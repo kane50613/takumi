@@ -1,46 +1,47 @@
-[package]
-name = "takumi"
-version = "0.1.1"
-edition = "2024"
-license = "MIT"
-description = "High-performance Rust library for generating images with CSS Flexbox-like layouts."
-keywords = ["image", "css", "flexbox", "layout", "rendering"]
-repository = "https://github.com/kane50613/takumi"
-readme = "README.md"
-exclude = ["benches/**/*"]
+[[bench]]
+  harness = false
+  name = 'takumi'
 
 [dependencies]
-imageproc = "0.25"
-woff2-patched = "0.4"
-futures-util = "0.3"
-bytes = "1.0"
-async-trait = "0.1"
-typetag = "0.2"
-dyn-clone = "1.0"
-merge = "0.2"
-ts-rs = "11.0"
+  async-trait = '0.1'
+  bytes = '1.0'
+  dyn-clone = '1.0'
+  futures-util = '0.3'
+  imageproc = '0.25'
+  merge = '0.2'
+  ts-rs = '11.0'
+  typetag = '0.2'
+  woff2-patched = '0.4'
 
-[dependencies.cosmic-text]
-version = "0.14"
-features = ["shape-run-cache", "hashbrown"]
+  [dependencies.cosmic-text]
+    features = ['shape-run-cache', 'hashbrown']
+    version = '0.14'
 
-[dependencies.taffy]
-version = "0.8"
-features = ["serde"]
+  [dependencies.image]
+    default-features = false
+    features = ['jpeg', 'png', 'webp']
+    version = '0.25'
 
-[dependencies.serde]
-version = "1"
-features = ["derive"]
+  [dependencies.serde]
+    features = ['derive']
+    version = '1'
 
-[dependencies.image]
-default-features = false
-version = "0.25"
-features = ["jpeg", "png", "webp"]
+  [dependencies.taffy]
+    features = ['serde']
+    version = '0.8'
 
-[dev-dependencies.criterion]
-version = "0.6"
-features = ["html_reports"]
+[dev-dependencies]
+  [dev-dependencies.criterion]
+    features = ['html_reports']
+    version = '0.6'
 
-[[bench]]
-name = "takumi"
-harness = false
+[package]
+  description = 'High-performance Rust library for generating images with CSS Flexbox-like layouts.'
+  edition = '2024'
+  exclude = ['benches/**/*']
+  keywords = ['image', 'css', 'flexbox', 'layout', 'rendering']
+  license = 'MIT'
+  name = 'takumi'
+  readme = 'README.md'
+  repository = 'https://github.com/kane50613/takumi'
+  version = '0.2.0'
