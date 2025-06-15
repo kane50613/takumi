@@ -39,7 +39,7 @@ fn render_scenarios(c: &mut Criterion) {
             })),
             ..Default::default()
           },
-          children: vec![],
+          children: None,
         }
         .into(),
         &context,
@@ -63,7 +63,7 @@ fn render_scenarios(c: &mut Criterion) {
             height: 630.0.into(),
             ..Default::default()
           },
-          children: vec![],
+          children: None,
         }
         .into(),
         &context,
@@ -88,7 +88,7 @@ fn render_scenarios(c: &mut Criterion) {
             background_color: Some(Color::Rgb(240, 240, 240).into()),
             ..Default::default()
           },
-          children: vec![
+          children: Some(vec![
             ContainerNode {
               style: Style {
                 width: 400.0.into(),
@@ -96,7 +96,7 @@ fn render_scenarios(c: &mut Criterion) {
                 background_color: Some(Color::Rgb(200, 200, 200).into()),
                 ..Default::default()
               },
-              children: vec![
+              children: Some(vec![
                 ContainerNode {
                   style: Style {
                     width: 200.0.into(),
@@ -104,13 +104,13 @@ fn render_scenarios(c: &mut Criterion) {
                     background_color: Some(Color::Rgb(160, 160, 160).into()),
                     ..Default::default()
                   },
-                  children: vec![],
+                  children: None,
                 }
                 .into(),
-              ],
+              ]),
             }
             .into(),
-          ],
+          ]),
         }
         .into(),
         &context,
@@ -137,7 +137,7 @@ fn render_performance_analysis(c: &mut Criterion) {
         background_color: Some(Color::Rgb(240, 240, 240).into()),
         ..Default::default()
       },
-      children: vec![
+      children: Some(vec![
         TextNode {
           style: Style {
             width: 800.0.into(),
@@ -161,7 +161,7 @@ fn render_performance_analysis(c: &mut Criterion) {
             background_color: Some(Color::Rgb(200, 200, 200).into()),
             ..Default::default()
           },
-          children: vec![
+          children: Some(vec![
             TextNode {
               style: Style {
                 width: 400.0.into(),
@@ -185,13 +185,13 @@ fn render_performance_analysis(c: &mut Criterion) {
                 background_color: Some(Color::Rgb(160, 160, 160).into()),
                 ..Default::default()
               },
-              children: vec![],
+              children: None,
             }
             .into(),
-          ],
+          ]),
         }
         .into(),
-      ],
+      ]),
     }
     .into()
   };

@@ -15,7 +15,7 @@ const root = container({
       style({
         font_size: 24,
         font_weight: 700,
-        color: 0xFFFFFF,
+        color: 0xffffff,
       }),
       "Hello, world!"
     ),

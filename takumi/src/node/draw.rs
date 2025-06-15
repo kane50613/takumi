@@ -261,7 +261,7 @@ pub fn draw_image(
   if let Some(border_radius) = style.inheritable_style.border_radius {
     apply_border_radius_antialiased(
       &mut processed_image,
-      BorderRadius::from_layout(context, &layout, border_radius),
+      BorderRadius::from_layout(context, &layout, border_radius.into()),
     );
   }
 

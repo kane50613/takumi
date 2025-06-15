@@ -163,6 +163,60 @@ impl From<FlexDirection> for taffy::style::FlexDirection {
   }
 }
 
+/// Defines a box shadow for an element.
+///
+/// This struct contains the properties for a box shadow, including color,
+/// offset, blur radius, spread radius, and inset flag.
+#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+pub struct BoxShadow {
+  /// Color of the box shadow
+  pub color: ColorInput,
+  /// Horizontal offset of the box shadow
+  pub offset_x: LengthUnit,
+  /// Vertical offset of the box shadow
+  pub offset_y: LengthUnit,
+  /// Blur radius of the box shadow (must be non-negative)
+  pub blur_radius: LengthUnit,
+  /// Spread radius of the box shadow
+  pub spread_radius: LengthUnit,
+  /// Whether the shadow is inset (inside the element)
+  #[serde(default)]
+  pub inset: bool,
+}
+
+impl BoxShadow {
+  pub(crate) fn resolve(self, context: &RenderContext) -> BoxShadowResolved {
+    BoxShadowResolved {
+      color: self.color,
+      offset_x: self.offset_x.resolve_to_px(context),
+      offset_y: self.offset_y.resolve_to_px(context),
+      blur_radius: self.blur_radius.resolve_to_px(context),
+      spread_radius: self.spread_radius.resolve_to_px(context),
+    }
+  }
+}
+
+pub(crate) struct BoxShadowResolved {
+  pub color: ColorInput,
+  pub offset_x: f32,
+  pub offset_y: f32,
+  pub blur_radius: f32,
+  pub spread_radius: f32,
+}
+
+/// Defines a box shadow for an element.
+///
+/// This enum allows for flexible specification of box shadows, including
+/// a single shadow or multiple shadows.
+#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[serde(untagged)]
+pub enum BoxShadowInput {
+  /// A single box shadow
+  Single(BoxShadow),
+  /// Multiple box shadows
+  Multiple(Vec<BoxShadow>),
+}
+
 /// Defines how flex items are aligned along the main axis.
 ///
 /// This enum determines how space is distributed between and around flex items
@@ -341,6 +395,8 @@ pub struct Style {
   pub object_fit: ObjectFit,
   /// Element's background color
   pub background_color: Option<ColorInput>,
+  /// Box shadow for the element
+  pub box_shadow: Option<BoxShadowInput>,
   /// Inheritable style properties
   #[serde(flatten)]
   pub inheritable_style: InheritableStyle,
@@ -371,6 +427,7 @@ impl Default for Style {
       border_width: Default::default(),
       object_fit: Default::default(),
       background_color: Default::default(),
+      box_shadow: Default::default(),
       inheritable_style: Default::default(),
     }
   }

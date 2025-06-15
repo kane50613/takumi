@@ -105,6 +105,12 @@ macro_rules! impl_node_enum {
           $( $name::$variant(inner) => <_ as ::takumi::node::Node<$name>>::draw_border(inner, context, canvas, layout), )*
         }
       }
+
+      fn draw_box_shadow(&self, context: &::takumi::render::RenderContext, canvas: &mut ::takumi::node::draw::FastBlendImage, layout: ::takumi::taffy::Layout) {
+        match self {
+          $( $name::$variant(inner) => <_ as ::takumi::node::Node<$name>>::draw_box_shadow(inner, context, canvas, layout), )*
+        }
+      }
     }
 
     $(

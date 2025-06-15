@@ -36,7 +36,7 @@ pub fn draw_border(
     .unwrap_or_default();
 
   if let Some(radius) = &style.inheritable_style.border_radius {
-    let radius: BorderRadius = BorderRadius::from_layout(context, layout, *radius);
+    let radius: BorderRadius = BorderRadius::from_layout(context, layout, (*radius).into());
 
     draw_rounded_border(canvas, layout, &border_color, radius);
   } else {

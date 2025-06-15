@@ -1,6 +1,8 @@
 import type { Style } from "./bindings/Style";
 
 export * from "./bindings/AlignItems";
+export * from "./bindings/BoxShadow";
+export * from "./bindings/BoxShadowInput";
 export * from "./bindings/Color";
 export * from "./bindings/ColorInput";
 export * from "./bindings/FlexDirection";

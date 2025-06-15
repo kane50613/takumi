@@ -17,7 +17,7 @@
 #![deny(missing_docs)]
 
 /// Module for handling border radius calculations and styling
-pub(crate) mod border_radius;
+pub mod border_radius;
 
 /// Module for color management and conversion between different color formats
 pub mod color;
@@ -33,6 +33,9 @@ pub mod node;
 
 /// Module for image rendering and canvas management
 pub mod render;
+
+/// Module for box shadow operations
+pub mod box_shadow;
 
 pub use image;
 pub use taffy;

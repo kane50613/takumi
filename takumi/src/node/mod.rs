@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use taffy::{AvailableSpace, Layout, Size};
 
 use crate::border_radius::BorderRadius;
+use crate::box_shadow::draw_box_shadow;
 use crate::context::GlobalContext;
 use crate::node::draw::{FastBlendImage, draw_background_color};
 use crate::node::{
@@ -99,9 +100,17 @@ pub trait Node<N: Node<N>>: Send + Sync + Debug + Clone {
 
   /// Draws the node onto the canvas using the computed layout.
   fn draw_on_canvas(&self, context: &RenderContext, canvas: &mut FastBlendImage, layout: Layout) {
+    self.draw_box_shadow(context, canvas, layout);
     self.draw_background(context, canvas, layout);
     self.draw_content(context, canvas, layout);
     self.draw_border(context, canvas, layout);
+  }
+
+  /// Draws the box shadow of the node.
+  fn draw_box_shadow(&self, context: &RenderContext, canvas: &mut FastBlendImage, layout: Layout) {
+    if let Some(box_shadow) = &self.get_style().box_shadow {
+      draw_box_shadow(box_shadow, self.get_style(), context, canvas, layout);
+    }
   }
 
   /// Draws the background of the node.
@@ -111,7 +120,7 @@ pub trait Node<N: Node<N>>: Send + Sync + Debug + Clone {
         .get_style()
         .inheritable_style
         .border_radius
-        .map(|radius| BorderRadius::from_layout(context, &layout, radius));
+        .map(|radius| BorderRadius::from_layout(context, &layout, radius.into()));
 
       draw_background_color(background_color, radius, canvas, layout);
     }
@@ -138,13 +147,16 @@ pub struct ContainerNode<Nodes: Node<Nodes>> {
   #[serde(default, flatten)]
   pub style: Style,
   /// The child nodes contained within this container
-  pub children: Vec<Nodes>,
+  pub children: Option<Vec<Nodes>>,
 }
 
 #[async_trait]
 impl<Nodes: Node<Nodes>> Node<Nodes> for ContainerNode<Nodes> {
   fn get_children(&self) -> Option<Vec<&Nodes>> {
-    Some(self.children.iter().collect())
+    self
+      .children
+      .as_ref()
+      .map(|children| children.iter().collect())
   }
 
   fn get_style(&self) -> &Style {
@@ -158,12 +170,17 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ContainerNode<Nodes> {
   fn should_hydrate_async(&self) -> bool {
     self
       .children
-      .iter()
-      .any(|child| child.should_hydrate_async())
+      .as_ref()
+      .map(|children| children.iter().any(|child| child.should_hydrate_async()))
+      .unwrap_or(false)
   }
 
   async fn hydrate_async(&self, context: &GlobalContext) {
-    let futures = self.children.iter().filter_map(|child| {
+    let Some(children) = &self.children else {
+      return;
+    };
+
+    let futures = children.iter().filter_map(|child| {
       if child.should_hydrate_async() {
         Some(child.hydrate_async(context))
       } else {
@@ -177,7 +194,11 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ContainerNode<Nodes> {
   fn inherit_style_for_children(&mut self) {
     let style = self.get_style().clone();
 
-    for child in self.children.iter_mut() {
+    let Some(children) = &mut self.children else {
+      return;
+    };
+
+    for child in children.iter_mut() {
       child.inherit_style(&style);
     }
   }
