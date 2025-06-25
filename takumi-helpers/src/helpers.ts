@@ -1,4 +1,4 @@
-import type { ContainerNode, ImageNode, TextNode, StyleInput } from "./types";
+import type { ContainerNode, ImageNode, StyleInput, TextNode } from "./types";
 
 export function container(props: Omit<ContainerNode, "type">): ContainerNode {
   return {

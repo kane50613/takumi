@@ -21,7 +21,8 @@
   "devDependencies": {
     "@types/bun": "latest",
     "@types/react": "^19.1.8",
-    "bun-plugin-dts": "^0.3.0"
+    "bun-plugin-dts": "^0.3.0",
+    "react": "^19.1.0"
   },
   "peerDependencies": {
     "typescript": "^5"
