@@ -2261,7 +2261,7 @@ dependencies = [
 
 [[package]]
 name = "takumi"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "base64",
  "bytes",
@@ -2284,7 +2284,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-napi-core"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "napi",
  "napi-build 3.0.0-beta.0",
@@ -2310,7 +2310,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-wasm"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "js-sys",
  "serde",

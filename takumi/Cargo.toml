@@ -1,6 +1,6 @@
 [package]
 name = "takumi"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2024"
 license = "MIT"
 description = "High-performance Rust library for generating images with CSS Flexbox-like layouts."
