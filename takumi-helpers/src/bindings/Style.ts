@@ -30,6 +30,8 @@ import type { TextAlign } from "./TextAlign";
 import type { TextOverflow } from "./TextOverflow";
 import type { TextStyle } from "./TextStyle";
 import type { TextTransform } from "./TextTransform";
+import type { Transform } from "./Transform";
+import type { TransformOrigin } from "./TransformOrigin";
 
 /**
  * Main styling structure that contains all layout and visual properties.
@@ -279,6 +281,14 @@ gridTemplateRows?: GridTemplateComponents,
  * Defines named grid areas specified via `grid-template-areas`.
  */
 gridTemplateAreas?: GridTemplateAreas, 
+/**
+ * Transform functions applied to this element.
+ */
+transform?: Transform, 
+/**
+ * Transform origin for this element.
+ */
+transformOrigin?: TransformOrigin, 
 /**
  * How the width and height of an element are calculated.
  */

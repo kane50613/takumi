@@ -10,12 +10,13 @@ use crate::{
   rendering::FastBlendImage,
 };
 
+use super::transform::draw_transformed_node_and_children;
 use crate::rendering::RenderContext;
 
 /// Stores the context and node for rendering.
-struct NodeRender<'ctx, Nodes: Node<Nodes>> {
-  context: RenderContext<'ctx>,
-  node: Nodes,
+pub(crate) struct NodeRender<'ctx, Nodes: Node<Nodes>> {
+  pub(crate) context: RenderContext<'ctx>,
+  pub(crate) node: Nodes,
 }
 
 /// Output format for the rendered image.
@@ -126,20 +127,27 @@ pub fn render<Nodes: Node<Nodes>>(
     )
     .unwrap();
 
-  draw_node(&taffy, root_node_id, &mut canvas, Point::ZERO);
+  draw_node_recursively(&taffy, root_node_id, &mut canvas, Point::ZERO);
 
   Ok(canvas.0)
 }
 
-fn draw_node<Nodes: Node<Nodes>>(
+fn draw_node_recursively<Nodes: Node<Nodes>>(
   taffy: &TaffyTree<NodeRender<Nodes>>,
   node_id: NodeId,
   canvas: &mut FastBlendImage,
   offset: Point<f32>,
 ) {
-  let mut layout = *taffy.layout(node_id).unwrap();
   let node_context = taffy.get_node_context(node_id).unwrap();
+  let style = node_context.node.get_style();
 
+  // If there is a transform, draw entire subtree via transform module and return early.
+  if style.transform.is_some() {
+    draw_transformed_node_and_children(taffy, node_id, canvas, offset);
+    return;
+  }
+
+  let mut layout = *taffy.layout(node_id).unwrap();
   layout.location.x += offset.x;
   layout.location.y += offset.y;
 
@@ -148,7 +156,7 @@ fn draw_node<Nodes: Node<Nodes>>(
     .draw_on_canvas(&node_context.context, canvas, layout);
 
   for child_id in taffy.children(node_id).unwrap() {
-    draw_node(taffy, child_id, canvas, layout.location);
+    draw_node_recursively(taffy, child_id, canvas, layout.location);
   }
 }
 

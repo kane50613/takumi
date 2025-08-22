@@ -11,6 +11,8 @@ mod image_drawing;
 mod render;
 /// Text drawing functions
 mod text_drawing;
+// Transform (node subtree) rendering helpers
+mod transform;
 
 pub use background_drawing::*;
 pub use canvas::*;

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { writeFile } from "node:fs/promises";
 import { container, image, percentage, rem, text } from "@takumi-rs/helpers";
 import { Glob } from "bun";
-import { OutputFormat, Renderer } from "../index";
+import { Renderer } from "../index";
 
 const renderer = new Renderer();
 
@@ -108,7 +108,7 @@ describe("renderAsync", () => {
   test("webp", async () => {
     const result = await renderer.renderAsync(node, {
       ...options,
-      format: OutputFormat.WebP,
+      format: "WebP",
     });
 
     await writeFile("./test.webp", result);
@@ -119,7 +119,7 @@ describe("renderAsync", () => {
   test("png", async () => {
     const result = await renderer.renderAsync(node, {
       ...options,
-      format: OutputFormat.Png,
+      format: "Png",
     });
 
     await writeFile("./test.png", result);
@@ -130,7 +130,7 @@ describe("renderAsync", () => {
   test("jpeg 75%", async () => {
     const result = await renderer.renderAsync(node, {
       ...options,
-      format: OutputFormat.Jpeg,
+      format: "Jpeg",
       quality: 75,
     });
 
@@ -142,7 +142,7 @@ describe("renderAsync", () => {
   test("jpeg 100%", async () => {
     const result = await renderer.renderAsync(node, {
       ...options,
-      format: OutputFormat.Jpeg,
+      format: "Jpeg",
       quality: 100,
     });
 
@@ -154,4 +154,131 @@ describe("renderAsync", () => {
 
 describe("clean up", () => {
   test("clearImageStore", () => renderer.clearImageStore());
+});
+
+test("transform property (rotate)", async () => {
+  const transformedNode = container({
+    style: {
+      width: 400,
+      height: 400,
+      backgroundColor: 0xff0000,
+      justifyContent: "center",
+      alignItems: "center",
+      transform: [{ rotate: 45 }],
+      // represent percentage units using helper
+      transformOrigin: [percentage(50), percentage(50)],
+    },
+    children: [
+      text("Rotated!", {
+        fontSize: 32,
+        color: 0xffffff,
+      }),
+    ],
+  });
+
+  const result = await renderer.renderAsync(transformedNode, {
+    width: 600,
+    height: 600,
+    format: "Png",
+  });
+
+  await writeFile("./test-transform.png", result);
+
+  expect(result).toBeInstanceOf(Buffer);
+});
+
+test("transform property (scale uniform)", async () => {
+  const nodeScaled = container({
+    style: {
+      width: 200,
+      height: 200,
+      backgroundColor: 0x00ff00,
+      justifyContent: "center",
+      alignItems: "center",
+      transform: [{ scale: [2, 2] }],
+      transformOrigin: [percentage(50), percentage(50)],
+    },
+    children: [text("Scale 2x", { fontSize: 20, color: 0x000000 })],
+  });
+  const result = await renderer.renderAsync(nodeScaled, {
+    width: 500,
+    height: 500,
+    format: "Png",
+  });
+
+  await writeFile("./test-transform-scale-uniform.png", result);
+
+  expect(result).toBeInstanceOf(Buffer);
+});
+
+test("transform property (scale non-uniform)", async () => {
+  const nodeScaled = container({
+    style: {
+      width: 200,
+      height: 200,
+      backgroundColor: 0x0000ff,
+      justifyContent: "center",
+      alignItems: "center",
+      transform: [{ scale: [2, 0.5] }],
+      transformOrigin: [percentage(50), percentage(50)],
+    },
+    children: [text("Scale 2x/0.5x", { fontSize: 20, color: 0xffffff })],
+  });
+  const result = await renderer.renderAsync(nodeScaled, {
+    width: 500,
+    height: 500,
+    format: "Png",
+  });
+
+  await writeFile("./test-transform-scale-non-uniform.png", result);
+
+  expect(result).toBeInstanceOf(Buffer);
+});
+
+test("transform property (translate)", async () => {
+  const nodeTranslated = container({
+    style: {
+      width: 300,
+      height: 300,
+      backgroundColor: 0xffff00,
+      justifyContent: "center",
+      alignItems: "center",
+      transform: [{ translate: [50, 30] }],
+      transformOrigin: [percentage(0), percentage(0)],
+    },
+    children: [text("Translate", { fontSize: 24, color: 0x000000 })],
+  });
+  const result = await renderer.renderAsync(nodeTranslated, {
+    width: 500,
+    height: 500,
+    format: "Png",
+  });
+
+  await writeFile("./test-transform-translate.png", result);
+
+  expect(result).toBeInstanceOf(Buffer);
+});
+
+test("transform property (skew)", async () => {
+  const nodeSkew = container({
+    style: {
+      width: 300,
+      height: 200,
+      backgroundColor: 0xff00ff,
+      justifyContent: "center",
+      alignItems: "center",
+      transform: [{ skew: [15, 5] }],
+      transformOrigin: [percentage(50), percentage(50)],
+    },
+    children: [text("Skew", { fontSize: 32, color: 0xffffff })],
+  });
+  const result = await renderer.renderAsync(nodeSkew, {
+    width: 500,
+    height: 500,
+    format: "Png",
+  });
+
+  await writeFile("./test-transform-skew.png", result);
+
+  expect(result).toBeInstanceOf(Buffer);
 });

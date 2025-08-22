@@ -163,6 +163,10 @@ pub struct Style {
   pub grid_template_rows: Option<GridTemplateComponents>,
   /// Defines named grid areas specified via `grid-template-areas`.
   pub grid_template_areas: Option<GridTemplateAreas>,
+  /// Transform functions applied to this element.
+  pub transform: Option<Transform>,
+  /// Transform origin for this element.
+  pub transform_origin: Option<TransformOrigin>,
   /// Inheritable style properties that cascade to child elements.
   #[serde(flatten)]
   pub inheritable_style: InheritableStyle,
@@ -232,6 +236,8 @@ impl Default for Style {
       grid_template_columns: None,
       grid_template_rows: None,
       grid_template_areas: None,
+      transform: None,
+      transform_origin: None,
       inheritable_style: Default::default(),
     }
   }

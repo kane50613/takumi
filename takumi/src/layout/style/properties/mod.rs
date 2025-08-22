@@ -20,6 +20,7 @@ mod noise_v1;
 mod parser;
 mod radial_gradient;
 mod sides;
+mod transform;
 
 use std::borrow::Cow;
 
@@ -39,6 +40,7 @@ pub use noise_v1::*;
 pub use parser::*;
 pub use radial_gradient::*;
 pub use sides::*;
+pub use transform::*;
 
 use cosmic_text::{Align, FamilyOwned};
 use cssparser::{ParseError, Parser};

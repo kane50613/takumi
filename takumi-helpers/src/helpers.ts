@@ -94,3 +94,19 @@ export function fr(fr: number) {
 export function rgba(r: number, g: number, b: number, a = 1): Color {
   return [r, g, b, a];
 }
+
+type LengthUnitInput =
+  | number
+  | {
+      percentage?: number;
+      vw?: number;
+      vh?: number;
+      em?: number;
+      rem?: number;
+    };
+export const translate = (x: LengthUnitInput, y: LengthUnitInput) => ({
+  translate: [x, y],
+});
+export const scale = (x: number, y?: number) => ({ scale: [x, y ?? x] });
+export const rotate = (deg: number) => ({ rotate: deg });
+export const skew = (ax: number, ay: number) => ({ skew: [ax, ay] });
