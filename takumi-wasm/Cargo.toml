@@ -1,6 +1,6 @@
 [package]
 name = "takumi-wasm"
-version = "0.28.3"
+version = "0.28.4"
 edition = "2024"
 
 [lib]
