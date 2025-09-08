@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/wasm",
-  "version": "0.29.5",
+  "version": "0.29.6",
   "scripts": {
     "build": "wasm-pack build --no-pack --release --out-dir pkg --target web"
   },
