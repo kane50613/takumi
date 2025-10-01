@@ -1,6 +1,6 @@
 [package]
 name = "takumi-wasm"
-version = "0.31.4"
+version = "0.32.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 
