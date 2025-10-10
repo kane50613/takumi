@@ -1,5 +1,11 @@
 # takumi
 
+## 0.36.0
+
+### Minor Changes
+
+- 95715d0: support `filter` on images (except `blur()` and `drop-shadow()`)
+
 ## 0.35.2
 
 ### Patch Changes
