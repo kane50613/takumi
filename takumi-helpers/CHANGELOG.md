@@ -1,5 +1,11 @@
 # @takumi-rs/helpers
 
+## 0.36.1
+
+### Patch Changes
+
+- f12f11a: fix default text chunk should be `display: inline`
+
 ## 0.36.0
 
 ## 0.35.2

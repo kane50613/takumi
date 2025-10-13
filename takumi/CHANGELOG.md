@@ -1,5 +1,7 @@
 # takumi
 
+## 0.36.1
+
 ## 0.36.0
 
 ### Minor Changes
