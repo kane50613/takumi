@@ -1,5 +1,11 @@
 # takumi
 
+## 0.36.2
+
+### Patch Changes
+
+- 568f76f: fix box shadow not being parsed
+
 ## 0.36.1
 
 ## 0.36.0

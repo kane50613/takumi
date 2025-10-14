@@ -1,7 +1,7 @@
 {
   "name": "@takumi-rs/image-response",
   "type": "module",
-  "version": "0.36.1",
+  "version": "0.36.2",
   "author": {
     "email": "me@kane.tw",
     "name": "Kane Wang",
@@ -11,8 +11,8 @@
     "url": "git+https://github.com/kane50613/takumi.git"
   },
   "peerDependencies": {
-    "@takumi-rs/core": "0.36.1",
-    "@takumi-rs/helpers": "0.36.1"
+    "@takumi-rs/core": "0.36.2",
+    "@takumi-rs/helpers": "0.36.2"
   },
   "devDependencies": {
     "@takumi-rs/core": "workspace:*",
