@@ -26,7 +26,7 @@
     "@types/bun": "catalog:",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
-    "lucide-react": "^0.545.0",
+    "lucide-react": "^0.546.0",
     "mitata": "^1.0.34",
     "typescript": "catalog:"
   },

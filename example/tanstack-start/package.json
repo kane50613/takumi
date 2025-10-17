@@ -16,7 +16,7 @@
     "@tanstack/react-router-ssr-query": "^1.131.7",
     "@tanstack/react-start": "^1.132.0",
     "@tanstack/router-plugin": "^1.132.0",
-    "lucide-react": "^0.545.0",
+    "lucide-react": "^0.546.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "vite-tsconfig-paths": "^5.1.4"
