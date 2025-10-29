@@ -202,7 +202,6 @@ fn render_node<'g, Nodes: Node<Nodes>>(
     };
 
     let image_rendering = node_context.context.style.image_rendering;
-    let filters = node_context.context.style.filter.0.clone();
 
     let offset = Point {
       x: if overflow.0 == Overflow::Visible {
@@ -249,7 +248,6 @@ fn render_node<'g, Nodes: Node<Nodes>>(
       BorderProperties::zero(),
       transform,
       image_rendering,
-      filters.as_ref(),
     );
   }
 

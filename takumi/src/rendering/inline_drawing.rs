@@ -197,8 +197,7 @@ fn create_fill_image(
           Default::default(),
           Affine::identity(),
           context.style.image_rendering,
-          context.style.filter.as_ref(),
-        )
+        );
       }
     }
   }

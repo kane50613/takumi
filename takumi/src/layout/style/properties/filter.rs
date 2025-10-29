@@ -5,28 +5,34 @@ use image::{
 };
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
+use taffy::Point;
 use ts_rs::TS;
 
-use crate::layout::style::{Angle, FromCss, ParseResult, PercentageNumber};
+use crate::{
+  layout::style::{Affine, Angle, FromCss, LengthUnit, ParseResult, PercentageNumber},
+  rendering::{BorderProperties, RenderContext, apply_fast_blur, overlay_image},
+};
 
 /// Represents a single CSS filter operation
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, TS)]
 #[serde(rename_all = "kebab-case")]
 pub enum Filter {
   /// Brightness multiplier (1 = unchanged). Accepts number or percentage
-  Brightness(f32),
+  Brightness(PercentageNumber),
   /// Contrast multiplier (1 = unchanged). Accepts number or percentage
-  Contrast(f32),
+  Contrast(PercentageNumber),
   /// Grayscale amount (0..1). Accepts number or percentage
-  Grayscale(f32),
+  Grayscale(PercentageNumber),
   /// Saturate multiplier (1 = unchanged). Accepts number or percentage
-  Saturate(f32),
+  Saturate(PercentageNumber),
   /// Hue rotation in degrees
   HueRotate(Angle),
   /// Invert amount (0..1). Accepts number or percentage
-  Invert(f32),
+  Invert(PercentageNumber),
   /// Opacity amount (0..1). Accepts number or percentage
-  Opacity(f32),
+  Opacity(PercentageNumber),
+  /// Blurs the image.
+  Blur(LengthUnit),
 }
 
 /// A list of filters
@@ -47,21 +53,26 @@ pub(crate) enum FiltersValue {
 pub struct Filters(pub SmallVec<[Filter; 4]>);
 
 impl Filters {
-  pub(crate) fn apply_to(&self, image: &mut RgbaImage) {
+  pub(crate) fn apply_to(&self, image: &mut RgbaImage, context: &RenderContext) {
+    let mut radius = 0.0;
+
     for filter in self.0.iter() {
       match *filter {
-        Filter::Brightness(value) => {
+        Filter::Blur(length) => {
+          radius += length.resolve_to_px(context, image.width() as f32).max(0.0);
+        }
+        Filter::Brightness(PercentageNumber(value)) => {
           for pixel in image.pixels_mut() {
             for channel in pixel.0.iter_mut().take(3) {
               *channel = ((*channel) as f32 * value).clamp(0.0, 255.0) as u8;
             }
           }
         }
-        Filter::Contrast(value) => {
+        Filter::Contrast(PercentageNumber(value)) => {
           let amount = value * 100.0 - 100.0;
           contrast_in_place(image, amount);
         }
-        Filter::Grayscale(amount) => {
+        Filter::Grayscale(PercentageNumber(amount)) => {
           for pixel in image.pixels_mut() {
             let lum = pixel.to_luma().0[0] as f32;
 
@@ -74,7 +85,7 @@ impl Filters {
         Filter::HueRotate(angle) => {
           huerotate_in_place(image, *angle as i32);
         }
-        Filter::Saturate(value) => {
+        Filter::Saturate(PercentageNumber(value)) => {
           for pixel in image.pixels_mut() {
             let lum = pixel.to_luma().0[0] as f32;
 
@@ -83,7 +94,7 @@ impl Filters {
             }
           }
         }
-        Filter::Invert(amount) => {
+        Filter::Invert(PercentageNumber(amount)) => {
           for pixel in image.pixels_mut() {
             for channel in pixel.0.iter_mut().take(3) {
               let inverted = u8::MAX.saturating_sub(*channel);
@@ -92,13 +103,34 @@ impl Filters {
             }
           }
         }
-        Filter::Opacity(value) => {
+        Filter::Opacity(PercentageNumber(value)) => {
           for alpha in image.as_mut().iter_mut().skip(3).step_by(4) {
             *alpha = ((*alpha) as f32 * value).clamp(0.0, 255.0) as u8;
           }
         }
       }
     }
+
+    let mut extended_image = RgbaImage::new(
+      image.width() + (radius * 2.0) as u32,
+      image.height() + (radius * 2.0) as u32,
+    );
+
+    overlay_image(
+      &mut extended_image,
+      image,
+      Point {
+        x: radius as i32,
+        y: radius as i32,
+      },
+      BorderProperties::default(),
+      Affine::identity(),
+      context.style.image_rendering,
+    );
+
+    apply_fast_blur(&mut extended_image, radius);
+
+    *image = extended_image;
   }
 }
 
@@ -141,31 +173,28 @@ impl<'i> FromCss<'i> for Filter {
 
     match_ignore_ascii_case! {function,
       "brightness" => parser.parse_nested_block(|input| {
-        let PercentageNumber(value) = PercentageNumber::from_css(input)?;
-        Ok(Filter::Brightness(value))
+        Ok(Filter::Brightness(PercentageNumber::from_css(input)?))
       }),
       "opacity" => parser.parse_nested_block(|input| {
-        let PercentageNumber(value) = PercentageNumber::from_css(input)?;
-        Ok(Filter::Opacity(value))
+        Ok(Filter::Opacity(PercentageNumber::from_css(input)?))
       }),
       "contrast" => parser.parse_nested_block(|input| {
-        let PercentageNumber(value) = PercentageNumber::from_css(input)?;
-        Ok(Filter::Contrast(value))
+        Ok(Filter::Contrast(PercentageNumber::from_css(input)?))
       }),
       "grayscale" => parser.parse_nested_block(|input| {
-        let PercentageNumber(value) = PercentageNumber::from_css(input)?;
-        Ok(Filter::Grayscale(value))
+        Ok(Filter::Grayscale(PercentageNumber::from_css(input)?))
       }),
       "hue-rotate" => parser.parse_nested_block(|input| {
         Ok(Filter::HueRotate(Angle::from_css(input)?))
       }),
       "invert" => parser.parse_nested_block(|input| {
-        let PercentageNumber(value) = PercentageNumber::from_css(input)?;
-        Ok(Filter::Invert(value))
+        Ok(Filter::Invert(PercentageNumber::from_css(input)?))
       }),
       "saturate" => parser.parse_nested_block(|input| {
-        let PercentageNumber(value) = PercentageNumber::from_css(input)?;
-        Ok(Filter::Saturate(value))
+        Ok(Filter::Saturate(PercentageNumber::from_css(input)?))
+      }),
+      "blur" => parser.parse_nested_block(|input| {
+        Ok(Filter::Blur(LengthUnit::from_css(input)?))
       }),
       _ => Err(location.new_basic_unexpected_token_error(Token::Function(function.clone())).into()),
     }

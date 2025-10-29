@@ -1,9 +1,4 @@
-//! Canvas operations and image blending for the takumi rendering system.
-//!
-//! This module provides performance-optimized canvas operations including
-//! fast image blending and pixel manipulation operations.
-
-use std::{borrow::Cow, sync::Mutex};
+use std::sync::Mutex;
 
 use image::{
   Pixel, Rgba, RgbaImage,
@@ -13,7 +8,7 @@ use taffy::{Point, Size};
 use zeno::{Mask, Placement};
 
 use crate::{
-  layout::style::{Affine, Angle, Color, Filters, ImageScalingAlgorithm},
+  layout::style::{Affine, Angle, Color, ImageScalingAlgorithm},
   rendering::BorderProperties,
 };
 
@@ -41,16 +36,13 @@ impl Canvas {
     border: BorderProperties,
     transform: Affine,
     algorithm: ImageScalingAlgorithm,
-    filters: Option<&Filters>,
   ) {
     if image.is_empty() {
       return;
     }
 
     let mut lock = self.0.lock().unwrap();
-    overlay_image(
-      &mut lock, image, offset, border, transform, algorithm, filters,
-    );
+    overlay_image(&mut lock, image, offset, border, transform, algorithm);
   }
 
   /// Draws a mask with the specified color onto the canvas.
@@ -239,23 +231,10 @@ pub(crate) fn overlay_image(
   border: BorderProperties,
   transform: Affine,
   algorithm: ImageScalingAlgorithm,
-  filters: Option<&Filters>,
 ) {
   let transform_part = transform.decompose();
   let can_direct_draw =
     !transform_part.is_rotated() && !transform_part.is_scaled() && border.is_zero();
-
-  let mut image = Cow::Borrowed(image);
-
-  if let Some(filters) = filters
-    && !filters.0.is_empty()
-  {
-    let mut owned_image = image.into_owned();
-
-    filters.apply_to(&mut owned_image);
-
-    image = Cow::Owned(owned_image);
-  }
 
   if can_direct_draw {
     let transformed_offset = Point {
@@ -314,8 +293,8 @@ pub(crate) fn overlay_image(
       } * inverse;
 
       let sampled_pixel = match algorithm {
-        ImageScalingAlgorithm::Pixelated => interpolate_nearest(&*image, point.x, point.y),
-        _ => interpolate_bilinear(&*image, point.x, point.y),
+        ImageScalingAlgorithm::Pixelated => interpolate_nearest(image, point.x, point.y),
+        _ => interpolate_bilinear(image, point.x, point.y),
       };
 
       if let Some(mut pixel) = sampled_pixel {

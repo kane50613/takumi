@@ -241,6 +241,5 @@ pub fn draw_image(image: &ImageSource, context: &RenderContext, canvas: &Canvas,
     border,
     transform_with_content_offset,
     context.style.image_rendering,
-    context.style.filter.0.as_ref(),
   );
 }

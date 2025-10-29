@@ -10,7 +10,7 @@ use crate::{
 };
 
 /// Applies a fast blur to an image using image-rs's optimized implementation.
-fn apply_fast_blur(image: &mut RgbaImage, radius: f32) {
+pub(crate) fn apply_fast_blur(image: &mut RgbaImage, radius: f32) {
   if radius <= 0.0 {
     return;
   }
@@ -119,7 +119,6 @@ impl SizedShadow {
       BorderProperties::zero(),
       Affine::identity(),
       ImageScalingAlgorithm::Auto,
-      None,
     );
   }
 
@@ -141,7 +140,6 @@ impl SizedShadow {
       border_radius,
       transform,
       ImageScalingAlgorithm::Auto,
-      None,
     );
   }
 }
