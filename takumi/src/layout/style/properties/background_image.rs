@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use cssparser::{BasicParseErrorKind, Parser};
+use cssparser::Parser;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use ts_rs::TS;
@@ -36,7 +36,7 @@ impl<'i> FromCss<'i> for BackgroundImage {
       return Ok(BackgroundImage::Url((&*url).into()));
     }
 
-    Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid))
+    Err(input.new_error_for_next_token())
   }
 }
 

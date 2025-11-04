@@ -1,4 +1,4 @@
-use cssparser::{Parser, match_ignore_ascii_case};
+use cssparser::{Parser, Token, match_ignore_ascii_case};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -101,7 +101,10 @@ impl<'i> FromCss<'i> for BorderStyle {
     let ident = input.expect_ident()?;
     match_ignore_ascii_case! {ident,
       "solid" => Ok(BorderStyle::Solid),
-      _ => Err(input.new_error_for_next_token()),
+      _ => {
+        let token = Token::Ident(ident.clone());
+        Err(input.new_basic_unexpected_token_error(token).into())
+      },
     }
   }
 }

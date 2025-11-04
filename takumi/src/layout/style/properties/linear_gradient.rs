@@ -443,10 +443,7 @@ impl<'i> FromCss<'i> for Angle {
         return Ok(Angle::new(horizontal.degrees()));
       }
 
-      let location = input.current_source_location();
-      let next_token = input.next()?.clone();
-
-      return Err(location.new_basic_unexpected_token_error(next_token).into());
+      return Err(input.new_error_for_next_token());
     }
 
     let location = input.current_source_location();

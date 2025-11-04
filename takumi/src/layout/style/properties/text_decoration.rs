@@ -139,14 +139,7 @@ impl<'i> FromCss<'i> for TextDecoration {
         break;
       }
 
-      let location = input.current_source_location();
-      let token = input.next()?;
-
-      return Err(
-        location
-          .new_basic_unexpected_token_error(token.clone())
-          .into(),
-      );
+      return Err(input.new_error_for_next_token());
     }
 
     Ok(TextDecoration { line, style, color })
