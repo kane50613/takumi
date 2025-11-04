@@ -1,5 +1,13 @@
 # takumi
 
+## 0.44.0
+
+### Minor Changes
+
+- 368fc1c: Support `textWrap`, `textWrapMode`, `whiteSpace`, `whiteSpaceCollapse` properties
+
+  **BREAKING CHANGE: by default text will collapse instead of preserve**, use `whiteSpace: pre;` to get the same behavior
+
 ## 0.43.1
 
 ## 0.43.0
