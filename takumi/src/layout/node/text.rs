@@ -117,17 +117,15 @@ fn create_text_only_layout(
       .global
       .font_context
       .tree_builder(font_style.into(), |builder| {
-        builder.set_white_space_mode(
-          context
-            .style
-            .white_space_collapse
-            .unwrap_or_default()
-            .into(),
-        );
         builder.push_text(&apply_text_transform(text, context.style.text_transform));
       });
 
-  break_lines(&mut inline_layout, max_width, max_height);
+  break_lines(
+    &mut inline_layout,
+    max_width,
+    max_height,
+    font_style.parent.white_space().text_wrap_mode,
+  );
 
   if measure_only {
     return inline_layout;

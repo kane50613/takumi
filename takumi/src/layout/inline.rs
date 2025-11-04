@@ -3,7 +3,10 @@ use std::borrow::Cow;
 use taffy::{AvailableSpace, Size};
 
 use crate::{
-  layout::{node::Node, style::Color},
+  layout::{
+    node::Node,
+    style::{Color, TextWrapMode},
+  },
   rendering::{MaxHeight, RenderContext},
 };
 
@@ -63,7 +66,13 @@ pub(crate) fn break_lines(
   layout: &mut InlineLayout,
   max_width: f32,
   max_height: Option<MaxHeight>,
+  wrap_mode: TextWrapMode,
 ) {
+  let max_width = match wrap_mode {
+    TextWrapMode::NoWrap => f32::MAX,
+    TextWrapMode::Wrap => max_width,
+  };
+
   let Some(max_height) = max_height else {
     return layout.break_all_lines(Some(max_width));
   };

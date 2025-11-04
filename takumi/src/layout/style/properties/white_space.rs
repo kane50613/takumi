@@ -16,6 +16,7 @@ pub struct WhiteSpace {
 }
 
 impl WhiteSpace {
+  /// Creates a `WhiteSpace` instance with `normal` behavior.
   pub const fn normal() -> Self {
     Self {
       text_wrap_mode: TextWrapMode::Wrap,
@@ -23,6 +24,7 @@ impl WhiteSpace {
     }
   }
 
+  /// Creates a `WhiteSpace` instance with `pre` behavior.
   pub const fn pre() -> Self {
     Self {
       text_wrap_mode: TextWrapMode::NoWrap,
@@ -30,6 +32,7 @@ impl WhiteSpace {
     }
   }
 
+  /// Creates a `WhiteSpace` instance with `pre-wrap` behavior.
   pub const fn pre_wrap() -> Self {
     Self {
       text_wrap_mode: TextWrapMode::Wrap,
@@ -37,6 +40,7 @@ impl WhiteSpace {
     }
   }
 
+  /// Creates a `WhiteSpace` instance with `pre-line` behavior.
   pub const fn pre_line() -> Self {
     Self {
       text_wrap_mode: TextWrapMode::Wrap,

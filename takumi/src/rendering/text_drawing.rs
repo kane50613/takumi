@@ -277,18 +277,15 @@ pub(crate) fn make_ellipsis_text<'s>(
     let (mut inline_layout, _) = global
       .font_context
       .tree_builder(font_style.into(), |builder| {
-        builder.set_white_space_mode(
-          font_style
-            .parent
-            .white_space_collapse
-            .unwrap_or_default()
-            .into(),
-        );
-
         builder.push_text(&text_with_ellipsis);
       });
 
-    break_lines(&mut inline_layout, max_width, Some(MaxHeight::Lines(2)));
+    break_lines(
+      &mut inline_layout,
+      max_width,
+      Some(MaxHeight::Lines(2)),
+      font_style.parent.white_space().text_wrap_mode,
+    );
 
     // if the text fits, return the text with ellipsis character
     if inline_layout.lines().count() == 1 {

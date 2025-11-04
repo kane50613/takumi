@@ -228,15 +228,6 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
           .global
           .font_context
           .tree_builder((&font_style).into(), |builder| {
-            builder.set_white_space_mode(
-              self
-                .context
-                .style
-                .white_space_collapse
-                .unwrap_or_default()
-                .into(),
-            );
-
             let mut idx = 0;
             let mut index_pos = 0;
 
@@ -272,7 +263,12 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
             }
           });
 
-      break_lines(&mut layout, max_width, max_height);
+      break_lines(
+        &mut layout,
+        max_width,
+        max_height,
+        font_style.parent.white_space().text_wrap_mode,
+      );
 
       let (max_run_width, total_height) =
         layout
@@ -320,15 +316,6 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
         .global
         .font_context
         .tree_builder((&font_style).into(), |builder| {
-          builder.set_white_space_mode(
-            self
-              .context
-              .style
-              .white_space_collapse
-              .unwrap_or_default()
-              .into(),
-          );
-
           let mut index_pos = 0;
 
           for (item, context) in self.inline_items_iter() {
@@ -375,7 +362,12 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
       None => Some(MaxHeight::Absolute(size.height)),
     };
 
-    break_lines(&mut layout, size.width, max_height);
+    break_lines(
+      &mut layout,
+      size.width,
+      max_height,
+      font_style.parent.white_space().text_wrap_mode,
+    );
 
     let should_handle_ellipsis = font_style.parent.text_overflow == TextOverflow::Ellipsis;
 
@@ -445,14 +437,6 @@ fn create_ellipsis_layout<N: Node<N>>(
     let (mut layout, text) = global
       .font_context
       .tree_builder(root_font_style.into(), |builder| {
-        builder.set_white_space_mode(
-          root_font_style
-            .parent
-            .white_space_collapse
-            .unwrap_or_default()
-            .into(),
-        );
-
         for (text, style) in text_spans.iter() {
           builder.push_style_span((style).into());
           builder.push_text(text);
@@ -466,7 +450,12 @@ fn create_ellipsis_layout<N: Node<N>>(
         builder.push_text(root_font_style.ellipsis_char());
       });
 
-    break_lines(&mut layout, max_width, max_height);
+    break_lines(
+      &mut layout,
+      max_width,
+      max_height,
+      root_font_style.parent.white_space().text_wrap_mode,
+    );
 
     if text_spans.is_empty() && boxes.is_empty() {
       return layout;
