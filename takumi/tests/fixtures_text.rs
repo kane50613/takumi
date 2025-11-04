@@ -414,3 +414,115 @@ fn fixtures_text_shadow_no_blur_radius() {
     "tests/fixtures/text_shadow_no_blur_radius.webp",
   );
 }
+
+#[test]
+fn fixtures_text_wrap_nowrap() {
+  let long_text = "This is a very long piece of text that should demonstrate text wrapping behavior when it exceeds the container width. The quick brown fox jumps over the lazy dog.";
+
+  let container = ContainerNode {
+    style: Some(
+      StyleBuilder::default()
+        .background_color(ColorInput::Value(Color([255, 255, 255, 255])))
+        .font_size(CssOption::some(Px(32.0)))
+        .width(Percentage(100.0))
+        .height(Percentage(100.0))
+        .display(Display::Flex)
+        .flex_direction(FlexDirection::Column)
+        .gap(Gap(Px(20.0), Px(20.0)))
+        .padding(Sides([Px(20.0); 4]))
+        .build()
+        .unwrap(),
+    ),
+    children: Some(vec![
+      // Wrap text
+      TextNode {
+        style: Some(
+          StyleBuilder::default()
+            .text_wrap(CssOption::some(TextWrapMode::Wrap))
+            .build()
+            .unwrap(),
+        ),
+        text: format!("Wrap: {}", long_text),
+      }
+      .into(),
+      TextNode {
+        style: Some(
+          StyleBuilder::default()
+            .text_wrap(CssOption::some(TextWrapMode::NoWrap))
+            .build()
+            .unwrap(),
+        ),
+        text: format!("No-wrap: {}", long_text),
+      }
+      .into(),
+    ]),
+  };
+
+  run_style_width_test(container.into(), "tests/fixtures/text_wrap_nowrap.webp");
+}
+
+#[test]
+fn fixtures_text_whitespace_collapse() {
+  let container = ContainerNode {
+    style: Some(
+      StyleBuilder::default()
+        .background_color(ColorInput::Value(Color([255, 255, 255, 255])))
+        .display(Display::Flex)
+        .flex_direction(FlexDirection::Column)
+        .font_size(CssOption::some(Px(32.0)))
+        .width(Percentage(100.0))
+        .height(Percentage(100.0))
+        .gap(Gap(Px(20.0), Px(20.0)))
+        .padding(Sides([Px(20.0); 4]))
+        .build()
+        .unwrap(),
+    ),
+    children: Some(vec![
+      TextNode {
+        style: Some(
+          StyleBuilder::default()
+            .white_space_collapse(CssOption::some(WhiteSpaceCollapse::Collapse))
+            .build()
+            .unwrap(),
+        ),
+        text: "collapse: Multiple    spaces   and\ttabs\t\tare    collapsed".to_string(),
+      }
+      .into(),
+      TextNode {
+        style: Some(
+          StyleBuilder::default()
+            .white_space_collapse(CssOption::some(WhiteSpaceCollapse::Preserve))
+            .build()
+            .unwrap(),
+        ),
+        text: "preserve: Multiple    spaces   and\ttabs\t\tare    preserved".to_string(),
+      }
+      .into(),
+      TextNode {
+        style: Some(
+          StyleBuilder::default()
+            .white_space_collapse(CssOption::some(WhiteSpaceCollapse::PreserveSpaces))
+            .build()
+            .unwrap(),
+        ),
+        text: "preserve-spaces: Multiple    spaces   preserved\nbut\nbreaks\nremoved".to_string(),
+      }
+      .into(),
+      TextNode {
+        style: Some(
+          StyleBuilder::default()
+            .white_space_collapse(CssOption::some(WhiteSpaceCollapse::PreserveBreaks))
+            .build()
+            .unwrap(),
+        ),
+        text: "preserve-breaks: Spaces    collapsed\n but\nline\nbreaks\npreserved".to_string(),
+      }
+      .into(),
+    ]),
+  };
+
+  run_style_width_test(
+    container.into(),
+    "tests/fixtures/text_whitespace_collapse.webp",
+  );
+}

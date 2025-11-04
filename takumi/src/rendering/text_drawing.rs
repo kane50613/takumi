@@ -308,20 +308,34 @@ pub(crate) fn apply_white_space_collapse<'a>(
       Cow::Owned(out)
     }
 
-    // Preserve line breaks but remove ordinary spaces and tabs.
+    // Preserve line breaks but collapse consecutive spaces and tabs into single spaces.
+    // Also remove leading spaces after line breaks.
     WhiteSpaceCollapse::PreserveBreaks => {
       let mut out = String::with_capacity(input.len());
+      let mut last_was_space = false;
+      let mut last_was_line_break = false;
 
       for ch in input.chars() {
         if ch == ' ' || ch == '\t' {
-          // skip
-          continue;
+          // Skip leading spaces after line breaks
+          if last_was_line_break {
+            continue;
+          }
+          if !last_was_space {
+            out.push(' ');
+            last_was_space = true;
+          }
+        } else {
+          out.push(ch);
+          // Only set last_was_space for actual spaces, not line breaks
+          last_was_space = ch == ' ' || ch == '\t';
+          // Track if we just processed a line break
+          last_was_line_break =
+            matches!(ch, '\n' | '\r' | '\x0B' | '\x0C' | '\u{2028}' | '\u{2029}');
         }
-
-        out.push(ch);
       }
 
-      Cow::Owned(out)
+      Cow::Owned(out.trim().to_string())
     }
   }
 }
@@ -415,7 +429,7 @@ mod tests {
   fn test_white_space_preserve_breaks() {
     let input = "a \n b\tc";
     let out = apply_white_space_collapse(input, WhiteSpaceCollapse::PreserveBreaks);
-    // spaces and tabs removed, line break preserved
-    assert_eq!(out, "a\nbc");
+    // spaces and tabs collapsed to single space, line break preserved
+    assert_eq!(out, "a \nb c");
   }
 }

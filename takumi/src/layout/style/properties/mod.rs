@@ -469,7 +469,7 @@ pub enum WhiteSpaceCollapse {
   Collapse,
   /// Preserve spaces and remove breaks.
   PreserveSpaces,
-  /// Preserve breaks and remove spaces.
+  /// Preserve breaks and collapse spaces.
   PreserveBreaks,
 }
 
