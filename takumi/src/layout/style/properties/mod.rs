@@ -435,7 +435,7 @@ impl From<&str> for FontFamily {
 
 /// Controls whether text should be wrapped.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, TS, PartialEq, Default)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "lowercase")]
 pub enum TextWrapMode {
   /// Text is wrapped across lines at appropriate characters to minimize overflow.
   #[default]

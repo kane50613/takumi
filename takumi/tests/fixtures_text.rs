@@ -442,7 +442,7 @@ fn fixtures_text_wrap_nowrap() {
             .build()
             .unwrap(),
         ),
-        text: format!("Wrap: {}", long_text),
+        text: format!("wrap: {}", long_text),
       }
       .into(),
       TextNode {
@@ -452,7 +452,7 @@ fn fixtures_text_wrap_nowrap() {
             .build()
             .unwrap(),
         ),
-        text: format!("No-wrap: {}", long_text),
+        text: format!("nowrap: {}", long_text),
       }
       .into(),
     ]),

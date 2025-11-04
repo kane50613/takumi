@@ -327,8 +327,7 @@ pub(crate) fn apply_white_space_collapse<'a>(
           }
         } else {
           out.push(ch);
-          // Only set last_was_space for actual spaces, not line breaks
-          last_was_space = ch == ' ' || ch == '\t';
+          last_was_space = false;
           // Track if we just processed a line break
           last_was_line_break =
             matches!(ch, '\n' | '\r' | '\x0B' | '\x0C' | '\u{2028}' | '\u{2029}');

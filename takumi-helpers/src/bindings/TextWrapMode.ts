@@ -3,4 +3,4 @@
 /**
  * Controls whether text should be wrapped.
  */
-export type TextWrapMode = "wrap" | "no-wrap";
+export type TextWrapMode = "wrap" | "nowrap";
