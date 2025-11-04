@@ -208,7 +208,6 @@ pub struct ResolvedGradientStop {
 
 impl<'i> FromCss<'i> for StopPosition {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, StopPosition> {
-    let location = input.current_source_location();
     if let Ok(num) = input.try_parse(Parser::expect_number) {
       return Ok(StopPosition(LengthUnit::Percentage(
         num.clamp(0.0, 1.0) * 100.0,
@@ -220,11 +219,7 @@ impl<'i> FromCss<'i> for StopPosition {
     }
 
     let Ok(length) = input.try_parse(LengthUnit::from_css) else {
-      return Err(
-        location
-          .new_basic_unexpected_token_error(input.next()?.clone())
-          .into(),
-      );
+      return Err(input.new_error_for_next_token());
     };
 
     Ok(StopPosition(length))

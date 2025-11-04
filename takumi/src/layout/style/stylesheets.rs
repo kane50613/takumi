@@ -170,7 +170,10 @@ define_style!(
   overflow_wrap: OverflowWrap = CssValue::inherit() => Default::default(),
   word_break: WordBreak = CssValue::inherit() => Default::default(),
   clip_path: CssOption<BasicShape> = CssOption::none() => CssOption::none(),
-  clip_rule: FillRule = CssValue::inherit() => FillRule::NonZero
+  clip_rule: FillRule = CssValue::inherit() => FillRule::NonZero,
+  white_space: WhiteSpace = CssValue::inherit() => WhiteSpace::normal(),
+  white_space_collapse: CssOption<WhiteSpaceCollapse> = CssValue::inherit() => CssOption::none(),
+  text_wrap_mode: CssOption<TextWrapMode> = CssValue::inherit() => CssOption::none(),
 );
 
 /// Sized font style with resolved font size and line height.
@@ -273,6 +276,17 @@ impl InheritedStyle {
       self.overflow_x.unwrap_or(self.overflow.0),
       self.overflow_y.unwrap_or(self.overflow.1),
     )
+  }
+
+  pub(crate) fn white_space(&self) -> WhiteSpace {
+    WhiteSpace {
+      text_wrap_mode: self
+        .text_wrap_mode
+        .unwrap_or(self.white_space.text_wrap_mode),
+      white_space_collapse: self
+        .white_space_collapse
+        .unwrap_or(self.white_space.white_space_collapse),
+    }
   }
 
   #[inline]

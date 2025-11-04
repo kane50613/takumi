@@ -1,4 +1,4 @@
-use cssparser::{Parser, Token};
+use cssparser::{Parser, match_ignore_ascii_case};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -85,14 +85,7 @@ impl<'i> FromCss<'i> for Border {
         continue;
       }
 
-      let location = input.current_source_location();
-      let token = input.next()?;
-
-      return Err(
-        location
-          .new_basic_unexpected_token_error(token.clone())
-          .into(),
-      );
+      return Err(input.new_error_for_next_token());
     }
 
     Ok(Border {
@@ -105,20 +98,11 @@ impl<'i> FromCss<'i> for Border {
 
 impl<'i> FromCss<'i> for BorderStyle {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
-    let token = input.next()?;
-
-    if let Token::Ident(ident) = token
-      && ident.eq_ignore_ascii_case("solid")
-    {
-      return Ok(BorderStyle::Solid);
+    let ident = input.expect_ident()?;
+    match_ignore_ascii_case! {ident,
+      "solid" => Ok(BorderStyle::Solid),
+      _ => Err(input.new_error_for_next_token()),
     }
-
-    Err(
-      location
-        .new_basic_unexpected_token_error(token.clone())
-        .into(),
-    )
   }
 }
 

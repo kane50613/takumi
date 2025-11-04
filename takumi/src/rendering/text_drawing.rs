@@ -277,6 +277,14 @@ pub(crate) fn make_ellipsis_text<'s>(
     let (mut inline_layout, _) = global
       .font_context
       .tree_builder(font_style.into(), |builder| {
+        builder.set_white_space_mode(
+          font_style
+            .parent
+            .white_space_collapse
+            .unwrap_or_default()
+            .into(),
+        );
+
         builder.push_text(&text_with_ellipsis);
       });
 

@@ -39,6 +39,7 @@ mod text_shadow;
 mod text_stroke;
 mod transform;
 mod translate;
+mod white_space;
 mod word_break;
 
 use std::borrow::Cow;
@@ -78,9 +79,10 @@ pub use text_shadow::*;
 pub use text_stroke::*;
 pub use transform::*;
 pub use translate::*;
+pub use white_space::*;
 pub use word_break::*;
 
-use cssparser::{ParseError, Parser, ParserInput};
+use cssparser::{ParseError, Parser, ParserInput, Token, match_ignore_ascii_case};
 use image::imageops::FilterType;
 use parley::{Alignment, FontStack};
 use serde::{Deserialize, Serialize};
@@ -428,6 +430,62 @@ impl<'a> From<&'a FontFamily> for FontStack<'a> {
 impl From<&str> for FontFamily {
   fn from(family: &str) -> Self {
     FontFamily(family.to_string())
+  }
+}
+
+/// Controls whether text should be wrapped.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, TS, PartialEq, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum TextWrapMode {
+  /// Text is wrapped across lines at appropriate characters to minimize overflow.
+  #[default]
+  Wrap,
+  /// Text does not wrap across lines. It will overflow its containing element rather than breaking onto a new line.
+  NoWrap,
+}
+
+impl<'i> FromCss<'i> for TextWrapMode {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let ident = input.expect_ident()?;
+    match_ignore_ascii_case! {ident,
+      "wrap" => Ok(TextWrapMode::Wrap),
+      "nowrap" => Ok(TextWrapMode::NoWrap),
+      _ => {
+        let token = Token::Ident(ident.clone());
+        Err(input.new_basic_unexpected_token_error(token).into())
+      }
+    }
+  }
+}
+
+/// Controls how whitespace should be collapsed.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, TS, PartialEq, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum WhiteSpaceCollapse {
+  /// Preserve whitespace as is—spaces and tabs are not collapsed.
+  #[default]
+  Preserve,
+  /// Collapse whitespace—spaces and tabs are collapsed.
+  Collapse,
+  /// Preserve spaces and remove breaks.
+  PreserveSpaces,
+  /// Preserve breaks and remove spaces.
+  PreserveBreaks,
+}
+
+impl<'i> FromCss<'i> for WhiteSpaceCollapse {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let ident = input.expect_ident()?;
+    match_ignore_ascii_case! {&ident,
+      "preserve" => Ok(WhiteSpaceCollapse::Preserve),
+      "collapse" => Ok(WhiteSpaceCollapse::Collapse),
+      "preserve-spaces" => Ok(WhiteSpaceCollapse::PreserveSpaces),
+      "preserve-breaks" => Ok(WhiteSpaceCollapse::PreserveBreaks),
+      _ => {
+        let token = Token::Ident(ident.clone());
+        Err(input.new_basic_unexpected_token_error(token).into())
+      }
+    }
   }
 }
 

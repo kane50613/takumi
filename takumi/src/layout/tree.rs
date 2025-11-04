@@ -228,6 +228,15 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
           .global
           .font_context
           .tree_builder((&font_style).into(), |builder| {
+            builder.set_white_space_mode(
+              self
+                .context
+                .style
+                .white_space_collapse
+                .unwrap_or_default()
+                .into(),
+            );
+
             let mut idx = 0;
             let mut index_pos = 0;
 
@@ -311,6 +320,15 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
         .global
         .font_context
         .tree_builder((&font_style).into(), |builder| {
+          builder.set_white_space_mode(
+            self
+              .context
+              .style
+              .white_space_collapse
+              .unwrap_or_default()
+              .into(),
+          );
+
           let mut index_pos = 0;
 
           for (item, context) in self.inline_items_iter() {
@@ -427,6 +445,14 @@ fn create_ellipsis_layout<N: Node<N>>(
     let (mut layout, text) = global
       .font_context
       .tree_builder(root_font_style.into(), |builder| {
+        builder.set_white_space_mode(
+          root_font_style
+            .parent
+            .white_space_collapse
+            .unwrap_or_default()
+            .into(),
+        );
+
         for (text, style) in text_spans.iter() {
           builder.push_style_span((style).into());
           builder.push_text(text);

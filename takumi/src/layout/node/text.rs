@@ -31,9 +31,9 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for TextNode {
   }
 
   fn inline_content(&self, context: &RenderContext) -> Option<InlineContentKind> {
-    Some(InlineContentKind::Text(
-      apply_text_transform(&self.text, context.style.text_transform).to_string(),
-    ))
+    let text = apply_text_transform(&self.text, context.style.text_transform);
+
+    Some(InlineContentKind::Text(text.into_owned()))
   }
 
   fn draw_content(&self, context: &RenderContext, canvas: &mut Canvas, layout: Layout) {
@@ -117,6 +117,13 @@ fn create_text_only_layout(
       .global
       .font_context
       .tree_builder(font_style.into(), |builder| {
+        builder.set_white_space_mode(
+          context
+            .style
+            .white_space_collapse
+            .unwrap_or_default()
+            .into(),
+        );
         builder.push_text(&apply_text_transform(text, context.style.text_transform));
       });
 
