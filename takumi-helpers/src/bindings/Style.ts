@@ -52,8 +52,11 @@ import type { TextOverflow } from "./TextOverflow";
 import type { TextShadows } from "./TextShadows";
 import type { TextStroke } from "./TextStroke";
 import type { TextTransform } from "./TextTransform";
+import type { TextWrapMode } from "./TextWrapMode";
 import type { Transforms } from "./Transforms";
 import type { Translate } from "./Translate";
+import type { WhiteSpace } from "./WhiteSpace";
+import type { WhiteSpaceCollapse } from "./WhiteSpaceCollapse";
 import type { WordBreak } from "./WordBreak";
 
 /**
@@ -166,4 +169,8 @@ export type Style = {
   wordBreak: CssValue<WordBreak>;
   clipPath: CssValue<CssOption<BasicShape>>;
   clipRule: CssValue<FillRule>;
+  whiteSpace: CssValue<WhiteSpace>;
+  whiteSpaceCollapse: CssValue<CssOption<WhiteSpaceCollapse>>;
+  textWrapMode: CssValue<CssOption<TextWrapMode>>;
+  textWrap: CssValue<CssOption<TextWrapMode>>;
 };

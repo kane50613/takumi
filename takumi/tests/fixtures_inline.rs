@@ -3,7 +3,7 @@ use takumi::layout::{
   style::{
     AlignItems, Color, ColorInput, CssOption, Display, FontWeight, JustifyContent,
     LengthUnit::{Percentage, Px},
-    Sides, StyleBuilder, TextOverflow, TextTransform,
+    Sides, StyleBuilder, TextOverflow, TextTransform, WhiteSpace,
   },
 };
 
@@ -67,6 +67,7 @@ fn fixtures_text_inline() {
         .line_clamp(CssOption::some(3.into()))
         .text_overflow(TextOverflow::Ellipsis)
         .font_size(CssOption::some(Px(48.0)))
+        .white_space(WhiteSpace::pre_wrap())
         .build()
         .unwrap(),
     ),
@@ -122,6 +123,7 @@ fn fixtures_inline_image() {
         .align_items(AlignItems::Center)
         .justify_content(JustifyContent::Center)
         .background_color(ColorInput::Value(Color::white()))
+        .white_space(WhiteSpace::pre())
         .build()
         .unwrap(),
     ),
@@ -201,6 +203,7 @@ fn fixtures_inline_block_in_inline() {
         .width(Percentage(100.0))
         .display(Display::Block)
         .font_size(CssOption::some(Px(24.0)))
+        .white_space(WhiteSpace::pre())
         .build()
         .unwrap(),
     ),

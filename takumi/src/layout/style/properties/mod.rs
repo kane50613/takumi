@@ -463,9 +463,9 @@ impl<'i> FromCss<'i> for TextWrapMode {
 #[serde(rename_all = "kebab-case")]
 pub enum WhiteSpaceCollapse {
   /// Preserve whitespace as is—spaces and tabs are not collapsed.
-  #[default]
   Preserve,
   /// Collapse whitespace—spaces and tabs are collapsed.
+  #[default]
   Collapse,
   /// Preserve spaces and remove breaks.
   PreserveSpaces,

@@ -90,7 +90,9 @@ impl From<WhiteSpaceKeywords> for WhiteSpace {
 pub(crate) enum WhiteSpaceValue {
   Keyword(WhiteSpaceKeywords),
   Structured {
+    #[serde(rename = "textWrapMode")]
     text_wrap_mode: TextWrapMode,
+    #[serde(rename = "whiteSpaceCollapse")]
     white_space_collapse: WhiteSpaceCollapse,
   },
   Css(String),

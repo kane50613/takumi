@@ -9,7 +9,9 @@ use crate::{
   GlobalContext,
   layout::{
     inline::{InlineBrush, break_lines},
-    style::{Affine, Color, ImageScalingAlgorithm, SizedFontStyle, TextTransform},
+    style::{
+      Affine, Color, ImageScalingAlgorithm, SizedFontStyle, TextTransform, WhiteSpaceCollapse,
+    },
   },
   rendering::{BorderProperties, Canvas, apply_mask_alpha_to_pixel},
   resources::font::ResolvedGlyph,
@@ -256,6 +258,74 @@ pub(crate) fn apply_text_transform<'a>(input: &'a str, transform: TextTransform)
   }
 }
 
+/// Applies whitespace collapse rules to the input text according to `WhiteSpaceCollapse`.
+pub(crate) fn apply_white_space_collapse<'a>(
+  input: &'a str,
+  collapse: WhiteSpaceCollapse,
+) -> Cow<'a, str> {
+  match collapse {
+    WhiteSpaceCollapse::Preserve => Cow::Borrowed(input),
+
+    // Collapse sequences of whitespace (spaces, tabs, line breaks) into a single space
+    // and trim leading/trailing spaces.
+    WhiteSpaceCollapse::Collapse => {
+      let mut out = String::with_capacity(input.len());
+      let mut last_was_ws = false;
+
+      for ch in input.chars() {
+        if ch.is_whitespace() {
+          if !last_was_ws {
+            out.push(' ');
+            last_was_ws = true;
+          }
+        } else {
+          out.push(ch);
+          last_was_ws = false;
+        }
+      }
+
+      Cow::Owned(out.trim().to_string())
+    }
+
+    // Preserve sequences of spaces/tabs but remove line breaks (replace them with a single space).
+    WhiteSpaceCollapse::PreserveSpaces => {
+      let mut out = String::with_capacity(input.len());
+      let mut last_was_space = false;
+
+      for ch in input.chars() {
+        // treat common line break characters as breaks to be removed/replaced
+        if matches!(ch, '\n' | '\r' | '\x0B' | '\x0C' | '\u{2028}' | '\u{2029}') {
+          if !last_was_space {
+            out.push(' ');
+            last_was_space = true;
+          }
+        } else {
+          out.push(ch);
+          last_was_space = ch == ' ' || ch == '\t';
+        }
+      }
+
+      Cow::Owned(out)
+    }
+
+    // Preserve line breaks but remove ordinary spaces and tabs.
+    WhiteSpaceCollapse::PreserveBreaks => {
+      let mut out = String::with_capacity(input.len());
+
+      for ch in input.chars() {
+        if ch == ' ' || ch == '\t' {
+          // skip
+          continue;
+        }
+
+        out.push(ch);
+      }
+
+      Cow::Owned(out)
+    }
+  }
+}
+
 /// Construct a new string with an ellipsis appended such that it fits within `max_width`.
 pub(crate) fn make_ellipsis_text<'s>(
   render_text: &'s str,
@@ -313,4 +383,39 @@ pub(crate) fn make_ellipsis_text<'s>(
 
   // if there's nothing left, returns nothing
   Cow::Borrowed("")
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_white_space_preserve() {
+    let input = "  a \t b\n";
+    let out = apply_white_space_collapse(input, WhiteSpaceCollapse::Preserve);
+    assert_eq!(out, input);
+  }
+
+  #[test]
+  fn test_white_space_collapse() {
+    let input = "  a \n\t b  c\n\n ";
+    let out = apply_white_space_collapse(input, WhiteSpaceCollapse::Collapse);
+    assert_eq!(out, "a b c");
+  }
+
+  #[test]
+  fn test_white_space_preserve_spaces() {
+    let input = "a \n b";
+    let out = apply_white_space_collapse(input, WhiteSpaceCollapse::PreserveSpaces);
+    // line break should be replaced with a single space; existing spaces preserved
+    assert_eq!(out, "a  b");
+  }
+
+  #[test]
+  fn test_white_space_preserve_breaks() {
+    let input = "a \n b\tc";
+    let out = apply_white_space_collapse(input, WhiteSpaceCollapse::PreserveBreaks);
+    // spaces and tabs removed, line break preserved
+    assert_eq!(out, "a\nbc");
+  }
 }

@@ -8,8 +8,8 @@ use crate::{
     style::{InheritedStyle, SizedFontStyle, Style, TextOverflow},
   },
   rendering::{
-    Canvas, MaxHeight, RenderContext, apply_text_transform, inline_drawing::draw_inline_layout,
-    make_ellipsis_text,
+    Canvas, MaxHeight, RenderContext, apply_text_transform, apply_white_space_collapse,
+    inline_drawing::draw_inline_layout, make_ellipsis_text,
   },
 };
 
@@ -31,9 +31,13 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for TextNode {
   }
 
   fn inline_content(&self, context: &RenderContext) -> Option<InlineContentKind> {
-    let text = apply_text_transform(&self.text, context.style.text_transform);
+    let transformed = apply_text_transform(&self.text, context.style.text_transform);
+    let collapsed = apply_white_space_collapse(
+      &transformed,
+      context.style.white_space().white_space_collapse,
+    );
 
-    Some(InlineContentKind::Text(text.into_owned()))
+    Some(InlineContentKind::Text(collapsed.into_owned()))
   }
 
   fn draw_content(&self, context: &RenderContext, canvas: &mut Canvas, layout: Layout) {
@@ -112,13 +116,20 @@ fn create_text_only_layout(
   font_style: &SizedFontStyle<'_>,
   measure_only: bool,
 ) -> parley::Layout<InlineBrush> {
-  let (mut inline_layout, text) =
+  let (mut inline_layout, text) = {
+    let transformed = apply_text_transform(text, context.style.text_transform);
+    let collapsed = apply_white_space_collapse(
+      &transformed,
+      font_style.parent.white_space().white_space_collapse,
+    );
+
     context
       .global
       .font_context
       .tree_builder(font_style.into(), |builder| {
-        builder.push_text(&apply_text_transform(text, context.style.text_transform));
-      });
+        builder.push_text(&collapsed);
+      })
+  };
 
   break_lines(
     &mut inline_layout,
