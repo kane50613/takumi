@@ -174,6 +174,7 @@ define_style!(
   white_space: WhiteSpace = CssValue::inherit() => WhiteSpace::normal(),
   white_space_collapse: CssOption<WhiteSpaceCollapse> = CssValue::inherit() => CssOption::none(),
   text_wrap_mode: CssOption<TextWrapMode> = CssValue::inherit() => CssOption::none(),
+  text_wrap: CssOption<TextWrapMode> = CssValue::inherit() => CssOption::none(),
 );
 
 /// Sized font style with resolved font size and line height.
@@ -282,6 +283,7 @@ impl InheritedStyle {
     WhiteSpace {
       text_wrap_mode: self
         .text_wrap_mode
+        .or(self.text_wrap.0)
         .unwrap_or(self.white_space.text_wrap_mode),
       white_space_collapse: self
         .white_space_collapse
