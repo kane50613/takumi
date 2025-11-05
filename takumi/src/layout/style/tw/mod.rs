@@ -79,7 +79,7 @@ pub enum TailwindProperty {
   /// The basis of the flex in the element.
   FlexBasis(LengthUnit),
   /// The overflow of the element.
-  Overflow(Overflows),
+  Overflow(Overflow),
   /// The overflow of the element on the x-axis.
   OverflowX(Overflow),
   /// The overflow of the element on the y-axis.
@@ -124,6 +124,12 @@ pub enum TailwindProperty {
   BackgroundSize(BackgroundSize),
   /// The background repeat of the element.
   BackgroundRepeat(BackgroundRepeat),
+  /// The gap of the element.
+  Gap(LengthUnit),
+  /// The gap of the element on the x-axis.
+  GapX(LengthUnit),
+  /// The gap of the element on the y-axis.
+  GapY(LengthUnit),
 }
 
 /// A trait for parsing tailwind properties.
@@ -168,12 +174,31 @@ impl TailwindProperty {
     property_check!("max-h-", MaxHeight(LengthUnit), token);
     property_check!("size-", Size(LengthUnit), token);
     property_check!("font-", FontWeight(FontWeight), token);
+    property_check!("gap-x-", GapX(LengthUnit), token);
+    property_check!("gap-y-", GapY(LengthUnit), token);
+    property_check!("gap-", Gap(LengthUnit), token);
+    property_check!("justify-", Justify(JustifyContent), token);
+    property_check!("content-", Content(JustifyContent), token);
+    property_check!("items-", Items(AlignItems), token);
+    property_check!("self-", AlignSelf(AlignItems), token);
+    property_check!("overflow-x-", OverflowX(Overflow), token);
+    property_check!("overflow-y-", OverflowY(Overflow), token);
+    property_check!("overflow-", Overflow(Overflow), token);
 
     None
   }
 
   pub(crate) fn apply(&self, style: &mut Style) {
     match *self {
+      TailwindProperty::Gap(gap) => {
+        style.gap = SpacePair::from_single(gap).into();
+      }
+      TailwindProperty::GapX(gap_x) => {
+        style.gap = SpacePair::from_pair(LengthUnit::Px(0.0), gap_x).into();
+      }
+      TailwindProperty::GapY(gap_y) => {
+        style.gap = SpacePair::from_pair(gap_y, LengthUnit::Px(0.0)).into();
+      }
       TailwindProperty::BoxSizing(box_sizing) => {
         style.box_sizing = box_sizing.into();
       }
@@ -211,7 +236,7 @@ impl TailwindProperty {
         style.flex_basis = CssOption::some(flex_basis).into();
       }
       TailwindProperty::Overflow(overflow) => {
-        style.overflow = overflow.into();
+        style.overflow = Overflows(SpacePair::from_single(overflow)).into();
       }
       TailwindProperty::Position(position) => {
         style.position = position.into();
@@ -296,28 +321,6 @@ static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
   "hidden" => TailwindProperty::Display(Display::None),
   "aspect-square" => TailwindProperty::Aspect(1.0),
   "aspect-video" => TailwindProperty::Aspect(16.0 / 9.0),
-  "items-center" => TailwindProperty::Items(AlignItems::Center),
-  "items-start" => TailwindProperty::Items(AlignItems::Start),
-  "items-end" => TailwindProperty::Items(AlignItems::End),
-  "items-baseline" => TailwindProperty::Items(AlignItems::Baseline),
-  "items-stretch" => TailwindProperty::Items(AlignItems::Stretch),
-  "justify-start" => TailwindProperty::Justify(JustifyContent::Start),
-  "justify-end" => TailwindProperty::Justify(JustifyContent::End),
-  "justify-center" => TailwindProperty::Justify(JustifyContent::Center),
-  "justify-between" => TailwindProperty::Justify(JustifyContent::SpaceBetween),
-  "justify-around" => TailwindProperty::Justify(JustifyContent::SpaceAround),
-  "justify-evenly" => TailwindProperty::Justify(JustifyContent::SpaceEvenly),
-  "content-start" => TailwindProperty::Content(JustifyContent::Start),
-  "content-end" => TailwindProperty::Content(JustifyContent::End),
-  "content-between" => TailwindProperty::Content(JustifyContent::SpaceBetween),
-  "content-around" => TailwindProperty::Content(JustifyContent::SpaceAround),
-  "content-stretch" => TailwindProperty::Content(JustifyContent::Stretch),
-  "content-center" => TailwindProperty::Content(JustifyContent::Center),
-  "self-start" => TailwindProperty::AlignSelf(AlignItems::Start),
-  "self-end" => TailwindProperty::AlignSelf(AlignItems::End),
-  "self-center" => TailwindProperty::AlignSelf(AlignItems::Center),
-  "self-stretch" => TailwindProperty::AlignSelf(AlignItems::Stretch),
-  "self-baseline" => TailwindProperty::AlignSelf(AlignItems::Baseline),
   "flex-grow" | "grow" => TailwindProperty::FlexGrow(1.0),
   "flex-shrink" | "shrink" => TailwindProperty::FlexShrink(1.0),
   "flex-row" => TailwindProperty::FlexDirection(FlexDirection::Row),
@@ -330,12 +333,6 @@ static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
   "flex-auto" => TailwindProperty::Flex(Flex::auto()),
   "flex-initial" => TailwindProperty::Flex(Flex::initial()),
   "flex-none" => TailwindProperty::Flex(Flex::none()),
-  "overflow-hidden" => TailwindProperty::Overflow(Overflows(SpacePair::from_single(Overflow::Hidden))),
-  "overflow-visible" => TailwindProperty::Overflow(Overflows(SpacePair::from_single(Overflow::Visible))),
-  "overflow-x-hidden" => TailwindProperty::OverflowX(Overflow::Hidden),
-  "overflow-y-hidden" => TailwindProperty::OverflowY(Overflow::Hidden),
-  "overflow-x-visible" => TailwindProperty::OverflowX(Overflow::Visible),
-  "overflow-y-visible" => TailwindProperty::OverflowY(Overflow::Visible),
   "absolute" => TailwindProperty::Position(Position::Absolute),
   "relative" => TailwindProperty::Position(Position::Relative),
   "text-start" => TailwindProperty::Text(TextAlign::Start),
@@ -353,14 +350,12 @@ static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
   "not-italic" => TailwindProperty::FontStyle(FontStyle::normal()),
   "basis-auto" => TailwindProperty::FlexBasis(LengthUnit::Auto),
   "flex-basis-auto" => TailwindProperty::FlexBasis(LengthUnit::Auto),
-  "w-screen" | "w-dvw" => TailwindProperty::Width(LengthUnit::Vw(100.0)),
-  "h-screen" | "h-dvh" => TailwindProperty::Height(LengthUnit::Vh(100.0)),
-  "min-w-scren" | "min-w-dvw" => TailwindProperty::MinWidth(LengthUnit::Vw(100.0)),
-  "min-h-screen" | "min-h-dvh" => TailwindProperty::MinHeight(LengthUnit::Vh(100.0)),
-  "max-w-screen" | "max-w-dvw" => TailwindProperty::MaxWidth(LengthUnit::Vw(100.0)),
-  "max-h-screen" | "max-h-dvh" => TailwindProperty::MaxHeight(LengthUnit::Vh(100.0)),
-  "size-dvw" => TailwindProperty::Width(LengthUnit::Vw(100.0)),
-  "size-dvh" => TailwindProperty::Height(LengthUnit::Vh(100.0)),
+  "w-screen" => TailwindProperty::Width(LengthUnit::Vw(100.0)),
+  "h-screen" => TailwindProperty::Height(LengthUnit::Vh(100.0)),
+  "min-w-screen" => TailwindProperty::MinWidth(LengthUnit::Vw(100.0)),
+  "min-h-screen" => TailwindProperty::MinHeight(LengthUnit::Vh(100.0)),
+  "max-w-screen" => TailwindProperty::MaxWidth(LengthUnit::Vw(100.0)),
+  "max-h-screen" => TailwindProperty::MaxHeight(LengthUnit::Vh(100.0)),
   "shadow-sm" => TailwindProperty::Shadow(BoxShadow {
     inset: false,
     offset_x: LengthUnit::Px(1.0),

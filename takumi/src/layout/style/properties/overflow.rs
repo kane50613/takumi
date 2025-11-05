@@ -6,7 +6,7 @@ use ts_rs::TS;
 use crate::{
   layout::{
     Viewport,
-    style::{FromCss, ParseResult, SpacePair},
+    style::{FromCss, ParseResult, SpacePair, tw::TailwindPropertyParser},
   },
   rendering::Canvas,
 };
@@ -22,6 +22,16 @@ pub enum Overflow {
   /// The automatic minimum size of this node as a flexbox/grid item should be `0`.
   /// Content that overflows this node should *not* contribute to the scroll region of its parent.
   Hidden,
+}
+
+impl TailwindPropertyParser for Overflow {
+  fn parse_tw(token: &str) -> Option<Self> {
+    match_ignore_ascii_case! {token,
+      "visible" => Some(Overflow::Visible),
+      "hidden" => Some(Overflow::Hidden),
+      _ => None,
+    }
+  }
 }
 
 impl From<Overflow> for taffy::Overflow {

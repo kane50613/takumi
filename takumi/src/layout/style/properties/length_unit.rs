@@ -62,6 +62,8 @@ impl TailwindPropertyParser for LengthUnit {
 
     match_ignore_ascii_case! {token,
       "auto" => Some(LengthUnit::Auto),
+      "dvw" => Some(LengthUnit::Vw(100.0)),
+      "dvh" => Some(LengthUnit::Vh(100.0)),
       "px" => Some(LengthUnit::Px(1.0)),
       "full" => Some(LengthUnit::Percentage(100.0)),
       "3xs" => Some(LengthUnit::Rem(16.0)),

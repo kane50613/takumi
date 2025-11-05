@@ -273,6 +273,24 @@ pub enum JustifyContent {
   SpaceAround,
 }
 
+impl TailwindPropertyParser for JustifyContent {
+  fn parse_tw(token: &str) -> Option<Self> {
+    match_ignore_ascii_case! {token,
+      "normal" => Some(JustifyContent::Normal),
+      "start" => Some(JustifyContent::Start),
+      "end" => Some(JustifyContent::End),
+      "flex-start" => Some(JustifyContent::FlexStart),
+      "flex-end" => Some(JustifyContent::FlexEnd),
+      "center" => Some(JustifyContent::Center),
+      "stretch" => Some(JustifyContent::Stretch),
+      "space-between" => Some(JustifyContent::SpaceBetween),
+      "space-around" => Some(JustifyContent::SpaceAround),
+      "space-evenly" => Some(JustifyContent::SpaceEvenly),
+      _ => None,
+    }
+  }
+}
+
 impl From<JustifyContent> for Option<taffy::JustifyContent> {
   fn from(value: JustifyContent) -> Self {
     match value {
@@ -368,6 +386,22 @@ pub enum AlignItems {
   Baseline,
   /// Items are stretched to fill the container in the cross axis
   Stretch,
+}
+
+impl TailwindPropertyParser for AlignItems {
+  fn parse_tw(token: &str) -> Option<Self> {
+    match_ignore_ascii_case! {token,
+      "normal" => Some(AlignItems::Normal),
+      "start" => Some(AlignItems::Start),
+      "end" => Some(AlignItems::End),
+      "flex-start" => Some(AlignItems::FlexStart),
+      "flex-end" => Some(AlignItems::FlexEnd),
+      "center" => Some(AlignItems::Center),
+      "baseline" => Some(AlignItems::Baseline),
+      "stretch" => Some(AlignItems::Stretch),
+      _ => None,
+    }
+  }
 }
 
 impl From<AlignItems> for Option<taffy::AlignItems> {
