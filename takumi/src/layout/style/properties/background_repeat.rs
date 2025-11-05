@@ -2,7 +2,7 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::layout::style::{FromCss, ParseResult};
+use crate::layout::style::{FromCss, ParseResult, tw::TailwindPropertyParser};
 
 /// Per-axis repeat style.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, TS, PartialEq, Default)]
@@ -22,27 +22,37 @@ pub enum BackgroundRepeatStyle {
 /// Combined repeat for X and Y axes.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, TS, PartialEq, Default)]
 #[serde(rename_all = "kebab-case")]
-pub struct BackgroundRepeat {
-  /// Repeat style along the X axis.
-  pub x: BackgroundRepeatStyle,
-  /// Repeat style along the Y axis.
-  pub y: BackgroundRepeatStyle,
-}
+pub struct BackgroundRepeat(pub BackgroundRepeatStyle, pub BackgroundRepeatStyle);
 
 impl BackgroundRepeat {
   /// Returns a repeat value that tiles on both the X and Y axes.
   pub const fn repeat() -> Self {
-    Self {
-      x: BackgroundRepeatStyle::Repeat,
-      y: BackgroundRepeatStyle::Repeat,
-    }
+    Self(BackgroundRepeatStyle::Repeat, BackgroundRepeatStyle::Repeat)
   }
 
   /// Returns a repeat value that does not tile on either axis.
   pub const fn no_repeat() -> Self {
-    Self {
-      x: BackgroundRepeatStyle::NoRepeat,
-      y: BackgroundRepeatStyle::NoRepeat,
+    Self(
+      BackgroundRepeatStyle::NoRepeat,
+      BackgroundRepeatStyle::NoRepeat,
+    )
+  }
+}
+
+impl TailwindPropertyParser for BackgroundRepeat {
+  fn parse_tw(token: &str) -> Option<Self> {
+    match token {
+      "repeat" => Some(BackgroundRepeat::repeat()),
+      "no-repeat" => Some(BackgroundRepeat::no_repeat()),
+      "repeat-x" => Some(BackgroundRepeat(
+        BackgroundRepeatStyle::Repeat,
+        BackgroundRepeatStyle::NoRepeat,
+      )),
+      "repeat-y" => Some(BackgroundRepeat(
+        BackgroundRepeatStyle::NoRepeat,
+        BackgroundRepeatStyle::Repeat,
+      )),
+      _ => None,
     }
   }
 }
@@ -67,19 +77,19 @@ impl<'i> FromCss<'i> for BackgroundRepeat {
       None => {
         // single keyword forms
         if first_ident.eq_ignore_ascii_case("repeat-x") {
-          return Ok(Self {
-            x: BackgroundRepeatStyle::Repeat,
-            y: BackgroundRepeatStyle::NoRepeat,
-          });
+          return Ok(Self(
+            BackgroundRepeatStyle::Repeat,
+            BackgroundRepeatStyle::NoRepeat,
+          ));
         }
         if first_ident.eq_ignore_ascii_case("repeat-y") {
-          return Ok(Self {
-            x: BackgroundRepeatStyle::NoRepeat,
-            y: BackgroundRepeatStyle::Repeat,
-          });
+          return Ok(Self(
+            BackgroundRepeatStyle::NoRepeat,
+            BackgroundRepeatStyle::Repeat,
+          ));
         }
         if let Some(axis) = parse_axis(&first_ident) {
-          return Ok(Self { x: axis, y: axis });
+          return Ok(Self(axis, axis));
         }
         Err(
           location
@@ -93,7 +103,7 @@ impl<'i> FromCss<'i> for BackgroundRepeat {
         })?;
         let y = parse_axis(&second)
           .ok_or_else(|| location.new_basic_unexpected_token_error(Token::Ident(second.clone())))?;
-        Ok(Self { x, y })
+        Ok(Self(x, y))
       }
     }
   }

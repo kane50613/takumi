@@ -14,6 +14,7 @@ use test_utils::run_style_width_test;
 #[test]
 fn test_style_text_decoration() {
   let text = TextNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))

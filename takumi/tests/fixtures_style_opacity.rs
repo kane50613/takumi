@@ -9,6 +9,7 @@ mod test_utils;
 
 fn create_test_container(opacity: f32) -> NodeKind {
   ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(LengthUnit::Percentage(8.0))
@@ -23,6 +24,7 @@ fn create_test_container(opacity: f32) -> NodeKind {
     ),
     children: Some(vec![
       TextNode {
+        tw: None,
         style: None,
         text: opacity.to_string(),
       }
@@ -35,6 +37,7 @@ fn create_test_container(opacity: f32) -> NodeKind {
 #[test]
 fn test_style_opacity() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(LengthUnit::Percentage(100.0))
@@ -42,7 +45,7 @@ fn test_style_opacity() {
         .justify_content(JustifyContent::Center)
         .align_items(AlignItems::Center)
         .background_color(ColorInput::Value(Color([255, 255, 255, 255])))
-        .gap(Gap(LengthUnit::Rem(4.0), LengthUnit::Rem(4.0)))
+        .gap(SpacePair::from_single(LengthUnit::Rem(4.0)))
         .build()
         .unwrap(),
     ),

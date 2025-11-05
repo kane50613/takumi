@@ -2,7 +2,7 @@ use takumi::layout::{
   node::ImageNode,
   style::{
     BackgroundPosition, LengthUnit::Percentage, ObjectFit, PositionComponent, PositionKeywordX,
-    PositionKeywordY, StyleBuilder,
+    PositionKeywordY, SpacePair, StyleBuilder,
   },
 };
 
@@ -12,15 +12,15 @@ use test_utils::run_style_width_test;
 #[test]
 fn test_style_object_position_contain_center() {
   let image = ImageNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
         .height(Percentage(100.0))
         .object_fit(ObjectFit::Contain)
-        .object_position(BackgroundPosition {
-          x: PositionComponent::KeywordX(PositionKeywordX::Center),
-          y: PositionComponent::KeywordY(PositionKeywordY::Center),
-        })
+        .object_position(BackgroundPosition(SpacePair::from_single(
+          PositionComponent::KeywordX(PositionKeywordX::Center),
+        )))
         .build()
         .unwrap(),
     ),
@@ -38,15 +38,16 @@ fn test_style_object_position_contain_center() {
 #[test]
 fn test_style_object_position_contain_top_left() {
   let image = ImageNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
         .height(Percentage(100.0))
         .object_fit(ObjectFit::Contain)
-        .object_position(BackgroundPosition {
-          x: PositionComponent::KeywordX(PositionKeywordX::Left),
-          y: PositionComponent::KeywordY(PositionKeywordY::Top),
-        })
+        .object_position(BackgroundPosition(SpacePair(
+          PositionComponent::KeywordX(PositionKeywordX::Left),
+          PositionComponent::KeywordY(PositionKeywordY::Top),
+        )))
         .build()
         .unwrap(),
     ),
@@ -64,15 +65,16 @@ fn test_style_object_position_contain_top_left() {
 #[test]
 fn test_style_object_position_contain_bottom_right() {
   let image = ImageNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
         .height(Percentage(100.0))
         .object_fit(ObjectFit::Contain)
-        .object_position(BackgroundPosition {
-          x: PositionComponent::KeywordX(PositionKeywordX::Right),
-          y: PositionComponent::KeywordY(PositionKeywordY::Bottom),
-        })
+        .object_position(BackgroundPosition(SpacePair(
+          PositionComponent::KeywordX(PositionKeywordX::Right),
+          PositionComponent::KeywordY(PositionKeywordY::Bottom),
+        )))
         .build()
         .unwrap(),
     ),
@@ -90,15 +92,16 @@ fn test_style_object_position_contain_bottom_right() {
 #[test]
 fn test_style_object_position_cover_center() {
   let image = ImageNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
         .height(Percentage(100.0))
         .object_fit(ObjectFit::Cover)
-        .object_position(BackgroundPosition {
-          x: PositionComponent::KeywordX(PositionKeywordX::Center),
-          y: PositionComponent::KeywordY(PositionKeywordY::Center),
-        })
+        .object_position(BackgroundPosition(SpacePair(
+          PositionComponent::KeywordX(PositionKeywordX::Center),
+          PositionComponent::KeywordY(PositionKeywordY::Center),
+        )))
         .build()
         .unwrap(),
     ),
@@ -116,15 +119,16 @@ fn test_style_object_position_cover_center() {
 #[test]
 fn test_style_object_position_cover_top_left() {
   let image = ImageNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
         .height(Percentage(100.0))
         .object_fit(ObjectFit::Cover)
-        .object_position(BackgroundPosition {
-          x: PositionComponent::KeywordX(PositionKeywordX::Left),
-          y: PositionComponent::KeywordY(PositionKeywordY::Top),
-        })
+        .object_position(BackgroundPosition(SpacePair(
+          PositionComponent::KeywordX(PositionKeywordX::Left),
+          PositionComponent::KeywordY(PositionKeywordY::Top),
+        )))
         .build()
         .unwrap(),
     ),
@@ -142,15 +146,16 @@ fn test_style_object_position_cover_top_left() {
 #[test]
 fn test_style_object_position_none_center() {
   let image = ImageNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
         .height(Percentage(100.0))
         .object_fit(ObjectFit::None)
-        .object_position(BackgroundPosition {
-          x: PositionComponent::KeywordX(PositionKeywordX::Center),
-          y: PositionComponent::KeywordY(PositionKeywordY::Center),
-        })
+        .object_position(BackgroundPosition(SpacePair(
+          PositionComponent::KeywordX(PositionKeywordX::Center),
+          PositionComponent::KeywordY(PositionKeywordY::Center),
+        )))
         .build()
         .unwrap(),
     ),
@@ -168,15 +173,16 @@ fn test_style_object_position_none_center() {
 #[test]
 fn test_style_object_position_none_top_left() {
   let image = ImageNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
         .height(Percentage(100.0))
         .object_fit(ObjectFit::None)
-        .object_position(BackgroundPosition {
-          x: PositionComponent::KeywordX(PositionKeywordX::Left),
-          y: PositionComponent::KeywordY(PositionKeywordY::Top),
-        })
+        .object_position(BackgroundPosition(SpacePair(
+          PositionComponent::KeywordX(PositionKeywordX::Left),
+          PositionComponent::KeywordY(PositionKeywordY::Top),
+        )))
         .build()
         .unwrap(),
     ),
@@ -194,15 +200,16 @@ fn test_style_object_position_none_top_left() {
 #[test]
 fn test_style_object_position_percentage_25_75() {
   let image = ImageNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
         .height(Percentage(100.0))
         .object_fit(ObjectFit::Contain)
-        .object_position(BackgroundPosition {
-          x: PositionComponent::Length(Percentage(25.0)),
-          y: PositionComponent::Length(Percentage(75.0)),
-        })
+        .object_position(BackgroundPosition(SpacePair(
+          PositionComponent::Length(Percentage(25.0)),
+          PositionComponent::Length(Percentage(75.0)),
+        )))
         .build()
         .unwrap(),
     ),

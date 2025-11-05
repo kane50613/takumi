@@ -1,4 +1,4 @@
-use cssparser::{Parser, ParserInput, match_ignore_ascii_case};
+use cssparser::{Parser, match_ignore_ascii_case};
 use serde::{Deserialize, Serialize};
 use taffy::{Layout, Size};
 use ts_rs::TS;
@@ -6,7 +6,7 @@ use ts_rs::TS;
 use crate::{
   layout::{
     Viewport,
-    style::{FromCss, ParseResult},
+    style::{FromCss, ParseResult, SpacePair},
   },
   rendering::Canvas,
 };
@@ -53,45 +53,40 @@ impl<'i> FromCss<'i> for Overflow {
 /// Can be either a single value applied to both axes, or separate values
 /// for horizontal and vertical overflow.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, TS, PartialEq)]
-#[serde(try_from = "OverflowValue")]
-#[ts(as = "OverflowValue")]
-pub struct Overflows(pub Overflow, pub Overflow);
+pub struct Overflows(pub SpacePair<Overflow>);
 
-/// Represents a value for the overflow property.
-///
-/// Can be either a single value applied to both axes, or separate values
-/// for horizontal and vertical overflow.
-#[derive(Debug, Clone, Deserialize, Serialize, TS, PartialEq)]
-#[serde(untagged)]
-pub(crate) enum OverflowValue {
-  /// Same overflow value for both horizontal and vertical
-  SingleValue(Overflow),
-  /// Separate values for horizontal and vertical overflow (horizontal, vertical)
-  Array(Overflow, Overflow),
-  /// CSS string representation
-  Css(String),
+impl Overflows {
+  /// Get the x-axis value.
+  pub(crate) fn x(&self) -> Overflow {
+    self.0.0
+  }
+
+  /// Get the y-axis value.
+  pub(crate) fn y(&self) -> Overflow {
+    self.0.1
+  }
 }
 
 impl Default for Overflows {
   fn default() -> Self {
-    Self(Overflow::Visible, Overflow::Visible)
+    Self(SpacePair::from_single(Overflow::Visible))
   }
 }
 
 impl Overflows {
   #[inline]
   pub(crate) fn should_clip_content(&self) -> bool {
-    *self != Overflows(Overflow::Visible, Overflow::Visible)
+    *self != Overflows(SpacePair::from_single(Overflow::Visible))
   }
 
   pub(crate) fn create_clip_canvas(&self, viewport: Viewport, layout: Layout) -> Option<Canvas> {
     let inner_size = Size {
-      width: if self.0 == Overflow::Visible {
+      width: if self.0.0 == Overflow::Visible {
         viewport.width
       } else {
         (layout.size.width - layout.padding.right - layout.border.right) as u32
       },
-      height: if self.1 == Overflow::Visible {
+      height: if self.0.1 == Overflow::Visible {
         viewport.height
       } else {
         (layout.size.height - layout.padding.bottom - layout.border.bottom) as u32
@@ -103,94 +98,5 @@ impl Overflows {
     }
 
     Some(Canvas::new(inner_size))
-  }
-}
-
-impl TryFrom<OverflowValue> for Overflows {
-  type Error = String;
-
-  fn try_from(value: OverflowValue) -> Result<Self, Self::Error> {
-    match value {
-      OverflowValue::SingleValue(value) => Ok(Self(value, value)),
-      OverflowValue::Array(horizontal, vertical) => Ok(Self(horizontal, vertical)),
-      OverflowValue::Css(value) => {
-        let mut input = ParserInput::new(&value);
-        let mut parser = Parser::new(&mut input);
-
-        let first = Overflow::from_css(&mut parser).map_err(|e| e.to_string())?;
-
-        if let Ok(second) = Overflow::from_css(&mut parser) {
-          Ok(Self(first, second))
-        } else {
-          Ok(Self(first, first))
-        }
-      }
-    }
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn test_overflow_from_str() {
-    assert_eq!(Overflow::from_str("visible").unwrap(), Overflow::Visible);
-    assert_eq!(Overflow::from_str("hidden").unwrap(), Overflow::Hidden);
-  }
-
-  #[test]
-  fn test_overflow_from_str_invalid() {
-    assert!(Overflow::from_str("invalid").is_err());
-  }
-
-  #[test]
-  fn test_overflows_default() {
-    assert_eq!(
-      Overflows::default(),
-      Overflows(Overflow::Visible, Overflow::Visible)
-    );
-  }
-
-  #[test]
-  fn test_overflows_try_from_variants() {
-    // TryFrom SingleValue
-    let single = OverflowValue::SingleValue(Overflow::Hidden);
-    let overflows_single = Overflows::try_from(single).expect("SingleValue should convert");
-    assert_eq!(
-      overflows_single,
-      Overflows(Overflow::Hidden, Overflow::Hidden)
-    );
-
-    // TryFrom Array
-    let array = OverflowValue::Array(Overflow::Hidden, Overflow::Visible);
-    let overflows_array = Overflows::try_from(array).expect("Array should convert");
-    assert_eq!(
-      overflows_array,
-      Overflows(Overflow::Hidden, Overflow::Visible)
-    );
-  }
-
-  #[test]
-  fn test_overflows_from_css_parsing() {
-    let overflows_single =
-      Overflows::try_from(OverflowValue::Css("hidden".to_string())).expect("hidden parses");
-    assert_eq!(
-      overflows_single,
-      Overflows(Overflow::Hidden, Overflow::Hidden)
-    );
-
-    let overflows_two = Overflows::try_from(OverflowValue::Css("hidden visible".to_string()))
-      .expect("two values parse");
-    assert_eq!(
-      overflows_two,
-      Overflows(Overflow::Hidden, Overflow::Visible)
-    );
-  }
-
-  #[test]
-  fn test_overflows_from_css_invalid() {
-    let res = Overflows::try_from(OverflowValue::Css("invalid".to_string()));
-    assert!(res.is_err());
   }
 }

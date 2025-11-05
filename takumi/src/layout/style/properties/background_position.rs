@@ -2,7 +2,9 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::layout::style::{FromCss, LengthUnit, ParseResult};
+use crate::layout::style::{
+  FromCss, LengthUnit, ParseResult, SpacePair, tw::TailwindPropertyParser,
+};
 
 /// Horizontal keywords for `background-position`.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, TS, PartialEq)]
@@ -60,42 +62,70 @@ impl PositionComponent {
 
 /// Parsed `background-position` value for one layer.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, TS, PartialEq)]
-#[serde(try_from = "BackgroundPositionValue")]
-#[ts(as = "BackgroundPositionValue")]
-pub struct BackgroundPosition {
-  /// X-axis position component.
-  pub x: PositionComponent,
-  /// Y-axis position component.
-  pub y: PositionComponent,
-}
+pub struct BackgroundPosition(pub SpacePair<PositionComponent>);
 
-/// Proxy type for deserializing `BackgroundPosition`
-#[derive(Debug, Clone, Deserialize, Serialize, TS, PartialEq)]
-#[serde(untagged)]
-pub(crate) enum BackgroundPositionValue {
-  /// Parsed positions for one or two dimensions.
-  Position(PositionComponent, PositionComponent),
-  /// Raw CSS string to be parsed.
-  Css(String),
-}
-
-impl Default for BackgroundPosition {
-  fn default() -> Self {
-    Self {
-      x: PositionComponent::KeywordX(PositionKeywordX::Center),
-      y: PositionComponent::KeywordY(PositionKeywordY::Center),
+impl TailwindPropertyParser for BackgroundPosition {
+  fn parse_tw(token: &str) -> Option<Self> {
+    match token {
+      "top-left" => Some(Self(SpacePair(
+        PositionComponent::KeywordX(PositionKeywordX::Left),
+        PositionComponent::KeywordY(PositionKeywordY::Top),
+      ))),
+      "top" => Some(Self(SpacePair(
+        PositionComponent::KeywordX(PositionKeywordX::Center),
+        PositionComponent::KeywordY(PositionKeywordY::Top),
+      ))),
+      "top-right" => Some(Self(SpacePair(
+        PositionComponent::KeywordX(PositionKeywordX::Right),
+        PositionComponent::KeywordY(PositionKeywordY::Top),
+      ))),
+      "left" => Some(Self(SpacePair(
+        PositionComponent::KeywordX(PositionKeywordX::Left),
+        PositionComponent::KeywordY(PositionKeywordY::Center),
+      ))),
+      "center" => Some(Self(SpacePair(
+        PositionComponent::KeywordX(PositionKeywordX::Center),
+        PositionComponent::KeywordY(PositionKeywordY::Center),
+      ))),
+      "right" => Some(Self(SpacePair(
+        PositionComponent::KeywordX(PositionKeywordX::Right),
+        PositionComponent::KeywordY(PositionKeywordY::Center),
+      ))),
+      "bottom-left" => Some(Self(SpacePair(
+        PositionComponent::KeywordX(PositionKeywordX::Left),
+        PositionComponent::KeywordY(PositionKeywordY::Bottom),
+      ))),
+      "bottom" => Some(Self(SpacePair(
+        PositionComponent::KeywordX(PositionKeywordX::Center),
+        PositionComponent::KeywordY(PositionKeywordY::Bottom),
+      ))),
+      "bottom-right" => Some(Self(SpacePair(
+        PositionComponent::KeywordX(PositionKeywordX::Right),
+        PositionComponent::KeywordY(PositionKeywordY::Bottom),
+      ))),
+      _ => None,
     }
   }
 }
 
-impl TryFrom<BackgroundPositionValue> for BackgroundPosition {
-  type Error = String;
+impl BackgroundPosition {
+  /// Get the x-axis value.
+  pub fn x(&self) -> PositionComponent {
+    self.0.0
+  }
 
-  fn try_from(value: BackgroundPositionValue) -> Result<Self, Self::Error> {
-    match value {
-      BackgroundPositionValue::Position(x, y) => Ok(Self { x, y }),
-      BackgroundPositionValue::Css(css) => Self::from_str(&css).map_err(|e| e.to_string()),
-    }
+  /// Get the y-axis value.
+  pub fn y(&self) -> PositionComponent {
+    self.0.1
+  }
+}
+
+impl Default for BackgroundPosition {
+  fn default() -> Self {
+    Self(SpacePair(
+      PositionComponent::KeywordX(PositionKeywordX::Center),
+      PositionComponent::KeywordY(PositionKeywordY::Center),
+    ))
   }
 }
 
@@ -114,7 +144,7 @@ impl<'i> FromCss<'i> for BackgroundPosition {
       (x, Some(y)) => (x, y),
     };
 
-    Ok(BackgroundPosition { x, y })
+    Ok(BackgroundPosition(SpacePair(x, y)))
   }
 }
 

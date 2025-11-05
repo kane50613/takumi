@@ -13,6 +13,7 @@ use test_utils::run_style_width_test;
 #[test]
 fn test_style_align_items() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -25,6 +26,7 @@ fn test_style_align_items() {
     ),
     children: Some(vec![
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Px(50.0))
@@ -37,6 +39,7 @@ fn test_style_align_items() {
       }
       .into(),
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Px(50.0))
@@ -49,6 +52,7 @@ fn test_style_align_items() {
       }
       .into(),
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Px(50.0))
@@ -69,6 +73,7 @@ fn test_style_align_items() {
 #[test]
 fn test_style_justify_content() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -81,6 +86,7 @@ fn test_style_justify_content() {
     ),
     children: Some(vec![
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Px(50.0))
@@ -93,6 +99,7 @@ fn test_style_justify_content() {
       }
       .into(),
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Px(50.0))
@@ -105,6 +112,7 @@ fn test_style_justify_content() {
       }
       .into(),
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Px(50.0))

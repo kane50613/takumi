@@ -8,6 +8,7 @@ use test_utils::run_style_width_test;
 
 fn create_overflow_fixture(overflows: Overflows) -> NodeKind {
   ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -20,6 +21,7 @@ fn create_overflow_fixture(overflows: Overflows) -> NodeKind {
     ),
     children: Some(vec![
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .display(Display::Block)
@@ -33,6 +35,7 @@ fn create_overflow_fixture(overflows: Overflows) -> NodeKind {
         ),
         children: Some(vec![
           ImageNode {
+            tw: None,
             style: Some(
               StyleBuilder::default()
                 .width(Px(300.0))
@@ -57,6 +60,7 @@ fn create_overflow_fixture(overflows: Overflows) -> NodeKind {
 
 fn create_text_overflow_fixture(overflows: Overflows) -> NodeKind {
   ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -69,6 +73,7 @@ fn create_text_overflow_fixture(overflows: Overflows) -> NodeKind {
     ),
     children: Some(vec![
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .display(Display::Block)
@@ -82,6 +87,7 @@ fn create_text_overflow_fixture(overflows: Overflows) -> NodeKind {
         ),
         children: Some(vec![
           TextNode {
+            tw: None,
             style: Some(
               StyleBuilder::default()
               .font_size(CssOption::some(Rem(4.0)))
@@ -103,7 +109,7 @@ fn create_text_overflow_fixture(overflows: Overflows) -> NodeKind {
 
 #[test]
 fn test_style_overflow_visible() {
-  let container = create_overflow_fixture(Overflows(Overflow::Visible, Overflow::Visible));
+  let container = create_overflow_fixture(Overflows(SpacePair::from_single(Overflow::Visible)));
 
   run_style_width_test(
     container,
@@ -113,14 +119,15 @@ fn test_style_overflow_visible() {
 
 #[test]
 fn test_overflow_hidden() {
-  let container = create_overflow_fixture(Overflows(Overflow::Hidden, Overflow::Hidden));
+  let container = create_overflow_fixture(Overflows(SpacePair::from_single(Overflow::Hidden)));
 
   run_style_width_test(container, "tests/fixtures/style_overflow_hidden_image.webp");
 }
 
 #[test]
 fn test_overflow_mixed_axes() {
-  let container = create_overflow_fixture(Overflows(Overflow::Hidden, Overflow::Visible));
+  let container =
+    create_overflow_fixture(Overflows(SpacePair(Overflow::Hidden, Overflow::Visible)));
 
   run_style_width_test(
     container,
@@ -130,21 +137,23 @@ fn test_overflow_mixed_axes() {
 
 #[test]
 fn test_text_overflow_visible() {
-  let container = create_text_overflow_fixture(Overflows(Overflow::Visible, Overflow::Visible));
+  let container =
+    create_text_overflow_fixture(Overflows(SpacePair::from_single(Overflow::Visible)));
 
   run_style_width_test(container, "tests/fixtures/style_overflow_visible_text.webp");
 }
 
 #[test]
 fn test_text_overflow_hidden() {
-  let container = create_text_overflow_fixture(Overflows(Overflow::Hidden, Overflow::Hidden));
+  let container = create_text_overflow_fixture(Overflows(SpacePair::from_single(Overflow::Hidden)));
 
   run_style_width_test(container, "tests/fixtures/style_overflow_hidden_text.webp");
 }
 
 #[test]
 fn test_text_overflow_mixed_axes() {
-  let container = create_text_overflow_fixture(Overflows(Overflow::Hidden, Overflow::Visible));
+  let container =
+    create_text_overflow_fixture(Overflows(SpacePair(Overflow::Hidden, Overflow::Visible)));
 
   run_style_width_test(
     container,

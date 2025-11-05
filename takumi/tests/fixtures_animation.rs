@@ -31,6 +31,7 @@ fn create_bouncing_text_nodes() -> Vec<(NodeKind, u32)> {
       let y_offset = -bounce * 140.0; // pixels up
 
       let node = ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
@@ -44,6 +45,7 @@ fn create_bouncing_text_nodes() -> Vec<(NodeKind, u32)> {
         ),
         children: Some(vec![
           ContainerNode {
+            tw: None,
             style: Some(
               StyleBuilder::default()
                 .transform(CssOption::some(Transforms(smallvec![
@@ -54,6 +56,7 @@ fn create_bouncing_text_nodes() -> Vec<(NodeKind, u32)> {
             ),
             children: Some(vec![
               TextNode {
+                tw: None,
                 style: Some(
                   StyleBuilder::default()
                     .font_size(CssOption::some(Px(56.0)))

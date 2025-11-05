@@ -2,10 +2,8 @@ use smallvec::smallvec;
 use takumi::layout::{
   node::{ContainerNode, ImageNode, TextNode},
   style::{
-    Angle, BackgroundPosition, Color, ColorInput, CssOption, Display,
     LengthUnit::{Percentage, Px},
-    Position, PositionComponent, PositionKeywordX, PositionKeywordY, Sides, StyleBuilder,
-    Transform, Transforms, Translate,
+    *,
   },
 };
 
@@ -17,6 +15,7 @@ const ROTATED_ANGLES: &[f32] = &[0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 31
 #[test]
 fn test_style_transform_origin_center() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -42,6 +41,7 @@ fn test_style_transform_origin_center() {
 #[test]
 fn test_style_transform_origin_top_left() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -58,10 +58,10 @@ fn test_style_transform_origin_top_left() {
         .map(|angle| {
           create_rotated_container(
             *angle,
-            BackgroundPosition {
-              x: PositionComponent::KeywordX(PositionKeywordX::Left),
-              y: PositionComponent::KeywordY(PositionKeywordY::Top),
-            },
+            BackgroundPosition(SpacePair(
+              PositionComponent::KeywordX(PositionKeywordX::Left),
+              PositionComponent::KeywordY(PositionKeywordY::Top),
+            )),
           )
           .into()
         })
@@ -77,12 +77,10 @@ fn test_style_transform_origin_top_left() {
 
 fn create_rotated_container(angle: f32, transform_origin: BackgroundPosition) -> ImageNode {
   ImageNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
-        .translate(CssOption::some(Translate {
-          x: Percentage(-50.0),
-          y: Percentage(-50.0),
-        }))
+        .translate(CssOption::some(SpacePair::from_single(Percentage(-50.0))))
         .rotate(CssOption::some(Angle::new(angle)))
         .position(Position::Absolute)
         .inset(Sides([
@@ -109,6 +107,7 @@ fn create_rotated_container(angle: f32, transform_origin: BackgroundPosition) ->
 #[test]
 fn test_style_transform_translate_and_scale() {
   let mut container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -123,6 +122,7 @@ fn test_style_transform_translate_and_scale() {
   };
 
   let position = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Px(200.0))
@@ -134,6 +134,7 @@ fn test_style_transform_translate_and_scale() {
     children: Some(vec![
       TextNode {
         text: "200px x 100px".to_string(),
+        tw: None,
         style: None,
       }
       .into(),
@@ -141,6 +142,7 @@ fn test_style_transform_translate_and_scale() {
   };
 
   let translated = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Px(300.0))
@@ -156,6 +158,7 @@ fn test_style_transform_translate_and_scale() {
     ),
     children: Some(vec![
       ImageNode {
+        tw: None,
         src: "assets/images/yeecord.png".into(),
         style: Some(
           StyleBuilder::default()
@@ -172,6 +175,7 @@ fn test_style_transform_translate_and_scale() {
   };
 
   let scaled = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .transform(CssOption::some(Transforms(smallvec![
@@ -189,6 +193,7 @@ fn test_style_transform_translate_and_scale() {
     children: Some(vec![
       TextNode {
         text: "100px x 100px, translate(0px, 200px), scale(2.0, 2.0)".to_string(),
+        tw: None,
         style: None,
       }
       .into(),
@@ -196,6 +201,7 @@ fn test_style_transform_translate_and_scale() {
   };
 
   let rotated = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .transform(CssOption::some(Transforms(smallvec![Transform::Rotate(
@@ -213,6 +219,7 @@ fn test_style_transform_translate_and_scale() {
     children: Some(vec![
       TextNode {
         text: "200px x 200px, rotate(45deg)".to_string(),
+        tw: None,
         style: None,
       }
       .into(),

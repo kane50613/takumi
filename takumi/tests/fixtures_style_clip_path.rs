@@ -11,6 +11,7 @@ fn fixtures_clip_path_text_stroke_filled() {
   let text = "clip-path works in Takumi";
 
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -28,15 +29,13 @@ fn fixtures_clip_path_text_stroke_filled() {
     ),
     children: Some(vec![
       TextNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .position(Position::Absolute)
             .top(CssOption::some(Percentage(50.0)))
             .left(CssOption::some(Percentage(50.0)))
-            .translate(CssOption::some(Translate {
-              x: Percentage(-50.0),
-              y: Percentage(-50.0),
-            }))
+            .translate(CssOption::some(SpacePair::from_single(Percentage(-50.0))))
             .color(ColorInput::Value(Color::white())) // White fill
             .clip_path(CssOption::some(
               BasicShape::from_str("inset(0 0 50% 0)").unwrap(),
@@ -48,15 +47,13 @@ fn fixtures_clip_path_text_stroke_filled() {
       }
       .into(),
       TextNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .position(Position::Absolute)
             .top(CssOption::some(Percentage(50.0)))
             .left(CssOption::some(Percentage(50.0)))
-            .translate(CssOption::some(Translate {
-              x: Percentage(-50.0),
-              y: Percentage(-50.0),
-            }))
+            .translate(CssOption::some(SpacePair::from_single(Percentage(-50.0))))
             .color(ColorInput::Value(Color::transparent())) // Transparent fill
             .text_stroke_width(Px(2.0))
             .text_stroke_color(CssOption::some(ColorInput::Value(Color([
@@ -84,6 +81,7 @@ fn fixtures_clip_path_text_stroke_filled() {
 #[test]
 fn fixtures_clip_path_triangle_vercel() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -99,6 +97,7 @@ fn fixtures_clip_path_triangle_vercel() {
     children: Some(vec![
       // Triangle with clip-path
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Px(128.0))
@@ -126,6 +125,7 @@ fn fixtures_clip_path_triangle_vercel() {
 #[test]
 fn fixtures_clip_path_triangle_gradient() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -141,6 +141,7 @@ fn fixtures_clip_path_triangle_gradient() {
     children: Some(vec![
       // Triangle with gradient background and clip-path
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Px(300.0))
@@ -173,6 +174,7 @@ fn fixtures_clip_path_triangle_gradient() {
 #[test]
 fn fixtures_clip_path_circle() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -188,6 +190,7 @@ fn fixtures_clip_path_circle() {
     children: Some(vec![
       // Circle with clip-path
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Px(200.0))
@@ -212,6 +215,7 @@ fn fixtures_clip_path_circle() {
 #[test]
 fn fixtures_clip_path_inset_rounded() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -227,6 +231,7 @@ fn fixtures_clip_path_inset_rounded() {
     children: Some(vec![
       // Inset with border radius and clip-path
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Px(200.0))

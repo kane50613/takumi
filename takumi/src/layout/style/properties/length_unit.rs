@@ -4,9 +4,37 @@ use taffy::{CompactLength, Dimension, LengthPercentage, LengthPercentageAuto, Re
 use ts_rs::TS;
 
 use crate::{
-  layout::style::{FromCss, ParseResult},
+  layout::style::{AspectRatio, FromCss, ParseResult, tw::TailwindPropertyParser},
   rendering::RenderContext,
 };
+
+/*
+w-3xs
+width: var(--container-3xs); /* 16rem (256px) */
+w-2xs
+width: var(--container-2xs); /* 18rem (288px) */
+w-xs
+width: var(--container-xs); /* 20rem (320px) */
+w-sm
+width: var(--container-sm); /* 24rem (384px) */
+w-md
+width: var(--container-md); /* 28rem (448px) */
+w-lg
+width: var(--container-lg); /* 32rem (512px) */
+w-xl
+width: var(--container-xl); /* 36rem (576px) */
+w-2xl
+width: var(--container-2xl); /* 42rem (672px) */
+w-3xl
+width: var(--container-3xl); /* 48rem (768px) */
+w-4xl
+width: var(--container-4xl); /* 56rem (896px) */
+w-5xl
+width: var(--container-5xl); /* 64rem (1024px) */
+w-6xl
+width: var(--container-6xl); /* 72rem (1152px) */
+w-7xl
+width: var(--container-7xl); /* 80rem (1280px) */ */
 
 /// Represents a value that can be a specific length, percentage, or automatic.
 ///
@@ -43,6 +71,36 @@ pub enum LengthUnit {
   Pc(f32),
   /// Specific pixel value
   Px(f32),
+}
+
+impl TailwindPropertyParser for LengthUnit {
+  fn parse_tw(token: &str) -> Option<Self> {
+    match AspectRatio::from_str(token) {
+      Ok(AspectRatio::Ratio(ratio)) => return Some(LengthUnit::Percentage(ratio * 100.0)),
+      Ok(AspectRatio::Auto) => return Some(LengthUnit::Auto),
+      _ => {}
+    }
+
+    match_ignore_ascii_case! {token,
+      "auto" => Some(LengthUnit::Auto),
+      "px" => Some(LengthUnit::Px(1.0)),
+      "full" => Some(LengthUnit::Percentage(100.0)),
+      "3xs" => Some(LengthUnit::Rem(16.0)),
+      "2xs" => Some(LengthUnit::Rem(18.0)),
+      "xs" => Some(LengthUnit::Rem(20.0)),
+      "sm" => Some(LengthUnit::Rem(24.0)),
+      "md" => Some(LengthUnit::Rem(28.0)),
+      "lg" => Some(LengthUnit::Rem(32.0)),
+      "xl" => Some(LengthUnit::Rem(36.0)),
+      "2xl" => Some(LengthUnit::Rem(42.0)),
+      "3xl" => Some(LengthUnit::Rem(48.0)),
+      "4xl" => Some(LengthUnit::Rem(56.0)),
+      "5xl" => Some(LengthUnit::Rem(64.0)),
+      "6xl" => Some(LengthUnit::Rem(72.0)),
+      "7xl" => Some(LengthUnit::Rem(80.0)),
+      _ => None,
+    }
+  }
 }
 
 /// Proxy type for CSS `LengthUnit` serialization/deserialization.

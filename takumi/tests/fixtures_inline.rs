@@ -50,6 +50,7 @@ fn fixtures_text_inline() {
     .iter()
     .map(|(text, style)| {
       TextNode {
+        tw: None,
         style: Some(style.clone()),
         text: text.to_string(),
       }
@@ -58,6 +59,7 @@ fn fixtures_text_inline() {
     .collect::<Vec<_>>();
 
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .background_color(ColorInput::Value(Color::white()))
@@ -82,6 +84,7 @@ fn fixtures_inline_image() {
   // Inline image should behave as inline-level box content
   let children = vec![
     TextNode {
+      tw: None,
       style: Some(
         StyleBuilder::default()
           .display(Display::Inline)
@@ -92,6 +95,7 @@ fn fixtures_inline_image() {
     }
     .into(),
     ImageNode {
+      tw: None,
       style: Some(
         StyleBuilder::default()
           .display(Display::Inline)
@@ -104,6 +108,7 @@ fn fixtures_inline_image() {
     }
     .into(),
     TextNode {
+      tw: None,
       style: Some(
         StyleBuilder::default()
           .display(Display::Inline)
@@ -116,6 +121,7 @@ fn fixtures_inline_image() {
   ];
 
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -129,6 +135,7 @@ fn fixtures_inline_image() {
     ),
     children: Some(vec![
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .border_width(CssOption::some(Sides([Px(1.0); 4])))
@@ -151,6 +158,7 @@ fn fixtures_inline_block_in_inline() {
   // A block-level container inside inline content: should create anonymous block formatting context
   let children = vec![
     TextNode {
+      tw: None,
       style: Some(
         StyleBuilder::default()
           .display(Display::Inline)
@@ -161,6 +169,7 @@ fn fixtures_inline_block_in_inline() {
     }
     .into(),
     ContainerNode {
+      tw: None,
       style: Some(
         StyleBuilder::default()
           .display(Display::Block)
@@ -172,6 +181,7 @@ fn fixtures_inline_block_in_inline() {
       ),
       children: Some(vec![
         TextNode {
+          tw: None,
           style: Some(
             StyleBuilder::default()
               .display(Display::Block)
@@ -185,6 +195,7 @@ fn fixtures_inline_block_in_inline() {
     }
     .into(),
     TextNode {
+      tw: None,
       style: Some(
         StyleBuilder::default()
           .display(Display::Inline)
@@ -197,6 +208,7 @@ fn fixtures_inline_block_in_inline() {
   ];
 
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .background_color(ColorInput::Value(Color::white()))

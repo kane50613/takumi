@@ -16,9 +16,9 @@ impl<'de> Deserialize<'de> for FontFeatureSettings {
   where
     D: Deserializer<'de>,
   {
-    let s = String::deserialize(deserializer)?;
+    let s = <&str>::deserialize(deserializer)?;
 
-    Ok(FontFeatureSettings(FontFeature::parse_list(&s).collect()))
+    Ok(FontFeatureSettings(FontFeature::parse_list(s).collect()))
   }
 }
 

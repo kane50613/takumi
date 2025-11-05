@@ -13,6 +13,7 @@ use test_utils::run_style_width_test;
 #[test]
 fn test_style_width() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -30,6 +31,7 @@ fn test_style_width() {
 #[test]
 fn test_style_height() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -47,6 +49,7 @@ fn test_style_height() {
 #[test]
 fn test_style_min_width() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .min_width(Px(50.0))
@@ -65,6 +68,7 @@ fn test_style_min_width() {
 #[test]
 fn test_style_min_height() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .min_height(Px(50.0))
@@ -83,6 +87,7 @@ fn test_style_min_height() {
 #[test]
 fn test_style_max_width() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .max_width(Px(100.0))
@@ -101,6 +106,7 @@ fn test_style_max_width() {
 #[test]
 fn test_style_max_height() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .max_height(Px(100.0))

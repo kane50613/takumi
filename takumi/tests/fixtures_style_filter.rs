@@ -20,12 +20,13 @@ fn test_style_filter_on_image_node() {
   ];
 
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
         .height(Percentage(100.0))
         .flex_wrap(FlexWrap::Wrap)
-        .gap(Gap(Rem(1.0), Rem(1.0)))
+        .gap(SpacePair::from_single(Rem(1.0)))
         .justify_content(JustifyContent::Center)
         .align_items(AlignItems::Center)
         .background_color(ColorInput::Value(Color::white()))
@@ -37,6 +38,7 @@ fn test_style_filter_on_image_node() {
         .iter()
         .map(|effect| {
           ContainerNode {
+            tw: None,
             style: Some(
               StyleBuilder::default()
                 .flex_direction(FlexDirection::Column)
@@ -47,6 +49,7 @@ fn test_style_filter_on_image_node() {
             ),
             children: Some(vec![
               ImageNode {
+                tw: None,
                 src: "assets/images/yeecord.png".into(),
                 style: Some(
                   StyleBuilder::default()
@@ -63,6 +66,7 @@ fn test_style_filter_on_image_node() {
               }
               .into(),
               TextNode {
+                tw: None,
                 style: None,
                 text: effect.to_string(),
               }

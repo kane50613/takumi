@@ -101,15 +101,15 @@ define_style!(
   flex_basis: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
   position: Position = Position::Relative => Position::Relative,
   rotate: CssOption<Angle> = CssOption::none() => CssOption::none(),
-  scale: CssOption<Scale> = CssOption::none() => CssOption::none(),
+  scale: CssOption<SpacePair<PercentageNumber>> = CssOption::none() => CssOption::none(),
   transform: CssOption<Transforms> = CssOption::none() => CssOption::none(),
   transform_origin: CssOption<BackgroundPosition> = CssOption::none() => CssOption::none(),
-  translate: CssOption<Translate> = CssOption::none() => CssOption::none(),
+  translate: CssOption<SpacePair<LengthUnit>> = CssOption::none() => CssOption::none(),
   mask_image: CssOption<BackgroundImages> = CssOption::none() => CssOption::none(),
   mask_size: CssOption<BackgroundSizes> = CssOption::none() => CssOption::none(),
   mask_position: CssOption<BackgroundPositions> = CssOption::none() => CssOption::none(),
   mask_repeat: CssOption<BackgroundRepeats> = CssOption::none() => CssOption::none(),
-  gap: Gap = Gap::default() => Gap::default(),
+  gap: SpacePair<LengthUnit> = SpacePair(LengthUnit::Px(0.0), LengthUnit::Px(0.0)) => SpacePair(LengthUnit::Px(0.0), LengthUnit::Px(0.0)),
   flex: CssOption<Flex> = CssOption::none() => CssOption::none(),
   flex_grow: CssOption<FlexGrow> = CssOption::none() => CssOption::none(),
   flex_shrink: CssOption<FlexGrow> = CssOption::none() => CssOption::none(),
@@ -273,10 +273,10 @@ impl<'s> SizedFontStyle<'s> {
 
 impl InheritedStyle {
   pub(crate) fn resolve_overflows(&self) -> Overflows {
-    Overflows(
-      self.overflow_x.unwrap_or(self.overflow.0),
-      self.overflow_y.unwrap_or(self.overflow.1),
-    )
+    Overflows(SpacePair(
+      self.overflow_x.unwrap_or(self.overflow.0.0),
+      self.overflow_y.unwrap_or(self.overflow.0.1),
+    ))
   }
 
   pub(crate) fn white_space(&self) -> WhiteSpace {
@@ -486,6 +486,8 @@ impl InheritedStyle {
     let (grid_template_rows, grid_template_row_names) =
       Self::convert_template_components(&self.grid_template_rows, context);
 
+    let overflow = self.resolve_overflows();
+
     taffy::style::Style {
       box_sizing: self.box_sizing.into(),
       size: Size {
@@ -557,10 +559,9 @@ impl InheritedStyle {
       align_self: self.align_self.into(),
       justify_self: self.justify_self.into(),
       overflow: Point {
-        x: self.overflow_x.unwrap_or(self.overflow.0).into(),
-        y: self.overflow_y.unwrap_or(self.overflow.1).into(),
+        x: overflow.x().into(),
+        y: overflow.y().into(),
       },
-
       dummy: PhantomData,
       item_is_table: false,
       item_is_replaced: false,

@@ -1,11 +1,11 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use taffy::{AvailableSpace, Layout, Size};
 
 use crate::{
   layout::{
     inline::{InlineBrush, InlineContentKind, break_lines, create_inline_constraint},
     node::Node,
-    style::{InheritedStyle, SizedFontStyle, Style, TextOverflow},
+    style::{InheritedStyle, SizedFontStyle, Style, TextOverflow, tw::TailwindProperties},
   },
   rendering::{
     Canvas, MaxHeight, RenderContext, apply_text_transform, apply_white_space_collapse,
@@ -17,17 +17,29 @@ use crate::{
 ///
 /// Text nodes display text with configurable font properties,
 /// alignment, and styling options.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct TextNode {
   /// The styling properties for this text node
   pub style: Option<Style>,
   /// The text content to be rendered
   pub text: String,
+  /// The tailwind properties for this text node
+  pub tw: Option<TailwindProperties>,
 }
 
 impl<Nodes: Node<Nodes>> Node<Nodes> for TextNode {
+  fn get_tailwind_properties(&self) -> Option<&TailwindProperties> {
+    self.tw.as_ref()
+  }
+
   fn create_inherited_style(&mut self, parent_style: &InheritedStyle) -> InheritedStyle {
-    self.style.take().unwrap_or_default().inherit(parent_style)
+    let mut style = self.style.take().unwrap_or_default();
+
+    if let Some(tw) = self.tw.as_ref() {
+      tw.apply(&mut style);
+    }
+
+    style.inherit(parent_style)
   }
 
   fn inline_content(&self, context: &RenderContext) -> Option<InlineContentKind> {

@@ -11,6 +11,7 @@ use test_utils::run_style_width_test;
 #[test]
 fn fixtures_text_basic() {
   let text = TextNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
@@ -26,6 +27,7 @@ fn fixtures_text_basic() {
 #[test]
 fn fixtures_text_typography_regular_24px() {
   let text = TextNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
@@ -48,6 +50,7 @@ fn fixtures_text_typography_variable_weight() {
     .step_by(50)
     .map(|weight| {
       TextNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .font_size(CssOption::some(Px(48.0)))
@@ -62,11 +65,12 @@ fn fixtures_text_typography_variable_weight() {
     .collect::<Vec<_>>();
 
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
         .font_size(CssOption::some(Px(24.0)))
-        .gap(Gap(Px(0.0), Px(24.0)))
+        .gap(SpacePair(Px(0.0), Px(24.0)))
         .flex_wrap(FlexWrap::Wrap)
         .build()
         .unwrap(),
@@ -83,6 +87,7 @@ fn fixtures_text_typography_variable_weight() {
 #[test]
 fn fixtures_text_typography_medium_weight_500() {
   let text = TextNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
@@ -103,6 +108,7 @@ fn fixtures_text_typography_medium_weight_500() {
 #[test]
 fn fixtures_text_typography_line_height_40px() {
   let text = TextNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
@@ -123,6 +129,7 @@ fn fixtures_text_typography_line_height_40px() {
 #[test]
 fn fixtures_text_typography_letter_spacing_2px() {
   let text = TextNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
@@ -143,6 +150,7 @@ fn fixtures_text_typography_letter_spacing_2px() {
 #[test]
 fn fixtures_text_align_start() {
   let text = TextNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
@@ -161,6 +169,7 @@ fn fixtures_text_align_start() {
 #[test]
 fn fixtures_text_align_center() {
   let text = TextNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
@@ -179,6 +188,7 @@ fn fixtures_text_align_center() {
 #[test]
 fn fixtures_text_align_right() {
   let text = TextNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
@@ -201,6 +211,7 @@ Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. \
 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.";
 
   let text = TextNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
@@ -222,6 +233,7 @@ fn fixtures_text_ellipsis_line_clamp_2() {
   let long_text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.";
 
   let text = TextNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -244,6 +256,7 @@ fn fixtures_text_ellipsis_line_clamp_2() {
 #[test]
 fn fixtures_text_transform_all() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -254,6 +267,7 @@ fn fixtures_text_transform_all() {
     ),
     children: Some(vec![
       TextNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Percentage(100.0))
@@ -266,6 +280,7 @@ fn fixtures_text_transform_all() {
       }
       .into(),
       TextNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Percentage(100.0))
@@ -278,6 +293,7 @@ fn fixtures_text_transform_all() {
       }
       .into(),
       TextNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Percentage(100.0))
@@ -290,6 +306,7 @@ fn fixtures_text_transform_all() {
       }
       .into(),
       TextNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Percentage(100.0))
@@ -315,6 +332,7 @@ fn fixtures_text_mask_image_gradient_and_emoji() {
   .unwrap();
 
   let text = TextNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
@@ -345,6 +363,7 @@ fn fixtures_text_mask_image_gradient_and_emoji() {
 #[test]
 fn fixtures_text_stroke_black_red() {
   let text = TextNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
@@ -373,6 +392,7 @@ fn fixtures_text_shadow() {
   }]);
 
   let text = TextNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
@@ -398,6 +418,7 @@ fn fixtures_text_shadow_no_blur_radius() {
   }]);
 
   let text = TextNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
@@ -420,6 +441,7 @@ fn fixtures_text_wrap_nowrap() {
   let long_text = "This is a very long piece of text that should demonstrate text wrapping behavior when it exceeds the container width. The quick brown fox jumps over the lazy dog.";
 
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .background_color(ColorInput::Value(Color([255, 255, 255, 255])))
@@ -428,7 +450,7 @@ fn fixtures_text_wrap_nowrap() {
         .height(Percentage(100.0))
         .display(Display::Flex)
         .flex_direction(FlexDirection::Column)
-        .gap(Gap(Px(20.0), Px(20.0)))
+        .gap(SpacePair::from_single(Px(20.0)))
         .padding(Sides([Px(20.0); 4]))
         .build()
         .unwrap(),
@@ -436,6 +458,7 @@ fn fixtures_text_wrap_nowrap() {
     children: Some(vec![
       // Wrap text
       TextNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .text_wrap(CssOption::some(TextWrapMode::Wrap))
@@ -446,6 +469,7 @@ fn fixtures_text_wrap_nowrap() {
       }
       .into(),
       TextNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .text_wrap(CssOption::some(TextWrapMode::NoWrap))
@@ -464,6 +488,7 @@ fn fixtures_text_wrap_nowrap() {
 #[test]
 fn fixtures_text_whitespace_collapse() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .background_color(ColorInput::Value(Color([255, 255, 255, 255])))
@@ -472,13 +497,14 @@ fn fixtures_text_whitespace_collapse() {
         .font_size(CssOption::some(Px(32.0)))
         .width(Percentage(100.0))
         .height(Percentage(100.0))
-        .gap(Gap(Px(20.0), Px(20.0)))
+        .gap(SpacePair::from_single(Px(20.0)))
         .padding(Sides([Px(20.0); 4]))
         .build()
         .unwrap(),
     ),
     children: Some(vec![
       TextNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .white_space_collapse(CssOption::some(WhiteSpaceCollapse::Collapse))
@@ -489,6 +515,7 @@ fn fixtures_text_whitespace_collapse() {
       }
       .into(),
       TextNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .white_space_collapse(CssOption::some(WhiteSpaceCollapse::Preserve))
@@ -499,6 +526,7 @@ fn fixtures_text_whitespace_collapse() {
       }
       .into(),
       TextNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .white_space_collapse(CssOption::some(WhiteSpaceCollapse::PreserveSpaces))
@@ -509,6 +537,7 @@ fn fixtures_text_whitespace_collapse() {
       }
       .into(),
       TextNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .white_space_collapse(CssOption::some(WhiteSpaceCollapse::PreserveBreaks))

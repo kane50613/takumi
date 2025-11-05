@@ -25,8 +25,8 @@ impl<'de> Deserialize<'de> for TextOverflow {
   where
     D: Deserializer<'de>,
   {
-    let string = String::deserialize(deserializer)?;
-    Self::from_str(&string).map_err(|e| serde::de::Error::custom(e.to_string()))
+    let string = <&str>::deserialize(deserializer)?;
+    Self::from_str(string).map_err(|e| serde::de::Error::custom(e.to_string()))
   }
 }
 

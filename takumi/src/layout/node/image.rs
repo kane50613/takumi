@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use data_url::DataUrl;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use taffy::{AvailableSpace, Layout, Size};
 
 use crate::resources::image::{ImageResult, load_image_source_from_bytes};
@@ -9,7 +9,7 @@ use crate::{
   layout::{
     inline::InlineContentKind,
     node::Node,
-    style::{InheritedStyle, Style},
+    style::{InheritedStyle, Style, tw::TailwindProperties},
   },
   rendering::{Canvas, RenderContext, draw_image},
   resources::{
@@ -19,7 +19,7 @@ use crate::{
 };
 
 /// A node that renders image content.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct ImageNode {
   /// The styling properties for this image node
   pub style: Option<Style>,
@@ -29,9 +29,15 @@ pub struct ImageNode {
   pub width: Option<f32>,
   /// The height of the image
   pub height: Option<f32>,
+  /// The tailwind properties for this image node
+  pub tw: Option<TailwindProperties>,
 }
 
 impl<Nodes: Node<Nodes>> Node<Nodes> for ImageNode {
+  fn get_tailwind_properties(&self) -> Option<&TailwindProperties> {
+    self.tw.as_ref()
+  }
+
   fn collect_fetch_tasks(&self, collection: &mut FetchTaskCollection) {
     if self.src.starts_with("https://") || self.src.starts_with("http://") {
       collection.insert(self.src.clone());
@@ -39,7 +45,13 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ImageNode {
   }
 
   fn create_inherited_style(&mut self, parent_style: &InheritedStyle) -> InheritedStyle {
-    self.style.take().unwrap_or_default().inherit(parent_style)
+    let mut style = self.style.take().unwrap_or_default();
+
+    if let Some(tw) = self.tw.as_ref() {
+      tw.apply(&mut style);
+    }
+
+    style.inherit(parent_style)
   }
 
   fn inline_content(&self, _context: &RenderContext) -> Option<InlineContentKind> {

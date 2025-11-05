@@ -1,10 +1,8 @@
 use takumi::layout::{
   node::ContainerNode,
   style::{
-    Color, CssOption, Display, FlexDirection, Gap, GridLengthUnit, GridTemplateComponent,
-    GridTemplateComponents, GridTrackSize,
     LengthUnit::{Percentage, Px},
-    StyleBuilder, *,
+    *,
   },
 };
 
@@ -14,6 +12,7 @@ use test_utils::run_style_width_test;
 #[test]
 fn test_style_flex_basis() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -26,6 +25,7 @@ fn test_style_flex_basis() {
     ),
     children: Some(vec![
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .flex_basis(CssOption::some(Px(100.0)))
@@ -38,6 +38,7 @@ fn test_style_flex_basis() {
       }
       .into(),
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .flex_basis(CssOption::some(Px(100.0)))
@@ -50,6 +51,7 @@ fn test_style_flex_basis() {
       }
       .into(),
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .flex_basis(CssOption::some(Px(100.0)))
@@ -70,6 +72,7 @@ fn test_style_flex_basis() {
 #[test]
 fn test_style_flex_direction() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -82,6 +85,7 @@ fn test_style_flex_direction() {
     ),
     children: Some(vec![
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Px(50.0))
@@ -94,6 +98,7 @@ fn test_style_flex_direction() {
       }
       .into(),
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Px(50.0))
@@ -106,6 +111,7 @@ fn test_style_flex_direction() {
       }
       .into(),
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Px(50.0))
@@ -126,12 +132,13 @@ fn test_style_flex_direction() {
 #[test]
 fn test_style_gap() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
         .height(Percentage(100.0))
         .display(Display::Flex)
-        .gap(Gap(Px(20.0), Px(40.0)))
+        .gap(SpacePair::from_single(Px(20.0)))
         .background_color(ColorInput::Value(Color([0, 0, 255, 255])))
         .build()
         .unwrap(),
@@ -139,6 +146,7 @@ fn test_style_gap() {
     children: Some(vec![
       // First child
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Px(50.0))
@@ -152,6 +160,7 @@ fn test_style_gap() {
       .into(),
       // Second child
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Px(50.0))
@@ -165,6 +174,7 @@ fn test_style_gap() {
       .into(),
       // Third child
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Px(50.0))
@@ -185,6 +195,7 @@ fn test_style_gap() {
 #[test]
 fn test_style_grid_template_columns() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Px(200.0))
@@ -200,6 +211,7 @@ fn test_style_grid_template_columns() {
     ),
     children: Some(vec![
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .background_color(ColorInput::Value(Color([255, 0, 0, 255])))
@@ -210,6 +222,7 @@ fn test_style_grid_template_columns() {
       }
       .into(),
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .background_color(ColorInput::Value(Color([0, 255, 0, 255])))
@@ -231,6 +244,7 @@ fn test_style_grid_template_columns() {
 #[test]
 fn test_style_grid_template_rows() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Px(200.0))
@@ -246,6 +260,7 @@ fn test_style_grid_template_rows() {
     ),
     children: Some(vec![
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .background_color(ColorInput::Value(Color([255, 0, 0, 255])))
@@ -256,6 +271,7 @@ fn test_style_grid_template_rows() {
       }
       .into(),
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .background_color(ColorInput::Value(Color([0, 255, 0, 255])))

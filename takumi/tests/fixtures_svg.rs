@@ -8,6 +8,7 @@ use test_utils::run_style_width_test;
 
 fn create_luma_logo_container() -> ContainerNode<NodeKind> {
   ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -22,6 +23,7 @@ fn create_luma_logo_container() -> ContainerNode<NodeKind> {
         .unwrap(),
     ),
     children: Some(vec![NodeKind::Image(ImageNode {
+      tw: None,
       style: Some(
         StyleBuilder::default()
           .width(Px(204.0))

@@ -63,7 +63,7 @@ pub(crate) fn resolve_position_component_x(
   context: &RenderContext,
 ) -> i32 {
   let available = area_w.saturating_sub(tile_w) as i32;
-  match comp.x {
+  match comp.x() {
     PositionComponent::KeywordX(PositionKeywordX::Left) => 0,
     PositionComponent::KeywordX(PositionKeywordX::Center) => available / 2,
     PositionComponent::KeywordX(PositionKeywordX::Right) => available,
@@ -81,7 +81,7 @@ pub(crate) fn resolve_position_component_y(
   context: &RenderContext,
 ) -> i32 {
   let available = area_h.saturating_sub(tile_h) as i32;
-  match comp.y {
+  match comp.y() {
     PositionComponent::KeywordY(PositionKeywordY::Top) => 0,
     PositionComponent::KeywordY(PositionKeywordY::Center) => available / 2,
     PositionComponent::KeywordY(PositionKeywordY::Bottom) => available,
@@ -138,7 +138,7 @@ pub(crate) fn resolve_layer_tiles(
   let mut tile_image = render_gradient_tile(image, tile_w, tile_h, context);
 
   // Handle round adjustment (rescale per axis)
-  let xs: SmallVec<[i32; 1]> = match repeat.x {
+  let xs: SmallVec<[i32; 1]> = match repeat.0 {
     BackgroundRepeatStyle::Repeat => {
       let origin_x = resolve_position_component_x(pos, tile_w, area_w, context);
       collect_repeat_tile_positions(area_w, tile_w, origin_x)
@@ -158,7 +158,7 @@ pub(crate) fn resolve_layer_tiles(
     }
   };
 
-  let ys: SmallVec<[i32; 1]> = match repeat.y {
+  let ys: SmallVec<[i32; 1]> = match repeat.1 {
     BackgroundRepeatStyle::Repeat => {
       let origin_y = resolve_position_component_y(pos, tile_h, area_h, context);
       collect_repeat_tile_positions(area_h, tile_h, origin_y)

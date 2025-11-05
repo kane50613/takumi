@@ -13,6 +13,7 @@ use test_utils::run_style_width_test;
 #[test]
 fn test_style_margin() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -23,6 +24,7 @@ fn test_style_margin() {
     ),
     children: Some(vec![
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .margin(Sides([Px(20.0); 4])) // Uniform margin of 20px
@@ -44,6 +46,7 @@ fn test_style_margin() {
 #[test]
 fn test_style_padding() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -55,6 +58,7 @@ fn test_style_padding() {
     ),
     children: Some(vec![
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Percentage(100.0))

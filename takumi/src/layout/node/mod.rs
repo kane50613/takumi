@@ -6,14 +6,14 @@ pub use container::*;
 pub use image::*;
 pub use text::*;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use taffy::{AvailableSpace, Layout, Point, Size};
 use zeno::Mask;
 
 use crate::{
   layout::{
     inline::InlineContentKind,
-    style::{BackgroundImage, CssOption, CssValue, InheritedStyle, Style},
+    style::{BackgroundImage, CssOption, CssValue, InheritedStyle, Style, tw::TailwindProperties},
   },
   rendering::{
     BorderProperties, Canvas, RenderContext, SizedShadow, draw_background_layers, draw_border,
@@ -47,6 +47,12 @@ macro_rules! impl_node_enum {
       fn inline_content(&self, context: &$crate::rendering::RenderContext) -> Option<$crate::layout::inline::InlineContentKind> {
         match self {
           $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::inline_content(inner, context), )*
+        }
+      }
+
+      fn get_tailwind_properties(&self) -> Option<&TailwindProperties> {
+        match self {
+          $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::get_tailwind_properties(inner), )*
         }
       }
 
@@ -138,6 +144,11 @@ macro_rules! impl_node_enum {
 /// This trait defines the common interface for all elements that can be
 /// rendered in the layout system, including containers, text, and images.
 pub trait Node<N: Node<N>>: Send + Sync + Clone {
+  /// Get the tailwind property of the node.
+  fn get_tailwind_properties(&self) -> Option<&TailwindProperties> {
+    None
+  }
+
   /// Gets reference of children.
   fn children_ref(&self) -> Option<&[N]> {
     None
@@ -330,7 +341,7 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
 }
 
 /// Represents the nodes enum.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum NodeKind {
   /// A node that contains other nodes.

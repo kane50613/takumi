@@ -13,6 +13,7 @@ use test_utils::run_style_width_test;
 #[test]
 fn test_style_position() {
   let container = ContainerNode {
+    tw: None,
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
@@ -23,6 +24,7 @@ fn test_style_position() {
     ),
     children: Some(vec![
       ContainerNode {
+        tw: None,
         style: Some(
           StyleBuilder::default()
             .width(Px(100.0))

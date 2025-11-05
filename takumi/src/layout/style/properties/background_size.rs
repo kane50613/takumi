@@ -2,7 +2,7 @@ use cssparser::Parser;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::layout::style::{FromCss, LengthUnit, ParseResult};
+use crate::layout::style::{FromCss, LengthUnit, ParseResult, tw::TailwindPropertyParser};
 
 /// Parsed `background-size` for one layer.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, TS, PartialEq)]
@@ -18,6 +18,16 @@ pub enum BackgroundSize {
     /// Height value for the background image.
     height: LengthUnit,
   },
+}
+
+impl TailwindPropertyParser for BackgroundSize {
+  fn parse_tw(token: &str) -> Option<Self> {
+    match token {
+      "cover" => Some(BackgroundSize::Cover),
+      "contain" => Some(BackgroundSize::Contain),
+      _ => None,
+    }
+  }
 }
 
 impl Default for BackgroundSize {

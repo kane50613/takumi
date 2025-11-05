@@ -20,26 +20,15 @@ async fn test_generate_image_handler_with_hmac_verify() {
   use hmac::{Hmac, Mac};
   use query_string_builder::QueryString;
   use sha2::Sha256;
-  use takumi::layout::{
-    node::{ContainerNode, NodeKind},
-    style::{LengthUnit::Px, StyleBuilder},
-  };
 
   let app = create_app(create_state(Args::default(), GlobalContext::default()));
 
-  let node: NodeKind = ContainerNode {
-    style: Some(
-      StyleBuilder::default()
-        .width(Px(100.0))
-        .height(Px(100.0))
-        .build()
-        .unwrap(),
-    ),
-    children: None,
-  }
-  .into();
+  const NODE: &str = r#"{
+    "type": "container",
+    "tw": "w-100 h-100"
+  }"#;
 
-  let payload = serde_json::to_string(&node).unwrap();
+  let payload = NODE.to_owned();
   let timestamp = SystemTime::now()
     .duration_since(UNIX_EPOCH)
     .unwrap()

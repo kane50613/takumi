@@ -19,7 +19,6 @@ mod font_feature_settings;
 mod font_style;
 mod font_variation_settings;
 mod font_weight;
-mod gap;
 mod gradient_utils;
 mod grid;
 mod length_unit;
@@ -31,14 +30,13 @@ mod overflow;
 mod overflow_wrap;
 mod percentage_number;
 mod radial_gradient;
-mod scale;
 mod sides;
+mod space_pair;
 mod text_decoration;
 mod text_overflow;
 mod text_shadow;
 mod text_stroke;
 mod transform;
-mod translate;
 mod white_space;
 mod word_break;
 
@@ -60,7 +58,6 @@ pub use font_feature_settings::*;
 pub use font_style::*;
 pub use font_variation_settings::*;
 pub use font_weight::*;
-pub use gap::*;
 pub use grid::*;
 pub use length_unit::*;
 pub use line_clamp::*;
@@ -71,14 +68,13 @@ pub use overflow::*;
 pub use overflow_wrap::*;
 pub use percentage_number::*;
 pub use radial_gradient::*;
-pub use scale::*;
 pub use sides::*;
+pub use space_pair::*;
 pub use text_decoration::*;
 pub use text_overflow::*;
 pub use text_shadow::*;
 pub use text_stroke::*;
 pub use transform::*;
-pub use translate::*;
 pub use white_space::*;
 pub use word_break::*;
 
@@ -87,6 +83,8 @@ use image::imageops::FilterType;
 use parley::{Alignment, FontStack};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
+
+use crate::layout::style::tw::TailwindPropertyParser;
 
 /// Parser result type alias for CSS property parsers.
 pub type ParseResult<'i, T> = Result<T, ParseError<'i, Cow<'i, str>>>;
@@ -140,6 +138,19 @@ pub enum ObjectFit {
   ScaleDown,
   /// The replaced content is not resized and maintains its intrinsic dimensions
   None,
+}
+
+impl TailwindPropertyParser for ObjectFit {
+  fn parse_tw(token: &str) -> Option<Self> {
+    match_ignore_ascii_case! {token,
+      "fill" => Some(ObjectFit::Fill),
+      "contain" => Some(ObjectFit::Contain),
+      "cover" => Some(ObjectFit::Cover),
+      "scale-down" => Some(ObjectFit::ScaleDown),
+      "none" => Some(ObjectFit::None),
+      _ => None,
+    }
+  }
 }
 
 /// Defines how the width and height of an element are calculated.
