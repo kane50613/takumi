@@ -22,6 +22,10 @@ serde-untagged = "0.1"
 data-url = "0.3"
 dashmap = "6.1"
 
+[dependencies.phf]
+version = "0.13"
+features = ["macros"]
+
 [dependencies.smallvec]
 version = "1.15"
 features = ["serde"]

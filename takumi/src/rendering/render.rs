@@ -9,7 +9,7 @@ use crate::{
   layout::{
     Viewport,
     node::Node,
-    style::{Affine, Color, InheritedStyle, Overflow},
+    style::{Affine, Color, Display, InheritedStyle, Overflow},
     tree::NodeTree,
   },
   rendering::{BorderProperties, Canvas},
@@ -138,7 +138,7 @@ fn render_node<'g, Nodes: Node<Nodes>>(
   let mut layout = *taffy.layout(node_id).unwrap();
   let node_context = taffy.get_node_context_mut(node_id).unwrap();
 
-  if node_context.context.opacity == 0.0 {
+  if node_context.context.opacity == 0.0 || node_context.context.style.display == Display::None {
     return;
   }
 

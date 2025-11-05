@@ -17,6 +17,35 @@ pub struct Flex {
   pub basis: LengthUnit,
 }
 
+impl Flex {
+  /// The flex-grow value is 1.
+  pub const fn auto() -> Self {
+    Self {
+      grow: 1.0,
+      shrink: 1.0,
+      basis: LengthUnit::Auto,
+    }
+  }
+
+  /// The flex-grow value is 0.
+  pub const fn none() -> Self {
+    Self {
+      grow: 0.0,
+      shrink: 0.0,
+      basis: LengthUnit::Auto,
+    }
+  }
+
+  /// The flex-grow value is 0 and the flex-shrink value is 1.
+  pub const fn initial() -> Self {
+    Self {
+      grow: 0.0,
+      shrink: 1.0,
+      basis: LengthUnit::Auto,
+    }
+  }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]
 #[serde(untagged)]
 pub(crate) enum FlexValue {
@@ -61,22 +90,14 @@ impl<'i> FromCss<'i> for Flex {
       .try_parse(|input| input.expect_ident_matching("none"))
       .is_ok()
     {
-      return Ok(Flex {
-        grow: 0.0,
-        shrink: 0.0,
-        basis: LengthUnit::Auto,
-      });
+      return Ok(Flex::none());
     }
 
     if input
       .try_parse(|input| input.expect_ident_matching("auto"))
       .is_ok()
     {
-      return Ok(Flex {
-        grow: 1.0,
-        shrink: 1.0,
-        basis: LengthUnit::Auto,
-      });
+      return Ok(Flex::auto());
     }
 
     // https://developer.mozilla.org/en-US/docs/Web/CSS/flex#syntax

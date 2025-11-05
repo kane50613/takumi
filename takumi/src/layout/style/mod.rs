@@ -1,6 +1,9 @@
 mod properties;
 mod stylesheets;
 
+/// Handle Tailwind CSS properties.
+pub mod tw;
+
 use std::ops::Deref;
 
 use cssparser::match_ignore_ascii_case;

@@ -283,6 +283,8 @@ impl From<JustifyContent> for Option<taffy::JustifyContent> {
 #[derive(Debug, Clone, Deserialize, Serialize, Copy, TS, PartialEq, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum Display {
+  /// The element is not displayed
+  None,
   /// The element generates a flex container and its children follow the flexbox layout algorithm
   #[default]
   Flex,
@@ -325,6 +327,7 @@ impl From<Display> for taffy::Display {
       Display::Flex => taffy::Display::Flex,
       Display::Grid => taffy::Display::Grid,
       Display::Block => taffy::Display::Block,
+      Display::None => taffy::Display::None,
       Display::Inline => unreachable!("Inline node should not be inserted into taffy context"),
     }
   }
