@@ -414,7 +414,7 @@ impl InheritedStyle {
   }
 
   #[inline]
-  fn resolved_gap(&self) -> SpacePair<LengthUnit> {
+  fn resolved_gap(&self) -> SpacePair<LengthUnit, true> {
     SpacePair::from_pair(
       self.column_gap.unwrap_or(self.gap.y),
       self.row_gap.unwrap_or(self.gap.x),
