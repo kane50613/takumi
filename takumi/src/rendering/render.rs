@@ -93,11 +93,13 @@ fn create_transform(style: &InheritedStyle, layout: &Layout, context: &RenderCon
 
   let center = Point {
     x: transform_origin
-      .x()
+      .0
+      .x
       .to_length_unit()
       .resolve_to_px(context, layout.size.width),
     y: transform_origin
-      .y()
+      .0
+      .y
       .to_length_unit()
       .resolve_to_px(context, layout.size.height),
   };
@@ -113,8 +115,8 @@ fn create_transform(style: &InheritedStyle, layout: &Layout, context: &RenderCon
     transform = transform
       * Affine::scale(
         Size {
-          width: scale.0.0,
-          height: scale.1.0,
+          width: scale.x.0,
+          height: scale.y.0,
         },
         center,
       );
@@ -127,8 +129,8 @@ fn create_transform(style: &InheritedStyle, layout: &Layout, context: &RenderCon
   if let Some(translate) = *style.translate {
     transform = transform
       * Affine::translation(Size {
-        width: translate.0.resolve_to_px(context, layout.size.width),
-        height: translate.1.resolve_to_px(context, layout.size.height),
+        width: translate.x.resolve_to_px(context, layout.size.width),
+        height: translate.y.resolve_to_px(context, layout.size.height),
       });
   }
 
@@ -212,12 +214,12 @@ fn render_node<'g, Nodes: Node<Nodes>>(
     let filters = node_context.context.style.filter.0.clone();
 
     let offset = Point {
-      x: if overflow.x() == Overflow::Visible {
+      x: if overflow.0.x == Overflow::Visible {
         layout.location.x
       } else {
         0.0
       },
-      y: if overflow.y() == Overflow::Visible {
+      y: if overflow.0.y == Overflow::Visible {
         layout.location.y
       } else {
         0.0
@@ -242,12 +244,12 @@ fn render_node<'g, Nodes: Node<Nodes>>(
     return canvas.overlay_image(
       &inner_canvas.into_inner(),
       Point {
-        x: if overflow.x() == Overflow::Visible {
+        x: if overflow.0.x == Overflow::Visible {
           0
         } else {
           layout.location.x as i32
         },
-        y: if overflow.y() == Overflow::Visible {
+        y: if overflow.0.y == Overflow::Visible {
           0
         } else {
           layout.location.y as i32

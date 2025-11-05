@@ -63,7 +63,7 @@ pub(crate) fn resolve_position_component_x(
   context: &RenderContext,
 ) -> i32 {
   let available = area_w.saturating_sub(tile_w) as i32;
-  match comp.x() {
+  match comp.0.x {
     PositionComponent::KeywordX(PositionKeywordX::Left) => 0,
     PositionComponent::KeywordX(PositionKeywordX::Center) => available / 2,
     PositionComponent::KeywordX(PositionKeywordX::Right) => available,
@@ -81,7 +81,7 @@ pub(crate) fn resolve_position_component_y(
   context: &RenderContext,
 ) -> i32 {
   let available = area_h.saturating_sub(tile_h) as i32;
-  match comp.y() {
+  match comp.0.y {
     PositionComponent::KeywordY(PositionKeywordY::Top) => 0,
     PositionComponent::KeywordY(PositionKeywordY::Center) => available / 2,
     PositionComponent::KeywordY(PositionKeywordY::Bottom) => available,

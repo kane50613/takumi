@@ -55,18 +55,6 @@ impl<'i> FromCss<'i> for Overflow {
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, TS, PartialEq)]
 pub struct Overflows(pub SpacePair<Overflow>);
 
-impl Overflows {
-  /// Get the x-axis value.
-  pub(crate) fn x(&self) -> Overflow {
-    self.0.0
-  }
-
-  /// Get the y-axis value.
-  pub(crate) fn y(&self) -> Overflow {
-    self.0.1
-  }
-}
-
 impl Default for Overflows {
   fn default() -> Self {
     Self(SpacePair::from_single(Overflow::Visible))
@@ -81,12 +69,12 @@ impl Overflows {
 
   pub(crate) fn create_clip_canvas(&self, viewport: Viewport, layout: Layout) -> Option<Canvas> {
     let inner_size = Size {
-      width: if self.0.0 == Overflow::Visible {
+      width: if self.0.x == Overflow::Visible {
         viewport.width
       } else {
         (layout.size.width - layout.padding.right - layout.border.right) as u32
       },
-      height: if self.0.1 == Overflow::Visible {
+      height: if self.0.y == Overflow::Visible {
         viewport.height
       } else {
         (layout.size.height - layout.padding.bottom - layout.border.bottom) as u32

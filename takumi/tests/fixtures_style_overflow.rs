@@ -126,8 +126,10 @@ fn test_overflow_hidden() {
 
 #[test]
 fn test_overflow_mixed_axes() {
-  let container =
-    create_overflow_fixture(Overflows(SpacePair(Overflow::Hidden, Overflow::Visible)));
+  let container = create_overflow_fixture(Overflows(SpacePair::from_pair(
+    Overflow::Hidden,
+    Overflow::Visible,
+  )));
 
   run_style_width_test(
     container,
@@ -152,8 +154,10 @@ fn test_text_overflow_hidden() {
 
 #[test]
 fn test_text_overflow_mixed_axes() {
-  let container =
-    create_text_overflow_fixture(Overflows(SpacePair(Overflow::Hidden, Overflow::Visible)));
+  let container = create_text_overflow_fixture(Overflows(SpacePair::from_pair(
+    Overflow::Hidden,
+    Overflow::Visible,
+  )));
 
   run_style_width_test(
     container,

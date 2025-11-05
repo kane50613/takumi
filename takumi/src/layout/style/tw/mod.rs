@@ -4,6 +4,9 @@ use smallvec::smallvec;
 
 use crate::layout::style::*;
 
+/// Tailwind `--spacing` variable value.
+pub const VAR_SPACING: f32 = 0.25;
+
 /// Represents a collection of tailwind properties.
 #[derive(Debug, Clone)]
 pub struct TailwindProperties {
@@ -39,6 +42,10 @@ impl<'de> Deserialize<'de> for TailwindProperties {
 /// Represents a tailwind property.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TailwindProperty {
+  /// The flex grow of the element.
+  FlexGrow(f32),
+  /// The flex shrink of the element.
+  FlexShrink(f32),
   /// The aspect ratio of the element.
   Aspect(f32),
   /// The alignment of the items in the element.
@@ -153,6 +160,12 @@ impl TailwindProperty {
 
   pub(crate) fn apply(&self, style: &mut Style) {
     match *self {
+      TailwindProperty::FlexGrow(flex_grow) => {
+        style.flex_grow = CssOption::some(FlexGrow(flex_grow)).into();
+      }
+      TailwindProperty::FlexShrink(flex_shrink) => {
+        style.flex_shrink = CssOption::some(FlexGrow(flex_shrink)).into();
+      }
       TailwindProperty::Aspect(ratio) => {
         style.aspect_ratio = AspectRatio::Ratio(ratio).into();
       }
@@ -286,6 +299,8 @@ static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
   "self-center" => TailwindProperty::AlignSelf(AlignItems::Center),
   "self-stretch" => TailwindProperty::AlignSelf(AlignItems::Stretch),
   "self-baseline" => TailwindProperty::AlignSelf(AlignItems::Baseline),
+  "flex-grow" | "grow" => TailwindProperty::FlexGrow(1.0),
+  "flex-shrink" | "shrink" => TailwindProperty::FlexShrink(1.0),
   "flex-row" => TailwindProperty::FlexDirection(FlexDirection::Row),
   "flex-row-reverse" => TailwindProperty::FlexDirection(FlexDirection::RowReverse),
   "flex-col" => TailwindProperty::FlexDirection(FlexDirection::Column),

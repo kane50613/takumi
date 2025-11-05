@@ -109,7 +109,7 @@ define_style!(
   mask_size: CssOption<BackgroundSizes> = CssOption::none() => CssOption::none(),
   mask_position: CssOption<BackgroundPositions> = CssOption::none() => CssOption::none(),
   mask_repeat: CssOption<BackgroundRepeats> = CssOption::none() => CssOption::none(),
-  gap: SpacePair<LengthUnit> = SpacePair(LengthUnit::Px(0.0), LengthUnit::Px(0.0)) => SpacePair(LengthUnit::Px(0.0), LengthUnit::Px(0.0)),
+  gap: SpacePair<LengthUnit, true> = SpacePair::from_single(LengthUnit::Px(0.0)) => SpacePair::from_single(LengthUnit::Px(0.0)),
   flex: CssOption<Flex> = CssOption::none() => CssOption::none(),
   flex_grow: CssOption<FlexGrow> = CssOption::none() => CssOption::none(),
   flex_shrink: CssOption<FlexGrow> = CssOption::none() => CssOption::none(),
@@ -273,9 +273,9 @@ impl<'s> SizedFontStyle<'s> {
 
 impl InheritedStyle {
   pub(crate) fn resolve_overflows(&self) -> Overflows {
-    Overflows(SpacePair(
-      self.overflow_x.unwrap_or(self.overflow.0.0),
-      self.overflow_y.unwrap_or(self.overflow.0.1),
+    Overflows(SpacePair::from_pair(
+      self.overflow_x.unwrap_or(self.overflow.0.x),
+      self.overflow_y.unwrap_or(self.overflow.0.y),
     ))
   }
 
@@ -559,8 +559,8 @@ impl InheritedStyle {
       align_self: self.align_self.into(),
       justify_self: self.justify_self.into(),
       overflow: Point {
-        x: overflow.x().into(),
-        y: overflow.y().into(),
+        x: overflow.0.x.into(),
+        y: overflow.0.y.into(),
       },
       dummy: PhantomData,
       item_is_table: false,

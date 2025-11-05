@@ -70,7 +70,7 @@ fn fixtures_text_typography_variable_weight() {
       StyleBuilder::default()
         .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
         .font_size(CssOption::some(Px(24.0)))
-        .gap(SpacePair(Px(0.0), Px(24.0)))
+        .gap(SpacePair::from_pair(Px(0.0), Px(24.0)))
         .flex_wrap(FlexWrap::Wrap)
         .build()
         .unwrap(),

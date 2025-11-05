@@ -58,7 +58,7 @@ fn test_style_transform_origin_top_left() {
         .map(|angle| {
           create_rotated_container(
             *angle,
-            BackgroundPosition(SpacePair(
+            BackgroundPosition(SpacePair::from_pair(
               PositionComponent::KeywordX(PositionKeywordX::Left),
               PositionComponent::KeywordY(PositionKeywordY::Top),
             )),

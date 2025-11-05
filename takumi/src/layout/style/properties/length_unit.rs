@@ -4,37 +4,12 @@ use taffy::{CompactLength, Dimension, LengthPercentage, LengthPercentageAuto, Re
 use ts_rs::TS;
 
 use crate::{
-  layout::style::{AspectRatio, FromCss, ParseResult, tw::TailwindPropertyParser},
+  layout::style::{
+    AspectRatio, FromCss, ParseResult,
+    tw::{TailwindPropertyParser, VAR_SPACING},
+  },
   rendering::RenderContext,
 };
-
-/*
-w-3xs
-width: var(--container-3xs); /* 16rem (256px) */
-w-2xs
-width: var(--container-2xs); /* 18rem (288px) */
-w-xs
-width: var(--container-xs); /* 20rem (320px) */
-w-sm
-width: var(--container-sm); /* 24rem (384px) */
-w-md
-width: var(--container-md); /* 28rem (448px) */
-w-lg
-width: var(--container-lg); /* 32rem (512px) */
-w-xl
-width: var(--container-xl); /* 36rem (576px) */
-w-2xl
-width: var(--container-2xl); /* 42rem (672px) */
-w-3xl
-width: var(--container-3xl); /* 48rem (768px) */
-w-4xl
-width: var(--container-4xl); /* 56rem (896px) */
-w-5xl
-width: var(--container-5xl); /* 64rem (1024px) */
-w-6xl
-width: var(--container-6xl); /* 72rem (1152px) */
-w-7xl
-width: var(--container-7xl); /* 80rem (1280px) */ */
 
 /// Represents a value that can be a specific length, percentage, or automatic.
 ///
@@ -75,6 +50,10 @@ pub enum LengthUnit {
 
 impl TailwindPropertyParser for LengthUnit {
   fn parse_tw(token: &str) -> Option<Self> {
+    if let Ok(value) = token.parse::<f32>() {
+      return Some(LengthUnit::Rem(value * VAR_SPACING));
+    }
+
     match AspectRatio::from_str(token) {
       Ok(AspectRatio::Ratio(ratio)) => return Some(LengthUnit::Percentage(ratio * 100.0)),
       Ok(AspectRatio::Auto) => return Some(LengthUnit::Auto),

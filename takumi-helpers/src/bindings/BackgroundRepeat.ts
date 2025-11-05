@@ -4,13 +4,4 @@ import type { BackgroundRepeatStyle } from "./BackgroundRepeatStyle";
 /**
  * Combined repeat for X and Y axes.
  */
-export type BackgroundRepeat = {
-  /**
-   * Repeat style along the X axis.
-   */
-  x: BackgroundRepeatStyle;
-  /**
-   * Repeat style along the Y axis.
-   */
-  y: BackgroundRepeatStyle;
-};
+export type BackgroundRepeat = [BackgroundRepeatStyle, BackgroundRepeatStyle];

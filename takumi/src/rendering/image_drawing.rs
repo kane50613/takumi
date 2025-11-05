@@ -41,13 +41,15 @@ pub fn process_image_for_object_fit<'i>(
   let object_position_x = context
     .style
     .object_position
-    .x()
+    .0
+    .x
     .to_length_unit()
     .resolve_to_px(context, content_box.width);
   let object_position_y = context
     .style
     .object_position
-    .y()
+    .0
+    .y
     .to_length_unit()
     .resolve_to_px(context, content_box.height);
 

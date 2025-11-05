@@ -3,4 +3,4 @@
 /**
  * This enum determines the layout algorithm used for the children of a node.
  */
-export type Display = "flex" | "grid" | "inline" | "block";
+export type Display = "none" | "flex" | "grid" | "inline" | "block";

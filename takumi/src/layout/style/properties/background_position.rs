@@ -67,39 +67,39 @@ pub struct BackgroundPosition(pub SpacePair<PositionComponent>);
 impl TailwindPropertyParser for BackgroundPosition {
   fn parse_tw(token: &str) -> Option<Self> {
     match token {
-      "top-left" => Some(Self(SpacePair(
+      "top-left" => Some(Self(SpacePair::from_pair(
         PositionComponent::KeywordX(PositionKeywordX::Left),
         PositionComponent::KeywordY(PositionKeywordY::Top),
       ))),
-      "top" => Some(Self(SpacePair(
+      "top" => Some(Self(SpacePair::from_pair(
         PositionComponent::KeywordX(PositionKeywordX::Center),
         PositionComponent::KeywordY(PositionKeywordY::Top),
       ))),
-      "top-right" => Some(Self(SpacePair(
+      "top-right" => Some(Self(SpacePair::from_pair(
         PositionComponent::KeywordX(PositionKeywordX::Right),
         PositionComponent::KeywordY(PositionKeywordY::Top),
       ))),
-      "left" => Some(Self(SpacePair(
+      "left" => Some(Self(SpacePair::from_pair(
         PositionComponent::KeywordX(PositionKeywordX::Left),
         PositionComponent::KeywordY(PositionKeywordY::Center),
       ))),
-      "center" => Some(Self(SpacePair(
+      "center" => Some(Self(SpacePair::from_pair(
         PositionComponent::KeywordX(PositionKeywordX::Center),
         PositionComponent::KeywordY(PositionKeywordY::Center),
       ))),
-      "right" => Some(Self(SpacePair(
+      "right" => Some(Self(SpacePair::from_pair(
         PositionComponent::KeywordX(PositionKeywordX::Right),
         PositionComponent::KeywordY(PositionKeywordY::Center),
       ))),
-      "bottom-left" => Some(Self(SpacePair(
+      "bottom-left" => Some(Self(SpacePair::from_pair(
         PositionComponent::KeywordX(PositionKeywordX::Left),
         PositionComponent::KeywordY(PositionKeywordY::Bottom),
       ))),
-      "bottom" => Some(Self(SpacePair(
+      "bottom" => Some(Self(SpacePair::from_pair(
         PositionComponent::KeywordX(PositionKeywordX::Center),
         PositionComponent::KeywordY(PositionKeywordY::Bottom),
       ))),
-      "bottom-right" => Some(Self(SpacePair(
+      "bottom-right" => Some(Self(SpacePair::from_pair(
         PositionComponent::KeywordX(PositionKeywordX::Right),
         PositionComponent::KeywordY(PositionKeywordY::Bottom),
       ))),
@@ -108,21 +108,9 @@ impl TailwindPropertyParser for BackgroundPosition {
   }
 }
 
-impl BackgroundPosition {
-  /// Get the x-axis value.
-  pub fn x(&self) -> PositionComponent {
-    self.0.0
-  }
-
-  /// Get the y-axis value.
-  pub fn y(&self) -> PositionComponent {
-    self.0.1
-  }
-}
-
 impl Default for BackgroundPosition {
   fn default() -> Self {
-    Self(SpacePair(
+    Self(SpacePair::from_pair(
       PositionComponent::KeywordX(PositionKeywordX::Center),
       PositionComponent::KeywordY(PositionKeywordY::Center),
     ))
@@ -144,7 +132,7 @@ impl<'i> FromCss<'i> for BackgroundPosition {
       (x, Some(y)) => (x, y),
     };
 
-    Ok(BackgroundPosition(SpacePair(x, y)))
+    Ok(BackgroundPosition(SpacePair::from_pair(x, y)))
   }
 }
 

@@ -56,18 +56,6 @@ impl Default for ShapePosition {
   }
 }
 
-impl ShapePosition {
-  /// Get the x-axis value.
-  pub fn x(&self) -> LengthUnit {
-    self.0.0
-  }
-
-  /// Get the y-axis value.
-  pub fn y(&self) -> LengthUnit {
-    self.0.1
-  }
-}
-
 /// Represents an inset() rectangle shape.
 ///
 /// The inset() function creates an inset rectangle, with its size defined by the offset distance
@@ -251,8 +239,8 @@ impl BasicShape {
       }
       BasicShape::Ellipse(shape) => {
         let distance = Size {
-          width: shape.position.x().resolve_to_px(context, size.width),
-          height: shape.position.y().resolve_to_px(context, size.height),
+          width: shape.position.0.x.resolve_to_px(context, size.width),
+          height: shape.position.0.y.resolve_to_px(context, size.height),
         };
 
         paths.add_ellipse(
@@ -265,15 +253,15 @@ impl BasicShape {
         if !shape.coordinates.is_empty() {
           // Start the path at the first coordinate
           let first = &shape.coordinates[0];
-          let first_x = first.0.resolve_to_px(context, size.width);
-          let first_y = first.1.resolve_to_px(context, size.height);
+          let first_x = first.x.resolve_to_px(context, size.width);
+          let first_y = first.y.resolve_to_px(context, size.height);
 
           paths.move_to((first_x, first_y));
 
           // Add lines to each subsequent coordinate
           for coord in &shape.coordinates[1..] {
-            let x = coord.0.resolve_to_px(context, size.width);
-            let y = coord.1.resolve_to_px(context, size.height);
+            let x = coord.x.resolve_to_px(context, size.width);
+            let y = coord.y.resolve_to_px(context, size.height);
             paths.line_to((x, y));
           }
 
@@ -337,7 +325,7 @@ impl<'i> FromCss<'i> for ShapePosition {
       .try_parse(LengthUnit::from_css)
       .unwrap_or(LengthUnit::Percentage(50.0));
 
-    Ok(ShapePosition(SpacePair(first, second)))
+    Ok(ShapePosition(SpacePair::from_pair(first, second)))
   }
 }
 
@@ -508,8 +496,8 @@ mod tests {
     if let BasicShape::Ellipse(circle) = result {
       assert_eq!(circle.radius_x, circle.radius_y);
       assert_eq!(circle.radius_x, ShapeRadius::Length(LengthUnit::Px(50.0)));
-      assert_eq!(circle.position.x(), LengthUnit::Percentage(50.0));
-      assert_eq!(circle.position.y(), LengthUnit::Percentage(50.0));
+      assert_eq!(circle.position.0.x, LengthUnit::Percentage(50.0));
+      assert_eq!(circle.position.0.y, LengthUnit::Percentage(50.0));
     } else {
       panic!("Expected circle shape");
     }
@@ -521,8 +509,8 @@ mod tests {
     if let BasicShape::Ellipse(circle) = result {
       assert_eq!(circle.radius_x, circle.radius_y);
       assert_eq!(circle.radius_x, ShapeRadius::Length(LengthUnit::Px(50.0)));
-      assert_eq!(circle.position.x(), LengthUnit::Percentage(25.0));
-      assert_eq!(circle.position.y(), LengthUnit::Percentage(75.0));
+      assert_eq!(circle.position.0.x, LengthUnit::Percentage(25.0));
+      assert_eq!(circle.position.0.y, LengthUnit::Percentage(75.0));
     } else {
       panic!("Expected circle shape");
     }
@@ -534,8 +522,8 @@ mod tests {
     if let BasicShape::Ellipse(circle) = result {
       assert_eq!(circle.radius_x, circle.radius_y);
       assert_eq!(circle.radius_x, ShapeRadius::ClosestSide);
-      assert_eq!(circle.position.x(), LengthUnit::Percentage(25.0));
-      assert_eq!(circle.position.y(), LengthUnit::Percentage(75.0));
+      assert_eq!(circle.position.0.x, LengthUnit::Percentage(25.0));
+      assert_eq!(circle.position.0.y, LengthUnit::Percentage(75.0));
     } else {
       panic!("Expected circle shape");
     }
@@ -547,8 +535,8 @@ mod tests {
     if let BasicShape::Ellipse(ellipse) = result {
       assert_eq!(ellipse.radius_x, ShapeRadius::Length(LengthUnit::Px(50.0)));
       assert_eq!(ellipse.radius_y, ShapeRadius::Length(LengthUnit::Px(30.0)));
-      assert_eq!(ellipse.position.x(), LengthUnit::Percentage(50.0));
-      assert_eq!(ellipse.position.y(), LengthUnit::Percentage(50.0));
+      assert_eq!(ellipse.position.0.x, LengthUnit::Percentage(50.0));
+      assert_eq!(ellipse.position.0.y, LengthUnit::Percentage(50.0));
     } else {
       panic!("Expected ellipse shape");
     }
@@ -560,8 +548,8 @@ mod tests {
     if let BasicShape::Ellipse(ellipse) = result {
       assert_eq!(ellipse.radius_x, ShapeRadius::Length(LengthUnit::Px(50.0)));
       assert_eq!(ellipse.radius_y, ShapeRadius::Length(LengthUnit::Px(30.0)));
-      assert_eq!(ellipse.position.x(), LengthUnit::Percentage(25.0));
-      assert_eq!(ellipse.position.y(), LengthUnit::Percentage(75.0));
+      assert_eq!(ellipse.position.0.x, LengthUnit::Percentage(25.0));
+      assert_eq!(ellipse.position.0.y, LengthUnit::Percentage(75.0));
     } else {
       panic!("Expected ellipse shape");
     }
@@ -574,12 +562,12 @@ mod tests {
       assert_eq!(polygon.fill_rule, None);
       assert_eq!(polygon.coordinates.len(), 3);
 
-      assert_eq!(polygon.coordinates[0].0, LengthUnit::Percentage(50.0));
-      assert_eq!(polygon.coordinates[0].1, LengthUnit::Percentage(0.0));
-      assert_eq!(polygon.coordinates[1].0, LengthUnit::Percentage(0.0));
-      assert_eq!(polygon.coordinates[1].1, LengthUnit::Percentage(100.0));
-      assert_eq!(polygon.coordinates[2].0, LengthUnit::Percentage(100.0));
-      assert_eq!(polygon.coordinates[2].1, LengthUnit::Percentage(100.0));
+      assert_eq!(polygon.coordinates[0].x, LengthUnit::Percentage(50.0));
+      assert_eq!(polygon.coordinates[0].y, LengthUnit::Percentage(0.0));
+      assert_eq!(polygon.coordinates[1].x, LengthUnit::Percentage(0.0));
+      assert_eq!(polygon.coordinates[1].y, LengthUnit::Percentage(100.0));
+      assert_eq!(polygon.coordinates[2].x, LengthUnit::Percentage(100.0));
+      assert_eq!(polygon.coordinates[2].y, LengthUnit::Percentage(100.0));
     } else {
       panic!("Expected polygon shape");
     }
