@@ -33,11 +33,14 @@ export function text(
   style?: PartialStyle,
 ): TextNode {
   if (typeof props === "string") {
-    return {
+    const node: TextNode = {
       type: "text",
       text: props,
-      style,
     };
+
+    applyStyle(node, style);
+
+    return node;
   }
 
   const node: TextNode = {
