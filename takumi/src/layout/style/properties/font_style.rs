@@ -35,8 +35,8 @@ impl<'de> Deserialize<'de> for FontStyle {
   where
     D: Deserializer<'de>,
   {
-    let s = <&str>::deserialize(deserializer)?;
-    Ok(FontStyle(ParleyFontStyle::parse(s).ok_or_else(|| {
+    let s = String::deserialize(deserializer)?;
+    Ok(FontStyle(ParleyFontStyle::parse(&s).ok_or_else(|| {
       serde::de::Error::custom(format!("Invalid font style: {s}"))
     })?))
   }

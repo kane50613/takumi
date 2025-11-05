@@ -43,10 +43,10 @@ impl<'de> Deserialize<'de> for TailwindProperties {
   where
     D: Deserializer<'de>,
   {
-    let string = <&str>::deserialize(deserializer)?;
+    let string = String::deserialize(deserializer)?;
 
     Ok(TailwindProperties {
-      inner: TailwindProperty::parse_list(string).collect(),
+      inner: TailwindProperty::parse_list(&string).collect(),
     })
   }
 }

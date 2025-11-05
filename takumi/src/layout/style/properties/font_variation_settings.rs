@@ -16,10 +16,10 @@ impl<'de> Deserialize<'de> for FontVariationSettings {
   where
     D: Deserializer<'de>,
   {
-    let s = <&str>::deserialize(deserializer)?;
+    let s = String::deserialize(deserializer)?;
 
     Ok(FontVariationSettings(
-      FontVariation::parse_list(s).collect(),
+      FontVariation::parse_list(&s).collect(),
     ))
   }
 }
