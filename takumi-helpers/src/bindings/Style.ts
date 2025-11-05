@@ -106,6 +106,8 @@ export type Style = {
   maskPosition: CssValue<CssOption<BackgroundPositions>>;
   maskRepeat: CssValue<CssOption<BackgroundRepeats>>;
   gap: CssValue<SpacePair<LengthUnit>>;
+  columnGap: CssValue<CssOption<LengthUnit>>;
+  rowGap: CssValue<CssOption<LengthUnit>>;
   flex: CssValue<CssOption<Flex>>;
   flexGrow: CssValue<CssOption<FlexGrow>>;
   flexShrink: CssValue<CssOption<FlexGrow>>;
