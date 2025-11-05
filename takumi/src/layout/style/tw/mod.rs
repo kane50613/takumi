@@ -42,6 +42,8 @@ impl<'de> Deserialize<'de> for TailwindProperties {
 /// Represents a tailwind property.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TailwindProperty {
+  /// The box sizing of the element.
+  BoxSizing(BoxSizing),
   /// The flex grow of the element.
   FlexGrow(f32),
   /// The flex shrink of the element.
@@ -160,6 +162,9 @@ impl TailwindProperty {
 
   pub(crate) fn apply(&self, style: &mut Style) {
     match *self {
+      TailwindProperty::BoxSizing(box_sizing) => {
+        style.box_sizing = box_sizing.into();
+      }
       TailwindProperty::FlexGrow(flex_grow) => {
         style.flex_grow = CssOption::some(FlexGrow(flex_grow)).into();
       }
@@ -270,6 +275,8 @@ impl TailwindProperty {
 }
 
 static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
+  "box-border" => TailwindProperty::BoxSizing(BoxSizing::BorderBox),
+  "box-content" => TailwindProperty::BoxSizing(BoxSizing::ContentBox),
   "inline" => TailwindProperty::Display(Display::Inline),
   "block" => TailwindProperty::Display(Display::Block),
   "flex" => TailwindProperty::Display(Display::Flex),
