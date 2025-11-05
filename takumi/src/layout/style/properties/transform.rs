@@ -31,7 +31,7 @@ pub enum Transform {
 }
 
 /// A collection of transform operations that can be applied together
-#[derive(Debug, Clone, Deserialize, Serialize, TS, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, Default, PartialEq)]
 #[ts(as = "TransformsValue")]
 #[serde(try_from = "TransformsValue")]
 pub struct Transforms(pub SmallVec<[Transform; 4]>);

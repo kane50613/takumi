@@ -19,7 +19,7 @@ use crate::{
 macro_rules! define_style {
   ($( $(#[$attr:meta])? $property:ident: $type:ty = $default_global:expr => $initial_value:expr),* $(,)?) => {
     /// Defines the style of an element.
-    #[derive(Debug, Clone, Deserialize, Serialize, TS, Builder)]
+    #[derive(Debug, Clone, Deserialize, Serialize, TS, Builder, PartialEq)]
     #[serde(default, rename_all = "camelCase")]
     #[ts(export, optional_fields)]
     #[builder(default, setter(into))]

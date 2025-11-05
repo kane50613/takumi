@@ -4,7 +4,7 @@ use ts_rs::TS;
 
 use crate::layout::style::{FromCss, ParseResult};
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, PartialEq)]
 #[serde(try_from = "LineClampValue")]
 #[ts(as = "LineClampValue")]
 /// Represents a line clamp value.

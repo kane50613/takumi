@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use phf::phf_map;
 use serde::Deserializer;
 use smallvec::smallvec;
@@ -11,6 +13,16 @@ pub const VAR_SPACING: f32 = 0.25;
 #[derive(Debug, Clone)]
 pub struct TailwindProperties {
   inner: Vec<TailwindProperty>,
+}
+
+impl FromStr for TailwindProperties {
+  type Err = String;
+
+  fn from_str(s: &str) -> Result<Self, Self::Err> {
+    Ok(TailwindProperties {
+      inner: TailwindProperty::parse_list(s).collect(),
+    })
+  }
 }
 
 impl TailwindProperties {
@@ -406,3 +418,25 @@ static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
     color: ColorInput::Value(Color([0, 0, 0, 0])),
   }),
 };
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_box_sizing() {
+    let mut tw_style = Style::default();
+
+    TailwindProperties::from_str("box-border")
+      .unwrap()
+      .apply(&mut tw_style);
+
+    assert_eq!(
+      tw_style,
+      Style {
+        box_sizing: BoxSizing::BorderBox.into(),
+        ..Default::default()
+      }
+    );
+  }
+}
