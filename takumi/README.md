@@ -33,9 +33,11 @@ let mut node = NodeKind::Container(ContainerNode {
     NodeKind::Text(TextNode {
       text: "Hello, world!".to_string(),
       style: None, // Construct with `StyleBuilder`
+      tw: None, // Tailwind properties
     }),
   ]),
   style: None,
+  tw: None, // Tailwind properties
 });
 
 // Create a context for storing resources, font caches.
