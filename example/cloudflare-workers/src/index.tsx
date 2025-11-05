@@ -1,4 +1,3 @@
-import { createTailwindFn } from "@takumi-rs/helpers/jsx/create-tailwind-fn";
 import ImageResponse from "@takumi-rs/image-response/wasm";
 import DocsTemplateV1 from "@takumi-rs/template/docs-template-v1";
 import { type ByteBuf, initSync } from "@takumi-rs/wasm";
@@ -19,8 +18,6 @@ async function prepareResources() {
   return map;
 }
 
-const tailwindFn = createTailwindFn();
-
 export default {
   async fetch(request) {
     fetchedResources ??= prepareResources();
@@ -39,9 +36,6 @@ export default {
         primaryTextColor="#fff"
       />,
       {
-        jsx: {
-          tailwindFn,
-        },
         fetchedResources: await fetchedResources,
         width: 1200,
         height: 630,

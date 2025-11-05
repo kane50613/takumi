@@ -1,4 +1,4 @@
-import { type FromJsxOptions, fromJsx } from "@takumi-rs/helpers/jsx";
+import { fromJsx } from "@takumi-rs/helpers/jsx";
 import {
   type ByteBuf,
   collectNodeFetchTasks,
@@ -21,14 +21,12 @@ const persistentImageLoadMarker = new WeakSet<PersistentImage>();
 type ImageResponseOptionsWithRenderer = ResponseInit &
   RenderOptions & {
     renderer: Renderer;
-    jsx?: FromJsxOptions;
   };
 
 type ImageResponseOptionsWithoutRenderer = ResponseInit &
   RenderOptions & {
     fonts?: Font[];
     persistentImages?: PersistentImage[];
-    jsx?: FromJsxOptions;
   };
 
 export type ImageResponseOptions =
@@ -84,7 +82,7 @@ function createStream(
       try {
         const renderer = getRenderer(options);
 
-        const node = await fromJsx(component, options?.jsx);
+        const node = await fromJsx(component);
 
         if (!options.fetchedResources) {
           const urls = collectNodeFetchTasks(node);

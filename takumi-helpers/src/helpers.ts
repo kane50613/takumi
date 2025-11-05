@@ -17,6 +17,7 @@ export function container(props: Omit<ContainerNode, "type">): ContainerNode {
   const node: ContainerNode = {
     type: "container",
     children: props.children,
+    tw: props.tw,
   };
 
   applyStyle(node, props.style);
@@ -24,13 +25,28 @@ export function container(props: Omit<ContainerNode, "type">): ContainerNode {
   return node;
 }
 
-export function text(text: string, style?: PartialStyle): TextNode {
+export function text(text: string, style?: PartialStyle): TextNode;
+export function text(props: Omit<TextNode, "type">): TextNode;
+
+export function text(
+  props: Omit<TextNode, "type"> | string,
+  style?: PartialStyle,
+): TextNode {
+  if (typeof props === "string") {
+    return {
+      type: "text",
+      text: props,
+      style,
+    };
+  }
+
   const node: TextNode = {
     type: "text",
-    text,
+    text: props.text,
+    tw: props.tw,
   };
 
-  applyStyle(node, style);
+  applyStyle(node, style ?? props.style);
 
   return node;
 }

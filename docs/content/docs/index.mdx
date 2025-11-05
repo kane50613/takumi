@@ -24,7 +24,6 @@ It comes with pre-bundled [Geist](https://vercel.com/font) and Geist Mono as def
 
 ```tsx
 import ImageResponse from "@takumi-rs/image-response";
-import { createTailwindFn } from "@takumi-rs/helpers/jsx/create-tailwind-fn";
 import { serve } from "bun";
 
 serve({
@@ -33,9 +32,6 @@ serve({
       width: 1200,
       height: 630,
       format: "webp",
-      jsx: {
-        tailwindFn: createTailwindFn(), // It's optional, doing so allows tree-shaking to reduce bundle size.
-      },
     });
   }
 });

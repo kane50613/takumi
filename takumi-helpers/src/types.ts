@@ -21,12 +21,14 @@ export type ContainerNode = {
   type: "container";
   style?: PartialStyle;
   children?: Node[];
+  tw?: string;
 };
 
 export type TextNode = {
   type: "text";
   text: string;
   style?: PartialStyle;
+  tw?: string;
 };
 
 export type ImageNode = {
@@ -35,4 +37,5 @@ export type ImageNode = {
   width?: number;
   height?: number;
   style?: PartialStyle;
+  tw?: string;
 };
