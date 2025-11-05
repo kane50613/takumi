@@ -1,8 +1,13 @@
+use std::ops::Neg;
+
 use cssparser::{Parser, ParserInput, Token};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::layout::style::properties::{FromCss, ParseResult};
+use crate::layout::style::{
+  properties::{FromCss, ParseResult},
+  tw::TailwindPropertyParser,
+};
 
 /// Represents a percentage value (0.0-1.0) in CSS parsing.
 ///
@@ -16,6 +21,22 @@ pub struct PercentageNumber(pub f32);
 impl Default for PercentageNumber {
   fn default() -> Self {
     Self(1.0)
+  }
+}
+
+impl Neg for PercentageNumber {
+  type Output = Self;
+
+  fn neg(self) -> Self::Output {
+    Self(-self.0)
+  }
+}
+
+impl TailwindPropertyParser for PercentageNumber {
+  fn parse_tw(token: &str) -> Option<Self> {
+    let value = token.parse::<f32>().ok()?;
+
+    Some(PercentageNumber(value / 100.0))
   }
 }
 

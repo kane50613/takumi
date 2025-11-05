@@ -57,11 +57,11 @@ pub enum TailwindProperty {
   /// The box sizing of the element.
   BoxSizing(BoxSizing),
   /// The flex grow of the element.
-  FlexGrow(f32),
+  FlexGrow(FlexGrow),
   /// The flex shrink of the element.
-  FlexShrink(f32),
+  FlexShrink(FlexGrow),
   /// The aspect ratio of the element.
-  Aspect(f32),
+  Aspect(AspectRatio),
   /// The alignment of the items in the element.
   Items(AlignItems),
   /// The justification of the content in the element.
@@ -69,6 +69,8 @@ pub enum TailwindProperty {
   /// The alignment of the content in the element.
   Content(JustifyContent),
   /// The alignment of the self in the element.
+  JustifySelf(AlignItems),
+  /// The alignment of the items in the element.
   AlignSelf(AlignItems),
   /// The direction of the flex in the element.
   FlexDirection(FlexDirection),
@@ -130,6 +132,8 @@ pub enum TailwindProperty {
   GapX(LengthUnit),
   /// The gap of the element on the y-axis.
   GapY(LengthUnit),
+  /// The width of the border of the element.
+  BorderWidth(LengthUnit),
 }
 
 /// A trait for parsing tailwind properties.
@@ -181,9 +185,14 @@ impl TailwindProperty {
     property_check!("content-", Content(JustifyContent), token);
     property_check!("items-", Items(AlignItems), token);
     property_check!("self-", AlignSelf(AlignItems), token);
+    property_check!("justify-self-", JustifySelf(AlignItems), token);
     property_check!("overflow-x-", OverflowX(Overflow), token);
     property_check!("overflow-y-", OverflowY(Overflow), token);
     property_check!("overflow-", Overflow(Overflow), token);
+    property_check!("border-", BorderWidth(LengthUnit), token);
+    property_check!("grow-", FlexGrow(FlexGrow), token);
+    property_check!("shrink-", FlexShrink(FlexGrow), token);
+    property_check!("aspect-", Aspect(AspectRatio), token);
 
     None
   }
@@ -194,22 +203,22 @@ impl TailwindProperty {
         style.gap = SpacePair::from_single(gap).into();
       }
       TailwindProperty::GapX(gap_x) => {
-        style.gap = SpacePair::from_pair(LengthUnit::Px(0.0), gap_x).into();
+        style.column_gap = CssOption::some(gap_x).into();
       }
       TailwindProperty::GapY(gap_y) => {
-        style.gap = SpacePair::from_pair(gap_y, LengthUnit::Px(0.0)).into();
+        style.row_gap = CssOption::some(gap_y).into();
       }
       TailwindProperty::BoxSizing(box_sizing) => {
         style.box_sizing = box_sizing.into();
       }
       TailwindProperty::FlexGrow(flex_grow) => {
-        style.flex_grow = CssOption::some(FlexGrow(flex_grow)).into();
+        style.flex_grow = CssOption::some(flex_grow).into();
       }
       TailwindProperty::FlexShrink(flex_shrink) => {
-        style.flex_shrink = CssOption::some(FlexGrow(flex_shrink)).into();
+        style.flex_shrink = CssOption::some(flex_shrink).into();
       }
       TailwindProperty::Aspect(ratio) => {
-        style.aspect_ratio = AspectRatio::Ratio(ratio).into();
+        style.aspect_ratio = ratio.into();
       }
       TailwindProperty::Items(align_items) => {
         style.align_items = align_items.into();
@@ -307,11 +316,18 @@ impl TailwindProperty {
         style.background_repeat =
           CssOption::some(BackgroundRepeats(vec![background_repeat])).into();
       }
+      TailwindProperty::BorderWidth(length_unit) => {
+        style.border_width = CssOption::some(Sides([length_unit; 4])).into();
+      }
+      TailwindProperty::JustifySelf(align_items) => {
+        style.justify_self = align_items.into();
+      }
     }
   }
 }
 
 static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
+  "border" => TailwindProperty::BorderWidth(LengthUnit::Px(1.0)),
   "box-border" => TailwindProperty::BoxSizing(BoxSizing::BorderBox),
   "box-content" => TailwindProperty::BoxSizing(BoxSizing::ContentBox),
   "inline" => TailwindProperty::Display(Display::Inline),
@@ -319,10 +335,11 @@ static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
   "flex" => TailwindProperty::Display(Display::Flex),
   "grid" => TailwindProperty::Display(Display::Grid),
   "hidden" => TailwindProperty::Display(Display::None),
-  "aspect-square" => TailwindProperty::Aspect(1.0),
-  "aspect-video" => TailwindProperty::Aspect(16.0 / 9.0),
-  "flex-grow" | "grow" => TailwindProperty::FlexGrow(1.0),
-  "flex-shrink" | "shrink" => TailwindProperty::FlexShrink(1.0),
+  "aspect-auto" => TailwindProperty::Aspect(AspectRatio::Auto),
+  "aspect-square" => TailwindProperty::Aspect(AspectRatio::Ratio(1.0)),
+  "aspect-video" => TailwindProperty::Aspect(AspectRatio::Ratio(16.0 / 9.0)),
+  "flex-grow" | "grow" => TailwindProperty::FlexGrow(FlexGrow(1.0)),
+  "flex-shrink" | "shrink" => TailwindProperty::FlexShrink(FlexGrow(1.0)),
   "flex-row" => TailwindProperty::FlexDirection(FlexDirection::Row),
   "flex-row-reverse" => TailwindProperty::FlexDirection(FlexDirection::RowReverse),
   "flex-col" => TailwindProperty::FlexDirection(FlexDirection::Column),

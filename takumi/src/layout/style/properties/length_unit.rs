@@ -1,3 +1,5 @@
+use std::ops::Neg;
+
 use cssparser::{Parser, ParserInput, Token, match_ignore_ascii_case};
 use serde::{Deserialize, Serialize};
 use taffy::{CompactLength, Dimension, LengthPercentage, LengthPercentageAuto, Rect};
@@ -170,6 +172,14 @@ impl From<LengthUnit> for LengthUnitValue {
       LengthUnit::Pc(v) => LengthUnitValue::Pc(v),
       LengthUnit::Px(v) => LengthUnitValue::Px(v),
     }
+  }
+}
+
+impl Neg for LengthUnit {
+  type Output = Self;
+
+  fn neg(self) -> Self::Output {
+    self.negative()
   }
 }
 

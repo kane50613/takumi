@@ -110,6 +110,8 @@ define_style!(
   mask_position: CssOption<BackgroundPositions> = CssOption::none() => CssOption::none(),
   mask_repeat: CssOption<BackgroundRepeats> = CssOption::none() => CssOption::none(),
   gap: SpacePair<LengthUnit, true> = SpacePair::from_single(LengthUnit::Px(0.0)) => SpacePair::from_single(LengthUnit::Px(0.0)),
+  column_gap: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
+  row_gap: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
   flex: CssOption<Flex> = CssOption::none() => CssOption::none(),
   flex_grow: CssOption<FlexGrow> = CssOption::none() => CssOption::none(),
   flex_shrink: CssOption<FlexGrow> = CssOption::none() => CssOption::none(),
@@ -412,6 +414,14 @@ impl InheritedStyle {
   }
 
   #[inline]
+  fn resolved_gap(&self) -> SpacePair<LengthUnit> {
+    SpacePair::from_pair(
+      self.column_gap.unwrap_or(self.gap.y),
+      self.row_gap.unwrap_or(self.gap.x),
+    )
+  }
+
+  #[inline]
   fn resolved_border_width(&self) -> taffy::Rect<LengthUnit> {
     Self::resolve_rect_with_longhands(
       self
@@ -510,7 +520,7 @@ impl InheritedStyle {
         .or_else(|| self.flex.map(|flex| flex.grow))
         .unwrap_or(0.0),
       align_items: self.align_items.into(),
-      gap: self.gap.resolve_to_size(context),
+      gap: self.resolved_gap().resolve_to_size(context),
       flex_basis: self
         .flex_basis
         .or_else(|| self.flex.map(|flex| flex.basis))

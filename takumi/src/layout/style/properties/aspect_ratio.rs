@@ -3,7 +3,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_untagged::UntaggedEnumVisitor;
 use ts_rs::TS;
 
-use crate::layout::style::{FromCss, ParseResult};
+use crate::layout::style::{FromCss, ParseResult, tw::TailwindPropertyParser};
 
 #[derive(Default, Debug, Clone, Serialize, Copy, TS, PartialEq)]
 #[ts(type = "number | 'auto' | (string & {})")]
@@ -16,6 +16,12 @@ pub enum AspectRatio {
   /// The aspect ratio is a fixed ratio.
   #[serde(untagged)]
   Ratio(f32),
+}
+
+impl TailwindPropertyParser for AspectRatio {
+  fn parse_tw(token: &str) -> Option<Self> {
+    Self::from_str(token).ok()
+  }
 }
 
 impl From<AspectRatio> for Option<f32> {
