@@ -122,6 +122,8 @@ pub enum TailwindProperty {
   TextAlign(TextAlign),
   /// `text-decoration` property.
   TextDecoration(TextDecoration),
+  /// `text-decoration-color` property.
+  TextDecorationColor(ColorInput),
   /// `text-transform` property.
   TextTransform(TextTransform),
   /// `width` and `height` property.
@@ -158,6 +160,30 @@ pub enum TailwindProperty {
   GapX(LengthUnit),
   /// `row-gap` property.
   GapY(LengthUnit),
+  /// `grid-auto-flow` property.
+  GridAutoFlow(GridAutoFlow),
+  /// `grid-auto-columns` property.
+  GridAutoColumns(TwGridAutoSize),
+  /// `grid-auto-rows` property.
+  GridAutoRows(TwGridAutoSize),
+  /// `grid-column` property.
+  GridColumn(TwGridSpan),
+  /// `grid-row` property.
+  GridRow(TwGridSpan),
+  /// `grid-column-start` property.
+  GridColumnStart(TwGridPlacement),
+  /// `grid-column-end` property.
+  GridColumnEnd(TwGridPlacement),
+  /// `grid-row-start` property.
+  GridRowStart(TwGridPlacement),
+  /// `grid-row-end` property.
+  GridRowEnd(TwGridPlacement),
+  /// `grid-template-columns` property.
+  GridTemplateColumns(TwGridTemplate),
+  /// `grid-template-rows` property.
+  GridTemplateRows(TwGridTemplate),
+  /// `letter-spacing` property.
+  LetterSpacing(TwLetterSpacing),
   /// `border-width` property.
   BorderWidth(TwBorderWidth),
   /// `color` property.
@@ -301,6 +327,7 @@ impl Neg for TailwindProperty {
       TailwindProperty::ScaleX(percentage_number) => TailwindProperty::ScaleX(-percentage_number),
       TailwindProperty::ScaleY(percentage_number) => TailwindProperty::ScaleY(-percentage_number),
       TailwindProperty::Rotate(angle) => TailwindProperty::Rotate(-angle),
+      TailwindProperty::LetterSpacing(length_unit) => TailwindProperty::LetterSpacing(-length_unit),
       _ => self,
     }
   }
@@ -424,6 +451,9 @@ impl TailwindProperty {
       }
       TailwindProperty::TextDecoration(ref text_decoration) => {
         style.text_decoration = text_decoration.clone().into();
+      }
+      TailwindProperty::TextDecorationColor(color_input) => {
+        style.text_decoration_color = CssOption::some(color_input).into();
       }
       TailwindProperty::TextTransform(text_transform) => {
         style.text_transform = text_transform.into();
@@ -672,6 +702,58 @@ impl TailwindProperty {
       TailwindProperty::Left(length_unit) => {
         style.left = CssOption::some(length_unit).into();
       }
+      TailwindProperty::GridAutoColumns(ref tw_grid_auto_size) => {
+        style.grid_auto_columns = CssOption::some(tw_grid_auto_size.0.clone()).into();
+      }
+      TailwindProperty::GridAutoRows(ref tw_grid_auto_size) => {
+        style.grid_auto_rows = CssOption::some(tw_grid_auto_size.0.clone()).into();
+      }
+      TailwindProperty::GridColumn(ref tw_grid_span) => {
+        style.grid_column = CssOption::some(tw_grid_span.0.clone()).into();
+      }
+      TailwindProperty::GridRow(ref tw_grid_span) => {
+        style.grid_row = CssOption::some(tw_grid_span.0.clone()).into();
+      }
+      TailwindProperty::GridColumnStart(ref tw_grid_placement) => {
+        if let CssValue::Value(CssOption(Some(ref mut existing_grid_column))) = style.grid_column {
+          existing_grid_column.start = tw_grid_placement.0.start.clone();
+        } else {
+          style.grid_column = CssOption::some(tw_grid_placement.0.clone()).into();
+        }
+      }
+      TailwindProperty::GridColumnEnd(ref tw_grid_placement) => {
+        if let CssValue::Value(CssOption(Some(ref mut existing_grid_column))) = style.grid_column {
+          existing_grid_column.end = tw_grid_placement.0.end.clone();
+        } else {
+          style.grid_column = CssOption::some(tw_grid_placement.0.clone()).into();
+        }
+      }
+      TailwindProperty::GridRowStart(ref tw_grid_placement) => {
+        if let CssValue::Value(CssOption(Some(ref mut existing_grid_row))) = style.grid_row {
+          existing_grid_row.start = tw_grid_placement.0.start.clone();
+        } else {
+          style.grid_row = CssOption::some(tw_grid_placement.0.clone()).into();
+        }
+      }
+      TailwindProperty::GridRowEnd(ref tw_grid_placement) => {
+        if let CssValue::Value(CssOption(Some(ref mut existing_grid_row))) = style.grid_row {
+          existing_grid_row.end = tw_grid_placement.0.end.clone();
+        } else {
+          style.grid_row = CssOption::some(tw_grid_placement.0.clone()).into();
+        }
+      }
+      TailwindProperty::GridTemplateColumns(ref tw_grid_template) => {
+        style.grid_template_columns = CssOption::some(tw_grid_template.0.clone()).into();
+      }
+      TailwindProperty::GridTemplateRows(ref tw_grid_template) => {
+        style.grid_template_rows = CssOption::some(tw_grid_template.0.clone()).into();
+      }
+      TailwindProperty::LetterSpacing(tw_letter_spacing) => {
+        style.letter_spacing = CssOption::some(tw_letter_spacing.0).into();
+      }
+      TailwindProperty::GridAutoFlow(grid_auto_flow) => {
+        style.grid_auto_flow = CssOption::some(grid_auto_flow).into();
+      }
     }
   }
 }
@@ -718,6 +800,16 @@ mod tests {
         0,
         (0.3_f32 * 255.0).round() as u8
       ]))))
+    );
+  }
+
+  #[test]
+  fn test_parse_decoration_color() {
+    assert_eq!(
+      TailwindProperty::parse("decoration-red-500"),
+      Some(TailwindProperty::TextDecorationColor(ColorInput::Value(
+        Color([239, 68, 68, 255])
+      )))
     );
   }
 
@@ -783,5 +875,83 @@ mod tests {
         LengthUnit::Px(4.0)
       )))
     );
+  }
+
+  #[test]
+  fn test_comprehensive_mappings() {
+    // Test various prefix mappings to ensure they're working
+    let should_parse = vec![
+      // Layout
+      "flex",
+      "grid",
+      "hidden",
+      "block",
+      "inline",
+      // Sizing
+      "w-4",
+      "h-8",
+      "size-12",
+      "min-w-0",
+      "max-h-96",
+      // Spacing
+      "m-2",
+      "mx-4",
+      "my-auto",
+      "mt-8",
+      "mr-6",
+      "mb-4",
+      "ml-2",
+      "p-3",
+      "px-5",
+      "py-2",
+      "pt-1",
+      "pr-4",
+      "pb-3",
+      "pl-2",
+      // Colors
+      "text-red-500",
+      "bg-blue-200",
+      "border-gray-300",
+      // Typography
+      "text-sm",
+      "font-bold",
+      "uppercase",
+      "tracking-wide",
+      // Flexbox
+      "justify-center",
+      "items-end",
+      "self-start",
+      "flex-grow",
+      "shrink",
+      // Borders
+      "border",
+      "border-t-2",
+      "rounded-lg",
+      // Transforms
+      "rotate-45",
+      "scale-75",
+      "translate-x-4",
+      // Grid
+      "grid-cols-3",
+      "col-span-2",
+    ];
+
+    let should_not_parse = vec!["nonexistent-class", "invalid-prefix-1", "random-string"];
+
+    for class in should_parse {
+      assert!(
+        TailwindProperty::parse(class).is_some(),
+        "Expected '{}' to parse successfully",
+        class
+      );
+    }
+
+    for class in should_not_parse {
+      assert!(
+        TailwindProperty::parse(class).is_none(),
+        "Expected '{}' to fail parsing",
+        class
+      );
+    }
   }
 }

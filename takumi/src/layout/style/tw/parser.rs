@@ -1,10 +1,11 @@
+use std::ops::Neg;
+
 use cssparser::{Parser, match_ignore_ascii_case};
 
 use crate::layout::style::{
-  FromCss,
-  LengthUnit::{self, Em, Rem},
-  LineHeight, ParseResult,
+  LengthUnit::{self, *},
   tw::TailwindPropertyParser,
+  *,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -113,6 +114,144 @@ impl TailwindPropertyParser for TwRound {
 impl TwRound {
   pub const fn new(border_radius: LengthUnit) -> Self {
     Self { border_radius }
+  }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TwGridTemplate(pub GridTemplateComponents);
+
+impl<'i> FromCss<'i> for TwGridTemplate {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    Ok(Self(GridTemplateComponents::from_css(input)?))
+  }
+}
+
+impl TailwindPropertyParser for TwGridTemplate {
+  fn parse_tw(token: &str) -> Option<Self> {
+    let count = token.parse::<u32>().ok()?;
+
+    // Create repeat(count, minmax(0, 1fr))
+    let track_sizes = vec![
+      GridTrackSize::MinMax(GridMinMaxSize {
+        min: GridLengthUnit::Unit(LengthUnit::Px(0.0)),
+        max: GridLengthUnit::Fr(1.0),
+      });
+      count as usize
+    ];
+
+    let template_components = track_sizes
+      .into_iter()
+      .map(GridTemplateComponent::Single)
+      .collect();
+
+    Some(TwGridTemplate(GridTemplateComponents(template_components)))
+  }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TwGridPlacement(pub GridLine);
+
+impl<'i> FromCss<'i> for TwGridPlacement {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    Ok(Self(GridLine::from_css(input)?))
+  }
+}
+
+impl TailwindPropertyParser for TwGridPlacement {
+  fn parse_tw(token: &str) -> Option<Self> {
+    if token.eq_ignore_ascii_case("auto") {
+      return Some(TwGridPlacement(GridLine {
+        start: None,
+        end: None,
+      }));
+    }
+
+    let value = token.parse::<i16>().ok()?;
+
+    Some(TwGridPlacement(GridLine {
+      start: Some(GridPlacement::Line(value)),
+      end: None,
+    }))
+  }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TwGridSpan(pub GridLine);
+
+impl<'i> FromCss<'i> for TwGridSpan {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    Ok(Self(GridLine::from_css(input)?))
+  }
+}
+
+impl TailwindPropertyParser for TwGridSpan {
+  fn parse_tw(token: &str) -> Option<Self> {
+    if token.eq_ignore_ascii_case("full") {
+      return Some(TwGridSpan(GridLine {
+        start: Some(GridPlacement::Span(GridPlacementSpan::Span(u16::MAX))),
+        end: None,
+      }));
+    }
+
+    let span = token.parse::<u32>().ok()?;
+
+    Some(TwGridSpan(GridLine {
+      start: Some(GridPlacement::Span(GridPlacementSpan::Span(span as u16))),
+      end: None,
+    }))
+  }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TwGridAutoSize(pub GridTrackSizes);
+
+impl<'i> FromCss<'i> for TwGridAutoSize {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    Ok(Self(GridTrackSizes::from_css(input)?))
+  }
+}
+
+impl TailwindPropertyParser for TwGridAutoSize {
+  fn parse_tw(token: &str) -> Option<Self> {
+    let track_size = match token {
+      "auto" => GridTrackSize::Fixed(GridLengthUnit::Unit(LengthUnit::Auto)),
+      "min" => GridTrackSize::Fixed(GridLengthUnit::Unit(LengthUnit::Px(0.0))),
+      "max" => GridTrackSize::Fixed(GridLengthUnit::Fr(1.0)),
+      "fr" => GridTrackSize::Fixed(GridLengthUnit::Fr(1.0)),
+      _ => return None,
+    };
+    Some(TwGridAutoSize(GridTrackSizes(vec![track_size])))
+  }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TwLetterSpacing(pub LengthUnit);
+
+impl<'i> FromCss<'i> for TwLetterSpacing {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    Ok(Self(LengthUnit::from_css(input)?))
+  }
+}
+
+impl Neg for TwLetterSpacing {
+  type Output = Self;
+
+  fn neg(self) -> Self::Output {
+    TwLetterSpacing(-self.0)
+  }
+}
+
+impl TailwindPropertyParser for TwLetterSpacing {
+  fn parse_tw(token: &str) -> Option<Self> {
+    match token {
+      "tighter" => Some(TwLetterSpacing(LengthUnit::Em(-0.05))),
+      "tight" => Some(TwLetterSpacing(LengthUnit::Em(-0.025))),
+      "normal" => Some(TwLetterSpacing(LengthUnit::Em(0.0))),
+      "wide" => Some(TwLetterSpacing(LengthUnit::Em(0.025))),
+      "wider" => Some(TwLetterSpacing(LengthUnit::Em(0.05))),
+      "widest" => Some(TwLetterSpacing(LengthUnit::Em(0.1))),
+      _ => None,
+    }
   }
 }
 

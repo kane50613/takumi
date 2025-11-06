@@ -604,32 +604,6 @@ impl<'i> FromCss<'i> for WhiteSpaceCollapse {
   }
 }
 
-/// Represents the grid auto flow with serde support
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, TS, Default, PartialEq)]
-#[serde(rename_all = "kebab-case")]
-pub enum GridAutoFlow {
-  /// Places grid items by filling each row in turn, adding new rows as needed
-  #[default]
-  Row,
-  /// Places grid items by filling each column in turn, adding new columns as needed
-  Column,
-  /// Places grid items by filling each row in turn, using dense packing to fill gaps
-  #[serde(rename = "row dense")]
-  RowDense,
-  /// Places grid items by filling each column in turn, using dense packing to fill gaps
-  #[serde(rename = "column dense")]
-  ColumnDense,
-}
-
-impl_from_taffy_enum!(
-  GridAutoFlow,
-  taffy::style::GridAutoFlow,
-  Row,
-  Column,
-  RowDense,
-  ColumnDense
-);
-
 /// Defines how images should be scaled when rendered.
 #[derive(Default, Debug, Clone, Copy, Deserialize, Serialize, TS, PartialEq)]
 #[serde(rename_all = "kebab-case")]

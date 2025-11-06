@@ -72,11 +72,27 @@ make_parser!(parse_rounded_t, LengthUnit, RoundedT);
 make_parser!(parse_rounded_r, LengthUnit, RoundedR);
 make_parser!(parse_rounded_b, LengthUnit, RoundedB);
 make_parser!(parse_rounded_l, LengthUnit, RoundedL);
+make_parser!(
+  parse_grid_template_columns,
+  TwGridTemplate,
+  GridTemplateColumns
+);
+make_parser!(parse_grid_template_rows, TwGridTemplate, GridTemplateRows);
+make_parser!(parse_grid_auto_columns, TwGridAutoSize, GridAutoColumns);
+make_parser!(parse_grid_auto_rows, TwGridAutoSize, GridAutoRows);
+make_parser!(parse_grid_column_start, TwGridPlacement, GridColumnStart);
+make_parser!(parse_grid_column_end, TwGridPlacement, GridColumnEnd);
+make_parser!(parse_grid_row_start, TwGridPlacement, GridRowStart);
+make_parser!(parse_grid_row_end, TwGridPlacement, GridRowEnd);
+make_parser!(parse_grid_column, TwGridSpan, GridColumn);
+make_parser!(parse_grid_row, TwGridSpan, GridRow);
+make_parser!(parse_letter_spacing, TwLetterSpacing, LetterSpacing);
 make_parser!(parse_flex_grow, FlexGrow, FlexGrow);
 make_parser!(parse_flex_shrink, FlexGrow, FlexShrink);
 make_parser!(parse_aspect, AspectRatio, Aspect);
 make_parser!(parse_align, TextAlign, TextAlign);
 make_parser!(parse_text_color, ColorInput, Color);
+make_parser!(parse_text_decoration_color, ColorInput, TextDecorationColor);
 make_parser!(parse_opacity, PercentageNumber, Opacity);
 make_parser!(parse_background_color, ColorInput, BackgroundColor);
 make_parser!(parse_border_color, ColorInput, BorderColor);
@@ -154,6 +170,7 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParserFn]> = phf_map! {
   "basis" | "flex-basis" => &[parse_basis],
   "aspect" => &[parse_aspect],
   "text" => &[parse_font_size, parse_text_color, parse_align],
+  "decoration" => &[parse_text_decoration_color],
   "leading" => &[parse_line_height],
   "opacity" => &[parse_opacity],
   "line-clamp" => &[parse_line_clamp],
@@ -198,6 +215,17 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParserFn]> = phf_map! {
   "rounded-tr" => &[parse_border_tr_radius],
   "rounded-br" => &[parse_border_br_radius],
   "rounded-bl" => &[parse_border_bl_radius],
+  "grid-cols" => &[parse_grid_template_columns],
+  "grid-rows" => &[parse_grid_template_rows],
+  "auto-cols" => &[parse_grid_auto_columns],
+  "auto-rows" => &[parse_grid_auto_rows],
+  "col-span" => &[parse_grid_column],
+  "row-span" => &[parse_grid_row],
+  "col-start" => &[parse_grid_column_start],
+  "col-end" => &[parse_grid_column_end],
+  "row-start" => &[parse_grid_row_start],
+  "row-end" => &[parse_grid_row_end],
+  "tracking" => &[parse_letter_spacing],
 };
 
 pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
@@ -246,6 +274,10 @@ pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
   "break-normal" => TailwindProperty::WordBreak(WordBreak::Normal),
   "break-all" => TailwindProperty::WordBreak(WordBreak::BreakAll),
   "break-keep" => TailwindProperty::WordBreak(WordBreak::KeepAll),
+  "grid-flow-row" => TailwindProperty::GridAutoFlow(GridAutoFlow::row()),
+  "grid-flow-col" => TailwindProperty::GridAutoFlow(GridAutoFlow::column()),
+  "grid-flow-row-dense" | "grid-flow-dense" => TailwindProperty::GridAutoFlow(GridAutoFlow::row().dense()),
+  "grid-flow-col-dense" => TailwindProperty::GridAutoFlow(GridAutoFlow::column().dense()),
   "shadow-sm" => TailwindProperty::Shadow(BoxShadow {
     inset: false,
     offset_x: LengthUnit::Px(1.0),
