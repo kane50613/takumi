@@ -1,5 +1,12 @@
 # @takumi-rs/helpers
 
+## 0.45.0
+
+### Minor Changes
+
+- 702c419: drop `createTailwindFn` as its built-in now
+- 702c419: drop `twrnc` dependency (now zero 🎉)
+
 ## 0.44.0
 
 ## 0.43.1

@@ -1,5 +1,12 @@
 # takumi
 
+## 0.45.0
+
+### Minor Changes
+
+- 702c419: add tailwind parser
+- 702c419: support `inline`/`block` for padding/margin/inset/border-width
+
 ## 0.44.0
 
 ### Minor Changes

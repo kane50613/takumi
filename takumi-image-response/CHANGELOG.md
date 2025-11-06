@@ -1,5 +1,19 @@
 # @takumi-rs/image-response
 
+## 0.45.0
+
+### Minor Changes
+
+- 702c419: remove `jsx` options
+
+### Patch Changes
+
+- Updated dependencies [702c419]
+- Updated dependencies [702c419]
+  - @takumi-rs/helpers@0.45.0
+  - @takumi-rs/core@0.45.0
+  - @takumi-rs/wasm@0.45.0
+
 ## 0.44.0
 
 ### Patch Changes
