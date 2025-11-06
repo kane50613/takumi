@@ -21,6 +21,7 @@ png = "0.18"
 serde-untagged = "0.1"
 data-url = "0.3"
 dashmap = "6.1"
+trig-const = "0.3"
 
 [dependencies.phf]
 version = "0.13"

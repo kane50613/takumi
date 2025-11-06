@@ -189,6 +189,20 @@ pub enum TextAlign {
   End,
 }
 
+impl TailwindPropertyParser for TextAlign {
+  fn parse_tw(token: &str) -> Option<Self> {
+    match_ignore_ascii_case! {token,
+      "left" => Some(TextAlign::Left),
+      "right" => Some(TextAlign::Right),
+      "center" => Some(TextAlign::Center),
+      "justify" => Some(TextAlign::Justify),
+      "start" => Some(TextAlign::Start),
+      "end" => Some(TextAlign::End),
+      _ => None,
+    }
+  }
+}
+
 impl_from_taffy_enum!(
   TextAlign, Alignment, Left, Right, Center, Justify, Start, End
 );

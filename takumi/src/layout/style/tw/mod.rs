@@ -1,10 +1,14 @@
+pub(crate) mod map;
+
 use std::str::FromStr;
 
-use phf::phf_map;
 use serde::Deserializer;
 use smallvec::smallvec;
 
-use crate::layout::style::*;
+use crate::layout::style::{
+  tw::map::{FIXED_PROPERTIES, PREFIX_PARSERS},
+  *,
+};
 
 /// Tailwind `--spacing` variable value.
 pub const VAR_SPACING: f32 = 0.25;
@@ -93,7 +97,7 @@ pub enum TailwindProperty {
   /// The weight of the font in the element.
   FontWeight(FontWeight),
   /// The alignment of the text in the element.
-  Text(TextAlign),
+  TextAlign(TextAlign),
   /// The decoration of the text in the element.
   TextDecoration(TextDecoration),
   /// The transformation of the text in the element.
@@ -134,23 +138,20 @@ pub enum TailwindProperty {
   GapY(LengthUnit),
   /// The width of the border of the element.
   BorderWidth(LengthUnit),
+  /// The color of the element.
+  Color(ColorInput),
+  /// The opacity of the element.
+  Opacity(PercentageNumber),
+  /// The background color of the element.
+  BackgroundColor(ColorInput),
+  /// The border color of the element.
+  BorderColor(ColorInput),
 }
 
 /// A trait for parsing tailwind properties.
 pub trait TailwindPropertyParser: Sized {
   /// Parse a tailwind property from a token.
   fn parse_tw(token: &str) -> Option<Self>;
-}
-
-// property_check!("object-", ObjectPosition) -> Option<TailwindProperty>
-macro_rules! property_check {
-  ($prefix:literal, $wrapper:ident($property:ident), $token:ident) => {
-    if $token.starts_with($prefix)
-      && let Some(property) = $property::parse_tw(&$token[$prefix.len()..])
-    {
-      return Some(TailwindProperty::$wrapper(property));
-    }
-  };
 }
 
 impl TailwindProperty {
@@ -161,38 +162,40 @@ impl TailwindProperty {
 
   /// Parse a single tailwind property from a token.
   pub fn parse(token: &str) -> Option<TailwindProperty> {
+    // Check fixed properties first
     if let Some(property) = FIXED_PROPERTIES.get(token) {
       return Some(property.clone());
     }
 
-    property_check!("object-", ObjectFit(ObjectFit), token);
-    property_check!("object-", ObjectPosition(BackgroundPosition), token);
-    property_check!("bg-", BackgroundPosition(BackgroundPosition), token);
-    property_check!("bg-", BackgroundSize(BackgroundSize), token);
-    property_check!("bg-", BackgroundRepeat(BackgroundRepeat), token);
-    property_check!("w-", Width(LengthUnit), token);
-    property_check!("h-", Height(LengthUnit), token);
-    property_check!("min-w-", MinWidth(LengthUnit), token);
-    property_check!("min-h-", MinHeight(LengthUnit), token);
-    property_check!("max-w-", MaxWidth(LengthUnit), token);
-    property_check!("max-h-", MaxHeight(LengthUnit), token);
-    property_check!("size-", Size(LengthUnit), token);
-    property_check!("font-", FontWeight(FontWeight), token);
-    property_check!("gap-x-", GapX(LengthUnit), token);
-    property_check!("gap-y-", GapY(LengthUnit), token);
-    property_check!("gap-", Gap(LengthUnit), token);
-    property_check!("justify-", Justify(JustifyContent), token);
-    property_check!("content-", Content(JustifyContent), token);
-    property_check!("items-", Items(AlignItems), token);
-    property_check!("self-", AlignSelf(AlignItems), token);
-    property_check!("justify-self-", JustifySelf(AlignItems), token);
-    property_check!("overflow-x-", OverflowX(Overflow), token);
-    property_check!("overflow-y-", OverflowY(Overflow), token);
-    property_check!("overflow-", Overflow(Overflow), token);
-    property_check!("border-", BorderWidth(LengthUnit), token);
-    property_check!("grow-", FlexGrow(FlexGrow), token);
-    property_check!("shrink-", FlexShrink(FlexGrow), token);
-    property_check!("aspect-", Aspect(AspectRatio), token);
+    // Handle negative values like "-top-4"
+    if let Some(stripped) = token.strip_prefix('-') {
+      if let Some(property) = Self::parse_prefix_suffix(stripped) {
+        return Some(property);
+      }
+    }
+
+    Self::parse_prefix_suffix(token)
+  }
+
+  fn parse_prefix_suffix(token: &str) -> Option<TailwindProperty> {
+    let dash_positions = token.match_indices('-').map(|(i, _)| i);
+
+    // Try different prefix lengths (longest first)
+    for dash_pos in dash_positions.rev() {
+      let prefix = &token[..dash_pos];
+
+      let Some(parsers) = PREFIX_PARSERS.get(prefix) else {
+        continue;
+      };
+
+      let suffix = &token[dash_pos + 1..];
+
+      for parser in *parsers {
+        if let Some(property) = parser(suffix) {
+          return Some(property);
+        }
+      }
+    }
 
     None
   }
@@ -256,7 +259,7 @@ impl TailwindProperty {
       TailwindProperty::FontWeight(font_weight) => {
         style.font_weight = font_weight.into();
       }
-      TailwindProperty::Text(text_align) => {
+      TailwindProperty::TextAlign(text_align) => {
         style.text_align = text_align.into();
       }
       TailwindProperty::TextDecoration(ref text_decoration) => {
@@ -322,114 +325,21 @@ impl TailwindProperty {
       TailwindProperty::JustifySelf(align_items) => {
         style.justify_self = align_items.into();
       }
+      TailwindProperty::Color(color_input) => {
+        style.color = color_input.into();
+      }
+      TailwindProperty::Opacity(percentage_number) => {
+        style.opacity = percentage_number.into();
+      }
+      TailwindProperty::BackgroundColor(color_input) => {
+        style.background_color = color_input.into();
+      }
+      TailwindProperty::BorderColor(color_input) => {
+        style.border_color = CssOption::some(color_input).into();
+      }
     }
   }
 }
-
-static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
-  "border" => TailwindProperty::BorderWidth(LengthUnit::Px(1.0)),
-  "box-border" => TailwindProperty::BoxSizing(BoxSizing::BorderBox),
-  "box-content" => TailwindProperty::BoxSizing(BoxSizing::ContentBox),
-  "inline" => TailwindProperty::Display(Display::Inline),
-  "block" => TailwindProperty::Display(Display::Block),
-  "flex" => TailwindProperty::Display(Display::Flex),
-  "grid" => TailwindProperty::Display(Display::Grid),
-  "hidden" => TailwindProperty::Display(Display::None),
-  "aspect-auto" => TailwindProperty::Aspect(AspectRatio::Auto),
-  "aspect-square" => TailwindProperty::Aspect(AspectRatio::Ratio(1.0)),
-  "aspect-video" => TailwindProperty::Aspect(AspectRatio::Ratio(16.0 / 9.0)),
-  "flex-grow" | "grow" => TailwindProperty::FlexGrow(FlexGrow(1.0)),
-  "flex-shrink" | "shrink" => TailwindProperty::FlexShrink(FlexGrow(1.0)),
-  "flex-row" => TailwindProperty::FlexDirection(FlexDirection::Row),
-  "flex-row-reverse" => TailwindProperty::FlexDirection(FlexDirection::RowReverse),
-  "flex-col" => TailwindProperty::FlexDirection(FlexDirection::Column),
-  "flex-col-reverse" => TailwindProperty::FlexDirection(FlexDirection::ColumnReverse),
-  "flex-wrap" => TailwindProperty::FlexWrap(FlexWrap::Wrap),
-  "flex-wrap-reverse" => TailwindProperty::FlexWrap(FlexWrap::WrapReverse),
-  "flex-nowrap" => TailwindProperty::FlexWrap(FlexWrap::NoWrap),
-  "flex-auto" => TailwindProperty::Flex(Flex::auto()),
-  "flex-initial" => TailwindProperty::Flex(Flex::initial()),
-  "flex-none" => TailwindProperty::Flex(Flex::none()),
-  "absolute" => TailwindProperty::Position(Position::Absolute),
-  "relative" => TailwindProperty::Position(Position::Relative),
-  "text-start" => TailwindProperty::Text(TextAlign::Start),
-  "text-end" => TailwindProperty::Text(TextAlign::End),
-  "text-left" => TailwindProperty::Text(TextAlign::Left),
-  "text-center" => TailwindProperty::Text(TextAlign::Center),
-  "text-right" => TailwindProperty::Text(TextAlign::Right),
-  "text-justify" => TailwindProperty::Text(TextAlign::Justify),
-  "text-auto" => TailwindProperty::Text(TextAlign::Start),
-  "uppercase" => TailwindProperty::TextTransform(TextTransform::Uppercase),
-  "lowercase" => TailwindProperty::TextTransform(TextTransform::Lowercase),
-  "capitalize" => TailwindProperty::TextTransform(TextTransform::Capitalize),
-  "normal-case" => TailwindProperty::TextTransform(TextTransform::None),
-  "italic" => TailwindProperty::FontStyle(FontStyle::italic()),
-  "not-italic" => TailwindProperty::FontStyle(FontStyle::normal()),
-  "basis-auto" => TailwindProperty::FlexBasis(LengthUnit::Auto),
-  "flex-basis-auto" => TailwindProperty::FlexBasis(LengthUnit::Auto),
-  "w-screen" => TailwindProperty::Width(LengthUnit::Vw(100.0)),
-  "h-screen" => TailwindProperty::Height(LengthUnit::Vh(100.0)),
-  "min-w-screen" => TailwindProperty::MinWidth(LengthUnit::Vw(100.0)),
-  "min-h-screen" => TailwindProperty::MinHeight(LengthUnit::Vh(100.0)),
-  "max-w-screen" => TailwindProperty::MaxWidth(LengthUnit::Vw(100.0)),
-  "max-h-screen" => TailwindProperty::MaxHeight(LengthUnit::Vh(100.0)),
-  "shadow-sm" => TailwindProperty::Shadow(BoxShadow {
-    inset: false,
-    offset_x: LengthUnit::Px(1.0),
-    offset_y: LengthUnit::Px(1.0),
-    blur_radius: LengthUnit::Px(1.0),
-    spread_radius: LengthUnit::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 6])),
-  }),
-  "shadow" => TailwindProperty::Shadow(BoxShadow {
-    inset: false,
-    offset_x: LengthUnit::Px(1.0),
-    offset_y: LengthUnit::Px(1.0),
-    blur_radius: LengthUnit::Px(1.0),
-    spread_radius: LengthUnit::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 19])),
-  }),
-  "shadow-md" => TailwindProperty::Shadow(BoxShadow {
-    inset: false,
-    offset_x: LengthUnit::Px(1.0),
-    offset_y: LengthUnit::Px(1.0),
-    blur_radius: LengthUnit::Px(3.0),
-    spread_radius: LengthUnit::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 32])),
-  }),
-  "shadow-lg" => TailwindProperty::Shadow(BoxShadow {
-    inset: false,
-    offset_x: LengthUnit::Px(1.0),
-    offset_y: LengthUnit::Px(1.0),
-    blur_radius: LengthUnit::Px(8.0),
-    spread_radius: LengthUnit::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 38])),
-  }),
-  "shadow-xl" => TailwindProperty::Shadow(BoxShadow {
-    inset: false,
-    offset_x: LengthUnit::Px(1.0),
-    offset_y: LengthUnit::Px(1.0),
-    blur_radius: LengthUnit::Px(20.0),
-    spread_radius: LengthUnit::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 48])),
-  }),
-  "shadow-2xl" => TailwindProperty::Shadow(BoxShadow {
-    inset: false,
-    offset_x: LengthUnit::Px(1.0),
-    offset_y: LengthUnit::Px(1.0),
-    blur_radius: LengthUnit::Px(30.0),
-    spread_radius: LengthUnit::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 64])),
-  }),
-  "shadow-none" => TailwindProperty::Shadow(BoxShadow {
-    inset: false,
-    offset_x: LengthUnit::Px(0.0),
-    offset_y: LengthUnit::Px(0.0),
-    blur_radius: LengthUnit::Px(0.0),
-    spread_radius: LengthUnit::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 0])),
-  }),
-};
 
 #[cfg(test)]
 mod tests {
@@ -449,6 +359,37 @@ mod tests {
         box_sizing: BoxSizing::BorderBox.into(),
         ..Default::default()
       }
+    );
+  }
+
+  #[test]
+  fn test_parse_width() {
+    assert_eq!(
+      TailwindProperty::parse("w-64"),
+      Some(TailwindProperty::Width(LengthUnit::Rem(64.0 * VAR_SPACING)))
+    );
+    assert_eq!(
+      TailwindProperty::parse("h-32"),
+      Some(TailwindProperty::Height(LengthUnit::Rem(
+        32.0 * VAR_SPACING
+      )))
+    );
+    assert_eq!(
+      TailwindProperty::parse("justify-self-center"),
+      Some(TailwindProperty::JustifySelf(AlignItems::Center))
+    );
+  }
+
+  #[test]
+  fn test_parse_color() {
+    assert_eq!(
+      TailwindProperty::parse("text-black/30"),
+      Some(TailwindProperty::Color(ColorInput::Value(Color([
+        0,
+        0,
+        0,
+        (0.3_f32 * 255.0).round() as u8
+      ]))))
     );
   }
 }
