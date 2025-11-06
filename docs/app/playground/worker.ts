@@ -112,6 +112,7 @@ self.onmessage = async (event: MessageEvent) => {
           type: "render-result",
           result: {
             status: "success",
+            id: payload.id,
             dataUrl,
             duration,
             node,
@@ -123,6 +124,7 @@ self.onmessage = async (event: MessageEvent) => {
           type: "render-result",
           result: {
             status: "error",
+            id: payload.id,
             message: error instanceof Error ? error.message : "Unknown error",
           },
         });

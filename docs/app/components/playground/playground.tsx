@@ -45,6 +45,7 @@ export default function Playground() {
   const [rendered, setRendered] =
     useState<z.infer<typeof renderResultSchema>["result"]>();
   const [isReady, setIsReady] = useState(false);
+  const currentRequestIdRef = useRef(0);
 
   const workerRef = useRef<Worker | undefined>(undefined);
   const direction = useDirection();
@@ -92,7 +93,10 @@ export default function Playground() {
           throw new Error("request is not possible for response");
         }
         case "render-result": {
-          setRendered(message.result);
+          // Only update if this result matches the current request
+          if (message.result.id === currentRequestIdRef.current) {
+            setRendered(message.result);
+          }
           break;
         }
         default: {
@@ -112,8 +116,11 @@ export default function Playground() {
 
   useEffect(() => {
     if (isReady && code) {
+      const requestId = currentRequestIdRef.current + 1;
+      currentRequestIdRef.current = requestId;
       workerRef.current?.postMessage({
         type: "render-request",
+        id: requestId,
         code,
       } satisfies RenderMessageInput);
     }

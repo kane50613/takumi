@@ -11,6 +11,7 @@ export const optionsSchema = z.object({
 
 const renderSuccessSchema = z.object({
   status: z.literal("success"),
+  id: z.int().check(z.positive(), z.minimum(1)),
   dataUrl: z.string(),
   duration: z.number(),
   node: z.unknown(),
@@ -19,12 +20,14 @@ const renderSuccessSchema = z.object({
 
 const renderErrorSchema = z.object({
   status: z.literal("error"),
+  id: z.int().check(z.positive(), z.minimum(1)),
   message: z.string(),
   transformedCode: z.optional(z.string()),
 });
 
 export const renderRequestSchema = z.object({
   type: z.literal("render-request"),
+  id: z.int().check(z.positive(), z.minimum(1)),
   code: z.string(),
 });
 
