@@ -5,7 +5,10 @@ use ts_rs::TS;
 use crate::{
   layout::{
     DEFAULT_LINE_HEIGHT_SCALER,
-    style::{FromCss, LengthUnit, ParseResult},
+    style::{
+      FromCss, LengthUnit, ParseResult,
+      tw::{TW_VAR_SPACING, TailwindPropertyParser},
+    },
   },
   rendering::RenderContext,
 };
@@ -19,6 +22,20 @@ pub struct LineHeight(pub LengthUnit);
 impl Default for LineHeight {
   fn default() -> Self {
     Self(LengthUnit::Em(DEFAULT_LINE_HEIGHT_SCALER)) // Default line height
+  }
+}
+
+impl TailwindPropertyParser for LineHeight {
+  fn parse_tw(token: &str) -> Option<Self> {
+    if token.eq_ignore_ascii_case("none") {
+      return Some(Self(LengthUnit::Em(1.0)));
+    }
+
+    let Ok(value) = token.parse::<f32>() else {
+      return None;
+    };
+
+    Some(Self(LengthUnit::Em(value * TW_VAR_SPACING)))
   }
 }
 

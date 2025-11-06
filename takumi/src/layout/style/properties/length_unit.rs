@@ -8,7 +8,7 @@ use ts_rs::TS;
 use crate::{
   layout::style::{
     AspectRatio, FromCss, ParseResult,
-    tw::{TailwindPropertyParser, VAR_SPACING},
+    tw::{TW_VAR_SPACING, TailwindPropertyParser},
   },
   rendering::RenderContext,
 };
@@ -53,7 +53,7 @@ pub enum LengthUnit {
 impl TailwindPropertyParser for LengthUnit {
   fn parse_tw(token: &str) -> Option<Self> {
     if let Ok(value) = token.parse::<f32>() {
-      return Some(LengthUnit::Rem(value * VAR_SPACING));
+      return Some(LengthUnit::Rem(value * TW_VAR_SPACING));
     }
 
     match AspectRatio::from_str(token) {

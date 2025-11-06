@@ -76,16 +76,22 @@ define_style!(
   min_height: LengthUnit = LengthUnit::Auto => LengthUnit::Auto,
   aspect_ratio: AspectRatio = AspectRatio::Auto => AspectRatio::Auto,
   padding: Sides<LengthUnit> = Sides::zero() => Sides::zero(),
+  padding_inline: CssOption<SpacePair<LengthUnit>> = CssOption::none() => CssOption::none(),
+  padding_block: CssOption<SpacePair<LengthUnit>> = CssOption::none() => CssOption::none(),
   padding_top: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
   padding_right: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
   padding_bottom: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
   padding_left: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
   margin: Sides<LengthUnit> = Sides::zero() => Sides::zero(),
+  margin_inline: CssOption<SpacePair<LengthUnit>> = CssOption::none() => CssOption::none(),
+  margin_block: CssOption<SpacePair<LengthUnit>> = CssOption::none() => CssOption::none(),
   margin_top: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
   margin_right: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
   margin_bottom: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
   margin_left: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
   inset: Sides<LengthUnit> = Sides::auto() => Sides::auto(),
+  inset_inline: CssOption<SpacePair<LengthUnit>> = CssOption::none() => CssOption::none(),
+  inset_block: CssOption<SpacePair<LengthUnit>> = CssOption::none() => CssOption::none(),
   top: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
   right: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
   bottom: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
@@ -102,9 +108,13 @@ define_style!(
   position: Position = Position::Relative => Position::Relative,
   rotate: CssOption<Angle> = CssOption::none() => CssOption::none(),
   scale: CssOption<SpacePair<PercentageNumber>> = CssOption::none() => CssOption::none(),
+  scale_x: CssOption<PercentageNumber> = CssOption::none() => CssOption::none(),
+  scale_y: CssOption<PercentageNumber> = CssOption::none() => CssOption::none(),
   transform: CssOption<Transforms> = CssOption::none() => CssOption::none(),
   transform_origin: CssOption<BackgroundPosition> = CssOption::none() => CssOption::none(),
   translate: CssOption<SpacePair<LengthUnit>> = CssOption::none() => CssOption::none(),
+  translate_x: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
+  translate_y: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
   mask_image: CssOption<BackgroundImages> = CssOption::none() => CssOption::none(),
   mask_size: CssOption<BackgroundSizes> = CssOption::none() => CssOption::none(),
   mask_position: CssOption<BackgroundPositions> = CssOption::none() => CssOption::none(),
@@ -121,6 +131,8 @@ define_style!(
   border_bottom_right_radius: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
   border_bottom_left_radius: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
   border_width: CssOption<Sides<LengthUnit>> = CssOption::none() => CssOption::none(),
+  border_inline_width: CssOption<SpacePair<LengthUnit>> = CssOption::none() => CssOption::none(),
+  border_block_width: CssOption<SpacePair<LengthUnit>> = CssOption::none() => CssOption::none(),
   border_top_width: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
   border_right_width: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
   border_bottom_width: CssOption<LengthUnit> = CssOption::none() => CssOption::none(),
@@ -360,12 +372,25 @@ impl InheritedStyle {
   #[inline]
   fn resolve_rect_with_longhands(
     base: Sides<LengthUnit>,
+    inline: CssOption<SpacePair<LengthUnit>>,
+    block: CssOption<SpacePair<LengthUnit>>,
     top: CssOption<LengthUnit>,
     right: CssOption<LengthUnit>,
     bottom: CssOption<LengthUnit>,
     left: CssOption<LengthUnit>,
   ) -> taffy::Rect<LengthUnit> {
     let mut values = base.0;
+
+    if let Some(pair) = *inline {
+      values[3] = pair.x; // left
+      values[1] = pair.y; // right
+    }
+
+    if let Some(pair) = *block {
+      values[0] = pair.x; // top
+      values[2] = pair.y; // bottom
+    }
+
     if let Some(v) = *top {
       values[0] = v;
     }
@@ -390,6 +415,8 @@ impl InheritedStyle {
   fn resolved_padding(&self) -> taffy::Rect<LengthUnit> {
     Self::resolve_rect_with_longhands(
       self.padding,
+      self.padding_inline,
+      self.padding_block,
       self.padding_top,
       self.padding_right,
       self.padding_bottom,
@@ -401,6 +428,8 @@ impl InheritedStyle {
   fn resolved_margin(&self) -> taffy::Rect<LengthUnit> {
     Self::resolve_rect_with_longhands(
       self.margin,
+      self.margin_inline,
+      self.margin_block,
       self.margin_top,
       self.margin_right,
       self.margin_bottom,
@@ -410,7 +439,15 @@ impl InheritedStyle {
 
   #[inline]
   fn resolved_inset(&self) -> taffy::Rect<LengthUnit> {
-    Self::resolve_rect_with_longhands(self.inset, self.top, self.right, self.bottom, self.left)
+    Self::resolve_rect_with_longhands(
+      self.inset,
+      self.inset_inline,
+      self.inset_block,
+      self.top,
+      self.right,
+      self.bottom,
+      self.left,
+    )
   }
 
   #[inline]
@@ -428,6 +465,8 @@ impl InheritedStyle {
         .border_width
         .or_else(|| self.border.width.map(Into::into))
         .unwrap_or(Sides::zero()),
+      self.border_inline_width,
+      self.border_block_width,
       self.border_top_width,
       self.border_right_width,
       self.border_bottom_width,
@@ -439,6 +478,8 @@ impl InheritedStyle {
   pub(crate) fn resolved_border_radius(&self) -> taffy::Rect<LengthUnit> {
     Self::resolve_rect_with_longhands(
       self.border_radius,
+      CssOption::none(),
+      CssOption::none(),
       self.border_top_left_radius,
       self.border_top_right_radius,
       self.border_bottom_right_radius,

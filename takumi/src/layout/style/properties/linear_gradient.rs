@@ -3,12 +3,14 @@ use image::RgbaImage;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_untagged::UntaggedEnumVisitor;
 use smallvec::SmallVec;
-use std::ops::Deref;
+use std::ops::{Deref, Neg};
 use ts_rs::TS;
 
 use super::gradient_utils::{color_from_stops, resolve_stops_along_axis};
 use crate::{
-  layout::style::{Color, ColorInput, FromCss, LengthUnit, ParseResult},
+  layout::style::{
+    Color, ColorInput, FromCss, LengthUnit, ParseResult, tw::TailwindPropertyParser,
+  },
   rendering::RenderContext,
 };
 
@@ -263,6 +265,26 @@ impl<'i> FromCss<'i> for GradientStop {
 #[serde(transparent)]
 #[ts(type = "number | string")]
 pub struct Angle(f32);
+
+impl TailwindPropertyParser for Angle {
+  fn parse_tw(token: &str) -> Option<Self> {
+    if token.eq_ignore_ascii_case("none") {
+      return Some(Angle::zero());
+    }
+
+    let angle = token.parse::<f32>().ok()?;
+
+    Some(Angle::new(angle))
+  }
+}
+
+impl Neg for Angle {
+  type Output = Self;
+
+  fn neg(self) -> Self::Output {
+    Angle::new(-self.0)
+  }
+}
 
 impl<'de> Deserialize<'de> for Angle {
   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>

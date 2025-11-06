@@ -1,7 +1,7 @@
 pub(crate) mod map;
 pub(crate) mod parser;
 
-use std::str::FromStr;
+use std::{ops::Neg, str::FromStr};
 
 use serde::Deserializer;
 use smallvec::smallvec;
@@ -9,13 +9,13 @@ use smallvec::smallvec;
 use crate::layout::style::{
   tw::{
     map::{FIXED_PROPERTIES, PREFIX_PARSERS},
-    parser::TwFontSize,
+    parser::*,
   },
   *,
 };
 
 /// Tailwind `--spacing` variable value.
-pub const VAR_SPACING: f32 = 0.25;
+pub const TW_VAR_SPACING: f32 = 0.25;
 
 /// Represents a collection of tailwind properties.
 #[derive(Debug, Clone)]
@@ -62,118 +62,248 @@ impl<'de> Deserialize<'de> for TailwindProperties {
 /// Represents a tailwind property.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TailwindProperty {
-  /// The box sizing of the element.
+  /// `box-sizing` property.
   BoxSizing(BoxSizing),
-  /// The flex grow of the element.
+  /// `flex-grow` property.
   FlexGrow(FlexGrow),
-  /// The flex shrink of the element.
+  /// `flex-shrink` property.
   FlexShrink(FlexGrow),
-  /// The aspect ratio of the element.
+  /// `aspect-ratio` property.
   Aspect(AspectRatio),
-  /// The alignment of the items in the element.
+  /// `align-items` property.
   Items(AlignItems),
-  /// The justification of the content in the element.
+  /// `justify-content` property.
   Justify(JustifyContent),
-  /// The alignment of the content in the element.
+  /// `align-content` property.
   Content(JustifyContent),
-  /// The alignment of the self in the element.
+  /// `align-self` property.
   JustifySelf(AlignItems),
-  /// The alignment of the items in the element.
+  /// `justify-items` property.
+  JustifyItems(AlignItems),
+  /// `flex-direction` property.
   AlignSelf(AlignItems),
-  /// The direction of the flex in the element.
+  /// `flex-direction` property.
   FlexDirection(FlexDirection),
-  /// The wrapping of the flex in the element.
+  /// `flex-wrap` property.
   FlexWrap(FlexWrap),
-  /// The flex properties of the element.
+  /// `flex` property.
   Flex(Flex),
-  /// The basis of the flex in the element.
+  /// `flex-basis` property.
   FlexBasis(LengthUnit),
-  /// The overflow of the element.
+  /// `overflow` property.
   Overflow(Overflow),
-  /// The overflow of the element on the x-axis.
+  /// `overflow-x` property.
   OverflowX(Overflow),
-  /// The overflow of the element on the y-axis.
+  /// `overflow-y` property.
   OverflowY(Overflow),
-  /// The position of the element.
+  /// `position` property.
   Position(Position),
-  /// The style of the font in the element.
+  /// `font-style` property.
   FontStyle(FontStyle),
-  /// The weight of the font in the element.
+  /// `font-weight` property.
   FontWeight(FontWeight),
-  /// The family of the font in the element.
+  /// `font-family` property.
   FontFamily(FontFamily),
-  /// The line clamp of the element.
+  /// `line-clamp` property.
   LineClamp(LineClamp),
-  /// The overflow of the text in the element.
+  /// `text-overflow` property.
   TextOverflow(TextOverflow),
-  /// The wrap mode of the text in the element.
+  /// `text-wrap` property.
   TextWrap(TextWrapMode),
-  /// The collapse mode of the white space in the element.
+  /// `white-space` property.
   WhiteSpace(WhiteSpace),
-  /// The word break of the text in the element.
+  /// `word-break` property.
   WordBreak(WordBreak),
-  /// The overflow wrap of the text in the element.
+  /// `overflow-wrap` property.
   OverflowWrap(OverflowWrap),
   /// Set `text-overflow: ellipsis`, `white-space: nowrap` and `overflow: hidden`.
   Truncate,
-  /// The alignment of the text in the element.
+  /// `text-align` property.
   TextAlign(TextAlign),
-  /// The decoration of the text in the element.
+  /// `text-decoration` property.
   TextDecoration(TextDecoration),
-  /// The transformation of the text in the element.
+  /// `text-transform` property.
   TextTransform(TextTransform),
-  /// The size of the element.
+  /// `width` and `height` property.
   Size(LengthUnit),
-  /// The width of the element.
+  /// `width` property.
   Width(LengthUnit),
-  /// The height of the element.
+  /// `height` property.
   Height(LengthUnit),
-  /// The minimum width of the element.
+  /// `min-width` property.
   MinWidth(LengthUnit),
-  /// The minimum height of the element.
+  /// `min-height` property.
   MinHeight(LengthUnit),
-  /// The maximum width of the element.
+  /// `max-width` property.
   MaxWidth(LengthUnit),
-  /// The maximum height of the element.
+  /// `max-height` property.
   MaxHeight(LengthUnit),
-  /// The shadow of the element.
+  /// `box-shadow` property.
   Shadow(BoxShadow),
-  /// The display of the element.
+  /// `display` property.
   Display(Display),
-  /// The object position of the element.
+  /// `object-position` property.
   ObjectPosition(BackgroundPosition),
-  /// The object fit of the element.
+  /// `object-fit` property.
   ObjectFit(ObjectFit),
-  /// The background position of the element.
+  /// `background-position` property.
   BackgroundPosition(BackgroundPosition),
-  /// The background size of the element.
+  /// `background-size` property.
   BackgroundSize(BackgroundSize),
-  /// The background repeat of the element.
+  /// `background-repeat` property.
   BackgroundRepeat(BackgroundRepeat),
-  /// The gap of the element.
+  /// `gap` property.
   Gap(LengthUnit),
-  /// The gap of the element on the x-axis.
+  /// `column-gap` property.
   GapX(LengthUnit),
-  /// The gap of the element on the y-axis.
+  /// `row-gap` property.
   GapY(LengthUnit),
-  /// The width of the border of the element.
-  BorderWidth(LengthUnit),
-  /// The color of the element.
+  /// `border-width` property.
+  BorderWidth(TwBorderWidth),
+  /// `color` property.
   Color(ColorInput),
-  /// The opacity of the element.
+  /// `opacity` property.
   Opacity(PercentageNumber),
-  /// The background color of the element.
+  /// `background-color` property.
   BackgroundColor(ColorInput),
-  /// The border color of the element.
+  /// `border-color` property.
   BorderColor(ColorInput),
-  /// The font size of the element.
+  /// `border-top-width` property.
+  BorderTopWidth(TwBorderWidth),
+  /// `border-right-width` property.
+  BorderRightWidth(TwBorderWidth),
+  /// `border-bottom-width` property.
+  BorderBottomWidth(TwBorderWidth),
+  /// `border-left-width` property.
+  BorderLeftWidth(TwBorderWidth),
+  /// `border-inline-width` property.
+  BorderXWidth(TwBorderWidth),
+  /// `border-block-width` property.
+  BorderYWidth(TwBorderWidth),
+  /// `border-radius` property.
+  BorderRadius(TwRound),
+  /// `border-top-left-radius` property.
+  BorderTopLeftRadius(LengthUnit),
+  /// `border-top-right-radius` property.
+  BorderTopRightRadius(LengthUnit),
+  /// `border-bottom-right-radius` property.
+  BorderBottomRightRadius(LengthUnit),
+  /// `border-bottom-left-radius` property.
+  BorderBottomLeftRadius(LengthUnit),
+  /// `border-top-left-radius`, `border-top-right-radius` property.
+  RoundedT(LengthUnit),
+  /// `border-top-right-radius`, `border-bottom-right-radius` property.
+  RoundedR(LengthUnit),
+  /// `border-bottom-left-radius`, `border-bottom-right-radius` property.
+  RoundedB(LengthUnit),
+  /// `border-top-left-radius`, `border-bottom-left-radius` property.
+  RoundedL(LengthUnit),
+  /// `font-size` property.
   FontSize(TwFontSize),
+  /// `line-height` property.
+  LineHeight(LineHeight),
+  /// `translate` property.
+  Translate(LengthUnit),
+  /// `translate-x` property.
+  TranslateX(LengthUnit),
+  /// `translate-y` property.
+  TranslateY(LengthUnit),
+  /// `rotate` property.
+  Rotate(Angle),
+  /// `scale` property.
+  Scale(PercentageNumber),
+  /// `scale-x` property.
+  ScaleX(PercentageNumber),
+  /// `scale-y` property.
+  ScaleY(PercentageNumber),
+  /// `transform-origin` property.
+  TransformOrigin(BackgroundPosition),
+  /// `margin` property.
+  Margin(LengthUnit),
+  /// `margin-inline` property.
+  MarginX(LengthUnit),
+  /// `margin-block` property.
+  MarginY(LengthUnit),
+  /// `margin-top` property.
+  MarginTop(LengthUnit),
+  /// `margin-right` property.
+  MarginRight(LengthUnit),
+  /// `margin-bottom` property.
+  MarginBottom(LengthUnit),
+  /// `margin-left` property.
+  MarginLeft(LengthUnit),
+  /// `padding` property.
+  Padding(LengthUnit),
+  /// `padding-inline` property.
+  PaddingX(LengthUnit),
+  /// `padding-block` property.
+  PaddingY(LengthUnit),
+  /// `padding-top` property.
+  PaddingTop(LengthUnit),
+  /// `padding-right` property.
+  PaddingRight(LengthUnit),
+  /// `padding-bottom` property.
+  PaddingBottom(LengthUnit),
+  /// `padding-left` property.
+  PaddingLeft(LengthUnit),
+  /// `inset` property.
+  Inset(LengthUnit),
+  /// `inset-inline` property.
+  InsetX(LengthUnit),
+  /// `inset-block` property.
+  InsetY(LengthUnit),
+  /// `top` property.
+  Top(LengthUnit),
+  /// `right` property.
+  Right(LengthUnit),
+  /// `bottom` property.
+  Bottom(LengthUnit),
+  /// `left` property.
+  Left(LengthUnit),
 }
 
 /// A trait for parsing tailwind properties.
 pub trait TailwindPropertyParser: Sized + for<'i> FromCss<'i> {
   /// Parse a tailwind property from a token.
   fn parse_tw(token: &str) -> Option<Self>;
+}
+
+impl Neg for TailwindProperty {
+  type Output = Self;
+
+  fn neg(self) -> Self::Output {
+    match self {
+      TailwindProperty::Margin(length_unit) => TailwindProperty::Margin(-length_unit),
+      TailwindProperty::MarginX(length_unit) => TailwindProperty::MarginX(-length_unit),
+      TailwindProperty::MarginY(length_unit) => TailwindProperty::MarginY(-length_unit),
+      TailwindProperty::MarginTop(length_unit) => TailwindProperty::MarginTop(-length_unit),
+      TailwindProperty::MarginRight(length_unit) => TailwindProperty::MarginRight(-length_unit),
+      TailwindProperty::MarginBottom(length_unit) => TailwindProperty::MarginBottom(-length_unit),
+      TailwindProperty::MarginLeft(length_unit) => TailwindProperty::MarginLeft(-length_unit),
+      TailwindProperty::Padding(length_unit) => TailwindProperty::Padding(-length_unit),
+      TailwindProperty::PaddingX(length_unit) => TailwindProperty::PaddingX(-length_unit),
+      TailwindProperty::PaddingY(length_unit) => TailwindProperty::PaddingY(-length_unit),
+      TailwindProperty::PaddingTop(length_unit) => TailwindProperty::PaddingTop(-length_unit),
+      TailwindProperty::PaddingRight(length_unit) => TailwindProperty::PaddingRight(-length_unit),
+      TailwindProperty::PaddingBottom(length_unit) => TailwindProperty::PaddingBottom(-length_unit),
+      TailwindProperty::PaddingLeft(length_unit) => TailwindProperty::PaddingLeft(-length_unit),
+      TailwindProperty::Inset(length_unit) => TailwindProperty::Inset(-length_unit),
+      TailwindProperty::InsetX(length_unit) => TailwindProperty::InsetX(-length_unit),
+      TailwindProperty::InsetY(length_unit) => TailwindProperty::InsetY(-length_unit),
+      TailwindProperty::Top(length_unit) => TailwindProperty::Top(-length_unit),
+      TailwindProperty::Right(length_unit) => TailwindProperty::Right(-length_unit),
+      TailwindProperty::Bottom(length_unit) => TailwindProperty::Bottom(-length_unit),
+      TailwindProperty::Left(length_unit) => TailwindProperty::Left(-length_unit),
+      TailwindProperty::Translate(length_unit) => TailwindProperty::Translate(-length_unit),
+      TailwindProperty::TranslateX(length_unit) => TailwindProperty::TranslateX(-length_unit),
+      TailwindProperty::TranslateY(length_unit) => TailwindProperty::TranslateY(-length_unit),
+      TailwindProperty::Scale(percentage_number) => TailwindProperty::Scale(-percentage_number),
+      TailwindProperty::ScaleX(percentage_number) => TailwindProperty::ScaleX(-percentage_number),
+      TailwindProperty::ScaleY(percentage_number) => TailwindProperty::ScaleY(-percentage_number),
+      TailwindProperty::Rotate(angle) => TailwindProperty::Rotate(-angle),
+      _ => self,
+    }
+  }
 }
 
 impl TailwindProperty {
@@ -192,8 +322,10 @@ impl TailwindProperty {
     // Handle negative values like "-top-4"
     if let Some(stripped) = token.strip_prefix('-') {
       if let Some(property) = Self::parse_prefix_suffix(stripped) {
-        return Some(property);
+        return Some(-property);
       }
+
+      return None;
     }
 
     Self::parse_prefix_suffix(token)
@@ -347,11 +479,14 @@ impl TailwindProperty {
         style.background_repeat =
           CssOption::some(BackgroundRepeats(vec![background_repeat])).into();
       }
-      TailwindProperty::BorderWidth(length_unit) => {
-        style.border_width = CssOption::some(Sides([length_unit; 4])).into();
+      TailwindProperty::BorderWidth(tw_border_width) => {
+        style.border_width = CssOption::some(Sides([tw_border_width.0; 4])).into();
       }
       TailwindProperty::JustifySelf(align_items) => {
         style.justify_self = align_items.into();
+      }
+      TailwindProperty::JustifyItems(align_items) => {
+        style.justify_items = align_items.into();
       }
       TailwindProperty::Color(color_input) => {
         style.color = color_input.into();
@@ -364,6 +499,57 @@ impl TailwindProperty {
       }
       TailwindProperty::BorderColor(color_input) => {
         style.border_color = CssOption::some(color_input).into();
+      }
+      TailwindProperty::BorderTopWidth(tw_border_width) => {
+        style.border_top_width = CssOption::some(tw_border_width.0).into();
+      }
+      TailwindProperty::BorderRightWidth(tw_border_width) => {
+        style.border_right_width = CssOption::some(tw_border_width.0).into();
+      }
+      TailwindProperty::BorderBottomWidth(tw_border_width) => {
+        style.border_bottom_width = CssOption::some(tw_border_width.0).into();
+      }
+      TailwindProperty::BorderLeftWidth(tw_border_width) => {
+        style.border_left_width = CssOption::some(tw_border_width.0).into();
+      }
+      TailwindProperty::BorderXWidth(tw_border_width) => {
+        style.border_left_width = CssOption::some(tw_border_width.0).into();
+        style.border_right_width = CssOption::some(tw_border_width.0).into();
+      }
+      TailwindProperty::BorderYWidth(tw_border_width) => {
+        style.border_top_width = CssOption::some(tw_border_width.0).into();
+        style.border_bottom_width = CssOption::some(tw_border_width.0).into();
+      }
+      TailwindProperty::BorderRadius(tw_round) => {
+        style.border_radius = Sides([tw_round.border_radius; 4]).into();
+      }
+      TailwindProperty::BorderTopLeftRadius(length_unit) => {
+        style.border_top_left_radius = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::BorderTopRightRadius(length_unit) => {
+        style.border_top_right_radius = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::BorderBottomRightRadius(length_unit) => {
+        style.border_bottom_right_radius = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::BorderBottomLeftRadius(length_unit) => {
+        style.border_bottom_left_radius = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::RoundedT(length_unit) => {
+        style.border_top_left_radius = CssOption::some(length_unit).into();
+        style.border_top_right_radius = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::RoundedR(length_unit) => {
+        style.border_top_right_radius = CssOption::some(length_unit).into();
+        style.border_bottom_right_radius = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::RoundedB(length_unit) => {
+        style.border_bottom_left_radius = CssOption::some(length_unit).into();
+        style.border_bottom_right_radius = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::RoundedL(length_unit) => {
+        style.border_top_left_radius = CssOption::some(length_unit).into();
+        style.border_bottom_left_radius = CssOption::some(length_unit).into();
       }
       TailwindProperty::TextOverflow(ref text_overflow) => {
         style.text_overflow = text_overflow.clone().into();
@@ -393,8 +579,98 @@ impl TailwindProperty {
         style.font_size = CssOption::some(font_size.font_size).into();
 
         if let Some(line_height) = font_size.line_height {
-          style.line_height = LineHeight(line_height).into();
+          style.line_height = line_height.into();
         }
+      }
+      TailwindProperty::LineHeight(line_height) => {
+        style.line_height = line_height.into();
+      }
+      TailwindProperty::Translate(length_unit) => {
+        style.translate = CssOption::some(SpacePair::from_single(length_unit)).into();
+      }
+      TailwindProperty::TranslateX(length_unit) => {
+        style.translate_x = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::TranslateY(length_unit) => {
+        style.translate_y = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::Rotate(angle) => {
+        style.rotate = CssOption::some(angle).into();
+      }
+      TailwindProperty::Scale(percentage_number) => {
+        style.scale = CssOption::some(SpacePair::from_single(percentage_number)).into();
+      }
+      TailwindProperty::ScaleX(percentage_number) => {
+        style.scale_x = CssOption::some(percentage_number).into();
+      }
+      TailwindProperty::ScaleY(percentage_number) => {
+        style.scale_y = CssOption::some(percentage_number).into();
+      }
+      TailwindProperty::TransformOrigin(background_position) => {
+        style.transform_origin = CssOption::some(background_position).into();
+      }
+      TailwindProperty::Margin(length_unit) => {
+        style.margin = Sides([length_unit; 4]).into();
+      }
+      TailwindProperty::MarginX(length_unit) => {
+        style.margin_inline = CssOption::some(SpacePair::from_single(length_unit)).into();
+      }
+      TailwindProperty::MarginY(length_unit) => {
+        style.margin_block = CssOption::some(SpacePair::from_single(length_unit)).into();
+      }
+      TailwindProperty::MarginTop(length_unit) => {
+        style.margin_top = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::MarginRight(length_unit) => {
+        style.margin_right = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::MarginBottom(length_unit) => {
+        style.margin_bottom = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::MarginLeft(length_unit) => {
+        style.margin_left = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::Padding(length_unit) => {
+        style.padding = Sides([length_unit; 4]).into();
+      }
+      TailwindProperty::PaddingX(length_unit) => {
+        style.padding_inline = CssOption::some(SpacePair::from_single(length_unit)).into();
+      }
+      TailwindProperty::PaddingY(length_unit) => {
+        style.padding_block = CssOption::some(SpacePair::from_single(length_unit)).into();
+      }
+      TailwindProperty::PaddingTop(length_unit) => {
+        style.padding_top = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::PaddingRight(length_unit) => {
+        style.padding_right = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::PaddingBottom(length_unit) => {
+        style.padding_bottom = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::PaddingLeft(length_unit) => {
+        style.padding_left = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::Inset(length_unit) => {
+        style.inset = Sides([length_unit; 4]).into();
+      }
+      TailwindProperty::InsetX(length_unit) => {
+        style.inset_inline = CssOption::some(SpacePair::from_single(length_unit)).into();
+      }
+      TailwindProperty::InsetY(length_unit) => {
+        style.inset_block = CssOption::some(SpacePair::from_single(length_unit)).into();
+      }
+      TailwindProperty::Top(length_unit) => {
+        style.top = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::Right(length_unit) => {
+        style.right = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::Bottom(length_unit) => {
+        style.bottom = CssOption::some(length_unit).into();
+      }
+      TailwindProperty::Left(length_unit) => {
+        style.left = CssOption::some(length_unit).into();
       }
     }
   }
@@ -406,18 +682,9 @@ mod tests {
 
   #[test]
   fn test_box_sizing() {
-    let mut tw_style = Style::default();
-
-    TailwindProperties::from_str("box-border")
-      .unwrap()
-      .apply(&mut tw_style);
-
     assert_eq!(
-      tw_style,
-      Style {
-        box_sizing: BoxSizing::BorderBox.into(),
-        ..Default::default()
-      }
+      TailwindProperty::parse("box-border"),
+      Some(TailwindProperty::BoxSizing(BoxSizing::BorderBox))
     );
   }
 
@@ -425,12 +692,14 @@ mod tests {
   fn test_parse_width() {
     assert_eq!(
       TailwindProperty::parse("w-64"),
-      Some(TailwindProperty::Width(LengthUnit::Rem(64.0 * VAR_SPACING)))
+      Some(TailwindProperty::Width(LengthUnit::Rem(
+        64.0 * TW_VAR_SPACING
+      )))
     );
     assert_eq!(
       TailwindProperty::parse("h-32"),
       Some(TailwindProperty::Height(LengthUnit::Rem(
-        32.0 * VAR_SPACING
+        32.0 * TW_VAR_SPACING
       )))
     );
     assert_eq!(
@@ -459,6 +728,60 @@ mod tests {
     assert_eq!(
       parsed,
       TailwindProperty::Color(ColorInput::Value(Color([0, 191, 255, 255])))
+    );
+  }
+
+  #[test]
+  fn test_parse_arbitrary_flex_with_spaces() {
+    assert_eq!(
+      TailwindProperty::parse("flex-[3_1_auto]"),
+      Some(TailwindProperty::Flex(Flex {
+        grow: 3.0,
+        shrink: 1.0,
+        basis: LengthUnit::Auto,
+      }))
+    );
+  }
+
+  #[test]
+  fn test_parse_negative_margin() {
+    assert_eq!(
+      TailwindProperty::parse("-ml-4"),
+      Some(TailwindProperty::MarginLeft(LengthUnit::Rem(
+        -4.0 * TW_VAR_SPACING
+      )))
+    );
+  }
+
+  #[test]
+  fn test_parse_border_radius() {
+    assert_eq!(
+      TailwindProperty::parse("rounded-lg"),
+      Some(TailwindProperty::BorderRadius(TwRound::new(
+        LengthUnit::Rem(0.5)
+      )))
+    );
+    assert_eq!(
+      TailwindProperty::parse("rounded-full"),
+      Some(TailwindProperty::BorderRadius(TwRound::new(
+        LengthUnit::Px(9999.0)
+      )))
+    );
+  }
+
+  #[test]
+  fn test_parse_border_width() {
+    assert_eq!(
+      TailwindProperty::parse("border-t-2"),
+      Some(TailwindProperty::BorderTopWidth(TwBorderWidth(
+        LengthUnit::Px(2.0)
+      )))
+    );
+    assert_eq!(
+      TailwindProperty::parse("border-x-4"),
+      Some(TailwindProperty::BorderXWidth(TwBorderWidth(
+        LengthUnit::Px(4.0)
+      )))
     );
   }
 }

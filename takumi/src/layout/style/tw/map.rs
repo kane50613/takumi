@@ -1,4 +1,5 @@
 use phf::phf_map;
+use std::borrow::Cow;
 
 use crate::layout::style::{
   tw::{TailwindProperty, TailwindPropertyParser, parser::*},
@@ -13,7 +14,14 @@ macro_rules! make_parser {
   ($name:ident, $type:ty, $variant:ident) => {
     fn $name(suffix: &str) -> Option<TailwindProperty> {
       if suffix.starts_with('[') && suffix.ends_with(']') {
-        return <$type>::from_str(&suffix[1..suffix.len() - 1])
+        let value = &suffix[1..suffix.len() - 1];
+        let value = if value.contains('_') {
+          Cow::Owned(value.replace('_', " "))
+        } else {
+          Cow::Borrowed(value)
+        };
+
+        return <$type>::from_str(&value)
           .ok()
           .map(TailwindProperty::$variant);
       }
@@ -48,7 +56,22 @@ make_parser!(parse_justify_self, AlignItems, JustifySelf);
 make_parser!(parse_overflow_x, Overflow, OverflowX);
 make_parser!(parse_overflow_y, Overflow, OverflowY);
 make_parser!(parse_overflow, Overflow, Overflow);
-make_parser!(parse_border_width, LengthUnit, BorderWidth);
+make_parser!(parse_border_width, TwBorderWidth, BorderWidth);
+make_parser!(parse_border_top_width, TwBorderWidth, BorderTopWidth);
+make_parser!(parse_border_right_width, TwBorderWidth, BorderRightWidth);
+make_parser!(parse_border_bottom_width, TwBorderWidth, BorderBottomWidth);
+make_parser!(parse_border_left_width, TwBorderWidth, BorderLeftWidth);
+make_parser!(parse_border_x_width, TwBorderWidth, BorderXWidth);
+make_parser!(parse_border_y_width, TwBorderWidth, BorderYWidth);
+make_parser!(parse_border_radius, TwRound, BorderRadius);
+make_parser!(parse_border_tl_radius, LengthUnit, BorderTopLeftRadius);
+make_parser!(parse_border_tr_radius, LengthUnit, BorderTopRightRadius);
+make_parser!(parse_border_br_radius, LengthUnit, BorderBottomRightRadius);
+make_parser!(parse_border_bl_radius, LengthUnit, BorderBottomLeftRadius);
+make_parser!(parse_rounded_t, LengthUnit, RoundedT);
+make_parser!(parse_rounded_r, LengthUnit, RoundedR);
+make_parser!(parse_rounded_b, LengthUnit, RoundedB);
+make_parser!(parse_rounded_l, LengthUnit, RoundedL);
 make_parser!(parse_flex_grow, FlexGrow, FlexGrow);
 make_parser!(parse_flex_shrink, FlexGrow, FlexShrink);
 make_parser!(parse_aspect, AspectRatio, Aspect);
@@ -62,6 +85,39 @@ make_parser!(parse_line_clamp, LineClamp, LineClamp);
 make_parser!(parse_white_space, WhiteSpace, WhiteSpace);
 make_parser!(parse_overflow_wrap, OverflowWrap, OverflowWrap);
 make_parser!(parse_font_size, TwFontSize, FontSize);
+make_parser!(parse_line_height, LineHeight, LineHeight);
+make_parser!(parse_basis, LengthUnit, FlexBasis);
+make_parser!(parse_flex, Flex, Flex);
+make_parser!(parse_justify_items, AlignItems, JustifyItems);
+make_parser!(parse_rotate, Angle, Rotate);
+make_parser!(parse_scale, PercentageNumber, Scale);
+make_parser!(parse_scale_x, PercentageNumber, ScaleX);
+make_parser!(parse_scale_y, PercentageNumber, ScaleY);
+make_parser!(parse_transform_origin, BackgroundPosition, TransformOrigin);
+make_parser!(parse_translate, LengthUnit, Translate);
+make_parser!(parse_translate_x, LengthUnit, TranslateX);
+make_parser!(parse_translate_y, LengthUnit, TranslateY);
+make_parser!(parse_margin, LengthUnit, Margin);
+make_parser!(parse_margin_x, LengthUnit, MarginX);
+make_parser!(parse_margin_y, LengthUnit, MarginY);
+make_parser!(parse_margin_top, LengthUnit, MarginTop);
+make_parser!(parse_margin_right, LengthUnit, MarginRight);
+make_parser!(parse_margin_bottom, LengthUnit, MarginBottom);
+make_parser!(parse_margin_left, LengthUnit, MarginLeft);
+make_parser!(parse_padding, LengthUnit, Padding);
+make_parser!(parse_padding_x, LengthUnit, PaddingX);
+make_parser!(parse_padding_y, LengthUnit, PaddingY);
+make_parser!(parse_padding_top, LengthUnit, PaddingTop);
+make_parser!(parse_padding_right, LengthUnit, PaddingRight);
+make_parser!(parse_padding_bottom, LengthUnit, PaddingBottom);
+make_parser!(parse_padding_left, LengthUnit, PaddingLeft);
+make_parser!(parse_inset, LengthUnit, Inset);
+make_parser!(parse_inset_x, LengthUnit, InsetX);
+make_parser!(parse_inset_y, LengthUnit, InsetY);
+make_parser!(parse_top, LengthUnit, Top);
+make_parser!(parse_right, LengthUnit, Right);
+make_parser!(parse_bottom, LengthUnit, Bottom);
+make_parser!(parse_left, LengthUnit, Left);
 
 pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParserFn]> = phf_map! {
   "object" => &[parse_object_fit, parse_object_position],
@@ -82,22 +138,70 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParserFn]> = phf_map! {
   "items" => &[parse_items],
   "self" => &[parse_align_self],
   "justify-self" => &[parse_justify_self],
+  "justify-items" => &[parse_justify_items],
   "overflow-x" => &[parse_overflow_x],
   "overflow-y" => &[parse_overflow_y],
   "overflow" => &[parse_overflow],
   "border" => &[parse_border_color, parse_border_width],
+  "border-t" => &[parse_border_top_width],
+  "border-r" => &[parse_border_right_width],
+  "border-b" => &[parse_border_bottom_width],
+  "border-l" => &[parse_border_left_width],
+  "border-x" => &[parse_border_x_width],
+  "border-y" => &[parse_border_y_width],
   "grow" | "flex-grow" => &[parse_flex_grow],
   "shrink" | "flex-shrink" => &[parse_flex_shrink],
+  "basis" | "flex-basis" => &[parse_basis],
   "aspect" => &[parse_aspect],
   "text" => &[parse_font_size, parse_text_color, parse_align],
+  "leading" => &[parse_line_height],
   "opacity" => &[parse_opacity],
   "line-clamp" => &[parse_line_clamp],
   "whitespace" => &[parse_white_space],
   "wrap" => &[parse_overflow_wrap],
+  "flex" => &[parse_flex],
+  "origin" => &[parse_transform_origin],
+  "translate" => &[parse_translate],
+  "rotate" => &[parse_rotate],
+  "scale" => &[parse_scale],
+  "scale-x" => &[parse_scale_x],
+  "scale-y" => &[parse_scale_y],
+  "translate-x" => &[parse_translate_x],
+  "translate-y" => &[parse_translate_y],
+  "m" => &[parse_margin],
+  "mx" | "ms" => &[parse_margin_x],
+  "my" | "me" => &[parse_margin_y],
+  "mt" => &[parse_margin_top],
+  "mr" => &[parse_margin_right],
+  "mb" => &[parse_margin_bottom],
+  "ml" => &[parse_margin_left],
+  "p" => &[parse_padding],
+  "px" | "ps" => &[parse_padding_x],
+  "py" | "pe" => &[parse_padding_y],
+  "pt" => &[parse_padding_top],
+  "pr" => &[parse_padding_right],
+  "pb" => &[parse_padding_bottom],
+  "pl" => &[parse_padding_left],
+  "inset" => &[parse_inset],
+  "inset-x" => &[parse_inset_x],
+  "inset-y" => &[parse_inset_y],
+  "top" => &[parse_top],
+  "right" => &[parse_right],
+  "bottom" => &[parse_bottom],
+  "left" => &[parse_left],
+  "rounded" => &[parse_border_radius],
+  "rounded-t" => &[parse_rounded_t],
+  "rounded-r" => &[parse_rounded_r],
+  "rounded-b" => &[parse_rounded_b],
+  "rounded-l" => &[parse_rounded_l],
+  "rounded-tl" => &[parse_border_tl_radius],
+  "rounded-tr" => &[parse_border_tr_radius],
+  "rounded-br" => &[parse_border_br_radius],
+  "rounded-bl" => &[parse_border_bl_radius],
 };
 
 pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
-  "border" => TailwindProperty::BorderWidth(LengthUnit::Px(1.0)),
+  "border" => TailwindProperty::BorderWidth(TwBorderWidth(LengthUnit::Px(1.0))),
   "box-border" => TailwindProperty::BoxSizing(BoxSizing::BorderBox),
   "box-content" => TailwindProperty::BoxSizing(BoxSizing::ContentBox),
   "inline" => TailwindProperty::Display(Display::Inline),
@@ -128,8 +232,6 @@ pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
   "normal-case" => TailwindProperty::TextTransform(TextTransform::None),
   "italic" => TailwindProperty::FontStyle(FontStyle::italic()),
   "not-italic" => TailwindProperty::FontStyle(FontStyle::normal()),
-  "basis-auto" => TailwindProperty::FlexBasis(LengthUnit::Auto),
-  "flex-basis-auto" => TailwindProperty::FlexBasis(LengthUnit::Auto),
   "w-screen" => TailwindProperty::Width(LengthUnit::Vw(100.0)),
   "h-screen" => TailwindProperty::Height(LengthUnit::Vh(100.0)),
   "min-w-screen" => TailwindProperty::MinWidth(LengthUnit::Vw(100.0)),

@@ -1,8 +1,10 @@
-use cssparser::Parser;
+use cssparser::{Parser, match_ignore_ascii_case};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::layout::style::{FromCss, LengthUnit, ParseResult};
+use crate::layout::style::{
+  AspectRatio, FromCss, LengthUnit, ParseResult, tw::TailwindPropertyParser,
+};
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, TS, PartialEq)]
 #[serde(try_from = "FlexValue")]
@@ -15,6 +17,23 @@ pub struct Flex {
   pub shrink: f32,
   /// The flex-basis value.
   pub basis: LengthUnit,
+}
+
+impl TailwindPropertyParser for Flex {
+  fn parse_tw(token: &str) -> Option<Self> {
+    match_ignore_ascii_case! {token,
+      "auto" => return Some(Flex::auto()),
+      "none" => return Some(Flex::none()),
+      "initial" => return Some(Flex::initial()),
+      _ => {}
+    }
+
+    let Ok(AspectRatio::Ratio(ratio)) = AspectRatio::from_str(token) else {
+      return None;
+    };
+
+    Some(Flex::from_number(ratio))
+  }
 }
 
 impl Flex {
@@ -42,6 +61,15 @@ impl Flex {
       grow: 0.0,
       shrink: 1.0,
       basis: LengthUnit::Auto,
+    }
+  }
+
+  /// Create a new Flex from a number.
+  pub const fn from_number(number: f32) -> Self {
+    Self {
+      grow: number,
+      shrink: 1.0,
+      basis: LengthUnit::zero(),
     }
   }
 }
@@ -73,11 +101,7 @@ impl TryFrom<FlexValue> for Flex {
         shrink: shrink.unwrap_or(1.0),
         basis: basis.unwrap_or(LengthUnit::Auto),
       }),
-      FlexValue::Number(grow) => Ok(Flex {
-        grow,
-        shrink: 1.0,
-        basis: LengthUnit::zero(),
-      }),
+      FlexValue::Number(grow) => Ok(Flex::from_number(grow)),
       FlexValue::Css(css) => Flex::from_str(&css).map_err(|e| e.to_string()),
     }
   }
