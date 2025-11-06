@@ -1,8 +1,8 @@
-use cssparser::match_ignore_ascii_case;
+use cssparser::{Parser, Token, match_ignore_ascii_case};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::layout::style::tw::TailwindPropertyParser;
+use crate::layout::style::{FromCss, ParseResult, tw::TailwindPropertyParser};
 
 /// Controls how text should be overflowed.
 #[derive(Debug, Default, Copy, Clone, Deserialize, Serialize, TS, PartialEq)]
@@ -12,11 +12,22 @@ pub struct OverflowWrap(parley::OverflowWrap);
 
 impl TailwindPropertyParser for OverflowWrap {
   fn parse_tw(token: &str) -> Option<Self> {
-    match_ignore_ascii_case! {token,
-      "normal" => Some(OverflowWrap(parley::OverflowWrap::Normal)),
-      "anywhere" => Some(OverflowWrap(parley::OverflowWrap::Anywhere)),
-      "break-word" => Some(OverflowWrap(parley::OverflowWrap::BreakWord)),
-      _ => None,
+    Self::from_str(token).ok()
+  }
+}
+
+impl<'i> FromCss<'i> for OverflowWrap {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let location = input.current_source_location();
+    let ident = input.expect_ident()?;
+
+    match_ignore_ascii_case! { ident,
+      "normal" => Ok(OverflowWrap(parley::OverflowWrap::Normal)),
+      "anywhere" => Ok(OverflowWrap(parley::OverflowWrap::Anywhere)),
+      "break-word" => Ok(OverflowWrap(parley::OverflowWrap::BreakWord)),
+      _ => Err(location.new_unexpected_token_error(
+        Token::Ident(ident.clone())
+      )),
     }
   }
 }

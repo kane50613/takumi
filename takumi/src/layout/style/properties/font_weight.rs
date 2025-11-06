@@ -1,16 +1,24 @@
 use std::fmt::Formatter;
 
-use cssparser::match_ignore_ascii_case;
+use cssparser::{Parser, match_ignore_ascii_case};
 use parley::style::FontWeight as ParleyFontWeight;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ts_rs::TS;
 
-use crate::layout::style::tw::TailwindPropertyParser;
+use crate::layout::style::{FromCss, ParseResult, tw::TailwindPropertyParser};
 
 /// Represents font weight value.
 #[derive(Debug, Default, Copy, Clone, TS, PartialEq)]
 #[ts(type = "string | number")]
 pub struct FontWeight(ParleyFontWeight);
+
+impl<'i> FromCss<'i> for FontWeight {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    Ok(FontWeight(
+      ParleyFontWeight::parse(input.current_line()).unwrap(),
+    ))
+  }
+}
 
 impl TailwindPropertyParser for FontWeight {
   fn parse_tw(token: &str) -> Option<Self> {

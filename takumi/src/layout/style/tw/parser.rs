@@ -1,7 +1,9 @@
-use cssparser::match_ignore_ascii_case;
+use cssparser::{Parser, match_ignore_ascii_case};
 
 use crate::layout::style::{
+  FromCss,
   LengthUnit::{self, Em, Rem},
+  ParseResult,
   tw::TailwindPropertyParser,
 };
 
@@ -9,6 +11,12 @@ use crate::layout::style::{
 pub struct TwFontSize {
   pub(crate) font_size: LengthUnit,
   pub(crate) line_height: Option<LengthUnit>,
+}
+
+impl<'i> FromCss<'i> for TwFontSize {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    Ok(Self::new(LengthUnit::from_css(input)?, None))
+  }
 }
 
 impl TailwindPropertyParser for TwFontSize {

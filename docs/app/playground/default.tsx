@@ -7,7 +7,7 @@ export default function Image() {
       }}
     >
       <div tw="p-8 bg-white/50 justify-center items-center flex flex-col">
-        <h1 tw="mt-0 font-medium text-7xl block">
+        <h1 tw="mt-0 font-medium text-7xl block whitespace-pre">
           Welcome to <span tw="text-red-500">Takumi </span>
           Playground!
         </h1>

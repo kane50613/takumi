@@ -12,6 +12,12 @@ pub type PropertyParserFn = fn(&str) -> Option<TailwindProperty>;
 macro_rules! make_parser {
   ($name:ident, $type:ty, $variant:ident) => {
     fn $name(suffix: &str) -> Option<TailwindProperty> {
+      if suffix.starts_with('[') && suffix.ends_with(']') {
+        return <$type>::from_str(&suffix[1..suffix.len() - 1])
+          .ok()
+          .map(TailwindProperty::$variant);
+      }
+
       <$type>::parse_tw(suffix).map(TailwindProperty::$variant)
     }
   };

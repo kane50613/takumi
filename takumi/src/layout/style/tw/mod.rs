@@ -171,7 +171,7 @@ pub enum TailwindProperty {
 }
 
 /// A trait for parsing tailwind properties.
-pub trait TailwindPropertyParser: Sized {
+pub trait TailwindPropertyParser: Sized + for<'i> FromCss<'i> {
   /// Parse a tailwind property from a token.
   fn parse_tw(token: &str) -> Option<Self>;
 }
@@ -449,6 +449,16 @@ mod tests {
         0,
         (0.3_f32 * 255.0).round() as u8
       ]))))
+    );
+  }
+
+  #[test]
+  fn test_parse_arbitrary_color() {
+    let parsed = TailwindProperty::parse("text-[rgb(0, 191, 255)]").unwrap();
+
+    assert_eq!(
+      parsed,
+      TailwindProperty::Color(ColorInput::Value(Color([0, 191, 255, 255])))
     );
   }
 }

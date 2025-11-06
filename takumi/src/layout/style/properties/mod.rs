@@ -140,16 +140,25 @@ pub enum ObjectFit {
   None,
 }
 
+impl<'i> FromCss<'i> for ObjectFit {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let location = input.current_source_location();
+    let token = input.expect_ident()?;
+
+    match_ignore_ascii_case! { token,
+      "fill" => Ok(ObjectFit::Fill),
+      "contain" => Ok(ObjectFit::Contain),
+      "cover" => Ok(ObjectFit::Cover),
+      "scale-down" => Ok(ObjectFit::ScaleDown),
+      "none" => Ok(ObjectFit::None),
+      _ => Err(location.new_unexpected_token_error(Token::Ident(token.clone()))),
+    }
+  }
+}
+
 impl TailwindPropertyParser for ObjectFit {
   fn parse_tw(token: &str) -> Option<Self> {
-    match_ignore_ascii_case! {token,
-      "fill" => Some(ObjectFit::Fill),
-      "contain" => Some(ObjectFit::Contain),
-      "cover" => Some(ObjectFit::Cover),
-      "scale-down" => Some(ObjectFit::ScaleDown),
-      "none" => Some(ObjectFit::None),
-      _ => None,
-    }
+    Self::from_str(token).ok()
   }
 }
 
@@ -189,17 +198,26 @@ pub enum TextAlign {
   End,
 }
 
+impl<'i> FromCss<'i> for TextAlign {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let location = input.current_source_location();
+    let token = input.expect_ident()?;
+
+    match_ignore_ascii_case! { token,
+      "left" => Ok(TextAlign::Left),
+      "right" => Ok(TextAlign::Right),
+      "center" => Ok(TextAlign::Center),
+      "justify" => Ok(TextAlign::Justify),
+      "start" => Ok(TextAlign::Start),
+      "end" => Ok(TextAlign::End),
+      _ => Err(location.new_unexpected_token_error(Token::Ident(token.clone()))),
+    }
+  }
+}
+
 impl TailwindPropertyParser for TextAlign {
   fn parse_tw(token: &str) -> Option<Self> {
-    match_ignore_ascii_case! {token,
-      "left" => Some(TextAlign::Left),
-      "right" => Some(TextAlign::Right),
-      "center" => Some(TextAlign::Center),
-      "justify" => Some(TextAlign::Justify),
-      "start" => Some(TextAlign::Start),
-      "end" => Some(TextAlign::End),
-      _ => None,
-    }
+    Self::from_str(token).ok()
   }
 }
 
@@ -287,21 +305,30 @@ pub enum JustifyContent {
   SpaceAround,
 }
 
+impl<'i> FromCss<'i> for JustifyContent {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let location = input.current_source_location();
+    let token = input.expect_ident()?;
+
+    match_ignore_ascii_case! { token,
+      "normal" => Ok(JustifyContent::Normal),
+      "start" => Ok(JustifyContent::Start),
+      "end" => Ok(JustifyContent::End),
+      "flex-start" => Ok(JustifyContent::FlexStart),
+      "flex-end" => Ok(JustifyContent::FlexEnd),
+      "center" => Ok(JustifyContent::Center),
+      "stretch" => Ok(JustifyContent::Stretch),
+      "space-between" => Ok(JustifyContent::SpaceBetween),
+      "space-around" => Ok(JustifyContent::SpaceAround),
+      "space-evenly" => Ok(JustifyContent::SpaceEvenly),
+      _ => Err(location.new_unexpected_token_error(Token::Ident(token.clone()))),
+    }
+  }
+}
+
 impl TailwindPropertyParser for JustifyContent {
   fn parse_tw(token: &str) -> Option<Self> {
-    match_ignore_ascii_case! {token,
-      "normal" => Some(JustifyContent::Normal),
-      "start" => Some(JustifyContent::Start),
-      "end" => Some(JustifyContent::End),
-      "flex-start" => Some(JustifyContent::FlexStart),
-      "flex-end" => Some(JustifyContent::FlexEnd),
-      "center" => Some(JustifyContent::Center),
-      "stretch" => Some(JustifyContent::Stretch),
-      "space-between" => Some(JustifyContent::SpaceBetween),
-      "space-around" => Some(JustifyContent::SpaceAround),
-      "space-evenly" => Some(JustifyContent::SpaceEvenly),
-      _ => None,
-    }
+    Self::from_str(token).ok()
   }
 }
 
@@ -402,19 +429,28 @@ pub enum AlignItems {
   Stretch,
 }
 
+impl<'i> FromCss<'i> for AlignItems {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let location = input.current_source_location();
+    let token = input.expect_ident()?;
+
+    match_ignore_ascii_case! {token,
+      "normal" => Ok(AlignItems::Normal),
+      "start" => Ok(AlignItems::Start),
+      "end" => Ok(AlignItems::End),
+      "flex-start" => Ok(AlignItems::FlexStart),
+      "flex-end" => Ok(AlignItems::FlexEnd),
+      "center" => Ok(AlignItems::Center),
+      "baseline" => Ok(AlignItems::Baseline),
+      "stretch" => Ok(AlignItems::Stretch),
+      _ => Err(location.new_unexpected_token_error(Token::Ident(token.clone()))),
+    }
+  }
+}
+
 impl TailwindPropertyParser for AlignItems {
   fn parse_tw(token: &str) -> Option<Self> {
-    match_ignore_ascii_case! {token,
-      "normal" => Some(AlignItems::Normal),
-      "start" => Some(AlignItems::Start),
-      "end" => Some(AlignItems::End),
-      "flex-start" => Some(AlignItems::FlexStart),
-      "flex-end" => Some(AlignItems::FlexEnd),
-      "center" => Some(AlignItems::Center),
-      "baseline" => Some(AlignItems::Baseline),
-      "stretch" => Some(AlignItems::Stretch),
-      _ => None,
-    }
+    Self::from_str(token).ok()
   }
 }
 
@@ -479,6 +515,12 @@ impl TailwindPropertyParser for FontFamily {
       "mono" => Some(FontFamily("monospace".to_string())),
       _ => None,
     }
+  }
+}
+
+impl<'i> FromCss<'i> for FontFamily {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    Ok(FontFamily(input.current_line().to_string()))
   }
 }
 

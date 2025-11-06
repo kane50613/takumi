@@ -409,25 +409,34 @@ impl TryFrom<ColorInputValue> for ColorInput {
 
 impl<'i> FromCss<'i> for ColorInput {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    if input
+      .try_parse(|input| input.expect_ident_matching("currentcolor"))
+      .is_ok()
+    {
+      return Ok(ColorInput::CurrentColor);
+    }
+
+    Ok(ColorInput::Value(Color::from_css(input)?))
+  }
+}
+
+impl<'i> FromCss<'i> for Color {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let location = input.current_source_location();
     let position = input.position();
     let token = input.next()?;
 
     match *token {
-      Token::Hash(_) | Token::IDHash(_) => parse_color_string(&token.to_css_string())
-        .map(ColorInput::Value)
-        .map_err(|_| {
+      Token::Hash(_) | Token::IDHash(_) => {
+        parse_color_string(&token.to_css_string()).map_err(|_| {
           location
             .new_basic_unexpected_token_error(token.clone())
             .into()
-        }),
+        })
+      }
       Token::Ident(ref ident) => {
         if ident.eq_ignore_ascii_case("transparent") {
-          return Ok(ColorInput::Value(Color([0, 0, 0, 0])));
-        }
-
-        if ident.eq_ignore_ascii_case("currentcolor") {
-          return Ok(ColorInput::CurrentColor);
+          return Ok(Color::transparent());
         }
 
         let Some([r, g, b]) = NAMED_COLORS.get(ident) else {
@@ -438,7 +447,7 @@ impl<'i> FromCss<'i> for ColorInput {
           );
         };
 
-        Ok(ColorInput::Value(Color([*r, *g, *b, 255])))
+        Ok(Color([*r, *g, *b, 255]))
       }
       Token::Function(_) => {
         // Have to clone to persist token, and allow input to be borrowed
@@ -456,7 +465,6 @@ impl<'i> FromCss<'i> for ColorInput {
           function.push(')');
 
           parse_color_string(&function)
-            .map(ColorInput::Value)
             .map_err(|_| location.new_basic_unexpected_token_error(token).into())
         })
       }
@@ -545,5 +553,21 @@ mod tests {
     // Test parsing invalid function
     let result = parse_color_str("invalid(255, 0, 153)");
     assert!(result.is_err());
+  }
+
+  #[test]
+  fn test_parse_arbitrary_color_from_str() {
+    // Test that ColorInput::from_str can parse arbitrary color names like deepskyblue
+    let result = ColorInput::from_str("deepskyblue").unwrap();
+    match result {
+      ColorInput::Value(color) => {
+        // deepskyblue is rgb(0, 191, 255)
+        assert_eq!(color.0[0], 0); // red
+        assert_eq!(color.0[1], 191); // green
+        assert_eq!(color.0[2], 255); // blue
+        assert_eq!(color.0[3], 255); // alpha
+      }
+      _ => panic!("Expected ColorInput::Value"),
+    }
   }
 }
