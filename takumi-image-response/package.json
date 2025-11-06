@@ -30,7 +30,7 @@
   },
   "scripts": {
     "version": "jq '.peerDependencies[\"@takumi-rs/core\"] = .version | .peerDependencies[\"@takumi-rs/helpers\"] = .version | .peerDependencies[\"@takumi-rs/wasm\"] = .version' package.json > tmp.json && mv tmp.json package.json",
-    "build": "tsup-node src/backends/*.ts --minify --dts --format esm,cjs --no-splitting"
+    "build": "tsup-node src/backends/*.ts --clean --minify --dts --format esm,cjs --no-splitting"
   },
   "files": [
     "dist",

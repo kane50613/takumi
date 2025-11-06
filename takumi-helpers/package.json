@@ -9,9 +9,6 @@
   "repository": {
     "url": "git+https://github.com/kane50613/takumi.git"
   },
-  "dependencies": {
-    "twrnc": "^4.10.1"
-  },
   "devDependencies": {
     "@types/bun": "catalog:",
     "@types/react": "^19.2.2",
@@ -35,12 +32,6 @@
       "import": "./dist/jsx/jsx.js",
       "require": "./dist/jsx/jsx.cjs",
       "default": "./dist/jsx/jsx.js"
-    },
-    "./jsx/create-tailwind-fn": {
-      "types": "./dist/jsx/create-tailwind-fn.d.ts",
-      "import": "./dist/jsx/create-tailwind-fn.js",
-      "require": "./dist/jsx/create-tailwind-fn.cjs",
-      "default": "./dist/jsx/create-tailwind-fn.js"
     }
   },
   "files": [
@@ -51,7 +42,7 @@
   ],
   "license": "(MIT OR Apache-2.0)",
   "scripts": {
-    "build": "tsup-node src/index.ts src/jsx/jsx.ts src/jsx/create-tailwind-fn.ts --minify --dts --format esm,cjs --no-splitting"
+    "build": "tsup-node src/index.ts src/jsx/jsx.ts src/jsx/create-tailwind-fn.ts --clean --minify --dts --format esm,cjs --no-splitting"
   },
   "type": "module"
 }

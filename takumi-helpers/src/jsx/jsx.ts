@@ -19,6 +19,13 @@ import {
   type ReactElementLike,
 } from "./utils";
 
+declare module "react" {
+  // biome-ignore lint/correctness/noUnusedVariables: used for type inference
+  interface DOMAttributes<T> {
+    tw?: string;
+  }
+}
+
 export async function fromJsx(
   element: ReactNode | ReactElementLike,
 ): Promise<Node> {
@@ -178,9 +185,17 @@ async function processReactElement(element: ReactElementLike): Promise<Node[]> {
   }
 
   const style = extractStyle(element) as PartialStyle;
+  const tw = extractTw(element);
 
   const textChildren = await tryCollectTextChildren(element);
-  if (textChildren !== undefined) return [text(textChildren, style)];
+  if (textChildren !== undefined)
+    return [
+      text({
+        text: textChildren,
+        style,
+        tw,
+      }),
+    ];
 
   const children = await collectChildren(element);
 
@@ -188,6 +203,7 @@ async function processReactElement(element: ReactElementLike): Promise<Node[]> {
     container({
       children,
       style,
+      tw,
     }),
   ];
 }
@@ -200,20 +216,24 @@ function createImageElement(
   }
 
   const style = extractStyle(element) as PartialStyle;
+  const tw = extractTw(element);
 
   return image({
     src: element.props.src,
     style,
+    tw,
   });
 }
 
 function createSvgElement(element: ReactElement<ComponentProps<"svg">, "svg">) {
   const style = extractStyle(element) as PartialStyle;
+  const tw = extractTw(element);
   const svg = serializeSvg(element);
 
   return image({
     style,
     src: svg,
+    tw,
   });
 }
 
@@ -255,6 +275,17 @@ function extractStyle(element: ReactElementLike): PartialStyle {
   }
 
   return base;
+}
+
+function extractTw(element: ReactElementLike): string | undefined {
+  if (
+    typeof element.props !== "object" ||
+    element.props === null ||
+    !("tw" in element.props)
+  )
+    return undefined;
+
+  return element.props.tw as string;
 }
 
 function collectChildren(element: ReactElementLike): Promise<Node[]> {

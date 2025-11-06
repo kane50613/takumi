@@ -18,6 +18,13 @@ type PersistentImage = {
 const fontLoadMarker = new WeakSet<Font>();
 const persistentImageLoadMarker = new WeakSet<PersistentImage>();
 
+declare module "react" {
+  // biome-ignore lint/correctness/noUnusedVariables: used for type inference
+  interface DOMAttributes<T> {
+    tw?: string;
+  }
+}
+
 type ImageResponseOptionsWithRenderer = ResponseInit &
   RenderOptions & {
     renderer: Renderer;
