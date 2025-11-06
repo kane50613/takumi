@@ -127,6 +127,8 @@ export type Style = {
   borderBottomRightRadius: CssValue<CssOption<LengthUnit>>;
   borderBottomLeftRadius: CssValue<CssOption<LengthUnit>>;
   borderWidth: CssValue<CssOption<Sides<LengthUnit>>>;
+  borderInlineWidth: CssValue<CssOption<SpacePair<LengthUnit>>>;
+  borderBlockWidth: CssValue<CssOption<SpacePair<LengthUnit>>>;
   borderTopWidth: CssValue<CssOption<LengthUnit>>;
   borderRightWidth: CssValue<CssOption<LengthUnit>>;
   borderBottomWidth: CssValue<CssOption<LengthUnit>>;
