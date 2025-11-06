@@ -49,6 +49,7 @@ make_parser!(parse_text_color, ColorInput, Color);
 make_parser!(parse_opacity, PercentageNumber, Opacity);
 make_parser!(parse_background_color, ColorInput, BackgroundColor);
 make_parser!(parse_border_color, ColorInput, BorderColor);
+make_parser!(parse_font_family, FontFamily, FontFamily);
 
 pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParserFn]> = phf_map! {
   "object" => &[parse_object_fit, parse_object_position],
@@ -60,7 +61,7 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParserFn]> = phf_map! {
   "max-w" => &[parse_max_width],
   "max-h" => &[parse_max_height],
   "size" => &[parse_size],
-  "font" => &[parse_font_weight],
+  "font" => &[parse_font_weight, parse_font_family],
   "gap-x" => &[parse_gap_x],
   "gap-y" => &[parse_gap_y],
   "gap" => &[parse_gap],

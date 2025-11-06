@@ -471,6 +471,17 @@ pub enum TextTransform {
 #[serde(transparent)]
 pub struct FontFamily(String);
 
+impl TailwindPropertyParser for FontFamily {
+  fn parse_tw(token: &str) -> Option<Self> {
+    match_ignore_ascii_case! {token,
+      "sans" => Some(FontFamily("sans-serif".to_string())),
+      "serif" => Some(FontFamily("serif".to_string())),
+      "mono" => Some(FontFamily("monospace".to_string())),
+      _ => None,
+    }
+  }
+}
+
 impl Default for FontFamily {
   fn default() -> Self {
     Self("sans-serif".to_string())

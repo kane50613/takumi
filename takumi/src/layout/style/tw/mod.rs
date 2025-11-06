@@ -96,6 +96,8 @@ pub enum TailwindProperty {
   FontStyle(FontStyle),
   /// The weight of the font in the element.
   FontWeight(FontWeight),
+  /// The family of the font in the element.
+  FontFamily(FontFamily),
   /// The alignment of the text in the element.
   TextAlign(TextAlign),
   /// The decoration of the text in the element.
@@ -258,6 +260,9 @@ impl TailwindProperty {
       }
       TailwindProperty::FontWeight(font_weight) => {
         style.font_weight = font_weight.into();
+      }
+      TailwindProperty::FontFamily(ref font_family) => {
+        style.font_family = CssOption::some(font_family.clone()).into();
       }
       TailwindProperty::TextAlign(text_align) => {
         style.text_align = text_align.into();
