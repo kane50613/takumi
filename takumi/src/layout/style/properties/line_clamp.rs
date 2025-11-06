@@ -2,7 +2,7 @@ use cssparser::Parser;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::layout::style::{FromCss, ParseResult};
+use crate::layout::style::{FromCss, ParseResult, tw::TailwindPropertyParser};
 
 #[derive(Debug, Clone, Deserialize, Serialize, TS, PartialEq)]
 #[serde(try_from = "LineClampValue")]
@@ -13,6 +13,16 @@ pub struct LineClamp {
   pub count: u32,
   /// The ellipsis character to use when the text is clamped.
   pub ellipsis: Option<String>,
+}
+
+impl TailwindPropertyParser for LineClamp {
+  fn parse_tw(token: &str) -> Option<Self> {
+    let count = token.parse::<u32>().ok()?;
+    Some(LineClamp {
+      count,
+      ellipsis: None,
+    })
+  }
 }
 
 impl From<u32> for LineClamp {

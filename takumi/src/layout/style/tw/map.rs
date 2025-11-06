@@ -50,6 +50,9 @@ make_parser!(parse_opacity, PercentageNumber, Opacity);
 make_parser!(parse_background_color, ColorInput, BackgroundColor);
 make_parser!(parse_border_color, ColorInput, BorderColor);
 make_parser!(parse_font_family, FontFamily, FontFamily);
+make_parser!(parse_line_clamp, LineClamp, LineClamp);
+make_parser!(parse_white_space, WhiteSpace, WhiteSpace);
+make_parser!(parse_overflow_wrap, OverflowWrap, OverflowWrap);
 
 pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParserFn]> = phf_map! {
   "object" => &[parse_object_fit, parse_object_position],
@@ -79,6 +82,9 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParserFn]> = phf_map! {
   "aspect" => &[parse_aspect],
   "text" => &[parse_text_color, parse_align],
   "opacity" => &[parse_opacity],
+  "line-clamp" => &[parse_line_clamp],
+  "whitespace" => &[parse_white_space],
+  "wrap" => &[parse_overflow_wrap],
 };
 
 pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
@@ -121,6 +127,14 @@ pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
   "min-h-screen" => TailwindProperty::MinHeight(LengthUnit::Vh(100.0)),
   "max-w-screen" => TailwindProperty::MaxWidth(LengthUnit::Vw(100.0)),
   "max-h-screen" => TailwindProperty::MaxHeight(LengthUnit::Vh(100.0)),
+  "truncate" => TailwindProperty::Truncate,
+  "text-ellipsis" => TailwindProperty::TextOverflow(TextOverflow::Ellipsis),
+  "text-clip" => TailwindProperty::TextOverflow(TextOverflow::Clip),
+  "text-wrap" => TailwindProperty::TextWrap(TextWrapMode::Wrap),
+  "text-nowrap" => TailwindProperty::TextWrap(TextWrapMode::NoWrap),
+  "break-normal" => TailwindProperty::WordBreak(WordBreak::Normal),
+  "break-all" => TailwindProperty::WordBreak(WordBreak::BreakAll),
+  "break-keep" => TailwindProperty::WordBreak(WordBreak::KeepAll),
   "shadow-sm" => TailwindProperty::Shadow(BoxShadow {
     inset: false,
     offset_x: LengthUnit::Px(1.0),

@@ -98,6 +98,20 @@ pub enum TailwindProperty {
   FontWeight(FontWeight),
   /// The family of the font in the element.
   FontFamily(FontFamily),
+  /// The line clamp of the element.
+  LineClamp(LineClamp),
+  /// The overflow of the text in the element.
+  TextOverflow(TextOverflow),
+  /// The wrap mode of the text in the element.
+  TextWrap(TextWrapMode),
+  /// The collapse mode of the white space in the element.
+  WhiteSpace(WhiteSpace),
+  /// The word break of the text in the element.
+  WordBreak(WordBreak),
+  /// The overflow wrap of the text in the element.
+  OverflowWrap(OverflowWrap),
+  /// Set `text-overflow: ellipsis`, `white-space: nowrap` and `overflow: hidden`.
+  Truncate,
   /// The alignment of the text in the element.
   TextAlign(TextAlign),
   /// The decoration of the text in the element.
@@ -264,6 +278,9 @@ impl TailwindProperty {
       TailwindProperty::FontFamily(ref font_family) => {
         style.font_family = CssOption::some(font_family.clone()).into();
       }
+      TailwindProperty::LineClamp(ref line_clamp) => {
+        style.line_clamp = CssOption::some(line_clamp.clone()).into();
+      }
       TailwindProperty::TextAlign(text_align) => {
         style.text_align = text_align.into();
       }
@@ -341,6 +358,30 @@ impl TailwindProperty {
       }
       TailwindProperty::BorderColor(color_input) => {
         style.border_color = CssOption::some(color_input).into();
+      }
+      TailwindProperty::TextOverflow(ref text_overflow) => {
+        style.text_overflow = text_overflow.clone().into();
+      }
+      TailwindProperty::Truncate => {
+        style.text_overflow = TextOverflow::Ellipsis.into();
+        style.white_space = WhiteSpace {
+          text_wrap_mode: TextWrapMode::NoWrap,
+          white_space_collapse: WhiteSpaceCollapse::Collapse,
+        }
+        .into();
+        style.overflow = Overflows(SpacePair::from_single(Overflow::Hidden)).into();
+      }
+      TailwindProperty::TextWrap(text_wrap_mode) => {
+        style.text_wrap_mode = CssOption::some(text_wrap_mode).into();
+      }
+      TailwindProperty::WhiteSpace(white_space) => {
+        style.white_space = white_space.into();
+      }
+      TailwindProperty::WordBreak(word_break) => {
+        style.word_break = word_break.into();
+      }
+      TailwindProperty::OverflowWrap(overflow_wrap) => {
+        style.overflow_wrap = overflow_wrap.into();
       }
     }
   }

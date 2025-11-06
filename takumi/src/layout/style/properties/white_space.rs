@@ -2,7 +2,9 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::layout::style::{FromCss, ParseResult, TextWrapMode, WhiteSpaceCollapse};
+use crate::layout::style::{
+  FromCss, ParseResult, TextWrapMode, WhiteSpaceCollapse, tw::TailwindPropertyParser,
+};
 
 /// Controls how whitespace should be handled.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, TS, PartialEq)]
@@ -15,7 +17,28 @@ pub struct WhiteSpace {
   pub white_space_collapse: WhiteSpaceCollapse,
 }
 
+impl TailwindPropertyParser for WhiteSpace {
+  fn parse_tw(token: &str) -> Option<Self> {
+    match_ignore_ascii_case! {token,
+      "normal" => Some(WhiteSpace::normal()),
+      "nowrap" => Some(WhiteSpace::no_wrap()),
+      "pre" => Some(WhiteSpace::pre()),
+      "pre-wrap" => Some(WhiteSpace::pre_wrap()),
+      "pre-line" => Some(WhiteSpace::pre_line()),
+      _ => None,
+    }
+  }
+}
+
 impl WhiteSpace {
+  /// Creates a `WhiteSpace` instance with `nowrap` behavior.
+  pub const fn no_wrap() -> Self {
+    Self {
+      text_wrap_mode: TextWrapMode::NoWrap,
+      white_space_collapse: WhiteSpaceCollapse::Collapse,
+    }
+  }
+
   /// Creates a `WhiteSpace` instance with `normal` behavior.
   pub const fn normal() -> Self {
     Self {
