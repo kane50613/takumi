@@ -1,4 +1,5 @@
 pub(crate) mod map;
+pub(crate) mod parser;
 
 use std::str::FromStr;
 
@@ -6,7 +7,10 @@ use serde::Deserializer;
 use smallvec::smallvec;
 
 use crate::layout::style::{
-  tw::map::{FIXED_PROPERTIES, PREFIX_PARSERS},
+  tw::{
+    map::{FIXED_PROPERTIES, PREFIX_PARSERS},
+    parser::TwFontSize,
+  },
   *,
 };
 
@@ -162,6 +166,8 @@ pub enum TailwindProperty {
   BackgroundColor(ColorInput),
   /// The border color of the element.
   BorderColor(ColorInput),
+  /// The font size of the element.
+  FontSize(TwFontSize),
 }
 
 /// A trait for parsing tailwind properties.
@@ -382,6 +388,13 @@ impl TailwindProperty {
       }
       TailwindProperty::OverflowWrap(overflow_wrap) => {
         style.overflow_wrap = overflow_wrap.into();
+      }
+      TailwindProperty::FontSize(font_size) => {
+        style.font_size = CssOption::some(font_size.font_size).into();
+
+        if let Some(line_height) = font_size.line_height {
+          style.line_height = LineHeight(line_height).into();
+        }
       }
     }
   }

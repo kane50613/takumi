@@ -1,7 +1,9 @@
 use phf::phf_map;
 
-use crate::layout::style::tw::{TailwindProperty, TailwindPropertyParser};
-use crate::layout::style::*;
+use crate::layout::style::{
+  tw::{TailwindProperty, TailwindPropertyParser, parser::*},
+  *,
+};
 
 /// Function type for parsing tailwind properties with suffix.
 pub type PropertyParserFn = fn(&str) -> Option<TailwindProperty>;
@@ -53,6 +55,7 @@ make_parser!(parse_font_family, FontFamily, FontFamily);
 make_parser!(parse_line_clamp, LineClamp, LineClamp);
 make_parser!(parse_white_space, WhiteSpace, WhiteSpace);
 make_parser!(parse_overflow_wrap, OverflowWrap, OverflowWrap);
+make_parser!(parse_font_size, TwFontSize, FontSize);
 
 pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParserFn]> = phf_map! {
   "object" => &[parse_object_fit, parse_object_position],
@@ -80,7 +83,7 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParserFn]> = phf_map! {
   "grow" | "flex-grow" => &[parse_flex_grow],
   "shrink" | "flex-shrink" => &[parse_flex_shrink],
   "aspect" => &[parse_aspect],
-  "text" => &[parse_text_color, parse_align],
+  "text" => &[parse_font_size, parse_text_color, parse_align],
   "opacity" => &[parse_opacity],
   "line-clamp" => &[parse_line_clamp],
   "whitespace" => &[parse_white_space],
