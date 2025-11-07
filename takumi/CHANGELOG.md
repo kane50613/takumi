@@ -1,5 +1,11 @@
 # takumi
 
+## 0.45.1
+
+### Patch Changes
+
+- 97ba495: fix `rounded` parsing
+
 ## 0.45.0
 
 ### Minor Changes
