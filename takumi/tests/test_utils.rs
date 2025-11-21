@@ -41,6 +41,11 @@ const TEST_FONTS: &[(&str, &str, GenericFamily)] = &[
     "Noto Color Emoji",
     GenericFamily::Emoji,
   ),
+  (
+    "fonts/emoji/AppleColorEmoji.ttf",
+    "Apple Color Emoji",
+    GenericFamily::Emoji,
+  ),
 ];
 
 fn create_test_context() -> GlobalContext {

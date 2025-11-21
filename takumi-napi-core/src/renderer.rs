@@ -135,6 +135,11 @@ const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[
     "Geist Mono",
     GenericFamily::Monospace,
   ),
+  (
+    include_bytes!("../../assets/fonts/emoji/AppleColorEmoji.ttf"),
+    "Apple Color Emoji",
+    GenericFamily::Emoji,
+  ),
 ];
 
 const DEFAULT_RESOURCE_CACHE_CAPACITY: u32 = 8;
