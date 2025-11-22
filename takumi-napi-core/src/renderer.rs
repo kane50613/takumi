@@ -136,8 +136,8 @@ const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[
     GenericFamily::Monospace,
   ),
   (
-    include_bytes!("../../assets/fonts/emoji/AppleColorEmoji.ttf"),
-    "Apple Color Emoji",
+    include_bytes!("../../assets/fonts/noto-sans/NotoColorEmoji.ttf"),
+    "Noto Color Emoji",
     GenericFamily::Emoji,
   ),
 ];
