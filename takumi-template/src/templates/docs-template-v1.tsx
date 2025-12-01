@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 
-// Source: https://github.com/fuma-nama/fumadocs/blob/bb47513e4350fd898b2a53f735538a247b4b660c/packages/ui/src/og.tsx
 export default function DocsTemplateV1({
   title,
   description,
@@ -19,59 +18,94 @@ export default function DocsTemplateV1({
   return (
     <div
       style={{
-        display: "flex",
-        flexDirection: "column",
         width: "100%",
         height: "100%",
-        color: "white",
-        padding: "4rem",
-        backgroundColor: "#0c0c0c",
-        backgroundImage: `linear-gradient(to top right, ${primaryColor}, transparent), noise-v1(opacity(0.2))`,
+        backgroundColor: "#09090b",
+        position: "relative",
+        display: "flex",
       }}
     >
       <div
         style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          backgroundImage: `radial-gradient(circle at 0% 0%, ${primaryColor}, transparent)`,
+          opacity: 0.8,
+        }}
+      />
+
+      <div
+        style={{
           display: "flex",
-          flexDirection: "row",
-          alignItems: "center",
-          gap: "16px",
-          marginBottom: "12px",
-          color: primaryTextColor,
+          flexDirection: "column",
+          width: "100%",
+          height: "100%",
+          padding: "4rem",
+          color: "white",
+          position: "relative",
+          flex: 1,
+          justifyContent: "space-between",
         }}
       >
-        {icon}
         <span
           style={{
-            fontSize: 56,
-            fontWeight: 600,
+            fontSize: 84,
+            fontWeight: 700,
+            lineHeight: 1.1,
+            letterSpacing: "-0.03em",
+            color: "white",
+            textOverflow: "ellipsis",
+            lineClamp: 2,
           }}
         >
-          {site}
+          {title}
         </span>
+        <span
+          style={{
+            fontSize: 48,
+            color: "rgba(161, 161, 170, 1)",
+            fontWeight: 400,
+            lineHeight: 1.4,
+            lineClamp: 2,
+            textOverflow: "ellipsis",
+            maxWidth: "90%",
+          }}
+        >
+          {description}
+        </span>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "1rem",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: primaryTextColor,
+            }}
+          >
+            {icon}
+          </div>
+          <span
+            style={{
+              fontSize: 40,
+              fontWeight: 600,
+              letterSpacing: "-0.02em",
+              color: "white",
+              opacity: 0.9,
+            }}
+          >
+            {site}
+          </span>
+        </div>
       </div>
-      <p
-        style={{
-          fontWeight: 800,
-          fontSize: 84,
-          textOverflow: "ellipsis",
-          lineClamp: 2,
-          marginTop: "0.5em",
-          marginBottom: "0.5em",
-        }}
-      >
-        {title}
-      </p>
-      <span
-        style={{
-          fontSize: 48,
-          color: "rgba(240,240,240,0.8)",
-          fontWeight: 500,
-          lineClamp: 2,
-          textOverflow: "ellipsis",
-        }}
-      >
-        {description}
-      </span>
     </div>
   );
 }

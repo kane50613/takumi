@@ -4,7 +4,10 @@ import { Renderer } from "@takumi-rs/core";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import { write } from "bun";
 import type { ReactNode } from "react";
+import BlogPostTemplateV1 from "../src/templates/blog-post-template-v1";
 import DocsTemplateV1 from "../src/templates/docs-template-v1";
+import ProductCardTemplateV1 from "../src/templates/product-card-template-v1";
+import SocialQuoteTemplateV1 from "../src/templates/social-quote-template-v1";
 
 const renderer = new Renderer({
   persistentImages: [
@@ -44,15 +47,58 @@ testRender(
   <DocsTemplateV1
     title="Fumadocs Integration"
     description="When will Fuma meet me in person? Hope we can meet in Japan! Culpa dolore eu ullamco aute exercitation sint aute nostrud qui tempor commodo ad culpa culpa. Laborum laboris eu laborum Lorem aliquip nulla nulla est proident eu. Officia deserunt aute ex quis exercitation ut. Irure cupidatat eu dolor Lorem eu aliquip mollit voluptate esse aute fugiat officia proident aliquip."
-    icon={
-      <img
-        alt="Takumi"
-        src="takumi.svg"
-        style={{ width: "4rem", height: "4rem" }}
-      />
-    }
+    icon={<img alt="Takumi" src="takumi.svg" tw="w-16 h-16" />}
     primaryColor="hsla(354, 90%, 54%, 0.3)"
     primaryTextColor="hsl(354, 90%, 60%)"
     site="Takumi"
+  />,
+);
+
+testRender(
+  "BlogPostTemplateV1",
+  <BlogPostTemplateV1
+    title="The Future of Web Rendering with Rust and WebAssembly"
+    author="Kane Wang"
+    date="Nov 24, 2025"
+    category="Engineering"
+    avatar={
+      <img
+        alt="Avatar"
+        src="https://avatars.githubusercontent.com/u/33802653?s=400&u=265f123fc40f34df69466e0a4368f64cc8837e2f&v=4"
+        tw="w-full h-full object-cover rounded-full"
+      />
+    }
+  />,
+);
+
+testRender(
+  "ProductCardTemplateV1",
+  <ProductCardTemplateV1
+    productName="Takumi Pro"
+    price="$299"
+    description="The ultimate image generation engine for your next project. Blazing fast, type-safe, and built for scale."
+    brand="Takumi"
+    image={
+      <img
+        alt="Product"
+        src="takumi.svg"
+        style={{ width: "200px", height: "200px", objectFit: "contain" }}
+      />
+    }
+  />,
+);
+
+testRender(
+  "SocialQuoteTemplateV1",
+  <SocialQuoteTemplateV1
+    quote="Takumi has completely transformed how we generate social media assets. It's incredibly fast and the quality is unmatched."
+    author="Sarah Chen"
+    avatar={
+      <img
+        alt="Avatar"
+        src="https://avatars.githubusercontent.com/u/33802653?s=400&u=265f123fc40f34df69466e0a4368f64cc8837e2f&v=4"
+        tw="w-full h-full object-cover"
+      />
+    }
   />,
 );
