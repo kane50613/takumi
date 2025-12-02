@@ -1,7 +1,7 @@
 use taffy::Layout;
 
 use crate::{
-  layout::style::{Affine, Color, Sides},
+  layout::style::{Affine, Color, Sides, SpacePair},
   rendering::{BorderProperties, Canvas},
 };
 
@@ -11,7 +11,7 @@ pub fn draw_debug_border(canvas: &mut Canvas, layout: Layout, transform: Affine)
   BorderProperties {
     width: Sides([1.0; 4]).into(),
     color: Color([255, 0, 0, 255]), // red
-    radius: Sides([0.0; 4]),
+    radius: Sides([SpacePair::from_single(0.0); 4]),
   }
   .draw(canvas, layout.size, transform);
 
@@ -19,7 +19,7 @@ pub fn draw_debug_border(canvas: &mut Canvas, layout: Layout, transform: Affine)
   BorderProperties {
     width: Sides([1.0; 4]).into(),
     color: Color([0, 255, 0, 255]), // green
-    radius: Sides([0.0; 4]),
+    radius: Sides([SpacePair::from_single(0.0); 4]),
   }
   .draw(
     canvas,

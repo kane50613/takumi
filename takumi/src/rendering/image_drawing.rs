@@ -246,8 +246,8 @@ pub fn draw_image(
     layout.border.top + layout.padding.top + offset.y,
   ) * context.transform;
 
-  let border =
-    BorderProperties::from_context(context, layout.size, layout.border).inset_by_border_width();
+  let mut border = BorderProperties::from_context(context, layout.size, layout.border);
+  border.inset_by_border_width();
 
   canvas.overlay_image(
     &image,

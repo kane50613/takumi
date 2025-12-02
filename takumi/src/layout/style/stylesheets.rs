@@ -108,11 +108,11 @@ define_style!(
   flex: Option<Flex>,
   flex_grow: Option<FlexGrow>,
   flex_shrink: Option<FlexGrow>,
-  border_radius: Sides<LengthUnit<false>>,
-  border_top_left_radius: Option<LengthUnit<false>>,
-  border_top_right_radius: Option<LengthUnit<false>>,
-  border_bottom_right_radius: Option<LengthUnit<false>>,
-  border_bottom_left_radius: Option<LengthUnit<false>>,
+  border_radius: BorderRadius,
+  border_top_left_radius: Option<SpacePair<LengthUnit<false>>>,
+  border_top_right_radius: Option<SpacePair<LengthUnit<false>>>,
+  border_bottom_right_radius: Option<SpacePair<LengthUnit<false>>>,
+  border_bottom_left_radius: Option<SpacePair<LengthUnit<false>>>,
   border_width: Option<Sides<LengthUnit>>,
   border_inline_width: Option<SpacePair<LengthUnit>>,
   border_block_width: Option<SpacePair<LengthUnit>>,
@@ -131,6 +131,7 @@ define_style!(
   background_size: Option<BackgroundSizes>,
   background_repeat: Option<BackgroundRepeats>,
   background_color: ColorInput<false>,
+  background_clip: BackgroundClip,
   box_shadow: Option<BoxShadows>,
   grid_auto_columns: Option<GridTrackSizes>,
   grid_auto_rows: Option<GridTrackSizes>,
@@ -387,15 +388,15 @@ impl InheritedStyle {
   }
 
   #[inline]
-  fn resolve_rect_with_longhands<const DEFAULT_AUTO: bool>(
-    base: Sides<LengthUnit<DEFAULT_AUTO>>,
-    inline: Option<SpacePair<LengthUnit<DEFAULT_AUTO>>>,
-    block: Option<SpacePair<LengthUnit<DEFAULT_AUTO>>>,
-    top: Option<LengthUnit<DEFAULT_AUTO>>,
-    right: Option<LengthUnit<DEFAULT_AUTO>>,
-    bottom: Option<LengthUnit<DEFAULT_AUTO>>,
-    left: Option<LengthUnit<DEFAULT_AUTO>>,
-  ) -> taffy::Rect<LengthUnit<DEFAULT_AUTO>> {
+  fn resolve_rect_with_longhands<T: Copy>(
+    base: Sides<T>,
+    inline: Option<SpacePair<T>>,
+    block: Option<SpacePair<T>>,
+    top: Option<T>,
+    right: Option<T>,
+    bottom: Option<T>,
+    left: Option<T>,
+  ) -> taffy::Rect<T> {
     let mut values = base.0;
 
     if let Some(pair) = inline {
@@ -492,9 +493,9 @@ impl InheritedStyle {
   }
 
   #[inline]
-  pub(crate) fn resolved_border_radius(&self) -> taffy::Rect<LengthUnit<false>> {
+  pub(crate) fn resolved_border_radius(&self) -> taffy::Rect<SpacePair<LengthUnit<false>>> {
     Self::resolve_rect_with_longhands(
-      self.border_radius,
+      self.border_radius.0,
       None,
       None,
       self.border_top_left_radius,

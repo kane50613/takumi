@@ -14,7 +14,9 @@ fn create_test_container(opacity: f32) -> NodeKind {
       StyleBuilder::default()
         .width(LengthUnit::Percentage(8.0))
         .height(LengthUnit::Percentage(6.0))
-        .border_radius(Sides::from(LengthUnit::Rem(1.0)))
+        .border_radius(BorderRadius(Sides(
+          [SpacePair::from_single(LengthUnit::Rem(1.0)); 4],
+        )))
         .opacity(PercentageNumber(opacity))
         .justify_content(JustifyContent::Center)
         .align_items(AlignItems::Center)

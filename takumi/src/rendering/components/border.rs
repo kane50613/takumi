@@ -4,19 +4,9 @@ use taffy::{Point, Rect, Size};
 use zeno::{Command, Fill, PathBuilder};
 
 use crate::{
-  layout::style::{Affine, Color, ColorInput, LengthUnit, Sides},
+  layout::style::{Affine, Color, ColorInput, Sides, SpacePair},
   rendering::{Canvas, RenderContext, draw_mask},
 };
-
-fn resolve_border_radius_from_percentage_css<const DEFAULT_AUTO: bool>(
-  context: &RenderContext,
-  radius: LengthUnit<DEFAULT_AUTO>,
-  reference_size: f32,
-) -> f32 {
-  radius
-    .resolve_to_px(context, reference_size)
-    .min(reference_size / 2.0)
-}
 
 /// Represents the properties of a border, including corner radii and drawing metadata.
 #[derive(Debug, Clone, Copy, Default)]
@@ -26,7 +16,7 @@ pub(crate) struct BorderProperties {
   /// The color of the border
   pub color: Color,
   /// Corner radii: top, right, bottom, left (in pixels)
-  pub radius: Sides<f32>,
+  pub radius: Sides<SpacePair<f32>>,
 }
 
 impl BorderProperties {
@@ -39,7 +29,7 @@ impl BorderProperties {
     Self {
       width: Rect::ZERO,
       color: Color([0, 0, 0, 255]),
-      radius: Sides([0.0; 4]),
+      radius: Sides([SpacePair::from_single(0.0); 4]),
     }
   }
 
@@ -50,15 +40,11 @@ impl BorderProperties {
     border_width: Rect<f32>,
   ) -> Self {
     let resolved = context.style.resolved_border_radius();
-    let reference_size = border_box.width.min(border_box.height);
 
-    let top_left = resolve_border_radius_from_percentage_css(context, resolved.top, reference_size);
-    let top_right =
-      resolve_border_radius_from_percentage_css(context, resolved.right, reference_size);
-    let bottom_right =
-      resolve_border_radius_from_percentage_css(context, resolved.bottom, reference_size);
-    let bottom_left =
-      resolve_border_radius_from_percentage_css(context, resolved.left, reference_size);
+    let top_left = resolved.top.resolve_to_px(context, border_box);
+    let top_right = resolved.right.resolve_to_px(context, border_box);
+    let bottom_right = resolved.bottom.resolve_to_px(context, border_box);
+    let bottom_left = resolved.left.resolve_to_px(context, border_box);
 
     Self {
       width: border_width,
@@ -75,30 +61,33 @@ impl BorderProperties {
   /// Returns true if all corner radii are zero.
   #[inline]
   pub fn is_zero(&self) -> bool {
-    self.radius.0[0] == 0.0
-      && self.radius.0[1] == 0.0
-      && self.radius.0[2] == 0.0
-      && self.radius.0[3] == 0.0
+    const ZERO: Sides<SpacePair<f32>> = Sides([SpacePair::from_single(0.0); 4]);
+
+    self.radius == ZERO
   }
 
   /// Expand/shrink all corner radii and adjust radius bounds/offset.
-  pub fn expand_by(&self, amount: f32) -> Self {
-    Self {
-      width: self.width,
-      color: self.color,
-      radius: Sides([
-        (self.radius.0[0] + amount).max(0.0),
-        (self.radius.0[1] + amount).max(0.0),
-        (self.radius.0[2] + amount).max(0.0),
-        (self.radius.0[3] + amount).max(0.0),
-      ]),
-    }
+  pub fn expand_by(&mut self, amount: Rect<f32>) {
+    // top-left
+    self.radius.0[0].x += amount.top;
+    self.radius.0[0].y += amount.left;
+
+    // top-right
+    self.radius.0[1].x += amount.top;
+    self.radius.0[1].y += amount.right;
+
+    // bottom-right
+    self.radius.0[2].x += amount.bottom;
+    self.radius.0[2].y += amount.right;
+
+    // bottom-left
+    self.radius.0[3].x += amount.bottom;
+    self.radius.0[3].y += amount.left;
   }
 
   /// Shrink radii by average border width to get inner radius path.
-  pub fn inset_by_border_width(&self) -> Self {
-    let avg_width = (self.width.top + self.width.right + self.width.bottom + self.width.left) / 4.0;
-    self.expand_by(-avg_width)
+  pub fn inset_by_border_width(&mut self) {
+    self.expand_by(self.width.map(|size| -size))
   }
 
   /// Append rounded-rect path commands for this border's corner radii.
@@ -110,71 +99,131 @@ impl BorderProperties {
   ) {
     path.reserve_exact(BorderProperties::PATH_COMMANDS_AMOUNT);
 
+    // The magic number for the cubic bezier curve
     const KAPPA: f32 = 4.0 / 3.0 * (SQRT_2 - 1.0);
 
-    let top_edge_width = (border_box.width - self.radius.0[0] - self.radius.0[1]).max(0.0);
-    let right_edge_height = (border_box.height - self.radius.0[1] - self.radius.0[2]).max(0.0);
-    let bottom_edge_width = (border_box.width - self.radius.0[3] - self.radius.0[2]).max(0.0);
-    let left_edge_height = (border_box.height - self.radius.0[3] - self.radius.0[0]).max(0.0);
-
-    path.move_to((offset.x + self.radius.0[0], offset.y));
-
-    if top_edge_width > 0.0 {
-      path.rel_line_to((top_edge_width, 0.0));
-    }
-
-    if self.radius.0[1] > 0.0 {
-      let control_offset = self.radius.0[1] * KAPPA;
-      path.rel_curve_to(
-        (control_offset, 0.0),
-        (self.radius.0[1], self.radius.0[1] - control_offset),
-        (self.radius.0[1], self.radius.0[1]),
+    // Calculate scale factor inline (CSS Overlapping Curves)
+    // Note: We use .max(0.0) on the radius access to safely handle inner border negative cases
+    let scale = 1.0f32
+      .min(
+        if self.radius.0[0].x + self.radius.0[1].x > border_box.width {
+          border_box.width / (self.radius.0[0].x + self.radius.0[1].x)
+        } else {
+          1.0
+        },
+      )
+      .min(
+        if self.radius.0[3].x + self.radius.0[2].x > border_box.width {
+          border_box.width / (self.radius.0[3].x + self.radius.0[2].x)
+        } else {
+          1.0
+        },
+      )
+      .min(
+        if self.radius.0[0].y + self.radius.0[3].y > border_box.height {
+          border_box.height / (self.radius.0[0].y + self.radius.0[3].y)
+        } else {
+          1.0
+        },
+      )
+      .min(
+        if self.radius.0[1].y + self.radius.0[2].y > border_box.height {
+          border_box.height / (self.radius.0[1].y + self.radius.0[2].y)
+        } else {
+          1.0
+        },
       );
-    }
 
-    if right_edge_height > 0.0 {
-      path.rel_line_to((0.0, right_edge_height));
-    }
+    // --- Top Edge ---
+    // Start after Top-Left corner
+    path.move_to((offset.x + (self.radius.0[0].x * scale).max(0.0), offset.y));
 
-    if self.radius.0[2] > 0.0 {
-      let control_offset = self.radius.0[2] * KAPPA;
-      path.rel_curve_to(
-        (0.0, control_offset),
-        (-self.radius.0[2] + control_offset, self.radius.0[2]),
-        (-self.radius.0[2], self.radius.0[2]),
+    // Line to start of Top-Right corner
+    path.line_to((
+      offset.x + border_box.width - (self.radius.0[1].x * scale).max(0.0),
+      offset.y,
+    ));
+
+    // --- Top-Right Corner ---
+    if self.radius.0[1].x > 0.0 && self.radius.0[1].y > 0.0 {
+      let rx = self.radius.0[1].x * scale;
+      let ry = self.radius.0[1].y * scale;
+      path.curve_to(
+        (offset.x + border_box.width - rx * (1.0 - KAPPA), offset.y),
+        (offset.x + border_box.width, offset.y + ry * (1.0 - KAPPA)),
+        (offset.x + border_box.width, offset.y + ry),
       );
+    } else {
+      path.line_to((offset.x + border_box.width, offset.y));
     }
 
-    if bottom_edge_width > 0.0 {
-      path.rel_line_to((-bottom_edge_width, 0.0));
-    }
+    // --- Right Edge ---
+    path.line_to((
+      offset.x + border_box.width,
+      offset.y + border_box.height - (self.radius.0[2].y * scale).max(0.0),
+    ));
 
-    if self.radius.0[3] > 0.0 {
-      let control_offset = self.radius.0[3] * KAPPA;
-      path.rel_curve_to(
-        (-control_offset, 0.0),
-        (-self.radius.0[3], -self.radius.0[3] + control_offset),
-        (-self.radius.0[3], -self.radius.0[3]),
+    // --- Bottom-Right Corner ---
+    if self.radius.0[2].x > 0.0 && self.radius.0[2].y > 0.0 {
+      let rx = self.radius.0[2].x * scale;
+      let ry = self.radius.0[2].y * scale;
+      path.curve_to(
+        (
+          offset.x + border_box.width,
+          offset.y + border_box.height - ry * (1.0 - KAPPA),
+        ),
+        (
+          offset.x + border_box.width - rx * (1.0 - KAPPA),
+          offset.y + border_box.height,
+        ),
+        (
+          offset.x + border_box.width - rx,
+          offset.y + border_box.height,
+        ),
       );
+    } else {
+      path.line_to((offset.x + border_box.width, offset.y + border_box.height));
     }
 
-    if left_edge_height > 0.0 {
-      path.rel_line_to((0.0, -left_edge_height));
-    }
+    // --- Bottom Edge ---
+    path.line_to((
+      offset.x + (self.radius.0[3].x * scale).max(0.0),
+      offset.y + border_box.height,
+    ));
 
-    if self.radius.0[0] > 0.0 {
-      let control_offset = self.radius.0[0] * KAPPA;
-      path.rel_curve_to(
-        (0.0, -control_offset),
-        (self.radius.0[0] - control_offset, -self.radius.0[0]),
-        (self.radius.0[0], -self.radius.0[0]),
+    // --- Bottom-Left Corner ---
+    if self.radius.0[3].x > 0.0 && self.radius.0[3].y > 0.0 {
+      let rx = self.radius.0[3].x * scale;
+      let ry = self.radius.0[3].y * scale;
+      path.curve_to(
+        (offset.x + rx * (1.0 - KAPPA), offset.y + border_box.height),
+        (offset.x, offset.y + border_box.height - ry * (1.0 - KAPPA)),
+        (offset.x, offset.y + border_box.height - ry),
       );
+    } else {
+      path.line_to((offset.x, offset.y + border_box.height));
+    }
+
+    // --- Left Edge ---
+    path.line_to((offset.x, offset.y + (self.radius.0[0].y * scale).max(0.0)));
+
+    // --- Top-Left Corner ---
+    if self.radius.0[0].x > 0.0 && self.radius.0[0].y > 0.0 {
+      let rx = self.radius.0[0].x * scale;
+      let ry = self.radius.0[0].y * scale;
+      path.curve_to(
+        (offset.x, offset.y + ry * (1.0 - KAPPA)),
+        (offset.x + rx * (1.0 - KAPPA), offset.y),
+        (offset.x + rx, offset.y),
+      );
+    } else {
+      path.line_to((offset.x, offset.y));
     }
 
     path.close();
   }
 
-  pub(crate) fn draw(&self, canvas: &mut Canvas, border_box: Size<f32>, transform: Affine) {
+  pub(crate) fn draw(mut self, canvas: &mut Canvas, border_box: Size<f32>, transform: Affine) {
     if self.width.left == 0.0
       && self.width.right == 0.0
       && self.width.top == 0.0
@@ -187,18 +236,18 @@ impl BorderProperties {
 
     self.append_mask_commands(&mut paths, border_box, Point::ZERO);
 
-    let avg_width = (self.width.top + self.width.right + self.width.bottom + self.width.left) / 4.0;
+    self.inset_by_border_width();
 
-    self.expand_by(-avg_width).append_mask_commands(
+    self.append_mask_commands(
       &mut paths,
       border_box
         - Size {
-          width: avg_width * 2.0,
-          height: avg_width * 2.0,
+          width: self.width.left + self.width.right,
+          height: self.width.top + self.width.bottom,
         },
       Point {
-        x: avg_width,
-        y: avg_width,
+        x: self.width.left,
+        y: self.width.top,
       },
     );
 

@@ -660,35 +660,35 @@ impl TailwindProperty {
         style.border_bottom_width = Some(tw_border_width.0).into();
       }
       TailwindProperty::Rounded(rounded) => {
-        style.border_radius = Sides([rounded.0; 4]).into();
+        style.border_radius = BorderRadius(Sides([SpacePair::from_single(rounded.0); 4])).into();
       }
       TailwindProperty::RoundedTopLeft(rounded) => {
-        style.border_top_left_radius = Some(rounded.0).into();
+        style.border_top_left_radius = Some(SpacePair::from_single(rounded.0)).into();
       }
       TailwindProperty::RoundedTopRight(rounded) => {
-        style.border_top_right_radius = Some(rounded.0).into();
+        style.border_top_right_radius = Some(SpacePair::from_single(rounded.0)).into();
       }
       TailwindProperty::RoundedBottomRight(rounded) => {
-        style.border_bottom_right_radius = Some(rounded.0).into();
+        style.border_bottom_right_radius = Some(SpacePair::from_single(rounded.0)).into();
       }
       TailwindProperty::RoundedBottomLeft(rounded) => {
-        style.border_bottom_left_radius = Some(rounded.0).into();
+        style.border_bottom_left_radius = Some(SpacePair::from_single(rounded.0)).into();
       }
       TailwindProperty::RoundedTop(rounded) => {
-        style.border_top_left_radius = Some(rounded.0).into();
-        style.border_top_right_radius = Some(rounded.0).into();
+        style.border_top_left_radius = Some(SpacePair::from_single(rounded.0)).into();
+        style.border_top_right_radius = Some(SpacePair::from_single(rounded.0)).into();
       }
       TailwindProperty::RoundedRight(rounded) => {
-        style.border_top_right_radius = Some(rounded.0).into();
-        style.border_bottom_right_radius = Some(rounded.0).into();
+        style.border_top_right_radius = Some(SpacePair::from_single(rounded.0)).into();
+        style.border_bottom_right_radius = Some(SpacePair::from_single(rounded.0)).into();
       }
       TailwindProperty::RoundedBottom(rounded) => {
-        style.border_bottom_left_radius = Some(rounded.0).into();
-        style.border_bottom_right_radius = Some(rounded.0).into();
+        style.border_bottom_left_radius = Some(SpacePair::from_single(rounded.0)).into();
+        style.border_bottom_right_radius = Some(SpacePair::from_single(rounded.0)).into();
       }
       TailwindProperty::RoundedLeft(rounded) => {
-        style.border_top_left_radius = Some(rounded.0).into();
-        style.border_bottom_left_radius = Some(rounded.0).into();
+        style.border_top_left_radius = Some(SpacePair::from_single(rounded.0)).into();
+        style.border_bottom_left_radius = Some(SpacePair::from_single(rounded.0)).into();
       }
       TailwindProperty::TextOverflow(ref text_overflow) => {
         style.text_overflow = text_overflow.clone().into();

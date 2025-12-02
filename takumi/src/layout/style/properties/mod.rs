@@ -71,6 +71,7 @@ pub use percentage_number::*;
 pub use radial_gradient::*;
 pub use sides::*;
 pub use space_pair::*;
+use taffy::{Layout, Size};
 pub use text_decoration::*;
 pub use text_overflow::*;
 pub use text_shadow::*;
@@ -157,6 +158,91 @@ impl<'i> FromCss<'i> for ObjectFit {
 impl TailwindPropertyParser for ObjectFit {
   fn parse_tw(token: &str) -> Option<Self> {
     Self::from_str(token).ok()
+  }
+}
+
+/// Defines how the background is clipped.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum BackgroundClip {
+  /// The background extends to the outside edge of the border
+  #[default]
+  BorderBox,
+  /// The background extends to the outside edge of the padding
+  PaddingBox,
+  /// The background extends to the inside edge of the content box
+  ContentBox,
+  /// The background extends to the outside edge of the text
+  Text,
+  /// The background extends to the outside edge of the border area
+  BorderArea,
+}
+
+impl BackgroundClip {
+  pub(crate) fn get_size_and_transform(
+    self,
+    layout: Layout,
+    transform: Affine,
+  ) -> (Size<f32>, Affine) {
+    match self {
+      BackgroundClip::BorderBox | BackgroundClip::BorderArea => (layout.size, transform),
+      BackgroundClip::PaddingBox => (
+        layout.size
+          + Size {
+            width: -layout.padding.left - layout.padding.right,
+            height: -layout.padding.top - layout.padding.bottom,
+          },
+        Affine::translation(layout.padding.left, layout.padding.top) * transform,
+      ),
+      BackgroundClip::ContentBox | BackgroundClip::Text => (
+        layout.content_box_size(),
+        Affine::translation(layout.content_box_x(), layout.content_box_y()) * transform,
+      ),
+    }
+  }
+}
+
+impl<'i> FromCss<'i> for BackgroundClip {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let location = input.current_source_location();
+    let token = input.expect_ident()?;
+
+    match_ignore_ascii_case! { token,
+      "border-box" => Ok(BackgroundClip::BorderBox),
+      "padding-box" => Ok(BackgroundClip::PaddingBox),
+      "content-box" => Ok(BackgroundClip::ContentBox),
+      "text" => Ok(BackgroundClip::Text),
+      "border-area" => Ok(BackgroundClip::BorderArea),
+      _ => Err(location.new_unexpected_token_error(Token::Ident(token.clone()))),
+    }
+  }
+}
+
+impl TailwindPropertyParser for BackgroundClip {
+  fn parse_tw(token: &str) -> Option<Self> {
+    Self::from_str(token).ok()
+  }
+}
+
+/// A pair of values for horizontal and vertical border radii.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct BorderRadius(pub Sides<SpacePair<LengthUnit<false>>>);
+
+impl<'i> FromCss<'i> for BorderRadius {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let widths: Sides<LengthUnit<false>> = Sides::from_css(input)?;
+
+    let heights = if input.try_parse(|input| input.expect_delim('/')).is_ok() {
+      Sides::from_css(input)?
+    } else {
+      widths
+    };
+
+    Ok(BorderRadius(Sides([
+      SpacePair::from_pair(widths.0[0], heights.0[0]),
+      SpacePair::from_pair(widths.0[1], heights.0[1]),
+      SpacePair::from_pair(widths.0[2], heights.0[2]),
+      SpacePair::from_pair(widths.0[3], heights.0[3]),
+    ])))
   }
 }
 

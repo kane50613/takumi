@@ -158,7 +158,7 @@ fn create_rotated_container(angle: f32, transform_origin: BackgroundPosition) ->
         .height(Px(200.0))
         .background_color(ColorInput::Value(Color([255, 0, 0, 30])))
         .border_width(Some(Sides([Px(1.0); 4])))
-        .border_radius(Sides([Px(12.0); 4]))
+        .border_radius(BorderRadius(Sides([SpacePair::from_single(Px(12.0)); 4])))
         .build()
         .unwrap(),
     ),

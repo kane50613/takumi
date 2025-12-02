@@ -170,7 +170,7 @@ impl BasicShape {
               Sides(
                 radius
                   .0
-                  .map(|corner| corner.resolve_to_px(context, size.width)),
+                  .map(|corner| SpacePair::from_single(corner.resolve_to_px(context, size.width))),
               )
             })
             .unwrap_or_default(),

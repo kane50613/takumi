@@ -82,3 +82,22 @@ impl SpacePair<Overflow> {
     self.x != Overflow::Visible || self.y != Overflow::Visible
   }
 }
+
+/// A pair of values for horizontal and vertical border radii.
+pub type BorderRadiusPair = SpacePair<LengthUnit<false>>;
+
+/// A pair of values for horizontal and vertical border radii in pixels.
+pub type SizedBorderRadiusPair = SpacePair<f32>;
+
+impl BorderRadiusPair {
+  pub(crate) fn resolve_to_px(
+    self,
+    context: &RenderContext,
+    border_box: Size<f32>,
+  ) -> SpacePair<f32> {
+    SpacePair::from_pair(
+      self.x.resolve_to_px(context, border_box.width).max(0.0),
+      self.y.resolve_to_px(context, border_box.height).max(0.0),
+    )
+  }
+}

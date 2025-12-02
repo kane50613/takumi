@@ -15,7 +15,7 @@ use crate::{
   layout::{
     Viewport,
     inline::InlineContentKind,
-    style::{BackgroundImage, CssValue, InheritedStyle, Style},
+    style::{BackgroundImage, CssValue, InheritedStyle, Sides, Style},
   },
   rendering::{
     BorderProperties, Canvas, RenderContext, SizedShadow, draw_background_layers,
@@ -234,18 +234,23 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
 
       let mut paths = Vec::new();
 
+      let mut border_radius = border_radius;
+      let resolved_spread_radius = shadow
+        .spread_radius
+        .resolve_to_px(context, layout.size.width);
+
+      border_radius.expand_by(Sides([resolved_spread_radius; 4]).into());
+
       let shadow = SizedShadow::from_box_shadow(*shadow, context, layout.size);
 
-      border_radius
-        .expand_by(shadow.spread_radius)
-        .append_mask_commands(
-          &mut paths,
-          layout.size,
-          Point {
-            x: -shadow.spread_radius,
-            y: -shadow.spread_radius,
-          },
-        );
+      border_radius.append_mask_commands(
+        &mut paths,
+        layout.size,
+        Point {
+          x: -shadow.spread_radius,
+          y: -shadow.spread_radius,
+        },
+      );
 
       shadow.draw_outset(
         &mut canvas.image,
@@ -323,12 +328,11 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
       layout,
     )?;
 
-    draw_background_layers(
-      tiles,
-      BorderProperties::from_context(context, layout.size, layout.border).inset_by_border_width(),
-      context,
-      canvas,
-    );
+    let mut border_radius = BorderProperties::from_context(context, layout.size, layout.border);
+    border_radius.inset_by_border_width();
+
+    draw_background_layers(tiles, border_radius, context, canvas);
+
     Ok(())
   }
 

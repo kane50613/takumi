@@ -3,7 +3,7 @@ use taffy::{Layout, Point, Size};
 use zeno::{Fill, PathData, Placement};
 
 use crate::{
-  layout::style::{Affine, BoxShadow, Color, ImageScalingAlgorithm, TextShadow},
+  layout::style::{Affine, BoxShadow, Color, ImageScalingAlgorithm, Sides, TextShadow},
   rendering::{
     BorderProperties, Canvas, CanvasConstrain, MaskMemory, RenderContext, draw_mask, overlay_image,
   },
@@ -142,7 +142,7 @@ impl SizedShadow {
 
 fn draw_inset_shadow(
   shadow: &SizedShadow,
-  border: BorderProperties,
+  mut border: BorderProperties,
   border_box: Size<f32>,
   mask_memory: &mut MaskMemory,
 ) -> RgbaImage {
@@ -161,7 +161,8 @@ fn draw_inset_shadow(
 
   border.append_mask_commands(&mut paths, border_box, offset);
 
-  border.expand_by(shadow.spread_radius).append_mask_commands(
+  border.expand_by(Sides([shadow.spread_radius; 4]).into());
+  border.append_mask_commands(
     &mut paths,
     border_box
       - Size {
