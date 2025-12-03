@@ -376,7 +376,6 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
       }
       BackgroundClip::PaddingBox => {
         border_radius.inset_by_border_width();
-        border_radius.expand_by(layout.padding.map(|size| -size));
 
         if let Some(image) = create_background_image(
           context,

@@ -237,6 +237,10 @@ impl BorderProperties {
     transform: Affine,
     fill_image: Option<CowImage>,
   ) {
+    if let Some(fill_image) = &fill_image {
+      assert_eq!(fill_image.size(), border_box.map(|size| size as u32));
+    }
+
     if self.width.left == 0.0
       && self.width.right == 0.0
       && self.width.top == 0.0
@@ -250,7 +254,6 @@ impl BorderProperties {
     self.append_mask_commands(&mut paths, border_box, Point::ZERO);
 
     self.inset_by_border_width();
-
     self.append_mask_commands(
       &mut paths,
       border_box

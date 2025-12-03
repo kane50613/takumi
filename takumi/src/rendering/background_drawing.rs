@@ -322,6 +322,10 @@ pub(crate) fn create_mask(
     border_box,
   )?;
 
+  if resolved_tiles.is_empty() {
+    return Ok(None);
+  }
+
   let mut composed = RgbaImage::new(border_box.width as u32, border_box.height as u32);
 
   for (tile_image, xs, ys) in resolved_tiles {
