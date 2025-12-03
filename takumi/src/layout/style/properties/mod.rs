@@ -204,7 +204,16 @@ impl TailwindPropertyParser for BackgroundClip {
   }
 }
 
-/// A pair of values for horizontal and vertical border radii.
+/// Represents the CSS `border-radius` property, supporting elliptical corners.
+///
+/// Each corner can have independent horizontal and vertical radii, allowing for both circular and elliptical shapes.
+///
+/// This struct supports the full CSS syntax, including the elliptical form, e.g.:
+/// `border-radius: 10px 20px 30px 40px / 15px 25px 35px 45px;`
+///
+/// The inner `Sides<SpacePair<LengthUnit<false>>>` field stores the radii for each corner as pairs of horizontal and vertical values.
+/// The order of the `Sides` array follows the CSS specification:
+/// [top-left, top-right, bottom-right, bottom-left].
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct BorderRadius(pub Sides<SpacePair<LengthUnit<false>>>);
 
