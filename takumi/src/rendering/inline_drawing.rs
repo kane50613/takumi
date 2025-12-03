@@ -1,7 +1,7 @@
 use image::RgbaImage;
 use parley::{GlyphRun, PositionedInlineBox, PositionedLayoutItem};
 use swash::FontRef;
-use taffy::{Layout, Size};
+use taffy::{Layout, Point, Size};
 
 use crate::{
   Result,
@@ -10,10 +10,7 @@ use crate::{
     node::Node,
     style::{Affine, BackgroundClip, SizedFontStyle, TextDecorationLine},
   },
-  rendering::{
-    Canvas, MaskMemory, RenderContext, draw_decoration, draw_glyph, overlay_image,
-    resolve_layers_tiles,
-  },
+  rendering::{Canvas, RenderContext, create_background_image, draw_decoration, draw_glyph},
   resources::font::FontError,
 };
 
@@ -143,7 +140,23 @@ pub(crate) fn draw_inline_layout(
   inline_layout: InlineLayout,
   font_style: &SizedFontStyle,
 ) -> Result<Vec<PositionedInlineBox>> {
-  let fill_image = create_text_background_image(context, layout, &mut canvas.mask_memory)?;
+  let fill_image = if context.style.background_clip == BackgroundClip::Text {
+    create_background_image(
+      context,
+      layout.size,
+      Size {
+        width: layout.content_box_width(),
+        height: layout.content_box_height(),
+      },
+      Point {
+        x: layout.padding.left + layout.border.left,
+        y: layout.padding.top + layout.border.top,
+      },
+      &mut canvas.mask_memory,
+    )?
+  } else {
+    None
+  };
 
   let mut positioned_inline_boxes = Vec::new();
 
@@ -166,58 +179,4 @@ pub(crate) fn draw_inline_layout(
   }
 
   Ok(positioned_inline_boxes)
-}
-
-fn create_text_background_image(
-  context: &RenderContext,
-  layout: Layout,
-  mask_memory: &mut MaskMemory,
-) -> Result<Option<RgbaImage>> {
-  if context.style.background_clip != BackgroundClip::Text {
-    return Ok(None);
-  }
-
-  let images = match context.style.background_image.as_ref() {
-    Some(images) => images,
-    None => return Ok(None),
-  };
-
-  let resolved_tiles = resolve_layers_tiles(
-    images,
-    context.style.background_position.as_ref(),
-    context.style.background_size.as_ref(),
-    context.style.background_repeat.as_ref(),
-    context,
-    layout,
-  )?;
-
-  if resolved_tiles.is_empty() {
-    return Ok(None);
-  }
-
-  let size = layout.content_box_size();
-
-  let mut composed = RgbaImage::new(size.width as u32, size.height as u32);
-
-  for (tile_image, xs, ys) in resolved_tiles {
-    for y in &ys {
-      for x in &xs {
-        overlay_image(
-          &mut composed,
-          (&tile_image).into(),
-          Default::default(),
-          Affine::translation(
-            *x as f32 - layout.border.left - layout.padding.left,
-            *y as f32 - layout.border.top - layout.padding.top,
-          ),
-          context.style.image_rendering,
-          context.style.filter.as_ref(),
-          None,
-          mask_memory,
-        );
-      }
-    }
-  }
-
-  Ok(Some(composed))
 }

@@ -15,7 +15,7 @@ use zeno::{Mask, PathData, Placement, Scratch};
 
 use crate::{
   layout::style::{Affine, Color, Filters, ImageScalingAlgorithm, InheritedStyle, Overflow},
-  rendering::{BorderProperties, RenderContext, resolve_layers_tiles},
+  rendering::{BorderProperties, RenderContext, create_mask},
 };
 
 #[derive(Clone)]
@@ -135,9 +135,15 @@ pub(crate) enum CanvasConstrain {
     to: Point<u32>,
     inverse_transform: Affine,
   },
-  Mask {
+  ClipPath {
     mask: Vec<u8>,
     placement: Placement,
+  },
+  MaskImage {
+    mask: Vec<u8>,
+    from: Point<u32>,
+    to: Point<u32>,
+    inverse_transform: Affine,
   },
 }
 
@@ -160,30 +166,27 @@ impl CanvasConstrain {
         return Ok(CanvasConstrainResult::SkipRendering);
       }
 
-      return Ok(CanvasConstrainResult::Some(CanvasConstrain::Mask {
+      return Ok(CanvasConstrainResult::Some(CanvasConstrain::ClipPath {
         mask: mask.to_vec(),
         placement,
       }));
     }
 
-    if let Some(mask_image) = &style.mask_image {
-      let tiles = resolve_layers_tiles(
-        mask_image,
-        style.mask_position.as_ref(),
-        style.mask_size.as_ref(),
-        style.mask_repeat.as_ref(),
-        context,
-        layout,
-      )?;
-
-      if tiles.is_empty() {
-        return Ok(CanvasConstrainResult::SkipRendering);
-      }
-    }
-
     let Some(inverse_transform) = transform.invert() else {
       return Ok(CanvasConstrainResult::SkipRendering);
     };
+
+    if let Some(mask) = create_mask(context, layout.size, mask_memory)? {
+      return Ok(CanvasConstrainResult::Some(CanvasConstrain::MaskImage {
+        mask,
+        from: Point { x: 0, y: 0 },
+        to: Point {
+          x: layout.size.width as u32,
+          y: layout.size.height as u32,
+        },
+        inverse_transform,
+      }));
+    }
 
     let overflow = style.resolve_overflows();
 
@@ -261,7 +264,35 @@ impl CanvasConstrain {
 
         u8::MAX
       }
-      CanvasConstrain::Mask {
+      CanvasConstrain::MaskImage {
+        ref mask,
+        from,
+        to,
+        inverse_transform,
+      } => {
+        let original_point = inverse_transform.transform_point(Point {
+          x: x as f32,
+          y: y as f32,
+        });
+
+        if original_point.x < 0.0 || original_point.y < 0.0 {
+          return 0;
+        }
+
+        let original_point = original_point.map(|point| point as u32);
+
+        let is_contained = original_point.x >= from.x
+          && original_point.x < to.x
+          && original_point.y >= from.y
+          && original_point.y < to.y;
+
+        if !is_contained {
+          return 0;
+        }
+
+        mask[mask_index_from_coord(original_point.x, original_point.y, to.x - from.x)]
+      }
+      CanvasConstrain::ClipPath {
         ref mask,
         placement,
       } => {

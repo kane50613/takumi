@@ -1,11 +1,14 @@
 use std::f32::consts::SQRT_2;
 
+use image::GenericImageView;
 use taffy::{Point, Rect, Size};
 use zeno::{Command, Fill, PathBuilder};
 
 use crate::{
   layout::style::{Affine, Color, ColorInput, Sides, SpacePair},
-  rendering::{Canvas, RenderContext, draw_mask},
+  rendering::{
+    Canvas, CowImage, RenderContext, apply_mask_alpha_to_pixel, mask_index_from_coord, overlay_area,
+  },
 };
 
 /// Represents the properties of a border, including corner radii and drawing metadata.
@@ -227,7 +230,13 @@ impl BorderProperties {
     path.close();
   }
 
-  pub(crate) fn draw(mut self, canvas: &mut Canvas, border_box: Size<f32>, transform: Affine) {
+  pub(crate) fn draw(
+    mut self,
+    canvas: &mut Canvas,
+    border_box: Size<f32>,
+    transform: Affine,
+    fill_image: Option<CowImage>,
+  ) {
     if self.width.left == 0.0
       && self.width.right == 0.0
       && self.width.top == 0.0
@@ -260,12 +269,27 @@ impl BorderProperties {
         .mask_memory
         .render(&paths, Some(transform), Some(Fill::EvenOdd.into()));
 
-    draw_mask(
+    overlay_area(
       &mut canvas.image,
-      mask,
-      placement,
-      self.color,
+      Point {
+        x: placement.left as f32,
+        y: placement.top as f32,
+      },
+      Size {
+        width: placement.width,
+        height: placement.height,
+      },
       canvas.constrains.last(),
+      |x, y| {
+        let alpha = mask[mask_index_from_coord(x, y, placement.width)];
+
+        let pixel = fill_image
+          .as_ref()
+          .map(|image| image.get_pixel(x, y))
+          .unwrap_or(self.color.into());
+
+        apply_mask_alpha_to_pixel(pixel, alpha)
+      },
     );
   }
 }

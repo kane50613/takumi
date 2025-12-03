@@ -2,7 +2,7 @@ use std::iter::successors;
 
 use image::RgbaImage;
 use smallvec::{SmallVec, smallvec};
-use taffy::Layout;
+use taffy::{Point, Size};
 
 use crate::{
   Result,
@@ -12,7 +12,7 @@ use crate::{
     Gradient, ImageScalingAlgorithm, LengthUnit, PositionComponent, PositionKeywordX,
     PositionKeywordY,
   },
-  rendering::{BorderProperties, Canvas, RenderContext, fast_resize},
+  rendering::{BorderProperties, Canvas, MaskMemory, RenderContext, fast_resize, overlay_image},
 };
 
 pub(crate) type ImageTiles = (RgbaImage, SmallVec<[i32; 1]>, SmallVec<[i32; 1]>);
@@ -256,7 +256,7 @@ pub(crate) fn resolve_layers_tiles(
   sizes: Option<&BackgroundSizes>,
   repeats: Option<&BackgroundRepeats>,
   context: &RenderContext,
-  layout: Layout,
+  border_box: Size<f32>,
 ) -> Result<Vec<ImageTiles>> {
   let last_position = positions
     .and_then(|p| p.0.last().copied())
@@ -280,8 +280,8 @@ pub(crate) fn resolve_layers_tiles(
       pos,
       size,
       repeat,
-      layout.size.width as u32,
-      layout.size.height as u32,
+      border_box.width as u32,
+      border_box.height as u32,
       context,
     )
   };
@@ -302,6 +302,92 @@ pub(crate) fn resolve_layers_tiles(
       images.0.iter().enumerate().map(map_fn).collect();
     Ok(results?.into_iter().flatten().collect())
   }
+}
+
+pub(crate) fn create_mask(
+  context: &RenderContext,
+  border_box: Size<f32>,
+  mask_memory: &mut MaskMemory,
+) -> Result<Option<Vec<u8>>> {
+  let Some(mask_image) = context.style.mask_image.as_ref() else {
+    return Ok(None);
+  };
+
+  let resolved_tiles = resolve_layers_tiles(
+    mask_image,
+    context.style.mask_position.as_ref(),
+    context.style.mask_size.as_ref(),
+    context.style.mask_repeat.as_ref(),
+    context,
+    border_box,
+  )?;
+
+  let mut composed = RgbaImage::new(border_box.width as u32, border_box.height as u32);
+
+  for (tile_image, xs, ys) in resolved_tiles {
+    for y in &ys {
+      for x in &xs {
+        overlay_image(
+          &mut composed,
+          (&tile_image).into(),
+          Default::default(),
+          Affine::translation(*x as f32, *y as f32),
+          context.style.image_rendering,
+          context.style.filter.as_ref(),
+          None,
+          mask_memory,
+        );
+      }
+    }
+  }
+
+  Ok(Some(composed.iter().skip(3).step_by(4).copied().collect()))
+}
+
+pub(crate) fn create_background_image(
+  context: &RenderContext,
+  border_box: Size<f32>,
+  size: Size<f32>,
+  offset: Point<f32>,
+  mask_memory: &mut MaskMemory,
+) -> Result<Option<RgbaImage>> {
+  let Some(background_image) = context.style.background_image.as_ref() else {
+    return Ok(None);
+  };
+
+  let resolved_tiles = resolve_layers_tiles(
+    background_image,
+    context.style.background_position.as_ref(),
+    context.style.background_size.as_ref(),
+    context.style.background_repeat.as_ref(),
+    context,
+    border_box,
+  )?;
+
+  if resolved_tiles.is_empty() {
+    return Ok(None);
+  }
+
+  let mut composed = RgbaImage::new(size.width as u32, size.height as u32);
+
+  for (tile_image, xs, ys) in resolved_tiles {
+    for y in &ys {
+      for x in &xs {
+        overlay_image(
+          &mut composed,
+          (&tile_image).into(),
+          Default::default(),
+          Affine::translation(*x as f32 - offset.x, *y as f32 - offset.y),
+          context.style.image_rendering,
+          context.style.filter.as_ref(),
+          None,
+          mask_memory,
+        );
+      }
+    }
+  }
+
+  Ok(Some(composed))
 }
 
 /// Draw layered backgrounds (gradients) with support for background-size, -position, and -repeat.

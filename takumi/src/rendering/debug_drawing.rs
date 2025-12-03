@@ -13,7 +13,7 @@ pub fn draw_debug_border(canvas: &mut Canvas, layout: Layout, transform: Affine)
     color: Color([255, 0, 0, 255]), // red
     radius: Sides([SpacePair::from_single(0.0); 4]),
   }
-  .draw(canvas, layout.size, transform);
+  .draw(canvas, layout.size, transform, None);
 
   // content-box
   BorderProperties {
@@ -28,5 +28,6 @@ pub fn draw_debug_border(canvas: &mut Canvas, layout: Layout, transform: Affine)
       layout.padding.left + layout.border.left,
       layout.padding.top + layout.border.top,
     ) * transform,
+    None,
   );
 }
