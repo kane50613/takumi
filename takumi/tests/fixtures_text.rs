@@ -325,10 +325,11 @@ fn fixtures_text_mask_image_gradient_and_emoji() {
         tw: None,
         style: Some(
           StyleBuilder::default()
-            .mask_image(Some(gradient_images))
-            .mask_size(Some(BackgroundSizes::from_str("100% 100%").unwrap()))
-            .mask_position(Some(BackgroundPositions::from_str("0 0").unwrap()))
-            .mask_repeat(Some(BackgroundRepeats::from_str("no-repeat").unwrap()))
+            .background_image(Some(gradient_images))
+            .background_size(Some(BackgroundSizes::from_str("100% 100%").unwrap()))
+            .background_position(Some(BackgroundPositions::from_str("0 0").unwrap()))
+            .background_repeat(Some(BackgroundRepeats::from_str("no-repeat").unwrap()))
+            .background_clip(BackgroundClip::Text)
             .build()
             .unwrap(),
         ),

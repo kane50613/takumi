@@ -165,7 +165,7 @@ fn render_node<'g, Nodes: Node<Nodes>>(
     layout,
     transform,
     &mut canvas.mask_memory,
-  );
+  )?;
 
   let has_constrain = matches!(constrain, CanvasConstrainResult::Some(_));
 

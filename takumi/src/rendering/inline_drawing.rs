@@ -8,7 +8,7 @@ use crate::{
   layout::{
     inline::{InlineBrush, InlineLayout},
     node::Node,
-    style::{Affine, SizedFontStyle, TextDecorationLine},
+    style::{Affine, BackgroundClip, SizedFontStyle, TextDecorationLine},
   },
   rendering::{
     Canvas, MaskMemory, RenderContext, draw_decoration, draw_glyph, overlay_image,
@@ -143,11 +143,7 @@ pub(crate) fn draw_inline_layout(
   inline_layout: InlineLayout,
   font_style: &SizedFontStyle,
 ) -> Result<Vec<PositionedInlineBox>> {
-  let content_box = layout.content_box_size();
-
-  // If we have a mask image on the style, render it using the background tiling logic into a
-  // temporary image and use that as the glyph fill.
-  let fill_image = create_fill_image(context, layout, content_box, &mut canvas.mask_memory)?;
+  let fill_image = create_text_background_image(context, layout, &mut canvas.mask_memory)?;
 
   let mut positioned_inline_boxes = Vec::new();
 
@@ -172,21 +168,25 @@ pub(crate) fn draw_inline_layout(
   Ok(positioned_inline_boxes)
 }
 
-fn create_fill_image(
+fn create_text_background_image(
   context: &RenderContext,
   layout: Layout,
-  size: Size<f32>,
   mask_memory: &mut MaskMemory,
 ) -> Result<Option<RgbaImage>> {
-  let images = match context.style.mask_image.as_ref() {
+  if context.style.background_clip != BackgroundClip::Text {
+    return Ok(None);
+  }
+
+  let images = match context.style.background_image.as_ref() {
     Some(images) => images,
     None => return Ok(None),
   };
+
   let resolved_tiles = resolve_layers_tiles(
     images,
-    context.style.mask_position.as_ref(),
-    context.style.mask_size.as_ref(),
-    context.style.mask_repeat.as_ref(),
+    context.style.background_position.as_ref(),
+    context.style.background_size.as_ref(),
+    context.style.background_repeat.as_ref(),
     context,
     layout,
   )?;
@@ -194,6 +194,8 @@ fn create_fill_image(
   if resolved_tiles.is_empty() {
     return Ok(None);
   }
+
+  let size = layout.content_box_size();
 
   let mut composed = RgbaImage::new(size.width as u32, size.height as u32);
 
@@ -204,7 +206,10 @@ fn create_fill_image(
           &mut composed,
           (&tile_image).into(),
           Default::default(),
-          Affine::translation(*x as f32, *y as f32),
+          Affine::translation(
+            *x as f32 - layout.border.left - layout.padding.left,
+            *y as f32 - layout.border.top - layout.padding.top,
+          ),
           context.style.image_rendering,
           context.style.filter.as_ref(),
           None,

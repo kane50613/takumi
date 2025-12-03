@@ -15,7 +15,7 @@ use crate::{
   layout::{
     Viewport,
     inline::InlineContentKind,
-    style::{BackgroundImage, CssValue, InheritedStyle, Sides, Style},
+    style::{Affine, BackgroundClip, BackgroundImage, CssValue, InheritedStyle, Sides, Style},
   },
   rendering::{
     BorderProperties, Canvas, RenderContext, SizedShadow, draw_background_layers,
@@ -295,17 +295,55 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
     canvas: &mut Canvas,
     layout: Layout,
   ) -> Result<()> {
-    let radius = BorderProperties::from_context(context, layout.size, layout.border);
+    let mut radius = BorderProperties::from_context(context, layout.size, layout.border);
 
-    canvas.fill_color(
-      layout.size,
-      context
-        .style
-        .background_color
-        .resolve(context.current_color, context.opacity),
-      radius,
-      context.transform,
-    );
+    match context.style.background_clip {
+      BackgroundClip::BorderBox => {
+        radius.inset_by_border_width();
+
+        canvas.fill_color(
+          layout.size,
+          context
+            .style
+            .background_color
+            .resolve(context.current_color, context.opacity),
+          radius,
+          context.transform,
+        );
+      }
+      BackgroundClip::PaddingBox => {
+        radius.inset_by_border_width();
+
+        canvas.fill_color(
+          layout.size,
+          context
+            .style
+            .background_color
+            .resolve(context.current_color, context.opacity),
+          radius,
+          Affine::translation(layout.border.left, layout.border.top) * context.transform,
+        );
+      }
+      BackgroundClip::ContentBox => {
+        radius.inset_by_border_width();
+        radius.expand_by(layout.padding.map(|size| -size));
+
+        canvas.fill_color(
+          layout.size,
+          context
+            .style
+            .background_color
+            .resolve(context.current_color, context.opacity),
+          radius,
+          Affine::translation(
+            layout.padding.left + layout.border.left,
+            layout.padding.top + layout.border.top,
+          ) * context.transform,
+        );
+      }
+      _ => {}
+    }
+
     Ok(())
   }
 
@@ -316,6 +354,10 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
     canvas: &mut Canvas,
     layout: Layout,
   ) -> Result<()> {
+    if context.style.background_clip == BackgroundClip::Text {
+      return Ok(());
+    }
+
     let Some(background_image) = context.style.background_image.as_ref() else {
       return Ok(());
     };

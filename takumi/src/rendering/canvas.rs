@@ -15,7 +15,7 @@ use zeno::{Mask, PathData, Placement, Scratch};
 
 use crate::{
   layout::style::{Affine, Color, Filters, ImageScalingAlgorithm, InheritedStyle, Overflow},
-  rendering::{BorderProperties, RenderContext},
+  rendering::{BorderProperties, RenderContext, resolve_layers_tiles},
 };
 
 #[derive(Clone)]
@@ -148,7 +148,7 @@ impl CanvasConstrain {
     layout: Layout,
     transform: Affine,
     mask_memory: &mut MaskMemory,
-  ) -> CanvasConstrainResult {
+  ) -> crate::Result<CanvasConstrainResult> {
     // Clip path would just clip everything, and behaves like overflow: hidden.
     if let Some(clip_path) = &style.clip_path {
       let (mask, placement) = clip_path.render_mask(context, layout.size, mask_memory);
@@ -157,17 +157,32 @@ impl CanvasConstrain {
       let end_y = placement.top + placement.height as i32;
 
       if end_x < 0 || end_y < 0 {
-        return CanvasConstrainResult::SkipRendering;
+        return Ok(CanvasConstrainResult::SkipRendering);
       }
 
-      return CanvasConstrainResult::Some(CanvasConstrain::Mask {
+      return Ok(CanvasConstrainResult::Some(CanvasConstrain::Mask {
         mask: mask.to_vec(),
         placement,
-      });
+      }));
+    }
+
+    if let Some(mask_image) = &style.mask_image {
+      let tiles = resolve_layers_tiles(
+        mask_image,
+        style.mask_position.as_ref(),
+        style.mask_size.as_ref(),
+        style.mask_repeat.as_ref(),
+        context,
+        layout,
+      )?;
+
+      if tiles.is_empty() {
+        return Ok(CanvasConstrainResult::SkipRendering);
+      }
     }
 
     let Some(inverse_transform) = transform.invert() else {
-      return CanvasConstrainResult::SkipRendering;
+      return Ok(CanvasConstrainResult::SkipRendering);
     };
 
     let overflow = style.resolve_overflows();
@@ -176,13 +191,13 @@ impl CanvasConstrain {
     let clip_y = overflow.y != Overflow::Visible;
 
     if !overflow.should_clip_content() {
-      return CanvasConstrainResult::None;
+      return Ok(CanvasConstrainResult::None);
     }
 
     if (clip_x && layout.content_box_width() < f32::EPSILON)
       || (clip_y && layout.content_box_height() < f32::EPSILON)
     {
-      return CanvasConstrainResult::SkipRendering;
+      return Ok(CanvasConstrainResult::SkipRendering);
     }
 
     let from = Point {
@@ -210,11 +225,11 @@ impl CanvasConstrain {
       },
     };
 
-    CanvasConstrainResult::Some(CanvasConstrain::Overflow {
+    Ok(CanvasConstrainResult::Some(CanvasConstrain::Overflow {
       from,
       to,
       inverse_transform,
-    })
+    }))
   }
 
   pub(crate) fn get_alpha(&self, x: u32, y: u32) -> u8 {
