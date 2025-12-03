@@ -237,7 +237,8 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
       let mut border_radius = border_radius;
       let resolved_spread_radius = shadow
         .spread_radius
-        .resolve_to_px(context, layout.size.width);
+        .resolve_to_px(context, layout.size.width)
+        .max(0.0);
 
       border_radius.expand_by(Sides([resolved_spread_radius; 4]).into());
 

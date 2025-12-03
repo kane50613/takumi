@@ -86,9 +86,6 @@ impl SpacePair<Overflow> {
 /// A pair of values for horizontal and vertical border radii.
 pub type BorderRadiusPair = SpacePair<LengthUnit<false>>;
 
-/// A pair of values for horizontal and vertical border radii in pixels.
-pub type SizedBorderRadiusPair = SpacePair<f32>;
-
 impl BorderRadiusPair {
   pub(crate) fn resolve_to_px(
     self,
