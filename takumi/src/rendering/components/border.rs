@@ -69,20 +69,20 @@ impl BorderProperties {
   /// Expand/shrink all corner radii and adjust radius bounds/offset.
   pub fn expand_by(&mut self, amount: Rect<f32>) {
     // top-left
-    self.radius.0[0].x = (self.radius.0[0].x + amount.top).max(0.0);
-    self.radius.0[0].y = (self.radius.0[0].y + amount.left).max(0.0);
+    self.radius.0[0].x = (self.radius.0[0].x + amount.left).max(0.0);
+    self.radius.0[0].y = (self.radius.0[0].y + amount.top).max(0.0);
 
     // top-right
-    self.radius.0[1].x = (self.radius.0[1].x + amount.top).max(0.0);
-    self.radius.0[1].y = (self.radius.0[1].y + amount.right).max(0.0);
+    self.radius.0[1].x = (self.radius.0[1].x + amount.right).max(0.0);
+    self.radius.0[1].y = (self.radius.0[1].y + amount.top).max(0.0);
 
     // bottom-right
-    self.radius.0[2].x = (self.radius.0[2].x + amount.bottom).max(0.0);
-    self.radius.0[2].y = (self.radius.0[2].y + amount.right).max(0.0);
+    self.radius.0[2].x = (self.radius.0[2].x + amount.right).max(0.0);
+    self.radius.0[2].y = (self.radius.0[2].y + amount.bottom).max(0.0);
 
     // bottom-left
-    self.radius.0[3].x = (self.radius.0[3].x + amount.bottom).max(0.0);
-    self.radius.0[3].y = (self.radius.0[3].y + amount.left).max(0.0);
+    self.radius.0[3].x = (self.radius.0[3].x + amount.left).max(0.0);
+    self.radius.0[3].y = (self.radius.0[3].y + amount.bottom).max(0.0);
   }
 
   /// Shrink radii by average border width to get inner radius path.
