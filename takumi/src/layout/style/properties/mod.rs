@@ -71,7 +71,6 @@ pub use percentage_number::*;
 pub use radial_gradient::*;
 pub use sides::*;
 pub use space_pair::*;
-use taffy::{Layout, Size};
 pub use text_decoration::*;
 pub use text_overflow::*;
 pub use text_shadow::*;
@@ -175,30 +174,6 @@ pub enum BackgroundClip {
   Text,
   /// The background extends to the outside edge of the border area
   BorderArea,
-}
-
-impl BackgroundClip {
-  pub(crate) fn get_size_and_transform(
-    self,
-    layout: Layout,
-    transform: Affine,
-  ) -> (Size<f32>, Affine) {
-    match self {
-      BackgroundClip::BorderBox | BackgroundClip::BorderArea => (layout.size, transform),
-      BackgroundClip::PaddingBox => (
-        layout.size
-          + Size {
-            width: -layout.padding.left - layout.padding.right,
-            height: -layout.padding.top - layout.padding.bottom,
-          },
-        Affine::translation(layout.padding.left, layout.padding.top) * transform,
-      ),
-      BackgroundClip::ContentBox | BackgroundClip::Text => (
-        layout.content_box_size(),
-        Affine::translation(layout.content_box_x(), layout.content_box_y()) * transform,
-      ),
-    }
-  }
 }
 
 impl<'i> FromCss<'i> for BackgroundClip {
