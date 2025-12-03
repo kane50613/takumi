@@ -66,7 +66,11 @@ impl BorderProperties {
     self.radius == ZERO
   }
 
-  /// Expand/shrink all corner radii and adjust radius bounds/offset.
+  /// Expand or shrink corner radii by the specified amounts.
+  ///
+  /// Each corner's x-radius is adjusted by the corresponding horizontal side (left or right),
+  /// and each corner's y-radius is adjusted by the corresponding vertical side (top or bottom).
+  /// Negative values in `amount` will shrink the radii, and the result is clamped to 0.0.
   pub fn expand_by(&mut self, amount: Rect<f32>) {
     // top-left
     self.radius.0[0].x = (self.radius.0[0].x + amount.left).max(0.0);
