@@ -330,6 +330,7 @@ fn fixtures_text_mask_image_gradient_and_emoji() {
             .background_position(Some(BackgroundPositions::from_str("0 0").unwrap()))
             .background_repeat(Some(BackgroundRepeats::from_str("no-repeat").unwrap()))
             .background_clip(BackgroundClip::Text)
+            .color(ColorInput::Value(Color::transparent()))
             .build()
             .unwrap(),
         ),

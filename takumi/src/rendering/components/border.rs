@@ -7,7 +7,8 @@ use zeno::{Command, Fill, PathBuilder};
 use crate::{
   layout::style::{Affine, Color, ColorInput, Sides, SpacePair},
   rendering::{
-    Canvas, CowImage, RenderContext, apply_mask_alpha_to_pixel, mask_index_from_coord, overlay_area,
+    Canvas, CowImage, RenderContext, apply_mask_alpha_to_pixel, blend_pixel, mask_index_from_coord,
+    overlay_area,
   },
 };
 
@@ -286,12 +287,20 @@ impl BorderProperties {
       |x, y| {
         let alpha = mask[mask_index_from_coord(x, y, placement.width)];
 
-        let pixel = fill_image
+        let mut pixel = fill_image
           .as_ref()
-          .map(|image| image.get_pixel(x, y))
+          .map(|image| {
+            let mut pixel = image.get_pixel(x, y);
+
+            blend_pixel(&mut pixel, self.color.into());
+
+            pixel
+          })
           .unwrap_or(self.color.into());
 
-        apply_mask_alpha_to_pixel(pixel, alpha)
+        apply_mask_alpha_to_pixel(&mut pixel, alpha);
+
+        pixel
       },
     );
   }

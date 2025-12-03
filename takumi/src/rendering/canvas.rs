@@ -487,36 +487,41 @@ fn draw_pixel(
       return;
     }
 
-    color = apply_mask_alpha_to_pixel(color, constrain_alpha);
+    apply_mask_alpha_to_pixel(&mut color, constrain_alpha);
   }
 
   // image-rs blend will skip the operation if the source color is fully transparent
   let pixel = canvas.get_pixel_mut(x, y);
 
-  if pixel.0[3] == 0 {
+  blend_pixel(pixel, color);
+}
+
+#[inline(always)]
+pub(crate) fn blend_pixel(bottom: &mut Rgba<u8>, top: Rgba<u8>) {
+  if top.0[3] == 0 {
+    return;
+  }
+
+  if bottom.0[3] == 0 {
     // If the destination pixel is fully transparent, we directly assign the new color.
     // This is a performance optimization: blending with a fully transparent pixel is
     // equivalent to assignment, so we skip the blend operation. This deviates from the
     // standard alpha blending approach for efficiency.
-    *pixel = color;
+    *bottom = top;
   } else {
-    pixel.blend(&color);
+    bottom.blend(&top);
   }
 }
 
 #[inline(always)]
-pub(crate) fn apply_mask_alpha_to_pixel(mut pixel: Rgba<u8>, alpha: u8) -> Rgba<u8> {
+pub(crate) fn apply_mask_alpha_to_pixel(pixel: &mut Rgba<u8>, alpha: u8) {
   match alpha {
     0 => {
       pixel.0[3] = 0;
-
-      pixel
     }
-    255 => pixel,
+    255 => {}
     alpha => {
       pixel.0[3] = ((pixel.0[3] as f32) * (alpha as f32 / 255.0)).round() as u8;
-
-      pixel
     }
   }
 }
@@ -551,7 +556,11 @@ pub(crate) fn draw_mask<C: Into<Rgba<u8>>>(
   overlay_area(canvas, offset, top_size, constrain, |x, y| {
     let alpha = mask[mask_index_from_coord(x, y, placement.width)];
 
-    apply_mask_alpha_to_pixel(color, alpha)
+    let mut pixel = color;
+
+    apply_mask_alpha_to_pixel(&mut pixel, alpha);
+
+    pixel
   });
 }
 
@@ -610,10 +619,11 @@ pub(crate) fn overlay_image(
 
     // Fast path: If only border radius is applied, we can just map the pixel directly
     if is_identity && placement.left >= 0 && placement.top >= 0 {
-      return apply_mask_alpha_to_pixel(
-        image.get_pixel(x + placement.left as u32, y + placement.top as u32),
-        alpha,
-      );
+      let mut pixel = image.get_pixel(x + placement.left as u32, y + placement.top as u32);
+
+      apply_mask_alpha_to_pixel(&mut pixel, alpha);
+
+      return pixel;
     }
 
     let point = inverse.transform_point(Point {
@@ -626,11 +636,13 @@ pub(crate) fn overlay_image(
       _ => interpolate_bilinear(&image, point.x, point.y),
     };
 
-    let Some(pixel) = sampled_pixel else {
+    let Some(mut pixel) = sampled_pixel else {
       return Color::transparent().into();
     };
 
-    apply_mask_alpha_to_pixel(pixel, alpha)
+    apply_mask_alpha_to_pixel(&mut pixel, alpha);
+
+    pixel
   };
 
   overlay_area(

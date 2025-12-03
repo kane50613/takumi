@@ -19,8 +19,8 @@ use crate::{
     },
   },
   rendering::{
-    BorderProperties, Canvas, CanvasConstrain, MaskMemory, apply_mask_alpha_to_pixel, draw_mask,
-    mask_index_from_coord, overlay_area,
+    BorderProperties, Canvas, CanvasConstrain, MaskMemory, apply_mask_alpha_to_pixel, blend_pixel,
+    draw_mask, mask_index_from_coord, overlay_area,
   },
   resources::font::ResolvedGlyph,
 };
@@ -74,7 +74,7 @@ pub(crate) fn draw_glyph(
   canvas: &mut Canvas,
   style: &SizedFontStyle,
   layout: Layout,
-  image_fill: Option<&RgbaImage>,
+  fill_image: Option<&RgbaImage>,
   mut transform: Affine,
   text_style: &parley::Style<InlineBrush>,
   palette: Option<ColorPalette>,
@@ -84,7 +84,7 @@ pub(crate) fn draw_glyph(
     layout.border.top + layout.padding.top + glyph.y,
   ) * transform;
 
-  match (glyph_content, image_fill) {
+  match (glyph_content, fill_image) {
     (ResolvedGlyph::Image(bitmap), Some(image_fill)) => {
       transform =
         Affine::translation(bitmap.placement.left as f32, -bitmap.placement.top as f32) * transform;
@@ -113,11 +113,13 @@ pub(crate) fn draw_glyph(
           let source_x = x + glyph.x as u32;
           let source_y = y + glyph.y as u32 - bitmap.placement.top as u32;
 
-          let Some(pixel) = image_fill.get_pixel_checked(source_x, source_y) else {
+          let Some(mut pixel) = image_fill.get_pixel_checked(source_x, source_y).cloned() else {
             return Color::transparent().into();
           };
 
-          apply_mask_alpha_to_pixel(*pixel, alpha)
+          apply_mask_alpha_to_pixel(&mut pixel, alpha);
+
+          pixel
         },
       );
 
@@ -151,7 +153,7 @@ pub(crate) fn draw_glyph(
         None,
       );
     }
-    (ResolvedGlyph::Outline(outline), Some(image_fill)) => {
+    (ResolvedGlyph::Outline(outline), Some(fill_image)) => {
       // If the transform is not invertible, we can't draw the glyph
       let Some(inverse) = transform.invert() else {
         return Ok(());
@@ -193,15 +195,18 @@ pub(crate) fn draw_glyph(
             };
 
           let sampled_pixel = match style.parent.image_rendering {
-            ImageScalingAlgorithm::Pixelated => interpolate_nearest(image_fill, point.x, point.y),
-            _ => interpolate_bilinear(image_fill, point.x, point.y),
+            ImageScalingAlgorithm::Pixelated => interpolate_nearest(fill_image, point.x, point.y),
+            _ => interpolate_bilinear(fill_image, point.x, point.y),
           };
 
-          let Some(pixel) = sampled_pixel else {
+          let Some(mut pixel) = sampled_pixel else {
             return Color::transparent().into();
           };
 
-          apply_mask_alpha_to_pixel(pixel, alpha)
+          blend_pixel(&mut pixel, text_style.brush.color.into());
+          apply_mask_alpha_to_pixel(&mut pixel, alpha);
+
+          pixel
         },
       );
 
