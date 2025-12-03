@@ -1,5 +1,16 @@
 # takumi
 
+## 0.56.0
+
+### Minor Changes
+
+- 1ac44c4: `mask-image` behaves correctly like a "mask" now instead of overlay image.
+- 1ac44c4: support `background-clip`
+
+### Patch Changes
+
+- c1260a2: `line-clamp` should has ellipsis if overflow
+
 ## 0.55.4
 
 ### Patch Changes
