@@ -173,6 +173,8 @@ impl Breakpoint {
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum TailwindProperty {
+  /// `background-clip` property.
+  BackgroundClip(BackgroundClip),
   /// `box-sizing` property.
   BoxSizing(BoxSizing),
   /// `flex-grow` property.
@@ -491,6 +493,9 @@ impl TailwindProperty {
 
   pub(crate) fn apply(&self, style: &mut Style) {
     match *self {
+      TailwindProperty::BackgroundClip(background_clip) => {
+        style.background_clip = background_clip.into();
+      }
       TailwindProperty::Gap(gap) => {
         style.gap = SpacePair::from_single(gap).into();
       }

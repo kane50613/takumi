@@ -64,11 +64,13 @@ pub enum PropertyParser {
   LineHeight(fn(LineHeight) -> TailwindProperty),
   Flex(fn(Flex) -> TailwindProperty),
   Angle(fn(Angle) -> TailwindProperty),
+  BackgroundClip(fn(BackgroundClip) -> TailwindProperty),
 }
 
 impl PropertyParser {
   pub fn parse(&self, suffix: &str) -> Option<TailwindProperty> {
     match self {
+      Self::BackgroundClip(f) => parse_property(suffix, *f),
       Self::ObjectFit(f) => parse_property(suffix, *f),
       Self::BgPosition(f) => parse_property(suffix, *f),
       Self::BgSize(f) => parse_property(suffix, *f),
@@ -115,6 +117,7 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
     PropertyParser::BgPosition(TailwindProperty::BackgroundPosition),
     PropertyParser::BgSize(TailwindProperty::BackgroundSize),
   ],
+  "bg-clip" => &[PropertyParser::BackgroundClip(TailwindProperty::BackgroundClip)],
   "bg-size" => &[PropertyParser::BgSize(TailwindProperty::BackgroundSize)],
   "bg-position" => &[PropertyParser::BgPosition(TailwindProperty::BackgroundPosition)],
   "w" => &[PropertyParser::LengthAuto(TailwindProperty::Width)],

@@ -194,7 +194,13 @@ impl<'i> FromCss<'i> for BackgroundClip {
 
 impl TailwindPropertyParser for BackgroundClip {
   fn parse_tw(token: &str) -> Option<Self> {
-    Self::from_str(token).ok()
+    match_ignore_ascii_case! {token,
+      "border" => Some(BackgroundClip::BorderBox),
+      "padding" => Some(BackgroundClip::PaddingBox),
+      "content" => Some(BackgroundClip::ContentBox),
+      "text" => Some(BackgroundClip::Text),
+      _ => None,
+    }
   }
 }
 
