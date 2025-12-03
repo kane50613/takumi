@@ -89,7 +89,8 @@ impl BorderProperties {
     self.radius.0[3].y = (self.radius.0[3].y + amount.bottom).max(0.0);
   }
 
-  /// Shrink radii by average border width to get inner radius path.
+  /// Shrink radii by the border width to get inner radius path.
+  /// Each side's border width is applied independently to the corresponding radius components.
   pub fn inset_by_border_width(&mut self) {
     self.expand_by(self.width.map(|size| -size))
   }
