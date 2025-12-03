@@ -69,20 +69,20 @@ impl BorderProperties {
   /// Expand/shrink all corner radii and adjust radius bounds/offset.
   pub fn expand_by(&mut self, amount: Rect<f32>) {
     // top-left
-    self.radius.0[0].x += amount.top;
-    self.radius.0[0].y += amount.left;
+    self.radius.0[0].x = (self.radius.0[0].x + amount.top).max(0.0);
+    self.radius.0[0].y = (self.radius.0[0].y + amount.left).max(0.0);
 
     // top-right
-    self.radius.0[1].x += amount.top;
-    self.radius.0[1].y += amount.right;
+    self.radius.0[1].x = (self.radius.0[1].x + amount.top).max(0.0);
+    self.radius.0[1].y = (self.radius.0[1].y + amount.right).max(0.0);
 
     // bottom-right
-    self.radius.0[2].x += amount.bottom;
-    self.radius.0[2].y += amount.right;
+    self.radius.0[2].x = (self.radius.0[2].x + amount.bottom).max(0.0);
+    self.radius.0[2].y = (self.radius.0[2].y + amount.right).max(0.0);
 
     // bottom-left
-    self.radius.0[3].x += amount.bottom;
-    self.radius.0[3].y += amount.left;
+    self.radius.0[3].x = (self.radius.0[3].x + amount.bottom).max(0.0);
+    self.radius.0[3].y = (self.radius.0[3].y + amount.left).max(0.0);
   }
 
   /// Shrink radii by average border width to get inner radius path.
@@ -103,7 +103,6 @@ impl BorderProperties {
     const KAPPA: f32 = 4.0 / 3.0 * (SQRT_2 - 1.0);
 
     // Calculate scale factor inline (CSS Overlapping Curves)
-    // Note: We use .max(0.0) on the radius access to safely handle inner border negative cases
     let scale = 1.0f32
       .min(
         if self.radius.0[0].x + self.radius.0[1].x > border_box.width {
