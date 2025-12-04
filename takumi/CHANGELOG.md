@@ -1,5 +1,12 @@
 # takumi
 
+## 0.57.1
+
+### Patch Changes
+
+- 61191b2: handles `background-size` for rasterized images
+- 260dbd0: optimize `encode_animated_webp` to reduce allocation
+
 ## 0.57.0
 
 ### Minor Changes
