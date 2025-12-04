@@ -125,13 +125,11 @@ function createStream(component: ReactNode, options?: ImageResponseOptions) {
 
 const contentTypeMapping = {
   webp: "image/webp",
-  avif: "image/avif",
   png: "image/png",
   jpeg: "image/jpeg",
   WebP: "image/webp",
   Jpeg: "image/jpeg",
   Png: "image/png",
-  Avif: "image/avif",
   raw: "application/octet-stream",
 };
 

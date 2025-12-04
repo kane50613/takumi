@@ -70,7 +70,6 @@ let image = render(options).unwrap();
 - `woff`: Enable WOFF font support.
 - `svg`: Enable SVG support.
 - `rayon`: Enable rayon support.
-- `avif`: Enable AVIF support.
 
 ## Credits
 

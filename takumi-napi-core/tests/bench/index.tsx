@@ -68,15 +68,6 @@ summary(() => {
       format: "webp",
     });
   });
-
-  bench("createNode + render (avif)", async () => {
-    const node = await createNode();
-    return renderer.render(node, {
-      width: 1200,
-      height: 630,
-      format: "avif",
-    });
-  });
 });
 
 summary(() => {

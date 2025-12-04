@@ -121,15 +121,6 @@ describe("render", () => {
     expect(result).toBeInstanceOf(Buffer);
   });
 
-  test("avif", async () => {
-    const result = await renderer.render(node, {
-      ...options,
-      format: "avif",
-    });
-
-    expect(result).toBeInstanceOf(Buffer);
-  });
-
   test("png", async () => {
     const result = await renderer.render(node, {
       ...options,

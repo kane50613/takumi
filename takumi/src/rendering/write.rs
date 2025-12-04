@@ -19,10 +19,6 @@ pub enum ImageOutputFormat {
   /// It is useful for images in web contents.
   WebP,
 
-  /// AVIF typically offers better compression than WebP/PNG but requires significant more CPU time.
-  #[cfg(feature = "avif")]
-  Avif,
-
   /// PNG image format, lossless and widely supported, and its the fastest format to encode.
   Png,
 
@@ -35,8 +31,6 @@ impl ImageOutputFormat {
   pub fn content_type(&self) -> &'static str {
     match self {
       ImageOutputFormat::WebP => "image/webp",
-      #[cfg(feature = "avif")]
-      ImageOutputFormat::Avif => "image/avif",
       ImageOutputFormat::Png => "image/png",
       ImageOutputFormat::Jpeg => "image/jpeg",
     }
@@ -47,8 +41,6 @@ impl From<ImageOutputFormat> for ImageFormat {
   fn from(format: ImageOutputFormat) -> Self {
     match format {
       ImageOutputFormat::WebP => Self::WebP,
-      #[cfg(feature = "avif")]
-      ImageOutputFormat::Avif => Self::Avif,
       ImageOutputFormat::Png => Self::Png,
       ImageOutputFormat::Jpeg => Self::Jpeg,
     }
@@ -120,21 +112,6 @@ pub fn write_image<T: Write>(
 
       let encoder = JpegEncoder::new_with_quality(destination, quality.unwrap_or(75));
       encoder.write_image(&rgb, image.width(), image.height(), ExtendedColorType::Rgb8)?;
-    }
-    #[cfg(feature = "avif")]
-    ImageOutputFormat::Avif => {
-      let encoder = image::codecs::avif::AvifEncoder::new_with_speed_quality(
-        destination,
-        10,
-        quality.unwrap_or(75),
-      );
-
-      encoder.write_image(
-        image.as_raw(),
-        image.width(),
-        image.height(),
-        ExtendedColorType::Rgba8,
-      )?;
     }
     ImageOutputFormat::Png => {
       let has_alpha = has_any_alpha_pixel(image);

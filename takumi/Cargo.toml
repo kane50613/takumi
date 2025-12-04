@@ -84,12 +84,11 @@ default-features = false
 features = ["std", "simd"]
 
 [features]
-default = ["woff2", "woff", "svg", "rayon", "avif"]
-avif = ["image/avif"]
+default = ["woff2", "woff", "svg", "rayon"]
 svg = ["dep:resvg"]
 woff2 = ["dep:wuff", "wuff/brotli"]
 woff = ["dep:wuff", "wuff/z"]
-rayon = ["dep:rayon", "image/rayon", "dashmap/rayon", "fast_image_resize/rayon"]
+rayon = ["dep:rayon", "fast_image_resize/rayon"]
 
 [dev-dependencies]
 serde_json = "1"

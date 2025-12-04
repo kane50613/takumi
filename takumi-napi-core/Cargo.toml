@@ -16,7 +16,7 @@ crossbeam-channel = "0.5"
 
 [dependencies.takumi]
 path = "../takumi"
-features = ["woff2", "woff", "svg", "rayon", "avif"]
+features = ["woff2", "woff", "svg", "rayon"]
 default-features = false
 
 [dependencies.napi]
@@ -26,7 +26,6 @@ features = ["napi10", "serde-json"]
 
 [dependencies.napi-derive]
 version = "3"
-features = ["type-def"]
 
 [build-dependencies]
 napi-build = "2"

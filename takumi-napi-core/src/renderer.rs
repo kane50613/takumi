@@ -81,13 +81,10 @@ pub enum AnimationOutputFormat {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
   webp,
-  avif,
   png,
   jpeg,
   /// @deprecated Use lowercase `webp` instead, may be removed in the future
   WebP,
-  /// @deprecated Use lowercase `avif` instead, may be removed in the future
-  Avif,
   /// @deprecated Use lowercase `jpeg` instead, may be removed in the future
   Jpeg,
   /// @deprecated Use lowercase `png` instead, may be removed in the future
@@ -99,7 +96,6 @@ impl From<OutputFormat> for ImageOutputFormat {
   fn from(format: OutputFormat) -> Self {
     match format {
       OutputFormat::WebP | OutputFormat::webp => ImageOutputFormat::WebP,
-      OutputFormat::Avif | OutputFormat::avif => ImageOutputFormat::Avif,
       OutputFormat::Jpeg | OutputFormat::jpeg => ImageOutputFormat::Jpeg,
       OutputFormat::Png | OutputFormat::png => ImageOutputFormat::Png,
       // SAFETY: It's handled in the render task

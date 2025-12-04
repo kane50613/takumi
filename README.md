@@ -15,7 +15,7 @@ You can try out Takumi in [Playground](https://takumi.kane.tw/playground) withou
 - Variable fonts support.
 - COLR font support (e.g. twemoji-colr).
 - WOFF2 font format support.
-- PNG, JPEG, WebP, AVIF output support.
+- PNG, JPEG, WebP output support.
 - WebP, APNG animation rendering support.
 
 ## Goals
