@@ -1,5 +1,11 @@
 # @takumi-rs/core
 
+## 0.57.0
+
+### Minor Changes
+
+- 42572bb: **Drop `avif` format support**
+
 ## 0.56.1
 
 ## 0.56.0

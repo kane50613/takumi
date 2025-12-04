@@ -1,5 +1,15 @@
 # takumi
 
+## 0.57.0
+
+### Minor Changes
+
+- 42572bb: **Drop `avif` format support**
+
+### Patch Changes
+
+- 26173c5: add `create_background_image` fast path for exact one image
+
 ## 0.56.1
 
 ### Patch Changes
