@@ -1,5 +1,13 @@
 # takumi
 
+## 0.56.1
+
+### Patch Changes
+
+- f4d54fa: fix `opacity` should be applied to image as well
+- 1972df9: fix `background-size` css parsing
+- 1972df9: support `background`, `mask` shorthand
+
 ## 0.56.0
 
 ### Minor Changes
