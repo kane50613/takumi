@@ -1,5 +1,11 @@
 # takumi
 
+## 0.57.3
+
+### Patch Changes
+
+- fa2f034: fix COLR layers blending
+
 ## 0.57.2
 
 ### Patch Changes
