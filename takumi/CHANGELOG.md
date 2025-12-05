@@ -1,5 +1,11 @@
 # takumi
 
+## 0.57.2
+
+### Patch Changes
+
+- 695f34a: fix passing opacity to COLR palette
+
 ## 0.57.1
 
 ### Patch Changes
