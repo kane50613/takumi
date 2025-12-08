@@ -2822,9 +2822,9 @@ checksum = "9edde0db4769d2dc68579893f2306b26c6ecfbe0ef499b013d731b7b9247e0b9"
 
 [[package]]
 name = "wuff"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29a267ddde5dc265fb7176bd82ba2c2596c8345be3865f29ba314da5080e7bf1"
+checksum = "ed6cd16afdec653fe088c66b2e5b70fbf1fac5157258f41fa2269ee424382ece"
 dependencies = [
  "arrayvec",
  "brotli-decompressor",
