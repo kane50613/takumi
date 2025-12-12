@@ -44,7 +44,7 @@
     "@react-router/dev": "^7.10.0",
     "@tailwindcss/vite": "^4.1.17",
     "@types/bun": "catalog:",
-    "@types/node": "^24.10.1",
+    "@types/node": "^25.0.0",
     "@types/react": "catalog:",
     "@types/react-dom": "^19.2.3",
     "tailwindcss": "^4.1.17",

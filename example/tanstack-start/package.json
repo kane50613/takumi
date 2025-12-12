@@ -22,7 +22,7 @@
   "devDependencies": {
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.2.0",
-    "@types/node": "^24.10.1",
+    "@types/node": "^25.0.0",
     "@types/react": "catalog:",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
