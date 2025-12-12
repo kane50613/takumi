@@ -79,7 +79,7 @@ jobs:
 
       - name: Upload changed files artifact
         if: steps.check_changes.outputs.changed == 'true'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: changed-files
           path: changed_files.tar.gz
@@ -127,7 +127,7 @@ jobs:
         run: bun run build
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: helpers-dist
           path: takumi-helpers/dist
@@ -213,7 +213,7 @@ jobs:
         run: ${{ matrix.settings.build }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: bindings-${{ matrix.settings.target }}
           path: |
@@ -235,19 +235,19 @@ jobs:
           bun-version: latest
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download N-API bindings artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi-core
 
       - name: Download WASM artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: wasm-package
           path: takumi-wasm/pkg
@@ -260,7 +260,7 @@ jobs:
         run: bun run build
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: image-response-dist
           path: takumi-image-response/dist
@@ -279,25 +279,25 @@ jobs:
           bun-version: latest
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download N-API bindings artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi-core
 
       - name: Download image-response artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: image-response-dist
           path: takumi-image-response/dist
 
       - name: Download WASM artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: wasm-package
           path: takumi-wasm/pkg
@@ -328,7 +328,7 @@ jobs:
         run: bun run build
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: template-dist
           path: takumi-template/dist
@@ -347,19 +347,19 @@ jobs:
           bun-version: latest
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download N-API bindings artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi-core
 
       - name: Download template artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: template-dist
           path: takumi-template/dist
@@ -408,7 +408,7 @@ jobs:
           bun-download-url: ${{ matrix.settings.bun-binary-url }}
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: helpers-dist
           path: takumi-helpers/dist
@@ -417,7 +417,7 @@ jobs:
         run: bun install --frozen-lockfile --filter ./takumi-napi-core
 
       - name: Download N-API bindings artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: bindings-${{ matrix.settings.target }}
           path: takumi-napi-core
@@ -462,7 +462,7 @@ jobs:
         run: bun run build
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: wasm-package
           path: |
@@ -482,13 +482,13 @@ jobs:
           bun-version: latest
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: wasm-package
           path: takumi-wasm/pkg
@@ -537,30 +537,30 @@ jobs:
           components: clippy,rustfmt
       
       - name: Download helpers artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download all napi artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           path: takumi-napi-core/artifacts
 
       - name: Download image-response artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: image-response-dist
           path: takumi-image-response/dist
 
       - name: Download template artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: template-dist
           path: takumi-template/dist
 
       - name: Download WASM artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: wasm-package
           path: takumi-wasm/pkg
@@ -599,43 +599,43 @@ jobs:
           bun-version: latest
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download N-API bindings artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi-core
 
       - name: Download image-response artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: image-response-dist
           path: takumi-image-response/dist
 
       - name: Download template artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: template-dist
           path: takumi-template/dist
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download template artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: template-dist
           path: takumi-template/dist
 
       - name: Download WASM artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: wasm-package
           path: takumi-wasm/pkg
