@@ -201,10 +201,10 @@ fn test_style_grid_template_columns() {
         .width(Px(200.0))
         .height(Px(200.0))
         .display(Display::Grid)
-        .grid_template_columns(Some(GridTemplateComponents(vec![
+        .grid_template_columns(Some(vec![
           GridTemplateComponent::Single(GridTrackSize::Fixed(GridLengthUnit::Unit(Px(50.0)))),
           GridTemplateComponent::Single(GridTrackSize::Fixed(GridLengthUnit::Unit(Px(100.0)))),
-        ])))
+        ]))
         .background_color(ColorInput::Value(Color([0, 0, 255, 255])))
         .build()
         .unwrap(),
@@ -250,10 +250,10 @@ fn test_style_grid_template_rows() {
         .width(Px(200.0))
         .height(Px(200.0))
         .display(Display::Grid)
-        .grid_template_rows(Some(GridTemplateComponents(vec![
+        .grid_template_rows(Some(vec![
           GridTemplateComponent::Single(GridTrackSize::Fixed(GridLengthUnit::Unit(Px(50.0)))),
           GridTemplateComponent::Single(GridTrackSize::Fixed(GridLengthUnit::Unit(Px(100.0)))),
-        ])))
+        ]))
         .background_color(ColorInput::Value(Color([0, 0, 255, 255])))
         .build()
         .unwrap(),

@@ -3,7 +3,7 @@ use cssparser::Parser;
 use crate::layout::style::{FromCss, GridLengthUnit, ParseResult};
 
 /// Represents a grid minmax()
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GridMinMaxSize {
   /// The minimum size of the grid item
   pub min: GridLengthUnit,

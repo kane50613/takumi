@@ -1,6 +1,6 @@
 use cssparser::{Parser, Token};
 
-use crate::layout::style::{FromCss, ParseResult};
+use crate::layout::style::{FromCss, ParseResult, tw::TailwindPropertyParser};
 
 /// Represents a grid placement with serde support
 #[derive(Debug, Clone, PartialEq)]
@@ -33,8 +33,14 @@ impl GridPlacement {
   }
 }
 
+impl TailwindPropertyParser for GridPlacement {
+  fn parse_tw(token: &str) -> Option<Self> {
+    token.parse::<i16>().map(Self::Line).ok()
+  }
+}
+
 /// Represents a grid placement keyword
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub enum GridPlacementKeyword {
   /// Auto placement
   #[default]
@@ -42,10 +48,26 @@ pub enum GridPlacementKeyword {
 }
 
 /// Represents a grid placement span
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GridPlacementSpan {
   /// Span count
   Span(u16),
+}
+
+impl<'i> FromCss<'i> for GridPlacementSpan {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    Ok(
+      input
+        .expect_integer()
+        .map(|n| GridPlacementSpan::Span(n.min(0) as u16))?,
+    )
+  }
+}
+
+impl TailwindPropertyParser for GridPlacementSpan {
+  fn parse_tw(token: &str) -> Option<Self> {
+    token.parse::<u16>().map(Self::Span).ok()
+  }
 }
 
 // Note: GridPlacement has a custom conversion due to its complex nature
@@ -70,9 +92,8 @@ impl<'i> FromCss<'i> for GridPlacement {
       if ident_str.eq_ignore_ascii_case("span") {
         // Next token should be a number or ident
         // Try integer first
-        if let Ok(count) = input.try_parse(Parser::expect_integer) {
-          let count = if count <= 0 { 1 } else { count as u16 };
-          return Ok(GridPlacement::span(count));
+        if let Ok(count) = GridPlacementSpan::from_css(input) {
+          return Ok(GridPlacement::Span(count));
         }
 
         // Try identifier span name (treated as span 1 for named; enum only carries count)

@@ -278,21 +278,25 @@ pub enum TailwindProperty {
   /// `grid-auto-flow` property.
   GridAutoFlow(GridAutoFlow),
   /// `grid-auto-columns` property.
-  GridAutoColumns(TwGridAutoSize),
+  GridAutoColumns(GridTrackSize),
   /// `grid-auto-rows` property.
-  GridAutoRows(TwGridAutoSize),
+  GridAutoRows(GridTrackSize),
   /// `grid-column` property.
-  GridColumn(TwGridSpan),
+  GridColumn(GridLine),
   /// `grid-row` property.
-  GridRow(TwGridSpan),
+  GridRow(GridLine),
+  /// `grid-column: span <number> / span <number>` property.
+  GridColumnSpan(GridPlacementSpan),
+  /// `grid-row: span <number> / span <number>` property.
+  GridRowSpan(GridPlacementSpan),
   /// `grid-column-start` property.
-  GridColumnStart(TwGridPlacement),
+  GridColumnStart(GridPlacement),
   /// `grid-column-end` property.
-  GridColumnEnd(TwGridPlacement),
+  GridColumnEnd(GridPlacement),
   /// `grid-row-start` property.
-  GridRowStart(TwGridPlacement),
+  GridRowStart(GridPlacement),
   /// `grid-row-end` property.
-  GridRowEnd(TwGridPlacement),
+  GridRowEnd(GridPlacement),
   /// `grid-template-columns` property.
   GridTemplateColumns(TwGridTemplate),
   /// `grid-template-rows` property.
@@ -594,7 +598,7 @@ impl TailwindProperty {
         style.max_height = max_height.into();
       }
       TailwindProperty::Shadow(box_shadow) => {
-        style.box_shadow = Some(BoxShadows(smallvec![box_shadow])).into();
+        style.box_shadow = Some(smallvec![box_shadow]).into();
       }
       TailwindProperty::Display(display) => {
         style.display = display.into();
@@ -816,44 +820,44 @@ impl TailwindProperty {
       TailwindProperty::Left(length_unit) => {
         style.left = Some(length_unit).into();
       }
-      TailwindProperty::GridAutoColumns(ref tw_grid_auto_size) => {
-        style.grid_auto_columns = Some(tw_grid_auto_size.0.clone()).into();
+      TailwindProperty::GridAutoColumns(grid_auto_size) => {
+        style.grid_auto_columns = Some(vec![grid_auto_size]).into();
       }
-      TailwindProperty::GridAutoRows(ref tw_grid_auto_size) => {
-        style.grid_auto_rows = Some(tw_grid_auto_size.0.clone()).into();
+      TailwindProperty::GridAutoRows(grid_auto_size) => {
+        style.grid_auto_rows = Some(vec![grid_auto_size]).into();
       }
       TailwindProperty::GridColumn(ref tw_grid_span) => {
-        style.grid_column = Some(tw_grid_span.0.clone()).into();
+        style.grid_column = Some(tw_grid_span.clone()).into();
       }
       TailwindProperty::GridRow(ref tw_grid_span) => {
-        style.grid_row = Some(tw_grid_span.0.clone()).into();
+        style.grid_row = Some(tw_grid_span.clone()).into();
       }
       TailwindProperty::GridColumnStart(ref tw_grid_placement) => {
         if let CssValue::Value(Some(ref mut existing_grid_column)) = style.grid_column {
-          existing_grid_column.start = tw_grid_placement.0.start.clone();
+          existing_grid_column.start = Some(tw_grid_placement.clone());
         } else {
-          style.grid_column = Some(tw_grid_placement.0.clone()).into();
+          style.grid_column = Some(GridLine::start(tw_grid_placement.clone())).into();
         }
       }
       TailwindProperty::GridColumnEnd(ref tw_grid_placement) => {
         if let CssValue::Value(Some(ref mut existing_grid_column)) = style.grid_column {
-          existing_grid_column.end = tw_grid_placement.0.end.clone();
+          existing_grid_column.end = Some(tw_grid_placement.clone());
         } else {
-          style.grid_column = Some(tw_grid_placement.0.clone()).into();
+          style.grid_column = Some(GridLine::end(tw_grid_placement.clone())).into();
         }
       }
       TailwindProperty::GridRowStart(ref tw_grid_placement) => {
         if let CssValue::Value(Some(ref mut existing_grid_row)) = style.grid_row {
-          existing_grid_row.start = tw_grid_placement.0.start.clone();
+          existing_grid_row.start = Some(tw_grid_placement.clone());
         } else {
-          style.grid_row = Some(tw_grid_placement.0.clone()).into();
+          style.grid_row = Some(GridLine::start(tw_grid_placement.clone())).into();
         }
       }
       TailwindProperty::GridRowEnd(ref tw_grid_placement) => {
         if let CssValue::Value(Some(ref mut existing_grid_row)) = style.grid_row {
-          existing_grid_row.end = tw_grid_placement.0.end.clone();
+          existing_grid_row.end = Some(tw_grid_placement.clone());
         } else {
-          style.grid_row = Some(tw_grid_placement.0.clone()).into();
+          style.grid_row = Some(GridLine::end(tw_grid_placement.clone())).into();
         }
       }
       TailwindProperty::GridTemplateColumns(ref tw_grid_template) => {
@@ -867,6 +871,12 @@ impl TailwindProperty {
       }
       TailwindProperty::GridAutoFlow(grid_auto_flow) => {
         style.grid_auto_flow = Some(grid_auto_flow).into();
+      }
+      TailwindProperty::GridColumnSpan(grid_placement_span) => {
+        style.grid_column = Some(GridLine::span(grid_placement_span)).into();
+      }
+      TailwindProperty::GridRowSpan(grid_placement_span) => {
+        style.grid_row = Some(GridLine::span(grid_placement_span)).into();
       }
     }
   }
@@ -984,6 +994,14 @@ mod tests {
       Some(TailwindProperty::BorderXWidth(TwBorderWidth(
         LengthUnit::Px(4.0)
       )))
+    );
+  }
+
+  #[test]
+  fn test_parse_col_start() {
+    assert_eq!(
+      TailwindProperty::parse("col-end-1"),
+      Some(TailwindProperty::GridColumnEnd(GridPlacement::Line(1)))
     );
   }
 

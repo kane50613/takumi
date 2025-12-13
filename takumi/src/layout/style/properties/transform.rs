@@ -195,37 +195,16 @@ impl Affine {
       y: (self.b * self.x - self.a * self.y) * inv_det,
     })
   }
-}
 
-impl From<Affine> for zeno::Transform {
-  fn from(affine: Affine) -> Self {
-    zeno::Transform::new(affine.a, affine.b, affine.c, affine.d, affine.x, affine.y)
-  }
-}
-
-impl<'i> FromCss<'i> for Affine {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let a = input.expect_number()?;
-    let b = input.expect_number()?;
-    let c = input.expect_number()?;
-    let d = input.expect_number()?;
-    let x = input.expect_number()?;
-    let y = input.expect_number()?;
-
-    Ok(Affine { a, b, c, d, x, y })
-  }
-}
-
-/// A collection of transform operations that can be applied together
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct Transforms(pub SmallVec<[Transform; 4]>);
-
-impl Transforms {
   /// Converts the transforms to a [`Affine`] instance
-  pub(crate) fn to_affine(&self, context: &RenderContext, border_box: Size<f32>) -> Affine {
+  pub(crate) fn from_transforms<'a, I: Iterator<Item = &'a Transform>>(
+    transforms: I,
+    context: &RenderContext,
+    border_box: Size<f32>,
+  ) -> Affine {
     let mut instance = Affine::IDENTITY;
 
-    for transform in self.0.iter() {
+    for transform in transforms {
       match *transform {
         Transform::Translate(x_length, y_length) => {
           instance *= Affine::translation(
@@ -252,6 +231,28 @@ impl Transforms {
   }
 }
 
+impl From<Affine> for zeno::Transform {
+  fn from(affine: Affine) -> Self {
+    zeno::Transform::new(affine.a, affine.b, affine.c, affine.d, affine.x, affine.y)
+  }
+}
+
+impl<'i> FromCss<'i> for Affine {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let a = input.expect_number()?;
+    let b = input.expect_number()?;
+    let c = input.expect_number()?;
+    let d = input.expect_number()?;
+    let x = input.expect_number()?;
+    let y = input.expect_number()?;
+
+    Ok(Affine { a, b, c, d, x, y })
+  }
+}
+
+/// A collection of transform operations that can be applied together
+pub type Transforms = SmallVec<[Transform; 4]>;
+
 impl<'i> FromCss<'i> for Transforms {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let mut transforms = SmallVec::new();
@@ -261,7 +262,7 @@ impl<'i> FromCss<'i> for Transforms {
       transforms.push(transform);
     }
 
-    Ok(Transforms(transforms))
+    Ok(transforms)
   }
 }
 

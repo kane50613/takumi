@@ -14,7 +14,7 @@ pub enum FrLengthUnit {
 }
 
 /// Represents a grid track sizing function with serde support
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GridLengthUnit {
   /// A fraction of the available space
   Fr(f32),

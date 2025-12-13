@@ -1,6 +1,6 @@
 use cssparser::Parser;
 
-use crate::layout::style::{FromCss, ParseResult};
+use crate::layout::style::{FromCss, GridPlacementSpan, ParseResult, tw::TailwindPropertyParser};
 
 use super::GridPlacement;
 
@@ -11,6 +11,40 @@ pub struct GridLine {
   pub start: Option<GridPlacement>,
   /// The end line placement
   pub end: Option<GridPlacement>,
+}
+
+impl GridLine {
+  /// Create a grid line that spans the entire grid
+  pub const fn full() -> Self {
+    Self {
+      start: Some(GridPlacement::Line(1)),
+      end: Some(GridPlacement::Line(-1)),
+    }
+  }
+
+  /// Create a grid line with a span placement
+  pub const fn span(span: GridPlacementSpan) -> Self {
+    Self {
+      start: Some(GridPlacement::Span(span)),
+      end: Some(GridPlacement::Span(span)),
+    }
+  }
+
+  /// Create a grid line with only a start placement
+  pub const fn start(start: GridPlacement) -> Self {
+    Self {
+      start: Some(start),
+      end: None,
+    }
+  }
+
+  /// Create a grid line with only an end placement
+  pub const fn end(end: GridPlacement) -> Self {
+    Self {
+      start: None,
+      end: Some(end),
+    }
+  }
 }
 
 impl From<GridLine> for taffy::Line<taffy::GridPlacement> {
@@ -29,7 +63,7 @@ impl<'i> FromCss<'i> for GridLine {
 
     // Optional delimiter '/'
     let second = if input.try_parse(|i| i.expect_delim('/')).is_ok() {
-      GridPlacement::from_css(input).ok()
+      Some(GridPlacement::from_css(input)?)
     } else {
       None
     };
@@ -41,6 +75,17 @@ impl<'i> FromCss<'i> for GridLine {
     Ok(GridLine {
       start: first,
       end: second,
+    })
+  }
+}
+
+impl TailwindPropertyParser for GridLine {
+  fn parse_tw(suffix: &str) -> Option<Self> {
+    let number = suffix.parse::<i16>().ok()?;
+
+    Some(GridLine {
+      start: Some(GridPlacement::Line(number)),
+      end: None,
     })
   }
 }

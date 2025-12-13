@@ -152,14 +152,14 @@ fn test_style_box_shadow() {
             .width(Px(100.0))
             .height(Px(100.0))
             .background_color(ColorInput::Value(Color([255, 0, 0, 255])))
-            .box_shadow(Some(BoxShadows(smallvec![BoxShadow {
+            .box_shadow(Some(smallvec![BoxShadow {
               color: ColorInput::Value(Color([0, 0, 0, 128])),
               offset_x: Px(5.0),
               offset_y: Px(5.0),
               blur_radius: Px(10.0),
               spread_radius: Px(0.0),
               inset: false,
-            }])))
+            }]))
             .build()
             .unwrap(),
         ),
@@ -193,14 +193,14 @@ fn test_style_box_shadow_inset() {
             .height(Px(80.0))
             .background_color(ColorInput::Value(Color::white())) // White child for inset visibility
             .border_radius(BorderRadius(Sides([SpacePair::from_single(Px(16.0)); 4])))
-            .box_shadow(Some(BoxShadows(smallvec![BoxShadow {
+            .box_shadow(Some(smallvec![BoxShadow {
               color: ColorInput::Value(Color([0, 0, 0, 153])),
               offset_x: Px(4.0),
               offset_y: Px(6.0),
               blur_radius: Px(18.0),
               spread_radius: Px(8.0),
               inset: true,
-            }])))
+            }]))
             .build()
             .unwrap(),
         ),

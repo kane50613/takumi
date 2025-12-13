@@ -247,7 +247,7 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
 
     let border_radius = BorderProperties::from_context(context, layout.size, layout.border);
 
-    for shadow in box_shadow.0.iter() {
+    for shadow in box_shadow.iter() {
       if shadow.inset {
         continue;
       }
@@ -296,7 +296,7 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
     if let Some(box_shadow) = context.style.box_shadow.as_ref() {
       let border_radius = BorderProperties::from_context(context, layout.size, layout.border);
 
-      for shadow in box_shadow.0.iter() {
+      for shadow in box_shadow.iter() {
         if !shadow.inset {
           continue;
         }

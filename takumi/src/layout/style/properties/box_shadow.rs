@@ -29,8 +29,7 @@ pub struct BoxShadow {
 }
 
 /// Represents a collection of box shadows, have custom `FromCss` implementation for comma-separated values.
-#[derive(Debug, Clone, PartialEq)]
-pub struct BoxShadows(pub SmallVec<[BoxShadow; 4]>);
+pub type BoxShadows = SmallVec<[BoxShadow; 4]>;
 
 impl<'i> FromCss<'i> for BoxShadows {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
@@ -49,7 +48,7 @@ impl<'i> FromCss<'i> for BoxShadows {
       }
     }
 
-    Ok(BoxShadows(shadows))
+    Ok(shadows)
   }
 }
 

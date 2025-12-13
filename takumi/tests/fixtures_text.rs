@@ -370,12 +370,12 @@ fn fixtures_text_stroke_black_red() {
 #[test]
 fn fixtures_text_shadow() {
   // #ffcc00 1px 0 10px
-  let shadows = TextShadows(smallvec![TextShadow {
+  let shadows = smallvec![TextShadow {
     offset_x: Px(1.0),
     offset_y: Px(0.0),
     blur_radius: Px(10.0),
     color: ColorInput::Value(Color([255, 204, 0, 255])),
-  }]);
+  }];
 
   let text = TextNode {
     tw: None,
@@ -396,12 +396,12 @@ fn fixtures_text_shadow() {
 #[test]
 fn fixtures_text_shadow_no_blur_radius() {
   // 5px 5px #558abb
-  let shadows = TextShadows(smallvec![TextShadow {
+  let shadows = smallvec![TextShadow {
     offset_x: Px(5.0),
     offset_y: Px(5.0),
     blur_radius: Px(0.0),
     color: ColorInput::Value(Color([85, 138, 187, 255])),
-  }]);
+  }];
 
   let text = TextNode {
     tw: None,

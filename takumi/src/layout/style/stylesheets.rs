@@ -202,18 +202,16 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, InlineBrush> {
       line_height: style.line_height,
       font_weight: style.parent.font_weight.into(),
       font_style: style.parent.font_style.into(),
-      font_variations: style
-        .parent
-        .font_variation_settings
-        .as_ref()
-        .map(|var| FontSettings::List(Cow::Borrowed(&var.0)))
-        .unwrap_or(FontSettings::List(Cow::Borrowed(&[]))),
-      font_features: style
-        .parent
-        .font_feature_settings
-        .as_ref()
-        .map(|var| FontSettings::List(Cow::Borrowed(&var.0)))
-        .unwrap_or(FontSettings::List(Cow::Borrowed(&[]))),
+      font_variations: FontSettings::List(Cow::Borrowed(
+        style
+          .parent
+          .font_variation_settings
+          .as_deref()
+          .unwrap_or(&[]),
+      )),
+      font_features: FontSettings::List(Cow::Borrowed(
+        style.parent.font_feature_settings.as_deref().unwrap_or(&[]),
+      )),
       font_stack: style
         .parent
         .font_family
@@ -339,7 +337,7 @@ impl InheritedStyle {
     let mut pending_line_names: Vec<String> = Vec::new();
 
     if let Some(list) = components {
-      for comp in list.0.iter() {
+      for comp in list.iter() {
         match comp {
           GridTemplateComponent::LineNames(names) => {
             if !names.is_empty() {
@@ -533,7 +531,6 @@ impl InheritedStyle {
         .map(|spacing| spacing.resolve_to_px(context, context.font_size)),
       text_shadow: self.text_shadow.as_ref().map(|shadows| {
         shadows
-          .0
           .iter()
           .map(|shadow| {
             SizedShadow::from_text_shadow(*shadow, context, Size::from_length(context.font_size))
@@ -612,10 +609,10 @@ impl InheritedStyle {
         height: self.max_height.resolve_to_dimension(context),
       },
       grid_auto_columns: self.grid_auto_columns.as_ref().map_or_else(Vec::new, |v| {
-        v.0.iter().map(|s| s.to_min_max(context)).collect()
+        v.iter().map(|s| s.to_min_max(context)).collect()
       }),
       grid_auto_rows: self.grid_auto_rows.as_ref().map_or_else(Vec::new, |v| {
-        v.0.iter().map(|s| s.to_min_max(context)).collect()
+        v.iter().map(|s| s.to_min_max(context)).collect()
       }),
       grid_auto_flow: self.grid_auto_flow.unwrap_or_default().into(),
       grid_column: self

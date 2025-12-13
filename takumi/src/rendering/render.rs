@@ -104,7 +104,7 @@ fn create_transform(
 
   // https://github.com/servo/servo/blob/9dfd6990ba381cbb7b7f9faa63d3425656ceac0a/components/layout/display_list/stacking_context.rs#L1717-L1720
   if let Some(node_transform) = &style.transform {
-    transform *= node_transform.to_affine(context, border_box);
+    transform *= Affine::from_transforms(node_transform.iter(), context, border_box);
   }
 
   if let Some(rotate) = style.rotate {

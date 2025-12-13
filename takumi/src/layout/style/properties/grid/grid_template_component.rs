@@ -8,8 +8,7 @@ use super::{GridRepeatTrack, GridRepetitionCount, GridTrackSize};
 ///
 /// This exists to provide a distinct type for template component lists while
 /// preserving JSON compatibility (serialized as a plain array) and clean TS types.
-#[derive(Debug, Clone, PartialEq)]
-pub struct GridTemplateComponents(pub Vec<GridTemplateComponent>);
+pub type GridTemplateComponents = Vec<GridTemplateComponent>;
 
 /// Represents a track sizing function or a list of line names between tracks
 #[derive(Debug, Clone, PartialEq)]
@@ -109,7 +108,7 @@ impl<'i> FromCss<'i> for GridTemplateComponents {
     while let Ok(component) = GridTemplateComponent::from_css(input) {
       components.push(component);
     }
-    Ok(GridTemplateComponents(components))
+    Ok(components)
   }
 }
 

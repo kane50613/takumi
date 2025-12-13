@@ -33,7 +33,7 @@ fn draw_glyph_run(
 
   // decoration underline should not overlap with the glyph descent part,
   // as a temporary workaround, we draw the decoration under the glyph.
-  if decoration_line.has(TextDecorationLine::Underline) {
+  if decoration_line.contains(&TextDecorationLine::Underline) {
     draw_decoration(
       canvas,
       glyph_run,
@@ -75,7 +75,7 @@ fn draw_glyph_run(
     }
   }
 
-  if decoration_line.has(TextDecorationLine::LineThrough) {
+  if decoration_line.contains(&TextDecorationLine::LineThrough) {
     let size = glyph_run.run().font_size() / 18.0;
     let offset = glyph_run.baseline() - metrics.strikethrough_offset;
 
@@ -90,7 +90,7 @@ fn draw_glyph_run(
     );
   }
 
-  if decoration_line.has(TextDecorationLine::Overline) {
+  if decoration_line.contains(&TextDecorationLine::Overline) {
     draw_decoration(
       canvas,
       glyph_run,

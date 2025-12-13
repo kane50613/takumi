@@ -19,8 +19,7 @@ pub struct TextShadow {
 }
 
 /// Represents a collection of text shadows; has custom `FromCss` implementation for comma-separated values.
-#[derive(Debug, Clone, PartialEq)]
-pub struct TextShadows(pub SmallVec<[TextShadow; 4]>);
+pub type TextShadows = SmallVec<[TextShadow; 4]>;
 
 impl<'i> FromCss<'i> for TextShadows {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
@@ -39,7 +38,7 @@ impl<'i> FromCss<'i> for TextShadows {
       }
     }
 
-    Ok(TextShadows(shadows))
+    Ok(shadows)
   }
 }
 
@@ -118,12 +117,12 @@ mod tests {
   fn test_parse_text_shadow_no_blur_radius() {
     assert_eq!(
       TextShadows::from_str("5px 5px #558abb"),
-      Ok(TextShadows(smallvec::smallvec![TextShadow {
+      Ok(smallvec::smallvec![TextShadow {
         offset_x: Px(5.0),
         offset_y: Px(5.0),
         blur_radius: Px(0.0),
         color: Color([85, 138, 187, 255]).into(),
-      }]))
+      }])
     );
   }
 
@@ -131,7 +130,7 @@ mod tests {
   fn test_parse_text_shadow_multiple_values() {
     assert_eq!(
       TextShadows::from_str("5px 5px #558abb, 10px 10px #558abb"),
-      Ok(TextShadows(smallvec::smallvec![
+      Ok(smallvec::smallvec![
         TextShadow {
           offset_x: Px(5.0),
           offset_y: Px(5.0),
@@ -144,7 +143,7 @@ mod tests {
           blur_radius: Px(0.0),
           color: Color([85, 138, 187, 255]).into(),
         }
-      ]))
+      ])
     );
   }
 }

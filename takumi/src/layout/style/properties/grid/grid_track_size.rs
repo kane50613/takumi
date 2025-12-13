@@ -1,14 +1,15 @@
-use cssparser::Parser;
+use cssparser::{Parser, match_ignore_ascii_case};
 use taffy::{MaxTrackSizingFunction, MinTrackSizingFunction, TrackSizingFunction};
 
 use crate::{
-  layout::style::{FromCss, GridLengthUnit, GridMinMaxSize, ParseResult},
+  layout::style::{
+    FromCss, GridLengthUnit, GridMinMaxSize, LengthUnit, ParseResult, tw::TailwindPropertyParser,
+  },
   rendering::RenderContext,
 };
 
-/// A wrapper around a list of `GridTrackSize` that can also be parsed from a CSS string.
-#[derive(Debug, Clone, PartialEq)]
-pub struct GridTrackSizes(pub Vec<GridTrackSize>);
+/// A list of `GridTrackSize`
+pub type GridTrackSizes = Vec<GridTrackSize>;
 
 impl<'i> FromCss<'i> for GridTrackSizes {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
@@ -17,12 +18,12 @@ impl<'i> FromCss<'i> for GridTrackSizes {
       components.push(size);
     }
 
-    Ok(GridTrackSizes(components))
+    Ok(components)
   }
 }
 
 /// Represents a grid track size
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GridTrackSize {
   /// A minmax() track size
   MinMax(GridMinMaxSize),
@@ -54,6 +55,19 @@ impl GridTrackSize {
         }
       },
     }
+  }
+}
+
+impl TailwindPropertyParser for GridTrackSize {
+  fn parse_tw(token: &str) -> Option<Self> {
+    let track_size = match_ignore_ascii_case! {token,
+      "auto" => GridTrackSize::Fixed(GridLengthUnit::Unit(LengthUnit::Auto)),
+      "min" => GridTrackSize::Fixed(GridLengthUnit::Unit(LengthUnit::Px(0.0))),
+      "max" => GridTrackSize::Fixed(GridLengthUnit::Fr(1.0)),
+      "fr" => GridTrackSize::Fixed(GridLengthUnit::Fr(1.0)),
+      _ => return None,
+    };
+    Some(track_size)
   }
 }
 
