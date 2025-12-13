@@ -834,28 +834,28 @@ impl TailwindProperty {
       }
       TailwindProperty::GridColumnStart(ref tw_grid_placement) => {
         if let CssValue::Value(Some(ref mut existing_grid_column)) = style.grid_column {
-          existing_grid_column.start = Some(tw_grid_placement.clone());
+          existing_grid_column.start = tw_grid_placement.clone();
         } else {
           style.grid_column = Some(GridLine::start(tw_grid_placement.clone())).into();
         }
       }
       TailwindProperty::GridColumnEnd(ref tw_grid_placement) => {
         if let CssValue::Value(Some(ref mut existing_grid_column)) = style.grid_column {
-          existing_grid_column.end = Some(tw_grid_placement.clone());
+          existing_grid_column.end = tw_grid_placement.clone();
         } else {
           style.grid_column = Some(GridLine::end(tw_grid_placement.clone())).into();
         }
       }
       TailwindProperty::GridRowStart(ref tw_grid_placement) => {
         if let CssValue::Value(Some(ref mut existing_grid_row)) = style.grid_row {
-          existing_grid_row.start = Some(tw_grid_placement.clone());
+          existing_grid_row.start = tw_grid_placement.clone();
         } else {
           style.grid_row = Some(GridLine::start(tw_grid_placement.clone())).into();
         }
       }
       TailwindProperty::GridRowEnd(ref tw_grid_placement) => {
         if let CssValue::Value(Some(ref mut existing_grid_row)) = style.grid_row {
-          existing_grid_row.end = Some(tw_grid_placement.clone());
+          existing_grid_row.end = tw_grid_placement.clone();
         } else {
           style.grid_row = Some(GridLine::end(tw_grid_placement.clone())).into();
         }
@@ -998,7 +998,7 @@ mod tests {
   }
 
   #[test]
-  fn test_parse_col_start() {
+  fn test_parse_col_end() {
     assert_eq!(
       TailwindProperty::parse("col-end-1"),
       Some(TailwindProperty::GridColumnEnd(GridPlacement::Line(1)))

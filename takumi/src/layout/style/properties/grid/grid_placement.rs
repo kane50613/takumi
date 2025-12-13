@@ -59,7 +59,7 @@ impl<'i> FromCss<'i> for GridPlacementSpan {
     Ok(
       input
         .expect_integer()
-        .map(|n| GridPlacementSpan::Span(n.min(0) as u16))?,
+        .map(|n| GridPlacementSpan::Span(n.max(1) as u16))?,
     )
   }
 }
@@ -85,15 +85,15 @@ impl From<GridPlacement> for taffy::GridPlacement {
 impl<'i> FromCss<'i> for GridPlacement {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     if let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
-      let ident_str = ident.as_ref();
-      if ident_str.eq_ignore_ascii_case("auto") {
+      if ident.eq_ignore_ascii_case("auto") {
         return Ok(GridPlacement::auto());
       }
-      if ident_str.eq_ignore_ascii_case("span") {
+
+      if ident.eq_ignore_ascii_case("span") {
         // Next token should be a number or ident
         // Try integer first
-        if let Ok(count) = GridPlacementSpan::from_css(input) {
-          return Ok(GridPlacement::Span(count));
+        if let Ok(span) = input.try_parse(GridPlacementSpan::from_css) {
+          return Ok(GridPlacement::Span(span));
         }
 
         // Try identifier span name (treated as span 1 for named; enum only carries count)
@@ -106,7 +106,7 @@ impl<'i> FromCss<'i> for GridPlacement {
       }
 
       // Any other ident is a named line
-      return Ok(GridPlacement::Named(ident_str.to_owned()));
+      return Ok(GridPlacement::Named(ident.to_string()));
     }
 
     // Try a line index (number, may be negative)

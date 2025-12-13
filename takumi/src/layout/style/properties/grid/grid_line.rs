@@ -8,41 +8,41 @@ use super::GridPlacement;
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct GridLine {
   /// The start line placement
-  pub start: Option<GridPlacement>,
+  pub start: GridPlacement,
   /// The end line placement
-  pub end: Option<GridPlacement>,
+  pub end: GridPlacement,
 }
 
 impl GridLine {
   /// Create a grid line that spans the entire grid
   pub const fn full() -> Self {
     Self {
-      start: Some(GridPlacement::Line(1)),
-      end: Some(GridPlacement::Line(-1)),
+      start: GridPlacement::Line(1),
+      end: GridPlacement::Line(-1),
     }
   }
 
   /// Create a grid line with a span placement
   pub const fn span(span: GridPlacementSpan) -> Self {
     Self {
-      start: Some(GridPlacement::Span(span)),
-      end: Some(GridPlacement::Span(span)),
+      start: GridPlacement::Span(span),
+      end: GridPlacement::Span(span),
     }
   }
 
   /// Create a grid line with only a start placement
   pub const fn start(start: GridPlacement) -> Self {
     Self {
-      start: Some(start),
-      end: None,
+      start,
+      end: GridPlacement::auto(),
     }
   }
 
   /// Create a grid line with only an end placement
   pub const fn end(end: GridPlacement) -> Self {
     Self {
-      start: None,
-      end: Some(end),
+      start: GridPlacement::auto(),
+      end,
     }
   }
 }
@@ -50,8 +50,8 @@ impl GridLine {
 impl From<GridLine> for taffy::Line<taffy::GridPlacement> {
   fn from(line: GridLine) -> Self {
     Self {
-      start: line.start.unwrap_or_default().into(),
-      end: line.end.unwrap_or_default().into(),
+      start: line.start.into(),
+      end: line.end.into(),
     }
   }
 }
@@ -59,7 +59,7 @@ impl From<GridLine> for taffy::Line<taffy::GridPlacement> {
 impl<'i> FromCss<'i> for GridLine {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     // First placement is required
-    let first = GridPlacement::from_css(input).ok();
+    let first = GridPlacement::from_css(input)?;
 
     // Optional delimiter '/'
     let second = if input.try_parse(|i| i.expect_delim('/')).is_ok() {
@@ -68,13 +68,9 @@ impl<'i> FromCss<'i> for GridLine {
       None
     };
 
-    if first.is_none() && second.is_none() {
-      return Err(input.new_error_for_next_token());
-    }
-
     Ok(GridLine {
       start: first,
-      end: second,
+      end: second.unwrap_or_default(),
     })
   }
 }
@@ -84,8 +80,8 @@ impl TailwindPropertyParser for GridLine {
     let number = suffix.parse::<i16>().ok()?;
 
     Some(GridLine {
-      start: Some(GridPlacement::Line(number)),
-      end: None,
+      start: GridPlacement::Line(number),
+      end: GridPlacement::auto(),
     })
   }
 }
@@ -99,8 +95,8 @@ mod tests {
     assert_eq!(
       GridLine::from_str("span 2 / 3"),
       Ok(GridLine {
-        start: Some(GridPlacement::span(2)),
-        end: Some(GridPlacement::Line(3)),
+        start: GridPlacement::span(2),
+        end: GridPlacement::Line(3),
       })
     );
   }
