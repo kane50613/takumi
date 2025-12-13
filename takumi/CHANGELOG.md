@@ -1,5 +1,13 @@
 # takumi
 
+## 0.57.4
+
+### Patch Changes
+
+- a8ebbba: remove redundant style property wrapper
+- a8ebbba: fix `matrix()` function parsing
+- a8ebbba: support `col`, `row` tailwind grid properties
+
 ## 0.57.3
 
 ### Patch Changes
