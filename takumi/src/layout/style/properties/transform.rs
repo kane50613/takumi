@@ -240,10 +240,15 @@ impl From<Affine> for zeno::Transform {
 impl<'i> FromCss<'i> for Affine {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let a = input.expect_number()?;
+    input.expect_comma()?;
     let b = input.expect_number()?;
+    input.expect_comma()?;
     let c = input.expect_number()?;
+    input.expect_comma()?;
     let d = input.expect_number()?;
+    input.expect_comma()?;
     let x = input.expect_number()?;
+    input.expect_comma()?;
     let y = input.expect_number()?;
 
     Ok(Affine { a, b, c, d, x, y })
