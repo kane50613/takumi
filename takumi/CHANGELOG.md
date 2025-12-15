@@ -1,5 +1,11 @@
 # takumi
 
+## 0.57.5
+
+### Patch Changes
+
+- 9bf3333: disable font hinting, apply normalized coordinates to glyph scaler
+
 ## 0.57.4
 
 ### Patch Changes
