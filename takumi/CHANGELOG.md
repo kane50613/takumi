@@ -1,5 +1,11 @@
 # takumi
 
+## 0.57.6
+
+### Patch Changes
+
+- 68e8fc2: fix inline style order should be greater than tailwind styles
+
 ## 0.57.5
 
 ### Patch Changes
