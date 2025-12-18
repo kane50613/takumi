@@ -1,5 +1,19 @@
 # @takumi-rs/image-response
 
+## 0.58.0
+
+### Minor Changes
+
+- 3bd63df: add `defaultStyles` option to opt-out from default styles #343
+
+### Patch Changes
+
+- Updated dependencies [0deafbd]
+- Updated dependencies [3bd63df]
+  - @takumi-rs/helpers@0.58.0
+  - @takumi-rs/core@0.58.0
+  - @takumi-rs/wasm@0.58.0
+
 ## 0.57.6
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # takumi
 
+## 0.58.0
+
+### Minor Changes
+
+- 0deafbd: decouple base Chromium styles (or customized from `defaultStylePresets`) from `style` field to independent `preset` field.
+
 ## 0.57.6
 
 ### Patch Changes

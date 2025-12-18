@@ -1,5 +1,12 @@
 # @takumi-rs/helpers
 
+## 0.58.0
+
+### Minor Changes
+
+- 0deafbd: decouple base Chromium styles (or customized from `defaultStylePresets`) from `style` field to independent `preset` field.
+- 3bd63df: add `defaultStyles` option to opt-out from default styles #343
+
 ## 0.57.6
 
 ## 0.57.5
