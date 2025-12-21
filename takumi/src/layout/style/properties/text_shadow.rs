@@ -3,7 +3,7 @@ use std::{borrow::Cow, fmt::Debug};
 use cssparser::{BasicParseErrorKind, ParseError, Parser};
 use smallvec::SmallVec;
 
-use crate::layout::style::{Color, ColorInput, FromCss, LengthUnit, ParseResult};
+use crate::layout::style::{ColorInput, FromCss, LengthUnit, ParseResult};
 
 /// Represents a text shadow with all its properties.
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -98,8 +98,8 @@ impl<'i> FromCss<'i> for TextShadow {
 
     // Construct the TextShadow with parsed values or defaults
     Ok(TextShadow {
-      // Use parsed color or default to transparent
-      color: color.unwrap_or(ColorInput::Value(Color::transparent())),
+      // Use parsed color or default to currentColor per CSS spec
+      color: color.unwrap_or(ColorInput::CurrentColor),
       offset_x: lengths.0,
       offset_y: lengths.1,
       blur_radius: lengths.2,
@@ -109,7 +109,7 @@ impl<'i> FromCss<'i> for TextShadow {
 
 #[cfg(test)]
 mod tests {
-  use crate::layout::style::LengthUnit::Px;
+  use crate::layout::style::{Color, LengthUnit::Px};
 
   use super::*;
 

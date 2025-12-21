@@ -7,22 +7,7 @@ use image::{
 };
 use smallvec::SmallVec;
 
-use crate::layout::style::{
-  Angle, Color, ColorInput, FromCss, LengthUnit, ParseResult, PercentageNumber,
-};
-
-/// Represents a drop shadow filter configuration
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct DropShadowFilter {
-  /// Horizontal offset of the shadow
-  pub offset_x: LengthUnit,
-  /// Vertical offset of the shadow
-  pub offset_y: LengthUnit,
-  /// Blur radius of the shadow
-  pub blur_radius: LengthUnit,
-  /// Color of the shadow
-  pub color: ColorInput,
-}
+use crate::layout::style::{Angle, FromCss, LengthUnit, ParseResult, PercentageNumber, TextShadow};
 
 /// Represents a single CSS filter operation
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -43,8 +28,8 @@ pub enum Filter {
   Opacity(PercentageNumber),
   /// Blur radius in pixels
   Blur(LengthUnit),
-  /// Drop shadow effect with offset, blur, and color
-  DropShadow(DropShadowFilter),
+  /// Drop shadow effect with offset, blur, and color (reuses TextShadow parsing)
+  DropShadow(TextShadow),
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -136,7 +121,7 @@ impl Filters {
   }
 
   /// Returns all drop shadow filters
-  pub(crate) fn get_drop_shadows(&self) -> impl Iterator<Item = &DropShadowFilter> {
+  pub(crate) fn get_drop_shadows(&self) -> impl Iterator<Item = &TextShadow> {
     self.0.iter().filter_map(|f| {
       if let Filter::DropShadow(shadow) = f {
         Some(shadow)
@@ -203,48 +188,8 @@ impl<'i> FromCss<'i> for Filter {
         Ok(Filter::Blur(radius))
       }),
       "drop-shadow" => parser.parse_nested_block(|input| {
-        // drop-shadow syntax: <offset-x> <offset-y> [<blur-radius>]? [<color>]?
-        // Components can appear in various orders, similar to box-shadow
-        let mut color = None;
-        let mut lengths = None;
-
-        loop {
-          // Try to parse length values (offsets, blur radius)
-          if lengths.is_none() {
-            let value: Result<_, cssparser::ParseError<'_, _>> = input.try_parse(|input| {
-              let offset_x = LengthUnit::from_css(input)?;
-              let offset_y = LengthUnit::from_css(input)?;
-              let blur = input
-                .try_parse(LengthUnit::from_css)
-                .unwrap_or(LengthUnit::zero());
-              Ok((offset_x, offset_y, blur))
-            });
-
-            if let Ok(value) = value {
-              lengths = Some(value);
-              continue;
-            }
-          }
-
-          // Try to parse a color value if not already found
-          if color.is_none() && let Ok(value) = input.try_parse(ColorInput::from_css) {
-            color = Some(value);
-            continue;
-          }
-
-          break;
-        }
-
-        let lengths = lengths.ok_or(
-          input.new_error(cssparser::BasicParseErrorKind::QualifiedRuleInvalid)
-        )?;
-
-        Ok(Filter::DropShadow(DropShadowFilter {
-          offset_x: lengths.0,
-          offset_y: lengths.1,
-          blur_radius: lengths.2,
-          color: color.unwrap_or(ColorInput::Value(Color::black())),
-        }))
+        // drop-shadow uses the same syntax as text-shadow
+        Ok(Filter::DropShadow(TextShadow::from_css(input)?))
       }),
       _ => Err(location.new_basic_unexpected_token_error(Token::Function(function.clone())).into()),
     }
@@ -254,7 +199,7 @@ impl<'i> FromCss<'i> for Filter {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::layout::style::LengthUnit::Px;
+  use crate::layout::style::{Color, ColorInput, LengthUnit::Px};
 
   #[test]
   fn test_parse_blur_filter() {
@@ -273,7 +218,7 @@ mod tests {
   fn test_parse_drop_shadow_filter() {
     assert_eq!(
       Filter::from_str("drop-shadow(2px 4px 6px red)"),
-      Ok(Filter::DropShadow(DropShadowFilter {
+      Ok(Filter::DropShadow(TextShadow {
         offset_x: Px(2.0),
         offset_y: Px(4.0),
         blur_radius: Px(6.0),
@@ -286,7 +231,7 @@ mod tests {
   fn test_parse_drop_shadow_color_first() {
     assert_eq!(
       Filter::from_str("drop-shadow(red 2px 4px)"),
-      Ok(Filter::DropShadow(DropShadowFilter {
+      Ok(Filter::DropShadow(TextShadow {
         offset_x: Px(2.0),
         offset_y: Px(4.0),
         blur_radius: LengthUnit::zero(),
@@ -299,11 +244,11 @@ mod tests {
   fn test_parse_drop_shadow_no_blur() {
     assert_eq!(
       Filter::from_str("drop-shadow(2px 4px)"),
-      Ok(Filter::DropShadow(DropShadowFilter {
+      Ok(Filter::DropShadow(TextShadow {
         offset_x: Px(2.0),
         offset_y: Px(4.0),
         blur_radius: LengthUnit::zero(),
-        color: ColorInput::Value(Color::black()),
+        color: ColorInput::CurrentColor,
       }))
     );
   }

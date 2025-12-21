@@ -10,7 +10,7 @@ use crate::{
     Viewport,
     node::Node,
     style::{
-      Affine, Display, DropShadowFilter, Filters, ImageScalingAlgorithm, InheritedStyle, SpacePair,
+      Affine, Display, Filters, ImageScalingAlgorithm, InheritedStyle, SpacePair, TextShadow,
     },
     tree::NodeTree,
   },
@@ -140,7 +140,7 @@ fn apply_transform(
 fn apply_drop_shadow_filter(
   canvas: &mut RgbaImage,
   source: &RgbaImage,
-  shadow_filter: &DropShadowFilter,
+  shadow_filter: &TextShadow,
   context: &RenderContext,
   layout_size: Size<f32>,
   transform: Affine,
