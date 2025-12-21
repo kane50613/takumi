@@ -15,6 +15,9 @@ pub struct SpacePair<T: Copy, const Y_FIRST: bool = false> {
   pub y: T,
 }
 
+/// A pair of gap values which has the vertical value first.
+pub type Gap = SpacePair<LengthUnit<false>, true>;
+
 impl<T: Copy + Default, const Y_FIRST: bool> Default for SpacePair<T, Y_FIRST> {
   fn default() -> Self {
     Self::from_single(T::default())

@@ -9,8 +9,34 @@ use crate::{
   },
 };
 
+/// Converts an image from straight alpha to premultiplied alpha.
+/// This is necessary before blurring to avoid black halo artifacts.
+fn to_premultiplied_alpha(image: &mut RgbaImage) {
+  for pixel in image.pixels_mut() {
+    let alpha = pixel.0[3] as f32 / 255.0;
+    pixel.0[0] = (pixel.0[0] as f32 * alpha).round() as u8;
+    pixel.0[1] = (pixel.0[1] as f32 * alpha).round() as u8;
+    pixel.0[2] = (pixel.0[2] as f32 * alpha).round() as u8;
+  }
+}
+
+/// Converts an image from premultiplied alpha back to straight alpha.
+fn from_premultiplied_alpha(image: &mut RgbaImage) {
+  for pixel in image.pixels_mut() {
+    let alpha = pixel.0[3] as f32;
+    if alpha > 0.0 {
+      let inv_alpha = 255.0 / alpha;
+      pixel.0[0] = (pixel.0[0] as f32 * inv_alpha).min(255.0).round() as u8;
+      pixel.0[1] = (pixel.0[1] as f32 * inv_alpha).min(255.0).round() as u8;
+      pixel.0[2] = (pixel.0[2] as f32 * inv_alpha).min(255.0).round() as u8;
+    }
+  }
+}
+
 /// Applies a fast blur to an image using image-rs's optimized implementation.
-fn apply_fast_blur(image: &mut RgbaImage, radius: f32) {
+/// Uses premultiplied alpha to avoid black halo artifacts when blurring
+/// images with transparency.
+pub(crate) fn apply_fast_blur(image: &mut RgbaImage, radius: f32) {
   if radius <= 0.0 {
     return;
   }
@@ -19,7 +45,9 @@ fn apply_fast_blur(image: &mut RgbaImage, radius: f32) {
   // CSS blur radius is roughly 3x the standard deviation (sigma)
   let sigma = radius / 3.0;
 
+  to_premultiplied_alpha(image);
   *image = fast_blur(image, sigma);
+  from_premultiplied_alpha(image);
 }
 
 /// Represents a resolved box shadow with all its properties.

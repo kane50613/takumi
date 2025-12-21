@@ -111,7 +111,7 @@ define_style!(
   mask_size: Option<BackgroundSizes>,
   mask_position: Option<BackgroundPositions>,
   mask_repeat: Option<BackgroundRepeats>,
-  gap: SpacePair<LengthUnit<false>, true>,
+  gap: Gap,
   column_gap: Option<LengthUnit<false>>,
   row_gap: Option<LengthUnit<false>>,
   flex: Option<Flex>,

@@ -7,25 +7,44 @@ use image::{
 };
 use smallvec::SmallVec;
 
-use crate::layout::style::{Angle, FromCss, ParseResult, PercentageNumber};
+use crate::layout::style::{
+  Angle, Color, ColorInput, FromCss, LengthUnit, ParseResult, PercentageNumber,
+};
+
+/// Represents a drop shadow filter configuration
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DropShadowFilter {
+  /// Horizontal offset of the shadow
+  pub offset_x: LengthUnit,
+  /// Vertical offset of the shadow
+  pub offset_y: LengthUnit,
+  /// Blur radius of the shadow
+  pub blur_radius: LengthUnit,
+  /// Color of the shadow
+  pub color: ColorInput,
+}
 
 /// Represents a single CSS filter operation
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Filter {
   /// Brightness multiplier (1 = unchanged). Accepts number or percentage
-  Brightness(f32),
+  Brightness(PercentageNumber),
   /// Contrast multiplier (1 = unchanged). Accepts number or percentage
-  Contrast(f32),
+  Contrast(PercentageNumber),
   /// Grayscale amount (0..1). Accepts number or percentage
-  Grayscale(f32),
+  Grayscale(PercentageNumber),
   /// Saturate multiplier (1 = unchanged). Accepts number or percentage
-  Saturate(f32),
+  Saturate(PercentageNumber),
   /// Hue rotation in degrees
   HueRotate(Angle),
   /// Invert amount (0..1). Accepts number or percentage
-  Invert(f32),
+  Invert(PercentageNumber),
   /// Opacity amount (0..1). Accepts number or percentage
-  Opacity(f32),
+  Opacity(PercentageNumber),
+  /// Blur radius in pixels
+  Blur(LengthUnit),
+  /// Drop shadow effect with offset, blur, and color
+  DropShadow(DropShadowFilter),
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -44,18 +63,18 @@ impl Filters {
   pub(crate) fn apply_to(&self, image: &mut RgbaImage) {
     for filter in self.0.iter() {
       match *filter {
-        Filter::Brightness(value) => {
+        Filter::Brightness(PercentageNumber(value)) => {
           for pixel in image.pixels_mut() {
             for channel in pixel.0.iter_mut().take(3) {
               *channel = ((*channel) as f32 * value).clamp(0.0, 255.0) as u8;
             }
           }
         }
-        Filter::Contrast(value) => {
+        Filter::Contrast(PercentageNumber(value)) => {
           let amount = value * 100.0 - 100.0;
           contrast_in_place(image, amount);
         }
-        Filter::Grayscale(amount) => {
+        Filter::Grayscale(PercentageNumber(amount)) => {
           for pixel in image.pixels_mut() {
             let lum = pixel.to_luma().0[0] as f32;
 
@@ -68,7 +87,7 @@ impl Filters {
         Filter::HueRotate(angle) => {
           huerotate_in_place(image, *angle as i32);
         }
-        Filter::Saturate(value) => {
+        Filter::Saturate(PercentageNumber(value)) => {
           for pixel in image.pixels_mut() {
             let lum = pixel.to_luma().0[0] as f32;
 
@@ -77,7 +96,7 @@ impl Filters {
             }
           }
         }
-        Filter::Invert(amount) => {
+        Filter::Invert(PercentageNumber(amount)) => {
           for pixel in image.pixels_mut() {
             for channel in pixel.0.iter_mut().take(3) {
               let inverted = u8::MAX.saturating_sub(*channel);
@@ -86,13 +105,45 @@ impl Filters {
             }
           }
         }
-        Filter::Opacity(value) => {
+        Filter::Opacity(PercentageNumber(value)) => {
           for alpha in image.as_mut().iter_mut().skip(3).step_by(4) {
             *alpha = ((*alpha) as f32 * value).clamp(0.0, 255.0) as u8;
           }
         }
+        // Blur and DropShadow require node-level rendering and are handled separately
+        Filter::Blur(_) | Filter::DropShadow(_) => {}
       }
     }
+  }
+
+  /// Returns true if any filter requires node-level rendering (blur or drop-shadow)
+  pub(crate) fn requires_node_level_rendering(&self) -> bool {
+    self
+      .0
+      .iter()
+      .any(|f| matches!(f, Filter::Blur(_) | Filter::DropShadow(_)))
+  }
+
+  /// Returns the blur radius if a blur filter is present, otherwise None
+  pub(crate) fn get_blur(&self) -> Option<LengthUnit> {
+    self.0.iter().find_map(|f| {
+      if let Filter::Blur(radius) = f {
+        Some(*radius)
+      } else {
+        None
+      }
+    })
+  }
+
+  /// Returns all drop shadow filters
+  pub(crate) fn get_drop_shadows(&self) -> impl Iterator<Item = &DropShadowFilter> {
+    self.0.iter().filter_map(|f| {
+      if let Filter::DropShadow(shadow) = f {
+        Some(shadow)
+      } else {
+        None
+      }
+    })
   }
 }
 
@@ -124,33 +175,153 @@ impl<'i> FromCss<'i> for Filter {
 
     match_ignore_ascii_case! {function,
       "brightness" => parser.parse_nested_block(|input| {
-        let PercentageNumber(value) = PercentageNumber::from_css(input)?;
-        Ok(Filter::Brightness(value))
+        Ok(Filter::Brightness(PercentageNumber::from_css(input)?))
       }),
       "opacity" => parser.parse_nested_block(|input| {
-        let PercentageNumber(value) = PercentageNumber::from_css(input)?;
-        Ok(Filter::Opacity(value))
+        Ok(Filter::Opacity(PercentageNumber::from_css(input)?))
       }),
       "contrast" => parser.parse_nested_block(|input| {
-        let PercentageNumber(value) = PercentageNumber::from_css(input)?;
-        Ok(Filter::Contrast(value))
+        Ok(Filter::Contrast(PercentageNumber::from_css(input)?))
       }),
       "grayscale" => parser.parse_nested_block(|input| {
-        let PercentageNumber(value) = PercentageNumber::from_css(input)?;
-        Ok(Filter::Grayscale(value))
+        Ok(Filter::Grayscale(PercentageNumber::from_css(input)?))
       }),
       "hue-rotate" => parser.parse_nested_block(|input| {
         Ok(Filter::HueRotate(Angle::from_css(input)?))
       }),
       "invert" => parser.parse_nested_block(|input| {
-        let PercentageNumber(value) = PercentageNumber::from_css(input)?;
-        Ok(Filter::Invert(value))
+        Ok(Filter::Invert(PercentageNumber::from_css(input)?))
       }),
       "saturate" => parser.parse_nested_block(|input| {
-        let PercentageNumber(value) = PercentageNumber::from_css(input)?;
-        Ok(Filter::Saturate(value))
+        Ok(Filter::Saturate(PercentageNumber::from_css(input)?))
+      }),
+      "blur" => parser.parse_nested_block(|input| {
+        // blur() can have an optional radius, defaults to 0
+        let radius = input
+          .try_parse(LengthUnit::from_css)
+          .unwrap_or(LengthUnit::zero());
+        Ok(Filter::Blur(radius))
+      }),
+      "drop-shadow" => parser.parse_nested_block(|input| {
+        // drop-shadow syntax: <offset-x> <offset-y> [<blur-radius>]? [<color>]?
+        // Components can appear in various orders, similar to box-shadow
+        let mut color = None;
+        let mut lengths = None;
+
+        loop {
+          // Try to parse length values (offsets, blur radius)
+          if lengths.is_none() {
+            let value: Result<_, cssparser::ParseError<'_, _>> = input.try_parse(|input| {
+              let offset_x = LengthUnit::from_css(input)?;
+              let offset_y = LengthUnit::from_css(input)?;
+              let blur = input
+                .try_parse(LengthUnit::from_css)
+                .unwrap_or(LengthUnit::zero());
+              Ok((offset_x, offset_y, blur))
+            });
+
+            if let Ok(value) = value {
+              lengths = Some(value);
+              continue;
+            }
+          }
+
+          // Try to parse a color value if not already found
+          if color.is_none() && let Ok(value) = input.try_parse(ColorInput::from_css) {
+            color = Some(value);
+            continue;
+          }
+
+          break;
+        }
+
+        let lengths = lengths.ok_or(
+          input.new_error(cssparser::BasicParseErrorKind::QualifiedRuleInvalid)
+        )?;
+
+        Ok(Filter::DropShadow(DropShadowFilter {
+          offset_x: lengths.0,
+          offset_y: lengths.1,
+          blur_radius: lengths.2,
+          color: color.unwrap_or(ColorInput::Value(Color::black())),
+        }))
       }),
       _ => Err(location.new_basic_unexpected_token_error(Token::Function(function.clone())).into()),
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::layout::style::LengthUnit::Px;
+
+  #[test]
+  fn test_parse_blur_filter() {
+    assert_eq!(Filter::from_str("blur(5px)"), Ok(Filter::Blur(Px(5.0))));
+  }
+
+  #[test]
+  fn test_parse_blur_filter_zero() {
+    assert_eq!(
+      Filter::from_str("blur()"),
+      Ok(Filter::Blur(LengthUnit::zero()))
+    );
+  }
+
+  #[test]
+  fn test_parse_drop_shadow_filter() {
+    assert_eq!(
+      Filter::from_str("drop-shadow(2px 4px 6px red)"),
+      Ok(Filter::DropShadow(DropShadowFilter {
+        offset_x: Px(2.0),
+        offset_y: Px(4.0),
+        blur_radius: Px(6.0),
+        color: ColorInput::Value(Color([255, 0, 0, 255])),
+      }))
+    );
+  }
+
+  #[test]
+  fn test_parse_drop_shadow_color_first() {
+    assert_eq!(
+      Filter::from_str("drop-shadow(red 2px 4px)"),
+      Ok(Filter::DropShadow(DropShadowFilter {
+        offset_x: Px(2.0),
+        offset_y: Px(4.0),
+        blur_radius: LengthUnit::zero(),
+        color: ColorInput::Value(Color([255, 0, 0, 255])),
+      }))
+    );
+  }
+
+  #[test]
+  fn test_parse_drop_shadow_no_blur() {
+    assert_eq!(
+      Filter::from_str("drop-shadow(2px 4px)"),
+      Ok(Filter::DropShadow(DropShadowFilter {
+        offset_x: Px(2.0),
+        offset_y: Px(4.0),
+        blur_radius: LengthUnit::zero(),
+        color: ColorInput::Value(Color::black()),
+      }))
+    );
+  }
+
+  #[test]
+  fn test_filters_requires_node_level_rendering() {
+    assert!(
+      Filters::from_str("blur(5px)").is_ok_and(|filters| filters.requires_node_level_rendering())
+    );
+
+    assert!(
+      Filters::from_str("grayscale(50%)")
+        .is_ok_and(|filters| !filters.requires_node_level_rendering())
+    );
+
+    assert!(
+      Filters::from_str("drop-shadow(2px 4px)")
+        .is_ok_and(|filters| filters.requires_node_level_rendering())
+    );
   }
 }
