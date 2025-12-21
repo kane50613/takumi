@@ -298,7 +298,8 @@ fn render_node<'g, Nodes: Node<Nodes>>(
       })
       .fold(0.0_f32, f32::max);
 
-    // Take the max of blur and shadow blur, add some padding (blur typically spreads ~3x the sigma)
+    // Take the max of blur and shadow blur, and add padding.
+    // The CSS blur radius is defined as ≈3×σ; using 1.5× the blur radius here corresponds to ~4.5×σ of padding.
     let blur_expansion = (max_blur.max(max_shadow_blur) * 1.5).ceil() as u32;
 
     // Calculate the size needed for the temporary canvas (with blur expansion on all sides)
