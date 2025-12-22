@@ -1,5 +1,12 @@
 # takumi
 
+## 0.59.0
+
+### Minor Changes
+
+- 13eca0e: rename `LengthUnit` to `Length` #347
+- 4dee0c0: support `blur()`, `drop-shadow()` filter, premultiply alpha blending for shadows
+
 ## 0.58.0
 
 ### Minor Changes

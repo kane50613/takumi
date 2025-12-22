@@ -1,6 +1,6 @@
 [package]
 name = "takumi"
-version = "0.58.0"
+version = "0.59.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Render your React components to images."
