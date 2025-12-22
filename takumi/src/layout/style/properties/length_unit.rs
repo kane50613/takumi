@@ -8,7 +8,7 @@ use crate::{
     AspectRatio, FromCss, ParseResult,
     tw::{TW_VAR_SPACING, TailwindPropertyParser},
   },
-  rendering::RenderContext,
+  rendering::Sizing,
 };
 
 /// Represents a value that can be a specific length, percentage, or automatic.
@@ -172,29 +172,27 @@ impl<const DEFAULT_AUTO: bool> LengthUnit<DEFAULT_AUTO> {
   ///
   /// This method converts the length unit (either a percentage, pixel, rem, em, vh, vw, or auto)
   /// into a compact length format that can be used by the layout engine.
-  pub(crate) fn to_compact_length(self, context: &RenderContext) -> CompactLength {
+  pub(crate) fn to_compact_length(self, sizing: &Sizing) -> CompactLength {
     match self {
       LengthUnit::Auto => CompactLength::auto(),
       LengthUnit::Percentage(value) => CompactLength::percent(value / 100.0),
-      LengthUnit::Rem(value) => CompactLength::length(
-        value * context.viewport.font_size * context.viewport.device_pixel_ratio,
-      ),
-      LengthUnit::Em(value) => CompactLength::length(value * context.font_size),
+      LengthUnit::Rem(value) => {
+        CompactLength::length(value * sizing.font_size * sizing.viewport.device_pixel_ratio)
+      }
+      LengthUnit::Em(value) => CompactLength::length(value * sizing.font_size),
       LengthUnit::Vh(value) => {
-        CompactLength::length(context.viewport.height.unwrap_or_default() as f32 * value / 100.0)
+        CompactLength::length(sizing.viewport.height.unwrap_or_default() as f32 * value / 100.0)
       }
       LengthUnit::Vw(value) => {
-        CompactLength::length(context.viewport.width.unwrap_or_default() as f32 * value / 100.0)
+        CompactLength::length(sizing.viewport.width.unwrap_or_default() as f32 * value / 100.0)
       }
-      _ => CompactLength::length(
-        self.resolve_to_px(context, context.viewport.width.unwrap_or_default() as f32),
-      ),
+      _ => CompactLength::length(self.px(sizing, sizing.viewport.width.unwrap_or_default() as f32)),
     }
   }
 
   /// Resolves the length unit to a `LengthPercentage`.
-  pub(crate) fn resolve_to_length_percentage(self, context: &RenderContext) -> LengthPercentage {
-    let compact_length = self.to_compact_length(context);
+  pub(crate) fn resolve_to_length_percentage(self, sizing: &Sizing) -> LengthPercentage {
+    let compact_length = self.to_compact_length(sizing);
 
     if compact_length.is_auto() {
       return LengthPercentage::length(0.0);
@@ -205,7 +203,7 @@ impl<const DEFAULT_AUTO: bool> LengthUnit<DEFAULT_AUTO> {
   }
 
   /// Resolves the length unit to a pixel value.
-  pub(crate) fn resolve_to_px(self, context: &RenderContext, percentage_full_px: f32) -> f32 {
+  pub(crate) fn px(self, sizing: &Sizing, percentage_full_px: f32) -> f32 {
     const ONE_CM_IN_PX: f32 = 96.0 / 2.54;
     const ONE_MM_IN_PX: f32 = ONE_CM_IN_PX / 10.0;
     const ONE_Q_IN_PX: f32 = ONE_CM_IN_PX / 40.0;
@@ -217,10 +215,10 @@ impl<const DEFAULT_AUTO: bool> LengthUnit<DEFAULT_AUTO> {
       LengthUnit::Auto => 0.0,
       LengthUnit::Px(value) => value,
       LengthUnit::Percentage(value) => (value / 100.0) * percentage_full_px,
-      LengthUnit::Rem(value) => value * context.viewport.font_size,
-      LengthUnit::Em(value) => value * context.font_size,
-      LengthUnit::Vh(value) => value * context.viewport.height.unwrap_or_default() as f32 / 100.0,
-      LengthUnit::Vw(value) => value * context.viewport.width.unwrap_or_default() as f32 / 100.0,
+      LengthUnit::Rem(value) => value * sizing.font_size,
+      LengthUnit::Em(value) => value * sizing.font_size,
+      LengthUnit::Vh(value) => value * sizing.viewport.height.unwrap_or_default() as f32 / 100.0,
+      LengthUnit::Vw(value) => value * sizing.viewport.width.unwrap_or_default() as f32 / 100.0,
       LengthUnit::Cm(value) => value * ONE_CM_IN_PX,
       LengthUnit::Mm(value) => value * ONE_MM_IN_PX,
       LengthUnit::In(value) => value * ONE_IN_PX,
@@ -240,20 +238,17 @@ impl<const DEFAULT_AUTO: bool> LengthUnit<DEFAULT_AUTO> {
       return value;
     }
 
-    value * context.viewport.device_pixel_ratio
+    value * sizing.viewport.device_pixel_ratio
   }
 
   /// Resolves the length unit to a `LengthPercentageAuto`.
-  pub(crate) fn resolve_to_length_percentage_auto(
-    self,
-    context: &RenderContext,
-  ) -> LengthPercentageAuto {
+  pub(crate) fn resolve_to_length_percentage_auto(self, sizing: &Sizing) -> LengthPercentageAuto {
     // SAFETY: only length/percentage/auto are allowed
-    unsafe { LengthPercentageAuto::from_raw(self.to_compact_length(context)) }
+    unsafe { LengthPercentageAuto::from_raw(self.to_compact_length(sizing)) }
   }
 
   /// Resolves the length unit to a `Dimension`.
-  pub(crate) fn resolve_to_dimension(self, context: &RenderContext) -> Dimension {
-    self.resolve_to_length_percentage_auto(context).into()
+  pub(crate) fn resolve_to_dimension(self, sizing: &Sizing) -> Dimension {
+    self.resolve_to_length_percentage_auto(sizing).into()
   }
 }

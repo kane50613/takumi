@@ -5,7 +5,7 @@ use crate::{
   layout::style::{
     FromCss, GridLengthUnit, GridMinMaxSize, LengthUnit, ParseResult, tw::TailwindPropertyParser,
   },
-  rendering::RenderContext,
+  rendering::Sizing,
 };
 
 /// A list of `GridTrackSize`
@@ -39,19 +39,19 @@ impl From<GridLengthUnit> for GridTrackSize {
 
 impl GridTrackSize {
   /// Converts the grid track size to a non-repeated track sizing function.
-  pub fn to_min_max(&self, context: &RenderContext) -> TrackSizingFunction {
+  pub(crate) fn to_min_max(self, sizing: &Sizing) -> TrackSizingFunction {
     match self {
       // SAFETY: The compact length is a valid track sizing function.
       Self::Fixed(size) => unsafe {
         TrackSizingFunction {
-          min: MinTrackSizingFunction::from_raw(size.to_compact_length(context)),
-          max: MaxTrackSizingFunction::from_raw(size.to_compact_length(context)),
+          min: MinTrackSizingFunction::from_raw(size.to_compact_length(sizing)),
+          max: MaxTrackSizingFunction::from_raw(size.to_compact_length(sizing)),
         }
       },
       Self::MinMax(min_max) => unsafe {
         TrackSizingFunction {
-          min: MinTrackSizingFunction::from_raw(min_max.min.to_compact_length(context)),
-          max: MaxTrackSizingFunction::from_raw(min_max.max.to_compact_length(context)),
+          min: MinTrackSizingFunction::from_raw(min_max.min.to_compact_length(sizing)),
+          max: MaxTrackSizingFunction::from_raw(min_max.max.to_compact_length(sizing)),
         }
       },
     }

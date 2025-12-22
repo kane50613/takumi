@@ -45,10 +45,10 @@ impl BorderProperties {
   ) -> Self {
     let resolved = context.style.resolved_border_radius();
 
-    let top_left = resolved.top.resolve_to_px(context, border_box);
-    let top_right = resolved.right.resolve_to_px(context, border_box);
-    let bottom_right = resolved.bottom.resolve_to_px(context, border_box);
-    let bottom_left = resolved.left.resolve_to_px(context, border_box);
+    let top_left = resolved.top.px(&context.sizing, border_box);
+    let top_right = resolved.right.px(&context.sizing, border_box);
+    let bottom_right = resolved.bottom.px(&context.sizing, border_box);
+    let bottom_left = resolved.left.px(&context.sizing, border_box);
 
     Self {
       width: border_width,

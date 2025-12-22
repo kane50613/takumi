@@ -7,14 +7,14 @@ use std::borrow::Cow;
 
 use image::{
   GenericImageView, Pixel, Rgba, RgbaImage,
-  imageops::{crop_imm, interpolate_bilinear, interpolate_nearest},
+  imageops::{interpolate_bilinear, interpolate_nearest},
 };
 use smallvec::SmallVec;
 use taffy::{Layout, Point, Size};
 use zeno::{Mask, PathData, Placement, Scratch};
 
 use crate::{
-  layout::style::{Affine, Color, Filters, ImageScalingAlgorithm, InheritedStyle, Overflow},
+  layout::style::{Affine, Color, ImageScalingAlgorithm, InheritedStyle, Overflow},
   rendering::{BorderProperties, RenderContext, create_mask},
 };
 
@@ -106,27 +106,18 @@ impl<'a> CowImage<'a> {
 
     Size { width, height }
   }
-
-  pub(crate) fn into_owned(self) -> RgbaImage {
-    if let Some((start, size)) = self.crop_bounds {
-      crop_imm(
-        self.inner.as_ref(),
-        start.x,
-        start.y,
-        size.width,
-        size.height,
-      )
-      .to_image()
-    } else {
-      self.inner.into_owned()
-    }
-  }
 }
 
 pub(crate) enum CanvasConstrainResult {
   Some(CanvasConstrain),
   None,
   SkipRendering,
+}
+
+impl CanvasConstrainResult {
+  pub(crate) fn is_some(&self) -> bool {
+    matches!(self, CanvasConstrainResult::Some(_))
+  }
 }
 
 pub(crate) enum CanvasConstrain {
@@ -394,6 +385,12 @@ impl Canvas {
     }
   }
 
+  pub(crate) fn replace_new_image(&mut self) -> RgbaImage {
+    let size = self.size();
+
+    std::mem::replace(&mut self.image, RgbaImage::new(size.width, size.height))
+  }
+
   pub(crate) fn push_constrain(&mut self, overflow_constrain: CanvasConstrain) {
     self.constrains.push(overflow_constrain);
   }
@@ -406,6 +403,13 @@ impl Canvas {
     self.image
   }
 
+  pub(crate) fn size(&self) -> Size<u32> {
+    Size {
+      width: self.image.width(),
+      height: self.image.height(),
+    }
+  }
+
   /// Overlays an image onto the canvas with optional border radius.
   pub(crate) fn overlay_image(
     &mut self,
@@ -413,7 +417,6 @@ impl Canvas {
     border: BorderProperties,
     transform: Affine,
     algorithm: ImageScalingAlgorithm,
-    filters: Option<&Filters>,
     opacity: u8,
   ) {
     overlay_image(
@@ -422,7 +425,6 @@ impl Canvas {
       border,
       transform,
       algorithm,
-      filters,
       opacity,
       self.constrains.last(),
       &mut self.mask_memory,
@@ -591,25 +593,14 @@ pub(crate) fn draw_mask<C: Into<Rgba<u8>>>(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn overlay_image(
   canvas: &mut RgbaImage,
-  mut image: CowImage,
+  image: CowImage,
   border: BorderProperties,
   transform: Affine,
   algorithm: ImageScalingAlgorithm,
-  filters: Option<&Filters>,
   opacity: u8,
   constrain: Option<&CanvasConstrain>,
   mask_memory: &mut MaskMemory,
 ) {
-  if let Some(filters) = filters
-    && !filters.is_empty()
-  {
-    let mut owned_image = image.into_owned();
-
-    filters.apply_to(&mut owned_image);
-
-    image = owned_image.into();
-  }
-
   // Fast path: if no sub-pixel interpolation is needed, we can just draw the image directly
   if transform.only_translation() && border.is_zero() {
     let translation = transform.decompose_translation();

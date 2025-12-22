@@ -105,8 +105,8 @@ impl RadialGradient {
 impl RadialGradientDrawContext {
   /// Builds a drawing context from a gradient and a target viewport.
   pub fn new(gradient: &RadialGradient, width: f32, height: f32, context: &RenderContext) -> Self {
-    let cx = LengthUnit::from(gradient.center.0.x).resolve_to_px(context, width);
-    let cy = LengthUnit::from(gradient.center.0.y).resolve_to_px(context, height);
+    let cx = LengthUnit::from(gradient.center.0.x).px(&context.sizing, width);
+    let cy = LengthUnit::from(gradient.center.0.y).px(&context.sizing, height);
 
     // Distances to sides and corners
     let dx_left = cx;
@@ -457,7 +457,7 @@ mod tests {
     let context = GlobalContext::default();
     let render_context = RenderContext::new(&context, (200, 100).into(), Default::default());
     let resolved = gradient.resolve_stops_for_radius(
-      render_context.viewport.width.unwrap_or_default() as f32,
+      render_context.sizing.viewport.width.unwrap_or_default() as f32,
       &render_context,
     );
 
@@ -491,7 +491,7 @@ mod tests {
     let context = GlobalContext::default();
     let render_context = RenderContext::new(&context, (200, 100).into(), Default::default());
     let resolved = gradient.resolve_stops_for_radius(
-      render_context.viewport.width.unwrap_or_default() as f32,
+      render_context.sizing.viewport.width.unwrap_or_default() as f32,
       &render_context,
     );
 

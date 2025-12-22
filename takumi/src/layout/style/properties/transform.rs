@@ -6,7 +6,7 @@ use taffy::{Point, Size};
 
 use crate::{
   layout::style::{Angle, FromCss, LengthUnit, ParseResult, PercentageNumber},
-  rendering::RenderContext,
+  rendering::Sizing,
 };
 
 const DEFAULT_SCALE: f32 = 1.0;
@@ -203,7 +203,7 @@ impl Affine {
   /// When applied to point p: translate * rotate * p, rotate is applied first.
   pub(crate) fn from_transforms<'a, I: Iterator<Item = &'a Transform>>(
     transforms: I,
-    context: &RenderContext,
+    sizing: &Sizing,
     border_box: Size<f32>,
   ) -> Affine {
     let mut instance = Affine::IDENTITY;
@@ -211,8 +211,8 @@ impl Affine {
     for transform in transforms {
       instance *= match *transform {
         Transform::Translate(x_length, y_length) => Affine::translation(
-          x_length.resolve_to_px(context, border_box.width),
-          y_length.resolve_to_px(context, border_box.height),
+          x_length.px(sizing, border_box.width),
+          y_length.px(sizing, border_box.height),
         ),
         Transform::Scale(x_scale, y_scale) => Affine::scale(x_scale, y_scale),
         Transform::Rotate(angle) => Affine::rotation(angle),

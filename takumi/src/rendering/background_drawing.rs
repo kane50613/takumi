@@ -7,19 +7,17 @@ use taffy::{Point, Size};
 use crate::{
   Result,
   layout::{node::resolve_image, style::*},
-  rendering::{BorderProperties, Canvas, MaskMemory, RenderContext, fast_resize, overlay_image},
+  rendering::{
+    BorderProperties, Canvas, MaskMemory, RenderContext, Sizing, fast_resize, overlay_image,
+  },
 };
 
 pub(crate) type ImageTiles = (RgbaImage, SmallVec<[i32; 1]>, SmallVec<[i32; 1]>);
 
-pub(crate) fn resolve_length_against_area(
-  unit: LengthUnit,
-  area: u32,
-  context: &RenderContext,
-) -> u32 {
+pub(crate) fn resolve_length_against_area(unit: LengthUnit, area: u32, sizing: &Sizing) -> u32 {
   match unit {
     LengthUnit::Auto => area,
-    _ => unit.resolve_to_px(context, area as f32).max(0.0) as u32,
+    _ => unit.px(sizing, area as f32).max(0.0) as u32,
   }
 }
 
@@ -31,8 +29,8 @@ pub(crate) fn resolve_background_size(
 ) -> (u32, u32) {
   match size {
     BackgroundSize::Explicit { width, height } => (
-      resolve_length_against_area(width, area.0, context),
-      resolve_length_against_area(height, area.1, context),
+      resolve_length_against_area(width, area.0, &context.sizing),
+      resolve_length_against_area(height, area.1, &context.sizing),
     ),
     BackgroundSize::Cover => {
       // Get intrinsic image dimensions
@@ -92,11 +90,11 @@ pub(crate) fn resolve_background_size(
 pub(crate) fn resolve_length_unit_to_position_component(
   length: LengthUnit,
   available: i32,
-  context: &RenderContext,
+  sizing: &Sizing,
 ) -> i32 {
   match length {
     LengthUnit::Auto => available / 2,
-    _ => length.resolve_to_px(context, available as f32) as i32,
+    _ => length.px(sizing, available as f32) as i32,
   }
 }
 
@@ -104,7 +102,7 @@ pub(crate) fn resolve_position_component_x(
   comp: BackgroundPosition,
   tile_w: u32,
   area_w: u32,
-  context: &RenderContext,
+  sizing: &Sizing,
 ) -> i32 {
   let available = area_w.saturating_sub(tile_w) as i32;
   match comp.0.x {
@@ -113,7 +111,7 @@ pub(crate) fn resolve_position_component_x(
     PositionComponent::KeywordX(PositionKeywordX::Right) => available,
     PositionComponent::KeywordY(_) => available / 2,
     PositionComponent::Length(length) => {
-      resolve_length_unit_to_position_component(length, available, context)
+      resolve_length_unit_to_position_component(length, available, sizing)
     }
   }
 }
@@ -122,7 +120,7 @@ pub(crate) fn resolve_position_component_y(
   comp: BackgroundPosition,
   tile_h: u32,
   area_h: u32,
-  context: &RenderContext,
+  sizing: &Sizing,
 ) -> i32 {
   let available = area_h.saturating_sub(tile_h) as i32;
   match comp.0.y {
@@ -131,7 +129,7 @@ pub(crate) fn resolve_position_component_y(
     PositionComponent::KeywordY(PositionKeywordY::Bottom) => available,
     PositionComponent::KeywordX(_) => available / 2,
     PositionComponent::Length(length) => {
-      resolve_length_unit_to_position_component(length, available, context)
+      resolve_length_unit_to_position_component(length, available, sizing)
     }
   }
 }
@@ -186,11 +184,11 @@ pub(crate) fn resolve_layer_tiles(
 
   let xs: SmallVec<[i32; 1]> = match repeat.0 {
     BackgroundRepeatStyle::Repeat => {
-      let origin_x = resolve_position_component_x(pos, tile_w, area_w, context);
+      let origin_x = resolve_position_component_x(pos, tile_w, area_w, &context.sizing);
       collect_repeat_tile_positions(area_w, tile_w, origin_x)
     }
     BackgroundRepeatStyle::NoRepeat => {
-      let origin_x = resolve_position_component_x(pos, tile_w, area_w, context);
+      let origin_x = resolve_position_component_x(pos, tile_w, area_w, &context.sizing);
       smallvec![origin_x]
     }
     BackgroundRepeatStyle::Space => collect_spaced_tile_positions(area_w, tile_w),
@@ -206,11 +204,11 @@ pub(crate) fn resolve_layer_tiles(
 
   let ys: SmallVec<[i32; 1]> = match repeat.1 {
     BackgroundRepeatStyle::Repeat => {
-      let origin_y = resolve_position_component_y(pos, tile_h, area_h, context);
+      let origin_y = resolve_position_component_y(pos, tile_h, area_h, &context.sizing);
       collect_repeat_tile_positions(area_h, tile_h, origin_y)
     }
     BackgroundRepeatStyle::NoRepeat => {
-      let origin_y = resolve_position_component_y(pos, tile_h, area_h, context);
+      let origin_y = resolve_position_component_y(pos, tile_h, area_h, &context.sizing);
       smallvec![origin_y]
     }
     BackgroundRepeatStyle::Space => collect_spaced_tile_positions(area_h, tile_h),
@@ -429,7 +427,6 @@ pub(crate) fn create_mask(
           Default::default(),
           Affine::translation(*x as f32, *y as f32),
           context.style.image_rendering,
-          context.style.filter.as_ref(),
           255,
           None,
           mask_memory,
@@ -557,7 +554,6 @@ pub(crate) fn create_background_image(
           Default::default(),
           Affine::translation(*x as f32 - offset.x, *y as f32 - offset.y),
           context.style.image_rendering,
-          context.style.filter.as_ref(),
           255,
           None,
           mask_memory,
@@ -584,7 +580,6 @@ pub(crate) fn draw_background_layers(
           radius,
           context.transform * Affine::translation(*x as f32, *y as f32),
           ImageScalingAlgorithm::Auto,
-          context.style.filter.as_ref(),
           context.opacity,
         );
       }

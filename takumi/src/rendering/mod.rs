@@ -34,17 +34,24 @@ use crate::{
   resources::image::ImageSource,
 };
 
+/// The sizing context used for length value resolving.
+#[derive(Clone, Copy)]
+pub(crate) struct Sizing {
+  /// The viewport for the image renderer.
+  pub(crate) viewport: Viewport,
+  /// The font size in pixels.
+  pub(crate) font_size: f32,
+}
+
 /// The context for the internal rendering. You should not construct this directly.
 #[derive(Clone)]
 pub struct RenderContext<'g> {
   /// The global context.
   pub(crate) global: &'g GlobalContext,
-  /// The viewport for the image renderer.
-  pub(crate) viewport: Viewport,
-  /// The font size in pixels.
-  pub(crate) font_size: f32,
   /// The scale factor for the image renderer.
   pub(crate) transform: Affine,
+  /// The sizing context.
+  pub(crate) sizing: Sizing,
   /// What the `currentColor` value is resolved to.
   pub(crate) current_color: Color,
   /// The opacity to apply to all colors.
@@ -65,8 +72,10 @@ impl<'g> RenderContext<'g> {
   ) -> Self {
     Self {
       global,
-      viewport,
-      font_size: viewport.font_size,
+      sizing: Sizing {
+        viewport,
+        font_size: viewport.font_size,
+      },
       transform: Affine::IDENTITY,
       current_color: Color::black(),
       opacity: 255,

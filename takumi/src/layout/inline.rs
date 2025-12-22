@@ -52,7 +52,7 @@ pub(crate) fn create_inline_constraint(
 
   // applies a maximum height to reduce unnecessary calculation.
   let max_height = match (
-    context.viewport.height,
+    context.sizing.viewport.height,
     context.style.text_wrap_mode_and_line_clamp().1,
   ) {
     (Some(height), Some(line_clamp)) => {

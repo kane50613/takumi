@@ -1,13 +1,12 @@
-use std::ops::Deref;
-
 use cssparser::{Parser, Token, match_ignore_ascii_case};
-use image::{
-  Pixel, RgbaImage,
-  imageops::colorops::{contrast_in_place, huerotate_in_place},
-};
+use image::{Pixel, Rgba, RgbaImage, imageops::colorops::huerotate_in_place};
 use smallvec::SmallVec;
+use taffy::Size;
 
-use crate::layout::style::{Angle, FromCss, LengthUnit, ParseResult, PercentageNumber, TextShadow};
+use crate::{
+  layout::style::{Angle, Color, FromCss, LengthUnit, ParseResult, PercentageNumber, TextShadow},
+  rendering::{SizedShadow, Sizing, apply_fast_blur},
+};
 
 /// Represents a single CSS filter operation
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -32,103 +31,240 @@ pub enum Filter {
   DropShadow(TextShadow),
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
 /// A list of filter operations
-pub struct Filters(SmallVec<[Filter; 4]>);
+pub type Filters = SmallVec<[Filter; 2]>;
 
-impl Deref for Filters {
-  type Target = SmallVec<[Filter; 4]>;
+pub(crate) fn apply_filters<'f, F: Iterator<Item = &'f Filter>>(
+  image: &mut RgbaImage,
+  sizing: &Sizing,
+  current_color: Color,
+  opacity: u8,
+  filters: F,
+) {
+  for filter in filters {
+    match *filter {
+      Filter::Brightness(PercentageNumber(value)) => {
+        for pixel in image.pixels_mut() {
+          if pixel.0[3] == 0 {
+            continue;
+          }
 
-  fn deref(&self) -> &Self::Target {
-    &self.0
+          for channel in pixel.0.iter_mut().take(3) {
+            *channel = ((*channel) as f32 * value).clamp(0.0, 255.0) as u8;
+          }
+        }
+      }
+      Filter::Contrast(PercentageNumber(value)) => {
+        for pixel in image.pixels_mut() {
+          if pixel.0[3] == 0 {
+            continue;
+          }
+
+          for channel in pixel.0.iter_mut().take(3) {
+            // Contrast formula: (value - 128) * contrast + 128
+            *channel = ((*channel as f32 - 128.0) * value + 128.0).clamp(0.0, 255.0) as u8;
+          }
+        }
+      }
+      Filter::Grayscale(PercentageNumber(amount)) => {
+        for pixel in image.pixels_mut() {
+          if pixel.0[3] == 0 {
+            continue;
+          }
+
+          let lum = pixel.to_luma().0[0] as f32;
+
+          for channel in pixel.0.iter_mut().take(3) {
+            *channel =
+              ((*channel as f32 * (1.0 - amount)) + (lum * amount)).clamp(0.0, 255.0) as u8;
+          }
+        }
+      }
+      Filter::HueRotate(angle) => {
+        huerotate_in_place(image, *angle as i32);
+      }
+      Filter::Saturate(PercentageNumber(value)) => {
+        for pixel in image.pixels_mut() {
+          if pixel.0[3] == 0 {
+            continue;
+          }
+          let lum = pixel.to_luma().0[0] as f32;
+
+          for channel in pixel.0.iter_mut().take(3) {
+            *channel = (lum * (1.0 - value) + *channel as f32 * value).clamp(0.0, 255.0) as u8;
+          }
+        }
+      }
+      Filter::Invert(PercentageNumber(amount)) => {
+        for pixel in image.pixels_mut() {
+          if pixel.0[3] == 0 {
+            continue;
+          }
+          for channel in pixel.0.iter_mut().take(3) {
+            let inverted = u8::MAX.saturating_sub(*channel);
+            *channel = ((*channel as f32 * (1.0 - amount)) + (inverted as f32 * amount))
+              .clamp(0.0, 255.0) as u8;
+          }
+        }
+      }
+      Filter::Opacity(PercentageNumber(value)) => {
+        for pixel in image.pixels_mut() {
+          if pixel.0[3] == 0 {
+            continue;
+          }
+          pixel.0[3] = ((pixel.0[3]) as f32 * value).clamp(0.0, 255.0) as u8;
+        }
+      }
+      // Blur and DropShadow require node-level rendering and are handled separately
+      Filter::Blur(blur) => {
+        apply_fast_blur(image, blur.px(sizing, 1.0));
+      }
+      Filter::DropShadow(drop_shadow) => {
+        let size = Size {
+          width: image.width() as f32,
+          height: image.height() as f32,
+        };
+        let shadow =
+          SizedShadow::from_text_shadow(drop_shadow, sizing, current_color, opacity, size);
+
+        apply_drop_shadow_filter(image, &shadow);
+      }
+    }
   }
 }
 
-impl Filters {
-  pub(crate) fn apply_to(&self, image: &mut RgbaImage) {
-    for filter in self.0.iter() {
-      match *filter {
-        Filter::Brightness(PercentageNumber(value)) => {
-          for pixel in image.pixels_mut() {
-            for channel in pixel.0.iter_mut().take(3) {
-              *channel = ((*channel) as f32 * value).clamp(0.0, 255.0) as u8;
-            }
-          }
-        }
-        Filter::Contrast(PercentageNumber(value)) => {
-          let amount = value * 100.0 - 100.0;
-          contrast_in_place(image, amount);
-        }
-        Filter::Grayscale(PercentageNumber(amount)) => {
-          for pixel in image.pixels_mut() {
-            let lum = pixel.to_luma().0[0] as f32;
+/// Applies a drop-shadow filter effect to an image.
+/// This renders the shadow based on the source image's alpha channel.
+///
+/// The drop-shadow filter creates a shadow that follows the shape of the source
+/// image's alpha channel. The process is:
+/// 1. Create a shadow image large enough to contain the original + blur + offset
+/// 2. Copy the source alpha channel, filling with shadow color
+/// 3. Apply blur to the shadow
+/// 4. Composite: draw shadow at offset, then draw original on top
+fn apply_drop_shadow_filter(canvas: &mut RgbaImage, shadow: &SizedShadow) {
+  let canvas_width = canvas.width();
+  let canvas_height = canvas.height();
 
-            for channel in pixel.0.iter_mut().take(3) {
-              *channel =
-                ((*channel as f32 * (1.0 - amount)) + (lum * amount)).clamp(0.0, 255.0) as u8;
-            }
-          }
-        }
-        Filter::HueRotate(angle) => {
-          huerotate_in_place(image, *angle as i32);
-        }
-        Filter::Saturate(PercentageNumber(value)) => {
-          for pixel in image.pixels_mut() {
-            let lum = pixel.to_luma().0[0] as f32;
+  if canvas_width == 0 || canvas_height == 0 {
+    return;
+  }
 
-            for channel in pixel.0.iter_mut().take(3) {
-              *channel = (lum * (1.0 - value) + *channel as f32 * value).clamp(0.0, 255.0) as u8;
-            }
-          }
-        }
-        Filter::Invert(PercentageNumber(amount)) => {
-          for pixel in image.pixels_mut() {
-            for channel in pixel.0.iter_mut().take(3) {
-              let inverted = u8::MAX.saturating_sub(*channel);
-              *channel = ((*channel as f32 * (1.0 - amount)) + (inverted as f32 * amount))
-                .clamp(0.0, 255.0) as u8;
-            }
-          }
-        }
-        Filter::Opacity(PercentageNumber(value)) => {
-          for alpha in image.as_mut().iter_mut().skip(3).step_by(4) {
-            *alpha = ((*alpha) as f32 * value).clamp(0.0, 255.0) as u8;
-          }
-        }
-        // Blur and DropShadow require node-level rendering and are handled separately
-        Filter::Blur(_) | Filter::DropShadow(_) => {}
+  // Calculate the padding needed for blur
+  let blur_padding = (shadow.blur_radius.ceil() as i32).max(0);
+
+  // Calculate the offset as integers
+  let offset_x = shadow.offset_x as i32;
+  let offset_y = shadow.offset_y as i32;
+
+  // Calculate the required size for the composited result
+  // We need space for: shadow (original + blur padding + offset) and original
+  let min_x = (-blur_padding + offset_x).min(0);
+  let min_y = (-blur_padding + offset_y).min(0);
+  let max_x = (canvas_width as i32 + blur_padding + offset_x).max(canvas_width as i32);
+  let max_y = (canvas_height as i32 + blur_padding + offset_y).max(canvas_height as i32);
+
+  let result_width = (max_x - min_x) as u32;
+  let result_height = (max_y - min_y) as u32;
+
+  // The origin offset for placing content in the result image
+  let origin_x = -min_x;
+  let origin_y = -min_y;
+
+  // Create shadow image with enough space for blur
+  let shadow_width = canvas_width + (blur_padding as u32 * 2);
+  let shadow_height = canvas_height + (blur_padding as u32 * 2);
+  let mut shadow_image = RgbaImage::new(shadow_width, shadow_height);
+
+  // Copy the source alpha channel and fill with shadow color
+  let shadow_color: Rgba<u8> = shadow.color.into();
+  for y in 0..canvas_height {
+    for x in 0..canvas_width {
+      let src_pixel = canvas.get_pixel(x, y);
+      let alpha = src_pixel.0[3];
+      if alpha > 0 {
+        // Place at center of shadow image (offset by blur_padding)
+        let dest_x = x + blur_padding as u32;
+        let dest_y = y + blur_padding as u32;
+        shadow_image.put_pixel(
+          dest_x,
+          dest_y,
+          Rgba([
+            shadow_color.0[0],
+            shadow_color.0[1],
+            shadow_color.0[2],
+            // Blend shadow alpha with source alpha
+            ((shadow_color.0[3] as u32 * alpha as u32) / 255) as u8,
+          ]),
+        );
       }
     }
   }
 
-  /// Returns true if any filter requires node-level rendering (blur or drop-shadow)
-  pub(crate) fn requires_node_level_rendering(&self) -> bool {
-    self
-      .0
-      .iter()
-      .any(|f| matches!(f, Filter::Blur(_) | Filter::DropShadow(_)))
+  // Apply blur to the shadow
+  apply_fast_blur(&mut shadow_image, shadow.blur_radius);
+
+  // Create the result image
+  let mut result = RgbaImage::new(result_width, result_height);
+
+  // Draw the shadow at its offset position
+  let shadow_dest_x = origin_x + offset_x - blur_padding;
+  let shadow_dest_y = origin_y + offset_y - blur_padding;
+  for y in 0..shadow_height {
+    for x in 0..shadow_width {
+      let dest_x = shadow_dest_x + x as i32;
+      let dest_y = shadow_dest_y + y as i32;
+      if dest_x >= 0 && dest_x < result_width as i32 && dest_y >= 0 && dest_y < result_height as i32
+      {
+        let shadow_pixel = shadow_image.get_pixel(x, y);
+        if shadow_pixel.0[3] > 0 {
+          blend_pixel(
+            result.get_pixel_mut(dest_x as u32, dest_y as u32),
+            *shadow_pixel,
+          );
+        }
+      }
+    }
   }
 
-  /// Returns the blur radius if a blur filter is present, otherwise None
-  pub(crate) fn get_blur(&self) -> Option<LengthUnit> {
-    self.0.iter().find_map(|f| {
-      if let Filter::Blur(radius) = f {
-        Some(*radius)
-      } else {
-        None
+  // Draw the original image on top
+  for y in 0..canvas_height {
+    for x in 0..canvas_width {
+      let dest_x = (origin_x + x as i32) as u32;
+      let dest_y = (origin_y + y as i32) as u32;
+      let src_pixel = *canvas.get_pixel(x, y);
+      if src_pixel.0[3] > 0 {
+        blend_pixel(result.get_pixel_mut(dest_x, dest_y), src_pixel);
       }
-    })
+    }
   }
 
-  /// Returns all drop shadow filters
-  pub(crate) fn get_drop_shadows(&self) -> impl Iterator<Item = &TextShadow> {
-    self.0.iter().filter_map(|f| {
-      if let Filter::DropShadow(shadow) = f {
-        Some(shadow)
-      } else {
-        None
+  // Copy the result back to the canvas area
+  // The canvas should remain the same size, so we crop/extend as needed
+  for y in 0..canvas_height {
+    for x in 0..canvas_width {
+      let src_x = (origin_x + x as i32) as u32;
+      let src_y = (origin_y + y as i32) as u32;
+      if src_x < result_width && src_y < result_height {
+        *canvas.get_pixel_mut(x, y) = *result.get_pixel(src_x, src_y);
       }
-    })
+    }
+  }
+}
+
+/// Blends a source pixel onto a destination pixel using alpha blending.
+#[inline]
+fn blend_pixel(dest: &mut Rgba<u8>, src: Rgba<u8>) {
+  let src_a = src.0[3] as f32 / 255.0;
+  let dst_a = dest.0[3] as f32 / 255.0;
+  let out_a = src_a + dst_a * (1.0 - src_a);
+
+  if out_a > 0.0 {
+    for i in 0..3 {
+      dest.0[i] = (((src.0[i] as f32 * src_a) + (dest.0[i] as f32 * dst_a * (1.0 - src_a))) / out_a)
+        .round() as u8;
+    }
+    dest.0[3] = (out_a * 255.0).round() as u8;
   }
 }
 
@@ -141,7 +277,7 @@ impl<'i> FromCss<'i> for Filters {
       filters.push(filter);
     }
 
-    Ok(Filters(filters))
+    Ok(filters)
   }
 }
 
@@ -250,23 +386,6 @@ mod tests {
         blur_radius: LengthUnit::zero(),
         color: ColorInput::CurrentColor,
       }))
-    );
-  }
-
-  #[test]
-  fn test_filters_requires_node_level_rendering() {
-    assert!(
-      Filters::from_str("blur(5px)").is_ok_and(|filters| filters.requires_node_level_rendering())
-    );
-
-    assert!(
-      Filters::from_str("grayscale(50%)")
-        .is_ok_and(|filters| !filters.requires_node_level_rendering())
-    );
-
-    assert!(
-      Filters::from_str("drop-shadow(2px 4px)")
-        .is_ok_and(|filters| filters.requires_node_level_rendering())
     );
   }
 }

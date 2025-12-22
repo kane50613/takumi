@@ -4,7 +4,7 @@ use taffy::{Point, Size};
 
 use crate::{
   layout::style::{FromCss, LengthUnit, ParseResult, SpacePair, tw::TailwindPropertyParser},
-  rendering::RenderContext,
+  rendering::Sizing,
 };
 
 /// Horizontal keywords for `background-position`.
@@ -63,10 +63,10 @@ impl From<PositionComponent> for LengthUnit {
 pub struct BackgroundPosition(pub SpacePair<PositionComponent>);
 
 impl BackgroundPosition {
-  pub(crate) fn to_point(self, context: &RenderContext, border_box: Size<f32>) -> Point<f32> {
+  pub(crate) fn to_point(self, sizing: &Sizing, border_box: Size<f32>) -> Point<f32> {
     Point {
-      x: LengthUnit::from(self.0.x).resolve_to_px(context, border_box.width),
-      y: LengthUnit::from(self.0.y).resolve_to_px(context, border_box.height),
+      x: LengthUnit::from(self.0.x).px(sizing, border_box.width),
+      y: LengthUnit::from(self.0.y).px(sizing, border_box.height),
     }
   }
 }

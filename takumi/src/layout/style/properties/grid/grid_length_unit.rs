@@ -3,7 +3,7 @@ use taffy::CompactLength;
 
 use crate::{
   layout::style::{FromCss, LengthUnit, ParseResult},
-  rendering::RenderContext,
+  rendering::Sizing,
 };
 
 /// Represents a fraction of the available space
@@ -24,10 +24,10 @@ pub enum GridLengthUnit {
 
 impl GridLengthUnit {
   /// Converts the grid track size to a compact length representation.
-  pub fn to_compact_length(&self, context: &RenderContext) -> CompactLength {
+  pub(crate) fn to_compact_length(self, sizing: &Sizing) -> CompactLength {
     match self {
-      GridLengthUnit::Fr(fr) => CompactLength::fr(*fr),
-      GridLengthUnit::Unit(unit) => unit.to_compact_length(context),
+      GridLengthUnit::Fr(fr) => CompactLength::fr(fr),
+      GridLengthUnit::Unit(unit) => unit.to_compact_length(sizing),
     }
   }
 }

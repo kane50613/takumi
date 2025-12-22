@@ -903,8 +903,8 @@ mod tests {
     let context = GlobalContext::default();
     let ctx = RenderContext::new(&context, (200, 100).into(), Default::default());
 
-    let resolved =
-      gradient.resolve_stops_for_axis_size(ctx.viewport.width.unwrap_or_default() as f32, &ctx);
+    let resolved = gradient
+      .resolve_stops_for_axis_size(ctx.sizing.viewport.width.unwrap_or_default() as f32, &ctx);
     assert_eq!(resolved.len(), 3);
     assert!((resolved[0].position - 0.0).abs() < 1e-3);
     assert!((resolved[1].position - 100.0).abs() < 1e-3);
@@ -929,8 +929,8 @@ mod tests {
     let context = GlobalContext::default();
     let ctx = RenderContext::new(&context, (200, 100).into(), Default::default());
 
-    let resolved =
-      gradient.resolve_stops_for_axis_size(ctx.viewport.width.unwrap_or_default() as f32, &ctx);
+    let resolved = gradient
+      .resolve_stops_for_axis_size(ctx.sizing.viewport.width.unwrap_or_default() as f32, &ctx);
     assert_eq!(resolved.len(), 2);
     assert!((resolved[0].position - 0.0).abs() < 1e-3);
     assert!((resolved[1].position - 0.0).abs() < 1e-3);

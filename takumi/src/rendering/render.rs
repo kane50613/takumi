@@ -9,14 +9,12 @@ use crate::{
   layout::{
     Viewport,
     node::Node,
-    style::{
-      Affine, Display, Filters, ImageScalingAlgorithm, InheritedStyle, SpacePair, TextShadow,
-    },
+    style::{Affine, Display, ImageScalingAlgorithm, InheritedStyle, SpacePair, apply_filters},
     tree::NodeTree,
   },
   rendering::{
-    BorderProperties, Canvas, CanvasConstrain, CanvasConstrainResult, MaskMemory, apply_fast_blur,
-    draw_debug_border, overlay_image,
+    BorderProperties, Canvas, CanvasConstrain, CanvasConstrainResult, Sizing, draw_debug_border,
+    overlay_image,
   },
   resources::image::ImageSource,
 };
@@ -55,7 +53,7 @@ pub fn render<'g, N: Node<N>>(options: RenderOptions<'g, N>) -> Result<RgbaImage
 
   taffy.compute_layout_with_measure(
     root_node_id,
-    render_context.viewport.into(),
+    render_context.sizing.viewport.into(),
     |known_dimensions, available_space, _node_id, node_context, style| {
       if let Size {
         width: Some(width),
@@ -99,10 +97,10 @@ fn apply_transform(
   transform: &mut Affine,
   style: &InheritedStyle,
   border_box: Size<f32>,
-  context: &RenderContext,
+  sizing: &Sizing,
 ) {
   let transform_origin = style.transform_origin.unwrap_or_default();
-  let origin = transform_origin.to_point(context, border_box);
+  let origin = transform_origin.to_point(sizing, border_box);
 
   // CSS Transforms Level 2 order: T(origin) * translate * rotate * scale * transform * T(-origin)
   // Ref: https://www.w3.org/TR/css-transforms-2/#ctm
@@ -112,8 +110,8 @@ fn apply_transform(
   let translate = style.resolve_translate();
   if translate != SpacePair::default() {
     local *= Affine::translation(
-      translate.x.resolve_to_px(context, border_box.width),
-      translate.y.resolve_to_px(context, border_box.height),
+      translate.x.px(sizing, border_box.width),
+      translate.y.px(sizing, border_box.height),
     );
   }
 
@@ -127,106 +125,12 @@ fn apply_transform(
   }
 
   if let Some(node_transform) = &style.transform {
-    local *= Affine::from_transforms(node_transform.iter(), context, border_box);
+    local *= Affine::from_transforms(node_transform.iter(), sizing, border_box);
   }
 
   local *= Affine::translation(-origin.x, -origin.y);
 
   *transform *= local;
-}
-
-/// Applies a drop-shadow filter effect to an image.
-/// This renders the shadow based on the source image's alpha channel.
-fn apply_drop_shadow_filter(
-  canvas: &mut RgbaImage,
-  source: &RgbaImage,
-  shadow_filter: &TextShadow,
-  context: &RenderContext,
-  layout_size: Size<f32>,
-  transform: Affine,
-  mask_memory: &mut MaskMemory,
-) {
-  let offset_x = shadow_filter
-    .offset_x
-    .resolve_to_px(context, layout_size.width);
-  let offset_y = shadow_filter
-    .offset_y
-    .resolve_to_px(context, layout_size.height);
-  let blur_radius = shadow_filter
-    .blur_radius
-    .resolve_to_px(context, layout_size.width);
-  let color = shadow_filter
-    .color
-    .resolve(context.current_color, context.opacity);
-
-  // Calculate expansion needed for blur (blur spreads ~1.5x the radius)
-  let blur_expansion = (blur_radius * 1.5).ceil() as u32;
-
-  // Create an expanded shadow image to accommodate blur spread
-  let expanded_width = source.width() + blur_expansion * 2;
-  let expanded_height = source.height() + blur_expansion * 2;
-  let mut shadow_image = RgbaImage::new(expanded_width, expanded_height);
-
-  // Copy the alpha channel into the center of the expanded image
-  for (y, source_row) in source.rows().enumerate() {
-    for (x, source_pixel) in source_row.enumerate() {
-      let alpha = source_pixel.0[3];
-      if alpha > 0 {
-        let shadow_pixel =
-          shadow_image.get_pixel_mut(x as u32 + blur_expansion, y as u32 + blur_expansion);
-        shadow_pixel.0 = [color.0[0], color.0[1], color.0[2], alpha];
-      }
-    }
-  }
-
-  // Apply blur to the shadow
-  apply_fast_blur(&mut shadow_image, blur_radius);
-
-  // Composite the shadow at the offset position (adjusted for blur expansion)
-  let shadow_transform = transform
-    * Affine::translation(
-      offset_x - blur_expansion as f32,
-      offset_y - blur_expansion as f32,
-    );
-
-  overlay_image(
-    canvas,
-    shadow_image.into(),
-    BorderProperties::zero(),
-    shadow_transform,
-    ImageScalingAlgorithm::Auto,
-    None,
-    255,
-    None,
-    mask_memory,
-  );
-}
-
-/// Macro to handle the constrain application pattern that appears in both
-/// filter rendering and normal rendering paths.
-/// Returns `true` if a constrain was pushed that needs popping later.
-macro_rules! apply_constrain {
-  ($canvas:expr, $node:expr, $layout:expr, $constrain:expr) => {{
-    match $constrain {
-      CanvasConstrainResult::SkipRendering => return Ok(()),
-      CanvasConstrainResult::None => {
-        $node.draw_shell($canvas, $layout)?;
-        false
-      }
-      CanvasConstrainResult::Some(constrain) => match constrain {
-        CanvasConstrain::ClipPath { .. } | CanvasConstrain::MaskImage { .. } => {
-          $canvas.push_constrain(constrain);
-          $node.draw_shell($canvas, $layout)?;
-          true
-        }
-        CanvasConstrain::Overflow { .. } => {
-          $node.draw_shell($canvas, $layout)?;
-          $canvas.push_constrain(constrain);
-          true
-        }
-      },
-    }
-  }};
 }
 
 fn render_node<'g, Nodes: Node<Nodes>>(
@@ -251,7 +155,7 @@ fn render_node<'g, Nodes: Node<Nodes>>(
     &mut transform,
     &node.context.style,
     layout.size,
-    &node.context,
+    &node.context.sizing,
   );
 
   // If a transform function causes the current transformation matrix of an object to be non-invertible, the object and its content do not get displayed.
@@ -262,129 +166,13 @@ fn render_node<'g, Nodes: Node<Nodes>>(
 
   node.context.transform = transform;
 
-  // Check if the node has filters that require node-level rendering (blur or drop-shadow)
-  let requires_filter_rendering = node
-    .context
-    .style
-    .filter
-    .as_ref()
-    .is_some_and(|f: &Filters| f.requires_node_level_rendering());
+  let should_create_isolated_canvas = !node.context.style.filter.is_empty();
 
-  // Get filter info before borrowing canvas mutably
-  let filter_info = if requires_filter_rendering {
-    let filters = node.context.style.filter.as_ref();
-    let blur_radius = filters.and_then(|f: &Filters| f.get_blur());
-    let drop_shadows: Vec<_> = filters
-      .map(|f| f.get_drop_shadows().cloned().collect())
-      .unwrap_or_default();
-    Some((blur_radius, drop_shadows, node.context.clone()))
+  let original_canvas_image = if should_create_isolated_canvas {
+    Some(canvas.replace_new_image())
   } else {
     None
   };
-
-  // If we have filters requiring node-level rendering, use a completely separate code path
-  if let Some((blur_radius, drop_shadows, original_context)) = filter_info {
-    // Calculate the blur expansion needed - we need extra space for blur to spread into
-    let max_blur = blur_radius
-      .map(|b| b.resolve_to_px(&original_context, layout.size.width))
-      .unwrap_or(0.0);
-
-    // Also account for drop shadow blur
-    let max_shadow_blur = drop_shadows
-      .iter()
-      .map(|s| {
-        s.blur_radius
-          .resolve_to_px(&original_context, layout.size.width)
-      })
-      .fold(0.0_f32, f32::max);
-
-    // Take the max of blur and shadow blur, and add padding.
-    // The CSS blur radius is defined as ≈3×σ; using 1.5× the blur radius here corresponds to ~4.5×σ of padding.
-    let blur_expansion = (max_blur.max(max_shadow_blur) * 1.5).ceil() as u32;
-
-    // Calculate the size needed for the temporary canvas (with blur expansion on all sides)
-    let temp_size = layout.size.map(|s| s.ceil() as u32 + blur_expansion * 2);
-
-    if temp_size.width == 0 || temp_size.height == 0 {
-      return Ok(());
-    }
-
-    // Update the node's transform to render at an offset for the blur expansion
-    // We need to do this AFTER we've cloned the original context
-    node.context.transform = Affine::translation(blur_expansion as f32, blur_expansion as f32);
-
-    // Render to temp canvas (with offset for blur expansion)
-    let mut temp_canvas = Canvas::new(temp_size);
-
-    let constrain = CanvasConstrain::from_node(
-      &node.context,
-      &node.context.style,
-      layout,
-      Affine::IDENTITY,
-      &mut temp_canvas.mask_memory,
-    )?;
-
-    let has_constrain = apply_constrain!(&mut temp_canvas, node, layout, constrain);
-
-    node.draw_content(&mut temp_canvas, layout)?;
-
-    if node.context.draw_debug_border {
-      draw_debug_border(&mut temp_canvas, layout, Affine::IDENTITY);
-    }
-
-    if node.should_create_inline_layout() {
-      node.draw_inline(&mut temp_canvas, layout)?;
-    } else {
-      let child_transform = Affine::translation(blur_expansion as f32, blur_expansion as f32);
-      for child_id in taffy.children(node_id)? {
-        render_node(taffy, child_id, &mut temp_canvas, child_transform)?;
-      }
-    }
-
-    if has_constrain {
-      temp_canvas.pop_constrain();
-    }
-
-    // Now apply filter effects and composite to main canvas
-    let mut temp_image = temp_canvas.into_inner();
-    // Use the original transform, but offset by the negative blur expansion to align correctly
-    let composite_transform = original_context.transform
-      * Affine::translation(-(blur_expansion as f32), -(blur_expansion as f32));
-
-    // Apply drop-shadow filters (draw shadows first, behind the content)
-    for shadow_filter in &drop_shadows {
-      apply_drop_shadow_filter(
-        &mut canvas.image,
-        &temp_image,
-        shadow_filter,
-        &original_context,
-        layout.size,
-        composite_transform,
-        &mut canvas.mask_memory,
-      );
-    }
-
-    // Apply blur filter if present
-    if let Some(blur) = blur_radius {
-      let blur_px = blur.resolve_to_px(&original_context, layout.size.width);
-      apply_fast_blur(&mut temp_image, blur_px);
-    }
-
-    // Composite the (possibly blurred) content to the main canvas
-    overlay_image(
-      &mut canvas.image,
-      temp_image.into(),
-      BorderProperties::zero(),
-      composite_transform,
-      ImageScalingAlgorithm::Auto,
-      None,
-      original_context.opacity,
-      None,
-      &mut canvas.mask_memory,
-    );
-
-    return Ok(());
-  }
 
   // Normal rendering path (no filters requiring node-level rendering)
   let constrain = CanvasConstrain::from_node(
@@ -395,7 +183,24 @@ fn render_node<'g, Nodes: Node<Nodes>>(
     &mut canvas.mask_memory,
   )?;
 
-  let has_constrain = apply_constrain!(canvas, node, layout, constrain);
+  let has_constrain = constrain.is_some();
+
+  match constrain {
+    CanvasConstrainResult::SkipRendering => return Ok(()),
+    CanvasConstrainResult::None => {
+      node.draw_shell(canvas, layout)?;
+    }
+    CanvasConstrainResult::Some(constrain) => match constrain {
+      CanvasConstrain::ClipPath { .. } | CanvasConstrain::MaskImage { .. } => {
+        canvas.push_constrain(constrain);
+        node.draw_shell(canvas, layout)?;
+      }
+      CanvasConstrain::Overflow { .. } => {
+        node.draw_shell(canvas, layout)?;
+        canvas.push_constrain(constrain);
+      }
+    },
+  }
 
   node.draw_content(canvas, layout)?;
 
@@ -403,12 +208,41 @@ fn render_node<'g, Nodes: Node<Nodes>>(
     draw_debug_border(canvas, layout, transform);
   }
 
+  let filters = node.context.style.filter.clone();
+  let sizing = node.context.sizing;
+  let current_color = node.context.current_color;
+  let opacity = node.context.opacity;
+
   if node.should_create_inline_layout() {
     node.draw_inline(canvas, layout)?;
   } else {
     for child_id in taffy.children(node_id)? {
       render_node(taffy, child_id, canvas, transform)?;
     }
+  }
+
+  apply_filters(
+    &mut canvas.image,
+    &sizing,
+    current_color,
+    opacity,
+    filters.iter(),
+  );
+
+  // If there was an isolated canvas, composite the filtered image back into the original canvas
+  if let Some(mut original_canvas_image) = original_canvas_image {
+    overlay_image(
+      &mut original_canvas_image,
+      (&canvas.image).into(),
+      BorderProperties::zero(),
+      Affine::IDENTITY,
+      ImageScalingAlgorithm::Auto,
+      255,
+      None,
+      &mut canvas.mask_memory,
+    );
+
+    canvas.image = original_canvas_image;
   }
 
   if has_constrain {

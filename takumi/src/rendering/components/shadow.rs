@@ -5,7 +5,7 @@ use zeno::{Fill, PathData, Placement};
 use crate::{
   layout::style::{Affine, BoxShadow, Color, ImageScalingAlgorithm, Sides, TextShadow},
   rendering::{
-    BorderProperties, Canvas, CanvasConstrain, MaskMemory, RenderContext, draw_mask, overlay_image,
+    BorderProperties, Canvas, CanvasConstrain, MaskMemory, Sizing, draw_mask, overlay_image,
   },
 };
 
@@ -67,28 +67,37 @@ pub(crate) struct SizedShadow {
 
 impl SizedShadow {
   /// Creates a new [`SizedShadow`] from a [`BoxShadow`].
-  pub fn from_box_shadow(shadow: BoxShadow, context: &RenderContext, size: Size<f32>) -> Self {
+  pub fn from_box_shadow(
+    shadow: BoxShadow,
+    sizing: &Sizing,
+    current_color: Color,
+    opacity: u8,
+    size: Size<f32>,
+  ) -> Self {
     Self {
-      offset_x: shadow.offset_x.resolve_to_px(context, size.width),
-      offset_y: shadow.offset_y.resolve_to_px(context, size.height),
-      blur_radius: shadow.blur_radius.resolve_to_px(context, size.width),
-      spread_radius: shadow
-        .spread_radius
-        .resolve_to_px(context, size.width)
-        .max(0.0),
-      color: shadow.color.resolve(context.current_color, context.opacity),
+      offset_x: shadow.offset_x.px(sizing, size.width),
+      offset_y: shadow.offset_y.px(sizing, size.height),
+      blur_radius: shadow.blur_radius.px(sizing, size.width),
+      spread_radius: shadow.spread_radius.px(sizing, size.width).max(0.0),
+      color: shadow.color.resolve(current_color, opacity),
     }
   }
 
   /// Creates a new `SizedShadow` from a `TextShadow`.
-  pub fn from_text_shadow(shadow: TextShadow, context: &RenderContext, size: Size<f32>) -> Self {
+  pub fn from_text_shadow(
+    shadow: TextShadow,
+    sizing: &Sizing,
+    current_color: Color,
+    opacity: u8,
+    size: Size<f32>,
+  ) -> Self {
     Self {
-      offset_x: shadow.offset_x.resolve_to_px(context, size.width),
-      offset_y: shadow.offset_y.resolve_to_px(context, size.height),
-      blur_radius: shadow.blur_radius.resolve_to_px(context, size.width),
+      offset_x: shadow.offset_x.px(sizing, size.width),
+      offset_y: shadow.offset_y.px(sizing, size.height),
+      blur_radius: shadow.blur_radius.px(sizing, size.width),
       // Text shadows do not support spread radius; set to 0.
       spread_radius: 0.0,
-      color: shadow.color.resolve(context.current_color, context.opacity),
+      color: shadow.color.resolve(current_color, opacity),
     }
   }
 
@@ -142,7 +151,6 @@ impl SizedShadow {
         placement.top as f32 - self.blur_radius,
       ),
       ImageScalingAlgorithm::Auto,
-      None,
       255,
       constrain,
       mask_memory,
@@ -163,7 +171,6 @@ impl SizedShadow {
       border_radius,
       transform,
       ImageScalingAlgorithm::Auto,
-      None,
       255,
     );
   }

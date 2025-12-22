@@ -257,12 +257,18 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
       let mut border_radius = border_radius;
       let resolved_spread_radius = shadow
         .spread_radius
-        .resolve_to_px(context, layout.size.width)
+        .px(&context.sizing, layout.size.width)
         .max(0.0);
 
       border_radius.expand_by(Sides([resolved_spread_radius; 4]).into());
 
-      let shadow = SizedShadow::from_box_shadow(*shadow, context, layout.size);
+      let shadow = SizedShadow::from_box_shadow(
+        *shadow,
+        &context.sizing,
+        context.current_color,
+        context.opacity,
+        layout.size,
+      );
 
       border_radius.append_mask_commands(
         &mut paths,
@@ -301,7 +307,13 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
           continue;
         }
 
-        let shadow = SizedShadow::from_box_shadow(*shadow, context, layout.size);
+        let shadow = SizedShadow::from_box_shadow(
+          *shadow,
+          &context.sizing,
+          context.current_color,
+          context.opacity,
+          layout.size,
+        );
         shadow.draw_inset(context.transform, border_radius, canvas, layout);
       }
     }
@@ -404,7 +416,6 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
             border_radius,
             Affine::translation(layout.border.left, layout.border.top) * context.transform,
             context.style.image_rendering,
-            context.style.filter.as_ref(),
             context.opacity,
           );
         }
@@ -431,7 +442,6 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
               layout.padding.top + layout.border.top,
             ) * context.transform,
             context.style.image_rendering,
-            context.style.filter.as_ref(),
             context.opacity,
           );
         }

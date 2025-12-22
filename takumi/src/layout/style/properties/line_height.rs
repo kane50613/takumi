@@ -8,7 +8,7 @@ use crate::{
       tw::{TW_VAR_SPACING, TailwindPropertyParser},
     },
   },
-  rendering::RenderContext,
+  rendering::Sizing,
 };
 
 /// Represents a line height value, number value is parsed as em.
@@ -47,12 +47,12 @@ impl<'i> FromCss<'i> for LineHeight {
 
 impl LineHeight {
   /// Converts the line height to a parley line height.
-  pub(crate) fn into_parley(self, context: &RenderContext) -> parley::LineHeight {
+  pub(crate) fn into_parley(self, sizing: &Sizing) -> parley::LineHeight {
     match self.0 {
       LengthUnit::Px(value) => parley::LineHeight::Absolute(value),
       LengthUnit::Em(value) => parley::LineHeight::FontSizeRelative(value),
       LengthUnit::Percentage(value) => parley::LineHeight::FontSizeRelative(value / 100.0),
-      unit => parley::LineHeight::Absolute(unit.resolve_to_px(context, context.font_size)),
+      unit => parley::LineHeight::Absolute(unit.px(sizing, sizing.font_size)),
     }
   }
 }

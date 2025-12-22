@@ -4,7 +4,7 @@ use zeno::{Fill, PathBuilder, PathData, Placement};
 
 use crate::{
   layout::style::{Axis, Color, FromCss, LengthUnit, ParseResult, Sides, SpacePair},
-  rendering::{BorderProperties, MaskMemory, RenderContext},
+  rendering::{BorderProperties, MaskMemory, RenderContext, Sizing},
 };
 
 /// Represents the fill rule used for determining the interior of shapes.
@@ -116,16 +116,11 @@ pub enum BasicShape {
   Path(PathShape),
 }
 
-fn resolve_radius(
-  radius: ShapeRadius,
-  distance: Size<f32>,
-  context: &RenderContext,
-  full: f32,
-) -> f32 {
+fn resolve_radius(radius: ShapeRadius, distance: Size<f32>, sizing: &Sizing, full: f32) -> f32 {
   match radius {
     ShapeRadius::ClosestSide => distance.width.min(distance.height),
     ShapeRadius::FarthestSide => distance.width.max(distance.height),
-    ShapeRadius::Length(length) => length.resolve_to_px(context, full),
+    ShapeRadius::Length(length) => length.px(sizing, full),
   }
 }
 
@@ -151,8 +146,8 @@ impl BasicShape {
         let inset: Rect<f32> = shape
           .inset
           .map_axis(|value, axis| {
-            value.resolve_to_px(
-              context,
+            value.px(
+              &context.sizing,
               match axis {
                 Axis::Horizontal => size.width,
                 Axis::Vertical => size.height,
@@ -170,7 +165,7 @@ impl BasicShape {
               Sides(
                 radius
                   .0
-                  .map(|corner| SpacePair::from_single(corner.resolve_to_px(context, size.width))),
+                  .map(|corner| SpacePair::from_single(corner.px(&context.sizing, size.width))),
               )
             })
             .unwrap_or_default(),
@@ -190,29 +185,29 @@ impl BasicShape {
       }
       BasicShape::Ellipse(shape) => {
         let distance = Size {
-          width: shape.position.0.x.resolve_to_px(context, size.width),
-          height: shape.position.0.y.resolve_to_px(context, size.height),
+          width: shape.position.0.x.px(&context.sizing, size.width),
+          height: shape.position.0.y.px(&context.sizing, size.height),
         };
 
         paths.add_ellipse(
           (distance.width, distance.height),
-          resolve_radius(shape.radius_x, distance, context, size.width),
-          resolve_radius(shape.radius_y, distance, context, size.height),
+          resolve_radius(shape.radius_x, distance, &context.sizing, size.width),
+          resolve_radius(shape.radius_y, distance, &context.sizing, size.height),
         );
       }
       BasicShape::Polygon(shape) => {
         if !shape.coordinates.is_empty() {
           // Start the path at the first coordinate
           let first = &shape.coordinates[0];
-          let first_x = first.x.resolve_to_px(context, size.width);
-          let first_y = first.y.resolve_to_px(context, size.height);
+          let first_x = first.x.px(&context.sizing, size.width);
+          let first_y = first.y.px(&context.sizing, size.height);
 
           paths.move_to((first_x, first_y));
 
           // Add lines to each subsequent coordinate
           for coord in &shape.coordinates[1..] {
-            let x = coord.x.resolve_to_px(context, size.width);
-            let y = coord.y.resolve_to_px(context, size.height);
+            let x = coord.x.px(&context.sizing, size.width);
+            let y = coord.y.px(&context.sizing, size.height);
             paths.line_to((x, y));
           }
 

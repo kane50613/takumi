@@ -21,7 +21,8 @@ fn create_filter_test_container(
       StyleBuilder::default()
         .width(Percentage(100.0))
         .height(Percentage(100.0))
-        .flex_wrap(FlexWrap::Wrap)
+        .display(Display::Grid)
+        .grid_template_columns(GridTemplateComponents::from_str("repeat(5, 1fr)").ok())
         .gap(SpacePair::from_single(Px(gap_px)))
         .justify_content(JustifyContent::Center)
         .align_items(AlignItems::Center)
@@ -62,7 +63,7 @@ fn create_filter_card(filter: &str, image_size_px: f32, label_font_size_px: f32)
           StyleBuilder::default()
             .width(Px(image_size_px))
             .height(Px(image_size_px))
-            .filter(Some(Filters::from_str(filter).unwrap()))
+            .filter(Filters::from_str(filter).unwrap())
             .build()
             .unwrap(),
         ),
@@ -85,16 +86,17 @@ fn create_filter_card(filter: &str, image_size_px: f32, label_font_size_px: f32)
 #[test]
 fn test_style_filter_on_image_node() {
   let effects = [
+    "blur(5px)",
     "grayscale(75%)",
     "opacity(30%)",
-    "contrast(75%)",
+    "contrast(150%)",
     "brightness(150%)",
     "invert(50%)",
     "hue-rotate(90deg)",
     "saturate(0.3)",
   ];
 
-  let container = create_filter_test_container(&effects, 16.0, 128.0, 28.0);
+  let container = create_filter_test_container(&effects, 16.0, 128.0, 24.0);
   run_style_width_test(container, "tests/fixtures/style_filter.webp");
 }
 

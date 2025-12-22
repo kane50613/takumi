@@ -11,7 +11,7 @@ use crate::{
     style::{Display, InheritedStyle, SizedFontStyle},
   },
   rendering::{
-    Canvas, MaxHeight, RenderContext,
+    Canvas, MaxHeight, RenderContext, Sizing,
     inline_drawing::{draw_inline_box, draw_inline_layout},
   },
 };
@@ -87,12 +87,12 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
   }
 
   fn from_node_impl(parent_context: &RenderContext<'g>, mut node: N) -> Self {
-    let style = node.create_inherited_style(&parent_context.style, parent_context.viewport);
+    let style = node.create_inherited_style(&parent_context.style, parent_context.sizing.viewport);
 
     let font_size = style
       .font_size
-      .map(|font_size| font_size.resolve_to_px(parent_context, parent_context.font_size))
-      .unwrap_or(parent_context.font_size);
+      .map(|font_size| font_size.px(&parent_context.sizing, parent_context.sizing.font_size))
+      .unwrap_or(parent_context.sizing.font_size);
 
     // currentColor itself should NOT have opacity applied yet,
     // otherwise it will cause double applying.
@@ -102,10 +102,13 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
 
     let mut context = RenderContext {
       style,
-      font_size,
       current_color,
       opacity,
       fetched_resources: parent_context.fetched_resources.clone(),
+      sizing: Sizing {
+        viewport: parent_context.sizing.viewport,
+        font_size,
+      },
       ..*parent_context
     };
 

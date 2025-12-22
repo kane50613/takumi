@@ -127,7 +127,6 @@ pub(crate) fn draw_glyph(
         BorderProperties::default(),
         transform,
         ImageScalingAlgorithm::Auto,
-        None,
         255,
       );
     }
@@ -149,7 +148,6 @@ pub(crate) fn draw_glyph(
         Default::default(),
         transform,
         Default::default(),
-        None,
         opacity,
       );
     }
@@ -390,7 +388,6 @@ fn draw_color_outline_image(
       translation.y + outer_placement.top as f32,
     ),
     Default::default(),
-    None,
     opacity,
     constrain,
     mask_memory,

@@ -156,7 +156,7 @@ define_style!(
   font_style: FontStyle where inherit = true,
   border_color: Option<ColorInput>,
   color: ColorInput where inherit = true,
-  filter: Option<Filters>,
+  filter: Filters,
   font_size: Option<LengthUnit> where inherit = true,
   font_family: Option<FontFamily> where inherit = true,
   line_height: LineHeight where inherit = true,
@@ -357,7 +357,7 @@ impl InheritedStyle {
             line_name_sets.push(std::mem::take(&mut pending_line_names));
             // Push the track component
             track_components.push(taffy::GridTemplateComponent::Single(
-              track_size.to_min_max(context),
+              track_size.to_min_max(&context.sizing),
             ));
           }
           GridTemplateComponent::Repeat(repetition, tracks) => {
@@ -365,8 +365,10 @@ impl InheritedStyle {
             line_name_sets.push(std::mem::take(&mut pending_line_names));
 
             // Build repetition
-            let track_sizes: Vec<taffy::TrackSizingFunction> =
-              tracks.iter().map(|t| t.size.to_min_max(context)).collect();
+            let track_sizes: Vec<taffy::TrackSizingFunction> = tracks
+              .iter()
+              .map(|t| t.size.to_min_max(&context.sizing))
+              .collect();
 
             // Build inner line names: one per line inside the repeat, including a trailing set
             let mut inner_line_names: Vec<Vec<String>> =
@@ -518,30 +520,36 @@ impl InheritedStyle {
   }
 
   pub(crate) fn to_sized_font_style(&'_ self, context: &RenderContext) -> SizedFontStyle<'_> {
-    let line_height = self.line_height.into_parley(context);
+    let line_height = self.line_height.into_parley(&context.sizing);
 
     let resolved_stroke_width = self
       .webkit_text_stroke_width
       .or(self.webkit_text_stroke.map(|stroke| stroke.width))
       .unwrap_or_default()
-      .resolve_to_px(context, context.font_size);
+      .px(&context.sizing, context.sizing.font_size);
 
     SizedFontStyle {
       parent: self,
-      font_size: context.font_size,
+      font_size: context.sizing.font_size,
       line_height,
       stroke_width: resolved_stroke_width,
       letter_spacing: self
         .letter_spacing
-        .map(|spacing| spacing.resolve_to_px(context, context.font_size)),
+        .map(|spacing| spacing.px(&context.sizing, context.sizing.font_size)),
       word_spacing: self
         .word_spacing
-        .map(|spacing| spacing.resolve_to_px(context, context.font_size)),
+        .map(|spacing| spacing.px(&context.sizing, context.sizing.font_size)),
       text_shadow: self.text_shadow.as_ref().map(|shadows| {
         shadows
           .iter()
           .map(|shadow| {
-            SizedShadow::from_text_shadow(*shadow, context, Size::from_length(context.font_size))
+            SizedShadow::from_text_shadow(
+              *shadow,
+              &context.sizing,
+              context.current_color,
+              context.opacity,
+              Size::from_length(context.sizing.font_size),
+            )
           })
           .collect()
       }),
@@ -569,21 +577,21 @@ impl InheritedStyle {
     taffy::style::Style {
       box_sizing: self.box_sizing.into(),
       size: Size {
-        width: self.width.resolve_to_dimension(context),
-        height: self.height.resolve_to_dimension(context),
+        width: self.width.resolve_to_dimension(&context.sizing),
+        height: self.height.resolve_to_dimension(&context.sizing),
       },
       border: self
         .resolved_border_width()
-        .map(|border| border.resolve_to_length_percentage(context)),
+        .map(|border| border.resolve_to_length_percentage(&context.sizing)),
       padding: self
         .resolved_padding()
-        .map(|padding| padding.resolve_to_length_percentage(context)),
+        .map(|padding| padding.resolve_to_length_percentage(&context.sizing)),
       inset: self
         .resolved_inset()
-        .map(|inset| inset.resolve_to_length_percentage_auto(context)),
+        .map(|inset| inset.resolve_to_length_percentage_auto(&context.sizing)),
       margin: self
         .resolved_margin()
-        .map(|margin| margin.resolve_to_length_percentage_auto(context)),
+        .map(|margin| margin.resolve_to_length_percentage_auto(&context.sizing)),
       display: self.display.into(),
       flex_direction: self.flex_direction.into(),
       position: self.position.into(),
@@ -596,12 +604,12 @@ impl InheritedStyle {
         .or_else(|| self.flex.map(|flex| flex.grow))
         .unwrap_or(0.0),
       align_items: self.align_items.into(),
-      gap: self.resolved_gap().resolve_to_size(context),
+      gap: self.resolved_gap().resolve_to_size(&context.sizing),
       flex_basis: self
         .flex_basis
         .or_else(|| self.flex.map(|flex| flex.basis))
         .unwrap_or(LengthUnit::Auto)
-        .resolve_to_dimension(context),
+        .resolve_to_dimension(&context.sizing),
       flex_shrink: self
         .flex_shrink
         .map(|shrink| shrink.0)
@@ -609,18 +617,18 @@ impl InheritedStyle {
         .unwrap_or(1.0),
       flex_wrap: self.flex_wrap.into(),
       min_size: Size {
-        width: self.min_width.resolve_to_dimension(context),
-        height: self.min_height.resolve_to_dimension(context),
+        width: self.min_width.resolve_to_dimension(&context.sizing),
+        height: self.min_height.resolve_to_dimension(&context.sizing),
       },
       max_size: Size {
-        width: self.max_width.resolve_to_dimension(context),
-        height: self.max_height.resolve_to_dimension(context),
+        width: self.max_width.resolve_to_dimension(&context.sizing),
+        height: self.max_height.resolve_to_dimension(&context.sizing),
       },
       grid_auto_columns: self.grid_auto_columns.as_ref().map_or_else(Vec::new, |v| {
-        v.iter().map(|s| s.to_min_max(context)).collect()
+        v.iter().map(|s| s.to_min_max(&context.sizing)).collect()
       }),
       grid_auto_rows: self.grid_auto_rows.as_ref().map_or_else(Vec::new, |v| {
-        v.iter().map(|s| s.to_min_max(context)).collect()
+        v.iter().map(|s| s.to_min_max(&context.sizing)).collect()
       }),
       grid_auto_flow: self.grid_auto_flow.unwrap_or_default().into(),
       grid_column: self
