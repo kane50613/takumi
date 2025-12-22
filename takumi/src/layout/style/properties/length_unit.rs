@@ -180,7 +180,8 @@ impl<const DEFAULT_AUTO: bool> LengthUnit<DEFAULT_AUTO> {
         value * sizing.viewport.font_size * sizing.viewport.device_pixel_ratio,
       ),
       LengthUnit::Em(value) => {
-        CompactLength::length(value * sizing.font_size * sizing.viewport.device_pixel_ratio)
+        // `device_pixel_ratio` should NOT be applied here since it's already taken into account by `sizing.font_size`
+        CompactLength::length(value * sizing.font_size)
       }
       LengthUnit::Vh(value) => {
         CompactLength::length(sizing.viewport.height.unwrap_or_default() as f32 * value / 100.0)
