@@ -176,9 +176,9 @@ impl<const DEFAULT_AUTO: bool> LengthUnit<DEFAULT_AUTO> {
     match self {
       LengthUnit::Auto => CompactLength::auto(),
       LengthUnit::Percentage(value) => CompactLength::percent(value / 100.0),
-      LengthUnit::Rem(value) => {
-        CompactLength::length(value * sizing.font_size * sizing.viewport.device_pixel_ratio)
-      }
+      LengthUnit::Rem(value) => CompactLength::length(
+        value * sizing.viewport.font_size * sizing.viewport.device_pixel_ratio,
+      ),
       LengthUnit::Em(value) => {
         CompactLength::length(value * sizing.font_size * sizing.viewport.device_pixel_ratio)
       }
@@ -219,7 +219,7 @@ impl<const DEFAULT_AUTO: bool> LengthUnit<DEFAULT_AUTO> {
       LengthUnit::Auto => 0.0,
       LengthUnit::Px(value) => value,
       LengthUnit::Percentage(value) => (value / 100.0) * percentage_full_px,
-      LengthUnit::Rem(value) => value * sizing.font_size,
+      LengthUnit::Rem(value) => value * sizing.viewport.font_size,
       LengthUnit::Em(value) => value * sizing.font_size,
       LengthUnit::Vh(value) => value * sizing.viewport.height.unwrap_or_default() as f32 / 100.0,
       LengthUnit::Vw(value) => value * sizing.viewport.width.unwrap_or_default() as f32 / 100.0,

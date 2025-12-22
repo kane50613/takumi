@@ -193,7 +193,6 @@ fn render_node<'g, Nodes: Node<Nodes>>(
   };
 
   match constrain {
-    CanvasConstrainResult::SkipRendering => return Ok(()),
     CanvasConstrainResult::None => {
       node.draw_shell(canvas, layout)?;
     }
@@ -207,6 +206,7 @@ fn render_node<'g, Nodes: Node<Nodes>>(
         canvas.push_constrain(constrain);
       }
     },
+    CanvasConstrainResult::SkipRendering => unreachable!(),
   }
 
   node.draw_content(canvas, layout)?;
