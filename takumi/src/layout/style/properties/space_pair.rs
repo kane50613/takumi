@@ -90,10 +90,10 @@ impl SpacePair<Overflow> {
 pub type BorderRadiusPair = SpacePair<LengthUnit<false>>;
 
 impl BorderRadiusPair {
-  pub(crate) fn px(self, sizing: &Sizing, border_box: Size<f32>) -> SpacePair<f32> {
+  pub(crate) fn to_px(self, sizing: &Sizing, border_box: Size<f32>) -> SpacePair<f32> {
     SpacePair::from_pair(
-      self.x.px(sizing, border_box.width).max(0.0),
-      self.y.px(sizing, border_box.height).max(0.0),
+      self.x.to_px(sizing, border_box.width).max(0.0),
+      self.y.to_px(sizing, border_box.height).max(0.0),
     )
   }
 }

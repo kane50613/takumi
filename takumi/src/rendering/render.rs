@@ -110,8 +110,8 @@ fn apply_transform(
   let translate = style.resolve_translate();
   if translate != SpacePair::default() {
     local *= Affine::translation(
-      translate.x.px(sizing, border_box.width),
-      translate.y.px(sizing, border_box.height),
+      translate.x.to_px(sizing, border_box.width),
+      translate.y.to_px(sizing, border_box.height),
     );
   }
 
@@ -166,14 +166,6 @@ fn render_node<'g, Nodes: Node<Nodes>>(
 
   node.context.transform = transform;
 
-  let should_create_isolated_canvas = !node.context.style.filter.is_empty();
-
-  let original_canvas_image = if should_create_isolated_canvas {
-    Some(canvas.replace_new_image())
-  } else {
-    None
-  };
-
   // Normal rendering path (no filters requiring node-level rendering)
   let constrain = CanvasConstrain::from_node(
     &node.context,
@@ -183,7 +175,22 @@ fn render_node<'g, Nodes: Node<Nodes>>(
     &mut canvas.mask_memory,
   )?;
 
+  // Skip rendering if the node is not visible
+  if matches!(constrain, CanvasConstrainResult::SkipRendering) {
+    return Ok(());
+  }
+
   let has_constrain = constrain.is_some();
+
+  let should_create_isolated_canvas = !node.context.style.filter.is_empty();
+
+  // If isolated canvas is required, replace the current canvas with a new one.
+  // Make sure to merge the image back!
+  let original_canvas_image = if should_create_isolated_canvas {
+    Some(canvas.replace_new_image())
+  } else {
+    None
+  };
 
   match constrain {
     CanvasConstrainResult::SkipRendering => return Ok(()),

@@ -42,9 +42,9 @@ pub fn process_image_for_object_fit<'i>(
   let (image_width, image_height) = image.size();
 
   let object_position_x =
-    LengthUnit::from(context.style.object_position.0.x).px(&context.sizing, content_box.width);
+    LengthUnit::from(context.style.object_position.0.x).to_px(&context.sizing, content_box.width);
   let object_position_y =
-    LengthUnit::from(context.style.object_position.0.y).px(&context.sizing, content_box.height);
+    LengthUnit::from(context.style.object_position.0.y).to_px(&context.sizing, content_box.height);
 
   match context.style.object_fit {
     ObjectFit::Fill => Ok((

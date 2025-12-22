@@ -70,7 +70,10 @@ pub(crate) fn resolve_stops_along_axis(
         color,
         hint: Some(hint),
       } => {
-        let position = hint.0.px(&context.sizing, axis_size_px).max(last_position);
+        let position = hint
+          .0
+          .to_px(&context.sizing, axis_size_px)
+          .max(last_position);
 
         last_position = position;
 
@@ -101,7 +104,10 @@ pub(crate) fn resolve_stops_along_axis(
 
         let interpolated_color = interpolate_rgba(before.color, after_color, 0.5);
 
-        let position = hint.0.px(&context.sizing, axis_size_px).max(last_position);
+        let position = hint
+          .0
+          .to_px(&context.sizing, axis_size_px)
+          .max(last_position);
 
         resolved.push(ResolvedGradientStop {
           color: interpolated_color,

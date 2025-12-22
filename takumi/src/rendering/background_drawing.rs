@@ -17,7 +17,7 @@ pub(crate) type ImageTiles = (RgbaImage, SmallVec<[i32; 1]>, SmallVec<[i32; 1]>)
 pub(crate) fn resolve_length_against_area(unit: LengthUnit, area: u32, sizing: &Sizing) -> u32 {
   match unit {
     LengthUnit::Auto => area,
-    _ => unit.px(sizing, area as f32).max(0.0) as u32,
+    _ => unit.to_px(sizing, area as f32).max(0.0) as u32,
   }
 }
 
@@ -94,7 +94,7 @@ pub(crate) fn resolve_length_unit_to_position_component(
 ) -> i32 {
   match length {
     LengthUnit::Auto => available / 2,
-    _ => length.px(sizing, available as f32) as i32,
+    _ => length.to_px(sizing, available as f32) as i32,
   }
 }
 

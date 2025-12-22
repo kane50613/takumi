@@ -77,7 +77,7 @@ fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
     ),
     children: Some(vec![
       ContainerNode {
-    preset: None,
+        preset: None,
         tw: None,
         style: Some(
           StyleBuilder::default()
@@ -92,7 +92,7 @@ fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
         ),
         children: Some(vec![
           TextNode {
-    preset: None,
+            preset: None,
             tw: None,
             style: Some(
               StyleBuilder::default()

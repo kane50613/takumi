@@ -105,8 +105,8 @@ impl RadialGradient {
 impl RadialGradientDrawContext {
   /// Builds a drawing context from a gradient and a target viewport.
   pub fn new(gradient: &RadialGradient, width: f32, height: f32, context: &RenderContext) -> Self {
-    let cx = LengthUnit::from(gradient.center.0.x).px(&context.sizing, width);
-    let cy = LengthUnit::from(gradient.center.0.y).px(&context.sizing, height);
+    let cx = LengthUnit::from(gradient.center.0.x).to_px(&context.sizing, width);
+    let cy = LengthUnit::from(gradient.center.0.y).to_px(&context.sizing, height);
 
     // Distances to sides and corners
     let dx_left = cx;

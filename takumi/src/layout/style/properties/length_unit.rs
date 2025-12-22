@@ -179,14 +179,18 @@ impl<const DEFAULT_AUTO: bool> LengthUnit<DEFAULT_AUTO> {
       LengthUnit::Rem(value) => {
         CompactLength::length(value * sizing.font_size * sizing.viewport.device_pixel_ratio)
       }
-      LengthUnit::Em(value) => CompactLength::length(value * sizing.font_size),
+      LengthUnit::Em(value) => {
+        CompactLength::length(value * sizing.font_size * sizing.viewport.device_pixel_ratio)
+      }
       LengthUnit::Vh(value) => {
         CompactLength::length(sizing.viewport.height.unwrap_or_default() as f32 * value / 100.0)
       }
       LengthUnit::Vw(value) => {
         CompactLength::length(sizing.viewport.width.unwrap_or_default() as f32 * value / 100.0)
       }
-      _ => CompactLength::length(self.px(sizing, sizing.viewport.width.unwrap_or_default() as f32)),
+      _ => {
+        CompactLength::length(self.to_px(sizing, sizing.viewport.width.unwrap_or_default() as f32))
+      }
     }
   }
 
@@ -203,7 +207,7 @@ impl<const DEFAULT_AUTO: bool> LengthUnit<DEFAULT_AUTO> {
   }
 
   /// Resolves the length unit to a pixel value.
-  pub(crate) fn px(self, sizing: &Sizing, percentage_full_px: f32) -> f32 {
+  pub(crate) fn to_px(self, sizing: &Sizing, percentage_full_px: f32) -> f32 {
     const ONE_CM_IN_PX: f32 = 96.0 / 2.54;
     const ONE_MM_IN_PX: f32 = ONE_CM_IN_PX / 10.0;
     const ONE_Q_IN_PX: f32 = ONE_CM_IN_PX / 40.0;

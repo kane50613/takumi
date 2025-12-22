@@ -120,7 +120,7 @@ fn resolve_radius(radius: ShapeRadius, distance: Size<f32>, sizing: &Sizing, ful
   match radius {
     ShapeRadius::ClosestSide => distance.width.min(distance.height),
     ShapeRadius::FarthestSide => distance.width.max(distance.height),
-    ShapeRadius::Length(length) => length.px(sizing, full),
+    ShapeRadius::Length(length) => length.to_px(sizing, full),
   }
 }
 
@@ -146,7 +146,7 @@ impl BasicShape {
         let inset: Rect<f32> = shape
           .inset
           .map_axis(|value, axis| {
-            value.px(
+            value.to_px(
               &context.sizing,
               match axis {
                 Axis::Horizontal => size.width,
@@ -165,7 +165,7 @@ impl BasicShape {
               Sides(
                 radius
                   .0
-                  .map(|corner| SpacePair::from_single(corner.px(&context.sizing, size.width))),
+                  .map(|corner| SpacePair::from_single(corner.to_px(&context.sizing, size.width))),
               )
             })
             .unwrap_or_default(),
@@ -185,8 +185,8 @@ impl BasicShape {
       }
       BasicShape::Ellipse(shape) => {
         let distance = Size {
-          width: shape.position.0.x.px(&context.sizing, size.width),
-          height: shape.position.0.y.px(&context.sizing, size.height),
+          width: shape.position.0.x.to_px(&context.sizing, size.width),
+          height: shape.position.0.y.to_px(&context.sizing, size.height),
         };
 
         paths.add_ellipse(
@@ -199,15 +199,15 @@ impl BasicShape {
         if !shape.coordinates.is_empty() {
           // Start the path at the first coordinate
           let first = &shape.coordinates[0];
-          let first_x = first.x.px(&context.sizing, size.width);
-          let first_y = first.y.px(&context.sizing, size.height);
+          let first_x = first.x.to_px(&context.sizing, size.width);
+          let first_y = first.y.to_px(&context.sizing, size.height);
 
           paths.move_to((first_x, first_y));
 
           // Add lines to each subsequent coordinate
           for coord in &shape.coordinates[1..] {
-            let x = coord.x.px(&context.sizing, size.width);
-            let y = coord.y.px(&context.sizing, size.height);
+            let x = coord.x.to_px(&context.sizing, size.width);
+            let y = coord.y.to_px(&context.sizing, size.height);
             paths.line_to((x, y));
           }
 

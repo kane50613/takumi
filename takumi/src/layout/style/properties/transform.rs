@@ -211,8 +211,8 @@ impl Affine {
     for transform in transforms {
       instance *= match *transform {
         Transform::Translate(x_length, y_length) => Affine::translation(
-          x_length.px(sizing, border_box.width),
-          y_length.px(sizing, border_box.height),
+          x_length.to_px(sizing, border_box.width),
+          y_length.to_px(sizing, border_box.height),
         ),
         Transform::Scale(x_scale, y_scale) => Affine::scale(x_scale, y_scale),
         Transform::Rotate(angle) => Affine::rotation(angle),

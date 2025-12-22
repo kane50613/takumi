@@ -65,8 +65,8 @@ pub struct BackgroundPosition(pub SpacePair<PositionComponent>);
 impl BackgroundPosition {
   pub(crate) fn to_point(self, sizing: &Sizing, border_box: Size<f32>) -> Point<f32> {
     Point {
-      x: LengthUnit::from(self.0.x).px(sizing, border_box.width),
-      y: LengthUnit::from(self.0.y).px(sizing, border_box.height),
+      x: LengthUnit::from(self.0.x).to_px(sizing, border_box.width),
+      y: LengthUnit::from(self.0.y).to_px(sizing, border_box.height),
     }
   }
 }

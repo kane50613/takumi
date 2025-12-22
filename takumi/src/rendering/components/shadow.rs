@@ -75,10 +75,10 @@ impl SizedShadow {
     size: Size<f32>,
   ) -> Self {
     Self {
-      offset_x: shadow.offset_x.px(sizing, size.width),
-      offset_y: shadow.offset_y.px(sizing, size.height),
-      blur_radius: shadow.blur_radius.px(sizing, size.width),
-      spread_radius: shadow.spread_radius.px(sizing, size.width).max(0.0),
+      offset_x: shadow.offset_x.to_px(sizing, size.width),
+      offset_y: shadow.offset_y.to_px(sizing, size.height),
+      blur_radius: shadow.blur_radius.to_px(sizing, size.width),
+      spread_radius: shadow.spread_radius.to_px(sizing, size.width).max(0.0),
       color: shadow.color.resolve(current_color, opacity),
     }
   }
@@ -92,9 +92,9 @@ impl SizedShadow {
     size: Size<f32>,
   ) -> Self {
     Self {
-      offset_x: shadow.offset_x.px(sizing, size.width),
-      offset_y: shadow.offset_y.px(sizing, size.height),
-      blur_radius: shadow.blur_radius.px(sizing, size.width),
+      offset_x: shadow.offset_x.to_px(sizing, size.width),
+      offset_y: shadow.offset_y.to_px(sizing, size.height),
+      blur_radius: shadow.blur_radius.to_px(sizing, size.width),
       // Text shadows do not support spread radius; set to 0.
       spread_radius: 0.0,
       color: shadow.color.resolve(current_color, opacity),

@@ -52,7 +52,7 @@ impl LineHeight {
       LengthUnit::Px(value) => parley::LineHeight::Absolute(value),
       LengthUnit::Em(value) => parley::LineHeight::FontSizeRelative(value),
       LengthUnit::Percentage(value) => parley::LineHeight::FontSizeRelative(value / 100.0),
-      unit => parley::LineHeight::Absolute(unit.px(sizing, sizing.font_size)),
+      unit => parley::LineHeight::Absolute(unit.to_px(sizing, sizing.font_size)),
     }
   }
 }

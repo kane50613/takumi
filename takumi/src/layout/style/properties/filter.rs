@@ -5,7 +5,7 @@ use taffy::Size;
 
 use crate::{
   layout::style::{Angle, Color, FromCss, LengthUnit, ParseResult, PercentageNumber, TextShadow},
-  rendering::{SizedShadow, Sizing, apply_fast_blur},
+  rendering::{SizedShadow, Sizing, apply_fast_blur, blend_pixel},
 };
 
 /// Represents a single CSS filter operation
@@ -34,6 +34,95 @@ pub enum Filter {
 /// A list of filter operations
 pub type Filters = SmallVec<[Filter; 2]>;
 
+/// Categorizes filters for batch processing
+enum FilterCategory<'f> {
+  /// Pixel filters that can potentially be batched
+  Pixel(&'f Filter),
+  /// Complex filters that need special handling (blur, drop-shadow, hue-rotate)
+  Complex(&'f Filter),
+}
+
+impl Filter {
+  fn categorize(&self) -> FilterCategory<'_> {
+    match self {
+      Filter::Blur(_) | Filter::DropShadow(_) | Filter::HueRotate(_) => {
+        FilterCategory::Complex(self)
+      }
+      _ => FilterCategory::Pixel(self),
+    }
+  }
+}
+
+/// Applies a single pixel filter inline - used for single filter optimization
+#[inline(always)]
+fn apply_single_pixel_filter(pixel: &mut Rgba<u8>, filter: &Filter) {
+  match *filter {
+    Filter::Brightness(PercentageNumber(value)) => {
+      for channel in pixel.0.iter_mut().take(3) {
+        *channel = ((*channel) as f32 * value).clamp(0.0, 255.0) as u8;
+      }
+    }
+    Filter::Contrast(PercentageNumber(value)) => {
+      for channel in pixel.0.iter_mut().take(3) {
+        *channel = ((*channel as f32 - 128.0) * value + 128.0).clamp(0.0, 255.0) as u8;
+      }
+    }
+    Filter::Grayscale(PercentageNumber(amount)) => {
+      let lum = pixel.to_luma().0[0] as f32;
+      for channel in pixel.0.iter_mut().take(3) {
+        *channel = ((*channel as f32 * (1.0 - amount)) + (lum * amount)).clamp(0.0, 255.0) as u8;
+      }
+    }
+    Filter::Saturate(PercentageNumber(value)) => {
+      let lum = pixel.to_luma().0[0] as f32;
+      for channel in pixel.0.iter_mut().take(3) {
+        *channel = (lum * (1.0 - value) + *channel as f32 * value).clamp(0.0, 255.0) as u8;
+      }
+    }
+    Filter::Invert(PercentageNumber(amount)) => {
+      for channel in pixel.0.iter_mut().take(3) {
+        let inverted = u8::MAX.saturating_sub(*channel);
+        *channel =
+          ((*channel as f32 * (1.0 - amount)) + (inverted as f32 * amount)).clamp(0.0, 255.0) as u8;
+      }
+    }
+    Filter::Opacity(PercentageNumber(value)) => {
+      pixel.0[3] = ((pixel.0[3]) as f32 * value).clamp(0.0, 255.0) as u8;
+    }
+    // Complex filters are not handled here
+    Filter::Blur(_) | Filter::DropShadow(_) | Filter::HueRotate(_) => {}
+  }
+}
+
+/// Applies batched pixel filters in a single pass over the image
+fn apply_batched_pixel_filters(image: &mut RgbaImage, filters: &[&Filter]) {
+  if filters.is_empty() {
+    return;
+  }
+
+  // Single filter fast path
+  if filters.len() == 1 {
+    let filter = filters[0];
+    for pixel in image.pixels_mut() {
+      if pixel.0[3] == 0 {
+        continue;
+      }
+      apply_single_pixel_filter(pixel, filter);
+    }
+    return;
+  }
+
+  // Multiple filters: apply all in one pass
+  for pixel in image.pixels_mut() {
+    if pixel.0[3] == 0 {
+      continue;
+    }
+    for &filter in filters {
+      apply_single_pixel_filter(pixel, filter);
+    }
+  }
+}
+
 pub(crate) fn apply_filters<'f, F: Iterator<Item = &'f Filter>>(
   image: &mut RgbaImage,
   sizing: &Sizing,
@@ -41,95 +130,48 @@ pub(crate) fn apply_filters<'f, F: Iterator<Item = &'f Filter>>(
   opacity: u8,
   filters: F,
 ) {
+  // Collect filters and batch consecutive pixel filters
+  let mut pending_pixel_filters: SmallVec<[&Filter; 8]> = SmallVec::new();
+
   for filter in filters {
-    match *filter {
-      Filter::Brightness(PercentageNumber(value)) => {
-        for pixel in image.pixels_mut() {
-          if pixel.0[3] == 0 {
-            continue;
-          }
-
-          for channel in pixel.0.iter_mut().take(3) {
-            *channel = ((*channel) as f32 * value).clamp(0.0, 255.0) as u8;
-          }
+    match filter.categorize() {
+      FilterCategory::Pixel(f) => {
+        // Accumulate pixel filters for batch processing
+        pending_pixel_filters.push(f);
+      }
+      FilterCategory::Complex(f) => {
+        // Flush any pending pixel filters first
+        if !pending_pixel_filters.is_empty() {
+          apply_batched_pixel_filters(image, &pending_pixel_filters);
+          pending_pixel_filters.clear();
         }
-      }
-      Filter::Contrast(PercentageNumber(value)) => {
-        for pixel in image.pixels_mut() {
-          if pixel.0[3] == 0 {
-            continue;
-          }
 
-          for channel in pixel.0.iter_mut().take(3) {
-            // Contrast formula: (value - 128) * contrast + 128
-            *channel = ((*channel as f32 - 128.0) * value + 128.0).clamp(0.0, 255.0) as u8;
+        // Apply complex filter
+        match *f {
+          Filter::HueRotate(angle) => {
+            huerotate_in_place(image, *angle as i32);
           }
+          Filter::Blur(blur) => {
+            apply_fast_blur(image, blur.to_px(sizing, 1.0));
+          }
+          Filter::DropShadow(drop_shadow) => {
+            let size = Size {
+              width: image.width() as f32,
+              height: image.height() as f32,
+            };
+            let shadow =
+              SizedShadow::from_text_shadow(drop_shadow, sizing, current_color, opacity, size);
+            apply_drop_shadow_filter(image, &shadow);
+          }
+          _ => unreachable!(),
         }
-      }
-      Filter::Grayscale(PercentageNumber(amount)) => {
-        for pixel in image.pixels_mut() {
-          if pixel.0[3] == 0 {
-            continue;
-          }
-
-          let lum = pixel.to_luma().0[0] as f32;
-
-          for channel in pixel.0.iter_mut().take(3) {
-            *channel =
-              ((*channel as f32 * (1.0 - amount)) + (lum * amount)).clamp(0.0, 255.0) as u8;
-          }
-        }
-      }
-      Filter::HueRotate(angle) => {
-        huerotate_in_place(image, *angle as i32);
-      }
-      Filter::Saturate(PercentageNumber(value)) => {
-        for pixel in image.pixels_mut() {
-          if pixel.0[3] == 0 {
-            continue;
-          }
-          let lum = pixel.to_luma().0[0] as f32;
-
-          for channel in pixel.0.iter_mut().take(3) {
-            *channel = (lum * (1.0 - value) + *channel as f32 * value).clamp(0.0, 255.0) as u8;
-          }
-        }
-      }
-      Filter::Invert(PercentageNumber(amount)) => {
-        for pixel in image.pixels_mut() {
-          if pixel.0[3] == 0 {
-            continue;
-          }
-          for channel in pixel.0.iter_mut().take(3) {
-            let inverted = u8::MAX.saturating_sub(*channel);
-            *channel = ((*channel as f32 * (1.0 - amount)) + (inverted as f32 * amount))
-              .clamp(0.0, 255.0) as u8;
-          }
-        }
-      }
-      Filter::Opacity(PercentageNumber(value)) => {
-        for pixel in image.pixels_mut() {
-          if pixel.0[3] == 0 {
-            continue;
-          }
-          pixel.0[3] = ((pixel.0[3]) as f32 * value).clamp(0.0, 255.0) as u8;
-        }
-      }
-      // Blur and DropShadow require node-level rendering and are handled separately
-      Filter::Blur(blur) => {
-        apply_fast_blur(image, blur.px(sizing, 1.0));
-      }
-      Filter::DropShadow(drop_shadow) => {
-        let size = Size {
-          width: image.width() as f32,
-          height: image.height() as f32,
-        };
-        let shadow =
-          SizedShadow::from_text_shadow(drop_shadow, sizing, current_color, opacity, size);
-
-        apply_drop_shadow_filter(image, &shadow);
       }
     }
+  }
+
+  // Flush remaining pixel filters
+  if !pending_pixel_filters.is_empty() {
+    apply_batched_pixel_filters(image, &pending_pixel_filters);
   }
 }
 
@@ -249,22 +291,6 @@ fn apply_drop_shadow_filter(canvas: &mut RgbaImage, shadow: &SizedShadow) {
         *canvas.get_pixel_mut(x, y) = *result.get_pixel(src_x, src_y);
       }
     }
-  }
-}
-
-/// Blends a source pixel onto a destination pixel using alpha blending.
-#[inline]
-fn blend_pixel(dest: &mut Rgba<u8>, src: Rgba<u8>) {
-  let src_a = src.0[3] as f32 / 255.0;
-  let dst_a = dest.0[3] as f32 / 255.0;
-  let out_a = src_a + dst_a * (1.0 - src_a);
-
-  if out_a > 0.0 {
-    for i in 0..3 {
-      dest.0[i] = (((src.0[i] as f32 * src_a) + (dest.0[i] as f32 * dst_a * (1.0 - src_a))) / out_a)
-        .round() as u8;
-    }
-    dest.0[3] = (out_a * 255.0).round() as u8;
   }
 }
 

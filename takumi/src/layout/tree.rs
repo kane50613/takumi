@@ -91,7 +91,7 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
 
     let font_size = style
       .font_size
-      .map(|font_size| font_size.px(&parent_context.sizing, parent_context.sizing.font_size))
+      .map(|font_size| font_size.to_px(&parent_context.sizing, parent_context.sizing.font_size))
       .unwrap_or(parent_context.sizing.font_size);
 
     // currentColor itself should NOT have opacity applied yet,
@@ -106,8 +106,8 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
       opacity,
       fetched_resources: parent_context.fetched_resources.clone(),
       sizing: Sizing {
-        viewport: parent_context.sizing.viewport,
         font_size,
+        ..parent_context.sizing
       },
       ..*parent_context
     };

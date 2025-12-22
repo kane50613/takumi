@@ -526,7 +526,7 @@ impl InheritedStyle {
       .webkit_text_stroke_width
       .or(self.webkit_text_stroke.map(|stroke| stroke.width))
       .unwrap_or_default()
-      .px(&context.sizing, context.sizing.font_size);
+      .to_px(&context.sizing, context.sizing.font_size);
 
     SizedFontStyle {
       parent: self,
@@ -535,10 +535,10 @@ impl InheritedStyle {
       stroke_width: resolved_stroke_width,
       letter_spacing: self
         .letter_spacing
-        .map(|spacing| spacing.px(&context.sizing, context.sizing.font_size)),
+        .map(|spacing| spacing.to_px(&context.sizing, context.sizing.font_size)),
       word_spacing: self
         .word_spacing
-        .map(|spacing| spacing.px(&context.sizing, context.sizing.font_size)),
+        .map(|spacing| spacing.to_px(&context.sizing, context.sizing.font_size)),
       text_shadow: self.text_shadow.as_ref().map(|shadows| {
         shadows
           .iter()
