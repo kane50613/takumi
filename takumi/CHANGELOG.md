@@ -1,5 +1,12 @@
 # takumi
 
+## 0.59.1
+
+### Patch Changes
+
+- c6b4eab: use stack blur algorithm
+- 8f02159: add `sepia()` filter, tailwind `filter` parsers
+
 ## 0.59.0
 
 ### Minor Changes
