@@ -1,7 +1,7 @@
 {
   "name": "@takumi-rs/image-response",
   "type": "module",
-  "version": "0.59.1",
+  "version": "0.60.0",
   "author": {
     "email": "me@kane.tw",
     "name": "Kane Wang",

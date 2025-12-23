@@ -1,5 +1,11 @@
 # takumi
 
+## 0.60.0
+
+### Minor Changes
+
+- ef3ec72: support `text-wrap: balance` & `pretty` (`text-wrap-style`)!
+
 ## 0.59.1
 
 ### Patch Changes
