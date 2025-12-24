@@ -20,89 +20,102 @@ export default function DocsTemplateV1({
       style={{
         width: "100%",
         height: "100%",
-        backgroundColor: "#09090b",
+        backgroundColor: "#050505",
         position: "relative",
         display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        color: "white",
+        backgroundImage: `linear-gradient(to bottom right, ${primaryColor}, transparent)`,
       }}
     >
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          backgroundImage: `radial-gradient(circle at 0% 0%, ${primaryColor}, transparent)`,
-          opacity: 0.8,
-        }}
-      />
-
       <div
         style={{
           display: "flex",
           flexDirection: "column",
           width: "100%",
           height: "100%",
-          padding: "4rem",
-          color: "white",
+          padding: "6rem",
           position: "relative",
-          flex: 1,
           justifyContent: "space-between",
         }}
       >
-        <span
+        <div
           style={{
-            fontSize: 84,
-            fontWeight: 700,
-            lineHeight: 1.1,
-            letterSpacing: "-0.03em",
-            color: "white",
-            textOverflow: "ellipsis",
-            lineClamp: 2,
+            display: "flex",
+            flexDirection: "column",
+            gap: "32px",
+            marginBottom: "40px",
+            textWrap: "pretty",
           }}
         >
-          {title}
-        </span>
-        <span
-          style={{
-            fontSize: 48,
-            color: "rgba(161, 161, 170, 1)",
-            fontWeight: 400,
-            lineHeight: 1.4,
-            lineClamp: 2,
-            textOverflow: "ellipsis",
-            maxWidth: "90%",
-          }}
-        >
-          {description}
-        </span>
+          <span
+            style={{
+              fontSize: 72,
+              fontWeight: 800,
+              lineHeight: 1.1,
+              letterSpacing: "-0.04em",
+              color: "white",
+            }}
+          >
+            {title}
+          </span>
+          <span
+            style={{
+              fontSize: 44,
+              color: "#a1a1aa",
+              fontWeight: 400,
+              lineHeight: 1.4,
+              maxWidth: "95%",
+              letterSpacing: "-0.01em",
+              lineClamp: 2,
+              textOverflow: "ellipsis",
+              overflow: "hidden",
+            }}
+          >
+            {description}
+          </span>
+        </div>
+
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            gap: "1rem",
+            gap: "28px",
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: primaryTextColor,
-            }}
-          >
-            {icon}
-          </div>
+          {icon}
           <span
             style={{
-              fontSize: 40,
-              fontWeight: 600,
+              fontSize: 32,
+              fontWeight: 700,
               letterSpacing: "-0.02em",
               color: "white",
               opacity: 0.9,
             }}
           >
             {site}
+          </span>
+          <div style={{ flexGrow: 1 }} />
+          <div
+            style={{
+              height: 4,
+              width: 60,
+              backgroundColor: primaryColor,
+              borderRadius: 2,
+            }}
+          />
+          <span
+            style={{
+              fontSize: 22,
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.2em",
+              color: primaryTextColor,
+              opacity: 0.8,
+            }}
+          >
+            Documentation
           </span>
         </div>
       </div>

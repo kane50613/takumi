@@ -19,7 +19,7 @@ export default function ProductCardTemplateV1({
         display: "flex",
         width: "100%",
         height: "100%",
-        backgroundColor: "#f3f4f6",
+        backgroundColor: "#f1f5f9",
         padding: "40px",
         alignItems: "center",
         justifyContent: "center",
@@ -33,7 +33,7 @@ export default function ProductCardTemplateV1({
           backgroundColor: "white",
           borderRadius: "32px",
           overflow: "hidden",
-          boxShadow: "0 20px 50px rgba(0,0,0,0.1)",
+          boxShadow: "0 20px 50px rgba(0,0,0,0.08)",
         }}
       >
         <div
@@ -42,8 +42,11 @@ export default function ProductCardTemplateV1({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: "#e5e7eb",
+            backgroundColor: "#f8fafc",
+            backgroundImage: "linear-gradient(to bottom, #f8fafc, #f1f5f9)",
             padding: "40px",
+            borderTopLeftRadius: "32px",
+            borderBottomLeftRadius: "32px",
           }}
         >
           {image}
@@ -53,46 +56,51 @@ export default function ProductCardTemplateV1({
             flex: 1,
             display: "flex",
             flexDirection: "column",
-            padding: "60px",
+            padding: "50px 60px",
             justifyContent: "center",
           }}
         >
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <span
+              style={{
+                fontSize: 22,
+                color: "#2563eb",
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+              }}
+            >
+              {brand}
+            </span>
+            <span
+              style={{
+                fontSize: 60,
+                fontWeight: 900,
+                color: "#0f172a",
+                lineHeight: 1.1,
+                letterSpacing: "-0.02em",
+              }}
+            >
+              {productName}
+            </span>
+          </div>
+
           <span
             style={{
-              fontSize: 24,
-              color: "#6b7280",
-              fontWeight: 600,
-              marginBottom: "16px",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-            }}
-          >
-            {brand}
-          </span>
-          <h1
-            style={{
-              fontSize: 64,
-              fontWeight: 900,
-              color: "#111827",
-              margin: "0 0 24px 0",
-              lineHeight: 1.1,
-            }}
-          >
-            {productName}
-          </h1>
-          <p
-            style={{
-              fontSize: 32,
-              color: "#4b5563",
+              fontSize: 28,
+              color: "#475569",
               lineHeight: 1.5,
-              marginBottom: "40px",
+              marginTop: "24px",
+              marginBottom: "32px",
+              fontWeight: 400,
             }}
           >
             {description}
-          </p>
+          </span>
+
           <div
             style={{
-              fontSize: 56,
+              fontSize: 52,
               fontWeight: 800,
               color: "#2563eb",
             }}

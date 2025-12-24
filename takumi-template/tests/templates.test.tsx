@@ -7,7 +7,6 @@ import type { ReactNode } from "react";
 import BlogPostTemplateV1 from "../src/templates/blog-post-template-v1";
 import DocsTemplateV1 from "../src/templates/docs-template-v1";
 import ProductCardTemplateV1 from "../src/templates/product-card-template-v1";
-import SocialQuoteTemplateV1 from "../src/templates/social-quote-template-v1";
 
 const renderer = new Renderer({
   persistentImages: [
@@ -83,21 +82,6 @@ testRender(
         alt="Product"
         src="takumi.svg"
         style={{ width: "200px", height: "200px", objectFit: "contain" }}
-      />
-    }
-  />,
-);
-
-testRender(
-  "SocialQuoteTemplateV1",
-  <SocialQuoteTemplateV1
-    quote="Takumi has completely transformed how we generate social media assets. It's incredibly fast and the quality is unmatched."
-    author="Sarah Chen"
-    avatar={
-      <img
-        alt="Avatar"
-        src="https://avatars.githubusercontent.com/u/33802653?s=400&u=265f123fc40f34df69466e0a4368f64cc8837e2f&v=4"
-        tw="w-full h-full object-cover"
       />
     }
   />,
