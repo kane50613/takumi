@@ -1,5 +1,14 @@
 # @takumi-rs/image-response
 
+## 0.60.5
+
+### Patch Changes
+
+- 66e28c7: fix should default to `webp` if no `format` option provided
+  - @takumi-rs/core@0.60.5
+  - @takumi-rs/wasm@0.60.5
+  - @takumi-rs/helpers@0.60.5
+
 ## 0.60.4
 
 ### Patch Changes

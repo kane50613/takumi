@@ -1,5 +1,11 @@
 # takumi
 
+## 0.60.5
+
+### Patch Changes
+
+- 12415ba: fix alpha blending precision
+
 ## 0.60.4
 
 ### Patch Changes
