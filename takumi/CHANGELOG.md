@@ -1,5 +1,11 @@
 # takumi
 
+## 0.60.6
+
+### Patch Changes
+
+- 7813b86: use bit masking for faster alpha quantiazation
+
 ## 0.60.5
 
 ### Patch Changes
