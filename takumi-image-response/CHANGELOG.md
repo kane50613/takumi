@@ -1,5 +1,13 @@
 # @takumi-rs/image-response
 
+## 0.60.4
+
+### Patch Changes
+
+- @takumi-rs/core@0.60.4
+- @takumi-rs/wasm@0.60.4
+- @takumi-rs/helpers@0.60.4
+
 ## 0.60.3
 
 ### Patch Changes

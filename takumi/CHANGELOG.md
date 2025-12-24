@@ -1,5 +1,11 @@
 # takumi
 
+## 0.60.4
+
+### Patch Changes
+
+- 6f74c75: fix `try_collect_palette` collecting over 256 colors
+
 ## 0.60.3
 
 ### Patch Changes
