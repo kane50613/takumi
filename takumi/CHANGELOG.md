@@ -1,5 +1,11 @@
 # takumi
 
+## 0.60.2
+
+### Patch Changes
+
+- 946fc9e: update ellipsis condition explicity check `text-overflow: ellipsis`
+
 ## 0.60.1
 
 ### Patch Changes
