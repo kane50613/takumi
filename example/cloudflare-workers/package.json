@@ -15,7 +15,6 @@
   "dependencies": {
     "@takumi-rs/helpers": "workspace:*",
     "@takumi-rs/image-response": "workspace:*",
-    "@takumi-rs/template": "workspace:*",
     "@takumi-rs/wasm": "workspace:*",
     "react": "^19.2.3"
   }

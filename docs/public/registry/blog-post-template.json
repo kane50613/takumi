@@ -1,0 +1,11 @@
+{
+  "name": "blog-post-template",
+  "type": "registry:ui",
+  "files": [
+    {
+      "path": "../templates/blog-post-template.tsx",
+      "type": "registry:ui",
+      "target": "components/takumi/blog-post-template.tsx"
+    }
+  ]
+}

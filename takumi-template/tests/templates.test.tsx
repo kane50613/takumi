@@ -4,9 +4,9 @@ import { Renderer } from "@takumi-rs/core";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import { write } from "bun";
 import type { ReactNode } from "react";
-import BlogPostTemplateV1 from "../src/templates/blog-post-template-v1";
-import DocsTemplateV1 from "../src/templates/docs-template-v1";
-import ProductCardTemplateV1 from "../src/templates/product-card-template-v1";
+import BlogPostTemplate from "../src/templates/blog-post-template";
+import DocsTemplate from "../src/templates/docs-template";
+import ProductCardTemplate from "../src/templates/product-card-template";
 
 const renderer = new Renderer({
   persistentImages: [
@@ -42,8 +42,8 @@ function testRender(name: string, template: ReactNode) {
 }
 
 testRender(
-  "DocsTemplateV1",
-  <DocsTemplateV1
+  "docs-template",
+  <DocsTemplate
     title="Fumadocs Integration"
     description="When will Fuma meet me in person? Hope we can meet in Japan! Culpa dolore eu ullamco aute exercitation sint aute nostrud qui tempor commodo ad culpa culpa. Laborum laboris eu laborum Lorem aliquip nulla nulla est proident eu. Officia deserunt aute ex quis exercitation ut. Irure cupidatat eu dolor Lorem eu aliquip mollit voluptate esse aute fugiat officia proident aliquip."
     icon={<img alt="Takumi" src="takumi.svg" tw="w-16 h-16" />}
@@ -54,8 +54,8 @@ testRender(
 );
 
 testRender(
-  "BlogPostTemplateV1",
-  <BlogPostTemplateV1
+  "blog-post-template",
+  <BlogPostTemplate
     title="The Future of Web Rendering with Rust and WebAssembly"
     author="Kane Wang"
     date="Nov 24, 2025"
@@ -71,8 +71,8 @@ testRender(
 );
 
 testRender(
-  "ProductCardTemplateV1",
-  <ProductCardTemplateV1
+  "product-card-template",
+  <ProductCardTemplate
     productName="Takumi Pro"
     price="$299"
     description="The ultimate image generation engine for your next project. Blazing fast, type-safe, and built for scale."

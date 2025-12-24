@@ -1,7 +1,7 @@
 import ImageResponse from "@takumi-rs/image-response";
-import DocsTemplateV1 from "@takumi-rs/template/docs-template-v1";
 import { createFileRoute } from "@tanstack/react-router";
 import { Axe } from "lucide-react";
+import DocsTemplate from "../../../../takumi-template/src/templates/docs-template";
 
 export const Route = createFileRoute("/")({
   server: {
@@ -10,7 +10,7 @@ export const Route = createFileRoute("/")({
         const { host } = new URL(request.url);
 
         return new ImageResponse(
-          <DocsTemplateV1
+          <DocsTemplate
             title={`Hello from ${host}!`}
             description="If you see this, the TanStack Start example works."
             icon={<Axe color="hsl(354, 90%, 60%)" size={64} />}

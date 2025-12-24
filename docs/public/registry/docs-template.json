@@ -1,0 +1,11 @@
+{
+  "name": "docs-template",
+  "type": "registry:ui",
+  "files": [
+    {
+      "path": "../templates/docs-template.tsx",
+      "type": "registry:ui",
+      "target": "components/takumi/docs-template.tsx"
+    }
+  ]
+}

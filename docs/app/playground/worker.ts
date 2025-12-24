@@ -1,5 +1,4 @@
 import { fromJsx } from "@takumi-rs/helpers/jsx";
-import DocsTemplateV1 from "@takumi-rs/template/docs-template-v1";
 import initWasm, { collectNodeFetchTasks, Renderer } from "@takumi-rs/wasm";
 import wasmUrl from "@takumi-rs/wasm/takumi_wasm_bg.wasm?url";
 import * as React from "react";
@@ -64,10 +63,6 @@ async function cachedFetch(url: string): Promise<ArrayBuffer> {
   postMessage({ type: "ready" });
 })();
 
-function require(module: string) {
-  if (module === "@takumi-rs/template/docs-template-v1") return DocsTemplateV1;
-}
-
 function transformCode(code: string) {
   return transform(code, {
     transforms: ["jsx", "typescript", "imports"],
@@ -78,11 +73,7 @@ function transformCode(code: string) {
 function evaluateCodeExports(code: string) {
   const exports = {};
 
-  new Function("exports", "require", "React", transformCode(code))(
-    exports,
-    require,
-    React,
-  );
+  new Function("exports", "React", transformCode(code))(exports, React);
 
   return exportsSchema.parse(exports);
 }

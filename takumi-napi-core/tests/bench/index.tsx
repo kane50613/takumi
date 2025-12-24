@@ -1,13 +1,13 @@
 import { fromJsx } from "@takumi-rs/helpers/jsx";
-import DocsTemplateV1 from "@takumi-rs/template/docs-template-v1";
 import { write } from "bun";
 import { Globe2 } from "lucide-react";
 import { bench, run, summary } from "mitata";
+import DocsTemplate from "../../../takumi-template/src/templates/docs-template";
 import { Renderer } from "../../index.js";
 
 function createNode() {
   return fromJsx(
-    <DocsTemplateV1
+    <DocsTemplate
       title="Takumi Benchmark"
       description="See how Takumi performs in real world use cases!"
       site="takumi.kane.tw"

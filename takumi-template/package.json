@@ -1,14 +1,11 @@
 {
-  "name": "@takumi-rs/template",
+  "name": "takumi-template",
+  "private": true,
   "type": "module",
-  "version": "0.60.2",
   "author": {
     "email": "me@kane.tw",
     "name": "Kane Wang",
     "url": "https://kane.tw"
-  },
-  "repository": {
-    "url": "git+https://github.com/kane50613/takumi.git"
   },
   "devDependencies": {
     "@takumi-rs/core": "workspace:*",
@@ -20,23 +17,6 @@
     "react-dom": "^19.2.3",
     "tsup": "^8.5.1",
     "typescript": "catalog:"
-  },
-  "scripts": {
-    "build": "tsup-node src/templates/*.tsx --minify --dts --format esm,cjs --no-splitting"
-  },
-  "files": [
-    "dist",
-    "package.json",
-    "README.md",
-    "tsconfig.json"
-  ],
-  "exports": {
-    "./*": {
-      "types": "./dist/*.d.ts",
-      "import": "./dist/*.js",
-      "require": "./dist/*.cjs",
-      "default": "./dist/*.js"
-    }
   },
   "license": "(MIT OR Apache-2.0)"
 }

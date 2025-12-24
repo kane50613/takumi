@@ -19,7 +19,6 @@
     "@takumi-rs/core": "workspace:*",
     "@takumi-rs/helpers": "workspace:*",
     "@takumi-rs/image-response": "workspace:*",
-    "@takumi-rs/template": "workspace:*",
     "@takumi-rs/wasm": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

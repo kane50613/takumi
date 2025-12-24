@@ -22,7 +22,6 @@
   "devDependencies": {
     "@napi-rs/cli": "3.5.0",
     "@takumi-rs/helpers": "workspace:*",
-    "@takumi-rs/template": "workspace:*",
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "^19.2.3",

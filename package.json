@@ -18,7 +18,7 @@
     "lucide-react": "^0.562.0"
   },
   "scripts": {
-    "lint": "biome ci . --css-parse-tailwind-directives=true",
+    "lint": "biome ci .",
     "lint:fix": "biome check --write --unsafe .",
     "version": "changeset version && bun --filter '*' version",
     "release": "changeset publish && bun --filter '*' release"

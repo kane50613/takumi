@@ -1,0 +1,37 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "takumi",
+  "homepage": "https://takumi.kane.tw",
+  "items": [
+    {
+      "name": "blog-post-template",
+      "type": "registry:ui",
+      "files": [
+        {
+          "path": "templates/blog-post-template.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "docs-template",
+      "type": "registry:ui",
+      "files": [
+        {
+          "path": "templates/docs-template.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "product-card-template",
+      "type": "registry:ui",
+      "files": [
+        {
+          "path": "templates/product-card-template.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    }
+  ]
+}

@@ -239,41 +239,15 @@ function Hello() {
 
 ### Templates
 
-If you don't have any idea about where to start, or just want quick and easy way to get started, you can use the built-in templates.
+If you don't have any idea about where to start, or just want quick and easy way to get started, you can use our built-in [Templates](/docs/templates).
 
-```npm
-npm i @takumi-rs/template
+They are available via our [Shadcn-compatible Registry](/registry.json) and can be added to your project with a single command:
+
+```bash
+npx shadcn@latest add https://takumi.kane.tw/registry/docs-template.json
 ```
 
-```tsx twoslash
-/** @jsxImportSource react */
-// ---cut-before---
-import DocsTemplateV1 from "@takumi-rs/template/docs-template-v1";
-import { ImageResponse } from "@takumi-rs/image-response";
-import { Axe } from "lucide-react";
-
-export function GET() {
-  return new ImageResponse(
-    <DocsTemplateV1 
-      title="Hello" 
-      description="World" 
-      icon={<Axe />} 
-      primaryColor="hsla(354, 90%, 54%, 0.3)" 
-      primaryTextColor="hsl(354, 90%, 60%)" 
-      site="Takumi" 
-    />, 
-    {
-      width: 1200,
-      height: 630,
-      format: "webp",
-    },
-  );
-}
-```
-
-You can find all the templates in the [`takumi-template` folder](https://github.com/kane50613/takumi/tree/master/takumi-template/src/templates).
-
-We need your help to improve and create more templates! Please feel free to submit PRs to add more templates.
+We need your help to improve and create more templates! Please feel free to submit PRs to add more templates to the [`takumi-template` folder](https://github.com/kane50613/takumi/tree/master/takumi-template/src/templates).
 
 ## Examples
 

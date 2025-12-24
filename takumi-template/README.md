@@ -1,20 +1,17 @@
-# @takumi-rs/template
+# Takumi Templates
 
-Template library for Takumi, it provides some pre-defined templates primarily for Takumi, but it could also be used in other libraries like satori.
+A collection of pre-designed templates for [Takumi](https://takumi.kane.tw). Check the documentation page [Templates](https://takumi.kane.tw/docs/templates) for more information.
 
-## Usage
+## Distribution
 
-```tsx
-import DocsTemplateV1 from "@takumi-rs/template/docs-template-v1";
-import { fromJsx } from "@takumi-rs/helpers/jsx";
-import { Renderer } from "@takumi-rs/core";
+These templates are available via our [Shadcn-compatible Registry](https://takumi.kane.tw/registry.json).
 
-const render = new Renderer();
+To add a template to your project, you can use the following command:
 
-const node = await fromJsx(<DocsTemplateV1 />);
-const buffer = await render.render(node, {
-  width: 1200,
-  height: 630,
-  format: "webp",
-});
+```bash
+npx shadcn@latest add https://takumi.kane.tw/registry/docs-template.json
 ```
+
+## Contributing
+
+We welcome contributions to add more templates! Please submit a PR with your template in `src/templates`.

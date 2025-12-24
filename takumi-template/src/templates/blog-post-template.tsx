@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export default function BlogPostTemplateV1({
+export default function BlogPostTemplate({
   title,
   author,
   date,

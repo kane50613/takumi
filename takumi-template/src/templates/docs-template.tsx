@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export default function DocsTemplateV1({
+export default function DocsTemplate({
   title,
   description,
   icon,
@@ -35,7 +35,7 @@ export default function DocsTemplateV1({
           flexDirection: "column",
           width: "100%",
           height: "100%",
-          padding: "6rem",
+          padding: "60px",
           position: "relative",
           justifyContent: "space-between",
         }}

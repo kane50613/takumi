@@ -1,6 +1,6 @@
 import { ImageResponse } from "@takumi-rs/image-response";
-import DocsTemplateV1 from "@takumi-rs/template/docs-template-v1";
 import { source } from "~/source";
+import DocsTemplate from "../../../takumi-template/src/templates/docs-template";
 import logo from "../../public/logo.svg?raw";
 import type { Route } from "./+types/og";
 
@@ -14,7 +14,7 @@ export function loader({ params }: Route.LoaderArgs) {
   if (!page) throw new Response(undefined, { status: 404 });
 
   return new ImageResponse(
-    <DocsTemplateV1
+    <DocsTemplate
       title={page.data.title}
       description={page.data.description}
       icon={

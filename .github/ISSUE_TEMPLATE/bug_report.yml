@@ -76,7 +76,6 @@ body:
         - "@takumi-rs/core (N-API)"
         - "@takumi-rs/wasm"
         - "@takumi-rs/image-response"
-        - "@takumi-rs/template"
         - "@takumi-rs/helpers"
     validations:
       required: true

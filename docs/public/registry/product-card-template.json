@@ -1,0 +1,11 @@
+{
+  "name": "product-card-template",
+  "type": "registry:ui",
+  "files": [
+    {
+      "path": "../templates/product-card-template.tsx",
+      "type": "registry:ui",
+      "target": "components/takumi/product-card-template.tsx"
+    }
+  ]
+}

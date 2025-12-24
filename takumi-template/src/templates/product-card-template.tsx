@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export default function ProductCardTemplateV1({
+export default function ProductCardTemplate({
   productName,
   price,
   description,

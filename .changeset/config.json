@@ -6,7 +6,6 @@
     [
       "@takumi-rs/core",
       "@takumi-rs/image-response",
-      "@takumi-rs/template",
       "@takumi-rs/wasm",
       "@takumi-rs/helpers",
       "takumi"

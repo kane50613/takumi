@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "@takumi-rs/image-response": "workspace:*",
-    "@takumi-rs/template": "workspace:*",
     "@takumi-rs/wasm": "workspace:*",
     "lucide-react": "catalog:",
     "next": "16.1.1",

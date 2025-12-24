@@ -3,18 +3,13 @@ import { loader } from "fumadocs-core/source";
 import defaultAttributes from "lucide-react/dist/esm/defaultAttributes";
 import { __iconNode as arrowBigRightIconNode } from "lucide-react/dist/esm/icons/arrow-big-right";
 import { __iconNode as axeIconNode } from "lucide-react/dist/esm/icons/axe";
-import { __iconNode as bookIconNode } from "lucide-react/dist/esm/icons/book";
 import { __iconNode as bookMarkedIconNode } from "lucide-react/dist/esm/icons/book-marked";
 import { __iconNode as brainIconNode } from "lucide-react/dist/esm/icons/brain";
 import { __iconNode as bugIconNode } from "lucide-react/dist/esm/icons/bug";
 import { __iconNode as databaseIconNode } from "lucide-react/dist/esm/icons/database";
-import { __iconNode as filmIconNode } from "lucide-react/dist/esm/icons/film";
-import { __iconNode as handIconNode } from "lucide-react/dist/esm/icons/hand";
 import { __iconNode as layersIconNode } from "lucide-react/dist/esm/icons/layers";
+import { __iconNode as layoutTemplateIconNode } from "lucide-react/dist/esm/icons/layout-template";
 import { __iconNode as leafIconNode } from "lucide-react/dist/esm/icons/leaf";
-import { __iconNode as paintbrushIconNode } from "lucide-react/dist/esm/icons/paintbrush";
-import { __iconNode as scissorsIconNode } from "lucide-react/dist/esm/icons/scissors";
-import { __iconNode as sparklesIconNode } from "lucide-react/dist/esm/icons/sparkles";
 import { __iconNode as toyBrickIconNode } from "lucide-react/dist/esm/icons/toy-brick";
 import { __iconNode as typeIconNode } from "lucide-react/dist/esm/icons/type";
 import { __iconNode as zapIconNode } from "lucide-react/dist/esm/icons/zap";
@@ -31,21 +26,16 @@ const iconProps = {
 const icons = {
   Leaf: leafIconNode,
   Brain: brainIconNode,
-  Book: bookIconNode,
   ToyBrick: toyBrickIconNode,
   Axe: axeIconNode,
   ArrowBigRight: arrowBigRightIconNode,
-  Hand: handIconNode,
   Bug: bugIconNode,
   BookMarked: bookMarkedIconNode,
   Database: databaseIconNode,
-  Sparkles: sparklesIconNode,
-  Film: filmIconNode,
   Type: typeIconNode,
   Layers: layersIconNode,
-  Scissors: scissorsIconNode,
-  Paintbrush: paintbrushIconNode,
   Zap: zapIconNode,
+  LayoutTemplate: layoutTemplateIconNode,
 };
 
 export const source = loader({

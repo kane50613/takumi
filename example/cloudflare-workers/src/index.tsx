@@ -1,8 +1,8 @@
 import { ImageResponse } from "@takumi-rs/image-response/wasm";
-import DocsTemplateV1 from "@takumi-rs/template/docs-template-v1";
 import type { ByteBuf } from "@takumi-rs/wasm";
 import module from "@takumi-rs/wasm/takumi_wasm_bg.wasm";
 import geist from "../../../assets/fonts/geist/Geist[wght].woff2";
+import DocsTemplate from "../../../takumi-template/src/templates/docs-template";
 
 let fetchedResources: Promise<Map<string, ByteBuf>>;
 const logoUrl = "https://yeecord.com/img/logo.png";
@@ -25,7 +25,7 @@ export default {
     const name = searchParams.get("name") || "Wizard";
 
     return new ImageResponse(
-      <DocsTemplateV1
+      <DocsTemplate
         title={`Hello, ${name}`}
         description="This is an example of rendering on Cloudflare Workers!"
         icon={<img tw="w-24 rounded-full" src={logoUrl} alt="Logo" />}
