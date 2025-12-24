@@ -1,5 +1,11 @@
 # takumi
 
+## 0.60.3
+
+### Patch Changes
+
+- 5e1cb26: try collect png palette if possible
+
 ## 0.60.2
 
 ### Patch Changes
