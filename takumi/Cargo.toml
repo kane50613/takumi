@@ -21,7 +21,7 @@ dashmap = "6.1"
 color = "0.3"
 thiserror = "2.0"
 rustc-hash = "2.1"
-wide = "0.7.33"
+wide = "0.8.0"
 
 [dependencies.fast_image_resize]
 version = "5.3"
