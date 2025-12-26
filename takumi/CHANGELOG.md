@@ -1,5 +1,11 @@
 # takumi
 
+## 0.60.7
+
+### Patch Changes
+
+- f07b7f5: switch to gaussian box blur, integer based alpha blending
+
 ## 0.60.6
 
 ### Patch Changes
