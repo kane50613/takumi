@@ -1,5 +1,11 @@
 # takumi
 
+## 0.60.8
+
+### Patch Changes
+
+- 4c6bf92: fix text drawing bypasses overflow constrain check
+
 ## 0.60.7
 
 ### Patch Changes
