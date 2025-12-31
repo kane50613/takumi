@@ -45,23 +45,26 @@ impl<'i> FromCss<'i> for BackgroundImage {
     }
 
     let location = input.current_source_location();
-    let function = input.expect_function()?;
+    let start = input.state();
+    let function = input.expect_function()?.to_owned();
+
+    input.reset(&start);
 
     match_ignore_ascii_case! {&function,
       "linear-gradient" => Ok(BackgroundImage::Linear(LinearGradient::from_css(input)?)),
       "radial-gradient" => Ok(BackgroundImage::Radial(RadialGradient::from_css(input)?)),
       "noise-v1" => Ok(BackgroundImage::Noise(NoiseV1::from_css(input)?)),
-      _ => Err(Self::unexpected_token_error(location, &Token::Function(function.to_owned()))),
+      _ => Err(Self::unexpected_token_error(location, &Token::Function(function))),
     }
   }
 
   fn valid_tokens() -> &'static [CssToken] {
     &[
-      CssToken::Keyword("none"),
       CssToken::Token("url()"),
       CssToken::Token("linear-gradient()"),
       CssToken::Token("radial-gradient()"),
       CssToken::Token("noise-v1()"),
+      CssToken::Keyword("none"),
     ]
   }
 }
