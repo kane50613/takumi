@@ -20,7 +20,7 @@ features = ["derive", "rc"]
 
 [dependencies.takumi]
 path = "../takumi"
-features = ["woff2", "svg"]
+features = ["woff2", "svg", "detailed_css_error"]
 default-features = false
 
 # https://github.com/rust-lang/rust/issues/93294

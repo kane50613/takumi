@@ -136,7 +136,7 @@ pub trait FromCss<'i> {
   /// Returns a message to be used in error messages.
   fn expect_message() -> Cow<'static, str> {
     Cow::Owned(format!(
-      "expect a value of {}",
+      "a value of {}",
       merge_enum_values(Self::valid_tokens())
     ))
   }

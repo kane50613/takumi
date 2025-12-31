@@ -47,7 +47,7 @@ impl<'i> FromCss<'i> for AspectRatio {
   }
 
   fn valid_tokens() -> &'static [CssToken] {
-    &[CssToken::Token("auto"), CssToken::Token("number")]
+    &[CssToken::Keyword("auto"), CssToken::Token("number")]
   }
 }
 

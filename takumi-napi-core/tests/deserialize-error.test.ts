@@ -59,7 +59,7 @@ test("report deserialize error for color property with invalid type", () => {
       },
     ),
   ).toThrowError(
-    "InvalidArg, invalid type: integer `123`, expected 'currentcolor' or a color value (hex, named color, rgb(), rgba(), hsl(), hsla()); also accepts 'initial' or 'inherit'.",
+    "InvalidArg, invalid type: integer `123`, expected a value of 'currentColor' or <color>; also accepts 'initial' or 'inherit'.",
   );
 });
 
@@ -79,7 +79,7 @@ test("report deserialize error for color property with invalid string value", ()
       },
     ),
   ).toThrowError(
-    "InvalidArg, invalid value: string \"notacolor\", expected 'currentcolor' or a color value (hex, named color, rgb(), rgba(), hsl(), hsla()); also accepts 'initial' or 'inherit'.",
+    "InvalidArg, invalid value: string \"notacolor\", expected a value of 'currentColor' or <color>; also accepts 'initial' or 'inherit'.",
   );
 });
 
@@ -99,7 +99,7 @@ test("report deserialize error for width property with invalid type", () => {
       },
     ),
   ).toThrowError(
-    "InvalidArg, invalid type: boolean `true`, expected a length value with optional unit: auto, px, em, rem, vw, vh, cm, mm, in, q, pt, pc, or %; also accepts 'initial' or 'inherit'.",
+    "InvalidArg, invalid type: boolean `true`, expected a value of <length>; also accepts 'initial' or 'inherit'.",
   );
 });
 
@@ -119,7 +119,7 @@ test("report deserialize error for width property with invalid string value", ()
       },
     ),
   ).toThrowError(
-    "InvalidArg, invalid value: string \"invalid\", expected a length value with optional unit: auto, px, em, rem, vw, vh, cm, mm, in, q, pt, pc, or %; also accepts 'initial' or 'inherit'.",
+    "InvalidArg, invalid value: string \"invalid\", expected a value of <length>; also accepts 'initial' or 'inherit'.",
   );
 });
 
@@ -239,7 +239,7 @@ test("report deserialize error for padding (Sides) with invalid type", () => {
       },
     ),
   ).toThrowError(
-    "InvalidArg, invalid type: map, expected 1 ~ 4 values of a length value with optional unit: auto, px, em, rem, vw, vh, cm, mm, in, q, pt, pc, or %; also accepts 'initial' or 'inherit'.",
+    "InvalidArg, invalid type: map, expected 1 ~ 4 values of <length>; also accepts 'initial' or 'inherit'.",
   );
 });
 
@@ -259,7 +259,7 @@ test("report deserialize error for padding (Sides) with invalid string value", (
       },
     ),
   ).toThrowError(
-    "InvalidArg, invalid value: string \"invalid\", expected 1 ~ 4 values of a length value with optional unit: auto, px, em, rem, vw, vh, cm, mm, in, q, pt, pc, or %; also accepts 'initial' or 'inherit'.",
+    "InvalidArg, invalid value: string \"invalid\", expected 1 ~ 4 values of <length>; also accepts 'initial' or 'inherit'.",
   );
 });
 
@@ -279,7 +279,7 @@ test("report deserialize error for gap (SpacePair) with invalid type", () => {
       },
     ),
   ).toThrowError(
-    "InvalidArg, invalid type: boolean `true`, expected 1 ~ 2 values of a length value with optional unit: auto, px, em, rem, vw, vh, cm, mm, in, q, pt, pc, or %; also accepts 'initial' or 'inherit'.",
+    "InvalidArg, invalid type: boolean `true`, expected 1 ~ 2 values of <length>; also accepts 'initial' or 'inherit'.",
   );
 });
 
@@ -299,7 +299,7 @@ test("report deserialize error for gap (SpacePair) with invalid string value", (
       },
     ),
   ).toThrowError(
-    "InvalidArg, invalid value: string \"invalid\", expected 1 ~ 2 values of a length value with optional unit: auto, px, em, rem, vw, vh, cm, mm, in, q, pt, pc, or %; also accepts 'initial' or 'inherit'.",
+    "InvalidArg, invalid value: string \"invalid\", expected 1 ~ 2 values of <length>; also accepts 'initial' or 'inherit'.",
   );
 });
 
@@ -320,7 +320,7 @@ test("report deserialize error for textDecorationLine with invalid type", () => 
       },
     ),
   ).toThrowError(
-    "InvalidArg, invalid type: integer `123`, expected a valid value for TextDecorationLine; also accepts 'none', 'initial' or 'inherit'.",
+    "InvalidArg, invalid type: integer `123`, expected a value of 'underline', 'line-through' or 'overline'; also accepts 'none', 'initial' or 'inherit'.",
   );
 });
 
@@ -340,6 +340,6 @@ test("report deserialize error for textDecorationLine with invalid string value"
       },
     ),
   ).toThrowError(
-    "InvalidArg, invalid value: string \"invalid\", expected a valid value for TextDecorationLine; also accepts 'none', 'initial' or 'inherit'.",
+    "InvalidArg, invalid value: string \"invalid\", expected a value of 'underline', 'line-through' or 'overline'; also accepts 'none', 'initial' or 'inherit'.",
   );
 });

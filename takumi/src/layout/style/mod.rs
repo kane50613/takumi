@@ -46,12 +46,23 @@ impl<'de, T: for<'i> FromCss<'i>, const DEFAULT_INHERIT: bool> Visitor<'de>
 {
   type Value = CssValue<T, DEFAULT_INHERIT>;
 
-  fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-    write!(
-      formatter,
-      "{}; also accepts 'initial' or 'inherit'.",
-      T::expect_message()
-    )
+  fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    #[cfg(feature = "detailed_css_error")]
+    {
+      write!(
+        f,
+        "{}; also accepts 'initial' or 'inherit'.",
+        T::expect_message()
+      )
+    }
+
+    #[cfg(not(feature = "detailed_css_error"))]
+    {
+      write!(
+        f,
+        "CSS value, compile with --features detailed_css_error for more details"
+      )
+    }
   }
 
   fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
@@ -125,12 +136,23 @@ impl<'de, T: for<'i> FromCss<'i>, const DEFAULT_INHERIT: bool> Visitor<'de>
 {
   type Value = CssValue<Option<T>, DEFAULT_INHERIT>;
 
-  fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-    write!(
-      formatter,
-      "{}; also accepts 'none', 'initial' or 'inherit'.",
-      T::expect_message()
-    )
+  fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    #[cfg(feature = "detailed_css_error")]
+    {
+      write!(
+        f,
+        "{}; also accepts 'none', 'initial' or 'inherit'.",
+        T::expect_message()
+      )
+    }
+
+    #[cfg(not(feature = "detailed_css_error"))]
+    {
+      write!(
+        f,
+        "CSS value, compile with --features detailed_css_error for more details"
+      )
+    }
   }
 
   fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
