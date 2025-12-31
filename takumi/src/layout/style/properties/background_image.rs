@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
-use cssparser::{Parser, match_ignore_ascii_case};
+use cssparser::{Parser, Token, match_ignore_ascii_case};
 use smallvec::SmallVec;
 
 use crate::layout::style::{
-  FromCss, LinearGradient, NoiseV1, ParseResult, RadialGradient, tw::TailwindPropertyParser,
+  CssToken, FromCss, LinearGradient, NoiseV1, ParseResult, RadialGradient,
+  tw::TailwindPropertyParser,
 };
 
 /// Background image variants supported by Takumi.
@@ -32,22 +33,36 @@ impl TailwindPropertyParser for BackgroundImage {
 
 impl<'i> FromCss<'i> for BackgroundImage {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, BackgroundImage> {
+    if input
+      .try_parse(|input| input.expect_ident_matching("none"))
+      .is_ok()
+    {
+      return Ok(BackgroundImage::None);
+    }
+
     if let Ok(url) = input.try_parse(Parser::expect_url) {
       return Ok(BackgroundImage::Url((&*url).into()));
     }
 
-    let start = input.state();
-    let function = input.expect_function()?.to_owned();
-
-    input.reset(&start);
+    let location = input.current_source_location();
+    let function = input.expect_function()?;
 
     match_ignore_ascii_case! {&function,
-      "none" => Ok(BackgroundImage::None),
       "linear-gradient" => Ok(BackgroundImage::Linear(LinearGradient::from_css(input)?)),
       "radial-gradient" => Ok(BackgroundImage::Radial(RadialGradient::from_css(input)?)),
       "noise-v1" => Ok(BackgroundImage::Noise(NoiseV1::from_css(input)?)),
-      _ => Err(input.new_error_for_next_token()),
+      _ => Err(Self::unexpected_token_error(location, &Token::Function(function.to_owned()))),
     }
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Keyword("none"),
+      CssToken::Token("url()"),
+      CssToken::Token("linear-gradient()"),
+      CssToken::Token("radial-gradient()"),
+      CssToken::Token("noise-v1()"),
+    ]
   }
 }
 
@@ -65,5 +80,9 @@ impl<'i> FromCss<'i> for BackgroundImages {
     }
 
     Ok(images)
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    BackgroundImage::valid_tokens()
   }
 }

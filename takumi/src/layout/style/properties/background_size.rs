@@ -1,7 +1,7 @@
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use smallvec::SmallVec;
 
-use crate::layout::style::{FromCss, Length, ParseResult, tw::TailwindPropertyParser};
+use crate::layout::style::{CssToken, FromCss, Length, ParseResult, tw::TailwindPropertyParser};
 
 /// Parsed `background-size` for one layer.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -53,8 +53,16 @@ impl<'i> FromCss<'i> for BackgroundSize {
       &ident,
       "cover" => Ok(BackgroundSize::Cover),
       "contain" => Ok(BackgroundSize::Contain),
-      _ => Err(location.new_basic_unexpected_token_error(Token::Ident(ident.clone())).into()),
+      _ => Err(Self::unexpected_token_error(location, &Token::Ident(ident.clone()))),
     }
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Keyword("cover"),
+      CssToken::Keyword("contain"),
+      CssToken::Token("length"),
+    ]
   }
 }
 
@@ -71,6 +79,10 @@ impl<'i> FromCss<'i> for BackgroundSizes {
     }
 
     Ok(values)
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    BackgroundSize::valid_tokens()
   }
 }
 

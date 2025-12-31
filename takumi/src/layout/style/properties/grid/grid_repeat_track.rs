@@ -1,6 +1,6 @@
 use cssparser::Parser;
 
-use crate::layout::style::{FromCss, GridTrackSize, ParseResult};
+use crate::layout::style::{CssToken, FromCss, GridTrackSize, ParseResult};
 
 /// Represents a grid repeat track
 #[derive(Debug, Clone, PartialEq)]
@@ -46,6 +46,10 @@ impl<'i> FromCss<'i> for GridRepeatTrack {
       names,
       end_names: None,
     })
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[CssToken::Token("line-names"), CssToken::Token("track-size")]
   }
 }
 

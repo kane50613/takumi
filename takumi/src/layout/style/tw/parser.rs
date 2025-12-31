@@ -3,6 +3,7 @@ use std::ops::Neg;
 use cssparser::{Parser, match_ignore_ascii_case};
 
 use crate::layout::style::{
+  CssToken,
   Length::{self, *},
   tw::TailwindPropertyParser,
   *,
@@ -17,6 +18,10 @@ pub struct TwFontSize {
 impl<'i> FromCss<'i> for TwFontSize {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     Ok(Self::new(Length::from_css(input)?, None))
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    Length::<true>::valid_tokens()
   }
 }
 
@@ -91,6 +96,10 @@ impl<'i> FromCss<'i> for TwGridTemplate {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     Ok(Self(GridTemplateComponents::from_css(input)?))
   }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    GridTemplateComponents::valid_tokens()
+  }
 }
 
 impl TailwindPropertyParser for TwGridTemplate {
@@ -121,6 +130,10 @@ pub struct TwLetterSpacing(pub Length);
 impl<'i> FromCss<'i> for TwLetterSpacing {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     Ok(Self(Length::from_css(input)?))
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    Length::<true>::valid_tokens()
   }
 }
 
@@ -153,6 +166,10 @@ impl<'i> FromCss<'i> for TwBorderWidth {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     Ok(Self(Length::from_css(input)?))
   }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    Length::<true>::valid_tokens()
+  }
 }
 
 impl TailwindPropertyParser for TwBorderWidth {
@@ -169,6 +186,10 @@ pub struct TwRounded(pub(crate) Length<false>);
 impl<'i> FromCss<'i> for TwRounded {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     Ok(TwRounded(Length::from_css(input)?))
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    Length::<false>::valid_tokens()
   }
 }
 
@@ -196,6 +217,10 @@ pub struct TwBlur(pub(crate) Length);
 impl<'i> FromCss<'i> for TwBlur {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     Ok(TwBlur(Length::from_css(input)?))
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    Length::<true>::valid_tokens()
   }
 }
 

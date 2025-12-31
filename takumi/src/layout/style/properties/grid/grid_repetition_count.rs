@@ -1,6 +1,6 @@
 use cssparser::{Parser, Token};
 
-use crate::layout::style::{FromCss, ParseResult};
+use crate::layout::style::{CssToken, FromCss, ParseResult};
 
 /// Represents grid track repetition keywords
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -36,6 +36,7 @@ impl From<GridRepetitionCount> for taffy::RepetitionCount {
 
 impl<'i> FromCss<'i> for GridRepetitionCount {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let location = input.current_source_location();
     if let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
       let ident_str = ident.as_ref();
       if ident_str.eq_ignore_ascii_case("auto-fill") {
@@ -46,16 +47,9 @@ impl<'i> FromCss<'i> for GridRepetitionCount {
       if ident_str.eq_ignore_ascii_case("auto-fit") {
         return Ok(GridRepetitionCount::Keyword(GridRepetitionKeyword::AutoFit));
       }
-      // If it's some other ident, treat as error
-      let location = input.current_source_location();
-      return Err::<Self, _>(
-        location
-          .new_basic_unexpected_token_error(Token::Ident(ident))
-          .into(),
-      );
+      return Err(Self::unexpected_token_error(location, &Token::Ident(ident)));
     }
 
-    let location = input.current_source_location();
     let token = input.next()?;
     match *token {
       Token::Number {
@@ -76,12 +70,16 @@ impl<'i> FromCss<'i> for GridRepetitionCount {
         }
         Ok(GridRepetitionCount::Count(count as u16))
       }
-      _ => Err::<Self, _>(
-        location
-          .new_basic_unexpected_token_error(token.clone())
-          .into(),
-      ),
+      _ => Err(Self::unexpected_token_error(location, token)),
     }
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Keyword("auto-fill"),
+      CssToken::Keyword("auto-fit"),
+      CssToken::Token("number"),
+    ]
   }
 }
 

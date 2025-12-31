@@ -3,7 +3,7 @@ use std::{borrow::Cow, fmt::Debug};
 use cssparser::{BasicParseErrorKind, ParseError, Parser};
 use smallvec::SmallVec;
 
-use crate::layout::style::{ColorInput, FromCss, Length, ParseResult};
+use crate::layout::style::{ColorInput, CssToken, FromCss, Length, ParseResult};
 
 /// Represents a text shadow with all its properties.
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -39,6 +39,10 @@ impl<'i> FromCss<'i> for TextShadows {
     }
 
     Ok(shadows)
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    TextShadow::valid_tokens()
   }
 }
 
@@ -102,6 +106,10 @@ impl<'i> FromCss<'i> for TextShadow {
       offset_y: lengths.1,
       blur_radius: lengths.2,
     })
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[CssToken::Token("length"), CssToken::Token("color")]
   }
 }
 

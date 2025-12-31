@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use cssparser::{Parser, Token};
 
-use crate::layout::style::{FromCss, ParseResult};
+use crate::layout::style::{CssToken, FromCss, ParseResult};
 
 /// Represents `grid-template-areas` value
 ///
@@ -48,10 +48,18 @@ impl From<GridTemplateAreas> for Vec<taffy::GridTemplateArea<String>> {
 
 impl<'i> FromCss<'i> for GridTemplateAreas {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let location = input.current_source_location();
+    if let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
+      let ident_str = ident.as_ref();
+      if ident_str == "none" {
+        return Ok(GridTemplateAreas(Vec::new()));
+      }
+      return Err(Self::unexpected_token_error(location, &Token::Ident(ident)));
+    }
+
     let mut rows: Vec<Vec<String>> = Vec::new();
 
     while !input.is_exhausted() {
-      let location = input.current_source_location();
       let token = input.next()?;
       match token {
         Token::QuotedString(row) => {
@@ -61,21 +69,16 @@ impl<'i> FromCss<'i> for GridTemplateAreas {
             .map(ToString::to_string)
             .collect();
           if cols.is_empty() {
-            return Err(
-              location
-                .new_basic_unexpected_token_error(Token::QuotedString(row.clone()))
-                .into(),
-            );
+            return Err(Self::unexpected_token_error(
+              location,
+              &Token::QuotedString(row.clone()),
+            ));
           }
           rows.push(cols);
         }
         Token::WhiteSpace(_) => continue,
         _ => {
-          return Err(
-            location
-              .new_basic_unexpected_token_error(token.clone())
-              .into(),
-          );
+          return Err(Self::unexpected_token_error(location, token));
         }
       }
     }
@@ -85,14 +88,16 @@ impl<'i> FromCss<'i> for GridTemplateAreas {
       && rows.iter().any(|r| r.len() != width)
     {
       // Create a parse error for inconsistent row lengths
-      let location = input.current_source_location();
-      return Err(
-        location
-          .new_basic_unexpected_token_error(Token::Ident("inconsistent-rows".into()))
-          .into(),
-      );
+      return Err(Self::unexpected_token_error(
+        input.current_source_location(),
+        &Token::Ident("inconsistent-rows".into()),
+      ));
     }
 
     Ok(GridTemplateAreas(rows))
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[CssToken::Token("string")]
   }
 }

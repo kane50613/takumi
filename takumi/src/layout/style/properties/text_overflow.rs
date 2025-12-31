@@ -1,6 +1,6 @@
 use cssparser::{Parser, match_ignore_ascii_case};
 
-use crate::layout::style::{FromCss, ParseResult};
+use crate::layout::style::{CssToken, FromCss, ParseResult};
 
 /// Defines how text should be overflowed.
 ///
@@ -25,5 +25,13 @@ impl<'i> FromCss<'i> for TextOverflow {
       "ellipsis" => Ok(TextOverflow::Ellipsis),
       _ => Ok(TextOverflow::Custom(string.to_string())),
     }
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Keyword("clip"),
+      CssToken::Keyword("ellipsis"),
+      CssToken::Token("string"),
+    ]
   }
 }

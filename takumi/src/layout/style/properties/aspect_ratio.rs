@@ -1,6 +1,6 @@
 use cssparser::Parser;
 
-use crate::layout::style::{FromCss, ParseResult, tw::TailwindPropertyParser};
+use crate::layout::style::{CssToken, FromCss, ParseResult, tw::TailwindPropertyParser};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 /// Represents a aspect ratio.
@@ -44,6 +44,10 @@ impl<'i> FromCss<'i> for AspectRatio {
 
     let second_ratio = input.expect_number()?;
     Ok(AspectRatio::Ratio(first_ratio / second_ratio))
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[CssToken::Token("auto"), CssToken::Token("number")]
   }
 }
 

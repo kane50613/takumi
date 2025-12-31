@@ -1,11 +1,11 @@
 use std::ops::Neg;
 
-use cssparser::{Parser, ToCss, Token, match_ignore_ascii_case};
+use cssparser::{Parser, Token, match_ignore_ascii_case};
 use taffy::{CompactLength, Dimension, LengthPercentage, LengthPercentageAuto};
 
 use crate::{
   layout::style::{
-    AspectRatio, FromCss, ParseResult,
+    AspectRatio, CssToken, FromCss, ParseResult,
     tw::{TW_VAR_SPACING, TailwindPropertyParser},
   },
   rendering::Sizing,
@@ -130,18 +130,13 @@ impl<const DEFAULT_AUTO: bool> From<f32> for Length<DEFAULT_AUTO> {
 
 impl<'i, const DEFAULT_AUTO: bool> FromCss<'i> for Length<DEFAULT_AUTO> {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    use std::borrow::Cow;
     let location = input.current_source_location();
     let token = input.next()?;
 
     match *token {
       Token::Ident(ref unit) => match_ignore_ascii_case! {&unit,
         "auto" => Ok(Self::Auto),
-        _ => Err(location.new_custom_error(Cow::Owned(format!(
-          "invalid value '{}', expected {}",
-          unit,
-          Self::value_description().unwrap_or(Cow::Borrowed("a valid length value"))
-        )))),
+        _ => Err(Self::unexpected_token_error(location, token)),
       },
       Token::Dimension {
         value, ref unit, ..
@@ -158,31 +153,17 @@ impl<'i, const DEFAULT_AUTO: bool> FromCss<'i> for Length<DEFAULT_AUTO> {
           "q" => Ok(Self::Q(value)),
           "pt" => Ok(Self::Pt(value)),
           "pc" => Ok(Self::Pc(value)),
-          _ => Err(location.new_custom_error(Cow::Owned(format!(
-            "invalid value '{}', expected {}",
-            unit,
-            Self::value_description().unwrap_or(Cow::Borrowed("a valid length value"))
-          )))),
+          _ => Err(Self::unexpected_token_error(location, token)),
         }
       }
       Token::Percentage { unit_value, .. } => Ok(Self::Percentage(unit_value * 100.0)),
       Token::Number { value, .. } => Ok(Self::Px(value)),
-      _ => {
-        let token_str = token.to_css_string();
-
-        Err(location.new_custom_error(Cow::Owned(format!(
-          "invalid value '{}', expected {}",
-          token_str,
-          Self::value_description().unwrap_or(Cow::Borrowed("a valid length value"))
-        ))))
-      }
+      _ => Err(Self::unexpected_token_error(location, token)),
     }
   }
 
-  fn value_description() -> Option<std::borrow::Cow<'static, str>> {
-    Some(std::borrow::Cow::Borrowed(
-      "a length value with optional unit: auto, px, em, rem, vw, vh, cm, mm, in, q, pt, pc, or %",
-    ))
+  fn valid_tokens() -> &'static [CssToken] {
+    &[CssToken::Token("length")]
   }
 }
 

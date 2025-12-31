@@ -7,6 +7,8 @@ use crate::layout::style::{
   tw::TailwindPropertyParser,
 };
 
+use super::CssToken;
+
 /// Represents a percentage value (0.0-1.0) in CSS parsing.
 ///
 /// This struct wraps an f32 value that represents a percentage
@@ -52,11 +54,11 @@ impl<'i> FromCss<'i> for PercentageNumber {
     match token {
       Token::Number { value, .. } => Ok(PercentageNumber(value.max(0.0))),
       Token::Percentage { unit_value, .. } => Ok(PercentageNumber(unit_value.max(0.0))),
-      _ => Err(
-        location
-          .new_basic_unexpected_token_error(token.clone())
-          .into(),
-      ),
+      _ => Err(Self::unexpected_token_error(location, token)),
     }
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[CssToken::Token("number"), CssToken::Token("percentage")]
   }
 }

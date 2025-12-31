@@ -1,7 +1,7 @@
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::{
-  layout::style::{Color, FromCss, Gradient, ParseResult},
+  layout::style::{Color, CssToken, FromCss, Gradient, ParseResult},
   rendering::RenderContext,
 };
 
@@ -78,11 +78,15 @@ impl<'i> FromCss<'i> for NoiseV1 {
         match_ignore_ascii_case! {key,
           "seed" => instance.seed = Some(input.parse_nested_block(|input| Ok(input.expect_integer()?))?),
           "opacity" => instance.opacity = Some(input.parse_nested_block(|input| Ok(input.expect_number()?))?),
-          _ => return Err(location.new_basic_unexpected_token_error(token.clone()).into()),
+          _ => return Err(Self::unexpected_token_error(location, token)),
         }
       }
 
       Ok(instance)
     })
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[CssToken::Token("seed()"), CssToken::Token("opacity()")]
   }
 }

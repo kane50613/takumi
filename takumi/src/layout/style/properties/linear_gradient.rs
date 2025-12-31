@@ -1,11 +1,14 @@
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::{Parser, Token};
 use image::RgbaImage;
 use smallvec::SmallVec;
 use std::ops::{Deref, Neg};
 
 use super::gradient_utils::{color_from_stops, resolve_stops_along_axis};
 use crate::{
-  layout::style::{Color, ColorInput, FromCss, Length, ParseResult, tw::TailwindPropertyParser},
+  layout::style::{
+    Color, CssToken, FromCss, Length, ParseResult, declare_enum_from_css_impl,
+    properties::ColorInput, tw::TailwindPropertyParser,
+  },
   rendering::RenderContext,
 };
 
@@ -173,10 +176,17 @@ impl<'i> FromCss<'i> for StopPosition {
     }
 
     let Ok(length) = input.try_parse(Length::from_css) else {
-      return Err(input.new_error_for_next_token());
+      return Err(Self::unexpected_token_error(
+        input.current_source_location(),
+        input.next()?,
+      ));
     };
 
     Ok(StopPosition(length))
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    Length::<true>::valid_tokens()
   }
 }
 
@@ -191,6 +201,10 @@ impl<'i> FromCss<'i> for GradientStop {
     let hint = input.try_parse(StopPosition::from_css).ok();
 
     Ok(GradientStop::ColorHint { color, hint })
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[CssToken::Token("color"), CssToken::Token("length")]
   }
 }
 
@@ -259,19 +273,17 @@ pub enum VerticalKeyword {
   Bottom,
 }
 
-impl<'i> FromCss<'i> for HorizontalKeyword {
-  /// Parses a horizontal keyword.
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, HorizontalKeyword> {
-    let location = input.current_source_location();
-    let ident = input.expect_ident()?;
+declare_enum_from_css_impl!(
+  HorizontalKeyword,
+  "left" => HorizontalKeyword::Left,
+  "right" => HorizontalKeyword::Right,
+);
 
-    match_ignore_ascii_case! {&ident,
-      "left" => Ok(HorizontalKeyword::Left),
-      "right" => Ok(HorizontalKeyword::Right),
-      _ => Err(location.new_basic_unexpected_token_error(Token::Ident(ident.clone())).into()),
-    }
-  }
-}
+declare_enum_from_css_impl!(
+  VerticalKeyword,
+  "top" => VerticalKeyword::Top,
+  "bottom" => VerticalKeyword::Bottom,
+);
 
 impl HorizontalKeyword {
   /// Returns the angle in degrees.
@@ -287,19 +299,6 @@ impl HorizontalKeyword {
     match self {
       HorizontalKeyword::Left => -45.0, // For diagonals with left
       HorizontalKeyword::Right => 45.0, // For diagonals with right
-    }
-  }
-}
-
-impl<'i> FromCss<'i> for VerticalKeyword {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
-    let ident = input.expect_ident()?;
-
-    match_ignore_ascii_case! {&ident,
-      "top" => Ok(VerticalKeyword::Top),
-      "bottom" => Ok(VerticalKeyword::Bottom),
-      _ => Err(location.new_basic_unexpected_token_error(Token::Ident(ident.clone())).into()),
     }
   }
 }
@@ -337,6 +336,10 @@ impl<'i> FromCss<'i> for LinearGradient {
 
       Ok(LinearGradient { angle, stops })
     })
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[CssToken::Token("linear-gradient()")]
   }
 }
 
@@ -402,18 +405,18 @@ impl<'i> FromCss<'i> for Angle {
         "grad" => Ok(Angle::new(*value / 400.0 * 360.0)),
         "turn" => Ok(Angle::new(*value * 360.0)),
         "rad" => Ok(Angle::new(value.to_degrees())),
-        _ => Err(
-          location
-            .new_basic_unexpected_token_error(token.clone())
-            .into(),
-        ),
+        _ => Err(Self::unexpected_token_error(location, token)),
       },
-      _ => Err(
-        location
-          .new_basic_unexpected_token_error(token.clone())
-          .into(),
-      ),
+      _ => Err(Self::unexpected_token_error(location, token)),
     }
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Token("angle"),
+      CssToken::Keyword("to"),
+      CssToken::Keyword("none"),
+    ]
   }
 }
 

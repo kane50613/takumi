@@ -16,7 +16,7 @@ crossbeam-channel = "0.5"
 
 [dependencies.takumi]
 path = "../takumi"
-features = ["woff2", "woff", "svg", "rayon"]
+features = ["woff2", "woff", "svg", "rayon", "detailed_css_error"]
 default-features = false
 
 [dependencies.napi]

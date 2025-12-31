@@ -1,6 +1,6 @@
-use cssparser::{Parser, match_ignore_ascii_case};
+use cssparser::match_ignore_ascii_case;
 
-use crate::layout::style::{FromCss, ParseResult, tw::TailwindPropertyParser};
+use crate::layout::style::{declare_enum_from_css_impl, tw::TailwindPropertyParser};
 
 /// How children overflowing their container should affect layout
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -13,6 +13,12 @@ pub enum Overflow {
   /// Content that overflows this node should *not* contribute to the scroll region of its parent.
   Hidden,
 }
+
+declare_enum_from_css_impl!(
+  Overflow,
+  "visible" => Overflow::Visible,
+  "hidden" => Overflow::Hidden,
+);
 
 impl TailwindPropertyParser for Overflow {
   fn parse_tw(token: &str) -> Option<Self> {
@@ -29,21 +35,6 @@ impl From<Overflow> for taffy::Overflow {
     match val {
       Overflow::Visible => taffy::Overflow::Visible,
       Overflow::Hidden => taffy::Overflow::Hidden,
-    }
-  }
-}
-
-impl<'i> FromCss<'i> for Overflow {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
-    let ident = input.expect_ident()?;
-
-    match_ignore_ascii_case! { ident,
-      "visible" => Ok(Overflow::Visible),
-      "hidden" => Ok(Overflow::Hidden),
-      _ => Err(location.new_unexpected_token_error(
-        cssparser::Token::Ident(ident.clone())
-      )),
     }
   }
 }

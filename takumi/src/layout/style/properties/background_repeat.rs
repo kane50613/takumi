@@ -1,7 +1,7 @@
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::{Parser, match_ignore_ascii_case};
 use smallvec::SmallVec;
 
-use crate::layout::style::{FromCss, ParseResult};
+use crate::layout::style::{CssToken, FromCss, ParseResult, declare_enum_from_css_impl};
 
 /// Per-axis repeat style.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -17,21 +17,13 @@ pub enum BackgroundRepeatStyle {
   Round,
 }
 
-impl<'i> FromCss<'i> for BackgroundRepeatStyle {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
-    let ident = input.expect_ident()?;
-
-    match_ignore_ascii_case! {
-      &ident,
-      "repeat" => Ok(BackgroundRepeatStyle::Repeat),
-      "no-repeat" => Ok(BackgroundRepeatStyle::NoRepeat),
-      "space" => Ok(BackgroundRepeatStyle::Space),
-      "round" => Ok(BackgroundRepeatStyle::Round),
-      _ => Err(location.new_basic_unexpected_token_error(Token::Ident(ident.clone())).into()),
-    }
-  }
-}
+declare_enum_from_css_impl!(
+  BackgroundRepeatStyle,
+  "repeat" => BackgroundRepeatStyle::Repeat,
+  "no-repeat" => BackgroundRepeatStyle::NoRepeat,
+  "space" => BackgroundRepeatStyle::Space,
+  "round" => BackgroundRepeatStyle::Round,
+);
 
 /// Combined repeat for X and Y axes.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -81,6 +73,17 @@ impl<'i> FromCss<'i> for BackgroundRepeat {
       .unwrap_or(x);
     Ok(BackgroundRepeat(x, y))
   }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Keyword("repeat-x"),
+      CssToken::Keyword("repeat-y"),
+      CssToken::Keyword("repeat"),
+      CssToken::Keyword("no-repeat"),
+      CssToken::Keyword("space"),
+      CssToken::Keyword("round"),
+    ]
+  }
 }
 
 /// A list of background-repeat values (one per layer).
@@ -96,5 +99,9 @@ impl<'i> FromCss<'i> for BackgroundRepeats {
     }
 
     Ok(values)
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    BackgroundRepeat::valid_tokens()
   }
 }

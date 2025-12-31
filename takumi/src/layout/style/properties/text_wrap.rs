@@ -1,6 +1,6 @@
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::Parser;
 
-use crate::layout::style::{FromCss, ParseResult};
+use crate::layout::style::{CssToken, FromCss, ParseResult, declare_enum_from_css_impl};
 
 /// Controls how text should be wrapped.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -33,6 +33,13 @@ impl<'i> FromCss<'i> for TextWrap {
 
     Ok(TextWrap { mode, style })
   }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Token("text-wrap-mode"),
+      CssToken::Token("text-wrap-style"),
+    ]
+  }
 }
 
 /// Controls whether text should be wrapped.
@@ -54,19 +61,11 @@ impl From<TextWrapMode> for parley::TextWrapMode {
   }
 }
 
-impl<'i> FromCss<'i> for TextWrapMode {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let ident = input.expect_ident()?;
-    match_ignore_ascii_case! {ident,
-      "wrap" => Ok(TextWrapMode::Wrap),
-      "nowrap" => Ok(TextWrapMode::NoWrap),
-      _ => {
-        let token = Token::Ident(ident.clone());
-        Err(input.new_basic_unexpected_token_error(token).into())
-      }
-    }
-  }
-}
+declare_enum_from_css_impl!(
+  TextWrapMode,
+  "wrap" => TextWrapMode::Wrap,
+  "nowrap" => TextWrapMode::NoWrap,
+);
 
 /// Controls the style of text wrapping.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -80,17 +79,9 @@ pub enum TextWrapStyle {
   Pretty,
 }
 
-impl<'i> FromCss<'i> for TextWrapStyle {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let ident = input.expect_ident()?;
-    match_ignore_ascii_case! {ident,
-      "auto" => Ok(TextWrapStyle::Auto),
-      "balance" => Ok(TextWrapStyle::Balance),
-      "pretty" => Ok(TextWrapStyle::Pretty),
-      _ => {
-        let token = Token::Ident(ident.clone());
-        Err(input.new_basic_unexpected_token_error(token).into())
-      }
-    }
-  }
-}
+declare_enum_from_css_impl!(
+  TextWrapStyle,
+  "auto" => TextWrapStyle::Auto,
+  "balance" => TextWrapStyle::Balance,
+  "pretty" => TextWrapStyle::Pretty,
+);

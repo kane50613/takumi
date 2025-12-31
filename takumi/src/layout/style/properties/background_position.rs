@@ -3,7 +3,7 @@ use smallvec::SmallVec;
 use taffy::{Point, Size};
 
 use crate::{
-  layout::style::{FromCss, Length, ParseResult, SpacePair, tw::TailwindPropertyParser},
+  layout::style::{CssToken, FromCss, Length, ParseResult, SpacePair, tw::TailwindPropertyParser},
   rendering::Sizing,
 };
 
@@ -141,6 +141,10 @@ impl<'i> FromCss<'i> for BackgroundPosition {
 
     Ok(BackgroundPosition(SpacePair::from_pair(x, y)))
   }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    PositionComponent::valid_tokens()
+  }
 }
 
 impl<'i> FromCss<'i> for PositionComponent {
@@ -150,17 +154,31 @@ impl<'i> FromCss<'i> for PositionComponent {
     }
 
     let location = input.current_source_location();
-    let token = input.expect_ident()?;
+    let token = input.next()?;
+    let Token::Ident(ident) = token else {
+      return Err(Self::unexpected_token_error(location, token));
+    };
 
     match_ignore_ascii_case! {
-      &token,
+      &ident,
       "left" => Ok(PositionComponent::KeywordX(PositionKeywordX::Left)),
       "center" => Ok(PositionComponent::KeywordX(PositionKeywordX::Center)),
       "right" => Ok(PositionComponent::KeywordX(PositionKeywordX::Right)),
       "top" => Ok(PositionComponent::KeywordY(PositionKeywordY::Top)),
       "bottom" => Ok(PositionComponent::KeywordY(PositionKeywordY::Bottom)),
-      _ => Err(location.new_basic_unexpected_token_error(Token::Ident(token.clone())).into()),
+      _ => Err(Self::unexpected_token_error(location, token)),
     }
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Keyword("left"),
+      CssToken::Keyword("center"),
+      CssToken::Keyword("right"),
+      CssToken::Keyword("top"),
+      CssToken::Keyword("bottom"),
+      CssToken::Token("length"),
+    ]
   }
 }
 
@@ -177,5 +195,9 @@ impl<'i> FromCss<'i> for BackgroundPositions {
     }
 
     Ok(values)
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    BackgroundPosition::valid_tokens()
   }
 }

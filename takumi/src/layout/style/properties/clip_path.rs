@@ -3,7 +3,7 @@ use taffy::{AbsoluteAxis, Point, Rect, Size};
 use zeno::{Fill, PathBuilder, PathData, Placement};
 
 use crate::{
-  layout::style::{Axis, Color, FromCss, Length, ParseResult, Sides, SpacePair},
+  layout::style::{Axis, Color, CssToken, FromCss, Length, ParseResult, Sides, SpacePair},
   rendering::{BorderProperties, MaskMemory, RenderContext, Sizing},
 };
 
@@ -236,8 +236,12 @@ impl<'i> FromCss<'i> for FillRule {
     match_ignore_ascii_case! { &ident,
       "nonzero" => Ok(FillRule::NonZero),
       "evenodd" => Ok(FillRule::EvenOdd),
-      _ => Err(location.new_basic_unexpected_token_error(Token::Ident(ident.clone())).into())
+      _ => Err(Self::unexpected_token_error(location, &Token::Ident(ident.clone()))),
     }
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[CssToken::Keyword("nonzero"), CssToken::Keyword("evenodd")]
   }
 }
 
@@ -255,8 +259,16 @@ impl<'i> FromCss<'i> for ShapeRadius {
     match_ignore_ascii_case! { &ident,
       "closest-side" => Ok(ShapeRadius::ClosestSide),
       "farthest-side" => Ok(ShapeRadius::FarthestSide),
-      _ => Err(location.new_basic_unexpected_token_error(Token::Ident(ident.clone())).into())
+      _ => Err(Self::unexpected_token_error(location, &Token::Ident(ident.clone()))),
     }
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Keyword("closest-side"),
+      CssToken::Keyword("farthest-side"),
+      CssToken::Token("length"),
+    ]
   }
 }
 
@@ -270,6 +282,10 @@ impl<'i> FromCss<'i> for ShapePosition {
       .unwrap_or(Length::Percentage(50.0));
 
     Ok(ShapePosition(SpacePair::from_pair(first, second)))
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    Length::<true>::valid_tokens()
   }
 }
 
@@ -354,15 +370,21 @@ impl<'i> FromCss<'i> for BasicShape {
               path,
             }))
           }),
-          _ => Err(location.new_basic_unexpected_token_error(token.clone()).into())
+          _ => Err(Self::unexpected_token_error(location, token)),
         }
       }
-      _ => Err(
-        location
-          .new_basic_unexpected_token_error(token.clone())
-          .into(),
-      ),
+      _ => Err(Self::unexpected_token_error(location, token)),
     }
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Token("inset()"),
+      CssToken::Token("circle()"),
+      CssToken::Token("ellipse()"),
+      CssToken::Token("polygon()"),
+      CssToken::Token("path()"),
+    ]
   }
 }
 

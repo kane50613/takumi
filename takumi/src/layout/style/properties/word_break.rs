@@ -1,7 +1,6 @@
-use cssparser::{Parser, Token, match_ignore_ascii_case};
 use swash::text::WordBreakStrength;
 
-use crate::layout::style::{FromCss, ParseResult};
+use crate::layout::style::declare_enum_from_css_impl;
 
 /// Controls how text should be broken at word boundaries.
 ///
@@ -19,20 +18,13 @@ pub enum WordBreak {
   BreakWord,
 }
 
-impl<'i> FromCss<'i> for WordBreak {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
-    let ident = input.expect_ident()?;
-
-    match_ignore_ascii_case! {&ident,
-      "normal" => Ok(WordBreak::Normal),
-      "break-all" => Ok(WordBreak::BreakAll),
-      "keep-all" => Ok(WordBreak::KeepAll),
-      "break-word" => Ok(WordBreak::BreakWord),
-      _ => Err(location.new_unexpected_token_error(Token::Ident(ident.clone()))),
-    }
-  }
-}
+declare_enum_from_css_impl!(
+  WordBreak,
+  "normal" => WordBreak::Normal,
+  "break-all" => WordBreak::BreakAll,
+  "keep-all" => WordBreak::KeepAll,
+  "break-word" => WordBreak::BreakWord,
+);
 
 impl From<WordBreak> for WordBreakStrength {
   fn from(value: WordBreak) -> Self {

@@ -1,6 +1,8 @@
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::Parser;
 
-use crate::layout::style::{ColorInput, FromCss, ParseResult, properties::Length};
+use crate::layout::style::{
+  ColorInput, CssToken, FromCss, ParseResult, declare_enum_from_css_impl, properties::Length,
+};
 
 /// Represents border style options (currently only solid is supported).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -8,6 +10,11 @@ pub enum BorderStyle {
   /// Solid border style.
   Solid,
 }
+
+declare_enum_from_css_impl!(
+  BorderStyle,
+  "solid" => BorderStyle::Solid,
+);
 
 /// Parsed `border` value.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -46,7 +53,10 @@ impl<'i> FromCss<'i> for Border {
         continue;
       }
 
-      return Err(input.new_error_for_next_token());
+      return Err(Self::unexpected_token_error(
+        input.current_source_location(),
+        input.next()?,
+      ));
     }
 
     Ok(Border {
@@ -55,18 +65,13 @@ impl<'i> FromCss<'i> for Border {
       color,
     })
   }
-}
 
-impl<'i> FromCss<'i> for BorderStyle {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let ident = input.expect_ident()?;
-    match_ignore_ascii_case! {ident,
-      "solid" => Ok(BorderStyle::Solid),
-      _ => {
-        let token = Token::Ident(ident.clone());
-        Err(input.new_basic_unexpected_token_error(token).into())
-      },
-    }
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Token("length"),
+      CssToken::Token("border-style"),
+      CssToken::Token("color"),
+    ]
   }
 }
 

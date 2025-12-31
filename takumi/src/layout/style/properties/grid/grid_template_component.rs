@@ -1,6 +1,6 @@
 use cssparser::Parser;
 
-use crate::layout::style::{FromCss, ParseResult};
+use crate::layout::style::{CssToken, FromCss, ParseResult};
 
 use super::{GridRepeatTrack, GridRepetitionCount, GridTrackSize};
 
@@ -100,6 +100,15 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
     let size = GridTrackSize::from_css(input)?;
     Ok(GridTemplateComponent::Single(size))
   }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Token("line-names"),
+      CssToken::Token("repeat()"),
+      CssToken::Token("minmax()"),
+      CssToken::Token("length"),
+    ]
+  }
 }
 
 impl<'i> FromCss<'i> for GridTemplateComponents {
@@ -109,6 +118,10 @@ impl<'i> FromCss<'i> for GridTemplateComponents {
       components.push(component);
     }
     Ok(components)
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    GridTemplateComponent::valid_tokens()
   }
 }
 

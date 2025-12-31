@@ -1,6 +1,6 @@
 use cssparser::{Parser, Token};
 
-use crate::layout::style::{FromCss, ParseResult, tw::TailwindPropertyParser};
+use crate::layout::style::{CssToken, FromCss, ParseResult, tw::TailwindPropertyParser};
 
 /// Represents a grid placement with serde support
 #[derive(Debug, Clone, PartialEq)]
@@ -62,6 +62,10 @@ impl<'i> FromCss<'i> for GridPlacementSpan {
         .map(|n| GridPlacementSpan::Span(n.max(1) as u16))?,
     )
   }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[CssToken::Token("integer")]
+  }
 }
 
 impl TailwindPropertyParser for GridPlacementSpan {
@@ -102,7 +106,10 @@ impl<'i> FromCss<'i> for GridPlacement {
         }
 
         // If neither, error
-        return Err(input.new_error_for_next_token());
+        return Err(Self::unexpected_token_error(
+          input.current_source_location(),
+          input.next()?,
+        ));
       }
 
       // Any other ident is a named line
@@ -119,12 +126,17 @@ impl<'i> FromCss<'i> for GridPlacement {
         let v: i32 = int_value.unwrap_or(value as i32);
         Ok(GridPlacement::Line(v as i16))
       }
-      _ => Err(
-        location
-          .new_basic_unexpected_token_error(token.clone())
-          .into(),
-      ),
+      _ => Err(Self::unexpected_token_error(location, token)),
     }
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Keyword("auto"),
+      CssToken::Keyword("span"),
+      CssToken::Token("number"),
+      CssToken::Token("ident"),
+    ]
   }
 }
 

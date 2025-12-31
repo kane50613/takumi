@@ -92,7 +92,10 @@ impl<'i> FromCss<'i> for Background {
       }
 
       // If we can't parse anything, it's an error
-      return Err(input.new_error_for_next_token());
+      return Err(Self::unexpected_token_error(
+        input.current_source_location(),
+        input.next()?,
+      ));
     }
 
     Ok(Background {
@@ -103,6 +106,16 @@ impl<'i> FromCss<'i> for Background {
       repeat: repeat.unwrap_or_default(),
       clip: clip.unwrap_or_default(),
     })
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Token("color"),
+      CssToken::Token("image"),
+      CssToken::Token("position"),
+      CssToken::Token("repeat"),
+      CssToken::Token("clip"),
+    ]
   }
 }
 
@@ -119,6 +132,10 @@ impl<'i> FromCss<'i> for Backgrounds {
     }
 
     Ok(backgrounds)
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    Background::valid_tokens()
   }
 }
 

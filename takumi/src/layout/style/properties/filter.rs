@@ -5,7 +5,7 @@ use taffy::Size;
 
 use crate::{
   layout::style::{
-    Angle, Color, FromCss, Length, ParseResult, PercentageNumber, TextShadow,
+    Angle, Color, CssToken, FromCss, Length, ParseResult, PercentageNumber, TextShadow,
     tw::TailwindPropertyParser,
   },
   rendering::{BlurType, SizedShadow, Sizing, apply_blur, blend_pixel, fast_div_255},
@@ -330,6 +330,10 @@ impl<'i> FromCss<'i> for Filters {
 
     Ok(filters)
   }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    Filter::valid_tokens()
+  }
 }
 
 impl<'i> FromCss<'i> for Filter {
@@ -381,8 +385,23 @@ impl<'i> FromCss<'i> for Filter {
         // drop-shadow uses the same syntax as text-shadow
         Ok(Filter::DropShadow(TextShadow::from_css(input)?))
       }),
-      _ => Err(location.new_basic_unexpected_token_error(Token::Function(function.clone())).into()),
+      _ => Err(Self::unexpected_token_error(location, token)),
     }
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Token("brightness()"),
+      CssToken::Token("opacity()"),
+      CssToken::Token("contrast()"),
+      CssToken::Token("grayscale()"),
+      CssToken::Token("hue-rotate()"),
+      CssToken::Token("invert()"),
+      CssToken::Token("saturate()"),
+      CssToken::Token("sepia()"),
+      CssToken::Token("blur()"),
+      CssToken::Token("drop-shadow()"),
+    ]
   }
 }
 

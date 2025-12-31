@@ -1,7 +1,9 @@
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::{Parser, Token};
 use smallvec::SmallVec;
 
-use crate::layout::style::{FromCss, ParseResult, properties::ColorInput};
+use crate::layout::style::{
+  CssToken, FromCss, ParseResult, declare_enum_from_css_impl, properties::ColorInput,
+};
 
 /// Represents text decoration line options.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -13,6 +15,13 @@ pub enum TextDecorationLine {
   /// Overline text decoration.
   Overline,
 }
+
+declare_enum_from_css_impl!(
+  TextDecorationLine,
+  "underline" => TextDecorationLine::Underline,
+  "line-through" => TextDecorationLine::LineThrough,
+  "overline" => TextDecorationLine::Overline,
+);
 
 /// Represents a collection of text decoration lines.
 pub type TextDecorationLines = SmallVec<[TextDecorationLine; 3]>;
@@ -27,6 +36,10 @@ impl<'i> FromCss<'i> for TextDecorationLines {
     }
 
     Ok(lines)
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    TextDecorationLine::valid_tokens()
   }
 }
 
@@ -74,32 +87,23 @@ impl<'i> FromCss<'i> for TextDecoration {
         break;
       }
 
-      return Err(input.new_error_for_next_token());
+      return Err(Self::unexpected_token_error(
+        input.current_source_location(),
+        input.next()?,
+      ));
     }
 
     Ok(TextDecoration { line, style, color })
   }
-}
 
-impl<'i> FromCss<'i> for TextDecorationLine {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
-    let token = input.next()?;
-
-    if let Token::Ident(ident) = token {
-      return match_ignore_ascii_case! {ident,
-        "underline" => Ok(TextDecorationLine::Underline),
-        "line-through" => Ok(TextDecorationLine::LineThrough),
-        "overline" => Ok(TextDecorationLine::Overline),
-        _ => Err(location.new_basic_unexpected_token_error(token.clone()).into()),
-      };
-    }
-
-    Err(
-      location
-        .new_basic_unexpected_token_error(token.clone())
-        .into(),
-    )
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Keyword("underline"),
+      CssToken::Keyword("line-through"),
+      CssToken::Keyword("overline"),
+      CssToken::Keyword("solid"),
+      CssToken::Token("color"),
+    ]
   }
 }
 
@@ -114,11 +118,11 @@ impl<'i> FromCss<'i> for TextDecorationStyle {
       return Ok(TextDecorationStyle::Solid);
     }
 
-    Err(
-      location
-        .new_basic_unexpected_token_error(token.clone())
-        .into(),
-    )
+    Err(Self::unexpected_token_error(location, token))
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[CssToken::Keyword("solid")]
   }
 }
 

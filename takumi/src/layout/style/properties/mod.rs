@@ -83,7 +83,10 @@ pub use transform::*;
 pub use white_space::*;
 pub use word_break::*;
 
-use cssparser::{ParseError, Parser, ParserInput, Token, match_ignore_ascii_case};
+use cssparser::{
+  ParseError, ParseErrorKind, Parser, ParserInput, SourceLocation, ToCss, Token,
+  match_ignore_ascii_case,
+};
 use image::imageops::FilterType;
 use parley::{Alignment, FontStack};
 
@@ -91,6 +94,23 @@ use crate::layout::style::tw::TailwindPropertyParser;
 
 /// Parser result type alias for CSS property parsers.
 pub type ParseResult<'i, T> = Result<T, ParseError<'i, Cow<'i, str>>>;
+
+/// Enum representing CSS tokens.
+pub enum CssToken {
+  /// A CSS keyword.
+  Keyword(&'static str),
+  /// A CSS token without the < and > wrappers.
+  Token(&'static str),
+}
+
+impl std::fmt::Display for CssToken {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      CssToken::Keyword(keyword) => write!(f, "'{}'", keyword),
+      CssToken::Token(token) => write!(f, "<{}>", token),
+    }
+  }
+}
 
 /// Trait for types that can be parsed from CSS.
 pub trait FromCss<'i> {
@@ -110,16 +130,50 @@ pub trait FromCss<'i> {
     Self::from_css(&mut parser)
   }
 
-  /// Returns a human-readable description of valid values for this type.
-  /// Used in error messages to help developers understand what values are accepted.
-  fn value_description() -> Option<Cow<'static, str>> {
-    None
+  /// Returns the list of valid CSS tokens for this type.
+  fn valid_tokens() -> &'static [CssToken];
+
+  /// Returns a message to be used in error messages.
+  fn expect_message() -> Cow<'static, str> {
+    Cow::Owned(format!(
+      "expect a value of {}",
+      merge_enum_values(Self::valid_tokens())
+    ))
   }
 
-  /// Returns the list of valid enum values for this type.
-  /// Used for composable error descriptions in complex types like Sides<T> or SpacePair<T>.
-  fn enum_values() -> Option<&'static [&'static str]> {
-    None
+  /// Creates a parse error for an unexpected token.
+  fn unexpected_token_error(
+    location: SourceLocation,
+    token: &Token,
+  ) -> ParseError<'i, Cow<'i, str>> {
+    #[cfg(feature = "detailed_css_error")]
+    {
+      create_unexpected_token_error(location, token, Self::expect_message())
+    }
+    #[cfg(not(feature = "detailed_css_error"))]
+    {
+      create_unexpected_token_error(location, token)
+    }
+  }
+}
+
+fn create_unexpected_token_error<'i>(
+  location: SourceLocation,
+  token: &Token,
+  #[cfg(feature = "detailed_css_error")] expect_message: Cow<'static, str>,
+) -> ParseError<'i, Cow<'i, str>> {
+  #[cfg(feature = "detailed_css_error")]
+  let message = format!(
+    "unexpected token: {}, {}.",
+    token.to_css_string(),
+    expect_message
+  );
+  #[cfg(not(feature = "detailed_css_error"))]
+  let message = format!("unexpected token: {}.", token.to_css_string());
+
+  ParseError {
+    location,
+    kind: ParseErrorKind::Custom(Cow::Owned(message)),
   }
 }
 
@@ -127,27 +181,20 @@ pub trait FromCss<'i> {
 /// - `["fill"]` → `"'fill'"`
 /// - `["fill", "contain"]` → `"'fill' or 'contain'"`
 /// - `["fill", "contain", "cover"]` → `"'fill', 'contain' or 'cover'"`
-#[doc(hidden)]
-pub fn merge_enum_values(values: &[&str]) -> String {
+pub(crate) fn merge_enum_values(values: &[CssToken]) -> String {
   match values.len() {
     0 => String::new(),
-    1 => format!("'{}'", values[0]),
-    2 => format!("'{}' or '{}'", values[0], values[1]),
+    1 => values[0].to_string(),
+    2 => format!("{} or {}", values[0], values[1]),
     _ => {
       let all_but_last = values[..values.len() - 1]
         .iter()
-        .map(|v| format!("'{}'", v))
+        .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join(", ");
-      format!("{} or '{}'", all_but_last, values[values.len() - 1])
+      format!("{} or {}", all_but_last, values[values.len() - 1])
     }
   }
-}
-
-/// Helper function to create a human-readable error description from enum values.
-#[doc(hidden)]
-pub fn create_enum_error_description(values: &[&str]) -> String {
-  format!("a value of {}.", merge_enum_values(values))
 }
 
 /// Macro to implement From trait for Taffy enum conversions.
@@ -164,72 +211,36 @@ macro_rules! impl_from_taffy_enum {
 }
 
 /// Declares a CSS enum parser with automatic value list generation.
-macro_rules! declare_css_enum_parser {
+macro_rules! declare_enum_from_css_impl {
   (
     $enum_type:ty,
     $($css_value:expr => $variant:expr),* $(,)?
   ) => {
-    impl<'i> FromCss<'i> for $enum_type {
-      fn enum_values() -> Option<&'static [&'static str]> {
-        Some(&[$($css_value),*])
+    impl<'i> crate::layout::style::FromCss<'i> for $enum_type {
+      fn valid_tokens() -> &'static [crate::layout::style::CssToken] {
+        &[$(crate::layout::style::CssToken::Keyword($css_value)),*]
       }
 
-      fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-        use cssparser::Token;
-
+      fn from_css(input: &mut cssparser::Parser<'i, '_>) -> crate::layout::style::ParseResult<'i, Self> {
         let location = input.current_source_location();
+        let token = input.next()?;
 
-        let expected_msg = || {
-          Self::value_description()
-            .map(|d| d.into_owned())
-            .unwrap_or_else(|| {
-              format!(
-                "a value of {}.",
-                merge_enum_values(&[$($css_value),*])
-              )
-            })
+        let cssparser::Token::Ident(ident) = token else {
+          return Err(Self::unexpected_token_error(location, &token));
         };
 
-        let make_error = |value_str: &str| {
-          location.new_custom_error(Cow::Owned(format!(
-            "invalid value '{}', expected {}",
-            value_str,
-            expected_msg()
-          )))
-        };
-
-        match input.next() {
-          Ok(token) => {
-            match token {
-              Token::Ident(ident) => {
-                match_ignore_ascii_case! { ident.as_ref(),
-                  $($css_value => Ok($variant),)*
-                  _ => Err(make_error(&ident))
-                }
-              }
-              token => {
-                let token_display = match token {
-                  Token::Number { value, .. } => format!("{}", value),
-                  Token::Dimension { value, unit, .. } => format!("{}{}", value, unit),
-                  Token::Percentage { unit_value, .. } => format!("{}%", unit_value * 100.0),
-                  Token::Hash(hash) | Token::IDHash(hash) => format!("#{}", hash),
-                  _ => format!("{:?}", token),
-                };
-                Err(make_error(&token_display))
-              }
-            }
-          }
-          Err(_) => {
-            Err(location.new_custom_error(Cow::Owned(format!(
-              "expected {}",
-              expected_msg()
-            ))))
-          }
+        cssparser::match_ignore_ascii_case! {&ident,
+          $(
+            $css_value => Ok($variant),
+          )*
+          _ => Err(Self::unexpected_token_error(location, &token)),
         }
       }
     }
   };
 }
+
+pub(crate) use declare_enum_from_css_impl;
 
 /// Defines how an image should be resized to fit its container.
 ///
@@ -249,7 +260,7 @@ pub enum ObjectFit {
   None,
 }
 
-declare_css_enum_parser!(
+declare_enum_from_css_impl!(
   ObjectFit,
   "fill" => ObjectFit::Fill,
   "contain" => ObjectFit::Contain,
@@ -280,7 +291,7 @@ pub enum BackgroundClip {
   BorderArea,
 }
 
-declare_css_enum_parser!(
+declare_enum_from_css_impl!(
   BackgroundClip,
   "border-box" => BackgroundClip::BorderBox,
   "padding-box" => BackgroundClip::PaddingBox,
@@ -325,10 +336,13 @@ impl<'i> FromCss<'i> for BorderRadius {
     ])))
   }
 
-  fn value_description() -> Option<Cow<'static, str>> {
-    Some(Cow::Borrowed(
-      "1 to 4 length values for width, optionally followed by '/' and 1 to 4 length values for height",
-    ))
+  fn expect_message() -> Cow<'static, str> {
+    "1 to 4 length values for width, optionally followed by '/' and 1 to 4 length values for height"
+      .into()
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[CssToken::Token("length")]
   }
 }
 
@@ -344,7 +358,7 @@ pub enum BoxSizing {
   BorderBox,
 }
 
-declare_css_enum_parser!(
+declare_enum_from_css_impl!(
   BoxSizing,
   "content-box" => BoxSizing::ContentBox,
   "border-box" => BoxSizing::BorderBox
@@ -372,7 +386,7 @@ pub enum TextAlign {
   End,
 }
 
-declare_css_enum_parser!(
+declare_enum_from_css_impl!(
   TextAlign,
   "left" => TextAlign::Left,
   "right" => TextAlign::Right,
@@ -406,7 +420,7 @@ pub enum Position {
   Absolute,
 }
 
-declare_css_enum_parser!(
+declare_enum_from_css_impl!(
   Position,
   "relative" => Position::Relative,
   "absolute" => Position::Absolute
@@ -430,7 +444,7 @@ pub enum FlexDirection {
   ColumnReverse,
 }
 
-declare_css_enum_parser!(
+declare_enum_from_css_impl!(
   FlexDirection,
   "row" => FlexDirection::Row,
   "column" => FlexDirection::Column,
@@ -483,7 +497,7 @@ pub enum JustifyContent {
   SpaceAround,
 }
 
-declare_css_enum_parser!(
+declare_enum_from_css_impl!(
   JustifyContent,
   "normal" => JustifyContent::Normal,
   "start" => JustifyContent::Start,
@@ -541,7 +555,7 @@ pub enum Display {
   Block,
 }
 
-declare_css_enum_parser!(
+declare_enum_from_css_impl!(
   Display,
   "none" => Display::None,
   "flex" => Display::Flex,
@@ -612,7 +626,7 @@ pub enum AlignItems {
   Stretch,
 }
 
-declare_css_enum_parser!(
+declare_enum_from_css_impl!(
   AlignItems,
   "normal" => AlignItems::Normal,
   "start" => AlignItems::Start,
@@ -659,7 +673,7 @@ pub enum FlexWrap {
   WrapReverse,
 }
 
-declare_css_enum_parser!(
+declare_enum_from_css_impl!(
   FlexWrap,
   "nowrap" => FlexWrap::NoWrap,
   "wrap" => FlexWrap::Wrap,
@@ -682,7 +696,7 @@ pub enum TextTransform {
   Capitalize,
 }
 
-declare_css_enum_parser!(
+declare_enum_from_css_impl!(
   TextTransform,
   "none" => TextTransform::None,
   "uppercase" => TextTransform::Uppercase,
@@ -702,6 +716,13 @@ impl<'i> FromCss<'i> for FontFamily {
 
   fn from_str(source: &'i str) -> ParseResult<'i, Self> {
     Ok(FontFamily(source.to_string()))
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Token("family-name"),
+      CssToken::Token("generic-name"),
+    ]
   }
 }
 
@@ -754,21 +775,13 @@ pub enum WhiteSpaceCollapse {
   PreserveBreaks,
 }
 
-impl<'i> FromCss<'i> for WhiteSpaceCollapse {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let ident = input.expect_ident()?;
-    match_ignore_ascii_case! {&ident,
-      "preserve" => Ok(WhiteSpaceCollapse::Preserve),
-      "collapse" => Ok(WhiteSpaceCollapse::Collapse),
-      "preserve-spaces" => Ok(WhiteSpaceCollapse::PreserveSpaces),
-      "preserve-breaks" => Ok(WhiteSpaceCollapse::PreserveBreaks),
-      _ => {
-        let token = Token::Ident(ident.clone());
-        Err(input.new_basic_unexpected_token_error(token).into())
-      }
-    }
-  }
-}
+declare_enum_from_css_impl!(
+  WhiteSpaceCollapse,
+  "preserve" => WhiteSpaceCollapse::Preserve,
+  "collapse" => WhiteSpaceCollapse::Collapse,
+  "preserve-spaces" => WhiteSpaceCollapse::PreserveSpaces,
+  "preserve-breaks" => WhiteSpaceCollapse::PreserveBreaks,
+);
 
 /// Defines how images should be scaled when rendered.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -785,7 +798,7 @@ pub enum ImageScalingAlgorithm {
   Pixelated,
 }
 
-declare_css_enum_parser!(
+declare_enum_from_css_impl!(
   ImageScalingAlgorithm,
   "auto" => ImageScalingAlgorithm::Auto,
   "smooth" => ImageScalingAlgorithm::Smooth,

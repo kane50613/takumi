@@ -1,6 +1,6 @@
 use cssparser::Parser;
 
-use crate::layout::style::{FromCss, ParseResult, tw::TailwindPropertyParser};
+use crate::layout::style::{CssToken, FromCss, ParseResult, tw::TailwindPropertyParser};
 
 #[derive(Debug, Clone, PartialEq)]
 /// Represents a line clamp value.
@@ -40,5 +40,9 @@ impl<'i> FromCss<'i> for LineClamp {
       count: count as u32,
       ellipsis: ellipsis.map(|s| s.to_string()),
     })
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[CssToken::Token("integer"), CssToken::Token("string")]
   }
 }

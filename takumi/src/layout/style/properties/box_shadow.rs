@@ -3,7 +3,7 @@ use std::{borrow::Cow, fmt::Debug};
 use cssparser::{BasicParseErrorKind, ParseError, Parser};
 use smallvec::SmallVec;
 
-use crate::layout::style::{Color, ColorInput, FromCss, Length, ParseResult};
+use crate::layout::style::{Color, ColorInput, CssToken, FromCss, Length, ParseResult};
 
 /// Represents a box shadow with all its properties.
 ///
@@ -49,6 +49,10 @@ impl<'i> FromCss<'i> for BoxShadows {
     }
 
     Ok(shadows)
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    BoxShadow::valid_tokens()
   }
 }
 
@@ -131,6 +135,14 @@ impl<'i> FromCss<'i> for BoxShadow {
       spread_radius: lengths.3,
       inset,
     })
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Keyword("inset"),
+      CssToken::Token("length"),
+      CssToken::Token("color"),
+    ]
   }
 }
 

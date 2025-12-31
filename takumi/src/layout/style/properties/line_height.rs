@@ -4,7 +4,7 @@ use crate::{
   layout::{
     DEFAULT_LINE_HEIGHT_SCALER,
     style::{
-      FromCss, Length, ParseResult,
+      CssToken, FromCss, Length, ParseResult,
       tw::{TW_VAR_SPACING, TailwindPropertyParser},
     },
   },
@@ -42,6 +42,10 @@ impl<'i> FromCss<'i> for LineHeight {
     };
 
     Ok(LineHeight(Length::Em(number)))
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    Length::<true>::valid_tokens()
   }
 }
 

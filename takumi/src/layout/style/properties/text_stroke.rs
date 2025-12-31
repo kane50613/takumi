@@ -1,6 +1,6 @@
 use cssparser::Parser;
 
-use crate::layout::style::{ColorInput, FromCss, ParseResult, properties::Length};
+use crate::layout::style::{ColorInput, CssToken, FromCss, ParseResult, properties::Length};
 
 /// Parsed `text-stroke` value.
 ///
@@ -21,5 +21,9 @@ impl<'i> FromCss<'i> for TextStroke {
     let color = input.try_parse(ColorInput::from_css).ok();
 
     Ok(TextStroke { width, color })
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[CssToken::Token("length"), CssToken::Token("color")]
   }
 }

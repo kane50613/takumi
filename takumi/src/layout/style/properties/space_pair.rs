@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use taffy::{LengthPercentage, Point, Size};
 
 use crate::{
-  layout::style::{FromCss, Length, Overflow, ParseResult, merge_enum_values},
+  layout::style::{CssToken, FromCss, Length, Overflow, ParseResult, merge_enum_values},
   rendering::Sizing,
 };
 
@@ -35,16 +35,15 @@ impl<'i, T: Copy + FromCss<'i>, const Y_FIRST: bool> FromCss<'i> for SpacePair<T
     }
   }
 
-  fn value_description() -> Option<Cow<'static, str>> {
-    if let Some(values) = T::enum_values() {
-      return Some(Cow::Owned(format!(
-        "1 ~ 2 values of {}",
-        merge_enum_values(values)
-      )));
-    }
+  fn expect_message() -> Cow<'static, str> {
+    Cow::Owned(format!(
+      "1 ~ 2 values of {}",
+      merge_enum_values(T::valid_tokens())
+    ))
+  }
 
-    // If no enum values, try using inner type's value_description (for complex types like LengthUnit)
-    T::value_description().map(|desc| Cow::Owned(format!("1 ~ 2 values of {}", desc)))
+  fn valid_tokens() -> &'static [CssToken] {
+    T::valid_tokens()
   }
 }
 

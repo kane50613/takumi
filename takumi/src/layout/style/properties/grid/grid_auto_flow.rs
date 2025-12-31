@@ -1,6 +1,6 @@
 use cssparser::Parser;
 
-use crate::layout::style::{FromCss, ParseResult};
+use crate::layout::style::{CssToken, FromCss, ParseResult};
 
 /// Represents the direction of the grid auto flow.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -96,5 +96,13 @@ impl<'i> FromCss<'i> for GridAutoFlow {
     }
 
     Ok(GridAutoFlow { direction, dense })
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Keyword("row"),
+      CssToken::Keyword("column"),
+      CssToken::Keyword("dense"),
+    ]
   }
 }

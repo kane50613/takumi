@@ -1,11 +1,11 @@
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::Parser;
 use smallvec::SmallVec;
 
 use super::gradient_utils::{color_from_stops, resolve_stops_along_axis};
 use crate::{
   layout::style::{
-    BackgroundPosition, Color, FromCss, Gradient, GradientStop, Length, ParseResult,
-    ResolvedGradientStop,
+    BackgroundPosition, Color, CssToken, FromCss, Gradient, GradientStop, Length, ParseResult,
+    ResolvedGradientStop, declare_enum_from_css_impl,
   },
   rendering::RenderContext,
 };
@@ -33,6 +33,12 @@ pub enum RadialShape {
   Ellipse,
 }
 
+declare_enum_from_css_impl!(
+  RadialShape,
+  "circle" => RadialShape::Circle,
+  "ellipse" => RadialShape::Ellipse,
+);
+
 /// Supported size keywords for radial gradients
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum RadialSize {
@@ -46,6 +52,14 @@ pub enum RadialSize {
   #[default]
   FarthestCorner,
 }
+
+declare_enum_from_css_impl!(
+  RadialSize,
+  "closest-side" => RadialSize::ClosestSide,
+  "farthest-side" => RadialSize::FarthestSide,
+  "closest-corner" => RadialSize::ClosestCorner,
+  "farthest-corner" => RadialSize::FarthestCorner,
+);
 
 /// Precomputed drawing context for repeated sampling of a `RadialGradient`.
 #[derive(Debug, Clone)]
@@ -232,33 +246,9 @@ impl<'i> FromCss<'i> for RadialGradient {
       })
     })
   }
-}
 
-impl<'i> FromCss<'i> for RadialShape {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
-    let ident = input.expect_ident()?;
-
-    match_ignore_ascii_case! {&ident,
-      "circle" => Ok(RadialShape::Circle),
-      "ellipse" => Ok(RadialShape::Ellipse),
-      _ => Err(location.new_basic_unexpected_token_error(Token::Ident(ident.clone())).into()),
-    }
-  }
-}
-
-impl<'i> FromCss<'i> for RadialSize {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
-    let ident = input.expect_ident()?;
-
-    match_ignore_ascii_case! {&ident,
-      "closest-side" => Ok(RadialSize::ClosestSide),
-      "farthest-side" => Ok(RadialSize::FarthestSide),
-      "closest-corner" => Ok(RadialSize::ClosestCorner),
-      "farthest-corner" => Ok(RadialSize::FarthestCorner),
-      _ => Err(location.new_basic_unexpected_token_error(Token::Ident(ident.clone())).into()),
-    }
+  fn valid_tokens() -> &'static [CssToken] {
+    &[CssToken::Token("radial-gradient()")]
   }
 }
 

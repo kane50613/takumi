@@ -1,6 +1,8 @@
 use cssparser::{Parser, match_ignore_ascii_case};
 
-use crate::layout::style::{AspectRatio, FromCss, Length, ParseResult, tw::TailwindPropertyParser};
+use crate::layout::style::{
+  AspectRatio, CssToken, FromCss, Length, ParseResult, tw::TailwindPropertyParser,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// Represents a flex shorthand property for flex-grow, flex-shrink, and flex-basis.
@@ -114,6 +116,15 @@ impl<'i> FromCss<'i> for Flex {
       shrink: shrink.unwrap_or(1.0),
       basis: basis.unwrap_or(Length::zero()),
     })
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Keyword("none"),
+      CssToken::Keyword("auto"),
+      CssToken::Token("number"),
+      CssToken::Token("length"),
+    ]
   }
 }
 

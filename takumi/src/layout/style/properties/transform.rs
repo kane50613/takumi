@@ -5,7 +5,7 @@ use smallvec::SmallVec;
 use taffy::{Point, Size};
 
 use crate::{
-  layout::style::{Angle, FromCss, Length, ParseResult, PercentageNumber},
+  layout::style::{Angle, CssToken, FromCss, Length, ParseResult, PercentageNumber},
   rendering::Sizing,
 };
 
@@ -247,6 +247,10 @@ impl<'i> FromCss<'i> for Affine {
 
     Ok(Affine { a, b, c, d, x, y })
   }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[CssToken::Token("number")]
+  }
 }
 
 /// A collection of transform operations that can be applied together
@@ -262,6 +266,10 @@ impl<'i> FromCss<'i> for Transforms {
     }
 
     Ok(transforms)
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    Transform::valid_tokens()
   }
 }
 
@@ -332,8 +340,12 @@ impl<'i> FromCss<'i> for Transform {
       "matrix" => parser.parse_nested_block(|input| Ok(Transform::Matrix(
         Affine::from_css(input)?,
       ))),
-      _ => Err(location.new_basic_unexpected_token_error(token.clone()).into()),
+      _ => Err(Self::unexpected_token_error(location, token)),
     }
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[CssToken::Token("transform-function")]
   }
 }
 

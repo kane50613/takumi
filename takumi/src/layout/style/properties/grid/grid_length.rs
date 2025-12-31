@@ -2,7 +2,7 @@ use cssparser::{Parser, Token};
 use taffy::CompactLength;
 
 use crate::{
-  layout::style::{FromCss, Length, ParseResult},
+  layout::style::{CssToken, FromCss, Length, ParseResult},
   rendering::Sizing,
 };
 
@@ -43,22 +43,18 @@ impl<'i> FromCss<'i> for GridLength {
     let token = input.next()?;
 
     let Token::Dimension { value, unit, .. } = &token else {
-      return Err(
-        location
-          .new_basic_unexpected_token_error(token.clone())
-          .into(),
-      );
+      return Err(Self::unexpected_token_error(location, token));
     };
 
     if !unit.eq_ignore_ascii_case("fr") {
-      return Err(
-        location
-          .new_basic_unexpected_token_error(token.clone())
-          .into(),
-      );
+      return Err(Self::unexpected_token_error(location, token));
     }
 
     Ok(GridLength::Fr(*value))
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    Length::<true>::valid_tokens()
   }
 }
 

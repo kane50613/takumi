@@ -1,6 +1,8 @@
 use cssparser::Parser;
 
-use crate::layout::style::{FromCss, GridPlacementSpan, ParseResult, tw::TailwindPropertyParser};
+use crate::layout::style::{
+  CssToken, FromCss, GridPlacementSpan, ParseResult, tw::TailwindPropertyParser,
+};
 
 use super::GridPlacement;
 
@@ -72,6 +74,14 @@ impl<'i> FromCss<'i> for GridLine {
       start: first,
       end: second.unwrap_or_default(),
     })
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[
+      CssToken::Keyword("span"),
+      CssToken::Token("number"),
+      CssToken::Token("ident"),
+    ]
   }
 }
 
