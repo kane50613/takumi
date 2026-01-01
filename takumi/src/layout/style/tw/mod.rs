@@ -425,6 +425,26 @@ pub enum TailwindProperty {
   Sepia(PercentageNumber),
   /// `filter` property.
   Filter(Filters),
+  /// `backdrop-filter: blur()` property.
+  BackdropBlur(TwBlur),
+  /// `backdrop-filter: brightness()` property.
+  BackdropBrightness(PercentageNumber),
+  /// `backdrop-filter: contrast()` property.
+  BackdropContrast(PercentageNumber),
+  /// `backdrop-filter: grayscale()` property.
+  BackdropGrayscale(PercentageNumber),
+  /// `backdrop-filter: hue-rotate()` property.
+  BackdropHueRotate(Angle),
+  /// `backdrop-filter: invert()` property.
+  BackdropInvert(PercentageNumber),
+  /// `backdrop-filter: opacity()` property.
+  BackdropOpacity(PercentageNumber),
+  /// `backdrop-filter: saturate()` property.
+  BackdropSaturate(PercentageNumber),
+  /// `backdrop-filter: sepia()` property.
+  BackdropSepia(PercentageNumber),
+  /// `backdrop-filter` property.
+  BackdropFilter(Filters),
 }
 
 /// A trait for parsing tailwind properties.
@@ -468,6 +488,7 @@ impl Neg for TailwindProperty {
       TailwindProperty::Rotate(angle) => TailwindProperty::Rotate(-angle),
       TailwindProperty::LetterSpacing(length) => TailwindProperty::LetterSpacing(-length),
       TailwindProperty::HueRotate(angle) => TailwindProperty::HueRotate(-angle),
+      TailwindProperty::BackdropHueRotate(angle) => TailwindProperty::BackdropHueRotate(-angle),
       _ => self,
     }
   }
@@ -929,6 +950,36 @@ impl TailwindProperty {
       TailwindProperty::Filter(ref filters) => {
         style.filter = filters.clone().into();
       }
+      TailwindProperty::BackdropBlur(tw_blur) => {
+        style.backdrop_filter = smallvec![Filter::Blur(tw_blur.0)].into();
+      }
+      TailwindProperty::BackdropBrightness(percentage_number) => {
+        style.backdrop_filter = smallvec![Filter::Brightness(percentage_number)].into();
+      }
+      TailwindProperty::BackdropContrast(percentage_number) => {
+        style.backdrop_filter = smallvec![Filter::Contrast(percentage_number)].into();
+      }
+      TailwindProperty::BackdropGrayscale(percentage_number) => {
+        style.backdrop_filter = smallvec![Filter::Grayscale(percentage_number)].into();
+      }
+      TailwindProperty::BackdropHueRotate(angle) => {
+        style.backdrop_filter = smallvec![Filter::HueRotate(angle)].into();
+      }
+      TailwindProperty::BackdropInvert(percentage_number) => {
+        style.backdrop_filter = smallvec![Filter::Invert(percentage_number)].into();
+      }
+      TailwindProperty::BackdropOpacity(percentage_number) => {
+        style.backdrop_filter = smallvec![Filter::Opacity(percentage_number)].into();
+      }
+      TailwindProperty::BackdropSaturate(percentage_number) => {
+        style.backdrop_filter = smallvec![Filter::Saturate(percentage_number)].into();
+      }
+      TailwindProperty::BackdropSepia(percentage_number) => {
+        style.backdrop_filter = smallvec![Filter::Sepia(percentage_number)].into();
+      }
+      TailwindProperty::BackdropFilter(ref filters) => {
+        style.backdrop_filter = filters.clone().into();
+      }
     }
   }
 }
@@ -1109,6 +1160,17 @@ mod tests {
       // Grid
       "grid-cols-3",
       "col-span-2",
+      // Backdrop Filters
+      "backdrop-blur-md",
+      "backdrop-brightness-50",
+      "backdrop-contrast-125",
+      "backdrop-grayscale",
+      "backdrop-hue-rotate-90",
+      "backdrop-invert",
+      "backdrop-opacity-50",
+      "backdrop-saturate-200",
+      "backdrop-sepia",
+      "backdrop-filter-[blur(4px)_brightness(0.5)]",
     ];
 
     let should_not_parse = vec!["nonexistent-class", "invalid-prefix-1", "random-string"];

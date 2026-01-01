@@ -243,10 +243,12 @@ pub(crate) fn apply_backdrop_filter(
   }
 
   // Calculate the region to extract (clamped to canvas bounds)
-  let region_x = placement.left.max(0) as u32;
-  let region_y = placement.top.max(0) as u32;
-  let region_right = ((placement.left + placement.width as i32) as u32).min(canvas_size.width);
-  let region_bottom = ((placement.top + placement.height as i32) as u32).min(canvas_size.height);
+  let region_x = (placement.left).clamp(0, canvas_size.width as i32) as u32;
+  let region_y = (placement.top).clamp(0, canvas_size.height as i32) as u32;
+  let region_right =
+    (placement.left + placement.width as i32).clamp(0, canvas_size.width as i32) as u32;
+  let region_bottom =
+    (placement.top + placement.height as i32).clamp(0, canvas_size.height as i32) as u32;
 
   if region_x >= region_right || region_y >= region_bottom {
     return;

@@ -235,6 +235,16 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
   "saturate" => &[PropertyParser::Percentage(TailwindProperty::Saturate)],
   "sepia" => &[PropertyParser::Percentage(TailwindProperty::Sepia)],
   "filter" => &[PropertyParser::Filter(TailwindProperty::Filter)],
+  "backdrop-blur" => &[PropertyParser::Blur(TailwindProperty::BackdropBlur)],
+  "backdrop-brightness" => &[PropertyParser::Percentage(TailwindProperty::BackdropBrightness)],
+  "backdrop-contrast" => &[PropertyParser::Percentage(TailwindProperty::BackdropContrast)],
+  "backdrop-grayscale" => &[PropertyParser::Percentage(TailwindProperty::BackdropGrayscale)],
+  "backdrop-hue-rotate" => &[PropertyParser::Angle(TailwindProperty::BackdropHueRotate)],
+  "backdrop-invert" => &[PropertyParser::Percentage(TailwindProperty::BackdropInvert)],
+  "backdrop-opacity" => &[PropertyParser::Percentage(TailwindProperty::BackdropOpacity)],
+  "backdrop-saturate" => &[PropertyParser::Percentage(TailwindProperty::BackdropSaturate)],
+  "backdrop-sepia" => &[PropertyParser::Percentage(TailwindProperty::BackdropSepia)],
+  "backdrop-filter" => &[PropertyParser::Filter(TailwindProperty::BackdropFilter)],
 };
 
 pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
@@ -364,4 +374,7 @@ pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
   "grayscale" => TailwindProperty::Grayscale(PercentageNumber(1.0)),
   "invert" => TailwindProperty::Invert(PercentageNumber(1.0)),
   "sepia" => TailwindProperty::Sepia(PercentageNumber(1.0)),
+  "backdrop-grayscale" => TailwindProperty::BackdropGrayscale(PercentageNumber(1.0)),
+  "backdrop-invert" => TailwindProperty::BackdropInvert(PercentageNumber(1.0)),
+  "backdrop-sepia" => TailwindProperty::BackdropSepia(PercentageNumber(1.0)),
 };
