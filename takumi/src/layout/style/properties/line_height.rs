@@ -45,7 +45,7 @@ impl<'i> FromCss<'i> for LineHeight {
   }
 
   fn valid_tokens() -> &'static [CssToken] {
-    Length::<true>::valid_tokens()
+    &[CssToken::Token("number"), CssToken::Token("length")]
   }
 }
 
