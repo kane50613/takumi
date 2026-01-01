@@ -6,6 +6,8 @@ pub mod animation;
 pub mod inline;
 #[path = "fixtures/style_alignment.rs"]
 pub mod style_alignment;
+#[path = "fixtures/style_backdrop_filter.rs"]
+pub mod style_backdrop_filter;
 #[path = "fixtures/style_background_clip.rs"]
 pub mod style_background_clip;
 #[path = "fixtures/style_background_image.rs"]

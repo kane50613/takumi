@@ -9,7 +9,10 @@ use crate::{
   layout::{
     Viewport,
     node::Node,
-    style::{Affine, Display, ImageScalingAlgorithm, InheritedStyle, SpacePair, apply_filters},
+    style::{
+      Affine, Display, ImageScalingAlgorithm, InheritedStyle, SpacePair, apply_backdrop_filter,
+      apply_filters,
+    },
     tree::NodeTree,
   },
   rendering::{
@@ -191,6 +194,13 @@ fn render_node<'g, Nodes: Node<Nodes>>(
   } else {
     None
   };
+
+  // Apply backdrop-filter effects to the area behind this element
+  if !node.context.style.backdrop_filter.is_empty() {
+    let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
+
+    apply_backdrop_filter(canvas, border, layout.size, transform, &node.context);
+  }
 
   match constrain {
     CanvasConstrainResult::None => {

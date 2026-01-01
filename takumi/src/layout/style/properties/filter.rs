@@ -1,14 +1,20 @@
 use cssparser::{Parser, Token, match_ignore_ascii_case};
-use image::{Pixel, Rgba, RgbaImage, imageops::colorops::huerotate_in_place};
+use image::{
+  Pixel, Rgba, RgbaImage,
+  imageops::{colorops::huerotate_in_place, crop_imm},
+};
 use smallvec::SmallVec;
-use taffy::Size;
+use taffy::{Point, Size};
 
 use crate::{
   layout::style::{
-    Angle, Color, CssToken, FromCss, Length, ParseResult, PercentageNumber, TextShadow,
+    Affine, Angle, Color, CssToken, FromCss, Length, ParseResult, PercentageNumber, TextShadow,
     tw::TailwindPropertyParser,
   },
-  rendering::{BlurType, SizedShadow, Sizing, apply_blur, blend_pixel, fast_div_255},
+  rendering::{
+    BlurType, BorderProperties, Canvas, RenderContext, SizedShadow, Sizing, apply_blur,
+    blend_pixel, fast_div_255,
+  },
 };
 
 /// Represents a single CSS filter operation
@@ -197,6 +203,120 @@ pub(crate) fn apply_filters<'f, F: Iterator<Item = &'f Filter>>(
   // Flush remaining pixel filters
   if !pending_pixel_filters.is_empty() {
     apply_batched_pixel_filters(image, &pending_pixel_filters);
+  }
+}
+
+/// Applies backdrop-filter effects to the area behind an element.
+///
+/// This extracts the region of the canvas that will be covered by the element,
+/// applies the specified filters to it, and composites it back to the canvas.
+pub(crate) fn apply_backdrop_filter(
+  canvas: &mut Canvas,
+  border: BorderProperties,
+  layout_size: Size<f32>,
+  transform: Affine,
+  context: &RenderContext,
+) {
+  let filters = &context.style.backdrop_filter;
+
+  let drop_shadow_filtered = filters
+    .iter()
+    .filter(|f| !matches!(f, Filter::DropShadow(_)));
+
+  if drop_shadow_filtered.clone().count() == 0 {
+    return;
+  }
+
+  let canvas_size = canvas.size();
+  if canvas_size.width == 0 || canvas_size.height == 0 {
+    return;
+  }
+
+  // Generate the mask for the element's shape (with border-radius)
+  let mut paths = Vec::new();
+  border.append_mask_commands(&mut paths, layout_size, Point::ZERO);
+
+  let (mask, placement) = canvas.mask_memory.render(&paths, Some(transform), None);
+
+  if placement.width == 0 || placement.height == 0 {
+    return;
+  }
+
+  // Calculate the region to extract (clamped to canvas bounds)
+  let region_x = placement.left.max(0) as u32;
+  let region_y = placement.top.max(0) as u32;
+  let region_right = ((placement.left + placement.width as i32) as u32).min(canvas_size.width);
+  let region_bottom = ((placement.top + placement.height as i32) as u32).min(canvas_size.height);
+
+  if region_x >= region_right || region_y >= region_bottom {
+    return;
+  }
+
+  let region_width = region_right - region_x;
+  let region_height = region_bottom - region_y;
+
+  // Extract the region from the canvas using crop_imm
+  let mut backdrop_image = crop_imm(
+    &canvas.image,
+    region_x,
+    region_y,
+    region_width,
+    region_height,
+  )
+  .to_image();
+
+  apply_filters(
+    &mut backdrop_image,
+    &context.sizing,
+    context.current_color,
+    context.opacity,
+    drop_shadow_filtered,
+  );
+
+  // Composite the filtered backdrop back to the canvas, respecting the mask
+  let mask_offset_x = (region_x as i32 - placement.left) as u32;
+  let mask_offset_y = (region_y as i32 - placement.top) as u32;
+
+  for y in 0..region_height {
+    for x in 0..region_width {
+      let mask_x = mask_offset_x + x;
+      let mask_y = mask_offset_y + y;
+
+      // Check if within mask bounds
+      if mask_x >= placement.width || mask_y >= placement.height {
+        continue;
+      }
+
+      let mask_idx = (mask_y * placement.width + mask_x) as usize;
+      let alpha = mask[mask_idx];
+
+      if alpha == 0 {
+        continue;
+      }
+
+      let canvas_x = region_x + x;
+      let canvas_y = region_y + y;
+
+      let filtered_pixel = backdrop_image.get_pixel(x, y);
+      let canvas_pixel = canvas.image.get_pixel_mut(canvas_x, canvas_y);
+
+      if alpha == 255 {
+        // Full coverage: replace with filtered pixel
+        *canvas_pixel = *filtered_pixel;
+      } else {
+        // Partial coverage: blend based on mask alpha
+        let src_a = alpha as u16;
+        let inv_a = 255 - src_a;
+
+        canvas_pixel.0[0] =
+          fast_div_255(filtered_pixel.0[0] as u16 * src_a + canvas_pixel.0[0] as u16 * inv_a);
+        canvas_pixel.0[1] =
+          fast_div_255(filtered_pixel.0[1] as u16 * src_a + canvas_pixel.0[1] as u16 * inv_a);
+        canvas_pixel.0[2] =
+          fast_div_255(filtered_pixel.0[2] as u16 * src_a + canvas_pixel.0[2] as u16 * inv_a);
+        // Alpha stays the same since we're modifying the existing backdrop
+      }
+    }
   }
 }
 

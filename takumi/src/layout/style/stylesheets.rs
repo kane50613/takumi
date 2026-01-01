@@ -157,6 +157,7 @@ define_style!(
   border_color: Option<ColorInput>,
   color: ColorInput where inherit = true,
   filter: Filters,
+  backdrop_filter: Filters,
   font_size: Option<Length> where inherit = true,
   font_family: Option<FontFamily> where inherit = true,
   line_height: LineHeight where inherit = true,
