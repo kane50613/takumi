@@ -1,5 +1,17 @@
 # takumi
 
+## 0.61.0
+
+### Minor Changes
+
+- c4bf981: enrich CSS error
+
+  The error message is much more helpful now.
+
+  > InvalidArg, invalid type: integer `123`, expected a value of 'currentColor' or <color>; also accepts 'initial' or 'inherit'.
+
+- 98e9254: support `backdrop-filter`
+
 ## 0.60.8
 
 ### Patch Changes
