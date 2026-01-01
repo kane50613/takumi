@@ -185,6 +185,13 @@ fn render_node<'g, Nodes: Node<Nodes>>(
 
   let has_constrain = constrain.is_some();
 
+  // Apply backdrop-filter effects to the area behind this element
+  if !node.context.style.backdrop_filter.is_empty() {
+    let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
+
+    apply_backdrop_filter(canvas, border, layout.size, transform, &node.context);
+  }
+
   let should_create_isolated_canvas = !node.context.style.filter.is_empty();
 
   // If isolated canvas is required, replace the current canvas with a new one.
@@ -194,13 +201,6 @@ fn render_node<'g, Nodes: Node<Nodes>>(
   } else {
     None
   };
-
-  // Apply backdrop-filter effects to the area behind this element
-  if !node.context.style.backdrop_filter.is_empty() {
-    let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
-
-    apply_backdrop_filter(canvas, border, layout.size, transform, &node.context);
-  }
 
   match constrain {
     CanvasConstrainResult::None => {
