@@ -17,6 +17,46 @@ use crate::{
   },
 };
 
+/// Lookup table for a single 8-bit channel transition.
+pub(crate) type TransferTable = [u8; 256];
+
+/// Builds a LUT for the Brightness filter.
+pub(crate) fn build_brightness_table(value: f32) -> TransferTable {
+  let mut table = [0u8; 256];
+  for (i, entry) in table.iter_mut().enumerate() {
+    *entry = (i as f32 * value).clamp(0.0, 255.0) as u8;
+  }
+  table
+}
+
+/// Builds a LUT for the Contrast filter.
+pub(crate) fn build_contrast_table(value: f32) -> TransferTable {
+  let mut table = [0u8; 256];
+  for (i, entry) in table.iter_mut().enumerate() {
+    *entry = ((i as f32 - 128.0) * value + 128.0).clamp(0.0, 255.0) as u8;
+  }
+  table
+}
+
+/// Builds a LUT for the Invert filter.
+pub(crate) fn build_invert_table(amount: f32) -> TransferTable {
+  let mut table = [0u8; 256];
+  for (i, entry) in table.iter_mut().enumerate() {
+    let inverted = 255 - i as u8;
+    *entry = ((i as f32 * (1.0 - amount)) + (inverted as f32 * amount)).clamp(0.0, 255.0) as u8;
+  }
+  table
+}
+
+/// Builds a LUT for the Opacity filter (applied to alpha channel).
+pub(crate) fn build_opacity_table(value: f32) -> TransferTable {
+  let mut table = [0u8; 256];
+  for (i, entry) in table.iter_mut().enumerate() {
+    *entry = (i as f32 * value).clamp(0.0, 255.0) as u8;
+  }
+  table
+}
+
 /// Represents a single CSS filter operation
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Filter {
@@ -51,16 +91,8 @@ impl TailwindPropertyParser for Filters {
   }
 }
 
-/// Categorizes filters for batch processing
-enum FilterCategory<'f> {
-  /// Pixel filters that can potentially be batched
-  Pixel(&'f Filter),
-  /// Complex filters that need special handling (blur, drop-shadow, hue-rotate)
-  Complex(&'f Filter),
-}
-
 impl Filter {
-  fn categorize(&self) -> FilterCategory<'_> {
+  pub(crate) fn categorize(&self) -> FilterCategory<'_> {
     match self {
       Filter::Blur(_) | Filter::DropShadow(_) | Filter::HueRotate(_) => {
         FilterCategory::Complex(self)
@@ -68,6 +100,26 @@ impl Filter {
       _ => FilterCategory::Pixel(self),
     }
   }
+
+  /// Returns a LUT if this filter is a simple 1D channel transfer.
+  /// Returns (RGB_LUT, Alpha_LUT).
+  pub(crate) fn transfer_tables(&self) -> (Option<TransferTable>, Option<TransferTable>) {
+    match *self {
+      Filter::Brightness(PercentageNumber(v)) => (Some(build_brightness_table(v)), None),
+      Filter::Contrast(PercentageNumber(v)) => (Some(build_contrast_table(v)), None),
+      Filter::Invert(PercentageNumber(v)) => (Some(build_invert_table(v)), None),
+      Filter::Opacity(PercentageNumber(v)) => (None, Some(build_opacity_table(v))),
+      _ => (None, None),
+    }
+  }
+}
+
+/// Category of filters for optimization purposes.
+pub(crate) enum FilterCategory<'f> {
+  /// Pixel filters that can potentially be batched
+  Pixel(&'f Filter),
+  /// Complex filters that need special handling (blur, drop-shadow, hue-rotate)
+  Complex(&'f Filter),
 }
 
 /// Applies a single pixel filter inline - used for single filter optimization
@@ -131,25 +183,31 @@ fn apply_batched_pixel_filters(image: &mut RgbaImage, filters: &[&Filter]) {
     return;
   }
 
-  // Single filter fast path
-  if filters.len() == 1 {
-    let filter = filters[0];
-    for pixel in image.pixels_mut() {
-      if pixel.0[3] == 0 {
-        continue;
-      }
-      apply_single_pixel_filter(pixel, filter);
-    }
-    return;
-  }
+  // Pre-calculate LUTs for each filter once
+  let luts: SmallVec<[(Option<TransferTable>, Option<TransferTable>); 4]> =
+    filters.iter().map(|f| f.transfer_tables()).collect();
 
-  // Multiple filters: apply all in one pass
   for pixel in image.pixels_mut() {
     if pixel.0[3] == 0 {
       continue;
     }
-    for &filter in filters {
-      apply_single_pixel_filter(pixel, filter);
+
+    for (i, &filter) in filters.iter().enumerate() {
+      let (rgb_lut, alpha_lut) = &luts[i];
+
+      if rgb_lut.is_none() && alpha_lut.is_none() {
+        // Fallback for matrix filters (grayscale, sepia, etc.)
+        apply_single_pixel_filter(pixel, filter);
+      } else {
+        if let Some(t) = rgb_lut {
+          pixel.0[0] = t[pixel.0[0] as usize];
+          pixel.0[1] = t[pixel.0[1] as usize];
+          pixel.0[2] = t[pixel.0[2] as usize];
+        }
+        if let Some(t) = alpha_lut {
+          pixel.0[3] = t[pixel.0[3] as usize];
+        }
+      }
     }
   }
 }
@@ -579,5 +637,31 @@ mod tests {
         color: ColorInput::CurrentColor,
       }))
     );
+  }
+
+  #[test]
+  fn test_apply_filters_lut_batching() {
+    let mut image = RgbaImage::new(1, 1);
+    image.put_pixel(0, 0, Rgba([100, 150, 200, 255]));
+
+    let filters = [
+      Filter::Brightness(PercentageNumber(1.2)), // 100 * 1.2 = 120, 150 * 1.2 = 180, 200 * 1.2 = 240
+      Filter::Invert(PercentageNumber(1.0)),     // 120 -> 135, 180 -> 75, 240 -> 15
+      Filter::Opacity(PercentageNumber(0.5)),    // 255 * 0.5 = 127
+    ];
+
+    let viewport = crate::layout::Viewport::new(Some(100), Some(100));
+    let sizing = Sizing {
+      viewport,
+      font_size: 16.0,
+    };
+    apply_filters(&mut image, &sizing, Color::black(), 255, filters.iter());
+
+    let pixel = image.get_pixel(0, 0);
+    // Rough verification of the math
+    assert_eq!(pixel.0[0], 135);
+    assert_eq!(pixel.0[1], 75);
+    assert_eq!(pixel.0[2], 15);
+    assert_eq!(pixel.0[3], 127);
   }
 }
