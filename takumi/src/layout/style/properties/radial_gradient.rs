@@ -1,7 +1,7 @@
 use cssparser::Parser;
 use smallvec::SmallVec;
 
-use super::gradient_utils::{color_from_stops, resolve_stops_along_axis};
+use super::gradient_utils::{adaptive_lut_size, build_color_lut, resolve_stops_along_axis};
 use crate::{
   layout::style::{
     BackgroundPosition, Color, CssToken, FromCss, Gradient, GradientStop, Length, ParseResult,
@@ -76,27 +76,38 @@ pub struct RadialGradientDrawContext {
   pub radius_x: f32,
   /// Radius Y in pixels (for circle, equals radius_x)
   pub radius_y: f32,
+  /// Scale component used for stop resolution.
+  pub radius_scale: f32,
   /// Resolved and ordered color stops.
   pub resolved_stops: SmallVec<[ResolvedGradientStop; 4]>,
+  /// Pre-computed color lookup table for fast gradient sampling.
+  /// Maps normalized distance [0.0, 1.0] from center to color.
+  pub color_lut: Box<[Color]>,
 }
 
 impl Gradient for RadialGradient {
   type DrawContext = RadialGradientDrawContext;
 
   fn at(&self, x: u32, y: u32, ctx: &Self::DrawContext) -> Color {
-    // Fast-paths
-    if ctx.resolved_stops.is_empty() {
+    // Fast path for empty or single-color gradients
+    if ctx.color_lut.is_empty() {
       return Color([0, 0, 0, 0]);
     }
-    if ctx.resolved_stops.len() == 1 {
-      return ctx.resolved_stops[0].color;
+    if ctx.color_lut.len() == 1 {
+      return ctx.color_lut[0];
     }
 
     let dx = (x as f32 - ctx.cx) / ctx.radius_x.max(1e-6);
     let dy = (y as f32 - ctx.cy) / ctx.radius_y.max(1e-6);
-    let position = (dx * dx + dy * dy).sqrt() * ctx.radius_x.max(ctx.radius_y);
 
-    color_from_stops(position, &ctx.resolved_stops)
+    // Normalized distance from center (1.0 = at radius)
+    let d = (dx * dx + dy * dy).sqrt();
+    let normalized = d.clamp(0.0, 1.0);
+
+    // Map distance to LUT index using rounding (nearest neighbor).
+    let lut_idx = (normalized * (ctx.color_lut.len() - 1) as f32).round() as usize;
+
+    ctx.color_lut[lut_idx]
   }
 
   fn to_draw_context(&self, width: f32, height: f32, context: &RenderContext) -> Self::DrawContext {
@@ -175,6 +186,10 @@ impl RadialGradientDrawContext {
     };
     let resolved_stops = resolve_stops_along_axis(&gradient.stops, radius_scale.max(1e-6), context);
 
+    // Pre-compute color lookup table with adaptive size.
+    let lut_size = adaptive_lut_size(radius_scale);
+    let color_lut = build_color_lut(&resolved_stops, radius_scale, lut_size);
+
     RadialGradientDrawContext {
       width,
       height,
@@ -182,7 +197,9 @@ impl RadialGradientDrawContext {
       cy,
       radius_x,
       radius_y,
+      radius_scale,
       resolved_stops,
+      color_lut,
     }
   }
 }
@@ -479,5 +496,36 @@ mod tests {
     assert!(resolved[0].position >= 0.0);
     assert!(resolved[1].position >= resolved[0].position);
     assert!(resolved[2].position >= resolved[1].position);
+  }
+
+  #[test]
+  fn test_radial_gradient_at() {
+    let gradient = RadialGradient {
+      shape: RadialShape::Circle,
+      size: RadialSize::FarthestCorner,
+      center: BackgroundPosition::default(), // default is center (50%, 50%)
+      stops: vec![
+        GradientStop::ColorHint {
+          color: Color([255, 0, 0, 255]).into(), // Red at center
+          hint: Some(StopPosition(Length::Percentage(0.0))),
+        },
+        GradientStop::ColorHint {
+          color: Color([0, 0, 255, 255]).into(), // Blue at edge
+          hint: Some(StopPosition(Length::Percentage(100.0))),
+        },
+      ],
+    };
+
+    let context = GlobalContext::default();
+    let dummy_context = RenderContext::new(&context, (100, 100).into(), Default::default());
+    let ctx = gradient.to_draw_context(100.0, 100.0, &dummy_context);
+
+    // Center (50, 50) should be red
+    let color_center = gradient.at(50, 50, &ctx);
+    assert_eq!(color_center, Color([255, 0, 0, 255]));
+
+    // Far outside (200, 200) should be clamped to blue
+    let color_far = gradient.at(200, 200, &ctx);
+    assert_eq!(color_far, Color([0, 0, 255, 255]));
   }
 }

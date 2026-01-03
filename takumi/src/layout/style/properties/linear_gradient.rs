@@ -3,7 +3,7 @@ use image::RgbaImage;
 use smallvec::SmallVec;
 use std::ops::{Deref, Neg};
 
-use super::gradient_utils::{color_from_stops, resolve_stops_along_axis};
+use super::gradient_utils::{adaptive_lut_size, build_color_lut, resolve_stops_along_axis};
 use crate::{
   layout::style::{
     Color, CssToken, FromCss, Length, ParseResult, declare_enum_from_css_impl,
@@ -50,22 +50,27 @@ impl Gradient for LinearGradient {
   type DrawContext = LinearGradientDrawContext;
 
   fn at(&self, x: u32, y: u32, ctx: &Self::DrawContext) -> Color {
-    let stops_len = self.stops.len();
-
-    // Fast-paths
-    if stops_len == 0 {
+    // Fast path for empty or single-color gradients
+    if ctx.color_lut.is_empty() {
       return Color([0, 0, 0, 0]);
     }
-    if stops_len == 1 {
-      return ctx.resolved_stops[0].color;
+    if ctx.color_lut.len() == 1 {
+      return ctx.color_lut[0];
     }
 
+    // Calculate position along gradient axis
     let dx = x as f32 - ctx.cx;
     let dy = y as f32 - ctx.cy;
     let projection = dx * ctx.dir_x + dy * ctx.dir_y;
     let position_px = (projection + ctx.max_extent).clamp(0.0, ctx.axis_length);
 
-    color_from_stops(position_px, &ctx.resolved_stops)
+    // Map position to LUT index using rounding (nearest neighbor).
+    // This is fast and, with a high-resolution LUT (>=1025 entries), provides good precision
+    // and preserves sharp transitions (hard stops).
+    let normalized = (position_px / ctx.axis_length).clamp(0.0, 1.0);
+    let lut_idx = (normalized * (ctx.color_lut.len() - 1) as f32).round() as usize;
+
+    ctx.color_lut[lut_idx]
   }
 
   fn to_draw_context(&self, width: f32, height: f32, context: &RenderContext) -> Self::DrawContext {
@@ -94,6 +99,9 @@ pub struct LinearGradientDrawContext {
   pub axis_length: f32,
   /// Resolved and ordered color stops (positions in pixels).
   pub resolved_stops: SmallVec<[ResolvedGradientStop; 4]>,
+  /// Pre-computed color lookup table for fast gradient sampling.
+  /// Maps normalized position [0.0, 1.0] to color.
+  pub color_lut: Box<[Color]>,
 }
 
 impl LinearGradientDrawContext {
@@ -109,6 +117,10 @@ impl LinearGradientDrawContext {
 
     let resolved_stops = resolve_stops_along_axis(&gradient.stops, axis_length.max(1e-6), context);
 
+    // Pre-compute color lookup table with adaptive size.
+    let lut_size = adaptive_lut_size(axis_length);
+    let color_lut = build_color_lut(&resolved_stops, axis_length, lut_size);
+
     LinearGradientDrawContext {
       width,
       height,
@@ -119,6 +131,7 @@ impl LinearGradientDrawContext {
       max_extent,
       axis_length,
       resolved_stops,
+      color_lut,
     }
   }
 }

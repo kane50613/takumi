@@ -76,6 +76,57 @@ pub(crate) fn color_from_stops(position: f32, resolved_stops: &[ResolvedGradient
   }
 }
 
+/// Builds a pre-computed color lookup table for a gradient.
+/// This allows O(1) color sampling instead of O(n) search + interpolation per pixel.
+pub(crate) fn build_color_lut(
+  resolved_stops: &[ResolvedGradientStop],
+  axis_length: f32,
+  lut_size: usize,
+) -> Box<[Color]> {
+  // Fast path: if only one color, fill entire LUT with it
+  if resolved_stops.len() <= 1 {
+    let color = resolved_stops
+      .first()
+      .map(|s| s.color)
+      .unwrap_or(Color([0, 0, 0, 0]));
+    let mut lut = Vec::with_capacity(lut_size);
+    lut.resize(lut_size, color);
+    return lut.into_boxed_slice();
+  }
+
+  #[cfg(feature = "rayon")]
+  {
+    use rayon::prelude::*;
+    (0..lut_size)
+      .into_par_iter()
+      .map(|i| {
+        let t = i as f32 / (lut_size - 1) as f32;
+        let position_px = t * axis_length;
+        color_from_stops(position_px, resolved_stops)
+      })
+      .collect::<Vec<_>>()
+      .into_boxed_slice()
+  }
+
+  #[cfg(not(feature = "rayon"))]
+  {
+    let mut lut = Vec::with_capacity(lut_size);
+    // Generate LUT entries by sampling the gradient uniformly
+    for i in 0..lut_size {
+      let t = i as f32 / (lut_size - 1) as f32;
+      let position_px = t * axis_length;
+      lut.push(color_from_stops(position_px, resolved_stops));
+    }
+    lut.into_boxed_slice()
+  }
+}
+
+/// Calculates an adaptive LUT size based on the gradient axis length.
+pub(crate) fn adaptive_lut_size(axis_length: f32) -> usize {
+  let size = (axis_length.ceil() as usize).next_power_of_two().max(1024);
+  (size + 1).min(8193)
+}
+
 const UNDEFINED_POSITION: f32 = -1.0;
 
 pub(crate) fn resolve_stops_along_axis(
