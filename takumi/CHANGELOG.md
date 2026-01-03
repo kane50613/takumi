@@ -1,5 +1,12 @@
 # takumi
 
+## 0.61.1
+
+### Patch Changes
+
+- 19235dd: support AVX2 & AVX-512 SIMD blurring
+- 8066f93: bump MSRV to 1.89
+
 ## 0.61.0
 
 ### Minor Changes
