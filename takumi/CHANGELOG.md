@@ -1,5 +1,16 @@
 # takumi
 
+## 0.62.0
+
+### Minor Changes
+
+- 4675458: use `Box` slices instead of `Vec` to optimize memory
+
+### Patch Changes
+
+- 7849598: SIMD enhanced `interpolate_rgba`
+- a774aa6: optimize filters to render using LUTs
+
 ## 0.61.1
 
 ### Patch Changes
