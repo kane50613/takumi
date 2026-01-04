@@ -1,5 +1,11 @@
 # takumi
 
+## 0.62.5
+
+### Patch Changes
+
+- dd1c0e1: fix tailwind `text-pretty` & `text-balance` not being parsed
+
 ## 0.62.4
 
 ## 0.62.3
