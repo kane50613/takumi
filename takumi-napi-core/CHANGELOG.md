@@ -1,5 +1,11 @@
 # @takumi-rs/core
 
+## 0.62.4
+
+### Patch Changes
+
+- 56ec805: downgrade napi requirement from napi10 to napi4 enables node.js v10.16+ support
+
 ## 0.62.3
 
 ### Patch Changes
