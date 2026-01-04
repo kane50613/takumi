@@ -1,5 +1,12 @@
 # takumi
 
+## 0.62.2
+
+### Patch Changes
+
+- 57cca21: Improve backdrop filter performance
+- 520f15d: Improve drop shadow performance and reduce allocation
+
 ## 0.62.1
 
 ### Patch Changes
