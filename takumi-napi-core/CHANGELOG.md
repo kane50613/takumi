@@ -1,5 +1,12 @@
 # @takumi-rs/core
 
+## 0.62.3
+
+### Patch Changes
+
+- e5d41bc: fix `fetch` option type definition
+- 33c9ba0: fix failure to retrieve buffer instance after `fetch().arrayBuffer()` #349
+
 ## 0.62.2
 
 ## 0.62.1
