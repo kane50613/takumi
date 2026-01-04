@@ -18,8 +18,8 @@ use crate::{
     style::{Affine, BackgroundClip, BackgroundImage, CssValue, InheritedStyle, Sides, Style},
   },
   rendering::{
-    BorderProperties, Canvas, RenderContext, SizedShadow, collect_background_image_tiles,
-    create_background_image, draw_background_layers,
+    BorderProperties, Canvas, RenderContext, SizedShadow, collect_background_image_layers,
+    rasterize_layers,
   },
   resources::task::FetchTaskCollection,
 };
@@ -391,60 +391,80 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
 
     match context.style.background_clip {
       BackgroundClip::BorderBox => {
-        let tiles = collect_background_image_tiles(context, layout.size)?;
+        let tiles = collect_background_image_layers(context, layout.size)?;
 
-        draw_background_layers(tiles, border_radius, context, canvas);
+        for tile in tiles {
+          for y in &tile.ys {
+            for x in &tile.xs {
+              canvas.overlay_image(
+                &tile.tile,
+                border_radius,
+                context.transform * Affine::translation(*x as f32, *y as f32),
+                context.style.image_rendering,
+                context.opacity,
+              );
+            }
+          }
+        }
       }
       BackgroundClip::PaddingBox => {
         border_radius.inset_by_border_width();
 
-        if let Some(image) = create_background_image(
-          context,
-          layout.size,
+        let layers = collect_background_image_layers(context, layout.size)?;
+
+        let Some(rasterized) = rasterize_layers(
+          layers,
           Size {
-            width: layout.size.width - layout.border.left - layout.border.right,
-            height: layout.size.height - layout.border.top - layout.border.bottom,
+            width: (layout.size.width - layout.border.left - layout.border.right) as u32,
+            height: (layout.size.height - layout.border.top - layout.border.bottom) as u32,
           },
-          Point {
-            x: layout.border.left,
-            y: layout.border.top,
-          },
+          context,
+          border_radius,
+          Affine::translation(-layout.border.left, -layout.border.top),
           &mut canvas.mask_memory,
-        )? {
-          canvas.overlay_image(
-            image.into(),
-            border_radius,
-            Affine::translation(layout.border.left, layout.border.top) * context.transform,
-            context.style.image_rendering,
-            context.opacity,
-          );
-        }
+        ) else {
+          return Ok(());
+        };
+
+        canvas.overlay_image(
+          &rasterized,
+          BorderProperties::default(),
+          context.transform * Affine::translation(layout.border.left, layout.border.top),
+          context.style.image_rendering,
+          context.opacity,
+        );
       }
       BackgroundClip::ContentBox => {
         border_radius.inset_by_border_width();
         border_radius.expand_by(layout.padding.map(|size| -size));
 
-        if let Some(image) = create_background_image(
+        let layers = collect_background_image_layers(context, layout.size)?;
+
+        let Some(rasterized) = rasterize_layers(
+          layers,
+          layout.content_box_size().map(|x| x as u32),
           context,
-          layout.size,
-          layout.content_box_size(),
-          Point {
-            x: layout.padding.left + layout.border.left,
-            y: layout.padding.top + layout.border.top,
-          },
+          border_radius,
+          Affine::translation(
+            -layout.padding.left - layout.border.left,
+            -layout.padding.top - layout.border.top,
+          ),
           &mut canvas.mask_memory,
-        )? {
-          canvas.overlay_image(
-            image.into(),
-            border_radius,
-            Affine::translation(
+        ) else {
+          return Ok(());
+        };
+
+        canvas.overlay_image(
+          &rasterized,
+          BorderProperties::default(),
+          context.transform
+            * Affine::translation(
               layout.padding.left + layout.border.left,
               layout.padding.top + layout.border.top,
-            ) * context.transform,
-            context.style.image_rendering,
-            context.opacity,
-          );
-        }
+            ),
+          context.style.image_rendering,
+          context.opacity,
+        );
       }
       _ => {}
     }
@@ -471,14 +491,16 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
     layout: Layout,
   ) -> Result<()> {
     let fill_image = if context.style.background_clip == BackgroundClip::BorderArea {
-      create_background_image(
+      let layers = collect_background_image_layers(context, layout.size)?;
+
+      rasterize_layers(
+        layers,
+        layout.size.map(|x| x as u32),
         context,
-        layout.size,
-        layout.size,
-        Point::zero(),
+        BorderProperties::default(),
+        Affine::IDENTITY,
         &mut canvas.mask_memory,
-      )?
-      .map(Into::into)
+      )
     } else {
       None
     };
@@ -487,7 +509,7 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
       canvas,
       layout.size,
       context.transform,
-      fill_image,
+      fill_image.as_ref(),
     );
     Ok(())
   }

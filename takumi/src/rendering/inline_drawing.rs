@@ -1,7 +1,7 @@
-use image::RgbaImage;
+use image::{GenericImageView, Rgba};
 use parley::{GlyphRun, PositionedInlineBox, PositionedLayoutItem};
 use swash::FontRef;
-use taffy::{Layout, Point, Size};
+use taffy::{Layout, Size};
 
 use crate::{
   Result,
@@ -10,17 +10,20 @@ use crate::{
     node::Node,
     style::{Affine, BackgroundClip, SizedFontStyle, TextDecorationLine},
   },
-  rendering::{Canvas, RenderContext, create_background_image, draw_decoration, draw_glyph},
+  rendering::{
+    BorderProperties, Canvas, RenderContext, collect_background_image_layers, draw_decoration,
+    draw_glyph, rasterize_layers,
+  },
   resources::font::FontError,
 };
 
-fn draw_glyph_run(
+fn draw_glyph_run<I: GenericImageView<Pixel = Rgba<u8>>>(
   style: &SizedFontStyle,
   glyph_run: &GlyphRun<'_, InlineBrush>,
   canvas: &mut Canvas,
   layout: Layout,
   context: &RenderContext,
-  image_fill: Option<&RgbaImage>,
+  image_fill: Option<&I>,
 ) -> Result<()> {
   let decoration_line = style
     .parent
@@ -141,19 +144,19 @@ pub(crate) fn draw_inline_layout(
   font_style: &SizedFontStyle,
 ) -> Result<Vec<PositionedInlineBox>> {
   let fill_image = if context.style.background_clip == BackgroundClip::Text {
-    create_background_image(
+    let layers = collect_background_image_layers(context, layout.size)?;
+
+    rasterize_layers(
+      layers,
+      layout.content_box_size().map(|x| x as u32),
       context,
-      layout.size,
-      Size {
-        width: layout.content_box_width(),
-        height: layout.content_box_height(),
-      },
-      Point {
-        x: layout.padding.left + layout.border.left,
-        y: layout.padding.top + layout.border.top,
-      },
+      BorderProperties::default(),
+      Affine::translation(
+        layout.padding.left + layout.border.left,
+        layout.padding.top + layout.border.top,
+      ),
       &mut canvas.mask_memory,
-    )?
+    )
   } else {
     None
   };

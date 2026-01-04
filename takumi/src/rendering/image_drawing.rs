@@ -252,7 +252,7 @@ pub fn draw_image(
   border.inset_by_border_width();
 
   canvas.overlay_image(
-    image,
+    &image,
     border,
     transform_with_content_offset,
     context.style.image_rendering,

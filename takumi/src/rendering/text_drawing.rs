@@ -1,7 +1,7 @@
 use std::{borrow::Cow, convert::Into};
 
 use image::{
-  ImageError, RgbaImage,
+  GenericImageView, ImageError, Rgba, RgbaImage,
   error::{DecodingError, ImageFormatHint},
   imageops::{interpolate_bilinear, interpolate_nearest},
 };
@@ -66,13 +66,13 @@ pub(crate) fn draw_decoration(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn draw_glyph(
+pub(crate) fn draw_glyph<I: GenericImageView<Pixel = Rgba<u8>>>(
   glyph: Glyph,
   glyph_content: &ResolvedGlyph,
   canvas: &mut Canvas,
   style: &SizedFontStyle,
   layout: Layout,
-  fill_image: Option<&RgbaImage>,
+  fill_image: Option<&I>,
   mut transform: Affine,
   opacity: u8,
   text_style: &parley::Style<InlineBrush>,
@@ -97,6 +97,8 @@ pub(crate) fn draw_glyph(
 
       let mut bottom = RgbaImage::new(bitmap.placement.width, bitmap.placement.height);
 
+      let fill_dimensions = image_fill.dimensions();
+
       overlay_area(
         &mut bottom,
         Point::ZERO,
@@ -111,9 +113,11 @@ pub(crate) fn draw_glyph(
           let source_x = x + glyph.x as u32;
           let source_y = y + glyph.y as u32 - bitmap.placement.top as u32;
 
-          let Some(mut pixel) = image_fill.get_pixel_checked(source_x, source_y).cloned() else {
+          if source_x >= fill_dimensions.0 || source_y >= fill_dimensions.1 {
             return Color::transparent().into();
-          };
+          }
+
+          let mut pixel = image_fill.get_pixel(source_x, source_y);
 
           apply_mask_alpha_to_pixel(&mut pixel, alpha);
           apply_mask_alpha_to_pixel(&mut pixel, opacity);
@@ -123,7 +127,7 @@ pub(crate) fn draw_glyph(
       );
 
       canvas.overlay_image(
-        bottom.into(),
+        &bottom,
         BorderProperties::default(),
         transform,
         ImageScalingAlgorithm::Auto,
@@ -144,7 +148,7 @@ pub(crate) fn draw_glyph(
       )))?;
 
       canvas.overlay_image(
-        image.into(),
+        &image,
         Default::default(),
         transform,
         Default::default(),
@@ -381,7 +385,7 @@ fn draw_color_outline_image(
 
   overlay_image(
     canvas,
-    image.into(),
+    &image,
     BorderProperties::default(),
     Affine::translation(
       translation.x + outer_placement.left as f32,

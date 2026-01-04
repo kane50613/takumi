@@ -100,12 +100,6 @@ impl<'a> CowImage<'a> {
       )),
     }
   }
-
-  pub(crate) fn size(&self) -> Size<u32> {
-    let (width, height) = self.dimensions();
-
-    Size { width, height }
-  }
 }
 
 pub(crate) enum CanvasConstrainResult {
@@ -411,9 +405,9 @@ impl Canvas {
   }
 
   /// Overlays an image onto the canvas with optional border radius.
-  pub(crate) fn overlay_image(
+  pub(crate) fn overlay_image<I: GenericImageView<Pixel = Rgba<u8>>>(
     &mut self,
-    image: CowImage,
+    image: &I,
     border: BorderProperties,
     transform: Affine,
     algorithm: ImageScalingAlgorithm,
@@ -634,9 +628,9 @@ pub(crate) fn draw_mask<C: Into<Rgba<u8>>>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn overlay_image(
+pub(crate) fn overlay_image<I: GenericImageView<Pixel = Rgba<u8>>>(
   canvas: &mut RgbaImage,
-  image: CowImage,
+  image: &I,
   border: BorderProperties,
   transform: Affine,
   algorithm: ImageScalingAlgorithm,
@@ -644,11 +638,14 @@ pub(crate) fn overlay_image(
   constrain: Option<&CanvasConstrain>,
   mask_memory: &mut MaskMemory,
 ) {
+  let (width, height) = image.dimensions();
+  let size = Size { width, height };
+
   // Fast path: if no sub-pixel interpolation is needed, we can just draw the image directly
   if transform.only_translation() && border.is_zero() {
     let translation = transform.decompose_translation();
 
-    return overlay_area(canvas, translation, image.size(), constrain, |x, y| {
+    return overlay_area(canvas, translation, size, constrain, |x, y| {
       let mut pixel = image.get_pixel(x, y);
 
       apply_mask_alpha_to_pixel(&mut pixel, opacity);
@@ -663,11 +660,7 @@ pub(crate) fn overlay_image(
 
   let mut paths = Vec::new();
 
-  border.append_mask_commands(
-    &mut paths,
-    image.size().map(|size| size as f32),
-    Point::ZERO,
-  );
+  border.append_mask_commands(&mut paths, size.map(|size| size as f32), Point::ZERO);
 
   let (mask, placement) = mask_memory.render(&paths, Some(transform), None);
 
@@ -696,8 +689,8 @@ pub(crate) fn overlay_image(
     });
 
     let sampled_pixel = match algorithm {
-      ImageScalingAlgorithm::Pixelated => interpolate_nearest(&image, point.x, point.y),
-      _ => interpolate_bilinear(&image, point.x, point.y),
+      ImageScalingAlgorithm::Pixelated => interpolate_nearest(image, point.x, point.y),
+      _ => interpolate_bilinear(image, point.x, point.y),
     };
 
     let Some(mut pixel) = sampled_pixel else {

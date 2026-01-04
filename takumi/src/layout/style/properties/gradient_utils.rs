@@ -1,3 +1,4 @@
+use image::Rgba;
 use smallvec::SmallVec;
 use wide::f32x4;
 
@@ -82,13 +83,14 @@ pub(crate) fn build_color_lut(
   resolved_stops: &[ResolvedGradientStop],
   axis_length: f32,
   lut_size: usize,
-) -> Box<[Color]> {
+) -> Box<[Rgba<u8>]> {
   // Fast path: if only one color, fill entire LUT with it
   if resolved_stops.len() <= 1 {
     let color = resolved_stops
       .first()
-      .map(|s| s.color)
-      .unwrap_or(Color([0, 0, 0, 0]));
+      .map(|s| s.color.into())
+      .unwrap_or(Rgba([0, 0, 0, 0]));
+
     let mut lut = Vec::with_capacity(lut_size);
     lut.resize(lut_size, color);
     return lut.into_boxed_slice();
@@ -97,15 +99,12 @@ pub(crate) fn build_color_lut(
   #[cfg(feature = "rayon")]
   {
     use rayon::prelude::*;
-    (0..lut_size)
-      .into_par_iter()
-      .map(|i| {
-        let t = i as f32 / (lut_size - 1) as f32;
-        let position_px = t * axis_length;
-        color_from_stops(position_px, resolved_stops)
-      })
-      .collect::<Vec<_>>()
-      .into_boxed_slice()
+
+    Box::from_par_iter((0..lut_size).into_par_iter().map(|i| {
+      let t = i as f32 / (lut_size - 1) as f32;
+      let position_px = t * axis_length;
+      color_from_stops(position_px, resolved_stops).into()
+    }))
   }
 
   #[cfg(not(feature = "rayon"))]
@@ -115,8 +114,9 @@ pub(crate) fn build_color_lut(
     for i in 0..lut_size {
       let t = i as f32 / (lut_size - 1) as f32;
       let position_px = t * axis_length;
-      lut.push(color_from_stops(position_px, resolved_stops));
+      lut.push(color_from_stops(position_px, resolved_stops).into());
     }
+
     lut.into_boxed_slice()
   }
 }

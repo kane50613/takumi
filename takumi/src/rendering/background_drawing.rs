@@ -1,18 +1,85 @@
 use std::{borrow::Cow, iter::successors};
 
-use image::RgbaImage;
+use image::{GenericImageView, Rgba, RgbaImage};
 use smallvec::{SmallVec, smallvec};
-use taffy::{Point, Size};
+use taffy::Size;
 
 use crate::{
   Result,
   layout::{node::resolve_image, style::*},
-  rendering::{
-    BorderProperties, Canvas, MaskMemory, RenderContext, Sizing, fast_resize, overlay_image,
-  },
+  rendering::{BorderProperties, MaskMemory, RenderContext, Sizing, overlay_image},
 };
 
-pub(crate) type ImageTiles = (RgbaImage, SmallVec<[i32; 1]>, SmallVec<[i32; 1]>);
+pub(crate) struct TileLayer {
+  pub tile: BackgroundTile,
+  pub xs: SmallVec<[i32; 1]>,
+  pub ys: SmallVec<[i32; 1]>,
+}
+
+pub(crate) type TileLayers = Vec<TileLayer>;
+
+pub(crate) fn rasterize_layers(
+  layers: TileLayers,
+  size: Size<u32>,
+  context: &RenderContext,
+  border: BorderProperties,
+  transform: Affine,
+  mask_memory: &mut MaskMemory,
+) -> Option<BackgroundTile> {
+  if layers.is_empty() {
+    return None;
+  }
+
+  let mut composed = RgbaImage::new(size.width, size.height);
+
+  for layer in layers {
+    for &x in &layer.xs {
+      for &y in &layer.ys {
+        overlay_image(
+          &mut composed,
+          &layer.tile,
+          border,
+          Affine::translation(x as f32, y as f32) * transform,
+          context.style.image_rendering,
+          255,
+          None,
+          mask_memory,
+        );
+      }
+    }
+  }
+
+  Some(BackgroundTile::Image(composed))
+}
+
+pub(crate) enum BackgroundTile {
+  Linear(LinearGradientTile),
+  Radial(RadialGradientTile),
+  Noise(NoiseV1Tile),
+  Image(RgbaImage),
+}
+
+impl GenericImageView for BackgroundTile {
+  type Pixel = Rgba<u8>;
+
+  fn dimensions(&self) -> (u32, u32) {
+    match self {
+      Self::Linear(t) => t.dimensions(),
+      Self::Radial(t) => t.dimensions(),
+      Self::Noise(t) => t.dimensions(),
+      Self::Image(t) => t.dimensions(),
+    }
+  }
+
+  fn get_pixel(&self, x: u32, y: u32) -> Self::Pixel {
+    match self {
+      Self::Linear(t) => t.get_pixel(x, y),
+      Self::Radial(t) => t.get_pixel(x, y),
+      Self::Noise(t) => t.get_pixel(x, y),
+      Self::Image(t) => *t.get_pixel(x, y),
+    }
+  }
+}
 
 pub(crate) fn resolve_length_against_area(unit: Length, area: u32, sizing: &Sizing) -> u32 {
   match unit {
@@ -140,19 +207,25 @@ pub(crate) fn render_tile(
   tile_w: u32,
   tile_h: u32,
   context: &RenderContext,
-) -> Result<Option<RgbaImage>> {
+) -> Result<Option<BackgroundTile>> {
   Ok(match image {
     BackgroundImage::None => None,
-    BackgroundImage::Linear(gradient) => Some(gradient.to_image(tile_w, tile_h, context)),
-    BackgroundImage::Radial(gradient) => Some(gradient.to_image(tile_w, tile_h, context)),
-    BackgroundImage::Noise(noise) => Some(noise.to_image(tile_w, tile_h, context)),
+    BackgroundImage::Linear(gradient) => Some(BackgroundTile::Linear(LinearGradientTile::new(
+      gradient, tile_w, tile_h, context,
+    ))),
+    BackgroundImage::Radial(gradient) => Some(BackgroundTile::Radial(RadialGradientTile::new(
+      gradient, tile_w, tile_h, context,
+    ))),
+    BackgroundImage::Noise(noise) => Some(BackgroundTile::Noise(NoiseV1Tile::new(
+      *noise, tile_w, tile_h,
+    ))),
     BackgroundImage::Url(url) => {
       if let Ok(source) = resolve_image(url, context) {
-        Some(
+        Some(BackgroundTile::Image(
           source
             .render_to_rgba_image(tile_w, tile_h, context.style.image_rendering)?
             .into_owned(),
-        )
+        ))
       } else {
         None
       }
@@ -170,59 +243,54 @@ pub(crate) fn resolve_layer_tiles(
   area_w: u32,
   area_h: u32,
   context: &RenderContext,
-) -> Result<Option<ImageTiles>> {
-  // Compute tile size
-  let (mut tile_w, mut tile_h) = resolve_background_size(size, (area_w, area_h), image, context);
+) -> Result<Option<TileLayer>> {
+  let (initial_w, initial_h) = resolve_background_size(size, (area_w, area_h), image, context);
 
-  if tile_w == 0 || tile_h == 0 {
+  if initial_w == 0 || initial_h == 0 {
     return Ok(None);
   }
 
-  let Some(mut tile_image) = render_tile(image, tile_w, tile_h, context)? else {
+  let (xs, tile_w) = match repeat.0 {
+    BackgroundRepeatStyle::Repeat => {
+      let origin_x = resolve_position_component_x(pos, initial_w, area_w, &context.sizing);
+      (
+        collect_repeat_tile_positions(area_w, initial_w, origin_x),
+        initial_w,
+      )
+    }
+    BackgroundRepeatStyle::NoRepeat => {
+      let origin_x = resolve_position_component_x(pos, initial_w, area_w, &context.sizing);
+      (smallvec![origin_x], initial_w)
+    }
+    BackgroundRepeatStyle::Space => (collect_spaced_tile_positions(area_w, initial_w), initial_w),
+    BackgroundRepeatStyle::Round => collect_stretched_tile_positions(area_w, initial_w),
+  };
+
+  let (ys, tile_h) = match repeat.1 {
+    BackgroundRepeatStyle::Repeat => {
+      let origin_y = resolve_position_component_y(pos, initial_h, area_h, &context.sizing);
+      (
+        collect_repeat_tile_positions(area_h, initial_h, origin_y),
+        initial_h,
+      )
+    }
+    BackgroundRepeatStyle::NoRepeat => {
+      let origin_y = resolve_position_component_y(pos, initial_h, area_h, &context.sizing);
+      (smallvec![origin_y], initial_h)
+    }
+    BackgroundRepeatStyle::Space => (collect_spaced_tile_positions(area_h, initial_h), initial_h),
+    BackgroundRepeatStyle::Round => collect_stretched_tile_positions(area_h, initial_h),
+  };
+
+  if xs.is_empty() || ys.is_empty() {
+    return Ok(None);
+  }
+
+  let Some(tile) = render_tile(image, tile_w, tile_h, context)? else {
     return Ok(None);
   };
 
-  let xs: SmallVec<[i32; 1]> = match repeat.0 {
-    BackgroundRepeatStyle::Repeat => {
-      let origin_x = resolve_position_component_x(pos, tile_w, area_w, &context.sizing);
-      collect_repeat_tile_positions(area_w, tile_w, origin_x)
-    }
-    BackgroundRepeatStyle::NoRepeat => {
-      let origin_x = resolve_position_component_x(pos, tile_w, area_w, &context.sizing);
-      smallvec![origin_x]
-    }
-    BackgroundRepeatStyle::Space => collect_spaced_tile_positions(area_w, tile_w),
-    BackgroundRepeatStyle::Round => {
-      let (px, new_w) = collect_stretched_tile_positions(area_w, tile_w);
-      if new_w != tile_w {
-        tile_w = new_w;
-        tile_image = fast_resize(&tile_image, tile_w, tile_h, context.style.image_rendering)?;
-      }
-      px
-    }
-  };
-
-  let ys: SmallVec<[i32; 1]> = match repeat.1 {
-    BackgroundRepeatStyle::Repeat => {
-      let origin_y = resolve_position_component_y(pos, tile_h, area_h, &context.sizing);
-      collect_repeat_tile_positions(area_h, tile_h, origin_y)
-    }
-    BackgroundRepeatStyle::NoRepeat => {
-      let origin_y = resolve_position_component_y(pos, tile_h, area_h, &context.sizing);
-      smallvec![origin_y]
-    }
-    BackgroundRepeatStyle::Space => collect_spaced_tile_positions(area_h, tile_h),
-    BackgroundRepeatStyle::Round => {
-      let (py, new_h) = collect_stretched_tile_positions(area_h, tile_h);
-      if new_h != tile_h {
-        tile_h = new_h;
-        tile_image = fast_resize(&tile_image, tile_w, tile_h, context.style.image_rendering)?;
-      }
-      py
-    }
-  };
-
-  Ok(Some((tile_image, xs, ys)))
+  Ok(Some(TileLayer { tile, xs, ys }))
 }
 
 /// Collects a list of tile positions to place along an axis.
@@ -295,14 +363,14 @@ pub(crate) fn collect_stretched_tile_positions(
   (positions, new_tile_size)
 }
 
-pub(crate) fn resolve_layers_tiles(
+pub(crate) fn resolve_tile_layers(
   images: &[BackgroundImage],
   positions: &[BackgroundPosition],
   sizes: &[BackgroundSize],
   repeats: &[BackgroundRepeat],
   context: &RenderContext,
-  border_box: Size<f32>,
-) -> Result<Vec<ImageTiles>> {
+  border_box: Size<u32>,
+) -> Result<TileLayers> {
   let last_position = positions.last().copied().unwrap_or_default();
   let last_size = sizes.last().copied().unwrap_or_default();
   let last_repeat = repeats.last().copied().unwrap_or_default();
@@ -317,8 +385,8 @@ pub(crate) fn resolve_layers_tiles(
       pos,
       size,
       repeat,
-      border_box.width as u32,
-      border_box.height as u32,
+      border_box.width,
+      border_box.height,
       context,
     )
   };
@@ -328,15 +396,25 @@ pub(crate) fn resolve_layers_tiles(
   {
     use rayon::prelude::*;
 
-    let results: Result<Vec<Option<ImageTiles>>> =
-      images.par_iter().enumerate().map(map_fn).collect();
-    Ok(results?.into_iter().flatten().collect())
+    let results = images
+      .par_iter()
+      .with_min_len(2)
+      .enumerate()
+      .map(map_fn)
+      .collect::<Result<Vec<Option<TileLayer>>>>()?;
+
+    Ok(results.into_iter().flatten().collect())
   }
 
   #[cfg(not(feature = "rayon"))]
   {
-    let results: Result<Vec<Option<ImageTiles>>> = images.iter().enumerate().map(map_fn).collect();
-    Ok(results?.into_iter().flatten().collect())
+    let results = images
+      .iter()
+      .enumerate()
+      .map(map_fn)
+      .collect::<Result<Vec<Option<TileLayer>>>>()?;
+
+    Ok(results.into_iter().flatten().collect())
   }
 }
 
@@ -361,7 +439,7 @@ pub(crate) fn create_mask(
       )
     });
 
-  let resolved_tiles = resolve_layers_tiles(
+  let layers = resolve_tile_layers(
     &mask_image,
     &context
       .style
@@ -409,39 +487,30 @@ pub(crate) fn create_mask(
         )
       }),
     context,
-    border_box,
+    border_box.map(|x| x as u32),
   )?;
 
-  if resolved_tiles.is_empty() {
+  if layers.is_empty() {
     return Ok(None);
   }
 
-  let mut composed = RgbaImage::new(border_box.width as u32, border_box.height as u32);
-
-  for (tile_image, xs, ys) in resolved_tiles {
-    for y in &ys {
-      for x in &xs {
-        overlay_image(
-          &mut composed,
-          (&tile_image).into(),
-          Default::default(),
-          Affine::translation(*x as f32, *y as f32),
-          context.style.image_rendering,
-          255,
-          None,
-          mask_memory,
-        );
-      }
-    }
-  }
-
-  Ok(Some(composed.iter().skip(3).step_by(4).copied().collect()))
+  Ok(
+    rasterize_layers(
+      layers,
+      border_box.map(|x| x as u32),
+      context,
+      BorderProperties::default(),
+      Affine::IDENTITY,
+      mask_memory,
+    )
+    .map(|tile| tile.pixels().map(|(_, _, pixel)| pixel.0[3]).collect()),
+  )
 }
 
-pub(crate) fn collect_background_image_tiles(
+pub(crate) fn collect_background_image_layers(
   context: &RenderContext,
   border_box: Size<f32>,
-) -> Result<Vec<ImageTiles>> {
+) -> Result<TileLayers> {
   let background_image = context
     .style
     .background_image
@@ -458,7 +527,7 @@ pub(crate) fn collect_background_image_tiles(
       )
     });
 
-  resolve_layers_tiles(
+  resolve_tile_layers(
     &background_image,
     &context
       .style
@@ -506,83 +575,6 @@ pub(crate) fn collect_background_image_tiles(
         )
       }),
     context,
-    border_box,
+    border_box.map(|x| x as u32),
   )
-}
-
-pub(crate) fn create_background_image(
-  context: &RenderContext,
-  border_box: Size<f32>,
-  size: Size<f32>,
-  offset: Point<f32>,
-  mask_memory: &mut MaskMemory,
-) -> Result<Option<RgbaImage>> {
-  let resolved_tiles = collect_background_image_tiles(context, border_box)?;
-
-  if resolved_tiles.is_empty() {
-    return Ok(None);
-  }
-
-  // Fast path: If there is exactly one tile and is the desired size and position, we can just return the tile image
-  if offset == Point::zero()
-    && resolved_tiles.len() == 1
-    && resolved_tiles.first().is_some_and(|(tile_image, xs, ys)| {
-      tile_image.width() == size.width as u32
-        && tile_image.height() == size.height as u32
-        && xs.len() == 1
-        && ys.len() == 1
-        && xs.first().is_some_and(|x| *x == 0)
-        && ys.first().is_some_and(|y| *y == 0)
-    })
-  {
-    return Ok(
-      resolved_tiles
-        .into_iter()
-        .next()
-        .map(|(tile_image, _, _)| tile_image),
-    );
-  }
-
-  let mut composed = RgbaImage::new(size.width as u32, size.height as u32);
-
-  for (tile_image, xs, ys) in resolved_tiles {
-    for y in &ys {
-      for x in &xs {
-        overlay_image(
-          &mut composed,
-          (&tile_image).into(),
-          Default::default(),
-          Affine::translation(*x as f32 - offset.x, *y as f32 - offset.y),
-          context.style.image_rendering,
-          255,
-          None,
-          mask_memory,
-        );
-      }
-    }
-  }
-
-  Ok(Some(composed))
-}
-
-/// Draw layered backgrounds (gradients) with support for background-size, -position, and -repeat.
-pub(crate) fn draw_background_layers(
-  tiles: Vec<ImageTiles>,
-  radius: BorderProperties,
-  context: &RenderContext,
-  canvas: &mut Canvas,
-) {
-  for (tile_image, xs, ys) in tiles {
-    for y in &ys {
-      for x in &xs {
-        canvas.overlay_image(
-          (&tile_image).into(),
-          radius,
-          context.transform * Affine::translation(*x as f32, *y as f32),
-          ImageScalingAlgorithm::Auto,
-          context.opacity,
-        );
-      }
-    }
-  }
 }

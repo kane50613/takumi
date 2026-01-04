@@ -1,5 +1,5 @@
 use cssparser::{Parser, Token};
-use image::RgbaImage;
+use image::{GenericImageView, Rgba};
 use smallvec::SmallVec;
 use std::ops::{Deref, Neg};
 
@@ -12,31 +12,6 @@ use crate::{
   rendering::RenderContext,
 };
 
-/// A trait for gradients that can be sampled at a specific point.
-/// This trait is used to avoid trait objects in the rendering pipeline.
-pub(crate) trait Gradient: Send + Sync {
-  /// The type of the draw context.
-  type DrawContext: Send + Sync;
-
-  /// Returns the color at a specific point in the gradient.
-  fn at(&self, x: u32, y: u32, ctx: &Self::DrawContext) -> Color;
-
-  /// Creates a draw context for the gradient.
-  fn to_draw_context(&self, width: f32, height: f32, context: &RenderContext) -> Self::DrawContext;
-
-  /// Creates an image of the gradient.
-  fn to_image(&self, width: u32, height: u32, context: &RenderContext) -> RgbaImage {
-    let ctx = self.to_draw_context(width as f32, height as f32, context);
-
-    #[cfg(feature = "rayon")]
-    {
-      RgbaImage::from_par_fn(width, height, |x, y| self.at(x, y, &ctx).into())
-    }
-    #[cfg(not(feature = "rayon"))]
-    RgbaImage::from_fn(width, height, |x, y| self.at(x, y, &ctx).into())
-  }
-}
-
 /// Represents a linear gradient.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LinearGradient {
@@ -46,53 +21,53 @@ pub struct LinearGradient {
   pub stops: Box<[GradientStop]>,
 }
 
-impl Gradient for LinearGradient {
-  type DrawContext = LinearGradientDrawContext;
+impl GenericImageView for LinearGradientTile {
+  type Pixel = Rgba<u8>;
 
-  fn at(&self, x: u32, y: u32, ctx: &Self::DrawContext) -> Color {
+  fn dimensions(&self) -> (u32, u32) {
+    (self.width, self.height)
+  }
+
+  fn get_pixel(&self, x: u32, y: u32) -> Self::Pixel {
     // Fast path for empty or single-color gradients
-    if ctx.color_lut.is_empty() {
-      return Color([0, 0, 0, 0]);
+    if self.color_lut.is_empty() {
+      return Rgba([0, 0, 0, 0]);
     }
-    if ctx.color_lut.len() == 1 {
-      return ctx.color_lut[0];
+    if self.color_lut.len() == 1 {
+      return self.color_lut[0];
     }
 
     // Calculate position along gradient axis
-    let dx = x as f32 - ctx.cx;
-    let dy = y as f32 - ctx.cy;
-    let projection = dx * ctx.dir_x + dy * ctx.dir_y;
-    let position_px = (projection + ctx.max_extent).clamp(0.0, ctx.axis_length);
+    let dx = x as f32 - self.cx as f32;
+    let dy = y as f32 - self.cy as f32;
+    let projection = dx * self.dir_x + dy * self.dir_y;
+    let position_px = (projection + self.max_extent).clamp(0.0, self.axis_length);
 
     // Map position to LUT index using rounding (nearest neighbor).
     // This is fast and, with a high-resolution LUT (>=1025 entries), provides good precision
     // and preserves sharp transitions (hard stops).
-    let normalized = (position_px / ctx.axis_length).clamp(0.0, 1.0);
-    let lut_idx = (normalized * (ctx.color_lut.len() - 1) as f32).round() as usize;
+    let normalized = (position_px / self.axis_length).clamp(0.0, 1.0);
+    let lut_idx = (normalized * (self.color_lut.len() - 1) as f32).round() as usize;
 
-    ctx.color_lut[lut_idx]
-  }
-
-  fn to_draw_context(&self, width: f32, height: f32, context: &RenderContext) -> Self::DrawContext {
-    LinearGradientDrawContext::new(self, width, height, context)
+    self.color_lut[lut_idx]
   }
 }
 
 /// Precomputed drawing context for repeated sampling of a `LinearGradient`.
 #[derive(Debug, Clone)]
-pub struct LinearGradientDrawContext {
+pub struct LinearGradientTile {
   /// Target width in pixels.
-  pub width: f32,
+  pub width: u32,
   /// Target height in pixels.
-  pub height: f32,
+  pub height: u32,
   /// Direction vector X component derived from angle.
   pub dir_x: f32,
   /// Direction vector Y component derived from angle.
   pub dir_y: f32,
   /// Center X coordinate.
-  pub cx: f32,
+  pub cx: u32,
   /// Center Y coordinate.
-  pub cy: f32,
+  pub cy: u32,
   /// Half of axis length along gradient direction in pixels.
   pub max_extent: f32,
   /// Full axis length along gradient direction in pixels.
@@ -101,18 +76,18 @@ pub struct LinearGradientDrawContext {
   pub resolved_stops: SmallVec<[ResolvedGradientStop; 4]>,
   /// Pre-computed color lookup table for fast gradient sampling.
   /// Maps normalized position [0.0, 1.0] to color.
-  pub color_lut: Box<[Color]>,
+  pub color_lut: Box<[Rgba<u8>]>,
 }
 
-impl LinearGradientDrawContext {
+impl LinearGradientTile {
   /// Builds a drawing context from a gradient and a target viewport.
-  pub fn new(gradient: &LinearGradient, width: f32, height: f32, context: &RenderContext) -> Self {
+  pub fn new(gradient: &LinearGradient, width: u32, height: u32, context: &RenderContext) -> Self {
     let rad = gradient.angle.0.to_radians();
     let (dir_x, dir_y) = (rad.sin(), -rad.cos());
 
-    let cx = width / 2.0;
-    let cy = height / 2.0;
-    let max_extent = ((width * dir_x.abs()) + (height * dir_y.abs())) / 2.0;
+    let cx = width / 2;
+    let cy = height / 2;
+    let max_extent = ((width as f32 * dir_x.abs()) + (height as f32 * dir_y.abs())) / 2.0;
     let axis_length = 2.0 * max_extent;
 
     let resolved_stops = resolve_stops_along_axis(&gradient.stops, axis_length.max(1e-6), context);
@@ -121,7 +96,7 @@ impl LinearGradientDrawContext {
     let lut_size = adaptive_lut_size(axis_length);
     let color_lut = build_color_lut(&resolved_stops, axis_length, lut_size);
 
-    LinearGradientDrawContext {
+    LinearGradientTile {
       width,
       height,
       dir_x,
@@ -735,22 +710,19 @@ mod tests {
     // Test at the top (should be red)
     let context = GlobalContext::default();
     let dummy_context = RenderContext::new(&context, (100, 100).into(), Default::default());
-    let ctx = gradient.to_draw_context(100.0, 100.0, &dummy_context);
-    let color_top = gradient.at(50, 0, &ctx);
-    assert_eq!(color_top, Color([255, 0, 0, 255]));
+    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context);
+
+    let color_top = tile.get_pixel(50, 0);
+    assert_eq!(color_top, Rgba([255, 0, 0, 255]));
 
     // Test at the bottom (should be blue)
-    let color_bottom = gradient.at(50, 100, &ctx);
-    assert_eq!(color_bottom, Color([0, 0, 255, 255]));
+    let color_bottom = tile.get_pixel(50, 100);
+    assert_eq!(color_bottom, Rgba([0, 0, 255, 255]));
 
     // Test in the middle (should be purple)
-    let color_middle = gradient.at(50, 50, &ctx);
+    let color_middle = tile.get_pixel(50, 50);
     // Middle should be roughly purple (red + blue)
-    let [r, g, b, a] = color_middle.0;
-    assert_eq!(r, 128); // Approximately halfway between 255 and 0
-    assert_eq!(g, 0); // No green component
-    assert_eq!(b, 128); // Approximately halfway between 0 and 255
-    assert_eq!(a, 255); // Fully opaque
+    assert_eq!(color_middle, Rgba([128, 0, 128, 255]));
   }
 
   #[test]
@@ -773,13 +745,14 @@ mod tests {
     // Test at the left (should be red)
     let context = GlobalContext::default();
     let dummy_context = RenderContext::new(&context, (100, 100).into(), Default::default());
-    let ctx = gradient.to_draw_context(100.0, 100.0, &dummy_context);
-    let color_left = gradient.at(0, 50, &ctx);
-    assert_eq!(color_left, Color([255, 0, 0, 255]));
+
+    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context);
+    let color_left = tile.get_pixel(0, 50);
+    assert_eq!(color_left, Rgba([255, 0, 0, 255]));
 
     // Test at the right (should be blue)
-    let color_right = gradient.at(100, 50, &ctx);
-    assert_eq!(color_right, Color([0, 0, 255, 255]));
+    let color_right = tile.get_pixel(100, 50);
+    assert_eq!(color_right, Rgba([0, 0, 255, 255]));
   }
 
   #[test]
@@ -796,9 +769,9 @@ mod tests {
     // Should always return the same color
     let context = GlobalContext::default();
     let dummy_context = RenderContext::new(&context, (100, 100).into(), Default::default());
-    let ctx = gradient.to_draw_context(100.0, 100.0, &dummy_context);
-    let color = gradient.at(50, 50, &ctx);
-    assert_eq!(color, Color([255, 0, 0, 255]));
+    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context);
+    let color = tile.get_pixel(50, 50);
+    assert_eq!(color, Rgba([255, 0, 0, 255]));
   }
 
   #[test]
@@ -811,9 +784,9 @@ mod tests {
     // Should return transparent
     let context = GlobalContext::default();
     let dummy_context = RenderContext::new(&context, (100, 100).into(), Default::default());
-    let ctx = gradient.to_draw_context(100.0, 100.0, &dummy_context);
-    let color = gradient.at(50, 50, &ctx);
-    assert_eq!(color, Color([0, 0, 0, 0]));
+    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context);
+    let color = tile.get_pixel(50, 50);
+    assert_eq!(color, Rgba([0, 0, 0, 0]));
   }
 
   #[test]
@@ -823,19 +796,19 @@ mod tests {
 
     let context = GlobalContext::default();
     let dummy_context = RenderContext::new(&context, (40, 40).into(), Default::default());
-    let ctx = gradient.to_draw_context(40.0, 40.0, &dummy_context);
+    let tile = LinearGradientTile::new(&gradient, 40, 40, &dummy_context);
 
     // grey at 0,0
-    let c0 = gradient.at(0, 0, &ctx);
-    assert_eq!(c0, Color([128, 128, 128, 255]));
+    let c0 = tile.get_pixel(0, 0);
+    assert_eq!(c0, Rgba([128, 128, 128, 255]));
 
     // transparent at 1,0
-    let c1 = gradient.at(1, 0, &ctx);
-    assert_eq!(c1, Color([0, 0, 0, 0]));
+    let c1 = tile.get_pixel(1, 0);
+    assert_eq!(c1, Rgba([0, 0, 0, 0]));
 
     // transparent till the end
-    let c2 = gradient.at(40, 0, &ctx);
-    assert_eq!(c2, Color([0, 0, 0, 0]));
+    let c2 = tile.get_pixel(40, 0);
+    assert_eq!(c2, Rgba([0, 0, 0, 0]));
 
     Ok(())
   }
@@ -847,10 +820,10 @@ mod tests {
 
     let context = GlobalContext::default();
     let dummy_context = RenderContext::new(&context, (40, 40).into(), Default::default());
-    let ctx = gradient.to_draw_context(40.0, 40.0, &dummy_context);
+    let tile = LinearGradientTile::new(&gradient, 40, 40, &dummy_context);
 
     // color at top-left (0, 0) should be grey (1px hard stop)
-    assert_eq!(gradient.at(0, 0, &ctx), Color([128, 128, 128, 255]));
+    assert_eq!(tile.get_pixel(0, 0), Rgba([128, 128, 128, 255]));
 
     Ok(())
   }

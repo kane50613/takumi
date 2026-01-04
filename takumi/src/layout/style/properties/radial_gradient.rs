@@ -1,11 +1,12 @@
 use cssparser::Parser;
+use image::{GenericImageView, Rgba};
 use smallvec::SmallVec;
 
 use super::gradient_utils::{adaptive_lut_size, build_color_lut, resolve_stops_along_axis};
 use crate::{
   layout::style::{
-    BackgroundPosition, Color, CssToken, FromCss, Gradient, GradientStop, Length, ParseResult,
-    ResolvedGradientStop, declare_enum_from_css_impl,
+    BackgroundPosition, CssToken, FromCss, GradientStop, Length, ParseResult, ResolvedGradientStop,
+    declare_enum_from_css_impl,
   },
   rendering::RenderContext,
 };
@@ -63,11 +64,11 @@ declare_enum_from_css_impl!(
 
 /// Precomputed drawing context for repeated sampling of a `RadialGradient`.
 #[derive(Debug, Clone)]
-pub struct RadialGradientDrawContext {
+pub struct RadialGradientTile {
   /// Target width in pixels.
-  pub width: f32,
+  pub width: u32,
   /// Target height in pixels.
-  pub height: f32,
+  pub height: u32,
   /// Center X coordinate in pixels
   pub cx: f32,
   /// Center Y coordinate in pixels
@@ -82,50 +83,50 @@ pub struct RadialGradientDrawContext {
   pub resolved_stops: SmallVec<[ResolvedGradientStop; 4]>,
   /// Pre-computed color lookup table for fast gradient sampling.
   /// Maps normalized distance [0.0, 1.0] from center to color.
-  pub color_lut: Box<[Color]>,
+  pub color_lut: Box<[Rgba<u8>]>,
 }
 
-impl Gradient for RadialGradient {
-  type DrawContext = RadialGradientDrawContext;
+impl GenericImageView for RadialGradientTile {
+  type Pixel = Rgba<u8>;
 
-  fn at(&self, x: u32, y: u32, ctx: &Self::DrawContext) -> Color {
+  fn dimensions(&self) -> (u32, u32) {
+    (self.width, self.height)
+  }
+
+  fn get_pixel(&self, x: u32, y: u32) -> Self::Pixel {
     // Fast path for empty or single-color gradients
-    if ctx.color_lut.is_empty() {
-      return Color([0, 0, 0, 0]);
+    if self.color_lut.is_empty() {
+      return Rgba([0, 0, 0, 0]);
     }
-    if ctx.color_lut.len() == 1 {
-      return ctx.color_lut[0];
+    if self.color_lut.len() == 1 {
+      return self.color_lut[0];
     }
 
-    let dx = (x as f32 - ctx.cx) / ctx.radius_x.max(1e-6);
-    let dy = (y as f32 - ctx.cy) / ctx.radius_y.max(1e-6);
+    let dx = (x as f32 - self.cx) / self.radius_x.max(1e-6);
+    let dy = (y as f32 - self.cy) / self.radius_y.max(1e-6);
 
     // Normalized distance from center (1.0 = at radius)
     let d = (dx * dx + dy * dy).sqrt();
     let normalized = d.clamp(0.0, 1.0);
 
     // Map distance to LUT index using rounding (nearest neighbor).
-    let lut_idx = (normalized * (ctx.color_lut.len() - 1) as f32).round() as usize;
+    let lut_idx = (normalized * (self.color_lut.len() - 1) as f32).round() as usize;
 
-    ctx.color_lut[lut_idx]
-  }
-
-  fn to_draw_context(&self, width: f32, height: f32, context: &RenderContext) -> Self::DrawContext {
-    RadialGradientDrawContext::new(self, width, height, context)
+    self.color_lut[lut_idx]
   }
 }
 
-impl RadialGradientDrawContext {
+impl RadialGradientTile {
   /// Builds a drawing context from a gradient and a target viewport.
-  pub fn new(gradient: &RadialGradient, width: f32, height: f32, context: &RenderContext) -> Self {
-    let cx = Length::from(gradient.center.0.x).to_px(&context.sizing, width);
-    let cy = Length::from(gradient.center.0.y).to_px(&context.sizing, height);
+  pub fn new(gradient: &RadialGradient, width: u32, height: u32, context: &RenderContext) -> Self {
+    let cx = Length::from(gradient.center.0.x).to_px(&context.sizing, width as f32);
+    let cy = Length::from(gradient.center.0.y).to_px(&context.sizing, height as f32);
 
     // Distances to sides and corners
     let dx_left = cx;
-    let dx_right = width - cx;
+    let dx_right = width as f32 - cx;
     let dy_top = cy;
-    let dy_bottom = height - cy;
+    let dy_bottom = height as f32 - cy;
 
     let (radius_x, radius_y) = match (gradient.shape, gradient.size) {
       (RadialShape::Ellipse, RadialSize::FarthestCorner) => {
@@ -136,9 +137,9 @@ impl RadialGradientDrawContext {
         // distance to farthest corner
         let candidates = [
           (cx, cy),
-          (cx, height - cy),
-          (width - cx, cy),
-          (width - cx, height - cy),
+          (cx, dy_bottom),
+          (dx_right, cy),
+          (dx_right, dy_bottom),
         ];
         let r = candidates
           .iter()
@@ -168,9 +169,9 @@ impl RadialGradientDrawContext {
       (RadialShape::Circle, RadialSize::ClosestCorner) => {
         let candidates = [
           (cx, cy),
-          (cx, height - cy),
-          (width - cx, cy),
-          (width - cx, height - cy),
+          (cx, dy_bottom),
+          (dx_right, cy),
+          (dx_right, dy_bottom),
         ];
         let r = candidates
           .iter()
@@ -187,7 +188,7 @@ impl RadialGradientDrawContext {
     let lut_size = adaptive_lut_size(radius_scale);
     let color_lut = build_color_lut(&resolved_stops, radius_scale, lut_size);
 
-    RadialGradientDrawContext {
+    RadialGradientTile {
       width,
       height,
       cx,
@@ -258,7 +259,7 @@ impl<'i> FromCss<'i> for RadialGradient {
 mod tests {
   use super::*;
   use crate::layout::style::{
-    Length, PositionComponent, PositionKeywordX, PositionKeywordY, SpacePair, StopPosition,
+    Color, Length, PositionComponent, PositionKeywordX, PositionKeywordY, SpacePair, StopPosition,
   };
   use crate::{GlobalContext, rendering::RenderContext};
 
@@ -524,14 +525,14 @@ mod tests {
 
     let context = GlobalContext::default();
     let dummy_context = RenderContext::new(&context, (100, 100).into(), Default::default());
-    let ctx = gradient.to_draw_context(100.0, 100.0, &dummy_context);
+    let tile = RadialGradientTile::new(&gradient, 100, 100, &dummy_context);
 
     // Center (50, 50) should be red
-    let color_center = gradient.at(50, 50, &ctx);
-    assert_eq!(color_center, Color([255, 0, 0, 255]));
+    let color_center = tile.get_pixel(50, 50);
+    assert_eq!(color_center, Rgba([255, 0, 0, 255]));
 
     // Far outside (200, 200) should be clamped to blue
-    let color_far = gradient.at(200, 200, &ctx);
-    assert_eq!(color_far, Color([0, 0, 255, 255]));
+    let color_far = tile.get_pixel(200, 200);
+    assert_eq!(color_far, Rgba([0, 0, 255, 255]));
   }
 }

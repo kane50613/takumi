@@ -1,13 +1,13 @@
 use std::f32::consts::SQRT_2;
 
-use image::GenericImageView;
+use image::{GenericImageView, Rgba};
 use taffy::{Point, Rect, Size};
 use zeno::{Command, Fill, PathBuilder};
 
 use crate::{
   layout::style::{Affine, Color, ColorInput, Sides, SpacePair},
   rendering::{
-    Canvas, CowImage, RenderContext, apply_mask_alpha_to_pixel, blend_pixel, mask_index_from_coord,
+    Canvas, RenderContext, apply_mask_alpha_to_pixel, blend_pixel, mask_index_from_coord,
     overlay_area,
   },
 };
@@ -231,15 +231,18 @@ impl BorderProperties {
     path.close();
   }
 
-  pub(crate) fn draw(
+  pub(crate) fn draw<I: GenericImageView<Pixel = Rgba<u8>>>(
     mut self,
     canvas: &mut Canvas,
     border_box: Size<f32>,
     transform: Affine,
-    fill_image: Option<CowImage>,
+    fill_image: Option<&I>,
   ) {
     if let Some(fill_image) = &fill_image {
-      assert_eq!(fill_image.size(), border_box.map(|size| size as u32));
+      assert_eq!(
+        fill_image.dimensions(),
+        (border_box.width as u32, border_box.height as u32)
+      );
     }
 
     if self.width.left == 0.0

@@ -250,7 +250,7 @@ fn render_node<'g, Nodes: Node<Nodes>>(
   if let Some(mut original_canvas_image) = original_canvas_image {
     overlay_image(
       &mut original_canvas_image,
-      (&canvas.image).into(),
+      &canvas.image,
       BorderProperties::zero(),
       Affine::IDENTITY,
       ImageScalingAlgorithm::Auto,

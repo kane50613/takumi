@@ -105,7 +105,7 @@ impl SizedShadow {
 
     overlay_image(
       canvas,
-      image.into(),
+      &image,
       BorderProperties::zero(),
       Affine::translation(
         placement.left as f32 - blur_padding,
@@ -128,7 +128,7 @@ impl SizedShadow {
     let image = draw_inset_shadow(self, border_radius, layout.size, &mut canvas.mask_memory);
 
     canvas.overlay_image(
-      image.into(),
+      &image,
       border_radius,
       transform,
       ImageScalingAlgorithm::Auto,

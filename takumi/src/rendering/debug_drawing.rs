@@ -1,3 +1,4 @@
+use image::RgbaImage;
 use taffy::Layout;
 
 use crate::{
@@ -13,7 +14,7 @@ pub fn draw_debug_border(canvas: &mut Canvas, layout: Layout, transform: Affine)
     color: Color([255, 0, 0, 255]), // red
     radius: Sides([SpacePair::from_single(0.0); 4]),
   }
-  .draw(canvas, layout.size, transform, None);
+  .draw::<RgbaImage>(canvas, layout.size, transform, None);
 
   // content-box
   BorderProperties {
@@ -21,7 +22,7 @@ pub fn draw_debug_border(canvas: &mut Canvas, layout: Layout, transform: Affine)
     color: Color([0, 255, 0, 255]), // green
     radius: Sides([SpacePair::from_single(0.0); 4]),
   }
-  .draw(
+  .draw::<RgbaImage>(
     canvas,
     layout.content_box_size(),
     transform

@@ -48,6 +48,14 @@ impl Mul<Affine> for Affine {
   type Output = Affine;
 
   fn mul(self, rhs: Affine) -> Self::Output {
+    if self.is_identity() {
+      return rhs;
+    }
+
+    if rhs.is_identity() {
+      return self;
+    }
+
     Affine {
       a: self.a * rhs.a + self.c * rhs.b,
       b: self.b * rhs.a + self.d * rhs.b,
