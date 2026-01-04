@@ -1,5 +1,11 @@
 # takumi
 
+## 0.62.1
+
+### Patch Changes
+
+- 5214274: refactor `overlay_image` to take any `GenericImageView` (avoid unnecessary `RgbaImage` recreation)
+
 ## 0.62.0
 
 ### Minor Changes
