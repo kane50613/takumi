@@ -1,5 +1,11 @@
 # takumi
 
+## 0.62.6
+
+### Patch Changes
+
+- a10f933: fix tailwind filter classes (blur, brightness, etc.) now append instead of replace
+
 ## 0.62.5
 
 ### Patch Changes
