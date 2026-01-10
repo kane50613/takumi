@@ -1,5 +1,11 @@
 # @takumi-rs/wasm
 
+## 0.62.7
+
+### Patch Changes
+
+- 54e8bec: return error instead of panicing #389
+
 ## 0.62.6
 
 ## 0.62.5

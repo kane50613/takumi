@@ -1,5 +1,11 @@
 # @takumi-rs/core
 
+## 0.62.7
+
+### Patch Changes
+
+- 43036a0: return error instead of panicing
+
 ## 0.62.6
 
 ## 0.62.5
