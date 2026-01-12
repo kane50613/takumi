@@ -76,7 +76,7 @@ version = "0.25"
 features = ["jpeg", "png", "webp"]
 
 [dependencies.resvg]
-version = "0.45"
+version = "0.46"
 default-features = false
 optional = true
 
