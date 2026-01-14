@@ -1,5 +1,11 @@
 # takumi
 
+## 0.62.8
+
+### Patch Changes
+
+- b0a21a4: refactor opacity blending should be on render level
+
 ## 0.62.7
 
 ## 0.62.6
