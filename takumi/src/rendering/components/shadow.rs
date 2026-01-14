@@ -31,7 +31,6 @@ impl SizedShadow {
     shadow: BoxShadow,
     sizing: &Sizing,
     current_color: Color,
-    opacity: u8,
     size: Size<f32>,
   ) -> Self {
     Self {
@@ -39,7 +38,7 @@ impl SizedShadow {
       offset_y: shadow.offset_y.to_px(sizing, size.height),
       blur_radius: shadow.blur_radius.to_px(sizing, size.width),
       spread_radius: shadow.spread_radius.to_px(sizing, size.width).max(0.0),
-      color: shadow.color.resolve(current_color, opacity),
+      color: shadow.color.resolve(current_color),
     }
   }
 
@@ -48,7 +47,6 @@ impl SizedShadow {
     shadow: TextShadow,
     sizing: &Sizing,
     current_color: Color,
-    opacity: u8,
     size: Size<f32>,
   ) -> Self {
     Self {
@@ -57,7 +55,7 @@ impl SizedShadow {
       blur_radius: shadow.blur_radius.to_px(sizing, size.width),
       // Text shadows do not support spread radius; set to 0.
       spread_radius: 0.0,
-      color: shadow.color.resolve(current_color, opacity),
+      color: shadow.color.resolve(current_color),
     }
   }
 
@@ -112,7 +110,6 @@ impl SizedShadow {
         placement.top as f32 - blur_padding,
       ),
       ImageScalingAlgorithm::Auto,
-      255,
       constrain,
       mask_memory,
     );
@@ -132,7 +129,6 @@ impl SizedShadow {
       border_radius,
       transform,
       ImageScalingAlgorithm::Auto,
-      255,
     );
   }
 }

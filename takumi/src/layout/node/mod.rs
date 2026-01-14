@@ -262,13 +262,8 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
 
       border_radius.expand_by(Sides([resolved_spread_radius; 4]).into());
 
-      let shadow = SizedShadow::from_box_shadow(
-        *shadow,
-        &context.sizing,
-        context.current_color,
-        context.opacity,
-        layout.size,
-      );
+      let shadow =
+        SizedShadow::from_box_shadow(*shadow, &context.sizing, context.current_color, layout.size);
 
       border_radius.append_mask_commands(
         &mut paths,
@@ -311,7 +306,6 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
           *shadow,
           &context.sizing,
           context.current_color,
-          context.opacity,
           layout.size,
         );
         shadow.draw_inset(context.transform, border_radius, canvas, layout);
@@ -336,7 +330,7 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
           context
             .style
             .background_color
-            .resolve(context.current_color, context.opacity),
+            .resolve(context.current_color),
           radius,
           context.transform,
         );
@@ -352,7 +346,7 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
           context
             .style
             .background_color
-            .resolve(context.current_color, context.opacity),
+            .resolve(context.current_color),
           radius,
           Affine::translation(layout.border.left, layout.border.top) * context.transform,
         );
@@ -366,7 +360,7 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
           context
             .style
             .background_color
-            .resolve(context.current_color, context.opacity),
+            .resolve(context.current_color),
           radius,
           Affine::translation(
             layout.padding.left + layout.border.left,
@@ -401,7 +395,6 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
                 border_radius,
                 context.transform * Affine::translation(*x as f32, *y as f32),
                 context.style.image_rendering,
-                context.opacity,
               );
             }
           }
@@ -431,7 +424,6 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
           BorderProperties::default(),
           context.transform * Affine::translation(layout.border.left, layout.border.top),
           context.style.image_rendering,
-          context.opacity,
         );
       }
       BackgroundClip::ContentBox => {
@@ -463,7 +455,6 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
               layout.padding.top + layout.border.top,
             ),
           context.style.image_rendering,
-          context.opacity,
         );
       }
       _ => {}

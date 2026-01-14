@@ -54,8 +54,6 @@ pub struct RenderContext<'g> {
   pub(crate) sizing: Sizing,
   /// What the `currentColor` value is resolved to.
   pub(crate) current_color: Color,
-  /// The opacity to apply to all colors.
-  pub(crate) opacity: u8,
   /// The style after inheritance.
   pub(crate) style: InheritedStyle,
   /// Whether to draw debug borders.
@@ -78,7 +76,6 @@ impl<'g> RenderContext<'g> {
       },
       transform: Affine::IDENTITY,
       current_color: Color::black(),
-      opacity: 255,
       style: InheritedStyle::default(),
       draw_debug_border: false,
       fetched_resources,

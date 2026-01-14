@@ -38,10 +38,10 @@ impl<const DEFAULT_CURRENT_COLOR: bool> Default for ColorInput<DEFAULT_CURRENT_C
 
 impl<const DEFAULT_CURRENT_COLOR: bool> ColorInput<DEFAULT_CURRENT_COLOR> {
   /// Resolves the color input to a color.
-  pub fn resolve(self, current_color: Color, opacity: u8) -> Color {
+  pub fn resolve(self, current_color: Color) -> Color {
     match self {
-      ColorInput::Value(color) => color.with_opacity(opacity),
-      ColorInput::CurrentColor => current_color.with_opacity(opacity),
+      ColorInput::Value(color) => color,
+      ColorInput::CurrentColor => current_color,
     }
   }
 }

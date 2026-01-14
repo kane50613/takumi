@@ -216,7 +216,6 @@ pub(crate) fn apply_filters<'f, F: Iterator<Item = &'f Filter>>(
   image: &mut RgbaImage,
   sizing: &Sizing,
   current_color: Color,
-  opacity: u8,
   filters: F,
 ) {
   // Collect filters and batch consecutive pixel filters
@@ -248,8 +247,7 @@ pub(crate) fn apply_filters<'f, F: Iterator<Item = &'f Filter>>(
               width: image.width() as f32,
               height: image.height() as f32,
             };
-            let shadow =
-              SizedShadow::from_text_shadow(drop_shadow, sizing, current_color, opacity, size);
+            let shadow = SizedShadow::from_text_shadow(drop_shadow, sizing, current_color, size);
             apply_drop_shadow_filter(image, &shadow);
           }
           _ => unreachable!(),
@@ -329,7 +327,6 @@ pub(crate) fn apply_backdrop_filter(
     &mut backdrop_image,
     &context.sizing,
     context.current_color,
-    context.opacity,
     drop_shadow_filtered,
   );
 
@@ -604,7 +601,7 @@ mod tests {
       viewport,
       font_size: 16.0,
     };
-    apply_filters(&mut image, &sizing, Color::black(), 255, filters.iter());
+    apply_filters(&mut image, &sizing, Color::black(), filters.iter());
 
     let pixel = image.get_pixel(0, 0);
     // Rough verification of the math

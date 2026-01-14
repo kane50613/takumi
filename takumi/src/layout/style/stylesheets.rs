@@ -545,23 +545,22 @@ impl InheritedStyle {
               *shadow,
               &context.sizing,
               context.current_color,
-              context.opacity,
               Size::from_length(context.sizing.font_size),
             )
           })
           .collect()
       }),
-      color: self.color.resolve(context.current_color, context.opacity),
+      color: self.color.resolve(context.current_color),
       text_stroke_color: self
         .webkit_text_stroke_color
         .or(self.webkit_text_stroke.and_then(|stroke| stroke.color))
         .unwrap_or_default()
-        .resolve(context.current_color, context.opacity),
+        .resolve(context.current_color),
       text_decoration_color: self
         .text_decoration_color
         .or(self.text_decoration.color)
         .unwrap_or(ColorInput::CurrentColor)
-        .resolve(context.current_color, context.opacity),
+        .resolve(context.current_color),
     }
   }
 

@@ -20,7 +20,7 @@ use crate::{
   },
   rendering::{
     BorderProperties, Canvas, CanvasConstrain, MaskMemory, apply_mask_alpha_to_pixel, blend_pixel,
-    draw_mask, mask_index_from_coord, overlay_area, overlay_image,
+    draw_mask, mask_index_from_coord, overlay_area,
   },
   resources::font::ResolvedGlyph,
 };
@@ -74,8 +74,7 @@ pub(crate) fn draw_glyph<I: GenericImageView<Pixel = Rgba<u8>>>(
   layout: Layout,
   fill_image: Option<&I>,
   mut transform: Affine,
-  opacity: u8,
-  text_style: &parley::Style<InlineBrush>,
+  color: Color,
   palette: Option<ColorPalette>,
 ) -> Result<()> {
   transform *= Affine::translation(
@@ -120,7 +119,6 @@ pub(crate) fn draw_glyph<I: GenericImageView<Pixel = Rgba<u8>>>(
           let mut pixel = image_fill.get_pixel(source_x, source_y);
 
           apply_mask_alpha_to_pixel(&mut pixel, alpha);
-          apply_mask_alpha_to_pixel(&mut pixel, opacity);
 
           pixel
         },
@@ -131,7 +129,6 @@ pub(crate) fn draw_glyph<I: GenericImageView<Pixel = Rgba<u8>>>(
         BorderProperties::default(),
         transform,
         ImageScalingAlgorithm::Auto,
-        255,
       );
     }
     (ResolvedGlyph::Image(bitmap), None) => {
@@ -147,13 +144,7 @@ pub(crate) fn draw_glyph<I: GenericImageView<Pixel = Rgba<u8>>>(
         "Failed to create image from raw data",
       )))?;
 
-      canvas.overlay_image(
-        &image,
-        Default::default(),
-        transform,
-        Default::default(),
-        opacity,
-      );
+      canvas.overlay_image(&image, Default::default(), transform, Default::default());
     }
     (ResolvedGlyph::Outline(outline), Some(fill_image)) => {
       // If the transform is not invertible, we can't draw the glyph
@@ -205,9 +196,8 @@ pub(crate) fn draw_glyph<I: GenericImageView<Pixel = Rgba<u8>>>(
             return Color::transparent().into();
           };
 
-          blend_pixel(&mut pixel, text_style.brush.color.into());
+          blend_pixel(&mut pixel, color.into());
           apply_mask_alpha_to_pixel(&mut pixel, alpha);
-          apply_mask_alpha_to_pixel(&mut pixel, opacity);
 
           pixel
         },
@@ -229,7 +219,6 @@ pub(crate) fn draw_glyph<I: GenericImageView<Pixel = Rgba<u8>>>(
           outline,
           palette,
           transform,
-          opacity,
           canvas.constrains.last(),
         );
       } else {
@@ -239,7 +228,7 @@ pub(crate) fn draw_glyph<I: GenericImageView<Pixel = Rgba<u8>>>(
           &mut canvas.image,
           mask,
           placement,
-          text_style.brush.color,
+          color,
           canvas.constrains.last(),
         );
       }
@@ -316,50 +305,9 @@ fn draw_color_outline_image(
   mask_memory: &mut MaskMemory,
   outline: &Outline,
   palette: ColorPalette,
-  mut transform: Affine,
-  opacity: u8,
+  transform: Affine,
   constrain: Option<&CanvasConstrain>,
 ) {
-  // Fast path: if the opacity is 255, we can just draw the outline without any blending
-  if opacity == 255 {
-    for i in 0..outline.len() {
-      let Some(layer) = outline.get(i) else {
-        break;
-      };
-
-      let Some(color) = layer.color_index().map(|index| Color(palette.get(index))) else {
-        continue;
-      };
-
-      let paths = layer
-        .path()
-        .commands()
-        .map(invert_y_coordinate)
-        .collect::<Vec<_>>();
-
-      let (mask, placement) = mask_memory.render(&paths, Some(transform), None);
-
-      draw_mask(canvas, mask, placement, color, constrain);
-    }
-
-    return;
-  }
-
-  let translation = transform.decompose_translation();
-
-  transform.x = 0.0;
-  transform.y = 0.0;
-
-  let paths = outline
-    .path()
-    .commands()
-    .map(invert_y_coordinate)
-    .collect::<Vec<_>>();
-
-  let outer_placement = mask_memory.placement(&paths, Some(transform), None);
-
-  let mut image = RgbaImage::new(outer_placement.width, outer_placement.height);
-
   for i in 0..outline.len() {
     let Some(layer) = outline.get(i) else {
       break;
@@ -375,27 +323,10 @@ fn draw_color_outline_image(
       .map(invert_y_coordinate)
       .collect::<Vec<_>>();
 
-    let (mask, mut placement) = mask_memory.render(&paths, Some(transform), None);
+    let (mask, placement) = mask_memory.render(&paths, Some(transform), None);
 
-    placement.left -= outer_placement.left;
-    placement.top -= outer_placement.top;
-
-    draw_mask(&mut image, mask, placement, color, constrain);
+    draw_mask(canvas, mask, placement, color, constrain);
   }
-
-  overlay_image(
-    canvas,
-    &image,
-    BorderProperties::default(),
-    Affine::translation(
-      translation.x + outer_placement.left as f32,
-      translation.y + outer_placement.top as f32,
-    ),
-    Default::default(),
-    opacity,
-    constrain,
-    mask_memory,
-  );
 }
 
 #[derive(Clone, Copy, Debug)]

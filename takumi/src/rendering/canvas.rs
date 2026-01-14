@@ -306,28 +306,6 @@ pub(crate) struct MaskMemory {
 }
 
 impl MaskMemory {
-  pub(crate) fn placement<D: PathData>(
-    &mut self,
-    paths: D,
-    transform: Option<Affine>,
-    style: Option<zeno::Style>,
-  ) -> Placement {
-    let style = style.unwrap_or_default();
-    let mut bounds = self
-      .scratch
-      .bounds(&paths, style, transform.map(Into::into));
-
-    bounds.min = bounds.min.floor();
-    bounds.max = bounds.max.ceil();
-
-    Placement {
-      left: bounds.min.x as i32,
-      top: bounds.min.y as i32,
-      width: (bounds.max.x - bounds.min.x) as u32,
-      height: (bounds.max.y - bounds.min.y) as u32,
-    }
-  }
-
   pub(crate) fn render<D: PathData>(
     &mut self,
     paths: D,
@@ -411,7 +389,6 @@ impl Canvas {
     border: BorderProperties,
     transform: Affine,
     algorithm: ImageScalingAlgorithm,
-    opacity: u8,
   ) {
     overlay_image(
       &mut self.image,
@@ -419,7 +396,6 @@ impl Canvas {
       border,
       transform,
       algorithm,
-      opacity,
       self.constrains.last(),
       &mut self.mask_memory,
     );
@@ -634,7 +610,6 @@ pub(crate) fn overlay_image<I: GenericImageView<Pixel = Rgba<u8>>>(
   border: BorderProperties,
   transform: Affine,
   algorithm: ImageScalingAlgorithm,
-  opacity: u8,
   constrain: Option<&CanvasConstrain>,
   mask_memory: &mut MaskMemory,
 ) {
@@ -646,11 +621,7 @@ pub(crate) fn overlay_image<I: GenericImageView<Pixel = Rgba<u8>>>(
     let translation = transform.decompose_translation();
 
     return overlay_area(canvas, translation, size, constrain, |x, y| {
-      let mut pixel = image.get_pixel(x, y);
-
-      apply_mask_alpha_to_pixel(&mut pixel, opacity);
-
-      pixel
+      image.get_pixel(x, y)
     });
   }
 
@@ -678,7 +649,6 @@ pub(crate) fn overlay_image<I: GenericImageView<Pixel = Rgba<u8>>>(
       let mut pixel = image.get_pixel(x + placement.left as u32, y + placement.top as u32);
 
       apply_mask_alpha_to_pixel(&mut pixel, alpha);
-      apply_mask_alpha_to_pixel(&mut pixel, opacity);
 
       return pixel;
     }
@@ -698,7 +668,6 @@ pub(crate) fn overlay_image<I: GenericImageView<Pixel = Rgba<u8>>>(
     };
 
     apply_mask_alpha_to_pixel(&mut pixel, alpha);
-    apply_mask_alpha_to_pixel(&mut pixel, opacity);
 
     pixel
   };

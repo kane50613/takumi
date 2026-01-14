@@ -151,13 +151,13 @@ pub(crate) fn resolve_stops_along_axis(
         last_position = position;
 
         resolved.push(ResolvedGradientStop {
-          color: color.resolve(context.current_color, context.opacity),
+          color: color.resolve(context.current_color),
           position,
         });
       }
       GradientStop::ColorHint { color, hint: None } => {
         resolved.push(ResolvedGradientStop {
-          color: color.resolve(context.current_color, context.opacity),
+          color: color.resolve(context.current_color),
           position: UNDEFINED_POSITION,
         });
       }
@@ -167,9 +167,7 @@ pub(crate) fn resolve_stops_along_axis(
         };
 
         let Some(after_color) = stops.get(i + 1).and_then(|stop| match stop {
-          GradientStop::ColorHint { color, hint: _ } => {
-            Some(color.resolve(context.current_color, context.opacity))
-          }
+          GradientStop::ColorHint { color, hint: _ } => Some(color.resolve(context.current_color)),
           GradientStop::Hint(_) => None,
         }) else {
           continue;

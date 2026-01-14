@@ -46,7 +46,7 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
   }
 
   pub fn draw_inline(&mut self, canvas: &mut Canvas, layout: Layout) -> Result<()> {
-    if self.context.opacity == 0 {
+    if self.context.style.opacity.0 == 0.0 {
       return Ok(());
     }
 
@@ -121,16 +121,11 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
       .map(|font_size| font_size.to_px(&parent_context.sizing, parent_context.sizing.font_size))
       .unwrap_or(parent_context.sizing.font_size);
 
-    // currentColor itself should NOT have opacity applied yet,
-    // otherwise it will cause double applying.
-    let current_color = style.color.resolve(parent_context.current_color, 255);
-
-    let opacity = (style.opacity.0 * parent_context.opacity as f32) as u8;
+    let current_color = style.color.resolve(parent_context.current_color);
 
     let mut context = RenderContext {
       style,
       current_color,
-      opacity,
       fetched_resources: parent_context.fetched_resources.clone(),
       sizing: Sizing {
         font_size,

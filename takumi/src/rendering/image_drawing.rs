@@ -256,7 +256,6 @@ pub fn draw_image(
     border,
     transform_with_content_offset,
     context.style.image_rendering,
-    context.opacity,
   );
 
   Ok(())

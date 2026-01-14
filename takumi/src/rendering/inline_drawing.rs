@@ -40,7 +40,7 @@ fn draw_glyph_run<I: GenericImageView<Pixel = Rgba<u8>>>(
     draw_decoration(
       canvas,
       glyph_run,
-      style.text_decoration_color,
+      glyph_run.style().brush.decoration_color,
       glyph_run.baseline() - metrics.underline_offset,
       glyph_run.run().font_size() / 18.0,
       layout,
@@ -71,8 +71,7 @@ fn draw_glyph_run<I: GenericImageView<Pixel = Rgba<u8>>>(
         layout,
         image_fill,
         context.transform,
-        context.opacity,
-        glyph_run.style(),
+        glyph_run.style().brush.color,
         palette,
       )?;
     }
@@ -85,7 +84,7 @@ fn draw_glyph_run<I: GenericImageView<Pixel = Rgba<u8>>>(
     draw_decoration(
       canvas,
       glyph_run,
-      style.text_decoration_color,
+      glyph_run.style().brush.decoration_color,
       offset,
       size,
       layout,
@@ -97,7 +96,7 @@ fn draw_glyph_run<I: GenericImageView<Pixel = Rgba<u8>>>(
     draw_decoration(
       canvas,
       glyph_run,
-      style.text_decoration_color,
+      glyph_run.style().brush.decoration_color,
       glyph_run.baseline() - metrics.ascent - metrics.underline_offset,
       glyph_run.run().font_size() / 18.0,
       layout,
@@ -114,7 +113,7 @@ pub(crate) fn draw_inline_box<N: Node<N>>(
   canvas: &mut Canvas,
   transform: Affine,
 ) -> Result<()> {
-  if node.context.opacity == 0 {
+  if node.context.style.opacity.0 == 0.0 {
     return Ok(());
   }
 
