@@ -1,5 +1,11 @@
 # @takumi-rs/core
 
+## 0.63.1
+
+### Patch Changes
+
+- 9fb085f: deprecate `purgeResourcesCache`, remove `resourceCacheCapacity` option for constructing `Renderer`
+
 ## 0.63.0
 
 ### Minor Changes

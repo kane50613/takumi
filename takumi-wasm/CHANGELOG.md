@@ -1,5 +1,7 @@
 # @takumi-rs/wasm
 
+## 0.63.1
+
 ## 0.63.0
 
 ### Minor Changes
