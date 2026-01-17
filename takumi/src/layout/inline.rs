@@ -58,6 +58,7 @@ pub struct InlineBrush {
   pub color: Color,
   pub decoration_color: Color,
   pub stroke_color: Color,
+  pub background_color: Color,
 }
 
 impl Default for InlineBrush {
@@ -66,6 +67,7 @@ impl Default for InlineBrush {
       color: Color::black(),
       decoration_color: Color::black(),
       stroke_color: Color::black(),
+      background_color: Color::transparent(),
     }
   }
 }

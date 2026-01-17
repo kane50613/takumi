@@ -234,3 +234,71 @@ fn inline_block_in_inline() {
 
   run_style_width_test(container.into(), "inline_block_in_inline.png");
 }
+
+#[test]
+fn inline_span_background_color() {
+  let texts = &[
+    (
+      "Hello ",
+      StyleBuilder::default()
+        .background_color(ColorInput::Value(Color([255, 200, 200, 255])))
+        .display(Display::Inline)
+        .build()
+        .unwrap(),
+    ),
+    (
+      "world ",
+      StyleBuilder::default()
+        .background_color(ColorInput::Value(Color([200, 255, 200, 255])))
+        .display(Display::Inline)
+        .build()
+        .unwrap(),
+    ),
+    (
+      "from ",
+      StyleBuilder::default()
+        .background_color(ColorInput::Value(Color([200, 200, 255, 255])))
+        .display(Display::Inline)
+        .build()
+        .unwrap(),
+    ),
+    (
+      "Takumi!",
+      StyleBuilder::default()
+        .background_color(ColorInput::Value(Color([255, 255, 200, 255])))
+        .display(Display::Inline)
+        .build()
+        .unwrap(),
+    ),
+  ];
+
+  let children = Box::from_iter(texts.iter().map(|(text, style)| {
+    TextNode {
+      preset: None,
+      tw: None,
+      style: Some(style.clone()),
+      text: text.to_string(),
+    }
+    .into()
+  }));
+
+  let container = ContainerNode {
+    preset: None,
+    tw: None,
+    style: Some(
+      StyleBuilder::default()
+        .width(Percentage(100.0))
+        .height(Percentage(100.0))
+        .align_items(AlignItems::Center)
+        .justify_content(JustifyContent::Center)
+        .background_color(ColorInput::Value(Color::white()))
+        .white_space(WhiteSpace::pre())
+        .font_size(Some(Px(48.0)))
+        .build()
+        .unwrap(),
+    ),
+    children: Some(children),
+  };
+
+  run_style_width_test(container.into(), "inline_span_background_color.png");
+}

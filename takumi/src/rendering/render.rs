@@ -110,7 +110,7 @@ fn apply_transform(
 
   let mut local = Affine::translation(origin.x, origin.y);
 
-  let translate = style.resolve_translate();
+  let translate = style.translate();
   if translate != SpacePair::default() {
     local *= Affine::translation(
       translate.x.to_px(sizing, border_box.width),
@@ -122,7 +122,7 @@ fn apply_transform(
     local *= Affine::rotation(rotate);
   }
 
-  let scale = style.resolve_scale();
+  let scale = style.scale();
   if scale != SpacePair::default() {
     local *= Affine::scale(scale.x.0, scale.y.0);
   }

@@ -34,6 +34,25 @@ fn draw_glyph_run<I: GenericImageView<Pixel = Rgba<u8>>>(
   let run = glyph_run.run();
   let metrics = run.metrics();
 
+  if glyph_run.style().brush.background_color.0[3] > 0 {
+    let bg_height = metrics.ascent + metrics.descent;
+    let bg_y = glyph_run.baseline() - metrics.ascent;
+
+    canvas.fill_color(
+      Size {
+        width: glyph_run.advance(),
+        height: bg_height,
+      },
+      glyph_run.style().brush.background_color,
+      BorderProperties::default(),
+      context.transform
+        * Affine::translation(
+          layout.border.left + layout.padding.left + glyph_run.offset(),
+          layout.border.top + layout.padding.top + bg_y,
+        ),
+    );
+  }
+
   // decoration underline should not overlap with the glyph descent part,
   // as a temporary workaround, we draw the decoration under the glyph.
   if decoration_line.contains(&TextDecorationLine::Underline) {

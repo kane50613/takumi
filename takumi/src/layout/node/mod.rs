@@ -329,7 +329,7 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
           layout.size,
           context
             .style
-            .background_color
+            .background_color()
             .resolve(context.current_color),
           radius,
           context.transform,
@@ -345,7 +345,7 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
           },
           context
             .style
-            .background_color
+            .background_color()
             .resolve(context.current_color),
           radius,
           Affine::translation(layout.border.left, layout.border.top) * context.transform,
@@ -359,7 +359,7 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
           layout.content_box_size(),
           context
             .style
-            .background_color
+            .background_color()
             .resolve(context.current_color),
           radius,
           Affine::translation(

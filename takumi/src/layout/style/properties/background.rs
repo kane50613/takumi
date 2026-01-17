@@ -15,7 +15,7 @@ use crate::layout::style::*;
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Background {
   /// Background color.
-  pub color: ColorInput<false>,
+  pub color: Option<ColorInput<false>>,
   /// Background image.
   pub image: BackgroundImage,
   /// Background position.
@@ -98,7 +98,7 @@ impl<'i> FromCss<'i> for Background {
     }
 
     Ok(Background {
-      color: color.unwrap_or_default(),
+      color,
       image: image.unwrap_or_default(),
       position: position.unwrap_or_default(),
       size: size.unwrap_or_default(),
@@ -147,7 +147,7 @@ mod tests {
     assert_eq!(
       Background::from_str("red"),
       Ok(Background {
-        color: ColorInput::Value(Color([255, 0, 0, 255])),
+        color: Some(ColorInput::Value(Color([255, 0, 0, 255]))),
         ..Default::default()
       })
     );
@@ -158,7 +158,7 @@ mod tests {
     assert_eq!(
       Background::from_str("red border-box"),
       Ok(Background {
-        color: ColorInput::Value(Color([255, 0, 0, 255])),
+        color: Some(ColorInput::Value(Color([255, 0, 0, 255]))),
         clip: BackgroundClip::BorderBox,
         ..Default::default()
       })
