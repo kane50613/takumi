@@ -1,3 +1,4 @@
+import { fetchResources } from "@takumi-rs/helpers";
 import { type FromJsxOptions, fromJsx } from "@takumi-rs/helpers/jsx";
 import init, {
   type ByteBuf,
@@ -133,17 +134,7 @@ function createStream(component: ReactNode, options: ImageResponseOptions) {
           const urls = collectNodeFetchTasks(node);
 
           if (urls.length > 0) {
-            options.fetchedResources = new Map(
-              await Promise.all(
-                urls.map(
-                  async (url) =>
-                    [
-                      url,
-                      await fetch(url).then((r) => r.arrayBuffer()),
-                    ] as const,
-                ),
-              ),
-            );
+            options.fetchedResources = await fetchResources(urls);
           }
         }
 

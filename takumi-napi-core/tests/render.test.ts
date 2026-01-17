@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { container, image, text } from "@takumi-rs/helpers";
 import { Glob } from "bun";
-import { Renderer } from "../index";
+import { collectNodeFetchTasks, Renderer, type RenderOptions } from "../index";
 
 const glob = new Glob("../assets/fonts/**/*.{woff2,ttf}");
 const files = await Array.fromAsync(glob.scan());
@@ -80,10 +80,6 @@ test("Renderer initialization with fonts and images", async () => {
     fonts: [font],
     persistentImages: [
       {
-        src: remoteUrl,
-        data: remoteImage,
-      },
-      {
         src: localImagePath,
         data: localImage,
       },
@@ -106,10 +102,20 @@ describe("setup", () => {
   });
 });
 
+describe("collectNodeFetchTasks", () => {
+  test("collectNodeFetchTasks", () => {
+    const tasks = collectNodeFetchTasks(node);
+    expect(tasks).toEqual([remoteUrl]);
+  });
+});
+
 describe("render", () => {
-  const options = {
+  const options: RenderOptions = {
     width: 1200,
     height: 630,
+    fetchedResources: {
+      [remoteUrl]: remoteImage,
+    },
   };
 
   test("webp", async () => {
@@ -173,21 +179,6 @@ describe("render", () => {
       ...options,
       format: "png",
       devicePixelRatio: 2.0,
-    });
-
-    expect(result).toBeInstanceOf(Buffer);
-  });
-
-  test("with custom fetch function", async () => {
-    const result = await renderer.render(node, {
-      ...options,
-      format: "png",
-      fetch(url: string) {
-        if (url === localImagePath) {
-          return new Response(localImage);
-        }
-        throw new Error(`Unexpected URL: ${url}`);
-      },
     });
 
     expect(result).toBeInstanceOf(Buffer);

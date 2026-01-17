@@ -1,10 +1,12 @@
 import {
   type ConstructRendererOptions,
+  collectNodeFetchTasks,
   type Font,
   type PersistentImage,
   Renderer,
   type RenderOptions,
 } from "@takumi-rs/core";
+import { fetchResources } from "@takumi-rs/helpers";
 import { type FromJsxOptions, fromJsx } from "@takumi-rs/helpers/jsx";
 import type { ReactNode } from "react";
 
@@ -103,13 +105,22 @@ function putPersistentImage(renderer: Renderer, image: PersistentImage) {
   return renderer.putPersistentImage(image.src, image.data);
 }
 
-function createStream(component: ReactNode, options?: ImageResponseOptions) {
+function createStream(component: ReactNode, options: ImageResponseOptions) {
   return new ReadableStream({
     async start(controller) {
       try {
         const renderer = await getRenderer(options);
 
         const node = await fromJsx(component, options?.jsx);
+
+        if (!options.fetchedResources) {
+          const urls = collectNodeFetchTasks(node);
+
+          if (urls.length > 0) {
+            options.fetchedResources = await fetchResources(urls);
+          }
+        }
+
         const image = await renderer.render(
           node,
           options ?? defaultOptions,

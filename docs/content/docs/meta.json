@@ -13,7 +13,7 @@
     "layout-engine",
     "typography-and-fonts",
     "tailwind-css",
-    "persistent-images",
+    "load-images",
     "--- Advanced ---",
     "architecture",
     "performance-and-optimization",

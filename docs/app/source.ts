@@ -6,7 +6,7 @@ import { __iconNode as axeIconNode } from "lucide-react/dist/esm/icons/axe";
 import { __iconNode as bookMarkedIconNode } from "lucide-react/dist/esm/icons/book-marked";
 import { __iconNode as brainIconNode } from "lucide-react/dist/esm/icons/brain";
 import { __iconNode as bugIconNode } from "lucide-react/dist/esm/icons/bug";
-import { __iconNode as databaseIconNode } from "lucide-react/dist/esm/icons/database";
+import { __iconNode as imageMarkedIconNode } from "lucide-react/dist/esm/icons/image";
 import { __iconNode as layersIconNode } from "lucide-react/dist/esm/icons/layers";
 import { __iconNode as layoutTemplateIconNode } from "lucide-react/dist/esm/icons/layout-template";
 import { __iconNode as leafIconNode } from "lucide-react/dist/esm/icons/leaf";
@@ -32,7 +32,7 @@ const icons = {
   ArrowBigRight: arrowBigRightIconNode,
   Bug: bugIconNode,
   BookMarked: bookMarkedIconNode,
-  Database: databaseIconNode,
+  Image: imageMarkedIconNode,
   Type: typeIconNode,
   Layers: layersIconNode,
   Zap: zapIconNode,

@@ -14,10 +14,15 @@ mod renderer;
 
 use std::{fmt::Display, ops::Deref};
 
-use napi::{De, Env, Error, JsString, JsValue, bindgen_prelude::*};
+use napi::{De, Env, Error, JsValue, bindgen_prelude::*};
+use napi_derive::napi;
 pub use renderer::Renderer;
 use serde::{Deserialize, Deserializer, de::DeserializeOwned};
-use takumi::parley::FontStyle;
+use takumi::{
+  layout::node::{Node, NodeKind},
+  parley::FontStyle,
+  resources::task::FetchTaskCollection,
+};
 
 #[derive(Deserialize, Default)]
 pub(crate) struct FontInput {
@@ -37,19 +42,6 @@ impl<'de> Deserialize<'de> for FontStyleInput {
     let s = String::deserialize(deserializer)?;
     Ok(FontStyleInput(FontStyle::parse(&s).unwrap_or_default()))
   }
-}
-
-// fetch(url: string): Promise<Response>
-pub(crate) type FetchFn<'env> = Function<'env, JsString<'env>, PromiseRaw<'env, Object<'env>>>;
-
-/// Somehow this didn't always return a proper `ArrayBuffer` that napi could handle properly: "Failed to get Buffer pointer and length",
-/// have to manually convert it to `Uint8Array`.
-/// arrayBuffer(this: Response): Promise<ArrayBuffer>
-pub(crate) type ArrayBufferFn<'env> = Function<'env, (), PromiseRaw<'env, Object<'env>>>;
-
-pub(crate) enum MaybeInitialized<B, A> {
-  Uninitialized(B),
-  Initialized(A),
 }
 
 fn buffer_from_object(env: Env, value: Object) -> Result<Buffer> {
@@ -94,4 +86,23 @@ pub(crate) fn deserialize_with_tracing<T: DeserializeOwned>(value: Object) -> Re
 
 pub(crate) fn map_error<E: Display>(err: E) -> napi::Error {
   napi::Error::from_reason(err.to_string())
+}
+
+/// Collects the fetch task urls from the node.
+#[napi(ts_args_type = "node: AnyNode")]
+pub fn collect_node_fetch_tasks(node: Object) -> Result<Vec<String>> {
+  let node: NodeKind = deserialize_with_tracing(node)?;
+
+  let mut collection = FetchTaskCollection::default();
+
+  node.collect_fetch_tasks(&mut collection);
+  node.collect_style_fetch_tasks(&mut collection);
+
+  Ok(
+    collection
+      .into_inner()
+      .iter()
+      .map(|task| task.to_string())
+      .collect(),
+  )
 }

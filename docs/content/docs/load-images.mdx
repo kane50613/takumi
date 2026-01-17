@@ -1,0 +1,103 @@
+---
+title: Load Images
+description: Choose the right way to load images.
+icon: Image
+---
+
+## External Images
+
+In order to make loading more flexible, we do not handle any fetching for you. Instead, exposes the fetched resources via `fetchedResources` option.
+
+If you are using `@takumi-rs/image-response`, it will handle fetching for you, or you can override the default fetching behavior by passing your own `fetchResources` option.
+
+```tsx twoslash tab="@takumi-rs/core"
+/** @jsxImportSource react */
+// ---cut-before---
+import { fromJsx } from "@takumi-rs/helpers/jsx";
+import { Renderer, collectNodeFetchTasks } from "@takumi-rs/core";
+import { fetchResources } from "@takumi-rs/helpers";
+
+const renderer = new Renderer();
+
+const node = await fromJsx(<img src="https://example.com/image.png" />);
+
+// [!code ++:2]
+const urls = collectNodeFetchTasks(node);
+const fetchedResources = await fetchResources(urls);
+
+const image = await renderer.render(node, {
+  // [!code ++]
+  fetchedResources,
+});
+```
+
+```tsx twoslash tab="@takumi-rs/wasm"
+/** @jsxImportSource react */
+// ---cut-before---
+import { fromJsx } from "@takumi-rs/helpers/jsx";
+import { Renderer, collectNodeFetchTasks } from "@takumi-rs/wasm";
+import { fetchResources } from "@takumi-rs/helpers";
+
+const renderer = new Renderer();
+
+const node = await fromJsx(<img src="https://example.com/image.png" />);
+
+// [!code ++:2]
+const urls = collectNodeFetchTasks(node);
+const fetchedResources = await fetchResources(urls);
+
+const image = await renderer.render(node, {
+  // [!code ++]
+  fetchedResources,
+});
+```
+
+## Persistent Images
+
+Preload frequently used images like logo, background, etc. to avoid redundant image decoding and improve performance.
+
+It's recommended to declare images in global scope so Takumi can identify and cache them with [`WeakSet`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WeakSet) reference to the image object.
+
+The image key can be used in any `src` field or `background-image`, `mask-image` CSS property.
+
+```tsx twoslash
+/** @jsxImportSource react */
+// ---cut-before---
+import { ImageResponse } from "@takumi-rs/image-response";
+import type { PersistentImage } from "@takumi-rs/core";
+
+const [logo, background] = await Promise.all([
+  fetch("/logo.png").then((res) => res.arrayBuffer()),
+  fetch("/background.png").then((res) => res.arrayBuffer()),
+]);
+
+const persistentImages: PersistentImage[] = [
+  {
+    src: "my-logo",
+    data: logo,
+  },
+  {
+    src: "background",
+    data: background,
+  },
+];
+
+export function GET() {
+  return new ImageResponse(<OgImage />, {
+    // [!code ++]
+    persistentImages,
+  });
+}
+
+function OgImage() {
+  return (
+    <div
+      style={{
+        backgroundImage: "url(background)",
+      }}
+    >
+      <img src="my-logo" />
+    </div>
+  );
+}
+```

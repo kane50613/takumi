@@ -1,25 +1,17 @@
 use std::collections::HashMap;
 
-use crossbeam_channel::{Receiver, bounded};
 use napi::bindgen_prelude::*;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::sync::Arc;
 use takumi::{
   GlobalContext,
-  layout::{
-    DEFAULT_DEVICE_PIXEL_RATIO, DEFAULT_FONT_SIZE, Viewport,
-    node::{Node, NodeKind},
-  },
+  layout::{DEFAULT_DEVICE_PIXEL_RATIO, DEFAULT_FONT_SIZE, Viewport, node::NodeKind},
   rendering::{RenderOptionsBuilder, render, write_image},
-  resources::{
-    image::{ImageSource, load_image_source_from_bytes},
-    task::{FetchTask, FetchTaskCollection},
-  },
+  resources::image::load_image_source_from_bytes,
 };
 
 use crate::{
-  ArrayBufferFn, MaybeInitialized, buffer_from_object, map_error,
-  renderer::{OutputFormat, RenderOptions, ResourceCache},
+  buffer_from_object, map_error,
+  renderer::{OutputFormat, RenderOptions},
 };
 
 pub struct RenderTask<'g> {
@@ -29,8 +21,7 @@ pub struct RenderTask<'g> {
   pub viewport: Viewport,
   pub format: OutputFormat,
   pub quality: Option<u8>,
-  pub(crate) resource_cache: ResourceCache,
-  pub(crate) tasks_rx: Receiver<(FetchTask, MaybeInitialized<Buffer, Arc<ImageSource>>)>,
+  pub fetched_resources: HashMap<Arc<str>, Buffer>,
 }
 
 impl<'g> RenderTask<'g> {
@@ -38,65 +29,8 @@ impl<'g> RenderTask<'g> {
     env: Env,
     node: NodeKind,
     options: RenderOptions,
-    resources_cache: &ResourceCache,
     global: &'g GlobalContext,
   ) -> Result<Self> {
-    let mut collection = FetchTaskCollection::default();
-
-    node.collect_fetch_tasks(&mut collection);
-    node.collect_style_fetch_tasks(&mut collection);
-
-    let collection = collection.into_inner();
-
-    let fetch = options
-      .fetch
-      .or_else(|| {
-        env
-          .get_global()
-          .ok()
-          .and_then(|global| global.get_named_property("fetch").ok())
-      })
-      .ok_or(Error::from_reason(
-        "No global fetch() function found. Please provide your own.",
-      ))?;
-
-    let (tx, rx) = bounded(1);
-
-    for task in collection {
-      if let Some(resources_cache) = resources_cache.as_ref() {
-        let mut lock = resources_cache
-          .lock()
-          .map_err(|e| Error::from_reason(e.to_string()))?;
-
-        if let Some(cached) = lock.get(&task).cloned() {
-          drop(lock);
-
-          tx.send((task, MaybeInitialized::Initialized(cached)))
-            .map_err(|e| Error::from_reason(e.to_string()))?;
-
-          continue;
-        }
-      }
-
-      let tx = tx.clone();
-
-      fetch.call(env.create_string(&task)?)?.then(move |ctx| {
-        let array_buffer_fn = ctx
-          .value
-          .get_named_property::<ArrayBufferFn>("arrayBuffer")?;
-
-        array_buffer_fn.apply(ctx.value, ())?.then(move |ctx| {
-          tx.send((
-            task,
-            MaybeInitialized::Uninitialized(buffer_from_object(ctx.env, ctx.value)?),
-          ))
-          .map_err(|e| Error::from_reason(e.to_string()))?;
-
-          Ok(())
-        })
-      })?;
-    }
-
     Ok(RenderTask {
       node: Some(node),
       global,
@@ -112,8 +46,12 @@ impl<'g> RenderTask<'g> {
       format: options.format.unwrap_or(OutputFormat::png),
       quality: options.quality,
       draw_debug_border: options.draw_debug_border.unwrap_or_default(),
-      tasks_rx: rx,
-      resource_cache: resources_cache.clone(),
+      fetched_resources: options
+        .fetched_resources
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(k, v)| Ok((k, buffer_from_object(env, v)?)))
+        .collect::<Result<_>>()?,
     })
   }
 }
@@ -127,36 +65,21 @@ impl Task for RenderTask<'_> {
       unreachable!()
     };
 
-    let resources: Vec<_> = self.tasks_rx.iter().collect();
-
-    let resource_cache = self.resource_cache.clone();
-    let fetched_resources: HashMap<_, _> = resources
-      .into_par_iter()
-      .filter_map(|(task, buffer)| match buffer {
-        MaybeInitialized::Initialized(source) => Some(Ok((task, source))),
-        MaybeInitialized::Uninitialized(buffer) => {
-          let Ok(source) = load_image_source_from_bytes(&buffer) else {
-            return None;
-          };
-
-          if let Some(cache) = resource_cache.as_ref() {
-            let mut lock = match cache.lock() {
-              Ok(l) => l,
-              Err(e) => return Some(Err(map_error(e))),
-            };
-
-            lock.put(task.clone(), source.clone());
-          }
-
-          Some(Ok((task, source)))
-        }
+    let initialized_images = self
+      .fetched_resources
+      .iter()
+      .map(|(k, v)| {
+        Ok((
+          k.clone(),
+          load_image_source_from_bytes(v).map_err(map_error)?,
+        ))
       })
       .collect::<Result<HashMap<_, _>, _>>()?;
 
     let image = render(
       RenderOptionsBuilder::default()
         .viewport(self.viewport)
-        .fetched_resources(fetched_resources)
+        .fetched_resources(initialized_images)
         .node(node)
         .global(self.global)
         .draw_debug_border(self.draw_debug_border)

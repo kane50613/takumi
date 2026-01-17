@@ -13,11 +13,12 @@ use takumi::{
 };
 
 use crate::{
-  FetchFn, FontInput, buffer_from_object, buffer_slice_from_object, deserialize_with_tracing,
+  FontInput, buffer_from_object, buffer_slice_from_object, deserialize_with_tracing,
   load_font_task::LoadFontTask, map_error, put_persistent_image_task::PutPersistentImageTask,
   render_animation_task::RenderAnimationTask, render_task::RenderTask,
 };
 use std::{
+  collections::HashMap,
   num::NonZeroUsize,
   sync::{Arc, Mutex},
 };
@@ -43,10 +44,9 @@ pub struct RenderOptions<'env> {
   pub quality: Option<u8>,
   /// Whether to draw debug borders.
   pub draw_debug_border: Option<bool>,
-  /// The fetch function to use to fetch resources.
-  /// @default global fetch function
-  #[napi(ts_type = "typeof fetch")]
-  pub fetch: Option<FetchFn<'env>>,
+  /// The fetched resources to use.
+  #[napi(ts_type = "Map<string, Uint8Array | ArrayBuffer>")]
+  pub fetched_resources: Option<HashMap<Arc<str>, Object<'env>>>,
   /// The device pixel ratio.
   /// @default 1.0
   pub device_pixel_ratio: Option<f64>,
@@ -374,13 +374,7 @@ impl Renderer {
     let node: NodeKind = deserialize_with_tracing(source)?;
 
     Ok(AsyncTask::with_optional_signal(
-      RenderTask::from_options(
-        env,
-        node,
-        options.unwrap_or_default(),
-        &self.resources_cache,
-        &self.global,
-      )?,
+      RenderTask::from_options(env, node, options.unwrap_or_default(), &self.global)?,
       signal,
     ))
   }

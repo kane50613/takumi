@@ -4,3 +4,4 @@
 /docs/deep-dives /docs/architecture 301
 /docs/deep-dives/stylesheets /docs/reference 301
 /docs/deep-dives/* /docs/architecture 301
+/docs/persistent-images /docs/load-images 301
