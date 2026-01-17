@@ -110,12 +110,14 @@ describe("collectNodeFetchTasks", () => {
 });
 
 describe("render", () => {
+  const fetchedResources = new Map<string, ArrayBuffer>();
+
+  fetchedResources.set(remoteUrl, remoteImage);
+
   const options: RenderOptions = {
     width: 1200,
     height: 630,
-    fetchedResources: {
-      [remoteUrl]: remoteImage,
-    },
+    fetchedResources,
   };
 
   test("webp", async () => {
