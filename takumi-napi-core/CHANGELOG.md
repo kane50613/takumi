@@ -1,5 +1,15 @@
 # @takumi-rs/core
 
+## 0.64.0
+
+### Minor Changes
+
+- 1600ff0: make `fetchedResources` accept `ImageSource` array instead of map
+
+### Patch Changes
+
+- 1600ff0: deprecate `PersistentImage` type
+
 ## 0.63.2
 
 ## 0.63.1

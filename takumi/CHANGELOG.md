@@ -1,5 +1,11 @@
 # takumi
 
+## 0.64.0
+
+### Patch Changes
+
+- 6571216: fix viewport check should include defined values
+
 ## 0.63.2
 
 ### Patch Changes

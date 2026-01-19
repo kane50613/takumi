@@ -1,5 +1,11 @@
 # @takumi-rs/helpers
 
+## 0.64.0
+
+### Minor Changes
+
+- 1600ff0: make `fetchResources` return array
+
 ## 0.63.2
 
 ## 0.63.1
