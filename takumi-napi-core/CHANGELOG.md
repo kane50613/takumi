@@ -1,5 +1,11 @@
 # @takumi-rs/core
 
+## 0.64.1
+
+### Patch Changes
+
+- 0dc36ce: hint GC about the external buffers
+
 ## 0.64.0
 
 ### Minor Changes
