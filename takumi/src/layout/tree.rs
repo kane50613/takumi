@@ -286,7 +286,7 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
     node.measure(&self.context, available_space, known_dimensions, style)
   }
 
-  fn inline_items_iter(&self) -> InlineItemIterator<'_, 'g, N> {
+  pub(crate) fn inline_items_iter(&self) -> InlineItemIterator<'_, 'g, N> {
     InlineItemIterator {
       stack: vec![(self, 0)], // (node, depth)
       current_node_content: None,

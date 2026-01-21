@@ -16,12 +16,34 @@ use crate::{
 };
 
 #[napi(object)]
+pub struct MeasuredTextRun {
+  pub text: String,
+  pub x: f64,
+  pub y: f64,
+  pub width: f64,
+  pub height: f64,
+}
+
+impl From<takumi::rendering::MeasuredTextRun> for MeasuredTextRun {
+  fn from(run: takumi::rendering::MeasuredTextRun) -> Self {
+    Self {
+      text: run.text,
+      x: run.x as f64,
+      y: run.y as f64,
+      width: run.width as f64,
+      height: run.height as f64,
+    }
+  }
+}
+
+#[napi(object)]
 pub struct MeasuredNode {
   pub width: f64,
   pub height: f64,
   #[napi(ts_type = "[number, number, number, number, number, number]")]
   pub transform: Vec<f64>,
   pub children: Vec<MeasuredNode>,
+  pub runs: Vec<MeasuredTextRun>,
 }
 
 impl From<takumi::rendering::MeasuredNode> for MeasuredNode {
@@ -31,6 +53,7 @@ impl From<takumi::rendering::MeasuredNode> for MeasuredNode {
       height: node.height as f64,
       transform: node.transform.iter().map(|&x| x as f64).collect(),
       children: node.children.into_iter().map(Into::into).collect(),
+      runs: node.runs.into_iter().map(Into::into).collect(),
     }
   }
 }

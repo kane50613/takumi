@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use derive_builder::Builder;
 use image::RgbaImage;
+use parley::PositionedLayoutItem;
 use serde::Serialize;
 use taffy::{AvailableSpace, NodeId, TaffyError, TaffyTree, geometry::Size};
 
@@ -9,6 +10,9 @@ use crate::{
   GlobalContext,
   layout::{
     Viewport,
+    inline::{
+      InlineLayoutStage, ProcessedInlineSpan, create_inline_constraint, create_inline_layout,
+    },
     node::Node,
     style::{
       Affine, Display, Filter, ImageScalingAlgorithm, InheritedStyle, SpacePair,
@@ -17,13 +21,11 @@ use crate::{
     tree::NodeTree,
   },
   rendering::{
-    BorderProperties, Canvas, CanvasConstrain, CanvasConstrainResult, Sizing, draw_debug_border,
-    overlay_image,
+    BorderProperties, Canvas, CanvasConstrain, CanvasConstrainResult, RenderContext, Sizing,
+    draw_debug_border, overlay_image,
   },
   resources::image::ImageSource,
 };
-
-use crate::rendering::RenderContext;
 
 #[derive(Clone, Builder)]
 /// Options for rendering a node. Construct using [`RenderOptionsBuilder`] to avoid breaking changes.
@@ -42,6 +44,22 @@ pub struct RenderOptions<'g, N: Node<N>> {
   pub(crate) fetched_resources: HashMap<Arc<str>, Arc<ImageSource>>,
 }
 
+/// Information about a text run in an inline layout.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MeasuredTextRun {
+  /// The text content of this run.
+  pub text: String,
+  /// The x position of the run.
+  pub x: f32,
+  /// The y position of the run (baseline).
+  pub y: f32,
+  /// The width of the run.
+  pub width: f32,
+  /// The height of the run.
+  pub height: f32,
+}
+
 /// The result of a layout measurement.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -52,8 +70,10 @@ pub struct MeasuredNode {
   pub height: f32,
   /// The transform matrix of the node.
   pub transform: [f32; 6],
-  /// The children of the node.
+  /// The children of the node (including inline boxes).
   pub children: Vec<MeasuredNode>,
+  /// Text runs for inline layouts.
+  pub runs: Vec<MeasuredTextRun>,
 }
 
 /// Computes the taffy layout for a node and returns the taffy tree and root node ID.
@@ -123,13 +143,98 @@ fn collect_measure_result<'g, Nodes: Node<Nodes>>(
   );
 
   let mut children = Vec::new();
-  // Inline nodes are wrapped in an anonymous block box by Taffy,
-  // so the Taffy tree structure differs from the logical tree for inline content.
-  // Currently we only traverse the Taffy block layout tree.
-  if !node.should_create_inline_layout() {
-    for child_id in taffy.children(node_id)? {
-      children.push(collect_measure_result(taffy, child_id, transform)?);
+  let mut runs = Vec::new();
+
+  // Handle inline layout
+  if node.should_create_inline_layout() {
+    let font_style = node.context.style.to_sized_font_style(&node.context);
+    let (max_width, max_height) = create_inline_constraint(
+      &node.context,
+      Size {
+        width: AvailableSpace::Definite(layout.content_box_width()),
+        height: AvailableSpace::Definite(layout.content_box_height()),
+      },
+      Size::NONE,
+    );
+
+    let (inline_layout, _, spans) = create_inline_layout(
+      node.inline_items_iter(),
+      Size {
+        width: AvailableSpace::Definite(layout.content_box_width()),
+        height: AvailableSpace::Definite(layout.content_box_height()),
+      },
+      max_width,
+      max_height,
+      &font_style,
+      node.context.global,
+      InlineLayoutStage::Measure,
+    );
+
+    // Extract text runs and inline box positions from spans and layout in a single pass
+    let mut span_idx = 0;
+
+    for line in inline_layout.lines() {
+      for item in line.items() {
+        match item {
+          PositionedLayoutItem::GlyphRun(glyph_run) => {
+            // Find the corresponding text span
+            if let Some(ProcessedInlineSpan::Text {
+              text: span_text, ..
+            }) = spans.get(span_idx)
+            {
+              let run = glyph_run.run();
+              let metrics = run.metrics();
+
+              runs.push(MeasuredTextRun {
+                text: span_text.clone(),
+                x: glyph_run.offset(),
+                y: glyph_run.baseline(),
+                width: glyph_run.advance(),
+                height: metrics.ascent + metrics.descent,
+              });
+              span_idx += 1;
+            }
+          }
+          PositionedLayoutItem::InlineBox(positioned_box) => {
+            // Handle inline box
+            if let Some(ProcessedInlineSpan::Box {
+              node: inline_node,
+              inline_box,
+            }) = spans.get(span_idx)
+            {
+              if positioned_box.id == inline_box.id {
+                let size = inline_node.node.measure(
+                  inline_node.context,
+                  Size {
+                    width: AvailableSpace::Definite(layout.content_box_width()),
+                    height: AvailableSpace::Definite(layout.content_box_height()),
+                  },
+                  Size::NONE,
+                  &taffy::Style::default(),
+                );
+
+                let x = positioned_box.x;
+                let y = line.metrics().baseline - positioned_box.height;
+                let inline_transform = transform * Affine::translation(x, y);
+
+                children.push(MeasuredNode {
+                  width: size.width,
+                  height: size.height,
+                  transform: inline_transform.to_cols_array(),
+                  children: Vec::new(),
+                  runs: Vec::new(),
+                });
+              }
+              span_idx += 1;
+            }
+          }
+        }
+      }
     }
+  }
+
+  for child_id in taffy.children(node_id)? {
+    children.push(collect_measure_result(taffy, child_id, transform)?);
   }
 
   Ok(MeasuredNode {
@@ -137,6 +242,7 @@ fn collect_measure_result<'g, Nodes: Node<Nodes>>(
     height: layout.size.height,
     transform: local_transform.to_cols_array(),
     children,
+    runs,
   })
 }
 

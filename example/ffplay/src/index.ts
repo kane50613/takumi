@@ -92,9 +92,18 @@ let posY = height / 2;
 let velocityX = 3;
 let velocityY = 2;
 
-// Approximate text dimensions (you can adjust these based on actual rendering)
-const textWidth = 520; // Approximate width of the time display
-const textHeight = 72; // Approximate height of the text
+function getTextMeasurement(time: number) {
+  return renderer.measure(
+    text({
+      tw: "text-white text-7xl font-semibold font-mono",
+      text: formatTime(time),
+    }),
+  );
+}
+
+const { width: textWidth, height: textHeight } = await getTextMeasurement(
+  Date.now(),
+);
 
 function createFrame(time = Date.now()): AnyNode {
   // Update position

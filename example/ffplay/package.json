@@ -1,10 +1,13 @@
 {
   "name": "ffplay",
-  "module": "index.ts",
+  "main": "src/index.ts",
   "type": "module",
   "private": true,
   "devDependencies": {
     "@types/bun": "latest"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts"
   },
   "peerDependencies": {
     "typescript": "^5"

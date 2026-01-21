@@ -88,11 +88,20 @@ export type ImageSource = {
 
 export type Font = FontDetails | ByteBuf;
 
+export type MeasuredTextRun = {
+  text: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+};
+
 export type MeasuredNode = {
   width: number,
   height: number,
   transform: [number, number, number, number, number, number],
   children: MeasuredNode[],
+  runs: MeasuredTextRun[],
 };
 "#;
 
