@@ -45,7 +45,7 @@ pub struct RenderOptions<'g, N: Node<N>> {
 }
 
 /// Information about a text run in an inline layout.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct MeasuredTextRun {
   /// The text content of this run.
@@ -61,7 +61,7 @@ pub struct MeasuredTextRun {
 }
 
 /// The result of a layout measurement.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct MeasuredNode {
   /// The width of the node.
@@ -188,7 +188,7 @@ fn collect_measure_result<'g, Nodes: Node<Nodes>>(
               runs.push(MeasuredTextRun {
                 text: span_text.clone(),
                 x: glyph_run.offset(),
-                y: glyph_run.baseline(),
+                y: glyph_run.baseline() - metrics.ascent,
                 width: glyph_run.advance(),
                 height: metrics.ascent + metrics.descent,
               });

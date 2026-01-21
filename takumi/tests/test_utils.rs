@@ -98,12 +98,13 @@ fn create_test_context() -> GlobalContext {
   context
 }
 
-fn create_test_viewport() -> Viewport {
+pub fn create_test_viewport() -> Viewport {
   (1200, 630).into()
 }
 
-static CONTEXT: LazyLock<GlobalContext> = LazyLock::new(create_test_context);
+pub static CONTEXT: LazyLock<GlobalContext> = LazyLock::new(create_test_context);
 
+#[allow(dead_code)]
 pub fn run_fixture_test(node: NodeKind, fixture_name: &str) {
   let viewport = create_test_viewport();
 
