@@ -56,10 +56,10 @@ pub struct MeasuredNode {
   pub children: Vec<MeasuredNode>,
 }
 
-/// Measures the layout of a node.
-pub fn measure_layout<'g, N: Node<N>>(
+/// Computes the taffy layout for a node and returns the taffy tree and root node ID.
+fn compute_taffy_layout<'g, N: Node<N>>(
   options: RenderOptions<'g, N>,
-) -> Result<MeasuredNode, crate::Error> {
+) -> Result<(TaffyTree<NodeTree<'g, N>>, NodeId), crate::Error> {
   let mut taffy = TaffyTree::new();
 
   let render_context = RenderContext {
@@ -88,6 +88,15 @@ pub fn measure_layout<'g, N: Node<N>>(
       }
     },
   )?;
+
+  Ok((taffy, root_node_id))
+}
+
+/// Measures the layout of a node.
+pub fn measure_layout<'g, N: Node<N>>(
+  options: RenderOptions<'g, N>,
+) -> Result<MeasuredNode, crate::Error> {
+  let (taffy, root_node_id) = compute_taffy_layout(options)?;
 
   collect_measure_result(&taffy, root_node_id, Affine::IDENTITY)
 }
@@ -133,41 +142,15 @@ fn collect_measure_result<'g, Nodes: Node<Nodes>>(
 
 /// Renders a node to an image.
 pub fn render<'g, N: Node<N>>(options: RenderOptions<'g, N>) -> Result<RgbaImage, crate::Error> {
-  let mut taffy = TaffyTree::new();
-
-  let render_context = RenderContext {
-    draw_debug_border: options.draw_debug_border,
-    ..RenderContext::new(options.global, options.viewport, options.fetched_resources)
-  };
-
-  let tree = NodeTree::from_node(&render_context, options.node);
-
-  let root_node_id = tree.insert_into_taffy(&mut taffy)?;
-
-  taffy.compute_layout_with_measure(
-    root_node_id,
-    render_context.sizing.viewport.into(),
-    |known_dimensions, available_space, _node_id, node_context, style| {
-      if let Size {
-        width: Some(width),
-        height: Some(height),
-      } = known_dimensions.maybe_apply_aspect_ratio(style.aspect_ratio)
-      {
-        Size { width, height }
-      } else if let Some(context) = node_context {
-        context.measure(available_space, known_dimensions, style)
-      } else {
-        Size::ZERO
-      }
-    },
-  )?;
+  let viewport = options.viewport;
+  let (mut taffy, root_node_id) = compute_taffy_layout(options)?;
 
   let root_size = taffy
     .layout(root_node_id)?
     .size
     .map(|size| size.round() as u32);
 
-  let root_size = root_size.zip_map(options.viewport.into(), |size, viewport| {
+  let root_size = root_size.zip_map(viewport.into(), |size, viewport| {
     if let AvailableSpace::Definite(defined) = viewport {
       defined as u32
     } else {
