@@ -212,7 +212,7 @@ fn collect_measure_result<'g, Nodes: Node<Nodes>>(
 
             let x = positioned_box.x;
             let y = line.metrics().baseline - positioned_box.height;
-            let inline_transform = transform * Affine::translation(x, y);
+            let inline_transform = Affine::translation(x, y) * transform;
 
             children.push(MeasuredNode {
               width: size.width,
