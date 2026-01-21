@@ -52,7 +52,7 @@ pub struct MeasuredTextRun {
   pub text: String,
   /// The x position of the run.
   pub x: f32,
-  /// The y position of the run (baseline).
+  /// The y position of the run.
   pub y: f32,
   /// The width of the run.
   pub width: f32,
