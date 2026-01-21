@@ -1,5 +1,11 @@
 # takumi
 
+## 0.65.0
+
+### Minor Changes
+
+- 1319540: new `measure()` API
+
 ## 0.64.1
 
 ## 0.64.0
