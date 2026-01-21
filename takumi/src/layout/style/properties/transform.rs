@@ -74,6 +74,11 @@ impl MulAssign<Affine> for Affine {
 }
 
 impl Affine {
+  /// Converts the affine transform to a column-major array.
+  pub fn to_cols_array(&self) -> [f32; 6] {
+    [self.a, self.b, self.c, self.d, self.x, self.y]
+  }
+
   /// Returns the identity transform
   pub const IDENTITY: Self = Self {
     a: 1.0,

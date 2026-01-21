@@ -10,9 +10,30 @@ use takumi::{
 
 use crate::{
   FontInput, buffer_from_object, buffer_slice_from_object, deserialize_with_tracing,
-  load_font_task::LoadFontTask, map_error, put_persistent_image_task::PutPersistentImageTask,
-  render_animation_task::RenderAnimationTask, render_task::RenderTask,
+  load_font_task::LoadFontTask, map_error, measure_task::MeasureTask,
+  put_persistent_image_task::PutPersistentImageTask, render_animation_task::RenderAnimationTask,
+  render_task::RenderTask,
 };
+
+#[napi(object)]
+pub struct MeasuredNode {
+  pub width: f64,
+  pub height: f64,
+  #[napi(ts_type = "[number, number, number, number, number, number]")]
+  pub transform: Vec<f64>,
+  pub children: Vec<MeasuredNode>,
+}
+
+impl From<takumi::rendering::MeasuredNode> for MeasuredNode {
+  fn from(node: takumi::rendering::MeasuredNode) -> Self {
+    Self {
+      width: node.width as f64,
+      height: node.height as f64,
+      transform: node.transform.iter().map(|&x| x as f64).collect(),
+      children: node.children.into_iter().map(Into::into).collect(),
+    }
+  }
+}
 
 #[napi]
 pub struct Renderer {
@@ -358,6 +379,25 @@ impl Renderer {
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<RenderTask<'_>>> {
     self.render(env, source, options, signal)
+  }
+
+  #[napi(
+    ts_args_type = "source: AnyNode, options?: RenderOptions, signal?: AbortSignal",
+    ts_return_type = "Promise<MeasuredNode>"
+  )]
+  pub fn measure(
+    &'_ self,
+    env: Env,
+    source: Object,
+    options: Option<RenderOptions>,
+    signal: Option<AbortSignal>,
+  ) -> Result<AsyncTask<MeasureTask<'_>>> {
+    let node: NodeKind = deserialize_with_tracing(source)?;
+
+    Ok(AsyncTask::with_optional_signal(
+      MeasureTask::from_options(env, node, options.unwrap_or_default(), &self.global)?,
+      signal,
+    ))
   }
 
   #[napi(

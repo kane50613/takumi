@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use derive_builder::Builder;
 use image::RgbaImage;
+use serde::Serialize;
 use taffy::{AvailableSpace, NodeId, TaffyError, TaffyTree, geometry::Size};
 
 use crate::{
@@ -39,6 +40,95 @@ pub struct RenderOptions<'g, N: Node<N>> {
   /// The resources fetched externally.
   #[builder(default)]
   pub(crate) fetched_resources: HashMap<Arc<str>, Arc<ImageSource>>,
+}
+
+/// The result of a layout measurement.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MeasuredNode {
+  /// The width of the node.
+  pub width: f32,
+  /// The height of the node.
+  pub height: f32,
+  /// The transform matrix of the node.
+  pub transform: [f32; 6],
+  /// The children of the node.
+  pub children: Vec<MeasuredNode>,
+}
+
+/// Measures the layout of a node.
+pub fn measure_layout<'g, N: Node<N>>(
+  options: RenderOptions<'g, N>,
+) -> Result<MeasuredNode, crate::Error> {
+  let mut taffy = TaffyTree::new();
+
+  let render_context = RenderContext {
+    draw_debug_border: options.draw_debug_border,
+    ..RenderContext::new(options.global, options.viewport, options.fetched_resources)
+  };
+
+  let tree = NodeTree::from_node(&render_context, options.node);
+
+  let root_node_id = tree.insert_into_taffy(&mut taffy)?;
+
+  taffy.compute_layout_with_measure(
+    root_node_id,
+    render_context.sizing.viewport.into(),
+    |known_dimensions, available_space, _node_id, node_context, style| {
+      if let Size {
+        width: Some(width),
+        height: Some(height),
+      } = known_dimensions.maybe_apply_aspect_ratio(style.aspect_ratio)
+      {
+        Size { width, height }
+      } else if let Some(context) = node_context {
+        context.measure(available_space, known_dimensions, style)
+      } else {
+        Size::ZERO
+      }
+    },
+  )?;
+
+  collect_measure_result(&taffy, root_node_id, Affine::IDENTITY)
+}
+
+fn collect_measure_result<'g, Nodes: Node<Nodes>>(
+  taffy: &TaffyTree<NodeTree<'g, Nodes>>,
+  node_id: NodeId,
+  mut transform: Affine,
+) -> Result<MeasuredNode, crate::Error> {
+  let layout = *taffy.layout(node_id)?;
+
+  let Some(node) = taffy.get_node_context(node_id) else {
+    return Err(TaffyError::InvalidInputNode(node_id).into());
+  };
+
+  transform *= Affine::translation(layout.location.x, layout.location.y);
+
+  let mut local_transform = transform;
+  apply_transform(
+    &mut local_transform,
+    &node.context.style,
+    layout.size,
+    &node.context.sizing,
+  );
+
+  let mut children = Vec::new();
+  // Inline nodes are wrapped in an anonymous block box by Taffy,
+  // so the Taffy tree structure differs from the logical tree for inline content.
+  // Currently we only traverse the Taffy block layout tree.
+  if !node.should_create_inline_layout() {
+    for child_id in taffy.children(node_id)? {
+      children.push(collect_measure_result(taffy, child_id, transform)?);
+    }
+  }
+
+  Ok(MeasuredNode {
+    width: layout.size.width,
+    height: layout.size.height,
+    transform: local_transform.to_cols_array(),
+    children,
+  })
 }
 
 /// Renders a node to an image.

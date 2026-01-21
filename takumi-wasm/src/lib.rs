@@ -11,7 +11,7 @@ use std::{fmt::Display, sync::Arc};
 use base64::{Engine, prelude::BASE64_STANDARD};
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
-use serde_wasm_bindgen::from_value;
+use serde_wasm_bindgen::{from_value, to_value};
 use takumi::{
   GlobalContext,
   image::load_from_memory,
@@ -22,7 +22,7 @@ use takumi::{
   parley::{FontWeight, fontique::FontInfoOverride},
   rendering::{
     AnimationFrame, ImageOutputFormat, RenderOptionsBuilder, encode_animated_png,
-    encode_animated_webp, render, write_image,
+    encode_animated_webp, measure_layout, render, write_image,
   },
   resources::{image::load_image_source_from_bytes, task::FetchTaskCollection},
 };
@@ -87,6 +87,13 @@ export type ImageSource = {
 };
 
 export type Font = FontDetails | ByteBuf;
+
+export type MeasuredNode = {
+  width: number,
+  height: number,
+  transform: [number, number, number, number, number, number],
+  children: MeasuredNode[],
+};
 "#;
 
 #[wasm_bindgen]
@@ -109,6 +116,9 @@ extern "C" {
 
   #[wasm_bindgen(typescript_type = "ImageSource")]
   pub type ImageSourceType;
+
+  #[wasm_bindgen(typescript_type = "MeasuredNode")]
+  pub type MeasuredNodeType;
 }
 
 #[derive(Deserialize, Default)]
@@ -335,6 +345,53 @@ impl Renderer {
     .map_err(map_error)?;
 
     Ok(buffer)
+  }
+
+  #[wasm_bindgen(js_name = measure)]
+  pub fn measure(
+    &self,
+    node: AnyNode,
+    options: Option<RenderOptionsType>,
+  ) -> Result<MeasuredNodeType, JsValue> {
+    let node: NodeKind = from_value(node.into()).map_err(map_error)?;
+    let options: RenderOptions = options
+      .map(|options| from_value(options.into()).map_err(map_error))
+      .transpose()?
+      .unwrap_or_default();
+
+    let fetched_resources = options
+      .fetched_resources
+      .map(|resources| -> Result<_, JsValue> {
+        resources
+          .into_iter()
+          .map(|source| {
+            let image = load_image_source_from_bytes(&source.data).map_err(map_error)?;
+            Ok((source.src, image))
+          })
+          .collect::<Result<_, JsValue>>()
+      })
+      .transpose()?
+      .unwrap_or_default();
+
+    let render_options = RenderOptionsBuilder::default()
+      .viewport(Viewport {
+        width: options.width,
+        height: options.height,
+        font_size: DEFAULT_FONT_SIZE,
+        device_pixel_ratio: options
+          .device_pixel_ratio
+          .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
+      })
+      .draw_debug_border(options.draw_debug_border.unwrap_or_default())
+      .fetched_resources(fetched_resources)
+      .node(node)
+      .global(&self.context)
+      .build()
+      .map_err(|e| JsValue::from_str(&format!("Failed to build render options: {e}")))?;
+
+    let layout = measure_layout(render_options).map_err(map_error)?;
+
+    Ok(to_value(&layout).map_err(map_error)?.into())
   }
 
   #[wasm_bindgen(js_name = "renderAsDataUrl")]
