@@ -7,7 +7,7 @@ const wasmPath = join(import.meta.dir, "../pkg/takumi_wasm_bg.wasm");
 const wasm = await file(wasmPath).arrayBuffer();
 await init(wasm);
 
-describe("Renderer.measure (WASM)", () => {
+describe("Renderer.measure", () => {
   const renderer = new Renderer();
 
   it("should measure a simple container", () => {
@@ -28,6 +28,7 @@ describe("Renderer.measure (WASM)", () => {
       height: 100,
       transform: [1, 0, 0, 1, 0, 0],
       children: [],
+      runs: [],
     });
   });
 
@@ -71,14 +72,17 @@ describe("Renderer.measure (WASM)", () => {
           height: 50,
           transform: [1, 0, 0, 1, 10, 10],
           children: [],
+          runs: [],
         },
         {
           width: 130,
           height: 50,
           transform: [1, 0, 0, 1, 60, 10],
           children: [],
+          runs: [],
         },
       ],
+      runs: [],
     });
   });
 });

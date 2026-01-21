@@ -22,6 +22,7 @@ describe("Renderer.measure", () => {
       height: 100,
       transform: [1, 0, 0, 1, 0, 0],
       children: [],
+      runs: [],
     });
   });
 
@@ -65,14 +66,17 @@ describe("Renderer.measure", () => {
           height: 50,
           transform: [1, 0, 0, 1, 10, 10],
           children: [],
+          runs: [],
         },
         {
           width: 130,
           height: 50,
           transform: [1, 0, 0, 1, 60, 10],
           children: [],
+          runs: [],
         },
       ],
+      runs: [],
     });
   });
 
@@ -94,6 +98,7 @@ describe("Renderer.measure", () => {
       height: 100,
       transform: [2, 0, 0, 2, 50, 0],
       children: [],
+      runs: [],
     });
   });
 });
