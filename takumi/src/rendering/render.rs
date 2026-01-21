@@ -212,7 +212,7 @@ fn collect_measure_result<'g, Nodes: Node<Nodes>>(
 
             let x = positioned_box.x;
             let y = line.metrics().baseline - positioned_box.height;
-            let inline_transform = Affine::translation(x, y) * transform;
+            let inline_transform = Affine::translation(x, y) * local_transform;
 
             children.push(MeasuredNode {
               width: size.width,
@@ -228,7 +228,7 @@ fn collect_measure_result<'g, Nodes: Node<Nodes>>(
   }
 
   for child_id in taffy.children(node_id)? {
-    children.push(collect_measure_result(taffy, child_id, transform)?);
+    children.push(collect_measure_result(taffy, child_id, local_transform)?);
   }
 
   Ok(MeasuredNode {
