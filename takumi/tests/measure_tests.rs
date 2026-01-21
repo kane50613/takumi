@@ -129,6 +129,18 @@ fn test_measure_inline_layout() {
           src: "assets/images/yeecord.png".into(),
         }
         .into(),
+        TextNode {
+          preset: None,
+          tw: None,
+          style: Some(
+            StyleBuilder::default()
+              .display(Display::Inline)
+              .build()
+              .unwrap(),
+          ),
+          text: "This is Takumi Speaking".to_string(),
+        }
+        .into(),
       ]
       .into_boxed_slice(),
     ),
@@ -151,13 +163,29 @@ fn test_measure_inline_layout() {
       width: 400.0,
       height: 300.0,
       transform: Affine::IDENTITY.to_cols_array(),
-      runs: vec![MeasuredTextRun {
-        text: "Hello World".to_string(),
-        x: 0.0,
-        y: 104.9, // we have the image 128px height on the same line, so the text is centered vertically
-        width: 105.46001,
-        height: 26.0,
-      }],
+      runs: vec![
+        MeasuredTextRun {
+          text: "Hello World".to_string(),
+          x: 0.0,
+          y: 104.9, // we have the image 128px height on the same line, so the text is centered vertically
+          width: 105.46001,
+          height: 26.0,
+        },
+        MeasuredTextRun {
+          text: "This is Takumi ".to_string(),
+          x: 233.46,
+          y: 104.9,
+          width: 132.79999,
+          height: 26.0,
+        },
+        MeasuredTextRun {
+          text: "Speaking".to_string(),
+          x: 0.0,
+          y: 126.9,
+          width: 85.71999,
+          height: 26.0,
+        },
+      ],
       children: vec![MeasuredNode {
         width: 128.0,
         height: 128.0,

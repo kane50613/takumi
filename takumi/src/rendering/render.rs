@@ -157,7 +157,7 @@ fn collect_measure_result<'g, Nodes: Node<Nodes>>(
       Size::NONE,
     );
 
-    let (inline_layout, _, spans) = create_inline_layout(
+    let (inline_layout, text, spans) = create_inline_layout(
       node.inline_items_iter(),
       Size {
         width: AvailableSpace::Definite(layout.content_box_width()),
@@ -170,63 +170,57 @@ fn collect_measure_result<'g, Nodes: Node<Nodes>>(
       InlineLayoutStage::Measure,
     );
 
-    // Extract text runs and inline box positions from spans and layout in a single pass
-    let mut span_idx = 0;
-
     for line in inline_layout.lines() {
       for item in line.items() {
         match item {
           PositionedLayoutItem::GlyphRun(glyph_run) => {
+            let text_range = glyph_run.run().text_range();
+            let text = &text[text_range];
             // Find the corresponding text span
-            if let Some(ProcessedInlineSpan::Text {
-              text: span_text, ..
-            }) = spans.get(span_idx)
-            {
-              let run = glyph_run.run();
-              let metrics = run.metrics();
+            let run = glyph_run.run();
+            let metrics = run.metrics();
 
-              runs.push(MeasuredTextRun {
-                text: span_text.clone(),
-                x: glyph_run.offset(),
-                y: glyph_run.baseline() - metrics.ascent,
-                width: glyph_run.advance(),
-                height: metrics.ascent + metrics.descent,
-              });
-              span_idx += 1;
-            }
+            runs.push(MeasuredTextRun {
+              text: text.to_string(),
+              x: glyph_run.offset(),
+              y: glyph_run.baseline() - metrics.ascent,
+              width: glyph_run.advance(),
+              height: metrics.ascent + metrics.descent,
+            });
           }
           PositionedLayoutItem::InlineBox(positioned_box) => {
-            // Handle inline box
-            if let Some(ProcessedInlineSpan::Box {
-              node: inline_node,
-              inline_box,
-            }) = spans.get(span_idx)
-            {
-              if positioned_box.id == inline_box.id {
-                let size = inline_node.node.measure(
-                  inline_node.context,
-                  Size {
-                    width: AvailableSpace::Definite(layout.content_box_width()),
-                    height: AvailableSpace::Definite(layout.content_box_height()),
-                  },
-                  Size::NONE,
-                  &taffy::Style::default(),
-                );
-
-                let x = positioned_box.x;
-                let y = line.metrics().baseline - positioned_box.height;
-                let inline_transform = transform * Affine::translation(x, y);
-
-                children.push(MeasuredNode {
-                  width: size.width,
-                  height: size.height,
-                  transform: inline_transform.to_cols_array(),
-                  children: Vec::new(),
-                  runs: Vec::new(),
-                });
+            let Some(inline_node) = spans.iter().find_map(|span| match span {
+              ProcessedInlineSpan::Box { node, inline_box }
+                if inline_box.id == positioned_box.id =>
+              {
+                Some(node)
               }
-              span_idx += 1;
-            }
+              _ => None,
+            }) else {
+              continue;
+            };
+
+            let size = inline_node.node.measure(
+              inline_node.context,
+              Size {
+                width: AvailableSpace::Definite(layout.content_box_width()),
+                height: AvailableSpace::Definite(layout.content_box_height()),
+              },
+              Size::NONE,
+              &taffy::Style::default(),
+            );
+
+            let x = positioned_box.x;
+            let y = line.metrics().baseline - positioned_box.height;
+            let inline_transform = transform * Affine::translation(x, y);
+
+            children.push(MeasuredNode {
+              width: size.width,
+              height: size.height,
+              transform: inline_transform.to_cols_array(),
+              children: Vec::new(),
+              runs: Vec::new(),
+            });
           }
         }
       }
