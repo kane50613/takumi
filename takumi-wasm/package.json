@@ -10,8 +10,12 @@
     "webassembly"
   ],
   "scripts": {
-    "build": "wasm-pack build --no-pack --release --out-dir pkg --target web",
-    "build:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target web"
+    "build": "bun run build:web && bun run build:node",
+    "build:debug": "bun run build:web:debug && bun run build:node:debug",
+    "build:web": "wasm-pack build --no-pack --release --out-dir pkg --target web",
+    "build:node": "wasm-pack build --no-pack --release --out-dir pkg-node --target nodejs",
+    "build:web:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target web",
+    "build:node:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target nodejs"
   },
   "author": {
     "email": "me@kane.tw",
@@ -40,11 +44,16 @@
     "./next": {
       "types": "./bundlers/next.d.ts",
       "default": "./bundlers/next.js"
+    },
+    "./node": {
+      "types": "./pkg-node/takumi_wasm.d.ts",
+      "default": "./pkg-node/takumi_wasm.js"
     }
   },
   "files": [
     "README.md",
     "pkg/takumi*",
+    "pkg-node/takumi*",
     "bundlers/*"
   ]
 }
