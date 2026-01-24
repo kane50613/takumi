@@ -15,7 +15,7 @@
     "build:web": "wasm-pack build --no-pack --release --out-dir pkg --target web",
     "build:node": "wasm-pack build --no-pack --release --out-dir pkg-node --target nodejs",
     "build:web:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target web",
-    "build:node:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target nodejs"
+    "build:node:debug": "wasm-pack build --no-pack --dev --out-dir pkg-node --target nodejs"
   },
   "author": {
     "email": "me@kane.tw",
