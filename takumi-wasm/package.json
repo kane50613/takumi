@@ -35,7 +35,11 @@
   "exports": {
     ".": {
       "types": "./pkg/takumi_wasm.d.ts",
-      "default": "./pkg/takumi_wasm.js"
+      "default": "./pkg/takumi_wasm.js",
+      "node": {
+        "types": "./pkg-node/takumi_wasm.d.ts",
+        "default": "./pkg-node/takumi_wasm.js"
+      }
     },
     "./takumi_wasm_bg.wasm": {
       "types": "./pkg/takumi_wasm_bg.wasm.d.ts",
@@ -44,10 +48,6 @@
     "./next": {
       "types": "./bundlers/next.d.ts",
       "default": "./bundlers/next.js"
-    },
-    "./node": {
-      "types": "./pkg-node/takumi_wasm.d.ts",
-      "default": "./pkg-node/takumi_wasm.js"
     }
   },
   "files": [
