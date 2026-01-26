@@ -3,11 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { container, image, text } from "@takumi-rs/helpers";
 import { Glob } from "bun";
-import init, { Renderer } from "../pkg/takumi_wasm";
-
-await init({
-  module_or_path: readFile("./pkg/takumi_wasm_bg.wasm"),
-});
+import { Renderer } from "../bundlers/node";
 
 const fontsGlob = new Glob("**/*.{woff2,ttf}");
 

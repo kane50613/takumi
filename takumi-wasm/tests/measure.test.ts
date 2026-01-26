@@ -1,11 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { join } from "node:path";
-import { file } from "bun";
-import init, { Renderer } from "../pkg/takumi_wasm.js";
-
-const wasmPath = join(import.meta.dir, "../pkg/takumi_wasm_bg.wasm");
-const wasm = await file(wasmPath).arrayBuffer();
-await init(wasm);
+import { Renderer } from "../bundlers/node";
 
 describe("Renderer.measure", () => {
   const renderer = new Renderer();

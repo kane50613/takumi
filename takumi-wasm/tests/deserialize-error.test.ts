@@ -1,10 +1,5 @@
 import { expect, test } from "bun:test";
-import { readFile } from "node:fs/promises";
-import init, { Renderer } from "../pkg/takumi_wasm";
-
-await init({
-  module_or_path: readFile("./pkg/takumi_wasm_bg.wasm"),
-});
+import { Renderer } from "../bundlers/node";
 
 const renderer = new Renderer();
 
