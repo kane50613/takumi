@@ -12,3 +12,4 @@ const wasmBytes = readFileSync(wasmPath);
 initSync(wasmBytes);
 
 export * from "../pkg/takumi_wasm";
+export { default } from "../pkg/takumi_wasm";
