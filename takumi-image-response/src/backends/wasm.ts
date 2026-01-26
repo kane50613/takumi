@@ -7,7 +7,7 @@ import init, {
   type InitInput,
   Renderer,
   type RenderOptions,
-} from "@takumi-rs/wasm";
+} from "@takumi-rs/wasm/no-bundler";
 import type { ReactNode } from "react";
 
 let renderer: Renderer;

@@ -38,6 +38,10 @@
       "types": "./pkg/takumi_wasm.d.ts",
       "default": "./pkg/takumi_wasm.js"
     },
+    "./no-bundler": {
+      "types": "./pkg/takumi_wasm.d.ts",
+      "default": "./pkg/takumi_wasm.js"
+    },
     "./node": {
       "types": "./node.d.ts",
       "import": "./node.mjs",
