@@ -1,5 +1,11 @@
 # takumi
 
+## 0.66.1
+
+### Patch Changes
+
+- 7e513fc: add `text-shadow-*`, `drop-shadow-*` tailwind properties parser
+
 ## 0.66.0
 
 ## 0.65.0
