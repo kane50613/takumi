@@ -1,5 +1,11 @@
 # @takumi-rs/core
 
+## 0.66.0
+
+### Patch Changes
+
+- 80da5a7: remove unused `browser` field
+
 ## 0.65.0
 
 ### Minor Changes

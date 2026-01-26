@@ -1,5 +1,16 @@
 # @takumi-rs/wasm
 
+## 0.66.0
+
+### Minor Changes
+
+- f811582: new `/node` entrypoint that handles synchronous WASM module initialization
+
+### Patch Changes
+
+- 5b7ea89: fix `AnimationFrameSource` deserialization
+- 94d7959: fix SVG persistent image loading
+
 ## 0.65.0
 
 ### Minor Changes
