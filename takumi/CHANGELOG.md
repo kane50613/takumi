@@ -1,5 +1,11 @@
 # takumi
 
+## 0.66.2
+
+### Patch Changes
+
+- 058f87a: use `zune-core` & `zune-jpeg` dev branch version (not published to crates.io)
+
 ## 0.66.1
 
 ### Patch Changes

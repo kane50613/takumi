@@ -1,5 +1,11 @@
 # @takumi-rs/helpers
 
+## 0.66.2
+
+### Patch Changes
+
+- 291e5cc: add `cache` option for `fetchResources` util
+
 ## 0.66.1
 
 ## 0.66.0
