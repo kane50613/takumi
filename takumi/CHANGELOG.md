@@ -1,5 +1,12 @@
 # takumi
 
+## 0.66.4
+
+### Patch Changes
+
+- 5f2b5ac: add `WebkitTextFillColor` property
+- 7eed4a1: support background clipping on text stroke
+
 ## 0.66.3
 
 ### Patch Changes
