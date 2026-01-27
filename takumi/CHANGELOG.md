@@ -1,5 +1,11 @@
 # takumi
 
+## 0.66.3
+
+### Patch Changes
+
+- 77c7107: fix `WebkitTextStroke` deserialize naming
+
 ## 0.66.2
 
 ### Patch Changes
