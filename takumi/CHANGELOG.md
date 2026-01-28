@@ -1,5 +1,11 @@
 # takumi
 
+## 0.66.6
+
+### Patch Changes
+
+- 2e7dbed: support `strokeLinejoin` property for text stroke
+
 ## 0.66.5
 
 ### Patch Changes
