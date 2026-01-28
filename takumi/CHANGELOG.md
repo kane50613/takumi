@@ -1,5 +1,11 @@
 # takumi
 
+## 0.66.5
+
+### Patch Changes
+
+- c8244eb: fix text clip drawing order
+
 ## 0.66.4
 
 ### Patch Changes
