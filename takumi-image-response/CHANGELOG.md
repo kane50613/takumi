@@ -1,5 +1,16 @@
 # @takumi-rs/image-response
 
+## 0.66.7
+
+### Patch Changes
+
+- bf2db74: avoid overriding `format` field for wasm version
+- Updated dependencies [a3e7f9c]
+- Updated dependencies [a3e7f9c]
+  - @takumi-rs/wasm@0.66.7
+  - @takumi-rs/core@0.66.7
+  - @takumi-rs/helpers@0.66.7
+
 ## 0.66.6
 
 ### Patch Changes

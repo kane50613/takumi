@@ -1,5 +1,11 @@
 # @takumi-rs/core
 
+## 0.66.7
+
+### Patch Changes
+
+- a3e7f9c: document all the functions
+
 ## 0.66.6
 
 ## 0.66.5
