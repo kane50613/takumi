@@ -1,5 +1,12 @@
 # takumi
 
+## 0.66.9
+
+### Patch Changes
+
+- c917b6d: add `parse_tw_with_arbitrary` method
+- 9929474: fix missing Tailwind `leading-*` keywords
+
 ## 0.66.8
 
 ### Patch Changes
