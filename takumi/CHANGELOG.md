@@ -1,5 +1,11 @@
 # takumi
 
+## 0.66.8
+
+### Patch Changes
+
+- 28a8348: merge `draw_background_color` & `draw_background_image` implementation
+
 ## 0.66.7
 
 ## 0.66.6
