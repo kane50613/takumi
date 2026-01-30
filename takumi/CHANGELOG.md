@@ -1,5 +1,11 @@
 # takumi
 
+## 0.66.10
+
+### Patch Changes
+
+- e457042: fix line height should be resolved absolute value
+
 ## 0.66.9
 
 ### Patch Changes
