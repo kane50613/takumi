@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/wasm",
-  "version": "0.66.10",
+  "version": "0.66.11",
   "keywords": [
     "image",
     "rendering",

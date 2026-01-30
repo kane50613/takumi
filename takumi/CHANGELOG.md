@@ -1,5 +1,11 @@
 # takumi
 
+## 0.66.11
+
+### Patch Changes
+
+- 8f28434: refactor inline box drawing & measure API
+
 ## 0.66.10
 
 ### Patch Changes
