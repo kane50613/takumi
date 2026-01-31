@@ -1,5 +1,11 @@
 # @takumi-rs/wasm
 
+## 0.66.13
+
+### Patch Changes
+
+- c97a402: add `ConstructRendererOptions` to `Renderer` constructor
+
 ## 0.66.12
 
 ### Patch Changes
