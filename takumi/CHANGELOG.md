@@ -1,5 +1,11 @@
 # takumi
 
+## 0.66.12
+
+### Patch Changes
+
+- 7389d6e: add font loading cache
+
 ## 0.66.11
 
 ### Patch Changes

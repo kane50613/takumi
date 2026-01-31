@@ -1,5 +1,15 @@
 # @takumi-rs/image-response
 
+## 0.66.12
+
+### Patch Changes
+
+- 499280d: do not require `module` if `renderer` is provided
+- Updated dependencies [7389d6e]
+  - @takumi-rs/core@0.66.12
+  - @takumi-rs/wasm@0.66.12
+  - @takumi-rs/helpers@0.66.12
+
 ## 0.66.11
 
 ### Patch Changes

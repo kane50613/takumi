@@ -1,5 +1,11 @@
 # @takumi-rs/wasm
 
+## 0.66.12
+
+### Patch Changes
+
+- 7389d6e: add persistent image cache
+
 ## 0.66.11
 
 ## 0.66.10
