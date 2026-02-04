@@ -343,12 +343,9 @@ fn render_node<'g, Nodes: Node<Nodes>>(
     apply_backdrop_filter(canvas, border, layout.size, transform, &node.context);
   }
 
-  let should_create_isolated_canvas =
-    node.context.style.opacity.0 < 1.0 || !node.context.style.filter.is_empty();
-
   // If isolated canvas is required, replace the current canvas with a new one.
   // Make sure to merge the image back!
-  let original_canvas_image = if should_create_isolated_canvas {
+  let original_canvas_image = if node.context.style.is_isolated() {
     Some(canvas.replace_new_image())
   } else {
     None
