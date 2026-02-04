@@ -192,6 +192,8 @@ define_style!(
   text_wrap_style: Option<TextWrapStyle> where inherit = true,
   text_wrap: TextWrap where inherit = true,
   isolation: Isolation,
+  mix_blend_mode: BlendMode,
+  background_blend_mode: BlendMode,
 );
 
 /// Sized font style with resolved font size and line height.
@@ -266,7 +268,10 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, InlineBrush> {
 impl InheritedStyle {
   // https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Positioned_layout/Stacking_context#features_creating_stacking_contexts
   pub(crate) fn is_isolated(&self) -> bool {
-    self.isolation == Isolation::Isolate || *self.opacity < 1.0 || !self.filter.is_empty()
+    self.isolation == Isolation::Isolate
+      || *self.opacity < 1.0
+      || !self.filter.is_empty()
+      || self.mix_blend_mode != BlendMode::Normal
   }
 
   pub(crate) fn resolve_overflows(&self) -> SpacePair<Overflow> {

@@ -446,6 +446,8 @@ pub enum TailwindProperty {
   BackdropFilter(Filters),
   /// `text-shadow` property.
   TextShadow(TextShadow),
+  /// `isolation` property.
+  Isolation(Isolation),
 }
 
 fn extract_arbitrary_value(suffix: &str) -> Option<Cow<'_, str>> {
@@ -1025,6 +1027,9 @@ impl TailwindProperty {
       }
       TailwindProperty::TextShadow(text_shadow) => {
         style.text_shadow = Some([text_shadow].into()).into();
+      }
+      TailwindProperty::Isolation(isolation) => {
+        style.isolation = isolation.into();
       }
     }
   }

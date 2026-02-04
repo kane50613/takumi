@@ -8,8 +8,8 @@ use taffy::{Point, Size};
 
 use crate::{
   layout::style::{
-    Affine, Angle, Color, CssToken, FromCss, Length, ParseResult, PercentageNumber, TextShadow,
-    tw::TailwindPropertyParser,
+    Affine, Angle, BlendMode, Color, CssToken, FromCss, Length, ParseResult, PercentageNumber,
+    TextShadow, tw::TailwindPropertyParser,
   },
   rendering::{
     BlurType, BorderProperties, Canvas, RenderContext, SizedShadow, Sizing, apply_blur,
@@ -440,7 +440,7 @@ fn apply_drop_shadow_filter(canvas: &mut RgbaImage, shadow: &SizedShadow) {
   // Since we already copied the source alpha to shadow_image, we can blend in-place
   for (x, y, canvas_pixel) in canvas.enumerate_pixels_mut() {
     let mut final_px = *shadow_image.get_pixel(x + padding, y + padding);
-    blend_pixel(&mut final_px, *canvas_pixel);
+    blend_pixel(&mut final_px, *canvas_pixel, BlendMode::Normal);
     *canvas_pixel = final_px;
   }
 }

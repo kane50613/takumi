@@ -1,5 +1,6 @@
 /// Background and color drawing functions
 mod background_drawing;
+mod blend;
 /// Canvas operations and image blending
 mod canvas;
 mod components;
@@ -17,6 +18,7 @@ mod write;
 use std::{collections::HashMap, sync::Arc};
 
 pub(crate) use background_drawing::*;
+pub(crate) use blend::*;
 pub(crate) use canvas::*;
 pub(crate) use components::*;
 pub(crate) use debug_drawing::*;
@@ -81,4 +83,13 @@ impl<'g> RenderContext<'g> {
       fetched_resources,
     }
   }
+}
+
+/// Fast division by 255 for u16.
+///
+/// This is a common optimization for alpha blending and pixel manipulation.
+/// It approximates `v / 255` using bitwise operations.
+#[inline(always)]
+pub(crate) fn fast_div_255(v: u16) -> u8 {
+  ((v + 128 + (v >> 8)) >> 8) as u8
 }

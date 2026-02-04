@@ -374,17 +374,24 @@ fn render_node<'g, Nodes: Node<Nodes>>(
     draw_debug_border(canvas, layout, transform);
   }
 
-  let mut filters = node.context.style.filter.clone();
+  // Extract needed properties from node before dropping it
   let sizing = node.context.sizing;
   let current_color = node.context.current_color;
+  let mut filters = node.context.style.filter.clone();
+  let opacity = node.context.style.opacity;
+  let mix_blend_mode = node.context.style.mix_blend_mode;
+  let should_create_inline = node.should_create_inline_layout();
 
-  if node.context.style.opacity.0 < 1.0 {
-    filters.push(Filter::Opacity(node.context.style.opacity));
+  if opacity.0 < 1.0 {
+    filters.push(Filter::Opacity(opacity));
   }
 
-  if node.should_create_inline_layout() {
+  if should_create_inline {
     node.draw_inline(canvas, layout)?;
   } else {
+    // Drop the node context reference so we can borrow taffy again
+    let _ = node;
+
     for child_id in taffy.children(node_id)? {
       render_node(taffy, child_id, canvas, transform)?;
     }
@@ -400,6 +407,7 @@ fn render_node<'g, Nodes: Node<Nodes>>(
       BorderProperties::zero(),
       Affine::IDENTITY,
       ImageScalingAlgorithm::Auto,
+      mix_blend_mode,
       None,
       &mut canvas.mask_memory,
     );

@@ -14,7 +14,8 @@ use crate::{
   layout::{
     inline::{InlineBrush, InlineLayout, break_lines},
     style::{
-      Affine, Color, ImageScalingAlgorithm, SizedFontStyle, TextTransform, WhiteSpaceCollapse,
+      Affine, BlendMode, Color, ImageScalingAlgorithm, SizedFontStyle, TextTransform,
+      WhiteSpaceCollapse,
     },
   },
   rendering::{
@@ -64,6 +65,7 @@ pub(crate) fn draw_decoration(
         layout.border.top + layout.padding.top + offset,
       ),
     ImageScalingAlgorithm::Auto,
+    BlendMode::Normal,
   );
 }
 
@@ -100,6 +102,7 @@ pub(crate) fn draw_glyph_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
           width: bitmap.placement.width,
           height: bitmap.placement.height,
         },
+        BlendMode::Normal,
         None,
         |x, y| {
           let alpha = mask[mask_index_from_coord(x, y, bitmap.placement.width)];
@@ -124,6 +127,7 @@ pub(crate) fn draw_glyph_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
         BorderProperties::default(),
         transform,
         ImageScalingAlgorithm::Auto,
+        BlendMode::Normal,
       );
     }
     ResolvedGlyph::Outline(outline) => {
@@ -148,6 +152,7 @@ pub(crate) fn draw_glyph_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
           width: placement.width,
           height: placement.height,
         },
+        BlendMode::Normal,
         canvas.constrains.last(),
         |x, y| {
           let alpha = mask[mask_index_from_coord(x, y, placement.width)];
@@ -206,7 +211,13 @@ pub(crate) fn draw_glyph(
         "Failed to create image from raw data",
       )))?;
 
-      canvas.overlay_image(&image, Default::default(), transform, Default::default());
+      canvas.overlay_image(
+        &image,
+        Default::default(),
+        transform,
+        Default::default(),
+        BlendMode::Normal,
+      );
     }
     ResolvedGlyph::Outline(outline) => {
       let paths = collect_outline_paths(outline);
@@ -233,6 +244,7 @@ pub(crate) fn draw_glyph(
           mask,
           placement,
           color,
+          BlendMode::Normal,
           canvas.constrains.last(),
         );
       }
@@ -279,6 +291,7 @@ fn draw_text_stroke_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
       width: stroke_placement.width,
       height: stroke_placement.height,
     },
+    BlendMode::Normal,
     canvas.constrains.last(),
     |x, y| {
       let alpha = stroke_mask[mask_index_from_coord(x, y, stroke_placement.width)];
@@ -303,7 +316,11 @@ fn draw_text_stroke_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
         return Color::transparent().into();
       };
 
-      blend_pixel(&mut pixel, style.text_stroke_color.into());
+      blend_pixel(
+        &mut pixel,
+        style.text_stroke_color.into(),
+        BlendMode::Normal,
+      );
       apply_mask_alpha_to_pixel(&mut pixel, alpha);
 
       pixel
@@ -335,6 +352,7 @@ fn draw_text_stroke(
     stroke_mask,
     stroke_placement,
     style.text_stroke_color,
+    BlendMode::Normal,
     canvas.constrains.last(),
   );
 }
@@ -403,7 +421,7 @@ fn draw_color_outline_image(
 
     let (mask, placement) = mask_memory.render(&paths, Some(transform), None);
 
-    draw_mask(canvas, mask, placement, color, constrain);
+    draw_mask(canvas, mask, placement, color, BlendMode::Normal, constrain);
   }
 }
 

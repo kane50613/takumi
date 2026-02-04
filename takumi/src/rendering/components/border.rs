@@ -5,7 +5,7 @@ use taffy::{Point, Rect, Size};
 use zeno::{Command, Fill, PathBuilder};
 
 use crate::{
-  layout::style::{Affine, Color, ColorInput, ImageScalingAlgorithm, Sides, SpacePair},
+  layout::style::{Affine, BlendMode, Color, ColorInput, ImageScalingAlgorithm, Sides, SpacePair},
   rendering::{
     Canvas, RenderContext, apply_mask_alpha_to_pixel, blend_pixel, mask_index_from_coord,
     overlay_area, sample_transformed_pixel,
@@ -294,6 +294,7 @@ impl BorderProperties {
         width: placement.width,
         height: placement.height,
       },
+      BlendMode::Normal,
       canvas.constrains.last(),
       |x, y| {
         let alpha = mask[mask_index_from_coord(x, y, placement.width)];
@@ -316,7 +317,7 @@ impl BorderProperties {
         let mut pixel = self.color.into();
 
         if let Some(clip_image_pixel) = clip_image_pixel {
-          blend_pixel(&mut pixel, clip_image_pixel);
+          blend_pixel(&mut pixel, clip_image_pixel, BlendMode::Normal);
         }
 
         apply_mask_alpha_to_pixel(&mut pixel, alpha);

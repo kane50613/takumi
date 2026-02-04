@@ -13,9 +13,10 @@ use smallvec::SmallVec;
 use taffy::{Layout, Point, Size};
 use zeno::{Mask, PathData, Placement, Scratch};
 
+use crate::layout::style::BlendMode;
 use crate::{
   layout::style::{Affine, Color, ImageScalingAlgorithm, InheritedStyle, Overflow},
-  rendering::{BorderProperties, RenderContext, create_mask, fast_div_255},
+  rendering::{BorderProperties, RenderContext, blend_pixel, create_mask, fast_div_255},
 };
 
 #[derive(Clone)]
@@ -389,6 +390,7 @@ impl Canvas {
     border: BorderProperties,
     transform: Affine,
     algorithm: ImageScalingAlgorithm,
+    mode: BlendMode,
   ) {
     overlay_image(
       &mut self.image,
@@ -396,6 +398,7 @@ impl Canvas {
       border,
       transform,
       algorithm,
+      mode,
       self.constrains.last(),
       &mut self.mask_memory,
     );
@@ -412,6 +415,7 @@ fn draw_pixel(
   x: u32,
   y: u32,
   mut color: Rgba<u8>,
+  mode: BlendMode,
   constrain: Option<&CanvasConstrain>,
 ) {
   if color.0[3] == 0 {
@@ -429,67 +433,12 @@ fn draw_pixel(
   // image-rs blend will skip the operation if the source color is fully transparent
   let pixel = canvas.get_pixel_mut(x, y);
 
-  blend_pixel(pixel, color);
+  blend_pixel(pixel, color, mode);
 }
 
 /// Removes 2 LSBs from the alpha value.
 pub(crate) fn quantize_alpha(alpha: u8) -> u8 {
   alpha & 0b1111_1100
-}
-
-#[inline(always)]
-pub(crate) fn blend_pixel(bottom: &mut Rgba<u8>, top: Rgba<u8>) {
-  match (bottom.0[3], top.0[3]) {
-    // Source is fully transparent, no operation needed
-    (_, 0) => {}
-    // Destination is fully transparent, or source is fully opaque: direct assignment
-    (0, _) | (_, 255) => *bottom = top,
-    // Destination is fully opaque: use integer math to preserve alpha = 255
-    // This avoids floating point precision errors from image::Rgba::blend
-    (255, src_a) => {
-      let src_a = src_a as u16;
-      let inv_a = 255 - src_a;
-
-      bottom.0[0] = fast_div_255(top.0[0] as u16 * src_a + bottom.0[0] as u16 * inv_a);
-      bottom.0[1] = fast_div_255(top.0[1] as u16 * src_a + bottom.0[1] as u16 * inv_a);
-      bottom.0[2] = fast_div_255(top.0[2] as u16 * src_a + bottom.0[2] as u16 * inv_a);
-    }
-    // Both have partial transparency: use integer-only blend
-    (dst_a, src_a) => {
-      // Alpha compositing: out_a = src_a + dst_a * (1 - src_a)
-      // Using integer math: out_a = src_a + dst_a - (dst_a * src_a) / 255
-      let src_a_u16 = src_a as u16;
-      let dst_a_u16 = dst_a as u16;
-      let out_a = src_a_u16 + dst_a_u16 - fast_div_255(dst_a_u16 * src_a_u16) as u16;
-
-      if out_a == 0 {
-        return;
-      }
-
-      // Premultiply RGB channels: premul = color * alpha
-      let src_r_pm = top.0[0] as u32 * src_a as u32;
-      let src_g_pm = top.0[1] as u32 * src_a as u32;
-      let src_b_pm = top.0[2] as u32 * src_a as u32;
-
-      let dst_r_pm = bottom.0[0] as u32 * dst_a as u32;
-      let dst_g_pm = bottom.0[1] as u32 * dst_a as u32;
-      let dst_b_pm = bottom.0[2] as u32 * dst_a as u32;
-
-      // Alpha compositing on premultiplied: out_pm = src_pm + dst_pm * (255 - src_a) / 255
-      let inv_src_a = 255 - src_a as u32;
-      let out_r_pm = src_r_pm + ((dst_r_pm * inv_src_a + 127) / 255);
-      let out_g_pm = src_g_pm + ((dst_g_pm * inv_src_a + 127) / 255);
-      let out_b_pm = src_b_pm + ((dst_b_pm * inv_src_a + 127) / 255);
-
-      // Unpremultiply: out = out_pm / out_a
-      let out_a_u32 = out_a as u32;
-
-      bottom.0[0] = ((out_r_pm + out_a_u32 / 2) / out_a_u32).min(255) as u8;
-      bottom.0[1] = ((out_g_pm + out_a_u32 / 2) / out_a_u32).min(255) as u8;
-      bottom.0[2] = ((out_b_pm + out_a_u32 / 2) / out_a_u32).min(255) as u8;
-      bottom.0[3] = out_a.min(255) as u8;
-    }
-  }
 }
 
 #[inline(always)]
@@ -510,6 +459,7 @@ pub(crate) fn draw_mask<C: Into<Rgba<u8>>>(
   mask: &[u8],
   placement: Placement,
   color: C,
+  mode: BlendMode,
   constrain: Option<&CanvasConstrain>,
 ) {
   if mask.is_empty() {
@@ -532,7 +482,7 @@ pub(crate) fn draw_mask<C: Into<Rgba<u8>>>(
 
   let color = color.into();
 
-  overlay_area(canvas, offset, top_size, constrain, |x, y| {
+  overlay_area(canvas, offset, top_size, mode, constrain, |x, y| {
     let alpha = mask[mask_index_from_coord(x, y, placement.width)];
 
     let mut pixel = color;
@@ -575,6 +525,7 @@ pub(crate) fn overlay_image<I: GenericImageView<Pixel = Rgba<u8>>>(
   border: BorderProperties,
   transform: Affine,
   algorithm: ImageScalingAlgorithm,
+  mode: BlendMode,
   constrain: Option<&CanvasConstrain>,
   mask_memory: &mut MaskMemory,
 ) {
@@ -585,7 +536,7 @@ pub(crate) fn overlay_image<I: GenericImageView<Pixel = Rgba<u8>>>(
   if transform.only_translation() && border.is_zero() {
     let translation = transform.decompose_translation();
 
-    return overlay_area(canvas, translation, size, constrain, |x, y| {
+    return overlay_area(canvas, translation, size, mode, constrain, |x, y| {
       image.get_pixel(x, y)
     });
   }
@@ -642,6 +593,7 @@ pub(crate) fn overlay_image<I: GenericImageView<Pixel = Rgba<u8>>>(
       width: placement.width,
       height: placement.height,
     },
+    mode,
     constrain,
     get_original_pixel,
   );
@@ -656,6 +608,7 @@ pub(crate) fn overlay_area(
   bottom: &mut RgbaImage,
   offset: Point<f32>,
   top_size: Size<u32>,
+  mode: BlendMode,
   constrain: Option<&CanvasConstrain>,
   f: impl Fn(u32, u32) -> Rgba<u8>,
 ) {
@@ -691,7 +644,7 @@ pub(crate) fn overlay_area(
       let src_x = (dest_x - offset_x) as u32;
       let pixel = f(src_x, src_y);
 
-      draw_pixel(bottom, dest_x as u32, dest_y as u32, pixel, constrain);
+      draw_pixel(bottom, dest_x as u32, dest_y as u32, pixel, mode, constrain);
     }
   }
 }

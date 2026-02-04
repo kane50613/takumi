@@ -3,7 +3,7 @@ use taffy::{Layout, Point, Size};
 use zeno::{Fill, PathData, Placement};
 
 use crate::{
-  layout::style::{Affine, BoxShadow, Color, ImageScalingAlgorithm, Sides, TextShadow},
+  layout::style::{Affine, BlendMode, BoxShadow, Color, ImageScalingAlgorithm, Sides, TextShadow},
   rendering::{
     BlurType, BorderProperties, Canvas, CanvasConstrain, MaskMemory, Sizing, apply_blur, draw_mask,
     overlay_image,
@@ -76,7 +76,14 @@ impl SizedShadow {
 
     // Fast path: if the blur radius is 0, we can just draw the spread mask
     if self.blur_radius <= 0.0 {
-      return draw_mask(canvas, mask, placement, self.color, constrain);
+      return draw_mask(
+        canvas,
+        mask,
+        placement,
+        self.color,
+        BlendMode::Normal,
+        constrain,
+      );
     }
 
     // Create a new image with the spread mask on, blurred by the blur radius
@@ -96,6 +103,7 @@ impl SizedShadow {
         height: placement.height,
       },
       self.color,
+      BlendMode::Normal,
       None,
     );
 
@@ -110,6 +118,7 @@ impl SizedShadow {
         placement.top as f32 - blur_padding,
       ),
       ImageScalingAlgorithm::Auto,
+      BlendMode::Normal,
       constrain,
       mask_memory,
     );
@@ -129,6 +138,7 @@ impl SizedShadow {
       border_radius,
       transform,
       ImageScalingAlgorithm::Auto,
+      BlendMode::Normal,
     );
   }
 }
@@ -171,7 +181,14 @@ fn draw_inset_shadow(
 
   let (mask, placement) = mask_memory.render(&paths, None, Some(Fill::EvenOdd.into()));
 
-  draw_mask(&mut shadow_image, mask, placement, shadow.color, None);
+  draw_mask(
+    &mut shadow_image,
+    mask,
+    placement,
+    shadow.color,
+    BlendMode::Normal,
+    None,
+  );
 
   apply_blur(&mut shadow_image, shadow.blur_radius, BlurType::Shadow);
 

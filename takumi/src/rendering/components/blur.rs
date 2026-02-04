@@ -420,9 +420,9 @@ fn premultiply_alpha(image: &mut RgbaImage) {
     if a == 0 {
       pixel.0 = [0, 0, 0, 0];
     } else if a < 255 {
-      pixel.0[0] = fast_div_255(pixel.0[0] as u16 * a);
-      pixel.0[1] = fast_div_255(pixel.0[1] as u16 * a);
-      pixel.0[2] = fast_div_255(pixel.0[2] as u16 * a);
+      pixel.0[0] = crate::rendering::fast_div_255(pixel.0[0] as u16 * a);
+      pixel.0[1] = crate::rendering::fast_div_255(pixel.0[1] as u16 * a);
+      pixel.0[2] = crate::rendering::fast_div_255(pixel.0[2] as u16 * a);
     }
   }
 }
@@ -436,9 +436,4 @@ fn unpremultiply_alpha(image: &mut RgbaImage) {
       pixel.0[2] = ((pixel.0[2] as u16 * 255 + a / 2) / a).min(255) as u8;
     }
   }
-}
-
-#[inline(always)]
-pub(crate) fn fast_div_255(v: u16) -> u8 {
-  ((v + 128 + (v >> 8)) >> 8) as u8
 }

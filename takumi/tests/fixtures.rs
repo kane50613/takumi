@@ -22,6 +22,8 @@ pub mod style_filter;
 pub mod style_layout;
 #[path = "fixtures/style_mask_image.rs"]
 pub mod style_mask_image;
+#[path = "fixtures/style_mix_blend_mode.rs"]
+pub mod style_mix_blend_mode;
 #[path = "fixtures/style_object_fit.rs"]
 pub mod style_object_fit;
 #[path = "fixtures/style_object_position.rs"]
