@@ -280,7 +280,7 @@ fn sat(c: [f32; 3]) -> f32 {
 
 fn set_sat(mut c: [f32; 3], s: f32) -> [f32; 3] {
   let mut indices = [0, 1, 2];
-  indices.sort_by(|&i, &j| c[i].partial_cmp(&c[j]).unwrap());
+  indices.sort_by(|&i, &j| c[i].total_cmp(&c[j]));
 
   let min = indices[0];
   let mid = indices[1];
