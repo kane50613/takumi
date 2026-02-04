@@ -46,6 +46,7 @@ pub enum PropertyParser {
   Filter(fn(Filters) -> TailwindProperty),
   DropShadow(fn(TextShadow) -> TailwindProperty),
   TextShadow(fn(TextShadow) -> TailwindProperty),
+  BlendMode(fn(BlendMode) -> TailwindProperty),
 }
 
 impl PropertyParser {
@@ -89,6 +90,7 @@ impl PropertyParser {
       Self::Filter(f) => Filters::parse_tw_with_arbitrary(suffix).map(f),
       Self::DropShadow(f) => TextShadow::parse_tw_with_arbitrary(suffix).map(f),
       Self::TextShadow(f) => TextShadow::parse_tw_with_arbitrary(suffix).map(f),
+      Self::BlendMode(f) => BlendMode::parse_tw_with_arbitrary(suffix).map(f),
     }
   }
 }
@@ -229,6 +231,8 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
   "backdrop-filter" => &[PropertyParser::Filter(TailwindProperty::BackdropFilter)],
   "drop-shadow" => &[PropertyParser::DropShadow(TailwindProperty::DropShadow)],
   "text-shadow" => &[PropertyParser::TextShadow(TailwindProperty::TextShadow)],
+  "mix-blend" => &[PropertyParser::BlendMode(TailwindProperty::MixBlendMode)],
+  "bg-blend" => &[PropertyParser::BlendMode(TailwindProperty::BackgroundBlendMode)],
 };
 
 pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
