@@ -1,5 +1,11 @@
 # takumi
 
+## 0.66.14
+
+### Patch Changes
+
+- 102c24a: include DPR when calculating `text-wrap: balance` #434
+
 ## 0.66.13
 
 ## 0.66.12
