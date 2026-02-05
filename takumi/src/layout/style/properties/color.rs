@@ -284,7 +284,7 @@ impl Color {
 
   /// Apply opacity to alpha channel
   pub fn with_opacity(mut self, opacity: u8) -> Self {
-    self.0[3] = fast_div_255(self.0[3] as u16 * opacity as u16);
+    self.0[3] = fast_div_255(self.0[3] as u32 * opacity as u32);
 
     self
   }

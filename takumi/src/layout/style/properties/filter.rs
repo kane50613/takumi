@@ -366,17 +366,14 @@ pub(crate) fn apply_backdrop_filter(
         canvas_raw[c_idx + 2] = backdrop_raw[b_idx + 2];
         canvas_raw[c_idx + 3] = backdrop_raw[b_idx + 3];
       } else {
-        let src_a = alpha as u16;
+        let src_a = alpha as u32;
         let inv_a = 255 - src_a;
 
-        canvas_raw[c_idx] =
-          fast_div_255(backdrop_raw[b_idx] as u16 * src_a + canvas_raw[c_idx] as u16 * inv_a);
-        canvas_raw[c_idx + 1] = fast_div_255(
-          backdrop_raw[b_idx + 1] as u16 * src_a + canvas_raw[c_idx + 1] as u16 * inv_a,
-        );
-        canvas_raw[c_idx + 2] = fast_div_255(
-          backdrop_raw[b_idx + 2] as u16 * src_a + canvas_raw[c_idx + 2] as u16 * inv_a,
-        );
+        for i in 0..3 {
+          canvas_raw[c_idx + i] = fast_div_255(
+            backdrop_raw[b_idx + i] as u32 * src_a + canvas_raw[c_idx + i] as u32 * inv_a,
+          );
+        }
       }
     }
   }
@@ -428,7 +425,7 @@ fn apply_drop_shadow_filter(canvas: &mut RgbaImage, shadow: &SizedShadow) {
         shadow_raw[d_idx] = sr;
         shadow_raw[d_idx + 1] = sg;
         shadow_raw[d_idx + 2] = sb;
-        shadow_raw[d_idx + 3] = fast_div_255(sa as u16 * alpha as u16);
+        shadow_raw[d_idx + 3] = fast_div_255(sa as u32 * alpha as u32);
       }
     }
   }

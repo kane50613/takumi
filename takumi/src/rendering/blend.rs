@@ -1,6 +1,9 @@
 use image::Rgba;
 
-use crate::{layout::style::BlendMode, rendering::fast_div_255};
+use crate::{
+  layout::style::BlendMode,
+  rendering::{fast_div_255, fast_div_255_u32},
+};
 
 #[inline(always)]
 pub(crate) fn blend_pixel(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode) {
@@ -24,11 +27,11 @@ pub(crate) fn blend_pixel(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode)
       }
 
       if bottom_alpha == 255 {
-        let alpha = top_alpha as u16;
+        let alpha = top_alpha as u32;
         let inverse_alpha = 255 - alpha;
 
         for i in 0..3 {
-          bottom.0[i] = fast_div_255(top[i] as u16 * alpha + bottom[i] as u16 * inverse_alpha);
+          bottom.0[i] = fast_div_255(top[i] as u32 * alpha + bottom[i] as u32 * inverse_alpha);
         }
       } else {
         blend_normal_partial_transparency(bottom, top);
@@ -54,7 +57,7 @@ fn blend_normal_partial_transparency(bottom: &mut Rgba<u8>, top: Rgba<u8>) {
   let bottom_alpha = bottom.0[3] as u32;
 
   let result_alpha =
-    top_alpha + bottom_alpha - fast_div_255(bottom.0[3] as u16 * top.0[3] as u16) as u32;
+    top_alpha + bottom_alpha - fast_div_255_u32(bottom.0[3] as u32 * top.0[3] as u32);
 
   if result_alpha == 0 {
     return;
@@ -75,11 +78,10 @@ fn blend_normal_partial_transparency(bottom: &mut Rgba<u8>, top: Rgba<u8>) {
 
 #[inline(always)]
 fn blend_with_integer(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode) {
-  let bottom_alpha = bottom.0[3] as u16;
-  let top_alpha = top.0[3] as u16;
+  let bottom_alpha = bottom.0[3] as u32;
+  let top_alpha = top.0[3] as u32;
 
-  let result_alpha =
-    top_alpha as u32 + bottom_alpha as u32 - fast_div_255(bottom_alpha * top_alpha) as u32;
+  let result_alpha = top_alpha + bottom_alpha - fast_div_255_u32(bottom_alpha * top_alpha);
 
   if result_alpha == 0 {
     return;
@@ -105,13 +107,13 @@ fn compute_blend_integer(mode: BlendMode, bottom: Rgba<u8>, top: Rgba<u8>) -> [u
     .take(3)
   {
     *r = match mode {
-      BlendMode::Multiply => fast_div_255(t as u16 * b as u16),
-      BlendMode::Screen => 255 - fast_div_255((255 - t as u16) * (255 - b as u16)),
+      BlendMode::Multiply => fast_div_255(t as u32 * b as u32),
+      BlendMode::Screen => 255 - fast_div_255((255 - t as u32) * (255 - b as u32)),
       BlendMode::Darken => t.min(b),
       BlendMode::Lighten => t.max(b),
       BlendMode::Difference => t.abs_diff(b),
       BlendMode::Exclusion => {
-        (b as u16 + t as u16 - (2 * fast_div_255(b as u16 * t as u16) as u16)).min(255) as u8
+        (b as u32 + t as u32 - (2 * fast_div_255_u32(b as u32 * t as u32))).min(255) as u8
       }
       _ => unreachable!(),
     };
@@ -149,7 +151,7 @@ fn blend_with_float(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode) {
   let result_alpha = top_normalized.alpha + bottom_normalized.alpha * (1.0 - top_normalized.alpha);
 
   if result_alpha <= 0.0 {
-    bottom.0 = [0, 0, 0, 0];
+    bottom.0 = [0; 4];
     return;
   }
 

@@ -1,6 +1,8 @@
 use image::RgbaImage;
 use wide::{u32x4, u32x8, u32x16};
 
+use crate::rendering::fast_div_255;
+
 /// Specifies the type of blur operation, which affects how the CSS radius is interpreted.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BlurType {
@@ -416,13 +418,14 @@ fn compute_mul_shg(d: u32) -> (u32, i32) {
 
 fn premultiply_alpha(image: &mut RgbaImage) {
   for pixel in image.pixels_mut() {
-    let a = pixel.0[3] as u16;
-    if a == 0 {
-      pixel.0 = [0, 0, 0, 0];
-    } else if a < 255 {
-      pixel.0[0] = crate::rendering::fast_div_255(pixel.0[0] as u16 * a);
-      pixel.0[1] = crate::rendering::fast_div_255(pixel.0[1] as u16 * a);
-      pixel.0[2] = crate::rendering::fast_div_255(pixel.0[2] as u16 * a);
+    let alpha = pixel.0[3] as u32;
+
+    if alpha == 0 {
+      pixel.0 = [0; 4];
+    } else if alpha < 255 {
+      for channel in pixel.0.iter_mut().take(3) {
+        *channel = fast_div_255(*channel as u32 * alpha);
+      }
     }
   }
 }
@@ -430,6 +433,7 @@ fn premultiply_alpha(image: &mut RgbaImage) {
 fn unpremultiply_alpha(image: &mut RgbaImage) {
   for pixel in image.pixels_mut() {
     let a = pixel.0[3] as u16;
+
     if a != 0 && a < 255 {
       pixel.0[0] = ((pixel.0[0] as u16 * 255 + a / 2) / a).min(255) as u8;
       pixel.0[1] = ((pixel.0[1] as u16 * 255 + a / 2) / a).min(255) as u8;

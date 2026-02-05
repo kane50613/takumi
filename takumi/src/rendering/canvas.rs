@@ -449,7 +449,7 @@ pub(crate) fn apply_mask_alpha_to_pixel(pixel: &mut Rgba<u8>, alpha: u8) {
     }
     255 => {}
     alpha => {
-      pixel.0[3] = fast_div_255(pixel.0[3] as u16 * alpha as u16);
+      pixel.0[3] = fast_div_255(pixel.0[3] as u32 * alpha as u32);
     }
   }
 }
