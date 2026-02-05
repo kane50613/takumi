@@ -43,9 +43,9 @@
       "default": "./pkg/takumi_wasm.js"
     },
     "./node": {
-      "types": "./node.d.ts",
-      "import": "./node.mjs",
-      "require": "./node.cjs"
+      "types": "./bundlers/node.d.ts",
+      "import": "./bundlers/node.mjs",
+      "require": "./bundlers/node.cjs"
     },
     "./takumi_wasm_bg.wasm": {
       "types": "./pkg/takumi_wasm_bg.wasm.d.ts",
