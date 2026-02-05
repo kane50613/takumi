@@ -3,15 +3,6 @@ use cssparser::Parser;
 use crate::layout::style::*;
 
 /// Parsed `background` shorthand value.
-///
-/// The background shorthand allows setting multiple background properties at once:
-/// - color
-/// - image
-/// - position (optionally followed by / size)
-/// - repeat
-/// - clip
-///
-/// Example: `background: red url(image.png) center/cover no-repeat border-box`
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Background {
   /// Background color.
@@ -26,6 +17,8 @@ pub struct Background {
   pub repeat: BackgroundRepeat,
   /// Background clip.
   pub clip: BackgroundClip,
+  /// Background blend mode.
+  pub blend_mode: BlendMode,
 }
 
 impl<'i> FromCss<'i> for Background {
@@ -36,6 +29,7 @@ impl<'i> FromCss<'i> for Background {
     let mut size = None;
     let mut repeat = None;
     let mut clip = None;
+    let mut blend_mode = None;
 
     loop {
       if input.is_exhausted() {
@@ -90,6 +84,14 @@ impl<'i> FromCss<'i> for Background {
         continue;
       }
 
+      // Try to parse background-blend-mode
+      if blend_mode.is_none()
+        && let Ok(value) = input.try_parse(BlendMode::from_css)
+      {
+        blend_mode = Some(value);
+        continue;
+      }
+
       // If we can't parse anything, it's an error
       return Err(Self::unexpected_token_error(
         input.current_source_location(),
@@ -104,6 +106,7 @@ impl<'i> FromCss<'i> for Background {
       size: size.unwrap_or_default(),
       repeat: repeat.unwrap_or_default(),
       clip: clip.unwrap_or_default(),
+      blend_mode: blend_mode.unwrap_or_default(),
     })
   }
 
@@ -114,6 +117,7 @@ impl<'i> FromCss<'i> for Background {
       CssToken::Token("position"),
       CssToken::Token("repeat"),
       CssToken::Token("clip"),
+      CssToken::Token("blend-mode"),
     ]
   }
 }

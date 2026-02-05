@@ -810,7 +810,7 @@ impl TailwindProperty {
         style.mix_blend_mode = blend_mode.into();
       }
       TailwindProperty::BackgroundBlendMode(blend_mode) => {
-        style.background_blend_mode = blend_mode.into();
+        style.background_blend_mode = [blend_mode].into();
       }
       TailwindProperty::OverflowWrap(overflow_wrap) => {
         style.overflow_wrap = overflow_wrap.into();

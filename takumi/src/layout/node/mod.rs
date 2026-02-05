@@ -15,7 +15,9 @@ use crate::{
   layout::{
     Viewport,
     inline::InlineContentKind,
-    style::{Affine, BackgroundClip, BackgroundImage, CssValue, InheritedStyle, Sides, Style},
+    style::{
+      Affine, BackgroundClip, BackgroundImage, BlendMode, CssValue, InheritedStyle, Sides, Style,
+    },
   },
   rendering::{
     BorderProperties, Canvas, RenderContext, SizedShadow, collect_background_layers,
@@ -329,7 +331,7 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
                 border_radius,
                 context.transform * Affine::translation(*x as f32, *y as f32),
                 context.style.image_rendering,
-                context.style.background_blend_mode,
+                tile.blend_mode,
               );
             }
           }
@@ -359,7 +361,7 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
           BorderProperties::default(),
           context.transform * Affine::translation(layout.border.left, layout.border.top),
           context.style.image_rendering,
-          context.style.background_blend_mode,
+          BlendMode::Normal,
         );
       }
       BackgroundClip::ContentBox => {
@@ -391,7 +393,7 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
               layout.padding.top + layout.border.top,
             ),
           context.style.image_rendering,
-          context.style.background_blend_mode,
+          BlendMode::Normal,
         );
       }
       _ => {}

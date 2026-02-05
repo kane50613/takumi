@@ -140,6 +140,7 @@ define_style!(
   background_position: Option<BackgroundPositions>,
   background_size: Option<BackgroundSizes>,
   background_repeat: Option<BackgroundRepeats>,
+  background_blend_mode: Option<BlendModes>,
   background_color: Option<ColorInput<false>>,
   background_clip: BackgroundClip,
   box_shadow: Option<BoxShadows>,
@@ -193,7 +194,6 @@ define_style!(
   text_wrap: TextWrap where inherit = true,
   isolation: Isolation,
   mix_blend_mode: BlendMode,
-  background_blend_mode: BlendMode,
 );
 
 /// Sized font style with resolved font size and line height.

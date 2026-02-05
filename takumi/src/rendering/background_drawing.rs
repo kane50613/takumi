@@ -11,6 +11,7 @@ use crate::{
 };
 
 pub(crate) struct TileLayer {
+  pub blend_mode: BlendMode,
   pub tile: BackgroundTile,
   pub xs: SmallVec<[i32; 1]>,
   pub ys: SmallVec<[i32; 1]>,
@@ -41,7 +42,7 @@ pub(crate) fn rasterize_layers(
           border,
           Affine::translation(x as f32, y as f32) * transform,
           context.style.image_rendering,
-          context.style.background_blend_mode,
+          layer.blend_mode,
           None,
           mask_memory,
         );
@@ -111,14 +112,14 @@ pub(crate) fn resolve_length_against_area(unit: Length, area: u32, sizing: &Sizi
 
 pub(crate) fn resolve_background_size(
   size: BackgroundSize,
-  area: (u32, u32),
+  area: Size<u32>,
   image: &BackgroundImage,
   context: &RenderContext,
 ) -> (u32, u32) {
   match size {
     BackgroundSize::Explicit { width, height } => (
-      resolve_length_against_area(width, area.0, &context.sizing),
-      resolve_length_against_area(height, area.1, &context.sizing),
+      resolve_length_against_area(width, area.width, &context.sizing),
+      resolve_length_against_area(height, area.height, &context.sizing),
     ),
     BackgroundSize::Cover => {
       // Get intrinsic image dimensions
@@ -135,8 +136,8 @@ pub(crate) fn resolve_background_size(
       }
 
       // Calculate scale factors for both dimensions
-      let scale_x = area.0 as f32 / intrinsic_width;
-      let scale_y = area.1 as f32 / intrinsic_height;
+      let scale_x = area.width as f32 / intrinsic_width;
+      let scale_y = area.height as f32 / intrinsic_height;
 
       // Use the larger scale to ensure the image covers the entire area
       let scale = scale_x.max(scale_y);
@@ -161,8 +162,8 @@ pub(crate) fn resolve_background_size(
       }
 
       // Calculate scale factors for both dimensions
-      let scale_x = area.0 as f32 / intrinsic_width;
-      let scale_y = area.1 as f32 / intrinsic_height;
+      let scale_x = area.width as f32 / intrinsic_width;
+      let scale_y = area.height as f32 / intrinsic_height;
 
       // Use the smaller scale to ensure the image is fully contained
       let scale = scale_x.min(scale_y);
@@ -255,17 +256,16 @@ pub(crate) fn render_tile(
 }
 
 /// Resolve tile image, positions along X and Y for a background-like layer.
-/// Returns (tile_image, tile_w, tile_h, xs, ys).
 pub(crate) fn resolve_layer_tiles(
   image: &BackgroundImage,
   pos: BackgroundPosition,
   size: BackgroundSize,
   repeat: BackgroundRepeat,
-  area_w: u32,
-  area_h: u32,
+  blend_mode: BlendMode,
+  area: Size<u32>,
   context: &RenderContext,
 ) -> Result<Option<TileLayer>> {
-  let (initial_w, initial_h) = resolve_background_size(size, (area_w, area_h), image, context);
+  let (initial_w, initial_h) = resolve_background_size(size, area, image, context);
 
   if initial_w == 0 || initial_h == 0 {
     return Ok(None);
@@ -273,34 +273,40 @@ pub(crate) fn resolve_layer_tiles(
 
   let (xs, tile_w) = match repeat.0 {
     BackgroundRepeatStyle::Repeat => {
-      let origin_x = resolve_position_component_x(pos, initial_w, area_w, &context.sizing);
+      let origin_x = resolve_position_component_x(pos, initial_w, area.width, &context.sizing);
       (
-        collect_repeat_tile_positions(area_w, initial_w, origin_x),
+        collect_repeat_tile_positions(area.width, initial_w, origin_x),
         initial_w,
       )
     }
     BackgroundRepeatStyle::NoRepeat => {
-      let origin_x = resolve_position_component_x(pos, initial_w, area_w, &context.sizing);
+      let origin_x = resolve_position_component_x(pos, initial_w, area.width, &context.sizing);
       (smallvec![origin_x], initial_w)
     }
-    BackgroundRepeatStyle::Space => (collect_spaced_tile_positions(area_w, initial_w), initial_w),
-    BackgroundRepeatStyle::Round => collect_stretched_tile_positions(area_w, initial_w),
+    BackgroundRepeatStyle::Space => (
+      collect_spaced_tile_positions(area.width, initial_w),
+      initial_w,
+    ),
+    BackgroundRepeatStyle::Round => collect_stretched_tile_positions(area.width, initial_w),
   };
 
   let (ys, tile_h) = match repeat.1 {
     BackgroundRepeatStyle::Repeat => {
-      let origin_y = resolve_position_component_y(pos, initial_h, area_h, &context.sizing);
+      let origin_y = resolve_position_component_y(pos, initial_h, area.height, &context.sizing);
       (
-        collect_repeat_tile_positions(area_h, initial_h, origin_y),
+        collect_repeat_tile_positions(area.height, initial_h, origin_y),
         initial_h,
       )
     }
     BackgroundRepeatStyle::NoRepeat => {
-      let origin_y = resolve_position_component_y(pos, initial_h, area_h, &context.sizing);
+      let origin_y = resolve_position_component_y(pos, initial_h, area.height, &context.sizing);
       (smallvec![origin_y], initial_h)
     }
-    BackgroundRepeatStyle::Space => (collect_spaced_tile_positions(area_h, initial_h), initial_h),
-    BackgroundRepeatStyle::Round => collect_stretched_tile_positions(area_h, initial_h),
+    BackgroundRepeatStyle::Space => (
+      collect_spaced_tile_positions(area.height, initial_h),
+      initial_h,
+    ),
+    BackgroundRepeatStyle::Round => collect_stretched_tile_positions(area.height, initial_h),
   };
 
   if xs.is_empty() || ys.is_empty() {
@@ -311,7 +317,12 @@ pub(crate) fn resolve_layer_tiles(
     return Ok(None);
   };
 
-  Ok(Some(TileLayer { tile, xs, ys }))
+  Ok(Some(TileLayer {
+    tile,
+    xs,
+    ys,
+    blend_mode,
+  }))
 }
 
 /// Collects a list of tile positions to place along an axis.
@@ -389,27 +400,22 @@ pub(crate) fn resolve_tile_layers(
   positions: &[BackgroundPosition],
   sizes: &[BackgroundSize],
   repeats: &[BackgroundRepeat],
+  blend_modes: &[BlendMode],
   context: &RenderContext,
   border_box: Size<u32>,
 ) -> Result<TileLayers> {
   let last_position = positions.last().copied().unwrap_or_default();
   let last_size = sizes.last().copied().unwrap_or_default();
   let last_repeat = repeats.last().copied().unwrap_or_default();
+  let last_blend_mode = blend_modes.last().copied().unwrap_or_default();
 
   let map_fn = |(i, image)| {
     let pos = positions.get(i).copied().unwrap_or(last_position);
     let size = sizes.get(i).copied().unwrap_or(last_size);
     let repeat = repeats.get(i).copied().unwrap_or(last_repeat);
+    let blend_mode = blend_modes.get(i).copied().unwrap_or(last_blend_mode);
 
-    resolve_layer_tiles(
-      image,
-      pos,
-      size,
-      repeat,
-      border_box.width,
-      border_box.height,
-      context,
-    )
+    resolve_layer_tiles(image, pos, size, repeat, blend_mode, border_box, context)
   };
 
   // Paint each background layer in order
@@ -507,6 +513,7 @@ pub(crate) fn create_mask(
             .collect::<Vec<_>>(),
         )
       }),
+    &[], // no blending mode for mask
     context,
     border_box.map(|x| x as u32),
   )?;
@@ -595,6 +602,21 @@ pub(crate) fn collect_background_layers(
             .collect::<Vec<_>>(),
         )
       }),
+    &context
+      .style
+      .background_blend_mode
+      .as_deref()
+      .map(Cow::Borrowed)
+      .unwrap_or_else(|| {
+        Cow::Owned(
+          context
+            .style
+            .background
+            .iter()
+            .map(|background| background.blend_mode)
+            .collect::<Vec<_>>(),
+        )
+      }),
     context,
     border_box.map(|x| x as u32),
   )?;
@@ -615,6 +637,7 @@ pub(crate) fn collect_background_layers(
         }),
         xs: [0].into(),
         ys: [0].into(),
+        blend_mode: BlendMode::Normal,
       },
     );
   }
