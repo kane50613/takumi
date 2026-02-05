@@ -271,6 +271,7 @@ impl InheritedStyle {
     self.isolation == Isolation::Isolate
       || *self.opacity < 1.0
       || !self.filter.is_empty()
+      || !self.backdrop_filter.is_empty()
       || self.mix_blend_mode != BlendMode::Normal
   }
 

@@ -6,7 +6,7 @@ use taffy::{Layout, Point, Size};
 use crate::rendering::CowImage;
 use crate::{
   Result,
-  layout::style::{Affine, BlendMode, ImageScalingAlgorithm, Length, ObjectFit},
+  layout::style::{Affine, ImageScalingAlgorithm, Length, ObjectFit},
   rendering::{BorderProperties, Canvas, RenderContext},
   resources::image::{ImageResourceError, ImageSource},
 };
@@ -255,7 +255,7 @@ pub fn draw_image(
     border,
     transform_with_content_offset,
     context.style.image_rendering,
-    BlendMode::Normal,
+    context.style.mix_blend_mode,
   );
 
   Ok(())
