@@ -2,297 +2,407 @@ use image::Rgba;
 
 use crate::{layout::style::BlendMode, rendering::fast_div_255};
 
-/// Blends two pixels using the specified blend mode.
 #[inline(always)]
 pub(crate) fn blend_pixel(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode) {
-  let [src_r, src_g, src_b, src_a] = top.0;
-  if src_a == 0 {
+  if top.0[3] == 0 {
     return;
   }
 
-  if mode == BlendMode::Normal {
-    let [dst_r, dst_g, dst_b, dst_a] = bottom.0;
-    match (dst_a, src_a) {
-      // Source is fully transparent, handled above but for completeness
-      (_, 0) => {}
-      // Destination is fully transparent, or source is fully opaque: direct assignment
-      (0, _) | (_, 255) => *bottom = top,
-      // Destination is fully opaque: use integer math to preserve alpha = 255
-      (255, src_a) => {
-        let src_a = src_a as u16;
-        let inv_a = 255 - src_a;
+  let top_alpha = top.0[3];
+  let bottom_alpha = bottom.0[3];
 
-        bottom.0[0] = fast_div_255(src_r as u16 * src_a + dst_r as u16 * inv_a);
-        bottom.0[1] = fast_div_255(src_g as u16 * src_a + dst_g as u16 * inv_a);
-        bottom.0[2] = fast_div_255(src_b as u16 * src_a + dst_b as u16 * inv_a);
-      }
-      // Both have partial transparency: use integer-only blend
-      (dst_a, src_a) => {
-        // Alpha compositing: out_a = src_a + dst_a * (1 - src_a)
-        // Using integer math: out_a = src_a + dst_a - (dst_a * src_a) / 255
-        let src_a_u16 = src_a as u16;
-        let dst_a_u16 = dst_a as u16;
-        let out_a = src_a_u16 + dst_a_u16 - fast_div_255(dst_a_u16 * src_a_u16) as u16;
-
-        if out_a == 0 {
-          return;
-        }
-
-        // Premultiply RGB channels: premul = color * alpha
-        let src_r_pm = src_r as u32 * src_a as u32;
-        let src_g_pm = src_g as u32 * src_a as u32;
-        let src_b_pm = src_b as u32 * src_a as u32;
-
-        let dst_r_pm = dst_r as u32 * dst_a as u32;
-        let dst_g_pm = dst_g as u32 * dst_a as u32;
-        let dst_b_pm = dst_b as u32 * dst_a as u32;
-
-        // Alpha compositing on premultiplied: out_pm = src_pm + dst_pm * (255 - src_a) / 255
-        let inv_src_a = 255 - src_a as u32;
-        let out_r_pm = src_r_pm + ((dst_r_pm * inv_src_a + 127) / 255);
-        let out_g_pm = src_g_pm + ((dst_g_pm * inv_src_a + 127) / 255);
-        let out_b_pm = src_b_pm + ((dst_b_pm * inv_src_a + 127) / 255);
-
-        // Unpremultiply: out = out_pm / out_a
-        let out_a_u32 = out_a as u32;
-
-        bottom.0[0] = ((out_r_pm + out_a_u32 / 2) / out_a_u32).min(255) as u8;
-        bottom.0[1] = ((out_g_pm + out_a_u32 / 2) / out_a_u32).min(255) as u8;
-        bottom.0[2] = ((out_b_pm + out_a_u32 / 2) / out_a_u32).min(255) as u8;
-        bottom.0[3] = out_a.min(255) as u8;
-      }
-    }
+  if bottom_alpha == 0 {
+    *bottom = top;
     return;
   }
 
-  let [dst_r, dst_g, dst_b, dst_a] = bottom.0;
-
-  match (dst_a, src_a) {
-    // Source is fully transparent, handled above but for completeness
-    (_, 0) => {}
-    // Destination is fully transparent: direct assignment (all blend modes behave this way)
-    (0, _) => *bottom = top,
-    // Both have some opacity: use the blend mode
-    (dst_a, src_a) => {
-      let src_r_f = src_r as f32 / 255.0;
-      let src_g_f = src_g as f32 / 255.0;
-      let src_b_f = src_b as f32 / 255.0;
-      let src_a_f = src_a as f32 / 255.0;
-
-      let dst_r_f = dst_r as f32 / 255.0;
-      let dst_g_f = dst_g as f32 / 255.0;
-      let dst_b_f = dst_b as f32 / 255.0;
-      let dst_a_f = dst_a as f32 / 255.0;
-
-      let out_a_f = src_a_f + dst_a_f * (1.0 - src_a_f);
-
-      if out_a_f <= 0.0 {
-        bottom.0 = [0, 0, 0, 0];
+  match mode {
+    BlendMode::Normal => {
+      if top_alpha == 255 {
+        *bottom = top;
         return;
       }
 
-      let (res_r, res_g, res_b) = match mode {
-        BlendMode::Normal => (src_r_f, src_g_f, src_b_f),
-        BlendMode::Multiply => (src_r_f * dst_r_f, src_g_f * dst_g_f, src_b_f * dst_b_f),
-        BlendMode::Screen => (
-          1.0 - (1.0 - src_r_f) * (1.0 - dst_r_f),
-          1.0 - (1.0 - src_g_f) * (1.0 - dst_g_f),
-          1.0 - (1.0 - src_b_f) * (1.0 - dst_b_f),
-        ),
-        BlendMode::Overlay => (
-          overlay(dst_r_f, src_r_f),
-          overlay(dst_g_f, src_g_f),
-          overlay(dst_b_f, src_b_f),
-        ),
-        BlendMode::Darken => (
-          src_r_f.min(dst_r_f),
-          src_g_f.min(dst_g_f),
-          src_b_f.min(dst_b_f),
-        ),
-        BlendMode::Lighten => (
-          src_r_f.max(dst_r_f),
-          src_g_f.max(dst_g_f),
-          src_b_f.max(dst_b_f),
-        ),
-        BlendMode::ColorDodge => (
-          color_dodge(dst_r_f, src_r_f),
-          color_dodge(dst_g_f, src_g_f),
-          color_dodge(dst_b_f, src_b_f),
-        ),
-        BlendMode::ColorBurn => (
-          color_burn(dst_r_f, src_r_f),
-          color_burn(dst_g_f, src_g_f),
-          color_burn(dst_b_f, src_b_f),
-        ),
-        BlendMode::HardLight => (
-          overlay(src_r_f, dst_r_f),
-          overlay(src_g_f, dst_g_f),
-          overlay(src_b_f, dst_b_f),
-        ),
-        BlendMode::SoftLight => (
-          soft_light(dst_r_f, src_r_f),
-          soft_light(dst_g_f, src_g_f),
-          soft_light(dst_b_f, src_b_f),
-        ),
-        BlendMode::Difference => (
-          (src_r_f - dst_r_f).abs(),
-          (src_g_f - dst_g_f).abs(),
-          (src_b_f - dst_b_f).abs(),
-        ),
-        BlendMode::Exclusion => (
-          dst_r_f + src_r_f - 2.0 * dst_r_f * src_r_f,
-          dst_g_f + src_g_f - 2.0 * dst_g_f * src_g_f,
-          dst_b_f + src_b_f - 2.0 * dst_b_f * src_b_f,
-        ),
-        BlendMode::Hue => {
-          let c = set_sat(
-            [src_r_f, src_g_f, src_b_f],
-            sat([dst_r_f, dst_g_f, dst_b_f]),
-          );
-          let c = set_lum(c, lum([dst_r_f, dst_g_f, dst_b_f]));
-          (c[0], c[1], c[2])
-        }
-        BlendMode::Saturation => {
-          let c = set_sat(
-            [dst_r_f, dst_g_f, dst_b_f],
-            sat([src_r_f, src_g_f, src_b_f]),
-          );
-          let c = set_lum(c, lum([dst_r_f, dst_g_f, dst_b_f]));
-          (c[0], c[1], c[2])
-        }
-        BlendMode::Color => {
-          let c = set_lum(
-            [src_r_f, src_g_f, src_b_f],
-            lum([dst_r_f, dst_g_f, dst_b_f]),
-          );
-          (c[0], c[1], c[2])
-        }
-        BlendMode::Luminosity => {
-          let c = set_lum(
-            [dst_r_f, dst_g_f, dst_b_f],
-            lum([src_r_f, src_g_f, src_b_f]),
-          );
-          (c[0], c[1], c[2])
-        }
-      };
+      if bottom_alpha == 255 {
+        let alpha = top_alpha as u16;
+        let inverse_alpha = 255 - alpha;
 
-      // Alpha compositing formula for colors:
-      // Co = (1 - αs/αo) * Cb + (αs/αo) * ((1 - αb) * Cs + αb * B(Cb, Cs))
-      // But wait, the standard formula from W3C is:
-      // αo * Co = (1 - αs) * αb * Cb + (1 - αb) * αs * Cs + αs * αb * B(Cb, Cs)
-
-      let out_r = (1.0 - src_a_f) * dst_a_f * dst_r_f
-        + (1.0 - dst_a_f) * src_a_f * src_r_f
-        + src_a_f * dst_a_f * res_r;
-      let out_g = (1.0 - src_a_f) * dst_a_f * dst_g_f
-        + (1.0 - dst_a_f) * src_a_f * src_g_f
-        + src_a_f * dst_a_f * res_g;
-      let out_b = (1.0 - src_a_f) * dst_a_f * dst_b_f
-        + (1.0 - dst_a_f) * src_a_f * src_b_f
-        + src_a_f * dst_a_f * res_b;
-
-      // Since we want Co, we divide by out_a_f
-      bottom.0[0] = (out_r / out_a_f * 255.0).round().clamp(0.0, 255.0) as u8;
-      bottom.0[1] = (out_g / out_a_f * 255.0).round().clamp(0.0, 255.0) as u8;
-      bottom.0[2] = (out_b / out_a_f * 255.0).round().clamp(0.0, 255.0) as u8;
-      bottom.0[3] = (out_a_f * 255.0).round() as u8;
+        for i in 0..3 {
+          bottom.0[i] = fast_div_255(top[i] as u16 * alpha + bottom[i] as u16 * inverse_alpha);
+        }
+      } else {
+        blend_normal_partial_transparency(bottom, top);
+      }
+    }
+    BlendMode::Multiply
+    | BlendMode::Screen
+    | BlendMode::Darken
+    | BlendMode::Lighten
+    | BlendMode::Difference
+    | BlendMode::Exclusion => {
+      blend_with_integer(bottom, top, mode);
+    }
+    _ => {
+      blend_with_float(bottom, top, mode);
     }
   }
 }
 
-fn overlay(b: f32, s: f32) -> f32 {
-  if b <= 0.5 {
-    2.0 * b * s
-  } else {
-    1.0 - 2.0 * (1.0 - b) * (1.0 - s)
+#[inline(always)]
+fn blend_normal_partial_transparency(bottom: &mut Rgba<u8>, top: Rgba<u8>) {
+  let top_alpha = top.0[3] as u32;
+  let bottom_alpha = bottom.0[3] as u32;
+
+  let result_alpha =
+    top_alpha + bottom_alpha - fast_div_255(bottom.0[3] as u16 * top.0[3] as u16) as u32;
+
+  if result_alpha == 0 {
+    return;
+  }
+
+  let inverse_top_alpha = 255 - top_alpha;
+
+  for i in 0..3 {
+    let top_premul = top.0[i] as u32 * top_alpha;
+    let bottom_premul = bottom.0[i] as u32 * bottom_alpha;
+    let result_premul = top_premul + ((bottom_premul * inverse_top_alpha + 127) / 255);
+
+    bottom.0[i] = ((result_premul + result_alpha / 2) / result_alpha).min(255) as u8;
+  }
+
+  bottom.0[3] = result_alpha.min(255) as u8;
+}
+
+#[inline(always)]
+fn blend_with_integer(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode) {
+  let bottom_alpha = bottom.0[3] as u16;
+  let top_alpha = top.0[3] as u16;
+
+  let result_alpha =
+    top_alpha as u32 + bottom_alpha as u32 - fast_div_255(bottom_alpha * top_alpha) as u32;
+
+  if result_alpha == 0 {
+    return;
+  }
+
+  let blended = compute_blend_integer(mode, *bottom, top);
+  let composited = composite_integer(*bottom, top, &blended);
+
+  for (channel, composited_channel) in bottom.0.iter_mut().zip(composited.iter()) {
+    *channel = ((composited_channel * 255 + result_alpha / 2) / result_alpha).min(255) as u8;
+  }
+
+  bottom.0[3] = result_alpha.min(255) as u8;
+}
+
+#[inline(always)]
+fn compute_blend_integer(mode: BlendMode, bottom: Rgba<u8>, top: Rgba<u8>) -> [u8; 3] {
+  let [bottom_r, bottom_g, bottom_b, _] = bottom.0;
+  let [top_r, top_g, top_b, _] = top.0;
+
+  match mode {
+    BlendMode::Multiply => [
+      fast_div_255(top_r as u16 * bottom_r as u16),
+      fast_div_255(top_g as u16 * bottom_g as u16),
+      fast_div_255(top_b as u16 * bottom_b as u16),
+    ],
+    BlendMode::Screen => [
+      255 - fast_div_255((255 - top_r as u16) * (255 - bottom_r as u16)),
+      255 - fast_div_255((255 - top_g as u16) * (255 - bottom_g as u16)),
+      255 - fast_div_255((255 - top_b as u16) * (255 - bottom_b as u16)),
+    ],
+    BlendMode::Darken => [
+      top_r.min(bottom_r),
+      top_g.min(bottom_g),
+      top_b.min(bottom_b),
+    ],
+    BlendMode::Lighten => [
+      top_r.max(bottom_r),
+      top_g.max(bottom_g),
+      top_b.max(bottom_b),
+    ],
+    BlendMode::Difference => [
+      top_r.abs_diff(bottom_r),
+      top_g.abs_diff(bottom_g),
+      top_b.abs_diff(bottom_b),
+    ],
+    BlendMode::Exclusion => [
+      (bottom_r as u16 + top_r as u16 - (2 * fast_div_255(bottom_r as u16 * top_r as u16) as u16))
+        .min(255) as u8,
+      (bottom_g as u16 + top_g as u16 - (2 * fast_div_255(bottom_g as u16 * top_g as u16) as u16))
+        .min(255) as u8,
+      (bottom_b as u16 + top_b as u16 - (2 * fast_div_255(bottom_b as u16 * top_b as u16) as u16))
+        .min(255) as u8,
+    ],
+    _ => unreachable!(),
   }
 }
 
-fn color_dodge(b: f32, s: f32) -> f32 {
-  if b == 0.0 {
+#[inline(always)]
+fn composite_integer(bottom: Rgba<u8>, top: Rgba<u8>, blended: &[u8; 3]) -> [u32; 3] {
+  const ROUNDING_OFFSET: u32 = 32512;
+  const ALPHA_DIVISOR: u32 = 65025;
+  const MAX_ALPHA: u32 = u8::MAX as u32;
+
+  let top_alpha = top.0[3] as u32;
+  let bottom_alpha = bottom.0[3] as u32;
+
+  let mut result = [0u32; 3];
+  for i in 0..3 {
+    result[i] = ((MAX_ALPHA - top_alpha) * bottom_alpha * bottom.0[i] as u32
+      + (MAX_ALPHA - bottom_alpha) * top_alpha * top.0[i] as u32
+      + top_alpha * bottom_alpha * blended[i] as u32
+      + ROUNDING_OFFSET)
+      / ALPHA_DIVISOR;
+  }
+
+  result
+}
+
+#[inline(always)]
+fn blend_with_float(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode) {
+  let top_normalized = normalize_rgba(top);
+  let bottom_normalized = normalize_rgba(*bottom);
+
+  let result_alpha = top_normalized.alpha + bottom_normalized.alpha * (1.0 - top_normalized.alpha);
+
+  if result_alpha <= 0.0 {
+    bottom.0 = [0, 0, 0, 0];
+    return;
+  }
+
+  let blended = compute_blend_float(mode, &bottom_normalized, &top_normalized);
+  let composited = composite_float(&bottom_normalized, &top_normalized, &blended);
+
+  for (pixel, composited_pixel) in bottom.0.iter_mut().zip(composited.iter()) {
+    *pixel = (composited_pixel / result_alpha * 255.0)
+      .round()
+      .clamp(0.0, 255.0) as u8;
+  }
+
+  bottom.0[3] = (result_alpha * 255.0).round() as u8;
+}
+
+#[derive(Copy, Clone)]
+struct NormalizedColor {
+  red: f32,
+  green: f32,
+  blue: f32,
+  alpha: f32,
+}
+
+#[inline(always)]
+fn normalize_rgba(color: Rgba<u8>) -> NormalizedColor {
+  let [r, g, b, a] = color.0;
+  NormalizedColor {
+    red: r as f32 / 255.0,
+    green: g as f32 / 255.0,
+    blue: b as f32 / 255.0,
+    alpha: a as f32 / 255.0,
+  }
+}
+
+#[inline(always)]
+fn compute_blend_float(
+  mode: BlendMode,
+  bottom: &NormalizedColor,
+  top: &NormalizedColor,
+) -> [f32; 3] {
+  match mode {
+    BlendMode::Normal => [top.red, top.green, top.blue],
+    BlendMode::Multiply => [
+      top.red * bottom.red,
+      top.green * bottom.green,
+      top.blue * bottom.blue,
+    ],
+    BlendMode::Screen => [
+      1.0 - (1.0 - top.red) * (1.0 - bottom.red),
+      1.0 - (1.0 - top.green) * (1.0 - bottom.green),
+      1.0 - (1.0 - top.blue) * (1.0 - bottom.blue),
+    ],
+    BlendMode::Overlay => [
+      overlay(bottom.red, top.red),
+      overlay(bottom.green, top.green),
+      overlay(bottom.blue, top.blue),
+    ],
+    BlendMode::Darken => [
+      top.red.min(bottom.red),
+      top.green.min(bottom.green),
+      top.blue.min(bottom.blue),
+    ],
+    BlendMode::Lighten => [
+      top.red.max(bottom.red),
+      top.green.max(bottom.green),
+      top.blue.max(bottom.blue),
+    ],
+    BlendMode::ColorDodge => [
+      color_dodge(bottom.red, top.red),
+      color_dodge(bottom.green, top.green),
+      color_dodge(bottom.blue, top.blue),
+    ],
+    BlendMode::ColorBurn => [
+      color_burn(bottom.red, top.red),
+      color_burn(bottom.green, top.green),
+      color_burn(bottom.blue, top.blue),
+    ],
+    BlendMode::HardLight => [
+      overlay(top.red, bottom.red),
+      overlay(top.green, bottom.green),
+      overlay(top.blue, bottom.blue),
+    ],
+    BlendMode::SoftLight => [
+      soft_light(bottom.red, top.red),
+      soft_light(bottom.green, top.green),
+      soft_light(bottom.blue, top.blue),
+    ],
+    BlendMode::Difference => [
+      (top.red - bottom.red).abs(),
+      (top.green - bottom.green).abs(),
+      (top.blue - bottom.blue).abs(),
+    ],
+    BlendMode::Exclusion => [
+      bottom.red + top.red - 2.0 * bottom.red * top.red,
+      bottom.green + top.green - 2.0 * bottom.green * top.green,
+      bottom.blue + top.blue - 2.0 * bottom.blue * top.blue,
+    ],
+    BlendMode::Hue => {
+      let color = set_sat(
+        [top.red, top.green, top.blue],
+        sat([bottom.red, bottom.green, bottom.blue]),
+      );
+
+      set_lum(color, lum([bottom.red, bottom.green, bottom.blue]))
+    }
+    BlendMode::Saturation => {
+      let color = set_sat(
+        [bottom.red, bottom.green, bottom.blue],
+        sat([top.red, top.green, top.blue]),
+      );
+
+      set_lum(color, lum([bottom.red, bottom.green, bottom.blue]))
+    }
+    BlendMode::Color => set_lum(
+      [top.red, top.green, top.blue],
+      lum([bottom.red, bottom.green, bottom.blue]),
+    ),
+    BlendMode::Luminosity => set_lum(
+      [bottom.red, bottom.green, bottom.blue],
+      lum([top.red, top.green, top.blue]),
+    ),
+  }
+}
+
+#[inline(always)]
+fn composite_float(
+  bottom: &NormalizedColor,
+  top: &NormalizedColor,
+  blended: &[f32; 3],
+) -> [f32; 3] {
+  [
+    (1.0 - top.alpha) * bottom.alpha * bottom.red
+      + (1.0 - bottom.alpha) * top.alpha * top.red
+      + top.alpha * bottom.alpha * blended[0],
+    (1.0 - top.alpha) * bottom.alpha * bottom.green
+      + (1.0 - bottom.alpha) * top.alpha * top.green
+      + top.alpha * bottom.alpha * blended[1],
+    (1.0 - top.alpha) * bottom.alpha * bottom.blue
+      + (1.0 - bottom.alpha) * top.alpha * top.blue
+      + top.alpha * bottom.alpha * blended[2],
+  ]
+}
+
+fn overlay(bottom: f32, top: f32) -> f32 {
+  if bottom <= 0.5 {
+    2.0 * bottom * top
+  } else {
+    1.0 - 2.0 * (1.0 - bottom) * (1.0 - top)
+  }
+}
+
+fn color_dodge(bottom: f32, top: f32) -> f32 {
+  if bottom == 0.0 {
     0.0
-  } else if s >= 1.0 {
+  } else if top >= 1.0 {
     1.0
   } else {
-    (b / (1.0 - s)).min(1.0)
+    (bottom / (1.0 - top)).min(1.0)
   }
 }
 
-fn color_burn(b: f32, s: f32) -> f32 {
-  if b >= 1.0 {
+fn color_burn(bottom: f32, top: f32) -> f32 {
+  if bottom >= 1.0 {
     1.0
-  } else if s <= 0.0 {
+  } else if top <= 0.0 {
     0.0
   } else {
-    1.0 - ((1.0 - b) / s).min(1.0)
+    1.0 - ((1.0 - bottom) / top).min(1.0)
   }
 }
 
-fn soft_light(b: f32, s: f32) -> f32 {
-  if s <= 0.5 {
-    b - (1.0 - 2.0 * s) * b * (1.0 - b)
+fn soft_light(bottom: f32, top: f32) -> f32 {
+  if top <= 0.5 {
+    bottom - (1.0 - 2.0 * top) * bottom * (1.0 - bottom)
   } else {
-    let d = if b <= 0.25 {
-      ((16.0 * b - 12.0) * b + 4.0) * b
+    let delta = if bottom <= 0.25 {
+      ((16.0 * bottom - 12.0) * bottom + 4.0) * bottom
     } else {
-      b.sqrt()
+      bottom.sqrt()
     };
-    b + (2.0 * s - 1.0) * (d - b)
+    bottom + (2.0 * top - 1.0) * (delta - bottom)
   }
 }
 
-// W3C spec functions for non-separable blend modes (Hue, Saturation, Color, Luminosity)
-// https://www.w3.org/TR/compositing-1/#blendingnonseparable
-
-fn lum(c: [f32; 3]) -> f32 {
-  0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2]
+fn lum(color: [f32; 3]) -> f32 {
+  0.3 * color[0] + 0.59 * color[1] + 0.11 * color[2]
 }
 
-fn set_lum(mut c: [f32; 3], l: f32) -> [f32; 3] {
-  let d = l - lum(c);
-  c[0] += d;
-  c[1] += d;
-  c[2] += d;
-  clip_color(c)
+fn set_lum(mut color: [f32; 3], luminosity: f32) -> [f32; 3] {
+  let delta = luminosity - lum(color);
+  color[0] += delta;
+  color[1] += delta;
+  color[2] += delta;
+  clip_color(color)
 }
 
-fn clip_color(mut c: [f32; 3]) -> [f32; 3] {
-  let l = lum(c);
-  let n = c[0].min(c[1]).min(c[2]);
-  let x = c[0].max(c[1]).max(c[2]);
+fn clip_color(mut color: [f32; 3]) -> [f32; 3] {
+  let luminosity = lum(color);
+  let min_channel = color[0].min(color[1]).min(color[2]);
+  let max_channel = color[0].max(color[1]).max(color[2]);
 
-  if n < 0.0 {
-    c[0] = l + (((c[0] - l) * l) / (l - n));
-    c[1] = l + (((c[1] - l) * l) / (l - n));
-    c[2] = l + (((c[2] - l) * l) / (l - n));
+  if min_channel < 0.0 {
+    for channel in color.iter_mut() {
+      *channel = luminosity + (((*channel - luminosity) * luminosity) / (luminosity - min_channel));
+    }
   }
-  if x > 1.0 {
-    c[0] = l + (((c[0] - l) * (1.0 - l)) / (x - l));
-    c[1] = l + (((c[1] - l) * (1.0 - l)) / (x - l));
-    c[2] = l + (((c[2] - l) * (1.0 - l)) / (x - l));
+  if max_channel > 1.0 {
+    for channel in color.iter_mut() {
+      *channel =
+        luminosity + (((*channel - luminosity) * (1.0 - luminosity)) / (max_channel - luminosity));
+    }
   }
-  c
+  color
 }
 
-fn sat(c: [f32; 3]) -> f32 {
-  c[0].max(c[1]).max(c[2]) - c[0].min(c[1]).min(c[2])
+fn sat(color: [f32; 3]) -> f32 {
+  color[0].max(color[1]).max(color[2]) - color[0].min(color[1]).min(color[2])
 }
 
-fn set_sat(mut c: [f32; 3], s: f32) -> [f32; 3] {
+fn set_sat(mut color: [f32; 3], saturation: f32) -> [f32; 3] {
   let mut indices = [0, 1, 2];
-  indices.sort_by(|&i, &j| c[i].total_cmp(&c[j]));
+  indices.sort_by(|&i, &j| color[i].total_cmp(&color[j]));
 
-  let min = indices[0];
-  let mid = indices[1];
-  let max = indices[2];
+  let min_idx = indices[0];
+  let mid_idx = indices[1];
+  let max_idx = indices[2];
 
-  if c[max] > c[min] {
-    c[mid] = ((c[mid] - c[min]) * s) / (c[max] - c[min]);
-    c[max] = s;
+  if color[max_idx] > color[min_idx] {
+    color[mid_idx] =
+      ((color[mid_idx] - color[min_idx]) * saturation) / (color[max_idx] - color[min_idx]);
+    color[max_idx] = saturation;
   } else {
-    c[mid] = 0.0;
-    c[max] = 0.0;
+    color[mid_idx] = 0.0;
+    color[max_idx] = 0.0;
   }
-  c[min] = 0.0;
-  c
+  color[min_idx] = 0.0;
+  color
 }
