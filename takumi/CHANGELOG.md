@@ -1,5 +1,16 @@
 # takumi
 
+## 0.67.0
+
+### Minor Changes
+
+- 691df9d: support `mix-blend-mode` and `isolation` property
+
+### Patch Changes
+
+- 7e34727: support `visibility` property
+- ba7aa93: fix prevent text balancer from forcing breaks #437
+
 ## 0.66.14
 
 ### Patch Changes
