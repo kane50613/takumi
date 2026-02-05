@@ -1,5 +1,5 @@
 ---
-"takumi": patch
+"takumi": minor
 ---
 
-add `isolation` property
+support `mix-blend-mode` and `isolation` property

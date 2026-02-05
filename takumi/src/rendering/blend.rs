@@ -206,51 +206,12 @@ fn compute_blend_float(
   bottom: &NormalizedColor,
   top: &NormalizedColor,
 ) -> [f32; 3] {
-  let mut result = [0.0; 3];
-
   match mode {
-    BlendMode::Normal => top.channels,
-    BlendMode::Multiply => {
-      for (r, (&t, &b)) in result
-        .iter_mut()
-        .zip(top.channels.iter().zip(bottom.channels.iter()))
-      {
-        *r = t * b;
-      }
-      result
-    }
-    BlendMode::Screen => {
-      for (r, (&t, &b)) in result
-        .iter_mut()
-        .zip(top.channels.iter().zip(bottom.channels.iter()))
-      {
-        *r = 1.0 - (1.0 - t) * (1.0 - b);
-      }
-      result
-    }
     BlendMode::Overlay => [
       overlay(bottom.red(), top.red()),
       overlay(bottom.green(), top.green()),
       overlay(bottom.blue(), top.blue()),
     ],
-    BlendMode::Darken => {
-      for (r, (&t, &b)) in result
-        .iter_mut()
-        .zip(top.channels.iter().zip(bottom.channels.iter()))
-      {
-        *r = t.min(b);
-      }
-      result
-    }
-    BlendMode::Lighten => {
-      for (r, (&t, &b)) in result
-        .iter_mut()
-        .zip(top.channels.iter().zip(bottom.channels.iter()))
-      {
-        *r = t.max(b);
-      }
-      result
-    }
     BlendMode::ColorDodge => [
       color_dodge(bottom.red(), top.red()),
       color_dodge(bottom.green(), top.green()),
@@ -271,24 +232,6 @@ fn compute_blend_float(
       soft_light(bottom.green(), top.green()),
       soft_light(bottom.blue(), top.blue()),
     ],
-    BlendMode::Difference => {
-      for (r, (&t, &b)) in result
-        .iter_mut()
-        .zip(top.channels.iter().zip(bottom.channels.iter()))
-      {
-        *r = (t - b).abs();
-      }
-      result
-    }
-    BlendMode::Exclusion => {
-      for (r, (&t, &b)) in result
-        .iter_mut()
-        .zip(top.channels.iter().zip(bottom.channels.iter()))
-      {
-        *r = b + t - 2.0 * b * t;
-      }
-      result
-    }
     BlendMode::Hue => {
       let color = set_sat(top.channels, sat(bottom.channels));
       set_lum(color, lum(bottom.channels))
@@ -299,6 +242,7 @@ fn compute_blend_float(
     }
     BlendMode::Color => set_lum(top.channels, lum(bottom.channels)),
     BlendMode::Luminosity => set_lum(bottom.channels, lum(top.channels)),
+    _ => unreachable!(),
   }
 }
 
