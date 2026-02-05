@@ -379,17 +379,19 @@ fn clip_color(mut color: [f32; 3]) -> [f32; 3] {
   let min_channel = color[0].min(color[1]).min(color[2]);
   let max_channel = color[0].max(color[1]).max(color[2]);
 
-  if min_channel < 0.0 {
+  if min_channel < 0.0 && (luminosity - min_channel).abs() > f32::EPSILON {
     for channel in color.iter_mut() {
       *channel = luminosity + (((*channel - luminosity) * luminosity) / (luminosity - min_channel));
     }
   }
-  if max_channel > 1.0 {
+
+  if max_channel > 1.0 && (max_channel - luminosity).abs() > f32::EPSILON {
     for channel in color.iter_mut() {
       *channel =
         luminosity + (((*channel - luminosity) * (1.0 - luminosity)) / (max_channel - luminosity));
     }
   }
+
   color
 }
 
