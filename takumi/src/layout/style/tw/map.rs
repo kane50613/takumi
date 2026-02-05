@@ -468,5 +468,5 @@ pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
     color: ColorInput::Value(Color([0, 0, 0, 26])),
   }),
   "isolate" => TailwindProperty::Isolation(Isolation::Isolate),
-  "isolate-auto" => TailwindProperty::Isolation(Isolation::Auto),
+  "isolation-auto" => TailwindProperty::Isolation(Isolation::Auto),
 };
