@@ -1,5 +1,11 @@
 # takumi
 
+## 0.67.1
+
+### Patch Changes
+
+- 4d8955d: fix text wrap ignores original height & line clamp constraint #439
+
 ## 0.67.0
 
 ### Minor Changes
