@@ -1,5 +1,11 @@
 # @takumi-rs/core
 
+## 0.67.2
+
+### Patch Changes
+
+- e8cc16c: add `loadFontSync`
+
 ## 0.67.1
 
 ## 0.67.0

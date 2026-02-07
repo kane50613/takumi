@@ -1,5 +1,11 @@
 # @takumi-rs/wasm
 
+## 0.67.2
+
+### Patch Changes
+
+- ca61b5e: add cjs build
+
 ## 0.67.1
 
 ## 0.67.0
