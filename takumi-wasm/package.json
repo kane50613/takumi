@@ -10,7 +10,7 @@
     "webassembly"
   ],
   "scripts": {
-    "build": "wasm-pack build --no-pack --release --out-dir pkg --target web",
+    "build": "wasm-pack build --no-pack --release --out-dir pkg --target web && rolldown ./pkg/takumi_wasm.js --format cjs > ./pkg/takumi_wasm.cjs",
     "build:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target web"
   },
   "author": {
@@ -26,6 +26,7 @@
   "devDependencies": {
     "@takumi-rs/helpers": "workspace:*",
     "@types/bun": "catalog:",
+    "rolldown": "^1.0.0-rc.3",
     "typescript": "catalog:"
   },
   "exports": {
