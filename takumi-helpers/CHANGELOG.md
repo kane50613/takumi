@@ -1,5 +1,11 @@
 # @takumi-rs/helpers
 
+## 0.67.3
+
+### Patch Changes
+
+- 06b118d: fix width/height not being passed to created node #448
+
 ## 0.67.2
 
 ## 0.67.1

@@ -1,5 +1,12 @@
 # takumi
 
+## 0.67.3
+
+### Patch Changes
+
+- 0632470: unpremultiply SVG pixels after rasterization #446
+- 1e9b23e: fix plus-lighter compositing #447
+
 ## 0.67.2
 
 ## 0.67.1

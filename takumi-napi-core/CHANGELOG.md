@@ -1,5 +1,7 @@
 # @takumi-rs/core
 
+## 0.67.3
+
 ## 0.67.2
 
 ### Patch Changes
