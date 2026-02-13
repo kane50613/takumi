@@ -1,5 +1,11 @@
 # @takumi-rs/core
 
+## 0.68.0
+
+### Patch Changes
+
+- 7684faa: refactor font loading to reduce buffer copying
+
 ## 0.67.3
 
 ## 0.67.2

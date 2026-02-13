@@ -1,5 +1,11 @@
 # takumi
 
+## 0.68.0
+
+### Minor Changes
+
+- 7684faa: refactor font loading to reduce buffer copying
+
 ## 0.67.3
 
 ### Patch Changes
