@@ -159,6 +159,53 @@ describe("fromJsx", () => {
     } satisfies ContainerNode);
   });
 
+  test("treats nested array children as non-pure text", async () => {
+    const result = await fromJsx({
+      type: "p",
+      props: {
+        children: ["Hello", [" World"]],
+      },
+    });
+
+    expect(result).toEqual({
+      type: "container",
+      preset: defaultStylePresets.p,
+      children: [
+        {
+          type: "text",
+          text: "Hello",
+          preset: defaultStylePresets.span,
+        },
+        {
+          type: "text",
+          text: " World",
+          preset: defaultStylePresets.span,
+        },
+      ],
+    } satisfies ContainerNode);
+  });
+
+  test("treats null children in iterables as non-pure text", async () => {
+    const result = await fromJsx({
+      type: "p",
+      props: {
+        children: ["Hello", null],
+      },
+    });
+
+    expect(result).toEqual({
+      type: "container",
+      preset: defaultStylePresets.p,
+      children: [
+        {
+          type: "text",
+          text: "Hello",
+          preset: defaultStylePresets.span,
+        },
+      ],
+    } satisfies ContainerNode);
+  });
+
   test("converts img elements to ImageNode", async () => {
     const result = await fromJsx(
       <img src="https://example.com/image.jpg" alt="Test" />,
@@ -186,6 +233,37 @@ describe("fromJsx", () => {
       height: 100,
       preset: defaultStylePresets.img,
     } satisfies ImageNode);
+  });
+
+  test("maps default tw property to node tw", async () => {
+    const result = await fromJsx(<p tw="text-red-500">Hello</p>);
+
+    expect(result).toEqual({
+      type: "text",
+      text: "Hello",
+      preset: defaultStylePresets.p,
+      tw: "text-red-500",
+    } satisfies TextNode);
+  });
+
+  test("maps configured tailwind classes property to node tw", async () => {
+    const result = await fromJsx(
+      {
+        type: "p",
+        props: {
+          children: "Hello",
+          classes: "text-red-500",
+        },
+      },
+      { tailwindClassesProperty: "classes" },
+    );
+
+    expect(result).toEqual({
+      type: "text",
+      text: "Hello",
+      preset: defaultStylePresets.p,
+      tw: "text-red-500",
+    } satisfies TextNode);
   });
 
   test("handles img without src satisfies container", () => {

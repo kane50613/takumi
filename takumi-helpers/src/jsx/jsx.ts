@@ -36,10 +36,17 @@ export interface FromJsxOptions {
    * If `false` is provided explicitly, no default style presets will be used.
    */
   defaultStyles?: typeof defaultStylePresets | false;
+  /**
+   * The JSX prop name used to pass Tailwind classes.
+   *
+   * @default "tw"
+   */
+  tailwindClassesProperty?: string;
 }
 
 interface ResolvedFromJsxOptions {
   presets?: typeof defaultStylePresets;
+  tailwindClassesProperty: string;
 }
 
 export async function fromJsx(
@@ -48,6 +55,7 @@ export async function fromJsx(
 ): Promise<Node> {
   const result = await fromJsxInternal(element, {
     presets: getPresets(options),
+    tailwindClassesProperty: options?.tailwindClassesProperty ?? "tw",
   });
 
   if (result.length === 0) {
@@ -97,7 +105,7 @@ async function fromJsxInternal(
 function getPresets(
   options?: FromJsxOptions,
 ): typeof defaultStylePresets | undefined {
-  if (options?.defaultStyles === false) return undefined;
+  if (options?.defaultStyles === false) return;
 
   return options?.defaultStyles ?? defaultStylePresets;
 }
@@ -106,8 +114,7 @@ function tryHandleComponentWrapper(
   element: ReactElementLike,
   options: ResolvedFromJsxOptions,
 ): Promise<Node[]> | undefined {
-  if (typeof element.type !== "object" || element.type === null)
-    return undefined;
+  if (typeof element.type !== "object" || element.type === null) return;
 
   // Handle forwardRef components
   if (isReactForwardRef(element.type) && "render" in element.type) {
@@ -136,7 +143,7 @@ function tryHandleComponentWrapper(
 }
 
 function tryCollectTextChildren(element: ReactElementLike): string | undefined {
-  if (!isValidElement(element)) return undefined;
+  if (!isValidElement(element)) return;
 
   const children =
     typeof element.props === "object" &&
@@ -163,8 +170,6 @@ function tryCollectTextChildren(element: ReactElementLike): string | undefined {
   if (isValidElement(children) && isReactFragment(children)) {
     return tryCollectTextChildren(children);
   }
-
-  return undefined;
 }
 
 // Collects pure text children to prevent unnecessary container nodes
@@ -188,7 +193,10 @@ function collectTextFromIterable(
 
     if (typeof child === "number") {
       output += String(child);
+      continue;
     }
+
+    return;
   }
 
   return output;
@@ -228,7 +236,7 @@ async function processReactElement(
   }
 
   const { preset, style } = extractStyle(element, options);
-  const tw = extractTw(element);
+  const tw = extractTw(element, options);
 
   const textChildren = tryCollectTextChildren(element);
   if (textChildren !== undefined)
@@ -262,7 +270,7 @@ function createImageElement(
   }
 
   const { preset, style } = extractStyle(element, options);
-  const tw = extractTw(element);
+  const tw = extractTw(element, options);
 
   const width =
     element.props.width !== undefined ? Number(element.props.width) : undefined;
@@ -286,7 +294,7 @@ function createSvgElement(
   options: ResolvedFromJsxOptions,
 ) {
   const { preset, style } = extractStyle(element, options);
-  const tw = extractTw(element);
+  const tw = extractTw(element, options);
   const svg = serializeSvg(element);
 
   const width =
@@ -337,15 +345,23 @@ function extractStyle(
   return { preset, style };
 }
 
-function extractTw(element: ReactElementLike): string | undefined {
+function extractTw(
+  element: ReactElementLike,
+  options: ResolvedFromJsxOptions,
+): string | undefined {
+  const propName = options.tailwindClassesProperty;
+
   if (
     typeof element.props !== "object" ||
     element.props === null ||
-    !("tw" in element.props)
+    !(propName in element.props)
   )
-    return undefined;
+    return;
 
-  return element.props.tw as string;
+  const tw = element.props[propName as keyof typeof element.props];
+  if (typeof tw !== "string") return;
+
+  return tw;
 }
 
 function collectChildren(
@@ -376,12 +392,19 @@ async function collectIterable(
     const currentIndex = index;
     index += 1;
 
-    const task = fromJsxInternal(element, options).then((nodes) => {
-      groupedResults[currentIndex] = nodes;
-    });
+    let task: Promise<void>;
+    task = fromJsxInternal(element, options)
+      .then(
+        (nodes) => {
+          groupedResults[currentIndex] = nodes;
+        },
+        (error) => {
+          throw error;
+        },
+      )
+      .finally(() => inFlight.delete(task));
 
     inFlight.add(task);
-    task.finally(() => inFlight.delete(task));
 
     if (inFlight.size >= MAX_CONCURRENT_ITERABLE_RESOLUTION) {
       await Promise.race(inFlight);
