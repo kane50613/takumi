@@ -172,7 +172,9 @@ function collectTextFromChildren(children: ReactNode[]): string | undefined {
   return collectTextFromIterable(children);
 }
 
-function collectTextFromIterable(children: Iterable<ReactNode>): string | undefined {
+function collectTextFromIterable(
+  children: Iterable<ReactNode>,
+): string | undefined {
   let output = "";
 
   for (const child of children) {
