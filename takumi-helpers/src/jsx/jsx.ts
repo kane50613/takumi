@@ -331,7 +331,9 @@ function extractStyle(
       : undefined;
 
   if (inlineStyle) {
-    for (const _ in inlineStyle) {
+    for (const key in inlineStyle) {
+      if (!Object.hasOwn(inlineStyle, key)) continue;
+
       style = inlineStyle;
       break;
     }
