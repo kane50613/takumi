@@ -1,5 +1,12 @@
 # @takumi-rs/helpers
 
+## 0.68.2
+
+### Patch Changes
+
+- f58f974: add `tailwindClassesProperty` option
+- f58f974: optimize JSX iterable/text collection, style hot path, and SVG lookup
+
 ## 0.68.1
 
 ## 0.68.0
