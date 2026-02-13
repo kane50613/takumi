@@ -156,7 +156,7 @@ function tryCollectTextChildren(element: ReactElementLike): string | undefined {
   if (typeof children === "number") return String(children);
 
   if (Array.isArray(children)) {
-    return collectTextFromChildren(children);
+    return collectTextFromIterable(children);
   }
 
   if (
@@ -170,11 +170,6 @@ function tryCollectTextChildren(element: ReactElementLike): string | undefined {
   if (isValidElement(children) && isReactFragment(children)) {
     return tryCollectTextChildren(children);
   }
-}
-
-// Collects pure text children to prevent unnecessary container nodes
-function collectTextFromChildren(children: ReactNode[]): string | undefined {
-  return collectTextFromIterable(children);
 }
 
 function collectTextFromIterable(
