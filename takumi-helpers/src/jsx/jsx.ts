@@ -389,16 +389,10 @@ async function collectIterable(
     const currentIndex = index;
     index += 1;
 
-    let task: Promise<void>;
-    task = fromJsxInternal(element, options)
-      .then(
-        (nodes) => {
-          groupedResults[currentIndex] = nodes;
-        },
-        (error) => {
-          throw error;
-        },
-      )
+    const task = fromJsxInternal(element, options)
+      .then((nodes) => {
+        groupedResults[currentIndex] = nodes;
+      })
       .finally(() => inFlight.delete(task));
 
     inFlight.add(task);
