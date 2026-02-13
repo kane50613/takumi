@@ -27,7 +27,7 @@ function styleObjectToString(styleObj: Record<string, unknown>): string {
     .join(";");
 }
 
-const propertiesToKebabCase = [
+const propertiesToKebabCase = new Set([
   "stopColor",
   "stopOpacity",
   "strokeWidth",
@@ -97,7 +97,7 @@ const propertiesToKebabCase = [
   "vMathematical",
   "wordSpacing",
   "writingMode",
-];
+]);
 
 function serializePropToAttrString(
   key: string,
@@ -109,7 +109,7 @@ function serializePropToAttrString(
   let attrName: string;
   if (key === "className") {
     attrName = "class";
-  } else if (propertiesToKebabCase.includes(key)) {
+  } else if (propertiesToKebabCase.has(key)) {
     attrName = camelToKebab(key);
   } else {
     attrName = key;

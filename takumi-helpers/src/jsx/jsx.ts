@@ -38,11 +38,17 @@ export interface FromJsxOptions {
   defaultStyles?: typeof defaultStylePresets | false;
 }
 
+interface ResolvedFromJsxOptions {
+  presets?: typeof defaultStylePresets;
+}
+
 export async function fromJsx(
   element: ReactNode | ReactElementLike,
   options?: FromJsxOptions,
 ): Promise<Node> {
-  const result = await fromJsxInternal(element, options);
+  const result = await fromJsxInternal(element, {
+    presets: getPresets(options),
+  });
 
   if (result.length === 0) {
     return container({});
@@ -63,7 +69,7 @@ export async function fromJsx(
 
 async function fromJsxInternal(
   element: ReactNode | ReactElementLike,
-  options?: FromJsxOptions,
+  options: ResolvedFromJsxOptions,
 ): Promise<Node[]> {
   if (element === undefined || element === null || element === false) return [];
 
@@ -83,7 +89,7 @@ async function fromJsxInternal(
   return [
     text({
       text: String(element),
-      preset: getPresets(options)?.span,
+      preset: options.presets?.span,
     }),
   ];
 }
@@ -98,7 +104,7 @@ function getPresets(
 
 function tryHandleComponentWrapper(
   element: ReactElementLike,
-  options?: FromJsxOptions,
+  options: ResolvedFromJsxOptions,
 ): Promise<Node[]> | undefined {
   if (typeof element.type !== "object" || element.type === null)
     return undefined;
@@ -129,10 +135,8 @@ function tryHandleComponentWrapper(
   }
 }
 
-function tryCollectTextChildren(
-  element: ReactElementLike,
-): Promise<string | undefined> {
-  if (!isValidElement(element)) return Promise.resolve(undefined);
+function tryCollectTextChildren(element: ReactElementLike): string | undefined {
+  if (!isValidElement(element)) return undefined;
 
   const children =
     typeof element.props === "object" &&
@@ -141,11 +145,11 @@ function tryCollectTextChildren(
       ? element.props.children
       : undefined;
 
-  if (typeof children === "string") return Promise.resolve(children);
-  if (typeof children === "number") return Promise.resolve(String(children));
+  if (typeof children === "string") return children;
+  if (typeof children === "number") return String(children);
 
   if (Array.isArray(children)) {
-    return Promise.resolve(collectTextFromChildren(children));
+    return collectTextFromChildren(children);
   }
 
   if (
@@ -153,39 +157,44 @@ function tryCollectTextChildren(
     children !== null &&
     Symbol.iterator in children
   ) {
-    return Promise.resolve(
-      collectTextFromChildren(
-        Array.from(children as Iterable<ReactElementLike>) as ReactNode[],
-      ),
-    );
+    return collectTextFromIterable(children as Iterable<ReactNode>);
   }
 
   if (isValidElement(children) && isReactFragment(children)) {
     return tryCollectTextChildren(children);
   }
 
-  return Promise.resolve(undefined);
+  return undefined;
 }
 
 // Collects pure text children to prevent unnecessary container nodes
 function collectTextFromChildren(children: ReactNode[]): string | undefined {
-  // If any child is a React element, this is not pure text
-  if (children.some((child) => isValidElement(child))) return;
+  return collectTextFromIterable(children);
+}
 
-  // All children are strings/numbers, concatenate them
-  return children
-    .map((child) => {
-      if (typeof child === "string") return child;
-      if (typeof child === "number") return String(child);
-      // This shouldn't happen since we checked for elements above
-      return "";
-    })
-    .join("");
+function collectTextFromIterable(children: Iterable<ReactNode>): string | undefined {
+  let output = "";
+
+  for (const child of children) {
+    // If any child is a React element, this is not pure text
+    if (isValidElement(child)) return;
+
+    if (typeof child === "string") {
+      output += child;
+      continue;
+    }
+
+    if (typeof child === "number") {
+      output += String(child);
+    }
+  }
+
+  return output;
 }
 
 async function processReactElement(
   element: ReactElementLike,
-  options?: FromJsxOptions,
+  options: ResolvedFromJsxOptions,
 ): Promise<Node[]> {
   if (isFunctionComponent(element.type)) {
     return fromJsxInternal(element.type(element.props), options);
@@ -205,7 +214,7 @@ async function processReactElement(
   }
 
   if (isHtmlElement(element, "br")) {
-    return [text({ text: "\n", preset: getPresets(options)?.span })];
+    return [text({ text: "\n", preset: options.presets?.span })];
   }
 
   if (isHtmlElement(element, "img")) {
@@ -219,7 +228,7 @@ async function processReactElement(
   const { preset, style } = extractStyle(element, options);
   const tw = extractTw(element);
 
-  const textChildren = await tryCollectTextChildren(element);
+  const textChildren = tryCollectTextChildren(element);
   if (textChildren !== undefined)
     return [
       text({
@@ -244,7 +253,7 @@ async function processReactElement(
 
 function createImageElement(
   element: ReactElement<ComponentProps<"img">, "img">,
-  options?: FromJsxOptions,
+  options: ResolvedFromJsxOptions,
 ) {
   if (!element.props.src) {
     throw new Error("Image element must have a 'src' prop.");
@@ -272,7 +281,7 @@ function createImageElement(
 
 function createSvgElement(
   element: ReactElement<ComponentProps<"svg">, "svg">,
-  options?: FromJsxOptions,
+  options: ResolvedFromJsxOptions,
 ) {
   const { preset, style } = extractStyle(element, options);
   const tw = extractTw(element);
@@ -297,14 +306,14 @@ function createSvgElement(
 
 function extractStyle(
   element: ReactElementLike,
-  options?: FromJsxOptions,
+  options: ResolvedFromJsxOptions,
 ): { preset?: CSSProperties; style?: CSSProperties } {
   let preset: CSSProperties | undefined;
   let style: CSSProperties | undefined;
 
-  const presets = getPresets(options);
+  const presets = options.presets;
   if (presets && typeof element.type === "string" && element.type in presets) {
-    preset = { ...presets[element.type as keyof typeof presets] };
+    preset = presets[element.type as keyof typeof presets];
   }
 
   const inlineStyle =
@@ -316,8 +325,11 @@ function extractStyle(
       ? element.props.style
       : undefined;
 
-  if (inlineStyle && Object.keys(inlineStyle).length > 0) {
-    style = inlineStyle;
+  if (inlineStyle) {
+    for (const _ in inlineStyle) {
+      style = inlineStyle;
+      break;
+    }
   }
 
   return { preset, style };
@@ -336,7 +348,7 @@ function extractTw(element: ReactElementLike): string | undefined {
 
 function collectChildren(
   element: ReactElementLike,
-  options?: FromJsxOptions,
+  options: ResolvedFromJsxOptions,
 ): Promise<Node[]> {
   if (
     typeof element.props !== "object" ||
@@ -348,11 +360,38 @@ function collectChildren(
   return fromJsxInternal(element.props.children as ReactNode, options);
 }
 
-function collectIterable(
+const MAX_CONCURRENT_ITERABLE_RESOLUTION = 8;
+
+async function collectIterable(
   iterable: Iterable<ReactNode>,
-  options?: FromJsxOptions,
+  options: ResolvedFromJsxOptions,
 ): Promise<Node[]> {
-  return Promise.all(
-    Array.from(iterable).map((element) => fromJsxInternal(element, options)),
-  ).then((results) => results.flat());
+  const groupedResults: Node[][] = [];
+  const inFlight = new Set<Promise<void>>();
+  let index = 0;
+
+  for (const element of iterable) {
+    const currentIndex = index;
+    index += 1;
+
+    const task = fromJsxInternal(element, options).then((nodes) => {
+      groupedResults[currentIndex] = nodes;
+    });
+
+    inFlight.add(task);
+    task.finally(() => inFlight.delete(task));
+
+    if (inFlight.size >= MAX_CONCURRENT_ITERABLE_RESOLUTION) {
+      await Promise.race(inFlight);
+    }
+  }
+
+  await Promise.all(inFlight);
+
+  const flattened: Node[] = [];
+  for (const group of groupedResults) {
+    if (group) flattened.push(...group);
+  }
+
+  return flattened;
 }
