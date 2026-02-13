@@ -1,5 +1,11 @@
 # takumi
 
+## 0.68.1
+
+### Patch Changes
+
+- fb32121: parse `bg-none` for Tailwind `background-image` and improve isolation coverage
+
 ## 0.68.0
 
 ### Minor Changes
