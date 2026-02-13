@@ -1118,6 +1118,24 @@ declare_enum_from_css_impl!(
 
 impl_from_taffy_enum!(Position, taffy::Position, Relative, Absolute);
 
+/// Defines the direction of layout.
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+pub enum Direction {
+  /// The layout direction is left-to-right.
+  #[default]
+  Ltr,
+  /// The layout direction is right-to-left.
+  Rtl,
+}
+
+declare_enum_from_css_impl!(
+  Direction,
+  "ltr" => Direction::Ltr,
+  "rtl" => Direction::Rtl
+);
+
+impl_from_taffy_enum!(Direction, taffy::Direction, Ltr, Rtl);
+
 /// Defines the direction of flex items within a flex container.
 ///
 /// This enum determines how flex items are laid out along the main axis.

@@ -526,6 +526,7 @@ impl_passthrough_animatable!(
   AnimationFillModes,
   AnimationPlayStates,
   Display,
+  Direction,
   FlexDirection,
   AlignItems,
   JustifyContent,

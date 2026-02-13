@@ -850,6 +850,7 @@ define_style! {
     white_space_collapse: WhiteSpaceCollapse where inherit = true,
     text_wrap_mode: TextWrapMode where inherit = true,
     text_wrap_style: TextWrapStyle where inherit = true,
+    direction: Direction where inherit = true,
     isolation: Isolation,
     mix_blend_mode: BlendMode,
     visibility: Visibility,
@@ -1666,6 +1667,7 @@ impl ComputedStyle {
       Self::grid_template(&self.grid_template_rows, sizing);
 
     taffy::Style {
+      direction: self.direction.into(),
       box_sizing: self.box_sizing.into(),
       size: Size {
         width: self.width,

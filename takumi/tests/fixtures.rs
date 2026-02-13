@@ -10,6 +10,8 @@ pub mod deep_nesting;
 pub mod inline;
 #[path = "fixtures/inline_vertical_align.rs"]
 pub mod inline_vertical_align;
+#[path = "fixtures/rtl.rs"]
+pub mod rtl;
 #[path = "fixtures/style_alignment.rs"]
 pub mod style_alignment;
 #[path = "fixtures/style_backdrop_filter.rs"]
