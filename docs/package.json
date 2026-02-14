@@ -9,7 +9,6 @@
     "typecheck": "react-router typegen && tsc"
   },
   "dependencies": {
-    "@icons-pack/react-simple-icons": "^13.8.0",
     "@monaco-editor/react": "^4.7.0",
     "@orama/orama": "^3.1.18",
     "@radix-ui/react-accordion": "^1.2.12",
