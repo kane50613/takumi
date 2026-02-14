@@ -608,7 +608,7 @@ jobs:
 
       - name: Build Vercel output (preview)
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        run: bunx vercel build --target=${{ github.head_ref || github.ref_name }} --token=${{ secrets.VERCEL_TOKEN }}
+        run: bunx vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy to Vercel (preview)
         id: deploy_preview
@@ -679,7 +679,6 @@ jobs:
       - name: Build Vercel output (production)
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: bunx vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-          
 
       - name: Deploy to Vercel (production)
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
