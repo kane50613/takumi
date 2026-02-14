@@ -564,6 +564,7 @@ jobs:
     permissions:
       contents: read
       issues: write
+      pull-requests: write
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -651,6 +652,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber,
+              per_page: 100,
             });
 
             const existing = comments.find((c) => c.body?.includes(marker));
