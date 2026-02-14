@@ -563,7 +563,6 @@ jobs:
     needs: pass-test
     permissions:
       contents: read
-      issues: write
       pull-requests: write
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
