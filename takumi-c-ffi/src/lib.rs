@@ -1061,3 +1061,15 @@ pub unsafe extern "C" fn takumi_bytes_init(out_bytes: *mut TakumiBytes) -> i32 {
     Ok(())
   })
 }
+
+#[cfg(test)]
+mod tests {
+  use super::map_ffi_font_weight;
+
+  #[test]
+  fn c_api_weight_zero_means_no_override() {
+    assert!(map_ffi_font_weight(None).is_none());
+    assert!(map_ffi_font_weight(Some(0)).is_none());
+    assert!(map_ffi_font_weight(Some(400)).is_some());
+  }
+}
