@@ -1,0 +1,29 @@
+[package]
+name = "takumi-c-ffi"
+version = "0.0.0"
+publish = false
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+base64 = "0.22"
+serde_json = "1.0"
+
+[dependencies.serde]
+version = "1.0"
+features = ["derive"]
+
+[dependencies.xxhash-rust]
+version = "0.8"
+features = ["xxh3", "std"]
+
+[dependencies.takumi]
+path = "../takumi"
+features = ["woff2", "woff", "svg", "detailed_css_error"]
+default-features = false
+
+[build-dependencies]
+cbindgen = "0.29"

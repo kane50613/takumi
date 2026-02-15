@@ -1,0 +1,40 @@
+language = "C"
+pragma_once = false
+include_version = false
+documentation = true
+style = "type"
+usize_is_size_t = true
+cpp_compat = true
+
+header = """
+#ifndef TAKUMI_C_FFI_H
+#define TAKUMI_C_FFI_H
+"""
+
+trailer = """
+#endif
+"""
+
+[parse]
+parse_deps = false
+
+[export]
+include = [
+  "TakumiRenderer",
+  "TakumiBytes",
+  "TakumiStatusCode",
+  "takumi_last_error_message",
+  "takumi_renderer_new",
+  "takumi_renderer_new_with_options",
+  "takumi_renderer_free",
+  "takumi_renderer_load_font",
+  "takumi_renderer_put_persistent_image",
+  "takumi_renderer_clear_image_store",
+  "takumi_renderer_render",
+  "takumi_renderer_measure",
+  "takumi_renderer_render_animation",
+  "takumi_extract_resource_urls",
+  "takumi_bytes_init",
+  "takumi_bytes_free",
+  "takumi_string_free",
+]

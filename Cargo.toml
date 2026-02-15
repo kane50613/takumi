@@ -5,6 +5,7 @@ members = [
   "takumi-server",
   "takumi-napi-core",
   "takumi-wasm",
+  "takumi-c-ffi",
   "example/rust",
 ]
 
