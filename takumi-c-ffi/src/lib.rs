@@ -376,7 +376,9 @@ impl TakumiRenderer {
             Some(FontInfoOverride {
               family_name: details.name.as_deref(),
               style: details.style.map(Into::into),
-              weight: details.weight.map(|weight| FontWeight::new(weight as f32)),
+              weight: details
+                .weight
+                .and_then(|weight| (weight > 0).then_some(FontWeight::new(weight as f32))),
               axes: None,
               width: None,
             }),

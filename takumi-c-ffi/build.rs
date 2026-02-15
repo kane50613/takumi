@@ -7,7 +7,7 @@ fn main() {
   let config_path = crate_dir.join("cbindgen.toml");
   let output_path = crate_dir.join("include").join("takumi.h");
 
-  println!("cargo:rerun-if-changed=src/lib.rs");
+  println!("cargo:rerun-if-changed=src");
   println!("cargo:rerun-if-changed={}", config_path.display());
 
   let config = cbindgen::Config::from_file(&config_path).expect("failed to load cbindgen.toml");
