@@ -338,6 +338,10 @@ struct AnimationFrameSourceInput {
   duration_ms: u32,
 }
 
+fn map_ffi_font_weight(weight: Option<u16>) -> Option<FontWeight> {
+  weight.and_then(|weight| (weight > 0).then_some(FontWeight::new(weight as f32)))
+}
+
 impl TakumiRenderer {
   fn new(options: Option<ConstructRendererOptions>) -> Result<Self, FfiError> {
     let mut renderer = Self::default();
@@ -376,9 +380,7 @@ impl TakumiRenderer {
             Some(FontInfoOverride {
               family_name: details.name.as_deref(),
               style: details.style.map(Into::into),
-              weight: details
-                .weight
-                .and_then(|weight| (weight > 0).then_some(FontWeight::new(weight as f32))),
+              weight: map_ffi_font_weight(details.weight),
               axes: None,
               width: None,
             }),
@@ -743,7 +745,7 @@ pub unsafe extern "C" fn takumi_renderer_load_font(
       Some(FontInfoOverride {
         family_name,
         style: style.map(Into::into),
-        weight: (weight > 0).then_some(FontWeight::new(weight as f32)),
+        weight: map_ffi_font_weight(Some(weight)),
         axes: None,
         width: None,
       })
