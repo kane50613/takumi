@@ -108,6 +108,56 @@ jobs:
           sed -i '/\[patch.crates-io\]/,$d' ../Cargo.toml
           cargo publish --dry-run
 
+  build-c-ffi:
+    name: Build takumi-c-ffi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          stage: build
+
+      - name: Build takumi-c-ffi
+        run: cargo build -p takumi-c-ffi --release
+
+      - name: Upload takumi-c-ffi artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: libtakumi.so
+          path: target/release/libtakumi_c_ffi.so
+          if-no-files-found: error
+
+  test-c-ffi:
+    name: Test takumi-c-ffi (C smoke)
+    runs-on: ubuntu-slim
+    needs: build-c-ffi
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download takumi-c-ffi artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: libtakumi.so
+          path: target/release
+
+      - name: Build C smoke binary
+        run: |
+          cc -std=c11 -Wall -Wextra -pedantic \
+            takumi-c-ffi/tests/smoke.c \
+            -Itakumi-c-ffi/include \
+            -Ltarget/release \
+            -ltakumi \
+            -o target/release/smoke
+
+      - name: Run C smoke binary
+        run: |
+          LD_LIBRARY_PATH=target/release \
+          target/release/smoke \
+          assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf \
+          assets/images/yeecord.png
+
   build-helpers:
     name: Build @takumi-rs/helpers
     runs-on: ubuntu-slim
@@ -476,6 +526,7 @@ jobs:
       [
         biome-lint,
         test-rust,
+        test-c-ffi,
         test-helpers,
         test-napi,
         test-image-response,
