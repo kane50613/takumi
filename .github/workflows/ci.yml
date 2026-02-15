@@ -122,11 +122,14 @@ jobs:
       - name: Build takumi-c-ffi
         run: cargo build -p takumi-c-ffi --release
 
+      - name: Prepare libtakumi.so
+        run: cp target/release/libtakumi_c_ffi.so target/release/libtakumi.so
+
       - name: Upload takumi-c-ffi artifact
         uses: actions/upload-artifact@v6
         with:
           name: libtakumi.so
-          path: target/release/libtakumi_c_ffi.so
+          path: target/release/libtakumi.so
           if-no-files-found: error
 
   test-c-ffi:
