@@ -69,16 +69,6 @@ int main(int argc, char **argv) {
   const char *font_path = argv[1];
   const char *image_path = argv[2];
 
-  const char *node_json =
-    "{\"type\":\"container\",\"children\":[],\"style\":{\"width\":\"100%\",\"height\":\"100%\",\"backgroundColor\":\"#ffffff\"}}";
-  const char *render_options_json = "{\"width\":128,\"height\":64,\"format\":\"png\"}";
-  const char *animation_frames_json =
-    "[{\"node\":{\"type\":\"container\",\"children\":[],\"style\":{\"width\":\"100%\",\"height\":\"100%\",\"backgroundColor\":\"#ffffff\"}},\"durationMs\":80}]";
-  const char *animation_options_json = "{\"width\":128,\"height\":64,\"format\":\"apng\"}";
-  const char *extract_json =
-    "{\"type\":\"container\",\"children\":[{\"type\":\"image\",\"src\":\"https://example.com/test.png\"}],\"style\":{\"width\":\"100%\",\"height\":\"100%\"}}";
-  const char *new_with_options_json = "{}";
-
   TakumiBytes initialized = {0};
   int32_t status = takumi_bytes_init(&initialized);
   CHECK_OK(status, "takumi_bytes_init");
@@ -95,12 +85,6 @@ int main(int argc, char **argv) {
 
   TakumiRenderer *renderer = takumi_renderer_new();
   CHECK(renderer != NULL, "takumi_renderer_new returned NULL");
-
-  TakumiRenderer *renderer2 = takumi_renderer_new_with_options(
-    (const uint8_t *)new_with_options_json,
-    strlen(new_with_options_json)
-  );
-  CHECK(renderer2 != NULL, "takumi_renderer_new_with_options returned NULL");
 
   uint8_t *font_data = NULL;
   size_t font_len = 0;
@@ -125,65 +109,37 @@ int main(int argc, char **argv) {
   status = takumi_renderer_clear_image_store(renderer);
   CHECK_OK(status, "takumi_renderer_clear_image_store");
 
+  TakumiNode *root = takumi_node_new_container();
+  CHECK(root != NULL, "takumi_node_new_container returned NULL");
+  TakumiNode *text = takumi_node_new_text("Hello Takumi");
+  CHECK(text != NULL, "takumi_node_new_text returned NULL");
+  status = takumi_node_set_tw(root, "w-full h-full bg-white flex items-center justify-center");
+  CHECK_OK(status, "takumi_node_set_tw(root)");
+  status = takumi_node_set_tw(text, "text-black text-lg");
+  CHECK_OK(status, "takumi_node_set_tw(text)");
+  status = takumi_node_add_child(root, text);
+  CHECK_OK(status, "takumi_node_add_child");
+
+  TakumiRenderOptions options;
+  status = takumi_render_options_init(&options);
+  CHECK_OK(status, "takumi_render_options_init");
+  options.width = 128;
+  options.height = 64;
+  options.format = TAKUMI_OUTPUT_PNG;
+
   TakumiBytes render_bytes = {0};
-  status = takumi_renderer_render(
-    renderer,
-    (const uint8_t *)node_json,
-    strlen(node_json),
-    (const uint8_t *)render_options_json,
-    strlen(render_options_json),
-    &render_bytes
-  );
+  status = takumi_renderer_render(renderer, root, &options, &render_bytes);
   CHECK_OK(status, "takumi_renderer_render");
   CHECK(render_bytes.data != NULL && render_bytes.len > 0, "render output should not be empty");
   takumi_bytes_free(render_bytes);
-
-  char *measure_json = NULL;
-  status = takumi_renderer_measure(
-    renderer,
-    (const uint8_t *)node_json,
-    strlen(node_json),
-    (const uint8_t *)render_options_json,
-    strlen(render_options_json),
-    &measure_json
-  );
-  CHECK_OK(status, "takumi_renderer_measure");
-  CHECK(measure_json != NULL && strstr(measure_json, "\"width\"") != NULL,
-        "measure output should contain width");
-  takumi_string_free(measure_json);
-
-  TakumiBytes animation_bytes = {0};
-  status = takumi_renderer_render_animation(
-    renderer,
-    (const uint8_t *)animation_frames_json,
-    strlen(animation_frames_json),
-    (const uint8_t *)animation_options_json,
-    strlen(animation_options_json),
-    &animation_bytes
-  );
-  CHECK_OK(status, "takumi_renderer_render_animation");
-  CHECK(animation_bytes.data != NULL && animation_bytes.len > 0,
-        "animation output should not be empty");
-  takumi_bytes_free(animation_bytes);
-
-  char *urls_json = NULL;
-  status = takumi_extract_resource_urls(
-    (const uint8_t *)extract_json,
-    strlen(extract_json),
-    &urls_json
-  );
-  CHECK_OK(status, "takumi_extract_resource_urls");
-  CHECK(urls_json != NULL && strstr(urls_json, "example.com/test.png") != NULL,
-        "extracted urls should include expected resource");
-  takumi_string_free(urls_json);
+  takumi_node_free(root);
 
   // Explicitly test null-safe free helpers.
+  takumi_node_free(NULL);
   takumi_renderer_free(NULL);
-  takumi_string_free(NULL);
   TakumiBytes empty = {0};
   takumi_bytes_free(empty);
 
-  takumi_renderer_free(renderer2);
   takumi_renderer_free(renderer);
 
   return 0;

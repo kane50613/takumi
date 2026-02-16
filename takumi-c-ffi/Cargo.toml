@@ -9,18 +9,6 @@ build = "build.rs"
 [lib]
 crate-type = ["cdylib", "staticlib"]
 
-[dependencies]
-base64 = "0.22"
-serde_json = "1.0"
-
-[dependencies.serde]
-version = "1.0"
-features = ["derive"]
-
-[dependencies.xxhash-rust]
-version = "0.8"
-features = ["xxh3", "std"]
-
 [dependencies.takumi]
 path = "../takumi"
 features = ["woff2", "woff", "svg", "detailed_css_error"]

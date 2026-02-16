@@ -2390,12 +2390,8 @@ dependencies = [
 name = "takumi-c-ffi"
 version = "0.0.0"
 dependencies = [
- "base64",
  "cbindgen",
- "serde",
- "serde_json",
  "takumi",
- "xxhash-rust",
 ]
 
 [[package]]
