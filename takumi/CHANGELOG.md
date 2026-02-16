@@ -1,5 +1,16 @@
 # takumi
 
+## 0.68.3
+
+### Patch Changes
+
+- 585e1ba: support `background: cconic-gradient()`
+- 755b998: support `font-stretch` property
+- 12ef8ce: loosen SVG check
+- db327e6: fix overflow hidden constraint should include border radius mask
+- 133c6a4: fix line height "normal" behavior
+- 3191865: fix inheritance should store computed instead of initial value
+
 ## 0.68.2
 
 ## 0.68.1
