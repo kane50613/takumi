@@ -1,5 +1,12 @@
 # takumi
 
+## 0.68.5
+
+### Patch Changes
+
+- 8fcbb90: support `font-synthesis-weight` & `font-synthesis-style` properties for faux-bold & skew
+- 07649be: fix text overline decoration should be drawn before text
+
 ## 0.68.4
 
 ### Patch Changes
