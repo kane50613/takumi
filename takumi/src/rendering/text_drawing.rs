@@ -383,7 +383,7 @@ fn draw_text_shadow(
   }
 }
 
-fn collect_outline_paths(outline: &Outline) -> Vec<Command> {
+pub(crate) fn collect_outline_paths(outline: &Outline) -> Vec<Command> {
   outline
     .path()
     .commands()
