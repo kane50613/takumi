@@ -2289,7 +2289,7 @@ dependencies = [
 
 [[package]]
 name = "takumi"
-version = "0.68.3"
+version = "0.68.4"
 dependencies = [
  "color",
  "cssparser",

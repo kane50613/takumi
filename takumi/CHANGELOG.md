@@ -1,5 +1,12 @@
 # takumi
 
+## 0.68.4
+
+### Patch Changes
+
+- d6f1cce: use `libm` for text rendering
+- 37864fd: support `outline` properties
+
 ## 0.68.3
 
 ### Patch Changes
