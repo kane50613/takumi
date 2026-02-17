@@ -43,12 +43,12 @@ features = ["serde"]
 [dependencies.parley]
 version = "0.7"
 default-features = false
-features = ["std"]
+features = ["libm"]
 
 [dependencies.swash]
 version = "0.2"
 default-features = false
-features = ["std", "scale"]
+features = ["libm", "scale"]
 
 [dependencies.rayon]
 version = "1.10"

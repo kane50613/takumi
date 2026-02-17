@@ -120,9 +120,6 @@ pub(crate) enum CanvasConstrain {
     from: Point<u32>,
     to: Point<u32>,
     inverse_transform: Affine,
-    /// Optional mask for border-radius-aware overflow clipping.
-    /// When present, the mask covers the element's border box and provides
-    /// rounded-corner alpha values. Tuple: (mask_data, mask_width).
     border_radius_mask: Option<(Box<[u8]>, u32)>,
   },
   ClipPath {
