@@ -37,7 +37,13 @@ pub enum TakumiError {
 
   /// Error during layout computation.
   #[error("Layout error: {0}")]
-  LayoutError(#[from] taffy::TaffyError),
+  LayoutError(taffy::TaffyError),
+}
+
+impl From<taffy::TaffyError> for TakumiError {
+  fn from(err: taffy::TaffyError) -> Self {
+    Self::LayoutError(err)
+  }
 }
 
 /// A specialized Result type for Takumi operations.

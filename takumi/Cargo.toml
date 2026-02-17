@@ -68,7 +68,6 @@ default-features = false
 features = [
   "flexbox",
   "grid",
-  "std",
   "alloc",
   "taffy_tree",
   "strict_provenance",
