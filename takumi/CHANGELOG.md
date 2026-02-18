@@ -1,5 +1,13 @@
 # takumi
 
+## 0.68.7
+
+### Patch Changes
+
+- 9248c6e: support `inline-block`, `inline-flex`, `inline-grid` layout, closes #219
+- 2639396: fix decoration rounding caused gap
+- 91037be: fix style shorthand overrides
+
 ## 0.68.6
 
 ### Patch Changes
