@@ -821,6 +821,22 @@ declare_enum_from_css_impl!(
   "capitalize" => TextTransform::Capitalize
 );
 
+/// Controls whether text decoration should skip descenders.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum TextDecorationSkipInk {
+  /// Skip descenders and glyph interiors when painting decorations.
+  #[default]
+  Auto,
+  /// Do not skip ink; paint decoration continuously.
+  None,
+}
+
+declare_enum_from_css_impl!(
+  TextDecorationSkipInk,
+  "auto" => TextDecorationSkipInk::Auto,
+  "none" => TextDecorationSkipInk::None
+);
+
 /// Represents a font family for text rendering.
 /// Multi value fallback is supported.
 #[derive(Debug, Clone, PartialEq)]

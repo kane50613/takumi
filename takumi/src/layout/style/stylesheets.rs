@@ -198,6 +198,7 @@ define_style!(
   text_decoration: TextDecoration,
   text_decoration_line: Option<TextDecorationLines> where inherit = true,
   text_decoration_color: Option<ColorInput> where inherit = true,
+  text_decoration_skip_ink: TextDecorationSkipInk where inherit = true,
   letter_spacing: Option<Length> where inherit = true,
   word_spacing: Option<Length> where inherit = true,
   image_rendering: ImageScalingAlgorithm where inherit = true,

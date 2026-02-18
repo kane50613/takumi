@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use image::{GenericImageView, Rgba};
 use parley::{GlyphRun, LineMetrics, PositionedInlineBox, PositionedLayoutItem};
 use swash::FontRef;
@@ -9,59 +11,74 @@ use crate::{
     inline::{InlineBoxItem, InlineBrush, InlineLayout},
     node::Node,
     style::{
-      Affine, BackgroundClip, BlendMode, ImageScalingAlgorithm, SizedFontStyle, TextDecorationLine,
+      Affine, BackgroundClip, BlendMode, Color, ImageScalingAlgorithm, SizedFontStyle,
+      TextDecorationLine, TextDecorationSkipInk,
     },
   },
   rendering::{
     BorderProperties, Canvas, ColorTile, RenderContext, collect_background_layers,
-    collect_outline_paths, draw_decoration, draw_glyph, draw_glyph_clip_image, rasterize_layers,
+    collect_outline_paths, draw_decoration, draw_glyph, draw_glyph_clip_image,
+    mask_index_from_coord, rasterize_layers,
   },
   resources::font::{FontError, ResolvedGlyph},
 };
 
-const UNDERLINE_SKIP_INK_PADDING: f32 = 1.0;
-const UNDERLINE_SKIP_INK_SMOOTH_GAP: f32 = 1.0;
+const UNDERLINE_SKIP_INK_ALPHA_THRESHOLD: u8 = 16;
 
 #[derive(Clone, Copy)]
 struct GlyphLocalBounds {
   left: f32,
   top: f32,
-  right: f32,
   bottom: f32,
+}
+
+struct GlyphSkipInkData {
+  bounds: GlyphLocalBounds,
+  width: u32,
+  height: u32,
+  alpha: Box<[u8]>,
 }
 
 fn build_glyph_bounds_cache(
   canvas: &mut Canvas,
-  resolved_glyphs: &std::collections::HashMap<u32, ResolvedGlyph>,
-) -> std::collections::HashMap<u32, GlyphLocalBounds> {
-  let mut bounds = std::collections::HashMap::with_capacity(resolved_glyphs.len());
+  resolved_glyphs: &HashMap<u32, ResolvedGlyph>,
+) -> HashMap<u32, GlyphSkipInkData> {
+  let mut bounds = HashMap::with_capacity(resolved_glyphs.len());
 
   for (glyph_id, content) in resolved_glyphs {
-    let glyph_bounds = match content {
-      ResolvedGlyph::Image(bitmap) => GlyphLocalBounds {
-        left: bitmap.placement.left as f32,
-        top: -bitmap.placement.top as f32,
-        right: bitmap.placement.left as f32 + bitmap.placement.width as f32,
-        bottom: -bitmap.placement.top as f32 + bitmap.placement.height as f32,
+    let glyph = match content {
+      ResolvedGlyph::Image(bitmap) => GlyphSkipInkData {
+        bounds: GlyphLocalBounds {
+          left: bitmap.placement.left as f32,
+          top: -bitmap.placement.top as f32,
+          bottom: -bitmap.placement.top as f32 + bitmap.placement.height as f32,
+        },
+        width: bitmap.placement.width,
+        height: bitmap.placement.height,
+        alpha: bitmap.data.iter().skip(3).step_by(4).copied().collect(),
       },
       ResolvedGlyph::Outline(outline) => {
         let paths = collect_outline_paths(outline);
-        let (_, placement) = canvas.mask_memory.render(&paths, None, None);
+        let (mask, placement) = canvas.mask_memory.render(&paths, None, None);
 
         if placement.width == 0 || placement.height == 0 {
           continue;
         }
 
-        GlyphLocalBounds {
-          left: placement.left as f32,
-          top: placement.top as f32,
-          right: placement.left as f32 + placement.width as f32,
-          bottom: placement.top as f32 + placement.height as f32,
+        GlyphSkipInkData {
+          bounds: GlyphLocalBounds {
+            left: placement.left as f32,
+            top: placement.top as f32,
+            bottom: placement.top as f32 + placement.height as f32,
+          },
+          width: placement.width,
+          height: placement.height,
+          alpha: mask.to_vec().into_boxed_slice(),
         }
       }
     };
 
-    bounds.insert(*glyph_id, glyph_bounds);
+    bounds.insert(*glyph_id, glyph);
   }
 
   bounds
@@ -69,7 +86,7 @@ fn build_glyph_bounds_cache(
 
 fn draw_decoration_segment(
   canvas: &mut Canvas,
-  color: crate::layout::style::Color,
+  color: Color,
   x: f32,
   y: f32,
   width: f32,
@@ -95,11 +112,12 @@ fn draw_decoration_segment(
   );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_underline_with_skip_ink(
   canvas: &mut Canvas,
   glyph_run: &GlyphRun<'_, InlineBrush>,
-  glyph_bounds_cache: &std::collections::HashMap<u32, GlyphLocalBounds>,
-  color: crate::layout::style::Color,
+  glyph_bounds_cache: &HashMap<u32, GlyphSkipInkData>,
+  color: Color,
   offset: f32,
   size: f32,
   layout: Layout,
@@ -109,22 +127,22 @@ fn draw_underline_with_skip_ink(
   let run_end_x = run_start_x + glyph_run.advance();
   let line_top = layout.border.top + layout.padding.top + offset;
   let line_bottom = line_top + size;
-  let skip_padding = UNDERLINE_SKIP_INK_PADDING + (size * 0.25);
+  let skip_padding = (size * 0.6).clamp(1.0, 3.0);
+  let smooth_gap = (size * 0.28).clamp(0.5, 1.5);
   let min_visible_segment = (size * 0.8).max(0.75);
 
   let mut skip_ranges = Vec::new();
 
   for glyph in glyph_run.positioned_glyphs() {
-    let Some(local_bounds) = glyph_bounds_cache.get(&glyph.id) else {
+    let Some(glyph_data) = glyph_bounds_cache.get(&glyph.id) else {
       continue;
     };
+    let local_bounds = glyph_data.bounds;
 
     let inline_x = layout.border.left + layout.padding.left + glyph.x;
     let inline_y = layout.border.top + layout.padding.top + glyph.y;
 
-    let glyph_left = inline_x + local_bounds.left;
     let glyph_top = inline_y + local_bounds.top;
-    let glyph_right = inline_x + local_bounds.right;
     let glyph_bottom = inline_y + local_bounds.bottom;
 
     let intersects_underline = glyph_bottom > line_top && glyph_top < line_bottom;
@@ -132,8 +150,40 @@ fn draw_underline_with_skip_ink(
       continue;
     }
 
-    let skip_start = (glyph_left - skip_padding).max(run_start_x);
-    let skip_end = (glyph_right + skip_padding).min(run_end_x);
+    let local_line_top = line_top - inline_y;
+    let local_line_bottom = line_bottom - inline_y;
+
+    let mask_y_start = (local_line_top - local_bounds.top).floor() as i32;
+    let mask_y_end = (local_line_bottom - local_bounds.top).ceil() as i32;
+    let y_start = mask_y_start.clamp(0, glyph_data.height as i32);
+    let y_end = mask_y_end.clamp(0, glyph_data.height as i32);
+
+    if y_start >= y_end {
+      continue;
+    }
+
+    let mut hit_min_x: Option<u32> = None;
+    let mut hit_max_x: Option<u32> = None;
+    for y in y_start as u32..y_end as u32 {
+      for x in 0..glyph_data.width {
+        let alpha = glyph_data.alpha[mask_index_from_coord(x, y, glyph_data.width)];
+        if alpha <= UNDERLINE_SKIP_INK_ALPHA_THRESHOLD {
+          continue;
+        }
+        hit_min_x = Some(hit_min_x.map_or(x, |min_x| min_x.min(x)));
+        hit_max_x = Some(hit_max_x.map_or(x, |max_x| max_x.max(x)));
+      }
+    }
+
+    let (hit_min_x, hit_max_x) = match (hit_min_x, hit_max_x) {
+      (Some(min_x), Some(max_x)) => (min_x, max_x),
+      _ => continue,
+    };
+
+    let skip_start =
+      (inline_x + local_bounds.left + hit_min_x as f32 - skip_padding).max(run_start_x);
+    let skip_end =
+      (inline_x + local_bounds.left + hit_max_x as f32 + 1.0 + skip_padding).min(run_end_x);
 
     if skip_end > skip_start {
       skip_ranges.push((skip_start, skip_end));
@@ -154,7 +204,7 @@ fn draw_underline_with_skip_ink(
       continue;
     };
 
-    if start <= last.1 + UNDERLINE_SKIP_INK_SMOOTH_GAP {
+    if start <= last.1 + smooth_gap {
       last.1 = last.1.max(end);
     } else {
       merged_ranges.push((start, end));
@@ -228,7 +278,6 @@ fn draw_glyph_run<I: GenericImageView<Pixel = Rgba<u8>>>(
     .global
     .font_context
     .resolve_glyphs(glyph_run, font, glyph_ids);
-  let glyph_bounds_cache = build_glyph_bounds_cache(canvas, &resolved_glyphs);
 
   let palette = font.color_palettes().next();
 
@@ -236,7 +285,11 @@ fn draw_glyph_run<I: GenericImageView<Pixel = Rgba<u8>>>(
     let offset = glyph_run.baseline() - metrics.underline_offset;
     let size = glyph_run.run().font_size() / 18.0;
 
-    if context.transform.only_translation() {
+    if context.transform.only_translation()
+      && style.parent.text_decoration_skip_ink != TextDecorationSkipInk::None
+    {
+      let glyph_bounds_cache = build_glyph_bounds_cache(canvas, &resolved_glyphs);
+
       draw_underline_with_skip_ink(
         canvas,
         glyph_run,
