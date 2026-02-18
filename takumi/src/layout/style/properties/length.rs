@@ -17,6 +17,7 @@ const ONE_Q_IN_PX: f32 = ONE_CM_IN_PX / 40.0;
 const ONE_IN_PX: f32 = 2.54 * ONE_CM_IN_PX;
 const ONE_PT_IN_PX: f32 = ONE_IN_PX / 72.0;
 const ONE_PC_IN_PX: f32 = ONE_IN_PX / 6.0;
+const CALC_ZERO_EPSILON: f32 = 1e-6;
 
 #[derive(Default)]
 pub(crate) struct CalcArena {
@@ -422,8 +423,13 @@ fn parse_calc_factor<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcValu
 fn calc_handle_to_linear(handle: CalcHandle, sizing: &Sizing) -> CalcLinear {
   match handle {
     CalcHandle::Formula(formula) => formula.resolve(sizing),
+    // Already resolved via `formula.resolve(sizing)`, so this is intentionally a no-op.
     CalcHandle::Linear(linear) => linear,
   }
+}
+
+fn is_near_zero(value: f32) -> bool {
+  value.abs() <= CALC_ZERO_EPSILON
 }
 
 /// Represents a value that can be a specific length, percentage, or automatic.
@@ -593,7 +599,7 @@ impl<'i, const DEFAULT_AUTO: bool> FromCss<'i> for Length<DEFAULT_AUTO> {
 }
 
 impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
-  fn to_px_without_dpr(self, sizing: &Sizing, percentage_full_px: f32) -> f32 {
+  fn to_px_pre_dpr(self, sizing: &Sizing, percentage_full_px: f32) -> f32 {
     match self {
       Length::Auto => 0.0,
       Length::Px(value) => value,
@@ -608,6 +614,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
       Length::Q(value) => value * ONE_Q_IN_PX,
       Length::Pt(value) => value * ONE_PT_IN_PX,
       Length::Pc(value) => value * ONE_PC_IN_PX,
+      // Calc linear values are already in device pixels.
       Length::Calc(handle) => calc_handle_to_linear(handle, sizing).resolve(percentage_full_px),
     }
   }
@@ -629,11 +636,11 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
       Length::Calc(handle) => {
         let linear = calc_handle_to_linear(handle, sizing);
 
-        if linear.percent == 0.0 {
+        if is_near_zero(linear.percent) {
           return CompactLength::length(linear.px);
         }
 
-        if linear.px == 0.0 {
+        if is_near_zero(linear.px) {
           return CompactLength::percent(linear.percent);
         }
 
@@ -656,7 +663,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
   }
 
   pub(crate) fn to_px(self, sizing: &Sizing, percentage_full_px: f32) -> f32 {
-    let value = self.to_px_without_dpr(sizing, percentage_full_px);
+    let value = self.to_px_pre_dpr(sizing, percentage_full_px);
 
     if matches!(
       self,
@@ -692,13 +699,17 @@ impl<const DEFAULT_AUTO: bool> MakeComputed for Length<DEFAULT_AUTO> {
     if let Self::Calc(CalcHandle::Formula(formula)) = *self {
       let linear = formula.resolve(sizing);
 
-      match linear {
-        CalcLinear { px, percent: 0.0 } => {
-          *self = Self::Px(px / sizing.viewport.device_pixel_ratio)
-        }
-        CalcLinear { px: 0.0, percent } => *self = Self::Percentage(percent * 100.0),
-        value => *self = Self::Calc(CalcHandle::Linear(value)),
+      if is_near_zero(linear.percent) {
+        *self = Self::Px(linear.px / sizing.viewport.device_pixel_ratio);
+        return;
       }
+
+      if is_near_zero(linear.px) {
+        *self = Self::Percentage(linear.percent * 100.0);
+        return;
+      }
+
+      *self = Self::Calc(CalcHandle::Linear(linear));
     }
   }
 }

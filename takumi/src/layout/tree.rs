@@ -1,6 +1,12 @@
 use std::{iter::Copied, mem::take, slice::Iter};
 
-use taffy::*;
+use taffy::{
+  AvailableSpace, Cache, CacheTree, Display as TaffyDisplay, Layout, LayoutBlockContainer,
+  LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput, LayoutPartialTree,
+  NodeId, RoundTree, RunMode, Size, Style, TaffyError, TraversePartialTree, TraverseTree,
+  compute_block_layout, compute_cached_layout, compute_flexbox_layout, compute_grid_layout,
+  compute_hidden_layout, compute_leaf_layout,
+};
 
 use crate::{
   Result,
@@ -27,6 +33,7 @@ struct LayoutNodeState<'g, N: Node<N>> {
   cache: Cache,
   unrounded_layout: Layout,
   final_layout: Layout,
+  is_inline_children: bool,
   render_node: RenderTreeNode<'g, N>,
   children: Box<[NodeId]>,
 }
@@ -80,7 +87,8 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
       .context
       .style
       .to_taffy_style(&render_node.context);
-    let child_nodes = if render_node.should_create_inline_layout() {
+    let is_inline_children = render_node.should_create_inline_layout();
+    let child_nodes = if is_inline_children {
       None
     } else {
       render_node.children.take()
@@ -91,6 +99,7 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
       cache: Cache::new(),
       unrounded_layout: Layout::new(),
       final_layout: Layout::new(),
+      is_inline_children,
       render_node,
       children: Box::new([]),
     });
@@ -208,10 +217,10 @@ impl<N: Node<N>> LayoutPartialTree for NodeTree<'_, N> {
       let has_children = !node_data.children.is_empty();
 
       match (display_mode, has_children) {
-        (taffy::Display::None, _) => compute_hidden_layout(tree, node),
-        (taffy::Display::Block, true) => compute_block_layout(tree, node, inputs),
-        (taffy::Display::Flex, true) => compute_flexbox_layout(tree, node, inputs),
-        (taffy::Display::Grid, true) => compute_grid_layout(tree, node, inputs),
+        (TaffyDisplay::None, _) => compute_hidden_layout(tree, node),
+        (TaffyDisplay::Block, true) => compute_block_layout(tree, node, inputs),
+        (TaffyDisplay::Flex, true) => compute_flexbox_layout(tree, node, inputs),
+        (TaffyDisplay::Grid, true) => compute_grid_layout(tree, node, inputs),
         (_, false) => compute_leaf_layout(
           inputs,
           &node_data.style,
@@ -225,9 +234,12 @@ impl<N: Node<N>> LayoutPartialTree for NodeTree<'_, N> {
               return Size { width, height };
             }
 
-            node_data
-              .render_node
-              .measure(available_space, known_dimensions, &node_data.style)
+            node_data.render_node.measure(
+              available_space,
+              known_dimensions,
+              &node_data.style,
+              node_data.is_inline_children,
+            )
           },
         ),
       }
@@ -554,8 +566,9 @@ impl<'g, N: Node<N>> RenderTreeNode<'g, N> {
     available_space: Size<AvailableSpace>,
     known_dimensions: Size<Option<f32>>,
     style: &taffy::Style,
+    is_inline_children: bool,
   ) -> Size<f32> {
-    if self.should_create_inline_layout() {
+    if is_inline_children {
       let (max_width, max_height) =
         create_inline_constraint(&self.context, available_space, known_dimensions);
 
@@ -606,10 +619,13 @@ fn flush_inline_group<'g, N: Node<N>>(
   }
 
   if inline_group.len() == 1 {
-    if let Some(mut child) = take(inline_group).into_iter().next() {
-      child.context.style.display.blockify();
-      final_children.push(child);
-    }
+    let Some(mut child) = inline_group.pop() else {
+      unreachable!();
+    };
+
+    child.context.style.display.blockify();
+
+    final_children.push(child);
   } else {
     final_children.push(RenderTreeNode {
       context: RenderContext {
