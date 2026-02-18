@@ -212,21 +212,24 @@ impl<N: Node<N>> LayoutPartialTree for NodeTree<'_, N> {
         (taffy::Display::Block, true) => compute_block_layout(tree, node, inputs),
         (taffy::Display::Flex, true) => compute_flexbox_layout(tree, node, inputs),
         (taffy::Display::Grid, true) => compute_grid_layout(tree, node, inputs),
-        (_, false) => {
-          let style = &node_data.style;
-          let measure_function = |known_dimensions, available_space| {
+        (_, false) => compute_leaf_layout(
+          inputs,
+          &node_data.style,
+          |val, basis| tree.resolve_calc_value(val, basis),
+          |known_dimensions, available_space| {
+            if let Size {
+              width: Some(width),
+              height: Some(height),
+            } = known_dimensions.maybe_apply_aspect_ratio(node_data.style.aspect_ratio)
+            {
+              return Size { width, height };
+            }
+
             node_data
               .render_node
-              .measure(available_space, known_dimensions, style)
-          };
-
-          compute_leaf_layout(
-            inputs,
-            style,
-            |val, basis| tree.resolve_calc_value(val, basis),
-            measure_function,
-          )
-        }
+              .measure(available_space, known_dimensions, &node_data.style)
+          },
+        ),
       }
     })
   }
