@@ -1,5 +1,15 @@
 # takumi
 
+## 0.68.6
+
+### Patch Changes
+
+- 51a5bd5: support `text-decoration-skip-ink` property
+- 642cf06: refactor `TextDecorationLines` to use `bitflags`, parses Tailwind `underline`, `overline`...
+- 57d6594: fix text painting order for shadow, decoration and actual content to avoid overlapping
+- 9215906: fix embolden and skew should avoid emojis
+- 53069e4: refactor taffy tree structure, support `calc()`
+
 ## 0.68.5
 
 ### Patch Changes
