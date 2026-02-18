@@ -387,10 +387,8 @@ fn render_node<'g, Nodes: Node<Nodes>>(
   if should_create_inline {
     node.draw_inline(canvas, layout)?;
   } else {
-    let children = taffy.children(node_id)?.to_vec();
-
-    for child_id in children.iter() {
-      render_node(taffy, *child_id, canvas, transform)?;
+    for child_id in taffy.children(node_id)?.to_vec() {
+      render_node(taffy, child_id, canvas, transform)?;
     }
   }
 
