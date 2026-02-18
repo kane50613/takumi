@@ -1,5 +1,12 @@
 # takumi
 
+## 0.68.8
+
+### Patch Changes
+
+- b7d7570: fix box-shadow rendering
+- 4b13519: support `overflow: clip`
+
 ## 0.68.7
 
 ### Patch Changes
