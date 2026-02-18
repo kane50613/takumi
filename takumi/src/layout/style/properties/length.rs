@@ -635,6 +635,25 @@ impl<'i, const DEFAULT_AUTO: bool> FromCss<'i> for Length<DEFAULT_AUTO> {
 }
 
 impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
+  fn to_px_without_dpr(self, sizing: &Sizing, percentage_full_px: f32) -> f32 {
+    match self {
+      Length::Auto => 0.0,
+      Length::Px(value) => value,
+      Length::Percentage(value) => (value / 100.0) * percentage_full_px,
+      Length::Rem(value) => value * sizing.viewport.font_size,
+      Length::Em(value) => value * sizing.font_size,
+      Length::Vh(value) => value * sizing.viewport.height.unwrap_or_default() as f32 / 100.0,
+      Length::Vw(value) => value * sizing.viewport.width.unwrap_or_default() as f32 / 100.0,
+      Length::Cm(value) => value * ONE_CM_IN_PX,
+      Length::Mm(value) => value * ONE_MM_IN_PX,
+      Length::In(value) => value * ONE_IN_PX,
+      Length::Q(value) => value * ONE_Q_IN_PX,
+      Length::Pt(value) => value * ONE_PT_IN_PX,
+      Length::Pc(value) => value * ONE_PC_IN_PX,
+      Length::Calc(handle) => calc_handle_to_linear(handle, sizing).resolve(percentage_full_px),
+    }
+  }
+
   pub(crate) fn to_compact_length(self, sizing: &Sizing) -> CompactLength {
     match self {
       Length::Auto => CompactLength::auto(),
@@ -679,22 +698,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
   }
 
   pub(crate) fn to_px(self, sizing: &Sizing, percentage_full_px: f32) -> f32 {
-    let value = match self {
-      Length::Auto => 0.0,
-      Length::Px(value) => value,
-      Length::Percentage(value) => (value / 100.0) * percentage_full_px,
-      Length::Rem(value) => value * sizing.viewport.font_size,
-      Length::Em(value) => value * sizing.font_size,
-      Length::Vh(value) => value * sizing.viewport.height.unwrap_or_default() as f32 / 100.0,
-      Length::Vw(value) => value * sizing.viewport.width.unwrap_or_default() as f32 / 100.0,
-      Length::Cm(value) => value * ONE_CM_IN_PX,
-      Length::Mm(value) => value * ONE_MM_IN_PX,
-      Length::In(value) => value * ONE_IN_PX,
-      Length::Q(value) => value * ONE_Q_IN_PX,
-      Length::Pt(value) => value * ONE_PT_IN_PX,
-      Length::Pc(value) => value * ONE_PC_IN_PX,
-      Length::Calc(handle) => calc_handle_to_linear(handle, sizing).resolve(percentage_full_px),
-    };
+    let value = self.to_px_without_dpr(sizing, percentage_full_px);
 
     if matches!(
       self,
@@ -731,7 +735,9 @@ impl<const DEFAULT_AUTO: bool> MakeComputed for Length<DEFAULT_AUTO> {
       let linear = formula.resolve(sizing);
 
       match linear {
-        CalcLinear { px, percent: 0.0 } => *self = Self::Px(px),
+        CalcLinear { px, percent: 0.0 } => {
+          *self = Self::Px(px / sizing.viewport.device_pixel_ratio)
+        }
         CalcLinear { px: 0.0, percent } => *self = Self::Percentage(percent * 100.0),
         value => *self = Self::Calc(CalcHandle::Linear(value)),
       }
@@ -815,7 +821,21 @@ mod tests {
       ..Default::default()
     }));
     value.make_computed(&sizing());
-    assert_eq!(value, Length::Px(42.0));
+    assert_eq!(value, Length::Px(21.0));
+  }
+
+  #[test]
+  fn make_computed_collapsed_px_applies_dpr_only_once_in_to_px() {
+    let mut value: Length<true> = Length::Calc(CalcHandle::Formula(CalcFormula {
+      rem: 1.0,
+      px: 5.0,
+      ..Default::default()
+    }));
+    let sizing = sizing();
+    value.make_computed(&sizing);
+
+    assert_eq!(value, Length::Px(21.0));
+    assert_eq!(value.to_px(&sizing, 0.0), 42.0);
   }
 
   #[test]

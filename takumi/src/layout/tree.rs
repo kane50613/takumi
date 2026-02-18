@@ -614,8 +614,12 @@ fn flush_inline_group<'g, N: Node<N>>(
     final_children.push(RenderTreeNode {
       context: RenderContext {
         style: anonymous_box_style.clone(),
+        global: parent_render_context.global,
+        transform: parent_render_context.transform,
+        sizing: parent_render_context.sizing.clone(),
+        current_color: parent_render_context.current_color,
+        draw_debug_border: parent_render_context.draw_debug_border,
         fetched_resources: Default::default(),
-        ..parent_render_context.clone()
       },
       children: Some(take(inline_group).into_boxed_slice()),
       node: None,
