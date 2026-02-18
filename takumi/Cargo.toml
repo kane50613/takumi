@@ -69,6 +69,7 @@ features = [
   "flexbox",
   "grid",
   "alloc",
+  "calc",
   "taffy_tree",
   "strict_provenance",
   "block_layout",

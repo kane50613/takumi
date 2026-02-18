@@ -8,7 +8,7 @@ use crate::{
   layout::{
     node::Node,
     style::{Color, FontSynthesis, SizedFontStyle, TextOverflow, TextWrapStyle},
-    tree::NodeTree,
+    tree::RenderTreeNode,
   },
   rendering::{
     MaxHeight, RenderContext, apply_text_transform, apply_white_space_collapse, make_balanced_text,
@@ -384,7 +384,7 @@ fn make_ellipsis_layout<'c, 'g: 'c, N: Node<N> + 'c>(
 }
 
 pub(crate) struct InlineItemIterator<'n, 'g, N: Node<N>> {
-  pub(crate) stack: Vec<(&'n NodeTree<'g, N>, usize)>, // (node, depth)
+  pub(crate) stack: Vec<(&'n RenderTreeNode<'g, N>, usize)>, // (node, depth)
   pub(crate) current_node_content: Option<InlineItem<'n, 'g, N>>,
 }
 

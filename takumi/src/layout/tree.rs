@@ -1,6 +1,6 @@
-use std::mem::take;
+use std::{iter::Copied, mem::take, slice::Iter};
 
-use taffy::{AvailableSpace, Layout, NodeId, Size, TaffyTree};
+use taffy::*;
 
 use crate::{
   Result,
@@ -10,7 +10,7 @@ use crate::{
       create_inline_layout, measure_inline_layout,
     },
     node::Node,
-    style::{Affine, Display, InheritedStyle},
+    style::{Affine, Display, InheritedStyle, resolve_calc_value},
   },
   rendering::{
     Canvas, MaxHeight, RenderContext, Sizing,
@@ -19,12 +19,327 @@ use crate::{
 };
 
 pub(crate) struct NodeTree<'g, N: Node<N>> {
+  nodes: Vec<LayoutNodeState<'g, N>>,
+}
+
+struct LayoutNodeState<'g, N: Node<N>> {
+  style: Style,
+  cache: Cache,
+  unrounded_layout: Layout,
+  final_layout: Layout,
+  render_node: RenderTreeNode<'g, N>,
+  children: Box<[NodeId]>,
+}
+
+pub(crate) struct RenderTreeNode<'g, N: Node<N>> {
   pub(crate) context: RenderContext<'g>,
   pub(crate) node: Option<N>,
-  pub(crate) children: Option<Box<[NodeTree<'g, N>]>>,
+  pub(crate) children: Option<Box<[RenderTreeNode<'g, N>]>>,
 }
 
 impl<'g, N: Node<N>> NodeTree<'g, N> {
+  pub(crate) fn from_node(parent_context: &RenderContext<'g>, node: N) -> Self {
+    let root = RenderTreeNode::from_node(parent_context, node);
+    let mut tree = Self { nodes: Vec::new() };
+    let root_id = tree.push_node(root);
+
+    debug_assert_eq!(root_id, NodeId::from(0usize));
+
+    tree
+  }
+
+  pub(crate) fn root_node_id(&self) -> NodeId {
+    NodeId::from(0usize)
+  }
+
+  pub(crate) fn layout(&self, node_id: NodeId) -> std::result::Result<&Layout, TaffyError> {
+    Ok(&self.get_node(node_id)?.final_layout)
+  }
+
+  pub(crate) fn children(&self, node_id: NodeId) -> std::result::Result<Vec<NodeId>, TaffyError> {
+    Ok(self.get_node(node_id)?.children.to_vec())
+  }
+
+  pub(crate) fn get_render_node(&self, node_id: NodeId) -> Option<&RenderTreeNode<'g, N>> {
+    self.get_node_ref(node_id).map(|node| &node.render_node)
+  }
+
+  pub(crate) fn get_render_node_mut(
+    &mut self,
+    node_id: NodeId,
+  ) -> Option<&mut RenderTreeNode<'g, N>> {
+    self
+      .get_node_mut_ref(node_id)
+      .map(|node| &mut node.render_node)
+  }
+
+  fn push_node(&mut self, mut render_node: RenderTreeNode<'g, N>) -> NodeId {
+    let node_index = self.nodes.len();
+    let node_id = NodeId::from(node_index);
+    let style = render_node
+      .context
+      .style
+      .to_taffy_style(&render_node.context);
+    let child_nodes = if render_node.should_create_inline_layout() {
+      None
+    } else {
+      render_node.children.take()
+    };
+
+    self.nodes.push(LayoutNodeState {
+      style,
+      cache: Cache::new(),
+      unrounded_layout: Layout::new(),
+      final_layout: Layout::new(),
+      render_node,
+      children: Box::new([]),
+    });
+
+    if let Some(children) = child_nodes {
+      self.nodes[node_index].children =
+        Box::from_iter(children.into_iter().map(|child| self.push_node(child)));
+    }
+
+    node_id
+  }
+
+  fn get_index(&self, node_id: NodeId) -> Option<usize> {
+    let idx = node_id.into();
+    (idx < self.nodes.len()).then_some(idx)
+  }
+
+  fn get_node_ref(&self, node_id: NodeId) -> Option<&LayoutNodeState<'g, N>> {
+    self.get_index(node_id).and_then(|idx| self.nodes.get(idx))
+  }
+
+  fn get_node_mut_ref(&mut self, node_id: NodeId) -> Option<&mut LayoutNodeState<'g, N>> {
+    self
+      .get_index(node_id)
+      .and_then(|idx| self.nodes.get_mut(idx))
+  }
+
+  fn get_node(&self, node_id: NodeId) -> std::result::Result<&LayoutNodeState<'g, N>, TaffyError> {
+    self
+      .get_node_ref(node_id)
+      .ok_or(TaffyError::InvalidInputNode(node_id))
+  }
+}
+
+impl<N: Node<N>> TraversePartialTree for NodeTree<'_, N> {
+  type ChildIter<'a>
+    = Copied<Iter<'a, NodeId>>
+  where
+    Self: 'a;
+
+  fn child_ids(&self, parent_node_id: NodeId) -> Self::ChildIter<'_> {
+    let Some(node) = self.get_node_ref(parent_node_id) else {
+      unreachable!()
+    };
+
+    node.children.iter().copied()
+  }
+
+  fn child_count(&self, parent_node_id: NodeId) -> usize {
+    let Some(node) = self.get_node_ref(parent_node_id) else {
+      unreachable!()
+    };
+
+    node.children.len()
+  }
+
+  fn get_child_id(&self, parent_node_id: NodeId, child_index: usize) -> NodeId {
+    let Some(node) = self.get_node_ref(parent_node_id) else {
+      unreachable!()
+    };
+
+    node.children[child_index]
+  }
+}
+
+impl<N: Node<N>> TraverseTree for NodeTree<'_, N> {}
+
+impl<N: Node<N>> LayoutPartialTree for NodeTree<'_, N> {
+  type CoreContainerStyle<'a>
+    = &'a Style
+  where
+    Self: 'a;
+  type CustomIdent = String;
+
+  fn get_core_container_style(&self, node_id: NodeId) -> Self::CoreContainerStyle<'_> {
+    let Some(node) = self.get_node_ref(node_id) else {
+      unreachable!()
+    };
+
+    &node.style
+  }
+
+  fn set_unrounded_layout(&mut self, node_id: NodeId, layout: &Layout) {
+    let Some(node) = self.get_node_mut_ref(node_id) else {
+      unreachable!()
+    };
+
+    node.unrounded_layout = *layout;
+  }
+
+  fn resolve_calc_value(&self, val: *const (), basis: f32) -> f32 {
+    resolve_calc_value(val, basis)
+  }
+
+  fn compute_child_layout(&mut self, node: NodeId, inputs: LayoutInput) -> LayoutOutput {
+    if inputs.run_mode == RunMode::PerformHiddenLayout {
+      return compute_hidden_layout(self, node);
+    }
+
+    compute_cached_layout(self, node, inputs, |tree, node, inputs| {
+      let Some(node_data) = tree.get_node_ref(node) else {
+        unreachable!()
+      };
+
+      let display_mode = node_data.style.display;
+      let has_children = !node_data.children.is_empty();
+
+      match (display_mode, has_children) {
+        (taffy::Display::None, _) => compute_hidden_layout(tree, node),
+        (taffy::Display::Block, true) => compute_block_layout(tree, node, inputs),
+        (taffy::Display::Flex, true) => compute_flexbox_layout(tree, node, inputs),
+        (taffy::Display::Grid, true) => compute_grid_layout(tree, node, inputs),
+        (_, false) => {
+          let style = &node_data.style;
+          let measure_function = |known_dimensions, available_space| {
+            node_data
+              .render_node
+              .measure(available_space, known_dimensions, style)
+          };
+
+          compute_leaf_layout(
+            inputs,
+            style,
+            |val, basis| tree.resolve_calc_value(val, basis),
+            measure_function,
+          )
+        }
+      }
+    })
+  }
+}
+
+impl<N: Node<N>> CacheTree for NodeTree<'_, N> {
+  fn cache_get(
+    &self,
+    node_id: NodeId,
+    known_dimensions: Size<Option<f32>>,
+    available_space: Size<AvailableSpace>,
+    run_mode: RunMode,
+  ) -> Option<LayoutOutput> {
+    let Some(node) = self.get_node_ref(node_id) else {
+      unreachable!()
+    };
+
+    node.cache.get(known_dimensions, available_space, run_mode)
+  }
+
+  fn cache_store(
+    &mut self,
+    node_id: NodeId,
+    known_dimensions: Size<Option<f32>>,
+    available_space: Size<AvailableSpace>,
+    run_mode: RunMode,
+    layout_output: LayoutOutput,
+  ) {
+    let Some(node) = self.get_node_mut_ref(node_id) else {
+      unreachable!()
+    };
+
+    node
+      .cache
+      .store(known_dimensions, available_space, run_mode, layout_output);
+  }
+
+  fn cache_clear(&mut self, node_id: NodeId) {
+    let Some(node) = self.get_node_mut_ref(node_id) else {
+      unreachable!()
+    };
+
+    node.cache.clear();
+  }
+}
+
+impl<N: Node<N>> LayoutBlockContainer for NodeTree<'_, N> {
+  type BlockContainerStyle<'a>
+    = &'a Style
+  where
+    Self: 'a;
+  type BlockItemStyle<'a>
+    = &'a Style
+  where
+    Self: 'a;
+
+  fn get_block_container_style(&self, node_id: NodeId) -> Self::BlockContainerStyle<'_> {
+    self.get_core_container_style(node_id)
+  }
+
+  fn get_block_child_style(&self, child_node_id: NodeId) -> Self::BlockItemStyle<'_> {
+    self.get_core_container_style(child_node_id)
+  }
+}
+
+impl<N: Node<N>> LayoutFlexboxContainer for NodeTree<'_, N> {
+  type FlexboxContainerStyle<'a>
+    = &'a Style
+  where
+    Self: 'a;
+  type FlexboxItemStyle<'a>
+    = &'a Style
+  where
+    Self: 'a;
+
+  fn get_flexbox_container_style(&self, node_id: NodeId) -> Self::FlexboxContainerStyle<'_> {
+    self.get_core_container_style(node_id)
+  }
+
+  fn get_flexbox_child_style(&self, child_node_id: NodeId) -> Self::FlexboxItemStyle<'_> {
+    self.get_core_container_style(child_node_id)
+  }
+}
+
+impl<N: Node<N>> LayoutGridContainer for NodeTree<'_, N> {
+  type GridContainerStyle<'a>
+    = &'a Style
+  where
+    Self: 'a;
+  type GridItemStyle<'a>
+    = &'a Style
+  where
+    Self: 'a;
+
+  fn get_grid_container_style(&self, node_id: NodeId) -> Self::GridContainerStyle<'_> {
+    self.get_core_container_style(node_id)
+  }
+
+  fn get_grid_child_style(&self, child_node_id: NodeId) -> Self::GridItemStyle<'_> {
+    self.get_core_container_style(child_node_id)
+  }
+}
+
+impl<N: Node<N>> RoundTree for NodeTree<'_, N> {
+  fn get_unrounded_layout(&self, node_id: NodeId) -> Layout {
+    let Some(node) = self.get_node_ref(node_id) else {
+      unreachable!()
+    };
+
+    node.unrounded_layout
+  }
+
+  fn set_final_layout(&mut self, node_id: NodeId, layout: &Layout) {
+    let Some(node) = self.get_node_mut_ref(node_id) else {
+      unreachable!()
+    };
+
+    node.final_layout = *layout;
+  }
+}
+
+impl<'g, N: Node<N>> RenderTreeNode<'g, N> {
   pub(crate) fn draw_shell(&self, canvas: &mut Canvas, layout: Layout) -> Result<()> {
     let Some(node) = &self.node else {
       return Ok(());
@@ -78,7 +393,6 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
       _ => None,
     });
 
-    // Draw the inline layout without a callback first
     let positioned_inline_boxes =
       draw_inline_layout(&self.context, canvas, layout, inline_layout, &font_style)?;
 
@@ -87,7 +401,6 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
       layout.border.top + layout.padding.top,
     ) * self.context.transform;
 
-    // Then handle the inline boxes directly by zipping the node refs with their positioned boxes
     for (item, positioned) in boxes.zip(positioned_inline_boxes.iter()) {
       draw_inline_box(positioned, item, canvas, inline_transform)?;
     }
@@ -100,17 +413,14 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
 
   pub fn should_create_inline_layout(&self) -> bool {
     self.context.style.display == Display::Block
-      && self
-        .children
-        .as_ref()
-        .is_some_and(|children| !children.is_empty() && children.iter().all(NodeTree::is_inline))
+      && self.children.as_ref().is_some_and(|children| {
+        !children.is_empty() && children.iter().all(RenderTreeNode::is_inline)
+      })
   }
 
   pub fn from_node(parent_context: &RenderContext<'g>, node: N) -> Self {
     let mut tree = Self::from_node_impl(parent_context, node);
 
-    // https://www.w3.org/TR/css-display-3/#root
-    // The root element’s display type is always blockified.
     if tree.is_inline() {
       tree.context.style.display.blockify();
     }
@@ -136,7 +446,7 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
 
     style.make_computed(&sizing);
 
-    let mut context = RenderContext {
+    let mut render_context = RenderContext {
       style,
       current_color,
       fetched_resources: parent_context.fetched_resources.clone(),
@@ -148,48 +458,48 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
       Box::from_iter(
         children
           .into_iter()
-          .map(|child| Self::from_node_impl(&context, child)),
+          .map(|child| Self::from_node_impl(&render_context, child)),
       )
     });
 
     let Some(mut children) = children else {
       return Self {
-        context,
+        context: render_context,
         node: Some(node),
         children: None,
       };
     };
 
-    if context.style.display.should_blockify_children() {
+    if render_context.style.display.should_blockify_children() {
       for child in &mut children {
         child.context.style.display.blockify();
       }
 
       return Self {
-        context,
+        context: render_context,
         node: Some(node),
         children: Some(children),
       };
     }
 
-    let has_inline = children.iter().any(NodeTree::is_inline);
+    let has_inline = children.iter().any(RenderTreeNode::is_inline);
     let has_block = children.iter().any(|child| !child.is_inline());
-    let needs_anonymous_boxes = !context.style.display.is_inline() && has_inline && has_block;
+    let needs_anonymous_boxes =
+      !render_context.style.display.is_inline() && has_inline && has_block;
 
     if !needs_anonymous_boxes {
       return Self {
-        context,
+        context: render_context,
         node: Some(node),
         children: Some(children),
       };
     }
 
-    context.style.display = context.style.display.as_blockified();
+    render_context.style.display = render_context.style.display.as_blockified();
 
     let mut final_children = Vec::new();
     let mut inline_group = Vec::new();
 
-    // Anonymous block box style.
     let anonymous_box_style = InheritedStyle {
       display: Display::Block,
       ..InheritedStyle::default()
@@ -205,7 +515,7 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
         &mut inline_group,
         &mut final_children,
         &anonymous_box_style,
-        &context,
+        &render_context,
       );
 
       final_children.push(item);
@@ -215,47 +525,14 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
       &mut inline_group,
       &mut final_children,
       &anonymous_box_style,
-      &context,
+      &render_context,
     );
 
     Self {
-      context,
+      context: render_context,
       node: Some(node),
       children: Some(final_children.into_boxed_slice()),
     }
-  }
-
-  pub(crate) fn insert_into_taffy(
-    mut self,
-    tree: &mut TaffyTree<NodeTree<'g, N>>,
-  ) -> Result<NodeId> {
-    assert_ne!(
-      self.context.style.display,
-      Display::Inline,
-      "Inline nodes should be wrapped in anonymous block boxes"
-    );
-
-    if self.should_create_inline_layout() {
-      return Ok(
-        tree.new_leaf_with_context(self.context.style.to_taffy_style(&self.context), self)?,
-      );
-    }
-
-    let children = self.children.take();
-
-    let node_id =
-      tree.new_leaf_with_context(self.context.style.to_taffy_style(&self.context), self)?;
-
-    if let Some(children) = children {
-      let children_ids = children
-        .into_iter()
-        .map(|child| child.insert_into_taffy(tree))
-        .collect::<Result<Vec<_>>>()?;
-
-      tree.set_children(node_id, &children_ids)?;
-    }
-
-    Ok(node_id)
   }
 
   pub(crate) fn measure(
@@ -298,17 +575,17 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
 
   pub(crate) fn inline_items_iter(&self) -> InlineItemIterator<'_, 'g, N> {
     InlineItemIterator {
-      stack: vec![(self, 0)], // (node, depth)
+      stack: vec![(self, 0)],
       current_node_content: None,
     }
   }
 }
 
 fn flush_inline_group<'g, N: Node<N>>(
-  inline_group: &mut Vec<NodeTree<'g, N>>,
-  final_children: &mut Vec<NodeTree<'g, N>>,
+  inline_group: &mut Vec<RenderTreeNode<'g, N>>,
+  final_children: &mut Vec<RenderTreeNode<'g, N>>,
   anonymous_box_style: &InheritedStyle,
-  context: &RenderContext<'g>,
+  parent_render_context: &RenderContext<'g>,
 ) {
   if inline_group.is_empty() {
     return;
@@ -320,11 +597,11 @@ fn flush_inline_group<'g, N: Node<N>>(
       final_children.push(child);
     }
   } else {
-    final_children.push(NodeTree {
+    final_children.push(RenderTreeNode {
       context: RenderContext {
         style: anonymous_box_style.clone(),
-        fetched_resources: Default::default(), // anonymous box has nothing to render, so provide an empty map.
-        ..*context
+        fetched_resources: Default::default(),
+        ..*parent_render_context
       },
       children: Some(take(inline_group).into_boxed_slice()),
       node: None,
