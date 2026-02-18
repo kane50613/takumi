@@ -20,18 +20,7 @@ const ONE_PC_IN_PX: f32 = ONE_IN_PX / 6.0;
 
 #[derive(Default)]
 pub(crate) struct CalcArena {
-  linear_values: RwLock<CalcArenaValues>,
-}
-
-enum CalcArenaValues {
-  Mutable(Vec<CalcLinear>),
-  Frozen(Box<[CalcLinear]>),
-}
-
-impl Default for CalcArenaValues {
-  fn default() -> Self {
-    Self::Mutable(Vec::new())
-  }
+  linear_values: RwLock<Vec<CalcLinear>>,
 }
 
 impl CalcArena {
@@ -41,33 +30,8 @@ impl CalcArena {
       Err(poisoned) => poisoned.into_inner(),
     };
 
-    match &mut *linear_values {
-      CalcArenaValues::Mutable(values) => {
-        values.push(linear);
-        encode_linear_id(values.len())
-      }
-      CalcArenaValues::Frozen(values) => {
-        let mut mutable = Vec::with_capacity(values.len() + 1);
-        mutable.extend_from_slice(values);
-        mutable.push(linear);
-        let id = mutable.len();
-        *linear_values = CalcArenaValues::Mutable(mutable);
-        encode_linear_id(id)
-      }
-    }
-  }
-
-  pub(crate) fn freeze(&self) {
-    let mut linear_values = match self.linear_values.write() {
-      Ok(values) => values,
-      Err(poisoned) => poisoned.into_inner(),
-    };
-
-    let CalcArenaValues::Mutable(values) = &mut *linear_values else {
-      return;
-    };
-
-    *linear_values = CalcArenaValues::Frozen(std::mem::take(values).into_boxed_slice());
+    linear_values.push(linear);
+    encode_linear_id(linear_values.len())
   }
 
   pub(crate) fn resolve_calc_value(&self, val: *const (), basis: f32) -> f32 {
@@ -79,16 +43,10 @@ impl CalcArena {
       Ok(values) => values,
       Err(poisoned) => poisoned.into_inner(),
     };
-    match &*linear_values {
-      CalcArenaValues::Mutable(values) => values
-        .get(id - 1)
-        .map(|linear| linear.resolve(basis))
-        .unwrap_or(0.0),
-      CalcArenaValues::Frozen(values) => values
-        .get(id - 1)
-        .map(|linear| linear.resolve(basis))
-        .unwrap_or(0.0),
-    }
+    linear_values
+      .get(id - 1)
+      .map(|linear| linear.resolve(basis))
+      .unwrap_or(0.0)
   }
 }
 
