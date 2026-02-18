@@ -459,11 +459,13 @@ impl<'g, N: Node<N>> RenderTreeNode<'g, N> {
     style.make_computed(&sizing);
 
     let mut render_context = RenderContext {
+      global: parent_context.global,
+      transform: parent_context.transform,
       style,
       current_color,
+      draw_debug_border: parent_context.draw_debug_border,
       fetched_resources: parent_context.fetched_resources.clone(),
       sizing,
-      ..parent_context.clone()
     };
 
     let children = node.take_children().map(|children| {

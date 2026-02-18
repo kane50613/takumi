@@ -97,6 +97,9 @@ fn compute_taffy_layout<'g, N: Node<N>>(
     render_context.sizing.viewport.into(),
   );
   round_layout(&mut taffy, root_node_id);
+  if let Some(root) = taffy.get_render_node(root_node_id) {
+    root.context.sizing.calc_arena.freeze();
+  }
 
   Ok(taffy)
 }

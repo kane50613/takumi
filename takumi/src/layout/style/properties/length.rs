@@ -11,6 +11,13 @@ use crate::{
   rendering::Sizing,
 };
 
+const ONE_CM_IN_PX: f32 = 96.0 / 2.54;
+const ONE_MM_IN_PX: f32 = ONE_CM_IN_PX / 10.0;
+const ONE_Q_IN_PX: f32 = ONE_CM_IN_PX / 40.0;
+const ONE_IN_PX: f32 = 2.54 * ONE_CM_IN_PX;
+const ONE_PT_IN_PX: f32 = ONE_IN_PX / 72.0;
+const ONE_PC_IN_PX: f32 = ONE_IN_PX / 6.0;
+
 #[derive(Default)]
 pub(crate) struct CalcArena {
   linear_values: RwLock<CalcArenaValues>,
@@ -40,16 +47,17 @@ impl CalcArena {
         encode_linear_id(values.len())
       }
       CalcArenaValues::Frozen(values) => {
-        let mut expanded = values.to_vec();
-        expanded.push(linear);
-        let id = expanded.len();
-        *linear_values = CalcArenaValues::Frozen(expanded.into_boxed_slice());
+        let mut mutable = Vec::with_capacity(values.len() + 1);
+        mutable.extend_from_slice(values);
+        mutable.push(linear);
+        let id = mutable.len();
+        *linear_values = CalcArenaValues::Mutable(mutable);
         encode_linear_id(id)
       }
     }
   }
 
-  fn freeze(&self) {
+  pub(crate) fn freeze(&self) {
     let mut linear_values = match self.linear_values.write() {
       Ok(values) => values,
       Err(poisoned) => poisoned.into_inner(),
@@ -67,30 +75,31 @@ impl CalcArena {
       return 0.0;
     };
 
-    self.freeze();
-
     let linear_values = match self.linear_values.read() {
       Ok(values) => values,
       Err(poisoned) => poisoned.into_inner(),
     };
-    let values = match &*linear_values {
-      CalcArenaValues::Frozen(values) => values,
-      CalcArenaValues::Mutable(_) => return 0.0,
-    };
-
-    values
-      .get(id - 1)
-      .map(|linear| linear.resolve(basis))
-      .unwrap_or(0.0)
+    match &*linear_values {
+      CalcArenaValues::Mutable(values) => values
+        .get(id - 1)
+        .map(|linear| linear.resolve(basis))
+        .unwrap_or(0.0),
+      CalcArenaValues::Frozen(values) => values
+        .get(id - 1)
+        .map(|linear| linear.resolve(basis))
+        .unwrap_or(0.0),
+    }
   }
 }
 
 fn encode_linear_id(id: usize) -> *const () {
+  // The low 3 bits are reserved because aligned pointers keep them as zero.
   ((id << 3) as *const ()).cast()
 }
 
 fn decode_linear_id(ptr: *const ()) -> Option<usize> {
   let raw = ptr as usize;
+  // `raw != 0` filters out the null pointer case.
   (raw != 0).then_some(raw >> 3)
 }
 
@@ -285,13 +294,6 @@ impl CalcFormula {
   }
 
   fn resolve(self, sizing: &Sizing) -> CalcLinear {
-    const ONE_CM_IN_PX: f32 = 96.0 / 2.54;
-    const ONE_MM_IN_PX: f32 = ONE_CM_IN_PX / 10.0;
-    const ONE_Q_IN_PX: f32 = ONE_CM_IN_PX / 40.0;
-    const ONE_IN_PX: f32 = 2.54 * ONE_CM_IN_PX;
-    const ONE_PT_IN_PX: f32 = ONE_IN_PX / 72.0;
-    const ONE_PC_IN_PX: f32 = ONE_IN_PX / 6.0;
-
     CalcLinear {
       px: self.px * sizing.viewport.device_pixel_ratio
         + self.rem * sizing.viewport.font_size * sizing.viewport.device_pixel_ratio
@@ -677,13 +679,6 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
   }
 
   pub(crate) fn to_px(self, sizing: &Sizing, percentage_full_px: f32) -> f32 {
-    const ONE_CM_IN_PX: f32 = 96.0 / 2.54;
-    const ONE_MM_IN_PX: f32 = ONE_CM_IN_PX / 10.0;
-    const ONE_Q_IN_PX: f32 = ONE_CM_IN_PX / 40.0;
-    const ONE_IN_PX: f32 = 2.54 * ONE_CM_IN_PX;
-    const ONE_PT_IN_PX: f32 = ONE_IN_PX / 72.0;
-    const ONE_PC_IN_PX: f32 = ONE_IN_PX / 6.0;
-
     let value = match self {
       Length::Auto => 0.0,
       Length::Px(value) => value,

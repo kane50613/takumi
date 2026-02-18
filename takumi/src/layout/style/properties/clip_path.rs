@@ -88,22 +88,6 @@ impl MakeComputed for InsetShape {
   }
 }
 
-/// Represents a circle() shape.
-#[derive(Debug, Clone, PartialEq)]
-pub struct CircleShape {
-  /// The radius of the circle
-  pub radius: ShapeRadius,
-  /// The center position of the circle
-  pub position: ShapePosition,
-}
-
-impl MakeComputed for CircleShape {
-  fn make_computed(&mut self, sizing: &Sizing) {
-    self.radius.make_computed(sizing);
-    self.position.make_computed(sizing);
-  }
-}
-
 /// Represents an ellipse() shape.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EllipseShape {
