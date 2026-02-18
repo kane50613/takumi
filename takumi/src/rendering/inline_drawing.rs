@@ -24,6 +24,22 @@ use crate::{
 };
 
 const UNDERLINE_SKIP_INK_ALPHA_THRESHOLD: u8 = 16;
+/// Empirical multiplier used for extending skip-ink bounds around detected glyph ink.
+const SKIP_PADDING_RATIO: f32 = 0.6;
+/// Empirical lower bound for skip-ink padding on thin underlines.
+const SKIP_PADDING_MIN: f32 = 1.0;
+/// Empirical upper bound for skip-ink padding on thick underlines.
+const SKIP_PADDING_MAX: f32 = 3.0;
+/// Empirical multiplier controlling when adjacent skip ranges are merged.
+const SMOOTH_GAP_RATIO: f32 = 0.28;
+/// Empirical lower bound for skip-range merge smoothing.
+const SMOOTH_GAP_MIN: f32 = 0.5;
+/// Empirical upper bound for skip-range merge smoothing.
+const SMOOTH_GAP_MAX: f32 = 1.5;
+/// Empirical multiplier for minimum visible underline segment between skipped ranges.
+const MIN_VISIBLE_SEGMENT_RATIO: f32 = 0.8;
+/// Empirical floor for minimum visible underline segment.
+const MIN_VISIBLE_SEGMENT_MIN: f32 = 0.75;
 
 #[derive(Clone, Copy)]
 struct GlyphLocalBounds {
@@ -112,6 +128,18 @@ fn draw_decoration_segment(
   );
 }
 
+fn compute_skip_padding(size: f32) -> f32 {
+  (size * SKIP_PADDING_RATIO).clamp(SKIP_PADDING_MIN, SKIP_PADDING_MAX)
+}
+
+fn compute_smooth_gap(size: f32) -> f32 {
+  (size * SMOOTH_GAP_RATIO).clamp(SMOOTH_GAP_MIN, SMOOTH_GAP_MAX)
+}
+
+fn compute_min_visible_segment(size: f32) -> f32 {
+  (size * MIN_VISIBLE_SEGMENT_RATIO).max(MIN_VISIBLE_SEGMENT_MIN)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn draw_underline_with_skip_ink(
   canvas: &mut Canvas,
@@ -127,9 +155,9 @@ fn draw_underline_with_skip_ink(
   let run_end_x = run_start_x + glyph_run.advance();
   let line_top = layout.border.top + layout.padding.top + offset;
   let line_bottom = line_top + size;
-  let skip_padding = (size * 0.6).clamp(1.0, 3.0);
-  let smooth_gap = (size * 0.28).clamp(0.5, 1.5);
-  let min_visible_segment = (size * 0.8).max(0.75);
+  let skip_padding = compute_skip_padding(size);
+  let smooth_gap = compute_smooth_gap(size);
+  let min_visible_segment = compute_min_visible_segment(size);
 
   let mut skip_ranges = Vec::new();
 
@@ -165,14 +193,30 @@ fn draw_underline_with_skip_ink(
     let mut hit_min_x: Option<u32> = None;
     let mut hit_max_x: Option<u32> = None;
     for y in y_start as u32..y_end as u32 {
+      let mut row_min_x: Option<u32> = None;
       for x in 0..glyph_data.width {
         let alpha = glyph_data.alpha[mask_index_from_coord(x, y, glyph_data.width)];
-        if alpha <= UNDERLINE_SKIP_INK_ALPHA_THRESHOLD {
-          continue;
+        if alpha > UNDERLINE_SKIP_INK_ALPHA_THRESHOLD {
+          row_min_x = Some(x);
+          break;
         }
-        hit_min_x = Some(hit_min_x.map_or(x, |min_x| min_x.min(x)));
-        hit_max_x = Some(hit_max_x.map_or(x, |max_x| max_x.max(x)));
       }
+
+      let Some(row_min_x) = row_min_x else {
+        continue;
+      };
+
+      let mut row_max_x = row_min_x;
+      for x in (row_min_x..glyph_data.width).rev() {
+        let alpha = glyph_data.alpha[mask_index_from_coord(x, y, glyph_data.width)];
+        if alpha > UNDERLINE_SKIP_INK_ALPHA_THRESHOLD {
+          row_max_x = x;
+          break;
+        }
+      }
+
+      hit_min_x = Some(hit_min_x.map_or(row_min_x, |min_x| min_x.min(row_min_x)));
+      hit_max_x = Some(hit_max_x.map_or(row_max_x, |max_x| max_x.max(row_max_x)));
     }
 
     let (hit_min_x, hit_max_x) = match (hit_min_x, hit_max_x) {
