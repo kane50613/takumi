@@ -56,8 +56,8 @@ impl<'g, N: Node<N>> NodeTree<'g, N> {
     Ok(&self.get_node(node_id)?.final_layout)
   }
 
-  pub(crate) fn children(&self, node_id: NodeId) -> std::result::Result<Vec<NodeId>, TaffyError> {
-    Ok(self.get_node(node_id)?.children.to_vec())
+  pub(crate) fn children(&self, node_id: NodeId) -> std::result::Result<&[NodeId], TaffyError> {
+    Ok(&self.get_node(node_id)?.children)
   }
 
   pub(crate) fn get_render_node(&self, node_id: NodeId) -> Option<&RenderTreeNode<'g, N>> {

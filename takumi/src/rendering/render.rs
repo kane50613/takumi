@@ -80,13 +80,10 @@ pub struct MeasuredNode {
 fn compute_taffy_layout<'g, N: Node<N>>(
   options: RenderOptions<'g, N>,
 ) -> Result<NodeTree<'g, N>, crate::Error> {
-  let mut render_context = RenderContext {
+  let render_context = RenderContext {
     draw_debug_border: options.draw_debug_border,
     ..RenderContext::new(options.global, options.viewport, options.fetched_resources)
   };
-
-  // Root node should always be block
-  render_context.style.display.blockify();
 
   let mut taffy = NodeTree::from_node(&render_context, options.node);
   let root_node_id = taffy.root_node_id();
@@ -200,7 +197,7 @@ fn collect_measure_result<'g, Nodes: Node<Nodes>>(
   }
 
   for child_id in taffy.children(node_id)? {
-    children.push(collect_measure_result(taffy, child_id, local_transform)?);
+    children.push(collect_measure_result(taffy, *child_id, local_transform)?);
   }
 
   Ok(MeasuredNode {
@@ -390,8 +387,10 @@ fn render_node<'g, Nodes: Node<Nodes>>(
   if should_create_inline {
     node.draw_inline(canvas, layout)?;
   } else {
-    for child_id in taffy.children(node_id)? {
-      render_node(taffy, child_id, canvas, transform)?;
+    let children = taffy.children(node_id)?.to_vec();
+
+    for child_id in children.iter() {
+      render_node(taffy, *child_id, canvas, transform)?;
     }
   }
 
