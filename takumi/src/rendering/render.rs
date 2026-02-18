@@ -373,7 +373,7 @@ fn render_node<'g, Nodes: Node<Nodes>>(
   }
 
   // Extract needed properties from node before dropping it
-  let sizing = node.context.sizing;
+  let sizing = node.context.sizing.clone();
   let current_color = node.context.current_color;
   let mut filters = node.context.style.filter.clone();
   let opacity = node.context.style.opacity;

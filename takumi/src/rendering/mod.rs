@@ -31,18 +31,20 @@ use crate::{
   GlobalContext,
   layout::{
     Viewport,
-    style::{Affine, Color, InheritedStyle},
+    style::{Affine, CalcArena, Color, InheritedStyle},
   },
   resources::image::ImageSource,
 };
 
 /// The sizing context used for length value resolving.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) struct Sizing {
   /// The viewport for the image renderer.
   pub(crate) viewport: Viewport,
   /// The font size in pixels.
   pub(crate) font_size: f32,
+  /// The calc arena shared by the current layout tree.
+  pub(crate) calc_arena: Arc<CalcArena>,
 }
 
 /// The context for the internal rendering. You should not construct this directly.
@@ -75,6 +77,7 @@ impl<'g> RenderContext<'g> {
       sizing: Sizing {
         viewport,
         font_size: viewport.font_size,
+        calc_arena: Arc::new(CalcArena::default()),
       },
       transform: Affine::IDENTITY,
       current_color: Color::black(),

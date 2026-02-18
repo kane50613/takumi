@@ -454,7 +454,7 @@ impl InheritedStyle {
   #[inline]
   fn convert_template_components(
     components: &Option<GridTemplateComponents>,
-    context: &RenderContext,
+    sizing: &Sizing,
   ) -> (Vec<taffy::GridTemplateComponent<String>>, Vec<Vec<String>>) {
     let mut track_components: Vec<taffy::GridTemplateComponent<String>> = Vec::new();
     let mut line_name_sets: Vec<Vec<String>> = Vec::new();
@@ -473,7 +473,7 @@ impl InheritedStyle {
             line_name_sets.push(std::mem::take(&mut pending_line_names));
             // Push the track component
             track_components.push(taffy::GridTemplateComponent::Single(
-              track_size.to_min_max(&context.sizing),
+              track_size.to_min_max(sizing),
             ));
           }
           GridTemplateComponent::Repeat(repetition, tracks) => {
@@ -481,10 +481,8 @@ impl InheritedStyle {
             line_name_sets.push(std::mem::take(&mut pending_line_names));
 
             // Build repetition
-            let track_sizes: Vec<taffy::TrackSizingFunction> = tracks
-              .iter()
-              .map(|t| t.size.to_min_max(&context.sizing))
-              .collect();
+            let track_sizes: Vec<taffy::TrackSizingFunction> =
+              tracks.iter().map(|t| t.size.to_min_max(sizing)).collect();
 
             // Build inner line names: one per line inside the repeat, including a trailing set
             let mut inner_line_names: Vec<Vec<String>> =
@@ -644,7 +642,7 @@ impl InheritedStyle {
       .to_px(&context.sizing, context.sizing.font_size);
 
     SizedFontStyle {
-      sizing: context.sizing,
+      sizing: context.sizing.clone(),
       parent: self,
       line_height,
       stroke_width: resolved_stroke_width,
@@ -684,16 +682,16 @@ impl InheritedStyle {
     }
   }
 
-  pub(crate) fn to_taffy_style(&self, context: &RenderContext) -> taffy::style::Style {
+  pub(crate) fn to_taffy_style(&self, context: &RenderContext) -> taffy::Style {
     // Convert grid templates and associated line names
     let (grid_template_columns, grid_template_column_names) =
-      Self::convert_template_components(&self.grid_template_columns, context);
+      Self::convert_template_components(&self.grid_template_columns, &context.sizing);
     let (grid_template_rows, grid_template_row_names) =
-      Self::convert_template_components(&self.grid_template_rows, context);
+      Self::convert_template_components(&self.grid_template_rows, &context.sizing);
 
     let border_style = self.border_style.unwrap_or(self.border.style);
 
-    taffy::style::Style {
+    taffy::Style {
       box_sizing: self.box_sizing.into(),
       size: Size {
         width: self.width.resolve_to_dimension(&context.sizing),
@@ -787,6 +785,8 @@ impl InheritedStyle {
 
 #[cfg(test)]
 mod tests {
+  use std::sync::Arc;
+
   use taffy::Size;
 
   use crate::{
@@ -929,6 +929,7 @@ mod tests {
     let sizing = Sizing {
       viewport: Viewport::new(Some(1200), Some(630)),
       font_size: 16.0,
+      calc_arena: Arc::new(CalcArena::default()),
     };
     let border_box = Size {
       width: 200.0,
@@ -976,12 +977,14 @@ mod tests {
     parent.make_computed(&Sizing {
       viewport: Viewport::new(Some(1200), Some(630)),
       font_size: 32.0,
+      calc_arena: Arc::new(CalcArena::default()),
     });
 
     let inherited_child = Style::default().inherit(&parent);
     let inherited_child_sizing = Sizing {
       viewport: Viewport::new(Some(1200), Some(630)),
       font_size: 32.0,
+      calc_arena: Arc::new(CalcArena::default()),
     };
     let inherited_font_size = inherited_child
       .font_size
@@ -997,6 +1000,7 @@ mod tests {
     let child_sizing = Sizing {
       viewport: Viewport::new(Some(1200), Some(630)),
       font_size: 10.0,
+      calc_arena: Arc::new(CalcArena::default()),
     };
 
     let inherited_letter_spacing = child_with_own_font_size

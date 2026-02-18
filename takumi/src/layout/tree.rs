@@ -10,7 +10,7 @@ use crate::{
       create_inline_layout, measure_inline_layout,
     },
     node::Node,
-    style::{Affine, Display, InheritedStyle, resolve_calc_value},
+    style::{Affine, Display, InheritedStyle},
   },
   rendering::{
     Canvas, MaxHeight, RenderContext, Sizing,
@@ -182,7 +182,16 @@ impl<N: Node<N>> LayoutPartialTree for NodeTree<'_, N> {
   }
 
   fn resolve_calc_value(&self, val: *const (), basis: f32) -> f32 {
-    resolve_calc_value(val, basis)
+    let Some(root) = self.nodes.first() else {
+      return 0.0;
+    };
+
+    root
+      .render_node
+      .context
+      .sizing
+      .calc_arena
+      .resolve_calc_value(val, basis)
   }
 
   fn compute_child_layout(&mut self, node: NodeId, inputs: LayoutInput) -> LayoutOutput {
@@ -441,7 +450,7 @@ impl<'g, N: Node<N>> RenderTreeNode<'g, N> {
 
     let sizing = Sizing {
       font_size,
-      ..parent_context.sizing
+      ..parent_context.sizing.clone()
     };
 
     style.make_computed(&sizing);
@@ -451,7 +460,7 @@ impl<'g, N: Node<N>> RenderTreeNode<'g, N> {
       current_color,
       fetched_resources: parent_context.fetched_resources.clone(),
       sizing,
-      ..*parent_context
+      ..parent_context.clone()
     };
 
     let children = node.take_children().map(|children| {
@@ -601,7 +610,7 @@ fn flush_inline_group<'g, N: Node<N>>(
       context: RenderContext {
         style: anonymous_box_style.clone(),
         fetched_resources: Default::default(),
-        ..*parent_render_context
+        ..parent_render_context.clone()
       },
       children: Some(take(inline_group).into_boxed_slice()),
       node: None,

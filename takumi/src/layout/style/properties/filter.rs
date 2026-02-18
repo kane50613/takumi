@@ -540,8 +540,10 @@ impl<'i> FromCss<'i> for Filter {
 
 #[cfg(test)]
 mod tests {
+  use std::sync::Arc;
+
   use super::*;
-  use crate::layout::style::{Color, ColorInput, Length::Px};
+  use crate::layout::style::{CalcArena, Color, ColorInput, Length::Px};
 
   #[test]
   fn test_parse_blur_filter() {
@@ -607,6 +609,7 @@ mod tests {
     let sizing = Sizing {
       viewport,
       font_size: 16.0,
+      calc_arena: Arc::new(CalcArena::default()),
     };
     apply_filters(&mut image, &sizing, Color::black(), filters.iter());
 

@@ -1,13 +1,6 @@
-use std::{
-  ops::Neg,
-  sync::{
-    OnceLock,
-    atomic::{AtomicU64, Ordering},
-  },
-};
+use std::{ops::Neg, sync::RwLock};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
-use dashmap::DashMap;
 use taffy::{CompactLength, Dimension, LengthPercentage, LengthPercentageAuto};
 
 use crate::{
@@ -18,17 +11,92 @@ use crate::{
   rendering::Sizing,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-/// Internal handle used by `Length::Calc`.
-pub enum CalcHandle {
-  /// Internal handle for a parsed calc expression.
-  Expr(u64),
-  /// Internal handle for a resolved linear calc expression.
-  Linear(u64),
+#[derive(Default)]
+pub(crate) struct CalcArena {
+  linear_values: RwLock<CalcArenaValues>,
 }
 
-#[derive(Debug, Clone, Copy)]
-struct CalcLinear {
+enum CalcArenaValues {
+  Mutable(Vec<CalcLinear>),
+  Frozen(Box<[CalcLinear]>),
+}
+
+impl Default for CalcArenaValues {
+  fn default() -> Self {
+    Self::Mutable(Vec::new())
+  }
+}
+
+impl CalcArena {
+  fn register_linear(&self, linear: CalcLinear) -> *const () {
+    let mut linear_values = match self.linear_values.write() {
+      Ok(values) => values,
+      Err(poisoned) => poisoned.into_inner(),
+    };
+
+    match &mut *linear_values {
+      CalcArenaValues::Mutable(values) => {
+        values.push(linear);
+        encode_linear_id(values.len())
+      }
+      CalcArenaValues::Frozen(values) => {
+        let mut expanded = values.to_vec();
+        expanded.push(linear);
+        let id = expanded.len();
+        *linear_values = CalcArenaValues::Frozen(expanded.into_boxed_slice());
+        encode_linear_id(id)
+      }
+    }
+  }
+
+  fn freeze(&self) {
+    let mut linear_values = match self.linear_values.write() {
+      Ok(values) => values,
+      Err(poisoned) => poisoned.into_inner(),
+    };
+
+    let CalcArenaValues::Mutable(values) = &mut *linear_values else {
+      return;
+    };
+
+    *linear_values = CalcArenaValues::Frozen(std::mem::take(values).into_boxed_slice());
+  }
+
+  pub(crate) fn resolve_calc_value(&self, val: *const (), basis: f32) -> f32 {
+    let Some(id) = decode_linear_id(val) else {
+      return 0.0;
+    };
+
+    self.freeze();
+
+    let linear_values = match self.linear_values.read() {
+      Ok(values) => values,
+      Err(poisoned) => poisoned.into_inner(),
+    };
+    let values = match &*linear_values {
+      CalcArenaValues::Frozen(values) => values,
+      CalcArenaValues::Mutable(_) => return 0.0,
+    };
+
+    values
+      .get(id - 1)
+      .map(|linear| linear.resolve(basis))
+      .unwrap_or(0.0)
+  }
+}
+
+fn encode_linear_id(id: usize) -> *const () {
+  ((id << 3) as *const ()).cast()
+}
+
+fn decode_linear_id(ptr: *const ()) -> Option<usize> {
+  let raw = ptr as usize;
+  (raw != 0).then_some(raw >> 3)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+/// Internal linear form of a `calc(...)` expression: `px + percent * basis`.
+pub struct CalcLinear {
   px: f32,
   percent: f32,
 }
@@ -41,10 +109,144 @@ impl CalcLinear {
     }
   }
 
+  fn resolve(self, basis: f32) -> f32 {
+    self.px + self.percent * basis
+  }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+/// Internal symbolic form of a `calc(...)` expression before sizing is known.
+pub struct CalcFormula {
+  px: f32,
+  percent: f32,
+  rem: f32,
+  em: f32,
+  vh: f32,
+  vw: f32,
+  cm: f32,
+  mm: f32,
+  inch: f32,
+  q: f32,
+  pt: f32,
+  pc: f32,
+}
+
+impl CalcFormula {
+  fn px(value: f32) -> Self {
+    Self {
+      px: value,
+      ..Default::default()
+    }
+  }
+
+  fn percentage(value: f32) -> Self {
+    Self {
+      percent: value,
+      ..Default::default()
+    }
+  }
+
+  fn rem(value: f32) -> Self {
+    Self {
+      rem: value,
+      ..Default::default()
+    }
+  }
+
+  fn em(value: f32) -> Self {
+    Self {
+      em: value,
+      ..Default::default()
+    }
+  }
+
+  fn vh(value: f32) -> Self {
+    Self {
+      vh: value,
+      ..Default::default()
+    }
+  }
+
+  fn vw(value: f32) -> Self {
+    Self {
+      vw: value,
+      ..Default::default()
+    }
+  }
+
+  fn cm(value: f32) -> Self {
+    Self {
+      cm: value,
+      ..Default::default()
+    }
+  }
+
+  fn mm(value: f32) -> Self {
+    Self {
+      mm: value,
+      ..Default::default()
+    }
+  }
+
+  fn inch(value: f32) -> Self {
+    Self {
+      inch: value,
+      ..Default::default()
+    }
+  }
+
+  fn q(value: f32) -> Self {
+    Self {
+      q: value,
+      ..Default::default()
+    }
+  }
+
+  fn pt(value: f32) -> Self {
+    Self {
+      pt: value,
+      ..Default::default()
+    }
+  }
+
+  fn pc(value: f32) -> Self {
+    Self {
+      pc: value,
+      ..Default::default()
+    }
+  }
+
+  fn neg(self) -> Self {
+    Self {
+      px: -self.px,
+      percent: -self.percent,
+      rem: -self.rem,
+      em: -self.em,
+      vh: -self.vh,
+      vw: -self.vw,
+      cm: -self.cm,
+      mm: -self.mm,
+      inch: -self.inch,
+      q: -self.q,
+      pt: -self.pt,
+      pc: -self.pc,
+    }
+  }
+
   fn add(self, rhs: Self) -> Self {
     Self {
       px: self.px + rhs.px,
       percent: self.percent + rhs.percent,
+      rem: self.rem + rhs.rem,
+      em: self.em + rhs.em,
+      vh: self.vh + rhs.vh,
+      vw: self.vw + rhs.vw,
+      cm: self.cm + rhs.cm,
+      mm: self.mm + rhs.mm,
+      inch: self.inch + rhs.inch,
+      q: self.q + rhs.q,
+      pt: self.pt + rhs.pt,
+      pc: self.pc + rhs.pc,
     }
   }
 
@@ -52,6 +254,16 @@ impl CalcLinear {
     Self {
       px: self.px - rhs.px,
       percent: self.percent - rhs.percent,
+      rem: self.rem - rhs.rem,
+      em: self.em - rhs.em,
+      vh: self.vh - rhs.vh,
+      vw: self.vw - rhs.vw,
+      cm: self.cm - rhs.cm,
+      mm: self.mm - rhs.mm,
+      inch: self.inch - rhs.inch,
+      q: self.q - rhs.q,
+      pt: self.pt - rhs.pt,
+      pc: self.pc - rhs.pc,
     }
   }
 
@@ -59,170 +271,182 @@ impl CalcLinear {
     Self {
       px: self.px * factor,
       percent: self.percent * factor,
+      rem: self.rem * factor,
+      em: self.em * factor,
+      vh: self.vh * factor,
+      vw: self.vw * factor,
+      cm: self.cm * factor,
+      mm: self.mm * factor,
+      inch: self.inch * factor,
+      q: self.q * factor,
+      pt: self.pt * factor,
+      pc: self.pc * factor,
     }
   }
 
-  fn resolve(self, basis: f32) -> f32 {
-    self.px + self.percent * basis
+  fn resolve(self, sizing: &Sizing) -> CalcLinear {
+    const ONE_CM_IN_PX: f32 = 96.0 / 2.54;
+    const ONE_MM_IN_PX: f32 = ONE_CM_IN_PX / 10.0;
+    const ONE_Q_IN_PX: f32 = ONE_CM_IN_PX / 40.0;
+    const ONE_IN_PX: f32 = 2.54 * ONE_CM_IN_PX;
+    const ONE_PT_IN_PX: f32 = ONE_IN_PX / 72.0;
+    const ONE_PC_IN_PX: f32 = ONE_IN_PX / 6.0;
+
+    CalcLinear {
+      px: self.px
+        + self.rem * sizing.viewport.font_size * sizing.viewport.device_pixel_ratio
+        + self.em * sizing.font_size
+        + self.vh * sizing.viewport.height.unwrap_or_default() as f32 / 100.0
+        + self.vw * sizing.viewport.width.unwrap_or_default() as f32 / 100.0
+        + self.cm * ONE_CM_IN_PX * sizing.viewport.device_pixel_ratio
+        + self.mm * ONE_MM_IN_PX * sizing.viewport.device_pixel_ratio
+        + self.inch * ONE_IN_PX * sizing.viewport.device_pixel_ratio
+        + self.q * ONE_Q_IN_PX * sizing.viewport.device_pixel_ratio
+        + self.pt * ONE_PT_IN_PX * sizing.viewport.device_pixel_ratio
+        + self.pc * ONE_PC_IN_PX * sizing.viewport.device_pixel_ratio,
+      percent: self.percent,
+    }
   }
 }
 
-#[derive(Debug, Clone)]
-enum CalcExpr {
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum CalcValue {
   Number(f32),
-  Length(CalcLength),
-  Add(Box<CalcExpr>, Box<CalcExpr>),
-  Sub(Box<CalcExpr>, Box<CalcExpr>),
-  Mul(Box<CalcExpr>, Box<CalcExpr>),
-  Div(Box<CalcExpr>, Box<CalcExpr>),
+  Formula(CalcFormula),
 }
 
-#[derive(Debug, Clone)]
-enum CalcEval {
-  Number(f32),
+#[derive(Debug, Clone, Copy, PartialEq)]
+/// Internal handle used by `Length::Calc`.
+pub enum CalcHandle {
+  /// Internal handle for a parsed calc formula.
+  Formula(CalcFormula),
+  /// Internal handle for a resolved linear calc expression.
   Linear(CalcLinear),
 }
 
-#[derive(Debug, Clone, Copy)]
-enum CalcLength {
-  Percentage(f32),
-  Rem(f32),
-  Em(f32),
-  Vh(f32),
-  Vw(f32),
-  Cm(f32),
-  Mm(f32),
-  In(f32),
-  Q(f32),
-  Pt(f32),
-  Pc(f32),
-  Px(f32),
-}
-
-static NEXT_EXPR_ID: AtomicU64 = AtomicU64::new(1);
-static NEXT_LINEAR_ID: AtomicU64 = AtomicU64::new(1);
-static CALC_EXPRS: OnceLock<DashMap<u64, CalcExpr>> = OnceLock::new();
-static CALC_LINEAR: OnceLock<DashMap<u64, CalcLinear>> = OnceLock::new();
-
-fn calc_exprs() -> &'static DashMap<u64, CalcExpr> {
-  CALC_EXPRS.get_or_init(DashMap::new)
-}
-
-fn calc_linear() -> &'static DashMap<u64, CalcLinear> {
-  CALC_LINEAR.get_or_init(DashMap::new)
-}
-
-fn register_expr(expr: CalcExpr) -> u64 {
-  let id = NEXT_EXPR_ID.fetch_add(1, Ordering::Relaxed);
-  calc_exprs().insert(id, expr);
-  id
-}
-
-fn register_linear(linear: CalcLinear) -> u64 {
-  let id = NEXT_LINEAR_ID.fetch_add(1, Ordering::Relaxed);
-  calc_linear().insert(id, linear);
-  id
-}
-
-fn linear_ptr(id: u64) -> *const () {
-  ((id as usize) << 3) as *const ()
-}
-
-fn linear_id_from_ptr(ptr: *const ()) -> Option<u64> {
-  let raw = ptr as usize;
-  (raw != 0).then_some((raw >> 3) as u64)
-}
-
-pub(crate) fn resolve_calc_value(val: *const (), basis: f32) -> f32 {
-  let Some(id) = linear_id_from_ptr(val) else {
-    return 0.0;
-  };
-
-  calc_linear()
-    .get(&id)
-    .map(|linear| linear.resolve(basis))
-    .unwrap_or(0.0)
-}
-
-fn parse_calc_sum<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcExpr> {
-  let mut expr = parse_calc_product(input)?;
+fn parse_calc_sum<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcValue> {
+  let mut value = parse_calc_product(input)?;
 
   loop {
     if input.try_parse(|parser| parser.expect_delim('+')).is_ok() {
       let rhs = parse_calc_product(input)?;
-      expr = CalcExpr::Add(Box::new(expr), Box::new(rhs));
+      value = match (value, rhs) {
+        (CalcValue::Number(lhs), CalcValue::Number(rhs)) => CalcValue::Number(lhs + rhs),
+        (CalcValue::Formula(lhs), CalcValue::Formula(rhs)) => CalcValue::Formula(lhs.add(rhs)),
+        _ => {
+          return Err(<Length as FromCss<'i>>::unexpected_token_error(
+            input.current_source_location(),
+            &Token::Delim('+'),
+          ));
+        }
+      };
       continue;
     }
 
     if input.try_parse(|parser| parser.expect_delim('-')).is_ok() {
       let rhs = parse_calc_product(input)?;
-      expr = CalcExpr::Sub(Box::new(expr), Box::new(rhs));
+      value = match (value, rhs) {
+        (CalcValue::Number(lhs), CalcValue::Number(rhs)) => CalcValue::Number(lhs - rhs),
+        (CalcValue::Formula(lhs), CalcValue::Formula(rhs)) => CalcValue::Formula(lhs.sub(rhs)),
+        _ => {
+          return Err(<Length as FromCss<'i>>::unexpected_token_error(
+            input.current_source_location(),
+            &Token::Delim('-'),
+          ));
+        }
+      };
       continue;
     }
 
     break;
   }
 
-  Ok(expr)
+  Ok(value)
 }
 
-fn parse_calc_product<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcExpr> {
-  let mut expr = parse_calc_factor(input)?;
+fn parse_calc_product<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcValue> {
+  let mut value = parse_calc_factor(input)?;
 
   loop {
     if input.try_parse(|parser| parser.expect_delim('*')).is_ok() {
       let rhs = parse_calc_factor(input)?;
-      expr = CalcExpr::Mul(Box::new(expr), Box::new(rhs));
+      value = match (value, rhs) {
+        (CalcValue::Formula(lhs), CalcValue::Number(rhs)) => CalcValue::Formula(lhs.scale(rhs)),
+        (CalcValue::Number(lhs), CalcValue::Formula(rhs)) => CalcValue::Formula(rhs.scale(lhs)),
+        (CalcValue::Number(lhs), CalcValue::Number(rhs)) => CalcValue::Number(lhs * rhs),
+        _ => {
+          return Err(<Length as FromCss<'i>>::unexpected_token_error(
+            input.current_source_location(),
+            &Token::Delim('*'),
+          ));
+        }
+      };
       continue;
     }
 
     if input.try_parse(|parser| parser.expect_delim('/')).is_ok() {
       let rhs = parse_calc_factor(input)?;
-      expr = CalcExpr::Div(Box::new(expr), Box::new(rhs));
+      value = match (value, rhs) {
+        (_, CalcValue::Number(0.0)) => {
+          return Err(<Length as FromCss<'i>>::unexpected_token_error(
+            input.current_source_location(),
+            &Token::Delim('/'),
+          ));
+        }
+        (CalcValue::Formula(lhs), CalcValue::Number(rhs)) => {
+          CalcValue::Formula(lhs.scale(1.0 / rhs))
+        }
+        (CalcValue::Number(lhs), CalcValue::Number(rhs)) => CalcValue::Number(lhs / rhs),
+        _ => {
+          return Err(<Length as FromCss<'i>>::unexpected_token_error(
+            input.current_source_location(),
+            &Token::Delim('/'),
+          ));
+        }
+      };
       continue;
     }
 
     break;
   }
 
-  Ok(expr)
+  Ok(value)
 }
 
-fn parse_calc_factor<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcExpr> {
+fn parse_calc_factor<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcValue> {
   if input.try_parse(|parser| parser.expect_delim('+')).is_ok() {
     return parse_calc_factor(input);
   }
 
   if input.try_parse(|parser| parser.expect_delim('-')).is_ok() {
-    let inner = parse_calc_factor(input)?;
-    return Ok(CalcExpr::Mul(
-      Box::new(CalcExpr::Number(-1.0)),
-      Box::new(inner),
-    ));
+    return Ok(match parse_calc_factor(input)? {
+      CalcValue::Number(value) => CalcValue::Number(-value),
+      CalcValue::Formula(formula) => CalcValue::Formula(formula.neg()),
+    });
   }
 
   let location = input.current_source_location();
   let token = input.next()?;
 
   match token {
-    Token::Number { value, .. } => Ok(CalcExpr::Number(*value)),
-    Token::Percentage { unit_value, .. } => Ok(CalcExpr::Length(CalcLength::Percentage(
-      *unit_value * 100.0,
-    ))),
+    Token::Number { value, .. } => Ok(CalcValue::Number(*value)),
+    Token::Percentage { unit_value, .. } => {
+      Ok(CalcValue::Formula(CalcFormula::percentage(*unit_value)))
+    }
     Token::Dimension { value, unit, .. } => {
       let unit = unit.as_ref();
       match_ignore_ascii_case! {unit,
-        "px" => Ok(CalcExpr::Length(CalcLength::Px(*value))),
-        "em" => Ok(CalcExpr::Length(CalcLength::Em(*value))),
-        "rem" => Ok(CalcExpr::Length(CalcLength::Rem(*value))),
-        "vw" => Ok(CalcExpr::Length(CalcLength::Vw(*value))),
-        "vh" => Ok(CalcExpr::Length(CalcLength::Vh(*value))),
-        "cm" => Ok(CalcExpr::Length(CalcLength::Cm(*value))),
-        "mm" => Ok(CalcExpr::Length(CalcLength::Mm(*value))),
-        "in" => Ok(CalcExpr::Length(CalcLength::In(*value))),
-        "q" => Ok(CalcExpr::Length(CalcLength::Q(*value))),
-        "pt" => Ok(CalcExpr::Length(CalcLength::Pt(*value))),
-        "pc" => Ok(CalcExpr::Length(CalcLength::Pc(*value))),
+        "px" => Ok(CalcValue::Formula(CalcFormula::px(*value))),
+        "em" => Ok(CalcValue::Formula(CalcFormula::em(*value))),
+        "rem" => Ok(CalcValue::Formula(CalcFormula::rem(*value))),
+        "vw" => Ok(CalcValue::Formula(CalcFormula::vw(*value))),
+        "vh" => Ok(CalcValue::Formula(CalcFormula::vh(*value))),
+        "cm" => Ok(CalcValue::Formula(CalcFormula::cm(*value))),
+        "mm" => Ok(CalcValue::Formula(CalcFormula::mm(*value))),
+        "in" => Ok(CalcValue::Formula(CalcFormula::inch(*value))),
+        "q" => Ok(CalcValue::Formula(CalcFormula::q(*value))),
+        "pt" => Ok(CalcValue::Formula(CalcFormula::pt(*value))),
+        "pc" => Ok(CalcValue::Formula(CalcFormula::pc(*value))),
         _ => Err(<Length as FromCss<'i>>::unexpected_token_error(location, token)),
       }
     }
@@ -235,110 +459,10 @@ fn parse_calc_factor<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcExpr
   }
 }
 
-fn calc_length_to_linear(length: CalcLength, sizing: &Sizing) -> CalcLinear {
-  const ONE_CM_IN_PX: f32 = 96.0 / 2.54;
-  const ONE_MM_IN_PX: f32 = ONE_CM_IN_PX / 10.0;
-  const ONE_Q_IN_PX: f32 = ONE_CM_IN_PX / 40.0;
-  const ONE_IN_PX: f32 = 2.54 * ONE_CM_IN_PX;
-  const ONE_PT_IN_PX: f32 = ONE_IN_PX / 72.0;
-  const ONE_PC_IN_PX: f32 = ONE_IN_PX / 6.0;
-
-  match length {
-    CalcLength::Percentage(value) => CalcLinear {
-      px: 0.0,
-      percent: value / 100.0,
-    },
-    CalcLength::Px(value) => CalcLinear {
-      px: value,
-      percent: 0.0,
-    },
-    CalcLength::Rem(value) => CalcLinear {
-      px: value * sizing.viewport.font_size * sizing.viewport.device_pixel_ratio,
-      percent: 0.0,
-    },
-    CalcLength::Em(value) => CalcLinear {
-      px: value * sizing.font_size,
-      percent: 0.0,
-    },
-    CalcLength::Vh(value) => CalcLinear {
-      px: value * sizing.viewport.height.unwrap_or_default() as f32 / 100.0,
-      percent: 0.0,
-    },
-    CalcLength::Vw(value) => CalcLinear {
-      px: value * sizing.viewport.width.unwrap_or_default() as f32 / 100.0,
-      percent: 0.0,
-    },
-    CalcLength::Cm(value) => CalcLinear {
-      px: value * ONE_CM_IN_PX * sizing.viewport.device_pixel_ratio,
-      percent: 0.0,
-    },
-    CalcLength::Mm(value) => CalcLinear {
-      px: value * ONE_MM_IN_PX * sizing.viewport.device_pixel_ratio,
-      percent: 0.0,
-    },
-    CalcLength::In(value) => CalcLinear {
-      px: value * ONE_IN_PX * sizing.viewport.device_pixel_ratio,
-      percent: 0.0,
-    },
-    CalcLength::Q(value) => CalcLinear {
-      px: value * ONE_Q_IN_PX * sizing.viewport.device_pixel_ratio,
-      percent: 0.0,
-    },
-    CalcLength::Pt(value) => CalcLinear {
-      px: value * ONE_PT_IN_PX * sizing.viewport.device_pixel_ratio,
-      percent: 0.0,
-    },
-    CalcLength::Pc(value) => CalcLinear {
-      px: value * ONE_PC_IN_PX * sizing.viewport.device_pixel_ratio,
-      percent: 0.0,
-    },
-  }
-}
-
-fn eval_calc_expr(expr: &CalcExpr, sizing: &Sizing) -> Option<CalcEval> {
-  match expr {
-    CalcExpr::Number(value) => Some(CalcEval::Number(*value)),
-    CalcExpr::Length(length) => Some(CalcEval::Linear(calc_length_to_linear(*length, sizing))),
-    CalcExpr::Add(lhs, rhs) => match (eval_calc_expr(lhs, sizing)?, eval_calc_expr(rhs, sizing)?) {
-      (CalcEval::Linear(lhs), CalcEval::Linear(rhs)) => Some(CalcEval::Linear(lhs.add(rhs))),
-      (CalcEval::Number(lhs), CalcEval::Number(rhs)) => Some(CalcEval::Number(lhs + rhs)),
-      _ => None,
-    },
-    CalcExpr::Sub(lhs, rhs) => match (eval_calc_expr(lhs, sizing)?, eval_calc_expr(rhs, sizing)?) {
-      (CalcEval::Linear(lhs), CalcEval::Linear(rhs)) => Some(CalcEval::Linear(lhs.sub(rhs))),
-      (CalcEval::Number(lhs), CalcEval::Number(rhs)) => Some(CalcEval::Number(lhs - rhs)),
-      _ => None,
-    },
-    CalcExpr::Mul(lhs, rhs) => match (eval_calc_expr(lhs, sizing)?, eval_calc_expr(rhs, sizing)?) {
-      (CalcEval::Linear(lhs), CalcEval::Number(rhs)) => Some(CalcEval::Linear(lhs.scale(rhs))),
-      (CalcEval::Number(lhs), CalcEval::Linear(rhs)) => Some(CalcEval::Linear(rhs.scale(lhs))),
-      (CalcEval::Number(lhs), CalcEval::Number(rhs)) => Some(CalcEval::Number(lhs * rhs)),
-      _ => None,
-    },
-    CalcExpr::Div(lhs, rhs) => match (eval_calc_expr(lhs, sizing)?, eval_calc_expr(rhs, sizing)?) {
-      (_, CalcEval::Number(0.0)) => None,
-      (CalcEval::Linear(lhs), CalcEval::Number(rhs)) => {
-        Some(CalcEval::Linear(lhs.scale(1.0 / rhs)))
-      }
-      (CalcEval::Number(lhs), CalcEval::Number(rhs)) => Some(CalcEval::Number(lhs / rhs)),
-      _ => None,
-    },
-  }
-}
-
-fn calc_handle_to_linear(handle: CalcHandle, sizing: &Sizing) -> Option<CalcLinear> {
+fn calc_handle_to_linear(handle: CalcHandle, sizing: &Sizing) -> CalcLinear {
   match handle {
-    CalcHandle::Linear(id) => calc_linear().get(&id).map(|value| *value),
-    CalcHandle::Expr(id) => {
-      let expr = calc_exprs().get(&id)?.clone();
-      match eval_calc_expr(&expr, sizing)? {
-        CalcEval::Linear(linear) => Some(linear),
-        CalcEval::Number(value) => Some(CalcLinear {
-          px: value,
-          percent: 0.0,
-        }),
-      }
-    }
+    CalcHandle::Formula(formula) => formula.resolve(sizing),
+    CalcHandle::Linear(linear) => linear,
   }
 }
 
@@ -451,21 +575,10 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
       Length::Pt(v) => Length::Pt(-v),
       Length::Pc(v) => Length::Pc(-v),
       Length::Px(v) => Length::Px(-v),
-      Length::Calc(CalcHandle::Expr(id)) => {
-        let Some(expr) = calc_exprs().get(&id).map(|entry| entry.clone()) else {
-          return Length::Px(0.0);
-        };
-
-        let neg_expr = CalcExpr::Mul(Box::new(CalcExpr::Number(-1.0)), Box::new(expr));
-        Length::Calc(CalcHandle::Expr(register_expr(neg_expr)))
+      Length::Calc(CalcHandle::Formula(formula)) => {
+        Length::Calc(CalcHandle::Formula(formula.neg()))
       }
-      Length::Calc(CalcHandle::Linear(id)) => {
-        let Some(linear) = calc_linear().get(&id).map(|entry| *entry) else {
-          return Length::Px(0.0);
-        };
-
-        Length::Calc(CalcHandle::Linear(register_linear(linear.neg())))
-      }
+      Length::Calc(CalcHandle::Linear(linear)) => Length::Calc(CalcHandle::Linear(linear.neg())),
     }
   }
 }
@@ -487,8 +600,10 @@ impl<'i, const DEFAULT_AUTO: bool> FromCss<'i> for Length<DEFAULT_AUTO> {
         _ => Err(Self::unexpected_token_error(location, token)),
       },
       Token::Function(function) if function.eq_ignore_ascii_case("calc") => {
-        let expr = input.parse_nested_block(parse_calc_sum)?;
-        Ok(Self::Calc(CalcHandle::Expr(register_expr(expr))))
+        match input.parse_nested_block(parse_calc_sum)? {
+          CalcValue::Number(value) => Ok(Self::Px(value)),
+          CalcValue::Formula(formula) => Ok(Self::Calc(CalcHandle::Formula(formula))),
+        }
       }
       Token::Dimension { value, unit, .. } => {
         match_ignore_ascii_case! {unit.as_ref(),
@@ -533,9 +648,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
         CompactLength::length(sizing.viewport.width.unwrap_or_default() as f32 * value / 100.0)
       }
       Length::Calc(handle) => {
-        let Some(linear) = calc_handle_to_linear(handle, sizing) else {
-          return CompactLength::length(0.0);
-        };
+        let linear = calc_handle_to_linear(handle, sizing);
 
         if linear.percent == 0.0 {
           return CompactLength::length(linear.px);
@@ -545,7 +658,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
           return CompactLength::percent(linear.percent);
         }
 
-        CompactLength::calc(linear_ptr(register_linear(linear)))
+        CompactLength::calc(sizing.calc_arena.register_linear(linear))
       }
       _ => {
         CompactLength::length(self.to_px(sizing, sizing.viewport.width.unwrap_or_default() as f32))
@@ -585,9 +698,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
       Length::Q(value) => value * ONE_Q_IN_PX,
       Length::Pt(value) => value * ONE_PT_IN_PX,
       Length::Pc(value) => value * ONE_PC_IN_PX,
-      Length::Calc(handle) => calc_handle_to_linear(handle, sizing)
-        .map(|linear| linear.resolve(percentage_full_px))
-        .unwrap_or(0.0),
+      Length::Calc(handle) => calc_handle_to_linear(handle, sizing).resolve(percentage_full_px),
     };
 
     if matches!(
@@ -621,25 +732,152 @@ impl<const DEFAULT_AUTO: bool> MakeComputed for Length<DEFAULT_AUTO> {
       return;
     }
 
-    if let Self::Calc(CalcHandle::Expr(expr_id)) = *self {
-      let Some(expr) = calc_exprs().get(&expr_id).map(|value| value.clone()) else {
-        *self = Self::Px(0.0);
-        return;
-      };
+    if let Self::Calc(CalcHandle::Formula(formula)) = *self {
+      let linear = formula.resolve(sizing);
 
-      let Some(evaluated) = eval_calc_expr(&expr, sizing) else {
-        *self = Self::Px(0.0);
-        return;
-      };
-
-      match evaluated {
-        CalcEval::Number(value) => *self = Self::Px(value),
-        CalcEval::Linear(CalcLinear { px, percent: 0.0 }) => *self = Self::Px(px),
-        CalcEval::Linear(CalcLinear { px: 0.0, percent }) => {
-          *self = Self::Percentage(percent * 100.0)
-        }
-        CalcEval::Linear(linear) => *self = Self::Calc(CalcHandle::Linear(register_linear(linear))),
+      match linear {
+        CalcLinear { px, percent: 0.0 } => *self = Self::Px(px),
+        CalcLinear { px: 0.0, percent } => *self = Self::Percentage(percent * 100.0),
+        value => *self = Self::Calc(CalcHandle::Linear(value)),
       }
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use std::sync::Arc;
+
+  use super::*;
+  use crate::layout::Viewport;
+
+  fn sizing() -> Sizing {
+    Sizing {
+      viewport: Viewport {
+        width: Some(200),
+        height: Some(100),
+        font_size: 16.0,
+        device_pixel_ratio: 2.0,
+      },
+      font_size: 10.0,
+      calc_arena: Arc::new(CalcArena::default()),
+    }
+  }
+
+  fn assert_near(lhs: f32, rhs: f32) {
+    let diff = (lhs - rhs).abs();
+    assert!(diff < 0.0001, "lhs={lhs}, rhs={rhs}, diff={diff}");
+  }
+
+  #[test]
+  fn parse_calc_mixed_returns_formula_handle() {
+    assert_eq!(
+      Length::<true>::from_str("calc(100% - 12px)"),
+      Ok(Length::Calc(CalcHandle::Formula(CalcFormula {
+        percent: 1.0,
+        px: -12.0,
+        ..Default::default()
+      })))
+    );
+  }
+
+  #[test]
+  fn parse_calc_number_expression_becomes_px() {
+    let parsed = Length::<true>::from_str("calc(1 + 2)");
+    assert_eq!(parsed, Ok(Length::Px(3.0)));
+  }
+
+  #[test]
+  fn parse_calc_rejects_number_plus_length() {
+    let parsed = Length::<true>::from_str("calc(1 + 2px)");
+    assert!(parsed.is_err());
+  }
+
+  #[test]
+  fn parse_calc_rejects_division_by_zero() {
+    let parsed = Length::<true>::from_str("calc(10px / 0)");
+    assert!(parsed.is_err());
+  }
+
+  #[test]
+  fn negative_calc_keeps_value_sign_consistent() {
+    let value: Length<true> = Length::Calc(CalcHandle::Formula(CalcFormula {
+      percent: 0.5,
+      px: 10.0,
+      ..Default::default()
+    }));
+    let negated = -value;
+    let sizing = sizing();
+    assert_near(value.to_px(&sizing, 200.0), 110.0);
+    assert_near(negated.to_px(&sizing, 200.0), -110.0);
+  }
+
+  #[test]
+  fn make_computed_collapses_formula_without_percent_to_px() {
+    let mut value: Length<true> = Length::Calc(CalcHandle::Formula(CalcFormula {
+      rem: 1.0,
+      px: 5.0,
+      ..Default::default()
+    }));
+    value.make_computed(&sizing());
+    assert_eq!(value, Length::Px(37.0));
+  }
+
+  #[test]
+  fn make_computed_collapses_formula_with_only_percent_to_percentage() {
+    let mut value: Length<true> = Length::Calc(CalcHandle::Formula(CalcFormula {
+      percent: 0.5,
+      ..Default::default()
+    }));
+    value.make_computed(&sizing());
+    assert_eq!(value, Length::Percentage(50.0));
+  }
+
+  #[test]
+  fn make_computed_keeps_mixed_formula_as_linear_calc() {
+    let mut value: Length<true> = Length::Calc(CalcHandle::Formula(CalcFormula {
+      percent: 0.5,
+      px: 10.0,
+      ..Default::default()
+    }));
+    value.make_computed(&sizing());
+    assert_eq!(
+      value,
+      Length::Calc(CalcHandle::Linear(CalcLinear {
+        px: 10.0,
+        percent: 0.5,
+      }))
+    );
+  }
+
+  #[test]
+  fn compact_length_calc_pointer_resolves_through_callback() {
+    let value: Length<true> = Length::Calc(CalcHandle::Formula(CalcFormula {
+      percent: 0.5,
+      px: 10.0,
+      ..Default::default()
+    }));
+    let sizing = sizing();
+    let compact = value.to_compact_length(&sizing);
+    assert!(compact.is_calc());
+    let resolved = sizing
+      .calc_arena
+      .resolve_calc_value(compact.calc_value(), 200.0);
+    assert_near(resolved, 110.0);
+  }
+
+  #[test]
+  fn compact_length_percent_does_not_use_calc_pointer() {
+    let sizing = sizing();
+    let compact = Length::<true>::Percentage(50.0).to_compact_length(&sizing);
+    assert!(!compact.is_calc());
+    assert_eq!(compact.tag(), CompactLength::PERCENT_TAG);
+    assert_near(compact.value(), 0.5);
+  }
+
+  #[test]
+  fn to_px_applies_device_pixel_ratio_for_absolute_units() {
+    let px = Length::<true>::Rem(2.0).to_px(&sizing(), 100.0);
+    assert_near(px, 64.0);
   }
 }
