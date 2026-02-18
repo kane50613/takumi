@@ -293,7 +293,7 @@ impl CalcFormula {
     const ONE_PC_IN_PX: f32 = ONE_IN_PX / 6.0;
 
     CalcLinear {
-      px: self.px
+      px: self.px * sizing.viewport.device_pixel_ratio
         + self.rem * sizing.viewport.font_size * sizing.viewport.device_pixel_ratio
         + self.em * sizing.font_size
         + self.vh * sizing.viewport.height.unwrap_or_default() as f32 / 100.0
@@ -808,8 +808,8 @@ mod tests {
     }));
     let negated = -value;
     let sizing = sizing();
-    assert_near(value.to_px(&sizing, 200.0), 110.0);
-    assert_near(negated.to_px(&sizing, 200.0), -110.0);
+    assert_near(value.to_px(&sizing, 200.0), 120.0);
+    assert_near(negated.to_px(&sizing, 200.0), -120.0);
   }
 
   #[test]
@@ -820,7 +820,7 @@ mod tests {
       ..Default::default()
     }));
     value.make_computed(&sizing());
-    assert_eq!(value, Length::Px(37.0));
+    assert_eq!(value, Length::Px(42.0));
   }
 
   #[test]
@@ -844,7 +844,7 @@ mod tests {
     assert_eq!(
       value,
       Length::Calc(CalcHandle::Linear(CalcLinear {
-        px: 10.0,
+        px: 20.0,
         percent: 0.5,
       }))
     );
@@ -863,7 +863,7 @@ mod tests {
     let resolved = sizing
       .calc_arena
       .resolve_calc_value(compact.calc_value(), 200.0);
-    assert_near(resolved, 110.0);
+    assert_near(resolved, 120.0);
   }
 
   #[test]
