@@ -470,6 +470,8 @@ pub enum TailwindProperty {
   BackgroundBlendMode(BlendMode),
   /// `visibility` property.
   Visibility(Visibility),
+  /// `vertical-align` property.
+  VerticalAlign(VerticalAlign),
 }
 
 fn extract_arbitrary_value(suffix: &str) -> Option<Cow<'_, str>> {
@@ -797,6 +799,9 @@ impl TailwindProperty {
       }
       TailwindProperty::Rounded(rounded) => {
         style.border_radius = BorderRadius(Sides([SpacePair::from_single(rounded.0); 4])).into();
+      }
+      TailwindProperty::VerticalAlign(vertical_align) => {
+        style.vertical_align = vertical_align.into();
       }
       TailwindProperty::RoundedTopLeft(rounded) => {
         style.border_top_left_radius = Some(SpacePair::from_single(rounded.0)).into();
@@ -1500,6 +1505,41 @@ mod tests {
     assert_eq!(
       TailwindProperty::parse("bg-blend-screen"),
       Some(TailwindProperty::BackgroundBlendMode(BlendMode::Screen))
+    );
+  }
+  #[test]
+  fn test_parse_vertical_align() {
+    assert_eq!(
+      TailwindProperty::parse("align-baseline"),
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::Baseline))
+    );
+    assert_eq!(
+      TailwindProperty::parse("align-top"),
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::Top))
+    );
+    assert_eq!(
+      TailwindProperty::parse("align-middle"),
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::Middle))
+    );
+    assert_eq!(
+      TailwindProperty::parse("align-bottom"),
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::Bottom))
+    );
+    assert_eq!(
+      TailwindProperty::parse("align-text-top"),
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::TextTop))
+    );
+    assert_eq!(
+      TailwindProperty::parse("align-text-bottom"),
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::TextBottom))
+    );
+    assert_eq!(
+      TailwindProperty::parse("align-sub"),
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::Sub))
+    );
+    assert_eq!(
+      TailwindProperty::parse("align-super"),
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::Super))
     );
   }
 }

@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
 use image::{GenericImageView, Rgba};
-use parley::{GlyphRun, LineMetrics, PositionedInlineBox, PositionedLayoutItem};
+use parley::{GlyphRun, PositionedInlineBox, PositionedLayoutItem};
 use swash::FontRef;
 use taffy::{Layout, Point};
 
 use crate::{
   Result,
   layout::{
-    inline::{InlineBoxItem, InlineBrush, InlineLayout},
+    inline::{InlineBoxItem, InlineBrush, InlineLayout, ProcessedInlineSpan},
     node::Node,
     style::{
       Affine, BackgroundClip, BlendMode, Color, ImageScalingAlgorithm, SizedFontStyle,
@@ -541,12 +541,13 @@ pub(crate) fn draw_inline_box<N: Node<N>>(
   Ok(())
 }
 
-pub(crate) fn draw_inline_layout(
+pub(crate) fn draw_inline_layout<N: Node<N>>(
   context: &RenderContext,
   canvas: &mut Canvas,
   layout: Layout,
   inline_layout: InlineLayout,
   font_style: &SizedFontStyle,
+  spans: &[ProcessedInlineSpan<'_, '_, N>],
 ) -> Result<Vec<PositionedInlineBox>> {
   let resolved_glyph_runs = resolve_inline_layout_glyphs(context, &inline_layout)?;
   let clip_image = if context.style.background_clip == BackgroundClip::Text {
@@ -610,7 +611,12 @@ pub(crate) fn draw_inline_layout(
           )?;
         }
         PositionedLayoutItem::InlineBox(mut inline_box) => {
-          fix_inline_box_y(&mut inline_box.y, line.metrics());
+          let item_index = inline_box.id as usize;
+
+          if let Some(ProcessedInlineSpan::Box(item)) = spans.get(item_index) {
+            let vertical_align = item.render_node.context.style.vertical_align;
+            vertical_align.apply(&mut inline_box.y, line.metrics(), inline_box.height);
+          }
           positioned_inline_boxes.push(inline_box)
         }
       }
@@ -622,8 +628,4 @@ pub(crate) fn draw_inline_layout(
   }
 
   Ok(positioned_inline_boxes)
-}
-
-pub(crate) fn fix_inline_box_y(y: &mut f32, metrics: &LineMetrics) {
-  *y += metrics.line_height - metrics.baseline;
 }

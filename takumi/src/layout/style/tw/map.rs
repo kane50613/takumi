@@ -49,6 +49,7 @@ pub enum PropertyParser {
   TextShadow(fn(TextShadow) -> TailwindProperty),
   BlendMode(fn(BlendMode) -> TailwindProperty),
   FontStretch(fn(FontStretch) -> TailwindProperty),
+  VerticalAlign(fn(VerticalAlign) -> TailwindProperty),
 }
 
 impl PropertyParser {
@@ -95,6 +96,7 @@ impl PropertyParser {
       Self::TextShadow(f) => TextShadow::parse_tw_with_arbitrary(suffix).map(f),
       Self::BlendMode(f) => BlendMode::parse_tw_with_arbitrary(suffix).map(f),
       Self::FontStretch(f) => FontStretch::parse_tw_with_arbitrary(suffix).map(f),
+      Self::VerticalAlign(f) => VerticalAlign::parse_tw_with_arbitrary(suffix).map(f),
     }
   }
 }
@@ -245,6 +247,7 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
   "text-shadow" => &[PropertyParser::TextShadow(TailwindProperty::TextShadow)],
   "mix-blend" => &[PropertyParser::BlendMode(TailwindProperty::MixBlendMode)],
   "bg-blend" => &[PropertyParser::BlendMode(TailwindProperty::BackgroundBlendMode)],
+  "align" => &[PropertyParser::VerticalAlign(TailwindProperty::VerticalAlign)],
 };
 
 pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {

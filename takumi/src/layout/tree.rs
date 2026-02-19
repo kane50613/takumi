@@ -456,8 +456,14 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
       _ => None,
     });
 
-    let positioned_inline_boxes =
-      draw_inline_layout(&self.context, canvas, layout, inline_layout, &font_style)?;
+    let positioned_inline_boxes = draw_inline_layout(
+      &self.context,
+      canvas,
+      layout,
+      inline_layout,
+      &font_style,
+      &spans,
+    )?;
 
     let inline_transform = Affine::translation(
       layout.border.left + layout.padding.left,

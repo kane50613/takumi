@@ -284,6 +284,7 @@ define_style!(
   isolation: Isolation,
   mix_blend_mode: BlendMode,
   visibility: Visibility,
+  vertical_align: VerticalAlign,
 );
 
 /// Sized font style with resolved font size and line height.
@@ -348,6 +349,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, InlineBrush> {
             .font_synthesis_style
             .unwrap_or(style.parent.font_synthesis.style),
         },
+        vertical_align: style.parent.vertical_align,
       },
       text_wrap_mode: style.parent.text_wrap_mode_and_line_clamp().0.into(),
       font_width: style.parent.font_stretch.into(),

@@ -189,7 +189,7 @@ fn test_measure_inline_layout() {
       children: vec![MeasuredNode {
         width: 128.0,
         height: 128.0,
-        transform: [1.0, 0.0, 0.0, 1.0, 105.46001, 0.0],
+        transform: [1.0, 0.0, 0.0, 1.0, 105.46001, -3.0],
         children: Vec::new(),
         runs: Vec::new(),
       }],

@@ -43,6 +43,7 @@ mod text_shadow;
 mod text_stroke;
 mod text_wrap;
 mod transform;
+mod vertical_align;
 mod white_space;
 mod word_break;
 
@@ -85,6 +86,7 @@ pub use text_shadow::*;
 pub use text_stroke::*;
 pub use text_wrap::*;
 pub use transform::*;
+pub use vertical_align::*;
 pub use white_space::*;
 pub use word_break::*;
 

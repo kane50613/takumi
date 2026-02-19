@@ -6,6 +6,8 @@ pub mod animation;
 pub mod color_artifacts;
 #[path = "fixtures/inline.rs"]
 pub mod inline;
+#[path = "fixtures/inline_vertical_align.rs"]
+pub mod inline_vertical_align;
 #[path = "fixtures/style_alignment.rs"]
 pub mod style_alignment;
 #[path = "fixtures/style_backdrop_filter.rs"]

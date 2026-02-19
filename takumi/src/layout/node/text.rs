@@ -87,7 +87,7 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for TextNode {
       context,
     };
 
-    let (inline_layout, _, _) = create_inline_layout(
+    let (inline_layout, _, spans) = create_inline_layout(
       once(inline_text),
       Size {
         width: AvailableSpace::Definite(size.width),
@@ -100,7 +100,7 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for TextNode {
       InlineLayoutStage::Draw,
     );
 
-    draw_inline_layout(context, canvas, layout, inline_layout, &font_style)?;
+    draw_inline_layout(context, canvas, layout, inline_layout, &font_style, &spans)?;
 
     Ok(())
   }

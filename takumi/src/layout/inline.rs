@@ -7,7 +7,7 @@ use crate::{
   GlobalContext,
   layout::{
     node::Node,
-    style::{Color, FontSynthesis, SizedFontStyle, TextOverflow, TextWrapStyle},
+    style::{Color, FontSynthesis, SizedFontStyle, TextOverflow, TextWrapStyle, VerticalAlign},
     tree::RenderNode,
   },
   rendering::{
@@ -111,6 +111,7 @@ pub struct InlineBrush {
   pub decoration_color: Color,
   pub stroke_color: Color,
   pub font_synthesis: FontSynthesis,
+  pub vertical_align: VerticalAlign,
 }
 
 impl Default for InlineBrush {
@@ -120,6 +121,7 @@ impl Default for InlineBrush {
       decoration_color: Color::black(),
       stroke_color: Color::black(),
       font_synthesis: FontSynthesis::default(),
+      vertical_align: VerticalAlign::default(),
     }
   }
 }
@@ -156,7 +158,6 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c, N: Node<N> + 'c>(
   let mut spans: Vec<ProcessedInlineSpan<'c, 'g, N>> = Vec::new();
 
   let (mut layout, text) = global.font_context.tree_builder(style.into(), |builder| {
-    let mut idx = 0;
     let mut index_pos = 0;
 
     for item in items {
@@ -208,7 +209,7 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c, N: Node<N> + 'c>(
 
           let inline_box = InlineBox {
             index: index_pos,
-            id: idx,
+            id: spans.len() as u64,
             width: if render_node.is_inline_atomic_container() {
               content_size.width + margin.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
             } else {
@@ -236,7 +237,6 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c, N: Node<N> + 'c>(
           }));
 
           builder.push_inline_box(inline_box);
-          idx += 1;
         }
       }
     }
