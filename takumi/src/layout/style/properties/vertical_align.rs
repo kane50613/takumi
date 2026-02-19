@@ -37,7 +37,13 @@ declare_enum_from_css_impl!(
 );
 
 impl VerticalAlign {
-  pub(crate) fn apply(self, y: &mut f32, metrics: &LineMetrics, box_height: f32) {
+  pub(crate) fn apply(
+    self,
+    y: &mut f32,
+    metrics: &LineMetrics,
+    box_height: f32,
+    parent_x_height: Option<f32>,
+  ) {
     match self {
       VerticalAlign::Baseline => *y = metrics.baseline - box_height,
       VerticalAlign::Top => {
@@ -45,12 +51,8 @@ impl VerticalAlign {
         *y = metrics.min_coord;
       }
       VerticalAlign::Middle => {
-        // Aligns the middle of the box with the baseline of the parent box plus half the x-height of the parent.
-        // Approximation: x_height ~ 0.5 * ascent.
-        // y_mid = baseline - x_height / 2.
-        // y_top = y_mid - box_height / 2.
-        // y_top = baseline - (0.5 * ascent) / 2 - box_height / 2.
-        *y = metrics.baseline - (metrics.ascent * 0.25) - (box_height / 2.0);
+        let x_height = parent_x_height.unwrap_or(metrics.ascent * 0.5);
+        *y = metrics.baseline - (x_height * 0.5) - (box_height / 2.0);
       }
       VerticalAlign::Bottom => {
         // Aligns with bottom of line box

@@ -481,6 +481,30 @@ fn resolve_inline_layout_glyphs(
     .collect()
 }
 
+pub(crate) fn get_parent_x_height(
+  context: &RenderContext,
+  font_style: &SizedFontStyle,
+) -> Option<f32> {
+  let (layout, _) = context
+    .global
+    .font_context
+    .tree_builder(font_style.into(), |builder| {
+      builder.push_text("x");
+    });
+
+  let run = layout.lines().next()?.runs().next()?;
+  let font = run.font();
+  let font_ref = FontRef::from_index(font.data.as_ref(), font.index as usize)?;
+
+  let metrics = font_ref.metrics(run.normalized_coords());
+  let units_per_em = metrics.units_per_em as f32;
+  if units_per_em == 0.0 {
+    return None;
+  }
+  let scale = run.font_size() / units_per_em;
+  Some(metrics.x_height * scale)
+}
+
 pub(crate) fn draw_inline_box<N: Node<N>>(
   inline_box: &PositionedInlineBox,
   item: &InlineBoxItem<'_, '_, N>,
@@ -592,6 +616,7 @@ pub(crate) fn draw_inline_layout<N: Node<N>>(
     )?;
   }
 
+  let parent_x_height = get_parent_x_height(context, font_style);
   let mut glyph_runs_with_resolved = glyph_runs_with_resolved(&inline_layout, &resolved_glyph_runs);
   for line in inline_layout.lines() {
     for item in line.items() {
@@ -615,7 +640,12 @@ pub(crate) fn draw_inline_layout<N: Node<N>>(
 
           if let Some(ProcessedInlineSpan::Box(item)) = spans.get(item_index) {
             let vertical_align = item.render_node.context.style.vertical_align;
-            vertical_align.apply(&mut inline_box.y, line.metrics(), inline_box.height);
+            vertical_align.apply(
+              &mut inline_box.y,
+              line.metrics(),
+              inline_box.height,
+              parent_x_height,
+            );
           }
           positioned_inline_boxes.push(inline_box)
         }

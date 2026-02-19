@@ -23,7 +23,7 @@ use crate::{
   },
   rendering::{
     BorderProperties, Canvas, CanvasConstrain, CanvasConstrainResult, RenderContext, Sizing,
-    draw_debug_border, overlay_image,
+    draw_debug_border, inline_drawing::get_parent_x_height, overlay_image,
   },
   resources::image::ImageSource,
 };
@@ -122,6 +122,7 @@ fn collect_measure_result<'g, Nodes: Node<Nodes>>(
   // Handle inline layout
   if node.should_create_inline_layout() {
     let font_style = node.context.style.to_sized_font_style(&node.context);
+    let parent_x_height = get_parent_x_height(&node.context, &font_style);
     let (max_width, max_height) = create_inline_constraint(
       &node.context,
       Size {
@@ -166,7 +167,12 @@ fn collect_measure_result<'g, Nodes: Node<Nodes>>(
             let item_index = positioned_box.id as usize;
             if let Some(ProcessedInlineSpan::Box(item)) = spans.get(item_index) {
               let vertical_align = item.render_node.context.style.vertical_align;
-              vertical_align.apply(&mut positioned_box.y, line.metrics(), positioned_box.height);
+              vertical_align.apply(
+                &mut positioned_box.y,
+                line.metrics(),
+                positioned_box.height,
+                parent_x_height,
+              );
             }
 
             let inline_transform =
