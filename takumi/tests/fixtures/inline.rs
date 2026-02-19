@@ -418,3 +418,119 @@ fn inline_atomic_containers() {
 
   run_fixture_test(container.into(), "inline_atomic_containers");
 }
+#[test]
+fn inline_nested_flex_block() {
+  let children = [
+    TextNode {
+      preset: None,
+      tw: None,
+      style: Some(
+        StyleBuilder::default()
+          .display(Display::Inline)
+          .build()
+          .unwrap(),
+      ),
+      text: "This is some preceding text that is long enough to wrap eventually. ".to_string(),
+    }
+    .into(),
+    ContainerNode {
+      preset: None,
+      tw: None,
+      style: Some(
+        StyleBuilder::default()
+          .display(Display::InlineFlex)
+          .background_color(ColorInput::Value(Color([200, 255, 200, 255])))
+          .padding(Sides([Px(5.0); 4]))
+          .align_items(AlignItems::Center)
+          .vertical_align(VerticalAlign::Middle)
+          .build()
+          .unwrap(),
+      ),
+      children: Some(
+        [
+          TextNode {
+            preset: None,
+            tw: None,
+            style: Some(
+              StyleBuilder::default()
+                .display(Display::Inline)
+                .build()
+                .unwrap(),
+            ),
+            text: "Flex Start ".to_string(),
+          }
+          .into(),
+          ContainerNode {
+            preset: None,
+            tw: None,
+            style: Some(
+              StyleBuilder::default()
+                .display(Display::InlineBlock)
+                .padding(Sides([Px(4.0); 4]))
+                .margin(Sides([Length::Px(0.0), Length::Px(10.0), Length::Px(0.0), Length::Px(10.0)]))
+                .background_color(ColorInput::Value(Color([255, 200, 200, 255])))
+                .build()
+                .unwrap(),
+            ),
+            children: Some(
+              [TextNode {
+                preset: None,
+                tw: None,
+                style: None,
+                text: "Inner".to_string(),
+              }
+              .into()]
+              .into(),
+            ),
+          }
+          .into(),
+          TextNode {
+            preset: None,
+            tw: None,
+            style: Some(
+              StyleBuilder::default()
+                .display(Display::Inline)
+                .build()
+                .unwrap(),
+            ),
+            text: " Flex End".to_string(),
+          }
+          .into(),
+        ]
+        .into(),
+      ),
+    }
+    .into(),
+    TextNode {
+      preset: None,
+      tw: None,
+      style: Some(
+        StyleBuilder::default()
+          .display(Display::Inline)
+          .build()
+          .unwrap(),
+      ),
+      text: " followed by more text that should definitely wrap and show how the inline-flex container behaves when it is part of a wrapped line. We want to make sure the nested boxes are drawn in the correct positions even after wrapping.".to_string(),
+    }
+    .into(),
+  ];
+
+  let container = ContainerNode {
+    preset: None,
+    tw: None,
+    style: Some(
+      StyleBuilder::default()
+        .width(Px(800.0))
+        .display(Display::Block)
+        .padding(Sides([Px(20.0); 4]))
+        .background_color(ColorInput::Value(Color::white()))
+        .font_size(Some(Px(20.0)))
+        .line_height(LineHeight::Length(Px(40.0)))
+        .build()
+        .unwrap(),
+    ),
+    children: Some(children.into()),
+  };
+
+  run_fixture_test(container.into(), "inline_nested_flex_block");
+}
