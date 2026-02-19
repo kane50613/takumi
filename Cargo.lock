@@ -2289,7 +2289,7 @@ dependencies = [
 
 [[package]]
 name = "takumi"
-version = "0.68.9"
+version = "0.68.10"
 dependencies = [
  "bitflags",
  "color",

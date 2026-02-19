@@ -1,5 +1,12 @@
 # takumi
 
+## 0.68.10
+
+### Patch Changes
+
+- f1e2c62: support `vertical-align` property
+- 1e30ea7: support `text-decoration-thickness` property
+
 ## 0.68.9
 
 ### Patch Changes
