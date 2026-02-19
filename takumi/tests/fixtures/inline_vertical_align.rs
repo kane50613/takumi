@@ -21,6 +21,10 @@ fn inline_vertical_align_types() {
           .border_width(Some(Sides([Px(1.0); 4])))
           .border_style(Some(BorderStyle::Solid))
           .border_color(ColorInput::Value(Color::black()))
+          .text_decoration(TextDecoration {
+            line: TextDecorationLines::UNDERLINE | TextDecorationLines::OVERLINE,
+            ..Default::default()
+          })
           .build()
           .unwrap(),
       ),
@@ -110,4 +114,102 @@ fn inline_vertical_align_types() {
   };
 
   run_fixture_test(container.into(), "inline_vertical_align_types");
+}
+
+#[test]
+fn inline_vertical_align_multiline() {
+  let children = [
+    TextNode {
+      preset: None,
+      tw: None,
+      style: Some(
+        StyleBuilder::default()
+          .display(Display::Inline)
+          .build()
+          .unwrap(),
+      ),
+      // Long text to force line break
+      text: "This is a long text that should definitely wrap to multiple lines, allowing us to test vertical alignment on the second line as well. ".to_string(),
+    }
+    .into(),
+    ContainerNode {
+      preset: None,
+      tw: None,
+      style: Some(
+        StyleBuilder::default()
+          .display(Display::InlineBlock)
+          .width(Px(40.0))
+          .height(Px(40.0))
+          .background_color(ColorInput::Value(Color([0, 255, 0, 255])))
+          .vertical_align(VerticalAlign::Top)
+          .build()
+          .unwrap(),
+      ),
+      children: None,
+    }
+    .into(),
+    TextNode {
+      preset: None,
+      tw: None,
+      style: Some(
+        StyleBuilder::default()
+          .display(Display::Inline)
+          .build()
+          .unwrap(),
+      ),
+      text: " After Top. ".to_string(),
+    }
+    .into(),
+    ContainerNode {
+      preset: None,
+      tw: None,
+      style: Some(
+        StyleBuilder::default()
+          .display(Display::InlineBlock)
+          .width(Px(40.0))
+          .height(Px(40.0))
+          .background_color(ColorInput::Value(Color([255, 255, 0, 255])))
+          .vertical_align(VerticalAlign::Bottom)
+          .build()
+          .unwrap(),
+      ),
+      children: None,
+    }
+    .into(),
+    TextNode {
+      preset: None,
+      tw: None,
+      style: Some(
+        StyleBuilder::default()
+          .display(Display::Inline)
+          .build()
+          .unwrap(),
+      ),
+      text: " After Bottom.".to_string(),
+    }
+    .into(),
+  ];
+
+  let container = ContainerNode {
+    preset: None,
+    tw: None,
+    style: Some(
+      StyleBuilder::default()
+        .width(Px(400.0))
+        .display(Display::Block)
+        .padding(Sides([Px(20.0); 4]))
+        .background_color(ColorInput::Value(Color::white()))
+        .font_size(Some(Px(24.0)))
+        .line_height(LineHeight::Length(Px(60.0)))
+        .text_decoration(TextDecoration {
+          line: TextDecorationLines::UNDERLINE | TextDecorationLines::OVERLINE,
+          ..Default::default()
+        })
+        .build()
+        .unwrap(),
+    ),
+    children: Some(children.into()),
+  };
+
+  run_fixture_test(container.into(), "inline_vertical_align_multiline");
 }

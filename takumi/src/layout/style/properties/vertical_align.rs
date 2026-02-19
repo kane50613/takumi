@@ -42,7 +42,7 @@ impl VerticalAlign {
       VerticalAlign::Baseline => *y = metrics.baseline - box_height,
       VerticalAlign::Top => {
         // Aligns with top of line box
-        *y = 0.0;
+        *y = metrics.min_coord;
       }
       VerticalAlign::Middle => {
         // Aligns the middle of the box with the baseline of the parent box plus half the x-height of the parent.
@@ -53,7 +53,8 @@ impl VerticalAlign {
         *y = metrics.baseline - (metrics.ascent * 0.25) - (box_height / 2.0);
       }
       VerticalAlign::Bottom => {
-        *y = metrics.line_height - box_height;
+        // Aligns with bottom of line box
+        *y = metrics.max_coord - box_height;
       }
       VerticalAlign::TextTop => *y = metrics.baseline - metrics.ascent,
       VerticalAlign::TextBottom => *y = metrics.baseline + metrics.descent - box_height,
