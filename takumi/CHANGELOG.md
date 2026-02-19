@@ -1,5 +1,13 @@
 # takumi
 
+## 0.68.11
+
+### Patch Changes
+
+- f0120ae: refactor text ellipsis
+- 60942e9: support Tailwind 4.2 new colors (Taupe, Mauve, Mist and Olive)
+- bf54cac: implement `BufferPool` to reuse buffers
+
 ## 0.68.10
 
 ### Patch Changes
