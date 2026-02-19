@@ -1,5 +1,11 @@
 # takumi
 
+## 0.68.9
+
+### Patch Changes
+
+- 2016a3c: fix nested inline-block caused infinite recursive calls
+
 ## 0.68.8
 
 ### Patch Changes
