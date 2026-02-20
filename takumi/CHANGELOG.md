@@ -1,5 +1,11 @@
 # takumi
 
+## 0.68.12
+
+### Patch Changes
+
+- d8d0fa8: parse Tailwind background image gradient
+
 ## 0.68.11
 
 ### Patch Changes
