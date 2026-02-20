@@ -1,5 +1,14 @@
 # @takumi-rs/image-response
 
+## 0.68.16
+
+### Patch Changes
+
+- 5dcd679: specify `type: "bytes"` in `ReadableStream` construction
+  - @takumi-rs/core@0.68.16
+  - @takumi-rs/wasm@0.68.16
+  - @takumi-rs/helpers@0.68.16
+
 ## 0.68.15
 
 ### Patch Changes

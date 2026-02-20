@@ -1,5 +1,12 @@
 # takumi
 
+## 0.68.16
+
+### Patch Changes
+
+- 757339e: remove png `try_collect_palette`, add compression control via `quality` field
+- bd4d602: support gif decoding
+
 ## 0.68.15
 
 ### Patch Changes
