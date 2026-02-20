@@ -1,5 +1,11 @@
 # takumi
 
+## 0.68.15
+
+### Patch Changes
+
+- 2c6f5c3: optimize interpolation, blur performance
+
 ## 0.68.14
 
 ## 0.68.13
