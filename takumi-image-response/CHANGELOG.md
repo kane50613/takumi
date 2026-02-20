@@ -1,5 +1,14 @@
 # @takumi-rs/image-response
 
+## 0.68.14
+
+### Patch Changes
+
+- c5b8029: avoid duplicated `init` calls
+  - @takumi-rs/core@0.68.14
+  - @takumi-rs/wasm@0.68.14
+  - @takumi-rs/helpers@0.68.14
+
 ## 0.68.13
 
 ### Patch Changes
