@@ -1,5 +1,11 @@
 # takumi
 
+## 0.68.13
+
+### Patch Changes
+
+- 27429b0: improve blur performance
+
 ## 0.68.12
 
 ### Patch Changes
