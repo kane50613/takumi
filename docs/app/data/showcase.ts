@@ -43,6 +43,12 @@ export const showcaseProjects: Project[] = [
     width: 800,
     height: 400,
   },
+  {
+    image: "https://shotwell.app/og-image.png",
+    url: "https://shotwell.app/?utm_source=takumi&utm_medium=showcase&utm_campaign=launch",
+    width: 1200,
+    height: 630,
+  },
 ];
 
 export const showcaseTemplates: Template[] = [
