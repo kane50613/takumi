@@ -1,5 +1,11 @@
 # takumi
 
+## 0.68.17
+
+### Patch Changes
+
+- f186186: improve gradient quality with dithering
+
 ## 0.68.16
 
 ### Patch Changes
