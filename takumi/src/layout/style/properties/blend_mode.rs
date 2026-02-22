@@ -1,27 +1,8 @@
-use cssparser::Parser;
-
 use crate::layout::style::tw::TailwindPropertyParser;
-use crate::layout::style::{CssToken, FromCss, ParseResult, declare_enum_from_css_impl};
+use crate::layout::style::{FromCss, declare_enum_from_css_impl};
 
 /// A list of blend modes.
 pub type BlendModes = Box<[BlendMode]>;
-
-impl<'i> FromCss<'i> for BlendModes {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut values = Vec::new();
-    values.push(BlendMode::from_css(input)?);
-
-    while input.expect_comma().is_ok() {
-      values.push(BlendMode::from_css(input)?);
-    }
-
-    Ok(values.into_boxed_slice())
-  }
-
-  fn valid_tokens() -> &'static [CssToken] {
-    BlendMode::valid_tokens()
-  }
-}
 
 /// Defines the blending mode for an element.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

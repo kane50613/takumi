@@ -82,23 +82,6 @@ impl MakeComputed for BackgroundSize {
 /// A list of `background-size` values (one per layer).
 pub type BackgroundSizes = Box<[BackgroundSize]>;
 
-impl<'i> FromCss<'i> for BackgroundSizes {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut values = Vec::new();
-    values.push(BackgroundSize::from_css(input)?);
-
-    while input.expect_comma().is_ok() {
-      values.push(BackgroundSize::from_css(input)?);
-    }
-
-    Ok(values.into_boxed_slice())
-  }
-
-  fn valid_tokens() -> &'static [CssToken] {
-    BackgroundSize::valid_tokens()
-  }
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;

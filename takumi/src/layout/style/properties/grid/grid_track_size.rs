@@ -12,21 +12,6 @@ use crate::{
 /// A list of `GridTrackSize`
 pub type GridTrackSizes = Vec<GridTrackSize>;
 
-impl<'i> FromCss<'i> for GridTrackSizes {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut components: Vec<GridTrackSize> = Vec::new();
-    while let Ok(size) = GridTrackSize::from_css(input) {
-      components.push(size);
-    }
-
-    Ok(components)
-  }
-
-  fn valid_tokens() -> &'static [CssToken] {
-    GridTrackSize::valid_tokens()
-  }
-}
-
 /// Represents a grid track size
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GridTrackSize {

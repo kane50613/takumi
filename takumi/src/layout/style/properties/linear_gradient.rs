@@ -154,26 +154,8 @@ impl MakeComputed for GradientStop {
   }
 }
 
-/// A list of gradient color stops, handling CSS double-stop syntax.
-pub type GradientStops = Vec<GradientStop>;
-
-impl<'i> FromCss<'i> for GradientStops {
-  fn valid_tokens() -> &'static [CssToken] {
-    GradientStop::valid_tokens()
-  }
-
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut stops = Vec::new();
-
-    stops.push(GradientStop::from_css(input)?);
-
-    while input.try_parse(Parser::expect_comma).is_ok() {
-      stops.push(GradientStop::from_css(input)?);
-    }
-
-    Ok(stops)
-  }
-}
+/// A list of gradient color stops.
+pub type GradientStops = Box<[GradientStop]>;
 
 /// Represents a resolved gradient stop with a position.
 #[derive(Debug, Clone, PartialEq)]
@@ -360,7 +342,7 @@ impl<'i> FromCss<'i> for LinearGradient {
 
       Ok(LinearGradient {
         angle,
-        stops: GradientStops::from_css(input)?.into_boxed_slice(),
+        stops: GradientStops::from_css(input)?,
       })
     })
   }

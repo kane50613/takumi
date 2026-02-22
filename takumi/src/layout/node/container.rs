@@ -10,7 +10,7 @@ use serde::Deserialize;
 use crate::layout::{
   Viewport,
   node::Node,
-  style::{InheritedStyle, Style, tw::TailwindValues},
+  style::{ComputedStyle, Style, tw::TailwindValues},
 };
 
 /// A container node that can hold child nodes.
@@ -34,11 +34,7 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ContainerNode<Nodes> {
     self.children.as_deref()
   }
 
-  fn create_inherited_style(
-    &mut self,
-    parent_style: &InheritedStyle,
-    viewport: Viewport,
-  ) -> InheritedStyle {
+  fn compute_style(&mut self, parent_style: &ComputedStyle, viewport: Viewport) -> ComputedStyle {
     // Start with empty style
     let mut style = Style::default();
 
@@ -57,7 +53,7 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ContainerNode<Nodes> {
       style.merge_from(inline_style);
     }
 
-    style.inherit(parent_style)
+    style.compute_style(parent_style)
   }
 
   fn take_children(&mut self) -> Option<Box<[Nodes]>> {

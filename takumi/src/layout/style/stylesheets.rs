@@ -1,9 +1,8 @@
-use std::{borrow::Cow, marker::PhantomData};
-
-use derive_builder::Builder;
+use cssparser::match_ignore_ascii_case;
 use parley::{FontSettings, FontStack, TextStyle};
-use serde::Deserialize;
+use serde::{Deserialize, de::Visitor};
 use smallvec::SmallVec;
+use std::{borrow::Cow, collections::HashMap, marker::PhantomData, sync::Arc};
 use taffy::{Point, Rect, Size, prelude::FromLength};
 
 use crate::{
@@ -14,7 +13,7 @@ use crate::{
   rendering::{RenderContext, SizedShadow, Sizing},
 };
 
-/// Helper macro to define the `Style` struct and `InheritedStyle` struct.
+/// Helper macro to define the `Style` struct and `ComputedStyle` struct.
 macro_rules! define_style_apply_clears {
   ($self:ident, $other:ident, $trigger:ident, [$($clear:ident),* $(,)?]) => {
     if !matches!(&$other.$trigger, CssValue::Unset) {
@@ -35,23 +34,130 @@ macro_rules! define_style {
       $(where inherit = $inherit:expr)?
       $(=> [$($merge_clear:ident),* $(,)?])?,
   )*) => {
-    /// Defines the style of an element.
-    #[derive(Debug, Default, Clone, Deserialize, Builder, PartialEq)]
-    #[serde(default, rename_all = "camelCase")]
-    #[builder(default, setter(into))]
-    pub struct Style {
+    /// A CSS attribute that can be set on a style.
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    #[allow(non_camel_case_types)]
+    pub enum Attribute {
       $(
-        $(#[$attr])*
         #[allow(missing_docs)]
-        pub $property: CssValue<$type$(, $inherit)?>,
+        $property,
+      )*
+      /// A custom attribute.
+      Custom(Arc<str>),
+    }
+
+    impl From<&str> for Attribute {
+      fn from(s: &str) -> Self {
+        $(
+          if s.eq_ignore_ascii_case(stringify!($property).replace("_", "-").as_str()) {
+            return Attribute::$property;
+          }
+        )*
+        Attribute::Custom(s.into())
+      }
+    }
+
+    impl Attribute {
+      /// Returns the string representation of the attribute.
+      pub fn as_str(&self) -> Cow<'static, str> {
+        match self {
+          $(
+            Attribute::$property => Cow::Borrowed(stringify!($property).replace("_", "-").leak()),
+          )*
+          Attribute::Custom(s) => Cow::Owned(s.to_string()),
+        }
+      }
+    }
+
+    impl std::fmt::Display for Attribute {
+      fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+      }
+    }
+
+    /// Defines the style of an element.
+    #[derive(Debug, Default, Clone, PartialEq)]
+    pub struct Style {
+      /// The CSS properties set on the element.
+      pub properties: HashMap<Attribute, Arc<str>>,
+      $(
+        #[allow(missing_docs)]
+        pub $property: CssValue<$type, { false $(|| $inherit)? }>,
       )*
     }
 
+    impl<'de> Deserialize<'de> for Style {
+      fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+      where
+        D: serde::Deserializer<'de>,
+      {
+        struct StyleVisitor;
+
+        impl<'de> Visitor<'de> for StyleVisitor {
+          type Value = Style;
+
+          fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a map of CSS properties")
+          }
+
+          fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+          where
+            A: serde::de::MapAccess<'de>,
+          {
+            let mut properties = HashMap::new();
+            while let Some(key) = map.next_key::<String>()? {
+              let value = map.next_value::<String>()?;
+              properties.insert(Attribute::from(key.as_str()), Arc::from(value));
+            }
+            Ok(Style {
+              properties,
+              ..Default::default()
+            })
+          }
+        }
+
+        deserializer.deserialize_map(StyleVisitor)
+      }
+    }
+
     impl Style {
-      /// Inherits the style from the parent element.
-      pub(crate) fn inherit(self, parent: &InheritedStyle) -> InheritedStyle {
-        InheritedStyle {
-          $( $property: self.$property.inherit_value(&parent.$property), )*
+      /// Returns the value of a property if it exists.
+      pub fn attr<T: for<'i> FromCss<'i>, const INHERIT: bool>(&self, attr: Attribute) -> CssValue<T, INHERIT> {
+        match self.properties.get(&attr) {
+          Some(s) => match_ignore_ascii_case! {s,
+            "initial" => CssValue::Initial,
+            "inherit" => CssValue::Inherit,
+            "unset" => CssValue::Unset,
+            _ => match T::from_str(s) {
+              Ok(v) => CssValue::Value(v),
+              Err(_) => CssValue::Unset,
+            },
+          },
+          None => CssValue::Unset,
+        }
+      }
+
+      /// Computes the style by inheriting from the parent element and resolving local properties.
+      pub(crate) fn compute_style(self, parent: &ComputedStyle) -> ComputedStyle {
+        let mut custom_properties = parent.custom_properties.clone();
+        for (key, value) in &self.properties {
+          if let Attribute::Custom(name) = key {
+             custom_properties.insert(name.clone(), value.clone());
+          }
+        }
+
+        ComputedStyle {
+          custom_properties,
+          $(
+            $property: {
+              #[allow(non_camel_case_types)]
+              let attr = Attribute::$property;
+              const IS_INHERIT: bool = false $(|| $inherit)?;
+              let v: CssValue<$type, IS_INHERIT> = self.$property.clone();
+              v.or(self.attr::<$type, IS_INHERIT>(attr))
+                .inherit_value(&parent.$property)
+            },
+          )*
         }
       }
 
@@ -59,22 +165,55 @@ macro_rules! define_style {
       /// This is used to overlay higher-priority styles (e.g., inline styles) over lower-priority ones (e.g., Tailwind).
       pub(crate) fn merge_from(&mut self, other: Self) {
         $(
-          define_style_apply_clears!(self, other, $property $(, [$($merge_clear),*])?);
+           self.$property = other.$property.clone().or(self.$property.clone());
+           define_style_apply_clears!(self, other, $property $(, [$($merge_clear),*])?);
         )*
 
         $(
-          self.$property = other.$property.or(std::mem::take(&mut self.$property));
+          if let Some(value) = other.properties.get(&Attribute::$property) {
+            if !matches!(value.as_ref(), "unset") {
+              $(
+                $(
+                  self.properties.remove(&Attribute::$merge_clear);
+                )*
+              )?
+            }
+          }
         )*
+
+        for (key, value) in other.properties {
+          if value.as_ref() == "unset" {
+             self.properties.remove(&key);
+          } else {
+             self.properties.insert(key, value);
+          }
+        }
       }
     }
 
     /// A resolved set of style properties.
     #[derive(Clone, Debug, Default)]
-    pub struct InheritedStyle {
+    pub struct ComputedStyle {
+      /// Computed custom properties (CSS variables).
+      pub custom_properties: HashMap<Arc<str>, Arc<str>>,
       $( pub(crate) $property: $type, )*
     }
 
-    impl InheritedStyle {
+    impl std::fmt::Display for ComputedStyle {
+      fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (name, value) in &self.custom_properties {
+          write!(f, "{}: {}; ", name, value)?;
+        }
+        $(
+          // Only show non-default values if possible, but for simplicity show all or skip None.
+          // This depends on whether $type implements Display or is Option.
+          write!(f, "{}: {:?}; ", stringify!($property).replace("_", "-"), self.$property)?;
+        )*
+        Ok(())
+      }
+    }
+
+    impl ComputedStyle {
       pub(crate) fn make_computed_values(&mut self, sizing: &Sizing) {
         $(
           self.$property.make_computed(sizing);
@@ -291,7 +430,7 @@ define_style!(
 /// Sized font style with resolved font size and line height.
 #[derive(Clone)]
 pub(crate) struct SizedFontStyle<'s> {
-  pub parent: &'s InheritedStyle,
+  pub parent: &'s ComputedStyle,
   pub line_height: parley::LineHeight,
   pub stroke_width: f32,
   pub letter_spacing: Option<f32>,
@@ -375,7 +514,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, InlineBrush> {
   }
 }
 
-impl InheritedStyle {
+impl ComputedStyle {
   /// Normalize inheritable text-related values to computed values for this node.
   pub(crate) fn make_computed(&mut self, sizing: &Sizing) {
     // `font-size` computed value is already resolved in `sizing.font_size`.
@@ -876,66 +1015,77 @@ impl InheritedStyle {
 
 #[cfg(test)]
 mod tests {
+  use super::*;
   use std::rc::Rc;
-
   use taffy::Size;
 
   use crate::{
-    layout::{
-      Viewport,
-      style::{CssValue, InheritedStyle, Style, properties::*},
-    },
+    layout::{Viewport, style::CssValue},
     rendering::Sizing,
   };
 
   #[test]
   fn test_merge_from_inline_over_tailwind() {
     // Tailwind style (lower priority)
-    let mut tw_style = Style {
-      width: CssValue::Value(Length::Rem(10.0)),
-      height: CssValue::Value(Length::Rem(20.0)),
-      color: CssValue::Value(ColorInput::Value(Color([255, 0, 0, 255]))), // red
-      ..Default::default()
-    };
+    let mut tw_style = Style::default();
+    tw_style
+      .properties
+      .insert(Attribute::width, Arc::from("10rem"));
+    tw_style
+      .properties
+      .insert(Attribute::height, Arc::from("20rem"));
+    tw_style
+      .properties
+      .insert(Attribute::color, Arc::from("red"));
 
     // Inline style (higher priority) - only sets width
-    // height is Unset
-    // color is Unset
-    let inline_style = Style {
-      width: CssValue::Value(Length::Px(100.0)),
-      ..Default::default()
-    };
+    let mut inline_style = Style::default();
+    inline_style
+      .properties
+      .insert(Attribute::width, Arc::from("100px"));
 
     // Merge: inline_style should override tw_style's width, but keep height and color
     tw_style.merge_from(inline_style);
 
     // Check results
-    assert_eq!(tw_style.width, CssValue::Value(Length::Px(100.0))); // from inline
-    assert_eq!(tw_style.height, CssValue::Value(Length::Rem(20.0))); // from tw
     assert_eq!(
-      tw_style.color,
+      tw_style.attr::<Length, false>(Attribute::width),
+      CssValue::Value(Length::Px(100.0))
+    ); // from inline
+    assert_eq!(
+      tw_style.attr::<Length, false>(Attribute::height),
+      CssValue::Value(Length::Rem(20.0))
+    ); // from tw
+    assert_eq!(
+      tw_style.attr::<ColorInput, true>(Attribute::color),
       CssValue::Value(ColorInput::Value(Color([255, 0, 0, 255])))
     ); // from tw
   }
 
   #[test]
   fn test_merge_from_margin_shorthand_clears_lower_priority_longhands() {
-    let mut preset_style = Style {
-      margin_top: Some(Length::Em(0.67)).into(),
-      margin_bottom: Some(Length::Em(0.67)).into(),
-      margin_left: Some(Length::Px(0.0)).into(),
-      margin_right: Some(Length::Px(0.0)).into(),
-      ..Default::default()
-    };
+    let mut preset_style = Style::default();
+    preset_style
+      .properties
+      .insert(Attribute::margin_top, Arc::from("0.67em"));
+    preset_style
+      .properties
+      .insert(Attribute::margin_bottom, Arc::from("0.67em"));
+    preset_style
+      .properties
+      .insert(Attribute::margin_left, Arc::from("0px"));
+    preset_style
+      .properties
+      .insert(Attribute::margin_right, Arc::from("0px"));
 
-    let inline_style = Style {
-      margin: Sides([Length::Px(0.0); 4]).into(),
-      ..Default::default()
-    };
+    let mut inline_style = Style::default();
+    inline_style
+      .properties
+      .insert(Attribute::margin, Arc::from("0px"));
 
     preset_style.merge_from(inline_style);
 
-    let inherited = preset_style.inherit(&InheritedStyle::default());
+    let inherited = preset_style.compute_style(&ComputedStyle::default());
     let resolved = inherited.resolved_margin();
     assert_eq!(resolved.top, Length::Px(0.0));
     assert_eq!(resolved.right, Length::Px(0.0));
@@ -945,21 +1095,25 @@ mod tests {
 
   #[test]
   fn test_merge_from_margin_longhand_still_overrides_shorthand_in_same_layer() {
-    let mut preset_style = Style {
-      margin_top: Some(Length::Em(0.67)).into(),
-      margin_bottom: Some(Length::Em(0.67)).into(),
-      ..Default::default()
-    };
+    let mut preset_style = Style::default();
+    preset_style
+      .properties
+      .insert(Attribute::margin_top, Arc::from("0.67em"));
+    preset_style
+      .properties
+      .insert(Attribute::margin_bottom, Arc::from("0.67em"));
 
-    let inline_style = Style {
-      margin: Sides([Length::Px(0.0); 4]).into(),
-      margin_top: Some(Length::Px(8.0)).into(),
-      ..Default::default()
-    };
+    let mut inline_style = Style::default();
+    inline_style
+      .properties
+      .insert(Attribute::margin, Arc::from("0px"));
+    inline_style
+      .properties
+      .insert(Attribute::margin_top, Arc::from("8px"));
 
     preset_style.merge_from(inline_style);
 
-    let inherited = preset_style.inherit(&InheritedStyle::default());
+    let inherited = preset_style.compute_style(&ComputedStyle::default());
     let resolved = inherited.resolved_margin();
     assert_eq!(resolved.top, Length::Px(8.0));
     assert_eq!(resolved.right, Length::Px(0.0));
@@ -969,25 +1123,19 @@ mod tests {
 
   #[test]
   fn test_merge_from_text_decoration_shorthand_clears_lower_priority_color() {
-    let mut preset_style = Style {
-      text_decoration_color: Some(ColorInput::Value(Color([255, 0, 0, 255]))).into(),
-      ..Default::default()
-    };
+    let mut preset_style = Style::default();
+    preset_style
+      .properties
+      .insert(Attribute::text_decoration_color, Arc::from("red"));
 
-    let inline_style = Style {
-      text_decoration: TextDecoration {
-        line: TextDecorationLines::UNDERLINE,
-        style: None,
-        color: None,
-        thickness: None,
-      }
-      .into(),
-      ..Default::default()
-    };
+    let mut inline_style = Style::default();
+    inline_style
+      .properties
+      .insert(Attribute::text_decoration, Arc::from("underline"));
 
     preset_style.merge_from(inline_style);
 
-    let inherited = preset_style.inherit(&InheritedStyle::default());
+    let inherited = preset_style.compute_style(&ComputedStyle::default());
     assert_eq!(inherited.text_decoration_color, None);
     assert_eq!(
       inherited.text_decoration.line,
@@ -997,25 +1145,22 @@ mod tests {
 
   #[test]
   fn test_merge_from_border_shorthand_clears_lower_priority_border_width_longhands() {
-    let mut preset_style = Style {
-      border_top_width: Some(Length::Px(8.0)).into(),
-      border_bottom_width: Some(Length::Px(8.0)).into(),
-      ..Default::default()
-    };
+    let mut preset_style = Style::default();
+    preset_style
+      .properties
+      .insert(Attribute::border_top_width, Arc::from("8px"));
+    preset_style
+      .properties
+      .insert(Attribute::border_bottom_width, Arc::from("8px"));
 
-    let inline_style = Style {
-      border: Border {
-        width: Length::Px(2.0),
-        style: BorderStyle::Solid,
-        color: ColorInput::CurrentColor,
-      }
-      .into(),
-      ..Default::default()
-    };
+    let mut inline_style = Style::default();
+    inline_style
+      .properties
+      .insert(Attribute::border, Arc::from("2px solid currentcolor"));
 
     preset_style.merge_from(inline_style);
 
-    let inherited = preset_style.inherit(&InheritedStyle::default());
+    let inherited = preset_style.compute_style(&ComputedStyle::default());
     let resolved = inherited.resolved_border_width();
     assert_eq!(resolved.top, Length::Px(2.0));
     assert_eq!(resolved.right, Length::Px(2.0));
@@ -1025,19 +1170,19 @@ mod tests {
 
   #[test]
   fn test_merge_from_background_shorthand_clears_lower_priority_background_color() {
-    let mut preset_style = Style {
-      background_color: Some(ColorInput::Value(Color([255, 0, 0, 255]))).into(),
-      ..Default::default()
-    };
+    let mut preset_style = Style::default();
+    preset_style
+      .properties
+      .insert(Attribute::background_color, Arc::from("red"));
 
-    let inline_style = Style {
-      background: [Background::default()].into(),
-      ..Default::default()
-    };
+    let mut inline_style = Style::default();
+    inline_style
+      .properties
+      .insert(Attribute::background, Arc::from("none"));
 
     preset_style.merge_from(inline_style);
 
-    let inherited = preset_style.inherit(&InheritedStyle::default());
+    let inherited = preset_style.compute_style(&ComputedStyle::default());
     assert_eq!(inherited.background_color, None);
   }
 
@@ -1090,7 +1235,7 @@ mod tests {
       padding_left: Some(Length::Px(50.0)).into(),
       ..Default::default()
     }
-    .inherit(&InheritedStyle::default());
+    .compute_style(&ComputedStyle::default());
 
     let resolved = inherited.resolved_padding();
 
@@ -1113,7 +1258,7 @@ mod tests {
       border_top_width: Some(Length::Px(4.0)).into(),
       ..Default::default()
     }
-    .inherit(&InheritedStyle::default());
+    .compute_style(&ComputedStyle::default());
 
     let resolved = inherited.resolved_border_width();
 
@@ -1125,7 +1270,7 @@ mod tests {
 
   #[test]
   fn test_isolated_for_clip_path_and_mask_image() {
-    let mut style = InheritedStyle::default();
+    let mut style = ComputedStyle::default();
     assert!(!style.is_isolated());
 
     style.clip_path = BasicShape::from_str("inset(10px)").ok();
@@ -1139,7 +1284,7 @@ mod tests {
 
   #[test]
   fn test_non_identity_transform_detection() {
-    let mut style = InheritedStyle::default();
+    let mut style = ComputedStyle::default();
     let sizing = Sizing {
       viewport: Viewport::new(Some(1200), Some(630)),
       font_size: 16.0,
@@ -1152,16 +1297,16 @@ mod tests {
 
     assert!(!style.has_non_identity_transform(border_box, &sizing));
 
-    style.transform = Some(vec![Transform::Rotate(Angle::new(0.0))].into_boxed_slice());
+    style.transform = Some(vec![Transform::Rotate(Angle::new(0.0))]);
     assert!(!style.has_non_identity_transform(border_box, &sizing));
 
-    style.transform = Some(vec![Transform::Rotate(Angle::new(10.0))].into_boxed_slice());
+    style.transform = Some(vec![Transform::Rotate(Angle::new(10.0))]);
     assert!(style.has_non_identity_transform(border_box, &sizing));
   }
 
   #[test]
   fn test_text_overflow_ellipsis_forces_single_line_clamp_on_nowrap() {
-    let style = InheritedStyle {
+    let style = ComputedStyle {
       text_wrap_mode: Some(TextWrapMode::NoWrap),
       text_overflow: TextOverflow::Ellipsis,
       ..Default::default()
@@ -1187,14 +1332,14 @@ mod tests {
       line_height: LineHeight::Length(Length::Em(1.5)).into(),
       ..Default::default()
     }
-    .inherit(&InheritedStyle::default());
+    .compute_style(&ComputedStyle::default());
     parent.make_computed(&Sizing {
       viewport: Viewport::new(Some(1200), Some(630)),
       font_size: 32.0,
       calc_arena: Rc::new(CalcArena::default()),
     });
 
-    let inherited_child = Style::default().inherit(&parent);
+    let inherited_child = Style::default().compute_style(&parent);
     let inherited_child_sizing = Sizing {
       viewport: Viewport::new(Some(1200), Some(630)),
       font_size: 32.0,
@@ -1210,7 +1355,7 @@ mod tests {
       font_size: Some(Length::Px(10.0)).into(),
       ..Default::default()
     }
-    .inherit(&parent);
+    .compute_style(&parent);
     let child_sizing = Sizing {
       viewport: Viewport::new(Some(1200), Some(630)),
       font_size: 10.0,

@@ -156,7 +156,7 @@ impl<'i> FromCss<'i> for ConicGradient {
       Ok(ConicGradient {
         from_angle: from_angle.unwrap_or(Angle::zero()),
         center: center.unwrap_or_default(),
-        stops: stops.into_boxed_slice(),
+        stops,
       })
     })
   }

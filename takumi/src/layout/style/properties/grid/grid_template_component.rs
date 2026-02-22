@@ -126,20 +126,6 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
   }
 }
 
-impl<'i> FromCss<'i> for GridTemplateComponents {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut components = Vec::new();
-    while let Ok(component) = GridTemplateComponent::from_css(input) {
-      components.push(component);
-    }
-    Ok(components)
-  }
-
-  fn valid_tokens() -> &'static [CssToken] {
-    GridTemplateComponent::valid_tokens()
-  }
-}
-
 #[cfg(test)]
 mod tests {
   use crate::layout::style::{GridLength, GridRepetitionKeyword};

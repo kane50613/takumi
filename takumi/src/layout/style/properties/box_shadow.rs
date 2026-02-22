@@ -30,33 +30,8 @@ pub struct BoxShadow {
   pub color: ColorInput,
 }
 
-/// Represents a collection of box shadows, have custom `FromCss` implementation for comma-separated values.
+/// Represents a collection of box shadows.
 pub type BoxShadows = Box<[BoxShadow]>;
-
-impl<'i> FromCss<'i> for BoxShadows {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut shadows = Vec::new();
-
-    loop {
-      if input.is_exhausted() {
-        break;
-      }
-
-      let shadow = BoxShadow::from_css(input)?;
-      shadows.push(shadow);
-
-      if input.expect_comma().is_err() {
-        break;
-      }
-    }
-
-    Ok(shadows.into_boxed_slice())
-  }
-
-  fn valid_tokens() -> &'static [CssToken] {
-    BoxShadow::valid_tokens()
-  }
-}
 
 impl<'i> FromCss<'i> for BoxShadow {
   /// Parses a box-shadow value from CSS input.

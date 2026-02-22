@@ -17,8 +17,8 @@ use crate::{
     Viewport,
     inline::InlineContentKind,
     style::{
-      Affine, BackgroundClip, BackgroundImage, BlendMode, CssValue, InheritedStyle, Length, Sides,
-      Style,
+      Affine, Attribute, Background, BackgroundClip, BackgroundImage, BlendMode, ComputedStyle,
+      CssValue, Length, Sides, Style,
     },
   },
   rendering::{
@@ -44,9 +44,9 @@ macro_rules! impl_node_enum {
         }
       }
 
-      fn create_inherited_style(&mut self, parent: &$crate::layout::style::InheritedStyle, viewport: $crate::layout::Viewport) -> $crate::layout::style::InheritedStyle {
+      fn compute_style(&mut self, parent: &$crate::layout::style::ComputedStyle, viewport: $crate::layout::Viewport) -> $crate::layout::style::ComputedStyle {
         match self {
-          $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::create_inherited_style(inner, parent, viewport), )*
+          $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::compute_style(inner, parent, viewport), )*
         }
       }
 
@@ -160,7 +160,9 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
   /// Creates resolving tasks for style's http resources.
   fn collect_style_fetch_tasks(&self, collection: &mut FetchTaskCollection) {
     if let Some(style) = self.get_style() {
-      if let CssValue::Value(Some(images)) = &style.background_image {
+      if let CssValue::Value(Some(images)) =
+        style.attr::<Option<Box<[BackgroundImage]>>, false>(Attribute::background_image)
+      {
         collection.insert_many(images.iter().filter_map(|image| {
           if let BackgroundImage::Url(url) = image {
             Some(url.clone())
@@ -170,7 +172,9 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
         }))
       };
 
-      if let CssValue::Value(background) = &style.background {
+      if let CssValue::Value(background) =
+        style.attr::<Box<[Background]>, false>(Attribute::background)
+      {
         collection.insert_many(background.iter().filter_map(|background| {
           if let BackgroundImage::Url(url) = &background.image {
             Some(url.clone())
@@ -180,7 +184,9 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
         }));
       };
 
-      if let CssValue::Value(Some(images)) = &style.mask_image {
+      if let CssValue::Value(Some(images)) =
+        style.attr::<Option<Box<[BackgroundImage]>>, false>(Attribute::mask_image)
+      {
         collection.insert_many(images.iter().filter_map(|image| {
           if let BackgroundImage::Url(url) = image {
             Some(url.clone())
@@ -190,7 +196,7 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
         }));
       };
 
-      if let CssValue::Value(mask) = &style.mask {
+      if let CssValue::Value(mask) = style.attr::<Box<[Background]>, false>(Attribute::mask) {
         collection.insert_many(mask.iter().filter_map(|background| {
           if let BackgroundImage::Url(url) = &background.image {
             Some(url.clone())
@@ -215,12 +221,8 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
     None
   }
 
-  /// Create a [`InheritedStyle`] instance or clone the parent's.
-  fn create_inherited_style(
-    &mut self,
-    _parent: &InheritedStyle,
-    viewport: Viewport,
-  ) -> InheritedStyle;
+  /// Create a [`ComputedStyle`] instance or clone the parent's.
+  fn compute_style(&mut self, _parent: &ComputedStyle, viewport: Viewport) -> ComputedStyle;
 
   /// Retrieve content for inline layout.
   fn inline_content(&self) -> Option<InlineContentKind<'_>> {

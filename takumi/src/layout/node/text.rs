@@ -12,7 +12,7 @@ use crate::{
       create_inline_layout, measure_inline_layout,
     },
     node::Node,
-    style::{InheritedStyle, Style, tw::TailwindValues},
+    style::{ComputedStyle, Style, tw::TailwindValues},
   },
   rendering::{Canvas, MaxHeight, RenderContext, inline_drawing::draw_inline_layout},
 };
@@ -34,11 +34,7 @@ pub struct TextNode {
 }
 
 impl<Nodes: Node<Nodes>> Node<Nodes> for TextNode {
-  fn create_inherited_style(
-    &mut self,
-    parent_style: &InheritedStyle,
-    viewport: Viewport,
-  ) -> InheritedStyle {
+  fn compute_style(&mut self, parent_style: &ComputedStyle, viewport: Viewport) -> ComputedStyle {
     // Start with empty style
     let mut style = Style::default();
 
@@ -57,7 +53,7 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for TextNode {
       style.merge_from(inline_style);
     }
 
-    style.inherit(parent_style)
+    style.compute_style(parent_style)
   }
 
   fn inline_content(&self) -> Option<InlineContentKind<'_>> {

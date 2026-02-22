@@ -89,24 +89,6 @@ impl<'i> FromCss<'i> for BackgroundImage {
 /// A collection of background images.
 pub type BackgroundImages = Box<[BackgroundImage]>;
 
-impl<'i> FromCss<'i> for BackgroundImages {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut images = Vec::new();
-
-    images.push(BackgroundImage::from_css(input)?);
-
-    while input.expect_comma().is_ok() {
-      images.push(BackgroundImage::from_css(input)?);
-    }
-
-    Ok(images.into_boxed_slice())
-  }
-
-  fn valid_tokens() -> &'static [CssToken] {
-    BackgroundImage::valid_tokens()
-  }
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;

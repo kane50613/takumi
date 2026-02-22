@@ -529,23 +529,6 @@ fn apply_drop_shadow_filter(
   Ok(())
 }
 
-impl<'i> FromCss<'i> for Filters {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut filters = Vec::new();
-
-    while !input.is_exhausted() {
-      let filter = Filter::from_css(input)?;
-      filters.push(filter);
-    }
-
-    Ok(filters)
-  }
-
-  fn valid_tokens() -> &'static [CssToken] {
-    Filter::valid_tokens()
-  }
-}
-
 impl<'i> FromCss<'i> for Filter {
   fn from_css(parser: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let location = parser.current_source_location();

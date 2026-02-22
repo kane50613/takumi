@@ -16,7 +16,7 @@ use crate::{
       create_inline_layout, measure_inline_layout,
     },
     node::Node,
-    style::{Affine, Display, InheritedStyle},
+    style::{Affine, ComputedStyle, Display},
   },
   rendering::{
     Canvas, MaxHeight, RenderContext, Sizing,
@@ -507,8 +507,7 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
   }
 
   fn from_node_impl(parent_context: &RenderContext<'g>, mut node: N) -> Self {
-    let mut style =
-      node.create_inherited_style(&parent_context.style, parent_context.sizing.viewport);
+    let mut style = node.compute_style(&parent_context.style, parent_context.sizing.viewport);
 
     let font_size = style
       .font_size
@@ -580,9 +579,9 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
     let mut final_children = Vec::new();
     let mut inline_group = Vec::new();
 
-    let anonymous_box_style = InheritedStyle {
+    let anonymous_box_style = ComputedStyle {
       display: Display::Block,
-      ..InheritedStyle::default()
+      ..ComputedStyle::default()
     };
 
     for item in children {
@@ -723,7 +722,7 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
 fn flush_inline_group<'g, N: Node<N>>(
   inline_group: &mut Vec<RenderNode<'g, N>>,
   final_children: &mut Vec<RenderNode<'g, N>>,
-  anonymous_box_style: &InheritedStyle,
+  anonymous_box_style: &ComputedStyle,
   parent_render_context: &RenderContext<'g>,
 ) {
   if inline_group.is_empty() {

@@ -286,24 +286,7 @@ impl<'i> FromCss<'i> for Affine {
 }
 
 /// A collection of transform operations that can be applied together
-pub type Transforms = Box<[Transform]>;
-
-impl<'i> FromCss<'i> for Transforms {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut transforms = Vec::new();
-
-    while !input.is_exhausted() {
-      let transform = Transform::from_css(input)?;
-      transforms.push(transform);
-    }
-
-    Ok(transforms.into_boxed_slice())
-  }
-
-  fn valid_tokens() -> &'static [CssToken] {
-    Transform::valid_tokens()
-  }
-}
+pub type Transforms = Vec<Transform>;
 
 impl<'i> FromCss<'i> for Transform {
   fn from_css(parser: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {

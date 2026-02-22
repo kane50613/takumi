@@ -182,6 +182,27 @@ impl<T: MakeComputed> MakeComputed for Option<T> {
   }
 }
 
+impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    if input
+      .try_parse(|input| input.expect_ident_matching("none"))
+      .is_ok()
+    {
+      return Ok(None);
+    }
+
+    T::from_css(input).map(Some)
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    T::valid_tokens()
+  }
+
+  fn expect_message() -> Cow<'static, str> {
+    format!("{}; also accepts 'none'", T::expect_message()).into()
+  }
+}
+
 impl<T: MakeComputed> MakeComputed for Box<[T]> {
   fn make_computed(&mut self, sizing: &Sizing) {
     for value in self.iter_mut() {
@@ -190,11 +211,59 @@ impl<T: MakeComputed> MakeComputed for Box<[T]> {
   }
 }
 
+impl<'i, T: FromCss<'i>> FromCss<'i> for Box<[T]> {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let mut values = Vec::new();
+
+    values.push(T::from_css(input)?);
+    while input.try_parse(Parser::expect_comma).is_ok() {
+      values.push(T::from_css(input)?);
+    }
+
+    Ok(values.into_boxed_slice())
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    T::valid_tokens()
+  }
+
+  fn expect_message() -> Cow<'static, str> {
+    T::expect_message()
+  }
+}
+
 impl<T: MakeComputed> MakeComputed for Vec<T> {
   fn make_computed(&mut self, sizing: &Sizing) {
     for value in self.iter_mut() {
       value.make_computed(sizing);
     }
+  }
+}
+
+impl<'i, T: FromCss<'i>> FromCss<'i> for Vec<T> {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let mut values = Vec::new();
+
+    while !input.is_exhausted() {
+      match input.try_parse(T::from_css) {
+        Ok(value) => values.push(value),
+        Err(_) => break,
+      }
+    }
+
+    if values.is_empty() {
+      return Err(input.new_error_for_next_token());
+    }
+
+    Ok(values)
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    T::valid_tokens()
+  }
+
+  fn expect_message() -> Cow<'static, str> {
+    T::expect_message()
   }
 }
 

@@ -260,7 +260,7 @@ impl<'i> FromCss<'i> for RadialGradient {
         shape,
         size,
         center,
-        stops: stops.into_boxed_slice(),
+        stops,
       })
     })
   }

@@ -205,20 +205,3 @@ impl<'i> FromCss<'i> for PositionComponent {
 
 /// A list of `background-position` values (one per layer).
 pub type BackgroundPositions = Box<[BackgroundPosition]>;
-
-impl<'i> FromCss<'i> for BackgroundPositions {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut values = Vec::new();
-    values.push(BackgroundPosition::from_css(input)?);
-
-    while input.expect_comma().is_ok() {
-      values.push(BackgroundPosition::from_css(input)?);
-    }
-
-    Ok(values.into_boxed_slice())
-  }
-
-  fn valid_tokens() -> &'static [CssToken] {
-    BackgroundPosition::valid_tokens()
-  }
-}
