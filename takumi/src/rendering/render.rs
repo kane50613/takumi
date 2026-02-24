@@ -17,7 +17,7 @@ use crate::{
     node::Node,
     style::{
       Affine, Filter, ImageScalingAlgorithm, InheritedStyle, SpacePair, apply_backdrop_filter,
-      apply_filters,
+      apply_filters, selector::StyleSheet,
     },
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
@@ -82,13 +82,16 @@ pub struct MeasuredNode {
 
 /// Measures the layout of a node.
 pub fn measure_layout<'g, N: Node<N>>(options: RenderOptions<'g, N>) -> Result<MeasuredNode> {
+  let parsed_stylesheets = StyleSheet::parse_list(options.stylesheets.iter().map(String::as_str))
+    .map(|stylesheet| stylesheet.map_err(Error::from))
+    .collect::<Result<Vec<_>>>()?;
   let render_context = RenderContext {
     draw_debug_border: options.draw_debug_border,
     ..RenderContext::new(
       options.global,
       options.viewport,
       options.fetched_resources,
-      options.stylesheets.into_iter().map(Into::into),
+      parsed_stylesheets,
     )
   };
   let root = RenderNode::from_node(&render_context, options.node);
@@ -223,13 +226,16 @@ fn collect_measure_result<'g, Nodes: Node<Nodes>>(
 /// Renders a node to an image.
 pub fn render<'g, N: Node<N>>(options: RenderOptions<'g, N>) -> Result<RgbaImage> {
   let viewport = options.viewport;
+  let parsed_stylesheets = StyleSheet::parse_list(options.stylesheets.iter().map(String::as_str))
+    .map(|stylesheet| stylesheet.map_err(Error::from))
+    .collect::<Result<Vec<_>>>()?;
   let render_context = RenderContext {
     draw_debug_border: options.draw_debug_border,
     ..RenderContext::new(
       options.global,
       viewport,
       options.fetched_resources,
-      options.stylesheets.into_iter().map(Into::into),
+      parsed_stylesheets,
     )
   };
 

@@ -306,20 +306,17 @@ pub(crate) struct StyleSheet {
   pub rules: Vec<CssRule>,
 }
 
-impl From<String> for StyleSheet {
-  fn from(css: String) -> Self {
-    Self::parse(&css)
-  }
-}
-
-impl From<&str> for StyleSheet {
-  fn from(css: &str) -> Self {
-    Self::parse(css)
-  }
-}
-
 impl StyleSheet {
-  pub(crate) fn parse(css: &str) -> Self {
+  pub(crate) fn parse_list<'a, I>(
+    stylesheets: I,
+  ) -> impl Iterator<Item = Result<Self, CssSelectorParseError<'a>>>
+  where
+    I: IntoIterator<Item = &'a str>,
+  {
+    stylesheets.into_iter().map(Self::parse)
+  }
+
+  pub(crate) fn parse(css: &str) -> Result<Self, CssSelectorParseError<'_>> {
     let mut input = ParserInput::new(css);
     let mut parser = Parser::new(&mut input);
     let mut rule_parser = TakumiRuleParser;
@@ -327,11 +324,18 @@ impl StyleSheet {
 
     let rule_list_parser = StyleSheetParser::new(&mut parser, &mut rule_parser);
 
-    for rule in rule_list_parser.flatten() {
-      rules.push(rule);
+    for rule in rule_list_parser {
+      match rule {
+        Ok(rule) => rules.push(rule),
+        Err((error, _slice)) => {
+          return Err(CssSelectorParseError::Property(Cow::Owned(format!(
+            "{error:?}"
+          ))));
+        }
+      }
     }
 
-    Self { rules }
+    Ok(Self { rules })
   }
 }
 
@@ -349,6 +353,10 @@ mod tests {
             }
         "#;
     let sheet = StyleSheet::parse(css);
+    assert!(sheet.is_ok());
+    let Ok(sheet) = sheet else {
+      return;
+    };
     assert_eq!(sheet.rules.len(), 1);
     let rule = &sheet.rules[0];
 
@@ -364,6 +372,10 @@ mod tests {
         #hero .label { height: 20px; }
       "#,
     );
+    assert!(sheet.is_ok());
+    let Ok(sheet) = sheet else {
+      return;
+    };
 
     assert_eq!(sheet.rules.len(), 2);
     assert_eq!(sheet.rules[0].selectors.slice().len(), 1);
@@ -383,6 +395,10 @@ mod tests {
         .b { height: 20px; }
       "#,
     );
+    assert!(sheet.is_ok());
+    let Ok(sheet) = sheet else {
+      return;
+    };
 
     assert_eq!(sheet.rules.len(), 2);
     assert_eq!(
@@ -402,6 +418,10 @@ mod tests {
         .a, .b { width: 12px; }
       "#,
     );
+    assert!(sheet.is_ok());
+    let Ok(sheet) = sheet else {
+      return;
+    };
 
     assert_eq!(sheet.rules.len(), 1);
     assert_eq!(sheet.rules[0].selectors.slice().len(), 2);
@@ -412,7 +432,7 @@ mod tests {
   }
 
   #[test]
-  fn test_parse_stylesheet_malformed_css_skips_invalid_rule() {
+  fn test_parse_stylesheet_malformed_css_returns_error() {
     let sheet = StyleSheet::parse(
       r#"
         .a { width: 10px; }
@@ -420,15 +440,18 @@ mod tests {
         .b { height: 20px; }
       "#,
     );
+    assert!(sheet.is_err());
+  }
 
-    assert_eq!(sheet.rules.len(), 2);
-    assert_eq!(
-      sheet.rules[0].style.width,
-      CssValue::Value(Length::Px(10.0))
-    );
-    assert_eq!(
-      sheet.rules[1].style.height,
-      CssValue::Value(Length::Px(20.0))
-    );
+  #[test]
+  fn test_parse_stylesheet_list_returns_error() {
+    let stylesheets = [
+      ".a { width: 10px; }",
+      ". { color: red; }",
+      ".b { height: 20px; }",
+    ];
+
+    let sheets = StyleSheet::parse_list(stylesheets).collect::<Result<Vec<_>, _>>();
+    assert!(sheets.is_err());
   }
 }

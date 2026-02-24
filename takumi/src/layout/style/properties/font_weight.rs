@@ -1,4 +1,4 @@
-use cssparser::{Parser, match_ignore_ascii_case};
+use cssparser::{Parser, Token, match_ignore_ascii_case};
 use parley::style::FontWeight as ParleyFontWeight;
 
 use crate::layout::style::{
@@ -13,14 +13,18 @@ impl MakeComputed for FontWeight {}
 
 impl<'i> FromCss<'i> for FontWeight {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let Some(value) = ParleyFontWeight::parse(input.current_line()) else {
-      return Err(Self::unexpected_token_error(
-        input.current_source_location(),
-        input.next()?,
-      ));
-    };
+    let location = input.current_source_location();
+    let token = input.next()?;
 
-    Ok(FontWeight(value))
+    match token {
+      Token::Number { value, .. } => Ok((*value).into()),
+      Token::Ident(ident) => match_ignore_ascii_case! { ident,
+        "normal" => Ok(400.0.into()),
+        "bold" => Ok(700.0.into()),
+        _ => Err(Self::unexpected_token_error(location, token)),
+      },
+      _ => Err(Self::unexpected_token_error(location, token)),
+    }
   }
 
   fn valid_tokens() -> &'static [CssToken] {
@@ -58,5 +62,15 @@ impl From<FontWeight> for ParleyFontWeight {
 impl From<f32> for FontWeight {
   fn from(value: f32) -> Self {
     FontWeight(ParleyFontWeight::new(value))
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn parses_numeric_font_weight() {
+    assert_eq!(FontWeight::from_str("700"), Ok(700.0.into()));
   }
 }
