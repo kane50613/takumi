@@ -69,7 +69,7 @@ self.onmessage = async (event: MessageEvent) => {
         const { default: component, options } = evaluateCodeExports(
           payload.code,
         );
-        const node = await fromJsx(
+        const { node, stylesheets } = await fromJsx(
           React.createElement(
             component as React.JSXElementConstructor<unknown>,
           ),
@@ -84,6 +84,7 @@ self.onmessage = async (event: MessageEvent) => {
         const start = performance.now();
         const dataUrl = renderer.renderAsDataUrl(node, {
           ...options,
+          stylesheets: options.stylesheets ?? stylesheets,
           fetchedResources,
         });
         const duration = performance.now() - start;

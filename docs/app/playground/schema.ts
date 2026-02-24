@@ -10,6 +10,7 @@ export const optionsSchema = z.object({
   devicePixelRatio: z.optional(
     z.number().check(z.positive(), z.minimum(0.1), z.maximum(10.0)),
   ),
+  stylesheets: z.optional(z.array(z.string())),
 });
 
 const renderSuccessSchema = z.object({

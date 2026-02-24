@@ -199,12 +199,15 @@ impl<'a, N: Node<N>> Element for ArenaElement<'a, N> {
     false
   }
 
+  // TODO(#attr-selectors): implement CSS attribute selector matching.
   fn attr_matches(
     &self,
     _ns: &selectors::attr::NamespaceConstraint<&TakumiIdent>,
     _local_name: &TakumiIdent,
     _operation: &selectors::attr::AttrSelectorOperation<&TakumiIdent>,
   ) -> bool {
+    #[cfg(debug_assertions)]
+    eprintln!("TODO(#attr-selectors): attribute selectors are not supported and will not match");
     false
   }
   fn match_non_ts_pseudo_class(
@@ -256,6 +259,7 @@ pub(crate) fn match_stylesheets_for_tree<N: Node<N>>(
   if stylesheets.is_empty() {
     return MatchedStyles { per_node };
   }
+  let mut matched_rules: Vec<Vec<(u32, usize, Style)>> = vec![Vec::new(); arena.nodes.len()];
 
   let mut caches = SelectorCaches::default();
   let mut ctx = MatchingContext::new(
@@ -267,18 +271,37 @@ pub(crate) fn match_stylesheets_for_tree<N: Node<N>>(
     MatchingForInvalidation::No,
   );
 
+  let mut source_order = 0usize;
   for sheet in stylesheets {
     for rule in &sheet.rules {
-      for (i, matched) in per_node.iter_mut().enumerate() {
+      let specificity = rule
+        .selectors
+        .slice()
+        .iter()
+        .map(|selector| selector.specificity())
+        .max()
+        .unwrap_or_default();
+
+      for i in 0..per_node.len() {
         let element = ArenaElement {
           tree: &arena,
           index: i,
         };
 
         if matches_selector_list(&rule.selectors, &element, &mut ctx) {
-          matched.stylesheet.merge_from(rule.style.clone());
+          matched_rules[i].push((specificity, source_order, rule.style.clone()));
         }
       }
+
+      source_order += 1;
+    }
+  }
+
+  for (matched, rules) in per_node.iter_mut().zip(matched_rules.into_iter()) {
+    let mut rules = rules;
+    rules.sort_by_key(|(specificity, order, _)| (*specificity, *order));
+    for (_, _, style) in rules {
+      matched.stylesheet.merge_from(style);
     }
   }
 

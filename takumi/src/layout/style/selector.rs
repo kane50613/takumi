@@ -47,7 +47,12 @@ impl ToCss for TakumiIdent {
 
 impl precomputed_hash::PrecomputedHash for TakumiIdent {
   fn precomputed_hash(&self) -> u32 {
-    0
+    let mut hash = 0x811c9dc5u32;
+    for byte in self.0.as_bytes() {
+      hash ^= u32::from(*byte);
+      hash = hash.wrapping_mul(0x0100_0193);
+    }
+    hash
   }
 }
 
@@ -259,7 +264,10 @@ impl<'i> QualifiedRuleParser<'i> for TakumiRuleParser {
     let mut decl_parser = StyleDeclarationParser { style: &mut style };
     let parser = RuleBodyParser::new(input, &mut decl_parser);
     for res in parser {
-      if let Err(_e) = res {}
+      if let Err(e) = res {
+        #[cfg(debug_assertions)]
+        eprintln!("Failed to parse CSS declaration in rule body: {e:?}");
+      }
     }
     Ok(CssRule { selectors, style })
   }
@@ -299,7 +307,7 @@ impl From<&str> for StyleSheet {
 }
 
 impl StyleSheet {
-  pub fn parse(css: &str) -> Self {
+  pub(crate) fn parse(css: &str) -> Self {
     let mut input = ParserInput::new(css);
     let mut parser = Parser::new(&mut input);
     let mut rule_parser = TakumiRuleParser;
@@ -334,5 +342,81 @@ mod tests {
 
     assert_eq!(rule.selectors.slice().len(), 1);
     assert_eq!(rule.style.width, CssValue::Value(Length::Px(100.0)));
+  }
+
+  #[test]
+  fn test_parse_stylesheet_compound_selectors_specificity() {
+    let sheet = StyleSheet::parse(
+      r#"
+        div.box { width: 10px; }
+        #hero .label { height: 20px; }
+      "#,
+    );
+
+    assert_eq!(sheet.rules.len(), 2);
+    assert_eq!(sheet.rules[0].selectors.slice().len(), 1);
+    assert_eq!(sheet.rules[1].selectors.slice().len(), 1);
+    assert!(sheet.rules[0].selectors.slice()[0].specificity() > 0);
+    assert!(
+      sheet.rules[1].selectors.slice()[0].specificity()
+        > sheet.rules[0].selectors.slice()[0].specificity()
+    );
+  }
+
+  #[test]
+  fn test_parse_stylesheet_multiple_rules() {
+    let sheet = StyleSheet::parse(
+      r#"
+        .a { width: 10px; }
+        .b { height: 20px; }
+      "#,
+    );
+
+    assert_eq!(sheet.rules.len(), 2);
+    assert_eq!(
+      sheet.rules[0].style.width,
+      CssValue::Value(Length::Px(10.0))
+    );
+    assert_eq!(
+      sheet.rules[1].style.height,
+      CssValue::Value(Length::Px(20.0))
+    );
+  }
+
+  #[test]
+  fn test_parse_stylesheet_multiple_selectors_in_rule() {
+    let sheet = StyleSheet::parse(
+      r#"
+        .a, .b { width: 12px; }
+      "#,
+    );
+
+    assert_eq!(sheet.rules.len(), 1);
+    assert_eq!(sheet.rules[0].selectors.slice().len(), 2);
+    assert_eq!(
+      sheet.rules[0].style.width,
+      CssValue::Value(Length::Px(12.0))
+    );
+  }
+
+  #[test]
+  fn test_parse_stylesheet_malformed_css_skips_invalid_rule() {
+    let sheet = StyleSheet::parse(
+      r#"
+        .a { width: 10px; }
+        . { color: red; }
+        .b { height: 20px; }
+      "#,
+    );
+
+    assert_eq!(sheet.rules.len(), 2);
+    assert_eq!(
+      sheet.rules[0].style.width,
+      CssValue::Value(Length::Px(10.0))
+    );
+    assert_eq!(
+      sheet.rules[1].style.height,
+      CssValue::Value(Length::Px(20.0))
+    );
   }
 }

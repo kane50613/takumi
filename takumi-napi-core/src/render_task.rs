@@ -81,7 +81,7 @@ impl Task for RenderTask<'_> {
       RenderOptionsBuilder::default()
         .viewport(self.viewport)
         .fetched_resources(initialized_images)
-        .stylesheets(self.stylesheets.clone().unwrap_or_default())
+        .stylesheets(self.stylesheets.take().unwrap_or_default())
         .node(node)
         .global(self.global)
         .draw_debug_border(self.draw_debug_border)

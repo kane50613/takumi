@@ -7,8 +7,8 @@ import type { ContainerNode, TextNode } from "../../src/types";
 describe("fromJsx - stylePresets overriding", () => {
   describe("default behavior", () => {
     test("applies default style presets to h1 element", async () => {
-      const result = await fromJsx(<h1>Hello</h1>);
-      expect(result).toEqual({
+      const { node } = await fromJsx(<h1>Hello</h1>);
+      expect(node).toEqual({
         type: "text",
         text: "Hello",
         preset: defaultStylePresets.h1,
@@ -17,8 +17,8 @@ describe("fromJsx - stylePresets overriding", () => {
     });
 
     test("applies default style presets to p element", async () => {
-      const result = await fromJsx(<p>Paragraph</p>);
-      expect(result).toEqual({
+      const { node } = await fromJsx(<p>Paragraph</p>);
+      expect(node).toEqual({
         type: "text",
         text: "Paragraph",
         preset: defaultStylePresets.p,
@@ -27,8 +27,8 @@ describe("fromJsx - stylePresets overriding", () => {
     });
 
     test("applies default style presets to strong element", async () => {
-      const result = await fromJsx(<strong>Bold</strong>);
-      expect(result).toEqual({
+      const { node } = await fromJsx(<strong>Bold</strong>);
+      expect(node).toEqual({
         type: "text",
         text: "Bold",
         preset: defaultStylePresets.strong,
@@ -37,8 +37,8 @@ describe("fromJsx - stylePresets overriding", () => {
     });
 
     test("applies default style presets to span for raw text", async () => {
-      const result = await fromJsx("Plain text");
-      expect(result).toEqual({
+      const { node } = await fromJsx("Plain text");
+      expect(node).toEqual({
         type: "text",
         text: "Plain text",
         preset: defaultStylePresets.span,
@@ -48,8 +48,8 @@ describe("fromJsx - stylePresets overriding", () => {
 
   describe("disabling default styles with false", () => {
     test("disables default styles for h1 element", async () => {
-      const result = await fromJsx(<h1>Hello</h1>, { defaultStyles: false });
-      expect(result).toEqual({
+      const { node } = await fromJsx(<h1>Hello</h1>, { defaultStyles: false });
+      expect(node).toEqual({
         type: "text",
         text: "Hello",
         tagName: "h1",
@@ -57,10 +57,10 @@ describe("fromJsx - stylePresets overriding", () => {
     });
 
     test("disables default styles for p element", async () => {
-      const result = await fromJsx(<p>Paragraph</p>, {
+      const { node } = await fromJsx(<p>Paragraph</p>, {
         defaultStyles: false,
       });
-      expect(result).toEqual({
+      expect(node).toEqual({
         type: "text",
         text: "Paragraph",
         tagName: "p",
@@ -68,10 +68,10 @@ describe("fromJsx - stylePresets overriding", () => {
     });
 
     test("disables default styles for strong element", async () => {
-      const result = await fromJsx(<strong>Bold</strong>, {
+      const { node } = await fromJsx(<strong>Bold</strong>, {
         defaultStyles: false,
       });
-      expect(result).toEqual({
+      expect(node).toEqual({
         type: "text",
         text: "Bold",
         tagName: "strong",
@@ -79,19 +79,19 @@ describe("fromJsx - stylePresets overriding", () => {
     });
 
     test("disables default styles for raw text", async () => {
-      const result = await fromJsx("Plain text", { defaultStyles: false });
-      expect(result).toEqual({
+      const { node } = await fromJsx("Plain text", { defaultStyles: false });
+      expect(node).toEqual({
         type: "text",
         text: "Plain text",
       } satisfies TextNode);
     });
 
     test("disables default styles for img element", async () => {
-      const result = await fromJsx(
+      const { node } = await fromJsx(
         <img src="https://example.com/image.jpg" alt="Test" />,
         { defaultStyles: false },
       );
-      expect(result).toEqual({
+      expect(node).toEqual({
         type: "image",
         src: "https://example.com/image.jpg",
         width: undefined,
@@ -101,7 +101,7 @@ describe("fromJsx - stylePresets overriding", () => {
     });
 
     test("disables default styles for nested elements", async () => {
-      const result = await fromJsx(
+      const { node } = await fromJsx(
         <div>
           <h1>Title</h1>
           <p>
@@ -111,7 +111,7 @@ describe("fromJsx - stylePresets overriding", () => {
         { defaultStyles: false },
       );
 
-      expect(result).toEqual({
+      expect(node).toEqual({
         type: "container",
         children: [
           {
@@ -151,11 +151,11 @@ describe("fromJsx - stylePresets overriding", () => {
         } as CSSProperties,
       };
 
-      const result = await fromJsx(<h1>Custom</h1>, {
+      const { node } = await fromJsx(<h1>Custom</h1>, {
         defaultStyles: customPresets,
       });
 
-      expect(result).toEqual({
+      expect(node).toEqual({
         type: "text",
         text: "Custom",
         preset: {
@@ -177,11 +177,11 @@ describe("fromJsx - stylePresets overriding", () => {
         } as CSSProperties,
       };
 
-      const result = await fromJsx(<p>Custom paragraph</p>, {
+      const { node } = await fromJsx(<p>Custom paragraph</p>, {
         defaultStyles: customPresets,
       });
 
-      expect(result).toEqual({
+      expect(node).toEqual({
         type: "text",
         text: "Custom paragraph",
         preset: {
@@ -206,7 +206,7 @@ describe("fromJsx - stylePresets overriding", () => {
         } as CSSProperties,
       };
 
-      const result = await fromJsx(
+      const { node } = await fromJsx(
         <div>
           <h1>Title</h1>
           <strong>Bold</strong>
@@ -214,7 +214,7 @@ describe("fromJsx - stylePresets overriding", () => {
         { defaultStyles: customPresets },
       );
 
-      expect(result).toEqual({
+      expect(node).toEqual({
         type: "container",
         children: [
           {
@@ -249,11 +249,11 @@ describe("fromJsx - stylePresets overriding", () => {
         } as CSSProperties,
       };
 
-      const result = await fromJsx(<article>Article content</article>, {
+      const { node } = await fromJsx(<article>Article content</article>, {
         defaultStyles: customPresets,
       });
 
-      expect(result).toEqual({
+      expect(node).toEqual({
         type: "text",
         text: "Article content",
         preset: {
@@ -272,7 +272,7 @@ describe("fromJsx - stylePresets overriding", () => {
         } as CSSProperties,
       };
 
-      const result = await fromJsx(
+      const { node } = await fromJsx(
         <div>
           <h1>Custom H1</h1>
           <h2>Default H2</h2>
@@ -280,7 +280,7 @@ describe("fromJsx - stylePresets overriding", () => {
         { defaultStyles: customPresets },
       );
 
-      expect(result).toEqual({
+      expect(node).toEqual({
         type: "container",
         children: [
           {
@@ -305,11 +305,11 @@ describe("fromJsx - stylePresets overriding", () => {
 
   describe("inline styles override presets", () => {
     test("inline styles override default presets", async () => {
-      const result = await fromJsx(
+      const { node } = await fromJsx(
         <h1 style={{ fontSize: "10em", color: "green" }}>Inline styled</h1>,
       );
 
-      expect(result).toEqual({
+      expect(node).toEqual({
         type: "text",
         text: "Inline styled",
         preset: defaultStylePresets.h1,
@@ -330,14 +330,14 @@ describe("fromJsx - stylePresets overriding", () => {
         } as CSSProperties,
       };
 
-      const result = await fromJsx(
+      const { node } = await fromJsx(
         <h1 style={{ fontSize: "10em", fontWeight: "100" }}>
           Inline override
         </h1>,
         { defaultStyles: customPresets },
       );
 
-      expect(result).toEqual({
+      expect(node).toEqual({
         type: "text",
         text: "Inline override",
         preset: {
@@ -353,12 +353,12 @@ describe("fromJsx - stylePresets overriding", () => {
     });
 
     test("inline styles work when default styles are disabled", async () => {
-      const result = await fromJsx(
+      const { node } = await fromJsx(
         <h1 style={{ fontSize: "8em", color: "blue" }}>No presets</h1>,
         { defaultStyles: false },
       );
 
-      expect(result).toEqual({
+      expect(node).toEqual({
         type: "text",
         text: "No presets",
         style: {
@@ -379,7 +379,7 @@ describe("fromJsx - stylePresets overriding", () => {
         strong: { fontWeight: "900" } as CSSProperties,
       };
 
-      const result = await fromJsx(
+      const { node } = await fromJsx(
         <div>
           <h1>Title</h1>
           <div>
@@ -391,7 +391,7 @@ describe("fromJsx - stylePresets overriding", () => {
         { defaultStyles: customPresets },
       );
 
-      expect(result).toEqual({
+      expect(node).toEqual({
         type: "container",
         children: [
           {
@@ -441,7 +441,7 @@ describe("fromJsx - stylePresets overriding", () => {
         p: { marginTop: "1.5em" } as CSSProperties,
       };
 
-      const result = await fromJsx(
+      const { node } = await fromJsx(
         <div>
           <h1 style={{ color: "blue" }}>Styled Title</h1>
           <p>Normal paragraph</p>
@@ -450,7 +450,7 @@ describe("fromJsx - stylePresets overriding", () => {
         { defaultStyles: customPresets },
       );
 
-      expect(result).toEqual({
+      expect(node).toEqual({
         type: "container",
         children: [
           {
@@ -502,11 +502,11 @@ describe("fromJsx - stylePresets overriding", () => {
         h1: { fontSize: "5em" } as CSSProperties,
       };
 
-      const result = await fromJsx(<MyComponent title="Test" />, {
+      const { node } = await fromJsx(<MyComponent title="Test" />, {
         defaultStyles: customPresets,
       });
 
-      expect(result).toEqual({
+      expect(node).toEqual({
         type: "container",
         children: [
           {
@@ -527,7 +527,7 @@ describe("fromJsx - stylePresets overriding", () => {
     });
 
     test("empty custom presets object (no presets)", async () => {
-      const result = await fromJsx(
+      const { node } = await fromJsx(
         <div>
           <h1>Title</h1>
           <p>Paragraph</p>
@@ -535,7 +535,7 @@ describe("fromJsx - stylePresets overriding", () => {
         { defaultStyles: {} },
       );
 
-      expect(result).toEqual({
+      expect(node).toEqual({
         type: "container",
         children: [
           {
@@ -556,10 +556,10 @@ describe("fromJsx - stylePresets overriding", () => {
 
   describe("edge cases", () => {
     test("undefined defaultStyles option uses default presets", async () => {
-      const result = await fromJsx(<h1>Hello</h1>, {
+      const { node } = await fromJsx(<h1>Hello</h1>, {
         defaultStyles: undefined,
       });
-      expect(result).toEqual({
+      expect(node).toEqual({
         type: "text",
         text: "Hello",
         preset: defaultStylePresets.h1,
@@ -568,8 +568,8 @@ describe("fromJsx - stylePresets overriding", () => {
     });
 
     test("empty options object uses default presets", async () => {
-      const result = await fromJsx(<h1>Hello</h1>, {});
-      expect(result).toEqual({
+      const { node } = await fromJsx(<h1>Hello</h1>, {});
+      expect(node).toEqual({
         type: "text",
         text: "Hello",
         preset: defaultStylePresets.h1,
@@ -582,7 +582,7 @@ describe("fromJsx - stylePresets overriding", () => {
         h1: { fontSize: "6em" } as CSSProperties,
       };
 
-      const result = await fromJsx(
+      const { node } = await fromJsx(
         <div>
           <h1>Custom</h1>
           <p>Default</p>
@@ -590,7 +590,7 @@ describe("fromJsx - stylePresets overriding", () => {
         { defaultStyles: customPresets },
       );
 
-      expect(result).toEqual({
+      expect(node).toEqual({
         type: "container",
         children: [
           {
@@ -622,11 +622,11 @@ describe("fromJsx - stylePresets overriding", () => {
         h1: { fontSize: "7em" } as CSSProperties,
       };
 
-      const result = await fromJsx(<Outer />, {
+      const { node } = await fromJsx(<Outer />, {
         defaultStyles: customPresets,
       });
 
-      expect(result).toEqual({
+      expect(node).toEqual({
         type: "container",
         children: [
           {

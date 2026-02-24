@@ -1,9 +1,5 @@
 import { fetchResources } from "@takumi-rs/helpers";
-import {
-  extractStylesheets,
-  type FromJsxOptions,
-  fromJsx,
-} from "@takumi-rs/helpers/jsx";
+import { type FromJsxOptions, fromJsx } from "@takumi-rs/helpers/jsx";
 import init, {
   extractResourceUrls,
   type Font,
@@ -125,9 +121,8 @@ function createStream(component: ReactNode, options: ImageResponseOptions) {
         }
 
         const rendererInstance = getRenderer(options);
-        options.stylesheets ??= extractStylesheets(component);
-
-        const node = await fromJsx(component, options.jsx);
+        const { node, stylesheets } = await fromJsx(component, options.jsx);
+        options.stylesheets ??= stylesheets;
 
         if (!options.fetchedResources) {
           const urls = extractResourceUrls(node);

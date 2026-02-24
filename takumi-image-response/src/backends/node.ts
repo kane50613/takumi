@@ -6,11 +6,7 @@ import {
   type RenderOptions,
 } from "@takumi-rs/core";
 import { fetchResources } from "@takumi-rs/helpers";
-import {
-  extractStylesheets,
-  type FromJsxOptions,
-  fromJsx,
-} from "@takumi-rs/helpers/jsx";
+import { type FromJsxOptions, fromJsx } from "@takumi-rs/helpers/jsx";
 import type { ReactNode } from "react";
 
 let renderer: Renderer | undefined;
@@ -98,27 +94,28 @@ function createStream(component: ReactNode, options?: ImageResponseOptions) {
     type: "bytes",
     async start(controller) {
       try {
-        const stylesheets =
-          options?.stylesheets ?? extractStylesheets(component);
         const nodePromise = fromJsx(component, options?.jsx).then(
-          async (node) => {
+          async ({ node, stylesheets }) => {
             const fetchedResources = await extractFetchedResources(
               node,
               options,
             );
-            return { node, fetchedResources };
+            return { node, fetchedResources, stylesheets };
           },
         );
 
-        const [renderer, { node, fetchedResources }] = await Promise.all([
-          getRenderer(options),
-          nodePromise,
-        ]);
+        const [renderer, { node, fetchedResources, stylesheets }] =
+          await Promise.all([getRenderer(options), nodePromise]);
 
         const mergedOptions = {
-          ...options,
+          width: options?.width,
+          height: options?.height,
+          format: options?.format,
+          quality: options?.quality,
+          drawDebugBorder: options?.drawDebugBorder,
+          devicePixelRatio: options?.devicePixelRatio,
           fetchedResources,
-          stylesheets,
+          stylesheets: options?.stylesheets ?? stylesheets,
         };
 
         const image = await renderer.render(

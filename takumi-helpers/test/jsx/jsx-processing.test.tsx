@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { User2 } from "lucide-react";
+import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { container } from "../../src/helpers";
 import { fromJsx } from "../../src/jsx/jsx";
@@ -8,14 +9,14 @@ import type { ContainerNode, ImageNode, TextNode } from "../../src/types";
 
 describe("fromJsx", () => {
   test("handles React like object", async () => {
-    const result = await fromJsx({
+    const { node } = await fromJsx({
       type: "div",
       props: {
         children: "Hello World",
       },
     });
 
-    expect(result).toEqual({
+    expect(node).toEqual({
       type: "text",
       text: "Hello World",
       tagName: "div",
@@ -23,8 +24,8 @@ describe("fromJsx", () => {
   });
 
   test("converts text to TextNode", async () => {
-    const result = await fromJsx("Hello World");
-    expect(result).toEqual({
+    const { node } = await fromJsx("Hello World");
+    expect(node).toEqual({
       type: "text",
       text: "Hello World",
       preset: defaultStylePresets.span,
@@ -32,8 +33,8 @@ describe("fromJsx", () => {
   });
 
   test("converts number to TextNode", async () => {
-    const result = await fromJsx(42);
-    expect(result).toEqual({
+    const { node } = await fromJsx(42);
+    expect(node).toEqual({
       type: "text",
       text: "42",
       preset: defaultStylePresets.span,
@@ -41,20 +42,29 @@ describe("fromJsx", () => {
   });
 
   test("returns empty container for null/undefined/false", async () => {
-    expect(await fromJsx(null)).toEqual({
-      type: "container",
-    } satisfies ContainerNode);
-    expect(await fromJsx(undefined)).toEqual({
-      type: "container",
-    } satisfies ContainerNode);
-    expect(await fromJsx(false)).toEqual({
-      type: "container",
-    } satisfies ContainerNode);
+    {
+      const { node } = await fromJsx(null);
+      expect(node).toEqual({
+        type: "container",
+      } satisfies ContainerNode);
+    }
+    {
+      const { node } = await fromJsx(undefined);
+      expect(node).toEqual({
+        type: "container",
+      } satisfies ContainerNode);
+    }
+    {
+      const { node } = await fromJsx(false);
+      expect(node).toEqual({
+        type: "container",
+      } satisfies ContainerNode);
+    }
   });
 
   test("converts simple div to ContainerNode", async () => {
-    const result = await fromJsx(<div>Hello</div>);
-    expect(result).toEqual({
+    const { node } = await fromJsx(<div>Hello</div>);
+    expect(node).toEqual({
       type: "text",
       text: "Hello",
       tagName: "div",
@@ -62,13 +72,13 @@ describe("fromJsx", () => {
   });
 
   test("passes tagName, id, className to text nodes", async () => {
-    const result = await fromJsx(
+    const { node } = await fromJsx(
       <p id="headline" className="text-xl">
         Hello
       </p>,
     );
 
-    expect(result).toEqual({
+    expect(node).toEqual({
       type: "text",
       text: "Hello",
       preset: defaultStylePresets.p,
@@ -79,14 +89,14 @@ describe("fromJsx", () => {
   });
 
   test("passes tagName, id, className to container nodes", async () => {
-    const result = await fromJsx(
+    const { node } = await fromJsx(
       <div id="wrapper" className="stack">
         <span>First</span>
         <span>Second</span>
       </div>,
     );
 
-    expect(result).toEqual({
+    expect(node).toEqual({
       type: "container",
       children: [
         {
@@ -111,8 +121,8 @@ describe("fromJsx", () => {
   test("handles function components", async () => {
     const MyComponent = ({ name }: { name: string }) => <div>Hello {name}</div>;
 
-    const result = await fromJsx(<MyComponent name="World" />);
-    expect(result).toEqual({
+    const { node } = await fromJsx(<MyComponent name="World" />);
+    expect(node).toEqual({
       type: "text",
       text: "Hello World",
       tagName: "div",
@@ -120,7 +130,7 @@ describe("fromJsx", () => {
   });
 
   test("handles style casing correctly", async () => {
-    const result = await fromJsx(
+    const { node } = await fromJsx(
       <p
         style={{
           WebkitTextStroke: "1px red",
@@ -130,7 +140,7 @@ describe("fromJsx", () => {
       </p>,
     );
 
-    expect(result).toEqual({
+    expect(node).toEqual({
       type: "text",
       text: "Hello",
       preset: {
@@ -150,8 +160,8 @@ describe("fromJsx", () => {
       <div>Hello {name}</div>
     );
 
-    const result = await fromJsx(<AsyncComponent name="Async" />);
-    expect(result).toEqual({
+    const { node } = await fromJsx(<AsyncComponent name="Async" />);
+    expect(node).toEqual({
       type: "text",
       text: "Hello Async",
       tagName: "div",
@@ -159,14 +169,14 @@ describe("fromJsx", () => {
   });
 
   test("handles fragments", async () => {
-    const result = await fromJsx(
+    const { node } = await fromJsx(
       <>
         <div>First</div>
         <div>Second</div>
       </>,
     );
 
-    expect(result).toEqual({
+    expect(node).toEqual({
       type: "container",
       children: [
         { type: "text", text: "First", tagName: "div" },
@@ -181,7 +191,7 @@ describe("fromJsx", () => {
 
   test("handles arrays", async () => {
     const items = ["First", "Second", "Third"];
-    const result = await fromJsx(
+    const { node } = await fromJsx(
       <div>
         {items.map((item) => (
           <span key={item}>{item}</span>
@@ -189,7 +199,7 @@ describe("fromJsx", () => {
       </div>,
     );
 
-    expect(result).toEqual({
+    expect(node).toEqual({
       type: "container",
       children: [
         {
@@ -216,14 +226,14 @@ describe("fromJsx", () => {
   });
 
   test("treats nested array children as non-pure text", async () => {
-    const result = await fromJsx({
+    const { node } = await fromJsx({
       type: "p",
       props: {
         children: ["Hello", [" World"]],
       },
     });
 
-    expect(result).toEqual({
+    expect(node).toEqual({
       type: "container",
       preset: defaultStylePresets.p,
       tagName: "p",
@@ -243,14 +253,14 @@ describe("fromJsx", () => {
   });
 
   test("treats null children in iterables as non-pure text", async () => {
-    const result = await fromJsx({
+    const { node } = await fromJsx({
       type: "p",
       props: {
         children: ["Hello", null],
       },
     });
 
-    expect(result).toEqual({
+    expect(node).toEqual({
       type: "container",
       preset: defaultStylePresets.p,
       tagName: "p",
@@ -265,10 +275,10 @@ describe("fromJsx", () => {
   });
 
   test("converts img elements to ImageNode", async () => {
-    const result = await fromJsx(
+    const { node } = await fromJsx(
       <img src="https://example.com/image.jpg" alt="Test" />,
     );
-    expect(result).toEqual({
+    expect(node).toEqual({
       type: "image",
       src: "https://example.com/image.jpg",
       width: undefined,
@@ -279,7 +289,7 @@ describe("fromJsx", () => {
   });
 
   test("passes tagName, id, className to img nodes", async () => {
-    const result = await fromJsx(
+    const { node } = await fromJsx(
       <img
         src="https://example.com/image.jpg"
         id="hero-image"
@@ -288,7 +298,7 @@ describe("fromJsx", () => {
       />,
     );
 
-    expect(result).toEqual({
+    expect(node).toEqual({
       type: "image",
       src: "https://example.com/image.jpg",
       width: undefined,
@@ -301,7 +311,7 @@ describe("fromJsx", () => {
   });
 
   test("converts img elements with width and height to ImageNode", async () => {
-    const result = await fromJsx(
+    const { node } = await fromJsx(
       <img
         src="https://example.com/image.jpg"
         width={100}
@@ -309,7 +319,7 @@ describe("fromJsx", () => {
         alt="Test"
       />,
     );
-    expect(result).toEqual({
+    expect(node).toEqual({
       type: "image",
       src: "https://example.com/image.jpg",
       width: 100,
@@ -320,9 +330,9 @@ describe("fromJsx", () => {
   });
 
   test("maps default tw property to node tw", async () => {
-    const result = await fromJsx(<p tw="text-red-500">Hello</p>);
+    const { node } = await fromJsx(<p tw="text-red-500">Hello</p>);
 
-    expect(result).toEqual({
+    expect(node).toEqual({
       type: "text",
       text: "Hello",
       preset: defaultStylePresets.p,
@@ -332,7 +342,7 @@ describe("fromJsx", () => {
   });
 
   test("maps configured tailwind classes property to node tw", async () => {
-    const result = await fromJsx(
+    const { node } = await fromJsx(
       {
         type: "p",
         props: {
@@ -343,7 +353,7 @@ describe("fromJsx", () => {
       { tailwindClassesProperty: "classes" },
     );
 
-    expect(result).toEqual({
+    expect(node).toEqual({
       type: "text",
       text: "Hello",
       preset: defaultStylePresets.p,
@@ -359,11 +369,12 @@ describe("fromJsx", () => {
   });
 
   test("handles external lucide-react icon", async () => {
-    expect((await fromJsx(<User2 />)).type).toBe("image");
+    const { node } = await fromJsx(<User2 />);
+    expect(node.type).toBe("image");
   });
 
   test("handles deeply nested structures", async () => {
-    const result = await fromJsx(
+    const { node } = await fromJsx(
       <div>
         <h1>Title</h1>
         <div>
@@ -378,7 +389,7 @@ describe("fromJsx", () => {
       </div>,
     );
 
-    expect(result).toEqual({
+    expect(node).toEqual({
       type: "container",
       children: [
         {
@@ -439,8 +450,8 @@ describe("fromJsx", () => {
 
   test("handles promises", async () => {
     const promiseElement = Promise.resolve("Resolved text");
-    const result = await fromJsx(promiseElement);
-    expect(result).toEqual({
+    const { node } = await fromJsx(promiseElement);
+    expect(node).toEqual({
       type: "text",
       text: "Resolved text",
       preset: defaultStylePresets.span,
@@ -449,7 +460,7 @@ describe("fromJsx", () => {
 
   test("integration: fromJsx result as container children with complex JSX", async () => {
     // Test complex JSX structure that can be directly used as container children
-    const complexJsx = await fromJsx(
+    const { node } = await fromJsx(
       <div>
         <h1>Welcome</h1>
         <div>
@@ -461,7 +472,7 @@ describe("fromJsx", () => {
     );
 
     const complexContainer = container({
-      children: [complexJsx],
+      children: [node],
     });
 
     expect(complexContainer).toEqual({
@@ -538,8 +549,8 @@ describe("fromJsx", () => {
       </svg>
     );
 
-    const result = await fromJsx(component);
-    expect(result).toEqual({
+    const { node } = await fromJsx(component);
+    expect(node).toEqual({
       type: "image",
       src: renderToStaticMarkup(component),
       width: 60,
@@ -562,9 +573,9 @@ describe("fromJsx", () => {
         <rect width="10" height="12" />
       </svg>
     );
-    const result = await fromJsx(component);
+    const { node } = await fromJsx(component);
 
-    expect(result).toEqual({
+    expect(node).toEqual({
       type: "image",
       src: renderToStaticMarkup(component),
       width: 10,
@@ -577,9 +588,9 @@ describe("fromJsx", () => {
   });
 
   test("passes tagName, id, className to br text nodes", async () => {
-    const result = await fromJsx(<br id="line-break" className="spacer" />);
+    const { node } = await fromJsx(<br id="line-break" className="spacer" />);
 
-    expect(result).toEqual({
+    expect(node).toEqual({
       type: "text",
       text: "\n",
       preset: defaultStylePresets.span,
@@ -587,5 +598,68 @@ describe("fromJsx", () => {
       id: "line-break",
       className: "spacer",
     } satisfies TextNode);
+  });
+
+  test("extracts style tag contents into stylesheets", async () => {
+    const { node, stylesheets } = await fromJsx(
+      <div>
+        <style>{".box { color: red; }"}</style>
+        <span>Hello</span>
+      </div>,
+    );
+
+    expect(stylesheets).toEqual([".box { color: red; }"]);
+    expect(node).toEqual({
+      type: "container",
+      tagName: "div",
+      children: [
+        {
+          type: "text",
+          text: "Hello",
+          preset: defaultStylePresets.span,
+          tagName: "span",
+        },
+      ],
+    } satisfies ContainerNode);
+  });
+
+  test("extracts stylesheets from fragments and preserves order", async () => {
+    const Wrapper = ({ children }: { children: ReactNode }) => <>{children}</>;
+
+    const { node, stylesheets } = await fromJsx(
+      <div>
+        <Wrapper>
+          <style>{".a { color: red; }"}</style>
+        </Wrapper>
+        <style>{".b { color: blue; }"}</style>
+        <span>Content</span>
+      </div>,
+    );
+
+    expect(stylesheets).toEqual([".a { color: red; }", ".b { color: blue; }"]);
+    expect(node).toEqual({
+      type: "container",
+      tagName: "div",
+      children: [
+        {
+          type: "text",
+          text: "Content",
+          preset: defaultStylePresets.span,
+          tagName: "span",
+        },
+      ],
+    } satisfies ContainerNode);
+  });
+
+  test("ignores boolean children while extracting style text", async () => {
+    const { stylesheets } = await fromJsx(
+      <style>
+        {"body{"}
+        {true}
+        {"color:red;}"}
+      </style>,
+    );
+
+    expect(stylesheets).toEqual(["body{color:red;}"]);
   });
 });
