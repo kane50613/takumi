@@ -6,7 +6,11 @@ import {
   type RenderOptions,
 } from "@takumi-rs/core";
 import { fetchResources } from "@takumi-rs/helpers";
-import { type FromJsxOptions, fromJsx } from "@takumi-rs/helpers/jsx";
+import {
+  extractStylesheets,
+  type FromJsxOptions,
+  fromJsx,
+} from "@takumi-rs/helpers/jsx";
 import type { ReactNode } from "react";
 
 let renderer: Renderer | undefined;
@@ -94,6 +98,8 @@ function createStream(component: ReactNode, options?: ImageResponseOptions) {
     type: "bytes",
     async start(controller) {
       try {
+        const stylesheets =
+          options?.stylesheets ?? extractStylesheets(component);
         const nodePromise = fromJsx(component, options?.jsx).then(
           async (node) => {
             const fetchedResources = await extractFetchedResources(
@@ -109,12 +115,15 @@ function createStream(component: ReactNode, options?: ImageResponseOptions) {
           nodePromise,
         ]);
 
+        const mergedOptions = {
+          ...options,
+          fetchedResources,
+          stylesheets,
+        };
+
         const image = await renderer.render(
           node,
-          {
-            ...options,
-            fetchedResources,
-          },
+          mergedOptions,
           options?.signal,
         );
 

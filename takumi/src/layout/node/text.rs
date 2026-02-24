@@ -11,8 +11,8 @@ use crate::{
       InlineContentKind, InlineItem, InlineLayoutStage, create_inline_constraint,
       create_inline_layout, measure_inline_layout,
     },
-    node::Node,
-    style::{InheritedStyle, Style, tw::TailwindValues},
+    node::{Node, NodeStyleLayers},
+    style::{Style, tw::TailwindValues},
   },
   rendering::{Canvas, MaxHeight, RenderContext, inline_drawing::draw_inline_layout},
 };
@@ -22,7 +22,14 @@ use crate::{
 /// Text nodes display text with configurable font properties,
 /// alignment, and styling options.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TextNode {
+  /// The element's tag name
+  pub tag_name: Option<Box<str>>,
+  /// The element's class name
+  pub class_name: Option<Box<str>>,
+  /// The element's id
+  pub id: Option<Box<str>>,
   /// Default style presets from HTML element type (lowest priority)
   pub preset: Option<Style>,
   /// The styling properties for this text node
@@ -34,30 +41,30 @@ pub struct TextNode {
 }
 
 impl<Nodes: Node<Nodes>> Node<Nodes> for TextNode {
-  fn create_inherited_style(
-    &mut self,
-    parent_style: &InheritedStyle,
-    viewport: Viewport,
-  ) -> InheritedStyle {
-    // Start with empty style
-    let mut style = Style::default();
+  fn tag_name(&self) -> Option<&str> {
+    self.tag_name.as_deref()
+  }
 
-    // 1. Apply preset first (lowest priority)
-    if let Some(preset) = self.preset.take() {
-      style.merge_from(preset);
-    }
+  fn class_name(&self) -> Option<&str> {
+    self.class_name.as_deref()
+  }
 
-    // 2. Apply Tailwind (medium priority)
-    if let Some(tw) = self.tw.as_ref() {
+  fn id(&self) -> Option<&str> {
+    self.id.as_deref()
+  }
+
+  fn take_style_layers(&mut self, viewport: Viewport) -> NodeStyleLayers {
+    let author_tw = self.tw.as_ref().map(|tw| {
+      let mut style = Style::default();
       tw.apply(&mut style, viewport);
-    }
+      style
+    });
 
-    // 3. Merge inline style last (highest priority)
-    if let Some(inline_style) = self.style.take() {
-      style.merge_from(inline_style);
+    NodeStyleLayers {
+      preset: self.preset.take(),
+      author_tw,
+      inline: self.style.take(),
     }
-
-    style.inherit(parent_style)
   }
 
   fn inline_content(&self) -> Option<InlineContentKind<'_>> {

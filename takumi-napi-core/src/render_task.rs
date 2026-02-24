@@ -20,6 +20,7 @@ pub struct RenderTask<'g> {
   pub viewport: Viewport,
   pub format: OutputFormat,
   pub quality: Option<u8>,
+  pub stylesheets: Option<Vec<String>>,
   pub fetched_resources: HashMap<Arc<str>, Buffer>,
 }
 
@@ -45,6 +46,7 @@ impl<'g> RenderTask<'g> {
       format: options.format.unwrap_or(OutputFormat::png),
       quality: options.quality,
       draw_debug_border: options.draw_debug_border.unwrap_or_default(),
+      stylesheets: options.stylesheets,
       fetched_resources: options
         .fetched_resources
         .unwrap_or_default()
@@ -79,6 +81,7 @@ impl Task for RenderTask<'_> {
       RenderOptionsBuilder::default()
         .viewport(self.viewport)
         .fetched_resources(initialized_images)
+        .stylesheets(self.stylesheets.clone().unwrap_or_default())
         .node(node)
         .global(self.global)
         .draw_debug_border(self.draw_debug_border)

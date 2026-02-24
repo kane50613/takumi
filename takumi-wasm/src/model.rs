@@ -34,6 +34,10 @@ export type RenderOptions = {
    */
   fetchedResources?: ImageSource[],
   /**
+   * CSS stylesheets to apply before rendering.
+   */
+  stylesheets?: string[],
+  /**
    * Whether to draw debug borders.
    */
   drawDebugBorder?: boolean,
@@ -152,6 +156,8 @@ pub struct RenderOptions {
   pub quality: Option<u8>,
   /// Pre-fetched image resources to use during rendering.
   pub fetched_resources: Option<Vec<ImageSource>>,
+  /// CSS stylesheets to apply before rendering.
+  pub stylesheets: Option<Vec<String>>,
   /// Whether to draw debug borders around layout elements.
   pub draw_debug_border: Option<bool>,
   /// The device pixel ratio for scaling.

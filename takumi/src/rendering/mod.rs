@@ -31,7 +31,7 @@ use crate::{
   GlobalContext,
   layout::{
     Viewport,
-    style::{Affine, CalcArena, Color, InheritedStyle},
+    style::{Affine, CalcArena, Color, InheritedStyle, selector::StyleSheet},
   },
   resources::image::ImageSource,
 };
@@ -64,13 +64,16 @@ pub struct RenderContext<'g> {
   pub(crate) draw_debug_border: bool,
   /// The resources fetched externally.
   pub(crate) fetched_resources: HashMap<Arc<str>, Arc<ImageSource>>,
+  /// The stylesheets to apply before layout/rendering.
+  pub(crate) stylesheets: Rc<[StyleSheet]>,
 }
 
 impl<'g> RenderContext<'g> {
-  pub(crate) fn new(
+  pub(crate) fn new<I: IntoIterator<Item = StyleSheet>>(
     global: &'g GlobalContext,
     viewport: Viewport,
     fetched_resources: HashMap<Arc<str>, Arc<ImageSource>>,
+    stylesheets: I,
   ) -> Self {
     Self {
       global,
@@ -84,6 +87,7 @@ impl<'g> RenderContext<'g> {
       style: InheritedStyle::default(),
       draw_debug_border: false,
       fetched_resources,
+      stylesheets: Rc::from_iter(stylesheets),
     }
   }
 }

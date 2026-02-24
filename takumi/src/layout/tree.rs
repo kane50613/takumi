@@ -15,8 +15,11 @@ use crate::{
       InlineLayoutStage, ProcessedInlineSpan, collect_inline_items, create_inline_constraint,
       create_inline_layout, measure_inline_layout,
     },
-    node::Node,
-    style::{Affine, Display, InheritedStyle},
+    node::{Node, NodeStyleLayers},
+    style::{
+      Affine, Display, InheritedStyle, Style as NodeStyle,
+      matching::{MatchedAuthorStyles, MatchedStyles, match_stylesheets_for_tree},
+    },
   },
   rendering::{
     Canvas, MaxHeight, RenderContext, Sizing,
@@ -76,6 +79,30 @@ pub(crate) struct RenderNode<'g, N: Node<N>> {
   pub(crate) context: RenderContext<'g>,
   pub(crate) node: Option<N>,
   pub(crate) children: Option<Box<[RenderNode<'g, N>]>>,
+}
+
+fn build_inherited_style(
+  parent_style: &InheritedStyle,
+  node_layers: NodeStyleLayers,
+  matched_author: &MatchedAuthorStyles,
+) -> InheritedStyle {
+  let mut style = NodeStyle::default();
+
+  if let Some(preset) = node_layers.preset {
+    style.merge_from(preset);
+  }
+
+  style.merge_from(matched_author.stylesheet.clone());
+
+  if let Some(author_tw) = node_layers.author_tw {
+    style.merge_from(author_tw);
+  }
+
+  if let Some(inline) = node_layers.inline {
+    style.merge_from(inline);
+  }
+
+  style.inherit(parent_style)
 }
 
 fn push_layout_node<'r, 'g, N: Node<N>>(
@@ -497,7 +524,10 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
   }
 
   pub fn from_node(parent_context: &RenderContext<'g>, node: N) -> Self {
-    let mut tree = Self::from_node_impl(parent_context, node);
+    let matched_styles = match_stylesheets_for_tree(&node, &parent_context.stylesheets);
+    let mut preorder_cursor = 0;
+    let mut tree =
+      Self::from_node_impl(parent_context, node, &matched_styles, &mut preorder_cursor);
 
     if tree.is_inline_level() {
       tree.context.style.display.blockify();
@@ -506,9 +536,17 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
     tree
   }
 
-  fn from_node_impl(parent_context: &RenderContext<'g>, mut node: N) -> Self {
-    let mut style =
-      node.create_inherited_style(&parent_context.style, parent_context.sizing.viewport);
+  fn from_node_impl(
+    parent_context: &RenderContext<'g>,
+    mut node: N,
+    matched_styles: &MatchedStyles,
+    preorder_cursor: &mut usize,
+  ) -> Self {
+    let node_index = *preorder_cursor;
+    *preorder_cursor += 1;
+    let layers = node.take_style_layers(parent_context.sizing.viewport);
+    let matched_author = &matched_styles.per_node[node_index];
+    let mut style = build_inherited_style(&parent_context.style, layers, matched_author);
 
     let font_size = style
       .font_size
@@ -532,15 +570,15 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
       draw_debug_border: parent_context.draw_debug_border,
       fetched_resources: parent_context.fetched_resources.clone(),
       sizing,
+      stylesheets: parent_context.stylesheets.clone(),
     };
 
-    let children = node.take_children().map(|children| {
-      Box::from_iter(
-        children
-          .into_iter()
-          .map(|child| Self::from_node_impl(&render_context, child)),
-      )
-    });
+    let children =
+      node.take_children().map(|children| {
+        Box::from_iter(children.into_iter().map(|child| {
+          Self::from_node_impl(&render_context, child, matched_styles, preorder_cursor)
+        }))
+      });
 
     let Some(mut children) = children else {
       return Self {
@@ -748,6 +786,7 @@ fn flush_inline_group<'g, N: Node<N>>(
         current_color: parent_render_context.current_color,
         draw_debug_border: parent_render_context.draw_debug_border,
         fetched_resources: Default::default(),
+        stylesheets: parent_render_context.stylesheets.clone(),
       },
       children: Some(take(inline_group).into_boxed_slice()),
       node: None,

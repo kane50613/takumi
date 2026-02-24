@@ -17,6 +17,7 @@ pub struct MeasureTask<'g> {
   pub node: Option<NodeKind>,
   pub global: &'g GlobalContext,
   pub viewport: Viewport,
+  pub stylesheets: Option<Vec<String>>,
   pub fetched_resources: HashMap<Arc<str>, Buffer>,
 }
 
@@ -39,6 +40,7 @@ impl<'g> MeasureTask<'g> {
           .map(|ratio| ratio as f32)
           .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
       },
+      stylesheets: options.stylesheets,
       fetched_resources: options
         .fetched_resources
         .unwrap_or_default()
@@ -72,6 +74,7 @@ impl Task for MeasureTask<'_> {
     let options = RenderOptionsBuilder::default()
       .viewport(self.viewport)
       .fetched_resources(initialized_images)
+      .stylesheets(self.stylesheets.clone().unwrap_or_default())
       .node(node)
       .global(self.global)
       .build()

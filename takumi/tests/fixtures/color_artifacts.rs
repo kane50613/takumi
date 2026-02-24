@@ -10,6 +10,9 @@ use crate::test_utils::run_fixture_test;
 #[test]
 fn test_color_artifacts() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -25,6 +28,9 @@ fn test_color_artifacts() {
     ),
     children: Some(
       [ImageNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(

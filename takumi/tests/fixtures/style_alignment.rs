@@ -12,6 +12,9 @@ use crate::test_utils::run_fixture_test;
 #[test]
 fn test_style_align_items() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -27,6 +30,9 @@ fn test_style_align_items() {
     children: Some(
       [
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -41,6 +47,9 @@ fn test_style_align_items() {
         }
         .into(),
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -55,6 +64,9 @@ fn test_style_align_items() {
         }
         .into(),
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -79,6 +91,9 @@ fn test_style_align_items() {
 #[test]
 fn test_style_justify_content() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -94,6 +109,9 @@ fn test_style_justify_content() {
     children: Some(
       [
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -108,6 +126,9 @@ fn test_style_justify_content() {
         }
         .into(),
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -122,6 +143,9 @@ fn test_style_justify_content() {
         }
         .into(),
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(

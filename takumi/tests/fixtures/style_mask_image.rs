@@ -10,6 +10,9 @@ fn create_container_with_mask(
   background_color: Color,
 ) -> ContainerNode<NodeKind> {
   ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -89,6 +92,9 @@ fn test_style_mask_image_with_background_image() {
     BackgroundImages::from_str("linear-gradient(135deg, #667eea 0%, #764ba2 100%)").unwrap();
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -112,6 +118,9 @@ fn test_style_mask_image_on_image_node() {
     BackgroundImages::from_str("radial-gradient(circle, black 60%, transparent 100%)").unwrap();
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -126,6 +135,9 @@ fn test_style_mask_image_on_image_node() {
     ),
     children: Some(
       [ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -139,6 +151,9 @@ fn test_style_mask_image_on_image_node() {
         children: Some(
           vec![
             ImageNode {
+              class_name: None,
+              id: None,
+              tag_name: None,
               preset: None,
               tw: None,
               style: Some(

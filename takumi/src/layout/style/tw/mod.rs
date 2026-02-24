@@ -654,7 +654,7 @@ impl Neg for TailwindProperty {
 /// If no filters exist, creates a new filter Vec with the single filter.
 macro_rules! append_filter {
   ($style:expr, $field:ident, $filter:expr) => {{
-    if let crate::layout::style::CssValue::Value(existing_filters) = &mut $style.$field {
+    if let CssValue::Value(existing_filters) = &mut $style.$field {
       existing_filters.push($filter);
     } else {
       $style.$field = vec![$filter].into();

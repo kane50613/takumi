@@ -9,8 +9,8 @@ use serde::Deserialize;
 
 use crate::layout::{
   Viewport,
-  node::Node,
-  style::{InheritedStyle, Style, tw::TailwindValues},
+  node::{Node, NodeStyleLayers},
+  style::{Style, tw::TailwindValues},
 };
 
 /// A container node that can hold child nodes.
@@ -18,7 +18,14 @@ use crate::layout::{
 /// Container nodes are used to group other nodes and apply layout
 /// properties like flexbox layout to arrange their children.
 #[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ContainerNode<Nodes: Node<Nodes>> {
+  /// The element's tag name
+  pub tag_name: Option<Box<str>>,
+  /// The element's class name
+  pub class_name: Option<Box<str>>,
+  /// The element's id
+  pub id: Option<Box<str>>,
   /// Default style presets from HTML element type (lowest priority)
   pub preset: Option<Style>,
   /// The styling properties for this container
@@ -30,34 +37,34 @@ pub struct ContainerNode<Nodes: Node<Nodes>> {
 }
 
 impl<Nodes: Node<Nodes>> Node<Nodes> for ContainerNode<Nodes> {
+  fn tag_name(&self) -> Option<&str> {
+    self.tag_name.as_deref()
+  }
+
+  fn class_name(&self) -> Option<&str> {
+    self.class_name.as_deref()
+  }
+
+  fn id(&self) -> Option<&str> {
+    self.id.as_deref()
+  }
+
   fn children_ref(&self) -> Option<&[Nodes]> {
     self.children.as_deref()
   }
 
-  fn create_inherited_style(
-    &mut self,
-    parent_style: &InheritedStyle,
-    viewport: Viewport,
-  ) -> InheritedStyle {
-    // Start with empty style
-    let mut style = Style::default();
-
-    // 1. Apply preset first (lowest priority)
-    if let Some(preset) = self.preset.take() {
-      style.merge_from(preset);
-    }
-
-    // 2. Apply Tailwind (medium priority)
-    if let Some(tw) = self.tw.as_ref() {
+  fn take_style_layers(&mut self, viewport: Viewport) -> NodeStyleLayers {
+    let author_tw = self.tw.as_ref().map(|tw| {
+      let mut style = Style::default();
       tw.apply(&mut style, viewport);
-    }
+      style
+    });
 
-    // 3. Merge inline style last (highest priority)
-    if let Some(inline_style) = self.style.take() {
-      style.merge_from(inline_style);
+    NodeStyleLayers {
+      preset: self.preset.take(),
+      author_tw,
+      inline: self.style.take(),
     }
-
-    style.inherit(parent_style)
   }
 
   fn take_children(&mut self) -> Option<Box<[Nodes]>> {

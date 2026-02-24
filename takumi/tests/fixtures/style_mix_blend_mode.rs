@@ -9,6 +9,9 @@ use std::sync::Arc;
 /// Creates a single card with an image and mix-blend-mode for testing.
 fn create_blend_card(mode: BlendMode, label_font_size_px: f32) -> NodeKind {
   ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -24,6 +27,9 @@ fn create_blend_card(mode: BlendMode, label_font_size_px: f32) -> NodeKind {
     children: Some(
       [
         ImageNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -40,6 +46,9 @@ fn create_blend_card(mode: BlendMode, label_font_size_px: f32) -> NodeKind {
         }
         .into(),
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -84,6 +93,9 @@ fn test_style_mix_blend_mode() {
   ];
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -111,6 +123,9 @@ fn test_style_mix_blend_mode() {
 #[test]
 fn test_style_mlx_blend_mode_isolation() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -126,6 +141,9 @@ fn test_style_mlx_blend_mode_isolation() {
     children: Some(
       [
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -138,6 +156,9 @@ fn test_style_mlx_blend_mode_isolation() {
           ),
           children: Some(
             [ImageNode {
+              class_name: None,
+              id: None,
+              tag_name: None,
               preset: None,
               tw: None,
               style: Some(
@@ -156,6 +177,9 @@ fn test_style_mlx_blend_mode_isolation() {
         }
         .into(),
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -168,6 +192,9 @@ fn test_style_mlx_blend_mode_isolation() {
           ),
           children: Some(
             [ImageNode {
+              class_name: None,
+              id: None,
+              tag_name: None,
               preset: None,
               tw: None,
               style: Some(

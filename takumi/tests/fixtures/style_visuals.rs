@@ -9,6 +9,9 @@ use crate::test_utils::run_fixture_test;
 #[test]
 fn test_style_background_color() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -28,6 +31,9 @@ fn test_style_background_color() {
 #[test]
 fn test_style_border_radius() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -48,6 +54,9 @@ fn test_style_border_radius() {
 #[test]
 fn test_style_border_radius_per_corner() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -72,6 +81,9 @@ fn test_style_border_radius_per_corner() {
 #[test]
 fn test_style_border_width() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -94,6 +106,9 @@ fn test_style_border_width() {
 #[test]
 fn test_style_border_width_with_radius() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -107,6 +122,9 @@ fn test_style_border_width_with_radius() {
     ),
     children: Some(
       [ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -133,6 +151,9 @@ fn test_style_border_width_with_radius() {
 #[test]
 fn test_style_box_shadow() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -145,6 +166,9 @@ fn test_style_box_shadow() {
     ),
     children: Some(
       [ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -179,6 +203,9 @@ fn test_style_box_shadow() {
 #[test]
 fn test_style_box_shadow_inset() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -191,6 +218,9 @@ fn test_style_box_shadow_inset() {
     ),
     children: Some(
       [ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -226,6 +256,9 @@ fn test_style_box_shadow_inset() {
 #[test]
 fn test_style_position() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -238,6 +271,9 @@ fn test_style_position() {
     ),
     children: Some(
       [ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -263,6 +299,9 @@ fn test_style_position() {
 #[test]
 fn test_style_border_radius_circle() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -286,6 +325,9 @@ fn test_style_border_radius_circle() {
 #[test]
 fn test_style_border_radius_width_offset() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -299,6 +341,9 @@ fn test_style_border_radius_width_offset() {
     ),
     children: Some(
       [ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -315,6 +360,9 @@ fn test_style_border_radius_width_offset() {
         ),
         children: Some(
           [TextNode {
+            class_name: None,
+            id: None,
+            tag_name: None,
             preset: None,
             tw: None,
             text: "The newest blog post".to_string(),
@@ -344,6 +392,9 @@ fn test_style_border_radius_width_offset() {
 #[test]
 fn test_style_border_radius_circle_avatar() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -358,6 +409,9 @@ fn test_style_border_radius_circle_avatar() {
     ),
     children: Some(
       [ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -375,6 +429,9 @@ fn test_style_border_radius_circle_avatar() {
         ),
         children: Some(
           [ImageNode {
+            class_name: None,
+            id: None,
+            tag_name: None,
             preset: None,
             tw: None,
             style: Some(
@@ -419,6 +476,9 @@ fn test_style_border_width_on_image_node() {
   });
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -454,6 +514,9 @@ fn test_style_outline() {
   });
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(

@@ -43,6 +43,9 @@ pub struct RenderOptions<'g, N: Node<N>> {
   /// The resources fetched externally.
   #[builder(default)]
   pub(crate) fetched_resources: HashMap<Arc<str>, Arc<ImageSource>>,
+  /// CSS stylesheets to apply before layout/rendering.
+  #[builder(default)]
+  pub(crate) stylesheets: Vec<String>,
 }
 
 /// Information about a text run in an inline layout.
@@ -81,7 +84,12 @@ pub struct MeasuredNode {
 pub fn measure_layout<'g, N: Node<N>>(options: RenderOptions<'g, N>) -> Result<MeasuredNode> {
   let render_context = RenderContext {
     draw_debug_border: options.draw_debug_border,
-    ..RenderContext::new(options.global, options.viewport, options.fetched_resources)
+    ..RenderContext::new(
+      options.global,
+      options.viewport,
+      options.fetched_resources,
+      options.stylesheets.into_iter().map(Into::into),
+    )
   };
   let root = RenderNode::from_node(&render_context, options.node);
   let mut tree = LayoutTree::from_render_node(&root);
@@ -217,7 +225,12 @@ pub fn render<'g, N: Node<N>>(options: RenderOptions<'g, N>) -> Result<RgbaImage
   let viewport = options.viewport;
   let render_context = RenderContext {
     draw_debug_border: options.draw_debug_border,
-    ..RenderContext::new(options.global, options.viewport, options.fetched_resources)
+    ..RenderContext::new(
+      options.global,
+      viewport,
+      options.fetched_resources,
+      options.stylesheets.into_iter().map(Into::into),
+    )
   };
 
   let mut root = RenderNode::from_node(&render_context, options.node);

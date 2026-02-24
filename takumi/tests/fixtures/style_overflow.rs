@@ -7,6 +7,9 @@ use crate::test_utils::run_fixture_test;
 
 fn create_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
   ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -21,6 +24,9 @@ fn create_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
     ),
     children: Some(
       [ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -37,6 +43,9 @@ fn create_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
         ),
         children: Some(
           [ImageNode {
+            class_name: None,
+            id: None,
+            tag_name: None,
             preset: None,
             tw: None,
             style: Some(
@@ -66,6 +75,9 @@ fn create_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
 
 fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
   ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -79,6 +91,9 @@ fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
         .unwrap(),
     ),
     children: Some([ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -95,6 +110,9 @@ fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
         ),
         children: Some([
           TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
             preset: None,
             tw: None,
             style: Some(

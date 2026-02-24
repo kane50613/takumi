@@ -11,6 +11,9 @@ use crate::test_utils::run_fixture_test;
 #[test]
 fn text_basic() {
   let text = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -28,6 +31,9 @@ fn text_basic() {
 #[test]
 fn text_typography_regular_24px() {
   let text = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -51,6 +57,9 @@ fn text_typography_variable_width() {
     .iter()
     .map(|width| {
       TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -75,6 +84,9 @@ fn text_typography_variable_width() {
     .collect::<Vec<_>>();
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -100,6 +112,9 @@ fn text_typography_variable_weight() {
     .step_by(50)
     .map(|weight| {
       TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -116,6 +131,9 @@ fn text_typography_variable_weight() {
     .collect::<Vec<_>>();
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -136,6 +154,9 @@ fn text_typography_variable_weight() {
 #[test]
 fn text_typography_medium_weight_500() {
   let text = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -155,6 +176,9 @@ fn text_typography_medium_weight_500() {
 #[test]
 fn text_typography_line_height_40px() {
   let text = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -174,6 +198,9 @@ fn text_typography_line_height_40px() {
 #[test]
 fn text_typography_letter_spacing_2px() {
   let text = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -193,6 +220,9 @@ fn text_typography_letter_spacing_2px() {
 #[test]
 fn text_align_start() {
   let text = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -213,6 +243,9 @@ fn text_align_start() {
 #[test]
 fn text_align_center() {
   let text = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -233,6 +266,9 @@ fn text_align_center() {
 #[test]
 fn text_align_right() {
   let text = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -255,6 +291,9 @@ fn text_ellipsis_line_clamp_2() {
   let long_text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.";
 
   let text = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -276,6 +315,9 @@ fn text_ellipsis_line_clamp_2() {
 #[test]
 fn text_transform_all() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -289,6 +331,9 @@ fn text_transform_all() {
     children: Some(
       [
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -303,6 +348,9 @@ fn text_transform_all() {
         }
         .into(),
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -317,6 +365,9 @@ fn text_transform_all() {
         }
         .into(),
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -331,6 +382,9 @@ fn text_transform_all() {
         }
         .into(),
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -360,6 +414,9 @@ fn text_mask_image_gradient_and_emoji() {
   .unwrap();
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -375,6 +432,9 @@ fn text_mask_image_gradient_and_emoji() {
     ),
     children: Some(
       [TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -401,6 +461,9 @@ fn text_mask_image_gradient_and_emoji() {
 #[test]
 fn text_stroke_black_red() {
   let text = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -427,6 +490,9 @@ fn text_stroke_background_clip() {
   .unwrap();
 
   let text = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -445,6 +511,9 @@ fn text_stroke_background_clip() {
   };
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -475,6 +544,9 @@ fn text_shadow() {
   }];
 
   let text = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -502,6 +574,9 @@ fn text_shadow_no_blur_radius() {
   }];
 
   let text = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -523,6 +598,9 @@ fn text_wrap_nowrap() {
   let long_text = "This is a very long piece of text that should demonstrate text wrapping behavior when it exceeds the container width. The quick brown fox jumps over the lazy dog.";
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -542,6 +620,9 @@ fn text_wrap_nowrap() {
       [
         // Wrap text
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -554,6 +635,9 @@ fn text_wrap_nowrap() {
         }
         .into(),
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -576,6 +660,9 @@ fn text_wrap_nowrap() {
 #[test]
 fn text_whitespace_collapse() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -594,6 +681,9 @@ fn text_whitespace_collapse() {
     children: Some(
       [
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -606,6 +696,9 @@ fn text_whitespace_collapse() {
         }
         .into(),
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -618,6 +711,9 @@ fn text_whitespace_collapse() {
         }
         .into(),
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -630,6 +726,9 @@ fn text_whitespace_collapse() {
         }
         .into(),
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -653,6 +752,9 @@ fn text_whitespace_collapse() {
 #[test]
 fn text_ellipsis_text_nowrap() {
   let container = ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -667,6 +769,9 @@ fn text_ellipsis_text_nowrap() {
     ),
     children: Some([
       TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
     preset: None,
         tw: None,
         style: Some(
@@ -693,6 +798,9 @@ fn text_ellipsis_text_nowrap() {
 #[test]
 fn text_wrap_style_all() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -712,6 +820,9 @@ fn text_wrap_style_all() {
       [
         // Auto (default) - standard line breaking
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -725,6 +836,9 @@ fn text_wrap_style_all() {
         .into(),
         // Balance - evenly distributes text across lines
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -738,6 +852,9 @@ fn text_wrap_style_all() {
         .into(),
         // Pretty - avoids orphans on the last line (text ends with short word "it")
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -765,6 +882,9 @@ fn text_super_bold_stroke_background_clip() {
   .unwrap();
 
   let text = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -784,6 +904,9 @@ fn text_super_bold_stroke_background_clip() {
   };
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -830,6 +953,9 @@ fn text_font_stretch() {
     .iter()
     .map(|(label, stretch)| {
       TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -846,6 +972,9 @@ fn text_font_stretch() {
     .collect::<Vec<_>>();
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -871,6 +1000,9 @@ fn text_font_synthesis_weight_auto_none() {
     .iter()
     .map(|(label, synthesis_weight)| {
       TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -889,6 +1021,9 @@ fn text_font_synthesis_weight_auto_none() {
     .collect::<Vec<_>>();
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -913,6 +1048,9 @@ fn text_font_synthesis_style_auto_none() {
     .iter()
     .map(|(label, synthesis_style)| {
       TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -931,6 +1069,9 @@ fn text_font_synthesis_style_auto_none() {
     .collect::<Vec<_>>();
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -970,6 +1111,9 @@ fn text_font_synthesis_weight_emoji() {
   .iter()
   .map(|(label, synthesis)| {
     TextNode {
+      class_name: None,
+      id: None,
+      tag_name: None,
       preset: None,
       tw: None,
       style: Some(
@@ -989,6 +1133,9 @@ fn text_font_synthesis_weight_emoji() {
   .collect::<Vec<_>>();
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -1012,6 +1159,9 @@ fn text_chinese_ellipsis() {
   let text = "日本利用壓電磁磚將腳步轉化為電能。這些瓷磚捕捉來自你腳步的動能。當你行走時，你的重量和動作會對瓷磚產生壓力。磁磚會輕微彎曲，從而產生機械應力。磁磚內部的壓電材料將這種應力轉化為電能。每一步都會產生少量電荷，而數百萬步結合在一起就能產生足夠的電力來驅動 LED燈、數位顯示器和感測器。在像澀谷車站這樣繁忙的地方，每天大約有240萬個腳步為此系統作出貢獻。這些電能可以被儲存或立即使用，從而減少對傳統電賴，並支持永續的城市基礎設施。這種方法將日常運動轉化為實用的再生能源。";
 
   let node = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -1037,6 +1187,9 @@ fn text_devanagari_noto_sans() {
   let text = "नमस्ते दुनिया, यह देवनागरी लिपि का एक परीक्षण है।";
 
   let node = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(

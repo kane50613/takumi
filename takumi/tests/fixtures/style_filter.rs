@@ -14,6 +14,9 @@ fn create_filter_test_container(
   label_font_size_px: f32,
 ) -> NodeKind {
   ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -42,6 +45,9 @@ fn create_filter_test_container(
 /// Creates a single card with an image and label for filter testing.
 fn create_filter_card(filter: &str, image_size_px: f32, label_font_size_px: f32) -> NodeKind {
   ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -56,6 +62,9 @@ fn create_filter_card(filter: &str, image_size_px: f32, label_font_size_px: f32)
     children: Some(
       [
         ImageNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           src: "assets/images/yeecord.png".into(),
@@ -72,6 +81,9 @@ fn create_filter_card(filter: &str, image_size_px: f32, label_font_size_px: f32)
         }
         .into(),
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: None,

@@ -11,6 +11,9 @@ use crate::test_utils::run_fixture_test;
 #[test]
 fn test_style_flex_basis() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -26,6 +29,9 @@ fn test_style_flex_basis() {
     children: Some(
       [
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -40,6 +46,9 @@ fn test_style_flex_basis() {
         }
         .into(),
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -54,6 +63,9 @@ fn test_style_flex_basis() {
         }
         .into(),
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -78,6 +90,9 @@ fn test_style_flex_basis() {
 #[test]
 fn test_style_flex_direction() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -93,6 +108,9 @@ fn test_style_flex_direction() {
     children: Some(
       [
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -107,6 +125,9 @@ fn test_style_flex_direction() {
         }
         .into(),
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -121,6 +142,9 @@ fn test_style_flex_direction() {
         }
         .into(),
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -145,6 +169,9 @@ fn test_style_flex_direction() {
 #[test]
 fn test_style_gap() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -161,6 +188,9 @@ fn test_style_gap() {
       [
         // First child
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -176,6 +206,9 @@ fn test_style_gap() {
         .into(),
         // Second child
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -191,6 +224,9 @@ fn test_style_gap() {
         .into(),
         // Third child
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -215,6 +251,9 @@ fn test_style_gap() {
 #[test]
 fn test_style_grid_template_columns() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -233,6 +272,9 @@ fn test_style_grid_template_columns() {
     children: Some(
       [
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -245,6 +287,9 @@ fn test_style_grid_template_columns() {
         }
         .into(),
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -267,6 +312,9 @@ fn test_style_grid_template_columns() {
 #[test]
 fn test_style_grid_template_rows() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -285,6 +333,9 @@ fn test_style_grid_template_rows() {
     children: Some(
       [
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -297,6 +348,9 @@ fn test_style_grid_template_rows() {
         }
         .into(),
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(

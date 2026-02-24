@@ -9,6 +9,9 @@ use crate::test_utils::run_fixture_test;
 fn test_style_text_decoration_thickness() {
   let make_line = |label: &str, thickness: TextDecorationThickness| {
     TextNode {
+      class_name: None,
+      id: None,
+      tag_name: None,
       preset: None,
       tw: None,
       style: Some(
@@ -31,6 +34,9 @@ fn test_style_text_decoration_thickness() {
   };
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(

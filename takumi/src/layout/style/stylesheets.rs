@@ -48,6 +48,27 @@ macro_rules! define_style {
     }
 
     impl Style {
+      /// Applies a CSS property to this style. Unknown properties are ignored.
+      pub(crate) fn apply_css_property<'i>(
+        &mut self,
+        name: &str,
+        input: &mut cssparser::Parser<'i, '_>,
+      ) -> Result<(), cssparser::ParseError<'i, cssparser::BasicParseErrorKind<'i>>> {
+        let name_normalized = name.replace('-', "_");
+        let name_normalized = name_normalized.trim_start_matches('_');
+        match name_normalized {
+          $(
+            stringify!($property) => {
+              if let Ok(val) = <$type as FromCss>::from_css(input) {
+                self.$property = val.into();
+              }
+            }
+          )*
+          _ => {}
+        }
+        Ok(())
+      }
+
       /// Inherits the style from the parent element.
       pub(crate) fn inherit(self, parent: &InheritedStyle) -> InheritedStyle {
         InheritedStyle {

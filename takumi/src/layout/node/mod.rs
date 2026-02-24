@@ -16,10 +16,7 @@ use crate::{
   layout::{
     Viewport,
     inline::InlineContentKind,
-    style::{
-      Affine, BackgroundClip, BackgroundImage, BlendMode, CssValue, InheritedStyle, Length, Sides,
-      Style,
-    },
+    style::{Affine, BackgroundClip, BackgroundImage, BlendMode, CssValue, Length, Sides, Style},
   },
   rendering::{
     BackgroundTile, BorderProperties, Canvas, RenderContext, SizedShadow,
@@ -44,9 +41,9 @@ macro_rules! impl_node_enum {
         }
       }
 
-      fn create_inherited_style(&mut self, parent: &$crate::layout::style::InheritedStyle, viewport: $crate::layout::Viewport) -> $crate::layout::style::InheritedStyle {
+      fn take_style_layers(&mut self, viewport: $crate::layout::Viewport) -> $crate::layout::node::NodeStyleLayers {
         match self {
-          $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::create_inherited_style(inner, parent, viewport), )*
+          $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::take_style_layers(inner, viewport), )*
         }
       }
 
@@ -98,6 +95,24 @@ macro_rules! impl_node_enum {
         }
       }
 
+      fn tag_name(&self) -> Option<&str> {
+        match self {
+          $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::tag_name(inner), )*
+        }
+      }
+
+      fn class_name(&self) -> Option<&str> {
+        match self {
+          $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::class_name(inner), )*
+        }
+      }
+
+      fn id(&self) -> Option<&str> {
+        match self {
+          $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::id(inner), )*
+        }
+      }
+
       fn get_style(&self) -> Option<&Style> {
         match self {
           $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::get_style(inner), )*
@@ -138,6 +153,21 @@ macro_rules! impl_node_enum {
 /// This trait defines the common interface for all elements that can be
 /// rendered in the layout system, including containers, text, and images.
 pub trait Node<N: Node<N>>: Send + Sync + Clone {
+  /// Returns the tag name of the node, if any.
+  fn tag_name(&self) -> Option<&str> {
+    None
+  }
+
+  /// Returns the class name of the node, if any.
+  fn class_name(&self) -> Option<&str> {
+    None
+  }
+
+  /// Returns the id of the node, if any.
+  fn id(&self) -> Option<&str> {
+    None
+  }
+
   /// Gets reference of children.
   fn children_ref(&self) -> Option<&[N]> {
     None
@@ -215,12 +245,8 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
     None
   }
 
-  /// Create a [`InheritedStyle`] instance or clone the parent's.
-  fn create_inherited_style(
-    &mut self,
-    _parent: &InheritedStyle,
-    viewport: Viewport,
-  ) -> InheritedStyle;
+  /// Takes the node's local style layers for cascade assembly.
+  fn take_style_layers(&mut self, viewport: Viewport) -> NodeStyleLayers;
 
   /// Retrieve content for inline layout.
   fn inline_content(&self) -> Option<InlineContentKind<'_>> {
@@ -511,6 +537,17 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
 
     Ok(())
   }
+}
+
+/// Style layers contributed by a node before cascade/inheritance assembly.
+#[derive(Debug, Default, Clone)]
+pub struct NodeStyleLayers {
+  /// UA/default style preset for the element.
+  pub preset: Option<Style>,
+  /// Tailwind-derived author style for the element.
+  pub author_tw: Option<Style>,
+  /// Inline style attached directly to the element.
+  pub inline: Option<Style>,
 }
 
 /// Represents the nodes enum.

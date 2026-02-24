@@ -23,6 +23,8 @@ thiserror = "2.0"
 wide = "1.1"
 unicode-linebreak = "0.1"
 libm = "0.2"
+selectors = "0.35"
+precomputed-hash = "0.1"
 
 [dependencies.bytemuck]
 version = "1.25"

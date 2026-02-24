@@ -12,6 +12,9 @@ use crate::test_utils::run_fixture_test;
 #[test]
 fn test_style_width() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -31,6 +34,9 @@ fn test_style_width() {
 #[test]
 fn test_style_height() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -50,6 +56,9 @@ fn test_style_height() {
 #[test]
 fn test_style_min_width() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -70,6 +79,9 @@ fn test_style_min_width() {
 #[test]
 fn test_style_min_height() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -90,6 +102,9 @@ fn test_style_min_height() {
 #[test]
 fn test_style_max_width() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -110,6 +125,9 @@ fn test_style_max_width() {
 #[test]
 fn test_style_max_height() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(

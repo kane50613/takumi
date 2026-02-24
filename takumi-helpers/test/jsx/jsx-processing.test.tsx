@@ -18,6 +18,7 @@ describe("fromJsx", () => {
     expect(result).toEqual({
       type: "text",
       text: "Hello World",
+      tagName: "div",
     } satisfies TextNode);
   });
 
@@ -56,7 +57,55 @@ describe("fromJsx", () => {
     expect(result).toEqual({
       type: "text",
       text: "Hello",
+      tagName: "div",
     } satisfies TextNode);
+  });
+
+  test("passes tagName, id, className to text nodes", async () => {
+    const result = await fromJsx(
+      <p id="headline" className="text-xl">
+        Hello
+      </p>,
+    );
+
+    expect(result).toEqual({
+      type: "text",
+      text: "Hello",
+      preset: defaultStylePresets.p,
+      tagName: "p",
+      id: "headline",
+      className: "text-xl",
+    } satisfies TextNode);
+  });
+
+  test("passes tagName, id, className to container nodes", async () => {
+    const result = await fromJsx(
+      <div id="wrapper" className="stack">
+        <span>First</span>
+        <span>Second</span>
+      </div>,
+    );
+
+    expect(result).toEqual({
+      type: "container",
+      children: [
+        {
+          type: "text",
+          text: "First",
+          preset: defaultStylePresets.span,
+          tagName: "span",
+        },
+        {
+          type: "text",
+          text: "Second",
+          preset: defaultStylePresets.span,
+          tagName: "span",
+        },
+      ],
+      tagName: "div",
+      id: "wrapper",
+      className: "stack",
+    } satisfies ContainerNode);
   });
 
   test("handles function components", async () => {
@@ -66,6 +115,7 @@ describe("fromJsx", () => {
     expect(result).toEqual({
       type: "text",
       text: "Hello World",
+      tagName: "div",
     } satisfies TextNode);
   });
 
@@ -91,6 +141,7 @@ describe("fromJsx", () => {
       style: {
         WebkitTextStroke: "1px red",
       },
+      tagName: "p",
     } satisfies TextNode);
   });
 
@@ -103,6 +154,7 @@ describe("fromJsx", () => {
     expect(result).toEqual({
       type: "text",
       text: "Hello Async",
+      tagName: "div",
     } satisfies TextNode);
   });
 
@@ -117,8 +169,8 @@ describe("fromJsx", () => {
     expect(result).toEqual({
       type: "container",
       children: [
-        { type: "text", text: "First" },
-        { type: "text", text: "Second" },
+        { type: "text", text: "First", tagName: "div" },
+        { type: "text", text: "Second", tagName: "div" },
       ],
       style: {
         width: "100%",
@@ -144,18 +196,22 @@ describe("fromJsx", () => {
           type: "text",
           text: "First",
           preset: defaultStylePresets.span,
+          tagName: "span",
         },
         {
           type: "text",
           text: "Second",
           preset: defaultStylePresets.span,
+          tagName: "span",
         },
         {
           type: "text",
           text: "Third",
           preset: defaultStylePresets.span,
+          tagName: "span",
         },
       ],
+      tagName: "div",
     } satisfies ContainerNode);
   });
 
@@ -170,6 +226,7 @@ describe("fromJsx", () => {
     expect(result).toEqual({
       type: "container",
       preset: defaultStylePresets.p,
+      tagName: "p",
       children: [
         {
           type: "text",
@@ -196,6 +253,7 @@ describe("fromJsx", () => {
     expect(result).toEqual({
       type: "container",
       preset: defaultStylePresets.p,
+      tagName: "p",
       children: [
         {
           type: "text",
@@ -213,7 +271,32 @@ describe("fromJsx", () => {
     expect(result).toEqual({
       type: "image",
       src: "https://example.com/image.jpg",
+      width: undefined,
+      height: undefined,
       preset: defaultStylePresets.img,
+      tagName: "img",
+    } satisfies ImageNode);
+  });
+
+  test("passes tagName, id, className to img nodes", async () => {
+    const result = await fromJsx(
+      <img
+        src="https://example.com/image.jpg"
+        id="hero-image"
+        className="rounded"
+        alt="Test"
+      />,
+    );
+
+    expect(result).toEqual({
+      type: "image",
+      src: "https://example.com/image.jpg",
+      width: undefined,
+      height: undefined,
+      preset: defaultStylePresets.img,
+      tagName: "img",
+      id: "hero-image",
+      className: "rounded",
     } satisfies ImageNode);
   });
 
@@ -232,6 +315,7 @@ describe("fromJsx", () => {
       width: 100,
       height: 100,
       preset: defaultStylePresets.img,
+      tagName: "img",
     } satisfies ImageNode);
   });
 
@@ -243,6 +327,7 @@ describe("fromJsx", () => {
       text: "Hello",
       preset: defaultStylePresets.p,
       tw: "text-red-500",
+      tagName: "p",
     } satisfies TextNode);
   });
 
@@ -263,6 +348,7 @@ describe("fromJsx", () => {
       text: "Hello",
       preset: defaultStylePresets.p,
       tw: "text-red-500",
+      tagName: "p",
     } satisfies TextNode);
   });
 
@@ -299,12 +385,15 @@ describe("fromJsx", () => {
           type: "text",
           text: "Title",
           preset: defaultStylePresets.h1,
+          tagName: "h1",
         },
         {
           type: "container",
+          tagName: "div",
           children: [
             {
               type: "container",
+              tagName: "p",
               children: [
                 {
                   type: "text",
@@ -315,6 +404,7 @@ describe("fromJsx", () => {
                   type: "text",
                   text: "bold",
                   preset: defaultStylePresets.strong,
+                  tagName: "strong",
                 },
                 {
                   type: "text",
@@ -326,20 +416,24 @@ describe("fromJsx", () => {
             },
             {
               type: "container",
+              tagName: "ul",
               children: [
                 {
                   type: "text",
                   text: "Item 1",
+                  tagName: "li",
                 },
                 {
                   type: "text",
                   text: "Item 2",
+                  tagName: "li",
                 },
               ],
             },
           ],
         },
       ],
+      tagName: "div",
     } satisfies ContainerNode);
   });
 
@@ -375,31 +469,39 @@ describe("fromJsx", () => {
       children: [
         {
           type: "container",
+          tagName: "div",
           children: [
             {
               type: "text",
               text: "Welcome",
               preset: defaultStylePresets.h1,
+              tagName: "h1",
             },
             {
               type: "container",
+              tagName: "div",
               children: [
                 {
                   type: "text",
                   text: "Item 1",
                   preset: defaultStylePresets.span,
+                  tagName: "span",
                 },
                 {
                   type: "text",
                   text: "Item 2",
                   preset: defaultStylePresets.span,
+                  tagName: "span",
                 },
               ],
             },
             {
               type: "image",
               src: "https://example.com/logo.png",
+              width: undefined,
+              height: undefined,
               preset: defaultStylePresets.img,
+              tagName: "img",
             },
           ],
         },
@@ -443,6 +545,47 @@ describe("fromJsx", () => {
       width: 60,
       height: 60,
       preset: defaultStylePresets.svg,
+      tagName: "svg",
     });
+  });
+
+  test("passes tagName, id, className to svg nodes", async () => {
+    const component = (
+      <svg
+        id="logo"
+        className="icon"
+        width="10"
+        height="12"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <title>Logo</title>
+        <rect width="10" height="12" />
+      </svg>
+    );
+    const result = await fromJsx(component);
+
+    expect(result).toEqual({
+      type: "image",
+      src: renderToStaticMarkup(component),
+      width: 10,
+      height: 12,
+      preset: defaultStylePresets.svg,
+      tagName: "svg",
+      id: "logo",
+      className: "icon",
+    } satisfies ImageNode);
+  });
+
+  test("passes tagName, id, className to br text nodes", async () => {
+    const result = await fromJsx(<br id="line-break" className="spacer" />);
+
+    expect(result).toEqual({
+      type: "text",
+      text: "\n",
+      preset: defaultStylePresets.span,
+      tagName: "br",
+      id: "line-break",
+      className: "spacer",
+    } satisfies TextNode);
   });
 });

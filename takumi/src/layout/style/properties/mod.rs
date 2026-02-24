@@ -168,6 +168,24 @@ pub trait FromCss<'i> {
   }
 }
 
+impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
+  fn valid_tokens() -> &'static [CssToken] {
+    T::valid_tokens()
+  }
+
+  fn expect_message() -> Cow<'static, str> {
+    Cow::Owned(format!("{} or 'none'", T::expect_message()))
+  }
+
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+      Ok(None)
+    } else {
+      T::from_css(input).map(Some)
+    }
+  }
+}
+
 /// Converts a parsed/inherited value into a computed value for the current node context.
 pub(crate) trait MakeComputed {
   /// Default no-op for types that do not need computed-value normalization.

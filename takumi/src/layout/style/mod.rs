@@ -1,7 +1,8 @@
+pub(crate) mod matching;
 mod properties;
+pub(crate) mod selector;
 mod stylesheets;
-
-/// Handle Tailwind CSS properties.
+/// Tailwind CSS Parser.
 pub mod tw;
 
 use std::marker::PhantomData;
@@ -115,97 +116,6 @@ impl<'de, T: for<'i> FromCss<'i>, const DEFAULT_INHERIT: bool> Deserialize<'de>
     D: Deserializer<'de>,
   {
     deserializer.deserialize_any(CssValueVisitor::new())
-  }
-}
-
-// Visitor for CssValue<Option<T>>
-struct CssValueOptionVisitor<T, const DEFAULT_INHERIT: bool> {
-  _marker: PhantomData<T>,
-}
-
-impl<T, const DEFAULT_INHERIT: bool> CssValueOptionVisitor<T, DEFAULT_INHERIT> {
-  fn new() -> Self {
-    Self {
-      _marker: PhantomData,
-    }
-  }
-}
-
-impl<'de, T: for<'i> FromCss<'i>, const DEFAULT_INHERIT: bool> Visitor<'de>
-  for CssValueOptionVisitor<T, DEFAULT_INHERIT>
-{
-  type Value = CssValue<Option<T>, DEFAULT_INHERIT>;
-
-  fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-    #[cfg(feature = "detailed_css_error")]
-    {
-      write!(
-        f,
-        "{}; also accepts 'none', 'initial' or 'inherit'.",
-        T::expect_message()
-      )
-    }
-
-    #[cfg(not(feature = "detailed_css_error"))]
-    {
-      write!(
-        f,
-        "CSS value, compile with --features detailed_css_error for more details"
-      )
-    }
-  }
-
-  fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-  where
-    E: de::Error,
-  {
-    match_ignore_ascii_case! {value,
-      "none" => Ok(CssValue::Value(None)),
-      "initial" => Ok(CssValue::Initial),
-      "inherit" => Ok(CssValue::Inherit),
-      "unset" => Ok(CssValue::Unset),
-      _ => T::from_str(value)
-        .map(|v| CssValue::Value(Some(v)))
-        .map_err(|_| E::invalid_value(de::Unexpected::Str(value), &self)),
-    }
-  }
-
-  fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
-  where
-    E: de::Error,
-  {
-    T::from_str(&value.to_string())
-      .map(|v| CssValue::Value(Some(v)))
-      .map_err(|_| E::invalid_type(de::Unexpected::Signed(value), &self))
-  }
-
-  fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
-  where
-    E: de::Error,
-  {
-    T::from_str(&value.to_string())
-      .map(|v| CssValue::Value(Some(v)))
-      .map_err(|_| E::invalid_type(de::Unexpected::Unsigned(value), &self))
-  }
-
-  fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
-  where
-    E: de::Error,
-  {
-    T::from_str(&value.to_string())
-      .map(|v| CssValue::Value(Some(v)))
-      .map_err(|_| E::invalid_type(de::Unexpected::Float(value), &self))
-  }
-}
-
-impl<'de, T: for<'i> FromCss<'i>, const DEFAULT_INHERIT: bool> Deserialize<'de>
-  for CssValue<Option<T>, DEFAULT_INHERIT>
-{
-  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-  where
-    D: Deserializer<'de>,
-  {
-    deserializer.deserialize_any(CssValueOptionVisitor::new())
   }
 }
 

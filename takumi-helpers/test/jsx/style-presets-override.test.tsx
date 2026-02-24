@@ -12,6 +12,7 @@ describe("fromJsx - stylePresets overriding", () => {
         type: "text",
         text: "Hello",
         preset: defaultStylePresets.h1,
+        tagName: "h1",
       } satisfies TextNode);
     });
 
@@ -21,6 +22,7 @@ describe("fromJsx - stylePresets overriding", () => {
         type: "text",
         text: "Paragraph",
         preset: defaultStylePresets.p,
+        tagName: "p",
       } satisfies TextNode);
     });
 
@@ -30,6 +32,7 @@ describe("fromJsx - stylePresets overriding", () => {
         type: "text",
         text: "Bold",
         preset: defaultStylePresets.strong,
+        tagName: "strong",
       } satisfies TextNode);
     });
 
@@ -49,6 +52,7 @@ describe("fromJsx - stylePresets overriding", () => {
       expect(result).toEqual({
         type: "text",
         text: "Hello",
+        tagName: "h1",
       } satisfies TextNode);
     });
 
@@ -59,6 +63,7 @@ describe("fromJsx - stylePresets overriding", () => {
       expect(result).toEqual({
         type: "text",
         text: "Paragraph",
+        tagName: "p",
       } satisfies TextNode);
     });
 
@@ -69,6 +74,7 @@ describe("fromJsx - stylePresets overriding", () => {
       expect(result).toEqual({
         type: "text",
         text: "Bold",
+        tagName: "strong",
       } satisfies TextNode);
     });
 
@@ -88,6 +94,9 @@ describe("fromJsx - stylePresets overriding", () => {
       expect(result).toEqual({
         type: "image",
         src: "https://example.com/image.jpg",
+        width: undefined,
+        height: undefined,
+        tagName: "img",
       });
     });
 
@@ -108,9 +117,11 @@ describe("fromJsx - stylePresets overriding", () => {
           {
             type: "text",
             text: "Title",
+            tagName: "h1",
           },
           {
             type: "container",
+            tagName: "p",
             children: [
               {
                 type: "text",
@@ -119,10 +130,12 @@ describe("fromJsx - stylePresets overriding", () => {
               {
                 type: "text",
                 text: "bold",
+                tagName: "strong",
               },
             ],
           },
         ],
+        tagName: "div",
       } satisfies ContainerNode);
     });
   });
@@ -150,6 +163,7 @@ describe("fromJsx - stylePresets overriding", () => {
           color: "red",
           fontWeight: "normal",
         },
+        tagName: "h1",
       } satisfies TextNode);
     });
 
@@ -175,6 +189,7 @@ describe("fromJsx - stylePresets overriding", () => {
           marginBottom: "2em",
           color: "blue",
         },
+        tagName: "p",
       } satisfies TextNode);
     });
 
@@ -209,6 +224,7 @@ describe("fromJsx - stylePresets overriding", () => {
               fontSize: "4em",
               color: "purple",
             },
+            tagName: "h1",
           },
           {
             type: "text",
@@ -217,8 +233,10 @@ describe("fromJsx - stylePresets overriding", () => {
               fontWeight: "900",
               color: "orange",
             },
+            tagName: "strong",
           },
         ],
+        tagName: "div",
       } satisfies ContainerNode);
     });
 
@@ -242,6 +260,7 @@ describe("fromJsx - stylePresets overriding", () => {
           padding: "20px",
           backgroundColor: "#f0f0f0",
         },
+        tagName: "article",
       } satisfies TextNode);
     });
 
@@ -270,13 +289,16 @@ describe("fromJsx - stylePresets overriding", () => {
             preset: {
               fontSize: "5em",
             },
+            tagName: "h1",
           },
           {
             type: "text",
             text: "Default H2",
             preset: defaultStylePresets.h2,
+            tagName: "h2",
           },
         ],
+        tagName: "div",
       } satisfies ContainerNode);
     });
   });
@@ -295,6 +317,7 @@ describe("fromJsx - stylePresets overriding", () => {
           fontSize: "10em",
           color: "green",
         },
+        tagName: "h1",
       } satisfies TextNode);
     });
 
@@ -325,6 +348,7 @@ describe("fromJsx - stylePresets overriding", () => {
           fontSize: "10em",
           fontWeight: "100",
         },
+        tagName: "h1",
       } satisfies TextNode);
     });
 
@@ -341,6 +365,7 @@ describe("fromJsx - stylePresets overriding", () => {
           fontSize: "8em",
           color: "blue",
         },
+        tagName: "h1",
       } satisfies TextNode);
     });
   });
@@ -373,12 +398,15 @@ describe("fromJsx - stylePresets overriding", () => {
             type: "text",
             text: "Title",
             preset: customPresets.h1,
+            tagName: "h1",
           },
           {
             type: "container",
+            tagName: "div",
             children: [
               {
                 type: "container",
+                tagName: "p",
                 children: [
                   {
                     type: "text",
@@ -389,6 +417,7 @@ describe("fromJsx - stylePresets overriding", () => {
                     type: "text",
                     text: "bold",
                     preset: customPresets.strong,
+                    tagName: "strong",
                   },
                   {
                     type: "text",
@@ -401,6 +430,7 @@ describe("fromJsx - stylePresets overriding", () => {
             ],
           },
         ],
+        tagName: "div",
       } satisfies ContainerNode);
     });
 
@@ -433,6 +463,7 @@ describe("fromJsx - stylePresets overriding", () => {
             style: {
               color: "blue",
             },
+            tagName: "h1",
           },
           {
             type: "text",
@@ -440,6 +471,7 @@ describe("fromJsx - stylePresets overriding", () => {
             preset: {
               marginTop: "1.5em",
             },
+            tagName: "p",
           },
           {
             type: "text",
@@ -450,8 +482,10 @@ describe("fromJsx - stylePresets overriding", () => {
             style: {
               color: "green",
             },
+            tagName: "p",
           },
         ],
+        tagName: "div",
       } satisfies ContainerNode);
     });
 
@@ -479,13 +513,16 @@ describe("fromJsx - stylePresets overriding", () => {
             type: "text",
             text: "Test",
             preset: customPresets.h1,
+            tagName: "h1",
           },
           {
             type: "text",
             text: "Content",
             preset: defaultStylePresets.p,
+            tagName: "p",
           },
         ],
+        tagName: "div",
       } satisfies ContainerNode);
     });
 
@@ -504,12 +541,15 @@ describe("fromJsx - stylePresets overriding", () => {
           {
             type: "text",
             text: "Title",
+            tagName: "h1",
           },
           {
             type: "text",
             text: "Paragraph",
+            tagName: "p",
           },
         ],
+        tagName: "div",
       } satisfies ContainerNode);
     });
   });
@@ -523,6 +563,7 @@ describe("fromJsx - stylePresets overriding", () => {
         type: "text",
         text: "Hello",
         preset: defaultStylePresets.h1,
+        tagName: "h1",
       } satisfies TextNode);
     });
 
@@ -532,6 +573,7 @@ describe("fromJsx - stylePresets overriding", () => {
         type: "text",
         text: "Hello",
         preset: defaultStylePresets.h1,
+        tagName: "h1",
       } satisfies TextNode);
     });
 
@@ -555,12 +597,15 @@ describe("fromJsx - stylePresets overriding", () => {
             type: "text",
             text: "Custom",
             preset: customPresets.h1,
+            tagName: "h1",
           },
           {
             type: "text",
             text: "Default",
+            tagName: "p",
           },
         ],
+        tagName: "div",
       } satisfies ContainerNode);
     });
 
@@ -588,8 +633,10 @@ describe("fromJsx - stylePresets overriding", () => {
             type: "text",
             text: "Inner Title",
             preset: customPresets.h1,
+            tagName: "h1",
           },
         ],
+        tagName: "div",
       } satisfies ContainerNode);
     });
   });

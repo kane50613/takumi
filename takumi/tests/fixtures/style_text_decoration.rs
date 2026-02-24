@@ -8,6 +8,9 @@ use crate::test_utils::run_fixture_test;
 #[test]
 fn test_style_text_decoration() {
   let text = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -35,6 +38,9 @@ fn test_style_text_decoration() {
 fn text_decoration_skip_ink_parapsychologists() {
   let make_line = |label: &str, skip_ink: TextDecorationSkipInk| {
     TextNode {
+      class_name: None,
+      id: None,
+      tag_name: None,
       preset: None,
       tw: None,
       style: Some(
@@ -58,6 +64,9 @@ fn text_decoration_skip_ink_parapsychologists() {
   };
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(

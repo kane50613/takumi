@@ -27,11 +27,17 @@ let mut node = NodeKind::Container(ContainerNode {
       style: None, // Construct with `StyleBuilder`
       tw: None, // Tailwind properties
       preset: None,
+      tag_name: None,
+      class_name: None,
+      id: None,
     }),
   ])),
   preset: None,
   style: None,
   tw: None, // Tailwind properties
+  tag_name: None,
+  class_name: None,
+  id: None,
 });
 
 // Create a context for storing resources, font caches.

@@ -13,6 +13,20 @@ function applyPreset(node: AnyNode, preset?: CSSProperties) {
   }
 }
 
+function applyMetadata(node: AnyNode, props: Partial<AnyNode>) {
+  if (props.tagName !== undefined) {
+    node.tagName = props.tagName;
+  }
+
+  if (props.className !== undefined) {
+    node.className = props.className;
+  }
+
+  if (props.id !== undefined) {
+    node.id = props.id;
+  }
+}
+
 export function container(props: Omit<ContainerNode, "type">): ContainerNode {
   const node: ContainerNode = {
     type: "container",
@@ -23,6 +37,7 @@ export function container(props: Omit<ContainerNode, "type">): ContainerNode {
     node.tw = props.tw;
   }
 
+  applyMetadata(node, props);
   applyPreset(node, props.preset);
   applyStyle(node, props.style);
 
@@ -56,6 +71,7 @@ export function text(
     node.tw = props.tw;
   }
 
+  applyMetadata(node, props);
   applyPreset(node, props.preset);
   applyStyle(node, style ?? props.style);
 
@@ -74,6 +90,7 @@ export function image(props: Omit<ImageNode, "type">): ImageNode {
     node.tw = props.tw;
   }
 
+  applyMetadata(node, props);
   applyPreset(node, props.preset);
   applyStyle(node, props.style);
 

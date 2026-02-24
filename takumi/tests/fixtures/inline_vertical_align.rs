@@ -9,6 +9,9 @@ use crate::test_utils::run_fixture_test;
 fn inline_vertical_align_types() {
   let row = |label: &str, align: VerticalAlign, color: Color| {
     ContainerNode {
+      class_name: None,
+      id: None,
+      tag_name: None,
       preset: None,
       tw: None,
       style: Some(
@@ -27,6 +30,9 @@ fn inline_vertical_align_types() {
       children: Some(
         [
           TextNode {
+            class_name: None,
+            id: None,
+            tag_name: None,
             preset: None,
             tw: None,
             style: Some(
@@ -42,6 +48,9 @@ fn inline_vertical_align_types() {
           }
           .into(),
           ContainerNode {
+            class_name: None,
+            id: None,
+            tag_name: None,
             preset: None,
             tw: None,
             style: Some(
@@ -58,6 +67,9 @@ fn inline_vertical_align_types() {
           }
           .into(),
           TextNode {
+            class_name: None,
+            id: None,
+            tag_name: None,
             preset: None,
             tw: None,
             style: Some(
@@ -99,6 +111,9 @@ fn inline_vertical_align_types() {
   ];
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -122,6 +137,9 @@ fn inline_vertical_align_types() {
 fn inline_vertical_align_multiline() {
   let children = [
     TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
       preset: None,
       tw: None,
       style: Some(
@@ -136,6 +154,9 @@ fn inline_vertical_align_multiline() {
     }
     .into(),
     ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
       preset: None,
       tw: None,
       style: Some(
@@ -152,6 +173,9 @@ fn inline_vertical_align_multiline() {
     }
     .into(),
     TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
       preset: None,
       tw: None,
       style: Some(
@@ -165,6 +189,9 @@ fn inline_vertical_align_multiline() {
     }
     .into(),
     ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
       preset: None,
       tw: None,
       style: Some(
@@ -181,6 +208,9 @@ fn inline_vertical_align_multiline() {
     }
     .into(),
     TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
       preset: None,
       tw: None,
       style: Some(
@@ -196,6 +226,9 @@ fn inline_vertical_align_multiline() {
   ];
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(

@@ -7,6 +7,9 @@ use crate::test_utils::run_fixture_test;
 
 fn create_test_container(opacity: f32) -> NodeKind {
   ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -25,6 +28,9 @@ fn create_test_container(opacity: f32) -> NodeKind {
     ),
     children: Some(
       [TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: None,
@@ -40,6 +46,9 @@ fn create_test_container(opacity: f32) -> NodeKind {
 #[test]
 fn test_style_opacity() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -70,6 +79,9 @@ fn test_style_opacity() {
 #[test]
 fn test_style_opacity_image_with_text() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -87,6 +99,9 @@ fn test_style_opacity_image_with_text() {
     children: Some(
       [
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -99,6 +114,9 @@ fn test_style_opacity_image_with_text() {
           ),
           children: Some(
             [ImageNode {
+              class_name: None,
+              id: None,
+              tag_name: None,
               preset: None,
               tw: None,
               style: Some(
@@ -118,6 +136,9 @@ fn test_style_opacity_image_with_text() {
         }
         .into(),
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(

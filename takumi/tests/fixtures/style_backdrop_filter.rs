@@ -8,6 +8,9 @@ use crate::test_utils::run_fixture_test;
 /// Creates a single card with backdrop-filter for testing.
 fn create_backdrop_card(filter: &str, label_font_size_px: f32) -> NodeKind {
   ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -26,6 +29,9 @@ fn create_backdrop_card(filter: &str, label_font_size_px: f32) -> NodeKind {
     ),
     children: Some(
       [TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: None,
@@ -64,6 +70,9 @@ fn test_style_backdrop_filter() {
   ];
 
   let container = ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -96,6 +105,9 @@ fn test_style_backdrop_filter() {
 #[test]
 fn test_style_backdrop_filter_frosted_glass() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -114,6 +126,9 @@ fn test_style_backdrop_filter_frosted_glass() {
     ),
     children: Some(
       [ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -133,6 +148,9 @@ fn test_style_backdrop_filter_frosted_glass() {
         children: Some(
           [
             TextNode {
+              class_name: None,
+              id: None,
+              tag_name: None,
               preset: None,
               tw: None,
               style: Some(
@@ -147,6 +165,9 @@ fn test_style_backdrop_filter_frosted_glass() {
             }
             .into(),
             TextNode {
+              class_name: None,
+              id: None,
+              tag_name: None,
               preset: None,
               tw: None,
               style: Some(

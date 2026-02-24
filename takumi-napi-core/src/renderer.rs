@@ -102,6 +102,8 @@ pub struct RenderOptions<'env> {
   pub draw_debug_border: Option<bool>,
   /// The fetched resources to use.
   pub fetched_resources: Option<Vec<ImageSource<'env>>>,
+  /// CSS stylesheets to apply before rendering.
+  pub stylesheets: Option<Vec<String>>,
   /// The device pixel ratio.
   /// @default 1.0
   pub device_pixel_ratio: Option<f64>,

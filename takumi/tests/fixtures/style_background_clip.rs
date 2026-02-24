@@ -12,6 +12,9 @@ fn create_container_with_background_clip(
   border_width: f32,
 ) -> ContainerNode<NodeKind> {
   ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -26,6 +29,9 @@ fn create_container_with_background_clip(
     ),
     children: Some(
       [ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -94,6 +100,9 @@ fn test_style_background_clip_text_gradient() {
   .unwrap();
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -109,6 +118,9 @@ fn test_style_background_clip_text_gradient() {
     ),
     children: Some(
       [TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -138,6 +150,9 @@ fn test_style_background_clip_text_radial_gradient() {
     BackgroundImages::from_str("radial-gradient(circle, #ff0080, #7928ca, #0070f3)").unwrap();
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -154,6 +169,9 @@ fn test_style_background_clip_text_radial_gradient() {
     ),
     children: Some(
       [TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -178,6 +196,9 @@ fn test_style_background_clip_text_radial_gradient() {
 #[test]
 fn test_style_background_clip_border_area() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -192,6 +213,9 @@ fn test_style_background_clip_border_area() {
     ),
     children: Some(
       [ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -224,6 +248,9 @@ fn test_style_background_clip_with_gradient_background() {
     BackgroundImages::from_str("linear-gradient(135deg, #667eea 0%, #764ba2 100%)").unwrap();
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -238,6 +265,9 @@ fn test_style_background_clip_with_gradient_background() {
     ),
     children: Some(
       [ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -269,6 +299,9 @@ fn test_style_background_clip_text_multiline() {
     BackgroundImages::from_str("linear-gradient(45deg, #12c2e9, #c471ed, #f64f59)").unwrap();
 
   let container = ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -284,6 +317,9 @@ fn test_style_background_clip_text_multiline() {
     ),
     children: Some([
       TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
     preset: None,
         tw: None,
         style: Some(
@@ -308,6 +344,9 @@ fn test_style_background_clip_text_multiline() {
 #[test]
 fn test_style_background_clip_comparison() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -326,6 +365,9 @@ fn test_style_background_clip_comparison() {
       [
         // Border Box
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -343,6 +385,9 @@ fn test_style_background_clip_comparison() {
           ),
           children: Some(
             [TextNode {
+              class_name: None,
+              id: None,
+              tag_name: None,
               preset: None,
               tw: None,
               style: Some(
@@ -361,6 +406,9 @@ fn test_style_background_clip_comparison() {
         .into(),
         // Padding Box
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -378,6 +426,9 @@ fn test_style_background_clip_comparison() {
           ),
           children: Some(
             [TextNode {
+              class_name: None,
+              id: None,
+              tag_name: None,
               preset: None,
               tw: None,
               style: Some(
@@ -396,6 +447,9 @@ fn test_style_background_clip_comparison() {
         .into(),
         // Content Box
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -413,6 +467,9 @@ fn test_style_background_clip_comparison() {
           ),
           children: Some(
             [TextNode {
+              class_name: None,
+              id: None,
+              tag_name: None,
               preset: None,
               tw: None,
               style: Some(

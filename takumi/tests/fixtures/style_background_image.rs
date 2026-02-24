@@ -7,6 +7,9 @@ use crate::test_utils::run_fixture_test;
 
 fn create_container(background_images: BackgroundImages) -> ContainerNode<NodeKind> {
   ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -28,6 +31,9 @@ fn create_container_with(
   background_repeat: Option<BackgroundRepeats>,
 ) -> ContainerNode<NodeKind> {
   ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(

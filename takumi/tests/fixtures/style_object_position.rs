@@ -11,6 +11,9 @@ use crate::test_utils::run_fixture_test;
 #[test]
 fn test_style_object_position_contain_center() {
   let image = ImageNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -35,6 +38,9 @@ fn test_style_object_position_contain_center() {
 #[test]
 fn test_style_object_position_contain_top_left() {
   let image = ImageNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -60,6 +66,9 @@ fn test_style_object_position_contain_top_left() {
 #[test]
 fn test_style_object_position_contain_bottom_right() {
   let image = ImageNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -85,6 +94,9 @@ fn test_style_object_position_contain_bottom_right() {
 #[test]
 fn test_style_object_position_cover_center() {
   let image = ImageNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -110,6 +122,9 @@ fn test_style_object_position_cover_center() {
 #[test]
 fn test_style_object_position_cover_top_left() {
   let image = ImageNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -135,6 +150,9 @@ fn test_style_object_position_cover_top_left() {
 #[test]
 fn test_style_object_position_none_center() {
   let image = ImageNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -160,6 +178,9 @@ fn test_style_object_position_none_center() {
 #[test]
 fn test_style_object_position_none_top_left() {
   let image = ImageNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -185,6 +206,9 @@ fn test_style_object_position_none_top_left() {
 #[test]
 fn test_style_object_position_percentage_25_75() {
   let image = ImageNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(

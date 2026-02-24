@@ -10,6 +10,9 @@ fn clip_path_text_stroke_filled() {
   let text = "clip-path works in Takumi";
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -30,6 +33,9 @@ fn clip_path_text_stroke_filled() {
     children: Some(
       [
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -47,6 +53,9 @@ fn clip_path_text_stroke_filled() {
         }
         .into(),
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -77,6 +86,9 @@ fn clip_path_text_stroke_filled() {
 #[test]
 fn clip_path_triangle_vercel() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -95,6 +107,9 @@ fn clip_path_triangle_vercel() {
       [
         // Triangle with clip-path
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -123,6 +138,9 @@ fn clip_path_triangle_vercel() {
 #[test]
 fn clip_path_triangle_gradient() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -141,6 +159,9 @@ fn clip_path_triangle_gradient() {
       [
         // Triangle with gradient background and clip-path
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -174,6 +195,9 @@ fn clip_path_triangle_gradient() {
 #[test]
 fn clip_path_circle() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -192,6 +216,9 @@ fn clip_path_circle() {
       [
         // Circle with clip-path
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -218,6 +245,9 @@ fn clip_path_circle() {
 #[test]
 fn clip_path_inset_rounded() {
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -236,6 +266,9 @@ fn clip_path_inset_rounded() {
       [
         // Inset with border radius and clip-path
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -265,6 +298,9 @@ fn clip_path_inset_rounded() {
 fn clip_path_inset_round_clips_children() {
   // Outer wrapper (white background, defines canvas)
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -279,6 +315,9 @@ fn clip_path_inset_round_clips_children() {
       [
         // Inner container with clip-path: inset(0px round 50px)
         ContainerNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -297,6 +336,9 @@ fn clip_path_inset_round_clips_children() {
             [
               // Full-bleed red child — should be clipped to rounded rect
               ContainerNode {
+                class_name: None,
+                id: None,
+                tag_name: None,
                 preset: None,
                 tw: None,
                 style: Some(

@@ -9,17 +9,18 @@ import type { Node } from "../types";
 import { defaultStylePresets } from "./style-presets";
 import { serializeSvg } from "./svg";
 import {
-  isFunctionComponent,
+  getElementChildren,
   isHtmlElement,
   isHtmlVoidElement,
-  isReactForwardRef,
+  isIntrinsicElement,
   isReactFragment,
-  isReactMemo,
   isValidElement,
   type ReactElementLike,
+  resolveJsxComponentWrapper,
 } from "./utils";
 
 export * from "./style-presets";
+export { extractStylesheets } from "./utils";
 
 declare module "react" {
   interface DOMAttributes<T> {
@@ -114,43 +115,19 @@ function tryHandleComponentWrapper(
   element: ReactElementLike,
   options: ResolvedFromJsxOptions,
 ): Promise<Node[]> | undefined {
-  if (typeof element.type !== "object" || element.type === null) return;
+  const resolved = resolveJsxComponentWrapper(element);
+  if (resolved === undefined) return;
 
-  // Handle forwardRef components
-  if (isReactForwardRef(element.type) && "render" in element.type) {
-    const forwardRefType = element.type as {
-      render: (props: unknown, ref: unknown) => ReactNode;
-    };
-    return fromJsxInternal(forwardRefType.render(element.props, null), options);
+  if (isValidElement(resolved)) {
+    return processReactElement(resolved, options);
   }
 
-  // Handle memo components
-  if (isReactMemo(element.type) && "type" in element.type) {
-    const memoType = element.type as { type: unknown };
-    const innerType = memoType.type;
-
-    if (isFunctionComponent(innerType)) {
-      return fromJsxInternal(innerType(element.props), options);
-    }
-
-    const cloned: ReactElementLike = {
-      ...element,
-      type: innerType as ReactElementLike["type"],
-    } as ReactElementLike;
-
-    return processReactElement(cloned, options);
-  }
+  return fromJsxInternal(resolved, options);
 }
 
 function tryCollectTextChildren(element: ReactElementLike): string | undefined {
   if (!isValidElement(element)) return;
-
-  const children =
-    typeof element.props === "object" &&
-    element.props !== null &&
-    "children" in element.props
-      ? element.props.children
-      : undefined;
+  const children = getElementChildren(element);
 
   if (typeof children === "string") return children;
   if (typeof children === "number") return String(children);
@@ -201,10 +178,6 @@ async function processReactElement(
   element: ReactElementLike,
   options: ResolvedFromJsxOptions,
 ): Promise<Node[]> {
-  if (isFunctionComponent(element.type)) {
-    return fromJsxInternal(element.type(element.props), options);
-  }
-
   const wrapperResult = tryHandleComponentWrapper(element, options);
   if (wrapperResult !== undefined) return wrapperResult;
 
@@ -214,12 +187,20 @@ async function processReactElement(
     return children || [];
   }
 
-  if (isHtmlVoidElement(element)) {
+  if (!isIntrinsicElement(element) || isHtmlVoidElement(element)) {
     return [];
   }
 
   if (isHtmlElement(element, "br")) {
-    return [text({ text: "\n", preset: options.presets?.span })];
+    return [
+      text({
+        text: "\n",
+        preset: options.presets?.span,
+        tagName: "br",
+        className: element.props.className,
+        id: element.props.id,
+      }),
+    ];
   }
 
   if (isHtmlElement(element, "img")) {
@@ -234,17 +215,22 @@ async function processReactElement(
   const tw = extractTw(element, options);
 
   const textChildren = tryCollectTextChildren(element);
-  if (textChildren !== undefined)
+  if (textChildren !== undefined) {
     return [
       text({
         text: textChildren,
         preset,
         style,
         tw,
+        className: element.props.className,
+        id: element.props.id,
+        tagName: element.type,
       }),
     ];
+  }
 
   const children = await collectChildren(element, options);
+  const tagName = isIntrinsicElement(element) ? element.type : undefined;
 
   return [
     container({
@@ -252,6 +238,9 @@ async function processReactElement(
       preset,
       style,
       tw,
+      tagName,
+      className: element.props.className,
+      id: element.props.id,
     }),
   ];
 }
@@ -281,6 +270,9 @@ function createImageElement(
     preset,
     style,
     tw,
+    className: element.props.className,
+    id: element.props.id,
+    tagName: "img",
   });
 }
 
@@ -306,6 +298,9 @@ function createSvgElement(
     style,
     src: svg,
     tw,
+    className: element.props.className,
+    id: element.props.id,
+    tagName: "svg",
   });
 }
 
@@ -365,14 +360,10 @@ function collectChildren(
   element: ReactElementLike,
   options: ResolvedFromJsxOptions,
 ): Promise<Node[]> {
-  if (
-    typeof element.props !== "object" ||
-    element.props === null ||
-    !("children" in element.props)
-  )
-    return Promise.resolve([]);
+  const children = getElementChildren(element);
+  if (children === undefined) return Promise.resolve([]);
 
-  return fromJsxInternal(element.props.children as ReactNode, options);
+  return fromJsxInternal(children, options);
 }
 
 const MAX_CONCURRENT_ITERABLE_RESOLUTION = 8;

@@ -46,6 +46,9 @@ fn text_inline() {
 
   let children = Box::from_iter(texts.iter().map(|(text, style)| {
     TextNode {
+      class_name: None,
+      id: None,
+      tag_name: None,
       preset: None,
       tw: None,
       style: Some(style.clone()),
@@ -55,6 +58,9 @@ fn text_inline() {
   }));
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -81,6 +87,9 @@ fn inline_image() {
   // Inline image should behave as inline-level box content
   let children = [
     TextNode {
+      class_name: None,
+      id: None,
+      tag_name: None,
       preset: None,
       tw: None,
       style: Some(
@@ -93,6 +102,9 @@ fn inline_image() {
     }
     .into(),
     ImageNode {
+      class_name: None,
+      id: None,
+      tag_name: None,
       preset: None,
       tw: None,
       style: Some(
@@ -112,6 +124,9 @@ fn inline_image() {
     }
     .into(),
     TextNode {
+      class_name: None,
+      id: None,
+      tag_name: None,
       preset: None,
       tw: None,
       style: Some(
@@ -126,6 +141,9 @@ fn inline_image() {
   ];
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -141,6 +159,9 @@ fn inline_image() {
     ),
     children: Some(
       [ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -167,6 +188,9 @@ fn inline_block_in_inline() {
   // A block-level container inside inline content: should create anonymous block formatting context
   let children = vec![
     TextNode {
+      class_name: None,
+      id: None,
+      tag_name: None,
       preset: None,
       tw: None,
       style: Some(
@@ -179,6 +203,9 @@ fn inline_block_in_inline() {
     }
     .into(),
     ContainerNode {
+      class_name: None,
+      id: None,
+      tag_name: None,
       preset: None,
       tw: None,
       style: Some(
@@ -192,6 +219,9 @@ fn inline_block_in_inline() {
       ),
       children: Some(
         [TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -208,6 +238,9 @@ fn inline_block_in_inline() {
     }
     .into(),
     TextNode {
+      class_name: None,
+      id: None,
+      tag_name: None,
       preset: None,
       tw: None,
       style: Some(
@@ -222,6 +255,9 @@ fn inline_block_in_inline() {
   ];
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -279,6 +315,9 @@ fn inline_span_background_color() {
 
   let children = Box::from_iter(texts.iter().map(|(text, style)| {
     TextNode {
+      class_name: None,
+      id: None,
+      tag_name: None,
       preset: None,
       tw: None,
       style: Some(style.clone()),
@@ -288,6 +327,9 @@ fn inline_span_background_color() {
   }));
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -312,6 +354,9 @@ fn inline_span_background_color() {
 fn inline_atomic_containers() {
   let atomic = |display, color, label: &str| {
     ContainerNode {
+      class_name: None,
+      id: None,
+      tag_name: None,
       preset: None,
       tw: None,
       style: Some(
@@ -326,6 +371,9 @@ fn inline_atomic_containers() {
       ),
       children: Some(
         [TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: None,
@@ -339,6 +387,9 @@ fn inline_atomic_containers() {
   };
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -354,6 +405,9 @@ fn inline_atomic_containers() {
     ),
     children: Some(
       [ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
@@ -368,6 +422,9 @@ fn inline_atomic_containers() {
         children: Some(
           [
             TextNode {
+              class_name: None,
+              id: None,
+              tag_name: None,
               preset: None,
               tw: None,
               style: Some(
@@ -385,6 +442,9 @@ fn inline_atomic_containers() {
               "inline-block",
             ),
             TextNode {
+              class_name: None,
+              id: None,
+              tag_name: None,
               preset: None,
               tw: None,
               style: Some(
@@ -398,6 +458,9 @@ fn inline_atomic_containers() {
             .into(),
             atomic(Display::InlineFlex, Color([0, 255, 0, 100]), "inline-flex"),
             TextNode {
+              class_name: None,
+              id: None,
+              tag_name: None,
               preset: None,
               tw: None,
               style: Some(
@@ -425,6 +488,9 @@ fn inline_atomic_containers() {
 fn inline_nested_flex_block() {
   let children = [
     TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
       preset: None,
       tw: None,
       style: Some(
@@ -437,6 +503,9 @@ fn inline_nested_flex_block() {
     }
     .into(),
     ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
       preset: None,
       tw: None,
       style: Some(
@@ -452,6 +521,9 @@ fn inline_nested_flex_block() {
       children: Some(
         [
           TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
             preset: None,
             tw: None,
             style: Some(
@@ -464,6 +536,9 @@ fn inline_nested_flex_block() {
           }
           .into(),
           ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
             preset: None,
             tw: None,
             style: Some(
@@ -477,6 +552,9 @@ fn inline_nested_flex_block() {
             ),
             children: Some(
               [TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
                 preset: None,
                 tw: None,
                 style: None,
@@ -488,6 +566,9 @@ fn inline_nested_flex_block() {
           }
           .into(),
           TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
             preset: None,
             tw: None,
             style: Some(
@@ -505,6 +586,9 @@ fn inline_nested_flex_block() {
     }
     .into(),
     TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
       preset: None,
       tw: None,
       style: Some(
@@ -519,6 +603,9 @@ fn inline_nested_flex_block() {
   ];
 
   let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(

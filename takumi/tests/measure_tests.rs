@@ -12,6 +12,9 @@ use test_utils::{CONTEXT, create_test_viewport};
 #[test]
 fn test_measure_simple_container() {
   let node: NodeKind = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -51,6 +54,9 @@ fn test_measure_simple_container() {
 #[test]
 fn test_measure_text_node() {
   let node: NodeKind = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -89,6 +95,9 @@ fn test_measure_text_node() {
 #[test]
 fn test_measure_inline_layout() {
   let node: NodeKind = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -103,6 +112,9 @@ fn test_measure_inline_layout() {
     children: Some(
       vec![
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -115,6 +127,9 @@ fn test_measure_inline_layout() {
         }
         .into(),
         ImageNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(
@@ -130,6 +145,9 @@ fn test_measure_inline_layout() {
         }
         .into(),
         TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
           preset: None,
           tw: None,
           style: Some(

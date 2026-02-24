@@ -7,6 +7,9 @@ use crate::test_utils::run_fixture_test;
 
 fn create_luma_logo_container() -> ContainerNode<NodeKind> {
   ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -24,6 +27,9 @@ fn create_luma_logo_container() -> ContainerNode<NodeKind> {
     ),
     children: Some(
       [NodeKind::Image(ImageNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
         preset: None,
         tw: None,
         style: Some(
