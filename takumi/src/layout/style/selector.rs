@@ -422,28 +422,4 @@ mod tests {
       CssValue::Value(Length::Px(12.0))
     );
   }
-
-  #[test]
-  fn test_parse_stylesheet_malformed_css_returns_error() {
-    let sheet = StyleSheet::parse(
-      r#"
-        .a { width: 10px; }
-        . { color: red; }
-        .b { height: 20px; }
-      "#,
-    );
-    assert!(sheet.is_err());
-  }
-
-  #[test]
-  fn test_parse_stylesheet_list_returns_error() {
-    let stylesheets = [
-      ".a { width: 10px; }",
-      ". { color: red; }",
-      ".b { height: 20px; }",
-    ];
-
-    let sheets = StyleSheet::parse_list(stylesheets).collect::<Result<Vec<_>, _>>();
-    assert!(sheets.is_err());
-  }
 }

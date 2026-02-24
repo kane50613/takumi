@@ -206,7 +206,6 @@ impl<'a, N: Node<N>> Element for ArenaElement<'a, N> {
     _operation: &selectors::attr::AttrSelectorOperation<&TakumiIdent>,
   ) -> bool {
     // TODO(#attr-selectors): implement CSS attribute selector matching.
-    #[cfg(debug_assertions)]
     false
   }
   fn match_non_ts_pseudo_class(
