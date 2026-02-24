@@ -319,7 +319,7 @@ mod tests {
     ];
 
     let context = GlobalContext::default();
-    let render_context = RenderContext::new(&context, (40, 40).into(), Default::default());
+    let render_context = RenderContext::new_test(&context, (40, 40).into());
 
     let width = render_context.sizing.viewport.width;
 
@@ -371,7 +371,7 @@ mod tests {
     ];
 
     let context = GlobalContext::default();
-    let render_context = RenderContext::new(&context, (40, 40).into(), Default::default());
+    let render_context = RenderContext::new_test(&context, (40, 40).into());
 
     let resolved = resolve_stops_along_axis(
       &stops,
@@ -413,7 +413,7 @@ mod tests {
     ];
 
     let context = GlobalContext::default();
-    let render_context = RenderContext::new(&context, (40, 40).into(), Default::default());
+    let render_context = RenderContext::new_test(&context, (40, 40).into());
 
     let resolved = resolve_stops_along_axis(
       &stops,

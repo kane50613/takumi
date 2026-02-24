@@ -470,7 +470,7 @@ mod tests {
     };
 
     let context = GlobalContext::default();
-    let render_context = RenderContext::new(&context, (200, 100).into(), Default::default());
+    let render_context = RenderContext::new_test(&context, (200, 100).into());
     let resolved = resolve_stops_along_axis(
       &gradient.stops,
       render_context.sizing.viewport.width.unwrap_or_default() as f32,
@@ -506,7 +506,7 @@ mod tests {
     };
 
     let context = GlobalContext::default();
-    let render_context = RenderContext::new(&context, (200, 100).into(), Default::default());
+    let render_context = RenderContext::new_test(&context, (200, 100).into());
     let resolved = resolve_stops_along_axis(
       &gradient.stops,
       render_context.sizing.viewport.width.unwrap_or_default() as f32,
@@ -539,7 +539,7 @@ mod tests {
     };
 
     let context = GlobalContext::default();
-    let dummy_context = RenderContext::new(&context, (100, 100).into(), Default::default());
+    let dummy_context = RenderContext::new_test(&context, (100, 100).into());
     let mut buffer_pool = crate::rendering::BufferPool::default();
     let tile = RadialGradientTile::new(&gradient, 100, 100, &dummy_context, &mut buffer_pool);
 
@@ -575,7 +575,7 @@ mod tests {
     };
 
     let context = GlobalContext::default();
-    let dummy_context = RenderContext::new(&context, (100, 100).into(), Default::default());
+    let dummy_context = RenderContext::new_test(&context, (100, 100).into());
     let mut buffer_pool = crate::rendering::BufferPool::default();
     let tile = RadialGradientTile::new(&gradient, 100, 100, &dummy_context, &mut buffer_pool);
 

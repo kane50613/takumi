@@ -757,7 +757,7 @@ mod tests {
 
     // Test at the top (should be red)
     let context = GlobalContext::default();
-    let dummy_context = RenderContext::new(&context, (100, 100).into(), Default::default());
+    let dummy_context = RenderContext::new_test(&context, (100, 100).into());
     let mut buffer_pool = crate::rendering::BufferPool::default();
     let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context, &mut buffer_pool);
 
@@ -793,7 +793,7 @@ mod tests {
 
     // Test at the left (should be red)
     let context = GlobalContext::default();
-    let dummy_context = RenderContext::new(&context, (100, 100).into(), Default::default());
+    let dummy_context = RenderContext::new_test(&context, (100, 100).into());
 
     let mut buffer_pool = crate::rendering::BufferPool::default();
     let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context, &mut buffer_pool);
@@ -818,7 +818,7 @@ mod tests {
 
     // Should always return the same color
     let context = GlobalContext::default();
-    let dummy_context = RenderContext::new(&context, (100, 100).into(), Default::default());
+    let dummy_context = RenderContext::new_test(&context, (100, 100).into());
     let mut buffer_pool = crate::rendering::BufferPool::default();
     let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context, &mut buffer_pool);
     let color = tile.get_pixel(50, 50);
@@ -834,7 +834,7 @@ mod tests {
 
     // Should return transparent
     let context = GlobalContext::default();
-    let dummy_context = RenderContext::new(&context, (100, 100).into(), Default::default());
+    let dummy_context = RenderContext::new_test(&context, (100, 100).into());
     let mut buffer_pool = crate::rendering::BufferPool::default();
     let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context, &mut buffer_pool);
     let color = tile.get_pixel(50, 50);
@@ -847,7 +847,7 @@ mod tests {
       LinearGradient::from_str("linear-gradient(to right, grey 1px, transparent 1px)")?;
 
     let context = GlobalContext::default();
-    let dummy_context = RenderContext::new(&context, (40, 40).into(), Default::default());
+    let dummy_context = RenderContext::new_test(&context, (40, 40).into());
     let mut buffer_pool = crate::rendering::BufferPool::default();
     let tile = LinearGradientTile::new(&gradient, 40, 40, &dummy_context, &mut buffer_pool);
 
@@ -872,7 +872,7 @@ mod tests {
       LinearGradient::from_str("linear-gradient(to bottom, grey 1px, transparent 1px)")?;
 
     let context = GlobalContext::default();
-    let dummy_context = RenderContext::new(&context, (40, 40).into(), Default::default());
+    let dummy_context = RenderContext::new_test(&context, (40, 40).into());
     let mut buffer_pool = crate::rendering::BufferPool::default();
     let tile = LinearGradientTile::new(&gradient, 40, 40, &dummy_context, &mut buffer_pool);
 
@@ -941,7 +941,7 @@ mod tests {
     };
 
     let context = GlobalContext::default();
-    let ctx = RenderContext::new(&context, (200, 100).into(), Default::default());
+    let ctx = RenderContext::new_test(&context, (200, 100).into());
 
     let resolved = resolve_stops_along_axis(
       &gradient.stops,
@@ -971,7 +971,7 @@ mod tests {
       .into(),
     };
     let context = GlobalContext::default();
-    let ctx = RenderContext::new(&context, (200, 100).into(), Default::default());
+    let ctx = RenderContext::new_test(&context, (200, 100).into());
 
     let resolved = resolve_stops_along_axis(
       &gradient.stops,

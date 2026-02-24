@@ -90,6 +90,15 @@ impl<'g> RenderContext<'g> {
       stylesheets: Rc::from_iter(stylesheets),
     }
   }
+
+  /// Internal, only used in tests.
+  #[cfg(debug_assertions)]
+  #[allow(dead_code)]
+  pub(crate) fn new_test(global: &'g GlobalContext, viewport: Viewport) -> Self {
+    use std::iter::empty;
+
+    Self::new(global, viewport, Default::default(), empty())
+  }
 }
 
 #[inline(always)]

@@ -50,6 +50,8 @@ pub mod style_text_decoration_thickness;
 pub mod style_transform;
 #[path = "fixtures/style_visuals.rs"]
 pub mod style_visuals;
+#[path = "fixtures/stylesheets.rs"]
+pub mod stylesheets;
 #[path = "fixtures/svg.rs"]
 pub mod svg;
 #[path = "fixtures/text.rs"]

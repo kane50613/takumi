@@ -12,7 +12,7 @@ use takumi::{
   GlobalContext,
   layout::{Viewport, node::NodeKind},
   rendering::{
-    AnimationFrame, ImageOutputFormat, RenderOptionsBuilder, encode_animated_png,
+    AnimationFrame, ImageOutputFormat, RenderOptions, RenderOptionsBuilder, encode_animated_png,
     encode_animated_webp, render, write_image,
   },
   resources::image::{ImageSource, parse_svg_str},
@@ -139,16 +139,19 @@ pub static CONTEXT: LazyLock<GlobalContext> = LazyLock::new(create_test_context)
 #[allow(dead_code)]
 pub fn run_fixture_test(node: NodeKind, fixture_name: &str) {
   let viewport = create_test_viewport();
+  let options = RenderOptionsBuilder::default()
+    .viewport(viewport)
+    .node(node)
+    .global(&CONTEXT)
+    .build()
+    .unwrap();
 
-  let image = render(
-    RenderOptionsBuilder::default()
-      .viewport(viewport)
-      .node(node)
-      .global(&CONTEXT)
-      .build()
-      .unwrap(),
-  )
-  .unwrap();
+  run_fixture_test_with_options(options, fixture_name);
+}
+
+#[allow(dead_code)]
+pub fn run_fixture_test_with_options(options: RenderOptions<'_, NodeKind>, fixture_name: &str) {
+  let image = render(options).unwrap();
 
   save_image(
     &image,

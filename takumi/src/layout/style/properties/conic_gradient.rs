@@ -268,7 +268,7 @@ mod tests {
     };
 
     let context = GlobalContext::default();
-    let render_context = RenderContext::new(&context, (100, 100).into(), Default::default());
+    let render_context = RenderContext::new_test(&context, (100, 100).into());
     let mut buffer_pool = crate::rendering::BufferPool::default();
     let tile = ConicGradientTile::new(&gradient, 100, 100, &render_context, &mut buffer_pool);
 
@@ -313,7 +313,7 @@ mod tests {
     };
 
     let context = GlobalContext::default();
-    let render_context = RenderContext::new(&context, (100, 100).into(), Default::default());
+    let render_context = RenderContext::new_test(&context, (100, 100).into());
     let mut buffer_pool = crate::rendering::BufferPool::default();
     let tile = ConicGradientTile::new(&gradient, 100, 100, &render_context, &mut buffer_pool);
 
