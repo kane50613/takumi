@@ -320,7 +320,7 @@ test("report deserialize error for textDecorationLine with invalid type", () => 
       },
     ),
   ).toThrowError(
-    "InvalidArg, invalid type: integer `123`, expected a value of 'underline', 'line-through' or 'overline'; also accepts 'none', 'initial' or 'inherit'.",
+    "InvalidArg, invalid type: integer `123`, expected a value of 'underline', 'line-through' or 'overline' or 'none'; also accepts 'initial' or 'inherit'.",
   );
 });
 
@@ -340,6 +340,6 @@ test("report deserialize error for textDecorationLine with invalid string value"
       },
     ),
   ).toThrowError(
-    "InvalidArg, invalid value: string \"invalid\", expected a value of 'underline', 'line-through' or 'overline'; also accepts 'none', 'initial' or 'inherit'.",
+    "InvalidArg, invalid value: string \"invalid\", expected a value of 'underline', 'line-through' or 'overline' or 'none'; also accepts 'initial' or 'inherit'.",
   );
 });
