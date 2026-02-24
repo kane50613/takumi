@@ -4,6 +4,7 @@ use selectors::matching::{
   MatchingContext, MatchingForInvalidation, MatchingMode, NeedsSelectorFlags, QuirksMode,
   SelectorCaches, matches_selector_list,
 };
+use selectors::parser::Selector;
 use selectors::{Element, OpaqueElement, attr::CaseSensitivity, bloom::BloomStorageU8};
 
 use crate::layout::{
@@ -278,18 +279,18 @@ pub(crate) fn match_stylesheets_for_tree<N: Node<N>>(
         .selectors
         .slice()
         .iter()
-        .map(|selector| selector.specificity())
+        .map(Selector::specificity)
         .max()
         .unwrap_or_default();
 
-      for i in 0..per_node.len() {
+      for (i, matched_rule) in matched_rules.iter_mut().enumerate() {
         let element = ArenaElement {
           tree: &arena,
           index: i,
         };
 
         if matches_selector_list(&rule.selectors, &element, &mut ctx) {
-          matched_rules[i].push((specificity, source_order, rule.style.clone()));
+          matched_rule.push((specificity, source_order, rule.style.clone()));
         }
       }
 
