@@ -19,7 +19,7 @@ import { fetchResources } from "@takumi-rs/helpers";
 
 const renderer = new Renderer();
 
-const node = await fromJsx(<img src="https://example.com/image.png" />);
+const { node, stylesheets } = await fromJsx(<img src="https://example.com/image.png" />);
 
 // [!code ++:2]
 const urls = extractResourceUrls(node);
@@ -28,6 +28,7 @@ const fetchedResources = await fetchResources(urls);
 const image = await renderer.render(node, {
   // [!code ++]
   fetchedResources,
+  stylesheets,
 });
 ```
 
@@ -40,7 +41,7 @@ import { fetchResources } from "@takumi-rs/helpers";
 
 const renderer = new Renderer();
 
-const node = await fromJsx(<img src="https://example.com/image.png" />);
+const { node, stylesheets } = await fromJsx(<img src="https://example.com/image.png" />);
 
 // [!code ++:2]
 const urls = extractResourceUrls(node);
@@ -49,6 +50,7 @@ const fetchedResources = await fetchResources(urls);
 const image = await renderer.render(node, {
   // [!code ++]
   fetchedResources,
+  stylesheets,
 });
 ```
 

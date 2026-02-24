@@ -53,7 +53,7 @@ const renderer = new Renderer({ // [!code ++]
   fonts, // [!code ++]
 }); // [!code ++]
 
-const node = await fromJsx(<OgImage title="Takumi" />); // [!code ++]
+const { node } = await fromJsx(<OgImage title="Takumi" />); // [!code ++]
 const png = await renderer.render(node, { // [!code ++]
   width: 1200, // [!code ++]
   height: 630, // [!code ++]

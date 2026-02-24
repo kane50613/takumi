@@ -13,12 +13,12 @@ import { Renderer } from "@takumi-rs/core";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 
 const renderer = new Renderer();
-const node = await fromJsx(
+const { node, stylesheets } = await fromJsx(
   <span tw="text-xl">I'm a text node</span>
 );
 
 // [!code ++]
-const { width, height } = await renderer.measure(node);
+const { width, height } = await renderer.measure(node, { stylesheets });
 ```
 
 ```tsx twoslash tab="@takumi-rs/wasm"
@@ -28,10 +28,10 @@ import { Renderer } from "@takumi-rs/wasm";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 
 const renderer = new Renderer();
-const node = await fromJsx(
+const { node, stylesheets } = await fromJsx(
   <span tw="text-xl">I'm a text node</span>
 );
 
 // [!code ++]
-const { width, height } = renderer.measure(node);
+const { width, height } = renderer.measure(node, { stylesheets });
 ```
