@@ -199,15 +199,14 @@ impl<'a, N: Node<N>> Element for ArenaElement<'a, N> {
     false
   }
 
-  // TODO(#attr-selectors): implement CSS attribute selector matching.
   fn attr_matches(
     &self,
     _ns: &selectors::attr::NamespaceConstraint<&TakumiIdent>,
     _local_name: &TakumiIdent,
     _operation: &selectors::attr::AttrSelectorOperation<&TakumiIdent>,
   ) -> bool {
+    // TODO(#attr-selectors): implement CSS attribute selector matching.
     #[cfg(debug_assertions)]
-    eprintln!("TODO(#attr-selectors): attribute selectors are not supported and will not match");
     false
   }
   fn match_non_ts_pseudo_class(

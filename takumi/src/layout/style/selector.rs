@@ -59,7 +59,7 @@ impl precomputed_hash::PrecomputedHash for TakumiIdent {
   fn precomputed_hash(&self) -> u32 {
     let mut hash = 0x811c9dc5u32;
     for byte in self.0.as_bytes() {
-      hash ^= u32::from(*byte);
+      hash ^= u32::from(byte.to_ascii_lowercase());
       hash = hash.wrapping_mul(0x0100_0193);
     }
     hash
@@ -138,33 +138,29 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
 
   fn parse_non_ts_pseudo_class(
     &self,
-    _location: SourceLocation,
+    location: SourceLocation,
     name: cssparser::CowRcStr<'i>,
   ) -> Result<DummyPseudoClass, ParseError<'i, Self::Error>> {
     if name.eq_ignore_ascii_case("hover") {
       Ok(DummyPseudoClass::Hover)
     } else {
-      Err(
-        cssparser::SourceLocation::default().new_custom_error(CssSelectorParseError::Basic(
-          BasicParseErrorKind::EndOfInput,
-        )),
-      )
+      Err(location.new_custom_error(CssSelectorParseError::Basic(
+        BasicParseErrorKind::EndOfInput,
+      )))
     }
   }
 
   fn parse_pseudo_element(
     &self,
-    _location: SourceLocation,
+    location: SourceLocation,
     name: cssparser::CowRcStr<'i>,
   ) -> Result<DummyPseudoElement, ParseError<'i, Self::Error>> {
     if name.eq_ignore_ascii_case("before") {
       Ok(DummyPseudoElement::Before)
     } else {
-      Err(
-        cssparser::SourceLocation::default().new_custom_error(CssSelectorParseError::Basic(
-          BasicParseErrorKind::EndOfInput,
-        )),
-      )
+      Err(location.new_custom_error(CssSelectorParseError::Basic(
+        BasicParseErrorKind::EndOfInput,
+      )))
     }
   }
 }
@@ -277,8 +273,8 @@ impl<'i> QualifiedRuleParser<'i> for TakumiRuleParser {
     let mut decl_parser = StyleDeclarationParser { style: &mut style };
     let parser = RuleBodyParser::new(input, &mut decl_parser);
     for res in parser {
-      if let Err((error, _declaration)) = res {
-        return Err(error);
+      if let Err((_error, _declaration)) = res {
+        continue;
       }
     }
     Ok(CssRule { selectors, style })
@@ -327,11 +323,7 @@ impl StyleSheet {
     for rule in rule_list_parser {
       match rule {
         Ok(rule) => rules.push(rule),
-        Err((error, _slice)) => {
-          return Err(CssSelectorParseError::Property(Cow::Owned(format!(
-            "{error:?}"
-          ))));
-        }
+        Err((_error, _slice)) => continue,
       }
     }
 

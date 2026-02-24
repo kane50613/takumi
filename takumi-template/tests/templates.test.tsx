@@ -22,7 +22,7 @@ const renderer = new Renderer({
 
 function testRender(name: string, template: ReactNode) {
   test(name, async () => {
-    const { node } = await fromJsx(template);
+    const { node, stylesheets } = await fromJsx(template);
     const start = performance.now();
 
     const resourceUrls = extractResourceUrls(node);
@@ -33,6 +33,7 @@ function testRender(name: string, template: ReactNode) {
       height: 630,
       format: "webp",
       fetchedResources,
+      stylesheets,
     });
 
     const end = performance.now();
