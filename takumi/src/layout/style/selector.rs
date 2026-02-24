@@ -303,16 +303,14 @@ pub(crate) struct StyleSheet {
 }
 
 impl StyleSheet {
-  pub(crate) fn parse_list<'a, I>(
-    stylesheets: I,
-  ) -> impl Iterator<Item = Result<Self, CssSelectorParseError<'a>>>
+  pub(crate) fn parse_list<'a, I>(stylesheets: I) -> impl Iterator<Item = Self>
   where
     I: IntoIterator<Item = &'a str>,
   {
     stylesheets.into_iter().map(Self::parse)
   }
 
-  pub(crate) fn parse(css: &str) -> Result<Self, CssSelectorParseError<'_>> {
+  pub(crate) fn parse(css: &str) -> Self {
     let mut input = ParserInput::new(css);
     let mut parser = Parser::new(&mut input);
     let mut rule_parser = TakumiRuleParser;
@@ -327,7 +325,7 @@ impl StyleSheet {
       }
     }
 
-    Ok(Self { rules })
+    Self { rules }
   }
 }
 
@@ -345,10 +343,6 @@ mod tests {
             }
         "#;
     let sheet = StyleSheet::parse(css);
-    assert!(sheet.is_ok());
-    let Ok(sheet) = sheet else {
-      return;
-    };
     assert_eq!(sheet.rules.len(), 1);
     let rule = &sheet.rules[0];
 
@@ -364,11 +358,6 @@ mod tests {
         #hero .label { height: 20px; }
       "#,
     );
-    assert!(sheet.is_ok());
-    let Ok(sheet) = sheet else {
-      return;
-    };
-
     assert_eq!(sheet.rules.len(), 2);
     assert_eq!(sheet.rules[0].selectors.slice().len(), 1);
     assert_eq!(sheet.rules[1].selectors.slice().len(), 1);
@@ -387,10 +376,6 @@ mod tests {
         .b { height: 20px; }
       "#,
     );
-    assert!(sheet.is_ok());
-    let Ok(sheet) = sheet else {
-      return;
-    };
 
     assert_eq!(sheet.rules.len(), 2);
     assert_eq!(
@@ -410,10 +395,6 @@ mod tests {
         .a, .b { width: 12px; }
       "#,
     );
-    assert!(sheet.is_ok());
-    let Ok(sheet) = sheet else {
-      return;
-    };
 
     assert_eq!(sheet.rules.len(), 1);
     assert_eq!(sheet.rules[0].selectors.slice().len(), 2);

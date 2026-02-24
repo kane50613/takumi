@@ -59,6 +59,60 @@ impl<'a, N: Node<N>> StyleArena<'a, N> {
   }
 
   fn add_node(&mut self, node: &'a N, parent: Option<usize>, prev_sibling: Option<usize>) -> usize {
+    struct ChildFrame<'a, N: Node<N>> {
+      parent_index: usize,
+      children: &'a [N],
+      next_child: usize,
+      current_prev: Option<usize>,
+    }
+
+    let root_index = self.push_node(node, parent, prev_sibling);
+    let mut stack = Vec::new();
+
+    if let Some(children) = node.children_ref() {
+      stack.push(ChildFrame {
+        parent_index: root_index,
+        children,
+        next_child: 0,
+        current_prev: None,
+      });
+    }
+
+    while let Some(frame) = stack.last_mut() {
+      if frame.next_child >= frame.children.len() {
+        stack.pop();
+        continue;
+      }
+
+      let child = &frame.children[frame.next_child];
+      let child_prev = frame.current_prev;
+      frame.next_child += 1;
+
+      let child_index = self.push_node(child, Some(frame.parent_index), child_prev);
+      if child_prev.is_none() {
+        self.nodes[frame.parent_index].first_child = Some(child_index);
+      }
+      frame.current_prev = Some(child_index);
+
+      if let Some(children) = child.children_ref() {
+        stack.push(ChildFrame {
+          parent_index: child_index,
+          children,
+          next_child: 0,
+          current_prev: None,
+        });
+      }
+    }
+
+    root_index
+  }
+
+  fn push_node(
+    &mut self,
+    node: &'a N,
+    parent: Option<usize>,
+    prev_sibling: Option<usize>,
+  ) -> usize {
     let index = self.nodes.len();
     self.nodes.push(StyleNode {
       node,
@@ -70,17 +124,6 @@ impl<'a, N: Node<N>> StyleArena<'a, N> {
 
     if let Some(prev) = prev_sibling {
       self.nodes[prev].next_sibling = Some(index);
-    }
-
-    if let Some(children) = node.children_ref() {
-      let mut current_prev = None;
-      for child in children.iter() {
-        let child_index = self.add_node(child, Some(index), current_prev);
-        if current_prev.is_none() {
-          self.nodes[index].first_child = Some(child_index);
-        }
-        current_prev = Some(child_index);
-      }
     }
 
     index

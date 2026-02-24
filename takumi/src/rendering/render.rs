@@ -80,15 +80,9 @@ pub struct MeasuredNode {
   pub runs: Vec<MeasuredTextRun>,
 }
 
-fn parse_stylesheets(stylesheets: &[String]) -> Result<Vec<StyleSheet>> {
-  StyleSheet::parse_list(stylesheets.iter().map(String::as_str))
-    .map(|stylesheet| stylesheet.map_err(Error::from))
-    .collect()
-}
-
 /// Measures the layout of a node.
 pub fn measure_layout<'g, N: Node<N>>(options: RenderOptions<'g, N>) -> Result<MeasuredNode> {
-  let parsed_stylesheets = parse_stylesheets(&options.stylesheets)?;
+  let parsed_stylesheets = StyleSheet::parse_list(options.stylesheets.iter().map(String::as_str));
   let render_context = RenderContext {
     draw_debug_border: options.draw_debug_border,
     ..RenderContext::new(
@@ -230,7 +224,7 @@ fn collect_measure_result<'g, Nodes: Node<Nodes>>(
 /// Renders a node to an image.
 pub fn render<'g, N: Node<N>>(options: RenderOptions<'g, N>) -> Result<RgbaImage> {
   let viewport = options.viewport;
-  let parsed_stylesheets = parse_stylesheets(&options.stylesheets)?;
+  let parsed_stylesheets = StyleSheet::parse_list(options.stylesheets.iter().map(String::as_str));
   let render_context = RenderContext {
     draw_debug_border: options.draw_debug_border,
     ..RenderContext::new(
