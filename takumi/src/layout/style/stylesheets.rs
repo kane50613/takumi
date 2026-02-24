@@ -53,15 +53,14 @@ macro_rules! define_style {
         &mut self,
         name: &str,
         input: &mut cssparser::Parser<'i, '_>,
-      ) -> Result<(), cssparser::ParseError<'i, cssparser::BasicParseErrorKind<'i>>> {
+      ) -> Result<(), cssparser::ParseError<'i, Cow<'i, str>>> {
         let name_normalized = name.replace('-', "_");
         let name_normalized = name_normalized.trim_start_matches('_');
         match name_normalized {
           $(
             stringify!($property) => {
-              if let Ok(val) = <$type as FromCss>::from_css(input) {
-                self.$property = val.into();
-              }
+              let val = <$type as FromCss>::from_css(input)?;
+              self.$property = val.into();
             }
           )*
           _ => {}

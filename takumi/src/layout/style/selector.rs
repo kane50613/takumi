@@ -5,19 +5,29 @@ use cssparser::{
 use selectors::parser::{
   NonTSPseudoClass, PseudoElement, SelectorImpl, SelectorList, SelectorParseErrorKind,
 };
-use std::fmt::{self, Write};
+use std::{
+  borrow::Cow,
+  fmt::{self, Write},
+};
 
 use crate::layout::style::Style;
 
 #[derive(Debug, Clone)]
 pub enum CssSelectorParseError<'i> {
   Basic(BasicParseErrorKind<'i>),
+  Property(Cow<'i, str>),
   Selector(SelectorParseErrorKind<'i>),
 }
 
 impl<'i> From<SelectorParseErrorKind<'i>> for CssSelectorParseError<'i> {
   fn from(err: SelectorParseErrorKind<'i>) -> Self {
     CssSelectorParseError::Selector(err)
+  }
+}
+
+impl<'i> From<Cow<'i, str>> for CssSelectorParseError<'i> {
+  fn from(err: Cow<'i, str>) -> Self {
+    CssSelectorParseError::Property(err)
   }
 }
 
@@ -173,7 +183,10 @@ impl<'a, 'i> DeclarationParser<'i> for StyleDeclarationParser<'a> {
     input: &mut Parser<'i, 't>,
     _state: &cssparser::ParserState,
   ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
-    let _ = self.style.apply_css_property(&name, input);
+    self
+      .style
+      .apply_css_property(&name, input)
+      .map_err(ParseError::into)?;
 
     Ok(())
   }
@@ -264,9 +277,8 @@ impl<'i> QualifiedRuleParser<'i> for TakumiRuleParser {
     let mut decl_parser = StyleDeclarationParser { style: &mut style };
     let parser = RuleBodyParser::new(input, &mut decl_parser);
     for res in parser {
-      if let Err(e) = res {
-        #[cfg(debug_assertions)]
-        eprintln!("Failed to parse CSS declaration in rule body: {e:?}");
+      if let Err((error, _declaration)) = res {
+        return Err(error);
       }
     }
     Ok(CssRule { selectors, style })
