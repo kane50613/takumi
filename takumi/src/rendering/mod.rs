@@ -92,8 +92,7 @@ impl<'g> RenderContext<'g> {
   }
 
   /// Internal, only used in tests.
-  #[cfg(debug_assertions)]
-  #[allow(dead_code)]
+  #[cfg(test)]
   pub(crate) fn new_test(global: &'g GlobalContext, viewport: Viewport) -> Self {
     use std::iter::empty;
 

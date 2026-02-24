@@ -63,7 +63,9 @@ macro_rules! define_style {
               self.$property = val.into();
             }
           )*
-          _ => {}
+          _ => {
+            while input.next_including_whitespace_and_comments().is_ok() {}
+          }
         }
         Ok(())
       }

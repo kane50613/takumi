@@ -2,9 +2,8 @@ use std::fmt;
 
 use selectors::matching::{
   MatchingContext, MatchingForInvalidation, MatchingMode, NeedsSelectorFlags, QuirksMode,
-  SelectorCaches, matches_selector_list,
+  SelectorCaches, matches_selector,
 };
-use selectors::parser::Selector;
 use selectors::{Element, OpaqueElement, attr::CaseSensitivity, bloom::BloomStorageU8};
 
 use crate::layout::{
@@ -260,7 +259,7 @@ pub(crate) fn match_stylesheets_for_tree<N: Node<N>>(
   if stylesheets.is_empty() {
     return MatchedStyles { per_node };
   }
-  let mut matched_rules: Vec<Vec<(u32, usize, Style)>> = vec![Vec::new(); arena.nodes.len()];
+  let mut matched_rules: Vec<Vec<(u32, usize, &Style)>> = vec![Vec::new(); arena.nodes.len()];
 
   let mut caches = SelectorCaches::default();
   let mut ctx = MatchingContext::new(
@@ -275,22 +274,16 @@ pub(crate) fn match_stylesheets_for_tree<N: Node<N>>(
   let mut source_order = 0usize;
   for sheet in stylesheets {
     for rule in &sheet.rules {
-      let specificity = rule
-        .selectors
-        .slice()
-        .iter()
-        .map(Selector::specificity)
-        .max()
-        .unwrap_or_default();
-
       for (i, matched_rule) in matched_rules.iter_mut().enumerate() {
         let element = ArenaElement {
           tree: &arena,
           index: i,
         };
 
-        if matches_selector_list(&rule.selectors, &element, &mut ctx) {
-          matched_rule.push((specificity, source_order, rule.style.clone()));
+        for selector in rule.selectors.slice().iter() {
+          if matches_selector(selector, 0, None, &element, &mut ctx) {
+            matched_rule.push((selector.specificity(), source_order, &rule.style));
+          }
         }
       }
 
@@ -302,7 +295,7 @@ pub(crate) fn match_stylesheets_for_tree<N: Node<N>>(
     let mut rules = rules;
     rules.sort_by_key(|(specificity, order, _)| (*specificity, *order));
     for (_, _, style) in rules {
-      matched.stylesheet.merge_from(style);
+      matched.stylesheet.merge_from(style.clone());
     }
   }
 
