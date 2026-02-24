@@ -23,6 +23,9 @@ fn run_gradient_render(global: &GlobalContext, background_image_str: &str) {
     preset: None,
     style: Some(style),
     tw: None,
+    class_name: None,
+    id: None,
+    tag_name: None,
   });
 
   let viewport = Viewport::new(Some(512), Some(512));

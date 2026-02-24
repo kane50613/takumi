@@ -11,6 +11,9 @@ use takumi::{
 
 fn run_effect_render(global: &GlobalContext, effect_tw: &str) {
   let node = NodeKind::Container(ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
     children: None,
     preset: None,
     style: None,
