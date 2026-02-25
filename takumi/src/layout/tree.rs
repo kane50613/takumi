@@ -27,13 +27,6 @@ use crate::{
   },
 };
 
-#[cfg(not(feature = "css_stylesheet_parsing"))]
-#[derive(Debug, Default, Clone)]
-struct MatchedAuthorStyles {
-  stylesheet_normal: NodeStyle,
-  stylesheet_important: NodeStyle,
-}
-
 pub(crate) struct LayoutResults {
   nodes: Vec<LayoutResultNode>,
 }

@@ -7,7 +7,7 @@ mod stylesheets;
 /// Tailwind CSS Parser.
 pub mod tw;
 
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt::Formatter};
 
 use cssparser::match_ignore_ascii_case;
 pub use properties::*;
@@ -164,7 +164,7 @@ impl RawCssInputVisitor {
 impl<'de> Visitor<'de> for RawCssInputVisitor {
   type Value = RawCssInput<'de>;
 
-  fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+  fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
     formatter.write_str("a CSS string or number")
   }
 
@@ -314,10 +314,14 @@ struct CssExpectedMessage<'a> {
 }
 
 impl Expected for CssExpectedMessage<'_> {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     #[cfg(feature = "detailed_css_error")]
     {
-      write!(f, "{}; also accepts 'initial' or 'inherit'.", self.message)
+      write!(
+        f,
+        "{}; also accepts 'initial', 'unset' or 'inherit'.",
+        self.message
+      )
     }
 
     #[cfg(not(feature = "detailed_css_error"))]
