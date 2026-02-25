@@ -20,7 +20,7 @@ use crate::{
       create_inline_layout, measure_inline_layout,
     },
     node::{Node, NodeStyleLayers},
-    style::{Affine, Display, InheritedStyle, Style as NodeStyle},
+    style::{Affine, Display, ResolvedStyle, Style as NodeStyle},
   },
   rendering::{
     Canvas, MaxHeight, RenderContext, Sizing,
@@ -109,10 +109,10 @@ pub(crate) struct RenderNode<'g, N: Node<N>> {
 }
 
 fn build_inherited_style(
-  parent_style: &InheritedStyle,
+  parent_style: &ResolvedStyle,
   node_layers: NodeStyleLayers,
   matched_author: &MatchedAuthorStyles,
-) -> InheritedStyle {
+) -> ResolvedStyle {
   let mut style = NodeStyle::default();
 
   if let Some(preset) = node_layers.preset {
@@ -649,9 +649,9 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
     let mut final_children = Vec::new();
     let mut inline_group = Vec::new();
 
-    let anonymous_box_style = InheritedStyle {
+    let anonymous_box_style = ResolvedStyle {
       display: Display::Block,
-      ..InheritedStyle::default()
+      ..ResolvedStyle::default()
     };
 
     for item in children {
@@ -792,7 +792,7 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
 fn flush_inline_group<'g, N: Node<N>>(
   inline_group: &mut Vec<RenderNode<'g, N>>,
   final_children: &mut Vec<RenderNode<'g, N>>,
-  anonymous_box_style: &InheritedStyle,
+  anonymous_box_style: &ResolvedStyle,
   parent_render_context: &RenderContext<'g>,
 ) {
   if inline_group.is_empty() {

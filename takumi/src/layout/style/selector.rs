@@ -1,6 +1,6 @@
 use cssparser::{
   BasicParseErrorKind, CowRcStr, DeclarationParser, ParseError, Parser, ParserInput,
-  QualifiedRuleParser, RuleBodyParser, SourceLocation, StyleSheetParser, ToCss,
+  QualifiedRuleParser, RuleBodyParser, SourceLocation, StyleSheetParser, ToCss, parse_important,
 };
 use selectors::parser::{
   NonTSPseudoClass, PseudoElement, SelectorImpl, SelectorList, SelectorParseErrorKind,
@@ -165,12 +165,15 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
   }
 }
 
-pub struct StyleDeclarationParser<'a> {
-  pub style: &'a mut Style,
+pub struct StyleDeclarationParser;
+
+pub struct ParsedDeclaration {
+  pub style: Style,
+  pub important: bool,
 }
 
-impl<'a, 'i> DeclarationParser<'i> for StyleDeclarationParser<'a> {
-  type Declaration = ();
+impl<'i> DeclarationParser<'i> for StyleDeclarationParser {
+  type Declaration = ParsedDeclaration;
   type Error = CssSelectorParseError<'i>;
 
   fn parse_value<'t>(
@@ -179,18 +182,19 @@ impl<'a, 'i> DeclarationParser<'i> for StyleDeclarationParser<'a> {
     input: &mut Parser<'i, 't>,
     _state: &cssparser::ParserState,
   ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
-    self
-      .style
+    let mut style = Style::default();
+    style
       .apply_css_property(&name, input)
       .map_err(ParseError::into)?;
+    let important = input.try_parse(parse_important).is_ok();
 
-    Ok(())
+    Ok(ParsedDeclaration { style, important })
   }
 }
 
-impl<'a, 'i> cssparser::QualifiedRuleParser<'i> for StyleDeclarationParser<'a> {
+impl<'i> cssparser::QualifiedRuleParser<'i> for StyleDeclarationParser {
   type Prelude = ();
-  type QualifiedRule = ();
+  type QualifiedRule = ParsedDeclaration;
   type Error = CssSelectorParseError<'i>;
 
   fn parse_prelude<'t>(
@@ -208,13 +212,16 @@ impl<'a, 'i> cssparser::QualifiedRuleParser<'i> for StyleDeclarationParser<'a> {
     _location: &cssparser::ParserState,
     _input: &mut Parser<'i, 't>,
   ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
-    Ok(())
+    Ok(ParsedDeclaration {
+      style: Style::default(),
+      important: false,
+    })
   }
 }
 
-impl<'a, 'i> cssparser::AtRuleParser<'i> for StyleDeclarationParser<'a> {
+impl<'i> cssparser::AtRuleParser<'i> for StyleDeclarationParser {
   type Prelude = ();
-  type AtRule = ();
+  type AtRule = ParsedDeclaration;
   type Error = CssSelectorParseError<'i>;
 
   fn parse_prelude<'t>(
@@ -228,8 +235,8 @@ impl<'a, 'i> cssparser::AtRuleParser<'i> for StyleDeclarationParser<'a> {
   }
 }
 
-impl<'a, 'i> cssparser::RuleBodyItemParser<'i, (), CssSelectorParseError<'i>>
-  for StyleDeclarationParser<'a>
+impl<'i> cssparser::RuleBodyItemParser<'i, ParsedDeclaration, CssSelectorParseError<'i>>
+  for StyleDeclarationParser
 {
   fn parse_qualified(&self) -> bool {
     false
@@ -244,7 +251,8 @@ pub struct TakumiRuleParser;
 #[derive(Debug, Clone)]
 pub struct CssRule {
   pub selectors: SelectorList<TakumiSelectorImpl>,
-  pub style: Style,
+  pub normal_style: Style,
+  pub important_style: Style,
 }
 
 impl<'i> QualifiedRuleParser<'i> for TakumiRuleParser {
@@ -269,15 +277,27 @@ impl<'i> QualifiedRuleParser<'i> for TakumiRuleParser {
     _location: &cssparser::ParserState,
     input: &mut Parser<'i, 't>,
   ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
-    let mut style = Style::default();
-    let mut decl_parser = StyleDeclarationParser { style: &mut style };
+    let mut normal_style = Style::default();
+    let mut important_style = Style::default();
+    let mut decl_parser = StyleDeclarationParser;
     let parser = RuleBodyParser::new(input, &mut decl_parser);
     for res in parser {
-      if let Err((_error, _declaration)) = res {
-        continue;
+      match res {
+        Ok(ParsedDeclaration { style, important }) => {
+          if important {
+            important_style.merge_from(style);
+          } else {
+            normal_style.merge_from(style);
+          }
+        }
+        Err((_error, _declaration)) => continue,
       }
     }
-    Ok(CssRule { selectors, style })
+    Ok(CssRule {
+      selectors,
+      normal_style,
+      important_style,
+    })
   }
 }
 
@@ -347,7 +367,7 @@ mod tests {
     let rule = &sheet.rules[0];
 
     assert_eq!(rule.selectors.slice().len(), 1);
-    assert_eq!(rule.style.width, CssValue::Value(Length::Px(100.0)));
+    assert_eq!(rule.normal_style.width, CssValue::Value(Length::Px(100.0)));
   }
 
   #[test]
@@ -379,11 +399,11 @@ mod tests {
 
     assert_eq!(sheet.rules.len(), 2);
     assert_eq!(
-      sheet.rules[0].style.width,
+      sheet.rules[0].normal_style.width,
       CssValue::Value(Length::Px(10.0))
     );
     assert_eq!(
-      sheet.rules[1].style.height,
+      sheet.rules[1].normal_style.height,
       CssValue::Value(Length::Px(20.0))
     );
   }
@@ -399,8 +419,24 @@ mod tests {
     assert_eq!(sheet.rules.len(), 1);
     assert_eq!(sheet.rules[0].selectors.slice().len(), 2);
     assert_eq!(
-      sheet.rules[0].style.width,
+      sheet.rules[0].normal_style.width,
       CssValue::Value(Length::Px(12.0))
     );
+  }
+
+  #[test]
+  fn test_parse_stylesheet_important_declaration() {
+    let sheet = StyleSheet::parse(
+      r#"
+        .a { width: 10px !important; height: 20px; }
+      "#,
+    );
+
+    let rule = &sheet.rules[0];
+    assert_eq!(
+      rule.important_style.width,
+      CssValue::Value(Length::Px(10.0))
+    );
+    assert_eq!(rule.normal_style.height, CssValue::Value(Length::Px(20.0)));
   }
 }

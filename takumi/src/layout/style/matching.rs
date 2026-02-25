@@ -300,7 +300,7 @@ pub(crate) fn match_stylesheets_for_tree<N: Node<N>>(
   if stylesheets.is_empty() {
     return MatchedStyles { per_node };
   }
-  let mut matched_rules: Vec<Vec<(u32, usize, &Style)>> = vec![Vec::new(); arena.nodes.len()];
+  let mut matched_rules: Vec<Vec<(bool, u32, usize, &Style)>> = vec![Vec::new(); arena.nodes.len()];
 
   let mut caches = SelectorCaches::default();
   let mut ctx = MatchingContext::new(
@@ -323,7 +323,18 @@ pub(crate) fn match_stylesheets_for_tree<N: Node<N>>(
 
         for selector in rule.selectors.slice().iter() {
           if matches_selector(selector, 0, None, &element, &mut ctx) {
-            matched_rule.push((selector.specificity(), source_order, &rule.style));
+            matched_rule.push((
+              false,
+              selector.specificity(),
+              source_order,
+              &rule.normal_style,
+            ));
+            matched_rule.push((
+              true,
+              selector.specificity(),
+              source_order,
+              &rule.important_style,
+            ));
           }
         }
       }
@@ -334,8 +345,8 @@ pub(crate) fn match_stylesheets_for_tree<N: Node<N>>(
 
   for (matched, rules) in per_node.iter_mut().zip(matched_rules.into_iter()) {
     let mut rules = rules;
-    rules.sort_by_key(|(specificity, order, _)| (*specificity, *order));
-    for (_, _, style) in rules {
+    rules.sort_by_key(|(important, specificity, order, _)| (*important, *specificity, *order));
+    for (_, _, _, style) in rules {
       matched.stylesheet.merge_from(style.clone());
     }
   }

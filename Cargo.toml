@@ -15,6 +15,9 @@ lto = true
 panic = "abort"
 codegen-units = 1
 
+[profile.release.package."takumi-wasm"]
+strip = "debuginfo"
+
 # there's some color artifacts issues with zune-image decoder, we have to use a pinned version on dev branch. 
 [patch.crates-io.zune-core]
 git = "https://github.com/etemesi254/zune-image"

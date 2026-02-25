@@ -33,7 +33,7 @@ use crate::{
   GlobalContext,
   layout::{
     Viewport,
-    style::{Affine, CalcArena, Color, InheritedStyle},
+    style::{Affine, CalcArena, Color, ResolvedStyle},
   },
   resources::image::ImageSource,
 };
@@ -61,7 +61,7 @@ pub struct RenderContext<'g> {
   /// What the `currentColor` value is resolved to.
   pub(crate) current_color: Color,
   /// The style after inheritance.
-  pub(crate) style: InheritedStyle,
+  pub(crate) style: ResolvedStyle,
   /// Whether to draw debug borders.
   pub(crate) draw_debug_border: bool,
   /// The resources fetched externally.
@@ -88,7 +88,7 @@ impl<'g> RenderContext<'g> {
       },
       transform: Affine::IDENTITY,
       current_color: Color::black(),
-      style: InheritedStyle::default(),
+      style: ResolvedStyle::default(),
       draw_debug_border: false,
       fetched_resources,
       stylesheets: Rc::from_iter(stylesheets),
@@ -110,7 +110,7 @@ impl<'g> RenderContext<'g> {
       },
       transform: Affine::IDENTITY,
       current_color: Color::black(),
-      style: InheritedStyle::default(),
+      style: ResolvedStyle::default(),
       draw_debug_border: false,
       fetched_resources,
     }

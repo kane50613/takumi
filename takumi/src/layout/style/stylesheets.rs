@@ -14,7 +14,7 @@ use crate::{
   rendering::{RenderContext, SizedShadow, Sizing},
 };
 
-/// Helper macro to define the `Style` struct and `InheritedStyle` struct.
+/// Helper macro to define the `Style` struct and `ResolvedStyle` struct.
 macro_rules! define_style_apply_clears {
   ($self:ident, $other:ident, $trigger:ident, [$($clear:ident),* $(,)?]) => {
     if !matches!(&$other.$trigger, CssValue::Unset) {
@@ -71,8 +71,8 @@ macro_rules! define_style {
       }
 
       /// Inherits the style from the parent element.
-      pub(crate) fn inherit(self, parent: &InheritedStyle) -> InheritedStyle {
-        InheritedStyle {
+      pub(crate) fn inherit(self, parent: &ResolvedStyle) -> ResolvedStyle {
+        ResolvedStyle {
           $( $property: self.$property.inherit_value(&parent.$property), )*
         }
       }
@@ -92,11 +92,11 @@ macro_rules! define_style {
 
     /// A resolved set of style properties.
     #[derive(Clone, Debug, Default)]
-    pub struct InheritedStyle {
+    pub struct ResolvedStyle {
       $( pub(crate) $property: $type, )*
     }
 
-    impl InheritedStyle {
+    impl ResolvedStyle {
       pub(crate) fn make_computed_values(&mut self, sizing: &Sizing) {
         $(
           self.$property.make_computed(sizing);
@@ -313,7 +313,7 @@ define_style!(
 /// Sized font style with resolved font size and line height.
 #[derive(Clone)]
 pub(crate) struct SizedFontStyle<'s> {
-  pub parent: &'s InheritedStyle,
+  pub parent: &'s ResolvedStyle,
   pub line_height: parley::LineHeight,
   pub stroke_width: f32,
   pub letter_spacing: Option<f32>,
@@ -397,7 +397,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, InlineBrush> {
   }
 }
 
-impl InheritedStyle {
+impl ResolvedStyle {
   /// Normalize inheritable text-related values to computed values for this node.
   pub(crate) fn make_computed(&mut self, sizing: &Sizing) {
     // `font-size` computed value is already resolved in `sizing.font_size`.
@@ -905,7 +905,7 @@ mod tests {
   use crate::{
     layout::{
       Viewport,
-      style::{CssValue, InheritedStyle, Style, properties::*},
+      style::{CssValue, ResolvedStyle, Style, properties::*},
     },
     rendering::Sizing,
   };
@@ -957,7 +957,7 @@ mod tests {
 
     preset_style.merge_from(inline_style);
 
-    let inherited = preset_style.inherit(&InheritedStyle::default());
+    let inherited = preset_style.inherit(&ResolvedStyle::default());
     let resolved = inherited.resolved_margin();
     assert_eq!(resolved.top, Length::Px(0.0));
     assert_eq!(resolved.right, Length::Px(0.0));
@@ -981,7 +981,7 @@ mod tests {
 
     preset_style.merge_from(inline_style);
 
-    let inherited = preset_style.inherit(&InheritedStyle::default());
+    let inherited = preset_style.inherit(&ResolvedStyle::default());
     let resolved = inherited.resolved_margin();
     assert_eq!(resolved.top, Length::Px(8.0));
     assert_eq!(resolved.right, Length::Px(0.0));
@@ -1009,7 +1009,7 @@ mod tests {
 
     preset_style.merge_from(inline_style);
 
-    let inherited = preset_style.inherit(&InheritedStyle::default());
+    let inherited = preset_style.inherit(&ResolvedStyle::default());
     assert_eq!(inherited.text_decoration_color, None);
     assert_eq!(
       inherited.text_decoration.line,
@@ -1037,7 +1037,7 @@ mod tests {
 
     preset_style.merge_from(inline_style);
 
-    let inherited = preset_style.inherit(&InheritedStyle::default());
+    let inherited = preset_style.inherit(&ResolvedStyle::default());
     let resolved = inherited.resolved_border_width();
     assert_eq!(resolved.top, Length::Px(2.0));
     assert_eq!(resolved.right, Length::Px(2.0));
@@ -1059,7 +1059,7 @@ mod tests {
 
     preset_style.merge_from(inline_style);
 
-    let inherited = preset_style.inherit(&InheritedStyle::default());
+    let inherited = preset_style.inherit(&ResolvedStyle::default());
     assert_eq!(inherited.background_color, None);
   }
 
@@ -1112,7 +1112,7 @@ mod tests {
       padding_left: Some(Length::Px(50.0)).into(),
       ..Default::default()
     }
-    .inherit(&InheritedStyle::default());
+    .inherit(&ResolvedStyle::default());
 
     let resolved = inherited.resolved_padding();
 
@@ -1135,7 +1135,7 @@ mod tests {
       border_top_width: Some(Length::Px(4.0)).into(),
       ..Default::default()
     }
-    .inherit(&InheritedStyle::default());
+    .inherit(&ResolvedStyle::default());
 
     let resolved = inherited.resolved_border_width();
 
@@ -1147,7 +1147,7 @@ mod tests {
 
   #[test]
   fn test_isolated_for_clip_path_and_mask_image() {
-    let mut style = InheritedStyle::default();
+    let mut style = ResolvedStyle::default();
     assert!(!style.is_isolated());
 
     style.clip_path = BasicShape::from_str("inset(10px)").ok();
@@ -1161,7 +1161,7 @@ mod tests {
 
   #[test]
   fn test_non_identity_transform_detection() {
-    let mut style = InheritedStyle::default();
+    let mut style = ResolvedStyle::default();
     let sizing = Sizing {
       viewport: Viewport::new(Some(1200), Some(630)),
       font_size: 16.0,
@@ -1183,7 +1183,7 @@ mod tests {
 
   #[test]
   fn test_text_overflow_ellipsis_forces_single_line_clamp_on_nowrap() {
-    let style = InheritedStyle {
+    let style = ResolvedStyle {
       text_wrap_mode: Some(TextWrapMode::NoWrap),
       text_overflow: TextOverflow::Ellipsis,
       ..Default::default()
@@ -1209,7 +1209,7 @@ mod tests {
       line_height: LineHeight::Length(Length::Em(1.5)).into(),
       ..Default::default()
     }
-    .inherit(&InheritedStyle::default());
+    .inherit(&ResolvedStyle::default());
     parent.make_computed(&Sizing {
       viewport: Viewport::new(Some(1200), Some(630)),
       font_size: 32.0,

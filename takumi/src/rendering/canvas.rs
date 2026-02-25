@@ -15,7 +15,7 @@ use zeno::{Mask, PathData, Placement, Scratch};
 
 use crate::{Result, layout::style::BlendMode};
 use crate::{
-  layout::style::{Affine, Color, ImageScalingAlgorithm, InheritedStyle, Overflow},
+  layout::style::{Affine, Color, ImageScalingAlgorithm, Overflow, ResolvedStyle},
   rendering::{BorderProperties, RenderContext, blend_pixel, create_mask, fast_div_255},
 };
 
@@ -137,7 +137,7 @@ pub(crate) enum CanvasConstrain {
 impl CanvasConstrain {
   pub(crate) fn from_node(
     context: &RenderContext,
-    style: &InheritedStyle,
+    style: &ResolvedStyle,
     layout: Layout,
     transform: Affine,
     mask_memory: &mut MaskMemory,
