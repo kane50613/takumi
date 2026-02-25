@@ -875,6 +875,7 @@ mod tests {
     let resolved = build_inherited_style(
       &parent,
       layers,
+      #[cfg(feature = "css_stylesheet_parsing")]
       &matched,
       Viewport::new(Some(1200), Some(630)),
     );
