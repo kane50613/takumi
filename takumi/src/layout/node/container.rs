@@ -68,3 +68,14 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ContainerNode<Nodes> {
     self.style.as_ref()
   }
 }
+
+impl<Nodes: Node<Nodes>> Default for ContainerNode<Nodes> {
+  fn default() -> Self {
+    ContainerNode {
+      preset: None,
+      style: None,
+      children: None,
+      tw: None,
+    }
+  }
+}

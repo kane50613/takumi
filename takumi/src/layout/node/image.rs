@@ -20,7 +20,7 @@ use crate::{
 };
 
 /// A node that renders image content.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ImageNode {
   /// The element's tag name

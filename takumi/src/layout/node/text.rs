@@ -20,7 +20,7 @@ use crate::{
 ///
 /// Text nodes display text with configurable font properties,
 /// alignment, and styling options.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct TextNode {
   /// The element's tag name

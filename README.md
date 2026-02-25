@@ -71,3 +71,8 @@ Takumi wouldn't be possible without the following works:
 ## License
 
 Licensed under the terms in the [LICENSE](LICENSE) file.
+
+<br/>
+<a href="https://vercel.com/oss">
+  <img alt="Vercel OSS Program" src="https://vercel.com/oss/program-badge.svg" />
+</a>
