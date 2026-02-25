@@ -14,11 +14,10 @@ use zeno::Fill;
 use crate::{
   Result,
   layout::{
-    Viewport,
     inline::InlineContentKind,
     style::{
       Affine, BackgroundClip, BackgroundImage, BlendMode, CssValue, Length, Sides, Style,
-      StyleDeclarations,
+      tw::TailwindValues,
     },
   },
   rendering::{
@@ -44,9 +43,9 @@ macro_rules! impl_node_enum {
         }
       }
 
-      fn take_style_layers(&mut self, viewport: $crate::layout::Viewport) -> $crate::layout::node::NodeStyleLayers {
+      fn take_style_layers(&mut self) -> $crate::layout::node::NodeStyleLayers {
         match self {
-          $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::take_style_layers(inner, viewport), )*
+          $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::take_style_layers(inner), )*
         }
       }
 
@@ -249,7 +248,7 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
   }
 
   /// Takes the node's local style layers for cascade assembly.
-  fn take_style_layers(&mut self, viewport: Viewport) -> NodeStyleLayers;
+  fn take_style_layers(&mut self) -> NodeStyleLayers;
 
   /// Retrieve content for inline layout.
   fn inline_content(&self) -> Option<InlineContentKind<'_>> {
@@ -548,7 +547,7 @@ pub struct NodeStyleLayers {
   /// UA/default style preset for the element.
   pub preset: Option<Style>,
   /// Tailwind-derived author style for the element.
-  pub author_tw: Option<StyleDeclarations>,
+  pub author_tw: Option<TailwindValues>,
   /// Inline style attached directly to the element.
   pub inline: Option<Style>,
 }

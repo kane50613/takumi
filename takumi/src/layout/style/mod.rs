@@ -133,6 +133,12 @@ impl<T, const DEFAULT_INHERIT: bool> From<T> for CssValue<Option<T>, DEFAULT_INH
   }
 }
 
+impl<T, const DEFAULT_INHERIT: bool> From<T> for CssValue<Box<T>, DEFAULT_INHERIT> {
+  fn from(value: T) -> Self {
+    CssValue::Value(Box::new(value))
+  }
+}
+
 impl<T, const N: usize, const DEFAULT_INHERIT: bool> From<[T; N]>
   for CssValue<Box<[T]>, DEFAULT_INHERIT>
 {

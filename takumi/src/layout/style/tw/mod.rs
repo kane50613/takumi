@@ -63,13 +63,7 @@ impl TailwindValues {
     self.inner.iter()
   }
 
-  pub(crate) fn to_declarations(&self, viewport: Viewport) -> StyleDeclarations {
-    let mut style = Style::default();
-    self.apply(&mut style, viewport);
-    style.into_declarations()
-  }
-
-  fn apply(&self, style: &mut Style, viewport: Viewport) {
+  pub(crate) fn apply_to_style(&self, style: &mut Style, viewport: Viewport) {
     let mut background_image_state = TwGradientState::default();
 
     for value in self.iter() {
@@ -1717,7 +1711,7 @@ mod tests {
       unreachable!()
     };
 
-    values.apply(&mut style, viewport);
+    values.apply_to_style(&mut style, viewport);
 
     assert_eq!(
       style.background_image,

@@ -20,7 +20,7 @@ use crate::{
       create_inline_layout, measure_inline_layout,
     },
     node::{Node, NodeStyleLayers},
-    style::{Affine, Display, ResolvedStyle, Style as NodeStyle, apply_style_declarations},
+    style::{Affine, Display, ResolvedStyle, Style as NodeStyle},
   },
   rendering::{
     Canvas, MaxHeight, RenderContext, Sizing,
@@ -112,6 +112,7 @@ fn build_inherited_style(
   parent_style: &ResolvedStyle,
   node_layers: NodeStyleLayers,
   matched_author: &MatchedAuthorStyles,
+  viewport: crate::layout::Viewport,
 ) -> ResolvedStyle {
   let mut style = NodeStyle::default();
 
@@ -122,7 +123,7 @@ fn build_inherited_style(
   style.merge_from(matched_author.stylesheet.clone());
 
   if let Some(author_tw) = node_layers.author_tw {
-    apply_style_declarations(&author_tw, &mut style);
+    author_tw.apply_to_style(&mut style, viewport);
   }
 
   if let Some(inline) = node_layers.inline {
@@ -574,9 +575,14 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
   ) -> Self {
     let node_index = *preorder_cursor;
     *preorder_cursor += 1;
-    let layers = node.take_style_layers(parent_context.sizing.viewport);
+    let layers = node.take_style_layers();
     let matched_author = &matched_styles.per_node[node_index];
-    let mut style = build_inherited_style(&parent_context.style, layers, matched_author);
+    let mut style = build_inherited_style(
+      &parent_context.style,
+      layers,
+      matched_author,
+      parent_context.sizing.viewport,
+    );
 
     let font_size = style
       .font_size

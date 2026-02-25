@@ -6,7 +6,6 @@ use taffy::{AvailableSpace, Layout, Size};
 use crate::{
   Result,
   layout::{
-    Viewport,
     inline::{
       InlineContentKind, InlineItem, InlineLayoutStage, create_inline_constraint,
       create_inline_layout, measure_inline_layout,
@@ -53,12 +52,10 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for TextNode {
     self.id.as_deref()
   }
 
-  fn take_style_layers(&mut self, viewport: Viewport) -> NodeStyleLayers {
-    let author_tw = self.tw.as_ref().map(|tw| tw.to_declarations(viewport));
-
+  fn take_style_layers(&mut self) -> NodeStyleLayers {
     NodeStyleLayers {
       preset: self.preset.take(),
-      author_tw,
+      author_tw: self.tw.take(),
       inline: self.style.take(),
     }
   }

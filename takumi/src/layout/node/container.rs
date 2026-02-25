@@ -8,7 +8,6 @@ use std::fmt::Debug;
 use serde::Deserialize;
 
 use crate::layout::{
-  Viewport,
   node::{Node, NodeStyleLayers},
   style::{Style, tw::TailwindValues},
 };
@@ -53,12 +52,10 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ContainerNode<Nodes> {
     self.children.as_deref()
   }
 
-  fn take_style_layers(&mut self, viewport: Viewport) -> NodeStyleLayers {
-    let author_tw = self.tw.as_ref().map(|tw| tw.to_declarations(viewport));
-
+  fn take_style_layers(&mut self) -> NodeStyleLayers {
     NodeStyleLayers {
       preset: self.preset.take(),
-      author_tw,
+      author_tw: self.tw.take(),
       inline: self.style.take(),
     }
   }

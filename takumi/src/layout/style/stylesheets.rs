@@ -186,25 +186,6 @@ macro_rules! define_style {
     }
 
     impl Style {
-      pub(crate) fn into_declarations(self) -> StyleDeclarations {
-        let mut declarations = StyleDeclarations::new();
-        $(
-          if !matches!(self.$property, CssValue::Unset) {
-            declarations.push(StyleDeclaration {
-              metadata: DeclarationMetadata::default(),
-              property: PropertyId::$property,
-              value: match self.$property {
-                CssValue::Value(value) => StyleDeclarationValue::$property(value),
-                CssValue::Initial => StyleDeclarationValue::$property(<$type as Default>::default()),
-                CssValue::Inherit => StyleDeclarationValue::$property(<$type as Default>::default()),
-                CssValue::Unset => unreachable!(),
-              },
-            });
-          }
-        )*
-        declarations
-      }
-
       /// Inherits the style from the parent element.
       pub(crate) fn inherit(self, parent: &ResolvedStyle) -> ResolvedStyle {
         ResolvedStyle {

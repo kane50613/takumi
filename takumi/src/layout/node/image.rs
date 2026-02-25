@@ -4,7 +4,6 @@ use data_url::DataUrl;
 use serde::Deserialize;
 use taffy::{AvailableSpace, Layout, Size};
 
-use crate::layout::Viewport;
 use crate::resources::image::{ImageResult, load_image_source_from_bytes};
 use crate::{
   Result,
@@ -63,12 +62,10 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ImageNode {
     }
   }
 
-  fn take_style_layers(&mut self, viewport: Viewport) -> NodeStyleLayers {
-    let author_tw = self.tw.as_ref().map(|tw| tw.to_declarations(viewport));
-
+  fn take_style_layers(&mut self) -> NodeStyleLayers {
     NodeStyleLayers {
       preset: self.preset.take(),
-      author_tw,
+      author_tw: self.tw.take(),
       inline: self.style.take(),
     }
   }
