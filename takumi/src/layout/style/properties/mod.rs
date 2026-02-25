@@ -185,7 +185,6 @@ impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
 
     T::from_css(input).map(Some)
   }
-  }
 }
 
 /// Converts a parsed/inherited value into a computed value for the current node context.
