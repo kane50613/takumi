@@ -64,11 +64,7 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ImageNode {
   }
 
   fn take_style_layers(&mut self, viewport: Viewport) -> NodeStyleLayers {
-    let author_tw = self.tw.as_ref().map(|tw| {
-      let mut style = Style::default();
-      tw.apply(&mut style, viewport);
-      style
-    });
+    let author_tw = self.tw.as_ref().map(|tw| tw.to_declarations(viewport));
 
     NodeStyleLayers {
       preset: self.preset.take(),

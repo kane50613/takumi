@@ -20,7 +20,7 @@ use crate::{
       create_inline_layout, measure_inline_layout,
     },
     node::{Node, NodeStyleLayers},
-    style::{Affine, Display, ResolvedStyle, Style as NodeStyle},
+    style::{Affine, Display, ResolvedStyle, Style as NodeStyle, apply_style_declarations},
   },
   rendering::{
     Canvas, MaxHeight, RenderContext, Sizing,
@@ -122,7 +122,7 @@ fn build_inherited_style(
   style.merge_from(matched_author.stylesheet.clone());
 
   if let Some(author_tw) = node_layers.author_tw {
-    style.merge_from(author_tw);
+    apply_style_declarations(&author_tw, &mut style);
   }
 
   if let Some(inline) = node_layers.inline {

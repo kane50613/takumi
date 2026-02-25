@@ -16,7 +16,10 @@ use crate::{
   layout::{
     Viewport,
     inline::InlineContentKind,
-    style::{Affine, BackgroundClip, BackgroundImage, BlendMode, CssValue, Length, Sides, Style},
+    style::{
+      Affine, BackgroundClip, BackgroundImage, BlendMode, CssValue, Length, Sides, Style,
+      StyleDeclarations,
+    },
   },
   rendering::{
     BackgroundTile, BorderProperties, Canvas, RenderContext, SizedShadow,
@@ -545,7 +548,7 @@ pub struct NodeStyleLayers {
   /// UA/default style preset for the element.
   pub preset: Option<Style>,
   /// Tailwind-derived author style for the element.
-  pub author_tw: Option<Style>,
+  pub author_tw: Option<StyleDeclarations>,
   /// Inline style attached directly to the element.
   pub inline: Option<Style>,
 }

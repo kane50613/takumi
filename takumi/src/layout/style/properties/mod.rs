@@ -389,6 +389,21 @@ impl MakeComputed for BorderRadius {
   }
 }
 
+impl<'i> FromCss<'i> for Box<BorderRadius> {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let value = BorderRadius::from_css(input)?;
+    Ok(Box::new(value))
+  }
+
+  fn expect_message() -> Cow<'static, str> {
+    BorderRadius::expect_message()
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    BorderRadius::valid_tokens()
+  }
+}
+
 impl<'i> FromCss<'i> for BorderRadius {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let widths: Sides<Length<false>> = Sides::from_css(input)?;

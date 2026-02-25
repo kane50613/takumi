@@ -63,7 +63,13 @@ impl TailwindValues {
     self.inner.iter()
   }
 
-  pub(crate) fn apply(&self, style: &mut Style, viewport: Viewport) {
+  pub(crate) fn to_declarations(&self, viewport: Viewport) -> StyleDeclarations {
+    let mut style = Style::default();
+    self.apply(&mut style, viewport);
+    style.into_declarations()
+  }
+
+  fn apply(&self, style: &mut Style, viewport: Viewport) {
     let mut background_image_state = TwGradientState::default();
 
     for value in self.iter() {
@@ -181,12 +187,7 @@ pub struct TailwindValue {
 }
 
 impl TailwindValue {
-  pub(crate) fn apply(
-    &self,
-    style: &mut Style,
-    viewport: Viewport,
-    gradient_state: &mut TwGradientState,
-  ) {
+  fn apply(&self, style: &mut Style, viewport: Viewport, gradient_state: &mut TwGradientState) {
     if let Some(breakpoint) = self.breakpoint
       && !breakpoint.matches(viewport)
     {
@@ -928,7 +929,8 @@ impl TailwindProperty {
         style.outline_offset = Some(outline_offset.0).into();
       }
       TailwindProperty::Rounded(rounded) => {
-        style.border_radius = BorderRadius(Sides([SpacePair::from_single(rounded.0); 4])).into();
+        style.border_radius =
+          Box::new(BorderRadius(Sides([SpacePair::from_single(rounded.0); 4]))).into();
       }
       TailwindProperty::VerticalAlign(vertical_align) => {
         style.vertical_align = vertical_align.into();

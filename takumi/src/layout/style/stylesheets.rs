@@ -28,6 +28,16 @@ macro_rules! define_style_apply_clears {
   ($self:ident, $other:ident, $trigger:ident) => {};
 }
 
+macro_rules! define_style_declaration_clears {
+  ($style:ident $(, [$($clear:ident),* $(,)?])?) => {
+    $(
+      $(
+        $style.$clear = CssValue::Unset;
+      )*
+    )?
+  };
+}
+
 macro_rules! define_style {
   ($(
     $(#[$attr:meta])*
@@ -35,6 +45,134 @@ macro_rules! define_style {
       $(where inherit = $inherit:expr)?
       $(=> [$($merge_clear:ident),* $(,)?])?,
   )*) => {
+    /// Metadata attached to a parsed CSS declaration.
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+    pub struct DeclarationMetadata {
+      /// Whether the declaration was marked with `!important`.
+      pub important: bool,
+    }
+
+    #[allow(non_camel_case_types)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum PropertyId {
+      Ignored,
+      $(
+        $property,
+      )*
+    }
+
+    const PROPERTY_NAME_TABLE: &[(&str, PropertyId)] = &[
+      $(
+        (stringify!($property), PropertyId::$property),
+      )*
+    ];
+
+    impl PropertyId {
+      fn from_normalized_name(name: &str) -> Self {
+        PROPERTY_NAME_TABLE
+          .iter()
+          .find_map(|(property_name, property_id)| {
+            (*property_name == name).then_some(*property_id)
+          })
+          .unwrap_or(Self::Ignored)
+      }
+
+      fn from_kebab_case(name: &str) -> Self {
+        let normalized = name.replace('-', "_");
+        let normalized = normalized.trim_start_matches('_');
+        Self::from_normalized_name(normalized)
+      }
+
+      #[allow(dead_code)]
+      pub(crate) fn from_camel_case(name: &str) -> Self {
+        let mut normalized = String::with_capacity(name.len() + 4);
+        for ch in name.chars() {
+          if ch.is_ascii_uppercase() {
+            normalized.push('_');
+            normalized.push(ch.to_ascii_lowercase());
+          } else {
+            normalized.push(ch);
+          }
+        }
+        let normalized = normalized.trim_start_matches('_');
+        Self::from_normalized_name(normalized)
+      }
+    }
+
+    #[allow(non_camel_case_types)]
+    #[derive(Debug, Clone)]
+    enum StyleDeclarationValue {
+      Ignored,
+      $(
+        $property($type),
+      )*
+    }
+
+    /// A parsed CSS declaration with metadata that can be applied to a [`Style`].
+    #[derive(Debug, Clone)]
+    pub struct StyleDeclaration {
+      /// Declaration metadata such as `!important`.
+      pub metadata: DeclarationMetadata,
+      property: PropertyId,
+      value: StyleDeclarationValue,
+    }
+
+    impl StyleDeclaration {
+      pub(crate) fn parse<'i>(
+        name: &str,
+        input: &mut cssparser::Parser<'i, '_>,
+      ) -> Result<Self, cssparser::ParseError<'i, Cow<'i, str>>> {
+        let property = PropertyId::from_kebab_case(name);
+        let value = match property {
+          PropertyId::Ignored => {
+            while input.next_including_whitespace_and_comments().is_ok() {}
+            StyleDeclarationValue::Ignored
+          }
+          $(
+            PropertyId::$property => {
+              let value = <$type as FromCss>::from_css(input)?;
+              StyleDeclarationValue::$property(value)
+            }
+          )*
+        };
+
+        Ok(Self {
+          metadata: DeclarationMetadata::default(),
+          property,
+          value,
+        })
+      }
+
+      pub(crate) fn with_metadata(
+        mut self,
+        metadata: DeclarationMetadata,
+      ) -> Self {
+        self.metadata = metadata;
+        self
+      }
+
+      pub(crate) fn merge_into(&self, style: &mut Style) {
+        match (&self.property, &self.value) {
+          (PropertyId::Ignored, StyleDeclarationValue::Ignored) => {}
+          $(
+            (PropertyId::$property, StyleDeclarationValue::$property(value)) => {
+              define_style_declaration_clears!(style $(, [$($merge_clear),*])?);
+              style.$property = value.clone().into();
+            }
+          )*
+          _ => {}
+        }
+      }
+    }
+
+    pub(crate) type StyleDeclarations = SmallVec<[StyleDeclaration; 8]>;
+
+    pub(crate) fn apply_style_declarations(declarations: &[StyleDeclaration], style: &mut Style) {
+      for declaration in declarations {
+        declaration.merge_into(style);
+      }
+    }
+
     /// Defines the style of an element.
     #[derive(Debug, Default, Clone, Deserialize, Builder, PartialEq)]
     #[serde(default, rename_all = "camelCase")]
@@ -48,26 +186,23 @@ macro_rules! define_style {
     }
 
     impl Style {
-      /// Applies a CSS property to this style. Unknown properties are ignored.
-      pub(crate) fn apply_css_property<'i>(
-        &mut self,
-        name: &str,
-        input: &mut cssparser::Parser<'i, '_>,
-      ) -> Result<(), cssparser::ParseError<'i, Cow<'i, str>>> {
-        let name_normalized = name.replace('-', "_");
-        let name_normalized = name_normalized.trim_start_matches('_');
-        match name_normalized {
-          $(
-            stringify!($property) => {
-              let val = <$type as FromCss>::from_css(input)?;
-              self.$property = val.into();
-            }
-          )*
-          _ => {
-            while input.next_including_whitespace_and_comments().is_ok() {}
+      pub(crate) fn into_declarations(self) -> StyleDeclarations {
+        let mut declarations = StyleDeclarations::new();
+        $(
+          if !matches!(self.$property, CssValue::Unset) {
+            declarations.push(StyleDeclaration {
+              metadata: DeclarationMetadata::default(),
+              property: PropertyId::$property,
+              value: match self.$property {
+                CssValue::Value(value) => StyleDeclarationValue::$property(value),
+                CssValue::Initial => StyleDeclarationValue::$property(<$type as Default>::default()),
+                CssValue::Inherit => StyleDeclarationValue::$property(<$type as Default>::default()),
+                CssValue::Unset => unreachable!("filtered above"),
+              },
+            });
           }
-        }
-        Ok(())
+        )*
+        declarations
       }
 
       /// Inherits the style from the parent element.
@@ -183,7 +318,7 @@ define_style!(
   flex: Option<Flex> => [flex_basis, flex_grow, flex_shrink],
   flex_grow: Option<FlexGrow>,
   flex_shrink: Option<FlexGrow>,
-  border_radius: BorderRadius => [
+  border_radius: Box<BorderRadius> => [
     border_top_left_radius,
     border_top_right_radius,
     border_bottom_right_radius,
@@ -902,6 +1037,7 @@ mod tests {
 
   use taffy::Size;
 
+  use super::PropertyId;
   use crate::{
     layout::{
       Viewport,
@@ -938,6 +1074,18 @@ mod tests {
       tw_style.color,
       CssValue::Value(ColorInput::Value(Color([255, 0, 0, 255])))
     ); // from tw
+  }
+
+  #[test]
+  fn property_id_accepts_kebab_and_camel_case() {
+    assert_eq!(
+      PropertyId::from_kebab_case("padding-left"),
+      PropertyId::from_camel_case("paddingLeft")
+    );
+    assert_eq!(
+      PropertyId::from_kebab_case("-webkit-mask-image"),
+      PropertyId::from_camel_case("WebkitMaskImage")
+    );
   }
 
   #[test]
