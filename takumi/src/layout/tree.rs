@@ -42,20 +42,6 @@ struct MatchedStyles {
   per_node: Vec<MatchedAuthorStyles>,
 }
 
-#[cfg(not(feature = "css_stylesheet_parsing"))]
-fn match_stylesheets_for_tree<N: Node<N>>(root: &N) -> MatchedStyles {
-  fn count_nodes<N: Node<N>>(node: &N) -> usize {
-    1 + node
-      .children_ref()
-      .map(|children| children.iter().map(count_nodes).sum::<usize>())
-      .unwrap_or_default()
-  }
-
-  MatchedStyles {
-    per_node: vec![MatchedAuthorStyles::default(); count_nodes(root)],
-  }
-}
-
 pub(crate) struct LayoutResults {
   nodes: Vec<LayoutResultNode>,
 }
@@ -122,7 +108,7 @@ fn build_inherited_style(
     style.merge_from(preset);
   }
 
-  style.merge_from(matched_author.stylesheet_normal.clone());
+  style.merge_from_ref(&matched_author.stylesheet_normal);
 
   if let Some(author_tw) = node_layers.author_tw {
     author_tw.apply_to_style(&mut style, viewport);
@@ -132,7 +118,7 @@ fn build_inherited_style(
     style.merge_from(inline);
   }
 
-  style.merge_from(matched_author.stylesheet_important.clone());
+  style.merge_from_ref(&matched_author.stylesheet_important);
 
   style.inherit(parent_style)
 }
@@ -559,7 +545,7 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
     #[cfg(feature = "css_stylesheet_parsing")]
     let matched_styles = match_stylesheets_for_tree(&node, &parent_context.stylesheets);
     #[cfg(not(feature = "css_stylesheet_parsing"))]
-    let matched_styles = match_stylesheets_for_tree(&node);
+    let matched_styles = MatchedStyles::default();
     let mut preorder_cursor = 0;
     let mut tree =
       Self::from_node_impl(parent_context, node, &matched_styles, &mut preorder_cursor);
@@ -580,7 +566,11 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
     let node_index = *preorder_cursor;
     *preorder_cursor += 1;
     let layers = node.take_style_layers();
-    let matched_author = &matched_styles.per_node[node_index];
+    let default_matched_author = MatchedAuthorStyles::default();
+    let matched_author = matched_styles
+      .per_node
+      .get(node_index)
+      .unwrap_or(&default_matched_author);
     let mut style = build_inherited_style(
       &parent_context.style,
       layers,

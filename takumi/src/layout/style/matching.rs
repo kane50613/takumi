@@ -323,21 +323,23 @@ pub(crate) fn match_stylesheets_for_tree<N: Node<N>>(
           index: i,
         };
 
+        let mut best_specificity: Option<u32> = None;
         for selector in rule.selectors.slice().iter() {
           if matches_selector(selector, 0, None, &element, &mut ctx) {
-            matched_rule.push((
-              false,
-              selector.specificity(),
-              source_order,
-              &rule.normal_declarations,
-            ));
-            matched_rule.push((
-              true,
-              selector.specificity(),
-              source_order,
-              &rule.important_declarations,
-            ));
+            let specificity = selector.specificity();
+            best_specificity =
+              Some(best_specificity.map_or(specificity, |best| best.max(specificity)));
           }
+        }
+
+        if let Some(specificity) = best_specificity {
+          matched_rule.push((false, specificity, source_order, &rule.normal_declarations));
+          matched_rule.push((
+            true,
+            specificity,
+            source_order,
+            &rule.important_declarations,
+          ));
         }
       }
 

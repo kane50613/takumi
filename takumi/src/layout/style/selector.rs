@@ -1,4 +1,5 @@
 use cssparser::*;
+use precomputed_hash::PrecomputedHash;
 use selectors::parser::{
   Component, NonTSPseudoClass, ParseRelative, PseudoElement, Selector, SelectorImpl, SelectorList,
   SelectorParseErrorKind,
@@ -12,9 +13,13 @@ use crate::layout::style::{DeclarationMetadata, StyleDeclaration, StyleDeclarati
 
 #[derive(Debug, Clone)]
 pub enum CssSelectorParseError<'i> {
+  #[allow(dead_code)]
   Basic(BasicParseErrorKind<'i>),
+  #[allow(dead_code)]
   Property(Cow<'i, str>),
+  #[allow(dead_code)]
   Selector(SelectorParseErrorKind<'i>),
+  #[allow(dead_code)]
   UnsupportedSelectorFeature(&'static str),
 }
 
@@ -39,7 +44,7 @@ impl From<&str> for TakumiIdent {
   }
 }
 
-impl std::convert::AsRef<str> for TakumiIdent {
+impl AsRef<str> for TakumiIdent {
   fn as_ref(&self) -> &str {
     &self.0
   }
@@ -54,7 +59,7 @@ impl ToCss for TakumiIdent {
   }
 }
 
-impl precomputed_hash::PrecomputedHash for TakumiIdent {
+impl PrecomputedHash for TakumiIdent {
   fn precomputed_hash(&self) -> u32 {
     let mut hash = 0x811c9dc5u32;
     for byte in self.0.as_bytes() {
@@ -95,10 +100,11 @@ impl NonTSPseudoClass for DummyPseudoClass {
   }
 }
 
+// TODO: support pseudo elements
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum DummyPseudoElement {
   #[default]
-  Before,
+  Noop,
 }
 
 impl ToCss for DummyPseudoElement {
@@ -107,7 +113,7 @@ impl ToCss for DummyPseudoElement {
     W: Write,
   {
     match self {
-      DummyPseudoElement::Before => dest.write_str("::before"),
+      DummyPseudoElement::Noop => dest.write_str("::noop"),
     }
   }
 }
@@ -129,31 +135,11 @@ impl SelectorImpl for TakumiSelectorImpl {
   type PseudoElement = DummyPseudoElement;
 }
 
-pub struct TakumiSelectorParser;
+struct TakumiSelectorParser;
 
 impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
   type Impl = TakumiSelectorImpl;
   type Error = CssSelectorParseError<'i>;
-
-  fn parse_non_ts_pseudo_class(
-    &self,
-    location: SourceLocation,
-    name: CowRcStr<'i>,
-  ) -> Result<DummyPseudoClass, ParseError<'i, Self::Error>> {
-    Err(location.new_custom_error(CssSelectorParseError::Selector(
-      SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name),
-    )))
-  }
-
-  fn parse_pseudo_element(
-    &self,
-    location: SourceLocation,
-    name: CowRcStr<'i>,
-  ) -> Result<DummyPseudoElement, ParseError<'i, Self::Error>> {
-    Err(location.new_custom_error(CssSelectorParseError::Selector(
-      SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name),
-    )))
-  }
 }
 
 fn selector_contains_unsupported_features(selector: &Selector<TakumiSelectorImpl>) -> bool {
@@ -213,42 +199,12 @@ impl<'i> QualifiedRuleParser<'i> for StyleDeclarationParser {
   type Prelude = ();
   type QualifiedRule = StyleDeclaration;
   type Error = CssSelectorParseError<'i>;
-
-  fn parse_prelude<'t>(
-    &mut self,
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
-    Err(input.new_custom_error(CssSelectorParseError::Basic(
-      BasicParseErrorKind::EndOfInput,
-    )))
-  }
-
-  fn parse_block<'t>(
-    &mut self,
-    _prelude: Self::Prelude,
-    _location: &ParserState,
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
-    Err(input.new_custom_error(CssSelectorParseError::Basic(
-      BasicParseErrorKind::EndOfInput,
-    )))
-  }
 }
 
 impl<'i> AtRuleParser<'i> for StyleDeclarationParser {
   type Prelude = ();
   type AtRule = StyleDeclaration;
   type Error = CssSelectorParseError<'i>;
-
-  fn parse_prelude<'t>(
-    &mut self,
-    name: CowRcStr<'i>,
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
-    Err(input.new_custom_error(CssSelectorParseError::Basic(
-      BasicParseErrorKind::AtRuleInvalid(name),
-    )))
-  }
 }
 
 impl<'i> RuleBodyItemParser<'i, StyleDeclaration, CssSelectorParseError<'i>>
@@ -319,16 +275,6 @@ impl<'i> AtRuleParser<'i> for TakumiRuleParser {
   type Prelude = ();
   type AtRule = CssRule;
   type Error = CssSelectorParseError<'i>;
-
-  fn parse_prelude<'t>(
-    &mut self,
-    name: CowRcStr<'i>,
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
-    Err(input.new_custom_error(CssSelectorParseError::Basic(
-      BasicParseErrorKind::AtRuleInvalid(name),
-    )))
-  }
 }
 
 #[derive(Debug, Clone, Default)]

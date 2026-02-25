@@ -178,7 +178,8 @@ impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
   }
 
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    if let Ok(value) = input.try_parse(T::from_css) {
+    let parsed_value = input.try_parse(T::from_css);
+    if let Ok(value) = parsed_value {
       return Ok(Some(value));
     }
 
@@ -186,7 +187,7 @@ impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
       return Ok(None);
     }
 
-    T::from_css(input).map(Some)
+    parsed_value.map(Some)
   }
 }
 

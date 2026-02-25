@@ -221,6 +221,18 @@ macro_rules! define_style {
           self.$property = other.$property.or(std::mem::take(&mut self.$property));
         )*
       }
+
+      pub(crate) fn merge_from_ref(&mut self, other: &Self) {
+        $(
+          define_style_apply_clears!(self, other, $property $(, [$($merge_clear),*])?);
+        )*
+
+        $(
+          if !matches!(&other.$property, CssValue::Unset) {
+            self.$property = other.$property.clone();
+          }
+        )*
+      }
     }
 
     /// A resolved set of style properties.
@@ -1076,16 +1088,22 @@ mod tests {
 
   #[test]
   fn property_id_accepts_kebab_and_camel_case() {
+    let padding_left_kebab = PropertyId::from_kebab_case("padding-left");
+    let padding_left_camel = PropertyId::from_camel_case("paddingLeft");
+    assert_ne!(padding_left_kebab, PropertyId::Ignored);
+    assert_ne!(padding_left_camel, PropertyId::Ignored);
+    assert_eq!(padding_left_kebab, padding_left_camel);
+
+    let webkit_text_fill_color_kebab = PropertyId::from_kebab_case("-webkit-text-fill-color");
+    let webkit_text_fill_color_camel = PropertyId::from_camel_case("WebkitTextFillColor");
+    assert_ne!(webkit_text_fill_color_kebab, PropertyId::Ignored);
+    assert_ne!(webkit_text_fill_color_camel, PropertyId::Ignored);
     assert_eq!(
-      PropertyId::from_kebab_case("padding-left"),
-      PropertyId::from_camel_case("paddingLeft")
-    );
-    assert_eq!(
-      PropertyId::from_kebab_case("-webkit-text-fill-color"),
+      webkit_text_fill_color_kebab,
       PropertyId::webkit_text_fill_color
     );
     assert_eq!(
-      PropertyId::from_camel_case("WebkitTextFillColor"),
+      webkit_text_fill_color_camel,
       PropertyId::webkit_text_fill_color
     );
   }

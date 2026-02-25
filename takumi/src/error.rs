@@ -1,5 +1,3 @@
-#[cfg(feature = "css_stylesheet_parsing")]
-use crate::layout::style::selector::CssSelectorParseError;
 use crate::resources::{font::FontError, image::ImageResourceError};
 use thiserror::Error;
 
@@ -37,20 +35,9 @@ pub enum TakumiError {
   #[error("Font error: {0}")]
   FontError(#[from] FontError),
 
-  /// Error parsing a CSS selector.
-  #[error("CSS selector parse error: {0}")]
-  CssSelectorParse(String),
-
   /// Error during layout computation.
   #[error("Layout error: {0}")]
   LayoutError(taffy::TaffyError),
-}
-
-#[cfg(feature = "css_stylesheet_parsing")]
-impl<'i> From<CssSelectorParseError<'i>> for TakumiError {
-  fn from(err: CssSelectorParseError<'i>) -> Self {
-    Self::CssSelectorParse(format!("{err:?}"))
-  }
 }
 
 impl From<taffy::TaffyError> for TakumiError {
