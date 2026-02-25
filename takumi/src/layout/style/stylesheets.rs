@@ -2,7 +2,6 @@ use std::{borrow::Cow, marker::PhantomData};
 
 use derive_builder::Builder;
 use parley::{FontSettings, FontStack, TextStyle};
-use serde::Deserialize;
 use smallvec::SmallVec;
 use taffy::{Point, Rect, Size, prelude::FromLength};
 
@@ -102,6 +101,13 @@ macro_rules! define_style {
 
       #[allow(dead_code)]
       pub(crate) fn from_camel_case(name: &str) -> Self {
+        match name {
+          "textStroke" | "WebkitTextStroke" => return Self::webkit_text_stroke,
+          "textStrokeWidth" | "WebkitTextStrokeWidth" => return Self::webkit_text_stroke_width,
+          "textStrokeColor" | "WebkitTextStrokeColor" => return Self::webkit_text_stroke_color,
+          "textFillColor" | "WebkitTextFillColor" => return Self::webkit_text_fill_color,
+          _ => {}
+        }
         let mut normalized = String::with_capacity(name.len() + 4);
         for ch in name.chars() {
           if ch.is_ascii_uppercase() {
@@ -188,8 +194,7 @@ macro_rules! define_style {
     pub(crate) type StyleDeclarations = SmallVec<[StyleDeclaration; 8]>;
 
     /// Defines the style of an element.
-    #[derive(Debug, Default, Clone, Deserialize, Builder, PartialEq)]
-    #[serde(default, rename_all = "camelCase")]
+    #[derive(Debug, Default, Clone, Builder, PartialEq)]
     #[builder(default, setter(into))]
     pub struct Style {
       $(
@@ -199,6 +204,46 @@ macro_rules! define_style {
       )*
     }
 
+    impl<'de> serde::Deserialize<'de> for Style {
+      fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+      where
+        D: serde::Deserializer<'de>,
+      {
+        struct StyleVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for StyleVisitor {
+          type Value = Style;
+
+          fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a style object")
+          }
+
+          fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+          where
+            A: serde::de::MapAccess<'de>,
+          {
+            let mut style = Style::default();
+
+            while let Some(key) = map.next_key::<std::borrow::Cow<'de, str>>()? {
+              match PropertyId::from_camel_case(&key) {
+                PropertyId::Ignored => {
+                  let _ = map.next_value::<serde::de::IgnoredAny>()?;
+                }
+                $(
+                  PropertyId::$property => {
+                    style.$property = map.next_value()?;
+                  }
+                )*
+              }
+            }
+
+            Ok(style)
+          }
+        }
+
+        deserializer.deserialize_map(StyleVisitor)
+      }
+    }
     impl Style {
       /// Inherits the style from the parent element.
       pub(crate) fn inherit(self, parent: &ResolvedStyle) -> ResolvedStyle {
@@ -403,17 +448,13 @@ define_style!(
   font_synthesis_style: Option<FontSynthesic> where inherit = true,
   line_clamp: Option<LineClamp> where inherit = true,
   text_align: TextAlign where inherit = true,
-  #[serde(rename = "WebkitTextStroke", alias = "textStroke")]
   webkit_text_stroke: Option<TextStroke> where inherit = true => [
     webkit_text_stroke_width,
     webkit_text_stroke_color,
     webkit_text_fill_color,
   ],
-  #[serde(rename = "WebkitTextStrokeWidth", alias = "textStrokeWidth")]
   webkit_text_stroke_width: Option<Length<false>> where inherit = true,
-  #[serde(rename = "WebkitTextStrokeColor", alias = "textStrokeColor")]
   webkit_text_stroke_color: Option<ColorInput> where inherit = true,
-  #[serde(rename = "WebkitTextFillColor", alias = "textFillColor")]
   webkit_text_fill_color: Option<ColorInput> where inherit = true,
   stroke_linejoin: LineJoin where inherit = true,
   text_shadow: Option<TextShadows> where inherit = true,
