@@ -1081,8 +1081,12 @@ mod tests {
       PropertyId::from_camel_case("paddingLeft")
     );
     assert_eq!(
-      PropertyId::from_kebab_case("-webkit-mask-image"),
-      PropertyId::from_camel_case("WebkitMaskImage")
+      PropertyId::from_kebab_case("-webkit-text-fill-color"),
+      PropertyId::webkit_text_fill_color
+    );
+    assert_eq!(
+      PropertyId::from_camel_case("WebkitTextFillColor"),
+      PropertyId::webkit_text_fill_color
     );
   }
 

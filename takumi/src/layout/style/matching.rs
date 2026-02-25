@@ -200,7 +200,7 @@ impl<'a, N: Node<N>> Element for ArenaElement<'a, N> {
   }
 
   fn has_namespace(&self, _ns: &TakumiIdent) -> bool {
-    true
+    false
   }
 
   fn is_same_type(&self, other: &Self) -> bool {
