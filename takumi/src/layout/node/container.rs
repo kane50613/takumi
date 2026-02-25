@@ -71,7 +71,10 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ContainerNode<Nodes> {
 
 impl<Nodes: Node<Nodes>> Default for ContainerNode<Nodes> {
   fn default() -> Self {
-    ContainerNode {
+    Self {
+      tag_name: None,
+      class_name: None,
+      id: None,
       preset: None,
       style: None,
       children: None,
