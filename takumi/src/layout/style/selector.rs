@@ -1,9 +1,7 @@
-use cssparser::{
-  BasicParseErrorKind, CowRcStr, DeclarationParser, ParseError, Parser, ParserInput,
-  QualifiedRuleParser, RuleBodyParser, SourceLocation, StyleSheetParser, ToCss, parse_important,
-};
+use cssparser::*;
 use selectors::parser::{
-  NonTSPseudoClass, PseudoElement, SelectorImpl, SelectorList, SelectorParseErrorKind,
+  Component, NonTSPseudoClass, ParseRelative, PseudoElement, Selector, SelectorImpl, SelectorList,
+  SelectorParseErrorKind,
 };
 use std::{
   borrow::Cow,
@@ -17,6 +15,7 @@ pub enum CssSelectorParseError<'i> {
   Basic(BasicParseErrorKind<'i>),
   Property(Cow<'i, str>),
   Selector(SelectorParseErrorKind<'i>),
+  UnsupportedSelectorFeature(&'static str),
 }
 
 impl<'i> From<SelectorParseErrorKind<'i>> for CssSelectorParseError<'i> {
@@ -51,7 +50,7 @@ impl ToCss for TakumiIdent {
   where
     W: Write,
   {
-    cssparser::serialize_identifier(&self.0, dest)
+    serialize_identifier(&self.0, dest)
   }
 }
 
@@ -139,30 +138,55 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
   fn parse_non_ts_pseudo_class(
     &self,
     location: SourceLocation,
-    name: cssparser::CowRcStr<'i>,
+    name: CowRcStr<'i>,
   ) -> Result<DummyPseudoClass, ParseError<'i, Self::Error>> {
-    if name.eq_ignore_ascii_case("hover") {
-      Ok(DummyPseudoClass::Hover)
-    } else {
-      Err(location.new_custom_error(CssSelectorParseError::Basic(
-        BasicParseErrorKind::EndOfInput,
-      )))
-    }
+    Err(location.new_custom_error(CssSelectorParseError::Selector(
+      SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name),
+    )))
   }
 
   fn parse_pseudo_element(
     &self,
     location: SourceLocation,
-    name: cssparser::CowRcStr<'i>,
+    name: CowRcStr<'i>,
   ) -> Result<DummyPseudoElement, ParseError<'i, Self::Error>> {
-    if name.eq_ignore_ascii_case("before") {
-      Ok(DummyPseudoElement::Before)
-    } else {
-      Err(location.new_custom_error(CssSelectorParseError::Basic(
-        BasicParseErrorKind::EndOfInput,
-      )))
-    }
+    Err(location.new_custom_error(CssSelectorParseError::Selector(
+      SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name),
+    )))
   }
+}
+
+fn selector_contains_unsupported_features(selector: &Selector<TakumiSelectorImpl>) -> bool {
+  selector
+    .iter_raw_match_order()
+    .any(|component| match component {
+      Component::AttributeInNoNamespaceExists { .. }
+      | Component::AttributeInNoNamespace { .. }
+      | Component::AttributeOther(_) => true,
+      Component::Negation(list) | Component::Is(list) | Component::Where(list) => list
+        .slice()
+        .iter()
+        .any(selector_contains_unsupported_features),
+      Component::Slotted(inner) => selector_contains_unsupported_features(inner),
+      Component::Host(Some(inner)) => selector_contains_unsupported_features(inner),
+      _ => false,
+    })
+}
+
+fn ensure_supported_selector_list<'i>(
+  selectors: &SelectorList<TakumiSelectorImpl>,
+) -> Result<(), CssSelectorParseError<'i>> {
+  if selectors
+    .slice()
+    .iter()
+    .any(selector_contains_unsupported_features)
+  {
+    return Err(CssSelectorParseError::UnsupportedSelectorFeature(
+      "attribute selectors are not supported",
+    ));
+  }
+
+  Ok(())
 }
 
 pub struct StyleDeclarationParser;
@@ -175,7 +199,7 @@ impl<'i> DeclarationParser<'i> for StyleDeclarationParser {
     &mut self,
     name: CowRcStr<'i>,
     input: &mut Parser<'i, 't>,
-    _state: &cssparser::ParserState,
+    _state: &ParserState,
   ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
     let declaration = StyleDeclaration::parse(&name, input).map_err(ParseError::into)?;
     let important = input.try_parse(parse_important).is_ok();
@@ -185,7 +209,7 @@ impl<'i> DeclarationParser<'i> for StyleDeclarationParser {
   }
 }
 
-impl<'i> cssparser::QualifiedRuleParser<'i> for StyleDeclarationParser {
+impl<'i> QualifiedRuleParser<'i> for StyleDeclarationParser {
   type Prelude = ();
   type QualifiedRule = StyleDeclaration;
   type Error = CssSelectorParseError<'i>;
@@ -202,7 +226,7 @@ impl<'i> cssparser::QualifiedRuleParser<'i> for StyleDeclarationParser {
   fn parse_block<'t>(
     &mut self,
     _prelude: Self::Prelude,
-    _location: &cssparser::ParserState,
+    _location: &ParserState,
     input: &mut Parser<'i, 't>,
   ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
     Err(input.new_custom_error(CssSelectorParseError::Basic(
@@ -211,7 +235,7 @@ impl<'i> cssparser::QualifiedRuleParser<'i> for StyleDeclarationParser {
   }
 }
 
-impl<'i> cssparser::AtRuleParser<'i> for StyleDeclarationParser {
+impl<'i> AtRuleParser<'i> for StyleDeclarationParser {
   type Prelude = ();
   type AtRule = StyleDeclaration;
   type Error = CssSelectorParseError<'i>;
@@ -227,7 +251,7 @@ impl<'i> cssparser::AtRuleParser<'i> for StyleDeclarationParser {
   }
 }
 
-impl<'i> cssparser::RuleBodyItemParser<'i, StyleDeclaration, CssSelectorParseError<'i>>
+impl<'i> RuleBodyItemParser<'i, StyleDeclaration, CssSelectorParseError<'i>>
   for StyleDeclarationParser
 {
   fn parse_qualified(&self) -> bool {
@@ -256,17 +280,15 @@ impl<'i> QualifiedRuleParser<'i> for TakumiRuleParser {
     &mut self,
     input: &mut Parser<'i, 't>,
   ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
-    SelectorList::parse(
-      &TakumiSelectorParser,
-      input,
-      selectors::parser::ParseRelative::No,
-    )
+    let selectors = SelectorList::parse(&TakumiSelectorParser, input, ParseRelative::No)?;
+    ensure_supported_selector_list(&selectors).map_err(|err| input.new_custom_error(err))?;
+    Ok(selectors)
   }
 
   fn parse_block<'t>(
     &mut self,
     selectors: Self::Prelude,
-    _location: &cssparser::ParserState,
+    _location: &ParserState,
     input: &mut Parser<'i, 't>,
   ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
     let mut normal_declarations = StyleDeclarations::new();
@@ -293,7 +315,7 @@ impl<'i> QualifiedRuleParser<'i> for TakumiRuleParser {
   }
 }
 
-impl<'i> cssparser::AtRuleParser<'i> for TakumiRuleParser {
+impl<'i> AtRuleParser<'i> for TakumiRuleParser {
   type Prelude = ();
   type AtRule = CssRule;
   type Error = CssSelectorParseError<'i>;
@@ -344,7 +366,9 @@ impl StyleSheet {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::layout::style::{CssValue, Length, Style, apply_style_declarations};
+  use crate::layout::style::{
+    Color, ColorInput, CssValue, Length, Style, apply_style_declarations,
+  };
 
   fn style_from_declarations(declarations: &[StyleDeclaration]) -> Style {
     let mut style = Style::default();
@@ -454,5 +478,55 @@ mod tests {
 
     let style = style_from_declarations(&sheet.rules[0].normal_declarations);
     assert_eq!(style.padding_left, CssValue::Unset);
+  }
+
+  #[test]
+  fn test_parse_stylesheet_webkit_alias_property() {
+    let sheet = StyleSheet::parse(
+      r#"
+        .a { -webkit-text-fill-color: rgb(255, 0, 0); }
+      "#,
+    );
+
+    let style = style_from_declarations(&sheet.rules[0].normal_declarations);
+    assert_eq!(
+      style.webkit_text_fill_color,
+      CssValue::Value(Some(ColorInput::Value(Color([255, 0, 0, 255]))))
+    );
+  }
+
+  #[test]
+  fn test_parse_stylesheet_unknown_property_does_not_drop_supported_declarations() {
+    let sheet = StyleSheet::parse(
+      r#"
+        .a { --local-token: 1; width: 14px; unsupported-prop: 2; height: 6px; }
+      "#,
+    );
+
+    let style = style_from_declarations(&sheet.rules[0].normal_declarations);
+    assert_eq!(style.width, CssValue::Value(Length::Px(14.0)));
+    assert_eq!(style.height, CssValue::Value(Length::Px(6.0)));
+  }
+
+  #[test]
+  fn test_unsupported_attribute_selector_rule_is_rejected() {
+    let sheet = StyleSheet::parse(
+      r#"
+        [data-kind="hero"] { width: 10px; }
+      "#,
+    );
+
+    assert!(sheet.rules.is_empty());
+  }
+
+  #[test]
+  fn test_unsupported_pseudo_selector_rule_is_rejected() {
+    let sheet = StyleSheet::parse(
+      r#"
+        .a:hover { width: 10px; }
+      "#,
+    );
+
+    assert!(sheet.rules.is_empty());
   }
 }

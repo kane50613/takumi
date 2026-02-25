@@ -61,26 +61,43 @@ macro_rules! define_style {
       )*
     }
 
-    const PROPERTY_NAME_TABLE: &[(&str, PropertyId)] = &[
-      $(
-        (stringify!($property), PropertyId::$property),
-      )*
-    ];
-
     impl PropertyId {
+      fn from_alias(name: &str) -> Option<Self> {
+        match name {
+          "-webkit-text-stroke" => Some(Self::webkit_text_stroke),
+          "-webkit-text-stroke-width" => Some(Self::webkit_text_stroke_width),
+          "-webkit-text-stroke-color" => Some(Self::webkit_text_stroke_color),
+          "-webkit-text-fill-color" => Some(Self::webkit_text_fill_color),
+          _ => None,
+        }
+      }
+
       fn from_normalized_name(name: &str) -> Self {
-        PROPERTY_NAME_TABLE
-          .iter()
-          .find_map(|(property_name, property_id)| {
-            (*property_name == name).then_some(*property_id)
-          })
-          .unwrap_or(Self::Ignored)
+        match name {
+          $(
+            stringify!($property) => PropertyId::$property,
+          )*
+          _ => Self::Ignored,
+        }
       }
 
       fn from_kebab_case(name: &str) -> Self {
-        let normalized = name.replace('-', "_");
-        let normalized = normalized.trim_start_matches('_');
-        Self::from_normalized_name(normalized)
+        if name.starts_with("--") {
+          return Self::Ignored;
+        }
+
+        if let Some(property) = Self::from_alias(name) {
+          return property;
+        }
+
+        let normalized = name
+          .chars()
+          .map(|ch| match ch {
+            '-' => '_',
+            _ => ch.to_ascii_lowercase(),
+          })
+          .collect::<String>();
+        Self::from_normalized_name(&normalized)
       }
 
       #[allow(dead_code)]
@@ -1066,6 +1083,30 @@ mod tests {
     assert_eq!(
       PropertyId::from_kebab_case("-webkit-mask-image"),
       PropertyId::from_camel_case("WebkitMaskImage")
+    );
+  }
+
+  #[test]
+  fn custom_properties_do_not_map_to_supported_properties() {
+    assert_eq!(
+      PropertyId::from_kebab_case("--padding-left"),
+      PropertyId::Ignored
+    );
+    assert_eq!(
+      PropertyId::from_kebab_case("--webkit-mask-image"),
+      PropertyId::Ignored
+    );
+  }
+
+  #[test]
+  fn property_id_accepts_webkit_aliases() {
+    assert_eq!(
+      PropertyId::from_kebab_case("-webkit-text-fill-color"),
+      PropertyId::webkit_text_fill_color
+    );
+    assert_eq!(
+      PropertyId::from_kebab_case("-webkit-text-stroke-color"),
+      PropertyId::webkit_text_stroke_color
     );
   }
 

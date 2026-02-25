@@ -31,7 +31,8 @@ use crate::{
 #[cfg(not(feature = "css_stylesheet_parsing"))]
 #[derive(Debug, Default, Clone)]
 struct MatchedAuthorStyles {
-  stylesheet: NodeStyle,
+  stylesheet_normal: NodeStyle,
+  stylesheet_important: NodeStyle,
 }
 
 #[cfg(not(feature = "css_stylesheet_parsing"))]
@@ -120,7 +121,7 @@ fn build_inherited_style(
     style.merge_from(preset);
   }
 
-  style.merge_from(matched_author.stylesheet.clone());
+  style.merge_from(matched_author.stylesheet_normal.clone());
 
   if let Some(author_tw) = node_layers.author_tw {
     author_tw.apply_to_style(&mut style, viewport);
@@ -129,6 +130,8 @@ fn build_inherited_style(
   if let Some(inline) = node_layers.inline {
     style.merge_from(inline);
   }
+
+  style.merge_from(matched_author.stylesheet_important.clone());
 
   style.inherit(parent_style)
 }
@@ -829,5 +832,46 @@ fn flush_inline_group<'g, N: Node<N>>(
       children: Some(take(inline_group).into_boxed_slice()),
       node: None,
     });
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{MatchedAuthorStyles, build_inherited_style};
+  use crate::layout::{
+    Viewport,
+    node::NodeStyleLayers,
+    style::{CssValue, Length, ResolvedStyle, Style},
+  };
+
+  #[test]
+  fn stylesheet_important_overrides_inline_normal() {
+    let parent = ResolvedStyle::default();
+    let layers = NodeStyleLayers {
+      inline: Some(Style {
+        width: CssValue::Value(Length::Px(20.0)),
+        ..Default::default()
+      }),
+      ..Default::default()
+    };
+    let matched = MatchedAuthorStyles {
+      stylesheet_normal: Style {
+        width: CssValue::Value(Length::Px(10.0)),
+        ..Default::default()
+      },
+      stylesheet_important: Style {
+        width: CssValue::Value(Length::Px(30.0)),
+        ..Default::default()
+      },
+    };
+
+    let resolved = build_inherited_style(
+      &parent,
+      layers,
+      &matched,
+      Viewport::new(Some(1200), Some(630)),
+    );
+
+    assert_eq!(resolved.width, Length::Px(30.0));
   }
 }

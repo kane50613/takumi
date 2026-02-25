@@ -6,6 +6,7 @@ use selectors::matching::{
 };
 use selectors::{Element, OpaqueElement, attr::CaseSensitivity, bloom::BloomStorageU8};
 
+use crate::layout::style::apply_style_declarations;
 use crate::layout::{
   node::Node,
   style::{
@@ -283,7 +284,8 @@ impl<'a, N: Node<N>> Element for ArenaElement<'a, N> {
 
 #[derive(Debug, Default, Clone)]
 pub(crate) struct MatchedAuthorStyles {
-  pub(crate) stylesheet: Style,
+  pub(crate) stylesheet_normal: Style,
+  pub(crate) stylesheet_important: Style,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -346,8 +348,12 @@ pub(crate) fn match_stylesheets_for_tree<N: Node<N>>(
   for (matched, rules) in per_node.iter_mut().zip(matched_rules.into_iter()) {
     let mut rules = rules;
     rules.sort_by_key(|(important, specificity, order, _)| (*important, *specificity, *order));
-    for (_, _, _, declarations) in rules {
-      crate::layout::style::apply_style_declarations(declarations, &mut matched.stylesheet);
+    for (important, _, _, declarations) in rules {
+      if important {
+        apply_style_declarations(declarations, &mut matched.stylesheet_important);
+      } else {
+        apply_style_declarations(declarations, &mut matched.stylesheet_normal);
+      }
     }
   }
 
