@@ -139,7 +139,7 @@ fn test_style_backdrop_filter_frosted_glass() {
             .justify_content(JustifyContent::Center)
             .backdrop_filter(Filters::from_str("blur(16px)").unwrap())
             .background_color(ColorInput::Value(Color([255, 255, 255, 80])))
-            .border_radius(BorderRadius::from_str("24px").unwrap())
+            .border_radius(Box::new(BorderRadius::from_str("24px").unwrap()))
             .padding(Sides([Px(48.0); 4]))
             .gap(SpacePair::from_pair(Px(16.0), Px(16.0)))
             .build()

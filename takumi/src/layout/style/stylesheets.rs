@@ -197,7 +197,7 @@ macro_rules! define_style {
                 CssValue::Value(value) => StyleDeclarationValue::$property(value),
                 CssValue::Initial => StyleDeclarationValue::$property(<$type as Default>::default()),
                 CssValue::Inherit => StyleDeclarationValue::$property(<$type as Default>::default()),
-                CssValue::Unset => unreachable!("filtered above"),
+                CssValue::Unset => unreachable!(),
               },
             });
           }

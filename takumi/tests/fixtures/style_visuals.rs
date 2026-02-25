@@ -41,7 +41,9 @@ fn test_style_border_radius() {
         .width(Percentage(100.0))
         .height(Percentage(100.0))
         .background_color(ColorInput::Value(Color([255, 0, 0, 255])))
-        .border_radius(BorderRadius(Sides([SpacePair::from_single(Px(20.0)); 4])))
+        .border_radius(Box::new(BorderRadius(Sides(
+          [SpacePair::from_single(Px(20.0)); 4],
+        ))))
         .build()
         .unwrap(),
     ),
@@ -131,7 +133,9 @@ fn test_style_border_width_with_radius() {
           StyleBuilder::default()
             .width(Rem(16.0))
             .height(Rem(8.0))
-            .border_radius(BorderRadius(Sides([SpacePair::from_single(Px(10.0)); 4])))
+            .border_radius(Box::new(BorderRadius(Sides(
+              [SpacePair::from_single(Px(10.0)); 4],
+            ))))
             .border_color(Some(ColorInput::Value(Color([255, 0, 0, 255]))))
             .border_width(Some(Sides([Px(4.0); 4])))
             .border_style(Some(BorderStyle::Solid))
@@ -228,7 +232,9 @@ fn test_style_box_shadow_inset() {
             .width(Px(120.0))
             .height(Px(80.0))
             .background_color(ColorInput::Value(Color::white())) // White child for inset visibility
-            .border_radius(BorderRadius(Sides([SpacePair::from_single(Px(16.0)); 4])))
+            .border_radius(Box::new(BorderRadius(Sides(
+              [SpacePair::from_single(Px(16.0)); 4],
+            ))))
             .box_shadow(Some(
               [BoxShadow {
                 color: ColorInput::Value(Color([0, 0, 0, 153])),
@@ -309,9 +315,9 @@ fn test_style_border_radius_circle() {
         .width(Px(300.0))
         .height(Px(300.0))
         .background_color(ColorInput::Value(Color([255, 0, 0, 255])))
-        .border_radius(BorderRadius(Sides(
+        .border_radius(Box::new(BorderRadius(Sides(
           [SpacePair::from_single(Percentage(50.0)); 4],
-        )))
+        ))))
         .build()
         .unwrap(),
     ),
@@ -353,7 +359,9 @@ fn test_style_border_radius_width_offset() {
             .background_color(ColorInput::Value(Color::white()))
             .border_width(Some(Sides([Px(1.0); 4])))
             .border_style(Some(BorderStyle::Solid))
-            .border_radius(BorderRadius(Sides([SpacePair::from_single(Px(24.0)); 4])))
+            .border_radius(Box::new(BorderRadius(Sides(
+              [SpacePair::from_single(Px(24.0)); 4],
+            ))))
             .border_color(Some(ColorInput::Value(Color([0, 0, 0, 255]))))
             .build()
             .unwrap(),
@@ -418,9 +426,9 @@ fn test_style_border_radius_circle_avatar() {
           StyleBuilder::default()
             .width(Rem(12.0))
             .height(Rem(12.0))
-            .border_radius(BorderRadius(Sides(
+            .border_radius(Box::new(BorderRadius(Sides(
               [SpacePair::from_single(Percentage(50.0)); 4],
-            )))
+            ))))
             .border_color(Some(ColorInput::Value(Color([128, 128, 128, 128])))) // gray
             .border_width(Some(Sides([Px(4.0); 4])))
             .border_style(Some(BorderStyle::Solid))
@@ -438,9 +446,9 @@ fn test_style_border_radius_circle_avatar() {
               StyleBuilder::default()
                 .width(Percentage(100.0))
                 .height(Percentage(100.0))
-                .border_radius(BorderRadius(Sides(
+                .border_radius(Box::new(BorderRadius(Sides(
                   [SpacePair::from_single(Percentage(50.0)); 4],
-                )))
+                ))))
                 .build()
                 .unwrap(),
             ),

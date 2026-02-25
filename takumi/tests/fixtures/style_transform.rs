@@ -179,7 +179,9 @@ fn create_rotated_container(angle: f32, transform_origin: BackgroundPosition) ->
         .background_color(ColorInput::Value(Color([255, 0, 0, 30])))
         .border_width(Some(Sides([Px(1.0); 4])))
         .border_style(Some(BorderStyle::Solid))
-        .border_radius(BorderRadius(Sides([SpacePair::from_single(Px(12.0)); 4])))
+        .border_radius(Box::new(BorderRadius(Sides(
+          [SpacePair::from_single(Px(12.0)); 4],
+        ))))
         .build()
         .unwrap(),
     ),
