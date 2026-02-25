@@ -2,13 +2,14 @@ use std::{borrow::Cow, marker::PhantomData};
 
 use derive_builder::Builder;
 use parley::{FontSettings, FontStack, TextStyle};
+use serde::de::IgnoredAny;
 use smallvec::SmallVec;
 use taffy::{Point, Rect, Size, prelude::FromLength};
 
 use crate::{
   layout::{
     inline::InlineBrush,
-    style::{CssValue, properties::*},
+    style::{CssValue, RawCssValueSeed, parse_css_value_from_raw, properties::*},
   },
   rendering::{RenderContext, SizedShadow, Sizing},
 };
@@ -224,14 +225,16 @@ macro_rules! define_style {
           {
             let mut style = Style::default();
 
-            while let Some(key) = map.next_key::<std::borrow::Cow<'de, str>>()? {
+            while let Some(key) = map.next_key::<Cow<'de, str>>()? {
               match PropertyId::from_camel_case(&key) {
                 PropertyId::Ignored => {
-                  let _ = map.next_value::<serde::de::IgnoredAny>()?;
-                }
+                  map.next_value::<IgnoredAny>()?;
+                  continue;
+                },
                 $(
                   PropertyId::$property => {
-                    style.$property = map.next_value()?;
+                    let raw_value = map.next_value_seed(RawCssValueSeed)?;
+                    style.$property = parse_css_value_from_raw(raw_value)?;
                   }
                 )*
               }
