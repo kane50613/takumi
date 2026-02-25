@@ -1,5 +1,7 @@
+#[cfg(feature = "css_stylesheet_parsing")]
 pub(crate) mod matching;
 mod properties;
+#[cfg(feature = "css_stylesheet_parsing")]
 pub(crate) mod selector;
 mod stylesheets;
 /// Tailwind CSS Parser.

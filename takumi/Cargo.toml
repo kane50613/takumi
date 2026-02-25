@@ -23,8 +23,6 @@ thiserror = "2.0"
 wide = "1.1"
 unicode-linebreak = "0.1"
 libm = "0.2"
-selectors = "0.35"
-precomputed-hash = "0.1"
 
 [dependencies.bytemuck]
 version = "1.25"
@@ -60,6 +58,14 @@ features = ["libm"]
 version = "0.2"
 default-features = false
 features = ["libm", "scale"]
+
+[dependencies.selectors]
+version = "0.35"
+optional = true
+
+[dependencies.precomputed-hash]
+version = "0.1"
+optional = true
 
 [dependencies.rayon]
 version = "1.10"
@@ -97,7 +103,15 @@ default-features = false
 optional = true
 
 [features]
-default = ["woff2", "woff", "svg", "rayon", "detailed_css_error"]
+default = [
+  "woff2",
+  "woff",
+  "svg",
+  "rayon",
+  "detailed_css_error",
+  "css_stylesheet_parsing",
+]
+css_stylesheet_parsing = ["dep:selectors", "dep:precomputed-hash"]
 svg = ["dep:resvg"]
 woff2 = ["dep:wuff", "wuff/brotli"]
 woff = ["dep:wuff", "wuff/z"]

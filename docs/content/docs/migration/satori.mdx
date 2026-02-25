@@ -44,21 +44,25 @@ const fonts = [
   }
 ];
 
-const svg = await satori(<OgImage title="Satori" />, { // [!code --]
-  fonts, // [!code --]
-}); // [!code --]
-const buffer = new Resvg(svg).render().asPng(); // [!code --]
+// [!code --:4]
+const svg = await satori(<OgImage title="Satori" />, {
+  fonts,
+});
+const buffer = new Resvg(svg).render().asPng();
 
-const renderer = new Renderer({ // [!code ++]
-  fonts, // [!code ++]
-}); // [!code ++]
+// [!code ++:3]
+const renderer = new Renderer({
+  fonts,
+});
 
-const { node } = await fromJsx(<OgImage title="Takumi" />); // [!code ++]
-const png = await renderer.render(node, { // [!code ++]
-  width: 1200, // [!code ++]
-  height: 630, // [!code ++]
-  format: "png", // "webp" is recommended as well. // [!code ++]
-}); // [!code ++]
+// [!code ++:7]
+const { node, stylesheets } = await fromJsx(<OgImage title="Takumi" />);
+const png = await renderer.render(node, {
+  width: 1200,
+  height: 630,
+  format: "png", // "webp" is recommended as well.
+  stylesheets,
+});
 
 function OgImage({ title }: { title: string }) {
   return (
@@ -71,4 +75,4 @@ function OgImage({ title }: { title: string }) {
 
 Now you have Takumi setup!
 
-If theres any issues or unexpected behavior, please open an issue on [our GitHub repository](https://github.com/kane50613/takumi/issues).
+If there's any issues or unexpected behavior, please open an issue on [our GitHub repository](https://github.com/kane50613/takumi/issues).

@@ -8,6 +8,10 @@ use taffy::{
   compute_hidden_layout, compute_leaf_layout, compute_root_layout, round_layout,
 };
 
+#[cfg(feature = "css_stylesheet_parsing")]
+use crate::layout::style::matching::{
+  MatchedAuthorStyles, MatchedStyles, match_stylesheets_for_tree,
+};
 use crate::{
   Result,
   layout::{
@@ -16,16 +20,39 @@ use crate::{
       create_inline_layout, measure_inline_layout,
     },
     node::{Node, NodeStyleLayers},
-    style::{
-      Affine, Display, InheritedStyle, Style as NodeStyle,
-      matching::{MatchedAuthorStyles, MatchedStyles, match_stylesheets_for_tree},
-    },
+    style::{Affine, Display, InheritedStyle, Style as NodeStyle},
   },
   rendering::{
     Canvas, MaxHeight, RenderContext, Sizing,
     inline_drawing::{draw_inline_box, draw_inline_layout},
   },
 };
+
+#[cfg(not(feature = "css_stylesheet_parsing"))]
+#[derive(Debug, Default, Clone)]
+struct MatchedAuthorStyles {
+  stylesheet: NodeStyle,
+}
+
+#[cfg(not(feature = "css_stylesheet_parsing"))]
+#[derive(Debug, Default, Clone)]
+struct MatchedStyles {
+  per_node: Vec<MatchedAuthorStyles>,
+}
+
+#[cfg(not(feature = "css_stylesheet_parsing"))]
+fn match_stylesheets_for_tree<N: Node<N>>(root: &N) -> MatchedStyles {
+  fn count_nodes<N: Node<N>>(node: &N) -> usize {
+    1 + node
+      .children_ref()
+      .map(|children| children.iter().map(count_nodes).sum::<usize>())
+      .unwrap_or_default()
+  }
+
+  MatchedStyles {
+    per_node: vec![MatchedAuthorStyles::default(); count_nodes(root)],
+  }
+}
 
 pub(crate) struct LayoutResults {
   nodes: Vec<LayoutResultNode>,
@@ -524,7 +551,10 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
   }
 
   pub fn from_node(parent_context: &RenderContext<'g>, node: N) -> Self {
+    #[cfg(feature = "css_stylesheet_parsing")]
     let matched_styles = match_stylesheets_for_tree(&node, &parent_context.stylesheets);
+    #[cfg(not(feature = "css_stylesheet_parsing"))]
+    let matched_styles = match_stylesheets_for_tree(&node);
     let mut preorder_cursor = 0;
     let mut tree =
       Self::from_node_impl(parent_context, node, &matched_styles, &mut preorder_cursor);
@@ -570,6 +600,7 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
       draw_debug_border: parent_context.draw_debug_border,
       fetched_resources: parent_context.fetched_resources.clone(),
       sizing,
+      #[cfg(feature = "css_stylesheet_parsing")]
       stylesheets: parent_context.stylesheets.clone(),
     };
 
@@ -786,6 +817,7 @@ fn flush_inline_group<'g, N: Node<N>>(
         current_color: parent_render_context.current_color,
         draw_debug_border: parent_render_context.draw_debug_border,
         fetched_resources: Default::default(),
+        #[cfg(feature = "css_stylesheet_parsing")]
         stylesheets: parent_render_context.stylesheets.clone(),
       },
       children: Some(take(inline_group).into_boxed_slice()),

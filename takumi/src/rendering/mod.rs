@@ -27,11 +27,13 @@ pub use render::*;
 pub(crate) use text_drawing::*;
 pub use write::*;
 
+#[cfg(feature = "css_stylesheet_parsing")]
+use crate::layout::style::selector::StyleSheet;
 use crate::{
   GlobalContext,
   layout::{
     Viewport,
-    style::{Affine, CalcArena, Color, InheritedStyle, selector::StyleSheet},
+    style::{Affine, CalcArena, Color, InheritedStyle},
   },
   resources::image::ImageSource,
 };
@@ -65,10 +67,12 @@ pub struct RenderContext<'g> {
   /// The resources fetched externally.
   pub(crate) fetched_resources: HashMap<Arc<str>, Arc<ImageSource>>,
   /// The stylesheets to apply before layout/rendering.
+  #[cfg(feature = "css_stylesheet_parsing")]
   pub(crate) stylesheets: Rc<[StyleSheet]>,
 }
 
 impl<'g> RenderContext<'g> {
+  #[cfg(feature = "css_stylesheet_parsing")]
   pub(crate) fn new<I: IntoIterator<Item = StyleSheet>>(
     global: &'g GlobalContext,
     viewport: Viewport,
@@ -91,12 +95,39 @@ impl<'g> RenderContext<'g> {
     }
   }
 
+  #[cfg(not(feature = "css_stylesheet_parsing"))]
+  pub(crate) fn new(
+    global: &'g GlobalContext,
+    viewport: Viewport,
+    fetched_resources: HashMap<Arc<str>, Arc<ImageSource>>,
+  ) -> Self {
+    Self {
+      global,
+      sizing: Sizing {
+        viewport,
+        font_size: viewport.font_size,
+        calc_arena: Rc::new(CalcArena::default()),
+      },
+      transform: Affine::IDENTITY,
+      current_color: Color::black(),
+      style: InheritedStyle::default(),
+      draw_debug_border: false,
+      fetched_resources,
+    }
+  }
+
   /// Internal, only used in tests.
   #[cfg(test)]
   pub(crate) fn new_test(global: &'g GlobalContext, viewport: Viewport) -> Self {
-    use std::iter::empty;
-
-    Self::new(global, viewport, Default::default(), empty())
+    #[cfg(feature = "css_stylesheet_parsing")]
+    {
+      use std::iter::empty;
+      Self::new(global, viewport, Default::default(), empty())
+    }
+    #[cfg(not(feature = "css_stylesheet_parsing"))]
+    {
+      Self::new(global, viewport, Default::default())
+    }
   }
 }
 

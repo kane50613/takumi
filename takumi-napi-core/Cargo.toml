@@ -18,7 +18,14 @@ features = ["xxh3", "std"]
 
 [dependencies.takumi]
 path = "../takumi"
-features = ["woff2", "woff", "svg", "rayon", "detailed_css_error"]
+features = [
+  "woff2",
+  "woff",
+  "svg",
+  "rayon",
+  "detailed_css_error",
+  "css_stylesheet_parsing",
+]
 default-features = false
 
 [dependencies.napi]
