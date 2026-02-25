@@ -15,6 +15,7 @@ use crate::layout::style::matching::{
 use crate::{
   Result,
   layout::{
+    Viewport,
     inline::{
       InlineLayoutStage, ProcessedInlineSpan, collect_inline_items, create_inline_constraint,
       create_inline_layout, measure_inline_layout,
@@ -113,7 +114,7 @@ fn build_inherited_style(
   parent_style: &ResolvedStyle,
   node_layers: NodeStyleLayers,
   matched_author: &MatchedAuthorStyles,
-  viewport: crate::layout::Viewport,
+  viewport: Viewport,
 ) -> ResolvedStyle {
   let mut style = NodeStyle::default();
 
