@@ -19,7 +19,7 @@ test("report deserialize error for justifyContent with wrong type", () => {
       },
     ),
   ).toThrowError(
-    "invalid type: integer `123`, expected a value of 'normal', 'start', 'end', 'flex-start', 'flex-end', 'center', 'stretch', 'space-between', 'space-around' or 'space-evenly'; also accepts 'initial' or 'inherit'.",
+    "invalid type: integer `123`, expected a value of 'normal', 'start', 'end', 'flex-start', 'flex-end', 'center', 'stretch', 'space-between', 'space-around' or 'space-evenly'; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -39,7 +39,7 @@ test("report deserialize error for justifyContent with invalid string value", ()
       },
     ),
   ).toThrowError(
-    "invalid value: string \"star\", expected a value of 'normal', 'start', 'end', 'flex-start', 'flex-end', 'center', 'stretch', 'space-between', 'space-around' or 'space-evenly'; also accepts 'initial' or 'inherit'.",
+    "invalid value: string \"star\", expected a value of 'normal', 'start', 'end', 'flex-start', 'flex-end', 'center', 'stretch', 'space-between', 'space-around' or 'space-evenly'; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -59,7 +59,7 @@ test("report deserialize error for color property with invalid type", () => {
       },
     ),
   ).toThrowError(
-    "invalid type: integer `123`, expected a value of 'currentColor' or <color>; also accepts 'initial' or 'inherit'.",
+    "invalid type: integer `123`, expected a value of 'currentColor' or <color>; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -79,7 +79,7 @@ test("report deserialize error for color property with invalid string value", ()
       },
     ),
   ).toThrowError(
-    "invalid value: string \"notacolor\", expected a value of 'currentColor' or <color>; also accepts 'initial' or 'inherit'.",
+    "invalid value: string \"notacolor\", expected a value of 'currentColor' or <color>; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -99,7 +99,7 @@ test("report deserialize error for width property with invalid type", () => {
       },
     ),
   ).toThrowError(
-    "invalid type: boolean `true`, expected a value of <length>; also accepts 'initial' or 'inherit'.",
+    "invalid type: boolean `true`, expected a value of <length>; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -119,7 +119,7 @@ test("report deserialize error for width property with invalid string value", ()
       },
     ),
   ).toThrowError(
-    "invalid value: string \"invalid\", expected a value of <length>; also accepts 'initial' or 'inherit'.",
+    "invalid value: string \"invalid\", expected a value of <length>; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -139,7 +139,7 @@ test("report deserialize error for alignItems property with invalid type", () =>
       },
     ),
   ).toThrowError(
-    "invalid type: sequence, expected a value of 'normal', 'start', 'end', 'flex-start', 'flex-end', 'center', 'baseline' or 'stretch'; also accepts 'initial' or 'inherit'.",
+    "invalid type: sequence, expected a value of 'normal', 'start', 'end', 'flex-start', 'flex-end', 'center', 'baseline' or 'stretch'; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -159,7 +159,7 @@ test("report deserialize error for alignItems property with invalid string value
       },
     ),
   ).toThrowError(
-    "invalid value: string \"invalid\", expected a value of 'normal', 'start', 'end', 'flex-start', 'flex-end', 'center', 'baseline' or 'stretch'; also accepts 'initial' or 'inherit'.",
+    "invalid value: string \"invalid\", expected a value of 'normal', 'start', 'end', 'flex-start', 'flex-end', 'center', 'baseline' or 'stretch'; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -179,7 +179,7 @@ test("report deserialize error for borderRadius property with invalid type", () 
       },
     ),
   ).toThrowError(
-    "invalid type: boolean `true`, expected 1 to 4 length values for width, optionally followed by '/' and 1 to 4 length values for height; also accepts 'initial' or 'inherit'.",
+    "invalid type: boolean `true`, expected 1 to 4 length values for width, optionally followed by '/' and 1 to 4 length values for height; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -199,7 +199,7 @@ test("report deserialize error for borderRadius property with invalid string val
       },
     ),
   ).toThrowError(
-    "invalid value: string \"invalid\", expected 1 to 4 length values for width, optionally followed by '/' and 1 to 4 length values for height; also accepts 'initial' or 'inherit'.",
+    "invalid value: string \"invalid\", expected 1 to 4 length values for width, optionally followed by '/' and 1 to 4 length values for height; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -219,7 +219,7 @@ test("report deserialize error for borderRadius property with invalid slash synt
       },
     ),
   ).toThrowError(
-    "invalid value: string \"10px / invalid\", expected 1 to 4 length values for width, optionally followed by '/' and 1 to 4 length values for height; also accepts 'initial' or 'inherit'.",
+    "invalid value: string \"10px / invalid\", expected 1 to 4 length values for width, optionally followed by '/' and 1 to 4 length values for height; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -239,7 +239,7 @@ test("report deserialize error for padding (Sides) with invalid type", () => {
       },
     ),
   ).toThrowError(
-    "invalid type: map, expected 1 ~ 4 values of <length>; also accepts 'initial' or 'inherit'.",
+    "invalid type: map, expected 1 ~ 4 values of <length>; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -259,7 +259,7 @@ test("report deserialize error for padding (Sides) with invalid string value", (
       },
     ),
   ).toThrowError(
-    "invalid value: string \"invalid\", expected 1 ~ 4 values of <length>; also accepts 'initial' or 'inherit'.",
+    "invalid value: string \"invalid\", expected 1 ~ 4 values of <length>; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -279,7 +279,7 @@ test("report deserialize error for gap (SpacePair) with invalid type", () => {
       },
     ),
   ).toThrowError(
-    "invalid type: boolean `true`, expected 1 ~ 2 values of <length>; also accepts 'initial' or 'inherit'.",
+    "invalid type: boolean `true`, expected 1 ~ 2 values of <length>; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -299,7 +299,7 @@ test("report deserialize error for gap (SpacePair) with invalid string value", (
       },
     ),
   ).toThrowError(
-    "invalid value: string \"invalid\", expected 1 ~ 2 values of <length>; also accepts 'initial' or 'inherit'.",
+    "invalid value: string \"invalid\", expected 1 ~ 2 values of <length>; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -320,7 +320,7 @@ test("report deserialize error for textDecorationLine with invalid type", () => 
       },
     ),
   ).toThrowError(
-    "invalid type: integer `123`, expected a value of 'underline', 'line-through' or 'overline' or 'none'; also accepts 'initial' or 'inherit'.",
+    "invalid type: integer `123`, expected a value of 'underline', 'line-through' or 'overline' or 'none'; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -340,6 +340,6 @@ test("report deserialize error for textDecorationLine with invalid string value"
       },
     ),
   ).toThrowError(
-    "invalid value: string \"invalid\", expected a value of 'underline', 'line-through' or 'overline' or 'none'; also accepts 'initial' or 'inherit'.",
+    "invalid value: string \"invalid\", expected a value of 'underline', 'line-through' or 'overline' or 'none'; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
