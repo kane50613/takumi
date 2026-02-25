@@ -177,7 +177,10 @@ macro_rules! define_style {
               style.$property = value.clone().into();
             }
           )*
+          #[cfg(not(debug_assertions))]
           _ => {}
+          #[cfg(debug_assertions)]
+          _ => unreachable!("StyleDeclaration property/value variant mismatch"),
         }
       }
     }

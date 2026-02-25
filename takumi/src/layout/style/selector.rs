@@ -153,6 +153,9 @@ fn selector_contains_unsupported_features(selector: &Selector<TakumiSelectorImpl
         .slice()
         .iter()
         .any(selector_contains_unsupported_features),
+      Component::Has(relatives) => relatives
+        .iter()
+        .any(|rel| selector_contains_unsupported_features(&rel.selector)),
       Component::Slotted(inner) => selector_contains_unsupported_features(inner),
       Component::Host(Some(inner)) => selector_contains_unsupported_features(inner),
       _ => false,

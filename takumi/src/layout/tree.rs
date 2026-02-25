@@ -9,9 +9,7 @@ use taffy::{
 };
 
 #[cfg(feature = "css_stylesheet_parsing")]
-use crate::layout::style::matching::{
-  MatchedAuthorStyles, MatchedStyles, match_stylesheets_for_tree,
-};
+use crate::layout::style::matching::{MatchedAuthorStyles, MatchedStyles, match_stylesheets};
 use crate::{
   Result,
   layout::{
@@ -543,7 +541,7 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
 
   pub fn from_node(parent_context: &RenderContext<'g>, node: N) -> Self {
     #[cfg(feature = "css_stylesheet_parsing")]
-    let matched_styles = match_stylesheets_for_tree(&node, &parent_context.stylesheets);
+    let matched_styles = match_stylesheets(&node, &parent_context.stylesheets);
     #[cfg(not(feature = "css_stylesheet_parsing"))]
     let matched_styles = MatchedStyles::default();
     let mut preorder_cursor = 0;

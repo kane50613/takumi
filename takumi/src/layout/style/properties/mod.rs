@@ -170,6 +170,7 @@ pub trait FromCss<'i> {
 
 impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
   fn valid_tokens() -> &'static [CssToken] {
+    // 'none' is intentionally omitted and applied in `expect_message`
     T::valid_tokens()
   }
 

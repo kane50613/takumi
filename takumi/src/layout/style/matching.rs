@@ -1,19 +1,179 @@
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
 use selectors::matching::{
   MatchingContext, MatchingForInvalidation, MatchingMode, NeedsSelectorFlags, QuirksMode,
-  SelectorCaches, matches_selector,
+  SelectorCaches, early_reject_by_local_name, matches_selector,
 };
-use selectors::{Element, OpaqueElement, attr::CaseSensitivity, bloom::BloomStorageU8};
+use selectors::{
+  Element, OpaqueElement,
+  attr::CaseSensitivity,
+  bloom::BloomFilter,
+  parser::{AncestorHashes, Component, Selector},
+};
 
 use crate::layout::style::apply_style_declarations;
 use crate::layout::{
   node::Node,
   style::{
     Style,
-    selector::{StyleSheet, TakumiIdent, TakumiSelectorImpl},
+    selector::{CssRule, StyleSheet, TakumiIdent, TakumiSelectorImpl},
   },
 };
+
+#[derive(Default)]
+struct SelectorSubjectHint {
+  tag_name: Option<String>,
+  id: Option<String>,
+  classes: Vec<String>,
+  has_positive_key: bool,
+}
+
+#[derive(Default)]
+struct RuleSubjectHint {
+  tags: Vec<String>,
+  ids: Vec<String>,
+  classes: Vec<String>,
+  matches_any: bool,
+}
+
+#[derive(Default)]
+struct RuleCandidateIndex {
+  any_rules: Vec<usize>,
+  by_tag: HashMap<String, Vec<usize>>,
+  by_id: HashMap<String, Vec<usize>>,
+  by_class: HashMap<String, Vec<usize>>,
+}
+
+fn selector_subject_hint(selector: &Selector<TakumiSelectorImpl>) -> SelectorSubjectHint {
+  let mut hint = SelectorSubjectHint::default();
+
+  for component in selector.iter_raw_match_order() {
+    match component {
+      Component::Combinator(_) => break,
+      Component::LocalName(local_name) => {
+        hint.tag_name = Some(local_name.lower_name.0.clone());
+        hint.has_positive_key = true;
+      }
+      Component::ID(id) => {
+        hint.id = Some(id.0.clone());
+        hint.has_positive_key = true;
+      }
+      Component::Class(class_name) => {
+        hint.classes.push(class_name.0.clone());
+        hint.has_positive_key = true;
+      }
+      _ => {}
+    }
+  }
+
+  hint
+}
+
+fn push_unique(vec: &mut Vec<String>, value: &str) {
+  if !vec.iter().any(|existing| existing == value) {
+    vec.push(value.to_owned());
+  }
+}
+
+fn build_rule_subject_hint(rule: &CssRule) -> RuleSubjectHint {
+  let mut hint = RuleSubjectHint::default();
+
+  for selector in rule.selectors.slice() {
+    let selector_hint = selector_subject_hint(selector);
+    if !selector_hint.has_positive_key {
+      hint.matches_any = true;
+      continue;
+    }
+
+    if let Some(tag_name) = selector_hint.tag_name.as_deref() {
+      push_unique(&mut hint.tags, tag_name);
+    }
+    if let Some(id) = selector_hint.id.as_deref() {
+      push_unique(&mut hint.ids, id);
+    }
+    for class_name in &selector_hint.classes {
+      push_unique(&mut hint.classes, class_name);
+    }
+  }
+
+  hint
+}
+
+fn push_rule_index_entry(map: &mut HashMap<String, Vec<usize>>, key: &str, rule_index: usize) {
+  map.entry(key.to_owned()).or_default().push(rule_index);
+}
+
+fn build_rule_candidate_index(rule_subject_hints: &[RuleSubjectHint]) -> RuleCandidateIndex {
+  let mut index = RuleCandidateIndex::default();
+
+  for (rule_index, hint) in rule_subject_hints.iter().enumerate() {
+    if hint.matches_any || (hint.tags.is_empty() && hint.ids.is_empty() && hint.classes.is_empty())
+    {
+      index.any_rules.push(rule_index);
+      continue;
+    }
+
+    for tag in &hint.tags {
+      push_rule_index_entry(&mut index.by_tag, tag, rule_index);
+    }
+    for id in &hint.ids {
+      push_rule_index_entry(&mut index.by_id, id, rule_index);
+    }
+    for class_name in &hint.classes {
+      push_rule_index_entry(&mut index.by_class, class_name, rule_index);
+    }
+  }
+
+  index
+}
+
+fn collect_candidate_rule_indices_for_node<N: Node<N>>(
+  node: &N,
+  index: &RuleCandidateIndex,
+  candidate_rule_indices: &mut Vec<usize>,
+  seen_rule_marks: &mut [u32],
+  seen_generation: u32,
+) {
+  let mut push_if_new = |rule_index: usize| {
+    let mark = &mut seen_rule_marks[rule_index];
+    if *mark == seen_generation {
+      return;
+    }
+    *mark = seen_generation;
+    candidate_rule_indices.push(rule_index);
+  };
+
+  for &rule_index in &index.any_rules {
+    push_if_new(rule_index);
+  }
+
+  if let Some(tag) = node.tag_name() {
+    let tag = tag.to_ascii_lowercase();
+    if let Some(rule_indices) = index.by_tag.get(&tag) {
+      for &rule_index in rule_indices {
+        push_if_new(rule_index);
+      }
+    }
+  }
+
+  if let Some(id) = node.id()
+    && let Some(rule_indices) = index.by_id.get(id)
+  {
+    for &rule_index in rule_indices {
+      push_if_new(rule_index);
+    }
+  }
+
+  if let Some(classes) = node.class_name() {
+    for class_name in classes.split_whitespace() {
+      if let Some(rule_indices) = index.by_class.get(class_name) {
+        for &rule_index in rule_indices {
+          push_if_new(rule_index);
+        }
+      }
+    }
+  }
+}
 
 /// A transient arena for CSS matching.
 /// It flattens the node tree into a vector of nodes and stores indices to parents, siblings, and children.
@@ -129,6 +289,38 @@ impl<'a, N: Node<N>> StyleArena<'a, N> {
 
     index
   }
+}
+
+fn hash_ascii_case_insensitive(value: &str) -> u32 {
+  let mut hash = 0x811c_9dc5u32;
+  for byte in value.as_bytes() {
+    hash ^= u32::from(byte.to_ascii_lowercase());
+    hash = hash.wrapping_mul(0x0100_0193);
+  }
+  hash
+}
+
+fn add_node_unique_hashes_to_filter<N: Node<N>>(node: &N, filter: &mut BloomFilter) -> bool {
+  let mut added = false;
+
+  if let Some(tag) = node.tag_name() {
+    filter.insert_hash(hash_ascii_case_insensitive(tag));
+    added = true;
+  }
+
+  if let Some(id) = node.id() {
+    filter.insert_hash(hash_ascii_case_insensitive(id));
+    added = true;
+  }
+
+  if let Some(classes) = node.class_name() {
+    for class_name in classes.split_whitespace() {
+      filter.insert_hash(hash_ascii_case_insensitive(class_name));
+      added = true;
+    }
+  }
+
+  added
 }
 
 impl<'a, N: Node<N>> Element for ArenaElement<'a, N> {
@@ -274,11 +466,8 @@ impl<'a, N: Node<N>> Element for ArenaElement<'a, N> {
   fn is_html_slot_element(&self) -> bool {
     false
   }
-  fn add_element_unique_hashes(
-    &self,
-    _filter: &mut selectors::bloom::CountingBloomFilter<BloomStorageU8>,
-  ) -> bool {
-    false
+  fn add_element_unique_hashes(&self, filter: &mut BloomFilter) -> bool {
+    add_node_unique_hashes_to_filter(self.tree.nodes[self.index].node, filter)
   }
 }
 
@@ -293,57 +482,98 @@ pub(crate) struct MatchedStyles {
   pub(crate) per_node: Vec<MatchedAuthorStyles>,
 }
 
-pub(crate) fn match_stylesheets_for_tree<N: Node<N>>(
-  root: &N,
-  stylesheets: &[StyleSheet],
-) -> MatchedStyles {
+pub(crate) fn match_stylesheets<N: Node<N>>(root: &N, stylesheets: &[StyleSheet]) -> MatchedStyles {
   let arena = StyleArena::new(root);
   let mut per_node = vec![MatchedAuthorStyles::default(); arena.nodes.len()];
   if stylesheets.is_empty() {
     return MatchedStyles { per_node };
   }
   let mut matched_rules = vec![Vec::new(); arena.nodes.len()];
+  let mut ancestor_bloom_filters = vec![BloomFilter::new(); arena.nodes.len()];
+  let mut selector_ancestor_hashes_cache: HashMap<usize, AncestorHashes> = HashMap::new();
+  let flattened_rules: Vec<&CssRule> = stylesheets
+    .iter()
+    .flat_map(|sheet| sheet.rules.iter())
+    .collect();
+  let rule_subject_hints: Vec<RuleSubjectHint> = flattened_rules
+    .iter()
+    .map(|rule| build_rule_subject_hint(rule))
+    .collect();
+  let rule_candidate_index = build_rule_candidate_index(&rule_subject_hints);
+  let mut candidate_rule_indices = Vec::new();
+  let mut seen_rule_marks = vec![0u32; flattened_rules.len()];
+  let mut seen_generation = 1u32;
+
+  for i in 0..arena.nodes.len() {
+    let Some(parent) = arena.nodes[i].parent else {
+      continue;
+    };
+    ancestor_bloom_filters[i] = ancestor_bloom_filters[parent].clone();
+    add_node_unique_hashes_to_filter(arena.nodes[parent].node, &mut ancestor_bloom_filters[i]);
+  }
 
   let mut caches = SelectorCaches::default();
-  let mut ctx = MatchingContext::new(
-    MatchingMode::Normal,
-    None,
-    &mut caches,
-    QuirksMode::NoQuirks,
-    NeedsSelectorFlags::No,
-    MatchingForInvalidation::No,
-  );
 
-  let mut source_order = 0usize;
-  for sheet in stylesheets {
-    for rule in &sheet.rules {
-      for (i, matched_rule) in matched_rules.iter_mut().enumerate() {
-        let element = ArenaElement {
-          tree: &arena,
-          index: i,
+  for (i, matched_rule) in matched_rules.iter_mut().enumerate() {
+    let element = ArenaElement {
+      tree: &arena,
+      index: i,
+    };
+    let mut ctx = MatchingContext::new(
+      MatchingMode::Normal,
+      Some(&ancestor_bloom_filters[i]),
+      &mut caches,
+      QuirksMode::NoQuirks,
+      NeedsSelectorFlags::No,
+      MatchingForInvalidation::No,
+    );
+    collect_candidate_rule_indices_for_node(
+      arena.nodes[i].node,
+      &rule_candidate_index,
+      &mut candidate_rule_indices,
+      &mut seen_rule_marks,
+      seen_generation,
+    );
+    candidate_rule_indices.sort_unstable();
+
+    for &source_order in &candidate_rule_indices {
+      let rule = flattened_rules[source_order];
+      let mut best_specificity: Option<u32> = None;
+      for selector in rule.selectors.slice().iter() {
+        let selector_key = selector as *const _ as usize;
+        let ancestor_hashes = selector_ancestor_hashes_cache
+          .entry(selector_key)
+          .or_insert_with(|| AncestorHashes::new(selector, QuirksMode::NoQuirks))
+          .clone();
+        let is_match = if early_reject_by_local_name(selector, 0, &element) {
+          false
+        } else {
+          matches_selector(selector, 0, Some(&ancestor_hashes), &element, &mut ctx)
         };
 
-        let mut best_specificity: Option<u32> = None;
-        for selector in rule.selectors.slice().iter() {
-          if matches_selector(selector, 0, None, &element, &mut ctx) {
-            let specificity = selector.specificity();
-            best_specificity =
-              Some(best_specificity.map_or(specificity, |best| best.max(specificity)));
-          }
-        }
-
-        if let Some(specificity) = best_specificity {
-          matched_rule.push((false, specificity, source_order, &rule.normal_declarations));
-          matched_rule.push((
-            true,
-            specificity,
-            source_order,
-            &rule.important_declarations,
-          ));
+        if is_match {
+          let specificity = selector.specificity();
+          best_specificity =
+            Some(best_specificity.map_or(specificity, |best| best.max(specificity)));
         }
       }
 
-      source_order += 1;
+      if let Some(specificity) = best_specificity {
+        matched_rule.push((false, specificity, source_order, &rule.normal_declarations));
+        matched_rule.push((
+          true,
+          specificity,
+          source_order,
+          &rule.important_declarations,
+        ));
+      }
+    }
+
+    candidate_rule_indices.clear();
+    seen_generation = seen_generation.wrapping_add(1);
+    if seen_generation == 0 {
+      seen_rule_marks.fill(0);
+      seen_generation = 1;
     }
   }
 
