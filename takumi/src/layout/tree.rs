@@ -9,7 +9,7 @@ use taffy::{
 };
 
 #[cfg(feature = "css_stylesheet_parsing")]
-use crate::layout::style::matching::{MatchedAuthorStyles, MatchedStyles, match_stylesheets};
+use crate::layout::style::matching::{MatchedDeclarations, match_stylesheets};
 use crate::{
   Result,
   layout::{
@@ -32,12 +32,6 @@ use crate::{
 struct MatchedAuthorStyles {
   stylesheet_normal: NodeStyle,
   stylesheet_important: NodeStyle,
-}
-
-#[cfg(not(feature = "css_stylesheet_parsing"))]
-#[derive(Debug, Default, Clone)]
-struct MatchedStyles {
-  per_node: Vec<MatchedAuthorStyles>,
 }
 
 pub(crate) struct LayoutResults {
@@ -97,7 +91,7 @@ pub(crate) struct RenderNode<'g, N: Node<N>> {
 fn build_inherited_style(
   parent_style: &ResolvedStyle,
   node_layers: NodeStyleLayers,
-  matched_author: &MatchedAuthorStyles,
+  #[cfg(feature = "css_stylesheet_parsing")] matched_declarations: &MatchedDeclarations,
   viewport: Viewport,
 ) -> ResolvedStyle {
   let mut style = NodeStyle::default();
@@ -106,7 +100,10 @@ fn build_inherited_style(
     style.merge_from(preset);
   }
 
-  style.merge_from_ref(&matched_author.stylesheet_normal);
+  #[cfg(feature = "css_stylesheet_parsing")]
+  for declaration in matched_declarations.normal.iter() {
+    declaration.merge_into(&mut style);
+  }
 
   if let Some(author_tw) = node_layers.author_tw {
     author_tw.apply_to_style(&mut style, viewport);
@@ -116,7 +113,10 @@ fn build_inherited_style(
     style.merge_from(inline);
   }
 
-  style.merge_from_ref(&matched_author.stylesheet_important);
+  #[cfg(feature = "css_stylesheet_parsing")]
+  for declaration in matched_declarations.important.iter() {
+    declaration.merge_into(&mut style);
+  }
 
   style.inherit(parent_style)
 }
@@ -542,11 +542,14 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
   pub fn from_node(parent_context: &RenderContext<'g>, node: N) -> Self {
     #[cfg(feature = "css_stylesheet_parsing")]
     let matched_styles = match_stylesheets(&node, &parent_context.stylesheets);
-    #[cfg(not(feature = "css_stylesheet_parsing"))]
-    let matched_styles = MatchedStyles::default();
     let mut preorder_cursor = 0;
-    let mut tree =
-      Self::from_node_impl(parent_context, node, &matched_styles, &mut preorder_cursor);
+    let mut tree = Self::from_node_impl(
+      parent_context,
+      node,
+      #[cfg(feature = "css_stylesheet_parsing")]
+      &matched_styles,
+      &mut preorder_cursor,
+    );
 
     if tree.is_inline_level() {
       tree.context.style.display.blockify();
@@ -558,21 +561,19 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
   fn from_node_impl(
     parent_context: &RenderContext<'g>,
     mut node: N,
-    matched_styles: &MatchedStyles,
+    #[cfg(feature = "css_stylesheet_parsing")] matched_declarations: &[MatchedDeclarations],
     preorder_cursor: &mut usize,
   ) -> Self {
     let node_index = *preorder_cursor;
     *preorder_cursor += 1;
     let layers = node.take_style_layers();
-    let default_matched_author = MatchedAuthorStyles::default();
-    let matched_author = matched_styles
-      .per_node
-      .get(node_index)
-      .unwrap_or(&default_matched_author);
     let mut style = build_inherited_style(
       &parent_context.style,
       layers,
-      matched_author,
+      #[cfg(feature = "css_stylesheet_parsing")]
+      matched_declarations
+        .get(node_index)
+        .unwrap_or(&MatchedDeclarations::default()),
       parent_context.sizing.viewport,
     );
 
@@ -602,12 +603,17 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
       stylesheets: parent_context.stylesheets.clone(),
     };
 
-    let children =
-      node.take_children().map(|children| {
-        Box::from_iter(children.into_iter().map(|child| {
-          Self::from_node_impl(&render_context, child, matched_styles, preorder_cursor)
-        }))
-      });
+    let children = node.take_children().map(|children| {
+      Box::from_iter(children.into_iter().map(|child| {
+        Self::from_node_impl(
+          &render_context,
+          child,
+          #[cfg(feature = "css_stylesheet_parsing")]
+          matched_declarations,
+          preorder_cursor,
+        )
+      }))
+    });
 
     let Some(mut children) = children else {
       return Self {
@@ -826,7 +832,15 @@ fn flush_inline_group<'g, N: Node<N>>(
 
 #[cfg(test)]
 mod tests {
-  use super::{MatchedAuthorStyles, build_inherited_style};
+  #[cfg(feature = "css_stylesheet_parsing")]
+  use smallvec::smallvec;
+
+  use super::build_inherited_style;
+  #[cfg(feature = "css_stylesheet_parsing")]
+  use crate::layout::style::{
+    DeclarationMetadata, PropertyId, StyleDeclaration, StyleDeclarationValue,
+    matching::MatchedDeclarations,
+  };
   use crate::layout::{
     Viewport,
     node::NodeStyleLayers,
@@ -843,15 +857,19 @@ mod tests {
       }),
       ..Default::default()
     };
-    let matched = MatchedAuthorStyles {
-      stylesheet_normal: Style {
-        width: CssValue::Value(Length::Px(10.0)),
-        ..Default::default()
-      },
-      stylesheet_important: Style {
-        width: CssValue::Value(Length::Px(30.0)),
-        ..Default::default()
-      },
+
+    #[cfg(feature = "css_stylesheet_parsing")]
+    let matched = MatchedDeclarations {
+      normal: smallvec![StyleDeclaration {
+        metadata: Default::default(),
+        property: PropertyId::width,
+        value: StyleDeclarationValue::width(Length::Px(20.0)),
+      }],
+      important: smallvec![StyleDeclaration {
+        metadata: DeclarationMetadata { important: true },
+        property: PropertyId::width,
+        value: StyleDeclarationValue::width(Length::Px(30.0)),
+      }],
     };
 
     let resolved = build_inherited_style(

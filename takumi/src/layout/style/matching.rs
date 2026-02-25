@@ -11,13 +11,10 @@ use selectors::{
   parser::{AncestorHashes, Component, Selector},
 };
 
-use crate::layout::style::apply_style_declarations;
+use crate::layout::style::StyleDeclarations;
 use crate::layout::{
   node::Node,
-  style::{
-    Style,
-    selector::{CssRule, StyleSheet, TakumiIdent, TakumiSelectorImpl},
-  },
+  style::selector::{CssRule, StyleSheet, TakumiIdent, TakumiSelectorImpl},
 };
 
 #[derive(Default)]
@@ -472,22 +469,22 @@ impl<'a, N: Node<N>> Element for ArenaElement<'a, N> {
 }
 
 #[derive(Debug, Default, Clone)]
-pub(crate) struct MatchedAuthorStyles {
-  pub(crate) stylesheet_normal: Style,
-  pub(crate) stylesheet_important: Style,
+pub(crate) struct MatchedDeclarations {
+  pub(crate) normal: StyleDeclarations,
+  pub(crate) important: StyleDeclarations,
 }
 
-#[derive(Debug, Default, Clone)]
-pub(crate) struct MatchedStyles {
-  pub(crate) per_node: Vec<MatchedAuthorStyles>,
-}
-
-pub(crate) fn match_stylesheets<N: Node<N>>(root: &N, stylesheets: &[StyleSheet]) -> MatchedStyles {
+pub(crate) fn match_stylesheets<N: Node<N>>(
+  root: &N,
+  stylesheets: &[StyleSheet],
+) -> Vec<MatchedDeclarations> {
   let arena = StyleArena::new(root);
-  let mut per_node = vec![MatchedAuthorStyles::default(); arena.nodes.len()];
+  let mut per_node = vec![MatchedDeclarations::default(); arena.nodes.len()];
+
   if stylesheets.is_empty() {
-    return MatchedStyles { per_node };
+    return per_node;
   }
+
   let mut matched_rules = vec![Vec::new(); arena.nodes.len()];
   let mut ancestor_bloom_filters = vec![BloomFilter::new(); arena.nodes.len()];
   let mut selector_ancestor_hashes_cache: HashMap<usize, AncestorHashes> = HashMap::new();
@@ -577,17 +574,17 @@ pub(crate) fn match_stylesheets<N: Node<N>>(root: &N, stylesheets: &[StyleSheet]
     }
   }
 
-  for (matched, rules) in per_node.iter_mut().zip(matched_rules.into_iter()) {
-    let mut rules = rules;
+  for (matched, mut rules) in per_node.iter_mut().zip(matched_rules.into_iter()) {
     rules.sort_by_key(|(important, specificity, order, _)| (*important, *specificity, *order));
+
     for (important, _, _, declarations) in rules {
       if important {
-        apply_style_declarations(declarations, &mut matched.stylesheet_important);
+        matched.important.extend(declarations.iter().cloned());
       } else {
-        apply_style_declarations(declarations, &mut matched.stylesheet_normal);
+        matched.normal.extend(declarations.iter().cloned());
       }
     }
   }
 
-  MatchedStyles { per_node }
+  per_node
 }

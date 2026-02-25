@@ -47,14 +47,14 @@ macro_rules! define_style {
   )*) => {
     /// Metadata attached to a parsed CSS declaration.
     #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-    pub struct DeclarationMetadata {
+    pub(crate) struct DeclarationMetadata {
       /// Whether the declaration was marked with `!important`.
       pub important: bool,
     }
 
     #[allow(non_camel_case_types)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    enum PropertyId {
+    pub(crate) enum PropertyId {
       Ignored,
       $(
         $property,
@@ -118,7 +118,7 @@ macro_rules! define_style {
 
     #[allow(non_camel_case_types)]
     #[derive(Debug, Clone)]
-    enum StyleDeclarationValue {
+    pub(crate) enum StyleDeclarationValue {
       Ignored,
       $(
         $property($type),
@@ -129,9 +129,9 @@ macro_rules! define_style {
     #[derive(Debug, Clone)]
     pub struct StyleDeclaration {
       /// Declaration metadata such as `!important`.
-      pub metadata: DeclarationMetadata,
-      property: PropertyId,
-      value: StyleDeclarationValue,
+      pub(crate) metadata: DeclarationMetadata,
+      pub(crate) property: PropertyId,
+      pub(crate) value: StyleDeclarationValue,
     }
 
     impl StyleDeclaration {
@@ -187,12 +187,6 @@ macro_rules! define_style {
 
     pub(crate) type StyleDeclarations = SmallVec<[StyleDeclaration; 8]>;
 
-    pub(crate) fn apply_style_declarations(declarations: &[StyleDeclaration], style: &mut Style) {
-      for declaration in declarations {
-        declaration.merge_into(style);
-      }
-    }
-
     /// Defines the style of an element.
     #[derive(Debug, Default, Clone, Deserialize, Builder, PartialEq)]
     #[serde(default, rename_all = "camelCase")]
@@ -222,18 +216,6 @@ macro_rules! define_style {
 
         $(
           self.$property = other.$property.or(std::mem::take(&mut self.$property));
-        )*
-      }
-
-      pub(crate) fn merge_from_ref(&mut self, other: &Self) {
-        $(
-          define_style_apply_clears!(self, other, $property $(, [$($merge_clear),*])?);
-        )*
-
-        $(
-          if !matches!(&other.$property, CssValue::Unset) {
-            self.$property = other.$property.clone();
-          }
         )*
       }
     }

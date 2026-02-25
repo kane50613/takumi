@@ -315,13 +315,13 @@ impl StyleSheet {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::layout::style::{
-    Color, ColorInput, CssValue, Length, Style, apply_style_declarations,
-  };
+  use crate::layout::style::{Color, ColorInput, CssValue, Length, Style};
 
   fn style_from_declarations(declarations: &[StyleDeclaration]) -> Style {
     let mut style = Style::default();
-    apply_style_declarations(declarations, &mut style);
+    for declaration in declarations {
+      declaration.merge_into(&mut style);
+    }
     style
   }
 
