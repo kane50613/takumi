@@ -9,7 +9,7 @@ use taffy::{Point, Rect, Size, prelude::FromLength};
 use crate::{
   layout::{
     inline::InlineBrush,
-    style::{CssValue, RawCssValueSeed, parse_css_value_from_raw, properties::*},
+    style::{CssGlobalKeyword, CssValue, RawCssValueSeed, parse_css_value_from_raw, properties::*},
   },
   rendering::{RenderContext, SizedShadow, Sizing},
 };
@@ -17,10 +17,10 @@ use crate::{
 /// Helper macro to define the `Style` struct and `ResolvedStyle` struct.
 macro_rules! define_style_apply_clears {
   ($self:ident, $other:ident, $trigger:ident, [$($clear:ident),* $(,)?]) => {
-    if !matches!(&$other.$trigger, CssValue::Unset) {
+    if !matches!(&$other.$trigger, CssValue::Keyword(CssGlobalKeyword::Unset)) {
       $(
-        if matches!(&$other.$clear, CssValue::Unset) {
-          $self.$clear = CssValue::Unset;
+        if matches!(&$other.$clear, CssValue::Keyword(CssGlobalKeyword::Unset)) {
+          $self.$clear = CssValue::Keyword(CssGlobalKeyword::Unset);
         }
       )*
     }
@@ -32,7 +32,7 @@ macro_rules! define_style_declaration_clears {
   ($style:ident $(, [$($clear:ident),* $(,)?])?) => {
     $(
       $(
-        $style.$clear = CssValue::Unset;
+        $style.$clear = CssValue::Keyword(CssGlobalKeyword::Unset);
       )*
     )?
   };
@@ -1080,7 +1080,7 @@ mod tests {
   use crate::{
     layout::{
       Viewport,
-      style::{CssValue, ResolvedStyle, Style, properties::*},
+      style::{CssGlobalKeyword, CssValue, ResolvedStyle, Style, properties::*},
     },
     rendering::Sizing,
   };
@@ -1287,12 +1287,12 @@ mod tests {
   #[test]
   fn test_unset_follows_default_inherit_flag() {
     // Non-inheriting property (DEFAULT_INHERIT = false)
-    let unset_width: CssValue<Length, false> = CssValue::Unset;
+    let unset_width: CssValue<Length, false> = CssValue::default();
     let result = unset_width.inherit_value(&Length::Px(100.0));
     assert_eq!(result, Length::Auto); // Should use default (Auto), not inherit
 
     // Inheriting property (DEFAULT_INHERIT = true)
-    let unset_color: CssValue<ColorInput, true> = CssValue::Unset;
+    let unset_color: CssValue<ColorInput, true> = CssValue::default();
     let parent_color = ColorInput::Value(Color([255, 0, 0, 255]));
     let result = unset_color.inherit_value(&parent_color);
     assert_eq!(result, parent_color); // Should inherit from parent
@@ -1302,7 +1302,7 @@ mod tests {
   fn test_or_method() {
     let high_priority = CssValue::Value(Length::Px(100.0));
     let low_priority = CssValue::Value(Length::Rem(10.0));
-    let unset: CssValue<Length> = CssValue::Unset;
+    let unset: CssValue<Length> = CssValue::default();
 
     // High priority value should be kept
     assert_eq!(high_priority.or(low_priority), high_priority);
@@ -1311,10 +1311,10 @@ mod tests {
     assert_eq!(unset.or(low_priority), low_priority);
 
     // Initial/Inherit should be kept even when or-ing with Value
-    let initial: CssValue<Length> = CssValue::Initial;
+    let initial: CssValue<Length> = CssValue::Keyword(CssGlobalKeyword::Initial);
     assert_eq!(initial.or(low_priority), initial);
 
-    let inherit: CssValue<Length> = CssValue::Inherit;
+    let inherit: CssValue<Length> = CssValue::Keyword(CssGlobalKeyword::Inherit);
     assert_eq!(inherit.or(low_priority), inherit);
   }
 

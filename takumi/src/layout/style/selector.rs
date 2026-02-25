@@ -315,7 +315,7 @@ impl StyleSheet {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::layout::style::{Color, ColorInput, CssValue, Length, Style};
+  use crate::layout::style::{Color, ColorInput, CssGlobalKeyword, CssValue, Length, Style};
 
   fn style_from_declarations(declarations: &[StyleDeclaration]) -> Style {
     let mut style = Style::default();
@@ -426,7 +426,10 @@ mod tests {
     );
 
     let style = style_from_declarations(&sheet.rules[0].normal_declarations);
-    assert_eq!(style.padding_left, CssValue::Unset);
+    assert_eq!(
+      style.padding_left,
+      CssValue::Keyword(CssGlobalKeyword::Unset)
+    );
   }
 
   #[test]

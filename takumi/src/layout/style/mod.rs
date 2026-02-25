@@ -18,22 +18,34 @@ use serde::{
 pub use stylesheets::*;
 
 /// Represents a CSS property value that can be explicitly set, inherited from parent, or reset to initial value.
-#[derive(Default, Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum CssValue<T, const DEFAULT_INHERIT: bool = false> {
-  /// Property was not set by the user
-  #[default]
-  Unset,
+  /// A CSS-wide keyword.
+  Keyword(CssGlobalKeyword),
+  /// Explicit value set on the element
+  Value(T),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// CSS-wide keywords accepted by style values.
+pub enum CssGlobalKeyword {
   /// Use the initial value of the property
   Initial,
   /// Inherit the computed value from the parent element
   Inherit,
-  /// Explicit value set on the element
-  Value(T),
+  /// Reset according to CSS unset semantics
+  Unset,
 }
 
 impl<T, const DEFAULT_INHERIT: bool> From<T> for CssValue<T, DEFAULT_INHERIT> {
   fn from(value: T) -> Self {
     CssValue::Value(value)
+  }
+}
+
+impl<T, const DEFAULT_INHERIT: bool> Default for CssValue<T, DEFAULT_INHERIT> {
+  fn default() -> Self {
+    Self::Keyword(CssGlobalKeyword::Unset)
   }
 }
 
@@ -73,11 +85,11 @@ impl<T: Default, const DEFAULT_INHERIT: bool> CssValue<T, DEFAULT_INHERIT> {
   {
     match self {
       Self::Value(v) => v,
-      Self::Inherit => parent.clone(),
-      Self::Initial => T::default(),
+      Self::Keyword(CssGlobalKeyword::Inherit) => parent.clone(),
+      Self::Keyword(CssGlobalKeyword::Initial) => T::default(),
       // Unset follows CSS spec: inherit if DEFAULT_INHERIT, otherwise initial
-      Self::Unset if DEFAULT_INHERIT => parent.clone(),
-      Self::Unset => T::default(),
+      Self::Keyword(CssGlobalKeyword::Unset) if DEFAULT_INHERIT => parent.clone(),
+      Self::Keyword(CssGlobalKeyword::Unset) => T::default(),
     }
   }
 
@@ -85,7 +97,7 @@ impl<T: Default, const DEFAULT_INHERIT: bool> CssValue<T, DEFAULT_INHERIT> {
   /// This is used to merge style layers (e.g., inline style over Tailwind).
   pub(crate) fn or(self, other: Self) -> Self {
     match self {
-      Self::Unset => other,
+      Self::Keyword(CssGlobalKeyword::Unset) => other,
       _ => self,
     }
   }
@@ -277,6 +289,25 @@ impl<'de> DeserializeSeed<'de> for RawCssValueSeed {
   }
 }
 
+#[inline(never)]
+fn parse_css_global_keyword(value: &str) -> Option<CssGlobalKeyword> {
+  match_ignore_ascii_case! {value,
+    "initial" => Some(CssGlobalKeyword::Initial),
+    "inherit" => Some(CssGlobalKeyword::Inherit),
+    "unset" => Some(CssGlobalKeyword::Unset),
+    _ => None,
+  }
+}
+
+#[inline(never)]
+fn raw_css_number_to_string(number: &RawCssNumber) -> String {
+  match number {
+    RawCssNumber::Signed(value) => value.to_string(),
+    RawCssNumber::Unsigned(value) => value.to_string(),
+    RawCssNumber::Float(value) => value.to_string(),
+  }
+}
+
 struct CssExpectedMessage<'a> {
   #[cfg(feature = "detailed_css_error")]
   message: Cow<'a, str>,
@@ -365,21 +396,15 @@ where
   E: de::Error,
 {
   match raw {
-    RawCssInput::Str(value) => match_ignore_ascii_case! {value.as_ref(),
-      "initial" => Ok(CssValue::Initial),
-      "inherit" => Ok(CssValue::Inherit),
-      "unset" => Ok(CssValue::Unset),
-      _ => match T::from_str(value.as_ref()) {
+    RawCssInput::Str(value) => match parse_css_global_keyword(value.as_ref()) {
+      Some(keyword) => Ok(CssValue::Keyword(keyword)),
+      None => match T::from_str(value.as_ref()) {
         Ok(parsed) => Ok(CssValue::Value(parsed)),
         Err(_) => css_invalid_string::<T, E, CssValue<T, DEFAULT_INHERIT>>(value.as_ref()),
       },
     },
     RawCssInput::Number(number) => {
-      let source = match &number {
-        RawCssNumber::Signed(value) => value.to_string(),
-        RawCssNumber::Unsigned(value) => value.to_string(),
-        RawCssNumber::Float(value) => value.to_string(),
-      };
+      let source = raw_css_number_to_string(&number);
       match T::from_str(&source) {
         Ok(parsed) => Ok(CssValue::Value(parsed)),
         Err(_) => css_invalid_number::<T, E, CssValue<T, DEFAULT_INHERIT>>(&number),
