@@ -121,6 +121,12 @@ macro_rules! impl_node_enum {
         }
       }
 
+      fn is_replaced_element(&self) -> bool {
+        match self {
+          $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::is_replaced_element(inner), )*
+        }
+      }
+
       fn collect_fetch_tasks(&self, collection: &mut FetchTaskCollection) {
         match self {
           $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::collect_fetch_tasks(inner, collection), )*
@@ -188,6 +194,12 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
 
   /// Returns a reference to this node's raw [`Style`], if any.
   fn get_style(&self) -> Option<&Style>;
+
+  /// Whether this node behaves like a [CSS replaced element](https://drafts.csswg.org/css-display/#replaced-element)
+  /// for sizing purposes.
+  fn is_replaced_element(&self) -> bool {
+    false
+  }
 
   /// Creates resolving tasks for style's http resources.
   fn collect_style_fetch_tasks(&self, collection: &mut FetchTaskCollection) {

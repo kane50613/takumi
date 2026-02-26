@@ -148,6 +148,10 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ImageNode {
   fn get_style(&self) -> Option<&Style> {
     self.style.as_ref()
   }
+
+  fn is_replaced_element(&self) -> bool {
+    true
+  }
 }
 
 fn should_skip_intrinsic_probe_cross_axis_ratio_transfer(

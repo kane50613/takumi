@@ -208,7 +208,7 @@ impl<'r, 'g, N: Node<N>> LayoutTree<'r, 'g, N> {
 
 // Taffy may inject a flex stretch-derived cross-size into leaf `known_dimensions`
 // during intrinsic single-axis sizing (`ComputeSize + InherentSize`). For replaced
-// elements (img/svg), letting that value participate in aspect-ratio transfer can
+// elements, letting that value participate in aspect-ratio transfer can
 // incorrectly inflate the measured main-size. Strip that hint at the leaf boundary.
 fn should_strip_flex_intrinsic_stretch_known_dimension<N: Node<N>>(
   render_node: &RenderNode<'_, N>,
@@ -230,7 +230,7 @@ fn should_strip_flex_intrinsic_stretch_known_dimension<N: Node<N>>(
     return false;
   };
 
-  if !matches!(node.tag_name(), Some("img" | "svg")) {
+  if !node.is_replaced_element() {
     return false;
   }
 
