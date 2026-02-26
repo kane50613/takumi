@@ -3,9 +3,7 @@ mod test_utils;
 use takumi::{
   layout::{
     node::{ContainerNode, ImageNode, NodeKind, TextNode},
-    style::{
-      Affine, Color, ColorInput, Display, Length::*, Position, Sides, StyleBuilder,
-    },
+    style::{Affine, Color, ColorInput, Display, Length::*, Position, Sides, StyleBuilder},
   },
   rendering::{MeasuredNode, MeasuredTextRun, RenderOptionsBuilder, measure_layout},
 };
@@ -286,7 +284,10 @@ fn test_measure_svg_attr_size_in_absolute_flex_container() {
   let absolute_container = &result.children[0];
   assert_eq!(absolute_container.width, 100.0);
   assert_eq!(absolute_container.height, 100.0);
-  assert_eq!(absolute_container.transform, [1.0, 0.0, 0.0, 1.0, 1060.0, 490.0]);
+  assert_eq!(
+    absolute_container.transform,
+    [1.0, 0.0, 0.0, 1.0, 1060.0, 490.0]
+  );
   assert_eq!(absolute_container.children.len(), 1);
 
   let svg_child = &absolute_container.children[0];

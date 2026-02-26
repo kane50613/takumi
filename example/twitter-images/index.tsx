@@ -12,7 +12,7 @@ const components = [OgImage, FiveHundredStars, XPostImage, PrismaOGImage];
 type Component = (typeof components)[number];
 
 async function render(module: Component) {
-  const { node: component, stylesheets } = await fromJsx(<module.default />);
+  const { node, stylesheets } = await fromJsx(<module.default />);
 
   const prepareStart = performance.now();
   const renderer = new Renderer({
@@ -29,7 +29,7 @@ async function render(module: Component) {
 
   const renderStart = performance.now();
 
-  const buffer = await renderer.render(component, {
+  const buffer = await renderer.render(node, {
     width: module.width,
     height: module.height,
     stylesheets,

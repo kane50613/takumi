@@ -3,9 +3,10 @@ use std::{iter::Copied, mem::take, slice::Iter};
 use taffy::{
   AvailableSpace, Cache, CacheTree, Display as TaffyDisplay, Layout, LayoutBlockContainer,
   LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput, LayoutPartialTree,
-  NodeId, RoundTree, RunMode, Size, Style, TaffyError, TraversePartialTree, TraverseTree,
-  compute_block_layout, compute_cached_layout, compute_flexbox_layout, compute_grid_layout,
-  compute_hidden_layout, compute_leaf_layout, compute_root_layout, round_layout,
+  NodeId, RequestedAxis, RoundTree, RunMode, Size, SizingMode, Style, TaffyError,
+  TraversePartialTree, TraverseTree, compute_block_layout, compute_cached_layout,
+  compute_flexbox_layout, compute_grid_layout, compute_hidden_layout, compute_leaf_layout,
+  compute_root_layout, round_layout,
 };
 
 #[cfg(feature = "css_stylesheet_parsing")]
@@ -205,6 +206,45 @@ impl<'r, 'g, N: Node<N>> LayoutTree<'r, 'g, N> {
   }
 }
 
+// Taffy may inject a flex stretch-derived cross-size into leaf `known_dimensions`
+// during intrinsic single-axis sizing (`ComputeSize + InherentSize`). For replaced
+// elements (img/svg), letting that value participate in aspect-ratio transfer can
+// incorrectly inflate the measured main-size. Strip that hint at the leaf boundary.
+fn should_strip_flex_intrinsic_stretch_known_dimension<N: Node<N>>(
+  render_node: &RenderNode<'_, N>,
+  inputs: LayoutInput,
+  known_dimensions: Size<Option<f32>>,
+) -> bool {
+  if inputs.run_mode != RunMode::ComputeSize || inputs.sizing_mode != SizingMode::InherentSize {
+    return false;
+  }
+
+  if !matches!(
+    inputs.axis,
+    RequestedAxis::Horizontal | RequestedAxis::Vertical
+  ) {
+    return false;
+  }
+
+  let Some(node) = render_node.node.as_ref() else {
+    return false;
+  };
+
+  if !matches!(node.tag_name(), Some("img" | "svg")) {
+    return false;
+  }
+
+  match inputs.axis {
+    RequestedAxis::Horizontal => {
+      known_dimensions.width.is_none() && known_dimensions.height.is_some()
+    }
+    RequestedAxis::Vertical => {
+      known_dimensions.height.is_none() && known_dimensions.width.is_some()
+    }
+    RequestedAxis::Both => false,
+  }
+}
+
 impl<N: Node<N>> TraversePartialTree for LayoutTree<'_, '_, N> {
   type ChildIter<'a>
     = Copied<Iter<'a, NodeId>>
@@ -296,6 +336,21 @@ impl<N: Node<N>> LayoutPartialTree for LayoutTree<'_, '_, N> {
           &node_data.style,
           |val, basis| tree.resolve_calc_value(val, basis),
           |known_dimensions, available_space| {
+            let idx: usize = node.into();
+            let Some(render_node) = tree.render_nodes.get(idx) else {
+              unreachable!()
+            };
+
+            let known_dimensions = if should_strip_flex_intrinsic_stretch_known_dimension(
+              render_node,
+              inputs,
+              known_dimensions,
+            ) {
+              Size::NONE
+            } else {
+              known_dimensions
+            };
+
             if let Size {
               width: Some(width),
               height: Some(height),
@@ -303,11 +358,6 @@ impl<N: Node<N>> LayoutPartialTree for LayoutTree<'_, '_, N> {
             {
               return Size { width, height };
             }
-
-            let idx: usize = node.into();
-            let Some(render_node) = tree.render_nodes.get(idx) else {
-              unreachable!()
-            };
 
             render_node.measure(
               available_space,

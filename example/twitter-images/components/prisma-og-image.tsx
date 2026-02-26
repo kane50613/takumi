@@ -182,8 +182,6 @@ function PrismaOGImage({
           bottom: 60,
           right: 60,
           display: "flex",
-          width: 150,
-          height: 46,
         }}
       >
         <PrismaLogo />
