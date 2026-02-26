@@ -114,10 +114,10 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ImageNode {
       // determine this replaced element's intrinsic main-size.
       known_dimensions
     } else {
-      let aspect_ratio = style
-        .aspect_ratio
-        .unwrap_or(preferred_size.width / preferred_size.height);
-      known_dimensions.maybe_apply_aspect_ratio(Some(aspect_ratio))
+      let aspect_ratio = style.aspect_ratio.or_else(|| {
+        (preferred_size.height != 0.0).then_some(preferred_size.width / preferred_size.height)
+      });
+      known_dimensions.maybe_apply_aspect_ratio(aspect_ratio)
     };
 
     if let Size {
