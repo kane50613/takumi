@@ -1,5 +1,29 @@
 # @takumi-rs/helpers
 
+## 0.69.0
+
+### Minor Changes
+
+- 62525f9: **BREAKING CHANGE: `fromJsx()` now returns `{ node, stylesheets }`**
+
+  Before:
+
+  ```tsx
+  const node = fromJsx(<div />);
+
+  renderer.render(node);
+  ```
+
+  After:
+
+  ```tsx
+  const { node, stylesheets } = fromJsx(<div />);
+
+  renderer.render(node, {
+    stylesheets,
+  });
+  ```
+
 ## 0.68.17
 
 ## 0.68.16

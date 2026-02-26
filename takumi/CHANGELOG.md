@@ -1,5 +1,15 @@
 # takumi
 
+## 0.69.0
+
+### Minor Changes
+
+- 62525f9: Parses CSS stylesheets with new `css_stylesheet_parsing` feature
+
+### Patch Changes
+
+- 55ea202: fixes `plus-darker` blending regression #501
+
 ## 0.68.17
 
 ### Patch Changes

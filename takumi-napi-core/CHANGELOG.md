@@ -1,5 +1,11 @@
 # @takumi-rs/core
 
+## 0.69.0
+
+### Patch Changes
+
+- 12034df: make sure `@takumi-rs/core` exports correctly
+
 ## 0.68.17
 
 ## 0.68.16
