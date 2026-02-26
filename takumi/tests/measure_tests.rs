@@ -3,7 +3,9 @@ mod test_utils;
 use takumi::{
   layout::{
     node::{ContainerNode, ImageNode, NodeKind, TextNode},
-    style::{Affine, Color, ColorInput, Display, Length::*, StyleBuilder},
+    style::{
+      Affine, Color, ColorInput, Display, Length::*, Position, Sides, StyleBuilder,
+    },
   },
   rendering::{MeasuredNode, MeasuredTextRun, RenderOptionsBuilder, measure_layout},
 };
@@ -213,4 +215,82 @@ fn test_measure_inline_layout() {
       }],
     }
   )
+}
+
+#[test]
+fn test_measure_svg_attr_size_in_absolute_flex_container() {
+  let svg = r##"<svg width="100" height="100" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 0L24.4903 15.5097L40 20L24.4903 24.4903L20 40L15.5097 24.4903L0 20L15.5097 15.5097L20 0Z" fill="#E0FF25"/></svg>"##;
+
+  let node: NodeKind = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
+    preset: None,
+    tw: None,
+    style: Some(
+      StyleBuilder::default()
+        .width(Percentage(100.0))
+        .height(Percentage(100.0))
+        .build()
+        .unwrap(),
+    ),
+    children: Some(
+      [ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
+        preset: None,
+        tw: None,
+        style: Some(
+          StyleBuilder::default()
+            .position(Position::Absolute)
+            .inset(Sides([Auto, Px(40.0), Px(40.0), Auto]))
+            .display(Display::Flex)
+            .build()
+            .unwrap(),
+        ),
+        children: Some(
+          [ImageNode {
+            class_name: None,
+            id: None,
+            tag_name: Some("svg".into()),
+            preset: None,
+            tw: None,
+            style: None,
+            src: svg.into(),
+            width: None,
+            height: None,
+          }
+          .into()]
+          .into(),
+        ),
+      }
+      .into()]
+      .into(),
+    ),
+  }
+  .into();
+
+  let result = measure_layout(
+    RenderOptionsBuilder::default()
+      .viewport(create_test_viewport())
+      .node(node)
+      .global(&CONTEXT)
+      .build()
+      .unwrap(),
+  )
+  .unwrap();
+
+  assert_eq!(result.children.len(), 1);
+
+  let absolute_container = &result.children[0];
+  assert_eq!(absolute_container.width, 100.0);
+  assert_eq!(absolute_container.height, 100.0);
+  assert_eq!(absolute_container.transform, [1.0, 0.0, 0.0, 1.0, 1060.0, 490.0]);
+  assert_eq!(absolute_container.children.len(), 1);
+
+  let svg_child = &absolute_container.children[0];
+  assert_eq!(svg_child.width, 100.0);
+  assert_eq!(svg_child.height, 100.0);
+  assert_eq!(svg_child.transform, [1.0, 0.0, 0.0, 1.0, 1060.0, 490.0]);
 }

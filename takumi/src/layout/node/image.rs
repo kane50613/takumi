@@ -106,10 +106,33 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ImageNode {
       .aspect_ratio
       .unwrap_or(overridden_size.width / overridden_size.height);
 
+    let should_skip_cross_axis_ratio_transfer = self.width.is_none()
+      && self.height.is_none()
+      && style.size.width.is_auto()
+      && style.size.height.is_auto()
+      && ((matches!(
+        _available_space.width,
+        AvailableSpace::MinContent | AvailableSpace::MaxContent
+      ) && known_dimensions.width.is_none()
+        && known_dimensions.height.is_some())
+        || (matches!(
+          _available_space.height,
+          AvailableSpace::MinContent | AvailableSpace::MaxContent
+        ) && known_dimensions.height.is_none()
+          && known_dimensions.width.is_some()));
+
+    let known_dimensions = if should_skip_cross_axis_ratio_transfer {
+      // During flex min/max-content probing, a stretched cross-size should not
+      // determine this replaced element's intrinsic main-size.
+      known_dimensions
+    } else {
+      known_dimensions.maybe_apply_aspect_ratio(Some(aspect_ratio))
+    };
+
     if let Size {
       width: Some(width),
       height: Some(height),
-    } = known_dimensions.maybe_apply_aspect_ratio(Some(aspect_ratio))
+    } = known_dimensions
     {
       return Size { width, height };
     }
