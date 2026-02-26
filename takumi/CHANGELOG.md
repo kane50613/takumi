@@ -1,5 +1,11 @@
 # takumi
 
+## 0.69.2
+
+### Patch Changes
+
+- 83a8198: Support `linear/radial/conic-gradient()` double-position color stops syntax
+
 ## 0.69.1
 
 ### Patch Changes
