@@ -1,5 +1,11 @@
 # takumi
 
+## 0.69.1
+
+### Patch Changes
+
+- a81238d: Fix intrinsic SVG sizing in absolute flex shrink-to-fit measurement
+
 ## 0.69.0
 
 ### Minor Changes

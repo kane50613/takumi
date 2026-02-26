@@ -1,5 +1,7 @@
 # @takumi-rs/helpers
 
+## 0.69.1
+
 ## 0.69.0
 
 ### Minor Changes
