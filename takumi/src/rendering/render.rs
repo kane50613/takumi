@@ -178,8 +178,7 @@ fn collect_measure_result<'g, Nodes: Node<Nodes>>(
           PositionedLayoutItem::InlineBox(mut positioned_box) => {
             let item_index = positioned_box.id as usize;
             if let Some(ProcessedInlineSpan::Box(item)) = spans.get(item_index) {
-              let vertical_align = item.render_node.context.style.vertical_align;
-              vertical_align.apply(
+              item.vertical_align.apply(
                 &mut positioned_box.y,
                 line.metrics(),
                 positioned_box.height,

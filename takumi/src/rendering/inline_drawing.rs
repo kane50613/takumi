@@ -646,8 +646,7 @@ pub(crate) fn draw_inline_layout<N: Node<N>>(
           let item_index = inline_box.id as usize;
 
           if let Some(ProcessedInlineSpan::Box(item)) = spans.get(item_index) {
-            let vertical_align = item.render_node.context.style.vertical_align;
-            vertical_align.apply(
+            item.vertical_align.apply(
               &mut inline_box.y,
               line.metrics(),
               inline_box.height,

@@ -1641,35 +1641,69 @@ mod tests {
   fn test_parse_vertical_align() {
     assert_eq!(
       TailwindProperty::parse("align-baseline"),
-      Some(TailwindProperty::VerticalAlign(VerticalAlign::Baseline))
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
+        VerticalAlignKeyword::Baseline
+      )))
     );
     assert_eq!(
       TailwindProperty::parse("align-top"),
-      Some(TailwindProperty::VerticalAlign(VerticalAlign::Top))
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
+        VerticalAlignKeyword::Top
+      )))
     );
     assert_eq!(
       TailwindProperty::parse("align-middle"),
-      Some(TailwindProperty::VerticalAlign(VerticalAlign::Middle))
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
+        VerticalAlignKeyword::Middle
+      )))
     );
     assert_eq!(
       TailwindProperty::parse("align-bottom"),
-      Some(TailwindProperty::VerticalAlign(VerticalAlign::Bottom))
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
+        VerticalAlignKeyword::Bottom
+      )))
     );
     assert_eq!(
       TailwindProperty::parse("align-text-top"),
-      Some(TailwindProperty::VerticalAlign(VerticalAlign::TextTop))
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
+        VerticalAlignKeyword::TextTop
+      )))
     );
     assert_eq!(
       TailwindProperty::parse("align-text-bottom"),
-      Some(TailwindProperty::VerticalAlign(VerticalAlign::TextBottom))
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
+        VerticalAlignKeyword::TextBottom
+      )))
     );
     assert_eq!(
       TailwindProperty::parse("align-sub"),
-      Some(TailwindProperty::VerticalAlign(VerticalAlign::Sub))
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
+        VerticalAlignKeyword::Sub
+      )))
     );
     assert_eq!(
       TailwindProperty::parse("align-super"),
-      Some(TailwindProperty::VerticalAlign(VerticalAlign::Super))
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
+        VerticalAlignKeyword::Super
+      )))
+    );
+    assert_eq!(
+      TailwindProperty::parse("align-[10px]"),
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::Length(
+        Length::Px(10.0)
+      )))
+    );
+    assert_eq!(
+      TailwindProperty::parse("align-[25%]"),
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::Length(
+        Length::Percentage(25.0)
+      )))
+    );
+    assert_eq!(
+      TailwindProperty::parse("align-[-0.5em]"),
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::Length(
+        Length::Em(-0.5)
+      )))
     );
   }
 

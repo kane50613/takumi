@@ -92,22 +92,46 @@ fn inline_vertical_align_types() {
   };
 
   let children = [
-    row("baseline", VerticalAlign::Baseline, Color([255, 0, 0, 100])),
-    row("top", VerticalAlign::Top, Color([0, 255, 0, 100])),
-    row("middle", VerticalAlign::Middle, Color([0, 0, 255, 100])),
-    row("bottom", VerticalAlign::Bottom, Color([255, 255, 0, 100])),
+    row(
+      "baseline",
+      VerticalAlign::Keyword(VerticalAlignKeyword::Baseline),
+      Color([255, 0, 0, 100]),
+    ),
+    row(
+      "top",
+      VerticalAlign::Keyword(VerticalAlignKeyword::Top),
+      Color([0, 255, 0, 100]),
+    ),
+    row(
+      "middle",
+      VerticalAlign::Keyword(VerticalAlignKeyword::Middle),
+      Color([0, 0, 255, 100]),
+    ),
+    row(
+      "bottom",
+      VerticalAlign::Keyword(VerticalAlignKeyword::Bottom),
+      Color([255, 255, 0, 100]),
+    ),
     row(
       "text-top",
-      VerticalAlign::TextTop,
+      VerticalAlign::Keyword(VerticalAlignKeyword::TextTop),
       Color([0, 255, 255, 100]),
     ),
     row(
       "text-bottom",
-      VerticalAlign::TextBottom,
+      VerticalAlign::Keyword(VerticalAlignKeyword::TextBottom),
       Color([255, 0, 255, 100]),
     ),
-    row("sub", VerticalAlign::Sub, Color([100, 100, 100, 100])),
-    row("super", VerticalAlign::Super, Color([200, 200, 200, 100])),
+    row(
+      "sub",
+      VerticalAlign::Keyword(VerticalAlignKeyword::Sub),
+      Color([100, 100, 100, 100]),
+    ),
+    row(
+      "super",
+      VerticalAlign::Keyword(VerticalAlignKeyword::Super),
+      Color([200, 200, 200, 100]),
+    ),
   ];
 
   let container = ContainerNode {
@@ -165,7 +189,7 @@ fn inline_vertical_align_multiline() {
           .width(Px(40.0))
           .height(Px(40.0))
           .background_color(ColorInput::Value(Color([0, 255, 0, 255])))
-          .vertical_align(VerticalAlign::Top)
+          .vertical_align(VerticalAlign::Keyword(VerticalAlignKeyword::Top))
           .build()
           .unwrap(),
       ),
@@ -200,7 +224,7 @@ fn inline_vertical_align_multiline() {
           .width(Px(40.0))
           .height(Px(40.0))
           .background_color(ColorInput::Value(Color([255, 255, 0, 255])))
-          .vertical_align(VerticalAlign::Bottom)
+          .vertical_align(VerticalAlign::Keyword(VerticalAlignKeyword::Bottom))
           .build()
           .unwrap(),
       ),

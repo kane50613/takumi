@@ -8,8 +8,8 @@ use crate::{
   layout::{
     node::Node,
     style::{
-      Color, FontSynthesis, SizedFontStyle, SizedTextDecorationThickness, TextDecorationLines,
-      TextDecorationSkipInk, TextOverflow, TextWrapStyle, VerticalAlign,
+      Color, FontSynthesis, ResolvedVerticalAlign, SizedFontStyle, SizedTextDecorationThickness,
+      TextDecorationLines, TextDecorationSkipInk, TextOverflow, TextWrapStyle, VerticalAlign,
     },
     tree::RenderNode,
   },
@@ -31,6 +31,7 @@ pub(crate) struct InlineBoxItem<'c, 'g, N: Node<N>> {
   pub(crate) margin: Rect<f32>,
   pub(crate) padding: Rect<f32>,
   pub(crate) border: Rect<f32>,
+  pub(crate) vertical_align: ResolvedVerticalAlign,
 }
 
 impl<N: Node<N>> From<&InlineBoxItem<'_, '_, N>> for Layout {
@@ -190,6 +191,12 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c, N: Node<N> + 'c>(
         }
         InlineItem::RenderNode { render_node } => {
           let context = &render_node.context;
+          let vertical_align = context.style.vertical_align.resolve(
+            &context.sizing,
+            context.sizing.font_size,
+            context.style.line_height,
+            context.sizing.font_size,
+          );
           let margin = context
             .style
             .resolved_margin()
@@ -243,6 +250,7 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c, N: Node<N> + 'c>(
             margin,
             padding,
             border,
+            vertical_align,
           }));
 
           builder.push_inline_box(inline_box);

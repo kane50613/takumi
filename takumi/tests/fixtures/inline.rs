@@ -514,7 +514,7 @@ fn inline_nested_flex_block() {
           .background_color(ColorInput::Value(Color([200, 255, 200, 255])))
           .padding(Sides([Px(5.0); 4]))
           .align_items(AlignItems::Center)
-          .vertical_align(VerticalAlign::Middle)
+          .vertical_align(VerticalAlign::Keyword(VerticalAlignKeyword::Middle))
           .build()
           .unwrap(),
       ),
