@@ -54,10 +54,13 @@ pub enum VerticalAlign {
 pub enum ResolvedVerticalAlign {
   /// A keyword-based alignment mode.
   Keyword(VerticalAlignKeyword),
-  /// A resolved absolute baseline shift in pixels.
-  BaselineShiftPx(f32),
-  /// A baseline shift relative to metrics-derived line height.
-  BaselineShiftMetricsRelative(f32),
+  /// A baseline shift resolved as: `px + line_height_relative * metrics_line_height`.
+  BaselineShift {
+    /// The absolute pixel component added to the final baseline shift.
+    px: f32,
+    /// The multiplier applied to metrics-derived line height.
+    line_height_relative: f32,
+  },
 }
 
 impl Default for VerticalAlign {
@@ -102,24 +105,39 @@ impl VerticalAlign {
     sizing: &Sizing,
     font_size: f32,
     line_height: LineHeight,
-    normal_line_height_px: f32,
   ) -> ResolvedVerticalAlign {
     match self {
       Self::Keyword(keyword) => ResolvedVerticalAlign::Keyword(keyword),
       Self::Length(length) => {
-        if line_height == LineHeight::Normal
-          && let Length::Percentage(value) = length
-        {
-          return ResolvedVerticalAlign::BaselineShiftMetricsRelative(value / 100.0);
+        if line_height == LineHeight::Normal {
+          if let Length::Percentage(value) = length {
+            return ResolvedVerticalAlign::BaselineShift {
+              px: 0.0,
+              line_height_relative: value / 100.0,
+            };
+          }
+
+          if let Length::Calc(handle) = length {
+            let linear = handle.resolve_linear(sizing);
+            let (px, percent) = linear.components();
+
+            return ResolvedVerticalAlign::BaselineShift {
+              px,
+              line_height_relative: percent,
+            };
+          }
         }
 
         let line_height_basis_px = match line_height {
-          LineHeight::Normal => normal_line_height_px,
+          LineHeight::Normal => font_size,
           LineHeight::Unitless(value) => value * font_size,
           LineHeight::Length(value) => value.to_px(sizing, font_size),
         };
         let shift = length.to_px(sizing, line_height_basis_px);
-        ResolvedVerticalAlign::BaselineShiftPx(shift)
+        ResolvedVerticalAlign::BaselineShift {
+          px: shift,
+          line_height_relative: 0.0,
+        }
       }
     }
   }
@@ -159,10 +177,13 @@ impl ResolvedVerticalAlign {
           *y = metrics.baseline - metrics.ascent + (metrics.ascent * 0.4)
         }
       },
-      ResolvedVerticalAlign::BaselineShiftPx(shift) => *y = baseline_top - shift,
-      ResolvedVerticalAlign::BaselineShiftMetricsRelative(value) => {
-        let line_height = (metrics.ascent - metrics.descent + metrics.leading) * value;
-        *y = baseline_top - line_height;
+      ResolvedVerticalAlign::BaselineShift {
+        px,
+        line_height_relative,
+      } => {
+        let line_height_component =
+          (metrics.ascent - metrics.descent + metrics.leading) * line_height_relative;
+        *y = baseline_top - (px + line_height_component);
       }
     }
   }
@@ -242,13 +263,15 @@ mod tests {
 
   #[test]
   fn resolve_length_to_baseline_shift_px() {
-    let resolved = VerticalAlign::Length(Length::Px(8.0)).resolve(
-      &sizing(),
-      12.0,
-      LineHeight::Unitless(1.5),
-      14.0,
+    let resolved =
+      VerticalAlign::Length(Length::Px(8.0)).resolve(&sizing(), 12.0, LineHeight::Unitless(1.5));
+    assert_eq!(
+      resolved,
+      ResolvedVerticalAlign::BaselineShift {
+        px: 16.0,
+        line_height_relative: 0.0
+      }
     );
-    assert_eq!(resolved, ResolvedVerticalAlign::BaselineShiftPx(8.0));
   }
 
   #[test]
@@ -257,27 +280,36 @@ mod tests {
       &sizing(),
       12.0,
       LineHeight::Unitless(2.0),
-      14.0,
     );
-    assert_eq!(unitless, ResolvedVerticalAlign::BaselineShiftPx(12.0));
+    assert_eq!(
+      unitless,
+      ResolvedVerticalAlign::BaselineShift {
+        px: 12.0,
+        line_height_relative: 0.0
+      }
+    );
 
     let fixed = VerticalAlign::Length(Length::Percentage(50.0)).resolve(
       &sizing(),
       12.0,
       LineHeight::Length(Length::Px(20.0)),
-      14.0,
-    );
-    assert_eq!(fixed, ResolvedVerticalAlign::BaselineShiftPx(20.0));
-
-    let normal = VerticalAlign::Length(Length::Percentage(50.0)).resolve(
-      &sizing(),
-      12.0,
-      LineHeight::Normal,
-      14.0,
     );
     assert_eq!(
+      fixed,
+      ResolvedVerticalAlign::BaselineShift {
+        px: 20.0,
+        line_height_relative: 0.0
+      }
+    );
+
+    let normal =
+      VerticalAlign::Length(Length::Percentage(50.0)).resolve(&sizing(), 12.0, LineHeight::Normal);
+    assert_eq!(
       normal,
-      ResolvedVerticalAlign::BaselineShiftMetricsRelative(0.5)
+      ResolvedVerticalAlign::BaselineShift {
+        px: 0.0,
+        line_height_relative: 0.5
+      }
     );
   }
 
@@ -287,10 +319,18 @@ mod tests {
     let baseline = metrics.baseline - 4.0;
 
     let mut y = 0.0;
-    ResolvedVerticalAlign::BaselineShiftPx(5.0).apply(&mut y, &metrics, 4.0, None);
+    ResolvedVerticalAlign::BaselineShift {
+      px: 5.0,
+      line_height_relative: 0.0,
+    }
+    .apply(&mut y, &metrics, 4.0, None);
     assert_eq!(y, baseline - 5.0);
 
-    ResolvedVerticalAlign::BaselineShiftPx(-5.0).apply(&mut y, &metrics, 4.0, None);
+    ResolvedVerticalAlign::BaselineShift {
+      px: -5.0,
+      line_height_relative: 0.0,
+    }
+    .apply(&mut y, &metrics, 4.0, None);
     assert_eq!(y, baseline + 5.0);
   }
 
@@ -300,10 +340,46 @@ mod tests {
     let baseline = metrics.baseline - 4.0;
     let mut y = 0.0;
 
-    ResolvedVerticalAlign::BaselineShiftMetricsRelative(0.5).apply(&mut y, &metrics, 4.0, None);
+    ResolvedVerticalAlign::BaselineShift {
+      px: 0.0,
+      line_height_relative: 0.5,
+    }
+    .apply(&mut y, &metrics, 4.0, None);
     assert_eq!(
       y,
       baseline - ((metrics.ascent - metrics.descent + metrics.leading) * 0.5)
+    );
+  }
+
+  #[test]
+  fn resolve_normal_calc_percentage_uses_metrics_relative_px() {
+    let Ok(length) = Length::from_str("calc(50% + 4px)") else {
+      unreachable!()
+    };
+    let resolved = VerticalAlign::Length(length).resolve(&sizing(), 12.0, LineHeight::Normal);
+    assert_eq!(
+      resolved,
+      ResolvedVerticalAlign::BaselineShift {
+        px: 8.0,
+        line_height_relative: 0.5
+      }
+    );
+  }
+
+  #[test]
+  fn apply_metrics_relative_px_shift_uses_line_metrics_formula_plus_px() {
+    let metrics = line_metrics();
+    let baseline = metrics.baseline - 4.0;
+    let mut y = 0.0;
+
+    ResolvedVerticalAlign::BaselineShift {
+      px: 3.0,
+      line_height_relative: 0.5,
+    }
+    .apply(&mut y, &metrics, 4.0, None);
+    assert_eq!(
+      y,
+      baseline - ((metrics.ascent - metrics.descent + metrics.leading) * 0.5 + 3.0)
     );
   }
 

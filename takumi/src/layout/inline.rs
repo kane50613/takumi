@@ -195,7 +195,6 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c, N: Node<N> + 'c>(
             &context.sizing,
             context.sizing.font_size,
             context.style.line_height,
-            context.sizing.font_size,
           );
           let margin = context
             .style

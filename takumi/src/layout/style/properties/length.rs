@@ -74,6 +74,10 @@ impl CalcLinear {
   fn resolve(self, basis: f32) -> f32 {
     self.px + self.percent * basis
   }
+
+  pub(crate) fn components(self) -> (f32, f32) {
+    (self.px, self.percent)
+  }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -277,6 +281,15 @@ pub enum CalcHandle {
   Formula(CalcFormula),
   /// Internal handle for a resolved linear calc expression.
   Linear(CalcLinear),
+}
+
+impl CalcHandle {
+  pub(crate) fn resolve_linear(self, sizing: &Sizing) -> CalcLinear {
+    match self {
+      Self::Formula(formula) => formula.resolve(sizing),
+      Self::Linear(linear) => linear,
+    }
+  }
 }
 
 fn parse_calc_sum<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcValue> {
