@@ -128,12 +128,11 @@ impl VerticalAlign {
           }
         }
 
-        let line_height_basis_px = match line_height {
-          LineHeight::Normal => font_size,
-          LineHeight::Unitless(value) => value * font_size,
-          LineHeight::Length(value) => value.to_px(sizing, font_size),
+        let shift = match line_height {
+          LineHeight::Normal => length.to_px(sizing, 0.0),
+          LineHeight::Unitless(value) => length.to_px(sizing, value * font_size),
+          LineHeight::Length(value) => length.to_px(sizing, value.to_px(sizing, font_size)),
         };
-        let shift = length.to_px(sizing, line_height_basis_px);
         ResolvedVerticalAlign::BaselineShift {
           px: shift,
           line_height_relative: 0.0,
