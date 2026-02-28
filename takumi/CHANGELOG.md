@@ -1,5 +1,12 @@
 # takumi
 
+## 0.69.4
+
+### Patch Changes
+
+- 1058a19: Pass `currentColor` to svg
+- 1dc8413: Support gradient color-space interpolation
+
 ## 0.69.3
 
 ### Patch Changes
