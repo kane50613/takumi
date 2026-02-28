@@ -2,4 +2,4 @@
 "takumi": patch
 ---
 
-Support gradient mix color space
+Support gradient color-space interpolation
