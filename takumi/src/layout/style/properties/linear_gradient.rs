@@ -3,11 +3,11 @@ use image::{GenericImageView, Rgba};
 use std::ops::{Deref, Neg};
 
 use super::gradient_utils::{
-  adaptive_lut_size, apply_dither, build_color_lut, resolve_stops_along_axis,
+  adaptive_lut_size, apply_dither, build_color_lut_with_interpolation, resolve_stops_along_axis,
 };
 use crate::layout::style::{
-  Color, CssToken, FromCss, Length, MakeComputed, ParseResult, declare_enum_from_css_impl,
-  properties::ColorInput, tw::TailwindPropertyParser,
+  Color, ColorInterpolationMethod, CssToken, FromCss, Length, MakeComputed, ParseResult,
+  declare_enum_from_css_impl, properties::ColorInput, tw::TailwindPropertyParser,
 };
 use crate::rendering::{RenderContext, Sizing};
 
@@ -16,6 +16,8 @@ use crate::rendering::{RenderContext, Sizing};
 pub struct LinearGradient {
   /// The angle of the gradient.
   pub angle: Angle,
+  /// The color interpolation method used between stops.
+  pub interpolation: ColorInterpolationMethod,
   /// The steps of the gradient.
   pub stops: Box<[GradientStop]>,
 }
@@ -104,7 +106,14 @@ impl LinearGradientTile {
 
     // Pre-compute color lookup table with adaptive size.
     let lut_size = adaptive_lut_size(axis_length);
-    let color_lut = build_color_lut(&resolved_stops, axis_length, lut_size, buffer_pool);
+    let color_lut = build_color_lut_with_interpolation(
+      &resolved_stops,
+      axis_length,
+      lut_size,
+      buffer_pool,
+      gradient.interpolation.color_space,
+      gradient.interpolation.hue_direction,
+    );
 
     LinearGradientTile {
       width,
@@ -380,16 +389,30 @@ impl<'i> FromCss<'i> for LinearGradient {
     input.expect_function_matching("linear-gradient")?;
 
     input.parse_nested_block(|input| {
-      let angle = if let Ok(angle) = input.try_parse(Angle::from_css) {
-        input.try_parse(Parser::expect_comma).ok();
+      let mut angle = Angle::new(180.0);
+      let mut has_angle = false;
+      let mut interpolation = ColorInterpolationMethod::default();
 
-        angle
-      } else {
-        Angle::new(180.0)
-      };
+      loop {
+        if !has_angle && let Ok(parsed_angle) = input.try_parse(Angle::from_css) {
+          angle = parsed_angle;
+          has_angle = true;
+          continue;
+        }
+
+        if let Ok(parsed_interpolation) = input.try_parse(ColorInterpolationMethod::from_css) {
+          interpolation = parsed_interpolation;
+          continue;
+        }
+
+        break;
+      }
+
+      input.try_parse(Parser::expect_comma).ok();
 
       Ok(LinearGradient {
         angle,
+        interpolation,
         stops: GradientStops::from_css(input)?.into_boxed_slice(),
       })
     })
@@ -479,6 +502,8 @@ impl<'i> FromCss<'i> for Angle {
 
 #[cfg(test)]
 mod tests {
+  use color::{ColorSpaceTag, HueDirection};
+
   use crate::GlobalContext;
 
   use super::*;
@@ -489,6 +514,7 @@ mod tests {
       LinearGradient::from_str("linear-gradient(to top right, #ff0000, #0000ff)"),
       Ok(LinearGradient {
         angle: Angle::new(45.0),
+        interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
             color: ColorInput::Value(Color([255, 0, 0, 255])),
@@ -580,6 +606,7 @@ mod tests {
       LinearGradient::from_str("linear-gradient(45deg, #ff0000, #0000ff)"),
       Ok(LinearGradient {
         angle: Angle::new(45.0),
+        interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
             color: ColorInput::Value(Color([255, 0, 0, 255])),
@@ -596,11 +623,62 @@ mod tests {
   }
 
   #[test]
+  fn test_parse_linear_gradient_with_interpolation_color_space() {
+    assert_eq!(
+      LinearGradient::from_str("linear-gradient(in oklab, #ff0000, #0000ff)"),
+      Ok(LinearGradient {
+        angle: Angle::new(180.0),
+        interpolation: ColorInterpolationMethod {
+          color_space: ColorSpaceTag::Oklab,
+          hue_direction: HueDirection::Shorter,
+        },
+        stops: [
+          GradientStop::ColorHint {
+            color: ColorInput::Value(Color([255, 0, 0, 255])),
+            hint: None,
+          },
+          GradientStop::ColorHint {
+            color: ColorInput::Value(Color([0, 0, 255, 255])),
+            hint: None,
+          },
+        ]
+        .into(),
+      })
+    );
+  }
+
+  #[test]
+  fn test_parse_linear_gradient_with_interpolation_hue_direction() {
+    assert_eq!(
+      LinearGradient::from_str("linear-gradient(to right in oklch longer hue, red, blue)"),
+      Ok(LinearGradient {
+        angle: Angle::new(90.0),
+        interpolation: ColorInterpolationMethod {
+          color_space: ColorSpaceTag::Oklch,
+          hue_direction: HueDirection::Longer,
+        },
+        stops: [
+          GradientStop::ColorHint {
+            color: ColorInput::Value(Color::from_rgb(0xff0000)),
+            hint: None,
+          },
+          GradientStop::ColorHint {
+            color: ColorInput::Value(Color::from_rgb(0x0000ff)),
+            hint: None,
+          },
+        ]
+        .into(),
+      })
+    );
+  }
+
+  #[test]
   fn test_parse_linear_gradient_with_stops() {
     assert_eq!(
       LinearGradient::from_str("linear-gradient(to right, #ff0000 0%, #0000ff 100%)"),
       Ok(LinearGradient {
         angle: Angle::new(90.0), // "to right" = 90deg
+        interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
             color: ColorInput::Value(Color([255, 0, 0, 255])),
@@ -622,6 +700,7 @@ mod tests {
       LinearGradient::from_str("linear-gradient(to right, red 10% 20%, blue)"),
       Ok(LinearGradient {
         angle: Angle::new(90.0),
+        interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
             color: ColorInput::Value(Color::from_rgb(0xff0000)),
@@ -647,6 +726,7 @@ mod tests {
       LinearGradient::from_str("linear-gradient(to right, #ff0000, 50%, #0000ff)"),
       Ok(LinearGradient {
         angle: Angle::new(90.0), // "to right" = 90deg
+        interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
             color: ColorInput::Value(Color([255, 0, 0, 255])),
@@ -669,6 +749,7 @@ mod tests {
       LinearGradient::from_str("linear-gradient(to bottom, #ff0000)"),
       Ok(LinearGradient {
         angle: Angle::new(180.0),
+        interpolation: ColorInterpolationMethod::default(),
         stops: [GradientStop::ColorHint {
           color: ColorInput::Value(Color([255, 0, 0, 255])),
           hint: None,
@@ -685,6 +766,7 @@ mod tests {
       LinearGradient::from_str("linear-gradient(#ff0000, #0000ff)"),
       Ok(LinearGradient {
         angle: Angle::new(180.0),
+        interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
             color: ColorInput::Value(Color::from_rgb(0xff0000)),
@@ -772,6 +854,7 @@ mod tests {
       LinearGradient::from_str("linear-gradient(45deg, #ff0000, 25%, #00ff00, 75%, #0000ff)"),
       Ok(LinearGradient {
         angle: Angle::new(45.0),
+        interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
             color: Color([255, 0, 0, 255]).into(),
@@ -797,6 +880,7 @@ mod tests {
   fn test_linear_gradient_at_simple() {
     let gradient = LinearGradient {
       angle: Angle::new(180.0), // "to bottom" (default) - Top to bottom
+      interpolation: ColorInterpolationMethod::default(),
       stops: [
         GradientStop::ColorHint {
           color: Color([255, 0, 0, 255]).into(), // Red
@@ -833,6 +917,7 @@ mod tests {
   fn test_linear_gradient_at_horizontal() {
     let gradient = LinearGradient {
       angle: Angle::new(90.0), // "to right" - Left to right
+      interpolation: ColorInterpolationMethod::default(),
       stops: [
         GradientStop::ColorHint {
           color: Color([255, 0, 0, 255]).into(), // Red
@@ -864,6 +949,7 @@ mod tests {
   fn test_linear_gradient_at_single_color() {
     let gradient = LinearGradient {
       angle: Angle::new(0.0),
+      interpolation: ColorInterpolationMethod::default(),
       stops: [GradientStop::ColorHint {
         color: Color([255, 0, 0, 255]).into(), // Red
         hint: None,
@@ -884,6 +970,7 @@ mod tests {
   fn test_linear_gradient_at_no_steps() {
     let gradient = LinearGradient {
       angle: Angle::new(0.0),
+      interpolation: ColorInterpolationMethod::default(),
       stops: [].into(),
     };
 
@@ -978,6 +1065,7 @@ mod tests {
   fn resolve_stops_percentage_and_px_linear() {
     let gradient = LinearGradient {
       angle: Angle::new(0.0),
+      interpolation: ColorInterpolationMethod::default(),
       stops: [
         GradientStop::ColorHint {
           color: Color::black().into(),
@@ -1013,6 +1101,7 @@ mod tests {
   fn resolve_stops_equal_positions_allowed_linear() {
     let gradient = LinearGradient {
       angle: Angle::new(0.0),
+      interpolation: ColorInterpolationMethod::default(),
       stops: [
         GradientStop::ColorHint {
           color: Color::black().into(),

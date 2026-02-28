@@ -4,12 +4,12 @@ use cssparser::Parser;
 use image::{GenericImageView, Rgba};
 
 use super::gradient_utils::{
-  adaptive_lut_size, apply_dither, build_color_lut, resolve_stops_along_axis,
+  adaptive_lut_size, apply_dither, build_color_lut_with_interpolation, resolve_stops_along_axis,
 };
 use crate::{
   layout::style::{
-    Angle, BackgroundPosition, CssToken, FromCss, GradientStop, GradientStops, Length,
-    MakeComputed, ParseResult,
+    Angle, BackgroundPosition, ColorInterpolationMethod, CssToken, FromCss, GradientStop,
+    GradientStops, Length, MakeComputed, ParseResult,
   },
   rendering::{RenderContext, Sizing},
 };
@@ -21,6 +21,8 @@ pub struct ConicGradient {
   pub from_angle: Angle,
   /// Center position (default 50% 50%).
   pub center: BackgroundPosition,
+  /// The color interpolation method used between stops.
+  pub interpolation: ColorInterpolationMethod,
   /// Gradient color stops.
   pub stops: Box<[GradientStop]>,
 }
@@ -111,7 +113,14 @@ impl ConicGradientTile {
     // 8 samples per pixel of the larger dimension provides enough angular density for conic edges.
     let angular_axis = width.max(height).max(1) as f32 * 8.0;
     let lut_size = adaptive_lut_size(angular_axis);
-    let color_lut = build_color_lut(&resolved_stops, 360.0, lut_size, buffer_pool);
+    let color_lut = build_color_lut_with_interpolation(
+      &resolved_stops,
+      360.0,
+      lut_size,
+      buffer_pool,
+      gradient.interpolation.color_space,
+      gradient.interpolation.hue_direction,
+    );
 
     ConicGradientTile {
       width,
@@ -131,6 +140,7 @@ impl<'i> FromCss<'i> for ConicGradient {
     input.parse_nested_block(|input| {
       let mut from_angle: Option<Angle> = None;
       let mut center: Option<BackgroundPosition> = None;
+      let mut interpolation = ColorInterpolationMethod::default();
 
       // Parse optional "from <angle>" and/or "at <position>" before the comma
       loop {
@@ -146,6 +156,11 @@ impl<'i> FromCss<'i> for ConicGradient {
           continue;
         }
 
+        if let Ok(parsed_interpolation) = input.try_parse(ColorInterpolationMethod::from_css) {
+          interpolation = parsed_interpolation;
+          continue;
+        }
+
         // Consume the comma separator if present
         input.try_parse(Parser::expect_comma).ok();
         break;
@@ -156,6 +171,7 @@ impl<'i> FromCss<'i> for ConicGradient {
       Ok(ConicGradient {
         from_angle: from_angle.unwrap_or(Angle::zero()),
         center: center.unwrap_or_default(),
+        interpolation,
         stops: stops.into_boxed_slice(),
       })
     })
@@ -168,6 +184,8 @@ impl<'i> FromCss<'i> for ConicGradient {
 
 #[cfg(test)]
 mod tests {
+  use color::{ColorSpaceTag, HueDirection};
+
   use super::*;
   use crate::layout::style::{Color, Length, SpacePair, StopPosition};
   use crate::{GlobalContext, rendering::RenderContext};
@@ -181,6 +199,7 @@ mod tests {
       Ok(ConicGradient {
         from_angle: Angle::zero(),
         center: BackgroundPosition::default(),
+        interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
             color: Color([255, 0, 0, 255]).into(),
@@ -197,12 +216,39 @@ mod tests {
   }
 
   #[test]
+  fn test_parse_conic_gradient_with_interpolation_color_space() {
+    assert_eq!(
+      ConicGradient::from_str("conic-gradient(in oklab, red, blue)"),
+      Ok(ConicGradient {
+        from_angle: Angle::zero(),
+        center: BackgroundPosition::default(),
+        interpolation: ColorInterpolationMethod {
+          color_space: ColorSpaceTag::Oklab,
+          hue_direction: HueDirection::Shorter,
+        },
+        stops: [
+          GradientStop::ColorHint {
+            color: Color::from_rgb(0xff0000).into(),
+            hint: None,
+          },
+          GradientStop::ColorHint {
+            color: Color::from_rgb(0x0000ff).into(),
+            hint: None,
+          },
+        ]
+        .into(),
+      })
+    );
+  }
+
+  #[test]
   fn test_parse_conic_gradient_with_stops() {
     assert_eq!(
       ConicGradient::from_str("conic-gradient(#ff0000 0%, #00ff00 50%, #0000ff 100%)"),
       Ok(ConicGradient {
         from_angle: Angle::zero(),
         center: BackgroundPosition::default(),
+        interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
             color: Color([255, 0, 0, 255]).into(),
@@ -229,6 +275,7 @@ mod tests {
       Ok(ConicGradient {
         from_angle: Angle::zero(),
         center: BackgroundPosition::default(),
+        interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
             color: Color::from_rgb(0xff0000).into(),
@@ -260,6 +307,7 @@ mod tests {
           Length::Percentage(25.0).into(),
           Length::Percentage(75.0).into()
         )),
+        interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
             color: Color([255, 0, 0, 255]).into(),
@@ -280,6 +328,7 @@ mod tests {
     let gradient = ConicGradient {
       from_angle: Angle::zero(),
       center: BackgroundPosition::default(),
+      interpolation: ColorInterpolationMethod::default(),
       stops: [
         GradientStop::ColorHint {
           color: Color([255, 0, 0, 255]).into(),
@@ -309,6 +358,7 @@ mod tests {
     let gradient = ConicGradient {
       from_angle: Angle::zero(),
       center: BackgroundPosition::default(),
+      interpolation: ColorInterpolationMethod::default(),
       stops: [
         GradientStop::ColorHint {
           color: Color([255, 0, 0, 255]).into(),

@@ -22,6 +22,93 @@ fn is_cylindrical_color_space(color_space: ColorSpaceTag) -> bool {
   )
 }
 
+/// Color interpolation configuration used by functions like `color-mix()` and gradients.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ColorInterpolationMethod {
+  /// The color space used to interpolate between two colors.
+  pub color_space: ColorSpaceTag,
+  /// Optional hue interpolation strategy for cylindrical color spaces.
+  pub hue_direction: HueDirection,
+}
+
+impl Default for ColorInterpolationMethod {
+  fn default() -> Self {
+    Self {
+      color_space: ColorSpaceTag::Srgb,
+      hue_direction: HueDirection::Shorter,
+    }
+  }
+}
+
+impl<'i> FromCss<'i> for ColorInterpolationMethod {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    input.expect_ident_matching("in")?;
+
+    let location = input.current_source_location();
+    let token = input.next()?;
+    let Token::Ident(color_space_ident) = token else {
+      return Err(Color::unexpected_token_error(location, token));
+    };
+
+    let color_space = match_ignore_ascii_case! { &color_space_ident,
+      "srgb" => ColorSpaceTag::Srgb,
+      "srgb-linear" => ColorSpaceTag::LinearSrgb,
+      "lab" => ColorSpaceTag::Lab,
+      "oklab" => ColorSpaceTag::Oklab,
+      "lch" => ColorSpaceTag::Lch,
+      "oklch" => ColorSpaceTag::Oklch,
+      "hsl" => ColorSpaceTag::Hsl,
+      "hwb" => ColorSpaceTag::Hwb,
+      "display-p3" => ColorSpaceTag::DisplayP3,
+      "a98-rgb" => ColorSpaceTag::A98Rgb,
+      "prophoto-rgb" => ColorSpaceTag::ProphotoRgb,
+      "rec2020" => ColorSpaceTag::Rec2020,
+      "xyz" | "xyz-d65" => ColorSpaceTag::XyzD65,
+      "xyz-d50" => ColorSpaceTag::XyzD50,
+      _ => return Err(Color::unexpected_token_error(location, token)),
+    };
+
+    let mut hue_direction = HueDirection::Shorter;
+    let mut has_hue_direction = false;
+
+    if let Ok(direction) = input.try_parse(|input| {
+      let location = input.current_source_location();
+      let token = input.next()?;
+      let Token::Ident(ident) = token else {
+        return Err(Color::unexpected_token_error(location, token));
+      };
+
+      let direction = match_ignore_ascii_case! { &ident,
+        "shorter" => HueDirection::Shorter,
+        "longer" => HueDirection::Longer,
+        "increasing" => HueDirection::Increasing,
+        "decreasing" => HueDirection::Decreasing,
+        _ => return Err(Color::unexpected_token_error(location, token)),
+      };
+
+      input.expect_ident_matching("hue")?;
+
+      Ok(direction)
+    }) {
+      hue_direction = direction;
+      has_hue_direction = true;
+    }
+
+    if has_hue_direction && !is_cylindrical_color_space(color_space) {
+      return Err(input.new_error_for_next_token());
+    }
+
+    Ok(Self {
+      color_space,
+      hue_direction,
+    })
+  }
+
+  fn valid_tokens() -> &'static [CssToken] {
+    &[CssToken::Token("in <color-space>")]
+  }
+}
+
 /// Represents a color with 8-bit RGBA components.
 #[derive(Debug, Default, Clone, PartialEq, Copy)]
 pub struct Color(pub [u8; 4]);
@@ -370,8 +457,7 @@ impl<'i> FromCss<'i> for ColorMixItem {
 
 #[derive(Debug, Clone, Copy)]
 struct ColorMix {
-  color_space: ColorSpaceTag,
-  hue_direction: HueDirection,
+  interpolation: ColorInterpolationMethod,
   first: ColorMixItem,
   second: ColorMixItem,
 }
@@ -414,7 +500,11 @@ impl ColorMix {
     ));
 
     let mixed = dynamic_1
-      .interpolate(dynamic_2, self.color_space, self.hue_direction)
+      .interpolate(
+        dynamic_2,
+        self.interpolation.color_space,
+        self.interpolation.hue_direction,
+      )
       .eval(weight_2)
       .multiply_alpha(alpha_multiplier);
 
@@ -426,61 +516,7 @@ impl ColorMix {
 
 impl<'i> FromCss<'i> for ColorMix {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    input.expect_ident_matching("in")?;
-
-    let location = input.current_source_location();
-    let token = input.next()?;
-    let Token::Ident(color_space_ident) = token else {
-      return Err(Color::unexpected_token_error(location, token));
-    };
-
-    let color_space = match_ignore_ascii_case! { &color_space_ident,
-      "srgb" => ColorSpaceTag::Srgb,
-      "srgb-linear" => ColorSpaceTag::LinearSrgb,
-      "lab" => ColorSpaceTag::Lab,
-      "oklab" => ColorSpaceTag::Oklab,
-      "lch" => ColorSpaceTag::Lch,
-      "oklch" => ColorSpaceTag::Oklch,
-      "hsl" => ColorSpaceTag::Hsl,
-      "hwb" => ColorSpaceTag::Hwb,
-      "display-p3" => ColorSpaceTag::DisplayP3,
-      "a98-rgb" => ColorSpaceTag::A98Rgb,
-      "prophoto-rgb" => ColorSpaceTag::ProphotoRgb,
-      "rec2020" => ColorSpaceTag::Rec2020,
-      "xyz" | "xyz-d65" => ColorSpaceTag::XyzD65,
-      "xyz-d50" => ColorSpaceTag::XyzD50,
-      _ => return Err(Color::unexpected_token_error(location, token)),
-    };
-
-    let mut hue_direction = HueDirection::Shorter;
-    let mut has_hue_direction = false;
-
-    if let Ok(direction) = input.try_parse(|input| {
-      let location = input.current_source_location();
-      let token = input.next()?;
-      let Token::Ident(ident) = token else {
-        return Err(Color::unexpected_token_error(location, token));
-      };
-
-      let direction = match_ignore_ascii_case! { &ident,
-        "shorter" => HueDirection::Shorter,
-        "longer" => HueDirection::Longer,
-        "increasing" => HueDirection::Increasing,
-        "decreasing" => HueDirection::Decreasing,
-        _ => return Err(Color::unexpected_token_error(location, token)),
-      };
-
-      input.expect_ident_matching("hue")?;
-
-      Ok(direction)
-    }) {
-      hue_direction = direction;
-      has_hue_direction = true;
-    }
-
-    if has_hue_direction && !is_cylindrical_color_space(color_space) {
-      return Err(input.new_error_for_next_token());
-    }
+    let interpolation = ColorInterpolationMethod::from_css(input)?;
 
     input.expect_comma()?;
     let first = ColorMixItem::from_css(input)?;
@@ -492,8 +528,7 @@ impl<'i> FromCss<'i> for ColorMix {
     }
 
     Ok(Self {
-      color_space,
-      hue_direction,
+      interpolation,
       first,
       second,
     })

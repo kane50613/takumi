@@ -130,6 +130,7 @@ impl TwGradientState {
       TwGradientType::Linear => {
         let gradient = LinearGradient {
           angle,
+          interpolation: ColorInterpolationMethod::default(),
           stops: stops.into_boxed_slice(),
         };
 
@@ -140,6 +141,7 @@ impl TwGradientState {
           shape: RadialShape::Ellipse,
           size: RadialSize::FarthestCorner,
           center: BackgroundPosition::default(),
+          interpolation: ColorInterpolationMethod::default(),
           stops: stops.into_boxed_slice(),
         };
 
@@ -149,6 +151,7 @@ impl TwGradientState {
         let gradient = ConicGradient {
           from_angle: angle,
           center: BackgroundPosition::default(),
+          interpolation: ColorInterpolationMethod::default(),
           stops: stops.into_boxed_slice(),
         };
 
@@ -1752,6 +1755,7 @@ mod tests {
       CssValue::Value(Some(
         [BackgroundImage::Linear(LinearGradient {
           angle: Angle::new(90.0),
+          interpolation: ColorInterpolationMethod::default(),
           stops: [
             GradientStop::ColorHint {
               color: ColorInput::Value(Color([239, 68, 68, 255])),

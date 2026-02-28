@@ -1,3 +1,4 @@
+use color::{AlphaColor, ColorSpaceTag, DynamicColor, HueDirection, Srgb};
 use smallvec::SmallVec;
 use wide::f32x4;
 
@@ -44,7 +45,59 @@ fn interpolate_rgba_impl(c1: Color, c2: Color, t: f32) -> f32x4 {
   c1_f32 * (1.0 - t) + c2_f32 * t
 }
 
-pub(crate) fn color_from_stops(position: f32, resolved_stops: &[ResolvedGradientStop]) -> f32x4 {
+fn interpolate_with_color_space(
+  c1: Color,
+  c2: Color,
+  t: f32,
+  color_space: ColorSpaceTag,
+  hue_direction: HueDirection,
+) -> f32x4 {
+  if color_space == ColorSpaceTag::Srgb && hue_direction == HueDirection::Shorter {
+    return interpolate_rgba_impl(c1, c2, t);
+  }
+
+  if t <= f32::EPSILON {
+    return f32x4::from([
+      c1.0[0] as f32,
+      c1.0[1] as f32,
+      c1.0[2] as f32,
+      c1.0[3] as f32,
+    ]);
+  }
+
+  if t >= 1.0 - f32::EPSILON {
+    return f32x4::from([
+      c2.0[0] as f32,
+      c2.0[1] as f32,
+      c2.0[2] as f32,
+      c2.0[3] as f32,
+    ]);
+  }
+
+  let dynamic_1 =
+    DynamicColor::from_alpha_color(AlphaColor::<Srgb>::from(color::Rgba8::from_u8_array(c1.0)));
+  let dynamic_2 =
+    DynamicColor::from_alpha_color(AlphaColor::<Srgb>::from(color::Rgba8::from_u8_array(c2.0)));
+
+  let mixed = dynamic_1
+    .interpolate(dynamic_2, color_space, hue_direction)
+    .eval(t);
+  let rgba = mixed.to_alpha_color::<Srgb>().to_rgba8().to_u8_array();
+
+  f32x4::from([
+    rgba[0] as f32,
+    rgba[1] as f32,
+    rgba[2] as f32,
+    rgba[3] as f32,
+  ])
+}
+
+pub(crate) fn color_from_stops_with_interpolation(
+  position: f32,
+  resolved_stops: &[ResolvedGradientStop],
+  color_space: ColorSpaceTag,
+  hue_direction: HueDirection,
+) -> f32x4 {
   // Find the two stops that bracket the current position.
   // We want the last stop with position <= current position.
   let left_index = resolved_stops
@@ -78,7 +131,13 @@ pub(crate) fn color_from_stops(position: f32, resolved_stops: &[ResolvedGradient
       ((position - left_stop.position) / denom).clamp(0.0, 1.0)
     };
 
-    interpolate_rgba_impl(left_stop.color, right_stop.color, interpolation_position)
+    interpolate_with_color_space(
+      left_stop.color,
+      right_stop.color,
+      interpolation_position,
+      color_space,
+      hue_direction,
+    )
   }
 }
 
@@ -123,11 +182,13 @@ pub(crate) fn apply_dither(color: &[f32], x: u32, y: u32) -> [u8; 4] {
 
 /// Builds a pre-computed high-precision color lookup table for a gradient.
 /// This allows O(1) color sampling instead of O(n) search + interpolation per pixel.
-pub(crate) fn build_color_lut(
+pub(crate) fn build_color_lut_with_interpolation(
   resolved_stops: &[ResolvedGradientStop],
   axis_length: f32,
   lut_size: usize,
   buffer_pool: &mut crate::rendering::BufferPool,
+  color_space: ColorSpaceTag,
+  hue_direction: HueDirection,
 ) -> Vec<u8> {
   // Fast path: if only one color, fill just 16 bytes
   if resolved_stops.len() <= 1 {
@@ -153,7 +214,8 @@ pub(crate) fn build_color_lut(
   for (i, chunk) in f32_lut.iter_mut().enumerate() {
     let t = i as f32 / (lut_size - 1) as f32;
     let position_px = t * axis_length;
-    let color = color_from_stops(position_px, resolved_stops);
+    let color =
+      color_from_stops_with_interpolation(position_px, resolved_stops, color_space, hue_direction);
     *chunk = color.to_array();
   }
 

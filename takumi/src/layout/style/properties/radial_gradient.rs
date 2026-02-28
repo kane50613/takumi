@@ -2,12 +2,12 @@ use cssparser::Parser;
 use image::{GenericImageView, Rgba};
 
 use super::gradient_utils::{
-  adaptive_lut_size, apply_dither, build_color_lut, resolve_stops_along_axis,
+  adaptive_lut_size, apply_dither, build_color_lut_with_interpolation, resolve_stops_along_axis,
 };
 use crate::{
   layout::style::{
-    BackgroundPosition, CssToken, FromCss, GradientStop, GradientStops, Length, MakeComputed,
-    ParseResult, declare_enum_from_css_impl,
+    BackgroundPosition, ColorInterpolationMethod, CssToken, FromCss, GradientStop, GradientStops,
+    Length, MakeComputed, ParseResult, declare_enum_from_css_impl,
   },
   rendering::{RenderContext, Sizing},
 };
@@ -21,6 +21,8 @@ pub struct RadialGradient {
   pub size: RadialSize,
   /// Center position
   pub center: BackgroundPosition,
+  /// The color interpolation method used between stops.
+  pub interpolation: ColorInterpolationMethod,
   /// Gradient stops
   pub stops: Box<[GradientStop]>,
 }
@@ -210,7 +212,14 @@ impl RadialGradientTile {
 
     // Pre-compute color lookup table with adaptive size.
     let lut_size = adaptive_lut_size(radius_scale);
-    let color_lut = build_color_lut(&resolved_stops, radius_scale, lut_size, buffer_pool);
+    let color_lut = build_color_lut_with_interpolation(
+      &resolved_stops,
+      radius_scale,
+      lut_size,
+      buffer_pool,
+      gradient.interpolation.color_space,
+      gradient.interpolation.hue_direction,
+    );
 
     RadialGradientTile {
       width,
@@ -232,6 +241,7 @@ impl<'i> FromCss<'i> for RadialGradient {
       let mut shape = RadialShape::Ellipse;
       let mut size = RadialSize::FarthestCorner;
       let mut center = BackgroundPosition::default();
+      let mut interpolation = ColorInterpolationMethod::default();
 
       loop {
         if let Ok(s) = input.try_parse(RadialShape::from_css) {
@@ -249,6 +259,11 @@ impl<'i> FromCss<'i> for RadialGradient {
           continue;
         }
 
+        if let Ok(parsed_interpolation) = input.try_parse(ColorInterpolationMethod::from_css) {
+          interpolation = parsed_interpolation;
+          continue;
+        }
+
         input.try_parse(Parser::expect_comma).ok();
 
         break;
@@ -260,6 +275,7 @@ impl<'i> FromCss<'i> for RadialGradient {
         shape,
         size,
         center,
+        interpolation,
         stops: stops.into_boxed_slice(),
       })
     })
@@ -272,6 +288,8 @@ impl<'i> FromCss<'i> for RadialGradient {
 
 #[cfg(test)]
 mod tests {
+  use color::{ColorSpaceTag, HueDirection};
+
   use super::*;
   use crate::layout::style::{
     Color, Length, PositionComponent, PositionKeywordX, PositionKeywordY, SpacePair, StopPosition,
@@ -288,6 +306,7 @@ mod tests {
         shape: RadialShape::Ellipse,
         size: RadialSize::FarthestCorner,
         center: BackgroundPosition::default(),
+        interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
             color: Color([255, 0, 0, 255]).into(),
@@ -295,6 +314,33 @@ mod tests {
           },
           GradientStop::ColorHint {
             color: Color([0, 0, 255, 255]).into(),
+            hint: None,
+          },
+        ]
+        .into(),
+      })
+    );
+  }
+
+  #[test]
+  fn test_parse_radial_gradient_with_interpolation_color_space() {
+    assert_eq!(
+      RadialGradient::from_str("radial-gradient(in oklab, red, blue)"),
+      Ok(RadialGradient {
+        shape: RadialShape::Ellipse,
+        size: RadialSize::FarthestCorner,
+        center: BackgroundPosition::default(),
+        interpolation: ColorInterpolationMethod {
+          color_space: ColorSpaceTag::Oklab,
+          hue_direction: HueDirection::Shorter,
+        },
+        stops: [
+          GradientStop::ColorHint {
+            color: Color::from_rgb(0xff0000).into(),
+            hint: None,
+          },
+          GradientStop::ColorHint {
+            color: Color::from_rgb(0x0000ff).into(),
             hint: None,
           },
         ]
@@ -314,6 +360,7 @@ mod tests {
         shape: RadialShape::Circle,
         size: RadialSize::FarthestSide,
         center: BackgroundPosition::default(),
+        interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
             color: Color([255, 0, 0, 255]).into(),
@@ -343,6 +390,7 @@ mod tests {
           PositionComponent::KeywordX(PositionKeywordX::Left),
           PositionComponent::KeywordY(PositionKeywordY::Top),
         )),
+        interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
             color: Color([255, 0, 0, 255]).into(),
@@ -372,6 +420,7 @@ mod tests {
           Length::Percentage(25.0).into(),
           Length::Percentage(70.0).into(),
         )),
+        interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
             color: Color::white().into(),
@@ -401,6 +450,7 @@ mod tests {
         center: BackgroundPosition(SpacePair::from_single(PositionComponent::Length(
           Length::Px(25.0),
         ))),
+        interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
             color: Color([211, 211, 211, 255]).into(),
@@ -427,6 +477,7 @@ mod tests {
         shape: RadialShape::Circle,
         size: RadialSize::FarthestCorner,
         center: BackgroundPosition::default(),
+        interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
             color: Color([255, 0, 0, 255]).into(),
@@ -454,6 +505,7 @@ mod tests {
         shape: RadialShape::Circle,
         size: RadialSize::FarthestCorner,
         center: BackgroundPosition::default(),
+        interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
             color: Color::from_rgb(0xff0000).into(),
@@ -479,6 +531,7 @@ mod tests {
       shape: RadialShape::Ellipse,
       size: RadialSize::FarthestCorner,
       center: BackgroundPosition::default(),
+      interpolation: ColorInterpolationMethod::default(),
       stops: [
         GradientStop::ColorHint {
           color: Color::black().into(),
@@ -515,6 +568,7 @@ mod tests {
       shape: RadialShape::Ellipse,
       size: RadialSize::FarthestCorner,
       center: BackgroundPosition::default(),
+      interpolation: ColorInterpolationMethod::default(),
       stops: [
         GradientStop::ColorHint {
           color: Color::black().into(),
@@ -552,6 +606,7 @@ mod tests {
       shape: RadialShape::Circle,
       size: RadialSize::FarthestCorner,
       center: BackgroundPosition::default(), // default is center (50%, 50%)
+      interpolation: ColorInterpolationMethod::default(),
       stops: [
         GradientStop::ColorHint {
           color: Color([255, 0, 0, 255]).into(), // Red at center
@@ -588,6 +643,7 @@ mod tests {
         Length::Px(20.0).into(),
         Length::Px(20.0).into(),
       )),
+      interpolation: ColorInterpolationMethod::default(),
       stops: [
         GradientStop::ColorHint {
           color: Color::black().into(),
