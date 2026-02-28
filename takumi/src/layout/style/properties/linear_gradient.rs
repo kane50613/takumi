@@ -390,13 +390,11 @@ impl<'i> FromCss<'i> for LinearGradient {
 
     input.parse_nested_block(|input| {
       let mut angle = Angle::new(180.0);
-      let mut has_angle = false;
       let mut interpolation = ColorInterpolationMethod::default();
 
       loop {
-        if !has_angle && let Ok(parsed_angle) = input.try_parse(Angle::from_css) {
+        if let Ok(parsed_angle) = input.try_parse(Angle::from_css) {
           angle = parsed_angle;
-          has_angle = true;
           continue;
         }
 

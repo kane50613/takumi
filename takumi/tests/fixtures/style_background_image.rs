@@ -102,7 +102,7 @@ fn test_style_background_image_gradient_color_space_comparison() {
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
-        .height(Percentage(33.333))
+        .height(Percentage(100.0 / 3.0))
         .background_image(Some(
           BackgroundImages::from_str("linear-gradient(to right, red, blue)").unwrap(),
         ))
