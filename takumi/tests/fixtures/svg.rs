@@ -1,5 +1,5 @@
 use takumi::layout::{
-  node::{ContainerNode, ImageNode, NodeKind},
+  node::{ContainerNode, ImageNode, NodeKind, TextNode},
   style::{Length::*, *},
 };
 
@@ -113,4 +113,94 @@ fn test_svg_attr_size_in_absolute_flex_container() {
   .into();
 
   run_fixture_test(node, "svg_attr_size_in_absolute_flex_container");
+}
+
+#[test]
+fn test_svg_current_color_fixture() {
+  let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect x="0" y="0" width="120" height="120" fill="currentColor"/></svg>"#;
+
+  let swatch = |color: Color| {
+    ContainerNode {
+      class_name: None,
+      id: None,
+      tag_name: None,
+      preset: None,
+      tw: None,
+      style: Some(
+        StyleBuilder::default()
+          .width(Px(160.0))
+          .height(Px(160.0))
+          .padding(Sides([Px(20.0); 4]))
+          .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
+          .color(ColorInput::Value(color))
+          .flex_direction(FlexDirection::Column)
+          .align_items(AlignItems::Center)
+          .build()
+          .unwrap(),
+      ),
+      children: Some(
+        [
+          ImageNode {
+            class_name: None,
+            id: None,
+            tag_name: Some("svg".into()),
+            preset: None,
+            tw: None,
+            style: Some(
+              StyleBuilder::default()
+                .width(Px(120.0))
+                .height(Px(120.0))
+                .build()
+                .unwrap(),
+            ),
+            src: svg.into(),
+            width: None,
+            height: None,
+          }
+          .into(),
+          TextNode {
+            class_name: None,
+            id: None,
+            tag_name: None,
+            preset: None,
+            tw: None,
+            style: None,
+            text: "Hello".into(),
+          }
+          .into(),
+        ]
+        .into(),
+      ),
+    }
+    .into()
+  };
+
+  let node: NodeKind = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
+    preset: None,
+    tw: None,
+    style: Some(
+      StyleBuilder::default()
+        .width(Percentage(100.0))
+        .height(Percentage(100.0))
+        .display(Display::Flex)
+        .gap(SpacePair::from_single(Px(24.0)))
+        .padding(Sides([Px(40.0); 4]))
+        .background_color(ColorInput::Value(Color([30, 30, 30, 255])))
+        .build()
+        .unwrap(),
+    ),
+    children: Some(
+      [
+        swatch(Color([230, 40, 70, 255])),
+        swatch(Color([60, 140, 255, 255])),
+      ]
+      .into(),
+    ),
+  }
+  .into();
+
+  run_fixture_test(node, "svg_current_color_fixture");
 }

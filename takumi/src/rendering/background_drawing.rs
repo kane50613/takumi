@@ -275,7 +275,12 @@ pub(crate) fn render_tile(
       if let Ok(source) = resolve_image(url, context) {
         Some(BackgroundTile::Image(
           source
-            .render_to_rgba_image(tile_w, tile_h, context.style.image_rendering)?
+            .render_to_rgba_image(
+              tile_w,
+              tile_h,
+              context.style.image_rendering,
+              context.current_color,
+            )?
             .into_owned(),
         ))
       } else {

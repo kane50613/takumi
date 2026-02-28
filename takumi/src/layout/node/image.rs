@@ -87,9 +87,9 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ImageNode {
 
     let intrinsic_size = match &*image {
       #[cfg(feature = "svg")]
-      ImageSource::Svg(svg) => Size {
-        width: svg.size().width(),
-        height: svg.size().height(),
+      ImageSource::Svg { tree, .. } => Size {
+        width: tree.size().width(),
+        height: tree.size().height(),
       },
       ImageSource::Bitmap(bitmap) => Size {
         width: bitmap.width() as f32,

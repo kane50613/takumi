@@ -377,9 +377,13 @@ impl From<Color> for Rgba<u8> {
 
 impl Display for Color {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    if self.0[3] == 255 {
+      return write!(f, "rgb({}, {}, {})", self.0[0], self.0[1], self.0[2]);
+    }
+
     write!(
       f,
-      "rgb({} {} {} / {})",
+      "rgba({}, {}, {}, {:.6})",
       self.0[0],
       self.0[1],
       self.0[2],

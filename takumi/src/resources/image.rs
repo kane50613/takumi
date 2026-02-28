@@ -9,7 +9,7 @@ use dashmap::DashMap;
 use image::RgbaImage;
 
 use crate::{
-  layout::style::ImageScalingAlgorithm,
+  layout::style::{Color, ImageScalingAlgorithm},
   rendering::{fast_resize, unpremultiply_alpha},
 };
 use thiserror::Error;
@@ -22,7 +22,12 @@ pub type ImageResult = Result<Arc<ImageSource>, ImageResourceError>;
 pub enum ImageSource {
   /// An svg image source
   #[cfg(feature = "svg")]
-  Svg(Box<resvg::usvg::Tree>),
+  Svg {
+    /// Original SVG source used for reparsing with style overrides.
+    source: Arc<str>,
+    /// Parsed SVG tree used for size and initial metadata.
+    tree: Box<resvg::usvg::Tree>,
+  },
   /// A bitmap image source
   Bitmap(RgbaImage),
 }
@@ -41,7 +46,7 @@ impl ImageSource {
   pub fn size(&self) -> (f32, f32) {
     match self {
       #[cfg(feature = "svg")]
-      ImageSource::Svg(svg) => (svg.size().width(), svg.size().height()),
+      ImageSource::Svg { tree, .. } => (tree.size().width(), tree.size().height()),
       ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
     }
   }
@@ -51,27 +56,51 @@ impl ImageSource {
     &'i self,
     width: u32,
     height: u32,
-    algorithm: ImageScalingAlgorithm,
+    image_rendering: ImageScalingAlgorithm,
+    current_color: Color,
   ) -> Result<Cow<'i, RgbaImage>, ImageResourceError> {
+    #[cfg(not(feature = "svg"))]
+    let _ = current_color;
+
     match self {
       ImageSource::Bitmap(bitmap) => {
         if bitmap.width() == width && bitmap.height() == height {
           return Ok(Cow::Borrowed(bitmap));
         }
 
-        Ok(Cow::Owned(fast_resize(bitmap, width, height, algorithm)?))
+        Ok(Cow::Owned(fast_resize(
+          bitmap,
+          width,
+          height,
+          image_rendering,
+        )?))
       }
       #[cfg(feature = "svg")]
-      ImageSource::Svg(svg) => {
-        use resvg::{tiny_skia::Pixmap, usvg::Transform};
+      ImageSource::Svg { source, tree } => {
+        use resvg::{
+          tiny_skia::Pixmap,
+          usvg::{Options, Transform, Tree},
+        };
+
+        let options = Options {
+          style_sheet: Some(format!("svg {{ color: {current_color}; }}")),
+          image_rendering: image_rendering.into(),
+          ..Default::default()
+        };
+        let reparsed_tree =
+          Tree::from_str(source, &options).map_err(ImageResourceError::SvgParseError)?;
 
         let mut pixmap = Pixmap::new(width, height).ok_or(ImageResourceError::InvalidPixmapSize)?;
 
-        let original_size = svg.size();
+        let original_size = tree.size();
         let sx = width as f32 / original_size.width();
         let sy = height as f32 / original_size.height();
 
-        resvg::render(svg, Transform::from_scale(sx, sy), &mut pixmap.as_mut());
+        resvg::render(
+          &reparsed_tree,
+          Transform::from_scale(sx, sy),
+          &mut pixmap.as_mut(),
+        );
 
         let mut image = RgbaImage::from_raw(width, height, pixmap.take())
           .ok_or(ImageResourceError::MismatchedBufferSize)?;
@@ -119,7 +148,10 @@ pub fn parse_svg_str(src: &str) -> ImageResult {
 
   let tree = Tree::from_str(src, &Default::default()).map_err(ImageResourceError::SvgParseError)?;
 
-  Ok(Arc::new(ImageSource::Svg(Box::new(tree))))
+  Ok(Arc::new(ImageSource::Svg {
+    source: Arc::from(src),
+    tree: Box::new(tree),
+  }))
 }
 
 /// Represents the state of an image in the rendering system.
@@ -157,4 +189,101 @@ pub enum ImageResourceError {
   /// An error occurred while resizing the image
   #[error("An error occurred while resizing the image: {0}")]
   ResizeError(#[from] fast_image_resize::ResizeError),
+}
+
+#[cfg(test)]
+mod tests {
+  use image::Rgba;
+
+  use super::*;
+
+  fn rgba_at(image: &RgbaImage, x: u32, y: u32) -> [u8; 4] {
+    image.get_pixel(x, y).0
+  }
+
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_current_color_changes_output() -> Result<(), ImageResourceError> {
+    let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="currentColor"/></svg>"#;
+    let image = parse_svg_str(svg)?;
+
+    let red = image
+      .render_to_rgba_image(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0xFF0000))?
+      .into_owned();
+    let blue = image
+      .render_to_rgba_image(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?
+      .into_owned();
+
+    assert_ne!(rgba_at(&red, 2, 2), rgba_at(&blue, 2, 2));
+    Ok(())
+  }
+
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_current_color_applies_alpha() -> Result<(), ImageResourceError> {
+    let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="currentColor"/></svg>"#;
+    let image = parse_svg_str(svg)?;
+    let color = Color([255, 0, 0, 128]);
+
+    let rendered = image
+      .render_to_rgba_image(4, 4, ImageScalingAlgorithm::Auto, color)?
+      .into_owned();
+    let alpha = rgba_at(&rendered, 2, 2)[3];
+
+    assert!((alpha as i16 - 128).abs() <= 1);
+    Ok(())
+  }
+
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_fixed_fill_is_not_affected_by_current_color() -> Result<(), ImageResourceError> {
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="#ff0000"/></svg>"##;
+    let image = parse_svg_str(svg)?;
+
+    let first = image
+      .render_to_rgba_image(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x00FF00))?
+      .into_owned();
+    let second = image
+      .render_to_rgba_image(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?
+      .into_owned();
+
+    assert_eq!(first.as_raw(), second.as_raw());
+    Ok(())
+  }
+
+  #[test]
+  fn bitmap_is_not_affected_by_current_color() -> Result<(), ImageResourceError> {
+    let mut bitmap = RgbaImage::new(2, 2);
+    bitmap.put_pixel(0, 0, Rgba([12, 34, 56, 200]));
+    bitmap.put_pixel(1, 0, Rgba([78, 90, 12, 255]));
+    let image = ImageSource::Bitmap(bitmap);
+
+    let first = image
+      .render_to_rgba_image(2, 2, ImageScalingAlgorithm::Auto, Color::from_rgb(0xFF0000))?
+      .into_owned();
+    let second = image
+      .render_to_rgba_image(2, 2, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?
+      .into_owned();
+
+    assert_eq!(first.as_raw(), second.as_raw());
+    Ok(())
+  }
+
+  #[test]
+  fn bitmap_resize_smoke_for_scaling_algorithm() -> Result<(), ImageResourceError> {
+    let mut bitmap = RgbaImage::new(2, 2);
+    bitmap.put_pixel(0, 0, Rgba([255, 0, 0, 255]));
+    bitmap.put_pixel(1, 0, Rgba([0, 255, 0, 255]));
+    bitmap.put_pixel(0, 1, Rgba([0, 0, 255, 255]));
+    bitmap.put_pixel(1, 1, Rgba([255, 255, 255, 255]));
+    let image = ImageSource::Bitmap(bitmap);
+
+    let resized = image
+      .render_to_rgba_image(4, 4, ImageScalingAlgorithm::Pixelated, Color::black())?
+      .into_owned();
+
+    assert_eq!(resized.width(), 4);
+    assert_eq!(resized.height(), 4);
+    Ok(())
+  }
 }

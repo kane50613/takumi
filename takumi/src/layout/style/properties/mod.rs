@@ -1002,6 +1002,17 @@ declare_enum_from_css_impl!(
   "pixelated" => ImageScalingAlgorithm::Pixelated
 );
 
+#[cfg(feature = "svg")]
+impl From<ImageScalingAlgorithm> for resvg::usvg::ImageRendering {
+  fn from(algorithm: ImageScalingAlgorithm) -> Self {
+    match algorithm {
+      ImageScalingAlgorithm::Auto => resvg::usvg::ImageRendering::default(),
+      ImageScalingAlgorithm::Smooth => resvg::usvg::ImageRendering::Smooth,
+      ImageScalingAlgorithm::Pixelated => resvg::usvg::ImageRendering::Pixelated,
+    }
+  }
+}
+
 /// Represents border style options.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum BorderStyle {

@@ -52,6 +52,7 @@ pub fn process_image_for_object_fit<'i>(
           content_box.width as u32,
           content_box.height as u32,
           context.style.image_rendering,
+          context.current_color,
         )?
         .into(),
       Point::zero(),
@@ -78,6 +79,7 @@ pub fn process_image_for_object_fit<'i>(
             new_width as u32,
             new_height as u32,
             context.style.image_rendering,
+            context.current_color,
           )?
           .into(),
         Point {
@@ -98,6 +100,7 @@ pub fn process_image_for_object_fit<'i>(
         new_width as u32,
         new_height as u32,
         context.style.image_rendering,
+        context.current_color,
       )?;
 
       let available_crop_x = new_width - content_box.width;
@@ -131,12 +134,14 @@ pub fn process_image_for_object_fit<'i>(
           new_width as u32,
           new_height as u32,
           context.style.image_rendering,
+          context.current_color,
         )?
       } else {
         image.render_to_rgba_image(
           image_width as u32,
           image_height as u32,
           context.style.image_rendering,
+          context.current_color,
         )?
       };
 
@@ -173,6 +178,7 @@ pub fn process_image_for_object_fit<'i>(
               image_width as u32,
               image_height as u32,
               context.style.image_rendering,
+              context.current_color,
             )?
             .into(),
           Point {
@@ -197,6 +203,7 @@ pub fn process_image_for_object_fit<'i>(
         image_width as u32,
         image_height as u32,
         context.style.image_rendering,
+        context.current_color,
       )?;
 
       let cropped = CowImage::crop(
