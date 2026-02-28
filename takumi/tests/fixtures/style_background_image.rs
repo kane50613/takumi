@@ -92,6 +92,89 @@ fn test_style_background_image_gradient_hard_stop() {
 }
 
 #[test]
+fn test_style_background_image_gradient_color_space_comparison() {
+  let srgb = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
+    preset: None,
+    tw: None,
+    style: Some(
+      StyleBuilder::default()
+        .width(Percentage(100.0))
+        .height(Percentage(33.333))
+        .background_image(Some(
+          BackgroundImages::from_str("linear-gradient(to right, red, blue)").unwrap(),
+        ))
+        .build()
+        .unwrap(),
+    ),
+    children: None,
+  };
+
+  let oklab = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
+    preset: None,
+    tw: None,
+    style: Some(
+      StyleBuilder::default()
+        .width(Percentage(100.0))
+        .height(Percentage(33.333))
+        .background_image(Some(
+          BackgroundImages::from_str("linear-gradient(to right in oklab, red, blue)").unwrap(),
+        ))
+        .build()
+        .unwrap(),
+    ),
+    children: None,
+  };
+
+  let oklch_longer = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
+    preset: None,
+    tw: None,
+    style: Some(
+      StyleBuilder::default()
+        .width(Percentage(100.0))
+        .height(Percentage(33.334))
+        .background_image(Some(
+          BackgroundImages::from_str("linear-gradient(to right in oklch longer hue, red, blue)")
+            .unwrap(),
+        ))
+        .build()
+        .unwrap(),
+    ),
+    children: None,
+  };
+
+  let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
+    preset: None,
+    tw: None,
+    style: Some(
+      StyleBuilder::default()
+        .width(Percentage(100.0))
+        .height(Percentage(100.0))
+        .flex_direction(FlexDirection::Column)
+        .build()
+        .unwrap(),
+    ),
+    children: Some([srgb.into(), oklab.into(), oklch_longer.into()].into()),
+  };
+
+  run_fixture_test(
+    container.into(),
+    "style_background_image_gradient_color_space_comparison",
+  );
+}
+
+#[test]
 fn test_style_background_image_radial_basic() {
   let background_images = BackgroundImages::from_str("radial-gradient(#e66465, #9198e5)").unwrap();
 
