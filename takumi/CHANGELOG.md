@@ -1,5 +1,11 @@
 # takumi
 
+## 0.69.5
+
+### Patch Changes
+
+- 9d9f43b: Support viewport & container length units
+
 ## 0.69.4
 
 ### Patch Changes
