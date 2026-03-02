@@ -1,5 +1,11 @@
 # takumi
 
+## 0.70.1
+
+### Patch Changes
+
+- 36fba31: Strip `text` & `tspan` nodes from SVG
+
 ## 0.70.0
 
 ### Patch Changes
