@@ -1,5 +1,11 @@
 # @takumi-rs/core
 
+## 0.70.0
+
+### Patch Changes
+
+- fb8ccf8: Secure `ArrayBuffer` memory accessing
+
 ## 0.69.5
 
 ## 0.69.4

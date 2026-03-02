@@ -1,5 +1,21 @@
 # @takumi-rs/wasm
 
+## 0.70.0
+
+### Minor Changes
+
+- a69dd7d: **Reverting `.asUint8Array()` changes**
+
+  As it's very dangerous to use `asUint8Array()` without proper handling and recycling, we are reverting the changes.
+
+  The `render` and `renderAnimation` methods now return `Uint8Array` instead of `WasmBuffer` class.
+
+  ```tsx
+  const image = renderer.render(node, options);
+
+  controller.enqueue(image);
+  ```
+
 ## 0.69.5
 
 ## 0.69.4

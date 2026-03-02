@@ -1,5 +1,12 @@
 # takumi
 
+## 0.70.0
+
+### Patch Changes
+
+- 217b9b0: Refactor rendering to avoid stack overflow in deep nested nodes
+- bf3b981: fix regression image node size measurement in absolute positioned container
+
 ## 0.69.5
 
 ### Patch Changes
