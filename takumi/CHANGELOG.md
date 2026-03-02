@@ -1,5 +1,11 @@
 # takumi
 
+## 0.70.2
+
+### Patch Changes
+
+- edd121c: Use `libwebp-sys` crate for non-wasm targets webp encoding
+
 ## 0.70.1
 
 ### Patch Changes

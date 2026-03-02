@@ -1,5 +1,11 @@
 # @takumi-rs/core
 
+## 0.70.2
+
+### Patch Changes
+
+- 7270512: Fix concurrent call to async methods caused race-condition
+
 ## 0.70.1
 
 ## 0.70.0
