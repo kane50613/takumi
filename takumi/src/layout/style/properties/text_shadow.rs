@@ -64,16 +64,18 @@ impl<'i> FromCss<'i> for TextShadow {
     let mut color = None;
     let mut lengths = None;
 
-    // Parse all components in a loop, as they can appear in any order
     loop {
-      // Try to parse length values (offsets, blur radius, spread radius)
+      let state = input.state();
+      if input.try_parse(|input| input.expect_comma()).is_ok() {
+        input.reset(&state);
+        break;
+      }
+
       if lengths.is_none() {
         let value = input.try_parse::<_, _, ParseError<Cow<'i, str>>>(|input| {
-          // Parse the required horizontal and vertical offsets
           let horizontal = Length::from_css(input)?;
           let vertical = Length::from_css(input)?;
 
-          // Parse optional blur radius (defaults to 0)
           let blur = input.try_parse(Length::from_css).unwrap_or(Length::zero());
 
           Ok((horizontal, vertical, blur))
@@ -85,7 +87,6 @@ impl<'i> FromCss<'i> for TextShadow {
         }
       }
 
-      // Try to parse a color value if not already found
       if color.is_none()
         && let Ok(value) = input.try_parse(ColorInput::from_css)
       {
@@ -93,16 +94,12 @@ impl<'i> FromCss<'i> for TextShadow {
         continue;
       }
 
-      // If we can't parse anything else, break out of the loop
       break;
     }
 
-    // At minimum, we need the two required length values (offsets)
     let lengths = lengths.ok_or(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid))?;
 
-    // Construct the TextShadow with parsed values or defaults
     Ok(TextShadow {
-      // Use parsed color or default to currentColor per CSS spec
       color: color.unwrap_or(ColorInput::CurrentColor),
       offset_x: lengths.0,
       offset_y: lengths.1,
@@ -168,6 +165,30 @@ mod tests {
             offset_y: Px(10.0),
             blur_radius: Px(0.0),
             color: Color([85, 138, 187, 255]).into(),
+          }
+        ]
+        .into()
+      )
+    );
+  }
+
+  #[test]
+  fn test_parse_text_shadow_multiple_rgba_values() {
+    assert_eq!(
+      TextShadows::from_str("5px 5px rgba(0, 0, 0, 0.5), 10px 10px rgba(255, 0, 0, 0.25)"),
+      Ok(
+        [
+          TextShadow {
+            offset_x: Px(5.0),
+            offset_y: Px(5.0),
+            blur_radius: Px(0.0),
+            color: Color([0, 0, 0, 128]).into(),
+          },
+          TextShadow {
+            offset_x: Px(10.0),
+            offset_y: Px(10.0),
+            blur_radius: Px(0.0),
+            color: Color([255, 0, 0, 64]).into(),
           }
         ]
         .into()

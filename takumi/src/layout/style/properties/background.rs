@@ -45,8 +45,6 @@ impl<'i> FromCss<'i> for Background {
         break;
       }
 
-      // Stop parsing this layer at a top-level comma so `Backgrounds` can parse
-      // the next layer.
       let state = input.state();
       if input.try_parse(|input| input.expect_comma()).is_ok() {
         input.reset(&state);

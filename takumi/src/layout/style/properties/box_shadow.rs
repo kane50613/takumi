@@ -78,9 +78,13 @@ impl<'i> FromCss<'i> for BoxShadow {
     let mut lengths = None;
     let mut inset = false;
 
-    // Parse all components in a loop, as they can appear in any order
     loop {
-      // Try to parse the "inset" keyword if not already found
+      let state = input.state();
+      if input.try_parse(|input| input.expect_comma()).is_ok() {
+        input.reset(&state);
+        break;
+      }
+
       if !inset
         && input
           .try_parse(|input| input.expect_ident_matching("inset"))
@@ -90,17 +94,13 @@ impl<'i> FromCss<'i> for BoxShadow {
         continue;
       }
 
-      // Try to parse length values (offsets, blur radius, spread radius)
       if lengths.is_none() {
         let value = input.try_parse::<_, _, ParseError<Cow<'i, str>>>(|input| {
-          // Parse the required horizontal and vertical offsets
           let horizontal = Length::from_css(input)?;
           let vertical = Length::from_css(input)?;
 
-          // Parse optional blur radius (defaults to 0)
           let blur = input.try_parse(Length::from_css).unwrap_or(Length::zero());
 
-          // Parse optional spread radius (defaults to 0)
           let spread = input.try_parse(Length::from_css).unwrap_or(Length::zero());
 
           Ok((horizontal, vertical, blur, spread))
@@ -112,7 +112,6 @@ impl<'i> FromCss<'i> for BoxShadow {
         }
       }
 
-      // Try to parse a color value if not already found
       if color.is_none()
         && let Ok(value) = input.try_parse(ColorInput::from_css)
       {
@@ -120,16 +119,12 @@ impl<'i> FromCss<'i> for BoxShadow {
         continue;
       }
 
-      // If we can't parse anything else, break out of the loop
       break;
     }
 
-    // At minimum, we need the two required length values (offsets)
     let lengths = lengths.ok_or(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid))?;
 
-    // Construct the BoxShadow with parsed values or defaults
     Ok(BoxShadow {
-      // Use parsed color or default to transparent
       color: color.unwrap_or(ColorInput::Value(Color::transparent())),
       offset_x: lengths.0,
       offset_y: lengths.1,
@@ -316,5 +311,33 @@ mod tests {
 
     // Test parsing invalid box-shadow (no values)
     assert!(BoxShadow::from_str("").is_err());
+  }
+
+  #[test]
+  fn test_parse_multiple_box_shadows_with_rgba() {
+    assert_eq!(
+      BoxShadows::from_str("2px 4px rgba(0, 0, 0, 0.5), 1px 2px 3px rgba(255, 0, 0, 0.25)"),
+      Ok(
+        [
+          BoxShadow {
+            offset_x: Px(2.0),
+            offset_y: Px(4.0),
+            blur_radius: Length::zero(),
+            spread_radius: Length::zero(),
+            color: ColorInput::Value(Color([0, 0, 0, 128])),
+            inset: false,
+          },
+          BoxShadow {
+            offset_x: Px(1.0),
+            offset_y: Px(2.0),
+            blur_radius: Px(3.0),
+            spread_radius: Length::zero(),
+            color: ColorInput::Value(Color([255, 0, 0, 64])),
+            inset: false,
+          }
+        ]
+        .into()
+      )
+    );
   }
 }
