@@ -156,8 +156,8 @@ pub(crate) fn compute_overlay_bounds(
     return None;
   }
 
-  let offset_x = offset.x.floor() as i32;
-  let offset_y = offset.y.floor() as i32;
+  let offset_x = offset.x.trunc() as i32;
+  let offset_y = offset.y.trunc() as i32;
   let bottom_width = bottom.width() as i32;
   let bottom_height = bottom.height() as i32;
   let dest_y_min = offset_y.max(0);
