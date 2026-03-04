@@ -45,6 +45,14 @@ impl<'i> FromCss<'i> for Background {
         break;
       }
 
+      // Stop parsing this layer at a top-level comma so `Backgrounds` can parse
+      // the next layer.
+      let state = input.state();
+      if input.try_parse(|input| input.expect_comma()).is_ok() {
+        input.reset(&state);
+        break;
+      }
+
       // Try to parse background-color
       if color.is_none()
         && let Ok(value) = input.try_parse(ColorInput::from_css)
@@ -213,5 +221,17 @@ mod tests {
   #[test]
   fn test_parse_background_invalid() {
     assert!(Background::from_str("invalid-value").is_err());
+  }
+
+  #[test]
+  fn test_parse_backgrounds_multiple_gradients() {
+    let backgrounds = Backgrounds::from_str(
+      "radial-gradient(circle at 80% 20%, #FF3D00 0%, transparent 40%), radial-gradient(circle at 20% 80%, #00E5FF 0%, transparent 40%)",
+    )
+    .unwrap();
+
+    assert_eq!(backgrounds.len(), 2);
+    assert!(matches!(backgrounds[0].image, BackgroundImage::Radial(_)));
+    assert!(matches!(backgrounds[1].image, BackgroundImage::Radial(_)));
   }
 }
