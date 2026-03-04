@@ -1,5 +1,13 @@
 # takumi
 
+## 0.70.4
+
+### Patch Changes
+
+- 4895e79: Fix nested node's resource urls not being collected
+- e200a64: Fix comma-separated list parsing for `background`, `box-shadow`, `text-shadow`
+- c5465f7: Fix flex text node self-alignment
+
 ## 0.70.3
 
 ## 0.70.2
