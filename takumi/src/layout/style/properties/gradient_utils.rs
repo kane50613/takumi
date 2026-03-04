@@ -140,11 +140,13 @@ pub(crate) trait GradientOverlayTile {
   fn height(&self) -> u32;
   fn lut_samples(&self) -> &[[f32; 4]];
   fn begin_row(&self, src_x_start: u32, src_y: u32, lut_len: usize) -> Self::RowState;
+  /// Returns an index in `0..lut_len` where `lut_len` is the value passed to `begin_row`.
   fn next_lut_index(&self, row_state: &mut Self::RowState) -> usize;
 }
 
 #[inline(always)]
-fn compute_overlay_bounds(
+/// Computes destination/source bounds using floored pixel offsets from `offset`.
+pub(crate) fn compute_overlay_bounds(
   bottom: &RgbaImage,
   offset: Point<f32>,
   width: u32,
@@ -154,8 +156,8 @@ fn compute_overlay_bounds(
     return None;
   }
 
-  let offset_x = offset.x as i32;
-  let offset_y = offset.y as i32;
+  let offset_x = offset.x.floor() as i32;
+  let offset_y = offset.y.floor() as i32;
   let bottom_width = bottom.width() as i32;
   let bottom_height = bottom.height() as i32;
   let dest_y_min = offset_y.max(0);
@@ -190,15 +192,17 @@ pub(crate) fn overlay_gradient_tile_fast_normal_unconstrained<T: GradientOverlay
   if lut_samples.is_empty() {
     return;
   }
+  let lut_len = lut_samples.len();
 
   for dest_y in dest_y_min..dest_y_max {
     let src_y = (dest_y - offset_y) as u32;
     let src_x_start = (dest_x_min - offset_x) as u32;
     let mut src_x = src_x_start;
-    let mut row_state = tile.begin_row(src_x_start, src_y, lut_samples.len());
+    let mut row_state = tile.begin_row(src_x_start, src_y, lut_len);
 
     for dest_x in dest_x_min..dest_x_max {
       let lut_idx = tile.next_lut_index(&mut row_state);
+      debug_assert!(lut_idx < lut_len);
       let pixel = Rgba(apply_dither(&lut_samples[lut_idx], src_x, src_y));
       if pixel.0[3] != 0 {
         let current = bottom.get_pixel_mut(dest_x as u32, dest_y as u32);
@@ -230,20 +234,27 @@ pub(crate) fn build_color_lut_with_interpolation(
       .map(|s| s.color)
       .unwrap_or(crate::layout::style::Color::transparent());
 
-    let mut lut = buffer_pool.acquire_dirty(16);
     let c = [
       color.0[0] as f32,
       color.0[1] as f32,
       color.0[2] as f32,
       color.0[3] as f32,
     ];
-    let f32_lut = bytemuck::cast_slice_mut::<u8, [f32; 4]>(&mut lut);
-    f32_lut[0] = c;
+    let mut lut = buffer_pool.acquire_dirty(16);
+    if let Ok(f32_lut) = bytemuck::try_cast_slice_mut::<u8, [f32; 4]>(&mut lut) {
+      f32_lut[0] = c;
+      return lut;
+    }
+
+    let typed_lut = [c];
+    lut.copy_from_slice(bytemuck::cast_slice(&typed_lut));
     return lut;
   }
 
-  let mut lut = buffer_pool.acquire_dirty(lut_size * 16);
-  let f32_lut = bytemuck::cast_slice_mut::<u8, [f32; 4]>(&mut lut);
+  let Some(lut_bytes) = lut_size.checked_mul(16) else {
+    return Vec::new();
+  };
+  let mut lut = buffer_pool.acquire_dirty(lut_bytes);
 
   let mut left_index = 0usize;
   let mut right_index = 1usize;
@@ -253,7 +264,7 @@ pub(crate) fn build_color_lut_with_interpolation(
     axis_length / (lut_size - 1) as f32
   };
 
-  for (sample_index, chunk) in f32_lut.iter_mut().enumerate() {
+  let mut write_sample = |sample_index: usize| -> [f32; 4] {
     let position_px = sample_index as f32 * sample_step;
 
     while right_index < resolved_stops.len() && resolved_stops[right_index].position <= position_px
@@ -289,8 +300,21 @@ pub(crate) fn build_color_lut_with_interpolation(
       )
     };
 
-    *chunk = color.to_array();
+    color.to_array()
+  };
+
+  if let Ok(f32_lut) = bytemuck::try_cast_slice_mut::<u8, [f32; 4]>(&mut lut) {
+    for (sample_index, chunk) in f32_lut.iter_mut().enumerate() {
+      *chunk = write_sample(sample_index);
+    }
+    return lut;
   }
+
+  let mut typed_lut = vec![[0.0; 4]; lut_size];
+  for (sample_index, chunk) in typed_lut.iter_mut().enumerate() {
+    *chunk = write_sample(sample_index);
+  }
+  lut.copy_from_slice(bytemuck::cast_slice(&typed_lut));
 
   lut
 }

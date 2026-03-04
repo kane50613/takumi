@@ -17,7 +17,7 @@ use crate::{Result, layout::style::BlendMode};
 use crate::{
   layout::style::{
     Affine, Color, GradientOverlayTile, ImageScalingAlgorithm, Overflow, ResolvedStyle,
-    overlay_gradient_tile_fast_normal_unconstrained,
+    compute_overlay_bounds, overlay_gradient_tile_fast_normal_unconstrained,
   },
   rendering::{BorderProperties, RenderContext, blend_pixel, create_mask, fast_div_255},
 };
@@ -931,39 +931,6 @@ pub(crate) fn mask_index_from_coord(x: u32, y: u32, width: u32) -> usize {
   (y * width + x) as usize
 }
 
-#[inline(always)]
-fn compute_overlay_bounds(
-  bottom: &RgbaImage,
-  offset: Point<f32>,
-  top_size: Size<u32>,
-) -> Option<(i32, i32, i32, i32, i32, i32)> {
-  if top_size.width == 0 || top_size.height == 0 {
-    return None;
-  }
-
-  let offset_x = offset.x as i32;
-  let offset_y = offset.y as i32;
-  let bottom_width = bottom.width() as i32;
-  let bottom_height = bottom.height() as i32;
-  let dest_y_min = offset_y.max(0);
-  let dest_y_max = (offset_y + top_size.height as i32).min(bottom_height);
-
-  if dest_y_min >= dest_y_max {
-    return None;
-  }
-
-  let dest_x_min = offset_x.max(0);
-  let dest_x_max = (offset_x + top_size.width as i32).min(bottom_width);
-
-  if dest_x_min >= dest_x_max {
-    return None;
-  }
-
-  Some((
-    offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max,
-  ))
-}
-
 fn overlay_area_fast_normal_unconstrained(
   bottom: &mut RgbaImage,
   offset: Point<f32>,
@@ -971,7 +938,7 @@ fn overlay_area_fast_normal_unconstrained(
   f: impl Fn(u32, u32) -> Rgba<u8>,
 ) {
   let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
-    compute_overlay_bounds(bottom, offset, top_size)
+    compute_overlay_bounds(bottom, offset, top_size.width, top_size.height)
   else {
     return;
   };
@@ -1028,7 +995,7 @@ pub(crate) fn overlay_area(
   }
 
   let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
-    compute_overlay_bounds(bottom, offset, top_size)
+    compute_overlay_bounds(bottom, offset, top_size.width, top_size.height)
   else {
     return;
   };

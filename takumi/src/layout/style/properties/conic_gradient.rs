@@ -70,7 +70,7 @@ impl GenericImageView for ConicGradientTile {
   }
 
   fn get_pixel(&self, x: u32, y: u32) -> Self::Pixel {
-    let lut_samples = self.lut_samples();
+    let lut_samples: &[[f32; 4]] = bytemuck::cast_slice(&self.color_lut);
     if lut_samples.is_empty() {
       return Rgba([0, 0, 0, 0]);
     }
@@ -94,11 +94,6 @@ impl GenericImageView for ConicGradientTile {
 }
 
 impl ConicGradientTile {
-  #[inline(always)]
-  pub(crate) fn lut_samples(&self) -> &[[f32; 4]] {
-    bytemuck::cast_slice(&self.color_lut)
-  }
-
   #[inline(always)]
   pub(crate) fn lut_index_for_adjusted_angle_with_len(
     &self,
@@ -174,7 +169,7 @@ impl GradientOverlayTile for ConicGradientTile {
 
   #[inline(always)]
   fn lut_samples(&self) -> &[[f32; 4]] {
-    self.lut_samples()
+    bytemuck::cast_slice(&self.color_lut)
   }
 
   #[inline(always)]

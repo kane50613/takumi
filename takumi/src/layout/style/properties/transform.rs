@@ -118,10 +118,10 @@ impl Affine {
 
   /// Returns true if the transform is only a translation
   pub(crate) fn only_translation(self) -> bool {
-    (self.a - 1.0).abs() < 1e-6
-      && self.b.abs() < 1e-6
-      && self.c.abs() < 1e-6
-      && (self.d - 1.0).abs() < 1e-6
+    (self.a - 1.0).abs() < 1e-8
+      && self.b.abs() < 1e-8
+      && self.c.abs() < 1e-8
+      && (self.d - 1.0).abs() < 1e-8
   }
 
   /// Creates a new rotation transform
