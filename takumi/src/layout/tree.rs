@@ -16,8 +16,8 @@ use crate::{
   layout::{
     Viewport,
     inline::{
-      InlineLayoutStage, ProcessedInlineSpan, collect_inline_items, create_inline_constraint,
-      create_inline_layout, measure_inline_layout,
+      InlineContentKind, InlineLayoutStage, ProcessedInlineSpan, collect_inline_items,
+      create_inline_constraint, create_inline_layout, measure_inline_layout,
     },
     node::{Node, NodeStyleLayers},
     style::{Affine, Color, Display, ResolvedStyle, Style as NodeStyle},
@@ -80,6 +80,9 @@ pub(crate) struct RenderNode<'g, N: Node<N>> {
   pub(crate) context: RenderContext<'g>,
   pub(crate) node: Option<N>,
   pub(crate) children: Option<Box<[RenderNode<'g, N>]>>,
+  pub(crate) layout_style_override: Option<Style>,
+  pub(crate) anonymous_text_content: Option<String>,
+  pub(crate) force_inline_layout: bool,
 }
 
 fn build_inherited_style(
@@ -145,9 +148,14 @@ fn push_layout_node<'r, 'g, N: Node<N>>(
 
     nodes.push(LayoutNodeState {
       style: render_node
-        .context
-        .style
-        .to_taffy_style(&render_node.context.sizing),
+        .layout_style_override
+        .clone()
+        .unwrap_or_else(|| {
+          render_node
+            .context
+            .style
+            .to_taffy_style(&render_node.context.sizing)
+        }),
       cache: Cache::new(),
       unrounded_layout: Layout::new(),
       final_layout: Layout::new(),
@@ -264,19 +272,23 @@ impl<'r, 'g, N: Node<N>> LayoutTree<'r, 'g, N> {
       return;
     };
 
-    let mut sizing = render_node.context.sizing.clone();
-    sizing.container_size = Size {
-      width: known_dimensions.width.or(match available_space.width {
-        AvailableSpace::Definite(value) => Some(value),
-        _ => None,
-      }),
-      height: known_dimensions.height.or(match available_space.height {
-        AvailableSpace::Definite(value) => Some(value),
-        _ => None,
-      }),
-    };
+    let style = if let Some(style_override) = &render_node.layout_style_override {
+      style_override.clone()
+    } else {
+      let mut sizing = render_node.context.sizing.clone();
+      sizing.container_size = Size {
+        width: known_dimensions.width.or(match available_space.width {
+          AvailableSpace::Definite(value) => Some(value),
+          _ => None,
+        }),
+        height: known_dimensions.height.or(match available_space.height {
+          AvailableSpace::Definite(value) => Some(value),
+          _ => None,
+        }),
+      };
 
-    let style = render_node.context.style.to_taffy_style(&sizing);
+      render_node.context.style.to_taffy_style(&sizing)
+    };
 
     if let Some(node) = self.nodes.get_mut(idx) {
       node.style = style;
@@ -577,6 +589,34 @@ impl<N: Node<N>> RoundTree for LayoutTree<'_, '_, N> {
 }
 
 impl<'g, N: Node<N>> RenderNode<'g, N> {
+  fn anonymous_text_item(parent_context: &RenderContext<'g>, text: String) -> Self {
+    let mut context = parent_context.clone();
+    context.style.display = Display::Block;
+
+    Self {
+      context,
+      node: None,
+      children: None,
+      layout_style_override: Some(Style {
+        display: TaffyDisplay::Block,
+        ..Style::default()
+      }),
+      anonymous_text_content: Some(text),
+      force_inline_layout: true,
+    }
+  }
+
+  fn is_anonymous_text_item(&self) -> bool {
+    self.anonymous_text_content.is_some() && self.node.is_none()
+  }
+
+  fn has_anonymous_text_item_child(&self) -> bool {
+    self
+      .children
+      .as_ref()
+      .is_some_and(|children| children.iter().any(RenderNode::is_anonymous_text_item))
+  }
+
   pub(crate) fn draw_shell(&self, canvas: &mut Canvas, layout: Layout) -> Result<()> {
     let Some(node) = &self.node else {
       return Ok(());
@@ -591,6 +631,10 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
   }
 
   pub(crate) fn draw_content(&self, canvas: &mut Canvas, layout: Layout) -> Result<()> {
+    if self.should_create_inline_layout() || self.has_anonymous_text_item_child() {
+      return Ok(());
+    }
+
     if let Some(node) = &self.node {
       node.draw_content(&self.context, canvas, layout)?;
     }
@@ -624,6 +668,7 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
       self.context.global,
       InlineLayoutStage::Draw,
     );
+    let inline_layout_box = layout;
 
     let boxes = spans.iter().filter_map(|span| match span {
       ProcessedInlineSpan::Box(item) => Some(item),
@@ -633,15 +678,15 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
     let positioned_inline_boxes = draw_inline_layout(
       &self.context,
       canvas,
-      layout,
+      inline_layout_box,
       inline_layout,
       &font_style,
       &spans,
     )?;
 
     let inline_transform = Affine::translation(
-      layout.border.left + layout.padding.left,
-      layout.border.top + layout.padding.top,
+      inline_layout_box.border.left + inline_layout_box.padding.left,
+      inline_layout_box.border.top + inline_layout_box.padding.top,
     ) * self.context.transform;
 
     for (item, positioned) in boxes.zip(positioned_inline_boxes.iter()) {
@@ -662,12 +707,13 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
   }
 
   pub fn should_create_inline_layout(&self) -> bool {
-    matches!(
-      self.context.style.display,
-      Display::Block | Display::InlineBlock
-    ) && self.children.as_ref().is_some_and(|children| {
-      !children.is_empty() && children.iter().all(RenderNode::is_inline_level)
-    })
+    self.force_inline_layout
+      || (matches!(
+        self.context.style.display,
+        Display::Block | Display::InlineBlock
+      ) && self.children.as_ref().is_some_and(|children| {
+        !children.is_empty() && children.iter().all(RenderNode::is_inline_level)
+      }))
   }
 
   pub fn from_node(parent_context: &RenderContext<'g>, node: N) -> Self {
@@ -834,6 +880,9 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
             context: finished.context,
             node: Some(finished.node),
             children: Some(children),
+            layout_style_override: None,
+            anonymous_text_content: None,
+            force_inline_layout: false,
           }
         } else {
           let has_inline = children.iter().any(RenderNode::is_inline_level);
@@ -846,6 +895,9 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
               context: finished.context,
               node: Some(finished.node),
               children: Some(children),
+              layout_style_override: None,
+              anonymous_text_content: None,
+              force_inline_layout: false,
             }
           } else {
             finished.context.style.display = finished.context.style.display.as_blockified();
@@ -885,14 +937,44 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
               context: finished.context,
               node: Some(finished.node),
               children: Some(final_children.into_boxed_slice()),
+              layout_style_override: None,
+              anonymous_text_content: None,
+              force_inline_layout: false,
             }
           }
         }
       } else {
-        RenderNode {
-          context: finished.context,
-          node: Some(finished.node),
-          children: None,
+        let maybe_anonymous_text = if finished.context.style.display.should_blockify_children() {
+          finished
+            .node
+            .inline_content()
+            .and_then(|content| match content {
+              InlineContentKind::Text(text) => Some(text.into_owned()),
+              InlineContentKind::Box => None,
+            })
+        } else {
+          None
+        };
+
+        if let Some(text) = maybe_anonymous_text {
+          let anonymous_text_item = RenderNode::anonymous_text_item(&finished.context, text);
+          RenderNode {
+            context: finished.context,
+            node: Some(finished.node),
+            children: Some(vec![anonymous_text_item].into_boxed_slice()),
+            layout_style_override: None,
+            anonymous_text_content: None,
+            force_inline_layout: false,
+          }
+        } else {
+          RenderNode {
+            context: finished.context,
+            node: Some(finished.node),
+            children: None,
+            layout_style_override: None,
+            anonymous_text_content: None,
+            force_inline_layout: false,
+          }
         }
       };
 
@@ -973,7 +1055,7 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
     &self,
     available_space: Size<AvailableSpace>,
     known_dimensions: Size<Option<f32>>,
-    style: &taffy::Style,
+    style: &Style,
     is_inline_children: bool,
   ) -> Size<f32> {
     if is_inline_children {
@@ -1042,6 +1124,9 @@ fn flush_inline_group<'g, N: Node<N>>(
       },
       children: Some(take(inline_group).into_boxed_slice()),
       node: None,
+      layout_style_override: None,
+      anonymous_text_content: None,
+      force_inline_layout: false,
     });
   }
 }

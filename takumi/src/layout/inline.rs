@@ -85,6 +85,13 @@ fn collect_inline_items_impl<'n, 'g, N: Node<N>>(
     return;
   }
 
+  if let Some(text) = node.anonymous_text_content.as_deref() {
+    items.push(InlineItem::Text {
+      text: Cow::Borrowed(text),
+      context: &node.context,
+    });
+  }
+
   if let Some(inline_content) = node.node.as_ref().and_then(Node::inline_content) {
     match inline_content {
       InlineContentKind::Box => items.push(InlineItem::RenderNode { render_node: node }),

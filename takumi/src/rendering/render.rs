@@ -207,6 +207,7 @@ fn collect_measure_result<'g, Nodes: Node<Nodes>>(
             current.context.global,
             InlineLayoutStage::Measure,
           );
+          let inline_offset = taffy::Point::ZERO;
 
           for line in inline_layout.lines() {
             for item in line.items() {
@@ -219,8 +220,8 @@ fn collect_measure_result<'g, Nodes: Node<Nodes>>(
 
                   runs.push(MeasuredTextRun {
                     text: text.to_string(),
-                    x: glyph_run.offset(),
-                    y: glyph_run.baseline() - metrics.ascent,
+                    x: glyph_run.offset() + inline_offset.x,
+                    y: glyph_run.baseline() - metrics.ascent + inline_offset.y,
                     width: glyph_run.advance(),
                     height: metrics.ascent + metrics.descent,
                   });
@@ -235,6 +236,8 @@ fn collect_measure_result<'g, Nodes: Node<Nodes>>(
                       parent_x_height,
                     );
                   }
+                  positioned_box.x += inline_offset.x;
+                  positioned_box.y += inline_offset.y;
 
                   let inline_transform =
                     Affine::translation(positioned_box.x, positioned_box.y) * local_transform;

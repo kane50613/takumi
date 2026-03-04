@@ -4,8 +4,8 @@ use takumi::{
   layout::{
     node::{ContainerNode, ImageNode, NodeKind, TextNode},
     style::{
-      Affine, Color, ColorInput, Display, FlexDirection, JustifyContent, Length::*, Position,
-      Sides, StyleBuilder,
+      Affine, AlignItems, Color, ColorInput, Display, FlexDirection, JustifyContent, Length::*,
+      Position, Sides, StyleBuilder,
     },
   },
   rendering::{MeasuredNode, MeasuredTextRun, RenderOptionsBuilder, measure_layout},
@@ -89,10 +89,79 @@ fn test_measure_text_node() {
       width: 300.0,
       height: 26.0,
       transform: Affine::IDENTITY.to_cols_array(),
-      children: Vec::new(),
-      runs: Vec::new(), // it's a block node, so no runs!
+      children: vec![MeasuredNode {
+        width: 106.0,
+        height: 26.0,
+        transform: Affine::IDENTITY.to_cols_array(),
+        children: Vec::new(),
+        runs: vec![MeasuredTextRun {
+          text: "Hello World".to_string(),
+          x: 0.0,
+          y: -0.10000038,
+          width: 105.46001,
+          height: 26.0,
+        }],
+      }],
+      runs: Vec::new(),
     }
   )
+}
+
+#[test]
+fn test_measure_flex_text_node_centers_inner_text() {
+  let node: NodeKind = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
+    preset: None,
+    tw: None,
+    style: Some(
+      StyleBuilder::default()
+        .width(Px(300.0))
+        .height(Px(120.0))
+        .display(Display::Flex)
+        .justify_content(JustifyContent::Center)
+        .align_items(AlignItems::Center)
+        .font_size(Some(Px(20.0)))
+        .build()
+        .unwrap(),
+    ),
+    text: "Hello World".to_string(),
+  }
+  .into();
+
+  let result = measure_layout(
+    RenderOptionsBuilder::default()
+      .viewport(create_test_viewport())
+      .node(node)
+      .global(&CONTEXT)
+      .build()
+      .unwrap(),
+  )
+  .unwrap();
+
+  assert_eq!(result.width, 300.0);
+  assert_eq!(result.height, 120.0);
+  assert_eq!(result.children.len(), 1);
+  assert_eq!(result.runs.len(), 0);
+
+  let anonymous_item = &result.children[0];
+  assert_eq!(anonymous_item.runs.len(), 1);
+  let run = &anonymous_item.runs[0];
+  let expected_x = (result.width - run.width) / 2.0;
+  let expected_y = (result.height - run.height) / 2.0;
+  let global_run_x = anonymous_item.transform[4] + run.x;
+  let global_run_y = anonymous_item.transform[5] + run.y;
+  assert!(
+    (global_run_x - expected_x).abs() <= 1.0,
+    "run.x = {}",
+    global_run_x
+  );
+  assert!(
+    (global_run_y - expected_y).abs() <= 1.0,
+    "run.y = {}",
+    global_run_y
+  );
 }
 
 #[test]
