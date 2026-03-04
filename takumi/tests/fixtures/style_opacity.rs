@@ -161,3 +161,99 @@ fn test_style_opacity_image_with_text() {
 
   run_fixture_test(container.into(), "style_opacity_image_with_text");
 }
+
+#[test]
+fn test_style_opacity_flex_text_node_vs_nested_container() {
+  let left: NodeKind = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
+    preset: None,
+    tw: None,
+    style: Some(
+      StyleBuilder::default()
+        .width(Length::Px(300.0))
+        .height(Length::Px(220.0))
+        .display(Display::Flex)
+        .align_items(AlignItems::Center)
+        .justify_content(JustifyContent::Center)
+        .font_size(Some(Length::Px(120.0)))
+        .font_weight(FontWeight::from(700.0))
+        .color(ColorInput::Value(Color::black()))
+        .opacity(PercentageNumber(0.5))
+        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
+        .build()
+        .unwrap(),
+    ),
+    text: "A".to_string(),
+  }
+  .into();
+
+  let right: NodeKind = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
+    preset: None,
+    tw: None,
+    style: Some(
+      StyleBuilder::default()
+        .width(Length::Px(300.0))
+        .height(Length::Px(220.0))
+        .display(Display::Flex)
+        .align_items(AlignItems::Center)
+        .justify_content(JustifyContent::Center)
+        .opacity(PercentageNumber(0.5))
+        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
+        .build()
+        .unwrap(),
+    ),
+    children: Some(
+      [TextNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
+        preset: None,
+        tw: None,
+        style: Some(
+          StyleBuilder::default()
+            .display(Display::Block)
+            .font_size(Some(Length::Px(120.0)))
+            .font_weight(FontWeight::from(700.0))
+            .color(ColorInput::Value(Color::black()))
+            .build()
+            .unwrap(),
+        ),
+        text: "A".to_string(),
+      }
+      .into()]
+      .into(),
+    ),
+  }
+  .into();
+
+  let root = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
+    preset: None,
+    tw: None,
+    style: Some(
+      StyleBuilder::default()
+        .width(Length::Percentage(100.0))
+        .height(Length::Percentage(100.0))
+        .display(Display::Flex)
+        .align_items(AlignItems::Center)
+        .justify_content(JustifyContent::Center)
+        .gap(SpacePair::from_single(Length::Px(48.0)))
+        .background_color(ColorInput::Value(Color::white()))
+        .build()
+        .unwrap(),
+    ),
+    children: Some([left, right].into()),
+  };
+
+  run_fixture_test(
+    root.into(),
+    "style_opacity_flex_text_node_vs_nested_container",
+  );
+}

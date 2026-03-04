@@ -20,7 +20,10 @@ use crate::{
       create_inline_constraint, create_inline_layout, measure_inline_layout,
     },
     node::{Node, NodeStyleLayers},
-    style::{Affine, Color, Display, ResolvedStyle, Style as NodeStyle},
+    style::{
+      Affine, BlendMode, Color, Display, Filters, Isolation, PercentageNumber, ResolvedStyle,
+      Style as NodeStyle,
+    },
   },
   rendering::{
     Canvas, MaxHeight, RenderContext, Sizing,
@@ -592,6 +595,26 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
   fn anonymous_text_item(parent_context: &RenderContext<'g>, text: String) -> Self {
     let mut context = parent_context.clone();
     context.style.display = Display::Block;
+    context.style.opacity = PercentageNumber(1.0);
+    context.style.filter = Filters::default();
+    context.style.backdrop_filter = Filters::default();
+    context.style.mix_blend_mode = BlendMode::Normal;
+    context.style.isolation = Isolation::Auto;
+    context.style.clip_path = None;
+    context.style.mask = Default::default();
+    context.style.mask_image = None;
+    context.style.mask_size = None;
+    context.style.mask_position = None;
+    context.style.mask_repeat = None;
+    context.style.transform = None;
+    context.style.transform_origin = None;
+    context.style.rotate = None;
+    context.style.scale = None;
+    context.style.scale_x = None;
+    context.style.scale_y = None;
+    context.style.translate = None;
+    context.style.translate_x = None;
+    context.style.translate_y = None;
 
     Self {
       context,
