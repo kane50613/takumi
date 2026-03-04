@@ -3,13 +3,14 @@ use image::{GenericImageView, Rgba};
 use std::ops::{Deref, Neg};
 
 use super::gradient_utils::{
-  adaptive_lut_size, apply_dither, build_color_lut_with_interpolation, resolve_stops_along_axis,
+  GradientOverlayTile, adaptive_lut_size, apply_dither, build_color_lut_with_interpolation,
+  resolve_stops_along_axis,
 };
 use crate::layout::style::{
   Color, ColorInterpolationMethod, CssToken, FromCss, Length, MakeComputed, ParseResult,
   declare_enum_from_css_impl, properties::ColorInput, tw::TailwindPropertyParser,
 };
-use crate::rendering::{RenderContext, Sizing};
+use crate::rendering::{BufferPool, RenderContext, Sizing};
 
 /// Represents a linear gradient.
 #[derive(Debug, Clone, PartialEq)]
@@ -36,28 +37,19 @@ impl GenericImageView for LinearGradientTile {
   }
 
   fn get_pixel(&self, x: u32, y: u32) -> Self::Pixel {
-    // Fast path for empty or single-color gradients
-    if self.color_lut.is_empty() {
+    let lut_samples = self.lut_samples();
+    if lut_samples.is_empty() {
       return Rgba([0, 0, 0, 0]);
     }
 
-    let lut_f32 = bytemuck::cast_slice::<u8, [f32; 4]>(&self.color_lut);
-
-    if lut_f32.len() == 1 {
-      return Rgba(apply_dither(&lut_f32[0], x, y));
+    if lut_samples.len() == 1 {
+      return Rgba(apply_dither(&lut_samples[0], x, y));
     }
 
-    // Calculate position along gradient axis
-    let dx = x as f32 - self.cx;
-    let dy = y as f32 - self.cy;
-    let projection = dx * self.dir_x + dy * self.dir_y;
-    let position_px = (projection + self.max_extent).clamp(0.0, self.axis_length);
+    let projection = self.projection_at(x as f32, y as f32);
+    let lut_idx = self.lut_index_for_projection_with_len(projection, lut_samples.len());
 
-    // Map position to LUT index using rounding (nearest neighbor).
-    let normalized = (position_px / self.axis_length).clamp(0.0, 1.0);
-    let lut_idx = (normalized * (lut_f32.len() - 1) as f32).round() as usize;
-
-    Rgba(apply_dither(&lut_f32[lut_idx], x, y))
+    Rgba(apply_dither(&lut_samples[lut_idx], x, y))
   }
 }
 
@@ -72,27 +64,51 @@ pub(crate) struct LinearGradientTile {
   pub dir_x: f32,
   /// Direction vector Y component derived from angle.
   pub dir_y: f32,
-  /// Center X coordinate.
-  pub cx: f32,
-  /// Center Y coordinate.
-  pub cy: f32,
-  /// Half of axis length along gradient direction in pixels.
-  pub max_extent: f32,
   /// Full axis length along gradient direction in pixels.
   pub axis_length: f32,
+  /// Projection bias for `x * dir_x + y * dir_y + projection_bias`.
+  pub projection_bias: f32,
+  /// Scale converting axis-space position in pixels into LUT index space.
+  pub position_to_lut_scale: f32,
   /// Pre-computed color lookup table for fast gradient sampling.
   /// Maps normalized position [0.0, 1.0] to color.
   pub color_lut: Vec<u8>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct LinearGradientRowState {
+  projection: f32,
+  lut_len: usize,
+}
+
 impl LinearGradientTile {
+  #[inline(always)]
+  pub(crate) fn lut_samples(&self) -> &[[f32; 4]] {
+    bytemuck::cast_slice(&self.color_lut)
+  }
+
+  #[inline(always)]
+  pub(crate) fn projection_at(&self, x: f32, y: f32) -> f32 {
+    x * self.dir_x + y * self.dir_y + self.projection_bias
+  }
+
+  #[inline(always)]
+  pub(crate) fn lut_index_for_projection_with_len(&self, projection: f32, lut_len: usize) -> usize {
+    if lut_len <= 1 {
+      return 0;
+    }
+
+    let position_px = projection.clamp(0.0, self.axis_length);
+    ((position_px * self.position_to_lut_scale).round() as usize).min(lut_len - 1)
+  }
+
   /// Builds a drawing context from a gradient and a target viewport.
   pub fn new(
     gradient: &LinearGradient,
     width: u32,
     height: u32,
     context: &RenderContext,
-    buffer_pool: &mut crate::rendering::BufferPool,
+    buffer_pool: &mut BufferPool,
   ) -> Self {
     let rad = gradient.angle.0.to_radians();
     let (dir_x, dir_y) = (rad.sin(), -rad.cos());
@@ -101,6 +117,7 @@ impl LinearGradientTile {
     let cy = height as f32 / 2.0;
     let max_extent = ((width as f32 * dir_x.abs()) + (height as f32 * dir_y.abs())) / 2.0;
     let axis_length = 2.0 * max_extent;
+    let projection_bias = max_extent - cx * dir_x - cy * dir_y;
 
     let resolved_stops = resolve_stops_along_axis(&gradient.stops, axis_length.max(1e-6), context);
 
@@ -114,18 +131,57 @@ impl LinearGradientTile {
       gradient.interpolation.color_space,
       gradient.interpolation.hue_direction,
     );
+    let lut_len = color_lut.len() / 16;
+    let position_to_lut_scale = if axis_length.abs() <= f32::EPSILON || lut_len <= 1 {
+      0.0
+    } else {
+      (lut_len - 1) as f32 / axis_length
+    };
 
     LinearGradientTile {
       width,
       height,
       dir_x,
       dir_y,
-      cx,
-      cy,
-      max_extent,
       axis_length,
+      projection_bias,
+      position_to_lut_scale,
       color_lut,
     }
+  }
+}
+
+impl GradientOverlayTile for LinearGradientTile {
+  type RowState = LinearGradientRowState;
+
+  #[inline(always)]
+  fn width(&self) -> u32 {
+    self.width
+  }
+
+  #[inline(always)]
+  fn height(&self) -> u32 {
+    self.height
+  }
+
+  #[inline(always)]
+  fn lut_samples(&self) -> &[[f32; 4]] {
+    self.lut_samples()
+  }
+
+  #[inline(always)]
+  fn begin_row(&self, src_x_start: u32, src_y: u32, lut_len: usize) -> Self::RowState {
+    LinearGradientRowState {
+      projection: self.projection_at(src_x_start as f32, src_y as f32),
+      lut_len,
+    }
+  }
+
+  #[inline(always)]
+  fn next_lut_index(&self, row_state: &mut Self::RowState) -> usize {
+    let lut_idx = self.lut_index_for_projection_with_len(row_state.projection, row_state.lut_len);
+    row_state.projection += self.dir_x;
+    lut_idx
   }
 }
 

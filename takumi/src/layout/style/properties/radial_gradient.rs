@@ -2,14 +2,15 @@ use cssparser::Parser;
 use image::{GenericImageView, Rgba};
 
 use super::gradient_utils::{
-  adaptive_lut_size, apply_dither, build_color_lut_with_interpolation, resolve_stops_along_axis,
+  GradientOverlayTile, adaptive_lut_size, apply_dither, build_color_lut_with_interpolation,
+  resolve_stops_along_axis,
 };
 use crate::{
   layout::style::{
     BackgroundPosition, ColorInterpolationMethod, CssToken, FromCss, GradientStop, GradientStops,
     Length, MakeComputed, ParseResult, declare_enum_from_css_impl,
   },
-  rendering::{RenderContext, Sizing},
+  rendering::{BufferPool, RenderContext, Sizing},
 };
 
 /// Represents a radial gradient.
@@ -87,9 +88,23 @@ pub(crate) struct RadialGradientTile {
   pub radius_x: f32,
   /// Radius Y in pixels (for circle, equals radius_x)
   pub radius_y: f32,
+  /// Reciprocal of `radius_x` for sampling.
+  pub inv_radius_x: f32,
+  /// Reciprocal of `radius_y` for sampling.
+  pub inv_radius_y: f32,
+  /// Scale converting normalized distance to LUT index.
+  pub distance_to_lut_scale: f32,
   /// Pre-computed color lookup table for fast gradient sampling.
   /// Maps normalized distance [0.0, 1.0] from center to color.
   pub color_lut: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RadialGradientRowState {
+  dx: f32,
+  dy2: f32,
+  lut_len: usize,
+  max_lut_index: usize,
 }
 
 impl GenericImageView for RadialGradientTile {
@@ -100,39 +115,52 @@ impl GenericImageView for RadialGradientTile {
   }
 
   fn get_pixel(&self, x: u32, y: u32) -> Self::Pixel {
-    // Fast path for empty or single-color gradients
-    if self.color_lut.is_empty() {
+    let lut_samples = self.lut_samples();
+    if lut_samples.is_empty() {
       return Rgba([0, 0, 0, 0]);
     }
 
-    let lut_f32 = bytemuck::cast_slice::<u8, [f32; 4]>(&self.color_lut);
-
-    if lut_f32.len() == 1 {
-      return Rgba(apply_dither(&lut_f32[0], x, y));
+    if lut_samples.len() == 1 {
+      return Rgba(apply_dither(&lut_samples[0], x, y));
     }
 
     let dx = (x as f32 - self.cx) / self.radius_x.max(1e-6);
     let dy = (y as f32 - self.cy) / self.radius_y.max(1e-6);
+    let normalized_distance = (dx * dx + dy * dy).sqrt();
+    let lut_idx =
+      self.lut_index_for_normalized_distance_with_len(normalized_distance, lut_samples.len());
 
-    // Normalized distance from center (1.0 = at radius)
-    let d = (dx * dx + dy * dy).sqrt();
-    let normalized = d.clamp(0.0, 1.0);
-
-    // Map distance to LUT index using rounding (nearest neighbor).
-    let lut_idx = (normalized * (lut_f32.len() - 1) as f32).round() as usize;
-
-    Rgba(apply_dither(&lut_f32[lut_idx], x, y))
+    Rgba(apply_dither(&lut_samples[lut_idx], x, y))
   }
 }
 
 impl RadialGradientTile {
+  #[inline(always)]
+  pub(crate) fn lut_samples(&self) -> &[[f32; 4]] {
+    bytemuck::cast_slice(&self.color_lut)
+  }
+
+  #[inline(always)]
+  pub(crate) fn lut_index_for_normalized_distance_with_len(
+    &self,
+    normalized_distance: f32,
+    lut_len: usize,
+  ) -> usize {
+    if lut_len <= 1 {
+      return 0;
+    }
+
+    ((normalized_distance.clamp(0.0, 1.0) * self.distance_to_lut_scale).round() as usize)
+      .min(lut_len - 1)
+  }
+
   /// Builds a drawing context from a gradient and a target viewport.
   pub fn new(
     gradient: &RadialGradient,
     width: u32,
     height: u32,
     context: &RenderContext,
-    buffer_pool: &mut crate::rendering::BufferPool,
+    buffer_pool: &mut BufferPool,
   ) -> Self {
     let cx = Length::from(gradient.center.0.x).to_px(&context.sizing, width as f32);
     let cy = Length::from(gradient.center.0.y).to_px(&context.sizing, height as f32);
@@ -220,6 +248,14 @@ impl RadialGradientTile {
       gradient.interpolation.color_space,
       gradient.interpolation.hue_direction,
     );
+    let lut_len = color_lut.len() / 16;
+    let inv_radius_x = radius_x.max(1e-6).recip();
+    let inv_radius_y = radius_y.max(1e-6).recip();
+    let distance_to_lut_scale = if lut_len <= 1 {
+      0.0
+    } else {
+      (lut_len - 1) as f32
+    };
 
     RadialGradientTile {
       width,
@@ -228,8 +264,54 @@ impl RadialGradientTile {
       cy,
       radius_x,
       radius_y,
+      inv_radius_x,
+      inv_radius_y,
+      distance_to_lut_scale,
       color_lut,
     }
+  }
+}
+
+impl GradientOverlayTile for RadialGradientTile {
+  type RowState = RadialGradientRowState;
+
+  #[inline(always)]
+  fn width(&self) -> u32 {
+    self.width
+  }
+
+  #[inline(always)]
+  fn height(&self) -> u32 {
+    self.height
+  }
+
+  #[inline(always)]
+  fn lut_samples(&self) -> &[[f32; 4]] {
+    self.lut_samples()
+  }
+
+  #[inline(always)]
+  fn begin_row(&self, src_x_start: u32, src_y: u32, lut_len: usize) -> Self::RowState {
+    let dy = (src_y as f32 - self.cy) * self.inv_radius_y;
+    RadialGradientRowState {
+      dx: (src_x_start as f32 - self.cx) * self.inv_radius_x,
+      dy2: dy * dy,
+      lut_len,
+      max_lut_index: lut_len.saturating_sub(1),
+    }
+  }
+
+  #[inline(always)]
+  fn next_lut_index(&self, row_state: &mut Self::RowState) -> usize {
+    if row_state.dy2 >= 1.0 {
+      return row_state.max_lut_index;
+    }
+
+    let normalized_distance = (row_state.dx * row_state.dx + row_state.dy2).sqrt();
+    let lut_idx =
+      self.lut_index_for_normalized_distance_with_len(normalized_distance, row_state.lut_len);
+    row_state.dx += self.inv_radius_x;
+    lut_idx
   }
 }
 

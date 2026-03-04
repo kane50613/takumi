@@ -68,6 +68,9 @@ pub use font_style::*;
 pub use font_synthesis::*;
 pub use font_variation_settings::*;
 pub use font_weight::*;
+pub(crate) use gradient_utils::{
+  GradientOverlayTile, overlay_gradient_tile_fast_normal_unconstrained,
+};
 pub use grid::*;
 pub use length::*;
 pub use line_clamp::*;

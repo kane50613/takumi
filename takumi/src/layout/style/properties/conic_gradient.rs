@@ -4,14 +4,15 @@ use cssparser::Parser;
 use image::{GenericImageView, Rgba};
 
 use super::gradient_utils::{
-  adaptive_lut_size, apply_dither, build_color_lut_with_interpolation, resolve_stops_along_axis,
+  GradientOverlayTile, adaptive_lut_size, apply_dither, build_color_lut_with_interpolation,
+  resolve_stops_along_axis,
 };
 use crate::{
   layout::style::{
     Angle, BackgroundPosition, ColorInterpolationMethod, CssToken, FromCss, GradientStop,
     GradientStops, Length, MakeComputed, ParseResult,
   },
-  rendering::{RenderContext, Sizing},
+  rendering::{BufferPool, RenderContext, Sizing},
 };
 
 /// Represents a CSS conic-gradient.
@@ -47,9 +48,18 @@ pub(crate) struct ConicGradientTile {
   pub cy: f32,
   /// Starting angle in radians (CSS 0deg = from top, clockwise).
   pub start_rad: f32,
+  /// Scale converting an adjusted angle in radians to LUT index.
+  pub angle_to_lut_scale: f32,
   /// Pre-computed color lookup table for fast gradient sampling.
   /// Maps normalized angle [0.0, 1.0] (fraction of full turn) to color.
   pub color_lut: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ConicGradientRowState {
+  dx: f32,
+  dy: f32,
+  lut_len: usize,
 }
 
 impl GenericImageView for ConicGradientTile {
@@ -60,46 +70,55 @@ impl GenericImageView for ConicGradientTile {
   }
 
   fn get_pixel(&self, x: u32, y: u32) -> Self::Pixel {
-    // Fast path for empty or single-color gradients
-    if self.color_lut.is_empty() {
+    let lut_samples = self.lut_samples();
+    if lut_samples.is_empty() {
       return Rgba([0, 0, 0, 0]);
     }
 
-    let lut_f32 = bytemuck::cast_slice::<u8, [f32; 4]>(&self.color_lut);
-
-    if lut_f32.len() == 1 {
-      return Rgba(apply_dither(&lut_f32[0], x, y));
+    if lut_samples.len() == 1 {
+      return Rgba(apply_dither(&lut_samples[0], x, y));
     }
 
     let dx = x as f32 - self.cx;
     let dy = y as f32 - self.cy;
     if dx.abs() <= f32::EPSILON && dy.abs() <= f32::EPSILON {
-      return Rgba(apply_dither(&lut_f32[0], x, y));
+      return Rgba(apply_dither(&lut_samples[0], x, y));
     }
 
-    // atan2 gives angle from positive X axis, counter-clockwise.
-    // CSS conic gradients start from top (negative Y axis) and go clockwise.
-    // Convert: css_angle = atan2(dx, -dy) (measured from top, clockwise)
-    let angle_from_top = libm::atan2f(dx, -dy); // range [-π, π]
-
-    // Subtract start angle and normalize to [0, 2π)
+    let angle_from_top = libm::atan2f(dx, -dy);
     let adjusted = (angle_from_top - self.start_rad).rem_euclid(TAU);
+    let lut_idx = self.lut_index_for_adjusted_angle_with_len(adjusted, lut_samples.len());
 
-    let normalized = adjusted / TAU;
-    let lut_idx = ((normalized * (lut_f32.len() as f32)).floor() as usize).min(lut_f32.len() - 1);
-
-    Rgba(apply_dither(&lut_f32[lut_idx], x, y))
+    Rgba(apply_dither(&lut_samples[lut_idx], x, y))
   }
 }
 
 impl ConicGradientTile {
+  #[inline(always)]
+  pub(crate) fn lut_samples(&self) -> &[[f32; 4]] {
+    bytemuck::cast_slice(&self.color_lut)
+  }
+
+  #[inline(always)]
+  pub(crate) fn lut_index_for_adjusted_angle_with_len(
+    &self,
+    adjusted_angle: f32,
+    lut_len: usize,
+  ) -> usize {
+    if lut_len <= 1 {
+      return 0;
+    }
+
+    ((adjusted_angle * self.angle_to_lut_scale).floor() as usize).min(lut_len - 1)
+  }
+
   /// Builds a drawing context from a conic gradient and a target viewport.
   pub fn new(
     gradient: &ConicGradient,
     width: u32,
     height: u32,
     context: &RenderContext,
-    buffer_pool: &mut crate::rendering::BufferPool,
+    buffer_pool: &mut BufferPool,
   ) -> Self {
     let cx = Length::from(gradient.center.0.x).to_px(&context.sizing, width as f32);
     let cy = Length::from(gradient.center.0.y).to_px(&context.sizing, height as f32);
@@ -121,6 +140,12 @@ impl ConicGradientTile {
       gradient.interpolation.color_space,
       gradient.interpolation.hue_direction,
     );
+    let lut_len = color_lut.len() / 16;
+    let angle_to_lut_scale = if lut_len == 0 {
+      0.0
+    } else {
+      lut_len as f32 / TAU
+    };
 
     ConicGradientTile {
       width,
@@ -128,8 +153,50 @@ impl ConicGradientTile {
       cx,
       cy,
       start_rad,
+      angle_to_lut_scale,
       color_lut,
     }
+  }
+}
+
+impl GradientOverlayTile for ConicGradientTile {
+  type RowState = ConicGradientRowState;
+
+  #[inline(always)]
+  fn width(&self) -> u32 {
+    self.width
+  }
+
+  #[inline(always)]
+  fn height(&self) -> u32 {
+    self.height
+  }
+
+  #[inline(always)]
+  fn lut_samples(&self) -> &[[f32; 4]] {
+    self.lut_samples()
+  }
+
+  #[inline(always)]
+  fn begin_row(&self, src_x_start: u32, src_y: u32, lut_len: usize) -> Self::RowState {
+    ConicGradientRowState {
+      dx: src_x_start as f32 - self.cx,
+      dy: src_y as f32 - self.cy,
+      lut_len,
+    }
+  }
+
+  #[inline(always)]
+  fn next_lut_index(&self, row_state: &mut Self::RowState) -> usize {
+    let lut_idx = if row_state.dx.abs() <= f32::EPSILON && row_state.dy.abs() <= f32::EPSILON {
+      0
+    } else {
+      let angle_from_top = libm::atan2f(row_state.dx, -row_state.dy);
+      let adjusted_angle = (angle_from_top - self.start_rad).rem_euclid(TAU);
+      self.lut_index_for_adjusted_angle_with_len(adjusted_angle, row_state.lut_len)
+    };
+    row_state.dx += 1.0;
+    lut_idx
   }
 }
 

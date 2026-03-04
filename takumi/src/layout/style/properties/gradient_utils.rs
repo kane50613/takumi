@@ -1,9 +1,11 @@
 use color::{AlphaColor, ColorSpaceTag, DynamicColor, HueDirection, Srgb};
+use image::{Rgba, RgbaImage};
 use smallvec::SmallVec;
+use taffy::Point;
 use wide::f32x4;
 
 use super::{Color, GradientStop, ResolvedGradientStop};
-use crate::rendering::RenderContext;
+use crate::rendering::{BufferPool, RenderContext, blend_pixel};
 
 /// Interpolates between two colors in RGBA space, if t is 0.0 or 1.0, returns the first or second color.
 /// Uses SIMD to process all 4 color channels in parallel.
@@ -92,55 +94,6 @@ fn interpolate_with_color_space(
   ])
 }
 
-pub(crate) fn color_from_stops_with_interpolation(
-  position: f32,
-  resolved_stops: &[ResolvedGradientStop],
-  color_space: ColorSpaceTag,
-  hue_direction: HueDirection,
-) -> f32x4 {
-  // Find the two stops that bracket the current position.
-  // We want the last stop with position <= current position.
-  let left_index = resolved_stops
-    .iter()
-    .rposition(|stop| stop.position <= position)
-    .unwrap_or(0);
-
-  let right_index = resolved_stops
-    .iter()
-    .enumerate()
-    .position(|(i, stop)| i > left_index && stop.position >= position)
-    .unwrap_or(resolved_stops.len() - 1);
-
-  if left_index == right_index {
-    // if the left and right indices are the same, we should return a hard stop
-    let color = resolved_stops[left_index].color;
-    f32x4::from([
-      color.0[0] as f32,
-      color.0[1] as f32,
-      color.0[2] as f32,
-      color.0[3] as f32,
-    ])
-  } else {
-    let left_stop = &resolved_stops[left_index];
-    let right_stop = &resolved_stops[right_index];
-
-    let denom = right_stop.position - left_stop.position;
-    let interpolation_position = if denom.abs() < f32::EPSILON {
-      0.0
-    } else {
-      ((position - left_stop.position) / denom).clamp(0.0, 1.0)
-    };
-
-    interpolate_with_color_space(
-      left_stop.color,
-      right_stop.color,
-      interpolation_position,
-      color_space,
-      hue_direction,
-    )
-  }
-}
-
 pub(crate) const BAYER_MATRIX_8X8: [[f32; 8]; 8] = [
   [
     -0.5, 0.0, -0.375, 0.125, -0.46875, 0.03125, -0.34375, 0.15625,
@@ -180,16 +133,96 @@ pub(crate) fn apply_dither(color: &[f32], x: u32, y: u32) -> [u8; 4] {
   ]
 }
 
+pub(crate) trait GradientOverlayTile {
+  type RowState;
+
+  fn width(&self) -> u32;
+  fn height(&self) -> u32;
+  fn lut_samples(&self) -> &[[f32; 4]];
+  fn begin_row(&self, src_x_start: u32, src_y: u32, lut_len: usize) -> Self::RowState;
+  fn next_lut_index(&self, row_state: &mut Self::RowState) -> usize;
+}
+
+#[inline(always)]
+fn compute_overlay_bounds(
+  bottom: &RgbaImage,
+  offset: Point<f32>,
+  width: u32,
+  height: u32,
+) -> Option<(i32, i32, i32, i32, i32, i32)> {
+  if width == 0 || height == 0 {
+    return None;
+  }
+
+  let offset_x = offset.x as i32;
+  let offset_y = offset.y as i32;
+  let bottom_width = bottom.width() as i32;
+  let bottom_height = bottom.height() as i32;
+  let dest_y_min = offset_y.max(0);
+  let dest_y_max = (offset_y + height as i32).min(bottom_height);
+  if dest_y_min >= dest_y_max {
+    return None;
+  }
+
+  let dest_x_min = offset_x.max(0);
+  let dest_x_max = (offset_x + width as i32).min(bottom_width);
+  if dest_x_min >= dest_x_max {
+    return None;
+  }
+
+  Some((
+    offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max,
+  ))
+}
+
+pub(crate) fn overlay_gradient_tile_fast_normal_unconstrained<T: GradientOverlayTile>(
+  bottom: &mut RgbaImage,
+  tile: &T,
+  offset: Point<f32>,
+) {
+  let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
+    compute_overlay_bounds(bottom, offset, tile.width(), tile.height())
+  else {
+    return;
+  };
+
+  let lut_samples = tile.lut_samples();
+  if lut_samples.is_empty() {
+    return;
+  }
+
+  for dest_y in dest_y_min..dest_y_max {
+    let src_y = (dest_y - offset_y) as u32;
+    let src_x_start = (dest_x_min - offset_x) as u32;
+    let mut src_x = src_x_start;
+    let mut row_state = tile.begin_row(src_x_start, src_y, lut_samples.len());
+
+    for dest_x in dest_x_min..dest_x_max {
+      let lut_idx = tile.next_lut_index(&mut row_state);
+      let pixel = Rgba(apply_dither(&lut_samples[lut_idx], src_x, src_y));
+      if pixel.0[3] != 0 {
+        let current = bottom.get_pixel_mut(dest_x as u32, dest_y as u32);
+        blend_pixel(current, pixel, super::BlendMode::Normal);
+      }
+      src_x += 1;
+    }
+  }
+}
+
 /// Builds a pre-computed high-precision color lookup table for a gradient.
 /// This allows O(1) color sampling instead of O(n) search + interpolation per pixel.
 pub(crate) fn build_color_lut_with_interpolation(
   resolved_stops: &[ResolvedGradientStop],
   axis_length: f32,
   lut_size: usize,
-  buffer_pool: &mut crate::rendering::BufferPool,
+  buffer_pool: &mut BufferPool,
   color_space: ColorSpaceTag,
   hue_direction: HueDirection,
 ) -> Vec<u8> {
+  if lut_size == 0 {
+    return Vec::new();
+  }
+
   // Fast path: if only one color, fill just 16 bytes
   if resolved_stops.len() <= 1 {
     let color = resolved_stops
@@ -211,11 +244,51 @@ pub(crate) fn build_color_lut_with_interpolation(
 
   let mut lut = buffer_pool.acquire_dirty(lut_size * 16);
   let f32_lut = bytemuck::cast_slice_mut::<u8, [f32; 4]>(&mut lut);
-  for (i, chunk) in f32_lut.iter_mut().enumerate() {
-    let t = i as f32 / (lut_size - 1) as f32;
-    let position_px = t * axis_length;
-    let color =
-      color_from_stops_with_interpolation(position_px, resolved_stops, color_space, hue_direction);
+
+  let mut left_index = 0usize;
+  let mut right_index = 1usize;
+  let sample_step = if lut_size <= 1 {
+    0.0
+  } else {
+    axis_length / (lut_size - 1) as f32
+  };
+
+  for (sample_index, chunk) in f32_lut.iter_mut().enumerate() {
+    let position_px = sample_index as f32 * sample_step;
+
+    while right_index < resolved_stops.len() && resolved_stops[right_index].position <= position_px
+    {
+      left_index = right_index;
+      right_index += 1;
+    }
+
+    let color = if right_index >= resolved_stops.len() {
+      let color = resolved_stops[left_index].color;
+      f32x4::from([
+        color.0[0] as f32,
+        color.0[1] as f32,
+        color.0[2] as f32,
+        color.0[3] as f32,
+      ])
+    } else {
+      let left_stop = &resolved_stops[left_index];
+      let right_stop = &resolved_stops[right_index];
+      let denominator = right_stop.position - left_stop.position;
+      let interpolation_position = if denominator.abs() < f32::EPSILON {
+        0.0
+      } else {
+        ((position_px - left_stop.position) / denominator).clamp(0.0, 1.0)
+      };
+
+      interpolate_with_color_space(
+        left_stop.color,
+        right_stop.color,
+        interpolation_position,
+        color_space,
+        hue_direction,
+      )
+    };
+
     *chunk = color.to_array();
   }
 
@@ -356,12 +429,99 @@ pub(crate) fn resolve_stops_along_axis(
 
 #[cfg(test)]
 mod tests {
+  use image::{Rgba, RgbaImage};
+  use taffy::Point;
+
+  use crate::rendering::blend_pixel;
   use crate::{
     GlobalContext,
-    layout::style::{Length, StopPosition},
+    layout::style::{BlendMode, Length, StopPosition},
   };
 
   use super::*;
+
+  #[derive(Debug, Clone, Copy)]
+  struct MockTile {
+    width: u32,
+    height: u32,
+  }
+
+  #[derive(Debug, Clone, Copy)]
+  struct MockRowState {
+    value: usize,
+    lut_len: usize,
+  }
+
+  impl GradientOverlayTile for MockTile {
+    type RowState = MockRowState;
+
+    fn width(&self) -> u32 {
+      self.width
+    }
+
+    fn height(&self) -> u32 {
+      self.height
+    }
+
+    fn lut_samples(&self) -> &[[f32; 4]] {
+      static LUT: [[f32; 4]; 2] = [[255.0, 0.0, 0.0, 255.0], [0.0, 0.0, 255.0, 255.0]];
+      &LUT
+    }
+
+    fn begin_row(&self, src_x_start: u32, src_y: u32, lut_len: usize) -> Self::RowState {
+      MockRowState {
+        value: ((src_x_start + src_y) as usize) % lut_len.max(1),
+        lut_len,
+      }
+    }
+
+    fn next_lut_index(&self, row_state: &mut Self::RowState) -> usize {
+      let value = row_state.value;
+      row_state.value = (row_state.value + 1) % row_state.lut_len.max(1);
+      value
+    }
+  }
+
+  fn overlay_reference(bottom: &mut RgbaImage, tile: &MockTile, offset: Point<f32>) {
+    let offset_x = offset.x as i32;
+    let offset_y = offset.y as i32;
+    let dest_x_min = offset_x.max(0);
+    let dest_x_max = (offset_x + tile.width as i32).min(bottom.width() as i32);
+    let dest_y_min = offset_y.max(0);
+    let dest_y_max = (offset_y + tile.height as i32).min(bottom.height() as i32);
+    let lut_samples = tile.lut_samples();
+
+    for dest_y in dest_y_min..dest_y_max {
+      let src_y = (dest_y - offset_y) as u32;
+      let src_x_start = (dest_x_min - offset_x) as u32;
+      let mut src_x = src_x_start;
+      let mut row_state = tile.begin_row(src_x_start, src_y, lut_samples.len());
+
+      for dest_x in dest_x_min..dest_x_max {
+        let lut_idx = tile.next_lut_index(&mut row_state);
+        let pixel = Rgba(apply_dither(&lut_samples[lut_idx], src_x, src_y));
+        let current = bottom.get_pixel_mut(dest_x as u32, dest_y as u32);
+        blend_pixel(current, pixel, BlendMode::Normal);
+        src_x += 1;
+      }
+    }
+  }
+
+  #[test]
+  fn test_overlay_gradient_tile_fast_matches_reference() {
+    let tile = MockTile {
+      width: 4,
+      height: 3,
+    };
+    let offset = Point { x: 2.0, y: 1.0 };
+    let mut actual = RgbaImage::from_pixel(10, 7, Rgba([20, 30, 40, 255]));
+    let mut expected = actual.clone();
+
+    overlay_gradient_tile_fast_normal_unconstrained(&mut actual, &tile, offset);
+    overlay_reference(&mut expected, &tile, offset);
+
+    assert_eq!(actual, expected);
+  }
 
   #[test]
   fn test_resolve_stops_along_axis() {

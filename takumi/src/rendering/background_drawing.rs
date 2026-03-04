@@ -7,7 +7,10 @@ use taffy::Size;
 use crate::{
   Result,
   layout::{node::resolve_image, style::*},
-  rendering::{BorderProperties, BufferPool, MaskMemory, RenderContext, Sizing, overlay_image},
+  rendering::{
+    BorderProperties, BufferPool, MaskMemory, RenderContext, Sizing, overlay_gradient_tile,
+    overlay_image,
+  },
 };
 
 pub(crate) struct TileLayer {
@@ -37,11 +40,49 @@ pub(crate) fn rasterize_layers(
   for layer in layers {
     for &x in &layer.xs {
       for &y in &layer.ys {
+        let layer_transform = Affine::translation(x as f32, y as f32) * transform;
+        if border.is_zero() && layer_transform.only_translation() {
+          let translation = layer_transform.decompose_translation();
+          match &layer.tile {
+            BackgroundTile::Linear(linear_gradient) => {
+              overlay_gradient_tile(
+                &mut composed,
+                linear_gradient,
+                translation,
+                layer.blend_mode,
+                &[],
+              );
+              continue;
+            }
+            BackgroundTile::Radial(radial_gradient) => {
+              overlay_gradient_tile(
+                &mut composed,
+                radial_gradient,
+                translation,
+                layer.blend_mode,
+                &[],
+              );
+              continue;
+            }
+            BackgroundTile::Conic(conic_gradient) => {
+              overlay_gradient_tile(
+                &mut composed,
+                conic_gradient,
+                translation,
+                layer.blend_mode,
+                &[],
+              );
+              continue;
+            }
+            _ => {}
+          }
+        }
+
         overlay_image(
           &mut composed,
           &layer.tile,
           border,
-          Affine::translation(x as f32, y as f32) * transform,
+          layer_transform,
           context.style.image_rendering,
           layer.blend_mode,
           &[],

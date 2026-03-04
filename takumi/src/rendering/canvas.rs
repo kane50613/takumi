@@ -15,7 +15,10 @@ use zeno::{Command, Mask, Placement, Scratch};
 
 use crate::{Result, layout::style::BlendMode};
 use crate::{
-  layout::style::{Affine, Color, ImageScalingAlgorithm, Overflow, ResolvedStyle},
+  layout::style::{
+    Affine, Color, GradientOverlayTile, ImageScalingAlgorithm, Overflow, ResolvedStyle,
+    overlay_gradient_tile_fast_normal_unconstrained,
+  },
   rendering::{BorderProperties, RenderContext, blend_pixel, create_mask, fast_div_255},
 };
 
@@ -928,6 +931,90 @@ pub(crate) fn mask_index_from_coord(x: u32, y: u32, width: u32) -> usize {
   (y * width + x) as usize
 }
 
+#[inline(always)]
+fn compute_overlay_bounds(
+  bottom: &RgbaImage,
+  offset: Point<f32>,
+  top_size: Size<u32>,
+) -> Option<(i32, i32, i32, i32, i32, i32)> {
+  if top_size.width == 0 || top_size.height == 0 {
+    return None;
+  }
+
+  let offset_x = offset.x as i32;
+  let offset_y = offset.y as i32;
+  let bottom_width = bottom.width() as i32;
+  let bottom_height = bottom.height() as i32;
+  let dest_y_min = offset_y.max(0);
+  let dest_y_max = (offset_y + top_size.height as i32).min(bottom_height);
+
+  if dest_y_min >= dest_y_max {
+    return None;
+  }
+
+  let dest_x_min = offset_x.max(0);
+  let dest_x_max = (offset_x + top_size.width as i32).min(bottom_width);
+
+  if dest_x_min >= dest_x_max {
+    return None;
+  }
+
+  Some((
+    offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max,
+  ))
+}
+
+fn overlay_area_fast_normal_unconstrained(
+  bottom: &mut RgbaImage,
+  offset: Point<f32>,
+  top_size: Size<u32>,
+  f: impl Fn(u32, u32) -> Rgba<u8>,
+) {
+  let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
+    compute_overlay_bounds(bottom, offset, top_size)
+  else {
+    return;
+  };
+
+  for dest_y in dest_y_min..dest_y_max {
+    let src_y = (dest_y - offset_y) as u32;
+
+    for dest_x in dest_x_min..dest_x_max {
+      let src_x = (dest_x - offset_x) as u32;
+      let pixel = f(src_x, src_y);
+      if pixel.0[3] == 0 {
+        continue;
+      }
+
+      let current = bottom.get_pixel_mut(dest_x as u32, dest_y as u32);
+      blend_pixel(current, pixel, BlendMode::Normal);
+    }
+  }
+}
+
+pub(crate) fn overlay_gradient_tile<T>(
+  bottom: &mut RgbaImage,
+  gradient: &T,
+  offset: Point<f32>,
+  mode: BlendMode,
+  constrains: &[CanvasConstrain],
+) where
+  T: GenericImageView<Pixel = Rgba<u8>> + GradientOverlayTile,
+{
+  let top_size = Size {
+    width: GenericImageView::width(gradient),
+    height: GenericImageView::height(gradient),
+  };
+
+  if mode != BlendMode::Normal || !constrains.is_empty() {
+    return overlay_area(bottom, offset, top_size, mode, constrains, |x, y| {
+      gradient.get_pixel(x, y)
+    });
+  }
+
+  overlay_gradient_tile_fast_normal_unconstrained(bottom, gradient, offset);
+}
+
 pub(crate) fn overlay_area(
   bottom: &mut RgbaImage,
   offset: Point<f32>,
@@ -936,31 +1023,16 @@ pub(crate) fn overlay_area(
   constrains: &[CanvasConstrain],
   f: impl Fn(u32, u32) -> Rgba<u8>,
 ) {
-  if top_size.width == 0 || top_size.height == 0 {
+  if constrains.is_empty() && mode == BlendMode::Normal {
+    return overlay_area_fast_normal_unconstrained(bottom, offset, top_size, f);
+  }
+
+  let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
+    compute_overlay_bounds(bottom, offset, top_size)
+  else {
     return;
-  }
+  };
 
-  let offset_x = offset.x as i32;
-  let offset_y = offset.y as i32;
-  let bottom_width = bottom.width() as i32;
-  let bottom_height = bottom.height() as i32;
-
-  // Calculate the valid range in the destination image
-  let dest_y_min = offset_y.max(0);
-  let dest_y_max = (offset_y + top_size.height as i32).min(bottom_height);
-
-  if dest_y_min >= dest_y_max {
-    return; // No overlap
-  }
-
-  let dest_x_min = offset_x.max(0);
-  let dest_x_max = (offset_x + top_size.width as i32).min(bottom_width);
-
-  if dest_x_min >= dest_x_max {
-    return; // No horizontal overlap on this row
-  }
-
-  // For each destination y, calculate corresponding source y
   for dest_y in dest_y_min..dest_y_max {
     let src_y = (dest_y - offset_y) as u32;
 
@@ -977,5 +1049,161 @@ pub(crate) fn overlay_area(
         constrains,
       );
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use image::RgbaImage;
+
+  use crate::{
+    GlobalContext,
+    layout::style::{
+      BlendMode, ConicGradient, ConicGradientTile, FromCss, LinearGradient, LinearGradientTile,
+      RadialGradient, RadialGradientTile,
+    },
+    rendering::{BufferPool, RenderContext, blend_pixel},
+  };
+
+  use super::*;
+
+  fn overlay_area_reference(
+    bottom: &mut RgbaImage,
+    offset: Point<f32>,
+    top_size: Size<u32>,
+    f: impl Fn(u32, u32) -> Rgba<u8>,
+  ) {
+    let offset_x = offset.x as i32;
+    let offset_y = offset.y as i32;
+    let dest_x_min = offset_x.max(0);
+    let dest_x_max = (offset_x + top_size.width as i32).min(bottom.width() as i32);
+    let dest_y_min = offset_y.max(0);
+    let dest_y_max = (offset_y + top_size.height as i32).min(bottom.height() as i32);
+
+    for dest_y in dest_y_min..dest_y_max {
+      let src_y = (dest_y - offset_y) as u32;
+      for dest_x in dest_x_min..dest_x_max {
+        let src_x = (dest_x - offset_x) as u32;
+        let pixel = f(src_x, src_y);
+        if pixel.0[3] == 0 {
+          continue;
+        }
+        let current = bottom.get_pixel_mut(dest_x as u32, dest_y as u32);
+        blend_pixel(current, pixel, BlendMode::Normal);
+      }
+    }
+  }
+
+  #[test]
+  fn test_overlay_area_fast_path_normal_matches_reference() {
+    let mut fast = RgbaImage::from_pixel(8, 6, Rgba([10, 20, 30, 255]));
+    let mut reference = fast.clone();
+
+    let offset = Point { x: 2.0, y: 1.0 };
+    let top_size = Size {
+      width: 4,
+      height: 3,
+    };
+
+    overlay_area(
+      &mut fast,
+      offset,
+      top_size,
+      BlendMode::Normal,
+      &[],
+      |x, y| {
+        let alpha = ((x + y * 2) * 40).min(255) as u8;
+        Rgba([200, 80, 30, alpha])
+      },
+    );
+
+    overlay_area_reference(&mut reference, offset, top_size, |x, y| {
+      let alpha = ((x + y * 2) * 40).min(255) as u8;
+      Rgba([200, 80, 30, alpha])
+    });
+
+    assert_eq!(fast.as_raw(), reference.as_raw());
+  }
+
+  #[test]
+  fn test_overlay_linear_gradient_matches_reference() {
+    let Ok(gradient) = LinearGradient::from_str("linear-gradient(to right, red, blue)") else {
+      unreachable!()
+    };
+    let global_context = GlobalContext::default();
+    let render_context = RenderContext::new_test(&global_context, (32, 16).into());
+    let mut buffer_pool = BufferPool::default();
+    let tile = LinearGradientTile::new(&gradient, 32, 16, &render_context, &mut buffer_pool);
+
+    let mut fast = RgbaImage::from_pixel(40, 24, Rgba([0, 0, 0, 0]));
+    let mut reference = fast.clone();
+    let offset = Point { x: 3.0, y: 4.0 };
+
+    overlay_gradient_tile(&mut fast, &tile, offset, BlendMode::Normal, &[]);
+
+    let top_size = Size {
+      width: tile.width,
+      height: tile.height,
+    };
+    overlay_area_reference(&mut reference, offset, top_size, |x, y| {
+      tile.get_pixel(x, y)
+    });
+
+    assert_eq!(fast.as_raw(), reference.as_raw());
+  }
+
+  #[test]
+  fn test_overlay_radial_gradient_matches_reference() {
+    let Ok(gradient) = RadialGradient::from_str("radial-gradient(circle, red, blue)") else {
+      unreachable!()
+    };
+    let global_context = GlobalContext::default();
+    let render_context = RenderContext::new_test(&global_context, (32, 24).into());
+    let mut buffer_pool = BufferPool::default();
+    let tile = RadialGradientTile::new(&gradient, 32, 24, &render_context, &mut buffer_pool);
+
+    let mut fast = RgbaImage::from_pixel(40, 30, Rgba([0, 0, 0, 0]));
+    let mut reference = fast.clone();
+    let offset = Point { x: 4.0, y: 3.0 };
+
+    overlay_gradient_tile(&mut fast, &tile, offset, BlendMode::Normal, &[]);
+
+    let top_size = Size {
+      width: tile.width,
+      height: tile.height,
+    };
+    overlay_area_reference(&mut reference, offset, top_size, |x, y| {
+      tile.get_pixel(x, y)
+    });
+
+    assert_eq!(fast.as_raw(), reference.as_raw());
+  }
+
+  #[test]
+  fn test_overlay_conic_gradient_matches_reference() {
+    let Ok(gradient) = ConicGradient::from_str("conic-gradient(red, blue)") else {
+      unreachable!()
+    };
+
+    let global_context = GlobalContext::default();
+    let render_context = RenderContext::new_test(&global_context, (32, 24).into());
+    let mut buffer_pool = BufferPool::default();
+    let tile = ConicGradientTile::new(&gradient, 32, 24, &render_context, &mut buffer_pool);
+
+    let mut fast = RgbaImage::from_pixel(40, 30, Rgba([0, 0, 0, 0]));
+    let mut reference = fast.clone();
+    let offset = Point { x: 4.0, y: 3.0 };
+
+    overlay_gradient_tile(&mut fast, &tile, offset, BlendMode::Normal, &[]);
+
+    let top_size = Size {
+      width: tile.width,
+      height: tile.height,
+    };
+    overlay_area_reference(&mut reference, offset, top_size, |x, y| {
+      tile.get_pixel(x, y)
+    });
+
+    assert_eq!(fast.as_raw(), reference.as_raw());
   }
 }
