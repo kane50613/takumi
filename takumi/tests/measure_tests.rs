@@ -165,6 +165,56 @@ fn test_measure_flex_text_node_centers_inner_text() {
 }
 
 #[test]
+fn test_measure_flex_text_node_anonymous_item_uses_intrinsic_size() {
+  let node: NodeKind = TextNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
+    preset: None,
+    tw: None,
+    style: Some(
+      StyleBuilder::default()
+        .width(Px(300.0))
+        .height(Px(120.0))
+        .display(Display::Flex)
+        .justify_content(JustifyContent::Center)
+        .align_items(AlignItems::Center)
+        .font_size(Some(Px(20.0)))
+        .build()
+        .unwrap(),
+    ),
+    text: "Hello World".to_string(),
+  }
+  .into();
+
+  let result = measure_layout(
+    RenderOptionsBuilder::default()
+      .viewport(create_test_viewport())
+      .node(node)
+      .global(&CONTEXT)
+      .build()
+      .unwrap(),
+  )
+  .unwrap();
+
+  assert_eq!(result.children.len(), 1);
+  let anonymous_item = &result.children[0];
+
+  assert!(
+    anonymous_item.width < result.width,
+    "anonymous item width should be intrinsic, got child={} parent={}",
+    anonymous_item.width,
+    result.width
+  );
+  assert!(
+    anonymous_item.height <= result.height,
+    "anonymous item height should fit parent, got child={} parent={}",
+    anonymous_item.height,
+    result.height
+  );
+}
+
+#[test]
 fn test_measure_inline_layout() {
   let node: NodeKind = ContainerNode {
     class_name: None,
