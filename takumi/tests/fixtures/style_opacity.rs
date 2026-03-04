@@ -143,6 +143,7 @@ fn test_style_opacity_image_with_text() {
           tw: None,
           style: Some(
             StyleBuilder::default()
+              .display(Display::Block)
               .font_size(Some(Length::Rem(3.0)))
               .font_weight(FontWeight::from(700.0))
               .color(ColorInput::Value(Color([60, 60, 60, 255])))

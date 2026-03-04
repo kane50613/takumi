@@ -86,7 +86,12 @@ fn create_filter_card(filter: &str, image_size_px: f32, label_font_size_px: f32)
           tag_name: None,
           preset: None,
           tw: None,
-          style: None,
+          style: Some(
+            StyleBuilder::default()
+              .display(Display::Block)
+              .build()
+              .unwrap(),
+          ),
           text: filter.to_string(),
         }
         .into(),

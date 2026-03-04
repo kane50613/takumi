@@ -16,6 +16,7 @@ fn test_style_text_decoration() {
     style: Some(
       StyleBuilder::default()
         .width(Percentage(100.0))
+        .display(Display::Block)
         .text_align(TextAlign::Center)
         .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
         .font_size(Some(Px(72.0)))
@@ -46,6 +47,7 @@ fn text_decoration_skip_ink_parapsychologists() {
       style: Some(
         StyleBuilder::default()
           .width(Percentage(100.0))
+          .display(Display::Block)
           .text_align(TextAlign::Center)
           .font_size(Some(Px(96.0)))
           .text_decoration(TextDecoration {

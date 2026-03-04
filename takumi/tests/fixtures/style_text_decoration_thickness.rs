@@ -17,6 +17,7 @@ fn test_style_text_decoration_thickness() {
       style: Some(
         StyleBuilder::default()
           .width(Percentage(100.0))
+          .display(Display::Block)
           .text_align(TextAlign::Center)
           .font_size(Some(Px(48.0)))
           .text_decoration(TextDecoration {

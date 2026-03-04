@@ -40,6 +40,7 @@ fn clip_path_text_stroke_filled() {
           tw: None,
           style: Some(
             StyleBuilder::default()
+              .display(Display::Block)
               .position(Position::Absolute)
               .top(Some(Percentage(50.0)))
               .left(Some(Percentage(50.0)))
@@ -60,6 +61,7 @@ fn clip_path_text_stroke_filled() {
           tw: None,
           style: Some(
             StyleBuilder::default()
+              .display(Display::Block)
               .position(Position::Absolute)
               .top(Some(Percentage(50.0)))
               .left(Some(Percentage(50.0)))
