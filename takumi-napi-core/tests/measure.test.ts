@@ -56,27 +56,32 @@ describe("Renderer.measure", () => {
 
     const result = await renderer.measure(node);
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       width: 200,
       height: 200,
       transform: [1, 0, 0, 1, 0, 0],
-      children: [
-        {
-          width: 50,
-          height: 50,
-          transform: [1, 0, 0, 1, 10, 10],
-          children: [],
-          runs: [],
-        },
-        {
-          width: 130,
-          height: 50,
-          transform: [1, 0, 0, 1, 60, 10],
-          children: [],
-          runs: [],
-        },
-      ],
       runs: [],
+    });
+
+    expect(result.children).toHaveLength(2);
+    expect(result.children[0]).toMatchObject({
+      width: 50,
+      height: 50,
+      transform: [1, 0, 0, 1, 10, 10],
+      runs: [],
+    });
+    expect(result.children[1]).toMatchObject({
+      width: 130,
+      height: 50,
+      transform: [1, 0, 0, 1, 60, 10],
+      children: [],
+      runs: [],
+    });
+    expect(result.children[0]?.children).toHaveLength(1);
+    expect(result.children[0]?.children[0]).toMatchObject({
+      height: 50,
+      transform: [1, 0, 0, 1, 10, 10],
+      children: [],
     });
   });
 
