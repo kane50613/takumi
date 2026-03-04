@@ -1,8 +1,11 @@
+use std::path::Path;
+
+use image::open;
 use takumi::layout::{
   node::{ContainerNode, TextNode},
   style::{Length::*, *},
 };
-use takumi::rendering::RenderOptionsBuilder;
+use takumi::rendering::{RenderOptionsBuilder, render};
 
 use crate::test_utils::{CONTEXT, create_test_viewport, run_fixture_test_with_options};
 
@@ -155,22 +158,51 @@ fn test_stylesheets_background_multiple_gradients() {
     ),
   };
 
-  let options = RenderOptionsBuilder::default()
-    .viewport(create_test_viewport())
-    .node(root.into())
-    .global(&CONTEXT)
-    .stylesheets(vec![
-      r#"
-        .multi-gradient-card {
-          background-color: #0b1020;
-          background: radial-gradient(circle at 80% 20%, #FF3D00 0%, transparent 40%), radial-gradient(circle at 20% 80%, #00E5FF 0%, transparent 40%);
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
-        }
-      "#
-      .to_string(),
-    ])
-    .build()
-    .unwrap();
+  let build_options = || {
+    RenderOptionsBuilder::default()
+      .viewport(create_test_viewport())
+      .node(root.clone().into())
+      .global(&CONTEXT)
+      .stylesheets(vec![
+        r#"
+          .multi-gradient-card {
+            background: radial-gradient(circle at 80% 20%, #FF3D00 0%, transparent 40%), radial-gradient(circle at 20% 80%, #00E5FF 0%, transparent 40%);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+          }
+        "#
+        .to_string(),
+      ])
+      .build()
+      .unwrap()
+  };
 
-  run_fixture_test_with_options(options, "stylesheets_background_multiple_gradients");
+  let fixture_name = "stylesheets_background_multiple_gradients";
+  let fixture_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+    .join("tests/fixtures-generated")
+    .join(format!("{fixture_name}.webp"));
+
+  let expected_fixture = open(&fixture_path)
+    .unwrap_or_else(|error| panic!("missing fixture image at {:?}: {error}", fixture_path))
+    .into_rgba8();
+
+  let actual_fixture = render(build_options()).unwrap();
+
+  // Keep writing the rendered fixture through the shared helper path so CI/local
+  // runs always publish the latest artifact.
+  run_fixture_test_with_options(build_options(), fixture_name);
+
+  assert_eq!(
+    actual_fixture.dimensions(),
+    expected_fixture.dimensions(),
+    "snapshot dimensions mismatch for {fixture_name}",
+  );
+  let differing_pixels = actual_fixture
+    .pixels()
+    .zip(expected_fixture.pixels())
+    .filter(|(actual, expected)| actual.0 != expected.0)
+    .count();
+  assert_eq!(
+    differing_pixels, 0,
+    "snapshot mismatch for {fixture_name}: {differing_pixels} pixels differ",
+  );
 }
