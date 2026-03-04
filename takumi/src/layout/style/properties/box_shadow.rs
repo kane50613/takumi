@@ -80,7 +80,7 @@ impl<'i> FromCss<'i> for BoxShadow {
 
     loop {
       let state = input.state();
-      if input.try_parse(|input| input.expect_comma()).is_ok() {
+      if input.try_parse(Parser::expect_comma).is_ok() {
         input.reset(&state);
         break;
       }
