@@ -315,12 +315,12 @@ impl Renderer {
       })
       .collect::<Result<Vec<_>, JsValue>>()?;
 
-    if let Some(quality) = options.quality {
-      if quality > 100 {
-        return Err(JsValue::from_str(&format!(
-          "Invalid WebP quality {quality}; expected a value in 0..=100"
-        )));
-      }
+    if let Some(quality) = options.quality
+      && quality > 100
+    {
+      return Err(JsValue::from_str(&format!(
+        "Invalid WebP quality {quality}; expected a value in 0..=100"
+      )));
     }
 
     let mut buffer = Vec::new();

@@ -176,11 +176,17 @@ fn write_riff_container<W: Write>(
   // bit 0: dispose (0 = do not dispose, 1 = dispose to background)
   let frame_flags: u8 = (u8::from(!blend) << 1) | u8::from(dispose);
 
-  let frames_total: usize = frames
-    .iter()
-    .map(|(p, _, _)| anmf_chunk_bytes(p.len()))
-    .sum();
-  let riff_payload = u32::try_from(4 + VP8X_CHUNK_BYTES + ANIM_CHUNK_BYTES + frames_total)
+  let frames_total = frames.iter().try_fold(0usize, |acc, (p, _, _)| {
+    acc
+      .checked_add(anmf_chunk_bytes(p.len()))
+      .ok_or_else(|| IoStdError::other("RIFF payload size overflow"))
+  })?;
+  let riff_payload_usize = 4usize
+    .checked_add(VP8X_CHUNK_BYTES)
+    .and_then(|v| v.checked_add(ANIM_CHUNK_BYTES))
+    .and_then(|v| v.checked_add(frames_total))
+    .ok_or_else(|| IoStdError::other("RIFF payload size overflow"))?;
+  let riff_payload = u32::try_from(riff_payload_usize)
     .map_err(|_| IoStdError::other("RIFF payload size overflows u32"))?;
 
   // RIFF header
@@ -206,7 +212,12 @@ fn write_riff_container<W: Write>(
   for (vp8_payload, vp8_tag, duration_ms) in frames {
     let vp8_len = vp8_payload.len();
     let padding = vp8_len & 1;
-    let anmf_payload_size = u32::try_from(16 + 8 + vp8_len + padding)
+    let anmf_payload_size_usize = 16usize
+      .checked_add(8)
+      .and_then(|v| v.checked_add(vp8_len))
+      .and_then(|v| v.checked_add(padding))
+      .ok_or_else(|| IoStdError::other("ANMF payload size overflow"))?;
+    let anmf_payload_size = u32::try_from(anmf_payload_size_usize)
       .map_err(|_| IoStdError::other("ANMF payload size overflows u32"))?;
 
     destination.write_all(b"ANMF")?;

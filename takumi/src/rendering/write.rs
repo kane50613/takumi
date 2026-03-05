@@ -387,7 +387,9 @@ mod tests {
       &mut bytes,
       AnimatedGifOptions::default(),
     );
-    let err = result.expect_err("empty frame list should be rejected");
+    let err = result.err();
+    assert!(err.is_some(), "empty frame list should be rejected");
+    let err = err.unwrap_or_else(|| unreachable!());
     assert_eq!(
       err.to_string(),
       "IO error: frames cannot be empty",
@@ -399,7 +401,9 @@ mod tests {
   fn encode_animated_png_rejects_empty_frames() {
     let mut bytes = Vec::new();
     let result = encode_animated_png(&[], &mut bytes, AnimatedPngOptions::default());
-    let err = result.expect_err("empty frame list should be rejected");
+    let err = result.err();
+    assert!(err.is_some(), "empty frame list should be rejected");
+    let err = err.unwrap_or_else(|| unreachable!());
     assert_eq!(
       err.to_string(),
       "IO error: frames cannot be empty",
@@ -578,7 +582,9 @@ mod tests {
       &mut bytes,
       AnimatedWebpOptions::default(),
     );
-    let err = result.expect_err("zero-sized frame should be rejected");
+    let err = result.err();
+    assert!(err.is_some(), "zero-sized frame should be rejected");
+    let err = err.unwrap_or_else(|| unreachable!());
     assert!(
       err
         .to_string()
