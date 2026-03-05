@@ -2,8 +2,6 @@ use std::borrow::Cow;
 
 use image::RgbaImage;
 
-use super::write::AnimationFrame;
-
 #[cfg(target_arch = "wasm32")]
 mod image_webp;
 #[cfg(not(target_arch = "wasm32"))]
