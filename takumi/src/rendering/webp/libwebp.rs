@@ -304,11 +304,11 @@ pub(crate) fn write_webp(
   Ok(())
 }
 
-fn collect_unique_frames<'a>(
-  frames: &'a [AnimationFrame],
+fn collect_unique_frames(
+  frames: &[AnimationFrame],
   frame_width: u32,
   frame_height: u32,
-) -> Result<Vec<(&'a RgbaImage, u32)>> {
+) -> Result<Vec<(&RgbaImage, u32)>> {
   let mut unique_frames = Vec::with_capacity(frames.len());
   let mut pending_image = &frames[0].image;
   let mut pending_duration_ms = frames[0].duration_ms.clamp(0, U24_MAX);
