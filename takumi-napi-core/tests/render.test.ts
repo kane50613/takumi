@@ -26,10 +26,9 @@ const renderer = new Renderer({
 const remoteUrl = "https://yeecord.com/img/logo.png";
 const localImagePath = "../assets/images/yeecord.png";
 
-const remoteImage = await fetch(remoteUrl).then((r) => r.arrayBuffer());
-const localImage = await Bun.file(localImagePath).arrayBuffer();
+const imageBuffer = await Bun.file(localImagePath).arrayBuffer();
 
-const dataUri = `data:image/png;base64,${Buffer.from(localImage).toString(
+const dataUri = `data:image/png;base64,${Buffer.from(imageBuffer).toString(
   "base64",
 )}`;
 
@@ -81,7 +80,7 @@ test("Renderer initialization with fonts and images", async () => {
     persistentImages: [
       {
         src: localImagePath,
-        data: localImage,
+        data: imageBuffer,
       },
     ],
   });
@@ -98,7 +97,7 @@ describe("setup", () => {
   });
 
   test("putPersistentImage", async () => {
-    await renderer.putPersistentImage(localImagePath, localImage);
+    await renderer.putPersistentImage(localImagePath, imageBuffer);
   });
 });
 
@@ -138,7 +137,7 @@ describe("render", () => {
     fetchedResources: [
       {
         src: remoteUrl,
-        data: remoteImage,
+        data: imageBuffer,
       },
     ],
   };
