@@ -9,7 +9,7 @@ use serde::Deserialize;
 pub use super::webp::encode_animated_webp;
 use super::webp::{has_any_alpha_pixel, strip_alpha_channel, write_webp};
 
-use crate::Result;
+use crate::{Result, error::TakumiError};
 
 /// Output format for rendered images.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -181,33 +181,23 @@ pub fn encode_animated_gif<W: Write>(
   options: AnimatedGifOptions,
 ) -> Result<()> {
   if frames.is_empty() {
-    return Err(
-      std::io::Error::new(std::io::ErrorKind::InvalidInput, "frames cannot be empty").into(),
-    );
+    return Err(TakumiError::EmptyAnimationFrames { format: "GIF" });
   }
 
   let width = frames[0].image.width();
   let height = frames[0].image.height();
 
   if width > u16::MAX as u32 || height > u16::MAX as u32 {
-    return Err(
-      std::io::Error::new(
-        std::io::ErrorKind::InvalidInput,
-        "GIF frame dimensions must be <= 65535x65535",
-      )
-      .into(),
-    );
+    return Err(TakumiError::GifFrameDimensionsTooLarge {
+      width,
+      height,
+      max: u16::MAX,
+    });
   }
 
   for frame in frames.iter() {
     if frame.image.width() != width || frame.image.height() != height {
-      return Err(
-        std::io::Error::new(
-          std::io::ErrorKind::InvalidInput,
-          "all GIF animation frames must share the same dimensions",
-        )
-        .into(),
-      );
+      return Err(TakumiError::MixedAnimationFrameDimensions { format: "GIF" });
     }
   }
 
@@ -233,16 +223,18 @@ pub fn encode_animated_png<W: Write>(
   options: AnimatedPngOptions,
 ) -> Result<()> {
   if frames.is_empty() {
-    return Err(
-      std::io::Error::new(std::io::ErrorKind::InvalidInput, "frames cannot be empty").into(),
-    );
+    return Err(TakumiError::EmptyAnimationFrames { format: "APNG" });
   }
 
-  let mut encoder = png::Encoder::new(
-    destination,
-    frames[0].image.width(),
-    frames[0].image.height(),
-  );
+  let width = frames[0].image.width();
+  let height = frames[0].image.height();
+  for frame in frames.iter() {
+    if frame.image.width() != width || frame.image.height() != height {
+      return Err(TakumiError::MixedAnimationFrameDimensions { format: "APNG" });
+    }
+  }
+
+  let mut encoder = png::Encoder::new(destination, width, height);
 
   encoder.set_color(ColorType::Rgba);
   encoder.set_compression(png::Compression::Fastest);
@@ -274,6 +266,7 @@ mod tests {
 
   use gif::{ColorOutput, DecodeOptions};
   use image::RgbaImage;
+  use libwebp_sys::WEBP_CSP_MODE::MODE_RGBA;
   use libwebp_sys::*;
 
   use super::{
@@ -392,7 +385,7 @@ mod tests {
     let err = err.unwrap_or_else(|| unreachable!());
     assert_eq!(
       err.to_string(),
-      "IO error: frames cannot be empty",
+      "GIF animation must contain at least one frame",
       "unexpected error message: {err}"
     );
   }
@@ -406,7 +399,32 @@ mod tests {
     let err = err.unwrap_or_else(|| unreachable!());
     assert_eq!(
       err.to_string(),
-      "IO error: frames cannot be empty",
+      "APNG animation must contain at least one frame",
+      "unexpected error message: {err}"
+    );
+  }
+
+  #[test]
+  fn encode_animated_png_rejects_mismatched_frame_dimensions() {
+    let frames = vec![
+      AnimationFrame::new(
+        RgbaImage::from_pixel(2, 2, image::Rgba([255, 0, 0, 255])),
+        100,
+      ),
+      AnimationFrame::new(
+        RgbaImage::from_pixel(3, 2, image::Rgba([0, 255, 0, 255])),
+        100,
+      ),
+    ];
+
+    let mut bytes = Vec::new();
+    let result = encode_animated_png(&frames, &mut bytes, AnimatedPngOptions::default());
+    let err = result.err();
+    assert!(err.is_some(), "mismatched frame sizes should be rejected");
+    let err = err.unwrap_or_else(|| unreachable!());
+    assert_eq!(
+      err.to_string(),
+      "all APNG animation frames must share the same dimensions",
       "unexpected error message: {err}"
     );
   }
@@ -591,5 +609,103 @@ mod tests {
         .contains("WebP animation frame dimensions must be in 1..=16777216"),
       "unexpected error message: {err}"
     );
+  }
+
+  #[test]
+  fn encode_animated_webp_preserves_parallel_frame_order() {
+    let frames = vec![
+      AnimationFrame::new(
+        RgbaImage::from_pixel(2, 2, image::Rgba([255, 0, 0, 255])),
+        10,
+      ),
+      AnimationFrame::new(
+        RgbaImage::from_pixel(2, 2, image::Rgba([0, 255, 0, 255])),
+        20,
+      ),
+      AnimationFrame::new(
+        RgbaImage::from_pixel(2, 2, image::Rgba([0, 0, 255, 255])),
+        30,
+      ),
+      AnimationFrame::new(
+        RgbaImage::from_pixel(2, 2, image::Rgba([255, 255, 0, 255])),
+        40,
+      ),
+    ];
+
+    let mut bytes = Vec::new();
+    let encode_result = encode_animated_webp(
+      Cow::Owned(frames),
+      &mut bytes,
+      AnimatedWebpOptions {
+        quality: 100,
+        ..Default::default()
+      },
+    );
+    assert!(
+      encode_result.is_ok(),
+      "failed to encode animated webp in parallel"
+    );
+
+    let webp_data = WebPData {
+      bytes: bytes.as_ptr(),
+      size: bytes.len(),
+    };
+    let mut state = WebPDemuxState::WEBP_DEMUX_PARSING_HEADER;
+    let demux =
+      unsafe { WebPDemuxInternal(&webp_data, 1, &mut state, WEBP_DEMUX_ABI_VERSION as i32) };
+    assert!(!demux.is_null(), "demux should parse encoded animation");
+
+    let mut decoder_config = unsafe { MaybeUninit::<WebPDecoderConfig>::zeroed().assume_init() };
+    let init_ok = unsafe { WebPInitDecoderConfig(&raw mut decoder_config) };
+    assert!(init_ok, "decoder config should initialize");
+    decoder_config.output.colorspace = MODE_RGBA;
+
+    let expected_colors = [
+      [255, 0, 0, 255],
+      [0, 255, 0, 255],
+      [0, 0, 255, 255],
+      [255, 255, 0, 255],
+    ];
+    let expected_durations = [10, 20, 30, 40];
+
+    let mut iter = MaybeUninit::<WebPIterator>::zeroed();
+    let has_frame = unsafe { WebPDemuxGetFrame(demux, 1, iter.as_mut_ptr()) };
+    assert_eq!(has_frame, 1, "first frame should be available");
+    let mut iter = unsafe { iter.assume_init() };
+
+    for (expected_color, expected_duration) in expected_colors.iter().zip(expected_durations) {
+      let decode_status = unsafe {
+        WebPDecode(
+          iter.fragment.bytes,
+          iter.fragment.size,
+          &raw mut decoder_config,
+        )
+      };
+      assert_eq!(
+        decode_status,
+        VP8StatusCode::VP8_STATUS_OK,
+        "frame payload should decode"
+      );
+
+      let rgba = unsafe {
+        std::slice::from_raw_parts(
+          decoder_config.output.u.RGBA.rgba,
+          decoder_config.output.u.RGBA.size,
+        )
+      };
+      assert_eq!(&rgba[..4], expected_color);
+      assert_eq!(iter.duration, expected_duration);
+
+      unsafe { WebPFreeDecBuffer(&raw mut decoder_config.output) };
+      if expected_duration != expected_durations[expected_durations.len() - 1] {
+        let has_next = unsafe { WebPDemuxNextFrame(&mut iter) };
+        assert_eq!(has_next, 1, "next frame should be available");
+      }
+    }
+
+    unsafe {
+      WebPDemuxReleaseIterator(&mut iter);
+      WebPDemuxDelete(demux);
+    }
   }
 }

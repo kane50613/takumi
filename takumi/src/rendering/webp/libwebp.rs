@@ -2,12 +2,10 @@ use std::{borrow::Cow, ffi::CStr, io::Write, mem::MaybeUninit, ops::Range, slice
 
 use image::RgbaImage;
 use libwebp_sys::*;
+#[cfg(feature = "rayon")]
 use rayon::prelude::*;
 
-use crate::{
-  Result,
-  error::{TakumiError, WebPError},
-};
+use crate::{Result, error::WebPError};
 
 use super::{
   super::write::{AnimatedWebpOptions, AnimationFrame},
@@ -179,7 +177,6 @@ fn extract_vp8_payload(buf: &[u8]) -> Option<([u8; 4], Range<usize>)> {
 
 const VP8X_CHUNK_BYTES: usize = 18;
 const ANIM_CHUNK_BYTES: usize = 14;
-const MIN_PARALLEL_FRAMES: usize = 4;
 
 #[inline]
 fn anmf_chunk_bytes(vp8_len: usize) -> usize {
@@ -334,24 +331,22 @@ fn encode_frames(
   unique_frames: &[(&RgbaImage, u32)],
   config: &WebPConfig,
 ) -> Result<Vec<EncodedFrame>> {
+  #[cfg(feature = "rayon")]
+  const MIN_PARALLEL_FRAMES: usize = 4;
+
+  #[cfg(feature = "rayon")]
   if unique_frames.len() >= MIN_PARALLEL_FRAMES {
-    unique_frames
+    return unique_frames
       .par_iter()
       .with_min_len(MIN_PARALLEL_FRAMES)
-      .try_fold(Vec::new, |mut frames, (image, duration_ms)| {
-        frames.push(encode_single_frame(image, *duration_ms, config)?);
-        Ok::<_, TakumiError>(frames)
-      })
-      .try_reduce(Vec::new, |mut left, mut right| {
-        left.append(&mut right);
-        Ok::<_, TakumiError>(left)
-      })
-  } else {
-    unique_frames
-      .iter()
       .map(|(image, duration_ms)| encode_single_frame(image, *duration_ms, config))
-      .collect()
+      .collect();
   }
+
+  unique_frames
+    .iter()
+    .map(|(image, duration_ms)| encode_single_frame(image, *duration_ms, config))
+    .collect()
 }
 
 /// Encodes a sequence of RGBA frames into an animated WebP.

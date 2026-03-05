@@ -176,6 +176,31 @@ pub enum TakumiError {
   #[error("Invalid viewport: width or height cannot be 0")]
   InvalidViewport,
 
+  /// Animated encode was requested without any frames.
+  #[error("{format} animation must contain at least one frame")]
+  EmptyAnimationFrames {
+    /// The animation format used in the error message.
+    format: &'static str,
+  },
+
+  /// Animated frames for a given format did not all share the same dimensions.
+  #[error("all {format} animation frames must share the same dimensions")]
+  MixedAnimationFrameDimensions {
+    /// The animation format used in the error message.
+    format: &'static str,
+  },
+
+  /// GIF frame dimensions exceeded the format limits.
+  #[error("GIF frame dimensions must be <= {max}x{max}, got {width}x{height}")]
+  GifFrameDimensionsTooLarge {
+    /// The invalid frame width.
+    width: u32,
+    /// The invalid frame height.
+    height: u32,
+    /// The maximum accepted dimension value.
+    max: u16,
+  },
+
   /// Error related to font processing.
   #[error("Font error: {0}")]
   FontError(#[from] FontError),
