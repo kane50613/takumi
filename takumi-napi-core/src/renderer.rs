@@ -138,7 +138,7 @@ pub struct RenderAnimationOptions {
   pub height: u32,
   /// The output animation format (WebP, APNG, or GIF).
   pub format: Option<AnimationOutputFormat>,
-  /// The quality of WebP format (0-100). Ignored for APNG.
+  /// The quality of WebP format (0-100). Ignored for APNG and GIF.
   pub quality: Option<u8>,
 }
 

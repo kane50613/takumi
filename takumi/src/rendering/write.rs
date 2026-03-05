@@ -180,7 +180,11 @@ pub fn encode_animated_gif<W: Write>(
   destination: &mut W,
   options: AnimatedGifOptions,
 ) -> Result<()> {
-  assert_ne!(frames.len(), 0);
+  if frames.is_empty() {
+    return Err(
+      std::io::Error::new(std::io::ErrorKind::InvalidInput, "frames cannot be empty").into(),
+    );
+  }
 
   let width = frames[0].image.width();
   let height = frames[0].image.height();
@@ -195,13 +199,8 @@ pub fn encode_animated_gif<W: Write>(
     );
   }
 
-  let width = width as u16;
-  let height = height as u16;
-  let mut encoder = GifEncoder::new(destination, width, height, &[])?;
-  encoder.set_repeat(options.loop_count.map_or(Repeat::Infinite, Repeat::Finite))?;
-
-  for frame in frames.into_owned().into_iter() {
-    if frame.image.width() != width as u32 || frame.image.height() != height as u32 {
+  for frame in frames.iter() {
+    if frame.image.width() != width || frame.image.height() != height {
       return Err(
         std::io::Error::new(
           std::io::ErrorKind::InvalidInput,
@@ -210,7 +209,14 @@ pub fn encode_animated_gif<W: Write>(
         .into(),
       );
     }
+  }
 
+  let width = width as u16;
+  let height = height as u16;
+  let mut encoder = GifEncoder::new(destination, width, height, &[])?;
+  encoder.set_repeat(options.loop_count.map_or(Repeat::Infinite, Repeat::Finite))?;
+
+  for frame in frames.into_owned().into_iter() {
     let mut pixels = frame.image.into_raw();
     let mut gif_frame = GifFrame::from_rgba_speed(width, height, &mut pixels, 28);
     gif_frame.delay = duration_ms_to_gif_delay(frame.duration_ms);
@@ -226,7 +232,11 @@ pub fn encode_animated_png<W: Write>(
   destination: &mut W,
   options: AnimatedPngOptions,
 ) -> Result<()> {
-  assert_ne!(frames.len(), 0);
+  if frames.is_empty() {
+    return Err(
+      std::io::Error::new(std::io::ErrorKind::InvalidInput, "frames cannot be empty").into(),
+    );
+  }
 
   let mut encoder = png::Encoder::new(
     destination,
@@ -267,8 +277,8 @@ mod tests {
   use libwebp_sys::*;
 
   use super::{
-    AnimatedGifOptions, AnimatedWebpOptions, AnimationFrame, encode_animated_gif,
-    encode_animated_webp,
+    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame,
+    encode_animated_gif, encode_animated_png, encode_animated_webp,
   };
 
   #[test]
@@ -363,6 +373,38 @@ mod tests {
       AnimatedGifOptions::default(),
     );
     assert!(encode_result.is_err(), "mismatched frames should error");
+    assert!(
+      bytes.is_empty(),
+      "encoder should not write bytes before validating frame dimensions"
+    );
+  }
+
+  #[test]
+  fn encode_animated_gif_rejects_empty_frames() {
+    let mut bytes = Vec::new();
+    let result = encode_animated_gif(
+      Cow::Owned(Vec::new()),
+      &mut bytes,
+      AnimatedGifOptions::default(),
+    );
+    let err = result.expect_err("empty frame list should be rejected");
+    assert_eq!(
+      err.to_string(),
+      "IO error: frames cannot be empty",
+      "unexpected error message: {err}"
+    );
+  }
+
+  #[test]
+  fn encode_animated_png_rejects_empty_frames() {
+    let mut bytes = Vec::new();
+    let result = encode_animated_png(&[], &mut bytes, AnimatedPngOptions::default());
+    let err = result.expect_err("empty frame list should be rejected");
+    assert_eq!(
+      err.to_string(),
+      "IO error: frames cannot be empty",
+      "unexpected error message: {err}"
+    );
   }
 
   #[test]

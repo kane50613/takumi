@@ -186,27 +186,10 @@ pub fn run_webp_animation_test(
   fixture_name: &str,
   options: AnimatedWebpOptions,
 ) {
-  assert_ne!(nodes.len(), 0);
+  assert!(!nodes.is_empty());
 
   let viewport = create_test_viewport();
-
-  let frames: Vec<_> = nodes
-    .into_par_iter()
-    .map(|(node, duration_ms)| {
-      AnimationFrame::new(
-        render(
-          RenderOptionsBuilder::default()
-            .viewport(viewport)
-            .node(node)
-            .global(&CONTEXT)
-            .build()
-            .unwrap(),
-        )
-        .unwrap(),
-        duration_ms,
-      )
-    })
-    .collect();
+  let frames = build_animation_frames(nodes, viewport);
 
   let fixture_path = format!("tests/fixtures-generated/{}", fixture_name);
   let mut out = File::create(fixture_path).unwrap();
@@ -219,27 +202,10 @@ pub fn run_png_animation_test(
   fixture_name: &str,
   options: AnimatedPngOptions,
 ) {
-  assert_ne!(nodes.len(), 0);
+  assert!(!nodes.is_empty());
 
   let viewport = create_test_viewport();
-
-  let frames: Vec<_> = nodes
-    .into_par_iter()
-    .map(|(node, duration_ms)| {
-      AnimationFrame::new(
-        render(
-          RenderOptionsBuilder::default()
-            .viewport(viewport)
-            .node(node)
-            .global(&CONTEXT)
-            .build()
-            .unwrap(),
-        )
-        .unwrap(),
-        duration_ms,
-      )
-    })
-    .collect();
+  let frames = build_animation_frames(nodes, viewport);
 
   let fixture_path = format!("tests/fixtures-generated/{}", fixture_name);
   let mut out = File::create(fixture_path).unwrap();
@@ -252,11 +218,18 @@ pub fn run_gif_animation_test(
   fixture_name: &str,
   options: AnimatedGifOptions,
 ) {
-  assert_ne!(nodes.len(), 0);
+  assert!(!nodes.is_empty());
 
   let viewport = create_test_viewport();
+  let frames = build_animation_frames(nodes, viewport);
 
-  let frames: Vec<_> = nodes
+  let fixture_path = format!("tests/fixtures-generated/{}", fixture_name);
+  let mut out = File::create(fixture_path).unwrap();
+  encode_animated_gif(Cow::Owned(frames), &mut out, options).unwrap();
+}
+
+fn build_animation_frames(nodes: Vec<(NodeKind, u32)>, viewport: Viewport) -> Vec<AnimationFrame> {
+  nodes
     .into_par_iter()
     .map(|(node, duration_ms)| {
       AnimationFrame::new(
@@ -272,9 +245,5 @@ pub fn run_gif_animation_test(
         duration_ms,
       )
     })
-    .collect();
-
-  let fixture_path = format!("tests/fixtures-generated/{}", fixture_name);
-  let mut out = File::create(fixture_path).unwrap();
-  encode_animated_gif(Cow::Owned(frames), &mut out, options).unwrap();
+    .collect()
 }

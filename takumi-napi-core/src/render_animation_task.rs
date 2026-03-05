@@ -82,15 +82,18 @@ impl Task for RenderAnimationTask {
     };
     let mut buffer = Vec::with_capacity(estimated_capacity);
 
+    if let Some(quality) = self.quality {
+      if quality > 100 {
+        return Err(Error::from_reason(format!(
+          "Invalid WebP quality {quality}; expected a value in 0..=100"
+        )));
+      }
+    }
+
     match self.format {
       AnimationOutputFormat::webp => {
         let mut options = AnimatedWebpOptions::default();
         if let Some(quality) = self.quality {
-          if quality > 100 {
-            return Err(Error::from_reason(format!(
-              "Invalid WebP quality {quality}; expected a value in 0..=100"
-            )));
-          }
           options.quality = quality;
         }
 

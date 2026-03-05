@@ -315,16 +315,25 @@ impl Renderer {
       })
       .collect::<Result<Vec<_>, JsValue>>()?;
 
+    if let Some(quality) = options.quality {
+      if quality > 100 {
+        return Err(JsValue::from_str(&format!(
+          "Invalid WebP quality {quality}; expected a value in 0..=100"
+        )));
+      }
+    }
+
     let mut buffer = Vec::new();
 
     match options.format.unwrap_or(AnimationOutputFormat::WebP) {
       AnimationOutputFormat::WebP => {
-        encode_animated_webp(
-          Cow::Owned(rendered_frames),
-          &mut buffer,
-          AnimatedWebpOptions::default(),
-        )
-        .map_err(map_error)?;
+        let mut webp_options = AnimatedWebpOptions::default();
+        if let Some(quality) = options.quality {
+          webp_options.quality = quality;
+        }
+
+        encode_animated_webp(Cow::Owned(rendered_frames), &mut buffer, webp_options)
+          .map_err(map_error)?;
       }
       AnimationOutputFormat::APng => {
         encode_animated_png(&rendered_frames, &mut buffer, AnimatedPngOptions::default())

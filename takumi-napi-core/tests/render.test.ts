@@ -243,6 +243,17 @@ describe("renderAnimation", () => {
     expect(result).toBeInstanceOf(Buffer);
     expect(result.subarray(0, 6).toString("ascii")).toMatch(/^GIF8[79]a$/);
   });
+
+  test("rejects quality > 100", () => {
+    expect(
+      renderer.renderAnimation([frame], {
+        width: 1200,
+        height: 630,
+        format: "gif",
+        quality: 101,
+      }),
+    ).rejects.toThrow();
+  });
 });
 
 describe("clean up", () => {

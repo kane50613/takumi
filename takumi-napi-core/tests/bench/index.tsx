@@ -59,9 +59,8 @@ async function createAnimationNodes() {
   const durationMs = 1000;
   const totalFrames = (durationMs * fps) / 1000;
 
-  const frames = await Array.fromAsync(
-    { length: totalFrames },
-    async (_frame, frameIndex) => {
+  const frames = await Promise.all(
+    Array.from({ length: totalFrames }, async (_frame, frameIndex) => {
       const normalizedProgress =
         totalFrames > 1 ? frameIndex / (totalFrames - 1) : 0;
       const { node, stylesheets } = await createNode(normalizedProgress);
@@ -70,7 +69,7 @@ async function createAnimationNodes() {
         durationMs: durationMs / totalFrames,
         stylesheets,
       };
-    },
+    }),
   );
 
   return {
