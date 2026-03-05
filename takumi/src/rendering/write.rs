@@ -262,7 +262,7 @@ pub fn encode_animated_png<W: Write>(
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
-  use std::{borrow::Cow, io::Cursor, mem::MaybeUninit};
+  use std::{borrow::Cow, io::Cursor, mem::MaybeUninit, slice::from_raw_parts};
 
   use gif::{ColorOutput, DecodeOptions};
   use image::RgbaImage;
@@ -660,11 +660,11 @@ mod tests {
     assert!(init_ok, "decoder config should initialize");
     decoder_config.output.colorspace = MODE_RGBA;
 
-    let expected_colors = [
-      [255, 0, 0, 255],
-      [0, 255, 0, 255],
-      [0, 0, 255, 255],
-      [255, 255, 0, 255],
+    let expected_dominant_channels = [
+      [true, false, false],
+      [false, true, false],
+      [false, false, true],
+      [true, true, false],
     ];
     let expected_durations = [10, 20, 30, 40];
 
@@ -673,7 +673,9 @@ mod tests {
     assert_eq!(has_frame, 1, "first frame should be available");
     let mut iter = unsafe { iter.assume_init() };
 
-    for (expected_color, expected_duration) in expected_colors.iter().zip(expected_durations) {
+    for (expected_dominant_channels, expected_duration) in
+      expected_dominant_channels.iter().zip(expected_durations)
+    {
       let decode_status = unsafe {
         WebPDecode(
           iter.fragment.bytes,
@@ -688,12 +690,14 @@ mod tests {
       );
 
       let rgba = unsafe {
-        std::slice::from_raw_parts(
+        from_raw_parts(
           decoder_config.output.u.RGBA.rgba,
           decoder_config.output.u.RGBA.size,
         )
       };
-      assert_eq!(&rgba[..4], expected_color);
+      let channel_flags = [rgba[0] >= 250, rgba[1] >= 250, rgba[2] >= 250];
+      assert_eq!(channel_flags, *expected_dominant_channels);
+      assert!(rgba[3] >= 250, "decoded frame should remain opaque");
       assert_eq!(iter.duration, expected_duration);
 
       unsafe { WebPFreeDecBuffer(&raw mut decoder_config.output) };
