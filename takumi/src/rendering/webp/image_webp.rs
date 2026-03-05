@@ -51,7 +51,7 @@ fn vp8_payload_coords(buf: &[u8]) -> Option<(usize, usize)> {
 }
 
 fn vp8_chunk_tag(buf: &[u8], payload_start: usize) -> Option<[u8; 4]> {
-  let tag_start = payload_start.checked_sub(4)?;
+  let tag_start = payload_start.checked_sub(8)?;
   buf[tag_start..payload_start].try_into().ok()
 }
 
@@ -87,6 +87,24 @@ pub(crate) fn write_webp(
   )?;
 
   Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{vp8_chunk, vp8_chunk_tag};
+
+  #[test]
+  fn vp8_chunk_tag_reads_chunk_tag_not_chunk_size() {
+    let encoded = [
+      b'R', b'I', b'F', b'F', 16, 0, 0, 0, b'W', b'E', b'B', b'P', b'V', b'P', b'8', b' ', 4, 0, 0,
+      0, 1, 2, 3, 4,
+    ];
+
+    let (tag, payload_start, _) = vp8_chunk(&encoded).expect("expected VP8 chunk");
+
+    assert_eq!(tag, *b"VP8 ");
+    assert_eq!(vp8_chunk_tag(&encoded, payload_start), Some(*b"VP8 "));
+  }
 }
 
 fn estimate_vp8_payload_size(buf: &[u8]) -> Result<u32> {
