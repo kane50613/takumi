@@ -1,5 +1,6 @@
 use std::{borrow::Cow, io::Write};
 
+use gif::{Encoder as GifEncoder, Frame as GifFrame, Repeat};
 use image::{ExtendedColorType, ImageEncoder, ImageFormat, RgbaImage, codecs::jpeg::JpegEncoder};
 use png::{ColorType, Compression, Filter};
 use serde::Deserialize;
@@ -100,6 +101,21 @@ pub struct AnimatedPngOptions {
   pub loop_count: Option<u16>,
 }
 
+/// Encoding options for animated GIF output.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AnimatedGifOptions {
+  /// Number of times to loop; `None` means infinite loop.
+  pub loop_count: Option<u16>,
+}
+
+fn duration_ms_to_gif_delay(duration_ms: u32) -> u16 {
+  if duration_ms == 0 {
+    0
+  } else {
+    duration_ms.div_ceil(10).min(u16::MAX as u32) as u16
+  }
+}
+
 /// Writes a single rendered image to `destination` using `format`.
 pub fn write_image<'a, T: Write>(
   image: Cow<'a, RgbaImage>,
@@ -158,6 +174,52 @@ pub fn write_image<'a, T: Write>(
   Ok(())
 }
 
+/// Encode a sequence of RGBA frames into an animated GIF and write to `destination`.
+pub fn encode_animated_gif<W: Write>(
+  frames: Cow<'_, [AnimationFrame]>,
+  destination: &mut W,
+  options: AnimatedGifOptions,
+) -> Result<()> {
+  assert_ne!(frames.len(), 0);
+
+  let width = frames[0].image.width();
+  let height = frames[0].image.height();
+
+  if width > u16::MAX as u32 || height > u16::MAX as u32 {
+    return Err(
+      std::io::Error::new(
+        std::io::ErrorKind::InvalidInput,
+        "GIF frame dimensions must be <= 65535x65535",
+      )
+      .into(),
+    );
+  }
+
+  let width = width as u16;
+  let height = height as u16;
+  let mut encoder = GifEncoder::new(destination, width, height, &[])?;
+  encoder.set_repeat(options.loop_count.map_or(Repeat::Infinite, Repeat::Finite))?;
+
+  for frame in frames.into_owned().into_iter() {
+    if frame.image.width() != width as u32 || frame.image.height() != height as u32 {
+      return Err(
+        std::io::Error::new(
+          std::io::ErrorKind::InvalidInput,
+          "all GIF animation frames must share the same dimensions",
+        )
+        .into(),
+      );
+    }
+
+    let mut pixels = frame.image.as_raw().clone();
+    let mut gif_frame = GifFrame::from_rgba_speed(width, height, &mut pixels, 28);
+    gif_frame.delay = duration_ms_to_gif_delay(frame.duration_ms);
+    encoder.write_frame(&gif_frame)?;
+  }
+
+  Ok(())
+}
+
 /// Encode a sequence of RGBA frames into an animated PNG and write to `destination`.
 pub fn encode_animated_png<W: Write>(
   frames: &[AnimationFrame],
@@ -198,12 +260,110 @@ pub fn encode_animated_png<W: Write>(
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
-  use std::{borrow::Cow, mem::MaybeUninit};
+  use std::{borrow::Cow, io::Cursor, mem::MaybeUninit};
 
+  use gif::{ColorOutput, DecodeOptions};
   use image::RgbaImage;
   use libwebp_sys::*;
 
-  use super::{AnimatedWebpOptions, AnimationFrame, encode_animated_webp};
+  use super::{
+    AnimatedGifOptions, AnimatedWebpOptions, AnimationFrame, encode_animated_gif,
+    encode_animated_webp,
+  };
+
+  #[test]
+  fn encode_animated_gif_writes_valid_animation_and_delays() {
+    let frame_a = AnimationFrame::new(
+      RgbaImage::from_fn(2, 2, |x, y| {
+        if x == 0 && y == 0 {
+          image::Rgba([255, 0, 0, 255])
+        } else {
+          image::Rgba([0, 0, 0, 0])
+        }
+      }),
+      45,
+    );
+    let frame_b = AnimationFrame::new(
+      RgbaImage::from_fn(2, 2, |x, y| {
+        if x == 1 && y == 1 {
+          image::Rgba([0, 255, 0, 255])
+        } else {
+          image::Rgba([0, 0, 0, 0])
+        }
+      }),
+      10,
+    );
+
+    let mut bytes = Vec::new();
+    let encode_result = encode_animated_gif(
+      Cow::Owned(vec![frame_a, frame_b]),
+      &mut bytes,
+      AnimatedGifOptions {
+        loop_count: Some(7),
+      },
+    );
+    assert!(encode_result.is_ok(), "failed to encode animated gif");
+
+    let mut decoder_options = DecodeOptions::new();
+    decoder_options.set_color_output(ColorOutput::RGBA);
+    let decode_result = decoder_options.read_info(Cursor::new(&bytes));
+    assert!(decode_result.is_ok(), "failed to decode animated gif");
+
+    let mut decoder = decode_result.unwrap_or_else(|_| unreachable!());
+    let frame_one = decoder.read_next_frame();
+    assert!(frame_one.is_ok(), "missing first decoded gif frame");
+    let frame_one = frame_one.unwrap_or_else(|_| unreachable!());
+    assert!(frame_one.is_some(), "missing first decoded gif frame");
+    let frame_one = frame_one.unwrap_or_else(|| unreachable!());
+    assert_eq!(frame_one.delay, 5);
+
+    let frame_two = decoder.read_next_frame();
+    assert!(frame_two.is_ok(), "missing second decoded gif frame");
+    let frame_two = frame_two.unwrap_or_else(|_| unreachable!());
+    assert!(frame_two.is_some(), "missing second decoded gif frame");
+    let frame_two = frame_two.unwrap_or_else(|| unreachable!());
+    assert_eq!(frame_two.delay, 1);
+
+    let frame_three = decoder.read_next_frame();
+    assert!(frame_three.is_ok(), "unexpected decoder error");
+    assert!(
+      frame_three.unwrap_or_else(|_| unreachable!()).is_none(),
+      "only two frames should be encoded"
+    );
+
+    assert!(
+      bytes
+        .windows(b"NETSCAPE2.0".len())
+        .any(|chunk| chunk == b"NETSCAPE2.0"),
+      "encoded gif should contain application extension for loop count"
+    );
+    assert!(
+      bytes
+        .windows(5)
+        .any(|chunk| chunk == [0x03, 0x01, 0x07, 0x00, 0x00]),
+      "encoded gif should store loop count = 7"
+    );
+  }
+
+  #[test]
+  fn encode_animated_gif_rejects_mismatched_frame_dimensions() {
+    let frame_a = AnimationFrame::new(
+      RgbaImage::from_fn(2, 2, |_, _| image::Rgba([255, 0, 0, 255])),
+      10,
+    );
+    let frame_b = AnimationFrame::new(
+      RgbaImage::from_fn(3, 2, |_, _| image::Rgba([0, 255, 0, 255])),
+      10,
+    );
+
+    let mut bytes = Vec::new();
+    let encode_result = encode_animated_gif(
+      Cow::Owned(vec![frame_a, frame_b]),
+      &mut bytes,
+      AnimatedGifOptions::default(),
+    );
+    assert!(encode_result.is_err(), "mismatched frames should error");
+  }
 
   #[test]
   fn encode_animated_webp_respects_blend_dispose_and_loop_count() {

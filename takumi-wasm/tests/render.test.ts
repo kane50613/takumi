@@ -267,5 +267,18 @@ describe("renderAsDataUrl", () => {
 
       expect(result).toBeInstanceOf(Uint8Array);
     });
+
+    test("gif", () => {
+      const result = renderer.renderAnimation([frame], {
+        width: 1200,
+        height: 630,
+        format: "gif",
+      });
+
+      expect(result).toBeInstanceOf(Uint8Array);
+      expect(Buffer.from(result.subarray(0, 6)).toString("ascii")).toMatch(
+        /^GIF8[79]a$/,
+      );
+    });
   });
 });

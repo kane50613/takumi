@@ -185,6 +185,20 @@ summary(() => {
       format: "apng",
     });
   });
+
+  bench("createNode + renderAnimation (gif, 30fps, 1000ms)", async () => {
+    const { frames, fps, durationMs } = await createAnimationNodes();
+
+    if (fps !== 30 || durationMs !== 1000) {
+      throw new Error("Invalid fps or durationMs");
+    }
+
+    return renderer.renderAnimation(frames, {
+      width: 1200,
+      height: 630,
+      format: "gif",
+    });
+  });
 });
 
 const { node, stylesheets } = await createNode();

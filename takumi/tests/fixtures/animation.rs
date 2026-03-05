@@ -3,9 +3,9 @@ use takumi::layout::{
   node::{ContainerNode, NodeKind, TextNode},
   style::{Length::*, *},
 };
-use takumi::rendering::{AnimatedPngOptions, AnimatedWebpOptions};
+use takumi::rendering::{AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions};
 
-use crate::test_utils::{run_png_animation_test, run_webp_animation_test};
+use crate::test_utils::{run_gif_animation_test, run_png_animation_test, run_webp_animation_test};
 
 fn create_bouncing_text_nodes() -> Vec<(NodeKind, u32)> {
   const FPS: u32 = 30;
@@ -121,5 +121,14 @@ fn animation_bouncing_text_png() {
     create_bouncing_text_nodes(),
     "animation_bouncing_text.png",
     AnimatedPngOptions { loop_count: None },
+  );
+}
+
+#[test]
+fn animation_bouncing_text_gif() {
+  run_gif_animation_test(
+    create_bouncing_text_nodes(),
+    "animation_bouncing_text.gif",
+    AnimatedGifOptions { loop_count: None },
   );
 }

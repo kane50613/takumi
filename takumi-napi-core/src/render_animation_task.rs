@@ -8,8 +8,8 @@ use rayon::prelude::*;
 use takumi::{
   layout::{Viewport, node::NodeKind},
   rendering::{
-    AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, RenderOptionsBuilder,
-    encode_animated_png, encode_animated_webp, render,
+    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame,
+    RenderOptionsBuilder, encode_animated_gif, encode_animated_png, encode_animated_webp, render,
   },
 };
 
@@ -100,6 +100,14 @@ impl Task for RenderAnimationTask {
       AnimationOutputFormat::apng => {
         encode_animated_png(&frames, &mut buffer, AnimatedPngOptions::default())
           .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+      }
+      AnimationOutputFormat::gif => {
+        encode_animated_gif(
+          Cow::Owned(frames),
+          &mut buffer,
+          AnimatedGifOptions::default(),
+        )
+        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
       }
     }
 

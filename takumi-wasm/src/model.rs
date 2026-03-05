@@ -51,7 +51,7 @@ export type RenderOptions = {
 export type RenderAnimationOptions = {
   width: number,
   height: number,
-  format?: "webp" | "apng",
+  format?: "webp" | "apng" | "gif",
   drawDebugBorder?: boolean,
 };
 
@@ -172,7 +172,7 @@ pub struct RenderAnimationOptions {
   pub width: u32,
   /// The height of each frame in pixels.
   pub height: u32,
-  /// The output animation format (WebP or APNG).
+  /// The output animation format (WebP, APNG, or GIF).
   pub format: Option<AnimationOutputFormat>,
   /// Whether to draw debug borders around layout elements.
   pub draw_debug_border: Option<bool>,
@@ -255,6 +255,8 @@ pub enum AnimationOutputFormat {
   APng,
   /// Animated WebP format.
   WebP,
+  /// Animated GIF format.
+  Gif,
 }
 
 /// Font style variants.

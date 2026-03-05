@@ -227,6 +227,24 @@ describe("render", () => {
   });
 });
 
+describe("renderAnimation", () => {
+  const frame = {
+    node,
+    durationMs: 1000,
+  };
+
+  test("gif", async () => {
+    const result = await renderer.renderAnimation([frame], {
+      width: 1200,
+      height: 630,
+      format: "gif",
+    });
+
+    expect(result).toBeInstanceOf(Buffer);
+    expect(result.subarray(0, 6).toString("ascii")).toMatch(/^GIF8[79]a$/);
+  });
+});
+
 describe("clean up", () => {
   test("clearImageStore", () => renderer.clearImageStore());
 });

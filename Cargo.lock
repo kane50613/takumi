@@ -2559,6 +2559,7 @@ dependencies = [
  "data-url",
  "derive_builder",
  "fast_image_resize",
+ "gif",
  "image",
  "image-webp",
  "libm",

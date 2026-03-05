@@ -23,6 +23,10 @@ pub enum TakumiError {
   #[error("WebP encoding error: {0}")]
   WebPEncodingError(#[from] image_webp::EncodingError),
 
+  /// Error encoding a GIF image.
+  #[error("GIF encoding error: {0}")]
+  GifEncodingError(#[from] gif::EncodingError),
+
   /// Generic image processing error.
   #[error("Image error: {0}")]
   ImageError(#[from] image::ImageError),
