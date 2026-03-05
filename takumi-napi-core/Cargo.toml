@@ -10,6 +10,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 serde = "1.0"
+rayon = "1.10"
 
 [dependencies.xxhash-rust]
 version = "0.8"

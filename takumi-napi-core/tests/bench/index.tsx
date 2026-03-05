@@ -5,13 +5,49 @@ import { bench, run, summary } from "mitata";
 import DocsTemplate from "../../../takumi-template/src/templates/docs-template";
 import { Renderer } from "../../index.js";
 
-function createNode() {
+function createNode(progress = 0) {
+  const orbitOffsetX = Math.sin(progress * Math.PI * 2) * 18;
+  const orbitOffsetY = Math.cos(progress * Math.PI * 2) * 14;
+  const globeRotation = progress * 360;
+  const globeScale = 1 + Math.sin(progress * Math.PI * 4) * 0.12;
+
   return fromJsx(
     <DocsTemplate
       title="Takumi Benchmark"
       description="See how Takumi performs in real world use cases!"
       site="takumi.kane.tw"
-      icon={<Globe2 size={64} color="white" />}
+      icon={
+        <div
+          style={{
+            width: 72,
+            height: 72,
+            position: "relative",
+            transform: `translate(${orbitOffsetX}px, ${orbitOffsetY}px)`,
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: "50%",
+              background:
+                "radial-gradient(circle at 30% 30%, rgba(125, 211, 252, 0.65), rgba(59, 130, 246, 0.15) 70%, transparent 100%)",
+              filter: "blur(1px)",
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              inset: 4,
+              display: "grid",
+              placeItems: "center",
+              transform: `rotate(${globeRotation}deg) scale(${globeScale})`,
+            }}
+          >
+            <Globe2 size={64} color="white" />
+          </div>
+        </div>
+      }
       primaryColor="blue"
       primaryTextColor="white"
     />,
@@ -23,14 +59,17 @@ async function createAnimationNodes() {
   const durationMs = 1000;
   const totalFrames = (durationMs * fps) / 1000;
 
-  const frames = await Array.fromAsync({ length: totalFrames }, async () => {
-    const { node, stylesheets } = await createNode();
-    return {
-      node,
-      durationMs: durationMs / totalFrames,
-      stylesheets,
-    };
-  });
+  const frames = await Array.fromAsync(
+    { length: totalFrames },
+    async (_frame, frameIndex) => {
+      const { node, stylesheets } = await createNode(frameIndex / totalFrames);
+      return {
+        node,
+        durationMs: durationMs / totalFrames,
+        stylesheets,
+      };
+    },
+  );
 
   return {
     frames,
@@ -98,7 +137,7 @@ summary(() => {
 });
 
 summary(() => {
-  bench("createNode + renderAnimation (webp, 30fps, 1000ms)", async () => {
+  bench("createNode + renderAnimation (webp, 30fps, 75%, 1000ms)", async () => {
     const { frames, fps, durationMs } = await createAnimationNodes();
 
     if (fps !== 30 || durationMs !== 1000) {
@@ -109,8 +148,27 @@ summary(() => {
       width: 1200,
       height: 630,
       format: "webp",
+      quality: 75,
     });
   });
+
+  bench(
+    "createNode + renderAnimation (webp, 30fps, 100%, 1000ms)",
+    async () => {
+      const { frames, fps, durationMs } = await createAnimationNodes();
+
+      if (fps !== 30 || durationMs !== 1000) {
+        throw new Error("Invalid fps or durationMs");
+      }
+
+      return renderer.renderAnimation(frames, {
+        width: 1200,
+        height: 630,
+        format: "webp",
+        quality: 100,
+      });
+    },
+  );
 
   bench("createNode + renderAnimation (apng, 30fps, 1000ms)", async () => {
     const { frames, fps, durationMs } = await createAnimationNodes();

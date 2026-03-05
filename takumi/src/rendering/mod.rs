@@ -13,6 +13,7 @@ pub(crate) mod inline_drawing;
 mod render;
 /// Text drawing functions
 mod text_drawing;
+mod webp;
 mod write;
 
 use std::{collections::HashMap, rc::Rc, sync::Arc};

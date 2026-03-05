@@ -1,10 +1,15 @@
-use std::sync::{Arc, RwLock};
+use std::{
+  borrow::Cow,
+  sync::{Arc, RwLock},
+};
 
 use napi::bindgen_prelude::*;
+use rayon::prelude::*;
 use takumi::{
   layout::{Viewport, node::NodeKind},
   rendering::{
-    AnimationFrame, RenderOptionsBuilder, encode_animated_png, encode_animated_webp, render,
+    AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, RenderOptionsBuilder,
+    encode_animated_png, encode_animated_webp, render,
   },
 };
 
@@ -18,6 +23,7 @@ pub struct RenderAnimationTask {
   pub(crate) state: Arc<RwLock<RendererState>>,
   pub viewport: Viewport,
   pub format: AnimationOutputFormat,
+  pub quality: Option<u8>,
   pub draw_debug_border: bool,
 }
 
@@ -34,16 +40,18 @@ impl Task for RenderAnimationTask {
       .read()
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
+    let viewport = self.viewport;
+    let draw_debug_border = self.draw_debug_border;
     let frames = nodes
-      .into_iter()
+      .into_par_iter()
       .map(|(node, duration_ms)| {
         Ok(AnimationFrame::new(
           render(
             RenderOptionsBuilder::default()
-              .viewport(self.viewport)
+              .viewport(viewport)
               .node(node)
               .global(&state.global)
-              .draw_debug_border(self.draw_debug_border)
+              .draw_debug_border(draw_debug_border)
               .build()
               .map_err(map_error)?,
           )
@@ -53,15 +61,29 @@ impl Task for RenderAnimationTask {
       })
       .collect::<Result<Vec<_>, _>>()?;
 
-    let mut buffer = Vec::new();
+    // Pre-size the output buffer to avoid repeated reallocations.
+    let estimated_capacity = if let Some(first) = frames.first() {
+      let w = first.image.width() as usize;
+      let h = first.image.height() as usize;
+      // generous upper-bound: N × uncompressed frame + RIFF overhead
+      frames.len() * (w * h * 4 + 50) + 44
+    } else {
+      0
+    };
+    let mut buffer = Vec::with_capacity(estimated_capacity);
 
     match self.format {
       AnimationOutputFormat::webp => {
-        encode_animated_webp(&frames, &mut buffer, true, false, None)
+        let mut options = AnimatedWebpOptions::default();
+        if let Some(quality) = self.quality {
+          options.quality = quality;
+        }
+
+        encode_animated_webp(Cow::Owned(frames), &mut buffer, options)
           .map_err(|e| napi::Error::from_reason(e.to_string()))?;
       }
       AnimationOutputFormat::apng => {
-        encode_animated_png(&frames, &mut buffer, None)
+        encode_animated_png(&frames, &mut buffer, AnimatedPngOptions::default())
           .map_err(|e| napi::Error::from_reason(e.to_string()))?;
       }
     }

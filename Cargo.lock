@@ -2591,6 +2591,7 @@ dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
+ "rayon",
  "serde",
  "takumi",
  "xxhash-rust",

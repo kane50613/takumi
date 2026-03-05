@@ -1,18 +1,14 @@
 use std::{borrow::Cow, io::Write};
 
-#[cfg(not(target_arch = "wasm32"))]
-use std::{io::Error as IoStdError, mem::MaybeUninit, slice};
-
 use image::{ExtendedColorType, ImageEncoder, ImageFormat, RgbaImage, codecs::jpeg::JpegEncoder};
 use png::{ColorType, Compression, Filter};
 use serde::Deserialize;
 
-use image_webp::WebPEncoder;
+/// Encode a sequence of RGBA frames into an animated WebP and write to `destination`.
+pub use super::webp::encode_animated_webp;
+use super::webp::{has_any_alpha_pixel, strip_alpha_channel, write_webp};
 
-#[cfg(feature = "rayon")]
-use rayon::prelude::*;
-
-use crate::{Error::IoError, Result};
+use crate::Result;
 
 /// Output format for rendered images.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -67,158 +63,41 @@ impl AnimationFrame {
   }
 }
 
-const U24_MAX: u32 = 0xffffff;
+/// Encoding options for animated WebP output.
+#[derive(Debug, Clone, Copy)]
+pub struct AnimatedWebpOptions {
+  /// Whether frames should be alpha-blended with previous content.
+  pub blend: bool,
+  /// Whether frame disposal clears to background before the next frame.
+  pub dispose: bool,
+  /// Number of times to loop; `None` means infinite loop.
+  pub loop_count: Option<u16>,
+  /// Quality in range `0..=100`; `100` is treated as lossless by native backend.
+  pub quality: u8,
+  /// Encoding speed in range `0..=6`; `0` is fastest (lowest compression), `6` is
+  /// slowest (best compression). `None` uses the default speed of `1`.
+  ///
+  /// Only effective on native targets (libwebp). Ignored on WASM.
+  pub speed: Option<u8>,
+}
 
-fn strip_alpha_channel(image: Cow<'_, RgbaImage>) -> Vec<u8> {
-  match image {
-    Cow::Owned(image) => {
-      let mut rgba = image.into_raw();
-      let pixels = rgba.len() / 4;
-
-      for pixel_index in 0..pixels {
-        let src_offset = pixel_index * 4;
-        let dst_offset = pixel_index * 3;
-        rgba[dst_offset] = rgba[src_offset];
-        rgba[dst_offset + 1] = rgba[src_offset + 1];
-        rgba[dst_offset + 2] = rgba[src_offset + 2];
-      }
-
-      rgba.truncate(pixels * 3);
-      rgba
-    }
-    Cow::Borrowed(image) => {
-      let pixels = bytemuck::cast_slice::<u8, [u8; 4]>(image.as_raw());
-      let mut rgb = Vec::with_capacity(pixels.len() * 3);
-
-      for [r, g, b, _] in pixels {
-        rgb.extend_from_slice(&[*r, *g, *b]);
-      }
-
-      rgb
+impl Default for AnimatedWebpOptions {
+  fn default() -> Self {
+    Self {
+      blend: true,
+      dispose: false,
+      loop_count: None,
+      quality: 100,
+      speed: None,
     }
   }
 }
 
-fn has_any_alpha_pixel(image: &RgbaImage) -> bool {
-  bytemuck::cast_slice::<u8, [u8; 4]>(image.as_raw())
-    .iter()
-    .any(|[_, _, _, a]| *a != u8::MAX)
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn write_webp(
-  image: Cow<'_, RgbaImage>,
-  destination: &mut impl Write,
-  quality: Option<u8>,
-) -> Result<()> {
-  use libwebp_sys::{
-    WebPConfig, WebPEncode, WebPMemoryWrite, WebPMemoryWriter, WebPMemoryWriterClear,
-    WebPMemoryWriterInit, WebPPicture, WebPPictureFree, WebPPictureImportRGB,
-    WebPPictureImportRGBA, WebPPreset, WebPValidateConfig,
-  };
-
-  let requested_quality = quality.unwrap_or(100).clamp(0, 100);
-  let is_lossless = requested_quality == 100;
-  let has_alpha = has_any_alpha_pixel(&image);
-  let width = image.width() as i32;
-  let height = image.height() as i32;
-
-  let mut config = WebPConfig::new_with_preset(
-    WebPPreset::WEBP_PRESET_TEXT,
-    if is_lossless {
-      20.0
-    } else {
-      requested_quality as f32
-    },
-  )
-  .map_err(|_| IoError(IoStdError::other("Failed to construct WebP config")))?;
-
-  config.lossless = if is_lossless { 1 } else { 0 };
-  config.alpha_compression = if is_lossless { 0 } else { 1 };
-  config.method = 1;
-  if unsafe { WebPValidateConfig(&config) } == 0 {
-    return Err(IoError(IoStdError::other("Invalid WebP config")));
-  }
-
-  let mut picture = WebPPicture::new()
-    .map_err(|_| IoError(IoStdError::other("Failed to initialize WebP picture")))?;
-  picture.width = width;
-  picture.height = height;
-
-  let rgb;
-  let import_ok = if has_alpha {
-    unsafe { WebPPictureImportRGBA(&mut picture, image.as_raw().as_ptr(), width * 4) }
-  } else {
-    rgb = strip_alpha_channel(image);
-    unsafe { WebPPictureImportRGB(&mut picture, rgb.as_ptr(), width * 3) }
-  };
-
-  if import_ok == 0 {
-    unsafe { WebPPictureFree(&mut picture) };
-    return Err(IoError(IoStdError::other(format!(
-      "WebP import error: {:?}",
-      picture.error_code
-    ))));
-  }
-
-  let mut writer = MaybeUninit::<WebPMemoryWriter>::uninit();
-  unsafe { WebPMemoryWriterInit(writer.as_mut_ptr()) };
-  picture.writer = Some(WebPMemoryWrite);
-  picture.custom_ptr = writer.as_mut_ptr().cast();
-
-  let encode_ok = unsafe { WebPEncode(&config, &mut picture) };
-  let mut writer = unsafe { writer.assume_init() };
-
-  if encode_ok == 0 {
-    unsafe {
-      WebPMemoryWriterClear(&mut writer);
-      WebPPictureFree(&mut picture);
-    }
-    return Err(IoError(IoStdError::other(format!(
-      "WebP encode error: {:?}",
-      picture.error_code
-    ))));
-  }
-
-  let encoded = unsafe { slice::from_raw_parts(writer.mem, writer.size) }.to_vec();
-  unsafe {
-    WebPMemoryWriterClear(&mut writer);
-    WebPPictureFree(&mut picture);
-  }
-
-  destination.write_all(encoded.as_slice())?;
-  Ok(())
-}
-
-#[cfg(target_arch = "wasm32")]
-fn write_webp(
-  image: Cow<'_, RgbaImage>,
-  destination: &mut impl Write,
-  _quality: Option<u8>,
-) -> Result<()> {
-  let encoder = WebPEncoder::new(destination);
-  let width = image.width();
-  let height = image.height();
-  let has_alpha = has_any_alpha_pixel(&image);
-
-  let image_data = if has_alpha {
-    Cow::Borrowed(image.as_raw())
-  } else {
-    Cow::Owned(strip_alpha_channel(image))
-  };
-
-  encoder.encode(
-    &image_data,
-    width,
-    height,
-    if has_alpha {
-      image_webp::ColorType::Rgba8
-    } else {
-      image_webp::ColorType::Rgb8
-    },
-  )?;
-
-  Ok(())
+/// Encoding options for animated PNG output.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AnimatedPngOptions {
+  /// Number of times to loop; `None` means infinite loop.
+  pub loop_count: Option<u16>,
 }
 
 /// Writes a single rendered image to `destination` using `format`.
@@ -279,196 +158,11 @@ pub fn write_image<'a, T: Write>(
   Ok(())
 }
 
-/// Scans the RIFF container and returns (offset, length) of the VP8/VP8L payload.
-/// Returns None if the tag is not found or if the buffer is truncated.
-fn vp8_payload_coords(buf: &[u8]) -> Option<(usize, usize)> {
-  // Skip RIFF header (12 bytes)
-  if buf.len() < 12 {
-    return None;
-  }
-
-  let mut i = 12;
-  let buf_len = buf.len();
-
-  // Iterate over chunks
-  while i + 8 <= buf_len {
-    let tag = &buf[i..i + 4];
-
-    let len = u32::from_le_bytes(buf[i + 4..i + 8].try_into().ok()?) as usize;
-
-    // Check for VP8 (Lossy) or VP8L (Lossless)
-    if tag == b"VP8 " || tag == b"VP8L" {
-      let start = i + 8;
-      let end = start.checked_add(len)?; // Protect against usize overflow
-
-      // Ensure the actual data exists in the buffer.
-      if end > buf_len {
-        return None;
-      }
-
-      return Some((start, len));
-    }
-
-    // Calculate next chunk offset (Size + Padding)
-    let padding = len & 1;
-
-    let chunk_size = len.checked_add(padding)?;
-    i = (i + 8).checked_add(chunk_size)?;
-  }
-
-  None
-}
-
-// NAME + size (4 bytes)
-const BASE_HEADER_SIZE: u32 = 8;
-
-// x (3 bytes) + y (3 bytes) + w (3 bytes) + h (3 bytes) + duration (3 bytes) + flags (1 byte)
-const ANMF_HEADER_SIZE: u32 = 16;
-
-// flags (1 byte) + cw (3 bytes) + ch (3 bytes)
-const VP8X_HEADER_SIZE: u32 = 10;
-
-// background color (4 bytes) + loop count (2 bytes)
-const ANIM_HEADER_SIZE: u32 = 6;
-
-fn estimate_vp8_payload_size(buf: &[u8]) -> Result<u32> {
-  let (_, len) = vp8_payload_coords(buf)
-    .ok_or_else(|| IoError(std::io::Error::other("VP8/VP8L chunk not found")))?;
-
-  let padding = len & 1;
-
-  // ANMF chunk + VP8L chunk
-  Ok(BASE_HEADER_SIZE + ANMF_HEADER_SIZE + BASE_HEADER_SIZE + len as u32 + padding as u32)
-}
-
-fn estimate_riff_size<'a, I: Iterator<Item = &'a [u8]>>(frames: I) -> Result<u32> {
-  // "WEBP" +  VPX8 chunk + ANIM chunk + [ANMF chunks]
-  let mut size = 4 + BASE_HEADER_SIZE + VP8X_HEADER_SIZE + BASE_HEADER_SIZE + ANIM_HEADER_SIZE;
-
-  for frame in frames {
-    size += estimate_vp8_payload_size(frame)?;
-  }
-
-  Ok(size)
-}
-
-/// Encode a sequence of RGBA frames into an animated WebP and write to `destination`.
-pub fn encode_animated_webp<W: Write>(
-  frames: &[AnimationFrame],
-  destination: &mut W,
-  blend: bool,
-  dispose: bool,
-  loop_count: Option<u16>,
-) -> Result<()> {
-  assert_ne!(frames.len(), 0);
-
-  // encode frames losslessly and collect VP8L/VP8 payloads
-  #[cfg(feature = "rayon")]
-  let frames_payloads: Vec<(&AnimationFrame, Vec<u8>)> = frames
-    .par_iter()
-    .map(|frame| {
-      let mut buf = Vec::new();
-      WebPEncoder::new(&mut buf).encode(
-        &frame.image,
-        frame.image.width(),
-        frame.image.height(),
-        image_webp::ColorType::Rgba8,
-      )?;
-
-      Ok((frame, buf))
-    })
-    .collect::<Result<Vec<(&AnimationFrame, Vec<u8>)>>>()?;
-
-  #[cfg(not(feature = "rayon"))]
-  let frames_payloads: Vec<(&AnimationFrame, Vec<u8>)> = frames
-    .iter()
-    .map(|frame| {
-      let mut buf = Vec::new();
-      WebPEncoder::new(&mut buf)
-        .encode(
-          &frame.image,
-          frame.image.width(),
-          frame.image.height(),
-          image_webp::ColorType::Rgba8,
-        )
-        .map_err(|_| IoError(std::io::Error::other("WebP encode error")))?;
-
-      Ok((frame, buf))
-    })
-    .collect::<Result<Vec<(&AnimationFrame, Vec<u8>)>>>()?;
-
-  let riff_size = estimate_riff_size(frames_payloads.iter().map(|(_, buf)| buf.as_slice()))?;
-
-  // RIFF header
-  destination.write_all(b"RIFF")?;
-  destination.write_all(&(riff_size as u32).to_le_bytes())?;
-  destination.write_all(b"WEBP")?;
-
-  // VP8X chunk
-  let vp8x_flags: u8 = (1 << 1) | (1 << 4); // animation + alpha
-  let cw = (frames[0].image.width() - 1).to_le_bytes();
-  let ch = (frames[0].image.height() - 1).to_le_bytes();
-
-  destination.write_all(b"VP8X")?;
-  destination.write_all(&VP8X_HEADER_SIZE.to_le_bytes())?;
-  destination.write_all(&[vp8x_flags])?;
-  destination.write_all(&[0u8; 3])?;
-  destination.write_all(&cw[..3])?;
-  destination.write_all(&ch[..3])?;
-
-  // ANIM chunk
-  destination.write_all(b"ANIM")?;
-  destination.write_all(&ANIM_HEADER_SIZE.to_le_bytes())?;
-  destination.write_all(&[0u8; 4])?; // bgcolor (4 bytes)
-  destination.write_all(&loop_count.unwrap_or(0).to_le_bytes())?;
-
-  let frame_flags = ((blend as u8) << 1) | (dispose as u8);
-
-  // ANMF frames
-  for (frame, vp8_data) in frames_payloads.into_iter() {
-    let w_bytes = (frame.image.width() - 1).to_le_bytes();
-    let h_bytes = (frame.image.height() - 1).to_le_bytes();
-
-    let (start, len) = vp8_payload_coords(&vp8_data)
-      .ok_or_else(|| IoError(std::io::Error::other("VP8/VP8L chunk not found")))?;
-
-    let vp8_payload = &vp8_data[start..start + len];
-
-    let padding = vp8_payload.len() & 1;
-
-    let anmf_size = ANMF_HEADER_SIZE + BASE_HEADER_SIZE + vp8_payload.len() as u32 + padding as u32; // x, y, w, h, duration, flags, payload
-
-    destination.write_all(b"ANMF")?;
-    destination.write_all(&anmf_size.to_le_bytes())?;
-
-    // frame header (16 bytes)
-    destination.write_all(&[0u8; 6])?; // x, y (3 bytes each)
-    destination.write_all(&w_bytes[..3])?; // w (3 bytes)
-    destination.write_all(&h_bytes[..3])?; // h (3 bytes)
-    destination.write_all(&frame.duration_ms.clamp(0, U24_MAX).to_le_bytes()[..3])?; // duration (3 bytes)
-    destination.write_all(&[frame_flags])?; // flags (1 byte)
-
-    // VP8L chunk: VP8L payload
-    destination.write_all(b"VP8L")?;
-    destination.write_all(&(vp8_payload.len() as u32).to_le_bytes())?;
-    destination.write_all(vp8_payload)?;
-
-    // padding
-    if padding == 1 {
-      destination.write_all(&[0u8])?;
-    }
-  }
-
-  destination.flush()?;
-
-  Ok(())
-}
-
 /// Encode a sequence of RGBA frames into an animated PNG and write to `destination`.
 pub fn encode_animated_png<W: Write>(
   frames: &[AnimationFrame],
   destination: &mut W,
-  loop_count: Option<u16>,
+  options: AnimatedPngOptions,
 ) -> Result<()> {
   assert_ne!(frames.len(), 0);
 
@@ -480,7 +174,7 @@ pub fn encode_animated_png<W: Write>(
 
   encoder.set_color(ColorType::Rgba);
   encoder.set_compression(png::Compression::Fastest);
-  encoder.set_animated(frames.len() as u32, loop_count.unwrap_or(0) as u32)?;
+  encoder.set_animated(frames.len() as u32, options.loop_count.unwrap_or(0) as u32)?;
 
   // Since APNG doesn't support variable frame duration, we use the minimum duration of all frames.
   let min_duration_ms = frames
@@ -500,4 +194,175 @@ pub fn encode_animated_png<W: Write>(
   writer.finish()?;
 
   Ok(())
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+  use std::{borrow::Cow, mem::MaybeUninit};
+
+  use image::RgbaImage;
+  use libwebp_sys::*;
+
+  use super::{AnimatedWebpOptions, AnimationFrame, encode_animated_webp};
+
+  #[test]
+  fn encode_animated_webp_respects_blend_dispose_and_loop_count() {
+    let frame_a = AnimationFrame::new(
+      RgbaImage::from_fn(2, 2, |x, y| {
+        if x == 0 && y == 0 {
+          image::Rgba([255, 0, 0, 255])
+        } else {
+          image::Rgba([0, 0, 0, 0])
+        }
+      }),
+      120,
+    );
+    let frame_b = AnimationFrame::new(
+      RgbaImage::from_fn(2, 2, |x, y| {
+        if x == 1 && y == 1 {
+          image::Rgba([0, 255, 0, 255])
+        } else {
+          image::Rgba([0, 0, 0, 0])
+        }
+      }),
+      240,
+    );
+
+    let mut bytes = Vec::new();
+    let encode_result = encode_animated_webp(
+      Cow::Owned(vec![frame_a, frame_b]),
+      &mut bytes,
+      AnimatedWebpOptions {
+        blend: true,
+        dispose: true,
+        loop_count: Some(7),
+        quality: 100,
+        speed: None,
+      },
+    );
+    assert!(encode_result.is_ok(), "failed to encode animated webp");
+
+    let webp_data = WebPData {
+      bytes: bytes.as_ptr(),
+      size: bytes.len(),
+    };
+    let mut state = WebPDemuxState::WEBP_DEMUX_PARSING_HEADER;
+    let demux =
+      unsafe { WebPDemuxInternal(&webp_data, 1, &mut state, WEBP_DEMUX_ABI_VERSION as i32) };
+    assert!(!demux.is_null(), "demux should parse encoded animation");
+
+    let loop_count = unsafe { WebPDemuxGetI(demux, WebPFormatFeature::WEBP_FF_LOOP_COUNT) };
+    assert_eq!(loop_count, 7);
+
+    let mut iter = MaybeUninit::<WebPIterator>::zeroed();
+    let has_frame = unsafe { WebPDemuxGetFrame(demux, 1, iter.as_mut_ptr()) };
+    assert_eq!(has_frame, 1, "first frame should be available");
+
+    let mut iter = unsafe { iter.assume_init() };
+    assert_eq!(
+      iter.dispose_method,
+      WebPMuxAnimDispose::WEBP_MUX_DISPOSE_BACKGROUND
+    );
+    assert_eq!(iter.blend_method, WebPMuxAnimBlend::WEBP_MUX_BLEND);
+
+    unsafe {
+      WebPDemuxReleaseIterator(&mut iter);
+      WebPDemuxDelete(demux);
+    }
+  }
+
+  #[test]
+  fn encode_animated_webp_lossy_produces_valid_animation() {
+    // With allow_mixed=1 libwebp may choose VP8L even at quality<100 when it
+    // produces a smaller file (trivial 2×2 solid-colour images always compress
+    // better losslessly). We verify the output is a parseable animated WebP.
+    let frame = AnimationFrame::new(
+      RgbaImage::from_fn(2, 2, |_, _| image::Rgba([20, 80, 220, 255])),
+      100,
+    );
+
+    let mut bytes = Vec::new();
+    let encode_result = encode_animated_webp(
+      Cow::Owned(vec![frame]),
+      &mut bytes,
+      AnimatedWebpOptions {
+        quality: 70,
+        ..Default::default()
+      },
+    );
+    assert!(
+      encode_result.is_ok(),
+      "failed to encode lossy animated webp"
+    );
+
+    assert!(
+      bytes
+        .windows(4)
+        .any(|chunk| chunk == b"VP8 " || chunk == b"VP8L"),
+      "animation should contain a VP8 or VP8L bitstream chunk"
+    );
+
+    // Verify it parses as a valid animated WebP
+    let webp_data = WebPData {
+      bytes: bytes.as_ptr(),
+      size: bytes.len(),
+    };
+    let mut state = WebPDemuxState::WEBP_DEMUX_PARSING_HEADER;
+    let demux =
+      unsafe { WebPDemuxInternal(&webp_data, 1, &mut state, WEBP_DEMUX_ABI_VERSION as i32) };
+    assert!(!demux.is_null(), "lossy animation should be parseable");
+    unsafe { WebPDemuxDelete(demux) };
+  }
+
+  #[test]
+  fn encode_animated_webp_merges_consecutive_identical_frames() {
+    let image_a = RgbaImage::from_fn(2, 2, |_, _| image::Rgba([120, 30, 10, 255]));
+    let image_b = RgbaImage::from_fn(2, 2, |_, _| image::Rgba([5, 200, 20, 255]));
+    let frame_a = AnimationFrame::new(image_a.clone(), 50);
+    let frame_b = AnimationFrame::new(image_a, 70);
+    let frame_c = AnimationFrame::new(image_b, 30);
+
+    let mut bytes = Vec::new();
+    let encode_result = encode_animated_webp(
+      Cow::Owned(vec![frame_a, frame_b, frame_c]),
+      &mut bytes,
+      AnimatedWebpOptions {
+        quality: 100,
+        ..Default::default()
+      },
+    );
+    assert!(
+      encode_result.is_ok(),
+      "failed to encode animated webp with repeated frames"
+    );
+
+    let webp_data = WebPData {
+      bytes: bytes.as_ptr(),
+      size: bytes.len(),
+    };
+    let mut state = WebPDemuxState::WEBP_DEMUX_PARSING_HEADER;
+    let demux =
+      unsafe { WebPDemuxInternal(&webp_data, 1, &mut state, WEBP_DEMUX_ABI_VERSION as i32) };
+    assert!(!demux.is_null(), "demux should parse encoded animation");
+
+    let frame_count = unsafe { WebPDemuxGetI(demux, WebPFormatFeature::WEBP_FF_FRAME_COUNT) };
+    assert_eq!(
+      frame_count, 2,
+      "identical consecutive frames should be merged"
+    );
+
+    let mut iter = MaybeUninit::<WebPIterator>::zeroed();
+    let has_frame = unsafe { WebPDemuxGetFrame(demux, 1, iter.as_mut_ptr()) };
+    assert_eq!(has_frame, 1, "first frame should be available");
+    let mut iter = unsafe { iter.assume_init() };
+    assert_eq!(
+      iter.duration, 120,
+      "merged frame should keep total duration"
+    );
+
+    unsafe {
+      WebPDemuxReleaseIterator(&mut iter);
+      WebPDemuxDelete(demux);
+    }
+  }
 }

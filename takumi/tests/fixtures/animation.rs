@@ -3,6 +3,7 @@ use takumi::layout::{
   node::{ContainerNode, NodeKind, TextNode},
   style::{Length::*, *},
 };
+use takumi::rendering::{AnimatedPngOptions, AnimatedWebpOptions};
 
 use crate::test_utils::{run_png_animation_test, run_webp_animation_test};
 
@@ -89,9 +90,13 @@ fn animation_bouncing_text_webp() {
   run_webp_animation_test(
     create_bouncing_text_nodes(),
     "animation_bouncing_text.webp",
-    true,
-    false,
-    None,
+    AnimatedWebpOptions {
+      blend: true,
+      dispose: false,
+      loop_count: None,
+      quality: 100,
+      speed: None,
+    },
   );
 }
 
@@ -100,6 +105,6 @@ fn animation_bouncing_text_png() {
   run_png_animation_test(
     create_bouncing_text_nodes(),
     "animation_bouncing_text.png",
-    None,
+    AnimatedPngOptions { loop_count: None },
   );
 }

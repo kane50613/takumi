@@ -17,8 +17,9 @@ use takumi::{
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, DEFAULT_FONT_SIZE, Viewport, node::NodeKind},
   parley::{FontWeight, fontique::FontInfoOverride},
   rendering::{
-    AnimationFrame, ImageOutputFormat, RenderOptionsBuilder, encode_animated_png,
-    encode_animated_webp, measure_layout, render, write_image,
+    AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
+    RenderOptionsBuilder, encode_animated_png, encode_animated_webp, measure_layout, render,
+    write_image,
   },
   resources::image::load_image_source_from_bytes,
 };
@@ -318,11 +319,16 @@ impl Renderer {
 
     match options.format.unwrap_or(AnimationOutputFormat::WebP) {
       AnimationOutputFormat::WebP => {
-        encode_animated_webp(&rendered_frames, &mut buffer, true, false, None)
-          .map_err(map_error)?;
+        encode_animated_webp(
+          Cow::Owned(rendered_frames),
+          &mut buffer,
+          AnimatedWebpOptions::default(),
+        )
+        .map_err(map_error)?;
       }
       AnimationOutputFormat::APng => {
-        encode_animated_png(&rendered_frames, &mut buffer, None).map_err(map_error)?;
+        encode_animated_png(&rendered_frames, &mut buffer, AnimatedPngOptions::default())
+          .map_err(map_error)?;
       }
     }
 
