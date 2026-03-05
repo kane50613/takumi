@@ -1,10 +1,13 @@
-use std::{borrow::Cow, ffi::CStr, io::Write, mem::MaybeUninit, slice};
+use std::{borrow::Cow, ffi::CStr, io::Write, mem::MaybeUninit, ops::Range, slice};
 
 use image::RgbaImage;
 use libwebp_sys::*;
 use rayon::prelude::*;
 
-use crate::{Result, error::WebPError};
+use crate::{
+  Result,
+  error::{TakumiError, WebPError},
+};
 
 use super::{
   super::write::{AnimatedWebpOptions, AnimationFrame},
@@ -62,27 +65,62 @@ fn import_rgba_picture(image: &RgbaImage) -> Result<WebPPicture> {
 }
 
 struct EncodedFrame {
-  payload: Vec<u8>,
+  encoded: WebPMemoryBuffer,
+  payload_range: Range<usize>,
   tag: [u8; 4],
   duration_ms: u32,
 }
 
-fn encode_single_frame(image: &RgbaImage, config: &WebPConfig) -> Result<(Vec<u8>, [u8; 4])> {
-  let mut picture = import_rgba_picture(image)?;
+impl EncodedFrame {
+  fn payload(&self) -> &[u8] {
+    &self.encoded.as_slice()[self.payload_range.clone()]
+  }
+}
 
-  let mut writer = MaybeUninit::<WebPMemoryWriter>::uninit();
-  unsafe { WebPMemoryWriterInit(writer.as_mut_ptr()) };
+struct WebPMemoryBuffer {
+  writer: WebPMemoryWriter,
+}
+
+unsafe impl Send for WebPMemoryBuffer {}
+
+impl WebPMemoryBuffer {
+  fn new() -> Self {
+    let mut writer = MaybeUninit::<WebPMemoryWriter>::uninit();
+    unsafe { WebPMemoryWriterInit(writer.as_mut_ptr()) };
+    Self {
+      writer: unsafe { writer.assume_init() },
+    }
+  }
+
+  fn as_mut_ptr(&mut self) -> *mut WebPMemoryWriter {
+    &raw mut self.writer
+  }
+
+  fn as_slice(&self) -> &[u8] {
+    unsafe { slice::from_raw_parts(self.writer.mem, self.writer.size) }
+  }
+}
+
+impl Drop for WebPMemoryBuffer {
+  fn drop(&mut self) {
+    unsafe { WebPMemoryWriterClear(&raw mut self.writer) };
+  }
+}
+
+fn encode_single_frame(
+  image: &RgbaImage,
+  duration_ms: u32,
+  config: &WebPConfig,
+) -> Result<EncodedFrame> {
+  let mut picture = import_rgba_picture(image)?;
+  let mut writer = WebPMemoryBuffer::new();
   picture.writer = Some(WebPMemoryWrite);
   picture.custom_ptr = writer.as_mut_ptr().cast();
 
   let encode_ok = unsafe { WebPEncode(std::ptr::from_ref(config), &raw mut picture) };
-  let mut writer = unsafe { writer.assume_init() };
 
   if encode_ok == 0 {
-    unsafe {
-      WebPMemoryWriterClear(&raw mut writer);
-      WebPPictureFree(&raw mut picture);
-    }
+    unsafe { WebPPictureFree(&raw mut picture) };
     return Err(
       WebPError::EncodeWithCode {
         error_code: format!("{:?}", picture.error_code),
@@ -91,28 +129,27 @@ fn encode_single_frame(image: &RgbaImage, config: &WebPConfig) -> Result<(Vec<u8
     );
   }
 
-  let blob = unsafe { slice::from_raw_parts(writer.mem, writer.size) };
+  let blob = writer.as_slice();
 
-  let (tag, payload) = match extract_vp8_payload(blob) {
+  let (tag, payload_range) = match extract_vp8_payload(blob) {
     Some(result) => result,
     None => {
-      unsafe {
-        WebPMemoryWriterClear(&raw mut writer);
-        WebPPictureFree(&raw mut picture);
-      }
+      unsafe { WebPPictureFree(&raw mut picture) };
       return Err(WebPError::MissingVp8ChunkInEncodedFrame.into());
     }
   };
 
-  unsafe {
-    WebPMemoryWriterClear(&raw mut writer);
-    WebPPictureFree(&raw mut picture);
-  }
+  unsafe { WebPPictureFree(&raw mut picture) };
 
-  Ok((payload, tag))
+  Ok(EncodedFrame {
+    encoded: writer,
+    payload_range,
+    tag,
+    duration_ms,
+  })
 }
 
-fn extract_vp8_payload(buf: &[u8]) -> Option<([u8; 4], Vec<u8>)> {
+fn extract_vp8_payload(buf: &[u8]) -> Option<([u8; 4], Range<usize>)> {
   const RIFF_HEADER_SIZE: usize = 12;
 
   if buf.len() < RIFF_HEADER_SIZE {
@@ -130,7 +167,7 @@ fn extract_vp8_payload(buf: &[u8]) -> Option<([u8; 4], Vec<u8>)> {
         return None;
       }
 
-      return Some((tag, buf[payload_start..payload_end].to_vec()));
+      return Some((tag, payload_start..payload_end));
     }
 
     let padding = len & 1;
@@ -142,6 +179,7 @@ fn extract_vp8_payload(buf: &[u8]) -> Option<([u8; 4], Vec<u8>)> {
 
 const VP8X_CHUNK_BYTES: usize = 18;
 const ANIM_CHUNK_BYTES: usize = 14;
+const MIN_PARALLEL_FRAMES: usize = 4;
 
 #[inline]
 fn anmf_chunk_bytes(vp8_len: usize) -> usize {
@@ -160,13 +198,15 @@ fn write_riff_container<W: Write>(
   loop_count: u16,
   blend: bool,
   dispose: bool,
-  frames: &[(&[u8], [u8; 4], u32)], // (vp8_payload, tag, duration_ms)
+  frames: &[EncodedFrame],
 ) -> Result<()> {
   let frame_flags: u8 = (u8::from(!blend) << 1) | u8::from(dispose);
+  let width_minus_one = width - 1;
+  let height_minus_one = height - 1;
 
-  let frames_total = frames.iter().try_fold(0usize, |acc, (p, _, _)| {
+  let frames_total = frames.iter().try_fold(0usize, |acc, frame| {
     acc
-      .checked_add(anmf_chunk_bytes(p.len()))
+      .checked_add(anmf_chunk_bytes(frame.payload().len()))
       .ok_or(WebPError::RiffPayloadSizeOverflow)
   })?;
   let riff_payload_usize = 4usize
@@ -185,15 +225,16 @@ fn write_riff_container<W: Write>(
   destination.write_all(b"VP8X")?;
   destination.write_all(&10u32.to_le_bytes())?;
   destination.write_all(&[vp8x_flags, 0, 0, 0])?;
-  write_le24(destination, width - 1)?;
-  write_le24(destination, height - 1)?;
+  write_le24(destination, width_minus_one)?;
+  write_le24(destination, height_minus_one)?;
 
   destination.write_all(b"ANIM")?;
   destination.write_all(&6u32.to_le_bytes())?;
   destination.write_all(&[0u8; 4])?;
   destination.write_all(&loop_count.to_le_bytes())?;
 
-  for (vp8_payload, vp8_tag, duration_ms) in frames {
+  for frame in frames {
+    let vp8_payload = frame.payload();
     let vp8_len = vp8_payload.len();
     let padding = vp8_len & 1;
     let anmf_payload_size_usize = 16usize
@@ -207,11 +248,11 @@ fn write_riff_container<W: Write>(
     destination.write_all(b"ANMF")?;
     destination.write_all(&anmf_payload_size.to_le_bytes())?;
     destination.write_all(&[0u8; 6])?;
-    write_le24(destination, width - 1)?;
-    write_le24(destination, height - 1)?;
-    write_le24(destination, (*duration_ms).clamp(0, U24_MAX))?;
+    write_le24(destination, width_minus_one)?;
+    write_le24(destination, height_minus_one)?;
+    write_le24(destination, frame.duration_ms.clamp(0, U24_MAX))?;
     destination.write_all(&[frame_flags])?;
-    destination.write_all(vp8_tag)?;
+    destination.write_all(&frame.tag)?;
     let vp8_len_u32 = u32::try_from(vp8_len).map_err(|_| WebPError::Vp8PayloadSizeTooLarge)?;
     destination.write_all(&vp8_len_u32.to_le_bytes())?;
     destination.write_all(vp8_payload)?;
@@ -220,7 +261,6 @@ fn write_riff_container<W: Write>(
     }
   }
 
-  destination.flush()?;
   Ok(())
 }
 
@@ -264,9 +304,57 @@ pub(crate) fn write_webp(
   Ok(())
 }
 
-/// Encodes a sequence of RGBA frames into an animated WebP using parallel
-/// per-frame encoding via `WebPEncode`, then assembles the RIFF container
-/// manually.  This bypasses the serial `WebPAnimEncoderAdd` bottleneck.
+fn collect_unique_frames<'a>(
+  frames: &'a [AnimationFrame],
+  frame_width: u32,
+  frame_height: u32,
+) -> Result<Vec<(&'a RgbaImage, u32)>> {
+  let mut unique_frames = Vec::with_capacity(frames.len());
+  let mut pending_image = &frames[0].image;
+  let mut pending_duration_ms = frames[0].duration_ms.clamp(0, U24_MAX);
+
+  for frame in frames.iter().skip(1) {
+    if frame.image.width() != frame_width || frame.image.height() != frame_height {
+      return Err(WebPError::MixedFrameDimensions.into());
+    }
+    if frame.image.as_raw() == pending_image.as_raw() {
+      pending_duration_ms = pending_duration_ms.saturating_add(frame.duration_ms.clamp(0, U24_MAX));
+      continue;
+    }
+    unique_frames.push((pending_image, pending_duration_ms));
+    pending_image = &frame.image;
+    pending_duration_ms = frame.duration_ms.clamp(0, U24_MAX);
+  }
+
+  unique_frames.push((pending_image, pending_duration_ms));
+  Ok(unique_frames)
+}
+
+fn encode_frames(
+  unique_frames: &[(&RgbaImage, u32)],
+  config: &WebPConfig,
+) -> Result<Vec<EncodedFrame>> {
+  if unique_frames.len() >= MIN_PARALLEL_FRAMES {
+    unique_frames
+      .par_iter()
+      .with_min_len(MIN_PARALLEL_FRAMES)
+      .try_fold(Vec::new, |mut frames, (image, duration_ms)| {
+        frames.push(encode_single_frame(image, *duration_ms, config)?);
+        Ok::<_, TakumiError>(frames)
+      })
+      .try_reduce(Vec::new, |mut left, mut right| {
+        left.append(&mut right);
+        Ok::<_, TakumiError>(left)
+      })
+  } else {
+    unique_frames
+      .iter()
+      .map(|(image, duration_ms)| encode_single_frame(image, *duration_ms, config))
+      .collect()
+  }
+}
+
+/// Encodes a sequence of RGBA frames into an animated WebP.
 pub fn encode_animated_webp<W: Write>(
   frames: Cow<'_, [AnimationFrame]>,
   destination: &mut W,
@@ -292,45 +380,8 @@ pub fn encode_animated_webp<W: Write>(
 
   let speed = options.speed.unwrap_or(1).clamp(0, 6);
   let config = webp_config(options.quality, speed)?;
-
-  let mut unique: Vec<(&RgbaImage, u32)> = Vec::new();
-  {
-    let mut pending_image = &frames[0].image;
-    let mut pending_dur = frames[0].duration_ms.clamp(0, U24_MAX);
-
-    for frame in frames.iter().skip(1) {
-      if frame.image.width() != frame_width || frame.image.height() != frame_height {
-        return Err(WebPError::MixedFrameDimensions.into());
-      }
-      if frame.image.as_raw() == pending_image.as_raw() {
-        pending_dur = pending_dur.saturating_add(frame.duration_ms.clamp(0, U24_MAX));
-        continue;
-      }
-      unique.push((pending_image, pending_dur));
-      pending_image = &frame.image;
-      pending_dur = frame.duration_ms.clamp(0, U24_MAX);
-    }
-    unique.push((pending_image, pending_dur));
-  }
-
-  let encoded: Vec<Result<EncodedFrame>> = unique
-    .par_iter()
-    .map(|(image, dur)| {
-      let (payload, tag) = encode_single_frame(image, &config)?;
-      Ok(EncodedFrame {
-        payload,
-        tag,
-        duration_ms: *dur,
-      })
-    })
-    .collect();
-
-  let frame_data: Vec<EncodedFrame> = encoded.into_iter().collect::<Result<_>>()?;
-
-  let refs: Vec<(&[u8], [u8; 4], u32)> = frame_data
-    .iter()
-    .map(|frame| (frame.payload.as_slice(), frame.tag, frame.duration_ms))
-    .collect();
+  let unique_frames = collect_unique_frames(&frames, frame_width, frame_height)?;
+  let frame_data = encode_frames(&unique_frames, &config)?;
 
   write_riff_container(
     destination,
@@ -339,7 +390,7 @@ pub fn encode_animated_webp<W: Write>(
     options.loop_count.unwrap_or(0),
     options.blend,
     options.dispose,
-    &refs,
+    &frame_data,
   )?;
 
   Ok(())
