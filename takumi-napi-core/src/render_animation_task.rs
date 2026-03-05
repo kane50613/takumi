@@ -32,6 +32,10 @@ impl Task for RenderAnimationTask {
   type JsValue = Buffer;
 
   fn compute(&mut self) -> Result<Self::Output> {
+    const ENCODED_BYTES_PER_PIXEL_ESTIMATE: usize = 1;
+    const FRAME_OVERHEAD_BYTES: usize = 128;
+    const MAX_PREALLOC: usize = 4 * 1024 * 1024;
+
     let Some(nodes) = self.nodes.take() else {
       unreachable!()
     };
@@ -61,12 +65,18 @@ impl Task for RenderAnimationTask {
       })
       .collect::<Result<Vec<_>, _>>()?;
 
-    // Pre-size the output buffer to avoid repeated reallocations.
+    // Pre-size conservatively to avoid excessive transient allocations.
     let estimated_capacity = if let Some(first) = frames.first() {
       let w = first.image.width() as usize;
       let h = first.image.height() as usize;
-      // generous upper-bound: N × uncompressed frame + RIFF overhead
-      frames.len() * (w * h * 4 + 50) + 44
+      let per_frame_estimate = w
+        .saturating_mul(h)
+        .saturating_mul(ENCODED_BYTES_PER_PIXEL_ESTIMATE)
+        .saturating_add(FRAME_OVERHEAD_BYTES);
+      per_frame_estimate
+        .saturating_mul(frames.len())
+        .saturating_add(44)
+        .min(MAX_PREALLOC)
     } else {
       0
     };
@@ -76,6 +86,11 @@ impl Task for RenderAnimationTask {
       AnimationOutputFormat::webp => {
         let mut options = AnimatedWebpOptions::default();
         if let Some(quality) = self.quality {
+          if quality > 100 {
+            return Err(Error::from_reason(format!(
+              "Invalid WebP quality {quality}; expected a value in 0..=100"
+            )));
+          }
           options.quality = quality;
         }
 

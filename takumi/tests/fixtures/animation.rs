@@ -101,6 +101,21 @@ fn animation_bouncing_text_webp() {
 }
 
 #[test]
+fn animation_bouncing_text_webp_lossy() {
+  run_webp_animation_test(
+    create_bouncing_text_nodes(),
+    "animation_bouncing_text_lossy.webp",
+    AnimatedWebpOptions {
+      blend: false,
+      dispose: false,
+      loop_count: Some(1),
+      quality: 75,
+      speed: Some(4),
+    },
+  );
+}
+
+#[test]
 fn animation_bouncing_text_png() {
   run_png_animation_test(
     create_bouncing_text_nodes(),

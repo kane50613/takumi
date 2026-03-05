@@ -1,7 +1,7 @@
 use std::{borrow::Cow, io::Write};
 
-use ::image_webp::WebPEncoder;
 use image::RgbaImage;
+use image_webp::{ColorType, EncoderParams, WebPEncoder};
 
 use crate::{Error::IoError, Result};
 
@@ -13,9 +13,14 @@ use super::{
 pub(crate) fn write_webp(
   image: Cow<'_, RgbaImage>,
   destination: &mut impl Write,
-  _quality: Option<u8>,
+  quality: Option<u8>,
 ) -> Result<()> {
-  let encoder = WebPEncoder::new(destination);
+  let quality = quality.unwrap_or(100);
+  let mut encoder = WebPEncoder::new(destination);
+  let mut params = EncoderParams::default();
+  // Prefer better compression for higher quality requests, favor faster encoding otherwise.
+  params.use_predictor_transform = quality >= 75;
+  encoder.set_params(params);
   let width = image.width();
   let height = image.height();
   let has_alpha = has_any_alpha_pixel(&image);
@@ -31,9 +36,9 @@ pub(crate) fn write_webp(
     width,
     height,
     if has_alpha {
-      ::image_webp::ColorType::Rgba8
+      ColorType::Rgba8
     } else {
-      ::image_webp::ColorType::Rgb8
+      ColorType::Rgb8
     },
   )?;
 
@@ -97,9 +102,22 @@ fn estimate_vp8_payload_size(buf: &[u8]) -> Result<u32> {
     .ok_or_else(|| IoError(std::io::Error::other("VP8/VP8L chunk not found")))?;
 
   let padding = len & 1;
+  let len_u32 = u32::try_from(len)
+    .map_err(|_| IoError(std::io::Error::other("VP8/VP8L payload size overflows u32")))?;
+  let padding_u32 = u32::try_from(padding)
+    .map_err(|_| IoError(std::io::Error::other("VP8/VP8L padding size overflows u32")))?;
 
   // ANMF chunk + VP8L chunk
-  Ok(BASE_HEADER_SIZE + ANMF_HEADER_SIZE + BASE_HEADER_SIZE + len as u32 + padding as u32)
+  BASE_HEADER_SIZE
+    .checked_add(ANMF_HEADER_SIZE)
+    .and_then(|size| size.checked_add(BASE_HEADER_SIZE))
+    .and_then(|size| size.checked_add(len_u32))
+    .and_then(|size| size.checked_add(padding_u32))
+    .ok_or_else(|| {
+      IoError(std::io::Error::other(
+        "Estimated VP8/VP8L payload size overflow",
+      ))
+    })
 }
 
 fn estimate_riff_size<'a, I: Iterator<Item = &'a [u8]>>(frames: I) -> Result<u32> {
@@ -107,7 +125,9 @@ fn estimate_riff_size<'a, I: Iterator<Item = &'a [u8]>>(frames: I) -> Result<u32
   let mut size = 4 + BASE_HEADER_SIZE + VP8X_HEADER_SIZE + BASE_HEADER_SIZE + ANIM_HEADER_SIZE;
 
   for frame in frames {
-    size += estimate_vp8_payload_size(frame)?;
+    size = size
+      .checked_add(estimate_vp8_payload_size(frame)?)
+      .ok_or_else(|| IoError(std::io::Error::other("Estimated RIFF size overflow")))?;
   }
 
   Ok(size)
@@ -119,19 +139,28 @@ pub fn encode_animated_webp<W: Write>(
   destination: &mut W,
   options: AnimatedWebpOptions,
 ) -> Result<()> {
-  assert_ne!(frames.len(), 0);
+  if frames.is_empty() {
+    return Err(IoError(std::io::Error::other(
+      "Animation must contain at least one frame",
+    )));
+  }
 
   // encode frames losslessly and collect VP8L/VP8 payloads
   let frames_payloads: Vec<(&AnimationFrame, Vec<u8>)> = frames
     .iter()
     .map(|frame| {
       let mut buf = Vec::new();
-      WebPEncoder::new(&mut buf)
+      let mut encoder = WebPEncoder::new(&mut buf);
+      let mut params = EncoderParams::default();
+      // Match static path behavior: keep predictor transform for higher quality targets.
+      params.use_predictor_transform = options.quality >= 75;
+      encoder.set_params(params);
+      encoder
         .encode(
           &frame.image,
           frame.image.width(),
           frame.image.height(),
-          ::image_webp::ColorType::Rgba8,
+          ColorType::Rgba8,
         )
         .map_err(|_| IoError(std::io::Error::other("WebP encode error")))?;
 
@@ -179,8 +208,15 @@ pub fn encode_animated_webp<W: Write>(
     let vp8_payload = &vp8_data[start..start + len];
 
     let padding = vp8_payload.len() & 1;
-
-    let anmf_size = ANMF_HEADER_SIZE + BASE_HEADER_SIZE + vp8_payload.len() as u32 + padding as u32;
+    let vp8_payload_len_u32 = u32::try_from(vp8_payload.len())
+      .map_err(|_| IoError(std::io::Error::other("VP8/VP8L payload size overflows u32")))?;
+    let padding_u32 = u32::try_from(padding)
+      .map_err(|_| IoError(std::io::Error::other("VP8/VP8L padding size overflows u32")))?;
+    let anmf_size = ANMF_HEADER_SIZE
+      .checked_add(BASE_HEADER_SIZE)
+      .and_then(|size| size.checked_add(vp8_payload_len_u32))
+      .and_then(|size| size.checked_add(padding_u32))
+      .ok_or_else(|| IoError(std::io::Error::other("ANMF chunk size overflow")))?;
 
     destination.write_all(b"ANMF")?;
     destination.write_all(&anmf_size.to_le_bytes())?;
@@ -192,9 +228,14 @@ pub fn encode_animated_webp<W: Write>(
     destination.write_all(&frame.duration_ms.clamp(0, U24_MAX).to_le_bytes()[..3])?; // duration (3 bytes)
     destination.write_all(&[frame_flags])?; // flags (1 byte)
 
-    // VP8L chunk: VP8L payload
-    destination.write_all(b"VP8L")?;
-    destination.write_all(&(vp8_payload.len() as u32).to_le_bytes())?;
+    let tag_start = start
+      .checked_sub(4)
+      .ok_or_else(|| IoError(std::io::Error::other("Missing VP8/VP8L chunk tag")))?;
+    let chunk_tag: [u8; 4] = vp8_data[tag_start..start]
+      .try_into()
+      .map_err(|_| IoError(std::io::Error::other("Invalid VP8/VP8L chunk tag")))?;
+    destination.write_all(&chunk_tag)?;
+    destination.write_all(&vp8_payload_len_u32.to_le_bytes())?;
     destination.write_all(vp8_payload)?;
 
     // padding

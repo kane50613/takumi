@@ -94,11 +94,18 @@ fn encode_single_frame(image: &RgbaImage, config: &WebPConfig) -> Result<(Vec<u8
   let blob = unsafe { slice::from_raw_parts(writer.mem, writer.size) };
 
   // Scan the RIFF wrapper for the VP8/VP8L chunk and extract just the payload.
-  let (tag, payload) = extract_vp8_payload(blob).ok_or_else(|| {
-    IoError(IoStdError::other(
-      "VP8/VP8L chunk not found in encoded frame",
-    ))
-  })?;
+  let (tag, payload) = match extract_vp8_payload(blob) {
+    Some(result) => result,
+    None => {
+      unsafe {
+        WebPMemoryWriterClear(&raw mut writer);
+        WebPPictureFree(&raw mut picture);
+      }
+      return Err(IoError(IoStdError::other(
+        "VP8/VP8L chunk not found in encoded frame",
+      )));
+    }
+  };
 
   unsafe {
     WebPMemoryWriterClear(&raw mut writer);
@@ -286,7 +293,7 @@ pub fn encode_animated_webp<W: Write>(
   let speed = options.speed.unwrap_or(1).clamp(0, 6);
   let config = webp_config(options.quality, speed)?;
 
-  // Step 1: deduplicate consecutive identical frames (pointer equality on raw buffer).
+  // Step 1: deduplicate consecutive identical frames by pixel-buffer value equality.
   // Each unique entry records (image_ref, duration_ms_for_anmf).
   let mut unique: Vec<(&RgbaImage, u32)> = Vec::new();
   {
