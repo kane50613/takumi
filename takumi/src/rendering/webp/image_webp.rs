@@ -3,11 +3,13 @@ use std::{borrow::Cow, io::Write};
 use image::RgbaImage;
 use image_webp::{ColorType, EncoderParams, WebPEncoder};
 
-use crate::{Result, error::WebPError};
-
-use super::{
-  super::write::AnimatedWebpOptions, AnimationFrame, U24_MAX, has_any_alpha_pixel,
-  strip_alpha_channel,
+use crate::{
+  Result,
+  error::WebPError,
+  rendering::{
+    webp::{U24_MAX, has_any_alpha_pixel, strip_alpha_channel},
+    write::{AnimatedWebpOptions, AnimationFrame},
+  },
 };
 
 const RIFF_HEADER_SIZE: usize = 12;
