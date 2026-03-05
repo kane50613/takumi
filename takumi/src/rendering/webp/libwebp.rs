@@ -5,7 +5,10 @@ use libwebp_sys::*;
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
 
-use crate::{Result, error::WebPError};
+use crate::{
+  Result,
+  error::{TakumiError, WebPError},
+};
 
 use super::{
   super::write::{AnimatedWebpOptions, AnimationFrame},
@@ -179,8 +182,13 @@ const VP8X_CHUNK_BYTES: usize = 18;
 const ANIM_CHUNK_BYTES: usize = 14;
 
 #[inline]
-fn anmf_chunk_bytes(vp8_len: usize) -> usize {
-  8 + 16 + 8 + vp8_len + (vp8_len & 1)
+fn anmf_chunk_bytes(vp8_len: usize) -> Result<usize> {
+  8usize
+    .checked_add(16)
+    .and_then(|v| v.checked_add(8))
+    .and_then(|v| v.checked_add(vp8_len))
+    .and_then(|v| v.checked_add(vp8_len & 1))
+    .ok_or(WebPError::AnmfChunkSizeOverflow.into())
 }
 
 fn write_le24<W: Write>(destination: &mut W, value: u32) -> Result<()> {
@@ -203,8 +211,9 @@ fn write_riff_container<W: Write>(
 
   let frames_total = frames.iter().try_fold(0usize, |acc, frame| {
     acc
-      .checked_add(anmf_chunk_bytes(frame.payload().len()))
+      .checked_add(anmf_chunk_bytes(frame.payload().len())?)
       .ok_or(WebPError::RiffPayloadSizeOverflow)
+      .map_err(TakumiError::from)
   })?;
   let riff_payload_usize = 4usize
     .checked_add(VP8X_CHUNK_BYTES)
