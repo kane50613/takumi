@@ -52,7 +52,7 @@ fn vp8_payload_coords(buf: &[u8]) -> Option<(usize, usize)> {
 
 fn vp8_chunk_tag(buf: &[u8], payload_start: usize) -> Option<[u8; 4]> {
   let tag_start = payload_start.checked_sub(8)?;
-  buf[tag_start..payload_start].try_into().ok()
+  buf[tag_start..tag_start + 4].try_into().ok()
 }
 
 pub(crate) fn write_webp(
