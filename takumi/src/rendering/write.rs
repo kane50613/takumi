@@ -211,7 +211,7 @@ pub fn encode_animated_gif<W: Write>(
       );
     }
 
-    let mut pixels = frame.image.as_raw().clone();
+    let mut pixels = frame.image.into_raw();
     let mut gif_frame = GifFrame::from_rgba_speed(width, height, &mut pixels, 28);
     gif_frame.delay = duration_ms_to_gif_delay(frame.duration_ms);
     encoder.write_frame(&gif_frame)?;
@@ -524,5 +524,18 @@ mod tests {
       WebPDemuxReleaseIterator(&mut iter);
       WebPDemuxDelete(demux);
     }
+  }
+
+  #[test]
+  fn encode_animated_webp_rejects_zero_sized_frames() {
+    let invalid = AnimationFrame::new(RgbaImage::new(0, 1), 10);
+
+    let mut bytes = Vec::new();
+    let result = encode_animated_webp(
+      Cow::Owned(vec![invalid]),
+      &mut bytes,
+      AnimatedWebpOptions::default(),
+    );
+    assert!(result.is_err(), "zero-sized frame should be rejected");
   }
 }
