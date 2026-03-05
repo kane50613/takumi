@@ -536,6 +536,12 @@ mod tests {
       &mut bytes,
       AnimatedWebpOptions::default(),
     );
-    assert!(result.is_err(), "zero-sized frame should be rejected");
+    let err = result.expect_err("zero-sized frame should be rejected");
+    assert!(
+      err
+        .to_string()
+        .contains("WebP animation frame dimensions must be in 1..=16777216"),
+      "unexpected error message: {err}"
+    );
   }
 }

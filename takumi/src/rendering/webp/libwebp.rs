@@ -289,6 +289,12 @@ pub fn encode_animated_webp<W: Write>(
   let first_frame = &frames[0];
   let frame_width = first_frame.image.width();
   let frame_height = first_frame.image.height();
+  if !(1..=U24_MAX + 1).contains(&frame_width) || !(1..=U24_MAX + 1).contains(&frame_height) {
+    return Err(IoError(IoStdError::other(format!(
+      "WebP animation frame dimensions must be in 1..={}, got {frame_width}x{frame_height}",
+      U24_MAX + 1
+    ))));
+  }
 
   let speed = options.speed.unwrap_or(1).clamp(0, 6);
   let config = webp_config(options.quality, speed)?;
