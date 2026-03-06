@@ -16,15 +16,15 @@ fn test_color_artifacts() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color([147, 197, 253, 255])))
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .padding(Sides([Rem(4.0); 4]))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([147, 197, 253, 255]),
+        ))))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with_padding(Sides([Rem(4.0); 4])),
     ),
     children: Some(
       [ImageNode {
@@ -34,13 +34,11 @@ fn test_color_artifacts() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .width(Percentage(100.0))
-            .height(Percentage(100.0))
-            .object_fit(ObjectFit::Contain)
-            .border_radius(Box::new(BorderRadius::from_str("10px").unwrap()))
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::width(Percentage(100.0)))
+            .with(StyleDeclaration::height(Percentage(100.0)))
+            .with(StyleDeclaration::object_fit(ObjectFit::Contain))
+            .with_border_radius(Box::new(BorderRadius::from_str("10px").unwrap())),
         ),
         src: "assets/images/luma-cover-0dfbf65d-0f58-4941-947c-d84a5b131dc0.jpeg".into(),
         width: None,

@@ -3,7 +3,7 @@ use takumi::layout::{
   style::{
     Color, ColorInput,
     Length::{Percentage, Px},
-    StyleBuilder,
+    Style, StyleDeclaration,
   },
 };
 
@@ -18,12 +18,12 @@ fn test_style_width() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color::white()))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        )))),
     ),
     children: None,
   };
@@ -40,12 +40,12 @@ fn test_style_height() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color::white()))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        )))),
     ),
     children: None,
   };
@@ -62,13 +62,13 @@ fn test_style_min_width() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .min_width(Px(50.0))
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color::white()))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::min_width(Px(50.0)))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        )))),
     ),
     children: None,
   };
@@ -85,13 +85,13 @@ fn test_style_min_height() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .min_height(Px(50.0))
-        .height(Percentage(100.0))
-        .width(Percentage(100.0))
-        .background_color(ColorInput::Value(Color::white()))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::min_height(Px(50.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        )))),
     ),
     children: None,
   };
@@ -108,13 +108,13 @@ fn test_style_max_width() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .max_width(Px(100.0))
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color::white()))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::max_width(Px(100.0)))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        )))),
     ),
     children: None,
   };
@@ -131,13 +131,13 @@ fn test_style_max_height() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .max_height(Px(100.0))
-        .height(Percentage(100.0))
-        .width(Percentage(100.0))
-        .background_color(ColorInput::Value(Color::white()))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::max_height(Px(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        )))),
     ),
     children: None,
   };

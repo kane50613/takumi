@@ -15,14 +15,12 @@ fn create_blend_card(mode: BlendMode, label_font_size_px: f32) -> NodeKind {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .display(Display::Flex)
-        .flex_direction(FlexDirection::Column)
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .padding(Sides([Px(8.0); 4]))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with_padding(Sides([Px(8.0); 4])),
     ),
     children: Some(
       [
@@ -33,12 +31,10 @@ fn create_blend_card(mode: BlendMode, label_font_size_px: f32) -> NodeKind {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .width(Px(80.0))
-              .height(Px(80.0))
-              .mix_blend_mode(mode)
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::width(Px(80.0)))
+              .with(StyleDeclaration::height(Px(80.0)))
+              .with(StyleDeclaration::mix_blend_mode(mode)),
           ),
           src: Arc::from("assets/images/yeecord.png"),
           width: None,
@@ -52,12 +48,10 @@ fn create_blend_card(mode: BlendMode, label_font_size_px: f32) -> NodeKind {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .font_size(Some(Px(label_font_size_px)))
-              .margin_top(Px(4.0))
-              .color(ColorInput::Value(Color::black()))
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::font_size(Some(Px(label_font_size_px))))
+              .with(StyleDeclaration::margin_top(Some(Px(4.0))))
+              .with(StyleDeclaration::color(ColorInput::Value(Color::black()))),
           ),
           text: format!("{:?}", mode),
         }
@@ -99,14 +93,16 @@ fn test_style_mix_blend_mode() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .display(Display::Grid)
-        .grid_template_columns(GridTemplateComponents::from_str("repeat(4, 1fr)").ok())
-        .background_color(Color::from_str("sandybrown").map(ColorInput::Value).ok())
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Grid))
+        .with(StyleDeclaration::grid_template_columns(
+          GridTemplateComponents::from_str("repeat(4, 1fr)").ok(),
+        ))
+        .with(StyleDeclaration::background_color(
+          Color::from_str("sandybrown").map(ColorInput::Value).ok(),
+        )),
     ),
     children: Some(
       blend_modes
@@ -129,14 +125,14 @@ fn test_style_mlx_blend_mode_isolation() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .background_color(Color::from_str("deepskyblue").map(ColorInput::Value).ok())
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::background_color(
+          Color::from_str("deepskyblue").map(ColorInput::Value).ok(),
+        )),
     ),
     children: Some(
       [
@@ -147,12 +143,10 @@ fn test_style_mlx_blend_mode_isolation() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .isolation(Isolation::Auto)
-              .width(Px(128.0))
-              .height(Px(128.0))
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::isolation(Isolation::Auto))
+              .with(StyleDeclaration::width(Px(128.0)))
+              .with(StyleDeclaration::height(Px(128.0))),
           ),
           children: Some(
             [ImageNode {
@@ -162,10 +156,7 @@ fn test_style_mlx_blend_mode_isolation() {
               preset: None,
               tw: None,
               style: Some(
-                StyleBuilder::default()
-                  .mix_blend_mode(BlendMode::Multiply)
-                  .build()
-                  .unwrap(),
+                Style::default().with(StyleDeclaration::mix_blend_mode(BlendMode::Multiply)),
               ),
               src: Arc::from("assets/images/yeecord.png"),
               width: None,
@@ -183,12 +174,10 @@ fn test_style_mlx_blend_mode_isolation() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .isolation(Isolation::Isolate)
-              .width(Px(128.0))
-              .height(Px(128.0))
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::isolation(Isolation::Isolate))
+              .with(StyleDeclaration::width(Px(128.0)))
+              .with(StyleDeclaration::height(Px(128.0))),
           ),
           children: Some(
             [ImageNode {
@@ -198,10 +187,7 @@ fn test_style_mlx_blend_mode_isolation() {
               preset: None,
               tw: None,
               style: Some(
-                StyleBuilder::default()
-                  .mix_blend_mode(BlendMode::Multiply)
-                  .build()
-                  .unwrap(),
+                Style::default().with(StyleDeclaration::mix_blend_mode(BlendMode::Multiply)),
               ),
               src: Arc::from("assets/images/yeecord.png"),
               width: None,

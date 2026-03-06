@@ -11,36 +11,31 @@ fn text_inline() {
   let texts = &[
     (
       "The quick brown fox jumps over the lazy dog.",
-      StyleBuilder::default()
-        .display(Display::Inline)
-        .build()
-        .unwrap(),
+      Style::default().with(StyleDeclaration::display(Display::Inline)),
     ),
     (
       "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ",
-      StyleBuilder::default()
-        .text_transform(TextTransform::Uppercase)
-        .display(Display::Inline)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::text_transform(TextTransform::Uppercase))
+        .with(StyleDeclaration::display(Display::Inline)),
     ),
     (
       "Nothing beats a jet2 holiday! ",
-      StyleBuilder::default()
-        .color(ColorInput::Value(Color([255, 0, 0, 255])))
-        .display(Display::Inline)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::color(ColorInput::Value(Color([
+          255, 0, 0, 255,
+        ]))))
+        .with(StyleDeclaration::display(Display::Inline)),
     ),
     (
       "I'm making a browser at this point. ",
-      StyleBuilder::default()
-        .font_weight(FontWeight::from(600.0))
-        .display(Display::Inline)
-        .color(ColorInput::Value(Color([0, 0, 255, 255])))
-        .font_style(FontStyle::italic())
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::font_weight(FontWeight::from(600.0)))
+        .with(StyleDeclaration::display(Display::Inline))
+        .with(StyleDeclaration::color(ColorInput::Value(Color([
+          0, 0, 255, 255,
+        ]))))
+        .with(StyleDeclaration::font_style(FontStyle::italic())),
     ),
   ];
 
@@ -64,17 +59,17 @@ fn text_inline() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color::white()))
-        .width(Percentage(100.0))
-        .display(Display::Block)
-        .justify_content(JustifyContent::Center)
-        .line_clamp(Some(3.into()))
-        .text_overflow(TextOverflow::Ellipsis)
-        .font_size(Some(Px(48.0)))
-        .white_space(WhiteSpace::pre_wrap())
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        ))))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::line_clamp(Some(3.into())))
+        .with(StyleDeclaration::text_overflow(TextOverflow::Ellipsis))
+        .with(StyleDeclaration::font_size(Some(Px(48.0))))
+        .with_white_space(WhiteSpace::pre_wrap()),
     ),
     children: Some(children),
   };
@@ -92,12 +87,7 @@ fn inline_image() {
       tag_name: None,
       preset: None,
       tw: None,
-      style: Some(
-        StyleBuilder::default()
-          .display(Display::Inline)
-          .build()
-          .unwrap(),
-      ),
+      style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
       text: "Before ".to_string(),
     }
     .into(),
@@ -108,15 +98,19 @@ fn inline_image() {
       preset: None,
       tw: None,
       style: Some(
-        StyleBuilder::default()
-          .display(Display::Inline)
-          .border_width(Sides([Px(12.0); 4]))
-          .border_style(BorderStyle::Solid)
-          .border_color(ColorInput::Value(Color::transparent()))
-          .background_image(BackgroundImages::from_str("linear-gradient(to right, red, blue)").ok())
-          .background_clip(BackgroundClip::BorderArea)
-          .build()
-          .unwrap(),
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with_border_width(Some(Sides([Px(12.0); 4])))
+          .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+          .with(StyleDeclaration::border_color(Some(ColorInput::Value(
+            Color::transparent(),
+          ))))
+          .with(StyleDeclaration::background_image(
+            BackgroundImages::from_str("linear-gradient(to right, red, blue)").ok(),
+          ))
+          .with(StyleDeclaration::background_clip(
+            BackgroundClip::BorderArea,
+          )),
       ),
       src: "assets/images/yeecord.png".into(),
       width: Some(64.0),
@@ -129,12 +123,7 @@ fn inline_image() {
       tag_name: None,
       preset: None,
       tw: None,
-      style: Some(
-        StyleBuilder::default()
-          .display(Display::Inline)
-          .build()
-          .unwrap(),
-      ),
+      style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
       text: " After".to_string(),
     }
     .into(),
@@ -147,15 +136,15 @@ fn inline_image() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .background_color(ColorInput::Value(Color::white()))
-        .white_space(WhiteSpace::pre())
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        ))))
+        .with_white_space(WhiteSpace::pre()),
     ),
     children: Some(
       [ContainerNode {
@@ -165,13 +154,11 @@ fn inline_image() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .border_width(Some(Sides([Px(2.0); 4])))
-            .border_style(Some(BorderStyle::Solid))
-            .display(Display::Block)
-            .font_size(Some(Px(48.0)))
-            .build()
-            .unwrap(),
+          Style::default()
+            .with_border_width(Some(Sides([Px(2.0); 4])))
+            .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+            .with(StyleDeclaration::display(Display::Block))
+            .with(StyleDeclaration::font_size(Some(Px(48.0)))),
         ),
         children: Some(children.into()),
       }
@@ -193,12 +180,7 @@ fn inline_block_in_inline() {
       tag_name: None,
       preset: None,
       tw: None,
-      style: Some(
-        StyleBuilder::default()
-          .display(Display::Inline)
-          .build()
-          .unwrap(),
-      ),
+      style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
       text: "Start ".to_string(),
     }
     .into(),
@@ -209,13 +191,13 @@ fn inline_block_in_inline() {
       preset: None,
       tw: None,
       style: Some(
-        StyleBuilder::default()
-          .display(Display::Block)
-          .background_color(ColorInput::Value(Color([200, 200, 255, 255])))
-          .width(Percentage(80.0))
-          .font_size(Some(Px(18.0)))
-          .build()
-          .unwrap(),
+        Style::default()
+          .with(StyleDeclaration::display(Display::Block))
+          .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+            Color([200, 200, 255, 255]),
+          ))))
+          .with(StyleDeclaration::width(Percentage(80.0)))
+          .with(StyleDeclaration::font_size(Some(Px(18.0)))),
       ),
       children: Some(
         [TextNode {
@@ -224,12 +206,7 @@ fn inline_block_in_inline() {
           tag_name: None,
           preset: None,
           tw: None,
-          style: Some(
-            StyleBuilder::default()
-              .display(Display::Block)
-              .build()
-              .unwrap(),
-          ),
+          style: Some(Style::default().with(StyleDeclaration::display(Display::Block))),
           text: "Block inside inline".to_string(),
         }
         .into()]
@@ -243,12 +220,7 @@ fn inline_block_in_inline() {
       tag_name: None,
       preset: None,
       tw: None,
-      style: Some(
-        StyleBuilder::default()
-          .display(Display::Inline)
-          .build()
-          .unwrap(),
-      ),
+      style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
       text: " End".to_string(),
     }
     .into(),
@@ -261,14 +233,14 @@ fn inline_block_in_inline() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color::white()))
-        .width(Percentage(100.0))
-        .display(Display::Block)
-        .font_size(Some(Px(24.0)))
-        .white_space(WhiteSpace::pre())
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        ))))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::font_size(Some(Px(24.0))))
+        .with_white_space(WhiteSpace::pre()),
     ),
     children: Some(children.into_boxed_slice()),
   };
@@ -281,35 +253,35 @@ fn inline_span_background_color() {
   let texts = &[
     (
       "Hello ",
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([255, 200, 200, 255])))
-        .display(Display::Inline)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([255, 200, 200, 255]),
+        ))))
+        .with(StyleDeclaration::display(Display::Inline)),
     ),
     (
       "world ",
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([200, 255, 200, 255])))
-        .display(Display::Inline)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([200, 255, 200, 255]),
+        ))))
+        .with(StyleDeclaration::display(Display::Inline)),
     ),
     (
       "from ",
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([200, 200, 255, 255])))
-        .display(Display::Inline)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([200, 200, 255, 255]),
+        ))))
+        .with(StyleDeclaration::display(Display::Inline)),
     ),
     (
       "Takumi!",
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([255, 255, 200, 255])))
-        .display(Display::Inline)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([255, 255, 200, 255]),
+        ))))
+        .with(StyleDeclaration::display(Display::Inline)),
     ),
   ];
 
@@ -333,16 +305,16 @@ fn inline_span_background_color() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .background_color(ColorInput::Value(Color::white()))
-        .white_space(WhiteSpace::pre())
-        .font_size(Some(Px(48.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        ))))
+        .with_white_space(WhiteSpace::pre())
+        .with(StyleDeclaration::font_size(Some(Px(48.0)))),
     ),
     children: Some(children),
   };
@@ -360,14 +332,14 @@ fn inline_atomic_containers() {
       preset: None,
       tw: None,
       style: Some(
-        StyleBuilder::default()
-          .display(display)
-          .padding(Sides([Px(8.0); 4]))
-          .background_color(ColorInput::Value(color))
-          .border_width(Some(Sides([Px(2.0); 4])))
-          .border_style(Some(BorderStyle::Solid))
-          .build()
-          .unwrap(),
+        Style::default()
+          .with(StyleDeclaration::display(display))
+          .with_padding(Sides([Px(8.0); 4]))
+          .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+            color,
+          ))))
+          .with_border_width(Some(Sides([Px(2.0); 4])))
+          .with(StyleDeclaration::border_style(Some(BorderStyle::Solid))),
       ),
       children: Some(
         [TextNode {
@@ -393,15 +365,15 @@ fn inline_atomic_containers() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .background_color(ColorInput::Value(Color::white()))
-        .white_space(WhiteSpace::pre())
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        ))))
+        .with_white_space(WhiteSpace::pre()),
     ),
     children: Some(
       [ContainerNode {
@@ -411,13 +383,11 @@ fn inline_atomic_containers() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .display(Display::Block)
-            .font_size(Some(Px(24.0)))
-            .border_width(Some(Sides([Px(2.0); 4])))
-            .border_style(Some(BorderStyle::Solid))
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::display(Display::Block))
+            .with(StyleDeclaration::font_size(Some(Px(24.0))))
+            .with_border_width(Some(Sides([Px(2.0); 4])))
+            .with(StyleDeclaration::border_style(Some(BorderStyle::Solid))),
         ),
         children: Some(
           [
@@ -427,12 +397,7 @@ fn inline_atomic_containers() {
               tag_name: None,
               preset: None,
               tw: None,
-              style: Some(
-                StyleBuilder::default()
-                  .display(Display::Inline)
-                  .build()
-                  .unwrap(),
-              ),
+              style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
               text: "before ".to_string(),
             }
             .into(),
@@ -447,12 +412,7 @@ fn inline_atomic_containers() {
               tag_name: None,
               preset: None,
               tw: None,
-              style: Some(
-                StyleBuilder::default()
-                  .display(Display::Inline)
-                  .build()
-                  .unwrap(),
-              ),
+              style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
               text: " mid ".to_string(),
             }
             .into(),
@@ -463,12 +423,7 @@ fn inline_atomic_containers() {
               tag_name: None,
               preset: None,
               tw: None,
-              style: Some(
-                StyleBuilder::default()
-                  .display(Display::Inline)
-                  .build()
-                  .unwrap(),
-              ),
+              style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
               text: " end ".to_string(),
             }
             .into(),
@@ -494,10 +449,8 @@ fn inline_nested_flex_block() {
       preset: None,
       tw: None,
       style: Some(
-        StyleBuilder::default()
-          .display(Display::Inline)
-          .build()
-          .unwrap(),
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline)),
       ),
       text: "This is some preceding text that is long enough to wrap eventually. ".to_string(),
     }
@@ -509,14 +462,12 @@ fn inline_nested_flex_block() {
       preset: None,
       tw: None,
       style: Some(
-        StyleBuilder::default()
-          .display(Display::InlineFlex)
-          .background_color(ColorInput::Value(Color([200, 255, 200, 255])))
-          .padding(Sides([Px(5.0); 4]))
-          .align_items(AlignItems::Center)
-          .vertical_align(VerticalAlign::Keyword(VerticalAlignKeyword::Middle))
-          .build()
-          .unwrap(),
+        Style::default()
+          .with(StyleDeclaration::display(Display::InlineFlex))
+          .with(StyleDeclaration::background_color(Some(ColorInput::Value(Color([200, 255, 200, 255])))))
+          .with_padding(Sides([Px(5.0); 4]))
+          .with(StyleDeclaration::align_items(AlignItems::Center))
+          .with(StyleDeclaration::vertical_align(VerticalAlign::Keyword(VerticalAlignKeyword::Middle))),
       ),
       children: Some(
         [
@@ -527,10 +478,8 @@ fn inline_nested_flex_block() {
             preset: None,
             tw: None,
             style: Some(
-              StyleBuilder::default()
-                .display(Display::Inline)
-                .build()
-                .unwrap(),
+              Style::default()
+                .with(StyleDeclaration::display(Display::Inline)),
             ),
             text: "Flex Start ".to_string(),
           }
@@ -542,13 +491,11 @@ fn inline_nested_flex_block() {
             preset: None,
             tw: None,
             style: Some(
-              StyleBuilder::default()
-                .display(Display::InlineBlock)
-                .padding(Sides([Px(4.0); 4]))
-                .margin(Sides([Px(0.0), Px(10.0), Px(0.0), Px(10.0)]))
-                .background_color(ColorInput::Value(Color([255, 200, 200, 255])))
-                .build()
-                .unwrap(),
+              Style::default()
+                .with(StyleDeclaration::display(Display::InlineBlock))
+                .with_padding(Sides([Px(4.0); 4]))
+                .with_margin(Sides([Px(0.0), Px(10.0), Px(0.0), Px(10.0)]))
+                .with(StyleDeclaration::background_color(Some(ColorInput::Value(Color([255, 200, 200, 255]))))),
             ),
             children: Some(
               [TextNode {
@@ -572,10 +519,8 @@ fn inline_nested_flex_block() {
             preset: None,
             tw: None,
             style: Some(
-              StyleBuilder::default()
-                .display(Display::Inline)
-                .build()
-                .unwrap(),
+              Style::default()
+                .with(StyleDeclaration::display(Display::Inline)),
             ),
             text: " Flex End".to_string(),
           }
@@ -592,10 +537,8 @@ fn inline_nested_flex_block() {
       preset: None,
       tw: None,
       style: Some(
-        StyleBuilder::default()
-          .display(Display::Inline)
-          .build()
-          .unwrap(),
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline)),
       ),
       text: " followed by more text that should definitely wrap and show how the inline-flex container behaves when it is part of a wrapped line. We want to make sure the nested boxes are drawn in the correct positions even after wrapping.".to_string(),
     }
@@ -609,15 +552,15 @@ fn inline_nested_flex_block() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Px(800.0))
-        .display(Display::Block)
-        .padding(Sides([Px(20.0); 4]))
-        .background_color(ColorInput::Value(Color::white()))
-        .font_size(Some(Px(20.0)))
-        .line_height(LineHeight::Length(Px(40.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Px(800.0)))
+        .with(StyleDeclaration::display(Display::Block))
+        .with_padding(Sides([Px(20.0); 4]))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        ))))
+        .with(StyleDeclaration::font_size(Some(Px(20.0))))
+        .with(StyleDeclaration::line_height(LineHeight::Length(Px(40.0)))),
     ),
     children: Some(children.into()),
   };

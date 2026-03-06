@@ -5,7 +5,7 @@ use takumi::{
   GlobalContext,
   layout::{
     node::{ContainerNode, NodeKind, TextNode},
-    style::StyleBuilder,
+    style::{Length::Px, Style, StyleDeclaration},
   },
   rendering::{ImageOutputFormat, RenderOptionsBuilder, render, write_image},
 };
@@ -34,12 +34,7 @@ pub fn say_hello_to(name: &str) {
     id: None,
     preset: None,
     tw: None,
-    style: Some(
-      StyleBuilder::default()
-        .font_size(Some(48.0.into()))
-        .build()
-        .unwrap(),
-    ),
+    style: Some(Style::default().with(StyleDeclaration::font_size(Some(Px(48.0))))),
     text: format!("Hello, {name}!"),
   };
 

@@ -20,17 +20,19 @@ fn create_filter_test_container(
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .display(Display::Grid)
-        .grid_template_columns(GridTemplateComponents::from_str("repeat(5, 1fr)").ok())
-        .gap(SpacePair::from_single(Px(gap_px)))
-        .justify_content(JustifyContent::Center)
-        .align_items(AlignItems::Center)
-        .background_color(ColorInput::Value(Color::white()))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Grid))
+        .with(StyleDeclaration::grid_template_columns(
+          GridTemplateComponents::from_str("repeat(5, 1fr)").ok(),
+        ))
+        .with_gap(SpacePair::from_single(Px(gap_px)))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        )))),
     ),
     children: Some(
       filter_values
@@ -51,13 +53,11 @@ fn create_filter_card(filter: &str, image_size_px: f32, label_font_size_px: f32)
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .flex_direction(FlexDirection::Column)
-        .align_items(AlignItems::Center)
-        .gap(SpacePair::from_single(Px(16.0)))
-        .font_size(Some(Px(label_font_size_px)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with_gap(SpacePair::from_single(Px(16.0)))
+        .with(StyleDeclaration::font_size(Some(Px(label_font_size_px)))),
     ),
     children: Some(
       [
@@ -69,12 +69,10 @@ fn create_filter_card(filter: &str, image_size_px: f32, label_font_size_px: f32)
           tw: None,
           src: "assets/images/yeecord.png".into(),
           style: Some(
-            StyleBuilder::default()
-              .width(Px(image_size_px))
-              .height(Px(image_size_px))
-              .filter(Filters::from_str(filter).unwrap())
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::width(Px(image_size_px)))
+              .with(StyleDeclaration::height(Px(image_size_px)))
+              .with(StyleDeclaration::filter(Filters::from_str(filter).unwrap())),
           ),
           width: None,
           height: None,
@@ -86,12 +84,7 @@ fn create_filter_card(filter: &str, image_size_px: f32, label_font_size_px: f32)
           tag_name: None,
           preset: None,
           tw: None,
-          style: Some(
-            StyleBuilder::default()
-              .display(Display::Block)
-              .build()
-              .unwrap(),
-          ),
+          style: Some(Style::default().with(StyleDeclaration::display(Display::Block))),
           text: filter.to_string(),
         }
         .into(),

@@ -2,7 +2,7 @@ use takumi::layout::{
   node::ImageNode,
   style::{
     BackgroundPosition, Length::Percentage, ObjectFit, PositionComponent, PositionKeywordX,
-    PositionKeywordY, SpacePair, StyleBuilder,
+    PositionKeywordY, SpacePair, Style, StyleDeclaration,
   },
 };
 
@@ -17,15 +17,13 @@ fn test_style_object_position_contain_center() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .object_fit(ObjectFit::Contain)
-        .object_position(BackgroundPosition(SpacePair::from_single(
-          PositionComponent::KeywordX(PositionKeywordX::Center),
-        )))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::object_fit(ObjectFit::Contain))
+        .with(StyleDeclaration::object_position(BackgroundPosition(
+          SpacePair::from_single(PositionComponent::KeywordX(PositionKeywordX::Center)),
+        ))),
     ),
     width: None,
     height: None,
@@ -44,16 +42,16 @@ fn test_style_object_position_contain_top_left() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .object_fit(ObjectFit::Contain)
-        .object_position(BackgroundPosition(SpacePair::from_pair(
-          PositionComponent::KeywordX(PositionKeywordX::Left),
-          PositionComponent::KeywordY(PositionKeywordY::Top),
-        )))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::object_fit(ObjectFit::Contain))
+        .with(StyleDeclaration::object_position(BackgroundPosition(
+          SpacePair::from_pair(
+            PositionComponent::KeywordX(PositionKeywordX::Left),
+            PositionComponent::KeywordY(PositionKeywordY::Top),
+          ),
+        ))),
     ),
     width: None,
     height: None,
@@ -72,16 +70,16 @@ fn test_style_object_position_contain_bottom_right() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .object_fit(ObjectFit::Contain)
-        .object_position(BackgroundPosition(SpacePair::from_pair(
-          PositionComponent::KeywordX(PositionKeywordX::Right),
-          PositionComponent::KeywordY(PositionKeywordY::Bottom),
-        )))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::object_fit(ObjectFit::Contain))
+        .with(StyleDeclaration::object_position(BackgroundPosition(
+          SpacePair::from_pair(
+            PositionComponent::KeywordX(PositionKeywordX::Right),
+            PositionComponent::KeywordY(PositionKeywordY::Bottom),
+          ),
+        ))),
     ),
     width: None,
     height: None,
@@ -100,16 +98,16 @@ fn test_style_object_position_cover_center() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .object_fit(ObjectFit::Cover)
-        .object_position(BackgroundPosition(SpacePair::from_pair(
-          PositionComponent::KeywordX(PositionKeywordX::Center),
-          PositionComponent::KeywordY(PositionKeywordY::Center),
-        )))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::object_fit(ObjectFit::Cover))
+        .with(StyleDeclaration::object_position(BackgroundPosition(
+          SpacePair::from_pair(
+            PositionComponent::KeywordX(PositionKeywordX::Center),
+            PositionComponent::KeywordY(PositionKeywordY::Center),
+          ),
+        ))),
     ),
     width: None,
     height: None,
@@ -128,16 +126,16 @@ fn test_style_object_position_cover_top_left() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .object_fit(ObjectFit::Cover)
-        .object_position(BackgroundPosition(SpacePair::from_pair(
-          PositionComponent::KeywordX(PositionKeywordX::Left),
-          PositionComponent::KeywordY(PositionKeywordY::Top),
-        )))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::object_fit(ObjectFit::Cover))
+        .with(StyleDeclaration::object_position(BackgroundPosition(
+          SpacePair::from_pair(
+            PositionComponent::KeywordX(PositionKeywordX::Left),
+            PositionComponent::KeywordY(PositionKeywordY::Top),
+          ),
+        ))),
     ),
     width: None,
     height: None,
@@ -156,16 +154,16 @@ fn test_style_object_position_none_center() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .object_fit(ObjectFit::None)
-        .object_position(BackgroundPosition(SpacePair::from_pair(
-          PositionComponent::KeywordX(PositionKeywordX::Center),
-          PositionComponent::KeywordY(PositionKeywordY::Center),
-        )))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::object_fit(ObjectFit::None))
+        .with(StyleDeclaration::object_position(BackgroundPosition(
+          SpacePair::from_pair(
+            PositionComponent::KeywordX(PositionKeywordX::Center),
+            PositionComponent::KeywordY(PositionKeywordY::Center),
+          ),
+        ))),
     ),
     width: None,
     height: None,
@@ -184,16 +182,16 @@ fn test_style_object_position_none_top_left() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .object_fit(ObjectFit::None)
-        .object_position(BackgroundPosition(SpacePair::from_pair(
-          PositionComponent::KeywordX(PositionKeywordX::Left),
-          PositionComponent::KeywordY(PositionKeywordY::Top),
-        )))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::object_fit(ObjectFit::None))
+        .with(StyleDeclaration::object_position(BackgroundPosition(
+          SpacePair::from_pair(
+            PositionComponent::KeywordX(PositionKeywordX::Left),
+            PositionComponent::KeywordY(PositionKeywordY::Top),
+          ),
+        ))),
     ),
     width: None,
     height: None,
@@ -212,16 +210,13 @@ fn test_style_object_position_percentage_25_75() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .object_fit(ObjectFit::Contain)
-        .object_position(BackgroundPosition(SpacePair::from_pair(
-          Percentage(25.0).into(),
-          Percentage(75.0).into(),
-        )))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::object_fit(ObjectFit::Contain))
+        .with(StyleDeclaration::object_position(BackgroundPosition(
+          SpacePair::from_pair(Percentage(25.0).into(), Percentage(75.0).into()),
+        ))),
     ),
     width: None,
     height: None,

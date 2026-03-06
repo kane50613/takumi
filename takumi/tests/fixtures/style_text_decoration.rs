@@ -14,20 +14,20 @@ fn test_style_text_decoration() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .display(Display::Block)
-        .text_align(TextAlign::Center)
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .font_size(Some(Px(72.0)))
-        .text_decoration(TextDecoration {
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::text_align(TextAlign::Center))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::font_size(Some(Px(72.0))))
+        .with_text_decoration(TextDecoration {
           line: TextDecorationLines::all(),
           style: None,
           color: Some(ColorInput::Value(Color([255, 0, 0, 255]))),
           thickness: None,
-        })
-        .build()
-        .unwrap(),
+        }),
     ),
     text: "Text Decoration with Underline, Line-Through, and Overline".to_string(),
   };
@@ -45,20 +45,18 @@ fn text_decoration_skip_ink_parapsychologists() {
       preset: None,
       tw: None,
       style: Some(
-        StyleBuilder::default()
-          .width(Percentage(100.0))
-          .display(Display::Block)
-          .text_align(TextAlign::Center)
-          .font_size(Some(Px(96.0)))
-          .text_decoration(TextDecoration {
+        Style::default()
+          .with(StyleDeclaration::width(Percentage(100.0)))
+          .with(StyleDeclaration::display(Display::Block))
+          .with(StyleDeclaration::text_align(TextAlign::Center))
+          .with(StyleDeclaration::font_size(Some(Px(96.0))))
+          .with_text_decoration(TextDecoration {
             line: TextDecorationLines::UNDERLINE,
             style: None,
             color: Some(ColorInput::Value(Color([255, 0, 0, 255]))),
             thickness: None,
           })
-          .text_decoration_skip_ink(skip_ink)
-          .build()
-          .unwrap(),
+          .with(StyleDeclaration::text_decoration_skip_ink(skip_ink)),
       ),
       text: format!("{label}: parapsychologists"),
     }
@@ -72,15 +70,15 @@ fn text_decoration_skip_ink_parapsychologists() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .display(Display::Flex)
-        .flex_direction(FlexDirection::Column)
-        .row_gap(Some(Px(28.0)))
-        .padding_top(Some(Px(40.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with(StyleDeclaration::row_gap(Some(Px(28.0))))
+        .with(StyleDeclaration::padding_top(Some(Px(40.0)))),
     ),
     children: Some(
       [

@@ -3,7 +3,7 @@ use takumi::layout::{
   style::{
     Color, ColorInput,
     Length::{Percentage, Px},
-    Position, Sides, StyleBuilder,
+    Position, Sides, Style, StyleDeclaration,
   },
 };
 
@@ -18,12 +18,12 @@ fn test_style_position() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color([0, 0, 255, 255]))) // Blue background to serve as container
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([0, 0, 255, 255]),
+        )))),
     ),
     children: Some(
       [ContainerNode {
@@ -33,14 +33,14 @@ fn test_style_position() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .width(Px(100.0))
-            .height(Px(100.0))
-            .position(Position::Absolute) // Test the position property
-            .inset(Sides([Px(20.0); 4])) // Position with inset properties
-            .background_color(ColorInput::Value(Color([255, 0, 0, 255]))) // Red child to make it visible
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::width(Px(100.0)))
+            .with(StyleDeclaration::height(Px(100.0)))
+            .with(StyleDeclaration::position(Position::Absolute))
+            .with_inset(Sides([Px(20.0); 4]))
+            .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              Color([255, 0, 0, 255]),
+            )))),
         ),
         children: None,
       }

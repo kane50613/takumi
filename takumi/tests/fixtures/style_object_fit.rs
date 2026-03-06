@@ -1,6 +1,6 @@
 use takumi::layout::{
   node::ImageNode,
-  style::{Length::Percentage, ObjectFit, StyleBuilder},
+  style::{Length::Percentage, ObjectFit, Style, StyleDeclaration},
 };
 
 use crate::test_utils::run_fixture_test;
@@ -14,12 +14,10 @@ fn test_style_object_fit_contain() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .object_fit(ObjectFit::Contain)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::object_fit(ObjectFit::Contain)),
     ),
     width: None,
     height: None,
@@ -38,12 +36,10 @@ fn test_style_object_fit_cover() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .object_fit(ObjectFit::Cover)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::object_fit(ObjectFit::Cover)),
     ),
     width: None,
     height: None,
@@ -62,12 +58,10 @@ fn test_style_object_fit_fill() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .object_fit(ObjectFit::Fill)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::object_fit(ObjectFit::Fill)),
     ),
     src: "assets/images/yeecord.png".into(),
     width: None,
@@ -86,12 +80,10 @@ fn test_style_object_fit_none() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .object_fit(ObjectFit::None)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::object_fit(ObjectFit::None)),
     ),
     src: "assets/images/yeecord.png".into(),
     width: None,
@@ -110,12 +102,10 @@ fn test_style_object_fit_scale_down() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .object_fit(ObjectFit::ScaleDown)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::object_fit(ObjectFit::ScaleDown)),
     ),
     src: "assets/images/yeecord.png".into(),
     width: None,

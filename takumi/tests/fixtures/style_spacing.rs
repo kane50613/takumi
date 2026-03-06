@@ -3,7 +3,7 @@ use takumi::layout::{
   style::{
     Color, ColorInput,
     Length::{Percentage, Px},
-    Sides, StyleBuilder,
+    Sides, Style, StyleDeclaration,
   },
 };
 
@@ -18,12 +18,12 @@ fn test_style_margin() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color([0, 0, 255, 255]))) // Blue background to show margin
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([0, 0, 255, 255]),
+        )))),
     ),
     children: Some(
       [ContainerNode {
@@ -33,13 +33,13 @@ fn test_style_margin() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .margin(Sides([Px(20.0); 4])) // Uniform margin of 20px
-            .width(Px(100.0)) // Fixed width
-            .height(Px(100.0)) // Fixed height
-            .background_color(ColorInput::Value(Color([255, 0, 0, 255]))) // Red child to show margin effect
-            .build()
-            .unwrap(),
+          Style::default()
+            .with_margin(Sides([Px(20.0); 4]))
+            .with(StyleDeclaration::width(Px(100.0)))
+            .with(StyleDeclaration::height(Px(100.0)))
+            .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              Color([255, 0, 0, 255]),
+            )))),
         ),
         children: None,
       }
@@ -60,13 +60,13 @@ fn test_style_padding() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color([0, 0, 255, 255]))) // Blue background to show padding
-        .padding(Sides([Px(20.0); 4])) // Uniform padding of 20px
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([0, 0, 255, 255]),
+        ))))
+        .with_padding(Sides([Px(20.0); 4])),
     ),
     children: Some(
       [ContainerNode {
@@ -76,12 +76,12 @@ fn test_style_padding() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .width(Percentage(100.0))
-            .height(Percentage(100.0))
-            .background_color(ColorInput::Value(Color([255, 0, 0, 255]))) // Red child to show padding effect
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::width(Percentage(100.0)))
+            .with(StyleDeclaration::height(Percentage(100.0)))
+            .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              Color([255, 0, 0, 255]),
+            )))),
         ),
         children: None,
       }

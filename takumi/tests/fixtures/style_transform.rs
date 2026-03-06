@@ -18,14 +18,14 @@ fn test_rotate_image() {
     tag_name: None,
     preset: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color::white()))
-        .justify_content(JustifyContent::Center)
-        .align_items(AlignItems::Center)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        ))))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::align_items(AlignItems::Center)),
     ),
     tw: None,
     children: Some(
@@ -34,12 +34,7 @@ fn test_rotate_image() {
         id: None,
         tag_name: None,
         preset: None,
-        style: Some(
-          StyleBuilder::default()
-            .rotate(Some(Angle::new(90.0)))
-            .build()
-            .unwrap(),
-        ),
+        style: Some(Style::default().with(StyleDeclaration::rotate(Some(Angle::new(90.0))))),
         tw: None,
         src: "assets/images/yeecord.png".into(),
         width: None,
@@ -62,14 +57,14 @@ fn test_rotate() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color::white()))
-        .justify_content(JustifyContent::Center)
-        .align_items(AlignItems::Center)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        ))))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::align_items(AlignItems::Center)),
     ),
     children: Some(
       [ContainerNode {
@@ -78,13 +73,13 @@ fn test_rotate() {
         tag_name: None,
         preset: None,
         style: Some(
-          StyleBuilder::default()
-            .width(Rem(16.0))
-            .height(Rem(16.0))
-            .background_color(ColorInput::Value(Color::black()))
-            .rotate(Some(Angle::new(45.0)))
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::width(Rem(16.0)))
+            .with(StyleDeclaration::height(Rem(16.0)))
+            .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              Color::black(),
+            ))))
+            .with(StyleDeclaration::rotate(Some(Angle::new(45.0)))),
         ),
         children: None,
         tw: None,
@@ -106,12 +101,12 @@ fn test_style_transform_origin_center() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color::white()))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        )))),
     ),
     children: Some(Box::from_iter(ROTATED_ANGLES.iter().map(|angle| {
       create_rotated_container(*angle, BackgroundPosition::default()).into()
@@ -130,14 +125,14 @@ fn test_style_transform_origin_top_left() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color::white()))
-        .display(Display::Flex)
-        .font_size(Some(Px(24.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        ))))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::font_size(Some(Px(24.0)))),
     ),
     children: Some(
       ROTATED_ANGLES
@@ -167,23 +162,23 @@ fn create_rotated_container(angle: f32, transform_origin: BackgroundPosition) ->
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .translate(Some(SpacePair::from_single(Percentage(-50.0))))
-        .rotate(Some(Angle::new(angle)))
-        .position(Position::Absolute)
-        .top(Some(Percentage(50.0)))
-        .left(Some(Percentage(50.0)))
-        .transform_origin(Some(transform_origin))
-        .width(Px(200.0))
-        .height(Px(200.0))
-        .background_color(ColorInput::Value(Color([255, 0, 0, 30])))
-        .border_width(Some(Sides([Px(1.0); 4])))
-        .border_style(Some(BorderStyle::Solid))
-        .border_radius(Box::new(BorderRadius(Sides(
-          [SpacePair::from_single(Px(12.0)); 4],
+      Style::default()
+        .with_translate(Some(SpacePair::from_single(Percentage(-50.0))))
+        .with(StyleDeclaration::rotate(Some(Angle::new(angle))))
+        .with(StyleDeclaration::position(Position::Absolute))
+        .with(StyleDeclaration::top(Some(Percentage(50.0))))
+        .with(StyleDeclaration::left(Some(Percentage(50.0))))
+        .with(StyleDeclaration::transform_origin(Some(transform_origin)))
+        .with(StyleDeclaration::width(Px(200.0)))
+        .with(StyleDeclaration::height(Px(200.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([255, 0, 0, 30]),
         ))))
-        .build()
-        .unwrap(),
+        .with_border_width(Some(Sides([Px(1.0); 4])))
+        .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+        .with_border_radius(Box::new(BorderRadius(Sides(
+          [SpacePair::from_single(Px(12.0)); 4],
+        )))),
     ),
     width: None,
     height: None,
@@ -200,14 +195,14 @@ fn test_style_transform_translate_and_scale() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color::white()))
-        .display(Display::Flex)
-        .font_size(Some(Px(24.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        ))))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::font_size(Some(Px(24.0)))),
     ),
     children: None,
   };
@@ -219,12 +214,12 @@ fn test_style_transform_translate_and_scale() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Px(200.0))
-        .height(Px(100.0))
-        .background_color(ColorInput::Value(Color([255, 0, 0, 255])))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Px(200.0)))
+        .with(StyleDeclaration::height(Px(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([255, 0, 0, 255]),
+        )))),
     ),
     children: Some(
       [TextNode {
@@ -248,15 +243,15 @@ fn test_style_transform_translate_and_scale() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Px(300.0))
-        .height(Px(300.0))
-        .border_width(Some(Sides([Px(1.0); 4])))
-        .border_style(Some(BorderStyle::Solid))
-        .translate(Some(SpacePair::from_single(Px(300.0))))
-        .background_color(ColorInput::Value(Color([0, 128, 255, 255])))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Px(300.0)))
+        .with(StyleDeclaration::height(Px(300.0)))
+        .with_border_width(Some(Sides([Px(1.0); 4])))
+        .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+        .with_translate(Some(SpacePair::from_single(Px(300.0))))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([0, 128, 255, 255]),
+        )))),
     ),
     children: Some(
       [ImageNode {
@@ -267,11 +262,9 @@ fn test_style_transform_translate_and_scale() {
         tw: None,
         src: "assets/images/yeecord.png".into(),
         style: Some(
-          StyleBuilder::default()
-            .width(Percentage(100.0))
-            .height(Percentage(100.0))
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::width(Percentage(100.0)))
+            .with(StyleDeclaration::height(Percentage(100.0))),
         ),
         width: None,
         height: None,
@@ -288,16 +281,16 @@ fn test_style_transform_translate_and_scale() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .scale(Some(SpacePair::from_single(PercentageNumber(2.0))))
-        .background_color(ColorInput::Value(Color([0, 255, 0, 255])))
-        .width(Px(100.0))
-        .height(Px(100.0))
-        .border_width(Some(Sides([Px(1.0); 4])))
-        .border_style(Some(BorderStyle::Solid))
-        .font_size(Some(Px(12.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with_scale(Some(SpacePair::from_single(PercentageNumber(2.0))))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([0, 255, 0, 255]),
+        ))))
+        .with(StyleDeclaration::width(Px(100.0)))
+        .with(StyleDeclaration::height(Px(100.0)))
+        .with_border_width(Some(Sides([Px(1.0); 4])))
+        .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+        .with(StyleDeclaration::font_size(Some(Px(12.0)))),
     ),
     children: Some(
       [TextNode {
@@ -321,17 +314,19 @@ fn test_style_transform_translate_and_scale() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .rotate(Some(Angle::new(45.0)))
-        .background_color(ColorInput::Value(Color([0, 0, 255, 255])))
-        .width(Px(200.0))
-        .height(Px(200.0))
-        .border_width(Some(Sides([Px(1.0); 4])))
-        .border_style(Some(BorderStyle::Solid))
-        .color(ColorInput::Value(Color::white()))
-        .border_color(Some(ColorInput::Value(Color::black())))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::rotate(Some(Angle::new(45.0))))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([0, 0, 255, 255]),
+        ))))
+        .with(StyleDeclaration::width(Px(200.0)))
+        .with(StyleDeclaration::height(Px(200.0)))
+        .with_border_width(Some(Sides([Px(1.0); 4])))
+        .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+        .with(StyleDeclaration::color(ColorInput::Value(Color::white())))
+        .with(StyleDeclaration::border_color(Some(ColorInput::Value(
+          Color::black(),
+        )))),
     ),
     children: Some(
       [TextNode {

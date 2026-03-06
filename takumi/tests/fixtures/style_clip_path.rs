@@ -16,19 +16,19 @@ fn clip_path_text_stroke_filled() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color([0, 0, 0, 255])))
-        .display(Display::Flex)
-        .justify_content(JustifyContent::Center)
-        .align_items(AlignItems::Center)
-        .flex_direction(FlexDirection::Column)
-        .font_size(Some(Px(84.0)))
-        .font_weight(FontWeight::from(700.0))
-        .text_align(TextAlign::Center)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([0, 0, 0, 255]),
+        ))))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with(StyleDeclaration::font_size(Some(Px(84.0))))
+        .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
+        .with(StyleDeclaration::text_align(TextAlign::Center)),
     ),
     children: Some(
       [
@@ -39,16 +39,16 @@ fn clip_path_text_stroke_filled() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .display(Display::Block)
-              .position(Position::Absolute)
-              .top(Some(Percentage(50.0)))
-              .left(Some(Percentage(50.0)))
-              .translate(Some(SpacePair::from_single(Percentage(-50.0))))
-              .color(ColorInput::Value(Color::white())) // White fill
-              .clip_path(Some(BasicShape::from_str("inset(0 0 50% 0)").unwrap()))
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::display(Display::Block))
+              .with(StyleDeclaration::position(Position::Absolute))
+              .with(StyleDeclaration::top(Some(Percentage(50.0))))
+              .with(StyleDeclaration::left(Some(Percentage(50.0))))
+              .with_translate(Some(SpacePair::from_single(Percentage(-50.0))))
+              .with(StyleDeclaration::color(ColorInput::Value(Color::white())))
+              .with(StyleDeclaration::clip_path(Some(
+                BasicShape::from_str("inset(0 0 50% 0)").unwrap(),
+              ))),
           ),
           text: text.to_string(),
         }
@@ -60,18 +60,22 @@ fn clip_path_text_stroke_filled() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .display(Display::Block)
-              .position(Position::Absolute)
-              .top(Some(Percentage(50.0)))
-              .left(Some(Percentage(50.0)))
-              .translate(Some(SpacePair::from_single(Percentage(-50.0))))
-              .color(ColorInput::Value(Color::transparent())) // Transparent fill
-              .webkit_text_stroke_width(Some(Px(2.0)))
-              .webkit_text_stroke_color(Some(ColorInput::Value(Color([128, 128, 128, 255])))) // Semi-transparent white stroke
-              .clip_path(Some(BasicShape::from_str("inset(50% 0 0 0)").unwrap()))
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::display(Display::Block))
+              .with(StyleDeclaration::position(Position::Absolute))
+              .with(StyleDeclaration::top(Some(Percentage(50.0))))
+              .with(StyleDeclaration::left(Some(Percentage(50.0))))
+              .with_translate(Some(SpacePair::from_single(Percentage(-50.0))))
+              .with(StyleDeclaration::color(ColorInput::Value(
+                Color::transparent(),
+              )))
+              .with(StyleDeclaration::webkit_text_stroke_width(Some(Px(2.0))))
+              .with(StyleDeclaration::webkit_text_stroke_color(Some(
+                ColorInput::Value(Color([128, 128, 128, 255])),
+              )))
+              .with(StyleDeclaration::clip_path(Some(
+                BasicShape::from_str("inset(50% 0 0 0)").unwrap(),
+              ))),
           ),
           text: text.to_string(),
         }
@@ -94,16 +98,16 @@ fn clip_path_triangle_vercel() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color([255, 255, 255, 255]))) // White background
-        .display(Display::Flex)
-        .justify_content(JustifyContent::Center)
-        .align_items(AlignItems::Center)
-        .flex_direction(FlexDirection::Column)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([255, 255, 255, 255]),
+        ))))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column)),
     ),
     children: Some(
       [
@@ -115,15 +119,15 @@ fn clip_path_triangle_vercel() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .width(Px(128.0))
-              .height(Px(128.0))
-              .background_color(ColorInput::Value(Color::black())) // Black triangle
-              .clip_path(Some(
+            Style::default()
+              .with(StyleDeclaration::width(Px(128.0)))
+              .with(StyleDeclaration::height(Px(128.0)))
+              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+                Color::black(),
+              ))))
+              .with(StyleDeclaration::clip_path(Some(
                 BasicShape::from_str("polygon(0% 100%, 100% 100%, 50% 12.25%)").unwrap(),
-              ))
-              .build()
-              .unwrap(),
+              ))),
           ),
           children: None,
         }
@@ -146,16 +150,16 @@ fn clip_path_triangle_gradient() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color([255, 255, 255, 255]))) // White background
-        .display(Display::Flex)
-        .justify_content(JustifyContent::Center)
-        .align_items(AlignItems::Center)
-        .flex_direction(FlexDirection::Column)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([255, 255, 255, 255]),
+        ))))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column)),
     ),
     children: Some(
       [
@@ -167,20 +171,18 @@ fn clip_path_triangle_gradient() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .width(Px(300.0))
-              .height(Px(300.0))
-              .background_image(Some(
+            Style::default()
+              .with(StyleDeclaration::width(Px(300.0)))
+              .with(StyleDeclaration::height(Px(300.0)))
+              .with(StyleDeclaration::background_image(Some(
                 BackgroundImages::from_str(
                   "linear-gradient(45deg, #ff3b30, #ff9500, #ffcc00, #34c759, #007aff, #5856d6)",
                 )
                 .unwrap(),
-              ))
-              .clip_path(Some(
+              )))
+              .with(StyleDeclaration::clip_path(Some(
                 BasicShape::from_str("polygon(0% 100%, 100% 100%, 50% 12.25%)").unwrap(),
-              ))
-              .build()
-              .unwrap(),
+              ))),
           ),
           children: None,
         }
@@ -203,16 +205,16 @@ fn clip_path_circle() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color([255, 255, 255, 255]))) // White background
-        .display(Display::Flex)
-        .justify_content(JustifyContent::Center)
-        .align_items(AlignItems::Center)
-        .flex_direction(FlexDirection::Column)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([255, 255, 255, 255]),
+        ))))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column)),
     ),
     children: Some(
       [
@@ -224,13 +226,15 @@ fn clip_path_circle() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .width(Px(200.0))
-              .height(Px(200.0))
-              .background_color(ColorInput::Value(Color([255, 0, 100, 255]))) // Pink background
-              .clip_path(Some(BasicShape::from_str("circle(50%)").unwrap()))
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::width(Px(200.0)))
+              .with(StyleDeclaration::height(Px(200.0)))
+              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+                Color([255, 0, 100, 255]),
+              ))))
+              .with(StyleDeclaration::clip_path(Some(
+                BasicShape::from_str("circle(50%)").unwrap(),
+              ))),
           ),
           children: None,
         }
@@ -253,16 +257,16 @@ fn clip_path_inset_rounded() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color([255, 255, 255, 255]))) // White background
-        .display(Display::Flex)
-        .justify_content(JustifyContent::Center)
-        .align_items(AlignItems::Center)
-        .flex_direction(FlexDirection::Column)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([255, 255, 255, 255]),
+        ))))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column)),
     ),
     children: Some(
       [
@@ -274,15 +278,15 @@ fn clip_path_inset_rounded() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .width(Px(200.0))
-              .height(Px(200.0))
-              .background_color(ColorInput::Value(Color([100, 200, 255, 255]))) // Light blue background
-              .clip_path(Some(
+            Style::default()
+              .with(StyleDeclaration::width(Px(200.0)))
+              .with(StyleDeclaration::height(Px(200.0)))
+              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+                Color([100, 200, 255, 255]),
+              ))))
+              .with(StyleDeclaration::clip_path(Some(
                 BasicShape::from_str("inset(50px 0 round 20px)").unwrap(),
-              ))
-              .build()
-              .unwrap(),
+              ))),
           ),
           children: None,
         }
@@ -306,12 +310,12 @@ fn clip_path_inset_round_clips_children() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color::white()))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        )))),
     ),
     children: Some(
       [
@@ -323,16 +327,18 @@ fn clip_path_inset_round_clips_children() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .position(Position::Absolute)
-              .top(Some(Px(0.0)))
-              .left(Some(Px(0.0)))
-              .width(Percentage(100.0))
-              .height(Percentage(100.0))
-              .clip_path(Some(BasicShape::from_str("inset(0px round 50px)").unwrap()))
-              .background_color(ColorInput::Value(Color([0, 0, 0, 255]))) // Black bg
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::position(Position::Absolute))
+              .with(StyleDeclaration::top(Some(Px(0.0))))
+              .with(StyleDeclaration::left(Some(Px(0.0))))
+              .with(StyleDeclaration::width(Percentage(100.0)))
+              .with(StyleDeclaration::height(Percentage(100.0)))
+              .with(StyleDeclaration::clip_path(Some(
+                BasicShape::from_str("inset(0px round 50px)").unwrap(),
+              )))
+              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+                Color([0, 0, 0, 255]),
+              )))),
           ),
           children: Some(
             [
@@ -344,15 +350,15 @@ fn clip_path_inset_round_clips_children() {
                 preset: None,
                 tw: None,
                 style: Some(
-                  StyleBuilder::default()
-                    .position(Position::Absolute)
-                    .top(Some(Px(0.0)))
-                    .left(Some(Px(0.0)))
-                    .width(Percentage(100.0))
-                    .height(Percentage(100.0))
-                    .background_color(ColorInput::Value(Color([255, 0, 0, 255])))
-                    .build()
-                    .unwrap(),
+                  Style::default()
+                    .with(StyleDeclaration::position(Position::Absolute))
+                    .with(StyleDeclaration::top(Some(Px(0.0))))
+                    .with(StyleDeclaration::left(Some(Px(0.0))))
+                    .with(StyleDeclaration::width(Percentage(100.0)))
+                    .with(StyleDeclaration::height(Percentage(100.0)))
+                    .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+                      Color([255, 0, 0, 255]),
+                    )))),
                 ),
                 children: None,
               }

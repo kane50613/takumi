@@ -37,15 +37,15 @@ fn bouncing_text_node(y_offset: f32) -> NodeKind {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .flex_direction(FlexDirection::Column)
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center)),
     ),
     children: Some(
       [ContainerNode {
@@ -54,12 +54,9 @@ fn bouncing_text_node(y_offset: f32) -> NodeKind {
         tag_name: None,
         preset: None,
         tw: None,
-        style: Some(
-          StyleBuilder::default()
-            .transform(Some([Transform::Translate(Px(0.0), Px(y_offset))].into()))
-            .build()
-            .unwrap(),
-        ),
+        style: Some(Style::default().with(StyleDeclaration::transform(Some(
+          [Transform::Translate(Px(0.0), Px(y_offset))].into(),
+        )))),
         children: Some([bouncing_text_label()].into()),
       }
       .into()]
@@ -77,13 +74,15 @@ fn bouncing_text_label() -> NodeKind {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .font_size(Some(Px(56.0)))
-        .font_family(Some(FontFamily::from("monospace")))
-        .font_weight(FontWeight::from(700.0))
-        .color(ColorInput::Value(Color([10, 10, 10, 255])))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::font_size(Some(Px(56.0))))
+        .with(StyleDeclaration::font_family(Some(FontFamily::from(
+          "monospace",
+        ))))
+        .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
+        .with(StyleDeclaration::color(ColorInput::Value(Color([
+          10, 10, 10, 255,
+        ])))),
     ),
     text: "Takumi Renders Animated image 🔥".to_string(),
   }
@@ -98,15 +97,15 @@ fn keyframe_interpolation_node() -> NodeKind {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .display(Display::Flex)
-        .justify_content(JustifyContent::Center)
-        .align_items(AlignItems::Center)
-        .background_color(ColorInput::Value(Color([242, 244, 247, 255])))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([242, 244, 247, 255]),
+        )))),
     ),
     children: Some(
       [ContainerNode {
@@ -116,13 +115,11 @@ fn keyframe_interpolation_node() -> NodeKind {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .display(Display::Flex)
-            .flex_direction(FlexDirection::Column)
-            .justify_content(JustifyContent::Center)
-            .align_items(AlignItems::Center)
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::display(Display::Flex))
+            .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+            .with(StyleDeclaration::justify_content(JustifyContent::Center))
+            .with(StyleDeclaration::align_items(AlignItems::Center)),
         ),
         children: Some(
           [

@@ -5,18 +5,18 @@ use takumi::{
   layout::{
     Viewport,
     node::{ContainerNode, NodeKind},
-    style::{BackgroundImages, FromCss, Length, StyleBuilder},
+    style::{BackgroundImages, FromCss, Length, Style, StyleDeclaration},
   },
   rendering::{RenderOptionsBuilder, render},
 };
 
 fn run_gradient_render(global: &GlobalContext, background_image_str: &str) {
-  let style = StyleBuilder::default()
-    .width(Length::Px(256.0))
-    .height(Length::Px(256.0))
-    .background_image(BackgroundImages::from_str(background_image_str).unwrap())
-    .build()
-    .unwrap();
+  let style = Style::default()
+    .with(StyleDeclaration::width(Length::Px(256.0)))
+    .with(StyleDeclaration::height(Length::Px(256.0)))
+    .with(StyleDeclaration::background_image(
+      BackgroundImages::from_str(background_image_str).ok(),
+    ));
 
   let node = NodeKind::Container(ContainerNode {
     children: None,

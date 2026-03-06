@@ -17,10 +17,9 @@ fn text_basic() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .build()
-        .unwrap(),
+      Style::default().with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        Color([240, 240, 240, 255]),
+      )))),
     ),
     text: "The quick brown fox jumps over the lazy dog 12345".to_string(),
   };
@@ -37,11 +36,11 @@ fn text_typography_regular_24px() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .font_size(Some(Px(24.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::font_size(Some(Px(24.0)))),
     ),
     text: "Regular 24px".to_string(),
   };
@@ -63,16 +62,13 @@ fn text_typography_variable_width() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .font_variation_settings(Some(
-              [FontVariation {
-                tag: tag_from_bytes(b"wdth"),
-                value: *width,
-              }]
-              .into(),
-            ))
-            .build()
-            .unwrap(),
+          Style::default().with(StyleDeclaration::font_variation_settings(Some(
+            [FontVariation {
+              tag: tag_from_bytes(b"wdth"),
+              value: *width,
+            }]
+            .into(),
+          ))),
         ),
         text: format!(
           "Hello world, this is a test of the variable width font: {}%",
@@ -90,15 +86,17 @@ fn text_typography_variable_width() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .font_family(FontFamily::from_str("Archivo").ok())
-        .font_size(Some(Px(48.0)))
-        .flex_wrap(FlexWrap::Wrap)
-        .row_gap(Some(Px(48.0)))
-        .width(Percentage(100.0))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::font_family(
+          FontFamily::from_str("Archivo").ok(),
+        ))
+        .with(StyleDeclaration::font_size(Some(Px(48.0))))
+        .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
+        .with(StyleDeclaration::row_gap(Some(Px(48.0))))
+        .with(StyleDeclaration::width(Percentage(100.0))),
     ),
     children: Some(nodes.into_boxed_slice()),
   };
@@ -118,11 +116,11 @@ fn text_typography_variable_weight() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .font_size(Some(Px(48.0)))
-            .font_weight(FontWeight::from(weight as f32))
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::font_size(Some(Px(48.0))))
+            .with(StyleDeclaration::font_weight(FontWeight::from(
+              weight as f32,
+            ))),
         ),
         text: weight.to_string(),
       }
@@ -137,13 +135,13 @@ fn text_typography_variable_weight() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .font_size(Some(Px(24.0)))
-        .gap(SpacePair::from_pair(Px(0.0), Px(24.0)))
-        .flex_wrap(FlexWrap::Wrap)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::font_size(Some(Px(24.0))))
+        .with_gap(SpacePair::from_pair(Px(0.0), Px(24.0)))
+        .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap)),
     ),
     children: Some(nodes.into_boxed_slice()),
   };
@@ -160,12 +158,12 @@ fn text_typography_medium_weight_500() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .font_size(Some(Px(24.0)))
-        .font_weight(FontWeight::from(500.0))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::font_size(Some(Px(24.0))))
+        .with(StyleDeclaration::font_weight(FontWeight::from(500.0))),
     ),
     text: "Medium 24px".to_string(),
   };
@@ -182,12 +180,12 @@ fn text_typography_line_height_40px() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .font_size(Some(Px(24.0)))
-        .line_height(LineHeight::Length(Px(40.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::font_size(Some(Px(24.0))))
+        .with(StyleDeclaration::line_height(LineHeight::Length(Px(40.0)))),
     ),
     text: "Line height 40px".to_string(),
   };
@@ -204,12 +202,12 @@ fn text_typography_letter_spacing_2px() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .font_size(Some(Px(24.0)))
-        .letter_spacing(Some(Px(2.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::font_size(Some(Px(24.0))))
+        .with(StyleDeclaration::letter_spacing(Some(Px(2.0)))),
     ),
     text: "Letter spacing 2px".to_string(),
   };
@@ -226,14 +224,14 @@ fn text_align_start() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .width(Percentage(100.0))
-        .display(Display::Block)
-        .font_size(Some(Px(24.0)))
-        .text_align(TextAlign::Start)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::font_size(Some(Px(24.0))))
+        .with(StyleDeclaration::text_align(TextAlign::Start)),
     ),
     text: "Start aligned".to_string(),
   };
@@ -250,14 +248,14 @@ fn text_align_center() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .width(Percentage(100.0))
-        .display(Display::Block)
-        .font_size(Some(Px(24.0)))
-        .text_align(TextAlign::Center)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::font_size(Some(Px(24.0))))
+        .with(StyleDeclaration::text_align(TextAlign::Center)),
     ),
     text: "Center aligned".to_string(),
   };
@@ -274,14 +272,14 @@ fn text_align_right() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .width(Percentage(100.0))
-        .display(Display::Block)
-        .font_size(Some(Px(24.0)))
-        .text_align(TextAlign::Right)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::font_size(Some(Px(24.0))))
+        .with(StyleDeclaration::text_align(TextAlign::Right)),
     ),
     text: "Right aligned".to_string(),
   };
@@ -300,14 +298,14 @@ fn text_ellipsis_line_clamp_2() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .font_size(Some(Px(48.0)))
-        .text_overflow(TextOverflow::Ellipsis)
-        .line_clamp(Some(2.into()))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::font_size(Some(Px(48.0))))
+        .with(StyleDeclaration::text_overflow(TextOverflow::Ellipsis))
+        .with(StyleDeclaration::line_clamp(Some(2.into()))),
     ),
     text: long_text.to_string(),
   };
@@ -324,12 +322,12 @@ fn text_transform_all() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        )))),
     ),
     children: Some(
       [
@@ -340,12 +338,10 @@ fn text_transform_all() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .width(Percentage(100.0))
-              .font_size(Some(Px(28.0)))
-              .text_transform(TextTransform::None)
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::width(Percentage(100.0)))
+              .with(StyleDeclaration::font_size(Some(Px(28.0))))
+              .with(StyleDeclaration::text_transform(TextTransform::None)),
           ),
           text: "None: The quick Brown Fox".to_string(),
         }
@@ -357,12 +353,10 @@ fn text_transform_all() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .width(Percentage(100.0))
-              .font_size(Some(Px(28.0)))
-              .text_transform(TextTransform::Uppercase)
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::width(Percentage(100.0)))
+              .with(StyleDeclaration::font_size(Some(Px(28.0))))
+              .with(StyleDeclaration::text_transform(TextTransform::Uppercase)),
           ),
           text: "Uppercase: The quick Brown Fox".to_string(),
         }
@@ -374,12 +368,10 @@ fn text_transform_all() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .width(Percentage(100.0))
-              .font_size(Some(Px(28.0)))
-              .text_transform(TextTransform::Lowercase)
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::width(Percentage(100.0)))
+              .with(StyleDeclaration::font_size(Some(Px(28.0))))
+              .with(StyleDeclaration::text_transform(TextTransform::Lowercase)),
           ),
           text: "Lowercase: The QUICK Brown FOX".to_string(),
         }
@@ -391,12 +383,10 @@ fn text_transform_all() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .width(Percentage(100.0))
-              .font_size(Some(Px(28.0)))
-              .text_transform(TextTransform::Capitalize)
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::width(Percentage(100.0)))
+              .with(StyleDeclaration::font_size(Some(Px(28.0))))
+              .with(StyleDeclaration::text_transform(TextTransform::Capitalize)),
           ),
           text: "Capitalize: the quick brown fox".to_string(),
         }
@@ -423,15 +413,15 @@ fn text_mask_image_gradient_and_emoji() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .font_size(Some(Px(72.0)))
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::font_size(Some(Px(72.0))))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center)),
     ),
     children: Some(
       [TextNode {
@@ -441,15 +431,21 @@ fn text_mask_image_gradient_and_emoji() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .background_image(Some(gradient_images))
-            .background_size(Some(BackgroundSizes::from_str("100% 100%").unwrap()))
-            .background_position(Some(BackgroundPositions::from_str("0 0").unwrap()))
-            .background_repeat(Some(BackgroundRepeats::from_str("no-repeat").unwrap()))
-            .background_clip(BackgroundClip::Text)
-            .color(ColorInput::Value(Color::transparent()))
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::background_image(Some(gradient_images)))
+            .with(StyleDeclaration::background_size(Some(
+              BackgroundSizes::from_str("100% 100%").unwrap(),
+            )))
+            .with(StyleDeclaration::background_position(Some(
+              BackgroundPositions::from_str("0 0").unwrap(),
+            )))
+            .with(StyleDeclaration::background_repeat(Some(
+              BackgroundRepeats::from_str("no-repeat").unwrap(),
+            )))
+            .with(StyleDeclaration::background_clip(BackgroundClip::Text))
+            .with(StyleDeclaration::color(ColorInput::Value(
+              Color::transparent(),
+            ))),
         ),
         text: "Gradient Mask Emoji: 🪓 🦊 💩".to_string(),
       }
@@ -470,18 +466,22 @@ fn text_stroke_black_red() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .color(ColorInput::Value(Color([0, 0, 0, 255]))) // Black text
-        .font_size(Some(Px(96.0)))
-        .font_weight(FontWeight::from(700.0))
-        .padding(Sides([Px(24.0); 4]))
-        .webkit_text_stroke_width(Some(Px(4.0)))
-        .webkit_text_stroke_color(Some(ColorInput::Value(Color([255, 0, 0, 255])))) // Red stroke
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::color(ColorInput::Value(Color([
+          0, 0, 0, 255,
+        ]))))
+        .with(StyleDeclaration::font_size(Some(Px(96.0))))
+        .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
+        .with_padding(Sides([Px(24.0); 4]))
+        .with(StyleDeclaration::webkit_text_stroke_width(Some(Px(4.0))))
+        .with(StyleDeclaration::webkit_text_stroke_color(Some(
+          ColorInput::Value(Color([255, 0, 0, 255])),
+        ))),
     ),
     text: "Red Stroke".to_string(),
   };
@@ -503,16 +503,16 @@ fn text_stroke_background_clip() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_image(Some(gradient_images))
-        .background_clip(BackgroundClip::Text)
-        .color(ColorInput::Value(Color::white()))
-        .font_size(Some(Px(96.0)))
-        .font_weight(FontWeight::from(700.0))
-        .webkit_text_stroke_width(Some(Px(4.0)))
-        .webkit_text_stroke_color(Some(ColorInput::Value(Color::transparent())))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_image(Some(gradient_images)))
+        .with(StyleDeclaration::background_clip(BackgroundClip::Text))
+        .with(StyleDeclaration::color(ColorInput::Value(Color::white())))
+        .with(StyleDeclaration::font_size(Some(Px(96.0))))
+        .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
+        .with(StyleDeclaration::webkit_text_stroke_width(Some(Px(4.0))))
+        .with(StyleDeclaration::webkit_text_stroke_color(Some(
+          ColorInput::Value(Color::transparent()),
+        ))),
     ),
     text: "Gradient Stroke".to_string(),
   };
@@ -524,14 +524,14 @@ fn text_stroke_background_clip() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color::white()))
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        ))))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center)),
     ),
     children: Some([text.into()].into()),
   };
@@ -557,12 +557,12 @@ fn text_shadow() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .font_size(Some(Px(48.0)))
-        .text_shadow(Some(shadows.into()))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::font_size(Some(Px(48.0))))
+        .with(StyleDeclaration::text_shadow(Some(shadows.into()))),
     ),
     text: "Shadowed Text".to_string(),
   };
@@ -587,12 +587,12 @@ fn text_shadow_no_blur_radius() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .font_size(Some(Px(72.0)))
-        .text_shadow(Some(shadows.into()))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::font_size(Some(Px(72.0))))
+        .with(StyleDeclaration::text_shadow(Some(shadows.into()))),
     ),
     text: "Shadowed Text".to_string(),
   };
@@ -611,17 +611,17 @@ fn text_wrap_nowrap() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([255, 255, 255, 255])))
-        .font_size(Some(Px(32.0)))
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .display(Display::Flex)
-        .flex_direction(FlexDirection::Column)
-        .gap(SpacePair::from_single(Px(20.0)))
-        .padding(Sides([Px(20.0); 4]))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([255, 255, 255, 255]),
+        ))))
+        .with(StyleDeclaration::font_size(Some(Px(32.0))))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with_gap(SpacePair::from_single(Px(20.0)))
+        .with_padding(Sides([Px(20.0); 4])),
     ),
     children: Some(
       [
@@ -633,10 +633,7 @@ fn text_wrap_nowrap() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .text_wrap_mode(Some(TextWrapMode::Wrap))
-              .build()
-              .unwrap(),
+            Style::default().with(StyleDeclaration::text_wrap_mode(Some(TextWrapMode::Wrap))),
           ),
           text: format!("wrap: {}", long_text),
         }
@@ -648,10 +645,7 @@ fn text_wrap_nowrap() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .text_wrap_mode(Some(TextWrapMode::NoWrap))
-              .build()
-              .unwrap(),
+            Style::default().with(StyleDeclaration::text_wrap_mode(Some(TextWrapMode::NoWrap))),
           ),
           text: format!("nowrap: {}", long_text),
         }
@@ -673,17 +667,17 @@ fn text_whitespace_collapse() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([255, 255, 255, 255])))
-        .display(Display::Flex)
-        .flex_direction(FlexDirection::Column)
-        .font_size(Some(Px(32.0)))
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .gap(SpacePair::from_single(Px(20.0)))
-        .padding(Sides([Px(20.0); 4]))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([255, 255, 255, 255]),
+        ))))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with(StyleDeclaration::font_size(Some(Px(32.0))))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with_gap(SpacePair::from_single(Px(20.0)))
+        .with_padding(Sides([Px(20.0); 4])),
     ),
     children: Some(
       [
@@ -694,10 +688,9 @@ fn text_whitespace_collapse() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .white_space_collapse(Some(WhiteSpaceCollapse::Collapse))
-              .build()
-              .unwrap(),
+            Style::default().with(StyleDeclaration::white_space_collapse(Some(
+              WhiteSpaceCollapse::Collapse,
+            ))),
           ),
           text: "collapse: Multiple    spaces   and\ttabs\t\tare    collapsed".to_string(),
         }
@@ -709,10 +702,9 @@ fn text_whitespace_collapse() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .white_space_collapse(Some(WhiteSpaceCollapse::Preserve))
-              .build()
-              .unwrap(),
+            Style::default().with(StyleDeclaration::white_space_collapse(Some(
+              WhiteSpaceCollapse::Preserve,
+            ))),
           ),
           text: "preserve: Multiple    spaces   and\ttabs\t\tare    preserved".to_string(),
         }
@@ -724,10 +716,9 @@ fn text_whitespace_collapse() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .white_space_collapse(Some(WhiteSpaceCollapse::PreserveSpaces))
-              .build()
-              .unwrap(),
+            Style::default().with(StyleDeclaration::white_space_collapse(Some(
+              WhiteSpaceCollapse::PreserveSpaces,
+            ))),
           ),
           text: "preserve-spaces: Multiple    spaces   preserved\nbut\nbreaks\nremoved".to_string(),
         }
@@ -739,10 +730,9 @@ fn text_whitespace_collapse() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .white_space_collapse(Some(WhiteSpaceCollapse::PreserveBreaks))
-              .build()
-              .unwrap(),
+            Style::default().with(StyleDeclaration::white_space_collapse(Some(
+              WhiteSpaceCollapse::PreserveBreaks,
+            ))),
           ),
           text: "preserve-breaks: Spaces    collapsed\n but\nline\nbreaks\npreserved".to_string(),
         }
@@ -765,14 +755,12 @@ fn text_ellipsis_text_nowrap() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .font_size(Some(Px(48.0)))
-        .padding(Sides([Px(20.0); 4]))
-        .overflow(SpacePair::from_single(Overflow::Hidden))
-        .width(Percentage(100.0))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(Color([240, 240, 240, 255])))))
+        .with(StyleDeclaration::font_size(Some(Px(48.0))))
+        .with_padding(Sides([Px(20.0); 4]))
+        .with_overflow(SpacePair::from_single(Overflow::Hidden))
+        .with(StyleDeclaration::width(Percentage(100.0))),
     ),
     children: Some([
       TextNode {
@@ -782,16 +770,14 @@ fn text_ellipsis_text_nowrap() {
     preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .text_overflow(TextOverflow::Ellipsis)
-            .text_wrap_mode(Some(TextWrapMode::NoWrap))
-            .border_width(Some(Sides([Px(1.0); 4])))
-            .border_style(Some(BorderStyle::Solid))
-            .border_color(Some(ColorInput::Value(Color([255, 0, 0, 255]))))
-            .word_break(WordBreak::BreakAll)
-            .width(Percentage(100.0))
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::text_overflow(TextOverflow::Ellipsis))
+            .with(StyleDeclaration::text_wrap_mode(Some(TextWrapMode::NoWrap)))
+            .with_border_width(Some(Sides([Px(1.0); 4])))
+            .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+            .with(StyleDeclaration::border_color(Some(ColorInput::Value(Color([255, 0, 0, 255])))))
+            .with(StyleDeclaration::word_break(WordBreak::BreakAll))
+            .with(StyleDeclaration::width(Percentage(100.0))),
         ),
         text: "This is a very long piece of text that should demonstrate text wrapping behavior when it exceeds the container width. The quick brown fox jumps over the lazy dog.".to_string(),
       }
@@ -811,17 +797,17 @@ fn text_wrap_style_all() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([255, 255, 255, 255])))
-        .font_size(Some(Px(48.0)))
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .display(Display::Flex)
-        .flex_direction(FlexDirection::Column)
-        .gap(SpacePair::from_single(Px(40.0)))
-        .padding(Sides([Px(20.0); 4]))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([255, 255, 255, 255]),
+        ))))
+        .with(StyleDeclaration::font_size(Some(Px(48.0))))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with_gap(SpacePair::from_single(Px(40.0)))
+        .with_padding(Sides([Px(20.0); 4])),
     ),
     children: Some(
       [
@@ -833,10 +819,7 @@ fn text_wrap_style_all() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .text_wrap_style(Some(TextWrapStyle::Auto))
-              .build()
-              .unwrap(),
+            Style::default().with(StyleDeclaration::text_wrap_style(Some(TextWrapStyle::Auto))),
           ),
           text: "Auto: The quick brown fox jumps over the lazy dog.".to_string(),
         }
@@ -849,10 +832,9 @@ fn text_wrap_style_all() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .text_wrap_style(Some(TextWrapStyle::Balance))
-              .build()
-              .unwrap(),
+            Style::default().with(StyleDeclaration::text_wrap_style(Some(
+              TextWrapStyle::Balance,
+            ))),
           ),
           text: "Balance: The quick brown fox jumps over the lazy dog.".to_string(),
         }
@@ -865,10 +847,9 @@ fn text_wrap_style_all() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .text_wrap_style(Some(TextWrapStyle::Pretty))
-              .build()
-              .unwrap(),
+            Style::default().with(StyleDeclaration::text_wrap_style(Some(
+              TextWrapStyle::Pretty,
+            ))),
           ),
           text: "Pretty: The quick brown fox jumps over the lazy dog and catches it.".to_string(),
         }
@@ -895,18 +876,18 @@ fn text_super_bold_stroke_background_clip() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_image(Some(gradient_images))
-        .background_clip(BackgroundClip::Text)
-        .display(Display::Block)
-        .color(ColorInput::Value(Color::white()))
-        .font_size(Some(Px(120.0)))
-        .font_weight(FontWeight::from(900.0))
-        .webkit_text_stroke_width(Some(Px(20.0)))
-        .webkit_text_stroke_color(Some(ColorInput::Value(Color::transparent())))
-        .padding(Sides([Px(60.0); 4]))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_image(Some(gradient_images)))
+        .with(StyleDeclaration::background_clip(BackgroundClip::Text))
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::color(ColorInput::Value(Color::white())))
+        .with(StyleDeclaration::font_size(Some(Px(120.0))))
+        .with(StyleDeclaration::font_weight(FontWeight::from(900.0)))
+        .with(StyleDeclaration::webkit_text_stroke_width(Some(Px(20.0))))
+        .with(StyleDeclaration::webkit_text_stroke_color(Some(
+          ColorInput::Value(Color::transparent()),
+        )))
+        .with_padding(Sides([Px(60.0); 4])),
     ),
     text: "Super Bold".to_string(),
   };
@@ -918,14 +899,14 @@ fn text_super_bold_stroke_background_clip() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color::white()))
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        ))))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center)),
     ),
     children: Some([text.into()].into()),
   };
@@ -967,11 +948,9 @@ fn text_font_stretch() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .font_size(Some(Px(36.0)))
-            .font_stretch(*stretch)
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::font_size(Some(Px(36.0))))
+            .with(StyleDeclaration::font_stretch(*stretch)),
         ),
         text: format!("font-stretch: {}", label),
       }
@@ -986,15 +965,17 @@ fn text_font_stretch() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .font_family(FontFamily::from_str("Archivo").ok())
-        .width(Percentage(100.0))
-        .flex_direction(FlexDirection::Column)
-        .padding(Sides([Px(20.0); 4]))
-        .gap(SpacePair::from_single(Px(12.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::font_family(
+          FontFamily::from_str("Archivo").ok(),
+        ))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with_padding(Sides([Px(20.0); 4]))
+        .with_gap(SpacePair::from_single(Px(12.0))),
     ),
     children: Some(nodes.into_boxed_slice()),
   };
@@ -1011,17 +992,17 @@ fn text_flex_centered_text_node_vs_nested_container() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Px(300.0))
-        .height(Px(200.0))
-        .margin(Sides([Px(0.0), Px(0.0), Px(30.0), Px(0.0)]))
-        .background_color(ColorInput::Value(Color::from_str("#3b82f6").unwrap()))
-        .display(Display::Flex)
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .font_size(Some(Px(30.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Px(300.0)))
+        .with(StyleDeclaration::height(Px(200.0)))
+        .with_margin(Sides([Px(0.0), Px(0.0), Px(30.0), Px(0.0)]))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::from_str("#3b82f6").unwrap(),
+        ))))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::font_size(Some(Px(30.0)))),
     ),
     text: "centered...?".to_string(),
   }
@@ -1034,16 +1015,16 @@ fn text_flex_centered_text_node_vs_nested_container() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Px(300.0))
-        .height(Px(200.0))
-        .background_color(ColorInput::Value(Color::from_str("#ab82f6").unwrap()))
-        .display(Display::Flex)
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .font_size(Some(Px(30.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Px(300.0)))
+        .with(StyleDeclaration::height(Px(200.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::from_str("#ab82f6").unwrap(),
+        ))))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::font_size(Some(Px(30.0)))),
     ),
     children: Some(
       [TextNode {
@@ -1068,14 +1049,14 @@ fn text_flex_centered_text_node_vs_nested_container() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color::black()))
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::black(),
+        ))))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center)),
     ),
     children: Some(
       [ContainerNode {
@@ -1085,14 +1066,12 @@ fn text_flex_centered_text_node_vs_nested_container() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .display(Display::Flex)
-            .flex_direction(FlexDirection::Column)
-            .align_items(AlignItems::Center)
-            .justify_content(JustifyContent::Center)
-            .color(ColorInput::Value(Color::white()))
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::display(Display::Flex))
+            .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+            .with(StyleDeclaration::align_items(AlignItems::Center))
+            .with(StyleDeclaration::justify_content(JustifyContent::Center))
+            .with(StyleDeclaration::color(ColorInput::Value(Color::white()))),
         ),
         children: Some([first_box_text, second_box_nested_text].into()),
       }
@@ -1119,13 +1098,15 @@ fn text_font_synthesis_weight_auto_none() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .font_size(Some(Px(72.0)))
-            .font_family(FontFamily::from_str("Scheherazade New Test").ok())
-            .font_weight(FontWeight::from(900.0))
-            .font_synthesis_weight(*synthesis_weight)
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::font_size(Some(Px(72.0))))
+            .with(StyleDeclaration::font_family(
+              FontFamily::from_str("Scheherazade New Test").ok(),
+            ))
+            .with(StyleDeclaration::font_weight(FontWeight::from(900.0)))
+            .with(StyleDeclaration::font_synthesis_weight(Some(
+              *synthesis_weight,
+            ))),
         ),
         text: format!("font-synthesis-weight: {} - السلام عليكم", label),
       }
@@ -1140,14 +1121,14 @@ fn text_font_synthesis_weight_auto_none() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .width(Percentage(100.0))
-        .flex_direction(FlexDirection::Column)
-        .padding(Sides([Px(20.0); 4]))
-        .gap(SpacePair::from_single(Px(12.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with_padding(Sides([Px(20.0); 4]))
+        .with_gap(SpacePair::from_single(Px(12.0))),
     ),
     children: Some(nodes.into_boxed_slice()),
   };
@@ -1167,13 +1148,15 @@ fn text_font_synthesis_style_auto_none() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .font_size(Some(Px(72.0)))
-            .font_family(FontFamily::from_str("Scheherazade New Test").ok())
-            .font_style(FontStyle::italic())
-            .font_synthesis_style(*synthesis_style)
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::font_size(Some(Px(72.0))))
+            .with(StyleDeclaration::font_family(
+              FontFamily::from_str("Scheherazade New Test").ok(),
+            ))
+            .with(StyleDeclaration::font_style(FontStyle::italic()))
+            .with(StyleDeclaration::font_synthesis_style(Some(
+              *synthesis_style,
+            ))),
         ),
         text: format!("font-synthesis-style: {} - السلام عليكم", label),
       }
@@ -1188,14 +1171,14 @@ fn text_font_synthesis_style_auto_none() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .width(Percentage(100.0))
-        .flex_direction(FlexDirection::Column)
-        .padding(Sides([Px(20.0); 4]))
-        .gap(SpacePair::from_single(Px(12.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with_padding(Sides([Px(20.0); 4]))
+        .with_gap(SpacePair::from_single(Px(12.0))),
     ),
     children: Some(nodes.into_boxed_slice()),
   };
@@ -1230,14 +1213,14 @@ fn text_font_synthesis_weight_emoji() {
       preset: None,
       tw: None,
       style: Some(
-        StyleBuilder::default()
-          .font_size(Some(Px(72.0)))
-          .font_family(FontFamily::from_str("Scheherazade New Test").ok())
-          .font_weight(FontWeight::from(900.0))
-          .font_style(FontStyle::italic())
-          .font_synthesis(*synthesis)
-          .build()
-          .unwrap(),
+        Style::default()
+          .with(StyleDeclaration::font_size(Some(Px(72.0))))
+          .with(StyleDeclaration::font_family(
+            FontFamily::from_str("Scheherazade New Test").ok(),
+          ))
+          .with(StyleDeclaration::font_weight(FontWeight::from(900.0)))
+          .with(StyleDeclaration::font_style(FontStyle::italic()))
+          .with_font_synthesis(*synthesis),
       ),
       text: format!("font-synthesis: {} - Takumi 😀 😺 🧪", label),
     }
@@ -1252,14 +1235,14 @@ fn text_font_synthesis_weight_emoji() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .width(Percentage(100.0))
-        .flex_direction(FlexDirection::Column)
-        .padding(Sides([Px(20.0); 4]))
-        .gap(SpacePair::from_single(Px(12.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with_padding(Sides([Px(20.0); 4]))
+        .with_gap(SpacePair::from_single(Px(12.0))),
     ),
     children: Some(nodes.into_boxed_slice()),
   };
@@ -1278,16 +1261,18 @@ fn text_chinese_ellipsis() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .font_size(Some(Px(64.0)))
-        .padding(Sides::from(Px(24.0)))
-        .font_family(FontFamily::from_str("Noto Sans TC").ok())
-        .text_overflow(TextOverflow::Ellipsis)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::font_size(Some(Px(64.0))))
+        .with_padding(Sides::from(Px(24.0)))
+        .with(StyleDeclaration::font_family(
+          FontFamily::from_str("Noto Sans TC").ok(),
+        ))
+        .with(StyleDeclaration::text_overflow(TextOverflow::Ellipsis)),
     ),
     text: text.to_string(),
   };
@@ -1307,16 +1292,18 @@ fn text_devanagari_noto_sans() {
       preset: None,
       tw: None,
       style: Some(
-        StyleBuilder::default()
-          .width(Percentage(100.0))
-          .height(Percentage(100.0))
-          .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-          .font_size(Some(Px(48.0)))
-          .padding(Sides::from(Px(24.0)))
-          .font_family(FontFamily::from_str(font_family).ok())
-          .font_weight(FontWeight::from(weight))
-          .build()
-          .unwrap(),
+        Style::default()
+          .with(StyleDeclaration::width(Percentage(100.0)))
+          .with(StyleDeclaration::height(Percentage(100.0)))
+          .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+            Color([240, 240, 240, 255]),
+          ))))
+          .with(StyleDeclaration::font_size(Some(Px(48.0))))
+          .with_padding(Sides::from(Px(24.0)))
+          .with(StyleDeclaration::font_family(
+            FontFamily::from_str(font_family).ok(),
+          ))
+          .with(StyleDeclaration::font_weight(FontWeight::from(weight))),
       ),
       text: text.to_string(),
     }
@@ -1339,14 +1326,14 @@ fn text_devanagari_noto_sans() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .width(Percentage(100.0))
-        .flex_direction(FlexDirection::Column)
-        .padding(Sides([Px(20.0); 4]))
-        .gap(SpacePair::from_single(Px(12.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with_padding(Sides([Px(20.0); 4]))
+        .with_gap(SpacePair::from_single(Px(12.0))),
     ),
     children: Some(nodes.into_boxed_slice()),
   };

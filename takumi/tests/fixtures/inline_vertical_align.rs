@@ -15,19 +15,21 @@ fn inline_vertical_align_types() {
       preset: None,
       tw: None,
       style: Some(
-        StyleBuilder::default()
-          .display(Display::Block)
-          .width(Percentage(48.0))
-          .margin(Sides([Px(4.0); 4]))
-          .padding(Sides([Px(4.0), Px(8.0), Px(4.0), Px(8.0)]))
-          .line_height(LineHeight::Length(Px(72.0)))
-          .font_size(Some(Px(32.0)))
-          .background_color(ColorInput::Value(Color([248, 248, 248, 255])))
-          .border_width(Some(Sides([Px(1.0); 4])))
-          .border_style(Some(BorderStyle::Solid))
-          .border_color(ColorInput::Value(Color([180, 180, 180, 255])))
-          .build()
-          .unwrap(),
+        Style::default()
+          .with(StyleDeclaration::display(Display::Block))
+          .with(StyleDeclaration::width(Percentage(48.0)))
+          .with_margin(Sides([Px(4.0); 4]))
+          .with_padding(Sides([Px(4.0), Px(8.0), Px(4.0), Px(8.0)]))
+          .with(StyleDeclaration::line_height(LineHeight::Length(Px(72.0))))
+          .with(StyleDeclaration::font_size(Some(Px(32.0))))
+          .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+            Color([248, 248, 248, 255]),
+          ))))
+          .with_border_width(Some(Sides([Px(1.0); 4])))
+          .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+          .with(StyleDeclaration::border_color(Some(ColorInput::Value(
+            Color([180, 180, 180, 255]),
+          )))),
       ),
       children: Some(
         [
@@ -38,17 +40,17 @@ fn inline_vertical_align_types() {
             preset: None,
             tw: None,
             style: Some(
-              StyleBuilder::default()
-                .display(Display::Inline)
-                .text_decoration(TextDecoration {
+              Style::default()
+                .with(StyleDeclaration::display(Display::Inline))
+                .with_text_decoration(TextDecoration {
                   line: TextDecorationLines::UNDERLINE,
                   style: None,
                   color: Some(ColorInput::Value(Color([220, 38, 38, 255]))),
                   thickness: Some(TextDecorationThickness::Length(Px(3.0))),
                 })
-                .text_decoration_skip_ink(TextDecorationSkipInk::None)
-                .build()
-                .unwrap(),
+                .with(StyleDeclaration::text_decoration_skip_ink(
+                  TextDecorationSkipInk::None,
+                )),
             ),
             text: format!("Baseline guide {label} "),
           }
@@ -60,17 +62,19 @@ fn inline_vertical_align_types() {
             preset: None,
             tw: None,
             style: Some(
-              StyleBuilder::default()
-                .display(Display::InlineBlock)
-                .width(Px(44.0))
-                .height(Px(44.0))
-                .background_color(ColorInput::Value(color))
-                .vertical_align(align)
-                .border_width(Some(Sides([Px(2.0); 4])))
-                .border_style(Some(BorderStyle::Solid))
-                .border_color(ColorInput::Value(Color([30, 30, 30, 255])))
-                .build()
-                .unwrap(),
+              Style::default()
+                .with(StyleDeclaration::display(Display::InlineBlock))
+                .with(StyleDeclaration::width(Px(44.0)))
+                .with(StyleDeclaration::height(Px(44.0)))
+                .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+                  color,
+                ))))
+                .with(StyleDeclaration::vertical_align(align))
+                .with_border_width(Some(Sides([Px(2.0); 4])))
+                .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+                .with(StyleDeclaration::border_color(Some(ColorInput::Value(
+                  Color([30, 30, 30, 255]),
+                )))),
             ),
             children: None,
           }
@@ -82,17 +86,17 @@ fn inline_vertical_align_types() {
             preset: None,
             tw: None,
             style: Some(
-              StyleBuilder::default()
-                .display(Display::Inline)
-                .text_decoration(TextDecoration {
+              Style::default()
+                .with(StyleDeclaration::display(Display::Inline))
+                .with_text_decoration(TextDecoration {
                   line: TextDecorationLines::UNDERLINE,
                   style: None,
                   color: Some(ColorInput::Value(Color([220, 38, 38, 255]))),
                   thickness: Some(TextDecorationThickness::Length(Px(3.0))),
                 })
-                .text_decoration_skip_ink(TextDecorationSkipInk::None)
-                .build()
-                .unwrap(),
+                .with(StyleDeclaration::text_decoration_skip_ink(
+                  TextDecorationSkipInk::None,
+                )),
             ),
             text: " marker".to_string(),
           }
@@ -174,16 +178,16 @@ fn inline_vertical_align_types() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .display(Display::Flex)
-        .flex_direction(FlexDirection::Row)
-        .flex_wrap(FlexWrap::Wrap)
-        .padding(Sides([Px(8.0); 4]))
-        .background_color(ColorInput::Value(Color::white()))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Row))
+        .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
+        .with_padding(Sides([Px(8.0); 4]))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        )))),
     ),
     children: Some(children.into()),
   };

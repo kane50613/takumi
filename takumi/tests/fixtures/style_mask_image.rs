@@ -16,13 +16,13 @@ fn create_container_with_mask(
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(background_color))
-        .mask_image(Some(mask_image))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          background_color,
+        ))))
+        .with(StyleDeclaration::mask_image(Some(mask_image))),
     ),
     children: None,
   }
@@ -98,13 +98,11 @@ fn test_style_mask_image_with_background_image() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_image(Some(background_image))
-        .mask_image(Some(mask_image))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_image(Some(background_image)))
+        .with(StyleDeclaration::mask_image(Some(mask_image))),
     ),
     children: None,
   };
@@ -124,14 +122,14 @@ fn test_style_mask_image_on_image_node() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .justify_content(JustifyContent::Center)
-        .align_items(AlignItems::Center)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::align_items(AlignItems::Center)),
     ),
     children: Some(
       [ContainerNode {
@@ -141,12 +139,10 @@ fn test_style_mask_image_on_image_node() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .width(Rem(16.0))
-            .height(Rem(16.0))
-            .mask_image(Some(mask_image))
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::width(Rem(16.0)))
+            .with(StyleDeclaration::height(Rem(16.0)))
+            .with(StyleDeclaration::mask_image(Some(mask_image))),
         ),
         children: Some(
           vec![
@@ -157,11 +153,9 @@ fn test_style_mask_image_on_image_node() {
               preset: None,
               tw: None,
               style: Some(
-                StyleBuilder::default()
-                  .width(Percentage(100.0))
-                  .height(Percentage(100.0))
-                  .build()
-                  .unwrap(),
+                Style::default()
+                  .with(StyleDeclaration::width(Percentage(100.0)))
+                  .with(StyleDeclaration::height(Percentage(100.0))),
               ),
               src: "assets/images/yeecord.png".into(),
               width: None,

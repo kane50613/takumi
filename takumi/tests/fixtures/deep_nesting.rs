@@ -3,7 +3,7 @@ use takumi::layout::{
   style::{
     Color, ColorInput, Display, FlexDirection, FontWeight,
     Length::{Percentage, Px},
-    Sides, SpacePair, StyleBuilder,
+    Sides, SpacePair, Style, StyleDeclaration,
   },
 };
 use takumi::rendering::{RenderOptionsBuilder, measure_layout};
@@ -21,12 +21,12 @@ fn make_text_node(text: String) -> NodeKind {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .font_size(Some(Px(20.0)))
-        .font_weight(FontWeight::from(600.0))
-        .color(ColorInput::Value(Color([35, 35, 35, 255])))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::font_size(Some(Px(20.0))))
+        .with(StyleDeclaration::font_weight(FontWeight::from(600.0)))
+        .with(StyleDeclaration::color(ColorInput::Value(Color([
+          35, 35, 35, 255,
+        ])))),
     ),
     text,
   }
@@ -85,17 +85,19 @@ fn recursive_visual_node(level: usize, max_depth: usize) -> NodeKind {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .display(Display::Flex)
-        .flex_direction(FlexDirection::Column)
-        .gap(SpacePair::from_pair(Px(0.0), Px(8.0)))
-        .padding(Sides([Px(10.0), Px(10.0), Px(10.0), Px(14.0)]))
-        .margin(Sides([Px(0.0), Px(0.0), Px(0.0), Px(8.0)]))
-        .border_width(Some(Sides([Px(0.0), Px(0.0), Px(0.0), Px(3.0)])))
-        .border_color(Some(ColorInput::Value(Color([215, 132, 55, 255]))))
-        .background_color(ColorInput::Value(recursive_level_background(level)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with_gap(SpacePair::from_pair(Px(0.0), Px(8.0)))
+        .with_padding(Sides([Px(10.0), Px(10.0), Px(10.0), Px(14.0)]))
+        .with_margin(Sides([Px(0.0), Px(0.0), Px(0.0), Px(8.0)]))
+        .with_border_width(Some(Sides([Px(0.0), Px(0.0), Px(0.0), Px(3.0)])))
+        .with(StyleDeclaration::border_color(Some(ColorInput::Value(
+          Color([215, 132, 55, 255]),
+        ))))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          recursive_level_background(level),
+        )))),
     ),
     children: Some(children.into_boxed_slice()),
   }
@@ -110,15 +112,15 @@ fn recursive_visual_fixture_tree() -> NodeKind {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .display(Display::Flex)
-        .flex_direction(FlexDirection::Column)
-        .padding(Sides([Px(16.0); 4]))
-        .background_color(ColorInput::Value(Color([250, 248, 244, 255])))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with_padding(Sides([Px(16.0); 4]))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([250, 248, 244, 255]),
+        )))),
     ),
     children: Some([recursive_visual_node(0, VISUAL_RECURSIVE_DEPTH)].into()),
   }

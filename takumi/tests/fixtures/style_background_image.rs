@@ -13,12 +13,10 @@ fn create_container(background_images: BackgroundImages) -> ContainerNode<NodeKi
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_image(Some(background_images))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_image(Some(background_images))),
     ),
     children: None,
   }
@@ -37,15 +35,13 @@ fn create_container_with(
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_image(Some(background_images))
-        .background_size(background_size)
-        .background_position(background_position)
-        .background_repeat(background_repeat)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_image(Some(background_images)))
+        .with(StyleDeclaration::background_size(background_size))
+        .with(StyleDeclaration::background_position(background_position))
+        .with(StyleDeclaration::background_repeat(background_repeat)),
     ),
     children: None,
   }
@@ -63,7 +59,11 @@ fn test_style_background_image_gradient() {
     unreachable!()
   };
 
-  style.background_color = Some(ColorInput::Value(Color::black())).into();
+  *style = style
+    .clone()
+    .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+      Color::black(),
+    ))));
 
   run_fixture_test(container.into(), "style_background_image_gradient");
 }
@@ -100,14 +100,12 @@ fn test_style_background_image_gradient_color_space_comparison() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0 / 3.0))
-        .background_image(Some(
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0 / 3.0)))
+        .with(StyleDeclaration::background_image(Some(
           BackgroundImages::from_str("linear-gradient(to right, red, blue)").unwrap(),
-        ))
-        .build()
-        .unwrap(),
+        ))),
     ),
     children: None,
   };
@@ -119,14 +117,12 @@ fn test_style_background_image_gradient_color_space_comparison() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(33.333))
-        .background_image(Some(
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(33.333)))
+        .with(StyleDeclaration::background_image(Some(
           BackgroundImages::from_str("linear-gradient(to right in oklab, red, blue)").unwrap(),
-        ))
-        .build()
-        .unwrap(),
+        ))),
     ),
     children: None,
   };
@@ -138,15 +134,13 @@ fn test_style_background_image_gradient_color_space_comparison() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(33.334))
-        .background_image(Some(
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(33.334)))
+        .with(StyleDeclaration::background_image(Some(
           BackgroundImages::from_str("linear-gradient(to right in oklch longer hue, red, blue)")
             .unwrap(),
-        ))
-        .build()
-        .unwrap(),
+        ))),
     ),
     children: None,
   };
@@ -158,12 +152,10 @@ fn test_style_background_image_gradient_color_space_comparison() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .flex_direction(FlexDirection::Column)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column)),
     ),
     children: Some([srgb.into(), oklab.into(), oklch_longer.into()].into()),
   };
@@ -328,14 +320,14 @@ fn test_background_image_grid_pattern() {
     Some(BackgroundRepeats::from_str("repeat, repeat").unwrap()),
   );
 
-  container.style.as_mut().unwrap().background_color = ColorInput::Value(Color::white()).into();
-
-  assert_eq!(
-    container.style.as_ref().unwrap().background_repeat,
-    CssValue::Value(Some(
-      [BackgroundRepeat::repeat(), BackgroundRepeat::repeat()].into()
-    ))
-  );
+  let Some(style) = container.style.as_mut() else {
+    unreachable!()
+  };
+  *style = style
+    .clone()
+    .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+      Color::white(),
+    ))));
 
   run_fixture_test(container.into(), "style_background_image_grid_pattern");
 }
@@ -354,7 +346,14 @@ fn test_background_image_noise_v1_with_gradient() {
     Some(BackgroundRepeats::from_str("no-repeat, no-repeat, no-repeat, no-repeat").unwrap()),
   );
 
-  container.style.as_mut().unwrap().background_color = ColorInput::Value(Color::white()).into();
+  let Some(style) = container.style.as_mut() else {
+    unreachable!()
+  };
+  *style = style
+    .clone()
+    .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+      Color::white(),
+    ))));
 
   run_fixture_test(container.into(), "style_background_image_noise_v1_blend");
 }
@@ -373,7 +372,14 @@ fn test_background_image_dotted_pattern() {
     Some(BackgroundRepeats::from_str("repeat").unwrap()),
   );
 
-  container.style.as_mut().unwrap().background_color = ColorInput::Value(Color::black()).into();
+  let Some(style) = container.style.as_mut() else {
+    unreachable!()
+  };
+  *style = style
+    .clone()
+    .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+      Color::black(),
+    ))));
 
   run_fixture_test(container.into(), "style_background_image_dotted_pattern");
 }

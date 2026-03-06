@@ -15,15 +15,15 @@ fn test_stylesheets() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .display(Display::Flex)
-        .justify_content(JustifyContent::Center)
-        .align_items(AlignItems::Center)
-        .background_color(ColorInput::Value(Color([245, 245, 245, 255])))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([245, 245, 245, 255]),
+        )))),
     ),
     children: Some(
       [ContainerNode {
@@ -33,13 +33,11 @@ fn test_stylesheets() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .display(Display::Flex)
-            .flex_direction(FlexDirection::Column)
-            .justify_content(JustifyContent::Center)
-            .align_items(AlignItems::Center)
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::display(Display::Flex))
+            .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+            .with(StyleDeclaration::justify_content(JustifyContent::Center))
+            .with(StyleDeclaration::align_items(AlignItems::Center)),
         ),
         children: Some(
           [
@@ -121,15 +119,15 @@ fn test_stylesheets_background_multiple_gradients() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .display(Display::Flex)
-        .justify_content(JustifyContent::Center)
-        .align_items(AlignItems::Center)
-        .background_color(ColorInput::Value(Color([22, 22, 22, 255])))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([22, 22, 22, 255]),
+        )))),
     ),
     children: Some(
       [ContainerNode {
@@ -139,14 +137,12 @@ fn test_stylesheets_background_multiple_gradients() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .width(Px(700.0))
-            .height(Px(360.0))
-            .border_radius(Box::new(BorderRadius(Sides(
+          Style::default()
+            .with(StyleDeclaration::width(Px(700.0)))
+            .with(StyleDeclaration::height(Px(360.0)))
+            .with_border_radius(Box::new(BorderRadius(Sides(
               [SpacePair::from_single(Px(24.0)); 4],
-            ))))
-            .build()
-            .unwrap(),
+            )))),
         ),
         children: None,
       }

@@ -13,14 +13,14 @@ fn create_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color::white()))
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        ))))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center)),
     ),
     children: Some(
       [ContainerNode {
@@ -30,16 +30,16 @@ fn create_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .display(Display::Block)
-            .width(Px(200.0))
-            .height(Px(200.0))
-            .border_width(Some(Sides([Px(4.0); 4])))
-            .border_style(Some(BorderStyle::Solid))
-            .border_color(Some(Color([255, 0, 0, 255]).into()))
-            .overflow(overflows)
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::display(Display::Block))
+            .with(StyleDeclaration::width(Px(200.0)))
+            .with(StyleDeclaration::height(Px(200.0)))
+            .with_border_width(Some(Sides([Px(4.0); 4])))
+            .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+            .with(StyleDeclaration::border_color(Some(
+              Color([255, 0, 0, 255]).into(),
+            )))
+            .with_overflow(overflows),
         ),
         children: Some(
           [ImageNode {
@@ -49,14 +49,14 @@ fn create_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
             preset: None,
             tw: None,
             style: Some(
-              StyleBuilder::default()
-                .width(Px(300.0))
-                .height(Px(300.0))
-                .border_width(Some(Sides([Px(4.0); 4])))
-                .border_style(Some(BorderStyle::Solid))
-                .border_color(Some(Color([0, 255, 0, 255]).into()))
-                .build()
-                .unwrap(),
+              Style::default()
+                .with(StyleDeclaration::width(Px(300.0)))
+                .with(StyleDeclaration::height(Px(300.0)))
+                .with_border_width(Some(Sides([Px(4.0); 4])))
+                .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+                .with(StyleDeclaration::border_color(Some(
+                  Color([0, 255, 0, 255]).into(),
+                ))),
             ),
             width: None,
             height: None,
@@ -81,14 +81,12 @@ fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color::white()))
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(Color::white()))))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center)),
     ),
     children: Some([ContainerNode {
         class_name: None,
@@ -97,16 +95,14 @@ fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .display(Display::Block)
-            .width(Px(400.0))
-            .height(Px(200.0))
-            .border_width(Some(Sides([Px(4.0); 4])))
-            .border_style(Some(BorderStyle::Solid))
-            .border_color(Some(Color([0, 0, 0, 255]).into()))
-            .overflow(overflows)
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::display(Display::Block))
+            .with(StyleDeclaration::width(Px(400.0)))
+            .with(StyleDeclaration::height(Px(200.0)))
+            .with_border_width(Some(Sides([Px(4.0); 4])))
+            .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+            .with(StyleDeclaration::border_color(Some(Color([0, 0, 0, 255]).into())))
+            .with_overflow(overflows),
         ),
         children: Some([
           TextNode {
@@ -116,14 +112,12 @@ fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
             preset: None,
             tw: None,
             style: Some(
-              StyleBuilder::default()
-              .font_size(Some(Rem(4.0)))
-              .color(ColorInput::Value(Color([0, 0, 0, 255])))
-              .border_width(Some(Sides([Px(2.0); 4])))
-              .border_style(Some(BorderStyle::Solid))
-              .border_color(Some(Color([255, 0, 0, 255]).into()))
-              .build()
-              .unwrap(),
+              Style::default()
+                .with(StyleDeclaration::font_size(Some(Rem(4.0))))
+                .with(StyleDeclaration::color(ColorInput::Value(Color([0, 0, 0, 255]))))
+                .with_border_width(Some(Sides([Px(2.0); 4])))
+                .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+                .with(StyleDeclaration::border_color(Some(Color([255, 0, 0, 255]).into()))),
           ),
           text: "This is a very long text that should overflow the container and demonstrate text overflow behavior with a large font size of 4rem.".to_string(),
         }.into()].into()),

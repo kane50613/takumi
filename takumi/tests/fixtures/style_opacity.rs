@@ -13,18 +13,18 @@ fn create_test_container(opacity: f32) -> NodeKind {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Length::Percentage(8.0))
-        .height(Length::Percentage(6.0))
-        .border_radius(Box::new(BorderRadius(Sides(
+      Style::default()
+        .with(StyleDeclaration::width(Length::Percentage(8.0)))
+        .with(StyleDeclaration::height(Length::Percentage(6.0)))
+        .with_border_radius(Box::new(BorderRadius(Sides(
           [SpacePair::from_single(Length::Rem(1.0)); 4],
         ))))
-        .opacity(PercentageNumber(opacity))
-        .justify_content(JustifyContent::Center)
-        .align_items(AlignItems::Center)
-        .background_color(ColorInput::Value(Color([255, 0, 0, 255])))
-        .build()
-        .unwrap(),
+        .with(StyleDeclaration::opacity(PercentageNumber(opacity)))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([255, 0, 0, 255]),
+        )))),
     ),
     children: Some(
       [TextNode {
@@ -52,15 +52,15 @@ fn test_style_opacity() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Length::Percentage(100.0))
-        .height(Length::Percentage(100.0))
-        .justify_content(JustifyContent::Center)
-        .align_items(AlignItems::Center)
-        .background_color(ColorInput::Value(Color([255, 255, 255, 255])))
-        .gap(SpacePair::from_single(Length::Rem(4.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Length::Percentage(100.0)))
+        .with(StyleDeclaration::height(Length::Percentage(100.0)))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([255, 255, 255, 255]),
+        ))))
+        .with_gap(SpacePair::from_single(Length::Rem(4.0))),
     ),
     children: Some(
       [
@@ -85,16 +85,16 @@ fn test_style_opacity_image_with_text() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Length::Percentage(100.0))
-        .height(Length::Percentage(100.0))
-        .justify_content(JustifyContent::Center)
-        .align_items(AlignItems::Center)
-        .flex_direction(FlexDirection::Column)
-        .gap(SpacePair::from_single(Length::Rem(2.0)))
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Length::Percentage(100.0)))
+        .with(StyleDeclaration::height(Length::Percentage(100.0)))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with_gap(SpacePair::from_single(Length::Rem(2.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        )))),
     ),
     children: Some(
       [
@@ -105,12 +105,10 @@ fn test_style_opacity_image_with_text() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .width(Length::Rem(20.0))
-              .height(Length::Rem(20.0))
-              .opacity(PercentageNumber(0.5))
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::width(Length::Rem(20.0)))
+              .with(StyleDeclaration::height(Length::Rem(20.0)))
+              .with(StyleDeclaration::opacity(PercentageNumber(0.5))),
           ),
           children: Some(
             [ImageNode {
@@ -120,11 +118,9 @@ fn test_style_opacity_image_with_text() {
               preset: None,
               tw: None,
               style: Some(
-                StyleBuilder::default()
-                  .width(Length::Percentage(100.0))
-                  .height(Length::Percentage(100.0))
-                  .build()
-                  .unwrap(),
+                Style::default()
+                  .with(StyleDeclaration::width(Length::Percentage(100.0)))
+                  .with(StyleDeclaration::height(Length::Percentage(100.0))),
               ),
               src: "assets/images/yeecord.png".into(),
               width: None,
@@ -142,14 +138,14 @@ fn test_style_opacity_image_with_text() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .display(Display::Block)
-              .font_size(Some(Length::Rem(3.0)))
-              .font_weight(FontWeight::from(700.0))
-              .color(ColorInput::Value(Color([60, 60, 60, 255])))
-              .opacity(PercentageNumber(0.5))
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::display(Display::Block))
+              .with(StyleDeclaration::font_size(Some(Length::Rem(3.0))))
+              .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
+              .with(StyleDeclaration::color(ColorInput::Value(Color([
+                60, 60, 60, 255,
+              ]))))
+              .with(StyleDeclaration::opacity(PercentageNumber(0.5))),
           ),
           text: "0.5".to_string(),
         }
@@ -171,19 +167,19 @@ fn test_style_opacity_flex_text_node_vs_nested_container() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Length::Px(300.0))
-        .height(Length::Px(220.0))
-        .display(Display::Flex)
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .font_size(Some(Length::Px(120.0)))
-        .font_weight(FontWeight::from(700.0))
-        .color(ColorInput::Value(Color::black()))
-        .opacity(PercentageNumber(0.5))
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Length::Px(300.0)))
+        .with(StyleDeclaration::height(Length::Px(220.0)))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::font_size(Some(Length::Px(120.0))))
+        .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
+        .with(StyleDeclaration::color(ColorInput::Value(Color::black())))
+        .with(StyleDeclaration::opacity(PercentageNumber(0.5)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        )))),
     ),
     text: "A".to_string(),
   }
@@ -196,16 +192,16 @@ fn test_style_opacity_flex_text_node_vs_nested_container() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Length::Px(300.0))
-        .height(Length::Px(220.0))
-        .display(Display::Flex)
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .opacity(PercentageNumber(0.5))
-        .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Length::Px(300.0)))
+        .with(StyleDeclaration::height(Length::Px(220.0)))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::opacity(PercentageNumber(0.5)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        )))),
     ),
     children: Some(
       [TextNode {
@@ -215,13 +211,11 @@ fn test_style_opacity_flex_text_node_vs_nested_container() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .display(Display::Block)
-            .font_size(Some(Length::Px(120.0)))
-            .font_weight(FontWeight::from(700.0))
-            .color(ColorInput::Value(Color::black()))
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::display(Display::Block))
+            .with(StyleDeclaration::font_size(Some(Length::Px(120.0))))
+            .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
+            .with(StyleDeclaration::color(ColorInput::Value(Color::black()))),
         ),
         text: "A".to_string(),
       }
@@ -238,16 +232,16 @@ fn test_style_opacity_flex_text_node_vs_nested_container() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Length::Percentage(100.0))
-        .height(Length::Percentage(100.0))
-        .display(Display::Flex)
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .gap(SpacePair::from_single(Length::Px(48.0)))
-        .background_color(ColorInput::Value(Color::white()))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Length::Percentage(100.0)))
+        .with(StyleDeclaration::height(Length::Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with_gap(SpacePair::from_single(Length::Px(48.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color::white(),
+        )))),
     ),
     children: Some([left, right].into()),
   };

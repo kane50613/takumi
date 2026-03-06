@@ -5,7 +5,7 @@ use takumi::{
     node::{ContainerNode, ImageNode, NodeKind, TextNode},
     style::{
       Affine, AlignItems, Color, ColorInput, Display, FlexDirection, JustifyContent, Length::*,
-      Position, Sides, StyleBuilder,
+      Position, Sides, Style, StyleDeclaration,
     },
   },
   rendering::{MeasuredNode, MeasuredTextRun, RenderOptionsBuilder, measure_layout},
@@ -21,12 +21,12 @@ fn test_measure_simple_container() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Px(100.0))
-        .height(Px(100.0))
-        .background_color(ColorInput::Value(Color([255, 0, 0, 255])))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Px(100.0)))
+        .with(StyleDeclaration::height(Px(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([255, 0, 0, 255]),
+        )))),
     ),
     children: None,
   }
@@ -63,11 +63,9 @@ fn test_measure_text_node() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Px(300.0))
-        .font_size(Some(Px(20.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Px(300.0)))
+        .with(StyleDeclaration::font_size(Some(Px(20.0)))),
     ),
     text: "Hello World".to_string(),
   }
@@ -116,15 +114,13 @@ fn test_measure_flex_text_node_centers_inner_text() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Px(300.0))
-        .height(Px(120.0))
-        .display(Display::Flex)
-        .justify_content(JustifyContent::Center)
-        .align_items(AlignItems::Center)
-        .font_size(Some(Px(20.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Px(300.0)))
+        .with(StyleDeclaration::height(Px(120.0)))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::font_size(Some(Px(20.0)))),
     ),
     text: "Hello World".to_string(),
   }
@@ -173,15 +169,13 @@ fn test_measure_flex_text_node_anonymous_item_uses_intrinsic_size() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Px(300.0))
-        .height(Px(120.0))
-        .display(Display::Flex)
-        .justify_content(JustifyContent::Center)
-        .align_items(AlignItems::Center)
-        .font_size(Some(Px(20.0)))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Px(300.0)))
+        .with(StyleDeclaration::height(Px(120.0)))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::font_size(Some(Px(20.0)))),
     ),
     text: "Hello World".to_string(),
   }
@@ -223,13 +217,11 @@ fn test_measure_inline_layout() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Px(400.0))
-        .height(Px(300.0))
-        .font_size(Some(Px(20.0)))
-        .display(Display::Block)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Px(400.0)))
+        .with(StyleDeclaration::height(Px(300.0)))
+        .with(StyleDeclaration::font_size(Some(Px(20.0))))
+        .with(StyleDeclaration::display(Display::Block)),
     ),
     children: Some(
       vec![
@@ -239,12 +231,7 @@ fn test_measure_inline_layout() {
           tag_name: None,
           preset: None,
           tw: None,
-          style: Some(
-            StyleBuilder::default()
-              .display(Display::Inline)
-              .build()
-              .unwrap(),
-          ),
+          style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
           text: "Hello World".to_string(),
         }
         .into(),
@@ -255,11 +242,11 @@ fn test_measure_inline_layout() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .display(Display::Inline)
-              .background_color(ColorInput::Value(Color([255, 0, 0, 255])))
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::display(Display::Inline))
+              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+                Color([255, 0, 0, 255]),
+              )))),
           ),
           width: None,
           height: None,
@@ -272,12 +259,7 @@ fn test_measure_inline_layout() {
           tag_name: None,
           preset: None,
           tw: None,
-          style: Some(
-            StyleBuilder::default()
-              .display(Display::Inline)
-              .build()
-              .unwrap(),
-          ),
+          style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
           text: "This is Takumi Speaking".to_string(),
         }
         .into(),
@@ -348,11 +330,9 @@ fn test_measure_svg_attr_size_in_absolute_flex_container() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0))),
     ),
     children: Some(
       [ContainerNode {
@@ -362,12 +342,10 @@ fn test_measure_svg_attr_size_in_absolute_flex_container() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .position(Position::Absolute)
-            .inset(Sides([Auto, Px(40.0), Px(40.0), Auto]))
-            .display(Display::Flex)
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::position(Position::Absolute))
+            .with_inset(Sides([Auto, Px(40.0), Px(40.0), Auto]))
+            .with(StyleDeclaration::display(Display::Flex)),
         ),
         children: Some(
           [ImageNode {
@@ -429,16 +407,14 @@ fn test_measure_svg_attr_size_in_absolute_flex_container_with_parent_padding() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .position(Position::Relative)
-        .display(Display::Flex)
-        .flex_direction(FlexDirection::Column)
-        .justify_content(JustifyContent::Center)
-        .padding(Sides([Px(60.0); 4]))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::position(Position::Relative))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with_padding(Sides([Px(60.0); 4])),
     ),
     children: Some(
       [ContainerNode {
@@ -448,12 +424,10 @@ fn test_measure_svg_attr_size_in_absolute_flex_container_with_parent_padding() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .position(Position::Absolute)
-            .inset(Sides([Auto, Px(60.0), Px(60.0), Auto]))
-            .display(Display::Flex)
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::position(Position::Absolute))
+            .with_inset(Sides([Auto, Px(60.0), Px(60.0), Auto]))
+            .with(StyleDeclaration::display(Display::Flex)),
         ),
         children: Some(
           [ImageNode {
@@ -515,13 +489,11 @@ fn test_measure_svg_with_width_only_preserves_intrinsic_ratio() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .display(Display::Flex)
-        .flex_direction(FlexDirection::Column)
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column)),
     ),
     children: Some(
       [ImageNode {
@@ -530,7 +502,7 @@ fn test_measure_svg_with_width_only_preserves_intrinsic_ratio() {
         tag_name: Some("svg".into()),
         preset: None,
         tw: None,
-        style: Some(StyleBuilder::default().width(Px(96.0)).build().unwrap()),
+        style: Some(Style::default().with(StyleDeclaration::width(Px(96.0)))),
         src: svg.into(),
         width: None,
         height: None,
@@ -600,25 +572,18 @@ fn test_measure_img_svg_attribute_sizing_cases() {
       preset: None,
       tw: None,
       style: Some(
-        StyleBuilder::default()
-          .width(Percentage(100.0))
-          .height(Percentage(100.0))
-          .display(Display::Flex)
-          .flex_direction(FlexDirection::Column)
-          .build()
-          .unwrap(),
+        Style::default()
+          .with(StyleDeclaration::width(Percentage(100.0)))
+          .with(StyleDeclaration::height(Percentage(100.0)))
+          .with(StyleDeclaration::display(Display::Flex))
+          .with(StyleDeclaration::flex_direction(FlexDirection::Column)),
       ),
       children: Some(
         [ImageNode {
           class_name: None,
           id: None,
           tag_name: Some("img".into()),
-          preset: Some(
-            StyleBuilder::default()
-              .display(Display::Inline)
-              .build()
-              .unwrap(),
-          ),
+          preset: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
           tw: None,
           style: None,
           src: svg.into(),

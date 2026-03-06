@@ -3,7 +3,7 @@ use takumi::layout::{
   style::{
     AlignItems, Color, ColorInput, Display, JustifyContent,
     Length::{Percentage, Px},
-    StyleBuilder,
+    Style, StyleDeclaration,
   },
 };
 
@@ -18,14 +18,14 @@ fn test_style_align_items() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .display(Display::Flex)
-        .align_items(AlignItems::Center)
-        .background_color(ColorInput::Value(Color([0, 0, 255, 255])))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([0, 0, 255, 255]),
+        )))),
     ),
     children: Some(
       [
@@ -36,12 +36,12 @@ fn test_style_align_items() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .width(Px(50.0))
-              .height(Px(50.0))
-              .background_color(ColorInput::Value(Color([255, 0, 0, 255])))
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::width(Px(50.0)))
+              .with(StyleDeclaration::height(Px(50.0)))
+              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+                Color([255, 0, 0, 255]),
+              )))),
           ),
           children: None,
         }
@@ -53,12 +53,12 @@ fn test_style_align_items() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .width(Px(50.0))
-              .height(Px(50.0))
-              .background_color(ColorInput::Value(Color([0, 255, 0, 255])))
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::width(Px(50.0)))
+              .with(StyleDeclaration::height(Px(50.0)))
+              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+                Color([0, 255, 0, 255]),
+              )))),
           ),
           children: None,
         }
@@ -70,12 +70,12 @@ fn test_style_align_items() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .width(Px(50.0))
-              .height(Px(50.0))
-              .background_color(ColorInput::Value(Color([255, 255, 0, 255])))
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::width(Px(50.0)))
+              .with(StyleDeclaration::height(Px(50.0)))
+              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+                Color([255, 255, 0, 255]),
+              )))),
           ),
           children: None,
         }
@@ -97,14 +97,14 @@ fn test_style_justify_content() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .display(Display::Flex)
-        .justify_content(JustifyContent::Center)
-        .background_color(ColorInput::Value(Color([0, 0, 255, 255])))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([0, 0, 255, 255]),
+        )))),
     ),
     children: Some(
       [
@@ -115,12 +115,12 @@ fn test_style_justify_content() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .width(Px(50.0))
-              .height(Px(50.0))
-              .background_color(ColorInput::Value(Color([255, 0, 0, 255])))
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::width(Px(50.0)))
+              .with(StyleDeclaration::height(Px(50.0)))
+              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+                Color([255, 0, 0, 255]),
+              )))),
           ),
           children: None,
         }
@@ -132,12 +132,12 @@ fn test_style_justify_content() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .width(Px(50.0))
-              .height(Px(50.0))
-              .background_color(ColorInput::Value(Color([0, 255, 0, 255])))
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::width(Px(50.0)))
+              .with(StyleDeclaration::height(Px(50.0)))
+              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+                Color([0, 255, 0, 255]),
+              )))),
           ),
           children: None,
         }
@@ -149,12 +149,12 @@ fn test_style_justify_content() {
           preset: None,
           tw: None,
           style: Some(
-            StyleBuilder::default()
-              .width(Px(50.0))
-              .height(Px(50.0))
-              .background_color(ColorInput::Value(Color([255, 255, 0, 255])))
-              .build()
-              .unwrap(),
+            Style::default()
+              .with(StyleDeclaration::width(Px(50.0)))
+              .with(StyleDeclaration::height(Px(50.0)))
+              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+                Color([255, 255, 0, 255]),
+              )))),
           ),
           children: None,
         }

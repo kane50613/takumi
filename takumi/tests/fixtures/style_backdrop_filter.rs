@@ -14,18 +14,20 @@ fn create_backdrop_card(filter: &str, label_font_size_px: f32) -> NodeKind {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .display(Display::Flex)
-        .flex_direction(FlexDirection::Column)
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .backdrop_filter(Filters::from_str(filter).unwrap())
-        .background_color(ColorInput::Value(Color([255, 255, 255, 60])))
-        .font_size(Some(Px(label_font_size_px)))
-        .color(ColorInput::Value(Color::black()))
-        .padding(Sides([Px(8.0); 4]))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::backdrop_filter(
+          Filters::from_str(filter).unwrap(),
+        ))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([255, 255, 255, 60]),
+        ))))
+        .with(StyleDeclaration::font_size(Some(Px(label_font_size_px))))
+        .with(StyleDeclaration::color(ColorInput::Value(Color::black())))
+        .with_padding(Sides([Px(8.0); 4])),
     ),
     children: Some(
       [TextNode {
@@ -76,19 +78,19 @@ fn test_style_backdrop_filter() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .display(Display::Grid)
-        .grid_template_columns(GridTemplateComponents::from_str("repeat(4, 1fr)").ok())
-        .background_image(Some(
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Grid))
+        .with(StyleDeclaration::grid_template_columns(
+          GridTemplateComponents::from_str("repeat(4, 1fr)").ok(),
+        ))
+        .with(StyleDeclaration::background_image(Some(
           BackgroundImages::from_str(
             "linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f857a6 50%, #ff5858 75%, #ffb199 100%)",
           )
           .unwrap(),
-        ))
-        .build()
-        .unwrap(),
+        ))),
     ),
     children: Some(
       filter_effects
@@ -111,18 +113,18 @@ fn test_style_backdrop_filter_frosted_glass() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .display(Display::Flex)
-        .align_items(AlignItems::Center)
-        .justify_content(JustifyContent::Center)
-        .background_image(Some(
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::background_image(Some(
           BackgroundImages::from_str("url(assets/images/yeecord.png)").unwrap(),
-        ))
-        .background_size(Some(BackgroundSizes::from_str("cover").unwrap()))
-        .build()
-        .unwrap(),
+        )))
+        .with(StyleDeclaration::background_size(Some(
+          BackgroundSizes::from_str("cover").unwrap(),
+        ))),
     ),
     children: Some(
       [ContainerNode {
@@ -132,18 +134,20 @@ fn test_style_backdrop_filter_frosted_glass() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .display(Display::Flex)
-            .flex_direction(FlexDirection::Column)
-            .align_items(AlignItems::Center)
-            .justify_content(JustifyContent::Center)
-            .backdrop_filter(Filters::from_str("blur(16px)").unwrap())
-            .background_color(ColorInput::Value(Color([255, 255, 255, 80])))
-            .border_radius(Box::new(BorderRadius::from_str("24px").unwrap()))
-            .padding(Sides([Px(48.0); 4]))
-            .gap(SpacePair::from_pair(Px(16.0), Px(16.0)))
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::display(Display::Flex))
+            .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+            .with(StyleDeclaration::align_items(AlignItems::Center))
+            .with(StyleDeclaration::justify_content(JustifyContent::Center))
+            .with(StyleDeclaration::backdrop_filter(
+              Filters::from_str("blur(16px)").unwrap(),
+            ))
+            .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              Color([255, 255, 255, 80]),
+            ))))
+            .with_border_radius(Box::new(BorderRadius::from_str("24px").unwrap()))
+            .with_padding(Sides([Px(48.0); 4]))
+            .with_gap(SpacePair::from_pair(Px(16.0), Px(16.0))),
         ),
         children: Some(
           [
@@ -154,12 +158,12 @@ fn test_style_backdrop_filter_frosted_glass() {
               preset: None,
               tw: None,
               style: Some(
-                StyleBuilder::default()
-                  .font_size(Some(Px(48.0)))
-                  .font_weight(FontWeight::from(700.0))
-                  .color(ColorInput::Value(Color([0, 0, 0, 200])))
-                  .build()
-                  .unwrap(),
+                Style::default()
+                  .with(StyleDeclaration::font_size(Some(Px(48.0))))
+                  .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
+                  .with(StyleDeclaration::color(ColorInput::Value(Color([
+                    0, 0, 0, 200,
+                  ])))),
               ),
               text: "Frosted Glass".to_string(),
             }
@@ -171,11 +175,11 @@ fn test_style_backdrop_filter_frosted_glass() {
               preset: None,
               tw: None,
               style: Some(
-                StyleBuilder::default()
-                  .font_size(Some(Px(24.0)))
-                  .color(ColorInput::Value(Color([0, 0, 0, 150])))
-                  .build()
-                  .unwrap(),
+                Style::default()
+                  .with(StyleDeclaration::font_size(Some(Px(24.0))))
+                  .with(StyleDeclaration::color(ColorInput::Value(Color([
+                    0, 0, 0, 150,
+                  ])))),
               ),
               text: "backdrop-filter: blur(16px)".to_string(),
             }
