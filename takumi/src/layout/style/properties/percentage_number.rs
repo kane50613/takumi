@@ -3,10 +3,11 @@ use std::ops::{Deref, Neg};
 use cssparser::{Parser, Token};
 
 use crate::layout::style::{
-  MakeComputed,
+  Animatable, Color, MakeComputed,
   properties::{FromCss, ParseResult},
   tw::TailwindPropertyParser,
 };
+use crate::rendering::Sizing;
 
 use super::CssToken;
 
@@ -18,6 +19,19 @@ use super::CssToken;
 pub struct PercentageNumber(pub f32);
 
 impl MakeComputed for PercentageNumber {}
+
+impl Animatable for PercentageNumber {
+  fn interpolate(
+    &mut self,
+    from: Self,
+    to: &Self,
+    progress: f32,
+    _sizing: &Sizing,
+    _current_color: Color,
+  ) {
+    *self = Self(from.0 + (to.0 - from.0) * progress);
+  }
+}
 
 impl Default for PercentageNumber {
   fn default() -> Self {

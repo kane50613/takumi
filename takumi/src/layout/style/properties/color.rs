@@ -10,9 +10,10 @@ use image::Rgba;
 
 use crate::{
   layout::style::{
-    CssToken, FromCss, MakeComputed, ParseResult, PercentageNumber, tw::TailwindPropertyParser,
+    Animatable, Color as CurrentColor, CssToken, FromCss, MakeComputed, ParseResult,
+    PercentageNumber, tw::TailwindPropertyParser,
   },
-  rendering::fast_div_255,
+  rendering::{Sizing, fast_div_255},
 };
 
 fn is_cylindrical_color_space(color_space: ColorSpaceTag) -> bool {
@@ -123,6 +124,44 @@ pub enum ColorInput<const DEFAULT_CURRENT_COLOR: bool = true> {
 }
 
 impl<const DEFAULT_CURRENT_COLOR: bool> MakeComputed for ColorInput<DEFAULT_CURRENT_COLOR> {}
+
+impl<const DEFAULT_CURRENT_COLOR: bool> Animatable for ColorInput<DEFAULT_CURRENT_COLOR> {
+  fn interpolate(
+    &mut self,
+    from: Self,
+    to: &Self,
+    progress: f32,
+    _sizing: &Sizing,
+    current_color: CurrentColor,
+  ) {
+    fn lerp(lhs: f32, rhs: f32, progress: f32) -> f32 {
+      lhs + (rhs - lhs) * progress
+    }
+
+    fn interpolate_color(from: Color, to: Color, progress: f32) -> Color {
+      let [r1, g1, b1, a1] = from.0;
+      let [r2, g2, b2, a2] = to.0;
+      Color([
+        lerp(r1 as f32, r2 as f32, progress).round() as u8,
+        lerp(g1 as f32, g2 as f32, progress).round() as u8,
+        lerp(b1 as f32, b2 as f32, progress).round() as u8,
+        lerp(a1 as f32, a2 as f32, progress).round() as u8,
+      ])
+    }
+
+    *self = match (from, to) {
+      (ColorInput::Value(lhs), ColorInput::Value(rhs)) => {
+        ColorInput::Value(interpolate_color(lhs, *rhs, progress))
+      }
+      (ColorInput::CurrentColor, ColorInput::CurrentColor) => ColorInput::CurrentColor,
+      _ => ColorInput::Value(interpolate_color(
+        from.resolve(current_color),
+        to.resolve(current_color),
+        progress,
+      )),
+    };
+  }
+}
 
 impl<const DEFAULT_CURRENT_COLOR: bool> Default for ColorInput<DEFAULT_CURRENT_COLOR> {
   fn default() -> Self {

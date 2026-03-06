@@ -191,6 +191,22 @@ macro_rules! define_style {
           _ => unreachable!("StyleDeclaration property/value variant mismatch"),
         }
       }
+
+      #[inline(never)]
+      pub(crate) fn apply_to_resolved(&self, style: &mut ResolvedStyle) {
+        match (&self.property, &self.value) {
+          (PropertyId::Ignored, StyleDeclarationValue::Ignored) => {}
+          $(
+            (PropertyId::$property, StyleDeclarationValue::$property(value)) => {
+              style.$property = value.clone();
+            }
+          )*
+          #[cfg(not(debug_assertions))]
+          _ => {}
+          #[cfg(debug_assertions)]
+          _ => unreachable!("StyleDeclaration property/value variant mismatch"),
+        }
+      }
     }
 
     pub(crate) type StyleDeclarations = SmallVec<[StyleDeclaration; 8]>;
@@ -294,6 +310,26 @@ macro_rules! define_style {
       pub(crate) fn make_computed_values(&mut self, sizing: &Sizing) {
         $(
           self.$property.make_computed(sizing);
+        )*
+      }
+
+      #[cfg(feature = "css_stylesheet_parsing")]
+      pub(crate) fn apply_interpolated_properties(
+        &mut self,
+        from: Self,
+        to: &Self,
+        progress: f32,
+        sizing: &Sizing,
+        current_color: Color,
+      ) {
+        $(
+          self.$property.interpolate(
+            from.$property,
+            &to.$property,
+            progress,
+            sizing,
+            current_color,
+          );
         )*
       }
     }

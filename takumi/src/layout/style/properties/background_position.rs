@@ -3,7 +3,8 @@ use taffy::{Point, Size};
 
 use crate::{
   layout::style::{
-    CssToken, FromCss, Length, MakeComputed, ParseResult, SpacePair, tw::TailwindPropertyParser,
+    Animatable, Color, CssToken, FromCss, Length, MakeComputed, ParseResult, SpacePair,
+    tw::TailwindPropertyParser,
   },
   rendering::Sizing,
 };
@@ -49,6 +50,27 @@ impl MakeComputed for PositionComponent {
   }
 }
 
+impl Animatable for PositionComponent {
+  fn interpolate(
+    &mut self,
+    from: Self,
+    to: &Self,
+    progress: f32,
+    sizing: &Sizing,
+    current_color: Color,
+  ) {
+    let mut length = Length::from(from);
+    length.interpolate(
+      Length::from(from),
+      &Length::from(*to),
+      progress,
+      sizing,
+      current_color,
+    );
+    *self = PositionComponent::Length(length);
+  }
+}
+
 impl From<Length> for PositionComponent {
   fn from(value: Length) -> Self {
     PositionComponent::Length(value)
@@ -80,6 +102,21 @@ pub struct BackgroundPosition(pub SpacePair<PositionComponent>);
 impl MakeComputed for BackgroundPosition {
   fn make_computed(&mut self, sizing: &Sizing) {
     self.0.make_computed(sizing);
+  }
+}
+
+impl Animatable for BackgroundPosition {
+  fn interpolate(
+    &mut self,
+    from: Self,
+    to: &Self,
+    progress: f32,
+    sizing: &Sizing,
+    current_color: Color,
+  ) {
+    let mut value = from.0;
+    value.interpolate(from.0, &to.0, progress, sizing, current_color);
+    self.0 = value;
   }
 }
 

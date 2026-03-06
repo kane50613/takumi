@@ -855,7 +855,7 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
         parent_context.sizing.viewport,
       );
       let mut style = style_layers.inherit(&parent_context.style);
-      style = apply_stylesheet_animations(&style, parent_context);
+      style = apply_stylesheet_animations(style, parent_context);
 
       let font_size = style
         .font_size

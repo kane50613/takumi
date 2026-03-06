@@ -7,8 +7,8 @@ use super::gradient_utils::{
   resolve_stops_along_axis,
 };
 use crate::layout::style::{
-  Color, ColorInterpolationMethod, CssToken, FromCss, Length, MakeComputed, ParseResult,
-  declare_enum_from_css_impl, properties::ColorInput, tw::TailwindPropertyParser,
+  Animatable, Color, ColorInterpolationMethod, CssToken, FromCss, Length, MakeComputed,
+  ParseResult, declare_enum_from_css_impl, properties::ColorInput, tw::TailwindPropertyParser,
 };
 use crate::rendering::{BufferPool, RenderContext, Sizing};
 
@@ -329,6 +329,19 @@ impl<'i> FromCss<'i> for GradientStop {
 pub struct Angle(f32);
 
 impl MakeComputed for Angle {}
+
+impl Animatable for Angle {
+  fn interpolate(
+    &mut self,
+    from: Self,
+    to: &Self,
+    progress: f32,
+    _sizing: &Sizing,
+    _current_color: Color,
+  ) {
+    *self = Angle::new(*from + (**to - *from) * progress);
+  }
+}
 
 impl From<Angle> for zeno::Angle {
   fn from(angle: Angle) -> Self {

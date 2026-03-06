@@ -181,69 +181,85 @@ fn save_image<P: AsRef<Path>>(image: RgbaImage, path: P, format: ImageOutputForm
 }
 
 #[allow(dead_code)]
-pub fn run_webp_animation_test(
-  nodes: Vec<(NodeKind, u32)>,
-  fixture_name: &str,
-  options: AnimatedWebpOptions,
-) {
-  assert!(!nodes.is_empty());
+pub(crate) fn run_animation_fixture_test<'g, Frames>(
+  frames: Frames,
+  fixture_id: &str,
+  duration_ms: u32,
+  fps: u32,
+) where
+  Frames: IntoAnimationFixtureFrames<'g>,
+{
+  assert!(duration_ms > 0);
+  assert!(fps > 0);
 
-  let viewport = create_test_viewport();
-  let frames = build_animation_frames(nodes, viewport);
+  let frame_duration_ms = ((1000.0 / fps as f32).round() as u32).max(1);
+  let expected_frame_count = duration_ms.div_ceil(frame_duration_ms).max(1) as usize;
+  let frames = frames.into_frames(frame_duration_ms);
+  assert!(!frames.is_empty());
+  assert_eq!(frames.len(), expected_frame_count);
 
-  let fixture_path = format!("tests/fixtures-generated/{}", fixture_name);
-  let mut out = File::create(fixture_path).unwrap();
-  encode_animated_webp(Cow::Owned(frames), &mut out, options).unwrap();
+  let mut webp = File::create(format!("tests/fixtures-generated/{fixture_id}.webp")).unwrap();
+  encode_animated_webp(
+    Cow::Owned(frames.clone()),
+    &mut webp,
+    AnimatedWebpOptions::default(),
+  )
+  .unwrap();
+
+  let mut png = File::create(format!("tests/fixtures-generated/{fixture_id}.png")).unwrap();
+  encode_animated_png(&frames, &mut png, AnimatedPngOptions::default()).unwrap();
+
+  let mut gif = File::create(format!("tests/fixtures-generated/{fixture_id}.gif")).unwrap();
+  encode_animated_gif(Cow::Owned(frames), &mut gif, AnimatedGifOptions::default()).unwrap();
 }
 
-#[allow(dead_code)]
-pub fn run_png_animation_test(
-  nodes: Vec<(NodeKind, u32)>,
-  fixture_name: &str,
-  options: AnimatedPngOptions,
-) {
-  assert!(!nodes.is_empty());
-
-  let viewport = create_test_viewport();
-  let frames = build_animation_frames(nodes, viewport);
-
-  let fixture_path = format!("tests/fixtures-generated/{}", fixture_name);
-  let mut out = File::create(fixture_path).unwrap();
-  encode_animated_png(&frames, &mut out, options).unwrap();
+pub(crate) trait IntoAnimationFixtureFrames<'g> {
+  fn into_frames(self, frame_duration_ms: u32) -> Vec<AnimationFrame>;
 }
 
-#[allow(dead_code)]
-pub fn run_gif_animation_test(
-  nodes: Vec<(NodeKind, u32)>,
-  fixture_name: &str,
-  options: AnimatedGifOptions,
-) {
-  assert!(!nodes.is_empty());
-
-  let viewport = create_test_viewport();
-  let frames = build_animation_frames(nodes, viewport);
-
-  let fixture_path = format!("tests/fixtures-generated/{}", fixture_name);
-  let mut out = File::create(fixture_path).unwrap();
-  encode_animated_gif(Cow::Owned(frames), &mut out, options).unwrap();
+impl IntoAnimationFixtureFrames<'_> for Vec<AnimationFrame> {
+  fn into_frames(self, _: u32) -> Vec<AnimationFrame> {
+    self
+  }
 }
 
-fn build_animation_frames(nodes: Vec<(NodeKind, u32)>, viewport: Viewport) -> Vec<AnimationFrame> {
-  nodes
+impl IntoAnimationFixtureFrames<'_> for Vec<NodeKind> {
+  fn into_frames(self, frame_duration_ms: u32) -> Vec<AnimationFrame> {
+    let viewport = create_test_viewport();
+
+    build_animation_frames(
+      self
+        .into_iter()
+        .map(|node| {
+          (
+            RenderOptionsBuilder::default()
+              .viewport(viewport)
+              .node(node)
+              .global(&CONTEXT)
+              .build()
+              .unwrap(),
+            frame_duration_ms,
+          )
+        })
+        .collect(),
+    )
+  }
+}
+
+impl<'g> IntoAnimationFixtureFrames<'g> for Vec<RenderOptions<'g, NodeKind>> {
+  fn into_frames(self, frame_duration_ms: u32) -> Vec<AnimationFrame> {
+    build_animation_frames(
+      self
+        .into_iter()
+        .map(|options| (options, frame_duration_ms))
+        .collect(),
+    )
+  }
+}
+
+fn build_animation_frames(options: Vec<(RenderOptions<'_, NodeKind>, u32)>) -> Vec<AnimationFrame> {
+  options
     .into_par_iter()
-    .map(|(node, duration_ms)| {
-      AnimationFrame::new(
-        render(
-          RenderOptionsBuilder::default()
-            .viewport(viewport)
-            .node(node)
-            .global(&CONTEXT)
-            .build()
-            .unwrap(),
-        )
-        .unwrap(),
-        duration_ms,
-      )
-    })
+    .map(|(options, duration_ms)| AnimationFrame::new(render(options).unwrap(), duration_ms))
     .collect()
 }
