@@ -163,12 +163,14 @@ fn create_rotated_container(angle: f32, transform_origin: BackgroundPosition) ->
     tw: None,
     style: Some(
       Style::default()
-        .with_translate(Some(SpacePair::from_single(Percentage(-50.0))))
+        .with(StyleDeclaration::translate(SpacePair::from_single(
+          Percentage(-50.0),
+        )))
         .with(StyleDeclaration::rotate(Some(Angle::new(angle))))
         .with(StyleDeclaration::position(Position::Absolute))
         .with(StyleDeclaration::top(Some(Percentage(50.0))))
         .with(StyleDeclaration::left(Some(Percentage(50.0))))
-        .with(StyleDeclaration::transform_origin(Some(transform_origin)))
+        .with(StyleDeclaration::transform_origin(transform_origin))
         .with(StyleDeclaration::width(Px(200.0)))
         .with(StyleDeclaration::height(Px(200.0)))
         .with(StyleDeclaration::background_color(Some(ColorInput::Value(
@@ -248,7 +250,9 @@ fn test_style_transform_translate_and_scale() {
         .with(StyleDeclaration::height(Px(300.0)))
         .with_border_width(Some(Sides([Px(1.0); 4])))
         .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
-        .with_translate(Some(SpacePair::from_single(Px(300.0))))
+        .with(StyleDeclaration::translate(SpacePair::from_single(Px(
+          300.0,
+        ))))
         .with(StyleDeclaration::background_color(Some(ColorInput::Value(
           Color([0, 128, 255, 255]),
         )))),
@@ -282,7 +286,9 @@ fn test_style_transform_translate_and_scale() {
     tw: None,
     style: Some(
       Style::default()
-        .with_scale(Some(SpacePair::from_single(PercentageNumber(2.0))))
+        .with(StyleDeclaration::scale(SpacePair::from_single(
+          PercentageNumber(2.0),
+        )))
         .with(StyleDeclaration::background_color(Some(ColorInput::Value(
           Color([0, 255, 0, 255]),
         ))))

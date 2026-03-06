@@ -44,7 +44,9 @@ fn clip_path_text_stroke_filled() {
               .with(StyleDeclaration::position(Position::Absolute))
               .with(StyleDeclaration::top(Some(Percentage(50.0))))
               .with(StyleDeclaration::left(Some(Percentage(50.0))))
-              .with_translate(Some(SpacePair::from_single(Percentage(-50.0))))
+              .with(StyleDeclaration::translate(SpacePair::from_single(
+                Percentage(-50.0),
+              )))
               .with(StyleDeclaration::color(ColorInput::Value(Color::white())))
               .with(StyleDeclaration::clip_path(Some(
                 BasicShape::from_str("inset(0 0 50% 0)").unwrap(),
@@ -65,7 +67,9 @@ fn clip_path_text_stroke_filled() {
               .with(StyleDeclaration::position(Position::Absolute))
               .with(StyleDeclaration::top(Some(Percentage(50.0))))
               .with(StyleDeclaration::left(Some(Percentage(50.0))))
-              .with_translate(Some(SpacePair::from_single(Percentage(-50.0))))
+              .with(StyleDeclaration::translate(SpacePair::from_single(
+                Percentage(-50.0),
+              )))
               .with(StyleDeclaration::color(ColorInput::Value(
                 Color::transparent(),
               )))

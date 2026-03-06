@@ -621,12 +621,9 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
     context.style.mask_position = None;
     context.style.mask_repeat = None;
     context.style.transform = None;
-    context.style.transform_origin = None;
     context.style.rotate = None;
-    context.style.scale_x = None;
-    context.style.scale_y = None;
-    context.style.translate_x = None;
-    context.style.translate_y = None;
+    context.style.scale = Default::default();
+    context.style.translate = Default::default();
     context
   }
 

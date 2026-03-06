@@ -79,6 +79,7 @@ impl TailwindValues {
 struct TailwindDeclarationBuilder {
   declarations: StyleDeclarationBlock,
   gradient_state: TwGradientState,
+  transform_state: TwTransformState,
   filter: Option<Filters>,
   filter_important: bool,
   backdrop_filter: Option<Filters>,
@@ -153,8 +154,56 @@ impl TailwindDeclarationBuilder {
       );
     }
 
+    self.transform_state.apply(&mut self.declarations);
     self.gradient_state.apply(&mut self.declarations);
     self.declarations
+  }
+}
+
+#[derive(Debug, Default)]
+struct TwTransformState {
+  translate: Option<SpacePair<Length>>,
+  translate_important: bool,
+  scale: Option<SpacePair<PercentageNumber>>,
+  scale_important: bool,
+}
+
+impl TwTransformState {
+  fn set_translate(&mut self, value: SpacePair<Length>, important: bool) {
+    self.translate = Some(value);
+    self.translate_important = important;
+  }
+
+  fn translate_mut(&mut self, important: bool) -> &mut SpacePair<Length> {
+    self.translate_important = important;
+    self
+      .translate
+      .get_or_insert_with(SpacePair::<Length>::default)
+  }
+
+  fn set_scale(&mut self, value: SpacePair<PercentageNumber>, important: bool) {
+    self.scale = Some(value);
+    self.scale_important = important;
+  }
+
+  fn scale_mut(&mut self, important: bool) -> &mut SpacePair<PercentageNumber> {
+    self.scale_important = important;
+    self
+      .scale
+      .get_or_insert_with(SpacePair::<PercentageNumber>::default)
+  }
+
+  fn apply(self, declarations: &mut StyleDeclarationBlock) {
+    if let Some(translate) = self.translate {
+      declarations.push(
+        StyleDeclaration::translate(translate),
+        self.translate_important,
+      );
+    }
+
+    if let Some(scale) = self.scale {
+      declarations.push(StyleDeclaration::scale(scale), self.scale_important);
+    }
   }
 }
 
@@ -1221,31 +1270,31 @@ impl TailwindProperty {
         push_decl!(builder, important, line_height(line_height))
       }
       TailwindProperty::Translate(length) => {
-        push_decl!(builder, important, translate_x(Some(length)));
-        push_decl!(builder, important, translate_y(Some(length)));
+        builder
+          .transform_state
+          .set_translate(SpacePair::from_single(length), important);
       }
       TailwindProperty::TranslateX(length) => {
-        push_decl!(builder, important, translate_x(Some(length)))
+        builder.transform_state.translate_mut(important).x = length;
       }
       TailwindProperty::TranslateY(length) => {
-        push_decl!(builder, important, translate_y(Some(length)))
+        builder.transform_state.translate_mut(important).y = length;
       }
       TailwindProperty::Rotate(angle) => push_decl!(builder, important, rotate(Some(angle))),
       TailwindProperty::Scale(percentage_number) => {
-        push_decl!(builder, important, scale_x(Some(percentage_number)));
-        push_decl!(builder, important, scale_y(Some(percentage_number)));
+        builder
+          .transform_state
+          .set_scale(SpacePair::from_single(percentage_number), important);
       }
       TailwindProperty::ScaleX(percentage_number) => {
-        push_decl!(builder, important, scale_x(Some(percentage_number)))
+        builder.transform_state.scale_mut(important).x = percentage_number;
       }
       TailwindProperty::ScaleY(percentage_number) => {
-        push_decl!(builder, important, scale_y(Some(percentage_number)))
+        builder.transform_state.scale_mut(important).y = percentage_number;
       }
-      TailwindProperty::TransformOrigin(background_position) => push_decl!(
-        builder,
-        important,
-        transform_origin(Some(background_position))
-      ),
+      TailwindProperty::TransformOrigin(background_position) => {
+        push_decl!(builder, important, transform_origin(background_position))
+      }
       TailwindProperty::Margin(length) => {
         push_decl!(builder, important, margin_top(Some(length)));
         push_decl!(builder, important, margin_right(Some(length)));
@@ -1831,6 +1880,27 @@ mod tests {
       ]
     )
   }
+
+  #[test]
+  fn test_transform_utilities_resolve_to_standard_longhands() {
+    let Ok(values) = TailwindValues::from_str("translate-x-4 translate-y-8 scale-75 scale-x-50")
+    else {
+      unreachable!()
+    };
+
+    let style = Style::from(values.to_declaration_block((100, 100).into()))
+      .inherit(&ResolvedStyle::default());
+
+    assert_eq!(
+      style.translate,
+      SpacePair::from_pair(Length::Rem(1.0), Length::Rem(2.0))
+    );
+    assert_eq!(
+      style.scale,
+      SpacePair::from_pair(PercentageNumber(0.5), PercentageNumber(0.75))
+    );
+  }
+
   #[test]
   fn test_parse_blend_mode() {
     assert_eq!(

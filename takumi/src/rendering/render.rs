@@ -524,19 +524,17 @@ fn apply_transform(
   border_box: Size<f32>,
   sizing: &Sizing,
 ) {
-  let transform_origin = style.transform_origin.unwrap_or_default();
-  let origin = transform_origin.to_point(sizing, border_box);
+  let origin = style.transform_origin.to_point(sizing, border_box);
 
   // CSS Transforms Level 2 order: T(origin) * translate * rotate * scale * transform * T(-origin)
   // Ref: https://www.w3.org/TR/css-transforms-2/#ctm
 
   let mut local = Affine::translation(origin.x, origin.y);
 
-  let translate = style.translate();
-  if translate != SpacePair::default() {
+  if style.translate != SpacePair::default() {
     local *= Affine::translation(
-      translate.x.to_px(sizing, border_box.width),
-      translate.y.to_px(sizing, border_box.height),
+      style.translate.x.to_px(sizing, border_box.width),
+      style.translate.y.to_px(sizing, border_box.height),
     );
   }
 
@@ -544,9 +542,8 @@ fn apply_transform(
     local *= Affine::rotation(rotate);
   }
 
-  let scale = style.scale();
-  if scale != SpacePair::default() {
-    local *= Affine::scale(scale.x.0, scale.y.0);
+  if style.scale != SpacePair::default() {
+    local *= Affine::scale(style.scale.x.0, style.scale.y.0);
   }
 
   if let Some(node_transform) = &style.transform {

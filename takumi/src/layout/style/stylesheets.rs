@@ -629,12 +629,10 @@ define_style! {
     flex_basis: Option<Length>,
     position: Position,
     rotate: Option<Angle>,
-    scale_x: Option<PercentageNumber>,
-    scale_y: Option<PercentageNumber>,
+    scale: SpacePair<PercentageNumber>,
+    translate: SpacePair<Length>,
     transform: Option<Transforms>,
-    transform_origin: Option<BackgroundPosition>,
-    translate_x: Option<Length>,
-    translate_y: Option<Length>,
+    transform_origin: BackgroundPosition,
     mask_image: Option<BackgroundImages>,
     mask_size: Option<BackgroundSizes>,
     mask_position: Option<BackgroundPositions>,
@@ -799,22 +797,6 @@ define_style! {
         important;
         StyleDeclaration::top(value.map(|pair| pair.x)),
         StyleDeclaration::bottom(value.map(|pair| pair.y)),
-      );
-    },
-    scale: Option<SpacePair<PercentageNumber>> => [ScaleX, ScaleY] |value, target, important| {
-      push_expanded_declarations!(
-        target,
-        important;
-        StyleDeclaration::scale_x(value.map(|pair| pair.x)),
-        StyleDeclaration::scale_y(value.map(|pair| pair.y)),
-      );
-    },
-    translate: Option<SpacePair<Length>> => [TranslateX, TranslateY] |value, target, important| {
-      push_expanded_declarations!(
-        target,
-        important;
-        StyleDeclaration::translate_x(value.map(|pair| pair.x)),
-        StyleDeclaration::translate_y(value.map(|pair| pair.y)),
       );
     },
     mask: Backgrounds => [MaskImage, MaskPosition, MaskSize, MaskRepeat] |value, target, important| {
@@ -1135,12 +1117,12 @@ impl ResolvedStyle {
   }
 
   pub(crate) fn has_non_identity_transform(&self, border_box: Size<f32>, sizing: &Sizing) -> bool {
-    let transform_origin = self.transform_origin.unwrap_or_default();
+    let transform_origin = self.transform_origin;
     let origin = transform_origin.to_point(sizing, border_box);
 
     let mut local = Affine::translation(origin.x, origin.y);
 
-    let translate = self.translate();
+    let translate = self.translate;
     if translate != SpacePair::default() {
       local *= Affine::translation(
         translate.x.to_px(sizing, border_box.width),
@@ -1152,7 +1134,7 @@ impl ResolvedStyle {
       local *= Affine::rotation(rotate);
     }
 
-    let scale = self.scale();
+    let scale = self.scale;
     if scale != SpacePair::default() {
       local *= Affine::scale(scale.x.0, scale.y.0);
     }
@@ -1170,20 +1152,6 @@ impl ResolvedStyle {
     SpacePair::from_pair(
       self.overflow_x.unwrap_or_default(),
       self.overflow_y.unwrap_or_default(),
-    )
-  }
-
-  pub(crate) fn translate(&self) -> SpacePair<Length> {
-    SpacePair::from_pair(
-      self.translate_x.unwrap_or_default(),
-      self.translate_y.unwrap_or_default(),
-    )
-  }
-
-  pub(crate) fn scale(&self) -> SpacePair<PercentageNumber> {
-    SpacePair::from_pair(
-      self.scale_x.unwrap_or_default(),
-      self.scale_y.unwrap_or_default(),
     )
   }
 
