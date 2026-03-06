@@ -432,16 +432,7 @@ impl<'i> AtRuleParser<'i> for TakumiRuleParser {
       return Err(input.new_error(BasicParseErrorKind::AtRuleInvalid(name)));
     }
 
-    let location = input.current_source_location();
-    let token = input.next()?;
-    let Token::Ident(identifier) = token else {
-      return Err(ParseError {
-        kind: ParseErrorKind::Basic(BasicParseErrorKind::UnexpectedToken(token.clone())),
-        location,
-      });
-    };
-
-    Ok(identifier.to_string())
+    Ok(input.expect_ident_or_string()?.to_string())
   }
 
   fn parse_block<'t>(

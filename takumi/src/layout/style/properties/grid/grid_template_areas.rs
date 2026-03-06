@@ -62,27 +62,15 @@ impl<'i> FromCss<'i> for GridTemplateAreas {
     let mut rows: Vec<Vec<String>> = Vec::new();
 
     while !input.is_exhausted() {
-      let token = input.next()?;
-      match token {
-        Token::QuotedString(row) => {
-          let row_str: &str = row.as_ref();
-          let cols: Vec<String> = row_str
-            .split_whitespace()
-            .map(ToString::to_string)
-            .collect();
-          if cols.is_empty() {
-            return Err(Self::unexpected_token_error(
-              location,
-              &Token::QuotedString(row.clone()),
-            ));
-          }
-          rows.push(cols);
-        }
-        Token::WhiteSpace(_) => continue,
-        _ => {
-          return Err(Self::unexpected_token_error(location, token));
-        }
+      let row = input.expect_ident_or_string()?;
+      let cols: Vec<String> = row.split_whitespace().map(ToString::to_string).collect();
+      if cols.is_empty() {
+        return Err(Self::unexpected_token_error(
+          location,
+          &Token::Ident("".into()),
+        ));
       }
+      rows.push(cols);
     }
 
     // Validate consistent column counts across rows

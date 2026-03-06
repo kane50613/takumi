@@ -198,19 +198,49 @@ pub(crate) fn run_animation_fixture_test<'g, Frames>(
   assert!(!frames.is_empty());
   assert_eq!(frames.len(), expected_frame_count);
 
-  let mut webp = File::create(format!("tests/fixtures-generated/{fixture_id}.webp")).unwrap();
-  encode_animated_webp(
-    Cow::Owned(frames.clone()),
-    &mut webp,
-    AnimatedWebpOptions::default(),
-  )
-  .unwrap();
+  enum AnimationFixtureFormat {
+    Webp,
+    Png,
+    Gif,
+  }
 
-  let mut png = File::create(format!("tests/fixtures-generated/{fixture_id}.png")).unwrap();
-  encode_animated_png(&frames, &mut png, AnimatedPngOptions::default()).unwrap();
+  [
+    AnimationFixtureFormat::Webp,
+    AnimationFixtureFormat::Png,
+    AnimationFixtureFormat::Gif,
+  ]
+  .into_par_iter()
+  .for_each(|format| {
+    let extension = match format {
+      AnimationFixtureFormat::Webp => "webp",
+      AnimationFixtureFormat::Png => "png",
+      AnimationFixtureFormat::Gif => "gif",
+    };
+    let mut file =
+      File::create(format!("tests/fixtures-generated/{fixture_id}.{extension}")).unwrap();
 
-  let mut gif = File::create(format!("tests/fixtures-generated/{fixture_id}.gif")).unwrap();
-  encode_animated_gif(Cow::Owned(frames), &mut gif, AnimatedGifOptions::default()).unwrap();
+    match format {
+      AnimationFixtureFormat::Webp => {
+        encode_animated_webp(
+          Cow::Owned(frames.clone()),
+          &mut file,
+          AnimatedWebpOptions::default(),
+        )
+        .unwrap();
+      }
+      AnimationFixtureFormat::Png => {
+        encode_animated_png(&frames, &mut file, AnimatedPngOptions::default()).unwrap();
+      }
+      AnimationFixtureFormat::Gif => {
+        encode_animated_gif(
+          Cow::Owned(frames.clone()),
+          &mut file,
+          AnimatedGifOptions::default(),
+        )
+        .unwrap();
+      }
+    }
+  });
 }
 
 pub(crate) trait IntoAnimationFixtureFrames<'g> {

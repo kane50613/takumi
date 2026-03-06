@@ -255,11 +255,6 @@ fn sample_keyframe_segment<'a>(
 
 #[cfg(feature = "css_stylesheet_parsing")]
 fn resolve_keyframes(keyframes: &KeyframesRule, base_style: &ResolvedStyle) -> ResolvedKeyframes {
-  let styles = keyframes
-    .keyframes
-    .iter()
-    .map(|keyframe| resolve_keyframe_style(keyframe, base_style))
-    .collect::<Vec<_>>();
   let mut points = keyframes
     .keyframes
     .iter()
@@ -282,7 +277,35 @@ fn resolve_keyframes(keyframes: &KeyframesRule, base_style: &ResolvedStyle) -> R
       .partial_cmp(&rhs.offset)
       .unwrap_or(Ordering::Equal)
   });
-  ResolvedKeyframes { points, styles }
+
+  let mut styles = Vec::with_capacity(points.len());
+  let mut merged_points: Vec<ResolvedKeyframePoint> = Vec::with_capacity(points.len());
+  for point in points {
+    if let Some(last_point) = merged_points.last_mut()
+      && (last_point.offset - point.offset).abs() <= f32::EPSILON
+    {
+      merge_keyframe_style(
+        &mut styles[last_point.style_index],
+        &keyframes.keyframes[point.style_index],
+      );
+      continue;
+    }
+
+    let style_index = styles.len();
+    styles.push(resolve_keyframe_style(
+      &keyframes.keyframes[point.style_index],
+      base_style,
+    ));
+    merged_points.push(ResolvedKeyframePoint {
+      offset: point.offset,
+      style_index,
+    });
+  }
+
+  ResolvedKeyframes {
+    points: merged_points,
+    styles,
+  }
 }
 
 #[cfg(feature = "css_stylesheet_parsing")]
@@ -361,11 +384,25 @@ fn resolve_keyframe_style(
 ) -> ResolvedKeyframeStyle {
   let mut style = base_style.clone();
   let mut mask = PropertyMask::new();
+  apply_keyframe_declarations(&mut style, &mut mask, keyframe);
+  ResolvedKeyframeStyle::new(style, mask)
+}
+
+#[cfg(feature = "css_stylesheet_parsing")]
+fn merge_keyframe_style(style: &mut ResolvedKeyframeStyle, keyframe: &KeyframeRule) {
+  apply_keyframe_declarations(&mut style.style, &mut style.mask, keyframe);
+}
+
+#[cfg(feature = "css_stylesheet_parsing")]
+fn apply_keyframe_declarations(
+  style: &mut ResolvedStyle,
+  mask: &mut PropertyMask,
+  keyframe: &KeyframeRule,
+) {
   for declaration in keyframe.declarations.iter() {
-    declaration.apply_to_resolved(&mut style);
+    declaration.apply_to_resolved(style);
     mask.insert(declaration.longhand_id());
   }
-  ResolvedKeyframeStyle::new(style, mask)
 }
 
 #[cfg(feature = "css_stylesheet_parsing")]

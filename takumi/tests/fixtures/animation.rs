@@ -9,7 +9,7 @@ use takumi::rendering::{
   render_sequence_animation,
 };
 
-use crate::test_utils::{CONTEXT, create_test_viewport, run_animation_fixture_test};
+use crate::test_utils::{CONTEXT, run_animation_fixture_test};
 
 const BOUNCING_TEXT_FPS: u32 = 20;
 const BOUNCING_TEXT_DURATION_MS: u32 = 900;
@@ -18,9 +18,10 @@ const KEYFRAME_INTERPOLATION_DURATION_MS: u32 = 1200;
 
 fn bouncing_text_frames() -> Vec<NodeKind> {
   let frame_count = BOUNCING_TEXT_DURATION_MS * BOUNCING_TEXT_FPS / 1000;
+  let denominator = frame_count.saturating_sub(1).max(1) as f32;
   (0..frame_count)
     .map(|frame_index| {
-      let progress = frame_index as f32 / (frame_count - 1) as f32;
+      let progress = frame_index as f32 / denominator;
       let bounce = (progress * 2.0 * PI).sin().abs();
       let y_offset = -140.0 * bounce;
 
@@ -190,7 +191,7 @@ fn keyframe_interpolation_frames() -> Vec<AnimationFrame> {
 
 fn keyframe_interpolation_options() -> RenderOptions<'static, NodeKind> {
   RenderOptionsBuilder::default()
-    .viewport(create_test_viewport())
+    .viewport((800, 400).into())
     .node(keyframe_interpolation_node())
     .global(&CONTEXT)
     .stylesheets(vec![keyframe_interpolation_stylesheet().to_string()])
@@ -233,7 +234,7 @@ fn keyframe_interpolation_stylesheet() -> &'static str {
       align-items: center;
       animation-name: glide;
       animation-duration: 600ms;
-      animation-timing-function: linear;
+      animation-timing-function: ease-in;
       animation-iteration-count: infinite;
       animation-direction: alternate;
       animation-fill-mode: both;
