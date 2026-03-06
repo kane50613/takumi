@@ -61,9 +61,9 @@ fn test_style_background_image_gradient() {
 
   *style = style
     .clone()
-    .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+    .with(StyleDeclaration::background_color(ColorInput::Value(
       Color::black(),
-    ))));
+    )));
 
   run_fixture_test(container.into(), "style_background_image_gradient");
 }
@@ -325,9 +325,9 @@ fn test_background_image_grid_pattern() {
   };
   *style = style
     .clone()
-    .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+    .with(StyleDeclaration::background_color(ColorInput::Value(
       Color::white(),
-    ))));
+    )));
 
   run_fixture_test(container.into(), "style_background_image_grid_pattern");
 }
@@ -351,9 +351,9 @@ fn test_background_image_noise_v1_with_gradient() {
   };
   *style = style
     .clone()
-    .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+    .with(StyleDeclaration::background_color(ColorInput::Value(
       Color::white(),
-    ))));
+    )));
 
   run_fixture_test(container.into(), "style_background_image_noise_v1_blend");
 }
@@ -377,9 +377,9 @@ fn test_background_image_dotted_pattern() {
   };
   *style = style
     .clone()
-    .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+    .with(StyleDeclaration::background_color(ColorInput::Value(
       Color::black(),
-    ))));
+    )));
 
   run_fixture_test(container.into(), "style_background_image_dotted_pattern");
 }

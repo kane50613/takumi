@@ -18,9 +18,9 @@ fn test_style_text_decoration() {
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::text_align(TextAlign::Center))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::font_size(Some(Px(72.0))))
         .with_text_decoration(TextDecoration {
           line: TextDecorationLines::all(),
@@ -72,12 +72,12 @@ fn text_decoration_skip_ink_parapsychologists() {
     style: Some(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
-        .with(StyleDeclaration::row_gap(Some(Px(28.0))))
+        .with(StyleDeclaration::row_gap(Px(28.0)))
         .with(StyleDeclaration::padding_top(Some(Px(40.0)))),
     ),
     children: Some(

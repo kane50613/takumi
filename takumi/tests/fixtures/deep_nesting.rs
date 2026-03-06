@@ -95,9 +95,9 @@ fn recursive_visual_node(level: usize, max_depth: usize) -> NodeKind {
         .with(StyleDeclaration::border_color(Some(ColorInput::Value(
           Color([215, 132, 55, 255]),
         ))))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           recursive_level_background(level),
-        )))),
+        ))),
     ),
     children: Some(children.into_boxed_slice()),
   }
@@ -118,9 +118,9 @@ fn recursive_visual_fixture_tree() -> NodeKind {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with_padding(Sides([Px(16.0); 4]))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([250, 248, 244, 255]),
-        )))),
+        ))),
     ),
     children: Some([recursive_visual_node(0, VISUAL_RECURSIVE_DEPTH)].into()),
   }

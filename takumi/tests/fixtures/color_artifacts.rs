@@ -19,9 +19,9 @@ fn test_color_artifacts() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([147, 197, 253, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with_padding(Sides([Rem(4.0); 4])),

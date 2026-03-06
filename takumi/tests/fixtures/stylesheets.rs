@@ -21,9 +21,9 @@ fn test_stylesheets() {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([245, 245, 245, 255]),
-        )))),
+        ))),
     ),
     children: Some(
       [ContainerNode {
@@ -125,9 +125,9 @@ fn test_stylesheets_background_multiple_gradients() {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([22, 22, 22, 255]),
-        )))),
+        ))),
     ),
     children: Some(
       [ContainerNode {

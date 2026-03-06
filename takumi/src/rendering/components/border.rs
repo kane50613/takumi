@@ -74,7 +74,7 @@ impl BorderProperties {
         .unwrap_or(ColorInput::CurrentColor)
         .resolve(context.current_color),
       radius: Self::resolve_radius_part(context, border_box),
-      style: context.style.border_style.unwrap_or_default(),
+      style: context.style.border_style,
       image_rendering: context.style.image_rendering,
     }
   }

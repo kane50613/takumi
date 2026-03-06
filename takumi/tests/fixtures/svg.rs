@@ -67,9 +67,9 @@ fn test_svg_attr_size_in_absolute_flex_container() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([35, 35, 35, 255]),
-        )))),
+        ))),
     ),
     children: Some(
       [ContainerNode {
@@ -125,9 +125,9 @@ fn test_svg_current_color_fixture() {
           .with(StyleDeclaration::width(Px(160.0)))
           .with(StyleDeclaration::height(Px(160.0)))
           .with_padding(Sides([Px(20.0); 4]))
-          .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          .with(StyleDeclaration::background_color(ColorInput::Value(
             Color([240, 240, 240, 255]),
-          ))))
+          )))
           .with(StyleDeclaration::color(ColorInput::Value(color)))
           .with(StyleDeclaration::flex_direction(FlexDirection::Column))
           .with(StyleDeclaration::align_items(AlignItems::Center)),
@@ -180,9 +180,9 @@ fn test_svg_current_color_fixture() {
         .with(StyleDeclaration::display(Display::Flex))
         .with_gap(SpacePair::from_single(Px(24.0)))
         .with_padding(Sides([Px(40.0); 4]))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([30, 30, 30, 255]),
-        )))),
+        ))),
     ),
     children: Some(
       [

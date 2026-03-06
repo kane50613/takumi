@@ -21,9 +21,9 @@ fn test_style_width() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        )))),
+        ))),
     ),
     children: None,
   };
@@ -43,9 +43,9 @@ fn test_style_height() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        )))),
+        ))),
     ),
     children: None,
   };
@@ -66,9 +66,9 @@ fn test_style_min_width() {
         .with(StyleDeclaration::min_width(Px(50.0)))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        )))),
+        ))),
     ),
     children: None,
   };
@@ -89,9 +89,9 @@ fn test_style_min_height() {
         .with(StyleDeclaration::min_height(Px(50.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::width(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        )))),
+        ))),
     ),
     children: None,
   };
@@ -112,9 +112,9 @@ fn test_style_max_width() {
         .with(StyleDeclaration::max_width(Px(100.0)))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        )))),
+        ))),
     ),
     children: None,
   };
@@ -135,9 +135,9 @@ fn test_style_max_height() {
         .with(StyleDeclaration::max_height(Px(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::width(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        )))),
+        ))),
     ),
     children: None,
   };

@@ -38,9 +38,9 @@ fn bouncing_text_node(y_offset: f32) -> NodeKind {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
@@ -103,9 +103,9 @@ fn keyframe_interpolation_node() -> NodeKind {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([242, 244, 247, 255]),
-        )))),
+        ))),
     ),
     children: Some(
       [ContainerNode {

@@ -183,7 +183,7 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c, N: Node<N> + 'c>(
           let span_style = context.style.to_sized_font_style(context);
           let transformed = apply_text_transform(&text, context.style.text_transform);
           let collapsed =
-            apply_white_space_collapse(&transformed, style.parent.white_space_collapse());
+            apply_white_space_collapse(&transformed, style.parent.white_space_collapse);
 
           builder.push_style_span((&span_style).into());
           builder.push_text(&collapsed);

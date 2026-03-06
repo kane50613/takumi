@@ -21,9 +21,9 @@ fn test_style_margin() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([0, 0, 255, 255]),
-        )))),
+        ))),
     ),
     children: Some(
       [ContainerNode {
@@ -37,9 +37,9 @@ fn test_style_margin() {
             .with_margin(Sides([Px(20.0); 4]))
             .with(StyleDeclaration::width(Px(100.0)))
             .with(StyleDeclaration::height(Px(100.0)))
-            .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+            .with(StyleDeclaration::background_color(ColorInput::Value(
               Color([255, 0, 0, 255]),
-            )))),
+            ))),
         ),
         children: None,
       }
@@ -63,9 +63,9 @@ fn test_style_padding() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([0, 0, 255, 255]),
-        ))))
+        )))
         .with_padding(Sides([Px(20.0); 4])),
     ),
     children: Some(
@@ -79,9 +79,9 @@ fn test_style_padding() {
           Style::default()
             .with(StyleDeclaration::width(Percentage(100.0)))
             .with(StyleDeclaration::height(Percentage(100.0)))
-            .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+            .with(StyleDeclaration::background_color(ColorInput::Value(
               Color([255, 0, 0, 255]),
-            )))),
+            ))),
         ),
         children: None,
       }

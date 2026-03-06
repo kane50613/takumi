@@ -22,11 +22,11 @@ fn inline_vertical_align_types() {
           .with_padding(Sides([Px(4.0), Px(8.0), Px(4.0), Px(8.0)]))
           .with(StyleDeclaration::line_height(LineHeight::Length(Px(72.0))))
           .with(StyleDeclaration::font_size(Some(Px(32.0))))
-          .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          .with(StyleDeclaration::background_color(ColorInput::Value(
             Color([248, 248, 248, 255]),
-          ))))
+          )))
           .with_border_width(Some(Sides([Px(1.0); 4])))
-          .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+          .with(StyleDeclaration::border_style(BorderStyle::Solid))
           .with(StyleDeclaration::border_color(Some(ColorInput::Value(
             Color([180, 180, 180, 255]),
           )))),
@@ -66,12 +66,10 @@ fn inline_vertical_align_types() {
                 .with(StyleDeclaration::display(Display::InlineBlock))
                 .with(StyleDeclaration::width(Px(44.0)))
                 .with(StyleDeclaration::height(Px(44.0)))
-                .with(StyleDeclaration::background_color(Some(ColorInput::Value(
-                  color,
-                ))))
+                .with(StyleDeclaration::background_color(ColorInput::Value(color)))
                 .with(StyleDeclaration::vertical_align(align))
                 .with_border_width(Some(Sides([Px(2.0); 4])))
-                .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+                .with(StyleDeclaration::border_style(BorderStyle::Solid))
                 .with(StyleDeclaration::border_color(Some(ColorInput::Value(
                   Color([30, 30, 30, 255]),
                 )))),
@@ -185,9 +183,9 @@ fn inline_vertical_align_types() {
         .with(StyleDeclaration::flex_direction(FlexDirection::Row))
         .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
         .with_padding(Sides([Px(8.0); 4]))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        )))),
+        ))),
     ),
     children: Some(children.into()),
   };

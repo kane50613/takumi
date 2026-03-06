@@ -24,9 +24,9 @@ fn test_measure_simple_container() {
       Style::default()
         .with(StyleDeclaration::width(Px(100.0)))
         .with(StyleDeclaration::height(Px(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 0, 0, 255]),
-        )))),
+        ))),
     ),
     children: None,
   }
@@ -244,9 +244,9 @@ fn test_measure_inline_layout() {
           style: Some(
             Style::default()
               .with(StyleDeclaration::display(Display::Inline))
-              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              .with(StyleDeclaration::background_color(ColorInput::Value(
                 Color([255, 0, 0, 255]),
-              )))),
+              ))),
           ),
           width: None,
           height: None,

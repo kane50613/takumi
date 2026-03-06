@@ -19,9 +19,9 @@ fn create_container_with_mask(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           background_color,
-        ))))
+        )))
         .with(StyleDeclaration::mask_image(Some(mask_image))),
     ),
     children: None,
@@ -125,9 +125,9 @@ fn test_style_mask_image_on_image_node() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center)),
     ),

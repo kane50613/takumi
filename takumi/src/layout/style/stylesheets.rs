@@ -637,8 +637,8 @@ define_style! {
     mask_size: Option<BackgroundSizes>,
     mask_position: Option<BackgroundPositions>,
     mask_repeat: Option<BackgroundRepeats>,
-    column_gap: Option<Length<false>>,
-    row_gap: Option<Length<false>>,
+    column_gap: Length<false>,
+    row_gap: Length<false>,
     flex_grow: Option<FlexGrow>,
     flex_shrink: Option<FlexGrow>,
     border_top_left_radius: Option<SpacePair<Length<false>>>,
@@ -649,27 +649,27 @@ define_style! {
     border_right_width: Option<Length>,
     border_bottom_width: Option<Length>,
     border_left_width: Option<Length>,
-    border_style: Option<BorderStyle>,
+    border_style: BorderStyle,
     border_color: Option<ColorInput>,
     outline_width: Option<Length>,
     outline_style: Option<BorderStyle>,
     outline_color: Option<ColorInput>,
     outline_offset: Option<Length>,
     object_fit: ObjectFit,
-    overflow_x: Option<Overflow>,
-    overflow_y: Option<Overflow>,
+    overflow_x: Overflow,
+    overflow_y: Overflow,
     object_position: BackgroundPosition where inherit = true,
     background_image: Option<BackgroundImages>,
     background_position: Option<BackgroundPositions>,
     background_size: Option<BackgroundSizes>,
     background_repeat: Option<BackgroundRepeats>,
     background_blend_mode: Option<BlendModes>,
-    background_color: Option<ColorInput<false>>,
+    background_color: ColorInput<false>,
     background_clip: BackgroundClip,
     box_shadow: Option<BoxShadows>,
     grid_auto_columns: Option<GridTrackSizes>,
     grid_auto_rows: Option<GridTrackSizes>,
-    grid_auto_flow: Option<GridAutoFlow>,
+    grid_auto_flow: GridAutoFlow,
     grid_column: Option<GridLine>,
     grid_row: Option<GridLine>,
     grid_template_columns: Option<GridTemplateComponents>,
@@ -709,8 +709,8 @@ define_style! {
     word_break: WordBreak where inherit = true,
     clip_path: Option<BasicShape>,
     clip_rule: FillRule where inherit = true,
-    white_space_collapse: Option<WhiteSpaceCollapse> where inherit = true,
-    text_wrap_mode: Option<TextWrapMode> where inherit = true,
+    white_space_collapse: WhiteSpaceCollapse where inherit = true,
+    text_wrap_mode: TextWrapMode where inherit = true,
     text_wrap_style: Option<TextWrapStyle> where inherit = true,
     isolation: Isolation,
     mix_blend_mode: BlendMode,
@@ -813,8 +813,8 @@ define_style! {
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::row_gap(Some(value.x)),
-        StyleDeclaration::column_gap(Some(value.y)),
+        StyleDeclaration::row_gap(value.x),
+        StyleDeclaration::column_gap(value.y),
       );
     },
     flex: Option<Flex> => [FlexGrow, FlexShrink, FlexBasis] |value, target, important| {
@@ -872,7 +872,7 @@ define_style! {
         StyleDeclaration::border_right_width(Some(value.width)),
         StyleDeclaration::border_bottom_width(Some(value.width)),
         StyleDeclaration::border_left_width(Some(value.width)),
-        StyleDeclaration::border_style(Some(value.style)),
+        StyleDeclaration::border_style(value.style),
         StyleDeclaration::border_color(Some(value.color)),
       );
     },
@@ -889,8 +889,8 @@ define_style! {
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::overflow_x(Some(value.x)),
-        StyleDeclaration::overflow_y(Some(value.y)),
+        StyleDeclaration::overflow_x(value.x),
+        StyleDeclaration::overflow_y(value.y),
       );
     },
     background: Backgrounds => [BackgroundImage, BackgroundPosition, BackgroundSize, BackgroundRepeat, BackgroundBlendMode, BackgroundColor, BackgroundClip] |value, target, important| {
@@ -902,7 +902,7 @@ define_style! {
         StyleDeclaration::background_size(Some(value.iter().map(|background| background.size).collect())),
         StyleDeclaration::background_repeat(Some(value.iter().map(|background| background.repeat).collect())),
         StyleDeclaration::background_blend_mode(Some(value.iter().map(|background| background.blend_mode).collect())),
-        StyleDeclaration::background_color(Some(value.iter().filter_map(|background| background.color).next_back().unwrap_or_default())),
+        StyleDeclaration::background_color(value.iter().filter_map(|background| background.color).next_back().unwrap_or_default()),
         StyleDeclaration::background_clip(value.last().map(|background| background.clip).unwrap_or_default()),
       );
     },
@@ -936,15 +936,15 @@ define_style! {
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::text_wrap_mode(Some(value.text_wrap_mode)),
-        StyleDeclaration::white_space_collapse(Some(value.white_space_collapse)),
+        StyleDeclaration::text_wrap_mode(value.text_wrap_mode),
+        StyleDeclaration::white_space_collapse(value.white_space_collapse),
       );
     },
     text_wrap: TextWrap where inherit = true => [TextWrapMode, TextWrapStyle] |value, target, important| {
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::text_wrap_mode(value.mode),
+        StyleDeclaration::text_wrap_mode(value.mode.unwrap_or_default()),
         StyleDeclaration::text_wrap_style(Some(value.style)),
       );
     },
@@ -1149,14 +1149,7 @@ impl ResolvedStyle {
   }
 
   pub(crate) fn resolve_overflows(&self) -> SpacePair<Overflow> {
-    SpacePair::from_pair(
-      self.overflow_x.unwrap_or_default(),
-      self.overflow_y.unwrap_or_default(),
-    )
-  }
-
-  pub(crate) fn background_color(&self) -> ColorInput<false> {
-    self.background_color.unwrap_or_default()
+    SpacePair::from_pair(self.overflow_x, self.overflow_y)
   }
 
   pub(crate) fn ellipsis_char(&self) -> &str {
@@ -1179,12 +1172,8 @@ impl ResolvedStyle {
     ELLIPSIS_CHAR
   }
 
-  pub(crate) fn white_space_collapse(&self) -> WhiteSpaceCollapse {
-    self.white_space_collapse.unwrap_or_default()
-  }
-
   pub(crate) fn text_wrap_mode_and_line_clamp(&self) -> (TextWrapMode, Option<Cow<'_, LineClamp>>) {
-    let mut text_wrap_mode = self.text_wrap_mode.unwrap_or_default();
+    let mut text_wrap_mode = self.text_wrap_mode;
 
     let mut line_clamp = self.line_clamp.as_ref().map(Cow::Borrowed);
 
@@ -1349,10 +1338,7 @@ impl ResolvedStyle {
 
   #[inline]
   fn resolved_gap(&self) -> SpacePair<Length<false>> {
-    SpacePair::from_pair(
-      self.row_gap.unwrap_or_default(),
-      self.column_gap.unwrap_or_default(),
-    )
+    SpacePair::from_pair(self.row_gap, self.column_gap)
   }
 
   #[inline]
@@ -1443,15 +1429,13 @@ impl ResolvedStyle {
     let (grid_template_rows, grid_template_row_names) =
       Self::convert_template_components(&self.grid_template_rows, sizing);
 
-    let border_style = self.border_style.unwrap_or_default();
-
     taffy::Style {
       box_sizing: self.box_sizing.into(),
       size: Size {
         width: self.width.resolve_to_dimension(sizing),
         height: self.height.resolve_to_dimension(sizing),
       },
-      border: if border_style == BorderStyle::None {
+      border: if self.border_style == BorderStyle::None {
         Rect::zero()
       } else {
         self
@@ -1496,7 +1480,7 @@ impl ResolvedStyle {
       grid_auto_rows: self.grid_auto_rows.as_ref().map_or_else(Vec::new, |v| {
         v.iter().map(|s| s.to_min_max(sizing)).collect()
       }),
-      grid_auto_flow: self.grid_auto_flow.unwrap_or_default().into(),
+      grid_auto_flow: self.grid_auto_flow.into(),
       grid_column: self
         .grid_column
         .as_ref()
@@ -1736,7 +1720,7 @@ mod tests {
       StyleDeclaration::border_right_width(Some(Length::Px(2.0))),
       StyleDeclaration::border_bottom_width(Some(Length::Px(2.0))),
       StyleDeclaration::border_left_width(Some(Length::Px(2.0))),
-      StyleDeclaration::border_style(Some(BorderStyle::Solid)),
+      StyleDeclaration::border_style(BorderStyle::Solid),
       StyleDeclaration::border_color(Some(ColorInput::CurrentColor)),
     ]);
 
@@ -1752,8 +1736,8 @@ mod tests {
 
   #[test]
   fn test_merge_from_background_longhands_clear_lower_priority_background_color() {
-    let mut preset_style = style_with([StyleDeclaration::background_color(Some(
-      ColorInput::Value(Color([255, 0, 0, 255])),
+    let mut preset_style = style_with([StyleDeclaration::background_color(ColorInput::Value(
+      Color([255, 0, 0, 255]),
     ))]);
     let inline_style = style_with([
       StyleDeclaration::background_image(Some([BackgroundImage::None].into())),
@@ -1761,14 +1745,14 @@ mod tests {
       StyleDeclaration::background_size(Some([BackgroundSize::default()].into())),
       StyleDeclaration::background_repeat(Some([BackgroundRepeat::default()].into())),
       StyleDeclaration::background_blend_mode(Some([BlendMode::default()].into())),
-      StyleDeclaration::background_color(Some(ColorInput::default())),
+      StyleDeclaration::background_color(ColorInput::default()),
       StyleDeclaration::background_clip(BackgroundClip::default()),
     ]);
 
     preset_style.merge_from(inline_style);
 
     let inherited = preset_style.inherit(&ResolvedStyle::default());
-    assert_eq!(inherited.background_color, Some(ColorInput::default()));
+    assert_eq!(inherited.background_color, ColorInput::default());
   }
 
   #[test]
@@ -1855,7 +1839,7 @@ mod tests {
   #[test]
   fn test_text_overflow_ellipsis_forces_single_line_clamp_on_nowrap() {
     let style = ResolvedStyle {
-      text_wrap_mode: Some(TextWrapMode::NoWrap),
+      text_wrap_mode: TextWrapMode::NoWrap,
       text_overflow: TextOverflow::Ellipsis,
       ..Default::default()
     };

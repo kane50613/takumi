@@ -21,9 +21,9 @@ fn test_rotate_image() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        ))))
+        )))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center)),
     ),
@@ -60,9 +60,9 @@ fn test_rotate() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        ))))
+        )))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center)),
     ),
@@ -76,9 +76,9 @@ fn test_rotate() {
           Style::default()
             .with(StyleDeclaration::width(Rem(16.0)))
             .with(StyleDeclaration::height(Rem(16.0)))
-            .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+            .with(StyleDeclaration::background_color(ColorInput::Value(
               Color::black(),
-            ))))
+            )))
             .with(StyleDeclaration::rotate(Some(Angle::new(45.0)))),
         ),
         children: None,
@@ -104,9 +104,9 @@ fn test_style_transform_origin_center() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        )))),
+        ))),
     ),
     children: Some(Box::from_iter(ROTATED_ANGLES.iter().map(|angle| {
       create_rotated_container(*angle, BackgroundPosition::default()).into()
@@ -128,9 +128,9 @@ fn test_style_transform_origin_top_left() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        ))))
+        )))
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::font_size(Some(Px(24.0)))),
     ),
@@ -173,11 +173,11 @@ fn create_rotated_container(angle: f32, transform_origin: BackgroundPosition) ->
         .with(StyleDeclaration::transform_origin(transform_origin))
         .with(StyleDeclaration::width(Px(200.0)))
         .with(StyleDeclaration::height(Px(200.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 0, 0, 30]),
-        ))))
+        )))
         .with_border_width(Some(Sides([Px(1.0); 4])))
-        .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+        .with(StyleDeclaration::border_style(BorderStyle::Solid))
         .with_border_radius(Box::new(BorderRadius(Sides(
           [SpacePair::from_single(Px(12.0)); 4],
         )))),
@@ -200,9 +200,9 @@ fn test_style_transform_translate_and_scale() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        ))))
+        )))
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::font_size(Some(Px(24.0)))),
     ),
@@ -219,9 +219,9 @@ fn test_style_transform_translate_and_scale() {
       Style::default()
         .with(StyleDeclaration::width(Px(200.0)))
         .with(StyleDeclaration::height(Px(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 0, 0, 255]),
-        )))),
+        ))),
     ),
     children: Some(
       [TextNode {
@@ -249,13 +249,13 @@ fn test_style_transform_translate_and_scale() {
         .with(StyleDeclaration::width(Px(300.0)))
         .with(StyleDeclaration::height(Px(300.0)))
         .with_border_width(Some(Sides([Px(1.0); 4])))
-        .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+        .with(StyleDeclaration::border_style(BorderStyle::Solid))
         .with(StyleDeclaration::translate(SpacePair::from_single(Px(
           300.0,
         ))))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([0, 128, 255, 255]),
-        )))),
+        ))),
     ),
     children: Some(
       [ImageNode {
@@ -289,13 +289,13 @@ fn test_style_transform_translate_and_scale() {
         .with(StyleDeclaration::scale(SpacePair::from_single(
           PercentageNumber(2.0),
         )))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([0, 255, 0, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::width(Px(100.0)))
         .with(StyleDeclaration::height(Px(100.0)))
         .with_border_width(Some(Sides([Px(1.0); 4])))
-        .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+        .with(StyleDeclaration::border_style(BorderStyle::Solid))
         .with(StyleDeclaration::font_size(Some(Px(12.0)))),
     ),
     children: Some(
@@ -322,13 +322,13 @@ fn test_style_transform_translate_and_scale() {
     style: Some(
       Style::default()
         .with(StyleDeclaration::rotate(Some(Angle::new(45.0))))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([0, 0, 255, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::width(Px(200.0)))
         .with(StyleDeclaration::height(Px(200.0)))
         .with_border_width(Some(Sides([Px(1.0); 4])))
-        .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+        .with(StyleDeclaration::border_style(BorderStyle::Solid))
         .with(StyleDeclaration::color(ColorInput::Value(Color::white())))
         .with(StyleDeclaration::border_color(Some(ColorInput::Value(
           Color::black(),

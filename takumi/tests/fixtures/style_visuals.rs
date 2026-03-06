@@ -18,9 +18,9 @@ fn test_style_background_color() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 0, 0, 255]),
-        )))),
+        ))),
     ),
     children: None,
   };
@@ -40,9 +40,9 @@ fn test_style_border_radius() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 0, 0, 255]),
-        ))))
+        )))
         .with_border_radius(Box::new(BorderRadius(Sides(
           [SpacePair::from_single(Px(20.0)); 4],
         )))),
@@ -65,9 +65,9 @@ fn test_style_border_radius_per_corner() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 0, 0, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::border_top_left_radius(Some(
           SpacePair::from_single(Px(40.0)),
         )))
@@ -99,11 +99,11 @@ fn test_style_border_width() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        ))))
+        )))
         .with_border_width(Some(Sides([Px(10.0); 4])))
-        .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+        .with(StyleDeclaration::border_style(BorderStyle::Solid))
         .with(StyleDeclaration::border_color(Some(ColorInput::Value(
           Color([255, 0, 0, 255]),
         )))),
@@ -127,9 +127,9 @@ fn test_style_border_width_with_radius() {
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with_padding(Sides([Rem(4.0); 4]))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        )))),
+        ))),
     ),
     children: Some(
       [ContainerNode {
@@ -149,7 +149,7 @@ fn test_style_border_width_with_radius() {
               Color([255, 0, 0, 255]),
             ))))
             .with_border_width(Some(Sides([Px(4.0); 4])))
-            .with(StyleDeclaration::border_style(Some(BorderStyle::Solid))),
+            .with(StyleDeclaration::border_style(BorderStyle::Solid)),
         ),
         children: None,
       }
@@ -173,9 +173,9 @@ fn test_style_box_shadow() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([0, 0, 255, 255]),
-        )))),
+        ))),
     ),
     children: Some(
       [ContainerNode {
@@ -188,9 +188,9 @@ fn test_style_box_shadow() {
           Style::default()
             .with(StyleDeclaration::width(Px(100.0)))
             .with(StyleDeclaration::height(Px(100.0)))
-            .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+            .with(StyleDeclaration::background_color(ColorInput::Value(
               Color([255, 0, 0, 255]),
-            ))))
+            )))
             .with(StyleDeclaration::box_shadow(Some(
               [BoxShadow {
                 color: ColorInput::Value(Color([0, 0, 0, 128])),
@@ -225,9 +225,9 @@ fn test_style_box_shadow_inset() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([0, 0, 255, 255]),
-        )))),
+        ))),
     ),
     children: Some(
       [ContainerNode {
@@ -240,9 +240,9 @@ fn test_style_box_shadow_inset() {
           Style::default()
             .with(StyleDeclaration::width(Px(120.0)))
             .with(StyleDeclaration::height(Px(80.0)))
-            .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+            .with(StyleDeclaration::background_color(ColorInput::Value(
               Color::white(),
-            ))))
+            )))
             .with_border_radius(Box::new(BorderRadius(Sides(
               [SpacePair::from_single(Px(16.0)); 4],
             ))))
@@ -280,9 +280,9 @@ fn test_style_position() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([0, 0, 255, 255]),
-        )))),
+        ))),
     ),
     children: Some(
       [ContainerNode {
@@ -297,9 +297,9 @@ fn test_style_position() {
             .with(StyleDeclaration::height(Px(100.0)))
             .with(StyleDeclaration::position(Position::Absolute))
             .with_inset(Sides([Px(20.0); 4]))
-            .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+            .with(StyleDeclaration::background_color(ColorInput::Value(
               Color([255, 0, 0, 255]),
-            )))),
+            ))),
         ),
         children: None,
       }
@@ -323,9 +323,9 @@ fn test_style_border_radius_circle() {
       Style::default()
         .with(StyleDeclaration::width(Px(300.0)))
         .with(StyleDeclaration::height(Px(300.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 0, 0, 255]),
-        ))))
+        )))
         .with_border_radius(Box::new(BorderRadius(Sides(
           [SpacePair::from_single(Percentage(50.0)); 4],
         )))),
@@ -349,9 +349,9 @@ fn test_style_border_radius_width_offset() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([128, 128, 128, 255]),
-        ))))
+        )))
         .with_padding(Sides([Rem(2.0); 4])),
     ),
     children: Some(
@@ -365,11 +365,11 @@ fn test_style_border_radius_width_offset() {
           Style::default()
             .with(StyleDeclaration::width(Percentage(100.0)))
             .with(StyleDeclaration::height(Percentage(100.0)))
-            .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+            .with(StyleDeclaration::background_color(ColorInput::Value(
               Color::white(),
-            ))))
+            )))
             .with_border_width(Some(Sides([Px(1.0); 4])))
-            .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+            .with(StyleDeclaration::border_style(BorderStyle::Solid))
             .with_border_radius(Box::new(BorderRadius(Sides(
               [SpacePair::from_single(Px(24.0)); 4],
             ))))
@@ -420,9 +420,9 @@ fn test_style_border_radius_circle_avatar() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        ))))
+        )))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center)),
     ),
@@ -444,7 +444,7 @@ fn test_style_border_radius_circle_avatar() {
               Color([128, 128, 128, 128]),
             ))))
             .with_border_width(Some(Sides([Px(4.0); 4])))
-            .with(StyleDeclaration::border_style(Some(BorderStyle::Solid))),
+            .with(StyleDeclaration::border_style(BorderStyle::Solid)),
         ),
         children: Some(
           [ImageNode {
@@ -502,9 +502,9 @@ fn test_style_border_width_on_image_node() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        ))))
+        )))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center)),
     ),
@@ -540,9 +540,9 @@ fn test_style_outline() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        ))))
+        )))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center)),
     ),

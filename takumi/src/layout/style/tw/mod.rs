@@ -872,11 +872,11 @@ impl TailwindProperty {
         push_decl!(builder, important, background_clip(background_clip));
       }
       TailwindProperty::Gap(gap) => {
-        push_decl!(builder, important, row_gap(Some(gap)));
-        push_decl!(builder, important, column_gap(Some(gap)));
+        push_decl!(builder, important, row_gap(gap));
+        push_decl!(builder, important, column_gap(gap));
       }
-      TailwindProperty::GapX(gap_x) => push_decl!(builder, important, column_gap(Some(gap_x))),
-      TailwindProperty::GapY(gap_y) => push_decl!(builder, important, row_gap(Some(gap_y))),
+      TailwindProperty::GapX(gap_x) => push_decl!(builder, important, column_gap(gap_x)),
+      TailwindProperty::GapY(gap_y) => push_decl!(builder, important, row_gap(gap_y)),
       TailwindProperty::BoxSizing(box_sizing) => {
         push_decl!(builder, important, box_sizing(box_sizing))
       }
@@ -912,8 +912,8 @@ impl TailwindProperty {
         push_decl!(builder, important, flex_basis(Some(flex_basis)))
       }
       TailwindProperty::Overflow(overflow) => {
-        push_decl!(builder, important, overflow_x(Some(overflow)));
-        push_decl!(builder, important, overflow_y(Some(overflow)));
+        push_decl!(builder, important, overflow_x(overflow));
+        push_decl!(builder, important, overflow_y(overflow));
       }
       TailwindProperty::Position(position) => push_decl!(builder, important, position(position)),
       TailwindProperty::FontStyle(font_style) => {
@@ -968,12 +968,8 @@ impl TailwindProperty {
         push_decl!(builder, important, box_shadow(Some([box_shadow].into())))
       }
       TailwindProperty::Display(display) => push_decl!(builder, important, display(display)),
-      TailwindProperty::OverflowX(overflow) => {
-        push_decl!(builder, important, overflow_x(Some(overflow)))
-      }
-      TailwindProperty::OverflowY(overflow) => {
-        push_decl!(builder, important, overflow_y(Some(overflow)))
-      }
+      TailwindProperty::OverflowX(overflow) => push_decl!(builder, important, overflow_x(overflow)),
+      TailwindProperty::OverflowY(overflow) => push_decl!(builder, important, overflow_y(overflow)),
       TailwindProperty::ObjectPosition(background_position) => {
         push_decl!(builder, important, object_position(background_position))
       }
@@ -1013,7 +1009,7 @@ impl TailwindProperty {
           border_bottom_width(Some(Length::Px(1.0)))
         );
         push_decl!(builder, important, border_left_width(Some(Length::Px(1.0))));
-        push_decl!(builder, important, border_style(Some(BorderStyle::Solid)));
+        push_decl!(builder, important, border_style(BorderStyle::Solid));
       }
       TailwindProperty::BorderWidth(tw_border_width) => {
         push_decl!(
@@ -1038,7 +1034,7 @@ impl TailwindProperty {
         );
       }
       TailwindProperty::BorderStyle(border_style) => {
-        push_decl!(builder, important, border_style(Some(border_style)))
+        push_decl!(builder, important, border_style(border_style))
       }
       TailwindProperty::JustifySelf(align_items) => {
         push_decl!(builder, important, justify_self(align_items))
@@ -1051,7 +1047,7 @@ impl TailwindProperty {
         push_decl!(builder, important, opacity(percentage_number))
       }
       TailwindProperty::BackgroundColor(color_input) => {
-        push_decl!(builder, important, background_color(Some(color_input)))
+        push_decl!(builder, important, background_color(color_input))
       }
       TailwindProperty::BorderColor(color_input) => {
         push_decl!(builder, important, border_color(Some(color_input)))
@@ -1214,33 +1210,33 @@ impl TailwindProperty {
       }
       TailwindProperty::Truncate => {
         push_decl!(builder, important, text_overflow(TextOverflow::Ellipsis));
+        push_decl!(builder, important, text_wrap_mode(TextWrapMode::NoWrap));
         push_decl!(
           builder,
           important,
-          text_wrap_mode(Some(TextWrapMode::NoWrap))
+          white_space_collapse(WhiteSpaceCollapse::Collapse)
         );
-        push_decl!(
-          builder,
-          important,
-          white_space_collapse(Some(WhiteSpaceCollapse::Collapse))
-        );
-        push_decl!(builder, important, overflow_x(Some(Overflow::Hidden)));
-        push_decl!(builder, important, overflow_y(Some(Overflow::Hidden)));
+        push_decl!(builder, important, overflow_x(Overflow::Hidden));
+        push_decl!(builder, important, overflow_y(Overflow::Hidden));
       }
       TailwindProperty::TextWrap(text_wrap) => {
-        push_decl!(builder, important, text_wrap_mode(text_wrap.mode));
+        push_decl!(
+          builder,
+          important,
+          text_wrap_mode(text_wrap.mode.unwrap_or_default())
+        );
         push_decl!(builder, important, text_wrap_style(Some(text_wrap.style)));
       }
       TailwindProperty::WhiteSpace(white_space) => {
         push_decl!(
           builder,
           important,
-          text_wrap_mode(Some(white_space.text_wrap_mode))
+          text_wrap_mode(white_space.text_wrap_mode)
         );
         push_decl!(
           builder,
           important,
-          white_space_collapse(Some(white_space.white_space_collapse))
+          white_space_collapse(white_space.white_space_collapse)
         );
       }
       TailwindProperty::WordBreak(word_break) => {
@@ -1409,7 +1405,7 @@ impl TailwindProperty {
         letter_spacing(Some(tw_letter_spacing.0))
       ),
       TailwindProperty::GridAutoFlow(grid_auto_flow) => {
-        push_decl!(builder, important, grid_auto_flow(Some(grid_auto_flow)))
+        push_decl!(builder, important, grid_auto_flow(grid_auto_flow))
       }
       TailwindProperty::GridColumnSpan(grid_placement_span) => {
         builder.set_grid_column(GridLine::span(grid_placement_span), important)

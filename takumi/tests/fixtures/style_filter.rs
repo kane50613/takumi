@@ -30,9 +30,9 @@ fn create_filter_test_container(
         .with_gap(SpacePair::from_single(Px(gap_px)))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        )))),
+        ))),
     ),
     children: Some(
       filter_values

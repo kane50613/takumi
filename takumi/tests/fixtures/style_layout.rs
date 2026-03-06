@@ -22,9 +22,9 @@ fn test_style_flex_basis() {
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::flex_direction(FlexDirection::Row))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([0, 0, 255, 255]),
-        )))),
+        ))),
     ),
     children: Some(
       [
@@ -38,9 +38,9 @@ fn test_style_flex_basis() {
             Style::default()
               .with(StyleDeclaration::flex_basis(Some(Px(100.0))))
               .with(StyleDeclaration::height(Px(50.0)))
-              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              .with(StyleDeclaration::background_color(ColorInput::Value(
                 Color([255, 0, 0, 255]),
-              )))),
+              ))),
           ),
           children: None,
         }
@@ -55,9 +55,9 @@ fn test_style_flex_basis() {
             Style::default()
               .with(StyleDeclaration::flex_basis(Some(Px(100.0))))
               .with(StyleDeclaration::height(Px(50.0)))
-              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              .with(StyleDeclaration::background_color(ColorInput::Value(
                 Color([0, 255, 0, 255]),
-              )))),
+              ))),
           ),
           children: None,
         }
@@ -72,9 +72,9 @@ fn test_style_flex_basis() {
             Style::default()
               .with(StyleDeclaration::flex_basis(Some(Px(100.0))))
               .with(StyleDeclaration::height(Px(50.0)))
-              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              .with(StyleDeclaration::background_color(ColorInput::Value(
                 Color([255, 255, 0, 255]),
-              )))),
+              ))),
           ),
           children: None,
         }
@@ -101,9 +101,9 @@ fn test_style_flex_direction() {
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([0, 0, 255, 255]),
-        )))),
+        ))),
     ),
     children: Some(
       [
@@ -117,9 +117,9 @@ fn test_style_flex_direction() {
             Style::default()
               .with(StyleDeclaration::width(Px(50.0)))
               .with(StyleDeclaration::height(Px(50.0)))
-              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              .with(StyleDeclaration::background_color(ColorInput::Value(
                 Color([255, 0, 0, 255]),
-              )))),
+              ))),
           ),
           children: None,
         }
@@ -134,9 +134,9 @@ fn test_style_flex_direction() {
             Style::default()
               .with(StyleDeclaration::width(Px(50.0)))
               .with(StyleDeclaration::height(Px(50.0)))
-              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              .with(StyleDeclaration::background_color(ColorInput::Value(
                 Color([0, 255, 0, 255]),
-              )))),
+              ))),
           ),
           children: None,
         }
@@ -151,9 +151,9 @@ fn test_style_flex_direction() {
             Style::default()
               .with(StyleDeclaration::width(Px(50.0)))
               .with(StyleDeclaration::height(Px(50.0)))
-              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              .with(StyleDeclaration::background_color(ColorInput::Value(
                 Color([255, 255, 0, 255]),
-              )))),
+              ))),
           ),
           children: None,
         }
@@ -180,9 +180,9 @@ fn test_style_gap() {
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Flex))
         .with_gap(SpacePair::from_pair(Px(20.0), Px(40.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([0, 0, 255, 255]),
-        )))),
+        ))),
     ),
     children: Some(
       [
@@ -197,9 +197,9 @@ fn test_style_gap() {
             Style::default()
               .with(StyleDeclaration::width(Px(50.0)))
               .with(StyleDeclaration::height(Px(50.0)))
-              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              .with(StyleDeclaration::background_color(ColorInput::Value(
                 Color([255, 0, 0, 255]),
-              )))),
+              ))),
           ),
           children: None,
         }
@@ -215,9 +215,9 @@ fn test_style_gap() {
             Style::default()
               .with(StyleDeclaration::width(Px(50.0)))
               .with(StyleDeclaration::height(Px(50.0)))
-              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              .with(StyleDeclaration::background_color(ColorInput::Value(
                 Color([0, 255, 0, 255]),
-              )))),
+              ))),
           ),
           children: None,
         }
@@ -233,9 +233,9 @@ fn test_style_gap() {
             Style::default()
               .with(StyleDeclaration::width(Px(50.0)))
               .with(StyleDeclaration::height(Px(50.0)))
-              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              .with(StyleDeclaration::background_color(ColorInput::Value(
                 Color([255, 255, 0, 255]),
-              )))),
+              ))),
           ),
           children: None,
         }
@@ -265,9 +265,9 @@ fn test_style_grid_template_columns() {
           GridTemplateComponent::Single(GridTrackSize::Fixed(GridLength::Unit(Px(50.0)))),
           GridTemplateComponent::Single(GridTrackSize::Fixed(GridLength::Unit(Px(100.0)))),
         ])))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([0, 0, 255, 255]),
-        )))),
+        ))),
     ),
     children: Some(
       [
@@ -277,11 +277,9 @@ fn test_style_grid_template_columns() {
           tag_name: None,
           preset: None,
           tw: None,
-          style: Some(
-            Style::default().with(StyleDeclaration::background_color(Some(ColorInput::Value(
-              Color([255, 0, 0, 255]),
-            )))),
-          ),
+          style: Some(Style::default().with(StyleDeclaration::background_color(
+            ColorInput::Value(Color([255, 0, 0, 255])),
+          ))),
           children: None,
         }
         .into(),
@@ -291,11 +289,9 @@ fn test_style_grid_template_columns() {
           tag_name: None,
           preset: None,
           tw: None,
-          style: Some(
-            Style::default().with(StyleDeclaration::background_color(Some(ColorInput::Value(
-              Color([0, 255, 0, 255]),
-            )))),
-          ),
+          style: Some(Style::default().with(StyleDeclaration::background_color(
+            ColorInput::Value(Color([0, 255, 0, 255])),
+          ))),
           children: None,
         }
         .into(),
@@ -324,9 +320,9 @@ fn test_style_grid_template_rows() {
           GridTemplateComponent::Single(GridTrackSize::Fixed(GridLength::Unit(Px(50.0)))),
           GridTemplateComponent::Single(GridTrackSize::Fixed(GridLength::Unit(Px(100.0)))),
         ])))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([0, 0, 255, 255]),
-        )))),
+        ))),
     ),
     children: Some(
       [
@@ -336,11 +332,9 @@ fn test_style_grid_template_rows() {
           tag_name: None,
           preset: None,
           tw: None,
-          style: Some(
-            Style::default().with(StyleDeclaration::background_color(Some(ColorInput::Value(
-              Color([255, 0, 0, 255]),
-            )))),
-          ),
+          style: Some(Style::default().with(StyleDeclaration::background_color(
+            ColorInput::Value(Color([255, 0, 0, 255])),
+          ))),
           children: None,
         }
         .into(),
@@ -350,11 +344,9 @@ fn test_style_grid_template_rows() {
           tag_name: None,
           preset: None,
           tw: None,
-          style: Some(
-            Style::default().with(StyleDeclaration::background_color(Some(ColorInput::Value(
-              Color([0, 255, 0, 255]),
-            )))),
-          ),
+          style: Some(Style::default().with(StyleDeclaration::background_color(
+            ColorInput::Value(Color([0, 255, 0, 255])),
+          ))),
           children: None,
         }
         .into(),

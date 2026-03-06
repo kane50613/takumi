@@ -41,12 +41,12 @@ fn test_style_text_decoration_thickness() {
     style: Some(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
-        .with(StyleDeclaration::row_gap(Some(Px(20.0))))
+        .with(StyleDeclaration::row_gap(Px(20.0)))
         .with(StyleDeclaration::padding_top(Some(Px(40.0))))
         .with(StyleDeclaration::padding_bottom(Some(Px(40.0)))),
     ),

@@ -21,9 +21,9 @@ fn create_container_with_background_clip(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([200, 200, 200, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center)),
     ),
@@ -38,13 +38,13 @@ fn create_container_with_background_clip(
           Style::default()
             .with(StyleDeclaration::width(Rem(16.0)))
             .with(StyleDeclaration::height(Rem(10.0)))
-            .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+            .with(StyleDeclaration::background_color(ColorInput::Value(
               background_color,
-            ))))
+            )))
             .with(StyleDeclaration::background_clip(background_clip))
             .with_padding(Sides([Px(padding); 4]))
             .with_border_width(Some(Sides([Px(border_width); 4])))
-            .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+            .with(StyleDeclaration::border_style(BorderStyle::Solid))
             .with(StyleDeclaration::border_color(Some(ColorInput::Value(
               Color([0, 0, 0, 255]),
             ))))
@@ -111,9 +111,9 @@ fn test_style_background_clip_text_gradient() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::font_size(Some(Px(72.0))))
@@ -167,9 +167,9 @@ fn test_style_background_clip_text_radial_gradient() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 255, 255, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::font_size(Some(Px(64.0))))
@@ -217,9 +217,9 @@ fn test_style_background_clip_border_area() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([200, 200, 200, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center)),
     ),
@@ -234,15 +234,15 @@ fn test_style_background_clip_border_area() {
           Style::default()
             .with(StyleDeclaration::width(Rem(16.0)))
             .with(StyleDeclaration::height(Rem(10.0)))
-            .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+            .with(StyleDeclaration::background_color(ColorInput::Value(
               Color([255, 165, 0, 255]),
-            ))))
+            )))
             .with(StyleDeclaration::background_clip(
               BackgroundClip::BorderArea,
             ))
             .with_padding(Sides([Px(20.0); 4]))
             .with_border_width(Some(Sides([Px(10.0); 4])))
-            .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+            .with(StyleDeclaration::border_style(BorderStyle::Solid))
             .with(StyleDeclaration::border_color(Some(ColorInput::Value(
               Color([0, 0, 0, 128]),
             ))))
@@ -275,9 +275,9 @@ fn test_style_background_clip_with_gradient_background() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([200, 200, 200, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center)),
     ),
@@ -298,7 +298,7 @@ fn test_style_background_clip_with_gradient_background() {
             ))
             .with_padding(Sides([Px(30.0); 4]))
             .with_border_width(Some(Sides([Px(15.0); 4])))
-            .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+            .with(StyleDeclaration::border_style(BorderStyle::Solid))
             .with(StyleDeclaration::border_color(Some(ColorInput::Value(
               Color([255, 255, 255, 255]),
             )))),
@@ -326,7 +326,7 @@ fn test_style_background_clip_text_multiline() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(Color([255, 255, 255, 255])))))
+        .with(StyleDeclaration::background_color(ColorInput::Value(Color([255, 255, 255, 255]))))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::font_size(Some(Px(48.0))))
@@ -369,9 +369,9 @@ fn test_style_background_clip_comparison() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with_gap(SpacePair::from_single(Px(20.0)))
@@ -390,13 +390,13 @@ fn test_style_background_clip_comparison() {
             Style::default()
               .with(StyleDeclaration::width(Percentage(100.0)))
               .with(StyleDeclaration::height(Px(80.0)))
-              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              .with(StyleDeclaration::background_color(ColorInput::Value(
                 Color([255, 0, 0, 255]),
-              ))))
+              )))
               .with(StyleDeclaration::background_clip(BackgroundClip::BorderBox))
               .with_padding(Sides([Px(15.0); 4]))
               .with_border_width(Some(Sides([Px(8.0); 4])))
-              .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+              .with(StyleDeclaration::border_style(BorderStyle::Solid))
               .with(StyleDeclaration::border_color(Some(ColorInput::Value(
                 Color([0, 0, 0, 128]),
               )))),
@@ -431,15 +431,15 @@ fn test_style_background_clip_comparison() {
             Style::default()
               .with(StyleDeclaration::width(Percentage(100.0)))
               .with(StyleDeclaration::height(Px(80.0)))
-              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              .with(StyleDeclaration::background_color(ColorInput::Value(
                 Color([0, 128, 255, 255]),
-              ))))
+              )))
               .with(StyleDeclaration::background_clip(
                 BackgroundClip::PaddingBox,
               ))
               .with_padding(Sides([Px(15.0); 4]))
               .with_border_width(Some(Sides([Px(8.0); 4])))
-              .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+              .with(StyleDeclaration::border_style(BorderStyle::Solid))
               .with(StyleDeclaration::border_color(Some(ColorInput::Value(
                 Color([0, 0, 0, 128]),
               )))),
@@ -474,15 +474,15 @@ fn test_style_background_clip_comparison() {
             Style::default()
               .with(StyleDeclaration::width(Percentage(100.0)))
               .with(StyleDeclaration::height(Px(80.0)))
-              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              .with(StyleDeclaration::background_color(ColorInput::Value(
                 Color([34, 197, 94, 255]),
-              ))))
+              )))
               .with(StyleDeclaration::background_clip(
                 BackgroundClip::ContentBox,
               ))
               .with_padding(Sides([Px(15.0); 4]))
               .with_border_width(Some(Sides([Px(8.0); 4])))
-              .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+              .with(StyleDeclaration::border_style(BorderStyle::Solid))
               .with(StyleDeclaration::border_color(Some(ColorInput::Value(
                 Color([0, 0, 0, 128]),
               )))),

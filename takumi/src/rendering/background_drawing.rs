@@ -611,7 +611,7 @@ pub(crate) fn collect_background_layers(
 
   let background_color = context
     .style
-    .background_color()
+    .background_color
     .resolve(context.current_color);
 
   if background_color.0[3] > 0 {

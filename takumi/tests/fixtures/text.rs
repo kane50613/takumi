@@ -17,9 +17,9 @@ fn text_basic() {
     preset: None,
     tw: None,
     style: Some(
-      Style::default().with(StyleDeclaration::background_color(Some(ColorInput::Value(
+      Style::default().with(StyleDeclaration::background_color(ColorInput::Value(
         Color([240, 240, 240, 255]),
-      )))),
+      ))),
     ),
     text: "The quick brown fox jumps over the lazy dog 12345".to_string(),
   };
@@ -37,9 +37,9 @@ fn text_typography_regular_24px() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::font_size(Some(Px(24.0)))),
     ),
     text: "Regular 24px".to_string(),
@@ -87,15 +87,15 @@ fn text_typography_variable_width() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::font_family(
           FontFamily::from_str("Archivo").ok(),
         ))
         .with(StyleDeclaration::font_size(Some(Px(48.0))))
         .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
-        .with(StyleDeclaration::row_gap(Some(Px(48.0))))
+        .with(StyleDeclaration::row_gap(Px(48.0)))
         .with(StyleDeclaration::width(Percentage(100.0))),
     ),
     children: Some(nodes.into_boxed_slice()),
@@ -136,9 +136,9 @@ fn text_typography_variable_weight() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::font_size(Some(Px(24.0))))
         .with_gap(SpacePair::from_pair(Px(0.0), Px(24.0)))
         .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap)),
@@ -159,9 +159,9 @@ fn text_typography_medium_weight_500() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::font_size(Some(Px(24.0))))
         .with(StyleDeclaration::font_weight(FontWeight::from(500.0))),
     ),
@@ -181,9 +181,9 @@ fn text_typography_line_height_40px() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::font_size(Some(Px(24.0))))
         .with(StyleDeclaration::line_height(LineHeight::Length(Px(40.0)))),
     ),
@@ -203,9 +203,9 @@ fn text_typography_letter_spacing_2px() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::font_size(Some(Px(24.0))))
         .with(StyleDeclaration::letter_spacing(Some(Px(2.0)))),
     ),
@@ -225,9 +225,9 @@ fn text_align_start() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::font_size(Some(Px(24.0))))
@@ -249,9 +249,9 @@ fn text_align_center() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::font_size(Some(Px(24.0))))
@@ -273,9 +273,9 @@ fn text_align_right() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::font_size(Some(Px(24.0))))
@@ -300,9 +300,9 @@ fn text_ellipsis_line_clamp_2() {
     style: Some(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::font_size(Some(Px(48.0))))
         .with(StyleDeclaration::text_overflow(TextOverflow::Ellipsis))
         .with(StyleDeclaration::line_clamp(Some(2.into()))),
@@ -325,9 +325,9 @@ fn text_transform_all() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        )))),
+        ))),
     ),
     children: Some(
       [
@@ -414,9 +414,9 @@ fn text_mask_image_gradient_and_emoji() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::font_size(Some(Px(72.0))))
@@ -469,9 +469,9 @@ fn text_stroke_black_red() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::color(ColorInput::Value(Color([
           0, 0, 0, 255,
         ]))))
@@ -525,9 +525,9 @@ fn text_stroke_background_clip() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        ))))
+        )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::align_items(AlignItems::Center))
@@ -558,9 +558,9 @@ fn text_shadow() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::font_size(Some(Px(48.0))))
         .with(StyleDeclaration::text_shadow(Some(shadows.into()))),
     ),
@@ -588,9 +588,9 @@ fn text_shadow_no_blur_radius() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::font_size(Some(Px(72.0))))
         .with(StyleDeclaration::text_shadow(Some(shadows.into()))),
     ),
@@ -612,9 +612,9 @@ fn text_wrap_nowrap() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 255, 255, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::font_size(Some(Px(32.0))))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -632,9 +632,7 @@ fn text_wrap_nowrap() {
           tag_name: None,
           preset: None,
           tw: None,
-          style: Some(
-            Style::default().with(StyleDeclaration::text_wrap_mode(Some(TextWrapMode::Wrap))),
-          ),
+          style: Some(Style::default().with(StyleDeclaration::text_wrap_mode(TextWrapMode::Wrap))),
           text: format!("wrap: {}", long_text),
         }
         .into(),
@@ -645,7 +643,7 @@ fn text_wrap_nowrap() {
           preset: None,
           tw: None,
           style: Some(
-            Style::default().with(StyleDeclaration::text_wrap_mode(Some(TextWrapMode::NoWrap))),
+            Style::default().with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap)),
           ),
           text: format!("nowrap: {}", long_text),
         }
@@ -668,9 +666,9 @@ fn text_whitespace_collapse() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 255, 255, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with(StyleDeclaration::font_size(Some(Px(32.0))))
@@ -688,9 +686,9 @@ fn text_whitespace_collapse() {
           preset: None,
           tw: None,
           style: Some(
-            Style::default().with(StyleDeclaration::white_space_collapse(Some(
+            Style::default().with(StyleDeclaration::white_space_collapse(
               WhiteSpaceCollapse::Collapse,
-            ))),
+            )),
           ),
           text: "collapse: Multiple    spaces   and\ttabs\t\tare    collapsed".to_string(),
         }
@@ -702,9 +700,9 @@ fn text_whitespace_collapse() {
           preset: None,
           tw: None,
           style: Some(
-            Style::default().with(StyleDeclaration::white_space_collapse(Some(
+            Style::default().with(StyleDeclaration::white_space_collapse(
               WhiteSpaceCollapse::Preserve,
-            ))),
+            )),
           ),
           text: "preserve: Multiple    spaces   and\ttabs\t\tare    preserved".to_string(),
         }
@@ -716,9 +714,9 @@ fn text_whitespace_collapse() {
           preset: None,
           tw: None,
           style: Some(
-            Style::default().with(StyleDeclaration::white_space_collapse(Some(
+            Style::default().with(StyleDeclaration::white_space_collapse(
               WhiteSpaceCollapse::PreserveSpaces,
-            ))),
+            )),
           ),
           text: "preserve-spaces: Multiple    spaces   preserved\nbut\nbreaks\nremoved".to_string(),
         }
@@ -730,9 +728,9 @@ fn text_whitespace_collapse() {
           preset: None,
           tw: None,
           style: Some(
-            Style::default().with(StyleDeclaration::white_space_collapse(Some(
+            Style::default().with(StyleDeclaration::white_space_collapse(
               WhiteSpaceCollapse::PreserveBreaks,
-            ))),
+            )),
           ),
           text: "preserve-breaks: Spaces    collapsed\n but\nline\nbreaks\npreserved".to_string(),
         }
@@ -756,7 +754,7 @@ fn text_ellipsis_text_nowrap() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(Color([240, 240, 240, 255])))))
+        .with(StyleDeclaration::background_color(ColorInput::Value(Color([240, 240, 240, 255]))))
         .with(StyleDeclaration::font_size(Some(Px(48.0))))
         .with_padding(Sides([Px(20.0); 4]))
         .with_overflow(SpacePair::from_single(Overflow::Hidden))
@@ -772,9 +770,9 @@ fn text_ellipsis_text_nowrap() {
         style: Some(
           Style::default()
             .with(StyleDeclaration::text_overflow(TextOverflow::Ellipsis))
-            .with(StyleDeclaration::text_wrap_mode(Some(TextWrapMode::NoWrap)))
+            .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
             .with_border_width(Some(Sides([Px(1.0); 4])))
-            .with(StyleDeclaration::border_style(Some(BorderStyle::Solid)))
+            .with(StyleDeclaration::border_style(BorderStyle::Solid))
             .with(StyleDeclaration::border_color(Some(ColorInput::Value(Color([255, 0, 0, 255])))))
             .with(StyleDeclaration::word_break(WordBreak::BreakAll))
             .with(StyleDeclaration::width(Percentage(100.0))),
@@ -798,9 +796,9 @@ fn text_wrap_style_all() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 255, 255, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::font_size(Some(Px(48.0))))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -900,9 +898,9 @@ fn text_super_bold_stroke_background_clip() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        ))))
+        )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::align_items(AlignItems::Center))
@@ -966,9 +964,9 @@ fn text_font_stretch() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::font_family(
           FontFamily::from_str("Archivo").ok(),
         ))
@@ -996,9 +994,9 @@ fn text_flex_centered_text_node_vs_nested_container() {
         .with(StyleDeclaration::width(Px(300.0)))
         .with(StyleDeclaration::height(Px(200.0)))
         .with_margin(Sides([Px(0.0), Px(0.0), Px(30.0), Px(0.0)]))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::from_str("#3b82f6").unwrap(),
-        ))))
+        )))
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
@@ -1018,9 +1016,9 @@ fn text_flex_centered_text_node_vs_nested_container() {
       Style::default()
         .with(StyleDeclaration::width(Px(300.0)))
         .with(StyleDeclaration::height(Px(200.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::from_str("#ab82f6").unwrap(),
-        ))))
+        )))
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
@@ -1052,9 +1050,9 @@ fn text_flex_centered_text_node_vs_nested_container() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::black(),
-        ))))
+        )))
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center)),
     ),
@@ -1122,9 +1120,9 @@ fn text_font_synthesis_weight_auto_none() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with_padding(Sides([Px(20.0); 4]))
@@ -1172,9 +1170,9 @@ fn text_font_synthesis_style_auto_none() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with_padding(Sides([Px(20.0); 4]))
@@ -1236,9 +1234,9 @@ fn text_font_synthesis_weight_emoji() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with_padding(Sides([Px(20.0); 4]))
@@ -1264,9 +1262,9 @@ fn text_chinese_ellipsis() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::font_size(Some(Px(64.0))))
         .with_padding(Sides::from(Px(24.0)))
         .with(StyleDeclaration::font_family(
@@ -1295,9 +1293,9 @@ fn text_devanagari_noto_sans() {
         Style::default()
           .with(StyleDeclaration::width(Percentage(100.0)))
           .with(StyleDeclaration::height(Percentage(100.0)))
-          .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          .with(StyleDeclaration::background_color(ColorInput::Value(
             Color([240, 240, 240, 255]),
-          ))))
+          )))
           .with(StyleDeclaration::font_size(Some(Px(48.0))))
           .with_padding(Sides::from(Px(24.0)))
           .with(StyleDeclaration::font_family(
@@ -1327,9 +1325,9 @@ fn text_devanagari_noto_sans() {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with_padding(Sides([Px(20.0); 4]))

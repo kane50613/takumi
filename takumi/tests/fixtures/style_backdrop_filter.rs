@@ -22,9 +22,9 @@ fn create_backdrop_card(filter: &str, label_font_size_px: f32) -> NodeKind {
         .with(StyleDeclaration::backdrop_filter(
           Filters::from_str(filter).unwrap(),
         ))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 255, 255, 60]),
-        ))))
+        )))
         .with(StyleDeclaration::font_size(Some(Px(label_font_size_px))))
         .with(StyleDeclaration::color(ColorInput::Value(Color::black())))
         .with_padding(Sides([Px(8.0); 4])),
@@ -142,9 +142,9 @@ fn test_style_backdrop_filter_frosted_glass() {
             .with(StyleDeclaration::backdrop_filter(
               Filters::from_str("blur(16px)").unwrap(),
             ))
-            .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+            .with(StyleDeclaration::background_color(ColorInput::Value(
               Color([255, 255, 255, 80]),
-            ))))
+            )))
             .with_border_radius(Box::new(BorderRadius::from_str("24px").unwrap()))
             .with_padding(Sides([Px(48.0); 4]))
             .with_gap(SpacePair::from_pair(Px(16.0), Px(16.0))),

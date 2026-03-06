@@ -101,7 +101,9 @@ fn test_style_mix_blend_mode() {
           GridTemplateComponents::from_str("repeat(4, 1fr)").ok(),
         ))
         .with(StyleDeclaration::background_color(
-          Color::from_str("sandybrown").map(ColorInput::Value).ok(),
+          Color::from_str("sandybrown")
+            .map(ColorInput::Value)
+            .unwrap(),
         )),
     ),
     children: Some(
@@ -131,7 +133,9 @@ fn test_style_mlx_blend_mode_isolation() {
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::background_color(
-          Color::from_str("deepskyblue").map(ColorInput::Value).ok(),
+          Color::from_str("deepskyblue")
+            .map(ColorInput::Value)
+            .unwrap(),
         )),
     ),
     children: Some(

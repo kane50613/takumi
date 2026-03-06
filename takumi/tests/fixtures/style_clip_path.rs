@@ -19,9 +19,9 @@ fn clip_path_text_stroke_filled() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([0, 0, 0, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center))
@@ -105,9 +105,9 @@ fn clip_path_triangle_vercel() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 255, 255, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center))
@@ -126,9 +126,9 @@ fn clip_path_triangle_vercel() {
             Style::default()
               .with(StyleDeclaration::width(Px(128.0)))
               .with(StyleDeclaration::height(Px(128.0)))
-              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              .with(StyleDeclaration::background_color(ColorInput::Value(
                 Color::black(),
-              ))))
+              )))
               .with(StyleDeclaration::clip_path(Some(
                 BasicShape::from_str("polygon(0% 100%, 100% 100%, 50% 12.25%)").unwrap(),
               ))),
@@ -157,9 +157,9 @@ fn clip_path_triangle_gradient() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 255, 255, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center))
@@ -212,9 +212,9 @@ fn clip_path_circle() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 255, 255, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center))
@@ -233,9 +233,9 @@ fn clip_path_circle() {
             Style::default()
               .with(StyleDeclaration::width(Px(200.0)))
               .with(StyleDeclaration::height(Px(200.0)))
-              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              .with(StyleDeclaration::background_color(ColorInput::Value(
                 Color([255, 0, 100, 255]),
-              ))))
+              )))
               .with(StyleDeclaration::clip_path(Some(
                 BasicShape::from_str("circle(50%)").unwrap(),
               ))),
@@ -264,9 +264,9 @@ fn clip_path_inset_rounded() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 255, 255, 255]),
-        ))))
+        )))
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center))
@@ -285,9 +285,9 @@ fn clip_path_inset_rounded() {
             Style::default()
               .with(StyleDeclaration::width(Px(200.0)))
               .with(StyleDeclaration::height(Px(200.0)))
-              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              .with(StyleDeclaration::background_color(ColorInput::Value(
                 Color([100, 200, 255, 255]),
-              ))))
+              )))
               .with(StyleDeclaration::clip_path(Some(
                 BasicShape::from_str("inset(50px 0 round 20px)").unwrap(),
               ))),
@@ -317,9 +317,9 @@ fn clip_path_inset_round_clips_children() {
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
-        )))),
+        ))),
     ),
     children: Some(
       [
@@ -340,9 +340,9 @@ fn clip_path_inset_round_clips_children() {
               .with(StyleDeclaration::clip_path(Some(
                 BasicShape::from_str("inset(0px round 50px)").unwrap(),
               )))
-              .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+              .with(StyleDeclaration::background_color(ColorInput::Value(
                 Color([0, 0, 0, 255]),
-              )))),
+              ))),
           ),
           children: Some(
             [
@@ -360,9 +360,9 @@ fn clip_path_inset_round_clips_children() {
                     .with(StyleDeclaration::left(Some(Px(0.0))))
                     .with(StyleDeclaration::width(Percentage(100.0)))
                     .with(StyleDeclaration::height(Percentage(100.0)))
-                    .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+                    .with(StyleDeclaration::background_color(ColorInput::Value(
                       Color([255, 0, 0, 255]),
-                    )))),
+                    ))),
                 ),
                 children: None,
               }
