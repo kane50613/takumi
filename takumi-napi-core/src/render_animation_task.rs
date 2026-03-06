@@ -5,23 +5,23 @@ use std::{
 };
 
 use napi::bindgen_prelude::*;
-use rayon::prelude::*;
 use takumi::{
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, DEFAULT_FONT_SIZE, Viewport, node::NodeKind},
   rendering::{
-    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame,
-    RenderOptionsBuilder, encode_animated_gif, encode_animated_png, encode_animated_webp, render,
+    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, RenderOptionsBuilder,
+    SequentialSceneBuilder, encode_animated_gif, encode_animated_png, encode_animated_webp,
+    render_sequence_animation,
   },
   resources::image::load_image_source_from_bytes,
 };
 
 use crate::{
   ExternalMemoryAccountable, buffer_from_object, map_error,
-  renderer::{AnimationOutputFormat, EncodeFramesOptions, ImageSource, RendererState},
+  renderer::{AnimationOutputFormat, ImageSource, RenderAnimationOptions, RendererState},
 };
 
-pub struct EncodeFramesTask {
-  pub frames: Option<Vec<(NodeKind, u32)>>,
+pub struct RenderAnimationTask {
+  pub scenes: Option<Vec<(NodeKind, u32)>>,
   pub(crate) state: Arc<RwLock<RendererState>>,
   pub viewport: Viewport,
   pub format: AnimationOutputFormat,
@@ -29,17 +29,32 @@ pub struct EncodeFramesTask {
   pub draw_debug_border: bool,
   pub stylesheets: Option<Vec<String>>,
   pub fetched_resources: HashMap<Arc<str>, Buffer>,
+  pub fps: u32,
 }
 
-impl EncodeFramesTask {
+impl RenderAnimationTask {
   pub(crate) fn from_options(
     env: Env,
-    frames: Vec<(NodeKind, u32)>,
-    options: EncodeFramesOptions,
+    scenes: Vec<(NodeKind, u32)>,
+    options: RenderAnimationOptions,
     state: Arc<RwLock<RendererState>>,
   ) -> Result<Self> {
+    if scenes.is_empty() {
+      return Err(Error::new(
+        Status::InvalidArg,
+        "Expected at least one animation scene".to_owned(),
+      ));
+    }
+
+    if options.fps == 0 {
+      return Err(Error::new(
+        Status::InvalidArg,
+        "Expected fps to be greater than 0".to_owned(),
+      ));
+    }
+
     Ok(Self {
-      frames: Some(frames),
+      scenes: Some(scenes),
       state,
       viewport: Viewport {
         width: Some(options.width),
@@ -62,20 +77,17 @@ impl EncodeFramesTask {
           Ok((Arc::from(image.src), buffer_from_object(env, image.data)?))
         })
         .collect::<Result<_>>()?,
+      fps: options.fps,
     })
   }
 }
 
-impl Task for EncodeFramesTask {
+impl Task for RenderAnimationTask {
   type Output = Vec<u8>;
   type JsValue = Buffer;
 
   fn compute(&mut self) -> Result<Self::Output> {
-    const ENCODED_BYTES_PER_PIXEL_ESTIMATE: usize = 1;
-    const FRAME_OVERHEAD_BYTES: usize = 128;
-    const MAX_PREALLOC: usize = 4 * 1024 * 1024;
-
-    let Some(frames) = self.frames.take() else {
+    let Some(scenes) = self.scenes.take() else {
       unreachable!()
     };
     let initialized_images = self
@@ -92,46 +104,28 @@ impl Task for EncodeFramesTask {
       .state
       .read()
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-
-    let viewport = self.viewport;
-    let draw_debug_border = self.draw_debug_border;
     let stylesheets = self.stylesheets.clone().unwrap_or_default();
-    let frames = frames
-      .into_par_iter()
+    let scene_options = scenes
+      .into_iter()
       .map(|(node, duration_ms)| {
-        Ok(AnimationFrame::new(
-          render(
+        SequentialSceneBuilder::default()
+          .duration_ms(duration_ms)
+          .options(
             RenderOptionsBuilder::default()
-              .viewport(viewport)
+              .viewport(self.viewport)
               .fetched_resources(initialized_images.clone())
               .stylesheets(stylesheets.clone())
               .node(node)
               .global(&state.global)
-              .draw_debug_border(draw_debug_border)
+              .draw_debug_border(self.draw_debug_border)
               .build()
               .map_err(map_error)?,
           )
-          .map_err(map_error)?,
-          duration_ms,
-        ))
+          .build()
+          .map_err(map_error)
       })
-      .collect::<Result<Vec<_>, _>>()?;
-
-    let estimated_capacity = if let Some(first) = frames.first() {
-      let width = first.image.width() as usize;
-      let height = first.image.height() as usize;
-      let per_frame_estimate = width
-        .saturating_mul(height)
-        .saturating_mul(ENCODED_BYTES_PER_PIXEL_ESTIMATE)
-        .saturating_add(FRAME_OVERHEAD_BYTES);
-      per_frame_estimate
-        .saturating_mul(frames.len())
-        .saturating_add(44)
-        .min(MAX_PREALLOC)
-    } else {
-      0
-    };
-    let mut buffer = Vec::with_capacity(estimated_capacity);
+      .collect::<Result<Vec<_>>>()?;
+    let frames = render_sequence_animation(&scene_options, self.fps).map_err(map_error)?;
 
     if let Some(quality) = self.quality
       && quality > 100
@@ -140,6 +134,8 @@ impl Task for EncodeFramesTask {
         "Invalid WebP quality {quality}; expected a value in 0..=100"
       )));
     }
+
+    let mut buffer = Vec::new();
 
     match self.format {
       AnimationOutputFormat::webp => {

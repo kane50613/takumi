@@ -17,9 +17,9 @@ use xxhash_rust::xxh3::Xxh3DefaultBuilder;
 
 use crate::{
   FontInput, buffer_from_object, buffer_slice_from_object, deserialize_with_tracing,
-  load_font_task::LoadFontTask, map_error, measure_task::MeasureTask,
-  put_persistent_image_task::PutPersistentImageTask, render_animation_task::EncodeFramesTask,
-  render_sequence_animation_task::RenderSequenceAnimationTask, render_task::RenderTask,
+  encode_frames_task::EncodeFramesTask, load_font_task::LoadFontTask, map_error,
+  measure_task::MeasureTask, put_persistent_image_task::PutPersistentImageTask,
+  render_animation_task::RenderAnimationTask, render_task::RenderTask,
 };
 
 /// Represents a single run of text in a measured node.
@@ -577,14 +577,14 @@ impl Renderer {
     source: Vec<AnimationSceneSource>,
     options: RenderAnimationOptions,
     signal: Option<AbortSignal>,
-  ) -> Result<AsyncTask<RenderSequenceAnimationTask>> {
+  ) -> Result<AsyncTask<RenderAnimationTask>> {
     let scenes = source
       .into_iter()
       .map(|scene| Ok((deserialize_with_tracing(scene.node)?, scene.duration_ms)))
       .collect::<Result<Vec<_>>>()?;
 
     Ok(AsyncTask::with_optional_signal(
-      RenderSequenceAnimationTask::from_options(env, scenes, options, Arc::clone(&self.state))?,
+      RenderAnimationTask::from_options(env, scenes, options, Arc::clone(&self.state))?,
       signal,
     ))
   }
