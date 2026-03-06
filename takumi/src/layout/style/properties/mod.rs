@@ -3,6 +3,7 @@
 //! This module contains CSS-like properties including layout properties,
 //! typography settings, positioning, and visual effects.
 
+mod animation;
 mod aspect_ratio;
 mod background;
 mod background_image;
@@ -47,6 +48,7 @@ mod vertical_align;
 mod white_space;
 mod word_break;
 
+pub use animation::*;
 pub use aspect_ratio::*;
 pub use background::*;
 pub use background_image::*;

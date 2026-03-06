@@ -70,6 +70,13 @@ impl Sizing {
   }
 }
 
+/// The absolute animation time used when resolving animated styles.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RenderTime {
+  /// The current time on the global timeline in milliseconds.
+  pub time_ms: u64,
+}
+
 /// The context for the internal rendering. You should not construct this directly.
 #[derive(Clone)]
 pub struct RenderContext<'g> {
@@ -83,6 +90,8 @@ pub struct RenderContext<'g> {
   pub(crate) current_color: Color,
   /// The style after inheritance.
   pub(crate) style: Box<ResolvedStyle>,
+  /// The active time for animation sampling.
+  pub(crate) time: RenderTime,
   /// Whether to draw debug borders.
   pub(crate) draw_debug_border: bool,
   /// The resources fetched externally.
@@ -99,6 +108,7 @@ impl<'g> RenderContext<'g> {
     viewport: Viewport,
     fetched_resources: HashMap<Arc<str>, Arc<ImageSource>>,
     stylesheets: I,
+    time: RenderTime,
   ) -> Self {
     Self {
       global,
@@ -111,6 +121,7 @@ impl<'g> RenderContext<'g> {
       transform: Affine::IDENTITY,
       current_color: Color::black(),
       style: Box::default(),
+      time,
       draw_debug_border: false,
       fetched_resources,
       stylesheets: Rc::from_iter(stylesheets),
@@ -122,6 +133,7 @@ impl<'g> RenderContext<'g> {
     global: &'g GlobalContext,
     viewport: Viewport,
     fetched_resources: HashMap<Arc<str>, Arc<ImageSource>>,
+    time: RenderTime,
   ) -> Self {
     Self {
       global,
@@ -134,6 +146,7 @@ impl<'g> RenderContext<'g> {
       transform: Affine::IDENTITY,
       current_color: Color::black(),
       style: Box::default(),
+      time,
       draw_debug_border: false,
       fetched_resources,
     }
@@ -145,11 +158,17 @@ impl<'g> RenderContext<'g> {
     #[cfg(feature = "css_stylesheet_parsing")]
     {
       use std::iter::empty;
-      Self::new(global, viewport, Default::default(), empty())
+      Self::new(
+        global,
+        viewport,
+        Default::default(),
+        empty(),
+        RenderTime::default(),
+      )
     }
     #[cfg(not(feature = "css_stylesheet_parsing"))]
     {
-      Self::new(global, viewport, Default::default())
+      Self::new(global, viewport, Default::default(), RenderTime::default())
     }
   }
 }

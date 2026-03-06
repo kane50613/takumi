@@ -221,6 +221,136 @@ impl<'i> RuleBodyItemParser<'i, StyleDeclaration, CssSelectorParseError<'i>>
   }
 }
 
+#[derive(Debug, Clone)]
+pub struct KeyframeRule {
+  pub offsets: Vec<f32>,
+  pub declarations: StyleDeclarations,
+}
+
+#[derive(Debug, Clone)]
+pub struct KeyframesRule {
+  pub name: String,
+  pub keyframes: Vec<KeyframeRule>,
+}
+
+struct KeyframeDeclarationParser;
+
+impl<'i> DeclarationParser<'i> for KeyframeDeclarationParser {
+  type Declaration = StyleDeclaration;
+  type Error = CssSelectorParseError<'i>;
+
+  fn parse_value<'t>(
+    &mut self,
+    name: CowRcStr<'i>,
+    input: &mut Parser<'i, 't>,
+    _state: &ParserState,
+  ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
+    let declaration = StyleDeclaration::parse(&name, input).map_err(ParseError::into)?;
+    let _ = input.try_parse(parse_important);
+    Ok(declaration)
+  }
+}
+
+impl<'i> QualifiedRuleParser<'i> for KeyframeDeclarationParser {
+  type Prelude = ();
+  type QualifiedRule = StyleDeclaration;
+  type Error = CssSelectorParseError<'i>;
+}
+
+impl<'i> AtRuleParser<'i> for KeyframeDeclarationParser {
+  type Prelude = ();
+  type AtRule = StyleDeclaration;
+  type Error = CssSelectorParseError<'i>;
+}
+
+impl<'i> RuleBodyItemParser<'i, StyleDeclaration, CssSelectorParseError<'i>>
+  for KeyframeDeclarationParser
+{
+  fn parse_qualified(&self) -> bool {
+    false
+  }
+
+  fn parse_declarations(&self) -> bool {
+    true
+  }
+}
+
+struct KeyframeRuleParser;
+
+impl<'i> QualifiedRuleParser<'i> for KeyframeRuleParser {
+  type Prelude = Vec<f32>;
+  type QualifiedRule = KeyframeRule;
+  type Error = CssSelectorParseError<'i>;
+
+  fn parse_prelude<'t>(
+    &mut self,
+    input: &mut Parser<'i, 't>,
+  ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
+    let mut offsets = Vec::new();
+
+    loop {
+      offsets.push(parse_keyframe_offset(input)?);
+      if input.try_parse(Parser::expect_comma).is_err() {
+        break;
+      }
+    }
+
+    Ok(offsets)
+  }
+
+  fn parse_block<'t>(
+    &mut self,
+    offsets: Self::Prelude,
+    _location: &ParserState,
+    input: &mut Parser<'i, 't>,
+  ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
+    let mut declaration_parser = KeyframeDeclarationParser;
+    let parser = RuleBodyParser::new(input, &mut declaration_parser);
+    let declarations = parser.filter_map(Result::ok).collect::<StyleDeclarations>();
+
+    Ok(KeyframeRule {
+      offsets,
+      declarations,
+    })
+  }
+}
+
+impl<'i> AtRuleParser<'i> for KeyframeRuleParser {
+  type Prelude = ();
+  type AtRule = KeyframeRule;
+  type Error = CssSelectorParseError<'i>;
+}
+
+fn parse_keyframe_offset<'i>(
+  input: &mut Parser<'i, '_>,
+) -> Result<f32, ParseError<'i, CssSelectorParseError<'i>>> {
+  if input
+    .try_parse(|parser| parser.expect_ident_matching("from"))
+    .is_ok()
+  {
+    return Ok(0.0);
+  }
+
+  if input
+    .try_parse(|parser| parser.expect_ident_matching("to"))
+    .is_ok()
+  {
+    return Ok(1.0);
+  }
+
+  let token = input.next()?;
+  let Token::Percentage { unit_value, .. } = token else {
+    return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
+  };
+
+  let offset = *unit_value;
+  if !(0.0..=1.0).contains(&offset) {
+    return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
+  }
+
+  Ok(offset)
+}
+
 pub struct TakumiRuleParser;
 
 #[derive(Debug, Clone)]
@@ -230,9 +360,15 @@ pub struct CssRule {
   pub important_declarations: StyleDeclarations,
 }
 
+#[derive(Debug, Clone)]
+pub enum StyleSheetRule {
+  Style(Box<CssRule>),
+  Keyframes(KeyframesRule),
+}
+
 impl<'i> QualifiedRuleParser<'i> for TakumiRuleParser {
   type Prelude = SelectorList<TakumiSelectorImpl>;
-  type QualifiedRule = CssRule;
+  type QualifiedRule = StyleSheetRule;
   type Error = CssSelectorParseError<'i>;
 
   fn parse_prelude<'t>(
@@ -266,23 +402,58 @@ impl<'i> QualifiedRuleParser<'i> for TakumiRuleParser {
         Err((_error, _declaration)) => continue,
       }
     }
-    Ok(CssRule {
+    Ok(StyleSheetRule::Style(Box::new(CssRule {
       selectors,
       normal_declarations,
       important_declarations,
-    })
+    })))
   }
 }
 
 impl<'i> AtRuleParser<'i> for TakumiRuleParser {
-  type Prelude = ();
-  type AtRule = CssRule;
+  type Prelude = String;
+  type AtRule = StyleSheetRule;
   type Error = CssSelectorParseError<'i>;
+
+  fn parse_prelude<'t>(
+    &mut self,
+    name: CowRcStr<'i>,
+    input: &mut Parser<'i, 't>,
+  ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
+    if !name.eq_ignore_ascii_case("keyframes") {
+      return Err(input.new_error(BasicParseErrorKind::AtRuleInvalid(name)));
+    }
+
+    let location = input.current_source_location();
+    let token = input.next()?;
+    let Token::Ident(identifier) = token else {
+      return Err(ParseError {
+        kind: ParseErrorKind::Basic(BasicParseErrorKind::UnexpectedToken(token.clone())),
+        location,
+      });
+    };
+
+    Ok(identifier.to_string())
+  }
+
+  fn parse_block<'t>(
+    &mut self,
+    name: Self::Prelude,
+    _location: &ParserState,
+    input: &mut Parser<'i, 't>,
+  ) -> Result<Self::AtRule, ParseError<'i, Self::Error>> {
+    let mut parser = KeyframeRuleParser;
+    let rule_list_parser = StyleSheetParser::new(input, &mut parser);
+    let keyframes = rule_list_parser.filter_map(Result::ok).collect::<Vec<_>>();
+
+    Ok(StyleSheetRule::Keyframes(KeyframesRule { name, keyframes }))
+  }
 }
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct StyleSheet {
   pub rules: Vec<CssRule>,
+  pub keyframes: Vec<KeyframesRule>,
 }
 
 impl StyleSheet {
@@ -298,17 +469,19 @@ impl StyleSheet {
     let mut parser = Parser::new(&mut input);
     let mut rule_parser = TakumiRuleParser;
     let mut rules = Vec::new();
+    let mut keyframes = Vec::new();
 
     let rule_list_parser = StyleSheetParser::new(&mut parser, &mut rule_parser);
 
     for rule in rule_list_parser {
       match rule {
-        Ok(rule) => rules.push(rule),
+        Ok(StyleSheetRule::Style(rule)) => rules.push(*rule),
+        Ok(StyleSheetRule::Keyframes(rule)) => keyframes.push(rule),
         Err((_error, _slice)) => continue,
       }
     }
 
-    Self { rules }
+    Self { rules, keyframes }
   }
 }
 
@@ -480,5 +653,26 @@ mod tests {
     );
 
     assert!(sheet.rules.is_empty());
+  }
+
+  #[test]
+  fn test_parse_keyframes_rule() {
+    let sheet = StyleSheet::parse(
+      r#"
+        @keyframes fade {
+          from { opacity: 0; }
+          50% { opacity: 0.5; }
+          to { opacity: 1; }
+        }
+      "#,
+    );
+
+    assert!(sheet.rules.is_empty());
+    assert_eq!(sheet.keyframes.len(), 1);
+    assert_eq!(sheet.keyframes[0].name, "fade");
+    assert_eq!(sheet.keyframes[0].keyframes.len(), 3);
+    assert_eq!(sheet.keyframes[0].keyframes[0].offsets, vec![0.0]);
+    assert_eq!(sheet.keyframes[0].keyframes[1].offsets, vec![0.5]);
+    assert_eq!(sheet.keyframes[0].keyframes[2].offsets, vec![1.0]);
   }
 }

@@ -21,6 +21,7 @@ pub struct RenderTask {
   pub viewport: Viewport,
   pub format: OutputFormat,
   pub quality: Option<u8>,
+  pub time_ms: u64,
   pub stylesheets: Option<Vec<String>>,
   pub fetched_resources: HashMap<Arc<str>, Buffer>,
 }
@@ -46,6 +47,7 @@ impl RenderTask {
       },
       format: options.format.unwrap_or(OutputFormat::png),
       quality: options.quality,
+      time_ms: options.time_ms.unwrap_or_default().max(0) as u64,
       draw_debug_border: options.draw_debug_border.unwrap_or_default(),
       stylesheets: options.stylesheets,
       fetched_resources: options
@@ -88,6 +90,7 @@ impl Task for RenderTask {
         .viewport(self.viewport)
         .fetched_resources(initialized_images)
         .stylesheets(self.stylesheets.take().unwrap_or_default())
+        .time_ms(self.time_ms)
         .node(node)
         .global(&state.global)
         .draw_debug_border(self.draw_debug_border)

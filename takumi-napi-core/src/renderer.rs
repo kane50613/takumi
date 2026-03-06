@@ -18,8 +18,8 @@ use xxhash_rust::xxh3::Xxh3DefaultBuilder;
 use crate::{
   FontInput, buffer_from_object, buffer_slice_from_object, deserialize_with_tracing,
   load_font_task::LoadFontTask, map_error, measure_task::MeasureTask,
-  put_persistent_image_task::PutPersistentImageTask, render_animation_task::RenderAnimationTask,
-  render_task::RenderTask,
+  put_persistent_image_task::PutPersistentImageTask, render_animation_task::EncodeFramesTask,
+  render_sequence_animation_task::RenderSequenceAnimationTask, render_task::RenderTask,
 };
 
 /// Represents a single run of text in a measured node.
@@ -115,9 +115,11 @@ pub struct RenderOptions<'env> {
   /// The device pixel ratio.
   /// @default 1.0
   pub device_pixel_ratio: Option<f64>,
+  /// The animation timeline time in milliseconds.
+  pub time_ms: Option<i64>,
 }
 
-/// Represents a single frame in an animation sequence.
+/// Represents a single frame in a precomputed animation sequence.
 #[napi(object)]
 pub struct AnimationFrameSource<'ctx> {
   /// The node tree to render for this frame.
@@ -127,9 +129,19 @@ pub struct AnimationFrameSource<'ctx> {
   pub duration_ms: u32,
 }
 
-/// Options for rendering an animated image.
+/// Represents a single scene in a sequential animation timeline.
 #[napi(object)]
-pub struct RenderAnimationOptions {
+pub struct AnimationSceneSource<'ctx> {
+  /// The node tree to render for this scene.
+  #[napi(ts_type = "AnyNode")]
+  pub node: Object<'ctx>,
+  /// The duration of this scene in milliseconds.
+  pub duration_ms: u32,
+}
+
+/// Options for rendering a sequential scene animation.
+#[napi(object)]
+pub struct RenderAnimationOptions<'env> {
   /// Whether to draw debug borders around layout elements.
   pub draw_debug_border: Option<bool>,
   /// The width of each frame in pixels.
@@ -140,6 +152,37 @@ pub struct RenderAnimationOptions {
   pub format: Option<AnimationOutputFormat>,
   /// The quality of WebP format (0-100). Ignored for APNG and GIF.
   pub quality: Option<u8>,
+  /// Frames per second for timeline sampling.
+  pub fps: u32,
+  /// The fetched resources to use.
+  pub fetched_resources: Option<Vec<ImageSource<'env>>>,
+  /// CSS stylesheets to apply before rendering.
+  pub stylesheets: Option<Vec<String>>,
+  /// The device pixel ratio.
+  /// @default 1.0
+  pub device_pixel_ratio: Option<f64>,
+}
+
+/// Options for encoding a precomputed frame sequence.
+#[napi(object)]
+pub struct EncodeFramesOptions<'env> {
+  /// Whether to draw debug borders around layout elements.
+  pub draw_debug_border: Option<bool>,
+  /// The width of each frame in pixels.
+  pub width: u32,
+  /// The height of each frame in pixels.
+  pub height: u32,
+  /// The output animation format (WebP, APNG, or GIF).
+  pub format: Option<AnimationOutputFormat>,
+  /// The quality of WebP format (0-100). Ignored for APNG and GIF.
+  pub quality: Option<u8>,
+  /// The fetched resources to use.
+  pub fetched_resources: Option<Vec<ImageSource<'env>>>,
+  /// CSS stylesheets to apply before rendering.
+  pub stylesheets: Option<Vec<String>>,
+  /// The device pixel ratio.
+  /// @default 1.0
+  pub device_pixel_ratio: Option<f64>,
 }
 
 /// Output format for animated images.
@@ -523,31 +566,48 @@ impl Renderer {
     ))
   }
 
-  /// Renders an animation sequence into a buffer asynchronously.
+  /// Renders a sequential scene animation into a buffer asynchronously.
   #[napi(
-    ts_args_type = "source: AnimationFrameSource[], options: RenderAnimationOptions, signal?: AbortSignal",
+    ts_args_type = "source: AnimationSceneSource[], options: RenderAnimationOptions, signal?: AbortSignal",
     ts_return_type = "Promise<Buffer>"
   )]
   pub fn render_animation(
     &self,
-    source: Vec<AnimationFrameSource>,
+    env: Env,
+    source: Vec<AnimationSceneSource>,
     options: RenderAnimationOptions,
     signal: Option<AbortSignal>,
-  ) -> Result<AsyncTask<RenderAnimationTask>> {
-    let nodes = source
+  ) -> Result<AsyncTask<RenderSequenceAnimationTask>> {
+    let scenes = source
+      .into_iter()
+      .map(|scene| Ok((deserialize_with_tracing(scene.node)?, scene.duration_ms)))
+      .collect::<Result<Vec<_>>>()?;
+
+    Ok(AsyncTask::with_optional_signal(
+      RenderSequenceAnimationTask::from_options(env, scenes, options, Arc::clone(&self.state))?,
+      signal,
+    ))
+  }
+
+  /// Encodes a precomputed frame sequence into an animated image buffer asynchronously.
+  #[napi(
+    ts_args_type = "source: AnimationFrameSource[], options: EncodeFramesOptions, signal?: AbortSignal",
+    ts_return_type = "Promise<Buffer>"
+  )]
+  pub fn encode_frames(
+    &self,
+    env: Env,
+    source: Vec<AnimationFrameSource>,
+    options: EncodeFramesOptions,
+    signal: Option<AbortSignal>,
+  ) -> Result<AsyncTask<EncodeFramesTask>> {
+    let frames = source
       .into_iter()
       .map(|frame| Ok((deserialize_with_tracing(frame.node)?, frame.duration_ms)))
       .collect::<Result<Vec<_>>>()?;
 
     Ok(AsyncTask::with_optional_signal(
-      RenderAnimationTask {
-        nodes: Some(nodes),
-        state: Arc::clone(&self.state),
-        viewport: (options.width, options.height).into(),
-        format: options.format.unwrap_or(AnimationOutputFormat::webp),
-        quality: options.quality,
-        draw_debug_border: options.draw_debug_border.unwrap_or_default(),
-      },
+      EncodeFramesTask::from_options(env, frames, options, Arc::clone(&self.state))?,
       signal,
     ))
   }

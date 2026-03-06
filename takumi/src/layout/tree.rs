@@ -22,7 +22,7 @@ use crate::{
     node::{Node, NodeStyleLayers},
     style::{
       Affine, BlendMode, Color, Display, Filters, Isolation, PercentageNumber, ResolvedStyle,
-      Style as NodeStyle,
+      Style as NodeStyle, apply_stylesheet_animations,
     },
   },
   rendering::{
@@ -88,12 +88,11 @@ pub(crate) struct RenderNode<'g, N: Node<N>> {
   pub(crate) force_inline_layout: bool,
 }
 
-fn build_inherited_style(
-  parent_style: &ResolvedStyle,
+fn build_style_layers(
   node_layers: NodeStyleLayers,
   #[cfg(feature = "css_stylesheet_parsing")] matched_declarations: &MatchedDeclarations,
   viewport: Viewport,
-) -> ResolvedStyle {
+) -> NodeStyle {
   let mut style = NodeStyle::default();
 
   if let Some(preset) = node_layers.preset {
@@ -118,7 +117,23 @@ fn build_inherited_style(
     declaration.merge_into(&mut style);
   }
 
-  style.inherit(parent_style)
+  style
+}
+
+#[cfg(test)]
+fn build_inherited_style(
+  parent_style: &ResolvedStyle,
+  node_layers: NodeStyleLayers,
+  #[cfg(feature = "css_stylesheet_parsing")] matched_declarations: &MatchedDeclarations,
+  viewport: Viewport,
+) -> ResolvedStyle {
+  build_style_layers(
+    node_layers,
+    #[cfg(feature = "css_stylesheet_parsing")]
+    matched_declarations,
+    viewport,
+  )
+  .inherit(parent_style)
 }
 
 fn push_layout_node<'r, 'g, N: Node<N>>(
@@ -815,6 +830,7 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
         transform: parent_context.transform,
         style: Box::new(style),
         current_color,
+        time: parent_context.time,
         draw_debug_border: parent_context.draw_debug_border,
         fetched_resources: parent_context.fetched_resources.clone(),
         sizing,
@@ -830,8 +846,7 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
       #[cfg(feature = "css_stylesheet_parsing")] matched_declarations: &[MatchedDeclarations],
     ) -> (ResolvedStyle, Sizing, Color) {
       let layers = node.take_style_layers();
-      let mut style = build_inherited_style(
-        &parent_context.style,
+      let style_layers = build_style_layers(
         layers,
         #[cfg(feature = "css_stylesheet_parsing")]
         matched_declarations
@@ -839,6 +854,8 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
           .unwrap_or(&MatchedDeclarations::default()),
         parent_context.sizing.viewport,
       );
+      let mut style = style_layers.inherit(&parent_context.style);
+      style = apply_stylesheet_animations(&style, parent_context);
 
       let font_size = style
         .font_size

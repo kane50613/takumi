@@ -1,3 +1,4 @@
+mod animation;
 #[cfg(feature = "css_stylesheet_parsing")]
 pub(crate) mod matching;
 mod properties;
@@ -9,6 +10,7 @@ pub mod tw;
 
 use std::{borrow::Cow, fmt::Formatter};
 
+pub(crate) use animation::apply_stylesheet_animations;
 use cssparser::match_ignore_ascii_case;
 pub use properties::*;
 use serde::{

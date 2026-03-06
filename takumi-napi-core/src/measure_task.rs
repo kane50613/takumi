@@ -17,6 +17,7 @@ pub struct MeasureTask {
   pub node: Option<NodeKind>,
   pub(crate) state: Arc<RwLock<RendererState>>,
   pub viewport: Viewport,
+  pub time_ms: u64,
   pub stylesheets: Option<Vec<String>>,
   pub fetched_resources: HashMap<Arc<str>, Buffer>,
 }
@@ -40,6 +41,7 @@ impl MeasureTask {
           .map(|ratio| ratio as f32)
           .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
       },
+      time_ms: options.time_ms.unwrap_or_default().max(0) as u64,
       stylesheets: options.stylesheets,
       fetched_resources: options
         .fetched_resources
@@ -80,6 +82,7 @@ impl Task for MeasureTask {
       .viewport(self.viewport)
       .fetched_resources(initialized_images)
       .stylesheets(self.stylesheets.clone().unwrap_or_default())
+      .time_ms(self.time_ms)
       .node(node)
       .global(&state.global)
       .build()

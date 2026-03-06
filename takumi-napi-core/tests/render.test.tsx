@@ -268,19 +268,50 @@ describe("render", () => {
     });
 
     expect(result).toBeInstanceOf(Buffer);
+  test("with timeMs applied to stylesheet animation", async () => {
+    const animated = await renderer.measure(
+      {
+        type: "container",
+        tagName: "div",
+      },
+      {
+        width: 200,
+        height: 100,
+        timeMs: 500,
+        stylesheets: [
+          `
+            div {
+              width: 100px;
+              animation-name: grow;
+              animation-duration: 1000ms;
+              animation-timing-function: linear;
+              animation-fill-mode: both;
+            }
+
+            @keyframes grow {
+              from { width: 100px; }
+              to { width: 200px; }
+            }
+          `,
+        ],
+      },
+    );
+
+    expect(animated.width).toBe(150);
   });
 });
 
 describe("renderAnimation", () => {
-  const frame = {
+  const scene = {
     node,
     durationMs: 1000,
   };
 
   test("gif", async () => {
-    const result = await renderer.renderAnimation([frame], {
+    const result = await renderer.renderAnimation([scene], {
       width: 1200,
       height: 630,
+      fps: 1,
       format: "gif",
     });
 
@@ -290,13 +321,32 @@ describe("renderAnimation", () => {
 
   test("rejects quality > 100", () => {
     expect(
-      renderer.renderAnimation([frame], {
+      renderer.renderAnimation([scene], {
         width: 1200,
         height: 630,
+        fps: 1,
         format: "gif",
         quality: 101,
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe("encodeFrames", () => {
+  const frame = {
+    node,
+    durationMs: 1000,
+  };
+
+  test("gif", async () => {
+    const result = await renderer.encodeFrames([frame], {
+      width: 1200,
+      height: 630,
+      format: "gif",
+    });
+
+    expect(result).toBeInstanceOf(Buffer);
+    expect(result.subarray(0, 6).toString("ascii")).toMatch(/^GIF8[79]a$/);
   });
 });
 
