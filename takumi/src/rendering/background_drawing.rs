@@ -159,10 +159,7 @@ impl BackgroundTile {
 }
 
 pub(crate) fn resolve_length_against_area(unit: Length, area: u32, sizing: &Sizing) -> u32 {
-  match unit {
-    Length::Auto => area,
-    _ => unit.to_px(sizing, area as f32).max(0.0) as u32,
-  }
+  unit.to_px(sizing, area as f32).max(0.0) as u32
 }
 
 pub(crate) fn resolve_background_size(
@@ -172,10 +169,49 @@ pub(crate) fn resolve_background_size(
   context: &RenderContext,
 ) -> (u32, u32) {
   match size {
-    BackgroundSize::Explicit { width, height } => (
-      resolve_length_against_area(width, area.width, &context.sizing),
-      resolve_length_against_area(height, area.height, &context.sizing),
-    ),
+    BackgroundSize::Explicit { width, height } => {
+      if width == Length::Auto || height == Length::Auto {
+        if let BackgroundImage::Url(url) = image
+          && let Ok(source) = resolve_image(url, context)
+        {
+          let (intrinsic_width, intrinsic_height) = source.size();
+          if width == Length::Auto && height == Length::Auto {
+            (
+              intrinsic_width.round() as u32,
+              intrinsic_height.round() as u32,
+            )
+          } else {
+            if intrinsic_width == 0.0 || intrinsic_height == 0.0 {
+              return (0, 0);
+            }
+            if width == Length::Auto {
+              let fix_height = resolve_length_against_area(height, area.height, &context.sizing);
+              let scale_factor = fix_height as f32 / intrinsic_height;
+              ((intrinsic_width * scale_factor).round() as u32, fix_height)
+            } else {
+              let fix_width = resolve_length_against_area(width, area.width, &context.sizing);
+              let scale_factor = fix_width as f32 / intrinsic_width;
+              (fix_width, (intrinsic_height * scale_factor).round() as u32)
+            }
+          }
+        } else {
+          if width == Length::Auto && height == Length::Auto {
+            (area.width, area.height)
+          } else if width == Length::Auto {
+            let fix_height = resolve_length_against_area(height, area.height, &context.sizing);
+            (area.width, fix_height)
+          } else {
+            let fix_width = resolve_length_against_area(width, area.width, &context.sizing);
+            (fix_width, area.height)
+          }
+        }
+      } else {
+        (
+          resolve_length_against_area(width, area.width, &context.sizing),
+          resolve_length_against_area(height, area.height, &context.sizing),
+        )
+      }
+    }
     BackgroundSize::Cover => {
       // Get intrinsic image dimensions
       let (intrinsic_width, intrinsic_height) = if let BackgroundImage::Url(url) = image
