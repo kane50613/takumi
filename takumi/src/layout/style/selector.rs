@@ -9,7 +9,7 @@ use std::{
   fmt::{self, Write},
 };
 
-use crate::layout::style::{DeclarationMetadata, StyleDeclaration, StyleDeclarations};
+use crate::layout::style::StyleDeclarationBlock;
 
 #[derive(Debug, Clone)]
 pub enum CssSelectorParseError<'i> {
@@ -181,7 +181,7 @@ fn ensure_supported_selector_list<'i>(
 pub struct StyleDeclarationParser;
 
 impl<'i> DeclarationParser<'i> for StyleDeclarationParser {
-  type Declaration = StyleDeclaration;
+  type Declaration = StyleDeclarationBlock;
   type Error = CssSelectorParseError<'i>;
 
   fn parse_value<'t>(
@@ -190,27 +190,32 @@ impl<'i> DeclarationParser<'i> for StyleDeclarationParser {
     input: &mut Parser<'i, 't>,
     _state: &ParserState,
   ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
-    let declaration = StyleDeclaration::parse(&name, input).map_err(ParseError::into)?;
+    let mut declarations = StyleDeclarationBlock::parse(&name, input).map_err(ParseError::into)?;
     let important = input.try_parse(parse_important).is_ok();
-    let metadata = DeclarationMetadata { important };
-
-    Ok(declaration.with_metadata(metadata))
+    if important {
+      for declaration in &declarations.declarations {
+        declarations
+          .importance_set
+          .insert(declaration.longhand_id());
+      }
+    }
+    Ok(declarations)
   }
 }
 
 impl<'i> QualifiedRuleParser<'i> for StyleDeclarationParser {
   type Prelude = ();
-  type QualifiedRule = StyleDeclaration;
+  type QualifiedRule = StyleDeclarationBlock;
   type Error = CssSelectorParseError<'i>;
 }
 
 impl<'i> AtRuleParser<'i> for StyleDeclarationParser {
   type Prelude = ();
-  type AtRule = StyleDeclaration;
+  type AtRule = StyleDeclarationBlock;
   type Error = CssSelectorParseError<'i>;
 }
 
-impl<'i> RuleBodyItemParser<'i, StyleDeclaration, CssSelectorParseError<'i>>
+impl<'i> RuleBodyItemParser<'i, StyleDeclarationBlock, CssSelectorParseError<'i>>
   for StyleDeclarationParser
 {
   fn parse_qualified(&self) -> bool {
@@ -224,7 +229,7 @@ impl<'i> RuleBodyItemParser<'i, StyleDeclaration, CssSelectorParseError<'i>>
 #[derive(Debug, Clone)]
 pub struct KeyframeRule {
   pub offsets: Vec<f32>,
-  pub declarations: StyleDeclarations,
+  pub declarations: StyleDeclarationBlock,
 }
 
 #[derive(Debug, Clone)]
@@ -236,7 +241,7 @@ pub struct KeyframesRule {
 struct KeyframeDeclarationParser;
 
 impl<'i> DeclarationParser<'i> for KeyframeDeclarationParser {
-  type Declaration = StyleDeclaration;
+  type Declaration = StyleDeclarationBlock;
   type Error = CssSelectorParseError<'i>;
 
   fn parse_value<'t>(
@@ -245,25 +250,25 @@ impl<'i> DeclarationParser<'i> for KeyframeDeclarationParser {
     input: &mut Parser<'i, 't>,
     _state: &ParserState,
   ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
-    let declaration = StyleDeclaration::parse(&name, input).map_err(ParseError::into)?;
+    let declarations = StyleDeclarationBlock::parse(&name, input).map_err(ParseError::into)?;
     let _ = input.try_parse(parse_important);
-    Ok(declaration)
+    Ok(declarations)
   }
 }
 
 impl<'i> QualifiedRuleParser<'i> for KeyframeDeclarationParser {
   type Prelude = ();
-  type QualifiedRule = StyleDeclaration;
+  type QualifiedRule = StyleDeclarationBlock;
   type Error = CssSelectorParseError<'i>;
 }
 
 impl<'i> AtRuleParser<'i> for KeyframeDeclarationParser {
   type Prelude = ();
-  type AtRule = StyleDeclaration;
+  type AtRule = StyleDeclarationBlock;
   type Error = CssSelectorParseError<'i>;
 }
 
-impl<'i> RuleBodyItemParser<'i, StyleDeclaration, CssSelectorParseError<'i>>
+impl<'i> RuleBodyItemParser<'i, StyleDeclarationBlock, CssSelectorParseError<'i>>
   for KeyframeDeclarationParser
 {
   fn parse_qualified(&self) -> bool {
@@ -306,7 +311,10 @@ impl<'i> QualifiedRuleParser<'i> for KeyframeRuleParser {
   ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
     let mut declaration_parser = KeyframeDeclarationParser;
     let parser = RuleBodyParser::new(input, &mut declaration_parser);
-    let declarations = parser.filter_map(Result::ok).collect::<StyleDeclarations>();
+    let mut declarations = StyleDeclarationBlock::default();
+    for block in parser.filter_map(Result::ok) {
+      declarations.append(block);
+    }
 
     Ok(KeyframeRule {
       offsets,
@@ -356,8 +364,8 @@ pub struct TakumiRuleParser;
 #[derive(Debug, Clone)]
 pub struct CssRule {
   pub selectors: SelectorList<TakumiSelectorImpl>,
-  pub normal_declarations: StyleDeclarations,
-  pub important_declarations: StyleDeclarations,
+  pub normal_declarations: StyleDeclarationBlock,
+  pub important_declarations: StyleDeclarationBlock,
 }
 
 #[derive(Debug, Clone)]
@@ -386,17 +394,17 @@ impl<'i> QualifiedRuleParser<'i> for TakumiRuleParser {
     _location: &ParserState,
     input: &mut Parser<'i, 't>,
   ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
-    let mut normal_declarations = StyleDeclarations::new();
-    let mut important_declarations = StyleDeclarations::new();
+    let mut normal_declarations = StyleDeclarationBlock::default();
+    let mut important_declarations = StyleDeclarationBlock::default();
     let mut decl_parser = StyleDeclarationParser;
     let parser = RuleBodyParser::new(input, &mut decl_parser);
     for res in parser {
       match res {
-        Ok(declaration) => {
-          if declaration.metadata.important {
-            important_declarations.push(declaration);
+        Ok(declarations) => {
+          if declarations.importance_set.is_empty() {
+            normal_declarations.append(declarations);
           } else {
-            normal_declarations.push(declaration);
+            important_declarations.append(declarations);
           }
         }
         Err((_error, _declaration)) => continue,
@@ -488,14 +496,16 @@ impl StyleSheet {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::layout::style::{Color, ColorInput, CssGlobalKeyword, CssValue, Length, Style};
+  use crate::layout::style::{
+    Color, ColorInput, Length, ResolvedStyle, Style, StyleDeclaration, StyleDeclarationBlock,
+  };
 
-  fn style_from_declarations(declarations: &[StyleDeclaration]) -> Style {
+  fn resolved_style_from_declarations(declarations: &StyleDeclarationBlock) -> ResolvedStyle {
     let mut style = Style::default();
-    for declaration in declarations {
+    for declaration in &declarations.declarations {
       declaration.merge_into(&mut style);
     }
-    style
+    style.inherit(&ResolvedStyle::default())
   }
 
   #[test]
@@ -512,8 +522,8 @@ mod tests {
 
     assert_eq!(rule.selectors.slice().len(), 1);
     assert_eq!(
-      style_from_declarations(&rule.normal_declarations).width,
-      CssValue::Value(Length::Px(100.0))
+      resolved_style_from_declarations(&rule.normal_declarations).width,
+      Length::Px(100.0)
     );
   }
 
@@ -546,12 +556,12 @@ mod tests {
 
     assert_eq!(sheet.rules.len(), 2);
     assert_eq!(
-      style_from_declarations(&sheet.rules[0].normal_declarations).width,
-      CssValue::Value(Length::Px(10.0))
+      resolved_style_from_declarations(&sheet.rules[0].normal_declarations).width,
+      Length::Px(10.0)
     );
     assert_eq!(
-      style_from_declarations(&sheet.rules[1].normal_declarations).height,
-      CssValue::Value(Length::Px(20.0))
+      resolved_style_from_declarations(&sheet.rules[1].normal_declarations).height,
+      Length::Px(20.0)
     );
   }
 
@@ -566,8 +576,8 @@ mod tests {
     assert_eq!(sheet.rules.len(), 1);
     assert_eq!(sheet.rules[0].selectors.slice().len(), 2);
     assert_eq!(
-      style_from_declarations(&sheet.rules[0].normal_declarations).width,
-      CssValue::Value(Length::Px(12.0))
+      resolved_style_from_declarations(&sheet.rules[0].normal_declarations).width,
+      Length::Px(12.0)
     );
   }
 
@@ -581,12 +591,12 @@ mod tests {
 
     let rule = &sheet.rules[0];
     assert_eq!(
-      style_from_declarations(&rule.important_declarations).width,
-      CssValue::Value(Length::Px(10.0))
+      resolved_style_from_declarations(&rule.important_declarations).width,
+      Length::Px(10.0)
     );
     assert_eq!(
-      style_from_declarations(&rule.normal_declarations).height,
-      CssValue::Value(Length::Px(20.0))
+      resolved_style_from_declarations(&rule.normal_declarations).height,
+      Length::Px(20.0)
     );
   }
 
@@ -598,10 +608,27 @@ mod tests {
       "#,
     );
 
-    let style = style_from_declarations(&sheet.rules[0].normal_declarations);
+    let declarations = &sheet.rules[0].normal_declarations;
+    assert_eq!(declarations.declarations.len(), 5);
     assert_eq!(
-      style.padding_left,
-      CssValue::Keyword(CssGlobalKeyword::Unset)
+      declarations.declarations[0],
+      StyleDeclaration::padding_left(Some(Length::Px(4.0)))
+    );
+    assert_eq!(
+      declarations.declarations[1],
+      StyleDeclaration::padding_top(Some(Length::Px(10.0)))
+    );
+    assert_eq!(
+      declarations.declarations[2],
+      StyleDeclaration::padding_right(Some(Length::Px(10.0)))
+    );
+    assert_eq!(
+      declarations.declarations[3],
+      StyleDeclaration::padding_bottom(Some(Length::Px(10.0)))
+    );
+    assert_eq!(
+      declarations.declarations[4],
+      StyleDeclaration::padding_left(Some(Length::Px(10.0)))
     );
   }
 
@@ -613,10 +640,10 @@ mod tests {
       "#,
     );
 
-    let style = style_from_declarations(&sheet.rules[0].normal_declarations);
+    let style = resolved_style_from_declarations(&sheet.rules[0].normal_declarations);
     assert_eq!(
       style.webkit_text_fill_color,
-      CssValue::Value(Some(ColorInput::Value(Color([255, 0, 0, 255]))))
+      Some(ColorInput::Value(Color([255, 0, 0, 255])))
     );
   }
 
@@ -628,9 +655,9 @@ mod tests {
       "#,
     );
 
-    let style = style_from_declarations(&sheet.rules[0].normal_declarations);
-    assert_eq!(style.width, CssValue::Value(Length::Px(14.0)));
-    assert_eq!(style.height, CssValue::Value(Length::Px(6.0)));
+    let style = resolved_style_from_declarations(&sheet.rules[0].normal_declarations);
+    assert_eq!(style.width, Length::Px(14.0));
+    assert_eq!(style.height, Length::Px(6.0));
   }
 
   #[test]

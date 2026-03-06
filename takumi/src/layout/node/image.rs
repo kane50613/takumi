@@ -10,7 +10,7 @@ use crate::{
   layout::{
     inline::InlineContentKind,
     node::{Node, NodeStyleLayers},
-    style::{Length, Style, tw::TailwindValues},
+    style::{Length, Style, StyleDeclaration, tw::TailwindValues},
   },
   rendering::{Canvas, RenderContext, draw_image},
   resources::{
@@ -67,10 +67,10 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ImageNode {
     if self.width.is_some() || self.height.is_some() {
       let preset_style = preset.get_or_insert_with(Style::default);
       if let Some(width) = self.width {
-        preset_style.width = Length::Px(width).into();
+        preset_style.push(StyleDeclaration::width(Length::Px(width)), false);
       }
       if let Some(height) = self.height {
-        preset_style.height = Length::Px(height).into();
+        preset_style.push(StyleDeclaration::height(Length::Px(height)), false);
       }
     }
 

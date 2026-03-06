@@ -1,4 +1,6 @@
 #[cfg(feature = "css_stylesheet_parsing")]
+use parley::{FontFeature, FontVariation};
+#[cfg(feature = "css_stylesheet_parsing")]
 use std::cmp::Ordering;
 
 #[cfg(feature = "css_stylesheet_parsing")]
@@ -25,12 +27,6 @@ pub(crate) fn apply_stylesheet_animations(
     let Some(keyframes) = find_keyframes(&context.stylesheets, animation_name) else {
       continue;
     };
-
-    if play_state_at(&base_snapshot.animation_play_state, animation_index)
-      == AnimationPlayState::Paused
-    {
-      continue;
-    }
 
     let duration = time_at(
       &base_snapshot.animation_duration,
@@ -60,16 +56,16 @@ pub(crate) fn apply_stylesheet_animations(
       continue;
     };
 
-    let Some((from_style, to_style, segment_progress)) =
-      sample_keyframe_segment(keyframes, &base_snapshot, progress)
-    else {
+    let resolved_frames = resolve_keyframes(keyframes, &base_snapshot);
+    let Some(segment) = sample_keyframe_segment(&resolved_frames, &base_snapshot, progress) else {
       continue;
     };
 
-    let eased_progress = apply_timing_function(&timing_function, segment_progress);
+    let eased_progress = apply_timing_function(&timing_function, segment.progress);
     base_style.apply_interpolated_properties(
-      from_style,
-      &to_style,
+      segment.from_style,
+      segment.to_style,
+      &segment.animated_properties,
       eased_progress,
       &context.sizing,
       context.current_color,
@@ -135,18 +131,33 @@ fn sample_animation_progress(
   if active_time >= total_active_duration {
     return match fill_mode {
       AnimationFillMode::Forwards | AnimationFillMode::Both => {
-        let iteration_index = match iteration_count {
-          AnimationIterationCount::Infinite => 0,
-          AnimationIterationCount::Number(count) => count.max(1.0).ceil() as usize - 1,
+        let end_progress = match iteration_count {
+          AnimationIterationCount::Infinite => end_progress(direction, 0),
+          AnimationIterationCount::Number(count) => {
+            let count = count.max(0.0);
+            let completed_iterations = count.floor() as usize;
+            let fraction = count.fract();
+            if fraction > f32::EPSILON {
+              let iteration_index = completed_iterations.saturating_sub(1);
+              apply_direction(fraction, direction, iteration_index)
+            } else {
+              end_progress(direction, count.max(1.0) as usize - 1)
+            }
+          }
         };
-        Some(end_progress(direction, iteration_index))
+        Some(end_progress)
       }
       _ => None,
     };
   }
 
-  let iteration_index = (active_time / duration_ms).floor() as usize;
-  let progress = (active_time / duration_ms).fract();
+  let progress_within_iteration = active_time / duration_ms;
+  let mut iteration_index = progress_within_iteration.floor() as usize;
+  let mut progress = progress_within_iteration.fract();
+  if active_time > 0.0 && progress_within_iteration.fract().abs() <= f32::EPSILON {
+    progress = 1.0;
+    iteration_index = iteration_index.saturating_sub(1);
+  }
 
   Some(apply_direction(progress, direction, iteration_index))
 }
@@ -184,88 +195,177 @@ fn apply_direction(progress: f32, direction: AnimationDirection, iteration_index
 }
 
 #[cfg(feature = "css_stylesheet_parsing")]
-fn sample_keyframe_segment(
-  keyframes: &KeyframesRule,
-  base_style: &ResolvedStyle,
+fn sample_keyframe_segment<'a>(
+  resolved_frames: &'a ResolvedKeyframes,
+  base_style: &'a ResolvedStyle,
   progress: f32,
-) -> Option<(ResolvedStyle, ResolvedStyle, f32)> {
-  let resolved_frames = resolve_keyframes(keyframes, base_style);
-  let first = resolved_frames.first()?;
+) -> Option<InterpolationSegment<'a>> {
+  let first = resolved_frames.points.first()?;
 
-  if progress <= first.0 {
-    let segment_progress = if first.0 <= 0.0 {
+  if progress <= first.offset {
+    let segment_progress = if first.offset <= 0.0 {
       1.0
     } else {
-      progress / first.0
+      progress / first.offset
     };
-    return Some((
-      base_style.clone(),
-      first.1.clone(),
+    return Some(InterpolationSegment::new(
+      base_style,
+      None,
+      &resolved_frames.style(first.style_index).style,
+      Some(&resolved_frames.style(first.style_index).mask),
       segment_progress.clamp(0.0, 1.0),
     ));
   }
 
-  for window in resolved_frames.windows(2) {
-    let [(start_offset, start_style), (end_offset, end_style)] = window else {
+  for window in resolved_frames.points.windows(2) {
+    let [start_point, end_point] = window else {
       continue;
     };
-    if progress <= *end_offset {
-      let width = end_offset - start_offset;
+    if progress <= end_point.offset {
+      let width = end_point.offset - start_point.offset;
       let segment_progress = if width <= f32::EPSILON {
         1.0
       } else {
-        (progress - start_offset) / width
+        (progress - start_point.offset) / width
       };
-      return Some((
-        start_style.clone(),
-        end_style.clone(),
+      return Some(InterpolationSegment::new(
+        &resolved_frames.style(start_point.style_index).style,
+        Some(&resolved_frames.style(start_point.style_index).mask),
+        &resolved_frames.style(end_point.style_index).style,
+        Some(&resolved_frames.style(end_point.style_index).mask),
         segment_progress.clamp(0.0, 1.0),
       ));
     }
   }
 
-  let last = resolved_frames.last()?;
-  let segment_progress = if last.0 >= 1.0 {
+  let last = resolved_frames.points.last()?;
+  let segment_progress = if last.offset >= 1.0 {
     1.0
   } else {
-    (progress - last.0) / (1.0 - last.0)
+    (progress - last.offset) / (1.0 - last.offset)
   };
-  Some((
-    last.1.clone(),
-    base_style.clone(),
+  Some(InterpolationSegment::new(
+    &resolved_frames.style(last.style_index).style,
+    Some(&resolved_frames.style(last.style_index).mask),
+    base_style,
+    None,
     segment_progress.clamp(0.0, 1.0),
   ))
 }
 
 #[cfg(feature = "css_stylesheet_parsing")]
-fn resolve_keyframes(
-  keyframes: &KeyframesRule,
-  base_style: &ResolvedStyle,
-) -> Vec<(f32, ResolvedStyle)> {
-  let mut frames = keyframes
+fn resolve_keyframes(keyframes: &KeyframesRule, base_style: &ResolvedStyle) -> ResolvedKeyframes {
+  let styles = keyframes
     .keyframes
     .iter()
-    .flat_map(|keyframe| {
+    .map(|keyframe| resolve_keyframe_style(keyframe, base_style))
+    .collect::<Vec<_>>();
+  let mut points = keyframes
+    .keyframes
+    .iter()
+    .enumerate()
+    .flat_map(|(style_index, keyframe)| {
       keyframe
         .offsets
         .iter()
         .copied()
-        .map(|offset| (offset, resolve_keyframe_style(keyframe, base_style)))
-        .collect::<Vec<_>>()
+        .map(move |offset| ResolvedKeyframePoint {
+          offset,
+          style_index,
+        })
     })
     .collect::<Vec<_>>();
 
-  frames.sort_by(|lhs, rhs| lhs.0.partial_cmp(&rhs.0).unwrap_or(Ordering::Equal));
-  frames
+  points.sort_by(|lhs, rhs| {
+    lhs
+      .offset
+      .partial_cmp(&rhs.offset)
+      .unwrap_or(Ordering::Equal)
+  });
+  ResolvedKeyframes { points, styles }
 }
 
 #[cfg(feature = "css_stylesheet_parsing")]
-fn resolve_keyframe_style(keyframe: &KeyframeRule, base_style: &ResolvedStyle) -> ResolvedStyle {
-  let mut style = base_style.clone();
-  for declaration in &keyframe.declarations {
-    declaration.apply_to_resolved(&mut style);
+#[derive(Debug)]
+struct ResolvedKeyframeStyle {
+  style: ResolvedStyle,
+  mask: PropertyMask,
+}
+
+#[cfg(feature = "css_stylesheet_parsing")]
+impl ResolvedKeyframeStyle {
+  fn new(style: ResolvedStyle, mask: PropertyMask) -> Self {
+    Self { style, mask }
   }
-  style
+}
+
+#[cfg(feature = "css_stylesheet_parsing")]
+#[derive(Debug)]
+struct ResolvedKeyframePoint {
+  offset: f32,
+  style_index: usize,
+}
+
+#[cfg(feature = "css_stylesheet_parsing")]
+#[derive(Debug)]
+struct ResolvedKeyframes {
+  points: Vec<ResolvedKeyframePoint>,
+  styles: Vec<ResolvedKeyframeStyle>,
+}
+
+#[cfg(feature = "css_stylesheet_parsing")]
+impl ResolvedKeyframes {
+  fn style(&self, index: usize) -> &ResolvedKeyframeStyle {
+    &self.styles[index]
+  }
+}
+
+#[cfg(feature = "css_stylesheet_parsing")]
+#[derive(Debug)]
+struct InterpolationSegment<'a> {
+  from_style: &'a ResolvedStyle,
+  to_style: &'a ResolvedStyle,
+  animated_properties: PropertyMask,
+  progress: f32,
+}
+
+#[cfg(feature = "css_stylesheet_parsing")]
+impl<'a> InterpolationSegment<'a> {
+  fn new(
+    from_style: &'a ResolvedStyle,
+    from_mask: Option<&'a PropertyMask>,
+    to_style: &'a ResolvedStyle,
+    to_mask: Option<&'a PropertyMask>,
+    progress: f32,
+  ) -> Self {
+    let mut animated_properties = PropertyMask::new();
+    if let Some(mask) = from_mask {
+      animated_properties.extend(mask.iter().copied());
+    }
+    if let Some(mask) = to_mask {
+      animated_properties.extend(mask.iter().copied());
+    }
+    Self {
+      from_style,
+      to_style,
+      animated_properties,
+      progress,
+    }
+  }
+}
+
+#[cfg(feature = "css_stylesheet_parsing")]
+fn resolve_keyframe_style(
+  keyframe: &KeyframeRule,
+  base_style: &ResolvedStyle,
+) -> ResolvedKeyframeStyle {
+  let mut style = base_style.clone();
+  let mut mask = PropertyMask::new();
+  for declaration in keyframe.declarations.iter() {
+    declaration.apply_to_resolved(&mut style);
+    mask.insert(declaration.longhand_id());
+  }
+  ResolvedKeyframeStyle::new(style, mask)
 }
 
 #[cfg(feature = "css_stylesheet_parsing")]
@@ -317,6 +417,7 @@ impl_passthrough_animatable!(
   LineJoin,
   TextDecoration,
   TextDecorationLines,
+  TextDecorationStyle,
   TextDecorationThickness,
   TextDecorationSkipInk,
   ImageScalingAlgorithm,
@@ -335,20 +436,38 @@ impl_passthrough_animatable!(
   VerticalAlign,
   Flex,
   FlexGrow,
+  Transform,
+  Background,
+  BackgroundImage,
+  BackgroundSize,
+  BackgroundRepeat,
+  BoxShadow,
+  GridTrackSize,
+  GridTemplateComponent,
+  Filter,
+  TextShadow,
+  FontFeature,
+  FontVariation,
 );
 
 #[cfg(feature = "css_stylesheet_parsing")]
 impl<const DEFAULT_AUTO: bool> Animatable for Length<DEFAULT_AUTO> {
   fn interpolate(
     &mut self,
-    from: Self,
+    from: &Self,
     to: &Self,
     progress: f32,
-    _sizing: &Sizing,
+    sizing: &Sizing,
     _current_color: Color,
   ) {
-    *self =
-      interpolate_length(from, *to, progress).unwrap_or(if progress >= 0.5 { *to } else { from });
+    *self = interpolate_length(*from, *to, progress)
+      .or_else(|| {
+        resolve_length_with_sizing(*from, sizing).and_then(|resolved_from| {
+          resolve_length_with_sizing(*to, sizing)
+            .map(|resolved_to| Length::Px(lerp(resolved_from, resolved_to, progress)))
+        })
+      })
+      .unwrap_or(if progress >= 0.5 { *to } else { *from });
   }
 }
 
@@ -385,12 +504,24 @@ fn interpolate_length<const DEFAULT_AUTO: bool>(
 }
 
 #[cfg(feature = "css_stylesheet_parsing")]
+fn resolve_length_with_sizing<const DEFAULT_AUTO: bool>(
+  value: Length<DEFAULT_AUTO>,
+  sizing: &Sizing,
+) -> Option<f32> {
+  if matches!(value, Length::Auto) {
+    return None;
+  }
+
+  Some(value.to_px(sizing, sizing.viewport.width.unwrap_or_default() as f32))
+}
+
 fn lerp(lhs: f32, rhs: f32, progress: f32) -> f32 {
   lhs + (rhs - lhs) * progress
 }
 
 #[cfg(all(test, feature = "css_stylesheet_parsing"))]
 mod tests {
+  use std::collections::BTreeSet;
   use std::rc::Rc;
 
   use taffy::Size;
@@ -422,15 +553,18 @@ mod tests {
   #[test]
   fn animatable_default_uses_from_value() {
     let mut target = Dummy(9);
-    target.interpolate(Dummy(3), &Dummy(7), 0.5, &sizing(), current_color());
+    target.interpolate(&Dummy(3), &Dummy(7), 0.5, &sizing(), current_color());
     assert_eq!(target, Dummy(3));
+
+    target.interpolate(&Dummy(3), &Dummy(7), 1.0, &sizing(), current_color());
+    assert_eq!(target, Dummy(7));
   }
 
   #[test]
   fn length_interpolates_continuously() {
     let mut target: Length = Length::zero();
     target.interpolate(
-      Length::Px(10.0),
+      &Length::Px(10.0),
       &Length::Px(30.0),
       0.25,
       &sizing(),
@@ -440,10 +574,24 @@ mod tests {
   }
 
   #[test]
+  fn mixed_unit_length_interpolates_via_sizing() {
+    let mut target: Length = Length::zero();
+    target.interpolate(
+      &Length::Px(0.0),
+      &Length::Percentage(50.0),
+      0.5,
+      &sizing(),
+      current_color(),
+    );
+
+    assert_eq!(target, Length::Px(50.0));
+  }
+
+  #[test]
   fn option_length_uses_discrete_fallback() {
     let mut target: Option<Length> = None;
     target.interpolate(
-      Some(Length::Px(10.0)),
+      &Some(Length::Px(10.0)),
       &None,
       0.25,
       &sizing(),
@@ -452,7 +600,7 @@ mod tests {
     assert_eq!(target, Some(Length::Px(10.0)));
 
     target.interpolate(
-      Some(Length::Px(10.0)),
+      &Some(Length::Px(10.0)),
       &None,
       0.75,
       &sizing(),
@@ -465,7 +613,7 @@ mod tests {
   fn background_position_interpolates_components() {
     let mut target = BackgroundPosition::default();
     target.interpolate(
-      BackgroundPosition(SpacePair::from_pair(
+      &BackgroundPosition(SpacePair::from_pair(
         PositionComponent::KeywordX(PositionKeywordX::Left),
         PositionComponent::KeywordY(PositionKeywordY::Top),
       )),
@@ -491,7 +639,7 @@ mod tests {
   fn color_input_interpolates_using_current_color() {
     let mut target: ColorInput = ColorInput::CurrentColor;
     target.interpolate(
-      ColorInput::CurrentColor,
+      &ColorInput::CurrentColor,
       &ColorInput::Value(Color([110, 120, 130, 255])),
       0.5,
       &sizing(),
@@ -505,7 +653,7 @@ mod tests {
   fn border_radius_interpolates_via_container_impls() {
     let mut target = BorderRadius::default();
     target.interpolate(
-      BorderRadius::from(4.0),
+      &BorderRadius::from(4.0),
       &BorderRadius::from(12.0),
       0.5,
       &sizing(),
@@ -519,7 +667,7 @@ mod tests {
   fn percentage_number_interpolates() {
     let mut target = PercentageNumber::default();
     target.interpolate(
-      PercentageNumber(0.2),
+      &PercentageNumber(0.2),
       &PercentageNumber(0.6),
       0.5,
       &sizing(),
@@ -555,5 +703,79 @@ mod tests {
     );
 
     assert_eq!(progress, Some(0.0));
+  }
+
+  #[test]
+  fn animation_progress_keeps_fractional_final_iteration_state() {
+    let progress = sample_animation_progress(
+      1500.0,
+      1000.0,
+      0.0,
+      AnimationIterationCount::Number(1.5),
+      AnimationDirection::Normal,
+      AnimationFillMode::Forwards,
+    );
+
+    assert_eq!(progress, Some(0.5));
+  }
+
+  #[test]
+  fn animation_progress_uses_end_of_iteration_for_exact_normal_boundaries() {
+    let progress = sample_animation_progress(
+      1000.0,
+      1000.0,
+      0.0,
+      AnimationIterationCount::Infinite,
+      AnimationDirection::Normal,
+      AnimationFillMode::Both,
+    );
+
+    assert_eq!(progress, Some(1.0));
+  }
+
+  #[test]
+  fn vec_animates_pairwise() {
+    let mut values: Vec<Length> = vec![Length::Px(0.0), Length::Px(10.0)];
+    values.interpolate(
+      &vec![Length::Px(0.0), Length::Px(10.0)],
+      &vec![Length::Px(20.0), Length::Px(30.0)],
+      0.5,
+      &sizing(),
+      current_color(),
+    );
+
+    assert_eq!(values, vec![Length::Px(10.0), Length::Px(20.0)]);
+  }
+
+  #[test]
+  fn apply_interpolated_properties_only_updates_masked_fields() {
+    let mut base_style = ResolvedStyle {
+      width: Length::Px(10.0),
+      height: Length::Px(20.0),
+      ..ResolvedStyle::default()
+    };
+    let from = ResolvedStyle {
+      width: Length::Px(10.0),
+      height: Length::Px(100.0),
+      ..ResolvedStyle::default()
+    };
+    let to = ResolvedStyle {
+      width: Length::Px(30.0),
+      height: Length::Px(200.0),
+      ..ResolvedStyle::default()
+    };
+    let animated_properties = BTreeSet::from([LonghandId::Width]);
+
+    base_style.apply_interpolated_properties(
+      &from,
+      &to,
+      &animated_properties,
+      0.5,
+      &sizing(),
+      current_color(),
+    );
+
+    assert_eq!(base_style.width, Length::Px(20.0));
+    assert_eq!(base_style.height, Length::Px(20.0));
   }
 }

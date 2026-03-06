@@ -23,7 +23,7 @@ impl MakeComputed for PercentageNumber {}
 impl Animatable for PercentageNumber {
   fn interpolate(
     &mut self,
-    from: Self,
+    from: &Self,
     to: &Self,
     progress: f32,
     _sizing: &Sizing,

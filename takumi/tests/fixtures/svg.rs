@@ -13,17 +13,15 @@ fn create_luma_logo_container() -> ContainerNode<NodeKind> {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_image(Some(
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_image(Some(
           BackgroundImages::from_str("linear-gradient(135deg, #2d3748 0%, #1a202c 100%)").unwrap(),
-        ))
-        .display(Display::Flex)
-        .justify_content(JustifyContent::Center)
-        .align_items(AlignItems::Center)
-        .build()
-        .unwrap(),
+        )))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::align_items(AlignItems::Center)),
     ),
     children: Some(
       [NodeKind::Image(ImageNode {
@@ -33,12 +31,10 @@ fn create_luma_logo_container() -> ContainerNode<NodeKind> {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .width(Px(204.0))
-            .height(Px(76.0))
-            .object_fit(ObjectFit::Contain)
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::width(Px(204.0)))
+            .with(StyleDeclaration::height(Px(76.0)))
+            .with(StyleDeclaration::object_fit(ObjectFit::Contain)),
         ),
         width: None,
         height: None,
@@ -68,12 +64,12 @@ fn test_svg_attr_size_in_absolute_flex_container() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .background_color(ColorInput::Value(Color([35, 35, 35, 255])))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([35, 35, 35, 255]),
+        )))),
     ),
     children: Some(
       [ContainerNode {
@@ -83,12 +79,10 @@ fn test_svg_attr_size_in_absolute_flex_container() {
         preset: None,
         tw: None,
         style: Some(
-          StyleBuilder::default()
-            .position(Position::Absolute)
-            .inset(Sides([Auto, Px(40.0), Px(40.0), Auto]))
-            .display(Display::Flex)
-            .build()
-            .unwrap(),
+          Style::default()
+            .with(StyleDeclaration::position(Position::Absolute))
+            .with_inset(Sides([Auto, Px(40.0), Px(40.0), Auto]))
+            .with(StyleDeclaration::display(Display::Flex)),
         ),
         children: Some(
           [ImageNode {
@@ -127,16 +121,16 @@ fn test_svg_current_color_fixture() {
       preset: None,
       tw: None,
       style: Some(
-        StyleBuilder::default()
-          .width(Px(160.0))
-          .height(Px(160.0))
-          .padding(Sides([Px(20.0); 4]))
-          .background_color(ColorInput::Value(Color([240, 240, 240, 255])))
-          .color(ColorInput::Value(color))
-          .flex_direction(FlexDirection::Column)
-          .align_items(AlignItems::Center)
-          .build()
-          .unwrap(),
+        Style::default()
+          .with(StyleDeclaration::width(Px(160.0)))
+          .with(StyleDeclaration::height(Px(160.0)))
+          .with_padding(Sides([Px(20.0); 4]))
+          .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+            Color([240, 240, 240, 255]),
+          ))))
+          .with(StyleDeclaration::color(ColorInput::Value(color)))
+          .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+          .with(StyleDeclaration::align_items(AlignItems::Center)),
       ),
       children: Some(
         [
@@ -147,11 +141,9 @@ fn test_svg_current_color_fixture() {
             preset: None,
             tw: None,
             style: Some(
-              StyleBuilder::default()
-                .width(Px(120.0))
-                .height(Px(120.0))
-                .build()
-                .unwrap(),
+              Style::default()
+                .with(StyleDeclaration::width(Px(120.0)))
+                .with(StyleDeclaration::height(Px(120.0))),
             ),
             src: svg.into(),
             width: None,
@@ -182,15 +174,15 @@ fn test_svg_current_color_fixture() {
     preset: None,
     tw: None,
     style: Some(
-      StyleBuilder::default()
-        .width(Percentage(100.0))
-        .height(Percentage(100.0))
-        .display(Display::Flex)
-        .gap(SpacePair::from_single(Px(24.0)))
-        .padding(Sides([Px(40.0); 4]))
-        .background_color(ColorInput::Value(Color([30, 30, 30, 255])))
-        .build()
-        .unwrap(),
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with_gap(SpacePair::from_single(Px(24.0)))
+        .with_padding(Sides([Px(40.0); 4]))
+        .with(StyleDeclaration::background_color(Some(ColorInput::Value(
+          Color([30, 30, 30, 255]),
+        )))),
     ),
     children: Some(
       [

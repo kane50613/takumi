@@ -3,6 +3,7 @@ pub(crate) mod parser;
 
 use std::{borrow::Cow, cmp::Ordering, ops::Neg, str::FromStr};
 
+use cssparser::match_ignore_ascii_case;
 use serde::{Deserializer, de::Error as DeError};
 
 use crate::layout::{
@@ -63,14 +64,97 @@ impl TailwindValues {
     self.inner.iter()
   }
 
-  pub(crate) fn apply_to_style(&self, style: &mut Style, viewport: Viewport) {
-    let mut background_image_state = TwGradientState::default();
+  pub(crate) fn to_declaration_block(&self, viewport: Viewport) -> StyleDeclarationBlock {
+    let mut builder = TailwindDeclarationBuilder::default();
 
     for value in self.iter() {
-      value.apply(style, viewport, &mut background_image_state);
+      value.apply(&mut builder, viewport);
     }
 
-    background_image_state.apply(style);
+    builder.finish()
+  }
+}
+
+#[derive(Debug, Default)]
+struct TailwindDeclarationBuilder {
+  declarations: StyleDeclarationBlock,
+  gradient_state: TwGradientState,
+  filter: Option<Filters>,
+  filter_important: bool,
+  backdrop_filter: Option<Filters>,
+  backdrop_filter_important: bool,
+  grid_column: Option<GridLine>,
+  grid_column_important: bool,
+  grid_row: Option<GridLine>,
+  grid_row_important: bool,
+}
+
+impl TailwindDeclarationBuilder {
+  fn push(&mut self, declaration: StyleDeclaration, important: bool) {
+    self.declarations.push(declaration, important);
+  }
+
+  fn push_filter(&mut self, filter: Filter, important: bool) {
+    self.filter.get_or_insert_with(Vec::new).push(filter);
+    self.filter_important = important;
+  }
+
+  fn push_backdrop_filter(&mut self, filter: Filter, important: bool) {
+    self
+      .backdrop_filter
+      .get_or_insert_with(Vec::new)
+      .push(filter);
+    self.backdrop_filter_important = important;
+  }
+
+  fn set_grid_column(&mut self, grid_line: GridLine, important: bool) {
+    self.grid_column = Some(grid_line);
+    self.grid_column_important = important;
+  }
+
+  fn set_grid_row(&mut self, grid_line: GridLine, important: bool) {
+    self.grid_row = Some(grid_line);
+    self.grid_row_important = important;
+  }
+
+  fn grid_column_mut(&mut self, important: bool) -> &mut GridLine {
+    self.grid_column_important = important;
+    self.grid_column.get_or_insert_with(GridLine::default)
+  }
+
+  fn grid_row_mut(&mut self, important: bool) -> &mut GridLine {
+    self.grid_row_important = important;
+    self.grid_row.get_or_insert_with(GridLine::default)
+  }
+
+  fn finish(mut self) -> StyleDeclarationBlock {
+    if let Some(grid_column) = self.grid_column.take() {
+      self.push(
+        StyleDeclaration::grid_column(Some(grid_column)),
+        self.grid_column_important,
+      );
+    }
+
+    if let Some(grid_row) = self.grid_row.take() {
+      self.push(
+        StyleDeclaration::grid_row(Some(grid_row)),
+        self.grid_row_important,
+      );
+    }
+
+    if let Some(filter) = self.filter.take() {
+      self.push(StyleDeclaration::filter(filter), self.filter_important);
+    }
+
+    if let Some(backdrop_filter) = self.backdrop_filter.take() {
+      self.push(
+        StyleDeclaration::backdrop_filter(backdrop_filter),
+        self.backdrop_filter_important,
+      );
+    }
+
+    self.gradient_state.apply(&mut self.declarations);
+    self.declarations
   }
 }
 
@@ -81,6 +165,7 @@ pub(crate) struct TwGradientState {
   pub from: Option<ColorInput>,
   pub to: Option<ColorInput>,
   pub via: Option<ColorInput>,
+  pub important: bool,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -92,7 +177,7 @@ pub(crate) enum TwGradientType {
 }
 
 impl TwGradientState {
-  pub(crate) fn apply(self, style: &mut Style) {
+  pub(crate) fn apply(self, declarations: &mut StyleDeclarationBlock) {
     if self.from.is_none() && self.to.is_none() && self.via.is_none() && self.angle.is_none() {
       return;
     }
@@ -134,7 +219,10 @@ impl TwGradientState {
           stops: stops.into_boxed_slice(),
         };
 
-        style.background_image = [BackgroundImage::Linear(gradient)].into();
+        declarations.push(
+          StyleDeclaration::background_image(Some([BackgroundImage::Linear(gradient)].into())),
+          self.important,
+        );
       }
       TwGradientType::Radial => {
         let gradient = RadialGradient {
@@ -145,7 +233,10 @@ impl TwGradientState {
           stops: stops.into_boxed_slice(),
         };
 
-        style.background_image = [BackgroundImage::Radial(gradient)].into();
+        declarations.push(
+          StyleDeclaration::background_image(Some([BackgroundImage::Radial(gradient)].into())),
+          self.important,
+        );
       }
       TwGradientType::Conic => {
         let gradient = ConicGradient {
@@ -155,7 +246,10 @@ impl TwGradientState {
           stops: stops.into_boxed_slice(),
         };
 
-        style.background_image = [BackgroundImage::Conic(gradient)].into();
+        declarations.push(
+          StyleDeclaration::background_image(Some([BackgroundImage::Conic(gradient)].into())),
+          self.important,
+        );
       }
     }
   }
@@ -184,14 +278,14 @@ pub struct TailwindValue {
 }
 
 impl TailwindValue {
-  fn apply(&self, style: &mut Style, viewport: Viewport, gradient_state: &mut TwGradientState) {
+  fn apply(&self, builder: &mut TailwindDeclarationBuilder, viewport: Viewport) {
     if let Some(breakpoint) = self.breakpoint
       && !breakpoint.matches(viewport)
     {
       return;
     }
 
-    self.property.apply(style, gradient_state);
+    self.property.apply(builder, self.important);
   }
 
   /// Parse a tailwind value from a token.
@@ -648,16 +742,10 @@ impl Neg for TailwindProperty {
   }
 }
 
-/// Macro to append a filter to the existing filter list in style.
-/// If no filters exist, creates a new filter Vec with the single filter.
-macro_rules! append_filter {
-  ($style:expr, $field:ident, $filter:expr) => {{
-    if let CssValue::Value(existing_filters) = &mut $style.$field {
-      existing_filters.push($filter);
-    } else {
-      $style.$field = vec![$filter].into();
-    }
-  }};
+macro_rules! push_decl {
+  ($builder:expr, $important:expr, $property:ident($value:expr)) => {
+    $builder.push(StyleDeclaration::$property($value), $important)
+  };
 }
 
 impl TailwindProperty {
@@ -703,524 +791,650 @@ impl TailwindProperty {
     None
   }
 
-  pub(crate) fn apply(&self, style: &mut Style, gradient_state: &mut TwGradientState) {
+  fn apply(&self, builder: &mut TailwindDeclarationBuilder, important: bool) {
     match *self {
       TailwindProperty::BgLinearAngle(angle) => {
-        gradient_state.gradient_type = TwGradientType::Linear;
-        gradient_state.angle = Some(angle);
+        builder.gradient_state.gradient_type = TwGradientType::Linear;
+        builder.gradient_state.angle = Some(angle);
+        builder.gradient_state.important = important;
       }
       TailwindProperty::BgRadial => {
-        gradient_state.gradient_type = TwGradientType::Radial;
+        builder.gradient_state.gradient_type = TwGradientType::Radial;
+        builder.gradient_state.important = important;
       }
       TailwindProperty::BgConicAngle(angle) => {
-        gradient_state.gradient_type = TwGradientType::Conic;
-        gradient_state.angle = Some(angle);
+        builder.gradient_state.gradient_type = TwGradientType::Conic;
+        builder.gradient_state.angle = Some(angle);
+        builder.gradient_state.important = important;
       }
       TailwindProperty::GradientFrom(color) => {
-        gradient_state.from = Some(color);
+        builder.gradient_state.from = Some(color);
+        builder.gradient_state.important = important;
       }
       TailwindProperty::GradientTo(color) => {
-        gradient_state.to = Some(color);
+        builder.gradient_state.to = Some(color);
+        builder.gradient_state.important = important;
       }
       TailwindProperty::GradientVia(color) => {
-        gradient_state.via = Some(color);
+        builder.gradient_state.via = Some(color);
+        builder.gradient_state.important = important;
       }
       TailwindProperty::BackgroundClip(background_clip) => {
-        style.background_clip = background_clip.into();
+        push_decl!(builder, important, background_clip(background_clip));
       }
       TailwindProperty::Gap(gap) => {
-        style.gap = SpacePair::from_single(gap).into();
+        push_decl!(builder, important, row_gap(Some(gap)));
+        push_decl!(builder, important, column_gap(Some(gap)));
       }
-      TailwindProperty::GapX(gap_x) => {
-        style.column_gap = Some(gap_x).into();
-      }
-      TailwindProperty::GapY(gap_y) => {
-        style.row_gap = Some(gap_y).into();
-      }
+      TailwindProperty::GapX(gap_x) => push_decl!(builder, important, column_gap(Some(gap_x))),
+      TailwindProperty::GapY(gap_y) => push_decl!(builder, important, row_gap(Some(gap_y))),
       TailwindProperty::BoxSizing(box_sizing) => {
-        style.box_sizing = box_sizing.into();
+        push_decl!(builder, important, box_sizing(box_sizing))
       }
       TailwindProperty::FlexGrow(flex_grow) => {
-        style.flex_grow = Some(flex_grow).into();
+        push_decl!(builder, important, flex_grow(Some(flex_grow)))
       }
       TailwindProperty::FlexShrink(flex_shrink) => {
-        style.flex_shrink = Some(flex_shrink).into();
+        push_decl!(builder, important, flex_shrink(Some(flex_shrink)))
       }
-      TailwindProperty::Aspect(ratio) => {
-        style.aspect_ratio = ratio.into();
-      }
+      TailwindProperty::Aspect(ratio) => push_decl!(builder, important, aspect_ratio(ratio)),
       TailwindProperty::Items(align_items) => {
-        style.align_items = align_items.into();
+        push_decl!(builder, important, align_items(align_items))
       }
       TailwindProperty::Justify(justify_content) => {
-        style.justify_content = justify_content.into();
+        push_decl!(builder, important, justify_content(justify_content))
       }
       TailwindProperty::Content(align_content) => {
-        style.align_content = align_content.into();
+        push_decl!(builder, important, align_content(align_content))
       }
       TailwindProperty::AlignSelf(align_self) => {
-        style.align_self = align_self.into();
+        push_decl!(builder, important, align_self(align_self))
       }
       TailwindProperty::FlexDirection(flex_direction) => {
-        style.flex_direction = flex_direction.into();
+        push_decl!(builder, important, flex_direction(flex_direction))
       }
-      TailwindProperty::FlexWrap(flex_wrap) => {
-        style.flex_wrap = flex_wrap.into();
-      }
+      TailwindProperty::FlexWrap(flex_wrap) => push_decl!(builder, important, flex_wrap(flex_wrap)),
       TailwindProperty::Flex(flex) => {
-        style.flex = Some(flex).into();
+        push_decl!(builder, important, flex_grow(Some(FlexGrow(flex.grow))));
+        push_decl!(builder, important, flex_shrink(Some(FlexGrow(flex.shrink))));
+        push_decl!(builder, important, flex_basis(Some(flex.basis)));
       }
       TailwindProperty::FlexBasis(flex_basis) => {
-        style.flex_basis = Some(flex_basis).into();
+        push_decl!(builder, important, flex_basis(Some(flex_basis)))
       }
       TailwindProperty::Overflow(overflow) => {
-        style.overflow = SpacePair::from_single(overflow).into();
+        push_decl!(builder, important, overflow_x(Some(overflow)));
+        push_decl!(builder, important, overflow_y(Some(overflow)));
       }
-      TailwindProperty::Position(position) => {
-        style.position = position.into();
-      }
+      TailwindProperty::Position(position) => push_decl!(builder, important, position(position)),
       TailwindProperty::FontStyle(font_style) => {
-        style.font_style = font_style.into();
+        push_decl!(builder, important, font_style(font_style))
       }
       TailwindProperty::FontWeight(font_weight) => {
-        style.font_weight = font_weight.into();
+        push_decl!(builder, important, font_weight(font_weight))
       }
       TailwindProperty::FontStretch(font_stretch) => {
-        style.font_stretch = font_stretch.into();
+        push_decl!(builder, important, font_stretch(font_stretch))
       }
       TailwindProperty::FontFamily(ref font_family) => {
-        style.font_family = Some(font_family.clone()).into();
+        push_decl!(builder, important, font_family(Some(font_family.clone())))
       }
       TailwindProperty::LineClamp(ref line_clamp) => {
-        style.line_clamp = Some(line_clamp.clone()).into();
+        push_decl!(builder, important, line_clamp(Some(line_clamp.clone())))
       }
       TailwindProperty::TextAlign(text_align) => {
-        style.text_align = text_align.into();
+        push_decl!(builder, important, text_align(text_align))
       }
-      TailwindProperty::TextDecorationLine(text_decoration) => {
-        style.text_decoration_line = text_decoration.into();
-      }
+      TailwindProperty::TextDecorationLine(text_decoration) => push_decl!(
+        builder,
+        important,
+        text_decoration_line(Some(text_decoration))
+      ),
       TailwindProperty::TextDecorationColor(color_input) => {
-        style.text_decoration_color = Some(color_input).into();
+        push_decl!(builder, important, text_decoration_color(Some(color_input)))
       }
-      TailwindProperty::TextDecorationThickness(thickness) => {
-        style.text_decoration_thickness = Some(thickness).into();
-      }
+      TailwindProperty::TextDecorationThickness(thickness) => push_decl!(
+        builder,
+        important,
+        text_decoration_thickness(Some(thickness))
+      ),
       TailwindProperty::TextTransform(text_transform) => {
-        style.text_transform = text_transform.into();
+        push_decl!(builder, important, text_transform(text_transform))
       }
       TailwindProperty::Size(size) => {
-        style.width = size.into();
-        style.height = size.into();
+        push_decl!(builder, important, width(size));
+        push_decl!(builder, important, height(size));
       }
-      TailwindProperty::Width(width) => {
-        style.width = width.into();
-      }
-      TailwindProperty::Height(height) => {
-        style.height = height.into();
-      }
-      TailwindProperty::MinWidth(min_width) => {
-        style.min_width = min_width.into();
-      }
+      TailwindProperty::Width(width) => push_decl!(builder, important, width(width)),
+      TailwindProperty::Height(height) => push_decl!(builder, important, height(height)),
+      TailwindProperty::MinWidth(min_width) => push_decl!(builder, important, min_width(min_width)),
       TailwindProperty::MinHeight(min_height) => {
-        style.min_height = min_height.into();
+        push_decl!(builder, important, min_height(min_height))
       }
-      TailwindProperty::MaxWidth(max_width) => {
-        style.max_width = max_width.into();
-      }
+      TailwindProperty::MaxWidth(max_width) => push_decl!(builder, important, max_width(max_width)),
       TailwindProperty::MaxHeight(max_height) => {
-        style.max_height = max_height.into();
+        push_decl!(builder, important, max_height(max_height))
       }
       TailwindProperty::Shadow(box_shadow) => {
-        style.box_shadow = [box_shadow].into();
+        push_decl!(builder, important, box_shadow(Some([box_shadow].into())))
       }
-      TailwindProperty::Display(display) => {
-        style.display = display.into();
-      }
+      TailwindProperty::Display(display) => push_decl!(builder, important, display(display)),
       TailwindProperty::OverflowX(overflow) => {
-        style.overflow_x = Some(overflow).into();
+        push_decl!(builder, important, overflow_x(Some(overflow)))
       }
       TailwindProperty::OverflowY(overflow) => {
-        style.overflow_y = Some(overflow).into();
+        push_decl!(builder, important, overflow_y(Some(overflow)))
       }
       TailwindProperty::ObjectPosition(background_position) => {
-        style.object_position = background_position.into();
+        push_decl!(builder, important, object_position(background_position))
       }
       TailwindProperty::ObjectFit(object_fit) => {
-        style.object_fit = object_fit.into();
+        push_decl!(builder, important, object_fit(object_fit))
       }
-      TailwindProperty::BackgroundPosition(background_position) => {
-        style.background_position = [background_position].into();
-      }
-      TailwindProperty::BackgroundSize(background_size) => {
-        style.background_size = [background_size].into();
-      }
-      TailwindProperty::BackgroundRepeat(background_repeat) => {
-        style.background_repeat = [background_repeat].into();
-      }
-      TailwindProperty::BackgroundImage(ref background_image) => {
-        style.background_image = [background_image.clone()].into();
-      }
+      TailwindProperty::BackgroundPosition(background_position) => push_decl!(
+        builder,
+        important,
+        background_position(Some([background_position].into()))
+      ),
+      TailwindProperty::BackgroundSize(background_size) => push_decl!(
+        builder,
+        important,
+        background_size(Some([background_size].into()))
+      ),
+      TailwindProperty::BackgroundRepeat(background_repeat) => push_decl!(
+        builder,
+        important,
+        background_repeat(Some([background_repeat].into()))
+      ),
+      TailwindProperty::BackgroundImage(ref background_image) => push_decl!(
+        builder,
+        important,
+        background_image(Some([background_image.clone()].into()))
+      ),
       TailwindProperty::BorderDefault => {
-        style.border_width = Some(Sides([Length::Px(1.0); 4])).into();
-        style.border_style = Some(BorderStyle::Solid).into();
+        push_decl!(builder, important, border_top_width(Some(Length::Px(1.0))));
+        push_decl!(
+          builder,
+          important,
+          border_right_width(Some(Length::Px(1.0)))
+        );
+        push_decl!(
+          builder,
+          important,
+          border_bottom_width(Some(Length::Px(1.0)))
+        );
+        push_decl!(builder, important, border_left_width(Some(Length::Px(1.0))));
+        push_decl!(builder, important, border_style(Some(BorderStyle::Solid)));
       }
       TailwindProperty::BorderWidth(tw_border_width) => {
-        style.border_width = Some(Sides([tw_border_width.0; 4])).into();
+        push_decl!(
+          builder,
+          important,
+          border_top_width(Some(tw_border_width.0))
+        );
+        push_decl!(
+          builder,
+          important,
+          border_right_width(Some(tw_border_width.0))
+        );
+        push_decl!(
+          builder,
+          important,
+          border_bottom_width(Some(tw_border_width.0))
+        );
+        push_decl!(
+          builder,
+          important,
+          border_left_width(Some(tw_border_width.0))
+        );
       }
       TailwindProperty::BorderStyle(border_style) => {
-        style.border_style = Some(border_style).into();
+        push_decl!(builder, important, border_style(Some(border_style)))
       }
       TailwindProperty::JustifySelf(align_items) => {
-        style.justify_self = align_items.into();
+        push_decl!(builder, important, justify_self(align_items))
       }
       TailwindProperty::JustifyItems(align_items) => {
-        style.justify_items = align_items.into();
+        push_decl!(builder, important, justify_items(align_items))
       }
-      TailwindProperty::Color(color_input) => {
-        style.color = color_input.into();
-      }
+      TailwindProperty::Color(color_input) => push_decl!(builder, important, color(color_input)),
       TailwindProperty::Opacity(percentage_number) => {
-        style.opacity = percentage_number.into();
+        push_decl!(builder, important, opacity(percentage_number))
       }
       TailwindProperty::BackgroundColor(color_input) => {
-        style.background_color = color_input.into();
+        push_decl!(builder, important, background_color(Some(color_input)))
       }
       TailwindProperty::BorderColor(color_input) => {
-        style.border_color = Some(color_input).into();
+        push_decl!(builder, important, border_color(Some(color_input)))
       }
-      TailwindProperty::BorderTopWidth(tw_border_width) => {
-        style.border_top_width = Some(tw_border_width.0).into();
-      }
-      TailwindProperty::BorderRightWidth(tw_border_width) => {
-        style.border_right_width = Some(tw_border_width.0).into();
-      }
-      TailwindProperty::BorderBottomWidth(tw_border_width) => {
-        style.border_bottom_width = Some(tw_border_width.0).into();
-      }
-      TailwindProperty::BorderLeftWidth(tw_border_width) => {
-        style.border_left_width = Some(tw_border_width.0).into();
-      }
+      TailwindProperty::BorderTopWidth(tw_border_width) => push_decl!(
+        builder,
+        important,
+        border_top_width(Some(tw_border_width.0))
+      ),
+      TailwindProperty::BorderRightWidth(tw_border_width) => push_decl!(
+        builder,
+        important,
+        border_right_width(Some(tw_border_width.0))
+      ),
+      TailwindProperty::BorderBottomWidth(tw_border_width) => push_decl!(
+        builder,
+        important,
+        border_bottom_width(Some(tw_border_width.0))
+      ),
+      TailwindProperty::BorderLeftWidth(tw_border_width) => push_decl!(
+        builder,
+        important,
+        border_left_width(Some(tw_border_width.0))
+      ),
       TailwindProperty::BorderXWidth(tw_border_width) => {
-        style.border_left_width = Some(tw_border_width.0).into();
-        style.border_right_width = Some(tw_border_width.0).into();
+        push_decl!(
+          builder,
+          important,
+          border_left_width(Some(tw_border_width.0))
+        );
+        push_decl!(
+          builder,
+          important,
+          border_right_width(Some(tw_border_width.0))
+        );
       }
       TailwindProperty::BorderYWidth(tw_border_width) => {
-        style.border_top_width = Some(tw_border_width.0).into();
-        style.border_bottom_width = Some(tw_border_width.0).into();
+        push_decl!(
+          builder,
+          important,
+          border_top_width(Some(tw_border_width.0))
+        );
+        push_decl!(
+          builder,
+          important,
+          border_bottom_width(Some(tw_border_width.0))
+        );
       }
       TailwindProperty::OutlineDefault => {
-        style.outline_width = Some(Length::Px(1.0)).into();
-        style.outline_style = Some(BorderStyle::Solid).into();
+        push_decl!(builder, important, outline_width(Some(Length::Px(1.0))));
+        push_decl!(builder, important, outline_style(Some(BorderStyle::Solid)));
       }
       TailwindProperty::OutlineWidth(tw_border_width) => {
-        style.outline_width = Some(tw_border_width.0).into();
+        push_decl!(builder, important, outline_width(Some(tw_border_width.0)))
       }
       TailwindProperty::OutlineColor(color_input) => {
-        style.outline_color = Some(color_input).into();
+        push_decl!(builder, important, outline_color(Some(color_input)))
       }
       TailwindProperty::OutlineStyle(outline_style) => {
-        style.outline_style = Some(outline_style).into();
+        push_decl!(builder, important, outline_style(Some(outline_style)))
       }
       TailwindProperty::OutlineOffset(outline_offset) => {
-        style.outline_offset = Some(outline_offset.0).into();
+        push_decl!(builder, important, outline_offset(Some(outline_offset.0)))
       }
       TailwindProperty::Rounded(rounded) => {
-        style.border_radius =
-          Box::new(BorderRadius(Sides([SpacePair::from_single(rounded.0); 4]))).into();
+        push_decl!(
+          builder,
+          important,
+          border_top_left_radius(Some(SpacePair::from_single(rounded.0)))
+        );
+        push_decl!(
+          builder,
+          important,
+          border_top_right_radius(Some(SpacePair::from_single(rounded.0)))
+        );
+        push_decl!(
+          builder,
+          important,
+          border_bottom_right_radius(Some(SpacePair::from_single(rounded.0)))
+        );
+        push_decl!(
+          builder,
+          important,
+          border_bottom_left_radius(Some(SpacePair::from_single(rounded.0)))
+        );
       }
       TailwindProperty::VerticalAlign(vertical_align) => {
-        style.vertical_align = vertical_align.into();
+        push_decl!(builder, important, vertical_align(vertical_align))
       }
-      TailwindProperty::RoundedTopLeft(rounded) => {
-        style.border_top_left_radius = Some(SpacePair::from_single(rounded.0)).into();
-      }
-      TailwindProperty::RoundedTopRight(rounded) => {
-        style.border_top_right_radius = Some(SpacePair::from_single(rounded.0)).into();
-      }
-      TailwindProperty::RoundedBottomRight(rounded) => {
-        style.border_bottom_right_radius = Some(SpacePair::from_single(rounded.0)).into();
-      }
-      TailwindProperty::RoundedBottomLeft(rounded) => {
-        style.border_bottom_left_radius = Some(SpacePair::from_single(rounded.0)).into();
-      }
+      TailwindProperty::RoundedTopLeft(rounded) => push_decl!(
+        builder,
+        important,
+        border_top_left_radius(Some(SpacePair::from_single(rounded.0)))
+      ),
+      TailwindProperty::RoundedTopRight(rounded) => push_decl!(
+        builder,
+        important,
+        border_top_right_radius(Some(SpacePair::from_single(rounded.0)))
+      ),
+      TailwindProperty::RoundedBottomRight(rounded) => push_decl!(
+        builder,
+        important,
+        border_bottom_right_radius(Some(SpacePair::from_single(rounded.0)))
+      ),
+      TailwindProperty::RoundedBottomLeft(rounded) => push_decl!(
+        builder,
+        important,
+        border_bottom_left_radius(Some(SpacePair::from_single(rounded.0)))
+      ),
       TailwindProperty::RoundedTop(rounded) => {
-        style.border_top_left_radius = Some(SpacePair::from_single(rounded.0)).into();
-        style.border_top_right_radius = Some(SpacePair::from_single(rounded.0)).into();
+        push_decl!(
+          builder,
+          important,
+          border_top_left_radius(Some(SpacePair::from_single(rounded.0)))
+        );
+        push_decl!(
+          builder,
+          important,
+          border_top_right_radius(Some(SpacePair::from_single(rounded.0)))
+        );
       }
       TailwindProperty::RoundedRight(rounded) => {
-        style.border_top_right_radius = Some(SpacePair::from_single(rounded.0)).into();
-        style.border_bottom_right_radius = Some(SpacePair::from_single(rounded.0)).into();
+        push_decl!(
+          builder,
+          important,
+          border_top_right_radius(Some(SpacePair::from_single(rounded.0)))
+        );
+        push_decl!(
+          builder,
+          important,
+          border_bottom_right_radius(Some(SpacePair::from_single(rounded.0)))
+        );
       }
       TailwindProperty::RoundedBottom(rounded) => {
-        style.border_bottom_left_radius = Some(SpacePair::from_single(rounded.0)).into();
-        style.border_bottom_right_radius = Some(SpacePair::from_single(rounded.0)).into();
+        push_decl!(
+          builder,
+          important,
+          border_bottom_left_radius(Some(SpacePair::from_single(rounded.0)))
+        );
+        push_decl!(
+          builder,
+          important,
+          border_bottom_right_radius(Some(SpacePair::from_single(rounded.0)))
+        );
       }
       TailwindProperty::RoundedLeft(rounded) => {
-        style.border_top_left_radius = Some(SpacePair::from_single(rounded.0)).into();
-        style.border_bottom_left_radius = Some(SpacePair::from_single(rounded.0)).into();
+        push_decl!(
+          builder,
+          important,
+          border_top_left_radius(Some(SpacePair::from_single(rounded.0)))
+        );
+        push_decl!(
+          builder,
+          important,
+          border_bottom_left_radius(Some(SpacePair::from_single(rounded.0)))
+        );
       }
       TailwindProperty::TextOverflow(ref text_overflow) => {
-        style.text_overflow = text_overflow.clone().into();
+        push_decl!(builder, important, text_overflow(text_overflow.clone()))
       }
       TailwindProperty::Truncate => {
-        style.text_overflow = TextOverflow::Ellipsis.into();
-        style.white_space = WhiteSpace {
-          text_wrap_mode: TextWrapMode::NoWrap,
-          white_space_collapse: WhiteSpaceCollapse::Collapse,
-        }
-        .into();
-        style.overflow = SpacePair::from_single(Overflow::Hidden).into();
+        push_decl!(builder, important, text_overflow(TextOverflow::Ellipsis));
+        push_decl!(
+          builder,
+          important,
+          text_wrap_mode(Some(TextWrapMode::NoWrap))
+        );
+        push_decl!(
+          builder,
+          important,
+          white_space_collapse(Some(WhiteSpaceCollapse::Collapse))
+        );
+        push_decl!(builder, important, overflow_x(Some(Overflow::Hidden)));
+        push_decl!(builder, important, overflow_y(Some(Overflow::Hidden)));
       }
       TailwindProperty::TextWrap(text_wrap) => {
-        style.text_wrap = text_wrap.into();
+        push_decl!(builder, important, text_wrap_mode(text_wrap.mode));
+        push_decl!(builder, important, text_wrap_style(Some(text_wrap.style)));
       }
       TailwindProperty::WhiteSpace(white_space) => {
-        style.white_space = white_space.into();
+        push_decl!(
+          builder,
+          important,
+          text_wrap_mode(Some(white_space.text_wrap_mode))
+        );
+        push_decl!(
+          builder,
+          important,
+          white_space_collapse(Some(white_space.white_space_collapse))
+        );
       }
       TailwindProperty::WordBreak(word_break) => {
-        style.word_break = word_break.into();
+        push_decl!(builder, important, word_break(word_break))
       }
       TailwindProperty::Isolation(isolation) => {
-        style.isolation = isolation.into();
+        push_decl!(builder, important, isolation(isolation))
       }
       TailwindProperty::MixBlendMode(blend_mode) => {
-        style.mix_blend_mode = blend_mode.into();
+        push_decl!(builder, important, mix_blend_mode(blend_mode))
       }
-      TailwindProperty::BackgroundBlendMode(blend_mode) => {
-        style.background_blend_mode = [blend_mode].into();
-      }
+      TailwindProperty::BackgroundBlendMode(blend_mode) => push_decl!(
+        builder,
+        important,
+        background_blend_mode(Some([blend_mode].into()))
+      ),
       TailwindProperty::OverflowWrap(overflow_wrap) => {
-        style.overflow_wrap = overflow_wrap.into();
+        push_decl!(builder, important, overflow_wrap(overflow_wrap))
       }
       TailwindProperty::FontSize(font_size) => {
-        style.font_size = Some(font_size.font_size).into();
-
+        push_decl!(builder, important, font_size(Some(font_size.font_size)));
         if let Some(line_height) = font_size.line_height {
-          style.line_height = line_height.into();
+          push_decl!(builder, important, line_height(line_height));
         }
       }
       TailwindProperty::LineHeight(line_height) => {
-        style.line_height = line_height.into();
+        push_decl!(builder, important, line_height(line_height))
       }
       TailwindProperty::Translate(length) => {
-        style.translate = Some(SpacePair::from_single(length)).into();
+        push_decl!(builder, important, translate_x(Some(length)));
+        push_decl!(builder, important, translate_y(Some(length)));
       }
       TailwindProperty::TranslateX(length) => {
-        style.translate_x = Some(length).into();
+        push_decl!(builder, important, translate_x(Some(length)))
       }
       TailwindProperty::TranslateY(length) => {
-        style.translate_y = Some(length).into();
+        push_decl!(builder, important, translate_y(Some(length)))
       }
-      TailwindProperty::Rotate(angle) => {
-        style.rotate = Some(angle).into();
-      }
+      TailwindProperty::Rotate(angle) => push_decl!(builder, important, rotate(Some(angle))),
       TailwindProperty::Scale(percentage_number) => {
-        style.scale = Some(SpacePair::from_single(percentage_number)).into();
+        push_decl!(builder, important, scale_x(Some(percentage_number)));
+        push_decl!(builder, important, scale_y(Some(percentage_number)));
       }
       TailwindProperty::ScaleX(percentage_number) => {
-        style.scale_x = Some(percentage_number).into();
+        push_decl!(builder, important, scale_x(Some(percentage_number)))
       }
       TailwindProperty::ScaleY(percentage_number) => {
-        style.scale_y = Some(percentage_number).into();
+        push_decl!(builder, important, scale_y(Some(percentage_number)))
       }
-      TailwindProperty::TransformOrigin(background_position) => {
-        style.transform_origin = Some(background_position).into();
-      }
+      TailwindProperty::TransformOrigin(background_position) => push_decl!(
+        builder,
+        important,
+        transform_origin(Some(background_position))
+      ),
       TailwindProperty::Margin(length) => {
-        style.margin = Sides([length; 4]).into();
+        push_decl!(builder, important, margin_top(Some(length)));
+        push_decl!(builder, important, margin_right(Some(length)));
+        push_decl!(builder, important, margin_bottom(Some(length)));
+        push_decl!(builder, important, margin_left(Some(length)));
       }
       TailwindProperty::MarginX(length) => {
-        style.margin_inline = Some(SpacePair::from_single(length)).into();
+        push_decl!(builder, important, margin_left(Some(length)));
+        push_decl!(builder, important, margin_right(Some(length)));
       }
       TailwindProperty::MarginY(length) => {
-        style.margin_block = Some(SpacePair::from_single(length)).into();
+        push_decl!(builder, important, margin_top(Some(length)));
+        push_decl!(builder, important, margin_bottom(Some(length)));
       }
       TailwindProperty::MarginTop(length) => {
-        style.margin_top = Some(length).into();
+        push_decl!(builder, important, margin_top(Some(length)))
       }
       TailwindProperty::MarginRight(length) => {
-        style.margin_right = Some(length).into();
+        push_decl!(builder, important, margin_right(Some(length)))
       }
       TailwindProperty::MarginBottom(length) => {
-        style.margin_bottom = Some(length).into();
+        push_decl!(builder, important, margin_bottom(Some(length)))
       }
       TailwindProperty::MarginLeft(length) => {
-        style.margin_left = Some(length).into();
+        push_decl!(builder, important, margin_left(Some(length)))
       }
       TailwindProperty::Padding(length) => {
-        style.padding = Sides([length; 4]).into();
+        push_decl!(builder, important, padding_top(Some(length)));
+        push_decl!(builder, important, padding_right(Some(length)));
+        push_decl!(builder, important, padding_bottom(Some(length)));
+        push_decl!(builder, important, padding_left(Some(length)));
       }
       TailwindProperty::PaddingX(length) => {
-        style.padding_inline = Some(SpacePair::from_single(length)).into();
+        push_decl!(builder, important, padding_left(Some(length)));
+        push_decl!(builder, important, padding_right(Some(length)));
       }
       TailwindProperty::PaddingY(length) => {
-        style.padding_block = Some(SpacePair::from_single(length)).into();
+        push_decl!(builder, important, padding_top(Some(length)));
+        push_decl!(builder, important, padding_bottom(Some(length)));
       }
       TailwindProperty::PaddingTop(length) => {
-        style.padding_top = Some(length).into();
+        push_decl!(builder, important, padding_top(Some(length)))
       }
       TailwindProperty::PaddingRight(length) => {
-        style.padding_right = Some(length).into();
+        push_decl!(builder, important, padding_right(Some(length)))
       }
       TailwindProperty::PaddingBottom(length) => {
-        style.padding_bottom = Some(length).into();
+        push_decl!(builder, important, padding_bottom(Some(length)))
       }
       TailwindProperty::PaddingLeft(length) => {
-        style.padding_left = Some(length).into();
+        push_decl!(builder, important, padding_left(Some(length)))
       }
       TailwindProperty::Inset(length) => {
-        style.inset = Sides([length; 4]).into();
+        push_decl!(builder, important, top(Some(length)));
+        push_decl!(builder, important, right(Some(length)));
+        push_decl!(builder, important, bottom(Some(length)));
+        push_decl!(builder, important, left(Some(length)));
       }
       TailwindProperty::InsetX(length) => {
-        style.inset_inline = Some(SpacePair::from_single(length)).into();
+        push_decl!(builder, important, left(Some(length)));
+        push_decl!(builder, important, right(Some(length)));
       }
       TailwindProperty::InsetY(length) => {
-        style.inset_block = Some(SpacePair::from_single(length)).into();
+        push_decl!(builder, important, top(Some(length)));
+        push_decl!(builder, important, bottom(Some(length)));
       }
-      TailwindProperty::Top(length) => {
-        style.top = Some(length).into();
-      }
-      TailwindProperty::Right(length) => {
-        style.right = Some(length).into();
-      }
-      TailwindProperty::Bottom(length) => {
-        style.bottom = Some(length).into();
-      }
-      TailwindProperty::Left(length) => {
-        style.left = Some(length).into();
-      }
-      TailwindProperty::GridAutoColumns(grid_auto_size) => {
-        style.grid_auto_columns = Some([grid_auto_size].into()).into();
-      }
-      TailwindProperty::GridAutoRows(grid_auto_size) => {
-        style.grid_auto_rows = Some([grid_auto_size].into()).into();
-      }
+      TailwindProperty::Top(length) => push_decl!(builder, important, top(Some(length))),
+      TailwindProperty::Right(length) => push_decl!(builder, important, right(Some(length))),
+      TailwindProperty::Bottom(length) => push_decl!(builder, important, bottom(Some(length))),
+      TailwindProperty::Left(length) => push_decl!(builder, important, left(Some(length))),
+      TailwindProperty::GridAutoColumns(grid_auto_size) => push_decl!(
+        builder,
+        important,
+        grid_auto_columns(Some([grid_auto_size].into()))
+      ),
+      TailwindProperty::GridAutoRows(grid_auto_size) => push_decl!(
+        builder,
+        important,
+        grid_auto_rows(Some([grid_auto_size].into()))
+      ),
       TailwindProperty::GridColumn(ref tw_grid_span) => {
-        style.grid_column = Some(tw_grid_span.clone()).into();
+        builder.set_grid_column(tw_grid_span.clone(), important)
       }
       TailwindProperty::GridRow(ref tw_grid_span) => {
-        style.grid_row = Some(tw_grid_span.clone()).into();
+        builder.set_grid_row(tw_grid_span.clone(), important)
       }
       TailwindProperty::GridColumnStart(ref tw_grid_placement) => {
-        if let CssValue::Value(Some(ref mut existing_grid_column)) = style.grid_column {
-          existing_grid_column.start = tw_grid_placement.clone();
-        } else {
-          style.grid_column = Some(GridLine::start(tw_grid_placement.clone())).into();
-        }
+        builder.grid_column_mut(important).start = tw_grid_placement.clone();
       }
       TailwindProperty::GridColumnEnd(ref tw_grid_placement) => {
-        if let CssValue::Value(Some(ref mut existing_grid_column)) = style.grid_column {
-          existing_grid_column.end = tw_grid_placement.clone();
-        } else {
-          style.grid_column = Some(GridLine::end(tw_grid_placement.clone())).into();
-        }
+        builder.grid_column_mut(important).end = tw_grid_placement.clone();
       }
       TailwindProperty::GridRowStart(ref tw_grid_placement) => {
-        if let CssValue::Value(Some(ref mut existing_grid_row)) = style.grid_row {
-          existing_grid_row.start = tw_grid_placement.clone();
-        } else {
-          style.grid_row = Some(GridLine::start(tw_grid_placement.clone())).into();
-        }
+        builder.grid_row_mut(important).start = tw_grid_placement.clone();
       }
       TailwindProperty::GridRowEnd(ref tw_grid_placement) => {
-        if let CssValue::Value(Some(ref mut existing_grid_row)) = style.grid_row {
-          existing_grid_row.end = tw_grid_placement.clone();
-        } else {
-          style.grid_row = Some(GridLine::end(tw_grid_placement.clone())).into();
-        }
+        builder.grid_row_mut(important).end = tw_grid_placement.clone();
       }
-      TailwindProperty::GridTemplateColumns(ref tw_grid_template) => {
-        style.grid_template_columns = Some(tw_grid_template.0.clone()).into();
-      }
-      TailwindProperty::GridTemplateRows(ref tw_grid_template) => {
-        style.grid_template_rows = Some(tw_grid_template.0.clone()).into();
-      }
-      TailwindProperty::LetterSpacing(tw_letter_spacing) => {
-        style.letter_spacing = Some(tw_letter_spacing.0).into();
-      }
+      TailwindProperty::GridTemplateColumns(ref tw_grid_template) => push_decl!(
+        builder,
+        important,
+        grid_template_columns(Some(tw_grid_template.0.clone()))
+      ),
+      TailwindProperty::GridTemplateRows(ref tw_grid_template) => push_decl!(
+        builder,
+        important,
+        grid_template_rows(Some(tw_grid_template.0.clone()))
+      ),
+      TailwindProperty::LetterSpacing(tw_letter_spacing) => push_decl!(
+        builder,
+        important,
+        letter_spacing(Some(tw_letter_spacing.0))
+      ),
       TailwindProperty::GridAutoFlow(grid_auto_flow) => {
-        style.grid_auto_flow = Some(grid_auto_flow).into();
+        push_decl!(builder, important, grid_auto_flow(Some(grid_auto_flow)))
       }
       TailwindProperty::GridColumnSpan(grid_placement_span) => {
-        style.grid_column = Some(GridLine::span(grid_placement_span)).into();
+        builder.set_grid_column(GridLine::span(grid_placement_span), important)
       }
       TailwindProperty::GridRowSpan(grid_placement_span) => {
-        style.grid_row = Some(GridLine::span(grid_placement_span)).into();
+        builder.set_grid_row(GridLine::span(grid_placement_span), important)
       }
-      TailwindProperty::Blur(tw_blur) => {
-        append_filter!(style, filter, Filter::Blur(tw_blur.0));
-      }
+      TailwindProperty::Blur(tw_blur) => builder.push_filter(Filter::Blur(tw_blur.0), important),
       TailwindProperty::Brightness(percentage_number) => {
-        append_filter!(style, filter, Filter::Brightness(percentage_number));
+        builder.push_filter(Filter::Brightness(percentage_number), important)
       }
       TailwindProperty::Contrast(percentage_number) => {
-        append_filter!(style, filter, Filter::Contrast(percentage_number));
+        builder.push_filter(Filter::Contrast(percentage_number), important)
       }
       TailwindProperty::DropShadow(text_shadow) => {
-        append_filter!(style, filter, Filter::DropShadow(text_shadow));
+        builder.push_filter(Filter::DropShadow(text_shadow), important)
       }
       TailwindProperty::Grayscale(percentage_number) => {
-        append_filter!(style, filter, Filter::Grayscale(percentage_number));
+        builder.push_filter(Filter::Grayscale(percentage_number), important)
       }
       TailwindProperty::HueRotate(angle) => {
-        append_filter!(style, filter, Filter::HueRotate(angle));
+        builder.push_filter(Filter::HueRotate(angle), important)
       }
       TailwindProperty::Invert(percentage_number) => {
-        append_filter!(style, filter, Filter::Invert(percentage_number));
+        builder.push_filter(Filter::Invert(percentage_number), important)
       }
       TailwindProperty::Saturate(percentage_number) => {
-        append_filter!(style, filter, Filter::Saturate(percentage_number));
+        builder.push_filter(Filter::Saturate(percentage_number), important)
       }
       TailwindProperty::Sepia(percentage_number) => {
-        append_filter!(style, filter, Filter::Sepia(percentage_number));
+        builder.push_filter(Filter::Sepia(percentage_number), important)
       }
       TailwindProperty::Filter(ref filters) => {
-        for f in filters {
-          append_filter!(style, filter, *f);
+        for filter in filters {
+          builder.push_filter(*filter, important);
         }
       }
       TailwindProperty::BackdropBlur(tw_blur) => {
-        append_filter!(style, backdrop_filter, Filter::Blur(tw_blur.0));
+        builder.push_backdrop_filter(Filter::Blur(tw_blur.0), important)
       }
       TailwindProperty::BackdropBrightness(percentage_number) => {
-        append_filter!(
-          style,
-          backdrop_filter,
-          Filter::Brightness(percentage_number)
-        );
+        builder.push_backdrop_filter(Filter::Brightness(percentage_number), important)
       }
       TailwindProperty::BackdropContrast(percentage_number) => {
-        append_filter!(style, backdrop_filter, Filter::Contrast(percentage_number));
+        builder.push_backdrop_filter(Filter::Contrast(percentage_number), important)
       }
       TailwindProperty::BackdropGrayscale(percentage_number) => {
-        append_filter!(style, backdrop_filter, Filter::Grayscale(percentage_number));
+        builder.push_backdrop_filter(Filter::Grayscale(percentage_number), important)
       }
       TailwindProperty::BackdropHueRotate(angle) => {
-        append_filter!(style, backdrop_filter, Filter::HueRotate(angle));
+        builder.push_backdrop_filter(Filter::HueRotate(angle), important)
       }
       TailwindProperty::BackdropInvert(percentage_number) => {
-        append_filter!(style, backdrop_filter, Filter::Invert(percentage_number));
+        builder.push_backdrop_filter(Filter::Invert(percentage_number), important)
       }
       TailwindProperty::BackdropOpacity(percentage_number) => {
-        append_filter!(style, backdrop_filter, Filter::Opacity(percentage_number));
+        builder.push_backdrop_filter(Filter::Opacity(percentage_number), important)
       }
       TailwindProperty::BackdropSaturate(percentage_number) => {
-        append_filter!(style, backdrop_filter, Filter::Saturate(percentage_number));
+        builder.push_backdrop_filter(Filter::Saturate(percentage_number), important)
       }
       TailwindProperty::BackdropSepia(percentage_number) => {
-        append_filter!(style, backdrop_filter, Filter::Sepia(percentage_number));
+        builder.push_backdrop_filter(Filter::Sepia(percentage_number), important)
       }
       TailwindProperty::BackdropFilter(ref filters) => {
-        for f in filters {
-          append_filter!(style, backdrop_filter, *f);
+        for filter in filters {
+          builder.push_backdrop_filter(*filter, important);
         }
       }
       TailwindProperty::TextShadow(text_shadow) => {
-        style.text_shadow = Some([text_shadow].into()).into();
+        push_decl!(builder, important, text_shadow(Some([text_shadow].into())))
       }
       TailwindProperty::Visibility(visibility) => {
-        style.visibility = visibility.into();
+        push_decl!(builder, important, visibility(visibility))
       }
     }
   }
@@ -1228,7 +1442,7 @@ impl TailwindProperty {
 
 #[cfg(test)]
 mod tests {
-  use crate::layout::style::{CssValue, Style, properties::BackgroundImage};
+  use crate::layout::style::{ResolvedStyle, Style, properties::BackgroundImage};
 
   use super::*;
 
@@ -1599,34 +1813,22 @@ mod tests {
 
   #[test]
   fn test_filters_append() {
-    use crate::layout::style::{CssValue, Style, properties::Filter};
+    use crate::layout::style::properties::Filter;
 
-    let mut style = Style::default();
+    let Ok(values) = TailwindValues::from_str("blur-sm brightness-150 contrast-125") else {
+      unreachable!()
+    };
 
-    let mut gradient_state = TwGradientState::default();
-
-    // Apply blur
-    if let Some(blur_prop) = TailwindProperty::parse("blur-sm") {
-      blur_prop.apply(&mut style, &mut gradient_state);
-    }
-
-    // Apply brightness - this should APPEND, not override
-    if let Some(brightness_prop) = TailwindProperty::parse("brightness-150") {
-      brightness_prop.apply(&mut style, &mut gradient_state);
-    }
-
-    // Apply contrast - this should also APPEND
-    if let Some(contrast_prop) = TailwindProperty::parse("contrast-125") {
-      contrast_prop.apply(&mut style, &mut gradient_state);
-    }
+    let style = Style::from(values.to_declaration_block((100, 100).into()))
+      .inherit(&ResolvedStyle::default());
 
     assert_eq!(
       style.filter,
-      CssValue::Value(vec![
+      vec![
         Filter::Blur(Length::Px(8.0)),
         Filter::Brightness(PercentageNumber(1.5)),
         Filter::Contrast(PercentageNumber(1.25))
-      ])
+      ]
     )
   }
   #[test]
@@ -1740,7 +1942,6 @@ mod tests {
 
   #[test]
   fn test_linear_gradient_apply() {
-    let mut style = Style::default();
     let viewport = (100, 100).into();
     let Ok(values) =
       TailwindValues::from_str("bg-linear-to-r from-red-500 via-green-500 to-blue-500")
@@ -1748,11 +1949,12 @@ mod tests {
       unreachable!()
     };
 
-    values.apply_to_style(&mut style, viewport);
+    let style =
+      Style::from(values.to_declaration_block(viewport)).inherit(&ResolvedStyle::default());
 
     assert_eq!(
       style.background_image,
-      CssValue::Value(Some(
+      Some(
         [BackgroundImage::Linear(LinearGradient {
           angle: Angle::new(90.0),
           interpolation: ColorInterpolationMethod::default(),
@@ -1773,7 +1975,7 @@ mod tests {
           .into(),
         })]
         .into()
-      ))
+      )
     );
   }
 }

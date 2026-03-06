@@ -198,16 +198,20 @@ pub(crate) trait MakeComputed {
   fn make_computed(&mut self, _sizing: &Sizing) {}
 }
 
-pub(crate) trait Animatable: Sized {
+pub(crate) trait Animatable: Sized + Clone {
   fn interpolate(
     &mut self,
-    from: Self,
-    _to: &Self,
-    _progress: f32,
+    from: &Self,
+    to: &Self,
+    progress: f32,
     _sizing: &Sizing,
     _current_color: Color,
   ) {
-    *self = from;
+    *self = if progress >= 1.0 {
+      to.clone()
+    } else {
+      from.clone()
+    };
   }
 }
 
@@ -238,7 +242,7 @@ impl<T: MakeComputed> MakeComputed for Vec<T> {
 impl<T: Animatable + Clone> Animatable for Option<T> {
   fn interpolate(
     &mut self,
-    from: Self,
+    from: &Self,
     to: &Self,
     progress: f32,
     sizing: &Sizing,
@@ -251,7 +255,11 @@ impl<T: Animatable + Clone> Animatable for Option<T> {
         *self = Some(value);
       }
       (Some(from), None) => {
-        *self = if progress >= 0.5 { None } else { Some(from) };
+        *self = if progress >= 0.5 {
+          None
+        } else {
+          Some(from.clone())
+        };
       }
       (None, Some(to)) => {
         *self = if progress >= 0.5 {
@@ -267,14 +275,72 @@ impl<T: Animatable + Clone> Animatable for Option<T> {
   }
 }
 
-impl<T> Animatable for Box<[T]> {}
+impl<T: Animatable + Clone> Animatable for Box<[T]> {
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &Sizing,
+    current_color: Color,
+  ) {
+    if from.len() != to.len() {
+      *self = if progress >= 1.0 {
+        to.clone()
+      } else {
+        from.clone()
+      };
+      return;
+    }
 
-impl<T> Animatable for Vec<T> {}
+    let values = from
+      .into_iter()
+      .zip(to.iter())
+      .map(|(from_value, to_value)| {
+        let mut value = from_value.clone();
+        value.interpolate(from_value, to_value, progress, sizing, current_color);
+        value
+      })
+      .collect::<Vec<_>>()
+      .into_boxed_slice();
+    *self = values;
+  }
+}
+
+impl<T: Animatable + Clone> Animatable for Vec<T> {
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &Sizing,
+    current_color: Color,
+  ) {
+    if from.len() != to.len() {
+      *self = if progress >= 1.0 {
+        to.clone()
+      } else {
+        from.clone()
+      };
+      return;
+    }
+
+    *self = from
+      .iter()
+      .zip(to.iter())
+      .map(|(from_value, to_value)| {
+        let mut value = from_value.clone();
+        value.interpolate(from_value, to_value, progress, sizing, current_color);
+        value
+      })
+      .collect();
+  }
+}
 
 impl<T: Animatable + Copy, const Y_FIRST: bool> Animatable for SpacePair<T, Y_FIRST> {
   fn interpolate(
     &mut self,
-    from: Self,
+    from: &Self,
     to: &Self,
     progress: f32,
     sizing: &Sizing,
@@ -282,24 +348,30 @@ impl<T: Animatable + Copy, const Y_FIRST: bool> Animatable for SpacePair<T, Y_FI
   ) {
     self
       .x
-      .interpolate(from.x, &to.x, progress, sizing, current_color);
+      .interpolate(&from.x, &to.x, progress, sizing, current_color);
     self
       .y
-      .interpolate(from.y, &to.y, progress, sizing, current_color);
+      .interpolate(&from.y, &to.y, progress, sizing, current_color);
   }
 }
 
 impl<T: Animatable + Copy> Animatable for Sides<T> {
   fn interpolate(
     &mut self,
-    from: Self,
+    from: &Self,
     to: &Self,
     progress: f32,
     sizing: &Sizing,
     current_color: Color,
   ) {
     for (index, value) in self.0.iter_mut().enumerate() {
-      value.interpolate(from.0[index], &to.0[index], progress, sizing, current_color);
+      value.interpolate(
+        &from.0[index],
+        &to.0[index],
+        progress,
+        sizing,
+        current_color,
+      );
     }
   }
 }
@@ -484,7 +556,7 @@ impl MakeComputed for BorderRadius {
 impl Animatable for BorderRadius {
   fn interpolate(
     &mut self,
-    from: Self,
+    from: &Self,
     to: &Self,
     progress: f32,
     sizing: &Sizing,
@@ -492,22 +564,21 @@ impl Animatable for BorderRadius {
   ) {
     self
       .0
-      .interpolate(from.0, &to.0, progress, sizing, current_color);
+      .interpolate(&from.0, &to.0, progress, sizing, current_color);
   }
 }
 
 impl Animatable for Box<BorderRadius> {
   fn interpolate(
     &mut self,
-    from: Self,
+    from: &Self,
     to: &Self,
     progress: f32,
     sizing: &Sizing,
     current_color: Color,
   ) {
-    let from = *from;
-    let mut value = from;
-    value.interpolate(from, to.as_ref(), progress, sizing, current_color);
+    let mut value = **from;
+    value.interpolate(&**from, to.as_ref(), progress, sizing, current_color);
     **self = value;
   }
 }

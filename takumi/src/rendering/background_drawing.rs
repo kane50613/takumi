@@ -1,4 +1,4 @@
-use std::{borrow::Cow, iter::successors};
+use std::iter::successors;
 
 use image::{GenericImageView, Rgba, RgbaImage};
 use smallvec::{SmallVec, smallvec};
@@ -517,69 +517,16 @@ pub(crate) fn create_mask(
   mask_memory: &mut MaskMemory,
   buffer_pool: &mut BufferPool,
 ) -> Result<Option<Vec<u8>>> {
-  let mask_image = context
-    .style
-    .mask_image
-    .as_deref()
-    .map(Cow::Borrowed)
-    .unwrap_or_else(|| {
-      Cow::Owned(
-        context
-          .style
-          .mask
-          .iter()
-          .map(|background| background.image.clone())
-          .collect::<Vec<_>>(),
-      )
-    });
+  let mask_image = context.style.mask_image.as_deref().unwrap_or(&[]);
+  let mask_position = context.style.mask_position.as_deref().unwrap_or(&[]);
+  let mask_size = context.style.mask_size.as_deref().unwrap_or(&[]);
+  let mask_repeat = context.style.mask_repeat.as_deref().unwrap_or(&[]);
 
   let layers = resolve_tile_layers(
-    &mask_image,
-    &context
-      .style
-      .mask_position
-      .as_deref()
-      .map(Cow::Borrowed)
-      .unwrap_or_else(|| {
-        Cow::Owned(
-          context
-            .style
-            .mask
-            .iter()
-            .map(|background| background.position)
-            .collect::<Vec<_>>(),
-        )
-      }),
-    &context
-      .style
-      .mask_size
-      .as_deref()
-      .map(Cow::Borrowed)
-      .unwrap_or_else(|| {
-        Cow::Owned(
-          context
-            .style
-            .mask
-            .iter()
-            .map(|background| background.size)
-            .collect::<Vec<_>>(),
-        )
-      }),
-    &context
-      .style
-      .mask_repeat
-      .as_deref()
-      .map(Cow::Borrowed)
-      .unwrap_or_else(|| {
-        Cow::Owned(
-          context
-            .style
-            .mask
-            .iter()
-            .map(|background| background.repeat)
-            .collect::<Vec<_>>(),
-        )
-      }),
+    mask_image,
+    mask_position,
+    mask_size,
+    mask_repeat,
     &[], // no blending mode for mask
     context,
     border_box.map(|x| x as u32),
@@ -641,84 +588,22 @@ pub(crate) fn collect_background_layers(
   border_box: Size<f32>,
   buffer_pool: &mut BufferPool,
 ) -> Result<TileLayers> {
-  let background_image = context
+  let background_image = context.style.background_image.as_deref().unwrap_or(&[]);
+  let background_position = context.style.background_position.as_deref().unwrap_or(&[]);
+  let background_size = context.style.background_size.as_deref().unwrap_or(&[]);
+  let background_repeat = context.style.background_repeat.as_deref().unwrap_or(&[]);
+  let background_blend_mode = context
     .style
-    .background_image
+    .background_blend_mode
     .as_deref()
-    .map(Cow::Borrowed)
-    .unwrap_or_else(|| {
-      Cow::Owned(
-        context
-          .style
-          .background
-          .iter()
-          .map(|background| background.image.clone())
-          .collect::<Vec<_>>(),
-      )
-    });
+    .unwrap_or(&[]);
 
   let mut layers = resolve_tile_layers(
-    &background_image,
-    &context
-      .style
-      .background_position
-      .as_deref()
-      .map(Cow::Borrowed)
-      .unwrap_or_else(|| {
-        Cow::Owned(
-          context
-            .style
-            .background
-            .iter()
-            .map(|background| background.position)
-            .collect::<Vec<_>>(),
-        )
-      }),
-    &context
-      .style
-      .background_size
-      .as_deref()
-      .map(Cow::Borrowed)
-      .unwrap_or_else(|| {
-        Cow::Owned(
-          context
-            .style
-            .background
-            .iter()
-            .map(|background| background.size)
-            .collect::<Vec<_>>(),
-        )
-      }),
-    &context
-      .style
-      .background_repeat
-      .as_deref()
-      .map(Cow::Borrowed)
-      .unwrap_or_else(|| {
-        Cow::Owned(
-          context
-            .style
-            .background
-            .iter()
-            .map(|background| background.repeat)
-            .collect::<Vec<_>>(),
-        )
-      }),
-    &context
-      .style
-      .background_blend_mode
-      .as_deref()
-      .map(Cow::Borrowed)
-      .unwrap_or_else(|| {
-        Cow::Owned(
-          context
-            .style
-            .background
-            .iter()
-            .map(|background| background.blend_mode)
-            .collect::<Vec<_>>(),
-        )
-      }),
+    background_image,
+    background_position,
+    background_size,
+    background_repeat,
+    background_blend_mode,
     context,
     border_box.map(|x| x as u32),
     buffer_pool,

@@ -2565,6 +2565,7 @@ dependencies = [
  "libm",
  "libwebp-sys",
  "parley",
+ "paste",
  "phf",
  "png",
  "precomputed-hash",

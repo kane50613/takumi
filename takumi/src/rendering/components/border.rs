@@ -5,7 +5,9 @@ use taffy::{Point, Rect, Size};
 use zeno::{Command, Fill, PathBuilder};
 
 use crate::{
-  layout::style::{Affine, BlendMode, BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair},
+  layout::style::{
+    Affine, BlendMode, BorderStyle, Color, ColorInput, ImageScalingAlgorithm, Sides, SpacePair,
+  },
   rendering::{
     Canvas, RenderContext, apply_mask_alpha_to_pixel, blend_pixel, mask_index_from_coord,
     overlay_area, sample_transformed_pixel,
@@ -69,13 +71,10 @@ impl BorderProperties {
       color: context
         .style
         .border_color
-        .unwrap_or(context.style.border.color)
+        .unwrap_or(ColorInput::CurrentColor)
         .resolve(context.current_color),
       radius: Self::resolve_radius_part(context, border_box),
-      style: context
-        .style
-        .border_style
-        .unwrap_or(context.style.border.style),
+      style: context.style.border_style.unwrap_or_default(),
       image_rendering: context.style.image_rendering,
     }
   }

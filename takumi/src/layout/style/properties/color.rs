@@ -11,7 +11,7 @@ use image::Rgba;
 use crate::{
   layout::style::{
     Animatable, Color as CurrentColor, CssToken, FromCss, MakeComputed, ParseResult,
-    PercentageNumber, tw::TailwindPropertyParser,
+    PercentageNumber, properties::gradient_utils::interpolate_rgba, tw::TailwindPropertyParser,
   },
   rendering::{Sizing, fast_div_255},
 };
@@ -128,33 +128,18 @@ impl<const DEFAULT_CURRENT_COLOR: bool> MakeComputed for ColorInput<DEFAULT_CURR
 impl<const DEFAULT_CURRENT_COLOR: bool> Animatable for ColorInput<DEFAULT_CURRENT_COLOR> {
   fn interpolate(
     &mut self,
-    from: Self,
+    from: &Self,
     to: &Self,
     progress: f32,
     _sizing: &Sizing,
     current_color: CurrentColor,
   ) {
-    fn lerp(lhs: f32, rhs: f32, progress: f32) -> f32 {
-      lhs + (rhs - lhs) * progress
-    }
-
-    fn interpolate_color(from: Color, to: Color, progress: f32) -> Color {
-      let [r1, g1, b1, a1] = from.0;
-      let [r2, g2, b2, a2] = to.0;
-      Color([
-        lerp(r1 as f32, r2 as f32, progress).round() as u8,
-        lerp(g1 as f32, g2 as f32, progress).round() as u8,
-        lerp(b1 as f32, b2 as f32, progress).round() as u8,
-        lerp(a1 as f32, a2 as f32, progress).round() as u8,
-      ])
-    }
-
     *self = match (from, to) {
       (ColorInput::Value(lhs), ColorInput::Value(rhs)) => {
-        ColorInput::Value(interpolate_color(lhs, *rhs, progress))
+        ColorInput::Value(interpolate_rgba(*lhs, *rhs, progress))
       }
       (ColorInput::CurrentColor, ColorInput::CurrentColor) => ColorInput::CurrentColor,
-      _ => ColorInput::Value(interpolate_color(
+      _ => ColorInput::Value(interpolate_rgba(
         from.resolve(current_color),
         to.resolve(current_color),
         progress,

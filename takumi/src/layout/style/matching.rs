@@ -11,7 +11,7 @@ use selectors::{
   parser::{AncestorHashes, Component, Selector},
 };
 
-use crate::layout::style::StyleDeclarations;
+use crate::layout::style::StyleDeclarationBlock;
 use crate::layout::{
   node::Node,
   style::selector::{CssRule, StyleSheet, TakumiIdent, TakumiSelectorImpl},
@@ -470,8 +470,8 @@ impl<'a, N: Node<N>> Element for ArenaElement<'a, N> {
 
 #[derive(Debug, Default, Clone)]
 pub(crate) struct MatchedDeclarations {
-  pub(crate) normal: StyleDeclarations,
-  pub(crate) important: StyleDeclarations,
+  pub(crate) normal: StyleDeclarationBlock,
+  pub(crate) important: StyleDeclarationBlock,
 }
 
 pub(crate) fn match_stylesheets<N: Node<N>>(
@@ -579,9 +579,9 @@ pub(crate) fn match_stylesheets<N: Node<N>>(
 
     for (important, _, _, declarations) in rules {
       if important {
-        matched.important.extend(declarations.iter().cloned());
+        matched.important.append(declarations.clone());
       } else {
-        matched.normal.extend(declarations.iter().cloned());
+        matched.normal.append(declarations.clone());
       }
     }
   }

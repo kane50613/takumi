@@ -290,10 +290,7 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c, N: Node<N> + 'c>(
     }
   }
 
-  let text_wrap_style = style
-    .parent
-    .text_wrap_style
-    .unwrap_or(style.parent.text_wrap.style);
+  let text_wrap_style = style.parent.text_wrap_style.unwrap_or_default();
   let line_count = layout.lines().count();
 
   if text_wrap_style == TextWrapStyle::Balance {

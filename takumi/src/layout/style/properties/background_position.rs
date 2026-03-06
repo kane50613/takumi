@@ -53,15 +53,15 @@ impl MakeComputed for PositionComponent {
 impl Animatable for PositionComponent {
   fn interpolate(
     &mut self,
-    from: Self,
+    from: &Self,
     to: &Self,
     progress: f32,
     sizing: &Sizing,
     current_color: Color,
   ) {
-    let mut length = Length::from(from);
+    let mut length = Length::from(*from);
     length.interpolate(
-      Length::from(from),
+      &Length::from(*from),
       &Length::from(*to),
       progress,
       sizing,
@@ -108,14 +108,14 @@ impl MakeComputed for BackgroundPosition {
 impl Animatable for BackgroundPosition {
   fn interpolate(
     &mut self,
-    from: Self,
+    from: &Self,
     to: &Self,
     progress: f32,
     sizing: &Sizing,
     current_color: Color,
   ) {
     let mut value = from.0;
-    value.interpolate(from.0, &to.0, progress, sizing, current_color);
+    value.interpolate(&from.0, &to.0, progress, sizing, current_color);
     self.0 = value;
   }
 }

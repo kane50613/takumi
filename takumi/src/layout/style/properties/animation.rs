@@ -410,10 +410,6 @@ pub(crate) fn fill_mode_at(values: &AnimationFillModes, index: usize) -> Animati
   repeated_list_value(&values.0, index, AnimationFillMode::default())
 }
 
-pub(crate) fn play_state_at(values: &AnimationPlayStates, index: usize) -> AnimationPlayState {
-  repeated_list_value(&values.0, index, AnimationPlayState::default())
-}
-
 pub(crate) fn cubic_bezier_sample(x1: f32, y1: f32, x2: f32, y2: f32, progress: f32) -> f32 {
   fn sample_curve(a: f32, b: f32, c: f32, t: f32) -> f32 {
     ((a * t + b) * t + c) * t

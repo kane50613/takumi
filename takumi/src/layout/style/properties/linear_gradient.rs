@@ -333,13 +333,13 @@ impl MakeComputed for Angle {}
 impl Animatable for Angle {
   fn interpolate(
     &mut self,
-    from: Self,
+    from: &Self,
     to: &Self,
     progress: f32,
     _sizing: &Sizing,
     _current_color: Color,
   ) {
-    *self = Angle::new(*from + (**to - *from) * progress);
+    *self = Angle::new(**from + (**to - **from) * progress);
   }
 }
 

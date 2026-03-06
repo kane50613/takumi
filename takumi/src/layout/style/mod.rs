@@ -11,7 +11,6 @@ pub mod tw;
 use std::{borrow::Cow, fmt::Formatter};
 
 pub(crate) use animation::apply_stylesheet_animations;
-use cssparser::match_ignore_ascii_case;
 pub use properties::*;
 use serde::{
   Deserialize,
@@ -19,133 +18,7 @@ use serde::{
 };
 pub use stylesheets::*;
 
-/// Represents a CSS property value that can be explicitly set, inherited from parent, or reset to initial value.
-#[derive(Clone, Debug, PartialEq)]
-pub enum CssValue<T, const DEFAULT_INHERIT: bool = false> {
-  /// A CSS-wide keyword.
-  Keyword(CssGlobalKeyword),
-  /// Explicit value set on the element
-  Value(T),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-/// CSS-wide keywords accepted by style values.
-pub enum CssGlobalKeyword {
-  /// Use the initial value of the property
-  Initial,
-  /// Inherit the computed value from the parent element
-  Inherit,
-  /// Reset according to CSS unset semantics
-  Unset,
-}
-
-impl CssGlobalKeyword {
-  #[inline(never)]
-  fn from_str(value: &str) -> Option<Self> {
-    match_ignore_ascii_case! {value,
-      "initial" => Some(Self::Initial),
-      "inherit" => Some(Self::Inherit),
-      "unset" => Some(Self::Unset),
-      _ => None,
-    }
-  }
-}
-
-impl<T, const DEFAULT_INHERIT: bool> From<T> for CssValue<T, DEFAULT_INHERIT> {
-  fn from(value: T) -> Self {
-    CssValue::Value(value)
-  }
-}
-
-impl<T, const DEFAULT_INHERIT: bool> Default for CssValue<T, DEFAULT_INHERIT> {
-  fn default() -> Self {
-    Self::Keyword(CssGlobalKeyword::Unset)
-  }
-}
-
-impl<T, const DEFAULT_INHERIT: bool> From<T> for CssValue<Option<T>, DEFAULT_INHERIT> {
-  fn from(value: T) -> Self {
-    CssValue::Value(Some(value))
-  }
-}
-
-impl<T, const DEFAULT_INHERIT: bool> From<T> for CssValue<Box<T>, DEFAULT_INHERIT> {
-  fn from(value: T) -> Self {
-    CssValue::Value(Box::new(value))
-  }
-}
-
-impl<T, const N: usize, const DEFAULT_INHERIT: bool> From<[T; N]>
-  for CssValue<Box<[T]>, DEFAULT_INHERIT>
-{
-  fn from(value: [T; N]) -> Self {
-    CssValue::Value(Box::from(value))
-  }
-}
-
-impl<T, const N: usize, const DEFAULT_INHERIT: bool> From<[T; N]>
-  for CssValue<Option<Box<[T]>>, DEFAULT_INHERIT>
-{
-  fn from(value: [T; N]) -> Self {
-    CssValue::Value(Some(Box::from(value)))
-  }
-}
-
-impl<T: Default, const DEFAULT_INHERIT: bool> CssValue<T, DEFAULT_INHERIT> {
-  /// Resolves this CssValue to a concrete value based on inheritance rules
-  pub(crate) fn inherit_value(self, parent: &T) -> T
-  where
-    T: Clone,
-  {
-    match self {
-      Self::Value(v) => v,
-      Self::Keyword(CssGlobalKeyword::Inherit) => parent.clone(),
-      Self::Keyword(CssGlobalKeyword::Initial) => T::default(),
-      // Unset follows CSS spec: inherit if DEFAULT_INHERIT, otherwise initial
-      Self::Keyword(CssGlobalKeyword::Unset) if DEFAULT_INHERIT => parent.clone(),
-      Self::Keyword(CssGlobalKeyword::Unset) => T::default(),
-    }
-  }
-
-  /// Returns self if it's not Unset, otherwise returns other.
-  /// This is used to merge style layers (e.g., inline style over Tailwind).
-  pub(crate) fn or(self, other: Self) -> Self {
-    match self {
-      Self::Keyword(CssGlobalKeyword::Unset) => other,
-      _ => self,
-    }
-  }
-}
-
-impl<T: Copy, const DEFAULT_INHERIT: bool> Copy for CssValue<T, DEFAULT_INHERIT> {}
-
-impl<T, const DEFAULT_INHERIT: bool> CssValue<T, DEFAULT_INHERIT> {
-  #[inline(never)]
-  pub(super) fn from_raw<'de, E>(raw: RawCssInput<'de>) -> Result<Self, E>
-  where
-    T: for<'i> FromCss<'i>,
-    E: de::Error,
-  {
-    match raw {
-      RawCssInput::Str(value) => match CssGlobalKeyword::from_str(value.as_ref()) {
-        Some(keyword) => Ok(Self::Keyword(keyword)),
-        None => match T::from_str(value.as_ref()) {
-          Ok(parsed) => Ok(Self::Value(parsed)),
-          Err(_) => css_invalid_string::<T, E, Self>(value.as_ref()),
-        },
-      },
-      RawCssInput::Number(number) => {
-        let source = number.to_string();
-        match T::from_str(&source) {
-          Ok(parsed) => Ok(Self::Value(parsed)),
-          Err(_) => number.as_invalid::<T, E, Self>(),
-        }
-      }
-      RawCssInput::Unexpected(unexpected) => unexpected.as_invalid_type::<T, E, Self>(),
-    }
-  }
-}
-
+#[derive(Clone, Copy)]
 pub(super) enum RawCssNumber {
   Signed(i64),
   Unsigned(u64),
@@ -172,19 +45,9 @@ impl RawCssNumber {
       RawCssNumber::Float(value) => de::Unexpected::Float(*value),
     }
   }
-
-  #[cold]
-  #[inline(never)]
-  fn as_invalid<T, E, R>(&self) -> Result<R, E>
-  where
-    T: for<'i> FromCss<'i>,
-    E: de::Error,
-  {
-    let expected = css_expected_message::<T>();
-    Err(E::invalid_type(self.unexpected(), &expected))
-  }
 }
 
+#[derive(Clone, Copy)]
 pub(super) enum RawCssUnexpected {
   Bool(bool),
   Char(char),
@@ -220,6 +83,7 @@ impl RawCssUnexpected {
   }
 }
 
+#[derive(Clone)]
 pub(super) enum RawCssInput<'a> {
   Str(Cow<'a, str>),
   Number(RawCssNumber),
@@ -418,15 +282,4 @@ where
     let _ = std::marker::PhantomData::<T>;
     CssExpectedMessage {}
   }
-}
-
-#[cold]
-#[inline(never)]
-fn css_invalid_string<T, E, R>(value: &str) -> Result<R, E>
-where
-  T: for<'i> FromCss<'i>,
-  E: de::Error,
-{
-  let expected = css_expected_message::<T>();
-  Err(E::invalid_value(de::Unexpected::Str(value), &expected))
 }
