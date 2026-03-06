@@ -268,6 +268,8 @@ describe("render", () => {
     });
 
     expect(result).toBeInstanceOf(Buffer);
+  });
+
   test("with timeMs applied to stylesheet animation", async () => {
     const animated = await renderer.measure(
       {
