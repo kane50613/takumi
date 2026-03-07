@@ -5,6 +5,10 @@ use takumi::layout::{
 
 use crate::test_utils::run_fixture_test;
 
+fn centered_background_position() -> BackgroundPositions {
+  BackgroundPositions::from_str("center center").unwrap()
+}
+
 fn create_container(background_images: BackgroundImages) -> ContainerNode<NodeKind> {
   ContainerNode {
     class_name: None,
@@ -16,7 +20,10 @@ fn create_container(background_images: BackgroundImages) -> ContainerNode<NodeKi
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_image(Some(background_images))),
+        .with(StyleDeclaration::background_image(Some(background_images)))
+        .with(StyleDeclaration::background_position(
+          centered_background_position(),
+        )),
     ),
     children: None,
   }
@@ -43,7 +50,7 @@ fn create_container_with(
           background_size.unwrap_or_default(),
         ))
         .with(StyleDeclaration::background_position(
-          background_position.unwrap_or_default(),
+          background_position.unwrap_or_else(centered_background_position),
         ))
         .with(StyleDeclaration::background_repeat(
           background_repeat.unwrap_or_default(),

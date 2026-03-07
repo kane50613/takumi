@@ -11,17 +11,17 @@ use crate::layout::style::{
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TwFontSize {
-  pub(crate) font_size: Length,
+  pub(crate) font_size: FontSize,
   pub(crate) line_height: Option<LineHeight>,
 }
 
 impl<'i> FromCss<'i> for TwFontSize {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    Ok(Self::new(Length::from_css(input)?, None))
+    Ok(Self::new(FontSize::from_css(input)?, None))
   }
 
   fn valid_tokens() -> &'static [CssToken] {
-    Length::<true>::valid_tokens()
+    FontSize::valid_tokens()
   }
 }
 
@@ -37,43 +37,43 @@ impl TailwindPropertyParser for TwFontSize {
 
     match_ignore_ascii_case! {token,
       "xs" => Some(
-        Self::new(Rem(0.75), Some(Em(1.0 / 0.75).into())),
+        Self::new(Rem(0.75).into(), Some(Em(1.0 / 0.75).into())),
       ),
       "sm" => Some(
-        Self::new(Rem(0.875), Some(Em(1.25 / 0.875).into())),
+        Self::new(Rem(0.875).into(), Some(Em(1.25 / 0.875).into())),
       ),
       "base" => Some(
-        Self::new(Rem(1.0), Some(Em(1.5 / 1.0).into())),
+        Self::new(Rem(1.0).into(), Some(Em(1.5 / 1.0).into())),
       ),
       "lg" => Some(
-        Self::new(Rem(1.125), Some(Em(1.75 / 1.125).into())),
+        Self::new(Rem(1.125).into(), Some(Em(1.75 / 1.125).into())),
       ),
       "xl" => Some(
-        Self::new(Rem(1.25), Some(Em(1.75 / 1.25).into())),
+        Self::new(Rem(1.25).into(), Some(Em(1.75 / 1.25).into())),
       ),
       "2xl" => Some(
-        Self::new(Rem(1.5), Some(Em(2.0 / 1.5).into())),
+        Self::new(Rem(1.5).into(), Some(Em(2.0 / 1.5).into())),
       ),
       "3xl" => Some(
-        Self::new(Rem(1.875), Some(Em(2.25 / 1.875).into())),
+        Self::new(Rem(1.875).into(), Some(Em(2.25 / 1.875).into())),
       ),
       "4xl" => Some(
-        Self::new(Rem(2.25), Some(Em(2.5 / 2.25).into())),
+        Self::new(Rem(2.25).into(), Some(Em(2.5 / 2.25).into())),
       ),
       "5xl" => Some(
-        Self::new(Rem(3.0), Some(Em(1.0).into())),
+        Self::new(Rem(3.0).into(), Some(Em(1.0).into())),
       ),
       "6xl" => Some(
-        Self::new(Rem(3.75), Some(Em(1.0).into())),
+        Self::new(Rem(3.75).into(), Some(Em(1.0).into())),
       ),
       "7xl" => Some(
-        Self::new(Rem(4.5), Some(Em(1.0).into())),
+        Self::new(Rem(4.5).into(), Some(Em(1.0).into())),
       ),
       "8xl" => Some(
-        Self::new(Rem(6.0), Some(Em(1.0).into())),
+        Self::new(Rem(6.0).into(), Some(Em(1.0).into())),
       ),
       "9xl" => Some(
-        Self::new(Rem(8.0), Some(Em(1.0).into())),
+        Self::new(Rem(8.0).into(), Some(Em(1.0).into())),
       ),
       _ => None,
     }
@@ -81,7 +81,7 @@ impl TailwindPropertyParser for TwFontSize {
 }
 
 impl TwFontSize {
-  pub const fn new(font_size: Length, line_height: Option<LineHeight>) -> Self {
+  pub const fn new(font_size: FontSize, line_height: Option<LineHeight>) -> Self {
     Self {
       font_size,
       line_height,

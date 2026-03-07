@@ -22,7 +22,7 @@ fn make_text_node(text: String) -> NodeKind {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::font_size(Px(20.0)))
+        .with(StyleDeclaration::font_size(Px(20.0).into()))
         .with(StyleDeclaration::font_weight(FontWeight::from(600.0)))
         .with(StyleDeclaration::color(ColorInput::Value(Color([
           35, 35, 35, 255,

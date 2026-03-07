@@ -9,7 +9,9 @@ use crate::layout::style::{
 #[derive(Clone, Copy)]
 pub enum PropertyParser {
   ObjectFit(fn(ObjectFit) -> TailwindProperty),
+  ObjectPosition(fn(ObjectPosition) -> TailwindProperty),
   BgPosition(fn(BackgroundPosition) -> TailwindProperty),
+  TransformOrigin(fn(TransformOrigin) -> TailwindProperty),
   BgSize(fn(BackgroundSize) -> TailwindProperty),
   BgImage(fn(BackgroundImage) -> TailwindProperty),
   LengthAuto(fn(Length) -> TailwindProperty),
@@ -58,7 +60,9 @@ impl PropertyParser {
     match self {
       Self::BackgroundClip(f) => BackgroundClip::parse_tw_with_arbitrary(suffix).map(f),
       Self::ObjectFit(f) => ObjectFit::parse_tw_with_arbitrary(suffix).map(f),
+      Self::ObjectPosition(f) => ObjectPosition::parse_tw_with_arbitrary(suffix).map(f),
       Self::BgPosition(f) => BackgroundPosition::parse_tw_with_arbitrary(suffix).map(f),
+      Self::TransformOrigin(f) => TransformOrigin::parse_tw_with_arbitrary(suffix).map(f),
       Self::BgSize(f) => BackgroundSize::parse_tw_with_arbitrary(suffix).map(f),
       Self::BgImage(f) => BackgroundImage::parse_tw_with_arbitrary(suffix).map(f),
       Self::LengthAuto(f) => Length::parse_tw_with_arbitrary(suffix).map(f),
@@ -108,7 +112,7 @@ impl PropertyParser {
 pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
   "object" => &[
     PropertyParser::ObjectFit(TailwindProperty::ObjectFit),
-    PropertyParser::BgPosition(TailwindProperty::ObjectPosition),
+    PropertyParser::ObjectPosition(TailwindProperty::ObjectPosition),
   ],
   "bg" => &[
     PropertyParser::ColorTransparent(TailwindProperty::BackgroundColor),
@@ -185,7 +189,7 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
   "whitespace" => &[PropertyParser::WhiteSpace(TailwindProperty::WhiteSpace)],
   "wrap" => &[PropertyParser::OverflowWrap(TailwindProperty::OverflowWrap)],
   "flex" => &[PropertyParser::Flex(TailwindProperty::Flex)],
-  "origin" => &[PropertyParser::BgPosition(TailwindProperty::TransformOrigin)],
+  "origin" => &[PropertyParser::TransformOrigin(TailwindProperty::TransformOrigin)],
   "translate" => &[PropertyParser::LengthAuto(TailwindProperty::Translate)],
   "rotate" => &[PropertyParser::Angle(TailwindProperty::Rotate)],
   "scale" => &[PropertyParser::Percentage(TailwindProperty::Scale)],

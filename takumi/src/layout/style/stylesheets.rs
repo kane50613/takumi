@@ -645,7 +645,7 @@ define_style! {
     scale: SpacePair<PercentageNumber>,
     translate: SpacePair<Length>,
     transform: Option<Transforms>,
-    transform_origin: BackgroundPosition,
+    transform_origin: TransformOrigin,
     mask_image: Option<BackgroundImages>,
     mask_size: BackgroundSizes,
     mask_position: BackgroundPositions,
@@ -671,7 +671,7 @@ define_style! {
     object_fit: ObjectFit,
     overflow_x: Overflow,
     overflow_y: Overflow,
-    object_position: BackgroundPosition where inherit = true,
+    object_position: ObjectPosition where inherit = true,
     background_image: Option<BackgroundImages>,
     background_position: BackgroundPositions,
     background_size: BackgroundSizes,
@@ -695,7 +695,7 @@ define_style! {
     color: ColorInput where inherit = true,
     filter: Filters,
     backdrop_filter: Filters,
-    font_size: Length where inherit = true,
+    font_size: FontSize where inherit = true,
     font_family: Option<FontFamily> where inherit = true,
     line_height: LineHeight where inherit = true,
     font_weight: FontWeight where inherit = true,
@@ -1098,9 +1098,9 @@ impl ResolvedStyle {
     // Keep it as css-px in style to avoid re-resolving descendant inheritance.
     let dpr = sizing.viewport.device_pixel_ratio;
     self.font_size = if dpr > 0.0 {
-      Length::Px(sizing.font_size / dpr)
+      FontSize::Length(Length::Px(sizing.font_size / dpr))
     } else {
-      Length::Px(sizing.font_size)
+      FontSize::Length(Length::Px(sizing.font_size))
     };
 
     self.make_computed_values(sizing);
@@ -1656,7 +1656,7 @@ mod tests {
   #[test]
   fn test_inherited_em_text_lengths_are_computed_once() {
     let mut parent = style_with([
-      StyleDeclaration::font_size(Length::Em(2.0)),
+      StyleDeclaration::font_size(Length::Em(2.0).into()),
       StyleDeclaration::letter_spacing(Length::Em(1.0)),
       StyleDeclaration::line_height(LineHeight::Length(Length::Em(1.5))),
     ])
@@ -1681,7 +1681,7 @@ mod tests {
     assert_eq!(inherited_font_size, 32.0);
 
     let child_with_own_font_size =
-      style_with([StyleDeclaration::font_size(Length::Px(10.0))]).inherit(&parent);
+      style_with([StyleDeclaration::font_size(Length::Px(10.0).into())]).inherit(&parent);
     let child_sizing = Sizing {
       viewport: Viewport::new(Some(1200), Some(630)),
       container_size: Size::NONE,

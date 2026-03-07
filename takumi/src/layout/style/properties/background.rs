@@ -189,6 +189,10 @@ mod tests {
     assert_eq!(
       Background::from_str("center/cover"),
       Ok(Background {
+        position: BackgroundPosition(SpacePair::from_pair(
+          PositionComponent::KeywordX(PositionKeywordX::Center),
+          PositionComponent::KeywordY(PositionKeywordY::Center),
+        )),
         size: BackgroundSize::Cover,
         ..Default::default()
       })
@@ -201,6 +205,10 @@ mod tests {
       Background::from_str("no-repeat center/80% url(../img/image.png)"),
       Ok(Background {
         image: BackgroundImage::Url("../img/image.png".into()),
+        position: BackgroundPosition(SpacePair::from_pair(
+          PositionComponent::KeywordX(PositionKeywordX::Center),
+          PositionComponent::KeywordY(PositionKeywordY::Center),
+        )),
         size: BackgroundSize::Explicit {
           width: Length::Percentage(80.0),
           height: Length::Auto,

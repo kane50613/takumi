@@ -7,8 +7,8 @@ use super::gradient_utils::{
 };
 use crate::{
   layout::style::{
-    BackgroundPosition, ColorInterpolationMethod, CssToken, FromCss, GradientStop, GradientStops,
-    Length, MakeComputed, ParseResult, declare_enum_from_css_impl,
+    ColorInterpolationMethod, CssToken, FromCss, GradientStop, GradientStops, Length, MakeComputed,
+    ObjectPosition, ParseResult, declare_enum_from_css_impl,
   },
   rendering::{BufferPool, RenderContext, Sizing},
 };
@@ -21,7 +21,7 @@ pub struct RadialGradient {
   /// The sizing mode for the gradient
   pub size: RadialSize,
   /// Center position
-  pub center: BackgroundPosition,
+  pub center: ObjectPosition,
   /// The color interpolation method used between stops.
   pub interpolation: ColorInterpolationMethod,
   /// Gradient stops
@@ -322,7 +322,7 @@ impl<'i> FromCss<'i> for RadialGradient {
     input.parse_nested_block(|input| {
       let mut shape = RadialShape::Ellipse;
       let mut size = RadialSize::FarthestCorner;
-      let mut center = BackgroundPosition::default();
+      let mut center = ObjectPosition::default();
       let mut interpolation = ColorInterpolationMethod::default();
 
       loop {
@@ -337,7 +337,7 @@ impl<'i> FromCss<'i> for RadialGradient {
         }
 
         if input.try_parse(|i| i.expect_ident_matching("at")).is_ok() {
-          center = BackgroundPosition::from_css(input)?;
+          center = ObjectPosition::from_css(input)?;
           continue;
         }
 
@@ -374,7 +374,8 @@ mod tests {
 
   use super::*;
   use crate::layout::style::{
-    Color, Length, PositionComponent, PositionKeywordX, PositionKeywordY, SpacePair, StopPosition,
+    BackgroundPosition, Color, Length, PositionComponent, PositionKeywordX, PositionKeywordY,
+    SpacePair, StopPosition,
   };
   use crate::{GlobalContext, rendering::RenderContext};
 
@@ -387,7 +388,7 @@ mod tests {
       Ok(RadialGradient {
         shape: RadialShape::Ellipse,
         size: RadialSize::FarthestCorner,
-        center: BackgroundPosition::default(),
+        center: ObjectPosition::default(),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
@@ -411,7 +412,7 @@ mod tests {
       Ok(RadialGradient {
         shape: RadialShape::Ellipse,
         size: RadialSize::FarthestCorner,
-        center: BackgroundPosition::default(),
+        center: ObjectPosition::default(),
         interpolation: ColorInterpolationMethod {
           color_space: ColorSpaceTag::Oklab,
           hue_direction: HueDirection::Shorter,
@@ -441,7 +442,7 @@ mod tests {
       Ok(RadialGradient {
         shape: RadialShape::Circle,
         size: RadialSize::FarthestSide,
-        center: BackgroundPosition::default(),
+        center: ObjectPosition::default(),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
@@ -468,7 +469,7 @@ mod tests {
       Ok(RadialGradient {
         shape: RadialShape::Ellipse,
         size: RadialSize::FarthestCorner,
-        center: BackgroundPosition(SpacePair::from_pair(
+        center: BackgroundPosition::<false>(SpacePair::from_pair(
           PositionComponent::KeywordX(PositionKeywordX::Left),
           PositionComponent::KeywordY(PositionKeywordY::Top),
         )),
@@ -498,7 +499,7 @@ mod tests {
       Ok(RadialGradient {
         shape: RadialShape::Ellipse,
         size: RadialSize::FarthestCorner,
-        center: BackgroundPosition(SpacePair::from_pair(
+        center: BackgroundPosition::<false>(SpacePair::from_pair(
           Length::Percentage(25.0).into(),
           Length::Percentage(70.0).into(),
         )),
@@ -529,7 +530,7 @@ mod tests {
       Ok(RadialGradient {
         shape: RadialShape::Circle,
         size: RadialSize::FarthestCorner,
-        center: BackgroundPosition(SpacePair::from_single(PositionComponent::Length(
+        center: BackgroundPosition::<false>(SpacePair::from_single(PositionComponent::Length(
           Length::Px(25.0),
         ))),
         interpolation: ColorInterpolationMethod::default(),
@@ -558,7 +559,7 @@ mod tests {
       Ok(RadialGradient {
         shape: RadialShape::Circle,
         size: RadialSize::FarthestCorner,
-        center: BackgroundPosition::default(),
+        center: ObjectPosition::default(),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
@@ -586,7 +587,7 @@ mod tests {
       Ok(RadialGradient {
         shape: RadialShape::Circle,
         size: RadialSize::FarthestCorner,
-        center: BackgroundPosition::default(),
+        center: ObjectPosition::default(),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
@@ -612,7 +613,7 @@ mod tests {
     let gradient = RadialGradient {
       shape: RadialShape::Ellipse,
       size: RadialSize::FarthestCorner,
-      center: BackgroundPosition::default(),
+      center: ObjectPosition::default(),
       interpolation: ColorInterpolationMethod::default(),
       stops: [
         GradientStop::ColorHint {
@@ -649,7 +650,7 @@ mod tests {
     let gradient = RadialGradient {
       shape: RadialShape::Ellipse,
       size: RadialSize::FarthestCorner,
-      center: BackgroundPosition::default(),
+      center: ObjectPosition::default(),
       interpolation: ColorInterpolationMethod::default(),
       stops: [
         GradientStop::ColorHint {
@@ -687,7 +688,7 @@ mod tests {
     let gradient = RadialGradient {
       shape: RadialShape::Circle,
       size: RadialSize::FarthestCorner,
-      center: BackgroundPosition::default(), // default is center (50%, 50%)
+      center: ObjectPosition::default(), // default is center (50%, 50%)
       interpolation: ColorInterpolationMethod::default(),
       stops: [
         GradientStop::ColorHint {
@@ -721,7 +722,7 @@ mod tests {
     let gradient = RadialGradient {
       shape: RadialShape::Ellipse,
       size: RadialSize::ClosestCorner,
-      center: BackgroundPosition(SpacePair::from_pair(
+      center: BackgroundPosition::<false>(SpacePair::from_pair(
         Length::Px(20.0).into(),
         Length::Px(20.0).into(),
       )),

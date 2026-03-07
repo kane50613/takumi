@@ -389,7 +389,7 @@ fn test_style_border_radius_width_offset() {
               Style::default()
                 .with(StyleDeclaration::width(Percentage(100.0)))
                 .with_padding(Sides([Rem(4.0); 4]))
-                .with(StyleDeclaration::font_size(Rem(4.0)))
+                .with(StyleDeclaration::font_size(Rem(4.0).into()))
                 .with(StyleDeclaration::font_weight(FontWeight::from(500.0)))
                 .with(StyleDeclaration::line_height(LineHeight::Length(Rem(
                   4.0 * 1.5,

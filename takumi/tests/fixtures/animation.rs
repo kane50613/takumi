@@ -76,7 +76,7 @@ fn bouncing_text_label() -> NodeKind {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::font_size(Px(56.0)))
+        .with(StyleDeclaration::font_size(Px(56.0).into()))
         .with(StyleDeclaration::font_family(Some(FontFamily::from(
           "monospace",
         ))))

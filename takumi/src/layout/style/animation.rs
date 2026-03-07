@@ -649,7 +649,7 @@ mod tests {
 
   #[test]
   fn background_position_interpolates_components() {
-    let mut target = BackgroundPosition::default();
+    let mut target: BackgroundPosition = BackgroundPosition::default();
     target.interpolate(
       &BackgroundPosition(SpacePair::from_pair(
         PositionComponent::KeywordX(PositionKeywordX::Left),

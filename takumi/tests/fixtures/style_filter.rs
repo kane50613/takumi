@@ -57,7 +57,7 @@ fn create_filter_card(filter: &str, image_size_px: f32, label_font_size_px: f32)
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with_gap(SpacePair::from_single(Px(16.0)))
-        .with(StyleDeclaration::font_size(Px(label_font_size_px))),
+        .with(StyleDeclaration::font_size(Px(label_font_size_px).into())),
     ),
     children: Some(
       [

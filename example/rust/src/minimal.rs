@@ -34,7 +34,7 @@ pub fn say_hello_to(name: &str) {
     id: None,
     preset: None,
     tw: None,
-    style: Some(Style::default().with(StyleDeclaration::font_size(Px(48.0)))),
+    style: Some(Style::default().with(StyleDeclaration::font_size(Px(48.0).into()))),
     text: format!("Hello, {name}!"),
   };
 

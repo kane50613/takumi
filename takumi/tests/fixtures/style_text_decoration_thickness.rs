@@ -19,7 +19,7 @@ fn test_style_text_decoration_thickness() {
           .with(StyleDeclaration::width(Percentage(100.0)))
           .with(StyleDeclaration::display(Display::Block))
           .with(StyleDeclaration::text_align(TextAlign::Center))
-          .with(StyleDeclaration::font_size(Px(48.0)))
+          .with(StyleDeclaration::font_size(Px(48.0).into()))
           .with_text_decoration(TextDecoration {
             line: TextDecorationLines::UNDERLINE,
             style: None,

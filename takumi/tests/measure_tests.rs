@@ -2,7 +2,7 @@ mod test_utils;
 
 use takumi::{
   layout::{
-    Viewport,
+    DEFAULT_FONT_SIZE, Viewport,
     node::{ContainerNode, ImageNode, NodeKind, TextNode},
     style::{
       Affine, AlignItems, Color, ColorInput, Display, FlexDirection, JustifyContent, Length::*,
@@ -15,6 +15,34 @@ use test_utils::CONTEXT;
 
 fn create_measure_viewport() -> Viewport {
   (1200, 630).into()
+}
+
+fn create_measure_viewport_with_dpr(device_pixel_ratio: f32) -> Viewport {
+  Viewport {
+    width: Some((1200.0 * device_pixel_ratio) as u32),
+    height: Some((630.0 * device_pixel_ratio) as u32),
+    font_size: DEFAULT_FONT_SIZE,
+    device_pixel_ratio,
+  }
+}
+
+fn measure(node: NodeKind, viewport: Viewport) -> MeasuredNode {
+  measure_layout(
+    RenderOptionsBuilder::default()
+      .viewport(viewport)
+      .node(node)
+      .global(&CONTEXT)
+      .build()
+      .unwrap(),
+  )
+  .unwrap()
+}
+
+fn assert_close(actual: f32, expected: f32) {
+  assert!(
+    (actual - expected).abs() <= 0.01,
+    "expected {expected}, got {actual}"
+  );
 }
 
 #[test]
@@ -70,7 +98,7 @@ fn test_measure_text_node() {
     style: Some(
       Style::default()
         .with(StyleDeclaration::width(Px(300.0)))
-        .with(StyleDeclaration::font_size(Px(20.0))),
+        .with(StyleDeclaration::font_size(Px(20.0).into())),
     ),
     text: "Hello World".to_string(),
   }
@@ -125,7 +153,7 @@ fn test_measure_flex_text_node_centers_inner_text() {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center))
-        .with(StyleDeclaration::font_size(Px(20.0))),
+        .with(StyleDeclaration::font_size(Px(20.0).into())),
     ),
     text: "Hello World".to_string(),
   }
@@ -180,7 +208,7 @@ fn test_measure_flex_text_node_anonymous_item_uses_intrinsic_size() {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center))
-        .with(StyleDeclaration::font_size(Px(20.0))),
+        .with(StyleDeclaration::font_size(Px(20.0).into())),
     ),
     text: "Hello World".to_string(),
   }
@@ -225,7 +253,7 @@ fn test_measure_inline_layout() {
       Style::default()
         .with(StyleDeclaration::width(Px(400.0)))
         .with(StyleDeclaration::height(Px(300.0)))
-        .with(StyleDeclaration::font_size(Px(20.0)))
+        .with(StyleDeclaration::font_size(Px(20.0).into()))
         .with(StyleDeclaration::display(Display::Block)),
     ),
     children: Some(
@@ -322,6 +350,144 @@ fn test_measure_inline_layout() {
       }],
     }
   )
+}
+
+#[test]
+fn test_measure_text_node_rem_font_size_matches_px_when_dpr_is_below_one() {
+  let viewport = create_measure_viewport_with_dpr(0.75);
+  let text = "Rem font size still applies".to_string();
+
+  let rem_result = measure(
+    TextNode {
+      class_name: None,
+      id: None,
+      tag_name: None,
+      preset: None,
+      tw: None,
+      style: Some(
+        Style::default()
+          .with(StyleDeclaration::width(Px(400.0)))
+          .with(StyleDeclaration::font_size(Rem(1.0).into())),
+      ),
+      text: text.clone(),
+    }
+    .into(),
+    viewport,
+  );
+
+  let px_result = measure(
+    TextNode {
+      class_name: None,
+      id: None,
+      tag_name: None,
+      preset: None,
+      tw: None,
+      style: Some(
+        Style::default()
+          .with(StyleDeclaration::width(Px(400.0)))
+          .with(StyleDeclaration::font_size(Px(16.0).into())),
+      ),
+      text,
+    }
+    .into(),
+    viewport,
+  );
+
+  assert_eq!(rem_result.children.len(), 1);
+  assert_eq!(px_result.children.len(), 1);
+
+  let rem_text = &rem_result.children[0];
+  let px_text = &px_result.children[0];
+
+  assert_close(rem_result.height, px_result.height);
+  assert_close(rem_text.width, px_text.width);
+  assert_close(rem_text.height, px_text.height);
+  assert_close(rem_text.runs[0].width, px_text.runs[0].width);
+  assert_close(rem_text.runs[0].height, px_text.runs[0].height);
+}
+
+#[test]
+fn test_measure_nested_em_font_size_inherits_correctly_from_rem_when_dpr_is_below_one() {
+  let viewport = create_measure_viewport_with_dpr(0.75);
+
+  let rem_parent_result = measure(
+    ContainerNode {
+      class_name: None,
+      id: None,
+      tag_name: None,
+      preset: None,
+      tw: None,
+      style: Some(
+        Style::default()
+          .with(StyleDeclaration::width(Px(400.0)))
+          .with(StyleDeclaration::font_size(Rem(1.0).into())),
+      ),
+      children: Some(
+        vec![
+          TextNode {
+            class_name: None,
+            id: None,
+            tag_name: None,
+            preset: None,
+            tw: None,
+            style: Some(Style::default().with(StyleDeclaration::font_size(Em(2.0).into()))),
+            text: "Nested em".to_string(),
+          }
+          .into(),
+        ]
+        .into_boxed_slice(),
+      ),
+    }
+    .into(),
+    viewport,
+  );
+
+  let px_parent_result = measure(
+    ContainerNode {
+      class_name: None,
+      id: None,
+      tag_name: None,
+      preset: None,
+      tw: None,
+      style: Some(
+        Style::default()
+          .with(StyleDeclaration::width(Px(400.0)))
+          .with(StyleDeclaration::font_size(Px(16.0).into())),
+      ),
+      children: Some(
+        vec![
+          TextNode {
+            class_name: None,
+            id: None,
+            tag_name: None,
+            preset: None,
+            tw: None,
+            style: Some(Style::default().with(StyleDeclaration::font_size(Em(2.0).into()))),
+            text: "Nested em".to_string(),
+          }
+          .into(),
+        ]
+        .into_boxed_slice(),
+      ),
+    }
+    .into(),
+    viewport,
+  );
+
+  assert_eq!(rem_parent_result.children.len(), 1);
+  assert_eq!(px_parent_result.children.len(), 1);
+
+  let rem_text = &rem_parent_result.children[0].children[0];
+  let px_text = &px_parent_result.children[0].children[0];
+
+  assert_close(
+    rem_parent_result.children[0].height,
+    px_parent_result.children[0].height,
+  );
+  assert_close(rem_text.width, px_text.width);
+  assert_close(rem_text.height, px_text.height);
+  assert_close(rem_text.runs[0].width, px_text.runs[0].width);
+  assert_close(rem_text.runs[0].height, px_text.runs[0].height);
 }
 
 #[test]

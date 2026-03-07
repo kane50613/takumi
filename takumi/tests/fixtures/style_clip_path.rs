@@ -26,7 +26,7 @@ fn clip_path_text_stroke_filled() {
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
-        .with(StyleDeclaration::font_size(Px(84.0)))
+        .with(StyleDeclaration::font_size(Px(84.0).into()))
         .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
         .with(StyleDeclaration::text_align(TextAlign::Center)),
     ),

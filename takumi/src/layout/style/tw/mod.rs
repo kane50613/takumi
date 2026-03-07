@@ -495,7 +495,7 @@ pub enum TailwindProperty {
   /// `display` property.
   Display(Display),
   /// `object-position` property.
-  ObjectPosition(BackgroundPosition),
+  ObjectPosition(ObjectPosition),
   /// `object-fit` property.
   ObjectFit(ObjectFit),
   /// `background-position` property.
@@ -613,7 +613,7 @@ pub enum TailwindProperty {
   /// `scale-y` property.
   ScaleY(PercentageNumber),
   /// `transform-origin` property.
-  TransformOrigin(BackgroundPosition),
+  TransformOrigin(TransformOrigin),
   /// `margin` property.
   Margin(Length<false>),
   /// `margin-inline` property.
@@ -1539,7 +1539,7 @@ mod tests {
     assert_eq!(
       TailwindProperty::parse("text-base/[12.34]"),
       Some(TailwindProperty::FontSize(TwFontSize {
-        font_size: Length::Rem(1.0),
+        font_size: (Length::Rem(1.0).into()),
         line_height: Some(LineHeight::Unitless(12.34)),
       }))
     );
@@ -1799,9 +1799,10 @@ mod tests {
     let Ok(values) = TailwindValues::from_str("blur-sm brightness-150 contrast-125") else {
       unreachable!()
     };
+    let viewport = (100, 100).into();
 
-    let style = Style::from(values.into_declaration_block((100, 100).into()))
-      .inherit(&ResolvedStyle::default());
+    let style =
+      Style::from(values.into_declaration_block(viewport)).inherit(&ResolvedStyle::default());
 
     assert_eq!(
       style.filter,
@@ -1819,9 +1820,10 @@ mod tests {
     else {
       unreachable!()
     };
+    let viewport = (100, 100).into();
 
-    let style = Style::from(values.into_declaration_block((100, 100).into()))
-      .inherit(&ResolvedStyle::default());
+    let style =
+      Style::from(values.into_declaration_block(viewport)).inherit(&ResolvedStyle::default());
 
     assert_eq!(
       style.translate,

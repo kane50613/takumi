@@ -109,7 +109,7 @@ fn test_style_transform_origin_center() {
         ))),
     ),
     children: Some(Box::from_iter(ROTATED_ANGLES.iter().map(|angle| {
-      create_rotated_container(*angle, BackgroundPosition::default()).into()
+      create_rotated_container(*angle, TransformOrigin::default()).into()
     }))),
   };
 
@@ -132,7 +132,7 @@ fn test_style_transform_origin_top_left() {
           Color::white(),
         )))
         .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::font_size(Px(24.0))),
+        .with(StyleDeclaration::font_size(Px(24.0).into())),
     ),
     children: Some(
       ROTATED_ANGLES
@@ -154,7 +154,7 @@ fn test_style_transform_origin_top_left() {
   run_fixture_test(container.into(), "style_transform_origin_top_left");
 }
 
-fn create_rotated_container(angle: f32, transform_origin: BackgroundPosition) -> ImageNode {
+fn create_rotated_container(angle: f32, transform_origin: TransformOrigin) -> ImageNode {
   ImageNode {
     class_name: None,
     id: None,
@@ -204,7 +204,7 @@ fn test_style_transform_translate_and_scale() {
           Color::white(),
         )))
         .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::font_size(Px(24.0))),
+        .with(StyleDeclaration::font_size(Px(24.0).into())),
     ),
     children: None,
   };
@@ -296,7 +296,7 @@ fn test_style_transform_translate_and_scale() {
         .with(StyleDeclaration::height(Px(100.0)))
         .with_border_width(Sides([Px(1.0); 4]))
         .with(StyleDeclaration::border_style(BorderStyle::Solid))
-        .with(StyleDeclaration::font_size(Px(12.0))),
+        .with(StyleDeclaration::font_size(Px(12.0).into())),
     ),
     children: Some(
       [TextNode {

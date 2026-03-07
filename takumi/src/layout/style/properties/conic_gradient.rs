@@ -10,7 +10,7 @@ use super::gradient_utils::{
 use crate::{
   layout::style::{
     Angle, BackgroundPosition, ColorInterpolationMethod, CssToken, FromCss, GradientStop,
-    GradientStops, Length, MakeComputed, ParseResult,
+    GradientStops, Length, MakeComputed, ObjectPosition, ParseResult,
   },
   rendering::{BufferPool, RenderContext, Sizing},
 };
@@ -21,7 +21,7 @@ pub struct ConicGradient {
   /// The starting angle of the gradient (default 0deg = from top).
   pub from_angle: Angle,
   /// Center position (default 50% 50%).
-  pub center: BackgroundPosition,
+  pub center: ObjectPosition,
   /// The color interpolation method used between stops.
   pub interpolation: ColorInterpolationMethod,
   /// Gradient color stops.
@@ -201,7 +201,7 @@ impl<'i> FromCss<'i> for ConicGradient {
 
     input.parse_nested_block(|input| {
       let mut from_angle: Option<Angle> = None;
-      let mut center: Option<BackgroundPosition> = None;
+      let mut center: Option<ObjectPosition> = None;
       let mut interpolation = ColorInterpolationMethod::default();
 
       // Parse optional "from <angle>" and/or "at <position>" before the comma
@@ -260,7 +260,7 @@ mod tests {
       gradient,
       Ok(ConicGradient {
         from_angle: Angle::zero(),
-        center: BackgroundPosition::default(),
+        center: ObjectPosition::default(),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
@@ -283,7 +283,7 @@ mod tests {
       ConicGradient::from_str("conic-gradient(in oklab, red, blue)"),
       Ok(ConicGradient {
         from_angle: Angle::zero(),
-        center: BackgroundPosition::default(),
+        center: ObjectPosition::default(),
         interpolation: ColorInterpolationMethod {
           color_space: ColorSpaceTag::Oklab,
           hue_direction: HueDirection::Shorter,
@@ -309,7 +309,7 @@ mod tests {
       ConicGradient::from_str("conic-gradient(#ff0000 0%, #00ff00 50%, #0000ff 100%)"),
       Ok(ConicGradient {
         from_angle: Angle::zero(),
-        center: BackgroundPosition::default(),
+        center: ObjectPosition::default(),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
@@ -336,7 +336,7 @@ mod tests {
       ConicGradient::from_str("conic-gradient(red 10% 20%, blue)"),
       Ok(ConicGradient {
         from_angle: Angle::zero(),
-        center: BackgroundPosition::default(),
+        center: ObjectPosition::default(),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
@@ -365,7 +365,7 @@ mod tests {
       gradient,
       Ok(ConicGradient {
         from_angle: Angle::new(90.0),
-        center: BackgroundPosition(SpacePair::from_pair(
+        center: BackgroundPosition::<false>(SpacePair::from_pair(
           Length::Percentage(25.0).into(),
           Length::Percentage(75.0).into()
         )),
@@ -389,7 +389,7 @@ mod tests {
   fn test_conic_gradient_top_pixel_is_first_color() {
     let gradient = ConicGradient {
       from_angle: Angle::zero(),
-      center: BackgroundPosition::default(),
+      center: ObjectPosition::default(),
       interpolation: ColorInterpolationMethod::default(),
       stops: [
         GradientStop::ColorHint {
@@ -419,7 +419,7 @@ mod tests {
     // Simulate the card cost gradient: 3 colors with hard stops
     let gradient = ConicGradient {
       from_angle: Angle::zero(),
-      center: BackgroundPosition::default(),
+      center: ObjectPosition::default(),
       interpolation: ColorInterpolationMethod::default(),
       stops: [
         GradientStop::ColorHint {

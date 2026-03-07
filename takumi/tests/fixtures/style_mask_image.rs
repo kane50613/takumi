@@ -5,6 +5,10 @@ use takumi::layout::{
 
 use crate::test_utils::run_fixture_test;
 
+fn centered_layer_position() -> BackgroundPositions {
+  BackgroundPositions::from_str("center center").unwrap()
+}
+
 fn create_container_with_mask(
   mask_image: BackgroundImages,
   background_color: Color,
@@ -22,7 +26,8 @@ fn create_container_with_mask(
         .with(StyleDeclaration::background_color(ColorInput::Value(
           background_color,
         )))
-        .with(StyleDeclaration::mask_image(Some(mask_image))),
+        .with(StyleDeclaration::mask_image(Some(mask_image)))
+        .with(StyleDeclaration::mask_position(centered_layer_position())),
     ),
     children: None,
   }
@@ -102,7 +107,11 @@ fn test_style_mask_image_with_background_image() {
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::background_image(Some(background_image)))
-        .with(StyleDeclaration::mask_image(Some(mask_image))),
+        .with(StyleDeclaration::background_position(
+          centered_layer_position(),
+        ))
+        .with(StyleDeclaration::mask_image(Some(mask_image)))
+        .with(StyleDeclaration::mask_position(centered_layer_position())),
     ),
     children: None,
   };
@@ -142,7 +151,8 @@ fn test_style_mask_image_on_image_node() {
           Style::default()
             .with(StyleDeclaration::width(Rem(16.0)))
             .with(StyleDeclaration::height(Rem(16.0)))
-            .with(StyleDeclaration::mask_image(Some(mask_image))),
+            .with(StyleDeclaration::mask_image(Some(mask_image)))
+            .with(StyleDeclaration::mask_position(centered_layer_position())),
         ),
         children: Some(
           vec![
