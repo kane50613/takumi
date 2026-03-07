@@ -583,8 +583,10 @@ mod tests {
 
   #[test]
   fn cubic_bezier_preserves_overshoot() {
-    let function = AnimationTimingFunction::from_str("cubic-bezier(0.68, -0.6, 0.32, 1.6)")
-      .expect("expected cubic-bezier to parse");
+    let Ok(function) = AnimationTimingFunction::from_str("cubic-bezier(0.68, -0.6, 0.32, 1.6)")
+    else {
+      unreachable!()
+    };
 
     let early = apply_timing_function(&function, 0.2);
     let late = apply_timing_function(&function, 0.8);
