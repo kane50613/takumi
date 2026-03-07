@@ -158,10 +158,6 @@ impl BackgroundTile {
   }
 }
 
-pub(crate) fn resolve_length_against_area(unit: Length, area: u32, sizing: &Sizing) -> u32 {
-  unit.to_px(sizing, area as f32).max(0.0) as u32
-}
-
 pub(crate) fn resolve_background_size(
   size: BackgroundSize,
   area: Size<u32>,
@@ -185,30 +181,36 @@ pub(crate) fn resolve_background_size(
               return (0, 0);
             }
             if width == Length::Auto {
-              let fix_height = resolve_length_against_area(height, area.height, &context.sizing);
-              let scale_factor = fix_height as f32 / intrinsic_height;
-              ((intrinsic_width * scale_factor).round() as u32, fix_height)
+              let fix_height = height.to_px(&context.sizing, area.height as f32).max(0.0);
+              let scale_factor = fix_height / intrinsic_height;
+              (
+                (intrinsic_width * scale_factor).round() as u32,
+                fix_height as u32,
+              )
             } else {
-              let fix_width = resolve_length_against_area(width, area.width, &context.sizing);
-              let scale_factor = fix_width as f32 / intrinsic_width;
-              (fix_width, (intrinsic_height * scale_factor).round() as u32)
+              let fix_width = width.to_px(&context.sizing, area.width as f32).max(0.0);
+              let scale_factor = fix_width / intrinsic_width;
+              (
+                fix_width as u32,
+                (intrinsic_height * scale_factor).round() as u32,
+              )
             }
           }
         } else {
           if width == Length::Auto && height == Length::Auto {
             (area.width, area.height)
           } else if width == Length::Auto {
-            let fix_height = resolve_length_against_area(height, area.height, &context.sizing);
+            let fix_height = height.to_px(&context.sizing, area.height as f32).max(0.0) as u32;
             (area.width, fix_height)
           } else {
-            let fix_width = resolve_length_against_area(width, area.width, &context.sizing);
+            let fix_width = width.to_px(&context.sizing, area.width as f32).max(0.0) as u32;
             (fix_width, area.height)
           }
         }
       } else {
         (
-          resolve_length_against_area(width, area.width, &context.sizing),
-          resolve_length_against_area(height, area.height, &context.sizing),
+          width.to_px(&context.sizing, area.width as f32).max(0.0) as u32,
+          height.to_px(&context.sizing, area.height as f32).max(0.0) as u32,
         )
       }
     }
