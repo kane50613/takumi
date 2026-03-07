@@ -77,6 +77,12 @@ pub enum TextDecorationThickness {
   Length(Length),
 }
 
+impl Default for TextDecorationThickness {
+  fn default() -> Self {
+    Self::Length(Length::Auto)
+  }
+}
+
 impl MakeComputed for TextDecorationThickness {
   fn make_computed(&mut self, sizing: &Sizing) {
     if let Self::Length(length) = self {
@@ -119,9 +125,10 @@ impl TailwindPropertyParser for TextDecorationThickness {
 }
 
 /// Represents text decoration style options (currently only solid is supported).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum TextDecorationStyle {
   /// Solid text decoration style.
+  #[default]
   Solid,
 }
 

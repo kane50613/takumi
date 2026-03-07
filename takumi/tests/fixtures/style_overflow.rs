@@ -114,7 +114,7 @@ fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
             tw: None,
             style: Some(
               Style::default()
-                .with(StyleDeclaration::font_size(Some(Rem(4.0))))
+                .with(StyleDeclaration::font_size(Rem(4.0)))
                 .with(StyleDeclaration::color(ColorInput::Value(Color([0, 0, 0, 255]))))
                 .with_border_width(Sides([Px(2.0); 4]))
                 .with(StyleDeclaration::border_style(BorderStyle::Solid))

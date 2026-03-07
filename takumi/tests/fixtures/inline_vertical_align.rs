@@ -21,7 +21,7 @@ fn inline_vertical_align_types() {
           .with_margin(Sides([Px(4.0); 4]))
           .with_padding(Sides([Px(4.0), Px(8.0), Px(4.0), Px(8.0)]))
           .with(StyleDeclaration::line_height(LineHeight::Length(Px(72.0))))
-          .with(StyleDeclaration::font_size(Some(Px(32.0))))
+          .with(StyleDeclaration::font_size(Px(32.0)))
           .with(StyleDeclaration::background_color(ColorInput::Value(
             Color([248, 248, 248, 255]),
           )))

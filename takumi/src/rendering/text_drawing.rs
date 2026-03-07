@@ -399,11 +399,11 @@ fn draw_text_shadow(
   transform: Affine,
   paths: &[Command],
 ) -> Result<()> {
-  let Some(ref shadows) = style.text_shadow else {
+  if style.text_shadow.is_empty() {
     return Ok(());
-  };
+  }
 
-  for shadow in shadows.iter() {
+  for shadow in style.text_shadow.iter() {
     shadow.draw_outset(canvas, paths, transform, Default::default(), None)?;
   }
 

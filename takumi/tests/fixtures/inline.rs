@@ -68,7 +68,7 @@ fn text_inline() {
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::line_clamp(Some(3.into())))
         .with(StyleDeclaration::text_overflow(TextOverflow::Ellipsis))
-        .with(StyleDeclaration::font_size(Some(Px(48.0))))
+        .with(StyleDeclaration::font_size(Px(48.0)))
         .with_white_space(WhiteSpace::pre_wrap()),
     ),
     children: Some(children),
@@ -158,7 +158,7 @@ fn inline_image() {
             .with_border_width(Sides([Px(2.0); 4]))
             .with(StyleDeclaration::border_style(BorderStyle::Solid))
             .with(StyleDeclaration::display(Display::Block))
-            .with(StyleDeclaration::font_size(Some(Px(48.0)))),
+            .with(StyleDeclaration::font_size(Px(48.0))),
         ),
         children: Some(children.into()),
       }
@@ -197,7 +197,7 @@ fn inline_block_in_inline() {
             Color([200, 200, 255, 255]),
           )))
           .with(StyleDeclaration::width(Percentage(80.0)))
-          .with(StyleDeclaration::font_size(Some(Px(18.0)))),
+          .with(StyleDeclaration::font_size(Px(18.0))),
       ),
       children: Some(
         [TextNode {
@@ -239,7 +239,7 @@ fn inline_block_in_inline() {
         )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Block))
-        .with(StyleDeclaration::font_size(Some(Px(24.0))))
+        .with(StyleDeclaration::font_size(Px(24.0)))
         .with_white_space(WhiteSpace::pre()),
     ),
     children: Some(children.into_boxed_slice()),
@@ -314,7 +314,7 @@ fn inline_span_background_color() {
           Color::white(),
         )))
         .with_white_space(WhiteSpace::pre())
-        .with(StyleDeclaration::font_size(Some(Px(48.0)))),
+        .with(StyleDeclaration::font_size(Px(48.0))),
     ),
     children: Some(children),
   };
@@ -383,7 +383,7 @@ fn inline_atomic_containers() {
         style: Some(
           Style::default()
             .with(StyleDeclaration::display(Display::Block))
-            .with(StyleDeclaration::font_size(Some(Px(24.0))))
+            .with(StyleDeclaration::font_size(Px(24.0)))
             .with_border_width(Sides([Px(2.0); 4]))
             .with(StyleDeclaration::border_style(BorderStyle::Solid)),
         ),
@@ -557,7 +557,7 @@ fn inline_nested_flex_block() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
         )))
-        .with(StyleDeclaration::font_size(Some(Px(20.0))))
+        .with(StyleDeclaration::font_size(Px(20.0)))
         .with(StyleDeclaration::line_height(LineHeight::Length(Px(40.0)))),
     ),
     children: Some(children.into()),

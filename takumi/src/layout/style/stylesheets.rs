@@ -647,9 +647,9 @@ define_style! {
     transform: Option<Transforms>,
     transform_origin: BackgroundPosition,
     mask_image: Option<BackgroundImages>,
-    mask_size: Option<BackgroundSizes>,
-    mask_position: Option<BackgroundPositions>,
-    mask_repeat: Option<BackgroundRepeats>,
+    mask_size: BackgroundSizes,
+    mask_position: BackgroundPositions,
+    mask_repeat: BackgroundRepeats,
     column_gap: Length<false>,
     row_gap: Length<false>,
     flex_grow: Option<FlexGrow>,
@@ -673,10 +673,10 @@ define_style! {
     overflow_y: Overflow,
     object_position: BackgroundPosition where inherit = true,
     background_image: Option<BackgroundImages>,
-    background_position: Option<BackgroundPositions>,
-    background_size: Option<BackgroundSizes>,
-    background_repeat: Option<BackgroundRepeats>,
-    background_blend_mode: Option<BlendModes>,
+    background_position: BackgroundPositions,
+    background_size: BackgroundSizes,
+    background_repeat: BackgroundRepeats,
+    background_blend_mode: BlendModes,
     background_color: ColorInput<false>,
     background_clip: BackgroundClip,
     box_shadow: Option<BoxShadows>,
@@ -695,14 +695,14 @@ define_style! {
     color: ColorInput where inherit = true,
     filter: Filters,
     backdrop_filter: Filters,
-    font_size: Option<Length> where inherit = true,
+    font_size: Length where inherit = true,
     font_family: Option<FontFamily> where inherit = true,
     line_height: LineHeight where inherit = true,
     font_weight: FontWeight where inherit = true,
-    font_variation_settings: Option<FontVariationSettings> where inherit = true,
-    font_feature_settings: Option<FontFeatureSettings> where inherit = true,
-    font_synthesis_weight: Option<FontSynthesic> where inherit = true,
-    font_synthesis_style: Option<FontSynthesic> where inherit = true,
+    font_variation_settings: FontVariationSettings where inherit = true,
+    font_feature_settings: FontFeatureSettings where inherit = true,
+    font_synthesis_weight: FontSynthesic where inherit = true,
+    font_synthesis_style: FontSynthesic where inherit = true,
     line_clamp: Option<LineClamp> where inherit = true,
     text_align: TextAlign where inherit = true,
     webkit_text_stroke_width: Option<Length<false>> where inherit = true,
@@ -711,12 +711,12 @@ define_style! {
     stroke_linejoin: LineJoin where inherit = true,
     text_shadow: Option<TextShadows> where inherit = true,
     text_decoration_line: Option<TextDecorationLines>,
-    text_decoration_style: Option<TextDecorationStyle>,
-    text_decoration_color: Option<ColorInput>,
-    text_decoration_thickness: Option<TextDecorationThickness>,
+    text_decoration_style: TextDecorationStyle,
+    text_decoration_color: ColorInput,
+    text_decoration_thickness: TextDecorationThickness,
     text_decoration_skip_ink: TextDecorationSkipInk where inherit = true,
-    letter_spacing: Option<Length> where inherit = true,
-    word_spacing: Option<Length> where inherit = true,
+    letter_spacing: Length where inherit = true,
+    word_spacing: Length where inherit = true,
     image_rendering: ImageScalingAlgorithm where inherit = true,
     overflow_wrap: OverflowWrap where inherit = true,
     word_break: WordBreak where inherit = true,
@@ -724,7 +724,7 @@ define_style! {
     clip_rule: FillRule where inherit = true,
     white_space_collapse: WhiteSpaceCollapse where inherit = true,
     text_wrap_mode: TextWrapMode where inherit = true,
-    text_wrap_style: Option<TextWrapStyle> where inherit = true,
+    text_wrap_style: TextWrapStyle where inherit = true,
     isolation: Isolation,
     mix_blend_mode: BlendMode,
     visibility: Visibility,
@@ -816,10 +816,10 @@ define_style! {
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::mask_image(Some(value.iter().map(|background| background.image.clone()).collect())),
-        StyleDeclaration::mask_position(Some(value.iter().map(|background| background.position).collect())),
-        StyleDeclaration::mask_size(Some(value.iter().map(|background| background.size).collect())),
-        StyleDeclaration::mask_repeat(Some(value.iter().map(|background| background.repeat).collect())),
+        StyleDeclaration::mask_position(value.iter().map(|background| background.position).collect()),
+        StyleDeclaration::mask_size(value.iter().map(|background| background.size).collect()),
+        StyleDeclaration::mask_repeat(value.iter().map(|background| background.repeat).collect()),
+        StyleDeclaration::mask_image(Some(value.into_iter().map(|background| background.image).collect())),
       );
     },
     gap: Gap => [RowGap, ColumnGap] |value, target, important| {
@@ -912,21 +912,21 @@ define_style! {
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::background_image(Some(value.iter().map(|background| background.image.clone()).collect())),
-        StyleDeclaration::background_position(Some(value.iter().map(|background| background.position).collect())),
-        StyleDeclaration::background_size(Some(value.iter().map(|background| background.size).collect())),
-        StyleDeclaration::background_repeat(Some(value.iter().map(|background| background.repeat).collect())),
-        StyleDeclaration::background_blend_mode(Some(value.iter().map(|background| background.blend_mode).collect())),
+        StyleDeclaration::background_position(value.iter().map(|background| background.position).collect()),
+        StyleDeclaration::background_size(value.iter().map(|background| background.size).collect()),
+        StyleDeclaration::background_repeat(value.iter().map(|background| background.repeat).collect()),
+        StyleDeclaration::background_blend_mode(value.iter().map(|background| background.blend_mode).collect()),
         StyleDeclaration::background_color(value.iter().filter_map(|background| background.color).next_back().unwrap_or_default()),
         StyleDeclaration::background_clip(value.last().map(|background| background.clip).unwrap_or_default()),
+        StyleDeclaration::background_image(Some(value.into_iter().map(|background| background.image).collect())),
       );
     },
     font_synthesis: FontSynthesis where inherit = true => [FontSynthesisWeight, FontSynthesisStyle] |value, target, important| {
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::font_synthesis_weight(Some(value.weight)),
-        StyleDeclaration::font_synthesis_style(Some(value.style)),
+        StyleDeclaration::font_synthesis_weight(value.weight),
+        StyleDeclaration::font_synthesis_style(value.style),
       );
     },
     webkit_text_stroke: Option<TextStroke> where inherit = true => [WebkitTextStrokeWidth, WebkitTextStrokeColor] |value, target, important| {
@@ -942,9 +942,9 @@ define_style! {
         target,
         important;
         StyleDeclaration::text_decoration_line(Some(value.line)),
-        StyleDeclaration::text_decoration_style(value.style),
-        StyleDeclaration::text_decoration_color(value.color),
-        StyleDeclaration::text_decoration_thickness(value.thickness),
+        StyleDeclaration::text_decoration_style(value.style.unwrap_or_default()),
+        StyleDeclaration::text_decoration_color(value.color.unwrap_or_default()),
+        StyleDeclaration::text_decoration_thickness(value.thickness.unwrap_or_default()),
       );
     },
     white_space: WhiteSpace where inherit = true => [TextWrapMode, WhiteSpaceCollapse] |value, target, important| {
@@ -960,7 +960,7 @@ define_style! {
         target,
         important;
         StyleDeclaration::text_wrap_mode(value.mode.unwrap_or_default()),
-        StyleDeclaration::text_wrap_style(Some(value.style)),
+        StyleDeclaration::text_wrap_style(value.style),
       );
     },
   }
@@ -1025,9 +1025,9 @@ pub(crate) struct SizedFontStyle<'s> {
   pub parent: &'s ResolvedStyle,
   pub line_height: parley::LineHeight,
   pub stroke_width: f32,
-  pub letter_spacing: Option<f32>,
-  pub word_spacing: Option<f32>,
-  pub text_shadow: Option<SmallVec<[SizedShadow; 4]>>,
+  pub letter_spacing: f32,
+  pub word_spacing: f32,
+  pub text_shadow: SmallVec<[SizedShadow; 4]>,
   pub color: Color,
   pub text_stroke_color: Color,
   pub text_decoration_color: Color,
@@ -1043,23 +1043,17 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, InlineBrush> {
       font_weight: style.parent.font_weight.into(),
       font_style: style.parent.font_style.into(),
       font_variations: FontSettings::List(Cow::Borrowed(
-        style
-          .parent
-          .font_variation_settings
-          .as_deref()
-          .unwrap_or(&[]),
+        style.parent.font_variation_settings.as_ref(),
       )),
-      font_features: FontSettings::List(Cow::Borrowed(
-        style.parent.font_feature_settings.as_deref().unwrap_or(&[]),
-      )),
+      font_features: FontSettings::List(Cow::Borrowed(style.parent.font_feature_settings.as_ref())),
       font_stack: style
         .parent
         .font_family
         .as_ref()
         .map(Into::into)
         .unwrap_or(FontStack::Source(Cow::Borrowed("sans-serif"))),
-      letter_spacing: style.letter_spacing.unwrap_or_default(),
-      word_spacing: style.word_spacing.unwrap_or_default(),
+      letter_spacing: style.letter_spacing,
+      word_spacing: style.word_spacing,
       word_break: style.parent.word_break.into(),
       overflow_wrap: if style.parent.word_break == WordBreak::BreakWord {
         // When word-break is break-word, ignore the overflow-wrap property's value.
@@ -1076,8 +1070,8 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, InlineBrush> {
         decoration_skip_ink: style.parent.text_decoration_skip_ink,
         stroke_color: style.text_stroke_color,
         font_synthesis: FontSynthesis {
-          weight: style.parent.font_synthesis_weight.unwrap_or_default(),
-          style: style.parent.font_synthesis_style.unwrap_or_default(),
+          weight: style.parent.font_synthesis_weight,
+          style: style.parent.font_synthesis_style,
         },
         vertical_align: style.parent.vertical_align,
       },
@@ -1103,11 +1097,11 @@ impl ResolvedStyle {
     // `font-size` computed value is already resolved in `sizing.font_size`.
     // Keep it as css-px in style to avoid re-resolving descendant inheritance.
     let dpr = sizing.viewport.device_pixel_ratio;
-    self.font_size = Some(if dpr > 0.0 {
+    self.font_size = if dpr > 0.0 {
       Length::Px(sizing.font_size / dpr)
     } else {
       Length::Px(sizing.font_size)
-    });
+    };
 
     self.make_computed_values(sizing);
   }
@@ -1290,23 +1284,26 @@ impl ResolvedStyle {
       stroke_width: resolved_stroke_width,
       letter_spacing: self
         .letter_spacing
-        .map(|spacing| spacing.to_px(&context.sizing, context.sizing.font_size)),
+        .to_px(&context.sizing, context.sizing.font_size),
       word_spacing: self
         .word_spacing
-        .map(|spacing| spacing.to_px(&context.sizing, context.sizing.font_size)),
-      text_shadow: self.text_shadow.as_ref().map(|shadows| {
-        shadows
-          .iter()
-          .map(|shadow| {
-            SizedShadow::from_text_shadow(
-              *shadow,
-              &context.sizing,
-              context.current_color,
-              Size::from_length(context.sizing.font_size),
-            )
-          })
-          .collect()
-      }),
+        .to_px(&context.sizing, context.sizing.font_size),
+      text_shadow: self
+        .text_shadow
+        .as_ref()
+        .map_or_else(SmallVec::new, |shadows| {
+          shadows
+            .iter()
+            .map(|shadow| {
+              SizedShadow::from_text_shadow(
+                *shadow,
+                &context.sizing,
+                context.current_color,
+                Size::from_length(context.sizing.font_size),
+              )
+            })
+            .collect()
+        }),
       color: self
         .webkit_text_fill_color
         .unwrap_or(self.color)
@@ -1315,15 +1312,12 @@ impl ResolvedStyle {
         .webkit_text_stroke_color
         .unwrap_or_default()
         .resolve(context.current_color),
-      text_decoration_color: self
-        .text_decoration_color
-        .unwrap_or(ColorInput::CurrentColor)
-        .resolve(context.current_color),
+      text_decoration_color: self.text_decoration_color.resolve(context.current_color),
       text_decoration_thickness: match self.text_decoration_thickness {
-        Some(TextDecorationThickness::Length(Length::Auto))
-        | None
-        | Some(TextDecorationThickness::FromFont) => SizedTextDecorationThickness::FromFont,
-        Some(TextDecorationThickness::Length(thickness)) => SizedTextDecorationThickness::Value(
+        TextDecorationThickness::Length(Length::Auto) | TextDecorationThickness::FromFont => {
+          SizedTextDecorationThickness::FromFont
+        }
+        TextDecorationThickness::Length(thickness) => SizedTextDecorationThickness::Value(
           thickness.to_px(&context.sizing, context.sizing.font_size),
         ),
       },
@@ -1561,20 +1555,20 @@ mod tests {
 
   #[test]
   fn test_merge_from_text_decoration_longhands_clear_lower_priority_color() {
-    let mut preset_style = style_with([StyleDeclaration::text_decoration_color(Some(
+    let mut preset_style = style_with([StyleDeclaration::text_decoration_color(
       ColorInput::Value(Color([255, 0, 0, 255])),
-    ))]);
+    )]);
     let inline_style = style_with([
       StyleDeclaration::text_decoration_line(Some(TextDecorationLines::UNDERLINE)),
-      StyleDeclaration::text_decoration_style(None),
-      StyleDeclaration::text_decoration_color(None),
-      StyleDeclaration::text_decoration_thickness(None),
+      StyleDeclaration::text_decoration_style(TextDecorationStyle::default()),
+      StyleDeclaration::text_decoration_color(ColorInput::default()),
+      StyleDeclaration::text_decoration_thickness(TextDecorationThickness::default()),
     ]);
 
     preset_style.merge_from(inline_style);
 
     let inherited = preset_style.inherit(&ResolvedStyle::default());
-    assert_eq!(inherited.text_decoration_color, None);
+    assert_eq!(inherited.text_decoration_color, ColorInput::default());
     assert_eq!(
       inherited.text_decoration_line,
       Some(TextDecorationLines::UNDERLINE)
@@ -1588,10 +1582,10 @@ mod tests {
     ))]);
     let inline_style = style_with([
       StyleDeclaration::background_image(Some([BackgroundImage::None].into())),
-      StyleDeclaration::background_position(Some([BackgroundPosition::default()].into())),
-      StyleDeclaration::background_size(Some([BackgroundSize::default()].into())),
-      StyleDeclaration::background_repeat(Some([BackgroundRepeat::default()].into())),
-      StyleDeclaration::background_blend_mode(Some([BlendMode::default()].into())),
+      StyleDeclaration::background_position([BackgroundPosition::default()].into()),
+      StyleDeclaration::background_size([BackgroundSize::default()].into()),
+      StyleDeclaration::background_repeat([BackgroundRepeat::default()].into()),
+      StyleDeclaration::background_blend_mode([BlendMode::default()].into()),
       StyleDeclaration::background_color(ColorInput::default()),
       StyleDeclaration::background_clip(BackgroundClip::default()),
     ]);
@@ -1662,8 +1656,8 @@ mod tests {
   #[test]
   fn test_inherited_em_text_lengths_are_computed_once() {
     let mut parent = style_with([
-      StyleDeclaration::font_size(Some(Length::Em(2.0))),
-      StyleDeclaration::letter_spacing(Some(Length::Em(1.0))),
+      StyleDeclaration::font_size(Length::Em(2.0)),
+      StyleDeclaration::letter_spacing(Length::Em(1.0)),
       StyleDeclaration::line_height(LineHeight::Length(Length::Em(1.5))),
     ])
     .inherit(&ResolvedStyle::default());
@@ -1683,12 +1677,11 @@ mod tests {
     };
     let inherited_font_size = inherited_child
       .font_size
-      .map(|size| size.to_px(&inherited_child_sizing, inherited_child_sizing.font_size))
-      .unwrap_or_default();
+      .to_px(&inherited_child_sizing, inherited_child_sizing.font_size);
     assert_eq!(inherited_font_size, 32.0);
 
     let child_with_own_font_size =
-      style_with([StyleDeclaration::font_size(Some(Length::Px(10.0)))]).inherit(&parent);
+      style_with([StyleDeclaration::font_size(Length::Px(10.0))]).inherit(&parent);
     let child_sizing = Sizing {
       viewport: Viewport::new(Some(1200), Some(630)),
       container_size: Size::NONE,
@@ -1698,8 +1691,7 @@ mod tests {
 
     let inherited_letter_spacing = child_with_own_font_size
       .letter_spacing
-      .map(|v| v.to_px(&child_sizing, child_sizing.font_size))
-      .unwrap_or_default();
+      .to_px(&child_sizing, child_sizing.font_size);
     assert_eq!(inherited_letter_spacing, 32.0);
 
     let inherited_line_height = match child_with_own_font_size.line_height {

@@ -40,7 +40,7 @@ fn text_typography_regular_24px() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
         )))
-        .with(StyleDeclaration::font_size(Some(Px(24.0)))),
+        .with(StyleDeclaration::font_size(Px(24.0))),
     ),
     text: "Regular 24px".to_string(),
   };
@@ -62,13 +62,13 @@ fn text_typography_variable_width() {
         preset: None,
         tw: None,
         style: Some(
-          Style::default().with(StyleDeclaration::font_variation_settings(Some(
+          Style::default().with(StyleDeclaration::font_variation_settings(
             [FontVariation {
               tag: tag_from_bytes(b"wdth"),
               value: *width,
             }]
             .into(),
-          ))),
+          )),
         ),
         text: format!(
           "Hello world, this is a test of the variable width font: {}%",
@@ -93,7 +93,7 @@ fn text_typography_variable_width() {
         .with(StyleDeclaration::font_family(
           FontFamily::from_str("Archivo").ok(),
         ))
-        .with(StyleDeclaration::font_size(Some(Px(48.0))))
+        .with(StyleDeclaration::font_size(Px(48.0)))
         .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
         .with(StyleDeclaration::row_gap(Px(48.0)))
         .with(StyleDeclaration::width(Percentage(100.0))),
@@ -117,7 +117,7 @@ fn text_typography_variable_weight() {
         tw: None,
         style: Some(
           Style::default()
-            .with(StyleDeclaration::font_size(Some(Px(48.0))))
+            .with(StyleDeclaration::font_size(Px(48.0)))
             .with(StyleDeclaration::font_weight(FontWeight::from(
               weight as f32,
             ))),
@@ -139,7 +139,7 @@ fn text_typography_variable_weight() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
         )))
-        .with(StyleDeclaration::font_size(Some(Px(24.0))))
+        .with(StyleDeclaration::font_size(Px(24.0)))
         .with_gap(SpacePair::from_pair(Px(0.0), Px(24.0)))
         .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap)),
     ),
@@ -162,7 +162,7 @@ fn text_typography_medium_weight_500() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
         )))
-        .with(StyleDeclaration::font_size(Some(Px(24.0))))
+        .with(StyleDeclaration::font_size(Px(24.0)))
         .with(StyleDeclaration::font_weight(FontWeight::from(500.0))),
     ),
     text: "Medium 24px".to_string(),
@@ -184,7 +184,7 @@ fn text_typography_line_height_40px() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
         )))
-        .with(StyleDeclaration::font_size(Some(Px(24.0))))
+        .with(StyleDeclaration::font_size(Px(24.0)))
         .with(StyleDeclaration::line_height(LineHeight::Length(Px(40.0)))),
     ),
     text: "Line height 40px".to_string(),
@@ -206,8 +206,8 @@ fn text_typography_letter_spacing_2px() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
         )))
-        .with(StyleDeclaration::font_size(Some(Px(24.0))))
-        .with(StyleDeclaration::letter_spacing(Some(Px(2.0)))),
+        .with(StyleDeclaration::font_size(Px(24.0)))
+        .with(StyleDeclaration::letter_spacing(Px(2.0))),
     ),
     text: "Letter spacing 2px".to_string(),
   };
@@ -230,7 +230,7 @@ fn text_align_start() {
         )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Block))
-        .with(StyleDeclaration::font_size(Some(Px(24.0))))
+        .with(StyleDeclaration::font_size(Px(24.0)))
         .with(StyleDeclaration::text_align(TextAlign::Start)),
     ),
     text: "Start aligned".to_string(),
@@ -254,7 +254,7 @@ fn text_align_center() {
         )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Block))
-        .with(StyleDeclaration::font_size(Some(Px(24.0))))
+        .with(StyleDeclaration::font_size(Px(24.0)))
         .with(StyleDeclaration::text_align(TextAlign::Center)),
     ),
     text: "Center aligned".to_string(),
@@ -278,7 +278,7 @@ fn text_align_right() {
         )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Block))
-        .with(StyleDeclaration::font_size(Some(Px(24.0))))
+        .with(StyleDeclaration::font_size(Px(24.0)))
         .with(StyleDeclaration::text_align(TextAlign::Right)),
     ),
     text: "Right aligned".to_string(),
@@ -303,7 +303,7 @@ fn text_ellipsis_line_clamp_2() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
         )))
-        .with(StyleDeclaration::font_size(Some(Px(48.0))))
+        .with(StyleDeclaration::font_size(Px(48.0)))
         .with(StyleDeclaration::text_overflow(TextOverflow::Ellipsis))
         .with(StyleDeclaration::line_clamp(Some(2.into()))),
     ),
@@ -340,7 +340,7 @@ fn text_transform_all() {
           style: Some(
             Style::default()
               .with(StyleDeclaration::width(Percentage(100.0)))
-              .with(StyleDeclaration::font_size(Some(Px(28.0))))
+              .with(StyleDeclaration::font_size(Px(28.0)))
               .with(StyleDeclaration::text_transform(TextTransform::None)),
           ),
           text: "None: The quick Brown Fox".to_string(),
@@ -355,7 +355,7 @@ fn text_transform_all() {
           style: Some(
             Style::default()
               .with(StyleDeclaration::width(Percentage(100.0)))
-              .with(StyleDeclaration::font_size(Some(Px(28.0))))
+              .with(StyleDeclaration::font_size(Px(28.0)))
               .with(StyleDeclaration::text_transform(TextTransform::Uppercase)),
           ),
           text: "Uppercase: The quick Brown Fox".to_string(),
@@ -370,7 +370,7 @@ fn text_transform_all() {
           style: Some(
             Style::default()
               .with(StyleDeclaration::width(Percentage(100.0)))
-              .with(StyleDeclaration::font_size(Some(Px(28.0))))
+              .with(StyleDeclaration::font_size(Px(28.0)))
               .with(StyleDeclaration::text_transform(TextTransform::Lowercase)),
           ),
           text: "Lowercase: The QUICK Brown FOX".to_string(),
@@ -385,7 +385,7 @@ fn text_transform_all() {
           style: Some(
             Style::default()
               .with(StyleDeclaration::width(Percentage(100.0)))
-              .with(StyleDeclaration::font_size(Some(Px(28.0))))
+              .with(StyleDeclaration::font_size(Px(28.0)))
               .with(StyleDeclaration::text_transform(TextTransform::Capitalize)),
           ),
           text: "Capitalize: the quick brown fox".to_string(),
@@ -419,7 +419,7 @@ fn text_mask_image_gradient_and_emoji() {
         )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::font_size(Some(Px(72.0))))
+        .with(StyleDeclaration::font_size(Px(72.0)))
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center)),
     ),
@@ -433,15 +433,15 @@ fn text_mask_image_gradient_and_emoji() {
         style: Some(
           Style::default()
             .with(StyleDeclaration::background_image(Some(gradient_images)))
-            .with(StyleDeclaration::background_size(Some(
+            .with(StyleDeclaration::background_size(
               BackgroundSizes::from_str("100% 100%").unwrap(),
-            )))
-            .with(StyleDeclaration::background_position(Some(
+            ))
+            .with(StyleDeclaration::background_position(
               BackgroundPositions::from_str("0 0").unwrap(),
-            )))
-            .with(StyleDeclaration::background_repeat(Some(
+            ))
+            .with(StyleDeclaration::background_repeat(
               BackgroundRepeats::from_str("no-repeat").unwrap(),
-            )))
+            ))
             .with(StyleDeclaration::background_clip(BackgroundClip::Text))
             .with(StyleDeclaration::color(ColorInput::Value(
               Color::transparent(),
@@ -475,7 +475,7 @@ fn text_stroke_black_red() {
         .with(StyleDeclaration::color(ColorInput::Value(Color([
           0, 0, 0, 255,
         ]))))
-        .with(StyleDeclaration::font_size(Some(Px(96.0))))
+        .with(StyleDeclaration::font_size(Px(96.0)))
         .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
         .with_padding(Sides([Px(24.0); 4]))
         .with(StyleDeclaration::webkit_text_stroke_width(Some(Px(4.0))))
@@ -507,7 +507,7 @@ fn text_stroke_background_clip() {
         .with(StyleDeclaration::background_image(Some(gradient_images)))
         .with(StyleDeclaration::background_clip(BackgroundClip::Text))
         .with(StyleDeclaration::color(ColorInput::Value(Color::white())))
-        .with(StyleDeclaration::font_size(Some(Px(96.0))))
+        .with(StyleDeclaration::font_size(Px(96.0)))
         .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
         .with(StyleDeclaration::webkit_text_stroke_width(Some(Px(4.0))))
         .with(StyleDeclaration::webkit_text_stroke_color(Some(
@@ -561,7 +561,7 @@ fn text_shadow() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
         )))
-        .with(StyleDeclaration::font_size(Some(Px(48.0))))
+        .with(StyleDeclaration::font_size(Px(48.0)))
         .with(StyleDeclaration::text_shadow(Some(shadows.into()))),
     ),
     text: "Shadowed Text".to_string(),
@@ -591,7 +591,7 @@ fn text_shadow_no_blur_radius() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
         )))
-        .with(StyleDeclaration::font_size(Some(Px(72.0))))
+        .with(StyleDeclaration::font_size(Px(72.0)))
         .with(StyleDeclaration::text_shadow(Some(shadows.into()))),
     ),
     text: "Shadowed Text".to_string(),
@@ -615,7 +615,7 @@ fn text_wrap_nowrap() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 255, 255, 255]),
         )))
-        .with(StyleDeclaration::font_size(Some(Px(32.0))))
+        .with(StyleDeclaration::font_size(Px(32.0)))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Flex))
@@ -671,7 +671,7 @@ fn text_whitespace_collapse() {
         )))
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
-        .with(StyleDeclaration::font_size(Some(Px(32.0))))
+        .with(StyleDeclaration::font_size(Px(32.0)))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with_gap(SpacePair::from_single(Px(20.0)))
@@ -755,7 +755,7 @@ fn text_ellipsis_text_nowrap() {
     style: Some(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(Color([240, 240, 240, 255]))))
-        .with(StyleDeclaration::font_size(Some(Px(48.0))))
+        .with(StyleDeclaration::font_size(Px(48.0)))
         .with_padding(Sides([Px(20.0); 4]))
         .with_overflow(SpacePair::from_single(Overflow::Hidden))
         .with(StyleDeclaration::width(Percentage(100.0))),
@@ -799,7 +799,7 @@ fn text_wrap_style_all() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 255, 255, 255]),
         )))
-        .with(StyleDeclaration::font_size(Some(Px(48.0))))
+        .with(StyleDeclaration::font_size(Px(48.0)))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Flex))
@@ -817,7 +817,7 @@ fn text_wrap_style_all() {
           preset: None,
           tw: None,
           style: Some(
-            Style::default().with(StyleDeclaration::text_wrap_style(Some(TextWrapStyle::Auto))),
+            Style::default().with(StyleDeclaration::text_wrap_style(TextWrapStyle::Auto)),
           ),
           text: "Auto: The quick brown fox jumps over the lazy dog.".to_string(),
         }
@@ -830,9 +830,7 @@ fn text_wrap_style_all() {
           preset: None,
           tw: None,
           style: Some(
-            Style::default().with(StyleDeclaration::text_wrap_style(Some(
-              TextWrapStyle::Balance,
-            ))),
+            Style::default().with(StyleDeclaration::text_wrap_style(TextWrapStyle::Balance)),
           ),
           text: "Balance: The quick brown fox jumps over the lazy dog.".to_string(),
         }
@@ -845,9 +843,7 @@ fn text_wrap_style_all() {
           preset: None,
           tw: None,
           style: Some(
-            Style::default().with(StyleDeclaration::text_wrap_style(Some(
-              TextWrapStyle::Pretty,
-            ))),
+            Style::default().with(StyleDeclaration::text_wrap_style(TextWrapStyle::Pretty)),
           ),
           text: "Pretty: The quick brown fox jumps over the lazy dog and catches it.".to_string(),
         }
@@ -879,7 +875,7 @@ fn text_super_bold_stroke_background_clip() {
         .with(StyleDeclaration::background_clip(BackgroundClip::Text))
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::color(ColorInput::Value(Color::white())))
-        .with(StyleDeclaration::font_size(Some(Px(120.0))))
+        .with(StyleDeclaration::font_size(Px(120.0)))
         .with(StyleDeclaration::font_weight(FontWeight::from(900.0)))
         .with(StyleDeclaration::webkit_text_stroke_width(Some(Px(20.0))))
         .with(StyleDeclaration::webkit_text_stroke_color(Some(
@@ -947,7 +943,7 @@ fn text_font_stretch() {
         tw: None,
         style: Some(
           Style::default()
-            .with(StyleDeclaration::font_size(Some(Px(36.0))))
+            .with(StyleDeclaration::font_size(Px(36.0)))
             .with(StyleDeclaration::font_stretch(*stretch)),
         ),
         text: format!("font-stretch: {}", label),
@@ -1000,7 +996,7 @@ fn text_flex_centered_text_node_vs_nested_container() {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
-        .with(StyleDeclaration::font_size(Some(Px(30.0)))),
+        .with(StyleDeclaration::font_size(Px(30.0))),
     ),
     text: "centered...?".to_string(),
   }
@@ -1022,7 +1018,7 @@ fn text_flex_centered_text_node_vs_nested_container() {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
-        .with(StyleDeclaration::font_size(Some(Px(30.0)))),
+        .with(StyleDeclaration::font_size(Px(30.0))),
     ),
     children: Some(
       [TextNode {
@@ -1097,14 +1093,12 @@ fn text_font_synthesis_weight_auto_none() {
         tw: None,
         style: Some(
           Style::default()
-            .with(StyleDeclaration::font_size(Some(Px(72.0))))
+            .with(StyleDeclaration::font_size(Px(72.0)))
             .with(StyleDeclaration::font_family(
               FontFamily::from_str("Scheherazade New Test").ok(),
             ))
             .with(StyleDeclaration::font_weight(FontWeight::from(900.0)))
-            .with(StyleDeclaration::font_synthesis_weight(Some(
-              *synthesis_weight,
-            ))),
+            .with(StyleDeclaration::font_synthesis_weight(*synthesis_weight)),
         ),
         text: format!("font-synthesis-weight: {} - السلام عليكم", label),
       }
@@ -1147,14 +1141,12 @@ fn text_font_synthesis_style_auto_none() {
         tw: None,
         style: Some(
           Style::default()
-            .with(StyleDeclaration::font_size(Some(Px(72.0))))
+            .with(StyleDeclaration::font_size(Px(72.0)))
             .with(StyleDeclaration::font_family(
               FontFamily::from_str("Scheherazade New Test").ok(),
             ))
             .with(StyleDeclaration::font_style(FontStyle::italic()))
-            .with(StyleDeclaration::font_synthesis_style(Some(
-              *synthesis_style,
-            ))),
+            .with(StyleDeclaration::font_synthesis_style(*synthesis_style)),
         ),
         text: format!("font-synthesis-style: {} - السلام عليكم", label),
       }
@@ -1212,7 +1204,7 @@ fn text_font_synthesis_weight_emoji() {
       tw: None,
       style: Some(
         Style::default()
-          .with(StyleDeclaration::font_size(Some(Px(72.0))))
+          .with(StyleDeclaration::font_size(Px(72.0)))
           .with(StyleDeclaration::font_family(
             FontFamily::from_str("Scheherazade New Test").ok(),
           ))
@@ -1265,7 +1257,7 @@ fn text_chinese_ellipsis() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
         )))
-        .with(StyleDeclaration::font_size(Some(Px(64.0))))
+        .with(StyleDeclaration::font_size(Px(64.0)))
         .with_padding(Sides::from(Px(24.0)))
         .with(StyleDeclaration::font_family(
           FontFamily::from_str("Noto Sans TC").ok(),
@@ -1296,7 +1288,7 @@ fn text_devanagari_noto_sans() {
           .with(StyleDeclaration::background_color(ColorInput::Value(
             Color([240, 240, 240, 255]),
           )))
-          .with(StyleDeclaration::font_size(Some(Px(48.0))))
+          .with(StyleDeclaration::font_size(Px(48.0)))
           .with_padding(Sides::from(Px(24.0)))
           .with(StyleDeclaration::font_family(
             FontFamily::from_str(font_family).ok(),

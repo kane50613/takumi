@@ -299,10 +299,9 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c, N: Node<N> + 'c>(
     }
   }
 
-  let text_wrap_style = style.parent.text_wrap_style.unwrap_or_default();
   let line_count = layout.lines().count();
 
-  if text_wrap_style == TextWrapStyle::Balance {
+  if style.parent.text_wrap_style == TextWrapStyle::Balance {
     make_balanced_text(
       &mut layout,
       &text,
@@ -313,7 +312,7 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c, N: Node<N> + 'c>(
     );
   }
 
-  if text_wrap_style == TextWrapStyle::Pretty {
+  if style.parent.text_wrap_style == TextWrapStyle::Pretty {
     make_pretty_text(&mut layout, max_width, max_height);
   }
 

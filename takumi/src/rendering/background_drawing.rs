@@ -518,9 +518,9 @@ pub(crate) fn create_mask(
   buffer_pool: &mut BufferPool,
 ) -> Result<Option<Vec<u8>>> {
   let mask_image = context.style.mask_image.as_deref().unwrap_or(&[]);
-  let mask_position = context.style.mask_position.as_deref().unwrap_or(&[]);
-  let mask_size = context.style.mask_size.as_deref().unwrap_or(&[]);
-  let mask_repeat = context.style.mask_repeat.as_deref().unwrap_or(&[]);
+  let mask_position = context.style.mask_position.as_ref();
+  let mask_size = context.style.mask_size.as_ref();
+  let mask_repeat = context.style.mask_repeat.as_ref();
 
   let layers = resolve_tile_layers(
     mask_image,
@@ -588,22 +588,12 @@ pub(crate) fn collect_background_layers(
   border_box: Size<f32>,
   buffer_pool: &mut BufferPool,
 ) -> Result<TileLayers> {
-  let background_image = context.style.background_image.as_deref().unwrap_or(&[]);
-  let background_position = context.style.background_position.as_deref().unwrap_or(&[]);
-  let background_size = context.style.background_size.as_deref().unwrap_or(&[]);
-  let background_repeat = context.style.background_repeat.as_deref().unwrap_or(&[]);
-  let background_blend_mode = context
-    .style
-    .background_blend_mode
-    .as_deref()
-    .unwrap_or(&[]);
-
   let mut layers = resolve_tile_layers(
-    background_image,
-    background_position,
-    background_size,
-    background_repeat,
-    background_blend_mode,
+    context.style.background_image.as_deref().unwrap_or(&[]),
+    &context.style.background_position,
+    &context.style.background_size,
+    &context.style.background_repeat,
+    &context.style.background_blend_mode,
     context,
     border_box.map(|x| x as u32),
     buffer_pool,

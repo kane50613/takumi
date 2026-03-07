@@ -2,6 +2,7 @@ mod test_utils;
 
 use takumi::{
   layout::{
+    Viewport,
     node::{ContainerNode, ImageNode, NodeKind, TextNode},
     style::{
       Affine, AlignItems, Color, ColorInput, Display, FlexDirection, JustifyContent, Length::*,
@@ -10,7 +11,11 @@ use takumi::{
   },
   rendering::{MeasuredNode, MeasuredTextRun, RenderOptionsBuilder, measure_layout},
 };
-use test_utils::{CONTEXT, create_test_viewport};
+use test_utils::CONTEXT;
+
+fn create_measure_viewport() -> Viewport {
+  (1200, 630).into()
+}
 
 #[test]
 fn test_measure_simple_container() {
@@ -34,7 +39,7 @@ fn test_measure_simple_container() {
 
   let result = measure_layout(
     RenderOptionsBuilder::default()
-      .viewport(create_test_viewport())
+      .viewport(create_measure_viewport())
       .node(node)
       .global(&CONTEXT)
       .build()
@@ -65,7 +70,7 @@ fn test_measure_text_node() {
     style: Some(
       Style::default()
         .with(StyleDeclaration::width(Px(300.0)))
-        .with(StyleDeclaration::font_size(Some(Px(20.0)))),
+        .with(StyleDeclaration::font_size(Px(20.0))),
     ),
     text: "Hello World".to_string(),
   }
@@ -73,7 +78,7 @@ fn test_measure_text_node() {
 
   let result = measure_layout(
     RenderOptionsBuilder::default()
-      .viewport(create_test_viewport())
+      .viewport(create_measure_viewport())
       .node(node)
       .global(&CONTEXT)
       .build()
@@ -120,7 +125,7 @@ fn test_measure_flex_text_node_centers_inner_text() {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center))
-        .with(StyleDeclaration::font_size(Some(Px(20.0)))),
+        .with(StyleDeclaration::font_size(Px(20.0))),
     ),
     text: "Hello World".to_string(),
   }
@@ -128,7 +133,7 @@ fn test_measure_flex_text_node_centers_inner_text() {
 
   let result = measure_layout(
     RenderOptionsBuilder::default()
-      .viewport(create_test_viewport())
+      .viewport(create_measure_viewport())
       .node(node)
       .global(&CONTEXT)
       .build()
@@ -175,7 +180,7 @@ fn test_measure_flex_text_node_anonymous_item_uses_intrinsic_size() {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center))
-        .with(StyleDeclaration::font_size(Some(Px(20.0)))),
+        .with(StyleDeclaration::font_size(Px(20.0))),
     ),
     text: "Hello World".to_string(),
   }
@@ -183,7 +188,7 @@ fn test_measure_flex_text_node_anonymous_item_uses_intrinsic_size() {
 
   let result = measure_layout(
     RenderOptionsBuilder::default()
-      .viewport(create_test_viewport())
+      .viewport(create_measure_viewport())
       .node(node)
       .global(&CONTEXT)
       .build()
@@ -220,7 +225,7 @@ fn test_measure_inline_layout() {
       Style::default()
         .with(StyleDeclaration::width(Px(400.0)))
         .with(StyleDeclaration::height(Px(300.0)))
-        .with(StyleDeclaration::font_size(Some(Px(20.0))))
+        .with(StyleDeclaration::font_size(Px(20.0)))
         .with(StyleDeclaration::display(Display::Block)),
     ),
     children: Some(
@@ -271,7 +276,7 @@ fn test_measure_inline_layout() {
 
   let result = measure_layout(
     RenderOptionsBuilder::default()
-      .viewport(create_test_viewport())
+      .viewport(create_measure_viewport())
       .node(node)
       .global(&CONTEXT)
       .build()
@@ -371,7 +376,7 @@ fn test_measure_svg_attr_size_in_absolute_flex_container() {
 
   let result = measure_layout(
     RenderOptionsBuilder::default()
-      .viewport(create_test_viewport())
+      .viewport(create_measure_viewport())
       .node(node)
       .global(&CONTEXT)
       .build()
@@ -453,7 +458,7 @@ fn test_measure_svg_attr_size_in_absolute_flex_container_with_parent_padding() {
 
   let result = measure_layout(
     RenderOptionsBuilder::default()
-      .viewport(create_test_viewport())
+      .viewport(create_measure_viewport())
       .node(node)
       .global(&CONTEXT)
       .build()
@@ -515,7 +520,7 @@ fn test_measure_svg_with_width_only_preserves_intrinsic_ratio() {
 
   let result = measure_layout(
     RenderOptionsBuilder::default()
-      .viewport(create_test_viewport())
+      .viewport(create_measure_viewport())
       .node(node)
       .global(&CONTEXT)
       .build()
@@ -598,7 +603,7 @@ fn test_measure_img_svg_attribute_sizing_cases() {
 
     let result = measure_layout(
       RenderOptionsBuilder::default()
-        .viewport(create_test_viewport())
+        .viewport(create_measure_viewport())
         .node(node)
         .global(&CONTEXT)
         .build()

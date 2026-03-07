@@ -132,7 +132,7 @@ fn test_style_transform_origin_top_left() {
           Color::white(),
         )))
         .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::font_size(Some(Px(24.0)))),
+        .with(StyleDeclaration::font_size(Px(24.0))),
     ),
     children: Some(
       ROTATED_ANGLES
@@ -204,7 +204,7 @@ fn test_style_transform_translate_and_scale() {
           Color::white(),
         )))
         .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::font_size(Some(Px(24.0)))),
+        .with(StyleDeclaration::font_size(Px(24.0))),
     ),
     children: None,
   };
@@ -296,7 +296,7 @@ fn test_style_transform_translate_and_scale() {
         .with(StyleDeclaration::height(Px(100.0)))
         .with_border_width(Sides([Px(1.0); 4]))
         .with(StyleDeclaration::border_style(BorderStyle::Solid))
-        .with(StyleDeclaration::font_size(Some(Px(12.0)))),
+        .with(StyleDeclaration::font_size(Px(12.0))),
     ),
     children: Some(
       [TextNode {

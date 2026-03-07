@@ -176,8 +176,8 @@ impl TailwindPropertyParser for BackgroundPosition {
 impl Default for BackgroundPosition {
   fn default() -> Self {
     Self(SpacePair::from_pair(
-      PositionComponent::KeywordX(PositionKeywordX::Center),
-      PositionComponent::KeywordY(PositionKeywordY::Center),
+      PositionComponent::KeywordX(PositionKeywordX::Left),
+      PositionComponent::KeywordY(PositionKeywordY::Top),
     ))
   }
 }

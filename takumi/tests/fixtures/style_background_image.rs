@@ -39,9 +39,15 @@ fn create_container_with(
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::background_image(Some(background_images)))
-        .with(StyleDeclaration::background_size(background_size))
-        .with(StyleDeclaration::background_position(background_position))
-        .with(StyleDeclaration::background_repeat(background_repeat)),
+        .with(StyleDeclaration::background_size(
+          background_size.unwrap_or_default(),
+        ))
+        .with(StyleDeclaration::background_position(
+          background_position.unwrap_or_default(),
+        ))
+        .with(StyleDeclaration::background_repeat(
+          background_repeat.unwrap_or_default(),
+        )),
     ),
     children: None,
   }

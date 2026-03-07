@@ -140,7 +140,7 @@ fn test_style_opacity_image_with_text() {
           style: Some(
             Style::default()
               .with(StyleDeclaration::display(Display::Block))
-              .with(StyleDeclaration::font_size(Some(Length::Rem(3.0))))
+              .with(StyleDeclaration::font_size(Length::Rem(3.0)))
               .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
               .with(StyleDeclaration::color(ColorInput::Value(Color([
                 60, 60, 60, 255,
@@ -173,7 +173,7 @@ fn test_style_opacity_flex_text_node_vs_nested_container() {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
-        .with(StyleDeclaration::font_size(Some(Length::Px(120.0))))
+        .with(StyleDeclaration::font_size(Length::Px(120.0)))
         .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
         .with(StyleDeclaration::color(ColorInput::Value(Color::black())))
         .with(StyleDeclaration::opacity(PercentageNumber(0.5)))
@@ -213,7 +213,7 @@ fn test_style_opacity_flex_text_node_vs_nested_container() {
         style: Some(
           Style::default()
             .with(StyleDeclaration::display(Display::Block))
-            .with(StyleDeclaration::font_size(Some(Length::Px(120.0))))
+            .with(StyleDeclaration::font_size(Length::Px(120.0)))
             .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
             .with(StyleDeclaration::color(ColorInput::Value(Color::black()))),
         ),

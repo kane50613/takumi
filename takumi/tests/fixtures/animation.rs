@@ -9,7 +9,7 @@ use takumi::rendering::{
   render_sequence_animation,
 };
 
-use crate::test_utils::{CONTEXT, run_animation_fixture_test};
+use crate::test_utils::{CONTEXT, create_test_viewport_with_size, run_animation_fixture_test};
 
 const BOUNCING_TEXT_FPS: u32 = 20;
 const BOUNCING_TEXT_DURATION_MS: u32 = 900;
@@ -76,7 +76,7 @@ fn bouncing_text_label() -> NodeKind {
     tw: None,
     style: Some(
       Style::default()
-        .with(StyleDeclaration::font_size(Some(Px(56.0))))
+        .with(StyleDeclaration::font_size(Px(56.0)))
         .with(StyleDeclaration::font_family(Some(FontFamily::from(
           "monospace",
         ))))
@@ -191,7 +191,7 @@ fn keyframe_interpolation_frames() -> Vec<AnimationFrame> {
 
 fn keyframe_interpolation_options() -> RenderOptions<'static, NodeKind> {
   RenderOptionsBuilder::default()
-    .viewport((800, 400).into())
+    .viewport(create_test_viewport_with_size(800, 400))
     .node(keyframe_interpolation_node())
     .global(&CONTEXT)
     .stylesheets(vec![keyframe_interpolation_stylesheet().to_string()])

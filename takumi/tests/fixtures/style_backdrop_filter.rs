@@ -25,7 +25,7 @@ fn create_backdrop_card(filter: &str, label_font_size_px: f32) -> NodeKind {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 255, 255, 60]),
         )))
-        .with(StyleDeclaration::font_size(Some(Px(label_font_size_px))))
+        .with(StyleDeclaration::font_size(Px(label_font_size_px)))
         .with(StyleDeclaration::color(ColorInput::Value(Color::black())))
         .with_padding(Sides([Px(8.0); 4])),
     ),
@@ -122,9 +122,9 @@ fn test_style_backdrop_filter_frosted_glass() {
         .with(StyleDeclaration::background_image(Some(
           BackgroundImages::from_str("url(assets/images/yeecord.png)").unwrap(),
         )))
-        .with(StyleDeclaration::background_size(Some(
+        .with(StyleDeclaration::background_size(
           BackgroundSizes::from_str("cover").unwrap(),
-        ))),
+        )),
     ),
     children: Some(
       [ContainerNode {
@@ -159,7 +159,7 @@ fn test_style_backdrop_filter_frosted_glass() {
               tw: None,
               style: Some(
                 Style::default()
-                  .with(StyleDeclaration::font_size(Some(Px(48.0))))
+                  .with(StyleDeclaration::font_size(Px(48.0)))
                   .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
                   .with(StyleDeclaration::color(ColorInput::Value(Color([
                     0, 0, 0, 200,
@@ -176,7 +176,7 @@ fn test_style_backdrop_filter_frosted_glass() {
               tw: None,
               style: Some(
                 Style::default()
-                  .with(StyleDeclaration::font_size(Some(Px(24.0))))
+                  .with(StyleDeclaration::font_size(Px(24.0)))
                   .with(StyleDeclaration::color(ColorInput::Value(Color([
                     0, 0, 0, 150,
                   ])))),

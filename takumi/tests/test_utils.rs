@@ -11,7 +11,7 @@ use parley::{GenericFamily, fontique::FontInfoOverride};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use takumi::{
   GlobalContext,
-  layout::{Viewport, node::NodeKind},
+  layout::{DEFAULT_FONT_SIZE, Viewport, node::NodeKind},
   rendering::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
     RenderOptions, RenderOptionsBuilder, encode_animated_gif, encode_animated_png,
@@ -74,6 +74,8 @@ const TEST_FONTS: &[(&str, &str, GenericFamily)] = &[
     GenericFamily::SansSerif,
   ),
 ];
+
+const FIXTURE_DEVICE_PIXEL_RATIO: f32 = 0.75;
 
 fn create_test_context() -> GlobalContext {
   let mut context = GlobalContext::default();
@@ -142,8 +144,17 @@ fn create_test_context() -> GlobalContext {
   context
 }
 
+pub const fn create_test_viewport_with_size(width: u32, height: u32) -> Viewport {
+  Viewport {
+    width: Some((width as f32 * FIXTURE_DEVICE_PIXEL_RATIO) as u32),
+    height: Some((height as f32 * FIXTURE_DEVICE_PIXEL_RATIO) as u32),
+    device_pixel_ratio: FIXTURE_DEVICE_PIXEL_RATIO,
+    font_size: DEFAULT_FONT_SIZE,
+  }
+}
+
 pub fn create_test_viewport() -> Viewport {
-  (1200, 630).into()
+  create_test_viewport_with_size(1200, 630)
 }
 
 pub static CONTEXT: LazyLock<GlobalContext> = LazyLock::new(create_test_context);

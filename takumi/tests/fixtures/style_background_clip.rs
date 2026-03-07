@@ -116,7 +116,7 @@ fn test_style_background_clip_text_gradient() {
         )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::font_size(Some(Px(72.0))))
+        .with(StyleDeclaration::font_size(Px(72.0)))
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center)),
     ),
@@ -130,15 +130,15 @@ fn test_style_background_clip_text_gradient() {
         style: Some(
           Style::default()
             .with(StyleDeclaration::background_image(Some(gradient_images)))
-            .with(StyleDeclaration::background_size(Some(
+            .with(StyleDeclaration::background_size(
               BackgroundSizes::from_str("100% 100%").unwrap(),
-            )))
-            .with(StyleDeclaration::background_position(Some(
+            ))
+            .with(StyleDeclaration::background_position(
               BackgroundPositions::from_str("0 0").unwrap(),
-            )))
-            .with(StyleDeclaration::background_repeat(Some(
+            ))
+            .with(StyleDeclaration::background_repeat(
               BackgroundRepeats::from_str("no-repeat").unwrap(),
-            )))
+            ))
             .with(StyleDeclaration::background_clip(BackgroundClip::Text))
             .with(StyleDeclaration::color(ColorInput::Value(
               Color::transparent(),
@@ -172,7 +172,7 @@ fn test_style_background_clip_text_radial_gradient() {
         )))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::font_size(Some(Px(64.0))))
+        .with(StyleDeclaration::font_size(Px(64.0)))
         .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center)),
@@ -187,9 +187,9 @@ fn test_style_background_clip_text_radial_gradient() {
         style: Some(
           Style::default()
             .with(StyleDeclaration::background_image(Some(gradient_images)))
-            .with(StyleDeclaration::background_size(Some(
+            .with(StyleDeclaration::background_size(
               BackgroundSizes::from_str("100% 100%").unwrap(),
-            )))
+            ))
             .with(StyleDeclaration::background_clip(BackgroundClip::Text))
             .with(StyleDeclaration::color(ColorInput::Value(
               Color::transparent(),
@@ -329,7 +329,7 @@ fn test_style_background_clip_text_multiline() {
         .with(StyleDeclaration::background_color(ColorInput::Value(Color([255, 255, 255, 255]))))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::font_size(Some(Px(48.0))))
+        .with(StyleDeclaration::font_size(Px(48.0)))
         .with(StyleDeclaration::font_weight(FontWeight::from(800.0)))
         .with_padding(Sides([Px(40.0); 4])),
     ),
@@ -343,7 +343,7 @@ fn test_style_background_clip_text_multiline() {
         style: Some(
           Style::default()
             .with(StyleDeclaration::background_image(Some(gradient_images)))
-            .with(StyleDeclaration::background_size(Some(BackgroundSizes::from_str("100% 100%").unwrap())))
+            .with(StyleDeclaration::background_size(BackgroundSizes::from_str("100% 100%").unwrap()))
             .with(StyleDeclaration::background_clip(BackgroundClip::Text))
             .with(StyleDeclaration::color(ColorInput::Value(Color::transparent())))
             .with(StyleDeclaration::width(Percentage(100.0))),
@@ -410,7 +410,7 @@ fn test_style_background_clip_comparison() {
               tw: None,
               style: Some(
                 Style::default()
-                  .with(StyleDeclaration::font_size(Some(Px(20.0))))
+                  .with(StyleDeclaration::font_size(Px(20.0)))
                   .with(StyleDeclaration::color(ColorInput::Value(Color::white()))),
               ),
               text: "border-box".to_string(),
@@ -453,7 +453,7 @@ fn test_style_background_clip_comparison() {
               tw: None,
               style: Some(
                 Style::default()
-                  .with(StyleDeclaration::font_size(Some(Px(20.0))))
+                  .with(StyleDeclaration::font_size(Px(20.0)))
                   .with(StyleDeclaration::color(ColorInput::Value(Color::white()))),
               ),
               text: "padding-box".to_string(),
@@ -496,7 +496,7 @@ fn test_style_background_clip_comparison() {
               tw: None,
               style: Some(
                 Style::default()
-                  .with(StyleDeclaration::font_size(Some(Px(20.0))))
+                  .with(StyleDeclaration::font_size(Px(20.0)))
                   .with(StyleDeclaration::color(ColorInput::Value(Color::white()))),
               ),
               text: "content-box".to_string(),

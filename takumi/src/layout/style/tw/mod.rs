@@ -940,13 +940,11 @@ impl TailwindProperty {
         text_decoration_line(Some(text_decoration))
       ),
       TailwindProperty::TextDecorationColor(color_input) => {
-        push_decl!(builder, important, text_decoration_color(Some(color_input)))
+        push_decl!(builder, important, text_decoration_color(color_input))
       }
-      TailwindProperty::TextDecorationThickness(thickness) => push_decl!(
-        builder,
-        important,
-        text_decoration_thickness(Some(thickness))
-      ),
+      TailwindProperty::TextDecorationThickness(thickness) => {
+        push_decl!(builder, important, text_decoration_thickness(thickness))
+      }
       TailwindProperty::TextTransform(text_transform) => {
         push_decl!(builder, important, text_transform(text_transform))
       }
@@ -979,17 +977,17 @@ impl TailwindProperty {
       TailwindProperty::BackgroundPosition(background_position) => push_decl!(
         builder,
         important,
-        background_position(Some([background_position].into()))
+        background_position([background_position].into())
       ),
       TailwindProperty::BackgroundSize(background_size) => push_decl!(
         builder,
         important,
-        background_size(Some([background_size].into()))
+        background_size([background_size].into())
       ),
       TailwindProperty::BackgroundRepeat(background_repeat) => push_decl!(
         builder,
         important,
-        background_repeat(Some([background_repeat].into()))
+        background_repeat([background_repeat].into())
       ),
       TailwindProperty::BackgroundImage(background_image) => push_decl!(
         builder,
@@ -1177,7 +1175,7 @@ impl TailwindProperty {
           important,
           text_wrap_mode(text_wrap.mode.unwrap_or_default())
         );
-        push_decl!(builder, important, text_wrap_style(Some(text_wrap.style)));
+        push_decl!(builder, important, text_wrap_style(text_wrap.style));
       }
       TailwindProperty::WhiteSpace(white_space) => {
         push_decl!(
@@ -1203,13 +1201,13 @@ impl TailwindProperty {
       TailwindProperty::BackgroundBlendMode(blend_mode) => push_decl!(
         builder,
         important,
-        background_blend_mode(Some([blend_mode].into()))
+        background_blend_mode([blend_mode].into())
       ),
       TailwindProperty::OverflowWrap(overflow_wrap) => {
         push_decl!(builder, important, overflow_wrap(overflow_wrap))
       }
       TailwindProperty::FontSize(font_size) => {
-        push_decl!(builder, important, font_size(Some(font_size.font_size)));
+        push_decl!(builder, important, font_size(font_size.font_size));
         if let Some(line_height) = font_size.line_height {
           push_decl!(builder, important, line_height(line_height));
         }
@@ -1339,11 +1337,9 @@ impl TailwindProperty {
         important,
         grid_template_rows(Some(tw_grid_template.0))
       ),
-      TailwindProperty::LetterSpacing(tw_letter_spacing) => push_decl!(
-        builder,
-        important,
-        letter_spacing(Some(tw_letter_spacing.0))
-      ),
+      TailwindProperty::LetterSpacing(tw_letter_spacing) => {
+        push_decl!(builder, important, letter_spacing(tw_letter_spacing.0))
+      }
       TailwindProperty::GridAutoFlow(grid_auto_flow) => {
         push_decl!(builder, important, grid_auto_flow(grid_auto_flow))
       }

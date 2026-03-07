@@ -617,9 +617,9 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
     context.style.isolation = Isolation::Auto;
     context.style.clip_path = None;
     context.style.mask_image = None;
-    context.style.mask_size = None;
-    context.style.mask_position = None;
-    context.style.mask_repeat = None;
+    context.style.mask_size = Default::default();
+    context.style.mask_position = Default::default();
+    context.style.mask_repeat = Default::default();
     context.style.transform = None;
     context.style.rotate = None;
     context.style.scale = Default::default();
@@ -856,8 +856,7 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
 
       let font_size = style
         .font_size
-        .map(|font_size| font_size.to_px(&parent_context.sizing, parent_context.sizing.font_size))
-        .unwrap_or(parent_context.sizing.font_size);
+        .to_px(&parent_context.sizing, parent_context.sizing.font_size);
       let child_sizing = Sizing {
         font_size,
         ..parent_context.sizing.clone()
@@ -876,10 +875,7 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
         declaration.apply_to_resolved(&mut style);
       }
 
-      let font_size = style
-        .font_size
-        .map(|font_size| font_size.to_px(&child_sizing, child_sizing.font_size))
-        .unwrap_or(child_sizing.font_size);
+      let font_size = style.font_size.to_px(&child_sizing, child_sizing.font_size);
       let sizing = Sizing {
         font_size,
         ..parent_context.sizing.clone()
