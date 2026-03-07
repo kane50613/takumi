@@ -1552,7 +1552,12 @@ mod tests {
   fn parse_declarations(name: &str, css: &str) -> StyleDeclarationBlock {
     let mut input = ParserInput::new(css);
     let mut parser = Parser::new(&mut input);
-    StyleDeclarationBlock::parse(name, &mut parser).unwrap()
+    let declarations_result = StyleDeclarationBlock::parse(name, &mut parser);
+    assert!(declarations_result.is_ok());
+    let Ok(declarations) = declarations_result else {
+      unreachable!()
+    };
+    declarations
   }
 
   #[test]

@@ -870,7 +870,11 @@ mod tests {
     let global = GlobalContext::default();
     let scenes = vec![make_scene(&global, 0)];
 
-    let frames = render_sequence_animation(&scenes, 30).unwrap();
+    let frames_result = render_sequence_animation(&scenes, 30);
+    assert!(frames_result.is_ok());
+    let Ok(frames) = frames_result else {
+      unreachable!()
+    };
 
     assert!(frames.is_empty());
   }
@@ -880,7 +884,11 @@ mod tests {
     let global = GlobalContext::default();
     let scenes = vec![make_scene(&global, 150)];
 
-    let frames = render_sequence_animation(&scenes, 30).unwrap();
+    let frames_result = render_sequence_animation(&scenes, 30);
+    assert!(frames_result.is_ok());
+    let Ok(frames) = frames_result else {
+      unreachable!()
+    };
     let durations = frames
       .iter()
       .map(|frame| frame.duration_ms)
