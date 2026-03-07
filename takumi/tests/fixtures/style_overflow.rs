@@ -34,11 +34,11 @@ fn create_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
             .with(StyleDeclaration::display(Display::Block))
             .with(StyleDeclaration::width(Px(200.0)))
             .with(StyleDeclaration::height(Px(200.0)))
-            .with_border_width(Some(Sides([Px(4.0); 4])))
+            .with_border_width(Sides([Px(4.0); 4]))
             .with(StyleDeclaration::border_style(BorderStyle::Solid))
-            .with(StyleDeclaration::border_color(Some(
+            .with(StyleDeclaration::border_color(
               Color([255, 0, 0, 255]).into(),
-            )))
+            ))
             .with_overflow(overflows),
         ),
         children: Some(
@@ -52,11 +52,11 @@ fn create_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
               Style::default()
                 .with(StyleDeclaration::width(Px(300.0)))
                 .with(StyleDeclaration::height(Px(300.0)))
-                .with_border_width(Some(Sides([Px(4.0); 4])))
+                .with_border_width(Sides([Px(4.0); 4]))
                 .with(StyleDeclaration::border_style(BorderStyle::Solid))
-                .with(StyleDeclaration::border_color(Some(
+                .with(StyleDeclaration::border_color(
                   Color([0, 255, 0, 255]).into(),
-                ))),
+                )),
             ),
             width: None,
             height: None,
@@ -100,9 +100,9 @@ fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
             .with(StyleDeclaration::display(Display::Block))
             .with(StyleDeclaration::width(Px(400.0)))
             .with(StyleDeclaration::height(Px(200.0)))
-            .with_border_width(Some(Sides([Px(4.0); 4])))
+            .with_border_width(Sides([Px(4.0); 4]))
             .with(StyleDeclaration::border_style(BorderStyle::Solid))
-            .with(StyleDeclaration::border_color(Some(Color([0, 0, 0, 255]).into())))
+            .with(StyleDeclaration::border_color(Color([0, 0, 0, 255]).into()))
             .with_overflow(overflows),
         ),
         children: Some(
@@ -116,9 +116,9 @@ fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
               Style::default()
                 .with(StyleDeclaration::font_size(Some(Rem(4.0))))
                 .with(StyleDeclaration::color(ColorInput::Value(Color([0, 0, 0, 255]))))
-                .with_border_width(Some(Sides([Px(2.0); 4])))
+                .with_border_width(Sides([Px(2.0); 4]))
                 .with(StyleDeclaration::border_style(BorderStyle::Solid))
-                .with(StyleDeclaration::border_color(Some(Color([255, 0, 0, 255]).into()))),
+                .with(StyleDeclaration::border_color(Color([255, 0, 0, 255]).into())),
             ),
             text: "This is a very long text that should overflow the container and demonstrate text overflow behavior with a large font size of 4rem.".to_string(),
           }

@@ -47,8 +47,8 @@ fn test_style_text_decoration_thickness() {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with(StyleDeclaration::row_gap(Px(20.0)))
-        .with(StyleDeclaration::padding_top(Some(Px(40.0))))
-        .with(StyleDeclaration::padding_bottom(Some(Px(40.0)))),
+        .with(StyleDeclaration::padding_top(Px(40.0)))
+        .with(StyleDeclaration::padding_bottom(Px(40.0))),
     ),
     children: Some(
       [

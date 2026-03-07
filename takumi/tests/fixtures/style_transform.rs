@@ -168,15 +168,15 @@ fn create_rotated_container(angle: f32, transform_origin: BackgroundPosition) ->
         )))
         .with(StyleDeclaration::rotate(Some(Angle::new(angle))))
         .with(StyleDeclaration::position(Position::Absolute))
-        .with(StyleDeclaration::top(Some(Percentage(50.0))))
-        .with(StyleDeclaration::left(Some(Percentage(50.0))))
+        .with(StyleDeclaration::top(Percentage(50.0)))
+        .with(StyleDeclaration::left(Percentage(50.0)))
         .with(StyleDeclaration::transform_origin(transform_origin))
         .with(StyleDeclaration::width(Px(200.0)))
         .with(StyleDeclaration::height(Px(200.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 0, 0, 30]),
         )))
-        .with_border_width(Some(Sides([Px(1.0); 4])))
+        .with_border_width(Sides([Px(1.0); 4]))
         .with(StyleDeclaration::border_style(BorderStyle::Solid))
         .with_border_radius(Box::new(BorderRadius(Sides(
           [SpacePair::from_single(Px(12.0)); 4],
@@ -248,7 +248,7 @@ fn test_style_transform_translate_and_scale() {
       Style::default()
         .with(StyleDeclaration::width(Px(300.0)))
         .with(StyleDeclaration::height(Px(300.0)))
-        .with_border_width(Some(Sides([Px(1.0); 4])))
+        .with_border_width(Sides([Px(1.0); 4]))
         .with(StyleDeclaration::border_style(BorderStyle::Solid))
         .with(StyleDeclaration::translate(SpacePair::from_single(Px(
           300.0,
@@ -294,7 +294,7 @@ fn test_style_transform_translate_and_scale() {
         )))
         .with(StyleDeclaration::width(Px(100.0)))
         .with(StyleDeclaration::height(Px(100.0)))
-        .with_border_width(Some(Sides([Px(1.0); 4])))
+        .with_border_width(Sides([Px(1.0); 4]))
         .with(StyleDeclaration::border_style(BorderStyle::Solid))
         .with(StyleDeclaration::font_size(Some(Px(12.0)))),
     ),
@@ -327,12 +327,12 @@ fn test_style_transform_translate_and_scale() {
         )))
         .with(StyleDeclaration::width(Px(200.0)))
         .with(StyleDeclaration::height(Px(200.0)))
-        .with_border_width(Some(Sides([Px(1.0); 4])))
+        .with_border_width(Sides([Px(1.0); 4]))
         .with(StyleDeclaration::border_style(BorderStyle::Solid))
         .with(StyleDeclaration::color(ColorInput::Value(Color::white())))
-        .with(StyleDeclaration::border_color(Some(ColorInput::Value(
+        .with(StyleDeclaration::border_color(ColorInput::Value(
           Color::black(),
-        )))),
+        ))),
     ),
     children: Some(
       [TextNode {

@@ -16,8 +16,8 @@ use crate::{
   layout::{
     inline::InlineContentKind,
     style::{
-      Affine, BackgroundClip, BackgroundImage, BlendMode, ColorInput, Length, Sides, Style,
-      StyleDeclaration, tw::TailwindValues,
+      Affine, BackgroundClip, BackgroundImage, BlendMode, Sides, Style, StyleDeclaration,
+      tw::TailwindValues,
     },
   },
   rendering::{
@@ -493,24 +493,18 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
     let width = context
       .style
       .outline_width
-      .unwrap_or_default()
       .to_px(&context.sizing, layout.size.width)
       .max(0.0);
 
     let offset = context
       .style
       .outline_offset
-      .unwrap_or(Length::zero())
       .to_px(&context.sizing, layout.size.width);
 
     let mut border = BorderProperties {
       width: Sides([width; 4]).into(),
-      color: context
-        .style
-        .outline_color
-        .unwrap_or(ColorInput::CurrentColor)
-        .resolve(context.current_color),
-      style: context.style.outline_style.unwrap_or_default(),
+      color: context.style.outline_color.resolve(context.current_color),
+      style: context.style.outline_style,
       image_rendering: context.style.image_rendering,
       radius: BorderProperties::resolve_radius_part(context, layout.size),
     };

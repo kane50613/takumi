@@ -203,18 +203,27 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c, N: Node<N> + 'c>(
             context.sizing.font_size,
             context.style.line_height,
           );
-          let margin = context
-            .style
-            .resolved_margin()
-            .map(|length| length.to_px(&context.sizing, 0.0));
-          let padding = context
-            .style
-            .resolved_padding()
-            .map(|length| length.to_px(&context.sizing, 0.0));
-          let border = context
-            .style
-            .resolved_border_width()
-            .map(|length| length.to_px(&context.sizing, 0.0));
+          let margin = Rect {
+            top: context.style.margin_top,
+            right: context.style.margin_right,
+            bottom: context.style.margin_bottom,
+            left: context.style.margin_left,
+          }
+          .map(|length| length.to_px(&context.sizing, 0.0));
+          let padding = Rect {
+            top: context.style.padding_top,
+            right: context.style.padding_right,
+            bottom: context.style.padding_bottom,
+            left: context.style.padding_left,
+          }
+          .map(|length| length.to_px(&context.sizing, 0.0));
+          let border = Rect {
+            top: context.style.border_top_width,
+            right: context.style.border_right_width,
+            bottom: context.style.border_bottom_width,
+            left: context.style.border_left_width,
+          }
+          .map(|length| length.to_px(&context.sizing, 0.0));
 
           let content_size = if render_node.is_inline_atomic_container() {
             render_node.measure_atomic_subtree(available_space)

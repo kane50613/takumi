@@ -100,11 +100,11 @@ fn inline_image() {
       style: Some(
         Style::default()
           .with(StyleDeclaration::display(Display::Inline))
-          .with_border_width(Some(Sides([Px(12.0); 4])))
+          .with_border_width(Sides([Px(12.0); 4]))
           .with(StyleDeclaration::border_style(BorderStyle::Solid))
-          .with(StyleDeclaration::border_color(Some(ColorInput::Value(
+          .with(StyleDeclaration::border_color(ColorInput::Value(
             Color::transparent(),
-          ))))
+          )))
           .with(StyleDeclaration::background_image(
             BackgroundImages::from_str("linear-gradient(to right, red, blue)").ok(),
           ))
@@ -155,7 +155,7 @@ fn inline_image() {
         tw: None,
         style: Some(
           Style::default()
-            .with_border_width(Some(Sides([Px(2.0); 4])))
+            .with_border_width(Sides([Px(2.0); 4]))
             .with(StyleDeclaration::border_style(BorderStyle::Solid))
             .with(StyleDeclaration::display(Display::Block))
             .with(StyleDeclaration::font_size(Some(Px(48.0)))),
@@ -336,7 +336,7 @@ fn inline_atomic_containers() {
           .with(StyleDeclaration::display(display))
           .with_padding(Sides([Px(8.0); 4]))
           .with(StyleDeclaration::background_color(ColorInput::Value(color)))
-          .with_border_width(Some(Sides([Px(2.0); 4])))
+          .with_border_width(Sides([Px(2.0); 4]))
           .with(StyleDeclaration::border_style(BorderStyle::Solid)),
       ),
       children: Some(
@@ -384,7 +384,7 @@ fn inline_atomic_containers() {
           Style::default()
             .with(StyleDeclaration::display(Display::Block))
             .with(StyleDeclaration::font_size(Some(Px(24.0))))
-            .with_border_width(Some(Sides([Px(2.0); 4])))
+            .with_border_width(Sides([Px(2.0); 4]))
             .with(StyleDeclaration::border_style(BorderStyle::Solid)),
         ),
         children: Some(

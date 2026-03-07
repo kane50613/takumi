@@ -771,9 +771,9 @@ fn text_ellipsis_text_nowrap() {
           Style::default()
             .with(StyleDeclaration::text_overflow(TextOverflow::Ellipsis))
             .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
-            .with_border_width(Some(Sides([Px(1.0); 4])))
+            .with_border_width(Sides([Px(1.0); 4]))
             .with(StyleDeclaration::border_style(BorderStyle::Solid))
-            .with(StyleDeclaration::border_color(Some(ColorInput::Value(Color([255, 0, 0, 255])))))
+            .with(StyleDeclaration::border_color(ColorInput::Value(Color([255, 0, 0, 255]))))
             .with(StyleDeclaration::word_break(WordBreak::BreakAll))
             .with(StyleDeclaration::width(Percentage(100.0))),
         ),

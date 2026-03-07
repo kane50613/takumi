@@ -43,11 +43,11 @@ fn create_container_with_background_clip(
             )))
             .with(StyleDeclaration::background_clip(background_clip))
             .with_padding(Sides([Px(padding); 4]))
-            .with_border_width(Some(Sides([Px(border_width); 4])))
+            .with_border_width(Sides([Px(border_width); 4]))
             .with(StyleDeclaration::border_style(BorderStyle::Solid))
-            .with(StyleDeclaration::border_color(Some(ColorInput::Value(
-              Color([0, 0, 0, 255]),
-            ))))
+            .with(StyleDeclaration::border_color(ColorInput::Value(Color([
+              0, 0, 0, 255,
+            ]))))
             .with_border_radius(Box::new(BorderRadius(Sides(
               [SpacePair::from_single(Px(8.0)); 4],
             )))),
@@ -241,11 +241,11 @@ fn test_style_background_clip_border_area() {
               BackgroundClip::BorderArea,
             ))
             .with_padding(Sides([Px(20.0); 4]))
-            .with_border_width(Some(Sides([Px(10.0); 4])))
+            .with_border_width(Sides([Px(10.0); 4]))
             .with(StyleDeclaration::border_style(BorderStyle::Solid))
-            .with(StyleDeclaration::border_color(Some(ColorInput::Value(
-              Color([0, 0, 0, 128]),
-            ))))
+            .with(StyleDeclaration::border_color(ColorInput::Value(Color([
+              0, 0, 0, 128,
+            ]))))
             .with_border_radius(Box::new(BorderRadius(Sides(
               [SpacePair::from_single(Px(8.0)); 4],
             )))),
@@ -297,11 +297,11 @@ fn test_style_background_clip_with_gradient_background() {
               BackgroundClip::PaddingBox,
             ))
             .with_padding(Sides([Px(30.0); 4]))
-            .with_border_width(Some(Sides([Px(15.0); 4])))
+            .with_border_width(Sides([Px(15.0); 4]))
             .with(StyleDeclaration::border_style(BorderStyle::Solid))
-            .with(StyleDeclaration::border_color(Some(ColorInput::Value(
-              Color([255, 255, 255, 255]),
-            )))),
+            .with(StyleDeclaration::border_color(ColorInput::Value(Color([
+              255, 255, 255, 255,
+            ])))),
         ),
         children: None,
       }
@@ -395,11 +395,11 @@ fn test_style_background_clip_comparison() {
               )))
               .with(StyleDeclaration::background_clip(BackgroundClip::BorderBox))
               .with_padding(Sides([Px(15.0); 4]))
-              .with_border_width(Some(Sides([Px(8.0); 4])))
+              .with_border_width(Sides([Px(8.0); 4]))
               .with(StyleDeclaration::border_style(BorderStyle::Solid))
-              .with(StyleDeclaration::border_color(Some(ColorInput::Value(
-                Color([0, 0, 0, 128]),
-              )))),
+              .with(StyleDeclaration::border_color(ColorInput::Value(Color([
+                0, 0, 0, 128,
+              ])))),
           ),
           children: Some(
             [TextNode {
@@ -438,11 +438,11 @@ fn test_style_background_clip_comparison() {
                 BackgroundClip::PaddingBox,
               ))
               .with_padding(Sides([Px(15.0); 4]))
-              .with_border_width(Some(Sides([Px(8.0); 4])))
+              .with_border_width(Sides([Px(8.0); 4]))
               .with(StyleDeclaration::border_style(BorderStyle::Solid))
-              .with(StyleDeclaration::border_color(Some(ColorInput::Value(
-                Color([0, 0, 0, 128]),
-              )))),
+              .with(StyleDeclaration::border_color(ColorInput::Value(Color([
+                0, 0, 0, 128,
+              ])))),
           ),
           children: Some(
             [TextNode {
@@ -481,11 +481,11 @@ fn test_style_background_clip_comparison() {
                 BackgroundClip::ContentBox,
               ))
               .with_padding(Sides([Px(15.0); 4]))
-              .with_border_width(Some(Sides([Px(8.0); 4])))
+              .with_border_width(Sides([Px(8.0); 4]))
               .with(StyleDeclaration::border_style(BorderStyle::Solid))
-              .with(StyleDeclaration::border_color(Some(ColorInput::Value(
-                Color([0, 0, 0, 128]),
-              )))),
+              .with(StyleDeclaration::border_color(ColorInput::Value(Color([
+                0, 0, 0, 128,
+              ])))),
           ),
           children: Some(
             [TextNode {

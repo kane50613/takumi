@@ -997,41 +997,17 @@ impl TailwindProperty {
         background_image(Some([background_image].into()))
       ),
       TailwindProperty::BorderDefault => {
-        push_decl!(builder, important, border_top_width(Some(Length::Px(1.0))));
-        push_decl!(
-          builder,
-          important,
-          border_right_width(Some(Length::Px(1.0)))
-        );
-        push_decl!(
-          builder,
-          important,
-          border_bottom_width(Some(Length::Px(1.0)))
-        );
-        push_decl!(builder, important, border_left_width(Some(Length::Px(1.0))));
+        push_decl!(builder, important, border_top_width(Length::Px(1.0)));
+        push_decl!(builder, important, border_right_width(Length::Px(1.0)));
+        push_decl!(builder, important, border_bottom_width(Length::Px(1.0)));
+        push_decl!(builder, important, border_left_width(Length::Px(1.0)));
         push_decl!(builder, important, border_style(BorderStyle::Solid));
       }
       TailwindProperty::BorderWidth(tw_border_width) => {
-        push_decl!(
-          builder,
-          important,
-          border_top_width(Some(tw_border_width.0))
-        );
-        push_decl!(
-          builder,
-          important,
-          border_right_width(Some(tw_border_width.0))
-        );
-        push_decl!(
-          builder,
-          important,
-          border_bottom_width(Some(tw_border_width.0))
-        );
-        push_decl!(
-          builder,
-          important,
-          border_left_width(Some(tw_border_width.0))
-        );
+        push_decl!(builder, important, border_top_width(tw_border_width.0));
+        push_decl!(builder, important, border_right_width(tw_border_width.0));
+        push_decl!(builder, important, border_bottom_width(tw_border_width.0));
+        push_decl!(builder, important, border_left_width(tw_border_width.0));
       }
       TailwindProperty::BorderStyle(border_style) => {
         push_decl!(builder, important, border_style(border_style))
@@ -1050,88 +1026,64 @@ impl TailwindProperty {
         push_decl!(builder, important, background_color(color_input))
       }
       TailwindProperty::BorderColor(color_input) => {
-        push_decl!(builder, important, border_color(Some(color_input)))
+        push_decl!(builder, important, border_color(color_input))
       }
-      TailwindProperty::BorderTopWidth(tw_border_width) => push_decl!(
-        builder,
-        important,
-        border_top_width(Some(tw_border_width.0))
-      ),
-      TailwindProperty::BorderRightWidth(tw_border_width) => push_decl!(
-        builder,
-        important,
-        border_right_width(Some(tw_border_width.0))
-      ),
-      TailwindProperty::BorderBottomWidth(tw_border_width) => push_decl!(
-        builder,
-        important,
-        border_bottom_width(Some(tw_border_width.0))
-      ),
-      TailwindProperty::BorderLeftWidth(tw_border_width) => push_decl!(
-        builder,
-        important,
-        border_left_width(Some(tw_border_width.0))
-      ),
+      TailwindProperty::BorderTopWidth(tw_border_width) => {
+        push_decl!(builder, important, border_top_width(tw_border_width.0))
+      }
+      TailwindProperty::BorderRightWidth(tw_border_width) => {
+        push_decl!(builder, important, border_right_width(tw_border_width.0))
+      }
+      TailwindProperty::BorderBottomWidth(tw_border_width) => {
+        push_decl!(builder, important, border_bottom_width(tw_border_width.0))
+      }
+      TailwindProperty::BorderLeftWidth(tw_border_width) => {
+        push_decl!(builder, important, border_left_width(tw_border_width.0))
+      }
       TailwindProperty::BorderXWidth(tw_border_width) => {
-        push_decl!(
-          builder,
-          important,
-          border_left_width(Some(tw_border_width.0))
-        );
-        push_decl!(
-          builder,
-          important,
-          border_right_width(Some(tw_border_width.0))
-        );
+        push_decl!(builder, important, border_left_width(tw_border_width.0));
+        push_decl!(builder, important, border_right_width(tw_border_width.0));
       }
       TailwindProperty::BorderYWidth(tw_border_width) => {
-        push_decl!(
-          builder,
-          important,
-          border_top_width(Some(tw_border_width.0))
-        );
-        push_decl!(
-          builder,
-          important,
-          border_bottom_width(Some(tw_border_width.0))
-        );
+        push_decl!(builder, important, border_top_width(tw_border_width.0));
+        push_decl!(builder, important, border_bottom_width(tw_border_width.0));
       }
       TailwindProperty::OutlineDefault => {
-        push_decl!(builder, important, outline_width(Some(Length::Px(1.0))));
-        push_decl!(builder, important, outline_style(Some(BorderStyle::Solid)));
+        push_decl!(builder, important, outline_width(Length::Px(1.0)));
+        push_decl!(builder, important, outline_style(BorderStyle::Solid));
       }
       TailwindProperty::OutlineWidth(tw_border_width) => {
-        push_decl!(builder, important, outline_width(Some(tw_border_width.0)))
+        push_decl!(builder, important, outline_width(tw_border_width.0))
       }
       TailwindProperty::OutlineColor(color_input) => {
-        push_decl!(builder, important, outline_color(Some(color_input)))
+        push_decl!(builder, important, outline_color(color_input))
       }
       TailwindProperty::OutlineStyle(outline_style) => {
-        push_decl!(builder, important, outline_style(Some(outline_style)))
+        push_decl!(builder, important, outline_style(outline_style))
       }
       TailwindProperty::OutlineOffset(outline_offset) => {
-        push_decl!(builder, important, outline_offset(Some(outline_offset.0)))
+        push_decl!(builder, important, outline_offset(outline_offset.0))
       }
       TailwindProperty::Rounded(rounded) => {
         push_decl!(
           builder,
           important,
-          border_top_left_radius(Some(SpacePair::from_single(rounded.0)))
+          border_top_left_radius(SpacePair::from_single(rounded.0))
         );
         push_decl!(
           builder,
           important,
-          border_top_right_radius(Some(SpacePair::from_single(rounded.0)))
+          border_top_right_radius(SpacePair::from_single(rounded.0))
         );
         push_decl!(
           builder,
           important,
-          border_bottom_right_radius(Some(SpacePair::from_single(rounded.0)))
+          border_bottom_right_radius(SpacePair::from_single(rounded.0))
         );
         push_decl!(
           builder,
           important,
-          border_bottom_left_radius(Some(SpacePair::from_single(rounded.0)))
+          border_bottom_left_radius(SpacePair::from_single(rounded.0))
         );
       }
       TailwindProperty::VerticalAlign(vertical_align) => {
@@ -1140,69 +1092,69 @@ impl TailwindProperty {
       TailwindProperty::RoundedTopLeft(rounded) => push_decl!(
         builder,
         important,
-        border_top_left_radius(Some(SpacePair::from_single(rounded.0)))
+        border_top_left_radius(SpacePair::from_single(rounded.0))
       ),
       TailwindProperty::RoundedTopRight(rounded) => push_decl!(
         builder,
         important,
-        border_top_right_radius(Some(SpacePair::from_single(rounded.0)))
+        border_top_right_radius(SpacePair::from_single(rounded.0))
       ),
       TailwindProperty::RoundedBottomRight(rounded) => push_decl!(
         builder,
         important,
-        border_bottom_right_radius(Some(SpacePair::from_single(rounded.0)))
+        border_bottom_right_radius(SpacePair::from_single(rounded.0))
       ),
       TailwindProperty::RoundedBottomLeft(rounded) => push_decl!(
         builder,
         important,
-        border_bottom_left_radius(Some(SpacePair::from_single(rounded.0)))
+        border_bottom_left_radius(SpacePair::from_single(rounded.0))
       ),
       TailwindProperty::RoundedTop(rounded) => {
         push_decl!(
           builder,
           important,
-          border_top_left_radius(Some(SpacePair::from_single(rounded.0)))
+          border_top_left_radius(SpacePair::from_single(rounded.0))
         );
         push_decl!(
           builder,
           important,
-          border_top_right_radius(Some(SpacePair::from_single(rounded.0)))
+          border_top_right_radius(SpacePair::from_single(rounded.0))
         );
       }
       TailwindProperty::RoundedRight(rounded) => {
         push_decl!(
           builder,
           important,
-          border_top_right_radius(Some(SpacePair::from_single(rounded.0)))
+          border_top_right_radius(SpacePair::from_single(rounded.0))
         );
         push_decl!(
           builder,
           important,
-          border_bottom_right_radius(Some(SpacePair::from_single(rounded.0)))
+          border_bottom_right_radius(SpacePair::from_single(rounded.0))
         );
       }
       TailwindProperty::RoundedBottom(rounded) => {
         push_decl!(
           builder,
           important,
-          border_bottom_left_radius(Some(SpacePair::from_single(rounded.0)))
+          border_bottom_left_radius(SpacePair::from_single(rounded.0))
         );
         push_decl!(
           builder,
           important,
-          border_bottom_right_radius(Some(SpacePair::from_single(rounded.0)))
+          border_bottom_right_radius(SpacePair::from_single(rounded.0))
         );
       }
       TailwindProperty::RoundedLeft(rounded) => {
         push_decl!(
           builder,
           important,
-          border_top_left_radius(Some(SpacePair::from_single(rounded.0)))
+          border_top_left_radius(SpacePair::from_single(rounded.0))
         );
         push_decl!(
           builder,
           important,
-          border_bottom_left_radius(Some(SpacePair::from_single(rounded.0)))
+          border_bottom_left_radius(SpacePair::from_single(rounded.0))
         );
       }
       TailwindProperty::TextOverflow(text_overflow) => {
@@ -1292,75 +1244,65 @@ impl TailwindProperty {
         push_decl!(builder, important, transform_origin(background_position))
       }
       TailwindProperty::Margin(length) => {
-        push_decl!(builder, important, margin_top(Some(length)));
-        push_decl!(builder, important, margin_right(Some(length)));
-        push_decl!(builder, important, margin_bottom(Some(length)));
-        push_decl!(builder, important, margin_left(Some(length)));
+        push_decl!(builder, important, margin_top(length));
+        push_decl!(builder, important, margin_right(length));
+        push_decl!(builder, important, margin_bottom(length));
+        push_decl!(builder, important, margin_left(length));
       }
       TailwindProperty::MarginX(length) => {
-        push_decl!(builder, important, margin_left(Some(length)));
-        push_decl!(builder, important, margin_right(Some(length)));
+        push_decl!(builder, important, margin_left(length));
+        push_decl!(builder, important, margin_right(length));
       }
       TailwindProperty::MarginY(length) => {
-        push_decl!(builder, important, margin_top(Some(length)));
-        push_decl!(builder, important, margin_bottom(Some(length)));
+        push_decl!(builder, important, margin_top(length));
+        push_decl!(builder, important, margin_bottom(length));
       }
-      TailwindProperty::MarginTop(length) => {
-        push_decl!(builder, important, margin_top(Some(length)))
-      }
-      TailwindProperty::MarginRight(length) => {
-        push_decl!(builder, important, margin_right(Some(length)))
-      }
+      TailwindProperty::MarginTop(length) => push_decl!(builder, important, margin_top(length)),
+      TailwindProperty::MarginRight(length) => push_decl!(builder, important, margin_right(length)),
       TailwindProperty::MarginBottom(length) => {
-        push_decl!(builder, important, margin_bottom(Some(length)))
+        push_decl!(builder, important, margin_bottom(length))
       }
-      TailwindProperty::MarginLeft(length) => {
-        push_decl!(builder, important, margin_left(Some(length)))
-      }
+      TailwindProperty::MarginLeft(length) => push_decl!(builder, important, margin_left(length)),
       TailwindProperty::Padding(length) => {
-        push_decl!(builder, important, padding_top(Some(length)));
-        push_decl!(builder, important, padding_right(Some(length)));
-        push_decl!(builder, important, padding_bottom(Some(length)));
-        push_decl!(builder, important, padding_left(Some(length)));
+        push_decl!(builder, important, padding_top(length));
+        push_decl!(builder, important, padding_right(length));
+        push_decl!(builder, important, padding_bottom(length));
+        push_decl!(builder, important, padding_left(length));
       }
       TailwindProperty::PaddingX(length) => {
-        push_decl!(builder, important, padding_left(Some(length)));
-        push_decl!(builder, important, padding_right(Some(length)));
+        push_decl!(builder, important, padding_left(length));
+        push_decl!(builder, important, padding_right(length));
       }
       TailwindProperty::PaddingY(length) => {
-        push_decl!(builder, important, padding_top(Some(length)));
-        push_decl!(builder, important, padding_bottom(Some(length)));
+        push_decl!(builder, important, padding_top(length));
+        push_decl!(builder, important, padding_bottom(length));
       }
-      TailwindProperty::PaddingTop(length) => {
-        push_decl!(builder, important, padding_top(Some(length)))
-      }
+      TailwindProperty::PaddingTop(length) => push_decl!(builder, important, padding_top(length)),
       TailwindProperty::PaddingRight(length) => {
-        push_decl!(builder, important, padding_right(Some(length)))
+        push_decl!(builder, important, padding_right(length))
       }
       TailwindProperty::PaddingBottom(length) => {
-        push_decl!(builder, important, padding_bottom(Some(length)))
+        push_decl!(builder, important, padding_bottom(length))
       }
-      TailwindProperty::PaddingLeft(length) => {
-        push_decl!(builder, important, padding_left(Some(length)))
-      }
+      TailwindProperty::PaddingLeft(length) => push_decl!(builder, important, padding_left(length)),
       TailwindProperty::Inset(length) => {
-        push_decl!(builder, important, top(Some(length)));
-        push_decl!(builder, important, right(Some(length)));
-        push_decl!(builder, important, bottom(Some(length)));
-        push_decl!(builder, important, left(Some(length)));
+        push_decl!(builder, important, top(length));
+        push_decl!(builder, important, right(length));
+        push_decl!(builder, important, bottom(length));
+        push_decl!(builder, important, left(length));
       }
       TailwindProperty::InsetX(length) => {
-        push_decl!(builder, important, left(Some(length)));
-        push_decl!(builder, important, right(Some(length)));
+        push_decl!(builder, important, left(length));
+        push_decl!(builder, important, right(length));
       }
       TailwindProperty::InsetY(length) => {
-        push_decl!(builder, important, top(Some(length)));
-        push_decl!(builder, important, bottom(Some(length)));
+        push_decl!(builder, important, top(length));
+        push_decl!(builder, important, bottom(length));
       }
-      TailwindProperty::Top(length) => push_decl!(builder, important, top(Some(length))),
-      TailwindProperty::Right(length) => push_decl!(builder, important, right(Some(length))),
-      TailwindProperty::Bottom(length) => push_decl!(builder, important, bottom(Some(length))),
-      TailwindProperty::Left(length) => push_decl!(builder, important, left(Some(length))),
+      TailwindProperty::Top(length) => push_decl!(builder, important, top(length)),
+      TailwindProperty::Right(length) => push_decl!(builder, important, right(length)),
+      TailwindProperty::Bottom(length) => push_decl!(builder, important, bottom(length)),
+      TailwindProperty::Left(length) => push_decl!(builder, important, left(length)),
       TailwindProperty::GridAutoColumns(grid_auto_size) => push_decl!(
         builder,
         important,

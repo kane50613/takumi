@@ -50,7 +50,7 @@ fn create_blend_card(mode: BlendMode, label_font_size_px: f32) -> NodeKind {
           style: Some(
             Style::default()
               .with(StyleDeclaration::font_size(Some(Px(label_font_size_px))))
-              .with(StyleDeclaration::margin_top(Some(Px(4.0))))
+              .with(StyleDeclaration::margin_top(Px(4.0)))
               .with(StyleDeclaration::color(ColorInput::Value(Color::black()))),
           ),
           text: format!("{:?}", mode),

@@ -42,8 +42,8 @@ fn clip_path_text_stroke_filled() {
             Style::default()
               .with(StyleDeclaration::display(Display::Block))
               .with(StyleDeclaration::position(Position::Absolute))
-              .with(StyleDeclaration::top(Some(Percentage(50.0))))
-              .with(StyleDeclaration::left(Some(Percentage(50.0))))
+              .with(StyleDeclaration::top(Percentage(50.0)))
+              .with(StyleDeclaration::left(Percentage(50.0)))
               .with(StyleDeclaration::translate(SpacePair::from_single(
                 Percentage(-50.0),
               )))
@@ -65,8 +65,8 @@ fn clip_path_text_stroke_filled() {
             Style::default()
               .with(StyleDeclaration::display(Display::Block))
               .with(StyleDeclaration::position(Position::Absolute))
-              .with(StyleDeclaration::top(Some(Percentage(50.0))))
-              .with(StyleDeclaration::left(Some(Percentage(50.0))))
+              .with(StyleDeclaration::top(Percentage(50.0)))
+              .with(StyleDeclaration::left(Percentage(50.0)))
               .with(StyleDeclaration::translate(SpacePair::from_single(
                 Percentage(-50.0),
               )))
@@ -333,8 +333,8 @@ fn clip_path_inset_round_clips_children() {
           style: Some(
             Style::default()
               .with(StyleDeclaration::position(Position::Absolute))
-              .with(StyleDeclaration::top(Some(Px(0.0))))
-              .with(StyleDeclaration::left(Some(Px(0.0))))
+              .with(StyleDeclaration::top(Px(0.0)))
+              .with(StyleDeclaration::left(Px(0.0)))
               .with(StyleDeclaration::width(Percentage(100.0)))
               .with(StyleDeclaration::height(Percentage(100.0)))
               .with(StyleDeclaration::clip_path(Some(
@@ -356,8 +356,8 @@ fn clip_path_inset_round_clips_children() {
                 style: Some(
                   Style::default()
                     .with(StyleDeclaration::position(Position::Absolute))
-                    .with(StyleDeclaration::top(Some(Px(0.0))))
-                    .with(StyleDeclaration::left(Some(Px(0.0))))
+                    .with(StyleDeclaration::top(Px(0.0)))
+                    .with(StyleDeclaration::left(Px(0.0)))
                     .with(StyleDeclaration::width(Percentage(100.0)))
                     .with(StyleDeclaration::height(Percentage(100.0)))
                     .with(StyleDeclaration::background_color(ColorInput::Value(

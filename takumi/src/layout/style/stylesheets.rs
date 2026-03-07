@@ -619,18 +619,18 @@ define_style! {
     min_width: Length,
     min_height: Length,
     aspect_ratio: AspectRatio,
-    padding_top: Option<Length<false>>,
-    padding_right: Option<Length<false>>,
-    padding_bottom: Option<Length<false>>,
-    padding_left: Option<Length<false>>,
-    margin_top: Option<Length<false>>,
-    margin_right: Option<Length<false>>,
-    margin_bottom: Option<Length<false>>,
-    margin_left: Option<Length<false>>,
-    top: Option<Length>,
-    right: Option<Length>,
-    bottom: Option<Length>,
-    left: Option<Length>,
+    padding_top: Length<false>,
+    padding_right: Length<false>,
+    padding_bottom: Length<false>,
+    padding_left: Length<false>,
+    margin_top: Length<false>,
+    margin_right: Length<false>,
+    margin_bottom: Length<false>,
+    margin_left: Length<false>,
+    top: Length,
+    right: Length,
+    bottom: Length,
+    left: Length,
     flex_direction: FlexDirection,
     justify_self: AlignItems,
     justify_content: JustifyContent,
@@ -654,20 +654,20 @@ define_style! {
     row_gap: Length<false>,
     flex_grow: Option<FlexGrow>,
     flex_shrink: Option<FlexGrow>,
-    border_top_left_radius: Option<SpacePair<Length<false>>>,
-    border_top_right_radius: Option<SpacePair<Length<false>>>,
-    border_bottom_right_radius: Option<SpacePair<Length<false>>>,
-    border_bottom_left_radius: Option<SpacePair<Length<false>>>,
-    border_top_width: Option<Length>,
-    border_right_width: Option<Length>,
-    border_bottom_width: Option<Length>,
-    border_left_width: Option<Length>,
+    border_top_left_radius: SpacePair<Length<false>>,
+    border_top_right_radius: SpacePair<Length<false>>,
+    border_bottom_right_radius: SpacePair<Length<false>>,
+    border_bottom_left_radius: SpacePair<Length<false>>,
+    border_top_width: Length,
+    border_right_width: Length,
+    border_bottom_width: Length,
+    border_left_width: Length,
     border_style: BorderStyle,
-    border_color: Option<ColorInput>,
-    outline_width: Option<Length>,
-    outline_style: Option<BorderStyle>,
-    outline_color: Option<ColorInput>,
-    outline_offset: Option<Length>,
+    border_color: ColorInput,
+    outline_width: Length,
+    outline_style: BorderStyle,
+    outline_color: ColorInput,
+    outline_offset: Length,
     object_fit: ObjectFit,
     overflow_x: Overflow,
     overflow_y: Overflow,
@@ -736,26 +736,26 @@ define_style! {
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::padding_top(Some(values[0])),
-        StyleDeclaration::padding_right(Some(values[1])),
-        StyleDeclaration::padding_bottom(Some(values[2])),
-        StyleDeclaration::padding_left(Some(values[3])),
+        StyleDeclaration::padding_top(values[0]),
+        StyleDeclaration::padding_right(values[1]),
+        StyleDeclaration::padding_bottom(values[2]),
+        StyleDeclaration::padding_left(values[3]),
       );
     },
-    padding_inline: Option<SpacePair<Length<false>>> => [PaddingLeft, PaddingRight] |value, target, important| {
+    padding_inline: SpacePair<Length<false>> => [PaddingLeft, PaddingRight] |value, target, important| {
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::padding_left(value.map(|pair| pair.x)),
-        StyleDeclaration::padding_right(value.map(|pair| pair.y)),
+        StyleDeclaration::padding_left(value.x),
+        StyleDeclaration::padding_right(value.y),
       );
     },
-    padding_block: Option<SpacePair<Length<false>>> => [PaddingTop, PaddingBottom] |value, target, important| {
+    padding_block: SpacePair<Length<false>> => [PaddingTop, PaddingBottom] |value, target, important| {
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::padding_top(value.map(|pair| pair.x)),
-        StyleDeclaration::padding_bottom(value.map(|pair| pair.y)),
+        StyleDeclaration::padding_top(value.x),
+        StyleDeclaration::padding_bottom(value.y),
       );
     },
     margin: Sides<Length<false>> => [MarginTop, MarginRight, MarginBottom, MarginLeft] |value, target, important| {
@@ -763,26 +763,26 @@ define_style! {
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::margin_top(Some(values[0])),
-        StyleDeclaration::margin_right(Some(values[1])),
-        StyleDeclaration::margin_bottom(Some(values[2])),
-        StyleDeclaration::margin_left(Some(values[3])),
+        StyleDeclaration::margin_top(values[0]),
+        StyleDeclaration::margin_right(values[1]),
+        StyleDeclaration::margin_bottom(values[2]),
+        StyleDeclaration::margin_left(values[3]),
       );
     },
-    margin_inline: Option<SpacePair<Length<false>>> => [MarginLeft, MarginRight] |value, target, important| {
+    margin_inline: SpacePair<Length<false>> => [MarginLeft, MarginRight] |value, target, important| {
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::margin_left(value.map(|pair| pair.x)),
-        StyleDeclaration::margin_right(value.map(|pair| pair.y)),
+        StyleDeclaration::margin_left(value.x),
+        StyleDeclaration::margin_right(value.y),
       );
     },
-    margin_block: Option<SpacePair<Length<false>>> => [MarginTop, MarginBottom] |value, target, important| {
+    margin_block: SpacePair<Length<false>> => [MarginTop, MarginBottom] |value, target, important| {
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::margin_top(value.map(|pair| pair.x)),
-        StyleDeclaration::margin_bottom(value.map(|pair| pair.y)),
+        StyleDeclaration::margin_top(value.x),
+        StyleDeclaration::margin_bottom(value.y),
       );
     },
     inset: Sides<Length> => [Top, Right, Bottom, Left] |value, target, important| {
@@ -790,26 +790,26 @@ define_style! {
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::top(Some(values[0])),
-        StyleDeclaration::right(Some(values[1])),
-        StyleDeclaration::bottom(Some(values[2])),
-        StyleDeclaration::left(Some(values[3])),
+        StyleDeclaration::top(values[0]),
+        StyleDeclaration::right(values[1]),
+        StyleDeclaration::bottom(values[2]),
+        StyleDeclaration::left(values[3]),
       );
     },
-    inset_inline: Option<SpacePair<Length>> => [Left, Right] |value, target, important| {
+    inset_inline: SpacePair<Length> => [Left, Right] |value, target, important| {
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::left(value.map(|pair| pair.x)),
-        StyleDeclaration::right(value.map(|pair| pair.y)),
+        StyleDeclaration::left(value.x),
+        StyleDeclaration::right(value.y),
       );
     },
-    inset_block: Option<SpacePair<Length>> => [Top, Bottom] |value, target, important| {
+    inset_block: SpacePair<Length> => [Top, Bottom] |value, target, important| {
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::top(value.map(|pair| pair.x)),
-        StyleDeclaration::bottom(value.map(|pair| pair.y)),
+        StyleDeclaration::top(value.x),
+        StyleDeclaration::bottom(value.y),
       );
     },
     mask: Backgrounds => [MaskImage, MaskPosition, MaskSize, MaskRepeat] |value, target, important| {
@@ -844,58 +844,60 @@ define_style! {
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::border_top_left_radius(Some(values[0])),
-        StyleDeclaration::border_top_right_radius(Some(values[1])),
-        StyleDeclaration::border_bottom_right_radius(Some(values[2])),
-        StyleDeclaration::border_bottom_left_radius(Some(values[3])),
+        StyleDeclaration::border_top_left_radius(values[0]),
+        StyleDeclaration::border_top_right_radius(values[1]),
+        StyleDeclaration::border_bottom_right_radius(values[2]),
+        StyleDeclaration::border_bottom_left_radius(values[3]),
       );
     },
-    border_width: Option<Sides<Length>> => [BorderTopWidth, BorderRightWidth, BorderBottomWidth, BorderLeftWidth] |value, target, important| {
-      let values = value.map(|value| value.0);
+    border_width: Sides<Length> => [BorderTopWidth, BorderRightWidth, BorderBottomWidth, BorderLeftWidth] |value, target, important| {
+      let values = value.0;
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::border_top_width(values.map(|values| values[0])),
-        StyleDeclaration::border_right_width(values.map(|values| values[1])),
-        StyleDeclaration::border_bottom_width(values.map(|values| values[2])),
-        StyleDeclaration::border_left_width(values.map(|values| values[3])),
+        StyleDeclaration::border_top_width(values[0]),
+        StyleDeclaration::border_right_width(values[1]),
+        StyleDeclaration::border_bottom_width(values[2]),
+        StyleDeclaration::border_left_width(values[3]),
       );
     },
     border_inline_width: Option<SpacePair<Length>> => [BorderLeftWidth, BorderRightWidth] |value, target, important| {
+      let value = value.unwrap_or_default();
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::border_left_width(value.map(|pair| pair.x)),
-        StyleDeclaration::border_right_width(value.map(|pair| pair.y)),
+        StyleDeclaration::border_left_width(value.x),
+        StyleDeclaration::border_right_width(value.y),
       );
     },
     border_block_width: Option<SpacePair<Length>> => [BorderTopWidth, BorderBottomWidth] |value, target, important| {
+      let value = value.unwrap_or_default();
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::border_top_width(value.map(|pair| pair.x)),
-        StyleDeclaration::border_bottom_width(value.map(|pair| pair.y)),
+        StyleDeclaration::border_top_width(value.x),
+        StyleDeclaration::border_bottom_width(value.y),
       );
     },
     border: Border => [BorderTopWidth, BorderRightWidth, BorderBottomWidth, BorderLeftWidth, BorderStyle, BorderColor] |value, target, important| {
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::border_top_width(Some(value.width)),
-        StyleDeclaration::border_right_width(Some(value.width)),
-        StyleDeclaration::border_bottom_width(Some(value.width)),
-        StyleDeclaration::border_left_width(Some(value.width)),
+        StyleDeclaration::border_top_width(value.width),
+        StyleDeclaration::border_right_width(value.width),
+        StyleDeclaration::border_bottom_width(value.width),
+        StyleDeclaration::border_left_width(value.width),
         StyleDeclaration::border_style(value.style),
-        StyleDeclaration::border_color(Some(value.color)),
+        StyleDeclaration::border_color(value.color),
       );
     },
     outline: Border => [OutlineWidth, OutlineStyle, OutlineColor] |value, target, important| {
       push_expanded_declarations!(
         target,
         important;
-        StyleDeclaration::outline_width(Some(value.width)),
-        StyleDeclaration::outline_style(Some(value.style)),
-        StyleDeclaration::outline_color(Some(value.color)),
+        StyleDeclaration::outline_width(value.width),
+        StyleDeclaration::outline_style(value.style),
+        StyleDeclaration::outline_color(value.color),
       );
     },
     overflow: SpacePair<Overflow> => [OverflowX, OverflowY] |value, target, important| {
@@ -1269,115 +1271,8 @@ impl ResolvedStyle {
   }
 
   #[inline]
-  fn resolve_rect_with_longhands<T: Copy>(
-    base: Sides<T>,
-    inline: Option<SpacePair<T>>,
-    block: Option<SpacePair<T>>,
-    top: Option<T>,
-    right: Option<T>,
-    bottom: Option<T>,
-    left: Option<T>,
-  ) -> taffy::Rect<T> {
-    let mut values = base.0;
-
-    if let Some(pair) = inline {
-      values[3] = pair.x; // left
-      values[1] = pair.y; // right
-    }
-
-    if let Some(pair) = block {
-      values[0] = pair.x; // top
-      values[2] = pair.y; // bottom
-    }
-
-    if let Some(v) = top {
-      values[0] = v;
-    }
-    if let Some(v) = right {
-      values[1] = v;
-    }
-    if let Some(v) = bottom {
-      values[2] = v;
-    }
-    if let Some(v) = left {
-      values[3] = v;
-    }
-    taffy::Rect {
-      top: values[0],
-      right: values[1],
-      bottom: values[2],
-      left: values[3],
-    }
-  }
-
-  #[inline]
-  pub(crate) fn resolved_padding(&self) -> taffy::Rect<Length<false>> {
-    Self::resolve_rect_with_longhands(
-      Sides::default(),
-      None,
-      None,
-      self.padding_top,
-      self.padding_right,
-      self.padding_bottom,
-      self.padding_left,
-    )
-  }
-
-  #[inline]
-  pub(crate) fn resolved_margin(&self) -> taffy::Rect<Length<false>> {
-    Self::resolve_rect_with_longhands(
-      Sides::default(),
-      None,
-      None,
-      self.margin_top,
-      self.margin_right,
-      self.margin_bottom,
-      self.margin_left,
-    )
-  }
-
-  #[inline]
-  fn resolved_inset(&self) -> taffy::Rect<Length> {
-    Self::resolve_rect_with_longhands(
-      Sides::default(),
-      None,
-      None,
-      self.top,
-      self.right,
-      self.bottom,
-      self.left,
-    )
-  }
-
-  #[inline]
   fn resolved_gap(&self) -> SpacePair<Length<false>> {
     SpacePair::from_pair(self.row_gap, self.column_gap)
-  }
-
-  #[inline]
-  pub(crate) fn resolved_border_width(&self) -> taffy::Rect<Length> {
-    Self::resolve_rect_with_longhands(
-      Sides::default(),
-      None,
-      None,
-      self.border_top_width,
-      self.border_right_width,
-      self.border_bottom_width,
-      self.border_left_width,
-    )
-  }
-
-  #[inline]
-  pub(crate) fn resolved_border_radius(&self) -> taffy::Rect<SpacePair<Length<false>>> {
-    Self::resolve_rect_with_longhands(
-      Sides::default(),
-      None,
-      None,
-      self.border_top_left_radius,
-      self.border_top_right_radius,
-      self.border_bottom_right_radius,
-      self.border_bottom_left_radius,
-    )
   }
 
   pub(crate) fn to_sized_font_style(&'_ self, context: &RenderContext) -> SizedFontStyle<'_> {
@@ -1451,19 +1346,35 @@ impl ResolvedStyle {
       border: if self.border_style == BorderStyle::None {
         Rect::zero()
       } else {
-        self
-          .resolved_border_width()
-          .map(|border| border.resolve_to_length_percentage(sizing))
+        Rect {
+          top: self.border_top_width,
+          right: self.border_right_width,
+          bottom: self.border_bottom_width,
+          left: self.border_left_width,
+        }
+        .map(|border| border.resolve_to_length_percentage(sizing))
       },
-      padding: self
-        .resolved_padding()
-        .map(|padding| padding.resolve_to_length_percentage(sizing)),
-      inset: self
-        .resolved_inset()
-        .map(|inset| inset.resolve_to_length_percentage_auto(sizing)),
-      margin: self
-        .resolved_margin()
-        .map(|margin| margin.resolve_to_length_percentage_auto(sizing)),
+      padding: Rect {
+        top: self.padding_top,
+        right: self.padding_right,
+        bottom: self.padding_bottom,
+        left: self.padding_left,
+      }
+      .map(|padding| padding.resolve_to_length_percentage(sizing)),
+      inset: Rect {
+        top: self.top,
+        right: self.right,
+        bottom: self.bottom,
+        left: self.left,
+      }
+      .map(|inset| inset.resolve_to_length_percentage_auto(sizing)),
+      margin: Rect {
+        top: self.margin_top,
+        right: self.margin_right,
+        bottom: self.margin_bottom,
+        left: self.margin_left,
+      }
+      .map(|margin| margin.resolve_to_length_percentage_auto(sizing)),
       display: self.display.into(),
       flex_direction: self.flex_direction.into(),
       position: self.position.into(),
@@ -1578,23 +1489,6 @@ mod tests {
   }
 
   #[test]
-  fn shorthand_with_methods_expand_to_longhands() {
-    let resolved = Style::default()
-      .with_padding(Sides([
-        Length::Px(1.0),
-        Length::Px(2.0),
-        Length::Px(3.0),
-        Length::Px(4.0),
-      ]))
-      .inherit(&ResolvedStyle::default());
-
-    assert_eq!(resolved.padding_top, Some(Length::Px(1.0)));
-    assert_eq!(resolved.padding_right, Some(Length::Px(2.0)));
-    assert_eq!(resolved.padding_bottom, Some(Length::Px(3.0)));
-    assert_eq!(resolved.padding_left, Some(Length::Px(4.0)));
-  }
-
-  #[test]
   fn property_id_accepts_kebab_and_camel_case() {
     let padding_left_kebab = PropertyId::from_kebab_case("padding-left");
     let padding_left_camel = PropertyId::from_camel_case("paddingLeft");
@@ -1666,55 +1560,6 @@ mod tests {
   }
 
   #[test]
-  fn test_merge_from_margin_longhands_override_lower_priority_longhands() {
-    let mut preset_style = style_with([
-      StyleDeclaration::margin_top(Some(Length::Em(0.67))),
-      StyleDeclaration::margin_bottom(Some(Length::Em(0.67))),
-      StyleDeclaration::margin_left(Some(Length::Px(0.0))),
-      StyleDeclaration::margin_right(Some(Length::Px(0.0))),
-    ]);
-    let inline_style = style_with([
-      StyleDeclaration::margin_top(Some(Length::Px(0.0))),
-      StyleDeclaration::margin_right(Some(Length::Px(0.0))),
-      StyleDeclaration::margin_bottom(Some(Length::Px(0.0))),
-      StyleDeclaration::margin_left(Some(Length::Px(0.0))),
-    ]);
-
-    preset_style.merge_from(inline_style);
-
-    let inherited = preset_style.inherit(&ResolvedStyle::default());
-    let resolved = inherited.resolved_margin();
-    assert_eq!(resolved.top, Length::Px(0.0));
-    assert_eq!(resolved.right, Length::Px(0.0));
-    assert_eq!(resolved.bottom, Length::Px(0.0));
-    assert_eq!(resolved.left, Length::Px(0.0));
-  }
-
-  #[test]
-  fn test_merge_from_margin_longhand_still_overrides_expanded_values_in_same_layer() {
-    let mut preset_style = style_with([
-      StyleDeclaration::margin_top(Some(Length::Em(0.67))),
-      StyleDeclaration::margin_bottom(Some(Length::Em(0.67))),
-    ]);
-    let inline_style = style_with([
-      StyleDeclaration::margin_top(Some(Length::Px(0.0))),
-      StyleDeclaration::margin_right(Some(Length::Px(0.0))),
-      StyleDeclaration::margin_bottom(Some(Length::Px(0.0))),
-      StyleDeclaration::margin_left(Some(Length::Px(0.0))),
-      StyleDeclaration::margin_top(Some(Length::Px(8.0))),
-    ]);
-
-    preset_style.merge_from(inline_style);
-
-    let inherited = preset_style.inherit(&ResolvedStyle::default());
-    let resolved = inherited.resolved_margin();
-    assert_eq!(resolved.top, Length::Px(8.0));
-    assert_eq!(resolved.right, Length::Px(0.0));
-    assert_eq!(resolved.bottom, Length::Px(0.0));
-    assert_eq!(resolved.left, Length::Px(0.0));
-  }
-
-  #[test]
   fn test_merge_from_text_decoration_longhands_clear_lower_priority_color() {
     let mut preset_style = style_with([StyleDeclaration::text_decoration_color(Some(
       ColorInput::Value(Color([255, 0, 0, 255])),
@@ -1737,54 +1582,6 @@ mod tests {
   }
 
   #[test]
-  fn test_apply_to_resolved_margin_longhands_override_existing_values() {
-    let mut resolved = ResolvedStyle {
-      margin_top: Some(Length::Px(12.0)),
-      margin_left: Some(Length::Px(8.0)),
-      ..ResolvedStyle::default()
-    };
-    for declaration in [
-      StyleDeclaration::margin_top(Some(Length::Px(4.0))),
-      StyleDeclaration::margin_right(Some(Length::Px(4.0))),
-      StyleDeclaration::margin_bottom(Some(Length::Px(4.0))),
-      StyleDeclaration::margin_left(Some(Length::Px(4.0))),
-    ] {
-      declaration.apply_to_resolved(&mut resolved);
-    }
-
-    let margin = resolved.resolved_margin();
-    assert_eq!(margin.top, Length::Px(4.0));
-    assert_eq!(margin.right, Length::Px(4.0));
-    assert_eq!(margin.bottom, Length::Px(4.0));
-    assert_eq!(margin.left, Length::Px(4.0));
-  }
-
-  #[test]
-  fn test_merge_from_border_longhands_clear_lower_priority_border_width_longhands() {
-    let mut preset_style = style_with([
-      StyleDeclaration::border_top_width(Some(Length::Px(8.0))),
-      StyleDeclaration::border_bottom_width(Some(Length::Px(8.0))),
-    ]);
-    let inline_style = style_with([
-      StyleDeclaration::border_top_width(Some(Length::Px(2.0))),
-      StyleDeclaration::border_right_width(Some(Length::Px(2.0))),
-      StyleDeclaration::border_bottom_width(Some(Length::Px(2.0))),
-      StyleDeclaration::border_left_width(Some(Length::Px(2.0))),
-      StyleDeclaration::border_style(BorderStyle::Solid),
-      StyleDeclaration::border_color(Some(ColorInput::CurrentColor)),
-    ]);
-
-    preset_style.merge_from(inline_style);
-
-    let inherited = preset_style.inherit(&ResolvedStyle::default());
-    let resolved = inherited.resolved_border_width();
-    assert_eq!(resolved.top, Length::Px(2.0));
-    assert_eq!(resolved.right, Length::Px(2.0));
-    assert_eq!(resolved.bottom, Length::Px(2.0));
-    assert_eq!(resolved.left, Length::Px(2.0));
-  }
-
-  #[test]
   fn test_merge_from_background_longhands_clear_lower_priority_background_color() {
     let mut preset_style = style_with([StyleDeclaration::background_color(ColorInput::Value(
       Color([255, 0, 0, 255]),
@@ -1803,50 +1600,6 @@ mod tests {
 
     let inherited = preset_style.inherit(&ResolvedStyle::default());
     assert_eq!(inherited.background_color, ColorInput::default());
-  }
-
-  #[test]
-  fn test_resolve_padding_precedence() {
-    let inherited = style_with([
-      StyleDeclaration::padding_top(Some(Length::Px(1.0))),
-      StyleDeclaration::padding_right(Some(Length::Px(2.0))),
-      StyleDeclaration::padding_bottom(Some(Length::Px(3.0))),
-      StyleDeclaration::padding_left(Some(Length::Px(4.0))),
-      StyleDeclaration::padding_left(Some(Length::Px(10.0))),
-      StyleDeclaration::padding_right(Some(Length::Px(20.0))),
-      StyleDeclaration::padding_top(Some(Length::Px(30.0))),
-      StyleDeclaration::padding_bottom(Some(Length::Px(40.0))),
-      StyleDeclaration::padding_left(Some(Length::Px(50.0))),
-    ])
-    .inherit(&ResolvedStyle::default());
-
-    let resolved = inherited.resolved_padding();
-
-    assert_eq!(resolved.top, Length::Px(30.0));
-    assert_eq!(resolved.right, Length::Px(20.0));
-    assert_eq!(resolved.bottom, Length::Px(40.0));
-    assert_eq!(resolved.left, Length::Px(50.0));
-  }
-
-  #[test]
-  fn test_resolve_border_width_precedence() {
-    let inherited = style_with([
-      StyleDeclaration::border_top_width(Some(Length::Px(1.0))),
-      StyleDeclaration::border_right_width(Some(Length::Px(1.0))),
-      StyleDeclaration::border_bottom_width(Some(Length::Px(1.0))),
-      StyleDeclaration::border_left_width(Some(Length::Px(1.0))),
-      StyleDeclaration::border_left_width(Some(Length::Px(2.0))),
-      StyleDeclaration::border_right_width(Some(Length::Px(3.0))),
-      StyleDeclaration::border_top_width(Some(Length::Px(4.0))),
-    ])
-    .inherit(&ResolvedStyle::default());
-
-    let resolved = inherited.resolved_border_width();
-
-    assert_eq!(resolved.top, Length::Px(4.0));
-    assert_eq!(resolved.right, Length::Px(3.0));
-    assert_eq!(resolved.bottom, Length::Px(1.0));
-    assert_eq!(resolved.left, Length::Px(2.0));
   }
 
   #[test]

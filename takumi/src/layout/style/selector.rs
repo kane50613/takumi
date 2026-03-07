@@ -603,23 +603,23 @@ mod tests {
     assert_eq!(declarations.declarations.len(), 5);
     assert_eq!(
       declarations.declarations[0],
-      StyleDeclaration::padding_left(Some(Length::Px(4.0)))
+      StyleDeclaration::padding_left(Length::Px(4.0))
     );
     assert_eq!(
       declarations.declarations[1],
-      StyleDeclaration::padding_top(Some(Length::Px(10.0)))
+      StyleDeclaration::padding_top(Length::Px(10.0))
     );
     assert_eq!(
       declarations.declarations[2],
-      StyleDeclaration::padding_right(Some(Length::Px(10.0)))
+      StyleDeclaration::padding_right(Length::Px(10.0))
     );
     assert_eq!(
       declarations.declarations[3],
-      StyleDeclaration::padding_bottom(Some(Length::Px(10.0)))
+      StyleDeclaration::padding_bottom(Length::Px(10.0))
     );
     assert_eq!(
       declarations.declarations[4],
-      StyleDeclaration::padding_left(Some(Length::Px(10.0)))
+      StyleDeclaration::padding_left(Length::Px(10.0))
     );
   }
 
