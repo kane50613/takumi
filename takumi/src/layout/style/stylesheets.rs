@@ -233,10 +233,23 @@ macro_rules! define_style {
           PropertyId::Longhand(property) => match property {
             $(
               LonghandId::[<$longhand:camel>] => {
-                declarations.push(
-                  StyleDeclaration::[<$longhand:camel>](<$longhand_ty as FromCss>::from_css(input)?),
-                  false,
-                );
+                let state = input.state();
+                let keyword = input
+                  .try_parse(cssparser::Parser::expect_ident_cloned)
+                  .ok()
+                  .and_then(|ident| parse_css_wide_keyword(ident.as_ref()));
+                if let Some(keyword) = keyword {
+                  declarations.push(
+                    StyleDeclaration::CssWideKeyword(LonghandId::[<$longhand:camel>], keyword),
+                    false,
+                  );
+                } else {
+                  input.reset(&state);
+                  declarations.push(
+                    StyleDeclaration::[<$longhand:camel>](<$longhand_ty as FromCss>::from_css(input)?),
+                    false,
+                  );
+                }
                 Ok(declarations)
               }
             )*
@@ -1516,9 +1529,10 @@ impl ResolvedStyle {
 mod tests {
   use std::rc::Rc;
 
+  use cssparser::{Parser, ParserInput};
   use taffy::Size;
 
-  use super::{LonghandId, PropertyId};
+  use super::{CssWideKeyword, LonghandId, PropertyId, StyleDeclarationBlock};
   use crate::{
     layout::{
       Viewport,
@@ -1533,6 +1547,12 @@ mod tests {
       style.push(declaration, false);
     }
     style
+  }
+
+  fn parse_declarations(name: &str, css: &str) -> StyleDeclarationBlock {
+    let mut input = ParserInput::new(css);
+    let mut parser = Parser::new(&mut input);
+    StyleDeclarationBlock::parse(name, &mut parser).unwrap()
   }
 
   #[test]
@@ -1612,6 +1632,31 @@ mod tests {
     assert_eq!(
       PropertyId::from_kebab_case("-webkit-text-stroke-color"),
       PropertyId::Longhand(LonghandId::WebkitTextStrokeColor)
+    );
+  }
+
+  #[test]
+  fn parse_style_declaration_supports_css_wide_keywords_for_longhands() {
+    let declarations = parse_declarations("color", "inherit");
+
+    assert_eq!(
+      declarations.iter().collect::<Vec<_>>(),
+      vec![&StyleDeclaration::CssWideKeyword(
+        LonghandId::Color,
+        CssWideKeyword::Inherit,
+      )]
+    );
+  }
+
+  #[test]
+  fn parse_style_declaration_still_parses_normal_longhand_values() {
+    let declarations = parse_declarations("color", "#ff0000");
+
+    assert_eq!(
+      declarations.iter().collect::<Vec<_>>(),
+      vec![&StyleDeclaration::color(ColorInput::Value(Color([
+        255, 0, 0, 255
+      ])))]
     );
   }
 

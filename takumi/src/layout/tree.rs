@@ -105,7 +105,7 @@ fn build_style_layers(
   }
 
   if let Some(author_tw) = node_layers.author_tw {
-    style.append_block(author_tw.to_declaration_block(viewport));
+    style.append_block(author_tw.into_declaration_block(viewport));
   }
 
   if let Some(inline) = node_layers.inline {

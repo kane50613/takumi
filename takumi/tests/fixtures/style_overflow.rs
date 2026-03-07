@@ -75,9 +75,9 @@ fn create_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
 
 fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
   ContainerNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
+    class_name: None,
+    id: None,
+    tag_name: None,
     preset: None,
     tw: None,
     style: Some(
@@ -88,7 +88,8 @@ fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center)),
     ),
-    children: Some([ContainerNode {
+    children: Some(
+      [ContainerNode {
         class_name: None,
         id: None,
         tag_name: None,
@@ -104,11 +105,11 @@ fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
             .with(StyleDeclaration::border_color(Some(Color([0, 0, 0, 255]).into())))
             .with_overflow(overflows),
         ),
-        children: Some([
-          TextNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
+        children: Some(
+          [TextNode {
+            class_name: None,
+            id: None,
+            tag_name: None,
             preset: None,
             tw: None,
             style: Some(
@@ -118,11 +119,16 @@ fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> NodeKind {
                 .with_border_width(Some(Sides([Px(2.0); 4])))
                 .with(StyleDeclaration::border_style(BorderStyle::Solid))
                 .with(StyleDeclaration::border_color(Some(Color([255, 0, 0, 255]).into()))),
-          ),
-          text: "This is a very long text that should overflow the container and demonstrate text overflow behavior with a large font size of 4rem.".to_string(),
-        }.into()].into()),
+            ),
+            text: "This is a very long text that should overflow the container and demonstrate text overflow behavior with a large font size of 4rem.".to_string(),
+          }
+          .into()]
+          .into(),
+        ),
       }
-      .into()].into()),
+      .into()]
+      .into(),
+    ),
   }
   .into()
 }

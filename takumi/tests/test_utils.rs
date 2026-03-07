@@ -260,11 +260,15 @@ impl IntoAnimationFixtureFrames<'_> for Vec<NodeKind> {
     build_animation_frames(
       self
         .into_iter()
-        .map(|node| {
+        .enumerate()
+        .map(|(index, node)| {
+          let time_ms = (index as u64) * u64::from(frame_duration_ms);
+
           (
             RenderOptionsBuilder::default()
               .viewport(viewport)
               .node(node)
+              .time_ms(time_ms)
               .global(&CONTEXT)
               .build()
               .unwrap(),

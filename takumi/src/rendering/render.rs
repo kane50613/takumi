@@ -472,16 +472,25 @@ pub fn render_sequence_animation<'g, N: Node<N>>(
   }
 
   let total_duration_ms = total_sequence_duration(scenes);
-  let frame_duration_ms = ((1000.0 / fps as f32).round() as u32).max(1);
-  let frame_count = ((total_duration_ms + u64::from(frame_duration_ms).saturating_sub(1))
-    / u64::from(frame_duration_ms))
-  .max(1);
+  if total_duration_ms == 0 {
+    return Ok(Vec::new());
+  }
+
+  let frame_count = total_duration_ms
+    .saturating_mul(u64::from(fps))
+    .div_ceil(1000);
   let mut frames = Vec::with_capacity(frame_count as usize);
 
   for frame_index in 0..frame_count {
-    let time_ms = frame_index * u64::from(frame_duration_ms);
-    let image = render_sequence_at_time(scenes, time_ms)?;
-    frames.push(AnimationFrame::new(image, frame_duration_ms));
+    let start_ms = frame_index * 1000 / u64::from(fps);
+    let end_ms = ((frame_index + 1) * 1000 / u64::from(fps)).min(total_duration_ms);
+    let frame_duration_ms = end_ms.saturating_sub(start_ms);
+    if frame_duration_ms == 0 {
+      continue;
+    }
+
+    let image = render_sequence_at_time(scenes, start_ms)?;
+    frames.push(AnimationFrame::new(image, frame_duration_ms as u32));
   }
 
   Ok(frames)
@@ -790,7 +799,8 @@ pub(crate) fn render_node<'g, Nodes: Node<Nodes>>(
 #[cfg(test)]
 mod tests {
   use super::{
-    RenderOptionsBuilder, SequentialScene, SequentialSceneBuilder, resolve_scene_at_time,
+    RenderOptionsBuilder, SequentialScene, SequentialSceneBuilder, render_sequence_animation,
+    resolve_scene_at_time,
   };
   use crate::{
     GlobalContext,
@@ -853,5 +863,36 @@ mod tests {
       unreachable!()
     };
     assert_eq!(local_time, 199);
+  }
+
+  #[test]
+  fn render_sequence_animation_returns_no_frames_for_zero_duration_timelines() {
+    let global = GlobalContext::default();
+    let scenes = vec![make_scene(&global, 0)];
+
+    let frames = render_sequence_animation(&scenes, 30).unwrap();
+
+    assert!(frames.is_empty());
+  }
+
+  #[test]
+  fn render_sequence_animation_uses_per_frame_integer_durations() {
+    let global = GlobalContext::default();
+    let scenes = vec![make_scene(&global, 150)];
+
+    let frames = render_sequence_animation(&scenes, 30).unwrap();
+    let durations = frames
+      .iter()
+      .map(|frame| frame.duration_ms)
+      .collect::<Vec<_>>();
+
+    assert_eq!(durations, vec![33, 33, 34, 33, 17]);
+    assert_eq!(
+      durations
+        .iter()
+        .map(|duration| u64::from(*duration))
+        .sum::<u64>(),
+      150
+    );
   }
 }

@@ -552,6 +552,7 @@ fn resolve_length_with_sizing<const DEFAULT_AUTO: bool>(
   Some(value.to_px(sizing, sizing.viewport.width.unwrap_or_default() as f32))
 }
 
+#[cfg(feature = "css_stylesheet_parsing")]
 fn lerp(lhs: f32, rhs: f32, progress: f32) -> f32 {
   lhs + (rhs - lhs) * progress
 }

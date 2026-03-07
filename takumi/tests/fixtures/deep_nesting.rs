@@ -88,7 +88,7 @@ fn recursive_visual_node(level: usize, max_depth: usize) -> NodeKind {
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
-        .with_gap(SpacePair::from_pair(Px(0.0), Px(8.0)))
+        .with_gap(SpacePair::from_pair(Px(8.0), Px(0.0)))
         .with_padding(Sides([Px(10.0), Px(10.0), Px(10.0), Px(14.0)]))
         .with_margin(Sides([Px(0.0), Px(0.0), Px(0.0), Px(8.0)]))
         .with_border_width(Some(Sides([Px(0.0), Px(0.0), Px(0.0), Px(3.0)])))

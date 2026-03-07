@@ -64,10 +64,10 @@ impl TailwindValues {
     self.inner.iter()
   }
 
-  pub(crate) fn to_declaration_block(&self, viewport: Viewport) -> StyleDeclarationBlock {
+  pub(crate) fn into_declaration_block(self, viewport: Viewport) -> StyleDeclarationBlock {
     let mut builder = TailwindDeclarationBuilder::default();
 
-    for value in self.iter() {
+    for value in self.inner {
       value.apply(&mut builder, viewport);
     }
 
@@ -327,7 +327,7 @@ pub struct TailwindValue {
 }
 
 impl TailwindValue {
-  fn apply(&self, builder: &mut TailwindDeclarationBuilder, viewport: Viewport) {
+  fn apply(self, builder: &mut TailwindDeclarationBuilder, viewport: Viewport) {
     if let Some(breakpoint) = self.breakpoint
       && !breakpoint.matches(viewport)
     {
@@ -840,8 +840,8 @@ impl TailwindProperty {
     None
   }
 
-  fn apply(&self, builder: &mut TailwindDeclarationBuilder, important: bool) {
-    match *self {
+  fn apply(self, builder: &mut TailwindDeclarationBuilder, important: bool) {
+    match self {
       TailwindProperty::BgLinearAngle(angle) => {
         builder.gradient_state.gradient_type = TwGradientType::Linear;
         builder.gradient_state.angle = Some(angle);
@@ -925,11 +925,11 @@ impl TailwindProperty {
       TailwindProperty::FontStretch(font_stretch) => {
         push_decl!(builder, important, font_stretch(font_stretch))
       }
-      TailwindProperty::FontFamily(ref font_family) => {
-        push_decl!(builder, important, font_family(Some(font_family.clone())))
+      TailwindProperty::FontFamily(font_family) => {
+        push_decl!(builder, important, font_family(Some(font_family)))
       }
-      TailwindProperty::LineClamp(ref line_clamp) => {
-        push_decl!(builder, important, line_clamp(Some(line_clamp.clone())))
+      TailwindProperty::LineClamp(line_clamp) => {
+        push_decl!(builder, important, line_clamp(Some(line_clamp)))
       }
       TailwindProperty::TextAlign(text_align) => {
         push_decl!(builder, important, text_align(text_align))
@@ -991,10 +991,10 @@ impl TailwindProperty {
         important,
         background_repeat(Some([background_repeat].into()))
       ),
-      TailwindProperty::BackgroundImage(ref background_image) => push_decl!(
+      TailwindProperty::BackgroundImage(background_image) => push_decl!(
         builder,
         important,
-        background_image(Some([background_image.clone()].into()))
+        background_image(Some([background_image].into()))
       ),
       TailwindProperty::BorderDefault => {
         push_decl!(builder, important, border_top_width(Some(Length::Px(1.0))));
@@ -1205,8 +1205,8 @@ impl TailwindProperty {
           border_bottom_left_radius(Some(SpacePair::from_single(rounded.0)))
         );
       }
-      TailwindProperty::TextOverflow(ref text_overflow) => {
-        push_decl!(builder, important, text_overflow(text_overflow.clone()))
+      TailwindProperty::TextOverflow(text_overflow) => {
+        push_decl!(builder, important, text_overflow(text_overflow))
       }
       TailwindProperty::Truncate => {
         push_decl!(builder, important, text_overflow(TextOverflow::Ellipsis));
@@ -1371,33 +1371,31 @@ impl TailwindProperty {
         important,
         grid_auto_rows(Some([grid_auto_size].into()))
       ),
-      TailwindProperty::GridColumn(ref tw_grid_span) => {
-        builder.set_grid_column(tw_grid_span.clone(), important)
+      TailwindProperty::GridColumn(tw_grid_span) => {
+        builder.set_grid_column(tw_grid_span, important)
       }
-      TailwindProperty::GridRow(ref tw_grid_span) => {
-        builder.set_grid_row(tw_grid_span.clone(), important)
+      TailwindProperty::GridRow(tw_grid_span) => builder.set_grid_row(tw_grid_span, important),
+      TailwindProperty::GridColumnStart(tw_grid_placement) => {
+        builder.grid_column_mut(important).start = tw_grid_placement;
       }
-      TailwindProperty::GridColumnStart(ref tw_grid_placement) => {
-        builder.grid_column_mut(important).start = tw_grid_placement.clone();
+      TailwindProperty::GridColumnEnd(tw_grid_placement) => {
+        builder.grid_column_mut(important).end = tw_grid_placement;
       }
-      TailwindProperty::GridColumnEnd(ref tw_grid_placement) => {
-        builder.grid_column_mut(important).end = tw_grid_placement.clone();
+      TailwindProperty::GridRowStart(tw_grid_placement) => {
+        builder.grid_row_mut(important).start = tw_grid_placement;
       }
-      TailwindProperty::GridRowStart(ref tw_grid_placement) => {
-        builder.grid_row_mut(important).start = tw_grid_placement.clone();
+      TailwindProperty::GridRowEnd(tw_grid_placement) => {
+        builder.grid_row_mut(important).end = tw_grid_placement;
       }
-      TailwindProperty::GridRowEnd(ref tw_grid_placement) => {
-        builder.grid_row_mut(important).end = tw_grid_placement.clone();
-      }
-      TailwindProperty::GridTemplateColumns(ref tw_grid_template) => push_decl!(
+      TailwindProperty::GridTemplateColumns(tw_grid_template) => push_decl!(
         builder,
         important,
-        grid_template_columns(Some(tw_grid_template.0.clone()))
+        grid_template_columns(Some(tw_grid_template.0))
       ),
-      TailwindProperty::GridTemplateRows(ref tw_grid_template) => push_decl!(
+      TailwindProperty::GridTemplateRows(tw_grid_template) => push_decl!(
         builder,
         important,
-        grid_template_rows(Some(tw_grid_template.0.clone()))
+        grid_template_rows(Some(tw_grid_template.0))
       ),
       TailwindProperty::LetterSpacing(tw_letter_spacing) => push_decl!(
         builder,
@@ -1438,9 +1436,9 @@ impl TailwindProperty {
       TailwindProperty::Sepia(percentage_number) => {
         builder.push_filter(Filter::Sepia(percentage_number), important)
       }
-      TailwindProperty::Filter(ref filters) => {
+      TailwindProperty::Filter(filters) => {
         for filter in filters {
-          builder.push_filter(*filter, important);
+          builder.push_filter(filter, important);
         }
       }
       TailwindProperty::BackdropBlur(tw_blur) => {
@@ -1470,9 +1468,9 @@ impl TailwindProperty {
       TailwindProperty::BackdropSepia(percentage_number) => {
         builder.push_backdrop_filter(Filter::Sepia(percentage_number), important)
       }
-      TailwindProperty::BackdropFilter(ref filters) => {
+      TailwindProperty::BackdropFilter(filters) => {
         for filter in filters {
-          builder.push_backdrop_filter(*filter, important);
+          builder.push_backdrop_filter(filter, important);
         }
       }
       TailwindProperty::TextShadow(text_shadow) => {
@@ -1864,7 +1862,7 @@ mod tests {
       unreachable!()
     };
 
-    let style = Style::from(values.to_declaration_block((100, 100).into()))
+    let style = Style::from(values.into_declaration_block((100, 100).into()))
       .inherit(&ResolvedStyle::default());
 
     assert_eq!(
@@ -1884,7 +1882,7 @@ mod tests {
       unreachable!()
     };
 
-    let style = Style::from(values.to_declaration_block((100, 100).into()))
+    let style = Style::from(values.into_declaration_block((100, 100).into()))
       .inherit(&ResolvedStyle::default());
 
     assert_eq!(
@@ -2016,7 +2014,7 @@ mod tests {
     };
 
     let style =
-      Style::from(values.to_declaration_block(viewport)).inherit(&ResolvedStyle::default());
+      Style::from(values.into_declaration_block(viewport)).inherit(&ResolvedStyle::default());
 
     assert_eq!(
       style.background_image,
