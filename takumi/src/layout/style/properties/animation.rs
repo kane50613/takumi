@@ -1,4 +1,4 @@
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case};
 
 use crate::layout::style::{
   CssToken, FromCss, MakeComputed, ParseResult, declare_enum_from_css_impl,
@@ -114,15 +114,34 @@ pub enum AnimationTimingFunction {
   EaseOut,
   /// Uses the CSS `ease-in-out` curve.
   EaseInOut,
+  /// Uses the CSS `step-start` timing function.
+  StepStart,
+  /// Uses the CSS `step-end` timing function.
+  StepEnd,
+  /// Uses a stepped timing function with an explicit position.
+  Steps(u32, StepPosition),
   /// Uses a custom cubic bezier timing curve.
   CubicBezier(f32, f32, f32, f32),
 }
 
 impl MakeComputed for AnimationTimingFunction {}
 
+/// Supported step positions for CSS stepped easing functions.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum StepPosition {
+  /// Jumps at the start of each step interval.
+  Start,
+  /// Jumps at the end of each step interval.
+  End,
+}
+
 impl<'i> FromCss<'i> for AnimationTimingFunction {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     if let Ok(function) = input.try_parse(parse_timing_keyword) {
+      return Ok(function);
+    }
+
+    if let Ok(function) = input.try_parse(parse_steps_function) {
       return Ok(function);
     }
 
@@ -135,6 +154,11 @@ impl<'i> FromCss<'i> for AnimationTimingFunction {
       let x2 = expect_number(input)?;
       input.expect_comma()?;
       let y2 = expect_number(input)?;
+
+      if !(0.0..=1.0).contains(&x1) || !(0.0..=1.0).contains(&x2) {
+        return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
+      }
+
       Ok(Self::CubicBezier(x1, y1, x2, y2))
     })
   }
@@ -146,6 +170,9 @@ impl<'i> FromCss<'i> for AnimationTimingFunction {
       CssToken::Keyword("ease-in"),
       CssToken::Keyword("ease-out"),
       CssToken::Keyword("ease-in-out"),
+      CssToken::Keyword("step-start"),
+      CssToken::Keyword("step-end"),
+      CssToken::Token("steps()"),
       CssToken::Token("cubic-bezier()"),
     ]
   }
@@ -194,7 +221,11 @@ impl<'i> FromCss<'i> for AnimationIterationCount {
     }
 
     let value = expect_number(input)?;
-    Ok(Self::Number(value.max(0.0)))
+    if value < 0.0 {
+      return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
+    }
+
+    Ok(Self::Number(value))
   }
 
   fn valid_tokens() -> &'static [CssToken] {
@@ -359,8 +390,42 @@ fn parse_timing_keyword<'i>(
     "ease-in" => Ok(AnimationTimingFunction::EaseIn),
     "ease-out" => Ok(AnimationTimingFunction::EaseOut),
     "ease-in-out" => Ok(AnimationTimingFunction::EaseInOut),
+    "step-start" => Ok(AnimationTimingFunction::StepStart),
+    "step-end" => Ok(AnimationTimingFunction::StepEnd),
     _ => Err(AnimationTimingFunction::unexpected_token_error(location, token)),
   }
+}
+
+fn parse_step_position<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, StepPosition> {
+  let location = input.current_source_location();
+  let token = input.next()?;
+  let Token::Ident(ident) = token else {
+    return Err(AnimationTimingFunction::unexpected_token_error(
+      location, token,
+    ));
+  };
+
+  match_ignore_ascii_case! {ident,
+    "start" => Ok(StepPosition::Start),
+    "end" => Ok(StepPosition::End),
+    _ => Err(AnimationTimingFunction::unexpected_token_error(location, token)),
+  }
+}
+
+fn parse_steps_function<'i>(
+  input: &mut Parser<'i, '_>,
+) -> ParseResult<'i, AnimationTimingFunction> {
+  input.expect_function_matching("steps")?;
+  input.parse_nested_block(|input| {
+    let count = input.expect_integer()?;
+    if count <= 0 {
+      return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
+    }
+
+    input.expect_comma()?;
+    let position = parse_step_position(input)?;
+    Ok(AnimationTimingFunction::Steps(count as u32, position))
+  })
 }
 
 fn expect_number<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, f32> {
@@ -436,7 +501,17 @@ pub(crate) fn cubic_bezier_sample(x1: f32, y1: f32, x2: f32, y2: f32, progress: 
     t = (t - x / derivative).clamp(0.0, 1.0);
   }
 
-  sample_curve(ay, by, cy, t).clamp(0.0, 1.0)
+  sample_curve(ay, by, cy, t)
+}
+
+fn steps_sample(step_count: u32, position: StepPosition, progress: f32) -> f32 {
+  let step_count = step_count as f32;
+  let progress = progress.clamp(0.0, 1.0);
+
+  match position {
+    StepPosition::Start => (((progress * step_count).floor() + 1.0).min(step_count)) / step_count,
+    StepPosition::End => ((progress * step_count).floor()) / step_count,
+  }
 }
 
 pub(crate) fn apply_timing_function(function: &AnimationTimingFunction, progress: f32) -> f32 {
@@ -446,6 +521,9 @@ pub(crate) fn apply_timing_function(function: &AnimationTimingFunction, progress
     AnimationTimingFunction::EaseIn => cubic_bezier_sample(0.42, 0.0, 1.0, 1.0, progress),
     AnimationTimingFunction::EaseOut => cubic_bezier_sample(0.0, 0.0, 0.58, 1.0, progress),
     AnimationTimingFunction::EaseInOut => cubic_bezier_sample(0.42, 0.0, 0.58, 1.0, progress),
+    AnimationTimingFunction::StepStart => steps_sample(1, StepPosition::Start, progress),
+    AnimationTimingFunction::StepEnd => steps_sample(1, StepPosition::End, progress),
+    AnimationTimingFunction::Steps(count, position) => steps_sample(*count, *position, progress),
     AnimationTimingFunction::CubicBezier(x1, y1, x2, y2) => {
       cubic_bezier_sample(*x1, *y1, *x2, *y2, progress)
     }
@@ -474,6 +552,45 @@ mod tests {
       AnimationNames::from_str("fade, slide"),
       Ok(names) if names.0.as_ref() == ["fade", "slide"]
     ));
+  }
+
+  #[test]
+  fn parse_steps_timing_functions() {
+    assert_eq!(
+      AnimationTimingFunction::from_str("step-start"),
+      Ok(AnimationTimingFunction::StepStart)
+    );
+    assert_eq!(
+      AnimationTimingFunction::from_str("step-end"),
+      Ok(AnimationTimingFunction::StepEnd)
+    );
+    assert_eq!(
+      AnimationTimingFunction::from_str("steps(4, end)"),
+      Ok(AnimationTimingFunction::Steps(4, StepPosition::End))
+    );
+  }
+
+  #[test]
+  fn reject_invalid_cubic_bezier_x_coordinates() {
+    assert!(AnimationTimingFunction::from_str("cubic-bezier(-0.1, 0, 0.2, 1)").is_err());
+    assert!(AnimationTimingFunction::from_str("cubic-bezier(0.1, 0, 1.2, 1)").is_err());
+  }
+
+  #[test]
+  fn reject_negative_animation_iteration_count() {
+    assert!(AnimationIterationCount::from_str("-1").is_err());
+  }
+
+  #[test]
+  fn cubic_bezier_preserves_overshoot() {
+    let function = AnimationTimingFunction::from_str("cubic-bezier(0.68, -0.6, 0.32, 1.6)")
+      .expect("expected cubic-bezier to parse");
+
+    let early = apply_timing_function(&function, 0.2);
+    let late = apply_timing_function(&function, 0.8);
+
+    assert!(early < 0.0, "expected negative overshoot, got {early}");
+    assert!(late > 1.0, "expected positive overshoot, got {late}");
   }
 
   #[test]
