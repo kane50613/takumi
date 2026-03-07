@@ -22,6 +22,73 @@ pub(crate) struct TileLayer {
 
 pub(crate) type TileLayers = Vec<TileLayer>;
 
+fn resolve_auto_background_size(
+  width: Length,
+  height: Length,
+  area: Size<u32>,
+  image: &BackgroundImage,
+  context: &RenderContext,
+) -> (u32, u32) {
+  match (width == Length::Auto, height == Length::Auto) {
+    // Both sides are auto, so prefer the intrinsic image size and fall back to the paint area.
+    (true, true) => {
+      let Some((intrinsic_width, intrinsic_height)) = resolve_intrinsic_size(image, context) else {
+        return (area.width, area.height);
+      };
+
+      (
+        intrinsic_width.round() as u32,
+        intrinsic_height.round() as u32,
+      )
+    }
+    // Width is auto, so derive it from the fixed height while preserving aspect ratio.
+    (true, false) => {
+      let fixed_height = height.to_px(&context.sizing, area.height as f32).max(0.0);
+      let Some((intrinsic_width, intrinsic_height)) = resolve_intrinsic_size(image, context) else {
+        return (area.width, fixed_height as u32);
+      };
+      if intrinsic_width == 0.0 || intrinsic_height == 0.0 {
+        return (0, 0);
+      }
+
+      let scale_factor = fixed_height / intrinsic_height;
+      (
+        (intrinsic_width * scale_factor).round() as u32,
+        fixed_height as u32,
+      )
+    }
+    // Height is auto, so derive it from the fixed width while preserving aspect ratio.
+    (false, true) => {
+      let fixed_width = width.to_px(&context.sizing, area.width as f32).max(0.0);
+      let Some((intrinsic_width, intrinsic_height)) = resolve_intrinsic_size(image, context) else {
+        return (fixed_width as u32, area.height);
+      };
+      if intrinsic_width == 0.0 || intrinsic_height == 0.0 {
+        return (0, 0);
+      }
+
+      let scale_factor = fixed_width / intrinsic_width;
+      (
+        fixed_width as u32,
+        (intrinsic_height * scale_factor).round() as u32,
+      )
+    }
+    (false, false) => unreachable!(),
+  }
+}
+
+fn resolve_intrinsic_size(image: &BackgroundImage, context: &RenderContext) -> Option<(f32, f32)> {
+  let BackgroundImage::Url(url) = image else {
+    return None;
+  };
+
+  let Ok(source) = resolve_image(url, context) else {
+    return None;
+  };
+
+  Some(source.size())
+}
+
 pub(crate) fn rasterize_layers(
   layers: TileLayers,
   size: Size<u32>,
@@ -166,53 +233,14 @@ pub(crate) fn resolve_background_size(
 ) -> (u32, u32) {
   match size {
     BackgroundSize::Explicit { width, height } => {
-      if width == Length::Auto || height == Length::Auto {
-        if let BackgroundImage::Url(url) = image
-          && let Ok(source) = resolve_image(url, context)
-        {
-          let (intrinsic_width, intrinsic_height) = source.size();
-          if width == Length::Auto && height == Length::Auto {
-            (
-              intrinsic_width.round() as u32,
-              intrinsic_height.round() as u32,
-            )
-          } else {
-            if intrinsic_width == 0.0 || intrinsic_height == 0.0 {
-              return (0, 0);
-            }
-            if width == Length::Auto {
-              let fix_height = height.to_px(&context.sizing, area.height as f32).max(0.0);
-              let scale_factor = fix_height / intrinsic_height;
-              (
-                (intrinsic_width * scale_factor).round() as u32,
-                fix_height as u32,
-              )
-            } else {
-              let fix_width = width.to_px(&context.sizing, area.width as f32).max(0.0);
-              let scale_factor = fix_width / intrinsic_width;
-              (
-                fix_width as u32,
-                (intrinsic_height * scale_factor).round() as u32,
-              )
-            }
-          }
-        } else {
-          if width == Length::Auto && height == Length::Auto {
-            (area.width, area.height)
-          } else if width == Length::Auto {
-            let fix_height = height.to_px(&context.sizing, area.height as f32).max(0.0) as u32;
-            (area.width, fix_height)
-          } else {
-            let fix_width = width.to_px(&context.sizing, area.width as f32).max(0.0) as u32;
-            (fix_width, area.height)
-          }
-        }
-      } else {
-        (
+      if width != Length::Auto && height != Length::Auto {
+        return (
           width.to_px(&context.sizing, area.width as f32).max(0.0) as u32,
           height.to_px(&context.sizing, area.height as f32).max(0.0) as u32,
-        )
+        );
       }
+
+      resolve_auto_background_size(width, height, area, image, context)
     }
     BackgroundSize::Cover => {
       // Get intrinsic image dimensions
