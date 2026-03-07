@@ -1,4 +1,5 @@
 use cssparser::{Parser, Token, match_ignore_ascii_case};
+use taffy::Size;
 
 use crate::{
   layout::style::{
@@ -6,6 +7,20 @@ use crate::{
   },
   rendering::Sizing,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AutoBackgroundAxis {
+  Width,
+  Height,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct ResolvedBackgroundSize {
+  pub(crate) width: u32,
+  pub(crate) height: u32,
+  pub(crate) intrinsic_size: Option<(f32, f32)>,
+  pub(crate) auto_axis: Option<AutoBackgroundAxis>,
+}
 
 /// Parsed `background-size` for one layer.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -76,6 +91,154 @@ impl MakeComputed for BackgroundSize {
       width.make_computed(sizing);
       height.make_computed(sizing);
     }
+  }
+}
+
+impl BackgroundSize {
+  pub(crate) fn resolve(
+    self,
+    area: Size<u32>,
+    sizing: &Sizing,
+    intrinsic_size: Option<(f32, f32)>,
+  ) -> ResolvedBackgroundSize {
+    match self {
+      BackgroundSize::Explicit { width, height } => {
+        if width != Length::Auto && height != Length::Auto {
+          return ResolvedBackgroundSize {
+            width: width.to_px(sizing, area.width as f32).max(0.0) as u32,
+            height: height.to_px(sizing, area.height as f32).max(0.0) as u32,
+            intrinsic_size: None,
+            auto_axis: None,
+          };
+        }
+
+        let (resolved_width, resolved_height) =
+          resolve_auto_background_size(width, height, area, sizing, intrinsic_size);
+
+        ResolvedBackgroundSize {
+          width: resolved_width,
+          height: resolved_height,
+          intrinsic_size,
+          auto_axis: match (width == Length::Auto, height == Length::Auto) {
+            (true, false) => Some(AutoBackgroundAxis::Width),
+            (false, true) => Some(AutoBackgroundAxis::Height),
+            _ => None,
+          },
+        }
+      }
+      BackgroundSize::Cover => {
+        let Some((intrinsic_width, intrinsic_height)) = intrinsic_size else {
+          return ResolvedBackgroundSize {
+            width: 0,
+            height: 0,
+            intrinsic_size: None,
+            auto_axis: None,
+          };
+        };
+
+        if intrinsic_width == 0.0 || intrinsic_height == 0.0 {
+          return ResolvedBackgroundSize {
+            width: 0,
+            height: 0,
+            intrinsic_size: Some((intrinsic_width, intrinsic_height)),
+            auto_axis: None,
+          };
+        }
+
+        let scale_x = area.width as f32 / intrinsic_width;
+        let scale_y = area.height as f32 / intrinsic_height;
+        let scale = scale_x.max(scale_y);
+
+        ResolvedBackgroundSize {
+          width: (intrinsic_width * scale).round() as u32,
+          height: (intrinsic_height * scale).round() as u32,
+          intrinsic_size: Some((intrinsic_width, intrinsic_height)),
+          auto_axis: None,
+        }
+      }
+      BackgroundSize::Contain => {
+        let Some((intrinsic_width, intrinsic_height)) = intrinsic_size else {
+          return ResolvedBackgroundSize {
+            width: 0,
+            height: 0,
+            intrinsic_size: None,
+            auto_axis: None,
+          };
+        };
+
+        if intrinsic_width == 0.0 || intrinsic_height == 0.0 {
+          return ResolvedBackgroundSize {
+            width: 0,
+            height: 0,
+            intrinsic_size: Some((intrinsic_width, intrinsic_height)),
+            auto_axis: None,
+          };
+        }
+
+        let scale_x = area.width as f32 / intrinsic_width;
+        let scale_y = area.height as f32 / intrinsic_height;
+        let scale = scale_x.min(scale_y);
+
+        ResolvedBackgroundSize {
+          width: (intrinsic_width * scale).round() as u32,
+          height: (intrinsic_height * scale).round() as u32,
+          intrinsic_size: Some((intrinsic_width, intrinsic_height)),
+          auto_axis: None,
+        }
+      }
+    }
+  }
+}
+
+fn resolve_auto_background_size(
+  width: Length,
+  height: Length,
+  area: Size<u32>,
+  sizing: &Sizing,
+  intrinsic_size: Option<(f32, f32)>,
+) -> (u32, u32) {
+  match (width == Length::Auto, height == Length::Auto) {
+    (true, true) => {
+      let Some((intrinsic_width, intrinsic_height)) = intrinsic_size else {
+        return (area.width, area.height);
+      };
+
+      (
+        intrinsic_width.round() as u32,
+        intrinsic_height.round() as u32,
+      )
+    }
+    (true, false) => {
+      let fixed_height = height.to_px(sizing, area.height as f32).max(0.0);
+      let Some((intrinsic_width, intrinsic_height)) = intrinsic_size else {
+        return (area.width, fixed_height as u32);
+      };
+      if intrinsic_width == 0.0 || intrinsic_height == 0.0 {
+        return (0, 0);
+      }
+
+      let scale_factor = fixed_height / intrinsic_height;
+      (
+        (intrinsic_width * scale_factor).round() as u32,
+        fixed_height as u32,
+      )
+    }
+    (false, true) => {
+      let fixed_width = width.to_px(sizing, area.width as f32).max(0.0);
+      let Some((intrinsic_width, intrinsic_height)) = intrinsic_size else {
+        return (fixed_width as u32, area.height);
+      };
+      if intrinsic_width == 0.0 || intrinsic_height == 0.0 {
+        return (0, 0);
+      }
+
+      let scale_factor = fixed_width / intrinsic_width;
+      (
+        fixed_width as u32,
+        (intrinsic_height * scale_factor).round() as u32,
+      )
+    }
+    (false, false) => unreachable!(),
   }
 }
 
