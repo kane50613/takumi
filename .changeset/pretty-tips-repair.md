@@ -3,4 +3,4 @@
 "takumi": minor
 ---
 
-support lossy webp animation rendering
+Support lossy webp animation rendering

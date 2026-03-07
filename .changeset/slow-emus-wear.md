@@ -2,4 +2,4 @@
 "takumi": minor
 ---
 
-add `encode_animated_gif` method
+Add `encode_animated_gif` method
