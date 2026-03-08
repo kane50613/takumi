@@ -1,5 +1,11 @@
 # takumi
 
+## 0.71.2
+
+### Patch Changes
+
+- 5c9a2f6: Rasterize repeated background tiles before compositing
+
 ## 0.71.1
 
 ## 0.71.0
