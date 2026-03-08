@@ -1,5 +1,39 @@
 # takumi
 
+## 0.71.0
+
+### Minor Changes
+
+- 812029d: Support lossy webp animation rendering
+- 0930cdb: Support CSS keyframe animation rendering and animation properties
+- 812029d: Add `encode_animated_gif` method
+- 0930cdb: **BREAKING CHANGE: Refactor public style API to declaration-based styles**
+
+  Replace the old field-based / `CssValue`-driven style construction with `StyleDeclaration` and `style.with(...)`.
+
+  Before:
+
+  ```rust
+  let style = StyleBuilder::default()
+    .font_size(Some(48.0.into()))
+    .margin(Sides([Px(4.0); 4]))
+    .build()
+    .unwrap();
+  ```
+
+  After:
+
+  ```rust
+  let style = Style::default()
+    .with(StyleDeclaration::font_size(Px(48.0).into()))
+    .with_margin(Sides([Px(4.0); 4]));
+  ```
+
+### Patch Changes
+
+- 5ad65bf: Fix panic when nested inline nodes presented
+- 1c9b8ac: Support background-size: auto
+
 ## 0.70.4
 
 ### Patch Changes

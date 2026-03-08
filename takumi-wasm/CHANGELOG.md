@@ -1,5 +1,13 @@
 # @takumi-rs/wasm
 
+## 0.71.0
+
+### Minor Changes
+
+- 0930cdb: **BREAKING CHANGE: `renderAnimation` now take "scenes" with keyframe animations instead of frames**
+
+  Original frame-by-frame encoding has been renamed to `encodeFrames`
+
 ## 0.70.4
 
 ## 0.70.3
