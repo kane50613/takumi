@@ -1,5 +1,11 @@
 # @takumi-rs/core
 
+## 0.71.1
+
+### Patch Changes
+
+- a22b234: Optimize for speed instead of binary size
+
 ## 0.71.0
 
 ### Minor Changes
