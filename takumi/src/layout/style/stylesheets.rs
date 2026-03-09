@@ -374,15 +374,15 @@ macro_rules! define_style {
 
       type LonghandParseFn =
         for<'i> fn(&mut cssparser::Parser<'i, '_>)
-          -> Result<ParsedDeclarations, cssparser::ParseError<'i, Cow<'i, str>>>;
+          -> ParseResult<'i, ParsedDeclarations>;
       type ShorthandParseFn =
         for<'i> fn(&mut cssparser::Parser<'i, '_>)
-          -> Result<ParsedDeclarations, cssparser::ParseError<'i, Cow<'i, str>>>;
+          -> ParseResult<'i, ParsedDeclarations>;
 
       $(
         fn [<parse_ $longhand _declarations>]<'i>(
           input: &mut cssparser::Parser<'i, '_>,
-        ) -> Result<ParsedDeclarations, cssparser::ParseError<'i, Cow<'i, str>>> {
+        ) -> ParseResult<'i, ParsedDeclarations> {
           Ok(ParsedDeclarations::Single(parse_longhand_declaration::<$longhand_ty>(
             input,
             LonghandId::[<$longhand:camel>],
@@ -413,7 +413,7 @@ macro_rules! define_style {
       $(
         fn [<parse_ $shorthand _declarations>]<'i>(
           input: &mut cssparser::Parser<'i, '_>,
-        ) -> Result<ParsedDeclarations, cssparser::ParseError<'i, Cow<'i, str>>> {
+        ) -> ParseResult<'i, ParsedDeclarations> {
           Ok(ParsedDeclarations::Many(expand_shorthand(
             <$shorthand_ty as FromCss>::from_css(input)?,
             |$value, $target_var| {
@@ -489,15 +489,15 @@ macro_rules! define_style {
           Self::from_normalized_name(&normalize_camel_property_name(name))
         }
 
-        fn parse_declarations<'i>(
-          self,
-          name: &str,
-          input: &mut cssparser::Parser<'i, '_>,
-        ) -> Result<ParsedDeclarations, cssparser::ParseError<'i, Cow<'i, str>>> {
-          match self {
-            Self::Ignored => {
-              while input.next_including_whitespace_and_comments().is_ok() {}
-              Ok(ParsedDeclarations::None)
+      fn parse_declarations<'i>(
+        self,
+        name: &str,
+        input: &mut cssparser::Parser<'i, '_>,
+      ) -> ParseResult<'i, ParsedDeclarations> {
+        match self {
+          Self::Ignored => {
+            while input.next_including_whitespace_and_comments().is_ok() {}
+            Ok(ParsedDeclarations::None)
             }
             Self::Custom => parse_custom_property_declaration(name, input),
             Self::Shorthand(property) => SHORTHAND_PARSE_FNS[property.index()](input),
@@ -512,12 +512,10 @@ macro_rules! define_style {
         where
           E: serde::de::Error,
         {
-          if matches!(self, Self::Custom) {
-            return Ok(ParsedDeclarations::Single(StyleDeclaration::CustomProperty(
-              String::new(),
-              raw_value.to_string(),
-            )));
-          }
+          debug_assert!(
+            !matches!(self, Self::Custom),
+            "custom properties should be handled before parse_raw_declarations",
+          );
 
           let raw_string = match &raw_value {
             RawCssInput::Str(value) => Some(value.as_ref()),
@@ -564,7 +562,7 @@ macro_rules! define_style {
       fn parse_style_declaration<'i>(
         name: &str,
         input: &mut cssparser::Parser<'i, '_>,
-      ) -> Result<StyleDeclarationBlock, cssparser::ParseError<'i, Cow<'i, str>>> {
+      ) -> ParseResult<'i, StyleDeclarationBlock> {
         let property = PropertyId::from_kebab_case(name);
         let start = input.position();
         match property.parse_declarations(name, input) {
@@ -1747,10 +1745,7 @@ impl StyleDeclarationBlock {
     self.declarations.iter()
   }
 
-  pub(crate) fn parse<'i>(
-    name: &str,
-    input: &mut Parser<'i, '_>,
-  ) -> Result<Self, cssparser::ParseError<'i, Cow<'i, str>>> {
+  pub(crate) fn parse<'i>(name: &str, input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     parse_style_declaration(name, input)
   }
 }
