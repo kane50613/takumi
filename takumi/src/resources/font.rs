@@ -68,7 +68,7 @@ pub enum FontFormat {
   Ttf,
   /// OpenType Font format - extended font format with advanced typography
   Otf,
-  /// TrueType Collection - multiple fonts in one file; the first font is extracted
+  /// TrueType Collection - multiple fonts in one file
   Ttc,
 }
 
@@ -84,8 +84,7 @@ pub fn load_font(
   };
 
   match format {
-    FontFormat::Ttf | FontFormat::Otf => Ok(source.into_owned()),
-    FontFormat::Ttc => extract_ttf_from_ttc(&source, 0),
+    FontFormat::Ttf | FontFormat::Otf | FontFormat::Ttc => Ok(source.into_owned()),
     #[cfg(feature = "woff2")]
     FontFormat::Woff2 => {
       let ttf = wuff::decompress_woff2(&source).map_err(FontError::Woff)?;
@@ -114,150 +113,6 @@ fn guess_font_format(source: &[u8]) -> Result<FontFormat, FontError> {
     b"ttcf" => Ok(FontFormat::Ttc),
     _ => Err(FontError::UnsupportedFormat),
   }
-}
-
-fn read_u32_be(source: &[u8], offset: usize) -> Option<u32> {
-  source
-    .get(offset..offset + 4)
-    .map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
-}
-
-fn read_u16_be(source: &[u8], offset: usize) -> Option<u16> {
-  source
-    .get(offset..offset + 2)
-    .map(|b| u16::from_be_bytes([b[0], b[1]]))
-}
-
-/// Extracts a single TrueType font from a TrueType Collection (.ttc) buffer.
-///
-/// TTC files store font tables at absolute offsets from the start of the file.
-/// This function rebuilds the selected font as a standalone TTF by copying each
-/// table and rewriting the offsets relative to the new buffer.
-fn extract_ttf_from_ttc(source: &[u8], font_index: usize) -> Result<Vec<u8>, FontError> {
-  let num_fonts = read_u32_be(source, 8).ok_or(FontError::UnsupportedFormat)? as usize;
-  if font_index >= num_fonts {
-    return Err(FontError::InvalidFontIndex);
-  }
-
-  let font_offset =
-    read_u32_be(source, 12 + font_index * 4).ok_or(FontError::UnsupportedFormat)? as usize;
-
-  let sf_version = read_u32_be(source, font_offset).ok_or(FontError::UnsupportedFormat)?;
-  let num_tables =
-    read_u16_be(source, font_offset + 4).ok_or(FontError::UnsupportedFormat)? as usize;
-  let search_range = read_u16_be(source, font_offset + 6).ok_or(FontError::UnsupportedFormat)?;
-  let entry_selector = read_u16_be(source, font_offset + 8).ok_or(FontError::UnsupportedFormat)?;
-  let range_shift = read_u16_be(source, font_offset + 10).ok_or(FontError::UnsupportedFormat)?;
-
-  struct TableRecord {
-    tag: [u8; 4],
-    check_sum: u32,
-    offset: usize,
-    length: usize,
-  }
-
-  let mut records = Vec::with_capacity(num_tables);
-  for i in 0..num_tables {
-    let ro = font_offset + 12 + i * 16;
-    let tag = source.get(ro..ro + 4).ok_or(FontError::UnsupportedFormat)?;
-    let check_sum = read_u32_be(source, ro + 4).ok_or(FontError::UnsupportedFormat)?;
-    let offset = read_u32_be(source, ro + 8).ok_or(FontError::UnsupportedFormat)? as usize;
-    let length = read_u32_be(source, ro + 12).ok_or(FontError::UnsupportedFormat)? as usize;
-
-    // Validate that the table data is within bounds before accepting the record
-    offset
-      .checked_add(length)
-      .filter(|&end| end <= source.len())
-      .ok_or(FontError::UnsupportedFormat)?;
-
-    records.push(TableRecord {
-      tag: [tag[0], tag[1], tag[2], tag[3]],
-      check_sum,
-      offset,
-      length,
-    });
-  }
-
-  // Assign new 4-byte-aligned offsets relative to the start of the output TTF,
-  // using checked arithmetic to guard against malformed inputs.
-  let header_size = 12_usize
-    .checked_add(
-      num_tables
-        .checked_mul(16)
-        .ok_or(FontError::UnsupportedFormat)?,
-    )
-    .ok_or(FontError::UnsupportedFormat)?;
-  let mut pos = header_size;
-  let new_offsets: Vec<usize> = records
-    .iter()
-    .map(|r| -> Result<usize, FontError> {
-      let new_offset = pos.checked_add(3).ok_or(FontError::UnsupportedFormat)? & !3;
-      let padded = r
-        .length
-        .checked_add(3)
-        .ok_or(FontError::UnsupportedFormat)?
-        & !3;
-      pos = new_offset
-        .checked_add(padded)
-        .ok_or(FontError::UnsupportedFormat)?;
-      Ok(new_offset)
-    })
-    .collect::<Result<_, _>>()?;
-
-  // Validate that new offsets fit in u32 (required by the sfnt table record format)
-  for &off in &new_offsets {
-    u32::try_from(off).map_err(|_| FontError::UnsupportedFormat)?;
-  }
-
-  let mut out = vec![0u8; pos];
-
-  // Write sfnt header
-  out[0..4].copy_from_slice(&sf_version.to_be_bytes());
-  out[4..6].copy_from_slice(&(num_tables as u16).to_be_bytes());
-  out[6..8].copy_from_slice(&search_range.to_be_bytes());
-  out[8..10].copy_from_slice(&entry_selector.to_be_bytes());
-  out[10..12].copy_from_slice(&range_shift.to_be_bytes());
-
-  // Write table records and copy table data
-  let mut head_checksum_offset: Option<usize> = None;
-  for (i, (record, &new_offset)) in records.iter().zip(new_offsets.iter()).enumerate() {
-    let ro = 12 + i * 16;
-    out[ro..ro + 4].copy_from_slice(&record.tag);
-    out[ro + 4..ro + 8].copy_from_slice(&record.check_sum.to_be_bytes());
-    out[ro + 8..ro + 12].copy_from_slice(&(new_offset as u32).to_be_bytes());
-    out[ro + 12..ro + 16].copy_from_slice(&(record.length as u32).to_be_bytes());
-
-    out[new_offset..new_offset + record.length]
-      .copy_from_slice(&source[record.offset..record.offset + record.length]);
-
-    if &record.tag == b"head" {
-      head_checksum_offset = Some(new_offset + 8);
-    }
-  }
-
-  // Recompute the head table's checkSumAdjustment for the rebuilt TTF.
-  // Per the OpenType spec: zero the field, sum all u32 words in the file,
-  // then set checkSumAdjustment = 0xB1B0AFBA - sum.
-  if let Some(adj_offset) = head_checksum_offset {
-    if adj_offset + 4 <= out.len() {
-      out[adj_offset..adj_offset + 4].copy_from_slice(&0u32.to_be_bytes());
-      let checksum: u32 = out.chunks(4).fold(0u32, |acc, chunk| {
-        let word = match chunk {
-          [a, b, c, d] => u32::from_be_bytes([*a, *b, *c, *d]),
-          _ => {
-            let mut buf = [0u8; 4];
-            buf[..chunk.len()].copy_from_slice(chunk);
-            u32::from_be_bytes(buf)
-          }
-        };
-        acc.wrapping_add(word)
-      });
-      let adjustment = 0xB1B0_AFBA_u32.wrapping_sub(checksum);
-      out[adj_offset..adj_offset + 4].copy_from_slice(&adjustment.to_be_bytes());
-    }
-  }
-
-  Ok(out)
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
