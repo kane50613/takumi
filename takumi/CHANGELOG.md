@@ -1,5 +1,13 @@
 # takumi
 
+## 0.71.7
+
+### Patch Changes
+
+- 384bc9d: Support Tailwind box/text shadow color
+- 85970f3: Support CSS variables and `var()` function
+- 9a5a542: Support `@media` CSS at-rule
+
 ## 0.71.6
 
 ### Patch Changes
