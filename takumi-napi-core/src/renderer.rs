@@ -8,9 +8,12 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use takumi::{
   GlobalContext,
-  layout::node::NodeKind,
+  layout::{node::NodeKind, style::Style},
   parley::{FontWeight, GenericFamily, fontique::FontInfoOverride},
-  rendering::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat},
+  rendering::{
+    DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat,
+    RenderKeyframe as CoreRenderKeyframe, RenderKeyframes as CoreRenderKeyframes,
+  },
   resources::image::load_image_source_from_bytes,
 };
 use xxhash_rust::xxh3::Xxh3DefaultBuilder;
@@ -94,6 +97,52 @@ pub(crate) struct RendererState {
   pub(crate) persistent_image_cache: HashSet<ImageCacheKey, Xxh3DefaultBuilder>,
 }
 
+#[napi(object)]
+pub struct KeyframeDefinition<'env> {
+  /// Keyframe offsets as values between 0.0 and 1.0.
+  pub offsets: Vec<f64>,
+  /// Style values applied at this step.
+  #[napi(ts_type = "Record<string, unknown>")]
+  pub style: Object<'env>,
+}
+
+#[napi(object)]
+pub struct KeyframesDefinition<'env> {
+  /// Animation name matched by `animation-name`.
+  pub name: String,
+  /// Individual keyframe steps for this animation.
+  pub frames: Vec<KeyframeDefinition<'env>>,
+}
+
+pub(crate) fn deserialize_keyframes(
+  keyframes: Option<Vec<KeyframesDefinition>>,
+) -> Result<Vec<CoreRenderKeyframes>> {
+  keyframes
+    .unwrap_or_default()
+    .into_iter()
+    .map(|animation| {
+      Ok(CoreRenderKeyframes {
+        name: animation.name,
+        frames: animation
+          .frames
+          .into_iter()
+          .map(|frame| {
+            let style: Style = deserialize_with_tracing(frame.style)?;
+            Ok(CoreRenderKeyframe {
+              offsets: frame
+                .offsets
+                .into_iter()
+                .map(|offset| offset as f32)
+                .collect(),
+              style,
+            })
+          })
+          .collect::<Result<_>>()?,
+      })
+    })
+    .collect()
+}
+
 /// Options for rendering an image.
 #[napi(object)]
 #[derive(Default)]
@@ -112,6 +161,8 @@ pub struct RenderOptions<'env> {
   pub fetched_resources: Option<Vec<ImageSource<'env>>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
+  /// Structured keyframes to register alongside stylesheets.
+  pub keyframes: Option<Vec<KeyframesDefinition<'env>>>,
   /// The device pixel ratio.
   /// @default 1.0
   pub device_pixel_ratio: Option<f64>,

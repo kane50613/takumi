@@ -1,17 +1,17 @@
-use std::borrow::Cow;
 use std::sync::RwLock;
+use std::{borrow::Cow, mem::take};
 use std::{collections::HashMap, sync::Arc};
 
 use napi::bindgen_prelude::*;
 use takumi::{
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, DEFAULT_FONT_SIZE, Viewport, node::NodeKind},
-  rendering::{DitheringAlgorithm, RenderOptionsBuilder, render, write_image},
+  rendering::{DitheringAlgorithm, RenderKeyframes, RenderOptionsBuilder, render, write_image},
   resources::image::load_image_source_from_bytes,
 };
 
 use crate::{
   ExternalMemoryAccountable, buffer_from_object, map_error,
-  renderer::{OutputFormat, RenderOptions, RendererState},
+  renderer::{OutputFormat, RenderOptions, RendererState, deserialize_keyframes},
 };
 
 pub struct RenderTask {
@@ -24,6 +24,7 @@ pub struct RenderTask {
   pub dithering: DitheringAlgorithm,
   pub time_ms: u64,
   pub stylesheets: Option<Vec<String>>,
+  pub keyframes: Vec<RenderKeyframes>,
   pub fetched_resources: HashMap<Arc<str>, Buffer>,
 }
 
@@ -52,6 +53,7 @@ impl RenderTask {
       time_ms: options.time_ms.unwrap_or_default().max(0) as u64,
       draw_debug_border: options.draw_debug_border.unwrap_or_default(),
       stylesheets: options.stylesheets,
+      keyframes: deserialize_keyframes(options.keyframes)?,
       fetched_resources: options
         .fetched_resources
         .unwrap_or_default()
@@ -92,6 +94,7 @@ impl Task for RenderTask {
         .viewport(self.viewport)
         .fetched_resources(initialized_images)
         .stylesheets(self.stylesheets.take().unwrap_or_default())
+        .keyframes(take(&mut self.keyframes))
         .time_ms(self.time_ms)
         .dithering(self.dithering)
         .node(node)

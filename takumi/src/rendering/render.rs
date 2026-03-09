@@ -3,11 +3,12 @@ use std::{collections::HashMap, mem::replace, sync::Arc};
 use derive_builder::Builder;
 use image::RgbaImage;
 use parley::PositionedLayoutItem;
+use serde::Deserialize;
 use serde::Serialize;
 use taffy::{AvailableSpace, Layout, NodeId, TaffyError, geometry::Size};
 
 #[cfg(feature = "css_stylesheet_parsing")]
-use crate::layout::style::selector::StyleSheet;
+use crate::layout::style::selector::{KeyframeRule, KeyframesRule, StyleSheet};
 use crate::{
   Error, GlobalContext, Result,
   layout::{
@@ -18,8 +19,8 @@ use crate::{
     },
     node::Node,
     style::{
-      Affine, ComputedStyle, Filter, ImageScalingAlgorithm, SpacePair, apply_backdrop_filter,
-      apply_filters,
+      Affine, ComputedStyle, Filter, ImageScalingAlgorithm, SpacePair, Style,
+      apply_backdrop_filter, apply_filters,
     },
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
@@ -30,6 +31,26 @@ use crate::{
   },
   resources::image::ImageSource,
 };
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+/// Structured keyframes that can be passed directly in render options.
+pub struct RenderKeyframes {
+  /// Animation name matched by `animation-name`.
+  pub name: String,
+  /// Individual keyframe steps for this animation.
+  pub frames: Vec<RenderKeyframe>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+/// A single structured keyframe step.
+pub struct RenderKeyframe {
+  /// Keyframe offsets as values between 0.0 and 1.0.
+  pub offsets: Vec<f32>,
+  /// Style values applied at this step.
+  pub style: Style,
+}
 
 #[derive(Clone, Builder)]
 #[builder(pattern = "owned")]
@@ -50,6 +71,9 @@ pub struct RenderOptions<'g, N: Node<N>> {
   /// CSS stylesheets to apply before layout/rendering.
   #[builder(default)]
   pub(crate) stylesheets: Vec<String>,
+  /// Structured keyframes to register alongside stylesheets.
+  #[builder(default)]
+  pub(crate) keyframes: Vec<RenderKeyframes>,
   /// Global animation time in milliseconds.
   #[builder(default)]
   pub(crate) time_ms: u64,
@@ -130,7 +154,7 @@ struct RenderExit {
 /// Measures the layout of a node.
 pub fn measure_layout<'g, N: Node<N>>(options: RenderOptions<'g, N>) -> Result<MeasuredNode> {
   #[cfg(feature = "css_stylesheet_parsing")]
-  let parsed_stylesheets = StyleSheet::parse_list(options.stylesheets.iter().map(String::as_str));
+  let parsed_stylesheets = build_stylesheets(&options.stylesheets, &options.keyframes);
   #[cfg(feature = "css_stylesheet_parsing")]
   let mut render_context = RenderContext::new(
     options.global,
@@ -384,7 +408,7 @@ pub fn render<'g, N: Node<N>>(options: RenderOptions<'g, N>) -> Result<RgbaImage
   let dithering = options.dithering;
   let viewport = options.viewport;
   #[cfg(feature = "css_stylesheet_parsing")]
-  let parsed_stylesheets = StyleSheet::parse_list(options.stylesheets.iter().map(String::as_str));
+  let parsed_stylesheets = build_stylesheets(&options.stylesheets, &options.keyframes);
   #[cfg(feature = "css_stylesheet_parsing")]
   let mut render_context = RenderContext::new(
     options.global,
@@ -803,18 +827,49 @@ pub(crate) fn render_node<'g, Nodes: Node<Nodes>>(
   Ok(())
 }
 
+#[cfg(feature = "css_stylesheet_parsing")]
+fn build_stylesheets(stylesheets: &[String], keyframes: &[RenderKeyframes]) -> Vec<StyleSheet> {
+  let mut parsed: Vec<StyleSheet> =
+    StyleSheet::parse_list(stylesheets.iter().map(String::as_str)).collect();
+  if !keyframes.is_empty() {
+    parsed.push(StyleSheet {
+      rules: Vec::new(),
+      keyframes: keyframes
+        .iter()
+        .map(|animation| KeyframesRule {
+          name: animation.name.clone(),
+          keyframes: animation
+            .frames
+            .iter()
+            .map(|frame| KeyframeRule {
+              offsets: frame.offsets.clone(),
+              declarations: frame.style.declarations.clone(),
+            })
+            .collect(),
+        })
+        .collect(),
+    });
+  }
+  parsed
+}
+
 #[cfg(test)]
 mod tests {
   use super::{
-    RenderOptionsBuilder, SequentialScene, SequentialSceneBuilder, render_sequence_animation,
-    resolve_scene_at_time,
+    RenderKeyframe, RenderKeyframes, RenderOptionsBuilder, SequentialScene, SequentialSceneBuilder,
+    render_sequence_animation, resolve_scene_at_time,
   };
   use crate::{
     GlobalContext,
     layout::{
       Viewport,
       node::{ContainerNode, NodeKind},
+      style::{
+        AnimationDurations, AnimationFillMode, AnimationFillModes, AnimationNames, AnimationTime,
+        AnimationTimingFunction, AnimationTimingFunctions, Length::Px, Style, StyleDeclaration,
+      },
     },
+    rendering::measure_layout,
   };
 
   fn make_scene<'g>(global: &'g GlobalContext, duration_ms: u32) -> SequentialScene<'g, NodeKind> {
@@ -909,5 +964,60 @@ mod tests {
         .sum::<u64>(),
       150
     );
+  }
+
+  #[test]
+  fn measure_layout_supports_structured_keyframes() {
+    let global = GlobalContext::default();
+    let node: NodeKind = ContainerNode {
+      class_name: None,
+      id: None,
+      tag_name: Some("div".into()),
+      preset: None,
+      style: Some(
+        Style::default()
+          .with(StyleDeclaration::width(Px(100.0)))
+          .with(StyleDeclaration::animation_name(AnimationNames(
+            vec!["grow".to_string()].into(),
+          )))
+          .with(StyleDeclaration::animation_duration(AnimationDurations(
+            vec![AnimationTime::from_milliseconds(1000.0)].into(),
+          )))
+          .with(StyleDeclaration::animation_timing_function(
+            AnimationTimingFunctions(vec![AnimationTimingFunction::Linear].into()),
+          ))
+          .with(StyleDeclaration::animation_fill_mode(AnimationFillModes(
+            vec![AnimationFillMode::Both].into(),
+          ))),
+      ),
+      children: None,
+      tw: None,
+    }
+    .into();
+
+    let options = RenderOptionsBuilder::default()
+      .global(&global)
+      .viewport(Viewport::new(Some(200), Some(100)))
+      .node(node)
+      .keyframes(vec![RenderKeyframes {
+        name: "grow".to_string(),
+        frames: vec![
+          RenderKeyframe {
+            offsets: vec![0.0],
+            style: Style::default().with(StyleDeclaration::width(Px(100.0))),
+          },
+          RenderKeyframe {
+            offsets: vec![1.0],
+            style: Style::default().with(StyleDeclaration::width(Px(200.0))),
+          },
+        ],
+      }])
+      .time_ms(500)
+      .build()
+      .unwrap();
+
+    let layout = measure_layout(options).unwrap();
+
+    assert_eq!(layout.width, 150.0);
   }
 }

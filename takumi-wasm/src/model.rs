@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde_bytes::ByteBuf;
 use std::sync::Arc;
 use takumi::layout::node::NodeKind;
-use takumi::rendering::DitheringAlgorithm;
+use takumi::rendering::{DitheringAlgorithm, RenderKeyframes};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(typescript_custom_section)]
@@ -39,6 +39,10 @@ export type RenderOptions = {
    * CSS stylesheets to apply before rendering.
    */
   stylesheets?: string[],
+  /**
+   * Structured keyframes to register alongside stylesheets.
+   */
+  keyframes?: RenderKeyframes[],
   /**
    * Whether to draw debug borders.
    */
@@ -122,6 +126,16 @@ export type FontDetails = {
 export type ImageSource = {
   src: string,
   data: ByteBuf,
+};
+
+export type RenderKeyframe = {
+  offsets: number[],
+  style: Record<string, unknown>,
+};
+
+export type RenderKeyframes = {
+  name: string,
+  frames: RenderKeyframe[],
 };
 
 export type Font = FontDetails | ByteBuf;
@@ -228,6 +242,8 @@ pub struct RenderOptions {
   pub fetched_resources: Option<Vec<ImageSource>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
+  /// Structured keyframes to register alongside stylesheets.
+  pub keyframes: Option<Vec<RenderKeyframes>>,
   /// Whether to draw debug borders around layout elements.
   pub draw_debug_border: Option<bool>,
   /// The device pixel ratio for scaling.

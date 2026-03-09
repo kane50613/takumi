@@ -363,4 +363,50 @@ describe("renderAsDataUrl", () => {
       );
     });
   });
+
+  test("with structured keyframes in render options", () => {
+    const animated = renderer.measure(
+      {
+        type: "container",
+        tagName: "div",
+      },
+      {
+        width: 200,
+        height: 100,
+        timeMs: 500,
+        stylesheets: [
+          `
+            div {
+              width: 100px;
+              animation-name: grow;
+              animation-duration: 1000ms;
+              animation-timing-function: linear;
+              animation-fill-mode: both;
+            }
+          `,
+        ],
+        keyframes: [
+          {
+            name: "grow",
+            frames: [
+              {
+                offsets: [0],
+                style: {
+                  width: "100px",
+                },
+              },
+              {
+                offsets: [1],
+                style: {
+                  width: "200px",
+                },
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    expect(animated.width).toBe(150);
+  });
 });
