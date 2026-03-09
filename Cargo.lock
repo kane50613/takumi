@@ -2548,7 +2548,7 @@ dependencies = [
 
 [[package]]
 name = "takumi"
-version = "0.71.3"
+version = "0.71.4"
 dependencies = [
  "bitflags",
  "bytemuck",

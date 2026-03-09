@@ -1,5 +1,11 @@
 # takumi
 
+## 0.71.4
+
+### Patch Changes
+
+- 1d284ac: Improve gradient hot paths
+
 ## 0.71.3
 
 ### Patch Changes
