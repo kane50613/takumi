@@ -25,7 +25,7 @@ use crate::{
   },
   rendering::{
     AnimationFrame, BorderProperties, Canvas, CanvasConstrain, CanvasConstrainResult,
-    DitheringAlgorithm, RenderContext, RenderTime, Sizing, draw_debug_border,
+    DitheringAlgorithm, RenderContext, RenderTime, Sizing, apply_dithering, draw_debug_border,
     inline_drawing::get_parent_x_height, overlay_image,
   },
   resources::image::ImageSource,
@@ -381,7 +381,7 @@ fn create_measured_node(
 
 /// Renders a node to an image.
 pub fn render<'g, N: Node<N>>(options: RenderOptions<'g, N>) -> Result<RgbaImage> {
-  let _ = options.dithering;
+  let dithering = options.dithering;
   let viewport = options.viewport;
   #[cfg(feature = "css_stylesheet_parsing")]
   let parsed_stylesheets = StyleSheet::parse_list(options.stylesheets.iter().map(String::as_str));
@@ -442,7 +442,10 @@ pub fn render<'g, N: Node<N>>(options: RenderOptions<'g, N>) -> Result<RgbaImage
     },
   )?;
 
-  Ok(canvas.into_inner())
+  let mut image = canvas.into_inner();
+  apply_dithering(&mut image, dithering);
+
+  Ok(image)
 }
 
 /// Renders a node at a specific time on the global animation timeline.

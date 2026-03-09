@@ -5,7 +5,7 @@ use std::{collections::HashMap, sync::Arc};
 use napi::bindgen_prelude::*;
 use takumi::{
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, DEFAULT_FONT_SIZE, Viewport, node::NodeKind},
-  rendering::{DitheringAlgorithm, RenderOptionsBuilder, apply_dithering, render, write_image},
+  rendering::{DitheringAlgorithm, RenderOptionsBuilder, render, write_image},
   resources::image::load_image_source_from_bytes,
 };
 
@@ -87,12 +87,13 @@ impl Task for RenderTask {
       .read()
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
-    let mut image = render(
+    let image = render(
       RenderOptionsBuilder::default()
         .viewport(self.viewport)
         .fetched_resources(initialized_images)
         .stylesheets(self.stylesheets.take().unwrap_or_default())
         .time_ms(self.time_ms)
+        .dithering(self.dithering)
         .node(node)
         .global(&state.global)
         .draw_debug_border(self.draw_debug_border)
@@ -100,10 +101,6 @@ impl Task for RenderTask {
         .map_err(map_error)?,
     )
     .map_err(map_error)?;
-
-    if self.dithering != DitheringAlgorithm::None {
-      apply_dithering(&mut image, self.dithering);
-    }
 
     if self.format == OutputFormat::raw {
       return Ok(image.into_raw());

@@ -13,10 +13,9 @@ use takumi::{
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, DEFAULT_FONT_SIZE, Viewport, node::NodeKind},
   parley::{FontWeight, fontique::FontInfoOverride},
   rendering::{
-    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame,
-    DitheringAlgorithm, ImageOutputFormat, RenderOptionsBuilder, SequentialSceneBuilder,
-    apply_dithering, encode_animated_gif, encode_animated_png, encode_animated_webp,
-    measure_layout, render, render_sequence_animation, write_image,
+    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
+    RenderOptionsBuilder, SequentialSceneBuilder, encode_animated_gif, encode_animated_png,
+    encode_animated_webp, measure_layout, render, render_sequence_animation, write_image,
   },
   resources::image::{ImageSource as LoadedImageSource, load_image_source_from_bytes},
 };
@@ -214,6 +213,7 @@ impl Renderer {
 
   fn render_internal(&self, node: NodeKind, options: RenderOptions) -> Result<Vec<u8>, JsValue> {
     let fetched_resources = self.fetch_resources_map(options.fetched_resources.as_deref())?;
+    let dithering = options.dithering.unwrap_or_default();
 
     let render_options = RenderOptionsBuilder::default()
       .viewport(Viewport {
@@ -228,20 +228,15 @@ impl Renderer {
       .fetched_resources(fetched_resources)
       .stylesheets(options.stylesheets.unwrap_or_default())
       .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
+      .dithering(dithering)
       .node(node)
       .global(&self.context)
       .build()
       .map_err(|e| JsValue::from_str(&format!("Failed to build render options: {e}")))?;
 
-    let mut image = render(render_options).map_err(map_error)?;
+    let image = render(render_options).map_err(map_error)?;
 
     let format = options.format.unwrap_or(OutputFormat::Png);
-
-    let dithering = options.dithering.unwrap_or_default();
-
-    if dithering != DitheringAlgorithm::None {
-      apply_dithering(&mut image, dithering);
-    }
 
     if format == OutputFormat::Raw {
       return Ok(image.into_raw());

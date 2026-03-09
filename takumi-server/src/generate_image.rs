@@ -8,10 +8,7 @@ use serde_json::from_str;
 use std::borrow::Cow;
 use takumi::{
   layout::{Viewport, node::NodeKind},
-  rendering::{
-    DitheringAlgorithm, ImageOutputFormat, RenderOptionsBuilder, apply_dithering, render,
-    write_image,
-  },
+  rendering::{DitheringAlgorithm, ImageOutputFormat, RenderOptionsBuilder, render, write_image},
 };
 use tokio::task::spawn_blocking;
 
@@ -43,25 +40,22 @@ pub async fn generate_image_handler(
 
   let buffer = spawn_blocking(move || -> AxumResult<Vec<u8>> {
     let viewport = Viewport::new(query.width, query.height);
+    let dithering = query.dithering.unwrap_or_default();
     let options = RenderOptionsBuilder::default()
       .viewport(viewport)
       .node(root_node)
       .global(&state.context)
       .draw_debug_border(query.draw_debug_border.unwrap_or(false))
+      .dithering(dithering)
       .build()
       .unwrap();
 
-    let mut image = render(options).map_err(|_| {
+    let image = render(options).map_err(|_| {
       (
         StatusCode::INTERNAL_SERVER_ERROR,
         "Failed to render image.".to_string(),
       )
     })?;
-
-    let dithering = query.dithering.unwrap_or_default();
-    if dithering != DitheringAlgorithm::None {
-      apply_dithering(&mut image, dithering);
-    }
 
     let mut buffer = Vec::new();
 

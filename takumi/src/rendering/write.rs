@@ -269,6 +269,7 @@ mod tests {
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
     encode_animated_gif, encode_animated_png, encode_animated_webp, write_image,
   };
+  use crate::rendering::{DitheringAlgorithm, apply_dithering};
 
   #[test]
   fn encode_animated_gif_writes_valid_animation_and_delays() {
@@ -434,6 +435,9 @@ mod tests {
       pixel.copy_from_slice(&[value, value, value, 255]);
     }
 
+    let mut dithered_image = image.clone();
+    apply_dithering(&mut dithered_image, DitheringAlgorithm::OrderedBayer);
+
     let mut encoded_none = Vec::new();
     let mut encoded_dithered = Vec::new();
 
@@ -446,14 +450,14 @@ mod tests {
     assert!(encode_none.is_ok(), "failed to encode non-dithered image");
 
     let encode_dithered = write_image(
-      Cow::Owned(image),
+      Cow::Owned(dithered_image),
       &mut encoded_dithered,
       ImageOutputFormat::Png,
       None,
     );
     assert!(encode_dithered.is_ok(), "failed to encode image");
 
-    assert_eq!(encoded_none, encoded_dithered);
+    assert_ne!(encoded_none, encoded_dithered);
   }
 
   #[test]

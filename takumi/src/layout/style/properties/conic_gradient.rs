@@ -211,8 +211,8 @@ fn parse_conic_stop_position<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, 
     Token::Percentage { unit_value, .. } => {
       Ok(StopPosition(Length::Percentage(*unit_value * 100.0)))
     }
-    Token::Number { value, .. } if value.abs() <= f32::EPSILON => {
-      Ok(StopPosition(Length::Percentage(0.0)))
+    Token::Number { value, .. } if (0.0..=1.0).contains(value) => {
+      Ok(StopPosition(Length::Percentage(*value * 100.0)))
     }
     Token::Dimension { value, unit, .. } => {
       let degrees = match_ignore_ascii_case! { unit,
@@ -257,7 +257,7 @@ fn parse_conic_gradient_stops<'i>(
             hint: Some(second_position),
           });
         }
-        (first_position, None) | (first_position, Some(_)) => {
+        _ => {
           stops.push(GradientStop::ColorHint {
             color,
             hint: first_position,
