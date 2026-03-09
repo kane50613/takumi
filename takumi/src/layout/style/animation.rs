@@ -3,14 +3,34 @@ use parley::{FontFeature, FontVariation};
 #[cfg(feature = "css_stylesheet_parsing")]
 use std::cmp::Ordering;
 
+use super::StyleDeclarationBlock;
+use serde::Deserialize;
+
 #[cfg(feature = "css_stylesheet_parsing")]
 use crate::{
-  layout::style::{
-    selector::{KeyframeRule, KeyframesRule, StyleSheet},
-    *,
-  },
+  layout::style::{selector::StyleSheet, *},
   rendering::{RenderContext, Sizing},
 };
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+/// A single structured keyframe rule.
+pub struct KeyframeRule {
+  /// Keyframe offsets as values between 0.0 and 1.0.
+  pub offsets: Vec<f32>,
+  /// Declarations applied at this step.
+  pub declarations: StyleDeclarationBlock,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+/// Structured keyframes that can be passed directly in render options.
+pub struct KeyframesRule {
+  /// Animation name matched by `animation-name`.
+  pub name: String,
+  /// Individual keyframe rules for this animation.
+  pub keyframes: Vec<KeyframeRule>,
+}
 
 #[cfg(feature = "css_stylesheet_parsing")]
 pub(crate) fn apply_stylesheet_animations(

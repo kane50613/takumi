@@ -9,7 +9,7 @@ use std::{
   fmt::{self, Write},
 };
 
-use crate::layout::style::StyleDeclarationBlock;
+use crate::layout::style::{KeyframeRule, KeyframesRule, StyleDeclarationBlock};
 
 #[derive(Debug, Clone)]
 pub enum CssSelectorParseError<'i> {
@@ -224,18 +224,6 @@ impl<'i> RuleBodyItemParser<'i, StyleDeclarationBlock, CssSelectorParseError<'i>
   fn parse_declarations(&self) -> bool {
     true
   }
-}
-
-#[derive(Debug, Clone)]
-pub struct KeyframeRule {
-  pub offsets: Vec<f32>,
-  pub declarations: StyleDeclarationBlock,
-}
-
-#[derive(Debug, Clone)]
-pub struct KeyframesRule {
-  pub name: String,
-  pub keyframes: Vec<KeyframeRule>,
 }
 
 struct KeyframeDeclarationParser;

@@ -11,6 +11,7 @@ pub mod tw;
 use std::{borrow::Cow, fmt::Formatter};
 
 pub(crate) use animation::apply_stylesheet_animations;
+pub use animation::{KeyframeRule, KeyframesRule};
 pub use properties::*;
 use serde::{
   Deserialize,

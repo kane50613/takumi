@@ -385,25 +385,16 @@ describe("renderAsDataUrl", () => {
             }
           `,
         ],
-        keyframes: [
-          {
-            name: "grow",
-            frames: [
-              {
-                offsets: [0],
-                style: {
-                  width: "100px",
-                },
-              },
-              {
-                offsets: [1],
-                style: {
-                  width: "200px",
-                },
-              },
-            ],
+        keyframes: {
+          grow: {
+            from: {
+              width: "100px",
+            },
+            to: {
+              width: "200px",
+            },
           },
-        ],
+        },
       },
     );
 

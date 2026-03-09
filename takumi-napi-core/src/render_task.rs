@@ -4,8 +4,9 @@ use std::{collections::HashMap, sync::Arc};
 
 use napi::bindgen_prelude::*;
 use takumi::{
+  layout::style::KeyframesRule,
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, DEFAULT_FONT_SIZE, Viewport, node::NodeKind},
-  rendering::{DitheringAlgorithm, RenderKeyframes, RenderOptionsBuilder, render, write_image},
+  rendering::{DitheringAlgorithm, RenderOptionsBuilder, render, write_image},
   resources::image::load_image_source_from_bytes,
 };
 
@@ -24,7 +25,7 @@ pub struct RenderTask {
   pub dithering: DitheringAlgorithm,
   pub time_ms: u64,
   pub stylesheets: Option<Vec<String>>,
-  pub keyframes: Vec<RenderKeyframes>,
+  pub keyframes: Vec<KeyframesRule>,
   pub fetched_resources: HashMap<Arc<str>, Buffer>,
 }
 

@@ -30,6 +30,8 @@ export interface AnyNode {
   [key: string]: any;
 }
 
+export type Keyframes = Record<string, Record<string, Record<string, unknown>>>;
+
 /**
  * @deprecated use `ImageSource` instead.
  */

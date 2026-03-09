@@ -1,19 +1,22 @@
 use std::{
   borrow::Cow,
-  collections::HashSet,
+  collections::{BTreeMap, HashSet},
   sync::{Arc, RwLock},
 };
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
+use serde::{Deserialize, Deserializer, de};
 use takumi::{
   GlobalContext,
-  layout::{node::NodeKind, style::Style},
-  parley::{FontWeight, GenericFamily, fontique::FontInfoOverride},
-  rendering::{
-    DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat,
-    RenderKeyframe as CoreRenderKeyframe, RenderKeyframes as CoreRenderKeyframes,
+  layout::{
+    node::NodeKind,
+    style::{
+      KeyframeRule as CoreKeyframeRule, KeyframesRule as CoreKeyframesRule, StyleDeclarationBlock,
+    },
   },
+  parley::{FontWeight, GenericFamily, fontique::FontInfoOverride},
+  rendering::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat},
   resources::image::load_image_source_from_bytes,
 };
 use xxhash_rust::xxh3::Xxh3DefaultBuilder;
@@ -97,50 +100,83 @@ pub(crate) struct RendererState {
   pub(crate) persistent_image_cache: HashSet<ImageCacheKey, Xxh3DefaultBuilder>,
 }
 
-#[napi(object)]
-pub struct KeyframeDefinition<'env> {
-  /// Keyframe offsets as values between 0.0 and 1.0.
-  pub offsets: Vec<f64>,
-  /// Style values applied at this step.
-  #[napi(ts_type = "Record<string, unknown>")]
-  pub style: Object<'env>,
+#[derive(Debug, Default)]
+struct KeyframesInput(Vec<CoreKeyframesRule>);
+
+impl From<KeyframesInput> for Vec<CoreKeyframesRule> {
+  fn from(input: KeyframesInput) -> Self {
+    input.0
+  }
 }
 
-#[napi(object)]
-pub struct KeyframesDefinition<'env> {
-  /// Animation name matched by `animation-name`.
-  pub name: String,
-  /// Individual keyframe steps for this animation.
-  pub frames: Vec<KeyframeDefinition<'env>>,
-}
+impl<'de> Deserialize<'de> for KeyframesInput {
+  fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+  where
+    D: Deserializer<'de>,
+  {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum RawKeyframesInput {
+      Rules(Vec<CoreKeyframesRule>),
+      Shorthand(BTreeMap<String, BTreeMap<String, StyleDeclarationBlock>>),
+    }
 
-pub(crate) fn deserialize_keyframes(
-  keyframes: Option<Vec<KeyframesDefinition>>,
-) -> Result<Vec<CoreRenderKeyframes>> {
-  keyframes
-    .unwrap_or_default()
-    .into_iter()
-    .map(|animation| {
-      Ok(CoreRenderKeyframes {
-        name: animation.name,
-        frames: animation
-          .frames
-          .into_iter()
-          .map(|frame| {
-            let style: Style = deserialize_with_tracing(frame.style)?;
-            Ok(CoreRenderKeyframe {
-              offsets: frame
-                .offsets
-                .into_iter()
-                .map(|offset| offset as f32)
-                .collect(),
-              style,
+    match RawKeyframesInput::deserialize(deserializer)? {
+      RawKeyframesInput::Rules(rules) => Ok(Self(rules)),
+      RawKeyframesInput::Shorthand(shorthand) => shorthand
+        .into_iter()
+        .map(|(name, stages)| {
+          let keyframes = stages
+            .into_iter()
+            .map(|(selector, declarations)| {
+              Ok(CoreKeyframeRule {
+                offsets: parse_keyframe_offsets(&selector).map_err(de::Error::custom)?,
+                declarations,
+              })
             })
-          })
-          .collect::<Result<_>>()?,
-      })
+            .collect::<std::result::Result<Vec<_>, D::Error>>()?;
+
+          Ok(CoreKeyframesRule { name, keyframes })
+        })
+        .collect::<std::result::Result<Vec<_>, D::Error>>()
+        .map(Self),
+    }
+  }
+}
+
+fn parse_keyframe_offsets(selector: &str) -> std::result::Result<Vec<f32>, String> {
+  selector
+    .split(',')
+    .map(str::trim)
+    .filter(|part| !part.is_empty())
+    .map(|part| match part {
+      "from" => Ok(0.0),
+      "to" => Ok(1.0),
+      _ => {
+        let Some(percent) = part.strip_suffix('%') else {
+          return Err(format!(
+            "unsupported keyframe selector `{part}`; use `from`, `to`, or percentage values like `50%`"
+          ));
+        };
+        let value = percent
+          .parse::<f32>()
+          .map_err(|_| format!("invalid keyframe percentage `{part}`"))?;
+        if !(0.0..=100.0).contains(&value) {
+          return Err(format!(
+            "invalid keyframe percentage `{part}`; expected a value in 0%..=100%"
+          ));
+        }
+        Ok(value / 100.0)
+      }
     })
-    .collect()
+    .collect::<std::result::Result<Vec<_>, _>>()
+}
+
+pub(crate) fn deserialize_keyframes(keyframes: Option<Object>) -> Result<Vec<CoreKeyframesRule>> {
+  match keyframes {
+    Some(keyframes) => deserialize_with_tracing::<KeyframesInput>(keyframes).map(Into::into),
+    None => Ok(Vec::new()),
+  }
 }
 
 /// Options for rendering an image.
@@ -162,7 +198,10 @@ pub struct RenderOptions<'env> {
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
   /// Structured keyframes to register alongside stylesheets.
-  pub keyframes: Option<Vec<KeyframesDefinition<'env>>>,
+  #[napi(
+    ts_type = "{ name: string; keyframes: { offsets: number[]; declarations: Record<string, unknown> }[] }[] | Keyframes"
+  )]
+  pub keyframes: Option<Object<'env>>,
   /// The device pixel ratio.
   /// @default 1.0
   pub device_pixel_ratio: Option<f64>,

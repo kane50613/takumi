@@ -526,6 +526,15 @@ macro_rules! define_style {
         }
       }
 
+      impl<'de> serde::Deserialize<'de> for StyleDeclarationBlock {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+          D: serde::Deserializer<'de>,
+        {
+          Style::deserialize(deserializer).map(Into::into)
+        }
+      }
+
       impl Style {
         fn push_declarations(
           &mut self,
@@ -610,6 +619,12 @@ macro_rules! define_style {
       impl From<StyleDeclarationBlock> for Style {
         fn from(declarations: StyleDeclarationBlock) -> Self {
           Self { declarations }
+        }
+      }
+
+      impl From<Style> for StyleDeclarationBlock {
+        fn from(style: Style) -> Self {
+          style.declarations
         }
       }
 

@@ -3,8 +3,9 @@ use std::{collections::HashMap, sync::Arc};
 
 use napi::bindgen_prelude::*;
 use takumi::{
+  layout::style::KeyframesRule,
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, DEFAULT_FONT_SIZE, Viewport, node::NodeKind},
-  rendering::{RenderKeyframes, RenderOptionsBuilder, measure_layout},
+  rendering::{RenderOptionsBuilder, measure_layout},
   resources::image::load_image_source_from_bytes,
 };
 
@@ -19,7 +20,7 @@ pub struct MeasureTask {
   pub viewport: Viewport,
   pub time_ms: u64,
   pub stylesheets: Option<Vec<String>>,
-  pub keyframes: Vec<RenderKeyframes>,
+  pub keyframes: Vec<KeyframesRule>,
   pub fetched_resources: HashMap<Arc<str>, Buffer>,
 }
 
