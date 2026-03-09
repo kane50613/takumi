@@ -32,6 +32,24 @@ fn test_ttf_font_loading() {
 }
 
 #[test]
+fn test_ttc_font_loading() {
+  let mut context = GlobalContext::default();
+
+  let mut font_data = Vec::new();
+  File::open(font_path("ubuntu/Ubuntu.ttc"))
+    .unwrap()
+    .read_to_end(&mut font_data)
+    .unwrap();
+
+  assert!(
+    context
+      .font_context
+      .load_and_store(font_data.into(), None, None)
+      .is_ok()
+  );
+}
+
+#[test]
 fn test_woff2_font_loading() {
   let mut context = GlobalContext::default();
 
