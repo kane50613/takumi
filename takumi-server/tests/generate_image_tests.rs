@@ -19,6 +19,7 @@ async fn test_generate_image_handler() {
       draw_debug_border: Some(false),
       width: Some(1200),
       height: Some(630),
+      dithering: Default::default(),
     }),
     state,
   )
