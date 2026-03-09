@@ -1,3 +1,4 @@
+use std::mem::take;
 use std::sync::RwLock;
 use std::{collections::HashMap, sync::Arc};
 
@@ -85,7 +86,7 @@ impl Task for MeasureTask {
       .viewport(self.viewport)
       .fetched_resources(initialized_images)
       .stylesheets(self.stylesheets.clone().unwrap_or_default())
-      .keyframes(self.keyframes.clone())
+      .keyframes(take(&mut self.keyframes))
       .time_ms(self.time_ms)
       .node(node)
       .global(&state.global)

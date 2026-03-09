@@ -1,20 +1,14 @@
 use std::{
   borrow::Cow,
-  collections::{BTreeMap, HashSet},
+  collections::HashSet,
   sync::{Arc, RwLock},
 };
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use serde::{Deserialize, Deserializer, de};
 use takumi::{
   GlobalContext,
-  layout::{
-    node::NodeKind,
-    style::{
-      KeyframeRule as CoreKeyframeRule, KeyframesRule as CoreKeyframesRule, StyleDeclarationBlock,
-    },
-  },
+  layout::{node::NodeKind, style::KeyframesRule as CoreKeyframesRule},
   parley::{FontWeight, GenericFamily, fontique::FontInfoOverride},
   rendering::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat},
   resources::image::load_image_source_from_bytes,
@@ -22,7 +16,7 @@ use takumi::{
 use xxhash_rust::xxh3::Xxh3DefaultBuilder;
 
 use crate::{
-  FontInput, buffer_from_object, buffer_slice_from_object, deserialize_with_tracing,
+  De, FontInput, buffer_from_object, buffer_slice_from_object, deserialize_with_tracing,
   encode_frames_task::EncodeFramesTask, load_font_task::LoadFontTask, map_error,
   measure_task::MeasureTask, put_persistent_image_task::PutPersistentImageTask,
   render_animation_task::RenderAnimationTask, render_task::RenderTask,
@@ -100,81 +94,13 @@ pub(crate) struct RendererState {
   pub(crate) persistent_image_cache: HashSet<ImageCacheKey, Xxh3DefaultBuilder>,
 }
 
-#[derive(Debug, Default)]
-struct KeyframesInput(Vec<CoreKeyframesRule>);
-
-impl From<KeyframesInput> for Vec<CoreKeyframesRule> {
-  fn from(input: KeyframesInput) -> Self {
-    input.0
-  }
-}
-
-impl<'de> Deserialize<'de> for KeyframesInput {
-  fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-  where
-    D: Deserializer<'de>,
-  {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum RawKeyframesInput {
-      Rules(Vec<CoreKeyframesRule>),
-      Shorthand(BTreeMap<String, BTreeMap<String, StyleDeclarationBlock>>),
-    }
-
-    match RawKeyframesInput::deserialize(deserializer)? {
-      RawKeyframesInput::Rules(rules) => Ok(Self(rules)),
-      RawKeyframesInput::Shorthand(shorthand) => shorthand
-        .into_iter()
-        .map(|(name, stages)| {
-          let keyframes = stages
-            .into_iter()
-            .map(|(selector, declarations)| {
-              Ok(CoreKeyframeRule {
-                offsets: parse_keyframe_offsets(&selector).map_err(de::Error::custom)?,
-                declarations,
-              })
-            })
-            .collect::<std::result::Result<Vec<_>, D::Error>>()?;
-
-          Ok(CoreKeyframesRule { name, keyframes })
-        })
-        .collect::<std::result::Result<Vec<_>, D::Error>>()
-        .map(Self),
-    }
-  }
-}
-
-fn parse_keyframe_offsets(selector: &str) -> std::result::Result<Vec<f32>, String> {
-  selector
-    .split(',')
-    .map(str::trim)
-    .filter(|part| !part.is_empty())
-    .map(|part| match part {
-      "from" => Ok(0.0),
-      "to" => Ok(1.0),
-      _ => {
-        let Some(percent) = part.strip_suffix('%') else {
-          return Err(format!(
-            "unsupported keyframe selector `{part}`; use `from`, `to`, or percentage values like `50%`"
-          ));
-        };
-        let value = percent
-          .parse::<f32>()
-          .map_err(|_| format!("invalid keyframe percentage `{part}`"))?;
-        if !(0.0..=100.0).contains(&value) {
-          return Err(format!(
-            "invalid keyframe percentage `{part}`; expected a value in 0%..=100%"
-          ));
-        }
-        Ok(value / 100.0)
-      }
-    })
-    .collect::<std::result::Result<Vec<_>, _>>()
-}
-
 pub(crate) fn deserialize_keyframes(keyframes: Option<Object>) -> Result<Vec<CoreKeyframesRule>> {
   match keyframes {
-    Some(keyframes) => deserialize_with_tracing::<KeyframesInput>(keyframes).map(Into::into),
+    Some(keyframes) => {
+      let mut deserializer = De::new(&keyframes);
+      takumi::keyframes::deserialize_keyframes(&mut deserializer)
+        .map_err(|error: napi::Error| Error::from_reason(error.to_string()))
+    }
     None => Ok(Vec::new()),
   }
 }

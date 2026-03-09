@@ -1,11 +1,12 @@
 //! Data models and types for the WebAssembly bindings.
 
-use serde::{Deserialize, Deserializer, de};
+use serde::Deserialize;
 use serde_bytes::ByteBuf;
-use std::{collections::BTreeMap, sync::Arc};
-use takumi::layout::node::NodeKind;
-use takumi::layout::style::{KeyframeRule, KeyframesRule, StyleDeclarationBlock};
-use takumi::rendering::DitheringAlgorithm;
+use std::sync::Arc;
+use takumi::{
+  keyframes::deserialize_optional_keyframes, layout::node::NodeKind, layout::style::KeyframesRule,
+  rendering::DitheringAlgorithm,
+};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(typescript_custom_section)]
@@ -246,7 +247,8 @@ pub struct RenderOptions {
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
   /// Structured keyframes to register alongside stylesheets.
-  pub(crate) keyframes: Option<KeyframesInput>,
+  #[serde(default, deserialize_with = "deserialize_optional_keyframes")]
+  pub(crate) keyframes: Option<Vec<KeyframesRule>>,
   /// Whether to draw debug borders around layout elements.
   pub draw_debug_border: Option<bool>,
   /// The device pixel ratio for scaling.
@@ -255,78 +257,6 @@ pub struct RenderOptions {
   pub time_ms: Option<i64>,
   /// The output dithering algorithm.
   pub dithering: Option<DitheringAlgorithm>,
-}
-
-#[derive(Debug, Default)]
-pub(crate) struct KeyframesInput(Vec<KeyframesRule>);
-
-impl From<KeyframesInput> for Vec<KeyframesRule> {
-  fn from(input: KeyframesInput) -> Self {
-    input.0
-  }
-}
-
-impl<'de> Deserialize<'de> for KeyframesInput {
-  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-  where
-    D: Deserializer<'de>,
-  {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum RawKeyframesInput {
-      Rules(Vec<KeyframesRule>),
-      Shorthand(BTreeMap<String, BTreeMap<String, StyleDeclarationBlock>>),
-    }
-
-    match RawKeyframesInput::deserialize(deserializer)? {
-      RawKeyframesInput::Rules(rules) => Ok(Self(rules)),
-      RawKeyframesInput::Shorthand(shorthand) => shorthand
-        .into_iter()
-        .map(|(name, stages)| {
-          let keyframes = stages
-            .into_iter()
-            .map(|(selector, declarations)| {
-              Ok(KeyframeRule {
-                offsets: parse_keyframe_offsets(&selector).map_err(de::Error::custom)?,
-                declarations,
-              })
-            })
-            .collect::<Result<Vec<_>, D::Error>>()?;
-
-          Ok(KeyframesRule { name, keyframes })
-        })
-        .collect::<Result<Vec<_>, D::Error>>()
-        .map(Self),
-    }
-  }
-}
-
-fn parse_keyframe_offsets(selector: &str) -> Result<Vec<f32>, String> {
-  selector
-    .split(',')
-    .map(str::trim)
-    .filter(|part| !part.is_empty())
-    .map(|part| match part {
-      "from" => Ok(0.0),
-      "to" => Ok(1.0),
-      _ => {
-        let Some(percent) = part.strip_suffix('%') else {
-          return Err(format!(
-            "unsupported keyframe selector `{part}`; use `from`, `to`, or percentage values like `50%`"
-          ));
-        };
-        let value = percent
-          .parse::<f32>()
-          .map_err(|_| format!("invalid keyframe percentage `{part}`"))?;
-        if !(0.0..=100.0).contains(&value) {
-          return Err(format!(
-            "invalid keyframe percentage `{part}`; expected a value in 0%..=100%"
-          ));
-        }
-        Ok(value / 100.0)
-      }
-    })
-    .collect()
 }
 
 /// Options for rendering an animated image.
