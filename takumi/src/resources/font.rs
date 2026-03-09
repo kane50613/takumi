@@ -68,6 +68,8 @@ pub enum FontFormat {
   Ttf,
   /// OpenType Font format - extended font format with advanced typography
   Otf,
+  /// TrueType Collection - multiple fonts in one file; the first font is extracted
+  Ttc,
 }
 
 /// Loads and processes font data, optionally using format hint for detection
@@ -83,6 +85,7 @@ pub fn load_font(
 
   match format {
     FontFormat::Ttf | FontFormat::Otf => Ok(source.into_owned()),
+    FontFormat::Ttc => extract_ttf_from_ttc(&source, 0),
     #[cfg(feature = "woff2")]
     FontFormat::Woff2 => {
       let ttf = wuff::decompress_woff2(&source).map_err(FontError::Woff)?;
@@ -108,7 +111,197 @@ fn guess_font_format(source: &[u8]) -> Result<FontFormat, FontError> {
     b"wOFF" => Ok(FontFormat::Woff),
     [0x00, 0x01, 0x00, 0x00] => Ok(FontFormat::Ttf),
     b"OTTO" => Ok(FontFormat::Otf),
+    b"ttcf" => Ok(FontFormat::Ttc),
     _ => Err(FontError::UnsupportedFormat),
+  }
+}
+
+fn read_u32_be(source: &[u8], offset: usize) -> Option<u32> {
+  source
+    .get(offset..offset + 4)
+    .map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+}
+
+fn read_u16_be(source: &[u8], offset: usize) -> Option<u16> {
+  source
+    .get(offset..offset + 2)
+    .map(|b| u16::from_be_bytes([b[0], b[1]]))
+}
+
+/// Extracts a single TrueType font from a TrueType Collection (.ttc) buffer.
+///
+/// TTC files store font tables at absolute offsets from the start of the file.
+/// This function rebuilds the selected font as a standalone TTF by copying each
+/// table and rewriting the offsets relative to the new buffer.
+fn extract_ttf_from_ttc(source: &[u8], font_index: usize) -> Result<Vec<u8>, FontError> {
+  let num_fonts = read_u32_be(source, 8).ok_or(FontError::UnsupportedFormat)? as usize;
+  if font_index >= num_fonts {
+    return Err(FontError::InvalidFontIndex);
+  }
+
+  let font_offset =
+    read_u32_be(source, 12 + font_index * 4).ok_or(FontError::UnsupportedFormat)? as usize;
+
+  let sf_version = read_u32_be(source, font_offset).ok_or(FontError::UnsupportedFormat)?;
+  let num_tables =
+    read_u16_be(source, font_offset + 4).ok_or(FontError::UnsupportedFormat)? as usize;
+  let search_range = read_u16_be(source, font_offset + 6).ok_or(FontError::UnsupportedFormat)?;
+  let entry_selector =
+    read_u16_be(source, font_offset + 8).ok_or(FontError::UnsupportedFormat)?;
+  let range_shift = read_u16_be(source, font_offset + 10).ok_or(FontError::UnsupportedFormat)?;
+
+  struct TableRecord {
+    tag: [u8; 4],
+    check_sum: u32,
+    offset: usize,
+    length: usize,
+  }
+
+  let mut records = Vec::with_capacity(num_tables);
+  for i in 0..num_tables {
+    let ro = font_offset + 12 + i * 16;
+    let tag = source.get(ro..ro + 4).ok_or(FontError::UnsupportedFormat)?;
+    let check_sum = read_u32_be(source, ro + 4).ok_or(FontError::UnsupportedFormat)?;
+    let offset = read_u32_be(source, ro + 8).ok_or(FontError::UnsupportedFormat)? as usize;
+    let length = read_u32_be(source, ro + 12).ok_or(FontError::UnsupportedFormat)? as usize;
+    records.push(TableRecord {
+      tag: [tag[0], tag[1], tag[2], tag[3]],
+      check_sum,
+      offset,
+      length,
+    });
+  }
+
+  // Assign new 4-byte-aligned offsets relative to the start of the output TTF
+  let header_size = 12 + num_tables * 16;
+  let mut pos = header_size;
+  let new_offsets: Vec<usize> = records
+    .iter()
+    .map(|r| {
+      let new_offset = (pos + 3) & !3;
+      pos = new_offset + ((r.length + 3) & !3);
+      new_offset
+    })
+    .collect();
+
+  let mut out = vec![0u8; pos];
+
+  // Write sfnt header
+  out[0..4].copy_from_slice(&sf_version.to_be_bytes());
+  out[4..6].copy_from_slice(&(num_tables as u16).to_be_bytes());
+  out[6..8].copy_from_slice(&search_range.to_be_bytes());
+  out[8..10].copy_from_slice(&entry_selector.to_be_bytes());
+  out[10..12].copy_from_slice(&range_shift.to_be_bytes());
+
+  // Write table records and copy table data
+  for (i, (record, &new_offset)) in records.iter().zip(new_offsets.iter()).enumerate() {
+    let ro = 12 + i * 16;
+    out[ro..ro + 4].copy_from_slice(&record.tag);
+    out[ro + 4..ro + 8].copy_from_slice(&record.check_sum.to_be_bytes());
+    out[ro + 8..ro + 12].copy_from_slice(&(new_offset as u32).to_be_bytes());
+    out[ro + 12..ro + 16].copy_from_slice(&(record.length as u32).to_be_bytes());
+
+    let src_end = record.offset + record.length;
+    if src_end > source.len() {
+      return Err(FontError::UnsupportedFormat);
+    }
+    out[new_offset..new_offset + record.length]
+      .copy_from_slice(&source[record.offset..src_end]);
+  }
+
+  Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  /// Builds a minimal but valid TTC containing one TTF-like font with a single
+  /// dummy table, so we can test extraction without needing a real font file.
+  fn make_minimal_ttc() -> Vec<u8> {
+    // Dummy table: 8 bytes of payload
+    let table_data: &[u8] = b"TAKUMITC";
+    let table_tag = b"test";
+    let table_len = table_data.len();
+
+    // sfnt header: sfVersion(4) + numTables(2) + searchRange(2) +
+    //              entrySelector(2) + rangeShift(2) = 12 bytes
+    // table record: tag(4) + checkSum(4) + offset(4) + length(4) = 16 bytes
+    // total header: 28 bytes; table data follows at offset 28 (already 4-aligned)
+    let sfnt_offset_in_ttc: u32 = 16; // TTC header is 16 bytes (tag+ver+count+1 offset)
+    let table_offset_in_ttc: u32 = sfnt_offset_in_ttc + 28; // sfnt header + 1 record
+
+    let mut ttc: Vec<u8> = Vec::new();
+    // TTC header
+    ttc.extend_from_slice(b"ttcf"); // tag
+    ttc.extend_from_slice(&0x00010000u32.to_be_bytes()); // version 1.0
+    ttc.extend_from_slice(&1u32.to_be_bytes()); // numFonts = 1
+    ttc.extend_from_slice(&sfnt_offset_in_ttc.to_be_bytes()); // offset to font 0
+
+    // sfnt header for font 0
+    ttc.extend_from_slice(&0x00010000u32.to_be_bytes()); // sfVersion (TrueType)
+    ttc.extend_from_slice(&1u16.to_be_bytes()); // numTables
+    ttc.extend_from_slice(&16u16.to_be_bytes()); // searchRange
+    ttc.extend_from_slice(&0u16.to_be_bytes()); // entrySelector
+    ttc.extend_from_slice(&0u16.to_be_bytes()); // rangeShift
+
+    // table record
+    ttc.extend_from_slice(table_tag);
+    ttc.extend_from_slice(&0u32.to_be_bytes()); // checkSum
+    ttc.extend_from_slice(&table_offset_in_ttc.to_be_bytes()); // absolute offset
+    ttc.extend_from_slice(&(table_len as u32).to_be_bytes());
+
+    // table data
+    ttc.extend_from_slice(table_data);
+
+    ttc
+  }
+
+  #[test]
+  fn ttc_is_detected() {
+    let ttc = make_minimal_ttc();
+    assert!(matches!(
+      guess_font_format(&ttc),
+      Ok(FontFormat::Ttc)
+    ));
+  }
+
+  #[test]
+  fn ttc_extraction_produces_valid_sfnt_header() {
+    let ttc = make_minimal_ttc();
+    let ttf = extract_ttf_from_ttc(&ttc, 0).expect("extraction should succeed");
+
+    // sfVersion should be preserved
+    assert_eq!(&ttf[0..4], &0x00010000u32.to_be_bytes());
+    // numTables
+    assert_eq!(u16::from_be_bytes([ttf[4], ttf[5]]), 1);
+  }
+
+  #[test]
+  fn ttc_extraction_copies_table_data() {
+    let ttc = make_minimal_ttc();
+    let ttf = extract_ttf_from_ttc(&ttc, 0).expect("extraction should succeed");
+
+    // Table record starts at byte 12; new offset is at bytes 8..12 of that record
+    let new_offset = u32::from_be_bytes([ttf[20], ttf[21], ttf[22], ttf[23]]) as usize;
+    assert_eq!(&ttf[new_offset..new_offset + 8], b"TAKUMITC");
+  }
+
+  #[test]
+  fn ttc_extraction_invalid_index_errors() {
+    let ttc = make_minimal_ttc();
+    assert!(matches!(
+      extract_ttf_from_ttc(&ttc, 1),
+      Err(FontError::InvalidFontIndex)
+    ));
+  }
+
+  #[test]
+  fn load_font_accepts_ttc() {
+    let ttc = make_minimal_ttc();
+    // Should not return UnsupportedFormat
+    let result = load_font(Cow::Owned(ttc), None);
+    assert!(result.is_ok(), "load_font should handle TTC: {result:?}");
   }
 }
 
