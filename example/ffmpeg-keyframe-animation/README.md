@@ -6,14 +6,14 @@ Render CSS **keyframe animations** with Takumi and encode them into an **H.265 (
 
 ## How It Works
 
-1. A scene is built once with CSS `@keyframes` declared in a stylesheet string.
+1. A scene is built once and exports structured `keyframes` objects alongside the JSX.
 2. For each frame `i` the renderer is called with:
 
    ```ts
    timeMs = (i / fps) * 1000;
    ```
 
-   This advances the CSS animation clock by exactly one frame period, so `animation-duration`, `animation-delay`, `animation-iteration-count`, etc. all work as expected.
+   This advances the animation clock by exactly one frame period, so `animation-duration`, `animation-delay`, `animation-iteration-count`, etc. all work as expected.
 
 3. `render()` is called with `format: "raw"` which returns raw RGBA pixels.
 4. Each frame buffer is written directly to ffmpeg's stdin.

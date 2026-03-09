@@ -708,6 +708,8 @@ pub enum TailwindProperty {
   Visibility(Visibility),
   /// `vertical-align` property.
   VerticalAlign(VerticalAlign),
+  /// `animation` shorthand.
+  Animation(Animations),
   /// `bg-linear` property.
   BgLinearAngle(Angle),
   /// `bg-radial` property.
@@ -1417,6 +1419,91 @@ impl TailwindProperty {
       TailwindProperty::Visibility(visibility) => {
         push_decl!(builder, important, visibility(visibility))
       }
+      TailwindProperty::Animation(animations) => {
+        let has_animation_name = animations.iter().any(|animation| animation.name.is_some());
+
+        push_decl!(
+          builder,
+          important,
+          animation_duration(AnimationDurations(
+            animations
+              .iter()
+              .map(|animation| animation.duration)
+              .collect()
+          ))
+        );
+        push_decl!(
+          builder,
+          important,
+          animation_delay(AnimationDurations(
+            animations.iter().map(|animation| animation.delay).collect()
+          ))
+        );
+        push_decl!(
+          builder,
+          important,
+          animation_timing_function(AnimationTimingFunctions(
+            animations
+              .iter()
+              .map(|animation| animation.timing_function)
+              .collect()
+          ))
+        );
+        push_decl!(
+          builder,
+          important,
+          animation_iteration_count(AnimationIterationCounts(
+            animations
+              .iter()
+              .map(|animation| animation.iteration_count)
+              .collect()
+          ))
+        );
+        push_decl!(
+          builder,
+          important,
+          animation_direction(AnimationDirections(
+            animations
+              .iter()
+              .map(|animation| animation.direction)
+              .collect()
+          ))
+        );
+        push_decl!(
+          builder,
+          important,
+          animation_fill_mode(AnimationFillModes(
+            animations
+              .iter()
+              .map(|animation| animation.fill_mode)
+              .collect()
+          ))
+        );
+        push_decl!(
+          builder,
+          important,
+          animation_play_state(AnimationPlayStates(
+            animations
+              .iter()
+              .map(|animation| animation.play_state)
+              .collect()
+          ))
+        );
+        push_decl!(
+          builder,
+          important,
+          animation_name(if has_animation_name {
+            AnimationNames(
+              animations
+                .into_iter()
+                .map(|animation| animation.name.unwrap_or_default())
+                .collect(),
+            )
+          } else {
+            AnimationNames::default()
+          })
+        );
+      }
     }
   }
 }
@@ -1510,6 +1597,36 @@ mod tests {
         basis: Length::Auto,
       }))
     );
+  }
+
+  #[test]
+  fn test_parse_tailwind_animation_preset() {
+    assert!(matches!(
+      TailwindProperty::parse("animate-spin"),
+      Some(TailwindProperty::Animation(animations))
+        if animations.as_ref() == [Animation {
+          duration: AnimationTime::from_milliseconds(1000.0),
+          timing_function: AnimationTimingFunction::Linear,
+          iteration_count: AnimationIterationCount::Infinite,
+          name: Some("spin".to_string()),
+          ..Animation::default()
+        }]
+    ));
+  }
+
+  #[test]
+  fn test_parse_tailwind_animation_arbitrary_value() {
+    assert!(matches!(
+      TailwindProperty::parse("animate-[wiggle_1s_ease-in-out_infinite]"),
+      Some(TailwindProperty::Animation(animations))
+        if animations.as_ref() == [Animation {
+          duration: AnimationTime::from_milliseconds(1000.0),
+          timing_function: AnimationTimingFunction::EaseInOut,
+          iteration_count: AnimationIterationCount::Infinite,
+          name: Some("wiggle".to_string()),
+          ..Animation::default()
+        }]
+    ));
   }
 
   #[test]
@@ -1674,6 +1791,8 @@ mod tests {
       "font-stretch-75%",
       "uppercase",
       "tracking-wide",
+      "animate-spin",
+      "animate-[wiggle_1s_ease-in-out_infinite]",
       // Flexbox
       "justify-center",
       "items-end",

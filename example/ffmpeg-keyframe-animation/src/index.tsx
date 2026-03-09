@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { Renderer } from "@takumi-rs/core";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import { spawn } from "bun";
-import { getHighlighterTokens, Scene } from "./Scene";
+import { getHighlighterTokens, keyframes, Scene } from "./Scene";
 
 const fps = 30;
 const durationSeconds = 4;
@@ -15,7 +15,7 @@ const outputPath = resolve(import.meta.dir, "../output/animation.mp4");
 
 const tokens = await getHighlighterTokens();
 
-const { node: scene, stylesheets } = await fromJsx(<Scene tokens={tokens} />);
+const { node: scene } = await fromJsx(<Scene tokens={tokens} />);
 
 const { node: thumbnailScene } = await fromJsx(
   <Scene tokens={tokens} showPlayButton={true} />,
@@ -76,7 +76,7 @@ const thumbnailFrame = await renderer.render(thumbnailScene, {
   height,
   devicePixelRatio,
   format: "webp",
-  stylesheets,
+  keyframes,
   timeMs: 2500,
 });
 
@@ -93,7 +93,7 @@ const framePromises = Array.from({ length: totalFrames }, (_, i) => {
     height,
     devicePixelRatio,
     format: "raw",
-    stylesheets,
+    keyframes,
     timeMs,
   });
 });

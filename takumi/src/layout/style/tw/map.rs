@@ -53,6 +53,7 @@ pub enum PropertyParser {
   FontStretch(fn(FontStretch) -> TailwindProperty),
   VerticalAlign(fn(VerticalAlign) -> TailwindProperty),
   DecorationThickness(fn(TextDecorationThickness) -> TailwindProperty),
+  Animation(fn(Animations) -> TailwindProperty),
 }
 
 impl PropertyParser {
@@ -105,6 +106,7 @@ impl PropertyParser {
       Self::DecorationThickness(f) => {
         TextDecorationThickness::parse_tw_with_arbitrary(suffix).map(f)
       }
+      Self::Animation(f) => Animations::parse_tw_with_arbitrary(suffix).map(f),
     }
   }
 }
@@ -264,6 +266,7 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
   "mix-blend" => &[PropertyParser::BlendMode(TailwindProperty::MixBlendMode)],
   "bg-blend" => &[PropertyParser::BlendMode(TailwindProperty::BackgroundBlendMode)],
   "align" => &[PropertyParser::VerticalAlign(TailwindProperty::VerticalAlign)],
+  "animate" => &[PropertyParser::Animation(TailwindProperty::Animation)],
 };
 
 pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {

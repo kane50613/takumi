@@ -1,7 +1,10 @@
+use std::borrow::Cow;
+
 use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case};
 
 use crate::layout::style::{
   CssToken, FromCss, MakeComputed, ParseResult, declare_enum_from_css_impl, next_is_comma,
+  tw::TailwindPropertyParser,
 };
 
 /// Represents a CSS animation time value stored in milliseconds.
@@ -467,6 +470,59 @@ impl<'i> FromCss<'i> for Animations {
   }
 }
 
+impl TailwindPropertyParser for Animations {
+  fn parse_tw(token: &str) -> Option<Self> {
+    match_ignore_ascii_case! {token,
+      "none" => Some(Box::from([Animation::default()])),
+      "spin" => Some(Box::from([Animation {
+        duration: AnimationTime::from_milliseconds(1000.0),
+        timing_function: AnimationTimingFunction::Linear,
+        iteration_count: AnimationIterationCount::Infinite,
+        name: Some("spin".to_string()),
+        ..Animation::default()
+      }])),
+      "ping" => Some(Box::from([Animation {
+        duration: AnimationTime::from_milliseconds(1000.0),
+        timing_function: AnimationTimingFunction::CubicBezier(0.0, 0.0, 0.2, 1.0),
+        iteration_count: AnimationIterationCount::Infinite,
+        name: Some("ping".to_string()),
+        ..Animation::default()
+      }])),
+      "pulse" => Some(Box::from([Animation {
+        duration: AnimationTime::from_milliseconds(2000.0),
+        timing_function: AnimationTimingFunction::CubicBezier(0.4, 0.0, 0.6, 1.0),
+        iteration_count: AnimationIterationCount::Infinite,
+        name: Some("pulse".to_string()),
+        ..Animation::default()
+      }])),
+      "bounce" => Some(Box::from([Animation {
+        duration: AnimationTime::from_milliseconds(1000.0),
+        iteration_count: AnimationIterationCount::Infinite,
+        name: Some("bounce".to_string()),
+        ..Animation::default()
+      }])),
+      _ => None,
+    }
+  }
+
+  fn parse_tw_with_arbitrary(token: &str) -> Option<Self> {
+    if let Some(value) = token
+      .strip_prefix('[')
+      .and_then(|value| value.strip_suffix(']'))
+    {
+      let value = if value.contains('_') {
+        Cow::Owned(value.replace('_', " "))
+      } else {
+        Cow::Borrowed(value)
+      };
+
+      return Self::from_str(&value).ok();
+    }
+
+    Self::parse_tw(token)
+  }
+}
+
 fn parse_comma_separated<'i, T>(
   input: &mut Parser<'i, '_>,
   mut parse_item: impl FnMut(&mut Parser<'i, '_>) -> ParseResult<'i, T>,
@@ -770,6 +826,34 @@ mod tests {
           ..Animation::default()
         },
       ]))
+    );
+  }
+
+  #[test]
+  fn parse_tailwind_animation_preset() {
+    assert_eq!(
+      Animations::parse_tw("spin"),
+      Some(Box::from([Animation {
+        duration: AnimationTime::from_milliseconds(1000.0),
+        timing_function: AnimationTimingFunction::Linear,
+        iteration_count: AnimationIterationCount::Infinite,
+        name: Some("spin".to_string()),
+        ..Animation::default()
+      }]))
+    );
+  }
+
+  #[test]
+  fn parse_tailwind_animation_arbitrary_value() {
+    assert_eq!(
+      Animations::parse_tw_with_arbitrary("[wiggle_1s_ease-in-out_infinite]"),
+      Some(Box::from([Animation {
+        duration: AnimationTime::from_milliseconds(1000.0),
+        timing_function: AnimationTimingFunction::EaseInOut,
+        iteration_count: AnimationIterationCount::Infinite,
+        name: Some("wiggle".to_string()),
+        ..Animation::default()
+      }]))
     );
   }
 }

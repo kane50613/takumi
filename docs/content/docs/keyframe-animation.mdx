@@ -7,7 +7,7 @@ icon: Play
 Takumi supports two animation workflows:
 
 - Use `renderAnimation()` when you want a simple animated `webp`, `apng`, or `gif`.
-- Use `render()` with `timeMs` when you want full control over frame rendering and external encoding tools like ffmpeg.
+- Use `render()` with `timeMs` when you want full control over frame rendering, structured `keyframes`, or external encoding tools like ffmpeg.
 
 This is an example of a keyframe animation rendered with ffmpeg + shiki for syntax highlighting:
 
@@ -17,38 +17,12 @@ This is an example of a keyframe animation rendered with ffmpeg + shiki for synt
   height={630}
 />
 
-This guide uses the following `scene.tsx` example.
+## How to define animations
 
-```tsx title="scene.tsx"
-const stylesheets = `
-  .box {
-    animation: move 1000ms ease-in-out infinite alternate;
-  }
+### Structured `keyframes` objects
 
-  @keyframes move {
-    from {
-      transform: translateX(0);
-    }
-
-    to {
-      transform: translateX(60px);
-    }
-  }
-`;
-
-export function Scene() {
-  return (
-    <div tw="w-full h-full items-center justify-center">
-      <style>{stylesheets}</style>
-      <div className="box" tw="w-10 h-10 bg-red-500" />
-    </div>
-  );
-}
-```
-
-## `renderAnimation()`
-
-This is the minimal API. In most cases, you should keep a single scene and animate it with CSS keyframes. The `scenes` field is still an array because you may want to compose multiple scenes into a single animated image, but Takumi does not generate transitions between them.
+Use structured `keyframes` when you render a specific animation frame with `render()` and `timeMs`.
+This is the API that accepts the `keyframes` option.
 
 ```tsx twoslash title="render.tsx"
 /** @jsxImportSource react */
@@ -56,12 +30,62 @@ This is the minimal API. In most cases, you should keep a single scene and anima
 // @noErrors
 import { Renderer } from "@takumi-rs/core";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
-import { Scene } from "./scene";
+
+const renderer = new Renderer();
+
+const { node } = await fromJsx(
+  <div tw="animate-[move_1s_ease-in-out_infinite_alternate]" />,
+);
+
+const output = await renderer.render(node, {
+  width: 100,
+  height: 100,
+  format: "png",
+  timeMs: 500,
+  keyframes: {
+    move: {
+      from: {
+        transform: "translateX(0)",
+      },
+      "50%": {
+        transform: "translateX(60px)",
+      },
+      to: {
+        transform: "translateX(120px)",
+      },
+    },
+  },
+});
+```
+
+### CSS Stylesheets
+
+Use stylesheet `@keyframes` when you want the animation to travel with the JSX tree and then render it with either `renderAnimation()` or `render()` + `stylesheets`.
+
+```tsx twoslash title="render.tsx"
+/** @jsxImportSource react */
+// ---cut-before---
+// @noErrors
+import { Renderer } from "@takumi-rs/core";
+import { fromJsx } from "@takumi-rs/helpers/jsx";
 
 const renderer = new Renderer();
 
 const { node, stylesheets } = await fromJsx(
-  <Scene />,
+  <div tw="w-full h-full items-center justify-center">
+    <style>{`
+      @keyframes move {
+        from {
+          transform: translateX(0);
+        }
+
+        to {
+          transform: translateX(60px);
+        }
+      }
+    `}</style>
+    <div tw="w-10 h-10 bg-red-500 animate-[move_1s_ease-in-out_infinite_alternate]" />
+  </div>,
 );
 
 const output = await renderer.renderAnimation({
@@ -79,7 +103,130 @@ const output = await renderer.renderAnimation({
 });
 ```
 
-## `render()` + ffmpeg
+### Tailwind animation utilities
+
+Takumi supports these Tailwind animation forms:
+
+- Presets: `animate-none`, `animate-spin`, `animate-ping`, `animate-pulse`, `animate-bounce`
+- Arbitrary shorthand values: `animate-[move_1s_ease-in-out_infinite_alternate]`
+
+For arbitrary values, `_` is converted to a space, so:
+
+```txt
+animate-[move_1s_ease-in-out_infinite_alternate]
+```
+
+becomes:
+
+```css
+animation: move 1s ease-in-out infinite alternate;
+```
+
+<Callout type="warning">
+Takumi does not currently support Tailwind's `animate-(--custom-property)` form because CSS custom property resolution for `animation` is not implemented.
+</Callout>
+
+## Ways to render
+
+The next two examples share this file.
+
+```tsx twoslash title="scene.tsx"
+/** @jsxImportSource react */
+// ---cut-before---
+// @noErrors
+import type { Keyframes } from "@takumi-rs/core";
+
+export const keyframes: Keyframes = {
+  move: {
+    from: {
+      transform: "translateX(0)",
+    },
+    to: {
+      transform: "translateX(60px)",
+    },
+  },
+};
+
+export function Scene() {
+  return (
+    <div tw="w-full h-full items-center justify-center">
+      <div tw="w-10 h-10 bg-red-500 animate-[move_1s_ease-in-out_infinite_alternate]" />
+    </div>
+  );
+}
+```
+
+### `render()`
+
+Use `render()` when you want a single frame at a specific animation time.
+
+```tsx twoslash title="render.tsx"
+/** @jsxImportSource react */
+// ---cut-before---
+// @noErrors
+import { Renderer } from "@takumi-rs/core";
+import { fromJsx } from "@takumi-rs/helpers/jsx";
+import { Scene, keyframes } from "./scene";
+
+const renderer = new Renderer();
+
+const { node } = await fromJsx(<Scene />);
+
+const output = await renderer.render(node, {
+  width: 100,
+  height: 100,
+  format: "png",
+  keyframes,
+  timeMs: 500,
+});
+```
+
+### `renderAnimation()`
+
+This is the minimal API for animated image output. In most cases, you should keep a single scene and animate it with stylesheet keyframes or Tailwind's built-in animation presets. The `scenes` field is still an array because you may want to compose multiple scenes into a single animated image, but Takumi does not generate transitions between them.
+
+```tsx twoslash title="render.tsx"
+/** @jsxImportSource react */
+// ---cut-before---
+// @noErrors
+import { Renderer } from "@takumi-rs/core";
+import { fromJsx } from "@takumi-rs/helpers/jsx";
+
+const renderer = new Renderer();
+
+const { node, stylesheets } = await fromJsx(
+  <div tw="w-full h-full items-center justify-center">
+    <style>{`
+      @keyframes move {
+        from {
+          transform: translateX(0);
+        }
+
+        to {
+          transform: translateX(60px);
+        }
+      }
+    `}</style>
+    <div tw="w-10 h-10 bg-red-500 animate-[move_1s_ease-in-out_infinite_alternate]" />
+  </div>,
+);
+
+const output = await renderer.renderAnimation({
+  width: 100,
+  height: 100,
+  fps: 30,
+  format: "webp",
+  stylesheets,
+  scenes: [
+    {
+      durationMs: 1000,
+      node,
+    },
+  ],
+});
+```
+
+### `render()` + ffmpeg
 
 The [`ffmpeg-keyframe-animation` example](https://github.com/kane50613/takumi/blob/master/example/ffmpeg-keyframe-animation/) renders raw frames with `render()` and streams them into ffmpeg. This is the better route when you want video output or tighter control over the pipeline.
 
@@ -96,6 +243,7 @@ The core idea is:
 import { Renderer } from "@takumi-rs/core";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import { spawn } from "bun";
+import { Scene, keyframes } from "./scene";
 
 const renderer = new Renderer();
 const fps = 30;
@@ -104,7 +252,7 @@ const width = 1200;
 const height = 630;
 const totalFrames = fps * durationSeconds;
 
-const { node, stylesheets } = await fromJsx(<Scene />);
+const { node } = await fromJsx(<Scene />);
 
 const ffmpeg = spawn(
   [
@@ -131,7 +279,7 @@ for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
     width,
     height,
     format: "raw",
-    stylesheets,
+    keyframes,
     timeMs,
   });
 
