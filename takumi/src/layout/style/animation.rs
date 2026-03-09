@@ -508,7 +508,7 @@ fn apply_keyframe_declarations(
 ) {
   for declaration in keyframe.declarations.iter() {
     declaration.apply_to_computed(style);
-    mask.insert(declaration.longhand_id());
+    mask.extend(declaration.affected_longhands().iter());
   }
 }
 

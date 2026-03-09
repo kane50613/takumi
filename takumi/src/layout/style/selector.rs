@@ -201,9 +201,7 @@ impl<'i> DeclarationParser<'i> for StyleDeclarationParser {
     let important = input.try_parse(parse_important).is_ok();
     if important {
       for declaration in &declarations.declarations {
-        declarations
-          .importance_set
-          .insert(declaration.longhand_id());
+        declarations.importance.insert_declaration(declaration);
       }
     }
     Ok(declarations)
@@ -357,7 +355,7 @@ impl<'i> QualifiedRuleParser<'i> for TakumiRuleParser {
     for res in parser {
       match res {
         Ok(declarations) => {
-          if declarations.importance_set.is_empty() {
+          if declarations.importance.is_empty() {
             normal_declarations.append(declarations);
           } else {
             important_declarations.append(declarations);

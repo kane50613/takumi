@@ -80,6 +80,16 @@ pub(super) enum RawCssInput<'a> {
   Unexpected(RawCssUnexpected),
 }
 
+impl std::fmt::Display for RawCssInput<'_> {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match self {
+      Self::Str(value) => f.write_str(value),
+      Self::Number(number) => number.fmt(f),
+      Self::Unexpected(_) => Ok(()),
+    }
+  }
+}
+
 struct RawCssInputVisitor;
 
 impl RawCssInputVisitor {

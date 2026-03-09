@@ -1222,11 +1222,11 @@ mod tests {
     let matched = MatchedDeclarations {
       normal: StyleDeclarationBlock {
         declarations: smallvec![StyleDeclaration::width(Length::Px(20.0))],
-        importance_set: Default::default(),
+        importance: Default::default(),
       },
       important: StyleDeclarationBlock {
         declarations: smallvec![StyleDeclaration::width(Length::Px(30.0))],
-        importance_set: [LonghandId::Width].into_iter().collect(),
+        importance: [LonghandId::Width].into(),
       },
     };
 
