@@ -191,8 +191,12 @@ fn extract_ttf_from_ttc(source: &[u8], font_index: usize) -> Result<Vec<u8>, Fon
   let new_offsets: Vec<usize> = records
     .iter()
     .map(|r| -> Result<usize, FontError> {
-      let new_offset = (pos + 3) & !3;
-      let padded = (r.length + 3) & !3;
+      let new_offset = pos.checked_add(3).ok_or(FontError::UnsupportedFormat)? & !3;
+      let padded = r
+        .length
+        .checked_add(3)
+        .ok_or(FontError::UnsupportedFormat)?
+        & !3;
       pos = new_offset
         .checked_add(padded)
         .ok_or(FontError::UnsupportedFormat)?;
