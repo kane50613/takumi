@@ -13,10 +13,10 @@ use takumi::{
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, DEFAULT_FONT_SIZE, Viewport, node::NodeKind},
   parley::{FontWeight, fontique::FontInfoOverride},
   rendering::{
-    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
-    RenderOptionsBuilder, SequentialSceneBuilder, apply_dithering, encode_animated_gif,
-    encode_animated_png, encode_animated_webp, measure_layout, render, render_sequence_animation,
-    write_image,
+    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame,
+    DitheringAlgorithm, ImageOutputFormat, RenderOptionsBuilder, SequentialSceneBuilder,
+    apply_dithering, encode_animated_gif, encode_animated_png, encode_animated_webp,
+    measure_layout, render, render_sequence_animation, write_image,
   },
   resources::image::{ImageSource as LoadedImageSource, load_image_source_from_bytes},
 };
