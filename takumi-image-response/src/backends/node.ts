@@ -112,6 +112,7 @@ function createStream(component: ReactNode, options?: ImageResponseOptions) {
           height: options?.height,
           format: options?.format,
           quality: options?.quality,
+          dithering: options?.dithering,
           drawDebugBorder: options?.drawDebugBorder,
           devicePixelRatio: options?.devicePixelRatio,
           fetchedResources,

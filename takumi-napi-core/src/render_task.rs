@@ -5,7 +5,7 @@ use std::{collections::HashMap, sync::Arc};
 use napi::bindgen_prelude::*;
 use takumi::{
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, DEFAULT_FONT_SIZE, Viewport, node::NodeKind},
-  rendering::{RenderOptionsBuilder, render, write_image},
+  rendering::{DitheringAlgorithm, RenderOptionsBuilder, apply_dithering, render, write_image},
   resources::image::load_image_source_from_bytes,
 };
 
@@ -21,6 +21,7 @@ pub struct RenderTask {
   pub viewport: Viewport,
   pub format: OutputFormat,
   pub quality: Option<u8>,
+  pub dithering: DitheringAlgorithm,
   pub time_ms: u64,
   pub stylesheets: Option<Vec<String>>,
   pub fetched_resources: HashMap<Arc<str>, Buffer>,
@@ -47,6 +48,7 @@ impl RenderTask {
       },
       format: options.format.unwrap_or(OutputFormat::png),
       quality: options.quality,
+      dithering: options.dithering.map(Into::into).unwrap_or_default(),
       time_ms: options.time_ms.unwrap_or_default().max(0) as u64,
       draw_debug_border: options.draw_debug_border.unwrap_or_default(),
       stylesheets: options.stylesheets,
@@ -100,6 +102,8 @@ impl Task for RenderTask {
     .map_err(map_error)?;
 
     if self.format == OutputFormat::raw {
+      let mut image = image;
+      apply_dithering(&mut image, self.dithering);
       return Ok(image.into_raw());
     }
 
@@ -110,6 +114,7 @@ impl Task for RenderTask {
       &mut buffer,
       self.format.into(),
       self.quality,
+      self.dithering,
     )
     .map_err(map_error)?;
 

@@ -25,8 +25,8 @@ use crate::{
   },
   rendering::{
     AnimationFrame, BorderProperties, Canvas, CanvasConstrain, CanvasConstrainResult,
-    RenderContext, RenderTime, Sizing, draw_debug_border, inline_drawing::get_parent_x_height,
-    overlay_image,
+    DitheringAlgorithm, RenderContext, RenderTime, Sizing, draw_debug_border,
+    inline_drawing::get_parent_x_height, overlay_image,
   },
   resources::image::ImageSource,
 };
@@ -53,6 +53,9 @@ pub struct RenderOptions<'g, N: Node<N>> {
   /// Global animation time in milliseconds.
   #[builder(default)]
   pub(crate) time_ms: u64,
+  /// Output dithering algorithm. Only used by encoding frontends.
+  #[builder(default)]
+  pub(crate) dithering: DitheringAlgorithm,
 }
 
 #[derive(Clone, Builder)]
@@ -378,6 +381,7 @@ fn create_measured_node(
 
 /// Renders a node to an image.
 pub fn render<'g, N: Node<N>>(options: RenderOptions<'g, N>) -> Result<RgbaImage> {
+  let _ = options.dithering;
   let viewport = options.viewport;
   #[cfg(feature = "css_stylesheet_parsing")]
   let parsed_stylesheets = StyleSheet::parse_list(options.stylesheets.iter().map(String::as_str));

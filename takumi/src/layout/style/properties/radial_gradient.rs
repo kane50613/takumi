@@ -2,15 +2,15 @@ use cssparser::Parser;
 use image::{GenericImageView, Rgba};
 
 use super::gradient_utils::{
-  GradientOverlayTile, adaptive_lut_size, apply_dither, build_color_lut_with_interpolation,
+  GradientOverlayTile, adaptive_lut_size, build_color_lut_with_interpolation,
   resolve_stops_along_axis,
 };
 use crate::{
   layout::style::{
-    ColorInterpolationMethod, CssToken, FromCss, GradientStop, GradientStops, Length, MakeComputed,
-    ObjectPosition, ParseResult, declare_enum_from_css_impl,
+    Color, ColorInterpolationMethod, CssToken, FromCss, GradientStop, GradientStops, Length,
+    MakeComputed, ObjectPosition, ParseResult, declare_enum_from_css_impl,
   },
-  rendering::{BufferPool, RenderContext, Sizing},
+  rendering::{RenderContext, Sizing},
 };
 
 /// Represents a radial gradient.
@@ -96,7 +96,7 @@ pub(crate) struct RadialGradientTile {
   pub distance_to_lut_scale: f32,
   /// Pre-computed color lookup table for fast gradient sampling.
   /// Maps normalized distance [0.0, 1.0] from center to color.
-  pub color_lut: Vec<u8>,
+  pub color_lut: Vec<[f32; 4]>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -116,31 +116,25 @@ impl GenericImageView for RadialGradientTile {
   }
 
   fn get_pixel(&self, x: u32, y: u32) -> Self::Pixel {
-    let lut_samples = self.lut_samples();
-    if lut_samples.is_empty() {
+    if self.color_lut.is_empty() {
       return Rgba([0, 0, 0, 0]);
     }
 
-    if lut_samples.len() == 1 {
-      return Rgba(apply_dither(&lut_samples[0], x, y));
+    if self.color_lut.len() == 1 {
+      return Color::from(self.color_lut[0]).into();
     }
 
     let dx = (x as f32 - self.cx) / self.radius_x.max(1e-6);
     let dy = (y as f32 - self.cy) / self.radius_y.max(1e-6);
     let normalized_distance = (dx * dx + dy * dy).sqrt();
     let lut_idx =
-      self.lut_index_for_normalized_distance_with_len(normalized_distance, lut_samples.len());
+      self.lut_index_for_normalized_distance_with_len(normalized_distance, self.color_lut.len());
 
-    Rgba(apply_dither(&lut_samples[lut_idx], x, y))
+    Color::from(self.color_lut[lut_idx]).into()
   }
 }
 
 impl RadialGradientTile {
-  #[inline(always)]
-  pub(crate) fn lut_samples(&self) -> &[[f32; 4]] {
-    bytemuck::cast_slice(&self.color_lut)
-  }
-
   #[inline(always)]
   pub(crate) fn lut_index_for_normalized_distance_with_len(
     &self,
@@ -156,13 +150,7 @@ impl RadialGradientTile {
   }
 
   /// Builds a drawing context from a gradient and a target viewport.
-  pub fn new(
-    gradient: &RadialGradient,
-    width: u32,
-    height: u32,
-    context: &RenderContext,
-    buffer_pool: &mut BufferPool,
-  ) -> Self {
+  pub fn new(gradient: &RadialGradient, width: u32, height: u32, context: &RenderContext) -> Self {
     let cx = Length::from(gradient.center.0.x).to_px(&context.sizing, width as f32);
     let cy = Length::from(gradient.center.0.y).to_px(&context.sizing, height as f32);
 
@@ -240,16 +228,15 @@ impl RadialGradientTile {
     let resolved_stops = resolve_stops_along_axis(&gradient.stops, radius_scale.max(1e-6), context);
 
     // Pre-compute color lookup table with adaptive size.
-    let lut_size = adaptive_lut_size(radius_scale);
+    let lut_size = adaptive_lut_size(radius_scale, &resolved_stops);
     let color_lut = build_color_lut_with_interpolation(
       &resolved_stops,
       radius_scale,
       lut_size,
-      buffer_pool,
       gradient.interpolation.color_space,
       gradient.interpolation.hue_direction,
     );
-    let lut_len = color_lut.len() / 16;
+    let lut_len = color_lut.len();
     let inv_radius_x = radius_x.max(1e-6).recip();
     let inv_radius_y = radius_y.max(1e-6).recip();
     let distance_to_lut_scale = if lut_len <= 1 {
@@ -288,7 +275,7 @@ impl GradientOverlayTile for RadialGradientTile {
 
   #[inline(always)]
   fn lut_samples(&self) -> &[[f32; 4]] {
-    self.lut_samples()
+    &self.color_lut
   }
 
   #[inline(always)]
@@ -710,8 +697,7 @@ mod tests {
 
     let context = GlobalContext::default();
     let dummy_context = RenderContext::new_test(&context, (100, 100).into());
-    let mut buffer_pool = crate::rendering::BufferPool::default();
-    let tile = RadialGradientTile::new(&gradient, 100, 100, &dummy_context, &mut buffer_pool);
+    let tile = RadialGradientTile::new(&gradient, 100, 100, &dummy_context);
 
     // Center (50, 50) should be red
     let color_center = tile.get_pixel(50, 50);
@@ -747,8 +733,7 @@ mod tests {
 
     let context = GlobalContext::default();
     let dummy_context = RenderContext::new_test(&context, (100, 100).into());
-    let mut buffer_pool = crate::rendering::BufferPool::default();
-    let tile = RadialGradientTile::new(&gradient, 100, 100, &dummy_context, &mut buffer_pool);
+    let tile = RadialGradientTile::new(&gradient, 100, 100, &dummy_context);
 
     // dx_left=20, dx_right=80, dy_top=20, dy_bottom=80
     // f_rx = 80, f_ry = 80

@@ -124,10 +124,10 @@ impl From<[u8; 4]> for Color {
 impl From<[f32; 4]> for Color {
   fn from(value: [f32; 4]) -> Self {
     Self([
-      value[0].round() as u8,
-      value[1].round() as u8,
-      value[2].round() as u8,
-      value[3].round() as u8,
+      value[0].clamp(0.0, 255.0).round() as u8,
+      value[1].clamp(0.0, 255.0).round() as u8,
+      value[2].clamp(0.0, 255.0).round() as u8,
+      value[3].clamp(0.0, 255.0).round() as u8,
     ])
   }
 }
@@ -675,6 +675,14 @@ impl<'i> FromCss<'i> for Color {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn test_color_from_f32_array_clamps_before_rounding() {
+    assert_eq!(
+      Color::from([-1.0, 127.5, 255.4, 999.0]),
+      Color([0, 128, 255, 255])
+    );
+  }
 
   #[test]
   fn test_parse_hex_color_3_digits() {

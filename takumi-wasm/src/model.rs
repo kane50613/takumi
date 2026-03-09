@@ -4,6 +4,7 @@ use serde::Deserialize;
 use serde_bytes::ByteBuf;
 use std::sync::Arc;
 use takumi::layout::node::NodeKind;
+use takumi::rendering::DitheringAlgorithm;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(typescript_custom_section)]
@@ -51,6 +52,11 @@ export type RenderOptions = {
    * The animation timeline time in milliseconds.
    */
   timeMs?: number,
+  /**
+   * The output dithering algorithm.
+   * @default "none"
+   */
+  dithering?: "none" | "ordered-bayer" | "floyd-steinberg",
 };
 
 export type RenderAnimationOptions = {
@@ -228,6 +234,8 @@ pub struct RenderOptions {
   pub device_pixel_ratio: Option<f32>,
   /// The animation timeline time in milliseconds.
   pub time_ms: Option<i64>,
+  /// The output dithering algorithm.
+  pub dithering: Option<DitheringAlgorithm>,
 }
 
 /// Options for rendering an animated image.

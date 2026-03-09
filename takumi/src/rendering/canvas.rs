@@ -1026,10 +1026,11 @@ mod tests {
   use crate::{
     GlobalContext,
     layout::style::{
-      BlendMode, ConicGradient, ConicGradientTile, FromCss, LinearGradient, LinearGradientTile,
-      RadialGradient, RadialGradientTile,
+      Angle, BlendMode, Color, ColorInterpolationMethod, ConicGradient, ConicGradientTile, FromCss,
+      GradientStop, Length, LinearGradient, LinearGradientTile, ObjectPosition, RadialGradient,
+      RadialGradientTile, StopPosition,
     },
-    rendering::{BufferPool, RenderContext, blend_pixel},
+    rendering::{RenderContext, blend_pixel},
   };
 
   use super::*;
@@ -1099,8 +1100,7 @@ mod tests {
     };
     let global_context = GlobalContext::default();
     let render_context = RenderContext::new_test(&global_context, (32, 16).into());
-    let mut buffer_pool = BufferPool::default();
-    let tile = LinearGradientTile::new(&gradient, 32, 16, &render_context, &mut buffer_pool);
+    let tile = LinearGradientTile::new(&gradient, 32, 16, &render_context);
 
     let mut fast = RgbaImage::from_pixel(40, 24, Rgba([0, 0, 0, 0]));
     let mut reference = fast.clone();
@@ -1126,8 +1126,7 @@ mod tests {
     };
     let global_context = GlobalContext::default();
     let render_context = RenderContext::new_test(&global_context, (32, 24).into());
-    let mut buffer_pool = BufferPool::default();
-    let tile = RadialGradientTile::new(&gradient, 32, 24, &render_context, &mut buffer_pool);
+    let tile = RadialGradientTile::new(&gradient, 32, 24, &render_context);
 
     let mut fast = RgbaImage::from_pixel(40, 30, Rgba([0, 0, 0, 0]));
     let mut reference = fast.clone();
@@ -1154,8 +1153,111 @@ mod tests {
 
     let global_context = GlobalContext::default();
     let render_context = RenderContext::new_test(&global_context, (32, 24).into());
-    let mut buffer_pool = BufferPool::default();
-    let tile = ConicGradientTile::new(&gradient, 32, 24, &render_context, &mut buffer_pool);
+    let tile = ConicGradientTile::new(&gradient, 32, 24, &render_context);
+
+    let mut fast = RgbaImage::from_pixel(40, 30, Rgba([0, 0, 0, 0]));
+    let mut reference = fast.clone();
+    let offset = Point { x: 4.0, y: 3.0 };
+
+    overlay_gradient_tile(&mut fast, &tile, offset, BlendMode::Normal, &[]);
+
+    let top_size = Size {
+      width: tile.width,
+      height: tile.height,
+    };
+    overlay_area_reference(&mut reference, offset, top_size, |x, y| {
+      tile.get_pixel(x, y)
+    });
+
+    assert_eq!(fast.as_raw(), reference.as_raw());
+  }
+
+  #[test]
+  fn test_overlay_linear_gradient_clustered_stops_matches_reference() {
+    let Ok(gradient) =
+      LinearGradient::from_str("linear-gradient(to right, red 0px, lime 0.5px, blue 32px)")
+    else {
+      unreachable!()
+    };
+    let global_context = GlobalContext::default();
+    let render_context = RenderContext::new_test(&global_context, (32, 16).into());
+    let tile = LinearGradientTile::new(&gradient, 32, 16, &render_context);
+
+    let mut fast = RgbaImage::from_pixel(40, 24, Rgba([0, 0, 0, 0]));
+    let mut reference = fast.clone();
+    let offset = Point { x: 3.0, y: 4.0 };
+
+    overlay_gradient_tile(&mut fast, &tile, offset, BlendMode::Normal, &[]);
+
+    let top_size = Size {
+      width: tile.width,
+      height: tile.height,
+    };
+    overlay_area_reference(&mut reference, offset, top_size, |x, y| {
+      tile.get_pixel(x, y)
+    });
+
+    assert_eq!(fast.as_raw(), reference.as_raw());
+  }
+
+  #[test]
+  fn test_overlay_conic_gradient_hard_stops_matches_reference() {
+    let gradient = ConicGradient {
+      from_angle: Angle::zero(),
+      center: ObjectPosition::default(),
+      interpolation: ColorInterpolationMethod::default(),
+      stops: [
+        GradientStop::ColorHint {
+          color: Color([255, 0, 0, 255]).into(),
+          hint: Some(StopPosition(Length::Percentage(0.0))),
+        },
+        GradientStop::ColorHint {
+          color: Color([255, 0, 0, 255]).into(),
+          hint: Some(StopPosition(Length::Percentage(25.0))),
+        },
+        GradientStop::ColorHint {
+          color: Color([0, 0, 255, 255]).into(),
+          hint: Some(StopPosition(Length::Percentage(25.0))),
+        },
+        GradientStop::ColorHint {
+          color: Color([0, 0, 255, 255]).into(),
+          hint: Some(StopPosition(Length::Percentage(100.0))),
+        },
+      ]
+      .into(),
+    };
+
+    let global_context = GlobalContext::default();
+    let render_context = RenderContext::new_test(&global_context, (48, 48).into());
+    let tile = ConicGradientTile::new(&gradient, 48, 48, &render_context);
+
+    let mut fast = RgbaImage::from_pixel(56, 56, Rgba([0, 0, 0, 0]));
+    let mut reference = fast.clone();
+    let offset = Point { x: 4.0, y: 4.0 };
+
+    overlay_gradient_tile(&mut fast, &tile, offset, BlendMode::Normal, &[]);
+
+    let top_size = Size {
+      width: tile.width,
+      height: tile.height,
+    };
+    overlay_area_reference(&mut reference, offset, top_size, |x, y| {
+      tile.get_pixel(x, y)
+    });
+
+    assert_eq!(fast.as_raw(), reference.as_raw());
+  }
+
+  #[test]
+  fn test_overlay_radial_gradient_clustered_stops_matches_reference() {
+    let Ok(gradient) =
+      RadialGradient::from_str("radial-gradient(circle, red 0%, lime 1%, blue 100%)")
+    else {
+      unreachable!()
+    };
+    let global_context = GlobalContext::default();
+    let render_context = RenderContext::new_test(&global_context, (32, 24).into());
+    let tile = RadialGradientTile::new(&gradient, 32, 24, &render_context);
 
     let mut fast = RgbaImage::from_pixel(40, 30, Rgba([0, 0, 0, 0]));
     let mut reference = fast.clone();

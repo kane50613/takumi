@@ -10,7 +10,7 @@ use takumi::{
   GlobalContext,
   layout::node::NodeKind,
   parley::{FontWeight, GenericFamily, fontique::FontInfoOverride},
-  rendering::ImageOutputFormat,
+  rendering::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat},
   resources::image::load_image_source_from_bytes,
 };
 use xxhash_rust::xxh3::Xxh3DefaultBuilder;
@@ -117,6 +117,28 @@ pub struct RenderOptions<'env> {
   pub device_pixel_ratio: Option<f64>,
   /// The animation timeline time in milliseconds.
   pub time_ms: Option<i64>,
+  /// The output dithering algorithm.
+  pub dithering: Option<DitheringAlgorithm>,
+}
+
+#[napi(string_enum)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum DitheringAlgorithm {
+  None,
+  #[napi(value = "ordered-bayer")]
+  OrderedBayer,
+  #[napi(value = "floyd-steinberg")]
+  FloydSteinberg,
+}
+
+impl From<DitheringAlgorithm> for CoreDitheringAlgorithm {
+  fn from(dithering: DitheringAlgorithm) -> Self {
+    match dithering {
+      DitheringAlgorithm::None => Self::None,
+      DitheringAlgorithm::OrderedBayer => Self::OrderedBayer,
+      DitheringAlgorithm::FloydSteinberg => Self::FloydSteinberg,
+    }
+  }
 }
 
 /// Represents a single frame in a precomputed animation sequence.

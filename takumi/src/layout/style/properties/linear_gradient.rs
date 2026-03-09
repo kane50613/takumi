@@ -3,14 +3,14 @@ use image::{GenericImageView, Rgba};
 use std::ops::{Deref, Neg};
 
 use super::gradient_utils::{
-  GradientOverlayTile, adaptive_lut_size, apply_dither, build_color_lut_with_interpolation,
+  GradientOverlayTile, adaptive_lut_size, build_color_lut_with_interpolation,
   resolve_stops_along_axis,
 };
 use crate::layout::style::{
   Animatable, Color, ColorInterpolationMethod, CssToken, FromCss, Length, MakeComputed,
   ParseResult, declare_enum_from_css_impl, properties::ColorInput, tw::TailwindPropertyParser,
 };
-use crate::rendering::{BufferPool, RenderContext, Sizing};
+use crate::rendering::{RenderContext, Sizing};
 
 /// Represents a linear gradient.
 #[derive(Debug, Clone, PartialEq)]
@@ -37,19 +37,18 @@ impl GenericImageView for LinearGradientTile {
   }
 
   fn get_pixel(&self, x: u32, y: u32) -> Self::Pixel {
-    let lut_samples = self.lut_samples();
-    if lut_samples.is_empty() {
+    if self.color_lut.is_empty() {
       return Rgba([0, 0, 0, 0]);
     }
 
-    if lut_samples.len() == 1 {
-      return Rgba(apply_dither(&lut_samples[0], x, y));
+    if self.color_lut.len() == 1 {
+      return Color::from(self.color_lut[0]).into();
     }
 
     let projection = self.projection_at(x as f32, y as f32);
-    let lut_idx = self.lut_index_for_projection_with_len(projection, lut_samples.len());
+    let lut_idx = self.lut_index_for_projection_with_len(projection, self.color_lut.len());
 
-    Rgba(apply_dither(&lut_samples[lut_idx], x, y))
+    Color::from(self.color_lut[lut_idx]).into()
   }
 }
 
@@ -72,7 +71,7 @@ pub(crate) struct LinearGradientTile {
   pub position_to_lut_scale: f32,
   /// Pre-computed color lookup table for fast gradient sampling.
   /// Maps normalized position [0.0, 1.0] to color.
-  pub color_lut: Vec<u8>,
+  pub color_lut: Vec<[f32; 4]>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -83,11 +82,6 @@ pub(crate) struct LinearGradientRowState {
 }
 
 impl LinearGradientTile {
-  #[inline(always)]
-  pub(crate) fn lut_samples(&self) -> &[[f32; 4]] {
-    bytemuck::cast_slice(&self.color_lut)
-  }
-
   #[inline(always)]
   pub(crate) fn projection_at(&self, x: f32, y: f32) -> f32 {
     x * self.dir_x + y * self.dir_y + self.projection_bias
@@ -104,13 +98,7 @@ impl LinearGradientTile {
   }
 
   /// Builds a drawing context from a gradient and a target viewport.
-  pub fn new(
-    gradient: &LinearGradient,
-    width: u32,
-    height: u32,
-    context: &RenderContext,
-    buffer_pool: &mut BufferPool,
-  ) -> Self {
+  pub fn new(gradient: &LinearGradient, width: u32, height: u32, context: &RenderContext) -> Self {
     let rad = gradient.angle.0.to_radians();
     let (dir_x, dir_y) = (rad.sin(), -rad.cos());
 
@@ -123,16 +111,15 @@ impl LinearGradientTile {
     let resolved_stops = resolve_stops_along_axis(&gradient.stops, axis_length.max(1e-6), context);
 
     // Pre-compute color lookup table with adaptive size.
-    let lut_size = adaptive_lut_size(axis_length);
+    let lut_size = adaptive_lut_size(axis_length, &resolved_stops);
     let color_lut = build_color_lut_with_interpolation(
       &resolved_stops,
       axis_length,
       lut_size,
-      buffer_pool,
       gradient.interpolation.color_space,
       gradient.interpolation.hue_direction,
     );
-    let lut_len = color_lut.len() / 16;
+    let lut_len = color_lut.len();
     let position_to_lut_scale = if axis_length.abs() <= f32::EPSILON || lut_len <= 1 {
       0.0
     } else {
@@ -167,7 +154,7 @@ impl GradientOverlayTile for LinearGradientTile {
 
   #[inline(always)]
   fn lut_samples(&self) -> &[[f32; 4]] {
-    self.lut_samples()
+    &self.color_lut
   }
 
   #[inline(always)]
@@ -1013,8 +1000,7 @@ mod tests {
     // Test at the top (should be red)
     let context = GlobalContext::default();
     let dummy_context = RenderContext::new_test(&context, (100, 100).into());
-    let mut buffer_pool = crate::rendering::BufferPool::default();
-    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context, &mut buffer_pool);
+    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context);
 
     let color_top = tile.get_pixel(50, 0);
     assert_eq!(color_top, Rgba([255, 0, 0, 255]));
@@ -1026,7 +1012,7 @@ mod tests {
     // Test in the middle (should be purple)
     let color_middle = tile.get_pixel(50, 50);
     // Middle should be roughly purple (red + blue)
-    assert_eq!(color_middle, Rgba([127, 0, 127, 255]));
+    assert_eq!(color_middle, Rgba([128, 0, 128, 255]));
   }
 
   #[test]
@@ -1051,8 +1037,7 @@ mod tests {
     let context = GlobalContext::default();
     let dummy_context = RenderContext::new_test(&context, (100, 100).into());
 
-    let mut buffer_pool = crate::rendering::BufferPool::default();
-    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context, &mut buffer_pool);
+    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context);
     let color_left = tile.get_pixel(0, 50);
     assert_eq!(color_left, Rgba([255, 0, 0, 255]));
 
@@ -1076,8 +1061,7 @@ mod tests {
     // Should always return the same color
     let context = GlobalContext::default();
     let dummy_context = RenderContext::new_test(&context, (100, 100).into());
-    let mut buffer_pool = crate::rendering::BufferPool::default();
-    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context, &mut buffer_pool);
+    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context);
     let color = tile.get_pixel(50, 50);
     assert_eq!(color, Rgba([255, 0, 0, 255]));
   }
@@ -1093,8 +1077,7 @@ mod tests {
     // Should return transparent
     let context = GlobalContext::default();
     let dummy_context = RenderContext::new_test(&context, (100, 100).into());
-    let mut buffer_pool = crate::rendering::BufferPool::default();
-    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context, &mut buffer_pool);
+    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context);
     let color = tile.get_pixel(50, 50);
     assert_eq!(color, Rgba([0, 0, 0, 0]));
   }
@@ -1106,8 +1089,7 @@ mod tests {
 
     let context = GlobalContext::default();
     let dummy_context = RenderContext::new_test(&context, (40, 40).into());
-    let mut buffer_pool = crate::rendering::BufferPool::default();
-    let tile = LinearGradientTile::new(&gradient, 40, 40, &dummy_context, &mut buffer_pool);
+    let tile = LinearGradientTile::new(&gradient, 40, 40, &dummy_context);
 
     // grey at 0,0
     let c0 = tile.get_pixel(0, 0);
@@ -1131,8 +1113,7 @@ mod tests {
 
     let context = GlobalContext::default();
     let dummy_context = RenderContext::new_test(&context, (40, 40).into());
-    let mut buffer_pool = crate::rendering::BufferPool::default();
-    let tile = LinearGradientTile::new(&gradient, 40, 40, &dummy_context, &mut buffer_pool);
+    let tile = LinearGradientTile::new(&gradient, 40, 40, &dummy_context);
 
     // color at top-left (0, 0) should be grey (1px hard stop)
     assert_eq!(tile.get_pixel(0, 0), Rgba([128, 128, 128, 255]));

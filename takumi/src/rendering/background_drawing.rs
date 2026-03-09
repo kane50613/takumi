@@ -305,30 +305,17 @@ pub(crate) fn render_tile(
   tile_w: u32,
   tile_h: u32,
   context: &RenderContext,
-  buffer_pool: &mut BufferPool,
 ) -> Result<Option<BackgroundTile>> {
   Ok(match image {
     BackgroundImage::None => None,
     BackgroundImage::Linear(gradient) => Some(BackgroundTile::Linear(LinearGradientTile::new(
-      gradient,
-      tile_w,
-      tile_h,
-      context,
-      buffer_pool,
+      gradient, tile_w, tile_h, context,
     ))),
     BackgroundImage::Radial(gradient) => Some(BackgroundTile::Radial(RadialGradientTile::new(
-      gradient,
-      tile_w,
-      tile_h,
-      context,
-      buffer_pool,
+      gradient, tile_w, tile_h, context,
     ))),
     BackgroundImage::Conic(gradient) => Some(BackgroundTile::Conic(ConicGradientTile::new(
-      gradient,
-      tile_w,
-      tile_h,
-      context,
-      buffer_pool,
+      gradient, tile_w, tile_h, context,
     ))),
     BackgroundImage::Noise(noise) => Some(BackgroundTile::Noise(NoiseV1Tile::new(
       *noise, tile_w, tile_h,
@@ -446,7 +433,7 @@ pub(crate) fn resolve_layer_tiles(
     return Ok(None);
   }
 
-  let Some(tile) = render_tile(image, tile_w, tile_h, context, buffer_pool)? else {
+  let Some(tile) = render_tile(image, tile_w, tile_h, context)? else {
     return Ok(None);
   };
   let tile = if should_rasterize_repeated_tile(&tile, &xs, &ys) {

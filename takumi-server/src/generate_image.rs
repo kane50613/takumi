@@ -8,7 +8,7 @@ use serde_json::from_str;
 use std::borrow::Cow;
 use takumi::{
   layout::{Viewport, node::NodeKind},
-  rendering::{ImageOutputFormat, RenderOptionsBuilder, render, write_image},
+  rendering::{DitheringAlgorithm, ImageOutputFormat, RenderOptionsBuilder, render, write_image},
 };
 use tokio::task::spawn_blocking;
 
@@ -18,6 +18,7 @@ use crate::{AxumResult, AxumState};
 pub struct GenerateImageQuery {
   pub format: Option<ImageOutputFormat>,
   pub quality: Option<u8>,
+  pub dithering: Option<DitheringAlgorithm>,
   pub payload: String,
   pub draw_debug_border: Option<bool>,
   pub width: Option<u32>,
@@ -56,7 +57,14 @@ pub async fn generate_image_handler(
 
     let mut buffer = Vec::new();
 
-    write_image(Cow::Owned(image), &mut buffer, format, query.quality).map_err(|_| {
+    write_image(
+      Cow::Owned(image),
+      &mut buffer,
+      format,
+      query.quality,
+      query.dithering.unwrap_or_default(),
+    )
+    .map_err(|_| {
       (
         StatusCode::INTERNAL_SERVER_ERROR,
         "Failed to write image.".to_string(),

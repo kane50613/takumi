@@ -1,18 +1,18 @@
 use std::f32::consts::TAU;
 
-use cssparser::Parser;
+use cssparser::{Parser, Token, match_ignore_ascii_case};
 use image::{GenericImageView, Rgba};
 
 use super::gradient_utils::{
-  GradientOverlayTile, adaptive_lut_size, apply_dither, build_color_lut_with_interpolation,
+  GradientOverlayTile, adaptive_lut_size, build_color_lut_with_interpolation,
   resolve_stops_along_axis,
 };
 use crate::{
   layout::style::{
-    Angle, BackgroundPosition, ColorInterpolationMethod, CssToken, FromCss, GradientStop,
-    GradientStops, Length, MakeComputed, ObjectPosition, ParseResult,
+    Angle, BackgroundPosition, Color, ColorInput, ColorInterpolationMethod, CssToken, FromCss,
+    GradientStop, Length, MakeComputed, ObjectPosition, ParseResult, StopPosition,
   },
-  rendering::{BufferPool, RenderContext, Sizing},
+  rendering::{RenderContext, Sizing},
 };
 
 /// Represents a CSS conic-gradient.
@@ -52,7 +52,7 @@ pub(crate) struct ConicGradientTile {
   pub angle_to_lut_scale: f32,
   /// Pre-computed color lookup table for fast gradient sampling.
   /// Maps normalized angle [0.0, 1.0] (fraction of full turn) to color.
-  pub color_lut: Vec<u8>,
+  pub color_lut: Vec<[f32; 4]>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -70,26 +70,25 @@ impl GenericImageView for ConicGradientTile {
   }
 
   fn get_pixel(&self, x: u32, y: u32) -> Self::Pixel {
-    let lut_samples: &[[f32; 4]] = bytemuck::cast_slice(&self.color_lut);
-    if lut_samples.is_empty() {
+    if self.color_lut.is_empty() {
       return Rgba([0, 0, 0, 0]);
     }
 
-    if lut_samples.len() == 1 {
-      return Rgba(apply_dither(&lut_samples[0], x, y));
+    if self.color_lut.len() == 1 {
+      return Color::from(self.color_lut[0]).into();
     }
 
     let dx = x as f32 - self.cx;
     let dy = y as f32 - self.cy;
     if dx.abs() <= f32::EPSILON && dy.abs() <= f32::EPSILON {
-      return Rgba(apply_dither(&lut_samples[0], x, y));
+      return Color::from(self.color_lut[0]).into();
     }
 
     let angle_from_top = Self::angle_from_top_normalized(dx, dy);
     let adjusted = self.adjusted_angle(angle_from_top);
-    let lut_idx = self.lut_index_for_adjusted_angle_with_len(adjusted, lut_samples.len());
+    let lut_idx = self.lut_index_for_adjusted_angle_with_len(adjusted, self.color_lut.len());
 
-    Rgba(apply_dither(&lut_samples[lut_idx], x, y))
+    Color::from(self.color_lut[lut_idx]).into()
   }
 }
 
@@ -124,13 +123,7 @@ impl ConicGradientTile {
   }
 
   /// Builds a drawing context from a conic gradient and a target viewport.
-  pub fn new(
-    gradient: &ConicGradient,
-    width: u32,
-    height: u32,
-    context: &RenderContext,
-    buffer_pool: &mut BufferPool,
-  ) -> Self {
+  pub fn new(gradient: &ConicGradient, width: u32, height: u32, context: &RenderContext) -> Self {
     let cx = Length::from(gradient.center.0.x).to_px(&context.sizing, width as f32);
     let cy = Length::from(gradient.center.0.y).to_px(&context.sizing, height as f32);
 
@@ -142,16 +135,15 @@ impl ConicGradientTile {
     // Keep LUT sizing deterministic across platforms by deriving from integer tile dimensions.
     // 8 samples per pixel of the larger dimension provides enough angular density for conic edges.
     let angular_axis = width.max(height).max(1) as f32 * 8.0;
-    let lut_size = adaptive_lut_size(angular_axis);
+    let lut_size = adaptive_lut_size(angular_axis, &resolved_stops);
     let color_lut = build_color_lut_with_interpolation(
       &resolved_stops,
       360.0,
       lut_size,
-      buffer_pool,
       gradient.interpolation.color_space,
       gradient.interpolation.hue_direction,
     );
-    let lut_len = color_lut.len() / 16;
+    let lut_len = color_lut.len();
     let angle_to_lut_scale = if lut_len == 0 {
       0.0
     } else {
@@ -185,7 +177,7 @@ impl GradientOverlayTile for ConicGradientTile {
 
   #[inline(always)]
   fn lut_samples(&self) -> &[[f32; 4]] {
-    bytemuck::cast_slice(&self.color_lut)
+    &self.color_lut
   }
 
   #[inline(always)]
@@ -209,6 +201,77 @@ impl GradientOverlayTile for ConicGradientTile {
     row_state.dx += 1.0;
     lut_idx
   }
+}
+
+fn parse_conic_stop_position<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, StopPosition> {
+  let location = input.current_source_location();
+  let token = input.next()?;
+
+  match token {
+    Token::Percentage { unit_value, .. } => {
+      Ok(StopPosition(Length::Percentage(*unit_value * 100.0)))
+    }
+    Token::Number { value, .. } if value.abs() <= f32::EPSILON => {
+      Ok(StopPosition(Length::Percentage(0.0)))
+    }
+    Token::Dimension { value, unit, .. } => {
+      let degrees = match_ignore_ascii_case! { unit,
+        "deg" => *value,
+        "grad" => *value * 0.9,
+        "rad" => value.to_degrees(),
+        "turn" => *value * 360.0,
+        _ => return Err(StopPosition::unexpected_token_error(location, token)),
+      };
+
+      Ok(StopPosition(Length::Percentage(degrees / 360.0 * 100.0)))
+    }
+    _ => Err(StopPosition::unexpected_token_error(location, token)),
+  }
+}
+
+fn parse_conic_gradient_stops<'i>(
+  input: &mut Parser<'i, '_>,
+) -> ParseResult<'i, Vec<GradientStop>> {
+  let mut stops = Vec::new();
+
+  loop {
+    if let Ok(hint) = input.try_parse(parse_conic_stop_position) {
+      stops.push(GradientStop::Hint(hint));
+    } else {
+      let color = ColorInput::from_css(input)?;
+      let first_position = input.try_parse(parse_conic_stop_position).ok();
+      let second_position = if first_position.is_some() {
+        input.try_parse(parse_conic_stop_position).ok()
+      } else {
+        None
+      };
+
+      match (first_position, second_position) {
+        (Some(first_position), Some(second_position)) => {
+          stops.push(GradientStop::ColorHint {
+            color,
+            hint: Some(first_position),
+          });
+          stops.push(GradientStop::ColorHint {
+            color,
+            hint: Some(second_position),
+          });
+        }
+        (first_position, None) | (first_position, Some(_)) => {
+          stops.push(GradientStop::ColorHint {
+            color,
+            hint: first_position,
+          });
+        }
+      }
+    }
+
+    if input.try_parse(Parser::expect_comma).is_err() {
+      break;
+    }
+  }
+
+  Ok(stops)
 }
 
 impl<'i> FromCss<'i> for ConicGradient {
@@ -244,7 +307,7 @@ impl<'i> FromCss<'i> for ConicGradient {
         break;
       }
 
-      let stops = GradientStops::from_css(input)?;
+      let stops = parse_conic_gradient_stops(input)?;
 
       Ok(ConicGradient {
         from_angle: from_angle.unwrap_or(Angle::zero()),
@@ -374,6 +437,60 @@ mod tests {
   }
 
   #[test]
+  fn test_parse_conic_gradient_with_angle_stops() {
+    assert_eq!(
+      ConicGradient::from_str("conic-gradient(red 0deg, lime 180deg, blue 1turn)"),
+      Ok(ConicGradient {
+        from_angle: Angle::zero(),
+        center: ObjectPosition::default(),
+        interpolation: ColorInterpolationMethod::default(),
+        stops: [
+          GradientStop::ColorHint {
+            color: Color::from_rgb(0xff0000).into(),
+            hint: Some(StopPosition(Length::Percentage(0.0))),
+          },
+          GradientStop::ColorHint {
+            color: Color::from_rgb(0x00ff00).into(),
+            hint: Some(StopPosition(Length::Percentage(50.0))),
+          },
+          GradientStop::ColorHint {
+            color: Color::from_rgb(0x0000ff).into(),
+            hint: Some(StopPosition(Length::Percentage(100.0))),
+          },
+        ]
+        .into(),
+      })
+    );
+  }
+
+  #[test]
+  fn test_parse_conic_gradient_with_double_angle_stop() {
+    assert_eq!(
+      ConicGradient::from_str("conic-gradient(red 0deg 90deg, blue)"),
+      Ok(ConicGradient {
+        from_angle: Angle::zero(),
+        center: ObjectPosition::default(),
+        interpolation: ColorInterpolationMethod::default(),
+        stops: [
+          GradientStop::ColorHint {
+            color: Color::from_rgb(0xff0000).into(),
+            hint: Some(StopPosition(Length::Percentage(0.0))),
+          },
+          GradientStop::ColorHint {
+            color: Color::from_rgb(0xff0000).into(),
+            hint: Some(StopPosition(Length::Percentage(25.0))),
+          },
+          GradientStop::ColorHint {
+            color: Color::from_rgb(0x0000ff).into(),
+            hint: None,
+          },
+        ]
+        .into(),
+      })
+    );
+  }
+
+  #[test]
   fn test_parse_conic_gradient_complex() {
     let gradient = ConicGradient::from_str("conic-gradient(from 90deg at 25% 75%, red, blue)");
 
@@ -422,8 +539,7 @@ mod tests {
 
     let context = GlobalContext::default();
     let render_context = RenderContext::new_test(&context, (100, 100).into());
-    let mut buffer_pool = crate::rendering::BufferPool::default();
-    let tile = ConicGradientTile::new(&gradient, 100, 100, &render_context, &mut buffer_pool);
+    let tile = ConicGradientTile::new(&gradient, 100, 100, &render_context);
 
     // Top center (50, 0) should be red (start of gradient)
     let color_top = tile.get_pixel(50, 0);
@@ -468,8 +584,7 @@ mod tests {
 
     let context = GlobalContext::default();
     let render_context = RenderContext::new_test(&context, (100, 100).into());
-    let mut buffer_pool = crate::rendering::BufferPool::default();
-    let tile = ConicGradientTile::new(&gradient, 100, 100, &render_context, &mut buffer_pool);
+    let tile = ConicGradientTile::new(&gradient, 100, 100, &render_context);
 
     // Top-center should be red
     let top = tile.get_pixel(50, 0);

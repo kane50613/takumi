@@ -6,6 +6,7 @@ mod canvas;
 mod components;
 /// Debug drawing utilities
 mod debug_drawing;
+mod dithering;
 /// Image drawing functions
 mod image_drawing;
 pub(crate) mod inline_drawing;
@@ -25,6 +26,7 @@ pub(crate) use blend::*;
 pub(crate) use canvas::*;
 pub(crate) use components::*;
 pub(crate) use debug_drawing::*;
+pub use dithering::*;
 pub(crate) use image_drawing::*;
 pub use render::*;
 pub(crate) use text_drawing::*;

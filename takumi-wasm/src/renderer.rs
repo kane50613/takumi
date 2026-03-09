@@ -14,8 +14,9 @@ use takumi::{
   parley::{FontWeight, fontique::FontInfoOverride},
   rendering::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
-    RenderOptionsBuilder, SequentialSceneBuilder, encode_animated_gif, encode_animated_png,
-    encode_animated_webp, measure_layout, render, render_sequence_animation, write_image,
+    RenderOptionsBuilder, SequentialSceneBuilder, apply_dithering, encode_animated_gif,
+    encode_animated_png, encode_animated_webp, measure_layout, render, render_sequence_animation,
+    write_image,
   },
   resources::image::{ImageSource as LoadedImageSource, load_image_source_from_bytes},
 };
@@ -236,7 +237,11 @@ impl Renderer {
 
     let format = options.format.unwrap_or(OutputFormat::Png);
 
+    let dithering = options.dithering.unwrap_or_default();
+
     if format == OutputFormat::Raw {
+      let mut image = image;
+      apply_dithering(&mut image, dithering);
       return Ok(image.into_raw());
     }
 
@@ -247,6 +252,7 @@ impl Renderer {
       &mut buffer,
       format.into(),
       options.quality,
+      dithering,
     )
     .map_err(map_error)?;
 

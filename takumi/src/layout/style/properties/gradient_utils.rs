@@ -5,7 +5,10 @@ use taffy::Point;
 use wide::f32x4;
 
 use super::{Color, GradientStop, ResolvedGradientStop};
-use crate::rendering::{BufferPool, RenderContext, blend_pixel};
+use crate::rendering::{RenderContext, blend_pixel};
+
+const MIN_GRADIENT_LUT_SIZE: usize = 1024;
+const MAX_GRADIENT_LUT_SIZE: usize = 8193;
 
 /// Interpolates between two colors in RGBA space, if t is 0.0 or 1.0, returns the first or second color.
 /// Uses SIMD to process all 4 color channels in parallel.
@@ -94,47 +97,15 @@ pub(crate) fn interpolate_with_color_space(
   ])
 }
 
-pub(crate) const BAYER_MATRIX_8X8: [[f32; 8]; 8] = [
-  [
-    -0.5, 0.0, -0.375, 0.125, -0.46875, 0.03125, -0.34375, 0.15625,
-  ],
-  [
-    0.25, -0.25, 0.375, -0.125, 0.28125, -0.21875, 0.40625, -0.09375,
-  ],
-  [
-    -0.3125, 0.1875, -0.4375, 0.0625, -0.28125, 0.21875, -0.40625, 0.09375,
-  ],
-  [
-    0.4375, -0.0625, 0.3125, -0.1875, 0.46875, -0.03125, 0.34375, -0.15625,
-  ],
-  [
-    -0.453125, 0.046875, -0.328125, 0.171875, -0.484375, 0.015625, -0.359375, 0.140625,
-  ],
-  [
-    0.296875, -0.203125, 0.421875, -0.078125, 0.265625, -0.234375, 0.390625, -0.109375,
-  ],
-  [
-    -0.265625, 0.234375, -0.390625, 0.109375, -0.296875, 0.203125, -0.421875, 0.078125,
-  ],
-  [
-    0.484375, -0.015625, 0.359375, -0.140625, 0.453125, -0.046875, 0.328125, -0.171875,
-  ],
-];
-
-/// Applies Bayer matrix dithering to a high-precision color and returns an 8-bit RGBA color.
-#[inline(always)]
-pub(crate) fn apply_dither(color: &[f32; 4], x: u32, y: u32) -> [u8; 4] {
-  apply_dither_with_value(color, BAYER_MATRIX_8X8[(y & 7) as usize][(x & 7) as usize])
-}
-
-#[inline(always)]
-pub(crate) fn apply_dither_with_value(color: &[f32; 4], dither: f32) -> [u8; 4] {
-  [
-    (color[0] + dither).clamp(0.0, 255.0).round() as u8,
-    (color[1] + dither).clamp(0.0, 255.0).round() as u8,
-    (color[2] + dither).clamp(0.0, 255.0).round() as u8,
-    (color[3] + dither).clamp(0.0, 255.0).round() as u8,
-  ]
+impl From<Color> for [f32; 4] {
+  fn from(color: Color) -> Self {
+    [
+      color.0[0] as f32,
+      color.0[1] as f32,
+      color.0[2] as f32,
+      color.0[3] as f32,
+    ]
+  }
 }
 
 pub(crate) trait GradientOverlayTile {
@@ -201,23 +172,90 @@ pub(crate) fn overlay_gradient_tile_fast_normal_unconstrained<T: GradientOverlay
   for dest_y in dest_y_min..dest_y_max {
     let src_y = (dest_y - offset_y) as u32;
     let src_x_start = (dest_x_min - offset_x) as u32;
-    let mut src_x = src_x_start;
     let mut row_state = tile.begin_row(src_x_start, src_y, lut_len);
-    let dither_row = &BAYER_MATRIX_8X8[(src_y & 7) as usize];
-
     for dest_x in dest_x_min..dest_x_max {
       let lut_idx = tile.next_lut_index(&mut row_state);
       debug_assert!(lut_idx < lut_len);
-      let pixel = Rgba(apply_dither_with_value(
-        &lut_samples[lut_idx],
-        dither_row[(src_x & 7) as usize],
-      ));
+      let pixel: Rgba<u8> = Color::from(lut_samples[lut_idx]).into();
       if pixel.0[3] != 0 {
         let current = bottom.get_pixel_mut(dest_x as u32, dest_y as u32);
         blend_pixel(current, pixel, super::BlendMode::Normal);
       }
-      src_x += 1;
     }
+  }
+}
+
+#[inline(always)]
+fn position_to_sample_index(position: f32, axis_length: f32, lut_size: usize) -> usize {
+  if lut_size <= 1 || axis_length.abs() <= f32::EPSILON {
+    return 0;
+  }
+
+  let max_index = lut_size - 1;
+  ((position.clamp(0.0, axis_length) * max_index as f32 / axis_length).round() as usize)
+    .min(max_index)
+}
+
+fn assign_stop_sample_indices(
+  resolved_stops: &[ResolvedGradientStop],
+  axis_length: f32,
+  lut_size: usize,
+) -> Vec<usize> {
+  if resolved_stops.is_empty() || lut_size == 0 {
+    return Vec::new();
+  }
+
+  let stop_count = resolved_stops.len();
+  let max_index = lut_size - 1;
+  let mut indices = vec![0usize; stop_count];
+  let mut i = 0usize;
+
+  while i < stop_count {
+    let position = resolved_stops[i].position;
+    let preferred = position_to_sample_index(position, axis_length, lut_size);
+    let mut run_end = i + 1;
+    while run_end < stop_count
+      && (resolved_stops[run_end].position - position).abs() <= f32::EPSILON
+    {
+      run_end += 1;
+    }
+
+    let run_len = run_end - i;
+    let run_start_index = preferred.saturating_sub(run_len.saturating_sub(1));
+    for (offset, slot) in indices[i..run_end].iter_mut().enumerate() {
+      let logical_index = run_start_index.saturating_add(offset).min(max_index);
+      let stop_index = i + offset;
+      let lower_bound = stop_index.min(max_index);
+      let upper_bound = max_index.saturating_sub(stop_count - 1 - stop_index);
+      *slot = logical_index.clamp(lower_bound, upper_bound);
+    }
+
+    i = run_end;
+  }
+
+  for i in 1..stop_count {
+    indices[i] = indices[i].max(indices[i - 1].saturating_add(1));
+  }
+
+  for i in (0..stop_count.saturating_sub(1)).rev() {
+    indices[i] = indices[i].min(indices[i + 1].saturating_sub(1));
+  }
+
+  indices
+}
+
+fn snap_stop_samples(
+  typed_lut: &mut [[f32; 4]],
+  resolved_stops: &[ResolvedGradientStop],
+  axis_length: f32,
+) {
+  if typed_lut.is_empty() || resolved_stops.is_empty() {
+    return;
+  }
+
+  let stop_indices = assign_stop_sample_indices(resolved_stops, axis_length, typed_lut.len());
+  for (stop, &sample_index) in resolved_stops.iter().zip(&stop_indices) {
+    typed_lut[sample_index] = stop.color.into();
   }
 }
 
@@ -227,10 +265,9 @@ pub(crate) fn build_color_lut_with_interpolation(
   resolved_stops: &[ResolvedGradientStop],
   axis_length: f32,
   lut_size: usize,
-  buffer_pool: &mut BufferPool,
   color_space: ColorSpaceTag,
   hue_direction: HueDirection,
-) -> Vec<u8> {
+) -> Vec<[f32; 4]> {
   if lut_size == 0 {
     return Vec::new();
   }
@@ -242,27 +279,8 @@ pub(crate) fn build_color_lut_with_interpolation(
       .map(|s| s.color)
       .unwrap_or(crate::layout::style::Color::transparent());
 
-    let c = [
-      color.0[0] as f32,
-      color.0[1] as f32,
-      color.0[2] as f32,
-      color.0[3] as f32,
-    ];
-    let mut lut = buffer_pool.acquire_dirty(16);
-    if let Ok(f32_lut) = bytemuck::try_cast_slice_mut::<u8, [f32; 4]>(&mut lut) {
-      f32_lut[0] = c;
-      return lut;
-    }
-
-    let typed_lut = [c];
-    lut.copy_from_slice(bytemuck::cast_slice(&typed_lut));
-    return lut;
+    return vec![color.into()];
   }
-
-  let Some(lut_bytes) = lut_size.checked_mul(16) else {
-    return Vec::new();
-  };
-  let mut lut = buffer_pool.acquire_dirty(lut_bytes);
 
   let mut left_index = 0usize;
   let mut right_index = 1usize;
@@ -282,13 +300,7 @@ pub(crate) fn build_color_lut_with_interpolation(
     }
 
     let color = if right_index >= resolved_stops.len() {
-      let color = resolved_stops[left_index].color;
-      f32x4::from([
-        color.0[0] as f32,
-        color.0[1] as f32,
-        color.0[2] as f32,
-        color.0[3] as f32,
-      ])
+      f32x4::from(<[f32; 4]>::from(resolved_stops[left_index].color))
     } else {
       let left_stop = &resolved_stops[left_index];
       let right_stop = &resolved_stops[right_index];
@@ -311,26 +323,48 @@ pub(crate) fn build_color_lut_with_interpolation(
     color.to_array()
   };
 
-  if let Ok(f32_lut) = bytemuck::try_cast_slice_mut::<u8, [f32; 4]>(&mut lut) {
-    for (sample_index, chunk) in f32_lut.iter_mut().enumerate() {
-      *chunk = write_sample(sample_index);
-    }
-    return lut;
-  }
-
   let mut typed_lut = vec![[0.0; 4]; lut_size];
   for (sample_index, chunk) in typed_lut.iter_mut().enumerate() {
     *chunk = write_sample(sample_index);
   }
-  lut.copy_from_slice(bytemuck::cast_slice(&typed_lut));
-
-  lut
+  snap_stop_samples(&mut typed_lut, resolved_stops, axis_length);
+  typed_lut
 }
 
 /// Calculates an adaptive LUT size based on the gradient axis length.
-pub(crate) fn adaptive_lut_size(axis_length: f32) -> usize {
-  let size = (axis_length.ceil() as usize).next_power_of_two().max(1024);
-  (size + 1).min(8193)
+pub(crate) fn adaptive_lut_size(
+  axis_length: f32,
+  resolved_stops: &[ResolvedGradientStop],
+) -> usize {
+  let base_size = (axis_length.ceil() as usize)
+    .max(1)
+    .next_power_of_two()
+    .max(MIN_GRADIENT_LUT_SIZE);
+
+  let min_interval = resolved_stops
+    .windows(2)
+    .map(|stops| stops[1].position - stops[0].position)
+    .filter(|interval| *interval > f32::EPSILON)
+    .fold(f32::INFINITY, f32::min);
+
+  let segment_aware_size = if min_interval.is_finite() {
+    let target_samples = ((axis_length / min_interval).ceil() as usize)
+      .saturating_add(resolved_stops.len())
+      .max(2);
+    target_samples.next_power_of_two()
+  } else {
+    resolved_stops
+      .len()
+      .saturating_mul(2)
+      .max(2)
+      .next_power_of_two()
+  };
+
+  let size = base_size
+    .max(segment_aware_size)
+    .max(resolved_stops.len().saturating_mul(2))
+    .max(2);
+  (size + 1).min(MAX_GRADIENT_LUT_SIZE)
 }
 
 const UNDEFINED_POSITION: f32 = -1.0;
@@ -526,15 +560,13 @@ mod tests {
     for dest_y in dest_y_min..dest_y_max {
       let src_y = (dest_y - offset_y) as u32;
       let src_x_start = (dest_x_min - offset_x) as u32;
-      let mut src_x = src_x_start;
       let mut row_state = tile.begin_row(src_x_start, src_y, lut_samples.len());
 
       for dest_x in dest_x_min..dest_x_max {
         let lut_idx = tile.next_lut_index(&mut row_state);
-        let pixel = Rgba(apply_dither(&lut_samples[lut_idx], src_x, src_y));
+        let pixel: Rgba<u8> = Color::from(lut_samples[lut_idx]).into();
         let current = bottom.get_pixel_mut(dest_x as u32, dest_y as u32);
         blend_pixel(current, pixel, BlendMode::Normal);
-        src_x += 1;
       }
     }
   }
@@ -699,5 +731,123 @@ mod tests {
         position: render_context.sizing.viewport.width.unwrap_or_default() as f32,
       },
     );
+  }
+
+  #[test]
+  fn test_adaptive_lut_size_grows_for_tight_stop_clusters() {
+    let resolved = [
+      ResolvedGradientStop {
+        color: Color([255, 0, 0, 255]),
+        position: 0.0,
+      },
+      ResolvedGradientStop {
+        color: Color([0, 255, 0, 255]),
+        position: 0.25,
+      },
+      ResolvedGradientStop {
+        color: Color([0, 0, 255, 255]),
+        position: 256.0,
+      },
+    ];
+
+    let size = adaptive_lut_size(256.0, &resolved);
+
+    assert!(size > 1025);
+    assert!(size <= MAX_GRADIENT_LUT_SIZE);
+  }
+
+  #[test]
+  fn test_build_color_lut_preserves_hard_stop_transition() {
+    let resolved = [
+      ResolvedGradientStop {
+        color: Color([255, 0, 0, 255]),
+        position: 0.0,
+      },
+      ResolvedGradientStop {
+        color: Color([255, 0, 0, 255]),
+        position: 8.0,
+      },
+      ResolvedGradientStop {
+        color: Color([0, 0, 255, 255]),
+        position: 8.0,
+      },
+      ResolvedGradientStop {
+        color: Color([0, 0, 255, 255]),
+        position: 16.0,
+      },
+    ];
+
+    let lut = build_color_lut_with_interpolation(
+      &resolved,
+      16.0,
+      17,
+      ColorSpaceTag::Srgb,
+      HueDirection::Shorter,
+    );
+
+    assert_eq!(Color::from(lut[7]), Color([255, 0, 0, 255]));
+    assert_eq!(Color::from(lut[8]), Color([0, 0, 255, 255]));
+  }
+
+  #[test]
+  fn test_build_color_lut_gives_distinct_samples_to_narrow_interval() {
+    let resolved = [
+      ResolvedGradientStop {
+        color: Color([255, 0, 0, 255]),
+        position: 0.0,
+      },
+      ResolvedGradientStop {
+        color: Color([0, 255, 0, 255]),
+        position: 0.05,
+      },
+      ResolvedGradientStop {
+        color: Color([0, 0, 255, 255]),
+        position: 32.0,
+      },
+    ];
+
+    let lut_size = adaptive_lut_size(32.0, &resolved);
+    let lut = build_color_lut_with_interpolation(
+      &resolved,
+      32.0,
+      lut_size,
+      ColorSpaceTag::Srgb,
+      HueDirection::Shorter,
+    );
+    let stop_indices = assign_stop_sample_indices(&resolved, 32.0, lut.len());
+
+    assert!(stop_indices[0] < stop_indices[1]);
+    assert_eq!(Color::from(lut[stop_indices[0]]), resolved[0].color);
+    assert_eq!(Color::from(lut[stop_indices[1]]), resolved[1].color);
+  }
+
+  #[test]
+  fn test_build_color_lut_remains_monotonic_for_even_spacing() {
+    let resolved = [
+      ResolvedGradientStop {
+        color: Color([0, 0, 0, 255]),
+        position: 0.0,
+      },
+      ResolvedGradientStop {
+        color: Color([255, 255, 255, 255]),
+        position: 10.0,
+      },
+    ];
+
+    let lut = build_color_lut_with_interpolation(
+      &resolved,
+      10.0,
+      33,
+      ColorSpaceTag::Srgb,
+      HueDirection::Shorter,
+    );
+
+    for pair in lut.windows(2) {
+      assert!(pair[0][0] <= pair[1][0]);
+      assert!(pair[0][1] <= pair[1][1]);
+      assert!(pair[0][2] <= pair[1][2]);
+      assert_eq!(pair[0][3], 255.0);
+      assert_eq!(pair[1][3], 255.0);
+    }
   }
 }
