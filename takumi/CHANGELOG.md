@@ -1,5 +1,11 @@
 # takumi
 
+## 0.71.5
+
+### Patch Changes
+
+- 02d7e3a: Support `.ttc` fonts loading
+
 ## 0.71.4
 
 ### Patch Changes
