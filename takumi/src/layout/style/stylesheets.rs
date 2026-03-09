@@ -2137,12 +2137,14 @@ impl ComputedStyle {
 
 #[cfg(test)]
 mod tests {
-  use std::rc::Rc;
+  use std::{collections::HashMap, rc::Rc};
 
   use cssparser::{Parser, ParserInput};
   use taffy::Size;
 
-  use super::{CssWideKeyword, LonghandId, PropertyId, StyleDeclarationBlock};
+  use super::{
+    CssWideKeyword, LonghandId, PropertyId, StyleDeclarationBlock, resolve_var_references,
+  };
   use crate::{
     layout::{
       Viewport,
@@ -2179,6 +2181,18 @@ mod tests {
       style.append_block(parse_declarations(name, value));
     }
     style.inherit(parent)
+  }
+
+  fn resolve_var(
+    raw_value: &str,
+    custom_properties: impl IntoIterator<Item = (&'static str, &'static str)>,
+  ) -> Option<String> {
+    let custom_properties = custom_properties
+      .into_iter()
+      .map(|(name, value)| (name.to_owned(), value.to_owned()))
+      .collect::<HashMap<_, _>>();
+
+    resolve_var_references(raw_value, &custom_properties, &mut Vec::new())
   }
 
   #[test]
@@ -2518,5 +2532,73 @@ mod tests {
     assert_eq!(style.padding_right, Length::Px(10.0));
     assert_eq!(style.padding_bottom, Length::Px(6.0));
     assert_eq!(style.padding_left, Length::Px(10.0));
+  }
+
+  #[test]
+  fn test_var_rejects_non_custom_property_name() {
+    let style =
+      inherited_style_from_pairs([("width", "var(size, 18px)")], &ComputedStyle::default());
+
+    assert_eq!(style.width, Length::default());
+  }
+
+  #[test]
+  fn test_var_allows_trailing_tokens_when_property_parser_is_loose() {
+    let style = inherited_style_from_pairs(
+      [("--size", "24px"), ("width", "var(--size) 10px")],
+      &ComputedStyle::default(),
+    );
+
+    assert_eq!(style.width, Length::Px(24.0));
+  }
+
+  #[test]
+  fn test_var_rejects_missing_separator_in_function() {
+    let style = inherited_style_from_pairs(
+      [("--size", "24px"), ("width", "var(--size 18px)")],
+      &ComputedStyle::default(),
+    );
+
+    assert_eq!(style.width, Length::default());
+  }
+
+  #[test]
+  fn test_var_supports_nested_fallback_chains() {
+    let style = inherited_style_from_pairs(
+      [
+        ("--backup", "22px"),
+        ("width", "var(--missing, var(--backup, 14px))"),
+      ],
+      &ComputedStyle::default(),
+    );
+
+    assert_eq!(style.width, Length::Px(22.0));
+  }
+
+  #[test]
+  fn test_var_resolves_inside_nested_functions() {
+    let resolved = resolve_var("calc(var(--space) + 2px)", [("--space", "8px")]);
+
+    assert_eq!(resolved.as_deref(), Some("calc(8px + 2px)"));
+  }
+
+  #[test]
+  fn test_var_resolves_inside_nested_blocks() {
+    let resolved = resolve_var(
+      "(var(--x)) [var(--y)] {var(--z)}",
+      [("--x", "1px"), ("--y", "2px"), ("--z", "3px")],
+    );
+
+    assert_eq!(resolved.as_deref(), Some("(1px) [2px] {3px}"));
+  }
+
+  #[test]
+  fn test_var_drops_declaration_when_substitution_stays_invalid() {
+    let style = inherited_style_from_pairs(
+      [("--size", "red"), ("width", "var(--size)")],
+      &ComputedStyle::default(),
+    );
+
+    assert_eq!(style.width, Length::default());
   }
 }
