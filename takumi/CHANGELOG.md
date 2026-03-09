@@ -1,5 +1,11 @@
 # takumi
 
+## 0.71.3
+
+### Patch Changes
+
+- a279b4c: Add `dithering` option for smoother gradients
+
 ## 0.71.2
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # @takumi-rs/image-response
 
+## 0.71.3
+
+### Patch Changes
+
+- a279b4c: Add `dithering` option for smoother gradients
+- Updated dependencies [a279b4c]
+  - @takumi-rs/core@0.71.3
+  - @takumi-rs/wasm@0.71.3
+  - @takumi-rs/helpers@0.71.3
+
 ## 0.71.2
 
 ### Patch Changes
