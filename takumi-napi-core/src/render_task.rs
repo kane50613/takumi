@@ -87,7 +87,7 @@ impl Task for RenderTask {
       .read()
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
-    let image = render(
+    let mut image = render(
       RenderOptionsBuilder::default()
         .viewport(self.viewport)
         .fetched_resources(initialized_images)
@@ -101,9 +101,11 @@ impl Task for RenderTask {
     )
     .map_err(map_error)?;
 
-    if self.format == OutputFormat::raw {
-      let mut image = image;
+    if self.dithering != DitheringAlgorithm::None {
       apply_dithering(&mut image, self.dithering);
+    }
+
+    if self.format == OutputFormat::raw {
       return Ok(image.into_raw());
     }
 
@@ -114,7 +116,6 @@ impl Task for RenderTask {
       &mut buffer,
       self.format.into(),
       self.quality,
-      self.dithering,
     )
     .map_err(map_error)?;
 

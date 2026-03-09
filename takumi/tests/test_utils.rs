@@ -13,9 +13,9 @@ use takumi::{
   GlobalContext,
   layout::{DEFAULT_FONT_SIZE, Viewport, node::NodeKind},
   rendering::{
-    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame,
-    DitheringAlgorithm, ImageOutputFormat, RenderOptions, RenderOptionsBuilder,
-    encode_animated_gif, encode_animated_png, encode_animated_webp, render, write_image,
+    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
+    RenderOptions, RenderOptionsBuilder, encode_animated_gif, encode_animated_png,
+    encode_animated_webp, render, write_image,
   },
   resources::image::{ImageSource, parse_svg_str},
 };
@@ -188,14 +188,7 @@ fn save_image<P: AsRef<Path>>(image: RgbaImage, path: P, format: ImageOutputForm
 
   let mut file = File::create(path).unwrap();
 
-  write_image(
-    Cow::Owned(image),
-    &mut file,
-    format,
-    None,
-    DitheringAlgorithm::None,
-  )
-  .unwrap();
+  write_image(Cow::Owned(image), &mut file, format, None).unwrap();
 }
 
 #[allow(dead_code)]

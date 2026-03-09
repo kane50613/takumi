@@ -8,7 +8,6 @@ use serde::Deserialize;
 /// Encode a sequence of RGBA frames into an animated WebP and write to `destination`.
 pub use super::webp::encode_animated_webp;
 use super::webp::{has_any_alpha_pixel, strip_alpha_channel, write_webp};
-use super::{DitheringAlgorithm, apply_dithering};
 
 use crate::{Result, error::TakumiError};
 
@@ -119,16 +118,11 @@ fn duration_ms_to_gif_delay(duration_ms: u32) -> u16 {
 
 /// Writes a single rendered image to `destination` using `format`.
 pub fn write_image<'a, T: Write>(
-  mut image: Cow<'a, RgbaImage>,
+  image: Cow<'a, RgbaImage>,
   destination: &mut T,
   format: ImageOutputFormat,
   quality: Option<u8>,
-  dithering: DitheringAlgorithm,
 ) -> Result<()> {
-  if dithering != DitheringAlgorithm::None {
-    apply_dithering(image.to_mut(), dithering);
-  }
-
   match format {
     ImageOutputFormat::Jpeg => {
       let width = image.width();
@@ -272,9 +266,8 @@ mod tests {
   use libwebp_sys::*;
 
   use super::{
-    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame,
-    DitheringAlgorithm, ImageOutputFormat, encode_animated_gif, encode_animated_png,
-    encode_animated_webp, write_image,
+    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
+    encode_animated_gif, encode_animated_png, encode_animated_webp, write_image,
   };
 
   #[test]
@@ -433,7 +426,7 @@ mod tests {
   }
 
   #[test]
-  fn write_image_applies_ordered_bayer_dithering() {
+  fn write_image_does_not_apply_dithering() {
     let mut image = RgbaImage::new(8, 8);
 
     for (index, pixel) in image.as_mut().chunks_exact_mut(4).enumerate() {
@@ -449,7 +442,6 @@ mod tests {
       &mut encoded_none,
       ImageOutputFormat::Png,
       None,
-      DitheringAlgorithm::None,
     );
     assert!(encode_none.is_ok(), "failed to encode non-dithered image");
 
@@ -458,11 +450,10 @@ mod tests {
       &mut encoded_dithered,
       ImageOutputFormat::Png,
       None,
-      DitheringAlgorithm::OrderedBayer,
     );
-    assert!(encode_dithered.is_ok(), "failed to encode dithered image");
+    assert!(encode_dithered.is_ok(), "failed to encode image");
 
-    assert_ne!(encoded_none, encoded_dithered);
+    assert_eq!(encoded_none, encoded_dithered);
   }
 
   #[test]

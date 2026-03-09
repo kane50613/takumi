@@ -8,7 +8,10 @@ use serde_json::from_str;
 use std::borrow::Cow;
 use takumi::{
   layout::{Viewport, node::NodeKind},
-  rendering::{DitheringAlgorithm, ImageOutputFormat, RenderOptionsBuilder, render, write_image},
+  rendering::{
+    DitheringAlgorithm, ImageOutputFormat, RenderOptionsBuilder, apply_dithering, render,
+    write_image,
+  },
 };
 use tokio::task::spawn_blocking;
 
@@ -48,23 +51,21 @@ pub async fn generate_image_handler(
       .build()
       .unwrap();
 
-    let image = render(options).map_err(|_| {
+    let mut image = render(options).map_err(|_| {
       (
         StatusCode::INTERNAL_SERVER_ERROR,
         "Failed to render image.".to_string(),
       )
     })?;
 
+    let dithering = query.dithering.unwrap_or_default();
+    if dithering != DitheringAlgorithm::None {
+      apply_dithering(&mut image, dithering);
+    }
+
     let mut buffer = Vec::new();
 
-    write_image(
-      Cow::Owned(image),
-      &mut buffer,
-      format,
-      query.quality,
-      query.dithering.unwrap_or_default(),
-    )
-    .map_err(|_| {
+    write_image(Cow::Owned(image), &mut buffer, format, query.quality).map_err(|_| {
       (
         StatusCode::INTERNAL_SERVER_ERROR,
         "Failed to write image.".to_string(),

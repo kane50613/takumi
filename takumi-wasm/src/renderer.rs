@@ -233,15 +233,17 @@ impl Renderer {
       .build()
       .map_err(|e| JsValue::from_str(&format!("Failed to build render options: {e}")))?;
 
-    let image = render(render_options).map_err(map_error)?;
+    let mut image = render(render_options).map_err(map_error)?;
 
     let format = options.format.unwrap_or(OutputFormat::Png);
 
     let dithering = options.dithering.unwrap_or_default();
 
-    if format == OutputFormat::Raw {
-      let mut image = image;
+    if dithering != DitheringAlgorithm::None {
       apply_dithering(&mut image, dithering);
+    }
+
+    if format == OutputFormat::Raw {
       return Ok(image.into_raw());
     }
 
@@ -252,7 +254,6 @@ impl Renderer {
       &mut buffer,
       format.into(),
       options.quality,
-      dithering,
     )
     .map_err(map_error)?;
 
