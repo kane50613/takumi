@@ -1,5 +1,11 @@
 # @takumi-rs/wasm
 
+## 0.71.6
+
+### Patch Changes
+
+- 1a111a6: Add `keyframes` render option
+
 ## 0.71.5
 
 ## 0.71.4
