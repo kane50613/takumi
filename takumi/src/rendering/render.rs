@@ -995,7 +995,7 @@ mod tests {
     }
     .into();
 
-    let options = RenderOptionsBuilder::default()
+    let options_result = RenderOptionsBuilder::default()
       .global(&global)
       .viewport(Viewport::new(Some(200), Some(100)))
       .node(node)
@@ -1013,10 +1013,17 @@ mod tests {
         ],
       }])
       .time_ms(500)
-      .build()
-      .unwrap();
+      .build();
+    assert!(options_result.is_ok());
+    let Ok(options) = options_result else {
+      unreachable!()
+    };
 
-    let layout = measure_layout(options).unwrap();
+    let layout_result = measure_layout(options);
+    assert!(layout_result.is_ok());
+    let Ok(layout) = layout_result else {
+      unreachable!()
+    };
 
     assert_eq!(layout.width, 150.0);
   }
