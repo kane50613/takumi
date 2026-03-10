@@ -2,7 +2,7 @@ use std::{collections::HashMap, mem::replace, sync::Arc};
 
 use derive_builder::Builder;
 use image::RgbaImage;
-use parley::PositionedLayoutItem;
+use parley::{GlyphRun, PositionedLayoutItem};
 use serde::Serialize;
 use taffy::{AvailableSpace, Layout, NodeId, TaffyError, geometry::Size};
 
@@ -13,8 +13,8 @@ use crate::{
   layout::{
     Viewport,
     inline::{
-      InlineLayoutStage, ProcessedInlineSpan, collect_inline_items, create_inline_constraint,
-      create_inline_layout,
+      InlineBrush, InlineLayoutStage, ProcessedInlineSpan, collect_inline_items,
+      create_inline_constraint, create_inline_layout,
     },
     node::Node,
     style::{
@@ -101,6 +101,29 @@ pub struct MeasuredNode {
   pub children: Vec<MeasuredNode>,
   /// Text runs for inline layouts.
   pub runs: Vec<MeasuredTextRun>,
+}
+
+fn measured_run_text<'a, N: Node<N>>(
+  text: &'a str,
+  spans: &[ProcessedInlineSpan<'_, '_, N>],
+  glyph_run: &GlyphRun<'_, InlineBrush>,
+) -> &'a str {
+  let text_range = glyph_run.run().text_range();
+  let Some(span_id) = glyph_run.style().brush.source_span_id else {
+    return &text[text_range];
+  };
+
+  let Some(ProcessedInlineSpan::Text { byte_range, .. }) = spans.get(span_id as usize) else {
+    return &text[text_range];
+  };
+
+  let start = text_range.start.max(byte_range.start);
+  let end = text_range.end.min(byte_range.end);
+  if start >= end {
+    return "";
+  }
+
+  &text[start..end]
 }
 
 struct TraversalEnter {
@@ -245,8 +268,10 @@ fn collect_measure_result<'g, Nodes: Node<Nodes>>(
             for item in line.items() {
               match item {
                 PositionedLayoutItem::GlyphRun(glyph_run) => {
-                  let text_range = glyph_run.run().text_range();
-                  let text = &text[text_range];
+                  let text = measured_run_text(&text, &spans, &glyph_run);
+                  if text.is_empty() {
+                    continue;
+                  }
                   let run = glyph_run.run();
                   let metrics = run.metrics();
 

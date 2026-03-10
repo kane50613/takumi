@@ -1,6 +1,6 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, ops::Range};
 
-use parley::{InlineBox, PositionedLayoutItem};
+use parley::{InlineBox, PositionedLayoutItem, TextStyle};
 use taffy::{AvailableSpace, Layout, Rect, Size};
 
 use crate::{
@@ -8,8 +8,9 @@ use crate::{
   layout::{
     node::Node,
     style::{
-      Color, FontSynthesis, ResolvedVerticalAlign, SizedFontStyle, SizedTextDecorationThickness,
-      TextDecorationLines, TextDecorationSkipInk, TextOverflow, TextWrapStyle, VerticalAlign,
+      BorderStyle, Color, FontSynthesis, ResolvedVerticalAlign, SizedFontStyle,
+      SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextOverflow,
+      TextWrapStyle, VerticalAlign,
     },
     tree::RenderNode,
   },
@@ -51,10 +52,21 @@ impl<N: Node<N>> From<&InlineBoxItem<'_, '_, N>> for Layout {
 
 pub(crate) enum ProcessedInlineSpan<'c, 'g, N: Node<N>> {
   Text {
+    span_id: u64,
+    byte_range: Range<usize>,
     text: String,
     style: SizedFontStyle<'c>,
+    outline: InlineTextOutlineStyle,
   },
   Box(InlineBoxItem<'c, 'g, N>),
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct InlineTextOutlineStyle {
+  pub(crate) width: f32,
+  pub(crate) offset: f32,
+  pub(crate) color: Color,
+  pub(crate) style: BorderStyle,
 }
 
 pub(crate) enum InlineItem<'c, 'g, N: Node<N>> {
@@ -118,6 +130,7 @@ pub type InlineLayout = parley::Layout<InlineBrush>;
 
 #[derive(Clone, PartialEq, Copy, Debug)]
 pub(crate) struct InlineBrush {
+  pub source_span_id: Option<u64>,
   pub color: Color,
   pub decoration_color: Color,
   pub decoration_thickness: SizedTextDecorationThickness,
@@ -131,6 +144,7 @@ pub(crate) struct InlineBrush {
 impl Default for InlineBrush {
   fn default() -> Self {
     Self {
+      source_span_id: None,
       color: Color::black(),
       decoration_color: Color::black(),
       decoration_thickness: SizedTextDecorationThickness::Value(0.0),
@@ -139,6 +153,30 @@ impl Default for InlineBrush {
       stroke_color: Color::black(),
       font_synthesis: FontSynthesis::default(),
       vertical_align: VerticalAlign::default(),
+    }
+  }
+}
+
+fn text_style_with_span_id<'s>(
+  style: &'s SizedFontStyle<'s>,
+  source_span_id: Option<u64>,
+) -> TextStyle<'s, InlineBrush> {
+  let mut text_style: TextStyle<'s, InlineBrush> = style.into();
+  text_style.brush.source_span_id = source_span_id;
+  text_style
+}
+
+fn refresh_text_span_ranges<N: Node<N>>(spans: &mut [ProcessedInlineSpan<'_, '_, N>]) {
+  let mut byte_offset = 0;
+
+  for span in spans {
+    if let ProcessedInlineSpan::Text {
+      text, byte_range, ..
+    } = span
+    {
+      let end = byte_offset + text.len();
+      *byte_range = byte_offset..end;
+      byte_offset = end;
     }
   }
 }
@@ -184,16 +222,31 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c, N: Node<N> + 'c>(
           let transformed = apply_text_transform(&text, context.style.text_transform);
           let collapsed =
             apply_white_space_collapse(&transformed, style.parent.white_space_collapse);
+          let span_id = spans.len() as u64;
+          let start = index_pos;
+          let end = start + collapsed.len();
 
-          builder.push_style_span((&span_style).into());
+          builder.push_style_span(text_style_with_span_id(&span_style, Some(span_id)));
           builder.push_text(&collapsed);
           builder.pop_style_span();
 
-          index_pos += collapsed.len();
+          index_pos = end;
 
           spans.push(ProcessedInlineSpan::Text {
+            span_id,
+            byte_range: start..end,
             text: collapsed.into_owned(),
             style: span_style,
+            outline: InlineTextOutlineStyle {
+              width: context
+                .style
+                .outline_width
+                .to_px(&context.sizing, 0.0)
+                .max(0.0),
+              offset: context.style.outline_offset.to_px(&context.sizing, 0.0),
+              color: context.style.outline_color.resolve(context.current_color),
+              style: context.style.outline_style,
+            },
           });
         }
         InlineItem::RenderNode { render_node } => {
@@ -498,13 +551,20 @@ fn make_ellipsis_layout<'c, 'g: 'c, N: Node<N> + 'c>(
     spans.clear();
   }
 
+  refresh_text_span_ranges(spans);
+
   let (mut final_layout, _) = global
     .font_context
     .tree_builder(root_style.into(), |builder| {
       for span in spans.iter() {
         match span {
-          ProcessedInlineSpan::Text { text, style } => {
-            builder.push_style_span(style.into());
+          ProcessedInlineSpan::Text {
+            span_id,
+            text,
+            style,
+            ..
+          } => {
+            builder.push_style_span(text_style_with_span_id(style, Some(*span_id)));
             builder.push_text(text);
             builder.pop_style_span();
           }
@@ -513,7 +573,7 @@ fn make_ellipsis_layout<'c, 'g: 'c, N: Node<N> + 'c>(
           }
         }
       }
-      builder.push_style_span((&*ellipsis_style).into());
+      builder.push_style_span(text_style_with_span_id(&ellipsis_style, None));
       builder.push_text(ellipsis_char);
       builder.pop_style_span();
     });

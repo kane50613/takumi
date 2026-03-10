@@ -1800,6 +1800,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, InlineBrush> {
         style.parent.overflow_wrap.into()
       },
       brush: InlineBrush {
+        source_span_id: None,
         color: style.color,
         decoration_color: style.text_decoration_color,
         decoration_thickness: style.text_decoration_thickness,

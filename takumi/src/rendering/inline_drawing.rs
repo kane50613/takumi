@@ -4,6 +4,7 @@ use image::{GenericImageView, Rgba};
 use parley::{GlyphRun, PositionedInlineBox, PositionedLayoutItem};
 use swash::FontRef;
 use taffy::{Layout, Point};
+use zeno::{Command, PathBuilder, Stroke};
 
 use crate::{
   Result,
@@ -11,7 +12,7 @@ use crate::{
     inline::{InlineBoxItem, InlineBrush, InlineLayout, ProcessedInlineSpan},
     node::Node,
     style::{
-      Affine, BackgroundClip, BlendMode, Color, ImageScalingAlgorithm, SizedFontStyle,
+      Affine, BackgroundClip, BlendMode, BorderStyle, Color, ImageScalingAlgorithm, SizedFontStyle,
       SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk,
     },
     tree::LayoutTree,
@@ -19,7 +20,8 @@ use crate::{
   rendering::{
     BackgroundTile, BorderProperties, Canvas, ColorTile, RenderContext, collect_background_layers,
     collect_outline_paths, draw_decoration, draw_glyph, draw_glyph_clip_image,
-    draw_glyph_text_shadow, mask_index_from_coord, rasterize_layers, render::render_node,
+    draw_glyph_text_shadow, mask_index_from_coord, overlay_area, rasterize_layers,
+    render::render_node,
   },
   resources::font::{FontError, ResolvedGlyph},
 };
@@ -42,6 +44,16 @@ struct GlyphSkipInkData {
   width: u32,
   height: u32,
   alpha: Box<[u8]>,
+}
+
+#[derive(Clone, Copy)]
+struct InlineOutlineRect {
+  span_id: u64,
+  line_index: usize,
+  x: f32,
+  y: f32,
+  width: f32,
+  height: f32,
 }
 
 fn build_glyph_bounds_cache(
@@ -367,6 +379,226 @@ fn draw_glyph_run_line_through(
   Ok(())
 }
 
+fn collect_glyph_run_outline_rect(
+  glyph_run: &GlyphRun<'_, InlineBrush>,
+  layout: Layout,
+  line_index: usize,
+  line_top: f32,
+  line_height: f32,
+) -> Option<InlineOutlineRect> {
+  let span_id = glyph_run.style().brush.source_span_id?;
+
+  Some(InlineOutlineRect {
+    span_id,
+    line_index,
+    x: layout.border.left + layout.padding.left + glyph_run.offset(),
+    y: line_top,
+    width: glyph_run.advance(),
+    height: line_height,
+  })
+}
+
+fn x_ranges_touch(left: InlineOutlineRect, right: InlineOutlineRect) -> bool {
+  left.x <= right.x + right.width + 0.5 && right.x <= left.x + left.width + 0.5
+}
+
+fn append_outline_contour(path: &mut Vec<Command>, outline_rects: &[InlineOutlineRect]) {
+  let Some(first_rect) = outline_rects.first().copied() else {
+    return;
+  };
+  let last_rect = *outline_rects.last().unwrap_or(&first_rect);
+
+  path.move_to((first_rect.x, first_rect.y));
+  path.line_to((first_rect.x + first_rect.width, first_rect.y));
+
+  for window in outline_rects.windows(2) {
+    let current_rect = window[0];
+    let next_rect = window[1];
+
+    path.line_to((current_rect.x + current_rect.width, next_rect.y));
+    path.line_to((next_rect.x + next_rect.width, next_rect.y));
+  }
+
+  path.line_to((
+    last_rect.x + last_rect.width,
+    last_rect.y + last_rect.height,
+  ));
+  path.line_to((last_rect.x, last_rect.y + last_rect.height));
+
+  for index in (1..outline_rects.len()).rev() {
+    let lower_rect = outline_rects[index];
+    let upper_rect = outline_rects[index - 1];
+
+    path.line_to((lower_rect.x, upper_rect.y + upper_rect.height));
+    path.line_to((upper_rect.x, upper_rect.y + upper_rect.height));
+  }
+
+  path.close();
+}
+
+fn expand_outline_rect(outline_rect: InlineOutlineRect, amount: f32) -> Option<InlineOutlineRect> {
+  let width = outline_rect.width + amount * 2.0;
+  let height = outline_rect.height + amount * 2.0;
+  if width <= 0.0 || height <= 0.0 {
+    return None;
+  }
+
+  Some(InlineOutlineRect {
+    x: outline_rect.x - amount,
+    y: outline_rect.y - amount,
+    width,
+    height,
+    ..outline_rect
+  })
+}
+
+fn draw_outline_island<N: Node<N>>(
+  outline_rects: &[InlineOutlineRect],
+  canvas: &mut Canvas,
+  spans: &[ProcessedInlineSpan<'_, '_, N>],
+  transform: Affine,
+) {
+  let Some(first_rect) = outline_rects.first().copied() else {
+    return;
+  };
+  let Some(ProcessedInlineSpan::Text { outline, .. }) = spans.get(first_rect.span_id as usize)
+  else {
+    return;
+  };
+
+  let width = outline.width;
+  if width == 0.0 || outline.style == BorderStyle::None {
+    return;
+  }
+
+  let Some(contour_rects): Option<Vec<_>> = outline_rects
+    .iter()
+    .copied()
+    .map(|outline_rect| expand_outline_rect(outline_rect, outline.offset + width / 2.0))
+    .collect()
+  else {
+    return;
+  };
+
+  let mut path = Vec::with_capacity(contour_rects.len() * 6);
+  append_outline_contour(&mut path, &contour_rects);
+
+  let stroke = Stroke::new(width);
+  let (mask, placement) = canvas.mask_memory.render(
+    &path,
+    Some(transform),
+    Some(stroke.into()),
+    &mut canvas.buffer_pool,
+  );
+
+  overlay_area(
+    &mut canvas.image,
+    Point {
+      x: placement.left as f32,
+      y: placement.top as f32,
+    },
+    Size {
+      width: placement.width,
+      height: placement.height,
+    },
+    BlendMode::Normal,
+    &canvas.constrains,
+    |x, y| {
+      let alpha = mask[mask_index_from_coord(x, y, placement.width)];
+      if alpha == 0 {
+        return Color::transparent().into();
+      }
+
+      let mut pixel: image::Rgba<u8> = outline.color.into();
+      pixel.0[3] = ((pixel.0[3] as u16 * alpha as u16) / 255) as u8;
+      pixel
+    },
+  );
+}
+
+fn draw_merged_outline_rects<N: Node<N>>(
+  mut outline_rects: Vec<InlineOutlineRect>,
+  canvas: &mut Canvas,
+  spans: &[ProcessedInlineSpan<'_, '_, N>],
+  transform: Affine,
+) {
+  outline_rects.sort_by(|left, right| {
+    left
+      .span_id
+      .cmp(&right.span_id)
+      .then(left.line_index.cmp(&right.line_index))
+      .then(left.x.total_cmp(&right.x))
+  });
+
+  let mut merged_rects = Vec::with_capacity(outline_rects.len());
+  for outline_rect in outline_rects {
+    let Some(previous_rect) = merged_rects.last_mut() else {
+      merged_rects.push(outline_rect);
+      continue;
+    };
+
+    let same_group = previous_rect.span_id == outline_rect.span_id
+      && previous_rect.line_index == outline_rect.line_index;
+    let touching = outline_rect.x <= previous_rect.x + previous_rect.width + 0.5;
+    let same_band = (outline_rect.y - previous_rect.y).abs() <= 0.5
+      && (outline_rect.height - previous_rect.height).abs() <= 0.5;
+
+    if same_group && same_band && touching {
+      let right_edge =
+        (previous_rect.x + previous_rect.width).max(outline_rect.x + outline_rect.width);
+      previous_rect.x = previous_rect.x.min(outline_rect.x);
+      previous_rect.y = previous_rect.y.min(outline_rect.y);
+      previous_rect.width = right_edge - previous_rect.x;
+      previous_rect.height = previous_rect.height.max(outline_rect.height);
+    } else {
+      merged_rects.push(outline_rect);
+    }
+  }
+
+  let mut line_rect_counts = HashMap::new();
+  for outline_rect in &merged_rects {
+    *line_rect_counts
+      .entry((outline_rect.span_id, outline_rect.line_index))
+      .or_insert(0usize) += 1;
+  }
+
+  let mut islands: Vec<Vec<InlineOutlineRect>> = Vec::new();
+  for outline_rect in merged_rects {
+    let mut matched_island = None;
+
+    for (index, island) in islands.iter().enumerate() {
+      let Some(previous_rect) = island.last().copied() else {
+        continue;
+      };
+      if previous_rect.span_id != outline_rect.span_id {
+        continue;
+      }
+      if outline_rect.line_index != previous_rect.line_index + 1 {
+        continue;
+      }
+
+      let previous_is_unique =
+        line_rect_counts.get(&(previous_rect.span_id, previous_rect.line_index)) == Some(&1);
+      let current_is_unique =
+        line_rect_counts.get(&(outline_rect.span_id, outline_rect.line_index)) == Some(&1);
+      if (previous_is_unique && current_is_unique) || x_ranges_touch(previous_rect, outline_rect) {
+        matched_island = Some(index);
+        break;
+      }
+    }
+
+    if let Some(index) = matched_island {
+      islands[index].push(outline_rect);
+    } else {
+      islands.push(vec![outline_rect]);
+    }
+  }
+
+  for island in islands {
+    draw_outline_island(&island, canvas, spans, transform);
+  }
+}
+
 fn draw_glyph_run_content<I: GenericImageView<Pixel = Rgba<u8>>>(
   style: &SizedFontStyle,
   glyph_run: &GlyphRun<'_, InlineBrush>,
@@ -608,6 +840,7 @@ pub(crate) fn draw_inline_layout<N: Node<N>>(
   };
 
   let mut positioned_inline_boxes = Vec::new();
+  let mut inline_outline_rects = Vec::new();
 
   // Reference: https://www.w3.org/TR/css-text-decor-3/#painting-order
   for (glyph_run, resolved_glyphs) in glyph_runs_with_resolved(&inline_layout, &resolved_glyph_runs)
@@ -629,7 +862,9 @@ pub(crate) fn draw_inline_layout<N: Node<N>>(
 
   let parent_x_height = get_parent_x_height(context, font_style);
   let mut glyph_runs_with_resolved = glyph_runs_with_resolved(&inline_layout, &resolved_glyph_runs);
-  for line in inline_layout.lines() {
+  for (line_index, line) in inline_layout.lines().enumerate() {
+    let line_metrics = line.metrics();
+
     for item in line.items() {
       match item {
         PositionedLayoutItem::GlyphRun(glyph_run) => {
@@ -645,6 +880,15 @@ pub(crate) fn draw_inline_layout<N: Node<N>>(
             context,
             clip_image.as_ref(),
           )?;
+          if let Some(outline_rect) = collect_glyph_run_outline_rect(
+            &glyph_run,
+            layout,
+            line_index,
+            layout.border.top + layout.padding.top + glyph_run.baseline() - line_metrics.ascent,
+            line_metrics.line_height,
+          ) {
+            inline_outline_rects.push(outline_rect);
+          }
         }
         PositionedLayoutItem::InlineBox(mut inline_box) => {
           let item_index = inline_box.id as usize;
@@ -662,6 +906,8 @@ pub(crate) fn draw_inline_layout<N: Node<N>>(
       }
     }
   }
+
+  draw_merged_outline_rects(inline_outline_rects, canvas, spans, context.transform);
 
   for glyph_run in glyph_runs(&inline_layout) {
     draw_glyph_run_line_through(&glyph_run, canvas, layout, context)?;

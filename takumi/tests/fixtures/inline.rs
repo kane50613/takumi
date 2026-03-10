@@ -323,6 +323,96 @@ fn inline_span_background_color() {
 }
 
 #[test]
+fn inline_outline_span_boundaries() {
+  let container = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
+    preset: None,
+    tw: None,
+    style: Some(
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color([240, 240, 240, 255]),
+        ))),
+    ),
+    children: Some(
+      [ContainerNode {
+        class_name: None,
+        id: None,
+        tag_name: None,
+        preset: None,
+        tw: None,
+        style: Some(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Block))
+            .with(StyleDeclaration::width(Px(320.0)))
+            .with_padding(Sides([Px(24.0); 4]))
+            .with_border_width(Sides([2.0.into(); 4]))
+            .with(StyleDeclaration::border_style(BorderStyle::Solid))
+            .with(StyleDeclaration::font_size(Px(28.0).into()))
+            .with(StyleDeclaration::line_height(Px(34.0).into()))
+            .with(StyleDeclaration::background_color(ColorInput::Value(
+              Color::white(),
+            ))),
+        ),
+        children: Some(
+          vec![
+            TextNode {
+              class_name: None,
+              id: None,
+              tag_name: None,
+              preset: None,
+              tw: None,
+              style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
+              text: "STEAM ".to_string(),
+            }
+            .into(),
+            TextNode {
+              class_name: None,
+              id: None,
+              tag_name: None,
+              preset: None,
+              tw: None,
+              style: Some(
+                Style::default()
+                  .with(StyleDeclaration::display(Display::Inline))
+                  .with(StyleDeclaration::outline_width(Px(3.0)))
+                  .with(StyleDeclaration::outline_style(BorderStyle::Solid))
+                  .with(StyleDeclaration::outline_color(ColorInput::Value(Color([
+                    255, 0, 0, 255,
+                  ])))),
+              ),
+              text: "education can become accessible through a sequence of free and high-quality teaching examples".to_string(),
+            }
+            .into(),
+            TextNode {
+              class_name: None,
+              id: None,
+              tag_name: None,
+              preset: None,
+              tw: None,
+              style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
+              text: " for everyone.".to_string(),
+            }
+            .into(),
+          ]
+          .into_boxed_slice(),
+        ),
+      }
+      .into()]
+      .into(),
+    ),
+  };
+
+  run_fixture_test(container.into(), "inline_outline_span_boundaries");
+}
+
+#[test]
 fn inline_atomic_containers() {
   let atomic = |display, color, label: &str| {
     ContainerNode {

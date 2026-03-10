@@ -5,8 +5,8 @@ use takumi::{
     DEFAULT_FONT_SIZE, Viewport,
     node::{ContainerNode, ImageNode, NodeKind, TextNode},
     style::{
-      Affine, AlignItems, Color, ColorInput, Display, FlexDirection, JustifyContent, Length::*,
-      Position, Sides, Style, StyleDeclaration,
+      Affine, AlignItems, BorderStyle, Color, ColorInput, Display, FlexDirection, JustifyContent,
+      Length::*, Position, Sides, Style, StyleDeclaration,
     },
   },
   rendering::{MeasuredNode, MeasuredTextRun, RenderOptionsBuilder, measure_layout},
@@ -350,6 +350,79 @@ fn test_measure_inline_layout() {
       }],
     }
   )
+}
+
+#[test]
+fn test_measure_inline_layout_preserves_text_span_boundaries() {
+  let node: NodeKind = ContainerNode {
+    class_name: None,
+    id: None,
+    tag_name: None,
+    preset: None,
+    tw: None,
+    style: Some(
+      Style::default()
+        .with(StyleDeclaration::width(Px(600.0)))
+        .with(StyleDeclaration::height(Px(120.0)))
+        .with(StyleDeclaration::font_size(Px(20.0).into()))
+        .with(StyleDeclaration::display(Display::Block)),
+    ),
+    children: Some(
+      vec![
+        TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
+          preset: None,
+          tw: None,
+          style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
+          text: "STEAM ".to_string(),
+        }
+        .into(),
+        TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
+          preset: None,
+          tw: None,
+          style: Some(
+            Style::default()
+              .with(StyleDeclaration::display(Display::Inline))
+              .with(StyleDeclaration::outline_width(Px(2.0)))
+              .with(StyleDeclaration::outline_style(BorderStyle::Solid))
+              .with(StyleDeclaration::outline_color(ColorInput::Value(Color([
+                255, 0, 0, 255,
+              ])))),
+          ),
+          text: "education can".to_string(),
+        }
+        .into(),
+        TextNode {
+          class_name: None,
+          id: None,
+          tag_name: None,
+          preset: None,
+          tw: None,
+          style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
+          text: " for everyone.".to_string(),
+        }
+        .into(),
+      ]
+      .into_boxed_slice(),
+    ),
+  }
+  .into();
+
+  let result = measure(node, create_measure_viewport());
+
+  assert_eq!(
+    result
+      .runs
+      .iter()
+      .map(|run| run.text.as_str())
+      .collect::<Vec<_>>(),
+    vec!["STEAM", "education can", "for everyone."]
+  );
 }
 
 #[test]
