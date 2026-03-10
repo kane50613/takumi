@@ -15,12 +15,7 @@ use crate::keyframes::{KeyframePreludeParseError, parse_keyframe_prelude};
 use crate::{
   layout::{
     Viewport,
-    style::{
-      CalcArena, FromCss, KeyframeRule, KeyframesRule, Length, StyleDeclarationBlock,
-      custom_property::{
-        custom_property_syntax_is_supported, custom_property_value_matches_syntax,
-      },
-    },
+    style::{CalcArena, FromCss, KeyframeRule, KeyframesRule, Length, StyleDeclarationBlock},
   },
   rendering::Sizing,
 };
@@ -900,18 +895,6 @@ fn parse_property_rule<'i, 't>(
 
   let syntax = syntax.unwrap_or_else(|| "*".to_owned());
   let initial_value = initial_value.unwrap_or_default();
-
-  if !custom_property_syntax_is_supported(&syntax) {
-    return Err(input.new_custom_error(CssSelectorParseError::InvalidAtRule(
-      "@property syntax is not supported",
-    )));
-  }
-
-  if !initial_value.is_empty() && !custom_property_value_matches_syntax(&syntax, &initial_value) {
-    return Err(input.new_custom_error(CssSelectorParseError::InvalidAtRule(
-      "@property initial-value does not match syntax",
-    )));
-  }
 
   Ok(PropertyRule {
     name: property_name.to_owned(),

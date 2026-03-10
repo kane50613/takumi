@@ -1,7 +1,5 @@
 mod animation;
 #[cfg(feature = "css_stylesheet_parsing")]
-mod custom_property;
-#[cfg(feature = "css_stylesheet_parsing")]
 pub(crate) mod matching;
 mod properties;
 #[cfg(feature = "css_stylesheet_parsing")]

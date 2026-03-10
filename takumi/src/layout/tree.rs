@@ -131,10 +131,6 @@ fn registered_custom_property_parent_style(
 
   for sheet in stylesheets {
     for property_rule in &sheet.property_rules {
-      adjusted_parent
-        .registered_custom_property_syntaxes
-        .insert(property_rule.name.clone(), property_rule.syntax.clone());
-
       if property_rule.inherits {
         adjusted_parent
           .custom_properties
@@ -1372,7 +1368,7 @@ mod tests {
 
   #[cfg(feature = "css_stylesheet_parsing")]
   #[test]
-  fn registered_custom_property_rejects_invalid_length_assignment() {
+  fn registered_custom_property_accepts_assignment_without_syntax_validation() {
     let parent = ComputedStyle::default();
     let stylesheet = StyleSheet::parse(
       r#"
@@ -1392,7 +1388,7 @@ mod tests {
     let resolved = style.inherit(&adjusted_parent);
     assert_eq!(
       resolved.custom_properties.get("--box-size"),
-      Some(&"10px".to_owned())
+      Some(&"red".to_owned())
     );
   }
 
@@ -1424,7 +1420,7 @@ mod tests {
 
   #[cfg(feature = "css_stylesheet_parsing")]
   #[test]
-  fn registered_custom_property_validates_var_resolved_value() {
+  fn registered_custom_property_keeps_var_assignment_without_validation() {
     let parent = ComputedStyle::default();
     let stylesheet = StyleSheet::parse(
       r#"
@@ -1455,7 +1451,7 @@ mod tests {
 
   #[cfg(feature = "css_stylesheet_parsing")]
   #[test]
-  fn registered_custom_property_accepts_keyword_syntax_assignment() {
+  fn registered_custom_property_still_accepts_keyword_assignment() {
     let parent = ComputedStyle::default();
     let stylesheet = StyleSheet::parse(
       r#"
@@ -1481,7 +1477,7 @@ mod tests {
 
   #[cfg(feature = "css_stylesheet_parsing")]
   #[test]
-  fn registered_custom_property_accepts_alternative_syntax_assignment() {
+  fn registered_custom_property_still_accepts_alternative_assignment() {
     let parent = ComputedStyle::default();
     let stylesheet = StyleSheet::parse(
       r#"
@@ -1507,7 +1503,7 @@ mod tests {
 
   #[cfg(feature = "css_stylesheet_parsing")]
   #[test]
-  fn registered_custom_property_accepts_supported_assignments() {
+  fn registered_custom_property_still_accepts_supported_assignments() {
     let parent = ComputedStyle::default();
     let stylesheet = StyleSheet::parse(
       r#"
@@ -1592,7 +1588,7 @@ mod tests {
 
   #[cfg(feature = "css_stylesheet_parsing")]
   #[test]
-  fn registered_custom_property_rejects_invalid_transform_function_assignment() {
+  fn registered_custom_property_accepts_invalid_transform_assignment_without_validation() {
     let parent = ComputedStyle::default();
     let stylesheet = StyleSheet::parse(
       r#"
@@ -1612,7 +1608,7 @@ mod tests {
     let resolved = style.inherit(&adjusted_parent);
     assert_eq!(
       resolved.custom_properties.get("--move"),
-      Some(&"translate(10px, 20px)".to_owned())
+      Some(&"red".to_owned())
     );
   }
 }

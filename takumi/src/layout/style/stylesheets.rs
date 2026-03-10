@@ -7,8 +7,6 @@ use serde::de::IgnoredAny;
 use smallvec::SmallVec;
 use taffy::{Point, Rect, Size, prelude::FromLength};
 
-#[cfg(feature = "css_stylesheet_parsing")]
-use crate::layout::style::custom_property::custom_property_value_matches_syntax;
 use crate::{
   layout::{
     inline::InlineBrush,
@@ -751,8 +749,6 @@ macro_rules! define_style {
       #[derive(Clone, Debug, Default)]
       pub struct ComputedStyle {
         pub(crate) custom_properties: HashMap<String, String>,
-        #[cfg(feature = "css_stylesheet_parsing")]
-        pub(crate) registered_custom_property_syntaxes: HashMap<String, String>,
         $(pub(crate) $longhand: $longhand_ty,)*
       }
 
@@ -776,8 +772,6 @@ macro_rules! define_style {
         pub(crate) fn from_parent(parent: &Self) -> Self {
           Self {
             custom_properties: parent.custom_properties.clone(),
-            #[cfg(feature = "css_stylesheet_parsing")]
-            registered_custom_property_syntaxes: parent.registered_custom_property_syntaxes.clone(),
             $($longhand: define_inherited_default!(parent.$longhand $(, $longhand_inherit)?),)*
           }
         }
@@ -1514,40 +1508,13 @@ fn apply_deferred_declaration(
 }
 
 fn apply_custom_property(style: &mut ComputedStyle, name: &str, raw_value: &str) {
-  if !custom_property_assignment_is_valid(style, name, raw_value) {
-    return;
-  }
-
   style
     .custom_properties
     .insert(name.to_owned(), raw_value.to_owned());
 }
 
 fn apply_owned_custom_property(style: &mut ComputedStyle, name: String, raw_value: String) {
-  if !custom_property_assignment_is_valid(style, &name, &raw_value) {
-    return;
-  }
-
   style.custom_properties.insert(name, raw_value);
-}
-
-fn custom_property_assignment_is_valid(style: &ComputedStyle, name: &str, raw_value: &str) -> bool {
-  #[cfg(feature = "css_stylesheet_parsing")]
-  {
-    if let Some(syntax) = style.registered_custom_property_syntaxes.get(name) {
-      let Some(resolved_value) =
-        resolve_var_references(raw_value, &style.custom_properties, &mut Vec::new())
-      else {
-        return false;
-      };
-
-      if !custom_property_value_matches_syntax(syntax, &resolved_value) {
-        return false;
-      }
-    }
-  }
-
-  true
 }
 
 /// CSS-wide keywords that can target any longhand declaration.

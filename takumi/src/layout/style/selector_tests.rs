@@ -494,7 +494,7 @@ fn test_invalid_property_rule_name_is_rejected() {
 }
 
 #[test]
-fn test_property_rule_invalid_initial_value_for_length_is_rejected() {
+fn test_property_rule_invalid_initial_value_for_length_is_preserved() {
   let sheet = StyleSheet::parse(
     r#"
         @property --box-size {
@@ -505,11 +505,12 @@ fn test_property_rule_invalid_initial_value_for_length_is_rejected() {
       "#,
   );
 
-  assert!(sheet.property_rules.is_empty());
+  assert_eq!(sheet.property_rules.len(), 1);
+  assert_eq!(sheet.property_rules[0].initial_value, "red");
 }
 
 #[test]
-fn test_property_rule_invalid_initial_value_for_color_is_rejected() {
+fn test_property_rule_invalid_initial_value_for_color_is_preserved() {
   let sheet = StyleSheet::parse(
     r#"
         @property --accent {
@@ -520,11 +521,12 @@ fn test_property_rule_invalid_initial_value_for_color_is_rejected() {
       "#,
   );
 
-  assert!(sheet.property_rules.is_empty());
+  assert_eq!(sheet.property_rules.len(), 1);
+  assert_eq!(sheet.property_rules[0].initial_value, "10px");
 }
 
 #[test]
-fn test_property_rule_unsupported_syntax_is_rejected() {
+fn test_property_rule_unsupported_syntax_is_preserved() {
   let sheet = StyleSheet::parse(
     r#"
         @property --box-size {
@@ -535,7 +537,8 @@ fn test_property_rule_unsupported_syntax_is_rejected() {
       "#,
   );
 
-  assert!(sheet.property_rules.is_empty());
+  assert_eq!(sheet.property_rules.len(), 1);
+  assert_eq!(sheet.property_rules[0].syntax, "\"<image>\"");
 }
 
 #[test]
