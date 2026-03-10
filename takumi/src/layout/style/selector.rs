@@ -57,7 +57,7 @@ pub(crate) struct PropertyRule {
   pub name: String,
   pub syntax: String,
   pub inherits: bool,
-  pub initial_value: String,
+  pub initial_value: Option<String>,
   pub media_queries: Vec<MediaQueryList>,
 }
 
@@ -931,16 +931,6 @@ fn parse_property_rule<'i, 't>(
     return Err(input.new_custom_error(CssSelectorParseError::InvalidAtRule(
       "missing `@property` inherits",
     )));
-  };
-  let initial_value = if syntax == "\"*\"" {
-    initial_value.unwrap_or_default()
-  } else {
-    let Some(initial_value) = initial_value else {
-      return Err(input.new_custom_error(CssSelectorParseError::InvalidAtRule(
-        "missing `@property` initial-value",
-      )));
-    };
-    initial_value
   };
 
   Ok(PropertyRule {

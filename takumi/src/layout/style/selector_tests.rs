@@ -440,7 +440,10 @@ fn test_parse_property_rule() {
   assert_eq!(sheet.property_rules[0].name, "--box-size");
   assert_eq!(sheet.property_rules[0].syntax, "\"<length>\"");
   assert!(!sheet.property_rules[0].inherits);
-  assert_eq!(sheet.property_rules[0].initial_value, "10px");
+  assert_eq!(
+    sheet.property_rules[0].initial_value,
+    Some("10px".to_owned())
+  );
 }
 
 #[test]
@@ -459,7 +462,10 @@ fn test_parse_property_rule_descriptors_case_insensitively() {
   assert_eq!(sheet.property_rules[0].name, "--box-size");
   assert_eq!(sheet.property_rules[0].syntax, "\"<length>\"");
   assert!(!sheet.property_rules[0].inherits);
-  assert_eq!(sheet.property_rules[0].initial_value, "10px");
+  assert_eq!(
+    sheet.property_rules[0].initial_value,
+    Some("10px".to_owned())
+  );
 }
 
 #[test]
@@ -477,7 +483,7 @@ fn test_parse_property_rule_requires_initial_value_for_typed_syntax() {
   assert_eq!(sheet.property_rules[0].name, "--tw-rotate-x");
   assert_eq!(sheet.property_rules[0].syntax, "\"*\"");
   assert!(!sheet.property_rules[0].inherits);
-  assert_eq!(sheet.property_rules[0].initial_value, "");
+  assert_eq!(sheet.property_rules[0].initial_value, None);
 
   let sheet = StyleSheet::parse(
     r#"
@@ -488,7 +494,8 @@ fn test_parse_property_rule_requires_initial_value_for_typed_syntax() {
       "#,
   );
 
-  assert!(sheet.property_rules.is_empty());
+  assert_eq!(sheet.property_rules.len(), 1);
+  assert_eq!(sheet.property_rules[0].initial_value, None);
 }
 
 #[test]
@@ -598,7 +605,11 @@ fn test_property_rule_computationally_dependent_initial_value_is_rejected() {
       "#,
   );
 
-  assert!(sheet.property_rules.is_empty());
+  assert_eq!(sheet.property_rules.len(), 1);
+  assert_eq!(
+    sheet.property_rules[0].initial_value,
+    Some("var(--fallback)".to_owned())
+  );
 }
 
 #[test]

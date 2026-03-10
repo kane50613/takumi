@@ -145,18 +145,21 @@ fn registered_custom_property_parent_style(
         .insert(property_rule.name.clone(), property_rule.clone());
 
       if property_rule.inherits {
-        adjusted_parent
-          .custom_properties
-          .entry(property_rule.name.clone())
-          .or_insert_with(|| property_rule.initial_value.clone());
+        if let Some(initial_value) = &property_rule.initial_value {
+          adjusted_parent
+            .custom_properties
+            .entry(property_rule.name.clone())
+            .or_insert_with(|| initial_value.clone());
+        }
       } else {
         adjusted_parent
           .custom_properties
           .remove(&property_rule.name);
-        adjusted_parent.custom_properties.insert(
-          property_rule.name.clone(),
-          property_rule.initial_value.clone(),
-        );
+        if let Some(initial_value) = &property_rule.initial_value {
+          adjusted_parent
+            .custom_properties
+            .insert(property_rule.name.clone(), initial_value.clone());
+        }
       }
     }
   }
@@ -1324,7 +1327,7 @@ mod tests {
         name: "--box-size".to_owned(),
         syntax: "*".to_owned(),
         inherits: false,
-        initial_value: "10px".to_owned(),
+        initial_value: Some("10px".to_owned()),
         media_queries: Vec::new(),
       }],
       ..StyleSheet::default()
@@ -1351,7 +1354,7 @@ mod tests {
         name: "--box-size".to_owned(),
         syntax: "*".to_owned(),
         inherits: true,
-        initial_value: "10px".to_owned(),
+        initial_value: Some("10px".to_owned()),
         media_queries: Vec::new(),
       }],
       ..StyleSheet::default()
@@ -1375,7 +1378,7 @@ mod tests {
         name: "--box-size".to_owned(),
         syntax: "*".to_owned(),
         inherits: true,
-        initial_value: "10px".to_owned(),
+        initial_value: Some("10px".to_owned()),
         media_queries: Vec::new(),
       }],
       ..StyleSheet::default()

@@ -1545,7 +1545,7 @@ fn validated_custom_property_value<'a>(rule: &'a PropertyRule, raw_value: &'a st
     return raw_value;
   }
 
-  rule.initial_value.as_str()
+  rule.initial_value.as_deref().unwrap_or("")
 }
 
 #[cfg(feature = "css_stylesheet_parsing")]
