@@ -987,6 +987,8 @@ mod tests {
               .into(),
           },
         ],
+        #[cfg(feature = "css_stylesheet_parsing")]
+        media_queries: Vec::new(),
       }])
       .time_ms(500)
       .build();

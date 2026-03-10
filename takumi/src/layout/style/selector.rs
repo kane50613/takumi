@@ -52,12 +52,13 @@ impl<'i> From<KeyframePreludeParseError<'i>> for CssSelectorParseError<'i> {
   }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct PropertyRule {
   pub name: String,
   pub syntax: String,
   pub inherits: bool,
   pub initial_value: String,
+  pub media_queries: Vec<MediaQueryList>,
 }
 
 type LayerName = Vec<String>;
@@ -894,22 +895,30 @@ fn parse_property_rule<'i, 't>(
   let mut initial_value = None;
 
   for entry in RuleBodyParser::new(input, &mut parser).filter_map(Result::ok) {
-    match entry.0.as_str() {
-      "syntax" => syntax = Some(entry.1),
-      "inherits" => {
-        let value = if entry.1.eq_ignore_ascii_case("true") {
-          true
-        } else if entry.1.eq_ignore_ascii_case("false") {
-          false
-        } else {
-          return Err(input.new_custom_error(CssSelectorParseError::InvalidAtRule(
-            "@property inherits must be true or false",
-          )));
-        };
-        inherits = Some(value);
+    let (name, value) = entry;
+    if name.eq_ignore_ascii_case("syntax") {
+      syntax = Some(value);
+      continue;
+    }
+
+    if name.eq_ignore_ascii_case("inherits") {
+      if value.eq_ignore_ascii_case("true") {
+        inherits = Some(true);
+        continue;
       }
-      "initial-value" => initial_value = Some(entry.1),
-      _ => {}
+
+      if value.eq_ignore_ascii_case("false") {
+        inherits = Some(false);
+        continue;
+      }
+
+      return Err(input.new_custom_error(CssSelectorParseError::InvalidAtRule(
+        "@property inherits must be true or false",
+      )));
+    }
+
+    if name.eq_ignore_ascii_case("initial-value") {
+      initial_value = Some(value);
     }
   }
 
@@ -945,6 +954,7 @@ fn parse_property_rule<'i, 't>(
     syntax,
     inherits,
     initial_value,
+    media_queries: Vec::new(),
   })
 }
 
@@ -1282,7 +1292,11 @@ impl<'i> AtRuleParser<'i> for TakumiRuleParser {
         let keyframes = rule_list_parser.filter_map(Result::ok).collect::<Vec<_>>();
 
         Ok(StyleSheetFragment {
-          keyframes: vec![KeyframesRule { name, keyframes }],
+          keyframes: vec![KeyframesRule {
+            name,
+            keyframes,
+            media_queries: Vec::new(),
+          }],
           ..StyleSheetFragment::default()
         })
       }
@@ -1291,6 +1305,12 @@ impl<'i> AtRuleParser<'i> for TakumiRuleParser {
 
         for rule in &mut fragment.rules {
           rule.media_queries.push(media_query.clone());
+        }
+        for keyframes in &mut fragment.keyframes {
+          keyframes.media_queries.push(media_query.clone());
+        }
+        for property_rule in &mut fragment.property_rules {
+          property_rule.media_queries.push(media_query.clone());
         }
 
         Ok(fragment)

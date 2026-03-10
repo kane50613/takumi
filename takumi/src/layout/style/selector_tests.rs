@@ -268,6 +268,41 @@ fn test_parse_media_rule_with_comma_list() {
 }
 
 #[test]
+fn test_parse_media_rule_applies_to_keyframes_and_property_rules() {
+  let sheet = StyleSheet::parse(
+    r#"
+        @media (min-width: 600px) {
+          @keyframes fade {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+
+          @property --box-size {
+            syntax: "<length>";
+            inherits: false;
+            initial-value: 10px;
+          }
+        }
+      "#,
+  );
+
+  assert_eq!(sheet.keyframes.len(), 1);
+  assert_eq!(sheet.property_rules.len(), 1);
+  assert!(
+    sheet.keyframes[0]
+      .media_queries
+      .first()
+      .is_some_and(|media| media.matches(Viewport::new(Some(800), Some(600))))
+  );
+  assert!(
+    sheet.property_rules[0]
+      .media_queries
+      .first()
+      .is_some_and(|media| media.matches(Viewport::new(Some(800), Some(600))))
+  );
+}
+
+#[test]
 fn test_parse_nested_rule_is_flattened() {
   let sheet = StyleSheet::parse(
     r#"
@@ -397,6 +432,25 @@ fn test_parse_property_rule() {
           syntax: "<length>";
           inherits: false;
           initial-value: 10px;
+        }
+      "#,
+  );
+
+  assert_eq!(sheet.property_rules.len(), 1);
+  assert_eq!(sheet.property_rules[0].name, "--box-size");
+  assert_eq!(sheet.property_rules[0].syntax, "\"<length>\"");
+  assert!(!sheet.property_rules[0].inherits);
+  assert_eq!(sheet.property_rules[0].initial_value, "10px");
+}
+
+#[test]
+fn test_parse_property_rule_descriptors_case_insensitively() {
+  let sheet = StyleSheet::parse(
+    r#"
+        @property --box-size {
+          SYNTAX: "<length>";
+          InHeRiTs: false;
+          INITIAL-VALUE: 10px;
         }
       "#,
   );

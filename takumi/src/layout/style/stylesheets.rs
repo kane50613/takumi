@@ -7,6 +7,8 @@ use serde::de::IgnoredAny;
 use smallvec::SmallVec;
 use taffy::{Point, Rect, Size, prelude::FromLength};
 
+#[cfg(feature = "css_stylesheet_parsing")]
+use crate::layout::style::selector::PropertyRule;
 use crate::{
   layout::{
     inline::InlineBrush,
@@ -749,6 +751,8 @@ macro_rules! define_style {
       #[derive(Clone, Debug, Default)]
       pub struct ComputedStyle {
         pub(crate) custom_properties: HashMap<String, String>,
+        #[cfg(feature = "css_stylesheet_parsing")]
+        pub(crate) registered_custom_properties: HashMap<String, PropertyRule>,
         $(pub(crate) $longhand: $longhand_ty,)*
       }
 
@@ -772,6 +776,8 @@ macro_rules! define_style {
         pub(crate) fn from_parent(parent: &Self) -> Self {
           Self {
             custom_properties: parent.custom_properties.clone(),
+            #[cfg(feature = "css_stylesheet_parsing")]
+            registered_custom_properties: parent.registered_custom_properties.clone(),
             $($longhand: define_inherited_default!(parent.$longhand $(, $longhand_inherit)?),)*
           }
         }
@@ -1508,13 +1514,69 @@ fn apply_deferred_declaration(
 }
 
 fn apply_custom_property(style: &mut ComputedStyle, name: &str, raw_value: &str) {
+  #[cfg(feature = "css_stylesheet_parsing")]
+  if let Some(rule) = style.registered_custom_properties.get(name) {
+    let value = validated_custom_property_value(rule, raw_value);
+    style
+      .custom_properties
+      .insert(name.to_owned(), value.to_owned());
+    return;
+  }
+
   style
     .custom_properties
     .insert(name.to_owned(), raw_value.to_owned());
 }
 
 fn apply_owned_custom_property(style: &mut ComputedStyle, name: String, raw_value: String) {
+  #[cfg(feature = "css_stylesheet_parsing")]
+  if let Some(rule) = style.registered_custom_properties.get(&name) {
+    let value = validated_custom_property_value(rule, &raw_value);
+    style.custom_properties.insert(name, value.to_owned());
+    return;
+  }
+
   style.custom_properties.insert(name, raw_value);
+}
+
+#[cfg(feature = "css_stylesheet_parsing")]
+fn validated_custom_property_value<'a>(rule: &'a PropertyRule, raw_value: &'a str) -> &'a str {
+  if custom_property_value_matches_syntax(&rule.syntax, raw_value) {
+    return raw_value;
+  }
+
+  rule.initial_value.as_str()
+}
+
+#[cfg(feature = "css_stylesheet_parsing")]
+fn custom_property_value_matches_syntax(syntax: &str, raw_value: &str) -> bool {
+  if raw_value.contains("var(") {
+    return true;
+  }
+
+  let syntax = syntax.trim_matches('"');
+  if syntax == "*" {
+    return true;
+  }
+
+  syntax
+    .split('|')
+    .map(str::trim)
+    .any(|branch| custom_property_value_matches_branch(branch, raw_value))
+}
+
+#[cfg(feature = "css_stylesheet_parsing")]
+fn custom_property_value_matches_branch(branch: &str, raw_value: &str) -> bool {
+  match branch {
+    "<length>" => Length::<true>::from_str(raw_value).is_ok(),
+    "<color>" => Color::from_str(raw_value).is_ok(),
+    "<time>" => AnimationTime::from_str(raw_value).is_ok(),
+    "<transform-function>" => Transform::from_str(raw_value).is_ok(),
+    "<easing-function>" => AnimationTimingFunction::from_str(raw_value).is_ok(),
+    "<filter-function>" => Filter::from_str(raw_value).is_ok(),
+    "<image>" => BackgroundImage::from_str(raw_value).is_ok(),
+    keyword => keyword.eq_ignore_ascii_case(raw_value),
+  }
 }
 
 /// CSS-wide keywords that can target any longhand declaration.

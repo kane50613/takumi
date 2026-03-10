@@ -59,7 +59,12 @@ where
         })
         .collect::<Result<Vec<_>, E>>()?;
 
-      Ok(KeyframesRule { name, keyframes })
+      Ok(KeyframesRule {
+        name,
+        keyframes,
+        #[cfg(feature = "css_stylesheet_parsing")]
+        media_queries: Vec::new(),
+      })
     })
     .collect::<Result<Vec<_>, E>>()
 }

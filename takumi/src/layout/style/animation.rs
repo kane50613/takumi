@@ -7,11 +7,16 @@ use parley::{FontFeature, FontVariation};
 use std::cmp::Ordering;
 
 use super::StyleDeclarationBlock;
+#[cfg(feature = "css_stylesheet_parsing")]
+use super::selector::MediaQueryList;
 use serde::Deserialize;
 
 #[cfg(feature = "css_stylesheet_parsing")]
 use crate::{
-  layout::style::{selector::StyleSheet, *},
+  layout::{
+    Viewport,
+    style::{selector::StyleSheet, *},
+  },
   rendering::{RenderContext, Sizing},
 };
 
@@ -33,6 +38,9 @@ pub struct KeyframesRule {
   pub name: String,
   /// Individual keyframe rules for this animation.
   pub keyframes: Vec<KeyframeRule>,
+  #[cfg(feature = "css_stylesheet_parsing")]
+  #[serde(skip, default)]
+  pub(crate) media_queries: Vec<MediaQueryList>,
 }
 
 #[cfg(feature = "css_stylesheet_parsing")]
@@ -47,7 +55,11 @@ pub(crate) fn apply_stylesheet_animations(
   let base_snapshot = base_style.clone();
 
   for (animation_index, animation_name) in base_snapshot.animation_name.0.iter().enumerate() {
-    let Some(keyframes) = find_keyframes(&context.stylesheets, animation_name) else {
+    let Some(keyframes) = find_keyframes(
+      &context.stylesheets,
+      animation_name,
+      context.sizing.viewport,
+    ) else {
       continue;
     };
 
@@ -107,16 +119,22 @@ pub(crate) fn apply_stylesheet_animations(
 }
 
 #[cfg(feature = "css_stylesheet_parsing")]
-fn find_keyframes<'a>(stylesheets: &'a [StyleSheet], name: &str) -> Option<Cow<'a, KeyframesRule>> {
+fn find_keyframes<'a>(
+  stylesheets: &'a [StyleSheet],
+  name: &str,
+  viewport: Viewport,
+) -> Option<Cow<'a, KeyframesRule>> {
   stylesheets
     .iter()
     .rev()
     .find_map(|sheet| {
-      sheet
-        .keyframes
-        .iter()
-        .rev()
-        .find(|rule| rule.name.eq_ignore_ascii_case(name))
+      sheet.keyframes.iter().rev().find(|rule| {
+        rule.name.eq_ignore_ascii_case(name)
+          && rule
+            .media_queries
+            .iter()
+            .all(|media_query| media_query.matches(viewport))
+      })
     })
     .map(Cow::Borrowed)
     .or_else(|| tailwind_animation_keyframes(name).map(Cow::Owned))
@@ -132,6 +150,8 @@ fn tailwind_animation_keyframes(name: &str) -> Option<KeyframesRule> {
         keyframe(0.75, [StyleDeclaration::rotate(Some(Angle::new(270.0)))]),
         keyframe(1.0, [StyleDeclaration::rotate(Some(Angle::new(359.999)))]),
       ],
+      #[cfg(feature = "css_stylesheet_parsing")]
+      media_queries: Vec::new(),
     }),
     "ping" => Some(KeyframesRule {
       name: "ping".to_string(),
@@ -151,6 +171,8 @@ fn tailwind_animation_keyframes(name: &str) -> Option<KeyframesRule> {
           ],
         ),
       ],
+      #[cfg(feature = "css_stylesheet_parsing")]
+      media_queries: Vec::new(),
     }),
     "pulse" => Some(KeyframesRule {
       name: "pulse".to_string(),
@@ -158,6 +180,8 @@ fn tailwind_animation_keyframes(name: &str) -> Option<KeyframesRule> {
         0.5,
         [StyleDeclaration::opacity(PercentageNumber(0.5))],
       )],
+      #[cfg(feature = "css_stylesheet_parsing")]
+      media_queries: Vec::new(),
     }),
     "bounce" => Some(KeyframesRule {
       name: "bounce".to_string(),
@@ -184,6 +208,8 @@ fn tailwind_animation_keyframes(name: &str) -> Option<KeyframesRule> {
           ))],
         ),
       ],
+      #[cfg(feature = "css_stylesheet_parsing")]
+      media_queries: Vec::new(),
     }),
     _ => None,
   }

@@ -126,11 +126,24 @@ fn build_style_layers(
 fn registered_custom_property_parent_style(
   parent_style: &ComputedStyle,
   stylesheets: &[StyleSheet],
+  viewport: Viewport,
 ) -> ComputedStyle {
   let mut adjusted_parent = parent_style.clone();
 
   for sheet in stylesheets {
     for property_rule in &sheet.property_rules {
+      if !property_rule
+        .media_queries
+        .iter()
+        .all(|media_query| media_query.matches(viewport))
+      {
+        continue;
+      }
+
+      adjusted_parent
+        .registered_custom_properties
+        .insert(property_rule.name.clone(), property_rule.clone());
+
       if property_rule.inherits {
         adjusted_parent
           .custom_properties
@@ -188,7 +201,8 @@ fn build_inherited_style(
   let style = build_style_layers(node_layers, viewport);
 
   #[cfg(feature = "css_stylesheet_parsing")]
-  let inherited_parent = registered_custom_property_parent_style(parent_style, &[]);
+  let inherited_parent =
+    registered_custom_property_parent_style(parent_style, &[], Viewport::new(None, None));
   #[cfg(feature = "css_stylesheet_parsing")]
   return style.inherit(&inherited_parent);
 
@@ -917,8 +931,11 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
         parent_context.sizing.viewport,
       );
       #[cfg(feature = "css_stylesheet_parsing")]
-      let inherited_parent =
-        registered_custom_property_parent_style(&parent_context.style, &parent_context.stylesheets);
+      let inherited_parent = registered_custom_property_parent_style(
+        &parent_context.style,
+        &parent_context.stylesheets,
+        parent_context.sizing.viewport,
+      );
       #[cfg(feature = "css_stylesheet_parsing")]
       let mut style = style_layers.inherit(&inherited_parent);
       #[cfg(not(feature = "css_stylesheet_parsing"))]
@@ -1308,11 +1325,13 @@ mod tests {
         syntax: "*".to_owned(),
         inherits: false,
         initial_value: "10px".to_owned(),
+        media_queries: Vec::new(),
       }],
       ..StyleSheet::default()
     }];
 
-    let adjusted_parent = registered_custom_property_parent_style(&parent, &stylesheets);
+    let adjusted_parent =
+      registered_custom_property_parent_style(&parent, &stylesheets, Viewport::new(None, None));
     assert_eq!(
       adjusted_parent.custom_properties.get("--box-size"),
       Some(&"10px".to_owned())
@@ -1333,11 +1352,13 @@ mod tests {
         syntax: "*".to_owned(),
         inherits: true,
         initial_value: "10px".to_owned(),
+        media_queries: Vec::new(),
       }],
       ..StyleSheet::default()
     }];
 
-    let adjusted_parent = registered_custom_property_parent_style(&parent, &stylesheets);
+    let adjusted_parent =
+      registered_custom_property_parent_style(&parent, &stylesheets, Viewport::new(None, None));
     assert_eq!(
       adjusted_parent.custom_properties.get("--box-size"),
       Some(&"50px".to_owned())
@@ -1355,11 +1376,13 @@ mod tests {
         syntax: "*".to_owned(),
         inherits: true,
         initial_value: "10px".to_owned(),
+        media_queries: Vec::new(),
       }],
       ..StyleSheet::default()
     }];
 
-    let adjusted_parent = registered_custom_property_parent_style(&parent, &stylesheets);
+    let adjusted_parent =
+      registered_custom_property_parent_style(&parent, &stylesheets, Viewport::new(None, None));
     assert_eq!(
       adjusted_parent.custom_properties.get("--box-size"),
       Some(&"10px".to_owned())
@@ -1379,7 +1402,8 @@ mod tests {
         }
       "#,
     );
-    let adjusted_parent = registered_custom_property_parent_style(&parent, &[stylesheet]);
+    let adjusted_parent =
+      registered_custom_property_parent_style(&parent, &[stylesheet], Viewport::new(None, None));
     let style = Style::default().with(StyleDeclaration::CustomProperty(
       "--box-size".to_owned(),
       "red".to_owned(),
@@ -1388,7 +1412,7 @@ mod tests {
     let resolved = style.inherit(&adjusted_parent);
     assert_eq!(
       resolved.custom_properties.get("--box-size"),
-      Some(&"red".to_owned())
+      Some(&"10px".to_owned())
     );
   }
 
@@ -1405,7 +1429,8 @@ mod tests {
         }
       "#,
     );
-    let adjusted_parent = registered_custom_property_parent_style(&parent, &[stylesheet]);
+    let adjusted_parent =
+      registered_custom_property_parent_style(&parent, &[stylesheet], Viewport::new(None, None));
     let style = Style::default().with(StyleDeclaration::CustomProperty(
       "--box-size".to_owned(),
       "24px".to_owned(),
@@ -1431,7 +1456,8 @@ mod tests {
         }
       "#,
     );
-    let adjusted_parent = registered_custom_property_parent_style(&parent, &[stylesheet]);
+    let adjusted_parent =
+      registered_custom_property_parent_style(&parent, &[stylesheet], Viewport::new(None, None));
     let style = Style::default()
       .with(StyleDeclaration::CustomProperty(
         "--source".to_owned(),
@@ -1462,7 +1488,8 @@ mod tests {
         }
       "#,
     );
-    let adjusted_parent = registered_custom_property_parent_style(&parent, &[stylesheet]);
+    let adjusted_parent =
+      registered_custom_property_parent_style(&parent, &[stylesheet], Viewport::new(None, None));
     let style = Style::default().with(StyleDeclaration::CustomProperty(
       "--display-state".to_owned(),
       "auto".to_owned(),
@@ -1488,7 +1515,8 @@ mod tests {
         }
       "#,
     );
-    let adjusted_parent = registered_custom_property_parent_style(&parent, &[stylesheet]);
+    let adjusted_parent =
+      registered_custom_property_parent_style(&parent, &[stylesheet], Viewport::new(None, None));
     let style = Style::default().with(StyleDeclaration::CustomProperty(
       "--accent".to_owned(),
       "12px".to_owned(),
@@ -1524,7 +1552,8 @@ mod tests {
         }
       "#,
     );
-    let adjusted_parent = registered_custom_property_parent_style(&parent, &[stylesheet]);
+    let adjusted_parent =
+      registered_custom_property_parent_style(&parent, &[stylesheet], Viewport::new(None, None));
     let style = Style::default()
       .with(StyleDeclaration::CustomProperty(
         "--fade-duration".to_owned(),
@@ -1567,7 +1596,8 @@ mod tests {
         }
       "#,
     );
-    let adjusted_parent = registered_custom_property_parent_style(&parent, &[stylesheet]);
+    let adjusted_parent =
+      registered_custom_property_parent_style(&parent, &[stylesheet], Viewport::new(None, None));
     let mut input = ParserInput::new("var(--box-size)");
     let mut parser = Parser::new(&mut input);
     let declarations = StyleDeclarationBlock::parse("width", &mut parser);
@@ -1599,7 +1629,8 @@ mod tests {
         }
       "#,
     );
-    let adjusted_parent = registered_custom_property_parent_style(&parent, &[stylesheet]);
+    let adjusted_parent =
+      registered_custom_property_parent_style(&parent, &[stylesheet], Viewport::new(None, None));
     let style = Style::default().with(StyleDeclaration::CustomProperty(
       "--move".to_owned(),
       "red".to_owned(),
@@ -1608,7 +1639,7 @@ mod tests {
     let resolved = style.inherit(&adjusted_parent);
     assert_eq!(
       resolved.custom_properties.get("--move"),
-      Some(&"red".to_owned())
+      Some(&"translate(10px, 20px)".to_owned())
     );
   }
 }
