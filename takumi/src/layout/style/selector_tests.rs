@@ -321,8 +321,8 @@ fn test_parse_nested_rule_is_flattened() {
 
   assert_eq!(sheet.rules.len(), 3);
   assert_eq!(selector_text(&sheet.rules[0]), ".card");
-  assert_eq!(selector_text(&sheet.rules[1]), ".card .title");
-  assert_eq!(selector_text(&sheet.rules[2]), ".card > .icon");
+  assert_eq!(selector_text(&sheet.rules[1]), ":is(.card) .title");
+  assert_eq!(selector_text(&sheet.rules[2]), ":is(.card) > .icon");
 }
 
 #[test]
@@ -338,8 +338,22 @@ fn test_parse_nested_rule_cross_product_for_selector_lists() {
   assert_eq!(sheet.rules.len(), 1);
   assert_eq!(
     selector_text(&sheet.rules[0]),
-    ".card .title, .card .subtitle, .panel .title, .panel .subtitle"
+    ":is(.card, .panel) .title, :is(.card, .panel) .subtitle"
   );
+}
+
+#[test]
+fn test_parse_nested_rule_uses_is_wrapper_for_multi_parent_lists() {
+  let sheet = StyleSheet::parse(
+    r#"
+        .card, .panel {
+          & + .item { width: 12px; }
+        }
+      "#,
+  );
+
+  assert_eq!(sheet.rules.len(), 1);
+  assert_eq!(selector_text(&sheet.rules[0]), ":is(.card, .panel) + .item");
 }
 
 #[test]
@@ -689,6 +703,40 @@ fn test_parse_nested_layers_are_transparent() {
 }
 
 #[test]
+fn test_parse_nested_layer_inside_style_rule_preserves_parent_selector() {
+  let sheet = StyleSheet::parse(
+    r#"
+        .card {
+          @layer theme {
+            width: 100px;
+            .title { height: 20px; }
+          }
+        }
+      "#,
+  );
+
+  assert_eq!(sheet.rules.len(), 2);
+  assert_eq!(selector_text(&sheet.rules[0]), ".card");
+  assert_eq!(selector_text(&sheet.rules[1]), ":is(.card) .title");
+  assert_eq!(
+    sheet.rules[0].layer.as_ref(),
+    Some(&vec![LayerName::Named("theme".to_owned())])
+  );
+  assert_eq!(
+    sheet.rules[1].layer.as_ref(),
+    Some(&vec![LayerName::Named("theme".to_owned())])
+  );
+  assert_eq!(
+    computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
+    Length::Px(100.0)
+  );
+  assert_eq!(
+    computed_style_from_declarations(&sheet.rules[1].normal_declarations).height,
+    Length::Px(20.0)
+  );
+}
+
+#[test]
 fn test_parse_anonymous_nested_layer_has_distinct_order() {
   let sheet = StyleSheet::parse(
     r#"
@@ -756,7 +804,7 @@ fn test_parse_nested_rules_preserves_source_order() {
     computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
     Length::Px(100.0)
   );
-  assert_eq!(selector_text(&sheet.rules[1]), ".card .title");
+  assert_eq!(selector_text(&sheet.rules[1]), ":is(.card) .title");
   assert_eq!(selector_text(&sheet.rules[2]), ".card");
   assert_eq!(
     computed_style_from_declarations(&sheet.rules[2].normal_declarations).height,

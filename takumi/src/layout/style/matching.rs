@@ -639,6 +639,7 @@ mod tests {
   #[derive(Clone, Default)]
   struct TestNode {
     class_name: Option<&'static str>,
+    id: Option<&'static str>,
     children: Vec<TestNode>,
     style: Style,
   }
@@ -646,6 +647,10 @@ mod tests {
   impl Node<TestNode> for TestNode {
     fn class_name(&self) -> Option<&str> {
       self.class_name
+    }
+
+    fn id(&self) -> Option<&str> {
+      self.id
     }
 
     fn children_ref(&self) -> Option<&[TestNode]> {
@@ -693,5 +698,30 @@ mod tests {
     let matched = match_stylesheets(&root, &[stylesheet], Viewport::new(None, None));
     assert_eq!(matched.len(), 1);
     assert_eq!(computed_width_from_matches(&matched[0]), Length::Px(10.0));
+  }
+
+  #[test]
+  fn nested_selector_uses_parent_list_specificity() {
+    let root = TestNode {
+      class_name: Some("card notice"),
+      children: vec![TestNode {
+        class_name: Some("title"),
+        ..TestNode::default()
+      }],
+      ..TestNode::default()
+    };
+    let stylesheet = StyleSheet::parse(
+      r#"
+        .card, #panel {
+          .title { width: 10px; }
+        }
+
+        .notice .title { width: 20px; }
+      "#,
+    );
+
+    let matched = match_stylesheets(&root, &[stylesheet], Viewport::new(None, None));
+    assert_eq!(matched.len(), 2);
+    assert_eq!(computed_width_from_matches(&matched[1]), Length::Px(10.0));
   }
 }

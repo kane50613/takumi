@@ -183,7 +183,7 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
 
 #[derive(Debug, Clone)]
 struct ParsedSelectors {
-  text: String,
+  selectors: SelectorList<TakumiSelectorImpl>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -209,86 +209,13 @@ enum StyleRuleBodyItem {
   Rules(Vec<CssRule>),
 }
 
-fn parse_selector_list_text(
-  selector_text: &str,
+fn parse_selector_list<'i, 't>(
+  input: &mut Parser<'i, 't>,
   parse_relative: ParseRelative,
-) -> Result<SelectorList<TakumiSelectorImpl>, &'static str> {
-  let mut input = ParserInput::new(selector_text);
-  let mut parser = Parser::new(&mut input);
-  let selectors = SelectorList::parse(&TakumiSelectorParser, &mut parser, parse_relative)
-    .map_err(|_| "invalid selector")?;
-  ensure_supported_selector_list(&selectors).map_err(|error| match error {
-    CssSelectorParseError::UnsupportedSelectorFeature(message) => message,
-    _ => "invalid selector",
-  })?;
+) -> Result<SelectorList<TakumiSelectorImpl>, ParseError<'i, CssSelectorParseError<'i>>> {
+  let selectors = SelectorList::parse(&TakumiSelectorParser, input, parse_relative)?;
+  ensure_supported_selector_list(&selectors).map_err(|err| input.new_custom_error(err))?;
   Ok(selectors)
-}
-
-fn split_selector_list(selector_text: &str) -> Vec<String> {
-  let mut selectors = Vec::new();
-  let mut start = 0usize;
-  let mut paren_depth = 0usize;
-  let mut bracket_depth = 0usize;
-  let mut brace_depth = 0usize;
-  let mut string_delimiter: Option<char> = None;
-  let mut escaped = false;
-
-  for (index, ch) in selector_text.char_indices() {
-    if let Some(delimiter) = string_delimiter {
-      if escaped {
-        escaped = false;
-        continue;
-      }
-
-      match ch {
-        '\\' => escaped = true,
-        _ if ch == delimiter => string_delimiter = None,
-        _ => {}
-      }
-      continue;
-    }
-
-    match ch {
-      '"' | '\'' => string_delimiter = Some(ch),
-      '(' => paren_depth += 1,
-      ')' => paren_depth = paren_depth.saturating_sub(1),
-      '[' => bracket_depth += 1,
-      ']' => bracket_depth = bracket_depth.saturating_sub(1),
-      '{' => brace_depth += 1,
-      '}' => brace_depth = brace_depth.saturating_sub(1),
-      ',' if paren_depth == 0 && bracket_depth == 0 && brace_depth == 0 => {
-        selectors.push(selector_text[start..index].trim().to_owned());
-        start = index + ch.len_utf8();
-      }
-      _ => {}
-    }
-  }
-
-  let trailing = selector_text[start..].trim();
-  if !trailing.is_empty() {
-    selectors.push(trailing.to_owned());
-  }
-
-  selectors
-}
-
-fn flatten_nested_selector_text(parent_selector_text: &str, nested_selector_text: &str) -> String {
-  let parents = split_selector_list(parent_selector_text);
-  let nested_selectors = split_selector_list(nested_selector_text);
-  let mut flattened = Vec::new();
-
-  for parent in &parents {
-    for nested in &nested_selectors {
-      let selector = if nested.contains('&') {
-        nested.replace('&', parent)
-      } else {
-        format!("{parent} {nested}")
-      };
-      flattened.push(selector.trim().to_owned());
-    }
-  }
-
-  flattened.join(", ")
 }
 
 fn selector_contains_unsupported_features(selector: &Selector<TakumiSelectorImpl>) -> bool {
@@ -416,7 +343,7 @@ impl<'i> RuleBodyItemParser<'i, (String, String), CssSelectorParseError<'i>>
 }
 
 struct NestedStyleRuleParser<'a> {
-  parent_selector_text: String,
+  parent_selectors: SelectorList<TakumiSelectorImpl>,
   media_queries: &'a [MediaQueryList],
   layer: Option<LayerPath>,
 }
@@ -440,7 +367,7 @@ impl<'i> DeclarationParser<'i> for NestedStyleRuleParser<'_> {
 }
 
 impl<'i> QualifiedRuleParser<'i> for NestedStyleRuleParser<'_> {
-  type Prelude = String;
+  type Prelude = SelectorList<TakumiSelectorImpl>;
   type QualifiedRule = StyleRuleBodyItem;
   type Error = CssSelectorParseError<'i>;
 
@@ -448,26 +375,17 @@ impl<'i> QualifiedRuleParser<'i> for NestedStyleRuleParser<'_> {
     &mut self,
     input: &mut Parser<'i, 't>,
   ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
-    let start = input.position();
-    let selectors = SelectorList::parse(&TakumiSelectorParser, input, ParseRelative::ForNesting)?;
-    ensure_supported_selector_list(&selectors).map_err(|err| input.new_custom_error(err))?;
-    Ok(input.slice_from(start).trim().to_owned())
+    parse_selector_list(input, ParseRelative::ForNesting)
   }
 
   fn parse_block<'t>(
     &mut self,
-    selector_text: Self::Prelude,
+    nested_selectors: Self::Prelude,
     _location: &ParserState,
     input: &mut Parser<'i, 't>,
   ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
-    let flattened_selector_text =
-      flatten_nested_selector_text(&self.parent_selector_text, &selector_text);
-    let rules = parse_style_rule_block(
-      &flattened_selector_text,
-      self.media_queries,
-      self.layer.as_ref(),
-      input,
-    )?;
+    let selectors = nested_selectors.replace_parent_selector(&self.parent_selectors);
+    let rules = parse_style_rule_block(selectors, self.media_queries, self.layer.as_ref(), input)?;
     Ok(StyleRuleBodyItem::Rules(rules))
   }
 }
@@ -492,7 +410,7 @@ impl<'i> AtRuleParser<'i> for NestedStyleRuleParser<'_> {
     input: &mut Parser<'i, 't>,
   ) -> Result<Self::AtRule, ParseError<'i, Self::Error>> {
     let rules = parse_nested_at_rule_block(
-      &self.parent_selector_text,
+      &self.parent_selectors,
       self.media_queries,
       self.layer.as_ref(),
       prelude,
@@ -1125,21 +1043,17 @@ fn ensure_single_layer_name<'i>(
 }
 
 fn parse_style_rule_block<'i, 't>(
-  selector_text: &str,
+  selectors: SelectorList<TakumiSelectorImpl>,
   media_queries: &[MediaQueryList],
   layer: Option<&LayerPath>,
   input: &mut Parser<'i, 't>,
 ) -> Result<Vec<CssRule>, ParseError<'i, CssSelectorParseError<'i>>> {
-  let selectors =
-    parse_selector_list_text(selector_text, ParseRelative::No).map_err(|message| {
-      input.new_custom_error(CssSelectorParseError::UnsupportedSelectorFeature(message))
-    })?;
   let mut normal_declarations = StyleDeclarationBlock::default();
   let mut important_declarations = StyleDeclarationBlock::default();
   let layer = layer.cloned();
   let mut rules = Vec::new();
   let mut parser = NestedStyleRuleParser {
-    parent_selector_text: selector_text.to_owned(),
+    parent_selectors: selectors.clone(),
     media_queries,
     layer: layer.clone(),
   };
@@ -1189,7 +1103,7 @@ fn parse_style_rule_block<'i, 't>(
 }
 
 fn parse_nested_at_rule_block<'i, 't>(
-  parent_selector_text: &str,
+  parent_selectors: &SelectorList<TakumiSelectorImpl>,
   media_queries: &[MediaQueryList],
   current_layer: Option<&LayerPath>,
   prelude: AtRulePrelude,
@@ -1202,24 +1116,32 @@ fn parse_nested_at_rule_block<'i, 't>(
         return Ok(Vec::new());
       };
       let nested_layer = extend_layer_name(current_layer, &layer_name);
-      Ok(parse_fragment(input, nested_layer.as_ref()).rules)
+      parse_style_rule_block(
+        parent_selectors.clone(),
+        media_queries,
+        nested_layer.as_ref(),
+        input,
+      )
     }
     AtRulePrelude::Media(media_query) => {
       let mut merged_media_queries = media_queries.to_vec();
       merged_media_queries.push(media_query);
       parse_style_rule_block(
-        parent_selector_text,
+        parent_selectors.clone(),
         &merged_media_queries,
         current_layer,
         input,
       )
     }
-    AtRulePrelude::Supports(true) => {
-      parse_style_rule_block(parent_selector_text, media_queries, current_layer, input)
-    }
+    AtRulePrelude::Supports(true) => parse_style_rule_block(
+      parent_selectors.clone(),
+      media_queries,
+      current_layer,
+      input,
+    ),
     AtRulePrelude::Supports(false) => {
       let mut parser = NestedStyleRuleParser {
-        parent_selector_text: parent_selector_text.to_owned(),
+        parent_selectors: parent_selectors.clone(),
         media_queries,
         layer: current_layer.cloned(),
       };
@@ -1241,11 +1163,8 @@ impl<'i> QualifiedRuleParser<'i> for TakumiRuleParser {
     &mut self,
     input: &mut Parser<'i, 't>,
   ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
-    let start = input.position();
-    let selectors = SelectorList::parse(&TakumiSelectorParser, input, ParseRelative::No)?;
-    ensure_supported_selector_list(&selectors).map_err(|err| input.new_custom_error(err))?;
     Ok(ParsedSelectors {
-      text: input.slice_from(start).trim().to_owned(),
+      selectors: parse_selector_list(input, ParseRelative::No)?,
     })
   }
 
@@ -1256,7 +1175,7 @@ impl<'i> QualifiedRuleParser<'i> for TakumiRuleParser {
     input: &mut Parser<'i, 't>,
   ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
     Ok(StyleSheetFragment {
-      rules: parse_style_rule_block(&selectors.text, &[], self.current_layer.as_ref(), input)?,
+      rules: parse_style_rule_block(selectors.selectors, &[], self.current_layer.as_ref(), input)?,
       ..StyleSheetFragment::default()
     })
   }
