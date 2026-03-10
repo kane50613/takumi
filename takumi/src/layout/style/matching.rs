@@ -475,6 +475,15 @@ pub(crate) struct MatchedDeclarations {
   pub(crate) important: StyleDeclarationBlock,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct MatchedRule<'a> {
+  important: bool,
+  layer_order: usize,
+  specificity: u32,
+  source_order: usize,
+  declarations: &'a StyleDeclarationBlock,
+}
+
 pub(crate) fn match_stylesheets<N: Node<N>>(
   root: &N,
   stylesheets: &[StyleSheet],
@@ -487,7 +496,7 @@ pub(crate) fn match_stylesheets<N: Node<N>>(
     return per_node;
   }
 
-  let mut matched_rules = vec![Vec::new(); arena.nodes.len()];
+  let mut matched_rules: Vec<Vec<MatchedRule<'_>>> = vec![Vec::new(); arena.nodes.len()];
   let mut ancestor_bloom_filters = vec![BloomFilter::new(); arena.nodes.len()];
   let mut selector_ancestor_hashes_cache: HashMap<usize, AncestorHashes> = HashMap::new();
   let flattened_rules: Vec<&CssRule> = stylesheets
@@ -500,6 +509,11 @@ pub(crate) fn match_stylesheets<N: Node<N>>(
         .all(|media_queries| media_queries.matches(viewport))
     })
     .collect();
+  let layer_count = flattened_rules
+    .iter()
+    .filter_map(|rule| rule.layer_order)
+    .max()
+    .map_or(0, |max_order| max_order + 1);
   let rule_subject_hints: Vec<RuleSubjectHint> = flattened_rules
     .iter()
     .map(|rule| build_rule_subject_hint(rule))
@@ -544,16 +558,15 @@ pub(crate) fn match_stylesheets<N: Node<N>>(
     for &source_order in &candidate_rule_indices {
       let rule = flattened_rules[source_order];
       let mut best_specificity: Option<u32> = None;
-      for selector in rule.selectors.slice().iter() {
+      for selector in rule.selectors.slice() {
         let selector_key = selector as *const _ as usize;
         let ancestor_hashes = selector_ancestor_hashes_cache
           .entry(selector_key)
-          .or_insert_with(|| AncestorHashes::new(selector, QuirksMode::NoQuirks))
-          .clone();
+          .or_insert_with(|| AncestorHashes::new(selector, QuirksMode::NoQuirks));
         let is_match = if early_reject_by_local_name(selector, 0, &element) {
           false
         } else {
-          matches_selector(selector, 0, Some(&ancestor_hashes), &element, &mut ctx)
+          matches_selector(selector, 0, Some(ancestor_hashes), &element, &mut ctx)
         };
 
         if is_match {
@@ -564,13 +577,22 @@ pub(crate) fn match_stylesheets<N: Node<N>>(
       }
 
       if let Some(specificity) = best_specificity {
-        matched_rule.push((false, specificity, source_order, &rule.normal_declarations));
-        matched_rule.push((
-          true,
+        let normal_layer_order = rule.layer_order.map_or(layer_count, |order| order);
+        matched_rule.push(MatchedRule {
+          important: false,
+          layer_order: normal_layer_order,
           specificity,
           source_order,
-          &rule.important_declarations,
-        ));
+          declarations: &rule.normal_declarations,
+        });
+        let important_layer_order = rule.layer_order.map_or(0, |order| layer_count - order);
+        matched_rule.push(MatchedRule {
+          important: true,
+          layer_order: important_layer_order,
+          specificity,
+          source_order,
+          declarations: &rule.important_declarations,
+        });
       }
     }
 
@@ -583,16 +605,93 @@ pub(crate) fn match_stylesheets<N: Node<N>>(
   }
 
   for (matched, mut rules) in per_node.iter_mut().zip(matched_rules.into_iter()) {
-    rules.sort_by_key(|(important, specificity, order, _)| (*important, *specificity, *order));
+    rules.sort_by_key(|rule| {
+      (
+        rule.important,
+        rule.layer_order,
+        rule.specificity,
+        rule.source_order,
+      )
+    });
 
-    for (important, _, _, declarations) in rules {
-      if important {
-        matched.important.append(declarations.clone());
+    for rule in rules {
+      if rule.important {
+        matched.important.append(rule.declarations.clone());
       } else {
-        matched.normal.append(declarations.clone());
+        matched.normal.append(rule.declarations.clone());
       }
     }
   }
 
   per_node
+}
+
+#[cfg(test)]
+mod tests {
+  use super::match_stylesheets;
+  use crate::layout::style::selector::StyleSheet;
+  use crate::layout::{
+    Viewport,
+    node::{Node, NodeStyleLayers},
+    style::{ComputedStyle, Length, Style},
+  };
+
+  #[derive(Clone, Default)]
+  struct TestNode {
+    class_name: Option<&'static str>,
+    children: Vec<TestNode>,
+    style: Style,
+  }
+
+  impl Node<TestNode> for TestNode {
+    fn class_name(&self) -> Option<&str> {
+      self.class_name
+    }
+
+    fn children_ref(&self) -> Option<&[TestNode]> {
+      Some(&self.children)
+    }
+
+    fn get_style(&self) -> Option<&Style> {
+      Some(&self.style)
+    }
+
+    fn take_style_layers(&mut self) -> NodeStyleLayers {
+      NodeStyleLayers::default()
+    }
+  }
+
+  fn computed_width_from_matches(matches: &super::MatchedDeclarations) -> Length {
+    let mut style = Style::default();
+    for declaration in matches.normal.iter() {
+      declaration.merge_into_ref(&mut style);
+    }
+    for declaration in matches.important.iter() {
+      declaration.merge_into_ref(&mut style);
+    }
+    style.inherit(&ComputedStyle::default()).width
+  }
+
+  #[test]
+  fn layered_rules_outrank_source_order() {
+    let root = TestNode {
+      class_name: Some("card"),
+      ..TestNode::default()
+    };
+    let stylesheet = StyleSheet::parse(
+      r#"
+        @layer theme, base;
+        @layer base {
+          .card { width: 10px; }
+        }
+        @layer theme {
+          .card { width: 20px; }
+        }
+      "#,
+    );
+
+    let matched = match_stylesheets(&root, &[stylesheet], Viewport::new(None, None));
+    assert_eq!(matched.len(), 1);
+    assert_eq!(computed_width_from_matches(&matched[0]), Length::Px(10.0));
+  }
 }

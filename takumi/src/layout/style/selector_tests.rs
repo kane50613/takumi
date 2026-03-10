@@ -409,7 +409,7 @@ fn test_parse_property_rule() {
 }
 
 #[test]
-fn test_parse_property_rule_defaults_missing_descriptors() {
+fn test_parse_property_rule_requires_initial_value_for_typed_syntax() {
   let sheet = StyleSheet::parse(
     r#"
         @property --tw-rotate-x {
@@ -424,6 +424,17 @@ fn test_parse_property_rule_defaults_missing_descriptors() {
   assert_eq!(sheet.property_rules[0].syntax, "\"*\"");
   assert!(!sheet.property_rules[0].inherits);
   assert_eq!(sheet.property_rules[0].initial_value, "");
+
+  let sheet = StyleSheet::parse(
+    r#"
+        @property --box-size {
+          syntax: "<length>";
+          inherits: false;
+        }
+      "#,
+  );
+
+  assert!(sheet.property_rules.is_empty());
 }
 
 #[test]
@@ -494,51 +505,46 @@ fn test_invalid_property_rule_name_is_rejected() {
 }
 
 #[test]
-fn test_property_rule_invalid_initial_value_for_length_is_preserved() {
+fn test_property_rule_missing_syntax_is_rejected() {
   let sheet = StyleSheet::parse(
     r#"
         @property --box-size {
-          syntax: "<length>";
-          inherits: false;
-          initial-value: red;
-        }
-      "#,
-  );
-
-  assert_eq!(sheet.property_rules.len(), 1);
-  assert_eq!(sheet.property_rules[0].initial_value, "red");
-}
-
-#[test]
-fn test_property_rule_invalid_initial_value_for_color_is_preserved() {
-  let sheet = StyleSheet::parse(
-    r#"
-        @property --accent {
-          syntax: "<color>";
           inherits: false;
           initial-value: 10px;
         }
       "#,
   );
 
-  assert_eq!(sheet.property_rules.len(), 1);
-  assert_eq!(sheet.property_rules[0].initial_value, "10px");
+  assert!(sheet.property_rules.is_empty());
 }
 
 #[test]
-fn test_property_rule_unsupported_syntax_is_preserved() {
+fn test_property_rule_missing_inherits_is_rejected() {
   let sheet = StyleSheet::parse(
     r#"
-        @property --box-size {
-          syntax: "<image>";
-          inherits: false;
-          initial-value: none;
+        @property --accent {
+          syntax: "<color>";
+          initial-value: red;
         }
       "#,
   );
 
-  assert_eq!(sheet.property_rules.len(), 1);
-  assert_eq!(sheet.property_rules[0].syntax, "\"<image>\"");
+  assert!(sheet.property_rules.is_empty());
+}
+
+#[test]
+fn test_property_rule_computationally_dependent_initial_value_is_rejected() {
+  let sheet = StyleSheet::parse(
+    r#"
+        @property --box-size {
+          syntax: "<length>";
+          inherits: false;
+          initial-value: var(--fallback);
+        }
+      "#,
+  );
+
+  assert!(sheet.property_rules.is_empty());
 }
 
 #[test]
@@ -554,6 +560,11 @@ fn test_parse_layer_rule_without_block() {
 
   assert_eq!(sheet.rules.len(), 1);
   assert_eq!(sheet.rules[0].selector_text, ".card");
+  assert_eq!(
+    sheet.rules[0].layer.as_deref(),
+    Some(&["utilities".to_owned()][..])
+  );
+  assert_eq!(sheet.rules[0].layer_order, Some(3));
   assert_eq!(
     computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
     Length::Px(100.0)
@@ -575,8 +586,38 @@ fn test_parse_nested_layers_are_transparent() {
   assert_eq!(sheet.rules.len(), 1);
   assert_eq!(sheet.rules[0].selector_text, ".card");
   assert_eq!(
+    sheet.rules[0].layer.as_deref(),
+    Some(&["theme".to_owned(), "components".to_owned()][..])
+  );
+  assert_eq!(
     computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
     Length::Px(100.0)
+  );
+}
+
+#[test]
+fn test_parse_nested_rules_preserves_source_order() {
+  let sheet = StyleSheet::parse(
+    r#"
+        .card {
+          width: 100px;
+          & .title { color: red; }
+          height: 20px;
+        }
+      "#,
+  );
+
+  assert_eq!(sheet.rules.len(), 3);
+  assert_eq!(sheet.rules[0].selector_text, ".card");
+  assert_eq!(
+    computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
+    Length::Px(100.0)
+  );
+  assert_eq!(sheet.rules[1].selector_text, ".card .title");
+  assert_eq!(sheet.rules[2].selector_text, ".card");
+  assert_eq!(
+    computed_style_from_declarations(&sheet.rules[2].normal_declarations).height,
+    Length::Px(20.0)
   );
 }
 
