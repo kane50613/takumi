@@ -146,10 +146,15 @@ fn registered_custom_property_parent_style(
 
       if property_rule.inherits {
         if let Some(initial_value) = &property_rule.initial_value {
-          adjusted_parent
+          if parent_style
             .custom_properties
-            .entry(property_rule.name.clone())
-            .or_insert_with(|| initial_value.clone());
+            .get(&property_rule.name)
+            .is_none()
+          {
+            adjusted_parent
+              .custom_properties
+              .insert(property_rule.name.clone(), initial_value.clone());
+          }
         }
       } else {
         adjusted_parent
@@ -1389,6 +1394,39 @@ mod tests {
     assert_eq!(
       adjusted_parent.custom_properties.get("--box-size"),
       Some(&"10px".to_owned())
+    );
+  }
+
+  #[cfg(feature = "css_stylesheet_parsing")]
+  #[test]
+  fn registered_custom_property_uses_last_inherited_initial_value_when_parent_is_missing() {
+    let parent = ComputedStyle::default();
+
+    let stylesheets = [StyleSheet {
+      property_rules: vec![
+        PropertyRule {
+          name: "--box-size".to_owned(),
+          syntax: "*".to_owned(),
+          inherits: true,
+          initial_value: Some("10px".to_owned()),
+          media_queries: Vec::new(),
+        },
+        PropertyRule {
+          name: "--box-size".to_owned(),
+          syntax: "*".to_owned(),
+          inherits: true,
+          initial_value: Some("20px".to_owned()),
+          media_queries: Vec::new(),
+        },
+      ],
+      ..StyleSheet::default()
+    }];
+
+    let adjusted_parent =
+      registered_custom_property_parent_style(&parent, &stylesheets, Viewport::new(None, None));
+    assert_eq!(
+      adjusted_parent.custom_properties.get("--box-size"),
+      Some(&"20px".to_owned())
     );
   }
 
