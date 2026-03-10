@@ -61,7 +61,13 @@ pub(crate) struct PropertyRule {
   pub media_queries: Vec<MediaQueryList>,
 }
 
-type LayerName = Vec<String>;
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) enum LayerName {
+  Named(String),
+  Anonymous,
+}
+
+type LayerPath = Vec<LayerName>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TakumiIdent(pub String);
@@ -184,7 +190,7 @@ struct StyleSheetFragment {
   rules: Vec<CssRule>,
   keyframes: Vec<KeyframesRule>,
   property_rules: Vec<PropertyRule>,
-  declared_layers: Vec<LayerName>,
+  declared_layers: Vec<LayerPath>,
 }
 
 impl StyleSheetFragment {
@@ -411,7 +417,7 @@ impl<'i> RuleBodyItemParser<'i, (String, String), CssSelectorParseError<'i>>
 struct NestedStyleRuleParser<'a> {
   parent_selector_text: String,
   media_queries: &'a [MediaQueryList],
-  layer: Option<LayerName>,
+  layer: Option<LayerPath>,
 }
 
 impl<'i> DeclarationParser<'i> for NestedStyleRuleParser<'_> {
@@ -458,7 +464,7 @@ impl<'i> QualifiedRuleParser<'i> for NestedStyleRuleParser<'_> {
     let rules = parse_style_rule_block(
       &flattened_selector_text,
       self.media_queries,
-      self.layer.as_deref(),
+      self.layer.as_ref(),
       input,
     )?;
     Ok(StyleRuleBodyItem::Rules(rules))
@@ -487,7 +493,7 @@ impl<'i> AtRuleParser<'i> for NestedStyleRuleParser<'_> {
     let rules = parse_nested_at_rule_block(
       &self.parent_selector_text,
       self.media_queries,
-      self.layer.as_deref(),
+      self.layer.as_ref(),
       prelude,
       input,
     )?;
@@ -590,7 +596,7 @@ impl<'i> AtRuleParser<'i> for KeyframeRuleParser {
 }
 
 struct TakumiRuleParser {
-  current_layer: Option<LayerName>,
+  current_layer: Option<LayerPath>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -852,7 +858,7 @@ fn parse_media_feature<'i, 't>(
 #[derive(Debug, Clone)]
 enum AtRulePrelude {
   Keyframes(String),
-  Layer(Vec<LayerName>),
+  Layer(Vec<LayerPath>),
   Media(MediaQueryList),
   Property(String),
   Supports(bool),
@@ -860,10 +866,10 @@ enum AtRulePrelude {
 
 fn parse_fragment(
   input: &mut Parser<'_, '_>,
-  current_layer: Option<&[String]>,
+  current_layer: Option<&LayerPath>,
 ) -> StyleSheetFragment {
   let mut parser = TakumiRuleParser {
-    current_layer: current_layer.map(<[String]>::to_vec),
+    current_layer: current_layer.cloned(),
   };
   StyleSheetParser::new(input, &mut parser)
     .filter_map(Result::ok)
@@ -881,7 +887,7 @@ pub struct CssRule {
   pub normal_declarations: StyleDeclarationBlock,
   pub important_declarations: StyleDeclarationBlock,
   pub media_queries: Vec<MediaQueryList>,
-  pub layer: Option<LayerName>,
+  pub layer: Option<LayerPath>,
   pub layer_order: Option<usize>,
 }
 
@@ -984,29 +990,44 @@ fn parse_supports_not<'i, 't>(
   parse_supports_in_parens(input)
 }
 
-fn parse_supports_and<'i, 't>(
-  input: &mut Parser<'i, 't>,
-) -> Result<bool, ParseError<'i, CssSelectorParseError<'i>>> {
-  let mut result = parse_supports_not(input)?;
-  while input
-    .try_parse(|input| input.expect_ident_matching("and"))
-    .is_ok()
-  {
-    result &= parse_supports_not(input)?;
-  }
-  Ok(result)
-}
-
 fn parse_supports_condition<'i, 't>(
   input: &mut Parser<'i, 't>,
 ) -> Result<bool, ParseError<'i, CssSelectorParseError<'i>>> {
-  let mut result = parse_supports_and(input)?;
-  while input
-    .try_parse(|input| input.expect_ident_matching("or"))
-    .is_ok()
-  {
-    result |= parse_supports_and(input)?;
+  let mut result = parse_supports_not(input)?;
+  let mut operator = None;
+
+  loop {
+    if input
+      .try_parse(|input| input.expect_ident_matching("and"))
+      .is_ok()
+    {
+      if matches!(operator, Some(false)) {
+        return Err(input.new_custom_error(CssSelectorParseError::InvalidAtRule(
+          "@supports cannot mix `and` and `or` without parentheses",
+        )));
+      }
+      operator = Some(true);
+      result &= parse_supports_not(input)?;
+      continue;
+    }
+
+    if input
+      .try_parse(|input| input.expect_ident_matching("or"))
+      .is_ok()
+    {
+      if matches!(operator, Some(true)) {
+        return Err(input.new_custom_error(CssSelectorParseError::InvalidAtRule(
+          "@supports cannot mix `and` and `or` without parentheses",
+        )));
+      }
+      operator = Some(false);
+      result |= parse_supports_not(input)?;
+      continue;
+    }
+
+    break;
   }
+
   Ok(result)
 }
 
@@ -1023,7 +1044,7 @@ fn parse_at_rule_prelude<'i, 't>(
       }
     }
     if layer_names.is_empty() {
-      layer_names.push(Vec::new());
+      layer_names.push(vec![LayerName::Anonymous]);
     }
     return Ok(AtRulePrelude::Layer(layer_names));
   }
@@ -1057,8 +1078,8 @@ fn parse_at_rule_prelude<'i, 't>(
 
 fn parse_layer_name<'i, 't>(
   input: &mut Parser<'i, 't>,
-) -> Result<LayerName, ParseError<'i, CssSelectorParseError<'i>>> {
-  let mut layer_name = Vec::new();
+) -> Result<LayerPath, ParseError<'i, CssSelectorParseError<'i>>> {
+  let mut segments = Vec::new();
 
   loop {
     let location = input.current_source_location();
@@ -1066,30 +1087,48 @@ fn parse_layer_name<'i, 't>(
       Token::Ident(value) | Token::QuotedString(value) => value.to_string(),
       token => return Err(location.new_unexpected_token_error(token.clone())),
     };
-    layer_name.push(segment);
+    segments.push(LayerName::Named(segment));
 
     if input.try_parse(|input| input.expect_delim('.')).is_err() {
       break;
     }
   }
 
-  Ok(layer_name)
+  Ok(segments)
 }
 
-fn extend_layer_name(current_layer: Option<&[String]>, layer_name: &[String]) -> Option<LayerName> {
-  if current_layer.is_none() && layer_name.is_empty() {
-    return None;
+fn extend_layer_name(
+  current_layer: Option<&LayerPath>,
+  layer_name: &[LayerName],
+) -> Option<LayerPath> {
+  if layer_name == [LayerName::Anonymous] {
+    let mut nested_layer = current_layer.cloned().unwrap_or_default();
+    nested_layer.push(LayerName::Anonymous);
+    return Some(nested_layer);
   }
 
-  let mut combined = current_layer.map_or_else(Vec::new, <[String]>::to_vec);
+  let mut combined = current_layer.cloned().unwrap_or_default();
   combined.extend(layer_name.iter().cloned());
   Some(combined)
+}
+
+fn ensure_single_layer_name<'i>(
+  layer_names: &[LayerPath],
+  input: &Parser<'i, '_>,
+) -> Result<(), ParseError<'i, CssSelectorParseError<'i>>> {
+  if layer_names.len() <= 1 {
+    return Ok(());
+  }
+
+  Err(input.new_custom_error(CssSelectorParseError::InvalidAtRule(
+    "@layer blocks accept at most one name",
+  )))
 }
 
 fn parse_style_rule_block<'i, 't>(
   selector_text: &str,
   media_queries: &[MediaQueryList],
-  layer: Option<&[String]>,
+  layer: Option<&LayerPath>,
   input: &mut Parser<'i, 't>,
 ) -> Result<Vec<CssRule>, ParseError<'i, CssSelectorParseError<'i>>> {
   let selectors =
@@ -1098,7 +1137,7 @@ fn parse_style_rule_block<'i, 't>(
     })?;
   let mut normal_declarations = StyleDeclarationBlock::default();
   let mut important_declarations = StyleDeclarationBlock::default();
-  let layer = layer.map(<[String]>::to_vec);
+  let layer = layer.cloned();
   let mut rules = Vec::new();
   let mut parser = NestedStyleRuleParser {
     parent_selector_text: selector_text.to_owned(),
@@ -1155,17 +1194,18 @@ fn parse_style_rule_block<'i, 't>(
 fn parse_nested_at_rule_block<'i, 't>(
   parent_selector_text: &str,
   media_queries: &[MediaQueryList],
-  current_layer: Option<&[String]>,
+  current_layer: Option<&LayerPath>,
   prelude: AtRulePrelude,
   input: &mut Parser<'i, 't>,
 ) -> Result<Vec<CssRule>, ParseError<'i, CssSelectorParseError<'i>>> {
   match prelude {
     AtRulePrelude::Layer(layer_names) => {
+      ensure_single_layer_name(&layer_names, input)?;
       let Some(layer_name) = layer_names.into_iter().next() else {
         return Ok(Vec::new());
       };
       let nested_layer = extend_layer_name(current_layer, &layer_name);
-      Ok(parse_fragment(input, nested_layer.as_deref()).rules)
+      Ok(parse_fragment(input, nested_layer.as_ref()).rules)
     }
     AtRulePrelude::Media(media_query) => {
       let mut merged_media_queries = media_queries.to_vec();
@@ -1184,7 +1224,7 @@ fn parse_nested_at_rule_block<'i, 't>(
       let mut parser = NestedStyleRuleParser {
         parent_selector_text: parent_selector_text.to_owned(),
         media_queries,
-        layer: current_layer.map(<[String]>::to_vec),
+        layer: current_layer.cloned(),
       };
       for _ in RuleBodyParser::new(input, &mut parser) {}
       Ok(Vec::new())
@@ -1219,7 +1259,7 @@ impl<'i> QualifiedRuleParser<'i> for TakumiRuleParser {
     input: &mut Parser<'i, 't>,
   ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
     Ok(StyleSheetFragment {
-      rules: parse_style_rule_block(&selectors.text, &[], self.current_layer.as_deref(), input)?,
+      rules: parse_style_rule_block(&selectors.text, &[], self.current_layer.as_ref(), input)?,
       ..StyleSheetFragment::default()
     })
   }
@@ -1246,9 +1286,10 @@ impl<'i> AtRuleParser<'i> for TakumiRuleParser {
   ) -> Result<Self::AtRule, ParseError<'i, Self::Error>> {
     match prelude {
       AtRulePrelude::Layer(layer_names) => {
+        ensure_single_layer_name(&layer_names, input)?;
         let declared_layers = layer_names
           .iter()
-          .filter_map(|layer_name| extend_layer_name(self.current_layer.as_deref(), layer_name))
+          .filter_map(|layer_name| extend_layer_name(self.current_layer.as_ref(), layer_name))
           .collect::<Vec<_>>();
         let Some(layer_name) = layer_names.into_iter().next() else {
           return Ok(StyleSheetFragment {
@@ -1256,8 +1297,8 @@ impl<'i> AtRuleParser<'i> for TakumiRuleParser {
             ..StyleSheetFragment::default()
           });
         };
-        let nested_layer = extend_layer_name(self.current_layer.as_deref(), &layer_name);
-        let mut fragment = parse_fragment(input, nested_layer.as_deref());
+        let nested_layer = extend_layer_name(self.current_layer.as_ref(), &layer_name);
+        let mut fragment = parse_fragment(input, nested_layer.as_ref());
         fragment.declared_layers.splice(0..0, declared_layers);
         Ok(fragment)
       }
@@ -1276,7 +1317,7 @@ impl<'i> AtRuleParser<'i> for TakumiRuleParser {
         })
       }
       AtRulePrelude::Media(media_query) => {
-        let mut fragment = parse_fragment(input, self.current_layer.as_deref());
+        let mut fragment = parse_fragment(input, self.current_layer.as_ref());
 
         for rule in &mut fragment.rules {
           rule.media_queries.push(media_query.clone());
@@ -1299,7 +1340,7 @@ impl<'i> AtRuleParser<'i> for TakumiRuleParser {
           return Ok(StyleSheetFragment::default());
         }
 
-        Ok(parse_fragment(input, self.current_layer.as_deref()))
+        Ok(parse_fragment(input, self.current_layer.as_ref()))
       }
       AtRulePrelude::Property(name) => Ok(StyleSheetFragment {
         property_rules: vec![parse_property_rule(&name, input)?],
@@ -1317,7 +1358,7 @@ impl<'i> AtRuleParser<'i> for TakumiRuleParser {
       AtRulePrelude::Layer(layer_names) => Ok(StyleSheetFragment {
         declared_layers: layer_names
           .into_iter()
-          .filter_map(|layer_name| extend_layer_name(self.current_layer.as_deref(), &layer_name))
+          .filter_map(|layer_name| extend_layer_name(self.current_layer.as_ref(), &layer_name))
           .collect(),
         ..StyleSheetFragment::default()
       }),
@@ -1361,7 +1402,7 @@ impl StyleSheet {
       declared_layers.extend(fragment.declared_layers);
     }
 
-    let mut layer_order = std::collections::HashMap::<LayerName, usize>::new();
+    let mut layer_order = std::collections::HashMap::<LayerPath, usize>::new();
     for layer_name in declared_layers {
       let next_order = layer_order.len();
       layer_order.entry(layer_name).or_insert(next_order);

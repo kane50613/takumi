@@ -425,6 +425,26 @@ fn test_parse_supports_not_and_or_conditions() {
 }
 
 #[test]
+fn test_parse_supports_mixed_and_or_requires_parentheses() {
+  let sheet = StyleSheet::parse(
+    r#"
+        @supports (display: grid) and (color: red) or (display: flex) {
+          .invalid { width: 10px; }
+        }
+
+        .valid { height: 20px; }
+      "#,
+  );
+
+  assert_eq!(sheet.rules.len(), 1);
+  assert_eq!(sheet.rules[0].selector_text, ".valid");
+  assert_eq!(
+    computed_style_from_declarations(&sheet.rules[0].normal_declarations).height,
+    Length::Px(20.0)
+  );
+}
+
+#[test]
 fn test_parse_property_rule() {
   let sheet = StyleSheet::parse(
     r#"
@@ -626,8 +646,8 @@ fn test_parse_layer_rule_without_block() {
   assert_eq!(sheet.rules.len(), 1);
   assert_eq!(sheet.rules[0].selector_text, ".card");
   assert_eq!(
-    sheet.rules[0].layer.as_deref(),
-    Some(&["utilities".to_owned()][..])
+    sheet.rules[0].layer.as_ref(),
+    Some(&vec![LayerName::Named("utilities".to_owned())])
   );
   assert_eq!(sheet.rules[0].layer_order, Some(3));
   assert_eq!(
@@ -651,12 +671,65 @@ fn test_parse_nested_layers_are_transparent() {
   assert_eq!(sheet.rules.len(), 1);
   assert_eq!(sheet.rules[0].selector_text, ".card");
   assert_eq!(
-    sheet.rules[0].layer.as_deref(),
-    Some(&["theme".to_owned(), "components".to_owned()][..])
+    sheet.rules[0].layer.as_ref(),
+    Some(&vec![
+      LayerName::Named("theme".to_owned()),
+      LayerName::Named("components".to_owned()),
+    ])
   );
   assert_eq!(
     computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
     Length::Px(100.0)
+  );
+}
+
+#[test]
+fn test_parse_anonymous_nested_layer_has_distinct_order() {
+  let sheet = StyleSheet::parse(
+    r#"
+        @layer theme {
+          .parent { width: 10px; }
+
+          @layer {
+            .child { width: 20px; }
+          }
+        }
+      "#,
+  );
+
+  assert_eq!(sheet.rules.len(), 2);
+  assert_eq!(
+    sheet.rules[0].layer.as_ref(),
+    Some(&vec![LayerName::Named("theme".to_owned())])
+  );
+  assert_eq!(
+    sheet.rules[1].layer.as_ref(),
+    Some(&vec![
+      LayerName::Named("theme".to_owned()),
+      LayerName::Anonymous,
+    ])
+  );
+  assert_ne!(sheet.rules[0].layer_order, sheet.rules[1].layer_order);
+}
+
+#[test]
+fn test_parse_layer_block_rejects_multiple_names() {
+  let sheet = StyleSheet::parse(
+    r#"
+        @layer theme, components {
+          .invalid { width: 10px; }
+        }
+
+        .valid { height: 20px; }
+      "#,
+  );
+
+  assert_eq!(sheet.rules.len(), 1);
+  assert_eq!(sheet.rules[0].selector_text, ".valid");
+  assert_eq!(sheet.rules[0].layer, None);
+  assert_eq!(
+    computed_style_from_declarations(&sheet.rules[0].normal_declarations).height,
+    Length::Px(20.0)
   );
 }
 
