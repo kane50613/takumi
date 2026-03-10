@@ -11,6 +11,8 @@ use taffy::{
 
 #[cfg(feature = "css_stylesheet_parsing")]
 use crate::layout::style::matching::{MatchedDeclarations, match_stylesheets};
+#[cfg(feature = "css_stylesheet_parsing")]
+use crate::layout::style::selector::StyleSheet;
 use crate::{
   Result,
   layout::{
@@ -120,6 +122,35 @@ fn build_style_layers(
   style
 }
 
+#[cfg(feature = "css_stylesheet_parsing")]
+fn registered_custom_property_parent_style(
+  parent_style: &ComputedStyle,
+  stylesheets: &[StyleSheet],
+) -> ComputedStyle {
+  let mut adjusted_parent = parent_style.clone();
+
+  for sheet in stylesheets {
+    for property_rule in &sheet.property_rules {
+      if property_rule.inherits {
+        adjusted_parent
+          .custom_properties
+          .entry(property_rule.name.clone())
+          .or_insert_with(|| property_rule.initial_value.clone());
+      } else {
+        adjusted_parent
+          .custom_properties
+          .remove(&property_rule.name);
+        adjusted_parent.custom_properties.insert(
+          property_rule.name.clone(),
+          property_rule.initial_value.clone(),
+        );
+      }
+    }
+  }
+
+  adjusted_parent
+}
+
 #[cfg(test)]
 fn build_inherited_style(
   parent_style: &ComputedStyle,
@@ -156,6 +187,12 @@ fn build_inherited_style(
   #[cfg(not(feature = "css_stylesheet_parsing"))]
   let style = build_style_layers(node_layers, viewport);
 
+  #[cfg(feature = "css_stylesheet_parsing")]
+  let inherited_parent = registered_custom_property_parent_style(parent_style, &[]);
+  #[cfg(feature = "css_stylesheet_parsing")]
+  return style.inherit(&inherited_parent);
+
+  #[cfg(not(feature = "css_stylesheet_parsing"))]
   style.inherit(parent_style)
 }
 
@@ -879,6 +916,12 @@ impl<'g, N: Node<N>> RenderNode<'g, N> {
         matched,
         parent_context.sizing.viewport,
       );
+      #[cfg(feature = "css_stylesheet_parsing")]
+      let inherited_parent =
+        registered_custom_property_parent_style(&parent_context.style, &parent_context.stylesheets);
+      #[cfg(feature = "css_stylesheet_parsing")]
+      let mut style = style_layers.inherit(&inherited_parent);
+      #[cfg(not(feature = "css_stylesheet_parsing"))]
       let mut style = style_layers.inherit(&parent_context.style);
 
       let font_size = style
@@ -1205,8 +1248,12 @@ mod tests {
 
   use super::build_inherited_style;
   #[cfg(feature = "css_stylesheet_parsing")]
+  use super::registered_custom_property_parent_style;
+  #[cfg(feature = "css_stylesheet_parsing")]
   use crate::layout::style::{
-    LonghandId, StyleDeclaration, StyleDeclarationBlock, matching::MatchedDeclarations,
+    LonghandId, StyleDeclaration, StyleDeclarationBlock,
+    matching::MatchedDeclarations,
+    selector::{PropertyRule, StyleSheet},
   };
   use crate::layout::{
     Viewport,
@@ -1243,5 +1290,77 @@ mod tests {
     );
 
     assert_eq!(resolved.width, Length::Px(30.0));
+  }
+
+  #[cfg(feature = "css_stylesheet_parsing")]
+  #[test]
+  fn registered_custom_property_can_disable_inheritance() {
+    let mut parent = ComputedStyle::default();
+    parent
+      .custom_properties
+      .insert("--box-size".to_owned(), "50px".to_owned());
+
+    let stylesheets = [StyleSheet {
+      property_rules: vec![PropertyRule {
+        name: "--box-size".to_owned(),
+        syntax: "*".to_owned(),
+        inherits: false,
+        initial_value: "10px".to_owned(),
+      }],
+      ..StyleSheet::default()
+    }];
+
+    let adjusted_parent = registered_custom_property_parent_style(&parent, &stylesheets);
+    assert_eq!(
+      adjusted_parent.custom_properties.get("--box-size"),
+      Some(&"10px".to_owned())
+    );
+  }
+
+  #[cfg(feature = "css_stylesheet_parsing")]
+  #[test]
+  fn registered_custom_property_preserves_parent_value_when_inheriting() {
+    let mut parent = ComputedStyle::default();
+    parent
+      .custom_properties
+      .insert("--box-size".to_owned(), "50px".to_owned());
+
+    let stylesheets = [StyleSheet {
+      property_rules: vec![PropertyRule {
+        name: "--box-size".to_owned(),
+        syntax: "*".to_owned(),
+        inherits: true,
+        initial_value: "10px".to_owned(),
+      }],
+      ..StyleSheet::default()
+    }];
+
+    let adjusted_parent = registered_custom_property_parent_style(&parent, &stylesheets);
+    assert_eq!(
+      adjusted_parent.custom_properties.get("--box-size"),
+      Some(&"50px".to_owned())
+    );
+  }
+
+  #[cfg(feature = "css_stylesheet_parsing")]
+  #[test]
+  fn registered_custom_property_uses_initial_value_when_missing_and_inheriting() {
+    let parent = ComputedStyle::default();
+
+    let stylesheets = [StyleSheet {
+      property_rules: vec![PropertyRule {
+        name: "--box-size".to_owned(),
+        syntax: "*".to_owned(),
+        inherits: true,
+        initial_value: "10px".to_owned(),
+      }],
+      ..StyleSheet::default()
+    }];
+
+    let adjusted_parent = registered_custom_property_parent_style(&parent, &stylesheets);
+    assert_eq!(
+      adjusted_parent.custom_properties.get("--box-size"),
+      Some(&"10px".to_owned())
+    );
   }
 }

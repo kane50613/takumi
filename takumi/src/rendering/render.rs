@@ -818,6 +818,7 @@ fn build_stylesheets(stylesheets: Vec<String>, keyframes: Vec<KeyframesRule>) ->
     parsed.push(StyleSheet {
       rules: Vec::new(),
       keyframes,
+      property_rules: Vec::new(),
     });
   }
   parsed

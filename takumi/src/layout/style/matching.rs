@@ -496,8 +496,8 @@ pub(crate) fn match_stylesheets<N: Node<N>>(
     .filter(|rule| {
       rule
         .media_queries
-        .as_ref()
-        .is_none_or(|media_queries| media_queries.matches(viewport))
+        .iter()
+        .all(|media_queries| media_queries.matches(viewport))
     })
     .collect();
   let rule_subject_hints: Vec<RuleSubjectHint> = flattened_rules
