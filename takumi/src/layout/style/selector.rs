@@ -943,12 +943,6 @@ fn parse_property_rule<'i, 't>(
     initial_value
   };
 
-  if !is_computationally_independent_initial_value(&initial_value) {
-    return Err(input.new_custom_error(CssSelectorParseError::InvalidAtRule(
-      "initial-value must be computationally independent",
-    )));
-  }
-
   Ok(PropertyRule {
     name: property_name.to_owned(),
     syntax,
@@ -956,15 +950,6 @@ fn parse_property_rule<'i, 't>(
     initial_value,
     media_queries: Vec::new(),
   })
-}
-
-fn is_computationally_independent_initial_value(initial_value: &str) -> bool {
-  let lower = initial_value.to_ascii_lowercase();
-  ![
-    "var(", "attr(", "env(", "calc(", "em", "rem", "lh", "rlh", "%",
-  ]
-  .into_iter()
-  .any(|pattern| lower.contains(pattern))
 }
 
 fn supports_declaration<'i, 't>(
