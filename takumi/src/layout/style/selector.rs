@@ -7,6 +7,7 @@ use selectors::parser::{
 use std::{
   borrow::Cow,
   fmt::{self, Write},
+  mem::take,
   rc::Rc,
 };
 use taffy::Size;
@@ -881,8 +882,6 @@ fn parse_fragment(
 
 #[derive(Debug, Clone)]
 pub struct CssRule {
-  #[cfg_attr(not(test), allow(dead_code))]
-  pub selector_text: String,
   pub selectors: SelectorList<TakumiSelectorImpl>,
   pub normal_declarations: StyleDeclarationBlock,
   pub important_declarations: StyleDeclarationBlock,
@@ -892,7 +891,7 @@ pub struct CssRule {
 }
 
 fn parse_property_rule<'i, 't>(
-  property_name: &str,
+  property_name: String,
   input: &mut Parser<'i, 't>,
 ) -> Result<PropertyRule, ParseError<'i, CssSelectorParseError<'i>>> {
   let mut parser = PropertyRuleDeclarationParser;
@@ -940,7 +939,7 @@ fn parse_property_rule<'i, 't>(
   };
 
   Ok(PropertyRule {
-    name: property_name.to_owned(),
+    name: property_name,
     syntax,
     inherits,
     initial_value,
@@ -1160,10 +1159,9 @@ fn parse_style_rule_block<'i, 't>(
           || !important_declarations.declarations.is_empty()
         {
           rules.push(CssRule {
-            selector_text: selector_text.to_owned(),
             selectors: selectors.clone(),
-            normal_declarations: std::mem::take(&mut normal_declarations),
-            important_declarations: std::mem::take(&mut important_declarations),
+            normal_declarations: take(&mut normal_declarations),
+            important_declarations: take(&mut important_declarations),
             media_queries: media_queries.to_vec(),
             layer: layer.clone(),
             layer_order: None,
@@ -1180,7 +1178,6 @@ fn parse_style_rule_block<'i, 't>(
   }
 
   rules.push(CssRule {
-    selector_text: selector_text.to_owned(),
     selectors,
     normal_declarations,
     important_declarations,
@@ -1343,7 +1340,7 @@ impl<'i> AtRuleParser<'i> for TakumiRuleParser {
         Ok(parse_fragment(input, self.current_layer.as_ref()))
       }
       AtRulePrelude::Property(name) => Ok(StyleSheetFragment {
-        property_rules: vec![parse_property_rule(&name, input)?],
+        property_rules: vec![parse_property_rule(name, input)?],
         ..StyleSheetFragment::default()
       }),
     }

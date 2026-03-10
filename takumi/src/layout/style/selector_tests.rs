@@ -2,6 +2,7 @@ use super::*;
 use crate::layout::style::{
   Color, ColorInput, ComputedStyle, Length, Style, StyleDeclaration, StyleDeclarationBlock,
 };
+use cssparser::ToCss;
 
 fn computed_style_from_declarations(declarations: &StyleDeclarationBlock) -> ComputedStyle {
   let mut style = Style::default();
@@ -9,6 +10,10 @@ fn computed_style_from_declarations(declarations: &StyleDeclarationBlock) -> Com
     declaration.merge_into_ref(&mut style);
   }
   style.inherit(&ComputedStyle::default())
+}
+
+fn selector_text(rule: &CssRule) -> String {
+  rule.selectors.to_css_string()
 }
 
 #[test]
@@ -93,7 +98,7 @@ fn test_parse_stylesheet_universal_selector() {
   );
 
   assert_eq!(sheet.rules.len(), 1);
-  assert_eq!(sheet.rules[0].selector_text, "*");
+  assert_eq!(selector_text(&sheet.rules[0]), "*");
   assert_eq!(sheet.rules[0].selectors.slice().len(), 1);
   assert_eq!(
     computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
@@ -315,9 +320,9 @@ fn test_parse_nested_rule_is_flattened() {
   );
 
   assert_eq!(sheet.rules.len(), 3);
-  assert_eq!(sheet.rules[0].selector_text, ".card");
-  assert_eq!(sheet.rules[1].selector_text, ".card .title");
-  assert_eq!(sheet.rules[2].selector_text, ".card > .icon");
+  assert_eq!(selector_text(&sheet.rules[0]), ".card");
+  assert_eq!(selector_text(&sheet.rules[1]), ".card .title");
+  assert_eq!(selector_text(&sheet.rules[2]), ".card > .icon");
 }
 
 #[test]
@@ -332,7 +337,7 @@ fn test_parse_nested_rule_cross_product_for_selector_lists() {
 
   assert_eq!(sheet.rules.len(), 1);
   assert_eq!(
-    sheet.rules[0].selector_text,
+    selector_text(&sheet.rules[0]),
     ".card .title, .card .subtitle, .panel .title, .panel .subtitle"
   );
 }
@@ -352,7 +357,7 @@ fn test_parse_nested_media_and_supports_rules() {
   );
 
   assert_eq!(sheet.rules.len(), 1);
-  assert_eq!(sheet.rules[0].selector_text, ".card");
+  assert_eq!(selector_text(&sheet.rules[0]), ".card");
   assert_eq!(sheet.rules[0].media_queries.len(), 1);
   assert!(
     sheet.rules[0]
@@ -398,7 +403,7 @@ fn test_parse_supports_rule_filters_unsupported_declarations() {
   );
 
   assert_eq!(sheet.rules.len(), 1);
-  assert_eq!(sheet.rules[0].selector_text, ".card");
+  assert_eq!(selector_text(&sheet.rules[0]), ".card");
   assert_eq!(
     computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
     Length::Px(100.0)
@@ -420,8 +425,8 @@ fn test_parse_supports_not_and_or_conditions() {
   );
 
   assert_eq!(sheet.rules.len(), 2);
-  assert_eq!(sheet.rules[0].selector_text, ".grid");
-  assert_eq!(sheet.rules[1].selector_text, ".flex");
+  assert_eq!(selector_text(&sheet.rules[0]), ".grid");
+  assert_eq!(selector_text(&sheet.rules[1]), ".flex");
 }
 
 #[test]
@@ -437,7 +442,7 @@ fn test_parse_supports_mixed_and_or_requires_parentheses() {
   );
 
   assert_eq!(sheet.rules.len(), 1);
-  assert_eq!(sheet.rules[0].selector_text, ".valid");
+  assert_eq!(selector_text(&sheet.rules[0]), ".valid");
   assert_eq!(
     computed_style_from_declarations(&sheet.rules[0].normal_declarations).height,
     Length::Px(20.0)
@@ -644,7 +649,7 @@ fn test_parse_layer_rule_without_block() {
   );
 
   assert_eq!(sheet.rules.len(), 1);
-  assert_eq!(sheet.rules[0].selector_text, ".card");
+  assert_eq!(selector_text(&sheet.rules[0]), ".card");
   assert_eq!(
     sheet.rules[0].layer.as_ref(),
     Some(&vec![LayerName::Named("utilities".to_owned())])
@@ -669,7 +674,7 @@ fn test_parse_nested_layers_are_transparent() {
   );
 
   assert_eq!(sheet.rules.len(), 1);
-  assert_eq!(sheet.rules[0].selector_text, ".card");
+  assert_eq!(selector_text(&sheet.rules[0]), ".card");
   assert_eq!(
     sheet.rules[0].layer.as_ref(),
     Some(&vec![
@@ -725,7 +730,7 @@ fn test_parse_layer_block_rejects_multiple_names() {
   );
 
   assert_eq!(sheet.rules.len(), 1);
-  assert_eq!(sheet.rules[0].selector_text, ".valid");
+  assert_eq!(selector_text(&sheet.rules[0]), ".valid");
   assert_eq!(sheet.rules[0].layer, None);
   assert_eq!(
     computed_style_from_declarations(&sheet.rules[0].normal_declarations).height,
@@ -746,13 +751,13 @@ fn test_parse_nested_rules_preserves_source_order() {
   );
 
   assert_eq!(sheet.rules.len(), 3);
-  assert_eq!(sheet.rules[0].selector_text, ".card");
+  assert_eq!(selector_text(&sheet.rules[0]), ".card");
   assert_eq!(
     computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
     Length::Px(100.0)
   );
-  assert_eq!(sheet.rules[1].selector_text, ".card .title");
-  assert_eq!(sheet.rules[2].selector_text, ".card");
+  assert_eq!(selector_text(&sheet.rules[1]), ".card .title");
+  assert_eq!(selector_text(&sheet.rules[2]), ".card");
   assert_eq!(
     computed_style_from_declarations(&sheet.rules[2].normal_declarations).height,
     Length::Px(20.0)
@@ -774,7 +779,7 @@ fn test_nested_unsupported_supports_rule_is_discarded() {
   );
 
   assert_eq!(sheet.rules.len(), 1);
-  assert_eq!(sheet.rules[0].selector_text, ".card");
+  assert_eq!(selector_text(&sheet.rules[0]), ".card");
 
   let computed = computed_style_from_declarations(&sheet.rules[0].normal_declarations);
   assert_eq!(computed.width, Length::Px(100.0));
@@ -797,7 +802,7 @@ fn test_nested_keyframes_rule_is_rejected() {
 
   assert_eq!(sheet.rules.len(), 1);
   assert_eq!(sheet.keyframes.len(), 0);
-  assert_eq!(sheet.rules[0].selector_text, ".card");
+  assert_eq!(selector_text(&sheet.rules[0]), ".card");
   assert_eq!(
     computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
     Length::Px(100.0)
@@ -821,7 +826,7 @@ fn test_nested_property_rule_is_rejected() {
 
   assert_eq!(sheet.rules.len(), 1);
   assert!(sheet.property_rules.is_empty());
-  assert_eq!(sheet.rules[0].selector_text, ".card");
+  assert_eq!(selector_text(&sheet.rules[0]), ".card");
   assert_eq!(
     computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
     Length::Px(100.0)
@@ -844,7 +849,7 @@ fn test_invalid_property_inherits_value_is_rejected() {
 
   assert!(sheet.property_rules.is_empty());
   assert_eq!(sheet.rules.len(), 1);
-  assert_eq!(sheet.rules[0].selector_text, ".card");
+  assert_eq!(selector_text(&sheet.rules[0]), ".card");
 }
 
 #[test]
@@ -860,7 +865,7 @@ fn test_unsupported_media_feature_rule_is_rejected() {
   );
 
   assert_eq!(sheet.rules.len(), 1);
-  assert_eq!(sheet.rules[0].selector_text, ".panel");
+  assert_eq!(selector_text(&sheet.rules[0]), ".panel");
   assert_eq!(
     computed_style_from_declarations(&sheet.rules[0].normal_declarations).height,
     Length::Px(20.0)
@@ -880,7 +885,7 @@ fn test_unknown_at_rule_is_rejected() {
   );
 
   assert_eq!(sheet.rules.len(), 1);
-  assert_eq!(sheet.rules[0].selector_text, ".panel");
+  assert_eq!(selector_text(&sheet.rules[0]), ".panel");
   assert_eq!(
     computed_style_from_declarations(&sheet.rules[0].normal_declarations).height,
     Length::Px(20.0)

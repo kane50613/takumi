@@ -1,3 +1,5 @@
+use std::mem::take;
+
 use cssparser::Parser;
 
 use crate::layout::style::{CssToken, FromCss, MakeComputed, ParseResult};
@@ -71,7 +73,7 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
         let mut pending_leading_names: Vec<String> = Vec::new();
         loop {
           // Start with any pending names from the previous track's trailing names
-          let mut names: Vec<String> = std::mem::take(&mut pending_leading_names);
+          let mut names: Vec<String> = take(&mut pending_leading_names);
 
           // Capture any additional leading square-bracketed names before the size
           while input.try_parse(Parser::expect_square_bracket_block).is_ok() {
@@ -111,7 +113,7 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
         if !pending_leading_names.is_empty()
           && let Some(last) = tracks.last_mut()
         {
-          last.end_names = Some(std::mem::take(&mut pending_leading_names));
+          last.end_names = Some(take(&mut pending_leading_names));
         }
 
         Ok(GridTemplateComponent::Repeat(repetition, tracks))
@@ -164,13 +166,13 @@ impl GridTemplateComponentsExt for [GridTemplateComponent] {
           }
         }
         GridTemplateComponent::Single(track_size) => {
-          line_name_sets.push(std::mem::take(&mut pending_line_names));
+          line_name_sets.push(take(&mut pending_line_names));
           track_components.push(taffy::GridTemplateComponent::Single(
             track_size.to_min_max(sizing),
           ));
         }
         GridTemplateComponent::Repeat(repetition, tracks) => {
-          line_name_sets.push(std::mem::take(&mut pending_line_names));
+          line_name_sets.push(take(&mut pending_line_names));
 
           let track_sizes = tracks
             .iter()
