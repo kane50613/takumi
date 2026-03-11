@@ -171,6 +171,15 @@ fn refresh_text_span_ranges<N: Node<N>>(spans: &mut [ProcessedInlineSpan<'_, '_,
   }
 }
 
+fn tail_text_span<'a, 'c, 'g, N: Node<N>>(
+  spans: &'a [ProcessedInlineSpan<'c, 'g, N>],
+) -> Option<(&'a SizedFontStyle<'c>, u64)> {
+  spans.iter().rev().find_map(|span| match span {
+    ProcessedInlineSpan::Text { span_id, style, .. } => Some((style, *span_id)),
+    ProcessedInlineSpan::Box(_) => None,
+  })
+}
+
 pub(crate) fn measure_inline_layout(layout: &mut InlineLayout, max_width: f32) -> Size<f32> {
   let (max_run_width, total_height) =
     layout
@@ -432,23 +441,13 @@ fn make_ellipsis_layout<'c, 'g: 'c, N: Node<N> + 'c>(
 ) {
   let ellipsis_char = root_style.parent.ellipsis_char();
 
-  let ellipsis_style = spans
-    .iter()
-    .rev()
-    .find_map(|span| {
-      if let ProcessedInlineSpan::Text { style, .. } = span {
-        Some(Cow::Owned(style.clone()))
-      } else {
-        None
-      }
-    })
-    .unwrap_or(Cow::Borrowed(root_style));
+  let initial_ellipsis_style = tail_text_span(spans).map_or(root_style, |(style, _)| style);
 
   let ellipsis_w = {
     let (mut ellipsis_layout, _) =
       global
         .font_context
-        .tree_builder((&*ellipsis_style).into(), |builder| {
+        .tree_builder(initial_ellipsis_style.into(), |builder| {
           builder.push_text(ellipsis_char);
         });
     ellipsis_layout.break_all_lines(None);
@@ -533,10 +532,10 @@ fn make_ellipsis_layout<'c, 'g: 'c, N: Node<N> + 'c>(
 
   refresh_text_span_ranges(spans);
 
-  let ellipsis_span_id = spans.iter().rev().find_map(|span| match span {
-    ProcessedInlineSpan::Text { span_id, .. } => Some(*span_id),
-    ProcessedInlineSpan::Box(_) => None,
-  });
+  let (ellipsis_style, ellipsis_span_id) = tail_text_span(spans)
+    .map_or((root_style, None), |(style, span_id)| {
+      (style, Some(span_id))
+    });
 
   let (mut final_layout, _) = global
     .font_context
@@ -558,7 +557,7 @@ fn make_ellipsis_layout<'c, 'g: 'c, N: Node<N> + 'c>(
           }
         }
       }
-      builder.push_style_span(text_style_with_span_id(&ellipsis_style, ellipsis_span_id));
+      builder.push_style_span(text_style_with_span_id(ellipsis_style, ellipsis_span_id));
       builder.push_text(ellipsis_char);
       builder.pop_style_span();
     });
