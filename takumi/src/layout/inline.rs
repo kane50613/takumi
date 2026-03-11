@@ -553,6 +553,11 @@ fn make_ellipsis_layout<'c, 'g: 'c, N: Node<N> + 'c>(
 
   refresh_text_span_ranges(spans);
 
+  let ellipsis_span_id = spans.iter().rev().find_map(|span| match span {
+    ProcessedInlineSpan::Text { span_id, .. } => Some(*span_id),
+    ProcessedInlineSpan::Box(_) => None,
+  });
+
   let (mut final_layout, _) = global
     .font_context
     .tree_builder(root_style.into(), |builder| {
@@ -573,7 +578,7 @@ fn make_ellipsis_layout<'c, 'g: 'c, N: Node<N> + 'c>(
           }
         }
       }
-      builder.push_style_span(text_style_with_span_id(&ellipsis_style, None));
+      builder.push_style_span(text_style_with_span_id(&ellipsis_style, ellipsis_span_id));
       builder.push_text(ellipsis_char);
       builder.pop_style_span();
     });

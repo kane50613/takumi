@@ -514,6 +514,8 @@ fn draw_outline_island<N: Node<N>>(
       pixel
     },
   );
+
+  canvas.buffer_pool.release(mask);
 }
 
 fn draw_merged_outline_rects<N: Node<N>>(
