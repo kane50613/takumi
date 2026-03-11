@@ -461,20 +461,19 @@ fn draw_outline_island<N: Node<N>>(
   let Some(first_rect) = outline_rects.first().copied() else {
     return;
   };
-  let Some(ProcessedInlineSpan::Text { outline, .. }) = spans.get(first_rect.span_id as usize)
-  else {
+  let Some(ProcessedInlineSpan::Text { style, .. }) = spans.get(first_rect.span_id as usize) else {
     return;
   };
 
-  let width = outline.width;
-  if width == 0.0 || outline.style == BorderStyle::None {
+  let width = style.outline_width;
+  if width == 0.0 || style.outline_style == BorderStyle::None {
     return;
   }
 
   let Some(contour_rects): Option<Vec<_>> = outline_rects
     .iter()
     .copied()
-    .map(|outline_rect| expand_outline_rect(outline_rect, outline.offset + width / 2.0))
+    .map(|outline_rect| expand_outline_rect(outline_rect, style.outline_offset + width / 2.0))
     .collect()
   else {
     return;
@@ -509,7 +508,7 @@ fn draw_outline_island<N: Node<N>>(
         return Color::transparent().into();
       }
 
-      let mut pixel: image::Rgba<u8> = outline.color.into();
+      let mut pixel: image::Rgba<u8> = style.outline_color.into();
       pixel.0[3] = ((pixel.0[3] as u16 * alpha as u16) / 255) as u8;
       pixel
     },

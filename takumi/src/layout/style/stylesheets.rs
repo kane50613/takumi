@@ -1762,10 +1762,14 @@ pub(crate) struct SizedFontStyle<'s> {
   pub parent: &'s ComputedStyle,
   pub line_height: parley::LineHeight,
   pub stroke_width: f32,
+  pub outline_width: f32,
+  pub outline_offset: f32,
   pub letter_spacing: f32,
   pub word_spacing: f32,
   pub text_shadow: SmallVec<[SizedShadow; 4]>,
   pub color: Color,
+  pub outline_color: Color,
+  pub outline_style: BorderStyle,
   pub text_stroke_color: Color,
   pub text_decoration_color: Color,
   pub text_decoration_thickness: SizedTextDecorationThickness,
@@ -2001,6 +2005,8 @@ impl ComputedStyle {
         .webkit_text_stroke_width
         .unwrap_or_default()
         .to_px(&context.sizing, context.sizing.font_size),
+      outline_width: self.outline_width.to_px(&context.sizing, 0.0).max(0.0),
+      outline_offset: self.outline_offset.to_px(&context.sizing, 0.0),
       letter_spacing: self
         .letter_spacing
         .to_px(&context.sizing, context.sizing.font_size),
@@ -2012,6 +2018,8 @@ impl ComputedStyle {
         .webkit_text_fill_color
         .unwrap_or(self.color)
         .resolve(context.current_color),
+      outline_color: self.outline_color.resolve(context.current_color),
+      outline_style: self.outline_style,
       text_stroke_color: self
         .webkit_text_stroke_color
         .unwrap_or_default()

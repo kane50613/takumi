@@ -8,9 +8,8 @@ use crate::{
   layout::{
     node::Node,
     style::{
-      BorderStyle, Color, FontSynthesis, ResolvedVerticalAlign, SizedFontStyle,
-      SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextOverflow,
-      TextWrapStyle, VerticalAlign,
+      Color, FontSynthesis, ResolvedVerticalAlign, SizedFontStyle, SizedTextDecorationThickness,
+      TextDecorationLines, TextDecorationSkipInk, TextOverflow, TextWrapStyle, VerticalAlign,
     },
     tree::RenderNode,
   },
@@ -56,17 +55,8 @@ pub(crate) enum ProcessedInlineSpan<'c, 'g, N: Node<N>> {
     byte_range: Range<usize>,
     text: String,
     style: SizedFontStyle<'c>,
-    outline: InlineTextOutlineStyle,
   },
   Box(InlineBoxItem<'c, 'g, N>),
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct InlineTextOutlineStyle {
-  pub(crate) width: f32,
-  pub(crate) offset: f32,
-  pub(crate) color: Color,
-  pub(crate) style: BorderStyle,
 }
 
 pub(crate) enum InlineItem<'c, 'g, N: Node<N>> {
@@ -237,16 +227,6 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c, N: Node<N> + 'c>(
             byte_range: start..end,
             text: collapsed.into_owned(),
             style: span_style,
-            outline: InlineTextOutlineStyle {
-              width: context
-                .style
-                .outline_width
-                .to_px(&context.sizing, 0.0)
-                .max(0.0),
-              offset: context.style.outline_offset.to_px(&context.sizing, 0.0),
-              color: context.style.outline_color.resolve(context.current_color),
-              style: context.style.outline_style,
-            },
           });
         }
         InlineItem::RenderNode { render_node } => {
