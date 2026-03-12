@@ -260,10 +260,7 @@ fn truncation_plan<'c, 'g, N: Node<N>>(
         ProcessedInlineSpan::Text { text, .. } => {
           let len = text.len();
           if remaining <= len {
-            let safe_cut = (0..=remaining.min(len))
-              .rev()
-              .find(|&byte_index| text.is_char_boundary(byte_index))
-              .unwrap_or(0);
+            let safe_cut = text.floor_char_boundary(remaining.min(len));
             text_cut = Some((index, safe_cut));
             span_cut_idx = index + 1;
             break;
@@ -283,6 +280,32 @@ fn truncation_plan<'c, 'g, N: Node<N>>(
   } else {
     (None, None)
   }
+}
+
+fn text_span_style_by_id<'a, 'c, 'g, N: Node<N>>(
+  spans: &'a [ProcessedInlineSpan<'c, 'g, N>],
+  span_id: u64,
+) -> Option<&'a SizedFontStyle<'c>> {
+  spans.iter().find_map(|span| match span {
+    ProcessedInlineSpan::Text {
+      span_id: current_span_id,
+      style,
+      ..
+    } if *current_span_id == span_id => Some(style),
+    ProcessedInlineSpan::Text { .. } | ProcessedInlineSpan::Box(_) => None,
+  })
+}
+
+fn truncated_tail_text_span_id<'c, 'g, N: Node<N>>(
+  spans: &[ProcessedInlineSpan<'c, 'g, N>],
+  span_cut_idx: Option<usize>,
+) -> Option<u64> {
+  span_cut_idx.and_then(|cut_idx| {
+    spans[..cut_idx].iter().rev().find_map(|span| match span {
+      ProcessedInlineSpan::Text { span_id, .. } => Some(*span_id),
+      ProcessedInlineSpan::Box(_) => None,
+    })
+  })
 }
 
 fn apply_truncation_plan<'c, 'g, N: Node<N>>(
@@ -563,37 +586,33 @@ fn make_ellipsis_layout<'c, 'g: 'c, N: Node<N> + 'c>(
 ) {
   let ellipsis_char = root_style.parent.ellipsis_char();
   let checkpoints = collect_truncation_checkpoints(layout);
-  let mut ellipsis_span_id = tail_text_span(spans).map(|(_, span_id)| span_id);
-  let final_plan = loop {
-    let ellipsis_style = ellipsis_span_id
-      .and_then(|span_id| {
-        spans.iter().find_map(|span| match span {
-          ProcessedInlineSpan::Text {
-            span_id: current_span_id,
-            style,
-            ..
-          } if *current_span_id == span_id => Some(style),
-          ProcessedInlineSpan::Text { .. } | ProcessedInlineSpan::Box(_) => None,
-        })
-      })
-      .unwrap_or(root_style);
-    let ellipsis_w = measure_ellipsis_width(global, ellipsis_style, ellipsis_char);
+  let mut ellipsis_candidates = spans
+    .iter()
+    .rev()
+    .filter_map(|span| match span {
+      ProcessedInlineSpan::Text { span_id, .. } => Some(Some(*span_id)),
+      ProcessedInlineSpan::Box(_) => None,
+    })
+    .collect::<Vec<_>>();
+  ellipsis_candidates.dedup();
+  ellipsis_candidates.push(None);
 
-    let plan = truncation_plan(&checkpoints, spans, (max_width - ellipsis_w).max(0.0));
-    let next_ellipsis_span_id = plan.0.and_then(|span_cut_idx| {
-      spans[..span_cut_idx]
-        .iter()
-        .rev()
-        .find_map(|span| match span {
-          ProcessedInlineSpan::Text { span_id, .. } => Some(*span_id),
-          ProcessedInlineSpan::Box(_) => None,
-        })
+  let final_plan = ellipsis_candidates
+    .iter()
+    .copied()
+    .find_map(|candidate_span_id| {
+      let ellipsis_style = candidate_span_id
+        .and_then(|span_id| text_span_style_by_id(spans, span_id))
+        .unwrap_or(root_style);
+      let ellipsis_w = measure_ellipsis_width(global, ellipsis_style, ellipsis_char);
+      let plan = truncation_plan(&checkpoints, spans, (max_width - ellipsis_w).max(0.0));
+      let resulting_span_id = truncated_tail_text_span_id(spans, plan.0);
+      (resulting_span_id == candidate_span_id).then_some(plan)
+    })
+    .unwrap_or_else(|| {
+      let ellipsis_w = measure_ellipsis_width(global, root_style, ellipsis_char);
+      truncation_plan(&checkpoints, spans, (max_width - ellipsis_w).max(0.0))
     });
-    if next_ellipsis_span_id == ellipsis_span_id {
-      break plan;
-    }
-    ellipsis_span_id = next_ellipsis_span_id;
-  };
 
   apply_truncation_plan(spans, final_plan);
   refresh_text_span_ranges(spans);

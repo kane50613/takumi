@@ -398,22 +398,37 @@ fn collect_glyph_run_outline_rect(
   })
 }
 
+const OUTLINE_COORD_TOLERANCE: f32 = 1e-3;
+
 fn x_ranges_touch(left: InlineOutlineRect, right: InlineOutlineRect) -> bool {
-  left.x <= right.x + right.width + 0.5 && right.x <= left.x + left.width + 0.5
+  left.x <= right.x + right.width + OUTLINE_COORD_TOLERANCE
+    && right.x <= left.x + left.width + OUTLINE_COORD_TOLERANCE
 }
 
-fn append_outline_contour(path: &mut Vec<Command>, outline_rects: &[InlineOutlineRect]) {
-  let Some(first_rect) = outline_rects.first().copied() else {
-    return;
+fn append_outline_contour(
+  path: &mut Vec<Command>,
+  outline_rects: &[InlineOutlineRect],
+  amount: f32,
+) -> Option<()> {
+  let Some(first_rect) = outline_rects
+    .first()
+    .copied()
+    .and_then(|outline_rect| expand_outline_rect(outline_rect, amount))
+  else {
+    return None;
   };
-  let last_rect = *outline_rects.last().unwrap_or(&first_rect);
+  let last_rect = outline_rects
+    .last()
+    .copied()
+    .and_then(|outline_rect| expand_outline_rect(outline_rect, amount))
+    .unwrap_or(first_rect);
 
   path.move_to((first_rect.x, first_rect.y));
   path.line_to((first_rect.x + first_rect.width, first_rect.y));
 
   for window in outline_rects.windows(2) {
-    let current_rect = window[0];
-    let next_rect = window[1];
+    let current_rect = expand_outline_rect(window[0], amount)?;
+    let next_rect = expand_outline_rect(window[1], amount)?;
 
     path.line_to((current_rect.x + current_rect.width, next_rect.y));
     path.line_to((next_rect.x + next_rect.width, next_rect.y));
@@ -426,14 +441,15 @@ fn append_outline_contour(path: &mut Vec<Command>, outline_rects: &[InlineOutlin
   path.line_to((last_rect.x, last_rect.y + last_rect.height));
 
   for index in (1..outline_rects.len()).rev() {
-    let lower_rect = outline_rects[index];
-    let upper_rect = outline_rects[index - 1];
+    let lower_rect = expand_outline_rect(outline_rects[index], amount)?;
+    let upper_rect = expand_outline_rect(outline_rects[index - 1], amount)?;
 
     path.line_to((lower_rect.x, upper_rect.y + upper_rect.height));
     path.line_to((upper_rect.x, upper_rect.y + upper_rect.height));
   }
 
   path.close();
+  Some(())
 }
 
 fn expand_outline_rect(outline_rect: InlineOutlineRect, amount: f32) -> Option<InlineOutlineRect> {
@@ -470,17 +486,11 @@ fn draw_outline_island<N: Node<N>>(
     return;
   }
 
-  let Some(contour_rects): Option<Vec<_>> = outline_rects
-    .iter()
-    .copied()
-    .map(|outline_rect| expand_outline_rect(outline_rect, style.outline_offset + width / 2.0))
-    .collect()
-  else {
+  let expansion = style.outline_offset + width / 2.0;
+  let mut path = Vec::with_capacity(outline_rects.len() * 6);
+  if append_outline_contour(&mut path, outline_rects, expansion).is_none() {
     return;
-  };
-
-  let mut path = Vec::with_capacity(contour_rects.len() * 6);
-  append_outline_contour(&mut path, &contour_rects);
+  }
 
   let stroke = Stroke::new(width);
   let (mask, placement) = canvas.mask_memory.render(
@@ -540,9 +550,10 @@ fn draw_merged_outline_rects<N: Node<N>>(
 
     let same_group = previous_rect.span_id == outline_rect.span_id
       && previous_rect.line_index == outline_rect.line_index;
-    let touching = outline_rect.x <= previous_rect.x + previous_rect.width + 0.5;
-    let same_band = (outline_rect.y - previous_rect.y).abs() <= 0.5
-      && (outline_rect.height - previous_rect.height).abs() <= 0.5;
+    let touching =
+      outline_rect.x <= previous_rect.x + previous_rect.width + OUTLINE_COORD_TOLERANCE;
+    let same_band = (outline_rect.y - previous_rect.y).abs() <= OUTLINE_COORD_TOLERANCE
+      && (outline_rect.height - previous_rect.height).abs() <= OUTLINE_COORD_TOLERANCE;
 
     if same_group && same_band && touching {
       let right_edge =

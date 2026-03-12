@@ -128,29 +128,13 @@ fn slice_text_at_char_boundaries(text: &str, byte_range: Range<usize>) -> &str {
   }
 
   let end = byte_range.end.min(text.len());
-  let start = ceil_char_boundary(text, byte_range.start.min(end));
-  let end = floor_char_boundary(text, end);
+  let start = text.ceil_char_boundary(byte_range.start.min(end));
+  let end = text.floor_char_boundary(end);
   if start >= end {
     return "";
   }
 
   &text[start..end]
-}
-
-fn floor_char_boundary(text: &str, index: usize) -> usize {
-  let mut boundary = index.min(text.len());
-  while boundary > 0 && !text.is_char_boundary(boundary) {
-    boundary -= 1;
-  }
-  boundary
-}
-
-fn ceil_char_boundary(text: &str, index: usize) -> usize {
-  let mut boundary = index.min(text.len());
-  while boundary < text.len() && !text.is_char_boundary(boundary) {
-    boundary += 1;
-  }
-  boundary
 }
 
 struct TraversalEnter {
