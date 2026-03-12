@@ -586,33 +586,24 @@ fn make_ellipsis_layout<'c, 'g: 'c, N: Node<N> + 'c>(
 ) {
   let ellipsis_char = root_style.parent.ellipsis_char();
   let checkpoints = collect_truncation_checkpoints(layout);
-  let mut ellipsis_candidates = spans
-    .iter()
-    .rev()
-    .filter_map(|span| match span {
-      ProcessedInlineSpan::Text { span_id, .. } => Some(Some(*span_id)),
-      ProcessedInlineSpan::Box(_) => None,
-    })
-    .collect::<Vec<_>>();
-  ellipsis_candidates.dedup();
-  ellipsis_candidates.push(None);
+  let mut ellipsis_span_id = tail_text_span(spans).map(|(_, span_id)| span_id);
 
-  let final_plan = ellipsis_candidates
-    .iter()
-    .copied()
-    .find_map(|candidate_span_id| {
-      let ellipsis_style = candidate_span_id
-        .and_then(|span_id| text_span_style_by_id(spans, span_id))
-        .unwrap_or(root_style);
-      let ellipsis_w = measure_ellipsis_width(global, ellipsis_style, ellipsis_char);
-      let plan = truncation_plan(&checkpoints, spans, (max_width - ellipsis_w).max(0.0));
-      let resulting_span_id = truncated_tail_text_span_id(spans, plan.0);
-      (resulting_span_id == candidate_span_id).then_some(plan)
-    })
-    .unwrap_or_else(|| {
-      let ellipsis_w = measure_ellipsis_width(global, root_style, ellipsis_char);
-      truncation_plan(&checkpoints, spans, (max_width - ellipsis_w).max(0.0))
-    });
+  let mut iterations = 0;
+  let final_plan = loop {
+    iterations += 1;
+    let ellipsis_style = ellipsis_span_id
+      .and_then(|span_id| text_span_style_by_id(spans, span_id))
+      .unwrap_or(root_style);
+    let ellipsis_w = measure_ellipsis_width(global, ellipsis_style, ellipsis_char);
+
+    let plan = truncation_plan(&checkpoints, spans, (max_width - ellipsis_w).max(0.0));
+    let next_ellipsis_span_id = truncated_tail_text_span_id(spans, plan.0);
+
+    if next_ellipsis_span_id == ellipsis_span_id || iterations > 3 {
+      break plan;
+    }
+    ellipsis_span_id = next_ellipsis_span_id;
+  };
 
   apply_truncation_plan(spans, final_plan);
   refresh_text_span_ranges(spans);

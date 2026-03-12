@@ -409,30 +409,26 @@ fn append_outline_contour(
   path: &mut Vec<Command>,
   outline_rects: &[InlineOutlineRect],
   amount: f32,
-) -> Option<()> {
-  let Some(first_rect) = outline_rects
-    .first()
-    .copied()
-    .and_then(|outline_rect| expand_outline_rect(outline_rect, amount))
-  else {
-    return None;
+) {
+  let mut expanded_rects = outline_rects
+    .iter()
+    .filter_map(|r| expand_outline_rect(*r, amount));
+
+  let Some(first_rect) = expanded_rects.next() else {
+    return;
   };
-  let last_rect = outline_rects
-    .last()
-    .copied()
-    .and_then(|outline_rect| expand_outline_rect(outline_rect, amount))
-    .unwrap_or(first_rect);
 
   path.move_to((first_rect.x, first_rect.y));
   path.line_to((first_rect.x + first_rect.width, first_rect.y));
 
-  for window in outline_rects.windows(2) {
-    let current_rect = expand_outline_rect(window[0], amount)?;
-    let next_rect = expand_outline_rect(window[1], amount)?;
+  let mut current_rect = first_rect;
 
+  for next_rect in expanded_rects {
     path.line_to((current_rect.x + current_rect.width, next_rect.y));
     path.line_to((next_rect.x + next_rect.width, next_rect.y));
+    current_rect = next_rect;
   }
+  let last_rect = current_rect;
 
   path.line_to((
     last_rect.x + last_rect.width,
@@ -440,16 +436,21 @@ fn append_outline_contour(
   ));
   path.line_to((last_rect.x, last_rect.y + last_rect.height));
 
-  for index in (1..outline_rects.len()).rev() {
-    let lower_rect = expand_outline_rect(outline_rects[index], amount)?;
-    let upper_rect = expand_outline_rect(outline_rects[index - 1], amount)?;
+  let mut expanded_rev = outline_rects
+    .iter()
+    .rev()
+    .filter_map(|r| expand_outline_rect(*r, amount));
+  let Some(mut lower_rect) = expanded_rev.next() else {
+    return;
+  };
 
+  for upper_rect in expanded_rev {
     path.line_to((lower_rect.x, upper_rect.y + upper_rect.height));
     path.line_to((upper_rect.x, upper_rect.y + upper_rect.height));
+    lower_rect = upper_rect;
   }
 
   path.close();
-  Some(())
 }
 
 fn expand_outline_rect(outline_rect: InlineOutlineRect, amount: f32) -> Option<InlineOutlineRect> {
@@ -488,7 +489,8 @@ fn draw_outline_island<N: Node<N>>(
 
   let expansion = style.outline_offset + width / 2.0;
   let mut path = Vec::with_capacity(outline_rects.len() * 6);
-  if append_outline_contour(&mut path, outline_rects, expansion).is_none() {
+  append_outline_contour(&mut path, outline_rects, expansion);
+  if path.is_empty() {
     return;
   }
 
