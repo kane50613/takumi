@@ -180,6 +180,118 @@ fn tail_text_span<'a, 'c, 'g, N: Node<N>>(
   })
 }
 
+fn measure_ellipsis_width(
+  global: &GlobalContext,
+  ellipsis_style: &SizedFontStyle,
+  ellipsis_char: &str,
+) -> f32 {
+  let (mut ellipsis_layout, _) =
+    global
+      .font_context
+      .tree_builder(ellipsis_style.into(), |builder| {
+        builder.push_text(ellipsis_char);
+      });
+  ellipsis_layout.break_all_lines(None);
+  ellipsis_layout
+    .lines()
+    .next()
+    .map(|line| line.runs().map(|run| run.advance()).sum::<f32>())
+    .unwrap_or(0.0)
+}
+
+fn truncation_plan<'c, 'g, N: Node<N>>(
+  layout: &InlineLayout,
+  spans: &[ProcessedInlineSpan<'c, 'g, N>],
+  available_w: f32,
+) -> (Option<usize>, Option<(usize, usize)>) {
+  let truncate_at: Option<usize> = layout.lines().last().and_then(|last_line| {
+    let mut accumulated = 0.0_f32;
+    let mut last_fitting_byte: Option<usize> = Some(0);
+    let mut last_run_index: Option<usize> = None;
+
+    'outer: for item in last_line.items() {
+      match item {
+        PositionedLayoutItem::InlineBox(inline_box) => {
+          if accumulated + inline_box.width <= available_w {
+            accumulated += inline_box.width;
+          } else {
+            break 'outer;
+          }
+        }
+        PositionedLayoutItem::GlyphRun(glyph_run) => {
+          let run = glyph_run.run();
+          if last_run_index == Some(run.index()) {
+            continue;
+          }
+          last_run_index = Some(run.index());
+
+          for cluster in run.visual_clusters() {
+            let cluster_w = cluster.advance();
+            if accumulated + cluster_w > available_w {
+              break 'outer;
+            }
+            accumulated += cluster_w;
+            last_fitting_byte = Some(cluster.text_range().end);
+          }
+        }
+      }
+    }
+
+    last_fitting_byte
+  });
+
+  if let Some(cut) = truncate_at {
+    let mut remaining = cut;
+    let mut span_cut_idx = spans.len();
+    let mut text_cut = None;
+
+    for (index, span) in spans.iter().enumerate() {
+      match span {
+        ProcessedInlineSpan::Text { text, .. } => {
+          let len = text.len();
+          if remaining <= len {
+            let safe_cut = (0..=remaining.min(len))
+              .rev()
+              .find(|&byte_index| text.is_char_boundary(byte_index))
+              .unwrap_or(0);
+            text_cut = Some((index, safe_cut));
+            span_cut_idx = index + 1;
+            break;
+          }
+          remaining -= len;
+        }
+        ProcessedInlineSpan::Box(_) => {
+          if remaining == 0 {
+            span_cut_idx = index;
+            break;
+          }
+        }
+      }
+    }
+
+    (Some(span_cut_idx), text_cut)
+  } else {
+    (None, None)
+  }
+}
+
+fn apply_truncation_plan<'c, 'g, N: Node<N>>(
+  spans: &mut Vec<ProcessedInlineSpan<'c, 'g, N>>,
+  plan: (Option<usize>, Option<(usize, usize)>),
+) {
+  let (span_cut_idx, text_cut) = plan;
+  if let Some(span_cut_idx) = span_cut_idx {
+    if let Some((text_index, safe_cut)) = text_cut
+      && let Some(ProcessedInlineSpan::Text { text, .. }) = spans.get_mut(text_index)
+    {
+      text.truncate(safe_cut);
+    }
+    spans.truncate(span_cut_idx);
+  } else {
+    spans.clear();
+  }
+}
+
 pub(crate) fn measure_inline_layout(layout: &mut InlineLayout, max_width: f32) -> Size<f32> {
   let (max_run_width, total_height) =
     layout
@@ -440,102 +552,42 @@ fn make_ellipsis_layout<'c, 'g: 'c, N: Node<N> + 'c>(
   global: &GlobalContext,
 ) {
   let ellipsis_char = root_style.parent.ellipsis_char();
+  let mut ellipsis_span_id = tail_text_span(spans).map(|(_, span_id)| span_id);
+  let final_plan = loop {
+    let ellipsis_style = ellipsis_span_id
+      .and_then(|span_id| {
+        spans.iter().find_map(|span| match span {
+          ProcessedInlineSpan::Text {
+            span_id: current_span_id,
+            style,
+            ..
+          } if *current_span_id == span_id => Some(style),
+          ProcessedInlineSpan::Text { .. } | ProcessedInlineSpan::Box(_) => None,
+        })
+      })
+      .unwrap_or(root_style);
+    let ellipsis_w = measure_ellipsis_width(global, ellipsis_style, ellipsis_char);
 
-  let initial_ellipsis_style = tail_text_span(spans).map_or(root_style, |(style, _)| style);
-
-  let ellipsis_w = {
-    let (mut ellipsis_layout, _) =
-      global
-        .font_context
-        .tree_builder(initial_ellipsis_style.into(), |builder| {
-          builder.push_text(ellipsis_char);
-        });
-    ellipsis_layout.break_all_lines(None);
-    ellipsis_layout
-      .lines()
-      .next()
-      .map(|l| l.runs().map(|r| r.advance()).sum::<f32>())
-      .unwrap_or(0.0)
+    let plan = truncation_plan(layout, spans, (max_width - ellipsis_w).max(0.0));
+    let next_ellipsis_span_id = plan.0.and_then(|span_cut_idx| {
+      spans[..span_cut_idx]
+        .iter()
+        .rev()
+        .find_map(|span| match span {
+          ProcessedInlineSpan::Text { span_id, .. } => Some(*span_id),
+          ProcessedInlineSpan::Box(_) => None,
+        })
+    });
+    if next_ellipsis_span_id == ellipsis_span_id {
+      break plan;
+    }
+    ellipsis_span_id = next_ellipsis_span_id;
   };
 
-  let available_w = (max_width - ellipsis_w).max(0.0);
-
-  let truncate_at: Option<usize> = layout.lines().last().and_then(|last_line| {
-    let mut accumulated = 0.0_f32;
-    let mut last_fitting_byte: Option<usize> = Some(0);
-    // items() may split one Run into multiple GlyphRuns by style; only scan clusters once per Run.
-    let mut last_run_index: Option<usize> = None;
-
-    'outer: for item in last_line.items() {
-      match item {
-        PositionedLayoutItem::InlineBox(inline_box) => {
-          if accumulated + inline_box.width <= available_w {
-            accumulated += inline_box.width;
-          } else {
-            break 'outer;
-          }
-        }
-        PositionedLayoutItem::GlyphRun(glyph_run) => {
-          let run = glyph_run.run();
-          if last_run_index == Some(run.index()) {
-            continue;
-          }
-          last_run_index = Some(run.index());
-
-          for cluster in run.visual_clusters() {
-            let cluster_w = cluster.advance();
-            if accumulated + cluster_w > available_w {
-              break 'outer;
-            }
-            accumulated += cluster_w;
-            last_fitting_byte = Some(cluster.text_range().end);
-          }
-        }
-      }
-    }
-
-    last_fitting_byte
-  });
-
-  if let Some(cut) = truncate_at {
-    let mut remaining = cut;
-    let mut span_cut_idx = spans.len();
-
-    for (i, span) in spans.iter_mut().enumerate() {
-      match span {
-        ProcessedInlineSpan::Text { text, .. } => {
-          let len = text.len();
-          if remaining <= len {
-            let safe_cut = (0..=remaining.min(len))
-              .rev()
-              .find(|&b| text.is_char_boundary(b))
-              .unwrap_or(0);
-            text.truncate(safe_cut);
-            span_cut_idx = i + 1;
-            break;
-          }
-          remaining -= len;
-        }
-        ProcessedInlineSpan::Box(_) => {
-          if remaining == 0 {
-            span_cut_idx = i;
-            break;
-          }
-        }
-      }
-    }
-
-    spans.truncate(span_cut_idx);
-  } else {
-    spans.clear();
-  }
-
+  apply_truncation_plan(spans, final_plan);
   refresh_text_span_ranges(spans);
 
-  let (ellipsis_style, ellipsis_span_id) = tail_text_span(spans)
-    .map_or((root_style, None), |(style, span_id)| {
-      (style, Some(span_id))
-    });
+  let ellipsis_style = tail_text_span(spans).map_or(root_style, |(style, _)| style);
 
   let (mut final_layout, _) = global
     .font_context
@@ -557,7 +609,7 @@ fn make_ellipsis_layout<'c, 'g: 'c, N: Node<N> + 'c>(
           }
         }
       }
-      builder.push_style_span(text_style_with_span_id(ellipsis_style, ellipsis_span_id));
+      builder.push_style_span(text_style_with_span_id(ellipsis_style, None));
       builder.push_text(ellipsis_char);
       builder.pop_style_span();
     });

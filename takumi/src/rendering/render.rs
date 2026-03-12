@@ -1,4 +1,4 @@
-use std::{collections::HashMap, mem::replace, sync::Arc};
+use std::{collections::HashMap, mem::replace, ops::Range, sync::Arc};
 
 use derive_builder::Builder;
 use image::RgbaImage;
@@ -110,20 +110,47 @@ fn measured_run_text<'a, N: Node<N>>(
 ) -> &'a str {
   let text_range = glyph_run.run().text_range();
   let Some(span_id) = glyph_run.style().brush.source_span_id else {
-    return &text[text_range];
+    return slice_text_at_char_boundaries(text, text_range);
   };
 
   let Some(ProcessedInlineSpan::Text { byte_range, .. }) = spans.get(span_id as usize) else {
-    return &text[text_range];
+    return slice_text_at_char_boundaries(text, text_range);
   };
 
   let start = text_range.start.max(byte_range.start);
   let end = text_range.end.min(byte_range.end);
+  slice_text_at_char_boundaries(text, start..end)
+}
+
+fn slice_text_at_char_boundaries(text: &str, byte_range: Range<usize>) -> &str {
+  if byte_range.start >= byte_range.end || byte_range.start >= text.len() {
+    return "";
+  }
+
+  let end = byte_range.end.min(text.len());
+  let start = ceil_char_boundary(text, byte_range.start.min(end));
+  let end = floor_char_boundary(text, end);
   if start >= end {
     return "";
   }
 
   &text[start..end]
+}
+
+fn floor_char_boundary(text: &str, index: usize) -> usize {
+  let mut boundary = index.min(text.len());
+  while boundary > 0 && !text.is_char_boundary(boundary) {
+    boundary -= 1;
+  }
+  boundary
+}
+
+fn ceil_char_boundary(text: &str, index: usize) -> usize {
+  let mut boundary = index.min(text.len());
+  while boundary < text.len() && !text.is_char_boundary(boundary) {
+    boundary += 1;
+  }
+  boundary
 }
 
 struct TraversalEnter {
@@ -853,7 +880,7 @@ fn build_stylesheets(stylesheets: Vec<String>, keyframes: Vec<KeyframesRule>) ->
 mod tests {
   use super::{
     RenderOptionsBuilder, SequentialScene, SequentialSceneBuilder, render_sequence_animation,
-    resolve_scene_at_time,
+    resolve_scene_at_time, slice_text_at_char_boundaries,
   };
   use crate::{
     GlobalContext,
@@ -961,6 +988,16 @@ mod tests {
         .sum::<u64>(),
       150
     );
+  }
+
+  #[test]
+  fn slice_text_at_char_boundaries_trims_invalid_utf8_edges() {
+    let text = "a🦀b";
+
+    assert_eq!(slice_text_at_char_boundaries(text, 0..3), "a");
+    assert_eq!(slice_text_at_char_boundaries(text, 1..5), "🦀");
+    assert_eq!(slice_text_at_char_boundaries(text, 2..5), "");
+    assert_eq!(slice_text_at_char_boundaries(text, 0..text.len()), text);
   }
 
   #[test]
