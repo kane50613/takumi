@@ -939,3 +939,98 @@ fn test_unknown_at_rule_is_rejected() {
     Length::Px(20.0)
   );
 }
+
+#[test]
+fn test_media_query_orientation_portrait_matches() {
+  let sheet = StyleSheet::parse(
+    r#"
+      @media (orientation: portrait) {
+        .card { width: 50px; }
+      }
+    "#,
+  );
+
+  assert_eq!(sheet.rules.len(), 1);
+  assert_eq!(sheet.rules[0].media_queries.len(), 1);
+
+  let viewport = Viewport::new(Some(600), Some(800));
+  assert!(sheet.rules[0].media_queries[0].matches(viewport));
+}
+
+#[test]
+fn test_media_query_max_width_matches() {
+  let sheet = StyleSheet::parse(
+    r#"
+      @media (max-width: 600px) {
+        .card { width: 50px; }
+      }
+    "#,
+  );
+
+  assert_eq!(sheet.rules.len(), 1);
+
+  let viewport_match = Viewport::new(Some(500), Some(400));
+  assert!(sheet.rules[0].media_queries[0].matches(viewport_match));
+
+  let viewport_no_match = Viewport::new(Some(700), Some(400));
+  assert!(!sheet.rules[0].media_queries[0].matches(viewport_no_match));
+}
+
+#[test]
+fn test_important_flag_splits_declarations() {
+  let sheet = StyleSheet::parse(
+    r#"
+      .card {
+        width: 100px !important;
+        height: 50px;
+      }
+    "#,
+  );
+
+  assert_eq!(sheet.rules.len(), 1);
+  assert!(!sheet.rules[0].important_declarations.declarations.is_empty());
+  assert!(!sheet.rules[0].normal_declarations.declarations.is_empty());
+
+  assert_eq!(
+    computed_style_from_declarations(&sheet.rules[0].important_declarations).width,
+    Length::Px(100.0)
+  );
+  assert_eq!(
+    computed_style_from_declarations(&sheet.rules[0].normal_declarations).height,
+    Length::Px(50.0)
+  );
+}
+
+#[test]
+fn test_keyframes_parsing_with_from_to() {
+  let sheet = StyleSheet::parse(
+    r#"
+      @keyframes slide {
+        from { width: 0px; }
+        to { width: 100px; }
+      }
+    "#,
+  );
+
+  assert_eq!(sheet.keyframes.len(), 1);
+  assert_eq!(sheet.keyframes[0].keyframes.len(), 2);
+  assert_eq!(sheet.keyframes[0].keyframes[0].offsets, vec![0.0]);
+  assert_eq!(sheet.keyframes[0].keyframes[1].offsets, vec![1.0]);
+}
+
+#[test]
+fn test_property_rule_requires_custom_property_name() {
+  let sheet = StyleSheet::parse(
+    r#"
+      @property invalid-name {
+        syntax: "<length>";
+        inherits: false;
+        initial-value: 10px;
+      }
+      .card { width: 50px; }
+    "#,
+  );
+
+  assert!(sheet.property_rules.is_empty());
+  assert_eq!(sheet.rules.len(), 1);
+}

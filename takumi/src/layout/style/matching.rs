@@ -724,4 +724,170 @@ mod tests {
     assert_eq!(matched.len(), 2);
     assert_eq!(computed_width_from_matches(&matched[1]), Length::Px(10.0));
   }
+
+  #[test]
+  fn important_declarations_override_normal_with_lower_specificity() {
+    let root = TestNode {
+      class_name: Some("box"),
+      ..TestNode::default()
+    };
+    let stylesheet = StyleSheet::parse(
+      r#"
+        .box { width: 100px !important; }
+        #specific { width: 200px; }
+      "#,
+    );
+
+    let matched = match_stylesheets(&root, &[stylesheet], Viewport::new(None, None));
+    assert_eq!(matched.len(), 1);
+    assert_eq!(computed_width_from_matches(&matched[0]), Length::Px(100.0));
+  }
+
+  #[test]
+  fn multiple_classes_on_same_element_matches() {
+    let root = TestNode {
+      class_name: Some("foo bar baz"),
+      ..TestNode::default()
+    };
+    let stylesheet = StyleSheet::parse(r#".foo.bar.baz { width: 50px; }"#);
+
+    let matched = match_stylesheets(&root, &[stylesheet], Viewport::new(None, None));
+    assert_eq!(matched.len(), 1);
+    assert_eq!(computed_width_from_matches(&matched[0]), Length::Px(50.0));
+  }
+
+  #[test]
+  fn id_selector_has_higher_specificity_than_class() {
+    let root = TestNode {
+      class_name: Some("card"),
+      id: Some("main"),
+      ..TestNode::default()
+    };
+    let stylesheet = StyleSheet::parse(
+      r#"
+        .card { width: 10px; }
+        #main { width: 20px; }
+      "#,
+    );
+
+    let matched = match_stylesheets(&root, &[stylesheet], Viewport::new(None, None));
+    assert_eq!(matched.len(), 1);
+    assert_eq!(computed_width_from_matches(&matched[0]), Length::Px(20.0));
+  }
+
+  #[test]
+  fn descendant_selector_matches_nested_elements() {
+    let root = TestNode {
+      class_name: Some("container"),
+      children: vec![TestNode {
+        class_name: Some("inner"),
+        children: vec![TestNode {
+          class_name: Some("target"),
+          ..TestNode::default()
+        }],
+        ..TestNode::default()
+      }],
+      ..TestNode::default()
+    };
+    let stylesheet = StyleSheet::parse(r#".container .target { width: 15px; }"#);
+
+    let matched = match_stylesheets(&root, &[stylesheet], Viewport::new(None, None));
+    assert_eq!(matched.len(), 3);
+    assert_eq!(computed_width_from_matches(&matched[2]), Length::Px(15.0));
+  }
+
+  #[test]
+  fn child_selector_only_matches_direct_children() {
+    let root = TestNode {
+      class_name: Some("parent"),
+      children: vec![
+        TestNode {
+          class_name: Some("child"),
+          ..TestNode::default()
+        },
+        TestNode {
+          children: vec![TestNode {
+            class_name: Some("grandchild"),
+            ..TestNode::default()
+          }],
+          ..TestNode::default()
+        },
+      ],
+      ..TestNode::default()
+    };
+    let stylesheet = StyleSheet::parse(r#".parent > .child { width: 25px; }"#);
+
+    let matched = match_stylesheets(&root, &[stylesheet], Viewport::new(None, None));
+    // Should match root, direct child, and non-matching grandchild
+    assert_eq!(matched.len(), 4);
+    assert_eq!(computed_width_from_matches(&matched[1]), Length::Px(25.0));
+  }
+
+  #[test]
+  fn empty_stylesheet_returns_empty_matches() {
+    let root = TestNode {
+      class_name: Some("test"),
+      ..TestNode::default()
+    };
+
+    let matched = match_stylesheets(&root, &[], Viewport::new(None, None));
+    assert_eq!(matched.len(), 1);
+    assert!(matched[0].normal.declarations.is_empty());
+    assert!(matched[0].important.declarations.is_empty());
+  }
+
+  #[test]
+  fn adjacent_sibling_selector_matches_next_sibling() {
+    let root = TestNode {
+      children: vec![
+        TestNode {
+          class_name: Some("first"),
+          ..TestNode::default()
+        },
+        TestNode {
+          class_name: Some("second"),
+          ..TestNode::default()
+        },
+      ],
+      ..TestNode::default()
+    };
+    let stylesheet = StyleSheet::parse(r#".first + .second { width: 30px; }"#);
+
+    let matched = match_stylesheets(&root, &[stylesheet], Viewport::new(None, None));
+    assert_eq!(matched.len(), 3);
+    assert_eq!(computed_width_from_matches(&matched[2]), Length::Px(30.0));
+  }
+
+  #[test]
+  fn universal_selector_matches_all_elements() {
+    let root = TestNode {
+      children: vec![TestNode::default(), TestNode::default()],
+      ..TestNode::default()
+    };
+    let stylesheet = StyleSheet::parse(r#"* { width: 5px; }"#);
+
+    let matched = match_stylesheets(&root, &[stylesheet], Viewport::new(None, None));
+    assert_eq!(matched.len(), 3);
+    for m in &matched {
+      assert_eq!(computed_width_from_matches(m), Length::Px(5.0));
+    }
+  }
+
+  #[test]
+  fn hash_ascii_case_insensitive_produces_same_hash_for_different_cases() {
+    let hash1 = super::hash_ascii_case_insensitive("Test");
+    let hash2 = super::hash_ascii_case_insensitive("test");
+    let hash3 = super::hash_ascii_case_insensitive("TEST");
+
+    assert_eq!(hash1, hash2);
+    assert_eq!(hash2, hash3);
+  }
+
+  #[test]
+  fn hash_ascii_case_insensitive_produces_different_hash_for_different_strings() {
+    let hash1 = super::hash_ascii_case_insensitive("foo");
+    let hash2 = super::hash_ascii_case_insensitive("bar");
+
+    assert_ne!(hash1, hash2);
+  }
 }

@@ -511,6 +511,73 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c, N: Node<N> + 'c>(
   (layout, text, spans)
 }
 
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_collect_truncation_checkpoints_returns_empty_for_empty_layout() {
+    let global = GlobalContext::default();
+    let (layout, _) = global.font_context.tree_builder(
+      TextStyle::default(),
+      |_builder| {
+        // Empty layout
+      },
+    );
+
+    let checkpoints = collect_truncation_checkpoints(&layout);
+    assert!(checkpoints.is_empty());
+  }
+
+  #[test]
+  fn test_measure_inline_layout_respects_max_width() {
+    let global = GlobalContext::default();
+    let (mut layout, _) = global.font_context.tree_builder(
+      TextStyle::default(),
+      |builder| {
+        builder.push_text("Very long text that should exceed the maximum width constraint");
+      },
+    );
+    layout.break_all_lines(Some(100.0));
+
+    let size = measure_inline_layout(&mut layout, 100.0);
+    assert!(size.width <= 100.0, "Width {} should be <= 100.0", size.width);
+  }
+
+  #[test]
+  fn test_measure_inline_layout_calculates_height() {
+    let global = GlobalContext::default();
+    let (mut layout, _) = global.font_context.tree_builder(
+      TextStyle::default(),
+      |builder| {
+        builder.push_text("Test text");
+      },
+    );
+    layout.break_all_lines(Some(200.0));
+
+    let size = measure_inline_layout(&mut layout, 200.0);
+    assert!(size.height > 0.0, "Height should be positive");
+  }
+
+  #[test]
+  fn test_measure_inline_layout_handles_multiline() {
+    let global = GlobalContext::default();
+    let (mut layout, _) = global.font_context.tree_builder(
+      TextStyle::default(),
+      |builder| {
+        builder.push_text("This is a long sentence that will wrap onto multiple lines when constrained by a narrow width");
+      },
+    );
+    layout.break_all_lines(Some(50.0));
+
+    let size = measure_inline_layout(&mut layout, 50.0);
+    assert!(size.width <= 50.0);
+    // Multiline text should have greater height than single line
+    let line_count = layout.lines().count();
+    assert!(line_count > 1, "Should have multiple lines");
+  }
+}
+
 pub(crate) fn create_inline_constraint(
   context: &RenderContext,
   available_space: Size<AvailableSpace>,

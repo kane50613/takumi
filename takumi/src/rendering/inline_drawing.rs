@@ -933,3 +933,162 @@ pub(crate) fn draw_inline_layout<N: Node<N>>(
 
   Ok(positioned_inline_boxes)
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_compute_skip_padding_clamps_to_min_max() {
+    let small_size = 1.0;
+    let padding = compute_skip_padding(small_size);
+    assert!(padding >= SKIP_PADDING_MIN);
+    assert!(padding <= SKIP_PADDING_MAX);
+
+    let medium_size = 3.0;
+    let padding = compute_skip_padding(medium_size);
+    assert!(padding >= SKIP_PADDING_MIN);
+    assert!(padding <= SKIP_PADDING_MAX);
+
+    let large_size = 100.0;
+    let padding = compute_skip_padding(large_size);
+    assert_eq!(padding, SKIP_PADDING_MAX);
+  }
+
+  #[test]
+  fn test_compute_skip_padding_proportional_to_size() {
+    let size1 = 2.0;
+    let size2 = 4.0;
+    let padding1 = compute_skip_padding(size1);
+    let padding2 = compute_skip_padding(size2);
+
+    // padding2 should be larger than padding1 within the clamp range
+    if padding1 < SKIP_PADDING_MAX {
+      assert!(padding2 >= padding1);
+    }
+  }
+
+  #[test]
+  fn test_expand_outline_rect_shrinks_with_negative_amount() {
+    let rect = InlineOutlineRect {
+      span_id: 0,
+      line_index: 0,
+      x: 10.0,
+      y: 10.0,
+      width: 100.0,
+      height: 50.0,
+    };
+
+    let expanded = expand_outline_rect(rect, -5.0);
+    assert!(expanded.is_some());
+    let expanded = expanded.unwrap();
+
+    assert_eq!(expanded.x, 15.0);
+    assert_eq!(expanded.y, 15.0);
+    assert_eq!(expanded.width, 90.0);
+    assert_eq!(expanded.height, 40.0);
+  }
+
+  #[test]
+  fn test_expand_outline_rect_returns_none_when_too_small() {
+    let rect = InlineOutlineRect {
+      span_id: 0,
+      line_index: 0,
+      x: 10.0,
+      y: 10.0,
+      width: 5.0,
+      height: 5.0,
+    };
+
+    let expanded = expand_outline_rect(rect, -10.0);
+    assert!(expanded.is_none());
+  }
+
+  #[test]
+  fn test_expand_outline_rect_expands_with_positive_amount() {
+    let rect = InlineOutlineRect {
+      span_id: 0,
+      line_index: 0,
+      x: 10.0,
+      y: 10.0,
+      width: 100.0,
+      height: 50.0,
+    };
+
+    let expanded = expand_outline_rect(rect, 5.0).unwrap();
+
+    assert_eq!(expanded.x, 5.0);
+    assert_eq!(expanded.y, 5.0);
+    assert_eq!(expanded.width, 110.0);
+    assert_eq!(expanded.height, 60.0);
+  }
+
+  #[test]
+  fn test_x_ranges_touch_detects_overlap() {
+    let left = InlineOutlineRect {
+      span_id: 0,
+      line_index: 0,
+      x: 0.0,
+      y: 0.0,
+      width: 10.0,
+      height: 10.0,
+    };
+
+    let right_touching = InlineOutlineRect {
+      span_id: 0,
+      line_index: 0,
+      x: 10.0,
+      y: 0.0,
+      width: 10.0,
+      height: 10.0,
+    };
+
+    assert!(x_ranges_touch(left, right_touching));
+  }
+
+  #[test]
+  fn test_x_ranges_touch_detects_no_overlap() {
+    let left = InlineOutlineRect {
+      span_id: 0,
+      line_index: 0,
+      x: 0.0,
+      y: 0.0,
+      width: 10.0,
+      height: 10.0,
+    };
+
+    let right_separated = InlineOutlineRect {
+      span_id: 0,
+      line_index: 0,
+      x: 15.0,
+      y: 0.0,
+      width: 10.0,
+      height: 10.0,
+    };
+
+    assert!(!x_ranges_touch(left, right_separated));
+  }
+
+  #[test]
+  fn test_x_ranges_touch_within_tolerance() {
+    let left = InlineOutlineRect {
+      span_id: 0,
+      line_index: 0,
+      x: 0.0,
+      y: 0.0,
+      width: 10.0,
+      height: 10.0,
+    };
+
+    let right_within_tolerance = InlineOutlineRect {
+      span_id: 0,
+      line_index: 0,
+      x: 10.0 + OUTLINE_COORD_TOLERANCE * 0.5,
+      y: 0.0,
+      width: 10.0,
+      height: 10.0,
+    };
+
+    assert!(x_ranges_touch(left, right_within_tolerance));
+  }
+}
