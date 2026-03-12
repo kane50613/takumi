@@ -8,7 +8,7 @@ keywords = ["react", "image", "css", "flexbox"]
 repository = "https://github.com/kane50613/takumi"
 homepage = "https://takumi.kane.tw"
 readme = "README.md"
-rust-version = "1.89"
+rust-version = "1.91"
 
 [dependencies]
 bitflags = "2.11"

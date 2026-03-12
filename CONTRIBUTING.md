@@ -13,7 +13,7 @@ This guide covers local setup, development flow, testing/build commands, fixture
 
 ## Prerequisites
 
-- Rust `1.89+`
+- Rust `1.91+`
 - Bun (latest)
 
 ## Local Setup
