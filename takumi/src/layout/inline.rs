@@ -199,46 +199,56 @@ fn measure_ellipsis_width(
     .unwrap_or(0.0)
 }
 
-fn truncation_plan<'c, 'g, N: Node<N>>(
-  layout: &InlineLayout,
-  spans: &[ProcessedInlineSpan<'c, 'g, N>],
-  available_w: f32,
-) -> (Option<usize>, Option<(usize, usize)>) {
-  let truncate_at: Option<usize> = layout.lines().last().and_then(|last_line| {
-    let mut accumulated = 0.0_f32;
-    let mut last_fitting_byte: Option<usize> = Some(0);
-    let mut last_run_index: Option<usize> = None;
+struct TruncationCheckpoint {
+  cumulative_width: f32,
+  byte_end: usize,
+}
 
-    'outer: for item in last_line.items() {
-      match item {
-        PositionedLayoutItem::InlineBox(inline_box) => {
-          if accumulated + inline_box.width <= available_w {
-            accumulated += inline_box.width;
-          } else {
-            break 'outer;
-          }
+fn collect_truncation_checkpoints(layout: &InlineLayout) -> Vec<TruncationCheckpoint> {
+  let Some(last_line) = layout.lines().last() else {
+    return Vec::new();
+  };
+
+  let mut checkpoints = Vec::new();
+  let mut cumulative_width = 0.0_f32;
+  let mut last_run_index: Option<usize> = None;
+
+  for item in last_line.items() {
+    match item {
+      PositionedLayoutItem::InlineBox(inline_box) => {
+        cumulative_width += inline_box.width;
+      }
+      PositionedLayoutItem::GlyphRun(glyph_run) => {
+        let run = glyph_run.run();
+        if last_run_index == Some(run.index()) {
+          continue;
         }
-        PositionedLayoutItem::GlyphRun(glyph_run) => {
-          let run = glyph_run.run();
-          if last_run_index == Some(run.index()) {
-            continue;
-          }
-          last_run_index = Some(run.index());
+        last_run_index = Some(run.index());
 
-          for cluster in run.visual_clusters() {
-            let cluster_w = cluster.advance();
-            if accumulated + cluster_w > available_w {
-              break 'outer;
-            }
-            accumulated += cluster_w;
-            last_fitting_byte = Some(cluster.text_range().end);
-          }
+        for cluster in run.visual_clusters() {
+          cumulative_width += cluster.advance();
+          checkpoints.push(TruncationCheckpoint {
+            cumulative_width,
+            byte_end: cluster.text_range().end,
+          });
         }
       }
     }
+  }
 
-    last_fitting_byte
-  });
+  checkpoints
+}
+
+fn truncation_plan<'c, 'g, N: Node<N>>(
+  checkpoints: &[TruncationCheckpoint],
+  spans: &[ProcessedInlineSpan<'c, 'g, N>],
+  available_w: f32,
+) -> (Option<usize>, Option<(usize, usize)>) {
+  let truncate_at = checkpoints
+    .partition_point(|checkpoint| checkpoint.cumulative_width <= available_w)
+    .checked_sub(1)
+    .map(|index| checkpoints[index].byte_end)
+    .or(Some(0));
 
   if let Some(cut) = truncate_at {
     let mut remaining = cut;
@@ -552,6 +562,7 @@ fn make_ellipsis_layout<'c, 'g: 'c, N: Node<N> + 'c>(
   global: &GlobalContext,
 ) {
   let ellipsis_char = root_style.parent.ellipsis_char();
+  let checkpoints = collect_truncation_checkpoints(layout);
   let mut ellipsis_span_id = tail_text_span(spans).map(|(_, span_id)| span_id);
   let final_plan = loop {
     let ellipsis_style = ellipsis_span_id
@@ -568,7 +579,7 @@ fn make_ellipsis_layout<'c, 'g: 'c, N: Node<N> + 'c>(
       .unwrap_or(root_style);
     let ellipsis_w = measure_ellipsis_width(global, ellipsis_style, ellipsis_char);
 
-    let plan = truncation_plan(layout, spans, (max_width - ellipsis_w).max(0.0));
+    let plan = truncation_plan(&checkpoints, spans, (max_width - ellipsis_w).max(0.0));
     let next_ellipsis_span_id = plan.0.and_then(|span_cut_idx| {
       spans[..span_cut_idx]
         .iter()
