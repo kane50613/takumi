@@ -1,5 +1,19 @@
 # takumi
 
+## 0.72.0
+
+### Minor Changes
+
+- c3e584d: **Remove `css_stylesheet_parsing` feature**
+- 5cfa29f: bump MSRV to 1.91
+- a7956fd: Remove `Y_FIRST` variable on `SpacePair` for simplicity
+
+### Patch Changes
+
+- 57163ec: Support `@layer`, `@property`, `@supports`
+- aa85f72: Fix `gap` resolves incorrectly
+- d6fde4c: Fix `font-family`, `font-variation-settings`, `font-feature-settings` parsing in stylesheets
+
 ## 0.71.7
 
 ### Patch Changes
