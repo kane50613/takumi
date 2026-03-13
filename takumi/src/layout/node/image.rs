@@ -9,8 +9,8 @@ use crate::{
   Result,
   layout::{
     inline::InlineContentKind,
-    node::{Node, NodeStyleLayers},
-    style::{Length, Style, StyleDeclaration, tw::TailwindValues},
+    node::{Node, NodeMetadata, NodeStyleLayers},
+    style::{Length, Style, StyleDeclaration},
   },
   rendering::{Canvas, RenderContext, draw_image},
   resources::{
@@ -23,37 +23,44 @@ use crate::{
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ImageNode {
-  /// The element's tag name
-  pub tag_name: Option<Box<str>>,
-  /// The element's class name
-  pub class_name: Option<Box<str>>,
-  /// The element's id
-  pub id: Option<Box<str>>,
-  /// Default style presets from HTML element type (lowest priority)
-  pub preset: Option<Style>,
-  /// The styling properties for this image node
-  pub style: Option<Style>,
+  /// Shared node metadata.
+  #[serde(flatten)]
+  pub(crate) metadata: NodeMetadata,
   /// The source URL or path to the image
-  pub src: Arc<str>,
+  pub(crate) src: Arc<str>,
   /// The width of the image
-  pub width: Option<f32>,
+  pub(crate) width: Option<f32>,
   /// The height of the image
-  pub height: Option<f32>,
-  /// The tailwind properties for this image node
-  pub tw: Option<TailwindValues>,
+  pub(crate) height: Option<f32>,
+}
+
+impl ImageNode {
+  /// Set the source URL or path to the image.
+  pub fn with_src(mut self, src: impl Into<Arc<str>>) -> Self {
+    self.src = src.into();
+    self
+  }
+
+  /// Set the width of the image.
+  pub fn with_width(mut self, width: f32) -> Self {
+    self.width = Some(width);
+    self
+  }
+
+  /// Set the height of the image.
+  pub fn with_height(mut self, height: f32) -> Self {
+    self.height = Some(height);
+    self
+  }
 }
 
 impl<Nodes: Node<Nodes>> Node<Nodes> for ImageNode {
-  fn tag_name(&self) -> Option<&str> {
-    self.tag_name.as_deref()
+  fn metadata(&self) -> &NodeMetadata {
+    &self.metadata
   }
 
-  fn class_name(&self) -> Option<&str> {
-    self.class_name.as_deref()
-  }
-
-  fn id(&self) -> Option<&str> {
-    self.id.as_deref()
+  fn metadata_mut(&mut self) -> &mut NodeMetadata {
+    &mut self.metadata
   }
 
   fn collect_fetch_tasks(&self, collection: &mut FetchTaskCollection) {
@@ -63,15 +70,15 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ImageNode {
   }
 
   fn get_preset(&self) -> Option<&Style> {
-    self.preset.as_ref()
+    self.metadata.preset.as_ref()
   }
 
-  fn get_tw(&self) -> Option<&TailwindValues> {
-    self.tw.as_ref()
+  fn get_style(&self) -> Option<&Style> {
+    self.metadata.style.as_ref()
   }
 
   fn take_style_layers(&mut self) -> NodeStyleLayers {
-    let mut preset = self.preset.take();
+    let mut preset = self.metadata.preset.take();
     if self.width.is_some() || self.height.is_some() {
       let preset_style = preset.get_or_insert_with(Style::default);
       if let Some(width) = self.width {
@@ -84,8 +91,8 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ImageNode {
 
     NodeStyleLayers {
       preset,
-      author_tw: self.tw.take(),
-      inline: self.style.take(),
+      author_tw: self.metadata.tw.take(),
+      inline: self.metadata.style.take(),
     }
   }
 
@@ -199,10 +206,6 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ImageNode {
 
     draw_image(&image, context, canvas, layout)?;
     Ok(())
-  }
-
-  fn get_style(&self) -> Option<&Style> {
-    self.style.as_ref()
   }
 
   fn is_replaced_element(&self) -> bool {

@@ -438,30 +438,24 @@ mod tests {
   use crate::layout::style::StyleSheet;
   use crate::layout::{
     Viewport,
-    node::{Node, NodeStyleLayers},
+    node::{Node, NodeMetadata, NodeStyleLayers},
     style::{ComputedStyle, Length, Style},
   };
 
   #[derive(Clone, Default)]
   struct TestNode {
-    tag_name: Option<&'static str>,
-    class_name: Option<&'static str>,
-    id: Option<&'static str>,
+    metadata: NodeMetadata,
     children: Vec<TestNode>,
     style: Style,
   }
 
   impl Node<TestNode> for TestNode {
-    fn tag_name(&self) -> Option<&str> {
-      self.tag_name
+    fn metadata(&self) -> &NodeMetadata {
+      &self.metadata
     }
 
-    fn class_name(&self) -> Option<&str> {
-      self.class_name
-    }
-
-    fn id(&self) -> Option<&str> {
-      self.id
+    fn metadata_mut(&mut self) -> &mut NodeMetadata {
+      &mut self.metadata
     }
 
     fn children_ref(&self) -> Option<&[TestNode]> {
@@ -526,10 +520,7 @@ mod tests {
 
   #[test]
   fn layered_rules_outrank_source_order() {
-    let root = TestNode {
-      class_name: Some("card"),
-      ..TestNode::default()
-    };
+    let root = TestNode::default().with_class_name("card");
     let stylesheet = parse_stylesheet(
       r#"
         @layer theme, base;
@@ -550,12 +541,8 @@ mod tests {
   #[test]
   fn nested_selector_uses_parent_list_specificity() {
     let root = TestNode {
-      class_name: Some("card notice"),
-      children: vec![TestNode {
-        class_name: Some("title"),
-        ..TestNode::default()
-      }],
-      ..TestNode::default()
+      children: vec![TestNode::default().with_class_name("title")],
+      ..TestNode::default().with_class_name("card notice")
     };
     let stylesheet = parse_stylesheet(
       r#"
@@ -574,10 +561,7 @@ mod tests {
 
   #[test]
   fn important_layered_rules_outrank_unlayered_important() {
-    let root = TestNode {
-      class_name: Some("card"),
-      ..TestNode::default()
-    };
+    let root = TestNode::default().with_class_name("card");
     let stylesheet = parse_stylesheet(
       r#"
         @layer theme, base;
@@ -598,10 +582,7 @@ mod tests {
 
   #[test]
   fn later_stylesheet_rules_outrank_earlier_stylesheets_on_ties() {
-    let root = TestNode {
-      class_name: Some("card"),
-      ..TestNode::default()
-    };
+    let root = TestNode::default().with_class_name("card");
     let stylesheet = parse_stylesheet(".card { width: 10px; } .card { width: 20px; }");
 
     let matched = match_stylesheets(&root, &stylesheet, Viewport::new(None, None));
@@ -611,10 +592,7 @@ mod tests {
 
   #[test]
   fn parse_list_preserves_cross_stylesheet_layer_order() {
-    let root = TestNode {
-      class_name: Some("card"),
-      ..TestNode::default()
-    };
+    let root = TestNode::default().with_class_name("card");
     let stylesheet = parse_stylesheet_list([
       r#"
         @layer theme, base;
@@ -653,26 +631,13 @@ mod tests {
   #[test]
   fn sibling_combinators_only_match_the_correct_siblings() {
     let root = TestNode {
-      class_name: Some("container"),
       children: vec![
-        TestNode {
-          class_name: Some("lead"),
-          ..TestNode::default()
-        },
-        TestNode {
-          class_name: Some("title"),
-          ..TestNode::default()
-        },
-        TestNode {
-          class_name: Some("spacer"),
-          ..TestNode::default()
-        },
-        TestNode {
-          class_name: Some("title"),
-          ..TestNode::default()
-        },
+        TestNode::default().with_class_name("lead"),
+        TestNode::default().with_class_name("title"),
+        TestNode::default().with_class_name("spacer"),
+        TestNode::default().with_class_name("title"),
       ],
-      ..TestNode::default()
+      ..TestNode::default().with_class_name("container")
     };
     let stylesheet = parse_stylesheet(
       r#"

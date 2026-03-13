@@ -8,8 +8,8 @@ use std::fmt::Debug;
 use serde::Deserialize;
 
 use crate::layout::{
-  node::{Node, NodeStyleLayers},
-  style::{Style, tw::TailwindValues},
+  node::{Node, NodeMetadata, NodeStyleLayers},
+  style::Style,
 };
 
 /// A container node that can hold child nodes.
@@ -19,33 +19,28 @@ use crate::layout::{
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ContainerNode<Nodes: Node<Nodes>> {
-  /// The element's tag name
-  pub tag_name: Option<Box<str>>,
-  /// The element's class name
-  pub class_name: Option<Box<str>>,
-  /// The element's id
-  pub id: Option<Box<str>>,
-  /// Default style presets from HTML element type (lowest priority)
-  pub preset: Option<Style>,
-  /// The styling properties for this container
-  pub style: Option<Style>,
+  /// Shared node metadata.
+  #[serde(flatten)]
+  pub(crate) metadata: NodeMetadata,
   /// The child nodes contained within this container
-  pub children: Option<Box<[Nodes]>>,
-  /// The tailwind properties for this container node
-  pub tw: Option<TailwindValues>,
+  pub(crate) children: Option<Box<[Nodes]>>,
+}
+
+impl<Nodes: Node<Nodes>> ContainerNode<Nodes> {
+  /// Set the children of the container node.
+  pub fn with_children(mut self, children: impl Into<Box<[Nodes]>>) -> Self {
+    self.children = Some(children.into());
+    self
+  }
 }
 
 impl<Nodes: Node<Nodes>> Node<Nodes> for ContainerNode<Nodes> {
-  fn tag_name(&self) -> Option<&str> {
-    self.tag_name.as_deref()
+  fn metadata(&self) -> &NodeMetadata {
+    &self.metadata
   }
 
-  fn class_name(&self) -> Option<&str> {
-    self.class_name.as_deref()
-  }
-
-  fn id(&self) -> Option<&str> {
-    self.id.as_deref()
+  fn metadata_mut(&mut self) -> &mut NodeMetadata {
+    &mut self.metadata
   }
 
   fn children_ref(&self) -> Option<&[Nodes]> {
@@ -54,9 +49,9 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ContainerNode<Nodes> {
 
   fn take_style_layers(&mut self) -> NodeStyleLayers {
     NodeStyleLayers {
-      preset: self.preset.take(),
-      author_tw: self.tw.take(),
-      inline: self.style.take(),
+      preset: self.metadata.preset.take(),
+      author_tw: self.metadata.tw.take(),
+      inline: self.metadata.style.take(),
     }
   }
 
@@ -65,28 +60,15 @@ impl<Nodes: Node<Nodes>> Node<Nodes> for ContainerNode<Nodes> {
   }
 
   fn get_style(&self) -> Option<&Style> {
-    self.style.as_ref()
-  }
-
-  fn get_preset(&self) -> Option<&Style> {
-    self.preset.as_ref()
-  }
-
-  fn get_tw(&self) -> Option<&TailwindValues> {
-    self.tw.as_ref()
+    self.metadata.style.as_ref()
   }
 }
 
 impl<Nodes: Node<Nodes>> Default for ContainerNode<Nodes> {
   fn default() -> Self {
     Self {
-      tag_name: None,
-      class_name: None,
-      id: None,
-      preset: None,
-      style: None,
+      metadata: NodeMetadata::default(),
       children: None,
-      tw: None,
     }
   }
 }

@@ -8,6 +8,7 @@ pub use image::*;
 pub use text::*;
 
 use serde::Deserialize;
+use std::collections::BTreeMap;
 use taffy::{AvailableSpace, Layout, Point, Size};
 use zeno::Fill;
 
@@ -96,38 +97,26 @@ macro_rules! impl_node_enum {
       }
 
       fn tag_name(&self) -> Option<&str> {
-        match self {
-          $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::tag_name(inner), )*
-        }
+        self.metadata().tag_name.as_deref()
       }
 
       fn class_name(&self) -> Option<&str> {
-        match self {
-          $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::class_name(inner), )*
-        }
+        self.metadata().class_name.as_deref()
       }
 
       fn id(&self) -> Option<&str> {
+        self.metadata().id.as_deref()
+      }
+
+      fn metadata(&self) -> &$crate::layout::node::NodeMetadata {
         match self {
-          $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::id(inner), )*
+          $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::metadata(inner), )*
         }
       }
 
-      fn get_style(&self) -> Option<&Style> {
+      fn metadata_mut(&mut self) -> &mut $crate::layout::node::NodeMetadata {
         match self {
-          $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::get_style(inner), )*
-        }
-      }
-
-      fn get_preset(&self) -> Option<&Style> {
-        match self {
-          $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::get_preset(inner), )*
-        }
-      }
-
-      fn get_tw(&self) -> Option<&TailwindValues> {
-        match self {
-          $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::get_tw(inner), )*
+          $( $name::$variant(inner) => <_ as $crate::layout::node::Node<$name>>::metadata_mut(inner), )*
         }
       }
 
@@ -166,24 +155,59 @@ macro_rules! impl_node_enum {
   };
 }
 
+/// Shared metadata stored by every renderable node.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeMetadata {
+  /// The element's tag name.
+  pub(crate) tag_name: Option<Box<str>>,
+  /// The element's class name.
+  pub(crate) class_name: Option<Box<str>>,
+  /// The element's id.
+  pub(crate) id: Option<Box<str>>,
+  /// Additional element attributes for selector matching and serialization.
+  pub(crate) attributes: Option<BTreeMap<Box<str>, Box<str>>>,
+  /// Default style presets from HTML element type (lowest priority).
+  pub(crate) preset: Option<Style>,
+  /// The styling properties for this node.
+  pub(crate) style: Option<Style>,
+  /// The tailwind properties for this node.
+  pub(crate) tw: Option<TailwindValues>,
+}
+
 /// A trait representing a node in the layout tree.
 ///
 /// This trait defines the common interface for all elements that can be
 /// rendered in the layout system, including containers, text, and images.
 pub trait Node<N: Node<N>>: Send + Sync + Clone {
+  /// Returns the shared node metadata.
+  fn metadata(&self) -> &NodeMetadata;
+
+  /// Returns the shared node metadata mutably.
+  fn metadata_mut(&mut self) -> &mut NodeMetadata;
+
   /// Returns the tag name of the node, if any.
   fn tag_name(&self) -> Option<&str> {
-    None
+    self.metadata().tag_name.as_deref()
   }
 
   /// Returns the class name of the node, if any.
   fn class_name(&self) -> Option<&str> {
-    None
+    self.metadata().class_name.as_deref()
   }
 
   /// Returns the id of the node, if any.
   fn id(&self) -> Option<&str> {
-    None
+    self.metadata().id.as_deref()
+  }
+
+  /// Returns the value of an attribute, if any.
+  fn attr(&self, name: &str) -> Option<&str> {
+    self
+      .metadata()
+      .attributes
+      .as_ref()
+      .and_then(|attributes| attributes.get(name).map(Box::as_ref))
   }
 
   /// Gets reference of children.
@@ -203,16 +227,18 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
   }
 
   /// Returns a reference to this node's raw [`Style`], if any.
-  fn get_style(&self) -> Option<&Style>;
+  fn get_style(&self) -> Option<&Style> {
+    self.metadata().style.as_ref()
+  }
 
   /// Returns a reference to this node's preset style, if any.
   fn get_preset(&self) -> Option<&Style> {
-    None
+    self.metadata().preset.as_ref()
   }
 
   /// Returns a reference to this node's Tailwind values, if any.
   fn get_tw(&self) -> Option<&TailwindValues> {
-    None
+    self.metadata().tw.as_ref()
   }
 
   /// Whether this node behaves like a [CSS replaced element](https://drafts.csswg.org/css-display/#replaced-element)
@@ -247,6 +273,69 @@ pub trait Node<N: Node<N>>: Send + Sync + Clone {
   /// Return reference to children nodes.
   fn take_children(&mut self) -> Option<Box<[N]>> {
     None
+  }
+
+  /// Sets the tag name and returns the updated node.
+  fn with_tag_name(mut self, tag_name: impl Into<Box<str>>) -> Self
+  where
+    Self: Sized,
+  {
+    self.metadata_mut().tag_name = Some(tag_name.into());
+    self
+  }
+
+  /// Sets the class name and returns the updated node.
+  fn with_class_name(mut self, class_name: impl Into<Box<str>>) -> Self
+  where
+    Self: Sized,
+  {
+    self.metadata_mut().class_name = Some(class_name.into());
+    self
+  }
+
+  /// Sets the id and returns the updated node.
+  fn with_id(mut self, id: impl Into<Box<str>>) -> Self
+  where
+    Self: Sized,
+  {
+    self.metadata_mut().id = Some(id.into());
+    self
+  }
+
+  /// Sets the attributes and returns the updated node.
+  fn with_attributes(mut self, attributes: BTreeMap<Box<str>, Box<str>>) -> Self
+  where
+    Self: Sized,
+  {
+    self.metadata_mut().attributes = Some(attributes);
+    self
+  }
+
+  /// Sets the preset style and returns the updated node.
+  fn with_preset(mut self, preset: Style) -> Self
+  where
+    Self: Sized,
+  {
+    self.metadata_mut().preset = Some(preset);
+    self
+  }
+
+  /// Sets the inline style and returns the updated node.
+  fn with_style(mut self, style: Style) -> Self
+  where
+    Self: Sized,
+  {
+    self.metadata_mut().style = Some(style);
+    self
+  }
+
+  /// Sets the Tailwind values and returns the updated node.
+  fn with_tw(mut self, tw: TailwindValues) -> Self
+  where
+    Self: Sized,
+  {
+    self.metadata_mut().tw = Some(tw);
+    self
   }
 
   /// Takes the node's local style layers for cascade assembly.
@@ -576,29 +665,22 @@ mod tests {
   fn collect_style_fetch_tasks_collects_nested_background_image_urls() {
     let background_url = "https://placehold.co/80x80/22c55e/white";
     let node = NodeKind::Container(ContainerNode {
+      metadata: NodeMetadata::default(),
       children: Some(
         [ContainerNode {
+          metadata: NodeMetadata {
+            style: Some(
+              Style::default().with(StyleDeclaration::background_image(Some(
+                [BackgroundImage::Url(background_url.into())].into(),
+              ))),
+            ),
+            ..NodeMetadata::default()
+          },
           children: None,
-          style: Some(
-            Style::default().with(StyleDeclaration::background_image(Some(
-              [BackgroundImage::Url(background_url.into())].into(),
-            ))),
-          ),
-          tag_name: None,
-          class_name: None,
-          id: None,
-          preset: None,
-          tw: None,
         }
         .into()]
         .into(),
       ),
-      style: None,
-      tag_name: None,
-      class_name: None,
-      id: None,
-      preset: None,
-      tw: None,
     });
 
     let mut collection = FetchTaskCollection::default();
@@ -620,17 +702,16 @@ mod tests {
       unreachable!()
     };
     let node = NodeKind::Container(ContainerNode {
+      metadata: NodeMetadata {
+        preset: Some(
+          Style::default().with(StyleDeclaration::background_image(Some(
+            [BackgroundImage::Url(preset_url.into())].into(),
+          ))),
+        ),
+        tw: Some(tw),
+        ..NodeMetadata::default()
+      },
       children: None,
-      style: None,
-      preset: Some(
-        Style::default().with(StyleDeclaration::background_image(Some(
-          [BackgroundImage::Url(preset_url.into())].into(),
-        ))),
-      ),
-      tag_name: None,
-      class_name: None,
-      id: None,
-      tw: Some(tw),
     });
 
     let mut collection = FetchTaskCollection::default();

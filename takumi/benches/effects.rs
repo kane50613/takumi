@@ -4,26 +4,20 @@ use takumi::{
   GlobalContext,
   layout::{
     Viewport,
-    node::{ContainerNode, NodeKind},
+    node::{ContainerNode, Node, NodeKind},
   },
   rendering::{RenderOptionsBuilder, render},
 };
 
 fn run_effect_render(global: &GlobalContext, effect_tw: &str) {
-  let node = NodeKind::Container(ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    children: None,
-    preset: None,
-    style: None,
-    // We set a reasonable size and background so the effect is actually computed
-    tw: Some(
+  // We set a reasonable size and background so the effect is actually computed
+  let node: NodeKind = ContainerNode::default()
+    .with_tw(
       format!("w-[256px] h-[256px] bg-white {effect_tw}")
         .parse()
         .unwrap(),
-    ),
-  });
+    )
+    .into();
 
   let viewport = Viewport::new(Some(512), Some(512));
 

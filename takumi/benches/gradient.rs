@@ -4,7 +4,7 @@ use takumi::{
   GlobalContext,
   layout::{
     Viewport,
-    node::{ContainerNode, NodeKind},
+    node::{ContainerNode, Node, NodeKind},
     style::{BackgroundImages, FromCss, Length, Style, StyleDeclaration},
   },
   rendering::{RenderOptionsBuilder, render},
@@ -21,15 +21,7 @@ fn run_gradient_render(global: &GlobalContext, background_image_str: &str) {
       BackgroundImages::from_str(background_image_str).ok(),
     ));
 
-  let node = NodeKind::Container(ContainerNode {
-    children: None,
-    preset: None,
-    style: Some(style),
-    tw: None,
-    class_name: None,
-    id: None,
-    tag_name: None,
-  });
+  let node = NodeKind::Container(ContainerNode::default().with_style(style));
 
   let viewport = Viewport::new(Some(BENCH_WIDTH), Some(BENCH_HEIGHT));
 
