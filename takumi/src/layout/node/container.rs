@@ -5,7 +5,7 @@
 
 use std::{fmt::Debug, mem::take};
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use std::collections::BTreeMap;
 
 use crate::layout::{
@@ -27,8 +27,16 @@ pub struct ContainerNode<Nodes: Node<Nodes>> {
   #[serde(flatten)]
   pub(crate) metadata: NodeMetadata,
   /// The child nodes contained within this container
-  #[serde(default)]
+  #[serde(default, deserialize_with = "deserialize_children")]
   pub(crate) children: Vec<Nodes>,
+}
+
+fn deserialize_children<'de, D, Nodes>(deserializer: D) -> Result<Vec<Nodes>, D::Error>
+where
+  D: Deserializer<'de>,
+  Nodes: Deserialize<'de> + Node<Nodes>,
+{
+  Option::<Vec<Nodes>>::deserialize(deserializer).map(Option::unwrap_or_default)
 }
 
 impl<Nodes: Node<Nodes>> ContainerNode<Nodes> {
