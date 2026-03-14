@@ -4,7 +4,7 @@ use takumi::{
   GlobalContext,
   layout::{
     Viewport,
-    node::{ContainerNode, Node, NodeKind},
+    node::{ContainerNode, NodeKind},
   },
   rendering::{RenderOptionsBuilder, render},
 };
