@@ -1,5 +1,16 @@
 # @takumi-rs/wasm
 
+## 0.73.0
+
+### Minor Changes
+
+- 349636a: **Deprecate `AnyNode`, replaced with strict `Node` type**
+
+### Patch Changes
+
+- Updated dependencies [349636a]
+  - @takumi-rs/helpers@0.73.0
+
 ## 0.72.0
 
 ## 0.71.7

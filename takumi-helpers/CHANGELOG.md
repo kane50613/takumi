@@ -1,5 +1,11 @@
 # @takumi-rs/helpers
 
+## 0.73.0
+
+### Minor Changes
+
+- 349636a: **Deprecate `AnyNode`, replaced with strict `Node` type**
+
 ## 0.72.0
 
 ## 0.71.7

@@ -1,5 +1,45 @@
 # takumi
 
+## 0.73.0
+
+### Minor Changes
+
+- be1a220: **Migrate to pure Node struct without generic support**
+
+  Before:
+
+  ```rust
+  let mut node = NodeKind::Container(ContainerNode {
+    children: Some(Box::from([
+      NodeKind::Text(TextNode {
+        text: "Hello, world!".to_string(),
+        style: None,
+        tw: None,
+        preset: None,
+        tag_name: None,
+        class_name: None,
+        id: None,
+      }),
+    ])),
+    preset: None,
+    style: None,
+    tw: None,
+    tag_name: None,
+    class_name: None,
+    id: Some("root".to_string()),
+  });
+  ```
+
+  After:
+
+  ```rust
+  let node = Node::container([Node::text("Hello, world!")]).with_id("root");
+  ```
+
+### Patch Changes
+
+- e6f3cf1: Fix negative offsets for oversized `background-position` #558
+
 ## 0.72.0
 
 ### Minor Changes
