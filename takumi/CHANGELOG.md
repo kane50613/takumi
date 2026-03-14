@@ -1,5 +1,12 @@
 # takumi
 
+## 0.73.1
+
+### Patch Changes
+
+- 27dc8aa: Add `ImageSource::from_bytes` method, switch to `libwebp`
+- 43c4ff8: Improved CSS error details
+
 ## 0.73.0
 
 ### Minor Changes

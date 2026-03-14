@@ -1,5 +1,11 @@
 # @takumi-rs/core
 
+## 0.73.1
+
+### Patch Changes
+
+- @takumi-rs/helpers@0.73.1
+
 ## 0.73.0
 
 ### Minor Changes
