@@ -31,7 +31,7 @@ let mut node = NodeKind::Container(ContainerNode {
 After:
 
 ```rust
-let node: NodeKind = ContainerNode::new()
+let node: NodeKind = ContainerNode::default()
   .with_child(TextNode::default().with_text("Hello, world!"))
   .into();
 ```
