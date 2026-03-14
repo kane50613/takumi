@@ -14,36 +14,21 @@ const STACK_OVERFLOW_DEPTH: usize = 200;
 const VISUAL_RECURSIVE_DEPTH: usize = 12;
 
 fn make_text_node(text: String) -> NodeKind {
-  TextNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  TextNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::font_size(Px(20.0).into()))
         .with(StyleDeclaration::font_weight(FontWeight::from(600.0)))
         .with(StyleDeclaration::color(ColorInput::Value(Color([
           35, 35, 35, 255,
         ])))),
-    ),
-    text,
-  }
-  .into()
+    )
+    .with_text(text)
+    .into()
 }
 
 fn wrap_in_plain_container(node: NodeKind) -> NodeKind {
-  ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: None,
-    children: Some([node].into()),
-  }
-  .into()
+  ContainerNode::default().with_children([node]).into()
 }
 
 fn iterative_nesting_node(depth: usize) -> NodeKind {
@@ -78,13 +63,8 @@ fn recursive_visual_node(level: usize, max_depth: usize) -> NodeKind {
     children.push(recursive_visual_node(level + 1, max_depth));
   }
 
-  ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
@@ -97,20 +77,14 @@ fn recursive_visual_node(level: usize, max_depth: usize) -> NodeKind {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           recursive_level_background(level),
         ))),
-    ),
-    children: Some(children.into_boxed_slice()),
-  }
-  .into()
+    )
+    .with_children(children.into_boxed_slice())
+    .into()
 }
 
 fn recursive_visual_fixture_tree() -> NodeKind {
-  ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -120,10 +94,9 @@ fn recursive_visual_fixture_tree() -> NodeKind {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([250, 248, 244, 255]),
         ))),
-    ),
-    children: Some([recursive_visual_node(0, VISUAL_RECURSIVE_DEPTH)].into()),
-  }
-  .into()
+    )
+    .with_children([recursive_visual_node(0, VISUAL_RECURSIVE_DEPTH)])
+    .into()
 }
 
 #[test]

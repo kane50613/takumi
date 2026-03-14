@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use data_url::DataUrl;
 use serde::Deserialize;
@@ -10,7 +10,7 @@ use crate::{
   layout::{
     inline::InlineContentKind,
     node::{Node, NodeMetadata, NodeStyleLayers},
-    style::{Length, Style, StyleDeclaration},
+    style::{Length, Style, StyleDeclaration, tw::TailwindValues},
   },
   rendering::{Canvas, RenderContext, draw_image},
   resources::{
@@ -35,6 +35,48 @@ pub struct ImageNode {
 }
 
 impl ImageNode {
+  /// Set the tag name and return the updated image node.
+  pub fn with_tag_name(mut self, tag_name: impl Into<Box<str>>) -> Self {
+    self.metadata.tag_name = Some(tag_name.into());
+    self
+  }
+
+  /// Set the class name and return the updated image node.
+  pub fn with_class_name(mut self, class_name: impl Into<Box<str>>) -> Self {
+    self.metadata.class_name = Some(class_name.into());
+    self
+  }
+
+  /// Set the id and return the updated image node.
+  pub fn with_id(mut self, id: impl Into<Box<str>>) -> Self {
+    self.metadata.id = Some(id.into());
+    self
+  }
+
+  /// Set the attributes and return the updated image node.
+  pub fn with_attributes(mut self, attributes: BTreeMap<Box<str>, Box<str>>) -> Self {
+    self.metadata.attributes = Some(attributes);
+    self
+  }
+
+  /// Set the preset style and return the updated image node.
+  pub fn with_preset(mut self, preset: Style) -> Self {
+    self.metadata.preset = Some(preset);
+    self
+  }
+
+  /// Set the inline style and return the updated image node.
+  pub fn with_style(mut self, style: Style) -> Self {
+    self.metadata.style = Some(style);
+    self
+  }
+
+  /// Set the Tailwind values and return the updated image node.
+  pub fn with_tw(mut self, tw: TailwindValues) -> Self {
+    self.metadata.tw = Some(tw);
+    self
+  }
+
   /// Set the source URL or path to the image.
   pub fn with_src(mut self, src: impl Into<Arc<str>>) -> Self {
     self.src = src.into();

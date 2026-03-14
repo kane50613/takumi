@@ -1,5 +1,5 @@
 use takumi::layout::{
-  node::{ContainerNode, TextNode},
+  node::{ContainerNode, NodeKind, TextNode},
   style::{Length::*, *},
 };
 
@@ -8,13 +8,8 @@ use crate::test_utils::run_fixture_test;
 #[test]
 fn inline_vertical_align_types() {
   let row = |label: &str, align: VerticalAlign, color: Color| {
-    ContainerNode {
-      class_name: None,
-      id: None,
-      tag_name: None,
-      preset: None,
-      tw: None,
-      style: Some(
+    ContainerNode::default()
+      .with_style(
         Style::default()
           .with(StyleDeclaration::display(Display::Block))
           .with(StyleDeclaration::width(Percentage(48.0)))
@@ -30,83 +25,60 @@ fn inline_vertical_align_types() {
           .with(StyleDeclaration::border_color(ColorInput::Value(Color([
             180, 180, 180, 255,
           ])))),
-      ),
-      children: Some(
-        [
-          TextNode {
-            class_name: None,
-            id: None,
-            tag_name: None,
-            preset: None,
-            tw: None,
-            style: Some(
-              Style::default()
-                .with(StyleDeclaration::display(Display::Inline))
-                .with_text_decoration(TextDecoration {
-                  line: TextDecorationLines::UNDERLINE,
-                  style: None,
-                  color: Some(ColorInput::Value(Color([220, 38, 38, 255]))),
-                  thickness: Some(TextDecorationThickness::Length(Px(3.0))),
-                })
-                .with(StyleDeclaration::text_decoration_skip_ink(
-                  TextDecorationSkipInk::None,
-                )),
-            ),
-            text: format!("Baseline guide {label} "),
-          }
-          .into(),
-          ContainerNode {
-            class_name: None,
-            id: None,
-            tag_name: None,
-            preset: None,
-            tw: None,
-            style: Some(
-              Style::default()
-                .with(StyleDeclaration::display(Display::InlineBlock))
-                .with(StyleDeclaration::width(Px(44.0)))
-                .with(StyleDeclaration::height(Px(44.0)))
-                .with(StyleDeclaration::background_color(ColorInput::Value(color)))
-                .with(StyleDeclaration::vertical_align(align))
-                .with_border_width(Sides([Px(2.0); 4]))
-                .with(StyleDeclaration::border_style(BorderStyle::Solid))
-                .with(StyleDeclaration::border_color(ColorInput::Value(Color([
-                  30, 30, 30, 255,
-                ])))),
-            ),
-            children: None,
-          }
-          .into(),
-          TextNode {
-            class_name: None,
-            id: None,
-            tag_name: None,
-            preset: None,
-            tw: None,
-            style: Some(
-              Style::default()
-                .with(StyleDeclaration::display(Display::Inline))
-                .with_text_decoration(TextDecoration {
-                  line: TextDecorationLines::UNDERLINE,
-                  style: None,
-                  color: Some(ColorInput::Value(Color([220, 38, 38, 255]))),
-                  thickness: Some(TextDecorationThickness::Length(Px(3.0))),
-                })
-                .with(StyleDeclaration::text_decoration_skip_ink(
-                  TextDecorationSkipInk::None,
-                )),
-            ),
-            text: " marker".to_string(),
-          }
-          .into(),
-        ]
-        .into(),
-      ),
-    }
-    .into()
+      )
+      .with_child(
+        TextNode::default()
+          .with_style(
+            Style::default()
+              .with(StyleDeclaration::display(Display::Inline))
+              .with_text_decoration(TextDecoration {
+                line: TextDecorationLines::UNDERLINE,
+                style: None,
+                color: Some(ColorInput::Value(Color([220, 38, 38, 255]))),
+                thickness: Some(TextDecorationThickness::Length(Px(3.0))),
+              })
+              .with(StyleDeclaration::text_decoration_skip_ink(
+                TextDecorationSkipInk::None,
+              )),
+          )
+          .with_text(format!("Baseline guide {label} ")),
+      )
+      .with_child(
+        ContainerNode::default().with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::InlineBlock))
+            .with(StyleDeclaration::width(Px(44.0)))
+            .with(StyleDeclaration::height(Px(44.0)))
+            .with(StyleDeclaration::background_color(ColorInput::Value(color)))
+            .with(StyleDeclaration::vertical_align(align))
+            .with_border_width(Sides([Px(2.0); 4]))
+            .with(StyleDeclaration::border_style(BorderStyle::Solid))
+            .with(StyleDeclaration::border_color(ColorInput::Value(Color([
+              30, 30, 30, 255,
+            ])))),
+        ),
+      )
+      .with_child(
+        TextNode::default()
+          .with_style(
+            Style::default()
+              .with(StyleDeclaration::display(Display::Inline))
+              .with_text_decoration(TextDecoration {
+                line: TextDecorationLines::UNDERLINE,
+                style: None,
+                color: Some(ColorInput::Value(Color([220, 38, 38, 255]))),
+                thickness: Some(TextDecorationThickness::Length(Px(3.0))),
+              })
+              .with(StyleDeclaration::text_decoration_skip_ink(
+                TextDecorationSkipInk::None,
+              )),
+          )
+          .with_text(" marker".to_string()),
+      )
+      .into()
   };
 
-  let children = [
+  let children: Vec<NodeKind> = vec![
     row(
       "baseline",
       VerticalAlign::Keyword(VerticalAlignKeyword::Baseline),
@@ -169,13 +141,8 @@ fn inline_vertical_align_types() {
     ),
   ];
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -186,9 +153,8 @@ fn inline_vertical_align_types() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
         ))),
-    ),
-    children: Some(children.into()),
-  };
+    )
+    .with_children(children);
 
   run_fixture_test(container.into(), "inline_vertical_align_types");
 }

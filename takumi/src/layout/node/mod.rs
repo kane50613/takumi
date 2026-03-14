@@ -666,8 +666,8 @@ mod tests {
     let background_url = "https://placehold.co/80x80/22c55e/white";
     let node = NodeKind::Container(ContainerNode {
       metadata: NodeMetadata::default(),
-      children: Some(
-        [ContainerNode {
+      children: vec![
+        ContainerNode {
           metadata: NodeMetadata {
             style: Some(
               Style::default().with(StyleDeclaration::background_image(Some(
@@ -676,11 +676,10 @@ mod tests {
             ),
             ..NodeMetadata::default()
           },
-          children: None,
+          children: Vec::new(),
         }
-        .into()]
         .into(),
-      ),
+      ],
     });
 
     let mut collection = FetchTaskCollection::default();
@@ -711,7 +710,7 @@ mod tests {
         tw: Some(tw),
         ..NodeMetadata::default()
       },
-      children: None,
+      children: Vec::new(),
     });
 
     let mut collection = FetchTaskCollection::default();

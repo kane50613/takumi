@@ -955,30 +955,25 @@ mod tests {
   #[test]
   fn measure_layout_supports_structured_keyframes() {
     let global = GlobalContext::default();
-    let node: NodeKind = ContainerNode {
-      metadata: crate::layout::node::NodeMetadata {
-        tag_name: Some("div".into()),
-        style: Some(
-          Style::default()
-            .with(StyleDeclaration::width(Px(100.0)))
-            .with(StyleDeclaration::animation_name(AnimationNames(
-              vec!["grow".to_string()].into(),
-            )))
-            .with(StyleDeclaration::animation_duration(AnimationDurations(
-              vec![AnimationTime::from_milliseconds(1000.0)].into(),
-            )))
-            .with(StyleDeclaration::animation_timing_function(
-              AnimationTimingFunctions(vec![AnimationTimingFunction::Linear].into()),
-            ))
-            .with(StyleDeclaration::animation_fill_mode(AnimationFillModes(
-              vec![AnimationFillMode::Both].into(),
-            ))),
-        ),
-        ..crate::layout::node::NodeMetadata::default()
-      },
-      children: None,
-    }
-    .into();
+    let node: NodeKind = ContainerNode::default()
+      .with_tag_name("div")
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::width(Px(100.0)))
+          .with(StyleDeclaration::animation_name(AnimationNames(
+            vec!["grow".to_string()].into(),
+          )))
+          .with(StyleDeclaration::animation_duration(AnimationDurations(
+            vec![AnimationTime::from_milliseconds(1000.0)].into(),
+          )))
+          .with(StyleDeclaration::animation_timing_function(
+            AnimationTimingFunctions(vec![AnimationTimingFunction::Linear].into()),
+          ))
+          .with(StyleDeclaration::animation_fill_mode(AnimationFillModes(
+            vec![AnimationFillMode::Both].into(),
+          ))),
+      )
+      .into();
 
     let options_result = RenderOptionsBuilder::default()
       .global(&global)

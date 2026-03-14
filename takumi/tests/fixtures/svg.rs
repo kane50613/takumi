@@ -6,13 +6,8 @@ use takumi::layout::{
 use crate::test_utils::run_fixture_test;
 
 fn create_luma_logo_container() -> ContainerNode<NodeKind> {
-  ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -22,27 +17,17 @@ fn create_luma_logo_container() -> ContainerNode<NodeKind> {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center)),
-    ),
-    children: Some(
-      [NodeKind::Image(ImageNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        tw: None,
-        style: Some(
+    )
+    .with_children([NodeKind::Image(
+      ImageNode::default()
+        .with_src("assets/images/luma.svg")
+        .with_style(
           Style::default()
             .with(StyleDeclaration::width(Px(204.0)))
             .with(StyleDeclaration::height(Px(76.0)))
             .with(StyleDeclaration::object_fit(ObjectFit::Contain)),
         ),
-        width: None,
-        height: None,
-        src: "assets/images/luma.svg".into(),
-      })]
-      .into(),
-    ),
-  }
+    )])
 }
 
 #[test]
@@ -57,54 +42,24 @@ fn test_svg_luma_logo_gradient_background() {
 fn test_svg_attr_size_in_absolute_flex_container() {
   let svg = r##"<svg width="100" height="100" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 0L24.4903 15.5097L40 20L24.4903 24.4903L20 40L15.5097 24.4903L0 20L15.5097 15.5097L20 0Z" fill="#E0FF25"/></svg>"##;
 
-  let node: NodeKind = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let node: NodeKind = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([35, 35, 35, 255]),
         ))),
-    ),
-    children: Some(
-      [ContainerNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        tw: None,
-        style: Some(
-          Style::default()
-            .with(StyleDeclaration::position(Position::Absolute))
-            .with_inset(Sides([Auto, Px(40.0), Px(40.0), Auto]))
-            .with(StyleDeclaration::display(Display::Flex)),
-        ),
-        children: Some(
-          [ImageNode {
-            class_name: None,
-            id: None,
-            tag_name: Some("svg".into()),
-            preset: None,
-            tw: None,
-            style: None,
-            src: svg.into(),
-            width: None,
-            height: None,
-          }
-          .into()]
-          .into(),
-        ),
-      }
-      .into()]
-      .into(),
-    ),
-  }
-  .into();
+    )
+    .with_children([ContainerNode::default()
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::position(Position::Absolute))
+          .with_inset(Sides([Auto, Px(40.0), Px(40.0), Auto]))
+          .with(StyleDeclaration::display(Display::Flex)),
+      )
+      .with_children([ImageNode::default().with_tag_name("svg").with_src(svg)])])
+    .into();
 
   run_fixture_test(node, "svg_attr_size_in_absolute_flex_container");
 }
@@ -114,13 +69,21 @@ fn test_svg_current_color_fixture() {
   let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect x="0" y="0" width="120" height="120" fill="currentColor"/></svg>"#;
 
   let swatch = |color: Color| {
-    ContainerNode {
-      class_name: None,
-      id: None,
-      tag_name: None,
-      preset: None,
-      tw: None,
-      style: Some(
+    let children: Vec<NodeKind> = vec![
+      ImageNode::default()
+        .with_tag_name("svg")
+        .with_style(
+          Style::default()
+            .with(StyleDeclaration::width(Px(120.0)))
+            .with(StyleDeclaration::height(Px(120.0))),
+        )
+        .with_src(svg)
+        .into(),
+      TextNode::default().with_text("Hello").into(),
+    ];
+
+    let container: NodeKind = ContainerNode::default()
+      .with_style(
         Style::default()
           .with(StyleDeclaration::width(Px(160.0)))
           .with(StyleDeclaration::height(Px(160.0)))
@@ -131,49 +94,15 @@ fn test_svg_current_color_fixture() {
           .with(StyleDeclaration::color(ColorInput::Value(color)))
           .with(StyleDeclaration::flex_direction(FlexDirection::Column))
           .with(StyleDeclaration::align_items(AlignItems::Center)),
-      ),
-      children: Some(
-        [
-          ImageNode {
-            class_name: None,
-            id: None,
-            tag_name: Some("svg".into()),
-            preset: None,
-            tw: None,
-            style: Some(
-              Style::default()
-                .with(StyleDeclaration::width(Px(120.0)))
-                .with(StyleDeclaration::height(Px(120.0))),
-            ),
-            src: svg.into(),
-            width: None,
-            height: None,
-          }
-          .into(),
-          TextNode {
-            class_name: None,
-            id: None,
-            tag_name: None,
-            preset: None,
-            tw: None,
-            style: None,
-            text: "Hello".into(),
-          }
-          .into(),
-        ]
-        .into(),
-      ),
-    }
-    .into()
+      )
+      .with_children(children)
+      .into();
+
+    container
   };
 
-  let node: NodeKind = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let node: NodeKind = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -183,16 +112,12 @@ fn test_svg_current_color_fixture() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([30, 30, 30, 255]),
         ))),
-    ),
-    children: Some(
-      [
-        swatch(Color([230, 40, 70, 255])),
-        swatch(Color([60, 140, 255, 255])),
-      ]
-      .into(),
-    ),
-  }
-  .into();
+    )
+    .with_children([
+      swatch(Color([230, 40, 70, 255])),
+      swatch(Color([60, 140, 255, 255])),
+    ])
+    .into();
 
   run_fixture_test(node, "svg_current_color_fixture");
 }
@@ -201,13 +126,9 @@ fn test_svg_current_color_fixture() {
 fn test_twemoji_svg() {
   // https://github.com/nuxt-modules/og-image/blob/0209474b99e1ffa8a9010df359f170563024056f/src/runtime/server/og-image/core/transforms/emojis/fetch.ts#L54
   fn create_svg_node(svg: &str) -> NodeKind {
-    ImageNode {
-      class_name: None,
-      id: None,
-      tag_name: Some("svg".into()),
-      preset: None,
-      tw: None,
-      style: Some(
+    ImageNode::default()
+      .with_tag_name("svg")
+      .with_style(
         Style::default()
           .with(StyleDeclaration::display(Display::Inline))
           .with(StyleDeclaration::width(Px(48.0)))
@@ -215,21 +136,31 @@ fn test_twemoji_svg() {
             -0.1,
           ))))
           .with_padding_inline(SpacePair::from_single(Px(4.0))),
-      ),
-      src: svg.into(),
-      width: None,
-      height: None,
-    }
-    .into()
+      )
+      .with_src(svg)
+      .into()
   }
 
-  let node: NodeKind = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let children: Vec<NodeKind> = vec![
+    TextNode::default()
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
+      .with_text("Laboris ex do ipsum. Quis mollit magna anim elit reprehenderit consequat irure ex duis adipisicing.".to_string())
+      .into(),
+    create_svg_node(include_str!(
+      "../../../assets/images/twemoji/grinning-squinting-face.svg"
+    )),
+    create_svg_node(include_str!("../../../assets/images/twemoji/hamburger.svg")),
+    create_svg_node(include_str!(
+      "../../../assets/images/twemoji/waving-hand.svg"
+    )),
+    TextNode::default()
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
+      .with_text("Ullamco occaecat anim mollit magna laborum elit ea tempor fugiat sit qui.".to_string())
+      .into(),
+  ];
+
+  let node: NodeKind = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -239,41 +170,9 @@ fn test_twemoji_svg() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
         ))),
-    ),
-    children: Some(
-      [
-        TextNode {
-          class_name: None,
-          id: None,
-          tag_name: None,
-          preset: None,
-          tw: None,
-          style: Some(Style::default().with(StyleDeclaration::Display(Display::Inline))),
-          text: "Laboris ex do ipsum. Quis mollit magna anim elit reprehenderit consequat irure ex duis adipisicing.".into(),
-        }
-        .into(),
-        create_svg_node(include_str!(
-          "../../../assets/images/twemoji/grinning-squinting-face.svg"
-        )),
-        create_svg_node(include_str!("../../../assets/images/twemoji/hamburger.svg")),
-        create_svg_node(include_str!(
-          "../../../assets/images/twemoji/waving-hand.svg"
-        )),
-        TextNode {
-          class_name: None,
-          id: None,
-          tag_name: None,
-          preset: None,
-          tw: None,
-          style: Some(Style::default().with(StyleDeclaration::Display(Display::Inline))),
-          text: "Ullamco occaecat anim mollit magna laborum elit ea tempor fugiat sit qui.".into(),
-        }
-        .into(),
-      ]
-      .into(),
-    ),
-  }
-  .into();
+    )
+    .with_children(children)
+    .into();
 
   run_fixture_test(node, "svg_twemoji");
 }

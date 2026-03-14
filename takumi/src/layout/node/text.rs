@@ -1,4 +1,4 @@
-use std::iter::once;
+use std::{collections::BTreeMap, iter::once};
 
 use serde::Deserialize;
 use taffy::{AvailableSpace, Layout, Size};
@@ -11,7 +11,7 @@ use crate::{
       create_inline_layout, measure_inline_layout,
     },
     node::{Node, NodeMetadata, NodeStyleLayers},
-    style::Style,
+    style::{Style, tw::TailwindValues},
   },
   rendering::{Canvas, MaxHeight, RenderContext, inline_drawing::draw_inline_layout},
 };
@@ -31,6 +31,48 @@ pub struct TextNode {
 }
 
 impl TextNode {
+  /// Set the tag name and return the updated text node.
+  pub fn with_tag_name(mut self, tag_name: impl Into<Box<str>>) -> Self {
+    self.metadata.tag_name = Some(tag_name.into());
+    self
+  }
+
+  /// Set the class name and return the updated text node.
+  pub fn with_class_name(mut self, class_name: impl Into<Box<str>>) -> Self {
+    self.metadata.class_name = Some(class_name.into());
+    self
+  }
+
+  /// Set the id and return the updated text node.
+  pub fn with_id(mut self, id: impl Into<Box<str>>) -> Self {
+    self.metadata.id = Some(id.into());
+    self
+  }
+
+  /// Set the attributes and return the updated text node.
+  pub fn with_attributes(mut self, attributes: BTreeMap<Box<str>, Box<str>>) -> Self {
+    self.metadata.attributes = Some(attributes);
+    self
+  }
+
+  /// Set the preset style and return the updated text node.
+  pub fn with_preset(mut self, preset: Style) -> Self {
+    self.metadata.preset = Some(preset);
+    self
+  }
+
+  /// Set the inline style and return the updated text node.
+  pub fn with_style(mut self, style: Style) -> Self {
+    self.metadata.style = Some(style);
+    self
+  }
+
+  /// Set the Tailwind values and return the updated text node.
+  pub fn with_tw(mut self, tw: TailwindValues) -> Self {
+    self.metadata.tw = Some(tw);
+    self
+  }
+
   /// Set the text content of the node.
   pub fn with_text(mut self, text: impl Into<String>) -> Self {
     self.text = text.into();

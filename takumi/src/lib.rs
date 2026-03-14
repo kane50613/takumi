@@ -38,25 +38,9 @@
 //! };
 //!
 //! // Create a node tree with `ContainerNode` and `TextNode`
-//! let mut node = NodeKind::Container(ContainerNode {
-//!   children: Some(Box::from([
-//!     NodeKind::Text(TextNode {
-//!       text: "Hello, world!".to_string(),
-//!       style: None, // Construct with `StyleBuilder`
-//!       tw: None, // Tailwind properties
-//!       preset: None,
-//!       tag_name: None,
-//!       class_name: None,
-//!       id: None,
-//!     }),
-//!   ])),
-//!   preset: None,
-//!   style: None,
-//!   tw: None, // Tailwind properties
-//!   tag_name: None,
-//!   class_name: None,
-//!   id: None,
-//! });
+//! let mut node: NodeKind = ContainerNode::default()
+//!   .with_child(TextNode::default().with_text("Hello, world!"))
+//!   .into();
 //!
 //! // Create a context for storing resources, font caches.
 //! // You should reuse the context to speed up the rendering.

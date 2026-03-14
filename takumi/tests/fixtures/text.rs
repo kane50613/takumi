@@ -10,40 +10,28 @@ use crate::test_utils::run_fixture_test;
 // Basic text render with defaults
 #[test]
 fn text_basic() {
-  let text = TextNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let text = TextNode::default()
+    .with_style(
       Style::default().with(StyleDeclaration::background_color(ColorInput::Value(
         Color([240, 240, 240, 255]),
       ))),
-    ),
-    text: "The quick brown fox jumps over the lazy dog 12345".to_string(),
-  };
+    )
+    .with_text("The quick brown fox jumps over the lazy dog 12345".to_string());
 
   run_fixture_test(text.into(), "text_basic");
 }
 
 #[test]
 fn text_typography_regular_24px() {
-  let text = TextNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let text = TextNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
         )))
         .with(StyleDeclaration::font_size(Px(24.0).into())),
-    ),
-    text: "Regular 24px".to_string(),
-  };
+    )
+    .with_text("Regular 24px".to_string());
 
   run_fixture_test(text.into(), "text_typography_regular_24px");
 }
@@ -52,30 +40,23 @@ fn text_typography_regular_24px() {
 fn text_typography_variable_width() {
   const WIDTHS: &[f32] = &[60.0, 100.0, 130.0];
 
-  let nodes = WIDTHS
+  let nodes: Vec<NodeKind> = WIDTHS
     .iter()
     .map(|width| {
-      TextNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        tw: None,
-        style: Some(
-          Style::default().with(StyleDeclaration::font_variation_settings(
-            [FontVariation {
+      TextNode::default()
+        .with_style(
+          Style::default().with(StyleDeclaration::font_variation_settings(Box::new([
+            FontVariation {
               tag: tag_from_bytes(b"wdth"),
               value: *width,
-            }]
-            .into(),
-          )),
-        ),
-        text: format!(
+            },
+          ]))),
+        )
+        .with_text(format!(
           "Hello world, this is a test of the variable width font: {}%",
           width
-        ),
-      }
-      .into()
+        ))
+        .into()
     })
     .collect::<Vec<_>>();
 
@@ -83,13 +64,8 @@ fn text_typography_variable_width() {
     unreachable!()
   };
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
@@ -99,44 +75,32 @@ fn text_typography_variable_width() {
         .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
         .with(StyleDeclaration::row_gap(Px(48.0)))
         .with(StyleDeclaration::width(Percentage(100.0))),
-    ),
-    children: Some(nodes.into_boxed_slice()),
-  };
+    )
+    .with_children(nodes.into_boxed_slice());
 
   run_fixture_test(container.into(), "text_typography_variable_width");
 }
 
 #[test]
 fn text_typography_variable_weight() {
-  let nodes = (400..=900)
+  let nodes: Vec<NodeKind> = (400..=900)
     .step_by(50)
     .map(|weight| {
-      TextNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        tw: None,
-        style: Some(
+      TextNode::default()
+        .with_style(
           Style::default()
             .with(StyleDeclaration::font_size(Px(48.0).into()))
             .with(StyleDeclaration::font_weight(FontWeight::from(
               weight as f32,
             ))),
-        ),
-        text: weight.to_string(),
-      }
-      .into()
+        )
+        .with_text(weight.to_string())
+        .into()
     })
-    .collect::<Vec<_>>();
+    .collect();
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
@@ -144,88 +108,64 @@ fn text_typography_variable_weight() {
         .with(StyleDeclaration::font_size(Px(24.0).into()))
         .with_gap(SpacePair::from_reversed_pair(Px(0.0), Px(24.0)))
         .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap)),
-    ),
-    children: Some(nodes.into_boxed_slice()),
-  };
+    )
+    .with_children(nodes.into_boxed_slice());
 
   run_fixture_test(container.into(), "text_typography_variable_weight");
 }
 
 #[test]
 fn text_typography_medium_weight_500() {
-  let text = TextNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let text = TextNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
         )))
         .with(StyleDeclaration::font_size(Px(24.0).into()))
         .with(StyleDeclaration::font_weight(FontWeight::from(500.0))),
-    ),
-    text: "Medium 24px".to_string(),
-  };
+    )
+    .with_text("Medium 24px".to_string());
 
   run_fixture_test(text.into(), "text_typography_medium_weight_500");
 }
 
 #[test]
 fn text_typography_line_height_40px() {
-  let text = TextNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let text = TextNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
         )))
         .with(StyleDeclaration::font_size(Px(24.0).into()))
         .with(StyleDeclaration::line_height(LineHeight::Length(Px(40.0)))),
-    ),
-    text: "Line height 40px".to_string(),
-  };
+    )
+    .with_text("Line height 40px".to_string());
 
   run_fixture_test(text.into(), "text_typography_line_height_40px");
 }
 
 #[test]
 fn text_typography_letter_spacing_2px() {
-  let text = TextNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let text = TextNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
         )))
         .with(StyleDeclaration::font_size(Px(24.0).into()))
         .with(StyleDeclaration::letter_spacing(Px(2.0))),
-    ),
-    text: "Letter spacing 2px".to_string(),
-  };
+    )
+    .with_text("Letter spacing 2px".to_string());
 
   run_fixture_test(text.into(), "text_typography_letter_spacing_2px");
 }
 
 #[test]
 fn text_align_start() {
-  let text = TextNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let text = TextNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
@@ -234,22 +174,16 @@ fn text_align_start() {
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::font_size(Px(24.0).into()))
         .with(StyleDeclaration::text_align(TextAlign::Start)),
-    ),
-    text: "Start aligned".to_string(),
-  };
+    )
+    .with_text("Start aligned".to_string());
 
   run_fixture_test(text.into(), "text_align_start");
 }
 
 #[test]
 fn text_align_center() {
-  let text = TextNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let text = TextNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
@@ -258,22 +192,16 @@ fn text_align_center() {
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::font_size(Px(24.0).into()))
         .with(StyleDeclaration::text_align(TextAlign::Center)),
-    ),
-    text: "Center aligned".to_string(),
-  };
+    )
+    .with_text("Center aligned".to_string());
 
   run_fixture_test(text.into(), "text_align_center");
 }
 
 #[test]
 fn text_align_right() {
-  let text = TextNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let text = TextNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
@@ -282,9 +210,8 @@ fn text_align_right() {
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::font_size(Px(24.0).into()))
         .with(StyleDeclaration::text_align(TextAlign::Right)),
-    ),
-    text: "Right aligned".to_string(),
-  };
+    )
+    .with_text("Right aligned".to_string());
 
   run_fixture_test(text.into(), "text_align_right");
 }
@@ -293,13 +220,8 @@ fn text_align_right() {
 fn text_ellipsis_line_clamp_2() {
   let long_text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.";
 
-  let text = TextNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let text = TextNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -308,95 +230,57 @@ fn text_ellipsis_line_clamp_2() {
         .with(StyleDeclaration::font_size(Px(48.0).into()))
         .with(StyleDeclaration::text_overflow(TextOverflow::Ellipsis))
         .with(StyleDeclaration::line_clamp(Some(2.into()))),
-    ),
-    text: long_text.to_string(),
-  };
+    )
+    .with_text(long_text.to_string());
 
   run_fixture_test(text.into(), "text_ellipsis_line_clamp_2");
 }
 
 #[test]
 fn text_transform_all() {
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
         ))),
-    ),
-    children: Some(
-      [
-        TextNode {
-          class_name: None,
-          id: None,
-          tag_name: None,
-          preset: None,
-          tw: None,
-          style: Some(
-            Style::default()
-              .with(StyleDeclaration::width(Percentage(100.0)))
-              .with(StyleDeclaration::font_size(Px(28.0).into()))
-              .with(StyleDeclaration::text_transform(TextTransform::None)),
-          ),
-          text: "None: The quick Brown Fox".to_string(),
-        }
-        .into(),
-        TextNode {
-          class_name: None,
-          id: None,
-          tag_name: None,
-          preset: None,
-          tw: None,
-          style: Some(
-            Style::default()
-              .with(StyleDeclaration::width(Percentage(100.0)))
-              .with(StyleDeclaration::font_size(Px(28.0).into()))
-              .with(StyleDeclaration::text_transform(TextTransform::Uppercase)),
-          ),
-          text: "Uppercase: The quick Brown Fox".to_string(),
-        }
-        .into(),
-        TextNode {
-          class_name: None,
-          id: None,
-          tag_name: None,
-          preset: None,
-          tw: None,
-          style: Some(
-            Style::default()
-              .with(StyleDeclaration::width(Percentage(100.0)))
-              .with(StyleDeclaration::font_size(Px(28.0).into()))
-              .with(StyleDeclaration::text_transform(TextTransform::Lowercase)),
-          ),
-          text: "Lowercase: The QUICK Brown FOX".to_string(),
-        }
-        .into(),
-        TextNode {
-          class_name: None,
-          id: None,
-          tag_name: None,
-          preset: None,
-          tw: None,
-          style: Some(
-            Style::default()
-              .with(StyleDeclaration::width(Percentage(100.0)))
-              .with(StyleDeclaration::font_size(Px(28.0).into()))
-              .with(StyleDeclaration::text_transform(TextTransform::Capitalize)),
-          ),
-          text: "Capitalize: the quick brown fox".to_string(),
-        }
-        .into(),
-      ]
-      .into(),
-    ),
-  };
+    )
+    .with_children([
+      TextNode::default()
+        .with_style(
+          Style::default()
+            .with(StyleDeclaration::width(Percentage(100.0)))
+            .with(StyleDeclaration::font_size(Px(28.0).into()))
+            .with(StyleDeclaration::text_transform(TextTransform::None)),
+        )
+        .with_text("None: The quick Brown Fox".to_string()),
+      TextNode::default()
+        .with_style(
+          Style::default()
+            .with(StyleDeclaration::width(Percentage(100.0)))
+            .with(StyleDeclaration::font_size(Px(28.0).into()))
+            .with(StyleDeclaration::text_transform(TextTransform::Uppercase)),
+        )
+        .with_text("Uppercase: The quick Brown Fox".to_string()),
+      TextNode::default()
+        .with_style(
+          Style::default()
+            .with(StyleDeclaration::width(Percentage(100.0)))
+            .with(StyleDeclaration::font_size(Px(28.0).into()))
+            .with(StyleDeclaration::text_transform(TextTransform::Lowercase)),
+        )
+        .with_text("Lowercase: The QUICK Brown FOX".to_string()),
+      TextNode::default()
+        .with_style(
+          Style::default()
+            .with(StyleDeclaration::width(Percentage(100.0)))
+            .with(StyleDeclaration::font_size(Px(28.0).into()))
+            .with(StyleDeclaration::text_transform(TextTransform::Capitalize)),
+        )
+        .with_text("Capitalize: the quick brown fox".to_string()),
+    ]);
 
   run_fixture_test(container.into(), "text_transform_all");
 }
@@ -408,13 +292,8 @@ fn text_mask_image_gradient_and_emoji() {
   )
   .unwrap();
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
@@ -424,50 +303,34 @@ fn text_mask_image_gradient_and_emoji() {
         .with(StyleDeclaration::font_size(Px(72.0).into()))
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center)),
-    ),
-    children: Some(
-      [TextNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        tw: None,
-        style: Some(
-          Style::default()
-            .with(StyleDeclaration::background_image(Some(gradient_images)))
-            .with(StyleDeclaration::background_size(
-              BackgroundSizes::from_str("100% 100%").unwrap(),
-            ))
-            .with(StyleDeclaration::background_position(
-              BackgroundPositions::from_str("0 0").unwrap(),
-            ))
-            .with(StyleDeclaration::background_repeat(
-              BackgroundRepeats::from_str("no-repeat").unwrap(),
-            ))
-            .with(StyleDeclaration::background_clip(BackgroundClip::Text))
-            .with(StyleDeclaration::color(ColorInput::Value(
-              Color::transparent(),
-            ))),
-        ),
-        text: "Gradient Mask Emoji: 🪓 🦊 💩".to_string(),
-      }
-      .into()]
-      .into(),
-    ),
-  };
+    )
+    .with_children([TextNode::default()
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::background_image(Some(gradient_images)))
+          .with(StyleDeclaration::background_size(
+            BackgroundSizes::from_str("100% 100%").unwrap(),
+          ))
+          .with(StyleDeclaration::background_position(
+            BackgroundPositions::from_str("0 0").unwrap(),
+          ))
+          .with(StyleDeclaration::background_repeat(
+            BackgroundRepeats::from_str("no-repeat").unwrap(),
+          ))
+          .with(StyleDeclaration::background_clip(BackgroundClip::Text))
+          .with(StyleDeclaration::color(ColorInput::Value(
+            Color::transparent(),
+          ))),
+      )
+      .with_text("Gradient Mask Emoji: 🪓 🦊 💩".to_string())]);
 
   run_fixture_test(container.into(), "text_mask_image_gradient_emoji");
 }
 
 #[test]
 fn text_stroke_black_red() {
-  let text = TextNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let text = TextNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -484,9 +347,8 @@ fn text_stroke_black_red() {
         .with(StyleDeclaration::webkit_text_stroke_color(Some(
           ColorInput::Value(Color([255, 0, 0, 255])),
         ))),
-    ),
-    text: "Red Stroke".to_string(),
-  };
+    )
+    .with_text("Red Stroke".to_string());
 
   run_fixture_test(text.into(), "text_stroke_black_red");
 }
@@ -498,13 +360,8 @@ fn text_stroke_background_clip() {
   )
   .unwrap();
 
-  let text = TextNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let text = TextNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_image(Some(gradient_images)))
         .with(StyleDeclaration::background_position(
@@ -518,17 +375,11 @@ fn text_stroke_background_clip() {
         .with(StyleDeclaration::webkit_text_stroke_color(Some(
           ColorInput::Value(Color::transparent()),
         ))),
-    ),
-    text: "Gradient Stroke".to_string(),
-  };
+    )
+    .with_text("Gradient Stroke".to_string());
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
@@ -537,9 +388,8 @@ fn text_stroke_background_clip() {
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center)),
-    ),
-    children: Some([text.into()].into()),
-  };
+    )
+    .with_children([text]);
 
   run_fixture_test(container.into(), "text_stroke_background_clip");
 }
@@ -555,22 +405,16 @@ fn text_shadow() {
     color: ColorInput::Value(Color([255, 204, 0, 255])),
   }];
 
-  let text = TextNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let text = TextNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
         )))
         .with(StyleDeclaration::font_size(Px(48.0).into()))
         .with(StyleDeclaration::text_shadow(Some(shadows.into()))),
-    ),
-    text: "Shadowed Text".to_string(),
-  };
+    )
+    .with_text("Shadowed Text".to_string());
 
   run_fixture_test(text.into(), "text_shadow");
 }
@@ -585,22 +429,16 @@ fn text_shadow_no_blur_radius() {
     color: ColorInput::Value(Color([85, 138, 187, 255])),
   }];
 
-  let text = TextNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let text = TextNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
         )))
         .with(StyleDeclaration::font_size(Px(72.0).into()))
         .with(StyleDeclaration::text_shadow(Some(shadows.into()))),
-    ),
-    text: "Shadowed Text".to_string(),
-  };
+    )
+    .with_text("Shadowed Text".to_string());
 
   run_fixture_test(text.into(), "text_shadow_no_blur_radius");
 }
@@ -609,13 +447,8 @@ fn text_shadow_no_blur_radius() {
 fn text_wrap_nowrap() {
   let long_text = "This is a very long piece of text that should demonstrate text wrapping behavior when it exceeds the container width. The quick brown fox jumps over the lazy dog.";
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 255, 255, 255]),
@@ -627,49 +460,24 @@ fn text_wrap_nowrap() {
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with_gap(SpacePair::from_single(Px(20.0)))
         .with_padding(Sides([Px(20.0); 4])),
-    ),
-    children: Some(
-      [
-        // Wrap text
-        TextNode {
-          class_name: None,
-          id: None,
-          tag_name: None,
-          preset: None,
-          tw: None,
-          style: Some(Style::default().with(StyleDeclaration::text_wrap_mode(TextWrapMode::Wrap))),
-          text: format!("wrap: {}", long_text),
-        }
-        .into(),
-        TextNode {
-          class_name: None,
-          id: None,
-          tag_name: None,
-          preset: None,
-          tw: None,
-          style: Some(
-            Style::default().with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap)),
-          ),
-          text: format!("nowrap: {}", long_text),
-        }
-        .into(),
-      ]
-      .into(),
-    ),
-  };
+    )
+    .with_children([
+      // Wrap text
+      TextNode::default()
+        .with_style(Style::default().with(StyleDeclaration::text_wrap_mode(TextWrapMode::Wrap)))
+        .with_text(format!("wrap: {}", long_text)),
+      TextNode::default()
+        .with_style(Style::default().with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap)))
+        .with_text(format!("nowrap: {}", long_text)),
+    ]);
 
   run_fixture_test(container.into(), "text_wrap_nowrap");
 }
 
 #[test]
 fn text_whitespace_collapse() {
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 255, 255, 255]),
@@ -681,69 +489,41 @@ fn text_whitespace_collapse() {
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with_gap(SpacePair::from_single(Px(20.0)))
         .with_padding(Sides([Px(20.0); 4])),
-    ),
-    children: Some(
-      [
-        TextNode {
-          class_name: None,
-          id: None,
-          tag_name: None,
-          preset: None,
-          tw: None,
-          style: Some(
-            Style::default().with(StyleDeclaration::white_space_collapse(
-              WhiteSpaceCollapse::Collapse,
-            )),
-          ),
-          text: "collapse: Multiple    spaces   and\ttabs\t\tare    collapsed".to_string(),
-        }
-        .into(),
-        TextNode {
-          class_name: None,
-          id: None,
-          tag_name: None,
-          preset: None,
-          tw: None,
-          style: Some(
-            Style::default().with(StyleDeclaration::white_space_collapse(
-              WhiteSpaceCollapse::Preserve,
-            )),
-          ),
-          text: "preserve: Multiple    spaces   and\ttabs\t\tare    preserved".to_string(),
-        }
-        .into(),
-        TextNode {
-          class_name: None,
-          id: None,
-          tag_name: None,
-          preset: None,
-          tw: None,
-          style: Some(
-            Style::default().with(StyleDeclaration::white_space_collapse(
-              WhiteSpaceCollapse::PreserveSpaces,
-            )),
-          ),
-          text: "preserve-spaces: Multiple    spaces   preserved\nbut\nbreaks\nremoved".to_string(),
-        }
-        .into(),
-        TextNode {
-          class_name: None,
-          id: None,
-          tag_name: None,
-          preset: None,
-          tw: None,
-          style: Some(
-            Style::default().with(StyleDeclaration::white_space_collapse(
-              WhiteSpaceCollapse::PreserveBreaks,
-            )),
-          ),
-          text: "preserve-breaks: Spaces    collapsed\n but\nline\nbreaks\npreserved".to_string(),
-        }
-        .into(),
-      ]
-      .into(),
-    ),
-  };
+    )
+    .with_children([
+      TextNode::default()
+        .with_style(
+          Style::default().with(StyleDeclaration::white_space_collapse(
+            WhiteSpaceCollapse::Collapse,
+          )),
+        )
+        .with_text("collapse: Multiple    spaces   and\ttabs\t\tare    collapsed".to_string()),
+      TextNode::default()
+        .with_style(
+          Style::default().with(StyleDeclaration::white_space_collapse(
+            WhiteSpaceCollapse::Preserve,
+          )),
+        )
+        .with_text("preserve: Multiple    spaces   and\ttabs\t\tare    preserved".to_string()),
+      TextNode::default()
+        .with_style(
+          Style::default().with(StyleDeclaration::white_space_collapse(
+            WhiteSpaceCollapse::PreserveSpaces,
+          )),
+        )
+        .with_text(
+          "preserve-spaces: Multiple    spaces   preserved\nbut\nbreaks\nremoved".to_string(),
+        ),
+      TextNode::default()
+        .with_style(
+          Style::default().with(StyleDeclaration::white_space_collapse(
+            WhiteSpaceCollapse::PreserveBreaks,
+          )),
+        )
+        .with_text(
+          "preserve-breaks: Spaces    collapsed\n but\nline\nbreaks\npreserved".to_string(),
+        ),
+    ]);
 
   run_fixture_test(container.into(), "text_whitespace_collapse");
 }
@@ -751,55 +531,49 @@ fn text_whitespace_collapse() {
 /// Handles special case where nowrap + ellipsis is used.
 #[test]
 fn text_ellipsis_text_nowrap() {
-  let container = ContainerNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
-      Style::default()
+  let container = ContainerNode::default()
+  .with_style(Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(Color([240, 240, 240, 255]))))
         .with(StyleDeclaration::font_size(Px(48.0).into()))
         .with_padding(Sides([Px(20.0); 4]))
         .with_overflow(SpacePair::from_single(Overflow::Hidden))
-        .with(StyleDeclaration::width(Percentage(100.0))),
-    ),
-    children: Some([
-      TextNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-    preset: None,
-        tw: None,
-        style: Some(
-          Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0))),)
+  .with_children([
+      TextNode::default()
+  .with_style(Style::default()
             .with(StyleDeclaration::text_overflow(TextOverflow::Ellipsis))
             .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
             .with_border_width(Sides([Px(1.0); 4]))
             .with(StyleDeclaration::border_style(BorderStyle::Solid))
             .with(StyleDeclaration::border_color(ColorInput::Value(Color([255, 0, 0, 255]))))
             .with(StyleDeclaration::word_break(WordBreak::BreakAll))
-            .with(StyleDeclaration::width(Percentage(100.0))),
-        ),
-        text: "This is a very long piece of text that should demonstrate text wrapping behavior when it exceeds the container width. The quick brown fox jumps over the lazy dog.".to_string(),
-      }
-      .into(),
-    ].into()),
-  };
+            .with(StyleDeclaration::width(Percentage(100.0))),)
+  .with_text("This is a very long piece of text that should demonstrate text wrapping behavior when it exceeds the container width. The quick brown fox jumps over the lazy dog.".to_string())
+
+    ]);
 
   run_fixture_test(container.into(), "text_ellipsis_text_nowrap");
 }
 
 #[test]
 fn text_wrap_style_all() {
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let children: Vec<NodeKind> = vec![
+    TextNode::default()
+      .with_style(Style::default().with(StyleDeclaration::text_wrap_style(TextWrapStyle::Auto)))
+      .with_text("Auto: The quick brown fox jumps over the lazy dog.".to_string())
+      .into(),
+    TextNode::default()
+      .with_style(Style::default().with(StyleDeclaration::text_wrap_style(TextWrapStyle::Balance)))
+      .with_text("Balance: The quick brown fox jumps over the lazy dog.".to_string())
+      .into(),
+    TextNode::default()
+      .with_style(Style::default().with(StyleDeclaration::text_wrap_style(TextWrapStyle::Pretty)))
+      .with_text("Pretty: The quick brown fox jumps over the lazy dog and catches it.".to_string())
+      .into(),
+  ];
+
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 255, 255, 255]),
@@ -811,52 +585,8 @@ fn text_wrap_style_all() {
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with_gap(SpacePair::from_single(Px(40.0)))
         .with_padding(Sides([Px(20.0); 4])),
-    ),
-    children: Some(
-      [
-        // Auto (default) - standard line breaking
-        TextNode {
-          class_name: None,
-          id: None,
-          tag_name: None,
-          preset: None,
-          tw: None,
-          style: Some(
-            Style::default().with(StyleDeclaration::text_wrap_style(TextWrapStyle::Auto)),
-          ),
-          text: "Auto: The quick brown fox jumps over the lazy dog.".to_string(),
-        }
-        .into(),
-        // Balance - evenly distributes text across lines
-        TextNode {
-          class_name: None,
-          id: None,
-          tag_name: None,
-          preset: None,
-          tw: None,
-          style: Some(
-            Style::default().with(StyleDeclaration::text_wrap_style(TextWrapStyle::Balance)),
-          ),
-          text: "Balance: The quick brown fox jumps over the lazy dog.".to_string(),
-        }
-        .into(),
-        // Pretty - avoids orphans on the last line (text ends with short word "it")
-        TextNode {
-          class_name: None,
-          id: None,
-          tag_name: None,
-          preset: None,
-          tw: None,
-          style: Some(
-            Style::default().with(StyleDeclaration::text_wrap_style(TextWrapStyle::Pretty)),
-          ),
-          text: "Pretty: The quick brown fox jumps over the lazy dog and catches it.".to_string(),
-        }
-        .into(),
-      ]
-      .into(),
-    ),
-  };
+    )
+    .with_children(children);
 
   run_fixture_test(container.into(), "text_wrap_style_all");
 }
@@ -868,13 +598,8 @@ fn text_super_bold_stroke_background_clip() {
   )
   .unwrap();
 
-  let text = TextNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let text = TextNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_image(Some(gradient_images)))
         .with(StyleDeclaration::background_position(
@@ -890,17 +615,11 @@ fn text_super_bold_stroke_background_clip() {
           ColorInput::Value(Color::transparent()),
         )))
         .with_padding(Sides([Px(60.0); 4])),
-    ),
-    text: "Super Bold".to_string(),
-  };
+    )
+    .with_text("Super Bold".to_string());
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
@@ -909,9 +628,8 @@ fn text_super_bold_stroke_background_clip() {
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center)),
-    ),
-    children: Some([text.into()].into()),
-  };
+    )
+    .with_children([text]);
 
   run_fixture_test(container.into(), "text_super_bold_stroke_background_clip");
 }
@@ -940,23 +658,17 @@ fn text_font_stretch() {
     ),
   ];
 
-  let nodes = stretches
+  let nodes: Vec<NodeKind> = stretches
     .iter()
     .map(|(label, stretch)| {
-      TextNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        tw: None,
-        style: Some(
+      TextNode::default()
+        .with_style(
           Style::default()
             .with(StyleDeclaration::font_size(Px(36.0).into()))
             .with(StyleDeclaration::font_stretch(*stretch)),
-        ),
-        text: format!("font-stretch: {}", label),
-      }
-      .into()
+        )
+        .with_text(format!("font-stretch: {}", label))
+        .into()
     })
     .collect::<Vec<_>>();
 
@@ -964,13 +676,8 @@ fn text_font_stretch() {
     unreachable!()
   };
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
@@ -980,22 +687,16 @@ fn text_font_stretch() {
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with_padding(Sides([Px(20.0); 4]))
         .with_gap(SpacePair::from_single(Px(12.0))),
-    ),
-    children: Some(nodes.into_boxed_slice()),
-  };
+    )
+    .with_children(nodes.into_boxed_slice());
 
   run_fixture_test(container.into(), "text_font_stretch");
 }
 
 #[test]
 fn text_flex_centered_text_node_vs_nested_container() {
-  let first_box_text: NodeKind = TextNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let first_box_text: NodeKind = TextNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Px(300.0)))
         .with(StyleDeclaration::height(Px(200.0)))
@@ -1007,18 +708,12 @@ fn text_flex_centered_text_node_vs_nested_container() {
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::font_size(Px(30.0).into())),
-    ),
-    text: "centered...?".to_string(),
-  }
-  .into();
+    )
+    .with_text("centered...?".to_string())
+    .into();
 
-  let second_box_nested_text: NodeKind = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let second_box_nested_text: NodeKind = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Px(300.0)))
         .with(StyleDeclaration::height(Px(200.0)))
@@ -1029,30 +724,12 @@ fn text_flex_centered_text_node_vs_nested_container() {
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::font_size(Px(30.0).into())),
-    ),
-    children: Some(
-      [TextNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        tw: None,
-        style: None,
-        text: "centered".to_string(),
-      }
-      .into()]
-      .into(),
-    ),
-  }
-  .into();
+    )
+    .with_children([TextNode::default().with_text("centered".to_string())])
+    .into();
 
-  let root = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let root = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -1061,28 +738,19 @@ fn text_flex_centered_text_node_vs_nested_container() {
         )))
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center)),
-    ),
-    children: Some(
-      [ContainerNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        tw: None,
-        style: Some(
+    )
+    .with_child(
+      ContainerNode::default()
+        .with_style(
           Style::default()
             .with(StyleDeclaration::display(Display::Flex))
             .with(StyleDeclaration::flex_direction(FlexDirection::Column))
             .with(StyleDeclaration::align_items(AlignItems::Center))
             .with(StyleDeclaration::justify_content(JustifyContent::Center))
             .with(StyleDeclaration::color(ColorInput::Value(Color::white()))),
-        ),
-        children: Some([first_box_text, second_box_nested_text].into()),
-      }
-      .into()]
-      .into(),
-    ),
-  };
+        )
+        .with_children([first_box_text, second_box_nested_text]),
+    );
 
   run_fixture_test(
     root.into(),
@@ -1096,35 +764,24 @@ fn text_font_synthesis_weight_auto_none() {
     unreachable!()
   };
 
-  let nodes = [("auto", FontSynthesic::Auto), ("none", FontSynthesic::None)]
+  let nodes: Vec<NodeKind> = [("auto", FontSynthesic::Auto), ("none", FontSynthesic::None)]
     .iter()
     .map(|(label, synthesis_weight)| {
-      TextNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        tw: None,
-        style: Some(
+      TextNode::default()
+        .with_style(
           Style::default()
             .with(StyleDeclaration::font_size(Px(72.0).into()))
             .with(StyleDeclaration::font_family(family.clone()))
             .with(StyleDeclaration::font_weight(FontWeight::from(900.0)))
             .with(StyleDeclaration::font_synthesis_weight(*synthesis_weight)),
-        ),
-        text: format!("font-synthesis-weight: {} - السلام عليكم", label),
-      }
-      .into()
+        )
+        .with_text(format!("font-synthesis-weight: {} - السلام عليكم", label))
+        .into()
     })
     .collect::<Vec<_>>();
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
@@ -1133,9 +790,8 @@ fn text_font_synthesis_weight_auto_none() {
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with_padding(Sides([Px(20.0); 4]))
         .with_gap(SpacePair::from_single(Px(12.0))),
-    ),
-    children: Some(nodes.into_boxed_slice()),
-  };
+    )
+    .with_children(nodes.into_boxed_slice());
 
   run_fixture_test(container.into(), "text_font_synthesis_weight_auto_none");
 }
@@ -1146,35 +802,24 @@ fn text_font_synthesis_style_auto_none() {
     unreachable!()
   };
 
-  let nodes = [("auto", FontSynthesic::Auto), ("none", FontSynthesic::None)]
+  let nodes: Vec<NodeKind> = [("auto", FontSynthesic::Auto), ("none", FontSynthesic::None)]
     .iter()
     .map(|(label, synthesis_style)| {
-      TextNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        tw: None,
-        style: Some(
+      TextNode::default()
+        .with_style(
           Style::default()
             .with(StyleDeclaration::font_size(Px(72.0).into()))
             .with(StyleDeclaration::font_family(family.clone()))
             .with(StyleDeclaration::font_style(FontStyle::italic()))
             .with(StyleDeclaration::font_synthesis_style(*synthesis_style)),
-        ),
-        text: format!("font-synthesis-style: {} - السلام عليكم", label),
-      }
-      .into()
+        )
+        .with_text(format!("font-synthesis-style: {} - السلام عليكم", label))
+        .into()
     })
     .collect::<Vec<_>>();
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
@@ -1183,9 +828,8 @@ fn text_font_synthesis_style_auto_none() {
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with_padding(Sides([Px(20.0); 4]))
         .with_gap(SpacePair::from_single(Px(12.0))),
-    ),
-    children: Some(nodes.into_boxed_slice()),
-  };
+    )
+    .with_children(nodes.into_boxed_slice());
 
   run_fixture_test(container.into(), "text_font_synthesis_style_auto_none");
 }
@@ -1196,7 +840,7 @@ fn text_font_synthesis_weight_emoji() {
     unreachable!()
   };
 
-  let nodes = [
+  let nodes: Vec<NodeKind> = [
     (
       "auto",
       FontSynthesis {
@@ -1214,33 +858,22 @@ fn text_font_synthesis_weight_emoji() {
   ]
   .iter()
   .map(|(label, synthesis)| {
-    TextNode {
-      class_name: None,
-      id: None,
-      tag_name: None,
-      preset: None,
-      tw: None,
-      style: Some(
+    TextNode::default()
+      .with_style(
         Style::default()
           .with(StyleDeclaration::font_size(Px(72.0).into()))
           .with(StyleDeclaration::font_family(family.clone()))
           .with(StyleDeclaration::font_weight(FontWeight::from(900.0)))
           .with(StyleDeclaration::font_style(FontStyle::italic()))
           .with_font_synthesis(*synthesis),
-      ),
-      text: format!("font-synthesis: {} - Takumi 😀 😺 🧪", label),
-    }
-    .into()
+      )
+      .with_text(format!("font-synthesis: {} - Takumi 😀 😺 🧪", label))
+      .into()
   })
   .collect::<Vec<_>>();
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
@@ -1249,9 +882,8 @@ fn text_font_synthesis_weight_emoji() {
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with_padding(Sides([Px(20.0); 4]))
         .with_gap(SpacePair::from_single(Px(12.0))),
-    ),
-    children: Some(nodes.into_boxed_slice()),
-  };
+    )
+    .with_children(nodes.into_boxed_slice());
 
   run_fixture_test(container.into(), "text_font_synthesis_weight_emoji");
 }
@@ -1264,13 +896,8 @@ fn text_chinese_ellipsis() {
     unreachable!()
   };
 
-  let node = TextNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let node = TextNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -1281,9 +908,8 @@ fn text_chinese_ellipsis() {
         .with_padding(Sides::from(Px(24.0)))
         .with(StyleDeclaration::font_family(family))
         .with(StyleDeclaration::text_overflow(TextOverflow::Ellipsis)),
-    ),
-    text: text.to_string(),
-  };
+    )
+    .with_text(text.to_string());
 
   run_fixture_test(node.into(), "text_chinese_ellipsis");
 }
@@ -1297,13 +923,8 @@ fn text_devanagari_noto_sans() {
       unreachable!()
     };
 
-    TextNode {
-      class_name: None,
-      id: None,
-      tag_name: None,
-      preset: None,
-      tw: None,
-      style: Some(
+    TextNode::default()
+      .with_style(
         Style::default()
           .with(StyleDeclaration::width(Percentage(100.0)))
           .with(StyleDeclaration::height(Percentage(100.0)))
@@ -1314,12 +935,11 @@ fn text_devanagari_noto_sans() {
           .with_padding(Sides::from(Px(24.0)))
           .with(StyleDeclaration::font_family(family))
           .with(StyleDeclaration::font_weight(FontWeight::from(weight))),
-      ),
-      text: text.to_string(),
-    }
+      )
+      .with_text(text)
   }
 
-  let nodes = [
+  let nodes: Vec<NodeKind> = [
     (400.0, "Noto Sans Devanagari"),
     (700.0, "Noto Sans Devanagari"),
     (400.0, "Poppins"),
@@ -1329,13 +949,8 @@ fn text_devanagari_noto_sans() {
   .map(|(weight, font_family)| create_node(*weight, font_family).into())
   .collect::<Vec<_>>();
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
@@ -1344,9 +959,8 @@ fn text_devanagari_noto_sans() {
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with_padding(Sides([Px(20.0); 4]))
         .with_gap(SpacePair::from_single(Px(12.0))),
-    ),
-    children: Some(nodes.into_boxed_slice()),
-  };
+    )
+    .with_children(nodes.into_boxed_slice());
 
   run_fixture_test(container.into(), "text_devanagari_noto_sans");
 }

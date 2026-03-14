@@ -13,13 +13,13 @@ fn create_filter_test_container(
   image_size_px: f32,
   label_font_size_px: f32,
 ) -> NodeKind {
-  ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let children: Vec<NodeKind> = filter_values
+    .iter()
+    .map(|filter| create_filter_card(filter, image_size_px, label_font_size_px))
+    .collect();
+
+  ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -33,66 +33,39 @@ fn create_filter_test_container(
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
         ))),
-    ),
-    children: Some(
-      filter_values
-        .iter()
-        .map(|filter| create_filter_card(filter, image_size_px, label_font_size_px))
-        .collect(),
-    ),
-  }
-  .into()
+    )
+    .with_children(children)
+    .into()
 }
 
 /// Creates a single card with an image and label for filter testing.
 fn create_filter_card(filter: &str, image_size_px: f32, label_font_size_px: f32) -> NodeKind {
-  ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let children: Vec<NodeKind> = vec![
+    ImageNode::default()
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::width(Px(image_size_px)))
+          .with(StyleDeclaration::height(Px(image_size_px)))
+          .with(StyleDeclaration::filter(Filters::from_str(filter).unwrap())),
+      )
+      .with_src("assets/images/yeecord.png")
+      .into(),
+    TextNode::default()
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Block)))
+      .with_text(filter.to_string())
+      .into(),
+  ];
+
+  ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with_gap(SpacePair::from_single(Px(16.0)))
         .with(StyleDeclaration::font_size(Px(label_font_size_px).into())),
-    ),
-    children: Some(
-      [
-        ImageNode {
-          class_name: None,
-          id: None,
-          tag_name: None,
-          preset: None,
-          tw: None,
-          src: "assets/images/yeecord.png".into(),
-          style: Some(
-            Style::default()
-              .with(StyleDeclaration::width(Px(image_size_px)))
-              .with(StyleDeclaration::height(Px(image_size_px)))
-              .with(StyleDeclaration::filter(Filters::from_str(filter).unwrap())),
-          ),
-          width: None,
-          height: None,
-        }
-        .into(),
-        TextNode {
-          class_name: None,
-          id: None,
-          tag_name: None,
-          preset: None,
-          tw: None,
-          style: Some(Style::default().with(StyleDeclaration::display(Display::Block))),
-          text: filter.to_string(),
-        }
-        .into(),
-      ]
-      .into(),
-    ),
-  }
-  .into()
+    )
+    .with_children(children)
+    .into()
 }
 
 #[test]

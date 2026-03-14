@@ -10,23 +10,15 @@ fn centered_background_position() -> BackgroundPositions {
 }
 
 fn create_container(background_images: BackgroundImages) -> ContainerNode<NodeKind> {
-  ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
-      Style::default()
-        .with(StyleDeclaration::width(Percentage(100.0)))
-        .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_image(Some(background_images)))
-        .with(StyleDeclaration::background_position(
-          centered_background_position(),
-        )),
-    ),
-    children: None,
-  }
+  ContainerNode::default().with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_image(Some(background_images)))
+      .with(StyleDeclaration::background_position(
+        centered_background_position(),
+      )),
+  )
 }
 
 fn create_container_with(
@@ -35,29 +27,21 @@ fn create_container_with(
   background_position: Option<BackgroundPositions>,
   background_repeat: Option<BackgroundRepeats>,
 ) -> ContainerNode<NodeKind> {
-  ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
-      Style::default()
-        .with(StyleDeclaration::width(Percentage(100.0)))
-        .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_image(Some(background_images)))
-        .with(StyleDeclaration::background_size(
-          background_size.unwrap_or_default(),
-        ))
-        .with(StyleDeclaration::background_position(
-          background_position.unwrap_or_else(centered_background_position),
-        ))
-        .with(StyleDeclaration::background_repeat(
-          background_repeat.unwrap_or_default(),
-        )),
-    ),
-    children: None,
-  }
+  ContainerNode::default().with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_image(Some(background_images)))
+      .with(StyleDeclaration::background_size(
+        background_size.unwrap_or_default(),
+      ))
+      .with(StyleDeclaration::background_position(
+        background_position.unwrap_or_else(centered_background_position),
+      ))
+      .with(StyleDeclaration::background_repeat(
+        background_repeat.unwrap_or_default(),
+      )),
+  )
 }
 
 #[test]
@@ -66,17 +50,21 @@ fn test_style_background_image_gradient() {
     BackgroundImages::from_str("linear-gradient(45deg, rgba(255,150,255,0.3), transparent)")
       .unwrap();
 
-  let mut container = create_container(background_images);
-
-  let Some(style) = container.style.as_mut() else {
-    unreachable!()
-  };
-
-  *style = style
-    .clone()
-    .with(StyleDeclaration::background_color(ColorInput::Value(
-      Color::black(),
-    )));
+  let container = create_container(background_images).with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_image(Some(
+        BackgroundImages::from_str("linear-gradient(45deg, rgba(255,150,255,0.3), transparent)")
+          .unwrap(),
+      )))
+      .with(StyleDeclaration::background_position(
+        centered_background_position(),
+      ))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::black(),
+      ))),
+  );
 
   run_fixture_test(container.into(), "style_background_image_gradient");
 }
@@ -106,72 +94,42 @@ fn test_style_background_image_gradient_hard_stop() {
 
 #[test]
 fn test_style_background_image_gradient_color_space_comparison() {
-  let srgb = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
-      Style::default()
-        .with(StyleDeclaration::width(Percentage(100.0)))
-        .with(StyleDeclaration::height(Percentage(100.0 / 3.0)))
-        .with(StyleDeclaration::background_image(Some(
-          BackgroundImages::from_str("linear-gradient(to right, red, blue)").unwrap(),
-        ))),
-    ),
-    children: None,
-  };
+  let srgb = ContainerNode::default().with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0 / 3.0)))
+      .with(StyleDeclaration::background_image(Some(
+        BackgroundImages::from_str("linear-gradient(to right, red, blue)").unwrap(),
+      ))),
+  );
 
-  let oklab = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
-      Style::default()
-        .with(StyleDeclaration::width(Percentage(100.0)))
-        .with(StyleDeclaration::height(Percentage(33.333)))
-        .with(StyleDeclaration::background_image(Some(
-          BackgroundImages::from_str("linear-gradient(to right in oklab, red, blue)").unwrap(),
-        ))),
-    ),
-    children: None,
-  };
+  let oklab = ContainerNode::default().with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(33.333)))
+      .with(StyleDeclaration::background_image(Some(
+        BackgroundImages::from_str("linear-gradient(to right in oklab, red, blue)").unwrap(),
+      ))),
+  );
 
-  let oklch_longer = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
-      Style::default()
-        .with(StyleDeclaration::width(Percentage(100.0)))
-        .with(StyleDeclaration::height(Percentage(33.334)))
-        .with(StyleDeclaration::background_image(Some(
-          BackgroundImages::from_str("linear-gradient(to right in oklch longer hue, red, blue)")
-            .unwrap(),
-        ))),
-    ),
-    children: None,
-  };
+  let oklch_longer = ContainerNode::default().with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(33.334)))
+      .with(StyleDeclaration::background_image(Some(
+        BackgroundImages::from_str("linear-gradient(to right in oklch longer hue, red, blue)")
+          .unwrap(),
+      ))),
+  );
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::flex_direction(FlexDirection::Column)),
-    ),
-    children: Some([srgb.into(), oklab.into(), oklch_longer.into()].into()),
-  };
+    )
+    .with_children([srgb, oklab, oklch_longer]);
 
   run_fixture_test(
     container.into(),
@@ -326,21 +284,30 @@ fn test_background_image_grid_pattern() {
   )
   .unwrap();
 
-  let mut container = create_container_with(
-    images,
+  let container = create_container_with(
+    images.clone(),
     Some(BackgroundSizes::from_str("40px 40px").unwrap()),
     Some(BackgroundPositions::from_str("0 0, 0 0").unwrap()),
     Some(BackgroundRepeats::from_str("repeat, repeat").unwrap()),
+  )
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_image(Some(images)))
+      .with(StyleDeclaration::background_size(
+        BackgroundSizes::from_str("40px 40px").unwrap(),
+      ))
+      .with(StyleDeclaration::background_position(
+        BackgroundPositions::from_str("0 0, 0 0").unwrap(),
+      ))
+      .with(StyleDeclaration::background_repeat(
+        BackgroundRepeats::from_str("repeat, repeat").unwrap(),
+      ))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      ))),
   );
-
-  let Some(style) = container.style.as_mut() else {
-    unreachable!()
-  };
-  *style = style
-    .clone()
-    .with(StyleDeclaration::background_color(ColorInput::Value(
-      Color::white(),
-    )));
 
   run_fixture_test(container.into(), "style_background_image_grid_pattern");
 }
@@ -352,21 +319,30 @@ fn test_background_image_noise_v1_with_gradient() {
   )
   .unwrap();
 
-  let mut container = create_container_with(
-    images,
+  let container = create_container_with(
+    images.clone(),
     Some(BackgroundSizes::from_str("100% 100%, 100% 100%, 100% 100%, 100% 100%").unwrap()),
     Some(BackgroundPositions::from_str("0 0, 0 0, 0 0, 0 0").unwrap()),
     Some(BackgroundRepeats::from_str("no-repeat, no-repeat, no-repeat, no-repeat").unwrap()),
+  )
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_image(Some(images)))
+      .with(StyleDeclaration::background_size(
+        BackgroundSizes::from_str("100% 100%, 100% 100%, 100% 100%, 100% 100%").unwrap(),
+      ))
+      .with(StyleDeclaration::background_position(
+        BackgroundPositions::from_str("0 0, 0 0, 0 0, 0 0").unwrap(),
+      ))
+      .with(StyleDeclaration::background_repeat(
+        BackgroundRepeats::from_str("no-repeat, no-repeat, no-repeat, no-repeat").unwrap(),
+      ))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      ))),
   );
-
-  let Some(style) = container.style.as_mut() else {
-    unreachable!()
-  };
-  *style = style
-    .clone()
-    .with(StyleDeclaration::background_color(ColorInput::Value(
-      Color::white(),
-    )));
 
   run_fixture_test(container.into(), "style_background_image_noise_v1_blend");
 }
@@ -378,21 +354,30 @@ fn test_background_image_dotted_pattern() {
   )
   .unwrap();
 
-  let mut container = create_container_with(
-    images,
+  let container = create_container_with(
+    images.clone(),
     Some(BackgroundSizes::from_str("100px 100px").unwrap()),
     None,
     Some(BackgroundRepeats::from_str("repeat").unwrap()),
+  )
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_image(Some(images)))
+      .with(StyleDeclaration::background_size(
+        BackgroundSizes::from_str("100px 100px").unwrap(),
+      ))
+      .with(StyleDeclaration::background_position(
+        centered_background_position(),
+      ))
+      .with(StyleDeclaration::background_repeat(
+        BackgroundRepeats::from_str("repeat").unwrap(),
+      ))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::black(),
+      ))),
   );
-
-  let Some(style) = container.style.as_mut() else {
-    unreachable!()
-  };
-  *style = style
-    .clone()
-    .with(StyleDeclaration::background_color(ColorInput::Value(
-      Color::black(),
-    )));
 
   run_fixture_test(container.into(), "style_background_image_dotted_pattern");
 }

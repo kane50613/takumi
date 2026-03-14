@@ -7,13 +7,8 @@ use crate::test_utils::run_fixture_test;
 
 #[test]
 fn test_style_text_decoration() {
-  let text = TextNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let text = TextNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Block))
@@ -28,23 +23,17 @@ fn test_style_text_decoration() {
           color: Some(ColorInput::Value(Color([255, 0, 0, 255]))),
           thickness: None,
         }),
-    ),
-    text: "Text Decoration with Underline, Line-Through, and Overline".to_string(),
-  };
+    )
+    .with_text("Text Decoration with Underline, Line-Through, and Overline".to_string());
 
   run_fixture_test(text.into(), "style_text_decoration");
 }
 
 #[test]
 fn text_decoration_skip_ink_parapsychologists() {
-  let make_line = |label: &str, skip_ink: TextDecorationSkipInk| {
-    TextNode {
-      class_name: None,
-      id: None,
-      tag_name: None,
-      preset: None,
-      tw: None,
-      style: Some(
+  let make_line = |label: &str, skip_ink: TextDecorationSkipInk| -> TextNode {
+    TextNode::default()
+      .with_style(
         Style::default()
           .with(StyleDeclaration::width(Percentage(100.0)))
           .with(StyleDeclaration::display(Display::Block))
@@ -57,19 +46,12 @@ fn text_decoration_skip_ink_parapsychologists() {
             thickness: None,
           })
           .with(StyleDeclaration::text_decoration_skip_ink(skip_ink)),
-      ),
-      text: format!("{label}: parapsychologists"),
-    }
-    .into()
+      )
+      .with_text(format!("{label}: parapsychologists"))
   };
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -79,15 +61,11 @@ fn text_decoration_skip_ink_parapsychologists() {
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with(StyleDeclaration::row_gap(Px(28.0)))
         .with(StyleDeclaration::padding_top(Px(40.0))),
-    ),
-    children: Some(
-      [
-        make_line("auto", TextDecorationSkipInk::Auto),
-        make_line("none", TextDecorationSkipInk::None),
-      ]
-      .into(),
-    ),
-  };
+    )
+    .with_children([
+      make_line("auto", TextDecorationSkipInk::Auto),
+      make_line("none", TextDecorationSkipInk::None),
+    ]);
 
   run_fixture_test(
     container.into(),

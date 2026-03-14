@@ -1,6 +1,5 @@
-use serde_json::{from_value, json};
 use takumi::layout::{
-  node::{ContainerNode, ImageNode, TextNode},
+  node::{ContainerNode, ImageNode, NodeKind, TextNode},
   style::{Length::*, *},
 };
 
@@ -39,26 +38,18 @@ fn text_inline() {
     ),
   ];
 
-  let children = Box::from_iter(texts.iter().map(|(text, style)| {
-    TextNode {
-      class_name: None,
-      id: None,
-      tag_name: None,
-      preset: None,
-      tw: None,
-      style: Some(style.clone()),
-      text: text.to_string(),
-    }
-    .into()
-  }));
+  let children: Vec<NodeKind> = texts
+    .iter()
+    .map(|(text, style)| {
+      TextNode::default()
+        .with_style(style.clone())
+        .with_text(text.to_string())
+        .into()
+    })
+    .collect();
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
@@ -70,9 +61,8 @@ fn text_inline() {
         .with(StyleDeclaration::text_overflow(TextOverflow::Ellipsis))
         .with(StyleDeclaration::font_size(Px(48.0).into()))
         .with_white_space(WhiteSpace::pre_wrap()),
-    ),
-    children: Some(children),
-  };
+    )
+    .with_children(children);
 
   run_fixture_test(container.into(), "text_inline");
 }
@@ -80,24 +70,13 @@ fn text_inline() {
 #[test]
 fn inline_image() {
   // Inline image should behave as inline-level box content
-  let children = [
-    TextNode {
-      class_name: None,
-      id: None,
-      tag_name: None,
-      preset: None,
-      tw: None,
-      style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
-      text: "Before ".to_string(),
-    }
-    .into(),
-    ImageNode {
-      class_name: None,
-      id: None,
-      tag_name: None,
-      preset: None,
-      tw: None,
-      style: Some(
+  let children: Vec<NodeKind> = vec![
+    TextNode::default()
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
+      .with_text("Before ".to_string())
+      .into(),
+    ImageNode::default()
+      .with_style(
         Style::default()
           .with(StyleDeclaration::display(Display::Inline))
           .with_border_width(Sides([Px(12.0); 4]))
@@ -111,31 +90,19 @@ fn inline_image() {
           .with(StyleDeclaration::background_clip(
             BackgroundClip::BorderArea,
           )),
-      ),
-      src: "assets/images/yeecord.png".into(),
-      width: Some(64.0),
-      height: Some(64.0),
-    }
-    .into(),
-    TextNode {
-      class_name: None,
-      id: None,
-      tag_name: None,
-      preset: None,
-      tw: None,
-      style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
-      text: " After".to_string(),
-    }
-    .into(),
+      )
+      .with_src("assets/images/yeecord.png")
+      .with_width(64.0)
+      .with_height(64.0)
+      .into(),
+    TextNode::default()
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
+      .with_text(" After".to_string())
+      .into(),
   ];
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -145,27 +112,16 @@ fn inline_image() {
           Color::white(),
         )))
         .with_white_space(WhiteSpace::pre()),
-    ),
-    children: Some(
-      [ContainerNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        tw: None,
-        style: Some(
-          Style::default()
-            .with_border_width(Sides([Px(2.0); 4]))
-            .with(StyleDeclaration::border_style(BorderStyle::Solid))
-            .with(StyleDeclaration::display(Display::Block))
-            .with(StyleDeclaration::font_size(Px(48.0).into())),
-        ),
-        children: Some(children.into()),
-      }
-      .into()]
-      .into(),
-    ),
-  };
+    )
+    .with_children([ContainerNode::default()
+      .with_style(
+        Style::default()
+          .with_border_width(Sides([Px(2.0); 4]))
+          .with(StyleDeclaration::border_style(BorderStyle::Solid))
+          .with(StyleDeclaration::display(Display::Block))
+          .with(StyleDeclaration::font_size(Px(48.0).into())),
+      )
+      .with_children(children)]);
 
   run_fixture_test(container.into(), "inline_image");
 }
@@ -173,24 +129,13 @@ fn inline_image() {
 #[test]
 fn inline_block_in_inline() {
   // A block-level container inside inline content: should create anonymous block formatting context
-  let children = vec![
-    TextNode {
-      class_name: None,
-      id: None,
-      tag_name: None,
-      preset: None,
-      tw: None,
-      style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
-      text: "Start ".to_string(),
-    }
-    .into(),
-    ContainerNode {
-      class_name: None,
-      id: None,
-      tag_name: None,
-      preset: None,
-      tw: None,
-      style: Some(
+  let children: Vec<NodeKind> = vec![
+    TextNode::default()
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
+      .with_text("Start ".to_string())
+      .into(),
+    ContainerNode::default()
+      .with_style(
         Style::default()
           .with(StyleDeclaration::display(Display::Block))
           .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -198,41 +143,19 @@ fn inline_block_in_inline() {
           )))
           .with(StyleDeclaration::width(Percentage(80.0)))
           .with(StyleDeclaration::font_size(Px(18.0).into())),
-      ),
-      children: Some(
-        [TextNode {
-          class_name: None,
-          id: None,
-          tag_name: None,
-          preset: None,
-          tw: None,
-          style: Some(Style::default().with(StyleDeclaration::display(Display::Block))),
-          text: "Block inside inline".to_string(),
-        }
-        .into()]
-        .into(),
-      ),
-    }
-    .into(),
-    TextNode {
-      class_name: None,
-      id: None,
-      tag_name: None,
-      preset: None,
-      tw: None,
-      style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
-      text: " End".to_string(),
-    }
-    .into(),
+      )
+      .with_children([TextNode::default()
+        .with_style(Style::default().with(StyleDeclaration::display(Display::Block)))
+        .with_text("Block inside inline".to_string())])
+      .into(),
+    TextNode::default()
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
+      .with_text(" End".to_string())
+      .into(),
   ];
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
@@ -241,9 +164,8 @@ fn inline_block_in_inline() {
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::font_size(Px(24.0).into()))
         .with_white_space(WhiteSpace::pre()),
-    ),
-    children: Some(children.into_boxed_slice()),
-  };
+    )
+    .with_children(children.into_boxed_slice());
 
   run_fixture_test(container.into(), "inline_block_in_inline");
 }
@@ -285,26 +207,18 @@ fn inline_span_background_color() {
     ),
   ];
 
-  let children = Box::from_iter(texts.iter().map(|(text, style)| {
-    TextNode {
-      class_name: None,
-      id: None,
-      tag_name: None,
-      preset: None,
-      tw: None,
-      style: Some(style.clone()),
-      text: text.to_string(),
-    }
-    .into()
-  }));
+  let children: Vec<NodeKind> = texts
+    .iter()
+    .map(|(text, style)| {
+      TextNode::default()
+        .with_style(style.clone())
+        .with_text(text.to_string())
+        .into()
+    })
+    .collect();
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -315,22 +229,42 @@ fn inline_span_background_color() {
         )))
         .with_white_space(WhiteSpace::pre())
         .with(StyleDeclaration::font_size(Px(48.0).into())),
-    ),
-    children: Some(children),
-  };
+    )
+    .with_children(children);
 
   run_fixture_test(container.into(), "inline_span_background_color");
 }
 
 #[test]
 fn inline_outline_span_boundaries() {
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let children: Vec<NodeKind> = vec![
+    TextNode::default()
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
+      .with_text("STEAM ".to_string())
+      .into(),
+    TextNode::default()
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with(StyleDeclaration::outline_width(Px(3.0)))
+          .with(StyleDeclaration::outline_style(BorderStyle::Solid))
+          .with(StyleDeclaration::outline_color(ColorInput::Value(Color([
+            255, 0, 0, 255,
+          ])))),
+      )
+      .with_text(
+        "education can become accessible through a sequence of free and high-quality teaching examples"
+          .to_string(),
+      )
+      .into(),
+    TextNode::default()
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
+      .with_text(" for everyone.".to_string())
+      .into(),
+  ];
+
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -339,120 +273,44 @@ fn inline_outline_span_boundaries() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
         ))),
-    ),
-    children: Some(
-      [ContainerNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        tw: None,
-        style: Some(
-          Style::default()
-            .with(StyleDeclaration::display(Display::Block))
-            .with(StyleDeclaration::width(Px(320.0)))
-            .with_padding(Sides([Px(24.0); 4]))
-            .with_border_width(Sides([2.0.into(); 4]))
-            .with(StyleDeclaration::border_style(BorderStyle::Solid))
-            .with(StyleDeclaration::font_size(Px(28.0).into()))
-            .with(StyleDeclaration::line_height(Px(34.0).into()))
-            .with(StyleDeclaration::background_color(ColorInput::Value(
-              Color::white(),
-            ))),
-        ),
-        children: Some(
-          vec![
-            TextNode {
-              class_name: None,
-              id: None,
-              tag_name: None,
-              preset: None,
-              tw: None,
-              style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
-              text: "STEAM ".to_string(),
-            }
-            .into(),
-            TextNode {
-              class_name: None,
-              id: None,
-              tag_name: None,
-              preset: None,
-              tw: None,
-              style: Some(
-                Style::default()
-                  .with(StyleDeclaration::display(Display::Inline))
-                  .with(StyleDeclaration::outline_width(Px(3.0)))
-                  .with(StyleDeclaration::outline_style(BorderStyle::Solid))
-                  .with(StyleDeclaration::outline_color(ColorInput::Value(Color([
-                    255, 0, 0, 255,
-                  ])))),
-              ),
-              text: "education can become accessible through a sequence of free and high-quality teaching examples".to_string(),
-            }
-            .into(),
-            TextNode {
-              class_name: None,
-              id: None,
-              tag_name: None,
-              preset: None,
-              tw: None,
-              style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
-              text: " for everyone.".to_string(),
-            }
-            .into(),
-          ]
-          .into_boxed_slice(),
-        ),
-      }
-      .into()]
-      .into(),
-    ),
-  };
+    )
+    .with_children([ContainerNode::default()
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Block))
+          .with(StyleDeclaration::width(Px(320.0)))
+          .with_padding(Sides([Px(24.0); 4]))
+          .with_border_width(Sides([2.0.into(); 4]))
+          .with(StyleDeclaration::border_style(BorderStyle::Solid))
+          .with(StyleDeclaration::font_size(Px(28.0).into()))
+          .with(StyleDeclaration::line_height(Px(34.0).into()))
+          .with(StyleDeclaration::background_color(ColorInput::Value(
+            Color::white(),
+          ))),
+      )
+      .with_children(children)]);
 
   run_fixture_test(container.into(), "inline_outline_span_boundaries");
 }
 
 #[test]
 fn inline_atomic_containers() {
-  let atomic = |display, color, label: &str| {
-    ContainerNode {
-      class_name: None,
-      id: None,
-      tag_name: None,
-      preset: None,
-      tw: None,
-      style: Some(
+  let atomic = |display, color, label: &str| -> NodeKind {
+    ContainerNode::default()
+      .with_style(
         Style::default()
           .with(StyleDeclaration::display(display))
           .with_padding(Sides([Px(8.0); 4]))
           .with(StyleDeclaration::background_color(ColorInput::Value(color)))
           .with_border_width(Sides([Px(2.0); 4]))
           .with(StyleDeclaration::border_style(BorderStyle::Solid)),
-      ),
-      children: Some(
-        [TextNode {
-          class_name: None,
-          id: None,
-          tag_name: None,
-          preset: None,
-          tw: None,
-          style: None,
-          text: label.to_string(),
-        }
-        .into()]
-        .into(),
-      ),
-    }
-    .into()
+      )
+      .with_children([TextNode::default().with_text(label.to_string())])
+      .into()
   };
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -462,184 +320,96 @@ fn inline_atomic_containers() {
           Color::white(),
         )))
         .with_white_space(WhiteSpace::pre()),
-    ),
-    children: Some(
-      [ContainerNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        tw: None,
-        style: Some(
-          Style::default()
-            .with(StyleDeclaration::display(Display::Block))
-            .with(StyleDeclaration::font_size(Px(24.0).into()))
-            .with_border_width(Sides([Px(2.0); 4]))
-            .with(StyleDeclaration::border_style(BorderStyle::Solid)),
-        ),
-        children: Some(
-          [
-            TextNode {
-              class_name: None,
-              id: None,
-              tag_name: None,
-              preset: None,
-              tw: None,
-              style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
-              text: "before ".to_string(),
-            }
-            .into(),
-            atomic(
-              Display::InlineBlock,
-              Color([255, 0, 0, 100]),
-              "inline-block",
-            ),
-            TextNode {
-              class_name: None,
-              id: None,
-              tag_name: None,
-              preset: None,
-              tw: None,
-              style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
-              text: " mid ".to_string(),
-            }
-            .into(),
-            atomic(Display::InlineFlex, Color([0, 255, 0, 100]), "inline-flex"),
-            TextNode {
-              class_name: None,
-              id: None,
-              tag_name: None,
-              preset: None,
-              tw: None,
-              style: Some(Style::default().with(StyleDeclaration::display(Display::Inline))),
-              text: " end ".to_string(),
-            }
-            .into(),
-            atomic(Display::InlineGrid, Color([0, 0, 255, 100]), "inline-grid"),
-          ]
+    )
+    .with_children([ContainerNode::default()
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Block))
+          .with(StyleDeclaration::font_size(Px(24.0).into()))
+          .with_border_width(Sides([Px(2.0); 4]))
+          .with(StyleDeclaration::border_style(BorderStyle::Solid)),
+      )
+      .with_children([
+        TextNode::default()
+          .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
+          .with_text("before ".to_string())
           .into(),
+        atomic(
+          Display::InlineBlock,
+          Color([255, 0, 0, 100]),
+          "inline-block",
         ),
-      }
-      .into()]
-      .into(),
-    ),
-  };
+        TextNode::default()
+          .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
+          .with_text(" mid ".to_string())
+          .into(),
+        atomic(Display::InlineFlex, Color([0, 255, 0, 100]), "inline-flex"),
+        TextNode::default()
+          .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
+          .with_text(" end ".to_string())
+          .into(),
+        atomic(Display::InlineGrid, Color([0, 0, 255, 100]), "inline-grid"),
+      ])]);
 
   run_fixture_test(container.into(), "inline_atomic_containers");
 }
 #[test]
 fn inline_nested_flex_block() {
-  let children = [
-    TextNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-      preset: None,
-      tw: None,
-      style: Some(
+  let inline_flex_children: Vec<NodeKind> = vec![
+    TextNode::default()
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
+      .with_text("Flex Start ".to_string())
+      .into(),
+    ContainerNode::default()
+      .with_style(
         Style::default()
-          .with(StyleDeclaration::display(Display::Inline)),
-      ),
-      text: "This is some preceding text that is long enough to wrap eventually. ".to_string(),
-    }
-    .into(),
-    ContainerNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-      preset: None,
-      tw: None,
-      style: Some(
-        Style::default()
-          .with(StyleDeclaration::display(Display::InlineFlex))
-          .with(StyleDeclaration::background_color(ColorInput::Value(Color([200, 255, 200, 255]))))
-          .with_padding(Sides([Px(5.0); 4]))
-          .with(StyleDeclaration::align_items(AlignItems::Center))
-          .with(StyleDeclaration::vertical_align(VerticalAlign::Keyword(VerticalAlignKeyword::Middle))),
-      ),
-      children: Some(
-        [
-          TextNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-            preset: None,
-            tw: None,
-            style: Some(
-              Style::default()
-                .with(StyleDeclaration::display(Display::Inline)),
-            ),
-            text: "Flex Start ".to_string(),
-          }
-          .into(),
-          ContainerNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-            preset: None,
-            tw: None,
-            style: Some(
-              Style::default()
-                .with(StyleDeclaration::display(Display::InlineBlock))
-                .with_padding(Sides([Px(4.0); 4]))
-                .with_margin(Sides([Px(0.0), Px(10.0), Px(0.0), Px(10.0)]))
-                .with(StyleDeclaration::background_color(ColorInput::Value(Color([255, 200, 200, 255])))),
-            ),
-            children: Some(
-              [TextNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-                preset: None,
-                tw: None,
-                style: None,
-                text: "Inner".to_string(),
-              }
-              .into()]
-              .into(),
-            ),
-          }
-          .into(),
-          TextNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-            preset: None,
-            tw: None,
-            style: Some(
-              Style::default()
-                .with(StyleDeclaration::display(Display::Inline)),
-            ),
-            text: " Flex End".to_string(),
-          }
-          .into(),
-        ]
-        .into(),
-      ),
-    }
-    .into(),
-    TextNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-      preset: None,
-      tw: None,
-      style: Some(
-        Style::default()
-          .with(StyleDeclaration::display(Display::Inline)),
-      ),
-      text: " followed by more text that should definitely wrap and show how the inline-flex container behaves when it is part of a wrapped line. We want to make sure the nested boxes are drawn in the correct positions even after wrapping.".to_string(),
-    }
-    .into(),
+          .with(StyleDeclaration::display(Display::InlineBlock))
+          .with_padding(Sides([Px(4.0); 4]))
+          .with_margin(Sides([Px(0.0), Px(10.0), Px(0.0), Px(10.0)]))
+          .with(StyleDeclaration::background_color(ColorInput::Value(
+            Color([255, 200, 200, 255]),
+          ))),
+      )
+      .with_children([TextNode::default().with_text("Inner".to_string())])
+      .into(),
+    TextNode::default()
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
+      .with_text(" Flex End".to_string())
+      .into(),
   ];
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let children: Vec<NodeKind> = vec![
+    TextNode::default()
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
+      .with_text(
+        "This is some preceding text that is long enough to wrap eventually. ".to_string(),
+      )
+      .into(),
+    ContainerNode::default()
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::InlineFlex))
+          .with(StyleDeclaration::background_color(ColorInput::Value(
+            Color([200, 255, 200, 255]),
+          )))
+          .with_padding(Sides([Px(5.0); 4]))
+          .with(StyleDeclaration::align_items(AlignItems::Center))
+          .with(StyleDeclaration::vertical_align(VerticalAlign::Keyword(
+            VerticalAlignKeyword::Middle,
+          ))),
+      )
+      .with_children(inline_flex_children)
+      .into(),
+    TextNode::default()
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
+      .with_text(
+        " followed by more text that should definitely wrap and show how the inline-flex container behaves when it is part of a wrapped line. We want to make sure the nested boxes are drawn in the correct positions even after wrapping.".to_string(),
+      )
+      .into(),
+  ];
+
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Px(800.0)))
         .with(StyleDeclaration::display(Display::Block))
@@ -649,187 +419,241 @@ fn inline_nested_flex_block() {
         )))
         .with(StyleDeclaration::font_size(Px(20.0).into()))
         .with(StyleDeclaration::line_height(LineHeight::Length(Px(40.0)))),
-    ),
-    children: Some(children.into()),
-  };
+    )
+    .with_children(children);
 
   run_fixture_test(container.into(), "inline_nested_flex_block");
 }
 
 #[test]
 fn inline_complex_nested_fixture() {
-  let json_data = json!({
-    "type": "container",
-    "style": {
-      "display": "block",
-      "fontFamily": "Inter, sans-serif",
-      "fontSize": "16px",
-      "lineHeight": "1.5",
-      "color": "#333",
-      "backgroundColor": "white",
-      "width": "600px",
-      "padding": "20px"
-    },
-    "children": [
-      {
-        "type": "text",
-        "text": "Start with some basic inline text. ",
-        "style": { "display": "inline" }
-      },
-      {
-        "type": "container",
-        "style": {
-          "display": "inline-flex",
-          "verticalAlign": "middle",
-          "backgroundColor": "#f0f4f8",
-          "borderWidth": "1px",
-          "borderStyle": "solid",
-          "borderColor": "#d9e2ec",
-          "borderRadius": "4px",
-          "padding": "8px 12px",
-          "margin": "0 8px"
-        },
-        "children": [
-          {
-            "type": "text",
-            "text": "Metadata: ",
-            "style": {
-              "display": "inline",
-              "fontWeight": "bold",
-              "color": "#102a43",
-              "textTransform": "uppercase",
-              "fontSize": "12px"
-            }
-          },
-          {
-            "type": "container",
-            "style": {
-              "display": "inline-flex",
-              "alignItems": "center",
-              "gap": "4px",
-              "backgroundColor": "#bcccdc",
-              "borderRadius": "999px",
-              "padding": "2px 8px",
-              "verticalAlign": "baseline"
-            },
-            "children": [
-              {
-                "type": "text",
-                "text": "Tag",
-                "style": { "display": "inline", "color": "white", "fontSize": "10px", "fontWeight": "600" }
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "type": "text",
-        "text": "Followed by a longer sentence that demonstrates how text wraps around inline-block elements. ",
-        "style": { "display": "inline" }
-      },
-      {
-        "type": "container",
-        "style": {
-          "display": "inline-block",
-          "verticalAlign": "bottom",
-          "width": "120px",
-          "backgroundColor": "#ffeedb",
-          "borderWidth": "1px",
-          "borderStyle": "solid",
-          "borderColor": "#ff9c38",
-          "padding": "10px",
-          "margin": "0 5px"
-        },
-        "children": [
-           {
-             "type": "text",
-             "text": "A fixed-width block that sits on the bottom of the line box.",
-             "style": { "display": "block", "fontSize": "12px", "lineHeight": "1.2" }
-           }
-        ]
-      },
-      {
-        "type": "text",
-        "text": " And finally some more text to close things out.",
-        "style": { "display": "inline"}
-      }
-    ]
-  });
+  let metadata_children: Vec<NodeKind> = vec![
+    TextNode::default()
+      .with_text("Metadata: ".to_string())
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
+          .with(StyleDeclaration::color(ColorInput::Value(Color([
+            16, 42, 67, 255,
+          ]))))
+          .with(StyleDeclaration::text_transform(TextTransform::Uppercase))
+          .with(StyleDeclaration::font_size(Px(12.0).into())),
+      )
+      .into(),
+    ContainerNode::default()
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::InlineFlex))
+          .with(StyleDeclaration::align_items(AlignItems::Center))
+          .with_gap(SpacePair::from_single(Px(4.0)))
+          .with(StyleDeclaration::background_color(ColorInput::Value(
+            Color([188, 204, 220, 255]),
+          )))
+          .with_border_radius(Box::new(BorderRadius(Sides(
+            [SpacePair::from_single(Px(999.0)); 4],
+          ))))
+          .with_padding(Sides([Px(2.0), Px(8.0), Px(2.0), Px(8.0)]))
+          .with(StyleDeclaration::vertical_align(VerticalAlign::Keyword(
+            VerticalAlignKeyword::Baseline,
+          ))),
+      )
+      .with_children(
+        [TextNode::default().with_text("Tag".to_string()).with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Inline))
+            .with(StyleDeclaration::color(ColorInput::Value(Color::white())))
+            .with(StyleDeclaration::font_size(Px(10.0).into()))
+            .with(StyleDeclaration::font_weight(FontWeight::from(600.0))),
+        )],
+      )
+      .into(),
+  ];
 
-  let node = from_value(json_data).expect("Failed to parse JSON fixture");
+  let children: Vec<NodeKind> = vec![
+    TextNode::default()
+      .with_text("Start with some basic inline text. ".to_string())
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
+      .into(),
+    ContainerNode::default()
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::InlineFlex))
+          .with(StyleDeclaration::vertical_align(VerticalAlign::Keyword(
+            VerticalAlignKeyword::Middle,
+          )))
+          .with(StyleDeclaration::background_color(ColorInput::Value(Color([
+            240, 244, 248, 255,
+          ]))))
+          .with_border_width(Sides([Px(1.0); 4]))
+          .with(StyleDeclaration::border_style(BorderStyle::Solid))
+          .with(StyleDeclaration::border_color(ColorInput::Value(Color([
+            217, 226, 236, 255,
+          ]))))
+          .with_border_radius(Box::new(BorderRadius(Sides(
+            [SpacePair::from_single(Px(4.0)); 4],
+          ))))
+          .with_padding(Sides([Px(8.0), Px(12.0), Px(8.0), Px(12.0)]))
+          .with_margin(Sides([Px(0.0), Px(8.0), Px(0.0), Px(8.0)])),
+      )
+      .with_children(metadata_children)
+      .into(),
+    TextNode::default()
+      .with_text(
+        "Followed by a longer sentence that demonstrates how text wraps around inline-block elements. ".to_string(),
+      )
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
+      .into(),
+    ContainerNode::default()
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::InlineBlock))
+          .with(StyleDeclaration::vertical_align(VerticalAlign::Keyword(
+            VerticalAlignKeyword::Bottom,
+          )))
+          .with(StyleDeclaration::width(Px(120.0)))
+          .with(StyleDeclaration::background_color(ColorInput::Value(Color([
+            255, 238, 219, 255,
+          ]))))
+          .with_border_width(Sides([Px(1.0); 4]))
+          .with(StyleDeclaration::border_style(BorderStyle::Solid))
+          .with(StyleDeclaration::border_color(ColorInput::Value(Color([
+            255, 156, 56, 255,
+          ]))))
+          .with_padding(Sides([Px(10.0); 4]))
+          .with_margin(Sides([Px(0.0), Px(5.0), Px(0.0), Px(5.0)])),
+      )
+      .with_children([TextNode::default()
+        .with_text("A fixed-width block that sits on the bottom of the line box.".to_string())
+        .with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Block))
+            .with(StyleDeclaration::font_size(Px(12.0).into()))
+            .with(StyleDeclaration::line_height(LineHeight::Length(Em(1.2)))),
+        )])
+      .into(),
+    TextNode::default()
+      .with_text(" And finally some more text to close things out.".to_string())
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
+      .into(),
+  ];
+
+  let node = ContainerNode::default()
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::font_size(Px(16.0).into()))
+        .with(StyleDeclaration::line_height(LineHeight::Length(Em(1.5))))
+        .with(StyleDeclaration::color(ColorInput::Value(Color([
+          51, 51, 51, 255,
+        ]))))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color::white(),
+        )))
+        .with(StyleDeclaration::width(Px(600.0)))
+        .with_padding(Sides([Px(20.0); 4])),
+    )
+    .with_children(children)
+    .into();
+
   run_fixture_test(node, "inline_complex_nested_fixture");
 }
 
 #[test]
 fn inline_text_decorations() {
-  let json_data = json!({
-    "type": "container",
-    "style": {
-      "display": "block",
-      "width": "100%",
-      "height": "100%",
-      "backgroundColor": "white",
-      "padding": "40px",
-      "fontSize": "48px",
-    },
-    "children": [
-      {
-        "type": "text",
-        "text": "Hello World",
-        "style": {
-          "display": "inline",
-          "textDecoration": "4px underline line-through blue",
-        }
-      },
-      {
-        "type": "text",
-        "text": "Woah",
-        "style": {
-          "display": "inline-block",
-          "backgroundColor": "rgb(255 0 0 / 0.5)",
-          "verticalAlign": "text-bottom",
-        }
-      },
-      {
-        "type": "container",
-        "style": {
-          "display": "inline-block",
-          "backgroundColor": "rgb(0 0 255 / 0.5)",
-          "fontStyle": "italic",
-          "verticalAlign": "middle",
-          "padding": "10px",
-        },
-        "children": [
-          {
-            "type": "text",
-            "text": "It works right",
-            "style": {
-              "display": "inline-block",
-              "background": "yellow",
-            }
-          },
-          {
-            "type": "text",
-            "text": "A flexbox!",
-            "style": {
-              "display": "inline-flex",
-              "background": "green",
-            }
-          }
-        ]
-      },
-      {
-        "type": "text",
-        "text": " Red Underline",
-        "style": {
-          "display": "inline",
-          "color": "red",
-          "textDecoration": "underline",
-        }
-      },
-    ]
-  });
+  let decorated_children: Vec<NodeKind> = vec![
+    TextNode::default()
+      .with_text("Hello World".to_string())
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with_text_decoration(TextDecoration {
+            line: TextDecorationLines::UNDERLINE | TextDecorationLines::LINE_THROUGH,
+            style: None,
+            color: Some(ColorInput::Value(Color([0, 0, 255, 255]))),
+            thickness: Some(TextDecorationThickness::Length(Px(4.0))),
+          }),
+      )
+      .into(),
+    TextNode::default()
+      .with_text("Woah".to_string())
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::InlineBlock))
+          .with(StyleDeclaration::background_color(ColorInput::Value(
+            Color([255, 0, 0, 128]),
+          )))
+          .with(StyleDeclaration::vertical_align(VerticalAlign::Keyword(
+            VerticalAlignKeyword::TextBottom,
+          ))),
+      )
+      .into(),
+    ContainerNode::default()
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::InlineBlock))
+          .with(StyleDeclaration::background_color(ColorInput::Value(
+            Color([0, 0, 255, 128]),
+          )))
+          .with(StyleDeclaration::font_style(FontStyle::italic()))
+          .with(StyleDeclaration::vertical_align(VerticalAlign::Keyword(
+            VerticalAlignKeyword::Middle,
+          )))
+          .with_padding(Sides([Px(10.0); 4])),
+      )
+      .with_children([
+        TextNode::default()
+          .with_text("It works right".to_string())
+          .with_style(
+            Style::default()
+              .with(StyleDeclaration::display(Display::InlineBlock))
+              .with(StyleDeclaration::background_color(ColorInput::Value(
+                Color([255, 255, 0, 255]),
+              ))),
+          ),
+        TextNode::default()
+          .with_text("A flexbox!".to_string())
+          .with_style(
+            Style::default()
+              .with(StyleDeclaration::display(Display::InlineFlex))
+              .with(StyleDeclaration::background_color(ColorInput::Value(
+                Color([0, 128, 0, 255]),
+              ))),
+          ),
+      ])
+      .into(),
+    TextNode::default()
+      .with_text(" Red Underline".to_string())
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with(StyleDeclaration::color(ColorInput::Value(Color([
+            255, 0, 0, 255,
+          ]))))
+          .with_text_decoration(TextDecoration {
+            line: TextDecorationLines::UNDERLINE,
+            style: None,
+            color: None,
+            thickness: None,
+          }),
+      )
+      .into(),
+  ];
 
-  let node = from_value(json_data).expect("Failed to parse JSON fixture");
+  let node = ContainerNode::default()
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color::white(),
+        )))
+        .with_padding(Sides([Px(40.0); 4]))
+        .with(StyleDeclaration::font_size(Px(48.0).into())),
+    )
+    .with_children(decorated_children)
+    .into();
+
   run_fixture_test(node, "inline_text_decorations");
 }

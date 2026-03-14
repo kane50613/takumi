@@ -7,14 +7,9 @@ use crate::test_utils::run_fixture_test;
 
 #[test]
 fn test_style_text_decoration_thickness() {
-  let make_line = |label: &str, thickness: TextDecorationThickness| {
-    TextNode {
-      class_name: None,
-      id: None,
-      tag_name: None,
-      preset: None,
-      tw: None,
-      style: Some(
+  let make_line = |label: &str, thickness: TextDecorationThickness| -> TextNode {
+    TextNode::default()
+      .with_style(
         Style::default()
           .with(StyleDeclaration::width(Percentage(100.0)))
           .with(StyleDeclaration::display(Display::Block))
@@ -26,19 +21,12 @@ fn test_style_text_decoration_thickness() {
             color: Some(ColorInput::Value(Color([255, 0, 0, 255]))),
             thickness: Some(thickness),
           }),
-      ),
-      text: format!("{label}: thickness parapsychologists"),
-    }
-    .into()
+      )
+      .with_text(format!("{label}: thickness parapsychologists"))
   };
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -49,18 +37,14 @@ fn test_style_text_decoration_thickness() {
         .with(StyleDeclaration::row_gap(Px(20.0)))
         .with(StyleDeclaration::padding_top(Px(40.0)))
         .with(StyleDeclaration::padding_bottom(Px(40.0))),
-    ),
-    children: Some(
-      [
-        make_line("auto (48/18=2.66px)", TextDecorationThickness::Length(Auto)),
-        make_line("from-font", TextDecorationThickness::FromFont),
-        make_line("2px", TextDecorationThickness::Length(Px(2.0))),
-        make_line("5px", TextDecorationThickness::Length(Px(5.0))),
-        make_line("10px", TextDecorationThickness::Length(Px(10.0))),
-      ]
-      .into(),
-    ),
-  };
+    )
+    .with_children([
+      make_line("auto (48/18=2.66px)", TextDecorationThickness::Length(Auto)),
+      make_line("from-font", TextDecorationThickness::FromFont),
+      make_line("2px", TextDecorationThickness::Length(Px(2.0))),
+      make_line("5px", TextDecorationThickness::Length(Px(5.0))),
+      make_line("10px", TextDecorationThickness::Length(Px(10.0))),
+    ]);
 
   run_fixture_test(container.into(), "style_text_decoration_thickness");
 }

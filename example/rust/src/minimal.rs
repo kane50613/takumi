@@ -28,27 +28,13 @@ pub fn say_hello_to(name: &str) {
 
   // Create a text node with custom styling
   // Font size is set to 48.0 and other styles use default values
-  let text = TextNode {
-    tag_name: None,
-    class_name: None,
-    id: None,
-    preset: None,
-    tw: None,
-    style: Some(Style::default().with(StyleDeclaration::font_size(Px(48.0).into()))),
-    text: format!("Hello, {name}!"),
-  };
+  let text = TextNode::default()
+    .with_text(format!("Hello, {name}!"))
+    .with_style(Style::default().with(StyleDeclaration::font_size(Px(48.0).into())));
 
   // Create a root container node that will hold the text
   // Set dimensions to 1200x630 pixels (common size for social media images)
-  let root: ContainerNode<NodeKind> = ContainerNode {
-    tag_name: None,
-    class_name: None,
-    id: None,
-    preset: None,
-    tw: None,
-    style: Default::default(),
-    children: Some([text.into()].into()),
-  };
+  let root: ContainerNode<NodeKind> = ContainerNode::default().with_child(text);
 
   // Create render options
   let options = RenderOptionsBuilder::<NodeKind>::default()

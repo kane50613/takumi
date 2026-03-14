@@ -32,13 +32,8 @@ fn bouncing_text_frames() -> Vec<NodeKind> {
 }
 
 fn bouncing_text_node(y_offset: f32) -> NodeKind {
-  ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([240, 240, 240, 255]),
@@ -48,34 +43,18 @@ fn bouncing_text_node(y_offset: f32) -> NodeKind {
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center)),
-    ),
-    children: Some(
-      [ContainerNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        tw: None,
-        style: Some(Style::default().with(StyleDeclaration::transform(Some(
-          [Transform::Translate(Px(0.0), Px(y_offset))].into(),
-        )))),
-        children: Some([bouncing_text_label()].into()),
-      }
-      .into()]
-      .into(),
-    ),
-  }
-  .into()
+    )
+    .with_children([ContainerNode::default()
+      .with_style(Style::default().with(StyleDeclaration::transform(Some(
+        [Transform::Translate(Px(0.0), Px(y_offset))].into(),
+      ))))
+      .with_children([bouncing_text_label()])])
+    .into()
 }
 
-fn bouncing_text_label() -> NodeKind {
-  TextNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+fn bouncing_text_label() -> TextNode {
+  TextNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::font_size(Px(56.0).into()))
         .with(StyleDeclaration::font_family(
@@ -85,20 +64,38 @@ fn bouncing_text_label() -> NodeKind {
         .with(StyleDeclaration::color(ColorInput::Value(Color([
           10, 10, 10, 255,
         ])))),
-    ),
-    text: "Takumi Renders Animated image 🔥".to_string(),
-  }
-  .into()
+    )
+    .with_text("Takumi Renders Animated image 🔥".to_string())
 }
 
 fn keyframe_interpolation_node() -> NodeKind {
-  ContainerNode {
-    class_name: Some("root".into()),
-    id: None,
-    tag_name: Some("div".into()),
-    preset: None,
-    tw: None,
-    style: Some(
+  let stage_children: Vec<NodeKind> = vec![
+    TextNode::default()
+      .with_tag_name("p")
+      .with_class_name("eyebrow")
+      .with_text("Stylesheet keyframes".to_string())
+      .into(),
+    ContainerNode::default()
+      .with_tag_name("div")
+      .with_class_name("track")
+      .with_child(
+        ContainerNode::default()
+          .with_tag_name("div")
+          .with_class_name("chip")
+          .with_child(
+            TextNode::default()
+              .with_tag_name("span")
+              .with_class_name("label")
+              .with_text("Takumi".to_string()),
+          ),
+      )
+      .into(),
+  ];
+
+  ContainerNode::default()
+    .with_tag_name("div")
+    .with_class_name("root")
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -108,76 +105,21 @@ fn keyframe_interpolation_node() -> NodeKind {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([242, 244, 247, 255]),
         ))),
-    ),
-    children: Some(
-      [ContainerNode {
-        class_name: Some("stage".into()),
-        id: None,
-        tag_name: Some("section".into()),
-        preset: None,
-        tw: None,
-        style: Some(
+    )
+    .with_child(
+      ContainerNode::default()
+        .with_tag_name("section")
+        .with_class_name("stage")
+        .with_style(
           Style::default()
             .with(StyleDeclaration::display(Display::Flex))
             .with(StyleDeclaration::flex_direction(FlexDirection::Column))
             .with(StyleDeclaration::justify_content(JustifyContent::Center))
             .with(StyleDeclaration::align_items(AlignItems::Center)),
-        ),
-        children: Some(
-          [
-            TextNode {
-              class_name: Some("eyebrow".into()),
-              id: None,
-              tag_name: Some("p".into()),
-              preset: None,
-              tw: None,
-              style: None,
-              text: "Stylesheet keyframes".to_string(),
-            }
-            .into(),
-            ContainerNode {
-              class_name: Some("track".into()),
-              id: None,
-              tag_name: Some("div".into()),
-              preset: None,
-              tw: None,
-              style: None,
-              children: Some(
-                [ContainerNode {
-                  class_name: Some("chip".into()),
-                  id: None,
-                  tag_name: Some("div".into()),
-                  preset: None,
-                  tw: None,
-                  style: None,
-                  children: Some(
-                    [TextNode {
-                      class_name: Some("label".into()),
-                      id: None,
-                      tag_name: Some("span".into()),
-                      preset: None,
-                      tw: None,
-                      style: None,
-                      text: "Takumi".to_string(),
-                    }
-                    .into()]
-                    .into(),
-                  ),
-                }
-                .into()]
-                .into(),
-              ),
-            }
-            .into(),
-          ]
-          .into(),
-        ),
-      }
-      .into()]
-      .into(),
-    ),
-  }
-  .into()
+        )
+        .with_children(stage_children),
+    )
+    .into()
 }
 
 fn keyframe_interpolation_frames() -> Vec<AnimationFrame> {

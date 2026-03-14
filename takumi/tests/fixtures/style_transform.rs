@@ -1,5 +1,5 @@
 use takumi::layout::{
-  node::{ContainerNode, ImageNode, TextNode},
+  node::{ContainerNode, ImageNode, NodeKind, TextNode},
   style::{
     Length::{Percentage, Px, Rem},
     *,
@@ -12,12 +12,8 @@ const ROTATED_ANGLES: &[f32] = &[0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 31
 
 #[test]
 fn test_rotate_image() {
-  let image = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    style: Some(
+  let image = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -26,37 +22,18 @@ fn test_rotate_image() {
         )))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center)),
-    ),
-    tw: None,
-    children: Some(
-      [ImageNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        style: Some(Style::default().with(StyleDeclaration::rotate(Some(Angle::new(90.0))))),
-        tw: None,
-        src: "assets/images/yeecord.png".into(),
-        width: None,
-        height: None,
-      }
-      .into()]
-      .into(),
-    ),
-  };
+    )
+    .with_children([ImageNode::default()
+      .with_style(Style::default().with(StyleDeclaration::rotate(Some(Angle::new(90.0)))))
+      .with_src("assets/images/yeecord.png")]);
 
   run_fixture_test(image.into(), "style_rotate_image");
 }
 
 #[test]
 fn test_rotate() {
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -65,66 +42,45 @@ fn test_rotate() {
         )))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center)),
-    ),
-    children: Some(
-      [ContainerNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        style: Some(
-          Style::default()
-            .with(StyleDeclaration::width(Rem(16.0)))
-            .with(StyleDeclaration::height(Rem(16.0)))
-            .with(StyleDeclaration::background_color(ColorInput::Value(
-              Color::black(),
-            )))
-            .with(StyleDeclaration::rotate(Some(Angle::new(45.0)))),
-        ),
-        children: None,
-        tw: None,
-      }
-      .into()]
-      .into(),
-    ),
-  };
+    )
+    .with_children([ContainerNode::default().with_style(
+      Style::default()
+        .with(StyleDeclaration::width(Rem(16.0)))
+        .with(StyleDeclaration::height(Rem(16.0)))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color::black(),
+        )))
+        .with(StyleDeclaration::rotate(Some(Angle::new(45.0)))),
+    )]);
 
   run_fixture_test(container.into(), "style_rotate");
 }
 
 #[test]
 fn test_style_transform_origin_center() {
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::white(),
         ))),
-    ),
-    children: Some(Box::from_iter(ROTATED_ANGLES.iter().map(|angle| {
-      create_rotated_container(*angle, TransformOrigin::default()).into()
-    }))),
-  };
+    )
+    .with_children(
+      ROTATED_ANGLES
+        .iter()
+        .map(|angle| NodeKind::from(create_rotated_container(*angle, TransformOrigin::default())))
+        .collect::<Vec<_>>(),
+    );
 
   run_fixture_test(container.into(), "style_transform_origin_center");
 }
 
 #[test]
 fn test_style_transform_origin_top_left() {
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -133,35 +89,29 @@ fn test_style_transform_origin_top_left() {
         )))
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::font_size(Px(24.0).into())),
-    ),
-    children: Some(
+    )
+    .with_children(
       ROTATED_ANGLES
         .iter()
         .map(|angle| {
-          create_rotated_container(
+          NodeKind::from(create_rotated_container(
             *angle,
             BackgroundPosition(SpacePair::from_pair(
               PositionComponent::KeywordX(PositionKeywordX::Left),
               PositionComponent::KeywordY(PositionKeywordY::Top),
             )),
-          )
-          .into()
+          ))
         })
-        .collect(),
-    ),
-  };
+        .collect::<Vec<_>>(),
+    );
 
   run_fixture_test(container.into(), "style_transform_origin_top_left");
 }
 
 fn create_rotated_container(angle: f32, transform_origin: TransformOrigin) -> ImageNode {
-  ImageNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  ImageNode::default()
+    .with_src("assets/images/yeecord.png")
+    .with_style(
       Style::default()
         .with(StyleDeclaration::translate(SpacePair::from_single(
           Percentage(-50.0),
@@ -181,70 +131,24 @@ fn create_rotated_container(angle: f32, transform_origin: TransformOrigin) -> Im
         .with_border_radius(Box::new(BorderRadius(Sides(
           [SpacePair::from_single(Px(12.0)); 4],
         )))),
-    ),
-    width: None,
-    height: None,
-    src: "assets/images/yeecord.png".into(),
-  }
+    )
 }
 
 #[test]
 fn test_style_transform_translate_and_scale() {
-  let mut container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
-      Style::default()
-        .with(StyleDeclaration::width(Percentage(100.0)))
-        .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(ColorInput::Value(
-          Color::white(),
-        )))
-        .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::font_size(Px(24.0).into())),
-    ),
-    children: None,
-  };
-
-  let position = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let position = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Px(200.0)))
         .with(StyleDeclaration::height(Px(100.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 0, 0, 255]),
         ))),
-    ),
-    children: Some(
-      [TextNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        text: "200px x 100px".to_string(),
-        tw: None,
-        style: None,
-      }
-      .into()]
-      .into(),
-    ),
-  };
+    )
+    .with_children([TextNode::default().with_text("200px x 100px".to_string())]);
 
-  let translated = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let translated = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Px(300.0)))
         .with(StyleDeclaration::height(Px(300.0)))
@@ -256,35 +160,17 @@ fn test_style_transform_translate_and_scale() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([0, 128, 255, 255]),
         ))),
-    ),
-    children: Some(
-      [ImageNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        tw: None,
-        src: "assets/images/yeecord.png".into(),
-        style: Some(
-          Style::default()
-            .with(StyleDeclaration::width(Percentage(100.0)))
-            .with(StyleDeclaration::height(Percentage(100.0))),
-        ),
-        width: None,
-        height: None,
-      }
-      .into()]
-      .into(),
-    ),
-  };
+    )
+    .with_children([ImageNode::default()
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::width(Percentage(100.0)))
+          .with(StyleDeclaration::height(Percentage(100.0))),
+      )
+      .with_src("assets/images/yeecord.png")]);
 
-  let scaled = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let scaled = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::scale(SpacePair::from_single(
           PercentageNumber(2.0),
@@ -297,29 +183,11 @@ fn test_style_transform_translate_and_scale() {
         .with_border_width(Sides([Px(1.0); 4]))
         .with(StyleDeclaration::border_style(BorderStyle::Solid))
         .with(StyleDeclaration::font_size(Px(12.0).into())),
-    ),
-    children: Some(
-      [TextNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        text: "100px x 100px, scale(2.0, 2.0)".to_string(),
-        tw: None,
-        style: None,
-      }
-      .into()]
-      .into(),
-    ),
-  };
+    )
+    .with_children([TextNode::default().with_text("100px x 100px, scale(2.0, 2.0)".to_string())]);
 
-  let rotated = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let rotated = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::rotate(Some(Angle::new(45.0))))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -333,31 +201,21 @@ fn test_style_transform_translate_and_scale() {
         .with(StyleDeclaration::border_color(ColorInput::Value(
           Color::black(),
         ))),
-    ),
-    children: Some(
-      [TextNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        text: "200px x 200px, rotate(45deg)".to_string(),
-        tw: None,
-        style: None,
-      }
-      .into()]
-      .into(),
-    ),
-  };
+    )
+    .with_children([TextNode::default().with_text("200px x 200px, rotate(45deg)".to_string())]);
 
-  container.children = Some(
-    [
-      position.into(),
-      translated.into(),
-      scaled.into(),
-      rotated.into(),
-    ]
-    .into(),
-  );
+  let container = ContainerNode::default()
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color::white(),
+        )))
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::font_size(Px(24.0).into())),
+    )
+    .with_children([position, translated, scaled, rotated]);
 
   run_fixture_test(container.into(), "style_transform_translate_and_scale");
 }

@@ -13,24 +13,16 @@ fn create_container_with_mask(
   mask_image: BackgroundImages,
   background_color: Color,
 ) -> ContainerNode<NodeKind> {
-  ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
-      Style::default()
-        .with(StyleDeclaration::width(Percentage(100.0)))
-        .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_color(ColorInput::Value(
-          background_color,
-        )))
-        .with(StyleDeclaration::mask_image(Some(mask_image)))
-        .with(StyleDeclaration::mask_position(centered_layer_position())),
-    ),
-    children: None,
-  }
+  ContainerNode::default().with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        background_color,
+      )))
+      .with(StyleDeclaration::mask_image(Some(mask_image)))
+      .with(StyleDeclaration::mask_position(centered_layer_position())),
+  )
 }
 
 #[test]
@@ -96,25 +88,17 @@ fn test_style_mask_image_with_background_image() {
   let background_image =
     BackgroundImages::from_str("linear-gradient(135deg, #667eea 0%, #764ba2 100%)").unwrap();
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
-      Style::default()
-        .with(StyleDeclaration::width(Percentage(100.0)))
-        .with(StyleDeclaration::height(Percentage(100.0)))
-        .with(StyleDeclaration::background_image(Some(background_image)))
-        .with(StyleDeclaration::background_position(
-          centered_layer_position(),
-        ))
-        .with(StyleDeclaration::mask_image(Some(mask_image)))
-        .with(StyleDeclaration::mask_position(centered_layer_position())),
-    ),
-    children: None,
-  };
+  let container = ContainerNode::default().with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_image(Some(background_image)))
+      .with(StyleDeclaration::background_position(
+        centered_layer_position(),
+      ))
+      .with(StyleDeclaration::mask_image(Some(mask_image)))
+      .with(StyleDeclaration::mask_position(centered_layer_position())),
+  );
 
   run_fixture_test(container.into(), "style_mask_image_with_background");
 }
@@ -124,13 +108,8 @@ fn test_style_mask_image_on_image_node() {
   let mask_image =
     BackgroundImages::from_str("radial-gradient(circle, black 60%, transparent 100%)").unwrap();
 
-  let container = ContainerNode {
-    class_name: None,
-    id: None,
-    tag_name: None,
-    preset: None,
-    tw: None,
-    style: Some(
+  let container = ContainerNode::default()
+    .with_style(
       Style::default()
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -139,47 +118,24 @@ fn test_style_mask_image_on_image_node() {
         )))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center)),
-    ),
-    children: Some(
-      [ContainerNode {
-        class_name: None,
-        id: None,
-        tag_name: None,
-        preset: None,
-        tw: None,
-        style: Some(
-          Style::default()
-            .with(StyleDeclaration::width(Rem(16.0)))
-            .with(StyleDeclaration::height(Rem(16.0)))
-            .with(StyleDeclaration::mask_image(Some(mask_image)))
-            .with(StyleDeclaration::mask_position(centered_layer_position())),
-        ),
-        children: Some(
-          vec![
-            ImageNode {
-              class_name: None,
-              id: None,
-              tag_name: None,
-              preset: None,
-              tw: None,
-              style: Some(
-                Style::default()
-                  .with(StyleDeclaration::width(Percentage(100.0)))
-                  .with(StyleDeclaration::height(Percentage(100.0))),
-              ),
-              src: "assets/images/yeecord.png".into(),
-              width: None,
-              height: None,
-            }
-            .into(),
-          ]
-          .into(),
-        ),
-      }
-      .into()]
-      .into(),
-    ),
-  };
+    )
+    .with_children([ContainerNode::default()
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::width(Rem(16.0)))
+          .with(StyleDeclaration::height(Rem(16.0)))
+          .with(StyleDeclaration::mask_image(Some(mask_image)))
+          .with(StyleDeclaration::mask_position(centered_layer_position())),
+      )
+      .with_children(vec![
+        ImageNode::default()
+          .with_style(
+            Style::default()
+              .with(StyleDeclaration::width(Percentage(100.0)))
+              .with(StyleDeclaration::height(Percentage(100.0))),
+          )
+          .with_src("assets/images/yeecord.png"),
+      ])]);
 
   run_fixture_test(container.into(), "style_mask_image_on_image");
 }

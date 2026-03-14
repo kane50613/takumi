@@ -446,7 +446,13 @@ mod tests {
   struct TestNode {
     metadata: NodeMetadata,
     children: Vec<TestNode>,
-    style: Style,
+  }
+
+  impl TestNode {
+    fn with_children(mut self, children: Vec<TestNode>) -> Self {
+      self.children = children;
+      self
+    }
   }
 
   impl Node<TestNode> for TestNode {
@@ -460,10 +466,6 @@ mod tests {
 
     fn children_ref(&self) -> Option<&[TestNode]> {
       Some(&self.children)
-    }
-
-    fn get_style(&self) -> Option<&Style> {
-      Some(&self.style)
     }
 
     fn take_style_layers(&mut self) -> NodeStyleLayers {
@@ -540,10 +542,10 @@ mod tests {
 
   #[test]
   fn nested_selector_uses_parent_list_specificity() {
-    let root = TestNode {
-      children: vec![TestNode::default().with_class_name("title")],
-      ..TestNode::default().with_class_name("card notice")
-    };
+    let root = TestNode::default()
+      .with_class_name("card notice")
+      .with_children(vec![TestNode::default().with_class_name("title")]);
+
     let stylesheet = parse_stylesheet(
       r#"
         .card, #panel {
