@@ -135,9 +135,6 @@ const contentTypeMapping = {
   webp: "image/webp",
   png: "image/png",
   jpeg: "image/jpeg",
-  WebP: "image/webp",
-  Jpeg: "image/jpeg",
-  Png: "image/png",
   raw: "application/octet-stream",
 };
 

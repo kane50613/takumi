@@ -1,3 +1,14 @@
+import type { Node } from "@takumi-rs/helpers";
+
+export type {
+  ContainerNode,
+  ImageNode,
+  NodeMetadata,
+  TextNode,
+} from "@takumi-rs/helpers";
+
+export type { Node };
+
 export interface FontDetails {
   /**
    * The name of the font. If not provided, the name in the font file will be used.
@@ -23,13 +34,5 @@ export interface FontDetails {
 }
 
 export type Font = FontDetails | Uint8Array | ArrayBuffer;
-
-export type {
-  ContainerNode,
-  ImageNode,
-  Node,
-  NodeMetadata,
-  TextNode,
-} from "@takumi-rs/helpers";
 
 export type Keyframes = Record<string, Record<string, Record<string, unknown>>>;

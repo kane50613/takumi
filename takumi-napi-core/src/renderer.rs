@@ -226,7 +226,7 @@ pub struct EncodeFramesOptions<'env> {
 }
 
 /// Output format for animated images.
-#[napi(string_enum = "kebab-case")]
+#[napi(string_enum = "lowercase")]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum AnimationOutputFormat {
   /// Animated WebP format.
@@ -238,7 +238,7 @@ pub enum AnimationOutputFormat {
 }
 
 /// Output format for static images.
-#[napi(string_enum = "kebab-case")]
+#[napi(string_enum = "lowercase")]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
   /// WebP format.
