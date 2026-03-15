@@ -64,14 +64,14 @@ The image key can be used in any `src` field or `background-image`, `mask-image`
 /** @jsxImportSource react */
 // ---cut-before---
 import { ImageResponse } from "@takumi-rs/image-response";
-import type { PersistentImage } from "@takumi-rs/core";
+import type { ImageSource } from "@takumi-rs/core";
 
 const [logo, background] = await Promise.all([
   fetch("/logo.png").then((res) => res.arrayBuffer()),
   fetch("/background.png").then((res) => res.arrayBuffer()),
 ]);
 
-const persistentImages: PersistentImage[] = [
+const persistentImages: ImageSource[] = [
   {
     src: "my-logo",
     data: logo,
