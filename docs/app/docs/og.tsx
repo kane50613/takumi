@@ -1,8 +1,16 @@
+import type { ImageSource } from "@takumi-rs/core";
 import { ImageResponse } from "@takumi-rs/image-response";
 import { source } from "~/source";
 import DocsTemplate from "../../../takumi-template/src/templates/docs-template";
 import logo from "../../public/logo.svg?raw";
 import type { Route } from "./+types/og";
+
+const persistentImages: ImageSource[] = [
+  {
+    src: "takumi.svg",
+    data: Buffer.from(logo),
+  },
+];
 
 export function loader({ params }: Route.LoaderArgs) {
   const slugs = params["*"]
@@ -29,12 +37,7 @@ export function loader({ params }: Route.LoaderArgs) {
       site="Takumi"
     />,
     {
-      persistentImages: [
-        {
-          src: "takumi.svg",
-          data: Buffer.from(logo),
-        },
-      ],
+      persistentImages,
       width: 1200,
       height: 630,
       format: "webp",
