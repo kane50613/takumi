@@ -1,10 +1,10 @@
 use std::{collections::HashMap, mem::replace, ops::Range, sync::Arc};
 
-use derive_builder::Builder;
 use image::RgbaImage;
 use parley::{GlyphRun, PositionedLayoutItem};
 use serde::Serialize;
 use taffy::{AvailableSpace, Layout, NodeId, TaffyError, geometry::Size};
+use typed_builder::TypedBuilder;
 
 use crate::{
   Error, GlobalContext, Result,
@@ -23,15 +23,14 @@ use crate::{
   },
   rendering::{
     AnimationFrame, BorderProperties, Canvas, CanvasConstrain, CanvasConstrainResult,
-    DitheringAlgorithm, RenderContext, RenderTime, Sizing, apply_dithering, draw_debug_border,
+    DitheringAlgorithm, RenderContext, Sizing, apply_dithering, draw_debug_border,
     inline_drawing::get_parent_x_height, overlay_image,
   },
   resources::image::ImageSource,
 };
 
-#[derive(Clone, Builder)]
-#[builder(pattern = "owned")]
-/// Options for rendering a node. Construct using [`RenderOptionsBuilder`] to avoid breaking changes.
+#[derive(Clone, TypedBuilder)]
+/// Options for rendering a node. Construct using [`RenderOptions::builder`] to avoid breaking changes.
 pub struct RenderOptions<'g> {
   /// The viewport to render the node in.
   pub(crate) viewport: Viewport,
@@ -40,7 +39,7 @@ pub struct RenderOptions<'g> {
   /// The node to render.
   pub(crate) node: Node,
   /// Whether to draw debug borders.
-  #[builder(default)]
+  #[builder(default = false)]
   pub(crate) draw_debug_border: bool,
   /// The resources fetched externally.
   #[builder(default)]
@@ -49,15 +48,14 @@ pub struct RenderOptions<'g> {
   #[builder(default)]
   pub(crate) stylesheet: StyleSheet,
   /// Global animation time in milliseconds.
-  #[builder(default)]
+  #[builder(default = 0)]
   pub(crate) time_ms: u64,
   /// Output dithering algorithm. Only used by encoding frontends.
   #[builder(default)]
   pub(crate) dithering: DitheringAlgorithm,
 }
 
-#[derive(Clone, Builder)]
-#[builder(pattern = "owned")]
+#[derive(Clone, TypedBuilder)]
 /// A single scene in a sequential animation timeline.
 pub struct SequentialScene<'g> {
   /// Render options used when this scene is active.
@@ -176,7 +174,7 @@ pub fn measure_layout<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
     viewport,
     fetched_resources,
     stylesheet.into(),
-    RenderTime { time_ms },
+    time_ms,
   );
   render_context.draw_debug_border = draw_debug_border;
   let mut root = RenderNode::from_node(&render_context, node);
@@ -427,7 +425,7 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<RgbaImage> {
     viewport,
     fetched_resources,
     stylesheet.into(),
-    RenderTime { time_ms },
+    time_ms,
   );
   render_context.draw_debug_border = draw_debug_border;
 
@@ -828,8 +826,8 @@ pub(crate) fn render_node<'g>(
 #[cfg(test)]
 mod tests {
   use super::{
-    RenderOptionsBuilder, SequentialScene, SequentialSceneBuilder, render_sequence_animation,
-    resolve_scene_at_time, slice_text_at_char_boundaries,
+    RenderOptions, SequentialScene, render_sequence_animation, resolve_scene_at_time,
+    slice_text_at_char_boundaries,
   };
   use crate::{
     GlobalContext,
@@ -846,25 +844,16 @@ mod tests {
   };
 
   fn make_scene<'g>(global: &'g GlobalContext, duration_ms: u32) -> SequentialScene<'g> {
-    let options_result = RenderOptionsBuilder::default()
+    let options = RenderOptions::builder()
       .global(global)
       .viewport(Viewport::new(Some(10), Some(10)))
       .node(Node::container([]))
       .build();
-    assert!(options_result.is_ok());
-    let Ok(options) = options_result else {
-      unreachable!()
-    };
 
-    let scene_result = SequentialSceneBuilder::default()
+    SequentialScene::builder()
       .duration_ms(duration_ms)
       .options(options)
-      .build();
-    assert!(scene_result.is_ok());
-    let Ok(scene) = scene_result else {
-      unreachable!()
-    };
-    scene
+      .build()
   }
 
   #[test]
@@ -969,7 +958,7 @@ mod tests {
         ))),
     );
 
-    let options_result = RenderOptionsBuilder::default()
+    let options = RenderOptions::builder()
       .global(&global)
       .viewport(Viewport::new(Some(200), Some(100)))
       .node(node)
@@ -977,18 +966,22 @@ mod tests {
         vec![KeyframesRule {
           name: "grow".to_string(),
           keyframes: vec![
-            KeyframeRule {
-              offsets: vec![0.0],
-              declarations: Style::default()
-                .with(StyleDeclaration::width(Px(100.0)))
-                .into(),
-            },
-            KeyframeRule {
-              offsets: vec![1.0],
-              declarations: Style::default()
-                .with(StyleDeclaration::width(Px(200.0)))
-                .into(),
-            },
+            KeyframeRule::builder()
+              .offsets([0.0])
+              .declarations(
+                Style::default()
+                  .with(StyleDeclaration::width(Px(100.0)))
+                  .into(),
+              )
+              .build(),
+            KeyframeRule::builder()
+              .offsets([1.0])
+              .declarations(
+                Style::default()
+                  .with(StyleDeclaration::width(Px(200.0)))
+                  .into(),
+              )
+              .build(),
           ],
           media_queries: Vec::new(),
         }]
@@ -996,10 +989,6 @@ mod tests {
       )
       .time_ms(500)
       .build();
-    assert!(options_result.is_ok());
-    let Ok(options) = options_result else {
-      unreachable!()
-    };
 
     let layout_result = measure_layout(options);
     assert!(layout_result.is_ok());

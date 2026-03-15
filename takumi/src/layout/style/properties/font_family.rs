@@ -10,6 +10,7 @@ use crate::layout::style::{
 /// Represents a font family for text rendering.
 /// Multi value fallback is supported.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct FontFamily(Box<[FontFamilyToken]>);
 
 #[derive(Debug, Clone, PartialEq)]

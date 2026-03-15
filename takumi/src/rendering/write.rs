@@ -4,6 +4,7 @@ use gif::{Encoder as GifEncoder, Frame as GifFrame, Repeat};
 use image::{ExtendedColorType, ImageEncoder, ImageFormat, RgbaImage, codecs::jpeg::JpegEncoder};
 use png::{ColorType, Compression};
 use serde::Deserialize;
+use typed_builder::TypedBuilder;
 
 /// Encode a sequence of RGBA frames into an animated WebP and write to `destination`.
 pub use super::webp::encode_animated_webp;
@@ -14,6 +15,7 @@ use crate::{Result, error::TakumiError};
 /// Output format for rendered images.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum ImageOutputFormat {
   /// WebP image format, provides good compression and supports animation.
   /// It is useful for images in web contents.
@@ -49,6 +51,7 @@ impl From<ImageOutputFormat> for ImageFormat {
 
 /// Represents a single frame of an animated image.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct AnimationFrame {
   /// The image data for the frame.
   pub image: RgbaImage,
@@ -65,7 +68,9 @@ impl AnimationFrame {
 }
 
 /// Encoding options for animated WebP output.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, TypedBuilder)]
+#[builder(field_defaults(default))]
+#[non_exhaustive]
 pub struct AnimatedWebpOptions {
   /// Whether frames should be alpha-blended with previous content.
   pub blend: bool,
@@ -95,14 +100,18 @@ impl Default for AnimatedWebpOptions {
 }
 
 /// Encoding options for animated PNG output.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, TypedBuilder)]
+#[builder(field_defaults(default))]
+#[non_exhaustive]
 pub struct AnimatedPngOptions {
   /// Number of times to loop; `None` means infinite loop.
   pub loop_count: Option<u16>,
 }
 
 /// Encoding options for animated GIF output.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, TypedBuilder)]
+#[builder(field_defaults(default))]
+#[non_exhaustive]
 pub struct AnimatedGifOptions {
   /// Number of times to loop; `None` means infinite loop.
   pub loop_count: Option<u16>,

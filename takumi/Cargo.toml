@@ -13,7 +13,6 @@ rust-version = "1.91"
 [dependencies]
 bitflags = "2.11"
 cssparser = "0.36"
-derive_builder = "0.20"
 paste = "1.0"
 png = "0.18"
 gif = "0.14"
@@ -22,6 +21,7 @@ color = "0.3"
 thiserror = "2.0"
 wide = "1.1"
 libm = "0.2"
+typed-builder = "0.23"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 image-webp = "0.2"

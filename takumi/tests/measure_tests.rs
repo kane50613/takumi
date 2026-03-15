@@ -2,14 +2,14 @@ mod test_utils;
 
 use takumi::{
   layout::{
-    DEFAULT_FONT_SIZE, Viewport,
+    Viewport,
     node::Node,
     style::{
       Affine, AlignItems, BorderStyle, Color, ColorInput, Display, FlexDirection, JustifyContent,
       Length::*, Position, Sides, Style, StyleDeclaration,
     },
   },
-  rendering::{MeasuredNode, MeasuredTextRun, RenderOptionsBuilder, measure_layout},
+  rendering::{MeasuredNode, MeasuredTextRun, RenderOptions, measure_layout},
 };
 use test_utils::CONTEXT;
 
@@ -18,22 +18,20 @@ fn create_measure_viewport() -> Viewport {
 }
 
 fn create_measure_viewport_with_dpr(device_pixel_ratio: f32) -> Viewport {
-  Viewport {
-    width: Some((1200.0 * device_pixel_ratio) as u32),
-    height: Some((630.0 * device_pixel_ratio) as u32),
-    font_size: DEFAULT_FONT_SIZE,
-    device_pixel_ratio,
-  }
+  Viewport::new(
+    Some((1200.0 * device_pixel_ratio) as u32),
+    Some((630.0 * device_pixel_ratio) as u32),
+  )
+  .with_device_pixel_ratio(device_pixel_ratio)
 }
 
 fn measure(node: Node, viewport: Viewport) -> MeasuredNode {
   measure_layout(
-    RenderOptionsBuilder::default()
+    RenderOptions::builder()
       .viewport(viewport)
       .node(node)
       .global(&CONTEXT)
-      .build()
-      .unwrap(),
+      .build(),
   )
   .unwrap()
 }
@@ -57,12 +55,11 @@ fn test_measure_simple_container() {
   );
 
   let result = measure_layout(
-    RenderOptionsBuilder::default()
+    RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
       .global(&CONTEXT)
-      .build()
-      .unwrap(),
+      .build(),
   )
   .unwrap();
 
@@ -87,12 +84,11 @@ fn test_measure_text_node() {
   );
 
   let result = measure_layout(
-    RenderOptionsBuilder::default()
+    RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
       .global(&CONTEXT)
-      .build()
-      .unwrap(),
+      .build(),
   )
   .unwrap();
 
@@ -133,12 +129,11 @@ fn test_measure_flex_text_node_centers_inner_text() {
   );
 
   let result = measure_layout(
-    RenderOptionsBuilder::default()
+    RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
       .global(&CONTEXT)
-      .build()
-      .unwrap(),
+      .build(),
   )
   .unwrap();
 
@@ -179,12 +174,11 @@ fn test_measure_flex_text_node_anonymous_item_uses_intrinsic_size() {
   );
 
   let result = measure_layout(
-    RenderOptionsBuilder::default()
+    RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
       .global(&CONTEXT)
-      .build()
-      .unwrap(),
+      .build(),
   )
   .unwrap();
 
@@ -230,12 +224,11 @@ fn test_measure_inline_layout() {
   );
 
   let result = measure_layout(
-    RenderOptionsBuilder::default()
+    RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
       .global(&CONTEXT)
-      .build()
-      .unwrap(),
+      .build(),
   )
   .unwrap();
 
@@ -412,12 +405,11 @@ fn test_measure_svg_attr_size_in_absolute_flex_container() {
   );
 
   let result = measure_layout(
-    RenderOptionsBuilder::default()
+    RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
       .global(&CONTEXT)
-      .build()
-      .unwrap(),
+      .build(),
   )
   .unwrap();
 
@@ -463,12 +455,11 @@ fn test_measure_svg_attr_size_in_absolute_flex_container_with_parent_padding() {
   );
 
   let result = measure_layout(
-    RenderOptionsBuilder::default()
+    RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
       .global(&CONTEXT)
-      .build()
-      .unwrap(),
+      .build(),
   )
   .unwrap();
 
@@ -505,12 +496,11 @@ fn test_measure_svg_with_width_only_preserves_intrinsic_ratio() {
   );
 
   let result = measure_layout(
-    RenderOptionsBuilder::default()
+    RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
       .global(&CONTEXT)
-      .build()
-      .unwrap(),
+      .build(),
   )
   .unwrap();
 
@@ -569,12 +559,11 @@ fn test_measure_img_svg_attribute_sizing_cases() {
     );
 
     let result = measure_layout(
-      RenderOptionsBuilder::default()
+      RenderOptions::builder()
         .viewport(create_measure_viewport())
         .node(node)
         .global(&CONTEXT)
-        .build()
-        .unwrap(),
+        .build(),
     )
     .unwrap();
 

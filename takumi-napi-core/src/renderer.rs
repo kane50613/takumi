@@ -324,7 +324,7 @@ impl Renderer {
     if load_default_fonts {
       for (font, name, generic) in EMBEDDED_FONTS {
         global
-          .font_context
+          .font_context_mut()
           .load_and_store(
             Cow::Borrowed(font),
             Some(FontInfoOverride {
@@ -351,7 +351,7 @@ impl Renderer {
     }
 
     if let Some(images) = options.persistent_images {
-      let state = renderer
+      let mut state = renderer
         .state
         .write()
         .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
@@ -361,7 +361,7 @@ impl Renderer {
 
         state
           .global
-          .persistent_image_store
+          .persistent_image_store_mut()
           .insert(image.src, image_source);
       }
     }
@@ -426,7 +426,7 @@ impl Renderer {
     if let Ok(buffer) = buffer_slice_from_object(env, font) {
       state
         .global
-        .font_context
+        .font_context_mut()
         .load_and_store(Cow::Borrowed(&buffer), None, None)
         .map_err(map_error)?;
 
@@ -448,7 +448,7 @@ impl Renderer {
 
     state
       .global
-      .font_context
+      .font_context_mut()
       .load_and_store(Cow::Borrowed(&buffer), Some(font_override), None)
       .map_err(map_error)?;
 
@@ -536,8 +536,8 @@ impl Renderer {
   /// Clears the renderer's internal image store.
   #[napi]
   pub fn clear_image_store(&self) {
-    if let Ok(state) = self.state.write() {
-      state.global.persistent_image_store.clear();
+    if let Ok(mut state) = self.state.write() {
+      state.global.persistent_image_store_mut().clear();
     }
   }
 

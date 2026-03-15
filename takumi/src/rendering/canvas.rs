@@ -546,7 +546,7 @@ impl BufferPool {
 }
 
 /// A canvas that can be used to draw images onto.
-pub struct Canvas {
+pub(crate) struct Canvas {
   pub(crate) image: RgbaImage,
   pub(crate) constrains: SmallVec<[CanvasConstrain; 1]>,
   // Since canvas is shared with mutable borrows everywhere already,

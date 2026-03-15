@@ -8,6 +8,7 @@ use crate::rendering::Sizing;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 /// Represents a aspect ratio.
+#[non_exhaustive]
 pub enum AspectRatio {
   /// The aspect ratio is determined by the content.
   #[default]

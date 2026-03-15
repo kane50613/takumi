@@ -485,12 +485,13 @@ fn inline_text_decorations() {
     Node::text("Hello World".to_string()).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Inline))
-        .with_text_decoration(TextDecoration {
-          line: TextDecorationLines::UNDERLINE | TextDecorationLines::LINE_THROUGH,
-          style: None,
-          color: Some(ColorInput::Value(Color([0, 0, 255, 255]))),
-          thickness: Some(TextDecorationThickness::Length(Px(4.0))),
-        }),
+        .with_text_decoration(
+          TextDecoration::builder()
+            .line(TextDecorationLines::UNDERLINE | TextDecorationLines::LINE_THROUGH)
+            .color(ColorInput::Value(Color([0, 0, 255, 255])))
+            .thickness(TextDecorationThickness::Length(Px(4.0)))
+            .build(),
+        ),
     ),
     Node::text("Woah".to_string()).with_style(
       Style::default()
@@ -536,12 +537,11 @@ fn inline_text_decorations() {
         .with(StyleDeclaration::color(ColorInput::Value(Color([
           255, 0, 0, 255,
         ]))))
-        .with_text_decoration(TextDecoration {
-          line: TextDecorationLines::UNDERLINE,
-          style: None,
-          color: None,
-          thickness: None,
-        }),
+        .with_text_decoration(
+          TextDecoration::builder()
+            .line(TextDecorationLines::UNDERLINE)
+            .build(),
+        ),
     ),
   ];
 

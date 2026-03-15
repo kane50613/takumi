@@ -11,11 +11,11 @@ use parley::{GenericFamily, fontique::FontInfoOverride};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use takumi::{
   GlobalContext,
-  layout::{DEFAULT_FONT_SIZE, Viewport, node::Node},
+  layout::{Viewport, node::Node},
   rendering::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
-    RenderOptions, RenderOptionsBuilder, encode_animated_gif, encode_animated_png,
-    encode_animated_webp, render, write_image,
+    RenderOptions, encode_animated_gif, encode_animated_png, encode_animated_webp, render,
+    write_image,
   },
   resources::image::{ImageSource, parse_svg_str},
 };
@@ -92,7 +92,7 @@ fn create_test_context() -> GlobalContext {
     .read_to_string(&mut luma_image_data)
     .unwrap();
 
-  context.persistent_image_store.insert(
+  context.persistent_image_store_mut().insert(
     "assets/images/yeecord.png".to_string(),
     ImageSource::from_bytes(&yeecord_image_data).unwrap(),
   );
@@ -105,12 +105,12 @@ fn create_test_context() -> GlobalContext {
   .read_to_end(&mut luma_cover_image_data)
   .unwrap();
 
-  context.persistent_image_store.insert(
+  context.persistent_image_store_mut().insert(
     "assets/images/luma.svg".to_string(),
     parse_svg_str(&luma_image_data).unwrap(),
   );
 
-  context.persistent_image_store.insert(
+  context.persistent_image_store_mut().insert(
     "assets/images/luma-cover-0dfbf65d-0f58-4941-947c-d84a5b131dc0.jpeg".to_string(),
     ImageSource::from_bytes(&luma_cover_image_data).unwrap(),
   );
@@ -123,7 +123,7 @@ fn create_test_context() -> GlobalContext {
       .unwrap();
 
     context
-      .font_context
+      .font_context_mut()
       .load_and_store(
         font_data.into(),
         Some(FontInfoOverride {
@@ -139,12 +139,11 @@ fn create_test_context() -> GlobalContext {
 }
 
 pub const fn create_test_viewport_with_size(width: u32, height: u32) -> Viewport {
-  Viewport {
-    width: Some((width as f32 * FIXTURE_DEVICE_PIXEL_RATIO) as u32),
-    height: Some((height as f32 * FIXTURE_DEVICE_PIXEL_RATIO) as u32),
-    device_pixel_ratio: FIXTURE_DEVICE_PIXEL_RATIO,
-    font_size: DEFAULT_FONT_SIZE,
-  }
+  Viewport::new(
+    Some((width as f32 * FIXTURE_DEVICE_PIXEL_RATIO) as u32),
+    Some((height as f32 * FIXTURE_DEVICE_PIXEL_RATIO) as u32),
+  )
+  .with_device_pixel_ratio(FIXTURE_DEVICE_PIXEL_RATIO)
 }
 
 pub fn create_test_viewport() -> Viewport {
@@ -156,12 +155,11 @@ pub static CONTEXT: LazyLock<GlobalContext> = LazyLock::new(create_test_context)
 #[allow(dead_code)]
 pub fn run_fixture_test(node: Node, fixture_name: &str) {
   let viewport = create_test_viewport();
-  let options = RenderOptionsBuilder::default()
+  let options = RenderOptions::builder()
     .viewport(viewport)
     .node(node)
     .global(&CONTEXT)
-    .build()
-    .unwrap();
+    .build();
 
   run_fixture_test_with_options(options, fixture_name);
 }
@@ -270,13 +268,12 @@ impl IntoAnimationFixtureFrames<'_> for Vec<Node> {
           let time_ms = (index as u64) * u64::from(frame_duration_ms);
 
           (
-            RenderOptionsBuilder::default()
+            RenderOptions::builder()
               .viewport(viewport)
               .node(node)
               .time_ms(time_ms)
               .global(&CONTEXT)
-              .build()
-              .unwrap(),
+              .build(),
             frame_duration_ms,
           )
         })

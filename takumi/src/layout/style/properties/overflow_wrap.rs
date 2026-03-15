@@ -2,6 +2,7 @@ use crate::layout::style::{FromCss, declare_enum_from_css_impl, tw::TailwindProp
 
 /// Controls how text should be overflowed.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct OverflowWrap(parley::OverflowWrap);
 
 impl TailwindPropertyParser for OverflowWrap {

@@ -901,13 +901,14 @@ macro_rules! define_style {
       #[derive(Clone, Debug, Default)]
       pub struct ComputedStyle {
         pub(crate) custom_properties: HashMap<String, String>,
-                pub(crate) registered_custom_properties: HashMap<String, PropertyRule>,
+        pub(crate) registered_custom_properties: HashMap<String, PropertyRule>,
         $(pub(crate) $longhand: $longhand_ty,)*
       }
 
       /// A single specified declaration stored in a declaration block.
       #[allow(private_interfaces)]
       #[derive(Debug, Clone, PartialEq)]
+      #[non_exhaustive]
       pub enum StyleDeclaration {
         $(
           /// An explicit specified value for a non-shorthand property.
@@ -1333,18 +1334,18 @@ define_style! {
         border_left_width
       );
     },
-    border_inline_width: Option<SpacePair<Length>> => [BorderLeftWidth, BorderRightWidth] |value, target| {
+    border_inline_width: SpacePair<Length> => [BorderLeftWidth, BorderRightWidth] |value, target| {
       push_axis_declarations!(
         target,
-        value.unwrap_or_default(),
+        value,
         border_left_width,
         border_right_width
       );
     },
-    border_block_width: Option<SpacePair<Length>> => [BorderTopWidth, BorderBottomWidth] |value, target| {
+    border_block_width: SpacePair<Length> => [BorderTopWidth, BorderBottomWidth] |value, target| {
       push_axis_declarations!(
         target,
-        value.unwrap_or_default(),
+        value,
         border_top_width,
         border_bottom_width
       );
@@ -1471,9 +1472,9 @@ fn expand_text_decoration_shorthand(value: TextDecoration, target: &mut Vec<Styl
   push_expanded_declarations!(
     target;
     StyleDeclaration::text_decoration_line(Some(value.line)),
-    StyleDeclaration::text_decoration_style(value.style.unwrap_or_default()),
-    StyleDeclaration::text_decoration_color(value.color.unwrap_or_default()),
-    StyleDeclaration::text_decoration_thickness(value.thickness.unwrap_or_default()),
+    StyleDeclaration::text_decoration_style(value.style),
+    StyleDeclaration::text_decoration_color(value.color),
+    StyleDeclaration::text_decoration_thickness(value.thickness),
   );
 }
 
@@ -1488,7 +1489,7 @@ fn expand_white_space_shorthand(value: WhiteSpace, target: &mut Vec<StyleDeclara
 fn expand_text_wrap_shorthand(value: TextWrap, target: &mut Vec<StyleDeclaration>) {
   push_expanded_declarations!(
     target;
-    StyleDeclaration::text_wrap_mode(value.mode.unwrap_or_default()),
+    StyleDeclaration::text_wrap_mode(value.mode),
     StyleDeclaration::text_wrap_style(value.style),
   );
 }

@@ -7,6 +7,7 @@ pub type FetchTask = Arc<str>;
 
 /// Collection of unique fetch tasks.
 #[derive(Default)]
+#[non_exhaustive]
 pub struct FetchTaskCollection(SmallVec<[FetchTask; 8]>);
 
 impl FetchTaskCollection {

@@ -14,12 +14,13 @@ fn test_style_text_decoration_thickness() {
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::text_align(TextAlign::Center))
         .with(StyleDeclaration::font_size(Px(48.0).into()))
-        .with_text_decoration(TextDecoration {
-          line: TextDecorationLines::UNDERLINE,
-          style: None,
-          color: Some(ColorInput::Value(Color([255, 0, 0, 255]))),
-          thickness: Some(thickness),
-        }),
+        .with_text_decoration(
+          TextDecoration::builder()
+            .line(TextDecorationLines::UNDERLINE)
+            .color(ColorInput::Value(Color([255, 0, 0, 255])))
+            .thickness(thickness)
+            .build(),
+        ),
     )
   };
 

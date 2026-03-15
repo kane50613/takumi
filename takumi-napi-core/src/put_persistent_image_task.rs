@@ -38,7 +38,7 @@ impl Task for PutPersistentImageTask {
     }
     state.persistent_image_cache.insert(cache_key);
     let image = LoadedImageSource::from_bytes(&self.buffer).map_err(map_error)?;
-    state.global.persistent_image_store.insert(src, image);
+    state.global.persistent_image_store_mut().insert(src, image);
 
     Ok(())
   }

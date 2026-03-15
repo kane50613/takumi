@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use parley::{FontFeature, FontVariation};
 use std::cmp::Ordering;
+use typed_builder::TypedBuilder;
 
 use super::StyleDeclarationBlock;
 use super::selector::MediaQueryList;
@@ -15,25 +16,29 @@ use crate::{
   rendering::{RenderContext, Sizing},
 };
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, PartialEq, TypedBuilder)]
 #[serde(rename_all = "camelCase")]
 /// A single structured keyframe rule.
 pub struct KeyframeRule {
   /// Keyframe offsets as values between 0.0 and 1.0.
-  pub offsets: Vec<f32>,
+  #[builder(setter(into))]
+  pub(crate) offsets: Vec<f32>,
   /// Declarations applied at this step.
-  pub declarations: StyleDeclarationBlock,
+  pub(crate) declarations: StyleDeclarationBlock,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, PartialEq, TypedBuilder)]
 #[serde(rename_all = "camelCase")]
 /// Structured keyframes that can be passed directly in render options.
 pub struct KeyframesRule {
   /// Animation name matched by `animation-name`.
-  pub name: String,
+  #[builder(setter(into))]
+  pub(crate) name: String,
   /// Individual keyframe rules for this animation.
-  pub keyframes: Vec<KeyframeRule>,
+  #[builder(setter(into))]
+  pub(crate) keyframes: Vec<KeyframeRule>,
   #[serde(skip, default)]
+  #[builder(default, setter(skip))]
   pub(crate) media_queries: Vec<MediaQueryList>,
 }
 
@@ -72,7 +77,7 @@ pub(crate) fn apply_stylesheet_animations(
       timing_function_at(&base_snapshot.animation_timing_function, animation_index);
 
     let Some(progress) = sample_animation_progress(
-      context.time.time_ms as f32,
+      context.time as f32,
       duration.milliseconds,
       delay.milliseconds,
       iteration_count,

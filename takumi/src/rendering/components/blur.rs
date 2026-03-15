@@ -5,6 +5,7 @@ use crate::rendering::{BufferPool, premultiply_alpha, unpremultiply_alpha};
 
 /// Specifies the type of blur operation, which affects how the CSS radius is interpreted.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum BlurType {
   /// CSS `filter: blur()` - radius equals σ (standard deviation).
   Filter,

@@ -1,0 +1,12 @@
+{
+  "mode": "pre",
+  "tag": "beta",
+  "initialVersions": {
+    "takumi": "0.73.1",
+    "@takumi-rs/helpers": "0.73.1",
+    "@takumi-rs/image-response": "0.73.1",
+    "@takumi-rs/core": "0.73.1",
+    "@takumi-rs/wasm": "0.73.1"
+  },
+  "changesets": []
+}

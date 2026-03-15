@@ -7,11 +7,10 @@ use std::{
 
 use napi::bindgen_prelude::*;
 use takumi::{
-  layout::{DEFAULT_DEVICE_PIXEL_RATIO, DEFAULT_FONT_SIZE, Viewport, node::Node},
+  layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node},
   rendering::{
-    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, RenderOptionsBuilder,
-    SequentialSceneBuilder, encode_animated_gif, encode_animated_png, encode_animated_webp,
-    render_sequence_animation,
+    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, RenderOptions, SequentialScene,
+    encode_animated_gif, encode_animated_png, encode_animated_webp, render_sequence_animation,
   },
   resources::image::ImageSource as LoadedImageSource,
 };
@@ -74,14 +73,11 @@ impl RenderAnimationTask {
     Ok(Self {
       scenes: Some(scenes),
       state,
-      viewport: Viewport {
-        width: Some(width),
-        height: Some(height),
-        font_size: DEFAULT_FONT_SIZE,
-        device_pixel_ratio: device_pixel_ratio
+      viewport: Viewport::new(Some(width), Some(height)).with_device_pixel_ratio(
+        device_pixel_ratio
           .map(|ratio| ratio as f32)
           .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
-      },
+      ),
       format: format.unwrap_or(AnimationOutputFormat::webp),
       quality,
       draw_debug_border: draw_debug_border.unwrap_or_default(),
@@ -124,23 +120,21 @@ impl Task for RenderAnimationTask {
     let scene_options = scenes
       .into_iter()
       .map(|(node, duration_ms)| {
-        SequentialSceneBuilder::default()
+        SequentialScene::builder()
           .duration_ms(duration_ms)
           .options(
-            RenderOptionsBuilder::default()
+            RenderOptions::builder()
               .viewport(self.viewport)
               .fetched_resources(initialized_images.clone())
               .stylesheet(stylesheet.clone())
               .node(node)
               .global(&state.global)
               .draw_debug_border(self.draw_debug_border)
-              .build()
-              .map_err(map_error)?,
+              .build(),
           )
           .build()
-          .map_err(map_error)
       })
-      .collect::<Result<Vec<_>>>()?;
+      .collect::<Vec<_>>();
     let frames = render_sequence_animation(&scene_options, self.fps).map_err(map_error)?;
 
     if let Some(quality) = self.quality

@@ -9,6 +9,7 @@ use crate::rendering::Sizing;
 
 /// Represents font weight value.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct FontWeight(ParleyFontWeight);
 
 impl MakeComputed for FontWeight {}

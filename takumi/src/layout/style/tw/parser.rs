@@ -10,6 +10,7 @@ use crate::layout::style::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct TwFontSize {
   pub(crate) font_size: FontSize,
   pub(crate) line_height: Option<LineHeight>,
@@ -88,6 +89,7 @@ impl TwFontSize {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct TwGridTemplate(pub GridTemplateComponents);
 
 impl<'i> FromCss<'i> for TwGridTemplate {
@@ -121,6 +123,7 @@ impl TailwindPropertyParser for TwGridTemplate {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct TwLetterSpacing(pub Length);
 
 impl<'i> FromCss<'i> for TwLetterSpacing {
@@ -154,6 +157,7 @@ impl TailwindPropertyParser for TwLetterSpacing {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct TwBorderWidth(pub Length);
 
 impl<'i> FromCss<'i> for TwBorderWidth {
@@ -173,6 +177,7 @@ impl TailwindPropertyParser for TwBorderWidth {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct TwRounded(pub(crate) LengthDefaultsToZero);
 
 impl<'i> FromCss<'i> for TwRounded {
@@ -202,6 +207,7 @@ impl TailwindPropertyParser for TwRounded {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct TwBlur(pub(crate) Length);
 
 impl<'i> FromCss<'i> for TwBlur {

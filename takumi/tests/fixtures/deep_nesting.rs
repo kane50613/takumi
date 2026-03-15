@@ -1,12 +1,15 @@
-use takumi::layout::{
-  node::Node,
-  style::{
-    Color, ColorInput, Display, FlexDirection, FontWeight,
-    Length::{Percentage, Px},
-    Sides, Style, StyleDeclaration,
+use takumi::rendering::measure_layout;
+use takumi::{
+  layout::{
+    node::Node,
+    style::{
+      Color, ColorInput, Display, FlexDirection, FontWeight,
+      Length::{Percentage, Px},
+      Sides, Style, StyleDeclaration,
+    },
   },
+  rendering::RenderOptions,
 };
-use takumi::rendering::{RenderOptionsBuilder, measure_layout};
 
 use crate::test_utils::{CONTEXT, create_test_viewport, run_fixture_test};
 
@@ -95,12 +98,11 @@ fn deep_nesting_stack_overflow() {
   let current_node = iterative_nesting_node(STACK_OVERFLOW_DEPTH);
 
   let viewport = create_test_viewport();
-  let options = RenderOptionsBuilder::default()
+  let options = RenderOptions::builder()
     .viewport(viewport)
     .node(current_node)
     .global(&CONTEXT)
-    .build()
-    .unwrap();
+    .build();
 
   let measured = measure_layout(options).unwrap();
   assert!(measured.width > 0.0);

@@ -4,6 +4,7 @@ use crate::layout::style::{CssToken, FromCss, MakeComputed, ParseResult};
 
 /// Represents the direction of the grid auto flow.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum GridDirection {
   /// The grid auto flow is in the row direction.
   #[default]
@@ -14,6 +15,7 @@ pub enum GridDirection {
 
 /// Represents the flow of the grid auto placement.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub struct GridAutoFlow {
   /// The direction of the grid auto flow.
   pub direction: GridDirection,

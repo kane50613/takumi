@@ -8,6 +8,7 @@ use crate::{
 
 /// Represents a fraction of the available space
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum FrLength {
   /// A fraction of the available space
   Fr(f32),
@@ -15,6 +16,7 @@ pub enum FrLength {
 
 /// Represents a grid track sizing function with serde support
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum GridLength {
   /// A fraction of the available space
   Fr(f32),

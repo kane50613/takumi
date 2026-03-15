@@ -26,6 +26,7 @@ fn is_cylindrical_color_space(color_space: ColorSpaceTag) -> bool {
 
 /// Color interpolation configuration used by functions like `color-mix()` and gradients.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct ColorInterpolationMethod {
   /// The color space used to interpolate between two colors.
   pub color_space: ColorSpaceTag,
@@ -133,6 +134,7 @@ impl From<[f32; 4]> for Color {
 
 /// Represents a color input value.
 #[derive(Debug, Clone, PartialEq, Copy)]
+#[non_exhaustive]
 pub enum ColorInput<const DEFAULT_CURRENT_COLOR: bool = true> {
   /// Inherit from the `color` value.
   CurrentColor,

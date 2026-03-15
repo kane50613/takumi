@@ -7,6 +7,7 @@ use crate::layout::style::{
 
 /// Per-axis repeat style.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum BackgroundRepeatStyle {
   /// Tile as many times as needed with no extra spacing
   #[default]

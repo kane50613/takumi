@@ -6,6 +6,7 @@ use crate::layout::style::{
 
 #[derive(Debug, Clone, PartialEq)]
 /// Represents a line clamp value.
+#[non_exhaustive]
 pub struct LineClamp {
   /// The number of lines to clamp.
   pub count: u32,

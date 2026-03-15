@@ -13,6 +13,7 @@ pub type Error = TakumiError;
 
 /// Errors raised while parsing a CSS declaration block string.
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum StyleDeclarationBlockParseError {
   /// The declaration block could not be parsed as CSS declarations.
   #[error("failed to parse CSS declaration block `{input}` near `{context}`: {reason}")]
@@ -28,6 +29,7 @@ pub enum StyleDeclarationBlockParseError {
 
 /// Errors raised while parsing a CSS stylesheet string.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct StyleSheetParseError {
   /// The original stylesheet input.
   pub input: Option<String>,
@@ -39,6 +41,7 @@ pub struct StyleSheetParseError {
 
 /// The specific stylesheet parse failure.
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum StyleSheetParseErrorKind {
   /// The stylesheet could not be parsed as valid CSS.
   #[error("{0}")]
@@ -179,6 +182,7 @@ impl StyleSheetParseError {
 
 /// Structured errors raised by the WebP encoding and container assembly paths.
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum WebPError {
   /// The encoder config could not be constructed.
   #[error("failed to construct WebP config")]
@@ -316,6 +320,7 @@ pub enum WebPError {
 
 /// The main error type for the Takumi crate.
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum TakumiError {
   /// Error resolving an image resource.
   #[error("Image resolution error: {0}")]

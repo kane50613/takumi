@@ -58,6 +58,7 @@ fn decode_linear_id(ptr: *const ()) -> Option<usize> {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// Internal linear form of a `calc(...)` expression: `px + percent * basis`.
+#[non_exhaustive]
 pub struct CalcLinear {
   px: f32,
   percent: f32,
@@ -75,6 +76,7 @@ impl CalcLinear {
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 /// Internal symbolic form of a `calc(...)` expression before sizing is known.
+#[non_exhaustive]
 pub struct CalcFormula {
   px: f32,
   percent: f32,
@@ -529,6 +531,7 @@ pub type LengthDefaultsToZero = Length<false>;
 
 /// Represents a value that can be a specific length, percentage, or automatic.
 #[derive(Debug, Clone, PartialEq, Copy)]
+#[non_exhaustive]
 pub enum Length<const DEFAULT_AUTO: bool = true> {
   /// Automatic sizing based on content
   Auto,

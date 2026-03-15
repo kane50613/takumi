@@ -7,7 +7,7 @@ use takumi::{
     node::Node,
     style::{BackgroundImages, FromCss, Length, Style, StyleDeclaration},
   },
-  rendering::{RenderOptionsBuilder, render},
+  rendering::{RenderOptions, render},
 };
 
 const BENCH_WIDTH: u32 = 1200;
@@ -25,12 +25,11 @@ fn run_gradient_render(global: &GlobalContext, background_image_str: &str) {
 
   let viewport = Viewport::new(Some(BENCH_WIDTH), Some(BENCH_HEIGHT));
 
-  let options = RenderOptionsBuilder::default()
+  let options = RenderOptions::builder()
     .viewport(viewport)
     .node(node)
     .global(global)
-    .build()
-    .unwrap();
+    .build();
 
   let _image = render(options).unwrap();
 }

@@ -1,12 +1,15 @@
 use cssparser::Parser;
+use typed_builder::TypedBuilder;
 
 use crate::layout::style::*;
 use crate::rendering::Sizing;
 
 /// Parsed `background` shorthand value.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, TypedBuilder)]
+#[builder(field_defaults(default))]
 pub struct Background {
   /// Background color.
+  #[builder(setter(strip_option))]
   pub color: Option<ColorInput<false>>,
   /// Background image.
   pub image: BackgroundImage,

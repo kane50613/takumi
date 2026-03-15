@@ -3,8 +3,7 @@ pub(crate) mod matching;
 mod properties;
 mod selector;
 mod stylesheets;
-/// Tailwind CSS Parser.
-pub mod tw;
+pub(crate) mod tw;
 
 use std::{borrow::Cow, fmt::Formatter};
 

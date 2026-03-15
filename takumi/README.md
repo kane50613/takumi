@@ -15,7 +15,7 @@ use takumi::{
     Viewport,
     style::{Length::Px, Style, StyleDeclaration},
   },
-  rendering::{render, RenderOptionsBuilder},
+  rendering::{render, RenderOptions},
   GlobalContext,
 };
 
@@ -39,12 +39,11 @@ global.font_context.load_and_store(
 let viewport = Viewport::new(Some(1200), Some(630));
 
 // Create render options
-let options = RenderOptionsBuilder::default()
+let options = RenderOptions::builder()
   .viewport(viewport)
   .node(node)
   .global(&global)
-  .build()
-  .unwrap();
+  .build();
 
 // Render the layout to an `RgbaImage`
 let image = render(options).unwrap();

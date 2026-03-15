@@ -15,6 +15,7 @@ use crate::{
 
 /// Represents a radial gradient.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct RadialGradient {
   /// The radial gradient shape
   pub shape: RadialShape,
@@ -37,6 +38,7 @@ impl MakeComputed for RadialGradient {
 
 /// Supported shapes for radial gradients
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum RadialShape {
   /// A circle shape where radii are equal
   Circle,
@@ -53,6 +55,7 @@ declare_enum_from_css_impl!(
 
 /// Supported size keywords for radial gradients
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum RadialSize {
   /// The gradient end stops at the nearest side from the center
   ClosestSide,

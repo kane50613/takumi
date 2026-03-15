@@ -29,7 +29,7 @@ impl Task for LoadFontTask {
     for (font, buffer) in &self.buffers {
       if state
         .global
-        .font_context
+        .font_context_mut()
         .load_and_store(
           Cow::Borrowed(buffer),
           Some(FontInfoOverride {

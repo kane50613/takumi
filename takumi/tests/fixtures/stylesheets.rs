@@ -1,8 +1,10 @@
-use takumi::layout::{
-  node::Node,
-  style::{Length::*, *},
+use takumi::{
+  layout::{
+    node::Node,
+    style::{Length::*, *},
+  },
+  rendering::RenderOptions,
 };
-use takumi::rendering::RenderOptionsBuilder;
 
 use crate::test_utils::{CONTEXT, create_test_viewport, run_fixture_test_with_options};
 
@@ -40,7 +42,7 @@ fn test_stylesheets() {
       ))),
   );
 
-  let options = RenderOptionsBuilder::default()
+  let options = RenderOptions::builder()
     .viewport(create_test_viewport())
     .node(root)
     .global(&CONTEXT)
@@ -55,18 +57,18 @@ fn test_stylesheets() {
             padding: 32px;
             row-gap: 16px;
           }
-
+  
           #hero-card {
             box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
           }
-
+  
           section .title {
             color: rgb(255, 255, 255);
             font-size: 56px;
             font-weight: 700;
             text-align: center;
           }
-
+  
           section .subtitle {
             color: rgb(148, 163, 184);
             font-size: 24px;
@@ -76,8 +78,7 @@ fn test_stylesheets() {
       )
       .unwrap(),
     )
-    .build()
-    .unwrap();
+    .build();
 
   run_fixture_test_with_options(options, "stylesheets");
 }
@@ -109,7 +110,7 @@ fn test_stylesheets_background_multiple_gradients() {
   );
 
   let build_options = || {
-    RenderOptionsBuilder::default()
+    RenderOptions::builder()
       .viewport(create_test_viewport())
       .node(root.clone())
       .global(&CONTEXT)
@@ -121,9 +122,7 @@ fn test_stylesheets_background_multiple_gradients() {
           }
         "#,
       )
-      .unwrap())
-      .build()
-      .unwrap()
+      .unwrap()).build()
   };
 
   run_fixture_test_with_options(build_options(), "stylesheets_background_multiple_gradients");

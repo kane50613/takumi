@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case};
+use typed_builder::TypedBuilder;
 
 use crate::layout::style::{
   CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult,
@@ -82,7 +83,7 @@ impl<'i> FromCss<'i> for AnimationNames {
 
 /// Parsed values for `animation-duration` and `animation-delay`.
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct AnimationDurations(pub Box<[AnimationTime]>);
+pub struct AnimationDurations(pub(crate) Box<[AnimationTime]>);
 
 impl MakeComputed for AnimationDurations {}
 
@@ -98,6 +99,7 @@ impl<'i> FromCss<'i> for AnimationDurations {
 
 /// Supported CSS timing functions for animations.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum AnimationTimingFunction {
   /// Uses linear interpolation.
   Linear,
@@ -124,6 +126,7 @@ impl MakeComputed for AnimationTimingFunction {}
 
 /// Supported step positions for CSS stepped easing functions.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum StepPosition {
   /// Jumps at the start of each step interval.
   Start,
@@ -174,6 +177,7 @@ impl<'i> FromCss<'i> for AnimationTimingFunction {
 
 /// Parsed values for `animation-timing-function`.
 #[derive(Debug, Clone, PartialEq, Default)]
+#[non_exhaustive]
 pub struct AnimationTimingFunctions(pub Box<[AnimationTimingFunction]>);
 
 impl MakeComputed for AnimationTimingFunctions {}
@@ -190,6 +194,7 @@ impl<'i> FromCss<'i> for AnimationTimingFunctions {
 
 /// Supported values for `animation-iteration-count`.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum AnimationIterationCount {
   /// A finite iteration count.
   Number(f32),
@@ -230,6 +235,7 @@ impl<'i> FromCss<'i> for AnimationIterationCount {
 
 /// Parsed values for `animation-iteration-count`.
 #[derive(Debug, Clone, PartialEq, Default)]
+#[non_exhaustive]
 pub struct AnimationIterationCounts(pub Box<[AnimationIterationCount]>);
 
 impl MakeComputed for AnimationIterationCounts {}
@@ -246,6 +252,7 @@ impl<'i> FromCss<'i> for AnimationIterationCounts {
 
 /// Supported values for `animation-direction`.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum AnimationDirection {
   #[default]
   /// Plays from the first keyframe to the last keyframe.
@@ -268,6 +275,7 @@ declare_enum_from_css_impl!(
 
 /// Parsed values for `animation-direction`.
 #[derive(Debug, Clone, PartialEq, Default)]
+#[non_exhaustive]
 pub struct AnimationDirections(pub Box<[AnimationDirection]>);
 
 impl MakeComputed for AnimationDirections {}
@@ -284,6 +292,7 @@ impl<'i> FromCss<'i> for AnimationDirections {
 
 /// Supported values for `animation-fill-mode`.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum AnimationFillMode {
   #[default]
   /// Does not apply keyframe values outside the active interval.
@@ -306,6 +315,7 @@ declare_enum_from_css_impl!(
 
 /// Parsed values for `animation-fill-mode`.
 #[derive(Debug, Clone, PartialEq, Default)]
+#[non_exhaustive]
 pub struct AnimationFillModes(pub Box<[AnimationFillMode]>);
 
 impl MakeComputed for AnimationFillModes {}
@@ -322,6 +332,7 @@ impl<'i> FromCss<'i> for AnimationFillModes {
 
 /// Supported values for `animation-play-state`.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum AnimationPlayState {
   #[default]
   /// The animation is actively progressing with time.
@@ -338,6 +349,7 @@ declare_enum_from_css_impl!(
 
 /// Parsed values for `animation-play-state`.
 #[derive(Debug, Clone, PartialEq, Default)]
+#[non_exhaustive]
 pub struct AnimationPlayStates(pub Box<[AnimationPlayState]>);
 
 impl MakeComputed for AnimationPlayStates {}
@@ -353,7 +365,9 @@ impl<'i> FromCss<'i> for AnimationPlayStates {
 }
 
 /// Parsed value for one `animation` shorthand item.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, TypedBuilder)]
+#[non_exhaustive]
+#[builder(field_defaults(default))]
 pub struct Animation {
   /// Parsed `animation-duration`.
   pub duration: AnimationTime,
@@ -370,6 +384,7 @@ pub struct Animation {
   /// Parsed `animation-play-state`.
   pub play_state: AnimationPlayState,
   /// Parsed `animation-name`, with `None` representing the CSS `none` keyword.
+  #[builder(setter(strip_option))]
   pub name: Option<String>,
 }
 

@@ -5,6 +5,7 @@ use crate::layout::style::{Angle, CssToken, FromCss, MakeComputed, ParseResult};
 
 /// Controls the slant (italic/oblique) of text rendering.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct FontStyle(ParleyFontStyle);
 
 impl MakeComputed for FontStyle {}

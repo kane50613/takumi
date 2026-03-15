@@ -12,9 +12,6 @@ use crate::rendering::Sizing;
 use super::{CssSyntaxKind, CssToken};
 
 /// Represents a percentage value (0.0-1.0) in CSS parsing.
-///
-/// This struct wraps an f32 value that represents a percentage
-/// where 0.0 corresponds to 0% and 1.0 corresponds to 100%.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PercentageNumber(pub f32);
 

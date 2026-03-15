@@ -15,6 +15,7 @@ use crate::rendering::{RenderContext, Sizing};
 
 /// Represents a linear gradient.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct LinearGradient {
   /// The angle of the gradient.
   pub angle: Angle,
@@ -187,6 +188,7 @@ impl GradientOverlayTile for LinearGradientTile {
 /// Represents a gradient stop position.
 /// If a percentage or number (0.0-1.0) is provided, it is treated as a percentage.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct StopPosition(pub Length);
 
 impl MakeComputed for StopPosition {
@@ -197,6 +199,7 @@ impl MakeComputed for StopPosition {
 
 /// Represents a gradient stop.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum GradientStop {
   /// A color gradient stop.
   ColorHint {
@@ -269,6 +272,7 @@ impl<'i> FromCss<'i> for GradientStops {
 
 /// Represents a resolved gradient stop with a position.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct ResolvedGradientStop {
   /// The color of the gradient stop.
   pub color: Color,
@@ -322,6 +326,7 @@ impl<'i> FromCss<'i> for GradientStop {
 
 /// Represents an angle value in degrees.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct Angle(f32);
 
 impl MakeComputed for Angle {}
@@ -401,6 +406,7 @@ impl Angle {
 }
 
 /// Represents a horizontal keyword.
+#[non_exhaustive]
 pub enum HorizontalKeyword {
   /// The left keyword.
   Left,
@@ -409,6 +415,7 @@ pub enum HorizontalKeyword {
 }
 
 /// Represents a vertical keyword.
+#[non_exhaustive]
 pub enum VerticalKeyword {
   /// The top keyword.
   Top,

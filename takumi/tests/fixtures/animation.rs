@@ -1,13 +1,12 @@
 use std::f32::consts::PI;
 
 use parley::GenericFamily;
-use takumi::layout::{
-  node::Node,
-  style::{Length::*, *},
-};
-use takumi::rendering::{
-  AnimationFrame, RenderOptions, RenderOptionsBuilder, SequentialSceneBuilder,
-  render_sequence_animation,
+use takumi::{
+  layout::{
+    node::Node,
+    style::{Length::*, *},
+  },
+  rendering::{AnimationFrame, RenderOptions, render_sequence_animation},
 };
 
 use crate::test_utils::{CONTEXT, create_test_viewport_with_size, run_animation_fixture_test};
@@ -104,11 +103,10 @@ fn keyframe_interpolation_node() -> Node {
 }
 
 fn keyframe_interpolation_frames() -> Vec<AnimationFrame> {
-  let scene = SequentialSceneBuilder::default()
+  let scene = takumi::rendering::SequentialScene::builder()
     .options(keyframe_interpolation_options())
     .duration_ms(KEYFRAME_INTERPOLATION_DURATION_MS)
-    .build()
-    .unwrap();
+    .build();
 
   render_sequence_animation(&[scene], KEYFRAME_INTERPOLATION_FPS).unwrap()
 }
@@ -123,13 +121,12 @@ fn keyframe_interpolation_options() -> RenderOptions<'static> {
     unreachable!();
   };
 
-  RenderOptionsBuilder::default()
+  RenderOptions::builder()
     .viewport(create_test_viewport_with_size(800, 400))
     .node(keyframe_interpolation_node())
     .global(&CONTEXT)
     .stylesheet(stylesheet)
     .build()
-    .unwrap()
 }
 
 fn keyframe_interpolation_stylesheet() -> &'static str {

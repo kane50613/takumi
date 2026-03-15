@@ -1219,11 +1219,12 @@ impl<'i> AtRuleParser<'i> for RuleParser {
         }
 
         Ok(StyleSheetFragment {
-          keyframes: vec![KeyframesRule {
-            name,
-            keyframes,
-            media_queries: Vec::new(),
-          }],
+          keyframes: vec![
+            KeyframesRule::builder()
+              .name(name)
+              .keyframes(keyframes)
+              .build(),
+          ],
           ..StyleSheetFragment::default()
         })
       }

@@ -5,6 +5,7 @@ use crate::layout::style::{declare_enum_from_css_impl, tw::TailwindPropertyParse
 
 /// How children overflowing their container should affect layout
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum Overflow {
   /// The automatic minimum size of this node as a flexbox/grid item should be based on the size of its content.
   /// Content that overflows this node *should* contribute to the scroll region of its parent.

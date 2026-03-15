@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 /// Output-stage dithering algorithms for static image exports and raw buffers.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
+#[non_exhaustive]
 pub enum DitheringAlgorithm {
   /// Disable output dithering.
   #[default]

@@ -42,6 +42,7 @@ pub(crate) fn synthesis_embolden_strength(font_size: f32) -> f32 {
 
 /// Errors that can occur during font loading and conversion.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum FontError {
   /// Error occurred during WOFF conversion
   #[cfg(any(feature = "woff", feature = "woff2"))]
@@ -57,6 +58,7 @@ pub enum FontError {
 
 /// Supported font formats for loading and processing
 #[derive(Copy, Clone)]
+#[non_exhaustive]
 pub enum FontFormat {
   #[cfg(feature = "woff")]
   /// Web Open Font Format (WOFF) - compressed web font format

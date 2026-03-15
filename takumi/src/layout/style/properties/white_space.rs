@@ -7,6 +7,7 @@ use crate::layout::style::{
 
 /// Controls how whitespace should be handled.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub struct WhiteSpace {
   /// Controls whether text should be wrapped.
   pub text_wrap_mode: TextWrapMode,

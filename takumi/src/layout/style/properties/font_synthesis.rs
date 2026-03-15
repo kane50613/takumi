@@ -1,11 +1,14 @@
 use cssparser::{Parser, Token, match_ignore_ascii_case};
+use typed_builder::TypedBuilder;
 
 use crate::layout::style::{
   CssToken, FromCss, MakeComputed, ParseResult, declare_enum_from_css_impl,
 };
 
 /// Controls synthetic font behaviors.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, TypedBuilder)]
+#[non_exhaustive]
+#[builder(field_defaults(default))]
 pub struct FontSynthesis {
   /// Controls synthetic bolding when a matching font weight is unavailable.
   pub weight: FontSynthesic,
@@ -55,6 +58,7 @@ impl<'i> FromCss<'i> for FontSynthesis {
 
 /// Control mode for synthetic.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum FontSynthesic {
   /// Synthetic is allowed.
   #[default]

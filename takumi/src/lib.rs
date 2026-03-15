@@ -33,7 +33,7 @@
 //!     Viewport,
 //!     style::{Length::Px, Style, StyleDeclaration},
 //!   },
-//!   rendering::{render, RenderOptionsBuilder},
+//!   rendering::{render, RenderOptions},
 //!   GlobalContext,
 //! };
 //!
@@ -57,12 +57,11 @@
 //! let viewport = Viewport::new(Some(1200), Some(630));
 //!
 //! // Create render options
-//! let options = RenderOptionsBuilder::default()
+//! let options = RenderOptions::builder()
 //!   .viewport(viewport)
 //!   .node(node)
 //!   .global(&global)
-//!   .build()
-//!   .unwrap();
+//!   .build();
 //!
 //! // Render the layout to an `RgbaImage`
 //! let image = render(options).unwrap();
@@ -117,9 +116,35 @@ use crate::resources::{font::FontContext, image::PersistentImageStore};
 #[derive(Default)]
 pub struct GlobalContext {
   /// The font context for text rendering
-  pub font_context: FontContext,
+  font_context: FontContext,
   /// The image store for persisting contents
-  pub persistent_image_store: PersistentImageStore,
+  persistent_image_store: PersistentImageStore,
+}
+
+impl GlobalContext {
+  /// Returns a reference to the font context.
+  #[inline]
+  pub fn font_context(&self) -> &FontContext {
+    &self.font_context
+  }
+
+  /// Returns a mutable reference to the font context.
+  #[inline]
+  pub fn font_context_mut(&mut self) -> &mut FontContext {
+    &mut self.font_context
+  }
+
+  /// Returns a reference to the persistent image store.
+  #[inline]
+  pub fn persistent_image_store(&self) -> &PersistentImageStore {
+    &self.persistent_image_store
+  }
+
+  /// Returns a mutable reference to the persistent image store.
+  #[inline]
+  pub fn persistent_image_store_mut(&mut self) -> &mut PersistentImageStore {
+    &mut self.persistent_image_store
+  }
 }
 
 /// Type alias for HashSet using XXH3 hasher

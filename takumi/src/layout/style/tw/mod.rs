@@ -25,6 +25,7 @@ pub const TW_VAR_SPACING: f32 = 0.25;
 
 /// Represents a collection of tailwind properties.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct TailwindValues {
   inner: Vec<TailwindValue>,
 }
@@ -383,6 +384,7 @@ impl<'de> Deserialize<'de> for TailwindValues {
 
 /// Represents a tailwind value.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct TailwindValue {
   /// The tailwind property.
   pub property: TailwindProperty,
@@ -446,6 +448,7 @@ impl TailwindValue {
 
 /// Represents a breakpoint.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct Breakpoint(pub(crate) Length);
 
 impl Breakpoint {
@@ -1258,11 +1261,7 @@ impl TailwindProperty {
         push_decl!(builder, important, overflow_y(Overflow::Hidden));
       }
       TailwindProperty::TextWrap(text_wrap) => {
-        push_decl!(
-          builder,
-          important,
-          text_wrap_mode(text_wrap.mode.unwrap_or_default())
-        );
+        push_decl!(builder, important, text_wrap_mode(text_wrap.mode));
         push_decl!(builder, important, text_wrap_style(text_wrap.style));
       }
       TailwindProperty::WhiteSpace(white_space) => {

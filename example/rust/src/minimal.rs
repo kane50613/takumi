@@ -7,7 +7,7 @@ use takumi::{
     node::Node,
     style::{Length::Px, Style, StyleDeclaration},
   },
-  rendering::{ImageOutputFormat, RenderOptionsBuilder, render, write_image},
+  rendering::{ImageOutputFormat, RenderOptions, render, write_image},
 };
 
 /// Generates a "Hello, {name}!" image with specified dimensions and styling
@@ -24,7 +24,7 @@ pub fn say_hello_to(name: &str) {
   // by default, takumi WON'T load any system fonts.
   //
   // Example:
-  // context.font_context.load_and_store()
+  // context.font_context_mut().load_and_store()
 
   // Create a text node with custom styling
   // Font size is set to 48.0 and other styles use default values
@@ -36,12 +36,11 @@ pub fn say_hello_to(name: &str) {
   let root = Node::container([text]);
 
   // Create render options
-  let options = RenderOptionsBuilder::default()
+  let options = RenderOptions::builder()
     .viewport((1200, 630).into())
     .node(root)
     .global(&context)
-    .build()
-    .unwrap();
+    .build();
 
   // Create an image from the render options
   let image = render(options).unwrap();

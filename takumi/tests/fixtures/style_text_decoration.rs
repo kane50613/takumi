@@ -17,12 +17,12 @@ fn test_style_text_decoration() {
           Color([240, 240, 240, 255]),
         )))
         .with(StyleDeclaration::font_size(Px(72.0).into()))
-        .with_text_decoration(TextDecoration {
-          line: TextDecorationLines::all(),
-          style: None,
-          color: Some(ColorInput::Value(Color([255, 0, 0, 255]))),
-          thickness: None,
-        }),
+        .with_text_decoration(
+          TextDecoration::builder()
+            .line(TextDecorationLines::all())
+            .color(ColorInput::Value(Color([255, 0, 0, 255])))
+            .build(),
+        ),
     );
 
   run_fixture_test(text, "style_text_decoration");
@@ -37,12 +37,12 @@ fn text_decoration_skip_ink_parapsychologists() {
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::text_align(TextAlign::Center))
         .with(StyleDeclaration::font_size(Px(96.0).into()))
-        .with_text_decoration(TextDecoration {
-          line: TextDecorationLines::UNDERLINE,
-          style: None,
-          color: Some(ColorInput::Value(Color([255, 0, 0, 255]))),
-          thickness: None,
-        })
+        .with_text_decoration(
+          TextDecoration::builder()
+            .line(TextDecorationLines::UNDERLINE)
+            .color(ColorInput::Value(Color([255, 0, 0, 255])))
+            .build(),
+        )
         .with(StyleDeclaration::text_decoration_skip_ink(skip_ink)),
     )
   };

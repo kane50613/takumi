@@ -109,7 +109,7 @@ fn collect_inline_items_impl<'n, 'g>(
   }
 }
 
-pub enum InlineContentKind<'c> {
+pub(crate) enum InlineContentKind<'c> {
   Text(Cow<'c, str>),
   Box,
 }

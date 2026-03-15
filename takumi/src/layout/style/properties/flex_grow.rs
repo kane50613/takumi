@@ -8,6 +8,7 @@ use crate::rendering::Sizing;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// Represents a flex grow value.
+#[non_exhaustive]
 pub struct FlexGrow(pub f32);
 
 impl MakeComputed for FlexGrow {}

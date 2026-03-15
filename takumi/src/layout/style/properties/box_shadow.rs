@@ -1,34 +1,33 @@
 use std::{borrow::Cow, fmt::Debug};
 
 use cssparser::{BasicParseErrorKind, ParseError, Parser};
+use typed_builder::TypedBuilder;
 
 use crate::{
   layout::style::{
-    Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length,
+    Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length, LengthDefaultsToZero,
     ListInterpolationStrategy, MakeComputed, ParseResult, next_is_comma,
   },
   rendering::Sizing,
 };
 
 /// Represents a box shadow with all its properties.
-///
-/// Box shadows can be either outset (default) or inset, and consist of:
-/// - Horizontal and vertical offsets
-/// - Blur radius (optional, defaults to 0)
-/// - Spread radius (optional, defaults to 0)
-/// - Color (optional, defaults to transparent)
-#[derive(Debug, Clone, PartialEq, Copy)]
+/// Construct with [`BoxShadow::builder`].
+#[derive(Debug, Clone, PartialEq, Copy, Default, TypedBuilder)]
+#[non_exhaustive]
+#[builder(field_defaults(default))]
 pub struct BoxShadow {
   /// Whether the shadow is inset (inside the element) or outset (outside the element).
+  #[builder(default = false)]
   pub inset: bool,
   /// Horizontal offset of the shadow.
-  pub offset_x: Length,
+  pub offset_x: LengthDefaultsToZero,
   /// Vertical offset of the shadow.
-  pub offset_y: Length,
+  pub offset_y: LengthDefaultsToZero,
   /// Blur radius of the shadow. Higher values create a more blurred shadow.
-  pub blur_radius: Length,
+  pub blur_radius: LengthDefaultsToZero,
   /// Spread radius of the shadow. Positive values expand the shadow, negative values shrink it.
-  pub spread_radius: Length,
+  pub spread_radius: LengthDefaultsToZero,
   /// Color of the shadow.
   pub color: ColorInput,
 }

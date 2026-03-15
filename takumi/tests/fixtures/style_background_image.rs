@@ -299,41 +299,6 @@ fn test_background_image_grid_pattern() {
 }
 
 #[test]
-fn test_background_image_noise_v1_with_gradient() {
-  let images = BackgroundImages::from_str(
-    "radial-gradient(circle at 25% 25%, rgba(255, 0, 128, 0.6), transparent 50%), radial-gradient(circle at 75% 75%, rgba(0, 128, 255, 0.6), transparent 50%), linear-gradient(135deg, rgba(138, 43, 226, 0.4), rgba(30, 144, 255, 0.4), rgba(255, 20, 147, 0.4)), noise-v1(opacity(0.8))",
-  )
-  .unwrap();
-
-  let container = create_container_with(
-    images.clone(),
-    Some(BackgroundSizes::from_str("100% 100%, 100% 100%, 100% 100%, 100% 100%").unwrap()),
-    Some(BackgroundPositions::from_str("0 0, 0 0, 0 0, 0 0").unwrap()),
-    Some(BackgroundRepeats::from_str("no-repeat, no-repeat, no-repeat, no-repeat").unwrap()),
-  )
-  .with_style(
-    Style::default()
-      .with(StyleDeclaration::width(Percentage(100.0)))
-      .with(StyleDeclaration::height(Percentage(100.0)))
-      .with(StyleDeclaration::background_image(Some(images)))
-      .with(StyleDeclaration::background_size(
-        BackgroundSizes::from_str("100% 100%, 100% 100%, 100% 100%, 100% 100%").unwrap(),
-      ))
-      .with(StyleDeclaration::background_position(
-        BackgroundPositions::from_str("0 0, 0 0, 0 0, 0 0").unwrap(),
-      ))
-      .with(StyleDeclaration::background_repeat(
-        BackgroundRepeats::from_str("no-repeat, no-repeat, no-repeat, no-repeat").unwrap(),
-      ))
-      .with(StyleDeclaration::background_color(ColorInput::Value(
-        Color::white(),
-      ))),
-  );
-
-  run_fixture_test(container, "style_background_image_noise_v1_blend");
-}
-
-#[test]
 fn test_background_image_dotted_pattern() {
   let images = BackgroundImages::from_str(
     "radial-gradient(circle at 25px 25px, lightgray 2%, transparent 0%), radial-gradient(circle at 75px 75px, lightgray 2%, transparent 0%)",

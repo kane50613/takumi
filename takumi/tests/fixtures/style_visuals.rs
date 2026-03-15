@@ -119,14 +119,16 @@ fn test_style_box_shadow() {
         Color([255, 0, 0, 255]),
       )))
       .with(StyleDeclaration::box_shadow(Some(
-        vec![BoxShadow {
-          color: ColorInput::Value(Color([0, 0, 0, 128])),
-          offset_x: Px(5.0),
-          offset_y: Px(5.0),
-          blur_radius: Px(10.0),
-          spread_radius: Px(0.0),
-          inset: false,
-        }]
+        vec![
+          BoxShadow::builder()
+            .color(ColorInput::Value(Color([0, 0, 0, 128])))
+            .offset_x(Px(5.0))
+            .offset_y(Px(5.0))
+            .blur_radius(Px(10.0))
+            .spread_radius(Px(0.0))
+            .inset(false)
+            .build(),
+        ]
         .into_boxed_slice(),
       ))),
   )])
@@ -155,14 +157,16 @@ fn test_style_box_shadow_inset() {
         [SpacePair::from_single(Px(16.0)); 4],
       ))))
       .with(StyleDeclaration::box_shadow(Some(
-        vec![BoxShadow {
-          color: ColorInput::Value(Color([0, 0, 0, 153])),
-          offset_x: Px(4.0),
-          offset_y: Px(6.0),
-          blur_radius: Px(18.0),
-          spread_radius: Px(8.0),
-          inset: true,
-        }]
+        vec![
+          BoxShadow::builder()
+            .color(ColorInput::Value(Color([0, 0, 0, 153])))
+            .offset_x(Px(4.0))
+            .offset_y(Px(6.0))
+            .blur_radius(Px(18.0))
+            .spread_radius(Px(8.0))
+            .inset(true)
+            .build(),
+        ]
         .into_boxed_slice(),
       ))),
   )])

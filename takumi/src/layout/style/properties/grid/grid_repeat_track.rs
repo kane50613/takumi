@@ -7,6 +7,7 @@ use crate::rendering::Sizing;
 
 /// Represents a grid repeat track
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct GridRepeatTrack {
   /// The size of the grid track
   pub size: GridTrackSize,

@@ -9,6 +9,7 @@ use crate::{
 
 /// Absolute `font-size` keywords.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum FontSizeKeyword {
   /// Maps to the `xx-small` keyword.
   XXSmall,
@@ -80,6 +81,7 @@ impl<'i> FromCss<'i> for FontSizeKeyword {
 
 /// A `font-size` value, either a keyword or an explicit length.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum FontSize {
   /// A CSS absolute-size keyword such as `medium`.
   Keyword(FontSizeKeyword),

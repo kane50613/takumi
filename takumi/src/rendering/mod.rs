@@ -70,16 +70,10 @@ impl Sizing {
   }
 }
 
-/// The absolute animation time used when resolving animated styles.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct RenderTime {
-  /// The current time on the global timeline in milliseconds.
-  pub time_ms: u64,
-}
-
 /// The context for the internal rendering. You should not construct this directly.
 #[derive(Clone)]
-pub struct RenderContext<'g> {
+#[non_exhaustive]
+pub(crate) struct RenderContext<'g> {
   /// The global context.
   pub(crate) global: &'g GlobalContext,
   /// The scale factor for the image renderer.
@@ -91,7 +85,7 @@ pub struct RenderContext<'g> {
   /// The style after inheritance.
   pub(crate) style: Box<ComputedStyle>,
   /// The active time for animation sampling.
-  pub(crate) time: RenderTime,
+  pub(crate) time: u64,
   /// Whether to draw debug borders.
   pub(crate) draw_debug_border: bool,
   /// The resources fetched externally.
@@ -106,7 +100,7 @@ impl<'g> RenderContext<'g> {
     viewport: Viewport,
     fetched_resources: HashMap<Arc<str>, Arc<ImageSource>>,
     stylesheet: Rc<StyleSheet>,
-    time: RenderTime,
+    time: u64,
   ) -> Self {
     Self {
       global,
@@ -129,13 +123,7 @@ impl<'g> RenderContext<'g> {
   /// Internal, only used in tests.
   #[cfg(test)]
   pub(crate) fn new_test(global: &'g GlobalContext, viewport: Viewport) -> Self {
-    Self::new(
-      global,
-      viewport,
-      Default::default(),
-      Default::default(),
-      RenderTime::default(),
-    )
+    Self::new(global, viewport, Default::default(), Default::default(), 0)
   }
 }
 

@@ -1,4 +1,5 @@
 use cssparser::{Parser, match_ignore_ascii_case};
+use typed_builder::TypedBuilder;
 
 use crate::layout::style::{
   CssDescriptorKind, CssToken, FromCss, MakeComputed, ParseResult, declare_enum_from_css_impl,
@@ -6,11 +7,13 @@ use crate::layout::style::{
 };
 
 /// Controls how text should be wrapped.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+/// Construct with [`TextWrap::builder`].
+#[derive(Debug, Clone, Copy, PartialEq, Default, TypedBuilder)]
+#[non_exhaustive]
+#[builder(field_defaults(default))]
 pub struct TextWrap {
   /// Controls whether text should be wrapped.
-  /// Marking it as optional since it can also be set by `white-space`.
-  pub mode: Option<TextWrapMode>,
+  pub mode: TextWrapMode,
   /// Controls the style of text wrapping.
   pub style: TextWrapStyle,
 }
@@ -21,19 +24,19 @@ impl TailwindPropertyParser for TextWrap {
   fn parse_tw(token: &str) -> Option<Self> {
     match_ignore_ascii_case! {token,
       "wrap" => Some(TextWrap {
-        mode: Some(TextWrapMode::Wrap),
+        mode: TextWrapMode::Wrap,
         style: TextWrapStyle::default(),
       }),
       "nowrap" => Some(TextWrap {
-        mode: Some(TextWrapMode::NoWrap),
+        mode: TextWrapMode::NoWrap,
         style: TextWrapStyle::default(),
       }),
       "balance" => Some(TextWrap {
-        mode: None,
+        mode: TextWrapMode::default(),
         style: TextWrapStyle::Balance,
       }),
       "pretty" => Some(TextWrap {
-        mode: None,
+        mode: TextWrapMode::default(),
         style: TextWrapStyle::Pretty,
       }),
       _ => None,
@@ -60,7 +63,10 @@ impl<'i> FromCss<'i> for TextWrap {
       return Err(input.new_error_for_next_token());
     }
 
-    Ok(TextWrap { mode, style })
+    Ok(TextWrap {
+      mode: mode.unwrap_or_default(),
+      style,
+    })
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[
@@ -71,6 +77,7 @@ impl<'i> FromCss<'i> for TextWrap {
 
 /// Controls whether text should be wrapped.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum TextWrapMode {
   /// Text is wrapped across lines at appropriate characters to minimize overflow.
   #[default]
@@ -96,6 +103,7 @@ declare_enum_from_css_impl!(
 
 /// Controls the style of text wrapping.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum TextWrapStyle {
   /// Text is wrapped in the default way.
   #[default]

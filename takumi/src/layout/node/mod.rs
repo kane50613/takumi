@@ -40,7 +40,7 @@ pub(crate) use self::image::resolve_image;
 /// Shared metadata stored by every renderable node.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct NodeMetadata {
+pub(crate) struct NodeMetadata {
   /// The element's tag name.
   pub(crate) tag_name: Option<Box<str>>,
   /// The element's class name.
@@ -60,13 +60,14 @@ pub struct NodeMetadata {
 #[derive(Debug, Default, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// Variant-specific text node data.
-pub struct TextData {
+pub(crate) struct TextData {
   pub(crate) text: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// Variant-specific image node data.
+#[non_exhaustive]
 pub struct ImageData {
   pub(crate) src: Arc<str>,
   pub(crate) width: Option<f32>,
@@ -76,6 +77,7 @@ pub struct ImageData {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// A renderable node with shared metadata and variant-specific content.
+#[non_exhaustive]
 pub struct Node {
   #[serde(flatten)]
   pub(crate) metadata: NodeMetadata,
@@ -86,7 +88,7 @@ pub struct Node {
 /// Represents the nodes enum.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
-pub enum NodeKind {
+pub(crate) enum NodeKind {
   /// A node that contains other nodes.
   Container {
     /// The container child nodes.
@@ -533,7 +535,7 @@ impl Node {
 
 /// Style layers contributed by a node before cascade/inheritance assembly.
 #[derive(Debug, Default, Clone)]
-pub struct NodeStyleLayers {
+pub(crate) struct NodeStyleLayers {
   /// UA/default style preset for the element.
   pub preset: Option<Style>,
   /// Tailwind-derived author style for the element.

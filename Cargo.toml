@@ -10,17 +10,13 @@ members = [
 
 [profile.release]
 strip = true
-opt-level = "s"
+opt-level = 3
 lto = true
 panic = "abort"
 codegen-units = 1
 
 [profile.release.package."takumi-wasm"]
 strip = "debuginfo"
-opt-level = 3
-
-[profile.release.package."takumi-napi-core"]
-opt-level = 3
 
 # there's some color artifacts issues with zune-image decoder, we have to use a pinned version on dev branch. 
 [patch.crates-io.zune-core]

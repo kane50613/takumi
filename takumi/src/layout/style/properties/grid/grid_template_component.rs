@@ -24,6 +24,7 @@ pub(crate) trait GridTemplateComponentsExt {
 
 /// Represents a track sizing function or a list of line names between tracks
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum GridTemplateComponent {
   /// A list of line names that apply to the current grid line (e.g., [a b])
   LineNames(Vec<String>),

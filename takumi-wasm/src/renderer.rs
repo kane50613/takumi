@@ -11,15 +11,15 @@ use std::{
 use takumi::{
   GlobalContext,
   layout::{
-    DEFAULT_DEVICE_PIXEL_RATIO, DEFAULT_FONT_SIZE, Viewport,
+    DEFAULT_DEVICE_PIXEL_RATIO, Viewport,
     node::Node,
     style::{KeyframesRule, StyleSheet},
   },
   parley::{FontWeight, fontique::FontInfoOverride},
   rendering::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
-    RenderOptionsBuilder, SequentialSceneBuilder, encode_animated_gif, encode_animated_png,
-    encode_animated_webp, measure_layout, render, render_sequence_animation, write_image,
+    SequentialScene, encode_animated_gif, encode_animated_png, encode_animated_webp,
+    measure_layout, render, render_sequence_animation, write_image,
   },
   resources::image::ImageSource as LoadedImageSource,
 };
@@ -143,14 +143,14 @@ impl Renderer {
       Font::Buffer(buffer) => {
         self
           .context
-          .font_context
+          .font_context_mut()
           .load_and_store(buffer.into_vec().into(), None, None)
           .map_err(map_error)?;
       }
       Font::Object(details) => {
         self
           .context
-          .font_context
+          .font_context_mut()
           .load_and_store(
             details.data.into_vec().into(),
             Some(FontInfoOverride {
@@ -191,7 +191,7 @@ impl Renderer {
     let image = LoadedImageSource::from_bytes(&data.data).map_err(map_error)?;
     self
       .context
-      .persistent_image_store
+      .persistent_image_store_mut()
       .insert(data.src.to_string(), image);
 
     Ok(())
@@ -206,8 +206,8 @@ impl Renderer {
 
   /// Clears the renderer's internal image store.
   #[wasm_bindgen(js_name = clearImageStore)]
-  pub fn clear_image_store(&self) {
-    self.context.persistent_image_store.clear();
+  pub fn clear_image_store(&mut self) {
+    self.context.persistent_image_store_mut().clear();
   }
 
   /// Renders a node tree into an image buffer.
@@ -232,15 +232,14 @@ impl Renderer {
     let stylesheet =
       self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
 
-    let render_options = RenderOptionsBuilder::default()
-      .viewport(Viewport {
-        width: options.width,
-        height: options.height,
-        font_size: DEFAULT_FONT_SIZE,
-        device_pixel_ratio: options
-          .device_pixel_ratio
-          .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
-      })
+    let render_options = takumi::rendering::RenderOptions::builder()
+      .viewport(
+        Viewport::new(options.width, options.height).with_device_pixel_ratio(
+          options
+            .device_pixel_ratio
+            .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
+        ),
+      )
       .draw_debug_border(options.draw_debug_border.unwrap_or_default())
       .fetched_resources(fetched_resources)
       .stylesheet(stylesheet)
@@ -248,8 +247,7 @@ impl Renderer {
       .dithering(dithering)
       .node(node)
       .global(&self.context)
-      .build()
-      .map_err(|e| JsValue::from_str(&format!("Failed to build render options: {e}")))?;
+      .build();
 
     let image = render(render_options).map_err(map_error)?;
 
@@ -289,23 +287,21 @@ impl Renderer {
     let stylesheet =
       self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
 
-    let render_options = RenderOptionsBuilder::default()
-      .viewport(Viewport {
-        width: options.width,
-        height: options.height,
-        font_size: DEFAULT_FONT_SIZE,
-        device_pixel_ratio: options
-          .device_pixel_ratio
-          .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
-      })
+    let render_options = takumi::rendering::RenderOptions::builder()
+      .viewport(
+        Viewport::new(options.width, options.height).with_device_pixel_ratio(
+          options
+            .device_pixel_ratio
+            .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
+        ),
+      )
       .draw_debug_border(options.draw_debug_border.unwrap_or_default())
       .fetched_resources(fetched_resources)
       .stylesheet(stylesheet)
       .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
       .node(node)
       .global(&self.context)
-      .build()
-      .map_err(|e| JsValue::from_str(&format!("Failed to build render options: {e}")))?;
+      .build();
 
     let layout = measure_layout(render_options).map_err(map_error)?;
 
@@ -369,34 +365,28 @@ impl Renderer {
       return Err(JsValue::from_str("Expected fps to be greater than 0"));
     }
 
-    let viewport = Viewport {
-      width: Some(width),
-      height: Some(height),
-      font_size: DEFAULT_FONT_SIZE,
-      device_pixel_ratio: device_pixel_ratio.unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
-    };
+    let viewport = Viewport::new(Some(width), Some(height))
+      .with_device_pixel_ratio(device_pixel_ratio.unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO));
     let draw_debug_border = draw_debug_border.unwrap_or_default();
     let stylesheet = StyleSheet::parse_owned_list_loosy(stylesheets.unwrap_or_default());
     let scene_options = scenes
       .into_iter()
       .map(|scene| {
-        SequentialSceneBuilder::default()
+        SequentialScene::builder()
           .duration_ms(scene.duration_ms)
           .options(
-            RenderOptionsBuilder::default()
+            takumi::rendering::RenderOptions::builder()
               .viewport(viewport)
               .fetched_resources(fetched_resources.clone())
               .stylesheet(stylesheet.clone())
               .node(scene.node)
               .global(&self.context)
               .draw_debug_border(draw_debug_border)
-              .build()
-              .map_err(|e| JsValue::from_str(&format!("Failed to build render options: {e}")))?,
+              .build(),
           )
           .build()
-          .map_err(|e| JsValue::from_str(&format!("Failed to build animation scene: {e}")))
       })
-      .collect::<Result<Vec<_>, _>>()?;
+      .collect::<Vec<_>>();
     let rendered_frames = render_sequence_animation(&scene_options, fps).map_err(map_error)?;
 
     self.encode_animation(rendered_frames, format, quality)
@@ -412,27 +402,24 @@ impl Renderer {
     let frames: Vec<AnimationFrameSource> = from_value(frames.into()).map_err(map_error)?;
     let options: EncodeFramesOptions = from_value(options.into()).map_err(map_error)?;
     let fetched_resources = self.fetch_resources_map(options.fetched_resources.as_deref())?;
-    let viewport = Viewport {
-      width: Some(options.width),
-      height: Some(options.height),
-      font_size: DEFAULT_FONT_SIZE,
-      device_pixel_ratio: options
-        .device_pixel_ratio
-        .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
-    };
+    let viewport = Viewport::new(Some(options.width), Some(options.height))
+      .with_device_pixel_ratio(
+        options
+          .device_pixel_ratio
+          .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
+      );
     let stylesheet = StyleSheet::parse_owned_list_loosy(options.stylesheets.unwrap_or_default());
     let rendered_frames = frames
       .into_iter()
       .map(|frame| -> Result<AnimationFrame, JsValue> {
-        let render_options = RenderOptionsBuilder::default()
+        let render_options = takumi::rendering::RenderOptions::builder()
           .viewport(viewport)
           .fetched_resources(fetched_resources.clone())
           .node(frame.node)
           .global(&self.context)
           .draw_debug_border(options.draw_debug_border.unwrap_or_default())
           .stylesheet(stylesheet.clone())
-          .build()
-          .map_err(|e| JsValue::from_str(&format!("Failed to build render options: {e}")))?;
+          .build();
 
         let image = render(render_options).map_err(map_error)?;
         Ok(AnimationFrame::new(image, frame.duration_ms))

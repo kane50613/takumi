@@ -1,5 +1,6 @@
 use bitflags::bitflags;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
+use typed_builder::TypedBuilder;
 
 use crate::{
   layout::style::{
@@ -12,6 +13,7 @@ use crate::{
 bitflags! {
   /// Represents a collection of text decoration lines.
   #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+  #[non_exhaustive]
   pub struct TextDecorationLines: u8 {
     /// Underline text decoration.
     const UNDERLINE = 0b001;
@@ -68,6 +70,7 @@ impl MakeComputed for TextDecorationLines {}
 
 /// Represents text decoration thickness options.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum TextDecorationThickness {
   /// Use the font's default thickness, fallback to `auto` if not available.
   FromFont,
@@ -151,6 +154,7 @@ impl TailwindPropertyParser for TextDecorationThickness {
 
 /// Represents text decoration style options (currently only solid is supported).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum TextDecorationStyle {
   /// Solid text decoration style.
   #[default]
@@ -163,16 +167,18 @@ declare_enum_from_css_impl!(
 );
 
 /// Parsed `text-decoration` value.
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, TypedBuilder)]
+#[non_exhaustive]
+#[builder(field_defaults(default))]
 pub struct TextDecoration {
   /// Text decoration line style.
   pub line: TextDecorationLines,
   /// Text decoration style (currently only solid is supported).
-  pub style: Option<TextDecorationStyle>,
+  pub style: TextDecorationStyle,
   /// Optional text decoration color.
-  pub color: Option<ColorInput>,
+  pub color: ColorInput,
   /// Optional text decoration thickness.
-  pub thickness: Option<TextDecorationThickness>,
+  pub thickness: TextDecorationThickness,
 }
 
 impl MakeComputed for TextDecoration {
@@ -222,9 +228,9 @@ impl<'i> FromCss<'i> for TextDecoration {
 
     Ok(TextDecoration {
       line,
-      style,
-      color,
-      thickness,
+      style: style.unwrap_or_default(),
+      color: color.unwrap_or_default(),
+      thickness: thickness.unwrap_or_default(),
     })
   }
 
@@ -246,12 +252,11 @@ mod tests {
   fn test_parse_text_decoration_underline() {
     assert_eq!(
       TextDecoration::from_str("underline"),
-      Ok(TextDecoration {
-        line: TextDecorationLines::UNDERLINE,
-        style: None,
-        color: None,
-        thickness: None,
-      })
+      Ok(
+        TextDecoration::builder()
+          .line(TextDecorationLines::UNDERLINE)
+          .build()
+      )
     );
   }
 
@@ -259,12 +264,11 @@ mod tests {
   fn test_parse_text_decoration_line_through() {
     assert_eq!(
       TextDecoration::from_str("line-through"),
-      Ok(TextDecoration {
-        line: TextDecorationLines::LINE_THROUGH,
-        style: None,
-        color: None,
-        thickness: None,
-      })
+      Ok(
+        TextDecoration::builder()
+          .line(TextDecorationLines::LINE_THROUGH)
+          .build()
+      )
     );
   }
 
@@ -272,12 +276,12 @@ mod tests {
   fn test_parse_text_decoration_underline_solid() {
     assert_eq!(
       TextDecoration::from_str("underline solid"),
-      Ok(TextDecoration {
-        line: TextDecorationLines::UNDERLINE,
-        style: Some(TextDecorationStyle::Solid),
-        color: None,
-        thickness: None,
-      })
+      Ok(
+        TextDecoration::builder()
+          .line(TextDecorationLines::UNDERLINE)
+          .style(TextDecorationStyle::Solid)
+          .build()
+      )
     );
   }
 
@@ -285,12 +289,13 @@ mod tests {
   fn test_parse_text_decoration_line_through_solid_red() {
     assert_eq!(
       TextDecoration::from_str("line-through solid red"),
-      Ok(TextDecoration {
-        line: TextDecorationLines::LINE_THROUGH,
-        style: Some(TextDecorationStyle::Solid),
-        color: Some(ColorInput::Value(Color([255, 0, 0, 255]))),
-        thickness: None,
-      })
+      Ok(
+        TextDecoration::builder()
+          .line(TextDecorationLines::LINE_THROUGH)
+          .style(TextDecorationStyle::Solid)
+          .color(ColorInput::Value(Color([255, 0, 0, 255])))
+          .build()
+      )
     );
   }
 
@@ -298,12 +303,13 @@ mod tests {
   fn test_parse_text_decoration_multiple_lines() {
     assert_eq!(
       TextDecoration::from_str("underline line-through solid red"),
-      Ok(TextDecoration {
-        line: TextDecorationLines::UNDERLINE | TextDecorationLines::LINE_THROUGH,
-        style: Some(TextDecorationStyle::Solid),
-        color: Some(ColorInput::Value(Color([255, 0, 0, 255]))),
-        thickness: None,
-      })
+      Ok(
+        TextDecoration::builder()
+          .line(TextDecorationLines::UNDERLINE | TextDecorationLines::LINE_THROUGH)
+          .style(TextDecorationStyle::Solid)
+          .color(ColorInput::Value(Color([255, 0, 0, 255])))
+          .build()
+      )
     );
   }
 

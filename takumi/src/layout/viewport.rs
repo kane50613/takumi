@@ -8,6 +8,7 @@ pub const DEFAULT_DEVICE_PIXEL_RATIO: f32 = 1.0;
 
 /// The viewport for the image renderer.
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub struct Viewport {
   /// The width of the viewport in pixels.
   pub width: Option<u32>,
@@ -42,15 +43,33 @@ impl From<(u32, u32)> for Viewport {
   }
 }
 
+impl Default for Viewport {
+  fn default() -> Self {
+    Self::new(None, None)
+  }
+}
+
 impl Viewport {
   /// Creates a new viewport with the default font size.
-  pub fn new(width: Option<u32>, height: Option<u32>) -> Self {
+  pub const fn new(width: Option<u32>, height: Option<u32>) -> Self {
     Self {
       width,
       height,
       font_size: DEFAULT_FONT_SIZE,
       device_pixel_ratio: DEFAULT_DEVICE_PIXEL_RATIO,
     }
+  }
+
+  /// Sets the font size in pixels.
+  pub const fn with_font_size(mut self, font_size: f32) -> Self {
+    self.font_size = font_size;
+    self
+  }
+
+  /// Sets the device pixel ratio.
+  pub const fn with_device_pixel_ratio(mut self, device_pixel_ratio: f32) -> Self {
+    self.device_pixel_ratio = device_pixel_ratio;
+    self
   }
 }
 

@@ -27,6 +27,7 @@ impl<'i> FromCss<'i> for GridTrackSizes {
 
 /// Represents a grid track size
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum GridTrackSize {
   /// A minmax() track size
   MinMax(GridMinMaxSize),

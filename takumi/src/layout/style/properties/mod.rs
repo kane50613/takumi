@@ -33,7 +33,6 @@ mod length;
 mod line_clamp;
 mod line_height;
 mod linear_gradient;
-mod noise_v1;
 mod overflow;
 mod overflow_wrap;
 mod percentage_number;
@@ -82,7 +81,6 @@ pub use length::*;
 pub use line_clamp::*;
 pub use line_height::*;
 pub use linear_gradient::*;
-pub use noise_v1::*;
 pub use overflow::*;
 pub use overflow_wrap::*;
 pub use percentage_number::*;
@@ -231,8 +229,6 @@ pub enum CssDescriptorKind {
   LinearGradientFn,
   /// `<minmax()>`
   MinmaxFn,
-  /// `<noise-v1()>`
-  NoiseV1Fn,
   /// `<opacity()>`
   OpacityFn,
   /// `<path()>`
@@ -282,7 +278,6 @@ impl CssDescriptorKind {
       Self::InvertFn => "invert()",
       Self::LinearGradientFn => "linear-gradient()",
       Self::MinmaxFn => "minmax()",
-      Self::NoiseV1Fn => "noise-v1()",
       Self::OpacityFn => "opacity()",
       Self::PathFn => "path()",
       Self::PolygonFn => "polygon()",
@@ -301,6 +296,7 @@ impl CssDescriptorKind {
 }
 
 /// Enum representing CSS tokens.
+#[non_exhaustive]
 pub enum CssToken {
   /// A CSS keyword.
   Keyword(&'static str),
@@ -808,6 +804,7 @@ pub(crate) use declare_enum_from_css_impl;
 ///
 /// Similar to CSS object-fit property.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum ObjectFit {
   /// The replaced content is sized to fill the element's content box exactly, without maintaining aspect ratio
   #[default]
@@ -839,6 +836,7 @@ impl TailwindPropertyParser for ObjectFit {
 
 /// Defines how the background is clipped.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum BackgroundClip {
   /// The background extends to the outside edge of the border
   #[default]
@@ -967,6 +965,7 @@ impl<'i> FromCss<'i> for BorderRadius {
 ///
 /// This enum determines whether the width and height properties include padding and border, or just the content area.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum BoxSizing {
   /// The width and height properties include padding and border, but not the content area
   ContentBox,
@@ -987,6 +986,7 @@ impl_from_taffy_enum!(BoxSizing, taffy::BoxSizing, ContentBox, BorderBox);
 ///
 /// Corresponds to CSS text-align property values.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum TextAlign {
   /// Aligns inline content to the left edge of the line box
   Left,
@@ -1025,6 +1025,7 @@ impl_from_taffy_enum!(
 
 /// Defines whether an element creates a new stacking context.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum Isolation {
   /// The element creates a new stacking context.
   Isolate,
@@ -1044,6 +1045,7 @@ declare_enum_from_css_impl!(
 /// This controls whether an element is rendered, but unlike `display: none`,
 /// it still takes up space in the layout.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum Visibility {
   /// The element is visible.
   #[default]
@@ -1060,6 +1062,7 @@ declare_enum_from_css_impl!(
 
 /// Defines how the corners of text strokes are rendered.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum LineJoin {
   /// The corners are sharp and pointed.
   #[default]
@@ -1097,6 +1100,7 @@ impl TailwindPropertyParser for LineJoin {
 ///
 /// This enum determines how an element is positioned within its containing element.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum Position {
   /// The element is positioned according to the normal flow of the document.
   /// Offsets (top, right, bottom, left) have no effect.
@@ -1119,6 +1123,7 @@ impl_from_taffy_enum!(Position, taffy::Position, Relative, Absolute);
 ///
 /// This enum determines how flex items are laid out along the main axis.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum FlexDirection {
   /// Items are laid out in the same direction as the text direction (left-to-right for English)
   #[default]
@@ -1153,6 +1158,7 @@ impl_from_taffy_enum!(
 /// This enum determines how space is distributed between and around flex items
 /// along the main axis of the flex container.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum JustifyContent {
   /// The items are distributed using the normal flow of the flex container.
   #[default]
@@ -1228,11 +1234,11 @@ impl From<JustifyContent> for Option<taffy::JustifyContent> {
 
 /// This enum determines the layout algorithm used for the children of a node.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum Display {
   /// The element is not displayed
   None,
   /// The element generates a flex container and its children follow the flexbox layout algorithm
-  #[default]
   Flex,
   /// The element generates an inline-level flex container
   InlineFlex,
@@ -1241,6 +1247,7 @@ pub enum Display {
   /// The element generates an inline-level grid container
   InlineGrid,
   /// The element generates an inline container and its children follow the inline layout algorithm
+  #[default]
   Inline,
   /// The element creates a block container and its children follow the block layout algorithm
   Block,
@@ -1302,14 +1309,10 @@ impl Display {
 impl From<Display> for taffy::Display {
   fn from(value: Display) -> Self {
     match value {
-      Display::Flex => taffy::Display::Flex,
-      Display::InlineFlex => taffy::Display::Flex,
-      Display::Grid => taffy::Display::Grid,
-      Display::InlineGrid => taffy::Display::Grid,
-      Display::Block => taffy::Display::Block,
-      Display::InlineBlock => taffy::Display::Block,
+      Display::Flex | Display::InlineFlex => taffy::Display::Flex,
+      Display::Grid | Display::InlineGrid => taffy::Display::Grid,
+      Display::Block | Display::InlineBlock | Display::Inline => taffy::Display::Block,
       Display::None => taffy::Display::None,
-      Display::Inline => unreachable!("Inline node should not be inserted into taffy context"),
     }
   }
 }
@@ -1319,6 +1322,7 @@ impl From<Display> for taffy::Display {
 /// This enum determines how items are aligned within the flex container
 /// along the cross axis (perpendicular to the main axis).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum AlignItems {
   /// The items are distributed using the normal flow of the flex container.
   #[default]
@@ -1376,6 +1380,7 @@ impl From<AlignItems> for Option<taffy::AlignItems> {
 ///
 /// This enum determines how flex items should wrap within the flex container.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum FlexWrap {
   /// Flex items will all be displayed in a single line, shrinking as needed
   #[default]
@@ -1397,6 +1402,7 @@ impl_from_taffy_enum!(FlexWrap, taffy::FlexWrap, NoWrap, Wrap, WrapReverse);
 
 /// Controls text case transformation when rendering.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum TextTransform {
   /// Do not transform text
   #[default]
@@ -1419,6 +1425,7 @@ declare_enum_from_css_impl!(
 
 /// Controls whether text decoration should skip descenders.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum TextDecorationSkipInk {
   /// Skip descenders and glyph interiors when painting decorations.
   #[default]
@@ -1435,6 +1442,7 @@ declare_enum_from_css_impl!(
 
 /// Controls how whitespace should be collapsed.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum WhiteSpaceCollapse {
   /// Preserve whitespace as is—spaces and tabs are not collapsed.
   Preserve,
@@ -1457,6 +1465,7 @@ declare_enum_from_css_impl!(
 
 /// Defines how images should be scaled when rendered.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum ImageScalingAlgorithm {
   /// The image is scaled using Catmull-Rom interpolation.
   /// This is balanced for speed and quality.
@@ -1490,6 +1499,7 @@ impl From<ImageScalingAlgorithm> for resvg::usvg::ImageRendering {
 
 /// Represents border style options.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum BorderStyle {
   /// No border will be rendered.
   #[default]

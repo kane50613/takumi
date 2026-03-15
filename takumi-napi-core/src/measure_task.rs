@@ -5,8 +5,8 @@ use std::{collections::HashMap, sync::Arc};
 use napi::bindgen_prelude::*;
 use takumi::{
   layout::style::StyleSheet,
-  layout::{DEFAULT_DEVICE_PIXEL_RATIO, DEFAULT_FONT_SIZE, Viewport, node::Node},
-  rendering::{RenderOptionsBuilder, measure_layout},
+  layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node},
+  rendering::measure_layout,
   resources::image::ImageSource as LoadedImageSource,
 };
 
@@ -34,15 +34,12 @@ impl MeasureTask {
     Ok(MeasureTask {
       node: Some(node),
       state,
-      viewport: Viewport {
-        width: options.width,
-        height: options.height,
-        font_size: DEFAULT_FONT_SIZE,
-        device_pixel_ratio: options
+      viewport: Viewport::new(options.width, options.height).with_device_pixel_ratio(
+        options
           .device_pixel_ratio
           .map(|ratio| ratio as f32)
           .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
-      },
+      ),
       time_ms: options.time_ms.unwrap_or_default().max(0) as u64,
       stylesheet: parse_stylesheet(
         options.stylesheets,
@@ -83,15 +80,14 @@ impl Task for MeasureTask {
       .read()
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
-    let options = RenderOptionsBuilder::default()
+    let options = takumi::rendering::RenderOptions::builder()
       .viewport(self.viewport)
       .fetched_resources(initialized_images)
       .stylesheet(take(&mut self.stylesheet))
       .time_ms(self.time_ms)
       .node(node)
       .global(&state.global)
-      .build()
-      .map_err(map_error)?;
+      .build();
 
     measure_layout(options).map_err(map_error)
   }

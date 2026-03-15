@@ -3,7 +3,7 @@ use std::hint::black_box;
 use takumi::{
   GlobalContext,
   layout::{Viewport, node::Node},
-  rendering::{RenderOptionsBuilder, render},
+  rendering::{RenderOptions, render},
 };
 
 fn run_effect_render(global: &GlobalContext, effect_tw: &str) {
@@ -16,12 +16,11 @@ fn run_effect_render(global: &GlobalContext, effect_tw: &str) {
 
   let viewport = Viewport::new(Some(512), Some(512));
 
-  let options = RenderOptionsBuilder::default()
+  let options = RenderOptions::builder()
     .viewport(viewport)
     .node(node)
     .global(global)
-    .build()
-    .unwrap();
+    .build();
 
   let _image = render(options).unwrap();
 }

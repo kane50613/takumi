@@ -11,6 +11,7 @@ use crate::{
 
 /// Horizontal keywords for `background-position`.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum PositionKeywordX {
   /// Align to the left edge.
   Left,
@@ -22,6 +23,7 @@ pub enum PositionKeywordX {
 
 /// Vertical keywords for `background-position`.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum PositionKeywordY {
   /// Align to the top edge.
   Top,
@@ -33,6 +35,7 @@ pub enum PositionKeywordY {
 
 /// A single `background-position` component for an axis.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum PositionComponent {
   /// A horizontal keyword.
   KeywordX(PositionKeywordX),

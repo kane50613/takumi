@@ -381,12 +381,11 @@ fn text_stroke_background_clip() {
 #[test]
 fn text_shadow() {
   // #ffcc00 1px 0 10px
-  let shadows = [TextShadow {
-    offset_x: Px(1.0),
-    offset_y: Px(0.0),
-    blur_radius: Px(10.0),
-    color: ColorInput::Value(Color([255, 204, 0, 255])),
-  }];
+  let shadows = [TextShadow::builder()
+    .offset_x(Px(1.0))
+    .blur_radius(Px(10.0))
+    .color(ColorInput::Value(Color([255, 204, 0, 255])))
+    .build()];
 
   let text = Node::text("Shadowed Text".to_string()).with_style(
     Style::default()
@@ -403,12 +402,11 @@ fn text_shadow() {
 #[test]
 fn text_shadow_no_blur_radius() {
   // 5px 5px #558abb
-  let shadows = [TextShadow {
-    offset_x: Px(5.0),
-    offset_y: Px(5.0),
-    blur_radius: Px(0.0),
-    color: ColorInput::Value(Color([85, 138, 187, 255])),
-  }];
+  let shadows = [TextShadow::builder()
+    .offset_x(Px(5.0))
+    .offset_y(Px(5.0))
+    .color(ColorInput::Value(Color([85, 138, 187, 255])))
+    .build()];
 
   let text = Node::text("Shadowed Text".to_string()).with_style(
     Style::default()
@@ -767,19 +765,13 @@ fn text_font_synthesis_weight_emoji() {
   };
 
   let nodes: Vec<Node> = [
-    (
-      "auto",
-      FontSynthesis {
-        weight: FontSynthesic::Auto,
-        style: FontSynthesic::Auto,
-      },
-    ),
+    ("auto", FontSynthesis::default()),
     (
       "none",
-      FontSynthesis {
-        weight: FontSynthesic::None,
-        style: FontSynthesic::None,
-      },
+      FontSynthesis::builder()
+        .weight(FontSynthesic::None)
+        .style(FontSynthesic::None)
+        .build(),
     ),
   ]
   .iter()

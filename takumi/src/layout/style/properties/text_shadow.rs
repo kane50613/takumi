@@ -1,24 +1,27 @@
 use std::{borrow::Cow, fmt::Debug};
 
 use cssparser::{BasicParseErrorKind, ParseError, Parser};
+use typed_builder::TypedBuilder;
 
 use crate::{
   layout::style::{
-    Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length,
+    Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length, LengthDefaultsToZero,
     ListInterpolationStrategy, MakeComputed, ParseResult, next_is_comma,
   },
   rendering::Sizing,
 };
 
 /// Represents a text shadow with all its properties.
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq, Copy, Default, TypedBuilder)]
+#[non_exhaustive]
+#[builder(field_defaults(default))]
 pub struct TextShadow {
   /// Horizontal offset of the shadow.
-  pub offset_x: Length,
+  pub offset_x: LengthDefaultsToZero,
   /// Vertical offset of the shadow.
-  pub offset_y: Length,
+  pub offset_y: LengthDefaultsToZero,
   /// Blur radius of the shadow. Higher values create a more blurred shadow.
-  pub blur_radius: Length,
+  pub blur_radius: LengthDefaultsToZero,
   /// Color of the shadow.
   pub color: ColorInput,
 }

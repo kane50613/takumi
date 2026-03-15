@@ -4,13 +4,13 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::layout::style::{
   Animatable, ConicGradient, CssDescriptorKind, CssToken, FromCss, LinearGradient,
-  ListInterpolationStrategy, MakeComputed, NoiseV1, ParseResult, RadialGradient,
-  tw::TailwindPropertyParser,
+  ListInterpolationStrategy, MakeComputed, ParseResult, RadialGradient, tw::TailwindPropertyParser,
 };
 use crate::rendering::Sizing;
 
 /// Background image variants supported by Takumi.
 #[derive(Debug, Clone, Default, PartialEq)]
+#[non_exhaustive]
 pub enum BackgroundImage {
   /// No background image.
   #[default]
@@ -21,8 +21,6 @@ pub enum BackgroundImage {
   Radial(RadialGradient),
   /// CSS conic-gradient(...)
   Conic(ConicGradient),
-  /// Custom noise-v1(...)
-  Noise(NoiseV1),
   /// Load external image resource.
   Url(Arc<str>),
 }
@@ -76,7 +74,6 @@ impl<'i> FromCss<'i> for BackgroundImage {
       "linear-gradient" => Ok(BackgroundImage::Linear(LinearGradient::from_css(input)?)),
       "radial-gradient" => Ok(BackgroundImage::Radial(RadialGradient::from_css(input)?)),
       "conic-gradient" => Ok(BackgroundImage::Conic(ConicGradient::from_css(input)?)),
-      "noise-v1" => Ok(BackgroundImage::Noise(NoiseV1::from_css(input)?)),
       _ => Err(Self::unexpected_token_error(location, &Token::Function(function))),
     }
   }
@@ -86,7 +83,6 @@ impl<'i> FromCss<'i> for BackgroundImage {
     CssToken::Descriptor(CssDescriptorKind::LinearGradientFn),
     CssToken::Descriptor(CssDescriptorKind::RadialGradientFn),
     CssToken::Descriptor(CssDescriptorKind::ConicGradientFn),
-    CssToken::Descriptor(CssDescriptorKind::NoiseV1Fn),
     CssToken::Keyword("none"),
   ];
 }

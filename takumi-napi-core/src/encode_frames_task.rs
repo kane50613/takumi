@@ -7,10 +7,10 @@ use std::{
 use napi::bindgen_prelude::*;
 use rayon::prelude::*;
 use takumi::{
-  layout::{DEFAULT_DEVICE_PIXEL_RATIO, DEFAULT_FONT_SIZE, Viewport, node::Node},
+  layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node},
   rendering::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame,
-    RenderOptionsBuilder, encode_animated_gif, encode_animated_png, encode_animated_webp, render,
+    encode_animated_gif, encode_animated_png, encode_animated_webp, render,
   },
   resources::image::ImageSource as LoadedImageSource,
 };
@@ -41,15 +41,12 @@ impl EncodeFramesTask {
     Ok(Self {
       frames: Some(frames),
       state,
-      viewport: Viewport {
-        width: Some(options.width),
-        height: Some(options.height),
-        font_size: DEFAULT_FONT_SIZE,
-        device_pixel_ratio: options
+      viewport: Viewport::new(Some(options.width), Some(options.height)).with_device_pixel_ratio(
+        options
           .device_pixel_ratio
           .map(|ratio| ratio as f32)
           .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
-      },
+      ),
       format: options.format.unwrap_or(AnimationOutputFormat::webp),
       quality: options.quality,
       draw_debug_border: options.draw_debug_border.unwrap_or_default(),
@@ -101,15 +98,14 @@ impl Task for EncodeFramesTask {
       .map(|(node, duration_ms)| {
         Ok(AnimationFrame::new(
           render(
-            RenderOptionsBuilder::default()
+            takumi::rendering::RenderOptions::builder()
               .viewport(viewport)
               .fetched_resources(initialized_images.clone())
               .stylesheet(stylesheet.clone())
               .node(node)
               .global(&state.global)
               .draw_debug_border(draw_debug_border)
-              .build()
-              .map_err(map_error)?,
+              .build(),
           )
           .map_err(map_error)?,
           duration_ms,

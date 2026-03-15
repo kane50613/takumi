@@ -17,6 +17,7 @@ use crate::{
 
 /// Represents a CSS conic-gradient.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct ConicGradient {
   /// The starting angle of the gradient (default 0deg = from top).
   pub from_angle: Angle,

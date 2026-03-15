@@ -58,6 +58,7 @@ pub(crate) fn build_opacity_table(value: f32) -> TransferTable {
 
 /// Represents a single CSS filter operation
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum Filter {
   /// Brightness multiplier (1 = unchanged). Accepts number or percentage
   Brightness(PercentageNumber),

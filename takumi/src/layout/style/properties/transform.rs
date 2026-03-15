@@ -15,6 +15,7 @@ const DEFAULT_SCALE: f32 = 1.0;
 
 /// Represents a single CSS transform operation
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum Transform {
   /// Translates an element along the X-axis and Y-axis by the specified lengths
   Translate(Length, Length),
@@ -106,6 +107,7 @@ impl Animatable for Transform {
 /// | b d y |
 /// | 0 0 1 |
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[non_exhaustive]
 pub struct Affine {
   /// Horizontal scaling / cosine of rotation
   pub a: f32,
