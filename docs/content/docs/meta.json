@@ -9,6 +9,7 @@
     "index",
     "templates",
     "migration",
+    "upgrade",
     "--- Guide ---",
     "layout-engine",
     "typography-and-fonts",

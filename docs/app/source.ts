@@ -5,6 +5,7 @@ import { __iconNode as axeIconNode } from "lucide-react/dist/esm/icons/axe";
 import { __iconNode as bookMarkedIconNode } from "lucide-react/dist/esm/icons/book-marked";
 import { __iconNode as brainIconNode } from "lucide-react/dist/esm/icons/brain";
 import { __iconNode as bugIconNode } from "lucide-react/dist/esm/icons/bug";
+import { __iconNode as circleFadingArrowUpIconNode } from "lucide-react/dist/esm/icons/circle-fading-arrow-up";
 import { __iconNode as imageMarkedIconNode } from "lucide-react/dist/esm/icons/image";
 import { __iconNode as layersIconNode } from "lucide-react/dist/esm/icons/layers";
 import { __iconNode as layoutTemplateIconNode } from "lucide-react/dist/esm/icons/layout-template";
@@ -40,6 +41,7 @@ const icons = {
   Type: typeIconNode,
   Layers: layersIconNode,
   Zap: zapIconNode,
+  CircleFadingArrowUp: circleFadingArrowUpIconNode,
   LayoutTemplate: layoutTemplateIconNode,
   Wind: windIconNode,
 };
