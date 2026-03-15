@@ -78,7 +78,7 @@ impl RenderAnimationTask {
           .map(|ratio| ratio as f32)
           .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
       ),
-      format: format.unwrap_or(AnimationOutputFormat::webp),
+      format: format.unwrap_or(AnimationOutputFormat::WebP),
       quality,
       draw_debug_border: draw_debug_border.unwrap_or_default(),
       stylesheets,
@@ -148,7 +148,7 @@ impl Task for RenderAnimationTask {
     let mut buffer = Vec::new();
 
     match self.format {
-      AnimationOutputFormat::webp => {
+      AnimationOutputFormat::WebP => {
         let mut options = AnimatedWebpOptions::default();
         if let Some(quality) = self.quality {
           options.quality = quality;
@@ -157,11 +157,11 @@ impl Task for RenderAnimationTask {
         encode_animated_webp(Cow::Owned(frames), &mut buffer, options)
           .map_err(|e| Error::from_reason(e.to_string()))?;
       }
-      AnimationOutputFormat::apng => {
+      AnimationOutputFormat::Apng => {
         encode_animated_png(&frames, &mut buffer, AnimatedPngOptions::default())
           .map_err(|e| Error::from_reason(e.to_string()))?;
       }
-      AnimationOutputFormat::gif => {
+      AnimationOutputFormat::Gif => {
         encode_animated_gif(
           Cow::Owned(frames),
           &mut buffer,

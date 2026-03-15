@@ -6,10 +6,33 @@ import type { CSSProperties, JSX } from "react";
 export const defaultStylePresets: Partial<
   Record<keyof JSX.IntrinsicElements, CSSProperties>
 > = {
-  body: {
-    margin: 8,
+  html: {
+    display: "block",
+  },
+  // children of the <head> element all have display: none
+  head: {
+    display: "none",
+  },
+  meta: {
+    display: "none",
+  },
+  title: {
+    display: "none",
+  },
+  link: {
+    display: "none",
+  },
+  style: {
+    display: "none",
+  },
+  script: {
+    display: "none",
   },
   // Generic block-level elements
+  body: {
+    margin: 8,
+    display: "block",
+  },
   p: {
     marginTop: "1em",
     marginBottom: "1em",
@@ -90,31 +113,24 @@ export const defaultStylePresets: Partial<
   },
   u: {
     textDecoration: "underline",
-    display: "inline",
   },
   strong: {
     fontWeight: "bold",
-    display: "inline",
   },
   b: {
     fontWeight: "bold",
-    display: "inline",
   },
   i: {
     fontStyle: "italic",
-    display: "inline",
   },
   em: {
     fontStyle: "italic",
-    display: "inline",
   },
   code: {
     fontFamily: "monospace",
-    display: "inline",
   },
   kbd: {
     fontFamily: "monospace",
-    display: "inline",
   },
   pre: {
     fontFamily: "monospace",
@@ -124,27 +140,17 @@ export const defaultStylePresets: Partial<
   mark: {
     backgroundColor: "yellow",
     color: "black",
-    display: "inline",
   },
   big: {
     fontSize: "1.2em",
-    display: "inline",
   },
   small: {
     fontSize: "0.8em",
-    display: "inline",
   },
   s: {
     textDecoration: "line-through",
-    display: "inline",
   },
-  span: {
-    display: "inline",
-  },
-  img: {
-    display: "inline",
-  },
-  svg: {
-    display: "inline",
+  div: {
+    display: "block",
   },
 };

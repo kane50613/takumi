@@ -9,6 +9,7 @@ use crate::test_utils::run_fixture_test;
 fn test_style_background_color() {
   let container = Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -23,6 +24,7 @@ fn test_style_background_color() {
 fn test_style_border_radius() {
   let container = Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -40,6 +42,7 @@ fn test_style_border_radius() {
 fn test_style_border_radius_per_corner() {
   let container = Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -66,6 +69,7 @@ fn test_style_border_radius_per_corner() {
 fn test_style_border_width() {
   let container = Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -85,6 +89,7 @@ fn test_style_border_width() {
 fn test_style_border_width_with_radius() {
   let container = Node::container([Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Rem(16.0)))
       .with(StyleDeclaration::height(Rem(8.0)))
       .with_border_radius(Box::new(BorderRadius(Sides(
@@ -98,6 +103,7 @@ fn test_style_border_width_with_radius() {
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with_padding(Sides([Rem(4.0); 4]))
@@ -113,6 +119,7 @@ fn test_style_border_width_with_radius() {
 fn test_style_box_shadow() {
   let container = Node::container([Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(100.0)))
       .with(StyleDeclaration::height(Px(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -134,6 +141,7 @@ fn test_style_box_shadow() {
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -148,6 +156,7 @@ fn test_style_box_shadow() {
 fn test_style_box_shadow_inset() {
   let container = Node::container([Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(120.0)))
       .with(StyleDeclaration::height(Px(80.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -172,6 +181,7 @@ fn test_style_box_shadow_inset() {
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -186,6 +196,7 @@ fn test_style_box_shadow_inset() {
 fn test_style_position() {
   let container = Node::container([Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(100.0)))
       .with(StyleDeclaration::height(Px(100.0)))
       .with(StyleDeclaration::position(Position::Absolute))
@@ -196,6 +207,7 @@ fn test_style_position() {
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -210,6 +222,7 @@ fn test_style_position() {
 fn test_style_border_radius_circle() {
   let container = Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(300.0)))
       .with(StyleDeclaration::height(Px(300.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -230,6 +243,7 @@ fn test_style_border_radius_width_offset() {
     Node::container([
       Node::container([Node::text("The newest blog post".to_string()).with_style(
         Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
           .with(StyleDeclaration::width(Percentage(100.0)))
           .with_padding(Sides([Rem(4.0); 4]))
           .with(StyleDeclaration::font_size(Rem(4.0).into()))
@@ -240,6 +254,7 @@ fn test_style_border_radius_width_offset() {
       )])
       .with_style(
         Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
           .with(StyleDeclaration::width(Percentage(100.0)))
           .with(StyleDeclaration::height(Percentage(100.0)))
           .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -257,6 +272,7 @@ fn test_style_border_radius_width_offset() {
     ])
     .with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -273,6 +289,7 @@ fn test_style_border_radius_circle_avatar() {
   let container = Node::container([Node::container([Node::image("assets/images/yeecord.png")
     .with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with_border_radius(Box::new(BorderRadius(Sides(
@@ -281,6 +298,7 @@ fn test_style_border_radius_circle_avatar() {
     )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Rem(12.0)))
       .with(StyleDeclaration::height(Rem(12.0)))
       .with_border_radius(Box::new(BorderRadius(Sides(
@@ -294,6 +312,7 @@ fn test_style_border_radius_circle_avatar() {
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -310,6 +329,7 @@ fn test_style_border_radius_circle_avatar() {
 fn test_style_border_width_on_image_node() {
   let avatar = Node::image("assets/images/yeecord.png").with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with_border_radius(Box::new(BorderRadius(Sides(
         [SpacePair::from_single(Percentage(100.0)); 4],
       ))))
@@ -324,6 +344,7 @@ fn test_style_border_width_on_image_node() {
 
   let container = Node::container([avatar]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -340,6 +361,7 @@ fn test_style_border_width_on_image_node() {
 fn test_style_outline() {
   let outlined_box = Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(240.0)))
       .with(StyleDeclaration::height(Px(140.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -358,6 +380,7 @@ fn test_style_outline() {
 
   let container = Node::container([outlined_box]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(

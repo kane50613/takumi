@@ -12,11 +12,6 @@ export type NodeMetadata = {
   preset?: CSSProperties;
 };
 
-/**
- * @deprecated Use {import("csstype").Properties} or {import("react").CSSProperties} instead
- */
-export type PartialStyle = CSSProperties;
-
 export type Node = ContainerNode | TextNode | ImageNode;
 
 export type ContainerNode = NodeMetadata & {

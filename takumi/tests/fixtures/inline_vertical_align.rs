@@ -11,6 +11,7 @@ fn inline_vertical_align_types() {
     Node::container([
       Node::text(format!("Baseline guide {label} ")).with_style(
         Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
           .with(StyleDeclaration::display(Display::Inline))
           .with_text_decoration(
             TextDecoration::builder()
@@ -25,6 +26,7 @@ fn inline_vertical_align_types() {
       ),
       Node::container([]).with_style(
         Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
           .with(StyleDeclaration::display(Display::InlineBlock))
           .with(StyleDeclaration::width(Px(44.0)))
           .with(StyleDeclaration::height(Px(44.0)))
@@ -38,6 +40,7 @@ fn inline_vertical_align_types() {
       ),
       Node::text(" marker".to_string()).with_style(
         Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
           .with(StyleDeclaration::display(Display::Inline))
           .with_text_decoration(
             TextDecoration::builder()
@@ -53,6 +56,7 @@ fn inline_vertical_align_types() {
     ])
     .with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::width(Percentage(48.0)))
         .with_margin(Sides([Px(4.0); 4]))
@@ -135,6 +139,7 @@ fn inline_vertical_align_types() {
 
   let container = Node::container(children).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Flex))

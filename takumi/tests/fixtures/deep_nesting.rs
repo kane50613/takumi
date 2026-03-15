@@ -19,6 +19,7 @@ const VISUAL_RECURSIVE_DEPTH: usize = 12;
 fn make_text_node(text: String) -> Node {
   Node::text(text).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::font_size(Px(20.0).into()))
       .with(StyleDeclaration::font_weight(FontWeight::from(600.0)))
       .with(StyleDeclaration::color(ColorInput::Value(Color([
@@ -66,6 +67,7 @@ fn recursive_visual_node(level: usize, max_depth: usize) -> Node {
   Node::container(children.into_boxed_slice()).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with_padding(Sides([Px(10.0), Px(10.0), Px(10.0), Px(14.0)]))
       .with_margin(Sides([Px(0.0), Px(0.0), Px(0.0), Px(8.0)]))
@@ -82,6 +84,7 @@ fn recursive_visual_node(level: usize, max_depth: usize) -> Node {
 fn recursive_visual_fixture_tree() -> Node {
   Node::container([recursive_visual_node(0, VISUAL_RECURSIVE_DEPTH)]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Flex))

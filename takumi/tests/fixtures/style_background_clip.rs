@@ -13,6 +13,7 @@ fn create_container_with_background_clip(
 ) -> Node {
   Node::container([Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Rem(16.0)))
       .with(StyleDeclaration::height(Rem(10.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -31,6 +32,7 @@ fn create_container_with_background_clip(
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -86,6 +88,7 @@ fn test_style_background_clip_text_gradient() {
 
   let container = Node::container([Node::text("Gradient Text".to_string()).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::background_image(Some(gradient_images)))
       .with(StyleDeclaration::background_size(
         BackgroundSizes::from_str("100% 100%").unwrap(),
@@ -103,6 +106,7 @@ fn test_style_background_clip_text_gradient() {
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([240, 240, 240, 255]),
       )))
@@ -123,6 +127,7 @@ fn test_style_background_clip_text_radial_gradient() {
 
   let container = Node::container([Node::text("Radial Gradient".to_string()).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::background_image(Some(gradient_images)))
       .with(StyleDeclaration::background_size(
         BackgroundSizes::from_str("100% 100%").unwrap(),
@@ -137,6 +142,7 @@ fn test_style_background_clip_text_radial_gradient() {
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([255, 255, 255, 255]),
       )))
@@ -155,6 +161,7 @@ fn test_style_background_clip_text_radial_gradient() {
 fn test_style_background_clip_border_area() {
   let container = Node::container([Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Rem(16.0)))
       .with(StyleDeclaration::height(Rem(10.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -175,6 +182,7 @@ fn test_style_background_clip_border_area() {
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -194,6 +202,7 @@ fn test_style_background_clip_with_gradient_background() {
 
   let container = Node::container([Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Rem(16.0)))
       .with(StyleDeclaration::height(Rem(10.0)))
       .with(StyleDeclaration::background_image(Some(gradient_images)))
@@ -212,6 +221,7 @@ fn test_style_background_clip_with_gradient_background() {
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -231,7 +241,7 @@ fn test_style_background_clip_text_multiline() {
 
   let container = Node::container([
       Node::text("This is a multiline text with a beautiful gradient background clipped to the text shape. It demonstrates how background-clip: text works with longer content.".to_string())
-  .with_style(Style::default()
+  .with_style(Style::default().with(StyleDeclaration::display(Display::Flex))
             .with(StyleDeclaration::background_image(Some(gradient_images)))
             .with(StyleDeclaration::background_size(BackgroundSizes::from_str("100% 100%").unwrap()))
             .with(StyleDeclaration::background_position(
@@ -242,7 +252,7 @@ fn test_style_background_clip_text_multiline() {
             .with(StyleDeclaration::width(Percentage(100.0))),)
 
     ])
-  .with_style(Style::default()
+  .with_style(Style::default().with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::background_color(ColorInput::Value(Color([255, 255, 255, 255]))))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
@@ -259,11 +269,13 @@ fn test_style_background_clip_comparison() {
     // Border Box
     Node::container([Node::text("border-box".to_string()).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::font_size(Px(20.0).into()))
         .with(StyleDeclaration::color(ColorInput::Value(Color::white()))),
     )])
     .with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Px(80.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -280,11 +292,13 @@ fn test_style_background_clip_comparison() {
     // Padding Box
     Node::container([Node::text("padding-box".to_string()).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::font_size(Px(20.0).into()))
         .with(StyleDeclaration::color(ColorInput::Value(Color::white()))),
     )])
     .with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Px(80.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -303,11 +317,13 @@ fn test_style_background_clip_comparison() {
     // Content Box
     Node::container([Node::text("content-box".to_string()).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::font_size(Px(20.0).into()))
         .with(StyleDeclaration::color(ColorInput::Value(Color::white()))),
     )])
     .with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Px(80.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -326,6 +342,7 @@ fn test_style_background_clip_comparison() {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(

@@ -20,6 +20,7 @@ fn create_filter_test_container(
 
   Node::container(children).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Grid))
@@ -50,6 +51,7 @@ fn create_filter_card(filter: &str, image_size_px: f32, label_font_size_px: f32)
 
   Node::container(children).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with_gap(SpacePair::from_single(Px(16.0)))

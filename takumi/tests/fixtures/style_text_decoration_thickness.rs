@@ -10,6 +10,7 @@ fn test_style_text_decoration_thickness() {
   let make_line = |label: &str, thickness: TextDecorationThickness| -> Node {
     Node::text(format!("{label}: thickness parapsychologists")).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::text_align(TextAlign::Center))
@@ -33,6 +34,7 @@ fn test_style_text_decoration_thickness() {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([240, 240, 240, 255]),

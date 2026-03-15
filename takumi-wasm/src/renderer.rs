@@ -132,12 +132,6 @@ impl Renderer {
     Ok(renderer)
   }
 
-  /// @deprecated use `loadFont` instead.
-  #[wasm_bindgen(js_name = loadFontWithInfo)]
-  pub fn load_font_with_info(&mut self, font: FontType) -> Result<(), js_sys::Error> {
-    self.load_font(font)
-  }
-
   fn load_font_internal(&mut self, font: Font) -> Result<(), js_sys::Error> {
     match font {
       Font::Buffer(buffer) => {

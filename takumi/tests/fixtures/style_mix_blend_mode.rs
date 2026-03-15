@@ -11,12 +11,14 @@ fn create_blend_card(mode: BlendMode, label_font_size_px: f32) -> Node {
   Node::container([
     Node::image(Arc::from("assets/images/yeecord.png")).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(80.0)))
         .with(StyleDeclaration::height(Px(80.0)))
         .with(StyleDeclaration::mix_blend_mode(mode)),
     ),
     Node::text(format!("{:?}", mode)).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::font_size(Px(label_font_size_px).into()))
         .with(StyleDeclaration::margin_top(Px(4.0)))
         .with(StyleDeclaration::color(ColorInput::Value(Color::black()))),
@@ -24,6 +26,7 @@ fn create_blend_card(mode: BlendMode, label_font_size_px: f32) -> Node {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with(StyleDeclaration::align_items(AlignItems::Center))
@@ -63,6 +66,7 @@ fn test_style_mix_blend_mode() {
   )
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Grid))
@@ -82,18 +86,30 @@ fn test_style_mix_blend_mode() {
 #[test]
 fn test_style_mlx_blend_mode_isolation() {
   let container = Node::container([
-    Node::container([Node::image(Arc::from("assets/images/yeecord.png"))
-      .with_style(Style::default().with(StyleDeclaration::mix_blend_mode(BlendMode::Multiply)))])
+    Node::container([
+      Node::image(Arc::from("assets/images/yeecord.png")).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
+          .with(StyleDeclaration::mix_blend_mode(BlendMode::Multiply)),
+      ),
+    ])
     .with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::isolation(Isolation::Auto))
         .with(StyleDeclaration::width(Px(128.0)))
         .with(StyleDeclaration::height(Px(128.0))),
     ),
-    Node::container([Node::image(Arc::from("assets/images/yeecord.png"))
-      .with_style(Style::default().with(StyleDeclaration::mix_blend_mode(BlendMode::Multiply)))])
+    Node::container([
+      Node::image(Arc::from("assets/images/yeecord.png")).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
+          .with(StyleDeclaration::mix_blend_mode(BlendMode::Multiply)),
+      ),
+    ])
     .with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::isolation(Isolation::Isolate))
         .with(StyleDeclaration::width(Px(128.0)))
         .with(StyleDeclaration::height(Px(128.0))),
@@ -101,6 +117,7 @@ fn test_style_mlx_blend_mode_isolation() {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::align_items(AlignItems::Center))

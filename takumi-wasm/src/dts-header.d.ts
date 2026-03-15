@@ -8,11 +8,6 @@ export {
   TextNode,
 } from "@takumi-rs/helpers";
 
-/**
- * @deprecated Use `Node` instead.
- */
-export type AnyNode = Node;
-
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 
 export type Keyframes = Record<string, Record<string, Record<string, unknown>>>;

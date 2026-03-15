@@ -10,6 +10,7 @@ fn test_style_text_decoration() {
   let text = Node::text("Text Decoration with Underline, Line-Through, and Overline".to_string())
     .with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::text_align(TextAlign::Center))
@@ -33,6 +34,7 @@ fn text_decoration_skip_ink_parapsychologists() {
   let make_line = |label: &str, skip_ink: TextDecorationSkipInk| -> Node {
     Node::text(format!("{label}: parapsychologists")).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::text_align(TextAlign::Center))
@@ -53,6 +55,7 @@ fn text_decoration_skip_ink_parapsychologists() {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([240, 240, 240, 255]),

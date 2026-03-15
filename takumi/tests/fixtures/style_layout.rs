@@ -13,6 +13,7 @@ fn test_style_flex_basis() {
   let container = Node::container([
     Node::container([]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::flex_basis(Some(Px(100.0))))
         .with(StyleDeclaration::height(Px(50.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -21,6 +22,7 @@ fn test_style_flex_basis() {
     ),
     Node::container([]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::flex_basis(Some(Px(100.0))))
         .with(StyleDeclaration::height(Px(50.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -29,6 +31,7 @@ fn test_style_flex_basis() {
     ),
     Node::container([]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::flex_basis(Some(Px(100.0))))
         .with(StyleDeclaration::height(Px(50.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -38,6 +41,7 @@ fn test_style_flex_basis() {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Flex))
@@ -55,6 +59,7 @@ fn test_style_flex_direction() {
   let container = Node::container([
     Node::container([]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(50.0)))
         .with(StyleDeclaration::height(Px(50.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -63,6 +68,7 @@ fn test_style_flex_direction() {
     ),
     Node::container([]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(50.0)))
         .with(StyleDeclaration::height(Px(50.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -71,6 +77,7 @@ fn test_style_flex_direction() {
     ),
     Node::container([]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(50.0)))
         .with(StyleDeclaration::height(Px(50.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -80,6 +87,7 @@ fn test_style_flex_direction() {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Flex))
@@ -98,6 +106,7 @@ fn test_style_gap() {
     // First child
     Node::container([]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(50.0)))
         .with(StyleDeclaration::height(Px(50.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -107,6 +116,7 @@ fn test_style_gap() {
     // Second child
     Node::container([]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(50.0)))
         .with(StyleDeclaration::height(Px(50.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -116,6 +126,7 @@ fn test_style_gap() {
     // Third child
     Node::container([]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(50.0)))
         .with(StyleDeclaration::height(Px(50.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -125,6 +136,7 @@ fn test_style_gap() {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Flex))
@@ -140,15 +152,24 @@ fn test_style_gap() {
 #[test]
 fn test_style_grid_template_columns() {
   let container = Node::container([
-    Node::container([]).with_style(Style::default().with(StyleDeclaration::background_color(
-      ColorInput::Value(Color([255, 0, 0, 255])),
-    ))),
-    Node::container([]).with_style(Style::default().with(StyleDeclaration::background_color(
-      ColorInput::Value(Color([0, 255, 0, 255])),
-    ))),
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color([255, 0, 0, 255]),
+        ))),
+    ),
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color([0, 255, 0, 255]),
+        ))),
+    ),
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(200.0)))
       .with(StyleDeclaration::height(Px(200.0)))
       .with(StyleDeclaration::display(Display::Grid))
@@ -167,15 +188,24 @@ fn test_style_grid_template_columns() {
 #[test]
 fn test_style_grid_template_rows() {
   let container = Node::container([
-    Node::container([]).with_style(Style::default().with(StyleDeclaration::background_color(
-      ColorInput::Value(Color([255, 0, 0, 255])),
-    ))),
-    Node::container([]).with_style(Style::default().with(StyleDeclaration::background_color(
-      ColorInput::Value(Color([0, 255, 0, 255])),
-    ))),
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color([255, 0, 0, 255]),
+        ))),
+    ),
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color([0, 255, 0, 255]),
+        ))),
+    ),
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(200.0)))
       .with(StyleDeclaration::height(Px(200.0)))
       .with(StyleDeclaration::display(Display::Grid))

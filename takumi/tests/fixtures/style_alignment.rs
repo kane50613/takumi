@@ -14,6 +14,7 @@ fn test_style_align_items() {
   let container = Node::container([
     Node::container([]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(50.0)))
         .with(StyleDeclaration::height(Px(50.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -22,6 +23,7 @@ fn test_style_align_items() {
     ),
     Node::container([]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(50.0)))
         .with(StyleDeclaration::height(Px(50.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -30,6 +32,7 @@ fn test_style_align_items() {
     ),
     Node::container([]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(50.0)))
         .with(StyleDeclaration::height(Px(50.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -39,6 +42,7 @@ fn test_style_align_items() {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Flex))
@@ -56,6 +60,7 @@ fn test_style_justify_content() {
   let container = Node::container([
     Node::container([]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(50.0)))
         .with(StyleDeclaration::height(Px(50.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -64,6 +69,7 @@ fn test_style_justify_content() {
     ),
     Node::container([]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(50.0)))
         .with(StyleDeclaration::height(Px(50.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -72,6 +78,7 @@ fn test_style_justify_content() {
     ),
     Node::container([]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(50.0)))
         .with(StyleDeclaration::height(Px(50.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -81,6 +88,7 @@ fn test_style_justify_content() {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Flex))

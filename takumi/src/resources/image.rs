@@ -190,12 +190,6 @@ impl ImageSource {
   }
 }
 
-/// Deprecated compatibility wrapper for [`ImageSource::from_bytes`].
-#[deprecated(note = "use `ImageSource::from_bytes` instead")]
-pub fn load_image_source_from_bytes(bytes: &[u8]) -> ImageResult {
-  ImageSource::from_bytes(bytes)
-}
-
 /// Check if the string looks like an SVG image.
 pub(crate) fn is_svg_like(src: &str) -> bool {
   src.contains("<svg") && src.contains("xmlns")

@@ -45,7 +45,7 @@ impl RenderTask {
           .map(|ratio| ratio as f32)
           .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
       ),
-      format: options.format.unwrap_or(OutputFormat::png),
+      format: options.format.unwrap_or(OutputFormat::Png),
       quality: options.quality,
       dithering: options.dithering.map(Into::into).unwrap_or_default(),
       time_ms: options.time_ms.unwrap_or_default().max(0) as u64,
@@ -103,7 +103,7 @@ impl Task for RenderTask {
     )
     .map_err(map_error)?;
 
-    if self.format == OutputFormat::raw {
+    if self.format == OutputFormat::Raw {
       return Ok(image.into_raw());
     }
 

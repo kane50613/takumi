@@ -1,8 +1,8 @@
 use takumi::layout::{
   node::Node,
   style::{
-    BackgroundPosition, Length::Percentage, ObjectFit, PositionComponent, PositionKeywordX,
-    PositionKeywordY, SpacePair, Style, StyleDeclaration,
+    BackgroundPosition, Display, Length::Percentage, ObjectFit, PositionComponent,
+    PositionKeywordX, PositionKeywordY, SpacePair, Style, StyleDeclaration,
   },
 };
 
@@ -16,6 +16,7 @@ fn image_with_style(style: Style) -> Node {
 fn test_style_object_position_contain_center() {
   let image = image_with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::Contain))
@@ -31,6 +32,7 @@ fn test_style_object_position_contain_center() {
 fn test_style_object_position_contain_top_left() {
   let image = image_with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::Contain))
@@ -49,6 +51,7 @@ fn test_style_object_position_contain_top_left() {
 fn test_style_object_position_contain_bottom_right() {
   let image = image_with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::Contain))
@@ -67,6 +70,7 @@ fn test_style_object_position_contain_bottom_right() {
 fn test_style_object_position_cover_center() {
   let image = image_with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::Cover))
@@ -85,6 +89,7 @@ fn test_style_object_position_cover_center() {
 fn test_style_object_position_cover_top_left() {
   let image = image_with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::Cover))
@@ -103,6 +108,7 @@ fn test_style_object_position_cover_top_left() {
 fn test_style_object_position_none_center() {
   let image = image_with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::None))
@@ -121,6 +127,7 @@ fn test_style_object_position_none_center() {
 fn test_style_object_position_none_top_left() {
   let image = image_with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::None))
@@ -139,6 +146,7 @@ fn test_style_object_position_none_top_left() {
 fn test_style_object_position_percentage_25_75() {
   let image = image_with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::Contain))

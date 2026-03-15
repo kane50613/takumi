@@ -9,6 +9,7 @@ fn create_overflow_fixture(overflows: SpacePair<Overflow>) -> Node {
   Node::container([
     Node::container([Node::image("assets/images/yeecord.png").with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(300.0)))
         .with(StyleDeclaration::height(Px(300.0)))
         .with_border_width(Sides([Px(4.0); 4]))
@@ -19,6 +20,7 @@ fn create_overflow_fixture(overflows: SpacePair<Overflow>) -> Node {
     )])
     .with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::width(Px(200.0)))
         .with(StyleDeclaration::height(Px(200.0)))
@@ -32,6 +34,7 @@ fn create_overflow_fixture(overflows: SpacePair<Overflow>) -> Node {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -47,7 +50,7 @@ fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> Node {
     Node::container([
         Node::text("This is a very long text that should overflow the container and demonstrate text overflow behavior with a large font size of 4rem.".to_string())
           .with_style(
-            Style::default()
+            Style::default().with(StyleDeclaration::display(Display::Flex))
               .with(StyleDeclaration::font_size(Rem(4.0).into()))
               .with(StyleDeclaration::color(ColorInput::Value(Color([0, 0, 0, 255]))))
               .with_border_width(Sides([Px(2.0); 4]))
@@ -56,7 +59,7 @@ fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> Node {
           ),
       ])
       .with_style(
-        Style::default()
+        Style::default().with(StyleDeclaration::display(Display::Flex))
           .with(StyleDeclaration::display(Display::Block))
           .with(StyleDeclaration::width(Px(400.0)))
           .with(StyleDeclaration::height(Px(200.0)))
@@ -66,7 +69,7 @@ fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> Node {
           .with_overflow(overflows),
       ),
   ])
-  .with_style(Style::default()
+  .with_style(Style::default().with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(Color::white())))

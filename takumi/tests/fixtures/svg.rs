@@ -8,12 +8,14 @@ use crate::test_utils::run_fixture_test;
 fn create_luma_logo_container() -> Node {
   Node::container([Node::image("assets/images/luma.svg").with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(204.0)))
       .with(StyleDeclaration::height(Px(76.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::Contain)),
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_image(Some(
@@ -40,12 +42,14 @@ fn test_svg_attr_size_in_absolute_flex_container() {
   let node: Node = Node::container([Node::container([Node::image(svg).with_tag_name("svg")])
     .with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::position(Position::Absolute))
         .with_inset(Sides([Auto, Px(40.0), Px(40.0), Auto]))
         .with(StyleDeclaration::display(Display::Flex)),
     )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -72,6 +76,7 @@ fn test_svg_current_color_fixture() {
 
     let container: Node = Node::container(children).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(160.0)))
         .with(StyleDeclaration::height(Px(160.0)))
         .with_padding(Sides([Px(20.0); 4]))
@@ -92,6 +97,7 @@ fn test_svg_current_color_fixture() {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Flex))
@@ -111,6 +117,7 @@ fn test_twemoji_svg() {
   fn create_svg_node(svg: &str) -> Node {
     Node::image(svg).with_tag_name("svg").with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::display(Display::Inline))
         .with(StyleDeclaration::width(Px(48.0)))
         .with(StyleDeclaration::vertical_align(VerticalAlign::Length(Em(
@@ -138,6 +145,7 @@ fn test_twemoji_svg() {
 
   let node: Node = Node::container(children).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Block))

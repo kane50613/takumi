@@ -12,6 +12,7 @@ fn centered_background_position() -> BackgroundPositions {
 fn create_container(background_images: BackgroundImages) -> Node {
   Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_image(Some(background_images)))
@@ -29,6 +30,7 @@ fn create_container_with(
 ) -> Node {
   Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_image(Some(background_images)))
@@ -52,6 +54,7 @@ fn test_style_background_image_gradient() {
 
   let container = create_container(background_images).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_image(Some(
@@ -93,6 +96,7 @@ fn test_style_background_image_gradient_hard_stop() {
 fn test_style_background_image_gradient_color_space_comparison() {
   let srgb = Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0 / 3.0)))
       .with(StyleDeclaration::background_image(Some(
@@ -102,6 +106,7 @@ fn test_style_background_image_gradient_color_space_comparison() {
 
   let oklab = Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(33.333)))
       .with(StyleDeclaration::background_image(Some(
@@ -111,6 +116,7 @@ fn test_style_background_image_gradient_color_space_comparison() {
 
   let oklch_longer = Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(33.334)))
       .with(StyleDeclaration::background_image(Some(
@@ -121,6 +127,7 @@ fn test_style_background_image_gradient_color_space_comparison() {
 
   let container = Node::container([srgb, oklab, oklch_longer]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column)),
@@ -278,6 +285,7 @@ fn test_background_image_grid_pattern() {
   )
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_image(Some(images)))
@@ -313,6 +321,7 @@ fn test_background_image_dotted_pattern() {
   )
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_image(Some(images)))

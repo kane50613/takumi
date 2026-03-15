@@ -47,7 +47,7 @@ impl EncodeFramesTask {
           .map(|ratio| ratio as f32)
           .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
       ),
-      format: options.format.unwrap_or(AnimationOutputFormat::webp),
+      format: options.format.unwrap_or(AnimationOutputFormat::WebP),
       quality: options.quality,
       draw_debug_border: options.draw_debug_border.unwrap_or_default(),
       stylesheets: options.stylesheets,
@@ -138,7 +138,7 @@ impl Task for EncodeFramesTask {
     }
 
     match self.format {
-      AnimationOutputFormat::webp => {
+      AnimationOutputFormat::WebP => {
         let mut options = AnimatedWebpOptions::default();
         if let Some(quality) = self.quality {
           options.quality = quality;
@@ -147,11 +147,11 @@ impl Task for EncodeFramesTask {
         encode_animated_webp(Cow::Owned(frames), &mut buffer, options)
           .map_err(|e| Error::from_reason(e.to_string()))?;
       }
-      AnimationOutputFormat::apng => {
+      AnimationOutputFormat::Apng => {
         encode_animated_png(&frames, &mut buffer, AnimatedPngOptions::default())
           .map_err(|e| Error::from_reason(e.to_string()))?;
       }
-      AnimationOutputFormat::gif => {
+      AnimationOutputFormat::Gif => {
         encode_animated_gif(
           Cow::Owned(frames),
           &mut buffer,

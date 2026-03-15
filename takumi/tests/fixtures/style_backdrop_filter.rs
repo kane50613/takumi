@@ -10,6 +10,7 @@ fn create_backdrop_card(filter: &str, label_font_size_px: f32) -> Node {
   Node::container([Node::text(filter.to_string())]).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
@@ -56,7 +57,7 @@ fn test_style_backdrop_filter() {
     .collect();
 
   let container = Node::container(children)
-  .with_style(Style::default()
+  .with_style(Style::default().with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Grid))
@@ -82,6 +83,7 @@ fn test_style_backdrop_filter_frosted_glass() {
   let container = Node::container([Node::container([
     Node::text("Frosted Glass".to_string()).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::font_size(Px(48.0).into()))
         .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
         .with(StyleDeclaration::color(ColorInput::Value(Color([
@@ -90,6 +92,7 @@ fn test_style_backdrop_filter_frosted_glass() {
     ),
     Node::text("backdrop-filter: blur(16px)".to_string()).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::font_size(Px(24.0).into()))
         .with(StyleDeclaration::color(ColorInput::Value(Color([
           0, 0, 0, 150,
@@ -98,6 +101,7 @@ fn test_style_backdrop_filter_frosted_glass() {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with(StyleDeclaration::align_items(AlignItems::Center))
@@ -114,6 +118,7 @@ fn test_style_backdrop_filter_frosted_glass() {
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Flex))

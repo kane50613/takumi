@@ -1,6 +1,6 @@
 use takumi::layout::{
   node::Node,
-  style::{Length::Percentage, ObjectFit, Style, StyleDeclaration},
+  style::{Display, Length::Percentage, ObjectFit, Style, StyleDeclaration},
 };
 
 use crate::test_utils::run_fixture_test;
@@ -8,6 +8,7 @@ use crate::test_utils::run_fixture_test;
 fn image_with_object_fit(object_fit: ObjectFit) -> Node {
   Node::image("assets/images/yeecord.png").with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(object_fit)),

@@ -1,7 +1,7 @@
 use takumi::layout::{
   node::Node,
   style::{
-    Color, ColorInput,
+    Color, ColorInput, Display,
     Length::{Percentage, Px},
     Sides, Style, StyleDeclaration,
   },
@@ -13,6 +13,7 @@ use crate::test_utils::run_fixture_test;
 fn test_style_padding() {
   let container = Node::container([Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -21,6 +22,7 @@ fn test_style_padding() {
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(

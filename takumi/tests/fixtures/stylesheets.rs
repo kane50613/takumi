@@ -24,6 +24,7 @@ fn test_stylesheets() {
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
       .with(StyleDeclaration::align_items(AlignItems::Center)),
@@ -32,6 +33,7 @@ fn test_stylesheets() {
   .with_class_name("root")
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Flex))
@@ -90,6 +92,7 @@ fn test_stylesheets_background_multiple_gradients() {
     .with_class_name("multi-gradient-card")
     .with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(700.0)))
         .with(StyleDeclaration::height(Px(360.0)))
         .with_border_radius(Box::new(BorderRadius(Sides(
@@ -99,6 +102,7 @@ fn test_stylesheets_background_multiple_gradients() {
   .with_tag_name("div")
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Flex))

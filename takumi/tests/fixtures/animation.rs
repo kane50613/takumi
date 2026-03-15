@@ -31,13 +31,16 @@ fn bouncing_text_frames() -> Vec<Node> {
 }
 
 fn bouncing_text_node(y_offset: f32) -> Node {
-  Node::container([
-    Node::container([bouncing_text_label()]).with_style(Style::default().with(
-      StyleDeclaration::transform(Some([Transform::Translate(Px(0.0), Px(y_offset))].into())),
-    )),
-  ])
+  Node::container([Node::container([bouncing_text_label()]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::transform(Some(
+        [Transform::Translate(Px(0.0), Px(y_offset))].into(),
+      ))),
+  )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([240, 240, 240, 255]),
       )))
@@ -52,6 +55,7 @@ fn bouncing_text_node(y_offset: f32) -> Node {
 fn bouncing_text_label() -> Node {
   Node::text("Takumi Renders Animated image 🔥".to_string()).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::font_size(Px(56.0).into()))
       .with(StyleDeclaration::font_family(
         GenericFamily::Monospace.into(),
@@ -83,6 +87,7 @@ fn keyframe_interpolation_node() -> Node {
     .with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::flex_direction(FlexDirection::Column))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::align_items(AlignItems::Center)),
@@ -91,6 +96,7 @@ fn keyframe_interpolation_node() -> Node {
   .with_class_name("root")
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Flex))

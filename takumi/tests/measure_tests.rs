@@ -47,6 +47,7 @@ fn assert_close(actual: f32, expected: f32) {
 fn test_measure_simple_container() {
   let node: Node = Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(100.0)))
       .with(StyleDeclaration::height(Px(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -79,6 +80,7 @@ fn test_measure_simple_container() {
 fn test_measure_text_node() {
   let node: Node = Node::text("Hello World".to_string()).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(300.0)))
       .with(StyleDeclaration::font_size(Px(20.0).into())),
   );
@@ -120,6 +122,7 @@ fn test_measure_text_node() {
 fn test_measure_flex_text_node_centers_inner_text() {
   let node: Node = Node::text("Hello World".to_string()).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(300.0)))
       .with(StyleDeclaration::height(Px(120.0)))
       .with(StyleDeclaration::display(Display::Flex))
@@ -165,6 +168,7 @@ fn test_measure_flex_text_node_centers_inner_text() {
 fn test_measure_flex_text_node_anonymous_item_uses_intrinsic_size() {
   let node: Node = Node::text("Hello World".to_string()).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(300.0)))
       .with(StyleDeclaration::height(Px(120.0)))
       .with(StyleDeclaration::display(Display::Flex))
@@ -217,6 +221,7 @@ fn test_measure_inline_layout() {
 
   let node: Node = Node::container(children).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(400.0)))
       .with(StyleDeclaration::height(Px(300.0)))
       .with(StyleDeclaration::font_size(Px(20.0).into()))
@@ -275,10 +280,14 @@ fn test_measure_inline_layout() {
 #[test]
 fn test_measure_inline_layout_preserves_text_span_boundaries() {
   let node: Node = Node::container([
-    Node::text("STEAM ".to_string())
-      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+    Node::text("STEAM ".to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::display(Display::Inline)),
+    ),
     Node::text("education can".to_string()).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::display(Display::Inline))
         .with(StyleDeclaration::outline_width(Px(2.0)))
         .with(StyleDeclaration::outline_style(BorderStyle::Solid))
@@ -286,11 +295,15 @@ fn test_measure_inline_layout_preserves_text_span_boundaries() {
           255, 0, 0, 255,
         ])))),
     ),
-    Node::text(" for everyone.".to_string())
-      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+    Node::text(" for everyone.".to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::display(Display::Inline)),
+    ),
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(600.0)))
       .with(StyleDeclaration::height(Px(120.0)))
       .with(StyleDeclaration::font_size(Px(20.0).into()))
@@ -317,6 +330,7 @@ fn test_measure_text_node_rem_font_size_matches_px_when_dpr_is_below_one() {
   let rem_result = measure(
     Node::text(text.clone()).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(400.0)))
         .with(StyleDeclaration::font_size(Rem(1.0).into())),
     ),
@@ -326,6 +340,7 @@ fn test_measure_text_node_rem_font_size_matches_px_when_dpr_is_below_one() {
   let px_result = measure(
     Node::text(text).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(400.0)))
         .with(StyleDeclaration::font_size(Px(16.0).into())),
     ),
@@ -350,10 +365,14 @@ fn test_measure_nested_em_font_size_inherits_correctly_from_rem_when_dpr_is_belo
   let viewport = create_measure_viewport_with_dpr(0.75);
 
   let rem_parent_result = measure(
-    Node::container([Node::text("Nested em".to_string())
-      .with_style(Style::default().with(StyleDeclaration::font_size(Em(2.0).into())))])
+    Node::container([Node::text("Nested em".to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::font_size(Em(2.0).into())),
+    )])
     .with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(400.0)))
         .with(StyleDeclaration::font_size(Rem(1.0).into())),
     ),
@@ -361,10 +380,14 @@ fn test_measure_nested_em_font_size_inherits_correctly_from_rem_when_dpr_is_belo
   );
 
   let px_parent_result = measure(
-    Node::container([Node::text("Nested em".to_string())
-      .with_style(Style::default().with(StyleDeclaration::font_size(Em(2.0).into())))])
+    Node::container([Node::text("Nested em".to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::font_size(Em(2.0).into())),
+    )])
     .with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(400.0)))
         .with(StyleDeclaration::font_size(Px(16.0).into())),
     ),
@@ -394,12 +417,14 @@ fn test_measure_svg_attr_size_in_absolute_flex_container() {
   let node: Node = Node::container([Node::container([Node::image(svg).with_tag_name("svg")])
     .with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::position(Position::Absolute))
         .with_inset(Sides([Auto, Px(40.0), Px(40.0), Auto]))
         .with(StyleDeclaration::display(Display::Flex)),
     )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0))),
   );
@@ -439,12 +464,14 @@ fn test_measure_svg_attr_size_in_absolute_flex_container_with_parent_padding() {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::position(Position::Absolute))
       .with_inset(Sides([Auto, Px(60.0), Px(60.0), Auto]))
       .with(StyleDeclaration::display(Display::Flex)),
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::position(Position::Relative))
@@ -484,11 +511,14 @@ fn test_measure_svg_attr_size_in_absolute_flex_container_with_parent_padding() {
 fn test_measure_svg_with_width_only_preserves_intrinsic_ratio() {
   let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><circle cx="64" cy="64" r="64" fill="#ffffff"/></svg>"##;
 
-  let node: Node = Node::container([Node::image(svg)
-    .with_tag_name("svg")
-    .with_style(Style::default().with(StyleDeclaration::width(Px(96.0))))])
+  let node: Node = Node::container([Node::image(svg).with_tag_name("svg").with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Px(96.0))),
+  )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Flex))
@@ -548,10 +578,15 @@ fn test_measure_img_svg_attribute_sizing_cases() {
   {
     let image = Node::image((svg, width, height))
       .with_tag_name("img")
-      .with_preset(Style::default().with(StyleDeclaration::display(Display::Inline)));
+      .with_preset(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
+          .with(StyleDeclaration::display(Display::Inline)),
+      );
 
     let node: Node = Node::container([image]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Flex))

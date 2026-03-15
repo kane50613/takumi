@@ -226,47 +226,39 @@ pub struct EncodeFramesOptions<'env> {
 }
 
 /// Output format for animated images.
-#[napi(string_enum)]
-#[allow(non_camel_case_types)]
+#[napi(string_enum = "kebab-case")]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum AnimationOutputFormat {
   /// Animated WebP format.
-  webp,
+  WebP,
   /// Animated PNG format.
-  apng,
+  Apng,
   /// Animated GIF format.
-  gif,
+  Gif,
 }
 
 /// Output format for static images.
-#[napi(string_enum)]
-#[allow(non_camel_case_types)]
+#[napi(string_enum = "kebab-case")]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
   /// WebP format.
-  webp,
-  /// PNG format.
-  png,
-  /// JPEG format.
-  jpeg,
-  /// @deprecated Use lowercase `webp` instead, may be removed in the future
   WebP,
-  /// @deprecated Use lowercase `jpeg` instead, may be removed in the future
-  Jpeg,
-  /// @deprecated Use lowercase `png` instead, may be removed in the future
+  /// PNG format.
   Png,
+  /// JPEG format.
+  Jpeg,
   /// Raw pixels format.
-  raw,
+  Raw,
 }
 
 impl From<OutputFormat> for ImageOutputFormat {
   fn from(format: OutputFormat) -> Self {
     match format {
-      OutputFormat::WebP | OutputFormat::webp => ImageOutputFormat::WebP,
-      OutputFormat::Jpeg | OutputFormat::jpeg => ImageOutputFormat::Jpeg,
-      OutputFormat::Png | OutputFormat::png => ImageOutputFormat::Png,
+      OutputFormat::WebP => ImageOutputFormat::WebP,
+      OutputFormat::Jpeg => ImageOutputFormat::Jpeg,
+      OutputFormat::Png => ImageOutputFormat::Png,
       // SAFETY: It's handled in the render task
-      OutputFormat::raw => unreachable!(),
+      OutputFormat::Raw => unreachable!(),
     }
   }
 }
@@ -369,29 +361,6 @@ impl Renderer {
     Ok(renderer)
   }
 
-  /// @deprecated This function does nothing.
-  #[napi]
-  pub fn purge_resources_cache(&self) {}
-
-  /// @deprecated This function does nothing.
-  #[napi]
-  pub fn purge_font_cache(&self) {}
-
-  /// @deprecated Use `putPersistentImage` instead (to align with the naming convention for sync/async functions).
-  #[napi(
-    ts_args_type = "src: string, data: Uint8Array | ArrayBuffer, signal?: AbortSignal",
-    ts_return_type = "Promise<void>"
-  )]
-  pub fn put_persistent_image_async(
-    &self,
-    env: Env,
-    src: String,
-    data: Object,
-    signal: Option<AbortSignal>,
-  ) -> Result<AsyncTask<PutPersistentImageTask>> {
-    self.put_persistent_image(env, src, data, signal)
-  }
-
   /// Puts a persistent image into the renderer's internal store asynchronously.
   #[napi(
     ts_args_type = "src: string, data: Uint8Array | ArrayBuffer, signal?: AbortSignal",
@@ -455,20 +424,6 @@ impl Renderer {
     Ok(())
   }
 
-  /// @deprecated Use `loadFont` instead (to align with the naming convention for sync/async functions).
-  #[napi(
-    ts_args_type = "data: Font, signal?: AbortSignal",
-    ts_return_type = "Promise<number>"
-  )]
-  pub fn load_font_async(
-    &self,
-    env: Env,
-    data: Object,
-    signal: Option<AbortSignal>,
-  ) -> Result<AsyncTask<LoadFontTask>> {
-    self.load_fonts(env, vec![data], signal)
-  }
-
   /// Loads a font into the renderer asynchronously.
   #[napi(
     ts_args_type = "data: Font, signal?: AbortSignal",
@@ -481,20 +436,6 @@ impl Renderer {
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<LoadFontTask>> {
     self.load_fonts(env, vec![data], signal)
-  }
-
-  /// @deprecated Use `loadFonts` instead (to align with the naming convention for sync/async functions).
-  #[napi(
-    ts_args_type = "fonts: Font[], signal?: AbortSignal",
-    ts_return_type = "Promise<number>"
-  )]
-  pub fn load_fonts_async(
-    &self,
-    env: Env,
-    fonts: Vec<Object>,
-    signal: Option<AbortSignal>,
-  ) -> Result<AsyncTask<LoadFontTask>> {
-    self.load_fonts(env, fonts, signal)
   }
 
   /// Loads multiple fonts into the renderer asynchronously.
@@ -564,21 +505,6 @@ impl Renderer {
       )?,
       signal,
     ))
-  }
-
-  /// @deprecated Use `render` instead (to align with the naming convention for sync/async functions).
-  #[napi(
-    ts_args_type = "source: Node, options?: RenderOptions, signal?: AbortSignal",
-    ts_return_type = "Promise<Buffer>"
-  )]
-  pub fn render_async(
-    &self,
-    env: Env,
-    source: Object,
-    options: Option<RenderOptions>,
-    signal: Option<AbortSignal>,
-  ) -> Result<AsyncTask<RenderTask>> {
-    self.render(env, source, options, signal)
   }
 
   /// Measures a node tree and returns layout information asynchronously.

@@ -12,10 +12,14 @@ const ROTATED_ANGLES: &[f32] = &[0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 31
 
 #[test]
 fn test_rotate_image() {
-  let image = Node::container([Node::image("assets/images/yeecord.png")
-    .with_style(Style::default().with(StyleDeclaration::rotate(Some(Angle::new(90.0)))))])
+  let image = Node::container([Node::image("assets/images/yeecord.png").with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::rotate(Some(Angle::new(90.0)))),
+  )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -32,6 +36,7 @@ fn test_rotate_image() {
 fn test_rotate() {
   let container = Node::container([Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Rem(16.0)))
       .with(StyleDeclaration::height(Rem(16.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -41,6 +46,7 @@ fn test_rotate() {
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -63,6 +69,7 @@ fn test_style_transform_origin_center() {
   )
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -91,6 +98,7 @@ fn test_style_transform_origin_top_left() {
   )
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -106,6 +114,7 @@ fn test_style_transform_origin_top_left() {
 fn create_rotated_container(angle: f32, transform_origin: TransformOrigin) -> Node {
   Node::image("assets/images/yeecord.png").with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::translate(SpacePair::from_single(
         Percentage(-50.0),
       )))
@@ -131,6 +140,7 @@ fn create_rotated_container(angle: f32, transform_origin: TransformOrigin) -> No
 fn test_style_transform_translate_and_scale() {
   let position = Node::container([Node::text("200px x 100px".to_string())]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(200.0)))
       .with(StyleDeclaration::height(Px(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -140,11 +150,13 @@ fn test_style_transform_translate_and_scale() {
 
   let translated = Node::container([Node::image("assets/images/yeecord.png").with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0))),
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(300.0)))
       .with(StyleDeclaration::height(Px(300.0)))
       .with_border_width(Sides([Px(1.0); 4]))
@@ -160,6 +172,7 @@ fn test_style_transform_translate_and_scale() {
   let scaled = Node::container([Node::text("100px x 100px, scale(2.0, 2.0)".to_string())])
     .with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::scale(SpacePair::from_single(
           PercentageNumber(2.0),
         )))
@@ -176,6 +189,7 @@ fn test_style_transform_translate_and_scale() {
   let rotated = Node::container([Node::text("200px x 200px, rotate(45deg)".to_string())])
     .with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::rotate(Some(Angle::new(45.0))))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([0, 0, 255, 255]),
@@ -192,6 +206,7 @@ fn test_style_transform_translate_and_scale() {
 
   let container = Node::container([position, translated, scaled, rotated]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(

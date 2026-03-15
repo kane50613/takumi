@@ -10,17 +10,21 @@ fn text_inline() {
   let texts = &[
     (
       "The quick brown fox jumps over the lazy dog.",
-      Style::default().with(StyleDeclaration::display(Display::Inline)),
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::display(Display::Inline)),
     ),
     (
       "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ",
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::text_transform(TextTransform::Uppercase))
         .with(StyleDeclaration::display(Display::Inline)),
     ),
     (
       "Nothing beats a jet2 holiday! ",
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::color(ColorInput::Value(Color([
           255, 0, 0, 255,
         ]))))
@@ -29,6 +33,7 @@ fn text_inline() {
     (
       "I'm making a browser at this point. ",
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::font_weight(FontWeight::from(600.0)))
         .with(StyleDeclaration::display(Display::Inline))
         .with(StyleDeclaration::color(ColorInput::Value(Color([
@@ -45,6 +50,7 @@ fn text_inline() {
 
   let container = Node::container(children).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color::white(),
       )))
@@ -87,6 +93,7 @@ fn inline_image() {
 
   let container = Node::container([Node::container(children).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with_border_width(Sides([Px(2.0); 4]))
       .with(StyleDeclaration::border_style(BorderStyle::Solid))
       .with(StyleDeclaration::display(Display::Block))
@@ -94,6 +101,7 @@ fn inline_image() {
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::align_items(AlignItems::Center))
@@ -130,6 +138,7 @@ fn inline_block_in_inline() {
 
   let container = Node::container(children.into_boxed_slice()).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color::white(),
       )))
@@ -148,6 +157,7 @@ fn inline_span_background_color() {
     (
       "Hello ",
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 200, 200, 255]),
         )))
@@ -156,6 +166,7 @@ fn inline_span_background_color() {
     (
       "world ",
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([200, 255, 200, 255]),
         )))
@@ -164,6 +175,7 @@ fn inline_span_background_color() {
     (
       "from ",
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([200, 200, 255, 255]),
         )))
@@ -172,6 +184,7 @@ fn inline_span_background_color() {
     (
       "Takumi!",
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([255, 255, 200, 255]),
         )))
@@ -186,6 +199,7 @@ fn inline_span_background_color() {
 
   let container = Node::container(children).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::align_items(AlignItems::Center))
@@ -227,6 +241,7 @@ fn inline_outline_span_boundaries() {
 
   let container = Node::container([Node::container(children).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::display(Display::Block))
       .with(StyleDeclaration::width(Px(320.0)))
       .with_padding(Sides([Px(24.0); 4]))
@@ -240,6 +255,7 @@ fn inline_outline_span_boundaries() {
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::align_items(AlignItems::Center))
@@ -257,6 +273,7 @@ fn inline_atomic_containers() {
   let atomic = |display, color, label: &str| -> Node {
     Node::container([Node::text(label.to_string())]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::display(display))
         .with_padding(Sides([Px(8.0); 4]))
         .with(StyleDeclaration::background_color(ColorInput::Value(color)))
@@ -266,22 +283,32 @@ fn inline_atomic_containers() {
   };
 
   let container = Node::container([Node::container([
-    Node::text("before ".to_string())
-      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+    Node::text("before ".to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::display(Display::Inline)),
+    ),
     atomic(
       Display::InlineBlock,
       Color([255, 0, 0, 100]),
       "inline-block",
     ),
-    Node::text(" mid ".to_string())
-      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+    Node::text(" mid ".to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::display(Display::Inline)),
+    ),
     atomic(Display::InlineFlex, Color([0, 255, 0, 100]), "inline-flex"),
-    Node::text(" end ".to_string())
-      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+    Node::text(" end ".to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::display(Display::Inline)),
+    ),
     atomic(Display::InlineGrid, Color([0, 0, 255, 100]), "inline-grid"),
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::display(Display::Block))
       .with(StyleDeclaration::font_size(Px(24.0).into()))
       .with_border_width(Sides([Px(2.0); 4]))
@@ -289,6 +316,7 @@ fn inline_atomic_containers() {
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::align_items(AlignItems::Center))
@@ -348,6 +376,7 @@ fn inline_nested_flex_block() {
 
   let container = Node::container(children).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(800.0)))
       .with(StyleDeclaration::display(Display::Block))
       .with_padding(Sides([Px(20.0); 4]))
@@ -463,6 +492,7 @@ fn inline_complex_nested_fixture() {
 
   let node = Node::container(children).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::display(Display::Block))
       .with(StyleDeclaration::font_size(Px(16.0).into()))
       .with(StyleDeclaration::line_height(LineHeight::Length(Em(1.5))))
@@ -547,6 +577,7 @@ fn inline_text_decorations() {
 
   let node = Node::container(decorated_children).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::display(Display::Block))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))

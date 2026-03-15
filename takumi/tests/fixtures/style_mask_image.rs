@@ -12,6 +12,7 @@ fn centered_layer_position() -> BackgroundPositions {
 fn create_container_with_mask(mask_image: BackgroundImages, background_color: Color) -> Node {
   Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -87,6 +88,7 @@ fn test_style_mask_image_with_background_image() {
 
   let container = Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_image(Some(background_image)))
@@ -114,6 +116,7 @@ fn test_style_mask_image_on_image_node() {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Rem(16.0)))
       .with(StyleDeclaration::height(Rem(16.0)))
       .with(StyleDeclaration::mask_image(Some(mask_image)))
@@ -121,6 +124,7 @@ fn test_style_mask_image_on_image_node() {
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(

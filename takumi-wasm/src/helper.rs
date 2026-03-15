@@ -32,10 +32,3 @@ pub fn extract_resource_urls(node: NodeType) -> JsResult<Vec<String>> {
       .collect(),
   )
 }
-
-/// Collects the fetch task urls from the node.
-/// @deprecated Use `extractResourceUrls` instead.
-#[wasm_bindgen(js_name = collectNodeFetchTasks)]
-pub fn collect_node_fetch_tasks(node: NodeType) -> JsResult<Vec<String>> {
-  extract_resource_urls(node)
-}

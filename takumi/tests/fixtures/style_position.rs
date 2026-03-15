@@ -1,7 +1,7 @@
 use takumi::layout::{
   node::Node,
   style::{
-    Color, ColorInput,
+    Color, ColorInput, Display,
     Length::{Percentage, Px},
     Position, Sides, Style, StyleDeclaration,
   },
@@ -13,6 +13,7 @@ use crate::test_utils::run_fixture_test;
 fn test_style_position() {
   let container = Node::container([Node::container([]).with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(100.0)))
       .with(StyleDeclaration::height(Px(100.0)))
       .with(StyleDeclaration::position(Position::Absolute))
@@ -23,6 +24,7 @@ fn test_style_position() {
   )])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(

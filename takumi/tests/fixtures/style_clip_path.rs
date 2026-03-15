@@ -12,6 +12,7 @@ fn clip_path_text_stroke_filled() {
   let container = Node::container([
     Node::text(text.to_string()).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::position(Position::Absolute))
         .with(StyleDeclaration::top(Percentage(50.0)))
@@ -26,6 +27,7 @@ fn clip_path_text_stroke_filled() {
     ),
     Node::text(text.to_string()).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::position(Position::Absolute))
         .with(StyleDeclaration::top(Percentage(50.0)))
@@ -47,6 +49,7 @@ fn clip_path_text_stroke_filled() {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -71,6 +74,7 @@ fn clip_path_triangle_vercel() {
     // Triangle with clip-path
     Node::container([]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(128.0)))
         .with(StyleDeclaration::height(Px(128.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -83,6 +87,7 @@ fn clip_path_triangle_vercel() {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -104,6 +109,7 @@ fn clip_path_triangle_gradient() {
     // Triangle with gradient background and clip-path
     Node::container([]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(300.0)))
         .with(StyleDeclaration::height(Px(300.0)))
         .with(StyleDeclaration::background_image(Some(
@@ -119,6 +125,7 @@ fn clip_path_triangle_gradient() {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -140,6 +147,7 @@ fn clip_path_circle() {
     // Circle with clip-path
     Node::container([]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(200.0)))
         .with(StyleDeclaration::height(Px(200.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -152,6 +160,7 @@ fn clip_path_circle() {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -173,6 +182,7 @@ fn clip_path_inset_rounded() {
     // Inset with border radius and clip-path
     Node::container([]).with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(200.0)))
         .with(StyleDeclaration::height(Px(200.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -185,6 +195,7 @@ fn clip_path_inset_rounded() {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -209,6 +220,7 @@ fn clip_path_inset_round_clips_children() {
       // Full-bleed red child — should be clipped to rounded rect
       Node::container([]).with_style(
         Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
           .with(StyleDeclaration::position(Position::Absolute))
           .with(StyleDeclaration::top(Px(0.0)))
           .with(StyleDeclaration::left(Px(0.0)))
@@ -221,6 +233,7 @@ fn clip_path_inset_round_clips_children() {
     ])
     .with_style(
       Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::position(Position::Absolute))
         .with(StyleDeclaration::top(Px(0.0)))
         .with(StyleDeclaration::left(Px(0.0)))
@@ -236,6 +249,7 @@ fn clip_path_inset_round_clips_children() {
   ])
   .with_style(
     Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
