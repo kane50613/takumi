@@ -9,10 +9,12 @@
     "@takumi-rs/wasm": "0.73.1"
   },
   "changesets": [
+    "calm-lemons-obey",
     "evil-bags-relax",
     "fresh-glasses-kiss",
     "funny-laws-juggle",
     "neat-rivers-pay",
-    "social-parts-refuse"
+    "social-parts-refuse",
+    "twenty-knives-deny"
   ]
 }

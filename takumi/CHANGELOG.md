@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.0-beta.1
+
+### Minor Changes
+
+- 256ef21: Remove public `load_font` function
+
 ## 1.0.0-beta.0
 
 ### Major Changes

@@ -1,5 +1,12 @@
 # @takumi-rs/core
 
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- 256ef21: Make Woff2/Woff decompression run in parallel
+  - @takumi-rs/helpers@1.0.0-beta.1
+
 ## 1.0.0-beta.0
 
 ### Major Changes
