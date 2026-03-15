@@ -27,6 +27,7 @@ export default function XPostImage() {
   return (
     <div
       style={{
+        display: "flex",
         backgroundColor: "black",
         width: "100%",
         height: "100%",
@@ -37,6 +38,7 @@ export default function XPostImage() {
     >
       <div
         style={{
+          display: "flex",
           marginBottom: "2rem",
           gap: "2rem",
           alignItems: "center",
@@ -53,6 +55,7 @@ export default function XPostImage() {
         />
         <div
           style={{
+            display: "flex",
             flexDirection: "column",
             fontSize: "3rem",
             flexGrow: 1,
@@ -88,6 +91,7 @@ export default function XPostImage() {
       </div>
       <span
         style={{
+          display: "flex",
           lineClamp: 1,
           textOverflow: "ellipsis",
           fontSize: "4rem",
@@ -100,6 +104,7 @@ export default function XPostImage() {
       </span>
       <div
         style={{
+          display: "flex",
           width: "100%",
           flexGrow: 1,
         }}
@@ -116,6 +121,7 @@ export default function XPostImage() {
       </div>
       <div
         style={{
+          display: "flex",
           position: "absolute",
           width: "100%",
           height: "50%",

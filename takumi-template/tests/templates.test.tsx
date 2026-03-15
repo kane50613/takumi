@@ -34,6 +34,7 @@ function testRender(name: string, template: ReactNode) {
       format: "webp",
       fetchedResources,
       stylesheets,
+      dithering: "floyd-steinberg",
     });
 
     const end = performance.now();

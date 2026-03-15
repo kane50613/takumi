@@ -100,6 +100,7 @@ export default function ProductCardTemplate({
 
           <div
             style={{
+              display: "flex",
               fontSize: 52,
               fontWeight: 800,
               color: "#2563eb",

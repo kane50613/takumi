@@ -35,7 +35,7 @@ export default function DocsTemplate({
           flexDirection: "column",
           width: "100%",
           height: "100%",
-          padding: "60px",
+          padding: "90px 60px 90px 60px",
           position: "relative",
           justifyContent: "space-between",
         }}
@@ -96,9 +96,10 @@ export default function DocsTemplate({
           >
             {site}
           </span>
-          <div style={{ flexGrow: 1 }} />
+          <div style={{ display: "flex", flexGrow: 1 }} />
           <div
             style={{
+              display: "flex",
               height: 4,
               width: 60,
               backgroundColor: primaryColor,

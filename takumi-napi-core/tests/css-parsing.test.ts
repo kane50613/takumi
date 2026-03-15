@@ -75,6 +75,7 @@ describe("CSS style parsing", () => {
             text: "This is a long text node used to validate CSS parsing for typography and truncation related style properties.",
             style: {
               width: "100%",
+              display: "flex",
               fontSize: "20px",
               fontWeight: "700",
               lineHeight: 1.3,

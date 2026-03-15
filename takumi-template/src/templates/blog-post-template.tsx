@@ -33,6 +33,7 @@ export default function BlogPostTemplate({
       <div style={{ display: "flex", alignItems: "flex-start" }}>
         <div
           style={{
+            display: "flex",
             backgroundColor: "#3b82f6",
             color: "white",
             padding: "8px 24px",
@@ -63,6 +64,7 @@ export default function BlogPostTemplate({
         {avatar && (
           <div
             style={{
+              display: "flex",
               width: 80,
               height: 80,
               borderRadius: "50%",

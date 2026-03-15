@@ -72,6 +72,7 @@ export default function OgImage() {
       <div style={{ display: "flex", flexDirection: "column" }}>
         <div
           style={{
+            display: "flex",
             justifyContent: "center",
             alignItems: "center",
             padding: "1rem",
@@ -94,6 +95,7 @@ export default function OgImage() {
         <Features />
         <div
           style={{
+            display: "flex",
             alignItems: "center",
             justifyContent: "center",
             padding: "0.75rem",
@@ -170,6 +172,7 @@ function Feature({
   return (
     <div
       style={{
+        display: "flex",
         flexDirection: "column",
         borderBottomWidth: Number(borderBottom),
         borderRightWidth: Number(borderRight),
@@ -182,6 +185,7 @@ function Feature({
     >
       <div
         style={{
+          display: "flex",
           gap: "0.5rem",
           color: secondaryForeground,
           alignItems: "center",
