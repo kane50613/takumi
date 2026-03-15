@@ -38,6 +38,7 @@ describe("Renderer.measure", () => {
         text({
           text: "Hello",
           style: {
+            display: "flex",
             width: 50,
             height: 50,
           },
