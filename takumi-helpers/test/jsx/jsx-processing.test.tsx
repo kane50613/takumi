@@ -19,6 +19,7 @@ describe("fromJsx", () => {
     expect(node).toEqual({
       type: "text",
       text: "Hello World",
+      preset: defaultStylePresets.div,
       tagName: "div",
     } satisfies TextNode);
   });
@@ -67,6 +68,7 @@ describe("fromJsx", () => {
     expect(node).toEqual({
       type: "text",
       text: "Hello",
+      preset: defaultStylePresets.div,
       tagName: "div",
     } satisfies TextNode);
   });
@@ -112,6 +114,7 @@ describe("fromJsx", () => {
           tagName: "span",
         },
       ],
+      preset: defaultStylePresets.div,
       tagName: "div",
       id: "wrapper",
       className: "stack",
@@ -125,6 +128,7 @@ describe("fromJsx", () => {
     expect(node).toEqual({
       type: "text",
       text: "Hello World",
+      preset: defaultStylePresets.div,
       tagName: "div",
     } satisfies TextNode);
   });
@@ -164,6 +168,7 @@ describe("fromJsx", () => {
     expect(node).toEqual({
       type: "text",
       text: "Hello Async",
+      preset: defaultStylePresets.div,
       tagName: "div",
     } satisfies TextNode);
   });
@@ -179,8 +184,18 @@ describe("fromJsx", () => {
     expect(node).toEqual({
       type: "container",
       children: [
-        { type: "text", text: "First", tagName: "div" },
-        { type: "text", text: "Second", tagName: "div" },
+        {
+          type: "text",
+          text: "First",
+          tagName: "div",
+          preset: defaultStylePresets.div,
+        },
+        {
+          type: "text",
+          text: "Second",
+          tagName: "div",
+          preset: defaultStylePresets.div,
+        },
       ],
       style: {
         width: "100%",
@@ -221,6 +236,7 @@ describe("fromJsx", () => {
           tagName: "span",
         },
       ],
+      preset: defaultStylePresets.div,
       tagName: "div",
     } satisfies ContainerNode);
   });
@@ -415,6 +431,7 @@ describe("fromJsx", () => {
         {
           type: "container",
           tagName: "div",
+          preset: defaultStylePresets.div,
           children: [
             {
               type: "container",
@@ -458,6 +475,7 @@ describe("fromJsx", () => {
           ],
         },
       ],
+      preset: defaultStylePresets.div,
       tagName: "div",
     } satisfies ContainerNode);
   });
@@ -495,6 +513,7 @@ describe("fromJsx", () => {
         {
           type: "container",
           tagName: "div",
+          preset: defaultStylePresets.div,
           children: [
             {
               type: "text",
@@ -505,6 +524,7 @@ describe("fromJsx", () => {
             {
               type: "container",
               tagName: "div",
+              preset: defaultStylePresets.div,
               children: [
                 {
                   type: "text",
@@ -679,6 +699,7 @@ describe("fromJsx", () => {
     expect(node).toEqual({
       type: "container",
       tagName: "div",
+      preset: defaultStylePresets.div,
       children: [
         {
           type: "text",
@@ -707,6 +728,7 @@ describe("fromJsx", () => {
     expect(node).toEqual({
       type: "container",
       tagName: "div",
+      preset: defaultStylePresets.div,
       children: [
         {
           type: "text",

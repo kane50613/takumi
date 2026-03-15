@@ -240,6 +240,7 @@ describe("fromJsx - stylePresets overriding", () => {
             tagName: "strong",
           },
         ],
+        preset: customPresets.div,
         tagName: "div",
       } satisfies ContainerNode);
     });
@@ -302,6 +303,7 @@ describe("fromJsx - stylePresets overriding", () => {
             tagName: "h2",
           },
         ],
+        preset: customPresets.div,
         tagName: "div",
       } satisfies ContainerNode);
     });
@@ -407,6 +409,7 @@ describe("fromJsx - stylePresets overriding", () => {
           {
             type: "container",
             tagName: "div",
+            preset: customPresets.div,
             children: [
               {
                 type: "container",
@@ -434,6 +437,7 @@ describe("fromJsx - stylePresets overriding", () => {
             ],
           },
         ],
+        preset: customPresets.div,
         tagName: "div",
       } satisfies ContainerNode);
     });
@@ -489,6 +493,7 @@ describe("fromJsx - stylePresets overriding", () => {
             tagName: "p",
           },
         ],
+        preset: customPresets.div,
         tagName: "div",
       } satisfies ContainerNode);
     });
@@ -526,6 +531,7 @@ describe("fromJsx - stylePresets overriding", () => {
             tagName: "p",
           },
         ],
+        preset: customPresets.div,
         tagName: "div",
       } satisfies ContainerNode);
     });
@@ -640,6 +646,7 @@ describe("fromJsx - stylePresets overriding", () => {
             tagName: "h1",
           },
         ],
+        preset: customPresets.div,
         tagName: "div",
       } satisfies ContainerNode);
     });

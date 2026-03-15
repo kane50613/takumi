@@ -29,7 +29,7 @@ let node = Node::container([Node::text("Hello, world!").with_style(
 let mut global = GlobalContext::default();
 
 // Load fonts
-global.font_context.load_and_store(
+global.font_context_mut().load_and_store(
   include_bytes!("../../assets/fonts/geist/Geist[wght].woff2").into(),
   None,
   None,
