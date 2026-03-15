@@ -1,6 +1,6 @@
 {
   "name": "takumi",
-  "version": "0.73.1",
+  "version": "1.0.0-beta.0",
   "private": true,
   "scripts": {
     "version": "cargo set-version -p takumi $(jq -r '.version' package.json)",

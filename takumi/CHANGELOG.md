@@ -1,5 +1,32 @@
 # takumi
 
+## 1.0.0-beta.0
+
+### Major Changes
+
+- 188079f: **Replaced `RenderOptionsBuilder` with `RenderOptions::builder()`**
+
+  Switch to [typed-builder](https://docs.rs/typed-builder) for compile time options validation, no unwrap needed.
+
+  Before:
+
+  ```rust
+  let options = RenderOptionsBuilder::default().build().unwrap();
+  ```
+
+  After:
+
+  ```rust
+  let options = RenderOptions::builder().build();
+  ```
+
+- 188079f: **`GlobalContext` fields are now private**
+- 188079f: **Changed initial `display` value from `flex` to `inline`**
+
+  This is to comply with [the CSSWG spec](https://drafts.csswg.org/css-display/#the-display-properties).
+
+  You should update your code to use `display: flex` if you want to use flexbox.
+
 ## 0.73.1
 
 ### Patch Changes

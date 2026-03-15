@@ -1,5 +1,21 @@
 # @takumi-rs/core
 
+## 1.0.0-beta.0
+
+### Major Changes
+
+- 188079f: Removed all deprecated types, functions
+- 188079f: **Removed pascal case output format (e.g. `WebP`, `Png`), please switch to lowercase.**
+- 188079f: **Changed initial `display` value from `flex` to `inline`**
+
+  This is to comply with [the CSSWG spec](https://drafts.csswg.org/css-display/#the-display-properties).
+
+  You should update your code to use `display: flex` if you want to use flexbox.
+
+### Patch Changes
+
+- @takumi-rs/helpers@1.0.0-beta.0
+
 ## 0.73.1
 
 ### Patch Changes
