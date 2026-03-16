@@ -1,5 +1,11 @@
 # @takumi-rs/helpers
 
+## 1.0.0-beta.3
+
+### Patch Changes
+
+- b5b8531: Support sourcing class name from `class` field
+
 ## 1.0.0-beta.2
 
 ### Minor Changes

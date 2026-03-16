@@ -1,5 +1,15 @@
 # takumi
 
+## 1.0.0-beta.3
+
+### Minor Changes
+
+- 00013a8: Support repeating gradients
+
+### Patch Changes
+
+- 3d2eab2: Blockify node when `position: absolute` #572
+
 ## 1.0.0-beta.2
 
 ## 1.0.0-beta.1
