@@ -48,7 +48,7 @@ function splitTextToNodes(node: TextNode, emojiType: EmojiType): Node[] {
   const segments = Array.from(segmenter.segment(node.text));
 
   for (const { segment } of segments) {
-    if (/\p{Extended_Pictographic}/u.test(segment) || segment === U200D) {
+    if (/\p{Extended_Pictographic}/u.test(segment)) {
       if (currentText) {
         nodes.push(text({ text: currentText }));
         currentText = "";
