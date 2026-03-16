@@ -225,6 +225,7 @@ mod tests {
         vec![
           Background {
             image: BackgroundImage::Radial(RadialGradient {
+              repeating: false,
               shape: RadialShape::Circle,
               size: RadialSize::FarthestCorner,
               center: BackgroundPosition(SpacePair::from_pair(
@@ -248,6 +249,7 @@ mod tests {
           },
           Background {
             image: BackgroundImage::Radial(RadialGradient {
+              repeating: false,
               shape: RadialShape::Circle,
               size: RadialSize::FarthestCorner,
               center: BackgroundPosition(SpacePair::from_pair(

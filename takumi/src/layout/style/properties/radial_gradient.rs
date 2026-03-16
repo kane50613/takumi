@@ -8,7 +8,8 @@ use super::gradient_utils::{
 use crate::{
   layout::style::{
     ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop, GradientStops,
-    Length, MakeComputed, ObjectPosition, ParseResult, declare_enum_from_css_impl,
+    Length, LengthDefaultsToZero, MakeComputed, ObjectPosition, ParseResult, ResolvedGradientStop,
+    declare_enum_from_css_impl,
   },
   rendering::{RenderContext, Sizing},
 };
@@ -17,6 +18,8 @@ use crate::{
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct RadialGradient {
+  /// Whether the gradient repeats beyond the last stop.
+  pub repeating: bool,
   /// The radial gradient shape
   pub shape: RadialShape,
   /// The sizing mode for the gradient
@@ -66,6 +69,15 @@ pub enum RadialSize {
   /// The gradient end stops at the farthest corner from the center
   #[default]
   FarthestCorner,
+  /// Explicit radii. Percentages resolve against the corresponding axis of the gradient box.
+  ///
+  /// Note: for `circle`, `radius_y` is treated as an alias of `radius_x` during rendering.
+  Explicit {
+    /// Horizontal radius.
+    radius_x: LengthDefaultsToZero,
+    /// Vertical radius.
+    radius_y: LengthDefaultsToZero,
+  },
 }
 
 declare_enum_from_css_impl!(
@@ -95,10 +107,18 @@ pub(crate) struct RadialGradientTile {
   pub inv_radius_x: f32,
   /// Reciprocal of `radius_y` for sampling.
   pub inv_radius_y: f32,
-  /// Scale converting normalized distance to LUT index.
-  pub distance_to_lut_scale: f32,
+  /// Axis length used to resolve stop percentages (in pixels).
+  pub radius_scale: f32,
+  /// Whether this gradient repeats.
+  pub repeating: bool,
+  /// First resolved stop position in pixels, used as repeating origin.
+  pub repeat_start: f32,
+  /// Repeat period in pixels.
+  pub repeat_period: f32,
+  /// Scale converting axis-space distance in pixels into LUT index space.
+  pub position_to_lut_scale: f32,
   /// Pre-computed color lookup table for fast gradient sampling.
-  /// Maps normalized distance [0.0, 1.0] from center to color.
+  /// Maps axis-space distance to color.
   pub color_lut: Vec<Rgba<u8>>,
 }
 
@@ -130,8 +150,8 @@ impl GenericImageView for RadialGradientTile {
     let dx = (x as f32 - self.cx) / self.radius_x.max(1e-6);
     let dy = (y as f32 - self.cy) / self.radius_y.max(1e-6);
     let normalized_distance = (dx * dx + dy * dy).sqrt();
-    let lut_idx =
-      self.lut_index_for_normalized_distance_with_len(normalized_distance, self.color_lut.len());
+    let distance_px = normalized_distance * self.radius_scale;
+    let lut_idx = self.lut_index_for_distance_px_with_len(distance_px, self.color_lut.len());
 
     self.color_lut[lut_idx]
   }
@@ -139,17 +159,22 @@ impl GenericImageView for RadialGradientTile {
 
 impl RadialGradientTile {
   #[inline(always)]
-  pub(crate) fn lut_index_for_normalized_distance_with_len(
+  pub(crate) fn lut_index_for_distance_px_with_len(
     &self,
-    normalized_distance: f32,
+    distance_px: f32,
     lut_len: usize,
   ) -> usize {
     if lut_len <= 1 {
       return 0;
     }
 
-    ((normalized_distance.clamp(0.0, 1.0) * self.distance_to_lut_scale).round() as usize)
-      .min(lut_len - 1)
+    let position_px = if self.repeating && self.repeat_period > 1e-6 {
+      (distance_px - self.repeat_start).rem_euclid(self.repeat_period)
+    } else {
+      distance_px.clamp(0.0, self.radius_scale)
+    };
+
+    ((position_px * self.position_to_lut_scale).round() as usize).min(lut_len - 1)
   }
 
   /// Builds a drawing context from a gradient and a target viewport.
@@ -164,6 +189,18 @@ impl RadialGradientTile {
     let dy_bottom = height as f32 - cy;
 
     let (radius_x, radius_y) = match (gradient.shape, gradient.size) {
+      (shape, RadialSize::Explicit { radius_x, radius_y }) => {
+        let resolved_radius_x = radius_x.to_px(&context.sizing, width as f32).max(0.0);
+        let resolved_radius_y = radius_y.to_px(&context.sizing, height as f32).max(0.0);
+
+        match shape {
+          RadialShape::Circle => {
+            let r = resolved_radius_x.max(resolved_radius_y);
+            (r, r)
+          }
+          RadialShape::Ellipse => (resolved_radius_x, resolved_radius_y),
+        }
+      }
       (RadialShape::Ellipse, RadialSize::FarthestCorner) => {
         // ellipse radii to farthest corner: take farthest side per axis
         (dx_left.max(dx_right), dy_top.max(dy_bottom))
@@ -230,11 +267,33 @@ impl RadialGradientTile {
     let radius_scale = radius_x.max(radius_y);
     let resolved_stops = resolve_stops_along_axis(&gradient.stops, radius_scale.max(1e-6), context);
 
+    let (repeating, repeat_start, repeat_period, lut_axis_length, lut_resolved_stops) = if gradient
+      .repeating
+      && let (Some(first), Some(last)) = (resolved_stops.first(), resolved_stops.last())
+    {
+      let repeat_start = first.position;
+      let repeat_period = (last.position - first.position).max(0.0);
+      if repeat_period > 1e-6 {
+        let shifted = resolved_stops
+          .iter()
+          .map(|stop| ResolvedGradientStop {
+            color: stop.color,
+            position: stop.position - repeat_start,
+          })
+          .collect();
+        (true, repeat_start, repeat_period, repeat_period, shifted)
+      } else {
+        (false, 0.0, 0.0, radius_scale, resolved_stops)
+      }
+    } else {
+      (false, 0.0, 0.0, radius_scale, resolved_stops)
+    };
+
     // Pre-compute color lookup table with adaptive size.
-    let lut_size = adaptive_lut_size(radius_scale, &resolved_stops);
+    let lut_size = adaptive_lut_size(lut_axis_length, &lut_resolved_stops);
     let color_lut = build_color_lut_with_interpolation(
-      &resolved_stops,
-      radius_scale,
+      &lut_resolved_stops,
+      lut_axis_length,
       lut_size,
       gradient.interpolation.color_space,
       gradient.interpolation.hue_direction,
@@ -242,10 +301,10 @@ impl RadialGradientTile {
     let lut_len = color_lut.len();
     let inv_radius_x = radius_x.max(1e-6).recip();
     let inv_radius_y = radius_y.max(1e-6).recip();
-    let distance_to_lut_scale = if lut_len <= 1 {
+    let position_to_lut_scale = if lut_axis_length.abs() <= f32::EPSILON || lut_len <= 1 {
       0.0
     } else {
-      (lut_len - 1) as f32
+      (lut_len - 1) as f32 / lut_axis_length
     };
 
     RadialGradientTile {
@@ -257,7 +316,11 @@ impl RadialGradientTile {
       radius_y,
       inv_radius_x,
       inv_radius_y,
-      distance_to_lut_scale,
+      radius_scale,
+      repeating,
+      repeat_start,
+      repeat_period,
+      position_to_lut_scale,
       color_lut,
     }
   }
@@ -302,22 +365,26 @@ impl GradientOverlayTile for RadialGradientTile {
 
   #[inline(always)]
   fn next_lut_index(&self, row_state: &mut Self::RowState) -> usize {
-    if row_state.dy2 >= 1.0 {
+    if !self.repeating && row_state.dy2 >= 1.0 {
       return row_state.max_lut_index;
     }
 
     let normalized_distance = (row_state.dx2 + row_state.dy2).sqrt();
-    let lut_idx = self
-      .lut_index_for_normalized_distance_with_len(normalized_distance, row_state.max_lut_index + 1);
+    let distance_px = normalized_distance * self.radius_scale;
+    let lut_idx = self.lut_index_for_distance_px_with_len(distance_px, row_state.max_lut_index + 1);
     row_state.dx2 += row_state.dx2_step;
     row_state.dx2_step += row_state.dx2_step_delta;
     lut_idx
   }
 }
 
-impl<'i> FromCss<'i> for RadialGradient {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, RadialGradient> {
-    input.expect_function_matching("radial-gradient")?;
+impl RadialGradient {
+  fn parse_with_function<'i>(
+    input: &mut Parser<'i, '_>,
+    function: &str,
+    repeating: bool,
+  ) -> ParseResult<'i, RadialGradient> {
+    input.expect_function_matching(function)?;
 
     input.parse_nested_block(|input| {
       let mut shape = RadialShape::Ellipse;
@@ -333,6 +400,14 @@ impl<'i> FromCss<'i> for RadialGradient {
 
         if let Ok(s) = input.try_parse(RadialSize::from_css) {
           size = s;
+          continue;
+        }
+
+        if let Ok(radius_x) = input.try_parse(LengthDefaultsToZero::from_css) {
+          let radius_y = input
+            .try_parse(LengthDefaultsToZero::from_css)
+            .unwrap_or(radius_x);
+          size = RadialSize::Explicit { radius_x, radius_y };
           continue;
         }
 
@@ -354,6 +429,7 @@ impl<'i> FromCss<'i> for RadialGradient {
       let stops = GradientStops::from_css(input)?;
 
       Ok(RadialGradient {
+        repeating,
         shape,
         size,
         center,
@@ -361,6 +437,18 @@ impl<'i> FromCss<'i> for RadialGradient {
         stops: stops.into_boxed_slice(),
       })
     })
+  }
+
+  pub(crate) fn from_css_repeating<'i>(
+    input: &mut Parser<'i, '_>,
+  ) -> ParseResult<'i, RadialGradient> {
+    Self::parse_with_function(input, "repeating-radial-gradient", true)
+  }
+}
+
+impl<'i> FromCss<'i> for RadialGradient {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, RadialGradient> {
+    Self::parse_with_function(input, "radial-gradient", false)
   }
 
   const VALID_TOKENS: &'static [CssToken] =
@@ -373,8 +461,8 @@ mod tests {
 
   use super::*;
   use crate::layout::style::{
-    BackgroundPosition, Color, Length, PositionComponent, PositionKeywordX, PositionKeywordY,
-    SpacePair, StopPosition,
+    BackgroundPosition, Color, Length, LengthDefaultsToZero, PositionComponent, PositionKeywordX,
+    PositionKeywordY, SpacePair, StopPosition,
   };
   use crate::{GlobalContext, rendering::RenderContext};
 
@@ -385,6 +473,7 @@ mod tests {
     assert_eq!(
       gradient,
       Ok(RadialGradient {
+        repeating: false,
         shape: RadialShape::Ellipse,
         size: RadialSize::FarthestCorner,
         center: ObjectPosition::default(),
@@ -409,6 +498,7 @@ mod tests {
     assert_eq!(
       RadialGradient::from_str("radial-gradient(in oklab, red, blue)"),
       Ok(RadialGradient {
+        repeating: false,
         shape: RadialShape::Ellipse,
         size: RadialSize::FarthestCorner,
         center: ObjectPosition::default(),
@@ -439,6 +529,7 @@ mod tests {
     assert_eq!(
       gradient,
       Ok(RadialGradient {
+        repeating: false,
         shape: RadialShape::Circle,
         size: RadialSize::FarthestSide,
         center: ObjectPosition::default(),
@@ -466,6 +557,7 @@ mod tests {
     assert_eq!(
       gradient,
       Ok(RadialGradient {
+        repeating: false,
         shape: RadialShape::Ellipse,
         size: RadialSize::FarthestCorner,
         center: BackgroundPosition::<false>(SpacePair::from_pair(
@@ -496,6 +588,7 @@ mod tests {
     assert_eq!(
       gradient,
       Ok(RadialGradient {
+        repeating: false,
         shape: RadialShape::Ellipse,
         size: RadialSize::FarthestCorner,
         center: BackgroundPosition::<false>(SpacePair::from_pair(
@@ -527,6 +620,7 @@ mod tests {
     assert_eq!(
       gradient,
       Ok(RadialGradient {
+        repeating: false,
         shape: RadialShape::Circle,
         size: RadialSize::FarthestCorner,
         center: BackgroundPosition::<false>(SpacePair::from_single(PositionComponent::Length(
@@ -556,6 +650,7 @@ mod tests {
     assert_eq!(
       gradient,
       Ok(RadialGradient {
+        repeating: false,
         shape: RadialShape::Circle,
         size: RadialSize::FarthestCorner,
         center: ObjectPosition::default(),
@@ -584,6 +679,7 @@ mod tests {
     assert_eq!(
       RadialGradient::from_str("radial-gradient(circle, red 10% 20%, blue)"),
       Ok(RadialGradient {
+        repeating: false,
         shape: RadialShape::Circle,
         size: RadialSize::FarthestCorner,
         center: ObjectPosition::default(),
@@ -608,8 +704,41 @@ mod tests {
   }
 
   #[test]
+  fn test_parse_radial_gradient_with_explicit_ellipse_radii() {
+    let gradient = RadialGradient::from_str(
+      "radial-gradient(ellipse 60% 60% at 50% 50%, rgba(255, 53, 53, 0.10) 0%, transparent 70%)",
+    );
+
+    assert!(match gradient {
+      Ok(RadialGradient {
+        shape: RadialShape::Ellipse,
+        size:
+          RadialSize::Explicit {
+            radius_x: LengthDefaultsToZero::Percentage(radius_x),
+            radius_y: LengthDefaultsToZero::Percentage(radius_y),
+          },
+        center:
+          BackgroundPosition::<false>(SpacePair {
+            x: PositionComponent::Length(Length::Percentage(center_x)),
+            y: PositionComponent::Length(Length::Percentage(center_y)),
+          }),
+        stops,
+        ..
+      }) => {
+        (radius_x - 60.0).abs() < 1e-3
+          && (radius_y - 60.0).abs() < 1e-3
+          && (center_x - 50.0).abs() < 1e-3
+          && (center_y - 50.0).abs() < 1e-3
+          && stops.len() == 2
+      }
+      _ => false,
+    });
+  }
+
+  #[test]
   fn resolve_stops_percentage_and_px_radial() {
     let gradient = RadialGradient {
+      repeating: false,
       shape: RadialShape::Ellipse,
       size: RadialSize::FarthestCorner,
       center: ObjectPosition::default(),
@@ -647,6 +776,7 @@ mod tests {
   #[test]
   fn resolve_stops_equal_positions_distributed_radial() {
     let gradient = RadialGradient {
+      repeating: false,
       shape: RadialShape::Ellipse,
       size: RadialSize::FarthestCorner,
       center: ObjectPosition::default(),
@@ -685,6 +815,7 @@ mod tests {
   #[test]
   fn test_radial_gradient_at() {
     let gradient = RadialGradient {
+      repeating: false,
       shape: RadialShape::Circle,
       size: RadialSize::FarthestCorner,
       center: ObjectPosition::default(), // default is center (50%, 50%)
@@ -716,8 +847,61 @@ mod tests {
   }
 
   #[test]
+  fn test_repeating_radial_gradient_rings() {
+    let gradient = RadialGradient {
+      repeating: true,
+      shape: RadialShape::Circle,
+      size: RadialSize::Explicit {
+        radius_x: LengthDefaultsToZero::Px(20.0),
+        radius_y: LengthDefaultsToZero::Px(20.0),
+      },
+      center: ObjectPosition::default(),
+      interpolation: ColorInterpolationMethod::default(),
+      stops: [
+        GradientStop::ColorHint {
+          color: Color([255, 0, 0, 255]).into(),
+          hint: Some(StopPosition(Length::Px(0.0))),
+        },
+        GradientStop::ColorHint {
+          color: Color([255, 0, 0, 255]).into(),
+          hint: Some(StopPosition(Length::Px(5.0))),
+        },
+        GradientStop::ColorHint {
+          color: Color([0, 0, 255, 255]).into(),
+          hint: Some(StopPosition(Length::Px(5.0))),
+        },
+        GradientStop::ColorHint {
+          color: Color([0, 0, 255, 255]).into(),
+          hint: Some(StopPosition(Length::Px(10.0))),
+        },
+      ]
+      .into(),
+    };
+
+    let context = GlobalContext::default();
+    let render_context = RenderContext::new_test(&context, (40, 40).into());
+    let tile = RadialGradientTile::new(&gradient, 40, 40, &render_context);
+
+    assert_eq!(
+      [
+        tile.get_pixel(22, 20),
+        tile.get_pixel(27, 20),
+        tile.get_pixel(32, 20),
+        tile.get_pixel(37, 20),
+      ],
+      [
+        Rgba([255, 0, 0, 255]),
+        Rgba([0, 0, 255, 255]),
+        Rgba([255, 0, 0, 255]),
+        Rgba([0, 0, 255, 255]),
+      ]
+    );
+  }
+
+  #[test]
   fn test_radial_gradient_ellipse_closest_corner() {
     let gradient = RadialGradient {
+      repeating: false,
       shape: RadialShape::Ellipse,
       size: RadialSize::ClosestCorner,
       center: BackgroundPosition::<false>(SpacePair::from_pair(

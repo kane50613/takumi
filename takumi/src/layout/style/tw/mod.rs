@@ -330,6 +330,7 @@ impl TwGradientState {
     match self.gradient_type {
       TwGradientType::Linear => {
         let gradient = LinearGradient {
+          repeating: false,
           angle,
           interpolation: ColorInterpolationMethod::default(),
           stops: stops.into_boxed_slice(),
@@ -342,6 +343,7 @@ impl TwGradientState {
       }
       TwGradientType::Radial => {
         let gradient = RadialGradient {
+          repeating: false,
           shape: RadialShape::Ellipse,
           size: RadialSize::FarthestCorner,
           center: BackgroundPosition::default(),
@@ -356,6 +358,7 @@ impl TwGradientState {
       }
       TwGradientType::Conic => {
         let gradient = ConicGradient {
+          repeating: false,
           from_angle: angle,
           center: BackgroundPosition::default(),
           interpolation: ColorInterpolationMethod::default(),
@@ -2183,6 +2186,7 @@ mod tests {
       style.background_image,
       Some(
         [BackgroundImage::Linear(LinearGradient {
+          repeating: false,
           angle: Angle::new(90.0),
           interpolation: ColorInterpolationMethod::default(),
           stops: [

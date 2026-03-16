@@ -10,7 +10,8 @@ use super::gradient_utils::{
 use crate::{
   layout::style::{
     Angle, BackgroundPosition, ColorInput, ColorInterpolationMethod, CssDescriptorKind, CssToken,
-    FromCss, GradientStop, Length, MakeComputed, ObjectPosition, ParseResult, StopPosition,
+    FromCss, GradientStop, Length, MakeComputed, ObjectPosition, ParseResult, ResolvedGradientStop,
+    StopPosition,
   },
   rendering::{RenderContext, Sizing},
 };
@@ -19,6 +20,8 @@ use crate::{
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct ConicGradient {
+  /// Whether the gradient repeats beyond the last stop.
+  pub repeating: bool,
   /// The starting angle of the gradient (default 0deg = from top).
   pub from_angle: Angle,
   /// Center position (default 50% 50%).
@@ -49,6 +52,12 @@ pub(crate) struct ConicGradientTile {
   pub cy: f32,
   /// Starting angle in radians (CSS 0deg = from top, clockwise).
   pub start_rad: f32,
+  /// Whether this gradient repeats.
+  pub repeating: bool,
+  /// First resolved stop position in degrees, used as repeating origin.
+  pub repeat_start_deg: f32,
+  /// Repeat period in degrees.
+  pub repeat_period_deg: f32,
   /// Scale converting an adjusted angle in radians to LUT index.
   pub angle_to_lut_scale: f32,
   /// Pre-computed color lookup table for fast gradient sampling.
@@ -120,7 +129,13 @@ impl ConicGradientTile {
       return 0;
     }
 
-    ((adjusted_angle * self.angle_to_lut_scale).floor() as usize).min(lut_len - 1)
+    if self.repeating && self.repeat_period_deg > 1e-6 {
+      let degrees = adjusted_angle / TAU * 360.0;
+      let wrapped = (degrees - self.repeat_start_deg).rem_euclid(self.repeat_period_deg);
+      ((wrapped * self.angle_to_lut_scale).round() as usize).min(lut_len - 1)
+    } else {
+      ((adjusted_angle * self.angle_to_lut_scale).floor() as usize).min(lut_len - 1)
+    }
   }
 
   /// Builds a drawing context from a conic gradient and a target viewport.
@@ -133,19 +148,49 @@ impl ConicGradientTile {
     // Resolve stop percentages against one full turn (360deg).
     let resolved_stops = resolve_stops_along_axis(&gradient.stops, 360.0, context);
 
+    let (repeating, repeat_start_deg, repeat_period_deg, lut_axis_length_deg, lut_resolved_stops) =
+      if gradient.repeating
+        && let (Some(first), Some(last)) = (resolved_stops.first(), resolved_stops.last())
+      {
+        let repeat_start_deg = first.position;
+        let repeat_period_deg = (last.position - first.position).max(0.0);
+        if repeat_period_deg > 1e-6 {
+          let shifted = resolved_stops
+            .iter()
+            .map(|stop| ResolvedGradientStop {
+              color: stop.color,
+              position: stop.position - repeat_start_deg,
+            })
+            .collect();
+          (
+            true,
+            repeat_start_deg,
+            repeat_period_deg,
+            repeat_period_deg,
+            shifted,
+          )
+        } else {
+          (false, 0.0, 0.0, 360.0, resolved_stops)
+        }
+      } else {
+        (false, 0.0, 0.0, 360.0, resolved_stops)
+      };
+
     // Keep LUT sizing deterministic across platforms by deriving from integer tile dimensions.
     // 8 samples per pixel of the larger dimension provides enough angular density for conic edges.
     let angular_axis = width.max(height).max(1) as f32 * 8.0;
-    let lut_size = adaptive_lut_size(angular_axis, &resolved_stops);
+    let lut_size = adaptive_lut_size(angular_axis, &lut_resolved_stops);
     let color_lut = build_color_lut_with_interpolation(
-      &resolved_stops,
-      360.0,
+      &lut_resolved_stops,
+      lut_axis_length_deg,
       lut_size,
       gradient.interpolation.color_space,
       gradient.interpolation.hue_direction,
     );
     let lut_len = color_lut.len();
-    let angle_to_lut_scale = if lut_len == 0 {
+    let angle_to_lut_scale = if repeating && repeat_period_deg > 1e-6 && lut_len > 1 {
+      (lut_len - 1) as f32 / repeat_period_deg
+    } else if lut_len == 0 {
       0.0
     } else {
       lut_len as f32 / TAU
@@ -157,6 +202,9 @@ impl ConicGradientTile {
       cx,
       cy,
       start_rad,
+      repeating,
+      repeat_start_deg,
+      repeat_period_deg,
       angle_to_lut_scale,
       color_lut,
     }
@@ -280,9 +328,13 @@ fn parse_conic_gradient_stops<'i>(
   Ok(stops)
 }
 
-impl<'i> FromCss<'i> for ConicGradient {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, ConicGradient> {
-    input.expect_function_matching("conic-gradient")?;
+impl ConicGradient {
+  fn parse_with_function<'i>(
+    input: &mut Parser<'i, '_>,
+    function: &str,
+    repeating: bool,
+  ) -> ParseResult<'i, ConicGradient> {
+    input.expect_function_matching(function)?;
 
     input.parse_nested_block(|input| {
       let mut from_angle: Option<Angle> = None;
@@ -316,12 +368,25 @@ impl<'i> FromCss<'i> for ConicGradient {
       let stops = parse_conic_gradient_stops(input)?;
 
       Ok(ConicGradient {
+        repeating,
         from_angle: from_angle.unwrap_or(Angle::zero()),
         center: center.unwrap_or_default(),
         interpolation,
         stops: stops.into_boxed_slice(),
       })
     })
+  }
+
+  pub(crate) fn from_css_repeating<'i>(
+    input: &mut Parser<'i, '_>,
+  ) -> ParseResult<'i, ConicGradient> {
+    Self::parse_with_function(input, "repeating-conic-gradient", true)
+  }
+}
+
+impl<'i> FromCss<'i> for ConicGradient {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, ConicGradient> {
+    Self::parse_with_function(input, "conic-gradient", false)
   }
 
   const VALID_TOKENS: &'static [CssToken] =
@@ -343,6 +408,7 @@ mod tests {
     assert_eq!(
       gradient,
       Ok(ConicGradient {
+        repeating: false,
         from_angle: Angle::zero(),
         center: ObjectPosition::default(),
         interpolation: ColorInterpolationMethod::default(),
@@ -366,6 +432,7 @@ mod tests {
     assert_eq!(
       ConicGradient::from_str("conic-gradient(in oklab, red, blue)"),
       Ok(ConicGradient {
+        repeating: false,
         from_angle: Angle::zero(),
         center: ObjectPosition::default(),
         interpolation: ColorInterpolationMethod {
@@ -392,6 +459,7 @@ mod tests {
     assert_eq!(
       ConicGradient::from_str("conic-gradient(#ff0000 0%, #00ff00 50%, #0000ff 100%)"),
       Ok(ConicGradient {
+        repeating: false,
         from_angle: Angle::zero(),
         center: ObjectPosition::default(),
         interpolation: ColorInterpolationMethod::default(),
@@ -419,6 +487,7 @@ mod tests {
     assert_eq!(
       ConicGradient::from_str("conic-gradient(red 10% 20%, blue)"),
       Ok(ConicGradient {
+        repeating: false,
         from_angle: Angle::zero(),
         center: ObjectPosition::default(),
         interpolation: ColorInterpolationMethod::default(),
@@ -446,6 +515,7 @@ mod tests {
     assert_eq!(
       ConicGradient::from_str("conic-gradient(red 0deg, lime 180deg, blue 1turn)"),
       Ok(ConicGradient {
+        repeating: false,
         from_angle: Angle::zero(),
         center: ObjectPosition::default(),
         interpolation: ColorInterpolationMethod::default(),
@@ -473,6 +543,7 @@ mod tests {
     assert_eq!(
       ConicGradient::from_str("conic-gradient(red 0deg 90deg, blue)"),
       Ok(ConicGradient {
+        repeating: false,
         from_angle: Angle::zero(),
         center: ObjectPosition::default(),
         interpolation: ColorInterpolationMethod::default(),
@@ -502,6 +573,7 @@ mod tests {
     assert_eq!(
       gradient,
       Ok(ConicGradient {
+        repeating: false,
         from_angle: Angle::new(90.0),
         center: BackgroundPosition::<false>(SpacePair::from_pair(
           Length::Percentage(25.0).into(),
@@ -526,6 +598,7 @@ mod tests {
   #[test]
   fn test_conic_gradient_top_pixel_is_first_color() {
     let gradient = ConicGradient {
+      repeating: false,
       from_angle: Angle::zero(),
       center: ObjectPosition::default(),
       interpolation: ColorInterpolationMethod::default(),
@@ -555,6 +628,7 @@ mod tests {
   fn test_conic_gradient_hard_stops() {
     // Simulate the card cost gradient: 3 colors with hard stops
     let gradient = ConicGradient {
+      repeating: false,
       from_angle: Angle::zero(),
       center: ObjectPosition::default(),
       interpolation: ColorInterpolationMethod::default(),
@@ -598,5 +672,53 @@ mod tests {
     // Bottom should be green (roughly 180deg = 50% of turn, within the 33%–66% green zone)
     let bottom = tile.get_pixel(50, 99);
     assert_eq!(bottom, Rgba([0, 255, 0, 255]));
+  }
+
+  #[test]
+  fn test_repeating_conic_gradient_quadrants() {
+    let gradient = ConicGradient {
+      repeating: true,
+      from_angle: Angle::zero(),
+      center: ObjectPosition::default(),
+      interpolation: ColorInterpolationMethod::default(),
+      stops: [
+        GradientStop::ColorHint {
+          color: Color([255, 0, 0, 255]).into(),
+          hint: Some(StopPosition(Length::Percentage(0.0))),
+        },
+        GradientStop::ColorHint {
+          color: Color([255, 0, 0, 255]).into(),
+          hint: Some(StopPosition(Length::Percentage(25.0))),
+        },
+        GradientStop::ColorHint {
+          color: Color([0, 0, 255, 255]).into(),
+          hint: Some(StopPosition(Length::Percentage(25.0))),
+        },
+        GradientStop::ColorHint {
+          color: Color([0, 0, 255, 255]).into(),
+          hint: Some(StopPosition(Length::Percentage(50.0))),
+        },
+      ]
+      .into(),
+    };
+
+    let context = GlobalContext::default();
+    let render_context = RenderContext::new_test(&context, (40, 40).into());
+    let tile = ConicGradientTile::new(&gradient, 40, 40, &render_context);
+
+    assert_eq!(
+      [
+        tile.get_pixel(25, 15),
+        tile.get_pixel(25, 25),
+        tile.get_pixel(15, 25),
+        tile.get_pixel(15, 15),
+      ],
+      [
+        Rgba([255, 0, 0, 255]),
+        Rgba([0, 0, 255, 255]),
+        Rgba([255, 0, 0, 255]),
+        Rgba([0, 0, 255, 255]),
+      ]
+    );
   }
 }

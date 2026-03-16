@@ -1203,6 +1203,7 @@ mod tests {
   #[test]
   fn test_overlay_conic_gradient_hard_stops_matches_reference() {
     let gradient = ConicGradient {
+      repeating: false,
       from_angle: Angle::zero(),
       center: ObjectPosition::default(),
       interpolation: ColorInterpolationMethod::default(),

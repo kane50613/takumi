@@ -182,6 +182,68 @@ fn test_style_background_image_linear_radial_mixed() {
 }
 
 #[test]
+fn test_style_background_image_repeating_gradients() {
+  let repeating_linear = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0 / 3.0)))
+      .with(StyleDeclaration::background_image(Some(
+        BackgroundImages::from_str(
+          "repeating-linear-gradient(90deg, rgba(99, 102, 241, 0.18) 0px, rgba(56, 189, 248, 0.14) 48px, rgba(99, 102, 241, 0.18) 96px)",
+        )
+        .unwrap(),
+      )))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::from_rgb(0x0b1020),
+      ))),
+  );
+
+  let repeating_radial = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0 / 3.0)))
+      .with(StyleDeclaration::background_image(Some(
+        BackgroundImages::from_str(
+          "repeating-radial-gradient(circle 320px at 50% 50%, rgba(56, 189, 248, 0.16) 0px, rgba(99, 102, 241, 0.10) 40px, rgba(56, 189, 248, 0.16) 80px)",
+        )
+        .unwrap(),
+      )))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::from_rgb(0x0b1020),
+      ))),
+  );
+
+  let repeating_conic = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0 / 3.0)))
+      .with(StyleDeclaration::background_image(Some(
+        BackgroundImages::from_str(
+          "repeating-conic-gradient(from 0deg at 50% 50%, rgba(99, 102, 241, 0.16) 0deg, rgba(56, 189, 248, 0.12) 90deg, rgba(99, 102, 241, 0.16) 180deg)",
+        )
+        .unwrap(),
+      )))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::from_rgb(0x0b1020),
+      ))),
+  );
+
+  let container = Node::container([repeating_linear, repeating_radial, repeating_conic])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0))),
+    );
+
+  run_fixture_test(container, "style_background_image_repeating_gradients");
+}
+
+#[test]
 fn test_background_no_repeat_center_with_size_px() {
   let images =
     BackgroundImages::from_str("linear-gradient(90deg, rgba(255,0,0,1), rgba(0,0,255,1))").unwrap();

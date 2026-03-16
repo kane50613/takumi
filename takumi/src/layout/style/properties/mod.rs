@@ -207,6 +207,8 @@ pub enum CssDescriptorKind {
   ColorMixFn,
   /// `<conic-gradient()>`
   ConicGradientFn,
+  /// `<repeating-conic-gradient()>`
+  RepeatingConicGradientFn,
   /// `<contrast()>`
   ContrastFn,
   /// `<cubic-bezier()>`
@@ -227,6 +229,8 @@ pub enum CssDescriptorKind {
   InvertFn,
   /// `<linear-gradient()>`
   LinearGradientFn,
+  /// `<repeating-linear-gradient()>`
+  RepeatingLinearGradientFn,
   /// `<minmax()>`
   MinmaxFn,
   /// `<opacity()>`
@@ -237,6 +241,8 @@ pub enum CssDescriptorKind {
   PolygonFn,
   /// `<radial-gradient()>`
   RadialGradientFn,
+  /// `<repeating-radial-gradient()>`
+  RepeatingRadialGradientFn,
   /// `<repeat()>`
   RepeatFn,
   /// `<saturate()>`
@@ -267,6 +273,7 @@ impl CssDescriptorKind {
       Self::ColorAndPercentage => "color and percentage",
       Self::ColorMixFn => "color-mix()",
       Self::ConicGradientFn => "conic-gradient()",
+      Self::RepeatingConicGradientFn => "repeating-conic-gradient()",
       Self::ContrastFn => "contrast()",
       Self::CubicBezierFn => "cubic-bezier()",
       Self::DropShadowFn => "drop-shadow()",
@@ -277,11 +284,13 @@ impl CssDescriptorKind {
       Self::InsetFn => "inset()",
       Self::InvertFn => "invert()",
       Self::LinearGradientFn => "linear-gradient()",
+      Self::RepeatingLinearGradientFn => "repeating-linear-gradient()",
       Self::MinmaxFn => "minmax()",
       Self::OpacityFn => "opacity()",
       Self::PathFn => "path()",
       Self::PolygonFn => "polygon()",
       Self::RadialGradientFn => "radial-gradient()",
+      Self::RepeatingRadialGradientFn => "repeating-radial-gradient()",
       Self::RepeatFn => "repeat()",
       Self::SaturateFn => "saturate()",
       Self::SeedFn => "seed()",

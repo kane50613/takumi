@@ -72,8 +72,11 @@ impl<'i> FromCss<'i> for BackgroundImage {
 
     match_ignore_ascii_case! {&function,
       "linear-gradient" => Ok(BackgroundImage::Linear(LinearGradient::from_css(input)?)),
+      "repeating-linear-gradient" => Ok(BackgroundImage::Linear(LinearGradient::from_css_repeating(input)?)),
       "radial-gradient" => Ok(BackgroundImage::Radial(RadialGradient::from_css(input)?)),
+      "repeating-radial-gradient" => Ok(BackgroundImage::Radial(RadialGradient::from_css_repeating(input)?)),
       "conic-gradient" => Ok(BackgroundImage::Conic(ConicGradient::from_css(input)?)),
+      "repeating-conic-gradient" => Ok(BackgroundImage::Conic(ConicGradient::from_css_repeating(input)?)),
       _ => Err(Self::unexpected_token_error(location, &Token::Function(function))),
     }
   }
@@ -81,8 +84,11 @@ impl<'i> FromCss<'i> for BackgroundImage {
   const VALID_TOKENS: &'static [CssToken] = &[
     CssToken::Descriptor(CssDescriptorKind::UrlFn),
     CssToken::Descriptor(CssDescriptorKind::LinearGradientFn),
+    CssToken::Descriptor(CssDescriptorKind::RepeatingLinearGradientFn),
     CssToken::Descriptor(CssDescriptorKind::RadialGradientFn),
+    CssToken::Descriptor(CssDescriptorKind::RepeatingRadialGradientFn),
     CssToken::Descriptor(CssDescriptorKind::ConicGradientFn),
+    CssToken::Descriptor(CssDescriptorKind::RepeatingConicGradientFn),
     CssToken::Keyword("none"),
   ];
 }
@@ -108,6 +114,8 @@ impl<'i> FromCss<'i> for BackgroundImages {
 
 #[cfg(test)]
 mod tests {
+  use crate::layout::style::RadialSize;
+
   use super::*;
 
   #[test]
@@ -124,5 +132,38 @@ mod tests {
       BackgroundImage::parse_tw_with_arbitrary("[url(https://example.com/bg.png)]"),
       Some(BackgroundImage::Url("https://example.com/bg.png".into()))
     );
+  }
+
+  #[test]
+  fn test_parse_background_images_radial_explicit_radii() {
+    let images = BackgroundImages::from_str(
+      "radial-gradient(ellipse 60% 60% at 50% 50%, rgba(255, 53, 53, 0.10) 0%, transparent 70%), radial-gradient(ellipse 30% 30% at 50% 50%, rgba(255, 53, 53, 0.06) 0%, transparent 55%)",
+    );
+
+    assert!(match images {
+      Ok(images) => matches!(
+        images.as_ref(),
+        [BackgroundImage::Radial(first), BackgroundImage::Radial(second)]
+          if matches!(first.size, RadialSize::Explicit { .. })
+            && matches!(second.size, RadialSize::Explicit { .. })
+      ),
+      Err(_) => false,
+    });
+  }
+
+  #[test]
+  fn test_parse_repeating_gradients_in_background_images() {
+    let images = BackgroundImages::from_str(
+      "repeating-linear-gradient(90deg, red 0px 5px, blue 5px 10px), repeating-radial-gradient(circle 20px, red 0px 5px, blue 5px 10px), repeating-conic-gradient(from 0deg, red 0deg 90deg, blue 90deg 180deg)",
+    );
+
+    assert!(match images {
+      Ok(images) => matches!(
+        images.as_ref(),
+        [BackgroundImage::Linear(linear), BackgroundImage::Radial(radial), BackgroundImage::Conic(conic)]
+          if linear.repeating && radial.repeating && conic.repeating
+      ),
+      Err(_) => false,
+    });
   }
 }

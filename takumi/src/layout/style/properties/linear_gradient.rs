@@ -17,6 +17,8 @@ use crate::rendering::{RenderContext, Sizing};
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct LinearGradient {
+  /// Whether the gradient repeats beyond the last stop.
+  pub repeating: bool,
   /// The angle of the gradient.
   pub angle: Angle,
   /// The color interpolation method used between stops.
@@ -48,7 +50,12 @@ impl GenericImageView for LinearGradientTile {
     }
 
     let projection = self.projection_at(x as f32, y as f32);
-    let lut_idx = self.lut_index_for_projection_with_len(projection, self.color_lut.len());
+    let lut_idx = if self.repeating && self.repeat_period > 1e-6 {
+      let wrapped = (projection - self.repeat_start).rem_euclid(self.repeat_period);
+      ((wrapped * self.position_to_lut_scale).round() as usize).min(self.color_lut.len() - 1)
+    } else {
+      self.lut_index_for_projection_with_len(projection, self.color_lut.len())
+    };
 
     self.color_lut[lut_idx]
   }
@@ -67,6 +74,12 @@ pub(crate) struct LinearGradientTile {
   pub dir_y: f32,
   /// Full axis length along gradient direction in pixels.
   pub axis_length: f32,
+  /// Whether this gradient repeats.
+  pub repeating: bool,
+  /// First resolved stop position in pixels, used as repeating origin.
+  pub repeat_start: f32,
+  /// Repeat period in pixels.
+  pub repeat_period: f32,
   /// Projection bias for `x * dir_x + y * dir_y + projection_bias`.
   pub projection_bias: f32,
   /// Scale converting axis-space position in pixels into LUT index space.
@@ -78,8 +91,8 @@ pub(crate) struct LinearGradientTile {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct LinearGradientRowState {
-  scaled_lut_position: f32,
-  lut_step: f32,
+  projection: f32,
+  projection_step: f32,
   max_lut_index: usize,
 }
 
@@ -112,20 +125,42 @@ impl LinearGradientTile {
 
     let resolved_stops = resolve_stops_along_axis(&gradient.stops, axis_length.max(1e-6), context);
 
+    let (repeating, repeat_start, repeat_period, lut_axis_length, lut_resolved_stops) = if gradient
+      .repeating
+      && let (Some(first), Some(last)) = (resolved_stops.first(), resolved_stops.last())
+    {
+      let repeat_start = first.position;
+      let repeat_period = (last.position - first.position).max(0.0);
+      if repeat_period > 1e-6 {
+        let shifted = resolved_stops
+          .iter()
+          .map(|stop| ResolvedGradientStop {
+            color: stop.color,
+            position: stop.position - repeat_start,
+          })
+          .collect();
+        (true, repeat_start, repeat_period, repeat_period, shifted)
+      } else {
+        (false, 0.0, 0.0, axis_length, resolved_stops)
+      }
+    } else {
+      (false, 0.0, 0.0, axis_length, resolved_stops)
+    };
+
     // Pre-compute color lookup table with adaptive size.
-    let lut_size = adaptive_lut_size(axis_length, &resolved_stops);
+    let lut_size = adaptive_lut_size(lut_axis_length, &lut_resolved_stops);
     let color_lut = build_color_lut_with_interpolation(
-      &resolved_stops,
-      axis_length,
+      &lut_resolved_stops,
+      lut_axis_length,
       lut_size,
       gradient.interpolation.color_space,
       gradient.interpolation.hue_direction,
     );
     let lut_len = color_lut.len();
-    let position_to_lut_scale = if axis_length.abs() <= f32::EPSILON || lut_len <= 1 {
+    let position_to_lut_scale = if lut_axis_length.abs() <= f32::EPSILON || lut_len <= 1 {
       0.0
     } else {
-      (lut_len - 1) as f32 / axis_length
+      (lut_len - 1) as f32 / lut_axis_length
     };
 
     LinearGradientTile {
@@ -134,6 +169,9 @@ impl LinearGradientTile {
       dir_x,
       dir_y,
       axis_length,
+      repeating,
+      repeat_start,
+      repeat_period,
       projection_bias,
       position_to_lut_scale,
       color_lut,
@@ -168,19 +206,23 @@ impl GradientOverlayTile for LinearGradientTile {
   fn begin_row(&self, src_x_start: u32, src_y: u32, lut_len: usize) -> Self::RowState {
     let projection = self.projection_at(src_x_start as f32, src_y as f32);
     LinearGradientRowState {
-      scaled_lut_position: projection * self.position_to_lut_scale,
-      lut_step: self.dir_x * self.position_to_lut_scale,
+      projection,
+      projection_step: self.dir_x,
       max_lut_index: lut_len.saturating_sub(1),
     }
   }
 
   #[inline(always)]
   fn next_lut_index(&self, row_state: &mut Self::RowState) -> usize {
-    let lut_idx = row_state
-      .scaled_lut_position
-      .clamp(0.0, row_state.max_lut_index as f32)
-      .round() as usize;
-    row_state.scaled_lut_position += row_state.lut_step;
+    let lut_idx = if self.repeating && self.repeat_period > 1e-6 {
+      let wrapped = (row_state.projection - self.repeat_start).rem_euclid(self.repeat_period);
+      ((wrapped * self.position_to_lut_scale).round() as usize).min(row_state.max_lut_index)
+    } else {
+      let position_px = row_state.projection.clamp(0.0, self.axis_length);
+      ((position_px * self.position_to_lut_scale).round() as usize).min(row_state.max_lut_index)
+    };
+
+    row_state.projection += row_state.projection_step;
     lut_idx
   }
 }
@@ -463,9 +505,13 @@ impl VerticalKeyword {
   }
 }
 
-impl<'i> FromCss<'i> for LinearGradient {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, LinearGradient> {
-    input.expect_function_matching("linear-gradient")?;
+impl LinearGradient {
+  fn parse_with_function<'i>(
+    input: &mut Parser<'i, '_>,
+    function: &str,
+    repeating: bool,
+  ) -> ParseResult<'i, LinearGradient> {
+    input.expect_function_matching(function)?;
 
     input.parse_nested_block(|input| {
       let mut angle = Angle::new(180.0);
@@ -488,11 +534,24 @@ impl<'i> FromCss<'i> for LinearGradient {
       input.try_parse(Parser::expect_comma).ok();
 
       Ok(LinearGradient {
+        repeating,
         angle,
         interpolation,
         stops: GradientStops::from_css(input)?.into_boxed_slice(),
       })
     })
+  }
+
+  pub(crate) fn from_css_repeating<'i>(
+    input: &mut Parser<'i, '_>,
+  ) -> ParseResult<'i, LinearGradient> {
+    Self::parse_with_function(input, "repeating-linear-gradient", true)
+  }
+}
+
+impl<'i> FromCss<'i> for LinearGradient {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, LinearGradient> {
+    LinearGradient::parse_with_function(input, "linear-gradient", false)
   }
 
   const VALID_TOKENS: &'static [CssToken] =
@@ -601,6 +660,7 @@ mod tests {
     assert_eq!(
       LinearGradient::from_str("linear-gradient(to top right, #ff0000, #0000ff)"),
       Ok(LinearGradient {
+        repeating: false,
         angle: Angle::new(45.0),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
@@ -715,6 +775,7 @@ mod tests {
     assert_eq!(
       LinearGradient::from_str("linear-gradient(45deg, #ff0000, #0000ff)"),
       Ok(LinearGradient {
+        repeating: false,
         angle: Angle::new(45.0),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
@@ -737,6 +798,7 @@ mod tests {
     assert_eq!(
       LinearGradient::from_str("linear-gradient(in oklab, #ff0000, #0000ff)"),
       Ok(LinearGradient {
+        repeating: false,
         angle: Angle::new(180.0),
         interpolation: ColorInterpolationMethod {
           color_space: ColorSpaceTag::Oklab,
@@ -762,6 +824,7 @@ mod tests {
     assert_eq!(
       LinearGradient::from_str("linear-gradient(to right in oklch longer hue, red, blue)"),
       Ok(LinearGradient {
+        repeating: false,
         angle: Angle::new(90.0),
         interpolation: ColorInterpolationMethod {
           color_space: ColorSpaceTag::Oklch,
@@ -787,6 +850,7 @@ mod tests {
     assert_eq!(
       LinearGradient::from_str("linear-gradient(to right, #ff0000 0%, #0000ff 100%)"),
       Ok(LinearGradient {
+        repeating: false,
         angle: Angle::new(90.0), // "to right" = 90deg
         interpolation: ColorInterpolationMethod::default(),
         stops: [
@@ -809,6 +873,7 @@ mod tests {
     assert_eq!(
       LinearGradient::from_str("linear-gradient(to right, red 10% 20%, blue)"),
       Ok(LinearGradient {
+        repeating: false,
         angle: Angle::new(90.0),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
@@ -835,6 +900,7 @@ mod tests {
     assert_eq!(
       LinearGradient::from_str("linear-gradient(to right, #ff0000, 50%, #0000ff)"),
       Ok(LinearGradient {
+        repeating: false,
         angle: Angle::new(90.0), // "to right" = 90deg
         interpolation: ColorInterpolationMethod::default(),
         stops: [
@@ -858,6 +924,7 @@ mod tests {
     assert_eq!(
       LinearGradient::from_str("linear-gradient(to bottom, #ff0000)"),
       Ok(LinearGradient {
+        repeating: false,
         angle: Angle::new(180.0),
         interpolation: ColorInterpolationMethod::default(),
         stops: [GradientStop::ColorHint {
@@ -875,6 +942,7 @@ mod tests {
     assert_eq!(
       LinearGradient::from_str("linear-gradient(#ff0000, #0000ff)"),
       Ok(LinearGradient {
+        repeating: false,
         angle: Angle::new(180.0),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
@@ -963,6 +1031,7 @@ mod tests {
     assert_eq!(
       LinearGradient::from_str("linear-gradient(45deg, #ff0000, 25%, #00ff00, 75%, #0000ff)"),
       Ok(LinearGradient {
+        repeating: false,
         angle: Angle::new(45.0),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
@@ -989,6 +1058,7 @@ mod tests {
   #[test]
   fn test_linear_gradient_at_simple() {
     let gradient = LinearGradient {
+      repeating: false,
       angle: Angle::new(180.0), // "to bottom" (default) - Top to bottom
       interpolation: ColorInterpolationMethod::default(),
       stops: [
@@ -1025,6 +1095,7 @@ mod tests {
   #[test]
   fn test_linear_gradient_at_horizontal() {
     let gradient = LinearGradient {
+      repeating: false,
       angle: Angle::new(90.0), // "to right" - Left to right
       interpolation: ColorInterpolationMethod::default(),
       stops: [
@@ -1056,6 +1127,7 @@ mod tests {
   #[test]
   fn test_linear_gradient_at_single_color() {
     let gradient = LinearGradient {
+      repeating: false,
       angle: Angle::new(0.0),
       interpolation: ColorInterpolationMethod::default(),
       stops: [GradientStop::ColorHint {
@@ -1076,6 +1148,7 @@ mod tests {
   #[test]
   fn test_linear_gradient_at_no_steps() {
     let gradient = LinearGradient {
+      repeating: false,
       angle: Angle::new(0.0),
       interpolation: ColorInterpolationMethod::default(),
       stops: [].into(),
@@ -1087,6 +1160,53 @@ mod tests {
     let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context);
     let color = tile.get_pixel(50, 50);
     assert_eq!(color, Rgba([0, 0, 0, 0]));
+  }
+
+  #[test]
+  fn test_repeating_linear_gradient_stripes() {
+    let gradient = LinearGradient {
+      repeating: true,
+      angle: Angle::new(90.0),
+      interpolation: ColorInterpolationMethod::default(),
+      stops: [
+        GradientStop::ColorHint {
+          color: Color([255, 0, 0, 255]).into(),
+          hint: Some(StopPosition(Length::Px(0.0))),
+        },
+        GradientStop::ColorHint {
+          color: Color([255, 0, 0, 255]).into(),
+          hint: Some(StopPosition(Length::Px(5.0))),
+        },
+        GradientStop::ColorHint {
+          color: Color([0, 0, 255, 255]).into(),
+          hint: Some(StopPosition(Length::Px(5.0))),
+        },
+        GradientStop::ColorHint {
+          color: Color([0, 0, 255, 255]).into(),
+          hint: Some(StopPosition(Length::Px(10.0))),
+        },
+      ]
+      .into(),
+    };
+
+    let context = GlobalContext::default();
+    let render_context = RenderContext::new_test(&context, (40, 1).into());
+    let tile = LinearGradientTile::new(&gradient, 40, 1, &render_context);
+
+    assert_eq!(
+      [
+        tile.get_pixel(2, 0),
+        tile.get_pixel(7, 0),
+        tile.get_pixel(12, 0),
+        tile.get_pixel(17, 0),
+      ],
+      [
+        Rgba([255, 0, 0, 255]),
+        Rgba([0, 0, 255, 255]),
+        Rgba([255, 0, 0, 255]),
+        Rgba([0, 0, 255, 255]),
+      ]
+    );
   }
 
   #[test]
@@ -1168,6 +1288,7 @@ mod tests {
   #[test]
   fn resolve_stops_percentage_and_px_linear() {
     let gradient = LinearGradient {
+      repeating: false,
       angle: Angle::new(0.0),
       interpolation: ColorInterpolationMethod::default(),
       stops: [
@@ -1204,6 +1325,7 @@ mod tests {
   #[test]
   fn resolve_stops_equal_positions_allowed_linear() {
     let gradient = LinearGradient {
+      repeating: false,
       angle: Angle::new(0.0),
       interpolation: ColorInterpolationMethod::default(),
       stops: [
