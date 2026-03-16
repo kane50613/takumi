@@ -1,5 +1,11 @@
 # @takumi-rs/helpers
 
+## 1.0.0-beta.2
+
+### Minor Changes
+
+- 3142b36: Add `extractEmojis` helper
+
 ## 1.0.0-beta.1
 
 ## 1.0.0-beta.0

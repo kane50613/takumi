@@ -1,5 +1,18 @@
 # @takumi-rs/image-response
 
+## 1.0.0-beta.2
+
+### Minor Changes
+
+- 3142b36: Add `emoji` option
+
+### Patch Changes
+
+- Updated dependencies [3142b36]
+  - @takumi-rs/helpers@1.0.0-beta.2
+  - @takumi-rs/core@1.0.0-beta.2
+  - @takumi-rs/wasm@1.0.0-beta.2
+
 ## 1.0.0-beta.1
 
 ### Patch Changes
