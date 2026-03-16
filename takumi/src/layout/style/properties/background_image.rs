@@ -163,4 +163,33 @@ mod tests {
       Err(_) => false,
     });
   }
+
+  #[test]
+  fn test_linear_gradient_from_css_repeating() {
+    let mut input = cssparser::ParserInput::new("repeating-linear-gradient(90deg, red, blue)");
+    let mut parser = cssparser::Parser::new(&mut input);
+    let gradient = LinearGradient::from_css(&mut parser).unwrap();
+    assert!(gradient.repeating);
+    assert!((*gradient.angle - 90.0).abs() < 1e-3);
+    assert_eq!(gradient.stops.len(), 2);
+  }
+
+  #[test]
+  fn test_radial_gradient_from_css_repeating() {
+    let mut input = cssparser::ParserInput::new("repeating-radial-gradient(circle, red, blue)");
+    let mut parser = cssparser::Parser::new(&mut input);
+    let gradient = RadialGradient::from_css(&mut parser).unwrap();
+    assert!(gradient.repeating);
+    assert_eq!(gradient.stops.len(), 2);
+  }
+
+  #[test]
+  fn test_conic_gradient_from_css_repeating() {
+    let mut input = cssparser::ParserInput::new("repeating-conic-gradient(from 45deg, red, blue)");
+    let mut parser = cssparser::Parser::new(&mut input);
+    let gradient = ConicGradient::from_css(&mut parser).unwrap();
+    assert!(gradient.repeating);
+    assert!((*gradient.from_angle - 45.0).abs() < 1e-3);
+    assert_eq!(gradient.stops.len(), 2);
+  }
 }

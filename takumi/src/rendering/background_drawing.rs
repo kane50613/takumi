@@ -28,12 +28,10 @@ fn should_rasterize_repeated_tile(
   ys: &SmallVec<[i32; 1]>,
 ) -> bool {
   xs.len().saturating_mul(ys.len()) > 1
-    && match tile {
-      BackgroundTile::Linear(linear) => linear.repeating,
-      BackgroundTile::Radial(radial) => radial.repeating,
-      BackgroundTile::Conic(conic) => conic.repeating,
-      _ => false,
-    }
+    && matches!(
+      tile,
+      BackgroundTile::Linear(_) | BackgroundTile::Radial(_) | BackgroundTile::Conic(_)
+    )
 }
 
 fn rasterize_tile(tile: BackgroundTile, buffer_pool: &mut BufferPool) -> Result<BackgroundTile> {
