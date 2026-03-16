@@ -1,4 +1,5 @@
 import { fetchResources } from "@takumi-rs/helpers";
+import { extractEmojis } from "@takumi-rs/helpers/emoji";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import initWasm, { extractResourceUrls, Renderer } from "@takumi-rs/wasm";
 import wasmUrl from "@takumi-rs/wasm/takumi_wasm_bg.wasm?url";
@@ -25,18 +26,16 @@ const exportsSchema = z.object({
 let renderer: Renderer | undefined;
 
 (async () => {
-  const [_, normalFont, monoFont, emojiFont] = await Promise.all([
+  const [_, normalFont, monoFont] = await Promise.all([
     initWasm({ module_or_path: wasmUrl }),
     fetch("/fonts/Geist.woff2").then((r) => r.arrayBuffer()),
     fetch("/fonts/GeistMono.woff2").then((r) => r.arrayBuffer()),
-    fetch("/fonts/TwemojiMozilla-colr.woff2").then((r) => r.arrayBuffer()),
   ]);
 
   renderer = new Renderer({
     fonts: [
       { data: normalFont, name: "Geist" },
       { data: monoFont, name: "Geist Mono" },
-      { data: emojiFont, name: "Twemoji Mozilla" },
     ],
   });
 
@@ -69,11 +68,13 @@ self.onmessage = async (event: MessageEvent) => {
         const { default: component, options } = evaluateCodeExports(
           payload.code,
         );
-        const { node, stylesheets } = await fromJsx(
+        let { node, stylesheets } = await fromJsx(
           React.createElement(
             component as React.JSXElementConstructor<unknown>,
           ),
         );
+
+        node = extractEmojis(node, options.emoji ?? "twemoji");
 
         const resourceUrls = extractResourceUrls(node);
 

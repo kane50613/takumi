@@ -45,4 +45,9 @@ declare type PlaygroundOptions = {
      */
     format?: "webp" | "apng" | "gif";
   };
+  /**
+   * @description emoji style to use.
+   * @default twemoji
+   */
+  emoji?: "twemoji" | "blobmoji" | "noto" | "openmoji";
 };

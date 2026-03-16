@@ -18,6 +18,7 @@ export const optionsSchema = z.object({
       format: z.optional(z.enum(["webp", "apng", "gif"])),
     }),
   ),
+  emoji: z.optional(z.enum(["twemoji", "blobmoji", "noto", "openmoji"])),
 });
 
 const renderSuccessSchema = z.object({

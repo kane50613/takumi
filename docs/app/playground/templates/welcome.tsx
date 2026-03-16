@@ -27,4 +27,5 @@ export const options: PlaygroundOptions = {
   height: 630 * devicePixelRatio,
   format: "png",
   devicePixelRatio,
+  emoji: "twemoji",
 };
