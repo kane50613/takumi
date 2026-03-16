@@ -31,6 +31,12 @@
       "import": "./dist/jsx/jsx.js",
       "require": "./dist/jsx/jsx.cjs",
       "default": "./dist/jsx/jsx.js"
+    },
+    "./emoji": {
+      "types": "./dist/emoji.d.ts",
+      "import": "./dist/emoji.js",
+      "require": "./dist/emoji.cjs",
+      "default": "./dist/emoji.js"
     }
   },
   "files": [
@@ -41,7 +47,7 @@
   ],
   "license": "(MIT OR Apache-2.0)",
   "scripts": {
-    "build": "tsup-node src/index.ts src/jsx/jsx.ts src/jsx/create-tailwind-fn.ts --clean --minify --dts --format esm,cjs --no-splitting"
+    "build": "tsup-node src/index.ts src/emoji.ts src/jsx/jsx.ts src/jsx/create-tailwind-fn.ts --clean --minify --dts --format esm,cjs --no-splitting"
   },
   "type": "module"
 }

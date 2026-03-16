@@ -1,4 +1,5 @@
 import { fetchResources } from "@takumi-rs/helpers";
+import { type EmojiType, extractEmojis } from "@takumi-rs/helpers/emoji";
 import { type FromJsxOptions, fromJsx } from "@takumi-rs/helpers/jsx";
 import init, {
   extractResourceUrls,
@@ -52,6 +53,7 @@ type ImageResponseOptionsWithRenderer = ResponseInit &
   RenderOptions & {
     renderer: Renderer;
     jsx?: FromJsxOptions;
+    emoji?: EmojiType | "from-font";
   };
 
 type ImageResponseOptionsWithoutRenderer = ResponseInit &
@@ -60,6 +62,7 @@ type ImageResponseOptionsWithoutRenderer = ResponseInit &
     fonts?: Font[];
     persistentImages?: ImageSource[];
     jsx?: FromJsxOptions;
+    emoji?: EmojiType | "from-font";
   };
 
 export type ImageResponseOptions =
@@ -94,43 +97,56 @@ function getRenderer(options?: ImageResponseOptions) {
 
 let initPromise: Promise<void> | null = null;
 
+async function ensureWasmInitialized(options: ImageResponseOptions) {
+  if (!("module" in options) || renderer) return;
+
+  if (!initPromise) {
+    initPromise = (async () => {
+      let moduleResolved = await options.module;
+
+      if (typeof moduleResolved === "object" && "default" in moduleResolved) {
+        moduleResolved = moduleResolved.default;
+      }
+
+      await init({
+        module_or_path: moduleResolved,
+      });
+    })();
+  }
+
+  await initPromise;
+}
+
+async function prepareNodeAndResources(
+  component: ReactNode,
+  options: ImageResponseOptions,
+) {
+  let { node, stylesheets } = await fromJsx(component, options.jsx);
+  options.stylesheets ??= stylesheets;
+
+  if (options.emoji && options.emoji !== "from-font") {
+    node = extractEmojis(node, options.emoji);
+  }
+
+  if (!options.fetchedResources) {
+    const urls = extractResourceUrls(node);
+    if (urls.length > 0) {
+      options.fetchedResources = await fetchResources(urls);
+    }
+  }
+
+  return node;
+}
+
 function createStream(component: ReactNode, options: ImageResponseOptions) {
   return new ReadableStream({
     type: "bytes",
     async start(controller) {
       try {
-        if ("module" in options && !renderer) {
-          if (!initPromise) {
-            initPromise = (async () => {
-              let moduleResolved = await options.module;
-
-              if (
-                typeof moduleResolved === "object" &&
-                "default" in moduleResolved
-              ) {
-                moduleResolved = moduleResolved.default;
-              }
-
-              await init({
-                module_or_path: moduleResolved,
-              });
-            })();
-          }
-
-          await initPromise;
-        }
+        await ensureWasmInitialized(options);
 
         const rendererInstance = getRenderer(options);
-        const { node, stylesheets } = await fromJsx(component, options.jsx);
-        options.stylesheets ??= stylesheets;
-
-        if (!options.fetchedResources) {
-          const urls = extractResourceUrls(node);
-
-          if (urls.length > 0) {
-            options.fetchedResources = await fetchResources(urls);
-          }
-        }
+        const node = await prepareNodeAndResources(component, options);
 
         const image = rendererInstance.render(node, options);
 

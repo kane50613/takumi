@@ -6,6 +6,7 @@ import {
   type RenderOptions,
 } from "@takumi-rs/core";
 import { fetchResources } from "@takumi-rs/helpers";
+import { type EmojiType, extractEmojis } from "@takumi-rs/helpers/emoji";
 import { type FromJsxOptions, fromJsx } from "@takumi-rs/helpers/jsx";
 import type { ReactNode } from "react";
 
@@ -22,6 +23,7 @@ type ImageResponseOptionsWithRenderer = ResponseInit &
     renderer: Renderer;
     signal?: AbortSignal;
     jsx?: FromJsxOptions;
+    emoji?: EmojiType | "from-font";
   };
 
 type ImageResponseOptionsWithoutRenderer = ResponseInit &
@@ -29,6 +31,7 @@ type ImageResponseOptionsWithoutRenderer = ResponseInit &
   ConstructRendererOptions & {
     signal?: AbortSignal;
     jsx?: FromJsxOptions;
+    emoji?: EmojiType | "from-font";
   };
 
 export type ImageResponseOptions =
@@ -93,10 +96,15 @@ function createStream(component: ReactNode, options?: ImageResponseOptions) {
       try {
         const nodePromise = fromJsx(component, options?.jsx).then(
           async ({ node, stylesheets }) => {
+            if (options?.emoji && options.emoji !== "from-font") {
+              node = extractEmojis(node, options.emoji);
+            }
+
             const fetchedResources = await extractFetchedResources(
               node,
               options,
             );
+
             return { node, fetchedResources, stylesheets };
           },
         );
