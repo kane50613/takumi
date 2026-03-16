@@ -1,0 +1,60 @@
+---
+title: Upgrade to v1
+description: Walks through what's new in v1 and how to upgrade from v0.
+---
+
+After over half year of development, Takumi is finally ready to reach its first stable release!
+
+## Install
+
+The package/crate is in beta release now, install with `beta` tag.
+
+### NPM
+
+```npm
+npm i @takumi-rs/image-response@beta
+```
+
+### Rust
+
+```toml
+[dependencies]
+takumi = "1.0.0-beta" # Check https://crates.io/crates/takumi/versions for latest beta release
+```
+
+## What changed?
+
+### `display` defaults to `inline`
+
+In the early stages, Takumi defaulted `display` to `flex` to simplify common layouts. 
+However, to stay as close to the CSS specification as possible and ensure LLMs can produce correct components without guessing, we've changed the default to `inline`.
+
+Verify your templates and explicitly add `display: flex` (or the `flex` Tailwind class) to containers where flexbox layout is intended.
+
+### Lowercase Image Formats
+
+To be more consistent with the CSS ecosystem and web standards, all image format options in `@takumi-rs/core` and `@takumi-rs/image-response` now use lowercase strings only.
+
+Before:
+
+```ts
+const image = await renderer.render(node, { format: 'WebP' });
+```
+
+After:
+
+```ts
+const image = await renderer.render(node, { format: 'webp' });
+```
+
+### Removal of Deprecated APIs
+
+We've cleaned up the codebase and removed all APIs that were marked as deprecated during the v0 phase. This includes:
+
+#### Node.js bindings
+
+Removed generic `AnyNode` type (use `Node` instead), `PersistentImage` (use `ImageSource`), and `purgeResourcesCache`.
+
+#### Rust
+
+Removed `RenderOptionsBuilder` in favor of a more robust `RenderOptions::builder()`.
