@@ -121,7 +121,7 @@ function createStream(component: ReactNode, options?: ImageResponseOptions) {
           drawDebugBorder: options?.drawDebugBorder,
           devicePixelRatio: options?.devicePixelRatio,
           fetchedResources,
-          stylesheets: options?.stylesheets ?? stylesheets,
+          stylesheets: [...(options?.stylesheets ?? []), ...stylesheets],
         };
 
         const image = await renderer.render(

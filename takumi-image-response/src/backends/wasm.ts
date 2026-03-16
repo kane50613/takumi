@@ -121,21 +121,25 @@ async function prepareNodeAndResources(
   component: ReactNode,
   options: ImageResponseOptions,
 ) {
-  let { node, stylesheets } = await fromJsx(component, options.jsx);
-  options.stylesheets ??= stylesheets;
+  const localOptions = { ...options };
+  let { node, stylesheets } = await fromJsx(component, localOptions.jsx);
+  localOptions.stylesheets = [
+    ...(localOptions.stylesheets ?? []),
+    ...stylesheets,
+  ];
 
-  if (options.emoji && options.emoji !== "from-font") {
-    node = extractEmojis(node, options.emoji);
+  if (localOptions.emoji && localOptions.emoji !== "from-font") {
+    node = extractEmojis(node, localOptions.emoji);
   }
 
-  if (!options.fetchedResources) {
+  if (!localOptions.fetchedResources) {
     const urls = extractResourceUrls(node);
     if (urls.length > 0) {
-      options.fetchedResources = await fetchResources(urls);
+      localOptions.fetchedResources = await fetchResources(urls);
     }
   }
 
-  return node;
+  return { node, options: localOptions };
 }
 
 function createStream(component: ReactNode, options: ImageResponseOptions) {
@@ -146,9 +150,12 @@ function createStream(component: ReactNode, options: ImageResponseOptions) {
         await ensureWasmInitialized(options);
 
         const rendererInstance = getRenderer(options);
-        const node = await prepareNodeAndResources(component, options);
+        const { node, options: localOptions } = await prepareNodeAndResources(
+          component,
+          options,
+        );
 
-        const image = rendererInstance.render(node, options);
+        const image = rendererInstance.render(node, localOptions);
 
         controller.enqueue(image as Uint8Array<ArrayBuffer>);
         controller.close();

@@ -39,13 +39,32 @@ function getEmojiUrl(icon: string, type: EmojiType) {
     : `${apis[type]}${code.toUpperCase()}.svg`;
 }
 
-const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
+let segmenter: Intl.Segmenter | null | undefined;
+
+function getSegmenter(): Intl.Segmenter | null {
+  if (segmenter === undefined) {
+    if (typeof Intl !== "undefined" && typeof Intl.Segmenter === "function") {
+      segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
+    } else {
+      segmenter = null;
+    }
+  }
+  return segmenter;
+}
+
+function getSegments(text: string): { segment: string }[] {
+  const s = getSegmenter();
+  if (s) {
+    return Array.from(s.segment(text));
+  }
+  return Array.from(text).map((s) => ({ segment: s }));
+}
 
 function splitTextToNodes(node: TextNode, emojiType: EmojiType): Node[] {
   const nodes: Node[] = [];
   let currentText = "";
 
-  const segments = Array.from(segmenter.segment(node.text));
+  const segments = getSegments(node.text);
 
   for (const { segment } of segments) {
     if (/\p{Extended_Pictographic}/u.test(segment)) {
@@ -79,8 +98,8 @@ function splitTextToNodes(node: TextNode, emojiType: EmojiType): Node[] {
 
 export function extractEmojis(node: Node, emojiType: EmojiType): Node {
   if (node.type === "text") {
-    const hasEmoji = Array.from(segmenter.segment(node.text)).some(
-      ({ segment }) => /\p{Extended_Pictographic}/u.test(segment),
+    const hasEmoji = getSegments(node.text).some(({ segment }) =>
+      /\p{Extended_Pictographic}/u.test(segment),
     );
 
     if (hasEmoji) {
@@ -91,12 +110,12 @@ export function extractEmojis(node: Node, emojiType: EmojiType): Node {
       });
     }
   } else if (node.type === "container" && node.children) {
-    for (let i = 0; i < node.children.length; i++) {
-      const child = node.children[i];
-      if (child) {
-        node.children[i] = extractEmojis(child, emojiType);
-      }
-    }
+    return {
+      ...node,
+      children: node.children.map((child) =>
+        child ? extractEmojis(child, emojiType) : child,
+      ),
+    };
   }
 
   return node;
