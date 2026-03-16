@@ -429,3 +429,15 @@ fn test_background_size_cover() {
 
   run_fixture_test(container, "style_background_size_cover");
 }
+
+#[test]
+fn test_style_background_image_repeating_hard_stop() {
+  let background_images = BackgroundImages::from_str(
+    "repeating-linear-gradient(45deg, #fbbf24 0px, #fbbf24 10px, #f59e0b 10px, #f59e0b 20px)",
+  )
+  .unwrap();
+
+  let container = create_container(background_images);
+
+  run_fixture_test(container, "style_background_image_repeating_hard_stop");
+}

@@ -2,6 +2,7 @@ use std::f32::consts::TAU;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use image::{GenericImageView, Rgba};
+use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
   GradientOverlayTile, adaptive_lut_size, build_color_lut_with_interpolation,
@@ -17,18 +18,23 @@ use crate::{
 };
 
 /// Represents a CSS conic-gradient.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, TypedBuilder)]
 #[non_exhaustive]
 pub struct ConicGradient {
   /// Whether the gradient repeats beyond the last stop.
+  #[builder(default)]
   pub repeating: bool,
   /// The starting angle of the gradient (default 0deg = from top).
+  #[builder(default)]
   pub from_angle: Angle,
   /// Center position (default 50% 50%).
+  #[builder(default)]
   pub center: ObjectPosition,
   /// The color interpolation method used between stops.
+  #[builder(default)]
   pub interpolation: ColorInterpolationMethod,
   /// Gradient color stops.
+  #[builder(setter(into))]
   pub stops: Box<[GradientStop]>,
 }
 
@@ -328,13 +334,15 @@ fn parse_conic_gradient_stops<'i>(
   Ok(stops)
 }
 
-impl ConicGradient {
-  fn parse_with_function<'i>(
-    input: &mut Parser<'i, '_>,
-    function: &str,
-    repeating: bool,
-  ) -> ParseResult<'i, ConicGradient> {
-    input.expect_function_matching(function)?;
+impl<'i> FromCss<'i> for ConicGradient {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, ConicGradient> {
+    let location = input.current_source_location();
+    let name = input.expect_function()?.to_owned();
+    let repeating = match_ignore_ascii_case! { &name,
+      "conic-gradient" => false,
+      "repeating-conic-gradient" => true,
+      _ => return Err(Self::unexpected_token_error(location, &Token::Function(name))),
+    };
 
     input.parse_nested_block(|input| {
       let mut from_angle: Option<Angle> = None;
@@ -375,18 +383,6 @@ impl ConicGradient {
         stops: stops.into_boxed_slice(),
       })
     })
-  }
-
-  pub(crate) fn from_css_repeating<'i>(
-    input: &mut Parser<'i, '_>,
-  ) -> ParseResult<'i, ConicGradient> {
-    Self::parse_with_function(input, "repeating-conic-gradient", true)
-  }
-}
-
-impl<'i> FromCss<'i> for ConicGradient {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, ConicGradient> {
-    Self::parse_with_function(input, "conic-gradient", false)
   }
 
   const VALID_TOKENS: &'static [CssToken] =
@@ -597,12 +593,8 @@ mod tests {
 
   #[test]
   fn test_conic_gradient_top_pixel_is_first_color() {
-    let gradient = ConicGradient {
-      repeating: false,
-      from_angle: Angle::zero(),
-      center: ObjectPosition::default(),
-      interpolation: ColorInterpolationMethod::default(),
-      stops: [
+    let gradient = ConicGradient::builder()
+      .stops([
         GradientStop::ColorHint {
           color: Color([255, 0, 0, 255]).into(),
           hint: Some(StopPosition(Length::Percentage(0.0))),
@@ -611,9 +603,8 @@ mod tests {
           color: Color([0, 0, 255, 255]).into(),
           hint: Some(StopPosition(Length::Percentage(100.0))),
         },
-      ]
-      .into(),
-    };
+      ])
+      .build();
 
     let context = GlobalContext::default();
     let render_context = RenderContext::new_test(&context, (100, 100).into());
@@ -627,12 +618,8 @@ mod tests {
   #[test]
   fn test_conic_gradient_hard_stops() {
     // Simulate the card cost gradient: 3 colors with hard stops
-    let gradient = ConicGradient {
-      repeating: false,
-      from_angle: Angle::zero(),
-      center: ObjectPosition::default(),
-      interpolation: ColorInterpolationMethod::default(),
-      stops: [
+    let gradient = ConicGradient::builder()
+      .stops([
         GradientStop::ColorHint {
           color: Color([255, 0, 0, 255]).into(),
           hint: Some(StopPosition(Length::Percentage(0.0))),
@@ -657,9 +644,8 @@ mod tests {
           color: Color([0, 0, 255, 255]).into(),
           hint: Some(StopPosition(Length::Percentage(100.0))),
         },
-      ]
-      .into(),
-    };
+      ])
+      .build();
 
     let context = GlobalContext::default();
     let render_context = RenderContext::new_test(&context, (100, 100).into());
@@ -676,12 +662,9 @@ mod tests {
 
   #[test]
   fn test_repeating_conic_gradient_quadrants() {
-    let gradient = ConicGradient {
-      repeating: true,
-      from_angle: Angle::zero(),
-      center: ObjectPosition::default(),
-      interpolation: ColorInterpolationMethod::default(),
-      stops: [
+    let gradient = ConicGradient::builder()
+      .repeating(true)
+      .stops([
         GradientStop::ColorHint {
           color: Color([255, 0, 0, 255]).into(),
           hint: Some(StopPosition(Length::Percentage(0.0))),
@@ -698,9 +681,8 @@ mod tests {
           color: Color([0, 0, 255, 255]).into(),
           hint: Some(StopPosition(Length::Percentage(50.0))),
         },
-      ]
-      .into(),
-    };
+      ])
+      .build();
 
     let context = GlobalContext::default();
     let render_context = RenderContext::new_test(&context, (40, 40).into());

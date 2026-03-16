@@ -224,51 +224,47 @@ mod tests {
       Ok(
         vec![
           Background {
-            image: BackgroundImage::Radial(RadialGradient {
-              repeating: false,
-              shape: RadialShape::Circle,
-              size: RadialSize::FarthestCorner,
-              center: BackgroundPosition(SpacePair::from_pair(
-                Length::Percentage(80.0).into(),
-                Length::Percentage(20.0).into(),
-              )),
-              interpolation: ColorInterpolationMethod::default(),
-              stops: [
-                GradientStop::ColorHint {
-                  color: Color([255, 61, 0, 255]).into(),
-                  hint: Some(StopPosition(Length::Percentage(0.0))),
-                },
-                GradientStop::ColorHint {
-                  color: Color::transparent().into(),
-                  hint: Some(StopPosition(Length::Percentage(40.0))),
-                },
-              ]
-              .into(),
-            }),
+            image: BackgroundImage::Radial(
+              RadialGradient::builder()
+                .shape(RadialShape::Circle)
+                .center(BackgroundPosition(SpacePair::from_pair(
+                  Length::Percentage(80.0).into(),
+                  Length::Percentage(20.0).into(),
+                )))
+                .stops([
+                  GradientStop::ColorHint {
+                    color: Color([255, 61, 0, 255]).into(),
+                    hint: Some(StopPosition(Length::Percentage(0.0))),
+                  },
+                  GradientStop::ColorHint {
+                    color: Color::transparent().into(),
+                    hint: Some(StopPosition(Length::Percentage(40.0))),
+                  },
+                ])
+                .build(),
+            ),
             ..Default::default()
           },
           Background {
-            image: BackgroundImage::Radial(RadialGradient {
-              repeating: false,
-              shape: RadialShape::Circle,
-              size: RadialSize::FarthestCorner,
-              center: BackgroundPosition(SpacePair::from_pair(
-                Length::Percentage(20.0).into(),
-                Length::Percentage(80.0).into(),
-              )),
-              interpolation: ColorInterpolationMethod::default(),
-              stops: [
-                GradientStop::ColorHint {
-                  color: Color([0, 229, 255, 255]).into(),
-                  hint: Some(StopPosition(Length::Percentage(0.0))),
-                },
-                GradientStop::ColorHint {
-                  color: Color::transparent().into(),
-                  hint: Some(StopPosition(Length::Percentage(40.0))),
-                },
-              ]
-              .into(),
-            }),
+            image: BackgroundImage::Radial(
+              RadialGradient::builder()
+                .shape(RadialShape::Circle)
+                .center(BackgroundPosition(SpacePair::from_pair(
+                  Length::Percentage(20.0).into(),
+                  Length::Percentage(80.0).into(),
+                )))
+                .stops([
+                  GradientStop::ColorHint {
+                    color: Color([0, 229, 255, 255]).into(),
+                    hint: Some(StopPosition(Length::Percentage(0.0))),
+                  },
+                  GradientStop::ColorHint {
+                    color: Color::transparent().into(),
+                    hint: Some(StopPosition(Length::Percentage(40.0))),
+                  },
+                ])
+                .build(),
+            ),
             ..Default::default()
           },
         ]

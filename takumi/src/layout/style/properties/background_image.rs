@@ -71,12 +71,9 @@ impl<'i> FromCss<'i> for BackgroundImage {
     input.reset(&start);
 
     match_ignore_ascii_case! {&function,
-      "linear-gradient" => Ok(BackgroundImage::Linear(LinearGradient::from_css(input)?)),
-      "repeating-linear-gradient" => Ok(BackgroundImage::Linear(LinearGradient::from_css_repeating(input)?)),
-      "radial-gradient" => Ok(BackgroundImage::Radial(RadialGradient::from_css(input)?)),
-      "repeating-radial-gradient" => Ok(BackgroundImage::Radial(RadialGradient::from_css_repeating(input)?)),
-      "conic-gradient" => Ok(BackgroundImage::Conic(ConicGradient::from_css(input)?)),
-      "repeating-conic-gradient" => Ok(BackgroundImage::Conic(ConicGradient::from_css_repeating(input)?)),
+      "linear-gradient" | "repeating-linear-gradient" => Ok(BackgroundImage::Linear(LinearGradient::from_css(input)?)),
+      "radial-gradient" | "repeating-radial-gradient" => Ok(BackgroundImage::Radial(RadialGradient::from_css(input)?)),
+      "conic-gradient" | "repeating-conic-gradient" => Ok(BackgroundImage::Conic(ConicGradient::from_css(input)?)),
       _ => Err(Self::unexpected_token_error(location, &Token::Function(function))),
     }
   }

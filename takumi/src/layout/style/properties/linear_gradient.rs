@@ -1,6 +1,8 @@
-use cssparser::{Parser, Token};
+use cssparser::{Parser, Token, match_ignore_ascii_case};
 use image::{GenericImageView, Rgba};
 use std::ops::{Deref, Neg};
+
+use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
   GradientOverlayTile, adaptive_lut_size, build_color_lut_with_interpolation,
@@ -14,16 +16,20 @@ use crate::layout::style::{
 use crate::rendering::{RenderContext, Sizing};
 
 /// Represents a linear gradient.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, TypedBuilder)]
 #[non_exhaustive]
 pub struct LinearGradient {
   /// Whether the gradient repeats beyond the last stop.
+  #[builder(default)]
   pub repeating: bool,
   /// The angle of the gradient.
+  #[builder(default)]
   pub angle: Angle,
   /// The color interpolation method used between stops.
+  #[builder(default)]
   pub interpolation: ColorInterpolationMethod,
   /// The steps of the gradient.
+  #[builder(setter(into))]
   pub stops: Box<[GradientStop]>,
 }
 
@@ -505,13 +511,15 @@ impl VerticalKeyword {
   }
 }
 
-impl LinearGradient {
-  fn parse_with_function<'i>(
-    input: &mut Parser<'i, '_>,
-    function: &str,
-    repeating: bool,
-  ) -> ParseResult<'i, LinearGradient> {
-    input.expect_function_matching(function)?;
+impl<'i> FromCss<'i> for LinearGradient {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, LinearGradient> {
+    let location = input.current_source_location();
+    let name = input.expect_function()?;
+    let repeating = match_ignore_ascii_case! { &name,
+      "linear-gradient" => false,
+      "repeating-linear-gradient" => true,
+      _ => return Err(Self::unexpected_token_error(location, &Token::Function(name.clone()))),
+    };
 
     input.parse_nested_block(|input| {
       let mut angle = Angle::new(180.0);
@@ -540,18 +548,6 @@ impl LinearGradient {
         stops: GradientStops::from_css(input)?.into_boxed_slice(),
       })
     })
-  }
-
-  pub(crate) fn from_css_repeating<'i>(
-    input: &mut Parser<'i, '_>,
-  ) -> ParseResult<'i, LinearGradient> {
-    Self::parse_with_function(input, "repeating-linear-gradient", true)
-  }
-}
-
-impl<'i> FromCss<'i> for LinearGradient {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, LinearGradient> {
-    LinearGradient::parse_with_function(input, "linear-gradient", false)
   }
 
   const VALID_TOKENS: &'static [CssToken] =
@@ -1164,11 +1160,10 @@ mod tests {
 
   #[test]
   fn test_repeating_linear_gradient_stripes() {
-    let gradient = LinearGradient {
-      repeating: true,
-      angle: Angle::new(90.0),
-      interpolation: ColorInterpolationMethod::default(),
-      stops: [
+    let gradient = LinearGradient::builder()
+      .repeating(true)
+      .angle(Angle::new(90.0))
+      .stops([
         GradientStop::ColorHint {
           color: Color([255, 0, 0, 255]).into(),
           hint: Some(StopPosition(Length::Px(0.0))),
@@ -1185,9 +1180,8 @@ mod tests {
           color: Color([0, 0, 255, 255]).into(),
           hint: Some(StopPosition(Length::Px(10.0))),
         },
-      ]
-      .into(),
-    };
+      ])
+      .build();
 
     let context = GlobalContext::default();
     let render_context = RenderContext::new_test(&context, (40, 1).into());
@@ -1287,11 +1281,9 @@ mod tests {
 
   #[test]
   fn resolve_stops_percentage_and_px_linear() {
-    let gradient = LinearGradient {
-      repeating: false,
-      angle: Angle::new(0.0),
-      interpolation: ColorInterpolationMethod::default(),
-      stops: [
+    let gradient = LinearGradient::builder()
+      .angle(Angle::new(0.0))
+      .stops([
         GradientStop::ColorHint {
           color: Color::black().into(),
           hint: Some(StopPosition(Length::Percentage(0.0))),
@@ -1304,9 +1296,8 @@ mod tests {
           color: Color::black().into(),
           hint: Some(StopPosition(Length::Px(100.0))),
         },
-      ]
-      .into(),
-    };
+      ])
+      .build();
 
     let context = GlobalContext::default();
     let ctx = RenderContext::new_test(&context, (200, 100).into());
@@ -1324,11 +1315,9 @@ mod tests {
 
   #[test]
   fn resolve_stops_equal_positions_allowed_linear() {
-    let gradient = LinearGradient {
-      repeating: false,
-      angle: Angle::new(0.0),
-      interpolation: ColorInterpolationMethod::default(),
-      stops: [
+    let gradient = LinearGradient::builder()
+      .angle(Angle::new(0.0))
+      .stops([
         GradientStop::ColorHint {
           color: Color::black().into(),
           hint: Some(StopPosition(Length::Px(0.0))),
@@ -1337,9 +1326,8 @@ mod tests {
           color: Color::black().into(),
           hint: Some(StopPosition(Length::Px(0.0))),
         },
-      ]
-      .into(),
-    };
+      ])
+      .build();
     let context = GlobalContext::default();
     let ctx = RenderContext::new_test(&context, (200, 100).into());
 
