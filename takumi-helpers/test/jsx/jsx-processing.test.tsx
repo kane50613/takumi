@@ -887,4 +887,60 @@ describe("fromJsx", () => {
 
     expect(stylesheets).toEqual(["body{color:red;}"]);
   });
+
+  test("parses html dir field on text nodes", async () => {
+    const { node } = await fromJsx(<div dir="rtl">Hello</div>);
+
+    expect(node).toEqual({
+      type: "text",
+      text: "Hello",
+      preset: defaultStylePresets.div,
+      tagName: "div",
+      dir: "rtl",
+    } satisfies TextNode);
+  });
+
+  test("parses html dir field on container nodes", async () => {
+    const { node } = await fromJsx(
+      <div dir="ltr">
+        <span>Content</span>
+      </div>,
+    );
+
+    expect(node).toEqual({
+      type: "container",
+      children: [
+        {
+          type: "text",
+          text: "Content",
+          preset: defaultStylePresets.span,
+          tagName: "span",
+        },
+      ],
+      preset: defaultStylePresets.div,
+      tagName: "div",
+      dir: "ltr",
+    } satisfies ContainerNode);
+  });
+
+  test("parses html dir field on image nodes", async () => {
+    const { node } = await fromJsx(
+      <img src="https://example.com/a.png" dir="rtl" alt="test" />,
+    );
+
+    expect(node).toEqual({
+      type: "image",
+      src: "https://example.com/a.png",
+      width: undefined,
+      height: undefined,
+      preset: defaultStylePresets.img,
+      attributes: {
+        src: "https://example.com/a.png",
+        alt: "test",
+        dir: "rtl",
+      },
+      tagName: "img",
+      dir: "rtl",
+    } satisfies ImageNode);
+  });
 });

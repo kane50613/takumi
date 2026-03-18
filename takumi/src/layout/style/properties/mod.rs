@@ -91,6 +91,7 @@ pub use overflow::*;
 pub use overflow_wrap::*;
 pub use percentage_number::*;
 pub use radial_gradient::*;
+use serde::Deserialize;
 pub use sides::*;
 pub use space_pair::*;
 pub use text_decoration::*;
@@ -1119,7 +1120,8 @@ declare_enum_from_css_impl!(
 impl_from_taffy_enum!(Position, taffy::Position, Relative, Absolute);
 
 /// Defines the direction of layout.
-#[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Direction {
   /// The layout direction is left-to-right.
   #[default]

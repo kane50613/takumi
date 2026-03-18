@@ -1672,7 +1672,6 @@ impl ComputedStyle {
       float: self.float.resolve(self.direction),
       clear: self.clear.resolve(self.direction),
       direction: self.direction.into(),
-
       box_sizing: self.box_sizing.into(),
       size: Size {
         width: self.width,

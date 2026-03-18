@@ -20,7 +20,7 @@ use crate::{
     node::{Node, NodeStyleLayers},
     style::{
       Affine, BlendMode, Color, ComputedStyle, Display, Filters, Isolation, PercentageNumber,
-      Style as NodeStyle, StyleSheet, apply_stylesheet_animations,
+      Style as NodeStyle, StyleDeclaration, StyleSheet, apply_stylesheet_animations,
       matching::{MatchedDeclarationsView, match_stylesheets_view},
     },
   },
@@ -96,6 +96,10 @@ fn build_style_layers(
 
   if let Some(preset) = node_layers.preset {
     style.merge_from(preset);
+  }
+
+  if let Some(dir) = node_layers.dir {
+    style.push(StyleDeclaration::direction(dir), false);
   }
 
   for &declarations in &matched_declarations.normal {

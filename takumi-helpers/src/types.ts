@@ -12,6 +12,7 @@ export type NodeMetadata = {
   tagName?: string;
   className?: string;
   id?: string;
+  dir?: "ltr" | "rtl";
   attributes?: NodeAttributes;
   tw?: string;
   style?: CSSProperties;

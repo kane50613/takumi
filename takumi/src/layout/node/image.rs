@@ -43,6 +43,7 @@ pub(crate) fn take_image_style_layers(
     preset,
     author_tw: node.metadata.tw.take(),
     inline: node.metadata.style.take(),
+    dir: node.metadata.dir.take(),
   }
 }
 

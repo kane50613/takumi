@@ -9,18 +9,10 @@ use crate::{
       InlineContentKind, InlineItem, InlineLayoutStage, create_inline_constraint,
       create_inline_layout, measure_inline_layout,
     },
-    node::{Node, NodeStyleLayers, TextData},
+    node::TextData,
   },
   rendering::{Canvas, MaxHeight, RenderContext, inline_drawing::draw_inline_layout},
 };
-
-pub(crate) fn take_text_style_layers(node: &mut Node) -> NodeStyleLayers {
-  NodeStyleLayers {
-    preset: node.metadata.preset.take(),
-    author_tw: node.metadata.tw.take(),
-    inline: node.metadata.style.take(),
-  }
-}
 
 pub(crate) fn text_inline_content(text: &TextData) -> Option<InlineContentKind<'_>> {
   Some(InlineContentKind::Text(text.text.as_str().into()))

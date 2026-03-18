@@ -61,6 +61,7 @@ type HtmlProps = {
   class?: string;
   id?: string;
   style?: string | CSSProperties;
+  dir?: string;
   [key: string]: unknown;
 };
 
@@ -653,6 +654,7 @@ function extractNodeMetadata(
     tagName: typeof element.type === "string" ? element.type : undefined,
     className: htmlProps.className ?? htmlProps.class,
     id: htmlProps.id,
+    dir: htmlProps.dir as NodeMetadata["dir"],
     attributes,
     tw,
     style,
