@@ -1,5 +1,12 @@
 # @takumi-rs/core
 
+## 1.0.0-beta.4
+
+### Patch Changes
+
+- Updated dependencies [f1b6104]
+  - @takumi-rs/helpers@1.0.0-beta.4
+
 ## 1.0.0-beta.3
 
 ### Patch Changes

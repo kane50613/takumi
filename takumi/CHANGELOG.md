@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.0-beta.4
+
+### Patch Changes
+
+- dc6126d: Support `<calc-keyword>`
+
 ## 1.0.0-beta.3
 
 ### Minor Changes

@@ -1,5 +1,11 @@
 # @takumi-rs/helpers
 
+## 1.0.0-beta.4
+
+### Patch Changes
+
+- f1b6104: Loosen `cache` map type
+
 ## 1.0.0-beta.3
 
 ### Patch Changes
