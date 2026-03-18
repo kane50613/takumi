@@ -897,6 +897,9 @@ describe("fromJsx", () => {
       preset: defaultStylePresets.div,
       tagName: "div",
       dir: "rtl",
+      attributes: {
+        dir: "rtl",
+      },
     } satisfies TextNode);
   });
 
@@ -917,6 +920,9 @@ describe("fromJsx", () => {
           tagName: "span",
         },
       ],
+      attributes: {
+        dir: "ltr",
+      },
       preset: defaultStylePresets.div,
       tagName: "div",
       dir: "ltr",
