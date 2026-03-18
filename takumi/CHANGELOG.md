@@ -1,5 +1,16 @@
 # takumi
 
+## 1.0.0-beta.6
+
+### Major Changes
+
+- b0e13d8: **Private `ImageSource::size()`**
+
+### Patch Changes
+
+- b0e13d8: Fix DPR not applied when resolving image intrinsic size
+- 02c4000: Fix `background-image` layers drawing order
+
 ## 1.0.0-beta.5
 
 ### Patch Changes
