@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.0-beta.5
+
+### Patch Changes
+
+- 27e38bd: Fix `calc()` infnity scaler calculation
+
 ## 1.0.0-beta.4
 
 ### Patch Changes
