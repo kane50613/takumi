@@ -78,9 +78,18 @@ default-features = false
 
 [dependencies.taffy]
 version = "0.9"
-git = "https://github.com/kane50613/taffy.git"
+git = "https://github.com/DioxusLabs/taffy.git"
 default-features = false
-features = ["flexbox", "grid", "alloc", "calc", "taffy_tree", "strict_provenance", "block_layout"]
+features = [
+  "flexbox",
+  "grid",
+  "alloc",
+  "calc",
+  "taffy_tree",
+  "strict_provenance",
+  "block_layout",
+  "float_layout",
+]
 
 [dependencies.serde]
 version = "1"

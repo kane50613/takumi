@@ -75,8 +75,6 @@ const TEST_FONTS: &[(&str, &str, GenericFamily)] = &[
   ),
 ];
 
-const FIXTURE_DEVICE_PIXEL_RATIO: f32 = 0.75;
-
 const IMAGES: &[&str] = &[
   "assets/images/yeecord.png",
   "assets/images/luma.svg",
@@ -122,16 +120,8 @@ fn create_test_context() -> GlobalContext {
   context
 }
 
-pub fn create_test_viewport_with_size(width: u32, height: u32) -> Viewport {
-  Viewport::new((
-    (width as f32 * FIXTURE_DEVICE_PIXEL_RATIO) as u32,
-    (height as f32 * FIXTURE_DEVICE_PIXEL_RATIO) as u32,
-  ))
-  .with_device_pixel_ratio(FIXTURE_DEVICE_PIXEL_RATIO)
-}
-
 pub fn create_test_viewport() -> Viewport {
-  create_test_viewport_with_size(1200, 630)
+  Viewport::new((1200, 630))
 }
 
 pub static CONTEXT: LazyLock<GlobalContext> = LazyLock::new(create_test_context);

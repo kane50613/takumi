@@ -543,7 +543,7 @@ macro_rules! define_style {
           $(self.$longhand.make_computed(sizing);)*
         }
 
-                pub(crate) fn apply_interpolated_properties(
+        pub(crate) fn apply_interpolated_properties(
           &mut self,
           from: &Self,
           to: &Self,
@@ -851,6 +851,8 @@ define_style! {
     text_wrap_mode: TextWrapMode where inherit = true,
     text_wrap_style: TextWrapStyle where inherit = true,
     direction: Direction where inherit = true,
+    float: Float,
+    clear: Clear,
     isolation: Isolation,
     mix_blend_mode: BlendMode,
     visibility: Visibility,
@@ -1457,7 +1459,7 @@ impl ComputedStyle {
 
     // https://www.w3.org/TR/css-display-3/#transformations
     // Elements with position: absolute or fixed are blockified
-    if self.position == Position::Absolute {
+    if self.position == Position::Absolute || self.float != Float::None {
       self.display.blockify();
     }
   }
@@ -1667,7 +1669,10 @@ impl ComputedStyle {
       Self::grid_template(&self.grid_template_rows, sizing);
 
     taffy::Style {
+      float: self.float.resolve(self.direction),
+      clear: self.clear.resolve(self.direction),
       direction: self.direction.into(),
+
       box_sizing: self.box_sizing.into(),
       size: Size {
         width: self.width,

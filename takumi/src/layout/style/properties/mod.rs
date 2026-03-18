@@ -1136,6 +1136,112 @@ declare_enum_from_css_impl!(
 
 impl_from_taffy_enum!(Direction, taffy::Direction, Ltr, Rtl);
 
+/// Defines whether an element should be placed along the left or right side of its container.
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub enum Float {
+  /// The element is not floated.
+  #[default]
+  None,
+  /// The element floats to the left.
+  Left,
+  /// The element floats to the right.
+  Right,
+  /// The element floats to the logical start side.
+  InlineStart,
+  /// The element floats to the logical end side.
+  InlineEnd,
+}
+
+declare_enum_from_css_impl!(
+  Float,
+  "none" => Float::None,
+  "left" => Float::Left,
+  "right" => Float::Right,
+  "inline-start" => Float::InlineStart,
+  "inline-end" => Float::InlineEnd,
+);
+
+impl Float {
+  /// Resolves the floating direction based on the layout direction.
+  pub fn resolve(self, direction: Direction) -> taffy::Float {
+    match self {
+      Self::None => taffy::Float::None,
+      Self::Left => taffy::Float::Left,
+      Self::Right => taffy::Float::Right,
+      Self::InlineStart => {
+        if direction == Direction::Rtl {
+          taffy::Float::Right
+        } else {
+          taffy::Float::Left
+        }
+      }
+      Self::InlineEnd => {
+        if direction == Direction::Rtl {
+          taffy::Float::Left
+        } else {
+          taffy::Float::Right
+        }
+      }
+    }
+  }
+}
+
+/// Defines whether an element must be moved below preceding floated elements.
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub enum Clear {
+  /// The element is not moved down.
+  #[default]
+  None,
+  /// The element is moved below left-floated elements.
+  Left,
+  /// The element is moved below right-floated elements.
+  Right,
+  /// The element is moved below both left- and right-floated elements.
+  Both,
+  /// The element is moved below logical start-floated elements.
+  InlineStart,
+  /// The element is moved below logical end-floated elements.
+  InlineEnd,
+}
+
+declare_enum_from_css_impl!(
+  Clear,
+  "none" => Clear::None,
+  "left" => Clear::Left,
+  "right" => Clear::Right,
+  "both" => Clear::Both,
+  "inline-start" => Clear::InlineStart,
+  "inline-end" => Clear::InlineEnd,
+);
+
+impl Clear {
+  /// Resolves the clearing direction based on the layout direction.
+  pub fn resolve(self, direction: Direction) -> taffy::Clear {
+    match self {
+      Self::None => taffy::Clear::None,
+      Self::Left => taffy::Clear::Left,
+      Self::Right => taffy::Clear::Right,
+      Self::Both => taffy::Clear::Both,
+      Self::InlineStart => {
+        if direction == Direction::Rtl {
+          taffy::Clear::Right
+        } else {
+          taffy::Clear::Left
+        }
+      }
+      Self::InlineEnd => {
+        if direction == Direction::Rtl {
+          taffy::Clear::Left
+        } else {
+          taffy::Clear::Right
+        }
+      }
+    }
+  }
+}
+
 /// Defines the direction of flex items within a flex container.
 ///
 /// This enum determines how flex items are laid out along the main axis.

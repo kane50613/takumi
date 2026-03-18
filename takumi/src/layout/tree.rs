@@ -1,10 +1,10 @@
 use std::{mem::take, vec::IntoIter};
 
 use taffy::{
-  AvailableSpace, Cache, CacheTree, Display as TaffyDisplay, Layout, LayoutBlockContainer,
-  LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput, LayoutPartialTree,
-  NodeId, RequestedAxis, RoundTree, RunMode, Size, SizingMode, Style, TaffyError,
-  TraversePartialTree, TraverseTree, compute_block_layout, compute_cached_layout,
+  AvailableSpace, BlockContext, Cache, CacheTree, Display as TaffyDisplay, Layout,
+  LayoutBlockContainer, LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput,
+  LayoutPartialTree, NodeId, RequestedAxis, RoundTree, RunMode, Size, SizingMode, Style,
+  TaffyError, TraversePartialTree, TraverseTree, compute_block_layout, compute_cached_layout,
   compute_flexbox_layout, compute_grid_layout, compute_hidden_layout, compute_leaf_layout,
   compute_root_layout, round_layout,
 };
@@ -540,6 +540,17 @@ impl LayoutPartialTree for LayoutTree<'_, '_> {
   }
 
   fn compute_child_layout(&mut self, node: NodeId, inputs: LayoutInput) -> LayoutOutput {
+    self.compute_child_layout_inner(node, inputs, None)
+  }
+}
+
+impl<'r, 'g> LayoutTree<'r, 'g> {
+  fn compute_child_layout_inner(
+    &mut self,
+    node: NodeId,
+    inputs: LayoutInput,
+    block_ctx: Option<&mut BlockContext<'_>>,
+  ) -> LayoutOutput {
     self.update_node_style_for_available_space(
       node,
       inputs.available_space,
@@ -560,7 +571,7 @@ impl LayoutPartialTree for LayoutTree<'_, '_> {
 
       match (display_mode, has_children) {
         (TaffyDisplay::None, _) => compute_hidden_layout(tree, node),
-        (TaffyDisplay::Block, true) => compute_block_layout(tree, node, inputs),
+        (TaffyDisplay::Block, true) => compute_block_layout(tree, node, inputs, block_ctx),
         (TaffyDisplay::Flex, true) => compute_flexbox_layout(tree, node, inputs),
         (TaffyDisplay::Grid, true) => compute_grid_layout(tree, node, inputs),
         (_, false) => compute_leaf_layout(
@@ -660,6 +671,15 @@ impl LayoutBlockContainer for LayoutTree<'_, '_> {
 
   fn get_block_child_style(&self, child_node_id: NodeId) -> Self::BlockItemStyle<'_> {
     self.get_core_container_style(child_node_id)
+  }
+
+  fn compute_block_child_layout(
+    &mut self,
+    node: NodeId,
+    inputs: LayoutInput,
+    block_ctx: Option<&mut BlockContext<'_>>,
+  ) -> LayoutOutput {
+    self.compute_child_layout_inner(node, inputs, block_ctx)
   }
 }
 
