@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.0-beta.7
+
+### Major Changes
+
+- cac231c: **Updated parameter type in `Viewport` constructor, removed `impl From<(u32, u32)>`**
+
 ## 1.0.0-beta.6
 
 ### Major Changes
