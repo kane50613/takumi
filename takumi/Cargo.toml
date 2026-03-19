@@ -29,9 +29,13 @@ image-webp = "0.2"
 libwebp-sys = "0.14"
 dashmap = "6.1"
 
-[dependencies.bytemuck]
+[target.'cfg(target_arch = "wasm32")'.dependencies.bytemuck]
 version = "1.25"
-features = ["wasm_simd", "aarch64_simd", "avx512_simd"]
+features = ["wasm_simd"]
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies.bytemuck]
+version = "1.25"
+features = ["aarch64_simd", "avx512_simd"]
 
 [dependencies.zeno]
 version = "0.3"

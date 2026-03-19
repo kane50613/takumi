@@ -210,12 +210,12 @@ impl<'de> DeserializeSeed<'de> for RawCssValueSeed {
   }
 }
 
-struct CssExpectedMessage<'a> {
+struct CssExpectedMessage {
   #[cfg(feature = "detailed_css_error")]
-  message: Cow<'a, str>,
+  message: Cow<'static, str>,
 }
 
-impl Expected for CssExpectedMessage<'_> {
+impl Expected for CssExpectedMessage {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     #[cfg(feature = "detailed_css_error")]
     {
@@ -236,7 +236,7 @@ impl Expected for CssExpectedMessage<'_> {
   }
 }
 
-impl std::fmt::Display for CssExpectedMessage<'_> {
+impl std::fmt::Display for CssExpectedMessage {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     Expected::fmt(self, f)
   }
@@ -244,7 +244,7 @@ impl std::fmt::Display for CssExpectedMessage<'_> {
 
 #[cold]
 #[inline(never)]
-fn css_expected_message<'a, T>() -> CssExpectedMessage<'a>
+fn css_expected_message<T>() -> CssExpectedMessage
 where
   T: for<'i> FromCss<'i>,
 {
@@ -257,7 +257,6 @@ where
 
   #[cfg(not(feature = "detailed_css_error"))]
   {
-    let _ = std::marker::PhantomData::<T>;
     CssExpectedMessage {}
   }
 }

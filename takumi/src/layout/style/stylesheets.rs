@@ -47,7 +47,7 @@ struct DeferredDeclaration {
   raw_value: String,
 }
 
-type ExpectedMessageFn = fn() -> super::CssExpectedMessage<'static>;
+type ExpectedMessageFn = fn() -> super::CssExpectedMessage;
 
 #[derive(Debug, Clone)]
 struct RawStyleValueParseFailure {
@@ -155,7 +155,7 @@ impl RawStyleValueParseError<'_> {
   }
 }
 
-fn expected_message<T>() -> super::CssExpectedMessage<'static>
+fn expected_message<T>() -> super::CssExpectedMessage
 where
   T: for<'i> FromCss<'i>,
 {
