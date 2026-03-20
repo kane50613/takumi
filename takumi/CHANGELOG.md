@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.0-beta.8
+
+### Patch Changes
+
+- e1de442: Drop `fast_image_resize` with direct sampling approach
+
 ## 1.0.0-beta.7
 
 ### Major Changes

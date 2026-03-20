@@ -1,5 +1,12 @@
 # @takumi-rs/wasm
 
+## 1.0.0-beta.8
+
+### Patch Changes
+
+- 9b411ce: Reduce wasm size with more stripping
+  - @takumi-rs/helpers@1.0.0-beta.8
+
 ## 1.0.0-beta.7
 
 ### Patch Changes

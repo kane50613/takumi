@@ -1,5 +1,7 @@
 # @takumi-rs/helpers
 
+## 1.0.0-beta.8
+
 ## 1.0.0-beta.7
 
 ## 1.0.0-beta.6
