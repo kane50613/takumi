@@ -1,12 +1,10 @@
-use std::{borrow::Cow, collections::HashMap, fmt::Write, marker::PhantomData, str::FromStr};
+use std::{borrow::Cow, collections::HashMap, marker::PhantomData, str::FromStr};
 
-use cssparser::{
-  ParseError, ParseErrorKind, Parser, ParserInput, SourceLocation, Token, match_ignore_ascii_case,
-};
+use cssparser::{Parser, ParserInput, Token, match_ignore_ascii_case};
 use parley::{FontSettings, TextStyle};
 use paste::paste;
 use serde::de::IgnoredAny;
-use smallvec::SmallVec;
+use smallvec::{SmallVec, smallvec};
 use taffy::{Point, Rect, Size, prelude::FromLength};
 
 use crate::layout::style::selector::{PropertyRule, StyleDeclarationParser};
@@ -14,12 +12,19 @@ use crate::{
   error::StyleDeclarationBlockParseError,
   layout::{
     inline::InlineBrush,
-    style::{RawCssInput, RawCssValueSeed, properties::*},
+    style::{CssInput, CssValueSeed, properties::*},
   },
   rendering::{RenderContext, SizedShadow, Sizing},
   resources::task::FetchTaskCollection,
 };
 use cssparser::RuleBodyParser;
+#[path = "stylesheets_helpers.rs"]
+mod stylesheets_helpers;
+#[path = "stylesheets_vars.rs"]
+mod stylesheets_vars;
+
+use self::stylesheets_helpers::*;
+use self::stylesheets_vars::apply_deferred_declaration;
 
 macro_rules! define_inherited_default {
   ($parent:expr, $inherit:tt) => {
@@ -30,291 +35,12 @@ macro_rules! define_inherited_default {
   };
 }
 
-enum ParsedRawStyleValue<T> {
-  Keyword(CssWideKeyword),
-  Value(T),
-}
-
-enum ParsedDeclarations {
-  None,
-  Single(StyleDeclaration),
-  Many(Vec<StyleDeclaration>),
-}
+type ParsedDeclarations = SmallVec<[StyleDeclaration; 8]>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct DeferredDeclaration {
   property: PropertyId,
-  raw_value: String,
-}
-
-type ExpectedMessageFn = fn() -> super::CssExpectedMessage;
-
-#[derive(Debug, Clone)]
-struct RawStyleValueParseFailure {
-  location: SourceLocation,
-  detail: Option<String>,
-}
-
-enum RawStyleValueParseError<'de> {
-  Value {
-    value: Cow<'de, str>,
-    expected_message: ExpectedMessageFn,
-    failure: Option<RawStyleValueParseFailure>,
-  },
-  NumberType {
-    number: super::RawCssNumber,
-    expected_message: ExpectedMessageFn,
-  },
-  UnexpectedType {
-    unexpected: super::RawCssUnexpected,
-    expected_message: ExpectedMessageFn,
-  },
-}
-
-impl RawStyleValueParseError<'_> {
-  fn into_serde_error<E>(self, property_name: &str, property: PropertyId) -> E
-  where
-    E: serde::de::Error,
-  {
-    E::custom(self.message(property_name, property))
-  }
-
-  fn message(self, property_name: &str, _property: PropertyId) -> String {
-    let mut message = String::new();
-    let _ = write!(
-      message,
-      "invalid {} for {}",
-      self.value_kind(),
-      property_name
-    );
-
-    if let Some(failure) = self.failure() {
-      let _ = write!(
-        message,
-        ", line {}, column {}",
-        failure.location.line + 1,
-        failure.location.column
-      );
-      if let Some(detail) = failure.detail {
-        let _ = write!(message, " near \"{}\"", detail);
-      }
-    }
-
-    let _ = write!(
-      message,
-      ": {}; {}",
-      self.input_description(),
-      self.expected_description()
-    );
-
-    message
-  }
-
-  fn value_kind(&self) -> &'static str {
-    match self {
-      Self::Value { .. } => "value",
-      Self::NumberType { .. } | Self::UnexpectedType { .. } => "type",
-    }
-  }
-
-  fn failure(&self) -> Option<RawStyleValueParseFailure> {
-    match self {
-      Self::Value { failure, .. } => failure.clone(),
-      Self::NumberType { .. } | Self::UnexpectedType { .. } => None,
-    }
-  }
-
-  fn input_description(&self) -> String {
-    match self {
-      Self::Value { value, .. } => format!("string {:?}", value),
-      Self::NumberType { number, .. } => format_raw_number(*number),
-      Self::UnexpectedType { unexpected, .. } => match unexpected {
-        super::RawCssUnexpected::Bool(value) => format!("boolean `{value}`"),
-        super::RawCssUnexpected::Char(value) => format!("char `{value}`"),
-        super::RawCssUnexpected::Bytes => "bytes".to_owned(),
-        super::RawCssUnexpected::Unit => "unit".to_owned(),
-        super::RawCssUnexpected::Seq => "sequence".to_owned(),
-        super::RawCssUnexpected::Map => "map".to_owned(),
-        super::RawCssUnexpected::Other(kind) => (*kind).to_owned(),
-      },
-    }
-  }
-
-  fn expected_description(&self) -> String {
-    match self {
-      Self::Value {
-        expected_message, ..
-      }
-      | Self::NumberType {
-        expected_message, ..
-      }
-      | Self::UnexpectedType {
-        expected_message, ..
-      } => expected_message().to_string(),
-    }
-  }
-}
-
-fn expected_message<T>() -> super::CssExpectedMessage
-where
-  T: for<'i> FromCss<'i>,
-{
-  super::css_expected_message::<T>()
-}
-
-fn parse_raw_style_value<'de, T>(
-  raw_value: RawCssInput<'de>,
-) -> Result<ParsedRawStyleValue<T>, RawStyleValueParseError<'de>>
-where
-  T: for<'i> FromCss<'i>,
-{
-  match raw_value {
-    RawCssInput::Str(value) => {
-      if let Ok(keyword) = CssWideKeyword::from_str(value.as_ref()) {
-        Ok(ParsedRawStyleValue::Keyword(keyword))
-      } else {
-        let source = value.as_ref().to_owned();
-        let parsed = T::from_str(source.as_str());
-
-        match parsed {
-          Ok(parsed_value) => Ok(ParsedRawStyleValue::Value(parsed_value)),
-          Err(error) => Err(RawStyleValueParseError::Value {
-            value,
-            expected_message: expected_message::<T>,
-            failure: Some(raw_style_value_parse_failure(source.as_str(), error)),
-          }),
-        }
-      }
-    }
-    RawCssInput::Number(number) => {
-      let source = number.to_string();
-
-      T::from_str(&source)
-        .map(ParsedRawStyleValue::Value)
-        .map_err(|_| RawStyleValueParseError::NumberType {
-          number,
-          expected_message: expected_message::<T>,
-        })
-    }
-    RawCssInput::Unexpected(unexpected) => Err(RawStyleValueParseError::UnexpectedType {
-      unexpected,
-      expected_message: expected_message::<T>,
-    }),
-  }
-}
-
-fn raw_style_value_parse_failure(
-  source: &str,
-  error: ParseError<'_, Cow<'_, str>>,
-) -> RawStyleValueParseFailure {
-  let location = error.location;
-  let detail = match error.kind {
-    ParseErrorKind::Basic(_) | ParseErrorKind::Custom(_) => {
-      Some(snippet_at_column(source, location.column))
-    }
-  }
-  .filter(|snippet| !snippet.is_empty());
-
-  RawStyleValueParseFailure { location, detail }
-}
-
-fn format_raw_number(number: super::RawCssNumber) -> String {
-  match number {
-    super::RawCssNumber::Signed(value) => format!("integer `{value}`"),
-    super::RawCssNumber::Unsigned(value) => format!("integer `{value}`"),
-    super::RawCssNumber::Float(value) => format!("float `{value}`"),
-  }
-}
-
-fn snippet_at_column(source: &str, column: u32) -> String {
-  let Some(start) = source
-    .char_indices()
-    .nth(column.saturating_sub(1) as usize)
-    .map(|(index, _)| index)
-  else {
-    return String::new();
-  };
-
-  let snippet = source[start..]
-    .trim_start()
-    .split([' ', '\t', '\n', '\r', ',', ')', '('])
-    .next()
-    .unwrap_or_default()
-    .trim_matches('"')
-    .trim_matches('\'');
-
-  snippet.chars().take(24).collect()
-}
-
-fn css_property_name(name: &'static str) -> Cow<'static, str> {
-  if name.contains('_') {
-    Cow::Owned(name.replace('_', "-"))
-  } else {
-    Cow::Borrowed(name)
-  }
-}
-
-fn parse_longhand_declaration<'i, T>(
-  input: &mut Parser<'i, '_>,
-  longhand_id: LonghandId,
-  to_declaration: impl FnOnce(T) -> StyleDeclaration,
-) -> ParseResult<'i, StyleDeclaration>
-where
-  T: for<'t> FromCss<'t>,
-{
-  let state = input.state();
-  let keyword = input.try_parse(CssWideKeyword::from_css).ok();
-
-  if let Some(keyword) = keyword {
-    Ok(StyleDeclaration::CssWideKeyword(longhand_id, keyword))
-  } else {
-    input.reset(&state);
-    Ok(to_declaration(T::from_css(input)?))
-  }
-}
-
-fn parse_raw_longhand_declaration<'de, T>(
-  longhand_id: LonghandId,
-  raw_value: RawCssInput<'de>,
-  to_declaration: impl FnOnce(T) -> StyleDeclaration,
-) -> Result<StyleDeclaration, RawStyleValueParseError<'de>>
-where
-  T: for<'t> FromCss<'t>,
-{
-  match parse_raw_style_value::<T>(raw_value)? {
-    ParsedRawStyleValue::Keyword(keyword) => {
-      Ok(StyleDeclaration::CssWideKeyword(longhand_id, keyword))
-    }
-    ParsedRawStyleValue::Value(value) => Ok(to_declaration(value)),
-  }
-}
-
-fn expand_shorthand<T>(
-  value: T,
-  expand: impl FnOnce(T, &mut Vec<StyleDeclaration>),
-) -> Vec<StyleDeclaration> {
-  let mut declarations = Vec::new();
-  expand(value, &mut declarations);
-  declarations
-}
-
-fn normalize_kebab_property_name(name: &str) -> Cow<'_, str> {
-  if !name
-    .bytes()
-    .any(|byte| byte == b'-' || byte.is_ascii_uppercase())
-  {
-    return Cow::Borrowed(name);
-  }
-
-  Cow::Owned(
-    name
-      .chars()
-      .map(|ch| match ch {
-        '-' => '_',
-        _ => ch.to_ascii_lowercase(),
-      })
-      .collect(),
-  )
+  specified_value: String,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -346,84 +72,6 @@ fn interpolate_option_with_missing<T: Animatable + Clone>(
     }
     (None, None) => None,
   };
-}
-
-fn normalize_camel_property_name(name: &str) -> Cow<'_, str> {
-  if !name.starts_with('_') && !name.bytes().any(|byte| byte.is_ascii_uppercase()) {
-    return Cow::Borrowed(name);
-  }
-
-  let mut normalized = String::with_capacity(name.len() + 4);
-  for ch in name.chars() {
-    if ch.is_ascii_uppercase() {
-      normalized.push('_');
-      normalized.push(ch.to_ascii_lowercase());
-    } else {
-      normalized.push(ch);
-    }
-  }
-
-  Cow::Owned(normalized.trim_start_matches('_').to_owned())
-}
-
-fn parse_custom_property_declaration<'i>(
-  name: &str,
-  input: &mut Parser<'i, '_>,
-) -> ParseResult<'i, ParsedDeclarations> {
-  let start = input.position();
-  while input.next_including_whitespace_and_comments().is_ok() {}
-
-  Ok(ParsedDeclarations::Single(
-    StyleDeclaration::CustomProperty(name.to_owned(), input.slice_from(start).trim().to_owned()),
-  ))
-}
-
-fn contains_var_function(raw_value: &str) -> bool {
-  fn contains_in_parser(input: &mut Parser<'_, '_>) -> bool {
-    while let Ok(token) = input.next_including_whitespace_and_comments() {
-      match token {
-        Token::Function(name) if name.eq_ignore_ascii_case("var") => return true,
-        Token::Function(_)
-        | Token::ParenthesisBlock
-        | Token::SquareBracketBlock
-        | Token::CurlyBracketBlock => {
-          if input
-            .parse_nested_block(|input| {
-              Ok::<_, cssparser::ParseError<'_, Cow<'_, str>>>(contains_in_parser(input))
-            })
-            .unwrap_or(true)
-          {
-            return true;
-          }
-        }
-        _ => {}
-      }
-    }
-
-    false
-  }
-
-  let mut parser_input = ParserInput::new(raw_value);
-  let mut parser = Parser::new(&mut parser_input);
-  contains_in_parser(&mut parser)
-}
-
-fn property_alias(name: &str) -> Option<PropertyId> {
-  match name {
-    "-webkit-text-stroke" | "textStroke" | "WebkitTextStroke" => {
-      Some(PropertyId::Shorthand(ShorthandId::WebkitTextStroke))
-    }
-    "-webkit-text-stroke-width" | "textStrokeWidth" | "WebkitTextStrokeWidth" => {
-      Some(PropertyId::Longhand(LonghandId::WebkitTextStrokeWidth))
-    }
-    "-webkit-text-stroke-color" | "textStrokeColor" | "WebkitTextStrokeColor" => {
-      Some(PropertyId::Longhand(LonghandId::WebkitTextStrokeColor))
-    }
-    "-webkit-text-fill-color" | "textFillColor" | "WebkitTextFillColor" => {
-      Some(PropertyId::Longhand(LonghandId::WebkitTextFillColor))
-    }
-    _ => None,
-  }
 }
 
 macro_rules! push_expanded_declarations {
@@ -491,10 +139,6 @@ macro_rules! define_style {
         const fn index(self) -> usize {
           self as usize
         }
-
-        const fn raw_name(self) -> &'static str {
-          Self::CSS_NAMES[self.index()]
-        }
       }
 
       #[repr(u8)]
@@ -510,85 +154,93 @@ macro_rules! define_style {
         const fn index(self) -> usize {
           self as usize
         }
+      }
 
-        const fn raw_name(self) -> &'static str {
-          Self::CSS_NAMES[self.index()]
+      impl LonghandId {
+        fn parse_declarations<'i>(
+          self,
+          input: &mut cssparser::Parser<'i, '_>,
+        ) -> ParseResult<'i, ParsedDeclarations> {
+          let state = input.state();
+          let keyword = input.try_parse(CssWideKeyword::from_css).ok();
+
+          if let Some(keyword) = keyword {
+            return Ok(smallvec![StyleDeclaration::CssWideKeyword(self, keyword)]);
+          }
+
+          input.reset(&state);
+          match self {
+            $(
+              Self::[<$longhand:camel>] => Ok(smallvec![StyleDeclaration::[<$longhand:camel>](
+                <$longhand_ty as FromCss>::from_css(input)?,
+              )]),
+            )*
+          }
+        }
+
+        fn parse_css_input_declarations<'de>(
+          self,
+          css_input: CssInput<'de>,
+        ) -> Result<ParsedDeclarations, CssInputParseError<'de>> {
+          match self {
+            $(
+              Self::[<$longhand:camel>] => {
+                if let Some(keyword) = parse_css_wide_keyword(&css_input) {
+                  return Ok(smallvec![StyleDeclaration::CssWideKeyword(self, keyword)]);
+                }
+
+                Ok(smallvec![StyleDeclaration::[<$longhand:camel>](
+                  parse_css_input_value::<$longhand_ty>(css_input)?,
+                )])
+              }
+            )*
+          }
         }
       }
 
-      type LonghandParseFn =
-        for<'i> fn(&mut cssparser::Parser<'i, '_>)
-          -> ParseResult<'i, ParsedDeclarations>;
-      type ShorthandParseFn =
-        for<'i> fn(&mut cssparser::Parser<'i, '_>)
-          -> ParseResult<'i, ParsedDeclarations>;
-
-      $(
-        fn [<parse_ $longhand _declarations>]<'i>(
+      impl ShorthandId {
+        fn parse_declarations<'i>(
+          self,
           input: &mut cssparser::Parser<'i, '_>,
         ) -> ParseResult<'i, ParsedDeclarations> {
-          Ok(ParsedDeclarations::Single(parse_longhand_declaration::<$longhand_ty>(
-            input,
-            LonghandId::[<$longhand:camel>],
-            StyleDeclaration::[<$longhand:camel>],
-          )?))
-        }
-
-        fn [<parse_raw_ $longhand _declarations>]<'de>(
-          raw_value: RawCssInput<'de>,
-        ) -> Result<ParsedDeclarations, RawStyleValueParseError<'de>> {
-          Ok(ParsedDeclarations::Single(
-            parse_raw_longhand_declaration::<$longhand_ty>(
-              LonghandId::[<$longhand:camel>],
-              raw_value,
-              StyleDeclaration::[<$longhand:camel>],
-            )?,
-          ))
-        }
-      )*
-
-      const LONGHAND_PARSE_FNS: [LonghandParseFn; LonghandId::COUNT] = [
-        $([<parse_ $longhand _declarations>],)*
-      ];
-      const RAW_LONGHAND_PARSE_FNS: [for<'de> fn(RawCssInput<'de>) -> Result<ParsedDeclarations, RawStyleValueParseError<'de>>; LonghandId::COUNT] = [
-        $([<parse_raw_ $longhand _declarations>],)*
-      ];
-
-      $(
-        fn [<parse_ $shorthand _declarations>]<'i>(
-          input: &mut cssparser::Parser<'i, '_>,
-        ) -> ParseResult<'i, ParsedDeclarations> {
-          Ok(ParsedDeclarations::Many(expand_shorthand(
-            <$shorthand_ty as FromCss>::from_css(input)?,
-            |$value, $target_var| {
-              $expand
-            },
-          )))
-        }
-
-        fn [<parse_raw_ $shorthand _declarations>]<'de>(
-          raw_value: RawCssInput<'de>,
-        ) -> Result<ParsedDeclarations, RawStyleValueParseError<'de>> {
-          match parse_raw_style_value::<$shorthand_ty>(raw_value)? {
-            ParsedRawStyleValue::Keyword(keyword) => Ok(ParsedDeclarations::Many(vec![
-              $(StyleDeclaration::CssWideKeyword(LonghandId::$target, keyword)),+
-            ])),
-            ParsedRawStyleValue::Value(value) => Ok(ParsedDeclarations::Many(expand_shorthand(
-              value,
-              |$value, $target_var| {
-                $expand
-              },
-            ))),
+          match self {
+            $(
+              Self::[<$shorthand:camel>] => Ok(expand_shorthand(
+                <$shorthand_ty as FromCss>::from_css(input)?,
+                |$value, $target_var| {
+                  $expand
+                },
+              )),
+            )*
           }
         }
-      )*
 
-      const SHORTHAND_PARSE_FNS: [ShorthandParseFn; ShorthandId::COUNT] = [
-        $([<parse_ $shorthand _declarations>],)*
-      ];
-      const RAW_SHORTHAND_PARSE_FNS: [for<'de> fn(RawCssInput<'de>) -> Result<ParsedDeclarations, RawStyleValueParseError<'de>>; ShorthandId::COUNT] = [
-        $([<parse_raw_ $shorthand _declarations>],)*
-      ];
+        fn parse_css_input_declarations<'de>(
+          self,
+          css_input: CssInput<'de>,
+        ) -> Result<ParsedDeclarations, CssInputParseError<'de>> {
+          match self {
+            $(
+              Self::[<$shorthand:camel>] => {
+                if let Some(keyword) = parse_css_wide_keyword(&css_input) {
+                  let mut declarations = ParsedDeclarations::new();
+                  $(
+                    declarations.push(StyleDeclaration::CssWideKeyword(LonghandId::$target, keyword));
+                  )+
+                  return Ok(declarations);
+                }
+
+                Ok(expand_shorthand(
+                  parse_css_input_value::<$shorthand_ty>(css_input)?,
+                  |$value, $target_var| {
+                    $expand
+                  },
+                ))
+              }
+            )*
+          }
+        }
+      }
 
       #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
       pub(crate) enum PropertyId {
@@ -599,15 +251,6 @@ macro_rules! define_style {
       }
 
       impl PropertyId {
-        fn css_name(self) -> Cow<'static, str> {
-          match self {
-            Self::Ignored => Cow::Borrowed("<ignored>"),
-            Self::Custom => Cow::Borrowed("<custom>"),
-            Self::Longhand(property) => css_property_name(property.raw_name()),
-            Self::Shorthand(property) => css_property_name(property.raw_name()),
-          }
-        }
-
         fn from_normalized_name(name: &str) -> Self {
           match name {
             $(stringify!($longhand) => Self::Longhand(LonghandId::[<$longhand:camel>]),)*
@@ -617,85 +260,72 @@ macro_rules! define_style {
         }
 
         fn from_kebab_case(name: &str) -> Self {
-          if name.starts_with("--") {
-            return Self::Custom;
-          }
-
-          if let Some(property) = property_alias(name) {
-            return property;
-          }
-
-          Self::from_normalized_name(normalize_kebab_property_name(name).as_ref())
+          property_id_from_name(name, normalize_kebab_property_name)
         }
 
         #[allow(dead_code)]
         pub(crate) fn from_camel_case(name: &str) -> Self {
-          if name.starts_with("--") {
-            return Self::Custom;
-          }
-
-          if let Some(property) = property_alias(name) {
-            return property;
-          }
-
-          Self::from_normalized_name(normalize_camel_property_name(name).as_ref())
+          property_id_from_name(name, normalize_camel_property_name)
         }
 
-      fn parse_declarations<'i>(
-        self,
-        name: &str,
-        input: &mut cssparser::Parser<'i, '_>,
-      ) -> ParseResult<'i, ParsedDeclarations> {
-        match self {
-          Self::Ignored => {
-            while input.next_including_whitespace_and_comments().is_ok() {}
-            Ok(ParsedDeclarations::None)
-            }
-            Self::Custom => parse_custom_property_declaration(name, input),
-            Self::Shorthand(property) => SHORTHAND_PARSE_FNS[property.index()](input),
-            Self::Longhand(property) => LONGHAND_PARSE_FNS[property.index()](input),
-          }
-        }
-
-        fn parse_raw_declarations<'de, E>(
+        fn parse_declarations<'i>(
           self,
           name: &str,
-          raw_value: RawCssInput<'de>,
+          input: &mut cssparser::Parser<'i, '_>,
+        ) -> ParseResult<'i, ParsedDeclarations> {
+          match self {
+            Self::Ignored => {
+              while input.next_including_whitespace_and_comments().is_ok() {}
+              Ok(ParsedDeclarations::new())
+            }
+            Self::Custom => {
+              let start = input.position();
+              while input.next_including_whitespace_and_comments().is_ok() {}
+              Ok(smallvec![StyleDeclaration::CustomProperty(
+                name.to_owned(),
+                input.slice_from(start).trim().to_owned(),
+              )])
+            }
+            Self::Shorthand(property) => property.parse_declarations(input),
+            Self::Longhand(property) => property.parse_declarations(input),
+          }
+        }
+
+        fn parse_css_input_declarations<'de, E>(
+          self,
+          name: &str,
+          css_input: CssInput<'de>,
         ) -> Result<ParsedDeclarations, E>
         where
           E: serde::de::Error,
         {
           debug_assert!(
             !matches!(self, Self::Custom),
-            "custom properties should be handled before parse_raw_declarations",
+            "custom properties should be handled before parse_css_input_declarations",
           );
 
-          let raw_string = match &raw_value {
-            RawCssInput::Str(value) => Some(value.as_ref()),
-            RawCssInput::Number(_) => None,
-            RawCssInput::Unexpected(_) => None,
+          let css_string = match &css_input {
+            CssInput::Str(value) => Some(value.as_ref()),
+            CssInput::Number(_) => None,
+            CssInput::Unexpected(_) => None,
           };
 
-          if raw_string.is_some_and(contains_var_function) {
-            return Ok(ParsedDeclarations::Single(StyleDeclaration::Deferred(
-              DeferredDeclaration {
+            if css_string.is_some_and(contains_var_function) {
+              return Ok(smallvec![StyleDeclaration::Deferred(DeferredDeclaration {
                 property: self,
-                raw_value: raw_value.to_string(),
-              },
-            )));
-          }
+                specified_value: css_input.into_string(),
+              })]);
+            }
 
           match self {
-            Self::Ignored => Ok(ParsedDeclarations::None),
+            Self::Ignored => Ok(ParsedDeclarations::new()),
             Self::Custom => unreachable!(),
-            Self::Shorthand(property) => {
-              RAW_SHORTHAND_PARSE_FNS[property.index()](raw_value)
-                .map_err(|error| error.into_serde_error(name, self))
-            }
-            Self::Longhand(property) => {
-              RAW_LONGHAND_PARSE_FNS[property.index()](raw_value)
-                .map_err(|error| error.into_serde_error(name, self))
-            }
+            Self::Shorthand(property) => property
+              .parse_css_input_declarations(css_input)
+              .map_err(|error| error.into_serde_error(name, self)),
+            Self::Longhand(property) => property
+              .parse_css_input_declarations(css_input)
+              .map_err(|error| error.into_serde_error(name, self)),
           }
         }
 
@@ -725,13 +355,13 @@ macro_rules! define_style {
           )),
           Err(error) if !matches!(property, PropertyId::Ignored | PropertyId::Custom) => {
             while input.next_including_whitespace_and_comments().is_ok() {}
-            let raw_value = input.slice_from(start).trim();
-            if contains_var_function(raw_value) {
+            let specified_value = input.slice_from(start).trim();
+            if contains_var_function(specified_value) {
               Ok(StyleDeclarationBlock::from_parsed_declarations(
-                ParsedDeclarations::Single(StyleDeclaration::Deferred(DeferredDeclaration {
+                smallvec![StyleDeclaration::Deferred(DeferredDeclaration {
                   property,
-                  raw_value: raw_value.to_owned(),
-                })),
+                  specified_value: specified_value.to_owned(),
+                })],
                 false,
               ))
             } else {
@@ -775,8 +405,20 @@ macro_rules! define_style {
                   continue;
                 }
 
-                let raw_value = map.next_value_seed(RawCssValueSeed)?;
-                style.push_property_from_raw::<A::Error>(&key, property, raw_value, false)?;
+                let css_input = map.next_value_seed(CssValueSeed)?;
+                if matches!(property, PropertyId::Custom) {
+                  style.declarations.push(
+                    StyleDeclaration::CustomProperty(key.into_owned(), css_input.into_string()),
+                    false,
+                  );
+                } else {
+                  style
+                    .declarations
+                    .append_parsed_declarations(
+                      property.parse_css_input_declarations(&key, css_input)?,
+                      false,
+                    );
+                }
               }
 
               Ok(style)
@@ -797,20 +439,14 @@ macro_rules! define_style {
       }
 
       impl Style {
-        fn push_declarations(
-          &mut self,
-          declarations: impl IntoIterator<Item = StyleDeclaration>,
-          important: bool,
-        ) {
-          self.declarations.push_declarations(declarations, important);
-        }
-
         fn with_declarations(
           mut self,
           declarations: impl IntoIterator<Item = StyleDeclaration>,
           important: bool,
         ) -> Self {
-          self.push_declarations(declarations, important);
+          for declaration in declarations {
+            self.declarations.push(declaration, important);
+          }
           self
         }
 
@@ -836,12 +472,12 @@ macro_rules! define_style {
           self.with_declarations([declaration], true)
         }
 
-        pub(crate) fn push(&mut self, declaration: StyleDeclaration, important: bool) {
-          self.declarations.push(declaration, important);
-        }
-
         pub(crate) fn append_block(&mut self, declarations: StyleDeclarationBlock) {
           self.declarations.append(declarations);
+        }
+
+        pub(crate) fn push(&mut self, declaration: StyleDeclaration, important: bool) {
+          self.declarations.push(declaration, important);
         }
 
         /// Collects fetch tasks referenced by this style's declarations.
@@ -851,37 +487,25 @@ macro_rules! define_style {
 
         pub(crate) fn inherit(self, parent: &ComputedStyle) -> ComputedStyle {
           let mut style = ComputedStyle::from_parent(parent);
-          apply_cascaded_declarations(&mut style, Some(parent), &self.declarations.declarations);
+          let mut declarations = ParsedDeclarations::new();
+
+          for declaration in self.declarations.declarations {
+            match declaration {
+              StyleDeclaration::CustomProperty(name, value) => {
+                style.custom_properties.insert(name, value);
+              }
+              declaration => declarations.push(declaration),
+            }
+          }
+
+          for declaration in declarations {
+            declaration.apply_with_parent(&mut style, parent);
+          }
           style
         }
 
         pub(crate) fn merge_from(&mut self, other: Self) {
           self.append_block(other.declarations);
-        }
-
-        #[inline(never)]
-        fn push_property_from_raw<'de, E>(
-          &mut self,
-          name: &str,
-          property: PropertyId,
-          raw_value: RawCssInput<'de>,
-          important: bool,
-        ) -> Result<(), E>
-        where
-          E: serde::de::Error,
-        {
-          if matches!(property, PropertyId::Custom) {
-            self.declarations.push(
-              StyleDeclaration::CustomProperty(name.to_owned(), raw_value.to_string()),
-              important,
-            );
-            return Ok(());
-          }
-
-          self
-            .declarations
-            .append_parsed_declarations(property.parse_raw_declarations(name, raw_value)?, important);
-          Ok(())
         }
       }
 
@@ -1059,10 +683,20 @@ macro_rules! define_style {
         ) {
           match self {
             Self::CssWideKeyword(property, keyword) => {
-              apply_css_wide_keyword(style, parent, property, keyword)
+              match property {
+                $(
+                  LonghandId::[<$longhand:camel>] => {
+                    style.$longhand = match keyword {
+                      CssWideKeyword::Initial => Default::default(),
+                      CssWideKeyword::Inherit => parent.$longhand.to_owned(),
+                      CssWideKeyword::Unset => define_inherited_default!(parent.$longhand $(, $longhand_inherit)?),
+                    };
+                  }
+                )*
+              }
             }
-            Self::CustomProperty(name, raw_value) => {
-              style.custom_properties.insert(name, raw_value);
+            Self::CustomProperty(name, value) => {
+              style.custom_properties.insert(name, value);
             }
             Self::Deferred(deferred) => {
               apply_deferred_declaration(style, Some(parent), &deferred);
@@ -1075,13 +709,19 @@ macro_rules! define_style {
         pub(crate) fn apply_to_computed(&self, style: &mut ComputedStyle) {
           match self {
             Self::CssWideKeyword(property, keyword) => match keyword {
-              CssWideKeyword::Initial => apply_initial_longhand(style, *property),
+              CssWideKeyword::Initial => match property {
+                $(
+                  LonghandId::[<$longhand:camel>] => {
+                    style.$longhand = Default::default();
+                  }
+                )*
+              },
               CssWideKeyword::Inherit | CssWideKeyword::Unset => {}
             },
-            Self::CustomProperty(name, raw_value) => {
+            Self::CustomProperty(name, value) => {
               style
                 .custom_properties
-                .insert(name.to_owned(), raw_value.to_owned());
+                .insert(name.to_owned(), value.to_owned());
             }
             Self::Deferred(deferred) => apply_deferred_declaration(style, None, deferred),
             $(Self::[<$longhand:camel>](value) => style.$longhand.clone_from(value),)*
@@ -1089,38 +729,7 @@ macro_rules! define_style {
         }
 
         pub(crate) fn merge_into_ref(&self, style: &mut Style) {
-          style.push(self.to_owned(), false);
-        }
-      }
-
-      #[inline(never)]
-      fn apply_initial_longhand(style: &mut ComputedStyle, property: LonghandId) {
-        match property {
-          $(
-            LonghandId::[<$longhand:camel>] => {
-              style.$longhand = Default::default();
-            }
-          )*
-        }
-      }
-
-      #[inline(never)]
-      fn apply_css_wide_keyword(
-        style: &mut ComputedStyle,
-        parent: &ComputedStyle,
-        property: LonghandId,
-        keyword: CssWideKeyword,
-      ) {
-        match property {
-          $(
-            LonghandId::[<$longhand:camel>] => {
-              style.$longhand = match keyword {
-                CssWideKeyword::Initial => Default::default(),
-                CssWideKeyword::Inherit => parent.$longhand.to_owned(),
-                CssWideKeyword::Unset => define_inherited_default!(parent.$longhand $(, $longhand_inherit)?),
-              };
-            }
-          )*
+          style.declarations.push(self.to_owned(), false);
         }
       }
 
@@ -1261,7 +870,48 @@ define_style! {
   }
   shorthands {
     animation: Animations => [AnimationName, AnimationDuration, AnimationDelay, AnimationTimingFunction, AnimationIterationCount, AnimationDirection, AnimationFillMode, AnimationPlayState] |value, target| {
-      expand_animation_shorthand(value, target);
+      let has_animation_name = value.iter().any(|animation| animation.name.is_some());
+      target.push(StyleDeclaration::animation_duration(AnimationDurations(
+        value.iter().map(|animation| animation.duration).collect(),
+      )));
+      target.push(StyleDeclaration::animation_delay(AnimationDurations(
+        value.iter().map(|animation| animation.delay).collect(),
+      )));
+      target.push(StyleDeclaration::animation_timing_function(
+        AnimationTimingFunctions(
+          value
+            .iter()
+            .map(|animation| animation.timing_function)
+            .collect(),
+        ),
+      ));
+      target.push(StyleDeclaration::animation_iteration_count(
+        AnimationIterationCounts(
+          value
+            .iter()
+            .map(|animation| animation.iteration_count)
+            .collect(),
+        ),
+      ));
+      target.push(StyleDeclaration::animation_direction(AnimationDirections(
+        value.iter().map(|animation| animation.direction).collect(),
+      )));
+      target.push(StyleDeclaration::animation_fill_mode(AnimationFillModes(
+        value.iter().map(|animation| animation.fill_mode).collect(),
+      )));
+      target.push(StyleDeclaration::animation_play_state(AnimationPlayStates(
+        value.iter().map(|animation| animation.play_state).collect(),
+      )));
+      target.push(StyleDeclaration::animation_name(if has_animation_name {
+        AnimationNames(
+          value
+            .into_iter()
+            .map(|animation| animation.name.unwrap_or_default())
+            .collect(),
+        )
+      } else {
+        AnimationNames::default()
+      }));
     },
     padding: Sides<LengthDefaultsToZero> => [PaddingTop, PaddingRight, PaddingBottom, PaddingLeft] |value, target| {
       push_four_side_declarations!(
@@ -1305,14 +955,34 @@ define_style! {
       push_axis_declarations!(target, value, top, bottom);
     },
     mask: Backgrounds => [MaskImage, MaskPosition, MaskSize, MaskRepeat] |value, target| {
-      expand_mask_shorthand(value, target);
+      target.push(StyleDeclaration::mask_position(
+        value.iter().map(|background| background.position).collect(),
+      ));
+      target.push(StyleDeclaration::mask_size(
+        value.iter().map(|background| background.size).collect(),
+      ));
+      target.push(StyleDeclaration::mask_repeat(
+        value.iter().map(|background| background.repeat).collect(),
+      ));
+      target.push(StyleDeclaration::mask_image(Some(
+        value
+          .into_iter()
+          .map(|background| background.image)
+          .collect(),
+      )));
     },
     gap: SpacePair<LengthDefaultsToZero> => [RowGap, ColumnGap] |value, target| {
       // Special case: gap is reversed in the declaration order (y-first)
       push_axis_declarations!(target, value, column_gap, row_gap);
     },
     flex: Option<Flex> => [FlexGrow, FlexShrink, FlexBasis] |value, target| {
-      expand_flex_shorthand(value, target);
+      target.push(StyleDeclaration::flex_grow(
+        value.map(|value| FlexGrow(value.grow)),
+      ));
+      target.push(StyleDeclaration::flex_shrink(
+        value.map(|value| FlexGrow(value.shrink)),
+      ));
+      target.push(StyleDeclaration::flex_basis(value.map(|value| value.basis)));
     },
     border_radius: Box<BorderRadius> => [BorderTopLeftRadius, BorderTopRightRadius, BorderBottomRightRadius, BorderBottomLeftRadius] |value, target| {
       push_four_side_declarations!(
@@ -1351,347 +1021,86 @@ define_style! {
       );
     },
     border: Border => [BorderTopWidth, BorderRightWidth, BorderBottomWidth, BorderLeftWidth, BorderStyle, BorderColor] |value, target| {
-      expand_border_shorthand(value, target);
+      target.push(StyleDeclaration::border_top_width(value.width));
+      target.push(StyleDeclaration::border_right_width(value.width));
+      target.push(StyleDeclaration::border_bottom_width(value.width));
+      target.push(StyleDeclaration::border_left_width(value.width));
+      target.push(StyleDeclaration::border_style(value.style));
+      target.push(StyleDeclaration::border_color(value.color));
     },
     outline: Border => [OutlineWidth, OutlineStyle, OutlineColor] |value, target| {
-      expand_outline_shorthand(value, target);
+      target.push(StyleDeclaration::outline_width(value.width));
+      target.push(StyleDeclaration::outline_style(value.style));
+      target.push(StyleDeclaration::outline_color(value.color));
     },
     overflow: SpacePair<Overflow> => [OverflowX, OverflowY] |value, target| {
       push_axis_declarations!(target, value, overflow_x, overflow_y);
     },
     background: Backgrounds => [BackgroundImage, BackgroundPosition, BackgroundSize, BackgroundRepeat, BackgroundBlendMode, BackgroundColor, BackgroundClip] |value, target| {
-      expand_background_shorthand(value, target);
+      target.push(StyleDeclaration::background_position(
+        value.iter().map(|background| background.position).collect(),
+      ));
+      target.push(StyleDeclaration::background_size(
+        value.iter().map(|background| background.size).collect(),
+      ));
+      target.push(StyleDeclaration::background_repeat(
+        value.iter().map(|background| background.repeat).collect(),
+      ));
+      target.push(StyleDeclaration::background_blend_mode(
+        value
+          .iter()
+          .map(|background| background.blend_mode)
+          .collect(),
+      ));
+      target.push(StyleDeclaration::background_color(
+        value
+          .iter()
+          .filter_map(|background| background.color)
+          .next_back()
+          .unwrap_or_default(),
+      ));
+      target.push(StyleDeclaration::background_clip(
+        value
+          .last()
+          .map(|background| background.clip)
+          .unwrap_or_default(),
+      ));
+      target.push(StyleDeclaration::background_image(Some(
+        value
+          .into_iter()
+          .map(|background| background.image)
+          .collect(),
+      )));
     },
     font_synthesis: FontSynthesis where inherit = true => [FontSynthesisWeight, FontSynthesisStyle] |value, target| {
-      expand_font_synthesis_shorthand(value, target);
+      target.push(StyleDeclaration::font_synthesis_weight(value.weight));
+      target.push(StyleDeclaration::font_synthesis_style(value.style));
     },
     webkit_text_stroke: Option<TextStroke> where inherit = true => [WebkitTextStrokeWidth, WebkitTextStrokeColor] |value, target| {
-      expand_text_stroke_shorthand(value, target);
+      target.push(StyleDeclaration::webkit_text_stroke_width(
+        value.map(|value| value.width),
+      ));
+      target.push(StyleDeclaration::webkit_text_stroke_color(
+        value.and_then(|value| value.color),
+      ));
     },
     text_decoration: TextDecoration => [TextDecorationLine, TextDecorationStyle, TextDecorationColor, TextDecorationThickness] |value, target| {
-      expand_text_decoration_shorthand(value, target);
+      target.push(StyleDeclaration::text_decoration_line(Some(value.line)));
+      target.push(StyleDeclaration::text_decoration_style(value.style));
+      target.push(StyleDeclaration::text_decoration_color(value.color));
+      target.push(StyleDeclaration::text_decoration_thickness(value.thickness));
     },
     white_space: WhiteSpace where inherit = true => [TextWrapMode, WhiteSpaceCollapse] |value, target| {
-      expand_white_space_shorthand(value, target);
+      target.push(StyleDeclaration::text_wrap_mode(value.text_wrap_mode));
+      target.push(StyleDeclaration::white_space_collapse(
+        value.white_space_collapse,
+      ));
     },
     text_wrap: TextWrap where inherit = true => [TextWrapMode, TextWrapStyle] |value, target| {
-      expand_text_wrap_shorthand(value, target);
+      target.push(StyleDeclaration::text_wrap_mode(value.mode));
+      target.push(StyleDeclaration::text_wrap_style(value.style));
     },
   }
-}
-
-fn expand_animation_shorthand(value: Animations, target: &mut Vec<StyleDeclaration>) {
-  let has_animation_name = value.iter().any(|animation| animation.name.is_some());
-  push_expanded_declarations!(
-    target;
-    StyleDeclaration::animation_duration(AnimationDurations(value.iter().map(|animation| animation.duration).collect())),
-    StyleDeclaration::animation_delay(AnimationDurations(value.iter().map(|animation| animation.delay).collect())),
-    StyleDeclaration::animation_timing_function(AnimationTimingFunctions(value.iter().map(|animation| animation.timing_function).collect())),
-    StyleDeclaration::animation_iteration_count(AnimationIterationCounts(value.iter().map(|animation| animation.iteration_count).collect())),
-    StyleDeclaration::animation_direction(AnimationDirections(value.iter().map(|animation| animation.direction).collect())),
-    StyleDeclaration::animation_fill_mode(AnimationFillModes(value.iter().map(|animation| animation.fill_mode).collect())),
-    StyleDeclaration::animation_play_state(AnimationPlayStates(value.iter().map(|animation| animation.play_state).collect())),
-    StyleDeclaration::animation_name(if has_animation_name {
-      AnimationNames(value.into_iter().map(|animation| animation.name.unwrap_or_default()).collect())
-    } else {
-      AnimationNames::default()
-    }),
-  );
-}
-
-fn expand_mask_shorthand(value: Backgrounds, target: &mut Vec<StyleDeclaration>) {
-  push_expanded_declarations!(
-    target;
-    StyleDeclaration::mask_position(value.iter().map(|background| background.position).collect()),
-    StyleDeclaration::mask_size(value.iter().map(|background| background.size).collect()),
-    StyleDeclaration::mask_repeat(value.iter().map(|background| background.repeat).collect()),
-    StyleDeclaration::mask_image(Some(value.into_iter().map(|background| background.image).collect())),
-  );
-}
-
-fn expand_flex_shorthand(value: Option<Flex>, target: &mut Vec<StyleDeclaration>) {
-  push_expanded_declarations!(
-    target;
-    StyleDeclaration::flex_grow(value.map(|value| FlexGrow(value.grow))),
-    StyleDeclaration::flex_shrink(value.map(|value| FlexGrow(value.shrink))),
-    StyleDeclaration::flex_basis(value.map(|value| value.basis)),
-  );
-}
-
-fn expand_border_shorthand(value: Border, target: &mut Vec<StyleDeclaration>) {
-  push_expanded_declarations!(
-    target;
-    StyleDeclaration::border_top_width(value.width),
-    StyleDeclaration::border_right_width(value.width),
-    StyleDeclaration::border_bottom_width(value.width),
-    StyleDeclaration::border_left_width(value.width),
-    StyleDeclaration::border_style(value.style),
-    StyleDeclaration::border_color(value.color),
-  );
-}
-
-fn expand_outline_shorthand(value: Border, target: &mut Vec<StyleDeclaration>) {
-  push_expanded_declarations!(
-    target;
-    StyleDeclaration::outline_width(value.width),
-    StyleDeclaration::outline_style(value.style),
-    StyleDeclaration::outline_color(value.color),
-  );
-}
-
-fn expand_background_shorthand(value: Backgrounds, target: &mut Vec<StyleDeclaration>) {
-  push_expanded_declarations!(
-    target;
-    StyleDeclaration::background_position(value.iter().map(|background| background.position).collect()),
-    StyleDeclaration::background_size(value.iter().map(|background| background.size).collect()),
-    StyleDeclaration::background_repeat(value.iter().map(|background| background.repeat).collect()),
-    StyleDeclaration::background_blend_mode(value.iter().map(|background| background.blend_mode).collect()),
-    StyleDeclaration::background_color(value.iter().filter_map(|background| background.color).next_back().unwrap_or_default()),
-    StyleDeclaration::background_clip(value.last().map(|background| background.clip).unwrap_or_default()),
-    StyleDeclaration::background_image(Some(value.into_iter().map(|background| background.image).collect())),
-  );
-}
-
-fn expand_font_synthesis_shorthand(value: FontSynthesis, target: &mut Vec<StyleDeclaration>) {
-  push_expanded_declarations!(
-    target;
-    StyleDeclaration::font_synthesis_weight(value.weight),
-    StyleDeclaration::font_synthesis_style(value.style),
-  );
-}
-
-fn expand_text_stroke_shorthand(value: Option<TextStroke>, target: &mut Vec<StyleDeclaration>) {
-  push_expanded_declarations!(
-    target;
-    StyleDeclaration::webkit_text_stroke_width(value.map(|value| value.width)),
-    StyleDeclaration::webkit_text_stroke_color(value.and_then(|value| value.color)),
-  );
-}
-
-fn expand_text_decoration_shorthand(value: TextDecoration, target: &mut Vec<StyleDeclaration>) {
-  push_expanded_declarations!(
-    target;
-    StyleDeclaration::text_decoration_line(Some(value.line)),
-    StyleDeclaration::text_decoration_style(value.style),
-    StyleDeclaration::text_decoration_color(value.color),
-    StyleDeclaration::text_decoration_thickness(value.thickness),
-  );
-}
-
-fn expand_white_space_shorthand(value: WhiteSpace, target: &mut Vec<StyleDeclaration>) {
-  push_expanded_declarations!(
-    target;
-    StyleDeclaration::text_wrap_mode(value.text_wrap_mode),
-    StyleDeclaration::white_space_collapse(value.white_space_collapse),
-  );
-}
-
-fn expand_text_wrap_shorthand(value: TextWrap, target: &mut Vec<StyleDeclaration>) {
-  push_expanded_declarations!(
-    target;
-    StyleDeclaration::text_wrap_mode(value.mode),
-    StyleDeclaration::text_wrap_style(value.style),
-  );
-}
-
-fn resolve_custom_property_value(
-  name: &str,
-  custom_properties: &HashMap<String, String>,
-  stack: &mut Vec<String>,
-) -> Option<String> {
-  if stack.iter().any(|entry| entry == name) {
-    return None;
-  }
-
-  let raw_value = custom_properties.get(name)?;
-  stack.push(name.to_owned());
-  let resolved = resolve_var_references(raw_value, custom_properties, stack);
-  stack.pop();
-  resolved
-}
-
-fn resolve_var_function(
-  input: &mut Parser<'_, '_>,
-  custom_properties: &HashMap<String, String>,
-  stack: &mut Vec<String>,
-) -> Option<String> {
-  let property_name = input.expect_ident_cloned().ok()?;
-  if !property_name.starts_with("--") {
-    return None;
-  }
-
-  let fallback = if input.try_parse(Parser::expect_comma).is_ok() {
-    Some(resolve_var_tokens(input, custom_properties, stack)?)
-  } else {
-    None
-  };
-
-  if input.next_including_whitespace_and_comments().is_ok() {
-    return None;
-  }
-
-  resolve_custom_property_value(property_name.as_ref(), custom_properties, stack).or(fallback)
-}
-
-fn resolve_var_tokens(
-  input: &mut Parser<'_, '_>,
-  custom_properties: &HashMap<String, String>,
-  stack: &mut Vec<String>,
-) -> Option<String> {
-  let mut output = String::new();
-
-  while !input.is_exhausted() {
-    let start = input.position();
-    let token = input.next_including_whitespace_and_comments().ok()?;
-
-    match token {
-      Token::Function(name) if name.eq_ignore_ascii_case("var") => {
-        output.push_str(
-          &input
-            .parse_nested_block(|input| {
-              resolve_var_function(input, custom_properties, stack)
-                .ok_or_else(|| input.new_error_for_next_token::<()>())
-            })
-            .ok()?,
-        );
-      }
-      Token::Function(name) => {
-        output.push_str(name);
-        output.push('(');
-        let nested = input
-          .parse_nested_block(|input| {
-            resolve_var_tokens(input, custom_properties, stack)
-              .ok_or_else(|| input.new_error_for_next_token::<()>())
-          })
-          .ok()?;
-        output.push_str(&nested);
-        output.push(')');
-      }
-      Token::ParenthesisBlock => {
-        output.push('(');
-        let nested = input
-          .parse_nested_block(|input| {
-            resolve_var_tokens(input, custom_properties, stack)
-              .ok_or_else(|| input.new_error_for_next_token::<()>())
-          })
-          .ok()?;
-        output.push_str(&nested);
-        output.push(')');
-      }
-      Token::SquareBracketBlock => {
-        output.push('[');
-        let nested = input
-          .parse_nested_block(|input| {
-            resolve_var_tokens(input, custom_properties, stack)
-              .ok_or_else(|| input.new_error_for_next_token::<()>())
-          })
-          .ok()?;
-        output.push_str(&nested);
-        output.push(']');
-      }
-      Token::CurlyBracketBlock => {
-        output.push('{');
-        let nested = input
-          .parse_nested_block(|input| {
-            resolve_var_tokens(input, custom_properties, stack)
-              .ok_or_else(|| input.new_error_for_next_token::<()>())
-          })
-          .ok()?;
-        output.push_str(&nested);
-        output.push('}');
-      }
-      _ => output.push_str(input.slice_from(start)),
-    }
-  }
-
-  Some(output)
-}
-
-fn resolve_var_references(
-  raw_value: &str,
-  custom_properties: &HashMap<String, String>,
-  stack: &mut Vec<String>,
-) -> Option<String> {
-  let mut parser_input = ParserInput::new(raw_value);
-  let mut parser = Parser::new(&mut parser_input);
-  resolve_var_tokens(&mut parser, custom_properties, stack)
-}
-
-fn apply_resolved_declarations(
-  style: &mut ComputedStyle,
-  parent: Option<&ComputedStyle>,
-  declarations: ParsedDeclarations,
-) {
-  match declarations {
-    ParsedDeclarations::None => {}
-    ParsedDeclarations::Single(declaration) => match parent {
-      Some(parent) => declaration.apply_with_parent(style, parent),
-      None => declaration.apply_to_computed(style),
-    },
-    ParsedDeclarations::Many(declarations) => {
-      for declaration in declarations {
-        match parent {
-          Some(parent) => declaration.apply_with_parent(style, parent),
-          None => declaration.apply_to_computed(style),
-        }
-      }
-    }
-  }
-}
-
-fn apply_cascaded_declarations(
-  style: &mut ComputedStyle,
-  parent: Option<&ComputedStyle>,
-  declarations: &[StyleDeclaration],
-) {
-  for declaration in declarations {
-    if let StyleDeclaration::CustomProperty(..) = declaration {
-      match parent {
-        Some(parent) => declaration.clone().apply_with_parent(style, parent),
-        None => declaration.apply_to_computed(style),
-      }
-    }
-  }
-
-  for declaration in declarations {
-    if matches!(declaration, StyleDeclaration::CustomProperty(..)) {
-      continue;
-    }
-
-    match parent {
-      Some(parent) => declaration.clone().apply_with_parent(style, parent),
-      None => declaration.apply_to_computed(style),
-    }
-  }
-}
-
-fn apply_deferred_declaration(
-  style: &mut ComputedStyle,
-  parent: Option<&ComputedStyle>,
-  deferred: &DeferredDeclaration,
-) {
-  let Some(resolved_value) = resolve_var_references(
-    &deferred.raw_value,
-    &style.custom_properties,
-    &mut Vec::new(),
-  ) else {
-    return;
-  };
-
-  let property = deferred.property;
-  let css_name = property.css_name();
-  let declarations = property
-    .parse_raw_declarations::<serde::de::value::Error>(
-      css_name.as_ref(),
-      RawCssInput::Str(Cow::Owned(resolved_value)),
-    )
-    .ok();
-
-  let Some(declarations) = declarations else {
-    return;
-  };
-
-  apply_resolved_declarations(style, parent, declarations);
 }
 
 /// CSS-wide keywords that can target any longhand declaration.
@@ -1897,22 +1306,6 @@ impl StyleDeclarationBlock {
   }
 
   fn append_parsed_declarations(&mut self, declarations: ParsedDeclarations, important: bool) {
-    match declarations {
-      ParsedDeclarations::None => {}
-      ParsedDeclarations::Single(declaration) => self.push(declaration, important),
-      ParsedDeclarations::Many(declarations) => {
-        for declaration in declarations {
-          self.push(declaration, important);
-        }
-      }
-    }
-  }
-
-  fn push_declarations(
-    &mut self,
-    declarations: impl IntoIterator<Item = StyleDeclaration>,
-    important: bool,
-  ) {
     for declaration in declarations {
       self.push(declaration, important);
     }
@@ -2385,9 +1778,8 @@ mod tests {
   use cssparser::{Parser, ParserInput};
   use taffy::Size;
 
-  use super::{
-    CssWideKeyword, LonghandId, PropertyId, StyleDeclarationBlock, resolve_var_references,
-  };
+  use super::stylesheets_vars::resolve_var_references;
+  use super::{CssWideKeyword, LonghandId, PropertyId, ShorthandId, StyleDeclarationBlock};
   use crate::{
     layout::{
       Viewport,
@@ -2428,7 +1820,7 @@ mod tests {
   }
 
   fn resolve_var(
-    raw_value: &str,
+    specified_value: &str,
     custom_properties: impl IntoIterator<Item = (&'static str, &'static str)>,
   ) -> Option<String> {
     let custom_properties = custom_properties
@@ -2436,7 +1828,7 @@ mod tests {
       .map(|(name, value)| (name.to_owned(), value.to_owned()))
       .collect::<HashMap<_, _>>();
 
-    resolve_var_references(raw_value, &custom_properties, &mut Vec::new())
+    resolve_var_references(specified_value, &custom_properties, &mut Vec::new())
   }
 
   #[test]
@@ -2499,6 +1891,10 @@ mod tests {
     assert_eq!(
       PropertyId::from_kebab_case("-webkit-text-stroke-color"),
       PropertyId::Longhand(LonghandId::WebkitTextStrokeColor)
+    );
+    assert_eq!(
+      PropertyId::from_camel_case("WebKitTextStroke"),
+      PropertyId::Shorthand(ShorthandId::WebkitTextStroke)
     );
   }
 

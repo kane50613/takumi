@@ -18,24 +18,24 @@ use serde::{
 pub use stylesheets::*;
 
 #[derive(Clone, Copy)]
-pub(super) enum RawCssNumber {
+pub(super) enum CssNumber {
   Signed(i64),
   Unsigned(u64),
   Float(f64),
 }
 
-impl std::fmt::Display for RawCssNumber {
+impl std::fmt::Display for CssNumber {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
-      RawCssNumber::Signed(value) => value.fmt(f),
-      RawCssNumber::Unsigned(value) => value.fmt(f),
-      RawCssNumber::Float(value) => value.fmt(f),
+      CssNumber::Signed(value) => value.fmt(f),
+      CssNumber::Unsigned(value) => value.fmt(f),
+      CssNumber::Float(value) => value.fmt(f),
     }
   }
 }
 
 #[derive(Clone, Copy)]
-pub(super) enum RawCssUnexpected {
+pub(super) enum CssUnexpected {
   Bool(bool),
   Char(char),
   Bytes,
@@ -46,13 +46,13 @@ pub(super) enum RawCssUnexpected {
 }
 
 #[derive(Clone)]
-pub(super) enum RawCssInput<'a> {
+pub(super) enum CssInput<'a> {
   Str(Cow<'a, str>),
-  Number(RawCssNumber),
-  Unexpected(RawCssUnexpected),
+  Number(CssNumber),
+  Unexpected(CssUnexpected),
 }
 
-impl std::fmt::Display for RawCssInput<'_> {
+impl std::fmt::Display for CssInput<'_> {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
       Self::Str(value) => f.write_str(value),
@@ -62,9 +62,19 @@ impl std::fmt::Display for RawCssInput<'_> {
   }
 }
 
-struct RawCssInputVisitor;
+impl CssInput<'_> {
+  pub(super) fn into_string(self) -> String {
+    match self {
+      Self::Str(value) => value.into_owned(),
+      Self::Number(number) => number.to_string(),
+      Self::Unexpected(_) => String::new(),
+    }
+  }
+}
 
-impl RawCssInputVisitor {
+struct CssInputVisitor;
+
+impl CssInputVisitor {
   fn drain_seq<'de, A>(mut seq: A) -> Result<(), A::Error>
   where
     A: SeqAccess<'de>,
@@ -82,8 +92,8 @@ impl RawCssInputVisitor {
   }
 }
 
-impl<'de> Visitor<'de> for RawCssInputVisitor {
-  type Value = RawCssInput<'de>;
+impl<'de> Visitor<'de> for CssInputVisitor {
+  type Value = CssInput<'de>;
 
   fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
     formatter.write_str("a CSS string or number")
@@ -93,84 +103,84 @@ impl<'de> Visitor<'de> for RawCssInputVisitor {
   where
     E: de::Error,
   {
-    Ok(RawCssInput::Str(Cow::Borrowed(value)))
+    Ok(CssInput::Str(Cow::Borrowed(value)))
   }
 
   fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
   where
     E: de::Error,
   {
-    Ok(RawCssInput::Str(Cow::Owned(value.to_owned())))
+    Ok(CssInput::Str(Cow::Owned(value.to_owned())))
   }
 
   fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
   where
     E: de::Error,
   {
-    Ok(RawCssInput::Str(Cow::Owned(value)))
+    Ok(CssInput::Str(Cow::Owned(value)))
   }
 
   fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
   where
     E: de::Error,
   {
-    Ok(RawCssInput::Number(RawCssNumber::Signed(value)))
+    Ok(CssInput::Number(CssNumber::Signed(value)))
   }
 
   fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
   where
     E: de::Error,
   {
-    Ok(RawCssInput::Number(RawCssNumber::Unsigned(value)))
+    Ok(CssInput::Number(CssNumber::Unsigned(value)))
   }
 
   fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
   where
     E: de::Error,
   {
-    Ok(RawCssInput::Number(RawCssNumber::Float(value)))
+    Ok(CssInput::Number(CssNumber::Float(value)))
   }
 
   fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
   where
     E: de::Error,
   {
-    Ok(RawCssInput::Unexpected(RawCssUnexpected::Bool(value)))
+    Ok(CssInput::Unexpected(CssUnexpected::Bool(value)))
   }
 
   fn visit_char<E>(self, value: char) -> Result<Self::Value, E>
   where
     E: de::Error,
   {
-    Ok(RawCssInput::Unexpected(RawCssUnexpected::Char(value)))
+    Ok(CssInput::Unexpected(CssUnexpected::Char(value)))
   }
 
   fn visit_bytes<E>(self, _value: &[u8]) -> Result<Self::Value, E>
   where
     E: de::Error,
   {
-    Ok(RawCssInput::Unexpected(RawCssUnexpected::Bytes))
+    Ok(CssInput::Unexpected(CssUnexpected::Bytes))
   }
 
   fn visit_byte_buf<E>(self, _value: Vec<u8>) -> Result<Self::Value, E>
   where
     E: de::Error,
   {
-    Ok(RawCssInput::Unexpected(RawCssUnexpected::Bytes))
+    Ok(CssInput::Unexpected(CssUnexpected::Bytes))
   }
 
   fn visit_unit<E>(self) -> Result<Self::Value, E>
   where
     E: de::Error,
   {
-    Ok(RawCssInput::Unexpected(RawCssUnexpected::Unit))
+    Ok(CssInput::Unexpected(CssUnexpected::Unit))
   }
 
   fn visit_none<E>(self) -> Result<Self::Value, E>
   where
     E: de::Error,
   {
-    Ok(RawCssInput::Unexpected(RawCssUnexpected::Other("null")))
+    Ok(CssInput::Unexpected(CssUnexpected::Other("null")))
   }
 
   fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
@@ -185,7 +195,7 @@ impl<'de> Visitor<'de> for RawCssInputVisitor {
     A: SeqAccess<'de>,
   {
     Self::drain_seq(seq)?;
-    Ok(RawCssInput::Unexpected(RawCssUnexpected::Seq))
+    Ok(CssInput::Unexpected(CssUnexpected::Seq))
   }
 
   fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
@@ -193,20 +203,20 @@ impl<'de> Visitor<'de> for RawCssInputVisitor {
     A: MapAccess<'de>,
   {
     Self::drain_map(map)?;
-    Ok(RawCssInput::Unexpected(RawCssUnexpected::Map))
+    Ok(CssInput::Unexpected(CssUnexpected::Map))
   }
 }
 
-pub(super) struct RawCssValueSeed;
+pub(super) struct CssValueSeed;
 
-impl<'de> DeserializeSeed<'de> for RawCssValueSeed {
-  type Value = RawCssInput<'de>;
+impl<'de> DeserializeSeed<'de> for CssValueSeed {
+  type Value = CssInput<'de>;
 
   fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
   where
     D: Deserializer<'de>,
   {
-    deserializer.deserialize_any(RawCssInputVisitor)
+    deserializer.deserialize_any(CssInputVisitor)
   }
 }
 
