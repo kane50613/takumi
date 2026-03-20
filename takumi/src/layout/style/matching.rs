@@ -10,6 +10,7 @@ use selectors::{
   },
   parser::AncestorHashes,
 };
+use smallvec::SmallVec;
 
 use crate::layout::{
   Viewport,
@@ -341,9 +342,9 @@ impl<'a> Element for ArenaElement<'a> {
 }
 
 #[derive(Debug, Default, Clone)]
-pub(crate) struct MatchedDeclarations {
-  pub(crate) normal: StyleDeclarationBlock,
-  pub(crate) important: StyleDeclarationBlock,
+pub(crate) struct MatchedDeclarationsView<'a> {
+  pub(crate) normal: SmallVec<[&'a StyleDeclarationBlock; 4]>,
+  pub(crate) important: SmallVec<[&'a StyleDeclarationBlock; 4]>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -355,15 +356,15 @@ struct MatchedRule<'a> {
   declarations: &'a StyleDeclarationBlock,
 }
 
-pub(crate) fn match_stylesheets(
+pub(crate) fn match_stylesheets_view<'a>(
   root: &Node,
-  stylesheet: &StyleSheet,
+  stylesheet: &'a StyleSheet,
   viewport: Viewport,
-) -> Vec<MatchedDeclarations> {
+) -> Vec<MatchedDeclarationsView<'a>> {
   let arena = StyleArena::new(root);
-  let mut per_node = vec![MatchedDeclarations::default(); arena.nodes.len()];
+  let mut per_node = vec![MatchedDeclarationsView::default(); arena.nodes.len()];
 
-  let mut matched_rules: Vec<Vec<MatchedRule<'_>>> = vec![Vec::new(); arena.nodes.len()];
+  let mut matched_rules: Vec<Vec<MatchedRule<'a>>> = vec![Vec::new(); arena.nodes.len()];
   let mut ancestor_bloom_filters = vec![BloomFilter::new(); arena.nodes.len()];
   let mut selector_ancestor_hashes_cache: HashMap<usize, AncestorHashes> = HashMap::new();
   let flattened_rules: Vec<&CssRule> = stylesheet
@@ -401,7 +402,7 @@ pub(crate) fn match_stylesheets(
       MatchingForInvalidation::No,
     );
 
-    for (source_order, rule) in flattened_rules.iter().copied().enumerate() {
+    for (source_order, &rule) in flattened_rules.iter().enumerate() {
       let mut best_specificity: Option<u32> = None;
       for selector in rule.selectors.slice() {
         let selector_key = selector as *const _ as usize;
@@ -458,9 +459,9 @@ pub(crate) fn match_stylesheets(
 
     for rule in rules {
       if rule.important {
-        matched.important.append(rule.declarations.clone());
+        matched.important.push(rule.declarations);
       } else {
-        matched.normal.append(rule.declarations.clone());
+        matched.normal.push(rule.declarations);
       }
     }
   }
@@ -472,7 +473,7 @@ pub(crate) fn match_stylesheets(
 mod tests {
   use std::collections::BTreeMap;
 
-  use super::match_stylesheets;
+  use super::{MatchedDeclarationsView, match_stylesheets_view};
   use crate::layout::style::StyleSheet;
   use crate::layout::{
     Viewport,
@@ -484,24 +485,32 @@ mod tests {
     Node::container([]).with_class_name(class_name)
   }
 
-  fn computed_width_from_matches(matches: &super::MatchedDeclarations) -> Length {
+  fn computed_width_from_matches(matches: &MatchedDeclarationsView<'_>) -> Length {
     let mut style = Style::default();
-    for declaration in matches.normal.iter() {
-      declaration.merge_into_ref(&mut style);
+    for &declarations in &matches.normal {
+      for declaration in declarations.iter() {
+        declaration.merge_into_ref(&mut style);
+      }
     }
-    for declaration in matches.important.iter() {
-      declaration.merge_into_ref(&mut style);
+    for &declarations in &matches.important {
+      for declaration in declarations.iter() {
+        declaration.merge_into_ref(&mut style);
+      }
     }
     style.inherit(&ComputedStyle::default()).width
   }
 
-  fn computed_height_from_matches(matches: &super::MatchedDeclarations) -> Length {
+  fn computed_height_from_matches(matches: &MatchedDeclarationsView<'_>) -> Length {
     let mut style = Style::default();
-    for declaration in matches.normal.iter() {
-      declaration.merge_into_ref(&mut style);
+    for &declarations in &matches.normal {
+      for declaration in declarations.iter() {
+        declaration.merge_into_ref(&mut style);
+      }
     }
-    for declaration in matches.important.iter() {
-      declaration.merge_into_ref(&mut style);
+    for &declarations in &matches.important {
+      for declaration in declarations.iter() {
+        declaration.merge_into_ref(&mut style);
+      }
     }
     style.inherit(&ComputedStyle::default()).height
   }
@@ -546,7 +555,7 @@ mod tests {
       "#,
     );
 
-    let matched = match_stylesheets(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(computed_width_from_matches(&matched[0]), Length::Px(10.0));
   }
@@ -565,7 +574,7 @@ mod tests {
       "#,
     );
 
-    let matched = match_stylesheets(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 2);
     assert_eq!(computed_width_from_matches(&matched[1]), Length::Px(10.0));
   }
@@ -586,7 +595,7 @@ mod tests {
       "#,
     );
 
-    let matched = match_stylesheets(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(computed_width_from_matches(&matched[0]), Length::Px(20.0));
   }
@@ -596,7 +605,7 @@ mod tests {
     let root = container_with_class("card");
     let stylesheet = parse_stylesheet(".card { width: 10px; } .card { width: 20px; }");
 
-    let matched = match_stylesheets(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(computed_width_from_matches(&matched[0]), Length::Px(20.0));
   }
@@ -618,7 +627,7 @@ mod tests {
       "#,
     ]);
 
-    let matched = match_stylesheets(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(computed_width_from_matches(&matched[0]), Length::Px(10.0));
   }
@@ -634,7 +643,7 @@ mod tests {
       "#,
     );
 
-    let matched = match_stylesheets(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(computed_width_from_matches(&matched[0]), Length::Px(10.0));
   }
@@ -656,7 +665,7 @@ mod tests {
       "#,
     );
 
-    let matched = match_stylesheets(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 5);
     assert_eq!(computed_width_from_matches(&matched[2]), Length::Px(10.0));
     assert_eq!(computed_height_from_matches(&matched[2]), Length::Px(30.0));
@@ -685,7 +694,7 @@ mod tests {
       "#,
     );
 
-    let matched = match_stylesheets(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 2);
     assert_eq!(computed_width_from_matches(&matched[1]), Length::Px(30.0));
     assert_eq!(computed_height_from_matches(&matched[1]), Length::Px(40.0));
@@ -695,15 +704,15 @@ mod tests {
   fn test_repro_mixed_importance_bug() {
     let stylesheet = parse_stylesheet(".test { width: 10px; height: 20px !important; }");
     let root = Node::container([]).with_class_name("test");
-    let matched = match_stylesheets(&root, &stylesheet, Viewport::default());
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
 
     // Matched normal: should have width: 10px.
     // Matched important: should have height: 20px.
 
-    assert_eq!(matched[0].normal.declarations.len(), 1);
-    assert!(matched[0].normal.importance.is_empty());
+    assert_eq!(matched[0].normal[0].declarations.len(), 1);
+    assert!(matched[0].normal[0].importance.is_empty());
 
-    assert_eq!(matched[0].important.declarations.len(), 1);
-    assert!(!matched[0].important.importance.is_empty());
+    assert_eq!(matched[0].important[0].declarations.len(), 1);
+    assert!(!matched[0].important[0].importance.is_empty());
   }
 }

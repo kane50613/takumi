@@ -21,7 +21,7 @@ use crate::{
     style::{
       Affine, BlendMode, Color, ComputedStyle, Display, Filters, Isolation, PercentageNumber,
       Style as NodeStyle, StyleSheet, apply_stylesheet_animations,
-      matching::{MatchedDeclarations, match_stylesheets},
+      matching::{MatchedDeclarationsView, match_stylesheets_view},
     },
   },
   rendering::{
@@ -89,7 +89,7 @@ pub(crate) struct RenderNode<'g> {
 
 fn build_style_layers(
   node_layers: NodeStyleLayers,
-  matched_declarations: &MatchedDeclarations,
+  matched_declarations: &MatchedDeclarationsView<'_>,
   viewport: Viewport,
 ) -> NodeStyle {
   let mut style = NodeStyle::default();
@@ -98,8 +98,10 @@ fn build_style_layers(
     style.merge_from(preset);
   }
 
-  for declaration in matched_declarations.normal.iter() {
-    declaration.merge_into_ref(&mut style);
+  for &declarations in &matched_declarations.normal {
+    for declaration in declarations.iter() {
+      declaration.merge_into_ref(&mut style);
+    }
   }
 
   if let Some(author_tw) = node_layers.author_tw {
@@ -110,8 +112,10 @@ fn build_style_layers(
     style.merge_from(inline);
   }
 
-  for declaration in matched_declarations.important.iter() {
-    declaration.merge_into_ref(&mut style);
+  for &declarations in &matched_declarations.important {
+    for declaration in declarations.iter() {
+      declaration.merge_into_ref(&mut style);
+    }
   }
 
   style
@@ -172,7 +176,7 @@ fn registered_custom_property_parent_style(
 fn build_inherited_style(
   parent_style: &ComputedStyle,
   node_layers: NodeStyleLayers,
-  matched_declarations: MatchedDeclarations,
+  matched_declarations: MatchedDeclarationsView<'_>,
   viewport: Viewport,
 ) -> ComputedStyle {
   let style = {
@@ -182,8 +186,10 @@ fn build_inherited_style(
       style.merge_from(preset);
     }
 
-    for declaration in matched_declarations.normal.declarations {
-      style.push(declaration, false);
+    for &declarations in &matched_declarations.normal {
+      for declaration in declarations.iter() {
+        declaration.merge_into_ref(&mut style);
+      }
     }
 
     if let Some(author_tw) = node_layers.author_tw {
@@ -194,8 +200,10 @@ fn build_inherited_style(
       style.merge_from(inline);
     }
 
-    for declaration in matched_declarations.important.declarations {
-      style.push(declaration, false);
+    for &declarations in &matched_declarations.important {
+      for declaration in declarations.iter() {
+        declaration.merge_into_ref(&mut style);
+      }
     }
 
     style
@@ -840,7 +848,7 @@ impl<'g> RenderNode<'g> {
   }
 
   pub fn from_node(parent_context: &RenderContext<'g>, node: Node) -> Self {
-    let matched_styles = match_stylesheets(
+    let matched_styles = match_stylesheets_view(
       &node,
       &parent_context.stylesheet,
       parent_context.sizing.viewport,
@@ -857,7 +865,7 @@ impl<'g> RenderNode<'g> {
   fn from_node_iterative(
     parent_context: &RenderContext<'g>,
     root: Node,
-    matched_declarations: &[MatchedDeclarations],
+    matched_declarations: &[MatchedDeclarationsView<'_>],
   ) -> Self {
     struct PendingRenderNode<'g> {
       context: RenderContext<'g>,
@@ -903,9 +911,9 @@ impl<'g> RenderNode<'g> {
       parent_context: &RenderContext<'g>,
       node: &mut Node,
       node_index: usize,
-      matched_declarations: &[MatchedDeclarations],
+      matched_declarations: &[MatchedDeclarationsView<'_>],
     ) -> (ComputedStyle, Sizing, Color) {
-      let default_matched = MatchedDeclarations::default();
+      let default_matched = MatchedDeclarationsView::default();
       let matched = matched_declarations
         .get(node_index)
         .unwrap_or(&default_matched);
@@ -934,8 +942,10 @@ impl<'g> RenderNode<'g> {
       );
       style = apply_stylesheet_animations(style, &child_context);
 
-      for declaration in matched.important.iter() {
-        declaration.apply_to_computed(&mut style);
+      for &declarations in &matched.important {
+        for declaration in declarations.iter() {
+          declaration.apply_to_computed(&mut style);
+        }
       }
 
       let font_size = style.font_size.to_px(&child_sizing, child_sizing.font_size);
@@ -951,7 +961,7 @@ impl<'g> RenderNode<'g> {
     fn build_pending_node<'g>(
       parent_context: &RenderContext<'g>,
       mut node: Node,
-      matched_declarations: &[MatchedDeclarations],
+      matched_declarations: &[MatchedDeclarationsView<'_>],
       preorder_cursor: &mut usize,
     ) -> PendingRenderNode<'g> {
       let node_index = next_preorder_index(preorder_cursor);
@@ -1236,7 +1246,7 @@ mod tests {
   use super::registered_custom_property_parent_style;
   use crate::layout::style::{
     LonghandId, PropertyRule, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
-    matching::MatchedDeclarations,
+    matching::MatchedDeclarationsView,
   };
   use crate::layout::{
     Viewport,
@@ -1261,15 +1271,17 @@ mod tests {
       ..Default::default()
     };
 
-    let matched = MatchedDeclarations {
-      normal: StyleDeclarationBlock {
-        declarations: smallvec![StyleDeclaration::width(Length::Px(20.0))],
-        importance: Default::default(),
-      },
-      important: StyleDeclarationBlock {
-        declarations: smallvec![StyleDeclaration::width(Length::Px(30.0))],
-        importance: [LonghandId::Width].into(),
-      },
+    let normal = StyleDeclarationBlock {
+      declarations: smallvec![StyleDeclaration::width(Length::Px(20.0))],
+      importance: Default::default(),
+    };
+    let important = StyleDeclarationBlock {
+      declarations: smallvec![StyleDeclaration::width(Length::Px(30.0))],
+      importance: [LonghandId::Width].into(),
+    };
+    let matched = MatchedDeclarationsView {
+      normal: smallvec![&normal],
+      important: smallvec![&important],
     };
 
     let resolved = build_inherited_style(&parent, layers, matched, Viewport::new((1200, 630)));
