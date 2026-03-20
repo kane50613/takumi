@@ -13,7 +13,7 @@ pub use properties::*;
 pub use selector::*;
 use serde::{
   Deserialize,
-  de::{self, DeserializeSeed, Deserializer, Expected, IgnoredAny, MapAccess, SeqAccess, Visitor},
+  de::{self, DeserializeSeed, Deserializer, IgnoredAny, MapAccess, SeqAccess, Visitor},
 };
 pub use stylesheets::*;
 
@@ -217,56 +217,5 @@ impl<'de> DeserializeSeed<'de> for CssValueSeed {
     D: Deserializer<'de>,
   {
     deserializer.deserialize_any(CssInputVisitor)
-  }
-}
-
-struct CssExpectedMessage {
-  #[cfg(feature = "detailed_css_error")]
-  message: Cow<'static, str>,
-}
-
-impl Expected for CssExpectedMessage {
-  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    #[cfg(feature = "detailed_css_error")]
-    {
-      write!(
-        f,
-        "{}; also accepts 'initial', 'unset' or 'inherit'.",
-        self.message
-      )
-    }
-
-    #[cfg(not(feature = "detailed_css_error"))]
-    {
-      write!(
-        f,
-        "CSS value, compile with --features detailed_css_error for more details"
-      )
-    }
-  }
-}
-
-impl std::fmt::Display for CssExpectedMessage {
-  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    Expected::fmt(self, f)
-  }
-}
-
-#[cold]
-#[inline(never)]
-fn css_expected_message<T>() -> CssExpectedMessage
-where
-  T: for<'i> FromCss<'i>,
-{
-  #[cfg(feature = "detailed_css_error")]
-  {
-    CssExpectedMessage {
-      message: T::expect_message(),
-    }
-  }
-
-  #[cfg(not(feature = "detailed_css_error"))]
-  {
-    CssExpectedMessage {}
   }
 }

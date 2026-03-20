@@ -190,7 +190,7 @@ macro_rules! define_style {
                 }
 
                 Ok(smallvec![StyleDeclaration::[<$longhand:camel>](
-                  parse_css_input_value::<$longhand_ty>(css_input)?,
+                  parse_css_input_value(css_input)?,
                 )])
               }
             )*
@@ -675,7 +675,6 @@ macro_rules! define_style {
           }
         }
 
-        #[inline(never)]
         pub(crate) fn apply_with_parent(
           self,
           style: &mut ComputedStyle,
@@ -705,7 +704,6 @@ macro_rules! define_style {
           }
         }
 
-        #[inline(never)]
         pub(crate) fn apply_to_computed(&self, style: &mut ComputedStyle) {
           match self {
             Self::CssWideKeyword(property, keyword) => match keyword {

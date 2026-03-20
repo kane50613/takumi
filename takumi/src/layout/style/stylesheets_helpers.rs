@@ -2,14 +2,9 @@ use std::{borrow::Cow, fmt::Write};
 
 use cssparser::{ParseError, ParseErrorKind, Parser, ParserInput, SourceLocation, Token};
 
-use crate::layout::style::{
-  CssExpectedMessage, CssInput, CssNumber, CssUnexpected, CssWideKeyword, FromCss,
-  css_expected_message,
-};
+use crate::layout::style::{CssInput, CssNumber, CssUnexpected, CssWideKeyword, FromCss};
 
 use super::{LonghandId, ParsedDeclarations, PropertyId, ShorthandId};
-
-type ExpectedMessageFn = fn() -> CssExpectedMessage;
 
 #[derive(Debug, Clone)]
 pub(super) struct CssInputParseFailure {
@@ -20,16 +15,16 @@ pub(super) struct CssInputParseFailure {
 pub(super) enum CssInputParseError<'de> {
   Value {
     value: Cow<'de, str>,
-    expected_message: ExpectedMessageFn,
+    expected: Cow<'static, str>,
     failure: Option<CssInputParseFailure>,
   },
   NumberType {
     number: CssNumber,
-    expected_message: ExpectedMessageFn,
+    expected: Cow<'static, str>,
   },
   UnexpectedType {
     unexpected: CssUnexpected,
-    expected_message: ExpectedMessageFn,
+    expected: Cow<'static, str>,
   },
 }
 
@@ -81,29 +76,23 @@ impl CssInputParseError<'_> {
       },
     };
 
-    let expected_description = match self {
-      Self::Value {
-        expected_message, ..
-      }
-      | Self::NumberType {
-        expected_message, ..
-      }
-      | Self::UnexpectedType {
-        expected_message, ..
-      } => expected_message().to_string(),
+    let expected = match self {
+      Self::Value { expected, .. }
+      | Self::NumberType { expected, .. }
+      | Self::UnexpectedType { expected, .. } => expected,
     };
 
-    let _ = write!(message, ": {}; {}", input_description, expected_description);
+    #[cfg(feature = "detailed_css_error")]
+    let _ = write!(
+      message,
+      ": {}; {}; also accepts 'initial', 'unset' or 'inherit'.",
+      input_description, expected
+    );
+    #[cfg(not(feature = "detailed_css_error"))]
+    let _ = write!(message, ": {}; {}", input_description, expected);
 
     message
   }
-}
-
-fn expected_message<T>() -> CssExpectedMessage
-where
-  T: for<'i> FromCss<'i>,
-{
-  css_expected_message::<T>()
 }
 
 pub(super) fn parse_css_wide_keyword(css_input: &CssInput<'_>) -> Option<CssWideKeyword> {
@@ -123,38 +112,39 @@ pub(super) fn parse_css_input_value<'de, T>(
 where
   T: for<'i> FromCss<'i>,
 {
+  #[cfg(feature = "detailed_css_error")]
+  let expected = T::expect_message();
+  #[cfg(not(feature = "detailed_css_error"))]
+  let expected =
+    Cow::Borrowed("CSS value, compile with --features detailed_css_error for more details");
+
   match css_input {
     CssInput::Str(value) => {
       let source = value.as_ref();
-      let failure = {
-        let parsed = T::from_str(source);
-        match parsed {
-          Ok(parsed_value) => return Ok(parsed_value),
-          Err(error) => css_input_parse_failure(source, error),
-        }
+      let failure = match T::from_str(source) {
+        Ok(parsed_value) => return Ok(parsed_value),
+        Err(error) => css_input_parse_failure(source, error),
       };
 
       Err(CssInputParseError::Value {
         value,
-        expected_message: expected_message::<T>,
+        expected,
         failure: Some(failure),
       })
     }
     CssInput::Number(number) => {
       let source = number.to_string();
 
-      T::from_str(&source).map_err(|_| CssInputParseError::NumberType {
-        number,
-        expected_message: expected_message::<T>,
-      })
+      T::from_str(&source).map_err(|_| CssInputParseError::NumberType { number, expected })
     }
     CssInput::Unexpected(unexpected) => Err(CssInputParseError::UnexpectedType {
       unexpected,
-      expected_message: expected_message::<T>,
+      expected,
     }),
   }
 }
 
+#[cold]
 fn css_input_parse_failure(
   source: &str,
   error: ParseError<'_, Cow<'_, str>>,

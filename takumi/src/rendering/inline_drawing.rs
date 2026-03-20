@@ -697,46 +697,53 @@ fn draw_glyph_run_text_shadow(
   Ok(())
 }
 
-fn glyph_runs(
-  inline_layout: &InlineLayout,
-) -> impl Iterator<Item = GlyphRun<'_, InlineBrush>> + '_ {
-  inline_layout.lines().flat_map(|line| {
-    line.items().filter_map(|item| {
+fn collect_glyph_runs(inline_layout: &InlineLayout) -> Vec<GlyphRun<'_, InlineBrush>> {
+  let mut glyph_runs = Vec::new();
+
+  for line in inline_layout.lines() {
+    for item in line.items() {
       if let PositionedLayoutItem::GlyphRun(glyph_run) = item {
-        Some(glyph_run)
-      } else {
-        None
+        glyph_runs.push(glyph_run);
       }
-    })
-  })
+    }
+  }
+
+  glyph_runs
 }
 
 fn glyph_runs_with_resolved<'a>(
-  inline_layout: &'a InlineLayout,
+  glyph_runs: &'a [GlyphRun<'a, InlineBrush>],
   resolved_glyph_runs: &'a [HashMap<u32, ResolvedGlyph>],
-) -> impl Iterator<Item = (GlyphRun<'a, InlineBrush>, &'a HashMap<u32, ResolvedGlyph>)> + 'a {
-  glyph_runs(inline_layout).zip(resolved_glyph_runs.iter())
+) -> impl Iterator<
+  Item = (
+    &'a GlyphRun<'a, InlineBrush>,
+    &'a HashMap<u32, ResolvedGlyph>,
+  ),
+> + 'a {
+  glyph_runs.iter().zip(resolved_glyph_runs.iter())
 }
 
 fn resolve_inline_layout_glyphs(
   context: &RenderContext,
-  inline_layout: &InlineLayout,
+  glyph_runs: &[GlyphRun<'_, InlineBrush>],
 ) -> Result<Vec<HashMap<u32, ResolvedGlyph>>> {
-  glyph_runs(inline_layout)
-    .map(|glyph_run| {
-      let run = glyph_run.run();
-      let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
-      let font = FontRef::from_index(run.font().data.as_ref(), run.font().index as usize)
-        .ok_or(FontError::InvalidFontIndex)?;
+  let mut resolved_glyph_runs = Vec::with_capacity(glyph_runs.len());
 
-      Ok(
-        context
-          .global
-          .font_context
-          .resolve_glyphs(&glyph_run, font, glyph_ids),
-      )
-    })
-    .collect()
+  for glyph_run in glyph_runs {
+    let run = glyph_run.run();
+    let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
+    let font = FontRef::from_index(run.font().data.as_ref(), run.font().index as usize)
+      .ok_or(FontError::InvalidFontIndex)?;
+
+    resolved_glyph_runs.push(
+      context
+        .global
+        .font_context
+        .resolve_glyphs(glyph_run, font, glyph_ids),
+    );
+  }
+
+  Ok(resolved_glyph_runs)
 }
 
 pub(crate) fn get_parent_x_height(
@@ -835,7 +842,8 @@ pub(crate) fn draw_inline_layout(
   font_style: &SizedFontStyle,
   spans: &[ProcessedInlineSpan<'_, '_>],
 ) -> Result<Vec<PositionedInlineBox>> {
-  let resolved_glyph_runs = resolve_inline_layout_glyphs(context, &inline_layout)?;
+  let glyph_runs = collect_glyph_runs(&inline_layout);
+  let resolved_glyph_runs = resolve_inline_layout_glyphs(context, &glyph_runs)?;
   let clip_image = if context.style.background_clip == BackgroundClip::Text {
     let layers = collect_background_layers(context, layout.size, &mut canvas.buffer_pool)?;
 
@@ -856,11 +864,10 @@ pub(crate) fn draw_inline_layout(
   let mut inline_outline_rects = Vec::new();
 
   // Reference: https://www.w3.org/TR/css-text-decor-3/#painting-order
-  for (glyph_run, resolved_glyphs) in glyph_runs_with_resolved(&inline_layout, &resolved_glyph_runs)
-  {
+  for (glyph_run, resolved_glyphs) in glyph_runs_with_resolved(&glyph_runs, &resolved_glyph_runs) {
     draw_glyph_run_text_shadow(
       font_style,
-      &glyph_run,
+      glyph_run,
       resolved_glyphs,
       canvas,
       layout,
@@ -868,13 +875,12 @@ pub(crate) fn draw_inline_layout(
     )?;
   }
 
-  for (glyph_run, resolved_glyphs) in glyph_runs_with_resolved(&inline_layout, &resolved_glyph_runs)
-  {
-    draw_glyph_run_under_overline(&glyph_run, resolved_glyphs, canvas, layout, context)?;
+  for (glyph_run, resolved_glyphs) in glyph_runs_with_resolved(&glyph_runs, &resolved_glyph_runs) {
+    draw_glyph_run_under_overline(glyph_run, resolved_glyphs, canvas, layout, context)?;
   }
 
   let parent_x_height = get_parent_x_height(context, font_style);
-  let mut glyph_runs_with_resolved = glyph_runs_with_resolved(&inline_layout, &resolved_glyph_runs);
+  let mut glyph_runs_with_resolved = glyph_runs_with_resolved(&glyph_runs, &resolved_glyph_runs);
   for (line_index, line) in inline_layout.lines().enumerate() {
     let line_metrics = line.metrics();
 
@@ -922,8 +928,8 @@ pub(crate) fn draw_inline_layout(
 
   draw_merged_outline_rects(inline_outline_rects, canvas, spans, context.transform);
 
-  for glyph_run in glyph_runs(&inline_layout) {
-    draw_glyph_run_line_through(&glyph_run, canvas, layout, context)?;
+  for glyph_run in &glyph_runs {
+    draw_glyph_run_line_through(glyph_run, canvas, layout, context)?;
   }
 
   if let Some(BackgroundTile::Image(image)) = clip_image {
