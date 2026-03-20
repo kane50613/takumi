@@ -1,16 +1,17 @@
-use fast_image_resize::ResizeOptions;
-use fast_image_resize::{PixelType, Resizer, images::Image};
-use image::RgbaImage;
 use taffy::{Layout, Point, Size};
 
 use crate::layout::style::BlendMode;
-use crate::rendering::CowImage;
 use crate::{
   Result,
-  layout::style::{Affine, ImageScalingAlgorithm, Length, ObjectFit},
-  rendering::{BorderProperties, Canvas, RenderContext},
-  resources::image::{ImageResourceError, ImageSource},
+  layout::style::{Affine, Length, ObjectFit},
+  rendering::{BorderProperties, Canvas, RenderContext, overlay_sampled_image},
+  resources::image::{ImageSource, RenderedImage},
 };
+
+pub(crate) struct PreparedImage<'a> {
+  image: RenderedImage<'a>,
+  logical_to_source: Affine,
+}
 
 /// Calculate offset for object-position within available space.
 /// Position values are resolved to px relative to content_box, so we need to
@@ -37,8 +38,18 @@ pub fn process_image_for_object_fit<'i>(
   image: &'i ImageSource,
   context: &RenderContext,
   content_box: Size<f32>,
-) -> Result<(CowImage<'i>, Point<f32>)> {
+) -> Result<(PreparedImage<'i>, Point<f32>)> {
   let (image_width, image_height) = image.size(&context.sizing);
+  let (source_width, source_height) = match image {
+    ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
+    #[cfg(feature = "svg")]
+    ImageSource::Svg { tree, .. } => (tree.size().width(), tree.size().height()),
+  };
+  let source_to_intrinsic = if image_width == 0.0 || image_height == 0.0 {
+    Affine::IDENTITY
+  } else {
+    Affine::scale(source_width / image_width, source_height / image_height)
+  };
 
   let object_position_x =
     Length::from(context.style.object_position.0.x).to_px(&context.sizing, content_box.width);
@@ -47,14 +58,22 @@ pub fn process_image_for_object_fit<'i>(
 
   match context.style.object_fit {
     ObjectFit::Fill => Ok((
-      image
-        .render_to_rgba_image(
+      PreparedImage {
+        image: image.render_for_layout(
           content_box.width as u32,
           content_box.height as u32,
           context.style.image_rendering,
           context.current_color,
-        )?
-        .into(),
+        )?,
+        logical_to_source: if content_box.width == 0.0 || content_box.height == 0.0 {
+          Affine::IDENTITY
+        } else {
+          Affine::scale(
+            source_width / content_box.width,
+            source_height / content_box.height,
+          )
+        },
+      },
       Point::zero(),
     )),
     ObjectFit::Contain => {
@@ -74,14 +93,19 @@ pub fn process_image_for_object_fit<'i>(
         calculate_object_position_offset(available_y, content_box.height, object_position_y);
 
       Ok((
-        image
-          .render_to_rgba_image(
+        PreparedImage {
+          image: image.render_for_layout(
             new_width as u32,
             new_height as u32,
             context.style.image_rendering,
             context.current_color,
-          )?
-          .into(),
+          )?,
+          logical_to_source: if new_width == 0.0 || new_height == 0.0 {
+            Affine::IDENTITY
+          } else {
+            Affine::scale(source_width / new_width, source_height / new_height)
+          },
+        },
         Point {
           x: offset_x,
           y: offset_y,
@@ -96,13 +120,6 @@ pub fn process_image_for_object_fit<'i>(
       let new_width = image_width * scale;
       let new_height = image_height * scale;
 
-      let resized = image.render_to_rgba_image(
-        new_width as u32,
-        new_height as u32,
-        context.style.image_rendering,
-        context.current_color,
-      )?;
-
       let available_crop_x = new_width - content_box.width;
       let available_crop_y = new_height - content_box.height;
 
@@ -111,15 +128,23 @@ pub fn process_image_for_object_fit<'i>(
       let crop_y =
         calculate_object_position_offset(available_crop_y, content_box.height, object_position_y);
 
-      let cropped = CowImage::crop(
-        resized,
-        crop_x as u32,
-        crop_y as u32,
-        content_box.width as u32,
-        content_box.height as u32,
-      );
-
-      Ok((cropped, Point::zero()))
+      Ok((
+        PreparedImage {
+          image: image.render_for_layout(
+            content_box.width as u32,
+            content_box.height as u32,
+            context.style.image_rendering,
+            context.current_color,
+          )?,
+          logical_to_source: if new_width == 0.0 || new_height == 0.0 {
+            Affine::IDENTITY
+          } else {
+            Affine::scale(source_width / new_width, source_height / new_height)
+              * Affine::translation(crop_x, crop_y)
+          },
+        },
+        Point::zero(),
+      ))
     }
     ObjectFit::ScaleDown => {
       let scale_x = content_box.width / image_width;
@@ -130,14 +155,14 @@ pub fn process_image_for_object_fit<'i>(
       let new_height = image_height * scale;
 
       let processed_image = if scale < 1.0 {
-        image.render_to_rgba_image(
+        image.render_for_layout(
           new_width as u32,
           new_height as u32,
           context.style.image_rendering,
           context.current_color,
         )?
       } else {
-        image.render_to_rgba_image(
+        image.render_for_layout(
           image_width as u32,
           image_height as u32,
           context.style.image_rendering,
@@ -154,7 +179,14 @@ pub fn process_image_for_object_fit<'i>(
         calculate_object_position_offset(available_y, content_box.height, object_position_y);
 
       Ok((
-        processed_image.into(),
+        PreparedImage {
+          image: processed_image,
+          logical_to_source: if scale < 1.0 && new_width > 0.0 && new_height > 0.0 {
+            Affine::scale(source_width / new_width, source_height / new_height)
+          } else {
+            source_to_intrinsic
+          },
+        },
         Point {
           x: offset_x,
           y: offset_y,
@@ -173,14 +205,15 @@ pub fn process_image_for_object_fit<'i>(
           calculate_object_position_offset(available_y, content_box.height, object_position_y);
 
         return Ok((
-          image
-            .render_to_rgba_image(
+          PreparedImage {
+            image: image.render_for_layout(
               image_width as u32,
               image_height as u32,
               context.style.image_rendering,
               context.current_color,
-            )?
-            .into(),
+            )?,
+            logical_to_source: source_to_intrinsic,
+          },
           Point {
             x: offset_x,
             y: offset_y,
@@ -199,21 +232,6 @@ pub fn process_image_for_object_fit<'i>(
       let crop_width = content_box.width.min(image_width);
       let crop_height = content_box.height.min(image_height);
 
-      let source_image = image.render_to_rgba_image(
-        image_width as u32,
-        image_height as u32,
-        context.style.image_rendering,
-        context.current_color,
-      )?;
-
-      let cropped = CowImage::crop(
-        source_image,
-        crop_x as u32,
-        crop_y as u32,
-        crop_width as u32,
-        crop_height as u32,
-      );
-
       let offset_x = calculate_object_position_offset(
         (content_box.width - crop_width).max(0.0),
         content_box.width,
@@ -226,7 +244,15 @@ pub fn process_image_for_object_fit<'i>(
       );
 
       Ok((
-        cropped,
+        PreparedImage {
+          image: image.render_for_layout(
+            crop_width as u32,
+            crop_height as u32,
+            context.style.image_rendering,
+            context.current_color,
+          )?,
+          logical_to_source: source_to_intrinsic * Affine::translation(crop_x, crop_y),
+        },
         Point {
           x: offset_x,
           y: offset_y,
@@ -258,34 +284,36 @@ pub fn draw_image(
   let mut border = BorderProperties::from_context(context, layout.size, layout.border);
   border.inset_by_border_width();
 
-  canvas.overlay_image(
-    &image,
-    border,
-    transform_with_content_offset,
-    context.style.image_rendering,
-    // blend mode will be applied in main render function,
-    // therefore we should not apply it here to avoid double application
-    BlendMode::Normal,
-  );
+  match image.image {
+    RenderedImage::Rasterized(image) => canvas.overlay_image(
+      &image,
+      border,
+      transform_with_content_offset,
+      context.style.image_rendering,
+      // blend mode will be applied in main render function,
+      // therefore we should not apply it here to avoid double application
+      BlendMode::Normal,
+    ),
+    RenderedImage::Borrowed {
+      source,
+      width,
+      height,
+      algorithm: algo,
+    } => overlay_sampled_image(
+      &mut canvas.image,
+      source,
+      width,
+      height,
+      border,
+      transform_with_content_offset,
+      image.logical_to_source,
+      algo,
+      BlendMode::Normal,
+      &canvas.constrains,
+      &mut canvas.mask_memory,
+      &mut canvas.buffer_pool,
+    ),
+  }
 
   Ok(())
-}
-
-pub(crate) fn fast_resize(
-  image: &RgbaImage,
-  width: u32,
-  height: u32,
-  algorithm: ImageScalingAlgorithm,
-) -> std::result::Result<RgbaImage, ImageResourceError> {
-  let mut resizer = Resizer::new();
-  let mut dest = Image::new(width, height, PixelType::U8x4);
-
-  resizer.resize(
-    image,
-    &mut dest,
-    Some(&ResizeOptions::default().resize_alg(algorithm.into())),
-  )?;
-
-  RgbaImage::from_raw(dest.width(), dest.height(), dest.into_vec())
-    .ok_or(ImageResourceError::MismatchedBufferSize)
 }

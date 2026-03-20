@@ -1,4 +1,4 @@
-use std::iter::successors;
+use std::{iter::successors, sync::Arc};
 
 use image::{GenericImageView, Rgba, RgbaImage};
 use smallvec::{SmallVec, smallvec};
@@ -8,9 +8,10 @@ use crate::{
   Result,
   layout::{node::resolve_image, style::*},
   rendering::{
-    BorderProperties, BufferPool, MaskMemory, RenderContext, Sizing, overlay_gradient_tile,
-    overlay_image,
+    BorderProperties, BufferPool, MaskMemory, RenderContext, Sizing, interpolate_bilinear,
+    interpolate_nearest, overlay_gradient_tile, overlay_image,
   },
+  resources::image::ImageSource,
 };
 
 pub(crate) struct TileLayer {
@@ -156,6 +157,12 @@ pub(crate) enum BackgroundTile {
   Radial(RadialGradientTile),
   Conic(ConicGradientTile),
   Image(RgbaImage),
+  SampledBitmap {
+    source: Arc<ImageSource>,
+    width: u32,
+    height: u32,
+    algo: ImageScalingAlgorithm,
+  },
   Color(ColorTile),
 }
 
@@ -168,6 +175,7 @@ impl GenericImageView for BackgroundTile {
       Self::Radial(t) => t.dimensions(),
       Self::Conic(t) => t.dimensions(),
       Self::Image(t) => t.dimensions(),
+      Self::SampledBitmap { width, height, .. } => (*width, *height),
       Self::Color(t) => t.dimensions(),
     }
   }
@@ -178,6 +186,30 @@ impl GenericImageView for BackgroundTile {
       Self::Radial(t) => t.get_pixel(x, y),
       Self::Conic(t) => t.get_pixel(x, y),
       Self::Image(t) => *t.get_pixel(x, y),
+      Self::SampledBitmap {
+        source,
+        width,
+        height,
+        algo,
+      } => {
+        let ImageSource::Bitmap(bitmap) = source.as_ref() else {
+          return Rgba([0, 0, 0, 0]);
+        };
+
+        let logical_width = (*width).max(1);
+        let logical_height = (*height).max(1);
+        let source_width = bitmap.width().max(1);
+        let source_height = bitmap.height().max(1);
+
+        let mapped_x = (x as f32 + 0.5) * source_width as f32 / logical_width as f32;
+        let mapped_y = (y as f32 + 0.5) * source_height as f32 / logical_height as f32;
+
+        if matches!(algo, ImageScalingAlgorithm::Pixelated) {
+          interpolate_nearest(bitmap, mapped_x, mapped_y).unwrap_or(Rgba([0, 0, 0, 0]))
+        } else {
+          interpolate_bilinear(bitmap, mapped_x, mapped_y).unwrap_or(Rgba([0, 0, 0, 0]))
+        }
+      }
       Self::Color(t) => t.color,
     }
   }
@@ -319,16 +351,25 @@ pub(crate) fn render_tile(
     ))),
     BackgroundImage::Url(url) => {
       if let Ok(source) = resolve_image(url, context) {
-        Some(BackgroundTile::Image(
-          source
-            .render_to_rgba_image(
-              tile_w,
-              tile_h,
-              context.style.image_rendering,
-              context.current_color,
-            )?
-            .into_owned(),
-        ))
+        match source.as_ref() {
+          ImageSource::Bitmap(_) => Some(BackgroundTile::SampledBitmap {
+            source: source.clone(),
+            width: tile_w,
+            height: tile_h,
+            algo: context.style.image_rendering,
+          }),
+          #[cfg(feature = "svg")]
+          ImageSource::Svg { .. } => Some(BackgroundTile::Image(
+            source
+              .render_for_layout(
+                tile_w,
+                tile_h,
+                context.style.image_rendering,
+                context.current_color,
+              )?
+              .into_owned()?,
+          )),
+        }
       } else {
         None
       }

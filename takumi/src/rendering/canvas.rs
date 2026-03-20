@@ -3,7 +3,7 @@
 //! This module provides performance-optimized canvas operations including
 //! fast image blending and pixel manipulation operations.
 
-use std::{borrow::Cow, mem::replace};
+use std::mem::replace;
 
 use image::{
   GenericImageView, ImageError, Rgba, RgbaImage,
@@ -21,90 +21,6 @@ use crate::{
   },
   rendering::{BorderProperties, RenderContext, blend_pixel, create_mask, fast_div_255},
 };
-
-#[derive(Clone)]
-pub(crate) struct CowImage<'a> {
-  inner: Cow<'a, RgbaImage>,
-  crop_bounds: Option<(Point<u32>, Size<u32>)>,
-}
-
-impl GenericImageView for CowImage<'_> {
-  type Pixel = Rgba<u8>;
-
-  fn dimensions(&self) -> (u32, u32) {
-    if let Some((_, size)) = self.crop_bounds {
-      (size.width, size.height)
-    } else {
-      (self.inner.width(), self.inner.height())
-    }
-  }
-
-  fn get_pixel(&self, x: u32, y: u32) -> Self::Pixel {
-    if let Some((start, _)) = self.crop_bounds {
-      *self.inner.get_pixel(x + start.x, y + start.y)
-    } else {
-      *self.inner.get_pixel(x, y)
-    }
-  }
-}
-
-impl<'a> From<&'a RgbaImage> for CowImage<'a> {
-  fn from(image: &'a RgbaImage) -> Self {
-    CowImage {
-      inner: Cow::Borrowed(image),
-      crop_bounds: None,
-    }
-  }
-}
-
-impl<'a> From<RgbaImage> for CowImage<'a> {
-  fn from(image: RgbaImage) -> Self {
-    CowImage {
-      inner: Cow::Owned(image),
-      crop_bounds: None,
-    }
-  }
-}
-
-impl<'a> From<Cow<'a, RgbaImage>> for CowImage<'a> {
-  fn from(image: Cow<'a, RgbaImage>) -> Self {
-    CowImage {
-      inner: image,
-      crop_bounds: None,
-    }
-  }
-}
-
-impl<'a> CowImage<'a> {
-  pub(crate) fn crop<I: Into<Cow<'a, RgbaImage>>>(
-    image: I,
-    mut crop_x: u32,
-    mut crop_y: u32,
-    mut crop_width: u32,
-    mut crop_height: u32,
-  ) -> Self {
-    let image = image.into();
-
-    crop_x = crop_x.clamp(0, image.width() - 1);
-    crop_y = crop_y.clamp(0, image.height() - 1);
-    crop_width = crop_width.clamp(0, image.width() - crop_x);
-    crop_height = crop_height.clamp(0, image.height() - crop_y);
-
-    CowImage {
-      inner: image,
-      crop_bounds: Some((
-        Point {
-          x: crop_x,
-          y: crop_y,
-        },
-        Size {
-          width: crop_width,
-          height: crop_height,
-        },
-      )),
-    }
-  }
-}
 
 pub(crate) enum CanvasConstrainResult {
   Some(CanvasConstrain),
@@ -926,6 +842,132 @@ pub(crate) fn overlay_image<I: GenericImageView<Pixel = Rgba<u8>>>(
   buffer_pool.release(mask);
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn overlay_sampled_image(
+  canvas: &mut RgbaImage,
+  source: &RgbaImage,
+  width: u32,
+  height: u32,
+  border: BorderProperties,
+  transform: Affine,
+  logical_to_source: Affine,
+  algorithm: ImageScalingAlgorithm,
+  mode: BlendMode,
+  constrains: &[CanvasConstrain],
+  mask_memory: &mut MaskMemory,
+  buffer_pool: &mut BufferPool,
+) {
+  let size = Size { width, height };
+
+  if transform.only_translation() && border.is_zero() {
+    let translation = transform.decompose_translation();
+
+    return overlay_area(canvas, translation, size, mode, constrains, |x, y| {
+      sample_transformed_pixel(
+        source,
+        logical_to_source,
+        algorithm,
+        x as f32 + 0.5,
+        y as f32 + 0.5,
+        Point::ZERO,
+      )
+      .unwrap_or_else(|| Color::transparent().into())
+    });
+  }
+
+  let mut paths = Vec::new();
+
+  border.append_mask_commands(&mut paths, size.map(|size| size as f32), Point::ZERO);
+
+  let (mask, placement) = mask_memory.render(&paths, Some(transform), None, buffer_pool);
+
+  let inverse = transform.invert();
+  let is_identity = transform.is_identity() && placement.left >= 0 && placement.top >= 0;
+
+  if is_identity {
+    let get_original_pixel = |x, y| {
+      let alpha = mask[mask_index_from_coord(x, y, placement.width)];
+
+      if alpha == 0 {
+        return Color::transparent().into();
+      }
+
+      let Some(mut pixel) = sample_transformed_pixel(
+        source,
+        logical_to_source,
+        algorithm,
+        (x + placement.left as u32) as f32 + 0.5,
+        (y + placement.top as u32) as f32 + 0.5,
+        Point::ZERO,
+      ) else {
+        return Color::transparent().into();
+      };
+
+      apply_mask_alpha_to_pixel(&mut pixel, alpha);
+
+      pixel
+    };
+
+    overlay_area(
+      canvas,
+      Point {
+        x: placement.left as f32,
+        y: placement.top as f32,
+      },
+      Size {
+        width: placement.width,
+        height: placement.height,
+      },
+      mode,
+      constrains,
+      get_original_pixel,
+    );
+  } else if let Some(inverse) = inverse {
+    let combined_inverse = logical_to_source * inverse;
+
+    let get_original_pixel = |x, y| {
+      let alpha = mask[mask_index_from_coord(x, y, placement.width)];
+
+      if alpha == 0 {
+        return Color::transparent().into();
+      }
+
+      let Some(mut pixel) = sample_transformed_pixel(
+        source,
+        combined_inverse,
+        algorithm,
+        (x as i32 + placement.left) as f32 + 0.5,
+        (y as i32 + placement.top) as f32 + 0.5,
+        Point::ZERO,
+      ) else {
+        return Color::transparent().into();
+      };
+
+      apply_mask_alpha_to_pixel(&mut pixel, alpha);
+
+      pixel
+    };
+
+    overlay_area(
+      canvas,
+      Point {
+        x: placement.left as f32,
+        y: placement.top as f32,
+      },
+      Size {
+        width: placement.width,
+        height: placement.height,
+      },
+      mode,
+      constrains,
+      get_original_pixel,
+    );
+  }
+
+  buffer_pool.release(mask);
+}
+
+#[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub(crate) fn mask_index_from_coord(x: u32, y: u32, width: u32) -> usize {
   (y * width + x) as usize

@@ -3,7 +3,7 @@
 //! This module provides types and utilities for managing image resources,
 //! including loading states, error handling, and image processing operations.
 
-use std::{borrow::Cow, sync::Arc};
+use std::sync::Arc;
 
 #[cfg(target_arch = "wasm32")]
 use std::{cell::RefCell, collections::HashMap};
@@ -15,7 +15,7 @@ use image::RgbaImage;
 use super::image_decoder;
 use crate::{
   layout::style::{Color, ImageScalingAlgorithm},
-  rendering::{Sizing, fast_resize, unpremultiply_alpha},
+  rendering::{Sizing, unpremultiply_alpha},
 };
 use thiserror::Error;
 
@@ -36,6 +36,34 @@ pub enum ImageSource {
   },
   /// A bitmap image source
   Bitmap(RgbaImage),
+}
+
+/// Image data prepared for layout rendering.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub(crate) enum RenderedImage<'a> {
+  /// A fully rasterized image, used for SVGs.
+  Rasterized(RgbaImage),
+  /// A borrowed bitmap that should be sampled directly.
+  Borrowed {
+    /// The original bitmap source.
+    source: &'a RgbaImage,
+    /// The logical width that will be rendered on the canvas.
+    width: u32,
+    /// The logical height that will be rendered on the canvas.
+    height: u32,
+    /// The sampling algorithm to use.
+    algorithm: ImageScalingAlgorithm,
+  },
+}
+
+impl RenderedImage<'_> {
+  pub(crate) fn into_owned(self) -> Result<RgbaImage, ImageResourceError> {
+    match self {
+      Self::Rasterized(image) => Ok(image),
+      Self::Borrowed { source, .. } => Ok(source.clone()),
+    }
+  }
 }
 
 /// Represents a persistent image store.
@@ -117,42 +145,27 @@ impl ImageSource {
     Ok(Arc::new(img.into()))
   }
 
-  /// Get the image size in device pixels for the current sizing context.
-  pub(crate) fn size(&self, sizing: &Sizing) -> (f32, f32) {
-    let (width, height) = match self {
-      #[cfg(feature = "svg")]
-      ImageSource::Svg { tree, .. } => (tree.size().width(), tree.size().height()),
-      ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
-    };
-
-    let dpr = sizing.viewport.device_pixel_ratio;
-    (width * dpr, height * dpr)
-  }
-
-  /// Render the image source to an RGBA image with the specified dimensions.
-  pub fn render_to_rgba_image<'i>(
+  /// Prepare image data for layout rendering.
+  ///
+  /// Bitmap images are kept borrowed so the renderer can sample them directly.
+  /// SVG images are rasterized to a bitmap first.
+  pub(crate) fn render_for_layout<'i>(
     &'i self,
     width: u32,
     height: u32,
     image_rendering: ImageScalingAlgorithm,
     current_color: Color,
-  ) -> Result<Cow<'i, RgbaImage>, ImageResourceError> {
+  ) -> Result<RenderedImage<'i>, ImageResourceError> {
     #[cfg(not(feature = "svg"))]
     let _ = current_color;
 
     match self {
-      ImageSource::Bitmap(bitmap) => {
-        if bitmap.width() == width && bitmap.height() == height {
-          return Ok(Cow::Borrowed(bitmap));
-        }
-
-        Ok(Cow::Owned(fast_resize(
-          bitmap,
-          width,
-          height,
-          image_rendering,
-        )?))
-      }
+      ImageSource::Bitmap(bitmap) => Ok(RenderedImage::Borrowed {
+        source: bitmap,
+        width,
+        height,
+        algorithm: image_rendering,
+      }),
       #[cfg(feature = "svg")]
       ImageSource::Svg { source, tree } => {
         use resvg::{
@@ -187,9 +200,21 @@ impl ImageSource {
           unpremultiply_alpha(pixel);
         }
 
-        Ok(Cow::Owned(image))
+        Ok(RenderedImage::Rasterized(image))
       }
     }
+  }
+
+  /// Get the image size in device pixels for the current sizing context.
+  pub(crate) fn size(&self, sizing: &Sizing) -> (f32, f32) {
+    let (width, height) = match self {
+      #[cfg(feature = "svg")]
+      ImageSource::Svg { tree, .. } => (tree.size().width(), tree.size().height()),
+      ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
+    };
+
+    let dpr = sizing.viewport.device_pixel_ratio;
+    (width * dpr, height * dpr)
   }
 }
 
@@ -330,11 +355,11 @@ mod tests {
     let image = parse_svg_str(svg)?;
 
     let red = image
-      .render_to_rgba_image(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0xFF0000))?
-      .into_owned();
+      .render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0xFF0000))?
+      .into_owned()?;
     let blue = image
-      .render_to_rgba_image(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?
-      .into_owned();
+      .render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?
+      .into_owned()?;
 
     assert_ne!(rgba_at(&red, 2, 2), rgba_at(&blue, 2, 2));
     Ok(())
@@ -348,8 +373,8 @@ mod tests {
     let color = Color([255, 0, 0, 128]);
 
     let rendered = image
-      .render_to_rgba_image(4, 4, ImageScalingAlgorithm::Auto, color)?
-      .into_owned();
+      .render_for_layout(4, 4, ImageScalingAlgorithm::Auto, color)?
+      .into_owned()?;
     let alpha = rgba_at(&rendered, 2, 2)[3];
 
     assert!((alpha as i16 - 128).abs() <= 1);
@@ -363,11 +388,11 @@ mod tests {
     let image = parse_svg_str(svg)?;
 
     let first = image
-      .render_to_rgba_image(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x00FF00))?
-      .into_owned();
+      .render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x00FF00))?
+      .into_owned()?;
     let second = image
-      .render_to_rgba_image(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?
-      .into_owned();
+      .render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?
+      .into_owned()?;
 
     assert_eq!(first.as_raw(), second.as_raw());
     Ok(())
@@ -396,18 +421,19 @@ mod tests {
     let image = ImageSource::Bitmap(bitmap);
 
     let first = image
-      .render_to_rgba_image(2, 2, ImageScalingAlgorithm::Auto, Color::from_rgb(0xFF0000))?
-      .into_owned();
+      .render_for_layout(2, 2, ImageScalingAlgorithm::Auto, Color::from_rgb(0xFF0000))?
+      .into_owned()?;
     let second = image
-      .render_to_rgba_image(2, 2, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?
-      .into_owned();
+      .render_for_layout(2, 2, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?
+      .into_owned()?;
 
     assert_eq!(first.as_raw(), second.as_raw());
     Ok(())
   }
 
   #[test]
-  fn bitmap_resize_smoke_for_scaling_algorithm() -> Result<(), ImageResourceError> {
+  fn bitmap_render_for_layout_keeps_borrowed_sampling_parameters() -> Result<(), ImageResourceError>
+  {
     let mut bitmap = RgbaImage::new(2, 2);
     bitmap.put_pixel(0, 0, Rgba([255, 0, 0, 255]));
     bitmap.put_pixel(1, 0, Rgba([0, 255, 0, 255]));
@@ -415,12 +441,21 @@ mod tests {
     bitmap.put_pixel(1, 1, Rgba([255, 255, 255, 255]));
     let image = ImageSource::Bitmap(bitmap);
 
-    let resized = image
-      .render_to_rgba_image(4, 4, ImageScalingAlgorithm::Pixelated, Color::black())?
-      .into_owned();
+    let rendered =
+      image.render_for_layout(4, 4, ImageScalingAlgorithm::Pixelated, Color::black())?;
+    let RenderedImage::Borrowed {
+      width,
+      height,
+      algorithm: algo,
+      ..
+    } = rendered
+    else {
+      unreachable!()
+    };
 
-    assert_eq!(resized.width(), 4);
-    assert_eq!(resized.height(), 4);
+    assert_eq!(width, 4);
+    assert_eq!(height, 4);
+    assert!(matches!(algo, ImageScalingAlgorithm::Pixelated));
     Ok(())
   }
 }
