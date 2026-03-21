@@ -88,18 +88,23 @@ pub(crate) struct OrderedChild {
 pub(crate) fn collect_layout_children(
   layout_results: &LayoutResults,
   node_id: NodeId,
-  render_child_len: usize,
+  render_children: &[RenderNode<'_>],
 ) -> Result<Vec<OrderedChild>> {
   let layout_children = layout_results.children(node_id)?;
-  let child_count = render_child_len.min(layout_children.len());
+  let child_count = render_children.len().min(layout_children.len());
+  let mut source_order_child_ids = layout_children.to_vec();
+  source_order_child_ids.sort_unstable_by_key(|child_id| usize::from(*child_id));
+
   Ok(
     layout_children
       .iter()
       .copied()
       .take(child_count)
-      .enumerate()
-      .map(|(render_index, node_id)| OrderedChild {
-        render_index,
+      .map(|node_id| OrderedChild {
+        render_index: source_order_child_ids
+          .iter()
+          .position(|child_id| *child_id == node_id)
+          .unwrap_or_else(|| unreachable!()),
         node_id,
       })
       .collect(),
@@ -353,7 +358,7 @@ pub(crate) fn build_stacking_contexts<'g>(
       continue;
     }
 
-    let layout_children = collect_layout_children(layout_results, visit.node_id, children.len())?;
+    let layout_children = collect_layout_children(layout_results, visit.node_id, children)?;
     let child_container_size = Size {
       width: Some(layout.content_box_width()),
       height: Some(layout.content_box_height()),

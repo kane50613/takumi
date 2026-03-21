@@ -316,8 +316,7 @@ fn collect_measure_result<'g>(
           continue;
         };
 
-        let layout_children =
-          collect_layout_children(layout_results, node_id, render_children.len())?;
+        let layout_children = collect_layout_children(layout_results, node_id, render_children)?;
         if layout_children.is_empty() {
           measured_by_node_id.insert(
             usize::from(node_id),
