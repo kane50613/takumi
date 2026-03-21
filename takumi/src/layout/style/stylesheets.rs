@@ -956,8 +956,7 @@ define_style! {
       )));
     },
     gap: SpacePair<LengthDefaultsToZero> => [RowGap, ColumnGap] |value, target| {
-      target.push(StyleDeclaration::row_gap(value.x));
-      target.push(StyleDeclaration::column_gap(value.y));
+      push_axis_declarations!(target, value, row_gap, column_gap);
     },
     flex_flow: FlexFlow => [FlexDirection, FlexWrap] |value, target| {
       target.push(StyleDeclaration::flex_direction(value.direction));
@@ -1602,11 +1601,6 @@ impl ComputedStyle {
   }
 
   #[inline]
-  fn resolved_gap(&self) -> SpacePair<LengthDefaultsToZero> {
-    SpacePair::from_pair(self.column_gap, self.row_gap)
-  }
-
-  #[inline]
   fn grid_template(
     components: &Option<GridTemplateComponents>,
     sizing: &Sizing,
@@ -1738,7 +1732,10 @@ impl ComputedStyle {
       justify_items: self.justify_items.into(),
       flex_grow: self.flex_grow.map(|grow| grow.0).unwrap_or(0.0),
       align_items: self.align_items.into(),
-      gap: self.resolved_gap().resolve_to_size(sizing),
+      gap: Size {
+        width: self.column_gap.resolve_to_length_percentage(sizing),
+        height: self.row_gap.resolve_to_length_percentage(sizing),
+      },
       flex_basis: self
         .flex_basis
         .unwrap_or(Length::Auto)
