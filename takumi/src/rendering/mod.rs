@@ -12,6 +12,7 @@ mod image_drawing;
 pub(crate) mod inline_drawing;
 /// Main image renderer and viewport management
 mod render;
+mod stacking_context;
 /// Text drawing functions
 mod text_drawing;
 mod webp;

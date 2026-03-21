@@ -103,7 +103,7 @@ fn text_typography_variable_weight() {
         Color([240, 240, 240, 255]),
       )))
       .with(StyleDeclaration::font_size(Px(24.0).into()))
-      .with_gap(SpacePair::from_reversed_pair(Px(0.0), Px(24.0)))
+      .with_gap(SpacePair::from_pair(Px(0.0), Px(24.0)))
       .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap)),
   );
 

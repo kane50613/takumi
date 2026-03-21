@@ -12,6 +12,7 @@ mod background_repeat;
 mod background_size;
 mod blend_mode;
 mod border;
+mod box_alignment;
 mod box_shadow;
 mod clip_path;
 mod color;
@@ -33,6 +34,7 @@ mod length;
 mod line_clamp;
 mod line_height;
 mod linear_gradient;
+mod order;
 mod overflow;
 mod overflow_wrap;
 mod percentage_number;
@@ -48,6 +50,7 @@ mod transform;
 mod vertical_align;
 mod white_space;
 mod word_break;
+mod z_index;
 
 pub use animation::*;
 pub use aspect_ratio::*;
@@ -58,6 +61,7 @@ pub use background_repeat::*;
 pub use background_size::*;
 pub use blend_mode::*;
 pub use border::*;
+pub use box_alignment::*;
 pub use box_shadow::*;
 pub use clip_path::*;
 pub use color::*;
@@ -81,6 +85,7 @@ pub use length::*;
 pub use line_clamp::*;
 pub use line_height::*;
 pub use linear_gradient::*;
+pub use order::*;
 pub use overflow::*;
 pub use overflow_wrap::*;
 pub use percentage_number::*;
@@ -96,6 +101,7 @@ pub use transform::*;
 pub use vertical_align::*;
 pub use white_space::*;
 pub use word_break::*;
+pub use z_index::*;
 
 use cssparser::{
   ParseError, ParseErrorKind, Parser, ParserInput, SourceLocation, ToCss, Token,
@@ -392,6 +398,17 @@ impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
     }
 
     T::from_css(input).map(Some)
+  }
+}
+
+impl<'i> FromCss<'i> for String {
+  const VALID_TOKENS: &'static [CssToken] = &[
+    CssToken::Syntax(CssSyntaxKind::String),
+    CssToken::Syntax(CssSyntaxKind::CustomIdent),
+  ];
+
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    Ok(input.expect_ident_or_string()?.to_string())
   }
 }
 

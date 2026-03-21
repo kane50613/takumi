@@ -1,11 +1,10 @@
 use cssparser::Parser;
 use std::borrow::Cow;
-use taffy::{LengthPercentage, Point, Size};
+use taffy::{Point, Size};
 
 use crate::{
   layout::style::{
-    CssToken, FromCss, Length, LengthDefaultsToZero, MakeComputed, Overflow, ParseResult,
-    merge_enum_values,
+    CssToken, FromCss, LengthDefaultsToZero, MakeComputed, Overflow, ParseResult, merge_enum_values,
   },
   rendering::Sizing,
 };
@@ -57,27 +56,12 @@ impl<T: Copy> SpacePair<T> {
   pub const fn from_pair(x: T, y: T) -> Self {
     Self { x, y }
   }
-
-  /// Create a new [`SpacePair`] for reversed properties like `gap: row column`.
-  #[inline]
-  pub const fn from_reversed_pair(y: T, x: T) -> Self {
-    Self { x, y }
-  }
 }
 
 impl<T: Copy + MakeComputed> MakeComputed for SpacePair<T> {
   fn make_computed(&mut self, sizing: &Sizing) {
     self.x.make_computed(sizing);
     self.y.make_computed(sizing);
-  }
-}
-
-impl<const DEFAULT_AUTO: bool> SpacePair<Length<DEFAULT_AUTO>> {
-  pub(crate) fn resolve_to_size(self, sizing: &Sizing) -> Size<LengthPercentage> {
-    Size {
-      width: self.x.resolve_to_length_percentage(sizing),
-      height: self.y.resolve_to_length_percentage(sizing),
-    }
   }
 }
 

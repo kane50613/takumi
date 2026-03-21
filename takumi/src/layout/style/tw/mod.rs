@@ -101,10 +101,48 @@ struct TailwindDeclarationBuilder {
   filter_important: bool,
   backdrop_filter: Option<Filters>,
   backdrop_filter_important: bool,
-  grid_column: Option<GridLine>,
-  grid_column_important: bool,
-  grid_row: Option<GridLine>,
-  grid_row_important: bool,
+  grid_column: TwGridLineState,
+  grid_row: TwGridLineState,
+}
+
+#[derive(Debug, Default)]
+struct TwGridLineState {
+  start: Option<GridPlacement>,
+  end: Option<GridPlacement>,
+  start_important: bool,
+  end_important: bool,
+}
+
+impl TwGridLineState {
+  fn set_line(&mut self, grid_line: GridLine, start_important: bool, end_important: bool) {
+    self.set_start(grid_line.start, start_important);
+    self.set_end(grid_line.end, end_important);
+  }
+
+  fn set_start(&mut self, grid_placement: GridPlacement, important: bool) {
+    self.start = Some(grid_placement);
+    self.start_important = important;
+  }
+
+  fn set_end(&mut self, grid_placement: GridPlacement, important: bool) {
+    self.end = Some(grid_placement);
+    self.end_important = important;
+  }
+
+  fn push_declarations(
+    self,
+    declarations: &mut StyleDeclarationBlock,
+    start_decl: fn(GridPlacement) -> StyleDeclaration,
+    end_decl: fn(GridPlacement) -> StyleDeclaration,
+  ) {
+    if let Some(start) = self.start {
+      declarations.push(start_decl(start), self.start_important);
+    }
+
+    if let Some(end) = self.end {
+      declarations.push(end_decl(end), self.end_important);
+    }
+  }
 }
 
 impl TailwindDeclarationBuilder {
@@ -162,23 +200,11 @@ impl TailwindDeclarationBuilder {
   }
 
   fn set_grid_column(&mut self, grid_line: GridLine, important: bool) {
-    self.grid_column = Some(grid_line);
-    self.grid_column_important = important;
+    self.grid_column.set_line(grid_line, important, important);
   }
 
   fn set_grid_row(&mut self, grid_line: GridLine, important: bool) {
-    self.grid_row = Some(grid_line);
-    self.grid_row_important = important;
-  }
-
-  fn grid_column_mut(&mut self, important: bool) -> &mut GridLine {
-    self.grid_column_important = important;
-    self.grid_column.get_or_insert_with(GridLine::default)
-  }
-
-  fn grid_row_mut(&mut self, important: bool) -> &mut GridLine {
-    self.grid_row_important = important;
-    self.grid_row.get_or_insert_with(GridLine::default)
+    self.grid_row.set_line(grid_line, important, important);
   }
 
   fn finish(mut self) -> StyleDeclarationBlock {
@@ -196,20 +222,6 @@ impl TailwindDeclarationBuilder {
       );
     }
 
-    if let Some(grid_column) = self.grid_column.take() {
-      self.push(
-        StyleDeclaration::grid_column(Some(grid_column)),
-        self.grid_column_important,
-      );
-    }
-
-    if let Some(grid_row) = self.grid_row.take() {
-      self.push(
-        StyleDeclaration::grid_row(Some(grid_row)),
-        self.grid_row_important,
-      );
-    }
-
     if let Some(filter) = self.filter.take() {
       self.push(StyleDeclaration::filter(filter), self.filter_important);
     }
@@ -223,6 +235,18 @@ impl TailwindDeclarationBuilder {
 
     self.transform_state.apply(&mut self.declarations);
     self.gradient_state.apply(&mut self.declarations);
+
+    self.grid_column.push_declarations(
+      &mut self.declarations,
+      StyleDeclaration::grid_column_start,
+      StyleDeclaration::grid_column_end,
+    );
+    self.grid_row.push_declarations(
+      &mut self.declarations,
+      StyleDeclaration::grid_row_start,
+      StyleDeclaration::grid_row_end,
+    );
+
     self.declarations
   }
 }
@@ -880,9 +904,11 @@ impl Neg for TailwindProperty {
 }
 
 macro_rules! push_decl {
-  ($builder:expr, $important:expr, $property:ident($value:expr)) => {
-    $builder.push(StyleDeclaration::$property($value), $important)
-  };
+  ($builder:expr, $important:expr $(, $property:ident($value:expr))* $(,)?) => {{
+    $(
+      $builder.push(StyleDeclaration::$property($value), $important);
+    )*
+  }};
 }
 
 impl TailwindProperty {
@@ -967,8 +993,7 @@ impl TailwindProperty {
         push_decl!(builder, important, background_clip(background_clip));
       }
       TailwindProperty::Gap(gap) => {
-        push_decl!(builder, important, row_gap(gap));
-        push_decl!(builder, important, column_gap(gap));
+        push_decl!(builder, important, row_gap(gap), column_gap(gap));
       }
       TailwindProperty::GapX(gap_x) => push_decl!(builder, important, column_gap(gap_x)),
       TailwindProperty::GapY(gap_y) => push_decl!(builder, important, row_gap(gap_y)),
@@ -999,16 +1024,24 @@ impl TailwindProperty {
       }
       TailwindProperty::FlexWrap(flex_wrap) => push_decl!(builder, important, flex_wrap(flex_wrap)),
       TailwindProperty::Flex(flex) => {
-        push_decl!(builder, important, flex_grow(Some(FlexGrow(flex.grow))));
-        push_decl!(builder, important, flex_shrink(Some(FlexGrow(flex.shrink))));
-        push_decl!(builder, important, flex_basis(Some(flex.basis)));
+        push_decl!(
+          builder,
+          important,
+          flex_grow(Some(FlexGrow(flex.grow))),
+          flex_shrink(Some(FlexGrow(flex.shrink))),
+          flex_basis(Some(flex.basis))
+        );
       }
       TailwindProperty::FlexBasis(flex_basis) => {
         push_decl!(builder, important, flex_basis(Some(flex_basis)))
       }
       TailwindProperty::Overflow(overflow) => {
-        push_decl!(builder, important, overflow_x(overflow));
-        push_decl!(builder, important, overflow_y(overflow));
+        push_decl!(
+          builder,
+          important,
+          overflow_x(overflow),
+          overflow_y(overflow)
+        );
       }
       TailwindProperty::Position(position) => push_decl!(builder, important, position(position)),
       TailwindProperty::FontStyle(font_style) => {
@@ -1044,8 +1077,7 @@ impl TailwindProperty {
         push_decl!(builder, important, text_transform(text_transform))
       }
       TailwindProperty::Size(size) => {
-        push_decl!(builder, important, width(size));
-        push_decl!(builder, important, height(size));
+        push_decl!(builder, important, width(size), height(size));
       }
       TailwindProperty::Width(width) => push_decl!(builder, important, width(width)),
       TailwindProperty::Height(height) => push_decl!(builder, important, height(height)),
@@ -1059,7 +1091,9 @@ impl TailwindProperty {
       }
       TailwindProperty::Shadow(box_shadow) => builder.set_shadow(box_shadow, important),
       TailwindProperty::ShadowColor(color) => builder.set_shadow_color(color, important),
-      TailwindProperty::Display(display) => push_decl!(builder, important, display(display)),
+      TailwindProperty::Display(display) => {
+        push_decl!(builder, important, display(display));
+      }
       TailwindProperty::OverflowX(overflow) => push_decl!(builder, important, overflow_x(overflow)),
       TailwindProperty::OverflowY(overflow) => push_decl!(builder, important, overflow_y(overflow)),
       TailwindProperty::ObjectPosition(background_position) => {
@@ -1089,17 +1123,25 @@ impl TailwindProperty {
         background_image(Some([background_image].into()))
       ),
       TailwindProperty::BorderDefault => {
-        push_decl!(builder, important, border_top_width(Length::Px(1.0)));
-        push_decl!(builder, important, border_right_width(Length::Px(1.0)));
-        push_decl!(builder, important, border_bottom_width(Length::Px(1.0)));
-        push_decl!(builder, important, border_left_width(Length::Px(1.0)));
-        push_decl!(builder, important, border_style(BorderStyle::Solid));
+        push_decl!(
+          builder,
+          important,
+          border_top_width(Length::Px(1.0)),
+          border_right_width(Length::Px(1.0)),
+          border_bottom_width(Length::Px(1.0)),
+          border_left_width(Length::Px(1.0)),
+          border_style(BorderStyle::Solid)
+        );
       }
       TailwindProperty::BorderWidth(tw_border_width) => {
-        push_decl!(builder, important, border_top_width(tw_border_width.0));
-        push_decl!(builder, important, border_right_width(tw_border_width.0));
-        push_decl!(builder, important, border_bottom_width(tw_border_width.0));
-        push_decl!(builder, important, border_left_width(tw_border_width.0));
+        push_decl!(
+          builder,
+          important,
+          border_top_width(tw_border_width.0),
+          border_right_width(tw_border_width.0),
+          border_bottom_width(tw_border_width.0),
+          border_left_width(tw_border_width.0)
+        );
       }
       TailwindProperty::BorderStyle(border_style) => {
         push_decl!(builder, important, border_style(border_style))
@@ -1133,16 +1175,28 @@ impl TailwindProperty {
         push_decl!(builder, important, border_left_width(tw_border_width.0))
       }
       TailwindProperty::BorderXWidth(tw_border_width) => {
-        push_decl!(builder, important, border_left_width(tw_border_width.0));
-        push_decl!(builder, important, border_right_width(tw_border_width.0));
+        push_decl!(
+          builder,
+          important,
+          border_left_width(tw_border_width.0),
+          border_right_width(tw_border_width.0)
+        );
       }
       TailwindProperty::BorderYWidth(tw_border_width) => {
-        push_decl!(builder, important, border_top_width(tw_border_width.0));
-        push_decl!(builder, important, border_bottom_width(tw_border_width.0));
+        push_decl!(
+          builder,
+          important,
+          border_top_width(tw_border_width.0),
+          border_bottom_width(tw_border_width.0)
+        );
       }
       TailwindProperty::OutlineDefault => {
-        push_decl!(builder, important, outline_width(Length::Px(1.0)));
-        push_decl!(builder, important, outline_style(BorderStyle::Solid));
+        push_decl!(
+          builder,
+          important,
+          outline_width(Length::Px(1.0)),
+          outline_style(BorderStyle::Solid)
+        );
       }
       TailwindProperty::OutlineWidth(tw_border_width) => {
         push_decl!(builder, important, outline_width(tw_border_width.0))
@@ -1160,21 +1214,9 @@ impl TailwindProperty {
         push_decl!(
           builder,
           important,
-          border_top_left_radius(SpacePair::from_single(rounded.0))
-        );
-        push_decl!(
-          builder,
-          important,
-          border_top_right_radius(SpacePair::from_single(rounded.0))
-        );
-        push_decl!(
-          builder,
-          important,
-          border_bottom_right_radius(SpacePair::from_single(rounded.0))
-        );
-        push_decl!(
-          builder,
-          important,
+          border_top_left_radius(SpacePair::from_single(rounded.0)),
+          border_top_right_radius(SpacePair::from_single(rounded.0)),
+          border_bottom_right_radius(SpacePair::from_single(rounded.0)),
           border_bottom_left_radius(SpacePair::from_single(rounded.0))
         );
       }
@@ -1205,11 +1247,7 @@ impl TailwindProperty {
         push_decl!(
           builder,
           important,
-          border_top_left_radius(SpacePair::from_single(rounded.0))
-        );
-        push_decl!(
-          builder,
-          important,
+          border_top_left_radius(SpacePair::from_single(rounded.0)),
           border_top_right_radius(SpacePair::from_single(rounded.0))
         );
       }
@@ -1217,11 +1255,7 @@ impl TailwindProperty {
         push_decl!(
           builder,
           important,
-          border_top_right_radius(SpacePair::from_single(rounded.0))
-        );
-        push_decl!(
-          builder,
-          important,
+          border_top_right_radius(SpacePair::from_single(rounded.0)),
           border_bottom_right_radius(SpacePair::from_single(rounded.0))
         );
       }
@@ -1229,11 +1263,7 @@ impl TailwindProperty {
         push_decl!(
           builder,
           important,
-          border_bottom_left_radius(SpacePair::from_single(rounded.0))
-        );
-        push_decl!(
-          builder,
-          important,
+          border_bottom_left_radius(SpacePair::from_single(rounded.0)),
           border_bottom_right_radius(SpacePair::from_single(rounded.0))
         );
       }
@@ -1241,11 +1271,7 @@ impl TailwindProperty {
         push_decl!(
           builder,
           important,
-          border_top_left_radius(SpacePair::from_single(rounded.0))
-        );
-        push_decl!(
-          builder,
-          important,
+          border_top_left_radius(SpacePair::from_single(rounded.0)),
           border_bottom_left_radius(SpacePair::from_single(rounded.0))
         );
       }
@@ -1253,29 +1279,29 @@ impl TailwindProperty {
         push_decl!(builder, important, text_overflow(text_overflow))
       }
       TailwindProperty::Truncate => {
-        push_decl!(builder, important, text_overflow(TextOverflow::Ellipsis));
-        push_decl!(builder, important, text_wrap_mode(TextWrapMode::NoWrap));
         push_decl!(
           builder,
           important,
-          white_space_collapse(WhiteSpaceCollapse::Collapse)
+          text_overflow(TextOverflow::Ellipsis),
+          text_wrap_mode(TextWrapMode::NoWrap),
+          white_space_collapse(WhiteSpaceCollapse::Collapse),
+          overflow_x(Overflow::Hidden),
+          overflow_y(Overflow::Hidden)
         );
-        push_decl!(builder, important, overflow_x(Overflow::Hidden));
-        push_decl!(builder, important, overflow_y(Overflow::Hidden));
       }
       TailwindProperty::TextWrap(text_wrap) => {
-        push_decl!(builder, important, text_wrap_mode(text_wrap.mode));
-        push_decl!(builder, important, text_wrap_style(text_wrap.style));
+        push_decl!(
+          builder,
+          important,
+          text_wrap_mode(text_wrap.mode),
+          text_wrap_style(text_wrap.style)
+        );
       }
       TailwindProperty::WhiteSpace(white_space) => {
         push_decl!(
           builder,
           important,
-          text_wrap_mode(white_space.text_wrap_mode)
-        );
-        push_decl!(
-          builder,
-          important,
+          text_wrap_mode(white_space.text_wrap_mode),
           white_space_collapse(white_space.white_space_collapse)
         );
       }
@@ -1332,18 +1358,30 @@ impl TailwindProperty {
         push_decl!(builder, important, transform_origin(background_position))
       }
       TailwindProperty::Margin(length) => {
-        push_decl!(builder, important, margin_top(length));
-        push_decl!(builder, important, margin_right(length));
-        push_decl!(builder, important, margin_bottom(length));
-        push_decl!(builder, important, margin_left(length));
+        push_decl!(
+          builder,
+          important,
+          margin_top(length),
+          margin_right(length),
+          margin_bottom(length),
+          margin_left(length)
+        );
       }
       TailwindProperty::MarginX(length) => {
-        push_decl!(builder, important, margin_left(length));
-        push_decl!(builder, important, margin_right(length));
+        push_decl!(
+          builder,
+          important,
+          margin_left(length),
+          margin_right(length)
+        );
       }
       TailwindProperty::MarginY(length) => {
-        push_decl!(builder, important, margin_top(length));
-        push_decl!(builder, important, margin_bottom(length));
+        push_decl!(
+          builder,
+          important,
+          margin_top(length),
+          margin_bottom(length)
+        );
       }
       TailwindProperty::MarginTop(length) => push_decl!(builder, important, margin_top(length)),
       TailwindProperty::MarginRight(length) => push_decl!(builder, important, margin_right(length)),
@@ -1352,18 +1390,30 @@ impl TailwindProperty {
       }
       TailwindProperty::MarginLeft(length) => push_decl!(builder, important, margin_left(length)),
       TailwindProperty::Padding(length) => {
-        push_decl!(builder, important, padding_top(length));
-        push_decl!(builder, important, padding_right(length));
-        push_decl!(builder, important, padding_bottom(length));
-        push_decl!(builder, important, padding_left(length));
+        push_decl!(
+          builder,
+          important,
+          padding_top(length),
+          padding_right(length),
+          padding_bottom(length),
+          padding_left(length)
+        );
       }
       TailwindProperty::PaddingX(length) => {
-        push_decl!(builder, important, padding_left(length));
-        push_decl!(builder, important, padding_right(length));
+        push_decl!(
+          builder,
+          important,
+          padding_left(length),
+          padding_right(length)
+        );
       }
       TailwindProperty::PaddingY(length) => {
-        push_decl!(builder, important, padding_top(length));
-        push_decl!(builder, important, padding_bottom(length));
+        push_decl!(
+          builder,
+          important,
+          padding_top(length),
+          padding_bottom(length)
+        );
       }
       TailwindProperty::PaddingTop(length) => push_decl!(builder, important, padding_top(length)),
       TailwindProperty::PaddingRight(length) => {
@@ -1374,18 +1424,20 @@ impl TailwindProperty {
       }
       TailwindProperty::PaddingLeft(length) => push_decl!(builder, important, padding_left(length)),
       TailwindProperty::Inset(length) => {
-        push_decl!(builder, important, top(length));
-        push_decl!(builder, important, right(length));
-        push_decl!(builder, important, bottom(length));
-        push_decl!(builder, important, left(length));
+        push_decl!(
+          builder,
+          important,
+          top(length),
+          right(length),
+          bottom(length),
+          left(length)
+        );
       }
       TailwindProperty::InsetX(length) => {
-        push_decl!(builder, important, left(length));
-        push_decl!(builder, important, right(length));
+        push_decl!(builder, important, left(length), right(length));
       }
       TailwindProperty::InsetY(length) => {
-        push_decl!(builder, important, top(length));
-        push_decl!(builder, important, bottom(length));
+        push_decl!(builder, important, top(length), bottom(length));
       }
       TailwindProperty::Top(length) => push_decl!(builder, important, top(length)),
       TailwindProperty::Right(length) => push_decl!(builder, important, right(length)),
@@ -1406,16 +1458,33 @@ impl TailwindProperty {
       }
       TailwindProperty::GridRow(tw_grid_span) => builder.set_grid_row(tw_grid_span, important),
       TailwindProperty::GridColumnStart(tw_grid_placement) => {
-        builder.grid_column_mut(important).start = tw_grid_placement;
+        let start = builder
+          .grid_column
+          .start
+          .get_or_insert_with(GridPlacement::auto);
+        *start = tw_grid_placement;
+        builder.grid_column.start_important = important;
       }
       TailwindProperty::GridColumnEnd(tw_grid_placement) => {
-        builder.grid_column_mut(important).end = tw_grid_placement;
+        let end = builder
+          .grid_column
+          .end
+          .get_or_insert_with(GridPlacement::auto);
+        *end = tw_grid_placement;
+        builder.grid_column.end_important = important;
       }
       TailwindProperty::GridRowStart(tw_grid_placement) => {
-        builder.grid_row_mut(important).start = tw_grid_placement;
+        let start = builder
+          .grid_row
+          .start
+          .get_or_insert_with(GridPlacement::auto);
+        *start = tw_grid_placement;
+        builder.grid_row.start_important = important;
       }
       TailwindProperty::GridRowEnd(tw_grid_placement) => {
-        builder.grid_row_mut(important).end = tw_grid_placement;
+        let end = builder.grid_row.end.get_or_insert_with(GridPlacement::auto);
+        *end = tw_grid_placement;
+        builder.grid_row.end_important = important;
       }
       TailwindProperty::GridTemplateColumns(tw_grid_template) => push_decl!(
         builder,
@@ -1507,88 +1576,52 @@ impl TailwindProperty {
         push_decl!(builder, important, visibility(visibility))
       }
       TailwindProperty::Animation(animations) => {
-        let has_animation_name = animations.iter().any(|animation| animation.name.is_some());
-
         push_decl!(
           builder,
           important,
-          animation_duration(AnimationDurations(
+          animation_duration(
             animations
               .iter()
               .map(|animation| animation.duration)
               .collect()
-          ))
-        );
-        push_decl!(
-          builder,
-          important,
-          animation_delay(AnimationDurations(
-            animations.iter().map(|animation| animation.delay).collect()
-          ))
-        );
-        push_decl!(
-          builder,
-          important,
-          animation_timing_function(AnimationTimingFunctions(
+          ),
+          animation_delay(animations.iter().map(|animation| animation.delay).collect()),
+          animation_timing_function(
             animations
               .iter()
               .map(|animation| animation.timing_function)
               .collect()
-          ))
-        );
-        push_decl!(
-          builder,
-          important,
-          animation_iteration_count(AnimationIterationCounts(
+          ),
+          animation_iteration_count(
             animations
               .iter()
               .map(|animation| animation.iteration_count)
               .collect()
-          ))
-        );
-        push_decl!(
-          builder,
-          important,
-          animation_direction(AnimationDirections(
+          ),
+          animation_direction(
             animations
               .iter()
               .map(|animation| animation.direction)
               .collect()
-          ))
-        );
-        push_decl!(
-          builder,
-          important,
-          animation_fill_mode(AnimationFillModes(
+          ),
+          animation_fill_mode(
             animations
               .iter()
               .map(|animation| animation.fill_mode)
               .collect()
-          ))
-        );
-        push_decl!(
-          builder,
-          important,
-          animation_play_state(AnimationPlayStates(
+          ),
+          animation_play_state(
             animations
               .iter()
               .map(|animation| animation.play_state)
               .collect()
-          ))
-        );
-        push_decl!(
-          builder,
-          important,
-          animation_name(if has_animation_name {
-            AnimationNames(
-              animations
-                .into_iter()
-                .map(|animation| animation.name.unwrap_or_default())
-                .collect(),
-            )
-          } else {
-            AnimationNames::default()
-          })
+          ),
+          animation_name(
+            animations
+              .into_iter()
+              .map(|animation| animation.name)
+              .collect()
+          )
         );
       }
     }
@@ -1597,7 +1630,7 @@ impl TailwindProperty {
 
 #[cfg(test)]
 mod tests {
-  use crate::layout::style::{ComputedStyle, Style, properties::BackgroundImage};
+  use crate::layout::style::{ComputedStyle, LonghandId, Style, properties::BackgroundImage};
 
   use super::*;
 
@@ -1836,6 +1869,60 @@ mod tests {
     assert_eq!(
       TailwindProperty::parse("col-end-1"),
       Some(TailwindProperty::GridColumnEnd(GridPlacement::Line(1)))
+    );
+  }
+
+  #[test]
+  fn test_grid_column_start_emits_only_start_longhand() {
+    let Ok(values) = TailwindValues::from_str("col-start-2") else {
+      unreachable!()
+    };
+    let declarations = values.into_declaration_block(Viewport::new((100, 100)));
+
+    assert_eq!(
+      declarations.iter().collect::<Vec<_>>(),
+      vec![&StyleDeclaration::grid_column_start(GridPlacement::Line(2))]
+    );
+  }
+
+  #[test]
+  fn test_grid_row_end_emits_only_end_longhand() {
+    let Ok(values) = TailwindValues::from_str("row-end-3") else {
+      unreachable!()
+    };
+    let declarations = values.into_declaration_block(Viewport::new((100, 100)));
+
+    assert_eq!(
+      declarations.iter().collect::<Vec<_>>(),
+      vec![&StyleDeclaration::grid_row_end(GridPlacement::Line(3))]
+    );
+  }
+
+  #[test]
+  fn test_grid_longhand_importance_is_tracked_per_side() {
+    let Ok(values) = TailwindValues::from_str("col-end-3 !col-start-2") else {
+      unreachable!();
+    };
+    let declarations = values.into_declaration_block(Viewport::new((100, 100)));
+
+    assert_eq!(
+      declarations.iter().collect::<Vec<_>>(),
+      vec![
+        &StyleDeclaration::grid_column_start(GridPlacement::Line(2)),
+        &StyleDeclaration::grid_column_end(GridPlacement::Line(3)),
+      ]
+    );
+    assert!(
+      declarations
+        .importance
+        .longhands
+        .contains(&LonghandId::GridColumnStart)
+    );
+    assert!(
+      !declarations
+        .importance
+        .longhands
+        .contains(&LonghandId::GridColumnEnd)
     );
   }
 

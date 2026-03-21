@@ -5,7 +5,7 @@ use parley::{FontSettings, TextStyle};
 use paste::paste;
 use serde::de::IgnoredAny;
 use smallvec::{SmallVec, smallvec};
-use taffy::{Point, Rect, Size, prelude::FromLength};
+use taffy::{Line, Point, Rect, Size, prelude::FromLength};
 
 use crate::layout::style::selector::{PropertyRule, StyleDeclarationParser};
 use crate::{
@@ -776,6 +776,8 @@ define_style! {
     align_self: AlignItems,
     flex_wrap: FlexWrap,
     flex_basis: Option<Length>,
+    order: Order,
+    z_index: ZIndex,
     position: Position,
     rotate: Option<Angle>,
     scale: SpacePair<PercentageNumber>,
@@ -819,8 +821,10 @@ define_style! {
     grid_auto_columns: Option<GridTrackSizes>,
     grid_auto_rows: Option<GridTrackSizes>,
     grid_auto_flow: GridAutoFlow,
-    grid_column: Option<GridLine>,
-    grid_row: Option<GridLine>,
+    grid_row_start: GridPlacement,
+    grid_row_end: GridPlacement,
+    grid_column_start: GridPlacement,
+    grid_column_end: GridPlacement,
     grid_template_columns: Option<GridTemplateComponents>,
     grid_template_rows: Option<GridTemplateComponents>,
     grid_template_areas: Option<GridTemplateAreas>,
@@ -868,48 +872,30 @@ define_style! {
   }
   shorthands {
     animation: Animations => [AnimationName, AnimationDuration, AnimationDelay, AnimationTimingFunction, AnimationIterationCount, AnimationDirection, AnimationFillMode, AnimationPlayState] |value, target| {
-      let has_animation_name = value.iter().any(|animation| animation.name.is_some());
-      target.push(StyleDeclaration::animation_duration(AnimationDurations(
-        value.iter().map(|animation| animation.duration).collect(),
-      )));
-      target.push(StyleDeclaration::animation_delay(AnimationDurations(
-        value.iter().map(|animation| animation.delay).collect(),
-      )));
+      target.push(StyleDeclaration::animation_duration(value.iter().map(|animation| animation.duration).collect()));
+      target.push(StyleDeclaration::animation_delay(value.iter().map(|animation| animation.delay).collect()));
       target.push(StyleDeclaration::animation_timing_function(
-        AnimationTimingFunctions(
-          value
-            .iter()
-            .map(|animation| animation.timing_function)
-            .collect(),
-        ),
+        value
+          .iter()
+          .map(|animation| animation.timing_function)
+          .collect(),
       ));
       target.push(StyleDeclaration::animation_iteration_count(
-        AnimationIterationCounts(
-          value
-            .iter()
-            .map(|animation| animation.iteration_count)
-            .collect(),
-        ),
+        value
+          .iter()
+          .map(|animation| animation.iteration_count)
+          .collect(),
       ));
-      target.push(StyleDeclaration::animation_direction(AnimationDirections(
+      target.push(StyleDeclaration::animation_direction(
         value.iter().map(|animation| animation.direction).collect(),
-      )));
-      target.push(StyleDeclaration::animation_fill_mode(AnimationFillModes(
+      ));
+      target.push(StyleDeclaration::animation_fill_mode(
         value.iter().map(|animation| animation.fill_mode).collect(),
-      )));
-      target.push(StyleDeclaration::animation_play_state(AnimationPlayStates(
+      ));
+      target.push(StyleDeclaration::animation_play_state(
         value.iter().map(|animation| animation.play_state).collect(),
-      )));
-      target.push(StyleDeclaration::animation_name(if has_animation_name {
-        AnimationNames(
-          value
-            .into_iter()
-            .map(|animation| animation.name.unwrap_or_default())
-            .collect(),
-        )
-      } else {
-        AnimationNames::default()
-      }));
+      ));
+      target.push(StyleDeclaration::animation_name(value.into_iter().map(|animation| animation.name).collect()));
     },
     padding: Sides<LengthDefaultsToZero> => [PaddingTop, PaddingRight, PaddingBottom, PaddingLeft] |value, target| {
       push_four_side_declarations!(
@@ -970,8 +956,11 @@ define_style! {
       )));
     },
     gap: SpacePair<LengthDefaultsToZero> => [RowGap, ColumnGap] |value, target| {
-      // Special case: gap is reversed in the declaration order (y-first)
-      push_axis_declarations!(target, value, column_gap, row_gap);
+      push_axis_declarations!(target, value, row_gap, column_gap);
+    },
+    flex_flow: FlexFlow => [FlexDirection, FlexWrap] |value, target| {
+      target.push(StyleDeclaration::flex_direction(value.direction));
+      target.push(StyleDeclaration::flex_wrap(value.wrap));
     },
     flex: Option<Flex> => [FlexGrow, FlexShrink, FlexBasis] |value, target| {
       target.push(StyleDeclaration::flex_grow(
@@ -981,6 +970,32 @@ define_style! {
         value.map(|value| FlexGrow(value.shrink)),
       ));
       target.push(StyleDeclaration::flex_basis(value.map(|value| value.basis)));
+    },
+    place_items: PlaceItems => [AlignItems, JustifyItems] |value, target| {
+      target.push(StyleDeclaration::align_items(value.align));
+      target.push(StyleDeclaration::justify_items(value.justify));
+    },
+    place_content: PlaceContent => [AlignContent, JustifyContent] |value, target| {
+      target.push(StyleDeclaration::align_content(value.align));
+      target.push(StyleDeclaration::justify_content(value.justify));
+    },
+    place_self: PlaceSelf => [AlignSelf, JustifySelf] |value, target| {
+      target.push(StyleDeclaration::align_self(value.align));
+      target.push(StyleDeclaration::justify_self(value.justify));
+    },
+    grid_column: GridLine => [GridColumnStart, GridColumnEnd] |value, target| {
+      target.push(StyleDeclaration::grid_column_start(value.start));
+      target.push(StyleDeclaration::grid_column_end(value.end));
+    },
+    grid_row: GridLine => [GridRowStart, GridRowEnd] |value, target| {
+      target.push(StyleDeclaration::grid_row_start(value.start));
+      target.push(StyleDeclaration::grid_row_end(value.end));
+    },
+    grid_area: GridArea => [GridRowStart, GridColumnStart, GridRowEnd, GridColumnEnd] |value, target| {
+      target.push(StyleDeclaration::grid_row_start(value.row_start));
+      target.push(StyleDeclaration::grid_column_start(value.column_start));
+      target.push(StyleDeclaration::grid_row_end(value.row_end));
+      target.push(StyleDeclaration::grid_column_end(value.column_end));
     },
     border_radius: Box<BorderRadius> => [BorderTopLeftRadius, BorderTopRightRadius, BorderBottomRightRadius, BorderBottomLeftRadius] |value, target| {
       push_four_side_declarations!(
@@ -1223,8 +1238,8 @@ impl Iterator for PropertyMaskIter<'_> {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct DeclarationImportance {
-  longhands: PropertyMask,
-  custom_properties: SmallVec<[Box<str>; 1]>,
+  pub(crate) longhands: PropertyMask,
+  pub(crate) custom_properties: SmallVec<[Box<str>; 1]>,
 }
 
 impl DeclarationImportance {
@@ -1471,8 +1486,29 @@ impl ComputedStyle {
     self.opacity.0 == 0.0 || self.display == Display::None || self.visibility == Visibility::Hidden
   }
 
-  // https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Positioned_layout/Stacking_context#features_creating_stacking_contexts
-  pub(crate) fn is_isolated(&self) -> bool {
+  pub(crate) fn is_z_index_applicable(&self, is_flex_or_grid_item: bool) -> bool {
+    !matches!(self.z_index, ZIndex::Auto)
+      && (matches!(self.position, Position::Absolute | Position::Relative) || is_flex_or_grid_item)
+  }
+
+  pub(crate) fn participates_in_positioned_paint_bucket(&self, is_flex_or_grid_item: bool) -> bool {
+    matches!(self.position, Position::Absolute | Position::Relative)
+      || self.is_z_index_applicable(is_flex_or_grid_item)
+  }
+
+  pub(crate) fn creates_stacking_context(
+    &self,
+    border_box: Size<f32>,
+    sizing: &Sizing,
+    is_flex_or_grid_item: bool,
+  ) -> bool {
+    self.isolation == Isolation::Isolate
+      || self.is_z_index_applicable(is_flex_or_grid_item)
+      || self.has_non_identity_transform(border_box, sizing)
+      || self.needs_offscreen_compositing()
+  }
+
+  pub(crate) fn needs_offscreen_compositing(&self) -> bool {
     self.isolation == Isolation::Isolate
       || *self.opacity < 1.0
       || !self.filter.is_empty()
@@ -1563,11 +1599,6 @@ impl ComputedStyle {
       count: 1,
       ellipsis: Some(self.ellipsis_char().to_string()),
     }
-  }
-
-  #[inline]
-  fn resolved_gap(&self) -> SpacePair<LengthDefaultsToZero> {
-    SpacePair::from_pair(self.column_gap, self.row_gap)
   }
 
   #[inline]
@@ -1702,7 +1733,10 @@ impl ComputedStyle {
       justify_items: self.justify_items.into(),
       flex_grow: self.flex_grow.map(|grow| grow.0).unwrap_or(0.0),
       align_items: self.align_items.into(),
-      gap: self.resolved_gap().resolve_to_size(sizing),
+      gap: Size {
+        width: self.column_gap.resolve_to_length_percentage(sizing),
+        height: self.row_gap.resolve_to_length_percentage(sizing),
+      },
       flex_basis: self
         .flex_basis
         .unwrap_or(Length::Auto)
@@ -1738,14 +1772,14 @@ impl ComputedStyle {
             .collect()
         }),
       grid_auto_flow: self.grid_auto_flow.into(),
-      grid_column: self
-        .grid_column
-        .as_ref()
-        .map_or_else(Default::default, Into::into),
-      grid_row: self
-        .grid_row
-        .as_ref()
-        .map_or_else(Default::default, Into::into),
+      grid_column: Line {
+        start: self.grid_column_start.clone().into(),
+        end: self.grid_column_end.clone().into(),
+      },
+      grid_row: Line {
+        start: self.grid_row_start.clone().into(),
+        end: self.grid_row_end.clone().into(),
+      },
       grid_template_columns,
       grid_template_rows,
       grid_template_column_names,
@@ -1897,6 +1931,26 @@ mod tests {
   }
 
   #[test]
+  fn property_id_accepts_legacy_gap_aliases() {
+    assert_eq!(
+      PropertyId::from_kebab_case("grid-gap"),
+      PropertyId::Shorthand(ShorthandId::Gap)
+    );
+    assert_eq!(
+      PropertyId::from_camel_case("gridGap"),
+      PropertyId::Shorthand(ShorthandId::Gap)
+    );
+    assert_eq!(
+      PropertyId::from_kebab_case("grid-row-gap"),
+      PropertyId::Longhand(LonghandId::RowGap)
+    );
+    assert_eq!(
+      PropertyId::from_camel_case("gridColumnGap"),
+      PropertyId::Longhand(LonghandId::ColumnGap)
+    );
+  }
+
+  #[test]
   fn parse_style_declaration_supports_css_wide_keywords_for_longhands() {
     let declarations = parse_declarations("color", "inherit");
 
@@ -1922,6 +1976,31 @@ mod tests {
   }
 
   #[test]
+  fn parse_style_declaration_parses_order_integer() {
+    let declarations = parse_declarations("order", "-2");
+
+    assert_eq!(
+      declarations.iter().collect::<Vec<_>>(),
+      vec![&StyleDeclaration::order(Order(-2))]
+    );
+  }
+
+  #[test]
+  fn parse_style_declaration_parses_z_index_values() {
+    let numeric = parse_declarations("z-index", "8");
+    assert_eq!(
+      numeric.iter().collect::<Vec<_>>(),
+      vec![&StyleDeclaration::z_index(ZIndex::Integer(8))]
+    );
+
+    let auto = parse_declarations("z-index", "auto");
+    assert_eq!(
+      auto.iter().collect::<Vec<_>>(),
+      vec![&StyleDeclaration::z_index(ZIndex::Auto)]
+    );
+  }
+
+  #[test]
   fn parse_style_declaration_expands_shorthands_in_order() {
     let declarations = parse_declarations("padding", "1px 2px");
 
@@ -1932,6 +2011,110 @@ mod tests {
         &StyleDeclaration::padding_right(Length::Px(2.0)),
         &StyleDeclaration::padding_bottom(Length::Px(1.0)),
         &StyleDeclaration::padding_left(Length::Px(2.0)),
+      ]
+    );
+  }
+
+  #[test]
+  fn parse_style_declaration_expands_flex_flow() {
+    let declarations = parse_declarations("flex-flow", "wrap row-reverse");
+
+    assert_eq!(
+      declarations.iter().collect::<Vec<_>>(),
+      vec![
+        &StyleDeclaration::flex_direction(FlexDirection::RowReverse),
+        &StyleDeclaration::flex_wrap(FlexWrap::Wrap),
+      ]
+    );
+  }
+
+  #[test]
+  fn parse_style_declaration_expands_place_items() {
+    let declarations = parse_declarations("place-items", "center stretch");
+
+    assert_eq!(
+      declarations.iter().collect::<Vec<_>>(),
+      vec![
+        &StyleDeclaration::align_items(AlignItems::Center),
+        &StyleDeclaration::justify_items(AlignItems::Stretch),
+      ]
+    );
+  }
+
+  #[test]
+  fn parse_style_declaration_expands_place_content() {
+    let declarations = parse_declarations("place-content", "space-between center");
+
+    assert_eq!(
+      declarations.iter().collect::<Vec<_>>(),
+      vec![
+        &StyleDeclaration::align_content(JustifyContent::SpaceBetween),
+        &StyleDeclaration::justify_content(JustifyContent::Center),
+      ]
+    );
+  }
+
+  #[test]
+  fn parse_style_declaration_expands_place_self() {
+    let declarations = parse_declarations("place-self", "end stretch");
+
+    assert_eq!(
+      declarations.iter().collect::<Vec<_>>(),
+      vec![
+        &StyleDeclaration::align_self(AlignItems::End),
+        &StyleDeclaration::justify_self(AlignItems::Stretch),
+      ]
+    );
+  }
+
+  #[test]
+  fn parse_style_declaration_expands_grid_row_shorthand() {
+    let declarations = parse_declarations("grid-row", "span 2 / 5");
+
+    assert_eq!(
+      declarations.iter().collect::<Vec<_>>(),
+      vec![
+        &StyleDeclaration::grid_row_start(GridPlacement::span(2)),
+        &StyleDeclaration::grid_row_end(GridPlacement::Line(5)),
+      ]
+    );
+  }
+
+  #[test]
+  fn parse_style_declaration_expands_grid_area_shorthand() {
+    let declarations = parse_declarations("grid-area", "header / sidebar");
+
+    assert_eq!(
+      declarations.iter().collect::<Vec<_>>(),
+      vec![
+        &StyleDeclaration::grid_row_start(GridPlacement::Named("header".to_string())),
+        &StyleDeclaration::grid_column_start(GridPlacement::Named("sidebar".to_string())),
+        &StyleDeclaration::grid_row_end(GridPlacement::Named("header".to_string())),
+        &StyleDeclaration::grid_column_end(GridPlacement::Named("sidebar".to_string())),
+      ]
+    );
+  }
+
+  #[test]
+  fn parse_style_declaration_supports_legacy_grid_gap_aliases() {
+    let row_gap = parse_declarations("grid-row-gap", "4px");
+    assert_eq!(
+      row_gap.iter().collect::<Vec<_>>(),
+      vec![&StyleDeclaration::row_gap(LengthDefaultsToZero::Px(4.0))]
+    );
+
+    let column_gap = parse_declarations("grid-column-gap", "3px");
+    assert_eq!(
+      column_gap.iter().collect::<Vec<_>>(),
+      vec![&StyleDeclaration::column_gap(LengthDefaultsToZero::Px(3.0))]
+    );
+
+    let gap = parse_declarations("grid-gap", "1px 2px");
+    assert_eq!(
+      gap.iter().collect::<Vec<_>>(),
+      vec![
+        &StyleDeclaration::row_gap(LengthDefaultsToZero::Px(1.0)),
+        &StyleDeclaration::column_gap(LengthDefaultsToZero::Px(2.0)),
       ]
     );
   }
@@ -2079,17 +2262,64 @@ mod tests {
   }
 
   #[test]
-  fn test_isolated_for_clip_path_and_mask_image() {
+  fn test_needs_offscreen_compositing_for_clip_path_and_mask_image() {
     let mut style = ComputedStyle::default();
-    assert!(!style.is_isolated());
+    assert!(!style.needs_offscreen_compositing());
 
     style.clip_path = BasicShape::from_str("inset(10px)").ok();
-    assert!(style.is_isolated());
+    assert!(style.needs_offscreen_compositing());
 
     style.clip_path = None;
-    style.mask_image =
-      Some(vec![BackgroundImage::Url("https://example.com/mask.png".into())].into_boxed_slice());
-    assert!(style.is_isolated());
+    style.mask_image = Some([BackgroundImage::Url("https://example.com/mask.png".into())].into());
+    assert!(style.needs_offscreen_compositing());
+  }
+
+  #[test]
+  fn test_is_z_index_applicable_matches_supported_scope() {
+    let mut style = ComputedStyle {
+      z_index: ZIndex::Integer(2),
+      ..Default::default()
+    };
+    assert!(style.is_z_index_applicable(false));
+
+    style.position = Position::Absolute;
+    assert!(style.is_z_index_applicable(false));
+
+    style.position = Position::Relative;
+    assert!(style.is_z_index_applicable(false));
+
+    style.z_index = ZIndex::Auto;
+    assert!(!style.is_z_index_applicable(false));
+  }
+
+  #[test]
+  fn test_creates_stacking_context_from_z_index_scope() {
+    let mut style = ComputedStyle::default();
+    let sizing = Sizing {
+      viewport: Viewport::new((1200, 630)),
+      container_size: Size::NONE,
+      font_size: 16.0,
+      calc_arena: Rc::new(CalcArena::default()),
+    };
+    let border_box = Size {
+      width: 200.0,
+      height: 100.0,
+    };
+
+    style.z_index = ZIndex::Integer(1);
+    assert!(style.creates_stacking_context(border_box, &sizing, false));
+
+    style.position = Position::Absolute;
+    assert!(style.creates_stacking_context(border_box, &sizing, false));
+  }
+
+  #[test]
+  fn test_relative_position_participates_in_positioned_paint_bucket() {
+    let style = ComputedStyle {
+      position: Position::Relative,
+      ..Default::default()
+    };
+    assert!(style.participates_in_positioned_paint_bucket(false));
   }
 
   #[test]
@@ -2108,11 +2338,31 @@ mod tests {
 
     assert!(!style.has_non_identity_transform(border_box, &sizing));
 
-    style.transform = Some(vec![Transform::Rotate(Angle::new(0.0))].into_boxed_slice());
+    style.transform = Some([Transform::Rotate(Angle::new(0.0))].into());
     assert!(!style.has_non_identity_transform(border_box, &sizing));
 
-    style.transform = Some(vec![Transform::Rotate(Angle::new(10.0))].into_boxed_slice());
+    style.transform = Some([Transform::Rotate(Angle::new(10.0))].into());
     assert!(style.has_non_identity_transform(border_box, &sizing));
+  }
+
+  #[test]
+  fn test_transform_creates_stacking_context_without_offscreen_compositing() {
+    let mut style = ComputedStyle::default();
+    let sizing = Sizing {
+      viewport: Viewport::new((1200, 630)),
+      container_size: Size::NONE,
+      font_size: 16.0,
+      calc_arena: Rc::new(CalcArena::default()),
+    };
+    let border_box = Size {
+      width: 200.0,
+      height: 100.0,
+    };
+
+    style.transform = Some([Transform::Rotate(Angle::new(10.0))].into());
+
+    assert!(style.creates_stacking_context(border_box, &sizing, false));
+    assert!(!style.needs_offscreen_compositing());
   }
 
   #[test]

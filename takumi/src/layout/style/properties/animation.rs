@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, vec::Vec};
 
 use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case};
 use typed_builder::TypedBuilder;
@@ -43,55 +43,36 @@ impl<'i> FromCss<'i> for AnimationTime {
   const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Time)];
 }
 
+/// Parsed value for one `animation-name`.
+pub type AnimationName = Option<String>;
+
 /// Parsed values for `animation-name`.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct AnimationNames(pub Box<[String]>);
+pub type AnimationNames = Box<[AnimationName]>;
 
 impl MakeComputed for AnimationNames {}
 
 impl<'i> FromCss<'i> for AnimationNames {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut names = Vec::new();
-    let mut saw_named_animation = false;
-
-    loop {
-      match parse_animation_name(input)? {
-        Some(name) => {
-          saw_named_animation = true;
-          names.push(name);
-        }
-        None => names.push(String::new()),
-      }
-
-      if input.try_parse(Parser::expect_comma).is_err() {
-        break;
-      }
-    }
-
-    if !saw_named_animation {
-      return Ok(Self::default());
-    }
-
-    Ok(Self(names.into_boxed_slice()))
+    input
+      .parse_comma_separated(AnimationName::from_css)
+      .map(Vec::into_boxed_slice)
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[
     CssToken::Keyword("none"),
     CssToken::Syntax(CssSyntaxKind::CustomIdent),
+    CssToken::Syntax(CssSyntaxKind::String),
   ];
 }
 
 /// Parsed values for `animation-duration` and `animation-delay`.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct AnimationDurations(pub(crate) Box<[AnimationTime]>);
-
-impl MakeComputed for AnimationDurations {}
+pub type AnimationDurations = Box<[AnimationTime]>;
 
 impl<'i> FromCss<'i> for AnimationDurations {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     input
       .parse_comma_separated(AnimationTime::from_css)
-      .map(|values| Self(values.into_boxed_slice()))
+      .map(Vec::into_boxed_slice)
   }
 
   const VALID_TOKENS: &'static [CssToken] = AnimationTime::VALID_TOKENS;
@@ -176,17 +157,13 @@ impl<'i> FromCss<'i> for AnimationTimingFunction {
 }
 
 /// Parsed values for `animation-timing-function`.
-#[derive(Debug, Clone, PartialEq, Default)]
-#[non_exhaustive]
-pub struct AnimationTimingFunctions(pub Box<[AnimationTimingFunction]>);
-
-impl MakeComputed for AnimationTimingFunctions {}
+pub type AnimationTimingFunctions = Box<[AnimationTimingFunction]>;
 
 impl<'i> FromCss<'i> for AnimationTimingFunctions {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     input
       .parse_comma_separated(AnimationTimingFunction::from_css)
-      .map(|values| Self(values.into_boxed_slice()))
+      .map(Vec::into_boxed_slice)
   }
 
   const VALID_TOKENS: &'static [CssToken] = AnimationTimingFunction::VALID_TOKENS;
@@ -234,17 +211,13 @@ impl<'i> FromCss<'i> for AnimationIterationCount {
 }
 
 /// Parsed values for `animation-iteration-count`.
-#[derive(Debug, Clone, PartialEq, Default)]
-#[non_exhaustive]
-pub struct AnimationIterationCounts(pub Box<[AnimationIterationCount]>);
-
-impl MakeComputed for AnimationIterationCounts {}
+pub type AnimationIterationCounts = Box<[AnimationIterationCount]>;
 
 impl<'i> FromCss<'i> for AnimationIterationCounts {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     input
       .parse_comma_separated(AnimationIterationCount::from_css)
-      .map(|values| Self(values.into_boxed_slice()))
+      .map(Vec::into_boxed_slice)
   }
 
   const VALID_TOKENS: &'static [CssToken] = AnimationIterationCount::VALID_TOKENS;
@@ -274,17 +247,13 @@ declare_enum_from_css_impl!(
 );
 
 /// Parsed values for `animation-direction`.
-#[derive(Debug, Clone, PartialEq, Default)]
-#[non_exhaustive]
-pub struct AnimationDirections(pub Box<[AnimationDirection]>);
-
-impl MakeComputed for AnimationDirections {}
+pub type AnimationDirections = Box<[AnimationDirection]>;
 
 impl<'i> FromCss<'i> for AnimationDirections {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     input
       .parse_comma_separated(AnimationDirection::from_css)
-      .map(|values| Self(values.into_boxed_slice()))
+      .map(Vec::into_boxed_slice)
   }
 
   const VALID_TOKENS: &'static [CssToken] = AnimationDirection::VALID_TOKENS;
@@ -314,17 +283,13 @@ declare_enum_from_css_impl!(
 );
 
 /// Parsed values for `animation-fill-mode`.
-#[derive(Debug, Clone, PartialEq, Default)]
-#[non_exhaustive]
-pub struct AnimationFillModes(pub Box<[AnimationFillMode]>);
-
-impl MakeComputed for AnimationFillModes {}
+pub type AnimationFillModes = Box<[AnimationFillMode]>;
 
 impl<'i> FromCss<'i> for AnimationFillModes {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     input
       .parse_comma_separated(AnimationFillMode::from_css)
-      .map(|values| Self(values.into_boxed_slice()))
+      .map(Vec::into_boxed_slice)
   }
 
   const VALID_TOKENS: &'static [CssToken] = AnimationFillMode::VALID_TOKENS;
@@ -348,17 +313,13 @@ declare_enum_from_css_impl!(
 );
 
 /// Parsed values for `animation-play-state`.
-#[derive(Debug, Clone, PartialEq, Default)]
-#[non_exhaustive]
-pub struct AnimationPlayStates(pub Box<[AnimationPlayState]>);
-
-impl MakeComputed for AnimationPlayStates {}
+pub type AnimationPlayStates = Box<[AnimationPlayState]>;
 
 impl<'i> FromCss<'i> for AnimationPlayStates {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     input
       .parse_comma_separated(AnimationPlayState::from_css)
-      .map(|values| Self(values.into_boxed_slice()))
+      .map(Vec::into_boxed_slice)
   }
 
   const VALID_TOKENS: &'static [CssToken] = AnimationPlayState::VALID_TOKENS;
@@ -431,7 +392,7 @@ impl<'i> FromCss<'i> for Animation {
         continue;
       }
 
-      if let Ok(value) = input.try_parse(parse_animation_name) {
+      if let Ok(value) = input.try_parse(AnimationName::from_css) {
         animation.name = value;
         continue;
       }
@@ -473,6 +434,7 @@ impl<'i> FromCss<'i> for Animations {
     CssToken::Keyword("running"),
     CssToken::Keyword("paused"),
     CssToken::Syntax(CssSyntaxKind::CustomIdent),
+    CssToken::Syntax(CssSyntaxKind::String),
   ];
 }
 
@@ -527,20 +489,6 @@ impl TailwindPropertyParser for Animations {
 
     Self::parse_tw(token)
   }
-}
-
-fn parse_animation_name<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Option<String>> {
-  let location = input.current_source_location();
-  let token = input.next()?;
-  let Token::Ident(name) = token else {
-    return Err(AnimationNames::unexpected_token_error(location, token));
-  };
-
-  if name.eq_ignore_ascii_case("none") {
-    return Ok(None);
-  }
-
-  Ok(Some(name.to_string()))
 }
 
 fn parse_timing_keyword<'i>(
@@ -619,7 +567,7 @@ pub(crate) fn timing_function_at(
   values: &AnimationTimingFunctions,
   index: usize,
 ) -> AnimationTimingFunction {
-  repeated_list_value(&values.0, index, AnimationTimingFunction::default())
+  repeated_list_value(values, index, AnimationTimingFunction::default())
 }
 
 pub(crate) fn time_at(
@@ -627,22 +575,22 @@ pub(crate) fn time_at(
   index: usize,
   default: AnimationTime,
 ) -> AnimationTime {
-  repeated_list_value(&values.0, index, default)
+  repeated_list_value(values, index, default)
 }
 
 pub(crate) fn iteration_count_at(
   values: &AnimationIterationCounts,
   index: usize,
 ) -> AnimationIterationCount {
-  repeated_list_value(&values.0, index, AnimationIterationCount::default())
+  repeated_list_value(values, index, AnimationIterationCount::default())
 }
 
 pub(crate) fn direction_at(values: &AnimationDirections, index: usize) -> AnimationDirection {
-  repeated_list_value(&values.0, index, AnimationDirection::default())
+  repeated_list_value(values, index, AnimationDirection::default())
 }
 
 pub(crate) fn fill_mode_at(values: &AnimationFillModes, index: usize) -> AnimationFillMode {
-  repeated_list_value(&values.0, index, AnimationFillMode::default())
+  repeated_list_value(values, index, AnimationFillMode::default())
 }
 
 pub(crate) fn cubic_bezier_sample(x1: f32, y1: f32, x2: f32, y2: f32, progress: f32) -> f32 {
@@ -720,7 +668,15 @@ mod tests {
   fn parse_animation_names() {
     assert!(matches!(
       AnimationNames::from_str("fade, slide"),
-      Ok(names) if names.0.as_ref() == ["fade", "slide"]
+      Ok(names) if names.as_ref() == [Some("fade".to_string()), Some("slide".to_string())]
+    ));
+  }
+
+  #[test]
+  fn parse_quoted_animation_names() {
+    assert!(matches!(
+      AnimationNames::from_str("\"fade\", slide"),
+      Ok(names) if names.as_ref() == [Some("fade".to_string()), Some("slide".to_string())]
     ));
   }
 
@@ -728,7 +684,7 @@ mod tests {
   fn parse_animation_names_with_none_entry() {
     assert!(matches!(
       AnimationNames::from_str("none, slide"),
-      Ok(names) if names.0.as_ref() == ["", "slide"]
+      Ok(names) if names.as_ref() == [None, Some("slide".to_string())]
     ));
   }
 
@@ -775,10 +731,7 @@ mod tests {
 
   #[test]
   fn repeated_list_value_wraps() {
-    let values = AnimationDirections(Box::from([
-      AnimationDirection::Normal,
-      AnimationDirection::Reverse,
-    ]));
+    let values = [AnimationDirection::Normal, AnimationDirection::Reverse].into();
     assert_eq!(direction_at(&values, 2), AnimationDirection::Normal);
   }
 
@@ -795,6 +748,19 @@ mod tests {
         fill_mode: AnimationFillMode::Both,
         play_state: AnimationPlayState::Paused,
         name: Some("fade".to_string()),
+      }]))
+    );
+  }
+
+  #[test]
+  fn parse_animation_shorthand_with_quoted_name() {
+    assert_eq!(
+      Animations::from_str("\"fade\" 1s linear"),
+      Ok(Box::from([Animation {
+        duration: AnimationTime::from_milliseconds(1000.0),
+        timing_function: AnimationTimingFunction::Linear,
+        name: Some("fade".to_string()),
+        ..Animation::default()
       }]))
     );
   }

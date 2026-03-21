@@ -2,8 +2,8 @@ use cssparser::{Parser, match_ignore_ascii_case};
 
 use crate::{
   layout::style::{
-    AspectRatio, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
-    tw::TailwindPropertyParser,
+    AspectRatio, CssSyntaxKind, CssToken, FlexDirection, FlexWrap, FromCss, Length, MakeComputed,
+    ParseResult, tw::TailwindPropertyParser,
   },
   rendering::Sizing,
 };
@@ -72,6 +72,58 @@ impl Flex {
       shrink: 1.0,
       basis: Length::zero(),
     }
+  }
+}
+
+/// Represents the `flex-flow` shorthand.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct FlexFlow {
+  /// The flex direction.
+  pub direction: FlexDirection,
+  /// The flex wrapping mode.
+  pub wrap: FlexWrap,
+}
+
+impl<'i> FromCss<'i> for FlexFlow {
+  const VALID_TOKENS: &'static [CssToken] = &[
+    CssToken::Keyword("column"),
+    CssToken::Keyword("column-reverse"),
+    CssToken::Keyword("nowrap"),
+    CssToken::Keyword("row"),
+    CssToken::Keyword("row-reverse"),
+    CssToken::Keyword("wrap"),
+    CssToken::Keyword("wrap-reverse"),
+  ];
+
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let mut direction = None;
+    let mut wrap = None;
+
+    while !input.is_exhausted() {
+      if direction.is_none()
+        && let Ok(value) = input.try_parse(FlexDirection::from_css)
+      {
+        direction = Some(value);
+        continue;
+      }
+
+      if wrap.is_none()
+        && let Ok(value) = input.try_parse(FlexWrap::from_css)
+      {
+        wrap = Some(value);
+        continue;
+      }
+
+      return Err(Self::unexpected_token_error(
+        input.current_source_location(),
+        input.next()?,
+      ));
+    }
+
+    Ok(Self {
+      direction: direction.unwrap_or_default(),
+      wrap: wrap.unwrap_or_default(),
+    })
   }
 }
 

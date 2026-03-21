@@ -1,4 +1,4 @@
-use std::{iter::Copied, mem::take, slice::Iter, vec::IntoIter};
+use std::{mem::take, vec::IntoIter};
 
 use taffy::{
   AvailableSpace, Cache, CacheTree, Display as TaffyDisplay, Layout, LayoutBlockContainer,
@@ -435,9 +435,26 @@ fn should_strip_flex_intrinsic_stretch_known_dimension(
   }
 }
 
+fn sort_children_by_order(
+  children: &[NodeId],
+  mut child_order: impl FnMut(NodeId) -> i32,
+) -> Vec<NodeId> {
+  let mut ordered = children
+    .iter()
+    .copied()
+    .enumerate()
+    .map(|(source_index, child_id)| (source_index, child_id, child_order(child_id)))
+    .collect::<Vec<_>>();
+  ordered.sort_by(|left, right| left.2.cmp(&right.2).then_with(|| left.0.cmp(&right.0)));
+  ordered
+    .into_iter()
+    .map(|(_, child_id, _)| child_id)
+    .collect()
+}
+
 impl TraversePartialTree for LayoutTree<'_, '_> {
   type ChildIter<'a>
-    = Copied<Iter<'a, NodeId>>
+    = IntoIter<NodeId>
   where
     Self: 'a;
 
@@ -446,7 +463,19 @@ impl TraversePartialTree for LayoutTree<'_, '_> {
       unreachable!()
     };
 
-    node.children.iter().copied()
+    let children = if matches!(node.style.display, TaffyDisplay::Flex | TaffyDisplay::Grid) {
+      sort_children_by_order(&node.children, |child_id| {
+        let child_idx: usize = child_id.into();
+        self
+          .render_nodes
+          .get(child_idx)
+          .map_or(0, |child| child.context.style.order.0)
+      })
+    } else {
+      node.children.to_vec()
+    };
+
+    children.into_iter()
   }
 
   fn child_count(&self, parent_node_id: NodeId) -> usize {
@@ -461,6 +490,13 @@ impl TraversePartialTree for LayoutTree<'_, '_> {
     let Some(node) = self.get_layout_node_ref(parent_node_id) else {
       unreachable!()
     };
+
+    if matches!(node.style.display, TaffyDisplay::Flex | TaffyDisplay::Grid) {
+      let mut ordered_children = self.child_ids(parent_node_id);
+      return ordered_children
+        .nth(child_index)
+        .unwrap_or_else(|| unreachable!());
+    }
 
     node.children[child_index]
   }
@@ -1092,7 +1128,7 @@ impl<'g> RenderNode<'g> {
           RenderNode {
             context: finished.context,
             node: Some(finished.node),
-            children: Some(vec![anonymous_text_item].into_boxed_slice()),
+            children: Some([anonymous_text_item].into()),
             layout_style_override: None,
             anonymous_text_content: None,
             force_inline_layout: false,
@@ -1241,6 +1277,7 @@ fn flush_inline_group<'g>(
 mod tests {
   use cssparser::{Parser, ParserInput};
   use smallvec::smallvec;
+  use taffy::NodeId;
 
   use super::build_inherited_style;
   use super::registered_custom_property_parent_style;
@@ -1261,6 +1298,27 @@ mod tests {
       unreachable!();
     };
     stylesheet
+  }
+
+  #[test]
+  fn sort_children_by_order_keeps_source_order_for_equal_values() {
+    let children = vec![
+      NodeId::from(3usize),
+      NodeId::from(1usize),
+      NodeId::from(2usize),
+    ];
+    let sorted = super::sort_children_by_order(&children, |child_id| match usize::from(child_id) {
+      1 => -1,
+      _ => 0,
+    });
+    assert_eq!(
+      sorted,
+      vec![
+        NodeId::from(1usize),
+        NodeId::from(3usize),
+        NodeId::from(2usize)
+      ]
+    );
   }
 
   #[test]
