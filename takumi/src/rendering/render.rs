@@ -1,4 +1,4 @@
-use std::{collections::HashMap, mem::replace, ops::Range, sync::Arc};
+use std::{collections::HashMap, ops::Range, sync::Arc};
 
 use image::RgbaImage;
 use parley::{GlyphRun, PositionedLayoutItem};
@@ -15,16 +15,15 @@ use crate::{
       create_inline_constraint, create_inline_layout,
     },
     node::Node,
-    style::{
-      Affine, ComputedStyle, Filter, ImageScalingAlgorithm, SpacePair, StyleSheet,
-      apply_backdrop_filter, apply_filters,
-    },
+    style::{Affine, StyleSheet},
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
   rendering::{
-    AnimationFrame, BorderProperties, Canvas, CanvasConstrain, CanvasConstrainResult,
-    DitheringAlgorithm, RenderContext, Sizing, apply_dithering, draw_debug_border,
-    inline_drawing::get_parent_x_height, overlay_image,
+    AnimationFrame, Canvas, DitheringAlgorithm, RenderContext, apply_dithering,
+    inline_drawing::get_parent_x_height,
+    stacking_context::{
+      apply_transform, build_stacking_contexts, collect_layout_children, paint_context,
+    },
   },
   resources::image::ImageSource,
 };
@@ -149,12 +148,6 @@ struct MeasureExit {
   local_transform: Affine,
   runs: Vec<MeasuredTextRun>,
   child_ids: Vec<NodeId>,
-}
-
-struct RenderExit {
-  path: Vec<usize>,
-  has_constrain: bool,
-  original_canvas_image: Option<RgbaImage>,
 }
 
 /// Measures the layout of a node.
@@ -323,8 +316,9 @@ fn collect_measure_result<'g>(
           continue;
         };
 
-        let ordered_children = collect_ordered_children(layout_results, node_id, render_children)?;
-        if ordered_children.is_empty() {
+        let layout_children =
+          collect_layout_children(layout_results, node_id, render_children.len())?;
+        if layout_children.is_empty() {
           measured_by_node_id.insert(
             usize::from(node_id),
             create_measured_node(layout, local_transform, children, runs),
@@ -343,10 +337,10 @@ fn collect_measure_result<'g>(
           height: layout.size.height,
           local_transform,
           runs,
-          child_ids: ordered_children.iter().map(|child| child.node_id).collect(),
+          child_ids: layout_children.iter().map(|child| child.node_id).collect(),
         }));
 
-        for child in ordered_children.iter().rev() {
+        for child in layout_children.iter().rev() {
           let mut child_path = path.clone();
           child_path.push(child.render_index);
           visits.push(TraversalVisit::Enter(TraversalEnter {
@@ -554,43 +548,6 @@ fn resolve_scene_at_time<'a, 'g>(
     .map(|scene| (scene, u64::from(scene.duration_ms.saturating_sub(1))))
 }
 
-fn apply_transform(
-  transform: &mut Affine,
-  style: &ComputedStyle,
-  border_box: Size<f32>,
-  sizing: &Sizing,
-) {
-  let origin = style.transform_origin.to_point(sizing, border_box);
-
-  // CSS Transforms Level 2 order: T(origin) * translate * rotate * scale * transform * T(-origin)
-  // Ref: https://www.w3.org/TR/css-transforms-2/#ctm
-
-  let mut local = Affine::translation(origin.x, origin.y);
-
-  if style.translate != SpacePair::default() {
-    local *= Affine::translation(
-      style.translate.x.to_px(sizing, border_box.width),
-      style.translate.y.to_px(sizing, border_box.height),
-    );
-  }
-
-  if let Some(rotate) = style.rotate {
-    local *= Affine::rotation(rotate);
-  }
-
-  if style.scale != SpacePair::default() {
-    local *= Affine::scale(style.scale.x.0, style.scale.y.0);
-  }
-
-  if let Some(node_transform) = &style.transform {
-    local *= Affine::from_transforms(node_transform.iter(), sizing, border_box);
-  }
-
-  local *= Affine::translation(-origin.x, -origin.y);
-
-  *transform *= local;
-}
-
 fn get_node_mut_by_path<'a, 'g>(
   root: &'a mut RenderNode<'g>,
   path: &[usize],
@@ -603,54 +560,6 @@ fn get_node_mut_by_path<'a, 'g>(
   Some(current)
 }
 
-#[derive(Debug, Clone, Copy)]
-struct OrderedChild {
-  render_index: usize,
-  node_id: NodeId,
-}
-
-fn collect_ordered_children(
-  layout_results: &LayoutResults,
-  node_id: NodeId,
-  render_children: &[RenderNode<'_>],
-) -> Result<Vec<OrderedChild>> {
-  let layout_children = layout_results.children(node_id)?;
-  let child_count = render_children.len().min(layout_children.len());
-  let mut children = layout_children
-    .iter()
-    .copied()
-    .take(child_count)
-    .enumerate()
-    .map(|(render_index, node_id)| {
-      let style = &render_children[render_index].context.style;
-      (
-        render_index,
-        node_id,
-        style.z_index.painting_order_value(),
-        style.order.0,
-      )
-    })
-    .collect::<Vec<_>>();
-
-  children.sort_by(|left, right| {
-    left
-      .2
-      .cmp(&right.2)
-      .then_with(|| left.3.cmp(&right.3))
-      .then_with(|| left.0.cmp(&right.0))
-  });
-
-  Ok(
-    children
-      .into_iter()
-      .map(|(render_index, node_id, _, _)| OrderedChild {
-        render_index,
-        node_id,
-      })
-      .collect(),
-  )
-}
-
 pub(crate) fn render_node<'g>(
   node: &mut RenderNode<'g>,
   layout_results: &LayoutResults,
@@ -659,200 +568,8 @@ pub(crate) fn render_node<'g>(
   transform: Affine,
   container_size: Size<Option<f32>>,
 ) -> Result<()> {
-  fn finish_node_render<'g>(
-    node: &mut RenderNode<'g>,
-    canvas: &mut Canvas,
-    has_constrain: bool,
-    original_canvas_image: Option<RgbaImage>,
-  ) -> Result<()> {
-    let opacity_filter =
-      (node.context.style.opacity.0 < 1.0).then_some(Filter::Opacity(node.context.style.opacity));
-
-    if !node.context.style.filter.is_empty() || opacity_filter.is_some() {
-      apply_filters(
-        &mut canvas.image,
-        &node.context.sizing,
-        node.context.current_color,
-        &mut canvas.buffer_pool,
-        node
-          .context
-          .style
-          .filter
-          .iter()
-          .chain(opacity_filter.iter()),
-      )?;
-    }
-
-    if let Some(mut source_canvas_image) = original_canvas_image {
-      overlay_image(
-        &mut source_canvas_image,
-        &canvas.image,
-        BorderProperties::zero(),
-        Affine::IDENTITY,
-        ImageScalingAlgorithm::Auto,
-        node.context.style.mix_blend_mode,
-        &[],
-        &mut canvas.mask_memory,
-        &mut canvas.buffer_pool,
-      );
-
-      let isolated_image = replace(&mut canvas.image, source_canvas_image);
-      canvas.buffer_pool.release_image(isolated_image);
-    }
-
-    if has_constrain {
-      canvas.pop_constrain();
-    }
-
-    Ok(())
-  }
-
-  let mut visits = vec![TraversalVisit::Enter(TraversalEnter {
-    path: Vec::new(),
-    node_id,
-    transform,
-    container_size,
-  })];
-
-  while let Some(visit) = visits.pop() {
-    match visit {
-      TraversalVisit::Enter(TraversalEnter {
-        path,
-        node_id,
-        mut transform,
-        container_size,
-      }) => {
-        let Some(current) = get_node_mut_by_path(node, &path) else {
-          unreachable!()
-        };
-        let layout = *layout_results.layout(node_id)?;
-
-        if current.context.style.is_invisible() {
-          continue;
-        }
-
-        current.context.sizing.container_size = container_size;
-        transform *= Affine::translation(layout.location.x, layout.location.y);
-        apply_transform(
-          &mut transform,
-          &current.context.style,
-          layout.size,
-          &current.context.sizing,
-        );
-
-        if !transform.is_invertible() {
-          continue;
-        }
-
-        current.context.transform = transform;
-
-        let constrain = CanvasConstrain::from_node(
-          &current.context,
-          &current.context.style,
-          layout,
-          transform,
-          &mut canvas.mask_memory,
-          &mut canvas.buffer_pool,
-        )?;
-
-        if matches!(constrain, CanvasConstrainResult::SkipRendering) {
-          continue;
-        }
-
-        let has_constrain = constrain.is_some();
-
-        if !current.context.style.backdrop_filter.is_empty() {
-          let border = BorderProperties::from_context(&current.context, layout.size, layout.border);
-          apply_backdrop_filter(canvas, border, layout.size, transform, &current.context)?;
-        }
-
-        let should_isolate = current.context.style.is_isolated()
-          || current
-            .context
-            .style
-            .has_non_identity_transform(layout.size, &current.context.sizing);
-        let original_canvas_image = if should_isolate {
-          Some(canvas.replace_new_image()?)
-        } else {
-          None
-        };
-
-        match constrain {
-          CanvasConstrainResult::None => {
-            current.draw_shell(canvas, layout)?;
-          }
-          CanvasConstrainResult::Some(constrain) => match constrain {
-            CanvasConstrain::ClipPath { .. } | CanvasConstrain::MaskImage { .. } => {
-              canvas.push_constrain(constrain);
-              current.draw_shell(canvas, layout)?;
-            }
-            CanvasConstrain::Overflow { .. } => {
-              current.draw_shell(canvas, layout)?;
-              canvas.push_constrain(constrain);
-            }
-          },
-          CanvasConstrainResult::SkipRendering => unreachable!(),
-        }
-
-        current.draw_content(canvas, layout)?;
-
-        if current.context.draw_debug_border {
-          draw_debug_border(canvas, layout, transform);
-        }
-
-        if current.should_create_inline_layout() {
-          current.draw_inline(canvas, layout)?;
-          finish_node_render(current, canvas, has_constrain, original_canvas_image)?;
-          continue;
-        }
-
-        let Some(children) = current.children.as_deref() else {
-          finish_node_render(current, canvas, has_constrain, original_canvas_image)?;
-          continue;
-        };
-
-        let ordered_children = collect_ordered_children(layout_results, node_id, children)?;
-        if ordered_children.is_empty() {
-          finish_node_render(current, canvas, has_constrain, original_canvas_image)?;
-          continue;
-        }
-
-        visits.push(TraversalVisit::Exit(RenderExit {
-          path: path.clone(),
-          has_constrain,
-          original_canvas_image,
-        }));
-
-        let child_container_size = Size {
-          width: Some(layout.content_box_width()),
-          height: Some(layout.content_box_height()),
-        };
-
-        for child in ordered_children.into_iter().rev() {
-          let mut child_path = path.clone();
-          child_path.push(child.render_index);
-          visits.push(TraversalVisit::Enter(TraversalEnter {
-            path: child_path,
-            node_id: child.node_id,
-            transform,
-            container_size: child_container_size,
-          }));
-        }
-      }
-      TraversalVisit::Exit(RenderExit {
-        path,
-        has_constrain,
-        original_canvas_image,
-      }) => {
-        let Some(current) = get_node_mut_by_path(node, &path) else {
-          unreachable!()
-        };
-        finish_node_render(current, canvas, has_constrain, original_canvas_image)?;
-      }
-    };
-  }
-
-  Ok(())
+  let contexts = build_stacking_contexts(node, layout_results, node_id, transform, container_size)?;
+  paint_context(node, &contexts, layout_results, canvas, 0)
 }
 
 #[cfg(test)]

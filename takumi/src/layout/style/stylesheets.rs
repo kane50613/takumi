@@ -1487,8 +1487,28 @@ impl ComputedStyle {
     self.opacity.0 == 0.0 || self.display == Display::None || self.visibility == Visibility::Hidden
   }
 
-  // https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Positioned_layout/Stacking_context#features_creating_stacking_contexts
-  pub(crate) fn is_isolated(&self) -> bool {
+  pub(crate) fn is_z_index_applicable(&self, is_flex_or_grid_item: bool) -> bool {
+    !matches!(self.z_index, ZIndex::Auto)
+      && (self.position == Position::Absolute || is_flex_or_grid_item)
+  }
+
+  pub(crate) fn participates_in_positioned_paint_bucket(&self, is_flex_or_grid_item: bool) -> bool {
+    self.position == Position::Absolute || self.is_z_index_applicable(is_flex_or_grid_item)
+  }
+
+  pub(crate) fn creates_stacking_context(
+    &self,
+    border_box: Size<f32>,
+    sizing: &Sizing,
+    is_flex_or_grid_item: bool,
+  ) -> bool {
+    self.isolation == Isolation::Isolate
+      || self.is_z_index_applicable(is_flex_or_grid_item)
+      || self.has_non_identity_transform(border_box, sizing)
+      || self.needs_offscreen_compositing()
+  }
+
+  pub(crate) fn needs_offscreen_compositing(&self) -> bool {
     self.isolation == Isolation::Isolate
       || *self.opacity < 1.0
       || !self.filter.is_empty()
@@ -2244,16 +2264,56 @@ mod tests {
   }
 
   #[test]
-  fn test_isolated_for_clip_path_and_mask_image() {
+  fn test_needs_offscreen_compositing_for_clip_path_and_mask_image() {
     let mut style = ComputedStyle::default();
-    assert!(!style.is_isolated());
+    assert!(!style.needs_offscreen_compositing());
 
     style.clip_path = BasicShape::from_str("inset(10px)").ok();
-    assert!(style.is_isolated());
+    assert!(style.needs_offscreen_compositing());
 
     style.clip_path = None;
     style.mask_image = Some([BackgroundImage::Url("https://example.com/mask.png".into())].into());
-    assert!(style.is_isolated());
+    assert!(style.needs_offscreen_compositing());
+  }
+
+  #[test]
+  fn test_is_z_index_applicable_matches_supported_scope() {
+    let mut style = ComputedStyle {
+      z_index: ZIndex::Integer(2),
+      ..Default::default()
+    };
+    assert!(!style.is_z_index_applicable(false));
+
+    style.position = Position::Absolute;
+    assert!(style.is_z_index_applicable(false));
+
+    style.position = Position::Relative;
+    assert!(style.is_z_index_applicable(true));
+
+    style.z_index = ZIndex::Auto;
+    assert!(!style.is_z_index_applicable(true));
+  }
+
+  #[test]
+  fn test_creates_stacking_context_from_z_index_scope() {
+    let mut style = ComputedStyle::default();
+    let sizing = Sizing {
+      viewport: Viewport::new((1200, 630)),
+      container_size: Size::NONE,
+      font_size: 16.0,
+      calc_arena: Rc::new(CalcArena::default()),
+    };
+    let border_box = Size {
+      width: 200.0,
+      height: 100.0,
+    };
+
+    style.z_index = ZIndex::Integer(1);
+    assert!(!style.creates_stacking_context(border_box, &sizing, false));
+    assert!(style.creates_stacking_context(border_box, &sizing, true));
+
+    style.position = Position::Absolute;
+    assert!(style.creates_stacking_context(border_box, &sizing, false));
   }
 
   #[test]
@@ -2277,6 +2337,26 @@ mod tests {
 
     style.transform = Some([Transform::Rotate(Angle::new(10.0))].into());
     assert!(style.has_non_identity_transform(border_box, &sizing));
+  }
+
+  #[test]
+  fn test_transform_creates_stacking_context_without_offscreen_compositing() {
+    let mut style = ComputedStyle::default();
+    let sizing = Sizing {
+      viewport: Viewport::new((1200, 630)),
+      container_size: Size::NONE,
+      font_size: 16.0,
+      calc_arena: Rc::new(CalcArena::default()),
+    };
+    let border_box = Size {
+      width: 200.0,
+      height: 100.0,
+    };
+
+    style.transform = Some([Transform::Rotate(Angle::new(10.0))].into());
+
+    assert!(style.creates_stacking_context(border_box, &sizing, false));
+    assert!(!style.needs_offscreen_compositing());
   }
 
   #[test]
