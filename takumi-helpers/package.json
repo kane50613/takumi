@@ -1,24 +1,22 @@
 {
   "name": "@takumi-rs/helpers",
   "version": "1.0.0-beta.8",
+  "license": "(MIT OR Apache-2.0)",
   "author": {
-    "email": "me@kane.tw",
     "name": "Kane Wang",
+    "email": "me@kane.tw",
     "url": "https://kane.tw"
   },
   "repository": {
     "url": "git+https://github.com/kane50613/takumi.git"
   },
-  "devDependencies": {
-    "@types/bun": "catalog:",
-    "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
-    "lucide-react": "catalog:",
-    "react": "catalog:",
-    "react-dom": "catalog:",
-    "tsup": "^8.5.1",
-    "typescript": "catalog:"
-  },
+  "files": [
+    "dist",
+    "package.json",
+    "README.md",
+    "tsconfig.json"
+  ],
+  "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -39,15 +37,17 @@
       "default": "./dist/emoji.js"
     }
   },
-  "files": [
-    "dist",
-    "package.json",
-    "README.md",
-    "tsconfig.json"
-  ],
-  "license": "(MIT OR Apache-2.0)",
   "scripts": {
     "build": "tsup-node src/index.ts src/emoji.ts src/jsx/jsx.ts src/jsx/create-tailwind-fn.ts --clean --minify --dts --format esm,cjs --no-splitting"
   },
-  "type": "module"
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "lucide-react": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "tsup": "^8.5.1",
+    "typescript": "catalog:"
+  }
 }

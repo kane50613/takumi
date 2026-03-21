@@ -2,35 +2,27 @@
   "name": "@takumi-rs/wasm",
   "version": "1.0.0-beta.8",
   "keywords": [
-    "image",
-    "rendering",
     "css",
-    "react",
+    "image",
     "jsx",
+    "react",
+    "rendering",
     "webassembly"
   ],
-  "scripts": {
-    "build": "wasm-pack build --no-pack --release --out-dir pkg --target web && bun run scripts/merge-dts.ts && bun build pkg/takumi_wasm.js --define import.meta.url=undefined --format cjs --outfile pkg/takumi_wasm.cjs",
-    "build:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target web && bun run scripts/merge-dts.ts && bun build pkg/takumi_wasm.js --define import.meta.url=undefined --format cjs --outfile pkg/takumi_wasm.cjs",
-    "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json"
-  },
+  "license": "(MIT OR Apache-2.0)",
   "author": {
-    "email": "me@kane.tw",
     "name": "Kane Wang",
+    "email": "me@kane.tw",
     "url": "https://kane.tw"
   },
   "repository": {
     "url": "git+https://github.com/kane50613/takumi.git"
   },
-  "dependencies": {
-    "@takumi-rs/helpers": "workspace:*"
-  },
-  "readme": "README.md",
-  "license": "(MIT OR Apache-2.0)",
-  "devDependencies": {
-    "@types/bun": "catalog:",
-    "typescript": "catalog:"
-  },
+  "files": [
+    "README.md",
+    "pkg/takumi*",
+    "bundlers/*"
+  ],
   "exports": {
     ".": {
       "node": {
@@ -63,9 +55,17 @@
       "default": "./bundlers/next.js"
     }
   },
-  "files": [
-    "README.md",
-    "pkg/takumi*",
-    "bundlers/*"
-  ]
+  "scripts": {
+    "build": "wasm-pack build --no-pack --release --out-dir pkg --target web && bun run scripts/merge-dts.ts && bun build pkg/takumi_wasm.js --define import.meta.url=undefined --format cjs --outfile pkg/takumi_wasm.cjs",
+    "build:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target web && bun run scripts/merge-dts.ts && bun build pkg/takumi_wasm.js --define import.meta.url=undefined --format cjs --outfile pkg/takumi_wasm.cjs",
+    "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json"
+  },
+  "dependencies": {
+    "@takumi-rs/helpers": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  },
+  "readme": "README.md"
 }

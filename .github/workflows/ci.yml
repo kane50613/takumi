@@ -23,17 +23,21 @@ concurrency:
 
 # Jobs are grouped by package
 jobs:
-  biome-lint:
-    name: Biome Lint
+  lint-and-format:
+    name: Lint and Format
     runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup Biome
-        uses: biomejs/setup-biome@v2
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@main
+        with:
+          bun-version: latest
 
-      - name: Run Biome
-        run: biome ci . --css-parse-tailwind-directives=true
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - run: bun lint
 
   test-rust:
     name: Rust Test
@@ -61,12 +65,6 @@ jobs:
 
       - name: Run tests
         run: CARGO_PROFILE_TEST_STRIP="debuginfo" cargo test
-
-      - name: Setup Biome
-        uses: biomejs/setup-biome@v2
-
-      - name: Run Biome
-        run: biome check --write --unsafe .
 
       - name: Check for git changes and prepare artifact
         id: check_changes
@@ -490,7 +488,7 @@ jobs:
     runs-on: ubuntu-slim
     needs:
       [
-        biome-lint,
+        lint-and-format,
         test-rust,
         test-helpers,
         test-napi,

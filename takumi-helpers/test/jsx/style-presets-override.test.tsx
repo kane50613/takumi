@@ -87,10 +87,9 @@ describe("fromJsx - stylePresets overriding", () => {
     });
 
     test("disables default styles for img element", async () => {
-      const { node } = await fromJsx(
-        <img src="https://example.com/image.jpg" alt="Test" />,
-        { defaultStyles: false },
-      );
+      const { node } = await fromJsx(<img src="https://example.com/image.jpg" alt="Test" />, {
+        defaultStyles: false,
+      });
       expect(node).toEqual({
         type: "image",
         src: "https://example.com/image.jpg",
@@ -337,9 +336,7 @@ describe("fromJsx - stylePresets overriding", () => {
       };
 
       const { node } = await fromJsx(
-        <h1 style={{ fontSize: "10em", fontWeight: "100" }}>
-          Inline override
-        </h1>,
+        <h1 style={{ fontSize: "10em", fontWeight: "100" }}>Inline override</h1>,
         { defaultStyles: customPresets },
       );
 

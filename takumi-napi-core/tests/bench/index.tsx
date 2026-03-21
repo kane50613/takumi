@@ -148,25 +148,22 @@ summary(() => {
     });
   });
 
-  bench(
-    "createNode + renderAnimation (webp, 30fps, 100%, 1000ms)",
-    async () => {
-      const { scenes, fps, durationMs } = await createAnimationNodes();
+  bench("createNode + renderAnimation (webp, 30fps, 100%, 1000ms)", async () => {
+    const { scenes, fps, durationMs } = await createAnimationNodes();
 
-      if (fps !== 30 || durationMs !== 1000) {
-        throw new Error("Invalid fps or durationMs");
-      }
+    if (fps !== 30 || durationMs !== 1000) {
+      throw new Error("Invalid fps or durationMs");
+    }
 
-      return renderer.renderAnimation({
-        scenes,
-        width: 1200,
-        height: 630,
-        fps,
-        format: "webp",
-        quality: 100,
-      });
-    },
-  );
+    return renderer.renderAnimation({
+      scenes,
+      width: 1200,
+      height: 630,
+      fps,
+      format: "webp",
+      quality: 100,
+    });
+  });
 
   bench("createNode + renderAnimation (apng, 30fps, 1000ms)", async () => {
     const { scenes, fps, durationMs } = await createAnimationNodes();
@@ -208,8 +205,7 @@ summary(() => {
     const totalFrames = (durationMs * fps) / 1000;
     const frames = await Promise.all(
       Array.from({ length: totalFrames }, async (_frame, frameIndex) => {
-        const normalizedProgress =
-          totalFrames > 1 ? frameIndex / (totalFrames - 1) : 0;
+        const normalizedProgress = totalFrames > 1 ? frameIndex / (totalFrames - 1) : 0;
         const { node } = await createNode(normalizedProgress);
         return {
           node,

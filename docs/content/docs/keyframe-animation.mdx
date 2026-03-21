@@ -33,9 +33,7 @@ import { fromJsx } from "@takumi-rs/helpers/jsx";
 
 const renderer = new Renderer();
 
-const { node } = await fromJsx(
-  <div tw="animate-[move_1s_ease-in-out_infinite_alternate]" />,
-);
+const { node } = await fromJsx(<div tw="animate-[move_1s_ease-in-out_infinite_alternate]" />);
 
 const output = await renderer.render(node, {
   width: 100,
@@ -123,7 +121,8 @@ animation: move 1s ease-in-out infinite alternate;
 ```
 
 <Callout type="warning">
-Takumi does not currently support Tailwind's `animate-(--custom-property)` form because CSS custom property resolution for `animation` is not implemented.
+  Takumi does not currently support Tailwind's `animate-(--custom-property)` form because CSS custom
+  property resolution for `animation` is not implemented.
 </Callout>
 
 ## Ways to render

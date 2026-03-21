@@ -31,10 +31,7 @@ export type FetchResourcesOptions = {
  * @param options - Fetch options
  * @returns Array of { src: string, data: ArrayBuffer }
  */
-export async function fetchResources(
-  urls: string[],
-  options?: FetchResourcesOptions,
-) {
+export async function fetchResources(urls: string[], options?: FetchResourcesOptions) {
   const signal = AbortSignal.timeout(options?.timeout ?? defaultTimeout);
   const fetch = options?.fetch ?? globalThis.fetch;
   const throwOnError = options?.throwOnError ?? true;
@@ -55,9 +52,7 @@ export async function fetchResources(
 
     // Validate HTTP status
     if (!response.ok) {
-      throw new Error(
-        `HTTP ${response.status}: ${response.statusText} for ${url}`,
-      );
+      throw new Error(`HTTP ${response.status}: ${response.statusText} for ${url}`);
     }
 
     const buffer = await response.arrayBuffer();

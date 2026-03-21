@@ -66,9 +66,7 @@ export function ShowcaseCard({ project }: ShowcaseCardProps) {
           <div className="flex items-center justify-center p-1 rounded-md bg-foreground/5 text-foreground/70 group-hover:text-primary group-hover:bg-primary/10 transition-colors duration-300">
             {icon}
           </div>
-          <span className="text-sm font-medium tracking-tight truncate">
-            {title}
-          </span>
+          <span className="text-sm font-medium tracking-tight truncate">{title}</span>
         </div>
       </div>
     </a>

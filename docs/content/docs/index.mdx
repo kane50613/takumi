@@ -85,7 +85,6 @@ Check [the reference page](/docs/reference#imageresponse) for all available opti
 Most setup issues come from bundling native modules or WASM assets.
 
 ```ts tab="Next.js" title="next.config.ts"
-
 const nextConfig = {
   // [!code ++]
   serverExternalPackages: ["@takumi-rs/core"],
@@ -131,6 +130,7 @@ If you use `pnpm` or `yarn` with a virtual store, add this to `.npmrc` and reins
 ```text title=".npmrc"
 public-hoist-pattern[]=@takumi-rs/core-*
 ```
+
 </Callout>
 
 ## Templates

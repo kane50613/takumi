@@ -16,8 +16,8 @@ export function CTA({ highlightedHtml }: { highlightedHtml: string }) {
             </span>
           </h2>
           <p className="text-[1.05rem] text-muted-foreground max-w-[420px] mx-auto mb-8 leading-relaxed">
-            Install the package, write your first component, and generate your
-            image. It's that simple.
+            Install the package, write your first component, and generate your image. It's that
+            simple.
           </p>
           <div
             suppressHydrationWarning

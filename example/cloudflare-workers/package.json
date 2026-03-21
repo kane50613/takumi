@@ -7,15 +7,15 @@
     "start": "wrangler dev",
     "cf-typegen": "wrangler types"
   },
-  "devDependencies": {
-    "@types/react": "catalog:",
-    "typescript": "catalog:",
-    "wrangler": "^4.72.0"
-  },
   "dependencies": {
     "@takumi-rs/helpers": "workspace:*",
     "@takumi-rs/image-response": "workspace:*",
     "@takumi-rs/wasm": "workspace:*",
     "react": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "typescript": "catalog:",
+    "wrangler": "^4.76.0"
   }
 }

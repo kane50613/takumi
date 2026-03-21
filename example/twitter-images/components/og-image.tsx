@@ -53,8 +53,7 @@ export default function OgImage() {
           right: -200,
           width: 800,
           height: 800,
-          backgroundImage:
-            "radial-gradient(circle, rgba(255, 53, 53, 0.08) 0%, transparent 70%)",
+          backgroundImage: "radial-gradient(circle, rgba(255, 53, 53, 0.08) 0%, transparent 70%)",
         }}
       />
       <div
@@ -64,8 +63,7 @@ export default function OgImage() {
           left: -200,
           width: 600,
           height: 600,
-          backgroundImage:
-            "radial-gradient(circle, rgba(255, 53, 53, 0.05) 0%, transparent 70%)",
+          backgroundImage: "radial-gradient(circle, rgba(255, 53, 53, 0.05) 0%, transparent 70%)",
         }}
       />
 
@@ -184,11 +182,7 @@ export default function OgImage() {
             description="Rust engine for Node and WASM."
             icon={Zap}
           />
-          <Feature
-            title="Runs Everywhere"
-            description="Node.js, Browser, and Edge."
-            icon={Globe}
-          />
+          <Feature title="Runs Everywhere" description="Node.js, Browser, and Edge." icon={Globe} />
           <Feature
             title="Output to Any Format"
             description="WebP, PNG, JPEG, and GIF."

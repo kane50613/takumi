@@ -3,9 +3,7 @@
 
 import type { CSSProperties, JSX } from "react";
 
-export const defaultStylePresets: Partial<
-  Record<keyof JSX.IntrinsicElements, CSSProperties>
-> = {
+export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CSSProperties>> = {
   html: {
     display: "block",
   },

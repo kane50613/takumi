@@ -30,4 +30,11 @@ default-features = false
 
 # https://github.com/rust-lang/rust/issues/93294
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ['-O4', '--all-features', '--strip-debug', '--strip-dwarf', '--strip-producers', '--strip-target-features']
+wasm-opt = [
+  '-O4',
+  '--all-features',
+  '--strip-debug',
+  '--strip-dwarf',
+  '--strip-producers',
+  '--strip-target-features',
+]

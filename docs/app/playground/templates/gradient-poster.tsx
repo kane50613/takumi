@@ -11,9 +11,7 @@ export default function Poster() {
         <h1 tw="text-8xl font-black text-white text-center tracking-tighter filter drop-shadow-md">
           Create Magic
         </h1>
-        <p tw="mt-6 text-4xl text-white/80 font-medium tracking-wide">
-          Unleash your creativity
-        </p>
+        <p tw="mt-6 text-4xl text-white/80 font-medium tracking-wide">Unleash your creativity</p>
       </div>
     </div>
   );

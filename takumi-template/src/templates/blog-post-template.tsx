@@ -24,8 +24,7 @@ export default function BlogPostTemplate({
         height: "100%",
         backgroundColor: "#111",
         color: "white",
-        backgroundImage:
-          backgroundImage || "linear-gradient(135deg, #1a1a1a 0%, #000 100%)",
+        backgroundImage: backgroundImage || "linear-gradient(135deg, #1a1a1a 0%, #000 100%)",
         padding: "60px",
         justifyContent: "space-between",
       }}

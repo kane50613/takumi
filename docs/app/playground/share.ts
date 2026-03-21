@@ -22,9 +22,7 @@ export async function compressCode(code: string) {
   const stream = blob.stream();
   const compressedStream = stream.pipeThrough(new CompressionStream("gzip"));
 
-  const compressedArrayBuffer = await new Response(
-    compressedStream,
-  ).arrayBuffer();
+  const compressedArrayBuffer = await new Response(compressedStream).arrayBuffer();
   const compressedBytes = new Uint8Array(compressedArrayBuffer);
 
   return uint8ToBase64(compressedBytes);

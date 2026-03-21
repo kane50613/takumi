@@ -28,8 +28,7 @@ describe("CSS style parsing", () => {
           transform: "translateX(8px) translateY(4px) scale(1)",
           transformOrigin: "0 0",
           boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
-          backgroundImage:
-            "linear-gradient(to bottom right, rgba(255,255,255,0.08), transparent)",
+          backgroundImage: "linear-gradient(to bottom right, rgba(255,255,255,0.08), transparent)",
         },
         children: [
           {

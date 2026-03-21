@@ -1,9 +1,4 @@
-import type {
-  ComponentProps,
-  CSSProperties,
-  ReactElement,
-  ReactNode,
-} from "react";
+import type { ComponentProps, CSSProperties, ReactElement, ReactNode } from "react";
 import { container, image, percentage, text } from "../helpers";
 import type { Node, NodeMetadata } from "../types";
 import { defaultStylePresets } from "./style-presets";
@@ -106,8 +101,7 @@ async function fromJsxInternal(
   }
 
   // If element is a server component, wait for it to resolve first
-  if (element instanceof Promise)
-    return fromJsxInternal(await element, options);
+  if (element instanceof Promise) return fromJsxInternal(await element, options);
 
   // If element is an iterable, collect the children
   if (typeof element === "object" && Symbol.iterator in element)
@@ -151,18 +145,11 @@ function extractAttributes(
       continue;
     }
 
-    if (
-      attributeValue === undefined ||
-      attributeValue === null ||
-      attributeValue === false
-    ) {
+    if (attributeValue === undefined || attributeValue === null || attributeValue === false) {
       continue;
     }
 
-    if (
-      typeof attributeValue === "function" ||
-      typeof attributeValue === "symbol"
-    ) {
+    if (typeof attributeValue === "function" || typeof attributeValue === "symbol") {
       continue;
     }
 
@@ -170,8 +157,7 @@ function extractAttributes(
       continue;
     }
 
-    collectedAttributes[attributeName] =
-      attributeValue === true ? "" : String(attributeValue);
+    collectedAttributes[attributeName] = attributeValue === true ? "" : String(attributeValue);
   }
 
   if (Object.keys(collectedAttributes).length === 0) {
@@ -181,9 +167,7 @@ function extractAttributes(
   return collectedAttributes;
 }
 
-function getPresets(
-  options?: FromJsxOptions,
-): typeof defaultStylePresets | undefined {
+function getPresets(options?: FromJsxOptions): typeof defaultStylePresets | undefined {
   if (options?.defaultStyles === false) return;
 
   return options?.defaultStyles ?? defaultStylePresets;
@@ -220,11 +204,7 @@ function tryHandleComponentWrapper(
 }
 
 function getElementChildren(element: ReactElementLike): ReactNode | undefined {
-  if (
-    typeof element.props === "object" &&
-    element.props !== null &&
-    "children" in element.props
-  ) {
+  if (typeof element.props === "object" && element.props !== null && "children" in element.props) {
     return element.props.children as ReactNode;
   }
 }
@@ -240,11 +220,7 @@ function tryCollectTextChildren(element: ReactElementLike): string | undefined {
     return collectTextFromIterable(children);
   }
 
-  if (
-    typeof children === "object" &&
-    children !== null &&
-    Symbol.iterator in children
-  ) {
+  if (typeof children === "object" && children !== null && Symbol.iterator in children) {
     return collectTextFromIterable(children as Iterable<ReactNode>);
   }
 
@@ -253,9 +229,7 @@ function tryCollectTextChildren(element: ReactElementLike): string | undefined {
   }
 }
 
-function collectStyleTextFromIterable(
-  children: Iterable<ReactNode>,
-): string | undefined {
+function collectStyleTextFromIterable(children: Iterable<ReactNode>): string | undefined {
   let output = "";
 
   for (const child of children) {
@@ -267,9 +241,7 @@ function collectStyleTextFromIterable(
   return output;
 }
 
-function collectStyleText(
-  node: ReactNode | ReactElementLike,
-): string | undefined {
+function collectStyleText(node: ReactNode | ReactElementLike): string | undefined {
   if (typeof node === "string") return node;
   if (typeof node === "number") return String(node);
   if (
@@ -294,20 +266,14 @@ function collectStyleText(
   const children = getElementChildren(node);
   if (children === undefined) return "";
 
-  if (
-    typeof children === "object" &&
-    children !== null &&
-    Symbol.iterator in children
-  ) {
+  if (typeof children === "object" && children !== null && Symbol.iterator in children) {
     return collectStyleTextFromIterable(children as Iterable<ReactNode>);
   }
 
   return collectStyleText(children);
 }
 
-function collectTextFromIterable(
-  children: Iterable<ReactNode>,
-): string | undefined {
+function collectTextFromIterable(children: Iterable<ReactNode>): string | undefined {
   let output = "";
 
   for (const child of children) {
@@ -423,12 +389,8 @@ function createImageElement(
 
   const metadata = extractNodeMetadata(element, options);
 
-  const width =
-    element.props.width !== undefined ? Number(element.props.width) : undefined;
-  const height =
-    element.props.height !== undefined
-      ? Number(element.props.height)
-      : undefined;
+  const width = element.props.width !== undefined ? Number(element.props.width) : undefined;
+  const height = element.props.height !== undefined ? Number(element.props.height) : undefined;
 
   return image({
     src: element.props.src,
@@ -445,12 +407,8 @@ function createSvgElement(
   const metadata = extractNodeMetadata(element, options);
   const svg = serializeSvg(element);
 
-  const width =
-    element.props.width !== undefined ? Number(element.props.width) : undefined;
-  const height =
-    element.props.height !== undefined
-      ? Number(element.props.height)
-      : undefined;
+  const width = element.props.width !== undefined ? Number(element.props.width) : undefined;
+  const height = element.props.height !== undefined ? Number(element.props.height) : undefined;
 
   return image({
     src: svg,
@@ -493,17 +451,10 @@ function extractStyle(
   return { preset, style };
 }
 
-function extractTw(
-  element: ReactElementLike,
-  options: ResolvedFromJsxOptions,
-): string | undefined {
+function extractTw(element: ReactElementLike, options: ResolvedFromJsxOptions): string | undefined {
   const propName = options.tailwindClassesProperty;
 
-  if (
-    typeof element.props !== "object" ||
-    element.props === null ||
-    !(propName in element.props)
-  )
+  if (typeof element.props !== "object" || element.props === null || !(propName in element.props))
     return;
 
   const tw = element.props[propName as keyof typeof element.props];
@@ -519,10 +470,7 @@ function extractNodeMetadata(
   const htmlProps = element.props as HtmlProps;
   const { preset, style } = extractStyle(element, options);
   const tw = extractTw(element, options);
-  const attributes = extractAttributes(
-    htmlProps,
-    options.tailwindClassesProperty,
-  );
+  const attributes = extractAttributes(htmlProps, options.tailwindClassesProperty);
 
   return {
     tagName: typeof element.type === "string" ? element.type : undefined,

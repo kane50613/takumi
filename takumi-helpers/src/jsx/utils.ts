@@ -1,11 +1,7 @@
 import type { ComponentProps, JSX, ReactElement, ReactNode } from "react";
 
 export type ReactElementLike = {
-  type:
-    | string
-    | symbol
-    | ((props: unknown) => ReactElementLike)
-    | ReactElementLike;
+  type: string | symbol | ((props: unknown) => ReactElementLike) | ReactElementLike;
   props: unknown;
   $$typeof?: symbol;
 };
@@ -31,9 +27,7 @@ export function isValidElement(object: unknown): object is ReactElementLike {
   return typeof object === "object" && object !== null && "type" in object;
 }
 
-export function isFunctionComponent(
-  value: unknown,
-): value is (props: unknown) => ReactNode {
+export function isFunctionComponent(value: unknown): value is (props: unknown) => ReactNode {
   return typeof value === "function";
 }
 

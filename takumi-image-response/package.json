@@ -1,33 +1,14 @@
 {
   "name": "@takumi-rs/image-response",
-  "type": "module",
   "version": "1.0.0-beta.8",
+  "license": "(MIT OR Apache-2.0)",
   "author": {
-    "email": "me@kane.tw",
     "name": "Kane Wang",
+    "email": "me@kane.tw",
     "url": "https://kane.tw"
   },
   "repository": {
     "url": "git+https://github.com/kane50613/takumi.git"
-  },
-  "dependencies": {
-    "@takumi-rs/core": "workspace:*",
-    "@takumi-rs/helpers": "workspace:*",
-    "@takumi-rs/wasm": "workspace:*"
-  },
-  "devDependencies": {
-    "@types/bun": "catalog:",
-    "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
-    "react": "catalog:",
-    "react-dom": "catalog:",
-    "tsup": "^8.5.1",
-    "type-fest": "^5.4.4",
-    "typescript": "catalog:"
-  },
-  "scripts": {
-    "build": "tsup-node src/backends/*.ts --clean --minify --dts --format esm,cjs --no-splitting",
-    "prepublishOnly": "jq '.dependencies[\"@takumi-rs/core\"] = .version | .dependencies[\"@takumi-rs/helpers\"] = .version | .dependencies[\"@takumi-rs/wasm\"] = .version' package.json > tmp.json && mv tmp.json package.json"
   },
   "files": [
     "dist",
@@ -35,6 +16,7 @@
     "README.md",
     "tsconfig.json"
   ],
+  "type": "module",
   "exports": {
     ".": {
       "types": "./dist/node.d.ts",
@@ -49,5 +31,23 @@
       "default": "./dist/wasm.js"
     }
   },
-  "license": "(MIT OR Apache-2.0)"
+  "scripts": {
+    "build": "tsup-node src/backends/*.ts --clean --minify --dts --format esm,cjs --no-splitting",
+    "prepublishOnly": "jq '.dependencies[\"@takumi-rs/core\"] = .version | .dependencies[\"@takumi-rs/helpers\"] = .version | .dependencies[\"@takumi-rs/wasm\"] = .version' package.json > tmp.json && mv tmp.json package.json"
+  },
+  "dependencies": {
+    "@takumi-rs/core": "workspace:*",
+    "@takumi-rs/helpers": "workspace:*",
+    "@takumi-rs/wasm": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "tsup": "^8.5.1",
+    "type-fest": "^5.5.0",
+    "typescript": "catalog:"
+  }
 }

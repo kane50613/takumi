@@ -97,13 +97,11 @@ describe("emoji", () => {
       const configs = [
         {
           type: "twemoji",
-          expectedSrc:
-            "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f600.svg",
+          expectedSrc: "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f600.svg",
         },
         {
           type: "blobmoji",
-          expectedSrc:
-            "https://cdn.jsdelivr.net/npm/@svgmoji/blob@2.0.0/svg/1F600.svg",
+          expectedSrc: "https://cdn.jsdelivr.net/npm/@svgmoji/blob@2.0.0/svg/1F600.svg",
         },
         {
           type: "noto",
@@ -112,8 +110,7 @@ describe("emoji", () => {
         },
         {
           type: "openmoji",
-          expectedSrc:
-            "https://cdn.jsdelivr.net/npm/@svgmoji/openmoji@2.0.0/svg/1F600.svg",
+          expectedSrc: "https://cdn.jsdelivr.net/npm/@svgmoji/openmoji@2.0.0/svg/1F600.svg",
         },
       ] as const;
 

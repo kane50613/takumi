@@ -17,9 +17,7 @@ const tokens = await getHighlighterTokens();
 
 const { node: scene } = await fromJsx(<Scene tokens={tokens} />);
 
-const { node: thumbnailScene } = await fromJsx(
-  <Scene tokens={tokens} showPlayButton={true} />,
-);
+const { node: thumbnailScene } = await fromJsx(<Scene tokens={tokens} showPlayButton={true} />);
 
 const ffmpeg = spawn(
   [
@@ -60,10 +58,7 @@ await renderer.putPersistentImage(
 await renderer.putPersistentImage(
   "background.jpg",
   await readFile(
-    join(
-      import.meta.dir,
-      "../../../assets/images/martin-martz-W0NRebXbsjM-unsplash.jpg",
-    ),
+    join(import.meta.dir, "../../../assets/images/martin-martz-W0NRebXbsjM-unsplash.jpg"),
   ),
 );
 

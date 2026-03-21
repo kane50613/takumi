@@ -89,10 +89,10 @@ new ImageResponse(<OgImage />, { renderer });
 You can pass the JSX options to the `ImageResponse` constructor.
 
 ```tsx
-new ImageResponse(<OgImage />, { 
-  jsx: { 
+new ImageResponse(<OgImage />, {
+  jsx: {
     defaultStyles: false,
-  } 
+  },
 });
 ```
 
@@ -116,6 +116,6 @@ export default {
     return new ImageResponse(<div>Hello</div>, {
       module,
     });
-  }
-}
+  },
+};
 ```

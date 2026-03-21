@@ -2,10 +2,7 @@ import { useMemo } from "react";
 import { showcaseProjects } from "../../data/showcase";
 
 export function ShowcaseMarquee() {
-  const projects = useMemo(
-    () => [...showcaseProjects, ...showcaseProjects],
-    [],
-  );
+  const projects = useMemo(() => [...showcaseProjects, ...showcaseProjects], []);
 
   return (
     <div className="overflow-hidden mask-[linear-gradient(to_right,transparent,black_10%,black_90%,transparent)] py-4">

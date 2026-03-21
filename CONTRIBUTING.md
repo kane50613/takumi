@@ -142,7 +142,7 @@ You usually do not need to run these in feature PRs.
 
 ## PR Checklist
 
-- Code is formatted (`cargo fmt --all`, Biome lint passes)
+- Code is formatted (`cargo fmt --all`, oxlint passes)
 - Relevant tests pass locally
 - Scope is focused (one logical change per PR when possible)
 - Fixture updates are intentional and reviewed

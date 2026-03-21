@@ -1,18 +1,10 @@
 {
   "name": "example-css-library-integration",
-  "module": "src/index.tsx",
-  "type": "module",
   "private": true,
+  "type": "module",
+  "module": "src/index.tsx",
   "scripts": {
     "render": "bun ./src/index.tsx"
-  },
-  "devDependencies": {
-    "@types/bun": "catalog:",
-    "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
-    "tailwindcss": "^4.2.1",
-    "typescript": "catalog:",
-    "unocss": "^66.6.6"
   },
   "dependencies": {
     "@takumi-rs/core": "workspace:*",
@@ -20,5 +12,13 @@
     "lucide-react": "^0.577.0",
     "react": "catalog:",
     "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "tailwindcss": "^4.2.2",
+    "typescript": "catalog:",
+    "unocss": "^66.6.7"
   }
 }

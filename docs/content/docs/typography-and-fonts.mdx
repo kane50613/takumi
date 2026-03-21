@@ -21,8 +21,8 @@ const interBuffer = await fetch("/path-to-inter.woff2").then((res) => res.arrayB
 const fonts: Font[] = [
   {
     name: "Inter",
-    data: interBuffer
-  }
+    data: interBuffer,
+  },
 ];
 
 export function GET() {
@@ -39,11 +39,13 @@ Thanks to underlying engine support, you can control font axes using the `font-v
 For variable fonts, `font-weight` has the same effect as `font-variation-settings: "wght" <weight>`.
 
 ```tsx
-<div style={{
-  fontFamily: "Geist",
-  fontVariationSettings: "'wght' 700, 'wdth' 150",
-  fontFeatureSettings: "ss01"
-}}>
+<div
+  style={{
+    fontFamily: "Geist",
+    fontVariationSettings: "'wght' 700, 'wdth' 150",
+    fontFeatureSettings: "ss01",
+  }}
+>
   Variable Font Text
 </div>
 ```
@@ -52,9 +54,7 @@ For variable fonts, `font-weight` has the same effect as `font-variation-setting
 
 #### Dynamic fetching
 
-<Callout type="warning">
-This is not in stable release yet, available since `1.0.0-beta.3`.
-</Callout>
+<Callout type="warning">This is not in stable release yet, available since `1.0.0-beta.3`.</Callout>
 
 If you are using `ImageResponse` API, theres a satori compatible `emoji` option.
 
@@ -64,12 +64,9 @@ If you are using `ImageResponse` API, theres a satori compatible `emoji` option.
 import { ImageResponse } from "@takumi-rs/image-response";
 
 export function GET() {
-  return new ImageResponse(
-    <div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>, 
-    {
-      emoji: "twemoji",
-    }
-  );
+  return new ImageResponse(<div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>, {
+    emoji: "twemoji",
+  });
 }
 ```
 
@@ -83,9 +80,7 @@ import { fromJsx } from "@takumi-rs/helpers/jsx";
 import { fetchResources } from "@takumi-rs/helpers";
 import { Renderer, extractResourceUrls } from "@takumi-rs/core";
 
-let { node } = await fromJsx(
-  <div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>
-);
+let { node } = await fromJsx(<div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>);
 node = extractEmojis(node, "twemoji");
 
 const resourceUrls = extractResourceUrls(node);
@@ -113,10 +108,12 @@ When `text-overflow` is set to `ellipsis`, Takumi tries to match the expected `l
 Setting `white-space: nowrap` is not required, which enables multiline ellipsis handling.
 
 ```tsx
-<div style={{
-  textOverflow: "ellipsis",
-  lineClamp: 3,
-}}>
+<div
+  style={{
+    textOverflow: "ellipsis",
+    lineClamp: 3,
+  }}
+>
   Super Long Text
 </div>
 ```
@@ -132,7 +129,5 @@ But currently there's no manual control over the direction of the text (see [iss
 Takumi supports both `balance` and `pretty` text wrapping. The algorithm is modified from [satori's implementation](https://github.com/vercel/satori/blob/2a0878a7f329bdba3a17ad68f71186a47add0dde/src/text/index.ts#L365).
 
 ```tsx
-<div style={{ textWrap: "balance" }}>
-  Super Long Text
-</div>
+<div style={{ textWrap: "balance" }}>Super Long Text</div>
 ```

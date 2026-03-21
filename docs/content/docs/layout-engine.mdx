@@ -21,7 +21,7 @@ import { ImageResponse } from "@takumi-rs/image-response";
 
 export function GET() {
   return new ImageResponse(<List />, {
-    width: 1200
+    width: 1200,
   });
 }
 
@@ -49,9 +49,9 @@ import { ImageResponse } from "@takumi-rs/image-response";
 
 export function GET() {
   return new ImageResponse(
-    <img src="https://via.placeholder.com/1200x600" width={1200} height={600} />
+    <img src="https://via.placeholder.com/1200x600" width={1200} height={600} />,
   );
 }
 ```
 
-## 
+##

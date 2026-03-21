@@ -13,9 +13,7 @@ import { Renderer } from "@takumi-rs/core";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 
 const renderer = new Renderer();
-const { node, stylesheets } = await fromJsx(
-  <span tw="text-xl">I'm a text node</span>
-);
+const { node, stylesheets } = await fromJsx(<span tw="text-xl">I'm a text node</span>);
 
 // [!code ++]
 const { width, height } = await renderer.measure(node, { stylesheets });
@@ -28,9 +26,7 @@ import { Renderer } from "@takumi-rs/wasm";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 
 const renderer = new Renderer();
-const { node, stylesheets } = await fromJsx(
-  <span tw="text-xl">I'm a text node</span>
-);
+const { node, stylesheets } = await fromJsx(<span tw="text-xl">I'm a text node</span>);
 
 // [!code ++]
 const { width, height } = renderer.measure(node, { stylesheets });

@@ -33,15 +33,15 @@ export const config = {
 import { ImageResponse } from "next/og"; // [!code --]
 import { ImageResponse } from "@takumi-rs/image-response"; // [!code ++]
 
-// Takumi comes with full axis Geist and Geist Mono by default, 
+// Takumi comes with full axis Geist and Geist Mono by default,
 // if this is what you want, you can just remove fonts array.
 const fonts = [
   {
     name: "Inter",
     data: await fetch("/fonts/Inter-Regular.ttf").then((res) => res.arrayBuffer()),
     style: "normal",
-    weight: 400
-  }
+    weight: 400,
+  },
 ];
 
 function OgImage({ title }: { title: string }) {
@@ -54,10 +54,10 @@ function OgImage({ title }: { title: string }) {
 
 export function GET(request: Request) {
   return new ImageResponse(<OgImage title="Next.js" />, {
-   width: 1200,
-   height: 630,
-   fonts,
- });
+    width: 1200,
+    height: 630,
+    fonts,
+  });
 }
 ```
 

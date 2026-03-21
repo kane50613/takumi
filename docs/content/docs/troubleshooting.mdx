@@ -24,6 +24,7 @@ export function GET() {
 ```
 
 If the issue still exists, please file an issue on [our GitHub repository](https://github.com/kane50613/takumi/issues).
+
   </Accordion>
 </Accordions>
 
@@ -38,6 +39,7 @@ If you are using package manager with virtual store such as `pnpm` or `yarn`, ad
 ```text title=".npmrc"
 public-hoist-pattern[]=@takumi-rs/core-*
 ```
+
   </Accordion>
   <Accordion title="TypeError: fetch failed">
 Node.js fetch implementation with [undici](https://github.com/nodejs/undici) is not really stable in my experience and [#349](https://github.com/kane50613/takumi/issues/349). Try using [bun](https://bun.sh) runtime instead.

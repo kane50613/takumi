@@ -1,12 +1,5 @@
-import {
-  defaultStringifier,
-  rehypeCodeDefaultOptions,
-} from "fumadocs-core/mdx-plugins";
-import {
-  defineConfig,
-  defineDocs,
-  frontmatterSchema,
-} from "fumadocs-mdx/config";
+import { defaultStringifier, rehypeCodeDefaultOptions } from "fumadocs-core/mdx-plugins";
+import { defineConfig, defineDocs, frontmatterSchema } from "fumadocs-mdx/config";
 import lastModified from "fumadocs-mdx/plugins/last-modified";
 import { transformerTwoslash } from "fumadocs-twoslash";
 import { createFileSystemTypesCache } from "fumadocs-twoslash/cache-fs";
@@ -38,18 +31,12 @@ export default defineConfig({
   mdxOptions: {
     remarkStructureOptions: {
       mdxTypes: (node) =>
-        node.name === "td" ||
-        node.name === "th" ||
-        !node.children ||
-        node.children.length === 0,
+        node.name === "td" || node.name === "th" || !node.children || node.children.length === 0,
       stringify(node, ctx) {
         return structureStringifier.call(
           this,
-          node.type === "mdxJsxFlowElement" &&
-            (node.name === "td" || node.name === "th")
-            ? ({ ...node, type: "mdxJsxTextElement" } as Parameters<
-                typeof structureStringifier
-              >[0])
+          node.type === "mdxJsxFlowElement" && (node.name === "td" || node.name === "th")
+            ? ({ ...node, type: "mdxJsxTextElement" } as Parameters<typeof structureStringifier>[0])
             : node,
           ctx,
         );

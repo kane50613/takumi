@@ -50,12 +50,10 @@ export function ComponentEditor({
   const { resolvedTheme } = useTheme();
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const editorRef = useRef<
-    | Parameters<NonNullable<React.ComponentProps<typeof Editor>["onMount"]>>[0]
-    | null
+    Parameters<NonNullable<React.ComponentProps<typeof Editor>["onMount"]>>[0] | null
   >(null);
   const isApplyingExternalCodeRef = useRef(false);
-  const theme =
-    resolvedTheme === "dark" ? "github-dark-default" : "github-light-default";
+  const theme = resolvedTheme === "dark" ? "github-dark-default" : "github-light-default";
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -63,8 +61,7 @@ export function ComponentEditor({
     }
 
     const mobileMediaQuery = window.matchMedia("(max-width: 640px)");
-    const updateMobileViewport = () =>
-      setIsMobileViewport(mobileMediaQuery.matches);
+    const updateMobileViewport = () => setIsMobileViewport(mobileMediaQuery.matches);
 
     updateMobileViewport();
     mobileMediaQuery.addEventListener("change", updateMobileViewport);
@@ -93,8 +90,7 @@ export function ComponentEditor({
         monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
           target: monaco.languages.typescript.ScriptTarget.Latest,
           allowNonTsExtensions: true,
-          moduleResolution:
-            monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+          moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
           module: monaco.languages.typescript.ModuleKind.ESNext,
           reactNamespace: "React",
           esModuleInterop: true,

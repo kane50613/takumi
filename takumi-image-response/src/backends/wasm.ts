@@ -117,16 +117,10 @@ async function ensureWasmInitialized(options: ImageResponseOptions) {
   await initPromise;
 }
 
-async function prepareNodeAndResources(
-  component: ReactNode,
-  options: ImageResponseOptions,
-) {
+async function prepareNodeAndResources(component: ReactNode, options: ImageResponseOptions) {
   const localOptions = { ...options };
   let { node, stylesheets } = await fromJsx(component, localOptions.jsx);
-  localOptions.stylesheets = [
-    ...(localOptions.stylesheets ?? []),
-    ...stylesheets,
-  ];
+  localOptions.stylesheets = [...(localOptions.stylesheets ?? []), ...stylesheets];
 
   if (localOptions.emoji && localOptions.emoji !== "from-font") {
     node = extractEmojis(node, localOptions.emoji);
@@ -150,10 +144,7 @@ function createStream(component: ReactNode, options: ImageResponseOptions) {
         await ensureWasmInitialized(options);
 
         const rendererInstance = getRenderer(options);
-        const { node, options: localOptions } = await prepareNodeAndResources(
-          component,
-          options,
-        );
+        const { node, options: localOptions } = await prepareNodeAndResources(component, options);
 
         const image = rendererInstance.render(node, localOptions);
 
@@ -183,10 +174,7 @@ export class ImageResponse extends Response {
     const headers = new Headers(options.headers);
 
     if (!headers.get("content-type")) {
-      headers.set(
-        "content-type",
-        contentTypeMapping[options.format ?? defaultOptions.format],
-      );
+      headers.set("content-type", contentTypeMapping[options.format ?? defaultOptions.format]);
     }
 
     super(stream, {

@@ -1,30 +1,44 @@
 {
   "name": "@takumi-rs/core",
   "version": "1.0.0-beta.8",
+  "keywords": [
+    "css",
+    "image",
+    "jsx",
+    "napi",
+    "nodejs",
+    "react",
+    "rendering"
+  ],
+  "license": "(MIT OR Apache-2.0)",
   "author": {
-    "email": "me@kane.tw",
     "name": "Kane Wang",
+    "email": "me@kane.tw",
     "url": "https://kane.tw"
   },
-  "keywords": [
-    "image",
-    "rendering",
-    "css",
-    "react",
-    "jsx",
-    "nodejs",
-    "napi"
-  ],
   "repository": {
     "url": "git+https://github.com/kane50613/takumi.git"
   },
+  "files": [
+    "index.d.ts",
+    "index.js",
+    "README.md"
+  ],
+  "type": "module",
   "main": "index.js",
+  "types": "index.d.ts",
   "exports": {
     ".": {
       "import": "./index.js",
       "require": "./index.js",
       "types": "./index.d.ts"
     }
+  },
+  "scripts": {
+    "build": "napi build --release --no-const-enum --platform --esm --strip",
+    "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json && bun artifacts && cp artifacts/bindings-x86_64-unknown-linux-gnu/index.* . && napi prepublish -t npm --no-gh-release",
+    "artifacts": "napi create-npm-dirs && napi artifacts && napi version",
+    "bench": "bun tests/bench/index.tsx"
   },
   "dependencies": {
     "@takumi-rs/helpers": "workspace:*"
@@ -39,12 +53,9 @@
     "react": "catalog:",
     "typescript": "catalog:"
   },
-  "engines": {
-    "node": ">= 12.22.0 < 13 || >= 14.17.0 < 15 || >= 15.12.0 < 16 || >= 16.0.0"
-  },
-  "license": "(MIT OR Apache-2.0)",
   "napi": {
     "binaryName": "core",
+    "dtsHeaderFile": "./src/dts-header.d.ts",
     "targets": [
       "x86_64-apple-darwin",
       "aarch64-apple-darwin",
@@ -54,20 +65,9 @@
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-linux-musl",
       "x86_64-pc-windows-msvc"
-    ],
-    "dtsHeaderFile": "./src/dts-header.d.ts"
+    ]
   },
-  "scripts": {
-    "build": "napi build --release --no-const-enum --platform --esm --strip",
-    "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json && bun artifacts && cp artifacts/bindings-x86_64-unknown-linux-gnu/index.* . && napi prepublish -t npm --no-gh-release",
-    "artifacts": "napi create-npm-dirs && napi artifacts && napi version",
-    "bench": "bun tests/bench/index.tsx"
-  },
-  "type": "module",
-  "types": "index.d.ts",
-  "files": [
-    "index.d.ts",
-    "index.js",
-    "README.md"
-  ]
+  "engines": {
+    "node": ">= 12.22.0 < 13 || >= 14.17.0 < 15 || >= 15.12.0 < 16 || >= 16.0.0"
+  }
 }

@@ -17,15 +17,13 @@ export const showcaseProjects: Project[] = [
     height: 630,
   },
   {
-    image:
-      "https://raw.githubusercontent.com/pi0/shiki-image/main/test/.snapshot/image.webp",
+    image: "https://raw.githubusercontent.com/pi0/shiki-image/main/test/.snapshot/image.webp",
     url: "https://github.com/pi0/shiki-image",
     width: 1200,
     height: 630,
   },
   {
-    image:
-      "https://res.cloudinary.com/alfanjauhari/image/upload/og/works/gcbc.webp",
+    image: "https://res.cloudinary.com/alfanjauhari/image/upload/og/works/gcbc.webp",
     url: "https://www.alfanjauhari.com/",
     width: 1200,
     height: 630,

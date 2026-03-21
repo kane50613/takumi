@@ -215,9 +215,7 @@ describe("fromJsx", () => {
   });
 
   test("handles async function components", async () => {
-    const AsyncComponent = async ({ name }: { name: string }) => (
-      <div>Hello {name}</div>
-    );
+    const AsyncComponent = async ({ name }: { name: string }) => <div>Hello {name}</div>;
 
     const { node } = await fromJsx(<AsyncComponent name="Async" />);
     expect(node).toEqual({
@@ -346,9 +344,7 @@ describe("fromJsx", () => {
   });
 
   test("converts img elements to ImageNode", async () => {
-    const { node } = await fromJsx(
-      <img src="https://example.com/image.jpg" alt="Test" />,
-    );
+    const { node } = await fromJsx(<img src="https://example.com/image.jpg" alt="Test" />);
     expect(node).toEqual({
       type: "image",
       src: "https://example.com/image.jpg",
@@ -365,12 +361,7 @@ describe("fromJsx", () => {
 
   test("passes tagName, id, className to img nodes", async () => {
     const { node } = await fromJsx(
-      <img
-        src="https://example.com/image.jpg"
-        id="hero-image"
-        className="rounded"
-        alt="Test"
-      />,
+      <img src="https://example.com/image.jpg" id="hero-image" className="rounded" alt="Test" />,
     );
 
     expect(node).toEqual({
@@ -391,12 +382,7 @@ describe("fromJsx", () => {
 
   test("converts img elements with width and height to ImageNode", async () => {
     const { node } = await fromJsx(
-      <img
-        src="https://example.com/image.jpg"
-        width={100}
-        height={100}
-        alt="Test"
-      />,
+      <img src="https://example.com/image.jpg" width={100} height={100} alt="Test" />,
     );
     expect(node).toEqual({
       type: "image",
@@ -626,13 +612,7 @@ describe("fromJsx", () => {
         <circle cx="90" cy="90" r="86" fill="url(#logo-iconGradient)" />
         <defs>
           <filter id="logo-shadow" colorInterpolationFilters="sRGB">
-            <feDropShadow
-              dx="0"
-              dy="0"
-              stdDeviation="4"
-              floodColor="white"
-              floodOpacity="1"
-            />
+            <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="white" floodOpacity="1" />
           </filter>
           <linearGradient id="logo-iconGradient" gradientTransform="rotate(45)">
             <stop offset="45%" stopColor="black" />
@@ -662,13 +642,7 @@ describe("fromJsx", () => {
 
   test("passes tagName, id, className to svg nodes", async () => {
     const component = (
-      <svg
-        id="logo"
-        className="icon"
-        width="10"
-        height="12"
-        xmlns="http://www.w3.org/2000/svg"
-      >
+      <svg id="logo" className="icon" width="10" height="12" xmlns="http://www.w3.org/2000/svg">
         <title>Logo</title>
         <rect width="10" height="12" />
       </svg>
@@ -707,13 +681,7 @@ describe("fromJsx", () => {
 
   test("collects JSX attributes into node metadata", async () => {
     const { node } = await fromJsx(
-      <button
-        type="button"
-        data-kind="hero"
-        aria-label="Promo"
-        draggable
-        hidden={false}
-      >
+      <button type="button" data-kind="hero" aria-label="Promo" draggable hidden={false}>
         <img src="https://example.com/a.png" alt="Preview" draggable />
       </button>,
     );

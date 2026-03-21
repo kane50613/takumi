@@ -17,70 +17,74 @@ The options object for `ImageResponse` combines standard [ResponseInit](https://
 <TypeTable
   type={{
     width: {
-      type: 'number',
-      description: 'The width of the image. If not provided, it will be calculated based on the content.',
+      type: "number",
+      description:
+        "The width of the image. If not provided, it will be calculated based on the content.",
     },
     height: {
-      type: 'number',
-      description: 'The height of the image. If not provided, it will be calculated based on the content.',
+      type: "number",
+      description:
+        "The height of the image. If not provided, it will be calculated based on the content.",
     },
     format: {
       type: "'webp' | 'png' | 'jpeg' | 'raw'",
       defaultValue: "'webp'",
-      description: 'The output image format.',
+      description: "The output image format.",
     },
     quality: {
-      type: 'number',
-      description: 'The quality of the image (0-100). Only applicable for `webp` and `jpeg` formats.',
+      type: "number",
+      description:
+        "The quality of the image (0-100). Only applicable for `webp` and `jpeg` formats.",
     },
     emoji: {
       type: "EmojiType | 'from-font'",
-      description: "Strategy for rendering emojis. Use 'from-font' to rely on system fonts, or specify a provider for SVG emojis.",
-      typeDescriptionLink: '#emojitype'
+      description:
+        "Strategy for rendering emojis. Use 'from-font' to rely on system fonts, or specify a provider for SVG emojis.",
+      typeDescriptionLink: "#emojitype",
     },
     fonts: {
-      type: 'Font[]',
-      description: 'Custom fonts to load for this response.',
+      type: "Font[]",
+      description: "Custom fonts to load for this response.",
     },
     devicePixelRatio: {
-      type: 'number',
-      defaultValue: '1.0',
-      description: 'The device pixel ratio used for rendering.',
+      type: "number",
+      defaultValue: "1.0",
+      description: "The device pixel ratio used for rendering.",
     },
     dithering: {
       type: "'None' | 'ordered-bayer' | 'floyd-steinberg'",
       defaultValue: "'None'",
-      description: 'The dithering algorithm to use for the output image.',
+      description: "The dithering algorithm to use for the output image.",
     },
     drawDebugBorder: {
-      type: 'boolean',
-      defaultValue: 'false',
-      description: 'Whether to draw debug borders around layout elements.',
+      type: "boolean",
+      defaultValue: "false",
+      description: "Whether to draw debug borders around layout elements.",
     },
     stylesheets: {
-      type: 'string[]',
-      description: 'Additional CSS stylesheets to apply.',
+      type: "string[]",
+      description: "Additional CSS stylesheets to apply.",
     },
     keyframes: {
-      type: 'Keyframes',
-      description: 'Structured keyframes to register alongside stylesheets.',
+      type: "Keyframes",
+      description: "Structured keyframes to register alongside stylesheets.",
     },
     jsx: {
-      type: 'FromJsxOptions',
-      description: 'Options for converting JSX to Takumi nodes.',
-      typeDescriptionLink: '#fromjsxoptions'
+      type: "FromJsxOptions",
+      description: "Options for converting JSX to Takumi nodes.",
+      typeDescriptionLink: "#fromjsxoptions",
     },
     headers: {
-      type: 'HeadersInit',
-      description: 'Custom HTTP headers for the response.',
+      type: "HeadersInit",
+      description: "Custom HTTP headers for the response.",
     },
     status: {
-      type: 'number',
-      description: 'HTTP status code.',
+      type: "number",
+      description: "HTTP status code.",
     },
     statusText: {
-      type: 'string',
-      description: 'HTTP status text.',
+      type: "string",
+      description: "HTTP status text.",
     },
   }}
 />
@@ -90,12 +94,12 @@ The options object for `ImageResponse` combines standard [ResponseInit](https://
 <TypeTable
   type={{
     renderer: {
-      type: 'Renderer',
-      description: 'An existing Renderer instance to use. Useful for optimizing repeated renders.',
+      type: "Renderer",
+      description: "An existing Renderer instance to use. Useful for optimizing repeated renders.",
     },
     signal: {
-      type: 'AbortSignal',
-      description: 'An AbortSignal to cancel the rendering process.',
+      type: "AbortSignal",
+      description: "An AbortSignal to cancel the rendering process.",
     },
   }}
 />
@@ -105,13 +109,14 @@ The options object for `ImageResponse` combines standard [ResponseInit](https://
 <TypeTable
   type={{
     module: {
-      type: 'InitInput | Promise<InitInput>',
+      type: "InitInput | Promise<InitInput>",
       required: true,
-      description: 'The WebAssembly module to use for the renderer. Required if no renderer is provided.',
+      description:
+        "The WebAssembly module to use for the renderer. Required if no renderer is provided.",
     },
     renderer: {
-      type: 'Renderer',
-      description: 'An existing Renderer instance to use.',
+      type: "Renderer",
+      description: "An existing Renderer instance to use.",
     },
   }}
 />
@@ -124,7 +129,7 @@ Supported emoji providers for SVG-based rendering.
   type={{
     provider: {
       type: "'twemoji' | 'blobmoji' | 'noto' | 'openmoji'",
-      description: 'The emoji provider to use for fetching SVG assets.',
+      description: "The emoji provider to use for fetching SVG assets.",
     },
   }}
 />
@@ -136,13 +141,13 @@ Options for the JSX to Takumi node conversion.
 <TypeTable
   type={{
     defaultStyles: {
-      type: 'StylePresets | false',
-      description: 'Override or disable the default Chromium-like style presets.',
+      type: "StylePresets | false",
+      description: "Override or disable the default Chromium-like style presets.",
     },
     tailwindClassesProperty: {
-      type: 'string',
+      type: "string",
       defaultValue: "'tw'",
-      description: 'The prop name used to pass Tailwind CSS classes.',
+      description: "The prop name used to pass Tailwind CSS classes.",
     },
   }}
 />
@@ -154,21 +159,22 @@ Options for the JSX to Takumi node conversion.
 <TypeTable
   type={{
     name: {
-      type: 'string',
-      description: 'The name of the font. If not provided, it will be extracted from the font data.',
+      type: "string",
+      description:
+        "The name of the font. If not provided, it will be extracted from the font data.",
     },
     data: {
-      type: 'Uint8Array | ArrayBuffer',
+      type: "Uint8Array | ArrayBuffer",
       required: true,
-      description: 'The raw font content.',
+      description: "The raw font content.",
     },
     weight: {
-      type: 'number',
-      description: 'The font weight.',
+      type: "number",
+      description: "The font weight.",
     },
     style: {
       type: "'normal' | 'italic' | 'oblique'",
-      description: 'The font style.',
+      description: "The font style.",
     },
   }}
 />
@@ -178,14 +184,14 @@ Options for the JSX to Takumi node conversion.
 <TypeTable
   type={{
     src: {
-      type: 'string',
+      type: "string",
       required: true,
-      description: 'The source URL of the image.',
+      description: "The source URL of the image.",
     },
     data: {
-      type: 'Uint8Array | ArrayBuffer',
+      type: "Uint8Array | ArrayBuffer",
       required: true,
-      description: 'The raw image data.',
+      description: "The raw image data.",
     },
   }}
 />
@@ -199,34 +205,34 @@ A container node is used to group other nodes and arrange them in a layout.
 <TypeTable
   type={{
     tagName: {
-      type: 'string',
+      type: "string",
       description: "Element tag name used for HTML preset and selector matching",
     },
     className: {
-      type: 'string',
-      description: 'Element class name used for selector matching',
+      type: "string",
+      description: "Element class name used for selector matching",
     },
     id: {
-      type: 'string',
-      description: 'Element id used for selector matching',
+      type: "string",
+      description: "Element id used for selector matching",
     },
     children: {
-      type: 'Node[]',
-      description: 'Children nodes',
+      type: "Node[]",
+      description: "Children nodes",
     },
     preset: {
-      type: 'Style',
-      description: 'Default HTML element styles (lowest priority)',
-      typeDescriptionLink: '#style-properties'
+      type: "Style",
+      description: "Default HTML element styles (lowest priority)",
+      typeDescriptionLink: "#style-properties",
     },
     style: {
-      type: 'Style',
-      description: 'Inline styling properties (highest priority)',
-      typeDescriptionLink: '#style-properties'
+      type: "Style",
+      description: "Inline styling properties (highest priority)",
+      typeDescriptionLink: "#style-properties",
     },
     tw: {
-      type: 'string',
-      description: 'Tailwind classes (medium priority, overrides preset)',
+      type: "string",
+      description: "Tailwind classes (medium priority, overrides preset)",
     },
   }}
 />
@@ -238,35 +244,35 @@ A text node displays text.
 <TypeTable
   type={{
     tagName: {
-      type: 'string',
+      type: "string",
       description: "Element tag name used for HTML preset and selector matching",
     },
     className: {
-      type: 'string',
-      description: 'Element class name used for selector matching',
+      type: "string",
+      description: "Element class name used for selector matching",
     },
     id: {
-      type: 'string',
-      description: 'Element id used for selector matching',
+      type: "string",
+      description: "Element id used for selector matching",
     },
     text: {
-      type: 'string',
+      type: "string",
       required: true,
-      description: 'Text content to be displayed',
+      description: "Text content to be displayed",
     },
     preset: {
-      type: 'Style',
-      description: 'Default HTML element styles (lowest priority)',
-      typeDescriptionLink: '#style-properties'
+      type: "Style",
+      description: "Default HTML element styles (lowest priority)",
+      typeDescriptionLink: "#style-properties",
     },
     style: {
-      type: 'Style',
-      description: 'Inline styling properties (highest priority)',
-      typeDescriptionLink: '#style-properties'
+      type: "Style",
+      description: "Inline styling properties (highest priority)",
+      typeDescriptionLink: "#style-properties",
     },
     tw: {
-      type: 'string',
-      description: 'Tailwind classes (medium priority, overrides preset)',
+      type: "string",
+      description: "Tailwind classes (medium priority, overrides preset)",
     },
   }}
 />
@@ -278,43 +284,43 @@ An image node displays rasterized or svg images.
 <TypeTable
   type={{
     tagName: {
-      type: 'string',
+      type: "string",
       description: "Element tag name used for HTML preset and selector matching",
     },
     className: {
-      type: 'string',
-      description: 'Element class name used for selector matching',
+      type: "string",
+      description: "Element class name used for selector matching",
     },
     id: {
-      type: 'string',
-      description: 'Element id used for selector matching',
+      type: "string",
+      description: "Element id used for selector matching",
     },
     src: {
-      type: 'string',
+      type: "string",
       required: true,
-      description: 'The source URL / persistent image key to the image',
+      description: "The source URL / persistent image key to the image",
     },
     width: {
-      type: 'number',
-      description: 'Overwrite the intrinsic width of the image',
+      type: "number",
+      description: "Overwrite the intrinsic width of the image",
     },
     height: {
-      type: 'number',
-      description: 'Overwrite the intrinsic height of the image',
+      type: "number",
+      description: "Overwrite the intrinsic height of the image",
     },
     preset: {
-      type: 'Style',
-      description: 'Default HTML element styles (lowest priority)',
-      typeDescriptionLink: '#style-properties'
+      type: "Style",
+      description: "Default HTML element styles (lowest priority)",
+      typeDescriptionLink: "#style-properties",
     },
     style: {
-      type: 'Style',
-      description: 'Inline styling properties (highest priority)',
-      typeDescriptionLink: '#style-properties'
+      type: "Style",
+      description: "Inline styling properties (highest priority)",
+      typeDescriptionLink: "#style-properties",
     },
     tw: {
-      type: 'string',
-      description: 'Tailwind classes (medium priority, overrides preset)',
+      type: "string",
+      description: "Tailwind classes (medium priority, overrides preset)",
     },
   }}
 />

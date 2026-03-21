@@ -23,9 +23,7 @@ const renderer = new Renderer();
 const localImagePath = "../assets/images/yeecord.png";
 
 const localImage = await readFile(localImagePath);
-const dataUri = `data:image/png;base64,${Buffer.from(localImage).toString(
-  "base64",
-)}`;
+const dataUri = `data:image/png;base64,${Buffer.from(localImage).toString("base64")}`;
 
 const node = container({
   children: [
@@ -314,9 +312,7 @@ describe("renderAsDataUrl", () => {
       });
 
       expect(result).toBeInstanceOf(Uint8Array);
-      expect(Buffer.from(result.subarray(0, 6)).toString("ascii")).toMatch(
-        /^GIF8[79]a$/,
-      );
+      expect(Buffer.from(result.subarray(0, 6)).toString("ascii")).toMatch(/^GIF8[79]a$/);
     });
   });
 
@@ -358,9 +354,7 @@ describe("renderAsDataUrl", () => {
       );
 
       expect(result).toBeInstanceOf(Uint8Array);
-      expect(Buffer.from(result.subarray(0, 6)).toString("ascii")).toMatch(
-        /^GIF8[79]a$/,
-      );
+      expect(Buffer.from(result.subarray(0, 6)).toString("ascii")).toMatch(/^GIF8[79]a$/);
     });
   });
 

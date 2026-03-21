@@ -99,13 +99,12 @@ const symbolKindTitles: Record<SymbolKind, string> = {
 };
 
 const demoWeeklyDownloads = [
-  330_000, 350_000, 360_000, 410_000, 390_000, 420_000, 480_000, 520_000,
-  530_000, 570_000, 590_000, 610_000, 640_000, 620_000, 650_000, 670_000,
-  700_000, 730_000, 760_000, 790_000, 820_000, 860_000, 900_000, 940_000,
-  980_000, 1_010_000, 1_040_000, 1_090_000, 1_130_000, 1_170_000, 1_220_000,
-  1_260_000, 1_310_000, 1_360_000, 1_410_000, 1_460_000, 1_520_000, 1_580_000,
-  1_630_000, 1_700_000, 1_760_000, 1_820_000, 1_900_000, 1_970_000, 2_050_000,
-  2_130_000, 2_220_000, 2_300_000, 2_400_000, 2_510_000, 2_620_000, 2_740_000,
+  330_000, 350_000, 360_000, 410_000, 390_000, 420_000, 480_000, 520_000, 530_000, 570_000, 590_000,
+  610_000, 640_000, 620_000, 650_000, 670_000, 700_000, 730_000, 760_000, 790_000, 820_000, 860_000,
+  900_000, 940_000, 980_000, 1_010_000, 1_040_000, 1_090_000, 1_130_000, 1_170_000, 1_220_000,
+  1_260_000, 1_310_000, 1_360_000, 1_410_000, 1_460_000, 1_520_000, 1_580_000, 1_630_000, 1_700_000,
+  1_760_000, 1_820_000, 1_900_000, 1_970_000, 2_050_000, 2_130_000, 2_220_000, 2_300_000, 2_400_000,
+  2_510_000, 2_620_000, 2_740_000,
 ];
 
 const demoTreeRows: TreeRow[] = [
@@ -239,10 +238,7 @@ function formatIsoDateOnly(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function differenceInUtcDaysInclusive(
-  startIso: string,
-  endIso: string,
-): number {
+function differenceInUtcDaysInclusive(startIso: string, endIso: string): number {
   const start = parseIsoDateOnly(startIso);
   const end = parseIsoDateOnly(endIso);
   return Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
@@ -264,8 +260,7 @@ function splitIsoRangeIntoChunksInclusive(
 
   while (cursorStart.getTime() <= finalEnd.getTime()) {
     const cursorEnd = addDays(cursorStart, maximumDaysPerRequest - 1);
-    const actualEnd =
-      cursorEnd.getTime() < finalEnd.getTime() ? cursorEnd : finalEnd;
+    const actualEnd = cursorEnd.getTime() < finalEnd.getTime() ? cursorEnd : finalEnd;
     chunks.push({
       startIso: formatIsoDateOnly(cursorStart),
       endIso: formatIsoDateOnly(actualEnd),
@@ -299,18 +294,13 @@ function buildRollingWeeklyEvolutionFromDaily(
 
   for (const item of sorted) {
     const itemDate = parseIsoDateOnly(item.day);
-    const dayOffset = Math.floor(
-      (itemDate.getTime() - rangeStartDate.getTime()) / 86400000,
-    );
+    const dayOffset = Math.floor((itemDate.getTime() - rangeStartDate.getTime()) / 86400000);
     if (dayOffset < 0) {
       continue;
     }
 
     const weekIndex = Math.floor(dayOffset / 7);
-    groupedByIndex.set(
-      weekIndex,
-      (groupedByIndex.get(weekIndex) ?? 0) + item.value,
-    );
+    groupedByIndex.set(weekIndex, (groupedByIndex.get(weekIndex) ?? 0) + item.value);
   }
 
   return Array.from(groupedByIndex.entries())
@@ -319,9 +309,7 @@ function buildRollingWeeklyEvolutionFromDaily(
       const weekStartDate = addDays(rangeStartDate, weekIndex * 7);
       const weekEndDate = addDays(weekStartDate, 6);
       const clampedWeekEndDate =
-        weekEndDate.getTime() > rangeEndDate.getTime()
-          ? rangeEndDate
-          : weekEndDate;
+        weekEndDate.getTime() > rangeEndDate.getTime() ? rangeEndDate : weekEndDate;
       const weekStartIso = toIsoDateString(weekStartDate);
       const weekEndIso = toIsoDateString(clampedWeekEndDate);
 
@@ -345,50 +333,30 @@ function toDateOnly(value?: string): string | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(dateOnly) ? dateOnly : null;
 }
 
-function fetchNpmDownloadsRange(
-  packageName: string,
-  startIso: string,
-  endIso: string,
-) {
+function fetchNpmDownloadsRange(packageName: string, startIso: string, endIso: string) {
   const encodedName = encodeURIComponent(packageName);
   return fetchJson<{ downloads: Array<{ day: string; downloads: number }> }>(
     `https://api.npmjs.org/downloads/range/${startIso}:${endIso}/${encodedName}`,
   );
 }
 
-async function fetchDailyRangeCached(
-  packageName: string,
-  startIso: string,
-  endIso: string,
-) {
+async function fetchDailyRangeCached(packageName: string, startIso: string, endIso: string) {
   const response = await fetchNpmDownloadsRange(packageName, startIso, endIso);
   return [...response.downloads]
     .sort((a, b) => a.day.localeCompare(b.day))
     .map((d) => ({ day: d.day, value: d.downloads }));
 }
 
-async function fetchDailyRangeChunked(
-  packageName: string,
-  startIso: string,
-  endIso: string,
-) {
+async function fetchDailyRangeChunked(packageName: string, startIso: string, endIso: string) {
   const maximumDaysPerRequest = 540;
-  const ranges = splitIsoRangeIntoChunksInclusive(
-    startIso,
-    endIso,
-    maximumDaysPerRequest,
-  );
+  const ranges = splitIsoRangeIntoChunksInclusive(startIso, endIso, maximumDaysPerRequest);
   if (ranges.length === 1) {
     return fetchDailyRangeCached(packageName, startIso, endIso);
   }
 
   const all: DailyRawPoint[] = [];
   for (const range of ranges) {
-    const part = await fetchDailyRangeCached(
-      packageName,
-      range.startIso,
-      range.endIso,
-    );
+    const part = await fetchDailyRangeCached(packageName, range.startIso, range.endIso);
     all.push(...part);
   }
 
@@ -398,11 +366,7 @@ async function fetchDailyRangeChunked(
 function resolveWeekRange(weeks: number): { startIso: string; endIso: string } {
   const today = new Date();
   const yesterday = new Date(
-    Date.UTC(
-      today.getUTCFullYear(),
-      today.getUTCMonth(),
-      today.getUTCDate() - 1,
-    ),
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 1),
   );
   const endDateOnly = toDateOnly(undefined);
   const end = endDateOnly ? parseIsoDateOnly(endDateOnly) : yesterday;
@@ -414,21 +378,10 @@ function resolveWeekRange(weeks: number): { startIso: string; endIso: string } {
   };
 }
 
-async function fetchPackageDownloadEvolution(
-  packageName: string,
-  weeks = 52,
-): Promise<number[]> {
+async function fetchPackageDownloadEvolution(packageName: string, weeks = 52): Promise<number[]> {
   const { startIso, endIso } = resolveWeekRange(weeks);
-  const sortedDaily = await fetchDailyRangeChunked(
-    packageName,
-    startIso,
-    endIso,
-  );
-  const weekly = buildRollingWeeklyEvolutionFromDaily(
-    sortedDaily,
-    startIso,
-    endIso,
-  );
+  const sortedDaily = await fetchDailyRangeChunked(packageName, startIso, endIso);
+  const weekly = buildRollingWeeklyEvolutionFromDaily(sortedDaily, startIso, endIso);
   return weekly.map((item) => item.value);
 }
 
@@ -511,9 +464,7 @@ function parseGitHubRepository(repositoryUrl: string | null) {
     return null;
   }
 
-  const match = repositoryUrl.match(
-    /github\.com\/(?<owner>[^/]+)\/(?<repo>[^/#]+)/i,
-  );
+  const match = repositoryUrl.match(/github\.com\/(?<owner>[^/]+)\/(?<repo>[^/#]+)/i);
   if (!match?.groups?.owner || !match.groups.repo) {
     return null;
   }
@@ -619,8 +570,7 @@ function buildSymbolRowsFromDeclarationSource(source: string) {
     class: /\bexport\s+(?:declare\s+)?class\s+([A-Za-z_$][\w$]*)/g,
     interface: /\bexport\s+interface\s+([A-Za-z_$][\w$]*)/g,
     typeAlias: /\bexport\s+type\s+([A-Za-z_$][\w$]*)\s*=/g,
-    variable:
-      /\bexport\s+(?:declare\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)/g,
+    variable: /\bexport\s+(?:declare\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)/g,
     enum: /\bexport\s+(?:declare\s+)?enum\s+([A-Za-z_$][\w$]*)/g,
     namespace: /\bexport\s+(?:declare\s+)?namespace\s+([A-Za-z_$][\w$]*)/g,
   };
@@ -720,11 +670,7 @@ function fetchJsDelivrFiles(encodedName: string, version: string) {
     .catch(() => []);
 }
 
-async function resolveSymbolRows(
-  files: JsDelivrFileNode[],
-  encodedName: string,
-  version: string,
-) {
+async function resolveSymbolRows(files: JsDelivrFileNode[], encodedName: string, version: string) {
   const declarationCandidates = findDeclarationFiles(files).slice(0, 4);
 
   for (const declarationPath of declarationCandidates) {
@@ -746,30 +692,21 @@ async function resolveSymbolRows(
   return demoSymbolRows;
 }
 
-async function loadPackageInfo(
-  packageName: string,
-  version: string | null,
-): Promise<PackageInfo> {
+async function loadPackageInfo(packageName: string, version: string | null): Promise<PackageInfo> {
   try {
     const encodedName = encodeURIComponent(packageName);
-    const versionMeta = await fetchPackageVersionMeta(
-      encodedName,
-      packageName,
-      version,
-    );
+    const versionMeta = await fetchPackageVersionMeta(encodedName, packageName, version);
     if (!versionMeta) {
       return defaultPackageInfo;
     }
 
-    const { packageDisplayName, packageVersionMeta, resolvedVersion } =
-      versionMeta;
+    const { packageDisplayName, packageVersionMeta, resolvedVersion } = versionMeta;
     const repositoryUrl = extractRepositoryPath(packageVersionMeta.repository);
     const { repoRef, stars } = await fetchGitHubStars(repositoryUrl);
 
-    const weeklyDownloads = await fetchPackageDownloadEvolution(
-      packageName,
-      52,
-    ).catch(() => demoWeeklyDownloads);
+    const weeklyDownloads = await fetchPackageDownloadEvolution(packageName, 52).catch(
+      () => demoWeeklyDownloads,
+    );
 
     const files = await fetchJsDelivrFiles(encodedName, resolvedVersion);
     const treeRows = files.length > 0 ? flattenTree(files) : demoTreeRows;
@@ -778,9 +715,7 @@ async function loadPackageInfo(
         ? await resolveSymbolRows(files, encodedName, resolvedVersion)
         : demoSymbolRows;
 
-    const repository = repoRef
-      ? `${repoRef.owner}/${repoRef.repo}`
-      : defaultPackageInfo.repository;
+    const repository = repoRef ? `${repoRef.owner}/${repoRef.repo}` : defaultPackageInfo.repository;
 
     return {
       packageName: packageDisplayName,
@@ -799,10 +734,7 @@ async function loadPackageInfo(
   }
 }
 
-const packageInfo = await loadPackageInfo(
-  requestedPackageName,
-  requestedVersion,
-);
+const packageInfo = await loadPackageInfo(requestedPackageName, requestedVersion);
 
 function PackageTitleBlock({
   org,
@@ -977,11 +909,7 @@ function VariantPanel({
               paddingLeft: `${row.depth * 20}px`,
             }}
           >
-            {row.isDir ? (
-              <Folder width={18} height={18} />
-            ) : (
-              <File width={18} height={18} />
-            )}
+            {row.isDir ? <Folder width={18} height={18} /> : <File width={18} height={18} />}
             <span style={{ marginLeft: "0.5rem" }}>{row.name}</span>
           </div>
         ))}
@@ -1067,9 +995,7 @@ function PackageOgImage({
 }) {
   const slashIndex = packageName.indexOf("/");
   const org =
-    packageName.startsWith("@") && slashIndex > -1
-      ? packageName.slice(0, slashIndex)
-      : null;
+    packageName.startsWith("@") && slashIndex > -1 ? packageName.slice(0, slashIndex) : null;
   const shortName =
     packageName.startsWith("@") && slashIndex > -1
       ? packageName.slice(slashIndex + 1)

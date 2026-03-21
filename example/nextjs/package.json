@@ -11,7 +11,7 @@
     "@takumi-rs/image-response": "workspace:*",
     "@takumi-rs/wasm": "workspace:*",
     "lucide-react": "catalog:",
-    "next": "16.1.6",
+    "next": "16.2.1",
     "react": "catalog:",
     "react-dom": "catalog:"
   },

@@ -1,11 +1,5 @@
 import type { CSSProperties } from "react";
-import type {
-  ContainerNode,
-  ImageNode,
-  Node,
-  NodeMetadata,
-  TextNode,
-} from "./types";
+import type { ContainerNode, ImageNode, Node, NodeMetadata, TextNode } from "./types";
 
 function applyStyle(node: Node, style?: CSSProperties) {
   if (style && Object.keys(style).length > 0) {
@@ -57,10 +51,7 @@ export function container(props: Omit<ContainerNode, "type">): ContainerNode {
 export function text(text: string, style?: CSSProperties): TextNode;
 export function text(props: Omit<TextNode, "type">): TextNode;
 
-export function text(
-  props: Omit<TextNode, "type"> | string,
-  style?: CSSProperties,
-): TextNode {
+export function text(props: Omit<TextNode, "type"> | string, style?: CSSProperties): TextNode {
   if (typeof props === "string") {
     const node: TextNode = {
       type: "text",

@@ -64,13 +64,7 @@ export function TypeTable({ type }: { type: Record<string, TypeNode> }) {
 
 function Item({
   name,
-  item: {
-    required = false,
-    deprecated,
-    type,
-    typeDescriptionLink,
-    description,
-  },
+  item: { required = false, deprecated, type, typeDescriptionLink, description },
 }: {
   name: string;
   item: TypeNode;
@@ -89,10 +83,7 @@ function Item({
         {!required && "?"}
       </code>
       {typeDescriptionLink ? (
-        <Link
-          href={typeDescriptionLink}
-          className="underline font-mono pe-2 w-[25%]"
-        >
+        <Link href={typeDescriptionLink} className="underline font-mono pe-2 w-[25%]">
           {type}
         </Link>
       ) : (

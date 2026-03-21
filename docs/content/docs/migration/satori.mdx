@@ -8,7 +8,8 @@ Takumi aims to create a universal image generation library that can be used in a
 If you are migrating from `next/og`, check out the [From Next.js ImageResponse](/docs/migration/image-response) guide instead.
 
 <Callout type="warning">
-Takumi renders your nodes/components to rasterized images directly, we don't support rendering to SVG at this moment.
+  Takumi renders your nodes/components to rasterized images directly, we don't support rendering to
+  SVG at this moment.
 </Callout>
 
 ## Installation
@@ -18,7 +19,7 @@ npm i @takumi-rs/core @takumi-rs/helpers
 ```
 
 <Callout>
-Make sure to mark `@takumi-rs/core` as `external` if you are using a bundler like Vite or Webpack
+  Make sure to mark `@takumi-rs/core` as `external` if you are using a bundler like Vite or Webpack
 </Callout>
 
 ## Code changes
@@ -33,15 +34,15 @@ import { fromJsx } from "@takumi-rs/helpers/jsx"; // [!code ++]
 import { Renderer } from "@takumi-rs/core"; // [!code ++]
 
 // You can use variable fonts with Takumi!
-// Takumi comes with full axis Geist and Geist Mono by default, 
+// Takumi comes with full axis Geist and Geist Mono by default,
 // if this is what you want, you can just remove fonts array.
 const fonts = [
   {
     name: "Inter",
     data: await fetch("/fonts/Inter-Regular.ttf").then((res) => res.arrayBuffer()),
     style: "normal" as const,
-    weight: 400
-  }
+    weight: 400,
+  },
 ];
 
 // [!code --:4]

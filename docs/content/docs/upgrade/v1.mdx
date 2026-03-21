@@ -26,7 +26,7 @@ takumi = "1.0.0-beta" # Check https://crates.io/crates/takumi/versions for lates
 
 ### `display` defaults to `inline`
 
-In the early stages, Takumi defaulted `display` to `flex` to simplify common layouts. 
+In the early stages, Takumi defaulted `display` to `flex` to simplify common layouts.
 However, to stay as close to the CSS specification as possible and ensure LLMs can produce correct components without guessing, we've changed the default to `inline`.
 
 Verify your templates and explicitly add `display: flex` (or the `flex` Tailwind class) to containers where flexbox layout is intended.
@@ -38,13 +38,13 @@ To be more consistent with the CSS ecosystem and web standards, all image format
 Before:
 
 ```ts
-const image = await renderer.render(node, { format: 'WebP' });
+const image = await renderer.render(node, { format: "WebP" });
 ```
 
 After:
 
 ```ts
-const image = await renderer.render(node, { format: 'webp' });
+const image = await renderer.render(node, { format: "webp" });
 ```
 
 ### Removal of Deprecated APIs

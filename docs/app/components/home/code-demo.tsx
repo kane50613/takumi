@@ -12,9 +12,7 @@ export function CodeDemo({ highlightedHtml }: CodeDemoProps) {
             <span className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
             <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
           </div>
-          <span className="text-xs text-muted-foreground font-mono">
-            route.tsx
-          </span>
+          <span className="text-xs text-muted-foreground font-mono">route.tsx</span>
         </div>
         <div
           suppressHydrationWarning
@@ -23,13 +21,7 @@ export function CodeDemo({ highlightedHtml }: CodeDemoProps) {
         />
       </div>
       <div className="text-muted-foreground/40 max-lg:rotate-90 max-lg:justify-self-center">
-        <svg
-          width="48"
-          height="48"
-          viewBox="0 0 24 24"
-          fill="none"
-          aria-hidden="true"
-        >
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path
             d="M5 12h14m-4-4l4 4-4 4"
             stroke="currentColor"
@@ -42,9 +34,7 @@ export function CodeDemo({ highlightedHtml }: CodeDemoProps) {
 
       <div className="border border-border rounded-2xl overflow-hidden bg-background backdrop-blur-sm">
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-muted/30">
-          <span className="text-xs text-muted-foreground font-mono">
-            output.png
-          </span>
+          <span className="text-xs text-muted-foreground font-mono">output.png</span>
           <span className="ml-auto text-[0.65rem] px-2 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">
             1200×630
           </span>

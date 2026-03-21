@@ -41,10 +41,7 @@ function testRender(name: string, template: ReactNode) {
 
     console.log(`Rendered in ${Math.round(end - start)}ms`);
 
-    await write(
-      join(import.meta.dirname, "output", `${name}.webp`),
-      buffer.buffer,
-    );
+    await write(join(import.meta.dirname, "output", `${name}.webp`), buffer.buffer);
   });
 }
 

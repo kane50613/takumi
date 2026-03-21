@@ -1,12 +1,13 @@
 {
   "name": "takumi-template",
   "private": true,
-  "type": "module",
+  "license": "(MIT OR Apache-2.0)",
   "author": {
-    "email": "me@kane.tw",
     "name": "Kane Wang",
+    "email": "me@kane.tw",
     "url": "https://kane.tw"
   },
+  "type": "module",
   "devDependencies": {
     "@takumi-rs/core": "workspace:*",
     "@takumi-rs/helpers": "workspace:*",
@@ -17,6 +18,5 @@
     "react-dom": "catalog:",
     "tsup": "^8.5.1",
     "typescript": "catalog:"
-  },
-  "license": "(MIT OR Apache-2.0)"
+  }
 }

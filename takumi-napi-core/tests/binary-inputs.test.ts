@@ -2,12 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { container, image } from "@takumi-rs/helpers";
 import { Renderer } from "../index";
 
-const fontArrayBuffer = await Bun.file(
-  "../assets/fonts/geist/Geist[wght].woff2",
-).arrayBuffer();
-const imageArrayBuffer = await Bun.file(
-  "../assets/images/yeecord.png",
-).arrayBuffer();
+const fontArrayBuffer = await Bun.file("../assets/fonts/geist/Geist[wght].woff2").arrayBuffer();
+const imageArrayBuffer = await Bun.file("../assets/images/yeecord.png").arrayBuffer();
 
 const fontBuffer = Buffer.from(fontArrayBuffer);
 const fontUint8Array = new Uint8Array(fontArrayBuffer.slice(0));
@@ -60,11 +56,7 @@ describe("binary inputs", () => {
   test("loadFonts accepts Buffer, Uint8Array, and ArrayBuffer", async () => {
     const renderer = new Renderer();
 
-    const count = await renderer.loadFonts([
-      fontBuffer,
-      fontUint8Array,
-      fontArrayBuffer,
-    ]);
+    const count = await renderer.loadFonts([fontBuffer, fontUint8Array, fontArrayBuffer]);
 
     expect(count).toBe(3);
   });

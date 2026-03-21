@@ -1,10 +1,5 @@
 import type { ComponentProps, ReactElement } from "react";
-import {
-  camelToKebab,
-  isFunctionComponent,
-  isValidElement,
-  type ReactElementLike,
-} from "./utils";
+import { camelToKebab, isFunctionComponent, isValidElement, type ReactElementLike } from "./utils";
 
 function isTextNode(node: unknown): node is string | number {
   return typeof node === "string" || typeof node === "number";
@@ -20,10 +15,7 @@ function escapeAttr(value: string): string {
 
 function styleObjectToString(styleObj: Record<string, unknown>): string {
   return Object.keys(styleObj)
-    .map(
-      (k) =>
-        `${k.replace(/([A-Z])/g, "-$1").toLowerCase()}:${String(styleObj[k]).trim()}`,
-    )
+    .map((k) => `${k.replace(/([A-Z])/g, "-$1").toLowerCase()}:${String(styleObj[k]).trim()}`)
     .join(";");
 }
 
@@ -99,10 +91,7 @@ const propertiesToKebabCase = new Set([
   "writingMode",
 ]);
 
-function serializePropToAttrString(
-  key: string,
-  value: unknown,
-): string | undefined {
+function serializePropToAttrString(key: string, value: unknown): string | undefined {
   if (key === "children" || value == null) return;
 
   // Determine the final attribute name (handle className and known SVG mappings)
@@ -167,9 +156,7 @@ const serialize = (node: unknown): string => {
   return serializeElementNode(node, serialize);
 };
 
-export function serializeSvg(
-  element: ReactElement<ComponentProps<"svg">, "svg">,
-): string {
+export function serializeSvg(element: ReactElement<ComponentProps<"svg">, "svg">): string {
   const props = (element.props as Record<string, unknown>) || {};
 
   if (!("xmlns" in props)) {

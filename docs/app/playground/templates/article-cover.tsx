@@ -21,8 +21,8 @@ export default function Article() {
             <span>with Rust</span>
           </h1>
           <p tw="text-3xl text-zinc-400 leading-relaxed text-pretty">
-            A deep dive into the architecture and optimizations that make Takumi
-            the fastest image generation engine.
+            A deep dive into the architecture and optimizations that make Takumi the fastest image
+            generation engine.
           </p>
         </div>
 
@@ -35,9 +35,7 @@ export default function Article() {
             />
             <div tw="flex flex-col ml-5">
               <span tw="text-zinc-400 text-lg font-medium">Published by</span>
-              <span tw="text-zinc-100 text-2xl font-bold">
-                The Engineering Team
-              </span>
+              <span tw="text-zinc-100 text-2xl font-bold">The Engineering Team</span>
             </div>
           </div>
         </div>

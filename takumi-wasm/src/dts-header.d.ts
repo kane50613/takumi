@@ -1,12 +1,6 @@
 import type { Node } from "@takumi-rs/helpers";
 
-export {
-  ContainerNode,
-  ImageNode,
-  Node,
-  NodeMetadata,
-  TextNode,
-} from "@takumi-rs/helpers";
+export { ContainerNode, ImageNode, Node, NodeMetadata, TextNode } from "@takumi-rs/helpers";
 
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 

@@ -34,9 +34,7 @@ const apis = {
 
 function getEmojiUrl(icon: string, type: EmojiType) {
   const code = getIconCode(icon);
-  return type === "twemoji"
-    ? apis.twemoji(code)
-    : `${apis[type]}${code.toUpperCase()}.svg`;
+  return type === "twemoji" ? apis.twemoji(code) : `${apis[type]}${code.toUpperCase()}.svg`;
 }
 
 let segmenter: Intl.Segmenter | null | undefined;
@@ -112,9 +110,7 @@ export function extractEmojis(node: Node, emojiType: EmojiType): Node {
   } else if (node.type === "container" && node.children) {
     return {
       ...node,
-      children: node.children.map((child) =>
-        child ? extractEmojis(child, emojiType) : child,
-      ),
+      children: node.children.map((child) => (child ? extractEmojis(child, emojiType) : child)),
     };
   }
 

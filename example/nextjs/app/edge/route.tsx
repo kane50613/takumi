@@ -8,9 +8,7 @@ export const runtime = "edge";
 const fonts = [
   {
     name: "Geist",
-    data: await fetch("https://takumi.kane.tw/fonts/Geist.woff2").then((r) =>
-      r.arrayBuffer(),
-    ),
+    data: await fetch("https://takumi.kane.tw/fonts/Geist.woff2").then((r) => r.arrayBuffer()),
   },
 ];
 

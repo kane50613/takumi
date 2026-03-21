@@ -26,11 +26,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "../ui/resizable";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../ui/resizable";
 import { ComponentEditor } from "./component-editor";
 
 const DEFAULT_TEMPLATE = templates[0];
@@ -41,8 +37,7 @@ function isBlobUrl(url: string) {
 
 export default function Playground() {
   const [code, setCode] = useState<string>();
-  const [rendered, setRendered] =
-    useState<z.infer<typeof renderResultSchema>["result"]>();
+  const [rendered, setRendered] = useState<z.infer<typeof renderResultSchema>["result"]>();
   const [isReady, setIsReady] = useState(false);
   const [isFormatting, setIsFormatting] = useState(false);
   const currentRequestIdRef = useRef(0);
@@ -62,9 +57,7 @@ export default function Playground() {
     let cancelled = false;
 
     void (async () => {
-      const templateCode = templates.find(
-        (template) => template.id === templateQuery,
-      )?.code;
+      const templateCode = templates.find((template) => template.id === templateQuery)?.code;
       const initialCode = codeQuery
         ? await decompressCode(codeQuery)
         : (templateCode ?? DEFAULT_TEMPLATE.code);
@@ -142,10 +135,7 @@ export default function Playground() {
         case "render-result": {
           if (message.result.id === currentRequestIdRef.current) {
             setRendered(message.result);
-          } else if (
-            message.result.status === "success" &&
-            isBlobUrl(message.result.outputUrl)
-          ) {
+          } else if (message.result.status === "success" && isBlobUrl(message.result.outputUrl)) {
             URL.revokeObjectURL(message.result.outputUrl);
           }
           break;
@@ -203,12 +193,11 @@ export default function Playground() {
     if (!code) return;
     try {
       setIsFormatting(true);
-      const [prettier, prettierPluginEstree, prettierPluginTypeScript] =
-        await Promise.all([
-          import("prettier/standalone"),
-          import("prettier/plugins/estree"),
-          import("prettier/plugins/typescript"),
-        ]);
+      const [prettier, prettierPluginEstree, prettierPluginTypeScript] = await Promise.all([
+        import("prettier/standalone"),
+        import("prettier/plugins/estree"),
+        import("prettier/plugins/typescript"),
+      ]);
 
       const formatted = await prettier.format(code, {
         parser: "typescript",
@@ -232,14 +221,11 @@ export default function Playground() {
           className={cn(
             "h-7 rounded-md text-[11px] font-bold transition-all",
             activeTab === "code" ? "px-2.5" : "px-2",
-            activeTab === "code" &&
-              "bg-zinc-800 text-white shadow-sm ring-1 ring-zinc-700/50",
+            activeTab === "code" && "bg-zinc-800 text-white shadow-sm ring-1 ring-zinc-700/50",
           )}
           onClick={() => setActiveTab("code")}
         >
-          <Code2Icon
-            className={cn("h-3 w-3", activeTab === "code" && "mr-1.5")}
-          />
+          <Code2Icon className={cn("h-3 w-3", activeTab === "code" && "mr-1.5")} />
           {activeTab === "code" && "Code"}
         </Button>
         <Button
@@ -248,14 +234,11 @@ export default function Playground() {
           className={cn(
             "h-7 rounded-md text-[11px] font-bold transition-all",
             activeTab === "preview" ? "px-2.5" : "px-2",
-            activeTab === "preview" &&
-              "bg-zinc-800 text-white shadow-sm ring-1 ring-zinc-700/50",
+            activeTab === "preview" && "bg-zinc-800 text-white shadow-sm ring-1 ring-zinc-700/50",
           )}
           onClick={() => setActiveTab("preview")}
         >
-          <ImageIcon
-            className={cn("h-3 w-3", activeTab === "preview" && "mr-1.5")}
-          />
+          <ImageIcon className={cn("h-3 w-3", activeTab === "preview" && "mr-1.5")} />
           {activeTab === "preview" && "Preview"}
         </Button>
       </div>
@@ -475,11 +458,7 @@ function PreviewPanel({
   );
 }
 
-function RenderPreview({
-  result,
-}: {
-  result: z.infer<typeof renderResultSchema>["result"];
-}) {
+function RenderPreview({ result }: { result: z.infer<typeof renderResultSchema>["result"] }) {
   if (result.status === "error") {
     return (
       <div className="flex h-full w-full flex-col items-center justify-center p-8 bg-red-950/10">

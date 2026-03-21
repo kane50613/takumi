@@ -25,11 +25,7 @@ async function createRenderer(module: Component) {
     persistentImages: module.persistentImages,
     fonts:
       module.fonts.length > 0
-        ? await Promise.all(
-            module.fonts.map((font) =>
-              readFile(join("../../assets/fonts", font)),
-            ),
-          )
+        ? await Promise.all(module.fonts.map((font) => readFile(join("../../assets/fonts", font))))
         : undefined,
   });
 }
@@ -62,10 +58,7 @@ async function render(
     `Rendered ${module.name} ${ratio}x in ${totalMs}ms (jsx prepare: ${jsxPrepareMs}ms, render: ${renderMs}ms)`,
   );
 
-  const fileName =
-    ratio === 1
-      ? `${module.name}.${format}`
-      : `${module.name}@${ratio}x.${format}`;
+  const fileName = ratio === 1 ? `${module.name}.${format}` : `${module.name}@${ratio}x.${format}`;
 
   await writeFile(join("output", fileName), buffer);
 }
@@ -73,9 +66,7 @@ async function render(
 for (const component of components) {
   const rendererPrepareStart = performance.now();
   const renderer = await createRenderer(component);
-  const rendererPrepareMs = Math.round(
-    performance.now() - rendererPrepareStart,
-  );
+  const rendererPrepareMs = Math.round(performance.now() - rendererPrepareStart);
 
   console.log(`Prepared ${component.name} renderer in ${rendererPrepareMs}ms`);
 

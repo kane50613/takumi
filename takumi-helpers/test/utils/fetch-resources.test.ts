@@ -8,9 +8,7 @@ describe("fetchResources", () => {
 
   test("fetches multiple resources successfully", async () => {
     const mockFetch = mock((url: string) =>
-      Promise.resolve(
-        new Response(new TextEncoder().encode(`Data for ${url}`).buffer),
-      ),
+      Promise.resolve(new Response(new TextEncoder().encode(`Data for ${url}`).buffer)),
     );
 
     const urls = ["https://example.com/1", "https://example.com/2"];
@@ -87,10 +85,9 @@ describe("fetchResources", () => {
     );
 
     expect(
-      fetchResources(
-        ["https://example.com/exists", "https://example.com/404"],
-        { fetch: mockFetch },
-      ),
+      fetchResources(["https://example.com/exists", "https://example.com/404"], {
+        fetch: mockFetch,
+      }),
     ).rejects.toThrow("HTTP 404");
   });
 
@@ -104,27 +101,21 @@ describe("fetchResources", () => {
       ),
     );
 
-    expect(
-      fetchResources(["https://example.com/error"], { fetch: mockFetch }),
-    ).rejects.toThrow("HTTP 500");
+    expect(fetchResources(["https://example.com/error"], { fetch: mockFetch })).rejects.toThrow(
+      "HTTP 500",
+    );
   });
 
   test("with throwOnError=false, skips failed fetches", async () => {
     const mockFetch = mock((url: string) => {
       if (url.includes("bad")) {
-        return Promise.resolve(
-          new Response(new ArrayBuffer(0), { status: 404 }),
-        );
+        return Promise.resolve(new Response(new ArrayBuffer(0), { status: 404 }));
       }
       return Promise.resolve(new Response(new ArrayBuffer(10)));
     });
 
     const result = await fetchResources(
-      [
-        "https://example.com/good1",
-        "https://example.com/bad",
-        "https://example.com/good2",
-      ],
+      ["https://example.com/good1", "https://example.com/bad", "https://example.com/good2"],
       { fetch: mockFetch, throwOnError: false },
     );
 
@@ -188,9 +179,7 @@ describe("fetchResources", () => {
 
   test("uses data from cache if available", async () => {
     const cachedData = new TextEncoder().encode("Cached Data").buffer;
-    const cache = new Map<string, ArrayBuffer>([
-      ["https://example.com/cached", cachedData],
-    ]);
+    const cache = new Map<string, ArrayBuffer>([["https://example.com/cached", cachedData]]);
     const mockFetch = mock(() => Promise.resolve(new Response()));
 
     const result = await fetchResources(["https://example.com/cached"], {
@@ -206,9 +195,7 @@ describe("fetchResources", () => {
   test("populates cache after fetching", async () => {
     const cache = new Map<string, ArrayBuffer>();
     const mockFetch = mock((url: string) =>
-      Promise.resolve(
-        new Response(new TextEncoder().encode(`Data for ${url}`).buffer),
-      ),
+      Promise.resolve(new Response(new TextEncoder().encode(`Data for ${url}`).buffer)),
     );
 
     const url = "https://example.com/new";

@@ -25,13 +25,7 @@ export function loader({ params }: Route.LoaderArgs) {
     <DocsTemplate
       title={page.data.title}
       description={page.data.description}
-      icon={
-        <img
-          src="takumi.svg"
-          alt="Takumi"
-          style={{ width: "4rem", height: "4rem" }}
-        />
-      }
+      icon={<img src="takumi.svg" alt="Takumi" style={{ width: "4rem", height: "4rem" }} />}
       primaryColor="hsla(354, 90%, 54%, 0.3)"
       primaryTextColor="hsl(354, 90%, 60%)"
       site="Takumi"

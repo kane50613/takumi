@@ -52,9 +52,7 @@ export const source = loader({
       return createElement(
         "svg",
         iconProps,
-        icons[icon as keyof typeof icons].map(([tag, attrs]) =>
-          createElement(tag, attrs),
-        ),
+        icons[icon as keyof typeof icons].map(([tag, attrs]) => createElement(tag, attrs)),
       );
     }
   },

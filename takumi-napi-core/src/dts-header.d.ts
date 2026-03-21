@@ -1,11 +1,6 @@
 import type { Node } from "@takumi-rs/helpers";
 
-export type {
-  ContainerNode,
-  ImageNode,
-  NodeMetadata,
-  TextNode,
-} from "@takumi-rs/helpers";
+export type { ContainerNode, ImageNode, NodeMetadata, TextNode } from "@takumi-rs/helpers";
 
 export type { Node };
 
@@ -25,12 +20,7 @@ export interface FontDetails {
   /**
    * The style of the font. If not provided, the style in the font file will be used.
    */
-  style?:
-    | "normal"
-    | "italic"
-    | "oblique"
-    | `oblique ${number}deg`
-    | (string & {});
+  style?: "normal" | "italic" | "oblique" | `oblique ${number}deg` | (string & {});
 }
 
 export type Font = FontDetails | Uint8Array | ArrayBuffer;

@@ -15,8 +15,8 @@ export default function Profile() {
         </div>
 
         <div tw="flex max-w-[800px] text-4xl leading-tight text-slate-200 mt-4">
-          Creator of Linux and Git. Passionate about operating systems, open
-          source, and making computers do what they're told.
+          Creator of Linux and Git. Passionate about operating systems, open source, and making
+          computers do what they're told.
         </div>
 
         <div tw="flex mt-auto text-3xl font-medium w-full items-center">

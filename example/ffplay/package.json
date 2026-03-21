@@ -1,19 +1,19 @@
 {
   "name": "ffplay",
-  "main": "src/index.ts",
-  "type": "module",
   "private": true,
-  "devDependencies": {
-    "@types/bun": "catalog:"
-  },
+  "type": "module",
+  "main": "src/index.ts",
   "scripts": {
     "start": "bun src/index.ts"
-  },
-  "peerDependencies": {
-    "typescript": "catalog:"
   },
   "dependencies": {
     "@takumi-rs/core": "workspace:*",
     "@takumi-rs/helpers": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:"
+  },
+  "peerDependencies": {
+    "typescript": "catalog:"
   }
 }

@@ -10,10 +10,7 @@ export function Video(props: ComponentPropsWithoutRef<"video">) {
       loop
       playsInline
       {...props}
-      className={cn(
-        "rounded-xl border bg-fd-background w-full",
-        props.className,
-      )}
+      className={cn("rounded-xl border bg-fd-background w-full", props.className)}
     />
   );
 }

@@ -37,12 +37,10 @@ export function Features() {
                 <line x1="12" y1="17" x2="12" y2="21" />
               </svg>
             </div>
-            <h3 className="font-display text-lg font-bold mb-2 tracking-tight">
-              Runs Everywhere
-            </h3>
+            <h3 className="font-display text-lg font-bold mb-2 tracking-tight">Runs Everywhere</h3>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Browser (WASM), Node.js, Bun, Deno, Edge Runtime, and native Rust.
-              One engine, every platform.
+              Browser (WASM), Node.js, Bun, Deno, Edge Runtime, and native Rust. One engine, every
+              platform.
             </p>
           </div>
         </div>

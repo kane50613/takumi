@@ -43,8 +43,7 @@ const stylesheets = [
 for (const stylesheet of stylesheets) {
   await write(join(outputDir, stylesheet.outputName), stylesheet.css);
 
-  const CardComponent =
-    stylesheet.libraryName === "Tailwind CSS" ? TailwindCard : UnoCard;
+  const CardComponent = stylesheet.libraryName === "Tailwind CSS" ? TailwindCard : UnoCard;
 
   const { node } = await fromJsx(
     <CardComponent

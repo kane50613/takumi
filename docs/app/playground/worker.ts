@@ -6,11 +6,7 @@ import wasmUrl from "@takumi-rs/wasm/takumi_wasm_bg.wasm?url";
 import * as React from "react";
 import { transform } from "sucrase";
 import * as z from "zod/mini";
-import {
-  messageSchema,
-  optionsSchema,
-  type RenderMessageInput,
-} from "./schema";
+import { messageSchema, optionsSchema, type RenderMessageInput } from "./schema";
 
 const fetchCache = new Map<string, ArrayBuffer>();
 
@@ -65,13 +61,9 @@ self.onmessage = async (event: MessageEvent) => {
       if (!renderer) throw new Error("WASM is not ready yet!");
 
       try {
-        const { default: component, options } = evaluateCodeExports(
-          payload.code,
-        );
+        const { default: component, options } = evaluateCodeExports(payload.code);
         let { node, stylesheets } = await fromJsx(
-          React.createElement(
-            component as React.JSXElementConstructor<unknown>,
-          ),
+          React.createElement(component as React.JSXElementConstructor<unknown>),
         );
 
         node = extractEmojis(node, options.emoji ?? "twemoji");

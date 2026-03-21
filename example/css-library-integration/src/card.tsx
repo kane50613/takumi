@@ -6,11 +6,7 @@ export type CssLibraryCardProps = {
   description: string;
 };
 
-export function TailwindCard({
-  libraryName,
-  title,
-  description,
-}: CssLibraryCardProps) {
+export function TailwindCard({ libraryName, title, description }: CssLibraryCardProps) {
   return (
     <div className="flex h-[630px] w-[1200px] bg-takumi-dark font-brand flex-row overflow-hidden border border-takumi-border">
       <div className="flex w-[640px] h-full flex-col p-20 justify-between bg-linear-to-b from-takumi-dark to-takumi-card relative z-10">
@@ -31,9 +27,7 @@ export function TailwindCard({
         </div>
 
         <div className="flex items-center bg-brand-primary w-max shrink-0 px-8 py-5 rounded-2xl shadow-brand animate-float">
-          <span className="text-xl font-bold text-white tracking-wide">
-            INITIALIZE PIPELINE
-          </span>
+          <span className="text-xl font-bold text-white tracking-wide">INITIALIZE PIPELINE</span>
           <Play className="w-5 h-5 shrink-0 text-white ml-3 fill-white" />
         </div>
       </div>
@@ -45,12 +39,9 @@ export function TailwindCard({
               <Code className="w-8 h-8 shrink-0" />
             </div>
             <div className="flex flex-col ml-8 justify-center">
-              <h3 className="m-0 text-2xl font-black text-[#f4f4f5]">
-                Static Resolution
-              </h3>
+              <h3 className="m-0 text-2xl font-black text-[#f4f4f5]">Static Resolution</h3>
               <p className="m-0 mt-2 text-lg text-[#71717a] font-medium leading-normal">
-                Optimized AST-based scanning of JSX source files for utility
-                tokens.
+                Optimized AST-based scanning of JSX source files for utility tokens.
               </p>
             </div>
           </div>
@@ -60,12 +51,9 @@ export function TailwindCard({
               <Zap className="w-8 h-8 shrink-0" />
             </div>
             <div className="flex flex-col ml-8 justify-center">
-              <h3 className="m-0 text-2xl font-black text-[#f4f4f5]">
-                Engine Build
-              </h3>
+              <h3 className="m-0 text-2xl font-black text-[#f4f4f5]">Engine Build</h3>
               <p className="m-0 mt-2 text-lg text-[#71717a] font-medium leading-normal">
-                Tailwind v4 JIT compilation into highly optimized raw CSS
-                stylesheets.
+                Tailwind v4 JIT compilation into highly optimized raw CSS stylesheets.
               </p>
             </div>
           </div>
@@ -75,11 +63,7 @@ export function TailwindCard({
   );
 }
 
-export function UnoCard({
-  libraryName,
-  title,
-  description,
-}: CssLibraryCardProps) {
+export function UnoCard({ libraryName, title, description }: CssLibraryCardProps) {
   return (
     <div className="flex h-[630px] w-[1200px] bg-white font-sans flex-col overflow-hidden relative border border-zinc-200">
       <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-linear-to-bl from-rose-500/20 via-fuchsia-500/20 to-transparent blur-3xl rounded-full translate-x-1/3 -translate-y-1/3" />
@@ -114,9 +98,7 @@ export function UnoCard({
           <div className="flex h-16 w-16 shrink-0 bg-zinc-100 rounded-[20px] items-center justify-center mb-auto border border-zinc-200">
             <Zap className="w-8 h-8 shrink-0 text-rose-500" />
           </div>
-          <h3 className="m-0 text-3xl font-black text-zinc-900 tracking-tight">
-            Zero Runtime
-          </h3>
+          <h3 className="m-0 text-3xl font-black text-zinc-900 tracking-tight">Zero Runtime</h3>
           <p className="m-0 mt-3 text-lg text-zinc-500 font-medium leading-snug">
             Generated entirely on-demand with zero client-side overhead.
           </p>
@@ -126,9 +108,7 @@ export function UnoCard({
           <div className="flex h-16 w-16 shrink-0 bg-zinc-100 rounded-[20px] items-center justify-center mb-auto border border-zinc-200">
             <Box className="w-8 h-8 shrink-0 text-fuchsia-500" />
           </div>
-          <h3 className="m-0 text-3xl font-black text-zinc-900 tracking-tight">
-            Extensible
-          </h3>
+          <h3 className="m-0 text-3xl font-black text-zinc-900 tracking-tight">Extensible</h3>
           <p className="m-0 mt-3 text-lg text-zinc-500 font-medium leading-snug">
             Built on top of a comprehensive native engine plugin system.
           </p>

@@ -101,9 +101,7 @@ function getTextMeasurement(time: number) {
   );
 }
 
-const { width: textWidth, height: textHeight } = await getTextMeasurement(
-  Date.now(),
-);
+const { width: textWidth, height: textHeight } = await getTextMeasurement(Date.now());
 
 function createFrame(time = Date.now()): Node {
   // Update position

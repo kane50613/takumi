@@ -1,3 +1,4 @@
+// oxlint-disable-next-line no-unused-vars
 declare type PlaygroundOptions = {
   /**
    * @description width of the render viewport.

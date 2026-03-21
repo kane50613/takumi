@@ -149,10 +149,7 @@ function PrismaOGImage({
               <span
                 key={i}
                 style={{
-                  color:
-                    segment.startsWith("{") && segment.endsWith("}")
-                      ? "#71e8df"
-                      : "#a0aec0",
+                  color: segment.startsWith("{") && segment.endsWith("}") ? "#71e8df" : "#a0aec0",
                 }}
               >
                 {segment}

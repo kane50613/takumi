@@ -3,7 +3,11 @@
   "typescript.preferences.importModuleSpecifier": "shortest",
   "rust-analyzer.diagnostics.disabled": ["inactive-code"],
   "tailwindCSS.classAttributes": ["class", "className", "tw"],
+  "editor.defaultFormatter": "oxc.oxc-vscode",
   "[typescript]": {
-    "editor.defaultFormatter": "biomejs.biome"
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
   }
 }

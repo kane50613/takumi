@@ -29,9 +29,7 @@ const localImagePath = "../assets/images/yeecord.png";
 
 const imageBuffer = await Bun.file(localImagePath).arrayBuffer();
 
-const dataUri = `data:image/png;base64,${Buffer.from(imageBuffer).toString(
-  "base64",
-)}`;
+const dataUri = `data:image/png;base64,${Buffer.from(imageBuffer).toString("base64")}`;
 
 const node = container({
   children: [

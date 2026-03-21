@@ -3,13 +3,9 @@ import * as z from "zod/mini";
 export const optionsSchema = z.object({
   width: z.optional(z.int().check(z.positive(), z.minimum(1))),
   height: z.optional(z.int().check(z.positive(), z.minimum(1))),
-  quality: z.optional(
-    z.int().check(z.positive(), z.minimum(1), z.maximum(100)),
-  ),
+  quality: z.optional(z.int().check(z.positive(), z.minimum(1), z.maximum(100))),
   format: z.optional(z.enum(["png", "jpeg", "webp"])),
-  devicePixelRatio: z.optional(
-    z.number().check(z.positive(), z.minimum(0.1), z.maximum(10.0)),
-  ),
+  devicePixelRatio: z.optional(z.number().check(z.positive(), z.minimum(0.1), z.maximum(10.0))),
   stylesheets: z.optional(z.array(z.string())),
   animation: z.optional(
     z.object({
@@ -46,10 +42,7 @@ export const renderRequestSchema = z.object({
 
 export const renderResultSchema = z.object({
   type: z.literal("render-result"),
-  result: z.discriminatedUnion("status", [
-    renderSuccessSchema,
-    renderErrorSchema,
-  ]),
+  result: z.discriminatedUnion("status", [renderSuccessSchema, renderErrorSchema]),
 });
 
 export const readySchema = z.object({

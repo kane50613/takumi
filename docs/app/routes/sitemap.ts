@@ -56,8 +56,7 @@ function page({
 `;
 
   if (lastModified) {
-    const date =
-      lastModified instanceof Date ? lastModified : new Date(lastModified);
+    const date = lastModified instanceof Date ? lastModified : new Date(lastModified);
     content += `<lastmod>${date.toISOString()}</lastmod>`;
   }
 

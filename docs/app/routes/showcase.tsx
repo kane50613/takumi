@@ -59,9 +59,8 @@ export default function Showcase() {
             Crafted with <span className="text-primary">Takumi</span>
           </h1>
           <p className="text-[1.1rem] md:text-[1.25rem] leading-relaxed text-muted-foreground text-pretty">
-            Explore a curated collection of production applications and
-            open-source projects leveraging Takumi's high-performance image
-            engine.
+            Explore a curated collection of production applications and open-source projects
+            leveraging Takumi's high-performance image engine.
           </p>
         </div>
 
@@ -84,8 +83,7 @@ export default function Showcase() {
               </h2>
             </div>
             <p className="text-muted-foreground max-w-sm md:text-right">
-              Kickstart your generation with our pre-built, responsive canvas
-              layouts.
+              Kickstart your generation with our pre-built, responsive canvas layouts.
             </p>
           </div>
 
@@ -108,8 +106,8 @@ export default function Showcase() {
               Feature your creation
             </h2>
             <p className="text-muted-foreground text-lg mb-10 max-w-[500px]">
-              Forged something exceptional? Submit your project to the showcase
-              and share your craft with the community.
+              Forged something exceptional? Submit your project to the showcase and share your craft
+              with the community.
             </p>
 
             <a

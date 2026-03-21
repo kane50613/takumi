@@ -1,22 +1,22 @@
 {
   "name": "ffmpeg-keyframe-animation",
-  "main": "src/index.tsx",
-  "type": "module",
   "private": true,
-  "devDependencies": {
-    "@types/bun": "catalog:",
-    "@types/react": "catalog:"
-  },
+  "type": "module",
+  "main": "src/index.tsx",
   "scripts": {
     "start": "bun src/index.tsx"
-  },
-  "peerDependencies": {
-    "typescript": "catalog:"
   },
   "dependencies": {
     "@takumi-rs/core": "workspace:*",
     "@takumi-rs/helpers": "workspace:*",
     "react": "catalog:",
     "shiki": "^4.0.2"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:"
+  },
+  "peerDependencies": {
+    "typescript": "catalog:"
   }
 }

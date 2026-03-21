@@ -76,10 +76,7 @@ export default function Home() {
         name="description"
         content="Rust-powered image rendering engine. Write JSX, get pixels. Built for fast image generation across runtimes."
       />
-      <meta
-        name="og:title"
-        content="Takumi — Render your React components to images."
-      />
+      <meta name="og:title" content="Takumi — Render your React components to images." />
       <meta
         name="og:description"
         content="Rust-powered image rendering engine. Write JSX, get pixels. Built for fast image generation across runtimes."
@@ -105,23 +102,19 @@ export default function Home() {
               JSX in. Image out.
             </h2>
             <p className="text-[1.05rem] leading-relaxed text-muted-foreground max-w-[520px] mt-4">
-              Write standard React components with CSS styling. Takumi renders
-              them into production-quality images at blazing speed.
+              Write standard React components with CSS styling. Takumi renders them into
+              production-quality images at blazing speed.
             </p>
           </div>
           <CodeDemo
-            highlightedHtml={
-              isLight ? highlightedCodeDemo.light : highlightedCodeDemo.dark
-            }
+            highlightedHtml={isLight ? highlightedCodeDemo.light : highlightedCodeDemo.dark}
           />
         </div>
       </section>
 
       <Features />
       <Showcase />
-      <CTA
-        highlightedHtml={isLight ? highlightedCta.light : highlightedCta.dark}
-      />
+      <CTA highlightedHtml={isLight ? highlightedCta.light : highlightedCta.dark} />
     </HomeLayout>
   );
 }

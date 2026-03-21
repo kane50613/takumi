@@ -94,23 +94,20 @@ function createStream(component: ReactNode, options?: ImageResponseOptions) {
     type: "bytes",
     async start(controller) {
       try {
-        const nodePromise = fromJsx(component, options?.jsx).then(
-          async ({ node, stylesheets }) => {
-            if (options?.emoji && options.emoji !== "from-font") {
-              node = extractEmojis(node, options.emoji);
-            }
+        const nodePromise = fromJsx(component, options?.jsx).then(async ({ node, stylesheets }) => {
+          if (options?.emoji && options.emoji !== "from-font") {
+            node = extractEmojis(node, options.emoji);
+          }
 
-            const fetchedResources = await extractFetchedResources(
-              node,
-              options,
-            );
+          const fetchedResources = await extractFetchedResources(node, options);
 
-            return { node, fetchedResources, stylesheets };
-          },
-        );
+          return { node, fetchedResources, stylesheets };
+        });
 
-        const [renderer, { node, fetchedResources, stylesheets }] =
-          await Promise.all([getRenderer(options), nodePromise]);
+        const [renderer, { node, fetchedResources, stylesheets }] = await Promise.all([
+          getRenderer(options),
+          nodePromise,
+        ]);
 
         const mergedOptions = {
           width: options?.width,
@@ -124,11 +121,7 @@ function createStream(component: ReactNode, options?: ImageResponseOptions) {
           stylesheets: [...(options?.stylesheets ?? []), ...stylesheets],
         };
 
-        const image = await renderer.render(
-          node,
-          mergedOptions,
-          options?.signal,
-        );
+        const image = await renderer.render(node, mergedOptions, options?.signal);
 
         controller.enqueue(image as ArrayBufferView<ArrayBuffer>);
         controller.close();
@@ -152,10 +145,7 @@ export class ImageResponse extends Response {
     const headers = new Headers(options?.headers);
 
     if (!headers.get("content-type")) {
-      headers.set(
-        "content-type",
-        contentTypeMapping[options?.format ?? defaultOptions.format],
-      );
+      headers.set("content-type", contentTypeMapping[options?.format ?? defaultOptions.format]);
     }
 
     super(stream, {

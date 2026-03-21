@@ -1,7 +1,4 @@
-import type {
-  AccordionMultipleProps,
-  AccordionSingleProps,
-} from "@radix-ui/react-accordion";
+import type { AccordionSingleProps } from "@radix-ui/react-accordion";
 import * as AccordionPrimitive from "@radix-ui/react-accordion";
 import { ChevronRight } from "lucide-react";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
@@ -10,11 +7,8 @@ import { cn } from "~/lib/utils";
 export const Accordions = ({
   type = "single",
   className,
-  defaultValue,
   ...props
-}:
-  | Omit<AccordionSingleProps, "value" | "onValueChange">
-  | Omit<AccordionMultipleProps, "value" | "onValueChange">) => (
+}: Omit<AccordionSingleProps, "value" | "onValueChange">) => (
   <AccordionPrimitive.Root
     type={type}
     className={cn(
@@ -32,19 +26,12 @@ export const Accordion = ({
   value = String(title),
   children,
   ...props
-}: Omit<
-  ComponentPropsWithoutRef<typeof AccordionPrimitive.Item>,
-  "value" | "title"
-> & {
+}: Omit<ComponentPropsWithoutRef<typeof AccordionPrimitive.Item>, "value" | "title"> & {
   title: string | ReactNode;
   value?: string;
 }) => {
   return (
-    <AccordionPrimitive.Item
-      value={value}
-      className={cn("scroll-m-24", className)}
-      {...props}
-    >
+    <AccordionPrimitive.Item value={value} className={cn("scroll-m-24", className)} {...props}>
       <AccordionPrimitive.Header
         id={id}
         data-accordion-value={value}
