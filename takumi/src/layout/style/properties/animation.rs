@@ -391,7 +391,7 @@ impl<'i> FromCss<'i> for Animation {
         continue;
       }
 
-      if let Ok(value) = input.try_parse(parse_animation_name) {
+      if let Ok(value) = input.try_parse(AnimationName::from_css) {
         animation.name = value;
         continue;
       }
@@ -487,20 +487,6 @@ impl TailwindPropertyParser for Animations {
 
     Self::parse_tw(token)
   }
-}
-
-fn parse_animation_name<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Option<String>> {
-  let location = input.current_source_location();
-  let token = input.next()?;
-  let Token::Ident(name) = token else {
-    return Err(AnimationNames::unexpected_token_error(location, token));
-  };
-
-  if name.eq_ignore_ascii_case("none") {
-    return Ok(None);
-  }
-
-  Ok(Some(name.to_string()))
 }
 
 fn parse_timing_keyword<'i>(
