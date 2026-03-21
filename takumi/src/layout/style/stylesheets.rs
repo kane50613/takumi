@@ -2315,7 +2315,10 @@ mod tests {
 
   #[test]
   fn test_relative_position_participates_in_positioned_paint_bucket() {
-    let style = ComputedStyle::default();
+    let style = ComputedStyle {
+      position: Position::Relative,
+      ..Default::default()
+    };
     assert!(style.participates_in_positioned_paint_bucket(false));
   }
 
