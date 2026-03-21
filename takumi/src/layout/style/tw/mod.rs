@@ -101,10 +101,38 @@ struct TailwindDeclarationBuilder {
   filter_important: bool,
   backdrop_filter: Option<Filters>,
   backdrop_filter_important: bool,
-  grid_column: Option<GridLine>,
-  grid_column_important: bool,
-  grid_row: Option<GridLine>,
-  grid_row_important: bool,
+  grid_column: TwGridLineState,
+  grid_row: TwGridLineState,
+}
+
+#[derive(Debug, Default)]
+struct TwGridLineState {
+  start: Option<GridPlacement>,
+  end: Option<GridPlacement>,
+  important: bool,
+}
+
+impl TwGridLineState {
+  fn set_line(&mut self, grid_line: GridLine, important: bool) {
+    self.start = Some(grid_line.start);
+    self.end = Some(grid_line.end);
+    self.important = important;
+  }
+
+  fn push_declarations(
+    self,
+    declarations: &mut StyleDeclarationBlock,
+    start_decl: fn(GridPlacement) -> StyleDeclaration,
+    end_decl: fn(GridPlacement) -> StyleDeclaration,
+  ) {
+    if let Some(start) = self.start {
+      declarations.push(start_decl(start), self.important);
+    }
+
+    if let Some(end) = self.end {
+      declarations.push(end_decl(end), self.important);
+    }
+  }
 }
 
 impl TailwindDeclarationBuilder {
@@ -162,23 +190,11 @@ impl TailwindDeclarationBuilder {
   }
 
   fn set_grid_column(&mut self, grid_line: GridLine, important: bool) {
-    self.grid_column = Some(grid_line);
-    self.grid_column_important = important;
+    self.grid_column.set_line(grid_line, important);
   }
 
   fn set_grid_row(&mut self, grid_line: GridLine, important: bool) {
-    self.grid_row = Some(grid_line);
-    self.grid_row_important = important;
-  }
-
-  fn grid_column_mut(&mut self, important: bool) -> &mut GridLine {
-    self.grid_column_important = important;
-    self.grid_column.get_or_insert_with(GridLine::default)
-  }
-
-  fn grid_row_mut(&mut self, important: bool) -> &mut GridLine {
-    self.grid_row_important = important;
-    self.grid_row.get_or_insert_with(GridLine::default)
+    self.grid_row.set_line(grid_line, important);
   }
 
   fn finish(mut self) -> StyleDeclarationBlock {
@@ -196,28 +212,6 @@ impl TailwindDeclarationBuilder {
       );
     }
 
-    if let Some(grid_column) = self.grid_column.take() {
-      self.push(
-        StyleDeclaration::grid_column_start(grid_column.start),
-        self.grid_column_important,
-      );
-      self.push(
-        StyleDeclaration::grid_column_end(grid_column.end),
-        self.grid_column_important,
-      );
-    }
-
-    if let Some(grid_row) = self.grid_row.take() {
-      self.push(
-        StyleDeclaration::grid_row_start(grid_row.start),
-        self.grid_row_important,
-      );
-      self.push(
-        StyleDeclaration::grid_row_end(grid_row.end),
-        self.grid_row_important,
-      );
-    }
-
     if let Some(filter) = self.filter.take() {
       self.push(StyleDeclaration::filter(filter), self.filter_important);
     }
@@ -231,6 +225,18 @@ impl TailwindDeclarationBuilder {
 
     self.transform_state.apply(&mut self.declarations);
     self.gradient_state.apply(&mut self.declarations);
+
+    self.grid_column.push_declarations(
+      &mut self.declarations,
+      StyleDeclaration::grid_column_start,
+      StyleDeclaration::grid_column_end,
+    );
+    self.grid_row.push_declarations(
+      &mut self.declarations,
+      StyleDeclaration::grid_row_start,
+      StyleDeclaration::grid_row_end,
+    );
+
     self.declarations
   }
 }
@@ -1442,16 +1448,29 @@ impl TailwindProperty {
       }
       TailwindProperty::GridRow(tw_grid_span) => builder.set_grid_row(tw_grid_span, important),
       TailwindProperty::GridColumnStart(tw_grid_placement) => {
-        builder.grid_column_mut(important).start = tw_grid_placement;
+        builder.grid_column.important = important;
+        *builder
+          .grid_column
+          .start
+          .get_or_insert_with(GridPlacement::auto) = tw_grid_placement;
       }
       TailwindProperty::GridColumnEnd(tw_grid_placement) => {
-        builder.grid_column_mut(important).end = tw_grid_placement;
+        builder.grid_column.important = important;
+        *builder
+          .grid_column
+          .end
+          .get_or_insert_with(GridPlacement::auto) = tw_grid_placement;
       }
       TailwindProperty::GridRowStart(tw_grid_placement) => {
-        builder.grid_row_mut(important).start = tw_grid_placement;
+        builder.grid_row.important = important;
+        *builder
+          .grid_row
+          .start
+          .get_or_insert_with(GridPlacement::auto) = tw_grid_placement;
       }
       TailwindProperty::GridRowEnd(tw_grid_placement) => {
-        builder.grid_row_mut(important).end = tw_grid_placement;
+        builder.grid_row.important = important;
+        *builder.grid_row.end.get_or_insert_with(GridPlacement::auto) = tw_grid_placement;
       }
       TailwindProperty::GridTemplateColumns(tw_grid_template) => push_decl!(
         builder,
@@ -1836,6 +1855,32 @@ mod tests {
     assert_eq!(
       TailwindProperty::parse("col-end-1"),
       Some(TailwindProperty::GridColumnEnd(GridPlacement::Line(1)))
+    );
+  }
+
+  #[test]
+  fn test_grid_column_start_emits_only_start_longhand() {
+    let Ok(values) = TailwindValues::from_str("col-start-2") else {
+      unreachable!()
+    };
+    let declarations = values.into_declaration_block(Viewport::new((100, 100)));
+
+    assert_eq!(
+      declarations.iter().collect::<Vec<_>>(),
+      vec![&StyleDeclaration::grid_column_start(GridPlacement::Line(2))]
+    );
+  }
+
+  #[test]
+  fn test_grid_row_end_emits_only_end_longhand() {
+    let Ok(values) = TailwindValues::from_str("row-end-3") else {
+      unreachable!()
+    };
+    let declarations = values.into_declaration_block(Viewport::new((100, 100)));
+
+    assert_eq!(
+      declarations.iter().collect::<Vec<_>>(),
+      vec![&StyleDeclaration::grid_row_end(GridPlacement::Line(3))]
     );
   }
 

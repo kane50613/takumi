@@ -956,8 +956,8 @@ define_style! {
       )));
     },
     gap: SpacePair<LengthDefaultsToZero> => [RowGap, ColumnGap] |value, target| {
-      // Special case: gap is reversed in the declaration order (y-first)
-      push_axis_declarations!(target, value, column_gap, row_gap);
+      target.push(StyleDeclaration::row_gap(value.x));
+      target.push(StyleDeclaration::column_gap(value.y));
     },
     flex_flow: FlexFlow => [FlexDirection, FlexWrap] |value, target| {
       target.push(StyleDeclaration::flex_direction(value.direction));
@@ -2115,8 +2115,8 @@ mod tests {
     assert_eq!(
       gap.iter().collect::<Vec<_>>(),
       vec![
-        &StyleDeclaration::column_gap(LengthDefaultsToZero::Px(1.0)),
-        &StyleDeclaration::row_gap(LengthDefaultsToZero::Px(2.0)),
+        &StyleDeclaration::row_gap(LengthDefaultsToZero::Px(1.0)),
+        &StyleDeclaration::column_gap(LengthDefaultsToZero::Px(2.0)),
       ]
     );
   }
