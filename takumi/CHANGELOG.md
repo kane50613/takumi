@@ -1,5 +1,15 @@
 # takumi
 
+## 1.0.0-beta.9
+
+### Major Changes
+
+- 7da94c5: Remove `SpacePair::from_reversed_pair`
+
+### Minor Changes
+
+- 7da94c5: Support `order`, `z-index` longhand, `flex-flow`, `place-items`, `place-content`, `place-self` shorthand
+
 ## 1.0.0-beta.8
 
 ### Patch Changes
