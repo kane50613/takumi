@@ -109,14 +109,24 @@ struct TailwindDeclarationBuilder {
 struct TwGridLineState {
   start: Option<GridPlacement>,
   end: Option<GridPlacement>,
-  important: bool,
+  start_important: bool,
+  end_important: bool,
 }
 
 impl TwGridLineState {
-  fn set_line(&mut self, grid_line: GridLine, important: bool) {
-    self.start = Some(grid_line.start);
-    self.end = Some(grid_line.end);
-    self.important = important;
+  fn set_line(&mut self, grid_line: GridLine, start_important: bool, end_important: bool) {
+    self.set_start(grid_line.start, start_important);
+    self.set_end(grid_line.end, end_important);
+  }
+
+  fn set_start(&mut self, grid_placement: GridPlacement, important: bool) {
+    self.start = Some(grid_placement);
+    self.start_important = important;
+  }
+
+  fn set_end(&mut self, grid_placement: GridPlacement, important: bool) {
+    self.end = Some(grid_placement);
+    self.end_important = important;
   }
 
   fn push_declarations(
@@ -126,11 +136,11 @@ impl TwGridLineState {
     end_decl: fn(GridPlacement) -> StyleDeclaration,
   ) {
     if let Some(start) = self.start {
-      declarations.push(start_decl(start), self.important);
+      declarations.push(start_decl(start), self.start_important);
     }
 
     if let Some(end) = self.end {
-      declarations.push(end_decl(end), self.important);
+      declarations.push(end_decl(end), self.end_important);
     }
   }
 }
@@ -190,11 +200,11 @@ impl TailwindDeclarationBuilder {
   }
 
   fn set_grid_column(&mut self, grid_line: GridLine, important: bool) {
-    self.grid_column.set_line(grid_line, important);
+    self.grid_column.set_line(grid_line, important, important);
   }
 
   fn set_grid_row(&mut self, grid_line: GridLine, important: bool) {
-    self.grid_row.set_line(grid_line, important);
+    self.grid_row.set_line(grid_line, important, important);
   }
 
   fn finish(mut self) -> StyleDeclarationBlock {
@@ -1448,29 +1458,33 @@ impl TailwindProperty {
       }
       TailwindProperty::GridRow(tw_grid_span) => builder.set_grid_row(tw_grid_span, important),
       TailwindProperty::GridColumnStart(tw_grid_placement) => {
-        builder.grid_column.important = important;
-        *builder
+        let start = builder
           .grid_column
           .start
-          .get_or_insert_with(GridPlacement::auto) = tw_grid_placement;
+          .get_or_insert_with(GridPlacement::auto);
+        *start = tw_grid_placement;
+        builder.grid_column.start_important = important;
       }
       TailwindProperty::GridColumnEnd(tw_grid_placement) => {
-        builder.grid_column.important = important;
-        *builder
+        let end = builder
           .grid_column
           .end
-          .get_or_insert_with(GridPlacement::auto) = tw_grid_placement;
+          .get_or_insert_with(GridPlacement::auto);
+        *end = tw_grid_placement;
+        builder.grid_column.end_important = important;
       }
       TailwindProperty::GridRowStart(tw_grid_placement) => {
-        builder.grid_row.important = important;
-        *builder
+        let start = builder
           .grid_row
           .start
-          .get_or_insert_with(GridPlacement::auto) = tw_grid_placement;
+          .get_or_insert_with(GridPlacement::auto);
+        *start = tw_grid_placement;
+        builder.grid_row.start_important = important;
       }
       TailwindProperty::GridRowEnd(tw_grid_placement) => {
-        builder.grid_row.important = important;
-        *builder.grid_row.end.get_or_insert_with(GridPlacement::auto) = tw_grid_placement;
+        let end = builder.grid_row.end.get_or_insert_with(GridPlacement::auto);
+        *end = tw_grid_placement;
+        builder.grid_row.end_important = important;
       }
       TailwindProperty::GridTemplateColumns(tw_grid_template) => push_decl!(
         builder,
@@ -1616,7 +1630,7 @@ impl TailwindProperty {
 
 #[cfg(test)]
 mod tests {
-  use crate::layout::style::{ComputedStyle, Style, properties::BackgroundImage};
+  use crate::layout::style::{ComputedStyle, LonghandId, Style, properties::BackgroundImage};
 
   use super::*;
 
@@ -1881,6 +1895,34 @@ mod tests {
     assert_eq!(
       declarations.iter().collect::<Vec<_>>(),
       vec![&StyleDeclaration::grid_row_end(GridPlacement::Line(3))]
+    );
+  }
+
+  #[test]
+  fn test_grid_longhand_importance_is_tracked_per_side() {
+    let Ok(values) = TailwindValues::from_str("col-end-3 !col-start-2") else {
+      unreachable!();
+    };
+    let declarations = values.into_declaration_block(Viewport::new((100, 100)));
+
+    assert_eq!(
+      declarations.iter().collect::<Vec<_>>(),
+      vec![
+        &StyleDeclaration::grid_column_start(GridPlacement::Line(2)),
+        &StyleDeclaration::grid_column_end(GridPlacement::Line(3)),
+      ]
+    );
+    assert!(
+      declarations
+        .importance
+        .longhands
+        .contains(&LonghandId::GridColumnStart)
+    );
+    assert!(
+      !declarations
+        .importance
+        .longhands
+        .contains(&LonghandId::GridColumnEnd)
     );
   }
 

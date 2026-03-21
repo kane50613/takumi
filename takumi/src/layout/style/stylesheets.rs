@@ -1238,8 +1238,8 @@ impl Iterator for PropertyMaskIter<'_> {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct DeclarationImportance {
-  longhands: PropertyMask,
-  custom_properties: SmallVec<[Box<str>; 1]>,
+  pub(crate) longhands: PropertyMask,
+  pub(crate) custom_properties: SmallVec<[Box<str>; 1]>,
 }
 
 impl DeclarationImportance {
@@ -1488,11 +1488,12 @@ impl ComputedStyle {
 
   pub(crate) fn is_z_index_applicable(&self, is_flex_or_grid_item: bool) -> bool {
     !matches!(self.z_index, ZIndex::Auto)
-      && (self.position == Position::Absolute || is_flex_or_grid_item)
+      && (matches!(self.position, Position::Absolute | Position::Relative) || is_flex_or_grid_item)
   }
 
   pub(crate) fn participates_in_positioned_paint_bucket(&self, is_flex_or_grid_item: bool) -> bool {
-    self.position == Position::Absolute || self.is_z_index_applicable(is_flex_or_grid_item)
+    matches!(self.position, Position::Absolute | Position::Relative)
+      || self.is_z_index_applicable(is_flex_or_grid_item)
   }
 
   pub(crate) fn creates_stacking_context(
@@ -2279,16 +2280,16 @@ mod tests {
       z_index: ZIndex::Integer(2),
       ..Default::default()
     };
-    assert!(!style.is_z_index_applicable(false));
+    assert!(style.is_z_index_applicable(false));
 
     style.position = Position::Absolute;
     assert!(style.is_z_index_applicable(false));
 
     style.position = Position::Relative;
-    assert!(style.is_z_index_applicable(true));
+    assert!(style.is_z_index_applicable(false));
 
     style.z_index = ZIndex::Auto;
-    assert!(!style.is_z_index_applicable(true));
+    assert!(!style.is_z_index_applicable(false));
   }
 
   #[test]
@@ -2306,11 +2307,16 @@ mod tests {
     };
 
     style.z_index = ZIndex::Integer(1);
-    assert!(!style.creates_stacking_context(border_box, &sizing, false));
-    assert!(style.creates_stacking_context(border_box, &sizing, true));
+    assert!(style.creates_stacking_context(border_box, &sizing, false));
 
     style.position = Position::Absolute;
     assert!(style.creates_stacking_context(border_box, &sizing, false));
+  }
+
+  #[test]
+  fn test_relative_position_participates_in_positioned_paint_bucket() {
+    let style = ComputedStyle::default();
+    assert!(style.participates_in_positioned_paint_bucket(false));
   }
 
   #[test]

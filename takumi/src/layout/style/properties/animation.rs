@@ -61,6 +61,7 @@ impl<'i> FromCss<'i> for AnimationNames {
   const VALID_TOKENS: &'static [CssToken] = &[
     CssToken::Keyword("none"),
     CssToken::Syntax(CssSyntaxKind::CustomIdent),
+    CssToken::Syntax(CssSyntaxKind::String),
   ];
 }
 
@@ -433,6 +434,7 @@ impl<'i> FromCss<'i> for Animations {
     CssToken::Keyword("running"),
     CssToken::Keyword("paused"),
     CssToken::Syntax(CssSyntaxKind::CustomIdent),
+    CssToken::Syntax(CssSyntaxKind::String),
   ];
 }
 
@@ -671,6 +673,14 @@ mod tests {
   }
 
   #[test]
+  fn parse_quoted_animation_names() {
+    assert!(matches!(
+      AnimationNames::from_str("\"fade\", slide"),
+      Ok(names) if names.as_ref() == [Some("fade".to_string()), Some("slide".to_string())]
+    ));
+  }
+
+  #[test]
   fn parse_animation_names_with_none_entry() {
     assert!(matches!(
       AnimationNames::from_str("none, slide"),
@@ -738,6 +748,19 @@ mod tests {
         fill_mode: AnimationFillMode::Both,
         play_state: AnimationPlayState::Paused,
         name: Some("fade".to_string()),
+      }]))
+    );
+  }
+
+  #[test]
+  fn parse_animation_shorthand_with_quoted_name() {
+    assert_eq!(
+      Animations::from_str("\"fade\" 1s linear"),
+      Ok(Box::from([Animation {
+        duration: AnimationTime::from_milliseconds(1000.0),
+        timing_function: AnimationTimingFunction::Linear,
+        name: Some("fade".to_string()),
+        ..Animation::default()
       }]))
     );
   }

@@ -114,10 +114,13 @@ struct NodePaint {
   container_size: Size<Option<f32>>,
 }
 
-struct DeferredNodeRender {
-  path: Vec<usize>,
-  has_constrain: bool,
-  original_canvas_image: Option<RgbaImage>,
+enum DeferredNodeRender {
+  Deferred {
+    path: Vec<usize>,
+    has_constrain: bool,
+    original_canvas_image: Option<RgbaImage>,
+  },
+  SkipRendering,
 }
 
 #[derive(Clone)]
@@ -454,7 +457,7 @@ fn begin_node_render<'g>(
     &mut canvas.buffer_pool,
   )?;
   if matches!(constrain, CanvasConstrainResult::SkipRendering) {
-    return Ok(None);
+    return Ok(Some(DeferredNodeRender::SkipRendering));
   }
 
   let has_constrain = constrain.is_some();
@@ -507,7 +510,7 @@ fn begin_node_render<'g>(
   }
 
   if defer_finish {
-    return Ok(Some(DeferredNodeRender {
+    return Ok(Some(DeferredNodeRender::Deferred {
       path: node_paint.path.clone(),
       has_constrain,
       original_canvas_image,
@@ -524,7 +527,10 @@ fn paint_single_node<'g>(
   canvas: &mut Canvas,
   node_paint: &NodePaint,
 ) -> Result<()> {
-  let _ = begin_node_render(root, layout_results, canvas, node_paint, false)?;
+  match begin_node_render(root, layout_results, canvas, node_paint, false)? {
+    Some(DeferredNodeRender::SkipRendering) | None => {}
+    Some(DeferredNodeRender::Deferred { .. }) => unreachable!(),
+  }
   Ok(())
 }
 
@@ -561,23 +567,29 @@ pub(crate) fn paint_context<'g>(
 
   let mut deferred_root = None;
   if let Some(root_paint) = &context.root {
-    deferred_root = begin_node_render(root, layout_results, canvas, root_paint, true)?;
+    match begin_node_render(root, layout_results, canvas, root_paint, true)? {
+      Some(DeferredNodeRender::SkipRendering) => return Ok(()),
+      Some(deferred_root_render @ DeferredNodeRender::Deferred { .. }) => {
+        deferred_root = Some(deferred_root_render);
+      }
+      None => {}
+    }
   }
 
   for bucket in context.buckets.in_paint_order() {
     paint_bucket(root, contexts, layout_results, canvas, bucket)?;
   }
 
-  if let Some(deferred) = deferred_root {
-    let Some(current) = get_node_mut_by_path(root, &deferred.path) else {
+  if let Some(DeferredNodeRender::Deferred {
+    path,
+    has_constrain,
+    original_canvas_image,
+  }) = deferred_root
+  {
+    let Some(current) = get_node_mut_by_path(root, &path) else {
       unreachable!()
     };
-    finish_node_render(
-      current,
-      canvas,
-      deferred.has_constrain,
-      deferred.original_canvas_image,
-    )?;
+    finish_node_render(current, canvas, has_constrain, original_canvas_image)?;
   }
 
   Ok(())
