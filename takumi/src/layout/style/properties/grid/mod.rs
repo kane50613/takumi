@@ -1,3 +1,4 @@
+mod grid_area;
 mod grid_auto_flow;
 mod grid_length;
 mod grid_line;
@@ -9,6 +10,7 @@ mod grid_template_areas;
 mod grid_template_component;
 mod grid_track_size;
 
+pub use grid_area::*;
 pub use grid_auto_flow::*;
 pub use grid_length::*;
 pub use grid_line::*;

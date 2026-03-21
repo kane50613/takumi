@@ -323,8 +323,8 @@ fn collect_measure_result<'g>(
           continue;
         };
 
-        let child_ids = collect_child_node_ids(layout_results, node_id, render_children.len())?;
-        if child_ids.is_empty() {
+        let ordered_children = collect_ordered_children(layout_results, node_id, render_children)?;
+        if ordered_children.is_empty() {
           measured_by_node_id.insert(
             usize::from(node_id),
             create_measured_node(layout, local_transform, children, runs),
@@ -343,15 +343,15 @@ fn collect_measure_result<'g>(
           height: layout.size.height,
           local_transform,
           runs,
-          child_ids: child_ids.clone(),
+          child_ids: ordered_children.iter().map(|child| child.node_id).collect(),
         }));
 
-        for (index, child_id) in child_ids.iter().copied().enumerate().rev() {
+        for child in ordered_children.iter().rev() {
           let mut child_path = path.clone();
-          child_path.push(index);
+          child_path.push(child.render_index);
           visits.push(TraversalVisit::Enter(TraversalEnter {
             path: child_path,
-            node_id: child_id,
+            node_id: child.node_id,
             transform: local_transform,
             container_size: child_container_size,
           }));
@@ -603,19 +603,51 @@ fn get_node_mut_by_path<'a, 'g>(
   Some(current)
 }
 
-fn collect_child_node_ids(
+#[derive(Debug, Clone, Copy)]
+struct OrderedChild {
+  render_index: usize,
+  node_id: NodeId,
+}
+
+fn collect_ordered_children(
   layout_results: &LayoutResults,
   node_id: NodeId,
-  render_child_len: usize,
-) -> Result<Vec<NodeId>> {
+  render_children: &[RenderNode<'_>],
+) -> Result<Vec<OrderedChild>> {
   let layout_children = layout_results.children(node_id)?;
-  let child_count = render_child_len.min(layout_children.len());
+  let child_count = render_children.len().min(layout_children.len());
+  let mut children = layout_children
+    .iter()
+    .copied()
+    .take(child_count)
+    .enumerate()
+    .map(|(render_index, node_id)| {
+      let style = &render_children[render_index].context.style;
+      (
+        render_index,
+        node_id,
+        style.z_index.painting_order_value(),
+        style.order.0,
+      )
+    })
+    .collect::<Vec<_>>();
+
+  children.sort_by(|left, right| {
+    left
+      .2
+      .cmp(&right.2)
+      .then_with(|| left.3.cmp(&right.3))
+      .then_with(|| left.0.cmp(&right.0))
+  });
+
   Ok(
-    layout_children
-      .iter()
-      .copied()
-      .take(child_count)
-      .collect::<Vec<_>>(),
+    children
+      .into_iter()
+      .map(|(render_index, node_id, _, _)| OrderedChild {
+        render_index,
+        node_id,
+      })
+      .collect(),
   )
 }
 
@@ -779,8 +811,8 @@ pub(crate) fn render_node<'g>(
           continue;
         };
 
-        let child_ids = collect_child_node_ids(layout_results, node_id, children.len())?;
-        if child_ids.is_empty() {
+        let ordered_children = collect_ordered_children(layout_results, node_id, children)?;
+        if ordered_children.is_empty() {
           finish_node_render(current, canvas, has_constrain, original_canvas_image)?;
           continue;
         }
@@ -796,12 +828,12 @@ pub(crate) fn render_node<'g>(
           height: Some(layout.content_box_height()),
         };
 
-        for (index, child_id) in child_ids.into_iter().enumerate().rev() {
+        for child in ordered_children.into_iter().rev() {
           let mut child_path = path.clone();
-          child_path.push(index);
+          child_path.push(child.render_index);
           visits.push(TraversalVisit::Enter(TraversalEnter {
             path: child_path,
-            node_id: child_id,
+            node_id: child.node_id,
             transform,
             container_size: child_container_size,
           }));
@@ -835,9 +867,8 @@ mod tests {
       Viewport,
       node::Node,
       style::{
-        AnimationDurations, AnimationFillMode, AnimationFillModes, AnimationNames, AnimationTime,
-        AnimationTimingFunction, AnimationTimingFunctions, KeyframeRule, KeyframesRule, Length::Px,
-        Style, StyleDeclaration,
+        AnimationFillMode, AnimationTime, AnimationTimingFunction, KeyframeRule, KeyframesRule,
+        Length::Px, Style, StyleDeclaration,
       },
     },
     rendering::measure_layout,
@@ -944,18 +975,18 @@ mod tests {
     let node = Node::container([]).with_tag_name("div").with_style(
       Style::default()
         .with(StyleDeclaration::width(Px(100.0)))
-        .with(StyleDeclaration::animation_name(AnimationNames(
-          vec!["grow".to_string()].into(),
-        )))
-        .with(StyleDeclaration::animation_duration(AnimationDurations(
-          vec![AnimationTime::from_milliseconds(1000.0)].into(),
-        )))
-        .with(StyleDeclaration::animation_timing_function(
-          AnimationTimingFunctions(vec![AnimationTimingFunction::Linear].into()),
+        .with(StyleDeclaration::animation_name(
+          [Some("grow".to_string())].into(),
         ))
-        .with(StyleDeclaration::animation_fill_mode(AnimationFillModes(
-          vec![AnimationFillMode::Both].into(),
-        ))),
+        .with(StyleDeclaration::animation_duration(
+          [AnimationTime::from_milliseconds(1000.0)].into(),
+        ))
+        .with(StyleDeclaration::animation_timing_function(
+          [AnimationTimingFunction::Linear].into(),
+        ))
+        .with(StyleDeclaration::animation_fill_mode(
+          [AnimationFillMode::Both].into(),
+        )),
     );
 
     let options = RenderOptions::builder()

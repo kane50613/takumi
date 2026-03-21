@@ -193,7 +193,22 @@ pub(super) fn property_id_from_name(name: &str, normalize: fn(&str) -> Cow<'_, s
   }
 
   let normalized = normalize(name);
+
+  if let Some(property) = legacy_alias_property_id(normalized.as_ref()) {
+    return property;
+  }
+
   PropertyId::from_normalized_name(normalized.as_ref())
+}
+
+// Ref: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/row-gap
+fn legacy_alias_property_id(name: &str) -> Option<PropertyId> {
+  match name {
+    "grid_gap" => Some(PropertyId::Shorthand(ShorthandId::Gap)),
+    "grid_row_gap" => Some(PropertyId::Longhand(LonghandId::RowGap)),
+    "grid_column_gap" => Some(PropertyId::Longhand(LonghandId::ColumnGap)),
+    _ => None,
+  }
 }
 
 fn webkit_property_id_from_name(name: &str) -> Option<PropertyId> {

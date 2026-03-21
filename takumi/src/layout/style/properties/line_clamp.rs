@@ -38,7 +38,6 @@ impl From<u32> for LineClamp {
 impl<'i> FromCss<'i> for LineClamp {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let count = input.try_parse(Parser::expect_integer)?;
-
     let ellipsis = input.try_parse(Parser::expect_string_cloned).ok();
 
     Ok(LineClamp {

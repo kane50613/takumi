@@ -46,13 +46,17 @@ pub(crate) fn apply_stylesheet_animations(
   mut base_style: ComputedStyle,
   context: &RenderContext<'_>,
 ) -> ComputedStyle {
-  if base_style.animation_name.0.is_empty() {
+  if base_style.animation_name.is_empty() {
     return base_style;
   }
 
   let base_snapshot = base_style.clone();
 
-  for (animation_index, animation_name) in base_snapshot.animation_name.0.iter().enumerate() {
+  for (animation_index, animation_name) in base_snapshot.animation_name.iter().enumerate() {
+    let Some(animation_name) = animation_name else {
+      continue;
+    };
+
     let Some(keyframes) =
       find_keyframes(&context.stylesheet, animation_name, context.sizing.viewport)
     else {
