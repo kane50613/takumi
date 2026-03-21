@@ -338,11 +338,15 @@ An image node displays rasterized or svg images.
   <tbody>
     <tr>
       <td colSpan={2}>`display`</td>
-      <td>`flex`, `grid`, `block`, `inline`</td>
+      <td>`none`, `flex`, `inline-flex`, `grid`, `inline-grid`, `block`, `inline-block`, `inline`</td>
     </tr>
     <tr>
       <td colSpan={2}>`position`</td>
       <td>`relative`, `absolute`</td>
+    </tr>
+    <tr>
+      <td colSpan={2}>`zIndex`</td>
+      <td>Supported</td>
     </tr>
     <tr>
       <td colSpan={2}>`width`</td>
@@ -423,6 +427,7 @@ An image node displays rasterized or svg images.
     <tr>
       <td rowSpan={3}>`border`</td>
       <td>`borderWidth` (`borderTopWidth`, `borderRightWidth`, `borderBottomWidth`, `borderLeftWidth`, `borderInlineWidth`, `borderBlockWidth`)</td>
+      <td>Supported</td>
     </tr>
     <tr>
       <td>`borderStyle`</td>
@@ -468,8 +473,16 @@ An image node displays rasterized or svg images.
       <td>Supported</td>
     </tr>
     <tr>
-      <td rowSpan={10}>Flexbox</td>
+      <td colSpan={2}>`order`</td>
+      <td>Supported</td>
+    </tr>
+    <tr>
+      <td rowSpan={13}>Flexbox</td>
       <td>`flexDirection`</td>
+      <td>Supported</td>
+    </tr>
+    <tr>
+      <td>`flexFlow`</td>
       <td>Supported</td>
     </tr>
     <tr>
@@ -485,6 +498,10 @@ An image node displays rasterized or svg images.
       <td>Supported</td>
     </tr>
     <tr>
+      <td>`placeContent`</td>
+      <td>Supported</td>
+    </tr>
+    <tr>
       <td>`justifyItems`</td>
       <td>Supported</td>
     </tr>
@@ -493,11 +510,15 @@ An image node displays rasterized or svg images.
       <td>Supported</td>
     </tr>
     <tr>
+      <td>`placeItems`</td>
+      <td>Supported</td>
+    </tr>
+    <tr>
       <td>`alignSelf`</td>
       <td>Supported</td>
     </tr>
     <tr>
-      <td>`justifySelf`</td>
+      <td>`placeSelf`</td>
       <td>Supported</td>
     </tr>
     <tr>
@@ -519,7 +540,7 @@ An image node displays rasterized or svg images.
     <tr>
       <td>`overflow`</td>
       <td>`overflowX`, `overflowY`</td>
-      <td>`visible`, `hidden`</td>
+      <td>`visible`, `clip`, `hidden`</td>
     </tr>
     <tr>
       <td rowSpan={7}>`background`</td>
@@ -596,7 +617,7 @@ An image node displays rasterized or svg images.
       <td>Supported</td>
     </tr>
     <tr>
-      <td rowSpan={8}>Grid</td>
+      <td rowSpan={9}>Grid</td>
       <td>`gridAutoColumns`</td>
       <td>Supported</td>
     </tr>
@@ -609,11 +630,15 @@ An image node displays rasterized or svg images.
       <td>Supported</td>
     </tr>
     <tr>
-      <td>`gridColumn`</td>
+      <td>`gridColumn` (`gridColumnStart`, `gridColumnEnd`)</td>
       <td>Supported</td>
     </tr>
     <tr>
-      <td>`gridRow`</td>
+      <td>`gridRow` (`gridRowStart`, `gridRowEnd`)</td>
+      <td>Supported</td>
+    </tr>
+    <tr>
+      <td>`gridArea` (`gridRowStart`, `gridColumnStart`, `gridRowEnd`, `gridColumnEnd`)</td>
       <td>Supported</td>
     </tr>
     <tr>
@@ -683,7 +708,7 @@ An image node displays rasterized or svg images.
     </tr>
     <tr>
       <td>`fontSynthesis`</td>
-      <td>`weight`, `style`</td>
+      <td>`none`, `weight`, `style`</td>
     </tr>
     <tr>
       <td>`fontSynthesisWeight`</td>
@@ -764,9 +789,13 @@ An image node displays rasterized or svg images.
       <td>`miter`, `round`, `bevel`</td>
     </tr>
     <tr>
-      <td rowSpan={3}>`textDecoration`</td>
+      <td rowSpan={4}>`textDecoration`</td>
       <td>`textDecorationLine`</td>
       <td>`underline`, `line-through`, `overline`</td>
+    </tr>
+    <tr>
+      <td>`textDecorationStyle`</td>
+      <td>`solid`</td>
     </tr>
     <tr>
       <td>`textDecorationColor`</td>
