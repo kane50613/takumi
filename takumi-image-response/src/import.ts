@@ -1,8 +1,18 @@
 import * as wasm from "@takumi-rs/wasm";
 
-export type Imports = Awaited<ReturnType<typeof getImports>>;
+export type Imports = Awaited<ReturnType<typeof getImportsImpl>>;
 
-export async function getImports(module?: wasm.InitInput) {
+let importPromise: Promise<Imports> | null = null;
+
+export function getImports(module?: wasm.InitInput) {
+  if (!importPromise) {
+    importPromise = getImportsImpl(module);
+  }
+
+  return importPromise;
+}
+
+async function getImportsImpl(module?: wasm.InitInput) {
   if (module) {
     return initializeWasm(module);
   }
@@ -25,16 +35,26 @@ async function initializeWasm(module?: wasm.InitInput) {
     await wasm.default(module ? { module_or_path: module } : undefined);
 
     return wasm;
-  } catch (e) {
-    console.error("Failed to initialize WASM module:", e);
+  } catch {
+    if (import.meta.env?.MODE) {
+      throw new Error(
+        "Failed to initialize Takumi WASM module. Please provide `module` option with a resolved WASM URL or module.",
+      );
+    }
+
     throw new Error(
-      "Failed to resolve Takumi native bindings automatically. Please provide the `module` option with the WASM module.",
+      "Failed to resolve Takumi native bindings automatically. Please provide `module` option with the WASM module.",
     );
   }
 }
 
 async function importWasm() {
-  // Cloudflare Workers path
+  // Vite path
+  if (import.meta.env?.BASE_URL && !import.meta.env?.SSR) {
+    return import("@takumi-rs/wasm/vite");
+  }
+
+  // Cloudflare Workers/esbuild path
   if (typeof navigator !== "undefined" && navigator.userAgent === "Cloudflare-Workers") {
     return import(
       /* @__PURE__ */ /* @vite-ignore */ /* webpackIgnore: true */ /* turbopackIgnore: true */ "@takumi-rs/wasm/takumi_wasm_bg.wasm"
@@ -47,15 +67,5 @@ async function importWasm() {
     return import(/* @__PURE__ */ /* @vite-ignore */ nextPath) as Promise<
       typeof import("@takumi-rs/wasm/next")
     >;
-  }
-
-  // Vite path
-  const vitePath = "@takumi-rs/wasm/takumi_wasm_bg.wasm?url";
-  if (import.meta.env.MODE) {
-    const url: string = await import(
-      /* @__PURE__ */ /* webpackIgnore: true */ /* turbopackIgnore: true */ vitePath
-    );
-
-    return fetch(url).then((res) => res.arrayBuffer());
   }
 }

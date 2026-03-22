@@ -48,6 +48,10 @@
     "./next": {
       "types": "./bundlers/next.d.ts",
       "default": "./bundlers/next.js"
+    },
+    "./vite": {
+      "types": "./bundlers/vite.d.ts",
+      "default": "./bundlers/vite.js"
     }
   },
   "scripts": {
