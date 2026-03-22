@@ -28,7 +28,7 @@ async function initializeWasm(module?: wasm.InitInput) {
   } catch (e) {
     console.error("Failed to initialize WASM module:", e);
     throw new Error(
-      "Failed to resolve Takumi native bindigns automatically. Please provide the `module` option with the WASM module.",
+      "Failed to resolve Takumi native bindings automatically. Please provide the `module` option with the WASM module.",
     );
   }
 }
