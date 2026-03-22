@@ -1,5 +1,7 @@
 # takumi
 
+## 1.0.0-beta.10
+
 ## 1.0.0-beta.9
 
 ### Major Changes

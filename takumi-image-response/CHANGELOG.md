@@ -1,5 +1,22 @@
 # @takumi-rs/image-response
 
+## 1.0.0-beta.10
+
+### Major Changes
+
+- 8566f15: **Unify both Node.js & WASM runtime**
+
+  No longer to choose what runtime to be used, and wasm module will be resolved automatically.
+
+  The existing `@takumi-rs/image-response/wasm` export will continue to work as an alias.
+
+### Patch Changes
+
+- Updated dependencies [8566f15]
+  - @takumi-rs/core@1.0.0-beta.10
+  - @takumi-rs/wasm@1.0.0-beta.10
+  - @takumi-rs/helpers@1.0.0-beta.10
+
 ## 1.0.0-beta.9
 
 ### Patch Changes
