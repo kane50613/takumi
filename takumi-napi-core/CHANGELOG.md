@@ -1,5 +1,32 @@
 # @takumi-rs/core
 
+## 1.0.0-beta.10
+
+### Major Changes
+
+- 8566f15: **`renderer.putPersistentImage()` now takes `ImageSource`**
+
+  Before:
+
+  ```tsx
+  const data = await readFile("foo.png");
+  await renderer.putPersistentImage("foo.png", data);
+  ```
+
+  After:
+
+  ```tsx
+  const data = await readFile("foo.png");
+  await renderer.putPersistentImage({
+    src: "foo.png",
+    data,
+  });
+  ```
+
+### Patch Changes
+
+- @takumi-rs/helpers@1.0.0-beta.10
+
 ## 1.0.0-beta.9
 
 ### Patch Changes
