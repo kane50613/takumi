@@ -19,20 +19,20 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/node.d.ts",
-      "import": "./dist/node.js",
-      "require": "./dist/node.cjs",
-      "default": "./dist/node.js"
+      "types": "./dist/response.d.ts",
+      "import": "./dist/response.js",
+      "require": "./dist/response.cjs",
+      "default": "./dist/response.js"
     },
     "./wasm": {
-      "types": "./dist/wasm.d.ts",
-      "import": "./dist/wasm.js",
-      "require": "./dist/wasm.cjs",
-      "default": "./dist/wasm.js"
+      "types": "./dist/response.d.ts",
+      "import": "./dist/response.js",
+      "require": "./dist/response.cjs",
+      "default": "./dist/response.js"
     }
   },
   "scripts": {
-    "build": "tsup-node src/backends/*.ts --clean --minify --dts --format esm,cjs --no-splitting",
+    "build": "tsup-node src/response.tsx --clean --minify-syntax --dts --format esm,cjs --no-splitting",
     "prepublishOnly": "jq '.dependencies[\"@takumi-rs/core\"] = .version | .dependencies[\"@takumi-rs/helpers\"] = .version | .dependencies[\"@takumi-rs/wasm\"] = .version' package.json > tmp.json && mv tmp.json package.json"
   },
   "dependencies": {

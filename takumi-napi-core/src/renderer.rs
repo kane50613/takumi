@@ -140,6 +140,7 @@ pub struct RenderOptions<'env> {
 #[napi(string_enum)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum DitheringAlgorithm {
+  #[napi(value = "none")]
   None,
   #[napi(value = "ordered-bayer")]
   OrderedBayer,
@@ -390,21 +391,20 @@ impl Renderer {
 
   /// Puts a persistent image into the renderer's internal store asynchronously.
   #[napi(
-    ts_args_type = "src: string, data: Uint8Array | ArrayBuffer, signal?: AbortSignal",
+    ts_args_type = "source: ImageSource, signal?: AbortSignal",
     ts_return_type = "Promise<void>"
   )]
   pub fn put_persistent_image(
     &self,
     env: Env,
-    src: String,
-    data: Object,
+    source: ImageSource,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<PutPersistentImageTask>> {
-    let buffer = buffer_from_object(env, data)?;
+    let buffer = buffer_from_object(env, source.data)?;
 
     Ok(AsyncTask::with_optional_signal(
       PutPersistentImageTask {
-        src: Some(src),
+        src: Some(source.src),
         state: Arc::clone(&self.state),
         buffer,
       },

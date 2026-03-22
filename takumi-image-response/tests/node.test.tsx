@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import ImageResponse from "../src/backends/node";
+import ImageResponse from "../src/response";
 
 describe("ImageResponse", () => {
   test("should not crash", async () => {

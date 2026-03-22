@@ -15,8 +15,7 @@
     "@tanstack/router-plugin": "^1.167.2",
     "lucide-react": "catalog:",
     "react": "catalog:",
-    "react-dom": "catalog:",
-    "vite-tsconfig-paths": "catalog:"
+    "react-dom": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

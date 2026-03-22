@@ -21,16 +21,11 @@ Takumi is a high-performance image renderer in Rust, designed for JSX workflows 
 npm i @takumi-rs/image-response
 ```
 
-## 2. Pick your runtime
-
-- Node.js/Bun runtime: `@takumi-rs/image-response` (native, fastest default)
-- Edge/browser/Workers runtime: `@takumi-rs/image-response/wasm` + `@takumi-rs/wasm`
-
-## 3. Return an `ImageResponse`
+## 2. Return an `ImageResponse`
 
 `ImageResponse` extends the standard [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response), so you can use it in route handlers directly.
 
-```tsx tab="Node.js / Bun" twoslash
+```tsx twoslash
 /** @jsxImportSource react */
 // ---cut-before---
 import { ImageResponse } from "@takumi-rs/image-response";
@@ -53,85 +48,13 @@ export function GET() {
 }
 ```
 
-```tsx tab="WASM / Edge" twoslash
-/** @jsxImportSource react */
-// ---cut-before---
-import { ImageResponse } from "@takumi-rs/image-response/wasm";
-import module from "@takumi-rs/wasm/next";
-
-export function GET() {
-  return new ImageResponse(
-    <div tw="w-full h-full flex items-center justify-center bg-white">
-      <h1 tw="text-4xl font-bold">Hello Takumi 👋😁</h1>
-    </div>,
-    {
-      width: 1200,
-      height: 630,
-      format: "webp",
-      emoji: "twemoji", // Available since 1.0.0-beta.3
-      module,
-      headers: {
-        "Cache-Control": "public, max-age=3600",
-      },
-    },
-  );
-}
-```
-
 Check [the reference page](/docs/reference#imageresponse) for all available options.
 
-## 4. Framework notes (only if needed)
-
-Most setup issues come from bundling native modules or WASM assets.
-
-```ts tab="Next.js" title="next.config.ts"
-const nextConfig = {
-  // [!code ++]
-  serverExternalPackages: ["@takumi-rs/core"],
-};
-
-export default nextConfig;
-```
-
-```ts tab="Vite SSR" title="vite.config.ts"
-import { defineConfig } from "vite";
-
-export default defineConfig({
-  optimizeDeps: {
-    // [!code ++]
-    exclude: ["@takumi-rs/core"],
-  },
-  ssr: {
-    // [!code ++]
-    external: ["@takumi-rs/core"],
-  },
-});
-```
-
-```tsx tab="Cloudflare Workers" title="worker.ts"
-import { ImageResponse } from "@takumi-rs/image-response/wasm";
-import module from "@takumi-rs/wasm/takumi_wasm_bg.wasm";
-
-export default {
-  fetch() {
-    return new ImageResponse(<div>Hello</div>, { module });
-  },
-};
-```
-
-```toml tab="Cloudflare Workers" title="wrangler.toml"
-// [!code ++]
-compatibility_date = "2025-10-30" # or later
-```
-
-<Callout type="warning">
 If you use `pnpm` or `yarn` with a virtual store, add this to `.npmrc` and reinstall:
 
 ```text title=".npmrc"
 public-hoist-pattern[]=@takumi-rs/core-*
 ```
-
-</Callout>
 
 ## Templates
 

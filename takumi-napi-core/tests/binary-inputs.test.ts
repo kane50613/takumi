@@ -65,13 +65,13 @@ describe("binary inputs", () => {
     const renderer = new Renderer();
 
     await expect(
-      renderer.putPersistentImage("test://img-buffer", imageBuffer),
+      renderer.putPersistentImage({ src: "test://img-buffer", data: imageBuffer }),
     ).resolves.toBeUndefined();
     await expect(
-      renderer.putPersistentImage("test://img-uint8array", imageUint8Array),
+      renderer.putPersistentImage({ src: "test://img-uint8array", data: imageUint8Array }),
     ).resolves.toBeUndefined();
     await expect(
-      renderer.putPersistentImage("test://img-arraybuffer", imageArrayBuffer),
+      renderer.putPersistentImage({ src: "test://img-arraybuffer", data: imageArrayBuffer }),
     ).resolves.toBeUndefined();
   });
 

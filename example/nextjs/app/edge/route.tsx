@@ -1,5 +1,4 @@
-import { ImageResponse } from "@takumi-rs/image-response/wasm";
-import module from "@takumi-rs/wasm/next";
+import { ImageResponse } from "@takumi-rs/image-response";
 import { Axe } from "lucide-react";
 import DocsTemplate from "../../../../takumi-template/src/templates/docs-template";
 
@@ -30,7 +29,6 @@ export function GET(request: Request) {
       height: 630,
       format: "webp",
       fonts,
-      module,
     },
   );
 }

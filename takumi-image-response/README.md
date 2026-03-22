@@ -95,27 +95,3 @@ new ImageResponse(<OgImage />, {
   },
 });
 ```
-
----
-
-## WASM Usage
-
-If you want to use this package in browser environment/cloudflare, you can import from the wasm entry point.
-
-Make sure you have the `@takumi-rs/wasm` package installed as well.
-
-Check the additional [bundler setup section](https://takumi.kane.tw/docs#additional-bundler-setup) for more setup details.
-
-```tsx
-import { describe, expect, test } from "bun:test";
-import { ImageResponse } from "@takumi-rs/image-response/wasm";
-import module from "@takumi-rs/wasm/next";
-
-export default {
-  fetch() {
-    return new ImageResponse(<div>Hello</div>, {
-      module,
-    });
-  },
-};
-```

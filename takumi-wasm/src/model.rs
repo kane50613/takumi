@@ -1,6 +1,6 @@
 //! Data models and types for the WebAssembly bindings.
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use serde_bytes::ByteBuf;
 use std::sync::Arc;
 use takumi::{
@@ -215,25 +215,25 @@ pub enum AnimationOutputFormat {
   Gif,
 }
 
-/// Font style variants.
-#[derive(Deserialize, Clone, Copy)]
-#[serde(rename_all = "camelCase")]
-pub enum FontStyle {
-  /// Normal font style.
-  Normal,
-  /// Italic font style.
-  Italic,
-  /// Oblique font style.
-  Oblique,
+/// Font style input parsed from CSS-like font-style strings.
+#[derive(Clone, Copy)]
+pub struct FontStyle(pub takumi::parley::FontStyle);
+
+impl<'de> Deserialize<'de> for FontStyle {
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: Deserializer<'de>,
+  {
+    let value = String::deserialize(deserializer)?;
+    Ok(Self(
+      takumi::parley::FontStyle::parse(&value).unwrap_or_default(),
+    ))
+  }
 }
 
 impl From<FontStyle> for takumi::parley::FontStyle {
   fn from(style: FontStyle) -> Self {
-    match style {
-      FontStyle::Italic => takumi::parley::FontStyle::Italic,
-      FontStyle::Oblique => takumi::parley::FontStyle::Oblique(None),
-      FontStyle::Normal => takumi::parley::FontStyle::Normal,
-    }
+    style.0
   }
 }
 

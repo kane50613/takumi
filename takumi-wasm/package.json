@@ -25,11 +25,6 @@
   ],
   "exports": {
     ".": {
-      "node": {
-        "types": "./bundlers/node.d.ts",
-        "import": "./bundlers/node.mjs",
-        "require": "./bundlers/node.cjs"
-      },
       "types": "./pkg/takumi_wasm.d.ts",
       "import": "./pkg/takumi_wasm.js",
       "require": "./pkg/takumi_wasm.cjs",

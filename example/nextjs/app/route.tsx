@@ -1,6 +1,8 @@
-import ImageResponse from "@takumi-rs/image-response";
+import { ImageResponse } from "@takumi-rs/image-response";
 import { Axe } from "lucide-react";
 import DocsTemplate from "../../../takumi-template/src/templates/docs-template";
+
+export const runtime = "nodejs";
 
 export function GET(request: Request) {
   const url = new URL(request.url);

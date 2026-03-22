@@ -16,6 +16,8 @@ npm i @takumi-rs/image-response
 
 ### Mark as external
 
+<Callout type="warning">This is only need for prior Takumi v1</Callout>
+
 By default Next.js bundles the `@takumi-rs/core` package, which requires native Node.js `require` function to resolve the native binary. You need to opt-out from the bundling by setting the `serverExternalPackages` option.
 
 ```ts title="next.config.ts"

@@ -1,16 +1,15 @@
-import {
-  type ConstructRendererOptions,
-  extractResourceUrls,
-  type Node,
-  Renderer,
-  type RenderOptions,
-} from "@takumi-rs/core";
 import { fetchResources } from "@takumi-rs/helpers";
 import { type EmojiType, extractEmojis } from "@takumi-rs/helpers/emoji";
 import { type FromJsxOptions, fromJsx } from "@takumi-rs/helpers/jsx";
 import type { ReactNode } from "react";
+import type * as napi from "@takumi-rs/core";
+import type * as wasm from "@takumi-rs/wasm";
+import { getImports, type Imports } from "./import";
 
-let renderer: Renderer | undefined;
+let renderer: napi.Renderer | wasm.Renderer | undefined;
+
+const fontMarks = new WeakSet<napi.Font | wasm.Font>();
+const imageMarks = new WeakSet<napi.ImageSource | wasm.ImageSource>();
 
 declare module "react" {
   interface DOMAttributes<T> {
@@ -18,21 +17,26 @@ declare module "react" {
   }
 }
 
+type RenderOptions = napi.RenderOptions | wasm.RenderOptions;
+type ConstructRendererOptions =
+  | napi.ConstructRendererOptions
+  | (wasm.ConstructRendererOptions & {
+      /**
+       * @description The WebAssembly module to use for the renderer. If not provided, the default resolving strategy will be used.
+       */
+      module?: wasm.InitInput | Promise<wasm.InitInput> | { default: wasm.InitInput };
+    });
+
 type ImageResponseOptionsWithRenderer = ResponseInit &
   RenderOptions & {
-    renderer: Renderer;
+    renderer: napi.Renderer | wasm.Renderer;
     signal?: AbortSignal;
     jsx?: FromJsxOptions;
     emoji?: EmojiType | "from-font";
   };
 
-type ImageResponseOptionsWithoutRenderer = ResponseInit &
-  RenderOptions &
-  ConstructRendererOptions & {
-    signal?: AbortSignal;
-    jsx?: FromJsxOptions;
-    emoji?: EmojiType | "from-font";
-  };
+type ImageResponseOptionsWithoutRenderer = Omit<ImageResponseOptionsWithRenderer, "renderer"> &
+  ConstructRendererOptions;
 
 export type ImageResponseOptions =
   | ImageResponseOptionsWithRenderer
@@ -42,49 +46,77 @@ const defaultOptions = {
   format: "webp",
 } as const satisfies ImageResponseOptions;
 
-async function getRenderer(options?: ImageResponseOptions) {
+async function getRenderer(options: ImageResponseOptions | undefined, imports: Imports) {
   if (options && "renderer" in options) {
     return options.renderer;
   }
 
   if (!renderer) {
-    renderer = new Renderer(options);
+    renderer = new imports.Renderer(options);
 
     return renderer;
   }
 
   const tasks: Promise<unknown>[] = [];
 
-  const currentRenderer = renderer;
-  if (!currentRenderer) {
-    return renderer;
-  }
-
   if (options?.fonts && options.fonts.length > 0) {
-    tasks.push(currentRenderer.loadFonts(options.fonts));
+    if ("loadFonts" in renderer) {
+      const filteredFonts = options.fonts.filter((font) => {
+        if (fontMarks.has(font)) {
+          return false;
+        }
+
+        fontMarks.add(font);
+        return true;
+      });
+
+      tasks.push(renderer.loadFonts(filteredFonts));
+    } else {
+      for (const font of options.fonts) {
+        if (fontMarks.has(font)) {
+          continue;
+        }
+
+        fontMarks.add(font);
+
+        renderer.loadFont(font);
+      }
+    }
   }
 
   if (options?.persistentImages) {
-    tasks.push(
-      ...options.persistentImages.map((image) =>
-        currentRenderer.putPersistentImage(image.src, image.data),
-      ),
-    );
+    for (const image of options.persistentImages) {
+      if (imageMarks.has(image)) {
+        continue;
+      }
+
+      imageMarks.add(image);
+
+      const maybePromise = renderer.putPersistentImage(image, options.signal);
+
+      if (maybePromise instanceof Promise) {
+        tasks.push(maybePromise);
+      }
+    }
   }
 
   if (tasks.length > 0) {
     await Promise.all(tasks);
   }
 
-  return currentRenderer;
+  return renderer;
 }
 
-function extractFetchedResources(node: Node, options?: ImageResponseOptions) {
+async function extractFetchedResources(
+  node: napi.Node | wasm.Node,
+  options: ImageResponseOptions | undefined,
+  imports: Imports,
+) {
   if (options?.fetchedResources) {
     return options.fetchedResources;
   }
 
-  const urls = extractResourceUrls(node);
+  const urls = imports.extractResourceUrls(node);
 
   return fetchResources(urls);
 }
@@ -94,29 +126,26 @@ function createStream(component: ReactNode, options?: ImageResponseOptions) {
     type: "bytes",
     async start(controller) {
       try {
+        const imports = await getImports(
+          options !== undefined && "module" in options ? options.module : undefined,
+        );
         const nodePromise = fromJsx(component, options?.jsx).then(async ({ node, stylesheets }) => {
           if (options?.emoji && options.emoji !== "from-font") {
             node = extractEmojis(node, options.emoji);
           }
 
-          const fetchedResources = await extractFetchedResources(node, options);
+          const fetchedResources = await extractFetchedResources(node, options, imports);
 
           return { node, fetchedResources, stylesheets };
         });
 
         const [renderer, { node, fetchedResources, stylesheets }] = await Promise.all([
-          getRenderer(options),
+          getRenderer(options, imports),
           nodePromise,
         ]);
 
         const mergedOptions = {
-          width: options?.width,
-          height: options?.height,
-          format: options?.format,
-          quality: options?.quality,
-          dithering: options?.dithering,
-          drawDebugBorder: options?.drawDebugBorder,
-          devicePixelRatio: options?.devicePixelRatio,
+          ...options,
           fetchedResources,
           stylesheets: [...(options?.stylesheets ?? []), ...stylesheets],
         };

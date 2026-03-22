@@ -2,14 +2,13 @@
   "name": "example-nextjs",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
     "@takumi-rs/image-response": "workspace:*",
-    "@takumi-rs/wasm": "workspace:*",
     "lucide-react": "catalog:",
     "next": "16.2.1",
     "react": "catalog:",

@@ -113,7 +113,7 @@ export type FontDetails = {
   name?: string;
   data: ByteBuf;
   weight?: number;
-  style?: "normal" | "italic" | "oblique";
+  style?: "normal" | "italic" | "oblique" | `oblique ${number}deg` | (string & {});
 };
 
 export type ImageSource = {
