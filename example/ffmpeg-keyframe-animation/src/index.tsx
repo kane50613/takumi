@@ -50,17 +50,17 @@ const ffmpeg = spawn(
 
 const renderer = new Renderer();
 
-await renderer.putPersistentImage(
-  "logo.svg",
-  await readFile(join(import.meta.dir, "../../../docs/public/logo.svg")),
-);
+await renderer.putPersistentImage({
+  src: "logo.svg",
+  data: await readFile(join(import.meta.dir, "../../../docs/public/logo.svg")),
+});
 
-await renderer.putPersistentImage(
-  "background.jpg",
-  await readFile(
+await renderer.putPersistentImage({
+  src: "background.jpg",
+  data: await readFile(
     join(import.meta.dir, "../../../assets/images/martin-martz-W0NRebXbsjM-unsplash.jpg"),
   ),
-);
+});
 
 const thumbnailPath = resolve(import.meta.dir, "../output/thumbnail.webp");
 console.log(`Rendering thumbnail to ${thumbnailPath}...`);

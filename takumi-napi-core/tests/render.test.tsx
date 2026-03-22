@@ -96,7 +96,10 @@ describe("setup", () => {
   });
 
   test("putPersistentImage", async () => {
-    await renderer.putPersistentImage(localImagePath, imageBuffer);
+    await renderer.putPersistentImage({
+      src: localImagePath,
+      data: imageBuffer,
+    });
   });
 });
 

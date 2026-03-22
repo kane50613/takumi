@@ -64,13 +64,13 @@ describe("binary inputs", () => {
   test("putPersistentImage accepts Buffer, Uint8Array, and ArrayBuffer", async () => {
     const renderer = new Renderer();
 
-    await expect(
+    expect(
       renderer.putPersistentImage({ src: "test://img-buffer", data: imageBuffer }),
     ).resolves.toBeUndefined();
-    await expect(
+    expect(
       renderer.putPersistentImage({ src: "test://img-uint8array", data: imageUint8Array }),
     ).resolves.toBeUndefined();
-    await expect(
+    expect(
       renderer.putPersistentImage({ src: "test://img-arraybuffer", data: imageArrayBuffer }),
     ).resolves.toBeUndefined();
   });
