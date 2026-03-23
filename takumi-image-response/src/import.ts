@@ -56,7 +56,7 @@ async function importBindings() {
     return await import("@takumi-rs/core");
   } catch (error) {
     console.warn(
-      "Failed to import @takumi-rs/core. This may be due to the bundler not supporting conditional exports. Falling back to auto-detection of WASM bindings.",
+      "Unable to import @takumi-rs/core. Falling back to auto-detection of WASM bindings.",
       {
         cause: error,
       },

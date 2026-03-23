@@ -64,13 +64,11 @@ const nativeModule = loadNativeModule();
 if (!nativeModule) {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     throw new Error(
-      "Native module is not being included in the bundle. Fallback to WASM version.\nAdd `outputFileTracingIncludes` to your Next.js configuration with `node_modules/@takumi-rs/core-*/*`.",
+      "Native module is not being included in the bundle, add `outputFileTracingIncludes` to your Next.js configuration with `node_modules/@takumi-rs/core-*/*`.",
     );
   }
 
-  throw new Error(
-    "Unable to load native module, falling back to WASM version. Make sure your bundler has included it.",
-  );
+  throw new Error("Unable to load native module, make sure your bundler has included it.");
 }
 
 const { Renderer, extractResourceUrls } = nativeModule;
