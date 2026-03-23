@@ -31,7 +31,8 @@ function resolveTarget() {
       if (process.arch === "x64") {
         return "win32-x64-msvc";
       }
-      break;
+
+      return "win32-arm64-msvc";
   }
 
   return null;
