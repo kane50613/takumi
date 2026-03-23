@@ -24,6 +24,12 @@
       "require": "./dist/response.cjs",
       "default": "./dist/response.js"
     },
+    "./trace": {
+      "types": "./dist/trace.d.ts",
+      "import": "./dist/trace.js",
+      "require": "./dist/trace.cjs",
+      "default": "./dist/trace.js"
+    },
     "./wasm": {
       "types": "./dist/response.d.ts",
       "import": "./dist/response.js",
@@ -32,7 +38,7 @@
     }
   },
   "scripts": {
-    "build": "tsup-node src/response.tsx --clean --minify-syntax --dts --format esm,cjs --no-splitting",
+    "build": "tsup-node src/response.tsx src/trace.ts --clean --minify-syntax --dts --format esm,cjs --no-splitting",
     "prepublishOnly": "jq '.dependencies[\"@takumi-rs/core\"] = .version | .dependencies[\"@takumi-rs/helpers\"] = .version | .dependencies[\"@takumi-rs/wasm\"] = .version' package.json > tmp.json && mv tmp.json package.json"
   },
   "dependencies": {

@@ -36,6 +36,10 @@
       "node": "./export.mjs",
       "import": "./export.mjs",
       "default": "./export.mjs"
+    },
+    "./trace": {
+      "types": "./trace.d.ts",
+      "default": "./trace.mjs"
     }
   },
   "scripts": {
