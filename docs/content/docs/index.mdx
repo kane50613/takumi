@@ -4,7 +4,8 @@ description: Get Takumi running in minutes with the high-level ImageResponse API
 icon: Axe
 ---
 
-Takumi is a high-performance image renderer in Rust, designed for JSX workflows across Node.js and WebAssembly.
+Takumi is a high-performance image renderer in Rust, featuring JSX support and portable runtimes.
+This guide will get you up and running with the high-level `ImageResponse` API in just a few steps.
 
 <Cards>
   <Card title="Try Playground" href="/playground" icon={<Shovel />}>
@@ -18,12 +19,12 @@ Takumi is a high-performance image renderer in Rust, designed for JSX workflows 
 ## 1. Install
 
 ```npm
-npm i @takumi-rs/image-response
+npm i @takumi-rs/image-response@beta
 ```
 
 ## 2. Return an `ImageResponse`
 
-`ImageResponse` extends the standard [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response), so you can use it in route handlers directly.
+`ImageResponse` extends the standard [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response), so you can use it in any environment you want.
 
 ```tsx twoslash
 /** @jsxImportSource react */
@@ -48,13 +49,7 @@ export function GET() {
 }
 ```
 
-Check [the reference page](/docs/reference#imageresponse) for all available options.
-
-If you use `pnpm` or `yarn` with a virtual store, add this to `.npmrc` and reinstall:
-
-```text title=".npmrc"
-public-hoist-pattern[]=@takumi-rs/core-*
-```
+Internally, Takumi will tries to load the native bindings for your platform. If it fails, it will fallback to the WebAssembly version, which is slightly slower but works everywhere.
 
 ## Templates
 
