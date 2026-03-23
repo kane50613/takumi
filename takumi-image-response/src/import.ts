@@ -20,14 +20,17 @@ async function getImportsImpl(module?: wasm.InitInput) {
     return importedModule;
   }
 
-  return initializeWasm(
-    importedModule && "default" in importedModule ? importedModule.default : importedModule,
-  );
+  return initializeWasm(importedModule);
 }
 
-async function initializeWasm(module?: wasm.InitInput) {
+async function initializeWasm(module?: wasm.InitInput | { default: wasm.InitInput }) {
+  const wasmModule =
+    module !== undefined && typeof module === "object" && "default" in module
+      ? module.default
+      : module;
+
   try {
-    await wasm.default(module ? { module_or_path: module } : undefined);
+    await wasm.default(wasmModule ? { module_or_path: wasmModule } : undefined);
 
     return wasm;
   } catch (error) {
@@ -51,7 +54,7 @@ async function importBindings() {
 
   try {
     return await import(
-      /* @__PURE__ */ /* turbopackIgnore: true */ /* webpackIgnore: true */ "@takumi-rs/core/auto"
+      /* @__PURE__ */ /* turbopackIgnore: true */ /* webpackIgnore: true */ /* @vite-ignore */ "@takumi-rs/core/auto"
     );
   } catch {
     if (typeof process !== "undefined" && process.env.NEXT_RUNTIME) {

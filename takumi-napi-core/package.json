@@ -35,8 +35,10 @@
     },
     "./auto": {
       "types": "./index.d.ts",
+      "workerd": "./not-available.js",
+      "browser": "./not-available.js",
       "node": "./index.js",
-      "default": "./not-available.js"
+      "module": "./index.js"
     }
   },
   "scripts": {
