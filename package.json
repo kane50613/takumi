@@ -31,10 +31,10 @@
     "@types/node": "^25.5.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "^19.2.3",
-    "lucide-react": "^0.577.0",
+    "lucide-react": "^1.0.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "typescript": "^5.9.3",
-    "vite": "^8.0.1"
+    "vite": "^8.0.2"
   }
 }
