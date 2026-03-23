@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { Renderer } from "../index.js";
+import { Renderer } from "../export";
 
 const renderer = new Renderer();
 

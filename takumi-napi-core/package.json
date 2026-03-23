@@ -20,30 +20,27 @@
     "url": "git+https://github.com/kane50613/takumi.git"
   },
   "files": [
-    "index.d.ts",
-    "index.js",
+    "export.d.ts",
+    "export.mjs",
+    "not-available.js",
     "README.md"
   ],
   "type": "module",
-  "main": "index.js",
-  "types": "index.d.ts",
+  "main": "export.mjs",
+  "types": "export.d.ts",
   "exports": {
     ".": {
-      "types": "./index.d.ts",
-      "import": "./index.js",
-      "require": "./index.js"
-    },
-    "./auto": {
-      "types": "./index.d.ts",
+      "types": "./export.d.ts",
       "workerd": "./not-available.js",
       "browser": "./not-available.js",
-      "node": "./index.js",
-      "module": "./index.js"
+      "node": "./export.mjs",
+      "import": "./export.mjs",
+      "default": "./export.mjs"
     }
   },
   "scripts": {
     "build": "napi build --release --no-const-enum --platform --esm --strip",
-    "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json && bun artifacts && cp artifacts/bindings-x86_64-unknown-linux-gnu/index.* . && napi prepublish -t npm --no-gh-release",
+    "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json && bun artifacts && napi prepublish -t npm --no-gh-release",
     "artifacts": "napi create-npm-dirs && napi artifacts && napi version",
     "bench": "bun tests/bench/index.tsx"
   },

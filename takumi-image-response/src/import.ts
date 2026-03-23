@@ -53,10 +53,15 @@ async function importBindings() {
   }
 
   try {
-    return await import(
-      /* @__PURE__ */ /* turbopackIgnore: true */ /* webpackIgnore: true */ /* @vite-ignore */ "@takumi-rs/core/auto"
+    return await import("@takumi-rs/core");
+  } catch (error) {
+    console.warn(
+      "Failed to import @takumi-rs/core. This may be due to the bundler not supporting conditional exports. Falling back to auto-detection of WASM bindings.",
+      {
+        cause: error,
+      },
     );
-  } catch {
+
     if (typeof process !== "undefined" && process.env.NEXT_RUNTIME) {
       return import(/* @__PURE__ */ /* @vite-ignore */ nextPath) as Promise<
         typeof import("@takumi-rs/wasm/next")

@@ -44,9 +44,9 @@
     "./auto": {
       "types": "./pkg/takumi_wasm.d.ts",
       "workerd": "./bundlers/workerd.js",
-      "module": "./bundlers/vite.js",
+      "module": "./bundlers/vite.mjs",
       "node": "./bundlers/node.mjs",
-      "default": "./bundlers/vite.js"
+      "default": "./bundlers/vite.mjs"
     },
     "./takumi_wasm_bg.wasm": {
       "types": "./pkg/takumi_wasm_bg.wasm.d.ts",
@@ -54,11 +54,11 @@
     },
     "./next": {
       "types": "./bundlers/next.d.ts",
-      "default": "./bundlers/next.js"
+      "default": "./bundlers/next.mjs"
     },
     "./vite": {
       "types": "./bundlers/vite.d.ts",
-      "default": "./bundlers/vite.js"
+      "default": "./bundlers/vite.mjs"
     }
   },
   "scripts": {
