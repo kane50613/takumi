@@ -11,3 +11,4 @@ count.txt
 .vinxi
 todos.json
 *.gen.ts
+.wrangler

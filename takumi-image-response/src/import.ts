@@ -15,15 +15,11 @@ async function getImportsImpl(module?: wasm.InitInput) {
     return initializeWasm(module);
   }
 
-  // Have to make it a separated variable outside of the if block so esbuild won't try to statically analyze the import.
-  const core = "@takumi-rs/core";
-  if (typeof process !== "undefined" && process.env.NEXT_RUNTIME !== "edge") {
-    return import(/* @__PURE__ */ /* @vite-ignore */ core) as Promise<
-      typeof import("@takumi-rs/core")
-    >;
+  const importedModule = await importBindings();
+  if (importedModule && "Renderer" in importedModule) {
+    return importedModule;
   }
 
-  const importedModule = await importWasm();
   return initializeWasm(
     importedModule && "default" in importedModule ? importedModule.default : importedModule,
   );
@@ -44,24 +40,28 @@ async function initializeWasm(module?: wasm.InitInput) {
   }
 }
 
-async function importWasm() {
-  // Vite path
-  if (import.meta.env?.BASE_URL && !import.meta.env?.SSR) {
-    return import("@takumi-rs/wasm/vite");
-  }
-
-  // Cloudflare Workers/esbuild path
-  if (typeof navigator !== "undefined" && navigator.userAgent === "Cloudflare-Workers") {
-    return import(
-      /* @__PURE__ */ /* @vite-ignore */ /* webpackIgnore: true */ /* turbopackIgnore: true */ "@takumi-rs/wasm/takumi_wasm_bg.wasm"
-    ) as Promise<typeof import("@takumi-rs/wasm/takumi_wasm_bg.wasm")>;
-  }
-
+async function importBindings() {
   // Next.js path
   const nextPath = "@takumi-rs/wasm/next";
-  if (typeof process !== "undefined" && process.env.NEXT_RUNTIME) {
+  if (typeof process !== "undefined" && process.env.NEXT_RUNTIME === "edge") {
     return import(/* @__PURE__ */ /* @vite-ignore */ nextPath) as Promise<
       typeof import("@takumi-rs/wasm/next")
     >;
+  }
+
+  try {
+    return await import(
+      /* @__PURE__ */ /* turbopackIgnore: true */ /* webpackIgnore: true */ "@takumi-rs/core/auto"
+    );
+  } catch {
+    if (typeof process !== "undefined" && process.env.NEXT_RUNTIME) {
+      return import(/* @__PURE__ */ /* @vite-ignore */ nextPath) as Promise<
+        typeof import("@takumi-rs/wasm/next")
+      >;
+    }
+
+    return import(
+      /* @__PURE__ */ /* turbopackIgnore: true */ /* webpackIgnore: true */ "@takumi-rs/wasm/auto"
+    ) as Promise<typeof import("@takumi-rs/wasm/auto")>;
   }
 }

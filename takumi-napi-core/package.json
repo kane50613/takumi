@@ -32,6 +32,11 @@
       "types": "./index.d.ts",
       "import": "./index.js",
       "require": "./index.js"
+    },
+    "./auto": {
+      "types": "./index.d.ts",
+      "node": "./index.js",
+      "default": "./not-available.js"
     }
   },
   "scripts": {

@@ -1,3 +1,3 @@
-declare const module: URL;
+declare const module: string;
 
 export default module;

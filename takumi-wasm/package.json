@@ -41,6 +41,12 @@
       "import": "./bundlers/node.mjs",
       "require": "./bundlers/node.cjs"
     },
+    "./auto": {
+      "types": "./pkg/takumi_wasm.d.ts",
+      "workerd": "./bundlers/workerd.js",
+      "node": "./bundlers/node.mjs",
+      "default": "./bundlers/vite.js"
+    },
     "./takumi_wasm_bg.wasm": {
       "types": "./pkg/takumi_wasm_bg.wasm.d.ts",
       "default": "./pkg/takumi_wasm_bg.wasm"

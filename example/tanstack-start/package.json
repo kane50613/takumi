@@ -8,6 +8,7 @@
     "serve": "vite preview"
   },
   "dependencies": {
+    "@cloudflare/vite-plugin": "^1.30.0",
     "@takumi-rs/image-response": "workspace:*",
     "@tanstack/react-router": "^1.168.1",
     "@tanstack/react-router-ssr-query": "^1.166.10",

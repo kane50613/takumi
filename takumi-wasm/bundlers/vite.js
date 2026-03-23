@@ -1,3 +1,3 @@
-const module = new URL("../pkg/takumi_wasm_bg.wasm", import.meta.url);
+import module from "../pkg/takumi_wasm_bg.wasm?url";
 
 export default module;
