@@ -5,9 +5,7 @@ export type Imports = Awaited<ReturnType<typeof getImportsImpl>>;
 let importPromise: Promise<Imports> | null = null;
 
 export function getImports(module?: wasm.InitInput) {
-  if (!importPromise) {
-    importPromise = getImportsImpl(module);
-  }
+  importPromise ??= getImportsImpl(module);
 
   return importPromise;
 }
@@ -17,6 +15,7 @@ async function getImportsImpl(module?: wasm.InitInput) {
     return initializeWasm(module);
   }
 
+  // Have to make it a separated variable outside of the if block so esbuild won't try to statically analyze the import.
   const core = "@takumi-rs/core";
   if (typeof process !== "undefined" && process.env.NEXT_RUNTIME !== "edge") {
     return import(/* @__PURE__ */ /* @vite-ignore */ core) as Promise<
@@ -35,15 +34,12 @@ async function initializeWasm(module?: wasm.InitInput) {
     await wasm.default(module ? { module_or_path: module } : undefined);
 
     return wasm;
-  } catch {
-    if (import.meta.env?.MODE) {
-      throw new Error(
-        "Failed to initialize Takumi WASM module. Please provide `module` option with a resolved WASM URL or module.",
-      );
-    }
-
+  } catch (error) {
     throw new Error(
-      "Failed to resolve Takumi native bindings automatically. Please provide `module` option with the WASM module.",
+      "Couldn't automatically resolve Takumi native bindings. Please specify the module option with the WASM module.",
+      {
+        cause: error,
+      },
     );
   }
 }
