@@ -9,7 +9,7 @@
   "dependencies": {
     "@takumi-rs/core": "workspace:*",
     "@takumi-rs/helpers": "workspace:*",
-    "lucide-react": "^0.577.0",
+    "lucide-react": "^1.0.0",
     "react": "catalog:",
     "react-dom": "catalog:"
   },
