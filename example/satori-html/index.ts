@@ -5,9 +5,7 @@ import { html } from "satori-html";
 
 const renderer = new Renderer();
 
-const markup = html`
-  <div style="color: black">hello, world</div>
-`;
+const markup = html` <div style="color: black">hello, world</div> `;
 const { node, stylesheets } = await fromJsx(markup);
 
 const png = await renderer.render(node, {
