@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { join } from "node:path";
 import { file } from "bun";
-import { ImageResponse } from "../src/response";
+import { createImageResponse, ImageResponse } from "../src/response";
 
 const module = new URL(import.meta.resolve("@takumi-rs/wasm/takumi_wasm_bg.wasm"), import.meta.url);
 
@@ -100,5 +100,37 @@ describe("ImageResponse", () => {
     expect(buffers).toHaveLength(8);
     expect(loadFont).toHaveBeenCalledTimes(1);
     expect(loadImage).toHaveBeenCalledTimes(1);
+  });
+
+  test("should isolate caches per createImageResponse instance", async () => {
+    const loadFont = mock(async () => geist);
+    const createResponseA = createImageResponse({
+      fonts: [
+        {
+          data: loadFont,
+          key: "geist",
+          name: "Geist",
+        },
+      ],
+      module,
+    });
+    const createResponseB = createImageResponse({
+      fonts: [
+        {
+          data: loadFont,
+          key: "geist",
+          name: "Geist",
+        },
+      ],
+      module,
+    });
+
+    await Promise.all([
+      createResponseA(<div tw="text-white">A</div>).arrayBuffer(),
+      createResponseA(<div tw="text-white">A2</div>).arrayBuffer(),
+      createResponseB(<div tw="text-white">B</div>).arrayBuffer(),
+    ]);
+
+    expect(loadFont).toHaveBeenCalledTimes(2);
   });
 });

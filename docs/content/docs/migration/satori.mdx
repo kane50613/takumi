@@ -39,7 +39,7 @@ import { Renderer } from "@takumi-rs/core"; // [!code ++]
 const fonts = [
   {
     name: "Inter",
-    data: await fetch("/fonts/Inter-Regular.ttf").then((res) => res.arrayBuffer()),
+    data: () => fetch("/fonts/Inter-Regular.ttf").then((res) => res.arrayBuffer()),
     style: "normal" as const,
     weight: 400,
   },

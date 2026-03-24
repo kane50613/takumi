@@ -27,6 +27,26 @@ export function GET(request: Request) {
 }
 ```
 
+For shared configuration and cache isolation, create your own image response factory.
+
+```tsx
+import { createImageResponse } from "@takumi-rs/image-response";
+
+const ogImage = createImageResponse({
+  fonts: [
+    {
+      data: () => fetch("/fonts/Inter-Regular.ttf").then((res) => res.arrayBuffer()),
+      key: "inter-regular",
+      name: "Inter",
+    },
+  ],
+});
+
+export function GET() {
+  return ogImage(<OgImage />);
+}
+```
+
 ### Fonts
 
 Takumi comes with full axis [Geist](https://vercel.com/font) and Geist Mono by default.
@@ -65,7 +85,7 @@ export function GET(request: Request) {
 }
 ```
 
-The same pattern also works for `persistentImages`.
+The same pattern also works for `persistentImages`. Caches are scoped to each `createImageResponse()` instance.
 
 ### Bring-Your-Own-Renderer (BYOR)
 
