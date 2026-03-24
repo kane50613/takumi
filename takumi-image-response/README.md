@@ -7,7 +7,7 @@ Checkout the migration guide [From Next.js ImageResponse](https://takumi.kane.tw
 ## Installation
 
 ```bash
-npm install @takumi-rs/image-response @takumi-rs/core @takumi-rs/helpers
+npm install @takumi-rs/image-response
 ```
 
 ## Usage
@@ -86,6 +86,8 @@ export function GET(request: Request) {
 ```
 
 The same pattern also works for `persistentImages`. Caches are scoped to each `createImageResponse()` instance.
+
+`loadDefaultFonts` is only supported by the native `@takumi-rs/core` renderer. It has no effect when using the WASM renderer.
 
 ### Bring-Your-Own-Renderer (BYOR)
 

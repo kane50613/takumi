@@ -27,6 +27,10 @@ declare module "react" {
 type RenderOptions = napi.RenderOptions | wasm.RenderOptions;
 type ManagedRendererOptions = {
   fonts?: ImageResponseFont[];
+  /**
+   * Only supported by the native `@takumi-rs/core` renderer.
+   * This option is ignored when using the WASM renderer.
+   */
   loadDefaultFonts?: boolean;
   persistentImages?: ImageResponsePersistentImage[];
   /**
@@ -147,7 +151,7 @@ function createManagedRendererFactory(
   defaultOptions: ImageResponseOptionsWithoutRenderer | undefined,
   cache: ResourceCache,
 ) {
-  let rendererPromise: Promise<napi.Renderer | wasm.Renderer> | undefined;
+  let renderer: napi.Renderer | wasm.Renderer | undefined;
 
   async function loadRendererResources(
     activeRenderer: napi.Renderer | wasm.Renderer,
@@ -221,27 +225,15 @@ function createManagedRendererFactory(
       return options.renderer;
     }
 
-    if (!rendererPromise) {
-      rendererPromise = Promise.resolve(
-        new imports.Renderer(
-          options?.loadDefaultFonts === undefined
-            ? defaultOptions?.loadDefaultFonts === undefined
-              ? undefined
-              : { loadDefaultFonts: defaultOptions.loadDefaultFonts }
-            : { loadDefaultFonts: options.loadDefaultFonts },
-        ),
-      ).catch((error) => {
-        rendererPromise = undefined;
-        throw error;
-      });
-    }
+    renderer ??= new imports.Renderer({
+      loadDefaultFonts: options?.loadDefaultFonts ?? defaultOptions?.loadDefaultFonts,
+    });
 
-    const activeRenderer = await rendererPromise;
     const managedOptions = hasManagedRendererOptions(options) ? options : defaultOptions;
 
-    await loadRendererResources(activeRenderer, managedOptions);
+    await loadRendererResources(renderer, managedOptions);
 
-    return activeRenderer;
+    return renderer;
   };
 }
 
