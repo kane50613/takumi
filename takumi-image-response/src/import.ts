@@ -44,54 +44,57 @@ async function initializeWasm(module?: wasm.InitInput | { default: wasm.InitInpu
 }
 
 async function importBindings() {
-  // Next.js path
-  const nextPath = "@takumi-rs/wasm/next";
-  if (typeof process !== "undefined" && process.env.NEXT_RUNTIME === "edge") {
-    return import(/* @__PURE__ */ /* @vite-ignore */ nextPath) as Promise<
-      typeof import("@takumi-rs/wasm/next")
-    >;
+  if (shouldSkipCoreImport()) {
+    return importWasmBindings();
   }
 
   try {
     return await import("@takumi-rs/core");
   } catch (error) {
-    if (shouldWarnOnNativeImportFailure()) {
-      console.warn(
-        "Unable to import @takumi-rs/core. Falling back to auto-detection of WASM bindings.",
-        {
-          cause: error,
-        },
-      );
-    }
-
-    if (typeof process !== "undefined" && process.env.NEXT_RUNTIME) {
-      return import(/* @__PURE__ */ /* @vite-ignore */ nextPath) as Promise<
-        typeof import("@takumi-rs/wasm/next")
-      >;
-    }
-
-    return import(
-      /* @__PURE__ */ /* turbopackIgnore: true */ /* webpackIgnore: true */ "@takumi-rs/wasm/auto"
-    ) as Promise<typeof import("@takumi-rs/wasm/auto")>;
+    console.warn(
+      "Unable to import @takumi-rs/core. Falling back to auto-detection of WASM bindings.",
+      {
+        cause: error,
+      },
+    );
   }
+
+  return importWasmBindings();
 }
 
-function shouldWarnOnNativeImportFailure() {
+async function importWasmBindings() {
+  const nextPath = "@takumi-rs/wasm/next";
+  if (typeof process !== "undefined" && process.env.NEXT_RUNTIME) {
+    return import(/* @__PURE__ */ /* @vite-ignore */ nextPath) as Promise<
+      typeof import("@takumi-rs/wasm/next")
+    >;
+  }
+
+  return import(
+    /* @__PURE__ */ /* turbopackIgnore: true */ /* webpackIgnore: true */ "@takumi-rs/wasm/auto"
+  ) as Promise<typeof import("@takumi-rs/wasm/auto")>;
+}
+
+function shouldSkipCoreImport() {
+  if (typeof process !== "undefined" && process.env.NEXT_RUNTIME === "edge") {
+    return true;
+  }
+
   if (typeof window !== "undefined") {
-    return false;
+    return true;
   }
 
   if (typeof navigator !== "undefined" && navigator.userAgent === "Cloudflare-Workers") {
-    return false;
+    return true;
   }
 
   // Cloudflare Workers runtime provides this global.
   if ("WebSocketPair" in globalThis) {
-    return false;
+    return true;
   }
 
   if ("EdgeRuntime" in globalThis) {
-    return false;
+    return true;
   }
 
   const maybeWorkerGlobalScope = (
@@ -103,8 +106,8 @@ function shouldWarnOnNativeImportFailure() {
     maybeWorkerGlobalScope !== undefined &&
     maybeWorkerGlobalScope.prototype.isPrototypeOf(globalThis)
   ) {
-    return false;
+    return true;
   }
 
-  return true;
+  return false;
 }
