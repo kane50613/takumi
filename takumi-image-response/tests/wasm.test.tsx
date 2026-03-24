@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { join } from "node:path";
 import { file } from "bun";
 import { ImageResponse } from "../src/response";
@@ -8,6 +8,7 @@ const module = new URL(import.meta.resolve("@takumi-rs/wasm/takumi_wasm_bg.wasm"
 const geist = await file(
   join(import.meta.dirname, "../../assets/fonts/geist/Geist[wght].woff2"),
 ).arrayBuffer();
+const icon = await file(join(import.meta.dirname, "../../assets/images/yeecord.png")).arrayBuffer();
 
 describe("ImageResponse", () => {
   test("should not crash", async () => {
@@ -62,5 +63,42 @@ describe("ImageResponse", () => {
     for (const buffer of buffers) {
       expect(buffer).toBeDefined();
     }
+  });
+
+  test("should cache lazy font and image loaders across requests", async () => {
+    const loadFont = mock(async () => geist);
+    const loadImage = mock(async () => icon);
+
+    const promises = Array.from({ length: 8 }).map(async (_, i) => {
+      const response = new ImageResponse(
+        <div tw="flex items-center gap-2 bg-black text-white">
+          <img src="icon.png" alt="" width={8} height={8} />
+          <div>Concurrent {i}</div>
+        </div>,
+        {
+          module,
+          fonts: [
+            {
+              data: loadFont,
+              name: "Geist",
+            },
+          ],
+          persistentImages: [
+            {
+              data: loadImage,
+              src: "icon.png",
+            },
+          ],
+        },
+      );
+
+      return response.arrayBuffer();
+    });
+
+    const buffers = await Promise.all(promises);
+
+    expect(buffers).toHaveLength(8);
+    expect(loadFont).toHaveBeenCalledTimes(1);
+    expect(loadImage).toHaveBeenCalledTimes(1);
   });
 });

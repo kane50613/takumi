@@ -31,7 +31,7 @@ export function GET(request: Request) {
 
 Takumi comes with full axis [Geist](https://vercel.com/font) and Geist Mono by default.
 
-We have global fonts cache to avoid loading the same fonts multiple times.
+We have a global fonts cache to avoid loading the same fonts multiple times.
 
 If your environment supports top-level await, you can load the fonts in global scope and reuse the fonts array.
 
@@ -48,29 +48,24 @@ const fonts = [
 new ImageResponse(<OgImage />, { fonts });
 ```
 
-If your environment doesn't support top-level await, or just want the fonts to get garbage collected after initialization, you can load the fonts like this.
+If your environment doesn't support top-level await, you can pass a lazy `data` loader instead.
 
 ```tsx
-let isFontsLoaded = false;
-
 export function GET(request: Request) {
-  const fonts = [];
-
-  if (!isFontsLoaded) {
-    isFontsLoaded = true;
-    fonts = [
+  return new ImageResponse(<OgImage />, {
+    fonts: [
       {
         name: "Inter",
-        data: await fetch("/fonts/Inter-Regular.ttf").then((res) => res.arrayBuffer()),
+        data: () => fetch("/fonts/Inter-Regular.ttf").then((res) => res.arrayBuffer()),
         style: "normal",
         weight: 400,
       },
-    ];
-  }
-
-  return new ImageResponse(<OgImage />, { fonts });
+    ],
+  });
 }
 ```
+
+The same pattern also works for `persistentImages`.
 
 ### Bring-Your-Own-Renderer (BYOR)
 

@@ -4,13 +4,6 @@ import DocsTemplate from "../../../../takumi-template/src/templates/docs-templat
 
 export const runtime = "edge";
 
-const fonts = [
-  {
-    name: "Geist",
-    data: await fetch("https://takumi.kane.tw/fonts/Geist.woff2").then((r) => r.arrayBuffer()),
-  },
-];
-
 export function GET(request: Request) {
   const url = new URL(request.url);
   const name = url.searchParams.get("name") || "Takumi";
@@ -28,7 +21,13 @@ export function GET(request: Request) {
       width: 1200,
       height: 630,
       format: "webp",
-      fonts,
+      fonts: [
+        {
+          name: "Geist",
+          data: () =>
+            fetch("https://takumi.kane.tw/fonts/Geist.woff2").then((r) => r.arrayBuffer()),
+        },
+      ],
     },
   );
 }
