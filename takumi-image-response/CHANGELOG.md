@@ -1,5 +1,14 @@
 # @takumi-rs/image-response
 
+## 1.0.0-beta.15
+
+### Patch Changes
+
+- 4cb7e23: Add `onError` option & `ready` promise
+  - @takumi-rs/core@1.0.0-beta.15
+  - @takumi-rs/wasm@1.0.0-beta.15
+  - @takumi-rs/helpers@1.0.0-beta.15
+
 ## 1.0.0-beta.14
 
 ### Minor Changes
