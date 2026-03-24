@@ -1,5 +1,14 @@
 # @takumi-rs/image-response
 
+## 1.0.0-beta.16
+
+### Patch Changes
+
+- 8770210: Skip resolving core package if Workers/edge runtime detected
+  - @takumi-rs/core@1.0.0-beta.16
+  - @takumi-rs/wasm@1.0.0-beta.16
+  - @takumi-rs/helpers@1.0.0-beta.16
+
 ## 1.0.0-beta.15
 
 ### Patch Changes
