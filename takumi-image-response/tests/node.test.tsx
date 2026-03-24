@@ -46,6 +46,7 @@ describe("ImageResponse", () => {
 
     const response = new ImageResponse(<div>Hello</div>, {
       renderer,
+      onError: mock(),
     });
     const ready = response.ready.catch((caughtError) => caughtError);
     const bodyResult = response.arrayBuffer().catch((caughtError) => caughtError);
@@ -54,26 +55,27 @@ describe("ImageResponse", () => {
     expect(await bodyResult).toBe(error);
   });
 
-  test("should render fallback image when onError is provided", async () => {
+  test("should call onError when rendering fails", async () => {
+    const error = new Error("primary render failed");
     const renderer = {
       render: mock(async () => {
-        if (renderer.render.mock.calls.length === 1) {
-          throw new Error("primary render failed");
-        }
-
-        return new Uint8Array([1, 2, 3, 4]);
+        throw error;
       }),
     } as any;
-    const onError = mock(() => <div>Fallback</div>);
+
+    const onError = mock();
 
     const response = new ImageResponse(<div>Hello</div>, {
       renderer,
       onError,
     });
 
-    await expect(response.ready).resolves.toBeUndefined();
-    await expect(response.arrayBuffer()).resolves.toBeInstanceOf(ArrayBuffer);
+    const readyResult = response.ready.catch((caughtError) => caughtError);
+    const bodyResult = response.arrayBuffer().catch((caughtError) => caughtError);
+
+    expect(await readyResult).toBe(error);
+    expect(await bodyResult).toBe(error);
     expect(onError).toHaveBeenCalledTimes(1);
-    expect(renderer.render).toHaveBeenCalledTimes(2);
+    expect(onError.mock.calls[0]?.[0]).toBe(error);
   });
 });
