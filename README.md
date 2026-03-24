@@ -28,28 +28,30 @@ See current benchmark runs and templates on [Image Bench](https://image-bench.ka
 ## First render in 30 seconds
 
 ```bash
-npm i @takumi-rs/image-response@beta
+bun i @takumi-rs/image-response@beta
 ```
 
 ```tsx
 import { ImageResponse } from "@takumi-rs/image-response";
+import { serve } from "bun";
 
-export function GET() {
-  return new ImageResponse(
-    <div tw="w-full h-full flex items-center justify-center bg-white">
-      <h1 tw="text-6xl font-bold">Hello from Takumi 👋😁</h1>
-    </div>,
-    {
-      width: 1200,
-      height: 630,
-      format: "webp",
-      emoji: "twemoji",
-    },
-  );
-}
+serve({
+  fetch() {
+    return new ImageResponse(
+      <div tw="w-full h-full flex items-center justify-center bg-[linear-gradient(to_bottom,#dbf4ff,#fff1f1)]">
+        <h1 tw="text-6xl font-bold">Hello from Takumi 👋😁</h1>
+      </div>,
+      {
+        width: 1200,
+        height: 630,
+        format: "webp",
+        emoji: "twemoji",
+      },
+    );
+  },
+  port: 3000,
+});
 ```
-
-For runtime-specific setup (Next.js, Vite SSR, Nitro, Cloudflare, Turbopack), see [Docs](https://takumi.kane.tw/docs/).
 
 ## What you can build
 
