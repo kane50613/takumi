@@ -6,7 +6,9 @@
     "@takumi-rs/helpers": "0.73.1",
     "@takumi-rs/image-response": "0.73.1",
     "@takumi-rs/core": "0.73.1",
-    "@takumi-rs/wasm": "0.73.1"
+    "@takumi-rs/wasm": "0.73.1",
+    "svelte": "0.0.1",
+    "waku-ssr": "0.0.0"
   },
   "changesets": [
     "angry-bags-drum",
@@ -34,6 +36,7 @@
     "sad-wombats-enjoy",
     "selfish-eels-boil",
     "sharp-hornets-open",
+    "small-walls-sleep",
     "social-parts-refuse",
     "some-plums-send",
     "twenty-knives-deny",
