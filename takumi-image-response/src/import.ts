@@ -55,12 +55,14 @@ async function importBindings() {
   try {
     return await import("@takumi-rs/core");
   } catch (error) {
-    console.warn(
-      "Unable to import @takumi-rs/core. Falling back to auto-detection of WASM bindings.",
-      {
-        cause: error,
-      },
-    );
+    if (shouldWarnOnNativeImportFailure()) {
+      console.warn(
+        "Unable to import @takumi-rs/core. Falling back to auto-detection of WASM bindings.",
+        {
+          cause: error,
+        },
+      );
+    }
 
     if (typeof process !== "undefined" && process.env.NEXT_RUNTIME) {
       return import(/* @__PURE__ */ /* @vite-ignore */ nextPath) as Promise<
@@ -72,4 +74,33 @@ async function importBindings() {
       /* @__PURE__ */ /* turbopackIgnore: true */ /* webpackIgnore: true */ "@takumi-rs/wasm/auto"
     ) as Promise<typeof import("@takumi-rs/wasm/auto")>;
   }
+}
+
+function shouldWarnOnNativeImportFailure() {
+  // Cloudflare Workers runtime provides this global.
+  if ("WebSocketPair" in globalThis) {
+    return false;
+  }
+
+  if ("EdgeRuntime" in globalThis) {
+    return false;
+  }
+
+  if (typeof window !== "undefined") {
+    return false;
+  }
+
+  const maybeWorkerGlobalScope = (
+    globalThis as typeof globalThis & {
+      WorkerGlobalScope?: { prototype: object };
+    }
+  ).WorkerGlobalScope;
+  if (
+    maybeWorkerGlobalScope !== undefined &&
+    maybeWorkerGlobalScope.prototype.isPrototypeOf(globalThis)
+  ) {
+    return false;
+  }
+
+  return true;
 }

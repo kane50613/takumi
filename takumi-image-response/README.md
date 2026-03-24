@@ -112,3 +112,22 @@ new ImageResponse(<OgImage />, {
   },
 });
 ```
+
+### Error Handling
+
+`ImageResponse` exposes a `ready` promise that resolves when rendering succeeds and rejects when rendering fails.
+
+```tsx
+const response = new ImageResponse(<OgImage />);
+
+await response.ready;
+return response;
+```
+
+You can also provide `onError` to render a fallback image instead of failing the response stream.
+
+```tsx
+const response = new ImageResponse(<OgImage />, {
+  onError: () => <div>Failed to generate image</div>,
+});
+```

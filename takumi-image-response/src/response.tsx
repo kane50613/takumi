@@ -45,22 +45,29 @@ type ImageResponseOptionsWithRenderer = ResponseInit &
     signal?: AbortSignal;
     jsx?: FromJsxOptions;
     emoji?: EmojiType | "from-font";
+    onError?: (error: unknown) => ReactNode | Promise<ReactNode>;
   };
 
 export type ImageResponseOptionsWithoutRenderer = Omit<
   ImageResponseOptionsWithRenderer,
   "renderer"
 > &
-  ManagedRendererOptions;
+  ManagedRendererOptions & {
+    onError?: (error: unknown) => ReactNode | Promise<ReactNode>;
+  };
 
 export type ImageResponseOptions =
   | ImageResponseOptionsWithRenderer
   | ImageResponseOptionsWithoutRenderer;
 
+export type ImageResponseResult = Response & {
+  readonly ready: Promise<void>;
+};
+
 export type ImageResponseFactory = (
   component: ReactNode,
   options?: ImageResponseOptions,
-) => Response;
+) => ImageResponseResult;
 
 function hasManagedRendererOptions(
   options: ImageResponseOptions | undefined,
@@ -145,6 +152,40 @@ function getContentType(format: RenderOptions["format"] | undefined) {
     default:
       return "image/webp";
   }
+}
+
+async function renderComponent(
+  component: ReactNode,
+  options: ImageResponseOptions | undefined,
+  imports: Imports,
+  getRenderer: (
+    options: ImageResponseOptions | undefined,
+    imports: Imports,
+  ) => Promise<napi.Renderer | wasm.Renderer>,
+) {
+  const nodePromise = fromJsx(component, options?.jsx).then(async ({ node, stylesheets }) => {
+    if (options?.emoji && options.emoji !== "from-font") {
+      node = extractEmojis(node, options.emoji);
+    }
+
+    const fetchedResources = await extractFetchedResources(node, options, imports);
+
+    return { node, fetchedResources, stylesheets };
+  });
+
+  const [renderer, { node, fetchedResources, stylesheets }] = await Promise.all([
+    getRenderer(options, imports),
+    nodePromise,
+  ]);
+
+  const renderOptions = {
+    ...options,
+    fetchedResources,
+    format: options?.format ?? defaultFormat,
+    stylesheets: [...(options?.stylesheets ?? []), ...stylesheets],
+  };
+
+  return renderer.render(node, renderOptions, options?.signal);
 }
 
 function createManagedRendererFactory(
@@ -259,45 +300,61 @@ export function createImageResponse(
 
   return function imageResponse(component: ReactNode, options?: ImageResponseOptions) {
     const mergedOptions = mergeOptions(defaultOptions, options);
+    let resolveReady: (() => void) | undefined;
+    let rejectReady: ((reason?: unknown) => void) | undefined;
+    const ready = new Promise<void>((resolve, reject) => {
+      resolveReady = resolve;
+      rejectReady = reject;
+    });
     const stream = new ReadableStream({
       type: "bytes",
       async start(controller) {
+        const finishSuccess = () => {
+          resolveReady?.();
+        };
+        const finishError = (error: unknown) => {
+          rejectReady?.(error);
+          controller.error(error);
+        };
+
         try {
           const imports = await getImports(
             mergedOptions !== undefined && "module" in mergedOptions
               ? mergedOptions.module
               : undefined,
           );
-          const nodePromise = fromJsx(component, mergedOptions?.jsx).then(
-            async ({ node, stylesheets }) => {
-              if (mergedOptions?.emoji && mergedOptions.emoji !== "from-font") {
-                node = extractEmojis(node, mergedOptions.emoji);
-              }
-
-              const fetchedResources = await extractFetchedResources(node, mergedOptions, imports);
-
-              return { node, fetchedResources, stylesheets };
-            },
-          );
-
-          const [renderer, { node, fetchedResources, stylesheets }] = await Promise.all([
-            getRenderer(mergedOptions, imports),
-            nodePromise,
-          ]);
-
-          const renderOptions = {
-            ...mergedOptions,
-            fetchedResources,
-            format: mergedOptions?.format ?? defaultFormat,
-            stylesheets: [...(mergedOptions?.stylesheets ?? []), ...stylesheets],
-          };
-
-          const image = await renderer.render(node, renderOptions, mergedOptions?.signal);
+          const image = await renderComponent(component, mergedOptions, imports, getRenderer);
 
           controller.enqueue(image as ArrayBufferView<ArrayBuffer>);
           controller.close();
+          finishSuccess();
         } catch (error) {
-          controller.error(error);
+          if (mergedOptions && "onError" in mergedOptions && mergedOptions.onError) {
+            try {
+              const fallbackComponent = await mergedOptions.onError(error);
+              const imports = await getImports(
+                mergedOptions !== undefined && "module" in mergedOptions
+                  ? mergedOptions.module
+                  : undefined,
+              );
+              const fallbackImage = await renderComponent(
+                fallbackComponent,
+                { ...mergedOptions, onError: undefined },
+                imports,
+                getRenderer,
+              );
+
+              controller.enqueue(fallbackImage as ArrayBufferView<ArrayBuffer>);
+              controller.close();
+              finishSuccess();
+              return;
+            } catch (fallbackError) {
+              finishError(fallbackError);
+              return;
+            }
+          }
+
+          finishError(error);
         }
       },
     });
@@ -307,23 +364,32 @@ export function createImageResponse(
       headers.set("content-type", getContentType(mergedOptions?.format));
     }
 
-    return new Response(stream, {
+    const response = new Response(stream, {
       headers,
       status: mergedOptions?.status,
       statusText: mergedOptions?.statusText,
     });
+
+    return Object.defineProperty(response, "ready", {
+      enumerable: false,
+      value: ready,
+      writable: false,
+    }) as ImageResponseResult;
   };
 }
 
 let defaultImageResponse: ImageResponseFactory | undefined;
 
 export class ImageResponse extends Response {
+  readonly ready: Promise<void>;
+
   constructor(component: ReactNode, options?: ImageResponseOptions) {
     defaultImageResponse ??= createImageResponse();
 
     const response = defaultImageResponse(component, options);
 
     super(response.body, response);
+    this.ready = response.ready;
   }
 }
 

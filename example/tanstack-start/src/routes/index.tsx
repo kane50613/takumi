@@ -6,7 +6,7 @@ import DocsTemplate from "../../../../takumi-template/src/templates/docs-templat
 export const Route = createFileRoute("/")({
   server: {
     handlers: {
-      async GET({ request }) {
+      GET({ request }) {
         const { host } = new URL(request.url);
 
         return new ImageResponse(
