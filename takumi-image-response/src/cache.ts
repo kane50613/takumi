@@ -28,6 +28,7 @@ export type ResourceCache = {
   loadedImageKeys: Set<string>;
   loadedImageObjects: WeakSet<object>;
   promiseDataCache: WeakMap<Promise<BinaryData>, Promise<BinaryData>>;
+  renderer?: napi.Renderer | wasm.Renderer;
   stringDataCache: Map<string, Promise<BinaryData>>;
 };
 
