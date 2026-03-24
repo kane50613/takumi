@@ -6,7 +6,7 @@ import DocsTemplate from "../../../../takumi-template/src/templates/docs-templat
 export const Route = createFileRoute("/")({
   server: {
     handlers: {
-      GET({ request }) {
+      async GET({ request }) {
         const { host } = new URL(request.url);
 
         return new ImageResponse(
@@ -22,6 +22,15 @@ export const Route = createFileRoute("/")({
             width: 1200,
             height: 630,
             format: "webp",
+            fonts: [
+              {
+                name: "Geist",
+                data: () =>
+                  fetch("https://takumi.kane.tw/fonts/Geist.woff2").then((res) =>
+                    res.arrayBuffer(),
+                  ),
+              },
+            ],
           },
         );
       },

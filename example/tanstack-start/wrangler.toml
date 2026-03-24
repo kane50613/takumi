@@ -1,0 +1,8 @@
+"$schema" = "node_modules/wrangler/config-schema.json"
+name = "takumi-tanstack-start-workers"
+compatibility_date = "2026-03-17"
+compatibility_flags = ["nodejs_compat"]
+main = "@tanstack/react-start/server-entry"
+
+[observability]
+enabled = true

@@ -3,7 +3,14 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import { defineConfig } from "vite";
 
 const config = defineConfig({
-  plugins: [tanstackStart(), cloudflare()],
+  plugins: [
+    tanstackStart(),
+    cloudflare({
+      viteEnvironment: {
+        name: "ssr",
+      },
+    }),
+  ],
   resolve: {
     tsconfigPaths: true,
   },

@@ -1,6 +1,6 @@
 # TanStack Start Example
 
-This is a simple example of how to use `@takumi-rs/image-response` in TanStack Start.
+This is a simple example of using `@takumi-rs/image-response` in TanStack Start with Cloudflare Vite plugin.
 
 Before running the example, you need to build the native binary.
 
