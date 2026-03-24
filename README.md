@@ -28,7 +28,7 @@ See current benchmark runs and templates on [Image Bench](https://image-bench.ka
 ## First render in 30 seconds
 
 ```bash
-npm i @takumi-rs/image-response
+npm i @takumi-rs/image-response@beta
 ```
 
 ```tsx
