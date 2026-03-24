@@ -1,5 +1,18 @@
 # @takumi-rs/image-response
 
+## 1.0.0-beta.14
+
+### Minor Changes
+
+- 7c16cb5: Add `createImageResponse` factory API
+- 9a451dd: Support passing function for `fonts` and `persistentImages` to avoid singleton pattern
+
+### Patch Changes
+
+- @takumi-rs/core@1.0.0-beta.14
+- @takumi-rs/wasm@1.0.0-beta.14
+- @takumi-rs/helpers@1.0.0-beta.14
+
 ## 1.0.0-beta.13
 
 ### Patch Changes
