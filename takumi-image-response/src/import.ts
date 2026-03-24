@@ -77,16 +77,20 @@ async function importBindings() {
 }
 
 function shouldWarnOnNativeImportFailure() {
+  if (typeof window !== "undefined") {
+    return false;
+  }
+
+  if (typeof navigator !== "undefined" && navigator.userAgent === "Cloudflare-Workers") {
+    return false;
+  }
+
   // Cloudflare Workers runtime provides this global.
   if ("WebSocketPair" in globalThis) {
     return false;
   }
 
   if ("EdgeRuntime" in globalThis) {
-    return false;
-  }
-
-  if (typeof window !== "undefined") {
     return false;
   }
 
