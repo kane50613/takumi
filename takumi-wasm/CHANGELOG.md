@@ -1,5 +1,15 @@
 # @takumi-rs/wasm
 
+## 1.0.0-beta.19
+
+### Minor Changes
+
+- 79c0c5a: Embed full-axis Manrope as the default font
+
+### Patch Changes
+
+- @takumi-rs/helpers@1.0.0-beta.19
+
 ## 1.0.0-beta.18
 
 ### Patch Changes
