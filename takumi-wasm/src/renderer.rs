@@ -15,7 +15,7 @@ use takumi::{
     node::Node,
     style::{KeyframesRule, StyleSheet},
   },
-  parley::{FontWeight, fontique::FontInfoOverride},
+  parley::{FontWeight, GenericFamily, fontique::FontInfoOverride},
   rendering::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
     SequentialScene, encode_animated_gif, encode_animated_png, encode_animated_webp,
@@ -25,6 +25,19 @@ use takumi::{
 };
 use wasm_bindgen::prelude::*;
 use xxhash_rust::xxh3::{Xxh3DefaultBuilder, xxh3_64};
+
+const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[
+  (
+    include_bytes!("../../assets/fonts/geist/Geist[wght].woff2"),
+    "Geist",
+    GenericFamily::SansSerif,
+  ),
+  (
+    include_bytes!("../../assets/fonts/geist/GeistMono[wght].woff2"),
+    "Geist Mono",
+    GenericFamily::Monospace,
+  ),
+];
 
 /// The main renderer for Takumi image rendering engine.
 #[wasm_bindgen]
@@ -107,6 +120,29 @@ impl Renderer {
     Ok(buffer)
   }
 
+  fn load_default_fonts(&mut self) -> Result<(), js_sys::Error> {
+    for (font, family_name, generic_family) in EMBEDDED_FONTS {
+      self
+        .context
+        .font_context_mut()
+        .load_and_store(
+          FontResource::new((*font).to_vec())
+            .override_info(FontInfoOverride {
+              family_name: Some(*family_name),
+              ..Default::default()
+            })
+            .generic_family(*generic_family)
+            .into_resolved()
+            .map_err(|error| {
+              js_sys::Error::new(&format!("Failed to load default font: {error}"))
+            })?,
+        )
+        .map_err(map_error)?;
+    }
+
+    Ok(())
+  }
+
   /// Creates a new Renderer instance.
   #[wasm_bindgen(constructor)]
   pub fn new(options: Option<ConstructRendererOptionsType>) -> Result<Renderer, js_sys::Error> {
@@ -116,6 +152,14 @@ impl Renderer {
       .unwrap_or_default();
 
     let mut renderer = Self::default();
+
+    let load_default_fonts = options
+      .load_default_fonts
+      .unwrap_or_else(|| options.fonts.is_none());
+
+    if load_default_fonts {
+      renderer.load_default_fonts()?;
+    }
 
     if let Some(fonts) = options.fonts {
       for font in fonts {

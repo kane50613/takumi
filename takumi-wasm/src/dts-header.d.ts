@@ -142,6 +142,11 @@ export type ConstructRendererOptions = {
    * The fonts being used.
    */
   fonts?: Font[];
+  /**
+   * Whether to load the default fonts.
+   * If `fonts` are provided, this will be `false` by default.
+   */
+  loadDefaultFonts?: boolean;
 };
 
 export type MeasuredTextRun = {

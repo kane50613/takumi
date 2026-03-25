@@ -6,12 +6,15 @@ import { Glob } from "bun";
 import { Renderer } from "../bundlers/node";
 
 const fontsGlob = new Glob("**/*.{woff2,ttf}");
+const assetsRoot = join(import.meta.dir, "../../assets");
+const fontsRoot = join(assetsRoot, "fonts");
+const imagesRoot = join(assetsRoot, "images");
 
 async function getFonts() {
   const fonts: Buffer[] = [];
 
-  for await (const file of fontsGlob.scan("../assets/fonts")) {
-    fonts.push(await readFile(join("../assets/fonts", file)));
+  for await (const file of fontsGlob.scan(fontsRoot)) {
+    fonts.push(await readFile(join(fontsRoot, file)));
   }
 
   return fonts;
@@ -19,8 +22,10 @@ async function getFonts() {
 
 const fonts = await getFonts();
 const renderer = new Renderer();
+const rendererWithoutDefaultFonts = new Renderer({ loadDefaultFonts: false });
 
-const localImagePath = "../assets/images/yeecord.png";
+const localImagePath = join(imagesRoot, "yeecord.png");
+const geistFont = await readFile(join(fontsRoot, "geist/Geist[wght].woff2"));
 
 const localImage = await readFile(localImagePath);
 const dataUri = `data:image/png;base64,${Buffer.from(localImage).toString("base64")}`;
@@ -51,6 +56,15 @@ const node = container({
 describe("setup", () => {
   test(`loadFonts (${fonts.length})`, () => {
     for (const font of fonts) renderer.loadFont(font);
+  });
+
+  test("loadFont without default fonts", () => {
+    rendererWithoutDefaultFonts.loadFont({
+      name: "Geist",
+      data: geistFont,
+      weight: 400,
+      style: "normal",
+    });
   });
 
   test("putPersistentImage", () => {
@@ -152,6 +166,25 @@ describe("render", () => {
 
   test("with no options provided", () => {
     const result = renderer.render(node);
+
+    expect(result).toBeInstanceOf(Uint8Array);
+  });
+
+  test("with default fonts disabled", () => {
+    const result = rendererWithoutDefaultFonts.render(
+      text({
+        text: "Geist",
+        style: {
+          fontFamily: "Geist",
+          fontSize: "2rem",
+        },
+      }),
+      {
+        width: 400,
+        height: 120,
+        format: "png",
+      },
+    );
 
     expect(result).toBeInstanceOf(Uint8Array);
   });
