@@ -1,5 +1,12 @@
 # @takumi-rs/wasm
 
+## 1.0.0-beta.17
+
+### Patch Changes
+
+- da2d85f: Support unwasm for `/auto` export
+  - @takumi-rs/helpers@1.0.0-beta.17
+
 ## 1.0.0-beta.16
 
 ### Patch Changes
