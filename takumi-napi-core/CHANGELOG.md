@@ -1,5 +1,12 @@
 # @takumi-rs/core
 
+## 1.0.0-beta.18
+
+### Patch Changes
+
+- 0e14dd5: Mark `turbopackOptional: true` to silent errors
+  - @takumi-rs/helpers@1.0.0-beta.18
+
 ## 1.0.0-beta.17
 
 ### Patch Changes
