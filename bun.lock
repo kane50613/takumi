@@ -155,7 +155,6 @@
     },
     "example/svelte": {
       "name": "svelte",
-      "version": "0.0.1",
       "dependencies": {
         "@takumi-rs/image-response": "workspace:*",
       },
@@ -208,7 +207,6 @@
     },
     "example/waku-ssr": {
       "name": "waku-ssr",
-      "version": "0.0.0",
       "dependencies": {
         "@takumi-rs/image-response": "workspace:*",
         "hono": "^4.12.5",
@@ -228,11 +226,11 @@
     },
     "takumi": {
       "name": "takumi",
-      "version": "1.0.0-beta.14",
+      "version": "1.0.0-beta.16",
     },
     "takumi-helpers": {
       "name": "@takumi-rs/helpers",
-      "version": "1.0.0-beta.14",
+      "version": "1.0.0-beta.16",
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/react": "catalog:",
@@ -246,7 +244,7 @@
     },
     "takumi-image-response": {
       "name": "@takumi-rs/image-response",
-      "version": "1.0.0-beta.14",
+      "version": "1.0.0-beta.16",
       "dependencies": {
         "@takumi-rs/core": "workspace:*",
         "@takumi-rs/helpers": "workspace:*",
@@ -265,7 +263,7 @@
     },
     "takumi-napi-core": {
       "name": "@takumi-rs/core",
-      "version": "1.0.0-beta.14",
+      "version": "1.0.0-beta.16",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
       },
@@ -296,7 +294,7 @@
     },
     "takumi-wasm": {
       "name": "@takumi-rs/wasm",
-      "version": "1.0.0-beta.14",
+      "version": "1.0.0-beta.16",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
       },
