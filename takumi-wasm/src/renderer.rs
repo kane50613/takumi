@@ -26,18 +26,11 @@ use takumi::{
 use wasm_bindgen::prelude::*;
 use xxhash_rust::xxh3::{Xxh3DefaultBuilder, xxh3_64};
 
-const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[
-  (
-    include_bytes!("../../assets/fonts/geist/Geist[wght].woff2"),
-    "Geist",
-    GenericFamily::SansSerif,
-  ),
-  (
-    include_bytes!("../../assets/fonts/geist/GeistMono[wght].woff2"),
-    "Geist Mono",
-    GenericFamily::Monospace,
-  ),
-];
+const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[(
+  include_bytes!("../../assets/fonts/geist/Geist[wght].woff2"),
+  "Geist",
+  GenericFamily::SansSerif,
+)];
 
 /// The main renderer for Takumi image rendering engine.
 #[wasm_bindgen]
