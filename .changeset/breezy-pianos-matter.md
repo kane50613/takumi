@@ -2,4 +2,4 @@
 "@takumi-rs/wasm": minor
 ---
 
-Embed full axis Manrope as the default font
+Embed full-axis Manrope as the default font

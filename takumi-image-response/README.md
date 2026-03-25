@@ -49,7 +49,7 @@ export function GET() {
 
 ### Fonts
 
-Takumi comes with full axis [Geist](https://vercel.com/font) and Geist Mono by default.
+Takumi comes with full-axis [Geist](https://vercel.com/font) and Geist Mono by default.
 
 We have a global fonts cache to avoid loading the same fonts multiple times.
 

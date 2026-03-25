@@ -1,20 +1,19 @@
 export default function Welcome() {
   return (
     <div
-      tw="flex w-full h-full justify-center bg-black bg-size-[100px_100px] items-center"
+      tw="flex w-full h-full flex-col justify-center bg-[#0a0a0a] items-center"
       style={{
-        backgroundImage:
-          "radial-gradient(circle at 25px 25px, lightgray 2%, transparent 0%), radial-gradient(circle at 75px 75px, lightgray 2%, transparent 0%)",
+        backgroundImage: "radial-gradient(circle at 50% 10%, #2a0a0a 0%, #0a0a0a 60%)",
       }}
     >
       <div tw="justify-center items-center flex flex-col text-white">
-        <h1 tw="font-semibold text-6xl block whitespace-pre mt-0">
-          Welcome to <span tw="text-[#ff3535]">Takumi </span>
-          Playground 👋
+        <img src="https://takumi.kane.tw/logo.svg" tw="w-30 h-30 mb-8" />
+        <h1 tw="font-extrabold text-8xl leading-none tracking-tighter mb-0 mt-0 flex items-center">
+          Takumi <span tw="text-neutral-500 font-medium ml-6">Playground</span>
         </h1>
-        <span tw="opacity-75 text-4xl font-[Geist_Mono]">
-          You can try out and experiment with Takumi here.
-        </span>
+        <p tw="text-4xl text-white/75 font-semibold tracking-wide mt-10">
+          Turn JSX into production-ready images fast. 🚀🗣️
+        </p>
       </div>
     </div>
   );
