@@ -22,14 +22,9 @@ const exportsSchema = z.object({
 let renderer: Renderer | undefined;
 
 (async () => {
-  const [_, manropeFont] = await Promise.all([
-    initWasm({ module_or_path: wasmUrl }),
-    fetch("/fonts/Manrope.woff2").then((r) => r.arrayBuffer()),
-  ]);
+  await initWasm({ module_or_path: wasmUrl });
 
-  renderer = new Renderer({
-    fonts: [{ data: manropeFont, name: "Manrope" }],
-  });
+  renderer = new Renderer();
 
   postMessage({ type: "ready" });
 })();
