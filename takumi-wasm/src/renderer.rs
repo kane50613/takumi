@@ -27,8 +27,8 @@ use wasm_bindgen::prelude::*;
 use xxhash_rust::xxh3::{Xxh3DefaultBuilder, xxh3_64};
 
 const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[(
-  include_bytes!("../../assets/fonts/geist/Geist[wght].woff2"),
-  "Geist",
+  include_bytes!("../../assets/fonts/manrope/manrope-latin-wght-normal.woff2"),
+  "Manrope",
   GenericFamily::SansSerif,
 )];
 

@@ -25,7 +25,7 @@ const renderer = new Renderer();
 const rendererWithoutDefaultFonts = new Renderer({ loadDefaultFonts: false });
 
 const localImagePath = join(imagesRoot, "yeecord.png");
-const geistFont = await readFile(join(fontsRoot, "geist/Geist[wght].woff2"));
+const manropeFont = await readFile(join(fontsRoot, "manrope/manrope-latin-wght-normal.woff2"));
 
 const localImage = await readFile(localImagePath);
 const dataUri = `data:image/png;base64,${Buffer.from(localImage).toString("base64")}`;
@@ -60,8 +60,8 @@ describe("setup", () => {
 
   test("loadFont without default fonts", () => {
     rendererWithoutDefaultFonts.loadFont({
-      name: "Geist",
-      data: geistFont,
+      name: "Manrope",
+      data: manropeFont,
       weight: 400,
       style: "normal",
     });
@@ -173,9 +173,9 @@ describe("render", () => {
   test("with default fonts disabled", () => {
     const result = rendererWithoutDefaultFonts.render(
       text({
-        text: "Geist",
+        text: "Manrope",
         style: {
-          fontFamily: "Geist",
+          fontFamily: "Manrope",
           fontSize: "2rem",
         },
       }),

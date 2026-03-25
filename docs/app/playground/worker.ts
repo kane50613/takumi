@@ -22,17 +22,13 @@ const exportsSchema = z.object({
 let renderer: Renderer | undefined;
 
 (async () => {
-  const [_, normalFont, monoFont] = await Promise.all([
+  const [_, manropeFont] = await Promise.all([
     initWasm({ module_or_path: wasmUrl }),
-    fetch("/fonts/Geist.woff2").then((r) => r.arrayBuffer()),
-    fetch("/fonts/GeistMono.woff2").then((r) => r.arrayBuffer()),
+    fetch("/fonts/Manrope.woff2").then((r) => r.arrayBuffer()),
   ]);
 
   renderer = new Renderer({
-    fonts: [
-      { data: normalFont, name: "Geist" },
-      { data: monoFont, name: "Geist Mono" },
-    ],
+    fonts: [{ data: manropeFont, name: "Manrope" }],
   });
 
   postMessage({ type: "ready" });
