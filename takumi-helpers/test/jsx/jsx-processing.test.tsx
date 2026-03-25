@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { User2 } from "lucide-react";
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { container } from "../../src/helpers";
 import { fromJsx } from "../../src/jsx/jsx";
@@ -185,6 +185,42 @@ describe("fromJsx", () => {
       text: "Hello World",
       preset: defaultStylePresets.div,
       tagName: "div",
+    } satisfies TextNode);
+  });
+
+  test("resolves useContext when react is installed", async () => {
+    const GreetingContext = createContext("Fallback");
+
+    const Message = () => <div>Hello {useContext(GreetingContext)}</div>;
+
+    const { node } = await fromJsx(
+      <GreetingContext.Provider value="Context">
+        <Message />
+      </GreetingContext.Provider>,
+    );
+
+    expect(node).toEqual({
+      type: "text",
+      text: "Hello Context",
+      preset: defaultStylePresets.div,
+      tagName: "div",
+    } satisfies TextNode);
+  });
+
+  test("handles context consumer render props", async () => {
+    const GreetingContext = createContext("Fallback");
+
+    const { node } = await fromJsx(
+      <GreetingContext.Provider value="Context">
+        <GreetingContext.Consumer>{(value) => <span>{value}</span>}</GreetingContext.Consumer>
+      </GreetingContext.Provider>,
+    );
+
+    expect(node).toEqual({
+      type: "text",
+      text: "Context",
+      preset: defaultStylePresets.span,
+      tagName: "span",
     } satisfies TextNode);
   });
 

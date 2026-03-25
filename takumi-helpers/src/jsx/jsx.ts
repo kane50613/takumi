@@ -1,6 +1,14 @@
 import type { ComponentProps, CSSProperties, ReactElement, ReactNode } from "react";
 import { container, image, percentage, text } from "../helpers";
 import type { Node, NodeMetadata } from "../types";
+import {
+  createContextDispatcher,
+  getReactRuntime,
+  isReactContextConsumer,
+  isReactContextProvider,
+  type ReactRuntime,
+  withContextValue,
+} from "./react";
 import { defaultStylePresets } from "./style-presets";
 import { serializeSvg } from "./svg";
 import {
@@ -42,6 +50,8 @@ export interface FromJsxOptions {
 interface ResolvedFromJsxOptions {
   presets?: typeof defaultStylePresets;
   tailwindClassesProperty: string;
+  reactRuntime: Promise<ReactRuntime | null> | null;
+  contextValues: ReadonlyMap<object, unknown>;
 }
 
 export interface FromJsxResult {
@@ -68,6 +78,8 @@ export async function fromJsx(
   const result = await fromJsxInternal(element, {
     presets: getPresets(options),
     tailwindClassesProperty: options?.tailwindClassesProperty ?? "tw",
+    reactRuntime: null,
+    contextValues: new Map(),
   });
   const nodes = result.nodes;
 
@@ -173,6 +185,30 @@ function getPresets(options?: FromJsxOptions): typeof defaultStylePresets | unde
   return options?.defaultStyles ?? defaultStylePresets;
 }
 
+async function renderFunctionComponent(
+  component: (props: unknown) => ReactNode,
+  props: unknown,
+  options: ResolvedFromJsxOptions,
+): Promise<FromJsxTraversalResult> {
+  const reactRuntime = await getReactRuntime(options.reactRuntime);
+
+  if (!reactRuntime) {
+    return fromJsxInternal(component(props), options);
+  }
+
+  const previousDispatcher = reactRuntime.internals.H;
+  reactRuntime.internals.H = createContextDispatcher(options.contextValues);
+
+  try {
+    return fromJsxInternal(component(props), {
+      ...options,
+      reactRuntime: Promise.resolve(reactRuntime),
+    });
+  } finally {
+    reactRuntime.internals.H = previousDispatcher;
+  }
+}
+
 function tryHandleComponentWrapper(
   element: ReactElementLike,
   options: ResolvedFromJsxOptions,
@@ -183,7 +219,11 @@ function tryHandleComponentWrapper(
     const forwardRefType = element.type as {
       render: (props: unknown, ref: unknown) => ReactNode;
     };
-    return fromJsxInternal(forwardRefType.render(element.props, null), options);
+    return renderFunctionComponent(
+      (props) => forwardRefType.render(props, null),
+      element.props,
+      options,
+    );
   }
 
   if (isReactMemo(element.type) && "type" in element.type) {
@@ -191,7 +231,7 @@ function tryHandleComponentWrapper(
     const innerType = memoType.type;
 
     if (isFunctionComponent(innerType)) {
-      return fromJsxInternal(innerType(element.props), options);
+      return renderFunctionComponent(innerType, element.props, options);
     }
 
     const cloned: ReactElementLike = {
@@ -301,7 +341,7 @@ async function processReactElement(
   options: ResolvedFromJsxOptions,
 ): Promise<FromJsxTraversalResult> {
   if (isFunctionComponent(element.type)) {
-    return fromJsxInternal(element.type(element.props), options);
+    return renderFunctionComponent(element.type, element.props, options);
   }
 
   const wrapperResult = tryHandleComponentWrapper(element, options);
@@ -310,6 +350,31 @@ async function processReactElement(
   // Handle React fragments <></>
   if (isReactFragment(element)) {
     return collectChildren(element, options);
+  }
+
+  if (isReactContextProvider(element)) {
+    const context = element.type as object;
+    const value =
+      typeof element.props === "object" && element.props !== null && "value" in element.props
+        ? element.props.value
+        : undefined;
+
+    return collectChildren(element, {
+      ...options,
+      contextValues: withContextValue(options.contextValues, context, value),
+    });
+  }
+
+  if (isReactContextConsumer(element)) {
+    const children = getElementChildren(element);
+    if (!isFunctionComponent(children)) {
+      return { nodes: [], stylesheets: [] };
+    }
+
+    const context = element.type._context as object & { _currentValue?: unknown };
+    const value = options.contextValues.get(context) ?? context._currentValue;
+
+    return fromJsxInternal(children(value), options);
   }
 
   if (isHtmlElement(element, "style")) {
