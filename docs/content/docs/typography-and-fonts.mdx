@@ -8,6 +8,8 @@ Takumi does not use system fonts. All fonts must be explicitly loaded to be avai
 
 For `@takumi-rs/core` (napi-rs version), full axis (which means 100-900 weights available) [Geist](https://vercel.com/font) and Geist Mono are embedded by default.
 
+In order to keep `@takumi-rs/wasm` small, only full axis Geist is included, and you need to provide your own mono font if you want to use it.
+
 ## Font
 
 ```tsx twoslash
