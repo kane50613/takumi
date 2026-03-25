@@ -6,7 +6,11 @@ icon: Type
 
 Takumi does not use system fonts. All fonts must be explicitly loaded to be available for rendering.
 
-For `@takumi-rs/core` (napi-rs version), full axis (which means 100-900 weights available) [Geist](https://vercel.com/font) and Geist Mono are embedded by default.
+For `@takumi-rs/core` (napi-rs version), full axis Geist and Geist Mono are embedded by default.
+
+For `@takumi-rs/wasm`, a single variable Latin font, Manrope, is embedded by default.
+
+If you need a monospace family in WASM, provide your own font.
 
 ## Font
 
@@ -41,7 +45,7 @@ For variable fonts, `font-weight` has the same effect as `font-variation-setting
 ```tsx
 <div
   style={{
-    fontFamily: "Geist",
+    fontFamily: "Manrope",
     fontVariationSettings: "'wght' 700, 'wdth' 150",
     fontFeatureSettings: "ss01",
   }}

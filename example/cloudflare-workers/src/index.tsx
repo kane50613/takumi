@@ -1,6 +1,5 @@
 import { fetchResources } from "@takumi-rs/helpers";
 import { ImageResponse } from "@takumi-rs/image-response";
-import archivo from "../../../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf";
 import DocsTemplate from "../../../takumi-template/src/templates/docs-template";
 
 const fetchCache = new Map();
@@ -35,7 +34,6 @@ export default {
         width: 1200,
         height: 630,
         format: "png",
-        fonts: [archivo],
       },
     );
   },

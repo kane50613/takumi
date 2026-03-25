@@ -166,6 +166,9 @@ pub struct ConstructRendererOptions {
   pub persistent_images: Option<Vec<ImageSource>>,
   /// The fonts being used.
   pub fonts: Option<Vec<Font>>,
+  /// Whether to load the default fonts.
+  /// If `fonts` are provided, this will be `false` by default.
+  pub load_default_fonts: Option<bool>,
 }
 
 /// An image source with its URL and raw data.
