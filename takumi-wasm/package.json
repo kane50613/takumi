@@ -44,6 +44,7 @@
     "./auto": {
       "types": "./pkg/takumi_wasm.d.ts",
       "workerd": "./bundlers/workerd.js",
+      "unwasm": "./bundlers/next.mjs",
       "module": "./bundlers/vite.mjs",
       "node": "./bundlers/node.mjs",
       "default": "./bundlers/vite.mjs"
