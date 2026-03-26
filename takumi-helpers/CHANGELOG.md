@@ -1,5 +1,11 @@
 # @takumi-rs/helpers
 
+## 1.0.0-beta.20
+
+### Minor Changes
+
+- 01c4fa3: Resolves `useContext` hook (support `lucide-react` v1)
+
 ## 1.0.0-beta.19
 
 ## 1.0.0-beta.18
