@@ -16,10 +16,6 @@
     "@react-router/node": "^7.13.2",
     "@react-router/serve": "^7.13.2",
     "@shikijs/monaco": "^4.0.2",
-    "@takumi-rs/core": "workspace:*",
-    "@takumi-rs/helpers": "workspace:*",
-    "@takumi-rs/image-response": "workspace:*",
-    "@takumi-rs/wasm": "workspace:*",
     "@vercel/analytics": "^2.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -40,6 +36,7 @@
     "shiki": "^4.0.2",
     "sucrase": "^3.35.1",
     "tailwind-merge": "^3.5.0",
+    "takumi-js": "workspace:*",
     "twoslash": "^0.3.6",
     "zod": "^4.3.6"
   },

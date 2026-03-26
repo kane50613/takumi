@@ -1,5 +1,5 @@
-import { fetchResources } from "@takumi-rs/helpers";
-import { ImageResponse } from "@takumi-rs/image-response";
+import { fetchResources } from "takumi-js/helpers";
+import { ImageResponse } from "takumi-js/response";
 import DocsTemplate from "../../../takumi-template/src/templates/docs-template";
 
 const fetchCache = new Map();

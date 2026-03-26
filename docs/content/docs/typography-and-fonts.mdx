@@ -6,9 +6,9 @@ icon: Type
 
 Takumi does not use system fonts. All fonts must be explicitly loaded to be available for rendering.
 
-For `@takumi-rs/core` (napi-rs version), full axis Geist and Geist Mono are embedded by default.
+For `takumi-js/node` (napi-rs version), full axis Geist and Geist Mono are embedded by default.
 
-For `@takumi-rs/wasm`, a single variable Latin font, Manrope, is embedded by default.
+For `takumi-js/wasm`, a single variable Latin font, Manrope, is embedded by default.
 
 If you need a monospace family in WASM, provide your own font.
 
@@ -17,8 +17,8 @@ If you need a monospace family in WASM, provide your own font.
 ```tsx twoslash
 /** @jsxImportSource react */
 // ---cut-before---
-import { ImageResponse } from "@takumi-rs/image-response";
-import type { Font } from "@takumi-rs/core";
+import { ImageResponse } from "takumi-js/response";
+import type { Font } from "takumi-js/node";
 
 const interBuffer = await fetch("/path-to-inter.woff2").then((res) => res.arrayBuffer());
 
@@ -63,7 +63,7 @@ If you are using `ImageResponse` API, theres a satori compatible `emoji` option.
 ```tsx twoslash
 /** @jsxImportSource react */
 // ---cut-before---
-import { ImageResponse } from "@takumi-rs/image-response";
+import { ImageResponse } from "takumi-js/response";
 
 export function GET() {
   return new ImageResponse(<div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>, {
@@ -77,10 +77,10 @@ Under the hood it calls `extractEmojis` helper function, which separates the emo
 ```tsx twoslash
 /** @jsxImportSource react */
 // ---cut-before---
-import { extractEmojis } from "@takumi-rs/helpers/emoji";
-import { fromJsx } from "@takumi-rs/helpers/jsx";
-import { fetchResources } from "@takumi-rs/helpers";
-import { Renderer, extractResourceUrls } from "@takumi-rs/core";
+import { extractEmojis } from "takumi-js/helpers/emoji";
+import { fromJsx } from "takumi-js/helpers/jsx";
+import { fetchResources } from "takumi-js/helpers";
+import { Renderer, extractResourceUrls } from "takumi-js/node";
 
 let { node } = await fromJsx(<div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>);
 node = extractEmojis(node, "twemoji");

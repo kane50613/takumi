@@ -6,7 +6,7 @@ import * as MdxConfig from "./source.config";
 
 export default defineConfig({
   ssr: {
-    external: ["typescript", "twoslash", "shiki", "@takumi-rs/core"],
+    external: ["typescript", "twoslash", "shiki"],
   },
   plugins: [mdx(MdxConfig), tailwindcss(), reactRouter()],
   resolve: {

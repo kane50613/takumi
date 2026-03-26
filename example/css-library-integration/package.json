@@ -7,11 +7,10 @@
     "render": "bun ./src/index.tsx"
   },
   "dependencies": {
-    "@takumi-rs/core": "workspace:*",
-    "@takumi-rs/helpers": "workspace:*",
     "lucide-react": "catalog:",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "takumi-js": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "catalog:",

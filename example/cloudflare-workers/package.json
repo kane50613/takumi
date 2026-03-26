@@ -9,10 +9,8 @@
     "build": "wrangler build"
   },
   "dependencies": {
-    "@takumi-rs/helpers": "workspace:*",
-    "@takumi-rs/image-response": "workspace:*",
-    "@takumi-rs/wasm": "workspace:*",
-    "react": "catalog:"
+    "react": "catalog:",
+    "takumi-js": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "catalog:",

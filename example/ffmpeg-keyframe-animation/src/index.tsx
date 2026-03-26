@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { Renderer } from "@takumi-rs/core";
-import { fromJsx } from "@takumi-rs/helpers/jsx";
+import { Renderer } from "takumi-js/node";
+import { fromJsx } from "takumi-js/helpers/jsx";
 import { spawn } from "bun";
 import { getHighlighterTokens, keyframes, Scene } from "./Scene";
 

@@ -7,10 +7,9 @@
     "start": "bun src/index.tsx"
   },
   "dependencies": {
-    "@takumi-rs/core": "workspace:*",
-    "@takumi-rs/helpers": "workspace:*",
     "react": "catalog:",
-    "shiki": "^4.0.2"
+    "shiki": "^4.0.2",
+    "takumi-js": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "catalog:",

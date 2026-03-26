@@ -17,7 +17,7 @@ The `width` and `height` parameters are optional, which means Takumi can calcula
 ```tsx twoslash
 /** @jsxImportSource react */
 // ---cut-before---
-import { ImageResponse } from "@takumi-rs/image-response";
+import { ImageResponse } from "takumi-js/response";
 
 export function GET() {
   return new ImageResponse(<List />, {
@@ -45,7 +45,7 @@ By default, the image would be measured based on its intrinsic size, you can ove
 ```tsx twoslash
 /** @jsxImportSource react */
 // ---cut-before---
-import { ImageResponse } from "@takumi-rs/image-response";
+import { ImageResponse } from "takumi-js/response";
 
 export function GET() {
   return new ImageResponse(

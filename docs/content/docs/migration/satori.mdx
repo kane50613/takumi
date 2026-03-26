@@ -15,11 +15,11 @@ If you are migrating from `next/og`, check out the [From Next.js ImageResponse](
 ## Installation
 
 ```npm
-npm i @takumi-rs/core @takumi-rs/helpers
+npm i takumi-js/node takumi-js/helpers
 ```
 
 <Callout>
-  Make sure to mark `@takumi-rs/core` as `external` if you are using a bundler like Vite or Webpack
+  Make sure to mark `takumi-js/node` as `external` if you are using a bundler like Vite or Webpack
 </Callout>
 
 ## Code changes
@@ -29,9 +29,9 @@ npm i @takumi-rs/core @takumi-rs/helpers
 // ---cut-before---
 // @noErrors
 import satori from "satori"; // [!code --]
-import { Resvg } from "@resvg/resvg-js"; // [!code --]
-import { fromJsx } from "@takumi-rs/helpers/jsx"; // [!code ++]
-import { Renderer } from "@takumi-rs/core"; // [!code ++]
+import { Resvg } from "@resvg/resvgtakumitakumi-js"; // [!code --]
+import { fromJsx } from "takumi-js/helpers/jsx"; // [!code ++]
+import { Renderer } from "takumi-js/node"; // [!code ++]
 
 // You can use variable fonts with Takumi!
 // Takumi comes with Geist and Geist Mono by default,

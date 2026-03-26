@@ -3,6 +3,7 @@
   "private": true,
   "workspaces": [
     "takumi",
+    "takumi-js",
     "takumi-helpers",
     "takumi-napi-core",
     "takumi-wasm",
@@ -20,10 +21,10 @@
   },
   "devDependencies": {
     "@changesets/cli": "^2.30.0",
-    "@takumi-rs/core": "workspace:*",
     "lefthook": "^2.1.4",
     "oxfmt": "^0.42.0",
     "oxlint": "^1.57.0",
+    "takumi-js": "workspace:*",
     "typescript": "catalog:"
   },
   "catalog": {

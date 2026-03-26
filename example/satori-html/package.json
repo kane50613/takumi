@@ -4,9 +4,8 @@
   "type": "module",
   "module": "index.ts",
   "dependencies": {
-    "@takumi-rs/core": "workspace:*",
-    "@takumi-rs/helpers": "workspace:*",
-    "satori-html": "^0.3.2"
+    "satori-html": "^0.3.2",
+    "takumi-js": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "catalog:",

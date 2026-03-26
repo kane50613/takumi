@@ -1,4 +1,4 @@
-import ImageResponse from "@takumi-rs/image-response";
+import ImageResponse from "takumi-js/response";
 import { createFileRoute } from "@tanstack/react-router";
 import { Axe } from "lucide-react";
 import DocsTemplate from "../../../../takumi-template/src/templates/docs-template";

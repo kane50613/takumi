@@ -28,8 +28,8 @@ This is the API that accepts the `keyframes` option.
 /** @jsxImportSource react */
 // ---cut-before---
 // @noErrors
-import { Renderer } from "@takumi-rs/core";
-import { fromJsx } from "@takumi-rs/helpers/jsx";
+import { Renderer } from "takumi-js/node";
+import { fromJsx } from "takumi-js/helpers/jsx";
 
 const renderer = new Renderer();
 
@@ -64,8 +64,8 @@ Use stylesheet `@keyframes` when you want the animation to travel with the JSX t
 /** @jsxImportSource react */
 // ---cut-before---
 // @noErrors
-import { Renderer } from "@takumi-rs/core";
-import { fromJsx } from "@takumi-rs/helpers/jsx";
+import { Renderer } from "takumi-js/node";
+import { fromJsx } from "takumi-js/helpers/jsx";
 
 const renderer = new Renderer();
 
@@ -133,7 +133,7 @@ The next two examples share this file.
 /** @jsxImportSource react */
 // ---cut-before---
 // @noErrors
-import type { Keyframes } from "@takumi-rs/core";
+import type { Keyframes } from "takumi-js/node";
 
 export const keyframes: Keyframes = {
   move: {
@@ -163,8 +163,8 @@ Use `render()` when you want a single frame at a specific animation time.
 /** @jsxImportSource react */
 // ---cut-before---
 // @noErrors
-import { Renderer } from "@takumi-rs/core";
-import { fromJsx } from "@takumi-rs/helpers/jsx";
+import { Renderer } from "takumi-js/node";
+import { fromJsx } from "takumi-js/helpers/jsx";
 import { Scene, keyframes } from "./scene";
 
 const renderer = new Renderer();
@@ -188,8 +188,8 @@ This is the minimal API for animated image output. In most cases, you should kee
 /** @jsxImportSource react */
 // ---cut-before---
 // @noErrors
-import { Renderer } from "@takumi-rs/core";
-import { fromJsx } from "@takumi-rs/helpers/jsx";
+import { Renderer } from "takumi-js/node";
+import { fromJsx } from "takumi-js/helpers/jsx";
 
 const renderer = new Renderer();
 
@@ -239,8 +239,8 @@ The core idea is:
 /** @jsxImportSource react */
 // ---cut-before---
 // @noErrors
-import { Renderer } from "@takumi-rs/core";
-import { fromJsx } from "@takumi-rs/helpers/jsx";
+import { Renderer } from "takumi-js/node";
+import { fromJsx } from "takumi-js/helpers/jsx";
 import { spawn } from "bun";
 import { Scene, keyframes } from "./scene";
 

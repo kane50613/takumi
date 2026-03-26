@@ -10,7 +10,7 @@ This means we've locked down the public API and are committed to maintaining bac
 ## Install
 
 ```npm
-npm i @takumi-rs/image-response@1
+npm i takumi-js@1
 ```
 
 ## What changed?
@@ -37,12 +37,12 @@ Verify your templates and explicitly add `display: flex` (or the `flex` Tailwind
 
 ### Unified Runtime Dectection & Fallback
 
-For better DX, `@takumi-rs/image-response` now automatically detects the best bindings for your environment Node.js, Workers, etc.
+For better DX, `takumi-js` now automatically detects the best bindings for your environment Node.js, Workers, etc.
 That means you no longer need to worry about importing NAPI or WASM bindings.
 
 ### `emoji` Option for Dynamic Emojis Loading
 
-To improve the compability with Next.js's `ImageResponse` API, `@takumi-rs/image-response` now supports an `emoji` option that allows you to specify a custom emoji provider.
+To improve the compability with Next.js's `ImageResponse` API, `takumi-js` now supports an `emoji` option that allows you to specify a custom emoji provider.
 
 By default it's set to `from-font`, which expects you to load an emoji font (e.g. `Noto Color Emoji`).
 
@@ -58,7 +58,7 @@ export function GET() {
 
 ### Lowercase Image Formats
 
-To be more consistent with the CSS ecosystem and web standards, all image format options in `@takumi-rs/core` and `@takumi-rs/image-response` now use lowercase strings only.
+To be more consistent with the CSS ecosystem and web standards, all image format options in `takumi-js/node` and `takumi-js` now use lowercase strings only.
 
 ```ts
 const image = await renderer.render(node, {

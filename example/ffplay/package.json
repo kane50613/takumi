@@ -7,8 +7,7 @@
     "start": "bun src/index.ts"
   },
   "dependencies": {
-    "@takumi-rs/core": "workspace:*",
-    "@takumi-rs/helpers": "workspace:*"
+    "takumi-js": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "catalog:"

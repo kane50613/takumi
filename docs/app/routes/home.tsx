@@ -13,7 +13,7 @@ import { Hero } from "~/components/home/hero";
 import { Showcase } from "~/components/home/showcase";
 import { baseOptions } from "~/layout-config";
 
-const CODE_SNIPPET = `import { ImageResponse } from "@takumi-rs/image-response";
+const CODE_SNIPPET = `import { ImageResponse } from "takumi-js/response";
 
 export async function GET() {
   return new ImageResponse(
@@ -35,7 +35,7 @@ export async function GET() {
   );
 }`;
 
-const CTA_COMMAND = "bun install @takumi-rs/image-response";
+const CTA_COMMAND = "bun install takumi-js";
 
 const highlighter = await createHighlighterCore({
   themes: [githubDarkDefault, githubLightDefault],
@@ -93,7 +93,7 @@ export default function Home() {
       <Hero />
 
       <section className="px-6 py-24 max-sm:py-12">
-        <div className="max-w-[1100px] mx-auto">
+        <div className="max-w-275 mx-auto">
           <div className="mb-14">
             <span className="inline-block text-xs font-semibold uppercase tracking-[0.12em] text-primary mb-3 px-3 py-1 rounded-full bg-primary/20">
               Bring Existing Code
@@ -101,7 +101,7 @@ export default function Home() {
             <h2 className="font-display text-[clamp(2rem,4vw,3.2rem)] font-[750] tracking-tighter leading-tight mt-3">
               JSX in. Image out.
             </h2>
-            <p className="text-[1.05rem] leading-relaxed text-muted-foreground max-w-[520px] mt-4">
+            <p className="text-[1.05rem] leading-relaxed text-muted-foreground max-w-130 mt-4">
               Write standard React components with CSS styling. Takumi renders them into
               production-quality images at blazing speed.
             </p>

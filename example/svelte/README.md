@@ -1,6 +1,6 @@
 # Svelte Example
 
-This is a simple example of using `@takumi-rs/image-response` in svelte.
+This is a simple example of using `takumi-js` in svelte.
 
 Before running the example, you need to build the native binary.
 

@@ -1,8 +1,8 @@
 import { test } from "bun:test";
 import { join } from "node:path";
-import { extractResourceUrls, Renderer } from "@takumi-rs/core";
-import { fetchResources } from "@takumi-rs/helpers";
-import { fromJsx } from "@takumi-rs/helpers/jsx";
+import { extractResourceUrls, Renderer } from "takumi-js/node";
+import { fetchResources } from "takumi-js/helpers";
+import { fromJsx } from "takumi-js/helpers/jsx";
 import { write } from "bun";
 import type { ReactNode } from "react";
 import BlogPostTemplate from "../src/templates/blog-post-template";

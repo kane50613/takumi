@@ -1,5 +1,5 @@
-import type { ImageSource } from "@takumi-rs/core";
-import { ImageResponse } from "@takumi-rs/image-response";
+import type { ImageSource } from "takumi-js/node";
+import { ImageResponse } from "takumi-js/response";
 import { source } from "~/source";
 import DocsTemplate from "../../../takumi-template/src/templates/docs-template";
 import logo from "../../public/logo.svg?raw";

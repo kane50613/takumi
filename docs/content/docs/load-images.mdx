@@ -8,14 +8,14 @@ icon: Image
 
 In order to make loading more flexible, we do not handle any fetching for you. Instead, exposes the fetched resources via `fetchedResources` option.
 
-If you are using `@takumi-rs/image-response`, it will handle fetching for you, or you can override the default fetching behavior by passing your own `fetchResources` option.
+If you are using `takumi-js`, it will handle fetching for you, or you can override the default fetching behavior by passing your own `fetchResources` option.
 
-```tsx twoslash tab="@takumi-rs/core"
+```tsx twoslash tab="takumi-js/node"
 /** @jsxImportSource react */
 // ---cut-before---
-import { fromJsx } from "@takumi-rs/helpers/jsx";
-import { Renderer, extractResourceUrls } from "@takumi-rs/core";
-import { fetchResources } from "@takumi-rs/helpers";
+import { fromJsx } from "takumi-js/helpers/jsx";
+import { Renderer, extractResourceUrls } from "takumi-js/node";
+import { fetchResources } from "takumi-js/helpers";
 
 const renderer = new Renderer();
 
@@ -32,12 +32,12 @@ const image = await renderer.render(node, {
 });
 ```
 
-```tsx twoslash tab="@takumi-rs/wasm"
+```tsx twoslash tab="takumi-js/wasm"
 /** @jsxImportSource react */
 // ---cut-before---
-import { fromJsx } from "@takumi-rs/helpers/jsx";
-import { Renderer, extractResourceUrls } from "@takumi-rs/wasm";
-import { fetchResources } from "@takumi-rs/helpers";
+import { fromJsx } from "takumi-js/helpers/jsx";
+import { Renderer, extractResourceUrls } from "takumi-js/wasm";
+import { fetchResources } from "takumi-js/helpers";
 
 const renderer = new Renderer();
 
@@ -63,8 +63,8 @@ The image key can be used in any `src` field or `background-image`, `mask-image`
 ```tsx twoslash
 /** @jsxImportSource react */
 // ---cut-before---
-import { ImageResponse } from "@takumi-rs/image-response";
-import type { ImageSource } from "@takumi-rs/core";
+import { ImageResponse } from "takumi-js/response";
+import type { ImageSource } from "takumi-js/node";
 
 const [logo, background] = await Promise.all([
   fetch("/logo.png").then((res) => res.arrayBuffer()),

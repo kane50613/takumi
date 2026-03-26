@@ -1,8 +1,8 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Renderer } from "@takumi-rs/core";
-import { fromJsx } from "@takumi-rs/helpers/jsx";
+import { Renderer } from "takumi-js/node";
+import { fromJsx } from "takumi-js/helpers/jsx";
 import { write } from "bun";
 import { TailwindCard, UnoCard } from "./card";
 import { compileTailwindStylesheet } from "./tailwind-compile";

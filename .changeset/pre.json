@@ -1,12 +1,13 @@
 {
-  "mode": "exit",
-  "tag": "beta",
+  "mode": "pre",
+  "tag": "rc",
   "initialVersions": {
-    "takumi": "0.73.1",
-    "@takumi-rs/helpers": "0.73.1",
-    "@takumi-rs/image-response": "0.73.1",
-    "@takumi-rs/core": "0.73.1",
-    "@takumi-rs/wasm": "0.73.1"
+    "takumi": "0.0.0",
+    "takumi-js": "0.0.0",
+    "@takumi-rs/helpers": "0.0.0",
+    "@takumi-rs/image-response": "0.0.0",
+    "@takumi-rs/core": "0.0.0",
+    "@takumi-rs/wasm": "0.0.0"
   },
   "changesets": [
     "angry-bags-drum",

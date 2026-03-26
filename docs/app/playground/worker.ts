@@ -1,8 +1,8 @@
-import { fetchResources } from "@takumi-rs/helpers";
-import { extractEmojis } from "@takumi-rs/helpers/emoji";
-import { fromJsx } from "@takumi-rs/helpers/jsx";
-import initWasm, { extractResourceUrls, Renderer } from "@takumi-rs/wasm";
-import wasmUrl from "@takumi-rs/wasm/takumi_wasm_bg.wasm?url";
+import { fetchResources } from "takumi-js/helpers";
+import { extractEmojis } from "takumi-js/helpers/emoji";
+import { fromJsx } from "takumi-js/helpers/jsx";
+import initWasm, { extractResourceUrls, Renderer } from "takumi-js/wasm";
+import wasmUrl from "takumi-js/wasm/takumi_wasm_bg.wasm?url";
 import * as React from "react";
 import { transform } from "sucrase";
 import * as z from "zod/mini";

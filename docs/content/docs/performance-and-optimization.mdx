@@ -10,7 +10,7 @@ Takumi is designed from the ground up for speed. However, as your node trees gro
 
 ### Reuse the Renderer Instance
 
-For both `@takumi-rs/core` and `@takumi-rs/wasm`, the `Renderer` is the heart of Takumi's resource management. Try to reuse the renderer instance across multiple renderings.
+For both `takumi-js/node` and `takumi-js/wasm`, the `Renderer` is the heart of Takumi's resource management. Try to reuse the renderer instance across multiple renderings.
 
 #### For ImageResponse
 
@@ -23,9 +23,9 @@ Refer to both [Typography & Fonts](/docs/typography-and-fonts) and [Persistent I
 Initialize the WASM module and renderer instance out side of the `fetch()` handler so it won't be re-run everytime a request comes in.
 
 ```tsx title="index.tsx"
-import { ImageResponse } from "@takumi-rs/image-response/wasm";
-import { initSync, Renderer } from "@takumi-rs/wasm";
-import module from "@takumi-rs/wasm/takumi_wasm_bg.wasm";
+import { ImageResponse } from "takumi-js/response";
+import { initSync, Renderer } from "takumi-js/wasm";
+import module from "takumi-js/wasm/takumi_wasm_bg.wasm";
 import archivo from "path-to-font.ttf";
 
 const fetchCache = new Map();
@@ -55,7 +55,7 @@ Loading images from URLs or bytes during the rendering pass can be a bottleneck.
 
 ### Parallel Rendering
 
-Always prefer `@takumi-rs/core` over `@takumi-rs/wasm` for utilizing multiple threads.
+Always prefer `takumi-js/node` over `takumi-js/wasm` for utilizing multiple threads.
 
 ## Component Design
 

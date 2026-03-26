@@ -9,13 +9,12 @@
   },
   "type": "module",
   "devDependencies": {
-    "@takumi-rs/core": "workspace:*",
-    "@takumi-rs/helpers": "workspace:*",
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "takumi-js": "workspace:*",
     "tsup": "^8.5.1",
     "typescript": "catalog:"
   }

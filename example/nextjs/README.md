@@ -1,6 +1,6 @@
 # Next.js Example
 
-This is a simple example of how to use `@takumi-rs/image-response` in Next.js.
+This is a simple example of how to use `takumi-js` in Next.js.
 
 Before running the example, you need to build the native binary.
 

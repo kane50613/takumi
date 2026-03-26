@@ -28,11 +28,11 @@ See current benchmark runs and templates on [Image Bench](https://image-bench.ka
 ## First render in 30 seconds
 
 ```bash
-bun i @takumi-rs/image-response@beta
+bun i takumi-js
 ```
 
 ```tsx
-import { ImageResponse } from "@takumi-rs/image-response";
+import { ImageResponse } from "takumi-js/response";
 import { serve } from "bun";
 
 serve({

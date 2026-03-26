@@ -19,7 +19,7 @@ This guide will get you up and running with the high-level `ImageResponse` API i
 ## 1. Install
 
 ```npm
-npm i @takumi-rs/image-response@beta
+npm i takumi-js
 ```
 
 ### Extra bundlers config for Node.js
@@ -42,7 +42,7 @@ export default config;
 ```tsx twoslash
 /** @jsxImportSource react */
 // ---cut-before---
-import { ImageResponse } from "@takumi-rs/image-response";
+import { ImageResponse } from "takumi-js/response";
 
 export function GET() {
   return new ImageResponse(

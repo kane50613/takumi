@@ -142,7 +142,7 @@ const demoSymbolRows: SymbolRow[] = [
 const maxRows = 25;
 
 const defaultPackageInfo: PackageInfo = {
-  packageName: "@takumi-rs/helpers",
+  packageName: "takumi-js/helpers",
   version: "0.7.0",
   siteName: "takumi.kane.tw",
   repository: "kane50613/takumi",

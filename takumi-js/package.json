@@ -1,0 +1,63 @@
+{
+  "name": "takumi-js",
+  "version": "0.0.0",
+  "description": "All-in-one Takumi package for Node.js and WebAssembly runtimes.",
+  "license": "(MIT OR Apache-2.0)",
+  "author": {
+    "name": "Kane Wang",
+    "email": "me@kane.tw",
+    "url": "https://kane.tw"
+  },
+  "repository": {
+    "url": "git+https://github.com/kane50613/takumi.git"
+  },
+  "files": [
+    "index.mjs",
+    "index.d.ts",
+    "response",
+    "node",
+    "wasm",
+    "helpers",
+    "package.json",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "type": "module",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.mjs"
+    },
+    "./response": {
+      "types": "./response/index.d.ts",
+      "default": "./response/index.mjs"
+    },
+    "./wasm": {
+      "types": "./wasm/index.d.ts",
+      "default": "./wasm/index.mjs"
+    },
+    "./node": {
+      "types": "./node/index.d.ts",
+      "default": "./node/index.mjs"
+    },
+    "./helpers": {
+      "types": "./helpers/index.d.ts",
+      "default": "./helpers/index.mjs"
+    },
+    "./helpers/*": {
+      "types": "./helpers/*/index.d.ts",
+      "default": "./helpers/*/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "prepublishOnly": "jq '.dependencies[\"@takumi-rs/core\"] = .version | .dependencies[\"@takumi-rs/helpers\"] = .version | .dependencies[\"@takumi-rs/image-response\"] = .version | .dependencies[\"@takumi-rs/wasm\"] = .version' package.json > tmp.json && mv tmp.json package.json"
+  },
+  "dependencies": {
+    "@takumi-rs/core": "workspace:*",
+    "@takumi-rs/helpers": "workspace:*",
+    "@takumi-rs/image-response": "workspace:*",
+    "@takumi-rs/wasm": "workspace:*"
+  }
+}

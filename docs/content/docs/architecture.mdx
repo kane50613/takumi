@@ -59,10 +59,10 @@ The documentation is available on [docs.rs](https://docs.rs/takumi/latest/takumi
 
 In order to utilize the power of multithreading and non-blocking, instead of building for wasm, we target [napi-rs](https://napi.rs/) to build the native binary for Node.js.
 
-The package is published as [`@takumi-rs/core`](https://www.npmjs.com/package/@takumi-rs/core) on npm.
+The package is published as [`takumi-js`](https://www.npmjs.com/package/takumi-js) on npm, and it exposes the `takumi-js/node` and `takumi-js/wasm` entrypoints.
 
 ### For Edge Runtime / Browser
 
-This is relatively rare, but if you are using a Edge runtime or browser, you can use the [`@takumi-rs/wasm`](https://www.npmjs.com/package/@takumi-rs/wasm) package.
+This is relatively rare, but if you are using a Edge runtime or browser, you can use the `takumi-js/wasm` entrypoint.
 
 And to keep the wasm file small, woff font loading is not supported and theres no bundled fonts (so font needs to be loaded to render text).

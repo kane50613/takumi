@@ -4,6 +4,7 @@
   "commit": false,
   "fixed": [
     [
+      "takumi-js",
       "@takumi-rs/core",
       "@takumi-rs/image-response",
       "@takumi-rs/wasm",

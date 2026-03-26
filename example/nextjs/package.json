@@ -8,11 +8,11 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@takumi-rs/image-response": "workspace:*",
     "lucide-react": "catalog:",
     "next": "16.2.1",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "takumi-js": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",
