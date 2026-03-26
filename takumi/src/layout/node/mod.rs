@@ -268,7 +268,7 @@ impl Node {
   }
 
   /// Collects unique resource URLs referenced by this node tree and styles.
-  pub fn resource_urls<'a>(&'a self) -> impl Iterator<Item = &'a str> {
+  pub fn resource_urls(&self) -> impl Iterator<Item = &str> {
     let mut urls = Xxh3HashSet::default();
     self.metadata_resource_urls(&mut urls);
     self.style_resource_urls(&mut urls);
