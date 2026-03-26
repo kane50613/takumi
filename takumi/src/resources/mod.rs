@@ -3,5 +3,3 @@ pub mod font;
 /// Image state and resource management
 pub mod image;
 mod image_decoder;
-/// Resource resolving tasks
-pub mod task;

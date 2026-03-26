@@ -60,7 +60,6 @@ fn decode_linear_id(ptr: *const ()) -> Option<usize> {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// Internal linear form of a `calc(...)` expression: `px + percent * basis`.
-#[non_exhaustive]
 pub struct CalcLinear {
   px: f32,
   percent: f32,
@@ -78,7 +77,6 @@ impl CalcLinear {
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 /// Internal symbolic form of a `calc(...)` expression before sizing is known.
-#[non_exhaustive]
 pub struct CalcFormula {
   px: f32,
   percent: f32,

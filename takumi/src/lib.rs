@@ -101,9 +101,6 @@ use std::collections::HashSet;
 
 pub use error::{Result, StyleSheetParseError, TakumiError as Error};
 
-pub use image;
-pub use parley;
-pub use taffy;
 use xxhash_rust::xxh3::Xxh3DefaultBuilder;
 
 use crate::resources::{font::FontContext, image::PersistentImageStore};

@@ -9,7 +9,6 @@ use crate::rendering::Sizing;
 
 /// Controls the width/stretch of text rendering.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
-#[non_exhaustive]
 pub struct FontStretch(FontWidth);
 
 impl MakeComputed for FontStretch {}

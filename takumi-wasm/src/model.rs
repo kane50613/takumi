@@ -1,5 +1,6 @@
 //! Data models and types for the WebAssembly bindings.
 
+use parley::FontStyle as ParleyFontStyle;
 use serde::{Deserialize, Deserializer};
 use serde_bytes::ByteBuf;
 use std::sync::Arc;
@@ -220,7 +221,7 @@ pub enum AnimationOutputFormat {
 
 /// Font style input parsed from CSS-like font-style strings.
 #[derive(Clone, Copy)]
-pub struct FontStyle(pub takumi::parley::FontStyle);
+pub struct FontStyle(pub ParleyFontStyle);
 
 impl<'de> Deserialize<'de> for FontStyle {
   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -228,13 +229,11 @@ impl<'de> Deserialize<'de> for FontStyle {
     D: Deserializer<'de>,
   {
     let value = String::deserialize(deserializer)?;
-    Ok(Self(
-      takumi::parley::FontStyle::parse(&value).unwrap_or_default(),
-    ))
+    Ok(Self(ParleyFontStyle::parse(&value).unwrap_or_default()))
   }
 }
 
-impl From<FontStyle> for takumi::parley::FontStyle {
+impl From<FontStyle> for ParleyFontStyle {
   fn from(style: FontStyle) -> Self {
     style.0
   }

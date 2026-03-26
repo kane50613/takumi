@@ -12,15 +12,14 @@ use crate::{
     style::{Length, Style, StyleDeclaration},
   },
   rendering::{Canvas, RenderContext, draw_image},
-  resources::{
-    image::{ImageResourceError, is_svg_like},
-    task::FetchTaskCollection,
-  },
+  resources::image::{ImageResourceError, is_svg_like},
 };
 
-pub(crate) fn image_collect_fetch_tasks(image: &ImageData, collection: &mut FetchTaskCollection) {
+pub(crate) fn image_resource_url(image: &ImageData) -> Option<&str> {
   if image.src.starts_with("https://") || image.src.starts_with("http://") {
-    collection.insert(image.src.clone());
+    Some(image.src.as_ref())
+  } else {
+    None
   }
 }
 

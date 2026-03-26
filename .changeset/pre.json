@@ -6,9 +6,7 @@
     "@takumi-rs/helpers": "0.73.1",
     "@takumi-rs/image-response": "0.73.1",
     "@takumi-rs/core": "0.73.1",
-    "@takumi-rs/wasm": "0.73.1",
-    "svelte": "0.0.1",
-    "waku-ssr": "0.0.0"
+    "@takumi-rs/wasm": "0.73.1"
   },
   "changesets": [
     "angry-bags-drum",

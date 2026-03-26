@@ -5,11 +5,11 @@ use std::{
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
+use parley::{GenericFamily, fontique::FontInfoOverride};
 use rayon::prelude::*;
 use takumi::{
   GlobalContext,
   layout::{node::Node, style::KeyframesRule as CoreKeyframesRule},
-  parley::{GenericFamily, fontique::FontInfoOverride},
   rendering::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat},
   resources::{font::FontResource, image::ImageSource as LoadedImageSource},
 };

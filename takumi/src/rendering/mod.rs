@@ -73,7 +73,6 @@ impl Sizing {
 
 /// The context for the internal rendering. You should not construct this directly.
 #[derive(Clone)]
-#[non_exhaustive]
 pub(crate) struct RenderContext<'g> {
   /// The global context.
   pub(crate) global: &'g GlobalContext,

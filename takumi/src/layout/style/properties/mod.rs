@@ -253,8 +253,6 @@ pub enum CssDescriptorKind {
   RepeatFn,
   /// `<saturate()>`
   SaturateFn,
-  /// `<seed()>`
-  SeedFn,
   /// `<sepia()>`
   SepiaFn,
   /// `<steps()>`
@@ -299,7 +297,6 @@ impl CssDescriptorKind {
       Self::RepeatingRadialGradientFn => "repeating-radial-gradient()",
       Self::RepeatFn => "repeat()",
       Self::SaturateFn => "saturate()",
-      Self::SeedFn => "seed()",
       Self::SepiaFn => "sepia()",
       Self::StepsFn => "steps()",
       Self::TextWrapMode => "text-wrap-mode",
@@ -319,8 +316,6 @@ pub enum CssToken {
   Syntax(CssSyntaxKind),
   /// A reusable CSS descriptor backed by a compact enum table.
   Descriptor(CssDescriptorKind),
-  /// A CSS token without the < and > wrappers.
-  Token(&'static str),
 }
 
 impl std::fmt::Display for CssToken {
@@ -329,7 +324,6 @@ impl std::fmt::Display for CssToken {
       CssToken::Keyword(keyword) => write!(f, "'{}'", keyword),
       CssToken::Syntax(token) => write!(f, "<{}>", token.as_str()),
       CssToken::Descriptor(token) => write!(f, "<{}>", token.as_str()),
-      CssToken::Token(token) => write!(f, "<{}>", token),
     }
   }
 }

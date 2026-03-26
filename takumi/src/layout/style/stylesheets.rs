@@ -15,7 +15,6 @@ use crate::{
     style::{CssInput, CssValueSeed, properties::*},
   },
   rendering::{RenderContext, SizedShadow, Sizing},
-  resources::task::FetchTaskCollection,
 };
 use cssparser::RuleBodyParser;
 #[path = "stylesheets_helpers.rs"]
@@ -480,9 +479,9 @@ macro_rules! define_style {
           self.declarations.push(declaration, important);
         }
 
-        /// Collects fetch tasks referenced by this style's declarations.
-        pub fn collect_fetch_tasks(&self, collection: &mut FetchTaskCollection) {
-          self.declarations.collect_fetch_tasks(collection);
+        /// Collects resource URLs referenced by this style's declarations.
+        pub fn resource_urls(&self) -> impl Iterator<Item = &str> {
+          self.declarations.resource_urls()
         }
 
         pub(crate) fn inherit(self, parent: &ComputedStyle) -> ComputedStyle {
@@ -1334,28 +1333,22 @@ impl StyleDeclarationBlock {
     self.declarations.iter()
   }
 
-  /// Collects fetch tasks referenced by declarations in this block.
-  pub fn collect_fetch_tasks(&self, collection: &mut FetchTaskCollection) {
-    for declaration in self.iter() {
-      match declaration {
+  /// Collects resource URLs referenced by declarations in this block.
+  pub fn resource_urls(&self) -> impl Iterator<Item = &str> {
+    self
+      .iter()
+      .filter_map(|declaration| match declaration {
         StyleDeclaration::BackgroundImage(Some(images))
-        | StyleDeclaration::MaskImage(Some(images)) => {
-          collection.insert_many(images.iter().filter_map(|image| {
-            if let BackgroundImage::Url(url) = image {
-              Some(url.clone())
-            } else {
-              None
-            }
-          }));
-        }
-        _ => {}
-      }
-    }
-  }
-
-  /// Consumes the declaration block and returns an iterator over the declarations.
-  pub fn into_declarations(self) -> SmallVec<[StyleDeclaration; 8]> {
-    self.declarations
+        | StyleDeclaration::MaskImage(Some(images)) => Some(images.iter().filter_map(|image| {
+          if let BackgroundImage::Url(url) = image {
+            Some(url.as_ref())
+          } else {
+            None
+          }
+        })),
+        _ => None,
+      })
+      .flatten()
   }
 
   pub(crate) fn parse<'i>(name: &str, input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
@@ -1818,7 +1811,6 @@ mod tests {
       style::{ComputedStyle, Style, StyleDeclaration, properties::*},
     },
     rendering::Sizing,
-    resources::task::FetchTaskCollection,
   };
 
   fn style_with(declarations: impl IntoIterator<Item = StyleDeclaration>) -> Style {
@@ -2187,19 +2179,10 @@ mod tests {
       )),
       StyleDeclaration::mask_image(Some([BackgroundImage::Url(mask_url.into())].into())),
     ]));
-    let mut collection = FetchTaskCollection::default();
-
-    declarations.collect_fetch_tasks(&mut collection);
-
-    let tasks = collection
-      .into_inner()
-      .iter()
-      .map(ToString::to_string)
-      .collect::<Vec<_>>();
 
     assert_eq!(
-      tasks,
-      vec![background_url.to_string(), mask_url.to_string()]
+      declarations.resource_urls().collect::<Vec<_>>(),
+      vec![background_url, mask_url]
     );
   }
 
@@ -2208,12 +2191,12 @@ mod tests {
     let declarations = parse_declarations("padding", "1px 2px");
 
     assert_eq!(
-      declarations.into_declarations().as_slice(),
-      &[
-        StyleDeclaration::padding_top(Length::Px(1.0)),
-        StyleDeclaration::padding_right(Length::Px(2.0)),
-        StyleDeclaration::padding_bottom(Length::Px(1.0)),
-        StyleDeclaration::padding_left(Length::Px(2.0)),
+      declarations.iter().collect::<Vec<_>>(),
+      vec![
+        &StyleDeclaration::padding_top(Length::Px(1.0)),
+        &StyleDeclaration::padding_right(Length::Px(2.0)),
+        &StyleDeclaration::padding_bottom(Length::Px(1.0)),
+        &StyleDeclaration::padding_left(Length::Px(2.0)),
       ]
     );
   }

@@ -6,18 +6,15 @@ use std::{borrow::Cow, cmp::Ordering, ops::Neg, str::FromStr};
 use cssparser::match_ignore_ascii_case;
 use serde::{Deserializer, de::Error as DeError};
 
-use crate::{
-  layout::{
-    Viewport,
-    style::{
-      tw::{
-        map::{FIXED_PROPERTIES, PREFIX_PARSERS},
-        parser::*,
-      },
-      *,
+use crate::layout::{
+  Viewport,
+  style::{
+    tw::{
+      map::{FIXED_PROPERTIES, PREFIX_PARSERS},
+      parser::*,
     },
+    *,
   },
-  resources::task::FetchTaskCollection,
 };
 
 /// Tailwind `--spacing` variable value.
@@ -25,7 +22,6 @@ pub const TW_VAR_SPACING: f32 = 0.25;
 
 /// Represents a collection of tailwind properties.
 #[derive(Debug, Clone, PartialEq)]
-#[non_exhaustive]
 pub struct TailwindValues {
   inner: Vec<TailwindValue>,
 }
@@ -63,16 +59,12 @@ impl FromStr for TailwindValues {
 }
 
 impl TailwindValues {
-  /// Iterate over the tailwind values.
-  pub fn iter(&self) -> impl Iterator<Item = &TailwindValue> {
-    self.inner.iter()
-  }
-
-  /// Collects fetch tasks referenced by active Tailwind utilities for the given viewport.
-  pub fn collect_fetch_tasks(&self, viewport: Viewport, collection: &mut FetchTaskCollection) {
-    for value in &self.inner {
-      value.collect_fetch_tasks(viewport, collection);
-    }
+  /// Collects resource URLs referenced by active Tailwind utilities for the given viewport.
+  pub fn resource_urls(&self, viewport: Viewport) -> impl Iterator<Item = &str> {
+    self
+      .inner
+      .iter()
+      .filter_map(move |value| value.resource_url(viewport))
   }
 
   pub(crate) fn into_declaration_block(self, viewport: Viewport) -> StyleDeclarationBlock {
@@ -411,7 +403,6 @@ impl<'de> Deserialize<'de> for TailwindValues {
 
 /// Represents a tailwind value.
 #[derive(Debug, Clone, PartialEq)]
-#[non_exhaustive]
 pub struct TailwindValue {
   /// The tailwind property.
   pub property: TailwindProperty,
@@ -422,14 +413,14 @@ pub struct TailwindValue {
 }
 
 impl TailwindValue {
-  fn collect_fetch_tasks(&self, viewport: Viewport, collection: &mut FetchTaskCollection) {
+  fn resource_url(&self, viewport: Viewport) -> Option<&str> {
     if let Some(breakpoint) = self.breakpoint
       && !breakpoint.matches(viewport)
     {
-      return;
+      return None;
     }
 
-    self.property.collect_fetch_tasks(collection);
+    self.property.resource_url()
   }
 
   fn apply(self, builder: &mut TailwindDeclarationBuilder, viewport: Viewport) {
@@ -475,7 +466,6 @@ impl TailwindValue {
 
 /// Represents a breakpoint.
 #[derive(Debug, Clone, Copy, PartialEq)]
-#[non_exhaustive]
 pub struct Breakpoint(pub(crate) Length);
 
 impl Breakpoint {
@@ -510,7 +500,6 @@ impl Breakpoint {
 
 /// Represents a tailwind property.
 #[derive(Debug, Clone, PartialEq)]
-#[non_exhaustive]
 pub enum TailwindProperty {
   /// `background-clip` property.
   BackgroundClip(BackgroundClip),
@@ -912,9 +901,11 @@ macro_rules! push_decl {
 }
 
 impl TailwindProperty {
-  fn collect_fetch_tasks(&self, collection: &mut FetchTaskCollection) {
+  fn resource_url(&self) -> Option<&str> {
     if let TailwindProperty::BackgroundImage(BackgroundImage::Url(url)) = self {
-      collection.insert(url.clone());
+      Some(url.as_ref())
+    } else {
+      None
     }
   }
 

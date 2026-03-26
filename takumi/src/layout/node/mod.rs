@@ -10,17 +10,17 @@ use taffy::{AvailableSpace, Layout, Point, Size};
 use zeno::Fill;
 
 use crate::{
-  Result,
+  Result, Xxh3HashSet,
   layout::{
     Viewport,
     inline::InlineContentKind,
+    node::image::image_resource_url,
     style::{Affine, BackgroundClip, BlendMode, Sides, Style, tw::TailwindValues},
   },
   rendering::{
     BackgroundTile, BorderProperties, Canvas, RenderContext, SizedShadow,
     collect_background_layers, rasterize_layers,
   },
-  resources::task::FetchTaskCollection,
 };
 
 use self::{
@@ -29,8 +29,7 @@ use self::{
     take_container_style_layers,
   },
   image::{
-    draw_image_node_content, image_collect_fetch_tasks, image_inline_content, measure_image_node,
-    take_image_style_layers,
+    draw_image_node_content, image_inline_content, measure_image_node, take_image_style_layers,
   },
   text::{draw_text_node_content, measure_text_node, take_text_style_layers, text_inline_content},
 };
@@ -67,7 +66,6 @@ pub(crate) struct TextData {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// Variant-specific image node data.
-#[non_exhaustive]
 pub struct ImageData {
   pub(crate) src: Arc<str>,
   pub(crate) width: Option<f32>,
@@ -77,7 +75,6 @@ pub struct ImageData {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// A renderable node with shared metadata and variant-specific content.
-#[non_exhaustive]
 pub struct Node {
   #[serde(flatten)]
   pub(crate) metadata: NodeMetadata,
@@ -227,7 +224,7 @@ impl Node {
   }
 
   /// Collects resource URLs referenced by this node tree.
-  pub fn collect_fetch_tasks(&self, collection: &mut FetchTaskCollection) {
+  pub(crate) fn metadata_resource_urls<'a>(&'a self, urls: &mut Xxh3HashSet<&'a str>) {
     match &self.kind {
       NodeKind::Container { .. } => {
         let Some(children) = self.children_ref() else {
@@ -235,26 +232,30 @@ impl Node {
         };
 
         for child in children {
-          child.collect_fetch_tasks(collection);
+          child.metadata_resource_urls(urls);
         }
       }
-      NodeKind::Image(image) => image_collect_fetch_tasks(image, collection),
+      NodeKind::Image(image) => {
+        if let Some(url) = image_resource_url(image) {
+          urls.insert(url);
+        }
+      }
       NodeKind::Text(_) => {}
     }
   }
 
   /// Collects resource URLs referenced by this node tree's styles.
-  pub fn collect_style_fetch_tasks(&self, collection: &mut FetchTaskCollection) {
+  pub(crate) fn style_resource_urls<'a>(&'a self, urls: &mut Xxh3HashSet<&'a str>) {
     if let Some(preset) = self.metadata.preset.as_ref() {
-      preset.collect_fetch_tasks(collection);
+      urls.extend(preset.resource_urls());
     }
 
     if let Some(author_tw) = self.metadata.tw.as_ref() {
-      author_tw.collect_fetch_tasks(Viewport::default(), collection);
+      urls.extend(author_tw.resource_urls(Viewport::default()));
     }
 
     if let Some(inline) = self.metadata.style.as_ref() {
-      inline.collect_fetch_tasks(collection);
+      urls.extend(inline.resource_urls());
     }
 
     let Some(children) = self.children_ref() else {
@@ -262,8 +263,17 @@ impl Node {
     };
 
     for child in children {
-      child.collect_style_fetch_tasks(collection);
+      child.style_resource_urls(urls);
     }
+  }
+
+  /// Collects unique resource URLs referenced by this node tree and styles.
+  pub fn resource_urls<'a>(&'a self) -> impl Iterator<Item = &'a str> {
+    let mut urls = Xxh3HashSet::default();
+    self.metadata_resource_urls(&mut urls);
+    self.style_resource_urls(&mut urls);
+
+    urls.into_iter()
   }
 
   pub(crate) fn is_replaced_element(&self) -> bool {
@@ -561,15 +571,10 @@ mod tests {
       )),
     ))]);
 
-    let mut collection = FetchTaskCollection::default();
-    node.collect_style_fetch_tasks(&mut collection);
-    let tasks = collection
-      .into_inner()
-      .iter()
-      .map(ToString::to_string)
-      .collect::<Vec<_>>();
+    let mut urls = Xxh3HashSet::default();
+    node.style_resource_urls(&mut urls);
 
-    assert_eq!(tasks, vec![background_url.to_string()]);
+    assert_eq!(urls.into_iter().collect::<Vec<_>>(), vec![background_url]);
   }
 
   #[test]
@@ -587,18 +592,11 @@ mod tests {
       )
       .with_tw(tw);
 
-    let mut collection = FetchTaskCollection::default();
-    node.collect_style_fetch_tasks(&mut collection);
+    let mut urls = Xxh3HashSet::default();
+    node.style_resource_urls(&mut urls);
 
-    let tasks = collection
-      .into_inner()
-      .iter()
-      .map(ToString::to_string)
-      .collect::<Vec<_>>();
+    let tasks = urls.into_iter().collect::<Vec<_>>();
 
-    assert_eq!(
-      tasks,
-      vec![preset_url.to_string(), tailwind_url.to_string()]
-    );
+    assert_eq!(tasks, vec![tailwind_url, preset_url]);
   }
 }

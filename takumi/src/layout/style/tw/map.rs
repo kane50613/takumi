@@ -7,7 +7,6 @@ use crate::layout::style::{
 
 /// Enum for data-driven property parsing
 #[derive(Clone, Copy)]
-#[non_exhaustive]
 pub enum PropertyParser {
   ObjectFit(fn(ObjectFit) -> TailwindProperty),
   ObjectPosition(fn(ObjectPosition) -> TailwindProperty),

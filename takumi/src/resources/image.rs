@@ -40,7 +40,6 @@ pub enum ImageSource {
 
 /// Image data prepared for layout rendering.
 #[derive(Debug, Clone)]
-#[non_exhaustive]
 pub(crate) enum RenderedImage<'a> {
   /// A fully rasterized image, used for SVGs.
   Rasterized(RgbaImage),
@@ -68,7 +67,6 @@ impl RenderedImage<'_> {
 
 /// Represents a persistent image store.
 #[derive(Debug, Default)]
-#[non_exhaustive]
 pub struct PersistentImageStore {
   #[cfg(target_arch = "wasm32")]
   map: RefCell<HashMap<String, Arc<ImageSource>>>,

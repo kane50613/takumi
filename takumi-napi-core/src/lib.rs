@@ -21,10 +21,10 @@ pub(crate) mod renderer;
 use std::{fmt::Display, ops::Deref};
 
 use napi::{De, Env, Error, bindgen_prelude::*};
+use parley::{FontStyle, FontWeight, fontique::FontInfoOverride};
 use serde::{Deserialize, Deserializer, de::DeserializeOwned};
 use takumi::{
   layout::style::{KeyframesRule, StyleSheet},
-  parley::{FontStyle, FontWeight, fontique::FontInfoOverride},
   resources::font::FontResource,
 };
 

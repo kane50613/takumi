@@ -2,6 +2,7 @@
 
 use crate::{helper::map_error, model::*};
 use base64::{Engine, prelude::BASE64_STANDARD};
+use parley::{FontWeight, GenericFamily, fontique::FontInfoOverride};
 use serde_wasm_bindgen::{from_value, to_value};
 use std::{
   borrow::Cow,
@@ -15,7 +16,6 @@ use takumi::{
     node::Node,
     style::{KeyframesRule, StyleSheet},
   },
-  parley::{FontWeight, GenericFamily, fontique::FontInfoOverride},
   rendering::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
     SequentialScene, encode_animated_gif, encode_animated_png, encode_animated_webp,
