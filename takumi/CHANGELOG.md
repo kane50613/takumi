@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.0-beta.20
+
+### Major Changes
+
+- 3b4f03d: **Removed `FetchTaskCollection`, switch to `Node::resource_urls` & `Style::resource_urls` instead.**
+
 ## 1.0.0-beta.19
 
 ## 1.0.0-beta.18
