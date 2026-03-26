@@ -58,8 +58,6 @@ For variable fonts, `font-weight` has the same effect as `font-variation-setting
 
 #### Dynamic fetching
 
-<Callout type="warning">This is not in stable release yet, available since `1.0.0-beta.3`.</Callout>
-
 If you are using `ImageResponse` API, theres a satori compatible `emoji` option.
 
 ```tsx twoslash
@@ -69,7 +67,7 @@ import { ImageResponse } from "@takumi-rs/image-response";
 
 export function GET() {
   return new ImageResponse(<div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>, {
-    emoji: "twemoji",
+    emoji: "twemoji", // [!code ++]
   });
 }
 ```

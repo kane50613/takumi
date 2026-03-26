@@ -1,5 +1,5 @@
 {
-  "mode": "pre",
+  "mode": "exit",
   "tag": "beta",
   "initialVersions": {
     "takumi": "0.73.1",
@@ -10,7 +10,6 @@
   },
   "changesets": [
     "angry-bags-drum",
-    "angry-tables-melt",
     "better-squids-pay",
     "big-loops-prove",
     "blue-clouds-behave",
@@ -29,7 +28,6 @@
     "long-chefs-jump",
     "loose-mirrors-begin",
     "neat-rivers-pay",
-    "old-tools-fail",
     "plain-doodles-enjoy",
     "puny-cougars-doubt",
     "purple-badgers-knock",
