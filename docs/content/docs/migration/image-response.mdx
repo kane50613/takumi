@@ -16,14 +16,15 @@ npm i @takumi-rs/image-response
 
 ### Mark as external
 
-<Callout type="warning">This is only need for prior Takumi v1</Callout>
-
 By default Next.js bundles the `@takumi-rs/core` package, which requires native Node.js `require` function to resolve the native binary. You need to opt-out from the bundling by setting the `serverExternalPackages` option.
 
 ```ts title="next.config.ts"
-export const config = {
+const config: NextConfig = {
+  // [!code ++]
   serverExternalPackages: ["@takumi-rs/core"],
 };
+
+export default config;
 ```
 
 ## Code changes
@@ -59,29 +60,9 @@ export function GET(request: Request) {
     width: 1200,
     height: 630,
     fonts,
+    emoji: "twemoji",
   });
 }
-```
-
-### For WASM environment
-
-If you are using in Edge runtime or a browser environment like Cloudflare Workers, you can import from the `@takumi-rs/image-response/wasm` package.
-
-```tsx twoslash
-/** @jsxImportSource react */
-// ---cut-before---
-// @noErrors
-import { ImageResponse } from "@takumi-rs/image-response"; // [!code --]
-import { ImageResponse } from "@takumi-rs/image-response/wasm"; // [!code ++]
-import module from "@takumi-rs/wasm/next"; // [!code ++]
-
-new ImageResponse(<OgImage title="Next.js" />, {
-  module, // [!code ++]
-  width: 1200,
-  height: 630,
-  // @noErrors
-  fonts,
-});
 ```
 
 Now you have an `GET` handler with Takumi setup!

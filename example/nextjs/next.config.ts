@@ -1,11 +1,11 @@
 import { join } from "node:path";
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
+const config: NextConfig = {
   turbopack: {
     root: join(__dirname, "..", ".."),
   },
   serverExternalPackages: ["@takumi-rs/core"],
 };
 
-export default nextConfig;
+export default config;

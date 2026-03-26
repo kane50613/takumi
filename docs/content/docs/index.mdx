@@ -22,6 +22,19 @@ This guide will get you up and running with the high-level `ImageResponse` API i
 npm i @takumi-rs/image-response@beta
 ```
 
+### Extra bundlers config for Node.js
+
+For Next.js users, before [the PR merged](https://github.com/vercel/next.js/pull/91899), you would need to mark Takumi's Node.js bindings as external so it bundles correctly.
+
+```tsx title="next.config.ts"
+const config: NextConfig = {
+  // [!code ++]
+  serverExternalPackages: ["@takumi-rs/core"],
+};
+
+export default config;
+```
+
 ## 2. Return an `ImageResponse`
 
 `ImageResponse` extends the standard [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response), so you can use it in any environment you want.

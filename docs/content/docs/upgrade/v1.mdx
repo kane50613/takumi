@@ -31,6 +31,11 @@ However, to stay as close to the CSS specification as possible and ensure LLMs c
 
 Verify your templates and explicitly add `display: flex` (or the `flex` Tailwind class) to containers where flexbox layout is intended.
 
+### Unified Runtime Dectection & Fallback
+
+For better DX, `@takumi-rs/image-response` now automatically detects the best bindings for your environment Node.js, Workers, etc.
+That means you no longer need to worry about importing NAPI or WASM bindings.
+
 ### Lowercase Image Formats
 
 To be more consistent with the CSS ecosystem and web standards, all image format options in `@takumi-rs/core` and `@takumi-rs/image-response` now use lowercase strings only.
@@ -46,15 +51,3 @@ After:
 ```ts
 const image = await renderer.render(node, { format: "webp" });
 ```
-
-### Removal of Deprecated APIs
-
-We've cleaned up the codebase and removed all APIs that were marked as deprecated during the v0 phase. This includes:
-
-#### Node.js bindings
-
-Removed generic `AnyNode` type (use `Node` instead), `PersistentImage` (use `ImageSource`), and `purgeResourcesCache`.
-
-#### Rust
-
-Removed `RenderOptionsBuilder` in favor of a more robust `RenderOptions::builder()`.
