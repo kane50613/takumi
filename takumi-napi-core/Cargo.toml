@@ -11,7 +11,12 @@ crate-type = ["cdylib"]
 [dependencies]
 serde = "1.0"
 rayon = "1.10"
-parley = "0.7"
+
+[dependencies.parley]
+version = "0.7"
+default-features = false
+features = ["libm"]
+
 
 [dependencies.xxhash-rust]
 version = "0.8"
