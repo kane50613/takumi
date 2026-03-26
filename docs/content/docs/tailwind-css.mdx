@@ -4,9 +4,57 @@ description: Use Tailwind CSS classes to style your Takumi components.
 icon: Wind
 ---
 
-Takumi includes a built-in Tailwind CSS parser that allows you to style your components using familiar utility classes. This provides a productive developer experience similar to modern web development.
+There are two ways to use Tailwind CSS with Takumi, you can either bring your bundler compiled stylesheet, or use the native parser.
 
-## Usage
+## Bring your Stylesheet
+
+This require you to have Tailwind setup with your bundler or manually compiled to CSS file that browser understands.
+
+### Vite Powered Frameworks
+
+Just import your stylesheet with `?inline` query and pass it to the `stylesheets` option of `ImageResponse`.
+
+```tsx title="og.tsx"
+// [!code ++]
+import stylesheet from "~/styles/global.css?inline";
+
+export async function loader() {
+  return ImageResponse(
+    <div className="bg-background text-foreground flex justify-center items-center w-full h-full text-4xl">
+      Hello Tailwind!
+    </div>,
+    {
+      width: 1200,
+      height: 630,
+      // [!code ++]
+      stylesheets: [stylesheet],
+    },
+  );
+}
+```
+
+```tsx title="vite.config.ts"
+import { defineConfig } from "vite";
+import tailwindcss from "@tailwindcss/vite";
+
+export default defineConfig({
+  // [!code ++]
+  plugins: [tailwindcss()],
+});
+```
+
+## Native Parser
+
+Prior Takumi has abaility to parse stylesheets, a built in parser is built for Tailwind CSS.
+
+Generally speaking, this is not recommended as it won't be able to cover all the features of Tailwind CSS, but as a quick solution for simple use cases, it can be a good option.
+
+### Limitations
+
+- No custom theme config, but arbitrary values are supported.
+- Read the [parser mapping](https://github.com/kane50613/takumi/blob/master/takumi/src/layout/style/tw/map.rs) for all supported classes.
+
+### Usage
 
 You can use the `tw` prop on any element (`div`, `span`, `img`, etc.) in your JSX.
 
@@ -29,8 +77,3 @@ const isError = true;
   {isError ? "Something went wrong" : "Success!"}
 </div>;
 ```
-
-## Limitations
-
-- No custom theme config, but arbitrary values are supported.
-- Read the [parser mapping](https://github.com/kane50613/takumi/blob/master/takumi/src/layout/style/tw/map.rs) for all supported classes.
