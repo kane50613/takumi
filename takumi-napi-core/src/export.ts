@@ -90,7 +90,7 @@ function loadNativeModule(target: string | null) {
   switch (target) {
     case "darwin-arm64":
       try {
-        return require(/* turbopackOptional: true */ "./core.darwin-arm64.node");
+        return require(/* turbopackOptional: true */ "../core.darwin-arm64.node");
       } catch {}
       try {
         return require(/* turbopackOptional: true */ "@takumi-rs/core-darwin-arm64");
@@ -98,7 +98,7 @@ function loadNativeModule(target: string | null) {
       break;
     case "darwin-x64":
       try {
-        return require(/* turbopackOptional: true */ "./core.darwin-x64.node");
+        return require(/* turbopackOptional: true */ "../core.darwin-x64.node");
       } catch {}
       try {
         return require(/* turbopackOptional: true */ "@takumi-rs/core-darwin-x64");
@@ -106,7 +106,7 @@ function loadNativeModule(target: string | null) {
       break;
     case "linux-arm64-gnu":
       try {
-        return require(/* turbopackOptional: true */ "./core.linux-arm64-gnu.node");
+        return require(/* turbopackOptional: true */ "../core.linux-arm64-gnu.node");
       } catch {}
       try {
         return require(/* turbopackOptional: true */ "@takumi-rs/core-linux-arm64-gnu");
@@ -114,7 +114,7 @@ function loadNativeModule(target: string | null) {
       break;
     case "linux-arm64-musl":
       try {
-        return require(/* turbopackOptional: true */ "./core.linux-arm64-musl.node");
+        return require(/* turbopackOptional: true */ "../core.linux-arm64-musl.node");
       } catch {}
       try {
         return require(/* turbopackOptional: true */ "@takumi-rs/core-linux-arm64-musl");
@@ -122,7 +122,7 @@ function loadNativeModule(target: string | null) {
       break;
     case "linux-x64-gnu":
       try {
-        return require(/* turbopackOptional: true */ "./core.linux-x64-gnu.node");
+        return require(/* turbopackOptional: true */ "../core.linux-x64-gnu.node");
       } catch {}
       try {
         return require(/* turbopackOptional: true */ "@takumi-rs/core-linux-x64-gnu");
@@ -130,7 +130,7 @@ function loadNativeModule(target: string | null) {
       break;
     case "linux-x64-musl":
       try {
-        return require(/* turbopackOptional: true */ "./core.linux-x64-musl.node");
+        return require(/* turbopackOptional: true */ "../core.linux-x64-musl.node");
       } catch {}
       try {
         return require(/* turbopackOptional: true */ "@takumi-rs/core-linux-x64-musl");
@@ -138,7 +138,7 @@ function loadNativeModule(target: string | null) {
       break;
     case "win32-arm64-msvc":
       try {
-        return require(/* turbopackOptional: true */ "./core.win32-arm64-msvc.node");
+        return require(/* turbopackOptional: true */ "../core.win32-arm64-msvc.node");
       } catch {}
       try {
         return require(/* turbopackOptional: true */ "@takumi-rs/core-win32-arm64-msvc");
@@ -146,7 +146,7 @@ function loadNativeModule(target: string | null) {
       break;
     case "win32-x64-msvc":
       try {
-        return require(/* turbopackOptional: true */ "./core.win32-x64-msvc.node");
+        return require(/* turbopackOptional: true */ "../core.win32-x64-msvc.node");
       } catch {}
       try {
         return require(/* turbopackOptional: true */ "@takumi-rs/core-win32-x64-msvc");

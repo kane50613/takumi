@@ -26,4 +26,12 @@ export interface FontDetails {
 
 export type Font = FontDetails | Uint8Array | ArrayBuffer;
 
-export type Keyframes = Record<string, Record<string, Properties>>;
+export type KeyframesMap = Record<string, Record<string, Properties>>;
+export type KeyframesRuleList = {
+  name: string;
+  keyframes: {
+    offsets: number[];
+    declarations: Record<string, Properties>;
+  }[];
+}[];
+export type Keyframes = KeyframesMap | KeyframesRuleList;

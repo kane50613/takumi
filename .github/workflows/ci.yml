@@ -268,93 +268,6 @@ jobs:
           path: takumi-js/dist
           if-no-files-found: error
 
-  build-image-response:
-    name: Build @takumi-rs/image-response
-    runs-on: ubuntu-slim
-    needs: build-js
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@main
-        with:
-          bun-version: latest
-
-      - name: Download helpers artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: helpers-dist
-          path: takumi-helpers/dist
-
-      - name: Download N-API bindings artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: bindings-x86_64-unknown-linux-gnu
-          path: takumi-napi-core
-
-      - name: Download WASM artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: wasm-package
-          path: takumi-wasm
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile --filter ./takumi-image-response
-
-      - name: Build image-response
-        working-directory: takumi-image-response
-        run: bun run build
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: image-response-dist
-          path: takumi-image-response/dist
-          if-no-files-found: error
-
-  test-image-response:
-    name: Test @takumi-rs/image-response
-    runs-on: ubuntu-slim
-    needs: build-image-response
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@main
-        with:
-          bun-version: latest
-
-      - name: Download helpers artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: helpers-dist
-          path: takumi-helpers/dist
-
-      - name: Download N-API bindings artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: bindings-x86_64-unknown-linux-gnu
-          path: takumi-napi-core
-
-      - name: Download image-response artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: image-response-dist
-          path: takumi-image-response/dist
-
-      - name: Download WASM artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: wasm-package
-          path: takumi-wasm
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile --filter ./takumi-image-response
-
-      - name: Test image-response
-        working-directory: takumi-image-response
-        run: bun test
-
   test-template:
     name: Test Templates
     runs-on: ubuntu-slim
@@ -538,16 +451,7 @@ jobs:
   pass-test:
     name: Pass Test
     runs-on: ubuntu-slim
-    needs:
-      [
-        lint-and-format,
-        test-rust,
-        test-helpers,
-        test-napi,
-        test-image-response,
-        test-template,
-        test-wasm,
-      ]
+    needs: [lint-and-format, test-rust, test-helpers, test-napi, test-template, test-wasm]
     steps:
       - name: Pass test
         run: echo "Pass test"
@@ -592,12 +496,6 @@ jobs:
         with:
           name: js-dist
           path: takumi-js/dist
-
-      - name: Download image-response artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: image-response-dist
-          path: takumi-image-response/dist
 
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
@@ -655,12 +553,6 @@ jobs:
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi-core
-
-      - name: Download image-response artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: image-response-dist
-          path: takumi-image-response/dist
 
       - name: Download WASM artifact
         uses: actions/download-artifact@v8

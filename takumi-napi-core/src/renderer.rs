@@ -113,9 +113,7 @@ pub struct RenderOptions<'env> {
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
   /// Structured keyframes to register alongside stylesheets.
-  #[napi(
-    ts_type = "{ name: string; keyframes: { offsets: number[]; declarations: Record<string, Properties> }[] }[] | Keyframes"
-  )]
+  #[napi(ts_type = "Keyframes")]
   pub keyframes: Option<Object<'env>>,
   /// The device pixel ratio.
   /// @default 1.0
