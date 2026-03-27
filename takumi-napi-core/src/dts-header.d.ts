@@ -1,5 +1,5 @@
 import type { Node } from "@takumi-rs/helpers";
-import { Properties } from "csstype";
+import type { Properties } from "csstype";
 
 export type { ContainerNode, ImageNode, NodeMetadata, TextNode } from "@takumi-rs/helpers";
 

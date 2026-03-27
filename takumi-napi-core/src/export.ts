@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import type { Font, FontDetails, ImageSource } from "../index";
+import type * as NativeModule from "../index";
 
 export type * from "../index";
 
@@ -158,7 +159,7 @@ function loadNativeModule(target: string | null) {
 }
 
 const target = resolveTarget();
-const nativeModule: typeof import("../index") = loadNativeModule(target);
+const nativeModule: typeof NativeModule = loadNativeModule(target);
 
 if (!nativeModule) {
   if (!target) {

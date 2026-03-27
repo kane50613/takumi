@@ -1,4 +1,6 @@
 import * as wasm from "@takumi-rs/wasm";
+import type * as WasmAutoBindings from "@takumi-rs/wasm/auto";
+import type * as WasmNextBindings from "@takumi-rs/wasm/next";
 
 export type Imports = Awaited<ReturnType<typeof getImportsImpl>>;
 
@@ -65,14 +67,12 @@ async function importBindings() {
 async function importWasmBindings() {
   const nextPath = "@takumi-rs/wasm/next";
   if (typeof process !== "undefined" && process.env.NEXT_RUNTIME) {
-    return import(/* @__PURE__ */ /* @vite-ignore */ nextPath) as Promise<
-      typeof import("@takumi-rs/wasm/next")
-    >;
+    return import(/* @__PURE__ */ /* @vite-ignore */ nextPath) as Promise<typeof WasmNextBindings>;
   }
 
   return import(
     /* @__PURE__ */ /* turbopackIgnore: true */ /* webpackIgnore: true */ "@takumi-rs/wasm/auto"
-  ) as Promise<typeof import("@takumi-rs/wasm/auto")>;
+  ) as Promise<typeof WasmAutoBindings>;
 }
 
 function shouldSkipCoreImport() {
