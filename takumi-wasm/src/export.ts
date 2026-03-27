@@ -134,7 +134,7 @@ function createFontKey(font: FontLoaderSync | FontLoader) {
     return font;
   }
 
-  return `${font.name ?? ""}-${font.style ?? ""}-${font.weight ?? ""}-${isBuffer(font.data) ? font.data : ""}`;
+  return `${font.name ?? ""}-${font.style ?? ""}-${font.weight ?? ""}`;
 }
 
 function resolveFontLoader(font: FontLoaderSync | FontLoader): Font | Promise<Font> {

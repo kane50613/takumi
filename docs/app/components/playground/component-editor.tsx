@@ -113,7 +113,7 @@ export function ComponentEditor({
           },
           {
             content: takumiTypings,
-            filePath: "file:///node_modules/takumi-js/wasm/index.d.ts",
+            filePath: "file:///node_modules/@takumi-rs/wasm/index.d.ts",
           },
           {
             content: playgroundOptionsTypings,

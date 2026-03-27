@@ -40,11 +40,34 @@ export class Renderer extends NativeRenderer {
   }
 
   override async loadFonts(fonts: FontLoader[], signal?: AbortSignal): Promise<number> {
-    const targetFonts = fonts.filter(this.checkAndMarkFont.bind(this));
+    const batchFontsMark = new Set<string>();
+    const batchFontBuffersMark = new WeakSet<FontDetails["data"]>();
+    const targetFonts = fonts.filter((font) => {
+      const key = createFontKey(font);
+
+      if (isBuffer(key)) {
+        if (this.fontBuffersMark.has(key) || batchFontBuffersMark.has(key)) {
+          return false;
+        }
+
+        batchFontBuffersMark.add(key);
+        return true;
+      }
+
+      if (this.fontsMark.has(key) || batchFontsMark.has(key)) {
+        return false;
+      }
+
+      batchFontsMark.add(key);
+      return true;
+    });
 
     const resolvedFonts = await Promise.all(targetFonts.map(resolveFontLoader));
+    const loadedCount = await super.loadFonts(resolvedFonts, signal);
 
-    return super.loadFonts(resolvedFonts, signal);
+    targetFonts.forEach((font) => this.checkAndMarkFont(font));
+
+    return loadedCount;
   }
 
   override async loadFont(data: FontLoader, signal?: AbortSignal): Promise<number> {
@@ -104,7 +127,7 @@ function createFontKey(font: FontLoader | FontLoaderSync) {
     return font;
   }
 
-  return `${font.name ?? ""}-${font.style ?? ""}-${font.weight ?? ""}-${isBuffer(font.data) ? font.data : ""}`;
+  return `${font.name ?? ""}-${font.style ?? ""}-${font.weight ?? ""}`;
 }
 
 async function resolveFontLoader(font: FontLoader) {
