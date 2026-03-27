@@ -3,7 +3,7 @@ import { fromJsx } from "@takumi-rs/helpers/jsx";
 import { Globe2 } from "lucide-react";
 import { bench, run, summary } from "mitata";
 import DocsTemplate from "../../../takumi-template/src/templates/docs-template";
-import { Renderer } from "../../export";
+import { Renderer } from "../../src/export";
 
 function createNode(progress = 0) {
   const orbitOffsetX = Math.sin(progress * Math.PI * 2) * 18;

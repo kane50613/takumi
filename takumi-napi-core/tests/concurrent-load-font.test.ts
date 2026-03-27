@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Renderer } from "../export";
+import { Renderer } from "../src/export";
 
 const fontData = await Bun.file(
   new URL("../../assets/fonts/geist/Geist[wght].woff2", import.meta.url),
