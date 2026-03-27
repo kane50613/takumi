@@ -50,6 +50,7 @@
       "devDependencies": {
         "@react-router/dev": "^7.13.2",
         "@tailwindcss/vite": "^4.2.2",
+        "@takumi-rs/core": "workspace:*",
         "@takumi-rs/wasm": "workspace:*",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
