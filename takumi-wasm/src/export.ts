@@ -200,5 +200,9 @@ function isPromise<T>(value: T | Promise<T>): value is Promise<T> {
 }
 
 function isBuffer(data: unknown): data is ByteBuf {
-  return data instanceof Uint8Array || data instanceof ArrayBuffer;
+  return (
+    data instanceof Uint8Array ||
+    data instanceof ArrayBuffer ||
+    (typeof Buffer !== "undefined" && Buffer.isBuffer(data))
+  );
 }
