@@ -268,6 +268,43 @@ jobs:
           path: takumi-js/dist
           if-no-files-found: error
 
+  test-js:
+    name: Test takumi-js
+    runs-on: ubuntu-slim
+    needs: [build-helpers, build-napi, build-wasm]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@main
+        with:
+          bun-version: latest
+
+      - name: Download helpers artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: helpers-dist
+          path: takumi-helpers/dist
+
+      - name: Download N-API bindings artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: bindings-x86_64-unknown-linux-gnu
+          path: takumi-napi-core
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wasm-package
+          path: takumi-wasm
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --filter ./takumi-js
+
+      - name: Test takumi-js
+        working-directory: takumi-js
+        run: bun test
+
   test-template:
     name: Test Templates
     runs-on: ubuntu-slim
@@ -451,7 +488,7 @@ jobs:
   pass-test:
     name: Pass Test
     runs-on: ubuntu-slim
-    needs: [lint-and-format, test-rust, test-helpers, test-napi, test-template, test-wasm]
+    needs: [lint-and-format, test-rust, test-helpers, test-js, test-napi, test-template, test-wasm]
     steps:
       - name: Pass test
         run: echo "Pass test"
