@@ -27,7 +27,7 @@ function patchGeneratedLoader(content: string) {
       /return require(\$1)?\(("(?:\.?\.\/core\.[^"]+\.node|@takumi-rs\/core-[^"]+)")\);/g,
       "return require$1(/* turbopackOptional: true */ $2);",
     )
-    .replace(
+    .replaceAll(
       "Native module @takumi-rs/core-${target} is not being bunlded.",
       "Native module @takumi-rs/core-${target} is not being bundled.",
     );
