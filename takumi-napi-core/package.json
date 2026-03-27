@@ -32,15 +32,15 @@
       "types": "./dist/export.d.mts",
       "workerd": "./not-available.js",
       "browser": "./not-available.js",
-      "node": "./dist/export.mjs",
       "import": "./dist/export.mjs",
       "require": "./dist/export.cjs",
+      "node": "./dist/export.mjs",
       "default": "./dist/export.mjs"
     }
   },
   "scripts": {
     "build": "napi build --release --no-const-enum --platform --esm --strip",
-    "build:js": "tsdown",
+    "build:js": "tsdown && bun scripts/patch-dist-loader.ts",
     "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json && bun artifacts && napi prepublish -t npm --no-gh-release",
     "artifacts": "napi create-npm-dirs && napi artifacts && napi version",
     "bench": "bun tests/bench/index.tsx"
@@ -57,7 +57,6 @@
     "lucide-react": "catalog:",
     "mitata": "^1.0.34",
     "react": "catalog:",
-    "tsdown": "catalog:",
     "typescript": "catalog:"
   },
   "napi": {

@@ -14,7 +14,4 @@ export default defineConfig({
   dts: true,
   clean: true,
   outDir: "dist",
-  deps: {
-    skipNodeModulesBundle: true,
-  },
 });

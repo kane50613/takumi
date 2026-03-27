@@ -1,188 +1,8 @@
-import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
 import type { Font, FontDetails, ImageSource } from "../index";
-import type * as NativeModule from "../index";
+import { Renderer as NativeRenderer, extractResourceUrls } from "../index";
+import * as nativeModule from "../index";
 
 export type * from "../index";
-
-const require = createRequire(import.meta.url);
-
-function checkIsMusl() {
-  const fileResult = isMuslFromFile();
-
-  if (fileResult !== undefined) {
-    return fileResult;
-  }
-
-  return isMuslFromReport();
-}
-
-function isMuslFromFile() {
-  try {
-    const content = readFileSync("/etc/ld.so.conf", "utf8");
-    return content.includes("musl");
-  } catch {}
-}
-
-function isMuslFromReport() {
-  try {
-    if ("excludeNetwork" in process.report) {
-      process.report.excludeNetwork = true;
-    }
-
-    const report = process.report.getReport() as {
-      header?: {
-        glibcVersionRuntime?: string;
-      };
-      sharedObjects?: string[];
-    };
-
-    if (report.header?.glibcVersionRuntime) {
-      return false;
-    }
-
-    if (Array.isArray(report.sharedObjects)) {
-      if (report.sharedObjects.some((f) => f.includes("libc.musl-") || f.includes("ld-musl-"))) {
-        return true;
-      }
-    }
-
-    return false;
-  } catch {}
-}
-
-function resolveTarget() {
-  switch (process.platform) {
-    case "darwin":
-      switch (process.arch) {
-        case "arm64":
-          return "darwin-arm64";
-        case "x64":
-          return "darwin-x64";
-      }
-      break;
-    case "linux": {
-      const isMusl = checkIsMusl();
-
-      switch (process.arch) {
-        case "arm64":
-          return isMusl ? "linux-arm64-musl" : "linux-arm64-gnu";
-        case "x64":
-          return isMusl ? "linux-x64-musl" : "linux-x64-gnu";
-      }
-      break;
-    }
-    case "win32":
-      if (process.arch === "x64") {
-        return "win32-x64-msvc";
-      }
-
-      return "win32-arm64-msvc";
-  }
-
-  return null;
-}
-
-function loadNativeModule(target: string | null) {
-  if (process.env.TAKUMI_CORE_TARGET) {
-    return require(/* turbopackOptional: true */ process.env.TAKUMI_CORE_TARGET);
-  }
-
-  switch (target) {
-    case "darwin-arm64":
-      try {
-        return require(/* turbopackOptional: true */ "../core.darwin-arm64.node");
-      } catch {}
-      try {
-        return require(/* turbopackOptional: true */ "@takumi-rs/core-darwin-arm64");
-      } catch {}
-      break;
-    case "darwin-x64":
-      try {
-        return require(/* turbopackOptional: true */ "../core.darwin-x64.node");
-      } catch {}
-      try {
-        return require(/* turbopackOptional: true */ "@takumi-rs/core-darwin-x64");
-      } catch {}
-      break;
-    case "linux-arm64-gnu":
-      try {
-        return require(/* turbopackOptional: true */ "../core.linux-arm64-gnu.node");
-      } catch {}
-      try {
-        return require(/* turbopackOptional: true */ "@takumi-rs/core-linux-arm64-gnu");
-      } catch {}
-      break;
-    case "linux-arm64-musl":
-      try {
-        return require(/* turbopackOptional: true */ "../core.linux-arm64-musl.node");
-      } catch {}
-      try {
-        return require(/* turbopackOptional: true */ "@takumi-rs/core-linux-arm64-musl");
-      } catch {}
-      break;
-    case "linux-x64-gnu":
-      try {
-        return require(/* turbopackOptional: true */ "../core.linux-x64-gnu.node");
-      } catch {}
-      try {
-        return require(/* turbopackOptional: true */ "@takumi-rs/core-linux-x64-gnu");
-      } catch {}
-      break;
-    case "linux-x64-musl":
-      try {
-        return require(/* turbopackOptional: true */ "../core.linux-x64-musl.node");
-      } catch {}
-      try {
-        return require(/* turbopackOptional: true */ "@takumi-rs/core-linux-x64-musl");
-      } catch {}
-      break;
-    case "win32-arm64-msvc":
-      try {
-        return require(/* turbopackOptional: true */ "../core.win32-arm64-msvc.node");
-      } catch {}
-      try {
-        return require(/* turbopackOptional: true */ "@takumi-rs/core-win32-arm64-msvc");
-      } catch {}
-      break;
-    case "win32-x64-msvc":
-      try {
-        return require(/* turbopackOptional: true */ "../core.win32-x64-msvc.node");
-      } catch {}
-      try {
-        return require(/* turbopackOptional: true */ "@takumi-rs/core-win32-x64-msvc");
-      } catch {}
-      break;
-  }
-
-  return null;
-}
-
-const target = resolveTarget();
-const nativeModule: typeof NativeModule = loadNativeModule(target);
-
-if (!nativeModule) {
-  if (!target) {
-    throw new Error(`Unsupported platform or architecture: ${process.platform} ${process.arch}`);
-  }
-
-  if (process.env.NEXT_RUNTIME === "nodejs") {
-    throw new Error(
-      `Native module @takumi-rs/core-${target} is not being bunlded.
-Add \`serverExternalPackages: ["@takumi-rs/core"]\` to your next.config.js.
-If you deployed from a different platform, make sure to manually install @takumi-rs/core-${target}.`,
-    );
-  }
-
-  throw new Error(
-    `Failed to load native module @takumi-rs/core-${target}. If you deployed from a different platform, make sure to manually install @takumi-rs/core-${target}.`,
-  );
-}
-
-const { extractResourceUrls } = nativeModule;
-
-export default nativeModule;
-
 export { extractResourceUrls };
 
 export type ImageSourceLoader = Omit<ImageSource, "data"> & {
@@ -193,7 +13,7 @@ export type FontLoader =
   | Font
   | (Omit<FontDetails, "data"> & {
       key?: string;
-      data: () => Promise<FontDetails["data"]> | FontDetails["data"];
+      data: (() => Promise<FontDetails["data"]>) | (() => FontDetails["data"]);
     });
 
 export type ImageSourceLoaderSync = Omit<ImageSource, "data"> & {
@@ -207,7 +27,7 @@ export type FontLoaderSync =
       data: () => FontDetails["data"];
     });
 
-export class Renderer extends nativeModule.Renderer {
+export class Renderer extends NativeRenderer {
   private fontsMark = new Set<string>();
   private fontBuffersMark = new WeakSet<FontDetails["data"]>();
 
@@ -266,6 +86,14 @@ export class Renderer extends nativeModule.Renderer {
     return isNew;
   }
 }
+
+const exportedModule = {
+  ...nativeModule,
+  Renderer,
+  extractResourceUrls,
+};
+
+export default exportedModule;
 
 function createFontKey(font: FontLoader | FontLoaderSync) {
   if ("key" in font && font.key) {

@@ -78,7 +78,6 @@
   "devDependencies": {
     "@types/bun": "catalog:",
     "csstype": "^3.2.3",
-    "tsdown": "catalog:",
     "typescript": "catalog:"
   },
   "readme": "README.md"

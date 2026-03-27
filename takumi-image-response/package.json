@@ -40,12 +40,6 @@
   },
   "devDependencies": {
     "@types/bun": "catalog:",
-    "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
-    "react": "catalog:",
-    "react-dom": "catalog:",
-    "tsdown": "catalog:",
-    "type-fest": "^5.5.0",
     "typescript": "catalog:"
   }
 }

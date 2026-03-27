@@ -9,6 +9,6 @@ export default defineConfig({
   clean: true,
   outDir: "dist",
   deps: {
-    skipNodeModulesBundle: true,
+    neverBundle: ["csstype"],
   },
 });
