@@ -211,7 +211,7 @@ jobs:
 
       - name: Build
         working-directory: takumi-napi-core
-        run: ${{ matrix.settings.build }}
+        run: ${{ matrix.settings.build }} && bun run build:js
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
@@ -466,7 +466,7 @@ jobs:
 
       - name: Build WASM
         working-directory: takumi-wasm
-        run: bun run build
+        run: bun run build && bun run build:js
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7

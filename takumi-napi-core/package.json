@@ -38,7 +38,8 @@
     }
   },
   "scripts": {
-    "build": "napi build --release --no-const-enum --platform --esm --strip && tsup-node src/export.ts --format esm --dts --out-dir dist",
+    "build": "napi build --release --no-const-enum --platform --esm --strip",
+    "build:js": "tsup-node src/export.ts --format esm --dts --out-dir dist --clean",
     "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json && bun artifacts && napi prepublish -t npm --no-gh-release",
     "artifacts": "napi create-npm-dirs && napi artifacts && napi version",
     "bench": "bun tests/bench/index.tsx"

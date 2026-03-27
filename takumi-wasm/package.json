@@ -61,7 +61,8 @@
     }
   },
   "scripts": {
-    "build": "wasm-pack build --no-pack --release --out-dir pkg --target web && tsup-node src/export.ts --format esm --dts --out-dir dist",
+    "build": "wasm-pack build --no-pack --release --out-dir pkg --target web",
+    "build:js": "tsup-node src/export.ts --format esm --dts --out-dir dist --clean",
     "build:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target web",
     "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json"
   },
