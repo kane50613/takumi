@@ -21,8 +21,7 @@
   },
   "files": [
     "dist",
-    "not-available.js",
-    "README.md"
+    "not-available.js"
   ],
   "type": "module",
   "main": "./dist/export.cjs",

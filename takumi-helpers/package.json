@@ -11,10 +11,7 @@
     "url": "git+https://github.com/kane50613/takumi.git"
   },
   "files": [
-    "dist",
-    "package.json",
-    "README.md",
-    "tsconfig.json"
+    "dist"
   ],
   "type": "module",
   "main": "./dist/index.cjs",

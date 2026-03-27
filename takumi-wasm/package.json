@@ -19,7 +19,6 @@
     "url": "git+https://github.com/kane50613/takumi.git"
   },
   "files": [
-    "README.md",
     "pkg/takumi_wasm_bg.wasm.d.ts",
     "pkg/takumi_wasm_bg.wasm",
     "dist",
