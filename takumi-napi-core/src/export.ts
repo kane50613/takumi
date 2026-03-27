@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
-import { Font, FontDetails, ImageSource } from "../index";
+import type { Font, FontDetails, ImageSource } from "../index";
 
 export type * from "../index";
 
