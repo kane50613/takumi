@@ -1,5 +1,5 @@
-import * as napi from "@takumi-rs/core";
-import * as wasm from "@takumi-rs/wasm";
+import type * as napi from "@takumi-rs/core";
+import type * as wasm from "@takumi-rs/wasm";
 import type { RenderOptionsWithoutRenderer } from "./render";
 
 export type ManagedRendererOptions = {

@@ -257,7 +257,7 @@ export default function Playground() {
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"
-            className="w-[180px] bg-zinc-950 border-zinc-800 text-zinc-300"
+            className="w-45 bg-zinc-950 border-zinc-800 text-zinc-300"
           >
             {templates.map((t) => (
               <DropdownMenuItem
@@ -384,7 +384,7 @@ function CodePanel({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 px-2.5 text-[11px] font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50 border border-zinc-800 bg-zinc-950/50 min-w-[120px] justify-between"
+                  className="h-7 px-2.5 text-[11px] font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50 border border-zinc-800 bg-zinc-950/50 min-w-30 justify-between"
                 >
                   {selectedTemplateName}
                   <ChevronDownIcon className="ml-1 h-3 w-3 text-zinc-500" />
@@ -392,7 +392,7 @@ function CodePanel({
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="start"
-                className="w-[180px] bg-zinc-950 border-zinc-800 text-zinc-300"
+                className="w-45 bg-zinc-950 border-zinc-800 text-zinc-300"
               >
                 {templates.map((t) => (
                   <DropdownMenuItem

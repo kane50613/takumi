@@ -1,8 +1,8 @@
 import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
-import { Font, FontDetails, ImageSource } from "./index";
+import { Font, FontDetails, ImageSource } from "../index";
 
-export type * from "./index";
+export type * from "../index";
 
 const require = createRequire(import.meta.url);
 
@@ -158,7 +158,7 @@ function loadNativeModule(target: string | null) {
 }
 
 const target = await resolveTarget();
-const nativeModule: typeof import("./index") = loadNativeModule(target);
+const nativeModule: typeof import("../index") = loadNativeModule(target);
 
 if (!nativeModule) {
   if (!target) {

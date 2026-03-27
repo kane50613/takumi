@@ -53,7 +53,7 @@
   },
   "scripts": {
     "prepublishOnly": "jq '.dependencies[\"@takumi-rs/core\"] = .version | .dependencies[\"@takumi-rs/helpers\"] = .version | .dependencies[\"@takumi-rs/wasm\"] = .version' package.json > tmp.json && mv tmp.json package.json",
-    "build": "tsup src/index.ts src/response/index.ts --format esm --dts --out-dir dist"
+    "build": "tsup src/index.ts src/response/index.ts --format esm --dts --out-dir dist --clean"
   },
   "dependencies": {
     "@takumi-rs/core": "workspace:*",
