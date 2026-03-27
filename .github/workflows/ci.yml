@@ -464,6 +464,9 @@ jobs:
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --filter ./takumi-wasm
+
       - name: Build WASM
         working-directory: takumi-wasm
         run: bun run build && bun run build:js
