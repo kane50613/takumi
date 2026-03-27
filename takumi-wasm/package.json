@@ -25,13 +25,20 @@
     "dist",
     "bundlers"
   ],
+  "main": "./dist/export.cjs",
+  "module": "./dist/export.mjs",
+  "types": "./dist/export.d.mts",
   "exports": {
     ".": {
       "types": "./dist/export.d.mts",
+      "import": "./dist/export.mjs",
+      "require": "./dist/export.cjs",
       "default": "./dist/export.mjs"
     },
     "./no-bundler": {
       "types": "./dist/export.d.mts",
+      "import": "./dist/export.mjs",
+      "require": "./dist/export.cjs",
       "default": "./dist/export.mjs"
     },
     "./node": {
@@ -62,7 +69,7 @@
   },
   "scripts": {
     "build": "wasm-pack build --no-pack --release --out-dir pkg --target web",
-    "build:js": "tsdown src/export.ts --format esm --dts --outdir dist --deps.skip-node-modules-bundle",
+    "build:js": "tsdown",
     "build:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target web",
     "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json"
   },
@@ -72,7 +79,7 @@
   "devDependencies": {
     "@types/bun": "catalog:",
     "csstype": "^3.2.3",
-    "tsdown": "^0.21.6",
+    "tsdown": "catalog:",
     "typescript": "catalog:"
   },
   "readme": "README.md"

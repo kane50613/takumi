@@ -11,20 +11,28 @@
     "url": "git+https://github.com/kane50613/takumi.git"
   },
   "files": [
-    "src"
+    "dist"
   ],
   "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
-      "types": "./src/index.d.ts",
-      "default": "./src/index.mjs"
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.mjs"
     },
     "./wasm": {
-      "types": "./src/index.d.ts",
-      "default": "./src/index.mjs"
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.mjs"
     }
   },
   "scripts": {
+    "build": "tsdown",
     "prepublishOnly": "jq '.dependencies[\"takumi-js\"] = .version' package.json > tmp.json && mv tmp.json package.json"
   },
   "dependencies": {
@@ -36,6 +44,7 @@
     "@types/react-dom": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "tsdown": "catalog:",
     "type-fest": "^5.5.0",
     "typescript": "catalog:"
   }

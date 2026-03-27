@@ -25,8 +25,9 @@
     "README.md"
   ],
   "type": "module",
-  "main": "dist/export.mjs",
-  "types": "export.d.ts",
+  "main": "./dist/export.cjs",
+  "module": "./dist/export.mjs",
+  "types": "./dist/export.d.mts",
   "exports": {
     ".": {
       "types": "./dist/export.d.mts",
@@ -40,7 +41,7 @@
   },
   "scripts": {
     "build": "napi build --release --no-const-enum --platform --esm --strip",
-    "build:js": "tsdown src/export.ts --format esm --format cjs --dts --out-dir dist --deps.skip-node-modules-bundle",
+    "build:js": "tsdown",
     "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json && bun artifacts && napi prepublish -t npm --no-gh-release",
     "artifacts": "napi create-npm-dirs && napi artifacts && napi version",
     "bench": "bun tests/bench/index.tsx"
@@ -57,7 +58,7 @@
     "lucide-react": "catalog:",
     "mitata": "^1.0.34",
     "react": "catalog:",
-    "tsdown": "^0.21.6",
+    "tsdown": "catalog:",
     "typescript": "catalog:"
   },
   "napi": {

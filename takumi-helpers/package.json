@@ -17,6 +17,9 @@
     "tsconfig.json"
   ],
   "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
@@ -38,7 +41,7 @@
     }
   },
   "scripts": {
-    "build": "tsdown src/index.ts src/emoji.ts src/jsx/jsx.ts --minify --dts --format esm,cjs"
+    "build": "tsdown"
   },
   "devDependencies": {
     "@types/bun": "catalog:",
@@ -47,7 +50,7 @@
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "tsdown": "^0.21.6",
+    "tsdown": "catalog:",
     "typescript": "catalog:"
   }
 }
