@@ -45,7 +45,7 @@
   },
   "scripts": {
     "prepublishOnly": "jq '.dependencies[\"@takumi-rs/core\"] = .version | .dependencies[\"@takumi-rs/helpers\"] = .version | .dependencies[\"@takumi-rs/wasm\"] = .version' package.json > tmp.json && mv tmp.json package.json",
-    "build": "tsup-node src/index.ts src/response/index.ts --format esm --dts --out-dir dist --clean"
+    "build:js": "tsdown src/index.ts src/response/index.ts --format esm --dts --out-dir dist --deps.skip-node-modules-bundle"
   },
   "dependencies": {
     "@takumi-rs/core": "workspace:*",
@@ -55,6 +55,6 @@
   "devDependencies": {
     "@types/react": "^19.2.14",
     "react": "^19.2.4",
-    "tsup": "^8.5.1"
+    "tsdown": "^0.21.6"
   }
 }

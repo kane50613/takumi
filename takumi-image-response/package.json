@@ -11,10 +11,7 @@
     "url": "git+https://github.com/kane50613/takumi.git"
   },
   "files": [
-    "src",
-    "package.json",
-    "README.md",
-    "tsconfig.json"
+    "src"
   ],
   "type": "module",
   "exports": {
@@ -28,7 +25,6 @@
     }
   },
   "scripts": {
-    "build": "tsup-node src/response.tsx --clean --minify-syntax --dts --format esm,cjs --no-splitting",
     "prepublishOnly": "jq '.dependencies[\"takumi-js\"] = .version' package.json > tmp.json && mv tmp.json package.json"
   },
   "dependencies": {
@@ -40,7 +36,6 @@
     "@types/react-dom": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "tsup": "^8.5.1",
     "type-fest": "^5.5.0",
     "typescript": "catalog:"
   }

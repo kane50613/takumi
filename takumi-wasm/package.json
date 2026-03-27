@@ -62,7 +62,7 @@
   },
   "scripts": {
     "build": "wasm-pack build --no-pack --release --out-dir pkg --target web",
-    "build:js": "tsup-node src/export.ts --format esm --dts --out-dir dist --clean",
+    "build:js": "tsdown src/export.ts --format esm --dts --outdir dist --deps.skip-node-modules-bundle",
     "build:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target web",
     "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json"
   },
@@ -71,8 +71,8 @@
   },
   "devDependencies": {
     "@types/bun": "catalog:",
-    "@types/react": "^19.2.14",
-    "tsup": "^8.5.1",
+    "csstype": "^3.2.3",
+    "tsdown": "^0.21.6",
     "typescript": "catalog:"
   },
   "readme": "README.md"

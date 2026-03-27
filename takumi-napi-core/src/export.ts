@@ -1,29 +1,29 @@
 import { createRequire } from "node:module";
-import { readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { Font, FontDetails, ImageSource } from "../index";
 
 export type * from "../index";
 
 const require = createRequire(import.meta.url);
 
-async function checkIsMusl() {
-  const fileResult = await isMuslFromFile();
+function checkIsMusl() {
+  const fileResult = isMuslFromFile();
 
   if (fileResult !== undefined) {
     return fileResult;
   }
 
-  return await isMuslFromReport();
+  return isMuslFromReport();
 }
 
 async function isMuslFromFile() {
   try {
-    const content = await readFile("/etc/ld.so.conf", "utf8");
+    const content = readFileSync("/etc/ld.so.conf", "utf8");
     return content.includes("musl");
   } catch {}
 }
 
-async function isMuslFromReport() {
+function isMuslFromReport() {
   try {
     if ("excludeNetwork" in process.report) {
       process.report.excludeNetwork = true;
@@ -50,7 +50,7 @@ async function isMuslFromReport() {
   } catch {}
 }
 
-async function resolveTarget() {
+function resolveTarget() {
   switch (process.platform) {
     case "darwin":
       switch (process.arch) {
@@ -61,7 +61,7 @@ async function resolveTarget() {
       }
       break;
     case "linux": {
-      const isMusl = await checkIsMusl();
+      const isMusl = checkIsMusl();
 
       switch (process.arch) {
         case "arm64":
@@ -157,7 +157,7 @@ function loadNativeModule(target: string | null) {
   return null;
 }
 
-const target = await resolveTarget();
+const target = resolveTarget();
 const nativeModule: typeof import("../index") = loadNativeModule(target);
 
 if (!nativeModule) {

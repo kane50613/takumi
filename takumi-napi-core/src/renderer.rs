@@ -114,7 +114,7 @@ pub struct RenderOptions<'env> {
   pub stylesheets: Option<Vec<String>>,
   /// Structured keyframes to register alongside stylesheets.
   #[napi(
-    ts_type = "{ name: string; keyframes: { offsets: number[]; declarations: Record<string, unknown> }[] }[] | Keyframes"
+    ts_type = "{ name: string; keyframes: { offsets: number[]; declarations: Record<string, Properties> }[] }[] | Keyframes"
   )]
   pub keyframes: Option<Object<'env>>,
   /// The device pixel ratio.

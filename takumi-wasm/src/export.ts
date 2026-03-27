@@ -5,8 +5,8 @@ import {
   type FontDetails,
   type ImageSource,
 } from "../pkg/takumi_wasm";
-export type * from "../pkg/takumi_wasm";
 
+export * from "../pkg/takumi_wasm";
 export { default } from "../pkg/takumi_wasm";
 
 export type ImageSourceLoader = Omit<ImageSource, "data"> & {

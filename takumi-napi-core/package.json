@@ -25,21 +25,22 @@
     "README.md"
   ],
   "type": "module",
-  "main": "dist/export.js",
+  "main": "dist/export.mjs",
   "types": "export.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/export.d.ts",
+      "types": "./dist/export.d.mts",
       "workerd": "./not-available.js",
       "browser": "./not-available.js",
-      "node": "./dist/export.js",
-      "import": "./dist/export.js",
-      "default": "./dist/export.js"
+      "node": "./dist/export.mjs",
+      "import": "./dist/export.mjs",
+      "require": "./dist/export.cjs",
+      "default": "./dist/export.mjs"
     }
   },
   "scripts": {
     "build": "napi build --release --no-const-enum --platform --esm --strip",
-    "build:js": "tsup-node src/export.ts --format esm --dts --out-dir dist --clean",
+    "build:js": "tsdown src/export.ts --format esm --format cjs --dts --out-dir dist --deps.skip-node-modules-bundle",
     "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json && bun artifacts && napi prepublish -t npm --no-gh-release",
     "artifacts": "napi create-npm-dirs && napi artifacts && napi version",
     "bench": "bun tests/bench/index.tsx"
@@ -52,10 +53,11 @@
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "csstype": "^3.2.3",
     "lucide-react": "catalog:",
     "mitata": "^1.0.34",
     "react": "catalog:",
-    "tsup": "^8.5.1",
+    "tsdown": "^0.21.6",
     "typescript": "catalog:"
   },
   "napi": {

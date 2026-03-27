@@ -1,11 +1,11 @@
 import type { Node } from "@takumi-rs/helpers";
-import type { CSSProperties } from "react";
+import type { Properties } from "csstype";
 
 export { ContainerNode, ImageNode, Node, NodeMetadata, TextNode } from "@takumi-rs/helpers";
 
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 
-export type Keyframes = Record<string, Record<string, CSSProperties>>;
+export type Keyframes = Record<string, Record<string, Properties>>;
 
 export type RenderOptions = {
   /**
@@ -124,7 +124,7 @@ export type ImageSource = {
 
 export type KeyframeRule = {
   offsets: number[];
-  declarations: Record<string, unknown>;
+  declarations: Properties;
 };
 
 export type KeyframesRule = {

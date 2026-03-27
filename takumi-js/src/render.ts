@@ -24,7 +24,7 @@ export type RenderOptions = RenderOptionsWithRenderer | RenderOptionsWithoutRend
 let globalRenderer: napi.Renderer | wasm.Renderer | undefined;
 
 export async function render(element: ReactNode | ReactElementLike, options?: RenderOptions) {
-  const imports = await getImports(module);
+  const imports = await getImports(options && "module" in options ? options.module : undefined);
   const isExternalRenderer = options && "renderer" in options;
   const renderer = isExternalRenderer
     ? options.renderer
