@@ -12,7 +12,6 @@
     "url": "git+https://github.com/kane50613/takumi.git"
   },
   "files": [
-    "src",
     "dist"
   ],
   "type": "module",
