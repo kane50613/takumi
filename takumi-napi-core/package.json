@@ -26,10 +26,10 @@
   "type": "module",
   "main": "./dist/export.cjs",
   "module": "./dist/export.mjs",
-  "types": "./dist/export.d.mts",
+  "types": "./dist/export.d.cts",
   "exports": {
     ".": {
-      "types": "./dist/export.d.mts",
+      "types": "./dist/export.d.cts",
       "workerd": "./not-available.js",
       "browser": "./not-available.js",
       "import": "./dist/export.mjs",

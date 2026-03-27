@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
-import { initSync } from "../pkg/takumi_wasm";
+import * as wasm from "../dist/export";
 
 const wasmBytes = readFileSync(new URL("../pkg/takumi_wasm_bg.wasm", import.meta.url));
 
-initSync({ module: wasmBytes });
+wasm.initSync({ module: wasmBytes });
 
-export * from "../pkg/takumi_wasm";
-export { default } from "../pkg/takumi_wasm";
+export * from "../dist/export";
+export default wasm.default;

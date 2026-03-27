@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
-const filesToPatch = ["dist/export.mjs", "dist/export.cjs", "index.js"];
+const filesToPatch = ["dist/export.mjs", "dist/export.cjs"];
 let patchedFileCount = 0;
 
 for (const file of filesToPatch) {
@@ -22,6 +22,7 @@ if (patchedFileCount === 0) {
 function patchGeneratedLoader(content: string) {
   return content
     .replaceAll("process.env.NAPI_RS_NATIVE_LIBRARY_PATH", "process.env.TAKUMI_CORE_TARGET")
+    .replaceAll(/(["'])\.\/core(\.[^"']+\.node["'])/g, "$1../core$2")
     .replaceAll(
       /return require(\$1)?\(("(?:\.?\.\/core\.[^"]+\.node|@takumi-rs\/core-[^"]+)")\);/g,
       "return require$1(/* turbopackOptional: true */ $2);",

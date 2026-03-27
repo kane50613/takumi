@@ -80,7 +80,7 @@ export function createImageResponse(defaultOptions?: ImageResponseOptions): Imag
       type: "bytes",
       async start(controller) {
         try {
-          const image = await render(element, options);
+          const image = await render(element, mergedOptions);
           controller.enqueue(image as ArrayBufferView<ArrayBuffer>);
           controller.close();
           resolveReady();

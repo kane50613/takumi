@@ -1,1 +1,3 @@
-export default WebAssembly.Module;
+declare const wasmModule: WebAssembly.Module;
+
+export default wasmModule;

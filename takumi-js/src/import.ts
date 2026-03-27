@@ -17,12 +17,22 @@ async function getImportsImpl(module?: wasm.InitInput) {
     return initializeWasm(module);
   }
 
-  const importedModule = await importBindings();
-  if (importedModule && "Renderer" in importedModule) {
-    return importedModule;
+  if (shouldSkipCoreImport()) {
+    return initializeWasm(importWasmBindings());
   }
 
-  return initializeWasm(importedModule);
+  try {
+    return await import("@takumi-rs/core");
+  } catch (error) {
+    console.warn(
+      "Unable to import @takumi-rs/core. Falling back to auto-detection of WASM bindings.",
+      {
+        cause: error,
+      },
+    );
+  }
+
+  return initializeWasm(importWasmBindings());
 }
 
 async function initializeWasm(module?: wasm.InitInput | { default: wasm.InitInput }) {
@@ -43,25 +53,6 @@ async function initializeWasm(module?: wasm.InitInput | { default: wasm.InitInpu
       },
     );
   }
-}
-
-async function importBindings() {
-  if (shouldSkipCoreImport()) {
-    return importWasmBindings();
-  }
-
-  try {
-    return await import("@takumi-rs/core");
-  } catch (error) {
-    console.warn(
-      "Unable to import @takumi-rs/core. Falling back to auto-detection of WASM bindings.",
-      {
-        cause: error,
-      },
-    );
-  }
-
-  return importWasmBindings();
 }
 
 async function importWasmBindings() {

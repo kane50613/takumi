@@ -86,7 +86,7 @@ export class Renderer extends RendererInternal {
     font: FontLoaderSync | FontLoader,
     signal?: AbortSignal,
   ): boolean | Promise<boolean> {
-    if (!this.checkAndMarkFont(font) || signal?.aborted) {
+    if (signal?.aborted) {
       return false;
     }
 
@@ -94,17 +94,31 @@ export class Renderer extends RendererInternal {
 
     if (isPromise(resolved)) {
       return resolved.then((value) => {
-        if (signal?.aborted) {
+        if (signal?.aborted || !this.checkAndMarkFont(value)) {
           return false;
         }
 
-        super.loadFont(value);
-        return true;
+        try {
+          super.loadFont(value);
+          return true;
+        } catch (error) {
+          this.unmarkFont(value);
+          throw error;
+        }
       });
     }
 
-    super.loadFont(resolved);
-    return true;
+    if (!this.checkAndMarkFont(resolved)) {
+      return false;
+    }
+
+    try {
+      super.loadFont(resolved);
+      return true;
+    } catch (error) {
+      this.unmarkFont(resolved);
+      throw error;
+    }
   }
 
   private checkAndMarkFont(font: FontLoaderSync | FontLoader): boolean {
@@ -122,6 +136,17 @@ export class Renderer extends RendererInternal {
     this.fontsMark.add(key);
 
     return isNew;
+  }
+
+  private unmarkFont(font: FontLoaderSync | FontLoader): void {
+    const key = createFontKey(font);
+
+    if (isBuffer(key)) {
+      this.fontBuffersMark.delete(key);
+      return;
+    }
+
+    this.fontsMark.delete(key);
   }
 }
 
