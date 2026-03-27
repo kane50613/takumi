@@ -1,7 +1,4 @@
-use std::{
-  collections::HashSet,
-  sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -13,7 +10,6 @@ use takumi::{
   rendering::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat},
   resources::{font::FontResource, image::ImageSource as LoadedImageSource},
 };
-use xxhash_rust::xxh3::Xxh3DefaultBuilder;
 
 use crate::{
   De, FontInput, buffer_from_object, buffer_slice_from_object, deserialize_with_tracing,
@@ -77,12 +73,6 @@ impl From<takumi::rendering::MeasuredNode> for MeasuredNode {
   }
 }
 
-#[derive(PartialEq, Eq, Hash)]
-pub(crate) struct ImageCacheKey {
-  pub src: Box<str>,
-  pub data_hash: u64,
-}
-
 /// The main renderer for Takumi image rendering engine (Node.js version).
 #[napi]
 pub struct Renderer {
@@ -91,7 +81,6 @@ pub struct Renderer {
 
 pub(crate) struct RendererState {
   pub(crate) global: GlobalContext,
-  pub(crate) persistent_image_cache: HashSet<ImageCacheKey, Xxh3DefaultBuilder>,
 }
 
 pub(crate) fn deserialize_keyframes(keyframes: Option<Object>) -> Result<Vec<CoreKeyframesRule>> {
@@ -338,10 +327,7 @@ impl Renderer {
     }
 
     let renderer = Self {
-      state: Arc::new(RwLock::new(RendererState {
-        global,
-        persistent_image_cache: HashSet::default(),
-      })),
+      state: Arc::new(RwLock::new(RendererState { global })),
     };
 
     if let Some(fonts) = options.fonts {

@@ -28,14 +28,10 @@ This is the API that accepts the `keyframes` option.
 /** @jsxImportSource react */
 // ---cut-before---
 // @noErrors
-import { Renderer } from "takumi-js/node";
+import { render } from "takumi-js/node";
 import { fromJsx } from "takumi-js/helpers/jsx";
 
-const renderer = new Renderer();
-
-const { node } = await fromJsx(<div tw="animate-[move_1s_ease-in-out_infinite_alternate]" />);
-
-const output = await renderer.render(node, {
+const output = await render(<div tw="animate-[move_1s_ease-in-out_infinite_alternate]" />, {
   width: 100,
   height: 100,
   format: "png",

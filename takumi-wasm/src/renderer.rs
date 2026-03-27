@@ -4,11 +4,7 @@ use crate::{helper::map_error, model::*};
 use base64::{Engine, prelude::BASE64_STANDARD};
 use parley::{FontWeight, GenericFamily, fontique::FontInfoOverride};
 use serde_wasm_bindgen::{from_value, to_value};
-use std::{
-  borrow::Cow,
-  collections::{HashMap, HashSet},
-  sync::Arc,
-};
+use std::{borrow::Cow, collections::HashMap, sync::Arc};
 use takumi::{
   GlobalContext,
   layout::{
@@ -24,7 +20,6 @@ use takumi::{
   resources::{font::FontResource, image::ImageSource as LoadedImageSource},
 };
 use wasm_bindgen::prelude::*;
-use xxhash_rust::xxh3::{Xxh3DefaultBuilder, xxh3_64};
 
 const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[(
   include_bytes!("../../assets/fonts/manrope/manrope-latin-wght-normal.woff2"),
@@ -37,7 +32,6 @@ const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[(
 #[derive(Default)]
 pub struct Renderer {
   pub(crate) context: GlobalContext,
-  pub(crate) persistent_image_cache: HashSet<ImageCacheKey, Xxh3DefaultBuilder>,
 }
 
 #[wasm_bindgen]
@@ -206,17 +200,6 @@ impl Renderer {
 
   /// Puts a persistent image into the renderer's internal store (internal version without JS conversion).
   fn put_persistent_image_internal(&mut self, data: &ImageSource) -> Result<(), js_sys::Error> {
-    let key = ImageCacheKey {
-      src: data.src.as_ref().into(),
-      data_hash: xxh3_64(&data.data),
-    };
-
-    if self.persistent_image_cache.contains(&key) {
-      return Ok(());
-    }
-
-    self.persistent_image_cache.insert(key);
-
     let image = LoadedImageSource::from_bytes(&data.data).map_err(map_error)?;
     self
       .context

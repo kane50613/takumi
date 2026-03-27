@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { Renderer } from "takumi-js/node";
-import { fromJsx } from "takumi-js/helpers/jsx";
 import { spawn } from "bun";
 import { getHighlighterTokens, keyframes, Scene } from "./Scene";
+import { render } from "takumi-js";
+import type { ImageSourceLoader } from "@takumi-rs/core";
 
 const fps = 30;
 const durationSeconds = 4;
@@ -14,10 +14,6 @@ const height = 630 * devicePixelRatio;
 const outputPath = resolve(import.meta.dir, "../output/animation.mp4");
 
 const tokens = await getHighlighterTokens();
-
-const { node: scene } = await fromJsx(<Scene tokens={tokens} />);
-
-const { node: thumbnailScene } = await fromJsx(<Scene tokens={tokens} showPlayButton={true} />);
 
 const ffmpeg = spawn(
   [
@@ -48,31 +44,32 @@ const ffmpeg = spawn(
   { stdin: "pipe", stdout: "ignore", stderr: "ignore" },
 );
 
-const renderer = new Renderer();
-
-await renderer.putPersistentImage({
-  src: "logo.svg",
-  data: await readFile(join(import.meta.dir, "../../../docs/public/logo.svg")),
-});
-
-await renderer.putPersistentImage({
-  src: "background.jpg",
-  data: await readFile(
-    join(import.meta.dir, "../../../assets/images/martin-martz-W0NRebXbsjM-unsplash.jpg"),
-  ),
-});
+const persistentImages: ImageSourceLoader[] = [
+  {
+    src: "logo.svg",
+    data: () => readFile(join(import.meta.dir, "../../../docs/public/logo.svg")),
+  },
+  {
+    src: "background.jpg",
+    data: () =>
+      readFile(
+        join(import.meta.dir, "../../../assets/images/martin-martz-W0NRebXbsjM-unsplash.jpg"),
+      ),
+  },
+];
 
 const thumbnailPath = resolve(import.meta.dir, "../output/thumbnail.webp");
 console.log(`Rendering thumbnail to ${thumbnailPath}...`);
 
 // Generate thumbnail at 2.5s where things are stable
-const thumbnailFrame = await renderer.render(thumbnailScene, {
+const thumbnailFrame = await render(<Scene tokens={tokens} showPlayButton={true} />, {
   width,
   height,
   devicePixelRatio,
   format: "webp",
   keyframes,
   timeMs: 2500,
+  persistentImages,
 });
 
 if (!thumbnailFrame) throw new Error("Thumbnail frame is undefined");
@@ -81,15 +78,18 @@ console.log(`Success! Thumbnail saved to ${thumbnailPath}`);
 
 console.log(`Rendering ${totalFrames} frames to ${outputPath}...`);
 
+const scene = <Scene tokens={tokens} />;
+
 const framePromises = Array.from({ length: totalFrames }, (_, i) => {
   const timeMs = (i / fps) * 1000;
-  return renderer.render(scene, {
+  return render(scene, {
     width,
     height,
     devicePixelRatio,
     format: "raw",
     keyframes,
     timeMs,
+    persistentImages,
   });
 });
 

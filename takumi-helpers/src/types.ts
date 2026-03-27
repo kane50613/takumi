@@ -2,6 +2,12 @@ import type { CSSProperties } from "react";
 
 export type NodeAttributes = Record<string, string>;
 
+export type ReactElementLike = {
+  type: string | symbol | ((props: unknown) => ReactElementLike) | ReactElementLike;
+  props: unknown;
+  $$typeof?: symbol;
+};
+
 export type NodeMetadata = {
   tagName?: string;
   className?: string;

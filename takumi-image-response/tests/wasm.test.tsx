@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { join } from "node:path";
 import { file } from "bun";
-import { createImageResponse, ImageResponse } from "../src/response";
+import { createImageResponse, ImageResponse } from "../../takumi-js/src/response";
 
 const module = new URL(import.meta.resolve("@takumi-rs/wasm/takumi_wasm_bg.wasm"), import.meta.url);
 

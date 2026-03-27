@@ -1,17 +1,12 @@
-import { Renderer } from "takumi-js/node";
-import { fromJsx } from "takumi-js/helpers/jsx";
 import { write } from "bun";
 import { html } from "satori-html";
-
-const renderer = new Renderer();
+import { render } from "takumi-js";
 
 const markup = html` <div style="color: black">hello, world</div> `;
-const { node, stylesheets } = await fromJsx(markup);
 
-const png = await renderer.render(node, {
+const png = await render(markup, {
   width: 600,
   height: 400,
-  stylesheets,
 });
 
 await write("./output.png", png.buffer);

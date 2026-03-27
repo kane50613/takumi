@@ -20,27 +20,26 @@
     "url": "git+https://github.com/kane50613/takumi.git"
   },
   "files": [
-    "export.d.ts",
-    "export.mjs",
+    "dist",
     "not-available.js",
     "README.md"
   ],
   "type": "module",
-  "main": "export.mjs",
+  "main": "dist/export.js",
   "types": "export.d.ts",
   "exports": {
     ".": {
-      "types": "./export.d.ts",
+      "types": "./dist/export.d.ts",
       "workerd": "./not-available.js",
       "browser": "./not-available.js",
-      "node": "./export.mjs",
-      "import": "./export.mjs",
-      "default": "./export.mjs"
+      "node": "./dist/export.js",
+      "import": "./dist/export.js",
+      "default": "./dist/export.js"
     }
   },
   "scripts": {
-    "build": "napi build --release --no-const-enum --platform --esm --strip",
-    "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json && bun artifacts && cp artifacts/bindings-x86_64-unknown-linux-gnu/index.d.ts export.d.ts && napi prepublish -t npm --no-gh-release",
+    "build": "napi build --release --no-const-enum --platform --esm --strip && tsup export.ts --format esm --dts --out-dir dist",
+    "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json && bun artifacts && napi prepublish -t npm --no-gh-release",
     "artifacts": "napi create-npm-dirs && napi artifacts && napi version",
     "bench": "bun tests/bench/index.tsx"
   },
@@ -55,6 +54,7 @@
     "lucide-react": "catalog:",
     "mitata": "^1.0.34",
     "react": "catalog:",
+    "tsup": "^8.5.1",
     "typescript": "catalog:"
   },
   "napi": {

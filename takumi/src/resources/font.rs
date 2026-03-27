@@ -1,14 +1,13 @@
 use std::{
   borrow::Cow,
   collections::{HashMap, HashSet},
-  hash::Hash,
   iter::once,
   ops::{Deref, DerefMut},
   sync::Arc,
 };
 
 use parley::{
-  FontStyle, GenericFamily, GlyphRun, LayoutContext, TextStyle, TreeBuilder,
+  GenericFamily, GlyphRun, LayoutContext, TextStyle, TreeBuilder,
   fontique::{Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, Script},
 };
 use swash::{
@@ -16,13 +15,9 @@ use swash::{
   scale::{ScaleContext, StrikeWith, image::Image, outline::Outline},
 };
 use thiserror::Error;
-use xxhash_rust::xxh3::xxh3_64;
 use zeno::{Angle as ZenoAngle, Transform as ZenoTransform};
 
-use crate::{
-  Xxh3HashSet,
-  layout::inline::{InlineBrush, InlineLayout},
-};
+use crate::layout::inline::{InlineBrush, InlineLayout};
 
 /// Represents a resolved glyph that can be either a bitmap image or an outline
 #[derive(Clone)]
@@ -113,39 +108,10 @@ fn guess_font_format(source: &[u8]) -> Result<FontFormat, FontError> {
   }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub(crate) struct FontCacheKey {
-  data_hash: u64,
-  family_name: Option<Box<str>>,
-  style: Option<FontStyleHash>,
-  weight: Option<u32>,
-  width: Option<u32>,
-  axes: Option<Box<[(u32, u32)]>>,
-  generic_family: Option<GenericFamily>,
-}
-
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub(crate) enum FontStyleHash {
-  Normal,
-  Italic,
-  Oblique(Option<u32>),
-}
-
-impl From<FontStyle> for FontStyleHash {
-  fn from(style: FontStyle) -> Self {
-    match style {
-      FontStyle::Normal => Self::Normal,
-      FontStyle::Italic => Self::Italic,
-      FontStyle::Oblique(angle) => Self::Oblique(angle.map(f32::to_bits)),
-    }
-  }
-}
-
 /// A context for managing fonts in the rendering system.
 #[derive(Clone)]
 pub struct FontContext {
   inner: parley::FontContext,
-  cache: Xxh3HashSet<FontCacheKey>,
 }
 
 impl Default for FontContext {
@@ -158,7 +124,6 @@ impl Default for FontContext {
         }),
         source_cache: Default::default(),
       },
-      cache: Xxh3HashSet::default(),
     }
   }
 }
@@ -279,31 +244,6 @@ impl FontContext {
       generic_family,
     } = font;
 
-    let cache_key = FontCacheKey {
-      data_hash: xxh3_64(source.as_ref()),
-      family_name: info_override
-        .and_then(|info| info.family_name)
-        .map(Into::into),
-      style: info_override.and_then(|info| info.style).map(Into::into),
-      weight: info_override
-        .and_then(|info| info.weight)
-        .map(|weight| weight.value().to_bits()),
-      width: info_override
-        .and_then(|info| info.width)
-        .map(|width| width.ratio().to_bits()),
-      axes: info_override.and_then(|info| info.axes).map(|axes| {
-        axes
-          .iter()
-          .map(|(tag, value)| (u32::from_be_bytes(tag.to_be_bytes()), value.to_bits()))
-          .collect()
-      }),
-      generic_family,
-    };
-
-    if self.cache.contains(&cache_key) {
-      return Ok(());
-    }
-
     let fonts = self
       .inner
       .collection
@@ -324,8 +264,6 @@ impl FontContext {
           .append_fallbacks(FallbackKey::new(*script, None), once(family));
       }
     }
-
-    self.cache.insert(cache_key);
 
     Ok(())
   }

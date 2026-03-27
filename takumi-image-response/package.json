@@ -11,7 +11,7 @@
     "url": "git+https://github.com/kane50613/takumi.git"
   },
   "files": [
-    "dist",
+    "src",
     "package.json",
     "README.md",
     "tsconfig.json"
@@ -19,26 +19,20 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/response.d.ts",
-      "import": "./dist/response.js",
-      "require": "./dist/response.cjs",
-      "default": "./dist/response.js"
+      "types": "./src/index.d.ts",
+      "default": "./src/index.mjs"
     },
     "./wasm": {
-      "types": "./dist/response.d.ts",
-      "import": "./dist/response.js",
-      "require": "./dist/response.cjs",
-      "default": "./dist/response.js"
+      "types": "./src/index.d.ts",
+      "default": "./src/index.mjs"
     }
   },
   "scripts": {
     "build": "tsup-node src/response.tsx --clean --minify-syntax --dts --format esm,cjs --no-splitting",
-    "prepublishOnly": "jq '.dependencies[\"@takumi-rs/core\"] = .version | .dependencies[\"@takumi-rs/helpers\"] = .version | .dependencies[\"@takumi-rs/wasm\"] = .version' package.json > tmp.json && mv tmp.json package.json"
+    "prepublishOnly": "jq '.dependencies[\"takumi-js\"] = .version' package.json > tmp.json && mv tmp.json package.json"
   },
   "dependencies": {
-    "@takumi-rs/core": "workspace:*",
-    "@takumi-rs/helpers": "workspace:*",
-    "@takumi-rs/wasm": "workspace:*"
+    "takumi-js": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "catalog:",

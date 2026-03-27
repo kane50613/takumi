@@ -1,4 +1,5 @@
 import type { Node } from "@takumi-rs/helpers";
+import { CSSProperties } from "react";
 
 export type { ContainerNode, ImageNode, NodeMetadata, TextNode } from "@takumi-rs/helpers";
 
@@ -25,4 +26,4 @@ export interface FontDetails {
 
 export type Font = FontDetails | Uint8Array | ArrayBuffer;
 
-export type Keyframes = Record<string, Record<string, Record<string, unknown>>>;
+export type Keyframes = Record<string, Record<string, CSSProperties>>;

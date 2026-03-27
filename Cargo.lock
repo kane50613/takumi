@@ -2508,7 +2508,6 @@ dependencies = [
  "rayon",
  "serde",
  "takumi",
- "xxhash-rust",
 ]
 
 [[package]]
@@ -2544,7 +2543,6 @@ dependencies = [
  "serde_bytes",
  "takumi",
  "wasm-bindgen",
- "xxhash-rust",
 ]
 
 [[package]]

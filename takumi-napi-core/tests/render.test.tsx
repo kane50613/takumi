@@ -101,6 +101,20 @@ describe("setup", () => {
       data: imageBuffer,
     });
   });
+
+  test("putPersistentImage with sync data loader", async () => {
+    await renderer.putPersistentImage({
+      src: `${localImagePath}?sync-loader`,
+      data: () => imageBuffer,
+    });
+  });
+
+  test("putPersistentImage with async data loader", async () => {
+    await renderer.putPersistentImage({
+      src: `${localImagePath}?async-loader`,
+      data: async () => imageBuffer,
+    });
+  });
 });
 
 describe("extractResourceUrls", () => {

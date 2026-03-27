@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import ImageResponse from "../src/response";
+import ImageResponse from "../../takumi-js/src/response";
 
 describe("ImageResponse", () => {
   test("should not crash", async () => {

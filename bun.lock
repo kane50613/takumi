@@ -236,9 +236,7 @@
       "name": "@takumi-rs/image-response",
       "version": "0.0.0",
       "dependencies": {
-        "@takumi-rs/core": "workspace:*",
-        "@takumi-rs/helpers": "workspace:*",
-        "@takumi-rs/wasm": "workspace:*",
+        "takumi-js": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
@@ -257,8 +255,12 @@
       "dependencies": {
         "@takumi-rs/core": "workspace:*",
         "@takumi-rs/helpers": "workspace:*",
-        "@takumi-rs/image-response": "workspace:*",
         "@takumi-rs/wasm": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/react": "^19.2.14",
+        "react": "^19.2.4",
+        "tsup": "^8.5.1",
       },
     },
     "takumi-napi-core": {
@@ -275,6 +277,7 @@
         "lucide-react": "catalog:",
         "mitata": "^1.0.34",
         "react": "catalog:",
+        "tsup": "^8.5.1",
         "typescript": "catalog:",
       },
     },
@@ -299,6 +302,8 @@
       },
       "devDependencies": {
         "@types/bun": "catalog:",
+        "@types/react": "^19.2.14",
+        "tsup": "^8.5.1",
         "typescript": "catalog:",
       },
     },

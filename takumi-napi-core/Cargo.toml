@@ -17,11 +17,6 @@ version = "0.7"
 default-features = false
 features = ["libm"]
 
-
-[dependencies.xxhash-rust]
-version = "0.8"
-features = ["xxh3", "std"]
-
 [dependencies.takumi]
 path = "../takumi"
 features = ["woff2", "woff", "svg", "rayon", "detailed_css_error"]

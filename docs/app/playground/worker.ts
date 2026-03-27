@@ -1,8 +1,7 @@
-import { fetchResources } from "takumi-js/helpers";
-import { extractEmojis } from "takumi-js/helpers/emoji";
+import { fetchResources } from "../../../takumi-js/src/helpers";
+import { extractEmojis } from "../../../takumi-js/src/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
-import initWasm, { extractResourceUrls, Renderer } from "takumi-js/wasm";
-import wasmUrl from "takumi-js/wasm/takumi_wasm_bg.wasm?url";
+import wasm, { extractResourceUrls, init, Renderer } from "../../../takumi-js/src/wasm";
 import * as React from "react";
 import { transform } from "sucrase";
 import * as z from "zod/mini";
@@ -22,7 +21,7 @@ const exportsSchema = z.object({
 let renderer: Renderer | undefined;
 
 (async () => {
-  await initWasm({ module_or_path: wasmUrl });
+  await init({ module_or_path: wasm });
 
   renderer = new Renderer();
 

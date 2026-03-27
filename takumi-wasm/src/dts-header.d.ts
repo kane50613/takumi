@@ -1,10 +1,11 @@
 import type { Node } from "@takumi-rs/helpers";
+import type { CSSProperties } from "react";
 
 export { ContainerNode, ImageNode, Node, NodeMetadata, TextNode } from "@takumi-rs/helpers";
 
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 
-export type Keyframes = Record<string, Record<string, Record<string, unknown>>>;
+export type Keyframes = Record<string, Record<string, CSSProperties>>;
 
 export type RenderOptions = {
   /**

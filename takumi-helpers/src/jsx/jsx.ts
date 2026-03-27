@@ -1,6 +1,6 @@
 import type { ComponentProps, CSSProperties, ReactElement, ReactNode } from "react";
 import { container, image, percentage, text } from "../helpers";
-import type { Node, NodeMetadata } from "../types";
+import type { Node, NodeMetadata, ReactElementLike } from "../types";
 import {
   createContextDispatcher,
   getReactRuntime,
@@ -19,7 +19,6 @@ import {
   isReactFragment,
   isReactMemo,
   isValidElement,
-  type ReactElementLike,
 } from "./utils";
 
 export * from "./style-presets";
