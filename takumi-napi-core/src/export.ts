@@ -16,7 +16,7 @@ function checkIsMusl() {
   return isMuslFromReport();
 }
 
-async function isMuslFromFile() {
+function isMuslFromFile() {
   try {
     const content = readFileSync("/etc/ld.so.conf", "utf8");
     return content.includes("musl");

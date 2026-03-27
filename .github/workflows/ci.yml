@@ -308,7 +308,7 @@ jobs:
   test-template:
     name: Test Templates
     runs-on: ubuntu-slim
-    needs: [build-napi, build-helpers]
+    needs: [build-helpers, build-js, build-napi]
     steps:
       - uses: actions/checkout@v6
 
@@ -328,6 +328,12 @@ jobs:
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi-core
+
+      - name: Download takumi-js artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: js-dist
+          path: takumi-js/dist
 
       - name: Install dependencies
         run: bun install --frozen-lockfile --filter ./takumi-template
