@@ -1,5 +1,12 @@
 # @takumi-rs/core
 
+## 1.0.0-rc.3
+
+### Patch Changes
+
+- 532bc96: Fix bun compile fails to resolve native module #606
+  - @takumi-rs/helpers@1.0.0-rc.3
+
 ## 1.0.0-rc.2
 
 ### Patch Changes
