@@ -194,6 +194,8 @@ function extractStaticNodeMetadata(
   const props = node.attributes ?? {};
   const style = typeof props.style === "string" ? parseInlineStyle(props.style) : undefined;
   const attributes = extractAttributes(props, tailwindClassesProperty);
+  const tw =
+    typeof props[tailwindClassesProperty] === "string" ? props[tailwindClassesProperty] : undefined;
   const preset =
     presets && node.name in presets ? presets[node.name as keyof typeof presets] : undefined;
 
@@ -202,6 +204,7 @@ function extractStaticNodeMetadata(
     className: props.class,
     id: props.id,
     attributes,
+    tw,
     style,
     preset,
   };

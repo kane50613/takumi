@@ -508,6 +508,26 @@ describe("fromJsx", () => {
     } satisfies TextNode);
   });
 
+  test("preserves tw when react-dom/server fallback renders a provider subtree", async () => {
+    const GreetingContext = createContext("Fallback");
+
+    const Message = () => <p tw="text-red-500">{useContext(GreetingContext)}</p>;
+
+    const { node } = await fromJsx(
+      <GreetingContext.Provider value="Context">
+        <Message />
+      </GreetingContext.Provider>,
+    );
+
+    expect(node).toEqual({
+      type: "text",
+      text: "Context",
+      preset: defaultStylePresets.p,
+      tagName: "p",
+      tw: "text-red-500",
+    } satisfies TextNode);
+  });
+
   test("handles deeply nested structures", async () => {
     const { node } = await fromJsx(
       <div>
