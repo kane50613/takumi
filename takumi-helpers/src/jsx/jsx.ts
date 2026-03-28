@@ -102,7 +102,12 @@ export async function fromJsx(
       throw error;
     }
 
-    return renderWithReactDomServer(element, resolvedOptions);
+    const fallbackResult = await renderWithReactDomServer(element, resolvedOptions);
+    if (fallbackResult) {
+      return fallbackResult;
+    }
+
+    return fromJsxInternal(element, resolvedOptions);
   });
   const nodes = result.nodes;
 
@@ -309,9 +314,30 @@ function getElementChildren(element: ReactElementLike): ReactNode | undefined {
   }
 }
 
+function isReactModuleLike(module: unknown): module is ReactModuleLike {
+  return (
+    typeof module === "object" &&
+    module !== null &&
+    "createElement" in module &&
+    typeof module.createElement === "function"
+  );
+}
+
+function isReactDomServerModule(module: unknown): module is ReactDomServerModule {
+  return (
+    typeof module === "object" &&
+    module !== null &&
+    "renderToStaticMarkup" in module &&
+    typeof module.renderToStaticMarkup === "function"
+  );
+}
+
 async function getReactModule(): Promise<ReactModuleLike | null> {
   reactModulePromise ??= import("react")
-    .then((module) => (module.default ?? module) as ReactModuleLike)
+    .then((module) => {
+      const resolvedModule = (module.default ?? module) as unknown;
+      return isReactModuleLike(resolvedModule) ? resolvedModule : null;
+    })
     .catch(() => null);
 
   return reactModulePromise;
@@ -319,7 +345,10 @@ async function getReactModule(): Promise<ReactModuleLike | null> {
 
 async function getReactDomServerModule(): Promise<ReactDomServerModule | null> {
   reactDomServerPromise ??= import("react-dom/server")
-    .then((module) => (module.default ?? module) as ReactDomServerModule)
+    .then((module) => {
+      const resolvedModule = (module.default ?? module) as unknown;
+      return isReactDomServerModule(resolvedModule) ? resolvedModule : null;
+    })
     .catch(() => null);
 
   return reactDomServerPromise;
@@ -328,14 +357,14 @@ async function getReactDomServerModule(): Promise<ReactDomServerModule | null> {
 async function renderWithReactDomServer(
   element: ReactNode | ReactElementLike,
   options: ResolvedFromJsxOptions,
-): Promise<FromJsxTraversalResult> {
+): Promise<FromJsxTraversalResult | null> {
   const [reactModule, reactDomServerModule] = await Promise.all([
     getReactModule(),
     getReactDomServerModule(),
   ]);
 
   if (!reactModule || !reactDomServerModule) {
-    throw new Error("react-dom/server is required for JSX fallback rendering.");
+    return null;
   }
 
   const markup = reactDomServerModule.renderToStaticMarkup(
@@ -440,7 +469,12 @@ async function processReactElement(
   options: ResolvedFromJsxOptions,
 ): Promise<FromJsxTraversalResult> {
   if (containsReactContextProvider(element)) {
-    return renderWithReactDomServer(element, options);
+    const fallbackResult = await renderWithReactDomServer(element, options);
+    if (fallbackResult) {
+      return fallbackResult;
+    }
+
+    return collectChildren(element, options);
   }
 
   if (isFunctionComponent(element.type)) {

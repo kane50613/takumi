@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import { User2 } from "lucide-react";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -8,6 +8,10 @@ import { defaultStylePresets } from "../../src/jsx/style-presets";
 import type { ContainerNode, ImageNode, TextNode } from "../../src/types";
 
 describe("fromJsx", () => {
+  afterEach(() => {
+    mock.restore();
+  });
+
   test("handles React like object", async () => {
     const { node } = await fromJsx({
       type: "div",
@@ -505,6 +509,31 @@ describe("fromJsx", () => {
       text: "Context 3",
       preset: defaultStylePresets.div,
       tagName: "div",
+    } satisfies TextNode);
+  });
+
+  test("falls back to internal traversal when react-dom/server is unavailable", async () => {
+    mock.module("react-dom/server", () => ({}));
+
+    const moduleUrl = new URL(
+      `../../src/jsx/jsx.ts?no-react-dom-server=${Date.now()}`,
+      import.meta.url,
+    ).href;
+    const { fromJsx: fromJsxWithoutReactDomServer } = await import(moduleUrl);
+    const GreetingContext = createContext("Fallback");
+
+    const { node } = await fromJsxWithoutReactDomServer(
+      <GreetingContext.Provider value="Context">
+        <p tw="text-red-500">Context</p>
+      </GreetingContext.Provider>,
+    );
+
+    expect(node).toEqual({
+      type: "text",
+      text: "Context",
+      preset: defaultStylePresets.p,
+      tagName: "p",
+      tw: "text-red-500",
     } satisfies TextNode);
   });
 
