@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./assets/images/takumi.svg" alt="Takumi" width="64" />
+  <img src="https://takumi.kane.tw/logo.svg" alt="Takumi" width="64" />
 
 # Takumi
 
