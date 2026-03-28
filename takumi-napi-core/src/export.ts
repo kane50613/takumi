@@ -71,7 +71,7 @@ export class Renderer extends NativeRenderer {
 
   override async loadFont(data: FontLoader, signal?: AbortSignal) {
     if (!this.isNewFont(data)) {
-      return { loadedCount: 0, results: [] };
+      return 0;
     }
 
     const resolved = await resolveFontLoader(data);
