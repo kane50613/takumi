@@ -1,5 +1,12 @@
 # @takumi-rs/core
 
+## 1.0.0-rc.2
+
+### Patch Changes
+
+- 26b5557: Fix dist folder not included
+  - @takumi-rs/helpers@1.0.0-rc.2
+
 ## 1.0.0-rc.1
 
 ### Patch Changes
