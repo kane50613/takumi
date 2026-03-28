@@ -185,6 +185,7 @@
     "example/twitter-images": {
       "name": "example-twitter-images",
       "dependencies": {
+        "@icons-pack/react-simple-icons": "^13.13.0",
         "lucide-react": "catalog:",
         "react": "catalog:",
         "react-dom": "catalog:",
@@ -218,11 +219,14 @@
     },
     "takumi": {
       "name": "takumi",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
     },
     "takumi-helpers": {
       "name": "@takumi-rs/helpers",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
+      "dependencies": {
+        "ultrahtml": "^1.6.0",
+      },
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/react": "catalog:",
@@ -233,10 +237,17 @@
         "tsdown": "catalog:",
         "typescript": "catalog:",
       },
+      "peerDependencies": {
+        "react": "^18.0.0 || ^19.0.0",
+        "react-dom": "^18.0.0 || ^19.0.0",
+      },
+      "optionalPeers": [
+        "react-dom",
+      ],
     },
     "takumi-image-response": {
       "name": "@takumi-rs/image-response",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "takumi-js": "workspace:*",
       },
@@ -248,7 +259,7 @@
     },
     "takumi-js": {
       "name": "takumi-js",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@takumi-rs/core": "workspace:*",
         "@takumi-rs/helpers": "workspace:*",
@@ -262,7 +273,7 @@
     },
     "takumi-napi-core": {
       "name": "@takumi-rs/core",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
       },
@@ -293,7 +304,7 @@
     },
     "takumi-wasm": {
       "name": "@takumi-rs/wasm",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
       },
@@ -511,6 +522,8 @@
     "@iconify/types": ["@iconify/types@2.0.0", "", {}, "sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg=="],
 
     "@iconify/utils": ["@iconify/utils@3.1.0", "", { "dependencies": { "@antfu/install-pkg": "^1.1.0", "@iconify/types": "^2.0.0", "mlly": "^1.8.0" } }, "sha512-Zlzem1ZXhI1iHeeERabLNzBHdOa4VhQbqAcOQaMKuTuyZCpwKbC2R4Dd0Zo3g9EAc+Y4fiarO8HIHRAth7+skw=="],
+
+    "@icons-pack/react-simple-icons": ["@icons-pack/react-simple-icons@13.13.0", "", { "peerDependencies": { "react": "^16.13 || ^17 || ^18 || ^19" } }, "sha512-B5HhQMIpcSH4z8IZ8HFhD59CboHceKYMpPC9kAwGyKntvPdyJJv26DLu4Z1wAjcCLyrJhf11tMhiQGom9Rxb9g=="],
 
     "@img/colour": ["@img/colour@1.0.0", "", {}, "sha512-A5P/LfWGFSl6nsckYtjw9da+19jB8hkJ6ACTGcDfEJ0aE+l2n2El7dsVM7UVHZQ9s2lmYMWlrS21YLy2IR1LUw=="],
 

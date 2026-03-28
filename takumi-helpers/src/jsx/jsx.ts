@@ -1,14 +1,7 @@
 import type { ComponentProps, CSSProperties, ReactElement, ReactNode } from "react";
 import { container, image, percentage, text } from "../helpers";
 import type { Node, NodeMetadata, ReactElementLike } from "../types";
-import {
-  createContextDispatcher,
-  getReactRuntime,
-  isReactContextConsumer,
-  isReactContextProvider,
-  type ReactRuntime,
-  withContextValue,
-} from "./react";
+import { fromStaticMarkup, type FromStaticMarkupOptions } from "./markup";
 import { defaultStylePresets } from "./style-presets";
 import { serializeSvg } from "./svg";
 import {
@@ -22,6 +15,7 @@ import {
 } from "./utils";
 
 export * from "./style-presets";
+export * from "./markup";
 
 declare module "react" {
   interface DOMAttributes<T> {
@@ -47,10 +41,9 @@ export interface FromJsxOptions {
 }
 
 interface ResolvedFromJsxOptions {
+  defaultStyles: typeof defaultStylePresets | false;
   presets?: typeof defaultStylePresets;
   tailwindClassesProperty: string;
-  reactRuntime: Promise<ReactRuntime | null> | null;
-  contextValues: ReadonlyMap<object, unknown>;
 }
 
 export interface FromJsxResult {
@@ -67,18 +60,49 @@ type HtmlProps = {
   className?: string;
   class?: string;
   id?: string;
+  style?: string | CSSProperties;
   [key: string]: unknown;
 };
+
+type ReactModuleLike = {
+  default?: ReactModuleLike;
+  Fragment?: unknown;
+  createElement: (
+    type: unknown,
+    props: Record<string, unknown> | null,
+    ...children: unknown[]
+  ) => ReactNode;
+};
+
+type ReactDomServerModule = {
+  default?: ReactDomServerModule;
+  renderToStaticMarkup: (node: ReactNode) => string;
+};
+
+const INVALID_HOOK_PATTERNS = [
+  /Invalid hook call\./,
+  /Cannot read properties of null \(reading 'use[A-Z][A-Za-z]+'\)/,
+  /null is not an object \(evaluating 'dispatcher\.use[A-Z][A-Za-z]+'\)/,
+];
+
+let reactDomServerPromise: Promise<ReactDomServerModule | null> | undefined;
+let reactModulePromise: Promise<ReactModuleLike | null> | undefined;
 
 export async function fromJsx(
   element: ReactNode | ReactElementLike,
   options?: FromJsxOptions,
 ): Promise<FromJsxResult> {
-  const result = await fromJsxInternal(element, {
+  const resolvedOptions = {
+    defaultStyles: resolveDefaultStyles(options),
     presets: getPresets(options),
     tailwindClassesProperty: options?.tailwindClassesProperty ?? "tw",
-    reactRuntime: null,
-    contextValues: new Map(),
+  } satisfies ResolvedFromJsxOptions;
+  const result = await fromJsxInternal(element, resolvedOptions).catch(async (error) => {
+    if (!shouldFallbackToReactDomServer(error)) {
+      throw error;
+    }
+
+    return renderWithReactDomServer(element, resolvedOptions);
   });
   const nodes = result.nodes;
 
@@ -184,28 +208,65 @@ function getPresets(options?: FromJsxOptions): typeof defaultStylePresets | unde
   return options?.defaultStyles ?? defaultStylePresets;
 }
 
+function resolveDefaultStyles(options?: FromJsxOptions): typeof defaultStylePresets | false {
+  if (options && "defaultStyles" in options) {
+    return options.defaultStyles ?? defaultStylePresets;
+  }
+
+  return defaultStylePresets;
+}
+
+function containsReactContextProvider(element: ReactNode | ReactElementLike): boolean {
+  if (!isValidElement(element)) {
+    return false;
+  }
+
+  if (typeof element.type !== "object" || element.type === null || !("$$typeof" in element.type)) {
+    return false;
+  }
+
+  return (
+    element.type.$$typeof === Symbol.for("react.context") ||
+    element.type.$$typeof === Symbol.for("react.provider")
+  );
+}
+
+function shouldFallbackToReactDomServer(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return INVALID_HOOK_PATTERNS.some((pattern) => pattern.test(error.message));
+}
+
+async function runWithSuppressedInvalidHookWarning<T>(callback: () => Promise<T>): Promise<T> {
+  const originalConsoleError = console.error;
+
+  console.error = (...args: unknown[]) => {
+    const [firstArg] = args;
+    if (
+      typeof firstArg === "string" &&
+      INVALID_HOOK_PATTERNS.some((pattern) => pattern.test(firstArg))
+    ) {
+      return;
+    }
+
+    originalConsoleError(...args);
+  };
+
+  try {
+    return await callback();
+  } finally {
+    console.error = originalConsoleError;
+  }
+}
+
 async function renderFunctionComponent(
   component: (props: unknown) => ReactNode,
   props: unknown,
   options: ResolvedFromJsxOptions,
 ): Promise<FromJsxTraversalResult> {
-  const reactRuntime = await getReactRuntime(options.reactRuntime);
-
-  if (!reactRuntime) {
-    return fromJsxInternal(component(props), options);
-  }
-
-  const previousDispatcher = reactRuntime.getDispatcher();
-  reactRuntime.setDispatcher(createContextDispatcher(options.contextValues));
-
-  try {
-    return fromJsxInternal(component(props), {
-      ...options,
-      reactRuntime: Promise.resolve(reactRuntime),
-    });
-  } finally {
-    reactRuntime.setDispatcher(previousDispatcher);
-  }
+  return runWithSuppressedInvalidHookWarning(() => fromJsxInternal(component(props), options));
 }
 
 function tryHandleComponentWrapper(
@@ -246,6 +307,45 @@ function getElementChildren(element: ReactElementLike): ReactNode | undefined {
   if (typeof element.props === "object" && element.props !== null && "children" in element.props) {
     return element.props.children as ReactNode;
   }
+}
+
+async function getReactModule(): Promise<ReactModuleLike | null> {
+  reactModulePromise ??= import("react")
+    .then((module) => (module.default ?? module) as ReactModuleLike)
+    .catch(() => null);
+
+  return reactModulePromise;
+}
+
+async function getReactDomServerModule(): Promise<ReactDomServerModule | null> {
+  reactDomServerPromise ??= import("react-dom/server")
+    .then((module) => (module.default ?? module) as ReactDomServerModule)
+    .catch(() => null);
+
+  return reactDomServerPromise;
+}
+
+async function renderWithReactDomServer(
+  element: ReactNode | ReactElementLike,
+  options: ResolvedFromJsxOptions,
+): Promise<FromJsxTraversalResult> {
+  const [reactModule, reactDomServerModule] = await Promise.all([
+    getReactModule(),
+    getReactDomServerModule(),
+  ]);
+
+  if (!reactModule || !reactDomServerModule) {
+    throw new Error("react-dom/server is required for JSX fallback rendering.");
+  }
+
+  const markup = reactDomServerModule.renderToStaticMarkup(
+    reactModule.createElement(reactModule.Fragment ?? undefined, null, element),
+  );
+
+  return fromStaticMarkup(markup, {
+    defaultStyles: options.defaultStyles,
+    tailwindClassesProperty: options.tailwindClassesProperty,
+  } satisfies FromStaticMarkupOptions);
 }
 
 function tryCollectTextChildren(element: ReactElementLike): string | undefined {
@@ -339,6 +439,10 @@ async function processReactElement(
   element: ReactElementLike,
   options: ResolvedFromJsxOptions,
 ): Promise<FromJsxTraversalResult> {
+  if (containsReactContextProvider(element)) {
+    return renderWithReactDomServer(element, options);
+  }
+
   if (isFunctionComponent(element.type)) {
     return renderFunctionComponent(element.type, element.props, options);
   }
@@ -351,31 +455,6 @@ async function processReactElement(
     return collectChildren(element, options);
   }
 
-  if (isReactContextProvider(element)) {
-    const context = element.type as object;
-    const value =
-      typeof element.props === "object" && element.props !== null && "value" in element.props
-        ? element.props.value
-        : undefined;
-
-    return collectChildren(element, {
-      ...options,
-      contextValues: withContextValue(options.contextValues, context, value),
-    });
-  }
-
-  if (isReactContextConsumer(element)) {
-    const children = getElementChildren(element);
-    if (!isFunctionComponent(children)) {
-      return { nodes: [], stylesheets: [] };
-    }
-
-    const context = element.type._context as object & { _currentValue?: unknown };
-    const value = options.contextValues.get(context) ?? context._currentValue;
-
-    return fromJsxInternal(children(value), options);
-  }
-
   if (isHtmlElement(element, "style")) {
     const css = collectStyleText(getElementChildren(element));
     return {
@@ -384,7 +463,7 @@ async function processReactElement(
     };
   }
 
-  if (typeof element.type !== "string" || isHtmlVoidElement(element)) {
+  if (typeof element.type !== "string" || isHtmlVoidElement(element.type)) {
     return { nodes: [], stylesheets: [] };
   }
 

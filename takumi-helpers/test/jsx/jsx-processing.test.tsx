@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { User2 } from "lucide-react";
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { container } from "../../src/helpers";
 import { fromJsx } from "../../src/jsx/jsx";
@@ -478,6 +478,34 @@ describe("fromJsx", () => {
   test("handles external lucide-react icon", async () => {
     const { node } = await fromJsx(<User2 />);
     expect(node.type).toBe("image");
+    expect("src" in node && node.src).toStartWith("<svg");
+  });
+
+  test("uses react-dom/server fallback when a provider exists", async () => {
+    const GreetingContext = createContext("Fallback");
+
+    const Counter = () => {
+      const [count] = useState(3);
+
+      return (
+        <div>
+          {useContext(GreetingContext)} {count}
+        </div>
+      );
+    };
+
+    const { node } = await fromJsx(
+      <GreetingContext.Provider value="Context">
+        <Counter />
+      </GreetingContext.Provider>,
+    );
+
+    expect(node).toEqual({
+      type: "text",
+      text: "Context 3",
+      preset: defaultStylePresets.div,
+      tagName: "div",
+    } satisfies TextNode);
   });
 
   test("handles deeply nested structures", async () => {
