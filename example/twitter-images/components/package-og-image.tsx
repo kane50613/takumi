@@ -4,7 +4,6 @@ import {
   Code,
   File,
   Folder,
-  Github,
   Heart,
   List,
   type LucideIcon,
@@ -16,6 +15,7 @@ import {
   Variable,
 } from "lucide-react";
 import { createElement } from "react";
+import { SiGithub } from "@icons-pack/react-simple-icons";
 
 type Variant = "download-chart" | "code-tree" | "function-tree";
 
@@ -823,7 +823,7 @@ function PackageMetaRow({
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-        <Github width={28} height={28} />
+        <SiGithub width={28} height={28} fill="white" />
         <span>
           {owner}
           <span style={{ opacity: 0.5 }}>/</span>

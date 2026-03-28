@@ -239,12 +239,34 @@ function shouldFallbackToReactDomServer(error: unknown): boolean {
   return INVALID_HOOK_PATTERNS.some((pattern) => pattern.test(error.message));
 }
 
+async function runWithSuppressedInvalidHookWarning<T>(callback: () => Promise<T>): Promise<T> {
+  const originalConsoleError = console.error;
+
+  console.error = (...args: unknown[]) => {
+    const [firstArg] = args;
+    if (
+      typeof firstArg === "string" &&
+      INVALID_HOOK_PATTERNS.some((pattern) => pattern.test(firstArg))
+    ) {
+      return;
+    }
+
+    originalConsoleError(...args);
+  };
+
+  try {
+    return await callback();
+  } finally {
+    console.error = originalConsoleError;
+  }
+}
+
 async function renderFunctionComponent(
   component: (props: unknown) => ReactNode,
   props: unknown,
   options: ResolvedFromJsxOptions,
 ): Promise<FromJsxTraversalResult> {
-  return fromJsxInternal(component(props), options);
+  return runWithSuppressedInvalidHookWarning(() => fromJsxInternal(component(props), options));
 }
 
 function tryHandleComponentWrapper(

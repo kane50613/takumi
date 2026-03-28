@@ -4,6 +4,7 @@
   "type": "module",
   "module": "index.ts",
   "dependencies": {
+    "@icons-pack/react-simple-icons": "^13.13.0",
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
