@@ -1,5 +1,15 @@
 # takumi-js
 
+## 1.0.0-rc.4
+
+### Patch Changes
+
+- Updated dependencies [7ff886b]
+- Updated dependencies [7ff886b]
+  - @takumi-rs/helpers@1.0.0-rc.4
+  - @takumi-rs/core@1.0.0-rc.4
+  - @takumi-rs/wasm@1.0.0-rc.4
+
 ## 1.0.0-rc.3
 
 ### Patch Changes

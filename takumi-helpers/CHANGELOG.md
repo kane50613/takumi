@@ -1,5 +1,15 @@
 # @takumi-rs/helpers
 
+## 1.0.0-rc.4
+
+### Minor Changes
+
+- 7ff886b: Add `fromStaticMarkup` API
+
+### Patch Changes
+
+- 7ff886b: Fallback to react-dom/server if needed to render with hooks
+
 ## 1.0.0-rc.3
 
 ## 1.0.0-rc.2
