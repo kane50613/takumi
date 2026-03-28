@@ -15,6 +15,6 @@
   "devDependencies": {
     "@types/react": "catalog:",
     "typescript": "catalog:",
-    "wrangler": "^4.77.0"
+    "wrangler": "^4.78.0"
   }
 }

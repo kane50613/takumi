@@ -32,9 +32,9 @@
       "types": "./dist/export.d.cts",
       "workerd": "./not-available.js",
       "browser": "./not-available.js",
+      "node": "./dist/export.mjs",
       "import": "./dist/export.mjs",
       "require": "./dist/export.cjs",
-      "node": "./dist/export.mjs",
       "default": "./dist/export.mjs"
     }
   },
