@@ -1,5 +1,3 @@
-use swash::text::WordBreakStrength;
-
 use crate::layout::style::declare_enum_from_css_impl;
 
 /// Controls how text should be broken at word boundaries.
@@ -27,12 +25,12 @@ declare_enum_from_css_impl!(
   "break-word" => WordBreak::BreakWord,
 );
 
-impl From<WordBreak> for WordBreakStrength {
+impl From<WordBreak> for parley::WordBreak {
   fn from(value: WordBreak) -> Self {
     match value {
-      WordBreak::Normal | WordBreak::BreakWord => WordBreakStrength::Normal,
-      WordBreak::BreakAll => WordBreakStrength::BreakAll,
-      WordBreak::KeepAll => WordBreakStrength::KeepAll,
+      WordBreak::Normal | WordBreak::BreakWord => parley::WordBreak::Normal,
+      WordBreak::BreakAll => parley::WordBreak::BreakAll,
+      WordBreak::KeepAll => parley::WordBreak::KeepAll,
     }
   }
 }

@@ -2,30 +2,25 @@ import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { container, image, text } from "@takumi-rs/helpers";
-import { Glob } from "bun";
 import { Renderer } from "../bundlers/node";
 
-const fontsGlob = new Glob("**/*.{woff2,ttf}");
 const assetsRoot = join(import.meta.dir, "../../assets");
 const fontsRoot = join(assetsRoot, "fonts");
 const imagesRoot = join(assetsRoot, "images");
-
-async function getFonts() {
-  const fonts: Buffer[] = [];
-
-  for await (const file of fontsGlob.scan(fontsRoot)) {
-    fonts.push(await readFile(join(fontsRoot, file)));
-  }
-
-  return fonts;
-}
-
-const fonts = await getFonts();
+const fontFiles = [
+  "manrope/manrope-latin-wght-normal.woff2",
+  "plus-jakarta-sans/PlusJakartaSans-VariableFont_wght.woff2",
+  "archivo/Archivo-VariableFont_wdth,wght.ttf",
+  "twemoji/TwemojiMozilla-colr.woff2",
+] as const;
+const fonts = await Promise.all(
+  fontFiles.map(async (file) => await readFile(join(fontsRoot, file))),
+);
 const renderer = new Renderer();
 const rendererWithoutDefaultFonts = new Renderer({ loadDefaultFonts: false });
 
 const localImagePath = join(imagesRoot, "yeecord.png");
-const manropeFont = await readFile(join(fontsRoot, "manrope/manrope-latin-wght-normal.woff2"));
+const [manropeFont] = fonts;
 
 const localImage = await readFile(localImagePath);
 const dataUri = `data:image/png;base64,${Buffer.from(localImage).toString("base64")}`;
@@ -54,8 +49,8 @@ const node = container({
 });
 
 describe("setup", () => {
-  test(`loadFonts (${fonts.length})`, () => {
-    for (const font of fonts) renderer.loadFont(font);
+  test(`loadFonts (${fonts.length})`, async () => {
+    expect(await renderer.loadFonts(fonts)).toBe(fonts.length);
   });
 
   test("loadFont without default fonts", () => {

@@ -229,7 +229,7 @@ impl<'de> Deserialize<'de> for FontStyle {
     D: Deserializer<'de>,
   {
     let value = String::deserialize(deserializer)?;
-    Ok(Self(ParleyFontStyle::parse(&value).unwrap_or_default()))
+    Ok(Self(ParleyFontStyle::parse_css(&value).unwrap_or_default()))
   }
 }
 

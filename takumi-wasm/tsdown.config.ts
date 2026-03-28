@@ -11,4 +11,7 @@ export default defineConfig({
   deps: {
     neverBundle: ["csstype"],
   },
+  outputOptions: {
+    exports: "named",
+  },
 });

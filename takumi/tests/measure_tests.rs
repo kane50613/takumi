@@ -6,7 +6,7 @@ use takumi::{
     node::Node,
     style::{
       Affine, AlignItems, BorderStyle, Color, ColorInput, Display, FlexDirection, JustifyContent,
-      Length::*, Position, Sides, Style, StyleDeclaration,
+      Length::*, Position, Sides, Style, StyleDeclaration, TextIndent, WhiteSpaceCollapse,
     },
   },
   rendering::{MeasuredNode, MeasuredTextRun, RenderOptions, measure_layout},
@@ -41,6 +41,11 @@ fn assert_close(actual: f32, expected: f32) {
     (actual - expected).abs() <= 0.01,
     "expected {expected}, got {actual}"
   );
+}
+
+fn measured_text_runs(result: &MeasuredNode) -> &[MeasuredTextRun] {
+  assert_eq!(result.children.len(), 1);
+  &result.children[0].runs
 }
 
 #[test]
@@ -275,6 +280,51 @@ fn test_measure_inline_layout() {
       }],
     }
   )
+}
+
+#[test]
+fn test_measure_text_indent_first_line_only() {
+  let node = Node::text("alpha\nbeta".to_string()).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Px(300.0)))
+      .with(StyleDeclaration::font_size(Px(20.0).into()))
+      .with(StyleDeclaration::white_space_collapse(
+        WhiteSpaceCollapse::PreserveBreaks,
+      ))
+      .with(StyleDeclaration::text_indent(TextIndent::new(Px(24.0)))),
+  );
+
+  let result = measure(node, create_measure_viewport());
+  let runs = measured_text_runs(&result);
+
+  assert_eq!(runs.len(), 2);
+  assert_close(runs[0].x, 24.0);
+  assert_close(runs[1].x, 0.0);
+}
+
+#[test]
+fn test_measure_text_indent_each_line() {
+  let node = Node::text("alpha\nbeta\ngamma".to_string()).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Px(300.0)))
+      .with(StyleDeclaration::font_size(Px(20.0).into()))
+      .with(StyleDeclaration::white_space_collapse(
+        WhiteSpaceCollapse::PreserveBreaks,
+      ))
+      .with(StyleDeclaration::text_indent(
+        TextIndent::new(Px(24.0)).with_each_line(true),
+      )),
+  );
+
+  let result = measure(node, create_measure_viewport());
+  let runs = measured_text_runs(&result);
+
+  assert_eq!(runs.len(), 3);
+  assert_close(runs[0].x, 24.0);
+  assert_close(runs[1].x, 24.0);
+  assert_close(runs[2].x, 24.0);
 }
 
 #[test]

@@ -62,7 +62,7 @@ Takumi wouldn't be possible without the following works:
 - [taffy](https://github.com/DioxusLabs/taffy) for the flex & grid layout.
 - [image](https://github.com/image-rs/image) for the image processing.
 - [parley](https://github.com/linebender/parley) for text layout.
-- [swash](https://github.com/linebender/swash) for font shaping.
+- [skrifa](https://github.com/googlefonts/fontations/tree/main/skrifa) for glyph loading.
 - [wuff](https://github.com/nicoburns/wuff) for woff/woff2 decompression.
 - [resvg](https://github.com/linebender/resvg) for SVG parsing & rasterization.
 

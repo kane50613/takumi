@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use image::{GenericImageView, Rgba};
 use parley::{GlyphRun, PositionedInlineBox, PositionedLayoutItem};
-use swash::FontRef;
+use skrifa::{FontRef, MetadataProvider};
 use taffy::{Layout, Point};
 use zeno::{Command, PathBuilder, Stroke};
 
@@ -18,9 +18,8 @@ use crate::{
   },
   rendering::{
     BackgroundTile, BorderProperties, Canvas, ColorTile, RenderContext, collect_background_layers,
-    collect_outline_paths, draw_decoration, draw_glyph, draw_glyph_clip_image,
-    draw_glyph_text_shadow, mask_index_from_coord, overlay_area, rasterize_layers,
-    render::render_node,
+    draw_decoration, draw_glyph, draw_glyph_clip_image, draw_glyph_text_shadow,
+    mask_index_from_coord, overlay_area, rasterize_layers, render::render_node,
   },
   resources::font::{FontError, ResolvedGlyph},
 };
@@ -63,7 +62,7 @@ fn build_glyph_bounds_cache(
 
   for (glyph_id, content) in resolved_glyphs {
     let glyph = match content {
-      ResolvedGlyph::Image(bitmap) => GlyphSkipInkData {
+      ResolvedGlyph::Bitmap(bitmap) => GlyphSkipInkData {
         bounds: GlyphLocalBounds {
           left: bitmap.placement.left as f32,
           top: -bitmap.placement.top as f32,
@@ -71,14 +70,20 @@ fn build_glyph_bounds_cache(
         },
         width: bitmap.placement.width,
         height: bitmap.placement.height,
-        alpha: bitmap.data.iter().skip(3).step_by(4).copied().collect(),
+        alpha: bitmap
+          .image
+          .as_raw()
+          .iter()
+          .skip(3)
+          .step_by(4)
+          .copied()
+          .collect(),
       },
       ResolvedGlyph::Outline(outline) => {
-        let paths = collect_outline_paths(outline);
         let (mask, placement) =
           canvas
             .mask_memory
-            .render(&paths, None, None, &mut canvas.buffer_pool);
+            .render(outline.paths(), None, None, &mut canvas.buffer_pool);
 
         if placement.width == 0 || placement.height == 0 {
           continue;
@@ -623,9 +628,10 @@ fn draw_glyph_run_content<I: GenericImageView<Pixel = Rgba<u8>>>(
 ) -> Result<()> {
   let run = glyph_run.run();
 
-  let font = FontRef::from_index(run.font().data.as_ref(), run.font().index as usize)
-    .ok_or(FontError::InvalidFontIndex)?;
-  let palette = font.color_palettes().next();
+  let font = FontRef::from_index(run.font().data.as_ref(), run.font().index)
+    .map_err(|_| FontError::InvalidFontIndex)?;
+  let palettes = font.color_palettes();
+  let palette = palettes.get(0);
 
   if let Some(clip_image) = clip_image {
     for glyph in glyph_run.positioned_glyphs() {
@@ -666,7 +672,7 @@ fn draw_glyph_run_content<I: GenericImageView<Pixel = Rgba<u8>>>(
       context.transform,
       inline_offset,
       glyph_run.style().brush.color,
-      palette,
+      palette.as_ref(),
     )?;
   }
 
@@ -732,8 +738,8 @@ fn resolve_inline_layout_glyphs(
   for glyph_run in glyph_runs {
     let run = glyph_run.run();
     let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
-    let font = FontRef::from_index(run.font().data.as_ref(), run.font().index as usize)
-      .ok_or(FontError::InvalidFontIndex)?;
+    let font = FontRef::from_index(run.font().data.as_ref(), run.font().index)
+      .map_err(|_| FontError::InvalidFontIndex)?;
 
     resolved_glyph_runs.push(
       context
@@ -758,16 +764,7 @@ pub(crate) fn get_parent_x_height(
     });
 
   let run = layout.lines().next()?.runs().next()?;
-  let font = run.font();
-  let font_ref = FontRef::from_index(font.data.as_ref(), font.index as usize)?;
-
-  let metrics = font_ref.metrics(run.normalized_coords());
-  let units_per_em = metrics.units_per_em as f32;
-  if units_per_em == 0.0 {
-    return None;
-  }
-  let scale = run.font_size() / units_per_em;
-  Some(metrics.x_height * scale)
+  run.metrics().x_height
 }
 
 pub(crate) fn draw_inline_box(
@@ -801,11 +798,10 @@ pub(crate) fn draw_inline_box(
       &layout_results,
       root_node_id,
       canvas,
-      transform
-        * Affine::translation(
-          inline_box.x + item.margin.left,
-          inline_box.y + item.margin.top,
-        ),
+      Affine::translation(
+        inline_box.x + item.margin.left,
+        inline_box.y + item.margin.top,
+      ) * transform,
       Size {
         width: Some(inline_width),
         height: Some(inline_height),
@@ -819,7 +815,7 @@ pub(crate) fn draw_inline_box(
   };
 
   let context = RenderContext {
-    transform: transform * Affine::translation(inline_box.x, inline_box.y),
+    transform: Affine::translation(inline_box.x, inline_box.y) * transform,
     ..item.render_node.context.clone()
   };
   let layout = item.into();

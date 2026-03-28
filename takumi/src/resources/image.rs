@@ -12,10 +12,10 @@ use std::{cell::RefCell, collections::HashMap};
 use dashmap::DashMap;
 use image::RgbaImage;
 
-use super::image_decoder;
 use crate::{
   layout::style::{Color, ImageScalingAlgorithm},
   rendering::{Sizing, unpremultiply_alpha},
+  resources::image_decoder::decode_image,
 };
 use thiserror::Error;
 
@@ -139,7 +139,7 @@ impl ImageSource {
       }
     }
 
-    let img = image_decoder::decode_image(bytes).map_err(ImageResourceError::DecodeError)?;
+    let img = decode_image(bytes).map_err(ImageResourceError::DecodeError)?;
     Ok(Arc::new(img.into()))
   }
 

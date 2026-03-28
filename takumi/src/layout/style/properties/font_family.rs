@@ -1,7 +1,7 @@
 use std::string::ToString;
 
 use cssparser::{Parser, match_ignore_ascii_case};
-use parley::{FontStack, GenericFamily};
+use parley::{FontFamily as ParleyFontFamily, FontFamilyName, GenericFamily};
 
 use crate::layout::style::{
   CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, tw::TailwindPropertyParser,
@@ -73,30 +73,30 @@ impl Default for FontFamily {
   }
 }
 
-impl<'a> From<FontFamily> for FontStack<'a> {
+impl<'a> From<FontFamily> for ParleyFontFamily<'a> {
   fn from(family: FontFamily) -> Self {
-    FontStack::List(
+    ParleyFontFamily::List(
       family
         .0
         .into_iter()
         .map(|token| match token {
-          FontFamilyToken::Owned(name) => parley::FontFamily::Named(name.into()),
-          FontFamilyToken::Generic(generic) => parley::FontFamily::Generic(generic),
+          FontFamilyToken::Owned(name) => FontFamilyName::Named(name.into()),
+          FontFamilyToken::Generic(generic) => FontFamilyName::Generic(generic),
         })
         .collect(),
     )
   }
 }
 
-impl<'a> From<&'a FontFamily> for FontStack<'a> {
+impl<'a> From<&'a FontFamily> for ParleyFontFamily<'a> {
   fn from(family: &'a FontFamily) -> Self {
-    FontStack::List(
+    ParleyFontFamily::List(
       family
         .0
         .iter()
         .map(|token| match token {
-          FontFamilyToken::Owned(name) => parley::FontFamily::Named(name.into()),
-          FontFamilyToken::Generic(generic) => parley::FontFamily::Generic(*generic),
+          FontFamilyToken::Owned(name) => FontFamilyName::Named(name.as_str().into()),
+          FontFamilyToken::Generic(generic) => FontFamilyName::Generic(*generic),
         })
         .collect(),
     )

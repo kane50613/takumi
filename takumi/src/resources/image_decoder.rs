@@ -62,7 +62,7 @@ fn decode_with_image_crate(decoder: impl image::ImageDecoder) -> ImageResult<Rgb
   Ok(DynamicImage::from_decoder(decoder)?.to_rgba8())
 }
 
-fn decode_png(bytes: &[u8]) -> ImageResult<RgbaImage> {
+pub(crate) fn decode_png(bytes: &[u8]) -> ImageResult<RgbaImage> {
   decode_with_image_crate(PngDecoder::new(Cursor::new(bytes))?)
 }
 

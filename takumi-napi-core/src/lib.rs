@@ -47,7 +47,7 @@ impl<'de> Deserialize<'de> for FontStyleInput {
     D: Deserializer<'de>,
   {
     let s = String::deserialize(deserializer)?;
-    Ok(FontStyleInput(FontStyle::parse(&s).unwrap_or_default()))
+    Ok(FontStyleInput(FontStyle::parse_css(&s).unwrap_or_default()))
   }
 }
 

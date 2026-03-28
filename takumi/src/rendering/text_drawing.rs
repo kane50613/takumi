@@ -1,10 +1,10 @@
 use std::{borrow::Cow, convert::Into};
 
-use image::{GenericImageView, Pixel, Rgba, RgbaImage};
+use image::{GenericImageView, Rgba, RgbaImage};
 use parley::{GlyphRun, layout::BreakReason};
-use swash::{ColorPalette, scale::outline::Outline};
+use skrifa::color::ColorPalette;
 use taffy::{Layout, Point, Size};
-use zeno::{Command, PathData, Stroke};
+use zeno::{Command, Stroke};
 
 use crate::{
   Result,
@@ -20,40 +20,8 @@ use crate::{
     apply_mask_alpha_to_pixel, blend_pixel, draw_mask, mask_index_from_coord, overlay_area,
     sample_transformed_pixel,
   },
-  resources::font::ResolvedGlyph,
+  resources::font::{ResolvedColorLayer, ResolvedGlyph},
 };
-
-struct SwashImageView<'a>(&'a swash::scale::image::Image);
-
-impl<'a> GenericImageView for SwashImageView<'a> {
-  type Pixel = Rgba<u8>;
-
-  fn dimensions(&self) -> (u32, u32) {
-    (self.0.placement.width, self.0.placement.height)
-  }
-
-  fn get_pixel(&self, x: u32, y: u32) -> Self::Pixel {
-    let index = ((y * self.0.placement.width + x) * 4) as usize;
-
-    *Rgba::from_slice(&self.0.data[index..index + 4])
-  }
-}
-
-fn invert_y_coordinate(command: Command) -> Command {
-  match command {
-    Command::MoveTo(point) => Command::MoveTo((point.x, -point.y).into()),
-    Command::LineTo(point) => Command::LineTo((point.x, -point.y).into()),
-    Command::CurveTo(point1, point2, point3) => Command::CurveTo(
-      (point1.x, -point1.y).into(),
-      (point2.x, -point2.y).into(),
-      (point3.x, -point3.y).into(),
-    ),
-    Command::QuadTo(point1, point2) => {
-      Command::QuadTo((point1.x, -point1.y).into(), (point2.x, -point2.y).into())
-    }
-    Command::Close => Command::Close,
-  }
-}
 
 pub(crate) fn draw_decoration(
   canvas: &mut Canvas,
@@ -103,12 +71,20 @@ pub(crate) fn draw_glyph_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
   transform *= Affine::translation(inline_offset.x, inline_offset.y);
 
   match glyph {
-    ResolvedGlyph::Image(bitmap) => {
+    ResolvedGlyph::Bitmap(bitmap) => {
       transform *= Affine::translation(bitmap.placement.left as f32, -bitmap.placement.top as f32);
 
       let mask_capacity = (bitmap.placement.width * bitmap.placement.height) as usize;
       let mut mask = canvas.buffer_pool.acquire_dirty(mask_capacity);
-      for (i, alpha) in bitmap.data.iter().skip(3).step_by(4).copied().enumerate() {
+      for (i, alpha) in bitmap
+        .image
+        .as_raw()
+        .iter()
+        .skip(3)
+        .step_by(4)
+        .copied()
+        .enumerate()
+      {
         if i < mask.len() {
           mask[i] = alpha;
         }
@@ -164,12 +140,12 @@ pub(crate) fn draw_glyph_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
         return Ok(());
       };
 
-      let paths = collect_outline_paths(outline);
-
-      let (mask, placement) =
-        canvas
-          .mask_memory
-          .render(&paths, Some(transform), None, &mut canvas.buffer_pool);
+      let (mask, placement) = canvas.mask_memory.render(
+        outline.paths(),
+        Some(transform),
+        None,
+        &mut canvas.buffer_pool,
+      );
 
       overlay_area(
         &mut canvas.image,
@@ -211,7 +187,26 @@ pub(crate) fn draw_glyph_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
 
       canvas.buffer_pool.release(mask);
 
-      draw_text_stroke_clip_image(canvas, style, transform, &paths, clip_image, inline_offset);
+      if let Some(embolden) = outline.embolden() {
+        draw_text_embolden_clip_image(
+          canvas,
+          style,
+          transform,
+          outline.paths(),
+          embolden,
+          clip_image,
+          inline_offset,
+        );
+      }
+
+      draw_text_stroke_clip_image(
+        canvas,
+        style,
+        transform,
+        outline.paths(),
+        clip_image,
+        inline_offset,
+      );
     }
   }
 
@@ -226,18 +221,16 @@ pub(crate) fn draw_glyph(
   mut transform: Affine,
   inline_offset: Point<f32>,
   color: Color,
-  palette: Option<ColorPalette>,
+  palette: Option<&ColorPalette>,
 ) -> Result<()> {
   transform *= Affine::translation(inline_offset.x, inline_offset.y);
 
   match glyph {
-    ResolvedGlyph::Image(bitmap) => {
+    ResolvedGlyph::Bitmap(bitmap) => {
       transform *= Affine::translation(bitmap.placement.left as f32, -bitmap.placement.top as f32);
 
-      let image = SwashImageView(bitmap);
-
       canvas.overlay_image(
-        &image,
+        &bitmap.image,
         Default::default(),
         transform,
         Default::default(),
@@ -245,26 +238,26 @@ pub(crate) fn draw_glyph(
       );
     }
     ResolvedGlyph::Outline(outline) => {
-      let paths = collect_outline_paths(outline);
-
-      if outline.is_color()
+      if let Some(color_layers) = outline.color_layers()
         && let Some(palette) = palette
       {
         draw_color_outline_image(
           &mut canvas.image,
           &mut canvas.mask_memory,
           &mut canvas.buffer_pool,
-          outline,
+          color_layers,
           palette,
+          color,
           transform,
           &canvas.constrains,
-          color.0[3],
         );
       } else {
-        let (mask, placement) =
-          canvas
-            .mask_memory
-            .render(&paths, Some(transform), None, &mut canvas.buffer_pool);
+        let (mask, placement) = canvas.mask_memory.render(
+          outline.paths(),
+          Some(transform),
+          None,
+          &mut canvas.buffer_pool,
+        );
 
         draw_mask(
           &mut canvas.image,
@@ -278,7 +271,11 @@ pub(crate) fn draw_glyph(
         canvas.buffer_pool.release(mask);
       }
 
-      draw_text_stroke(canvas, style, transform, &paths);
+      if let Some(embolden) = outline.embolden() {
+        draw_text_embolden(canvas, style, transform, outline.paths(), color, embolden);
+      }
+
+      draw_text_stroke(canvas, style, transform, outline.paths());
     }
   }
 
@@ -360,6 +357,76 @@ fn draw_text_stroke_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
   canvas.buffer_pool.release(stroke_mask);
 }
 
+fn draw_text_embolden_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
+  canvas: &mut Canvas,
+  style: &SizedFontStyle,
+  transform: Affine,
+  paths: &[Command],
+  embolden: f32,
+  clip_image: &I,
+  inline_offset: Point<f32>,
+) {
+  if embolden <= 0.0 {
+    return;
+  }
+
+  let Some(inverse) = transform.invert() else {
+    return;
+  };
+
+  let mut stroke = Stroke::new(embolden * 2.0);
+  stroke.join = style.parent.stroke_linejoin.into();
+
+  let (stroke_mask, stroke_placement) = canvas.mask_memory.render(
+    paths,
+    Some(transform),
+    Some(stroke.into()),
+    &mut canvas.buffer_pool,
+  );
+
+  overlay_area(
+    &mut canvas.image,
+    Point {
+      x: stroke_placement.left as f32,
+      y: stroke_placement.top as f32,
+    },
+    Size {
+      width: stroke_placement.width,
+      height: stroke_placement.height,
+    },
+    BlendMode::Normal,
+    &canvas.constrains,
+    |x, y| {
+      let alpha = stroke_mask[mask_index_from_coord(x, y, stroke_placement.width)];
+
+      if alpha == 0 {
+        return Color::transparent().into();
+      }
+
+      let inline_x = (x as i32 + stroke_placement.left) as f32;
+      let inline_y = (y as i32 + stroke_placement.top) as f32;
+
+      let sampled_pixel = sample_transformed_pixel(
+        clip_image,
+        inverse,
+        style.parent.image_rendering,
+        inline_x,
+        inline_y,
+        inline_offset,
+      );
+
+      let Some(mut pixel) = sampled_pixel else {
+        return Color::transparent().into();
+      };
+
+      apply_mask_alpha_to_pixel(&mut pixel, alpha);
+      pixel
+    },
+  );
+
+  canvas.buffer_pool.release(stroke_mask);
+}
+
 fn draw_text_stroke(
   canvas: &mut Canvas,
   style: &SizedFontStyle,
@@ -385,6 +452,40 @@ fn draw_text_stroke(
     &stroke_mask,
     stroke_placement,
     style.text_stroke_color,
+    BlendMode::Normal,
+    &canvas.constrains,
+  );
+
+  canvas.buffer_pool.release(stroke_mask);
+}
+
+fn draw_text_embolden(
+  canvas: &mut Canvas,
+  style: &SizedFontStyle,
+  transform: Affine,
+  paths: &[Command],
+  color: Color,
+  embolden: f32,
+) {
+  if embolden <= 0.0 {
+    return;
+  }
+
+  let mut stroke = Stroke::new(embolden * 2.0);
+  stroke.join = style.parent.stroke_linejoin.into();
+
+  let (stroke_mask, stroke_placement) = canvas.mask_memory.render(
+    paths,
+    Some(transform),
+    Some(stroke.into()),
+    &mut canvas.buffer_pool,
+  );
+
+  draw_mask(
+    &mut canvas.image,
+    &stroke_mask,
+    stroke_placement,
+    color,
     BlendMode::Normal,
     &canvas.constrains,
   );
@@ -419,55 +520,50 @@ pub(crate) fn draw_glyph_text_shadow(
   transform *= Affine::translation(inline_offset.x, inline_offset.y);
 
   if let ResolvedGlyph::Outline(outline) = glyph {
-    let paths = collect_outline_paths(outline);
-    draw_text_shadow(canvas, style, transform, &paths)?;
+    draw_text_shadow(canvas, style, transform, outline.paths())?;
   }
 
   Ok(())
 }
 
-pub(crate) fn collect_outline_paths(outline: &Outline) -> Vec<Command> {
-  outline
-    .path()
-    .commands()
-    .map(invert_y_coordinate)
-    .collect::<Vec<_>>()
-}
-
-// https://github.com/dfrg/swash/blob/3d8e6a781c93454dadf97e5c15764ceafab228e0/src/scale/mod.rs#L921
 #[allow(clippy::too_many_arguments)]
 fn draw_color_outline_image(
   canvas: &mut RgbaImage,
   mask_memory: &mut MaskMemory,
   buffer_pool: &mut BufferPool,
-  outline: &Outline,
-  palette: ColorPalette,
+  color_layers: &[ResolvedColorLayer],
+  palette: &ColorPalette,
+  foreground_color: Color,
   transform: Affine,
   constrains: &[CanvasConstrain],
-  opacity: u8,
 ) {
-  if opacity == 0 {
+  let foreground_opacity = foreground_color.0[3] as f32 / 255.0;
+  if foreground_opacity <= 0.0 {
     return;
   }
 
-  for i in 0..outline.len() {
-    let Some(layer) = outline.get(i) else {
-      break;
+  for layer in color_layers {
+    let color = if layer.palette_index == u16::MAX {
+      let alpha = (foreground_opacity * layer.alpha * 255.0)
+        .round()
+        .clamp(0.0, 255.0) as u8;
+      Color([
+        foreground_color.0[0],
+        foreground_color.0[1],
+        foreground_color.0[2],
+        alpha,
+      ])
+    } else {
+      let Some(record) = palette.colors().get(usize::from(layer.palette_index)) else {
+        continue;
+      };
+      let alpha = ((record.alpha() as f32 / 255.0) * layer.alpha * foreground_opacity * 255.0)
+        .round()
+        .clamp(0.0, 255.0) as u8;
+      Color([record.red(), record.green(), record.blue(), alpha])
     };
 
-    let Some(color) = layer.color_index().map(|index| Color(palette.get(index))) else {
-      continue;
-    };
-
-    let color = color.with_opacity(opacity);
-
-    let paths = layer
-      .path()
-      .commands()
-      .map(invert_y_coordinate)
-      .collect::<Vec<_>>();
-
-    let (mask, placement) = mask_memory.render(&paths, Some(transform), None, buffer_pool);
+    let (mask, placement) = mask_memory.render(&layer.paths, Some(transform), None, buffer_pool);
 
     draw_mask(
       canvas,

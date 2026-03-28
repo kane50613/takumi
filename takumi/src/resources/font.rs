@@ -6,26 +6,91 @@ use std::{
   sync::Arc,
 };
 
+use image::{
+  Rgba, RgbaImage,
+  imageops::{FilterType, resize},
+};
 use parley::{
   GenericFamily, GlyphRun, LayoutContext, TextStyle, TreeBuilder,
-  fontique::{Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, Script},
+  fontique::{
+    Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, Script, ScriptExt,
+  },
 };
-use swash::{
-  FontRef,
-  scale::{ScaleContext, StrikeWith, image::Image, outline::Outline},
+use skrifa::{
+  FontRef, GlyphId, MetadataProvider,
+  bitmap::{BitmapData, BitmapGlyph, Origin},
+  color::{Brush, ColorGlyphFormat, ColorPainter, CompositeMode, PaintCachedColorGlyph, Transform},
+  instance::{LocationRef, Size},
+  outline::{DrawSettings, OutlinePen},
+  raw::types::{BoundingBox, F2Dot14},
 };
 use thiserror::Error;
-use zeno::{Angle as ZenoAngle, Transform as ZenoTransform};
+use zeno::{Angle as ZenoAngle, Command, Transform as ZenoTransform};
 
-use crate::layout::inline::{InlineBrush, InlineLayout};
+use crate::{
+  layout::inline::{InlineBrush, InlineLayout},
+  resources::image_decoder::decode_png,
+};
 
-/// Represents a resolved glyph that can be either a bitmap image or an outline
 #[derive(Clone)]
 pub(crate) enum ResolvedGlyph {
-  /// A bitmap glyph image
-  Image(Image),
-  /// A vector outline glyph
-  Outline(Outline),
+  Bitmap(ResolvedBitmapGlyph),
+  Outline(ResolvedOutlineGlyph),
+}
+
+#[derive(Clone)]
+pub(crate) struct ResolvedBitmapGlyph {
+  pub(crate) image: RgbaImage,
+  pub(crate) placement: ResolvedGlyphPlacement,
+}
+
+#[derive(Clone)]
+pub(crate) enum ResolvedOutlineGlyph {
+  Plain {
+    paths: Vec<Command>,
+    embolden: Option<f32>,
+  },
+  Color {
+    paths: Vec<Command>,
+    layers: Vec<ResolvedColorLayer>,
+  },
+}
+
+#[derive(Clone)]
+pub(crate) struct ResolvedColorLayer {
+  pub(crate) paths: Vec<Command>,
+  pub(crate) palette_index: u16,
+  pub(crate) alpha: f32,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct ResolvedGlyphPlacement {
+  pub(crate) left: i32,
+  pub(crate) top: i32,
+  pub(crate) width: u32,
+  pub(crate) height: u32,
+}
+
+impl ResolvedOutlineGlyph {
+  pub(crate) fn paths(&self) -> &[Command] {
+    match self {
+      Self::Plain { paths, .. } | Self::Color { paths, .. } => paths,
+    }
+  }
+
+  pub(crate) fn embolden(&self) -> Option<f32> {
+    match self {
+      Self::Plain { embolden, .. } => *embolden,
+      Self::Color { .. } => None,
+    }
+  }
+
+  pub(crate) fn color_layers(&self) -> Option<&[ResolvedColorLayer]> {
+    match self {
+      Self::Plain { .. } => None,
+      Self::Color { layers, .. } => Some(layers),
+    }
+  }
 }
 
 /// Matches the typical faux-bold expansion used by text rasterizers.
@@ -33,6 +98,276 @@ const SYNTHESIS_EMBOLDEN_FACTOR: f32 = 1.0 / 24.0;
 
 pub(crate) fn synthesis_embolden_strength(font_size: f32) -> f32 {
   font_size * SYNTHESIS_EMBOLDEN_FACTOR
+}
+
+#[derive(Default)]
+struct GlyphOutlinePen {
+  paths: Vec<Command>,
+}
+
+impl GlyphOutlinePen {
+  fn finish(self) -> Vec<Command> {
+    self.paths
+  }
+}
+
+impl OutlinePen for GlyphOutlinePen {
+  fn move_to(&mut self, x: f32, y: f32) {
+    self.paths.push(Command::MoveTo((x, -y).into()));
+  }
+
+  fn line_to(&mut self, x: f32, y: f32) {
+    self.paths.push(Command::LineTo((x, -y).into()));
+  }
+
+  fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
+    self
+      .paths
+      .push(Command::QuadTo((cx0, -cy0).into(), (x, -y).into()));
+  }
+
+  fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
+    self.paths.push(Command::CurveTo(
+      (cx0, -cy0).into(),
+      (cx1, -cy1).into(),
+      (x, -y).into(),
+    ));
+  }
+
+  fn close(&mut self) {
+    self.paths.push(Command::Close);
+  }
+}
+
+struct ColorLayerCollector<'a, 'font> {
+  font_ref: &'font FontRef<'a>,
+  size: Size,
+  location: LocationRef<'a>,
+  layers: Vec<ResolvedColorLayer>,
+}
+
+impl<'a, 'font> ColorLayerCollector<'a, 'font> {
+  fn new(font_ref: &'font FontRef<'a>, size: Size, location: LocationRef<'a>) -> Self {
+    Self {
+      font_ref,
+      size,
+      location,
+      layers: Vec::new(),
+    }
+  }
+
+  fn into_layers(self) -> Vec<ResolvedColorLayer> {
+    self.layers
+  }
+}
+
+struct GlyphResolveContext<'a, 'font> {
+  font_ref: &'font FontRef<'a>,
+  font_size: f32,
+  size: Size,
+  location: LocationRef<'a>,
+  skew: Option<ZenoTransform>,
+  embolden: Option<f32>,
+}
+
+impl<'a, 'font> GlyphResolveContext<'a, 'font> {
+  fn resolve_glyph(&self, glyph_id: u32) -> Option<ResolvedGlyph> {
+    let glyph_id = GlyphId::new(glyph_id);
+
+    self
+      .resolve_bitmap_glyph(glyph_id)
+      .map(ResolvedGlyph::Bitmap)
+      .or_else(|| {
+        // Color outline glyphs intentionally bypass skew synthesis so COLR
+        // layer metrics stay aligned and stacked color layers are not deformed.
+        self
+          .resolve_color_outline_glyph(glyph_id)
+          .map(ResolvedGlyph::Outline)
+      })
+      .or_else(|| {
+        self
+          .resolve_plain_outline_glyph(glyph_id)
+          .map(ResolvedGlyph::Outline)
+      })
+  }
+
+  fn resolve_bitmap_glyph(&self, glyph_id: GlyphId) -> Option<ResolvedBitmapGlyph> {
+    let bitmap = self
+      .font_ref
+      .bitmap_strikes()
+      .glyph_for_size(self.size, glyph_id)?;
+    scale_bitmap_glyph(bitmap, self.font_size)
+  }
+
+  fn resolve_color_outline_glyph(&self, glyph_id: GlyphId) -> Option<ResolvedOutlineGlyph> {
+    resolve_color_outline_glyph(self.font_ref, glyph_id, self.size, self.location)
+  }
+
+  fn resolve_plain_outline_glyph(&self, glyph_id: GlyphId) -> Option<ResolvedOutlineGlyph> {
+    let mut paths = resolve_outline_commands(self.font_ref, glyph_id, self.size, self.location)?;
+    if let Some(skew_transform) = &self.skew {
+      transform_commands(&mut paths, skew_transform);
+    }
+
+    Some(ResolvedOutlineGlyph::Plain {
+      paths,
+      embolden: self.embolden,
+    })
+  }
+}
+
+/// `ColorPainter` for `ColorLayerCollector` that only records COLR v0 layer
+/// stacking. `push_transform`, `pop_transform`, `push_clip_glyph`,
+/// `push_clip_box`, `pop_clip`, and `push_layer` are intentional no-ops, and
+/// `fill_glyph` only records `Brush::Solid` layers, so gradients and other
+/// non-solid brushes are silently skipped.
+impl ColorPainter for ColorLayerCollector<'_, '_> {
+  fn push_transform(&mut self, _transform: Transform) {}
+
+  fn pop_transform(&mut self) {}
+
+  fn push_clip_glyph(&mut self, _glyph_id: GlyphId) {}
+
+  fn push_clip_box(&mut self, _clip_box: BoundingBox<f32>) {}
+
+  fn pop_clip(&mut self) {}
+
+  fn fill(&mut self, _brush: Brush<'_>) {}
+
+  fn fill_glyph(
+    &mut self,
+    glyph_id: GlyphId,
+    _brush_transform: Option<Transform>,
+    brush: Brush<'_>,
+  ) {
+    let Brush::Solid {
+      palette_index,
+      alpha,
+    } = brush
+    else {
+      return;
+    };
+
+    let Some(paths) = resolve_outline_commands(self.font_ref, glyph_id, self.size, self.location)
+    else {
+      return;
+    };
+
+    self.layers.push(ResolvedColorLayer {
+      paths,
+      palette_index,
+      alpha,
+    });
+  }
+
+  fn paint_cached_color_glyph(
+    &mut self,
+    _glyph: GlyphId,
+  ) -> Result<PaintCachedColorGlyph, skrifa::color::PaintError> {
+    Ok(PaintCachedColorGlyph::Unimplemented)
+  }
+
+  fn push_layer(&mut self, _composite_mode: CompositeMode) {}
+}
+
+fn resolve_outline_commands(
+  font_ref: &FontRef<'_>,
+  glyph_id: GlyphId,
+  size: Size,
+  location: LocationRef<'_>,
+) -> Option<Vec<Command>> {
+  let glyph = font_ref.outline_glyphs().get(glyph_id)?;
+  let mut pen = GlyphOutlinePen::default();
+  glyph
+    .draw(DrawSettings::unhinted(size, location), &mut pen)
+    .ok()?;
+  Some(pen.finish())
+}
+
+fn transform_commands(paths: &mut [Command], transform: &ZenoTransform) {
+  for command in paths {
+    *command = command.transform(transform);
+  }
+}
+
+fn decode_bitmap_image(bitmap: &BitmapGlyph<'_>) -> Option<(RgbaImage, Origin)> {
+  let image = match &bitmap.data {
+    BitmapData::Png(bytes) => decode_png(bytes).ok()?,
+    BitmapData::Bgra(bytes) => RgbaImage::from_fn(bitmap.width, bitmap.height, |x, y| {
+      let index = ((y * bitmap.width + x) * 4) as usize;
+      Rgba([
+        bytes[index + 2],
+        bytes[index + 1],
+        bytes[index],
+        bytes[index + 3],
+      ])
+    }),
+    BitmapData::Mask(_) => return None,
+  };
+
+  Some((image, bitmap.placement_origin))
+}
+
+fn scale_bitmap_glyph(bitmap: BitmapGlyph<'_>, font_size: f32) -> Option<ResolvedBitmapGlyph> {
+  let (image, origin) = decode_bitmap_image(&bitmap)?;
+  let scale_x = if bitmap.ppem_x > 0.0 {
+    font_size / bitmap.ppem_x
+  } else {
+    1.0
+  };
+  let scale_y = if bitmap.ppem_y > 0.0 {
+    font_size / bitmap.ppem_y
+  } else {
+    1.0
+  };
+  let width = ((image.width() as f32) * scale_x).round().max(1.0) as u32;
+  let height = ((image.height() as f32) * scale_y).round().max(1.0) as u32;
+  let image = if width == image.width() && height == image.height() {
+    image
+  } else {
+    resize(&image, width, height, FilterType::Triangle)
+  };
+  let top = match origin {
+    Origin::TopLeft => bitmap.inner_bearing_y,
+    Origin::BottomLeft => bitmap.inner_bearing_y + bitmap.height as f32,
+  };
+
+  Some(ResolvedBitmapGlyph {
+    image,
+    placement: ResolvedGlyphPlacement {
+      left: (bitmap.inner_bearing_x * scale_x).round() as i32,
+      top: (top * scale_y).round() as i32,
+      width,
+      height,
+    },
+  })
+}
+
+fn resolve_color_outline_glyph(
+  font_ref: &FontRef<'_>,
+  glyph_id: GlyphId,
+  size: Size,
+  location: LocationRef<'_>,
+) -> Option<ResolvedOutlineGlyph> {
+  let color_glyph = font_ref
+    .color_glyphs()
+    .get_with_format(glyph_id, ColorGlyphFormat::ColrV0)?;
+  let mut collector = ColorLayerCollector::new(font_ref, size, location);
+  color_glyph.paint(location, &mut collector).ok()?;
+  let color_layers = collector.into_layers();
+  if color_layers.is_empty() {
+    return None;
+  }
+
+  let mut paths = Vec::new();
+  for layer in &color_layers {
+    paths.extend(layer.paths.iter().copied());
+  }
+
+  Some(ResolvedOutlineGlyph::Color {
+    paths,
+    layers: color_layers,
+  })
 }
 
 /// Errors that can occur during font loading and conversion.
@@ -149,70 +484,44 @@ impl FontContext {
     font_ref: FontRef,
     glyph_ids: impl Iterator<Item = u32> + Clone,
   ) -> HashMap<u32, ResolvedGlyph> {
-    // Collect unique glyph IDs to avoid duplicate work
     let unique_glyph_ids: HashSet<u32> = glyph_ids.collect();
-
-    let mut result = HashMap::new();
-
     if unique_glyph_ids.is_empty() {
-      return result;
+      return HashMap::new();
     }
-
-    let mut scale = ScaleContext::with_max_entries(0);
-    let mut scaler = scale
-      .builder(font_ref)
-      .size(run.run().font_size())
-      .normalized_coords(run.run().normalized_coords())
-      .build();
 
     let has_emoji_cluster = run
       .run()
       .visual_clusters()
       .any(|cluster| cluster.is_emoji());
-    let embolden = if !has_emoji_cluster
-      && run.run().synthesis().embolden()
-      && run.style().brush.font_synthesis.weight.is_allowed()
-    {
-      Some(synthesis_embolden_strength(run.run().font_size()))
-    } else {
-      None
-    };
-    let skew = run
+    let font_size = run.run().font_size();
+    let normalized_coords = run
       .run()
-      .synthesis()
-      .skew()
-      .filter(|_| !has_emoji_cluster)
-      .filter(|_| run.style().brush.font_synthesis.style.is_allowed())
-      .map(|degrees| ZenoTransform::skew(ZenoAngle::from_degrees(degrees), ZenoAngle::ZERO));
+      .normalized_coords()
+      .iter()
+      .copied()
+      .map(F2Dot14::from_bits)
+      .collect::<Vec<_>>();
+    let resolver = GlyphResolveContext {
+      font_ref: &font_ref,
+      font_size,
+      size: Size::new(font_size),
+      location: LocationRef::new(&normalized_coords),
+      embolden: (!has_emoji_cluster
+        && run.run().synthesis().embolden()
+        && run.style().brush.font_synthesis.weight.is_allowed())
+      .then_some(synthesis_embolden_strength(font_size)),
+      skew: run
+        .run()
+        .synthesis()
+        .skew()
+        .filter(|_| !has_emoji_cluster)
+        .filter(|_| run.style().brush.font_synthesis.style.is_allowed())
+        .map(|degrees| ZenoTransform::skew(ZenoAngle::from_degrees(-degrees), ZenoAngle::ZERO)),
+    };
 
-    // Process each unique glyph ID
-    for &glyph_id in &unique_glyph_ids {
-      let mut resolved = scaler
-        .scale_color_bitmap(glyph_id as u16, StrikeWith::BestFit)
-        .map(|image| (ResolvedGlyph::Image(image), false))
-        .or_else(|| {
-          scaler
-            .scale_color_outline(glyph_id as u16)
-            .map(|outline| (ResolvedGlyph::Outline(outline), false))
-        })
-        .or_else(|| {
-          scaler
-            .scale_outline(glyph_id as u16)
-            .map(|outline| (ResolvedGlyph::Outline(outline), true))
-        });
-
-      if let Some(embolden_strength) = embolden
-        && let Some((ResolvedGlyph::Outline(ref mut outline), true)) = resolved
-      {
-        outline.embolden(embolden_strength, embolden_strength);
-      }
-      if let Some(ref skew_transform) = skew
-        && let Some((ResolvedGlyph::Outline(ref mut outline), true)) = resolved
-      {
-        outline.transform(skew_transform);
-      }
-
-      if let Some((glyph, _)) = resolved {
+    let mut result = HashMap::with_capacity(unique_glyph_ids.len());
+    for glyph_id in unique_glyph_ids {
+      if let Some(glyph) = resolver.resolve_glyph(glyph_id) {
         result.insert(glyph_id, glyph);
       }
     }
@@ -223,7 +532,7 @@ impl FontContext {
   /// Create an inline layout with the given root style and function
   pub(crate) fn tree_builder(
     &self,
-    root_style: TextStyle<'_, InlineBrush>,
+    root_style: TextStyle<'_, '_, InlineBrush>,
     func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),
   ) -> (InlineLayout, String) {
     let mut font_context = self.clone();

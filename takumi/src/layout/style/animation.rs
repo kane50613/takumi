@@ -1383,4 +1383,29 @@ mod tests {
       Some(ColorInput::Value(Color([70, 90, 110, 255])))
     );
   }
+
+  #[test]
+  fn text_indent_interpolates_amount_continuously() {
+    let mut target = TextIndent::default();
+    let from = TextIndent {
+      amount: LengthDefaultsToZero::Px(10.0),
+      each_line: false,
+      hanging: false,
+    };
+    let to = TextIndent {
+      amount: LengthDefaultsToZero::Px(30.0),
+      each_line: true,
+      hanging: true,
+    };
+
+    target.interpolate(&from, &to, 0.25, &sizing(), current_color());
+    assert_eq!(target.amount, LengthDefaultsToZero::Px(15.0));
+    assert!(!target.each_line);
+    assert!(!target.hanging);
+
+    target.interpolate(&from, &to, 0.75, &sizing(), current_color());
+    assert_eq!(target.amount, LengthDefaultsToZero::Px(25.0));
+    assert!(target.each_line);
+    assert!(target.hanging);
+  }
 }
