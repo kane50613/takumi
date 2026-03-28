@@ -1,7 +1,6 @@
 export interface ReactRuntime {
-  internals: {
-    H: ReactDispatcher | null;
-  };
+  getDispatcher(): ReactDispatcher | null;
+  setDispatcher(dispatcher: ReactDispatcher | null): void;
 }
 
 interface ReactDispatcher {
@@ -10,6 +9,7 @@ interface ReactDispatcher {
 
 type ReactModuleLike = {
   __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: unknown;
+  __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED?: unknown;
 };
 
 export const REACT_CONTEXT_TYPE = Symbol.for("react.context");
@@ -43,6 +43,44 @@ export function isReactContextConsumer(element: { type: unknown }): element is {
 
 let reactRuntimePromise: Promise<ReactRuntime | null> | undefined;
 
+function resolveReactRuntime(candidate: ReactModuleLike): ReactRuntime | null {
+  const clientInternals = candidate.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+  if (clientInternals && typeof clientInternals === "object" && "H" in clientInternals) {
+    const internals = clientInternals as { H: ReactDispatcher | null };
+
+    return {
+      getDispatcher() {
+        return internals.H;
+      },
+      setDispatcher(dispatcher) {
+        internals.H = dispatcher;
+      },
+    };
+  }
+
+  const legacyInternals = candidate.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+  if (
+    legacyInternals &&
+    typeof legacyInternals === "object" &&
+    "ReactCurrentDispatcher" in legacyInternals
+  ) {
+    const dispatcherContainer = legacyInternals as {
+      ReactCurrentDispatcher: { current: ReactDispatcher | null };
+    };
+
+    return {
+      getDispatcher() {
+        return dispatcherContainer.ReactCurrentDispatcher.current;
+      },
+      setDispatcher(dispatcher) {
+        dispatcherContainer.ReactCurrentDispatcher.current = dispatcher;
+      },
+    };
+  }
+
+  return null;
+}
+
 export function getReactRuntime(
   currentRuntime: Promise<ReactRuntime | null> | null,
 ): Promise<ReactRuntime | null> {
@@ -51,15 +89,7 @@ export function getReactRuntime(
   reactRuntimePromise ??= import("react")
     .then((module) => {
       const candidate = (module.default ?? module) as ReactModuleLike;
-      const internals = candidate.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-
-      if (!internals || typeof internals !== "object" || !("H" in internals)) {
-        return null;
-      }
-
-      return {
-        internals: internals as ReactRuntime["internals"],
-      };
+      return resolveReactRuntime(candidate);
     })
     .catch(() => null);
 

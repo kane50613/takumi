@@ -195,8 +195,8 @@ async function renderFunctionComponent(
     return fromJsxInternal(component(props), options);
   }
 
-  const previousDispatcher = reactRuntime.internals.H;
-  reactRuntime.internals.H = createContextDispatcher(options.contextValues);
+  const previousDispatcher = reactRuntime.getDispatcher();
+  reactRuntime.setDispatcher(createContextDispatcher(options.contextValues));
 
   try {
     return fromJsxInternal(component(props), {
@@ -204,7 +204,7 @@ async function renderFunctionComponent(
       reactRuntime: Promise.resolve(reactRuntime),
     });
   } finally {
-    reactRuntime.internals.H = previousDispatcher;
+    reactRuntime.setDispatcher(previousDispatcher);
   }
 }
 

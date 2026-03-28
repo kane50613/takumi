@@ -8,6 +8,9 @@ export default defineConfig({
   },
   format: ["esm", "cjs"],
   dts: true,
+  deps: {
+    neverBundle: ["react"],
+  },
   minify: true,
   clean: true,
   outDir: "dist",

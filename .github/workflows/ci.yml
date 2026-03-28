@@ -348,6 +348,13 @@ jobs:
         working-directory: takumi-image-response
         run: bun run build
 
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: image-response-dist
+          path: takumi-image-response/dist
+          if-no-files-found: error
+
   test-template:
     name: Test Templates
     runs-on: ubuntu-slim
@@ -605,6 +612,12 @@ jobs:
         with:
           name: js-dist
           path: takumi-js/dist
+
+      - name: Download image-response artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: image-response-dist
+          path: takumi-image-response/dist
 
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
