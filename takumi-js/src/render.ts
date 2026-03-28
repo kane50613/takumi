@@ -54,3 +54,10 @@ export async function render(element: ReactNode | ReactElementLike, options?: Re
 
   return renderer.render(node, renderOptions, options?.signal);
 }
+
+export async function extractResourceUrls(element: ReactNode | ReactElementLike) {
+  const imports = await getImports();
+  const { node } = await fromJsx(element);
+
+  return imports.extractResourceUrls(node);
+}

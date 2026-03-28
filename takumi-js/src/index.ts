@@ -1,6 +1,10 @@
 export type * from "@takumi-rs/helpers";
+export type * from "@takumi-rs/core";
 export * from "./render";
-export type { OutputFormat } from "@takumi-rs/core";
+
+export type { RenderOptions } from "./render";
+
+export { extractResourceUrls } from "./render";
 
 declare module "react" {
   interface DOMAttributes<T> {

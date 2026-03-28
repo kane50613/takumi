@@ -1,4 +1,4 @@
-import { fetchResources } from "../../../takumi-js/src/helpers";
+import { fetchResources } from "takumi-js/helpers";
 import { ImageResponse } from "takumi-js/response";
 import DocsTemplate from "../../../takumi-template/src/templates/docs-template";
 

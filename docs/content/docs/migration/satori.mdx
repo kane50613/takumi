@@ -15,11 +15,11 @@ If you are migrating from `next/og`, check out the [From Next.js ImageResponse](
 ## Installation
 
 ```npm
-npm i takumi-js/node takumi-js/helpers
+npm i takumi-js
 ```
 
 <Callout>
-  Make sure to mark `takumi-js/node` as `external` if you are using a bundler like Vite or Webpack
+  Make sure to mark `@takumi-rs/core` as `external` if you are using a bundler like Vite or Webpack
 </Callout>
 
 ## Code changes
@@ -29,9 +29,8 @@ npm i takumi-js/node takumi-js/helpers
 // ---cut-before---
 // @noErrors
 import satori from "satori"; // [!code --]
-import { Resvg } from "@resvg/resvgtakumitakumi-js"; // [!code --]
-import { fromJsx } from "takumi-js/helpers/jsx"; // [!code ++]
-import { Renderer } from "takumi-js/node"; // [!code ++]
+import { Resvg } from "@resvg/resvg"; // [!code --]
+import { render } from "takumi-js"; // [!code ++]
 
 // You can use variable fonts with Takumi!
 // Takumi comes with Geist and Geist Mono by default,
@@ -51,18 +50,13 @@ const svg = await satori(<OgImage title="Satori" />, {
 });
 const buffer = new Resvg(svg).render().asPng();
 
-// [!code ++:3]
-const renderer = new Renderer({
-  fonts,
-});
-
 // [!code ++:7]
-const { node, stylesheets } = await fromJsx(<OgImage title="Takumi" />);
-const png = await renderer.render(node, {
+const png = await render(<OgImage title="Takumi" />, {
   width: 1200,
   height: 630,
   format: "png", // "webp" is recommended as well.
   stylesheets,
+  fonts,
 });
 
 function OgImage({ title }: { title: string }) {

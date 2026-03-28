@@ -1,12 +1,11 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Renderer } from "takumi-js/node";
-import { fromJsx } from "takumi-js/helpers/jsx";
 import { write } from "bun";
 import { TailwindCard, UnoCard } from "./card";
 import { compileTailwindStylesheet } from "./tailwind-compile";
 import { compileUnoStylesheet } from "./unocss-compile";
+import { render } from "takumi-js";
 
 const width = 1200;
 const height = 630;
@@ -15,7 +14,6 @@ const currentFile = fileURLToPath(import.meta.url);
 const currentDir = dirname(currentFile);
 const exampleDir = dirname(currentFile);
 const outputDir = join(exampleDir, "..", "output");
-const renderer = new Renderer();
 
 await mkdir(outputDir, { recursive: true });
 
@@ -45,19 +43,18 @@ for (const stylesheet of stylesheets) {
 
   const CardComponent = stylesheet.libraryName === "Tailwind CSS" ? TailwindCard : UnoCard;
 
-  const { node } = await fromJsx(
+  const image = await render(
     <CardComponent
       description={stylesheet.description}
       libraryName={stylesheet.libraryName}
       title={stylesheet.title}
     />,
+    {
+      width,
+      height,
+      stylesheets: [stylesheet.css],
+    },
   );
-
-  const image = await renderer.render(node, {
-    width,
-    height,
-    stylesheets: [stylesheet.css],
-  });
 
   await write(join(outputDir, stylesheet.imageName), image);
 }

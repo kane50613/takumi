@@ -6,9 +6,9 @@ icon: Type
 
 Takumi does not use system fonts. All fonts must be explicitly loaded to be available for rendering.
 
-For `takumi-js/node` (napi-rs version), full axis Geist and Geist Mono are embedded by default.
+For `@takumi-rs/core` (napi-rs version), full axis Geist and Geist Mono are embedded by default.
 
-For `takumi-js/wasm`, a single variable Latin font, Manrope, is embedded by default.
+For `@takumi-rs/wasm`, a single variable Latin font, Manrope, is embedded by default.
 
 If you need a monospace family in WASM, provide your own font.
 
@@ -18,20 +18,16 @@ If you need a monospace family in WASM, provide your own font.
 /** @jsxImportSource react */
 // ---cut-before---
 import { ImageResponse } from "takumi-js/response";
-import type { Font } from "takumi-js/node";
-
-const interBuffer = await fetch("/path-to-inter.woff2").then((res) => res.arrayBuffer());
-
-const fonts: Font[] = [
-  {
-    name: "Inter",
-    data: interBuffer,
-  },
-];
+import type { Font } from "takumi-js";
 
 export function GET() {
   return new ImageResponse(<div />, {
-    fonts,
+    fonts: [
+      {
+        name: "Inter",
+        data: () => fetch("/path-to-inter.woff2").then((res) => res.arrayBuffer()),
+      },
+    ],
   });
 }
 ```

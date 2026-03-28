@@ -10,7 +10,7 @@ Takumi is designed from the ground up for speed. However, as your node trees gro
 
 ### Reuse the Renderer Instance
 
-For both `takumi-js/node` and `takumi-js/wasm`, the `Renderer` is the heart of Takumi's resource management. Try to reuse the renderer instance across multiple renderings.
+For both `@takumi-rs/core` and `@takumi-rs/wasm`, the `Renderer` is the heart of Takumi's resource management. Try to reuse the renderer instance across multiple renderings.
 
 #### For ImageResponse
 
@@ -55,7 +55,7 @@ Loading images from URLs or bytes during the rendering pass can be a bottleneck.
 
 ### Parallel Rendering
 
-Always prefer `takumi-js/node` over `takumi-js/wasm` for utilizing multiple threads.
+Always prefer `@takumi-rs/core` over `@takumi-rs/wasm` for utilizing multiple threads.
 
 ## Component Design
 
