@@ -56,11 +56,11 @@ impl<'i> FromCss<'i> for TextIndent {
     let mut hanging = false;
 
     while !input.is_exhausted() {
-      if amount.is_none() {
-        if let Ok(length) = input.try_parse(LengthDefaultsToZero::from_css) {
-          amount = Some(length);
-          continue;
-        }
+      if amount.is_none()
+        && let Ok(length) = input.try_parse(LengthDefaultsToZero::from_css)
+      {
+        amount = Some(length);
+        continue;
       }
 
       let location = input.current_source_location();

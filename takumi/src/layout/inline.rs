@@ -155,7 +155,11 @@ fn text_style_with_span_id<'s>(
 }
 
 fn apply_text_indent(layout: &mut InlineLayout, style: &SizedFontStyle, max_width: f32) {
-  let indent_basis = max_width.is_finite().then_some(max_width).unwrap_or(0.0);
+  let indent_basis = if max_width.is_finite() {
+    max_width
+  } else {
+    0.0
+  };
   let amount = style
     .parent
     .text_indent
