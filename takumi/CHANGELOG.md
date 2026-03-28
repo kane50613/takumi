@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.0-rc.5
+
+### Patch Changes
+
+- ef692db: Remove `fast_image_resize` dependency
+
 ## 1.0.0-rc.4
 
 ## 1.0.0-rc.3
