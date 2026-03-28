@@ -1,4 +1,5 @@
 import type { ComponentProps, JSX, ReactElement, ReactNode } from "react";
+export type { ReactElementLike } from "../types";
 import type { ReactElementLike } from "../types";
 
 const voidElements = new Set(["head", "meta", "link", "style", "script"]);
