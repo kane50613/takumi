@@ -25,7 +25,6 @@ const fetchedResources = await fetchResources(urls);
 
 const image = await render(element, {
   fetchedResources, // [!code ++]
-  stylesheets,
 });
 ```
 
@@ -41,26 +40,19 @@ The image key can be used in any `src` field or `background-image`, `mask-image`
 import { ImageResponse } from "takumi-js/response";
 import type { ImageSource } from "takumi-js";
 
-const [logo, background] = await Promise.all([
-  fetch("/logo.png").then((res) => res.arrayBuffer()),
-  fetch("/background.png").then((res) => res.arrayBuffer()),
-]);
-
-const persistentImages: ImageSource[] = [
-  {
-    src: "my-logo",
-    data: logo,
-  },
-  {
-    src: "background",
-    data: background,
-  },
-];
-
 export function GET() {
   return new ImageResponse(<OgImage />, {
     // [!code ++]
-    persistentImages,
+    persistentImages: [
+      {
+        src: "my-logo",
+        data: () => fetch("/logo.png").then((res) => res.arrayBuffer()),
+      },
+      {
+        src: "background",
+        data: () => fetch("/background.png").then((res) => res.arrayBuffer()),
+      },
+    ],
   });
 }
 
