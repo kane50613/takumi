@@ -41,6 +41,7 @@ export interface FromJsxOptions {
 }
 
 interface ResolvedFromJsxOptions {
+  defaultStyles: typeof defaultStylePresets | false;
   presets?: typeof defaultStylePresets;
   tailwindClassesProperty: string;
 }
@@ -92,18 +93,17 @@ export async function fromJsx(
   options?: FromJsxOptions,
 ): Promise<FromJsxResult> {
   const resolvedOptions = {
+    defaultStyles: resolveDefaultStyles(options),
     presets: getPresets(options),
     tailwindClassesProperty: options?.tailwindClassesProperty ?? "tw",
   } satisfies ResolvedFromJsxOptions;
-  const result = containsReactContextProvider(element)
-    ? await renderWithReactDomServer(element, resolvedOptions)
-    : await fromJsxInternal(element, resolvedOptions).catch(async (error) => {
-        if (!shouldFallbackToReactDomServer(error)) {
-          throw error;
-        }
+  const result = await fromJsxInternal(element, resolvedOptions).catch(async (error) => {
+    if (!shouldFallbackToReactDomServer(error)) {
+      throw error;
+    }
 
-        return renderWithReactDomServer(element, resolvedOptions);
-      });
+    return renderWithReactDomServer(element, resolvedOptions);
+  });
   const nodes = result.nodes;
 
   let node: Node;
@@ -208,39 +208,27 @@ function getPresets(options?: FromJsxOptions): typeof defaultStylePresets | unde
   return options?.defaultStyles ?? defaultStylePresets;
 }
 
+function resolveDefaultStyles(options?: FromJsxOptions): typeof defaultStylePresets | false {
+  if (options && "defaultStyles" in options) {
+    return options.defaultStyles ?? defaultStylePresets;
+  }
+
+  return defaultStylePresets;
+}
+
 function containsReactContextProvider(element: ReactNode | ReactElementLike): boolean {
-  if (element === undefined || element === null || element === false) {
-    return false;
-  }
-
-  if (element instanceof Promise) {
-    return false;
-  }
-
-  if (typeof element === "object" && Symbol.iterator in element) {
-    for (const child of element as Iterable<ReactNode>) {
-      if (containsReactContextProvider(child)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
   if (!isValidElement(element)) {
     return false;
   }
 
-  if (
-    typeof element.type === "object" &&
-    element.type !== null &&
-    "$$typeof" in element.type &&
-    element.type.$$typeof === Symbol.for("react.context")
-  ) {
-    return true;
+  if (typeof element.type !== "object" || element.type === null || !("$$typeof" in element.type)) {
+    return false;
   }
 
-  return containsReactContextProvider(getElementChildren(element));
+  return (
+    element.type.$$typeof === Symbol.for("react.context") ||
+    element.type.$$typeof === Symbol.for("react.provider")
+  );
 }
 
 function shouldFallbackToReactDomServer(error: unknown): boolean {
@@ -333,7 +321,7 @@ async function renderWithReactDomServer(
   );
 
   return fromStaticMarkup(markup, {
-    defaultStyles: options.presets ?? defaultStylePresets,
+    defaultStyles: options.defaultStyles,
     tailwindClassesProperty: options.tailwindClassesProperty,
   } satisfies FromStaticMarkupOptions);
 }
@@ -429,6 +417,10 @@ async function processReactElement(
   element: ReactElementLike,
   options: ResolvedFromJsxOptions,
 ): Promise<FromJsxTraversalResult> {
+  if (containsReactContextProvider(element)) {
+    return renderWithReactDomServer(element, options);
+  }
+
   if (isFunctionComponent(element.type)) {
     return renderFunctionComponent(element.type, element.props, options);
   }
@@ -449,7 +441,7 @@ async function processReactElement(
     };
   }
 
-  if (typeof element.type !== "string" || isHtmlVoidElement(element)) {
+  if (typeof element.type !== "string" || isHtmlVoidElement(element.type)) {
     return { nodes: [], stylesheets: [] };
   }
 

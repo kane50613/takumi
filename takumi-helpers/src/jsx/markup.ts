@@ -6,7 +6,7 @@ import type {
 } from "ultrahtml";
 import type { CSSProperties } from "react";
 import { container, image, text } from "../helpers";
-import type { Node, NodeMetadata, ReactElementLike } from "../types";
+import type { Node, NodeMetadata } from "../types";
 import type { FromJsxOptions } from "./jsx";
 import { defaultStylePresets } from "./style-presets";
 import { isHtmlVoidElement } from "./utils";
@@ -105,10 +105,6 @@ function buildStaticNodes(
     return { nodes: [], stylesheets: content ? [content] : [] };
   }
 
-  if (isHtmlVoidElement({ type: element.name, props: {} } as ReactElementLike)) {
-    return { nodes: [], stylesheets: [] };
-  }
-
   const metadata = extractStaticNodeMetadata(element, presets, tailwindClassesProperty);
   if (element.name === "br") {
     return {
@@ -142,6 +138,10 @@ function buildStaticNodes(
     };
   }
 
+  if (isHtmlVoidElement(element.name)) {
+    return { nodes: [], stylesheets: [] };
+  }
+
   if (element.name === "svg") {
     return {
       nodes: [
@@ -172,7 +172,7 @@ function buildStaticNodes(
 
   return {
     nodes: [
-      onlyTextChildren
+      onlyTextChildren && children.nodes.length > 0
         ? text({
             text: children.nodes.map((child) => (child.type === "text" ? child.text : "")).join(""),
             ...metadata,
@@ -269,6 +269,10 @@ function parseInlineStyle(styleText: string): CSSProperties | undefined {
 }
 
 function cssPropertyToJsProperty(property: string): string {
+  if (property.startsWith("--")) {
+    return property;
+  }
+
   return property.replace(/-([a-z])/g, (_, character: string) => character.toUpperCase());
 }
 

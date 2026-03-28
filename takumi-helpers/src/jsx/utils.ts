@@ -4,8 +4,8 @@ import type { ReactElementLike } from "../types";
 
 const voidElements = new Set(["head", "meta", "link", "style", "script"]);
 
-export function isHtmlVoidElement(element: ReactElementLike) {
-  return voidElements.has(element.type as string);
+export function isHtmlVoidElement(type: string) {
+  return voidElements.has(type);
 }
 
 export function isHtmlElement<T extends keyof JSX.IntrinsicElements>(
