@@ -26,22 +26,22 @@
       "default": "./dist/index.mjs"
     },
     "./response": {
-      "types": "./dist/response/index.d.mts",
-      "import": "./dist/response/index.mjs",
-      "require": "./dist/response/index.cjs",
-      "default": "./dist/response/index.mjs"
+      "types": "./dist/response.d.mts",
+      "import": "./dist/response.mjs",
+      "require": "./dist/response.cjs",
+      "default": "./dist/response.mjs"
     },
     "./node": {
-      "types": "./dist/node/index.d.mts",
-      "import": "./dist/node/index.mjs",
-      "require": "./dist/node/index.cjs",
-      "default": "./dist/node/index.mjs"
+      "types": "./dist/node.d.mts",
+      "import": "./dist/node.mjs",
+      "require": "./dist/node.cjs",
+      "default": "./dist/node.mjs"
     },
     "./wasm": {
-      "types": "./dist/wasm/index.d.mts",
-      "import": "./dist/wasm/index.mjs",
-      "require": "./dist/wasm/index.cjs",
-      "default": "./dist/wasm/index.mjs"
+      "types": "./dist/wasm.d.mts",
+      "import": "./dist/wasm.mjs",
+      "require": "./dist/wasm.cjs",
+      "default": "./dist/wasm.mjs"
     },
     "./helpers": {
       "types": "./dist/helpers/index.d.mts",
@@ -50,16 +50,16 @@
       "default": "./dist/helpers/index.mjs"
     },
     "./helpers/emoji": {
-      "types": "./dist/helpers/emoji/index.d.mts",
-      "import": "./dist/helpers/emoji/index.mjs",
-      "require": "./dist/helpers/emoji/index.cjs",
-      "default": "./dist/helpers/emoji/index.mjs"
+      "types": "./dist/helpers/emoji.d.mts",
+      "import": "./dist/helpers/emoji.mjs",
+      "require": "./dist/helpers/emoji.cjs",
+      "default": "./dist/helpers/emoji.mjs"
     },
     "./helpers/jsx": {
-      "types": "./dist/helpers/jsx/index.d.mts",
-      "import": "./dist/helpers/jsx/index.mjs",
-      "require": "./dist/helpers/jsx/index.cjs",
-      "default": "./dist/helpers/jsx/index.mjs"
+      "types": "./dist/helpers/jsx.d.mts",
+      "import": "./dist/helpers/jsx.mjs",
+      "require": "./dist/helpers/jsx.cjs",
+      "default": "./dist/helpers/jsx.mjs"
     }
   },
   "scripts": {

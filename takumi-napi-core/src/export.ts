@@ -71,25 +71,26 @@ export class Renderer extends NativeRenderer {
   }
 
   override async loadFont(data: FontLoader, signal?: AbortSignal): Promise<number> {
-    const isNew = this.checkAndMarkFont(data);
-
-    if (!isNew) {
-      return Promise.resolve(0);
+    if (!this.isNewFont(data)) {
+      return 0;
     }
 
     const resolved = await resolveFontLoader(data);
-    return super.loadFont(resolved, signal);
+    const loadedCount = await super.loadFont(resolved, signal);
+
+    this.checkAndMarkFont(data);
+
+    return loadedCount;
   }
 
   override loadFontSync(font: FontLoaderSync): void {
-    const isNew = this.checkAndMarkFont(font);
-
-    if (!isNew) {
+    if (!this.isNewFont(font)) {
       return;
     }
 
     const resolved = resolveSyncFontLoader(font);
-    return super.loadFontSync(resolved);
+    super.loadFontSync(resolved);
+    this.checkAndMarkFont(font);
   }
 
   private checkAndMarkFont(font: FontLoader | FontLoaderSync) {
@@ -107,6 +108,12 @@ export class Renderer extends NativeRenderer {
     this.fontsMark.add(key);
 
     return isNew;
+  }
+
+  private isNewFont(font: FontLoader | FontLoaderSync) {
+    const key = createFontKey(font);
+
+    return isBuffer(key) ? !this.fontBuffersMark.has(key) : !this.fontsMark.has(key);
   }
 }
 

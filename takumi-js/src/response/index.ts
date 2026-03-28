@@ -20,7 +20,7 @@ export type ImageResponseFactory = (
 function mergeOptions(
   defaultOptions: ImageResponseOptions | undefined,
   options: ImageResponseOptions | undefined,
-): ImageResponseOptions | undefined {
+) {
   if (!defaultOptions) {
     return options;
   }
@@ -29,9 +29,9 @@ function mergeOptions(
     return defaultOptions;
   }
 
-  const headers = new Headers(defaultOptions.headers);
+  const headers = new Headers(defaultOptions?.headers);
 
-  if (options.headers) {
+  if (options?.headers) {
     const optionHeaders = new Headers(options.headers);
 
     optionHeaders.forEach((value, key) => {
@@ -39,19 +39,11 @@ function mergeOptions(
     });
   }
 
-  if ("renderer" in options) {
-    return {
-      ...defaultOptions,
-      ...options,
-      headers,
-    };
-  }
-
   return {
     ...defaultOptions,
     ...options,
     headers,
-    stylesheets: [...(defaultOptions.stylesheets ?? []), ...(options.stylesheets ?? [])],
+    stylesheets: [...(defaultOptions?.stylesheets ?? []), ...(options?.stylesheets ?? [])],
   };
 }
 
@@ -69,7 +61,10 @@ function defaultErrorHandler(error: unknown) {
 
 export function createImageResponse(defaultOptions?: ImageResponseOptions): ImageResponseFactory {
   return function imageResponse(element: ReactNode, options?: ImageResponseOptions) {
-    const mergedOptions = mergeOptions(defaultOptions, options);
+    const mergedOptions: ImageResponseOptions = {
+      ...mergeOptions(defaultOptions, options),
+      format: options?.format ?? defaultOptions?.format ?? defaultFormat,
+    };
     const {
       promise: ready,
       reject: rejectReady,
@@ -87,17 +82,17 @@ export function createImageResponse(defaultOptions?: ImageResponseOptions): Imag
         } catch (error) {
           controller.error(error);
 
-          const errorHandler = mergedOptions?.onError ?? defaultErrorHandler;
-          await errorHandler(error);
-
           rejectReady(error);
+          const errorHandler = mergedOptions?.onError ?? defaultErrorHandler;
+
+          await errorHandler(error);
         }
       },
     });
     const headers = new Headers(mergedOptions?.headers);
 
     if (!headers.get("content-type")) {
-      headers.set("content-type", contentTypeMap[mergedOptions?.format ?? defaultFormat]);
+      headers.set("content-type", contentTypeMap[mergedOptions.format ?? defaultFormat]);
     }
 
     const response = new Response(stream, {
