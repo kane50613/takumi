@@ -109,7 +109,6 @@ use cssparser::{
   ParseError, ParseErrorKind, Parser, ParserInput, SourceLocation, ToCss, Token,
   match_ignore_ascii_case,
 };
-use fast_image_resize::ResizeAlg;
 use image::imageops::FilterType;
 use parley::Alignment;
 use std::borrow::Cow;
@@ -1548,20 +1547,6 @@ impl From<ImageScalingAlgorithm> for FilterType {
       ImageScalingAlgorithm::Auto => FilterType::CatmullRom,
       ImageScalingAlgorithm::Smooth => FilterType::Lanczos3,
       ImageScalingAlgorithm::Pixelated => FilterType::Nearest,
-    }
-  }
-}
-
-impl From<ImageScalingAlgorithm> for ResizeAlg {
-  fn from(algorithm: ImageScalingAlgorithm) -> Self {
-    match algorithm {
-      ImageScalingAlgorithm::Auto => {
-        ResizeAlg::Convolution(fast_image_resize::FilterType::CatmullRom)
-      }
-      ImageScalingAlgorithm::Smooth => {
-        ResizeAlg::Convolution(fast_image_resize::FilterType::Lanczos3)
-      }
-      ImageScalingAlgorithm::Pixelated => ResizeAlg::Nearest,
     }
   }
 }

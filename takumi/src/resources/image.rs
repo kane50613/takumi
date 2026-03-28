@@ -331,9 +331,6 @@ pub enum ImageResourceError {
   /// The buffer size does not match the target image size
   #[error("The buffer size does not match the target image size")]
   MismatchedBufferSize,
-  /// An error occurred while resizing the image
-  #[error("An error occurred while resizing the image: {0}")]
-  ResizeError(#[from] fast_image_resize::ResizeError),
 }
 
 #[cfg(test)]

@@ -234,6 +234,68 @@ fn text_align_right() {
 }
 
 #[test]
+fn text_indent_variants() {
+  let text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit.\nSed do eiusmod tempor incididunt ut labore et dolore magna aliqua.";
+  let variants = [
+    ("first-line", TextIndent::new(Px(48.0))),
+    ("each-line", TextIndent::new(Px(48.0)).with_each_line(true)),
+    ("hanging", TextIndent::new(Px(48.0)).with_hanging(true)),
+    (
+      "hanging + each-line",
+      TextIndent::new(Px(48.0))
+        .with_each_line(true)
+        .with_hanging(true),
+    ),
+  ];
+
+  let nodes: Vec<Node> = variants
+    .iter()
+    .map(|(label, text_indent)| {
+      Node::container([
+        Node::text(label.to_string()).with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Flex))
+            .with(StyleDeclaration::font_size(Px(24.0).into()))
+            .with(StyleDeclaration::font_weight(FontWeight::from(700.0))),
+        ),
+        Node::text(text.to_string()).with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Flex))
+            .with(StyleDeclaration::display(Display::Block))
+            .with(StyleDeclaration::width(Px(380.0)))
+            .with(StyleDeclaration::font_size(Px(28.0).into()))
+            .with(StyleDeclaration::white_space_collapse(
+              WhiteSpaceCollapse::PreserveBreaks,
+            ))
+            .with(StyleDeclaration::text_indent(*text_indent)),
+        ),
+      ])
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
+          .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+          .with(StyleDeclaration::width(Px(380.0)))
+          .with_gap(SpacePair::from_single(Px(8.0))),
+      )
+    })
+    .collect::<Vec<_>>();
+
+  let container = Node::container(nodes.into_boxed_slice()).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([240, 240, 240, 255]),
+      )))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
+      .with_padding(Sides([Px(20.0); 4]))
+      .with_gap(SpacePair::from_single(Px(24.0))),
+  );
+
+  run_fixture_test(container, "text_indent_variants");
+}
+
+#[test]
 fn text_ellipsis_line_clamp_2() {
   let long_text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.";
 
