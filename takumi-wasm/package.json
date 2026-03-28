@@ -42,11 +42,13 @@
     },
     "./node": {
       "types": "./bundlers/node.d.ts",
+      "bun": "./bundlers/bun.mjs",
       "import": "./bundlers/node.mjs",
       "require": "./bundlers/node.cjs"
     },
     "./auto": {
       "types": "./bundlers/type.d.ts",
+      "bun": "./bundlers/bun.mjs",
       "workerd": "./bundlers/workerd.js",
       "unwasm": "./bundlers/next.mjs",
       "module": "./bundlers/vite.mjs",
