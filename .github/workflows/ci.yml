@@ -591,6 +591,7 @@ jobs:
       - name: Download all napi artifacts
         uses: actions/download-artifact@v8
         with:
+          pattern: bindings-*
           path: takumi-napi-core/artifacts
 
       - name: Download N-API bindings artifact
