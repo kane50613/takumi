@@ -475,7 +475,7 @@ jobs:
 
       - name: Build WASM
         working-directory: takumi-wasm
-        run: bun run build && bun run build:js
+        run: bun run build
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
