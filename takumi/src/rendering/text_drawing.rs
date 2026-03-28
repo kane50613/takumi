@@ -141,7 +141,7 @@ pub(crate) fn draw_glyph_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
       };
 
       let (mask, placement) = canvas.mask_memory.render(
-        &outline.paths,
+        outline.paths(),
         Some(transform),
         None,
         &mut canvas.buffer_pool,
@@ -187,12 +187,12 @@ pub(crate) fn draw_glyph_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
 
       canvas.buffer_pool.release(mask);
 
-      if let Some(embolden) = outline.embolden {
+      if let Some(embolden) = outline.embolden() {
         draw_text_embolden_clip_image(
           canvas,
           style,
           transform,
-          &outline.paths,
+          outline.paths(),
           embolden,
           clip_image,
           inline_offset,
@@ -203,7 +203,7 @@ pub(crate) fn draw_glyph_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
         canvas,
         style,
         transform,
-        &outline.paths,
+        outline.paths(),
         clip_image,
         inline_offset,
       );
@@ -238,7 +238,7 @@ pub(crate) fn draw_glyph(
       );
     }
     ResolvedGlyph::Outline(outline) => {
-      if let Some(color_layers) = outline.color_layers.as_ref()
+      if let Some(color_layers) = outline.color_layers()
         && let Some(palette) = palette
       {
         draw_color_outline_image(
@@ -253,7 +253,7 @@ pub(crate) fn draw_glyph(
         );
       } else {
         let (mask, placement) = canvas.mask_memory.render(
-          &outline.paths,
+          outline.paths(),
           Some(transform),
           None,
           &mut canvas.buffer_pool,
@@ -271,11 +271,11 @@ pub(crate) fn draw_glyph(
         canvas.buffer_pool.release(mask);
       }
 
-      if let Some(embolden) = outline.embolden {
-        draw_text_embolden(canvas, transform, &outline.paths, color, embolden);
+      if let Some(embolden) = outline.embolden() {
+        draw_text_embolden(canvas, transform, outline.paths(), color, embolden);
       }
 
-      draw_text_stroke(canvas, style, transform, &outline.paths);
+      draw_text_stroke(canvas, style, transform, outline.paths());
     }
   }
 
@@ -518,7 +518,7 @@ pub(crate) fn draw_glyph_text_shadow(
   transform *= Affine::translation(inline_offset.x, inline_offset.y);
 
   if let ResolvedGlyph::Outline(outline) = glyph {
-    draw_text_shadow(canvas, style, transform, &outline.paths)?;
+    draw_text_shadow(canvas, style, transform, outline.paths())?;
   }
 
   Ok(())

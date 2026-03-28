@@ -83,7 +83,7 @@ fn build_glyph_bounds_cache(
         let (mask, placement) =
           canvas
             .mask_memory
-            .render(&outline.paths, None, None, &mut canvas.buffer_pool);
+            .render(outline.paths(), None, None, &mut canvas.buffer_pool);
 
         if placement.width == 0 || placement.height == 0 {
           continue;

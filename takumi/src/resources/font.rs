@@ -45,10 +45,15 @@ pub(crate) struct ResolvedBitmapGlyph {
 }
 
 #[derive(Clone)]
-pub(crate) struct ResolvedOutlineGlyph {
-  pub(crate) paths: Vec<Command>,
-  pub(crate) color_layers: Option<Vec<ResolvedColorLayer>>,
-  pub(crate) embolden: Option<f32>,
+pub(crate) enum ResolvedOutlineGlyph {
+  Plain {
+    paths: Vec<Command>,
+    embolden: Option<f32>,
+  },
+  Color {
+    paths: Vec<Command>,
+    layers: Vec<ResolvedColorLayer>,
+  },
 }
 
 #[derive(Clone)]
@@ -64,6 +69,28 @@ pub(crate) struct ResolvedGlyphPlacement {
   pub(crate) top: i32,
   pub(crate) width: u32,
   pub(crate) height: u32,
+}
+
+impl ResolvedOutlineGlyph {
+  pub(crate) fn paths(&self) -> &[Command] {
+    match self {
+      Self::Plain { paths, .. } | Self::Color { paths, .. } => paths,
+    }
+  }
+
+  pub(crate) fn embolden(&self) -> Option<f32> {
+    match self {
+      Self::Plain { embolden, .. } => *embolden,
+      Self::Color { .. } => None,
+    }
+  }
+
+  pub(crate) fn color_layers(&self) -> Option<&[ResolvedColorLayer]> {
+    match self {
+      Self::Plain { .. } => None,
+      Self::Color { layers, .. } => Some(layers),
+    }
+  }
 }
 
 /// Matches the typical faux-bold expansion used by text rasterizers.
@@ -131,6 +158,59 @@ impl<'a, 'font> ColorLayerCollector<'a, 'font> {
 
   fn into_layers(self) -> Vec<ResolvedColorLayer> {
     self.layers
+  }
+}
+
+struct GlyphResolveContext<'a, 'font> {
+  font_ref: &'font FontRef<'a>,
+  font_size: f32,
+  size: Size,
+  location: LocationRef<'a>,
+  skew: Option<ZenoTransform>,
+  embolden: Option<f32>,
+}
+
+impl<'a, 'font> GlyphResolveContext<'a, 'font> {
+  fn resolve_glyph(&self, glyph_id: u32) -> Option<ResolvedGlyph> {
+    let glyph_id = GlyphId::new(glyph_id);
+
+    self
+      .resolve_bitmap_glyph(glyph_id)
+      .map(ResolvedGlyph::Bitmap)
+      .or_else(|| {
+        self
+          .resolve_color_outline_glyph(glyph_id)
+          .map(ResolvedGlyph::Outline)
+      })
+      .or_else(|| {
+        self
+          .resolve_plain_outline_glyph(glyph_id)
+          .map(ResolvedGlyph::Outline)
+      })
+  }
+
+  fn resolve_bitmap_glyph(&self, glyph_id: GlyphId) -> Option<ResolvedBitmapGlyph> {
+    let bitmap = self
+      .font_ref
+      .bitmap_strikes()
+      .glyph_for_size(self.size, glyph_id)?;
+    scale_bitmap_glyph(bitmap, self.font_size)
+  }
+
+  fn resolve_color_outline_glyph(&self, glyph_id: GlyphId) -> Option<ResolvedOutlineGlyph> {
+    resolve_color_outline_glyph(self.font_ref, glyph_id, self.size, self.location)
+  }
+
+  fn resolve_plain_outline_glyph(&self, glyph_id: GlyphId) -> Option<ResolvedOutlineGlyph> {
+    let mut paths = resolve_outline_commands(self.font_ref, glyph_id, self.size, self.location)?;
+    if let Some(skew_transform) = &self.skew {
+      transform_commands(&mut paths, skew_transform);
+    }
+
+    Some(ResolvedOutlineGlyph::Plain {
+      paths,
+      embolden: self.embolden,
+    })
   }
 }
 
@@ -277,10 +357,9 @@ fn resolve_color_outline_glyph(
     paths.extend(layer.paths.iter().copied());
   }
 
-  Some(ResolvedOutlineGlyph {
+  Some(ResolvedOutlineGlyph::Color {
     paths,
-    color_layers: Some(color_layers),
-    embolden: None,
+    layers: color_layers,
   })
 }
 
@@ -398,17 +477,16 @@ impl FontContext {
     font_ref: FontRef,
     glyph_ids: impl Iterator<Item = u32> + Clone,
   ) -> HashMap<u32, ResolvedGlyph> {
-    // Collect unique glyph IDs to avoid duplicate work
     let unique_glyph_ids: HashSet<u32> = glyph_ids.collect();
-
-    let mut result = HashMap::new();
-
     if unique_glyph_ids.is_empty() {
-      return result;
+      return HashMap::new();
     }
 
+    let has_emoji_cluster = run
+      .run()
+      .visual_clusters()
+      .any(|cluster| cluster.is_emoji());
     let font_size = run.run().font_size();
-    let size = Size::new(font_size);
     let normalized_coords = run
       .run()
       .normalized_coords()
@@ -416,56 +494,27 @@ impl FontContext {
       .copied()
       .map(F2Dot14::from_bits)
       .collect::<Vec<_>>();
-    let location = LocationRef::new(&normalized_coords);
-    let has_emoji_cluster = run
-      .run()
-      .visual_clusters()
-      .any(|cluster| cluster.is_emoji());
-    let embolden = if !has_emoji_cluster
-      && run.run().synthesis().embolden()
-      && run.style().brush.font_synthesis.weight.is_allowed()
-    {
-      Some(synthesis_embolden_strength(font_size))
-    } else {
-      None
+    let resolver = GlyphResolveContext {
+      font_ref: &font_ref,
+      font_size,
+      size: Size::new(font_size),
+      location: LocationRef::new(&normalized_coords),
+      embolden: (!has_emoji_cluster
+        && run.run().synthesis().embolden()
+        && run.style().brush.font_synthesis.weight.is_allowed())
+      .then_some(synthesis_embolden_strength(font_size)),
+      skew: run
+        .run()
+        .synthesis()
+        .skew()
+        .filter(|_| !has_emoji_cluster)
+        .filter(|_| run.style().brush.font_synthesis.style.is_allowed())
+        .map(|degrees| ZenoTransform::skew(ZenoAngle::from_degrees(-degrees), ZenoAngle::ZERO)),
     };
-    let skew = run
-      .run()
-      .synthesis()
-      .skew()
-      .filter(|_| !has_emoji_cluster)
-      .filter(|_| run.style().brush.font_synthesis.style.is_allowed())
-      .map(|degrees| ZenoTransform::skew(ZenoAngle::from_degrees(-degrees), ZenoAngle::ZERO));
 
-    // Process each unique glyph ID
-    for &glyph_id in &unique_glyph_ids {
-      let skrifa_glyph_id = GlyphId::new(glyph_id);
-      let resolved = if let Some(bitmap) = font_ref
-        .bitmap_strikes()
-        .glyph_for_size(size, skrifa_glyph_id)
-      {
-        scale_bitmap_glyph(bitmap, font_size).map(ResolvedGlyph::Bitmap)
-      } else if let Some(color_outline) =
-        resolve_color_outline_glyph(&font_ref, skrifa_glyph_id, size, location)
-      {
-        Some(ResolvedGlyph::Outline(color_outline))
-      } else {
-        let Some(mut paths) = resolve_outline_commands(&font_ref, skrifa_glyph_id, size, location)
-        else {
-          continue;
-        };
-        if let Some(skew_transform) = &skew {
-          transform_commands(&mut paths, skew_transform);
-        }
-
-        Some(ResolvedGlyph::Outline(ResolvedOutlineGlyph {
-          paths,
-          color_layers: None,
-          embolden,
-        }))
-      };
-
-      if let Some(glyph) = resolved {
+    let mut result = HashMap::with_capacity(unique_glyph_ids.len());
+    for glyph_id in unique_glyph_ids {
+      if let Some(glyph) = resolver.resolve_glyph(glyph_id) {
         result.insert(glyph_id, glyph);
       }
     }
