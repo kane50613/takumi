@@ -1,5 +1,12 @@
 # @takumi-rs/wasm
 
+## 1.0.0-rc.3
+
+### Patch Changes
+
+- bc6243a: Add `bun` conditional exports
+  - @takumi-rs/helpers@1.0.0-rc.3
+
 ## 1.0.0-rc.2
 
 ### Patch Changes
