@@ -59,14 +59,14 @@ version = "1.15"
 features = ["serde"]
 
 [dependencies.parley]
-version = "0.7"
+version = "0.8"
 default-features = false
 features = ["libm"]
 
-[dependencies.swash]
-version = "0.2"
+[dependencies.skrifa]
+version = "0.40"
 default-features = false
-features = ["libm", "scale"]
+features = ["libm"]
 
 [dependencies.selectors]
 version = "0.36"

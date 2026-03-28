@@ -1,6 +1,5 @@
 use cssparser::{Parser, Token};
-use parley::FontFeature;
-use swash::tag_from_str_lossy;
+use parley::{FontFeature, setting::Tag};
 
 use crate::layout::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult};
 
@@ -31,7 +30,9 @@ impl<'i> FromCss<'i> for FontFeatureSettings {
         ));
       }
 
-      let tag = tag_from_str_lossy(tag_name);
+      let tag = Tag::parse(tag_name).ok_or_else(|| {
+        Self::unexpected_token_error(location, &Token::QuotedString(tag_name.clone()))
+      })?;
       let value = if input.is_exhausted() {
         1
       } else {

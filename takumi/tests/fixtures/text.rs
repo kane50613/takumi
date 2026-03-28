@@ -1,5 +1,4 @@
-use parley::FontVariation;
-use swash::tag_from_bytes;
+use parley::{FontVariation, setting::Tag};
 use takumi::layout::{
   node::Node,
   style::{Length::*, *},
@@ -52,7 +51,7 @@ fn text_typography_variable_width() {
           .with(StyleDeclaration::display(Display::Flex))
           .with(StyleDeclaration::font_variation_settings(Box::new([
             FontVariation {
-              tag: tag_from_bytes(b"wdth"),
+              tag: Tag::from_bytes(*b"wdth"),
               value: *width,
             },
           ]))),

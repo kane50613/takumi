@@ -1,7 +1,6 @@
 use crate::layout::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult};
 use cssparser::{Parser, Token};
-use parley::FontVariation;
-use swash::tag_from_str_lossy;
+use parley::{FontVariation, setting::Tag};
 
 /// Controls variable font axis values via CSS font-variation-settings property.
 ///
@@ -31,7 +30,9 @@ impl<'i> FromCss<'i> for FontVariationSettings {
         ));
       }
 
-      let tag = tag_from_str_lossy(tag_name);
+      let tag = Tag::parse(tag_name).ok_or_else(|| {
+        Self::unexpected_token_error(location, &Token::QuotedString(tag_name.clone()))
+      })?;
       let value = input.expect_number()?;
 
       Ok(FontVariation { tag, value })

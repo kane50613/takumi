@@ -1,6 +1,6 @@
 use std::{borrow::Cow, ops::Range};
 
-use parley::{InlineBox, PositionedLayoutItem, TextStyle};
+use parley::{IndentOptions, InlineBox, PositionedLayoutItem, TextStyle};
 use taffy::{AvailableSpace, Layout, Rect, Size};
 
 use crate::{
@@ -148,10 +148,24 @@ impl Default for InlineBrush {
 fn text_style_with_span_id<'s>(
   style: &'s SizedFontStyle<'s>,
   source_span_id: Option<u64>,
-) -> TextStyle<'s, InlineBrush> {
-  let mut text_style: TextStyle<'s, InlineBrush> = style.into();
+) -> TextStyle<'s, 's, InlineBrush> {
+  let mut text_style: TextStyle<'s, 's, InlineBrush> = style.into();
   text_style.brush.source_span_id = source_span_id;
   text_style
+}
+
+fn apply_text_indent(layout: &mut InlineLayout, style: &SizedFontStyle, max_width: f32) {
+  let indent_basis = max_width.is_finite().then_some(max_width).unwrap_or(0.0);
+  let amount = style
+    .parent
+    .text_indent
+    .resolve_px(&style.sizing, indent_basis);
+  let options = IndentOptions {
+    each_line: style.parent.text_indent.each_line,
+    hanging: style.parent.text_indent.hanging,
+  };
+
+  layout.set_text_indent(amount, options);
 }
 
 fn refresh_text_span_ranges(spans: &mut [ProcessedInlineSpan<'_, '_>]) {
@@ -459,9 +473,15 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
     }
   });
 
+  apply_text_indent(&mut layout, style, max_width);
   break_lines(&mut layout, max_width, max_height);
 
   if stage == InlineLayoutStage::Measure {
+    layout.align(
+      Some(max_width),
+      style.parent.text_align.into(),
+      Default::default(),
+    );
     return (layout, text, spans);
   }
 
@@ -633,6 +653,7 @@ fn make_ellipsis_layout<'c, 'g: 'c>(
       builder.pop_style_span();
     });
 
+  apply_text_indent(&mut final_layout, root_style, max_width);
   break_lines(&mut final_layout, max_width, max_height);
   *layout = final_layout;
 }

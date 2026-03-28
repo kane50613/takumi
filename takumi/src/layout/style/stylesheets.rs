@@ -1,7 +1,7 @@
 use std::{borrow::Cow, collections::HashMap, marker::PhantomData, str::FromStr};
 
 use cssparser::{Parser, ParserInput, Token, match_ignore_ascii_case};
-use parley::{FontSettings, TextStyle};
+use parley::{FontFeatures, FontVariations, TextStyle};
 use paste::paste;
 use serde::de::IgnoredAny;
 use smallvec::{SmallVec, smallvec};
@@ -854,6 +854,7 @@ define_style! {
     text_decoration_color: ColorInput,
     text_decoration_thickness: TextDecorationThickness,
     text_decoration_skip_ink: TextDecorationSkipInk where inherit = true,
+    text_indent: TextIndent where inherit = true,
     letter_spacing: Length where inherit = true,
     word_spacing: Length where inherit = true,
     image_rendering: ImageScalingAlgorithm where inherit = true,
@@ -1402,18 +1403,18 @@ pub(crate) struct SizedFontStyle<'s> {
   pub sizing: Sizing,
 }
 
-impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, InlineBrush> {
+impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
   fn from(style: &'s SizedFontStyle<'s>) -> Self {
     TextStyle {
       font_size: style.sizing.font_size,
       line_height: style.line_height,
       font_weight: style.parent.font_weight.into(),
       font_style: style.parent.font_style.into(),
-      font_variations: FontSettings::List(Cow::Borrowed(
+      font_variations: FontVariations::List(Cow::Borrowed(
         style.parent.font_variation_settings.as_ref(),
       )),
-      font_features: FontSettings::List(Cow::Borrowed(style.parent.font_feature_settings.as_ref())),
-      font_stack: (&style.parent.font_family).into(),
+      font_features: FontFeatures::List(Cow::Borrowed(style.parent.font_feature_settings.as_ref())),
+      font_family: (&style.parent.font_family).into(),
       letter_spacing: style.letter_spacing,
       word_spacing: style.word_spacing,
       word_break: style.parent.word_break.into(),
