@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.0-rc.0
+
+### Minor Changes
+
+- 14ac37b: Support `text-indent` property
+
 ## 1.0.0-beta.20
 
 ### Major Changes
