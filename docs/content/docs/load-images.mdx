@@ -6,51 +6,25 @@ icon: Image
 
 ## External Images
 
-In order to make loading more flexible, we do not handle any fetching for you. Instead, exposes the fetched resources via `fetchedResources` option.
+By default, Takumi will fetch external images in `src` attributes and CSS properties like `background-image` and `mask-image`.
 
-If you are using `takumi-js`, it will handle fetching for you, or you can override the default fetching behavior by passing your own `fetchResources` option.
+If you want to add additional caching layer, you can fetch the image yourself and pass the data to `render()` with `fetchedResources`.
 
-```tsx twoslash tab="takumi-js/node"
+```tsx twoslash
 /** @jsxImportSource react */
 // ---cut-before---
 import { fromJsx } from "takumi-js/helpers/jsx";
-import { Renderer, extractResourceUrls } from "takumi-js/node";
+import { extractResourceUrls, render } from "takumi-js";
 import { fetchResources } from "takumi-js/helpers";
 
-const renderer = new Renderer();
-
-const { node, stylesheets } = await fromJsx(<img src="https://example.com/image.png" />);
+const element = <img src="https://example.com/image.png" />;
 
 // [!code ++:2]
-const urls = extractResourceUrls(node);
+const urls = await extractResourceUrls(element);
 const fetchedResources = await fetchResources(urls);
 
-const image = await renderer.render(node, {
-  // [!code ++]
-  fetchedResources,
-  stylesheets,
-});
-```
-
-```tsx twoslash tab="takumi-js/wasm"
-/** @jsxImportSource react */
-// ---cut-before---
-import { fromJsx } from "takumi-js/helpers/jsx";
-import { Renderer, extractResourceUrls } from "takumi-js/wasm";
-import { fetchResources } from "takumi-js/helpers";
-
-const renderer = new Renderer();
-
-const { node, stylesheets } = await fromJsx(<img src="https://example.com/image.png" />);
-
-// [!code ++:2]
-const urls = extractResourceUrls(node);
-const fetchedResources = await fetchResources(urls);
-
-const image = await renderer.render(node, {
-  // [!code ++]
-  fetchedResources,
-  stylesheets,
+const image = await render(element, {
+  fetchedResources, // [!code ++]
 });
 ```
 
@@ -64,28 +38,21 @@ The image key can be used in any `src` field or `background-image`, `mask-image`
 /** @jsxImportSource react */
 // ---cut-before---
 import { ImageResponse } from "takumi-js/response";
-import type { ImageSource } from "takumi-js/node";
-
-const [logo, background] = await Promise.all([
-  fetch("/logo.png").then((res) => res.arrayBuffer()),
-  fetch("/background.png").then((res) => res.arrayBuffer()),
-]);
-
-const persistentImages: ImageSource[] = [
-  {
-    src: "my-logo",
-    data: logo,
-  },
-  {
-    src: "background",
-    data: background,
-  },
-];
+import type { ImageSource } from "takumi-js";
 
 export function GET() {
   return new ImageResponse(<OgImage />, {
     // [!code ++]
-    persistentImages,
+    persistentImages: [
+      {
+        src: "my-logo",
+        data: () => fetch("/logo.png").then((res) => res.arrayBuffer()),
+      },
+      {
+        src: "background",
+        data: () => fetch("/background.png").then((res) => res.arrayBuffer()),
+      },
+    ],
   });
 }
 

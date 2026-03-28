@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { container, image, text } from "@takumi-rs/helpers";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import { Glob } from "bun";
-import { extractResourceUrls, Renderer, type RenderOptions } from "../export";
+import { extractResourceUrls, Renderer, type RenderOptions } from "../src/export";
 
 const glob = new Glob("../assets/fonts/**/*.{woff2,ttf}");
 const files = await Array.fromAsync(glob.scan());
@@ -99,6 +99,20 @@ describe("setup", () => {
     await renderer.putPersistentImage({
       src: localImagePath,
       data: imageBuffer,
+    });
+  });
+
+  test("putPersistentImage with sync data loader", async () => {
+    await renderer.putPersistentImage({
+      src: `${localImagePath}?sync-loader`,
+      data: () => imageBuffer,
+    });
+  });
+
+  test("putPersistentImage with async data loader", async () => {
+    await renderer.putPersistentImage({
+      src: `${localImagePath}?async-loader`,
+      data: async () => imageBuffer,
     });
   });
 });

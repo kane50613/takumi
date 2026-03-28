@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/core",
-  "version": "0.0.0",
+  "version": "0.73.1",
   "keywords": [
     "css",
     "image",
@@ -20,27 +20,28 @@
     "url": "git+https://github.com/kane50613/takumi.git"
   },
   "files": [
-    "export.d.ts",
-    "export.mjs",
-    "not-available.js",
-    "README.md"
+    "dist",
+    "not-available.js"
   ],
   "type": "module",
-  "main": "export.mjs",
-  "types": "export.d.ts",
+  "main": "./dist/export.cjs",
+  "module": "./dist/export.mjs",
+  "types": "./dist/export.d.cts",
   "exports": {
     ".": {
-      "types": "./export.d.ts",
+      "types": "./dist/export.d.cts",
       "workerd": "./not-available.js",
       "browser": "./not-available.js",
-      "node": "./export.mjs",
-      "import": "./export.mjs",
-      "default": "./export.mjs"
+      "import": "./dist/export.mjs",
+      "require": "./dist/export.cjs",
+      "node": "./dist/export.mjs",
+      "default": "./dist/export.mjs"
     }
   },
   "scripts": {
     "build": "napi build --release --no-const-enum --platform --esm --strip",
-    "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json && bun artifacts && cp artifacts/bindings-x86_64-unknown-linux-gnu/index.d.ts export.d.ts && napi prepublish -t npm --no-gh-release",
+    "build:js": "tsdown && bun scripts/patch-dist-loader.ts",
+    "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json && bun artifacts && napi prepublish -t npm --no-gh-release",
     "artifacts": "napi create-npm-dirs && napi artifacts && napi version",
     "bench": "bun tests/bench/index.tsx"
   },
@@ -52,9 +53,11 @@
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "csstype": "^3.2.3",
     "lucide-react": "catalog:",
     "mitata": "^1.0.34",
     "react": "catalog:",
+    "tsdown": "catalog:",
     "typescript": "catalog:"
   },
   "napi": {

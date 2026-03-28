@@ -258,10 +258,3 @@ pub struct AnimationSceneSource {
   /// The duration of this scene in milliseconds.
   pub duration_ms: u32,
 }
-
-/// Key for caching images in the renderer.
-#[derive(PartialEq, Eq, Hash)]
-pub struct ImageCacheKey {
-  pub(crate) src: Box<str>,
-  pub(crate) data_hash: u64,
-}

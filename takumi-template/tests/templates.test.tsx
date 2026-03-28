@@ -1,40 +1,30 @@
 import { test } from "bun:test";
 import { join } from "node:path";
-import { extractResourceUrls, Renderer } from "takumi-js/node";
-import { fetchResources } from "takumi-js/helpers";
-import { fromJsx } from "takumi-js/helpers/jsx";
-import { write } from "bun";
+import { render } from "takumi-js";
+import { file, write } from "bun";
 import type { ReactNode } from "react";
 import BlogPostTemplate from "../src/templates/blog-post-template";
 import DocsTemplate from "../src/templates/docs-template";
 import ProductCardTemplate from "../src/templates/product-card-template";
 
-const renderer = new Renderer({
-  persistentImages: [
-    {
-      src: "takumi.svg",
-      data: await Bun.file(
-        join(import.meta.dirname, "..", "..", "assets", "images", "takumi.svg"),
-      ).arrayBuffer(),
-    },
-  ],
-});
-
 function testRender(name: string, template: ReactNode) {
   test(name, async () => {
-    const { node, stylesheets } = await fromJsx(template);
     const start = performance.now();
 
-    const resourceUrls = extractResourceUrls(node);
-    const fetchedResources = await fetchResources(resourceUrls);
-
-    const buffer = await renderer.render(node, {
+    const buffer = await render(template, {
       width: 1200,
       height: 630,
       format: "webp",
-      fetchedResources,
-      stylesheets,
       dithering: "floyd-steinberg",
+      persistentImages: [
+        {
+          src: "takumi.svg",
+          data: () =>
+            file(
+              join(import.meta.dirname, "..", "..", "assets", "images", "takumi.svg"),
+            ).arrayBuffer(),
+        },
+      ],
     });
 
     const end = performance.now();

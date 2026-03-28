@@ -1,1 +1,1 @@
-export * from "../pkg/takumi_wasm";
+export * from "../dist/export";

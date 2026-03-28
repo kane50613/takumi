@@ -1,10 +1,19 @@
 import type { Node } from "@takumi-rs/helpers";
+import type { Properties } from "csstype";
 
 export { ContainerNode, ImageNode, Node, NodeMetadata, TextNode } from "@takumi-rs/helpers";
 
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 
-export type Keyframes = Record<string, Record<string, Record<string, unknown>>>;
+export type KeyframesMap = Record<string, Record<string, Properties>>;
+export type KeyframesRuleList = {
+  name: string;
+  keyframes: {
+    offsets: number[];
+    declarations: Record<string, Properties>;
+  }[];
+}[];
+export type Keyframes = KeyframesMap | KeyframesRuleList;
 
 export type RenderOptions = {
   /**
@@ -35,7 +44,7 @@ export type RenderOptions = {
   /**
    * Structured keyframes to register alongside stylesheets.
    */
-  keyframes?: KeyframesRule[] | Keyframes;
+  keyframes?: Keyframes;
   /**
    * Whether to draw debug borders.
    */
@@ -123,7 +132,7 @@ export type ImageSource = {
 
 export type KeyframeRule = {
   offsets: number[];
-  declarations: Record<string, unknown>;
+  declarations: Record<string, Properties>;
 };
 
 export type KeyframesRule = {

@@ -1,6 +1,6 @@
 [package]
 name = "takumi-napi-core"
-version = "0.0.0"
+version = "0.73.1"
 publish = false
 edition = "2024"
 license = "MIT OR Apache-2.0"
@@ -16,11 +16,6 @@ rayon = "1.10"
 version = "0.7"
 default-features = false
 features = ["libm"]
-
-
-[dependencies.xxhash-rust]
-version = "0.8"
-features = ["xxh3", "std"]
 
 [dependencies.takumi]
 path = "../takumi"

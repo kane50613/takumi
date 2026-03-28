@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { container, image } from "@takumi-rs/helpers";
-import { Renderer } from "../export";
+import { Renderer } from "../src/export";
 
 const fontArrayBuffer = await Bun.file("../assets/fonts/geist/Geist[wght].woff2").arrayBuffer();
 const imageArrayBuffer = await Bun.file("../assets/images/yeecord.png").arrayBuffer();

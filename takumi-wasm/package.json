@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/wasm",
-  "version": "0.0.0",
+  "version": "0.73.1",
   "keywords": [
     "css",
     "image",
@@ -19,22 +19,26 @@
     "url": "git+https://github.com/kane50613/takumi.git"
   },
   "files": [
-    "README.md",
-    "pkg/takumi*",
-    "bundlers/*"
+    "pkg/takumi_wasm_bg.wasm.d.ts",
+    "pkg/takumi_wasm_bg.wasm",
+    "dist",
+    "bundlers"
   ],
+  "main": "./dist/export.cjs",
+  "module": "./dist/export.mjs",
+  "types": "./dist/export.d.mts",
   "exports": {
     ".": {
-      "types": "./pkg/takumi_wasm.d.ts",
-      "import": "./pkg/takumi_wasm.js",
-      "require": "./pkg/takumi_wasm.cjs",
-      "default": "./pkg/takumi_wasm.js"
+      "types": "./dist/export.d.mts",
+      "import": "./dist/export.mjs",
+      "require": "./dist/export.cjs",
+      "default": "./dist/export.mjs"
     },
     "./no-bundler": {
-      "types": "./pkg/takumi_wasm.d.ts",
-      "import": "./pkg/takumi_wasm.js",
-      "require": "./pkg/takumi_wasm.cjs",
-      "default": "./pkg/takumi_wasm.cjs"
+      "types": "./dist/export.d.mts",
+      "import": "./dist/export.mjs",
+      "require": "./dist/export.cjs",
+      "default": "./dist/export.mjs"
     },
     "./node": {
       "types": "./bundlers/node.d.ts",
@@ -42,7 +46,7 @@
       "require": "./bundlers/node.cjs"
     },
     "./auto": {
-      "types": "./pkg/takumi_wasm.d.ts",
+      "types": "./bundlers/type.d.ts",
       "workerd": "./bundlers/workerd.js",
       "unwasm": "./bundlers/next.mjs",
       "module": "./bundlers/vite.mjs",
@@ -63,8 +67,9 @@
     }
   },
   "scripts": {
-    "build": "wasm-pack build --no-pack --release --out-dir pkg --target web && bun run scripts/merge-dts.ts && bun build pkg/takumi_wasm.js --define import.meta.url=undefined --format cjs --outfile pkg/takumi_wasm.cjs",
-    "build:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target web && bun run scripts/merge-dts.ts && bun build pkg/takumi_wasm.js --define import.meta.url=undefined --format cjs --outfile pkg/takumi_wasm.cjs",
+    "build": "wasm-pack build --no-pack --release --out-dir pkg --target web && bun build:js && bun scripts/patch-generated-loader.ts",
+    "build:js": "tsdown",
+    "build:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target web && bun build:js && bun scripts/patch-generated-loader.ts",
     "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json"
   },
   "dependencies": {
@@ -72,6 +77,8 @@
   },
   "devDependencies": {
     "@types/bun": "catalog:",
+    "csstype": "^3.2.3",
+    "tsdown": "catalog:",
     "typescript": "catalog:"
   },
   "readme": "README.md"

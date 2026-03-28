@@ -2499,7 +2499,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-napi-core"
-version = "0.0.0"
+version = "0.73.1"
 dependencies = [
  "napi",
  "napi-build",
@@ -2508,7 +2508,6 @@ dependencies = [
  "rayon",
  "serde",
  "takumi",
- "xxhash-rust",
 ]
 
 [[package]]
@@ -2534,7 +2533,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-wasm"
-version = "0.0.0"
+version = "0.73.1"
 dependencies = [
  "base64",
  "js-sys",
@@ -2544,7 +2543,6 @@ dependencies = [
  "serde_bytes",
  "takumi",
  "wasm-bindgen",
- "xxhash-rust",
 ]
 
 [[package]]

@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/helpers",
-  "version": "0.0.0",
+  "version": "0.73.1",
   "license": "(MIT OR Apache-2.0)",
   "author": {
     "name": "Kane Wang",
@@ -11,34 +11,34 @@
     "url": "git+https://github.com/kane50613/takumi.git"
   },
   "files": [
-    "dist",
-    "package.json",
-    "README.md",
-    "tsconfig.json"
+    "dist"
   ],
   "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
       "require": "./dist/index.cjs",
-      "default": "./dist/index.js"
+      "default": "./dist/index.mjs"
     },
     "./jsx": {
-      "types": "./dist/jsx/jsx.d.ts",
-      "import": "./dist/jsx/jsx.js",
+      "types": "./dist/jsx/jsx.d.mts",
+      "import": "./dist/jsx/jsx.mjs",
       "require": "./dist/jsx/jsx.cjs",
-      "default": "./dist/jsx/jsx.js"
+      "default": "./dist/jsx/jsx.mjs"
     },
     "./emoji": {
-      "types": "./dist/emoji.d.ts",
-      "import": "./dist/emoji.js",
+      "types": "./dist/emoji.d.mts",
+      "import": "./dist/emoji.mjs",
       "require": "./dist/emoji.cjs",
-      "default": "./dist/emoji.js"
+      "default": "./dist/emoji.mjs"
     }
   },
   "scripts": {
-    "build": "tsup-node src/index.ts src/emoji.ts src/jsx/jsx.ts src/jsx/create-tailwind-fn.ts --clean --minify --dts --format esm,cjs --no-splitting"
+    "build": "tsdown"
   },
   "devDependencies": {
     "@types/bun": "catalog:",
@@ -47,7 +47,7 @@
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "tsup": "^8.5.1",
+    "tsdown": "catalog:",
     "typescript": "catalog:"
   }
 }

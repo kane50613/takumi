@@ -2,12 +2,8 @@ use std::sync::{Arc, RwLock};
 
 use napi::bindgen_prelude::*;
 use takumi::resources::image::ImageSource as LoadedImageSource;
-use xxhash_rust::xxh3::xxh3_64;
 
-use crate::{
-  map_error,
-  renderer::{ImageCacheKey, RendererState},
-};
+use crate::{map_error, renderer::RendererState};
 
 pub struct PutPersistentImageTask {
   pub src: Option<String>,
@@ -24,19 +20,11 @@ impl Task for PutPersistentImageTask {
       unreachable!()
     };
 
-    let cache_key = ImageCacheKey {
-      src: src.as_str().into(),
-      data_hash: xxh3_64(&self.buffer),
-    };
-
     let mut state = self
       .state
       .write()
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-    if state.persistent_image_cache.contains(&cache_key) {
-      return Ok(());
-    }
-    state.persistent_image_cache.insert(cache_key);
+
     let image = LoadedImageSource::from_bytes(&self.buffer).map_err(map_error)?;
     state.global.persistent_image_store_mut().insert(src, image);
 

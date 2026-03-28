@@ -1,4 +1,4 @@
-import type { Keyframes } from "takumi-js/node";
+import type { Keyframes } from "takumi-js";
 import type { ThemedToken } from "shiki";
 import { createHighlighter } from "shiki";
 

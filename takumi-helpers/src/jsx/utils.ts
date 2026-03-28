@@ -1,10 +1,5 @@
 import type { ComponentProps, JSX, ReactElement, ReactNode } from "react";
-
-export type ReactElementLike = {
-  type: string | symbol | ((props: unknown) => ReactElementLike) | ReactElementLike;
-  props: unknown;
-  $$typeof?: symbol;
-};
+import type { ReactElementLike } from "../types";
 
 const voidElements = new Set(["head", "meta", "link", "style", "script"]);
 

@@ -211,20 +211,21 @@ jobs:
 
       - name: Build
         working-directory: takumi-napi-core
-        run: ${{ matrix.settings.build }}
+        run: ${{ matrix.settings.build }} && bun run build:js
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: bindings-${{ matrix.settings.target }}
           path: |
+            takumi-napi-core/dist
             takumi-napi-core/core.*.node
             takumi-napi-core/index.js
             takumi-napi-core/index.d.ts
           if-no-files-found: error
 
-  build-image-response:
-    name: Build @takumi-rs/image-response
+  build-js:
+    name: Build takumi-js
     runs-on: ubuntu-slim
     needs: [build-helpers, build-napi, build-wasm]
     steps:
@@ -251,7 +252,94 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: wasm-package
-          path: takumi-wasm/pkg
+          path: takumi-wasm
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --filter ./takumi-js
+
+      - name: Build takumi-js
+        working-directory: takumi-js
+        run: bun run build:js
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: js-dist
+          path: takumi-js/dist
+          if-no-files-found: error
+
+  test-js:
+    name: Test takumi-js
+    runs-on: ubuntu-slim
+    needs: [build-helpers, build-napi, build-wasm]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@main
+        with:
+          bun-version: latest
+
+      - name: Download helpers artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: helpers-dist
+          path: takumi-helpers/dist
+
+      - name: Download N-API bindings artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: bindings-x86_64-unknown-linux-gnu
+          path: takumi-napi-core
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wasm-package
+          path: takumi-wasm
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --filter ./takumi-js
+
+      - name: Test takumi-js
+        working-directory: takumi-js
+        run: bun test
+
+  build-image-response:
+    name: Build @takumi-rs/image-response
+    runs-on: ubuntu-slim
+    needs: [build-helpers, build-js, build-napi, build-wasm]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@main
+        with:
+          bun-version: latest
+
+      - name: Download helpers artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: helpers-dist
+          path: takumi-helpers/dist
+
+      - name: Download N-API bindings artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: bindings-x86_64-unknown-linux-gnu
+          path: takumi-napi-core
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wasm-package
+          path: takumi-wasm
+
+      - name: Download takumi-js artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: js-dist
+          path: takumi-js/dist
 
       - name: Install dependencies
         run: bun install --frozen-lockfile --filter ./takumi-image-response
@@ -260,17 +348,10 @@ jobs:
         working-directory: takumi-image-response
         run: bun run build
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: image-response-dist
-          path: takumi-image-response/dist
-          if-no-files-found: error
-
-  test-image-response:
-    name: Test @takumi-rs/image-response
+  test-template:
+    name: Test Templates
     runs-on: ubuntu-slim
-    needs: build-image-response
+    needs: [build-helpers, build-js, build-napi, build-wasm]
     steps:
       - uses: actions/checkout@v6
 
@@ -291,48 +372,17 @@ jobs:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi-core
 
-      - name: Download image-response artifact
+      - name: Download takumi-js artifact
         uses: actions/download-artifact@v8
         with:
-          name: image-response-dist
-          path: takumi-image-response/dist
+          name: js-dist
+          path: takumi-js/dist
 
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
         with:
           name: wasm-package
-          path: takumi-wasm/pkg
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile --filter ./takumi-image-response
-
-      - name: Test image-response
-        working-directory: takumi-image-response
-        run: bun test
-
-  test-template:
-    name: Test Templates
-    runs-on: ubuntu-slim
-    needs: [build-napi, build-helpers]
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@main
-        with:
-          bun-version: latest
-
-      - name: Download helpers artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: helpers-dist
-          path: takumi-helpers/dist
-
-      - name: Download N-API bindings artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: bindings-x86_64-unknown-linux-gnu
-          path: takumi-napi-core
+          path: takumi-wasm
 
       - name: Install dependencies
         run: bun install --frozen-lockfile --filter ./takumi-template
@@ -420,6 +470,9 @@ jobs:
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --filter ./takumi-wasm
+
       - name: Build WASM
         working-directory: takumi-wasm
         run: bun run build
@@ -429,7 +482,11 @@ jobs:
         with:
           name: wasm-package
           path: |
-            takumi-wasm/pkg/*
+            takumi-wasm/pkg/takumi_wasm.d.ts
+            takumi-wasm/pkg/takumi_wasm.js
+            takumi-wasm/pkg/takumi_wasm_bg.wasm
+            takumi-wasm/pkg/takumi_wasm_bg.wasm.d.ts
+            takumi-wasm/dist
           if-no-files-found: error
 
   test-wasm:
@@ -474,7 +531,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: wasm-package
-          path: takumi-wasm/pkg
+          path: takumi-wasm
 
       - name: Install dependencies
         run: bun install --frozen-lockfile --filter ./takumi-wasm
@@ -491,8 +548,9 @@ jobs:
         lint-and-format,
         test-rust,
         test-helpers,
+        test-js,
+        build-image-response,
         test-napi,
-        test-image-response,
         test-template,
         test-wasm,
       ]
@@ -535,17 +593,17 @@ jobs:
         with:
           path: takumi-napi-core/artifacts
 
-      - name: Download image-response artifact
+      - name: Download takumi-js artifact
         uses: actions/download-artifact@v8
         with:
-          name: image-response-dist
-          path: takumi-image-response/dist
+          name: js-dist
+          path: takumi-js/dist
 
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
         with:
           name: wasm-package
-          path: takumi-wasm/pkg
+          path: takumi-wasm
 
       - name: Install dependencies
         run: bun install --frozen-lockfile && echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
@@ -598,17 +656,17 @@ jobs:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi-core
 
-      - name: Download image-response artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: image-response-dist
-          path: takumi-image-response/dist
-
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
         with:
           name: wasm-package
-          path: takumi-wasm/pkg
+          path: takumi-wasm
+
+      - name: Download js-dist artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: js-dist
+          path: takumi-js/dist
 
       - name: Install dependencies
         run: bun install --frozen-lockfile --filter ./docs

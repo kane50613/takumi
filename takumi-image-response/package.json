@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/image-response",
-  "version": "0.0.0",
+  "version": "0.73.1",
   "license": "(MIT OR Apache-2.0)",
   "author": {
     "name": "Kane Wang",
@@ -11,43 +11,36 @@
     "url": "git+https://github.com/kane50613/takumi.git"
   },
   "files": [
-    "dist",
-    "package.json",
-    "README.md",
-    "tsconfig.json"
+    "dist"
   ],
   "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/response.d.ts",
-      "import": "./dist/response.js",
-      "require": "./dist/response.cjs",
-      "default": "./dist/response.js"
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.mjs"
     },
     "./wasm": {
-      "types": "./dist/response.d.ts",
-      "import": "./dist/response.js",
-      "require": "./dist/response.cjs",
-      "default": "./dist/response.js"
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.mjs"
     }
   },
   "scripts": {
-    "build": "tsup-node src/response.tsx --clean --minify-syntax --dts --format esm,cjs --no-splitting",
-    "prepublishOnly": "jq '.dependencies[\"@takumi-rs/core\"] = .version | .dependencies[\"@takumi-rs/helpers\"] = .version | .dependencies[\"@takumi-rs/wasm\"] = .version' package.json > tmp.json && mv tmp.json package.json"
+    "build": "tsdown",
+    "prepublishOnly": "jq '.dependencies[\"takumi-js\"] = .version' package.json > tmp.json && mv tmp.json package.json"
   },
   "dependencies": {
-    "@takumi-rs/core": "workspace:*",
-    "@takumi-rs/helpers": "workspace:*",
-    "@takumi-rs/wasm": "workspace:*"
+    "takumi-js": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "catalog:",
-    "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
-    "react": "catalog:",
-    "react-dom": "catalog:",
-    "tsup": "^8.5.1",
-    "type-fest": "^5.5.0",
+    "tsdown": "catalog:",
     "typescript": "catalog:"
   }
 }
