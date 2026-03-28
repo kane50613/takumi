@@ -1,9 +1,8 @@
-import type { Font, FontDetails, ImageSource } from "../index";
-import { Renderer as NativeRenderer, extractResourceUrls } from "../index";
-import * as nativeModule from "../index";
+import type { Font, FontDetails, ImageSource } from "../index.d.ts";
+export type * from "../index.d.ts";
+import { Renderer as NativeRenderer } from "../index.js";
 
-export type * from "../index";
-export { extractResourceUrls };
+export { extractResourceUrls } from "../index.js";
 
 export type ImageSourceLoader = Omit<ImageSource, "data"> & {
   data: ImageSource["data"] | (() => Promise<ImageSource["data"]> | ImageSource["data"]);
@@ -39,7 +38,7 @@ export class Renderer extends NativeRenderer {
     return super.putPersistentImage(resolved, signal);
   }
 
-  override async loadFonts(fonts: FontLoader[], signal?: AbortSignal): Promise<number> {
+  override async loadFonts(fonts: FontLoader[], signal?: AbortSignal) {
     const batchFontsMark = new Set<string>();
     const batchFontBuffersMark = new WeakSet<FontDetails["data"]>();
     const targetFonts = fonts.filter((font) => {
@@ -70,9 +69,9 @@ export class Renderer extends NativeRenderer {
     return loadedCount;
   }
 
-  override async loadFont(data: FontLoader, signal?: AbortSignal): Promise<number> {
+  override async loadFont(data: FontLoader, signal?: AbortSignal) {
     if (!this.isNewFont(data)) {
-      return 0;
+      return { loadedCount: 0, results: [] };
     }
 
     const resolved = await resolveFontLoader(data);
@@ -116,14 +115,6 @@ export class Renderer extends NativeRenderer {
     return isBuffer(key) ? !this.fontBuffersMark.has(key) : !this.fontsMark.has(key);
   }
 }
-
-const exportedModule = {
-  ...nativeModule,
-  Renderer,
-  extractResourceUrls,
-};
-
-export default exportedModule;
 
 function createFontKey(font: FontLoader | FontLoaderSync) {
   if ("key" in font && font.key) {
