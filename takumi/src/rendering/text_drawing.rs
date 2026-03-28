@@ -247,9 +247,9 @@ pub(crate) fn draw_glyph(
           &mut canvas.buffer_pool,
           color_layers,
           palette,
+          color,
           transform,
           &canvas.constrains,
-          color.0[3],
         );
       } else {
         let (mask, placement) = canvas.mask_memory.render(
@@ -272,7 +272,7 @@ pub(crate) fn draw_glyph(
       }
 
       if let Some(embolden) = outline.embolden() {
-        draw_text_embolden(canvas, transform, outline.paths(), color, embolden);
+        draw_text_embolden(canvas, style, transform, outline.paths(), color, embolden);
       }
 
       draw_text_stroke(canvas, style, transform, outline.paths());
@@ -461,6 +461,7 @@ fn draw_text_stroke(
 
 fn draw_text_embolden(
   canvas: &mut Canvas,
+  style: &SizedFontStyle,
   transform: Affine,
   paths: &[Command],
   color: Color,
@@ -470,7 +471,8 @@ fn draw_text_embolden(
     return;
   }
 
-  let stroke = Stroke::new(embolden * 2.0);
+  let mut stroke = Stroke::new(embolden * 2.0);
+  stroke.join = style.parent.stroke_linejoin.into();
 
   let (stroke_mask, stroke_placement) = canvas.mask_memory.render(
     paths,
@@ -531,22 +533,35 @@ fn draw_color_outline_image(
   buffer_pool: &mut BufferPool,
   color_layers: &[ResolvedColorLayer],
   palette: &ColorPalette,
+  foreground_color: Color,
   transform: Affine,
   constrains: &[CanvasConstrain],
-  opacity: u8,
 ) {
-  if opacity == 0 {
+  let foreground_opacity = foreground_color.0[3] as f32 / 255.0;
+  if foreground_opacity <= 0.0 {
     return;
   }
 
   for layer in color_layers {
-    let Some(record) = palette.colors().get(usize::from(layer.palette_index)) else {
-      continue;
+    let color = if layer.palette_index == u16::MAX {
+      let alpha = (foreground_opacity * layer.alpha * 255.0)
+        .round()
+        .clamp(0.0, 255.0) as u8;
+      Color([
+        foreground_color.0[0],
+        foreground_color.0[1],
+        foreground_color.0[2],
+        alpha,
+      ])
+    } else {
+      let Some(record) = palette.colors().get(usize::from(layer.palette_index)) else {
+        continue;
+      };
+      let alpha = ((record.alpha() as f32 / 255.0) * layer.alpha * foreground_opacity * 255.0)
+        .round()
+        .clamp(0.0, 255.0) as u8;
+      Color([record.red(), record.green(), record.blue(), alpha])
     };
-    let alpha = ((record.alpha() as f32 / 255.0) * layer.alpha * (opacity as f32 / 255.0) * 255.0)
-      .round()
-      .clamp(0.0, 255.0) as u8;
-    let color = Color([record.red(), record.green(), record.blue(), alpha]);
 
     let (mask, placement) = mask_memory.render(&layer.paths, Some(transform), None, buffer_pool);
 

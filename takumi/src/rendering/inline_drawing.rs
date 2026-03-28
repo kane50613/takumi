@@ -798,11 +798,10 @@ pub(crate) fn draw_inline_box(
       &layout_results,
       root_node_id,
       canvas,
-      transform
-        * Affine::translation(
-          inline_box.x + item.margin.left,
-          inline_box.y + item.margin.top,
-        ),
+      Affine::translation(
+        inline_box.x + item.margin.left,
+        inline_box.y + item.margin.top,
+      ) * transform,
       Size {
         width: Some(inline_width),
         height: Some(inline_height),
@@ -816,7 +815,7 @@ pub(crate) fn draw_inline_box(
   };
 
   let context = RenderContext {
-    transform: transform * Affine::translation(inline_box.x, inline_box.y),
+    transform: Affine::translation(inline_box.x, inline_box.y) * transform,
     ..item.render_node.context.clone()
   };
   let layout = item.into();

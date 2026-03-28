@@ -2,7 +2,8 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::{
   layout::style::{
-    Animatable, CssSyntaxKind, CssToken, FromCss, LengthDefaultsToZero, MakeComputed, ParseResult,
+    Animatable, Color, CssSyntaxKind, CssToken, FromCss, LengthDefaultsToZero, MakeComputed,
+    ParseResult,
   },
   rendering::Sizing,
 };
@@ -47,7 +48,31 @@ impl TextIndent {
 }
 
 impl MakeComputed for TextIndent {}
-impl Animatable for TextIndent {}
+
+impl Animatable for TextIndent {
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &Sizing,
+    current_color: Color,
+  ) {
+    self
+      .amount
+      .interpolate(&from.amount, &to.amount, progress, sizing, current_color);
+    self.each_line = if progress >= 0.5 {
+      to.each_line
+    } else {
+      from.each_line
+    };
+    self.hanging = if progress >= 0.5 {
+      to.hanging
+    } else {
+      from.hanging
+    };
+  }
+}
 
 impl<'i> FromCss<'i> for TextIndent {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {

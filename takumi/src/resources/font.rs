@@ -178,6 +178,8 @@ impl<'a, 'font> GlyphResolveContext<'a, 'font> {
       .resolve_bitmap_glyph(glyph_id)
       .map(ResolvedGlyph::Bitmap)
       .or_else(|| {
+        // Color outline glyphs intentionally bypass skew synthesis so COLR
+        // layer metrics stay aligned and stacked color layers are not deformed.
         self
           .resolve_color_outline_glyph(glyph_id)
           .map(ResolvedGlyph::Outline)
@@ -214,6 +216,11 @@ impl<'a, 'font> GlyphResolveContext<'a, 'font> {
   }
 }
 
+/// `ColorPainter` for `ColorLayerCollector` that only records COLR v0 layer
+/// stacking. `push_transform`, `pop_transform`, `push_clip_glyph`,
+/// `push_clip_box`, `pop_clip`, and `push_layer` are intentional no-ops, and
+/// `fill_glyph` only records `Brush::Solid` layers, so gradients and other
+/// non-solid brushes are silently skipped.
 impl ColorPainter for ColorLayerCollector<'_, '_> {
   fn push_transform(&mut self, _transform: Transform) {}
 
@@ -283,8 +290,8 @@ fn transform_commands(paths: &mut [Command], transform: &ZenoTransform) {
   }
 }
 
-fn decode_bitmap_image(bitmap: BitmapGlyph<'_>) -> Option<(RgbaImage, Origin)> {
-  let image = match bitmap.data {
+fn decode_bitmap_image(bitmap: &BitmapGlyph<'_>) -> Option<(RgbaImage, Origin)> {
+  let image = match &bitmap.data {
     BitmapData::Png(bytes) => decode_png(bytes).ok()?,
     BitmapData::Bgra(bytes) => RgbaImage::from_fn(bitmap.width, bitmap.height, |x, y| {
       let index = ((y * bitmap.width + x) * 4) as usize;
@@ -302,7 +309,7 @@ fn decode_bitmap_image(bitmap: BitmapGlyph<'_>) -> Option<(RgbaImage, Origin)> {
 }
 
 fn scale_bitmap_glyph(bitmap: BitmapGlyph<'_>, font_size: f32) -> Option<ResolvedBitmapGlyph> {
-  let (image, origin) = decode_bitmap_image(bitmap.clone())?;
+  let (image, origin) = decode_bitmap_image(&bitmap)?;
   let scale_x = if bitmap.ppem_x > 0.0 {
     font_size / bitmap.ppem_x
   } else {
