@@ -435,7 +435,7 @@ impl FontContext {
       .skew()
       .filter(|_| !has_emoji_cluster)
       .filter(|_| run.style().brush.font_synthesis.style.is_allowed())
-      .map(|degrees| ZenoTransform::skew(ZenoAngle::from_degrees(degrees), ZenoAngle::ZERO));
+      .map(|degrees| ZenoTransform::skew(ZenoAngle::from_degrees(-degrees), ZenoAngle::ZERO));
 
     // Process each unique glyph ID
     for &glyph_id in &unique_glyph_ids {
