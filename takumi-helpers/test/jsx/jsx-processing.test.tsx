@@ -478,6 +478,7 @@ describe("fromJsx", () => {
   test("handles external lucide-react icon", async () => {
     const { node } = await fromJsx(<User2 />);
     expect(node.type).toBe("image");
+    expect("src" in node && node.src).toStartWith("<svg");
   });
 
   test("uses react-dom/server fallback when a provider exists", async () => {
