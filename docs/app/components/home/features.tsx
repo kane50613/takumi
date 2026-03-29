@@ -4,12 +4,11 @@ import { FeatureCard } from "./feature-card";
 export function Features() {
   return (
     <section className="px-6 py-24 max-sm:py-12">
-      <div className="max-w-[1100px] mx-auto">
+      <div className="max-w-275 mx-auto">
         <div className="mb-14">
           <h2 className="font-display text-[clamp(2rem,4vw,3.2rem)] font-[750] tracking-tighter leading-tight mt-3">
-            Unmatched features,
-            <br />
-            zero compromises.
+            Still images are just the beginning. CSS animations, video pipelines, batch at native
+            speed.
           </h2>
         </div>
         <div className="grid grid-cols-3 max-md:grid-cols-1 gap-px rounded-2xl overflow-hidden border border-border bg-border">
@@ -39,8 +38,7 @@ export function Features() {
             </div>
             <h3 className="font-display text-lg font-bold mb-2 tracking-tight">Runs Everywhere</h3>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Browser (WASM), Node.js, Bun, Deno, Edge Runtime, and native Rust. One engine, every
-              platform.
+              Node.js native, WebAssembly for Edge, or embed the Rust crate.
             </p>
           </div>
         </div>

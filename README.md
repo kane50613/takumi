@@ -3,60 +3,137 @@
 
 # Takumi
 
-**Turn JSX into production-ready images fast.**  
-OG cards, banners, and lightweight animations from one Rust engine for Node.js and WebAssembly.
+**Render React components to images, animations, and video frames.**
+
+One engine for Node.js, Edge, browsers, or embed the Rust crate directly.
 
 [Documentation](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground)
 
 </div>
 
-Takumi is inspired by [satori](https://github.com/vercel/satori), with a stronger focus on portability and performance.
+## What you can build
 
-## Why teams pick Takumi
+### Static images
 
-- **Direct image rendering** with no SVG-to-image conversion step.
-- **One JSX pipeline across runtimes** for Node.js, browsers, and edge workers.
-- **Native performance on Node.js** with WebAssembly fallback when portability matters.
-- **Production-grade text and font support** including variable fonts, COLR, WOFF2, and RTL.
-- **Flexible output targets** from WebP, PNG, JPEG, and GIF to raw frames for FFmpeg pipelines.
+Open Graph cards, blog covers, social media graphics with proper typography.
 
-## Performance
+### Animations
 
-Takumi is built for fast image rendering across Node.js and WebAssembly runtimes.
-See current benchmark runs and templates on [Image Bench](https://image-bench.kane.tw/), including comparisons with `next/og`.
+GIFs, WebP animations, or raw frames piped to FFmpeg for video.
 
-## First render in 30 seconds
+### At scale
+
+Batch processing with Node.js native / WebAssembly bindings.
+
+## Install
 
 ```bash
 bun i takumi-js
 ```
 
+## Quick start
+
 ```tsx
 import { ImageResponse } from "takumi-js/response";
-import { serve } from "bun";
 
-serve({
-  fetch() {
-    return new ImageResponse(
-      <div tw="w-full h-full flex items-center justify-center bg-[linear-gradient(to_bottom,#dbf4ff,#fff1f1)]">
-        <h1 tw="text-6xl font-bold">Hello from Takumi 👋😁</h1>
-      </div>,
-      {
-        width: 1200,
-        height: 630,
-      },
-    );
-  },
-  port: 3000,
-});
+export function GET() {
+  return new ImageResponse(
+    <div tw="w-full h-full flex items-center justify-center bg-gradient-to-b from-blue-100 to-red-50">
+      <h1 tw="text-6xl font-bold">Hello from Takumi</h1>
+    </div>,
+    { width: 1200, height: 630 },
+  );
+}
 ```
 
-## What you can build
+## Render animations
 
-- Open Graph and social cards
-- Blog covers and marketing banners
-- JSX-powered dynamic snapshots
-- Component-based motion graphics
+```tsx
+import { render } from "takumi-js";
+
+// Single frame at specific time
+const frame = await render(<Scene />, {
+  width: 1200,
+  height: 630,
+  timeMs: 500,
+  keyframes: {
+    move: {
+      from: { transform: "translateX(0)" },
+      to: { transform: "translateX(100px)" },
+    },
+  },
+});
+
+// Or pipe to FFmpeg for video
+for (let i = 0; i < 120; i++) {
+  const frame = await render(<Scene />, {
+    timeMs: (i / 30) * 1000,
+    format: "raw", // RGBA pixels
+  });
+  ffmpeg.stdin.write(frame);
+}
+```
+
+## Use from Rust
+
+```rust
+use takumi::{
+  layout::{node::Node, Viewport, style::{Length::Px, Style, StyleDeclaration}},
+  resources::font::FontResource,
+  rendering::{render, RenderOptions},
+  GlobalContext,
+};
+
+let node = Node::container([Node::text("Hello").with_style(
+  Style::default().with(StyleDeclaration::font_size(Px(32.0).into())),
+)]);
+
+let mut global = GlobalContext::default();
+global.font_context_mut().load_and_store(
+  FontResource::new(include_bytes!("font.woff2"))
+);
+
+let image = render(RenderOptions::builder()
+  .viewport(Viewport::new((1200, 630)))
+  .node(node)
+  .global(&global)
+  .build()
+).unwrap();
+```
+
+## Capabilities
+
+### Layout
+
+Powered by [Taffy](https://github.com/DioxusLabs/taffy) for high-performance Flexbox, CSS Grid, and block layouts. Supports absolute positioning, z-index stacking, inline text spans, and nested inline blocks.
+
+### Typography
+
+Browser-grade text shaping and layout. Supports WOFF/WOFF2 fonts, emoji, and RTL languages out of the box.
+
+### Runtime
+
+Deploy anywhere. Ships with optimized native bindings for Node.js (via N-API), WebAssembly for Edge environments (Cloudflare Workers, browsers), or embed the native [Rust crate](https://docs.rs/takumi) directly.
+
+### Keyframes Animation
+
+Parses CSS `@keyframes` and the `animation` shorthand property. Supports percentage offsets, standard timing functions (`linear`, `ease`, `steps`, custom `cubic-bezier`), delays, fill modes, and iteration counts. Includes built-in Tailwind presets like `spin`, `ping`, `pulse`, and `bounce`.
+
+### Styling
+
+Full CSS stylesheet parsing and native Tailwind v4 support. Handles arbitrary values, linear and radial gradients, box shadows, blend modes, transforms, filters, and complex CSS selectors.
+
+## Comparison
+
+| Feature             | Satori | Takumi |
+| ------------------- | ------ | ------ |
+| Block/Inline layout | No     | Yes    |
+| Flexbox             | Yes    | Yes    |
+| Grid                | No     | Yes    |
+| Animations          | No     | Yes    |
+| WOFF Fonts          | Yes    | Yes    |
+| WOFF2 fonts         | No     | Yes    |
+| RTL languages       | No     | Yes    |
 
 ## Showcase
 
@@ -70,30 +147,13 @@ serve({
 
 - [(Unofficial) Takumi Playground](https://takumi-playground.kapadiya.net/)
 
-> [!NOTE]
-> Showcase submissions are welcome via PR to [showcase.ts](./docs/app/data/showcase.ts).
-
 ## Contributing
 
-PRs are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup, tests, fixtures, and changesets.
-By participating, you agree to the [Code of Conduct](./CODE_OF_CONDUCT.md).
-
-## Credits
-
-Takumi builds on excellent OSS:
-[taffy](https://github.com/DioxusLabs/taffy),
-[image](https://github.com/image-rs/image),
-[parley](https://github.com/linebender/parley),
-[swash](https://github.com/linebender/swash),
-[wuff](https://github.com/nicoburns/wuff),
-[resvg](https://github.com/linebender/resvg).
+Read [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 
-Licensed under either of:
-
-- [Apache License, Version 2.0](./LICENSE-APACHE)
-- [MIT license](./LICENSE-MIT)
+MIT or Apache-2.0
 
 <br/>
 <a href="https://vercel.com/oss">

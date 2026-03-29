@@ -99,11 +99,10 @@ export default function Home() {
               Bring Existing Code
             </span>
             <h2 className="font-display text-[clamp(2rem,4vw,3.2rem)] font-[750] tracking-tighter leading-tight mt-3">
-              JSX in. Image out.
+              JSX in. Pixels out.
             </h2>
             <p className="text-[1.05rem] leading-relaxed text-muted-foreground max-w-130 mt-4">
-              Write standard React components with CSS styling. Takumi renders them into
-              production-quality images at blazing speed.
+              Images, animations, video frames all in one engine.
             </p>
           </div>
           <CodeDemo

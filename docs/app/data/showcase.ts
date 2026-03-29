@@ -72,18 +72,18 @@ export const showcaseTemplates: Template[] = [
 
 export const showcaseFeatures: Feature[] = [
   {
-    title: "Advanced Typography",
-    description: "Variable fonts, RTL, complex text decorations, and more.",
+    title: "Rich CSS Layout",
+    description: "Block, Inline, Flexbox, Grid complete display support.",
     icon: Type,
   },
   {
-    title: "Satori Compatibility",
-    description: "Supports nearly all Satori features.",
+    title: "Animations & Video",
+    description: "Keyframes, GIF, WebP, or raw frames for FFmpeg.",
     icon: LayoutTemplate,
   },
   {
-    title: "Tailwind CSS First",
-    description: "Native Tailwind parser built-in for maximum performance.",
+    title: "Native Performance",
+    description: "Rust-powered rendering. No browser, no timeouts.",
     icon: Zap,
   },
 ];
