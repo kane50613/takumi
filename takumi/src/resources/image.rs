@@ -3,7 +3,7 @@
 //! This module provides types and utilities for managing image resources,
 //! including loading states, error handling, and image processing operations.
 
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
 #[cfg(target_arch = "wasm32")]
 use std::{cell::RefCell, collections::HashMap};
@@ -28,14 +28,25 @@ pub type ImageResult = Result<Arc<ImageSource>, ImageResourceError>;
 pub enum ImageSource {
   /// An svg image source
   #[cfg(feature = "svg")]
-  Svg {
-    /// Original SVG source used for reparsing with style overrides.
-    source: Arc<str>,
-    /// Parsed SVG tree used for size and initial metadata.
-    tree: Box<resvg::usvg::Tree>,
-  },
+  Svg(SvgSource),
   /// A bitmap image source
   Bitmap(RgbaImage),
+}
+
+/// Represents the resolved SVG source.
+#[cfg(feature = "svg")]
+#[derive(Debug, Clone)]
+pub struct SvgSource {
+  /// Original SVG source used for reparsing with style overrides.
+  source: Arc<str>,
+  /// Parsed SVG tree used for size and initial metadata.
+  pub(crate) tree: Box<resvg::usvg::Tree>,
+}
+
+impl From<SvgSource> for ImageSource {
+  fn from(svg: SvgSource) -> Self {
+    ImageSource::Svg(svg)
+  }
 }
 
 /// Image data prepared for layout rendering.
@@ -121,6 +132,24 @@ impl From<RgbaImage> for ImageSource {
   }
 }
 
+#[cfg(feature = "svg")]
+impl FromStr for SvgSource {
+  type Err = ImageResourceError;
+
+  fn from_str(src: &str) -> Result<Self, Self::Err> {
+    use resvg::usvg::Tree;
+
+    let sanitized_svg = strip_unsupported_svg_text_nodes(src);
+    let tree = Tree::from_str(&sanitized_svg, &Default::default())
+      .map_err(ImageResourceError::SvgParseError)?;
+
+    Ok(SvgSource {
+      source: Arc::from(sanitized_svg),
+      tree: Box::new(tree),
+    })
+  }
+}
+
 impl ImageSource {
   /// Load an image source from raw bytes.
   ///
@@ -135,7 +164,7 @@ impl ImageSource {
       if let Ok(text) = from_utf8(bytes)
         && is_svg_like(text)
       {
-        return parse_svg_str(text);
+        return Ok(Arc::new(ImageSource::Svg(text.parse()?)));
       }
     }
 
@@ -165,7 +194,7 @@ impl ImageSource {
         algorithm: image_rendering,
       }),
       #[cfg(feature = "svg")]
-      ImageSource::Svg { source, tree } => {
+      ImageSource::Svg(svg) => {
         use resvg::{
           tiny_skia::Pixmap,
           usvg::{Options, Transform, Tree},
@@ -177,11 +206,11 @@ impl ImageSource {
           ..Default::default()
         };
         let reparsed_tree =
-          Tree::from_str(source, &options).map_err(ImageResourceError::SvgParseError)?;
+          Tree::from_str(&svg.source, &options).map_err(ImageResourceError::SvgParseError)?;
 
         let mut pixmap = Pixmap::new(width, height).ok_or(ImageResourceError::InvalidPixmapSize)?;
 
-        let original_size = tree.size();
+        let original_size = svg.tree.size();
         let sx = width as f32 / original_size.width();
         let sy = height as f32 / original_size.height();
 
@@ -207,7 +236,7 @@ impl ImageSource {
   pub(crate) fn size(&self, sizing: &Sizing) -> (f32, f32) {
     let (width, height) = match self {
       #[cfg(feature = "svg")]
-      ImageSource::Svg { tree, .. } => (tree.size().width(), tree.size().height()),
+      ImageSource::Svg(svg) => (svg.tree.size().width(), svg.tree.size().height()),
       ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
     };
 
@@ -283,21 +312,6 @@ fn strip_unsupported_svg_text_nodes(src: &str) -> String {
   stripped
 }
 
-#[cfg(feature = "svg")]
-/// Parse SVG from &str.
-pub fn parse_svg_str(src: &str) -> ImageResult {
-  use resvg::usvg::Tree;
-
-  let sanitized_svg = strip_unsupported_svg_text_nodes(src);
-  let tree = Tree::from_str(&sanitized_svg, &Default::default())
-    .map_err(ImageResourceError::SvgParseError)?;
-
-  Ok(Arc::new(ImageSource::Svg {
-    source: Arc::from(sanitized_svg),
-    tree: Box::new(tree),
-  }))
-}
-
 /// Represents the state of an image in the rendering system.
 ///
 /// This enum tracks whether an image has been successfully loaded and decoded,
@@ -347,7 +361,7 @@ mod tests {
   #[test]
   fn svg_current_color_changes_output() -> Result<(), ImageResourceError> {
     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="currentColor"/></svg>"#;
-    let image = parse_svg_str(svg)?;
+    let image = ImageSource::from_bytes(svg.as_bytes())?;
 
     let red = image
       .render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0xFF0000))?
@@ -364,7 +378,7 @@ mod tests {
   #[test]
   fn svg_current_color_applies_alpha() -> Result<(), ImageResourceError> {
     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="currentColor"/></svg>"#;
-    let image = parse_svg_str(svg)?;
+    let image = ImageSource::from_bytes(svg.as_bytes())?;
     let color = Color([255, 0, 0, 128]);
 
     let rendered = image
@@ -380,7 +394,7 @@ mod tests {
   #[test]
   fn svg_fixed_fill_is_not_affected_by_current_color() -> Result<(), ImageResourceError> {
     let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="#ff0000"/></svg>"##;
-    let image = parse_svg_str(svg)?;
+    let image: ImageSource = SvgSource::from_str(svg)?.into();
 
     let first = image
       .render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x00FF00))?
@@ -397,14 +411,14 @@ mod tests {
   #[test]
   fn parse_svg_str_strips_text_and_tspan_nodes() -> Result<(), ImageResourceError> {
     let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect x="0" y="0" width="20" height="20" fill="#ff0000"/><text x="2" y="10">hello <tspan>world</tspan></text><g><tspan>orphan</tspan></g></svg>"##;
-    let image = parse_svg_str(svg)?;
-    let ImageSource::Svg { source, .. } = image.as_ref() else {
+    let image: ImageSource = SvgSource::from_str(svg)?.into();
+    let ImageSource::Svg(svg) = image else {
       unreachable!()
     };
 
-    assert!(source.contains("<rect"));
-    assert!(!source.contains("<text"));
-    assert!(!source.contains("<tspan"));
+    assert!(svg.source.contains("<rect"));
+    assert!(!svg.source.contains("<text"));
+    assert!(!svg.source.contains("<tspan"));
     Ok(())
   }
 

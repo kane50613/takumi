@@ -63,9 +63,9 @@ pub(crate) fn measure_image_node(
 
   let intrinsic_size = match &*image_source {
     #[cfg(feature = "svg")]
-    ImageSource::Svg { tree, .. } => Size {
-      width: tree.size().width(),
-      height: tree.size().height(),
+    ImageSource::Svg(svg) => Size {
+      width: svg.tree.size().width(),
+      height: svg.tree.size().height(),
     },
     ImageSource::Bitmap(bitmap) => Size {
       width: bitmap.width() as f32,
@@ -196,7 +196,7 @@ pub(crate) fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
 
   if is_svg_like(src) {
     #[cfg(feature = "svg")]
-    return crate::resources::image::parse_svg_str(src);
+    return ImageSource::from_bytes(src.as_bytes());
     #[cfg(not(feature = "svg"))]
     return Err(ImageResourceError::SvgParseNotSupported);
   }

@@ -17,15 +17,12 @@ use takumi::{
     RenderOptions, encode_animated_gif, encode_animated_png, encode_animated_webp, render,
     write_image,
   },
-  resources::{
-    font::FontResource,
-    image::{ImageSource, parse_svg_str},
-  },
+  resources::{font::FontResource, image::ImageSource},
 };
 
 fn assets_path(path: &str) -> PathBuf {
   Path::new(env!("CARGO_MANIFEST_DIR"))
-    .join("../assets/")
+    .join("../")
     .join(path)
     .to_path_buf()
 }
@@ -80,43 +77,27 @@ const TEST_FONTS: &[(&str, &str, GenericFamily)] = &[
 
 const FIXTURE_DEVICE_PIXEL_RATIO: f32 = 0.75;
 
+const IMAGES: &[&str] = &[
+  "assets/images/yeecord.png",
+  "assets/images/luma.svg",
+  "assets/images/luma-cover-0dfbf65d-0f58-4941-947c-d84a5b131dc0.jpeg",
+];
+
 fn create_test_context() -> GlobalContext {
   let mut context = GlobalContext::default();
 
-  let mut yeecord_image_data = Vec::new();
-  File::open(assets_path("images/yeecord.png"))
-    .unwrap()
-    .read_to_end(&mut yeecord_image_data)
-    .unwrap();
+  for image_path in IMAGES {
+    let mut image_data = Vec::new();
+    File::open(assets_path(image_path))
+      .unwrap()
+      .read_to_end(&mut image_data)
+      .unwrap();
 
-  let mut luma_image_data = String::new();
-  File::open(assets_path("images/luma.svg"))
-    .unwrap()
-    .read_to_string(&mut luma_image_data)
-    .unwrap();
-
-  context.persistent_image_store_mut().insert(
-    "assets/images/yeecord.png".to_string(),
-    ImageSource::from_bytes(&yeecord_image_data).unwrap(),
-  );
-
-  let mut luma_cover_image_data = Vec::new();
-  File::open(assets_path(
-    "images/luma-cover-0dfbf65d-0f58-4941-947c-d84a5b131dc0.jpeg",
-  ))
-  .unwrap()
-  .read_to_end(&mut luma_cover_image_data)
-  .unwrap();
-
-  context.persistent_image_store_mut().insert(
-    "assets/images/luma.svg".to_string(),
-    parse_svg_str(&luma_image_data).unwrap(),
-  );
-
-  context.persistent_image_store_mut().insert(
-    "assets/images/luma-cover-0dfbf65d-0f58-4941-947c-d84a5b131dc0.jpeg".to_string(),
-    ImageSource::from_bytes(&luma_cover_image_data).unwrap(),
-  );
+    let image = ImageSource::from_bytes(&image_data).unwrap();
+    context
+      .persistent_image_store_mut()
+      .insert(image_path.to_string(), image);
+  }
 
   for (font, name, generic) in TEST_FONTS {
     let mut font_data = Vec::new();

@@ -43,7 +43,7 @@ pub fn process_image_for_object_fit<'i>(
   let (source_width, source_height) = match image {
     ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
     #[cfg(feature = "svg")]
-    ImageSource::Svg { tree, .. } => (tree.size().width(), tree.size().height()),
+    ImageSource::Svg(svg) => (svg.tree.size().width(), svg.tree.size().height()),
   };
   let source_to_intrinsic = if image_width == 0.0 || image_height == 0.0 {
     Affine::IDENTITY
