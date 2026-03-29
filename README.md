@@ -6,7 +6,7 @@
 **Turn JSX into production-ready images fast.**  
 OG cards, banners, and lightweight animations from one Rust engine for Node.js and WebAssembly.
 
-[Docs](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground)
+[Documentation](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground)
 
 </div>
 
