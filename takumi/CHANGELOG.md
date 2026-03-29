@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.0-rc.6
+
+### Major Changes
+
+- 7f0b66b: **Removed `parse_svg_str`, use `SvgSource::from_str` instead.**
+
 ## 1.0.0-rc.5
 
 ### Patch Changes
