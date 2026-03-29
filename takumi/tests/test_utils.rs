@@ -20,7 +20,7 @@ use takumi::{
   resources::{font::FontResource, image::ImageSource},
 };
 
-fn assets_path(path: &str) -> PathBuf {
+fn repo_base_path(path: &str) -> PathBuf {
   Path::new(env!("CARGO_MANIFEST_DIR"))
     .join("../")
     .join(path)
@@ -29,47 +29,47 @@ fn assets_path(path: &str) -> PathBuf {
 
 const TEST_FONTS: &[(&str, &str, GenericFamily)] = &[
   (
-    "fonts/geist/Geist[wght].woff2",
+    "assets/fonts/geist/Geist[wght].woff2",
     "Geist",
     GenericFamily::SansSerif,
   ),
   (
-    "fonts/geist/GeistMono[wght].woff2",
+    "assets/fonts/geist/GeistMono[wght].woff2",
     "Geist Mono",
     GenericFamily::Monospace,
   ),
   (
-    "fonts/twemoji/TwemojiMozilla-colr.woff2",
+    "assets/fonts/twemoji/TwemojiMozilla-colr.woff2",
     "Twemoji Mozilla",
     GenericFamily::Emoji,
   ),
   (
-    "fonts/archivo/Archivo-VariableFont_wdth,wght.ttf",
+    "assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf",
     "Archivo",
     GenericFamily::SansSerif,
   ),
   (
-    "fonts/sil/scheherazade-new-v17-arabic-regular.woff2",
+    "assets/fonts/sil/scheherazade-new-v17-arabic-regular.woff2",
     "Scheherazade New Test",
     GenericFamily::Serif,
   ),
   (
-    "fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2",
+    "assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2",
     "Noto Sans TC",
     GenericFamily::SansSerif,
   ),
   (
-    "fonts/noto-sans/noto-sans-devanagari-v30-devanagari-regular.woff2",
+    "assets/fonts/noto-sans/noto-sans-devanagari-v30-devanagari-regular.woff2",
     "Noto Sans Devanagari",
     GenericFamily::Serif,
   ),
   (
-    "fonts/poppins/poppins-v24-devanagari_latin-regular.woff2",
+    "assets/fonts/poppins/poppins-v24-devanagari_latin-regular.woff2",
     "Poppins",
     GenericFamily::SansSerif,
   ),
   (
-    "fonts/poppins/poppins-v24-devanagari_latin-700.woff2",
+    "assets/fonts/poppins/poppins-v24-devanagari_latin-700.woff2",
     "Poppins Bold",
     GenericFamily::SansSerif,
   ),
@@ -88,7 +88,7 @@ fn create_test_context() -> GlobalContext {
 
   for image_path in IMAGES {
     let mut image_data = Vec::new();
-    File::open(assets_path(image_path))
+    File::open(repo_base_path(image_path))
       .unwrap()
       .read_to_end(&mut image_data)
       .unwrap();
@@ -101,7 +101,7 @@ fn create_test_context() -> GlobalContext {
 
   for (font, name, generic) in TEST_FONTS {
     let mut font_data = Vec::new();
-    File::open(assets_path(font))
+    File::open(repo_base_path(font))
       .unwrap()
       .read_to_end(&mut font_data)
       .unwrap();
