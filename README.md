@@ -44,8 +44,6 @@ serve({
       {
         width: 1200,
         height: 630,
-        format: "webp",
-        emoji: "twemoji",
       },
     );
   },

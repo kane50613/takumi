@@ -58,11 +58,11 @@ async function initializeWasm(module?: wasm.InitInput | { default: wasm.InitInpu
 async function importWasmBindings() {
   const nextPath = "@takumi-rs/wasm/next";
   if (typeof process !== "undefined" && process.env.NEXT_RUNTIME) {
-    return import(/* @__PURE__ */ /* @vite-ignore */ nextPath) as Promise<typeof WasmNextBindings>;
+    return import(/* @vite-ignore */ nextPath) as Promise<typeof WasmNextBindings>;
   }
 
   return import(
-    /* @__PURE__ */ /* turbopackIgnore: true */ /* webpackIgnore: true */ "@takumi-rs/wasm/auto"
+    /* turbopackIgnore: true */ /* webpackIgnore: true */ "@takumi-rs/wasm/auto"
   ) as Promise<typeof WasmAutoBindings>;
 }
 

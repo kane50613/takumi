@@ -13,6 +13,10 @@ type RenderOptionsWithRenderer = InnerRenderOptions & {
   renderer: napi.Renderer | wasm.Renderer;
   signal?: AbortSignal;
   jsx?: FromJsxOptions;
+  /**
+   * @description The emoji provider to use when rendering emojis. If set to `"from-font"`, the renderer will attempt to source emoji glyphs from the loaded fonts.
+   * @default "twemoji"
+   */
   emoji?: EmojiType | "from-font";
 };
 
@@ -37,10 +41,9 @@ export async function render(element: ReactNode | ReactElementLike, options?: Re
   }
 
   const { node: originalNode, stylesheets } = await fromJsx(element, options?.jsx);
-  const node =
-    options?.emoji && options.emoji !== "from-font"
-      ? extractEmojis(originalNode, options.emoji)
-      : originalNode;
+  const emojiType = options?.emoji ?? "twemoji";
+
+  const node = emojiType !== "from-font" ? extractEmojis(originalNode, emojiType) : originalNode;
   const fetchedResources =
     options?.fetchedResources !== undefined
       ? options.fetchedResources
