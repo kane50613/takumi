@@ -1,5 +1,17 @@
 # takumi-js
 
+## 1.0.0-rc.6
+
+### Minor Changes
+
+- f637f3b: Set default emoji source to "twemoji"
+
+### Patch Changes
+
+- @takumi-rs/core@1.0.0-rc.6
+- @takumi-rs/wasm@1.0.0-rc.6
+- @takumi-rs/helpers@1.0.0-rc.6
+
 ## 1.0.0-rc.5
 
 ### Patch Changes
