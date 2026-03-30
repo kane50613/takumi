@@ -1,5 +1,7 @@
 # takumi
 
+## 1.0.0-rc.7
+
 ## 1.0.0-rc.6
 
 ### Major Changes
