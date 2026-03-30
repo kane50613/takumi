@@ -1,5 +1,16 @@
 # takumi
 
+## 1.0.0-rc.9
+
+### Major Changes
+
+- 4a114d5: Removed `detailed_css_error` feature
+
+### Patch Changes
+
+- 7a79268: Fix linear gradient direction keywords handles incorrectly
+- 7a79268: Set default color interpolation method to Oklab
+
 ## 1.0.0-rc.8
 
 ## 1.0.0-rc.7
