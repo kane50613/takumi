@@ -1,5 +1,14 @@
 # takumi-js
 
+## 1.0.0-rc.7
+
+### Patch Changes
+
+- f94f541: Fix wasm initialization
+  - @takumi-rs/core@1.0.0-rc.7
+  - @takumi-rs/wasm@1.0.0-rc.7
+  - @takumi-rs/helpers@1.0.0-rc.7
+
 ## 1.0.0-rc.6
 
 ### Minor Changes
