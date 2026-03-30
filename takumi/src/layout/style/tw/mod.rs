@@ -9,6 +9,7 @@ use serde::{Deserializer, de::Error as DeError};
 use crate::layout::{
   Viewport,
   style::{
+    LinearGradientDirection,
     tw::{
       map::{FIXED_PROPERTIES, PREFIX_PARSERS},
       parser::*,
@@ -348,7 +349,7 @@ impl TwGradientState {
       TwGradientType::Linear => {
         let gradient = LinearGradient {
           repeating: false,
-          angle,
+          direction: LinearGradientDirection::Angle(angle),
           interpolation: ColorInterpolationMethod::default(),
           stops: stops.into_boxed_slice(),
         };
@@ -2268,7 +2269,7 @@ mod tests {
       Some(
         [BackgroundImage::Linear(LinearGradient {
           repeating: false,
-          angle: Angle::new(90.0),
+          direction: crate::layout::style::LinearGradientDirection::Angle(Angle::new(90.0)),
           interpolation: ColorInterpolationMethod::default(),
           stops: [
             GradientStop::ColorHint {

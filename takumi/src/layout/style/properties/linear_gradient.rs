@@ -23,9 +23,9 @@ pub struct LinearGradient {
   /// Whether the gradient repeats beyond the last stop.
   #[builder(default)]
   pub repeating: bool,
-  /// The angle of the gradient.
+  /// The gradient direction.
   #[builder(default)]
-  pub angle: Angle,
+  pub direction: LinearGradientDirection,
   /// The color interpolation method used between stops.
   #[builder(default)]
   pub interpolation: ColorInterpolationMethod,
@@ -104,6 +104,37 @@ pub(crate) struct LinearGradientRowState {
 }
 
 impl LinearGradientTile {
+  fn direction_components(gradient: &LinearGradient, width: u32, height: u32) -> (f32, f32) {
+    match gradient.direction {
+      LinearGradientDirection::Angle(angle) => {
+        let rad = angle.0.to_radians();
+        (rad.sin(), -rad.cos())
+      }
+      LinearGradientDirection::Keyword(keyword_direction) => {
+        if let (Some(horizontal), Some(vertical)) =
+          (keyword_direction.horizontal, keyword_direction.vertical)
+        {
+          let dir_x = match horizontal {
+            HorizontalKeyword::Left => -(height as f32),
+            HorizontalKeyword::Right => height as f32,
+          };
+          let dir_y = match vertical {
+            VerticalKeyword::Top => -(width as f32),
+            VerticalKeyword::Bottom => width as f32,
+          };
+          let magnitude = dir_x.hypot(dir_y);
+          if magnitude > f32::EPSILON {
+            return (dir_x / magnitude, dir_y / magnitude);
+          }
+        }
+
+        let angle = keyword_direction.to_angle();
+        let rad = angle.0.to_radians();
+        (rad.sin(), -rad.cos())
+      }
+    }
+  }
+
   #[inline(always)]
   pub(crate) fn projection_at(&self, x: f32, y: f32) -> f32 {
     x * self.dir_x + y * self.dir_y + self.projection_bias
@@ -121,8 +152,7 @@ impl LinearGradientTile {
 
   /// Builds a drawing context from a gradient and a target viewport.
   pub fn new(gradient: &LinearGradient, width: u32, height: u32, context: &RenderContext) -> Self {
-    let rad = gradient.angle.0.to_radians();
-    let (dir_x, dir_y) = (rad.sin(), -rad.cos());
+    let (dir_x, dir_y) = Self::direction_components(gradient, width, height);
 
     let cx = width as f32 / 2.0;
     let cy = height as f32 / 2.0;
@@ -448,6 +478,7 @@ impl Angle {
 }
 
 /// Represents a horizontal keyword.
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum HorizontalKeyword {
   /// The left keyword.
@@ -457,6 +488,7 @@ pub enum HorizontalKeyword {
 }
 
 /// Represents a vertical keyword.
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum VerticalKeyword {
   /// The top keyword.
@@ -476,6 +508,30 @@ declare_enum_from_css_impl!(
   "top" => VerticalKeyword::Top,
   "bottom" => VerticalKeyword::Bottom,
 );
+
+/// The original `to <side-or-corner>` direction parsed from CSS.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GradientKeywordDirection {
+  /// Horizontal keyword, if one was provided.
+  pub horizontal: Option<HorizontalKeyword>,
+  /// Vertical keyword, if one was provided.
+  pub vertical: Option<VerticalKeyword>,
+}
+
+/// The direction of a linear gradient.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LinearGradientDirection {
+  /// An explicit numeric angle.
+  Angle(Angle),
+  /// A box-relative side-or-corner direction.
+  Keyword(GradientKeywordDirection),
+}
+
+impl Default for LinearGradientDirection {
+  fn default() -> Self {
+    Self::Angle(Angle::new(180.0))
+  }
+}
 
 impl HorizontalKeyword {
   /// Returns the angle in degrees.
@@ -505,6 +561,62 @@ impl VerticalKeyword {
   }
 }
 
+impl GradientKeywordDirection {
+  /// Converts a side-or-corner direction into the matching CSS angle.
+  pub fn to_angle(self) -> Angle {
+    Angle::degrees_from_keywords(self.horizontal, self.vertical)
+  }
+}
+
+impl<'i> FromCss<'i> for GradientKeywordDirection {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    input.expect_ident_matching("to")?;
+
+    if let Ok(vertical) = input.try_parse(VerticalKeyword::from_css) {
+      if let Ok(horizontal) = input.try_parse(HorizontalKeyword::from_css) {
+        return Ok(Self {
+          horizontal: Some(horizontal),
+          vertical: Some(vertical),
+        });
+      }
+
+      return Ok(Self {
+        horizontal: None,
+        vertical: Some(vertical),
+      });
+    }
+
+    if let Ok(horizontal) = input.try_parse(HorizontalKeyword::from_css) {
+      return Ok(Self {
+        horizontal: Some(horizontal),
+        vertical: None,
+      });
+    }
+
+    Err(input.new_error_for_next_token())
+  }
+
+  const VALID_TOKENS: &'static [CssToken] = &[
+    CssToken::Keyword("to"),
+    CssToken::Keyword("top"),
+    CssToken::Keyword("bottom"),
+    CssToken::Keyword("left"),
+    CssToken::Keyword("right"),
+  ];
+}
+
+impl<'i> FromCss<'i> for LinearGradientDirection {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    if let Ok(direction) = input.try_parse(GradientKeywordDirection::from_css) {
+      return Ok(Self::Keyword(direction));
+    }
+
+    Angle::from_css(input).map(Self::Angle)
+  }
+
+  const VALID_TOKENS: &'static [CssToken] = Angle::VALID_TOKENS;
+}
+
 impl<'i> FromCss<'i> for LinearGradient {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, LinearGradient> {
     let location = input.current_source_location();
@@ -516,12 +628,18 @@ impl<'i> FromCss<'i> for LinearGradient {
     };
 
     input.parse_nested_block(|input| {
-      let mut angle = Angle::new(180.0);
+      let mut direction = LinearGradientDirection::default();
       let mut interpolation = ColorInterpolationMethod::default();
+      let mut saw_direction = false;
 
       loop {
-        if let Ok(parsed_angle) = input.try_parse(Angle::from_css) {
-          angle = parsed_angle;
+        if let Ok(parsed_direction) = input.try_parse(LinearGradientDirection::from_css) {
+          if saw_direction {
+            return Err(input.new_error_for_next_token());
+          }
+
+          direction = parsed_direction;
+          saw_direction = true;
           continue;
         }
 
@@ -537,7 +655,7 @@ impl<'i> FromCss<'i> for LinearGradient {
 
       Ok(LinearGradient {
         repeating,
-        angle,
+        direction,
         interpolation,
         stops: GradientStops::from_css(input)?.into_boxed_slice(),
       })
@@ -577,29 +695,6 @@ impl<'i> FromCss<'i> for Angle {
       return Ok(Angle::zero());
     }
 
-    let is_direction_keyword = input
-      .try_parse(|input| input.expect_ident_matching("to"))
-      .is_ok();
-
-    if is_direction_keyword {
-      if let Ok(vertical) = input.try_parse(VerticalKeyword::from_css) {
-        if let Ok(horizontal) = input.try_parse(HorizontalKeyword::from_css) {
-          return Ok(Angle::degrees_from_keywords(
-            Some(horizontal),
-            Some(vertical),
-          ));
-        }
-
-        return Ok(Angle::new(vertical.degrees()));
-      }
-
-      if let Ok(horizontal) = input.try_parse(HorizontalKeyword::from_css) {
-        return Ok(Angle::new(horizontal.degrees()));
-      }
-
-      return Err(input.new_error_for_next_token());
-    }
-
     let location = input.current_source_location();
     let token = input.next()?;
 
@@ -618,7 +713,6 @@ impl<'i> FromCss<'i> for Angle {
 
   const VALID_TOKENS: &'static [CssToken] = &[
     CssToken::Syntax(CssSyntaxKind::Angle),
-    CssToken::Keyword("to"),
     CssToken::Keyword("none"),
   ];
 }
@@ -651,7 +745,10 @@ mod tests {
       LinearGradient::from_str("linear-gradient(to top right, #ff0000, #0000ff)"),
       Ok(LinearGradient {
         repeating: false,
-        angle: Angle::new(45.0),
+        direction: LinearGradientDirection::Keyword(GradientKeywordDirection {
+          horizontal: Some(HorizontalKeyword::Right),
+          vertical: Some(VerticalKeyword::Top),
+        }),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
@@ -699,43 +796,90 @@ mod tests {
 
   #[test]
   fn test_parse_direction_keywords_top() {
-    assert_eq!(Angle::from_str("to top"), Ok(Angle::new(0.0)));
+    assert_eq!(
+      GradientKeywordDirection::from_str("to top"),
+      Ok(GradientKeywordDirection {
+        horizontal: None,
+        vertical: Some(VerticalKeyword::Top),
+      })
+    );
   }
 
   #[test]
   fn test_parse_direction_keywords_right() {
-    assert_eq!(Angle::from_str("to right"), Ok(Angle::new(90.0)));
+    assert_eq!(
+      GradientKeywordDirection::from_str("to right"),
+      Ok(GradientKeywordDirection {
+        horizontal: Some(HorizontalKeyword::Right),
+        vertical: None,
+      })
+    );
   }
 
   #[test]
   fn test_parse_direction_keywords_bottom() {
-    assert_eq!(Angle::from_str("to bottom"), Ok(Angle::new(180.0)));
+    assert_eq!(
+      GradientKeywordDirection::from_str("to bottom"),
+      Ok(GradientKeywordDirection {
+        horizontal: None,
+        vertical: Some(VerticalKeyword::Bottom),
+      })
+    );
   }
 
   #[test]
   fn test_parse_direction_keywords_left() {
-    assert_eq!(Angle::from_str("to left"), Ok(Angle::new(270.0)));
+    assert_eq!(
+      GradientKeywordDirection::from_str("to left"),
+      Ok(GradientKeywordDirection {
+        horizontal: Some(HorizontalKeyword::Left),
+        vertical: None,
+      })
+    );
   }
 
   #[test]
   fn test_parse_direction_keywords_top_right() {
-    assert_eq!(Angle::from_str("to top right"), Ok(Angle::new(45.0)));
+    assert_eq!(
+      GradientKeywordDirection::from_str("to top right"),
+      Ok(GradientKeywordDirection {
+        horizontal: Some(HorizontalKeyword::Right),
+        vertical: Some(VerticalKeyword::Top),
+      })
+    );
   }
 
   #[test]
   fn test_parse_direction_keywords_bottom_left() {
-    // 45 + 180 = 225 degrees
-    assert_eq!(Angle::from_str("to bottom left"), Ok(Angle::new(225.0)));
+    assert_eq!(
+      GradientKeywordDirection::from_str("to bottom left"),
+      Ok(GradientKeywordDirection {
+        horizontal: Some(HorizontalKeyword::Left),
+        vertical: Some(VerticalKeyword::Bottom),
+      })
+    );
   }
 
   #[test]
   fn test_parse_direction_keywords_top_left() {
-    assert_eq!(Angle::from_str("to top left"), Ok(Angle::new(315.0)));
+    assert_eq!(
+      GradientKeywordDirection::from_str("to top left"),
+      Ok(GradientKeywordDirection {
+        horizontal: Some(HorizontalKeyword::Left),
+        vertical: Some(VerticalKeyword::Top),
+      })
+    );
   }
 
   #[test]
   fn test_parse_direction_keywords_bottom_right() {
-    assert_eq!(Angle::from_str("to bottom right"), Ok(Angle::new(135.0)));
+    assert_eq!(
+      GradientKeywordDirection::from_str("to bottom right"),
+      Ok(GradientKeywordDirection {
+        horizontal: Some(HorizontalKeyword::Right),
+        vertical: Some(VerticalKeyword::Bottom),
+      })
+    );
   }
 
   #[test]
@@ -766,7 +910,7 @@ mod tests {
       LinearGradient::from_str("linear-gradient(45deg, #ff0000, #0000ff)"),
       Ok(LinearGradient {
         repeating: false,
-        angle: Angle::new(45.0),
+        direction: LinearGradientDirection::Angle(Angle::new(45.0)),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
@@ -789,7 +933,7 @@ mod tests {
       LinearGradient::from_str("linear-gradient(in oklab, #ff0000, #0000ff)"),
       Ok(LinearGradient {
         repeating: false,
-        angle: Angle::new(180.0),
+        direction: LinearGradientDirection::default(),
         interpolation: ColorInterpolationMethod {
           color_space: ColorSpaceTag::Oklab,
           hue_direction: HueDirection::Shorter,
@@ -815,7 +959,10 @@ mod tests {
       LinearGradient::from_str("linear-gradient(to right in oklch longer hue, red, blue)"),
       Ok(LinearGradient {
         repeating: false,
-        angle: Angle::new(90.0),
+        direction: LinearGradientDirection::Keyword(GradientKeywordDirection {
+          horizontal: Some(HorizontalKeyword::Right),
+          vertical: None,
+        }),
         interpolation: ColorInterpolationMethod {
           color_space: ColorSpaceTag::Oklch,
           hue_direction: HueDirection::Longer,
@@ -836,12 +983,21 @@ mod tests {
   }
 
   #[test]
+  fn test_parse_linear_gradient_rejects_multiple_directions() {
+    assert!(LinearGradient::from_str("linear-gradient(to right 45deg, red, blue)").is_err());
+    assert!(LinearGradient::from_str("linear-gradient(45deg to right, red, blue)").is_err());
+  }
+
+  #[test]
   fn test_parse_linear_gradient_with_stops() {
     assert_eq!(
       LinearGradient::from_str("linear-gradient(to right, #ff0000 0%, #0000ff 100%)"),
       Ok(LinearGradient {
         repeating: false,
-        angle: Angle::new(90.0), // "to right" = 90deg
+        direction: LinearGradientDirection::Keyword(GradientKeywordDirection {
+          horizontal: Some(HorizontalKeyword::Right),
+          vertical: None,
+        }),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
@@ -864,7 +1020,10 @@ mod tests {
       LinearGradient::from_str("linear-gradient(to right, red 10% 20%, blue)"),
       Ok(LinearGradient {
         repeating: false,
-        angle: Angle::new(90.0),
+        direction: LinearGradientDirection::Keyword(GradientKeywordDirection {
+          horizontal: Some(HorizontalKeyword::Right),
+          vertical: None,
+        }),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
@@ -891,7 +1050,10 @@ mod tests {
       LinearGradient::from_str("linear-gradient(to right, #ff0000, 50%, #0000ff)"),
       Ok(LinearGradient {
         repeating: false,
-        angle: Angle::new(90.0), // "to right" = 90deg
+        direction: LinearGradientDirection::Keyword(GradientKeywordDirection {
+          horizontal: Some(HorizontalKeyword::Right),
+          vertical: None,
+        }),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
@@ -915,7 +1077,10 @@ mod tests {
       LinearGradient::from_str("linear-gradient(to bottom, #ff0000)"),
       Ok(LinearGradient {
         repeating: false,
-        angle: Angle::new(180.0),
+        direction: LinearGradientDirection::Keyword(GradientKeywordDirection {
+          horizontal: None,
+          vertical: Some(VerticalKeyword::Bottom),
+        }),
         interpolation: ColorInterpolationMethod::default(),
         stops: [GradientStop::ColorHint {
           color: ColorInput::Value(Color([255, 0, 0, 255])),
@@ -933,7 +1098,7 @@ mod tests {
       LinearGradient::from_str("linear-gradient(#ff0000, #0000ff)"),
       Ok(LinearGradient {
         repeating: false,
-        angle: Angle::new(180.0),
+        direction: LinearGradientDirection::default(),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
@@ -1022,7 +1187,7 @@ mod tests {
       LinearGradient::from_str("linear-gradient(45deg, #ff0000, 25%, #00ff00, 75%, #0000ff)"),
       Ok(LinearGradient {
         repeating: false,
-        angle: Angle::new(45.0),
+        direction: LinearGradientDirection::Angle(Angle::new(45.0)),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
@@ -1049,7 +1214,7 @@ mod tests {
   fn test_linear_gradient_at_simple() {
     let gradient = LinearGradient {
       repeating: false,
-      angle: Angle::new(180.0), // "to bottom" (default) - Top to bottom
+      direction: LinearGradientDirection::default(),
       interpolation: ColorInterpolationMethod::default(),
       stops: [
         GradientStop::ColorHint {
@@ -1078,15 +1243,14 @@ mod tests {
 
     // Test in the middle (should be purple)
     let color_middle = tile.get_pixel(50, 50);
-    // Middle should be roughly purple (red + blue)
-    assert_eq!(color_middle, Rgba([128, 0, 128, 255]));
+    assert_eq!(color_middle, Rgba([140, 83, 162, 255]));
   }
 
   #[test]
   fn test_linear_gradient_at_horizontal() {
     let gradient = LinearGradient {
       repeating: false,
-      angle: Angle::new(90.0), // "to right" - Left to right
+      direction: LinearGradientDirection::Angle(Angle::new(90.0)),
       interpolation: ColorInterpolationMethod::default(),
       stops: [
         GradientStop::ColorHint {
@@ -1115,10 +1279,40 @@ mod tests {
   }
 
   #[test]
+  fn test_keyword_corner_direction_uses_aspect_ratio() {
+    let gradient = LinearGradient {
+      repeating: false,
+      direction: LinearGradientDirection::Keyword(GradientKeywordDirection {
+        horizontal: Some(HorizontalKeyword::Right),
+        vertical: Some(VerticalKeyword::Bottom),
+      }),
+      interpolation: ColorInterpolationMethod::default(),
+      stops: [
+        GradientStop::ColorHint {
+          color: Color([255, 0, 0, 255]).into(),
+          hint: Some(StopPosition(Length::Percentage(0.0))),
+        },
+        GradientStop::ColorHint {
+          color: Color([0, 0, 255, 255]).into(),
+          hint: Some(StopPosition(Length::Percentage(100.0))),
+        },
+      ]
+      .into(),
+    };
+
+    let context = GlobalContext::default();
+    let dummy_context = RenderContext::new_test(&context, Viewport::new((200, 100)));
+    let tile = LinearGradientTile::new(&gradient, 200, 100, &dummy_context);
+
+    assert!((tile.dir_x - 0.4472136).abs() < 0.001);
+    assert!((tile.dir_y - 0.8944272).abs() < 0.001);
+  }
+
+  #[test]
   fn test_linear_gradient_at_single_color() {
     let gradient = LinearGradient {
       repeating: false,
-      angle: Angle::new(0.0),
+      direction: LinearGradientDirection::Angle(Angle::new(0.0)),
       interpolation: ColorInterpolationMethod::default(),
       stops: [GradientStop::ColorHint {
         color: Color([255, 0, 0, 255]).into(), // Red
@@ -1139,7 +1333,7 @@ mod tests {
   fn test_linear_gradient_at_no_steps() {
     let gradient = LinearGradient {
       repeating: false,
-      angle: Angle::new(0.0),
+      direction: LinearGradientDirection::Angle(Angle::new(0.0)),
       interpolation: ColorInterpolationMethod::default(),
       stops: [].into(),
     };
@@ -1156,7 +1350,7 @@ mod tests {
   fn test_repeating_linear_gradient_stripes() {
     let gradient = LinearGradient::builder()
       .repeating(true)
-      .angle(Angle::new(90.0))
+      .direction(LinearGradientDirection::Angle(Angle::new(90.0)))
       .stops([
         GradientStop::ColorHint {
           color: Color([255, 0, 0, 255]).into(),
@@ -1276,7 +1470,7 @@ mod tests {
   #[test]
   fn resolve_stops_percentage_and_px_linear() {
     let gradient = LinearGradient::builder()
-      .angle(Angle::new(0.0))
+      .direction(LinearGradientDirection::Angle(Angle::new(0.0)))
       .stops([
         GradientStop::ColorHint {
           color: Color::black().into(),
@@ -1310,7 +1504,7 @@ mod tests {
   #[test]
   fn resolve_stops_equal_positions_allowed_linear() {
     let gradient = LinearGradient::builder()
-      .angle(Angle::new(0.0))
+      .direction(LinearGradientDirection::Angle(Angle::new(0.0)))
       .stops([
         GradientStop::ColorHint {
           color: Color::black().into(),

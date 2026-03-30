@@ -114,7 +114,8 @@ impl<'i> FromCss<'i> for BackgroundImages {
 mod tests {
   use crate::layout::style::{
     Angle, BackgroundPosition, Color, ConicGradient, GradientStop, Length, LengthDefaultsToZero,
-    LinearGradient, RadialGradient, RadialShape, RadialSize, SpacePair, StopPosition,
+    LinearGradient, LinearGradientDirection, RadialGradient, RadialShape, RadialSize, SpacePair,
+    StopPosition,
   };
 
   use super::*;
@@ -208,7 +209,7 @@ mod tests {
           BackgroundImage::Linear(
             LinearGradient::builder()
               .repeating(true)
-              .angle(Angle::new(90.0))
+              .direction(LinearGradientDirection::Angle(Angle::new(90.0)))
               .stops([
                 GradientStop::ColorHint {
                   color: Color::from_rgb(0xff0000).into(),

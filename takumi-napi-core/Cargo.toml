@@ -1,6 +1,6 @@
 [package]
 name = "takumi-napi-core"
-version = "0.73.1"
+version = "0.0.0"
 publish = false
 edition = "2024"
 license = "MIT OR Apache-2.0"

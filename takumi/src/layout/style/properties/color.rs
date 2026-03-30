@@ -38,7 +38,9 @@ pub struct ColorInterpolationMethod {
 impl Default for ColorInterpolationMethod {
   fn default() -> Self {
     Self {
-      color_space: ColorSpaceTag::Srgb,
+      // Reference: https://developer.mozilla.org/en-US/docs/Web/CSS/color-interpolation-method
+      // When interpolating <color> values, the interpolation color space defaults to Oklab.
+      color_space: ColorSpaceTag::Oklab,
       hue_direction: HueDirection::Shorter,
     }
   }
