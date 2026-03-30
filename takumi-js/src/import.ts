@@ -38,10 +38,11 @@ async function getImportsImpl(module?: wasm.InitInput) {
 type WasmModuleInput =
   | wasm.InitInput
   | { default: wasm.InitInput }
-  | Promise<wasm.InitInput | { default: wasm.InitInput }>;
+  | Promise<wasm.InitInput | { default: wasm.InitInput }>
+  | (() => Promise<wasm.InitInput | { default: wasm.InitInput }>);
 
 async function initializeWasm(module?: WasmModuleInput) {
-  const resolvedModule = await module;
+  const resolvedModule = typeof module === "function" ? await module() : await module;
   const wasmModule =
     resolvedModule !== undefined &&
     typeof resolvedModule === "object" &&
