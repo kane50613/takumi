@@ -130,9 +130,7 @@ fn create_rotated_container(angle: f32, transform_origin: TransformOrigin) -> No
       )))
       .with_border_width(Sides([Px(1.0); 4]))
       .with(StyleDeclaration::border_style(BorderStyle::Solid))
-      .with_border_radius(Box::new(BorderRadius(Sides(
-        [SpacePair::from_single(Px(12.0)); 4],
-      )))),
+      .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(12.0)); 4]))),
   )
 }
 

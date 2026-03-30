@@ -112,7 +112,7 @@ fn test_style_backdrop_filter_frosted_glass() {
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([255, 255, 255, 80]),
       )))
-      .with_border_radius(Box::new(BorderRadius::from_str("24px").unwrap()))
+      .with_border_radius(BorderRadius::from_str("24px").unwrap())
       .with_padding(Sides([Px(48.0); 4]))
       .with_gap(SpacePair::from_single(Px(16.0))),
   )])

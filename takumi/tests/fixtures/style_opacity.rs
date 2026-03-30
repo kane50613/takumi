@@ -11,9 +11,9 @@ fn create_test_container(opacity: f32) -> Node {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Length::Percentage(8.0)))
       .with(StyleDeclaration::height(Length::Percentage(6.0)))
-      .with_border_radius(Box::new(BorderRadius(Sides(
+      .with_border_radius(BorderRadius(Sides(
         [SpacePair::from_single(Length::Rem(1.0)); 4],
-      ))))
+      )))
       .with(StyleDeclaration::opacity(PercentageNumber(opacity)))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
       .with(StyleDeclaration::align_items(AlignItems::Center))

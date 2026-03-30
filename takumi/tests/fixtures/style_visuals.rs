@@ -30,9 +30,7 @@ fn test_style_border_radius() {
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([255, 0, 0, 255]),
       )))
-      .with_border_radius(Box::new(BorderRadius(Sides(
-        [SpacePair::from_single(Px(20.0)); 4],
-      )))),
+      .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(20.0)); 4]))),
   );
 
   run_fixture_test(container, "style_border_radius");
@@ -92,9 +90,7 @@ fn test_style_border_width_with_radius() {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Rem(16.0)))
       .with(StyleDeclaration::height(Rem(8.0)))
-      .with_border_radius(Box::new(BorderRadius(Sides(
-        [SpacePair::from_single(Px(10.0)); 4],
-      ))))
+      .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(10.0)); 4])))
       .with(StyleDeclaration::border_color(ColorInput::Value(Color([
         255, 0, 0, 255,
       ]))))
@@ -162,9 +158,7 @@ fn test_style_box_shadow_inset() {
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color::white(),
       )))
-      .with_border_radius(Box::new(BorderRadius(Sides(
-        [SpacePair::from_single(Px(16.0)); 4],
-      ))))
+      .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(16.0)); 4])))
       .with(StyleDeclaration::box_shadow(Some(
         vec![
           BoxShadow::builder()
@@ -228,9 +222,9 @@ fn test_style_border_radius_circle() {
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([255, 0, 0, 255]),
       )))
-      .with_border_radius(Box::new(BorderRadius(Sides(
+      .with_border_radius(BorderRadius(Sides(
         [SpacePair::from_single(Percentage(50.0)); 4],
-      )))),
+      ))),
   );
 
   run_fixture_test(container, "style_border_radius_circle");
@@ -262,9 +256,7 @@ fn test_style_border_radius_width_offset() {
           )))
           .with_border_width(Sides([Px(1.0); 4]))
           .with(StyleDeclaration::border_style(BorderStyle::Solid))
-          .with_border_radius(Box::new(BorderRadius(Sides(
-            [SpacePair::from_single(Px(24.0)); 4],
-          ))))
+          .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(24.0)); 4])))
           .with(StyleDeclaration::border_color(ColorInput::Value(Color([
             0, 0, 0, 255,
           ])))),
@@ -292,18 +284,18 @@ fn test_style_border_radius_circle_avatar() {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with_border_radius(Box::new(BorderRadius(Sides(
+        .with_border_radius(BorderRadius(Sides(
           [SpacePair::from_single(Percentage(50.0)); 4],
-        )))),
+        ))),
     )])
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Rem(12.0)))
       .with(StyleDeclaration::height(Rem(12.0)))
-      .with_border_radius(Box::new(BorderRadius(Sides(
+      .with_border_radius(BorderRadius(Sides(
         [SpacePair::from_single(Percentage(50.0)); 4],
-      ))))
+      )))
       .with(StyleDeclaration::border_color(ColorInput::Value(Color([
         128, 128, 128, 128,
       ]))))
@@ -330,9 +322,9 @@ fn test_style_border_width_on_image_node() {
   let avatar = Node::image("assets/images/yeecord.png").with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with_border_radius(Box::new(BorderRadius(Sides(
+      .with_border_radius(BorderRadius(Sides(
         [SpacePair::from_single(Percentage(100.0)); 4],
-      ))))
+      )))
       .with_border_width(Sides([Px(2.0); 4]))
       .with(StyleDeclaration::border_style(BorderStyle::Solid))
       .with(StyleDeclaration::border_color(ColorInput::Value(Color([
@@ -367,9 +359,7 @@ fn test_style_outline() {
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([14, 165, 233, 255]),
       )))
-      .with_border_radius(Box::new(BorderRadius(Sides(
-        [SpacePair::from_single(Px(16.0)); 4],
-      ))))
+      .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(16.0)); 4])))
       .with(StyleDeclaration::outline_width(Px(10.0)))
       .with(StyleDeclaration::outline_color(ColorInput::Value(Color([
         17, 24, 39, 255,

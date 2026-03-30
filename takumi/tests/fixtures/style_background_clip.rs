@@ -26,9 +26,7 @@ fn create_container_with_background_clip(
       .with(StyleDeclaration::border_color(ColorInput::Value(Color([
         0, 0, 0, 255,
       ]))))
-      .with_border_radius(Box::new(BorderRadius(Sides(
-        [SpacePair::from_single(Px(8.0)); 4],
-      )))),
+      .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(8.0)); 4]))),
   )])
   .with_style(
     Style::default()
@@ -176,9 +174,7 @@ fn test_style_background_clip_border_area() {
       .with(StyleDeclaration::border_color(ColorInput::Value(Color([
         0, 0, 0, 128,
       ]))))
-      .with_border_radius(Box::new(BorderRadius(Sides(
-        [SpacePair::from_single(Px(8.0)); 4],
-      )))),
+      .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(8.0)); 4]))),
   )])
   .with_style(
     Style::default()

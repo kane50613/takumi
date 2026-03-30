@@ -95,9 +95,7 @@ fn test_stylesheets_background_multiple_gradients() {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(700.0)))
         .with(StyleDeclaration::height(Px(360.0)))
-        .with_border_radius(Box::new(BorderRadius(Sides(
-          [SpacePair::from_single(Px(24.0)); 4],
-        )))),
+        .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(24.0)); 4]))),
     )])
   .with_tag_name("div")
   .with_style(

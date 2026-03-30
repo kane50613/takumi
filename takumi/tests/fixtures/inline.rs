@@ -418,9 +418,7 @@ fn inline_complex_nested_fixture() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([188, 204, 220, 255]),
         )))
-        .with_border_radius(Box::new(BorderRadius(Sides(
-          [SpacePair::from_single(Px(999.0)); 4],
-        ))))
+        .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(999.0)); 4])))
         .with_padding(Sides([Px(2.0), Px(8.0), Px(2.0), Px(8.0)]))
         .with(StyleDeclaration::vertical_align(VerticalAlign::Keyword(
           VerticalAlignKeyword::Baseline,
@@ -430,8 +428,7 @@ fn inline_complex_nested_fixture() {
 
   let children: Vec<Node> = vec![
     Node::text("Start with some basic inline text. ".to_string())
-      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
-      ,
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
     Node::container(metadata_children)
       .with_style(
         Style::default()
@@ -447,13 +444,12 @@ fn inline_complex_nested_fixture() {
           .with(StyleDeclaration::border_color(ColorInput::Value(Color([
             217, 226, 236, 255,
           ]))))
-          .with_border_radius(Box::new(BorderRadius(Sides(
+          .with_border_radius(BorderRadius(Sides(
             [SpacePair::from_single(Px(4.0)); 4],
-          ))))
+          )))
           .with_padding(Sides([Px(8.0), Px(12.0), Px(8.0), Px(12.0)]))
           .with_margin(Sides([Px(0.0), Px(8.0), Px(0.0), Px(8.0)])),
-      )
-      ,
+      ),
     Node::text(
         "Followed by a longer sentence that demonstrates how text wraps around inline-block elements. ".to_string(),
       )

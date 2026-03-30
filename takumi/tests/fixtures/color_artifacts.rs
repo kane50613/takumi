@@ -18,7 +18,7 @@ fn test_color_artifacts() {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::Contain))
-      .with_border_radius(Box::new(BorderRadius::from_str("10px").unwrap())),
+      .with_border_radius(BorderRadius::from_str("10px").unwrap()),
   )])
   .with_style(
     Style::default()
