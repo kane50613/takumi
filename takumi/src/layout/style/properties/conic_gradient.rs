@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use std::f32::consts::TAU;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
@@ -280,12 +281,12 @@ fn parse_conic_stop_position<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, 
         "grad" => *value * 0.9,
         "rad" => value.to_degrees(),
         "turn" => *value * 360.0,
-        _ => return Err(StopPosition::unexpected_token_error(location, token)),
+        _ => return Err(unexpected_token!(StopPosition, location, token)),
       };
 
       Ok(StopPosition(Length::Percentage(degrees / 360.0 * 100.0)))
     }
-    _ => Err(StopPosition::unexpected_token_error(location, token)),
+    _ => Err(unexpected_token!(StopPosition, location, token)),
   }
 }
 
@@ -341,7 +342,7 @@ impl<'i> FromCss<'i> for ConicGradient {
     let repeating = match_ignore_ascii_case! { &name,
       "conic-gradient" => false,
       "repeating-conic-gradient" => true,
-      _ => return Err(Self::unexpected_token_error(location, &Token::Function(name))),
+      _ => return Err(unexpected_token!(location, &Token::Function(name))),
     };
 
     input.parse_nested_block(|input| {

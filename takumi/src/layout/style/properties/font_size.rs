@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::{
@@ -61,9 +62,9 @@ impl<'i> FromCss<'i> for FontSizeKeyword {
         "x-large" => Ok(Self::XLarge),
         "xx-large" => Ok(Self::XXLarge),
         "xxx-large" => Ok(Self::XXXLarge),
-        _ => Err(Self::unexpected_token_error(location, token)),
+        _ => Err(unexpected_token!(location, token)),
       },
-      _ => Err(Self::unexpected_token_error(location, token)),
+      _ => Err(unexpected_token!(location, token)),
     }
   }
 

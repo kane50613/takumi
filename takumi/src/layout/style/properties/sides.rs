@@ -1,9 +1,8 @@
 use cssparser::Parser;
-use std::borrow::Cow;
 use taffy::Rect;
 
 use crate::{
-  layout::style::{CssToken, FromCss, Length, MakeComputed, ParseResult, merge_enum_values},
+  layout::style::{CssToken, FromCss, Length, MakeComputed, ParseResult},
   rendering::Sizing,
 };
 
@@ -66,12 +65,7 @@ impl<'i, T: Copy + for<'j> FromCss<'j>> FromCss<'i> for Sides<T> {
 
   const VALID_TOKENS: &'static [CssToken] = T::VALID_TOKENS;
 
-  fn expect_message() -> Cow<'static, str> {
-    Cow::Owned(format!(
-      "1 ~ 4 values of {}",
-      merge_enum_values(T::VALID_TOKENS)
-    ))
-  }
+  const EXPECT_MESSAGE: super::CssExpectedMessage = T::EXPECT_MESSAGE;
 }
 
 impl<T: Copy> From<Sides<T>> for Rect<T> {

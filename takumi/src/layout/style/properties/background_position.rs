@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use taffy::{Point, Size};
 
@@ -233,7 +234,7 @@ impl<'i> FromCss<'i> for PositionComponent {
     let location = input.current_source_location();
     let token = input.next()?;
     let Token::Ident(ident) = token else {
-      return Err(Self::unexpected_token_error(location, token));
+      return Err(unexpected_token!(location, token));
     };
 
     match_ignore_ascii_case! {
@@ -243,7 +244,7 @@ impl<'i> FromCss<'i> for PositionComponent {
       "right" => Ok(PositionComponent::KeywordX(PositionKeywordX::Right)),
       "top" => Ok(PositionComponent::KeywordY(PositionKeywordY::Top)),
       "bottom" => Ok(PositionComponent::KeywordY(PositionKeywordY::Bottom)),
-      _ => Err(Self::unexpected_token_error(location, token)),
+      _ => Err(unexpected_token!(location, token)),
     }
   }
 

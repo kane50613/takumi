@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token};
 
 use crate::layout::style::{
@@ -114,7 +115,7 @@ impl<'i> FromCss<'i> for GridPlacement {
         }
 
         // If neither, error
-        return Err(Self::unexpected_token_error(
+        return Err(unexpected_token!(
           input.current_source_location(),
           input.next()?,
         ));
@@ -134,7 +135,7 @@ impl<'i> FromCss<'i> for GridPlacement {
         let v: i32 = int_value.unwrap_or(value as i32);
         Ok(GridPlacement::Line(v as i16))
       }
-      _ => Err(Self::unexpected_token_error(location, token)),
+      _ => Err(unexpected_token!(location, token)),
     }
   }
 

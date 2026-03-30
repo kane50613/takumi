@@ -100,12 +100,11 @@ version = "0.21.1"
 optional = true
 
 [features]
-default = ["woff2", "woff", "svg", "rayon", "detailed_css_error"]
+default = ["woff2", "woff", "svg", "rayon"]
 svg = ["dep:resvg", "dep:roxmltree"]
 woff2 = ["dep:wuff", "wuff/brotli"]
 woff = ["dep:wuff", "wuff/z"]
 rayon = ["dep:rayon"]
-detailed_css_error = []
 
 [dev-dependencies]
 criterion = "0.8"

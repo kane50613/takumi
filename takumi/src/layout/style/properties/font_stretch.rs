@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use parley::FontWidth;
 
@@ -45,7 +46,7 @@ impl<'i> FromCss<'i> for FontStretch {
       "expanded" => Ok(Self(FontWidth::EXPANDED)),
       "extra-expanded" => Ok(Self(FontWidth::EXTRA_EXPANDED)),
       "ultra-expanded" => Ok(Self(FontWidth::ULTRA_EXPANDED)),
-      _ => Err(Self::unexpected_token_error(location, &Token::Ident(ident.to_owned()))),
+      _ => Err(unexpected_token!(location, &Token::Ident(ident.to_owned()))),
     }
   }
 

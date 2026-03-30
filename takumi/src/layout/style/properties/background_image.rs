@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use std::sync::Arc;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
@@ -74,7 +75,7 @@ impl<'i> FromCss<'i> for BackgroundImage {
       "linear-gradient" | "repeating-linear-gradient" => Ok(BackgroundImage::Linear(LinearGradient::from_css(input)?)),
       "radial-gradient" | "repeating-radial-gradient" => Ok(BackgroundImage::Radial(RadialGradient::from_css(input)?)),
       "conic-gradient" | "repeating-conic-gradient" => Ok(BackgroundImage::Conic(ConicGradient::from_css(input)?)),
-      _ => Err(Self::unexpected_token_error(location, &Token::Function(function))),
+      _ => Err(unexpected_token!(location, &Token::Function(function))),
     }
   }
 

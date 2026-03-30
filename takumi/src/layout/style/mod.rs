@@ -9,6 +9,7 @@ use std::{borrow::Cow, fmt::Formatter};
 
 pub(crate) use animation::apply_stylesheet_animations;
 pub use animation::{KeyframeRule, KeyframesRule};
+pub(crate) use properties::unexpected_token;
 pub use properties::*;
 pub use selector::*;
 use serde::{

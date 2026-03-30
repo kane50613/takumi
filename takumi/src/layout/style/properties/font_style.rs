@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use parley::style::FontStyle as ParleyFontStyle;
 
@@ -21,7 +22,7 @@ impl<'i> FromCss<'i> for FontStyle {
         let angle = input.try_parse(Angle::from_css).ok().map(|angle| *angle);
         Ok(Self(ParleyFontStyle::Oblique(angle)))
       },
-      _ => Err(Self::unexpected_token_error(location, &Token::Ident(ident.to_owned()))),
+      _ => Err(unexpected_token!(location, &Token::Ident(ident.to_owned()))),
     }
   }
 

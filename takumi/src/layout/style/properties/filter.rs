@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use image::{Rgba, RgbaImage, imageops::colorops::huerotate_in_place};
 use smallvec::SmallVec;
@@ -685,7 +686,7 @@ impl<'i> FromCss<'i> for Filter {
         // drop-shadow uses the same syntax as text-shadow
         Ok(Filter::DropShadow(TextShadow::from_css(input)?))
       }),
-      _ => Err(Self::unexpected_token_error(location, token)),
+      _ => Err(unexpected_token!(location, token)),
     }
   }
 

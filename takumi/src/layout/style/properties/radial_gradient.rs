@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use image::{GenericImageView, Rgba};
 use typed_builder::TypedBuilder;
@@ -392,7 +393,7 @@ impl<'i> FromCss<'i> for RadialGradient {
     let repeating = match_ignore_ascii_case! { &name,
       "radial-gradient" => false,
       "repeating-radial-gradient" => true,
-      _ => return Err(Self::unexpected_token_error(location, &Token::Function(name.clone()))),
+      _ => return Err(unexpected_token!(location, &Token::Function(name.clone()))),
     };
 
     input.parse_nested_block(|input| {

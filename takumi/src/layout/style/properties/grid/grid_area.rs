@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::Parser;
 
 use crate::layout::style::{CssSyntaxKind, CssToken, FromCss, GridPlacement, ParseResult};
@@ -31,7 +32,7 @@ impl<'i> FromCss<'i> for GridArea {
     }
 
     if !input.is_exhausted() {
-      return Err(Self::unexpected_token_error(
+      return Err(unexpected_token!(
         input.current_source_location(),
         input.next()?,
       ));

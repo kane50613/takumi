@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::Parser;
 use typed_builder::TypedBuilder;
 
@@ -101,7 +102,7 @@ impl<'i> FromCss<'i> for Background {
       }
 
       // If we can't parse anything, it's an error
-      return Err(Self::unexpected_token_error(
+      return Err(unexpected_token!(
         input.current_source_location(),
         input.next()?,
       ));

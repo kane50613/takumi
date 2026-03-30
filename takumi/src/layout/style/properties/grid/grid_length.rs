@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token};
 use taffy::CompactLength;
 
@@ -45,11 +46,11 @@ impl<'i> FromCss<'i> for GridLength {
     let token = input.next()?;
 
     let Token::Dimension { value, unit, .. } = &token else {
-      return Err(Self::unexpected_token_error(location, token));
+      return Err(unexpected_token!(location, token));
     };
 
     if !unit.eq_ignore_ascii_case("fr") {
-      return Err(Self::unexpected_token_error(location, token));
+      return Err(unexpected_token!(location, token));
     }
 
     Ok(GridLength::Fr(*value))

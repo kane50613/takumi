@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use std::collections::HashMap;
 
 use cssparser::{Parser, Token};
@@ -57,7 +58,7 @@ impl<'i> FromCss<'i> for GridTemplateAreas {
       if ident_str == "none" {
         return Ok(GridTemplateAreas(Vec::new()));
       }
-      return Err(Self::unexpected_token_error(location, &Token::Ident(ident)));
+      return Err(unexpected_token!(location, &Token::Ident(ident)));
     }
 
     let mut rows: Vec<Vec<String>> = Vec::new();
@@ -66,10 +67,7 @@ impl<'i> FromCss<'i> for GridTemplateAreas {
       let row = input.expect_ident_or_string()?;
       let cols: Vec<String> = row.split_whitespace().map(ToString::to_string).collect();
       if cols.is_empty() {
-        return Err(Self::unexpected_token_error(
-          location,
-          &Token::Ident("".into()),
-        ));
+        return Err(unexpected_token!(location, &Token::Ident("".into()),));
       }
       rows.push(cols);
     }
@@ -79,7 +77,7 @@ impl<'i> FromCss<'i> for GridTemplateAreas {
       && rows.iter().any(|r| r.len() != width)
     {
       // Create a parse error for inconsistent row lengths
-      return Err(Self::unexpected_token_error(
+      return Err(unexpected_token!(
         input.current_source_location(),
         &Token::Ident("inconsistent-rows".into()),
       ));

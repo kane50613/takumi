@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use crate::layout::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult};
 use cssparser::{Parser, Token};
 use parley::{FontVariation, setting::Tag};
@@ -24,15 +25,14 @@ impl<'i> FromCss<'i> for FontVariationSettings {
       let tag_name = input.expect_string()?;
 
       if tag_name.len() != 4 || !tag_name.is_ascii() {
-        return Err(Self::unexpected_token_error(
+        return Err(unexpected_token!(
           location,
           &Token::QuotedString(tag_name.clone()),
         ));
       }
 
-      let tag = Tag::parse(tag_name).ok_or_else(|| {
-        Self::unexpected_token_error(location, &Token::QuotedString(tag_name.clone()))
-      })?;
+      let tag = Tag::parse(tag_name)
+        .ok_or_else(|| unexpected_token!(location, &Token::QuotedString(tag_name.clone())))?;
       let value = input.expect_number()?;
 
       Ok(FontVariation { tag, value })

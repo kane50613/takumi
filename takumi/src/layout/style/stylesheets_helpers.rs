@@ -1,8 +1,10 @@
 use std::{borrow::Cow, fmt::Write};
 
-use cssparser::{ParseError, ParseErrorKind, Parser, ParserInput, SourceLocation, Token};
+use cssparser::{ParseError, Parser, ParserInput, SourceLocation, Token};
 
-use crate::layout::style::{CssInput, CssNumber, CssUnexpected, CssWideKeyword, FromCss};
+use crate::layout::style::{
+  CssInput, CssNumber, CssUnexpected, CssWideKeyword, FromCss, merge_enum_values,
+};
 
 use super::{LonghandId, ParsedDeclarations, PropertyId, ShorthandId};
 
@@ -82,14 +84,11 @@ impl CssInputParseError<'_> {
       | Self::UnexpectedType { expected, .. } => expected,
     };
 
-    #[cfg(feature = "detailed_css_error")]
     let _ = write!(
       message,
       ": {}; {}; also accepts 'initial', 'unset' or 'inherit'.",
       input_description, expected
     );
-    #[cfg(not(feature = "detailed_css_error"))]
-    let _ = write!(message, ": {}; {}", input_description, expected);
 
     message
   }
@@ -112,34 +111,37 @@ pub(super) fn parse_css_input_value<'de, T>(
 where
   T: for<'i> FromCss<'i>,
 {
-  #[cfg(feature = "detailed_css_error")]
-  let expected = T::expect_message();
-  #[cfg(not(feature = "detailed_css_error"))]
-  let expected =
-    Cow::Borrowed("CSS value, compile with --features detailed_css_error for more details");
-
   match css_input {
     CssInput::Str(value) => {
-      let source = value.as_ref();
-      let failure = match T::from_str(source) {
+      let source = value.to_string();
+      let failure = match T::from_str(source.as_str()) {
         Ok(parsed_value) => return Ok(parsed_value),
-        Err(error) => css_input_parse_failure(source, error),
+        Err(error) => css_input_parse_failure(source.as_str(), error),
       };
 
       Err(CssInputParseError::Value {
         value,
-        expected,
+        expected: T::EXPECT_MESSAGE
+          .build_message(source.as_str(), merge_enum_values(T::VALID_TOKENS))
+          .into(),
         failure: Some(failure),
       })
     }
     CssInput::Number(number) => {
       let source = number.to_string();
 
-      T::from_str(&source).map_err(|_| CssInputParseError::NumberType { number, expected })
+      T::from_str(&source).map_err(|_| CssInputParseError::NumberType {
+        number,
+        expected: T::EXPECT_MESSAGE
+          .build_message(&source, merge_enum_values(T::VALID_TOKENS))
+          .into(),
+      })
     }
     CssInput::Unexpected(unexpected) => Err(CssInputParseError::UnexpectedType {
       unexpected,
-      expected,
+      expected: T::EXPECT_MESSAGE
+        .build_message("input", merge_enum_values(T::VALID_TOKENS))
+        .into(),
     }),
   }
 }
@@ -150,37 +152,37 @@ fn css_input_parse_failure(
   error: ParseError<'_, Cow<'_, str>>,
 ) -> CssInputParseFailure {
   let location = error.location;
-  let detail = match error.kind {
-    ParseErrorKind::Basic(_) | ParseErrorKind::Custom(_) => {
-      let Some(start) = source
-        .char_indices()
-        .nth(location.column.saturating_sub(1) as usize)
-        .map(|(index, _)| index)
-      else {
-        return CssInputParseFailure {
-          location,
-          detail: None,
-        };
-      };
-
-      let snippet = source[start..]
-        .trim_start()
-        .split([' ', '\t', '\n', '\r', ',', ')', '('])
-        .next()
-        .unwrap_or_default()
-        .trim_matches('"')
-        .trim_matches('\'');
-
-      let snippet = snippet.chars().take(24).collect::<String>();
-      if snippet.is_empty() {
-        None
-      } else {
-        Some(snippet)
-      }
-    }
+  let Some(start) = source
+    .char_indices()
+    .nth(location.column.saturating_sub(1) as usize)
+    .map(|(index, _)| index)
+  else {
+    return CssInputParseFailure {
+      location,
+      detail: None,
+    };
   };
 
-  CssInputParseFailure { location, detail }
+  let snippet = source[start..]
+    .trim_start()
+    .split([' ', '\t', '\n', '\r', ',', ')', '('])
+    .next()
+    .unwrap_or_default()
+    .trim_matches('"')
+    .trim_matches('\'');
+
+  let snippet = snippet.chars().take(24).collect::<String>();
+  if snippet.is_empty() {
+    CssInputParseFailure {
+      location,
+      detail: None,
+    }
+  } else {
+    CssInputParseFailure {
+      location,
+      detail: Some(snippet),
+    }
+  }
 }
 
 pub(super) fn property_id_from_name(name: &str, normalize: fn(&str) -> Cow<'_, str>) -> PropertyId {

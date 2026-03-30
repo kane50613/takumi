@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use std::fmt::Display;
 
 use color::{AlphaColor, ColorSpaceTag, DynamicColor, HueDirection, Srgb, parse_color};
@@ -50,7 +51,7 @@ impl<'i> FromCss<'i> for ColorInterpolationMethod {
     let location = input.current_source_location();
     let token = input.next()?;
     let Token::Ident(color_space_ident) = token else {
-      return Err(Color::unexpected_token_error(location, token));
+      return Err(unexpected_token!(location, token));
     };
 
     let color_space = match_ignore_ascii_case! { &color_space_ident,
@@ -68,17 +69,17 @@ impl<'i> FromCss<'i> for ColorInterpolationMethod {
       "rec2020" => ColorSpaceTag::Rec2020,
       "xyz" | "xyz-d65" => ColorSpaceTag::XyzD65,
       "xyz-d50" => ColorSpaceTag::XyzD50,
-      _ => return Err(Color::unexpected_token_error(location, token)),
+      _ => return Err(unexpected_token!(location, token)),
     };
 
     let mut hue_direction = HueDirection::Shorter;
     let mut has_hue_direction = false;
 
-    if let Ok(direction) = input.try_parse(|input| {
+    if let Ok(direction) = input.try_parse(|input| -> ParseResult<'i, HueDirection> {
       let location = input.current_source_location();
       let token = input.next()?;
       let Token::Ident(ident) = token else {
-        return Err(Color::unexpected_token_error(location, token));
+        return Err(unexpected_token!(location, token));
       };
 
       let direction = match_ignore_ascii_case! { &ident,
@@ -86,7 +87,7 @@ impl<'i> FromCss<'i> for ColorInterpolationMethod {
         "longer" => HueDirection::Longer,
         "increasing" => HueDirection::Increasing,
         "decreasing" => HueDirection::Decreasing,
-        _ => return Err(Color::unexpected_token_error(location, token)),
+        _ => return Err(unexpected_token!(location, token)),
       };
 
       input.expect_ident_matching("hue")?;
@@ -618,7 +619,7 @@ impl<'i> FromCss<'i> for Color {
     match *token {
       Token::Hash(ref value) | Token::IDHash(ref value) => parse_hash_color(value.as_bytes())
         .map(|(r, g, b, a)| Color([r, g, b, (a * 255.0) as u8]))
-        .map_err(|_| Self::unexpected_token_error(location, token)),
+        .map_err(|_| unexpected_token!(location, token)),
       Token::Ident(ref ident) => {
         if ident.eq_ignore_ascii_case("transparent") {
           return Ok(Color::transparent());
@@ -626,7 +627,7 @@ impl<'i> FromCss<'i> for Color {
 
         parse_named_color(ident)
           .map(|(r, g, b)| Color([r, g, b, 255]))
-          .map_err(|_| Self::unexpected_token_error(location, token))
+          .map_err(|_| unexpected_token!(location, token))
       }
       Token::Function(_) => {
         // Have to clone to persist token, and allow input to be borrowed
@@ -656,10 +657,10 @@ impl<'i> FromCss<'i> for Color {
 
           parse_color(&function)
             .map(|color| Color(color.to_alpha_color::<Srgb>().to_rgba8().to_u8_array()))
-            .map_err(|_| Self::unexpected_token_error(location, &token))
+            .map_err(|_| unexpected_token!(location, &token))
         })
       }
-      _ => Err(Self::unexpected_token_error(location, token)),
+      _ => Err(unexpected_token!(location, token)),
     }
   }
   const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Color)];

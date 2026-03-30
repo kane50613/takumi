@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use bitflags::bitflags;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use typed_builder::TypedBuilder;
@@ -35,7 +36,7 @@ impl<'i> FromCss<'i> for TextDecorationLines {
       "underline" => lines |= TextDecorationLines::UNDERLINE,
       "line-through" => lines |= TextDecorationLines::LINE_THROUGH,
       "overline" => lines |= TextDecorationLines::OVERLINE,
-      _ => return Err(Self::unexpected_token_error(first_location, &Token::Ident(first_ident.clone()))),
+      _ => return Err(unexpected_token!(first_location, &Token::Ident(first_ident.clone()))),
     }
 
     // Parse additional decorations if present
@@ -220,7 +221,7 @@ impl<'i> FromCss<'i> for TextDecoration {
         break;
       }
 
-      return Err(Self::unexpected_token_error(
+      return Err(unexpected_token!(
         input.current_source_location(),
         input.next()?,
       ));

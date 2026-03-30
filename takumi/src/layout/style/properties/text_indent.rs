@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::{
@@ -93,9 +94,9 @@ impl<'i> FromCss<'i> for TextIndent {
         Token::Ident(keyword) => match_ignore_ascii_case! {keyword.as_ref(),
           "each-line" if !each_line => each_line = true,
           "hanging" if !hanging => hanging = true,
-          _ => return Err(Self::unexpected_token_error(location, &Token::Ident(keyword.clone()))),
+          _ => return Err(unexpected_token!(location, &Token::Ident(keyword.clone()))),
         },
-        token => return Err(Self::unexpected_token_error(location, token)),
+        token => return Err(unexpected_token!(location, token)),
       }
     }
 

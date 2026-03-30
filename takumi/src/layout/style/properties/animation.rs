@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use std::{borrow::Cow, vec::Vec};
 
 use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case};
@@ -33,10 +34,10 @@ impl<'i> FromCss<'i> for AnimationTime {
       Token::Dimension { value, unit, .. } => match_ignore_ascii_case! {unit.as_ref(),
         "ms" => Ok(Self::from_milliseconds(*value)),
         "s" => Ok(Self::from_milliseconds(*value * 1000.0)),
-        _ => Err(Self::unexpected_token_error(location, token)),
+        _ => Err(unexpected_token!(location, token)),
       },
       Token::Number { value, .. } if *value == 0.0 => Ok(Self::from_milliseconds(0.0)),
-      _ => Err(Self::unexpected_token_error(location, token)),
+      _ => Err(unexpected_token!(location, token)),
     }
   }
 
@@ -497,9 +498,7 @@ fn parse_timing_keyword<'i>(
   let location = input.current_source_location();
   let token = input.next()?;
   let Token::Ident(ident) = token else {
-    return Err(AnimationTimingFunction::unexpected_token_error(
-      location, token,
-    ));
+    return Err(unexpected_token!(AnimationTimingFunction, location, token));
   };
 
   match_ignore_ascii_case! {ident,
@@ -510,7 +509,7 @@ fn parse_timing_keyword<'i>(
     "ease-in-out" => Ok(AnimationTimingFunction::EaseInOut),
     "step-start" => Ok(AnimationTimingFunction::StepStart),
     "step-end" => Ok(AnimationTimingFunction::StepEnd),
-    _ => Err(AnimationTimingFunction::unexpected_token_error(location, token)),
+    _ => Err(unexpected_token!(AnimationTimingFunction, location, token)),
   }
 }
 
@@ -518,15 +517,13 @@ fn parse_step_position<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, StepPo
   let location = input.current_source_location();
   let token = input.next()?;
   let Token::Ident(ident) = token else {
-    return Err(AnimationTimingFunction::unexpected_token_error(
-      location, token,
-    ));
+    return Err(unexpected_token!(AnimationTimingFunction, location, token));
   };
 
   match_ignore_ascii_case! {ident,
     "start" => Ok(StepPosition::Start),
     "end" => Ok(StepPosition::End),
-    _ => Err(AnimationTimingFunction::unexpected_token_error(location, token)),
+    _ => Err(unexpected_token!(AnimationTimingFunction, location, token)),
   }
 }
 
@@ -550,7 +547,7 @@ fn expect_number<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, f32> {
   let location = input.current_source_location();
   let token = input.next()?;
   let Token::Number { value, .. } = token else {
-    return Err(AnimationTime::unexpected_token_error(location, token));
+    return Err(unexpected_token!(AnimationTime, location, token));
   };
   Ok(*value)
 }

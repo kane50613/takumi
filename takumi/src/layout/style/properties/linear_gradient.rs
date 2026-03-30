@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use image::{GenericImageView, Rgba};
 use std::ops::{Deref, Neg};
@@ -341,7 +342,7 @@ impl<'i> FromCss<'i> for StopPosition {
     }
 
     let Ok(length) = input.try_parse(Length::from_css) else {
-      return Err(Self::unexpected_token_error(
+      return Err(unexpected_token!(
         input.current_source_location(),
         input.next()?,
       ));
@@ -511,7 +512,7 @@ impl<'i> FromCss<'i> for LinearGradient {
     let repeating = match_ignore_ascii_case! { &name,
       "linear-gradient" => false,
       "repeating-linear-gradient" => true,
-      _ => return Err(Self::unexpected_token_error(location, &Token::Function(name.clone()))),
+      _ => return Err(unexpected_token!(location, &Token::Function(name.clone()))),
     };
 
     input.parse_nested_block(|input| {
@@ -609,9 +610,9 @@ impl<'i> FromCss<'i> for Angle {
         "grad" => Ok(Angle::new(*value / 400.0 * 360.0)),
         "turn" => Ok(Angle::new(*value * 360.0)),
         "rad" => Ok(Angle::new(value.to_degrees())),
-        _ => Err(Self::unexpected_token_error(location, token)),
+        _ => Err(unexpected_token!(location, token)),
       },
-      _ => Err(Self::unexpected_token_error(location, token)),
+      _ => Err(unexpected_token!(location, token)),
     }
   }
 

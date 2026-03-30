@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token};
 use parley::{FontFeature, setting::Tag};
 
@@ -24,15 +25,14 @@ impl<'i> FromCss<'i> for FontFeatureSettings {
       let location = input.current_source_location();
       let tag_name = input.expect_string()?;
       if tag_name.len() != 4 || !tag_name.is_ascii() {
-        return Err(Self::unexpected_token_error(
+        return Err(unexpected_token!(
           location,
           &Token::QuotedString(tag_name.clone()),
         ));
       }
 
-      let tag = Tag::parse(tag_name).ok_or_else(|| {
-        Self::unexpected_token_error(location, &Token::QuotedString(tag_name.clone()))
-      })?;
+      let tag = Tag::parse(tag_name)
+        .ok_or_else(|| unexpected_token!(location, &Token::QuotedString(tag_name.clone())))?;
       let value = if input.is_exhausted() {
         1
       } else {
@@ -44,7 +44,7 @@ impl<'i> FromCss<'i> for FontFeatureSettings {
             value, int_value, ..
           } => int_value.map(|v| v as u16).unwrap_or(*value as u16),
           token => {
-            return Err(Self::unexpected_token_error(location, token));
+            return Err(unexpected_token!(location, token));
           }
         }
       };

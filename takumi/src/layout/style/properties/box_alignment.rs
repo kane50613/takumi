@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::Parser;
 
 use crate::layout::style::{AlignItems, CssToken, FromCss, JustifyContent, ParseResult};
@@ -65,7 +66,8 @@ where
   };
 
   if !input.is_exhausted() {
-    return Err(T::unexpected_token_error(
+    return Err(unexpected_token!(
+      T,
       input.current_source_location(),
       input.next()?,
     ));

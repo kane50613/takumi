@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use std::ops::{Deref, Neg};
 
 use cssparser::{Parser, Token};
@@ -68,7 +69,7 @@ impl<'i> FromCss<'i> for PercentageNumber {
     match token {
       Token::Number { value, .. } => Ok(PercentageNumber(value.max(0.0))),
       Token::Percentage { unit_value, .. } => Ok(PercentageNumber(unit_value.max(0.0))),
-      _ => Err(Self::unexpected_token_error(location, token)),
+      _ => Err(unexpected_token!(location, token)),
     }
   }
 

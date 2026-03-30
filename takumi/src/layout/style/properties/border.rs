@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::Parser;
 
 use crate::{
@@ -46,7 +47,7 @@ impl<'i> FromCss<'i> for Border {
         continue;
       }
 
-      return Err(Self::unexpected_token_error(
+      return Err(unexpected_token!(
         input.current_source_location(),
         input.next()?,
       ));

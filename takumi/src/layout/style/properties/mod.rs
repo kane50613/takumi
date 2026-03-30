@@ -105,13 +105,10 @@ pub use white_space::*;
 pub use word_break::*;
 pub use z_index::*;
 
-use cssparser::{
-  ParseError, ParseErrorKind, Parser, ParserInput, SourceLocation, ToCss, Token,
-  match_ignore_ascii_case,
-};
+use cssparser::{ParseError, Parser, ParserInput, match_ignore_ascii_case};
 use image::imageops::FilterType;
 use parley::Alignment;
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt::Write};
 
 use crate::{
   layout::style::tw::TailwindPropertyParser,
@@ -330,6 +327,38 @@ impl std::fmt::Display for CssToken {
   }
 }
 
+/// Defines reusable message templates for CSS parse errors.
+#[non_exhaustive]
+pub enum CssExpectedMessage {
+  /// Expects a value or the `none` keyword.
+  ValueOrNone,
+  /// Expects exactly one value.
+  OneValue,
+  /// Expects one or two values.
+  OneOrTwoValues,
+  /// Expects one to four values.
+  OneToFourValues,
+  /// Expects the border-radius shorthand grammar.
+  BorderRadius,
+}
+
+impl CssExpectedMessage {
+  #[cold]
+  pub(crate) fn build_message(&self, token: &str, valid_tokens: String) -> String {
+    let mut message = format!("Unexpected token: {token}, expected ");
+
+    match self {
+      Self::ValueOrNone => write!(message, "a value or 'none' for {valid_tokens}").ok(),
+      Self::OneValue => write!(message, "a single value for {valid_tokens}").ok(),
+      Self::OneOrTwoValues => write!(message, "1 or 2 values for {valid_tokens}").ok(),
+      Self::OneToFourValues => write!(message, "1 to 4 values for {valid_tokens}").ok(),
+      Self::BorderRadius => write!(message, "1 to 4 length values for width, optionally followed by '/' and 1 to 4 length values for height").ok(),
+    };
+
+    message
+  }
+}
+
 /// Trait for types that can be parsed from CSS.
 pub trait FromCss<'i> {
   /// Parses the type from a [`Parser`] instance.
@@ -351,42 +380,15 @@ pub trait FromCss<'i> {
   /// Returns the list of valid CSS tokens for this type.
   const VALID_TOKENS: &'static [CssToken];
 
-  /// Returns the list of valid CSS tokens for this type.
-  fn valid_tokens() -> &'static [CssToken] {
-    Self::VALID_TOKENS
-  }
-
-  /// Returns a message to be used in error messages.
-  fn expect_message() -> Cow<'static, str> {
-    Cow::Owned(format!(
-      "a value of {}",
-      merge_enum_values(Self::valid_tokens())
-    ))
-  }
-
-  /// Creates a parse error for an unexpected token.
-  fn unexpected_token_error(
-    location: SourceLocation,
-    token: &Token,
-  ) -> ParseError<'i, Cow<'i, str>> {
-    #[cfg(feature = "detailed_css_error")]
-    {
-      create_unexpected_token_error(location, token, Self::expect_message())
-    }
-    #[cfg(not(feature = "detailed_css_error"))]
-    {
-      create_unexpected_token_error(location, token)
-    }
-  }
+  /// Message template used when building parse errors for this type.
+  const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::OneValue;
 }
 
 impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
   // 'none' is intentionally omitted and applied in `expect_message`
   const VALID_TOKENS: &'static [CssToken] = T::VALID_TOKENS;
 
-  fn expect_message() -> Cow<'static, str> {
-    Cow::Owned(format!("{} or 'none'", T::expect_message()))
-  }
+  const EXPECT_MESSAGE: CssExpectedMessage = T::EXPECT_MESSAGE;
 
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
@@ -736,25 +738,28 @@ impl<T: Animatable + Copy> Animatable for Sides<T> {
   }
 }
 
-fn create_unexpected_token_error<'i>(
-  location: SourceLocation,
-  token: &Token,
-  #[cfg(feature = "detailed_css_error")] expect_message: Cow<'static, str>,
-) -> ParseError<'i, Cow<'i, str>> {
-  #[cfg(feature = "detailed_css_error")]
-  let message = format!(
-    "unexpected token: {}, {}.",
-    token.to_css_string(),
-    expect_message
-  );
-  #[cfg(not(feature = "detailed_css_error"))]
-  let message = format!("unexpected token: {}.", token.to_css_string());
+macro_rules! unexpected_token {
+  (@build $type:ty, $location:expr, $token:expr $(,)?) => {{
+    let location = $location;
+    let token = $token;
+    let token = cssparser::ToCss::to_css_string(token);
+    let message = <$type as $crate::layout::style::FromCss>::EXPECT_MESSAGE
+      .build_message(&token, $crate::layout::style::merge_enum_values(<$type as $crate::layout::style::FromCss>::VALID_TOKENS));
 
-  ParseError {
-    location,
-    kind: ParseErrorKind::Custom(Cow::Owned(message)),
-  }
+    cssparser::ParseError {
+      location,
+      kind: cssparser::ParseErrorKind::Custom(std::borrow::Cow::Owned(message)),
+    }
+  }};
+  ($type:ty, $location:expr, $token:expr $(,)?) => {
+    $crate::layout::style::unexpected_token!(@build $type, $location, $token)
+  };
+  ($location:expr, $token:expr $(,)?) => {
+    $crate::layout::style::unexpected_token!(@build Self, $location, $token)
+  };
 }
+
+pub(crate) use unexpected_token;
 
 /// Helper function to merge enum values into a human-readable format.
 /// - `["fill"]` → `"'fill'"`
@@ -806,14 +811,14 @@ macro_rules! declare_enum_from_css_impl {
         let token = input.next()?;
 
         let cssparser::Token::Ident(ident) = token else {
-          return Err(Self::unexpected_token_error(location, &token));
+          return Err($crate::layout::style::unexpected_token!(location, token));
         };
 
         cssparser::match_ignore_ascii_case! {&ident,
           $(
             $css_value => Ok($variant),
           )*
-          _ => Err(Self::unexpected_token_error(location, &token)),
+          _ => Err($crate::layout::style::unexpected_token!(location, token)),
         }
       }
     }
@@ -929,34 +934,6 @@ impl Animatable for BorderRadius {
   }
 }
 
-impl Animatable for Box<BorderRadius> {
-  fn interpolate(
-    &mut self,
-    from: &Self,
-    to: &Self,
-    progress: f32,
-    sizing: &Sizing,
-    current_color: Color,
-  ) {
-    let mut value = **from;
-    value.interpolate(&**from, to.as_ref(), progress, sizing, current_color);
-    **self = value;
-  }
-}
-
-impl<'i> FromCss<'i> for Box<BorderRadius> {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let value = BorderRadius::from_css(input)?;
-    Ok(Box::new(value))
-  }
-
-  fn expect_message() -> Cow<'static, str> {
-    BorderRadius::expect_message()
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = BorderRadius::VALID_TOKENS;
-}
-
 impl<'i> FromCss<'i> for BorderRadius {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let widths: Sides<LengthDefaultsToZero> = Sides::from_css(input)?;
@@ -975,10 +952,7 @@ impl<'i> FromCss<'i> for BorderRadius {
     ])))
   }
 
-  fn expect_message() -> Cow<'static, str> {
-    "1 to 4 length values for width, optionally followed by '/' and 1 to 4 length values for height"
-      .into()
-  }
+  const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::BorderRadius;
 
   const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Length)];
 }

@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use typed_builder::TypedBuilder;
 
@@ -38,7 +39,7 @@ impl<'i> FromCss<'i> for FontSynthesis {
         "style" => {
           style = FontSynthesic::Auto;
         },
-        _ => return Err(Self::unexpected_token_error(location, &Token::Ident(ident.to_owned()))),
+        _ => return Err(unexpected_token!(location, &Token::Ident(ident.to_owned()))),
       };
     }
 

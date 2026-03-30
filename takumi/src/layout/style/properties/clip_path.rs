@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use taffy::{AbsoluteAxis, Point, Rect, Size};
 
@@ -291,7 +292,7 @@ impl<'i> FromCss<'i> for FillRule {
     match_ignore_ascii_case! { &ident,
       "nonzero" => Ok(FillRule::NonZero),
       "evenodd" => Ok(FillRule::EvenOdd),
-      _ => Err(Self::unexpected_token_error(location, &Token::Ident(ident.clone()))),
+      _ => Err(unexpected_token!(location, &Token::Ident(ident.clone()))),
     }
   }
 
@@ -313,7 +314,7 @@ impl<'i> FromCss<'i> for ShapeRadius {
     match_ignore_ascii_case! { &ident,
       "closest-side" => Ok(ShapeRadius::ClosestSide),
       "farthest-side" => Ok(ShapeRadius::FarthestSide),
-      _ => Err(Self::unexpected_token_error(location, &Token::Ident(ident.clone()))),
+      _ => Err(unexpected_token!(location, &Token::Ident(ident.clone()))),
     }
   }
 
@@ -411,10 +412,10 @@ impl<'i> FromCss<'i> for BasicShape {
               path,
             }))
           }),
-          _ => Err(Self::unexpected_token_error(location, token)),
+          _ => Err(unexpected_token!(location, token)),
         }
       }
-      _ => Err(Self::unexpected_token_error(location, token)),
+      _ => Err(unexpected_token!(location, token)),
     }
   }
 

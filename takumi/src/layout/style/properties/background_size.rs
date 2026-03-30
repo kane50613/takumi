@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use taffy::Size;
 
@@ -74,7 +75,7 @@ impl<'i> FromCss<'i> for BackgroundSize {
       &ident,
       "cover" => Ok(BackgroundSize::Cover),
       "contain" => Ok(BackgroundSize::Contain),
-      _ => Err(Self::unexpected_token_error(location, &Token::Ident(ident.clone()))),
+      _ => Err(unexpected_token!(location, &Token::Ident(ident.clone()))),
     }
   }
 

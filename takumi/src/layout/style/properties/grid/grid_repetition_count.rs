@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token};
 
 use crate::layout::style::{CssSyntaxKind, CssToken, FromCss, ParseResult};
@@ -49,7 +50,7 @@ impl<'i> FromCss<'i> for GridRepetitionCount {
       if ident_str.eq_ignore_ascii_case("auto-fit") {
         return Ok(GridRepetitionCount::Keyword(GridRepetitionKeyword::AutoFit));
       }
-      return Err(Self::unexpected_token_error(location, &Token::Ident(ident)));
+      return Err(unexpected_token!(location, &Token::Ident(ident)));
     }
 
     let token = input.next()?;
@@ -72,7 +73,7 @@ impl<'i> FromCss<'i> for GridRepetitionCount {
         }
         Ok(GridRepetitionCount::Count(count as u16))
       }
-      _ => Err(Self::unexpected_token_error(location, token)),
+      _ => Err(unexpected_token!(location, token)),
     }
   }
 

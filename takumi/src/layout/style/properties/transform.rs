@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use std::ops::{Mul, MulAssign};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
@@ -440,7 +441,7 @@ impl<'i> FromCss<'i> for Transform {
       "matrix" => parser.parse_nested_block(|input| Ok(Transform::Matrix(
         Affine::from_css(input)?,
       ))),
-      _ => Err(Self::unexpected_token_error(location, token)),
+      _ => Err(unexpected_token!(location, token)),
     }
   }
 

@@ -1,13 +1,12 @@
 use cssparser::Parser;
-use std::borrow::Cow;
 use taffy::{Point, Size};
 
 use crate::{
-  layout::style::{
-    CssToken, FromCss, LengthDefaultsToZero, MakeComputed, Overflow, ParseResult, merge_enum_values,
-  },
+  layout::style::{CssToken, FromCss, LengthDefaultsToZero, MakeComputed, Overflow, ParseResult},
   rendering::Sizing,
 };
+
+use super::CssExpectedMessage;
 
 /// A pair of values for horizontal and vertical axes.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -34,12 +33,7 @@ impl<'i, T: Copy + FromCss<'i>> FromCss<'i> for SpacePair<T> {
     }
   }
 
-  fn expect_message() -> Cow<'static, str> {
-    Cow::Owned(format!(
-      "1 ~ 2 values of {}",
-      merge_enum_values(T::VALID_TOKENS)
-    ))
-  }
+  const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::OneOrTwoValues;
 
   const VALID_TOKENS: &'static [CssToken] = T::VALID_TOKENS;
 }

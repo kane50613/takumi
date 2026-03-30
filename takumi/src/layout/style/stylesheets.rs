@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use std::{borrow::Cow, collections::HashMap, marker::PhantomData, str::FromStr};
 
 use cssparser::{Parser, ParserInput, Token, match_ignore_ascii_case};
@@ -997,7 +998,7 @@ define_style! {
       target.push(StyleDeclaration::grid_row_end(value.row_end));
       target.push(StyleDeclaration::grid_column_end(value.column_end));
     },
-    border_radius: Box<BorderRadius> => [BorderTopLeftRadius, BorderTopRightRadius, BorderBottomRightRadius, BorderBottomLeftRadius] |value, target| {
+    border_radius: BorderRadius => [BorderTopLeftRadius, BorderTopRightRadius, BorderBottomRightRadius, BorderBottomLeftRadius] |value, target| {
       push_four_side_declarations!(
         target,
         value.0.0,
@@ -1136,7 +1137,7 @@ impl<'i> FromCss<'i> for CssWideKeyword {
       "initial" => Ok(Self::Initial),
       "inherit" => Ok(Self::Inherit),
       "unset" => Ok(Self::Unset),
-      _ => Err(Self::unexpected_token_error(location, &Token::Ident(ident))),
+      _ => Err(unexpected_token!(location, &Token::Ident(ident))),
     }
   }
 

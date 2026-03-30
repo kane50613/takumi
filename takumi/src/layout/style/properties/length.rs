@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use std::{cell::RefCell, ops::Neg};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
@@ -370,7 +371,8 @@ fn parse_calc_sum<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcValue> 
         (CalcValue::Number(lhs), CalcValue::Number(rhs)) => CalcValue::Number(lhs + rhs),
         (CalcValue::Formula(lhs), CalcValue::Formula(rhs)) => CalcValue::Formula(lhs.add(rhs)),
         _ => {
-          return Err(<Length as FromCss<'i>>::unexpected_token_error(
+          return Err(unexpected_token!(
+            Length,
             input.current_source_location(),
             &Token::Delim('+'),
           ));
@@ -385,7 +387,8 @@ fn parse_calc_sum<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcValue> 
         (CalcValue::Number(lhs), CalcValue::Number(rhs)) => CalcValue::Number(lhs - rhs),
         (CalcValue::Formula(lhs), CalcValue::Formula(rhs)) => CalcValue::Formula(lhs.sub(rhs)),
         _ => {
-          return Err(<Length as FromCss<'i>>::unexpected_token_error(
+          return Err(unexpected_token!(
+            Length,
             input.current_source_location(),
             &Token::Delim('-'),
           ));
@@ -426,7 +429,8 @@ fn parse_calc_product<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcVal
         (CalcValue::Number(lhs), CalcValue::Formula(rhs)) => CalcValue::Formula(rhs.scale(lhs)),
         (CalcValue::Number(lhs), CalcValue::Number(rhs)) => CalcValue::Number(lhs * rhs),
         _ => {
-          return Err(<Length as FromCss<'i>>::unexpected_token_error(
+          return Err(unexpected_token!(
+            Length,
             input.current_source_location(),
             &Token::Delim('*'),
           ));
@@ -439,7 +443,8 @@ fn parse_calc_product<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcVal
       let rhs = parse_calc_factor(input)?;
       value = match (value, rhs) {
         (_, CalcValue::Number(0.0)) => {
-          return Err(<Length as FromCss<'i>>::unexpected_token_error(
+          return Err(unexpected_token!(
+            Length,
             input.current_source_location(),
             &Token::Delim('/'),
           ));
@@ -449,7 +454,8 @@ fn parse_calc_product<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcVal
         }
         (CalcValue::Number(lhs), CalcValue::Number(rhs)) => CalcValue::Number(lhs / rhs),
         _ => {
-          return Err(<Length as FromCss<'i>>::unexpected_token_error(
+          return Err(unexpected_token!(
+            Length,
             input.current_source_location(),
             &Token::Delim('/'),
           ));
@@ -514,7 +520,7 @@ fn parse_calc_factor<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcValu
         "q" => Ok(CalcValue::Formula(CalcFormula::q(*value))),
         "pt" => Ok(CalcValue::Formula(CalcFormula::pt(*value))),
         "pc" => Ok(CalcValue::Formula(CalcFormula::pc(*value))),
-        _ => Err(<Length as FromCss<'i>>::unexpected_token_error(location, token)),
+        _ => Err(unexpected_token!(Length, location, token)),
       }
     }
     Token::Function(name) if name.eq_ignore_ascii_case("calc") => {
@@ -526,11 +532,9 @@ fn parse_calc_factor<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcValu
       "infinity" => Ok(CalcValue::Number(f32::INFINITY)),
       "-infinity" => Ok(CalcValue::Number(f32::NEG_INFINITY)),
       "nan" => Ok(CalcValue::Number(f32::NAN)),
-      _ => Err(<Length as FromCss<'i>>::unexpected_token_error(location, token)),
+      _ => Err(unexpected_token!(Length, location, token)),
     },
-    _ => Err(<Length as FromCss<'i>>::unexpected_token_error(
-      location, token,
-    )),
+    _ => Err(unexpected_token!(Length, location, token)),
   }
 }
 
@@ -718,7 +722,7 @@ impl<'i, const DEFAULT_AUTO: bool> FromCss<'i> for Length<DEFAULT_AUTO> {
     match token {
       Token::Ident(unit) => match_ignore_ascii_case! {unit.as_ref(),
         "auto" => Ok(Self::Auto),
-        _ => Err(Self::unexpected_token_error(location, token)),
+        _ => Err(unexpected_token!(location, token)),
       },
       Token::Function(function) if function.eq_ignore_ascii_case("calc") => {
         match input.parse_nested_block(parse_calc_sum)? {
@@ -755,12 +759,12 @@ impl<'i, const DEFAULT_AUTO: bool> FromCss<'i> for Length<DEFAULT_AUTO> {
           "q" => Ok(Self::Q(*value)),
           "pt" => Ok(Self::Pt(*value)),
           "pc" => Ok(Self::Pc(*value)),
-          _ => Err(Self::unexpected_token_error(location, token)),
+          _ => Err(unexpected_token!(location, token)),
         }
       }
       Token::Percentage { unit_value, .. } => Ok(Self::Percentage(*unit_value * 100.0)),
       Token::Number { value, .. } => Ok(Self::Px(*value)),
-      _ => Err(Self::unexpected_token_error(location, token)),
+      _ => Err(unexpected_token!(location, token)),
     }
   }
 

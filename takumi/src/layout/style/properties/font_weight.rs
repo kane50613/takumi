@@ -1,3 +1,4 @@
+use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use parley::style::FontWeight as ParleyFontWeight;
 
@@ -36,9 +37,9 @@ impl<'i> FromCss<'i> for FontWeight {
       Token::Ident(ident) => match_ignore_ascii_case! { ident,
         "normal" => Ok(400.0.into()),
         "bold" => Ok(700.0.into()),
-        _ => Err(Self::unexpected_token_error(location, token)),
+        _ => Err(unexpected_token!(location, token)),
       },
-      _ => Err(Self::unexpected_token_error(location, token)),
+      _ => Err(unexpected_token!(location, token)),
     }
   }
 
