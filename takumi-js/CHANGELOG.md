@@ -1,5 +1,14 @@
 # takumi-js
 
+## 1.0.0-rc.8
+
+### Patch Changes
+
+- ddb8245: Fix edge runtime check
+  - @takumi-rs/core@1.0.0-rc.8
+  - @takumi-rs/wasm@1.0.0-rc.8
+  - @takumi-rs/helpers@1.0.0-rc.8
+
 ## 1.0.0-rc.7
 
 ### Patch Changes
