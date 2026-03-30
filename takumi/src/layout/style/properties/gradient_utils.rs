@@ -1,4 +1,4 @@
-use color::{AlphaColor, ColorSpaceTag, DynamicColor, HueDirection, Srgb};
+use color::{AlphaColor, ColorSpaceTag, DynamicColor, HueDirection, Rgba8, Srgb};
 use image::{Rgba, RgbaImage};
 use smallvec::SmallVec;
 use taffy::Point;
@@ -42,6 +42,10 @@ pub(crate) fn interpolate_with_color_space(
   color_space: ColorSpaceTag,
   hue_direction: HueDirection,
 ) -> Color {
+  if c1 == c2 {
+    return c1;
+  }
+
   if color_space == ColorSpaceTag::Srgb && hue_direction == HueDirection::Shorter {
     return interpolate_rgba(c1, c2, t);
   }
@@ -55,9 +59,9 @@ pub(crate) fn interpolate_with_color_space(
   }
 
   let dynamic_1 =
-    DynamicColor::from_alpha_color(AlphaColor::<Srgb>::from(color::Rgba8::from_u8_array(c1.0)));
+    DynamicColor::from_alpha_color(AlphaColor::<Srgb>::from(Rgba8::from_u8_array(c1.0)));
   let dynamic_2 =
-    DynamicColor::from_alpha_color(AlphaColor::<Srgb>::from(color::Rgba8::from_u8_array(c2.0)));
+    DynamicColor::from_alpha_color(AlphaColor::<Srgb>::from(Rgba8::from_u8_array(c2.0)));
 
   let mixed = dynamic_1
     .interpolate(dynamic_2, color_space, hue_direction)
@@ -224,6 +228,16 @@ fn snap_stop_samples(
   }
 }
 
+#[inline(always)]
+fn interpolation_position(left_position: f32, right_position: f32, sample_position: f32) -> f32 {
+  let denominator = right_position - left_position;
+  if denominator.abs() < f32::EPSILON {
+    return 0.0;
+  }
+
+  ((sample_position - left_position) / denominator).clamp(0.0, 1.0)
+}
+
 /// Builds a pre-computed high-precision color lookup table for a gradient.
 /// This allows O(1) color sampling instead of O(n) search + interpolation per pixel.
 pub(crate) fn build_color_lut_with_interpolation(
@@ -269,17 +283,15 @@ pub(crate) fn build_color_lut_with_interpolation(
     } else {
       let left_stop = &resolved_stops[left_index];
       let right_stop = &resolved_stops[right_index];
-      let denominator = right_stop.position - left_stop.position;
-      let interpolation_position = if denominator.abs() < f32::EPSILON {
-        0.0
-      } else {
-        ((position_px - left_stop.position) / denominator).clamp(0.0, 1.0)
-      };
+      if left_stop.color == right_stop.color {
+        return left_stop.color.into();
+      }
 
+      let t = interpolation_position(left_stop.position, right_stop.position, position_px);
       interpolate_with_color_space(
         left_stop.color,
         right_stop.color,
-        interpolation_position,
+        t,
         color_space,
         hue_direction,
       )

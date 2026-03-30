@@ -162,7 +162,7 @@ impl<const DEFAULT_CURRENT_COLOR: bool> Animatable for ColorInput<DEFAULT_CURREN
           *lhs,
           *rhs,
           progress,
-          ColorSpaceTag::Srgb,
+          ColorSpaceTag::Oklab,
           HueDirection::Shorter,
         ))
       }
@@ -171,7 +171,7 @@ impl<const DEFAULT_CURRENT_COLOR: bool> Animatable for ColorInput<DEFAULT_CURREN
         from.resolve(current_color),
         to.resolve(current_color),
         progress,
-        ColorSpaceTag::Srgb,
+        ColorSpaceTag::Oklab,
         HueDirection::Shorter,
       )),
     };
