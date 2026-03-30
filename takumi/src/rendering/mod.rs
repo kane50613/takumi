@@ -10,6 +10,7 @@ mod dithering;
 /// Image drawing functions
 mod image_drawing;
 pub(crate) mod inline_drawing;
+mod path;
 /// Main image renderer and viewport management
 mod render;
 mod stacking_context;
@@ -29,6 +30,7 @@ pub(crate) use components::*;
 pub(crate) use debug_drawing::*;
 pub use dithering::*;
 pub(crate) use image_drawing::*;
+pub(crate) use path::*;
 pub use render::*;
 pub(crate) use text_drawing::*;
 pub use write::*;

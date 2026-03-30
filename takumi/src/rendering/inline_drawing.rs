@@ -4,7 +4,6 @@ use image::{GenericImageView, Rgba};
 use parley::{GlyphRun, PositionedInlineBox, PositionedLayoutItem};
 use skrifa::{FontRef, MetadataProvider};
 use taffy::{Layout, Point};
-use zeno::{Command, PathBuilder, Stroke};
 
 use crate::{
   Result,
@@ -17,9 +16,10 @@ use crate::{
     tree::LayoutTree,
   },
   rendering::{
-    BackgroundTile, BorderProperties, Canvas, ColorTile, RenderContext, collect_background_layers,
-    draw_decoration, draw_glyph, draw_glyph_clip_image, draw_glyph_text_shadow,
-    mask_index_from_coord, overlay_area, rasterize_layers, render::render_node,
+    BackgroundTile, BorderProperties, Canvas, ColorTile, Command, PathBuilder, RenderContext,
+    Stroke, collect_background_layers, draw_decoration, draw_glyph, draw_glyph_clip_image,
+    draw_glyph_text_shadow, mask_index_from_coord, overlay_area, rasterize_layers,
+    render::render_node, render_mask,
   },
   resources::font::{FontError, ResolvedGlyph},
 };
@@ -80,10 +80,7 @@ fn build_glyph_bounds_cache(
           .collect(),
       },
       ResolvedGlyph::Outline(outline) => {
-        let (mask, placement) =
-          canvas
-            .mask_memory
-            .render(outline.paths(), None, None, &mut canvas.buffer_pool);
+        let (mask, placement) = render_mask(outline.paths(), None, None, &mut canvas.buffer_pool);
 
         if placement.width == 0 || placement.height == 0 {
           continue;
@@ -499,7 +496,7 @@ fn draw_outline_island(
   }
 
   let stroke = Stroke::new(width);
-  let (mask, placement) = canvas.mask_memory.render(
+  let (mask, placement) = render_mask(
     &path,
     Some(transform),
     Some(stroke.into()),
@@ -849,7 +846,6 @@ pub(crate) fn draw_inline_layout(
       context,
       BorderProperties::default(),
       Affine::IDENTITY,
-      &mut canvas.mask_memory,
       &mut canvas.buffer_pool,
     )?
   } else {

@@ -4,7 +4,6 @@ use image::{GenericImageView, Rgba, RgbaImage};
 use parley::{GlyphRun, layout::BreakReason};
 use skrifa::color::ColorPalette;
 use taffy::{Layout, Point, Size};
-use zeno::{Command, Stroke};
 
 use crate::{
   Result,
@@ -16,9 +15,9 @@ use crate::{
     },
   },
   rendering::{
-    BorderProperties, BufferPool, Canvas, CanvasConstrain, ColorTile, MaskMemory,
+    BorderProperties, BufferPool, Canvas, CanvasConstrain, ColorTile, Command, Stroke,
     apply_mask_alpha_to_pixel, blend_pixel, draw_mask, mask_index_from_coord, overlay_area,
-    sample_transformed_pixel,
+    render_mask, sample_transformed_pixel,
   },
   resources::font::{ResolvedColorLayer, ResolvedGlyph},
 };
@@ -140,7 +139,7 @@ pub(crate) fn draw_glyph_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
         return Ok(());
       };
 
-      let (mask, placement) = canvas.mask_memory.render(
+      let (mask, placement) = render_mask(
         outline.paths(),
         Some(transform),
         None,
@@ -243,7 +242,6 @@ pub(crate) fn draw_glyph(
       {
         draw_color_outline_image(
           &mut canvas.image,
-          &mut canvas.mask_memory,
           &mut canvas.buffer_pool,
           color_layers,
           palette,
@@ -252,7 +250,7 @@ pub(crate) fn draw_glyph(
           &canvas.constrains,
         );
       } else {
-        let (mask, placement) = canvas.mask_memory.render(
+        let (mask, placement) = render_mask(
           outline.paths(),
           Some(transform),
           None,
@@ -301,7 +299,7 @@ fn draw_text_stroke_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
   let mut stroke = Stroke::new(style.stroke_width);
   stroke.join = style.parent.stroke_linejoin.into();
 
-  let (stroke_mask, stroke_placement) = canvas.mask_memory.render(
+  let (stroke_mask, stroke_placement) = render_mask(
     paths,
     Some(transform),
     Some(stroke.into()),
@@ -377,7 +375,7 @@ fn draw_text_embolden_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
   let mut stroke = Stroke::new(embolden * 2.0);
   stroke.join = style.parent.stroke_linejoin.into();
 
-  let (stroke_mask, stroke_placement) = canvas.mask_memory.render(
+  let (stroke_mask, stroke_placement) = render_mask(
     paths,
     Some(transform),
     Some(stroke.into()),
@@ -440,7 +438,7 @@ fn draw_text_stroke(
   let mut stroke = Stroke::new(style.stroke_width);
   stroke.join = style.parent.stroke_linejoin.into();
 
-  let (stroke_mask, stroke_placement) = canvas.mask_memory.render(
+  let (stroke_mask, stroke_placement) = render_mask(
     paths,
     Some(transform),
     Some(stroke.into()),
@@ -474,7 +472,7 @@ fn draw_text_embolden(
   let mut stroke = Stroke::new(embolden * 2.0);
   stroke.join = style.parent.stroke_linejoin.into();
 
-  let (stroke_mask, stroke_placement) = canvas.mask_memory.render(
+  let (stroke_mask, stroke_placement) = render_mask(
     paths,
     Some(transform),
     Some(stroke.into()),
@@ -529,7 +527,6 @@ pub(crate) fn draw_glyph_text_shadow(
 #[allow(clippy::too_many_arguments)]
 fn draw_color_outline_image(
   canvas: &mut RgbaImage,
-  mask_memory: &mut MaskMemory,
   buffer_pool: &mut BufferPool,
   color_layers: &[ResolvedColorLayer],
   palette: &ColorPalette,
@@ -563,7 +560,7 @@ fn draw_color_outline_image(
       Color([record.red(), record.green(), record.blue(), alpha])
     };
 
-    let (mask, placement) = mask_memory.render(&layer.paths, Some(transform), None, buffer_pool);
+    let (mask, placement) = render_mask(&layer.paths, Some(transform), None, buffer_pool);
 
     draw_mask(
       canvas,

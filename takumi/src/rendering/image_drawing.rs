@@ -310,7 +310,6 @@ pub fn draw_image(
       algo,
       BlendMode::Normal,
       &canvas.constrains,
-      &mut canvas.mask_memory,
       &mut canvas.buffer_pool,
     ),
   }

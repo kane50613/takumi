@@ -2184,12 +2184,13 @@ dependencies = [
  "serde_json",
  "skrifa",
  "smallvec",
+ "svgtypes",
  "taffy",
  "thiserror",
+ "tiny-skia",
  "typed-builder",
  "wuff",
  "xxhash-rust",
- "zeno",
 ]
 
 [[package]]
@@ -2701,15 +2702,6 @@ dependencies = [
  "quote",
  "syn",
  "synstructure",
-]
-
-[[package]]
-name = "zeno"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6df3dc4292935e51816d896edcd52aa30bc297907c26167fec31e2b0c6a32524"
-dependencies = [
- "libm",
 ]
 
 [[package]]

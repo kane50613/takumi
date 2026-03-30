@@ -2,13 +2,12 @@ use std::f32::consts::SQRT_2;
 
 use image::{GenericImageView, Rgba};
 use taffy::{Point, Rect, Size};
-use zeno::{Command, Fill, PathBuilder};
 
 use crate::{
   layout::style::{Affine, BlendMode, BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair},
   rendering::{
-    Canvas, RenderContext, apply_mask_alpha_to_pixel, blend_pixel, mask_index_from_coord,
-    overlay_area, sample_transformed_pixel,
+    Canvas, Command, Fill, PathBuilder, RenderContext, apply_mask_alpha_to_pixel, blend_pixel,
+    mask_index_from_coord, overlay_area, render_mask, sample_transformed_pixel,
   },
 };
 
@@ -297,7 +296,7 @@ impl BorderProperties {
       },
     );
 
-    let (mask, placement) = canvas.mask_memory.render(
+    let (mask, placement) = render_mask(
       &paths,
       Some(transform),
       Some(Fill::EvenOdd.into()),
@@ -349,5 +348,7 @@ impl BorderProperties {
         pixel
       },
     );
+
+    canvas.buffer_pool.release(mask);
   }
 }

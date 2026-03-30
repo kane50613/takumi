@@ -8,8 +8,8 @@ use crate::{
   Result,
   layout::{node::resolve_image, style::*},
   rendering::{
-    BorderProperties, BufferPool, MaskMemory, RenderContext, Sizing, interpolate_bilinear,
-    interpolate_nearest, overlay_gradient_tile, overlay_image,
+    BorderProperties, BufferPool, RenderContext, Sizing, interpolate_bilinear, interpolate_nearest,
+    overlay_gradient_tile, overlay_image,
   },
   resources::image::ImageSource,
 };
@@ -66,7 +66,6 @@ pub(crate) fn rasterize_layers(
   context: &RenderContext,
   border: BorderProperties,
   transform: Affine,
-  mask_memory: &mut MaskMemory,
   buffer_pool: &mut BufferPool,
 ) -> Result<Option<BackgroundTile>> {
   if layers.is_empty() {
@@ -124,7 +123,6 @@ pub(crate) fn rasterize_layers(
           context.style.image_rendering,
           layer.blend_mode,
           &[],
-          mask_memory,
           buffer_pool,
         );
       }
@@ -599,7 +597,6 @@ pub(crate) fn resolve_tile_layers(
 pub(crate) fn create_mask(
   context: &RenderContext,
   border_box: Size<f32>,
-  mask_memory: &mut MaskMemory,
   buffer_pool: &mut BufferPool,
 ) -> Result<Option<Vec<u8>>> {
   let mask_image = context.style.mask_image.as_deref().unwrap_or(&[]);
@@ -629,7 +626,6 @@ pub(crate) fn create_mask(
       context,
       BorderProperties::default(),
       Affine::IDENTITY,
-      mask_memory,
       buffer_pool,
     )?
     .map(|tile| {

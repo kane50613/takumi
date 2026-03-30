@@ -1,13 +1,12 @@
 use image::RgbaImage;
 use taffy::{Layout, Point, Size};
-use zeno::{Command, Fill, Placement};
 
 use crate::{
   Result,
   layout::style::{Affine, BlendMode, BoxShadow, Color, ImageScalingAlgorithm, Sides, TextShadow},
   rendering::{
-    BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, MaskMemory, Sizing, apply_blur,
-    draw_mask, overlay_image,
+    BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Command, Fill, Placement, Sizing,
+    Style, apply_blur, draw_mask, overlay_image, render_mask,
   },
 };
 
@@ -67,13 +66,11 @@ impl SizedShadow {
     canvas: &mut Canvas,
     paths: &[Command],
     transform: Affine,
-    style: zeno::Style,
+    style: Style,
     cutout_paths: Option<&[Command]>,
   ) -> Result<()> {
     let (mask, mut placement) =
-      canvas
-        .mask_memory
-        .render(paths, Some(transform), Some(style), &mut canvas.buffer_pool);
+      render_mask(paths, Some(transform), Some(style), &mut canvas.buffer_pool);
 
     placement.left += self.offset_x as i32;
     placement.top += self.offset_y as i32;
@@ -128,7 +125,7 @@ impl SizedShadow {
     let img_origin_y = placement.top as f32 - blur_padding;
 
     if let Some(cutout_paths) = cutout_paths {
-      let (erase_mask, erase_placement) = canvas.mask_memory.render(
+      let (erase_mask, erase_placement) = render_mask(
         cutout_paths,
         Some(transform),
         Some(Fill::NonZero.into()),
@@ -171,7 +168,6 @@ impl SizedShadow {
       ImageScalingAlgorithm::Auto,
       BlendMode::Normal,
       &canvas.constrains,
-      &mut canvas.mask_memory,
       &mut canvas.buffer_pool,
     );
 
@@ -186,13 +182,7 @@ impl SizedShadow {
     canvas: &mut Canvas,
     layout: Layout,
   ) -> Result<()> {
-    let image = draw_inset_shadow(
-      self,
-      border_radius,
-      layout.size,
-      &mut canvas.mask_memory,
-      &mut canvas.buffer_pool,
-    )?;
+    let image = draw_inset_shadow(self, border_radius, layout.size, &mut canvas.buffer_pool)?;
 
     canvas.overlay_image(
       &image,
@@ -211,7 +201,6 @@ pub(crate) fn draw_inset_shadow(
   shadow: &SizedShadow,
   mut border: BorderProperties,
   border_box: Size<f32>,
-  mask_memory: &mut MaskMemory,
   buffer_pool: &mut BufferPool,
 ) -> Result<RgbaImage> {
   let mut shadow_image =
@@ -246,7 +235,7 @@ pub(crate) fn draw_inset_shadow(
       },
   );
 
-  let (mask, placement) = mask_memory.render(&paths, None, Some(Fill::NonZero.into()), buffer_pool);
+  let (mask, placement) = render_mask(&paths, None, Some(Fill::NonZero.into()), buffer_pool);
 
   if !mask.is_empty() {
     let img_w = shadow_image.width() as i32;

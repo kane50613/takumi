@@ -1,13 +1,15 @@
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use taffy::{AbsoluteAxis, Point, Rect, Size};
-use zeno::{Fill, PathBuilder, PathData, Placement};
 
 use crate::{
   layout::style::{
     Axis, BorderStyle, Color, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
     ImageScalingAlgorithm, Length, MakeComputed, ParseResult, Sides, SpacePair,
   },
-  rendering::{BorderProperties, BufferPool, MaskMemory, RenderContext, Sizing},
+  rendering::{
+    BorderProperties, BufferPool, Fill, PathBuilder, PathData, Placement, RenderContext, Sizing,
+    render_mask,
+  },
 };
 
 /// Represents the fill rule used for determining the interior of shapes.
@@ -187,7 +189,6 @@ impl BasicShape {
     &self,
     context: &RenderContext,
     size: Size<f32>,
-    mask_memory: &mut MaskMemory,
     buffer_pool: &mut BufferPool,
   ) -> (Vec<u8>, Placement) {
     let mut paths = Vec::new();
@@ -273,7 +274,7 @@ impl BasicShape {
       }
     }
 
-    mask_memory.render(
+    render_mask(
       &paths,
       Some(context.transform),
       Some(Fill::from(self.fill_rule().unwrap_or(context.style.clip_rule)).into()),

@@ -1,0 +1,229 @@
+use svgtypes::{SimplePathSegment, SimplifyingPathParser};
+use tiny_skia::{
+  FillRule as TinyFillRule, LineJoin as TinyLineJoin, Path as TinyPath,
+  PathBuilder as TinyPathBuilder, PathSegment as TinyPathSegment, Point as TinyPoint,
+  Rect as TinyRect, Stroke as TinyStroke,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub(crate) enum Fill {
+  #[default]
+  NonZero,
+  EvenOdd,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub(crate) enum Join {
+  #[default]
+  Miter,
+  Round,
+  Bevel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Stroke {
+  pub(crate) width: f32,
+  pub(crate) join: Join,
+}
+
+impl Stroke {
+  pub(crate) fn new(width: f32) -> Self {
+    Self {
+      width,
+      join: Join::Miter,
+    }
+  }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub(crate) enum Style {
+  #[default]
+  FillNonZero,
+  FillEvenOdd,
+  Stroke(Stroke),
+}
+
+impl From<Fill> for Style {
+  fn from(fill: Fill) -> Self {
+    match fill {
+      Fill::NonZero => Self::FillNonZero,
+      Fill::EvenOdd => Self::FillEvenOdd,
+    }
+  }
+}
+
+impl From<Stroke> for Style {
+  fn from(stroke: Stroke) -> Self {
+    Self::Stroke(stroke)
+  }
+}
+
+impl From<Fill> for TinyFillRule {
+  fn from(fill: Fill) -> Self {
+    match fill {
+      Fill::NonZero => TinyFillRule::Winding,
+      Fill::EvenOdd => TinyFillRule::EvenOdd,
+    }
+  }
+}
+
+impl From<Join> for TinyLineJoin {
+  fn from(join: Join) -> Self {
+    match join {
+      Join::Miter => TinyLineJoin::Miter,
+      Join::Round => TinyLineJoin::Round,
+      Join::Bevel => TinyLineJoin::Bevel,
+    }
+  }
+}
+
+impl From<Stroke> for TinyStroke {
+  fn from(stroke: Stroke) -> Self {
+    Self {
+      width: stroke.width,
+      line_join: stroke.join.into(),
+      ..TinyStroke::default()
+    }
+  }
+}
+
+impl Style {
+  pub(crate) fn fill_rule(self) -> TinyFillRule {
+    match self {
+      Style::FillEvenOdd => Fill::EvenOdd.into(),
+      Style::FillNonZero | Style::Stroke(_) => Fill::NonZero.into(),
+    }
+  }
+
+  pub(crate) fn stroke(self) -> Option<TinyStroke> {
+    match self {
+      Style::Stroke(stroke) => Some(stroke.into()),
+      _ => None,
+    }
+  }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub(crate) struct Placement {
+  pub(crate) left: i32,
+  pub(crate) top: i32,
+  pub(crate) width: u32,
+  pub(crate) height: u32,
+}
+
+pub(crate) type Command = TinyPathSegment;
+
+pub(crate) trait PathBuilder {
+  fn move_to(&mut self, point: (f32, f32));
+  fn line_to(&mut self, point: (f32, f32));
+  fn curve_to(&mut self, p1: (f32, f32), p2: (f32, f32), p3: (f32, f32));
+  fn close(&mut self);
+  fn add_ellipse(&mut self, center: (f32, f32), radius_x: f32, radius_y: f32);
+}
+
+impl PathBuilder for Vec<Command> {
+  fn move_to(&mut self, point: (f32, f32)) {
+    self.push(Command::MoveTo(TinyPoint::from_xy(point.0, point.1)));
+  }
+
+  fn line_to(&mut self, point: (f32, f32)) {
+    self.push(Command::LineTo(TinyPoint::from_xy(point.0, point.1)));
+  }
+
+  fn curve_to(&mut self, p1: (f32, f32), p2: (f32, f32), p3: (f32, f32)) {
+    self.push(Command::CubicTo(
+      TinyPoint::from_xy(p1.0, p1.1),
+      TinyPoint::from_xy(p2.0, p2.1),
+      TinyPoint::from_xy(p3.0, p3.1),
+    ));
+  }
+
+  fn close(&mut self) {
+    self.push(Command::Close);
+  }
+
+  fn add_ellipse(&mut self, center: (f32, f32), radius_x: f32, radius_y: f32) {
+    let Some(rect) = TinyRect::from_ltrb(
+      center.0 - radius_x,
+      center.1 - radius_y,
+      center.0 + radius_x,
+      center.1 + radius_y,
+    ) else {
+      return;
+    };
+
+    let mut builder = TinyPathBuilder::new();
+    builder.push_oval(rect);
+    if let Some(path) = builder.finish() {
+      self.extend(path.segments());
+    }
+  }
+}
+
+pub(crate) trait PathData {
+  fn commands(&self) -> Vec<Command>;
+}
+
+impl PathData for str {
+  fn commands(&self) -> Vec<Command> {
+    parse_svg_path_segments(self).unwrap_or_default()
+  }
+}
+
+pub(crate) fn build_path(commands: &[Command]) -> Option<TinyPath> {
+  let mut builder = TinyPathBuilder::new();
+
+  for command in commands {
+    match command {
+      Command::MoveTo(point) => builder.move_to(point.x, point.y),
+      Command::LineTo(point) => builder.line_to(point.x, point.y),
+      Command::QuadTo(p1, p2) => builder.quad_to(p1.x, p1.y, p2.x, p2.y),
+      Command::CubicTo(p1, p2, p3) => {
+        builder.cubic_to(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
+      }
+      Command::Close => builder.close(),
+    }
+  }
+
+  builder.finish()
+}
+
+fn parse_svg_path_segments(input: &str) -> Option<Vec<Command>> {
+  let mut commands = Vec::new();
+
+  for segment in SimplifyingPathParser::from(input) {
+    match segment.ok()? {
+      SimplePathSegment::MoveTo { x, y } => {
+        commands.push(Command::MoveTo(TinyPoint::from_xy(x as f32, y as f32)));
+      }
+      SimplePathSegment::LineTo { x, y } => {
+        commands.push(Command::LineTo(TinyPoint::from_xy(x as f32, y as f32)));
+      }
+      SimplePathSegment::CurveTo {
+        x1,
+        y1,
+        x2,
+        y2,
+        x,
+        y,
+      } => {
+        commands.push(Command::CubicTo(
+          TinyPoint::from_xy(x1 as f32, y1 as f32),
+          TinyPoint::from_xy(x2 as f32, y2 as f32),
+          TinyPoint::from_xy(x as f32, y as f32),
+        ));
+      }
+      SimplePathSegment::Quadratic { x1, y1, x, y } => {
+        commands.push(Command::QuadTo(
+          TinyPoint::from_xy(x1 as f32, y1 as f32),
+          TinyPoint::from_xy(x as f32, y as f32),
+        ));
+      }
+      SimplePathSegment::ClosePath => {
+        commands.push(Command::Close);
+      }
+    }
+  }
+
+  Some(commands)
+}

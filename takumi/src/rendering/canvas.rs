@@ -11,7 +11,7 @@ use image::{
 };
 use smallvec::SmallVec;
 use taffy::{Layout, Point, Size};
-use zeno::{Command, Mask, Placement, Scratch};
+use tiny_skia::{Mask as TinyMask, Transform as TinyTransform};
 
 use crate::{Result, layout::style::BlendMode};
 use crate::{
@@ -19,7 +19,10 @@ use crate::{
     Affine, Color, ComputedStyle, GradientOverlayTile, ImageScalingAlgorithm, Overflow,
     compute_overlay_bounds, overlay_gradient_tile_fast_normal_unconstrained,
   },
-  rendering::{BorderProperties, RenderContext, blend_pixel, create_mask, fast_div_255},
+  rendering::{
+    BorderProperties, Command, Placement, RenderContext, Style, blend_pixel, build_path,
+    create_mask, fast_div_255,
+  },
 };
 
 pub(crate) enum CanvasConstrainResult {
@@ -59,12 +62,11 @@ impl CanvasConstrain {
     style: &ComputedStyle,
     layout: Layout,
     transform: Affine,
-    mask_memory: &mut MaskMemory,
     buffer_pool: &mut BufferPool,
   ) -> Result<CanvasConstrainResult> {
     // Clip path would just clip everything, and behaves like overflow: hidden.
     if let Some(clip_path) = &style.clip_path {
-      let (mask, placement) = clip_path.render_mask(context, layout.size, mask_memory, buffer_pool);
+      let (mask, placement) = clip_path.render_mask(context, layout.size, buffer_pool);
 
       let end_x = placement.left + placement.width as i32;
       let end_y = placement.top + placement.height as i32;
@@ -84,7 +86,7 @@ impl CanvasConstrain {
       return Ok(CanvasConstrainResult::SkipRendering);
     };
 
-    if let Some(mask) = create_mask(context, layout.size, mask_memory, buffer_pool)? {
+    if let Some(mask) = create_mask(context, layout.size, buffer_pool)? {
       return Ok(CanvasConstrainResult::Some(CanvasConstrain::MaskImage {
         mask,
         from: Point { x: 0, y: 0 },
@@ -134,7 +136,7 @@ impl CanvasConstrain {
       };
       inner_props.append_mask_commands(&mut paths, padding_box, padding_origin);
 
-      let (mask_data, placement) = mask_memory.render(&paths, None, None, buffer_pool);
+      let (mask_data, placement) = render_mask(&paths, None, None, buffer_pool);
 
       if placement.width == 0 || placement.height == 0 {
         buffer_pool.release(mask_data);
@@ -276,39 +278,71 @@ impl CanvasConstrain {
   }
 }
 
-/// Memory for mask rasterization scratch space and output buffer.
-#[derive(Default)]
-pub(crate) struct MaskMemory {
-  scratch: Scratch,
-}
+pub(crate) fn render_mask(
+  paths: &[Command],
+  transform: Option<Affine>,
+  style: Option<Style>,
+  buffer_pool: &mut BufferPool,
+) -> (Vec<u8>, Placement) {
+  let style = style.unwrap_or_default();
+  let Some(mut path) = build_path(paths) else {
+    return (Vec::new(), Placement::default());
+  };
 
-impl MaskMemory {
-  pub(crate) fn render(
-    &mut self,
-    paths: &[Command],
-    transform: Option<Affine>,
-    style: Option<zeno::Style>,
-    buffer_pool: &mut BufferPool,
-  ) -> (Vec<u8>, Placement) {
-    let style = style.unwrap_or_default();
-    let mut bounds = self.scratch.bounds(paths, style, transform.map(Into::into));
-
-    bounds.min = bounds.min.floor();
-    bounds.max = bounds.max.ceil();
-
-    let expected_len = (bounds.width() as usize) * (bounds.height() as usize);
-    let mut buffer = buffer_pool.acquire(expected_len);
-
-    let placement = Mask::with_scratch(paths, &mut self.scratch)
-      .transform(transform.map(Into::into))
-      .style(style)
-      .render_into(&mut buffer, None);
-
-    assert_eq!(bounds.width() as u32, placement.width);
-    assert_eq!(bounds.height() as u32, placement.height);
-
-    (buffer, placement)
+  if let Some(stroke) = style.stroke() {
+    let Some(stroked_path) = path.stroke(&stroke, 1.0) else {
+      return (Vec::new(), Placement::default());
+    };
+    path = stroked_path;
   }
+
+  if let Some(transform) = transform {
+    let Some(transformed) = path.transform(transform.into()) else {
+      return (Vec::new(), Placement::default());
+    };
+    path = transformed;
+  }
+
+  let Some(bounds) = path.compute_tight_bounds() else {
+    return (Vec::new(), Placement::default());
+  };
+  let left = bounds.left().floor() as i32;
+  let top = bounds.top().floor() as i32;
+  let right = bounds.right().ceil() as i32;
+  let bottom = bounds.bottom().ceil() as i32;
+
+  if right <= left || bottom <= top {
+    return (Vec::new(), Placement::default());
+  }
+
+  let width = (right - left) as u32;
+  let height = (bottom - top) as u32;
+  let Some(mut mask) = TinyMask::new(width, height) else {
+    return (Vec::new(), Placement::default());
+  };
+  let Some(local_path) =
+    path.transform(TinyTransform::from_translate(-(left as f32), -(top as f32)))
+  else {
+    return (Vec::new(), Placement::default());
+  };
+  mask.fill_path(
+    &local_path,
+    style.fill_rule(),
+    true,
+    TinyTransform::identity(),
+  );
+
+  let mut buffer = buffer_pool.acquire(mask.data().len());
+  buffer.copy_from_slice(mask.data());
+  (
+    buffer,
+    Placement {
+      left,
+      top,
+      width,
+      height,
+    },
+  )
 }
 
 const BUCKET_COUNT: usize = 32;
@@ -465,9 +499,6 @@ impl BufferPool {
 pub(crate) struct Canvas {
   pub(crate) image: RgbaImage,
   pub(crate) constrains: SmallVec<[CanvasConstrain; 1]>,
-  // Since canvas is shared with mutable borrows everywhere already,
-  // we can just include the memory here instead of making the function argument bloated.
-  pub(crate) mask_memory: MaskMemory,
   pub(crate) buffer_pool: BufferPool,
 }
 
@@ -477,7 +508,6 @@ impl Canvas {
     Self {
       image: RgbaImage::new(size.width, size.height),
       constrains: SmallVec::new(),
-      mask_memory: MaskMemory::default(),
       buffer_pool: BufferPool::default(),
     }
   }
@@ -542,7 +572,6 @@ impl Canvas {
       algorithm,
       mode,
       &self.constrains,
-      &mut self.mask_memory,
       &mut self.buffer_pool,
     );
   }
@@ -746,7 +775,6 @@ pub(crate) fn overlay_image<I: GenericImageView<Pixel = Rgba<u8>>>(
   algorithm: ImageScalingAlgorithm,
   mode: BlendMode,
   constrains: &[CanvasConstrain],
-  mask_memory: &mut MaskMemory,
   buffer_pool: &mut BufferPool,
 ) {
   let (width, height) = image.dimensions();
@@ -765,7 +793,7 @@ pub(crate) fn overlay_image<I: GenericImageView<Pixel = Rgba<u8>>>(
 
   border.append_mask_commands(&mut paths, size.map(|size| size as f32), Point::ZERO);
 
-  let (mask, placement) = mask_memory.render(&paths, Some(transform), None, buffer_pool);
+  let (mask, placement) = render_mask(&paths, Some(transform), None, buffer_pool);
 
   let inverse = transform.invert();
   let is_identity = transform.is_identity() && placement.left >= 0 && placement.top >= 0;
@@ -854,7 +882,6 @@ pub(crate) fn overlay_sampled_image(
   algorithm: ImageScalingAlgorithm,
   mode: BlendMode,
   constrains: &[CanvasConstrain],
-  mask_memory: &mut MaskMemory,
   buffer_pool: &mut BufferPool,
 ) {
   let size = Size { width, height };
@@ -879,7 +906,7 @@ pub(crate) fn overlay_sampled_image(
 
   border.append_mask_commands(&mut paths, size.map(|size| size as f32), Point::ZERO);
 
-  let (mask, placement) = mask_memory.render(&paths, Some(transform), None, buffer_pool);
+  let (mask, placement) = render_mask(&paths, Some(transform), None, buffer_pool);
 
   let inverse = transform.invert();
   let is_identity = transform.is_identity() && placement.left >= 0 && placement.top >= 0;

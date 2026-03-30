@@ -7,7 +7,6 @@ use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use taffy::{AvailableSpace, Layout, Point, Size};
-use zeno::Fill;
 
 use crate::{
   Result, Xxh3HashSet,
@@ -18,7 +17,7 @@ use crate::{
     style::{Affine, BackgroundClip, BlendMode, Sides, Style, tw::TailwindValues},
   },
   rendering::{
-    BackgroundTile, BorderProperties, Canvas, RenderContext, SizedShadow,
+    BackgroundTile, BorderProperties, Canvas, Fill, RenderContext, SizedShadow,
     collect_background_layers, rasterize_layers,
   },
 };
@@ -404,7 +403,6 @@ impl Node {
           context,
           border_radius,
           Affine::translation(-layout.border.left, -layout.border.top),
-          &mut canvas.mask_memory,
           &mut canvas.buffer_pool,
         )? {
           canvas.overlay_image(
@@ -435,7 +433,6 @@ impl Node {
             -layout.padding.left - layout.border.left,
             -layout.padding.top - layout.border.top,
           ),
-          &mut canvas.mask_memory,
           &mut canvas.buffer_pool,
         )? {
           canvas.overlay_image(
@@ -487,7 +484,6 @@ impl Node {
         context,
         BorderProperties::default(),
         Affine::IDENTITY,
-        &mut canvas.mask_memory,
         &mut canvas.buffer_pool,
       )?
     } else {

@@ -112,10 +112,11 @@ use cssparser::{
 use image::imageops::FilterType;
 use parley::Alignment;
 use std::borrow::Cow;
-use zeno::Join;
 
-use crate::layout::style::tw::TailwindPropertyParser;
-use crate::rendering::Sizing;
+use crate::{
+  layout::style::tw::TailwindPropertyParser,
+  rendering::{Join, Sizing},
+};
 
 /// Parser result type alias for CSS property parsers.
 pub type ParseResult<'i, T> = Result<T, ParseError<'i, Cow<'i, str>>>;
