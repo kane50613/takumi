@@ -419,7 +419,6 @@ fn finish_node_render<'g>(
       ImageScalingAlgorithm::Auto,
       node.context.style.mix_blend_mode,
       &[],
-      &mut canvas.mask_memory,
       &mut canvas.buffer_pool,
     );
 
@@ -458,7 +457,6 @@ fn begin_node_render<'g>(
     &current.context.style,
     layout,
     node_paint.transform,
-    &mut canvas.mask_memory,
     &mut canvas.buffer_pool,
   )?;
   if matches!(constrain, CanvasConstrainResult::SkipRendering) {

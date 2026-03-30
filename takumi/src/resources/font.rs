@@ -25,10 +25,10 @@ use skrifa::{
   raw::types::{BoundingBox, F2Dot14},
 };
 use thiserror::Error;
-use zeno::{Angle as ZenoAngle, Command, Transform as ZenoTransform};
 
 use crate::{
   layout::inline::{InlineBrush, InlineLayout},
+  rendering::Command,
   resources::image_decoder::decode_png,
 };
 
@@ -113,24 +113,29 @@ impl GlyphOutlinePen {
 
 impl OutlinePen for GlyphOutlinePen {
   fn move_to(&mut self, x: f32, y: f32) {
-    self.paths.push(Command::MoveTo((x, -y).into()));
+    self
+      .paths
+      .push(Command::MoveTo(tiny_skia::Point::from_xy(x, -y)));
   }
 
   fn line_to(&mut self, x: f32, y: f32) {
-    self.paths.push(Command::LineTo((x, -y).into()));
+    self
+      .paths
+      .push(Command::LineTo(tiny_skia::Point::from_xy(x, -y)));
   }
 
   fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
-    self
-      .paths
-      .push(Command::QuadTo((cx0, -cy0).into(), (x, -y).into()));
+    self.paths.push(Command::QuadTo(
+      tiny_skia::Point::from_xy(cx0, -cy0),
+      tiny_skia::Point::from_xy(x, -y),
+    ));
   }
 
   fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-    self.paths.push(Command::CurveTo(
-      (cx0, -cy0).into(),
-      (cx1, -cy1).into(),
-      (x, -y).into(),
+    self.paths.push(Command::CubicTo(
+      tiny_skia::Point::from_xy(cx0, -cy0),
+      tiny_skia::Point::from_xy(cx1, -cy1),
+      tiny_skia::Point::from_xy(x, -y),
     ));
   }
 
@@ -166,7 +171,7 @@ struct GlyphResolveContext<'a, 'font> {
   font_size: f32,
   size: Size,
   location: LocationRef<'a>,
-  skew: Option<ZenoTransform>,
+  skew: Option<f32>,
   embolden: Option<f32>,
 }
 
@@ -205,8 +210,8 @@ impl<'a, 'font> GlyphResolveContext<'a, 'font> {
 
   fn resolve_plain_outline_glyph(&self, glyph_id: GlyphId) -> Option<ResolvedOutlineGlyph> {
     let mut paths = resolve_outline_commands(self.font_ref, glyph_id, self.size, self.location)?;
-    if let Some(skew_transform) = &self.skew {
-      transform_commands(&mut paths, skew_transform);
+    if let Some(skew_degrees) = self.skew {
+      transform_commands(&mut paths, skew_degrees);
     }
 
     Some(ResolvedOutlineGlyph::Plain {
@@ -284,9 +289,24 @@ fn resolve_outline_commands(
   Some(pen.finish())
 }
 
-fn transform_commands(paths: &mut [Command], transform: &ZenoTransform) {
+fn transform_commands(paths: &mut [Command], skew_degrees: f32) {
+  let skew_tangent = skew_degrees.to_radians().tan();
   for command in paths {
-    *command = command.transform(transform);
+    match command {
+      Command::MoveTo(point) | Command::LineTo(point) => {
+        point.x += point.y * skew_tangent;
+      }
+      Command::QuadTo(control, point) => {
+        control.x += control.y * skew_tangent;
+        point.x += point.y * skew_tangent;
+      }
+      Command::CubicTo(control1, control2, point) => {
+        control1.x += control1.y * skew_tangent;
+        control2.x += control2.y * skew_tangent;
+        point.x += point.y * skew_tangent;
+      }
+      Command::Close => {}
+    }
   }
 }
 
@@ -516,7 +536,7 @@ impl FontContext {
         .skew()
         .filter(|_| !has_emoji_cluster)
         .filter(|_| run.style().brush.font_synthesis.style.is_allowed())
-        .map(|degrees| ZenoTransform::skew(ZenoAngle::from_degrees(-degrees), ZenoAngle::ZERO)),
+        .map(|degrees| -degrees),
     };
 
     let mut result = HashMap::with_capacity(unique_glyph_ids.len());

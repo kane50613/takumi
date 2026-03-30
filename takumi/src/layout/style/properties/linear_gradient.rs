@@ -398,12 +398,6 @@ impl Animatable for Angle {
   }
 }
 
-impl From<Angle> for zeno::Angle {
-  fn from(angle: Angle) -> Self {
-    zeno::Angle::from_degrees(angle.0)
-  }
-}
-
 impl TailwindPropertyParser for Angle {
   fn parse_tw(token: &str) -> Option<Self> {
     match token.to_ascii_lowercase().as_str() {

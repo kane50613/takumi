@@ -321,18 +321,6 @@ impl Affine {
   }
 }
 
-impl From<Affine> for zeno::Transform {
-  fn from(affine: Affine) -> Self {
-    if affine.is_identity() {
-      zeno::Transform::IDENTITY
-    } else if affine.only_translation() {
-      zeno::Transform::translation(affine.x, affine.y)
-    } else {
-      zeno::Transform::new(affine.a, affine.b, affine.c, affine.d, affine.x, affine.y)
-    }
-  }
-}
-
 impl<'i> FromCss<'i> for Affine {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let a = input.expect_number()?;

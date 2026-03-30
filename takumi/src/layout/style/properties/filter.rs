@@ -12,7 +12,7 @@ use crate::{
   },
   rendering::{
     BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, RenderContext, SizedShadow, Sizing,
-    apply_blur, blend_pixel, fast_div_255,
+    apply_blur, blend_pixel, fast_div_255, render_mask,
   },
 };
 
@@ -429,13 +429,8 @@ pub(crate) fn apply_backdrop_filter(
   let mut paths = Vec::new();
   border.append_mask_commands(&mut paths, layout_size, Point::ZERO);
 
-  // Render the mask — this borrows mask_memory only for the duration of the
-  // composite loop below. apply_filters borrows buffer_pool separately, so
-  // there is no conflict and no clone is needed.
-  let (mask_data, placement) =
-    canvas
-      .mask_memory
-      .render(&paths, Some(transform), None, &mut canvas.buffer_pool);
+  // Render the mask for compositing.
+  let (mask_data, placement) = render_mask(&paths, Some(transform), None, &mut canvas.buffer_pool);
 
   if placement.width == 0 || placement.height == 0 {
     return Ok(());
@@ -483,7 +478,6 @@ pub(crate) fn apply_backdrop_filter(
   )?;
 
   // Composite the filtered backdrop back to the canvas, respecting the mask.
-  // mask_memory borrow (mask_data) ends here — canvas.image borrow begins.
   let mask_offset_x = (region_x as i32 - placement.left) as u32;
   let mask_offset_y = (region_y as i32 - placement.top) as u32;
 
