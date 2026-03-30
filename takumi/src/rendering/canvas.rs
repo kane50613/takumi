@@ -289,18 +289,18 @@ pub(crate) fn render_mask(
     return (Vec::new(), Placement::default());
   };
 
-  if let Some(transform) = transform {
-    let Some(transformed) = path.transform(transform.into()) else {
-      return (Vec::new(), Placement::default());
-    };
-    path = transformed;
-  }
-
   if let Some(stroke) = style.stroke() {
     let Some(stroked_path) = path.stroke(&stroke, 1.0) else {
       return (Vec::new(), Placement::default());
     };
     path = stroked_path;
+  }
+
+  if let Some(transform) = transform {
+    let Some(transformed) = path.transform(transform.into()) else {
+      return (Vec::new(), Placement::default());
+    };
+    path = transformed;
   }
 
   let Some(bounds) = path.compute_tight_bounds() else {
@@ -343,19 +343,6 @@ pub(crate) fn render_mask(
       height,
     },
   )
-}
-
-impl From<Affine> for TinyTransform {
-  fn from(transform: Affine) -> Self {
-    TinyTransform::from_row(
-      transform.a,
-      transform.b,
-      transform.c,
-      transform.d,
-      transform.x,
-      transform.y,
-    )
-  }
 }
 
 const BUCKET_COUNT: usize = 32;

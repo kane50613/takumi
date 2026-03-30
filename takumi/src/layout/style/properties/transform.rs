@@ -2,6 +2,7 @@ use std::ops::{Mul, MulAssign};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use taffy::{Point, Size};
+use tiny_skia::Transform as TinyTransform;
 
 use crate::{
   layout::style::{
@@ -121,6 +122,19 @@ pub struct Affine {
   pub x: f32,
   /// Vertical translation (always orthogonal regardless of rotation)
   pub y: f32,
+}
+
+impl From<Affine> for TinyTransform {
+  fn from(transform: Affine) -> Self {
+    TinyTransform::from_row(
+      transform.a,
+      transform.b,
+      transform.c,
+      transform.d,
+      transform.x,
+      transform.y,
+    )
+  }
 }
 
 impl Mul<Affine> for Affine {

@@ -531,6 +531,7 @@ pub(crate) fn apply_backdrop_filter(
   }
 
   canvas.buffer_pool.release_image(backdrop_image);
+  canvas.buffer_pool.release(mask_data);
 
   Ok(())
 }

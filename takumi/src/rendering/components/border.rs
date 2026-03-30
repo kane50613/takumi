@@ -348,5 +348,7 @@ impl BorderProperties {
         pixel
       },
     );
+
+    canvas.buffer_pool.release(mask);
   }
 }
