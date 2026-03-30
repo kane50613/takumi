@@ -108,7 +108,7 @@ pub use z_index::*;
 use cssparser::{ParseError, Parser, ParserInput, match_ignore_ascii_case};
 use image::imageops::FilterType;
 use parley::Alignment;
-use std::{borrow::Cow, fmt::Write};
+use std::borrow::Cow;
 
 use crate::{
   layout::style::tw::TailwindPropertyParser,
@@ -343,19 +343,22 @@ pub enum CssExpectedMessage {
 }
 
 impl CssExpectedMessage {
-  #[cold]
   pub(crate) fn build_message(&self, token: &str, valid_tokens: String) -> String {
-    let mut message = format!("Unexpected token: {token}, expected ");
-
     match self {
-      Self::ValueOrNone => write!(message, "a value or 'none' for {valid_tokens}").ok(),
-      Self::OneValue => write!(message, "a single value for {valid_tokens}").ok(),
-      Self::OneOrTwoValues => write!(message, "1 or 2 values for {valid_tokens}").ok(),
-      Self::OneToFourValues => write!(message, "1 to 4 values for {valid_tokens}").ok(),
-      Self::BorderRadius => write!(message, "1 to 4 length values for width, optionally followed by '/' and 1 to 4 length values for height").ok(),
-    };
-
-    message
+      Self::ValueOrNone => {
+        format!("Unexpected token: {token}, expected a value of {valid_tokens} or 'none'")
+      }
+      Self::OneValue => format!("Unexpected token: {token}, expected a value of {valid_tokens}"),
+      Self::OneOrTwoValues => {
+        format!("Unexpected token: {token}, expected 1 ~ 2 values of {valid_tokens}")
+      }
+      Self::OneToFourValues => {
+        format!("Unexpected token: {token}, expected 1 ~ 4 values of {valid_tokens}")
+      }
+      Self::BorderRadius => format!(
+        "Unexpected token: {token}, expected 1 to 4 length values for width, optionally followed by '/' and 1 to 4 length values for height"
+      ),
+    }
   }
 }
 
@@ -388,7 +391,7 @@ impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
   // 'none' is intentionally omitted and applied in `expect_message`
   const VALID_TOKENS: &'static [CssToken] = T::VALID_TOKENS;
 
-  const EXPECT_MESSAGE: CssExpectedMessage = T::EXPECT_MESSAGE;
+  const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::ValueOrNone;
 
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {

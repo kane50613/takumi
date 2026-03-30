@@ -4,7 +4,7 @@ use cssparser::{Parser, ParserInput, Token};
 
 use crate::layout::style::CssInput;
 
-use super::{DeferredDeclaration, PropertyId};
+use super::DeferredDeclaration;
 
 pub(super) fn resolve_var_function(
   input: &mut Parser<'_, '_>,
@@ -138,22 +138,9 @@ pub(super) fn apply_deferred_declaration(
     return;
   };
 
-  let property = deferred.property;
-  let css_name = match property {
-    PropertyId::Ignored => Cow::Borrowed("<ignored>"),
-    PropertyId::Custom => Cow::Borrowed("<custom>"),
-    PropertyId::Longhand(longhand) => {
-      Cow::Owned(super::LonghandId::CSS_NAMES[longhand.index()].replace('_', "-"))
-    }
-    PropertyId::Shorthand(shorthand) => {
-      Cow::Owned(super::ShorthandId::CSS_NAMES[shorthand.index()].replace('_', "-"))
-    }
-  };
-  let declarations = property
-    .parse_css_input_declarations::<serde::de::value::Error>(
-      css_name.as_ref(),
-      CssInput::Str(Cow::Owned(resolved_value)),
-    )
+  let declarations = deferred
+    .property
+    .parse_css_input_declarations(CssInput::Str(Cow::Owned(resolved_value)))
     .ok();
 
   let Some(declarations) = declarations else {

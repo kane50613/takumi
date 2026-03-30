@@ -134,7 +134,6 @@ macro_rules! define_style {
       impl LonghandId {
         const COUNT: usize = [$(Self::[<$longhand:camel>]),*].len();
         const ALL: [Self; Self::COUNT] = [$(Self::[<$longhand:camel>],)*];
-        const CSS_NAMES: [&'static str; Self::COUNT] = [$(stringify!($longhand),)*];
 
         const fn index(self) -> usize {
           self as usize
@@ -145,15 +144,6 @@ macro_rules! define_style {
       #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
       pub(crate) enum ShorthandId {
         $([<$shorthand:camel>],)*
-      }
-
-      impl ShorthandId {
-        const COUNT: usize = [$(Self::[<$shorthand:camel>]),*].len();
-        const CSS_NAMES: [&'static str; Self::COUNT] = [$(stringify!($shorthand),)*];
-
-        const fn index(self) -> usize {
-          self as usize
-        }
       }
 
       impl LonghandId {
@@ -291,14 +281,10 @@ macro_rules! define_style {
           }
         }
 
-        fn parse_css_input_declarations<'de, E>(
+        fn parse_css_input_declarations<'de>(
           self,
-          name: &str,
           css_input: CssInput<'de>,
-        ) -> Result<ParsedDeclarations, E>
-        where
-          E: serde::de::Error,
-        {
+        ) -> Result<ParsedDeclarations, CssInputParseError<'de>> {
           debug_assert!(
             !matches!(self, Self::Custom),
             "custom properties should be handled before parse_css_input_declarations",
@@ -320,12 +306,8 @@ macro_rules! define_style {
           match self {
             Self::Ignored => Ok(ParsedDeclarations::new()),
             Self::Custom => unreachable!(),
-            Self::Shorthand(property) => property
-              .parse_css_input_declarations(css_input)
-              .map_err(|error| error.into_serde_error(name, self)),
-            Self::Longhand(property) => property
-              .parse_css_input_declarations(css_input)
-              .map_err(|error| error.into_serde_error(name, self)),
+            Self::Shorthand(property) => property.parse_css_input_declarations(css_input),
+            Self::Longhand(property) => property.parse_css_input_declarations(css_input),
           }
         }
 
@@ -415,7 +397,9 @@ macro_rules! define_style {
                   style
                     .declarations
                     .append_parsed_declarations(
-                      property.parse_css_input_declarations(&key, css_input)?,
+                      property
+                        .parse_css_input_declarations(css_input)
+                        .map_err(|error| error.into_serde_error(&key, property))?,
                       false,
                     );
                 }

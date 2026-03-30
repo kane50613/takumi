@@ -15,7 +15,7 @@ function expectInvalidType(
 ) {
   expect(action).toThrowError(
     new RegExp(
-      `^InvalidArg, invalid type for ${escapeRegex(property)}: ${escapeRegex(actual)}; ${escapeRegex(expected)}$`,
+      `^InvalidArg, invalid type for ${escapeRegex(property)}: ${escapeRegex(actual)}; (?:Unexpected token: .+?, expected )?${escapeRegex(expected)}$`,
     ),
   );
 }
@@ -30,7 +30,7 @@ function expectInvalidValue(
 ) {
   expect(action).toThrowError(
     new RegExp(
-      `^InvalidArg, invalid value for ${escapeRegex(property)}, line 1, column ${column} near "${escapeRegex(near)}": string ${escapeRegex(JSON.stringify(input))}; ${escapeRegex(expected)}$`,
+      `^InvalidArg, invalid value for ${escapeRegex(property)}, line 1, column ${column} near "${escapeRegex(near)}": string ${escapeRegex(JSON.stringify(input))}; (?:Unexpected token: .+?, expected )?${escapeRegex(expected)}$`,
     ),
   );
 }

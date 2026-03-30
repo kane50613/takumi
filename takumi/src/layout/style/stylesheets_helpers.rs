@@ -146,7 +146,6 @@ where
   }
 }
 
-#[cold]
 fn css_input_parse_failure(
   source: &str,
   error: ParseError<'_, Cow<'_, str>>,

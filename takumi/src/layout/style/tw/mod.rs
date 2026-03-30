@@ -67,6 +67,7 @@ impl TailwindValues {
       .filter_map(move |value| value.resource_url(viewport))
   }
 
+  #[inline(never)]
   pub(crate) fn into_declaration_block(self, viewport: Viewport) -> StyleDeclarationBlock {
     let mut builder = TailwindDeclarationBuilder::default();
 
@@ -423,6 +424,7 @@ impl TailwindValue {
     self.property.resource_url()
   }
 
+  #[inline(never)]
   fn apply(self, builder: &mut TailwindDeclarationBuilder, viewport: Viewport) {
     if let Some(breakpoint) = self.breakpoint
       && !breakpoint.matches(viewport)
@@ -952,6 +954,7 @@ impl TailwindProperty {
     None
   }
 
+  #[inline(never)]
   fn apply(self, builder: &mut TailwindDeclarationBuilder, important: bool) {
     match self {
       TailwindProperty::BgLinearAngle(angle) => {

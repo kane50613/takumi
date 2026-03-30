@@ -2,7 +2,7 @@ use cssparser::Parser;
 use taffy::Rect;
 
 use crate::{
-  layout::style::{CssToken, FromCss, Length, MakeComputed, ParseResult},
+  layout::style::{CssExpectedMessage, CssToken, FromCss, Length, MakeComputed, ParseResult},
   rendering::Sizing,
 };
 
@@ -65,7 +65,7 @@ impl<'i, T: Copy + for<'j> FromCss<'j>> FromCss<'i> for Sides<T> {
 
   const VALID_TOKENS: &'static [CssToken] = T::VALID_TOKENS;
 
-  const EXPECT_MESSAGE: super::CssExpectedMessage = T::EXPECT_MESSAGE;
+  const EXPECT_MESSAGE: super::CssExpectedMessage = CssExpectedMessage::OneToFourValues;
 }
 
 impl<T: Copy> From<Sides<T>> for Rect<T> {
