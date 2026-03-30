@@ -63,11 +63,27 @@ async function initializeWasm(module?: WasmModuleInput) {
   }
 }
 
+function hackFakeProcessForBrowser() {
+  const before = globalThis.process;
+
+  // @ts-expect-error: In order to keep the NEXT_RUNTIME check statically analyzable, no other checks can be added before it.
+  // But it will break Cloudflare Workers runtime which doesn't have process at all, so we need to hack a fake process for browser environments.
+  globalThis.process ??= {};
+  globalThis.process.env ??= {};
+
+  return before;
+}
+
 async function importWasmBindings() {
+  const beforeProcess = hackFakeProcessForBrowser();
+
   const nextPath = "@takumi-rs/wasm/next";
-  if (typeof process !== "undefined" && process.env.NEXT_RUNTIME) {
+  if (process.env.NEXT_RUNTIME) {
+    globalThis.process = beforeProcess;
     return import(/* @vite-ignore */ nextPath) as Promise<typeof WasmNextBindings>;
   }
+
+  globalThis.process = beforeProcess;
 
   return import(
     /* turbopackIgnore: true */ /* webpackIgnore: true */ "@takumi-rs/wasm/auto"
@@ -75,9 +91,15 @@ async function importWasmBindings() {
 }
 
 function shouldSkipCoreImport() {
-  if (typeof process !== "undefined" && process.env.NEXT_RUNTIME === "edge") {
+  const beforeProcess = hackFakeProcessForBrowser();
+
+  if (process.env.NEXT_RUNTIME === "edge") {
+    globalThis.process = beforeProcess;
+
     return true;
   }
+
+  globalThis.process = beforeProcess;
 
   if (typeof window !== "undefined") {
     return true;
