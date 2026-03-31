@@ -1,5 +1,11 @@
 # @takumi-rs/helpers
 
+## 1.0.0-rc.10
+
+### Patch Changes
+
+- cc9e63c: Bundle `ultrahtml` instead of externalized #621
+
 ## 1.0.0-rc.9
 
 ## 1.0.0-rc.8
