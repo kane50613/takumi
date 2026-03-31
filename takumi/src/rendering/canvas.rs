@@ -355,13 +355,18 @@ impl Canvas {
     self.constraint_mask_stack.pop();
   }
 
-  pub(crate) fn into_inner(self) -> RgbaImage {
+  pub(crate) fn into_inner(self) -> Result<RgbaImage> {
     RgbaImage::from_raw(
       self.image.width(),
       self.image.height(),
       self.image.take_demultiplied(),
     )
-    .unwrap_or_else(|| unreachable!())
+    .ok_or_else(|| {
+      ImageError::Parameter(ParameterError::from_kind(
+        ParameterErrorKind::DimensionMismatch,
+      ))
+      .into()
+    })
   }
 
   pub(crate) fn recycle_offscreen_image(&mut self, mut image: Pixmap) {
@@ -2092,7 +2097,16 @@ mod tests {
     );
     isolated.composite_subcanvas(subcanvas, BlendMode::Normal);
 
-    assert_eq!(direct.into_inner().as_raw(), isolated.into_inner().as_raw());
+    assert_eq!(
+      direct
+        .into_inner()
+        .unwrap_or_else(|_| unreachable!())
+        .as_raw(),
+      isolated
+        .into_inner()
+        .unwrap_or_else(|_| unreachable!())
+        .as_raw()
+    );
   }
 
   #[test]
