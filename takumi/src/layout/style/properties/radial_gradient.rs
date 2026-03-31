@@ -341,8 +341,8 @@ impl GradientOverlayTile for RadialGradientTile {
       return self.color_lut[0];
     }
 
-    let dx = (x as f32 - self.cx) / self.radius_x.max(1e-6);
-    let dy = (y as f32 - self.cy) / self.radius_y.max(1e-6);
+    let dx = (x as f32 - self.cx) * self.inv_radius_x;
+    let dy = (y as f32 - self.cy) * self.inv_radius_y;
     let normalized_distance = (dx * dx + dy * dy).sqrt();
     let distance_px = normalized_distance * self.radius_scale;
     let lut_idx = self.lut_index_for_distance_px_with_len(distance_px, self.color_lut.len());

@@ -387,15 +387,12 @@ mod tests {
     let mut data = vec![0u8; 3];
     let mut pool = BufferPool::default();
 
-    let err = apply_blur_rgba_bytes(&mut data, 1, 1, 4.0, BlurType::Filter, &mut pool)
-      .expect_err("expected invalid RGBA buffer length error");
-
-    match err {
-      Error::InvalidRgbaBufferLength { actual, expected } => {
-        assert_eq!(actual, 3);
-        assert_eq!(expected, 4);
-      }
-      _ => panic!("unexpected error variant: {err}"),
-    }
+    assert!(matches!(
+      apply_blur_rgba_bytes(&mut data, 1, 1, 4.0, BlurType::Filter, &mut pool),
+      Err(Error::InvalidRgbaBufferLength {
+        actual: 3,
+        expected: 4
+      })
+    ));
   }
 }

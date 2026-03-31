@@ -84,7 +84,7 @@ impl BufferPool {
   }
 
   pub(crate) fn release(&mut self, buffer: Vec<u8>) {
-    if buffer.is_empty() || buffer.capacity() == 0 {
+    if buffer.capacity() == 0 {
       return;
     }
 
@@ -124,7 +124,7 @@ impl BufferPool {
   }
 
   pub(crate) fn release_u32(&mut self, buffer: Vec<u32>) {
-    if buffer.is_empty() || buffer.capacity() == 0 {
+    if buffer.capacity() == 0 {
       return;
     }
 
