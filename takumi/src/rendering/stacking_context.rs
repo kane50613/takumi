@@ -1,5 +1,3 @@
-use std::sync::atomic::{AtomicU64, Ordering};
-
 use taffy::{NodeId, Point, geometry::Size};
 use tiny_skia::Pixmap;
 
@@ -31,13 +29,10 @@ pub(crate) fn blend_pixmap_software(
   };
 
   if matches!(mode, crate::layout::style::BlendMode::PlusDarker) {
-    BLEND_PLUS_DARKER_CALLS.fetch_add(1, Ordering::Relaxed);
     let dst_width = dst.width() as usize;
     let src_width = src.width() as usize;
     let dst_data = dst.data_mut();
 
-    BLEND_PLUS_DARKER_DENSE_HITS.fetch_add(1, Ordering::Relaxed);
-    BLEND_PLUS_DARKER_PIXELS.fetch_add((width * height) as u64, Ordering::Relaxed);
     for row in 0..height {
       let dst_row = (dst_top + row) * dst_width;
       let src_row = (src_top + row) * src_width;
@@ -48,6 +43,7 @@ pub(crate) fn blend_pixmap_software(
         );
       }
     }
+
     return;
   }
 
@@ -68,39 +64,6 @@ pub(crate) fn blend_pixmap_software(
       blend_pixel(&mut out, top, mode);
       *dst_pixel = Color(out.0).into();
     }
-  }
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct BlendStats {
-  pub(crate) plus_darker_calls: u64,
-  pub(crate) plus_darker_pixels: u64,
-  pub(crate) plus_darker_dense_hits: u64,
-  pub(crate) plus_darker_sparse_hits: u64,
-  pub(crate) plus_darker_bounds_hits: u64,
-}
-
-static BLEND_PLUS_DARKER_CALLS: AtomicU64 = AtomicU64::new(0);
-static BLEND_PLUS_DARKER_PIXELS: AtomicU64 = AtomicU64::new(0);
-static BLEND_PLUS_DARKER_DENSE_HITS: AtomicU64 = AtomicU64::new(0);
-static BLEND_PLUS_DARKER_SPARSE_HITS: AtomicU64 = AtomicU64::new(0);
-static BLEND_PLUS_DARKER_BOUNDS_HITS: AtomicU64 = AtomicU64::new(0);
-
-pub(crate) fn reset_blend_stats() {
-  BLEND_PLUS_DARKER_CALLS.store(0, Ordering::Relaxed);
-  BLEND_PLUS_DARKER_PIXELS.store(0, Ordering::Relaxed);
-  BLEND_PLUS_DARKER_DENSE_HITS.store(0, Ordering::Relaxed);
-  BLEND_PLUS_DARKER_SPARSE_HITS.store(0, Ordering::Relaxed);
-  BLEND_PLUS_DARKER_BOUNDS_HITS.store(0, Ordering::Relaxed);
-}
-
-pub(crate) fn blend_stats() -> BlendStats {
-  BlendStats {
-    plus_darker_calls: BLEND_PLUS_DARKER_CALLS.load(Ordering::Relaxed),
-    plus_darker_pixels: BLEND_PLUS_DARKER_PIXELS.load(Ordering::Relaxed),
-    plus_darker_dense_hits: BLEND_PLUS_DARKER_DENSE_HITS.load(Ordering::Relaxed),
-    plus_darker_sparse_hits: BLEND_PLUS_DARKER_SPARSE_HITS.load(Ordering::Relaxed),
-    plus_darker_bounds_hits: BLEND_PLUS_DARKER_BOUNDS_HITS.load(Ordering::Relaxed),
   }
 }
 
