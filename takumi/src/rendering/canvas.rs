@@ -964,6 +964,7 @@ fn sample_paint_source(
   }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn blit_sampled_rgba_translation(
   pixmap: &mut PixmapMut<'_>,
   source: &RgbaImage,
@@ -1595,16 +1596,19 @@ fn try_fill_image_path_with_tiny_skia(
 
   image
     .with_pixmap_ref(buffer_pool, |source_pixmap| {
-      let mut paint = TinyPaint::default();
-      paint.shader = TinyPattern::new(
-        source_pixmap,
-        TinySpreadMode::Pad,
-        to_tiny_filter_quality(algorithm),
-        1.0,
-        source_to_canvas.into(),
-      );
-      paint.blend_mode = blend_mode;
-      paint.anti_alias = true;
+      let paint = TinyPaint {
+        shader: TinyPattern::new(
+          source_pixmap,
+          TinySpreadMode::Pad,
+          to_tiny_filter_quality(algorithm),
+          1.0,
+          source_to_canvas.into(),
+        ),
+        blend_mode,
+        anti_alias: true,
+        ..Default::default()
+      };
+
       pixmap.fill_path(
         &path,
         &paint,
@@ -1612,6 +1616,7 @@ fn try_fill_image_path_with_tiny_skia(
         transform.into(),
         combined_mask,
       );
+
       true
     })
     .unwrap_or(false)
@@ -1633,10 +1638,10 @@ pub(crate) fn overlay_image<'a, I: Into<PaintSource<'a>>>(
   let height = image.height();
   let size = Size { width, height };
 
-  if let PaintSource::ColorTile(color) = image {
-    if try_fill_color_with_tiny_skia(pixmap, color, size, border, transform, mode, combined_mask) {
-      return;
-    }
+  if let PaintSource::ColorTile(color) = image
+    && try_fill_color_with_tiny_skia(pixmap, color, size, border, transform, mode, combined_mask)
+  {
+    return;
   }
 
   if border.is_zero() && transform.only_translation() {

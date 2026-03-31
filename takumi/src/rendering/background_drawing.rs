@@ -153,7 +153,6 @@ pub(crate) fn rasterize_layers(
     }
   }
 
-  drop(pixmap);
   let pixmap = Pixmap::from_vec(composed, pixmap_size).unwrap_or_else(|| unreachable!());
   Ok(Some(BackgroundTile::Pixmap(Arc::new(pixmap))))
 }
@@ -162,13 +161,10 @@ pub(crate) fn release_rasterized_background_tile(
   tile: BackgroundTile,
   buffer_pool: &mut BufferPool,
 ) {
-  match tile {
-    BackgroundTile::Pixmap(pixmap) => {
-      if let Ok(pixmap) = Arc::try_unwrap(pixmap) {
-        buffer_pool.release(pixmap.take());
-      }
-    }
-    _ => {}
+  if let BackgroundTile::Pixmap(pixmap) = tile
+    && let Ok(pixmap) = Arc::try_unwrap(pixmap)
+  {
+    buffer_pool.release(pixmap.take());
   }
 }
 
