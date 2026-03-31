@@ -9,7 +9,7 @@ export default defineConfig({
   format: ["esm", "cjs"],
   dts: true,
   deps: {
-    neverBundle: ["react", "react-dom", "react-dom/server"],
+    onlyBundle: ["ultrahtml"],
   },
   minify: true,
   clean: true,
