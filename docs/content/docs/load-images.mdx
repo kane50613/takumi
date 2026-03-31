@@ -11,8 +11,6 @@ By default, Takumi will fetch external images in `src` attributes and CSS proper
 If you want to add additional caching layer, you can fetch the image yourself and pass the data to `render()` with `fetchedResources`.
 
 ```tsx twoslash
-/** @jsxImportSource react */
-// ---cut-before---
 import { fromJsx } from "takumi-js/helpers/jsx";
 import { extractResourceUrls, render } from "takumi-js";
 import { fetchResources } from "takumi-js/helpers";
@@ -35,8 +33,6 @@ Preload frequently used images like logo, background, etc. to avoid redundant im
 The image key can be used in any `src` field or `background-image`, `mask-image` CSS property.
 
 ```tsx twoslash
-/** @jsxImportSource react */
-// ---cut-before---
 import { ImageResponse } from "takumi-js/response";
 import type { ImageSource } from "takumi-js";
 

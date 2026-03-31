@@ -51,6 +51,13 @@ export default defineConfig({
       transformers: [
         ...(rehypeCodeDefaultOptions.transformers ?? []),
         transformerTwoslash({
+          twoslashOptions: {
+            compilerOptions: {
+              moduleResolution: 100, // ts.ModuleResolutionKind.Bundler
+              jsx: 1, // ts.JsxEmit.Preserve
+              baseUrl: undefined,
+            },
+          },
           typesCache: createFileSystemTypesCache({
             dir: ".react-router/twoslash",
             cwd: process.cwd(),

@@ -15,8 +15,6 @@ Every node in Takumi follows the standard CSS box model. The total size of an el
 The `width` and `height` parameters are optional, which means Takumi can calculate the size based on the content.
 
 ```tsx twoslash
-/** @jsxImportSource react */
-// ---cut-before---
 import { ImageResponse } from "takumi-js/response";
 
 export function GET() {
@@ -43,8 +41,6 @@ function List() {
 By default, the image would be measured based on its intrinsic size, you can override it by setting `width` and `height` properties.
 
 ```tsx twoslash
-/** @jsxImportSource react */
-// ---cut-before---
 import { ImageResponse } from "takumi-js/response";
 
 export function GET() {

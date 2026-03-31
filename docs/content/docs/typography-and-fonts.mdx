@@ -15,8 +15,6 @@ If you need a monospace family in WASM, provide your own font.
 ## Font
 
 ```tsx twoslash
-/** @jsxImportSource react */
-// ---cut-before---
 import { ImageResponse } from "takumi-js/response";
 import type { Font } from "takumi-js";
 
@@ -57,8 +55,6 @@ For variable fonts, `font-weight` has the same effect as `font-variation-setting
 If you are using `ImageResponse` API, theres a satori compatible `emoji` option.
 
 ```tsx twoslash
-/** @jsxImportSource react */
-// ---cut-before---
 import { ImageResponse } from "takumi-js/response";
 
 export function GET() {
@@ -71,8 +67,6 @@ export function GET() {
 Under the hood it calls `extractEmojis` helper function, which separates the emoji segments from the text and modifies the text node.
 
 ```tsx twoslash
-/** @jsxImportSource react */
-// ---cut-before---
 import { extractEmojis } from "takumi-js/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
 import { fetchResources } from "takumi-js/helpers";

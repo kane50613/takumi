@@ -25,8 +25,6 @@ Use structured `keyframes` when you render a specific animation frame with `rend
 This is the API that accepts the `keyframes` option.
 
 ```tsx twoslash title="render.tsx"
-/** @jsxImportSource react */
-// ---cut-before---
 // @noErrors
 import { render } from "takumi-js";
 
@@ -56,8 +54,6 @@ const output = await render(<div tw="animate-[move_1s_ease-in-out_infinite_alter
 Use stylesheet `@keyframes` when you want the animation to travel with the JSX tree and then render it with either `renderAnimation()` or `render()` + `stylesheets`.
 
 ```tsx twoslash title="render.tsx"
-/** @jsxImportSource react */
-// ---cut-before---
 // @noErrors
 import { Renderer } from "takumi-js/node";
 import { fromJsx } from "takumi-js/helpers/jsx";
@@ -125,8 +121,6 @@ animation: move 1s ease-in-out infinite alternate;
 The next two examples share this file.
 
 ```tsx twoslash title="scene.tsx"
-/** @jsxImportSource react */
-// ---cut-before---
 // @noErrors
 import type { Keyframes } from "takumi-js";
 
@@ -155,8 +149,6 @@ export function Scene() {
 Use `render()` when you want a single frame at a specific animation time.
 
 ```tsx twoslash title="render.tsx"
-/** @jsxImportSource react */
-// ---cut-before---
 // @noErrors
 import { render } from "takumi-js";
 import { Scene, keyframes } from "./scene";
@@ -175,8 +167,6 @@ const output = await render(<Scene />, {
 This is the minimal API for animated image output. In most cases, you should keep a single scene and animate it with stylesheet keyframes or Tailwind's built-in animation presets. The `scenes` field is still an array because you may want to compose multiple scenes into a single animated image, but Takumi does not generate transitions between them.
 
 ```tsx twoslash title="render.tsx"
-/** @jsxImportSource react */
-// ---cut-before---
 // @noErrors
 import { Renderer } from "takumi-js/node";
 import { fromJsx } from "takumi-js/helpers/jsx";
@@ -226,8 +216,6 @@ The core idea is:
 3. Pipe the raw RGBA frames into ffmpeg.
 
 ```tsx twoslash title="render.tsx"
-/** @jsxImportSource react */
-// ---cut-before---
 // @noErrors
 import { render } from "takumi-js";
 import { spawn } from "bun";

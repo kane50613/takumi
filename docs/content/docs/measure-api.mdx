@@ -7,8 +7,6 @@ icon: Ruler
 This functionality is useful if you want to get the node layout for further calculations.
 
 ```tsx twoslash tab="takumi-js/node"
-/** @jsxImportSource react */
-// ---cut-before---
 import { Renderer } from "takumi-js/node";
 import { fromJsx } from "takumi-js/helpers/jsx";
 
@@ -20,8 +18,6 @@ const { width, height } = await renderer.measure(node, { stylesheets });
 ```
 
 ```tsx twoslash tab="takumi-js/wasm"
-/** @jsxImportSource react */
-// ---cut-before---
 import { Renderer } from "takumi-js/wasm";
 import { fromJsx } from "takumi-js/helpers/jsx";
 
