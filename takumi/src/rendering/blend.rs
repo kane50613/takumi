@@ -184,9 +184,11 @@ fn color_burn_integer(bottom: u8, top: u8) -> u8 {
     u8::MAX
   } else if top == 0 {
     0
+  } else if bottom as u32 + top as u32 <= u8::MAX as u32 {
+    0
   } else {
-    let burned = ((255 - bottom as u32) * 255 + top as u32 / 2) / top as u32;
-    255u32.saturating_sub(burned.min(255)) as u8
+    let numerator = (bottom as u32 + top as u32 - u8::MAX as u32) * u8::MAX as u32;
+    ((numerator + top as u32 / 2) / top as u32).min(255) as u8
   }
 }
 
