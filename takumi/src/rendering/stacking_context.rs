@@ -12,7 +12,7 @@ use crate::{
   },
   rendering::{
     BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, NodeMaskAction, Placement, Sizing,
-    blend_pixel, draw_debug_border, fast_div_255, prepare_node_mask,
+    blend_pixel, draw_debug_border, prepare_node_mask,
   },
 };
 
@@ -81,9 +81,9 @@ fn blend_plus_darker_pixel_raw_4(dst_px: &mut [u8], src_px: &[u8]) {
   let green = ((src_px[1] as u16 + dst_px[1] as u16).saturating_sub(255)) as u8;
   let blue = ((src_px[2] as u16 + dst_px[2] as u16).saturating_sub(255)) as u8;
 
-  dst_px[0] = fast_div_255(red as u32 * result_alpha as u32);
-  dst_px[1] = fast_div_255(green as u32 * result_alpha as u32);
-  dst_px[2] = fast_div_255(blue as u32 * result_alpha as u32);
+  dst_px[0] = red;
+  dst_px[1] = green;
+  dst_px[2] = blue;
   dst_px[3] = result_alpha;
 }
 

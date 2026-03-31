@@ -1,5 +1,5 @@
-use crate::Result;
 use crate::rendering::BufferPool;
+use crate::{Error, Result};
 
 /// Specifies the type of blur operation, which affects how the CSS radius is interpreted.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -138,7 +138,10 @@ pub(crate) fn apply_blur_rgba_bytes(
     .saturating_mul(height as usize)
     .saturating_mul(4);
   if data.len() != expected {
-    return Ok(());
+    return Err(Error::InvalidRgbaBufferLength {
+      actual: data.len(),
+      expected,
+    });
   }
 
   let Some(pass_params) = blur_pass_params(width, height, radius, blur_type, width as usize * 4)
@@ -372,4 +375,27 @@ fn compute_mul_shg(d: u32) -> (u32, i32) {
   let shg = 23;
   let mul = ((1u64 << shg) as f64 / d as f64).round() as u32;
   (mul, shg)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{BlurType, apply_blur_rgba_bytes};
+  use crate::{Error, rendering::BufferPool};
+
+  #[test]
+  fn apply_blur_rgba_bytes_returns_error_for_invalid_buffer_length() {
+    let mut data = vec![0u8; 3];
+    let mut pool = BufferPool::default();
+
+    let err = apply_blur_rgba_bytes(&mut data, 1, 1, 4.0, BlurType::Filter, &mut pool)
+      .expect_err("expected invalid RGBA buffer length error");
+
+    match err {
+      Error::InvalidRgbaBufferLength { actual, expected } => {
+        assert_eq!(actual, 3);
+        assert_eq!(expected, 4);
+      }
+      _ => panic!("unexpected error variant: {err}"),
+    }
+  }
 }

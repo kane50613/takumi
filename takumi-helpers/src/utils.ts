@@ -4,11 +4,16 @@ import type { Node } from "./types";
 const defaultTimeout = 5000;
 const cssUrlPattern = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
 
+function isFetchableResourceUrl(value: string): boolean {
+  return value.startsWith("https://") || value.startsWith("http://");
+}
+
 function collectCssUrls(value: unknown, urls: Set<string>) {
   if (typeof value === "string") {
     for (const match of value.matchAll(cssUrlPattern)) {
-      if (match[2]) {
-        urls.add(match[2]);
+      const url = match[2]?.trim();
+      if (url && isFetchableResourceUrl(url)) {
+        urls.add(url);
       }
     }
   } else if (Array.isArray(value)) {
@@ -34,10 +39,7 @@ export function extractResourceUrls(node: Node): string[] {
     collectStyleUrls(current.style);
     collectStyleUrls(current.preset);
 
-    if (
-      current.type === "image" &&
-      (current.src.startsWith("https://") || current.src.startsWith("http://"))
-    ) {
+    if (current.type === "image" && isFetchableResourceUrl(current.src)) {
       urls.add(current.src);
       return;
     }

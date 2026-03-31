@@ -31,7 +31,8 @@ fn run_gradient_render(global: &GlobalContext, background_image_str: &str) {
     .global(global)
     .build();
 
-  let _image = render(options).unwrap();
+  let image = render(options).unwrap();
+  black_box(image);
 }
 
 fn bench_gradients(c: &mut Criterion) {

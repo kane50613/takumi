@@ -27,7 +27,8 @@ fn render_fixture(global: &GlobalContext, node: Node) {
     .global(global)
     .build();
 
-  let _image = render(options).unwrap();
+  let image = render(options).unwrap();
+  black_box(image);
 }
 
 fn simple_image_blit_fixture() -> Node {

@@ -22,7 +22,8 @@ fn run_effect_render(global: &GlobalContext, effect_tw: &str) {
     .global(global)
     .build();
 
-  let _image = render(options).unwrap();
+  let image = render(options).unwrap();
+  black_box(image);
 }
 
 fn bench_effects(c: &mut Criterion) {

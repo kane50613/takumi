@@ -40,4 +40,15 @@ describe("extractResourceUrls", () => {
 
     expect(extractResourceUrls(node)).toEqual(["https://example.com/good.png"]);
   });
+
+  test("ignores non-fetchable css url values", () => {
+    const validUrl = "https://example.com/background.png";
+    const node = container({
+      style: {
+        backgroundImage: `url(background), url("${validUrl}")`,
+      },
+    });
+
+    expect(extractResourceUrls(node)).toEqual([validUrl]);
+  });
 });
