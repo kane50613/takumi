@@ -6,30 +6,53 @@ use takumi::layout::{
 use crate::test_utils::run_fixture_test;
 use std::sync::Arc;
 
-/// Creates a single card with layered gradients and mix-blend-mode for testing.
+/// Creates a single card with solid blocks and mix-blend-mode for testing.
 fn create_blend_card(mode: BlendMode) -> Node {
-  let foreground = Node::container([]).with_style(
+  let foreground = Node::container([
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::width(Px(120.0)))
+        .with(StyleDeclaration::height(Px(200.0)))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color([173, 107, 96, 255]),
+        ))),
+    ),
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::width(Px(120.0)))
+        .with(StyleDeclaration::height(Px(200.0)))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color([102, 156, 116, 255]),
+        ))),
+    ),
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::width(Px(120.0)))
+        .with(StyleDeclaration::height(Px(200.0)))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color([98, 122, 176, 255]),
+        ))),
+    ),
+  ])
+  .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0)))
-      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::width(Px(360.0)))
+      .with(StyleDeclaration::height(Px(200.0)))
       .with(StyleDeclaration::mix_blend_mode(mode))
-      .with(StyleDeclaration::background_image(Some(
-        BackgroundImages::from_str("linear-gradient(35deg, #ce5f5f 0%, #d1a15d 42%, #5eaec9 100%)")
-          .unwrap(),
-      ))),
+      .with(StyleDeclaration::flex_direction(FlexDirection::Row)),
   );
 
   Node::container([foreground]).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(400.0)))
-      .with(StyleDeclaration::height(Px(220.0)))
-      .with(StyleDeclaration::background_image(Some(
-        BackgroundImages::from_str(
-          "linear-gradient(130deg, #4f5470 0%, #6a5275 35%, #4f7b85 70%, #78a989 100%)",
-        )
-        .unwrap(),
+      .with(StyleDeclaration::width(Px(360.0)))
+      .with(StyleDeclaration::height(Px(200.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([118, 128, 138, 255]),
       ))),
   )
 }
