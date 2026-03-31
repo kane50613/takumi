@@ -181,15 +181,23 @@ fn blend_channel_integer(mode: BlendMode, bottom: u8, top: u8) -> u8 {
 #[inline(always)]
 fn color_burn_integer(bottom: u8, top: u8) -> u8 {
   if bottom == u8::MAX {
-    u8::MAX
-  } else if top == 0 {
-    0
-  } else if bottom as u32 + top as u32 <= u8::MAX as u32 {
-    0
-  } else {
-    let numerator = (bottom as u32 + top as u32 - u8::MAX as u32) * u8::MAX as u32;
-    ((numerator + top as u32 / 2) / top as u32).min(255) as u8
+    return u8::MAX;
   }
+
+  if top == 0 {
+    return 0;
+  }
+
+  let bottom = u32::from(bottom);
+  let top = u32::from(top);
+  let max = u32::from(u8::MAX);
+
+  if bottom + top <= max {
+    return 0;
+  }
+
+  let numerator = (bottom + top - max) * max;
+  ((numerator + top / 2) / top) as u8
 }
 
 #[inline(always)]
