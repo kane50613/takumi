@@ -15,22 +15,19 @@ fn create_blend_card(mode: BlendMode) -> Node {
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::mix_blend_mode(mode))
       .with(StyleDeclaration::background_image(Some(
-        BackgroundImages::from_str(
-          "linear-gradient(35deg, rgba(252,84,84,0.95) 0%, rgba(253,187,45,0.92) 42%, rgba(55,190,255,0.94) 100%), radial-gradient(circle at 78% 28%, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.0) 50%)",
-        )
-        .unwrap(),
+        BackgroundImages::from_str("linear-gradient(35deg, #ce5f5f 0%, #d1a15d 42%, #5eaec9 100%)")
+          .unwrap(),
       ))),
   );
 
-  Node::container([foreground])
-  .with_style(
+  Node::container([foreground]).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(400.0)))
       .with(StyleDeclaration::height(Px(220.0)))
       .with(StyleDeclaration::background_image(Some(
         BackgroundImages::from_str(
-          "linear-gradient(130deg, #2d365a 0%, #593a6b 35%, #2a7b8f 70%, #70c8a2 100%), repeating-linear-gradient(-45deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 14px, rgba(0,0,0,0.04) 14px, rgba(0,0,0,0.04) 28px)",
+          "linear-gradient(130deg, #4f5470 0%, #6a5275 35%, #4f7b85 70%, #78a989 100%)",
         )
         .unwrap(),
       ))),
