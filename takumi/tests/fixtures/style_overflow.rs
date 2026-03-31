@@ -100,8 +100,7 @@ fn test_overflow_clip() {
 
 #[test]
 fn test_overflow_mixed_axes() {
-  let container =
-    create_overflow_fixture(SpacePair::from_pair(Overflow::Hidden, Overflow::Visible));
+  let container = create_overflow_fixture(SpacePair::from_pair(Overflow::Clip, Overflow::Visible));
 
   run_fixture_test(container, "style_overflow_hidden_visible_image");
 }

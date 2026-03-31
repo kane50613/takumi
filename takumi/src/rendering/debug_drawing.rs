@@ -1,4 +1,3 @@
-use image::RgbaImage;
 use taffy::Layout;
 
 use crate::{
@@ -16,7 +15,7 @@ pub fn draw_debug_border(canvas: &mut Canvas, layout: Layout, transform: Affine)
     image_rendering: ImageScalingAlgorithm::Auto,
     style: BorderStyle::Solid,
   }
-  .draw::<RgbaImage>(canvas, layout.size, transform, None);
+  .draw(canvas, layout.size, transform, None);
 
   // content-box
   BorderProperties {
@@ -26,7 +25,7 @@ pub fn draw_debug_border(canvas: &mut Canvas, layout: Layout, transform: Affine)
     image_rendering: ImageScalingAlgorithm::Auto,
     style: BorderStyle::Solid,
   }
-  .draw::<RgbaImage>(
+  .draw(
     canvas,
     layout.content_box_size(),
     transform

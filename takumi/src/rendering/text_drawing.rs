@@ -1,9 +1,9 @@
 use std::{borrow::Cow, convert::Into};
 
-use image::{GenericImageView, Rgba, RgbaImage};
 use parley::{GlyphRun, layout::BreakReason};
 use skrifa::color::ColorPalette;
 use taffy::{Layout, Point, Size};
+use tiny_skia::PixmapMut;
 
 use crate::{
   Result,
@@ -15,9 +15,9 @@ use crate::{
     },
   },
   rendering::{
-    BorderProperties, BufferPool, Canvas, CanvasConstrain, ColorTile, Command, Stroke,
-    apply_mask_alpha_to_pixel, blend_pixel, draw_mask, mask_index_from_coord, overlay_area,
-    render_mask, sample_transformed_pixel,
+    BorderProperties, Canvas, ColorTile, Command, PaintSource, Stroke, apply_mask_alpha_to_pixel,
+    blend_pixel, mask_index_from_coord, overlay_area, premultiplied_to_rgba, render_mask,
+    sample_transformed_pixel,
   },
   resources::font::{ResolvedColorLayer, ResolvedGlyph},
 };
@@ -40,11 +40,7 @@ pub(crate) fn draw_decoration(
   let snapped_start_x = start_x.floor();
   let width = (end_x.ceil() - snapped_start_x) as u32;
 
-  let tile = ColorTile {
-    color: color.into(),
-    width,
-    height: size as u32,
-  };
+  let tile = ColorTile::new(color.into(), width, size as u32);
 
   canvas.overlay_image(
     &tile,
@@ -59,13 +55,13 @@ pub(crate) fn draw_decoration(
   );
 }
 
-pub(crate) fn draw_glyph_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
+pub(crate) fn draw_glyph_clip_image(
   glyph: &ResolvedGlyph,
   canvas: &mut Canvas,
   style: &SizedFontStyle,
   mut transform: Affine,
   inline_offset: Point<f32>,
-  clip_image: &I,
+  clip_image: PaintSource<'_>,
 ) -> Result<()> {
   transform *= Affine::translation(inline_offset.x, inline_offset.y);
 
@@ -93,17 +89,24 @@ pub(crate) fn draw_glyph_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
         .buffer_pool
         .acquire_image(bitmap.placement.width, bitmap.placement.height)?;
 
-      let fill_dimensions = clip_image.dimensions();
+      let fill_dimensions = (clip_image.width(), clip_image.height());
 
+      let bottom_width = bottom.width();
+      let bottom_height = bottom.height();
+      let Some(mut bottom_pixmap) =
+        PixmapMut::from_bytes(bottom.as_mut(), bottom_width, bottom_height)
+      else {
+        return Ok(());
+      };
       overlay_area(
-        &mut bottom,
+        &mut bottom_pixmap,
         Point::ZERO,
         Size {
           width: bitmap.placement.width,
           height: bitmap.placement.height,
         },
         BlendMode::Normal,
-        &[],
+        None,
         |x, y| {
           let alpha = mask[mask_index_from_coord(x, y, bitmap.placement.width)];
 
@@ -114,7 +117,7 @@ pub(crate) fn draw_glyph_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
             return Color::transparent().into();
           }
 
-          let mut pixel = clip_image.get_pixel(source_x, source_y);
+          let mut pixel = premultiplied_to_rgba(clip_image.get_pixel(source_x, source_y));
 
           apply_mask_alpha_to_pixel(&mut pixel, alpha);
 
@@ -146,8 +149,7 @@ pub(crate) fn draw_glyph_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
         &mut canvas.buffer_pool,
       );
 
-      overlay_area(
-        &mut canvas.image,
+      canvas.overlay_area(
         Point {
           x: placement.left as f32,
           y: placement.top as f32,
@@ -157,7 +159,6 @@ pub(crate) fn draw_glyph_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
           height: placement.height,
         },
         BlendMode::Normal,
-        &canvas.constrains,
         |x, y| {
           let alpha = mask[mask_index_from_coord(x, y, placement.width)];
 
@@ -174,9 +175,10 @@ pub(crate) fn draw_glyph_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
             inline_offset,
           );
 
-          let Some(mut pixel) = sampled_pixel else {
+          let Some(sampled_pixel) = sampled_pixel else {
             return Color::transparent().into();
           };
+          let mut pixel = premultiplied_to_rgba(sampled_pixel);
 
           apply_mask_alpha_to_pixel(&mut pixel, alpha);
 
@@ -240,15 +242,7 @@ pub(crate) fn draw_glyph(
       if let Some(color_layers) = outline.color_layers()
         && let Some(palette) = palette
       {
-        draw_color_outline_image(
-          &mut canvas.image,
-          &mut canvas.buffer_pool,
-          color_layers,
-          palette,
-          color,
-          transform,
-          &canvas.constrains,
-        );
+        draw_color_outline_image(canvas, color_layers, palette, color, transform);
       } else {
         let (mask, placement) = render_mask(
           outline.paths(),
@@ -257,14 +251,7 @@ pub(crate) fn draw_glyph(
           &mut canvas.buffer_pool,
         );
 
-        draw_mask(
-          &mut canvas.image,
-          &mask,
-          placement,
-          color,
-          BlendMode::Normal,
-          &canvas.constrains,
-        );
+        canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
 
         canvas.buffer_pool.release(mask);
       }
@@ -280,12 +267,12 @@ pub(crate) fn draw_glyph(
   Ok(())
 }
 
-fn draw_text_stroke_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
+fn draw_text_stroke_clip_image(
   canvas: &mut Canvas,
   style: &SizedFontStyle,
   transform: Affine,
   paths: &[Command],
-  clip_image: &I,
+  clip_image: PaintSource<'_>,
   inline_offset: Point<f32>,
 ) {
   if style.stroke_width <= 0.0 {
@@ -306,8 +293,7 @@ fn draw_text_stroke_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
     &mut canvas.buffer_pool,
   );
 
-  overlay_area(
-    &mut canvas.image,
+  canvas.overlay_area(
     Point {
       x: stroke_placement.left as f32,
       y: stroke_placement.top as f32,
@@ -317,7 +303,6 @@ fn draw_text_stroke_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
       height: stroke_placement.height,
     },
     BlendMode::Normal,
-    &canvas.constrains,
     |x, y| {
       let alpha = stroke_mask[mask_index_from_coord(x, y, stroke_placement.width)];
 
@@ -337,9 +322,10 @@ fn draw_text_stroke_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
         inline_offset,
       );
 
-      let Some(mut pixel) = sampled_pixel else {
+      let Some(sampled_pixel) = sampled_pixel else {
         return Color::transparent().into();
       };
+      let mut pixel = premultiplied_to_rgba(sampled_pixel);
 
       blend_pixel(
         &mut pixel,
@@ -355,13 +341,13 @@ fn draw_text_stroke_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
   canvas.buffer_pool.release(stroke_mask);
 }
 
-fn draw_text_embolden_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
+fn draw_text_embolden_clip_image(
   canvas: &mut Canvas,
   style: &SizedFontStyle,
   transform: Affine,
   paths: &[Command],
   embolden: f32,
-  clip_image: &I,
+  clip_image: PaintSource<'_>,
   inline_offset: Point<f32>,
 ) {
   if embolden <= 0.0 {
@@ -382,8 +368,7 @@ fn draw_text_embolden_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
     &mut canvas.buffer_pool,
   );
 
-  overlay_area(
-    &mut canvas.image,
+  canvas.overlay_area(
     Point {
       x: stroke_placement.left as f32,
       y: stroke_placement.top as f32,
@@ -393,7 +378,6 @@ fn draw_text_embolden_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
       height: stroke_placement.height,
     },
     BlendMode::Normal,
-    &canvas.constrains,
     |x, y| {
       let alpha = stroke_mask[mask_index_from_coord(x, y, stroke_placement.width)];
 
@@ -413,9 +397,10 @@ fn draw_text_embolden_clip_image<I: GenericImageView<Pixel = Rgba<u8>>>(
         inline_offset,
       );
 
-      let Some(mut pixel) = sampled_pixel else {
+      let Some(sampled_pixel) = sampled_pixel else {
         return Color::transparent().into();
       };
+      let mut pixel = premultiplied_to_rgba(sampled_pixel);
 
       apply_mask_alpha_to_pixel(&mut pixel, alpha);
       pixel
@@ -445,13 +430,11 @@ fn draw_text_stroke(
     &mut canvas.buffer_pool,
   );
 
-  draw_mask(
-    &mut canvas.image,
+  canvas.draw_mask(
     &stroke_mask,
     stroke_placement,
     style.text_stroke_color,
     BlendMode::Normal,
-    &canvas.constrains,
   );
 
   canvas.buffer_pool.release(stroke_mask);
@@ -479,14 +462,7 @@ fn draw_text_embolden(
     &mut canvas.buffer_pool,
   );
 
-  draw_mask(
-    &mut canvas.image,
-    &stroke_mask,
-    stroke_placement,
-    color,
-    BlendMode::Normal,
-    &canvas.constrains,
-  );
+  canvas.draw_mask(&stroke_mask, stroke_placement, color, BlendMode::Normal);
 
   canvas.buffer_pool.release(stroke_mask);
 }
@@ -526,13 +502,11 @@ pub(crate) fn draw_glyph_text_shadow(
 
 #[allow(clippy::too_many_arguments)]
 fn draw_color_outline_image(
-  canvas: &mut RgbaImage,
-  buffer_pool: &mut BufferPool,
+  canvas: &mut Canvas,
   color_layers: &[ResolvedColorLayer],
   palette: &ColorPalette,
   foreground_color: Color,
   transform: Affine,
-  constrains: &[CanvasConstrain],
 ) {
   let foreground_opacity = foreground_color.0[3] as f32 / 255.0;
   if foreground_opacity <= 0.0 {
@@ -560,17 +534,10 @@ fn draw_color_outline_image(
       Color([record.red(), record.green(), record.blue(), alpha])
     };
 
-    let (mask, placement) = render_mask(&layer.paths, Some(transform), None, buffer_pool);
-
-    draw_mask(
-      canvas,
-      &mask,
-      placement,
-      color,
-      BlendMode::Normal,
-      constrains,
-    );
-    buffer_pool.release(mask);
+    let (mask, placement) =
+      render_mask(&layer.paths, Some(transform), None, &mut canvas.buffer_pool);
+    canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
+    canvas.buffer_pool.release(mask);
   }
 }
 

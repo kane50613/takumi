@@ -8,6 +8,7 @@ use cssparser::{
   match_ignore_ascii_case,
 };
 use image::Rgba;
+use tiny_skia::{ColorU8, PremultipliedColorU8};
 
 use crate::{
   layout::style::{
@@ -426,6 +427,24 @@ impl<const DEFAULT_CURRENT_COLOR: bool> From<Color> for ColorInput<DEFAULT_CURRE
 impl From<Color> for Rgba<u8> {
   fn from(color: Color) -> Self {
     Rgba(color.0)
+  }
+}
+
+impl From<Color> for PremultipliedColorU8 {
+  fn from(color: Color) -> Self {
+    let [r, g, b, a] = color.0;
+    let premul_r = fast_div_255(r as u32 * a as u32);
+    let premul_g = fast_div_255(g as u32 * a as u32);
+    let premul_b = fast_div_255(b as u32 * a as u32);
+
+    PremultipliedColorU8::from_rgba(premul_r, premul_g, premul_b, a)
+      .unwrap_or_else(|| unreachable!())
+  }
+}
+
+impl From<ColorU8> for Color {
+  fn from(color: ColorU8) -> Self {
+    Self([color.red(), color.green(), color.blue(), color.alpha()])
   }
 }
 

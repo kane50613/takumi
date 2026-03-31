@@ -1,14 +1,15 @@
 use std::{iter::successors, sync::Arc};
 
-use image::{GenericImageView, Rgba, RgbaImage};
+use image::{Rgba, RgbaImage};
 use smallvec::{SmallVec, smallvec};
 use taffy::Size;
+use tiny_skia::{IntSize, Pixmap, PixmapMut, PremultipliedColorU8};
 
 use crate::{
   Result,
   layout::{node::resolve_image, style::*},
   rendering::{
-    BorderProperties, BufferPool, RenderContext, Sizing, interpolate_bilinear, interpolate_nearest,
+    BorderProperties, BufferPool, PaintSource, RenderContext, Sizing, fast_div_255,
     overlay_gradient_tile, overlay_image,
   },
   resources::image::ImageSource,
@@ -31,21 +32,122 @@ fn should_rasterize_repeated_tile(
   xs.len().saturating_mul(ys.len()) > 1
     && matches!(
       tile,
-      BackgroundTile::Linear(_) | BackgroundTile::Radial(_) | BackgroundTile::Conic(_)
+      BackgroundTile::Linear(_)
+        | BackgroundTile::Radial(_)
+        | BackgroundTile::Conic(_)
+        | BackgroundTile::SampledBitmap { .. }
     )
+}
+
+#[inline(always)]
+fn premultiplied_bitmap_pixel(bitmap: &RgbaImage, x: u32, y: u32) -> PremultipliedColorU8 {
+  let width = bitmap.width();
+  let raw = bitmap.as_raw();
+  let index = ((y * width + x) * 4) as usize;
+  let alpha = raw[index + 3] as u32;
+  PremultipliedColorU8::from_rgba(
+    fast_div_255(raw[index] as u32 * alpha),
+    fast_div_255(raw[index + 1] as u32 * alpha),
+    fast_div_255(raw[index + 2] as u32 * alpha),
+    raw[index + 3],
+  )
+  .unwrap_or_else(|| unreachable!())
+}
+
+#[inline(always)]
+fn interpolate_bitmap_nearest(bitmap: &RgbaImage, x: f32, y: f32) -> PremultipliedColorU8 {
+  let w = bitmap.width();
+  let h = bitmap.height();
+  if w == 0 || h == 0 {
+    return PremultipliedColorU8::TRANSPARENT;
+  }
+
+  let px = x.floor().max(0.0) as u32;
+  let py = y.floor().max(0.0) as u32;
+  premultiplied_bitmap_pixel(bitmap, px.min(w - 1), py.min(h - 1))
+}
+
+#[inline(always)]
+fn interpolate_bitmap_bilinear(bitmap: &RgbaImage, x: f32, y: f32) -> PremultipliedColorU8 {
+  let w = bitmap.width();
+  let h = bitmap.height();
+  if w == 0 || h == 0 {
+    return PremultipliedColorU8::TRANSPARENT;
+  }
+
+  let x = (x - 0.5).clamp(0.0, w.saturating_sub(1) as f32);
+  let y = (y - 0.5).clamp(0.0, h.saturating_sub(1) as f32);
+
+  let uf = x.floor() as u32;
+  let vf = y.floor() as u32;
+  let uc = (uf + 1).min(w - 1);
+  let vc = (vf + 1).min(h - 1);
+
+  let p00 = premultiplied_bitmap_pixel(bitmap, uf, vf);
+  let p01 = premultiplied_bitmap_pixel(bitmap, uf, vc);
+  let p10 = premultiplied_bitmap_pixel(bitmap, uc, vf);
+  let p11 = premultiplied_bitmap_pixel(bitmap, uc, vc);
+
+  let u_ratio = ((x - uf as f32) * 256.0) as u32;
+  let v_ratio = ((y - vf as f32) * 256.0) as u32;
+  let u_opposite = 256 - u_ratio;
+  let v_opposite = 256 - v_ratio;
+  let w00 = u_opposite * v_opposite;
+  let w01 = u_opposite * v_ratio;
+  let w10 = u_ratio * v_opposite;
+  let w11 = u_ratio * v_ratio;
+
+  let mut out = [0u8; 4];
+  for (i, channel) in out.iter_mut().enumerate() {
+    let p00_i = match i {
+      0 => p00.red(),
+      1 => p00.green(),
+      2 => p00.blue(),
+      _ => p00.alpha(),
+    };
+    let p01_i = match i {
+      0 => p01.red(),
+      1 => p01.green(),
+      2 => p01.blue(),
+      _ => p01.alpha(),
+    };
+    let p10_i = match i {
+      0 => p10.red(),
+      1 => p10.green(),
+      2 => p10.blue(),
+      _ => p10.alpha(),
+    };
+    let p11_i = match i {
+      0 => p11.red(),
+      1 => p11.green(),
+      2 => p11.blue(),
+      _ => p11.alpha(),
+    };
+    *channel = ((p00_i as u32 * w00 + p10_i as u32 * w10 + p01_i as u32 * w01 + p11_i as u32 * w11)
+      >> 16) as u8;
+  }
+
+  PremultipliedColorU8::from_rgba(out[0], out[1], out[2], out[3]).unwrap_or_else(|| unreachable!())
 }
 
 fn rasterize_tile(tile: BackgroundTile, buffer_pool: &mut BufferPool) -> Result<BackgroundTile> {
   let (width, height) = tile.dimensions();
-  let mut image = buffer_pool.acquire_image_dirty(width, height)?;
+  let size = IntSize::from_wh(width, height).unwrap_or_else(|| unreachable!());
+  let mut data = buffer_pool.acquire_dirty((width * height * 4) as usize);
 
   for y in 0..height {
     for x in 0..width {
-      image.put_pixel(x, y, tile.get_pixel(x, y));
+      let pixel = tile.get_pixel(x, y);
+      let offset = ((y * width + x) * 4) as usize;
+      data[offset] = pixel.red();
+      data[offset + 1] = pixel.green();
+      data[offset + 2] = pixel.blue();
+      data[offset + 3] = pixel.alpha();
     }
   }
 
-  Ok(BackgroundTile::Image(image))
+  let pixmap = Pixmap::from_vec(data, size).unwrap_or_else(|| unreachable!());
+  Ok(BackgroundTile::Pixmap(pixmap))
 }
 
 fn resolve_intrinsic_size(image: &BackgroundImage, context: &RenderContext) -> Option<(f32, f32)> {
@@ -68,46 +170,57 @@ pub(crate) fn rasterize_layers(
   transform: Affine,
   buffer_pool: &mut BufferPool,
 ) -> Result<Option<BackgroundTile>> {
-  if layers.is_empty() {
+  if layers.is_empty() || size.width == 0 || size.height == 0 {
     return Ok(None);
   }
 
-  let mut composed = buffer_pool.acquire_image(size.width, size.height)?;
+  let Some(pixmap_size) = IntSize::from_wh(size.width, size.height) else {
+    return Ok(None);
+  };
+  let mut composed = buffer_pool.acquire_dirty((size.width * size.height * 4) as usize);
+  composed.fill(0);
+  let Some(mut pixmap) = PixmapMut::from_bytes(&mut composed, size.width, size.height) else {
+    buffer_pool.release(composed);
+    return Ok(None);
+  };
 
   for layer in layers {
     for &x in &layer.xs {
       for &y in &layer.ys {
         let layer_transform = Affine::translation(x as f32, y as f32) * transform;
-        if border.is_zero() && layer_transform.only_translation() {
+        if border.is_zero()
+          && layer_transform.only_translation()
+          && layer.blend_mode == BlendMode::Normal
+        {
           let translation = layer_transform.decompose_translation();
           match &layer.tile {
             BackgroundTile::Linear(linear_gradient) => {
               overlay_gradient_tile(
-                &mut composed,
+                &mut pixmap,
                 linear_gradient,
                 translation,
                 layer.blend_mode,
-                &[],
+                None,
               );
               continue;
             }
             BackgroundTile::Radial(radial_gradient) => {
               overlay_gradient_tile(
-                &mut composed,
+                &mut pixmap,
                 radial_gradient,
                 translation,
                 layer.blend_mode,
-                &[],
+                None,
               );
               continue;
             }
             BackgroundTile::Conic(conic_gradient) => {
               overlay_gradient_tile(
-                &mut composed,
+                &mut pixmap,
                 conic_gradient,
                 translation,
                 layer.blend_mode,
-                &[],
+                None,
               );
               continue;
             }
@@ -116,37 +229,73 @@ pub(crate) fn rasterize_layers(
         }
 
         overlay_image(
-          &mut composed,
+          &mut pixmap,
           &layer.tile,
           border,
           layer_transform,
           context.style.image_rendering,
           layer.blend_mode,
-          &[],
+          None,
           buffer_pool,
         );
       }
     }
   }
 
-  Ok(Some(BackgroundTile::Image(composed)))
+  drop(pixmap);
+  let pixmap = Pixmap::from_vec(composed, pixmap_size).unwrap_or_else(|| unreachable!());
+  Ok(Some(BackgroundTile::Pixmap(pixmap)))
+}
+
+pub(crate) fn release_rasterized_background_tile(
+  tile: BackgroundTile,
+  buffer_pool: &mut BufferPool,
+) {
+  match tile {
+    BackgroundTile::Pixmap(pixmap) => buffer_pool.release(pixmap.take()),
+    _ => {}
+  }
 }
 
 pub(crate) struct ColorTile {
-  pub color: Rgba<u8>,
+  color: Color,
+  premultiplied: PremultipliedColorU8,
   pub width: u32,
   pub height: u32,
 }
 
-impl GenericImageView for ColorTile {
-  type Pixel = Rgba<u8>;
-
-  fn dimensions(&self) -> (u32, u32) {
-    (self.width, self.height)
+impl ColorTile {
+  pub(crate) fn new(color: Rgba<u8>, width: u32, height: u32) -> Self {
+    let alpha = color.0[3] as u32;
+    let premultiplied = PremultipliedColorU8::from_rgba(
+      fast_div_255(color.0[0] as u32 * alpha),
+      fast_div_255(color.0[1] as u32 * alpha),
+      fast_div_255(color.0[2] as u32 * alpha),
+      color.0[3],
+    )
+    .unwrap_or_else(|| unreachable!());
+    Self {
+      color: color.0.into(),
+      premultiplied,
+      width,
+      height,
+    }
   }
 
-  fn get_pixel(&self, _x: u32, _y: u32) -> Self::Pixel {
+  pub(crate) fn color(&self) -> Color {
     self.color
+  }
+
+  pub(crate) fn width(&self) -> u32 {
+    self.width
+  }
+
+  pub(crate) fn height(&self) -> u32 {
+    self.height
+  }
+
+  pub(crate) fn get_pixel(&self, _x: u32, _y: u32) -> PremultipliedColorU8 {
+    self.premultiplied
   }
 }
 
@@ -154,7 +303,7 @@ pub(crate) enum BackgroundTile {
   Linear(LinearGradientTile),
   Radial(RadialGradientTile),
   Conic(ConicGradientTile),
-  Image(RgbaImage),
+  Pixmap(Pixmap),
   SampledBitmap {
     source: Arc<ImageSource>,
     width: u32,
@@ -164,26 +313,39 @@ pub(crate) enum BackgroundTile {
   Color(ColorTile),
 }
 
-impl GenericImageView for BackgroundTile {
-  type Pixel = Rgba<u8>;
-
-  fn dimensions(&self) -> (u32, u32) {
+impl BackgroundTile {
+  pub(crate) fn width(&self) -> u32 {
     match self {
-      Self::Linear(t) => t.dimensions(),
-      Self::Radial(t) => t.dimensions(),
-      Self::Conic(t) => t.dimensions(),
-      Self::Image(t) => t.dimensions(),
-      Self::SampledBitmap { width, height, .. } => (*width, *height),
-      Self::Color(t) => t.dimensions(),
+      Self::Linear(t) => t.width(),
+      Self::Radial(t) => t.width(),
+      Self::Conic(t) => t.width(),
+      Self::Pixmap(t) => t.width(),
+      Self::SampledBitmap { width, .. } => *width,
+      Self::Color(t) => t.width(),
     }
   }
 
-  fn get_pixel(&self, x: u32, y: u32) -> Self::Pixel {
+  pub(crate) fn height(&self) -> u32 {
     match self {
-      Self::Linear(t) => t.get_pixel(x, y),
-      Self::Radial(t) => t.get_pixel(x, y),
-      Self::Conic(t) => t.get_pixel(x, y),
-      Self::Image(t) => *t.get_pixel(x, y),
+      Self::Linear(t) => t.height(),
+      Self::Radial(t) => t.height(),
+      Self::Conic(t) => t.height(),
+      Self::Pixmap(t) => t.height(),
+      Self::SampledBitmap { height, .. } => *height,
+      Self::Color(t) => t.height(),
+    }
+  }
+
+  pub(crate) fn dimensions(&self) -> (u32, u32) {
+    (self.width(), self.height())
+  }
+
+  pub(crate) fn get_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {
+    match self {
+      Self::Linear(t) => t.sample_pixel(x, y),
+      Self::Radial(t) => t.sample_pixel(x, y),
+      Self::Conic(t) => t.sample_pixel(x, y),
+      Self::Pixmap(t) => PaintSource::from(t).get_pixel(x, y),
       Self::SampledBitmap {
         source,
         width,
@@ -191,7 +353,7 @@ impl GenericImageView for BackgroundTile {
         algo,
       } => {
         let ImageSource::Bitmap(bitmap) = source.as_ref() else {
-          return Rgba([0, 0, 0, 0]);
+          return PremultipliedColorU8::TRANSPARENT;
         };
 
         let logical_width = (*width).max(1);
@@ -203,20 +365,18 @@ impl GenericImageView for BackgroundTile {
         let mapped_y = (y as f32 + 0.5) * source_height as f32 / logical_height as f32;
 
         if matches!(algo, ImageScalingAlgorithm::Pixelated) {
-          interpolate_nearest(bitmap, mapped_x, mapped_y).unwrap_or(Rgba([0, 0, 0, 0]))
+          interpolate_bitmap_nearest(bitmap, mapped_x, mapped_y)
         } else {
-          interpolate_bilinear(bitmap, mapped_x, mapped_y).unwrap_or(Rgba([0, 0, 0, 0]))
+          interpolate_bitmap_bilinear(bitmap, mapped_x, mapped_y)
         }
       }
-      Self::Color(t) => t.color,
+      Self::Color(t) => t.get_pixel(x, y),
     }
   }
-}
 
-impl BackgroundTile {
   pub(crate) fn as_raw(&self) -> Option<&[u8]> {
     match self {
-      Self::Image(image) => Some(image.as_raw()),
+      Self::Pixmap(pixmap) => Some(pixmap.data()),
       _ => None,
     }
   }
@@ -357,16 +517,17 @@ pub(crate) fn render_tile(
             algo: context.style.image_rendering,
           }),
           #[cfg(feature = "svg")]
-          ImageSource::Svg { .. } => Some(BackgroundTile::Image(
-            source
-              .render_for_layout(
-                tile_w,
-                tile_h,
-                context.style.image_rendering,
-                context.current_color,
-              )?
-              .into_owned()?,
-          )),
+          ImageSource::Svg { .. } => match source.render_for_layout(
+            tile_w,
+            tile_h,
+            context.style.image_rendering,
+            context.current_color,
+          )? {
+            crate::resources::image::RenderedImage::Rasterized(pixmap) => {
+              Some(BackgroundTile::Pixmap(pixmap))
+            }
+            crate::resources::image::RenderedImage::Borrowed { .. } => None,
+          },
         }
       } else {
         None
@@ -645,7 +806,7 @@ pub(crate) fn create_mask(
         for y in 0..h {
           for x in 0..w {
             if i < alpha.len() {
-              alpha[i] = tile.get_pixel(x, y).0[3];
+              alpha[i] = tile.get_pixel(x, y).alpha();
               i += 1;
             }
           }
@@ -655,9 +816,7 @@ pub(crate) fn create_mask(
         }
       }
 
-      if let BackgroundTile::Image(image) = tile {
-        buffer_pool.release_image(image);
-      }
+      release_rasterized_background_tile(tile, buffer_pool);
 
       alpha
     }),
@@ -689,11 +848,11 @@ pub(crate) fn collect_background_layers(
     layers.insert(
       0,
       TileLayer {
-        tile: BackgroundTile::Color(ColorTile {
-          color: background_color.into(),
-          width: border_box.width as u32,
-          height: border_box.height as u32,
-        }),
+        tile: BackgroundTile::Color(ColorTile::new(
+          background_color.into(),
+          border_box.width as u32,
+          border_box.height as u32,
+        )),
         xs: [0].into(),
         ys: [0].into(),
         blend_mode: BlendMode::Normal,

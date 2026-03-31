@@ -1,7 +1,7 @@
 use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
-use image::{GenericImageView, Rgba};
 use std::ops::{Deref, Neg};
+use tiny_skia::PremultipliedColorU8;
 
 use typed_builder::TypedBuilder;
 
@@ -40,34 +40,6 @@ impl MakeComputed for LinearGradient {
   }
 }
 
-impl GenericImageView for LinearGradientTile {
-  type Pixel = Rgba<u8>;
-
-  fn dimensions(&self) -> (u32, u32) {
-    (self.width, self.height)
-  }
-
-  fn get_pixel(&self, x: u32, y: u32) -> Self::Pixel {
-    if self.color_lut.is_empty() {
-      return Rgba([0, 0, 0, 0]);
-    }
-
-    if self.color_lut.len() == 1 {
-      return self.color_lut[0];
-    }
-
-    let projection = self.projection_at(x as f32, y as f32);
-    let lut_idx = if self.repeating && self.repeat_period > 1e-6 {
-      let wrapped = (projection - self.repeat_start).rem_euclid(self.repeat_period);
-      ((wrapped * self.position_to_lut_scale).round() as usize).min(self.color_lut.len() - 1)
-    } else {
-      self.lut_index_for_projection_with_len(projection, self.color_lut.len())
-    };
-
-    self.color_lut[lut_idx]
-  }
-}
-
 /// Precomputed drawing context for repeated sampling of a `LinearGradient`.
 #[derive(Debug, Clone)]
 pub(crate) struct LinearGradientTile {
@@ -93,7 +65,7 @@ pub(crate) struct LinearGradientTile {
   pub position_to_lut_scale: f32,
   /// Pre-computed color lookup table for fast gradient sampling.
   /// Maps normalized position [0.0, 1.0] to color.
-  pub color_lut: Vec<Rgba<u8>>,
+  pub color_lut: Vec<PremultipliedColorU8>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -235,7 +207,28 @@ impl GradientOverlayTile for LinearGradientTile {
   }
 
   #[inline(always)]
-  fn sample_at(&self, lut_idx: usize) -> Rgba<u8> {
+  fn sample_at(&self, lut_idx: usize) -> PremultipliedColorU8 {
+    self.color_lut[lut_idx]
+  }
+
+  #[inline(always)]
+  fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {
+    if self.color_lut.is_empty() {
+      return PremultipliedColorU8::TRANSPARENT;
+    }
+
+    if self.color_lut.len() == 1 {
+      return self.color_lut[0];
+    }
+
+    let projection = self.projection_at(x as f32, y as f32);
+    let lut_idx = if self.repeating && self.repeat_period > 1e-6 {
+      let wrapped = (projection - self.repeat_start).rem_euclid(self.repeat_period);
+      ((wrapped * self.position_to_lut_scale).round() as usize).min(self.color_lut.len() - 1)
+    } else {
+      self.lut_index_for_projection_with_len(projection, self.color_lut.len())
+    };
+
     self.color_lut[lut_idx]
   }
 
@@ -722,6 +715,7 @@ mod tests {
   use color::{ColorSpaceTag, HueDirection};
   use std::rc::Rc;
   use taffy::Size;
+  use tiny_skia::ColorU8;
 
   use crate::{
     GlobalContext,
@@ -729,7 +723,6 @@ mod tests {
   };
 
   use super::*;
-
   fn sizing() -> Sizing {
     Sizing {
       viewport: Viewport::new((200, 100)),
@@ -1234,16 +1227,16 @@ mod tests {
     let dummy_context = RenderContext::new_test(&context, Viewport::new((100, 100)));
     let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context);
 
-    let color_top = tile.get_pixel(50, 0);
-    assert_eq!(color_top, Rgba([255, 0, 0, 255]));
+    let color_top = tile.sample_pixel(50, 0).demultiply();
+    assert_eq!(color_top, ColorU8::from_rgba(255, 0, 0, 255));
 
     // Test at the bottom (should be blue)
-    let color_bottom = tile.get_pixel(50, 100);
-    assert_eq!(color_bottom, Rgba([0, 0, 255, 255]));
+    let color_bottom = tile.sample_pixel(50, 100).demultiply();
+    assert_eq!(color_bottom, ColorU8::from_rgba(0, 0, 255, 255));
 
     // Test in the middle (should be purple)
-    let color_middle = tile.get_pixel(50, 50);
-    assert_eq!(color_middle, Rgba([140, 83, 162, 255]));
+    let color_middle = tile.sample_pixel(50, 50).demultiply();
+    assert_eq!(color_middle, ColorU8::from_rgba(140, 83, 162, 255));
   }
 
   #[test]
@@ -1270,12 +1263,12 @@ mod tests {
     let dummy_context = RenderContext::new_test(&context, Viewport::new((100, 100)));
 
     let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context);
-    let color_left = tile.get_pixel(0, 50);
-    assert_eq!(color_left, Rgba([255, 0, 0, 255]));
+    let color_left = tile.sample_pixel(0, 50).demultiply();
+    assert_eq!(color_left, ColorU8::from_rgba(255, 0, 0, 255));
 
     // Test at the right (should be blue)
-    let color_right = tile.get_pixel(100, 50);
-    assert_eq!(color_right, Rgba([0, 0, 255, 255]));
+    let color_right = tile.sample_pixel(100, 50).demultiply();
+    assert_eq!(color_right, ColorU8::from_rgba(0, 0, 255, 255));
   }
 
   #[test]
@@ -1325,8 +1318,8 @@ mod tests {
     let context = GlobalContext::default();
     let dummy_context = RenderContext::new_test(&context, Viewport::new((100, 100)));
     let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context);
-    let color = tile.get_pixel(50, 50);
-    assert_eq!(color, Rgba([255, 0, 0, 255]));
+    let color = tile.sample_pixel(50, 50).demultiply();
+    assert_eq!(color, ColorU8::from_rgba(255, 0, 0, 255));
   }
 
   #[test]
@@ -1342,8 +1335,8 @@ mod tests {
     let context = GlobalContext::default();
     let dummy_context = RenderContext::new_test(&context, Viewport::new((100, 100)));
     let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context);
-    let color = tile.get_pixel(50, 50);
-    assert_eq!(color, Rgba([0, 0, 0, 0]));
+    let color = tile.sample_pixel(50, 50).demultiply();
+    assert_eq!(color, ColorU8::from_rgba(0, 0, 0, 0));
   }
 
   #[test]
@@ -1377,16 +1370,16 @@ mod tests {
 
     assert_eq!(
       [
-        tile.get_pixel(2, 0),
-        tile.get_pixel(7, 0),
-        tile.get_pixel(12, 0),
-        tile.get_pixel(17, 0),
+        tile.sample_pixel(2, 0).demultiply(),
+        tile.sample_pixel(7, 0).demultiply(),
+        tile.sample_pixel(12, 0).demultiply(),
+        tile.sample_pixel(17, 0).demultiply(),
       ],
       [
-        Rgba([255, 0, 0, 255]),
-        Rgba([0, 0, 255, 255]),
-        Rgba([255, 0, 0, 255]),
-        Rgba([0, 0, 255, 255]),
+        ColorU8::from_rgba(255, 0, 0, 255),
+        ColorU8::from_rgba(0, 0, 255, 255),
+        ColorU8::from_rgba(255, 0, 0, 255),
+        ColorU8::from_rgba(0, 0, 255, 255),
       ]
     );
   }
@@ -1401,16 +1394,16 @@ mod tests {
     let tile = LinearGradientTile::new(&gradient, 40, 40, &dummy_context);
 
     // grey at 0,0
-    let c0 = tile.get_pixel(0, 0);
-    assert_eq!(c0, Rgba([128, 128, 128, 255]));
+    let c0 = tile.sample_pixel(0, 0).demultiply();
+    assert_eq!(c0, ColorU8::from_rgba(128, 128, 128, 255));
 
     // transparent at 1,0
-    let c1 = tile.get_pixel(1, 0);
-    assert_eq!(c1, Rgba([0, 0, 0, 0]));
+    let c1 = tile.sample_pixel(1, 0).demultiply();
+    assert_eq!(c1, ColorU8::from_rgba(0, 0, 0, 0));
 
     // transparent till the end
-    let c2 = tile.get_pixel(40, 0);
-    assert_eq!(c2, Rgba([0, 0, 0, 0]));
+    let c2 = tile.sample_pixel(40, 0).demultiply();
+    assert_eq!(c2, ColorU8::from_rgba(0, 0, 0, 0));
 
     Ok(())
   }
@@ -1425,7 +1418,10 @@ mod tests {
     let tile = LinearGradientTile::new(&gradient, 40, 40, &dummy_context);
 
     // color at top-left (0, 0) should be grey (1px hard stop)
-    assert_eq!(tile.get_pixel(0, 0), Rgba([128, 128, 128, 255]));
+    assert_eq!(
+      tile.sample_pixel(0, 0).demultiply(),
+      ColorU8::from_rgba(128, 128, 128, 255)
+    );
 
     Ok(())
   }

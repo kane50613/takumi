@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Range, sync::Arc};
+use std::{collections::HashMap, ops::Range, sync::Arc, time::Instant};
 
 use image::RgbaImage;
 use parley::{GlyphRun, PositionedLayoutItem};
@@ -22,7 +22,8 @@ use crate::{
     AnimationFrame, Canvas, DitheringAlgorithm, RenderContext, apply_dithering,
     inline_drawing::get_parent_x_height,
     stacking_context::{
-      apply_transform, build_stacking_contexts, collect_layout_children, paint_context,
+      apply_transform, blend_stats, build_stacking_contexts, collect_layout_children,
+      paint_context, reset_blend_stats,
     },
   },
   resources::image::ImageSource,
@@ -402,6 +403,12 @@ fn create_measured_node(
 
 /// Renders a node to an image.
 pub fn render<'g>(options: RenderOptions<'g>) -> Result<RgbaImage> {
+  let report_blend_stats = std::env::var_os("TAKUMI_BLEND_STATS").is_some();
+  if report_blend_stats {
+    reset_blend_stats();
+  }
+  let render_start = report_blend_stats.then(Instant::now);
+
   let RenderOptions {
     viewport,
     global,
@@ -457,6 +464,22 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<RgbaImage> {
       height: viewport.size.height.map(|value| value as f32),
     },
   )?;
+
+  if report_blend_stats {
+    let elapsed_ms = render_start
+      .map(|start| start.elapsed().as_millis())
+      .unwrap_or(0);
+    let stats = blend_stats();
+    eprintln!(
+      "takumi_blend_stats calls={} pixels={} dense={} sparse={} bounds={} elapsed_ms={}",
+      stats.plus_darker_calls,
+      stats.plus_darker_pixels,
+      stats.plus_darker_dense_hits,
+      stats.plus_darker_sparse_hits,
+      stats.plus_darker_bounds_hits,
+      elapsed_ms,
+    );
+  }
 
   let mut image = canvas.into_inner();
   apply_dithering(&mut image, dithering);

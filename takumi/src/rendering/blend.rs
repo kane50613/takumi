@@ -15,27 +15,6 @@ pub(crate) fn premultiply_alpha(color: &mut [u8]) {
 }
 
 #[inline(always)]
-pub(crate) fn unpremultiply_alpha(color: &mut [u8]) {
-  const Q16_SHIFT: u32 = 16;
-  const Q16_ROUNDING: u32 = 1 << (Q16_SHIFT - 1);
-
-  let alpha = color[3] as u32;
-
-  if alpha == 0 {
-    color[0] = 0;
-    color[1] = 0;
-    color[2] = 0;
-    return;
-  }
-
-  let inv_alpha = (((255u32 << Q16_SHIFT) + (alpha / 2)) / alpha).min(255u32 << Q16_SHIFT);
-
-  color[0] = (((color[0] as u32 * inv_alpha) + Q16_ROUNDING) >> Q16_SHIFT).min(255) as u8;
-  color[1] = (((color[1] as u32 * inv_alpha) + Q16_ROUNDING) >> Q16_SHIFT).min(255) as u8;
-  color[2] = (((color[2] as u32 * inv_alpha) + Q16_ROUNDING) >> Q16_SHIFT).min(255) as u8;
-}
-
-#[inline(always)]
 pub(crate) fn premultiply_alpha_imm(mut color: Rgba<u8>) -> Rgba<u8> {
   premultiply_alpha(&mut color.0);
   color

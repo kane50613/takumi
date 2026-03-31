@@ -1,10 +1,12 @@
 use color::{AlphaColor, ColorSpaceTag, DynamicColor, HueDirection, Rgba8, Srgb};
-use image::{Rgba, RgbaImage};
+#[cfg(test)]
+use image::RgbaImage;
 use smallvec::SmallVec;
 use taffy::Point;
+use tiny_skia::{ColorU8, PremultipliedColorU8};
 
 use super::{Color, GradientStop, ResolvedGradientStop};
-use crate::rendering::{RenderContext, blend_pixel, premultiply_alpha, unpremultiply_alpha};
+use crate::rendering::{RenderContext, fast_div_255};
 
 const MIN_GRADIENT_LUT_SIZE: usize = 1024;
 const MAX_GRADIENT_LUT_SIZE: usize = 8193;
@@ -19,10 +21,20 @@ pub(crate) fn interpolate_rgba(c1: Color, c2: Color, t: f32) -> Color {
     return c2;
   }
 
-  let mut premul_1 = c1.0;
-  premultiply_alpha(&mut premul_1);
-  let mut premul_2 = c2.0;
-  premultiply_alpha(&mut premul_2);
+  let [r1, g1, b1, a1] = c1.0;
+  let [r2, g2, b2, a2] = c2.0;
+  let premul_1 = [
+    fast_div_255(r1 as u32 * a1 as u32),
+    fast_div_255(g1 as u32 * a1 as u32),
+    fast_div_255(b1 as u32 * a1 as u32),
+    a1,
+  ];
+  let premul_2 = [
+    fast_div_255(r2 as u32 * a2 as u32),
+    fast_div_255(g2 as u32 * a2 as u32),
+    fast_div_255(b2 as u32 * a2 as u32),
+    a2,
+  ];
 
   let mut result = [0u8; 4];
   for i in 0..4 {
@@ -30,9 +42,16 @@ pub(crate) fn interpolate_rgba(c1: Color, c2: Color, t: f32) -> Color {
       .round()
       .clamp(0.0, 255.0) as u8;
   }
-  unpremultiply_alpha(&mut result);
 
-  Color(result)
+  let premul = PremultipliedColorU8::from_rgba(
+    result[0].min(result[3]),
+    result[1].min(result[3]),
+    result[2].min(result[3]),
+    result[3],
+  )
+  .unwrap_or(PremultipliedColorU8::TRANSPARENT);
+  let demul: ColorU8 = premul.demultiply();
+  Color([demul.red(), demul.green(), demul.blue(), demul.alpha()])
 }
 
 pub(crate) fn interpolate_with_color_space(
@@ -71,22 +90,136 @@ pub(crate) fn interpolate_with_color_space(
   Color(rgba)
 }
 
+/// Interpolates two premultiplied colors directly in premultiplied RGBA space.
+pub(crate) fn interpolate_rgba_premultiplied(
+  c1: PremultipliedColorU8,
+  c2: PremultipliedColorU8,
+  t: f32,
+) -> PremultipliedColorU8 {
+  if t <= f32::EPSILON {
+    return c1;
+  }
+
+  if t >= 1.0 - f32::EPSILON {
+    return c2;
+  }
+
+  let mut result = [0u8; 4];
+  let c1_rgba = [c1.red(), c1.green(), c1.blue(), c1.alpha()];
+  let c2_rgba = [c2.red(), c2.green(), c2.blue(), c2.alpha()];
+
+  for i in 0..4 {
+    result[i] = (c1_rgba[i] as f32 * (1.0 - t) + c2_rgba[i] as f32 * t)
+      .round()
+      .clamp(0.0, 255.0) as u8;
+  }
+
+  PremultipliedColorU8::from_rgba(
+    result[0].min(result[3]),
+    result[1].min(result[3]),
+    result[2].min(result[3]),
+    result[3],
+  )
+  .unwrap_or(PremultipliedColorU8::TRANSPARENT)
+}
+
 pub(crate) trait GradientOverlayTile {
   type RowState;
 
   fn width(&self) -> u32;
   fn height(&self) -> u32;
   fn lut_len(&self) -> usize;
-  fn sample_at(&self, lut_idx: usize) -> Rgba<u8>;
+  fn sample_at(&self, lut_idx: usize) -> PremultipliedColorU8;
+  fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8;
   fn begin_row(&self, src_x_start: u32, src_y: u32, lut_len: usize) -> Self::RowState;
   /// Returns an index in `0..lut_len` where `lut_len` is the value passed to `begin_row`.
   fn next_lut_index(&self, row_state: &mut Self::RowState) -> usize;
 }
 
+#[cfg(test)]
+pub(crate) fn overlay_gradient_tile_fast_normal_unconstrained_test<T: GradientOverlayTile>(
+  bottom: &mut RgbaImage,
+  tile: &T,
+  offset: Point<f32>,
+) {
+  let bottom_width = bottom.width();
+  let bottom_height = bottom.height();
+  overlay_gradient_tile_fast_normal_unconstrained(
+    bottom.as_mut(),
+    bottom_width,
+    bottom_height,
+    tile,
+    offset,
+  );
+}
+
+pub(crate) fn overlay_gradient_tile_fast_normal_unconstrained<T: GradientOverlayTile>(
+  data: &mut [u8],
+  bottom_width: u32,
+  bottom_height: u32,
+  tile: &T,
+  offset: Point<f32>,
+) {
+  let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
+    compute_overlay_bounds_raw(
+      bottom_width,
+      bottom_height,
+      offset,
+      tile.width(),
+      tile.height(),
+    )
+  else {
+    return;
+  };
+
+  let lut_len = tile.lut_len();
+  if lut_len == 0 {
+    return;
+  }
+  let row_stride = bottom_width as usize * 4;
+
+  for dest_y in dest_y_min..dest_y_max {
+    let src_y = (dest_y - offset_y) as u32;
+    let src_x_start = (dest_x_min - offset_x) as u32;
+    let mut row_state = tile.begin_row(src_x_start, src_y, lut_len);
+    for dest_x in dest_x_min..dest_x_max {
+      let lut_idx = tile.next_lut_index(&mut row_state);
+      debug_assert!(lut_idx < lut_len);
+      let pixel = tile.sample_at(lut_idx);
+      let src_a = pixel.alpha();
+      if src_a == 0 {
+        continue;
+      }
+
+      let pixel_offset = dest_y as usize * row_stride + dest_x as usize * 4;
+      if src_a == u8::MAX {
+        data[pixel_offset] = pixel.red();
+        data[pixel_offset + 1] = pixel.green();
+        data[pixel_offset + 2] = pixel.blue();
+        data[pixel_offset + 3] = src_a;
+      } else {
+        let inv_src_a = u8::MAX - src_a;
+        data[pixel_offset] = pixel
+          .red()
+          .saturating_add(fast_div_255(data[pixel_offset] as u32 * inv_src_a as u32));
+        data[pixel_offset + 1] = pixel.green().saturating_add(fast_div_255(
+          data[pixel_offset + 1] as u32 * inv_src_a as u32,
+        ));
+        data[pixel_offset + 2] = pixel.blue().saturating_add(fast_div_255(
+          data[pixel_offset + 2] as u32 * inv_src_a as u32,
+        ));
+        data[pixel_offset + 3] = src_a.saturating_add(fast_div_255(
+          data[pixel_offset + 3] as u32 * inv_src_a as u32,
+        ));
+      }
+    }
+  }
+}
+
 #[inline(always)]
-/// Computes destination/source bounds using floored pixel offsets from `offset`.
-pub(crate) fn compute_overlay_bounds(
-  bottom: &RgbaImage,
+fn compute_overlay_bounds_raw(
+  bottom_width: u32,
+  bottom_height: u32,
   offset: Point<f32>,
   width: u32,
   height: u32,
@@ -97,8 +230,8 @@ pub(crate) fn compute_overlay_bounds(
 
   let offset_x = offset.x.trunc() as i32;
   let offset_y = offset.y.trunc() as i32;
-  let bottom_width = bottom.width() as i32;
-  let bottom_height = bottom.height() as i32;
+  let bottom_width = bottom_width as i32;
+  let bottom_height = bottom_height as i32;
   let dest_y_min = offset_y.max(0);
   let dest_y_max = (offset_y + height as i32).min(bottom_height);
   if dest_y_min >= dest_y_max {
@@ -114,44 +247,6 @@ pub(crate) fn compute_overlay_bounds(
   Some((
     offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max,
   ))
-}
-
-pub(crate) fn overlay_gradient_tile_fast_normal_unconstrained<T: GradientOverlayTile>(
-  bottom: &mut RgbaImage,
-  tile: &T,
-  offset: Point<f32>,
-) {
-  let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
-    compute_overlay_bounds(bottom, offset, tile.width(), tile.height())
-  else {
-    return;
-  };
-
-  let lut_len = tile.lut_len();
-  if lut_len == 0 {
-    return;
-  }
-
-  for dest_y in dest_y_min..dest_y_max {
-    let src_y = (dest_y - offset_y) as u32;
-    let src_x_start = (dest_x_min - offset_x) as u32;
-    let mut row_state = tile.begin_row(src_x_start, src_y, lut_len);
-    for dest_x in dest_x_min..dest_x_max {
-      let lut_idx = tile.next_lut_index(&mut row_state);
-      debug_assert!(lut_idx < lut_len);
-      let pixel = tile.sample_at(lut_idx);
-      if pixel.0[3] == 0 {
-        continue;
-      }
-
-      let current = bottom.get_pixel_mut(dest_x as u32, dest_y as u32);
-      if pixel.0[3] == u8::MAX {
-        *current = pixel;
-      } else {
-        blend_pixel(current, pixel, super::BlendMode::Normal);
-      }
-    }
-  }
 }
 
 #[inline(always)]
@@ -214,7 +309,7 @@ fn assign_stop_sample_indices(
 }
 
 fn snap_stop_samples(
-  typed_lut: &mut [Rgba<u8>],
+  typed_lut: &mut [PremultipliedColorU8],
   resolved_stops: &[ResolvedGradientStop],
   axis_length: f32,
 ) {
@@ -246,7 +341,7 @@ pub(crate) fn build_color_lut_with_interpolation(
   lut_size: usize,
   color_space: ColorSpaceTag,
   hue_direction: HueDirection,
-) -> Vec<Rgba<u8>> {
+) -> Vec<PremultipliedColorU8> {
   if lut_size == 0 {
     return Vec::new();
   }
@@ -269,7 +364,7 @@ pub(crate) fn build_color_lut_with_interpolation(
     axis_length / (lut_size - 1) as f32
   };
 
-  let mut write_sample = |sample_index: usize| -> Rgba<u8> {
+  let mut write_sample = |sample_index: usize| -> PremultipliedColorU8 {
     let position_px = sample_index as f32 * sample_step;
 
     while right_index < resolved_stops.len() && resolved_stops[right_index].position <= position_px
@@ -288,6 +383,10 @@ pub(crate) fn build_color_lut_with_interpolation(
       }
 
       let t = interpolation_position(left_stop.position, right_stop.position, position_px);
+      if color_space == ColorSpaceTag::Srgb && hue_direction == HueDirection::Shorter {
+        return interpolate_rgba_premultiplied(left_stop.color.into(), right_stop.color.into(), t);
+      }
+
       interpolate_with_color_space(
         left_stop.color,
         right_stop.color,
@@ -300,7 +399,7 @@ pub(crate) fn build_color_lut_with_interpolation(
     color.into()
   };
 
-  let mut typed_lut = vec![Rgba([0, 0, 0, 0]); lut_size];
+  let mut typed_lut = vec![PremultipliedColorU8::TRANSPARENT; lut_size];
   for (sample_index, chunk) in typed_lut.iter_mut().enumerate() {
     *chunk = write_sample(sample_index);
   }
@@ -479,7 +578,7 @@ mod tests {
   use crate::rendering::blend_pixel;
   use crate::{
     GlobalContext,
-    layout::style::{BlendMode, Length, StopPosition},
+    layout::style::{BlendMode, Color, Length, StopPosition},
   };
 
   use super::*;
@@ -511,9 +610,16 @@ mod tests {
       2
     }
 
-    fn sample_at(&self, lut_idx: usize) -> Rgba<u8> {
-      static LUT: [Rgba<u8>; 2] = [Rgba([255, 0, 0, 255]), Rgba([0, 0, 255, 255])];
-      LUT[lut_idx]
+    fn sample_at(&self, lut_idx: usize) -> PremultipliedColorU8 {
+      match lut_idx {
+        0 => Color([255, 0, 0, 255]).into(),
+        _ => Color([0, 0, 255, 255]).into(),
+      }
+    }
+
+    fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {
+      let lut_idx = ((x + y) % self.lut_len() as u32) as usize;
+      self.sample_at(lut_idx)
     }
 
     fn begin_row(&self, src_x_start: u32, src_y: u32, lut_len: usize) -> Self::RowState {
@@ -545,8 +651,13 @@ mod tests {
       for dest_x in dest_x_min..dest_x_max {
         let lut_idx = tile.next_lut_index(&mut row_state);
         let pixel = tile.sample_at(lut_idx);
+        let pixel = pixel.demultiply();
         let current = bottom.get_pixel_mut(dest_x as u32, dest_y as u32);
-        blend_pixel(current, pixel, BlendMode::Normal);
+        blend_pixel(
+          current,
+          Rgba([pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]),
+          BlendMode::Normal,
+        );
       }
     }
   }
@@ -561,7 +672,7 @@ mod tests {
     let mut actual = RgbaImage::from_pixel(10, 7, Rgba([20, 30, 40, 255]));
     let mut expected = actual.clone();
 
-    overlay_gradient_tile_fast_normal_unconstrained(&mut actual, &tile, offset);
+    overlay_gradient_tile_fast_normal_unconstrained_test(&mut actual, &tile, offset);
     overlay_reference(&mut expected, &tile, offset);
 
     assert_eq!(actual, expected);
@@ -797,8 +908,8 @@ mod tests {
       HueDirection::Shorter,
     );
 
-    assert_eq!(lut[7], Rgba([255, 0, 0, 255]));
-    assert_eq!(lut[8], Rgba([0, 0, 255, 255]));
+    assert_eq!(lut[7], Color([255, 0, 0, 255]).into());
+    assert_eq!(lut[8], Color([0, 0, 255, 255]).into());
   }
 
   #[test]
@@ -829,8 +940,8 @@ mod tests {
     let stop_indices = assign_stop_sample_indices(&resolved, 32.0, lut.len());
 
     assert!(stop_indices[0] < stop_indices[1]);
-    assert_eq!(lut[stop_indices[0]], Rgba(resolved[0].color.0));
-    assert_eq!(lut[stop_indices[1]], Rgba(resolved[1].color.0));
+    assert_eq!(lut[stop_indices[0]], resolved[0].color.into());
+    assert_eq!(lut[stop_indices[1]], resolved[1].color.into());
   }
 
   #[test]
@@ -855,11 +966,11 @@ mod tests {
     );
 
     for pair in lut.windows(2) {
-      assert!(pair[0].0[0] <= pair[1].0[0]);
-      assert!(pair[0].0[1] <= pair[1].0[1]);
-      assert!(pair[0].0[2] <= pair[1].0[2]);
-      assert_eq!(pair[0].0[3], 255);
-      assert_eq!(pair[1].0[3], 255);
+      assert!(pair[0].red() <= pair[1].red());
+      assert!(pair[0].green() <= pair[1].green());
+      assert!(pair[0].blue() <= pair[1].blue());
+      assert_eq!(pair[0].alpha(), 255);
+      assert_eq!(pair[1].alpha(), 255);
     }
   }
 

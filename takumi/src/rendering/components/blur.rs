@@ -1,7 +1,5 @@
-use image::RgbaImage;
-
 use crate::Result;
-use crate::rendering::{BufferPool, premultiply_alpha, unpremultiply_alpha};
+use crate::rendering::BufferPool;
 
 /// Specifies the type of blur operation, which affects how the CSS radius is interpreted.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -41,7 +39,6 @@ struct BlurPassParams {
 }
 
 pub(crate) enum BlurFormat<'a> {
-  Rgba(&'a mut RgbaImage),
   Alpha {
     data: &'a mut [u8],
     width: u32,
@@ -52,17 +49,43 @@ pub(crate) enum BlurFormat<'a> {
 impl<'a> BlurFormat<'a> {
   pub fn width(&self) -> u32 {
     match self {
-      Self::Rgba(img) => img.width(),
       Self::Alpha { width, .. } => *width,
     }
   }
 
   pub fn height(&self) -> u32 {
     match self {
-      Self::Rgba(img) => img.height(),
       Self::Alpha { height, .. } => *height,
     }
   }
+}
+
+fn blur_pass_params(
+  width: u32,
+  height: u32,
+  radius: f32,
+  blur_type: BlurType,
+  stride: usize,
+) -> Option<BlurPassParams> {
+  let sigma = blur_type.to_sigma(radius);
+  if sigma <= 0.5 || width == 0 || height == 0 {
+    return None;
+  }
+
+  let box_radius = (((4.0 * sigma * sigma + 1.0).sqrt() - 1.0) * 0.5)
+    .round()
+    .max(1.0) as u32;
+  let div = 2 * box_radius + 1;
+  let (mul_val, shg) = compute_mul_shg(div);
+
+  Some(BlurPassParams {
+    width,
+    height,
+    radius: box_radius,
+    stride,
+    mul_val,
+    shg,
+  })
 }
 
 /// Applies a Gaussian approximation using 3-pass Box Blur.
@@ -72,61 +95,15 @@ pub(crate) fn apply_blur(
   blur_type: BlurType,
   pool: &mut BufferPool,
 ) -> Result<()> {
-  let sigma = blur_type.to_sigma(radius);
-  if sigma <= 0.5 {
-    return Ok(());
-  }
-
   let width = format.width();
   let height = format.height();
-  if width == 0 || height == 0 {
+  let Some(pass_params) = blur_pass_params(width, height, radius, blur_type, width as usize) else {
     return Ok(());
-  }
-
-  let box_radius = (((4.0 * sigma * sigma + 1.0).sqrt() - 1.0) * 0.5)
-    .round()
-    .max(1.0) as u32;
-
-  let div = 2 * box_radius + 1;
-  let (mul_val, shg) = compute_mul_shg(div);
-
-  let stride = match format {
-    BlurFormat::Rgba(_) => width as usize * 4,
-    BlurFormat::Alpha { .. } => width as usize,
   };
 
-  let pass_params = BlurPassParams {
-    width,
-    height,
-    radius: box_radius,
-    stride,
-    mul_val,
-    shg,
-  };
-
-  let mut col_sums = vec![0u32; stride];
+  let mut col_sums = pool.acquire_u32(pass_params.stride);
 
   match format {
-    BlurFormat::Rgba(image) => {
-      for pixel in bytemuck::cast_slice_mut::<u8, [u8; 4]>(image.as_mut()) {
-        premultiply_alpha(pixel);
-      }
-
-      let mut temp_image = pool.acquire_image_dirty(width, height)?;
-      let temp_data = &mut *temp_image;
-      let img_data = image.as_mut();
-
-      for _ in 0..3 {
-        box_blur_h::<4>(img_data, temp_data, pass_params);
-        box_blur_v(temp_data, img_data, pass_params, &mut col_sums);
-      }
-
-      pool.release_image(temp_image);
-
-      for pixel in bytemuck::cast_slice_mut::<u8, [u8; 4]>(image.as_mut()) {
-        unpremultiply_alpha(pixel);
-      }
-    }
     BlurFormat::Alpha { data, .. } => {
       let mut temp_image = pool.acquire_dirty((width * height) as usize);
       let temp_data = &mut *temp_image;
@@ -139,6 +116,44 @@ pub(crate) fn apply_blur(
       pool.release(temp_image);
     }
   }
+
+  pool.release_u32(col_sums);
+
+  Ok(())
+}
+
+pub(crate) fn apply_blur_rgba_bytes(
+  data: &mut [u8],
+  width: u32,
+  height: u32,
+  radius: f32,
+  blur_type: BlurType,
+  pool: &mut BufferPool,
+) -> Result<()> {
+  if width == 0 || height == 0 {
+    return Ok(());
+  }
+
+  let expected = (width as usize)
+    .saturating_mul(height as usize)
+    .saturating_mul(4);
+  if data.len() != expected {
+    return Ok(());
+  }
+
+  let Some(pass_params) = blur_pass_params(width, height, radius, blur_type, width as usize * 4)
+  else {
+    return Ok(());
+  };
+  let mut col_sums = pool.acquire_u32(pass_params.stride);
+
+  let mut temp = pool.acquire_dirty(expected);
+  for _ in 0..3 {
+    box_blur_h::<4>(data, &mut temp, pass_params);
+    box_blur_v(&temp, data, pass_params, &mut col_sums);
+  }
+  pool.release(temp);
+  pool.release_u32(col_sums);
 
   Ok(())
 }
