@@ -107,10 +107,6 @@ pub(crate) struct RadialGradientTile {
   pub cx: f32,
   /// Center Y coordinate in pixels
   pub cy: f32,
-  /// Radius X in pixels (for circle, equals radius_y)
-  pub radius_x: f32,
-  /// Radius Y in pixels (for circle, equals radius_x)
-  pub radius_y: f32,
   /// Reciprocal of `radius_x` for sampling.
   pub inv_radius_x: f32,
   /// Reciprocal of `radius_y` for sampling.
@@ -294,8 +290,6 @@ impl RadialGradientTile {
       height,
       cx,
       cy,
-      radius_x,
-      radius_y,
       inv_radius_x,
       inv_radius_y,
       radius_scale,
@@ -886,8 +880,8 @@ mod tests {
     // d_closest = sqrt(20^2 + 20^2)
     // d_farthest = sqrt(80^2 + 80^2)
     // ratio = d_closest / d_farthest = 20/80 = 0.25
-    // radius_x = 80 * 0.25 = 20
-    assert!((tile.radius_x - 20.0).abs() < 1e-3);
-    assert!((tile.radius_y - 20.0).abs() < 1e-3);
+    // radius_x = 80 * 0.25 = 20, radius_y = 80 * 0.25 = 20
+    assert!((tile.inv_radius_x - (1.0 / 20.0)).abs() < 1e-3);
+    assert!((tile.inv_radius_y - (1.0 / 20.0)).abs() < 1e-3);
   }
 }
