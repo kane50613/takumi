@@ -5,7 +5,7 @@ use crate::{
   Result,
   layout::{
     style::{
-      Affine, Color, ComputedStyle, Display, Filter, SpacePair, apply_backdrop_filter,
+      Affine, BlendMode, Color, ComputedStyle, Display, Filter, SpacePair, apply_backdrop_filter,
       apply_filters_to_pixmap,
     },
     tree::{LayoutResults, RenderNode},
@@ -19,7 +19,7 @@ use crate::{
 pub(crate) fn blend_pixmap_software(
   dst: &mut Pixmap,
   src: &Pixmap,
-  mode: crate::layout::style::BlendMode,
+  mode: BlendMode,
   offset: Point<i32>,
 ) {
   let Some((dst_left, dst_top, src_left, src_top, width, height)) =
@@ -28,7 +28,7 @@ pub(crate) fn blend_pixmap_software(
     return;
   };
 
-  if matches!(mode, crate::layout::style::BlendMode::PlusDarker) {
+  if matches!(mode, BlendMode::PlusDarker) {
     let dst_width = dst.width() as usize;
     let src_width = src.width() as usize;
     let dst_data = dst.data_mut();
