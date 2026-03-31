@@ -99,6 +99,7 @@ pub(crate) fn blend_pixel(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode)
     | BlendMode::Screen
     | BlendMode::Darken
     | BlendMode::Lighten
+    | BlendMode::ColorBurn
     | BlendMode::Difference
     | BlendMode::Exclusion => {
       blend_with_integer(bottom, top, mode);
@@ -168,11 +169,24 @@ fn blend_channel_integer(mode: BlendMode, bottom: u8, top: u8) -> u8 {
     BlendMode::Screen => 255 - fast_div_255((255 - top as u32) * (255 - bottom as u32)),
     BlendMode::Darken => top.min(bottom),
     BlendMode::Lighten => top.max(bottom),
+    BlendMode::ColorBurn => color_burn_integer(bottom, top),
     BlendMode::Difference => top.abs_diff(bottom),
     BlendMode::Exclusion => (bottom as u32 + top as u32
       - (2 * fast_div_255_u32(bottom as u32 * top as u32)))
     .min(255) as u8,
     _ => unreachable!(),
+  }
+}
+
+#[inline(always)]
+fn color_burn_integer(bottom: u8, top: u8) -> u8 {
+  if bottom == u8::MAX {
+    u8::MAX
+  } else if top == 0 {
+    0
+  } else {
+    let burned = ((255 - bottom as u32) * 255 + top as u32 / 2) / top as u32;
+    255u32.saturating_sub(burned.min(255)) as u8
   }
 }
 
