@@ -356,8 +356,12 @@ impl Canvas {
   }
 
   pub(crate) fn into_inner(self) -> RgbaImage {
-    RgbaImage::from_raw(self.image.width(), self.image.height(), self.image.take())
-      .unwrap_or_else(|| unreachable!())
+    RgbaImage::from_raw(
+      self.image.width(),
+      self.image.height(),
+      self.image.take_demultiplied(),
+    )
+    .unwrap_or_else(|| unreachable!())
   }
 
   pub(crate) fn recycle_offscreen_image(&mut self, mut image: Pixmap) {
