@@ -69,8 +69,8 @@ Under the hood it calls `extractEmojis` helper function, which separates the emo
 ```tsx twoslash
 import { extractEmojis } from "takumi-js/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
-import { fetchResources } from "takumi-js/helpers";
-import { Renderer, extractResourceUrls } from "takumi-js/node";
+import { extractResourceUrls, fetchResources } from "takumi-js/helpers";
+import { Renderer } from "takumi-js/node";
 
 let { node } = await fromJsx(<div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>);
 node = extractEmojis(node, "twemoji");

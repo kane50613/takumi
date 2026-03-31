@@ -286,7 +286,7 @@ pub fn draw_image(
 
   match image.image {
     RenderedImage::Rasterized(image) => canvas.overlay_image(
-      &image,
+      image.as_ref(),
       border,
       transform_with_content_offset,
       context.style.image_rendering,

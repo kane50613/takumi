@@ -3,32 +3,36 @@
 //! This module provides performance-optimized canvas operations including
 //! fast image blending and pixel manipulation operations.
 
-use std::mem::{replace, size_of};
+mod buffer_pool;
+mod mask;
+
+use std::mem::replace;
 
 use image::{
   ImageError, Rgba, RgbaImage,
   error::{ParameterError, ParameterErrorKind},
 };
-use taffy::{Layout, Point, Size};
+use taffy::{Point, Size};
 use tiny_skia::{
   FillRule as TinyFillRule, FilterQuality as TinyFilterQuality, Mask as TinyMask,
-  Paint as TinyPaint, Path as TinyPath, PathBuilder as TinyPathBuilder, Pattern as TinyPattern,
-  Pixmap, PixmapMut, PixmapPaint, PixmapRef, PremultipliedColorU8, Rect as TinyRect,
-  SpreadMode as TinySpreadMode, Transform as TinyTransform,
+  Paint as TinyPaint, Path as TinyPath, Pattern as TinyPattern, Pixmap, PixmapMut, PixmapPaint,
+  PixmapRef, PremultipliedColorU8, SpreadMode as TinySpreadMode, Transform as TinyTransform,
 };
 
 use super::stacking_context::blend_pixmap_software;
 use crate::{Result, layout::style::BlendMode};
 use crate::{
   layout::style::{
-    Affine, Color, ComputedStyle, GradientOverlayTile, ImageScalingAlgorithm, Overflow,
+    Affine, GradientOverlayTile, ImageScalingAlgorithm,
     overlay_gradient_tile_fast_normal_unconstrained,
   },
   rendering::{
-    BackgroundTile, BorderProperties, ColorTile, Command, Placement, RenderContext, Style,
-    blend_pixel, build_path, create_mask, fast_div_255,
+    BackgroundTile, BorderProperties, ColorTile, Placement, blend_pixel, build_path, fast_div_255,
   },
 };
+
+pub(crate) use buffer_pool::BufferPool;
+pub(crate) use mask::{CanvasViewport, NodeMaskAction, prepare_node_mask, render_mask};
 
 #[derive(Clone, Copy)]
 pub(crate) enum PaintSource<'a> {
@@ -94,7 +98,17 @@ impl<'a> PaintSource<'a> {
   fn as_pixmap_ref(self) -> Option<PixmapRef<'a>> {
     match self {
       Self::Pixmap(source) => Some(source.as_ref()),
-      Self::BackgroundTile(BackgroundTile::Pixmap(source)) => Some(source.as_ref()),
+      Self::BackgroundTile(BackgroundTile::Pixmap(source)) => Some(source.as_ref().as_ref()),
+      _ => None,
+    }
+  }
+
+  fn premultiplied_constant(self) -> Option<[u8; 4]> {
+    match self {
+      Self::ColorTile(tile) => Some(premultiplied_from_pixel(tile.get_pixel(0, 0))),
+      Self::BackgroundTile(BackgroundTile::Color(tile)) => {
+        Some(premultiplied_from_pixel(tile.get_pixel(0, 0)))
+      }
       _ => None,
     }
   }
@@ -180,675 +194,27 @@ pub(crate) fn premultiplied_to_rgba(pixel: PremultipliedColorU8) -> Rgba<u8> {
   Rgba([color.red(), color.green(), color.blue(), color.alpha()])
 }
 
-pub(crate) enum NodeMaskAction {
-  Shell(TinyMask),
-  Content(TinyMask),
-  None,
-  SkipRendering,
-}
-
 #[derive(Clone, Copy)]
-pub(crate) struct CanvasViewport {
-  pub(crate) origin: Point<u32>,
-  pub(crate) size: Size<u32>,
+enum MaskCompositeColor {
+  SourceOnly,
+  SourceOverColor([u8; 4]),
+  ColorOverSource([u8; 4]),
 }
 
-impl CanvasViewport {
-  pub(crate) fn right(self) -> i32 {
-    self.origin.x as i32 + self.size.width as i32
-  }
-
-  pub(crate) fn bottom(self) -> i32 {
-    self.origin.y as i32 + self.size.height as i32
-  }
-}
-
-impl NodeMaskAction {
-  pub(crate) fn is_some(&self) -> bool {
-    matches!(self, Self::Shell(_) | Self::Content(_))
-  }
-}
-
-pub(crate) fn prepare_node_mask(
-  context: &RenderContext,
-  style: &ComputedStyle,
-  layout: Layout,
-  transform: Affine,
-  viewport: CanvasViewport,
-  buffer_pool: &mut BufferPool,
-) -> Result<NodeMaskAction> {
-  // Clip path would just clip everything, and behaves like overflow: hidden.
-  if let Some(clip_path) = &style.clip_path {
-    let (mask, placement) = clip_path.render_mask(context, layout.size, buffer_pool);
-
-    let end_x = placement.left + placement.width as i32;
-    let end_y = placement.top + placement.height as i32;
-
-    if end_x < 0 || end_y < 0 {
-      buffer_pool.release(mask);
-      return Ok(NodeMaskAction::SkipRendering);
+#[inline(always)]
+fn apply_mask_color_mode(src: [u8; 4], color_mode: MaskCompositeColor) -> [u8; 4] {
+  match color_mode {
+    MaskCompositeColor::SourceOnly => src,
+    MaskCompositeColor::SourceOverColor(color) => {
+      let mut out = color;
+      composite_premultiplied_over(&mut out, src);
+      out
     }
-
-    let Some(mut full_mask) = TinyMask::new(viewport.size.width, viewport.size.height) else {
-      buffer_pool.release(mask);
-      return Ok(NodeMaskAction::SkipRendering);
-    };
-    full_mask.data_mut().fill(0);
-    copy_mask_into_canvas(&mut full_mask, viewport.origin, &mask, placement);
-    buffer_pool.release(mask);
-    return Ok(NodeMaskAction::Shell(full_mask));
-  }
-
-  let Some(inverse_transform) = transform.invert() else {
-    return Ok(NodeMaskAction::SkipRendering);
-  };
-
-  if let Some(mask) = create_mask(context, layout.size, buffer_pool)? {
-    let Some(placement) = transformed_rect_placement(layout.size, transform) else {
-      buffer_pool.release(mask);
-      return Ok(NodeMaskAction::SkipRendering);
-    };
-    let Some(full_mask) = rasterize_constraint_mask(viewport, placement, |x, y| {
-      sample_mask_image_alpha(
-        &mask,
-        Point { x: 0, y: 0 },
-        Point {
-          x: layout.size.width as u32,
-          y: layout.size.height as u32,
-        },
-        inverse_transform,
-        x,
-        y,
-      )
-    }) else {
-      buffer_pool.release(mask);
-      return Ok(NodeMaskAction::SkipRendering);
-    };
-    buffer_pool.release(mask);
-    return Ok(NodeMaskAction::Shell(full_mask));
-  }
-
-  let overflow = style.resolve_overflows();
-
-  let clip_x = overflow.x != Overflow::Visible;
-  let clip_y = overflow.y != Overflow::Visible;
-
-  if !overflow.should_clip_content() {
-    return Ok(NodeMaskAction::None);
-  }
-
-  if (clip_x && layout.content_box_width() < f32::EPSILON)
-    || (clip_y && layout.content_box_height() < f32::EPSILON)
-  {
-    return Ok(NodeMaskAction::SkipRendering);
-  }
-
-  // When border-radius is non-zero, create a mask-based overflow constraint
-  // so that children (including abs-pos) are clipped to the padding-box
-  // rounded corners (inset from the border edge by border widths).
-  let border_props = BorderProperties::from_context(context, layout.size, layout.border);
-  if !border_props.is_zero() {
-    // Compute padding-box: border-box inset by border widths on each side.
-    let padding_box = Size {
-      width: (layout.size.width - layout.border.left - layout.border.right).max(0.0),
-      height: (layout.size.height - layout.border.top - layout.border.bottom).max(0.0),
-    };
-
-    // Shrink corner radii inward by border widths to get padding-box radii.
-    let mut inner_props = border_props;
-    inner_props.inset_by_border_width();
-
-    let mut paths = Vec::with_capacity(10);
-    // Offset origin so the mask starts at the padding edge (inside the border).
-    let padding_origin = Point {
-      x: layout.border.left,
-      y: layout.border.top,
-    };
-    inner_props.append_mask_commands(&mut paths, padding_box, padding_origin);
-
-    let (mask_data, placement) = render_mask(&paths, None, None, buffer_pool);
-
-    if placement.width == 0 || placement.height == 0 {
-      buffer_pool.release(mask_data);
-      return Ok(NodeMaskAction::SkipRendering);
+    MaskCompositeColor::ColorOverSource(color) => {
+      let mut out = src;
+      composite_premultiplied_over(&mut out, color);
+      out
     }
-
-    let from = Point {
-      x: placement.left.max(0) as u32,
-      y: placement.top.max(0) as u32,
-    };
-
-    let to = Point {
-      x: from.x + placement.width,
-      y: from.y + placement.height,
-    };
-    let Some(full_mask) = rasterize_constraint_mask(viewport, placement, |x, y| {
-      sample_overflow_alpha(
-        from,
-        to,
-        inverse_transform,
-        Some((&mask_data, placement.width)),
-        x,
-        y,
-      )
-    }) else {
-      buffer_pool.release(mask_data);
-      return Ok(NodeMaskAction::SkipRendering);
-    };
-    buffer_pool.release(mask_data);
-    return Ok(NodeMaskAction::Content(full_mask));
-  }
-
-  let from = Point {
-    x: if clip_x {
-      (layout.padding.left + layout.border.left) as u32
-    } else {
-      0
-    },
-    y: if clip_y {
-      (layout.padding.top + layout.border.top) as u32
-    } else {
-      0
-    },
-  };
-  let to = Point {
-    x: if clip_x {
-      from.x + layout.content_box_width() as u32
-    } else {
-      u32::MAX
-    },
-    y: if clip_y {
-      from.y + layout.content_box_height() as u32
-    } else {
-      u32::MAX
-    },
-  };
-
-  if to.x != u32::MAX
-    && to.y != u32::MAX
-    && let Some(rect) = TinyRect::from_ltrb(from.x as f32, from.y as f32, to.x as f32, to.y as f32)
-    && let Some(forward_transform) = inverse_transform.invert()
-    && let Some(mut mask) = TinyMask::new(viewport.size.width, viewport.size.height)
-  {
-    mask.data_mut().fill(u8::MAX);
-    let path = TinyPathBuilder::from_rect(rect);
-    let localized_transform =
-      Affine::translation(-(viewport.origin.x as f32), -(viewport.origin.y as f32))
-        * forward_transform;
-    mask.intersect_path(
-      &path,
-      TinyFillRule::Winding,
-      true,
-      TinyTransform::from(localized_transform),
-    );
-    return Ok(NodeMaskAction::Content(mask));
-  }
-
-  let Some(placement) = overflow_mask_placement(layout.size, transform, viewport, clip_x, clip_y)
-  else {
-    return Ok(NodeMaskAction::SkipRendering);
-  };
-  let Some(mask) = rasterize_constraint_mask(viewport, placement, |x, y| {
-    sample_overflow_alpha(from, to, inverse_transform, None, x, y)
-  }) else {
-    return Ok(NodeMaskAction::SkipRendering);
-  };
-  Ok(NodeMaskAction::Content(mask))
-}
-
-fn overflow_mask_placement(
-  size: Size<f32>,
-  transform: Affine,
-  viewport: CanvasViewport,
-  clip_x: bool,
-  clip_y: bool,
-) -> Option<Placement> {
-  let mut placement = transformed_rect_placement(size, transform)?;
-
-  if clip_x == clip_y {
-    return Some(placement);
-  }
-
-  if !transform.only_translation() {
-    return Some(Placement {
-      left: viewport.origin.x as i32,
-      top: viewport.origin.y as i32,
-      width: viewport.size.width,
-      height: viewport.size.height,
-    });
-  }
-
-  if !clip_x {
-    placement.left = viewport.origin.x as i32;
-    placement.width = viewport.size.width;
-  }
-
-  if !clip_y {
-    placement.top = viewport.origin.y as i32;
-    placement.height = viewport.size.height;
-  }
-
-  Some(placement)
-}
-
-fn copy_mask_into_canvas(
-  canvas_mask: &mut TinyMask,
-  canvas_origin: Point<u32>,
-  mask: &[u8],
-  placement: Placement,
-) {
-  let canvas_left = canvas_origin.x as i32;
-  let canvas_top = canvas_origin.y as i32;
-  let canvas_right = canvas_left + canvas_mask.width() as i32;
-  let canvas_bottom = canvas_top + canvas_mask.height() as i32;
-  let src_width = placement.width as i32;
-  let src_height = placement.height as i32;
-  let start_x = placement.left.max(canvas_left);
-  let start_y = placement.top.max(canvas_top);
-  let end_x = (placement.left + src_width).min(canvas_right);
-  let end_y = (placement.top + src_height).min(canvas_bottom);
-
-  if start_x >= end_x || start_y >= end_y {
-    return;
-  }
-
-  let stride = canvas_mask.width() as usize;
-  let data = canvas_mask.data_mut();
-  for global_y in start_y..end_y {
-    let src_y = (global_y - placement.top) as usize;
-    let canvas_row = (global_y - canvas_top) as usize * stride;
-    let src_row = src_y * placement.width as usize;
-    for global_x in start_x..end_x {
-      let src_x = (global_x - placement.left) as usize;
-      data[canvas_row + (global_x - canvas_left) as usize] = mask[src_row + src_x];
-    }
-  }
-}
-
-fn rasterize_constraint_mask(
-  viewport: CanvasViewport,
-  placement: Placement,
-  alpha_at: impl Fn(u32, u32) -> u8,
-) -> Option<TinyMask> {
-  let mut mask = TinyMask::new(viewport.size.width, viewport.size.height)?;
-  mask.data_mut().fill(0);
-
-  let start_x = placement.left.max(viewport.origin.x as i32);
-  let start_y = placement.top.max(viewport.origin.y as i32);
-  let end_x = (placement.left + placement.width as i32).min(viewport.right());
-  let end_y = (placement.top + placement.height as i32).min(viewport.bottom());
-  if start_x >= end_x || start_y >= end_y {
-    return Some(mask);
-  }
-
-  let data = mask.data_mut();
-  let stride = viewport.size.width as usize;
-  for global_y in start_y..end_y {
-    let row = (global_y - viewport.origin.y as i32) as usize * stride;
-    for global_x in start_x..end_x {
-      data[row + (global_x - viewport.origin.x as i32) as usize] =
-        alpha_at(global_x as u32, global_y as u32);
-    }
-  }
-  Some(mask)
-}
-
-fn transformed_rect_placement(size: Size<f32>, transform: Affine) -> Option<Placement> {
-  let corners = [
-    transform.transform_point(Point::ZERO),
-    transform.transform_point(Point {
-      x: size.width,
-      y: 0.0,
-    }),
-    transform.transform_point(Point {
-      x: 0.0,
-      y: size.height,
-    }),
-    transform.transform_point(Point {
-      x: size.width,
-      y: size.height,
-    }),
-  ];
-
-  let mut left = f32::INFINITY;
-  let mut top = f32::INFINITY;
-  let mut right = f32::NEG_INFINITY;
-  let mut bottom = f32::NEG_INFINITY;
-  for point in corners {
-    left = left.min(point.x);
-    top = top.min(point.y);
-    right = right.max(point.x);
-    bottom = bottom.max(point.y);
-  }
-
-  let left = left.floor() as i32;
-  let top = top.floor() as i32;
-  let right = right.ceil() as i32;
-  let bottom = bottom.ceil() as i32;
-  if right <= left || bottom <= top {
-    return None;
-  }
-
-  Some(Placement {
-    left,
-    top,
-    width: (right - left) as u32,
-    height: (bottom - top) as u32,
-  })
-}
-
-fn sample_mask_image_alpha(
-  mask: &[u8],
-  from: Point<u32>,
-  to: Point<u32>,
-  inverse_transform: Affine,
-  x: u32,
-  y: u32,
-) -> u8 {
-  let Some(original_point) = transformed_mask_point(inverse_transform, from, to, x, y) else {
-    return 0;
-  };
-  mask[mask_index_from_coord(original_point.x, original_point.y, to.x - from.x)]
-}
-
-fn sample_overflow_alpha(
-  from: Point<u32>,
-  to: Point<u32>,
-  inverse_transform: Affine,
-  border_radius_mask: Option<(&[u8], u32)>,
-  x: u32,
-  y: u32,
-) -> u8 {
-  let Some(original_point) = transformed_mask_point(inverse_transform, from, to, x, y) else {
-    return 0;
-  };
-
-  if let Some((mask, mask_width)) = border_radius_mask {
-    let mask_x = original_point.x - from.x;
-    let mask_y = original_point.y - from.y;
-    return mask[mask_index_from_coord(mask_x, mask_y, mask_width)];
-  }
-
-  u8::MAX
-}
-
-fn transformed_mask_point(
-  inverse_transform: Affine,
-  from: Point<u32>,
-  to: Point<u32>,
-  x: u32,
-  y: u32,
-) -> Option<Point<u32>> {
-  let original_point = inverse_transform.transform_point(Point {
-    x: x as f32,
-    y: y as f32,
-  });
-  if original_point.x < 0.0 || original_point.y < 0.0 {
-    return None;
-  }
-
-  let original_point = original_point.map(|point| point as u32);
-  let is_contained = original_point.x >= from.x
-    && original_point.x < to.x
-    && original_point.y >= from.y
-    && original_point.y < to.y;
-  if !is_contained {
-    return None;
-  }
-  Some(original_point)
-}
-
-pub(crate) fn render_mask(
-  paths: &[Command],
-  transform: Option<Affine>,
-  style: Option<Style>,
-  buffer_pool: &mut BufferPool,
-) -> (Vec<u8>, Placement) {
-  let style = style.unwrap_or_default();
-  let Some(mut path) = build_path(paths) else {
-    return (Vec::new(), Placement::default());
-  };
-
-  if let Some(stroke) = style.stroke() {
-    let Some(stroked_path) = path.stroke(&stroke, 1.0) else {
-      return (Vec::new(), Placement::default());
-    };
-    path = stroked_path;
-  }
-
-  if let Some(transform) = transform {
-    let Some(transformed) = path.transform(transform.into()) else {
-      return (Vec::new(), Placement::default());
-    };
-    path = transformed;
-  }
-
-  let Some(bounds) = path.compute_tight_bounds() else {
-    return (Vec::new(), Placement::default());
-  };
-  let left = bounds.left().floor() as i32;
-  let top = bounds.top().floor() as i32;
-  let right = bounds.right().ceil() as i32;
-  let bottom = bounds.bottom().ceil() as i32;
-
-  if right <= left || bottom <= top {
-    return (Vec::new(), Placement::default());
-  }
-
-  let width = (right - left) as u32;
-  let height = (bottom - top) as u32;
-  let Some(mut mask) = TinyMask::new(width, height) else {
-    return (Vec::new(), Placement::default());
-  };
-  let Some(local_path) =
-    path.transform(TinyTransform::from_translate(-(left as f32), -(top as f32)))
-  else {
-    return (Vec::new(), Placement::default());
-  };
-  mask.fill_path(
-    &local_path,
-    style.fill_rule(),
-    true,
-    TinyTransform::identity(),
-  );
-
-  let mut buffer = buffer_pool.acquire(mask.data().len());
-  buffer.copy_from_slice(mask.data());
-  (
-    buffer,
-    Placement {
-      left,
-      top,
-      width,
-      height,
-    },
-  )
-}
-
-const BUCKET_COUNT: usize = 32;
-
-/// A pool of reusable RGBA image buffers to avoid repeated heap allocations.
-pub(crate) struct BufferPool {
-  pools: [Vec<Vec<u8>>; BUCKET_COUNT],
-  u32_pools: [Vec<Vec<u32>>; BUCKET_COUNT],
-  current_size: usize,
-  max_size: usize,
-}
-
-impl Default for BufferPool {
-  fn default() -> Self {
-    const EMPTY_VEC: Vec<Vec<u8>> = Vec::new();
-    const EMPTY_U32_VEC: Vec<Vec<u32>> = Vec::new();
-    Self {
-      pools: [EMPTY_VEC; BUCKET_COUNT],
-      u32_pools: [EMPTY_U32_VEC; BUCKET_COUNT],
-      current_size: 0,
-      // Default to 64MB limit to avoid excessive memory usage
-      max_size: 64 * 1024 * 1024,
-    }
-  }
-}
-
-impl BufferPool {
-  fn bucket_index(capacity: usize) -> usize {
-    if capacity == 0 {
-      return 0;
-    }
-    capacity.next_power_of_two().trailing_zeros() as usize
-  }
-
-  /// Acquires a zero-filled `Vec<u8>` of the given capacity from the pool.
-  /// Call [`release`](Self::release) when done to return the buffer.
-  pub(crate) fn acquire(&mut self, capacity: usize) -> Vec<u8> {
-    let mut index = Self::bucket_index(capacity);
-    if index >= BUCKET_COUNT {
-      index = BUCKET_COUNT - 1;
-    }
-
-    // Find the smallest non-empty bucket that can satisfy this capacity
-    for i in index..BUCKET_COUNT {
-      if let Some(mut buf) = self.pools[i].pop() {
-        self.current_size -= buf.capacity();
-
-        buf.clear();
-        buf.resize(capacity, 0);
-
-        return buf;
-      }
-    }
-
-    // Always allocate at least the power-of-2 size so we neatly fit buckets
-    let alloc_cap = (1_usize.checked_shl(index as u32).unwrap_or(capacity)).max(capacity);
-    let mut buf = Vec::with_capacity(alloc_cap);
-
-    // For safety, we zero-initialize newly allocated OS memory
-    // to avoid potential UB or data leaks from uninitialized OS pages.
-    buf.resize(capacity, 0);
-    buf
-  }
-
-  /// Acquires an uninitialized `Vec<u8>` of the given capacity from the pool.
-  /// Call [`release`](Self::release) when done to return the buffer.
-  #[allow(clippy::uninit_vec)]
-  pub(crate) fn acquire_dirty(&mut self, capacity: usize) -> Vec<u8> {
-    let mut index = Self::bucket_index(capacity);
-    if index >= BUCKET_COUNT {
-      index = BUCKET_COUNT - 1;
-    }
-
-    // Find the smallest non-empty bucket that can satisfy this capacity
-    for i in index..BUCKET_COUNT {
-      if let Some(mut buf) = self.pools[i].pop() {
-        self.current_size -= buf.capacity();
-
-        buf.clear();
-        unsafe {
-          buf.set_len(capacity);
-        }
-
-        return buf;
-      }
-    }
-
-    // Always allocate at least the power-of-2 size so we neatly fit buckets
-    let alloc_cap = (1_usize.checked_shl(index as u32).unwrap_or(capacity)).max(capacity);
-    let mut buf = Vec::with_capacity(alloc_cap);
-
-    unsafe {
-      buf.set_len(capacity);
-    }
-    buf
-  }
-
-  /// Returns a previously acquired buffer to the pool for reuse.
-  pub(crate) fn release(&mut self, buffer: Vec<u8>) {
-    if buffer.is_empty() || buffer.capacity() == 0 {
-      return;
-    }
-
-    let cap = buffer.capacity();
-
-    // If adding this buffer exceeds our size limit, just let it be dropped.
-    if self.current_size + cap > self.max_size {
-      // Actually if dropping it exceeds memory but it's large, we might want to pop smaller ones,
-      // but simpler to just drop this one.
-      return;
-    }
-
-    let mut index = Self::bucket_index(cap);
-    if index >= BUCKET_COUNT {
-      index = BUCKET_COUNT - 1;
-    }
-
-    self.current_size += cap;
-    self.pools[index].push(buffer);
-  }
-
-  /// Acquires a zero-filled `Vec<u32>` of the given capacity from the pool.
-  /// Call [`release_u32`](Self::release_u32) when done to return the buffer.
-  pub(crate) fn acquire_u32(&mut self, capacity: usize) -> Vec<u32> {
-    let mut index = Self::bucket_index(capacity);
-    if index >= BUCKET_COUNT {
-      index = BUCKET_COUNT - 1;
-    }
-
-    for i in index..BUCKET_COUNT {
-      if let Some(mut buf) = self.u32_pools[i].pop() {
-        self.current_size -= buf.capacity() * size_of::<u32>();
-        buf.clear();
-        buf.resize(capacity, 0);
-        return buf;
-      }
-    }
-
-    let alloc_cap = (1_usize.checked_shl(index as u32).unwrap_or(capacity)).max(capacity);
-    let mut buf = Vec::with_capacity(alloc_cap);
-    buf.resize(capacity, 0);
-    buf
-  }
-
-  /// Returns a previously acquired `Vec<u32>` to the pool for reuse.
-  pub(crate) fn release_u32(&mut self, buffer: Vec<u32>) {
-    if buffer.is_empty() || buffer.capacity() == 0 {
-      return;
-    }
-
-    let cap_bytes = buffer.capacity() * size_of::<u32>();
-    if self.current_size + cap_bytes > self.max_size {
-      return;
-    }
-
-    let mut index = Self::bucket_index(buffer.capacity());
-    if index >= BUCKET_COUNT {
-      index = BUCKET_COUNT - 1;
-    }
-
-    self.current_size += cap_bytes;
-    self.u32_pools[index].push(buffer);
-  }
-
-  /// Acquires a zeroed `RgbaImage` of the given dimensions from the pool.
-  ///
-  /// If the pool contains a buffer with enough capacity to hold `width * height * 4` bytes,
-  /// it is reused (zero-filled); otherwise a fresh allocation is made.
-  /// Call [`release_image`](Self::release_image) when done to return the buffer.
-  pub(crate) fn acquire_image(&mut self, width: u32, height: u32) -> Result<RgbaImage> {
-    let needed = (width * height * 4) as usize;
-    let raw = self.acquire(needed);
-
-    RgbaImage::from_raw(width, height, raw).ok_or_else(|| {
-      ImageError::Parameter(ParameterError::from_kind(
-        ParameterErrorKind::DimensionMismatch,
-      ))
-      .into()
-    })
-  }
-
-  /// Returns a previously acquired image's backing buffer to the pool for reuse.
-  ///
-  /// If the pool is currently at its memory limit, the buffer is dropped instead.
-  pub(crate) fn release_image(&mut self, image: RgbaImage) {
-    self.release(image.into_raw());
   }
 }
 
@@ -1017,19 +383,6 @@ impl Canvas {
     f(&self.image, &mut self.buffer_pool)
   }
 
-  pub(crate) fn overlay_area(
-    &mut self,
-    offset: Point<f32>,
-    top_size: Size<u32>,
-    mode: BlendMode,
-    f: impl Fn(u32, u32) -> Rgba<u8>,
-  ) {
-    let offset = self.localize_offset(offset);
-    self.with_overlay_state(|pixmap, combined_mask, _| {
-      overlay_area(pixmap, offset, top_size, mode, combined_mask, f);
-    });
-  }
-
   pub(crate) fn draw_mask<C: Into<Rgba<u8>>>(
     &mut self,
     mask: &[u8],
@@ -1040,6 +393,98 @@ impl Canvas {
     let placement = self.localize_placement(placement);
     self.with_overlay_state(|pixmap, combined_mask, _| {
       draw_mask(pixmap, mask, placement, color.into(), mode, combined_mask);
+    });
+  }
+
+  #[allow(clippy::too_many_arguments)]
+  pub(crate) fn composite_mask_source(
+    &mut self,
+    mask: &[u8],
+    placement: Placement,
+    source: PaintSource<'_>,
+    canvas_to_source: Affine,
+    sample_bias: Point<f32>,
+    algorithm: ImageScalingAlgorithm,
+    mode: BlendMode,
+  ) {
+    let placement = self.localize_placement(placement);
+    let canvas_to_source =
+      canvas_to_source * Affine::translation(self.origin.x as f32, self.origin.y as f32);
+    self.with_overlay_state(|pixmap, combined_mask, _| {
+      composite_masked_source(
+        pixmap,
+        mask,
+        placement,
+        source,
+        canvas_to_source,
+        sample_bias,
+        algorithm,
+        MaskCompositeColor::SourceOnly,
+        mode,
+        combined_mask,
+      );
+    });
+  }
+
+  #[allow(clippy::too_many_arguments)]
+  pub(crate) fn composite_mask_source_over_color<C: Into<Rgba<u8>>>(
+    &mut self,
+    mask: &[u8],
+    placement: Placement,
+    source: PaintSource<'_>,
+    color: C,
+    canvas_to_source: Affine,
+    sample_bias: Point<f32>,
+    algorithm: ImageScalingAlgorithm,
+    mode: BlendMode,
+  ) {
+    let placement = self.localize_placement(placement);
+    let canvas_to_source =
+      canvas_to_source * Affine::translation(self.origin.x as f32, self.origin.y as f32);
+    self.with_overlay_state(|pixmap, combined_mask, _| {
+      composite_masked_source(
+        pixmap,
+        mask,
+        placement,
+        source,
+        canvas_to_source,
+        sample_bias,
+        algorithm,
+        MaskCompositeColor::SourceOverColor(premultiply_rgba(color.into())),
+        mode,
+        combined_mask,
+      );
+    });
+  }
+
+  #[allow(clippy::too_many_arguments)]
+  pub(crate) fn composite_mask_color_over_source<C: Into<Rgba<u8>>>(
+    &mut self,
+    mask: &[u8],
+    placement: Placement,
+    source: PaintSource<'_>,
+    color: C,
+    canvas_to_source: Affine,
+    sample_bias: Point<f32>,
+    algorithm: ImageScalingAlgorithm,
+    mode: BlendMode,
+  ) {
+    let placement = self.localize_placement(placement);
+    let canvas_to_source =
+      canvas_to_source * Affine::translation(self.origin.x as f32, self.origin.y as f32);
+    self.with_overlay_state(|pixmap, combined_mask, _| {
+      composite_masked_source(
+        pixmap,
+        mask,
+        placement,
+        source,
+        canvas_to_source,
+        sample_bias,
+        algorithm,
+        MaskCompositeColor::ColorOverSource(premultiply_rgba(color.into())),
+        mode,
+        combined_mask,
+      );
     });
   }
 
@@ -1136,13 +581,6 @@ impl Canvas {
     Some(combined)
   }
 
-  fn localize_offset(&self, offset: Point<f32>) -> Point<f32> {
-    Point {
-      x: offset.x - self.origin.x as f32,
-      y: offset.y - self.origin.y as f32,
-    }
-  }
-
   fn localize_transform(&self, transform: Affine) -> Affine {
     Affine::translation(-(self.origin.x as f32), -(self.origin.y as f32)) * transform
   }
@@ -1230,6 +668,89 @@ fn write_premultiplied_rgba(dst: &mut [u8], src: &[u8]) {
 }
 
 #[inline(always)]
+fn premultiply_rgba_pixel(red: u8, green: u8, blue: u8, alpha: u8) -> [u8; 4] {
+  [
+    fast_div_255(red as u32 * alpha as u32),
+    fast_div_255(green as u32 * alpha as u32),
+    fast_div_255(blue as u32 * alpha as u32),
+    alpha,
+  ]
+}
+
+#[inline(always)]
+fn premultiply_rgba(color: Rgba<u8>) -> [u8; 4] {
+  let [red, green, blue, alpha] = color.0;
+  premultiply_rgba_pixel(red, green, blue, alpha)
+}
+
+#[inline(always)]
+fn scale_premultiplied_pixel(pixel: [u8; 4], alpha: u8) -> [u8; 4] {
+  if alpha == u8::MAX {
+    return pixel;
+  }
+
+  [
+    fast_div_255(pixel[0] as u32 * alpha as u32),
+    fast_div_255(pixel[1] as u32 * alpha as u32),
+    fast_div_255(pixel[2] as u32 * alpha as u32),
+    fast_div_255(pixel[3] as u32 * alpha as u32),
+  ]
+}
+
+#[inline(always)]
+fn composite_premultiplied_over(dst: &mut [u8; 4], src: [u8; 4]) {
+  let src_alpha = src[3];
+  if src_alpha == 0 {
+    return;
+  }
+
+  let dst_alpha = dst[3];
+  if src_alpha == u8::MAX || dst_alpha == 0 {
+    *dst = src;
+    return;
+  }
+
+  let inverse_alpha = u8::MAX - src_alpha;
+  dst[0] = src[0].saturating_add(fast_div_255(dst[0] as u32 * inverse_alpha as u32));
+  dst[1] = src[1].saturating_add(fast_div_255(dst[1] as u32 * inverse_alpha as u32));
+  dst[2] = src[2].saturating_add(fast_div_255(dst[2] as u32 * inverse_alpha as u32));
+  dst[3] = src_alpha.saturating_add(fast_div_255(dst_alpha as u32 * inverse_alpha as u32));
+}
+
+#[inline(always)]
+fn blend_premultiplied_pixel(dst: &mut [u8; 4], src: [u8; 4], mode: BlendMode) {
+  if src[3] == 0 {
+    return;
+  }
+
+  if mode == BlendMode::Normal {
+    composite_premultiplied_over(dst, src);
+    return;
+  }
+
+  let mut current = premultiplied_to_rgba(
+    PremultipliedColorU8::from_rgba(
+      dst[0].min(dst[3]),
+      dst[1].min(dst[3]),
+      dst[2].min(dst[3]),
+      dst[3],
+    )
+    .unwrap_or(PremultipliedColorU8::TRANSPARENT),
+  );
+  let color = premultiplied_to_rgba(
+    PremultipliedColorU8::from_rgba(src[0], src[1], src[2], src[3])
+      .unwrap_or(PremultipliedColorU8::TRANSPARENT),
+  );
+  blend_pixel(&mut current, color, mode);
+  *dst = premultiply_rgba(current);
+}
+
+#[inline(always)]
+fn premultiplied_from_pixel(pixel: PremultipliedColorU8) -> [u8; 4] {
+  [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]
+}
+
+#[inline(always)]
 fn compute_overlay_bounds_for_canvas(
   canvas_width: u32,
   canvas_height: u32,
@@ -1262,24 +783,201 @@ fn compute_overlay_bounds_for_canvas(
   ))
 }
 
-pub(crate) fn overlay_area(
+#[inline(always)]
+fn sample_pixmap_nearest(source: PixmapRef<'_>, x: f32, y: f32) -> Option<[u8; 4]> {
+  let width = source.width();
+  let height = source.height();
+  if width == 0 || height == 0 {
+    return None;
+  }
+
+  let px = x.floor().max(0.0) as u32;
+  let py = y.floor().max(0.0) as u32;
+  let px = px.min(width.saturating_sub(1));
+  let py = py.min(height.saturating_sub(1));
+  let pixel = source.pixels()[(py * width + px) as usize];
+  Some([pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()])
+}
+
+#[inline(always)]
+fn sample_pixmap_bilinear(source: PixmapRef<'_>, x: f32, y: f32) -> Option<[u8; 4]> {
+  let width = source.width();
+  let height = source.height();
+  if width == 0 || height == 0 {
+    return None;
+  }
+
+  let x = (x - 0.5).clamp(0.0, width.saturating_sub(1) as f32);
+  let y = (y - 0.5).clamp(0.0, height.saturating_sub(1) as f32);
+  let uf = x.floor() as u32;
+  let vf = y.floor() as u32;
+  let uc = (uf + 1).min(width - 1);
+  let vc = (vf + 1).min(height - 1);
+  let pixels = source.pixels();
+  let p00 = pixels[(vf * width + uf) as usize];
+  let p01 = pixels[(vc * width + uf) as usize];
+  let p10 = pixels[(vf * width + uc) as usize];
+  let p11 = pixels[(vc * width + uc) as usize];
+
+  let u_ratio = ((x - uf as f32) * 256.0) as u32;
+  let v_ratio = ((y - vf as f32) * 256.0) as u32;
+  let u_opposite = 256 - u_ratio;
+  let v_opposite = 256 - v_ratio;
+  let w00 = u_opposite * v_opposite;
+  let w01 = u_opposite * v_ratio;
+  let w10 = u_ratio * v_opposite;
+  let w11 = u_ratio * v_ratio;
+
+  let mut out = [0u8; 4];
+  for (index, channel) in out.iter_mut().enumerate() {
+    let p00_i = match index {
+      0 => p00.red(),
+      1 => p00.green(),
+      2 => p00.blue(),
+      _ => p00.alpha(),
+    };
+    let p01_i = match index {
+      0 => p01.red(),
+      1 => p01.green(),
+      2 => p01.blue(),
+      _ => p01.alpha(),
+    };
+    let p10_i = match index {
+      0 => p10.red(),
+      1 => p10.green(),
+      2 => p10.blue(),
+      _ => p10.alpha(),
+    };
+    let p11_i = match index {
+      0 => p11.red(),
+      1 => p11.green(),
+      2 => p11.blue(),
+      _ => p11.alpha(),
+    };
+    *channel = ((p00_i as u32 * w00 + p10_i as u32 * w10 + p01_i as u32 * w01 + p11_i as u32 * w11)
+      >> 16) as u8;
+  }
+
+  Some(out)
+}
+
+#[inline(always)]
+fn sample_rgba_nearest(source: &RgbaImage, x: f32, y: f32) -> Option<[u8; 4]> {
+  let width = source.width();
+  let height = source.height();
+  if width == 0 || height == 0 {
+    return None;
+  }
+
+  let px = x.floor().max(0.0) as u32;
+  let py = y.floor().max(0.0) as u32;
+  let px = px.min(width.saturating_sub(1));
+  let py = py.min(height.saturating_sub(1));
+  let raw = source.as_raw();
+  let offset = ((py * width + px) * 4) as usize;
+  Some(premultiply_rgba_pixel(
+    raw[offset],
+    raw[offset + 1],
+    raw[offset + 2],
+    raw[offset + 3],
+  ))
+}
+
+#[inline(always)]
+fn sample_rgba_bilinear(source: &RgbaImage, x: f32, y: f32) -> Option<[u8; 4]> {
+  let width = source.width();
+  let height = source.height();
+  if width == 0 || height == 0 {
+    return None;
+  }
+
+  let x = (x - 0.5).clamp(0.0, width.saturating_sub(1) as f32);
+  let y = (y - 0.5).clamp(0.0, height.saturating_sub(1) as f32);
+  let uf = x.floor() as u32;
+  let vf = y.floor() as u32;
+  let uc = (uf + 1).min(width - 1);
+  let vc = (vf + 1).min(height - 1);
+  let raw = source.as_raw();
+
+  let get_pixel = |x: u32, y: u32| {
+    let offset = ((y * width + x) * 4) as usize;
+    premultiply_rgba_pixel(
+      raw[offset],
+      raw[offset + 1],
+      raw[offset + 2],
+      raw[offset + 3],
+    )
+  };
+
+  let p00 = get_pixel(uf, vf);
+  let p01 = get_pixel(uf, vc);
+  let p10 = get_pixel(uc, vf);
+  let p11 = get_pixel(uc, vc);
+
+  let u_ratio = ((x - uf as f32) * 256.0) as u32;
+  let v_ratio = ((y - vf as f32) * 256.0) as u32;
+  let u_opposite = 256 - u_ratio;
+  let v_opposite = 256 - v_ratio;
+  let w00 = u_opposite * v_opposite;
+  let w01 = u_opposite * v_ratio;
+  let w10 = u_ratio * v_opposite;
+  let w11 = u_ratio * v_ratio;
+
+  let mut out = [0u8; 4];
+  for index in 0..4 {
+    out[index] = ((p00[index] as u32 * w00
+      + p10[index] as u32 * w10
+      + p01[index] as u32 * w01
+      + p11[index] as u32 * w11)
+      >> 16) as u8;
+  }
+
+  Some(out)
+}
+
+#[inline(always)]
+fn sample_paint_source(
+  source: PaintSource<'_>,
+  algorithm: ImageScalingAlgorithm,
+  x: f32,
+  y: f32,
+) -> Option<[u8; 4]> {
+  match source {
+    PaintSource::RgbaImage(image) => {
+      if matches!(algorithm, ImageScalingAlgorithm::Pixelated) {
+        sample_rgba_nearest(image, x, y)
+      } else {
+        sample_rgba_bilinear(image, x, y)
+      }
+    }
+    PaintSource::Pixmap(pixmap) => {
+      if matches!(algorithm, ImageScalingAlgorithm::Pixelated) {
+        sample_pixmap_nearest(pixmap.as_ref(), x, y)
+      } else {
+        sample_pixmap_bilinear(pixmap.as_ref(), x, y)
+      }
+    }
+    _ if matches!(algorithm, ImageScalingAlgorithm::Pixelated) => {
+      interpolate_nearest(source, x, y).map(premultiplied_from_pixel)
+    }
+    _ => interpolate_bilinear(source, x, y).map(premultiplied_from_pixel),
+  }
+}
+
+fn blit_sampled_rgba_translation(
   pixmap: &mut PixmapMut<'_>,
+  source: &RgbaImage,
+  size: Size<u32>,
   offset: Point<f32>,
-  top_size: Size<u32>,
+  logical_to_source: Affine,
+  algorithm: ImageScalingAlgorithm,
   mode: BlendMode,
   combined_mask: Option<&TinyMask>,
-  f: impl Fn(u32, u32) -> Rgba<u8>,
 ) {
   let canvas_width = pixmap.width();
   let canvas_height = pixmap.height();
   let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
-    compute_overlay_bounds_for_canvas(
-      canvas_width,
-      canvas_height,
-      offset,
-      top_size.width,
-      top_size.height,
-    )
+    compute_overlay_bounds_for_canvas(canvas_width, canvas_height, offset, size.width, size.height)
   else {
     return;
   };
@@ -1287,12 +985,21 @@ pub(crate) fn overlay_area(
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
   let mask_data = combined_mask.map(TinyMask::data);
   for dest_y in dest_y_min..dest_y_max {
-    let src_y = (dest_y - offset_y) as u32;
-
+    let src_y = (dest_y - offset_y) as f32;
+    let mut sample_point = logical_to_source.transform_point(Point {
+      x: (dest_x_min - offset_x) as f32 + 0.5,
+      y: src_y + 0.5,
+    });
     for dest_x in dest_x_min..dest_x_max {
-      let src_x = (dest_x - offset_x) as u32;
-      let mut color = f(src_x, src_y);
-      if color.0[3] == 0 {
+      let mut src = if matches!(algorithm, ImageScalingAlgorithm::Pixelated) {
+        sample_rgba_nearest(source, sample_point.x, sample_point.y)
+      } else {
+        sample_rgba_bilinear(source, sample_point.x, sample_point.y)
+      }
+      .unwrap_or([0, 0, 0, 0]);
+      sample_point.x += logical_to_source.a;
+      sample_point.y += logical_to_source.b;
+      if src[3] == 0 {
         continue;
       }
 
@@ -1303,30 +1010,382 @@ pub(crate) fn overlay_area(
         if alpha == 0 {
           continue;
         }
-        if alpha < 255 {
-          apply_mask_alpha_to_pixel(&mut color, alpha);
-          if color.0[3] == 0 {
-            continue;
-          }
+        src = scale_premultiplied_pixel(src, alpha);
+        if src[3] == 0 {
+          continue;
         }
       }
 
       let index = (dest_y * canvas_width + dest_x) as usize;
-      let [r, g, b, a] = pixels[index];
-      let current_premul = PremultipliedColorU8::from_rgba(r.min(a), g.min(a), b.min(a), a)
-        .unwrap_or(PremultipliedColorU8::TRANSPARENT);
-      let mut current = premultiplied_to_rgba(current_premul);
-      blend_pixel(&mut current, color, mode);
-
-      let alpha = current.0[3] as u32;
-      pixels[index] = [
-        fast_div_255(current.0[0] as u32 * alpha),
-        fast_div_255(current.0[1] as u32 * alpha),
-        fast_div_255(current.0[2] as u32 * alpha),
-        current.0[3],
-      ];
+      blend_premultiplied_pixel(&mut pixels[index], src, mode);
     }
   }
+}
+
+fn blit_paint_source_translation(
+  pixmap: &mut PixmapMut<'_>,
+  source: PaintSource<'_>,
+  offset: Point<f32>,
+  mode: BlendMode,
+  combined_mask: Option<&TinyMask>,
+) {
+  if let Some(color) = source.premultiplied_constant() {
+    blit_solid_translation(
+      pixmap,
+      source.width(),
+      source.height(),
+      color,
+      offset,
+      mode,
+      combined_mask,
+    );
+    return;
+  }
+
+  let canvas_width = pixmap.width();
+  let canvas_height = pixmap.height();
+  let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
+    compute_overlay_bounds_for_canvas(
+      canvas_width,
+      canvas_height,
+      offset,
+      source.width(),
+      source.height(),
+    )
+  else {
+    return;
+  };
+
+  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let mask_data = combined_mask.map(TinyMask::data);
+  match source {
+    PaintSource::RgbaImage(source) => {
+      let raw = source.as_raw();
+      let source_width = source.width();
+      for dest_y in dest_y_min..dest_y_max {
+        let src_y = (dest_y - offset_y) as u32;
+        for dest_x in dest_x_min..dest_x_max {
+          let src_x = (dest_x - offset_x) as u32;
+          let raw_offset = ((src_y * source_width + src_x) * 4) as usize;
+          let mut src = premultiply_rgba_pixel(
+            raw[raw_offset],
+            raw[raw_offset + 1],
+            raw[raw_offset + 2],
+            raw[raw_offset + 3],
+          );
+          if src[3] == 0 {
+            continue;
+          }
+
+          let dest_x = dest_x as u32;
+          let dest_y = dest_y as u32;
+          if let Some(mask_data) = mask_data {
+            let alpha = mask_data[mask_index_from_coord(dest_x, dest_y, canvas_width)];
+            if alpha == 0 {
+              continue;
+            }
+            src = scale_premultiplied_pixel(src, alpha);
+            if src[3] == 0 {
+              continue;
+            }
+          }
+
+          let index = (dest_y * canvas_width + dest_x) as usize;
+          blend_premultiplied_pixel(&mut pixels[index], src, mode);
+        }
+      }
+    }
+    PaintSource::Pixmap(source) => {
+      let source_pixels = source.pixels();
+      let source_width = source.width();
+      for dest_y in dest_y_min..dest_y_max {
+        let src_y = (dest_y - offset_y) as u32;
+        for dest_x in dest_x_min..dest_x_max {
+          let src_x = (dest_x - offset_x) as u32;
+          let mut src =
+            premultiplied_from_pixel(source_pixels[(src_y * source_width + src_x) as usize]);
+          if src[3] == 0 {
+            continue;
+          }
+
+          let dest_x = dest_x as u32;
+          let dest_y = dest_y as u32;
+          if let Some(mask_data) = mask_data {
+            let alpha = mask_data[mask_index_from_coord(dest_x, dest_y, canvas_width)];
+            if alpha == 0 {
+              continue;
+            }
+            src = scale_premultiplied_pixel(src, alpha);
+            if src[3] == 0 {
+              continue;
+            }
+          }
+
+          let index = (dest_y * canvas_width + dest_x) as usize;
+          blend_premultiplied_pixel(&mut pixels[index], src, mode);
+        }
+      }
+    }
+    _ => {
+      for dest_y in dest_y_min..dest_y_max {
+        let src_y = (dest_y - offset_y) as f32;
+        for dest_x in dest_x_min..dest_x_max {
+          let src_x = (dest_x - offset_x) as f32;
+          let mut src = sample_paint_source(source, ImageScalingAlgorithm::Pixelated, src_x, src_y)
+            .unwrap_or([0; 4]);
+          if src[3] == 0 {
+            continue;
+          }
+
+          let dest_x = dest_x as u32;
+          let dest_y = dest_y as u32;
+          if let Some(mask_data) = mask_data {
+            let alpha = mask_data[mask_index_from_coord(dest_x, dest_y, canvas_width)];
+            if alpha == 0 {
+              continue;
+            }
+            src = scale_premultiplied_pixel(src, alpha);
+            if src[3] == 0 {
+              continue;
+            }
+          }
+
+          let index = (dest_y * canvas_width + dest_x) as usize;
+          blend_premultiplied_pixel(&mut pixels[index], src, mode);
+        }
+      }
+    }
+  }
+}
+
+fn blit_solid_translation(
+  pixmap: &mut PixmapMut<'_>,
+  source_width: u32,
+  source_height: u32,
+  color: [u8; 4],
+  offset: Point<f32>,
+  mode: BlendMode,
+  combined_mask: Option<&TinyMask>,
+) {
+  let canvas_width = pixmap.width();
+  let canvas_height = pixmap.height();
+  let Some((_offset_x, _offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
+    compute_overlay_bounds_for_canvas(
+      canvas_width,
+      canvas_height,
+      offset,
+      source_width,
+      source_height,
+    )
+  else {
+    return;
+  };
+
+  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let mask_data = combined_mask.map(TinyMask::data);
+  for dest_y in dest_y_min..dest_y_max {
+    for dest_x in dest_x_min..dest_x_max {
+      let mut src = color;
+      if src[3] == 0 {
+        continue;
+      }
+
+      let dest_x = dest_x as u32;
+      let dest_y = dest_y as u32;
+      if let Some(mask_data) = mask_data {
+        let alpha = mask_data[mask_index_from_coord(dest_x, dest_y, canvas_width)];
+        if alpha == 0 {
+          continue;
+        }
+        src = scale_premultiplied_pixel(src, alpha);
+        if src[3] == 0 {
+          continue;
+        }
+      }
+
+      let index = (dest_y * canvas_width + dest_x) as usize;
+      blend_premultiplied_pixel(&mut pixels[index], src, mode);
+    }
+  }
+}
+
+fn composite_masked_constant(
+  pixmap: &mut PixmapMut<'_>,
+  mask: &[u8],
+  placement: Placement,
+  color: [u8; 4],
+  mode: BlendMode,
+  combined_mask: Option<&TinyMask>,
+) {
+  let canvas_width = pixmap.width();
+  let canvas_height = pixmap.height();
+  let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
+    compute_overlay_bounds_for_canvas(
+      canvas_width,
+      canvas_height,
+      Point {
+        x: placement.left as f32,
+        y: placement.top as f32,
+      },
+      placement.width,
+      placement.height,
+    )
+  else {
+    return;
+  };
+
+  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let mask_data = combined_mask.map(TinyMask::data);
+  for dest_y in dest_y_min..dest_y_max {
+    let mask_y = (dest_y - offset_y) as u32;
+    for dest_x in dest_x_min..dest_x_max {
+      let mask_x = (dest_x - offset_x) as u32;
+      let mut src = scale_premultiplied_pixel(
+        color,
+        mask[mask_index_from_coord(mask_x, mask_y, placement.width)],
+      );
+      if src[3] == 0 {
+        continue;
+      }
+
+      let dest_x = dest_x as u32;
+      let dest_y = dest_y as u32;
+      if let Some(mask_data) = mask_data {
+        let alpha = mask_data[mask_index_from_coord(dest_x, dest_y, canvas_width)];
+        if alpha == 0 {
+          continue;
+        }
+        src = scale_premultiplied_pixel(src, alpha);
+        if src[3] == 0 {
+          continue;
+        }
+      }
+
+      let index = (dest_y * canvas_width + dest_x) as usize;
+      blend_premultiplied_pixel(&mut pixels[index], src, mode);
+    }
+  }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn composite_masked_source(
+  pixmap: &mut PixmapMut<'_>,
+  mask: &[u8],
+  placement: Placement,
+  source: PaintSource<'_>,
+  canvas_to_source: Affine,
+  sample_bias: Point<f32>,
+  algorithm: ImageScalingAlgorithm,
+  color_mode: MaskCompositeColor,
+  mode: BlendMode,
+  combined_mask: Option<&TinyMask>,
+) {
+  if mask.is_empty() {
+    return;
+  }
+
+  if let Some(color) = source.premultiplied_constant() {
+    composite_masked_constant(
+      pixmap,
+      mask,
+      placement,
+      apply_mask_color_mode(color, color_mode),
+      mode,
+      combined_mask,
+    );
+    return;
+  }
+
+  let canvas_width = pixmap.width();
+  let canvas_height = pixmap.height();
+  let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
+    compute_overlay_bounds_for_canvas(
+      canvas_width,
+      canvas_height,
+      Point {
+        x: placement.left as f32,
+        y: placement.top as f32,
+      },
+      placement.width,
+      placement.height,
+    )
+  else {
+    return;
+  };
+
+  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let mask_data = combined_mask.map(TinyMask::data);
+  for dest_y in dest_y_min..dest_y_max {
+    let mask_y = (dest_y - offset_y) as u32;
+    let mut sample_point = canvas_to_source.transform_point(Point {
+      x: dest_x_min as f32 + sample_bias.x,
+      y: dest_y as f32 + sample_bias.y,
+    });
+    for dest_x in dest_x_min..dest_x_max {
+      let mask_x = (dest_x - offset_x) as u32;
+      let mask_alpha = mask[mask_index_from_coord(mask_x, mask_y, placement.width)];
+      let sampled = if mask_alpha == 0 {
+        None
+      } else {
+        sample_paint_source(source, algorithm, sample_point.x, sample_point.y)
+      };
+      sample_point.x += canvas_to_source.a;
+      sample_point.y += canvas_to_source.b;
+
+      let Some(mut src) = sampled else {
+        continue;
+      };
+
+      src = apply_mask_color_mode(src, color_mode);
+
+      src = scale_premultiplied_pixel(src, mask_alpha);
+      if src[3] == 0 {
+        continue;
+      }
+
+      let dest_x = dest_x as u32;
+      let dest_y = dest_y as u32;
+      if let Some(mask_data) = mask_data {
+        let alpha = mask_data[mask_index_from_coord(dest_x, dest_y, canvas_width)];
+        if alpha == 0 {
+          continue;
+        }
+        src = scale_premultiplied_pixel(src, alpha);
+        if src[3] == 0 {
+          continue;
+        }
+      }
+
+      let index = (dest_y * canvas_width + dest_x) as usize;
+      blend_premultiplied_pixel(&mut pixels[index], src, mode);
+    }
+  }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn composite_mask_source_to_pixmap(
+  pixmap: &mut PixmapMut<'_>,
+  mask: &[u8],
+  placement: Placement,
+  source: PaintSource<'_>,
+  canvas_to_source: Affine,
+  sample_bias: Point<f32>,
+  algorithm: ImageScalingAlgorithm,
+  mode: BlendMode,
+  combined_mask: Option<&TinyMask>,
+) {
+  composite_masked_source(
+    pixmap,
+    mask,
+    placement,
+    source,
+    canvas_to_source,
+    sample_bias,
+    algorithm,
+    MaskCompositeColor::SourceOnly,
+    mode,
+    combined_mask,
+  );
 }
 
 pub(crate) fn draw_mask(
@@ -1346,59 +1405,14 @@ pub(crate) fn draw_mask(
     placement.width as usize * placement.height as usize,
   );
 
-  let offset = Point {
-    x: placement.left as f32,
-    y: placement.top as f32,
-  };
-  let top_size = Size {
-    width: placement.width,
-    height: placement.height,
-  };
-
-  overlay_area(pixmap, offset, top_size, mode, combined_mask, |x, y| {
-    let alpha = mask[mask_index_from_coord(x, y, placement.width)];
-    let mut pixel = color;
-    apply_mask_alpha_to_pixel(&mut pixel, alpha);
-    pixel
-  });
-}
-
-#[inline(always)]
-pub(crate) fn apply_mask_alpha_to_pixel(pixel: &mut Rgba<u8>, alpha: u8) {
-  match alpha {
-    0 => {
-      pixel.0[3] = 0;
-    }
-    255 => {}
-    alpha => {
-      pixel.0[3] = fast_div_255(pixel.0[3] as u32 * alpha as u32);
-    }
-  }
-}
-
-/// Samples a pixel from an image given a transform and canvas coordinates.
-///
-/// This function handles the inverse transform and the scaling algorithm.
-/// It also optimizes for translate-only transforms by skipping bilinear interpolation.
-#[inline(always)]
-pub(crate) fn sample_transformed_pixel(
-  image: PaintSource<'_>,
-  inverse_transform: Affine,
-  algorithm: ImageScalingAlgorithm,
-  canvas_x: f32,
-  canvas_y: f32,
-  offset: Point<f32>,
-) -> Option<PremultipliedColorU8> {
-  let sampled_point = inverse_transform.transform_point(Point {
-    x: canvas_x,
-    y: canvas_y,
-  }) + offset;
-
-  if inverse_transform.only_translation() || matches!(algorithm, ImageScalingAlgorithm::Pixelated) {
-    interpolate_nearest(image, sampled_point.x, sampled_point.y)
-  } else {
-    interpolate_bilinear(image, sampled_point.x, sampled_point.y)
-  }
+  composite_masked_constant(
+    pixmap,
+    mask,
+    placement,
+    premultiply_rgba(color),
+    mode,
+    combined_mask,
+  );
 }
 
 #[inline(always)]
@@ -1625,6 +1639,12 @@ pub(crate) fn overlay_image<'a, I: Into<PaintSource<'a>>>(
     }
   }
 
+  if border.is_zero() && transform.only_translation() {
+    let offset = transform.decompose_translation();
+    blit_paint_source_translation(pixmap, image, offset, mode, combined_mask);
+    return;
+  }
+
   if border.is_zero()
     && try_draw_image_with_tiny_skia(
       pixmap,
@@ -1657,78 +1677,36 @@ pub(crate) fn overlay_image<'a, I: Into<PaintSource<'a>>>(
     return;
   }
 
-  if transform.only_translation() && border.is_zero() {
-    let translation = transform.decompose_translation();
-    overlay_area(pixmap, translation, size, mode, combined_mask, |x, y| {
-      premultiplied_to_rgba(image.get_pixel(x, y))
-    });
-    return;
-  }
-
   let mut paths = Vec::new();
   border.append_mask_commands(&mut paths, size.map(|v| v as f32), Point::ZERO);
 
   let (mask, placement) = render_mask(&paths, Some(transform), None, buffer_pool);
   let inverse = transform.invert();
-  let is_identity = transform.is_identity() && placement.left >= 0 && placement.top >= 0;
-
-  if is_identity {
-    overlay_area(
+  if transform.is_identity() && placement.left >= 0 && placement.top >= 0 {
+    composite_masked_source(
       pixmap,
-      Point {
-        x: placement.left as f32,
-        y: placement.top as f32,
-      },
-      Size {
-        width: placement.width,
-        height: placement.height,
-      },
+      &mask,
+      placement,
+      image,
+      Affine::IDENTITY,
+      Point { x: 0.5, y: 0.5 },
+      algorithm,
+      MaskCompositeColor::SourceOnly,
       mode,
       combined_mask,
-      |x, y| {
-        let alpha = mask[mask_index_from_coord(x, y, placement.width)];
-        if alpha == 0 {
-          return Color::transparent().into();
-        }
-        let mut pixel = premultiplied_to_rgba(
-          image.get_pixel(x + placement.left as u32, y + placement.top as u32),
-        );
-        apply_mask_alpha_to_pixel(&mut pixel, alpha);
-        pixel
-      },
     );
   } else if let Some(inverse) = inverse {
-    overlay_area(
+    composite_masked_source(
       pixmap,
-      Point {
-        x: placement.left as f32,
-        y: placement.top as f32,
-      },
-      Size {
-        width: placement.width,
-        height: placement.height,
-      },
+      &mask,
+      placement,
+      image,
+      inverse,
+      Point { x: 0.5, y: 0.5 },
+      algorithm,
+      MaskCompositeColor::SourceOnly,
       mode,
       combined_mask,
-      |x, y| {
-        let alpha = mask[mask_index_from_coord(x, y, placement.width)];
-        if alpha == 0 {
-          return Color::transparent().into();
-        }
-        let Some(sampled_pixel) = sample_transformed_pixel(
-          image,
-          inverse,
-          algorithm,
-          (x as i32 + placement.left) as f32 + 0.5,
-          (y as i32 + placement.top) as f32 + 0.5,
-          Point::ZERO,
-        ) else {
-          return Color::transparent().into();
-        };
-        let mut pixel = premultiplied_to_rgba(sampled_pixel);
-        apply_mask_alpha_to_pixel(&mut pixel, alpha);
-        pixel
-      },
     );
   }
 
@@ -1750,6 +1728,20 @@ pub(crate) fn overlay_sampled_image(
   buffer_pool: &mut BufferPool,
 ) {
   let image = PaintSource::from(source);
+  if border.is_zero() && transform.only_translation() {
+    blit_sampled_rgba_translation(
+      pixmap,
+      source,
+      Size { width, height },
+      transform.decompose_translation(),
+      logical_to_source,
+      algorithm,
+      mode,
+      combined_mask,
+    );
+    return;
+  }
+
   if border.is_zero()
     && logical_to_source.is_identity()
     && width == source.width()
@@ -1768,97 +1760,37 @@ pub(crate) fn overlay_sampled_image(
   }
 
   let size = Size { width, height };
-
-  if transform.only_translation() && border.is_zero() {
-    let translation = transform.decompose_translation();
-    overlay_area(pixmap, translation, size, mode, combined_mask, |x, y| {
-      sample_transformed_pixel(
-        image,
-        logical_to_source,
-        algorithm,
-        x as f32 + 0.5,
-        y as f32 + 0.5,
-        Point::ZERO,
-      )
-      .map(premultiplied_to_rgba)
-      .unwrap_or_else(|| Color::transparent().into())
-    });
-    return;
-  }
-
   let mut paths = Vec::new();
   border.append_mask_commands(&mut paths, size.map(|v| v as f32), Point::ZERO);
   let (mask, placement) = render_mask(&paths, Some(transform), None, buffer_pool);
 
   let inverse = transform.invert();
-  let is_identity = transform.is_identity() && placement.left >= 0 && placement.top >= 0;
-
-  if is_identity {
-    overlay_area(
+  if transform.is_identity() && placement.left >= 0 && placement.top >= 0 {
+    composite_masked_source(
       pixmap,
-      Point {
-        x: placement.left as f32,
-        y: placement.top as f32,
-      },
-      Size {
-        width: placement.width,
-        height: placement.height,
-      },
+      &mask,
+      placement,
+      image,
+      logical_to_source,
+      Point { x: 0.5, y: 0.5 },
+      algorithm,
+      MaskCompositeColor::SourceOnly,
       mode,
       combined_mask,
-      |x, y| {
-        let alpha = mask[mask_index_from_coord(x, y, placement.width)];
-        if alpha == 0 {
-          return Color::transparent().into();
-        }
-        let Some(sampled_pixel) = sample_transformed_pixel(
-          image,
-          logical_to_source,
-          algorithm,
-          (x + placement.left as u32) as f32 + 0.5,
-          (y + placement.top as u32) as f32 + 0.5,
-          Point::ZERO,
-        ) else {
-          return Color::transparent().into();
-        };
-        let mut pixel = premultiplied_to_rgba(sampled_pixel);
-        apply_mask_alpha_to_pixel(&mut pixel, alpha);
-        pixel
-      },
     );
   } else if let Some(inverse) = inverse {
     let combined_inverse = logical_to_source * inverse;
-    overlay_area(
+    composite_masked_source(
       pixmap,
-      Point {
-        x: placement.left as f32,
-        y: placement.top as f32,
-      },
-      Size {
-        width: placement.width,
-        height: placement.height,
-      },
+      &mask,
+      placement,
+      image,
+      combined_inverse,
+      Point { x: 0.5, y: 0.5 },
+      algorithm,
+      MaskCompositeColor::SourceOnly,
       mode,
       combined_mask,
-      |x, y| {
-        let alpha = mask[mask_index_from_coord(x, y, placement.width)];
-        if alpha == 0 {
-          return Color::transparent().into();
-        }
-        let Some(sampled_pixel) = sample_transformed_pixel(
-          image,
-          combined_inverse,
-          algorithm,
-          (x as i32 + placement.left) as f32 + 0.5,
-          (y as i32 + placement.top) as f32 + 0.5,
-          Point::ZERO,
-        ) else {
-          return Color::transparent().into();
-        };
-        let mut pixel = premultiplied_to_rgba(sampled_pixel);
-        apply_mask_alpha_to_pixel(&mut pixel, alpha);
-        pixel
-      },
     );
   }
 
@@ -1887,21 +1819,58 @@ pub(crate) fn overlay_gradient_tile<T>(
     height: gradient.height(),
   };
 
-  if mode != BlendMode::Normal || combined_mask.is_some() {
-    return overlay_area(pixmap, offset, top_size, mode, combined_mask, |x, y| {
-      let color = gradient.sample_pixel(x, y).demultiply();
-      Rgba([color.red(), color.green(), color.blue(), color.alpha()])
-    });
+  if mode == BlendMode::Normal && combined_mask.is_none() {
+    let bottom_data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+    overlay_gradient_tile_fast_normal_unconstrained(
+      bottom_data,
+      bottom_width,
+      bottom_height,
+      gradient,
+      offset,
+    );
+    return;
   }
 
-  let bottom_data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-  overlay_gradient_tile_fast_normal_unconstrained(
-    bottom_data,
-    bottom_width,
-    bottom_height,
-    gradient,
-    offset,
-  );
+  let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
+    compute_overlay_bounds_for_canvas(
+      bottom_width,
+      bottom_height,
+      offset,
+      top_size.width,
+      top_size.height,
+    )
+  else {
+    return;
+  };
+
+  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let mask_data = combined_mask.map(TinyMask::data);
+  for dest_y in dest_y_min..dest_y_max {
+    let src_y = (dest_y - offset_y) as u32;
+    for dest_x in dest_x_min..dest_x_max {
+      let src_x = (dest_x - offset_x) as u32;
+      let mut src = premultiplied_from_pixel(gradient.sample_pixel(src_x, src_y));
+      if src[3] == 0 {
+        continue;
+      }
+
+      let dest_x = dest_x as u32;
+      let dest_y = dest_y as u32;
+      if let Some(mask_data) = mask_data {
+        let alpha = mask_data[mask_index_from_coord(dest_x, dest_y, bottom_width)];
+        if alpha == 0 {
+          continue;
+        }
+        src = scale_premultiplied_pixel(src, alpha);
+        if src[3] == 0 {
+          continue;
+        }
+      }
+
+      let index = (dest_y * bottom_width + dest_x) as usize;
+      blend_premultiplied_pixel(&mut pixels[index], src, mode);
+    }
+  }
 }
 
 #[cfg(test)]
@@ -1960,28 +1929,32 @@ mod tests {
     }
   }
 
-  #[test]
-  fn test_overlay_area_fast_path_normal_matches_reference() {
-    let mut fast = RgbaImage::from_pixel(8, 6, Rgba([10, 20, 30, 255]));
+  fn assert_gradient_overlay_matches_reference<T>(
+    tile: &T,
+    canvas_size: Size<u32>,
+    offset: Point<f32>,
+  ) where
+    T: GradientOverlayTile,
+  {
+    let mut fast = RgbaImage::from_pixel(canvas_size.width, canvas_size.height, Rgba([0, 0, 0, 0]));
     let mut reference = fast.clone();
 
-    let offset = Point { x: 2.0, y: 1.0 };
-    let top_size = Size {
-      width: 4,
-      height: 3,
-    };
-
     with_pixmap(&mut fast, |pixmap| {
-      overlay_area(pixmap, offset, top_size, BlendMode::Normal, None, |x, y| {
-        let alpha = ((x + y * 2) * 40).min(255) as u8;
-        Rgba([200, 80, 30, alpha])
-      });
+      overlay_gradient_tile(pixmap, tile, offset, BlendMode::Normal, None);
     });
 
-    overlay_area_reference(&mut reference, offset, top_size, |x, y| {
-      let alpha = ((x + y * 2) * 40).min(255) as u8;
-      Rgba([200, 80, 30, alpha])
-    });
+    overlay_area_reference(
+      &mut reference,
+      offset,
+      Size {
+        width: tile.width(),
+        height: tile.height(),
+      },
+      |x, y| {
+        let color = tile.sample_pixel(x, y).demultiply();
+        Rgba([color.red(), color.green(), color.blue(), color.alpha()])
+      },
+    );
 
     assert_eq!(fast.as_raw(), reference.as_raw());
   }
@@ -1994,25 +1967,14 @@ mod tests {
     let global_context = GlobalContext::default();
     let render_context = RenderContext::new_test(&global_context, Viewport::new((32, 16)));
     let tile = LinearGradientTile::new(&gradient, 32, 16, &render_context);
-
-    let mut fast = RgbaImage::from_pixel(40, 24, Rgba([0, 0, 0, 0]));
-    let mut reference = fast.clone();
-    let offset = Point { x: 3.0, y: 4.0 };
-
-    with_pixmap(&mut fast, |pixmap| {
-      overlay_gradient_tile(pixmap, &tile, offset, BlendMode::Normal, None);
-    });
-
-    let top_size = Size {
-      width: tile.width,
-      height: tile.height,
-    };
-    overlay_area_reference(&mut reference, offset, top_size, |x, y| {
-      let color = tile.sample_pixel(x, y).demultiply();
-      Rgba([color.red(), color.green(), color.blue(), color.alpha()])
-    });
-
-    assert_eq!(fast.as_raw(), reference.as_raw());
+    assert_gradient_overlay_matches_reference(
+      &tile,
+      Size {
+        width: 40,
+        height: 24,
+      },
+      Point { x: 3.0, y: 4.0 },
+    );
   }
 
   #[test]
@@ -2023,25 +1985,14 @@ mod tests {
     let global_context = GlobalContext::default();
     let render_context = RenderContext::new_test(&global_context, Viewport::new((32, 24)));
     let tile = RadialGradientTile::new(&gradient, 32, 24, &render_context);
-
-    let mut fast = RgbaImage::from_pixel(40, 30, Rgba([0, 0, 0, 0]));
-    let mut reference = fast.clone();
-    let offset = Point { x: 4.0, y: 3.0 };
-
-    with_pixmap(&mut fast, |pixmap| {
-      overlay_gradient_tile(pixmap, &tile, offset, BlendMode::Normal, None);
-    });
-
-    let top_size = Size {
-      width: tile.width,
-      height: tile.height,
-    };
-    overlay_area_reference(&mut reference, offset, top_size, |x, y| {
-      let color = tile.sample_pixel(x, y).demultiply();
-      Rgba([color.red(), color.green(), color.blue(), color.alpha()])
-    });
-
-    assert_eq!(fast.as_raw(), reference.as_raw());
+    assert_gradient_overlay_matches_reference(
+      &tile,
+      Size {
+        width: 40,
+        height: 30,
+      },
+      Point { x: 4.0, y: 3.0 },
+    );
   }
 
   #[test]
@@ -2053,25 +2004,14 @@ mod tests {
     let global_context = GlobalContext::default();
     let render_context = RenderContext::new_test(&global_context, Viewport::new((32, 24)));
     let tile = ConicGradientTile::new(&gradient, 32, 24, &render_context);
-
-    let mut fast = RgbaImage::from_pixel(40, 30, Rgba([0, 0, 0, 0]));
-    let mut reference = fast.clone();
-    let offset = Point { x: 4.0, y: 3.0 };
-
-    with_pixmap(&mut fast, |pixmap| {
-      overlay_gradient_tile(pixmap, &tile, offset, BlendMode::Normal, None);
-    });
-
-    let top_size = Size {
-      width: tile.width,
-      height: tile.height,
-    };
-    overlay_area_reference(&mut reference, offset, top_size, |x, y| {
-      let color = tile.sample_pixel(x, y).demultiply();
-      Rgba([color.red(), color.green(), color.blue(), color.alpha()])
-    });
-
-    assert_eq!(fast.as_raw(), reference.as_raw());
+    assert_gradient_overlay_matches_reference(
+      &tile,
+      Size {
+        width: 40,
+        height: 30,
+      },
+      Point { x: 4.0, y: 3.0 },
+    );
   }
 
   #[test]
@@ -2084,25 +2024,14 @@ mod tests {
     let global_context = GlobalContext::default();
     let render_context = RenderContext::new_test(&global_context, Viewport::new((32, 16)));
     let tile = LinearGradientTile::new(&gradient, 32, 16, &render_context);
-
-    let mut fast = RgbaImage::from_pixel(40, 24, Rgba([0, 0, 0, 0]));
-    let mut reference = fast.clone();
-    let offset = Point { x: 3.0, y: 4.0 };
-
-    with_pixmap(&mut fast, |pixmap| {
-      overlay_gradient_tile(pixmap, &tile, offset, BlendMode::Normal, None);
-    });
-
-    let top_size = Size {
-      width: tile.width,
-      height: tile.height,
-    };
-    overlay_area_reference(&mut reference, offset, top_size, |x, y| {
-      let color = tile.sample_pixel(x, y).demultiply();
-      Rgba([color.red(), color.green(), color.blue(), color.alpha()])
-    });
-
-    assert_eq!(fast.as_raw(), reference.as_raw());
+    assert_gradient_overlay_matches_reference(
+      &tile,
+      Size {
+        width: 40,
+        height: 24,
+      },
+      Point { x: 3.0, y: 4.0 },
+    );
   }
 
   #[test]
@@ -2188,25 +2117,14 @@ mod tests {
     let global_context = GlobalContext::default();
     let render_context = RenderContext::new_test(&global_context, Viewport::new((48, 48)));
     let tile = ConicGradientTile::new(&gradient, 48, 48, &render_context);
-
-    let mut fast = RgbaImage::from_pixel(56, 56, Rgba([0, 0, 0, 0]));
-    let mut reference = fast.clone();
-    let offset = Point { x: 4.0, y: 4.0 };
-
-    with_pixmap(&mut fast, |pixmap| {
-      overlay_gradient_tile(pixmap, &tile, offset, BlendMode::Normal, None);
-    });
-
-    let top_size = Size {
-      width: tile.width,
-      height: tile.height,
-    };
-    overlay_area_reference(&mut reference, offset, top_size, |x, y| {
-      let color = tile.sample_pixel(x, y).demultiply();
-      Rgba([color.red(), color.green(), color.blue(), color.alpha()])
-    });
-
-    assert_eq!(fast.as_raw(), reference.as_raw());
+    assert_gradient_overlay_matches_reference(
+      &tile,
+      Size {
+        width: 56,
+        height: 56,
+      },
+      Point { x: 4.0, y: 4.0 },
+    );
   }
 
   #[test]
@@ -2219,24 +2137,13 @@ mod tests {
     let global_context = GlobalContext::default();
     let render_context = RenderContext::new_test(&global_context, Viewport::new((32, 24)));
     let tile = RadialGradientTile::new(&gradient, 32, 24, &render_context);
-
-    let mut fast = RgbaImage::from_pixel(40, 30, Rgba([0, 0, 0, 0]));
-    let mut reference = fast.clone();
-    let offset = Point { x: 4.0, y: 3.0 };
-
-    with_pixmap(&mut fast, |pixmap| {
-      overlay_gradient_tile(pixmap, &tile, offset, BlendMode::Normal, None);
-    });
-
-    let top_size = Size {
-      width: tile.width,
-      height: tile.height,
-    };
-    overlay_area_reference(&mut reference, offset, top_size, |x, y| {
-      let color = tile.sample_pixel(x, y).demultiply();
-      Rgba([color.red(), color.green(), color.blue(), color.alpha()])
-    });
-
-    assert_eq!(fast.as_raw(), reference.as_raw());
+    assert_gradient_overlay_matches_reference(
+      &tile,
+      Size {
+        width: 40,
+        height: 30,
+      },
+      Point { x: 4.0, y: 3.0 },
+    );
   }
 }

@@ -117,3 +117,7 @@ harness = false
 [[bench]]
 name = "gradient"
 harness = false
+
+[[bench]]
+name = "fixtures"
+harness = false

@@ -4,11 +4,7 @@ use taffy::{Point, Rect, Size};
 
 use crate::{
   layout::style::{Affine, BlendMode, BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair},
-  rendering::{
-    Canvas, Command, Fill, PaintSource, PathBuilder, RenderContext, apply_mask_alpha_to_pixel,
-    blend_pixel, mask_index_from_coord, premultiplied_to_rgba, render_mask,
-    sample_transformed_pixel,
-  },
+  rendering::{Canvas, Command, Fill, PaintSource, PathBuilder, RenderContext, render_mask},
 };
 
 /// Represents the properties of a border, including corner radii and drawing metadata.
@@ -303,45 +299,15 @@ impl BorderProperties {
       return;
     };
 
-    canvas.overlay_area(
-      Point {
-        x: placement.left as f32,
-        y: placement.top as f32,
-      },
-      Size {
-        width: placement.width,
-        height: placement.height,
-      },
+    canvas.composite_mask_source_over_color(
+      &mask,
+      placement,
+      clip_image.unwrap_or_else(|| unreachable!()),
+      self.color,
+      inverse,
+      Point::ZERO,
+      self.image_rendering,
       BlendMode::Normal,
-      |x, y| {
-        let alpha = mask[mask_index_from_coord(x, y, placement.width)];
-
-        let clip_image_pixel = clip_image.and_then(|image| {
-          // Convert canvas coordinates to border_box coordinates using inverse transform
-          let canvas_x = (x as i32 + placement.left) as f32;
-          let canvas_y = (y as i32 + placement.top) as f32;
-
-          sample_transformed_pixel(
-            image,
-            inverse,
-            self.image_rendering,
-            canvas_x,
-            canvas_y,
-            Point::ZERO,
-          )
-        });
-
-        let mut pixel = self.color.into();
-
-        if let Some(clip_image_pixel) = clip_image_pixel {
-          let clip_image_pixel = premultiplied_to_rgba(clip_image_pixel);
-          blend_pixel(&mut pixel, clip_image_pixel, BlendMode::Normal);
-        }
-
-        apply_mask_alpha_to_pixel(&mut pixel, alpha);
-
-        pixel
-      },
     );
 
     canvas.buffer_pool.release(mask);

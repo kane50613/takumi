@@ -2,8 +2,6 @@ import type { Font, FontDetails, ImageSource } from "../index.d.ts";
 export type * from "../index.d.ts";
 import { Renderer as NativeRenderer } from "../index.js";
 
-export { extractResourceUrls } from "../index.js";
-
 export type ImageSourceLoader = Omit<ImageSource, "data"> & {
   data: ImageSource["data"] | (() => Promise<ImageSource["data"]> | ImageSource["data"]);
 };

@@ -12,8 +12,8 @@ If you want to add additional caching layer, you can fetch the image yourself an
 
 ```tsx twoslash
 import { fromJsx } from "takumi-js/helpers/jsx";
-import { extractResourceUrls, render } from "takumi-js";
-import { fetchResources } from "takumi-js/helpers";
+import { render } from "takumi-js";
+import { extractResourceUrls, fetchResources } from "takumi-js/helpers";
 
 const element = <img src="https://example.com/image.png" />;
 

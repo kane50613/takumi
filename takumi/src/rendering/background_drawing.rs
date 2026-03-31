@@ -1,16 +1,18 @@
 use std::{iter::successors, sync::Arc};
 
-use image::{Rgba, RgbaImage};
+use image::Rgba;
 use smallvec::{SmallVec, smallvec};
 use taffy::Size;
 use tiny_skia::{IntSize, Pixmap, PixmapMut, PremultipliedColorU8};
 
+#[cfg(feature = "svg")]
+use crate::resources::image::RenderedImage;
 use crate::{
   Result,
   layout::{node::resolve_image, style::*},
   rendering::{
     BorderProperties, BufferPool, PaintSource, RenderContext, Sizing, fast_div_255,
-    overlay_gradient_tile, overlay_image,
+    interpolate_bilinear, interpolate_nearest, overlay_gradient_tile, overlay_image,
   },
   resources::image::ImageSource,
 };
@@ -39,97 +41,6 @@ fn should_rasterize_repeated_tile(
     )
 }
 
-#[inline(always)]
-fn premultiplied_bitmap_pixel(bitmap: &RgbaImage, x: u32, y: u32) -> PremultipliedColorU8 {
-  let width = bitmap.width();
-  let raw = bitmap.as_raw();
-  let index = ((y * width + x) * 4) as usize;
-  let alpha = raw[index + 3] as u32;
-  PremultipliedColorU8::from_rgba(
-    fast_div_255(raw[index] as u32 * alpha),
-    fast_div_255(raw[index + 1] as u32 * alpha),
-    fast_div_255(raw[index + 2] as u32 * alpha),
-    raw[index + 3],
-  )
-  .unwrap_or_else(|| unreachable!())
-}
-
-#[inline(always)]
-fn interpolate_bitmap_nearest(bitmap: &RgbaImage, x: f32, y: f32) -> PremultipliedColorU8 {
-  let w = bitmap.width();
-  let h = bitmap.height();
-  if w == 0 || h == 0 {
-    return PremultipliedColorU8::TRANSPARENT;
-  }
-
-  let px = x.floor().max(0.0) as u32;
-  let py = y.floor().max(0.0) as u32;
-  premultiplied_bitmap_pixel(bitmap, px.min(w - 1), py.min(h - 1))
-}
-
-#[inline(always)]
-fn interpolate_bitmap_bilinear(bitmap: &RgbaImage, x: f32, y: f32) -> PremultipliedColorU8 {
-  let w = bitmap.width();
-  let h = bitmap.height();
-  if w == 0 || h == 0 {
-    return PremultipliedColorU8::TRANSPARENT;
-  }
-
-  let x = (x - 0.5).clamp(0.0, w.saturating_sub(1) as f32);
-  let y = (y - 0.5).clamp(0.0, h.saturating_sub(1) as f32);
-
-  let uf = x.floor() as u32;
-  let vf = y.floor() as u32;
-  let uc = (uf + 1).min(w - 1);
-  let vc = (vf + 1).min(h - 1);
-
-  let p00 = premultiplied_bitmap_pixel(bitmap, uf, vf);
-  let p01 = premultiplied_bitmap_pixel(bitmap, uf, vc);
-  let p10 = premultiplied_bitmap_pixel(bitmap, uc, vf);
-  let p11 = premultiplied_bitmap_pixel(bitmap, uc, vc);
-
-  let u_ratio = ((x - uf as f32) * 256.0) as u32;
-  let v_ratio = ((y - vf as f32) * 256.0) as u32;
-  let u_opposite = 256 - u_ratio;
-  let v_opposite = 256 - v_ratio;
-  let w00 = u_opposite * v_opposite;
-  let w01 = u_opposite * v_ratio;
-  let w10 = u_ratio * v_opposite;
-  let w11 = u_ratio * v_ratio;
-
-  let mut out = [0u8; 4];
-  for (i, channel) in out.iter_mut().enumerate() {
-    let p00_i = match i {
-      0 => p00.red(),
-      1 => p00.green(),
-      2 => p00.blue(),
-      _ => p00.alpha(),
-    };
-    let p01_i = match i {
-      0 => p01.red(),
-      1 => p01.green(),
-      2 => p01.blue(),
-      _ => p01.alpha(),
-    };
-    let p10_i = match i {
-      0 => p10.red(),
-      1 => p10.green(),
-      2 => p10.blue(),
-      _ => p10.alpha(),
-    };
-    let p11_i = match i {
-      0 => p11.red(),
-      1 => p11.green(),
-      2 => p11.blue(),
-      _ => p11.alpha(),
-    };
-    *channel = ((p00_i as u32 * w00 + p10_i as u32 * w10 + p01_i as u32 * w01 + p11_i as u32 * w11)
-      >> 16) as u8;
-  }
-
-  PremultipliedColorU8::from_rgba(out[0], out[1], out[2], out[3]).unwrap_or_else(|| unreachable!())
-}
-
 fn rasterize_tile(tile: BackgroundTile, buffer_pool: &mut BufferPool) -> Result<BackgroundTile> {
   let (width, height) = tile.dimensions();
   let size = IntSize::from_wh(width, height).unwrap_or_else(|| unreachable!());
@@ -147,7 +58,7 @@ fn rasterize_tile(tile: BackgroundTile, buffer_pool: &mut BufferPool) -> Result<
   }
 
   let pixmap = Pixmap::from_vec(data, size).unwrap_or_else(|| unreachable!());
-  Ok(BackgroundTile::Pixmap(pixmap))
+  Ok(BackgroundTile::Pixmap(Arc::new(pixmap)))
 }
 
 fn resolve_intrinsic_size(image: &BackgroundImage, context: &RenderContext) -> Option<(f32, f32)> {
@@ -244,7 +155,7 @@ pub(crate) fn rasterize_layers(
 
   drop(pixmap);
   let pixmap = Pixmap::from_vec(composed, pixmap_size).unwrap_or_else(|| unreachable!());
-  Ok(Some(BackgroundTile::Pixmap(pixmap)))
+  Ok(Some(BackgroundTile::Pixmap(Arc::new(pixmap))))
 }
 
 pub(crate) fn release_rasterized_background_tile(
@@ -252,7 +163,11 @@ pub(crate) fn release_rasterized_background_tile(
   buffer_pool: &mut BufferPool,
 ) {
   match tile {
-    BackgroundTile::Pixmap(pixmap) => buffer_pool.release(pixmap.take()),
+    BackgroundTile::Pixmap(pixmap) => {
+      if let Ok(pixmap) = Arc::try_unwrap(pixmap) {
+        buffer_pool.release(pixmap.take());
+      }
+    }
     _ => {}
   }
 }
@@ -303,7 +218,7 @@ pub(crate) enum BackgroundTile {
   Linear(LinearGradientTile),
   Radial(RadialGradientTile),
   Conic(ConicGradientTile),
-  Pixmap(Pixmap),
+  Pixmap(Arc<Pixmap>),
   SampledBitmap {
     source: Arc<ImageSource>,
     width: u32,
@@ -345,7 +260,7 @@ impl BackgroundTile {
       Self::Linear(t) => t.sample_pixel(x, y),
       Self::Radial(t) => t.sample_pixel(x, y),
       Self::Conic(t) => t.sample_pixel(x, y),
-      Self::Pixmap(t) => PaintSource::from(t).get_pixel(x, y),
+      Self::Pixmap(t) => PaintSource::from(t.as_ref()).get_pixel(x, y),
       Self::SampledBitmap {
         source,
         width,
@@ -364,10 +279,13 @@ impl BackgroundTile {
         let mapped_x = (x as f32 + 0.5) * source_width as f32 / logical_width as f32;
         let mapped_y = (y as f32 + 0.5) * source_height as f32 / logical_height as f32;
 
+        let source = PaintSource::from(bitmap);
         if matches!(algo, ImageScalingAlgorithm::Pixelated) {
-          interpolate_bitmap_nearest(bitmap, mapped_x, mapped_y)
+          interpolate_nearest(source, mapped_x, mapped_y)
+            .unwrap_or(PremultipliedColorU8::TRANSPARENT)
         } else {
-          interpolate_bitmap_bilinear(bitmap, mapped_x, mapped_y)
+          interpolate_bilinear(source, mapped_x, mapped_y)
+            .unwrap_or(PremultipliedColorU8::TRANSPARENT)
         }
       }
       Self::Color(t) => t.get_pixel(x, y),
@@ -523,10 +441,8 @@ pub(crate) fn render_tile(
             context.style.image_rendering,
             context.current_color,
           )? {
-            crate::resources::image::RenderedImage::Rasterized(pixmap) => {
-              Some(BackgroundTile::Pixmap(pixmap))
-            }
-            crate::resources::image::RenderedImage::Borrowed { .. } => None,
+            RenderedImage::Rasterized(pixmap) => Some(BackgroundTile::Pixmap(pixmap)),
+            RenderedImage::Borrowed { .. } => None,
           },
         }
       } else {

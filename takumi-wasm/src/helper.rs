@@ -1,10 +1,6 @@
 //! Helper functions and utilities for the WebAssembly bindings.
 
-use crate::model::NodeType;
-use serde_wasm_bindgen::from_value;
 use std::fmt::Display;
-use takumi::layout::node::Node;
-use wasm_bindgen::prelude::*;
 
 /// Maps any error to a JavaScript Error object.
 pub fn map_error<E: Display>(err: E) -> js_sys::Error {
@@ -13,10 +9,3 @@ pub fn map_error<E: Display>(err: E) -> js_sys::Error {
 
 /// Type alias for JavaScript result.
 pub type JsResult<T> = Result<T, js_sys::Error>;
-
-/// Collects the fetch task urls from the node.
-#[wasm_bindgen(js_name = extractResourceUrls)]
-pub fn extract_resource_urls(node: NodeType) -> JsResult<Vec<String>> {
-  let node: Node = from_value(node.into()).map_err(map_error)?;
-  Ok(node.resource_urls().map(str::to_owned).collect())
-}

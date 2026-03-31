@@ -10,7 +10,6 @@
 )]
 
 mod encode_frames_task;
-mod helper;
 mod load_font_task;
 mod measure_task;
 mod put_persistent_image_task;
@@ -28,7 +27,6 @@ use takumi::{
   resources::font::FontResource,
 };
 
-pub use helper::*;
 pub use renderer::Renderer;
 
 #[derive(Deserialize, Default)]

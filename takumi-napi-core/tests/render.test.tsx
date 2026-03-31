@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { container, image, text } from "@takumi-rs/helpers";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import { Glob } from "bun";
-import { extractResourceUrls, Renderer, type RenderOptions } from "../src/export";
+import { Renderer, type RenderOptions } from "../src/export";
 
 const glob = new Glob("../assets/fonts/**/*.{woff2,ttf}");
 const files = await Array.fromAsync(glob.scan());
@@ -114,35 +114,6 @@ describe("setup", () => {
       src: `${localImagePath}?async-loader`,
       data: async () => imageBuffer,
     });
-  });
-});
-
-describe("extractResourceUrls", () => {
-  test("extractResourceUrls", () => {
-    const tasks = extractResourceUrls(node);
-    expect(tasks).toEqual([remoteUrl]);
-  });
-
-  test("extracts nested backgroundImage URLs", () => {
-    const nestedBackgroundUrl = "https://placehold.co/80x80/22c55e/white";
-    const nestedNode = container({
-      children: [
-        container({
-          style: {
-            backgroundImage: `url(${nestedBackgroundUrl})`,
-            width: 80,
-            height: 80,
-          },
-        }),
-      ],
-      style: {
-        width: 100,
-        height: 100,
-      },
-    });
-
-    const tasks = extractResourceUrls(nestedNode);
-    expect(tasks).toEqual([nestedBackgroundUrl]);
   });
 });
 

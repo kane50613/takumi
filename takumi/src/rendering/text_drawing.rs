@@ -2,7 +2,7 @@ use std::{borrow::Cow, convert::Into};
 
 use parley::{GlyphRun, layout::BreakReason};
 use skrifa::color::ColorPalette;
-use taffy::{Layout, Point, Size};
+use taffy::{Layout, Point};
 use tiny_skia::PixmapMut;
 
 use crate::{
@@ -15,9 +15,8 @@ use crate::{
     },
   },
   rendering::{
-    BorderProperties, Canvas, ColorTile, Command, PaintSource, Stroke, apply_mask_alpha_to_pixel,
-    blend_pixel, mask_index_from_coord, overlay_area, premultiplied_to_rgba, render_mask,
-    sample_transformed_pixel,
+    BorderProperties, Canvas, ColorTile, Command, PaintSource, Placement, Stroke,
+    composite_mask_source_to_pixmap, render_mask,
   },
   resources::font::{ResolvedColorLayer, ResolvedGlyph},
 };
@@ -89,8 +88,6 @@ pub(crate) fn draw_glyph_clip_image(
         .buffer_pool
         .acquire_image(bitmap.placement.width, bitmap.placement.height)?;
 
-      let fill_dimensions = (clip_image.width(), clip_image.height());
-
       let bottom_width = bottom.width();
       let bottom_height = bottom.height();
       let Some(mut bottom_pixmap) =
@@ -98,31 +95,24 @@ pub(crate) fn draw_glyph_clip_image(
       else {
         return Ok(());
       };
-      overlay_area(
+      composite_mask_source_to_pixmap(
         &mut bottom_pixmap,
-        Point::ZERO,
-        Size {
+        &mask,
+        Placement {
+          left: 0,
+          top: 0,
           width: bitmap.placement.width,
           height: bitmap.placement.height,
         },
+        clip_image,
+        Affine::translation(
+          inline_offset.x + bitmap.placement.left as f32,
+          inline_offset.y - bitmap.placement.top as f32,
+        ),
+        Point::ZERO,
+        ImageScalingAlgorithm::Pixelated,
         BlendMode::Normal,
         None,
-        |x, y| {
-          let alpha = mask[mask_index_from_coord(x, y, bitmap.placement.width)];
-
-          let source_x = (x as i32 + inline_offset.x as i32 + bitmap.placement.left) as u32;
-          let source_y = (y as i32 + inline_offset.y as i32 - bitmap.placement.top) as u32;
-
-          if source_x >= fill_dimensions.0 || source_y >= fill_dimensions.1 {
-            return Color::transparent().into();
-          }
-
-          let mut pixel = premultiplied_to_rgba(clip_image.get_pixel(source_x, source_y));
-
-          apply_mask_alpha_to_pixel(&mut pixel, alpha);
-
-          pixel
-        },
       );
 
       canvas.overlay_image(
@@ -149,41 +139,14 @@ pub(crate) fn draw_glyph_clip_image(
         &mut canvas.buffer_pool,
       );
 
-      canvas.overlay_area(
-        Point {
-          x: placement.left as f32,
-          y: placement.top as f32,
-        },
-        Size {
-          width: placement.width,
-          height: placement.height,
-        },
+      canvas.composite_mask_source(
+        &mask,
+        placement,
+        clip_image,
+        Affine::translation(inline_offset.x, inline_offset.y) * inverse,
+        Point::ZERO,
+        style.parent.image_rendering,
         BlendMode::Normal,
-        |x, y| {
-          let alpha = mask[mask_index_from_coord(x, y, placement.width)];
-
-          if alpha == 0 {
-            return Color::transparent().into();
-          }
-
-          let sampled_pixel = sample_transformed_pixel(
-            clip_image,
-            inverse,
-            style.parent.image_rendering,
-            (x as i32 + placement.left) as f32,
-            (y as i32 + placement.top) as f32,
-            inline_offset,
-          );
-
-          let Some(sampled_pixel) = sampled_pixel else {
-            return Color::transparent().into();
-          };
-          let mut pixel = premultiplied_to_rgba(sampled_pixel);
-
-          apply_mask_alpha_to_pixel(&mut pixel, alpha);
-
-          pixel
-        },
       );
 
       canvas.buffer_pool.release(mask);
@@ -293,49 +256,15 @@ fn draw_text_stroke_clip_image(
     &mut canvas.buffer_pool,
   );
 
-  canvas.overlay_area(
-    Point {
-      x: stroke_placement.left as f32,
-      y: stroke_placement.top as f32,
-    },
-    Size {
-      width: stroke_placement.width,
-      height: stroke_placement.height,
-    },
+  canvas.composite_mask_color_over_source(
+    &stroke_mask,
+    stroke_placement,
+    clip_image,
+    style.text_stroke_color,
+    Affine::translation(inline_offset.x, inline_offset.y) * inverse,
+    Point::ZERO,
+    style.parent.image_rendering,
     BlendMode::Normal,
-    |x, y| {
-      let alpha = stroke_mask[mask_index_from_coord(x, y, stroke_placement.width)];
-
-      if alpha == 0 {
-        return Color::transparent().into();
-      }
-
-      let inline_x = (x as i32 + stroke_placement.left) as f32;
-      let inline_y = (y as i32 + stroke_placement.top) as f32;
-
-      let sampled_pixel = sample_transformed_pixel(
-        clip_image,
-        inverse,
-        style.parent.image_rendering,
-        inline_x,
-        inline_y,
-        inline_offset,
-      );
-
-      let Some(sampled_pixel) = sampled_pixel else {
-        return Color::transparent().into();
-      };
-      let mut pixel = premultiplied_to_rgba(sampled_pixel);
-
-      blend_pixel(
-        &mut pixel,
-        style.text_stroke_color.into(),
-        BlendMode::Normal,
-      );
-      apply_mask_alpha_to_pixel(&mut pixel, alpha);
-
-      pixel
-    },
   );
 
   canvas.buffer_pool.release(stroke_mask);
@@ -368,43 +297,14 @@ fn draw_text_embolden_clip_image(
     &mut canvas.buffer_pool,
   );
 
-  canvas.overlay_area(
-    Point {
-      x: stroke_placement.left as f32,
-      y: stroke_placement.top as f32,
-    },
-    Size {
-      width: stroke_placement.width,
-      height: stroke_placement.height,
-    },
+  canvas.composite_mask_source(
+    &stroke_mask,
+    stroke_placement,
+    clip_image,
+    Affine::translation(inline_offset.x, inline_offset.y) * inverse,
+    Point::ZERO,
+    style.parent.image_rendering,
     BlendMode::Normal,
-    |x, y| {
-      let alpha = stroke_mask[mask_index_from_coord(x, y, stroke_placement.width)];
-
-      if alpha == 0 {
-        return Color::transparent().into();
-      }
-
-      let inline_x = (x as i32 + stroke_placement.left) as f32;
-      let inline_y = (y as i32 + stroke_placement.top) as f32;
-
-      let sampled_pixel = sample_transformed_pixel(
-        clip_image,
-        inverse,
-        style.parent.image_rendering,
-        inline_x,
-        inline_y,
-        inline_offset,
-      );
-
-      let Some(sampled_pixel) = sampled_pixel else {
-        return Color::transparent().into();
-      };
-      let mut pixel = premultiplied_to_rgba(sampled_pixel);
-
-      apply_mask_alpha_to_pixel(&mut pixel, alpha);
-      pixel
-    },
   );
 
   canvas.buffer_pool.release(stroke_mask);
