@@ -1,5 +1,7 @@
 # @takumi-rs/helpers
 
+## 1.0.0-rc.12
+
 ## 1.0.0-rc.11
 
 ### Minor Changes
