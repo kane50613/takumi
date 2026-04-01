@@ -5,7 +5,12 @@ import { fromJsx, type FromJsxOptions } from "@takumi-rs/helpers/jsx";
 import { loadRendererResources, type ManagedRendererOptions } from "./renderer";
 import { getImports } from "./import";
 import type { ReactNode } from "react";
-import { fetchResources, type ReactElementLike } from "@takumi-rs/helpers";
+import {
+  extractResourceUrls,
+  fetchResources,
+  type FetchResourcesOptions,
+  type ReactElementLike,
+} from "@takumi-rs/helpers";
 
 type InnerRenderOptions = napi.RenderOptions | wasm.RenderOptions;
 
@@ -13,6 +18,7 @@ type RenderOptionsWithRenderer = InnerRenderOptions & {
   renderer: napi.Renderer | wasm.Renderer;
   signal?: AbortSignal;
   jsx?: FromJsxOptions;
+  resourcesOptions?: FetchResourcesOptions;
   /**
    * @description The emoji provider to use when rendering emojis. If set to `"from-font"`, the renderer will attempt to source emoji glyphs from the loaded fonts.
    * @default "twemoji"
@@ -45,9 +51,8 @@ export async function render(element: ReactNode | ReactElementLike, options?: Re
 
   const node = emojiType !== "from-font" ? extractEmojis(originalNode, emojiType) : originalNode;
   const fetchedResources =
-    options?.fetchedResources !== undefined
-      ? options.fetchedResources
-      : await fetchResources(imports.extractResourceUrls(node));
+    options?.fetchedResources ??
+    (await fetchResources(extractResourceUrls(node), options?.resourcesOptions));
 
   const renderOptions = {
     ...options,
@@ -56,11 +61,4 @@ export async function render(element: ReactNode | ReactElementLike, options?: Re
   };
 
   return renderer.render(node, renderOptions, options?.signal);
-}
-
-export async function extractResourceUrls(element: ReactNode | ReactElementLike) {
-  const imports = await getImports();
-  const { node } = await fromJsx(element);
-
-  return imports.extractResourceUrls(node);
 }

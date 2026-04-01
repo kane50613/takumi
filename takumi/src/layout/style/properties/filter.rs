@@ -1,19 +1,20 @@
 use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
-use image::{Rgba, RgbaImage, imageops::colorops::huerotate_in_place};
+use image::Rgba;
 use smallvec::SmallVec;
 use taffy::{Point, Size};
+use tiny_skia::PixmapMut;
 
 use crate::{
   Result,
   layout::style::{
-    Affine, Angle, Animatable, BlendMode, Color, CssDescriptorKind, CssToken, FromCss, Length,
+    Affine, Angle, Animatable, Color, CssDescriptorKind, CssToken, FromCss, Length,
     ListInterpolationStrategy, MakeComputed, ParseResult, PercentageNumber, TextShadow,
     tw::TailwindPropertyParser,
   },
   rendering::{
-    BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, RenderContext, SizedShadow, Sizing,
-    apply_blur, blend_pixel, fast_div_255, render_mask,
+    BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Placement, RenderContext,
+    SizedShadow, Sizing, apply_blur, apply_blur_rgba_bytes, fast_div_255, render_mask,
   },
 };
 
@@ -298,7 +299,7 @@ enum PreparedFilter<'a> {
 }
 
 /// Applies batched pixel filters in a single pass over the image
-fn apply_batched_pixel_filters(image: &mut RgbaImage, filters: &[&Filter]) {
+fn apply_batched_pixel_filters(data: &mut [u8], filters: &[&Filter]) {
   if filters.is_empty() {
     return;
   }
@@ -314,7 +315,7 @@ fn apply_batched_pixel_filters(image: &mut RgbaImage, filters: &[&Filter]) {
     })
     .collect();
 
-  for pixel in bytemuck::cast_slice_mut::<u8, [u8; 4]>(image.as_mut()) {
+  for pixel in bytemuck::cast_slice_mut::<u8, [u8; 4]>(data) {
     if pixel[3] == 0 {
       continue;
     }
@@ -341,8 +342,167 @@ fn apply_batched_pixel_filters(image: &mut RgbaImage, filters: &[&Filter]) {
   }
 }
 
-pub(crate) fn apply_filters<'f, F: Iterator<Item = &'f Filter>>(
-  image: &mut RgbaImage,
+fn apply_hue_rotate_rgba_bytes(data: &mut [u8], angle_degrees: i32) {
+  let radians = (angle_degrees as f32).to_radians();
+  let cos = radians.cos();
+  let sin = radians.sin();
+
+  let m00 = 0.213 + cos * 0.787 - sin * 0.213;
+  let m01 = 0.715 - cos * 0.715 - sin * 0.715;
+  let m02 = 0.072 - cos * 0.072 + sin * 0.928;
+
+  let m10 = 0.213 - cos * 0.213 + sin * 0.143;
+  let m11 = 0.715 + cos * 0.285 + sin * 0.140;
+  let m12 = 0.072 - cos * 0.072 - sin * 0.283;
+
+  let m20 = 0.213 - cos * 0.213 - sin * 0.787;
+  let m21 = 0.715 - cos * 0.715 + sin * 0.715;
+  let m22 = 0.072 + cos * 0.928 + sin * 0.072;
+
+  for pixel in bytemuck::cast_slice_mut::<u8, [u8; 4]>(data) {
+    if pixel[3] == 0 {
+      continue;
+    }
+
+    let r = pixel[0] as f32;
+    let g = pixel[1] as f32;
+    let b = pixel[2] as f32;
+
+    pixel[0] = (r * m00 + g * m01 + b * m02).clamp(0.0, 255.0) as u8;
+    pixel[1] = (r * m10 + g * m11 + b * m12).clamp(0.0, 255.0) as u8;
+    pixel[2] = (r * m20 + g * m21 + b * m22).clamp(0.0, 255.0) as u8;
+  }
+}
+
+#[inline(always)]
+fn composite_pixel_under(dst: &mut [u8], under_rgb: [u8; 3], under_alpha: u8) {
+  if under_alpha == 0 || dst[3] == 255 {
+    return;
+  }
+
+  if dst[3] == 0 {
+    dst[0] = under_rgb[0];
+    dst[1] = under_rgb[1];
+    dst[2] = under_rgb[2];
+    dst[3] = under_alpha;
+    return;
+  }
+
+  let dst_alpha = dst[3] as u32;
+  let under_alpha = under_alpha as u32;
+  let result_alpha = dst_alpha + under_alpha - u32::from(fast_div_255(dst_alpha * under_alpha));
+  if result_alpha == 0 {
+    return;
+  }
+
+  let inverse_dst_alpha = 255 - dst_alpha;
+  for (channel, src) in dst.iter_mut().take(3).zip(under_rgb) {
+    let dst_premul = *channel as u32 * dst_alpha;
+    let src_premul = src as u32 * under_alpha;
+    let result_premul = dst_premul + (src_premul * inverse_dst_alpha + 127) / 255;
+    *channel = ((result_premul + result_alpha / 2) / result_alpha).min(255) as u8;
+  }
+  dst[3] = result_alpha.min(255) as u8;
+}
+
+fn find_nonzero_bounds<T>(
+  pixels: &[T],
+  width: u32,
+  height: u32,
+  mut alpha_of: impl FnMut(&T) -> u8,
+) -> Option<Placement> {
+  let mut min_x = width;
+  let mut min_y = height;
+  let mut max_x = 0;
+  let mut max_y = 0;
+  let mut has_alpha = false;
+
+  for (y, row) in pixels
+    .chunks_exact(width as usize)
+    .take(height as usize)
+    .enumerate()
+  {
+    for (x, pixel) in row.iter().enumerate() {
+      if alpha_of(pixel) == 0 {
+        continue;
+      }
+      has_alpha = true;
+      min_x = min_x.min(x as u32);
+      min_y = min_y.min(y as u32);
+      max_x = max_x.max(x as u32);
+      max_y = max_y.max(y as u32);
+    }
+  }
+
+  has_alpha.then_some(Placement {
+    left: min_x as i32,
+    top: min_y as i32,
+    width: max_x - min_x + 1,
+    height: max_y - min_y + 1,
+  })
+}
+
+fn mask_bounds(mask: &[u8], width: u32, height: u32) -> Option<Placement> {
+  find_nonzero_bounds(mask, width, height, |alpha| *alpha)
+}
+
+fn backdrop_filter_padding(filters: &[Filter], sizing: &Sizing) -> i32 {
+  filters
+    .iter()
+    .filter_map(|filter| match filter {
+      Filter::Blur(radius) => {
+        Some((radius.to_px(sizing, 1.0) * BlurType::Filter.extent_multiplier()).ceil() as i32)
+      }
+      _ => None,
+    })
+    .max()
+    .unwrap_or(0)
+}
+
+fn backdrop_region(
+  mask_placement: Placement,
+  mask_bounds: Placement,
+  padding: i32,
+  canvas_size: Size<u32>,
+) -> Option<Placement> {
+  mask_bounds
+    .translate(mask_placement.left, mask_placement.top)
+    .inflate(padding)?
+    .clamp_to(canvas_size)
+}
+
+fn composite_backdrop_with_mask(
+  canvas_row: &mut [u8],
+  backdrop_row: &[u8],
+  mask_row: &[u8],
+  mask_start_x: usize,
+  region_width: usize,
+) {
+  let mask_end_x = (mask_start_x + region_width).min(mask_row.len());
+  for (x, &alpha) in mask_row[mask_start_x..mask_end_x].iter().enumerate() {
+    if alpha == 0 {
+      continue;
+    }
+
+    let px_idx = x * 4;
+    let src = &backdrop_row[px_idx..px_idx + 4];
+    let dst = &mut canvas_row[px_idx..px_idx + 4];
+
+    if alpha == 255 {
+      dst.copy_from_slice(src);
+      continue;
+    }
+
+    let src_alpha = alpha as u32;
+    let inverse_alpha = 255 - src_alpha;
+    dst[0] = fast_div_255(src[0] as u32 * src_alpha + dst[0] as u32 * inverse_alpha);
+    dst[1] = fast_div_255(src[1] as u32 * src_alpha + dst[1] as u32 * inverse_alpha);
+    dst[2] = fast_div_255(src[2] as u32 * src_alpha + dst[2] as u32 * inverse_alpha);
+  }
+}
+
+pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
+  pixmap: &mut PixmapMut<'_>,
   sizing: &Sizing,
   current_color: Color,
   buffer_pool: &mut BufferPool,
@@ -360,18 +520,25 @@ pub(crate) fn apply_filters<'f, F: Iterator<Item = &'f Filter>>(
       FilterCategory::Complex(f) => {
         // Flush any pending pixel filters first
         if !pending_pixel_filters.is_empty() {
-          apply_batched_pixel_filters(image, &pending_pixel_filters);
+          let raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+          apply_batched_pixel_filters(raw, &pending_pixel_filters);
           pending_pixel_filters.clear();
         }
 
         // Apply complex filter
         match *f {
           Filter::HueRotate(angle) => {
-            huerotate_in_place(image, *angle as i32);
+            let raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+            apply_hue_rotate_rgba_bytes(raw, *angle as i32);
           }
           Filter::Blur(blur) => {
-            apply_blur(
-              BlurFormat::Rgba(image),
+            let width = pixmap.width();
+            let height = pixmap.height();
+            let raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+            apply_blur_rgba_bytes(
+              raw,
+              width,
+              height,
               blur.to_px(sizing, 1.0),
               BlurType::Filter,
               buffer_pool,
@@ -379,11 +546,11 @@ pub(crate) fn apply_filters<'f, F: Iterator<Item = &'f Filter>>(
           }
           Filter::DropShadow(drop_shadow) => {
             let size = Size {
-              width: image.width() as f32,
-              height: image.height() as f32,
+              width: pixmap.width() as f32,
+              height: pixmap.height() as f32,
             };
             let shadow = SizedShadow::from_text_shadow(drop_shadow, sizing, current_color, size);
-            apply_drop_shadow_filter(image, &shadow, buffer_pool)?;
+            apply_drop_shadow_filter(pixmap, &shadow, buffer_pool)?;
           }
           _ => unreachable!(),
         }
@@ -393,7 +560,8 @@ pub(crate) fn apply_filters<'f, F: Iterator<Item = &'f Filter>>(
 
   // Flush remaining pixel filters
   if !pending_pixel_filters.is_empty() {
-    apply_batched_pixel_filters(image, &pending_pixel_filters);
+    let raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+    apply_batched_pixel_filters(raw, &pending_pixel_filters);
   }
 
   Ok(())
@@ -434,44 +602,49 @@ pub(crate) fn apply_backdrop_filter(
   let (mask_data, placement) = render_mask(&paths, Some(transform), None, &mut canvas.buffer_pool);
 
   if placement.width == 0 || placement.height == 0 {
+    canvas.buffer_pool.release(mask_data);
     return Ok(());
   }
 
-  // Calculate the region to extract (clamped to canvas bounds)
-  let region_x = (placement.left).clamp(0, canvas_size.width as i32) as u32;
-  let region_y = (placement.top).clamp(0, canvas_size.height as i32) as u32;
-  let region_right =
-    (placement.left + placement.width as i32).clamp(0, canvas_size.width as i32) as u32;
-  let region_bottom =
-    (placement.top + placement.height as i32).clamp(0, canvas_size.height as i32) as u32;
-
-  if region_x >= region_right || region_y >= region_bottom {
+  let Some(mask_bounds) = mask_bounds(&mask_data, placement.width, placement.height) else {
+    canvas.buffer_pool.release(mask_data);
     return Ok(());
-  }
+  };
 
-  let region_width = region_right - region_x;
-  let region_height = region_bottom - region_y;
+  let padding = backdrop_filter_padding(filters, &context.sizing);
+  let Some(region) = backdrop_region(placement, mask_bounds, padding, canvas_size) else {
+    canvas.buffer_pool.release(mask_data);
+    return Ok(());
+  };
 
-  // Extract the region from the canvas using the pool to avoid allocations
-  let mut backdrop_image = canvas
-    .buffer_pool
-    .acquire_image(region_width, region_height)?;
+  let region_width = region.width;
+  let region_height = region.height;
+  let region_row_bytes = region_width as usize * 4;
+  let backdrop_len = region_row_bytes * region_height as usize;
 
-  {
-    let canvas_width = canvas.image.width() as usize;
-    let canvas_raw = canvas.image.as_raw();
-    let backdrop_raw = backdrop_image.as_mut();
+  // Extract the region from the canvas using pooled raw bytes.
+  let mut backdrop_raw = canvas.buffer_pool.acquire(backdrop_len);
 
-    let row_bytes = region_width as usize * 4;
-    for (y, dest_row) in backdrop_raw.chunks_exact_mut(row_bytes).enumerate() {
-      let src_y = region_y as usize + y;
-      let src_start = (src_y * canvas_width + region_x as usize) * 4;
-      dest_row.copy_from_slice(&canvas_raw[src_start..src_start + row_bytes]);
+  canvas.with_pixmap_ref_and_pool(|pixmap, _| {
+    let canvas_width = pixmap.width() as usize;
+    let canvas_raw: &[u8] = bytemuck::cast_slice(pixmap.pixels());
+    for (y, dest_row) in backdrop_raw.chunks_exact_mut(region_row_bytes).enumerate() {
+      let src_y = region.top as usize + y;
+      let src_start = (src_y * canvas_width + region.left as usize) * 4;
+      dest_row.copy_from_slice(&canvas_raw[src_start..src_start + region_row_bytes]);
     }
-  }
+  });
 
-  apply_filters(
-    &mut backdrop_image,
+  let Some(mut backdrop_pixmap) =
+    PixmapMut::from_bytes(&mut backdrop_raw, region_width, region_height)
+  else {
+    canvas.buffer_pool.release(backdrop_raw);
+    canvas.buffer_pool.release(mask_data);
+    return Ok(());
+  };
+
+  apply_filters_to_pixmap(
+    &mut backdrop_pixmap,
     &context.sizing,
     context.current_color,
     &mut canvas.buffer_pool,
@@ -479,59 +652,46 @@ pub(crate) fn apply_backdrop_filter(
   )?;
 
   // Composite the filtered backdrop back to the canvas, respecting the mask.
-  let mask_offset_x = (region_x as i32 - placement.left) as u32;
-  let mask_offset_y = (region_y as i32 - placement.top) as u32;
+  let mask_offset_x = region.left - placement.left;
+  let mask_offset_y = region.top - placement.top;
+  let x_start = (-mask_offset_x).max(0) as usize;
+  let x_end = (placement.width as i32 - mask_offset_x)
+    .min(region.width as i32)
+    .max(0) as usize;
+  let visible_width = x_end.saturating_sub(x_start);
 
-  let canvas_width = canvas.image.width() as usize;
-  let canvas_raw = canvas.image.as_mut();
-  let backdrop_raw = backdrop_image.as_raw();
+  canvas.with_pixmap_and_pool(|pixmap, _| {
+    let canvas_width = pixmap.width() as usize;
+    let canvas_raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
 
-  let region_row_bytes = region_width as usize * 4;
-
-  for y in 0..region_height {
-    let mask_y = mask_offset_y + y;
-    if mask_y >= placement.height {
-      break;
-    }
-
-    let canvas_y = region_y + y;
-    let canvas_start = (canvas_y as usize * canvas_width + region_x as usize) * 4;
-    let canvas_row = &mut canvas_raw[canvas_start..canvas_start + region_row_bytes];
-
-    let backdrop_start = (y * region_width) as usize * 4;
-    let backdrop_row = &backdrop_raw[backdrop_start..backdrop_start + region_row_bytes];
-
-    let mask_start = (mask_y * placement.width + mask_offset_x) as usize;
-    let mask_row = &mask_data[mask_start..mask_start + region_width as usize];
-
-    assert_eq!(canvas_row.len(), region_row_bytes);
-    assert_eq!(backdrop_row.len(), region_row_bytes);
-    assert_eq!(mask_row.len(), region_width as usize);
-
-    for x in 0..region_width as usize {
-      let alpha = mask_row[x];
-      if alpha == 0 {
+    for y in 0..region_height {
+      let mask_y = mask_offset_y + y as i32;
+      if mask_y < 0 {
         continue;
       }
-
-      let px_idx = x * 4;
-      let b_chunk = &backdrop_row[px_idx..px_idx + 4];
-      let c_chunk = &mut canvas_row[px_idx..px_idx + 4];
-
-      if alpha == 255 {
-        c_chunk.copy_from_slice(b_chunk);
-      } else {
-        let src_a = alpha as u32;
-        let inv_a = 255 - src_a;
-
-        c_chunk[0] = fast_div_255(b_chunk[0] as u32 * src_a + c_chunk[0] as u32 * inv_a);
-        c_chunk[1] = fast_div_255(b_chunk[1] as u32 * src_a + c_chunk[1] as u32 * inv_a);
-        c_chunk[2] = fast_div_255(b_chunk[2] as u32 * src_a + c_chunk[2] as u32 * inv_a);
+      if mask_y >= placement.height as i32 {
+        break;
       }
-    }
-  }
 
-  canvas.buffer_pool.release_image(backdrop_image);
+      let canvas_y = region.top as usize + y as usize;
+      let canvas_start = (canvas_y * canvas_width + region.left as usize) * 4;
+      let canvas_row = &mut canvas_raw[canvas_start..canvas_start + region_row_bytes];
+
+      let backdrop_start = (y * region_width) as usize * 4;
+      let backdrop_row = &backdrop_raw[backdrop_start..backdrop_start + region_row_bytes];
+      let mask_row_start = mask_y as usize * placement.width as usize;
+      let mask_row = &mask_data[mask_row_start..mask_row_start + placement.width as usize];
+      composite_backdrop_with_mask(
+        &mut canvas_row[x_start * 4..(x_start + visible_width) * 4],
+        &backdrop_row[x_start * 4..(x_start + visible_width) * 4],
+        mask_row,
+        (mask_offset_x + x_start as i32) as usize,
+        visible_width,
+      );
+    }
+  });
+
+  canvas.buffer_pool.release(backdrop_raw);
   canvas.buffer_pool.release(mask_data);
 
   Ok(())
@@ -539,11 +699,12 @@ pub(crate) fn apply_backdrop_filter(
 
 /// Applies a drop-shadow filter effect to an image.
 fn apply_drop_shadow_filter(
-  canvas: &mut RgbaImage,
+  pixmap: &mut PixmapMut<'_>,
   shadow: &SizedShadow,
   buffer_pool: &mut BufferPool,
 ) -> Result<()> {
-  let (canvas_width, canvas_height) = canvas.dimensions();
+  let canvas_width = pixmap.width();
+  let canvas_height = pixmap.height();
   if canvas_width == 0 || canvas_height == 0 {
     return Ok(());
   }
@@ -551,45 +712,37 @@ fn apply_drop_shadow_filter(
   let blur_radius = shadow.blur_radius;
   let padding = blur_radius.ceil() as u32;
 
-  let shadow_width = canvas_width + 2 * padding;
-  let shadow_height = canvas_height + 2 * padding;
-
-  let mut shadow_alpha = buffer_pool.acquire_dirty((shadow_width * shadow_height) as usize);
-
   let offset_x = shadow.offset_x.round() as i32;
   let offset_y = shadow.offset_y.round() as i32;
 
-  // Populate shadow alpha with source alpha
   let shadow_color: Rgba<u8> = shadow.color.into();
   let [sr, sg, sb, sa] = shadow_color.0;
+  let shadow_rgb = [sr, sg, sb];
+  let source_pixels = pixmap.as_ref().pixels();
+  let Some(source_bounds) =
+    find_nonzero_bounds(source_pixels, canvas_width, canvas_height, |pixel| {
+      pixel.alpha()
+    })
+  else {
+    return Ok(());
+  };
 
-  let canvas_raw = canvas.as_raw();
+  if sa == 0 {
+    return Ok(());
+  }
 
-  for y in 0..shadow_height {
-    let dest_y_offset = (y * shadow_width) as usize;
-    let src_y = y as i32 - offset_y - padding as i32;
+  let shadow_width = source_bounds.width + 2 * padding;
+  let shadow_height = source_bounds.height + 2 * padding;
 
-    if src_y >= 0 && src_y < canvas_height as i32 {
-      let src_y_idx = src_y as usize * canvas_width as usize * 4;
+  let mut shadow_alpha = buffer_pool.acquire_dirty((shadow_width * shadow_height) as usize);
+  shadow_alpha.fill(0);
 
-      for x in 0..shadow_width {
-        let src_x = x as i32 - offset_x - padding as i32;
-
-        if src_x >= 0 && src_x < canvas_width as i32 {
-          let alpha = canvas_raw[src_y_idx + src_x as usize * 4 + 3];
-          if alpha > 0 {
-            shadow_alpha[dest_y_offset + x as usize] = fast_div_255(sa as u32 * alpha as u32);
-          } else {
-            shadow_alpha[dest_y_offset + x as usize] = 0;
-          }
-        } else {
-          shadow_alpha[dest_y_offset + x as usize] = 0;
-        }
-      }
-    } else {
-      for x in 0..shadow_width {
-        shadow_alpha[dest_y_offset + x as usize] = 0;
-      }
+  for y in 0..source_bounds.height {
+    let src_row = (source_bounds.top as u32 + y) as usize * canvas_width as usize;
+    let dst_row = (y + padding) as usize * shadow_width as usize + padding as usize;
+    for x in 0..source_bounds.width {
+      let alpha = source_pixels[src_row + (source_bounds.left as u32 + x) as usize].alpha();
+      shadow_alpha[dst_row + x as usize] = fast_div_255(sa as u32 * alpha as u32);
     }
   }
 
@@ -605,15 +758,33 @@ fn apply_drop_shadow_filter(
     buffer_pool,
   )?;
 
-  // Draw source element OVER the blurred shadow
-  for y in 0..canvas_height {
-    for x in 0..canvas_width {
-      let sa_px = shadow_alpha[((y + padding) * shadow_width + (x + padding)) as usize];
+  let dest_left = source_bounds.left + offset_x - padding as i32;
+  let dest_top = source_bounds.top + offset_y - padding as i32;
+  let dest_right = dest_left + shadow_width as i32;
+  let dest_bottom = dest_top + shadow_height as i32;
+
+  let start_x = dest_left.max(0);
+  let start_y = dest_top.max(0);
+  let end_x = dest_right.min(canvas_width as i32);
+  let end_y = dest_bottom.min(canvas_height as i32);
+  if start_x >= end_x || start_y >= end_y {
+    buffer_pool.release(shadow_alpha);
+    return Ok(());
+  }
+
+  let canvas_data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  for y in start_y..end_y {
+    let shadow_y = (y - dest_top) as u32;
+    for x in start_x..end_x {
+      let shadow_x = (x - dest_left) as u32;
+      let sa_px = shadow_alpha[(shadow_y * shadow_width + shadow_x) as usize];
       if sa_px > 0 {
-        let canvas_pixel = canvas.get_pixel_mut(x, y);
-        let mut final_px = Rgba([sr, sg, sb, sa_px]);
-        blend_pixel(&mut final_px, *canvas_pixel, BlendMode::Normal);
-        *canvas_pixel = final_px;
+        let pixel_index = ((y as u32 * canvas_width + x as u32) * 4) as usize;
+        composite_pixel_under(
+          &mut canvas_data[pixel_index..pixel_index + 4],
+          shadow_rgb,
+          sa_px,
+        );
       }
     }
   }
@@ -708,6 +879,9 @@ impl<'i> FromCss<'i> for Filter {
 mod tests {
   use std::rc::Rc;
 
+  use image::RgbaImage;
+  use tiny_skia::PixmapMut;
+
   use super::*;
   use crate::{
     Result,
@@ -785,8 +959,13 @@ mod tests {
       calc_arena: Rc::new(CalcArena::default()),
     };
     let mut buffer_pool = BufferPool::default();
-    apply_filters(
-      &mut image,
+    let width = image.width();
+    let height = image.height();
+    let Some(mut pixmap) = PixmapMut::from_bytes(image.as_mut(), width, height) else {
+      unreachable!()
+    };
+    apply_filters_to_pixmap(
+      &mut pixmap,
       &sizing,
       Color::black(),
       &mut buffer_pool,

@@ -15,27 +15,6 @@ pub(crate) fn premultiply_alpha(color: &mut [u8]) {
 }
 
 #[inline(always)]
-pub(crate) fn unpremultiply_alpha(color: &mut [u8]) {
-  const Q16_SHIFT: u32 = 16;
-  const Q16_ROUNDING: u32 = 1 << (Q16_SHIFT - 1);
-
-  let alpha = color[3] as u32;
-
-  if alpha == 0 {
-    color[0] = 0;
-    color[1] = 0;
-    color[2] = 0;
-    return;
-  }
-
-  let inv_alpha = (((255u32 << Q16_SHIFT) + (alpha / 2)) / alpha).min(255u32 << Q16_SHIFT);
-
-  color[0] = (((color[0] as u32 * inv_alpha) + Q16_ROUNDING) >> Q16_SHIFT).min(255) as u8;
-  color[1] = (((color[1] as u32 * inv_alpha) + Q16_ROUNDING) >> Q16_SHIFT).min(255) as u8;
-  color[2] = (((color[2] as u32 * inv_alpha) + Q16_ROUNDING) >> Q16_SHIFT).min(255) as u8;
-}
-
-#[inline(always)]
 pub(crate) fn premultiply_alpha_imm(mut color: Rgba<u8>) -> Rgba<u8> {
   premultiply_alpha(&mut color.0);
   color
@@ -120,6 +99,8 @@ pub(crate) fn blend_pixel(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode)
     | BlendMode::Screen
     | BlendMode::Darken
     | BlendMode::Lighten
+    | BlendMode::ColorDodge
+    | BlendMode::ColorBurn
     | BlendMode::Difference
     | BlendMode::Exclusion => {
       blend_with_integer(bottom, top, mode);
@@ -189,12 +170,58 @@ fn blend_channel_integer(mode: BlendMode, bottom: u8, top: u8) -> u8 {
     BlendMode::Screen => 255 - fast_div_255((255 - top as u32) * (255 - bottom as u32)),
     BlendMode::Darken => top.min(bottom),
     BlendMode::Lighten => top.max(bottom),
+    BlendMode::ColorDodge => color_dodge_integer(bottom, top),
+    BlendMode::ColorBurn => color_burn_integer(bottom, top),
     BlendMode::Difference => top.abs_diff(bottom),
     BlendMode::Exclusion => (bottom as u32 + top as u32
       - (2 * fast_div_255_u32(bottom as u32 * top as u32)))
     .min(255) as u8,
     _ => unreachable!(),
   }
+}
+
+#[inline(always)]
+fn color_dodge_integer(bottom: u8, top: u8) -> u8 {
+  if bottom == 0 {
+    return 0;
+  }
+
+  if top == u8::MAX {
+    return u8::MAX;
+  }
+
+  let bottom = u32::from(bottom);
+  let top = u32::from(top);
+  let max = u32::from(u8::MAX);
+
+  if bottom + top >= max {
+    return u8::MAX;
+  }
+
+  let denominator = max - top;
+  ((bottom * max + denominator / 2) / denominator) as u8
+}
+
+#[inline(always)]
+fn color_burn_integer(bottom: u8, top: u8) -> u8 {
+  if bottom == u8::MAX {
+    return u8::MAX;
+  }
+
+  if top == 0 {
+    return 0;
+  }
+
+  let bottom = u32::from(bottom);
+  let top = u32::from(top);
+  let max = u32::from(u8::MAX);
+
+  if bottom + top <= max {
+    return 0;
+  }
+
+  let numerator = (bottom + top - max) * max;
+  ((numerator + top / 2) / top) as u8
 }
 
 #[inline(always)]

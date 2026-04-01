@@ -6,7 +6,7 @@ use crate::{
   layout::style::{Affine, BlendMode, BoxShadow, Color, ImageScalingAlgorithm, Sides, TextShadow},
   rendering::{
     BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Command, Fill, Placement, Sizing,
-    Style, apply_blur, draw_mask, overlay_image, render_mask,
+    Style, apply_blur, fast_div_255, render_mask,
   },
 };
 
@@ -76,14 +76,7 @@ impl SizedShadow {
     placement.top += self.offset_y as i32;
 
     if self.blur_radius <= 0.0 && cutout_paths.is_none() {
-      draw_mask(
-        &mut canvas.image,
-        &mask,
-        placement,
-        self.color,
-        BlendMode::Normal,
-        &canvas.constrains,
-      );
+      canvas.draw_mask(&mask, placement, self.color, BlendMode::Normal);
       canvas.buffer_pool.release(mask);
       return Ok(());
     }
@@ -94,28 +87,28 @@ impl SizedShadow {
       0.0
     };
 
-    let mut image = canvas.buffer_pool.acquire_image(
-      placement.width + (blur_padding * 2.0) as u32,
-      placement.height + (blur_padding * 2.0) as u32,
-    )?;
+    let shadow_width = placement.width + (blur_padding * 2.0) as u32;
+    let shadow_height = placement.height + (blur_padding * 2.0) as u32;
+    let mut shadow_alpha = canvas
+      .buffer_pool
+      .acquire_dirty((shadow_width * shadow_height) as usize);
+    shadow_alpha.fill(0);
 
-    draw_mask(
-      &mut image,
-      &mask,
-      Placement {
-        left: blur_padding as i32,
-        top: blur_padding as i32,
-        width: placement.width,
-        height: placement.height,
-      },
-      self.color,
-      BlendMode::Normal,
-      &[],
-    );
+    let padding = blur_padding as u32;
+    for y in 0..placement.height {
+      let src_row = y as usize * placement.width as usize;
+      let dst_row = (y + padding) as usize * shadow_width as usize + padding as usize;
+      shadow_alpha[dst_row..dst_row + placement.width as usize]
+        .copy_from_slice(&mask[src_row..src_row + placement.width as usize]);
+    }
     canvas.buffer_pool.release(mask);
 
     apply_blur(
-      BlurFormat::Rgba(&mut image),
+      BlurFormat::Alpha {
+        data: &mut shadow_alpha,
+        width: shadow_width,
+        height: shadow_height,
+      },
       self.blur_radius,
       BlurType::Shadow,
       &mut canvas.buffer_pool,
@@ -132,12 +125,8 @@ impl SizedShadow {
         &mut canvas.buffer_pool,
       );
 
-      let img_w = image.width() as i32;
-      let img_h = image.height() as i32;
-      let img_w_usize = img_w as usize;
-
       if !erase_mask.is_empty() {
-        let data = image.as_mut();
+        let shadow_width_usize = shadow_width as usize;
         for my in 0..erase_placement.height as i32 {
           for mx in 0..erase_placement.width as i32 {
             let canvas_x = erase_placement.left + mx;
@@ -145,13 +134,13 @@ impl SizedShadow {
             let ix = canvas_x - img_origin_x as i32;
             let iy = canvas_y - img_origin_y as i32;
 
-            if ix >= 0 && iy >= 0 && ix < img_w && iy < img_h {
+            if ix >= 0 && iy >= 0 && ix < shadow_width as i32 && iy < shadow_height as i32 {
               let mask_alpha =
                 erase_mask[(my as u32 * erase_placement.width + mx as u32) as usize] as u32;
               if mask_alpha > 0 {
-                let idx = (iy as usize * img_w_usize + ix as usize) * 4;
-                let alpha = &mut data[idx + 3];
-                *alpha = ((*alpha as u32 * (255 - mask_alpha)) / 255) as u8;
+                let idx = iy as usize * shadow_width_usize + ix as usize;
+                let factor = 255 - mask_alpha;
+                shadow_alpha[idx] = fast_div_255(shadow_alpha[idx] as u32 * factor);
               }
             }
           }
@@ -160,18 +149,18 @@ impl SizedShadow {
       }
     }
 
-    overlay_image(
-      &mut canvas.image,
-      &image,
-      BorderProperties::zero(),
-      Affine::translation(img_origin_x, img_origin_y),
-      ImageScalingAlgorithm::Auto,
+    canvas.draw_mask(
+      &shadow_alpha,
+      Placement {
+        left: img_origin_x as i32,
+        top: img_origin_y as i32,
+        width: shadow_width,
+        height: shadow_height,
+      },
+      self.color,
       BlendMode::Normal,
-      &canvas.constrains,
-      &mut canvas.buffer_pool,
     );
-
-    canvas.buffer_pool.release_image(image);
+    canvas.buffer_pool.release(shadow_alpha);
     Ok(())
   }
 
@@ -203,15 +192,11 @@ pub(crate) fn draw_inset_shadow(
   border_box: Size<f32>,
   buffer_pool: &mut BufferPool,
 ) -> Result<RgbaImage> {
-  let mut shadow_image =
-    buffer_pool.acquire_image(border_box.width as u32, border_box.height as u32)?;
-
-  // Fill with shadow color (BufferPool returns zeroed/dirty buffers)
-  let shadow_raw = shadow_image.as_mut();
-  let color_rgba: [u8; 4] = shadow.color.0;
-  for pixel in bytemuck::cast_slice_mut::<u8, [u8; 4]>(shadow_raw) {
-    *pixel = color_rgba;
-  }
+  let width = border_box.width as u32;
+  let height = border_box.height as u32;
+  let [red, green, blue, alpha] = shadow.color.0;
+  let mut shadow_alpha = buffer_pool.acquire_dirty((width * height) as usize);
+  shadow_alpha.fill(alpha);
 
   let offset = Point {
     x: shadow.offset_x,
@@ -238,10 +223,9 @@ pub(crate) fn draw_inset_shadow(
   let (mask, placement) = render_mask(&paths, None, Some(Fill::NonZero.into()), buffer_pool);
 
   if !mask.is_empty() {
-    let img_w = shadow_image.width() as i32;
-    let img_h = shadow_image.height() as i32;
+    let img_w = width as i32;
+    let img_h = height as i32;
     let img_w_usize = img_w as usize;
-    let data = shadow_image.as_mut();
 
     for my in 0..placement.height as i32 {
       for mx in 0..placement.width as i32 {
@@ -251,9 +235,9 @@ pub(crate) fn draw_inset_shadow(
         if ix >= 0 && iy >= 0 && ix < img_w && iy < img_h {
           let mask_alpha = mask[(my as u32 * placement.width + mx as u32) as usize] as u32;
           if mask_alpha > 0 {
-            let idx = (iy as usize * img_w_usize + ix as usize) * 4;
-            let alpha = &mut data[idx + 3];
-            *alpha = ((*alpha as u32 * (255 - mask_alpha)) / 255) as u8;
+            let idx = iy as usize * img_w_usize + ix as usize;
+            let factor = 255 - mask_alpha;
+            shadow_alpha[idx] = fast_div_255(shadow_alpha[idx] as u32 * factor);
           }
         }
       }
@@ -262,11 +246,24 @@ pub(crate) fn draw_inset_shadow(
   }
 
   apply_blur(
-    BlurFormat::Rgba(&mut shadow_image),
+    BlurFormat::Alpha {
+      data: &mut shadow_alpha,
+      width,
+      height,
+    },
     shadow.blur_radius,
     BlurType::Shadow,
     buffer_pool,
   )?;
+
+  let mut shadow_image = buffer_pool.acquire_image(width, height)?;
+  for (pixel, &alpha) in bytemuck::cast_slice_mut::<u8, [u8; 4]>(shadow_image.as_mut())
+    .iter_mut()
+    .zip(&shadow_alpha)
+  {
+    *pixel = [red, green, blue, alpha];
+  }
+  buffer_pool.release(shadow_alpha);
 
   Ok(shadow_image)
 }

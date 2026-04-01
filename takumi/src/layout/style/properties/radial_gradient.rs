@@ -1,6 +1,6 @@
 use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
-use image::{GenericImageView, Rgba};
+use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
@@ -107,10 +107,6 @@ pub(crate) struct RadialGradientTile {
   pub cx: f32,
   /// Center Y coordinate in pixels
   pub cy: f32,
-  /// Radius X in pixels (for circle, equals radius_y)
-  pub radius_x: f32,
-  /// Radius Y in pixels (for circle, equals radius_x)
-  pub radius_y: f32,
   /// Reciprocal of `radius_x` for sampling.
   pub inv_radius_x: f32,
   /// Reciprocal of `radius_y` for sampling.
@@ -127,7 +123,7 @@ pub(crate) struct RadialGradientTile {
   pub position_to_lut_scale: f32,
   /// Pre-computed color lookup table for fast gradient sampling.
   /// Maps axis-space distance to color.
-  pub color_lut: Vec<Rgba<u8>>,
+  pub color_lut: Vec<PremultipliedColorU8>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -137,32 +133,6 @@ pub(crate) struct RadialGradientRowState {
   dx2_step_delta: f32,
   dy2: f32,
   max_lut_index: usize,
-}
-
-impl GenericImageView for RadialGradientTile {
-  type Pixel = Rgba<u8>;
-
-  fn dimensions(&self) -> (u32, u32) {
-    (self.width, self.height)
-  }
-
-  fn get_pixel(&self, x: u32, y: u32) -> Self::Pixel {
-    if self.color_lut.is_empty() {
-      return Rgba([0, 0, 0, 0]);
-    }
-
-    if self.color_lut.len() == 1 {
-      return self.color_lut[0];
-    }
-
-    let dx = (x as f32 - self.cx) / self.radius_x.max(1e-6);
-    let dy = (y as f32 - self.cy) / self.radius_y.max(1e-6);
-    let normalized_distance = (dx * dx + dy * dy).sqrt();
-    let distance_px = normalized_distance * self.radius_scale;
-    let lut_idx = self.lut_index_for_distance_px_with_len(distance_px, self.color_lut.len());
-
-    self.color_lut[lut_idx]
-  }
 }
 
 impl RadialGradientTile {
@@ -320,8 +290,6 @@ impl RadialGradientTile {
       height,
       cx,
       cy,
-      radius_x,
-      radius_y,
       inv_radius_x,
       inv_radius_y,
       radius_scale,
@@ -353,7 +321,26 @@ impl GradientOverlayTile for RadialGradientTile {
   }
 
   #[inline(always)]
-  fn sample_at(&self, lut_idx: usize) -> Rgba<u8> {
+  fn sample_at(&self, lut_idx: usize) -> PremultipliedColorU8 {
+    self.color_lut[lut_idx]
+  }
+
+  #[inline(always)]
+  fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {
+    if self.color_lut.is_empty() {
+      return PremultipliedColorU8::TRANSPARENT;
+    }
+
+    if self.color_lut.len() == 1 {
+      return self.color_lut[0];
+    }
+
+    let dx = (x as f32 - self.cx) * self.inv_radius_x;
+    let dy = (y as f32 - self.cy) * self.inv_radius_y;
+    let normalized_distance = (dx * dx + dy * dy).sqrt();
+    let distance_px = normalized_distance * self.radius_scale;
+    let lut_idx = self.lut_index_for_distance_px_with_len(distance_px, self.color_lut.len());
+
     self.color_lut[lut_idx]
   }
 
@@ -456,6 +443,7 @@ impl<'i> FromCss<'i> for RadialGradient {
 #[cfg(test)]
 mod tests {
   use color::{ColorSpaceTag, HueDirection};
+  use tiny_skia::ColorU8;
 
   use super::*;
   use crate::layout::Viewport;
@@ -464,7 +452,6 @@ mod tests {
     PositionKeywordY, SpacePair, StopPosition,
   };
   use crate::{GlobalContext, rendering::RenderContext};
-
   #[test]
   fn test_parse_radial_gradient_basic() {
     let gradient = RadialGradient::from_str("radial-gradient(#ff0000, #0000ff)");
@@ -807,12 +794,12 @@ mod tests {
     let tile = RadialGradientTile::new(&gradient, 100, 100, &dummy_context);
 
     // Center (50, 50) should be red
-    let color_center = tile.get_pixel(50, 50);
-    assert_eq!(color_center, Rgba([255, 0, 0, 255]));
+    let color_center = tile.sample_pixel(50, 50).demultiply();
+    assert_eq!(color_center, ColorU8::from_rgba(255, 0, 0, 255));
 
     // Far outside (200, 200) should be clamped to blue
-    let color_far = tile.get_pixel(200, 200);
-    assert_eq!(color_far, Rgba([0, 0, 255, 255]));
+    let color_far = tile.sample_pixel(200, 200).demultiply();
+    assert_eq!(color_far, ColorU8::from_rgba(0, 0, 255, 255));
   }
 
   #[test]
@@ -850,16 +837,16 @@ mod tests {
 
     assert_eq!(
       [
-        tile.get_pixel(22, 20),
-        tile.get_pixel(27, 20),
-        tile.get_pixel(32, 20),
-        tile.get_pixel(37, 20),
+        tile.sample_pixel(22, 20).demultiply(),
+        tile.sample_pixel(27, 20).demultiply(),
+        tile.sample_pixel(32, 20).demultiply(),
+        tile.sample_pixel(37, 20).demultiply(),
       ],
       [
-        Rgba([255, 0, 0, 255]),
-        Rgba([0, 0, 255, 255]),
-        Rgba([255, 0, 0, 255]),
-        Rgba([0, 0, 255, 255]),
+        ColorU8::from_rgba(255, 0, 0, 255),
+        ColorU8::from_rgba(0, 0, 255, 255),
+        ColorU8::from_rgba(255, 0, 0, 255),
+        ColorU8::from_rgba(0, 0, 255, 255),
       ]
     );
   }
@@ -893,8 +880,8 @@ mod tests {
     // d_closest = sqrt(20^2 + 20^2)
     // d_farthest = sqrt(80^2 + 80^2)
     // ratio = d_closest / d_farthest = 20/80 = 0.25
-    // radius_x = 80 * 0.25 = 20
-    assert!((tile.radius_x - 20.0).abs() < 1e-3);
-    assert!((tile.radius_y - 20.0).abs() < 1e-3);
+    // radius_x = 80 * 0.25 = 20, radius_y = 80 * 0.25 = 20
+    assert!((tile.inv_radius_x - (1.0 / 20.0)).abs() < 1e-3);
+    assert!((tile.inv_radius_y - (1.0 / 20.0)).abs() < 1e-3);
   }
 }

@@ -1,4 +1,5 @@
 use svgtypes::{SimplePathSegment, SimplifyingPathParser};
+use taffy::Size;
 use tiny_skia::{
   FillRule as TinyFillRule, LineJoin as TinyLineJoin, Path as TinyPath,
   PathBuilder as TinyPathBuilder, PathSegment as TinyPathSegment, Point as TinyPoint,
@@ -109,6 +110,55 @@ pub(crate) struct Placement {
   pub(crate) top: i32,
   pub(crate) width: u32,
   pub(crate) height: u32,
+}
+
+impl Placement {
+  pub(crate) fn right(self) -> i32 {
+    self.left + self.width as i32
+  }
+
+  pub(crate) fn bottom(self) -> i32 {
+    self.top + self.height as i32
+  }
+
+  pub(crate) fn from_bounds(left: i32, top: i32, right: i32, bottom: i32) -> Option<Self> {
+    if left >= right || top >= bottom {
+      return None;
+    }
+
+    Some(Self {
+      left,
+      top,
+      width: (right - left) as u32,
+      height: (bottom - top) as u32,
+    })
+  }
+
+  pub(crate) fn translate(self, dx: i32, dy: i32) -> Self {
+    Self {
+      left: self.left + dx,
+      top: self.top + dy,
+      ..self
+    }
+  }
+
+  pub(crate) fn inflate(self, padding: i32) -> Option<Self> {
+    Self::from_bounds(
+      self.left - padding,
+      self.top - padding,
+      self.right() + padding,
+      self.bottom() + padding,
+    )
+  }
+
+  pub(crate) fn clamp_to(self, size: Size<u32>) -> Option<Self> {
+    Self::from_bounds(
+      self.left.clamp(0, size.width as i32),
+      self.top.clamp(0, size.height as i32),
+      self.right().clamp(0, size.width as i32),
+      self.bottom().clamp(0, size.height as i32),
+    )
+  }
 }
 
 pub(crate) type Command = TinyPathSegment;

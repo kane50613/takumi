@@ -1,22 +1,114 @@
-use std::mem::replace;
-
-use image::RgbaImage;
-use taffy::{NodeId, geometry::Size};
+use taffy::{NodeId, Point, geometry::Size};
+use tiny_skia::Pixmap;
 
 use crate::{
   Result,
   layout::{
     style::{
-      Affine, ComputedStyle, Display, Filter, ImageScalingAlgorithm, SpacePair,
-      apply_backdrop_filter, apply_filters,
+      Affine, BackgroundImage, BlendMode, BorderStyle, Color, ComputedStyle, Display, Filter,
+      SpacePair, apply_backdrop_filter, apply_filters_to_pixmap,
     },
     tree::{LayoutResults, RenderNode},
   },
   rendering::{
-    BorderProperties, Canvas, CanvasConstrain, CanvasConstrainResult, Sizing, draw_debug_border,
-    overlay_image,
+    BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, NodeMaskAction, Placement, Sizing,
+    blend_pixel, draw_debug_border, prepare_node_mask,
   },
 };
+
+pub(crate) fn blend_pixmap_software(
+  dst: &mut Pixmap,
+  src: &Pixmap,
+  mode: BlendMode,
+  offset: Point<i32>,
+) {
+  let Some((dst_left, dst_top, src_left, src_top, width, height)) =
+    overlapping_region(dst, src, offset)
+  else {
+    return;
+  };
+
+  if matches!(mode, BlendMode::PlusDarker) {
+    let dst_width = dst.width() as usize;
+    let src_width = src.width() as usize;
+    let dst_data = dst.data_mut();
+
+    for row in 0..height {
+      let dst_row = (dst_top + row) * dst_width;
+      let src_row = (src_top + row) * src_width;
+      for col in 0..width {
+        blend_plus_darker_pixel_raw_4(
+          &mut dst_data[(dst_row + dst_left + col) * 4..(dst_row + dst_left + col + 1) * 4],
+          &src.data()[(src_row + src_left + col) * 4..(src_row + src_left + col + 1) * 4],
+        );
+      }
+    }
+
+    return;
+  }
+
+  let dst_width = dst.width() as usize;
+  let src_width = src.width() as usize;
+  let dst_pixels = dst.pixels_mut();
+  let src_pixels = src.pixels();
+  for row in 0..height {
+    let dst_row = (dst_top + row) * dst_width;
+    let src_row = (src_top + row) * src_width;
+    for col in 0..width {
+      let dst_pixel = &mut dst_pixels[dst_row + dst_left + col];
+      let src_pixel = src_pixels[src_row + src_left + col];
+      let s = src_pixel.demultiply();
+      let d = dst_pixel.demultiply();
+      let mut out = image::Rgba([d.red(), d.green(), d.blue(), d.alpha()]);
+      let top = image::Rgba([s.red(), s.green(), s.blue(), s.alpha()]);
+      blend_pixel(&mut out, top, mode);
+      *dst_pixel = Color(out.0).into();
+    }
+  }
+}
+
+#[inline(always)]
+fn blend_plus_darker_pixel_raw_4(dst_px: &mut [u8], src_px: &[u8]) {
+  let src_alpha = src_px[3];
+  if src_alpha == 0 {
+    return;
+  }
+
+  let dst_alpha = dst_px[3];
+  let result_alpha = src_alpha.saturating_add(dst_alpha);
+
+  let red = ((src_px[0] as u16 + dst_px[0] as u16).saturating_sub(255)) as u8;
+  let green = ((src_px[1] as u16 + dst_px[1] as u16).saturating_sub(255)) as u8;
+  let blue = ((src_px[2] as u16 + dst_px[2] as u16).saturating_sub(255)) as u8;
+
+  dst_px[0] = red;
+  dst_px[1] = green;
+  dst_px[2] = blue;
+  dst_px[3] = result_alpha;
+}
+
+fn overlapping_region(
+  dst: &Pixmap,
+  src: &Pixmap,
+  offset: Point<i32>,
+) -> Option<(usize, usize, usize, usize, usize, usize)> {
+  let dst_left = offset.x.max(0) as usize;
+  let dst_top = offset.y.max(0) as usize;
+  let src_left = (-offset.x).max(0) as usize;
+  let src_top = (-offset.y).max(0) as usize;
+  let width = (dst.width() as i32 - offset.x.max(0))
+    .min(src.width() as i32 - src_left as i32)
+    .max(0) as usize;
+  let height = (dst.height() as i32 - offset.y.max(0))
+    .min(src.height() as i32 - src_top as i32)
+    .max(0) as usize;
+
+  if width == 0 || height == 0 {
+    return None;
+  }
+
+  Some((dst_left, dst_top, src_left, src_top, width, height))
+}
 
 pub(crate) fn apply_transform(
   transform: &mut Affine,
@@ -115,15 +207,24 @@ pub(crate) fn collect_layout_children(
 struct NodePaint {
   path: Vec<usize>,
   node_id: NodeId,
+  size: Size<f32>,
   transform: Affine,
   container_size: Size<Option<f32>>,
+}
+
+#[derive(Clone, Copy)]
+struct SceneBounds {
+  left: usize,
+  top: usize,
+  right: usize,
+  bottom: usize,
 }
 
 enum DeferredNodeRender {
   Deferred {
     path: Vec<usize>,
     has_constrain: bool,
-    original_canvas_image: Option<RgbaImage>,
+    isolated_canvas: Option<CanvasSubcanvas>,
   },
   SkipRendering,
 }
@@ -201,6 +302,7 @@ impl StackingBuckets {
 pub(crate) struct StackingContextNode {
   root: Option<NodePaint>,
   buckets: StackingBuckets,
+  paint_bounds: Option<SceneBounds>,
 }
 
 impl StackingContextNode {
@@ -208,6 +310,7 @@ impl StackingContextNode {
     Self {
       root,
       buckets: StackingBuckets::default(),
+      paint_bounds: None,
     }
   }
 
@@ -299,6 +402,7 @@ pub(crate) fn build_stacking_contexts<'g>(
     let node_paint = NodePaint {
       path: visit.path.clone(),
       node_id: visit.node_id,
+      size: layout.size,
       transform: current_transform,
       container_size: visit.container_size,
     };
@@ -383,51 +487,128 @@ pub(crate) fn build_stacking_contexts<'g>(
     context.buckets.sort();
   }
 
+  for context_id in (0..contexts.len()).rev() {
+    let mut paint_bounds = contexts[context_id]
+      .root
+      .as_ref()
+      .and_then(node_paint_bounds);
+    for bucket in contexts[context_id].buckets.in_paint_order() {
+      for item in bucket {
+        let item_bounds = match &item.kind {
+          PaintItemKind::Node(node_paint) => node_paint_bounds(node_paint),
+          PaintItemKind::Context(child_context_id) => contexts[*child_context_id].paint_bounds,
+        };
+        paint_bounds = merge_bounds(paint_bounds, item_bounds);
+      }
+    }
+    contexts[context_id].paint_bounds = paint_bounds;
+  }
+
   Ok(contexts)
+}
+
+fn node_paint_bounds(node_paint: &NodePaint) -> Option<SceneBounds> {
+  bounds_for_rect(node_paint.size, node_paint.transform)
+}
+
+fn bounds_for_rect(size: Size<f32>, transform: Affine) -> Option<SceneBounds> {
+  let corners = [
+    taffy::Point { x: 0.0, y: 0.0 },
+    taffy::Point {
+      x: size.width,
+      y: 0.0,
+    },
+    taffy::Point {
+      x: 0.0,
+      y: size.height,
+    },
+    taffy::Point {
+      x: size.width,
+      y: size.height,
+    },
+  ];
+
+  let mut min_x = f32::INFINITY;
+  let mut min_y = f32::INFINITY;
+  let mut max_x = f32::NEG_INFINITY;
+  let mut max_y = f32::NEG_INFINITY;
+
+  for corner in corners {
+    let point = transform.transform_point(corner);
+    min_x = min_x.min(point.x);
+    min_y = min_y.min(point.y);
+    max_x = max_x.max(point.x);
+    max_y = max_y.max(point.y);
+  }
+
+  if !min_x.is_finite() || !min_y.is_finite() || !max_x.is_finite() || !max_y.is_finite() {
+    return None;
+  }
+
+  let left = (min_x.floor() as i32).max(0) as usize;
+  let top = (min_y.floor() as i32).max(0) as usize;
+  let right = (max_x.ceil() as i32).max(0) as usize;
+  let bottom = (max_y.ceil() as i32).max(0) as usize;
+
+  if left >= right || top >= bottom {
+    return None;
+  }
+
+  Some(SceneBounds {
+    left,
+    top,
+    right,
+    bottom,
+  })
+}
+
+fn merge_bounds(left: Option<SceneBounds>, right: Option<SceneBounds>) -> Option<SceneBounds> {
+  match (left, right) {
+    (Some(left), Some(right)) => Some(SceneBounds {
+      left: left.left.min(right.left),
+      top: left.top.min(right.top),
+      right: left.right.max(right.right),
+      bottom: left.bottom.max(right.bottom),
+    }),
+    (Some(bounds), None) | (None, Some(bounds)) => Some(bounds),
+    (None, None) => None,
+  }
 }
 
 fn finish_node_render<'g>(
   node: &mut RenderNode<'g>,
   canvas: &mut Canvas,
   has_constrain: bool,
-  original_canvas_image: Option<RgbaImage>,
+  isolated_canvas: Option<CanvasSubcanvas>,
 ) -> Result<()> {
   let opacity_filter =
     (node.context.style.opacity.0 < 1.0).then_some(Filter::Opacity(node.context.style.opacity));
 
   if !node.context.style.filter.is_empty() || opacity_filter.is_some() {
-    apply_filters(
-      &mut canvas.image,
-      &node.context.sizing,
-      node.context.current_color,
-      &mut canvas.buffer_pool,
-      node
-        .context
-        .style
-        .filter
-        .iter()
-        .chain(opacity_filter.iter()),
-    )?;
+    canvas.with_pixmap_and_pool(|pixmap, pool| {
+      let mut pixmap_mut = pixmap.as_mut();
+      apply_filters_to_pixmap(
+        &mut pixmap_mut,
+        &node.context.sizing,
+        node.context.current_color,
+        pool,
+        node
+          .context
+          .style
+          .filter
+          .iter()
+          .chain(opacity_filter.iter()),
+      )
+    })?;
   }
 
-  if let Some(mut source_canvas_image) = original_canvas_image {
-    overlay_image(
-      &mut source_canvas_image,
-      &canvas.image,
-      BorderProperties::zero(),
-      Affine::IDENTITY,
-      ImageScalingAlgorithm::Auto,
-      node.context.style.mix_blend_mode,
-      &[],
-      &mut canvas.buffer_pool,
-    );
-
-    let isolated_image = replace(&mut canvas.image, source_canvas_image);
-    canvas.buffer_pool.release_image(isolated_image);
-  }
-
-  if has_constrain {
-    canvas.pop_constrain();
+  if let Some(isolated_canvas) = isolated_canvas {
+    if has_constrain {
+      canvas.pop_mask();
+    }
+    canvas.composite_subcanvas(isolated_canvas, node.context.style.mix_blend_mode);
+  } else if has_constrain {
+    canvas.pop_mask();
   }
 
   Ok(())
@@ -452,18 +633,19 @@ fn begin_node_render<'g>(
   current.context.sizing.container_size = node_paint.container_size;
   current.context.transform = node_paint.transform;
 
-  let constrain = CanvasConstrain::from_node(
+  let mask_action = prepare_node_mask(
     &current.context,
     &current.context.style,
     layout,
     node_paint.transform,
+    canvas.viewport(),
     &mut canvas.buffer_pool,
   )?;
-  if matches!(constrain, CanvasConstrainResult::SkipRendering) {
+  if matches!(mask_action, NodeMaskAction::SkipRendering) {
     return Ok(Some(DeferredNodeRender::SkipRendering));
   }
 
-  let has_constrain = constrain.is_some();
+  let has_constrain = mask_action.is_some();
 
   if !current.context.style.backdrop_filter.is_empty() {
     let border = BorderProperties::from_context(&current.context, layout.size, layout.border);
@@ -477,27 +659,30 @@ fn begin_node_render<'g>(
   }
 
   let should_isolate = current.context.style.needs_offscreen_compositing();
-  let original_canvas_image = if should_isolate {
-    Some(canvas.replace_new_image()?)
+  let isolated_canvas = if should_isolate {
+    Some(canvas.begin_subcanvas(compute_isolation_bounds(
+      current,
+      layout.size,
+      node_paint.transform,
+      canvas.viewport(),
+    ))?)
   } else {
     None
   };
 
-  match constrain {
-    CanvasConstrainResult::None => {
+  match mask_action {
+    NodeMaskAction::None => {
       current.draw_shell(canvas, layout)?;
     }
-    CanvasConstrainResult::Some(constrain) => match constrain {
-      CanvasConstrain::ClipPath { .. } | CanvasConstrain::MaskImage { .. } => {
-        canvas.push_constrain(constrain);
-        current.draw_shell(canvas, layout)?;
-      }
-      CanvasConstrain::Overflow { .. } => {
-        current.draw_shell(canvas, layout)?;
-        canvas.push_constrain(constrain);
-      }
-    },
-    CanvasConstrainResult::SkipRendering => unreachable!(),
+    NodeMaskAction::Shell(mask) => {
+      canvas.push_mask(mask);
+      current.draw_shell(canvas, layout)?;
+    }
+    NodeMaskAction::Content(mask) => {
+      current.draw_shell(canvas, layout)?;
+      canvas.push_mask(mask);
+    }
+    NodeMaskAction::SkipRendering => unreachable!(),
   }
 
   current.draw_content(canvas, layout)?;
@@ -508,19 +693,17 @@ fn begin_node_render<'g>(
 
   if current.should_create_inline_layout() {
     current.draw_inline(canvas, layout)?;
-    finish_node_render(current, canvas, has_constrain, original_canvas_image)?;
-    return Ok(None);
-  }
-
-  if defer_finish {
+    finish_node_render(current, canvas, has_constrain, isolated_canvas)?;
+  } else if !defer_finish {
+    finish_node_render(current, canvas, has_constrain, isolated_canvas)?;
+  } else {
     return Ok(Some(DeferredNodeRender::Deferred {
       path: node_paint.path.clone(),
       has_constrain,
-      original_canvas_image,
+      isolated_canvas,
     }));
   }
 
-  finish_node_render(current, canvas, has_constrain, original_canvas_image)?;
   Ok(None)
 }
 
@@ -586,14 +769,139 @@ pub(crate) fn paint_context<'g>(
   if let Some(DeferredNodeRender::Deferred {
     path,
     has_constrain,
-    original_canvas_image,
+    isolated_canvas,
   }) = deferred_root
   {
     let Some(current) = get_node_mut_by_path(root, &path) else {
       unreachable!()
     };
-    finish_node_render(current, canvas, has_constrain, original_canvas_image)?;
+    finish_node_render(current, canvas, has_constrain, isolated_canvas)?;
   }
 
   Ok(())
+}
+
+fn can_use_bounds_hint(node: &RenderNode<'_>) -> bool {
+  let style = &node.context.style;
+  let has_children = node
+    .children
+    .as_ref()
+    .is_some_and(|children| !children.is_empty());
+  let clips_children = style.resolve_overflows().should_clip_content();
+  let has_box_shadow = style
+    .box_shadow
+    .as_ref()
+    .is_some_and(|shadows| !shadows.is_empty());
+  let has_outline = style.outline_style != BorderStyle::None;
+  let has_border = style.border_style != BorderStyle::None;
+  let has_text_shadow = style
+    .text_shadow
+    .as_ref()
+    .is_some_and(|shadows| !shadows.is_empty());
+  let has_text_stroke = style
+    .webkit_text_stroke_width
+    .is_some_and(|width| width != Default::default());
+  let has_text_decoration = style
+    .text_decoration_line
+    .is_some_and(|lines| !lines.is_empty());
+  let has_spread_background = style.background_image.as_ref().is_some_and(|images| {
+    images.iter().any(|image| match image {
+      BackgroundImage::Linear(gradient) => gradient.repeating,
+      BackgroundImage::Radial(gradient) => gradient.repeating,
+      BackgroundImage::Conic(gradient) => gradient.repeating,
+      _ => false,
+    })
+  });
+
+  style.filter.is_empty()
+    && style.backdrop_filter.is_empty()
+    && style.clip_path.is_none()
+    && style.mask_image.as_ref().is_none_or(|images| {
+      images
+        .iter()
+        .all(|image| matches!(image, BackgroundImage::None))
+    })
+    && !has_box_shadow
+    && !has_outline
+    && !has_border
+    && !has_text_shadow
+    && !has_text_stroke
+    && !has_text_decoration
+    && !has_spread_background
+    && (!has_children || clips_children)
+}
+
+fn compute_isolation_bounds(
+  node: &RenderNode<'_>,
+  size: Size<f32>,
+  transform: Affine,
+  viewport: CanvasViewport,
+) -> Placement {
+  if !can_use_bounds_hint(node) {
+    return Placement {
+      left: viewport.origin.x as i32,
+      top: viewport.origin.y as i32,
+      width: viewport.size.width,
+      height: viewport.size.height,
+    };
+  }
+
+  let corners = [
+    taffy::Point { x: 0.0, y: 0.0 },
+    taffy::Point {
+      x: size.width,
+      y: 0.0,
+    },
+    taffy::Point {
+      x: 0.0,
+      y: size.height,
+    },
+    taffy::Point {
+      x: size.width,
+      y: size.height,
+    },
+  ];
+
+  let mut min_x = f32::INFINITY;
+  let mut min_y = f32::INFINITY;
+  let mut max_x = f32::NEG_INFINITY;
+  let mut max_y = f32::NEG_INFINITY;
+
+  for corner in corners {
+    let point = transform.transform_point(corner);
+    min_x = min_x.min(point.x);
+    min_y = min_y.min(point.y);
+    max_x = max_x.max(point.x);
+    max_y = max_y.max(point.y);
+  }
+
+  if !min_x.is_finite() || !min_y.is_finite() || !max_x.is_finite() || !max_y.is_finite() {
+    return Placement {
+      left: viewport.origin.x as i32,
+      top: viewport.origin.y as i32,
+      width: viewport.size.width,
+      height: viewport.size.height,
+    };
+  }
+
+  let left = min_x.floor().max(viewport.origin.x as f32) as i32;
+  let top = min_y.floor().max(viewport.origin.y as f32) as i32;
+  let right = max_x.ceil().min(viewport.right() as f32) as i32;
+  let bottom = max_y.ceil().min(viewport.bottom() as f32) as i32;
+
+  if left >= right || top >= bottom {
+    return Placement {
+      left: viewport.origin.x as i32,
+      top: viewport.origin.y as i32,
+      width: viewport.size.width,
+      height: viewport.size.height,
+    };
+  }
+
+  Placement {
+    left,
+    top,
+    width: (right - left) as u32,
+    height: (bottom - top) as u32,
+  }
 }

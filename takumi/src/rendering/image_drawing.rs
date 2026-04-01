@@ -4,7 +4,7 @@ use crate::layout::style::BlendMode;
 use crate::{
   Result,
   layout::style::{Affine, Length, ObjectFit},
-  rendering::{BorderProperties, Canvas, RenderContext, overlay_sampled_image},
+  rendering::{BorderProperties, Canvas, RenderContext},
   resources::image::{ImageSource, RenderedImage},
 };
 
@@ -286,7 +286,7 @@ pub fn draw_image(
 
   match image.image {
     RenderedImage::Rasterized(image) => canvas.overlay_image(
-      &image,
+      image.as_ref(),
       border,
       transform_with_content_offset,
       context.style.image_rendering,
@@ -299,8 +299,7 @@ pub fn draw_image(
       width,
       height,
       algorithm: algo,
-    } => overlay_sampled_image(
-      &mut canvas.image,
+    } => canvas.overlay_sampled_image(
       source,
       width,
       height,
@@ -309,8 +308,6 @@ pub fn draw_image(
       image.logical_to_source,
       algo,
       BlendMode::Normal,
-      &canvas.constrains,
-      &mut canvas.buffer_pool,
     ),
   }
 

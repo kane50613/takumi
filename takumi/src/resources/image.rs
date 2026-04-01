@@ -11,10 +11,11 @@ use std::{cell::RefCell, collections::HashMap};
 #[cfg(not(target_arch = "wasm32"))]
 use dashmap::DashMap;
 use image::RgbaImage;
+use tiny_skia::Pixmap;
 
 use crate::{
   layout::style::{Color, ImageScalingAlgorithm},
-  rendering::{Sizing, unpremultiply_alpha},
+  rendering::Sizing,
   resources::image_decoder::decode_image,
 };
 use thiserror::Error;
@@ -39,8 +40,11 @@ pub enum ImageSource {
 pub struct SvgSource {
   /// Original SVG source used for reparsing with style overrides.
   source: Arc<str>,
+  /// Whether the SVG depends on currentColor and must be reparsed per render.
+  uses_current_color: bool,
   /// Parsed SVG tree used for size and initial metadata.
   pub(crate) tree: Box<resvg::usvg::Tree>,
+  raster_cache: Arc<SvgRasterCache>,
 }
 
 impl From<SvgSource> for ImageSource {
@@ -53,7 +57,7 @@ impl From<SvgSource> for ImageSource {
 #[derive(Debug, Clone)]
 pub(crate) enum RenderedImage<'a> {
   /// A fully rasterized image, used for SVGs.
-  Rasterized(RgbaImage),
+  Rasterized(Arc<Pixmap>),
   /// A borrowed bitmap that should be sampled directly.
   Borrowed {
     /// The original bitmap source.
@@ -65,15 +69,6 @@ pub(crate) enum RenderedImage<'a> {
     /// The sampling algorithm to use.
     algorithm: ImageScalingAlgorithm,
   },
-}
-
-impl RenderedImage<'_> {
-  pub(crate) fn into_owned(self) -> Result<RgbaImage, ImageResourceError> {
-    match self {
-      Self::Rasterized(image) => Ok(image),
-      Self::Borrowed { source, .. } => Ok(source.clone()),
-    }
-  }
 }
 
 /// Represents a persistent image store.
@@ -133,6 +128,72 @@ impl From<RgbaImage> for ImageSource {
 }
 
 #[cfg(feature = "svg")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct SvgRasterCacheKey {
+  width: u32,
+  height: u32,
+  image_rendering: u8,
+  current_color: u32,
+}
+
+#[cfg(feature = "svg")]
+impl SvgRasterCacheKey {
+  fn new(
+    width: u32,
+    height: u32,
+    image_rendering: ImageScalingAlgorithm,
+    current_color: Color,
+  ) -> Self {
+    Self {
+      width,
+      height,
+      image_rendering: match image_rendering {
+        ImageScalingAlgorithm::Auto => 0,
+        ImageScalingAlgorithm::Smooth => 1,
+        ImageScalingAlgorithm::Pixelated => 2,
+      },
+      current_color: u32::from_be_bytes(current_color.0),
+    }
+  }
+}
+
+#[cfg(feature = "svg")]
+#[derive(Debug, Default)]
+struct SvgRasterCache {
+  #[cfg(target_arch = "wasm32")]
+  map: RefCell<HashMap<SvgRasterCacheKey, Arc<Pixmap>>>,
+  #[cfg(not(target_arch = "wasm32"))]
+  map: DashMap<SvgRasterCacheKey, Arc<Pixmap>>,
+}
+
+#[cfg(feature = "svg")]
+impl SvgRasterCache {
+  fn get(&self, key: SvgRasterCacheKey) -> Option<Arc<Pixmap>> {
+    #[cfg(target_arch = "wasm32")]
+    {
+      self.map.borrow().get(&key).cloned()
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+      self.map.get(&key).map(|pixmap| pixmap.clone())
+    }
+  }
+
+  fn insert(&self, key: SvgRasterCacheKey, pixmap: Arc<Pixmap>) {
+    #[cfg(target_arch = "wasm32")]
+    {
+      self.map.borrow_mut().insert(key, pixmap);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+      self.map.insert(key, pixmap);
+    }
+  }
+}
+
+#[cfg(feature = "svg")]
 impl FromStr for SvgSource {
   type Err = ImageResourceError;
 
@@ -144,8 +205,10 @@ impl FromStr for SvgSource {
       .map_err(ImageResourceError::SvgParseError)?;
 
     Ok(SvgSource {
+      uses_current_color: sanitized_svg.contains("currentColor"),
       source: Arc::from(sanitized_svg),
       tree: Box::new(tree),
+      raster_cache: Arc::default(),
     })
   }
 }
@@ -195,39 +258,46 @@ impl ImageSource {
       }),
       #[cfg(feature = "svg")]
       ImageSource::Svg(svg) => {
-        use resvg::{
-          tiny_skia::Pixmap,
-          usvg::{Options, Transform, Tree},
-        };
+        use resvg::usvg::{Options, Transform, Tree};
 
-        let options = Options {
-          style_sheet: Some(format!("svg {{ color: {current_color}; }}")),
-          image_rendering: image_rendering.into(),
-          ..Default::default()
+        let cache_key = SvgRasterCacheKey::new(
+          width,
+          height,
+          image_rendering,
+          if svg.uses_current_color {
+            current_color
+          } else {
+            Color::transparent()
+          },
+        );
+        if let Some(pixmap) = svg.raster_cache.get(cache_key) {
+          return Ok(RenderedImage::Rasterized(pixmap));
+        }
+
+        let tree = if svg.uses_current_color {
+          let options = Options {
+            style_sheet: Some(format!("svg {{ color: {current_color}; }}")),
+            image_rendering: image_rendering.into(),
+            ..Default::default()
+          };
+          Some(Tree::from_str(&svg.source, &options).map_err(ImageResourceError::SvgParseError)?)
+        } else {
+          None
         };
-        let reparsed_tree =
-          Tree::from_str(&svg.source, &options).map_err(ImageResourceError::SvgParseError)?;
+        let tree = tree.as_ref().unwrap_or(&svg.tree);
 
         let mut pixmap = Pixmap::new(width, height).ok_or(ImageResourceError::InvalidPixmapSize)?;
 
-        let original_size = svg.tree.size();
+        let original_size = tree.size();
         let sx = width as f32 / original_size.width();
         let sy = height as f32 / original_size.height();
 
-        resvg::render(
-          &reparsed_tree,
-          Transform::from_scale(sx, sy),
-          &mut pixmap.as_mut(),
-        );
+        resvg::render(tree, Transform::from_scale(sx, sy), &mut pixmap.as_mut());
 
-        let mut image = RgbaImage::from_raw(width, height, pixmap.take())
-          .ok_or(ImageResourceError::MismatchedBufferSize)?;
+        let pixmap = Arc::new(pixmap);
+        svg.raster_cache.insert(cache_key, pixmap.clone());
 
-        for pixel in bytemuck::cast_slice_mut::<u8, [u8; 4]>(image.as_mut()) {
-          unpremultiply_alpha(pixel);
-        }
-
-        Ok(RenderedImage::Rasterized(image))
+        Ok(RenderedImage::Rasterized(pixmap))
       }
     }
   }
@@ -350,11 +420,27 @@ pub enum ImageResourceError {
 #[cfg(test)]
 mod tests {
   use image::Rgba;
+  use tiny_skia::PremultipliedColorU8;
 
   use super::*;
 
-  fn rgba_at(image: &RgbaImage, x: u32, y: u32) -> [u8; 4] {
-    image.get_pixel(x, y).0
+  fn premul_at(image: &RenderedImage<'_>, x: u32, y: u32) -> PremultipliedColorU8 {
+    match image {
+      RenderedImage::Rasterized(pixmap) => pixmap
+        .pixel(x, y)
+        .unwrap_or(PremultipliedColorU8::TRANSPARENT),
+      RenderedImage::Borrowed { source, .. } => {
+        let pixel = source.get_pixel(x, y).0;
+        let alpha = pixel[3] as u32;
+        PremultipliedColorU8::from_rgba(
+          crate::rendering::fast_div_255(pixel[0] as u32 * alpha),
+          crate::rendering::fast_div_255(pixel[1] as u32 * alpha),
+          crate::rendering::fast_div_255(pixel[2] as u32 * alpha),
+          pixel[3],
+        )
+        .unwrap_or_else(|| unreachable!())
+      }
+    }
   }
 
   #[cfg(feature = "svg")]
@@ -363,14 +449,12 @@ mod tests {
     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="currentColor"/></svg>"#;
     let image = ImageSource::from_bytes(svg.as_bytes())?;
 
-    let red = image
-      .render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0xFF0000))?
-      .into_owned()?;
-    let blue = image
-      .render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?
-      .into_owned()?;
+    let red =
+      image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0xFF0000))?;
+    let blue =
+      image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?;
 
-    assert_ne!(rgba_at(&red, 2, 2), rgba_at(&blue, 2, 2));
+    assert_ne!(premul_at(&red, 2, 2), premul_at(&blue, 2, 2));
     Ok(())
   }
 
@@ -381,10 +465,8 @@ mod tests {
     let image = ImageSource::from_bytes(svg.as_bytes())?;
     let color = Color([255, 0, 0, 128]);
 
-    let rendered = image
-      .render_for_layout(4, 4, ImageScalingAlgorithm::Auto, color)?
-      .into_owned()?;
-    let alpha = rgba_at(&rendered, 2, 2)[3];
+    let rendered = image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, color)?;
+    let alpha = premul_at(&rendered, 2, 2).alpha();
 
     assert!((alpha as i16 - 128).abs() <= 1);
     Ok(())
@@ -396,14 +478,40 @@ mod tests {
     let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="#ff0000"/></svg>"##;
     let image: ImageSource = SvgSource::from_str(svg)?.into();
 
-    let first = image
-      .render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x00FF00))?
-      .into_owned()?;
-    let second = image
-      .render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?
-      .into_owned()?;
+    let first =
+      image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x00FF00))?;
+    let second =
+      image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?;
 
-    assert_eq!(first.as_raw(), second.as_raw());
+    let RenderedImage::Rasterized(first) = first else {
+      unreachable!()
+    };
+    let RenderedImage::Rasterized(second) = second else {
+      unreachable!()
+    };
+    assert_eq!(first.data(), second.data());
+    Ok(())
+  }
+
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_fixed_fill_reuses_rasterized_pixmap() -> Result<(), ImageResourceError> {
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="#ff0000"/></svg>"##;
+    let image: ImageSource = SvgSource::from_str(svg)?.into();
+
+    let first =
+      image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x00FF00))?;
+    let second =
+      image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?;
+
+    let RenderedImage::Rasterized(first) = first else {
+      unreachable!()
+    };
+    let RenderedImage::Rasterized(second) = second else {
+      unreachable!()
+    };
+
+    assert!(Arc::ptr_eq(&first, &second));
     Ok(())
   }
 
@@ -429,13 +537,17 @@ mod tests {
     bitmap.put_pixel(1, 0, Rgba([78, 90, 12, 255]));
     let image = ImageSource::Bitmap(bitmap);
 
-    let first = image
-      .render_for_layout(2, 2, ImageScalingAlgorithm::Auto, Color::from_rgb(0xFF0000))?
-      .into_owned()?;
-    let second = image
-      .render_for_layout(2, 2, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?
-      .into_owned()?;
+    let first =
+      image.render_for_layout(2, 2, ImageScalingAlgorithm::Auto, Color::from_rgb(0xFF0000))?;
+    let second =
+      image.render_for_layout(2, 2, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?;
 
+    let RenderedImage::Borrowed { source: first, .. } = first else {
+      unreachable!()
+    };
+    let RenderedImage::Borrowed { source: second, .. } = second else {
+      unreachable!()
+    };
     assert_eq!(first.as_raw(), second.as_raw());
     Ok(())
   }

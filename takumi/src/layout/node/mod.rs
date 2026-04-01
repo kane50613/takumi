@@ -2,7 +2,6 @@ mod container;
 mod image;
 mod text;
 
-use ::image::RgbaImage;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -17,8 +16,8 @@ use crate::{
     style::{Affine, BackgroundClip, BlendMode, Sides, Style, tw::TailwindValues},
   },
   rendering::{
-    BackgroundTile, BorderProperties, Canvas, Fill, RenderContext, SizedShadow,
-    collect_background_layers, rasterize_layers,
+    BorderProperties, Canvas, Fill, PaintSource, RenderContext, SizedShadow,
+    collect_background_layers, rasterize_layers, release_rasterized_background_tile,
   },
 };
 
@@ -373,20 +372,39 @@ impl Node {
 
     match context.style.background_clip {
       BackgroundClip::BorderBox => {
-        let tiles = collect_background_layers(context, layout.size, &mut canvas.buffer_pool)?;
+        let layers = collect_background_layers(context, layout.size, &mut canvas.buffer_pool)?;
 
-        for tile in tiles {
-          for y in &tile.ys {
-            for x in &tile.xs {
-              canvas.overlay_image(
-                &tile.tile,
-                border_radius,
-                context.transform * Affine::translation(*x as f32, *y as f32),
-                context.style.image_rendering,
-                tile.blend_mode,
-              );
+        if border_radius.is_zero() {
+          for tile in layers {
+            for y in &tile.ys {
+              for x in &tile.xs {
+                canvas.overlay_image(
+                  &tile.tile,
+                  border_radius,
+                  context.transform * Affine::translation(*x as f32, *y as f32),
+                  context.style.image_rendering,
+                  tile.blend_mode,
+                );
+              }
             }
           }
+        } else if let Some(tile) = rasterize_layers(
+          layers,
+          layout.size.map(|x| x as u32),
+          context,
+          BorderProperties::default(),
+          Affine::IDENTITY,
+          &mut canvas.buffer_pool,
+        )? {
+          canvas.overlay_image(
+            &tile,
+            border_radius,
+            context.transform,
+            context.style.image_rendering,
+            BlendMode::Normal,
+          );
+
+          release_rasterized_background_tile(tile, &mut canvas.buffer_pool);
         }
       }
       BackgroundClip::PaddingBox => {
@@ -413,9 +431,7 @@ impl Node {
             BlendMode::Normal,
           );
 
-          if let BackgroundTile::Image(image) = tile {
-            canvas.buffer_pool.release_image(image);
-          }
+          release_rasterized_background_tile(tile, &mut canvas.buffer_pool);
         }
       }
       BackgroundClip::ContentBox => {
@@ -447,9 +463,7 @@ impl Node {
             BlendMode::Normal,
           );
 
-          if let BackgroundTile::Image(image) = tile {
-            canvas.buffer_pool.release_image(image);
-          }
+          release_rasterized_background_tile(tile, &mut canvas.buffer_pool);
         }
       }
       _ => {}
@@ -494,11 +508,11 @@ impl Node {
       canvas,
       layout.size,
       context.transform,
-      clip_image.as_ref(),
+      clip_image.as_ref().map(PaintSource::from),
     );
 
-    if let Some(BackgroundTile::Image(image)) = clip_image {
-      canvas.buffer_pool.release_image(image);
+    if let Some(tile) = clip_image {
+      release_rasterized_background_tile(tile, &mut canvas.buffer_pool);
     }
     Ok(())
   }
@@ -533,7 +547,7 @@ impl Node {
     let transform = Affine::translation(-offset - width, -offset - width) * context.transform;
     let size = layout.size.map(|x| x + (offset + width) * 2.0);
 
-    border.draw::<RgbaImage>(canvas, size, transform, None);
+    border.draw(canvas, size, transform, None);
 
     Ok(())
   }

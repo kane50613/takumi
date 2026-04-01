@@ -2,7 +2,7 @@ use crate::layout::style::unexpected_token;
 use std::f32::consts::TAU;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
-use image::{GenericImageView, Rgba};
+use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
@@ -69,7 +69,7 @@ pub(crate) struct ConicGradientTile {
   pub angle_to_lut_scale: f32,
   /// Pre-computed color lookup table for fast gradient sampling.
   /// Maps normalized angle [0.0, 1.0] (fraction of full turn) to color.
-  pub color_lut: Vec<Rgba<u8>>,
+  pub color_lut: Vec<PremultipliedColorU8>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -77,36 +77,6 @@ pub(crate) struct ConicGradientRowState {
   dx: f32,
   dy: f32,
   lut_len: usize,
-}
-
-impl GenericImageView for ConicGradientTile {
-  type Pixel = Rgba<u8>;
-
-  fn dimensions(&self) -> (u32, u32) {
-    (self.width, self.height)
-  }
-
-  fn get_pixel(&self, x: u32, y: u32) -> Self::Pixel {
-    if self.color_lut.is_empty() {
-      return Rgba([0, 0, 0, 0]);
-    }
-
-    if self.color_lut.len() == 1 {
-      return self.color_lut[0];
-    }
-
-    let dx = x as f32 - self.cx;
-    let dy = y as f32 - self.cy;
-    if dx.abs() <= f32::EPSILON && dy.abs() <= f32::EPSILON {
-      return self.color_lut[0];
-    }
-
-    let angle_from_top = Self::angle_from_top_normalized(dx, dy);
-    let adjusted = self.adjusted_angle(angle_from_top);
-    let lut_idx = self.lut_index_for_adjusted_angle_with_len(adjusted, self.color_lut.len());
-
-    self.color_lut[lut_idx]
-  }
 }
 
 impl ConicGradientTile {
@@ -237,7 +207,30 @@ impl GradientOverlayTile for ConicGradientTile {
   }
 
   #[inline(always)]
-  fn sample_at(&self, lut_idx: usize) -> Rgba<u8> {
+  fn sample_at(&self, lut_idx: usize) -> PremultipliedColorU8 {
+    self.color_lut[lut_idx]
+  }
+
+  #[inline(always)]
+  fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {
+    if self.color_lut.is_empty() {
+      return PremultipliedColorU8::TRANSPARENT;
+    }
+
+    if self.color_lut.len() == 1 {
+      return self.color_lut[0];
+    }
+
+    let dx = x as f32 - self.cx;
+    let dy = y as f32 - self.cy;
+    if dx.abs() <= f32::EPSILON && dy.abs() <= f32::EPSILON {
+      return self.color_lut[0];
+    }
+
+    let angle_from_top = Self::angle_from_top_normalized(dx, dy);
+    let adjusted = self.adjusted_angle(angle_from_top);
+    let lut_idx = self.lut_index_for_adjusted_angle_with_len(adjusted, self.color_lut.len());
+
     self.color_lut[lut_idx]
   }
 
@@ -393,12 +386,12 @@ impl<'i> FromCss<'i> for ConicGradient {
 #[cfg(test)]
 mod tests {
   use color::{ColorSpaceTag, HueDirection};
+  use tiny_skia::ColorU8;
 
   use super::*;
   use crate::layout::Viewport;
   use crate::layout::style::{Color, Length, SpacePair, StopPosition};
   use crate::{GlobalContext, rendering::RenderContext};
-
   #[test]
   fn test_parse_conic_gradient_basic() {
     let gradient = ConicGradient::from_str("conic-gradient(#ff0000, #0000ff)");
@@ -613,8 +606,8 @@ mod tests {
     let tile = ConicGradientTile::new(&gradient, 100, 100, &render_context);
 
     // Top center (50, 0) should be red (start of gradient)
-    let color_top = tile.get_pixel(50, 0);
-    assert_eq!(color_top, Rgba([255, 0, 0, 255]));
+    let color_top = tile.sample_pixel(50, 0).demultiply();
+    assert_eq!(color_top, ColorU8::from_rgba(255, 0, 0, 255));
   }
 
   #[test]
@@ -654,12 +647,12 @@ mod tests {
     let tile = ConicGradientTile::new(&gradient, 100, 100, &render_context);
 
     // Top-center should be red
-    let top = tile.get_pixel(50, 0);
-    assert_eq!(top, Rgba([255, 0, 0, 255]));
+    let top = tile.sample_pixel(50, 0).demultiply();
+    assert_eq!(top, ColorU8::from_rgba(255, 0, 0, 255));
 
     // Bottom should be green (roughly 180deg = 50% of turn, within the 33%–66% green zone)
-    let bottom = tile.get_pixel(50, 99);
-    assert_eq!(bottom, Rgba([0, 255, 0, 255]));
+    let bottom = tile.sample_pixel(50, 99).demultiply();
+    assert_eq!(bottom, ColorU8::from_rgba(0, 255, 0, 255));
   }
 
   #[test]
@@ -692,16 +685,16 @@ mod tests {
 
     assert_eq!(
       [
-        tile.get_pixel(25, 15),
-        tile.get_pixel(25, 25),
-        tile.get_pixel(15, 25),
-        tile.get_pixel(15, 15),
+        tile.sample_pixel(25, 15).demultiply(),
+        tile.sample_pixel(25, 25).demultiply(),
+        tile.sample_pixel(15, 25).demultiply(),
+        tile.sample_pixel(15, 15).demultiply(),
       ],
       [
-        Rgba([255, 0, 0, 255]),
-        Rgba([0, 0, 255, 255]),
-        Rgba([255, 0, 0, 255]),
-        Rgba([0, 0, 255, 255]),
+        ColorU8::from_rgba(255, 0, 0, 255),
+        ColorU8::from_rgba(0, 0, 255, 255),
+        ColorU8::from_rgba(255, 0, 0, 255),
+        ColorU8::from_rgba(0, 0, 255, 255),
       ]
     );
   }

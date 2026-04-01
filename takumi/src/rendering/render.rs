@@ -458,7 +458,7 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<RgbaImage> {
     },
   )?;
 
-  let mut image = canvas.into_inner();
+  let mut image = canvas.into_inner()?;
   apply_dithering(&mut image, dithering);
 
   Ok(image)

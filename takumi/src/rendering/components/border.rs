@@ -1,14 +1,10 @@
 use std::f32::consts::SQRT_2;
 
-use image::{GenericImageView, Rgba};
 use taffy::{Point, Rect, Size};
 
 use crate::{
   layout::style::{Affine, BlendMode, BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair},
-  rendering::{
-    Canvas, Command, Fill, PathBuilder, RenderContext, apply_mask_alpha_to_pixel, blend_pixel,
-    mask_index_from_coord, overlay_area, render_mask, sample_transformed_pixel,
-  },
+  rendering::{Canvas, Command, Fill, PaintSource, PathBuilder, RenderContext, render_mask},
 };
 
 /// Represents the properties of a border, including corner radii and drawing metadata.
@@ -30,17 +26,6 @@ impl BorderProperties {
   /// The amount of path commands to append for this border.
   /// This is used to pre-allocate the vector size for the mask commands.
   const PATH_COMMANDS_AMOUNT: usize = 10;
-
-  /// Create an empty BorderProperties with zeroed radii and default values.
-  pub const fn zero() -> Self {
-    Self {
-      width: Rect::ZERO,
-      color: Color([0, 0, 0, 255]),
-      radius: Sides([SpacePair::from_single(0.0); 4]),
-      style: BorderStyle::None,
-      image_rendering: ImageScalingAlgorithm::Auto,
-    }
-  }
 
   /// Resolves the border radius from the context and layout.
   pub fn resolve_radius_part(
@@ -255,17 +240,17 @@ impl BorderProperties {
     path.close();
   }
 
-  pub(crate) fn draw<I: GenericImageView<Pixel = Rgba<u8>>>(
+  pub(crate) fn draw(
     mut self,
     canvas: &mut Canvas,
     border_box: Size<f32>,
     transform: Affine,
-    clip_image: Option<&I>,
+    clip_image: Option<PaintSource<'_>>,
   ) {
     if let Some(clip_image) = &clip_image {
       assert_eq!(
-        clip_image.dimensions(),
-        (border_box.width as u32, border_box.height as u32)
+        (clip_image.width(), clip_image.height()),
+        (border_box.width as u32, border_box.height as u32),
       );
     }
 
@@ -303,50 +288,26 @@ impl BorderProperties {
       &mut canvas.buffer_pool,
     );
 
+    if clip_image.is_none() {
+      canvas.draw_mask(&mask, placement, self.color, BlendMode::Normal);
+      canvas.buffer_pool.release(mask);
+      return;
+    }
+
     let Some(inverse) = transform.invert() else {
+      canvas.buffer_pool.release(mask);
       return;
     };
 
-    overlay_area(
-      &mut canvas.image,
-      Point {
-        x: placement.left as f32,
-        y: placement.top as f32,
-      },
-      Size {
-        width: placement.width,
-        height: placement.height,
-      },
+    canvas.composite_mask_source_over_color(
+      &mask,
+      placement,
+      clip_image.unwrap_or_else(|| unreachable!()),
+      self.color,
+      inverse,
+      Point::ZERO,
+      self.image_rendering,
       BlendMode::Normal,
-      &canvas.constrains,
-      |x, y| {
-        let alpha = mask[mask_index_from_coord(x, y, placement.width)];
-
-        let clip_image_pixel = clip_image.and_then(|image| {
-          // Convert canvas coordinates to border_box coordinates using inverse transform
-          let canvas_x = (x as i32 + placement.left) as f32;
-          let canvas_y = (y as i32 + placement.top) as f32;
-
-          sample_transformed_pixel(
-            image,
-            inverse,
-            self.image_rendering,
-            canvas_x,
-            canvas_y,
-            Point::ZERO,
-          )
-        });
-
-        let mut pixel = self.color.into();
-
-        if let Some(clip_image_pixel) = clip_image_pixel {
-          blend_pixel(&mut pixel, clip_image_pixel, BlendMode::Normal);
-        }
-
-        apply_mask_alpha_to_pixel(&mut pixel, alpha);
-
-        pixel
-      },
     );
 
     canvas.buffer_pool.release(mask);

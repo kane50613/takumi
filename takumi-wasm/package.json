@@ -24,6 +24,7 @@
     "dist",
     "bundlers"
   ],
+  "type": "module",
   "main": "./dist/export.cjs",
   "module": "./dist/export.mjs",
   "types": "./dist/export.d.mts",

@@ -1,4 +1,59 @@
+import type { CSSProperties } from "react";
+import type { Node } from "./types";
+
 const defaultTimeout = 5000;
+const cssUrlPattern = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
+
+function isFetchableResourceUrl(value: string): boolean {
+  return value.startsWith("https://") || value.startsWith("http://");
+}
+
+function collectCssUrls(value: unknown, urls: Set<string>) {
+  if (typeof value === "string") {
+    for (const match of value.matchAll(cssUrlPattern)) {
+      const url = match[2]?.trim();
+      if (url && isFetchableResourceUrl(url)) {
+        urls.add(url);
+      }
+    }
+  } else if (Array.isArray(value)) {
+    for (const item of value) {
+      collectCssUrls(item, urls);
+    }
+  }
+}
+
+export function extractResourceUrls(node: Node): string[] {
+  const urls = new Set<string>();
+
+  const visit = (current: Node) => {
+    const collectStyleUrls = (style: CSSProperties | undefined) => {
+      if (!style) {
+        return;
+      }
+
+      collectCssUrls(style.backgroundImage, urls);
+      collectCssUrls(style.maskImage, urls);
+    };
+
+    collectStyleUrls(current.style);
+    collectStyleUrls(current.preset);
+
+    if (current.type === "image" && isFetchableResourceUrl(current.src)) {
+      urls.add(current.src);
+      return;
+    }
+
+    if (current.type === "container") {
+      for (const child of current.children ?? []) {
+        visit(child);
+      }
+    }
+  };
+
+  visit(node);
+  return [...urls];
+}
 
 export type FetchResourcesOptions = {
   /**

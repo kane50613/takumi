@@ -2,7 +2,7 @@ use std::{borrow::Cow, io::Write};
 
 use gif::{Encoder as GifEncoder, Frame as GifFrame, Repeat};
 use image::{ExtendedColorType, ImageEncoder, ImageFormat, RgbaImage, codecs::jpeg::JpegEncoder};
-use png::{ColorType, Compression};
+use png::{ColorType, DeflateCompression, Filter};
 use serde::Deserialize;
 use typed_builder::TypedBuilder;
 
@@ -125,6 +125,11 @@ fn duration_ms_to_gif_delay(duration_ms: u32) -> u16 {
   }
 }
 
+fn configure_png_encoder<T: Write>(encoder: &mut png::Encoder<'_, T>) {
+  encoder.set_deflate_compression(DeflateCompression::Level(6));
+  encoder.set_filter(Filter::NoFilter);
+}
+
 /// Writes a single rendered image to `destination` using `format`.
 pub fn write_image<'a, T: Write>(
   image: Cow<'a, RgbaImage>,
@@ -143,6 +148,7 @@ pub fn write_image<'a, T: Write>(
     }
     ImageOutputFormat::Png => {
       let mut encoder = png::Encoder::new(destination, image.width(), image.height());
+      configure_png_encoder(&mut encoder);
 
       let has_alpha = has_any_alpha_pixel(&image);
 
@@ -157,15 +163,6 @@ pub fn write_image<'a, T: Write>(
       } else {
         ColorType::Rgb
       });
-
-      // PNG is lossless, so default to the better-compression path unless the
-      // caller explicitly requests lower effort via `quality`.
-      let quality = quality.unwrap_or(100);
-      if quality >= 90 {
-        encoder.set_compression(Compression::Balanced);
-      } else {
-        encoder.set_compression(Compression::Fast);
-      }
 
       let mut writer = encoder.write_header()?;
       writer.write_image_data(&image_data)?;
@@ -240,9 +237,8 @@ pub fn encode_animated_png<W: Write>(
   }
 
   let mut encoder = png::Encoder::new(destination, width, height);
-
+  configure_png_encoder(&mut encoder);
   encoder.set_color(ColorType::Rgba);
-  encoder.set_compression(png::Compression::Fastest);
   encoder.set_animated(frames.len() as u32, options.loop_count.unwrap_or(0) as u32)?;
 
   // Since APNG doesn't support variable frame duration, we use the minimum duration of all frames.

@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use image::{GenericImageView, Rgba};
 use parley::{GlyphRun, PositionedInlineBox, PositionedLayoutItem};
 use skrifa::{FontRef, MetadataProvider};
 use taffy::{Layout, Point};
@@ -16,10 +15,10 @@ use crate::{
     tree::LayoutTree,
   },
   rendering::{
-    BackgroundTile, BorderProperties, Canvas, ColorTile, Command, PathBuilder, RenderContext,
-    Stroke, collect_background_layers, draw_decoration, draw_glyph, draw_glyph_clip_image,
-    draw_glyph_text_shadow, mask_index_from_coord, overlay_area, rasterize_layers,
-    render::render_node, render_mask,
+    BorderProperties, Canvas, ColorTile, Command, PaintSource, PathBuilder, RenderContext, Stroke,
+    collect_background_layers, draw_decoration, draw_glyph, draw_glyph_clip_image,
+    draw_glyph_text_shadow, mask_index_from_coord, rasterize_layers,
+    release_rasterized_background_tile, render::render_node, render_mask,
   },
   resources::font::{FontError, ResolvedGlyph},
 };
@@ -123,11 +122,7 @@ fn draw_decoration_segment(
   let x = start_x.floor();
   let width = (end_x.ceil() - x) as u32;
 
-  let tile = ColorTile {
-    color: color.into(),
-    width,
-    height: height as u32,
-  };
+  let tile = ColorTile::new(color.into(), width, height as u32);
 
   if tile.width == 0 || tile.height == 0 {
     return;
@@ -502,30 +497,7 @@ fn draw_outline_island(
     Some(stroke.into()),
     &mut canvas.buffer_pool,
   );
-
-  overlay_area(
-    &mut canvas.image,
-    Point {
-      x: placement.left as f32,
-      y: placement.top as f32,
-    },
-    Size {
-      width: placement.width,
-      height: placement.height,
-    },
-    BlendMode::Normal,
-    &canvas.constrains,
-    |x, y| {
-      let alpha = mask[mask_index_from_coord(x, y, placement.width)];
-      if alpha == 0 {
-        return Color::transparent().into();
-      }
-
-      let mut pixel: image::Rgba<u8> = style.outline_color.into();
-      pixel.0[3] = ((pixel.0[3] as u16 * alpha as u16) / 255) as u8;
-      pixel
-    },
-  );
+  canvas.draw_mask(&mask, placement, style.outline_color, BlendMode::Normal);
 
   canvas.buffer_pool.release(mask);
 }
@@ -614,14 +586,14 @@ fn draw_merged_outline_rects(
   }
 }
 
-fn draw_glyph_run_content<I: GenericImageView<Pixel = Rgba<u8>>>(
+fn draw_glyph_run_content(
   style: &SizedFontStyle,
   glyph_run: &GlyphRun<'_, InlineBrush>,
   resolved_glyphs: &HashMap<u32, ResolvedGlyph>,
   canvas: &mut Canvas,
   layout: Layout,
   context: &RenderContext,
-  clip_image: Option<&I>,
+  clip_image: Option<PaintSource<'_>>,
 ) -> Result<()> {
   let run = glyph_run.run();
 
@@ -851,6 +823,7 @@ pub(crate) fn draw_inline_layout(
   } else {
     None
   };
+  let clip_image_source = clip_image.as_ref().map(PaintSource::from);
 
   let mut positioned_inline_boxes = Vec::new();
   let mut inline_outline_rects = Vec::new();
@@ -889,7 +862,7 @@ pub(crate) fn draw_inline_layout(
             canvas,
             layout,
             context,
-            clip_image.as_ref(),
+            clip_image_source,
           )?;
           if let Some(outline_rect) = collect_glyph_run_outline_rect(
             &glyph_run,
@@ -924,8 +897,8 @@ pub(crate) fn draw_inline_layout(
     draw_glyph_run_line_through(glyph_run, canvas, layout, context)?;
   }
 
-  if let Some(BackgroundTile::Image(image)) = clip_image {
-    canvas.buffer_pool.release_image(image);
+  if let Some(tile) = clip_image {
+    release_rasterized_background_tile(tile, &mut canvas.buffer_pool);
   }
 
   Ok(positioned_inline_boxes)

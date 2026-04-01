@@ -355,6 +355,15 @@ pub enum TakumiError {
   #[error("Invalid viewport: width or height cannot be 0")]
   InvalidViewport,
 
+  /// RGBA buffer length does not match `width * height * 4`.
+  #[error("invalid RGBA buffer length: expected {expected} bytes, got {actual}")]
+  InvalidRgbaBufferLength {
+    /// Actual RGBA byte length in the buffer.
+    actual: usize,
+    /// Expected RGBA byte length from dimensions.
+    expected: usize,
+  },
+
   /// Animated encode was requested without any frames.
   #[error("{format} animation must contain at least one frame")]
   EmptyAnimationFrames {

@@ -9,6 +9,8 @@ import {
 export * from "../pkg/takumi_wasm";
 export { default } from "../pkg/takumi_wasm";
 
+export { extractResourceUrls } from "@takumi-rs/helpers";
+
 export type ImageSourceLoader = Omit<ImageSource, "data"> & {
   data: ImageSource["data"] | (() => Promise<ImageSource["data"]> | ImageSource["data"]);
 };
