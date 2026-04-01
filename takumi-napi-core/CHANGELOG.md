@@ -1,5 +1,13 @@
 # @takumi-rs/core
 
+## 1.0.0-rc.11
+
+### Patch Changes
+
+- b2e304a: Replaced native `extractResourceUrls` with JS version to avoid roundtrip
+- Updated dependencies [b2e304a]
+  - @takumi-rs/helpers@1.0.0-rc.11
+
 ## 1.0.0-rc.10
 
 ### Patch Changes

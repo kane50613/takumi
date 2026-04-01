@@ -1,5 +1,11 @@
 # @takumi-rs/helpers
 
+## 1.0.0-rc.11
+
+### Minor Changes
+
+- b2e304a: Add `extractResourceUrls` in pure JS to avoid extra roundtrip to native bindings
+
 ## 1.0.0-rc.10
 
 ### Patch Changes

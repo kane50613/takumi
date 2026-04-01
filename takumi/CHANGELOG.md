@@ -1,5 +1,12 @@
 # takumi
 
+## 1.0.0-rc.11
+
+### Minor Changes
+
+- 1ccf8a9: Support `direction`, `float`, `clear` properties
+- b2e304a: Rework on internal rendering pipeline to be performant
+
 ## 1.0.0-rc.10
 
 ## 1.0.0-rc.9
