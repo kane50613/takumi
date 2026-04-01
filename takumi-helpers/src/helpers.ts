@@ -26,6 +26,10 @@ function applyMetadata(node: Node, props: Partial<NodeMetadata>) {
     node.id = props.id;
   }
 
+  if (props.dir !== undefined) {
+    node.dir = props.dir;
+  }
+
   if (props.attributes !== undefined) {
     node.attributes = props.attributes;
   }

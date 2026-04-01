@@ -1,10 +1,10 @@
 use std::{mem::take, vec::IntoIter};
 
 use taffy::{
-  AvailableSpace, Cache, CacheTree, Display as TaffyDisplay, Layout, LayoutBlockContainer,
-  LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput, LayoutPartialTree,
-  NodeId, RequestedAxis, RoundTree, RunMode, Size, SizingMode, Style, TaffyError,
-  TraversePartialTree, TraverseTree, compute_block_layout, compute_cached_layout,
+  AvailableSpace, BlockContext, Cache, CacheTree, Display as TaffyDisplay, Layout,
+  LayoutBlockContainer, LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput,
+  LayoutPartialTree, NodeId, RequestedAxis, RoundTree, RunMode, Size, SizingMode, Style,
+  TaffyError, TraversePartialTree, TraverseTree, compute_block_layout, compute_cached_layout,
   compute_flexbox_layout, compute_grid_layout, compute_hidden_layout, compute_leaf_layout,
   compute_root_layout, round_layout,
 };
@@ -20,7 +20,7 @@ use crate::{
     node::{Node, NodeStyleLayers},
     style::{
       Affine, BlendMode, Color, ComputedStyle, Display, Filters, Isolation, PercentageNumber,
-      Style as NodeStyle, StyleSheet, apply_stylesheet_animations,
+      Style as NodeStyle, StyleDeclaration, StyleSheet, apply_stylesheet_animations,
       matching::{MatchedDeclarationsView, match_stylesheets_view},
     },
   },
@@ -96,6 +96,10 @@ fn build_style_layers(
 
   if let Some(preset) = node_layers.preset {
     style.merge_from(preset);
+  }
+
+  if let Some(dir) = node_layers.dir {
+    style.push(StyleDeclaration::direction(dir), false);
   }
 
   for &declarations in &matched_declarations.normal {
@@ -540,6 +544,17 @@ impl LayoutPartialTree for LayoutTree<'_, '_> {
   }
 
   fn compute_child_layout(&mut self, node: NodeId, inputs: LayoutInput) -> LayoutOutput {
+    self.compute_child_layout_inner(node, inputs, None)
+  }
+}
+
+impl<'r, 'g> LayoutTree<'r, 'g> {
+  fn compute_child_layout_inner(
+    &mut self,
+    node: NodeId,
+    inputs: LayoutInput,
+    block_ctx: Option<&mut BlockContext<'_>>,
+  ) -> LayoutOutput {
     self.update_node_style_for_available_space(
       node,
       inputs.available_space,
@@ -560,7 +575,7 @@ impl LayoutPartialTree for LayoutTree<'_, '_> {
 
       match (display_mode, has_children) {
         (TaffyDisplay::None, _) => compute_hidden_layout(tree, node),
-        (TaffyDisplay::Block, true) => compute_block_layout(tree, node, inputs),
+        (TaffyDisplay::Block, true) => compute_block_layout(tree, node, inputs, block_ctx),
         (TaffyDisplay::Flex, true) => compute_flexbox_layout(tree, node, inputs),
         (TaffyDisplay::Grid, true) => compute_grid_layout(tree, node, inputs),
         (_, false) => compute_leaf_layout(
@@ -604,35 +619,20 @@ impl LayoutPartialTree for LayoutTree<'_, '_> {
 }
 
 impl CacheTree for LayoutTree<'_, '_> {
-  fn cache_get(
-    &self,
-    node_id: NodeId,
-    known_dimensions: Size<Option<f32>>,
-    available_space: Size<AvailableSpace>,
-    run_mode: RunMode,
-  ) -> Option<LayoutOutput> {
+  fn cache_get(&self, node_id: NodeId, input: &LayoutInput) -> Option<LayoutOutput> {
     let Some(node) = self.get_layout_node_ref(node_id) else {
       unreachable!()
     };
 
-    node.cache.get(known_dimensions, available_space, run_mode)
+    node.cache.get(input)
   }
 
-  fn cache_store(
-    &mut self,
-    node_id: NodeId,
-    known_dimensions: Size<Option<f32>>,
-    available_space: Size<AvailableSpace>,
-    run_mode: RunMode,
-    layout_output: LayoutOutput,
-  ) {
+  fn cache_store(&mut self, node_id: NodeId, input: &LayoutInput, layout_output: LayoutOutput) {
     let Some(node) = self.get_layout_node_mut_ref(node_id) else {
       unreachable!()
     };
 
-    node
-      .cache
-      .store(known_dimensions, available_space, run_mode, layout_output);
+    node.cache.store(input, layout_output);
   }
 
   fn cache_clear(&mut self, node_id: NodeId) {
@@ -660,6 +660,15 @@ impl LayoutBlockContainer for LayoutTree<'_, '_> {
 
   fn get_block_child_style(&self, child_node_id: NodeId) -> Self::BlockItemStyle<'_> {
     self.get_core_container_style(child_node_id)
+  }
+
+  fn compute_block_child_layout(
+    &mut self,
+    node: NodeId,
+    inputs: LayoutInput,
+    block_ctx: Option<&mut BlockContext<'_>>,
+  ) -> LayoutOutput {
+    self.compute_child_layout_inner(node, inputs, block_ctx)
   }
 }
 

@@ -3,13 +3,14 @@ use std::f32::consts::PI;
 use parley::GenericFamily;
 use takumi::{
   layout::{
+    Viewport,
     node::Node,
     style::{Length::*, *},
   },
   rendering::{AnimationFrame, RenderOptions, render_sequence_animation},
 };
 
-use crate::test_utils::{CONTEXT, create_test_viewport_with_size, run_animation_fixture_test};
+use crate::test_utils::{CONTEXT, run_animation_fixture_test};
 
 const BOUNCING_TEXT_FPS: u32 = 20;
 const BOUNCING_TEXT_DURATION_MS: u32 = 900;
@@ -128,7 +129,7 @@ fn keyframe_interpolation_options() -> RenderOptions<'static> {
   };
 
   RenderOptions::builder()
-    .viewport(create_test_viewport_with_size(800, 400))
+    .viewport(Viewport::new((800, 400)))
     .node(keyframe_interpolation_node())
     .global(&CONTEXT)
     .stylesheet(stylesheet)

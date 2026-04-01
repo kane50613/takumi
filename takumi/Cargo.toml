@@ -77,9 +77,18 @@ optional = true
 default-features = false
 
 [dependencies.taffy]
-version = "0.9"
+version = "0.10"
 default-features = false
-features = ["flexbox", "grid", "alloc", "calc", "taffy_tree", "strict_provenance", "block_layout"]
+features = [
+  "flexbox",
+  "grid",
+  "alloc",
+  "calc",
+  "taffy_tree",
+  "strict_provenance",
+  "block_layout",
+  "float_layout",
+]
 
 [dependencies.serde]
 version = "1"

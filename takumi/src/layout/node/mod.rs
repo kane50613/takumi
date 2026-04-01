@@ -13,7 +13,7 @@ use crate::{
     Viewport,
     inline::InlineContentKind,
     node::image::image_resource_url,
-    style::{Affine, BackgroundClip, BlendMode, Sides, Style, tw::TailwindValues},
+    style::{Affine, BackgroundClip, BlendMode, Direction, Sides, Style, tw::TailwindValues},
   },
   rendering::{
     BorderProperties, Canvas, Fill, PaintSource, RenderContext, SizedShadow,
@@ -24,12 +24,11 @@ use crate::{
 use self::{
   container::{
     container_children_ref, deserialize_children, drop_container_children, take_container_children,
-    take_container_style_layers,
   },
   image::{
     draw_image_node_content, image_inline_content, measure_image_node, take_image_style_layers,
   },
-  text::{draw_text_node_content, measure_text_node, take_text_style_layers, text_inline_content},
+  text::{draw_text_node_content, measure_text_node, text_inline_content},
 };
 
 pub(crate) use self::image::resolve_image;
@@ -52,6 +51,8 @@ pub(crate) struct NodeMetadata {
   pub(crate) style: Option<Style>,
   /// The tailwind properties for this node.
   pub(crate) tw: Option<TailwindValues>,
+  /// The text direction for this node.
+  pub(crate) dir: Option<Direction>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
@@ -167,6 +168,12 @@ impl Node {
     self
   }
 
+  /// Sets the direction and returns the updated node.
+  pub fn with_dir(mut self, dir: Direction) -> Self {
+    self.metadata.dir = Some(dir);
+    self
+  }
+
   /// Sets the preset style and returns the updated node.
   pub fn with_preset(mut self, preset: Style) -> Self {
     self.metadata.preset = Some(preset);
@@ -186,15 +193,16 @@ impl Node {
   }
 
   pub(crate) fn take_style_layers(&mut self) -> NodeStyleLayers {
-    if matches!(self.kind, NodeKind::Container { .. }) {
-      return take_container_style_layers(self);
-    }
-
     if let NodeKind::Image(image) = &self.kind {
       return take_image_style_layers(self, image.width, image.height);
     }
 
-    take_text_style_layers(self)
+    NodeStyleLayers {
+      preset: self.metadata.preset.take(),
+      author_tw: self.metadata.tw.take(),
+      inline: self.metadata.style.take(),
+      dir: self.metadata.dir.take(),
+    }
   }
 
   pub(crate) fn inline_content(&self) -> Option<InlineContentKind<'_>> {
@@ -562,6 +570,7 @@ pub(crate) struct NodeStyleLayers {
   pub author_tw: Option<TailwindValues>,
   /// Inline style attached directly to the element.
   pub inline: Option<Style>,
+  pub dir: Option<Direction>,
 }
 
 #[cfg(test)]

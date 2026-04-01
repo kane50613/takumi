@@ -2,7 +2,7 @@ use std::mem::take;
 
 use serde::{Deserialize, Deserializer};
 
-use crate::layout::node::{Node, NodeKind, NodeStyleLayers};
+use crate::layout::node::{Node, NodeKind};
 
 pub(crate) fn deserialize_children<'de, D>(deserializer: D) -> Result<Vec<Node>, D::Error>
 where
@@ -25,14 +25,6 @@ pub(crate) fn take_container_children(kind: &mut NodeKind) -> Option<Box<[Node]>
   };
 
   (!children.is_empty()).then(|| take(children).into_boxed_slice())
-}
-
-pub(crate) fn take_container_style_layers(node: &mut Node) -> NodeStyleLayers {
-  NodeStyleLayers {
-    preset: node.metadata.preset.take(),
-    author_tw: node.metadata.tw.take(),
-    inline: node.metadata.style.take(),
-  }
 }
 
 pub(crate) fn drop_container_children(kind: &mut NodeKind) {

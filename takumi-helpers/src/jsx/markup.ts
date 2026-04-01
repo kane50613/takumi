@@ -7,8 +7,9 @@ import type {
 import type { CSSProperties } from "react";
 import { container, image, text } from "../helpers";
 import type { Node, NodeMetadata } from "../types";
+import { extractAttributes, getPresets } from "./metadata";
 import type { FromJsxOptions } from "./jsx";
-import { defaultStylePresets } from "./style-presets";
+import type { defaultStylePresets } from "./style-presets";
 import { isHtmlVoidElement } from "./utils";
 
 export interface FromStaticMarkupOptions extends FromJsxOptions {}
@@ -17,14 +18,6 @@ export interface FromStaticMarkupResult {
   nodes: Node[];
   stylesheets: string[];
 }
-
-type HtmlProps = {
-  className?: string;
-  class?: string;
-  id?: string;
-  style?: string | CSSProperties;
-  [key: string]: unknown;
-};
 
 /**
  * Convert static HTML/SVG markup into Takumi nodes.
@@ -43,7 +36,7 @@ export function fromStaticMarkup(
   const document = parse(markup) as UltraHtmlDocumentNode;
   const nodes: Node[] = [];
   const stylesheets: string[] = [];
-  const presets = getPresets(options);
+  const presets = getPresets(options?.defaultStyles);
   const tailwindClassesProperty = options?.tailwindClassesProperty ?? "tw";
 
   for (const child of document.children) {
@@ -203,51 +196,12 @@ function extractStaticNodeMetadata(
     tagName: node.name,
     className: props.class,
     id: props.id,
+    dir: props.dir as NodeMetadata["dir"],
     attributes,
     tw,
     style,
     preset,
   };
-}
-
-function extractAttributes(
-  props: HtmlProps,
-  tailwindClassesProperty: string,
-): Record<string, string> | undefined {
-  const collectedAttributes: Record<string, string> = {};
-
-  for (const [attributeName, attributeValue] of Object.entries(props)) {
-    if (
-      attributeName === "children" ||
-      attributeName === "className" ||
-      attributeName === "class" ||
-      attributeName === "id" ||
-      attributeName === "style" ||
-      attributeName === tailwindClassesProperty ||
-      attributeName === "ref" ||
-      attributeName === "key" ||
-      attributeName === "dangerouslySetInnerHTML" ||
-      attributeName === "suppressHydrationWarning"
-    ) {
-      continue;
-    }
-
-    if (attributeValue === undefined || attributeValue === null || attributeValue === false) {
-      continue;
-    }
-
-    if (typeof attributeValue === "function" || typeof attributeValue === "symbol") {
-      continue;
-    }
-
-    if (typeof attributeValue === "object") {
-      continue;
-    }
-
-    collectedAttributes[attributeName] = attributeValue === true ? "" : String(attributeValue);
-  }
-
-  return Object.keys(collectedAttributes).length > 0 ? collectedAttributes : undefined;
 }
 
 function parseInlineStyle(styleText: string): CSSProperties | undefined {
@@ -286,12 +240,4 @@ function parseDimension(value: string | undefined): number | undefined {
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function getPresets(options?: FromStaticMarkupOptions): typeof defaultStylePresets | undefined {
-  if (options?.defaultStyles === false) {
-    return;
-  }
-
-  return options?.defaultStyles ?? defaultStylePresets;
 }
