@@ -619,35 +619,20 @@ impl<'r, 'g> LayoutTree<'r, 'g> {
 }
 
 impl CacheTree for LayoutTree<'_, '_> {
-  fn cache_get(
-    &self,
-    node_id: NodeId,
-    known_dimensions: Size<Option<f32>>,
-    available_space: Size<AvailableSpace>,
-    run_mode: RunMode,
-  ) -> Option<LayoutOutput> {
+  fn cache_get(&self, node_id: NodeId, input: &LayoutInput) -> Option<LayoutOutput> {
     let Some(node) = self.get_layout_node_ref(node_id) else {
       unreachable!()
     };
 
-    node.cache.get(known_dimensions, available_space, run_mode)
+    node.cache.get(input)
   }
 
-  fn cache_store(
-    &mut self,
-    node_id: NodeId,
-    known_dimensions: Size<Option<f32>>,
-    available_space: Size<AvailableSpace>,
-    run_mode: RunMode,
-    layout_output: LayoutOutput,
-  ) {
+  fn cache_store(&mut self, node_id: NodeId, input: &LayoutInput, layout_output: LayoutOutput) {
     let Some(node) = self.get_layout_node_mut_ref(node_id) else {
       unreachable!()
     };
 
-    node
-      .cache
-      .store(known_dimensions, available_space, run_mode, layout_output);
+    node.cache.store(input, layout_output);
   }
 
   fn cache_clear(&mut self, node_id: NodeId) {
