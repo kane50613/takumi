@@ -545,19 +545,20 @@ fn bounds_for_rect(size: Size<f32>, transform: Affine) -> Option<SceneBounds> {
     return None;
   }
 
-  let left = min_x.floor() as i32;
-  let top = min_y.floor() as i32;
-  let right = max_x.ceil() as i32;
-  let bottom = max_y.ceil() as i32;
+  let left = (min_x.floor() as i32).max(0) as usize;
+  let top = (min_y.floor() as i32).max(0) as usize;
+  let right = (max_x.ceil() as i32).max(0) as usize;
+  let bottom = (max_y.ceil() as i32).max(0) as usize;
+
   if left >= right || top >= bottom {
     return None;
   }
 
   Some(SceneBounds {
-    left: left.max(0) as usize,
-    top: top.max(0) as usize,
-    right: right.max(0) as usize,
-    bottom: bottom.max(0) as usize,
+    left,
+    top,
+    right,
+    bottom,
   })
 }
 
