@@ -6,7 +6,7 @@ use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
-  GradientOverlayTile, adaptive_lut_size, build_color_lut_with_interpolation,
+  GradientOverlayTile, adaptive_lut_size_with_visible_samples, build_color_lut_with_interpolation,
   resolve_stops_along_axis,
 };
 use crate::{
@@ -80,6 +80,12 @@ pub(crate) struct ConicGradientRowState {
 }
 
 impl ConicGradientTile {
+  fn visible_angle_samples(width: u32, height: u32, cx: f32, cy: f32) -> usize {
+    let max_dx = cx.max(width as f32 - cx);
+    let max_dy = cy.max(height as f32 - cy);
+    (max_dx.hypot(max_dy) * TAU).ceil() as usize + 1
+  }
+
   #[inline(always)]
   fn angle_from_top_normalized(dx: f32, dy: f32) -> f32 {
     let angle = libm::atan2f(dx, -dy);
@@ -153,10 +159,11 @@ impl ConicGradientTile {
         (false, 0.0, 0.0, 360.0, resolved_stops)
       };
 
-    // Keep LUT sizing deterministic across platforms by deriving from integer tile dimensions.
-    // 8 samples per pixel of the larger dimension provides enough angular density for conic edges.
-    let angular_axis = width.max(height).max(1) as f32 * 8.0;
-    let lut_size = adaptive_lut_size(angular_axis, &lut_resolved_stops);
+    let lut_size = adaptive_lut_size_with_visible_samples(
+      Self::visible_angle_samples(width, height, cx, cy),
+      lut_axis_length_deg,
+      &lut_resolved_stops,
+    );
     let color_lut = build_color_lut_with_interpolation(
       &lut_resolved_stops,
       lut_axis_length_deg,

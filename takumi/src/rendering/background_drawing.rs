@@ -13,6 +13,7 @@ use crate::{
   rendering::{
     BorderProperties, BufferPool, PaintSource, RenderContext, Sizing, fast_div_255,
     interpolate_bilinear, interpolate_nearest, overlay_gradient_tile, overlay_image,
+    overlay_linear_gradient_tile, overlay_radial_gradient_tile,
   },
   resources::image::ImageSource,
 };
@@ -106,7 +107,7 @@ pub(crate) fn rasterize_layers(
           let translation = layer_transform.decompose_translation();
           match &layer.tile {
             BackgroundTile::Linear(linear_gradient) => {
-              overlay_gradient_tile(
+              overlay_linear_gradient_tile(
                 &mut pixmap,
                 linear_gradient,
                 translation,
@@ -116,7 +117,7 @@ pub(crate) fn rasterize_layers(
               continue;
             }
             BackgroundTile::Radial(radial_gradient) => {
-              overlay_gradient_tile(
+              overlay_radial_gradient_tile(
                 &mut pixmap,
                 radial_gradient,
                 translation,

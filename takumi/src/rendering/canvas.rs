@@ -23,7 +23,7 @@ use super::stacking_context::blend_pixmap_software;
 use crate::{Result, layout::style::BlendMode};
 use crate::{
   layout::style::{
-    Affine, GradientOverlayTile, ImageScalingAlgorithm,
+    Affine, GradientOverlayTile, ImageScalingAlgorithm, LinearGradientTile, RadialGradientTile,
     overlay_gradient_tile_fast_normal_unconstrained,
   },
   rendering::{
@@ -563,6 +563,52 @@ impl Canvas {
         buffer_pool,
       );
     });
+  }
+
+  pub(crate) fn overlay_background_tile_direct(
+    &mut self,
+    tile: &BackgroundTile,
+    translation: Point<f32>,
+    mode: BlendMode,
+  ) -> bool {
+    let localized_translation = Point {
+      x: translation.x - self.origin.x as f32,
+      y: translation.y - self.origin.y as f32,
+    };
+
+    match tile {
+      BackgroundTile::Linear(gradient) => {
+        self.with_overlay_state(|pixmap, combined_mask, _| {
+          overlay_linear_gradient_tile(
+            pixmap,
+            gradient,
+            localized_translation,
+            mode,
+            combined_mask,
+          );
+        });
+        true
+      }
+      BackgroundTile::Radial(gradient) => {
+        self.with_overlay_state(|pixmap, combined_mask, _| {
+          overlay_radial_gradient_tile(
+            pixmap,
+            gradient,
+            localized_translation,
+            mode,
+            combined_mask,
+          );
+        });
+        true
+      }
+      BackgroundTile::Conic(gradient) => {
+        self.with_overlay_state(|pixmap, combined_mask, _| {
+          overlay_gradient_tile(pixmap, gradient, localized_translation, mode, combined_mask);
+        });
+        true
+      }
+      _ => false,
+    }
   }
 
   fn with_overlay_state<R>(
@@ -1887,6 +1933,296 @@ pub(crate) fn overlay_gradient_tile<T>(
   }
 }
 
+fn encode_premultiplied_pixels(pixels: &[PremultipliedColorU8]) -> Vec<u8> {
+  let mut encoded = Vec::with_capacity(pixels.len() * 4);
+  for pixel in pixels {
+    encoded.extend_from_slice(&[pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]);
+  }
+  encoded
+}
+
+fn fill_repeated_premultiplied_pixel(dst: &mut [u8], pixel: [u8; 4]) {
+  if dst.is_empty() {
+    return;
+  }
+
+  dst[..4].copy_from_slice(&pixel);
+  let mut written = 4;
+  while written < dst.len() {
+    let copy_len = written.min(dst.len() - written);
+    let (filled, remaining) = dst.split_at_mut(written);
+    remaining[..copy_len].copy_from_slice(&filled[..copy_len]);
+    written += copy_len;
+  }
+}
+
+#[inline(always)]
+fn blend_premultiplied_pixel_normal(dst: &mut [u8], src: PremultipliedColorU8) {
+  let src_a = src.alpha();
+  if src_a == 0 {
+    return;
+  }
+
+  if src_a == u8::MAX {
+    dst[0] = src.red();
+    dst[1] = src.green();
+    dst[2] = src.blue();
+    dst[3] = src_a;
+    return;
+  }
+
+  let inv_src_a = u8::MAX - src_a;
+  dst[0] = src
+    .red()
+    .saturating_add(fast_div_255(dst[0] as u32 * inv_src_a as u32));
+  dst[1] = src
+    .green()
+    .saturating_add(fast_div_255(dst[1] as u32 * inv_src_a as u32));
+  dst[2] = src
+    .blue()
+    .saturating_add(fast_div_255(dst[2] as u32 * inv_src_a as u32));
+  dst[3] = src_a.saturating_add(fast_div_255(dst[3] as u32 * inv_src_a as u32));
+}
+
+fn blend_premultiplied_span(dst: &mut [u8], pixels: &[PremultipliedColorU8]) {
+  for (dst_pixel, src_pixel) in dst.chunks_exact_mut(4).zip(pixels) {
+    blend_premultiplied_pixel_normal(dst_pixel, *src_pixel);
+  }
+}
+
+fn blend_repeated_premultiplied_pixel(dst: &mut [u8], pixel: PremultipliedColorU8) {
+  for dst_pixel in dst.chunks_exact_mut(4) {
+    blend_premultiplied_pixel_normal(dst_pixel, pixel);
+  }
+}
+
+fn composite_repeated_premultiplied_pixel_normal(dst: &mut [u8], pixel: PremultipliedColorU8) {
+  let alpha = pixel.alpha();
+  if alpha == 0 {
+    return;
+  }
+
+  if alpha == u8::MAX {
+    fill_repeated_premultiplied_pixel(
+      dst,
+      [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()],
+    );
+  } else {
+    blend_repeated_premultiplied_pixel(dst, pixel);
+  }
+}
+
+fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
+  data: &mut [u8],
+  bottom_width: u32,
+  bottom_height: u32,
+  gradient: &LinearGradientTile,
+  offset: Point<f32>,
+) -> bool {
+  let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
+    compute_overlay_bounds_for_canvas(
+      bottom_width,
+      bottom_height,
+      offset,
+      gradient.width(),
+      gradient.height(),
+    )
+  else {
+    return true;
+  };
+
+  let Some(fast_path) = gradient.fast_path() else {
+    return false;
+  };
+
+  let row_stride = bottom_width as usize * 4;
+  let row_count = (dest_y_max - dest_y_min) as usize;
+  let segment_pixel_count = (dest_x_max - dest_x_min) as usize;
+  let dest_byte_start = dest_x_min as usize * 4;
+  let dest_byte_end = dest_byte_start + segment_pixel_count * 4;
+  let rows = &mut data[dest_y_min as usize * row_stride..dest_y_max as usize * row_stride];
+
+  match fast_path.kind {
+    crate::layout::style::LinearGradientFastPathKind::Horizontal => {
+      let src_x_start = (dest_x_min - offset_x) as usize;
+      let src_x_end = src_x_start + segment_pixel_count;
+      let src_pixels = &fast_path.axis_samples[src_x_start..src_x_end];
+
+      if fast_path.fully_opaque {
+        let scanline = encode_premultiplied_pixels(src_pixels);
+
+        for row in rows.chunks_mut(row_stride) {
+          row[dest_byte_start..dest_byte_end].copy_from_slice(&scanline);
+        }
+      } else {
+        for row in rows.chunks_mut(row_stride) {
+          blend_premultiplied_span(&mut row[dest_byte_start..dest_byte_end], src_pixels);
+        }
+      }
+    }
+    crate::layout::style::LinearGradientFastPathKind::Vertical => {
+      let src_y_start = (dest_y_min - offset_y) as usize;
+      let src_pixels = &fast_path.axis_samples[src_y_start..src_y_start + row_count];
+
+      for (row_offset, row) in rows.chunks_mut(row_stride).enumerate() {
+        let row_segment = &mut row[dest_byte_start..dest_byte_end];
+        let pixel = src_pixels[row_offset];
+        if fast_path.fully_opaque {
+          fill_repeated_premultiplied_pixel(
+            row_segment,
+            [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()],
+          );
+        } else {
+          blend_repeated_premultiplied_pixel(row_segment, pixel);
+        }
+      }
+    }
+  }
+
+  true
+}
+
+pub(crate) fn overlay_linear_gradient_tile(
+  pixmap: &mut PixmapMut<'_>,
+  gradient: &LinearGradientTile,
+  offset: Point<f32>,
+  mode: BlendMode,
+  combined_mask: Option<&TinyMask>,
+) {
+  overlay_gradient_tile_with_fast_path(
+    pixmap,
+    gradient,
+    offset,
+    mode,
+    combined_mask,
+    try_overlay_linear_gradient_tile_fast_normal_unconstrained,
+  );
+}
+
+fn overlay_gradient_tile_with_fast_path<T>(
+  pixmap: &mut PixmapMut<'_>,
+  gradient: &T,
+  offset: Point<f32>,
+  mode: BlendMode,
+  combined_mask: Option<&TinyMask>,
+  try_fast_path: impl FnOnce(&mut [u8], u32, u32, &T, Point<f32>) -> bool,
+) where
+  T: GradientOverlayTile,
+{
+  let bottom_width = pixmap.width();
+  let bottom_height = pixmap.height();
+
+  if mode == BlendMode::Normal && combined_mask.is_none() {
+    let bottom_data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+    if try_fast_path(bottom_data, bottom_width, bottom_height, gradient, offset) {
+      return;
+    }
+
+    overlay_gradient_tile_fast_normal_unconstrained(
+      bottom_data,
+      bottom_width,
+      bottom_height,
+      gradient,
+      offset,
+    );
+    return;
+  }
+
+  overlay_gradient_tile(pixmap, gradient, offset, mode, combined_mask);
+}
+
+fn try_overlay_radial_gradient_tile_fast_normal_unconstrained(
+  data: &mut [u8],
+  bottom_width: u32,
+  bottom_height: u32,
+  gradient: &RadialGradientTile,
+  offset: Point<f32>,
+) -> bool {
+  let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
+    compute_overlay_bounds_for_canvas(
+      bottom_width,
+      bottom_height,
+      offset,
+      gradient.width(),
+      gradient.height(),
+    )
+  else {
+    return true;
+  };
+
+  if gradient.repeating {
+    return false;
+  }
+
+  let Some(outer_pixel) = gradient.outer_sample() else {
+    return true;
+  };
+
+  let lut_len = gradient.lut_len();
+  if lut_len == 0 {
+    return true;
+  }
+
+  let row_stride = bottom_width as usize * 4;
+  for dest_y in dest_y_min..dest_y_max {
+    let src_y = (dest_y - offset_y) as u32;
+    let src_x_start = (dest_x_min - offset_x) as u32;
+    let src_x_end = (dest_x_max - offset_x) as u32;
+    let Some((active_x_start, active_x_end)) =
+      gradient.non_repeating_active_span(src_x_start, src_x_end, src_y)
+    else {
+      return false;
+    };
+
+    let row_start = dest_y as usize * row_stride + dest_x_min as usize * 4;
+    let row_end = row_start + (dest_x_max - dest_x_min) as usize * 4;
+    let row = &mut data[row_start..row_end];
+
+    let left_pixels = (active_x_start - src_x_start) as usize;
+    if left_pixels > 0 {
+      composite_repeated_premultiplied_pixel_normal(&mut row[..left_pixels * 4], outer_pixel);
+    }
+
+    let center_pixels = (active_x_end - active_x_start) as usize;
+    if center_pixels > 0 {
+      let center_byte_start = left_pixels * 4;
+      let center_byte_end = center_byte_start + center_pixels * 4;
+      let center_row = &mut row[center_byte_start..center_byte_end];
+      let mut row_state = gradient.begin_row(active_x_start, src_y, lut_len);
+      for pixel in center_row.chunks_exact_mut(4) {
+        let lut_idx = gradient.next_lut_index(&mut row_state);
+        let src = gradient.sample_at(lut_idx);
+        blend_premultiplied_pixel_normal(pixel, src);
+      }
+    }
+
+    let right_pixels = (src_x_end - active_x_end) as usize;
+    if right_pixels > 0 {
+      let right_byte_start = row.len() - right_pixels * 4;
+      composite_repeated_premultiplied_pixel_normal(&mut row[right_byte_start..], outer_pixel);
+    }
+  }
+
+  true
+}
+
+pub(crate) fn overlay_radial_gradient_tile(
+  pixmap: &mut PixmapMut<'_>,
+  gradient: &RadialGradientTile,
+  offset: Point<f32>,
+  mode: BlendMode,
+  combined_mask: Option<&TinyMask>,
+) {
+  overlay_gradient_tile_with_fast_path(
+    pixmap,
+    gradient,
+    offset,
+    mode,
+    combined_mask,
+    try_overlay_radial_gradient_tile_fast_normal_unconstrained,
+  );
+}
+
 #[cfg(test)]
 mod tests {
   use image::RgbaImage;
@@ -1906,15 +2242,6 @@ mod tests {
   };
 
   use super::*;
-
-  fn with_pixmap(image: &mut RgbaImage, f: impl FnOnce(&mut PixmapMut<'_>)) {
-    let width = image.width();
-    let height = image.height();
-    let Some(mut pixmap) = PixmapMut::from_bytes(image.as_mut(), width, height) else {
-      return;
-    };
-    f(&mut pixmap);
-  }
 
   fn overlay_area_reference(
     bottom: &mut RgbaImage,
@@ -1943,19 +2270,22 @@ mod tests {
     }
   }
 
-  fn assert_gradient_overlay_matches_reference<T>(
+  fn assert_gradient_overlay_matches_reference_with<T>(
     tile: &T,
     canvas_size: Size<u32>,
     offset: Point<f32>,
+    overlay: impl FnOnce(&mut PixmapMut<'_>, &T, Point<f32>),
   ) where
     T: GradientOverlayTile,
   {
-    let mut fast = RgbaImage::from_pixel(canvas_size.width, canvas_size.height, Rgba([0, 0, 0, 0]));
-    let mut reference = fast.clone();
+    let mut canvas = Canvas::new(canvas_size);
+    let mut reference =
+      RgbaImage::from_pixel(canvas_size.width, canvas_size.height, Rgba([0, 0, 0, 0]));
 
-    with_pixmap(&mut fast, |pixmap| {
-      overlay_gradient_tile(pixmap, tile, offset, BlendMode::Normal, None);
-    });
+    {
+      let mut pixmap = canvas.image.as_mut();
+      overlay(&mut pixmap, tile, offset);
+    }
 
     overlay_area_reference(
       &mut reference,
@@ -1970,7 +2300,25 @@ mod tests {
       },
     );
 
+    let fast = canvas.into_inner().unwrap_or_else(|_| unreachable!());
     assert_eq!(fast.as_raw(), reference.as_raw());
+  }
+
+  fn assert_gradient_overlay_matches_reference<T>(
+    tile: &T,
+    canvas_size: Size<u32>,
+    offset: Point<f32>,
+  ) where
+    T: GradientOverlayTile,
+  {
+    assert_gradient_overlay_matches_reference_with(
+      tile,
+      canvas_size,
+      offset,
+      |pixmap, tile, offset| {
+        overlay_gradient_tile(pixmap, tile, offset, BlendMode::Normal, None);
+      },
+    );
   }
 
   #[test]
@@ -1981,32 +2329,72 @@ mod tests {
     let global_context = GlobalContext::default();
     let render_context = RenderContext::new_test(&global_context, Viewport::new((32, 16)));
     let tile = LinearGradientTile::new(&gradient, 32, 16, &render_context);
-    assert_gradient_overlay_matches_reference(
+    assert_gradient_overlay_matches_reference_with(
       &tile,
       Size {
         width: 40,
         height: 24,
       },
       Point { x: 3.0, y: 4.0 },
+      |pixmap, tile, offset| {
+        overlay_linear_gradient_tile(pixmap, tile, offset, BlendMode::Normal, None);
+      },
     );
   }
 
   #[test]
-  fn test_overlay_radial_gradient_matches_reference() {
-    let Ok(gradient) = RadialGradient::from_str("radial-gradient(circle, red, blue)") else {
-      unreachable!()
-    };
+  fn test_overlay_radial_gradient_fast_paths_match_reference() {
+    let cases = [
+      (
+        "radial-gradient(circle, red, blue)",
+        Size {
+          width: 32,
+          height: 24,
+        },
+        Size {
+          width: 40,
+          height: 30,
+        },
+        Point { x: 4.0, y: 3.0 },
+      ),
+      (
+        "radial-gradient(circle at 20% 30%, red, rgba(0,0,255,0.25))",
+        Size {
+          width: 40,
+          height: 28,
+        },
+        Size {
+          width: 52,
+          height: 36,
+        },
+        Point { x: 5.0, y: 4.0 },
+      ),
+    ];
+
     let global_context = GlobalContext::default();
-    let render_context = RenderContext::new_test(&global_context, Viewport::new((32, 24)));
-    let tile = RadialGradientTile::new(&gradient, 32, 24, &render_context);
-    assert_gradient_overlay_matches_reference(
-      &tile,
-      Size {
-        width: 40,
-        height: 30,
-      },
-      Point { x: 4.0, y: 3.0 },
-    );
+    for (gradient_css, tile_size, canvas_size, offset) in cases {
+      let Ok(gradient) = RadialGradient::from_str(gradient_css) else {
+        unreachable!()
+      };
+      let render_context = RenderContext::new_test(
+        &global_context,
+        Viewport::new((tile_size.width, tile_size.height)),
+      );
+      let tile = RadialGradientTile::new(
+        &gradient,
+        tile_size.width,
+        tile_size.height,
+        &render_context,
+      );
+      assert_gradient_overlay_matches_reference_with(
+        &tile,
+        canvas_size,
+        offset,
+        |pixmap, tile, offset| {
+          overlay_radial_gradient_tile(pixmap, tile, offset, BlendMode::Normal, None);
+        },
+      );
+    }
   }
 
   #[test]
@@ -2018,34 +2406,108 @@ mod tests {
     let global_context = GlobalContext::default();
     let render_context = RenderContext::new_test(&global_context, Viewport::new((32, 24)));
     let tile = ConicGradientTile::new(&gradient, 32, 24, &render_context);
-    assert_gradient_overlay_matches_reference(
+    assert_gradient_overlay_matches_reference_with(
       &tile,
       Size {
         width: 40,
         height: 30,
       },
       Point { x: 4.0, y: 3.0 },
+      |pixmap, tile, offset| {
+        overlay_gradient_tile(pixmap, tile, offset, BlendMode::Normal, None);
+      },
     );
   }
 
   #[test]
-  fn test_overlay_linear_gradient_clustered_stops_matches_reference() {
-    let Ok(gradient) =
-      LinearGradient::from_str("linear-gradient(to right, red 0px, lime 0.5px, blue 32px)")
-    else {
-      unreachable!()
-    };
+  fn test_overlay_linear_gradient_fast_paths_match_reference() {
+    let cases = [
+      (
+        "linear-gradient(to right, red 0px, lime 0.5px, blue 32px)",
+        Size {
+          width: 32,
+          height: 16,
+        },
+        Size {
+          width: 40,
+          height: 24,
+        },
+        Point { x: 3.0, y: 4.0 },
+      ),
+      (
+        "linear-gradient(90deg, #ff3b30, #ffcc00, #34c759, #007aff, #5856d6)",
+        Size {
+          width: 48,
+          height: 12,
+        },
+        Size {
+          width: 56,
+          height: 24,
+        },
+        Point { x: 4.0, y: 6.0 },
+      ),
+      (
+        "linear-gradient(180deg, rgba(0,128,255,0.9), rgba(0,128,255,0))",
+        Size {
+          width: 24,
+          height: 48,
+        },
+        Size {
+          width: 36,
+          height: 64,
+        },
+        Point { x: 6.0, y: 5.0 },
+      ),
+      (
+        "linear-gradient(to right, grey 1px, transparent 1px)",
+        Size {
+          width: 40,
+          height: 8,
+        },
+        Size {
+          width: 48,
+          height: 16,
+        },
+        Point { x: 4.0, y: 3.0 },
+      ),
+      (
+        "repeating-linear-gradient(90deg, red 0px 5px, blue 5px 10px)",
+        Size {
+          width: 40,
+          height: 8,
+        },
+        Size {
+          width: 52,
+          height: 16,
+        },
+        Point { x: 5.0, y: 4.0 },
+      ),
+    ];
+
     let global_context = GlobalContext::default();
-    let render_context = RenderContext::new_test(&global_context, Viewport::new((32, 16)));
-    let tile = LinearGradientTile::new(&gradient, 32, 16, &render_context);
-    assert_gradient_overlay_matches_reference(
-      &tile,
-      Size {
-        width: 40,
-        height: 24,
-      },
-      Point { x: 3.0, y: 4.0 },
-    );
+    for (gradient_css, tile_size, canvas_size, offset) in cases {
+      let Ok(gradient) = LinearGradient::from_str(gradient_css) else {
+        unreachable!()
+      };
+      let render_context = RenderContext::new_test(
+        &global_context,
+        Viewport::new((tile_size.width, tile_size.height)),
+      );
+      let tile = LinearGradientTile::new(
+        &gradient,
+        tile_size.width,
+        tile_size.height,
+        &render_context,
+      );
+      assert_gradient_overlay_matches_reference_with(
+        &tile,
+        canvas_size,
+        offset,
+        |pixmap, tile, offset| {
+          overlay_linear_gradient_tile(pixmap, tile, offset, BlendMode::Normal, None);
+        },
+      );
+    }
   }
 
   #[test]

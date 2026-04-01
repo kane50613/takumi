@@ -6,8 +6,8 @@ use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
-  GradientOverlayTile, adaptive_lut_size, build_color_lut_with_interpolation,
-  resolve_stops_along_axis,
+  GradientOverlayTile, adaptive_lut_size, adaptive_lut_size_with_visible_samples,
+  build_color_lut_with_interpolation, resolve_stops_along_axis,
 };
 use crate::layout::style::{
   Animatable, Color, ColorInterpolationMethod, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
@@ -63,9 +63,13 @@ pub(crate) struct LinearGradientTile {
   pub projection_bias: f32,
   /// Scale converting axis-space position in pixels into LUT index space.
   pub position_to_lut_scale: f32,
+  /// Whether every sampled pixel in this gradient is fully opaque.
+  pub fully_opaque: bool,
   /// Pre-computed color lookup table for fast gradient sampling.
   /// Maps normalized position [0.0, 1.0] to color.
   pub color_lut: Vec<PremultipliedColorU8>,
+  /// Precomputed axis samples for fast horizontal/vertical fills.
+  pub axis_aligned_fast_path: Option<LinearGradientFastPathData>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -75,7 +79,28 @@ pub(crate) struct LinearGradientRowState {
   max_lut_index: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LinearGradientFastPathKind {
+  Horizontal,
+  Vertical,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct LinearGradientFastPathData {
+  pub kind: LinearGradientFastPathKind,
+  pub axis_samples: Box<[PremultipliedColorU8]>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct LinearGradientFastPath<'a> {
+  pub kind: LinearGradientFastPathKind,
+  pub axis_samples: &'a [PremultipliedColorU8],
+  pub fully_opaque: bool,
+}
+
 impl LinearGradientTile {
+  const AXIS_ALIGNMENT_EPSILON: f32 = 1e-4;
+
   fn direction_components(gradient: &LinearGradient, width: u32, height: u32) -> (f32, f32) {
     match gradient.direction {
       LinearGradientDirection::Angle(angle) => {
@@ -122,9 +147,46 @@ impl LinearGradientTile {
     ((position_px * self.position_to_lut_scale).round() as usize).min(lut_len - 1)
   }
 
+  fn classify_axis_aligned(dir_x: f32, dir_y: f32) -> Option<LinearGradientFastPathKind> {
+    if dir_y.abs() <= Self::AXIS_ALIGNMENT_EPSILON
+      && (dir_x.abs() - 1.0).abs() <= Self::AXIS_ALIGNMENT_EPSILON
+    {
+      return Some(LinearGradientFastPathKind::Horizontal);
+    }
+
+    if dir_x.abs() <= Self::AXIS_ALIGNMENT_EPSILON
+      && (dir_y.abs() - 1.0).abs() <= Self::AXIS_ALIGNMENT_EPSILON
+    {
+      return Some(LinearGradientFastPathKind::Vertical);
+    }
+
+    None
+  }
+
+  fn build_axis_samples(&self, kind: LinearGradientFastPathKind) -> Box<[PremultipliedColorU8]> {
+    match kind {
+      LinearGradientFastPathKind::Horizontal => {
+        (0..self.width).map(|x| self.sample_pixel(x, 0)).collect()
+      }
+      LinearGradientFastPathKind::Vertical => {
+        (0..self.height).map(|y| self.sample_pixel(0, y)).collect()
+      }
+    }
+  }
+
+  pub(crate) fn fast_path(&self) -> Option<LinearGradientFastPath<'_>> {
+    let fast_path = self.axis_aligned_fast_path.as_ref()?;
+    Some(LinearGradientFastPath {
+      kind: fast_path.kind,
+      axis_samples: &fast_path.axis_samples,
+      fully_opaque: self.fully_opaque,
+    })
+  }
+
   /// Builds a drawing context from a gradient and a target viewport.
   pub fn new(gradient: &LinearGradient, width: u32, height: u32, context: &RenderContext) -> Self {
     let (dir_x, dir_y) = Self::direction_components(gradient, width, height);
+    let axis_aligned_kind = Self::classify_axis_aligned(dir_x, dir_y);
 
     let cx = width as f32 / 2.0;
     let cy = height as f32 / 2.0;
@@ -156,8 +218,20 @@ impl LinearGradientTile {
       (false, 0.0, 0.0, axis_length, resolved_stops)
     };
 
-    // Pre-compute color lookup table with adaptive size.
-    let lut_size = adaptive_lut_size(lut_axis_length, &lut_resolved_stops);
+    let visible_lut_samples = match axis_aligned_kind {
+      Some(LinearGradientFastPathKind::Horizontal) => width as usize + 1,
+      Some(LinearGradientFastPathKind::Vertical) => height as usize + 1,
+      None => (lut_axis_length.ceil() as usize).saturating_add(1),
+    };
+    let lut_size = if axis_aligned_kind.is_some() {
+      adaptive_lut_size_with_visible_samples(
+        visible_lut_samples,
+        lut_axis_length,
+        &lut_resolved_stops,
+      )
+    } else {
+      adaptive_lut_size(lut_axis_length, &lut_resolved_stops)
+    };
     let color_lut = build_color_lut_with_interpolation(
       &lut_resolved_stops,
       lut_axis_length,
@@ -171,8 +245,11 @@ impl LinearGradientTile {
     } else {
       (lut_len - 1) as f32 / lut_axis_length
     };
+    let fully_opaque = lut_resolved_stops
+      .iter()
+      .all(|stop| stop.color.0[3] == u8::MAX);
 
-    LinearGradientTile {
+    let mut tile = LinearGradientTile {
       width,
       height,
       dir_x,
@@ -183,8 +260,21 @@ impl LinearGradientTile {
       repeat_period,
       projection_bias,
       position_to_lut_scale,
+      fully_opaque,
       color_lut,
+      axis_aligned_fast_path: None,
+    };
+
+    if !tile.repeating
+      && let Some(kind) = axis_aligned_kind
+    {
+      tile.axis_aligned_fast_path = Some(LinearGradientFastPathData {
+        kind,
+        axis_samples: tile.build_axis_samples(kind),
+      });
     }
+
+    tile
   }
 }
 

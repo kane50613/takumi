@@ -11,3 +11,7 @@ codegen-units = 1
 
 [profile.release.package."takumi-wasm"]
 strip = "debuginfo"
+
+[profile.bench]
+debug = true
+strip = "debuginfo"

@@ -8,7 +8,7 @@ use tiny_skia::{ColorU8, PremultipliedColorU8};
 use super::{Color, GradientStop, ResolvedGradientStop};
 use crate::rendering::{RenderContext, fast_div_255};
 
-const MIN_GRADIENT_LUT_SIZE: usize = 1024;
+const MIN_GRADIENT_LUT_SIZE: usize = 2;
 const MAX_GRADIENT_LUT_SIZE: usize = 8193;
 
 /// Interpolates between two colors in RGBA space, if t is 0.0 or 1.0, returns the first or second color.
@@ -412,10 +412,21 @@ pub(crate) fn adaptive_lut_size(
   axis_length: f32,
   resolved_stops: &[ResolvedGradientStop],
 ) -> usize {
-  let base_size = (axis_length.ceil() as usize)
-    .max(1)
-    .next_power_of_two()
-    .max(MIN_GRADIENT_LUT_SIZE);
+  adaptive_lut_size_with_visible_samples(
+    (axis_length.ceil() as usize)
+      .saturating_add(1)
+      .max(MIN_GRADIENT_LUT_SIZE),
+    axis_length,
+    resolved_stops,
+  )
+}
+
+pub(crate) fn adaptive_lut_size_with_visible_samples(
+  visible_samples: usize,
+  axis_length: f32,
+  resolved_stops: &[ResolvedGradientStop],
+) -> usize {
+  let visible_samples = visible_samples.max(MIN_GRADIENT_LUT_SIZE);
 
   let min_interval = resolved_stops
     .windows(2)
@@ -424,23 +435,22 @@ pub(crate) fn adaptive_lut_size(
     .fold(f32::INFINITY, f32::min);
 
   let segment_aware_size = if min_interval.is_finite() {
-    let target_samples = ((axis_length / min_interval).ceil() as usize)
+    ((axis_length / min_interval).ceil() as usize)
       .saturating_add(resolved_stops.len())
-      .max(2);
-    target_samples.next_power_of_two()
+      .saturating_add(1)
+      .max(MIN_GRADIENT_LUT_SIZE)
   } else {
     resolved_stops
       .len()
-      .saturating_mul(2)
-      .max(2)
-      .next_power_of_two()
+      .saturating_add(1)
+      .max(MIN_GRADIENT_LUT_SIZE)
   };
 
-  let size = base_size
+  let size = visible_samples
     .max(segment_aware_size)
     .max(resolved_stops.len().saturating_mul(2))
-    .max(2);
-  (size + 1).min(MAX_GRADIENT_LUT_SIZE)
+    .max(MIN_GRADIENT_LUT_SIZE);
+  size.min(MAX_GRADIENT_LUT_SIZE)
 }
 
 const UNDEFINED_POSITION: f32 = -1.0;

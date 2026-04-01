@@ -4,7 +4,7 @@ use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
-  GradientOverlayTile, adaptive_lut_size, build_color_lut_with_interpolation,
+  GradientOverlayTile, adaptive_lut_size_with_visible_samples, build_color_lut_with_interpolation,
   resolve_stops_along_axis,
 };
 use crate::{
@@ -137,6 +137,36 @@ pub(crate) struct RadialGradientRowState {
 
 impl RadialGradientTile {
   #[inline(always)]
+  pub(crate) fn outer_sample(&self) -> Option<PremultipliedColorU8> {
+    self.color_lut.last().copied()
+  }
+
+  #[inline(always)]
+  pub(crate) fn non_repeating_active_span(
+    &self,
+    src_x_start: u32,
+    src_x_end: u32,
+    src_y: u32,
+  ) -> Option<(u32, u32)> {
+    if self.repeating || src_x_start >= src_x_end {
+      return None;
+    }
+
+    let dy = (src_y as f32 - self.cy) * self.inv_radius_y;
+    let dy2 = dy * dy;
+    if dy2 >= 1.0 {
+      return Some((src_x_start, src_x_start));
+    }
+
+    let max_dx = (1.0 - dy2).sqrt() / self.inv_radius_x;
+    let active_start = (self.cx - max_dx).floor() as i32 + 1;
+    let active_end = (self.cx + max_dx).ceil() as i32;
+    let clamped_start = active_start.max(src_x_start as i32).min(src_x_end as i32) as u32;
+    let clamped_end = active_end.max(clamped_start as i32).min(src_x_end as i32) as u32;
+    Some((clamped_start, clamped_end))
+  }
+
+  #[inline(always)]
   pub(crate) fn lut_index_for_distance_px_with_len(
     &self,
     distance_px: f32,
@@ -268,7 +298,11 @@ impl RadialGradientTile {
     };
 
     // Pre-compute color lookup table with adaptive size.
-    let lut_size = adaptive_lut_size(lut_axis_length, &lut_resolved_stops);
+    let lut_size = adaptive_lut_size_with_visible_samples(
+      (radius_scale.ceil() as usize).saturating_add(1),
+      lut_axis_length,
+      &lut_resolved_stops,
+    );
     let color_lut = build_color_lut_with_interpolation(
       &lut_resolved_stops,
       lut_axis_length,

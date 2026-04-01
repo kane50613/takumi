@@ -386,10 +386,21 @@ impl Node {
           for tile in layers {
             for y in &tile.ys {
               for x in &tile.xs {
+                let transform = context.transform * Affine::translation(*x as f32, *y as f32);
+                if transform.only_translation()
+                  && canvas.overlay_background_tile_direct(
+                    &tile.tile,
+                    transform.decompose_translation(),
+                    tile.blend_mode,
+                  )
+                {
+                  continue;
+                }
+
                 canvas.overlay_image(
                   &tile.tile,
                   border_radius,
-                  context.transform * Affine::translation(*x as f32, *y as f32),
+                  transform,
                   context.style.image_rendering,
                   tile.blend_mode,
                 );
