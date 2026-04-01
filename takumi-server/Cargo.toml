@@ -21,11 +21,11 @@ version = "0.4"
 optional = true
 
 [dependencies.hmac]
-version = "0.12"
+version = "0.13"
 optional = true
 
 [dependencies.sha2]
-version = "0.10"
+version = "0.11"
 optional = true
 
 [dependencies.takumi]

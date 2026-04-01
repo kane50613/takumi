@@ -8,11 +8,11 @@
     "serve": "vite preview"
   },
   "dependencies": {
-    "@cloudflare/vite-plugin": "^1.30.2",
-    "@tanstack/react-router": "^1.168.7",
+    "@cloudflare/vite-plugin": "^1.30.3",
+    "@tanstack/react-router": "^1.168.10",
     "@tanstack/react-router-ssr-query": "^1.166.10",
-    "@tanstack/react-start": "^1.167.12",
-    "@tanstack/router-plugin": "^1.167.8",
+    "@tanstack/react-start": "^1.167.16",
+    "@tanstack/router-plugin": "^1.167.12",
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",

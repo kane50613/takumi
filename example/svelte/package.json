@@ -17,8 +17,8 @@
     "@sveltejs/adapter-vercel": "^6.3.3",
     "@sveltejs/kit": "^2.50.2",
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
-    "svelte": "^5.51.0",
-    "svelte-check": "^4.4.2",
+    "svelte": "^5.55.1",
+    "svelte-check": "^4.4.6",
     "typescript": "catalog:",
     "vite": "catalog:"
   }

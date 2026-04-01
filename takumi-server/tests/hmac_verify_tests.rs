@@ -76,6 +76,7 @@ fn test_verify_payload_malformed_hex() {
 #[test]
 #[cfg(feature = "hmac_verify")]
 fn test_verify_payload_empty_secret() {
+  use hmac::KeyInit;
   use takumi_server::hmac_verify::*;
 
   let secret = b"";
@@ -98,6 +99,7 @@ fn test_verify_payload_empty_secret() {
 #[test]
 #[cfg(feature = "hmac_verify")]
 fn test_verify_payload_empty_payload() {
+  use hmac::KeyInit;
   use takumi_server::hmac_verify::*;
 
   let secret = b"secret";
