@@ -930,9 +930,7 @@ describe("fromJsx", () => {
   });
 
   test("parses html dir field on image nodes", async () => {
-    const { node } = await fromJsx(
-      <img src="https://example.com/a.png" dir="rtl" alt="test" />,
-    );
+    const { node } = await fromJsx(<img src="https://example.com/a.png" dir="rtl" alt="test" />);
 
     expect(node).toEqual({
       type: "image",

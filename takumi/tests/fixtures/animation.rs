@@ -3,7 +3,9 @@ use std::f32::consts::PI;
 use parley::GenericFamily;
 use takumi::{
   layout::{
-    Viewport, node::Node, style::{Length::*, *}
+    Viewport,
+    node::Node,
+    style::{Length::*, *},
   },
   rendering::{AnimationFrame, RenderOptions, render_sequence_animation},
 };
