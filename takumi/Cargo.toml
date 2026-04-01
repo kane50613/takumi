@@ -77,8 +77,7 @@ optional = true
 default-features = false
 
 [dependencies.taffy]
-version = "0.9"
-git = "https://github.com/DioxusLabs/taffy.git"
+version = "0.10"
 default-features = false
 features = [
   "flexbox",
