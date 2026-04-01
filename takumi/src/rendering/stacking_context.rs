@@ -5,8 +5,8 @@ use crate::{
   Result,
   layout::{
     style::{
-      Affine, BlendMode, Color, ComputedStyle, Display, Filter, SpacePair, apply_backdrop_filter,
-      apply_filters_to_pixmap,
+      Affine, BackgroundImage, BlendMode, BorderStyle, Color, ComputedStyle, Display, Filter,
+      SpacePair, apply_backdrop_filter, apply_filters_to_pixmap,
     },
     tree::{LayoutResults, RenderNode},
   },
@@ -602,10 +602,11 @@ fn finish_node_render<'g>(
   }
 
   if let Some(isolated_canvas) = isolated_canvas {
+    if has_constrain {
+      canvas.pop_mask();
+    }
     canvas.composite_subcanvas(isolated_canvas, node.context.style.mix_blend_mode);
-  }
-
-  if has_constrain {
+  } else if has_constrain {
     canvas.pop_mask();
   }
 
@@ -786,6 +787,30 @@ fn can_use_bounds_hint(node: &RenderNode<'_>) -> bool {
     .as_ref()
     .is_some_and(|children| !children.is_empty());
   let clips_children = style.resolve_overflows().should_clip_content();
+  let has_box_shadow = style
+    .box_shadow
+    .as_ref()
+    .is_some_and(|shadows| !shadows.is_empty());
+  let has_outline = style.outline_style != BorderStyle::None;
+  let has_border = style.border_style != BorderStyle::None;
+  let has_text_shadow = style
+    .text_shadow
+    .as_ref()
+    .is_some_and(|shadows| !shadows.is_empty());
+  let has_text_stroke = style
+    .webkit_text_stroke_width
+    .is_some_and(|width| width != Default::default());
+  let has_text_decoration = style
+    .text_decoration_line
+    .is_some_and(|lines| !lines.is_empty());
+  let has_spread_background = style.background_image.as_ref().is_some_and(|images| {
+    images.iter().any(|image| match image {
+      BackgroundImage::Linear(gradient) => gradient.repeating,
+      BackgroundImage::Radial(gradient) => gradient.repeating,
+      BackgroundImage::Conic(gradient) => gradient.repeating,
+      _ => false,
+    })
+  });
 
   style.filter.is_empty()
     && style.backdrop_filter.is_empty()
@@ -793,8 +818,15 @@ fn can_use_bounds_hint(node: &RenderNode<'_>) -> bool {
     && style.mask_image.as_ref().is_none_or(|images| {
       images
         .iter()
-        .all(|image| matches!(image, crate::layout::style::BackgroundImage::None))
+        .all(|image| matches!(image, BackgroundImage::None))
     })
+    && !has_box_shadow
+    && !has_outline
+    && !has_border
+    && !has_text_shadow
+    && !has_text_stroke
+    && !has_text_decoration
+    && !has_spread_background
     && (!has_children || clips_children)
 }
 
