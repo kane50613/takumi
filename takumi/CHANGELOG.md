@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.0-rc.12
+
+### Patch Changes
+
+- 1aa4442: Optimize gradient performance
+
 ## 1.0.0-rc.11
 
 ### Minor Changes
