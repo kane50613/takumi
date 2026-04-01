@@ -1,6 +1,8 @@
 import type { ComponentProps, CSSProperties, ReactElement, ReactNode } from "react";
 import { container, image, percentage, text } from "../helpers";
 import type { Node, NodeMetadata, ReactElementLike } from "../types";
+import { extractAttributes, getPresets, type HtmlProps } from "./metadata";
+export type { HtmlProps } from "./metadata";
 import { fromStaticMarkup, type FromStaticMarkupOptions } from "./markup";
 import { defaultStylePresets } from "./style-presets";
 import { serializeSvg } from "./svg";
@@ -56,15 +58,6 @@ interface FromJsxTraversalResult {
   stylesheets: string[];
 }
 
-type HtmlProps = {
-  className?: string;
-  class?: string;
-  id?: string;
-  style?: string | CSSProperties;
-  dir?: string;
-  [key: string]: unknown;
-};
-
 type ReactModuleLike = {
   default?: ReactModuleLike;
   Fragment?: unknown;
@@ -95,7 +88,7 @@ export async function fromJsx(
 ): Promise<FromJsxResult> {
   const resolvedOptions = {
     defaultStyles: resolveDefaultStyles(options),
-    presets: getPresets(options),
+    presets: getPresets(options?.defaultStyles),
     tailwindClassesProperty: options?.tailwindClassesProperty ?? "tw",
   } satisfies ResolvedFromJsxOptions;
   const result = await fromJsxInternal(element, resolvedOptions).catch(async (error) => {
@@ -162,56 +155,6 @@ async function fromJsxInternal(
     ],
     stylesheets: [],
   };
-}
-
-function extractAttributes(
-  props: HtmlProps,
-  tailwindClassesProperty: string,
-): Record<string, string> | undefined {
-  const collectedAttributes: Record<string, string> = {};
-
-  for (const [attributeName, attributeValue] of Object.entries(props)) {
-    if (
-      attributeName === "children" ||
-      attributeName === "className" ||
-      attributeName === "class" ||
-      attributeName === "id" ||
-      attributeName === "style" ||
-      attributeName === tailwindClassesProperty ||
-      attributeName === "ref" ||
-      attributeName === "key" ||
-      attributeName === "dangerouslySetInnerHTML" ||
-      attributeName === "suppressHydrationWarning"
-    ) {
-      continue;
-    }
-
-    if (attributeValue === undefined || attributeValue === null || attributeValue === false) {
-      continue;
-    }
-
-    if (typeof attributeValue === "function" || typeof attributeValue === "symbol") {
-      continue;
-    }
-
-    if (typeof attributeValue === "object") {
-      continue;
-    }
-
-    collectedAttributes[attributeName] = attributeValue === true ? "" : String(attributeValue);
-  }
-
-  if (Object.keys(collectedAttributes).length === 0) {
-    return;
-  }
-
-  return collectedAttributes;
-}
-
-function getPresets(options?: FromJsxOptions): typeof defaultStylePresets | undefined {
-  if (options?.defaultStyles === false) return;
-
-  return options?.defaultStyles ?? defaultStylePresets;
 }
 
 function resolveDefaultStyles(options?: FromJsxOptions): typeof defaultStylePresets | false {
