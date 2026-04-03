@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.0-rc.13
+
+### Patch Changes
+
+- a118b5d: Add blending fast path, blur downscale scaling
+
 ## 1.0.0-rc.12
 
 ### Patch Changes
