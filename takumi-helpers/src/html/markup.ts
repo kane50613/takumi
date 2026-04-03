@@ -7,10 +7,10 @@ import type {
 import type { CSSProperties } from "react";
 import { container, image, text } from "../helpers";
 import type { Node, NodeMetadata } from "../types";
-import { extractAttributes, getPresets } from "./metadata";
-import type { FromJsxOptions } from "./jsx";
-import type { defaultStylePresets } from "./style-presets";
-import { isHtmlVoidElement } from "./utils";
+import { extractAttributes, getPresets } from "../jsx/metadata";
+import type { FromJsxOptions } from "../jsx";
+import type { defaultStylePresets } from "../jsx/style-presets";
+import { isHtmlVoidElement } from "../jsx/utils";
 
 export interface FromStaticMarkupOptions extends FromJsxOptions {}
 

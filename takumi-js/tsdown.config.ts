@@ -9,6 +9,7 @@ export default defineConfig({
     "helpers/index": "src/helpers/index.ts",
     "helpers/emoji": "src/helpers/emoji.ts",
     "helpers/jsx": "src/helpers/jsx.ts",
+    "helpers/html": "src/helpers/html.ts",
   },
   format: ["esm", "cjs"],
   dts: true,

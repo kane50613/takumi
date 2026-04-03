@@ -1,16 +1,13 @@
 import type * as napi from "@takumi-rs/core";
 import type * as wasm from "@takumi-rs/wasm";
 import { extractEmojis, type EmojiType } from "@takumi-rs/helpers/emoji";
+import { extractResourceUrls, fetchResources } from "@takumi-rs/helpers";
 import { fromJsx, type FromJsxOptions } from "@takumi-rs/helpers/jsx";
 import { loadRendererResources, type ManagedRendererOptions } from "./renderer";
 import { getImports } from "./import";
 import type { ReactNode } from "react";
-import {
-  extractResourceUrls,
-  fetchResources,
-  type FetchResourcesOptions,
-  type ReactElementLike,
-} from "@takumi-rs/helpers";
+import type { FetchResourcesOptions, ReactElementLike } from "@takumi-rs/helpers";
+import { fromHtml } from "@takumi-rs/helpers/html";
 
 type InnerRenderOptions = napi.RenderOptions | wasm.RenderOptions;
 
@@ -33,7 +30,18 @@ export type RenderOptions = RenderOptionsWithRenderer | RenderOptionsWithoutRend
 
 let globalRenderer: napi.Renderer | wasm.Renderer | undefined;
 
-export async function render(element: ReactNode | ReactElementLike, options?: RenderOptions) {
+function transformElement(element: ReactNode | ReactElementLike | string, options?: RenderOptions) {
+  if (typeof element === "string") {
+    return fromHtml(element);
+  }
+
+  return fromJsx(element, options?.jsx);
+}
+
+export async function render(
+  element: ReactNode | ReactElementLike | string,
+  options?: RenderOptions,
+) {
   const imports = await getImports(options && "module" in options ? options.module : undefined);
   const isExternalRenderer = options && "renderer" in options;
   const renderer = isExternalRenderer
@@ -46,7 +54,7 @@ export async function render(element: ReactNode | ReactElementLike, options?: Re
     await loadRendererResources(renderer, options);
   }
 
-  const { node: originalNode, stylesheets } = await fromJsx(element, options?.jsx);
+  const { node: originalNode, stylesheets } = await transformElement(element, options);
   const emojiType = options?.emoji ?? "twemoji";
 
   const node = emojiType !== "from-font" ? extractEmojis(originalNode, emojiType) : originalNode;

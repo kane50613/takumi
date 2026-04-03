@@ -3,7 +3,7 @@ import { User2 } from "lucide-react";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { container } from "../../src/helpers";
-import { fromJsx } from "../../src/jsx/jsx";
+import { fromJsx } from "../../src/jsx";
 import { defaultStylePresets } from "../../src/jsx/style-presets";
 import type { ContainerNode, ImageNode, TextNode } from "../../src/types";
 

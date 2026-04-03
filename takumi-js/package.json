@@ -64,7 +64,7 @@
   },
   "scripts": {
     "prepublishOnly": "jq '.dependencies[\"@takumi-rs/core\"] = .version | .dependencies[\"@takumi-rs/helpers\"] = .version | .dependencies[\"@takumi-rs/wasm\"] = .version' package.json > tmp.json && mv tmp.json package.json",
-    "build:js": "tsdown"
+    "build": "tsdown"
   },
   "dependencies": {
     "@takumi-rs/core": "workspace:*",

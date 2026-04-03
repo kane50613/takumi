@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { CSSProperties } from "react";
-import { fromJsx } from "../../src/jsx/jsx";
+import { fromJsx } from "../../src/jsx";
 import { defaultStylePresets } from "../../src/jsx/style-presets";
 import type { ContainerNode, TextNode } from "../../src/types";
 

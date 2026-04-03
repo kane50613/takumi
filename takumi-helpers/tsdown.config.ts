@@ -4,7 +4,8 @@ export default defineConfig({
   entry: {
     index: "src/index.ts",
     emoji: "src/emoji.ts",
-    "jsx/jsx": "src/jsx/jsx.ts",
+    jsx: "src/jsx/index.ts",
+    html: "src/html/index.ts",
   },
   format: ["esm", "cjs"],
   dts: true,

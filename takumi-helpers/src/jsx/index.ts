@@ -3,7 +3,7 @@ import { container, image, percentage, text } from "../helpers";
 import type { Node, NodeMetadata, ReactElementLike } from "../types";
 import { extractAttributes, getPresets, type HtmlProps } from "./metadata";
 export type { HtmlProps } from "./metadata";
-import { fromStaticMarkup, type FromStaticMarkupOptions } from "./markup";
+import { fromStaticMarkup, type FromStaticMarkupOptions } from "../html/markup";
 import { defaultStylePresets } from "./style-presets";
 import { serializeSvg } from "./svg";
 import {
@@ -17,7 +17,6 @@ import {
 } from "./utils";
 
 export * from "./style-presets";
-export * from "./markup";
 
 declare module "react" {
   interface DOMAttributes<T> {

@@ -134,10 +134,10 @@ function createFrame(time = Date.now()): Node {
     },
     children: [
       text({
-        tw: "text-white text-7xl font-semibold font-mono",
+        tw: "text-white text-7xl font-semibold font-mono absolute",
         style: {
-          left: `${posX}px`,
-          top: `${posY}px`,
+          left: posX,
+          top: posY,
           textShadow: "0 0 10px rgb(0 0 0 / 0.5)",
         },
         text: formatTime(time),

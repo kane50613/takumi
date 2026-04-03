@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { render, type RenderOptions } from "../render";
+import type { ReactElementLike } from "@takumi-rs/helpers";
 
 const defaultFormat = "webp";
 
@@ -60,7 +61,10 @@ function defaultErrorHandler(error: unknown) {
 }
 
 export function createImageResponse(defaultOptions?: ImageResponseOptions): ImageResponseFactory {
-  return function imageResponse(element: ReactNode, options?: ImageResponseOptions) {
+  return function imageResponse(
+    element: ReactNode | ReactElementLike | string,
+    options?: ImageResponseOptions,
+  ) {
     const mergedOptions: ImageResponseOptions = {
       ...mergeOptions(defaultOptions, options),
       format: options?.format ?? defaultOptions?.format ?? defaultFormat,
