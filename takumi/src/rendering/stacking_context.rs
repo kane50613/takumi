@@ -1,5 +1,7 @@
+use smallvec::SmallVec;
 use taffy::{NodeId, Point, geometry::Size};
 use tiny_skia::Pixmap;
+use tiny_skia::PixmapMut;
 
 use crate::{
   Result,
@@ -194,9 +196,8 @@ pub(crate) fn collect_layout_children(
       .take(child_count)
       .map(|node_id| OrderedChild {
         render_index: source_order_child_ids
-          .iter()
-          .position(|child_id| *child_id == node_id)
-          .unwrap_or_else(|| unreachable!()),
+          .binary_search_by_key(&usize::from(node_id), |child_id| usize::from(*child_id))
+          .unwrap_or_else(|_| unreachable!()),
         node_id,
       })
       .collect(),
@@ -223,8 +224,9 @@ struct SceneBounds {
 enum DeferredNodeRender {
   Deferred {
     path: Vec<usize>,
-    has_constrain: bool,
+    has_constraint: bool,
     isolated_canvas: Option<CanvasSubcanvas>,
+    filter_bounds: Option<SceneBounds>,
   },
   SkipRendering,
 }
@@ -512,6 +514,25 @@ fn node_paint_bounds(node_paint: &NodePaint) -> Option<SceneBounds> {
 }
 
 fn bounds_for_rect(size: Size<f32>, transform: Affine) -> Option<SceneBounds> {
+  let (min_x, min_y, max_x, max_y) = transformed_rect_extents(size, transform)?;
+  let left = (min_x.floor() as i32).max(0) as usize;
+  let top = (min_y.floor() as i32).max(0) as usize;
+  let right = (max_x.ceil() as i32).max(0) as usize;
+  let bottom = (max_y.ceil() as i32).max(0) as usize;
+
+  if left >= right || top >= bottom {
+    return None;
+  }
+
+  Some(SceneBounds {
+    left,
+    top,
+    right,
+    bottom,
+  })
+}
+
+fn transformed_rect_extents(size: Size<f32>, transform: Affine) -> Option<(f32, f32, f32, f32)> {
   let corners = [
     taffy::Point { x: 0.0, y: 0.0 },
     taffy::Point {
@@ -545,21 +566,7 @@ fn bounds_for_rect(size: Size<f32>, transform: Affine) -> Option<SceneBounds> {
     return None;
   }
 
-  let left = (min_x.floor() as i32).max(0) as usize;
-  let top = (min_y.floor() as i32).max(0) as usize;
-  let right = (max_x.ceil() as i32).max(0) as usize;
-  let bottom = (max_y.ceil() as i32).max(0) as usize;
-
-  if left >= right || top >= bottom {
-    return None;
-  }
-
-  Some(SceneBounds {
-    left,
-    top,
-    right,
-    bottom,
-  })
+  Some((min_x, min_y, max_x, max_y))
 }
 
 fn merge_bounds(left: Option<SceneBounds>, right: Option<SceneBounds>) -> Option<SceneBounds> {
@@ -578,36 +585,100 @@ fn merge_bounds(left: Option<SceneBounds>, right: Option<SceneBounds>) -> Option
 fn finish_node_render<'g>(
   node: &mut RenderNode<'g>,
   canvas: &mut Canvas,
-  has_constrain: bool,
+  has_constraint: bool,
   isolated_canvas: Option<CanvasSubcanvas>,
+  filter_bounds: Option<SceneBounds>,
 ) -> Result<()> {
   let opacity_filter =
     (node.context.style.opacity.0 < 1.0).then_some(Filter::Opacity(node.context.style.opacity));
 
   if !node.context.style.filter.is_empty() || opacity_filter.is_some() {
-    canvas.with_pixmap_and_pool(|pixmap, pool| {
-      let mut pixmap_mut = pixmap.as_mut();
+    let viewport = canvas.viewport();
+    let filter_region = filter_bounds.and_then(|bounds| {
+      let left = (bounds.left as i32).max(viewport.origin.x as i32);
+      let top = (bounds.top as i32).max(viewport.origin.y as i32);
+      let right = (bounds.right as i32).min(viewport.right() as i32);
+      let bottom = (bounds.bottom as i32).min(viewport.bottom() as i32);
+
+      (left < right && top < bottom).then_some(Placement {
+        left: left - viewport.origin.x as i32,
+        top: top - viewport.origin.y as i32,
+        width: (right - left) as u32,
+        height: (bottom - top) as u32,
+      })
+    });
+
+    if let Some(region) = filter_region {
+      let row_bytes = region.width as usize * 4;
+      let region_len = row_bytes * region.height as usize;
+      let mut region_raw = canvas.buffer_pool.acquire(region_len);
+
+      canvas.with_pixmap_ref_and_pool(|pixmap, _| {
+        let canvas_width = pixmap.width() as usize;
+        let canvas_raw: &[u8] = bytemuck::cast_slice(pixmap.pixels());
+        for (y, dest_row) in region_raw.chunks_exact_mut(row_bytes).enumerate() {
+          let src_y = region.top as usize + y;
+          let src_start = (src_y * canvas_width + region.left as usize) * 4;
+          dest_row.copy_from_slice(&canvas_raw[src_start..src_start + row_bytes]);
+        }
+      });
+
+      let Some(mut region_pixmap) =
+        PixmapMut::from_bytes(&mut region_raw, region.width, region.height)
+      else {
+        canvas.buffer_pool.release(region_raw);
+        return Ok(());
+      };
+
+      let mut filter_list: SmallVec<[&Filter; 8]> = node.context.style.filter.iter().collect();
+      if let Some(opacity_filter) = opacity_filter.as_ref() {
+        filter_list.push(opacity_filter);
+      }
+
       apply_filters_to_pixmap(
-        &mut pixmap_mut,
+        &mut region_pixmap,
         &node.context.sizing,
         node.context.current_color,
-        pool,
-        node
-          .context
-          .style
-          .filter
-          .iter()
-          .chain(opacity_filter.iter()),
-      )
-    })?;
+        &mut canvas.buffer_pool,
+        filter_list.iter().copied(),
+      )?;
+
+      canvas.with_pixmap_and_pool(|pixmap, _| {
+        let canvas_width = pixmap.width() as usize;
+        let canvas_raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+        for (y, src_row) in region_raw.chunks_exact(row_bytes).enumerate() {
+          let dst_y = region.top as usize + y;
+          let dst_start = (dst_y * canvas_width + region.left as usize) * 4;
+          canvas_raw[dst_start..dst_start + row_bytes].copy_from_slice(src_row);
+        }
+      });
+
+      canvas.buffer_pool.release(region_raw);
+    } else {
+      canvas.with_pixmap_and_pool(|pixmap, pool| {
+        let mut pixmap_mut = pixmap.as_mut();
+        apply_filters_to_pixmap(
+          &mut pixmap_mut,
+          &node.context.sizing,
+          node.context.current_color,
+          pool,
+          node
+            .context
+            .style
+            .filter
+            .iter()
+            .chain(opacity_filter.iter()),
+        )
+      })?;
+    }
   }
 
   if let Some(isolated_canvas) = isolated_canvas {
-    if has_constrain {
+    if has_constraint {
       canvas.pop_mask();
     }
     canvas.composite_subcanvas(isolated_canvas, node.context.style.mix_blend_mode);
-  } else if has_constrain {
+  } else if has_constraint {
     canvas.pop_mask();
   }
 
@@ -620,6 +691,7 @@ fn begin_node_render<'g>(
   canvas: &mut Canvas,
   node_paint: &NodePaint,
   defer_finish: bool,
+  isolation_bounds_hint: Option<SceneBounds>,
 ) -> Result<Option<DeferredNodeRender>> {
   let Some(current) = get_node_mut_by_path(root, &node_paint.path) else {
     unreachable!()
@@ -645,7 +717,7 @@ fn begin_node_render<'g>(
     return Ok(Some(DeferredNodeRender::SkipRendering));
   }
 
-  let has_constrain = mask_action.is_some();
+  let has_constraint = mask_action.is_some();
 
   if !current.context.style.backdrop_filter.is_empty() {
     let border = BorderProperties::from_context(&current.context, layout.size, layout.border);
@@ -665,6 +737,7 @@ fn begin_node_render<'g>(
       layout.size,
       node_paint.transform,
       canvas.viewport(),
+      isolation_bounds_hint,
     ))?)
   } else {
     None
@@ -693,14 +766,27 @@ fn begin_node_render<'g>(
 
   if current.should_create_inline_layout() {
     current.draw_inline(canvas, layout)?;
-    finish_node_render(current, canvas, has_constrain, isolated_canvas)?;
+    finish_node_render(
+      current,
+      canvas,
+      has_constraint,
+      isolated_canvas,
+      node_paint_bounds(node_paint),
+    )?;
   } else if !defer_finish {
-    finish_node_render(current, canvas, has_constrain, isolated_canvas)?;
+    finish_node_render(
+      current,
+      canvas,
+      has_constraint,
+      isolated_canvas,
+      node_paint_bounds(node_paint),
+    )?;
   } else {
     return Ok(Some(DeferredNodeRender::Deferred {
       path: node_paint.path.clone(),
-      has_constrain,
+      has_constraint,
       isolated_canvas,
+      filter_bounds: node_paint_bounds(node_paint),
     }));
   }
 
@@ -713,7 +799,7 @@ fn paint_single_node<'g>(
   canvas: &mut Canvas,
   node_paint: &NodePaint,
 ) -> Result<()> {
-  match begin_node_render(root, layout_results, canvas, node_paint, false)? {
+  match begin_node_render(root, layout_results, canvas, node_paint, false, None)? {
     Some(DeferredNodeRender::SkipRendering) | None => {}
     Some(DeferredNodeRender::Deferred { .. }) => unreachable!(),
   }
@@ -753,7 +839,14 @@ pub(crate) fn paint_context<'g>(
 
   let mut deferred_root = None;
   if let Some(root_paint) = &context.root {
-    match begin_node_render(root, layout_results, canvas, root_paint, true)? {
+    match begin_node_render(
+      root,
+      layout_results,
+      canvas,
+      root_paint,
+      true,
+      context.paint_bounds,
+    )? {
       Some(DeferredNodeRender::SkipRendering) => return Ok(()),
       Some(deferred_root_render @ DeferredNodeRender::Deferred { .. }) => {
         deferred_root = Some(deferred_root_render);
@@ -768,14 +861,21 @@ pub(crate) fn paint_context<'g>(
 
   if let Some(DeferredNodeRender::Deferred {
     path,
-    has_constrain,
+    has_constraint,
     isolated_canvas,
+    filter_bounds,
   }) = deferred_root
   {
     let Some(current) = get_node_mut_by_path(root, &path) else {
       unreachable!()
     };
-    finish_node_render(current, canvas, has_constrain, isolated_canvas)?;
+    finish_node_render(
+      current,
+      canvas,
+      has_constraint,
+      isolated_canvas,
+      context.paint_bounds.or(filter_bounds),
+    )?;
   }
 
   Ok(())
@@ -793,7 +893,6 @@ fn can_use_bounds_hint(node: &RenderNode<'_>) -> bool {
     .as_ref()
     .is_some_and(|shadows| !shadows.is_empty());
   let has_outline = style.outline_style != BorderStyle::None;
-  let has_border = style.border_style != BorderStyle::None;
   let has_text_shadow = style
     .text_shadow
     .as_ref()
@@ -801,9 +900,6 @@ fn can_use_bounds_hint(node: &RenderNode<'_>) -> bool {
   let has_text_stroke = style
     .webkit_text_stroke_width
     .is_some_and(|width| width != Default::default());
-  let has_text_decoration = style
-    .text_decoration_line
-    .is_some_and(|lines| !lines.is_empty());
   let has_spread_background = style.background_image.as_ref().is_some_and(|images| {
     images.iter().any(|image| match image {
       BackgroundImage::Linear(gradient) => gradient.repeating,
@@ -823,12 +919,44 @@ fn can_use_bounds_hint(node: &RenderNode<'_>) -> bool {
     })
     && !has_box_shadow
     && !has_outline
-    && !has_border
     && !has_text_shadow
     && !has_text_stroke
-    && !has_text_decoration
     && !has_spread_background
     && (!has_children || clips_children)
+}
+
+fn isolation_hint_is_safe(node: &RenderNode<'_>) -> bool {
+  let style = &node.context.style;
+  style.filter.is_empty()
+    && style.backdrop_filter.is_empty()
+    && style.clip_path.is_none()
+    && style.mask_image.as_ref().is_none_or(|images| {
+      images
+        .iter()
+        .all(|image| matches!(image, BackgroundImage::None))
+    })
+}
+
+fn placement_from_bounds(
+  bounds: SceneBounds,
+  viewport: CanvasViewport,
+  padding: i32,
+) -> Option<Placement> {
+  let left = (bounds.left as i32 - padding).max(viewport.origin.x as i32);
+  let top = (bounds.top as i32 - padding).max(viewport.origin.y as i32);
+  let right = (bounds.right as i32 + padding).min(viewport.right() as i32);
+  let bottom = (bounds.bottom as i32 + padding).min(viewport.bottom() as i32);
+
+  Placement::from_bounds(left, top, right, bottom)
+}
+
+fn full_viewport_placement(viewport: CanvasViewport) -> Placement {
+  Placement {
+    left: viewport.origin.x as i32,
+    top: viewport.origin.y as i32,
+    width: viewport.size.width,
+    height: viewport.size.height,
+  }
 }
 
 fn compute_isolation_bounds(
@@ -836,72 +964,28 @@ fn compute_isolation_bounds(
   size: Size<f32>,
   transform: Affine,
   viewport: CanvasViewport,
+  paint_bounds_hint: Option<SceneBounds>,
 ) -> Placement {
+  if isolation_hint_is_safe(node)
+    && let Some(bounds) = paint_bounds_hint
+    && let Some(placement) = placement_from_bounds(bounds, viewport, 2)
+  {
+    return placement;
+  }
+
   if !can_use_bounds_hint(node) {
-    return Placement {
-      left: viewport.origin.x as i32,
-      top: viewport.origin.y as i32,
-      width: viewport.size.width,
-      height: viewport.size.height,
-    };
+    return full_viewport_placement(viewport);
   }
 
-  let corners = [
-    taffy::Point { x: 0.0, y: 0.0 },
-    taffy::Point {
-      x: size.width,
-      y: 0.0,
-    },
-    taffy::Point {
-      x: 0.0,
-      y: size.height,
-    },
-    taffy::Point {
-      x: size.width,
-      y: size.height,
-    },
-  ];
-
-  let mut min_x = f32::INFINITY;
-  let mut min_y = f32::INFINITY;
-  let mut max_x = f32::NEG_INFINITY;
-  let mut max_y = f32::NEG_INFINITY;
-
-  for corner in corners {
-    let point = transform.transform_point(corner);
-    min_x = min_x.min(point.x);
-    min_y = min_y.min(point.y);
-    max_x = max_x.max(point.x);
-    max_y = max_y.max(point.y);
-  }
-
-  if !min_x.is_finite() || !min_y.is_finite() || !max_x.is_finite() || !max_y.is_finite() {
-    return Placement {
-      left: viewport.origin.x as i32,
-      top: viewport.origin.y as i32,
-      width: viewport.size.width,
-      height: viewport.size.height,
-    };
-  }
+  let Some((min_x, min_y, max_x, max_y)) = transformed_rect_extents(size, transform) else {
+    return full_viewport_placement(viewport);
+  };
 
   let left = min_x.floor().max(viewport.origin.x as f32) as i32;
   let top = min_y.floor().max(viewport.origin.y as f32) as i32;
   let right = max_x.ceil().min(viewport.right() as f32) as i32;
   let bottom = max_y.ceil().min(viewport.bottom() as f32) as i32;
 
-  if left >= right || top >= bottom {
-    return Placement {
-      left: viewport.origin.x as i32,
-      top: viewport.origin.y as i32,
-      width: viewport.size.width,
-      height: viewport.size.height,
-    };
-  }
-
-  Placement {
-    left,
-    top,
-    width: (right - left) as u32,
-    height: (bottom - top) as u32,
-  }
+  Placement::from_bounds(left, top, right, bottom)
+    .unwrap_or_else(|| full_viewport_placement(viewport))
 }

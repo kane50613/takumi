@@ -783,6 +783,14 @@ fn blend_premultiplied_pixel(dst: &mut [u8; 4], src: [u8; 4], mode: BlendMode) {
     return;
   }
 
+  if src[3] == u8::MAX && dst[3] == u8::MAX {
+    let mut current = Rgba(*dst);
+    let color = Rgba(src);
+    blend_pixel(&mut current, color, mode);
+    *dst = current.0;
+    return;
+  }
+
   let mut current = premultiplied_to_rgba(
     PremultipliedColorU8::from_rgba(
       dst[0].min(dst[3]),
@@ -1154,6 +1162,21 @@ fn blit_paint_source_translation(
     PaintSource::Pixmap(source) => {
       let source_pixels = source.pixels();
       let source_width = source.width();
+      if mode == BlendMode::Normal && mask_data.is_none() {
+        let copy_width = (dest_x_max - dest_x_min) as usize;
+        let src_x_start = (dest_x_min - offset_x) as usize;
+        for dest_y in dest_y_min..dest_y_max {
+          let src_y = (dest_y - offset_y) as usize;
+          let src_start = src_y * source_width as usize + src_x_start;
+          let src_end = src_start + copy_width;
+          let dst_start = (dest_y as u32 * canvas_width + dest_x_min as u32) as usize;
+          let dst_end = dst_start + copy_width;
+          let dst = bytemuck::cast_slice_mut(&mut pixels[dst_start..dst_end]);
+          composite_premultiplied_over_span(dst, &source_pixels[src_start..src_end]);
+        }
+        return;
+      }
+
       for dest_y in dest_y_min..dest_y_max {
         let src_y = (dest_y - offset_y) as u32;
         for dest_x in dest_x_min..dest_x_max {
@@ -1984,7 +2007,7 @@ fn blend_premultiplied_pixel_normal(dst: &mut [u8], src: PremultipliedColorU8) {
   dst[3] = src_a.saturating_add(fast_div_255(dst[3] as u32 * inv_src_a as u32));
 }
 
-fn blend_premultiplied_span(dst: &mut [u8], pixels: &[PremultipliedColorU8]) {
+fn composite_premultiplied_over_span(dst: &mut [u8], pixels: &[PremultipliedColorU8]) {
   for (dst_pixel, src_pixel) in dst.chunks_exact_mut(4).zip(pixels) {
     blend_premultiplied_pixel_normal(dst_pixel, *src_pixel);
   }
@@ -2056,7 +2079,7 @@ fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
         }
       } else {
         for row in rows.chunks_mut(row_stride) {
-          blend_premultiplied_span(&mut row[dest_byte_start..dest_byte_end], src_pixels);
+          composite_premultiplied_over_span(&mut row[dest_byte_start..dest_byte_end], src_pixels);
         }
       }
     }
