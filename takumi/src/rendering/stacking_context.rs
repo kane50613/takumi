@@ -597,8 +597,8 @@ fn finish_node_render<'g>(
     let filter_region = filter_bounds.and_then(|bounds| {
       let left = (bounds.left as i32).max(viewport.origin.x as i32);
       let top = (bounds.top as i32).max(viewport.origin.y as i32);
-      let right = (bounds.right as i32).min(viewport.right() as i32);
-      let bottom = (bounds.bottom as i32).min(viewport.bottom() as i32);
+      let right = (bounds.right as i32).min(viewport.right());
+      let bottom = (bounds.bottom as i32).min(viewport.bottom());
 
       (left < right && top < bottom).then_some(Placement {
         left: left - viewport.origin.x as i32,
@@ -944,8 +944,8 @@ fn placement_from_bounds(
 ) -> Option<Placement> {
   let left = (bounds.left as i32 - padding).max(viewport.origin.x as i32);
   let top = (bounds.top as i32 - padding).max(viewport.origin.y as i32);
-  let right = (bounds.right as i32 + padding).min(viewport.right() as i32);
-  let bottom = (bounds.bottom as i32 + padding).min(viewport.bottom() as i32);
+  let right = (bounds.right as i32 + padding).min(viewport.right());
+  let bottom = (bounds.bottom as i32 + padding).min(viewport.bottom());
 
   Placement::from_bounds(left, top, right, bottom)
 }
