@@ -13,8 +13,8 @@ use crate::{
     tree::{LayoutResults, RenderNode},
   },
   rendering::{
-    BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, NodeMaskAction, Placement, Sizing,
-    blend_pixel, draw_debug_border, prepare_node_mask,
+    BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, NodeMaskAction, Placement,
+    Sizing, blend_pixel, draw_debug_border, prepare_node_mask,
   },
 };
 
@@ -594,11 +594,16 @@ fn finish_node_render<'g>(
 
   if !node.context.style.filter.is_empty() || opacity_filter.is_some() {
     let viewport = canvas.viewport();
+    let filter_padding = filter_padding(
+      &node.context.style.filter,
+      &node.context.sizing,
+      node.context.transform,
+    );
     let filter_region = filter_bounds.and_then(|bounds| {
-      let left = (bounds.left as i32).max(viewport.origin.x as i32);
-      let top = (bounds.top as i32).max(viewport.origin.y as i32);
-      let right = (bounds.right as i32).min(viewport.right());
-      let bottom = (bounds.bottom as i32).min(viewport.bottom());
+      let left = (bounds.left as i32 - filter_padding).max(viewport.origin.x as i32);
+      let top = (bounds.top as i32 - filter_padding).max(viewport.origin.y as i32);
+      let right = (bounds.right as i32 + filter_padding).min(viewport.right());
+      let bottom = (bounds.bottom as i32 + filter_padding).min(viewport.bottom());
 
       (left < right && top < bottom).then_some(Placement {
         left: left - viewport.origin.x as i32,
@@ -683,6 +688,44 @@ fn finish_node_render<'g>(
   }
 
   Ok(())
+}
+
+fn filter_padding(filters: &[Filter], sizing: &Sizing, transform: Affine) -> i32 {
+  let transform_scale = affine_max_scale(transform);
+  filters
+    .iter()
+    .map(|filter| match filter {
+      Filter::Blur(radius) => {
+        (radius.to_px(sizing, 1.0) * BlurType::Filter.extent_multiplier() * transform_scale).ceil()
+          as i32
+      }
+      Filter::DropShadow(shadow) => {
+        let blur_spread = shadow.blur_radius.to_px(sizing, 1.0)
+          * BlurType::Shadow.extent_multiplier()
+          * transform_scale;
+        let offset_x = shadow.offset_x.to_px(sizing, 1.0).abs() * transform_scale;
+        let offset_y = shadow.offset_y.to_px(sizing, 1.0).abs() * transform_scale;
+        (blur_spread + offset_x.max(offset_y)).ceil() as i32
+      }
+      _ => 0,
+    })
+    .sum()
+}
+
+fn affine_max_scale(transform: Affine) -> f32 {
+  let s1 = transform.a * transform.a + transform.b * transform.b;
+  let s2 = transform.c * transform.c + transform.d * transform.d;
+  let off = transform.a * transform.c + transform.b * transform.d;
+  let trace = s1 + s2;
+  let half_trace = trace * 0.5;
+  let det = s1 * s2 - off * off;
+  let discriminant = (half_trace * half_trace - det).max(0.0);
+  let sigma_max = (half_trace + discriminant.sqrt()).sqrt();
+  if sigma_max.is_finite() {
+    sigma_max.max(1.0)
+  } else {
+    1.0
+  }
 }
 
 fn begin_node_render<'g>(

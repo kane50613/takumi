@@ -359,14 +359,18 @@ macro_rules! update_h_pixel {
       for c in 0..STRIDE {
         unsafe {
           *$dst.get_unchecked_mut($out + c) = 0;
+          let entering = *$src.get_unchecked($entering + c) as u32;
+          let leaving = *$src.get_unchecked($leaving + c) as u32;
+          $sum[c] = $sum[c].saturating_add(entering).saturating_sub(leaving);
         }
       }
     } else {
       for c in 0..STRIDE {
         unsafe {
           *$dst.get_unchecked_mut($out + c) = (($sum[c] * $mul) >> $shift) as u8;
-          $sum[c] += *$src.get_unchecked($entering + c) as u32;
-          $sum[c] -= *$src.get_unchecked($leaving + c) as u32;
+          let entering = *$src.get_unchecked($entering + c) as u32;
+          let leaving = *$src.get_unchecked($leaving + c) as u32;
+          $sum[c] = $sum[c].saturating_add(entering).saturating_sub(leaving);
         }
       }
     }
@@ -459,14 +463,16 @@ macro_rules! update_v_pixel {
   ($src:expr, $dst:expr, $sums:expr, $x:expr, $out:expr, $entering:expr, $leaving:expr, $mul:expr, $shift:expr) => {
     let sum = $sums[$x];
     let entering = unsafe { *$src.get_unchecked($entering + $x) } as u32;
+    let leaving = unsafe { *$src.get_unchecked($leaving + $x) } as u32;
     if sum == 0 && entering == 0 {
       unsafe {
         *$dst.get_unchecked_mut($out + $x) = 0;
+        $sums[$x] = sum.saturating_add(entering).saturating_sub(leaving);
       }
     } else {
       unsafe {
         *$dst.get_unchecked_mut($out + $x) = ((sum * $mul) >> $shift) as u8;
-        $sums[$x] = sum + entering - *$src.get_unchecked($leaving + $x) as u32;
+        $sums[$x] = sum.saturating_add(entering).saturating_sub(leaving);
       }
     }
   };

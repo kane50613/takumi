@@ -59,6 +59,35 @@ fn create_filter_card(filter: &str, image_size_px: f32, label_font_size_px: f32)
   )
 }
 
+fn create_filter_transform_card(
+  filter: &str,
+  label: &str,
+  transforms: Transforms,
+  image_size_px: f32,
+  label_font_size_px: f32,
+) -> Node {
+  let children: Vec<Node> = vec![
+    Node::image("assets/images/yeecord.png").with_style(
+      Style::default()
+        .with(StyleDeclaration::width(Px(image_size_px)))
+        .with(StyleDeclaration::height(Px(image_size_px)))
+        .with(StyleDeclaration::filter(Filters::from_str(filter).unwrap()))
+        .with(StyleDeclaration::transform(Some(transforms))),
+    ),
+    Node::text(label.to_string())
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Block))),
+  ];
+
+  Node::container(children).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with_gap(SpacePair::from_single(Px(16.0)))
+      .with(StyleDeclaration::font_size(Px(label_font_size_px).into())),
+  )
+}
+
 #[test]
 fn test_style_filter_on_image_node() {
   let effects = [
@@ -109,6 +138,67 @@ fn test_style_filter_combined() {
 
   let container = create_filter_test_container(&combined_filters, 16.0, 140.0, 16.0);
   run_fixture_test(container, "style_filter_combined");
+}
+
+#[test]
+fn test_style_filter_combined_with_transform() {
+  let children: Vec<Node> = vec![
+    create_filter_transform_card(
+      "blur(3px) grayscale(50%)",
+      "blur(3px) grayscale(50%) scale(1.35)",
+      [Transform::Scale(1.35, 1.35)].into(),
+      140.0,
+      16.0,
+    ),
+    create_filter_transform_card(
+      "drop-shadow(5px 5px 10px black) brightness(120%)",
+      "drop-shadow(5px 5px 10px black) brightness(120%) rotate(22deg)",
+      [Transform::Rotate(Angle::new(22.0))].into(),
+      140.0,
+      16.0,
+    ),
+    create_filter_transform_card(
+      "blur(2px) drop-shadow(3px 3px 5px red)",
+      "blur(2px) drop-shadow(3px 3px 5px red) scale(1.2) rotate(-18deg)",
+      [
+        Transform::Scale(1.2, 1.2),
+        Transform::Rotate(Angle::new(-18.0)),
+      ]
+      .into(),
+      140.0,
+      16.0,
+    ),
+    create_filter_transform_card(
+      "saturate(150%) blur(1px)",
+      "saturate(150%) blur(1px) rotate(12deg) scale(1.1)",
+      [
+        Transform::Rotate(Angle::new(12.0)),
+        Transform::Scale(1.1, 1.1),
+      ]
+      .into(),
+      140.0,
+      16.0,
+    ),
+  ];
+
+  let container = Node::container(children).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::display(Display::Grid))
+      .with(StyleDeclaration::grid_template_columns(
+        GridTemplateComponents::from_str("repeat(4, 1fr)").ok(),
+      ))
+      .with_gap(SpacePair::from_single(Px(16.0)))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      ))),
+  );
+
+  run_fixture_test(container, "style_filter_combined_transform");
 }
 
 #[test]
