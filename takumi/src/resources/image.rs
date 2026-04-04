@@ -53,7 +53,7 @@ pub struct SvgSource {
 /// A decoded GIF image with frame timing metadata.
 #[derive(Debug, Clone)]
 pub struct GifSource {
-  frames: Vec<GifFrame>,
+  frames: Arc<[GifFrame]>,
   total_duration_ms: u64,
 }
 
@@ -81,7 +81,7 @@ impl GifSource {
     }
 
     Ok(Self {
-      frames,
+      frames: frames.into(),
       total_duration_ms,
     })
   }
@@ -94,7 +94,7 @@ impl GifSource {
     let target_time = time_ms % self.total_duration_ms;
     let mut elapsed_ms = 0_u64;
 
-    for frame in &self.frames {
+    for frame in self.frames.iter() {
       elapsed_ms = elapsed_ms.saturating_add(frame.duration_ms as u64);
       if target_time < elapsed_ms {
         return &frame.pixmap;
@@ -112,7 +112,7 @@ impl GifSource {
     let target_time = time_ms % self.total_duration_ms;
     let mut elapsed_ms = 0_u64;
 
-    for frame in &self.frames {
+    for frame in self.frames.iter() {
       elapsed_ms = elapsed_ms.saturating_add(frame.duration_ms as u64);
       if target_time < elapsed_ms {
         return frame.pixmap.clone();
@@ -522,10 +522,13 @@ pub enum ImageResourceError {
 
 #[cfg(test)]
 mod tests {
+  use std::borrow::Cow;
+
   use image::Rgba;
   use tiny_skia::PremultipliedColorU8;
 
   use super::*;
+  use crate::resources::image_decoder::DecodedGifFrame;
 
   fn premul_at(image: &RenderedImage<'_>, x: u32, y: u32) -> PremultipliedColorU8 {
     match image {
@@ -536,6 +539,42 @@ mod tests {
         .pixel(x, y)
         .unwrap_or(PremultipliedColorU8::TRANSPARENT),
     }
+  }
+
+  fn frame_pixmap(seed: u8) -> Arc<Pixmap> {
+    let bitmap = RgbaImage::from_pixel(1, 1, Rgba([seed, 0, 0, 255]));
+    let pixmap =
+      premultiplied_pixmap_from_rgba(Cow::Owned(bitmap)).unwrap_or_else(|| unreachable!());
+    Arc::new(pixmap)
+  }
+
+  fn gif_with_durations(durations: &[u32]) -> GifSource {
+    let frames = durations
+      .iter()
+      .enumerate()
+      .map(|(index, duration_ms)| DecodedGifFrame {
+        pixmap: frame_pixmap(index as u8 + 1),
+        duration_ms: *duration_ms,
+      })
+      .collect();
+    GifSource::from_decoded(DecodedGif { frames }).unwrap_or_else(|_| unreachable!())
+  }
+
+  fn expected_frame_index(gif: &GifSource, time_ms: u64) -> usize {
+    if gif.total_duration_ms == 0 {
+      return 0;
+    }
+
+    let target_time = time_ms % gif.total_duration_ms;
+    let mut elapsed_ms = 0_u64;
+    for (index, frame) in gif.frames.iter().enumerate() {
+      elapsed_ms = elapsed_ms.saturating_add(frame.duration_ms as u64);
+      if target_time < elapsed_ms {
+        return index;
+      }
+    }
+
+    0
   }
 
   #[cfg(feature = "svg")]
@@ -713,5 +752,61 @@ mod tests {
     assert_eq!(height, 4);
     assert!(matches!(algo, ImageScalingAlgorithm::Pixelated));
     Ok(())
+  }
+
+  #[test]
+  fn gif_source_from_decoded_rejects_empty_frames() {
+    let result = GifSource::from_decoded(DecodedGif { frames: Vec::new() });
+    assert!(matches!(result, Err(ImageResourceError::InvalidGif)));
+  }
+
+  #[test]
+  fn gif_source_from_decoded_preserves_frames_and_total_duration() {
+    let gif = gif_with_durations(&[10, 25, 5]);
+
+    assert_eq!(gif.frames.len(), 3);
+    assert_eq!(gif.total_duration_ms, 40);
+    assert_eq!(gif.frames[0].duration_ms, 10);
+    assert_eq!(gif.frames[1].duration_ms, 25);
+    assert_eq!(gif.frames[2].duration_ms, 5);
+  }
+
+  #[test]
+  fn gif_source_frame_selection_matches_expected_indices() {
+    let gif = gif_with_durations(&[10, 20, 30]);
+    let samples = [0_u64, 9, 10, 29, 30, 59, 60, 75];
+
+    for time_ms in samples {
+      let expected_index = expected_frame_index(&gif, time_ms);
+      let expected_frame = &gif.frames[expected_index];
+
+      let frame = gif.frame_at_time(time_ms);
+      assert_eq!(frame.data(), expected_frame.pixmap.data());
+
+      let frame_arc = gif.frame_at_time_arc(time_ms);
+      assert!(Arc::ptr_eq(&frame_arc, &expected_frame.pixmap));
+    }
+  }
+
+  #[test]
+  fn gif_source_zero_total_duration_always_returns_first_frame() {
+    let gif = gif_with_durations(&[0, 0, 0]);
+
+    assert_eq!(gif.total_duration_ms, 0);
+    for time_ms in [0_u64, 1, 10, 1_000] {
+      let frame = gif.frame_at_time(time_ms);
+      assert_eq!(frame.data(), gif.frames[0].pixmap.data());
+
+      let frame_arc = gif.frame_at_time_arc(time_ms);
+      assert!(Arc::ptr_eq(&frame_arc, &gif.frames[0].pixmap));
+    }
+  }
+
+  #[test]
+  fn gif_source_clone_shares_frame_storage() {
+    let gif = gif_with_durations(&[5, 15, 25]);
+    let cloned = gif.clone();
+
+    assert!(Arc::ptr_eq(&gif.frames, &cloned.frames));
   }
 }
