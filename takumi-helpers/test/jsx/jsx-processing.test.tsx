@@ -516,7 +516,7 @@ describe("fromJsx", () => {
     mock.module("react-dom/server", () => ({}));
 
     const moduleUrl = new URL(
-      `../../src/jsx/jsx.ts?no-react-dom-server=${Date.now()}`,
+      `../../src/jsx/index.ts?no-react-dom-server=${Date.now()}`,
       import.meta.url,
     ).href;
     const { fromJsx: fromJsxWithoutReactDomServer } = await import(moduleUrl);
