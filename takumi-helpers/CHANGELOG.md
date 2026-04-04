@@ -1,5 +1,11 @@
 # @takumi-rs/helpers
 
+## 1.0.0-rc.14
+
+### Minor Changes
+
+- eb34add: Replaced `fromStaticMarkup` with `fromHtml`
+
 ## 1.0.0-rc.13
 
 ## 1.0.0-rc.12
