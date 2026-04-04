@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::io::{Cursor, Error as IoError, ErrorKind};
-use std::slice::from_raw_parts;
 use std::sync::Arc;
 
 use image::{
@@ -165,7 +164,7 @@ fn decode_webp(bytes: &[u8]) -> ImageResult<Pixmap> {
   let buffer_len = usize::try_from(pixel_count).map_err(|_| invalid_buffer_error())?;
   let image_data = unsafe {
     // SAFETY: `decoded_ptr` points to a `buffer_len`-byte RGBA allocation returned by libwebp.
-    let slice = from_raw_parts(decoded_ptr, buffer_len);
+    let slice = std::slice::from_raw_parts(decoded_ptr, buffer_len);
     let owned = slice.to_vec();
     WebPFree(decoded_ptr.cast());
     owned
