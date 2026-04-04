@@ -259,7 +259,7 @@ jobs:
 
       - name: Build takumi-js
         working-directory: takumi-js
-        run: bun run build:js
+        run: bun run build
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
