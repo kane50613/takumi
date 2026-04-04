@@ -3,6 +3,7 @@
 //! This module provides types and utilities for managing image resources,
 //! including loading states, error handling, and image processing operations.
 
+use std::borrow::Cow;
 use std::{str::FromStr, sync::Arc};
 
 #[cfg(target_arch = "wasm32")]
@@ -15,7 +16,7 @@ use tiny_skia::Pixmap;
 
 use crate::{
   layout::style::{Color, ImageScalingAlgorithm},
-  rendering::Sizing,
+  rendering::{Sizing, premultiplied_pixmap_from_rgba},
   resources::image_decoder::decode_image,
 };
 use thiserror::Error;
@@ -31,7 +32,7 @@ pub enum ImageSource {
   #[cfg(feature = "svg")]
   Svg(SvgSource),
   /// A bitmap image source
-  Bitmap(RgbaImage),
+  Bitmap(Pixmap),
 }
 
 /// Represents the resolved SVG source.
@@ -61,7 +62,7 @@ pub(crate) enum RenderedImage<'a> {
   /// A borrowed bitmap that should be sampled directly.
   Borrowed {
     /// The original bitmap source.
-    source: &'a RgbaImage,
+    source: &'a Pixmap,
     /// The logical width that will be rendered on the canvas.
     width: u32,
     /// The logical height that will be rendered on the canvas.
@@ -123,7 +124,15 @@ impl PersistentImageStore {
 
 impl From<RgbaImage> for ImageSource {
   fn from(bitmap: RgbaImage) -> Self {
-    ImageSource::Bitmap(bitmap)
+    let pixmap =
+      premultiplied_pixmap_from_rgba(Cow::Owned(bitmap)).unwrap_or_else(|| unreachable!());
+    ImageSource::Bitmap(pixmap)
+  }
+}
+
+impl From<Pixmap> for ImageSource {
+  fn from(pixmap: Pixmap) -> Self {
+    ImageSource::Bitmap(pixmap)
   }
 }
 
@@ -429,17 +438,9 @@ mod tests {
       RenderedImage::Rasterized(pixmap) => pixmap
         .pixel(x, y)
         .unwrap_or(PremultipliedColorU8::TRANSPARENT),
-      RenderedImage::Borrowed { source, .. } => {
-        let pixel = source.get_pixel(x, y).0;
-        let alpha = pixel[3] as u32;
-        PremultipliedColorU8::from_rgba(
-          crate::rendering::fast_div_255(pixel[0] as u32 * alpha),
-          crate::rendering::fast_div_255(pixel[1] as u32 * alpha),
-          crate::rendering::fast_div_255(pixel[2] as u32 * alpha),
-          pixel[3],
-        )
-        .unwrap_or_else(|| unreachable!())
-      }
+      RenderedImage::Borrowed { source, .. } => source
+        .pixel(x, y)
+        .unwrap_or(PremultipliedColorU8::TRANSPARENT),
     }
   }
 
@@ -535,7 +536,7 @@ mod tests {
     let mut bitmap = RgbaImage::new(2, 2);
     bitmap.put_pixel(0, 0, Rgba([12, 34, 56, 200]));
     bitmap.put_pixel(1, 0, Rgba([78, 90, 12, 255]));
-    let image = ImageSource::Bitmap(bitmap);
+    let image = ImageSource::from(bitmap);
 
     let first =
       image.render_for_layout(2, 2, ImageScalingAlgorithm::Auto, Color::from_rgb(0xFF0000))?;
@@ -548,7 +549,7 @@ mod tests {
     let RenderedImage::Borrowed { source: second, .. } = second else {
       unreachable!()
     };
-    assert_eq!(first.as_raw(), second.as_raw());
+    assert_eq!(first.data(), second.data());
     Ok(())
   }
 
@@ -560,7 +561,7 @@ mod tests {
     bitmap.put_pixel(1, 0, Rgba([0, 255, 0, 255]));
     bitmap.put_pixel(0, 1, Rgba([0, 0, 255, 255]));
     bitmap.put_pixel(1, 1, Rgba([255, 255, 255, 255]));
-    let image = ImageSource::Bitmap(bitmap);
+    let image = ImageSource::from(bitmap);
 
     let rendered =
       image.render_for_layout(4, 4, ImageScalingAlgorithm::Pixelated, Color::black())?;

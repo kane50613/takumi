@@ -1,5 +1,5 @@
-use image::RgbaImage;
 use taffy::{Layout, Point, Size};
+use tiny_skia::{IntSize, Pixmap};
 
 use crate::{
   Result,
@@ -173,15 +173,17 @@ impl SizedShadow {
   ) -> Result<()> {
     let image = draw_inset_shadow(self, border_radius, layout.size, &mut canvas.buffer_pool)?;
 
-    canvas.overlay_image(
+    canvas.overlay_sampled_pixmap(
       &image,
+      image.width(),
+      image.height(),
       border_radius,
       transform,
+      Affine::IDENTITY,
       ImageScalingAlgorithm::Auto,
       BlendMode::Normal,
     );
 
-    canvas.buffer_pool.release_image(image);
     Ok(())
   }
 }
@@ -191,7 +193,7 @@ pub(crate) fn draw_inset_shadow(
   mut border: BorderProperties,
   border_box: Size<f32>,
   buffer_pool: &mut BufferPool,
-) -> Result<RgbaImage> {
+) -> Result<Pixmap> {
   let width = border_box.width as u32;
   let height = border_box.height as u32;
   let [red, green, blue, alpha] = shadow.color.0;
@@ -256,14 +258,31 @@ pub(crate) fn draw_inset_shadow(
     buffer_pool,
   )?;
 
-  let mut shadow_image = buffer_pool.acquire_image(width, height)?;
-  for (pixel, &alpha) in bytemuck::cast_slice_mut::<u8, [u8; 4]>(shadow_image.as_mut())
+  let mut data = vec![0u8; (width * height * 4) as usize];
+  for (pixel, &alpha) in bytemuck::cast_slice_mut::<u8, [u8; 4]>(&mut data)
     .iter_mut()
     .zip(&shadow_alpha)
   {
-    *pixel = [red, green, blue, alpha];
+    if alpha == u8::MAX {
+      *pixel = [red, green, blue, alpha];
+      continue;
+    }
+    if alpha == 0 {
+      *pixel = [0, 0, 0, 0];
+      continue;
+    }
+
+    let alpha_u32 = alpha as u32;
+    *pixel = [
+      fast_div_255(red as u32 * alpha_u32),
+      fast_div_255(green as u32 * alpha_u32),
+      fast_div_255(blue as u32 * alpha_u32),
+      alpha,
+    ];
   }
   buffer_pool.release(shadow_alpha);
 
-  Ok(shadow_image)
+  let size = IntSize::from_wh(width, height).unwrap_or_else(|| unreachable!());
+  let pixmap = Pixmap::from_vec(data, size).unwrap_or_else(|| unreachable!());
+  Ok(pixmap)
 }

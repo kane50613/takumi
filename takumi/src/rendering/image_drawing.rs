@@ -299,7 +299,7 @@ pub fn draw_image(
       width,
       height,
       algorithm: algo,
-    } => canvas.overlay_sampled_image(
+    } => canvas.overlay_sampled_pixmap(
       source,
       width,
       height,

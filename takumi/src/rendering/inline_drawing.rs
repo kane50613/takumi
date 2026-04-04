@@ -40,7 +40,7 @@ struct GlyphSkipInkData {
   bounds: GlyphLocalBounds,
   width: u32,
   height: u32,
-  alpha: Box<[u8]>,
+  alpha: Vec<u8>,
 }
 
 #[derive(Clone, Copy)]
@@ -69,14 +69,11 @@ fn build_glyph_bounds_cache(
         },
         width: bitmap.placement.width,
         height: bitmap.placement.height,
-        alpha: bitmap
-          .image
-          .as_raw()
-          .iter()
-          .skip(3)
-          .step_by(4)
-          .copied()
-          .collect(),
+        alpha: {
+          let mut alpha = vec![0; (bitmap.placement.width * bitmap.placement.height) as usize];
+          bitmap.write_alpha_mask(&mut alpha);
+          alpha
+        },
       },
       ResolvedGlyph::Outline(outline) => {
         let (mask, placement) = render_mask(outline.paths(), None, None, &mut canvas.buffer_pool);
@@ -93,7 +90,7 @@ fn build_glyph_bounds_cache(
           },
           width: placement.width,
           height: placement.height,
-          alpha: mask.to_vec().into_boxed_slice(),
+          alpha: mask.to_vec(),
         };
         canvas.buffer_pool.release(mask);
         data

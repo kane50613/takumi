@@ -6,10 +6,7 @@ use std::{
   sync::Arc,
 };
 
-use image::{
-  Rgba, RgbaImage,
-  imageops::{FilterType, resize},
-};
+use image::{Rgba, RgbaImage};
 use parley::{
   GenericFamily, GlyphRun, LayoutContext, TextStyle, TreeBuilder,
   fontique::{
@@ -25,10 +22,11 @@ use skrifa::{
   raw::types::{BoundingBox, F2Dot14},
 };
 use thiserror::Error;
+use tiny_skia::Pixmap;
 
 use crate::{
   layout::inline::{InlineBrush, InlineLayout},
-  rendering::Command,
+  rendering::{Command, premultiplied_pixmap_from_rgba},
   resources::image_decoder::decode_png,
 };
 
@@ -40,8 +38,58 @@ pub(crate) enum ResolvedGlyph {
 
 #[derive(Clone)]
 pub(crate) struct ResolvedBitmapGlyph {
-  pub(crate) image: RgbaImage,
+  pub(crate) pixmap: Pixmap,
+  pub(crate) scale_x: f32,
+  pub(crate) scale_y: f32,
   pub(crate) placement: ResolvedGlyphPlacement,
+}
+
+impl ResolvedBitmapGlyph {
+  pub(crate) fn write_alpha_mask(&self, mask: &mut [u8]) {
+    let width = self.placement.width as usize;
+    let height = self.placement.height as usize;
+    if width == 0 || height == 0 {
+      return;
+    }
+
+    let alpha_len = width.saturating_mul(height);
+    let mask_len = mask.len();
+    let write_len = alpha_len.min(mask_len);
+    let mask = &mut mask[..write_len];
+    let source_width = self.pixmap.width() as usize;
+    let source_height = self.pixmap.height() as usize;
+    let source_raw = self.pixmap.data();
+
+    if source_width == width && source_height == height {
+      for (i, alpha) in source_raw.iter().skip(3).step_by(4).copied().enumerate() {
+        if i >= mask.len() {
+          break;
+        }
+        mask[i] = alpha;
+      }
+      return;
+    }
+
+    if source_width == 0 || source_height == 0 {
+      return;
+    }
+
+    for y in 0..height {
+      let mapped_y = ((y as f32 + 0.5) / self.scale_y - 0.5).round();
+      let source_y = mapped_y.clamp(0.0, (source_height.saturating_sub(1)) as f32) as usize;
+
+      for x in 0..width {
+        let mapped_x = ((x as f32 + 0.5) / self.scale_x - 0.5).round();
+        let source_x = mapped_x.clamp(0.0, (source_width.saturating_sub(1)) as f32) as usize;
+        let source_index = (source_y * source_width + source_x) * 4 + 3;
+        let mask_index = y * width + x;
+        if mask_index >= mask.len() || source_index >= source_raw.len() {
+          continue;
+        }
+        mask[mask_index] = source_raw[source_index];
+      }
+    }
+  }
 }
 
 #[derive(Clone)]
@@ -342,18 +390,16 @@ fn scale_bitmap_glyph(bitmap: BitmapGlyph<'_>, font_size: f32) -> Option<Resolve
   };
   let width = ((image.width() as f32) * scale_x).round().max(1.0) as u32;
   let height = ((image.height() as f32) * scale_y).round().max(1.0) as u32;
-  let image = if width == image.width() && height == image.height() {
-    image
-  } else {
-    resize(&image, width, height, FilterType::Triangle)
-  };
   let top = match origin {
     Origin::TopLeft => bitmap.inner_bearing_y,
     Origin::BottomLeft => bitmap.inner_bearing_y + bitmap.height as f32,
   };
+  let pixmap = premultiplied_pixmap_from_rgba(Cow::Owned(image))?;
 
   Some(ResolvedBitmapGlyph {
-    image,
+    pixmap,
+    scale_x,
+    scale_y,
     placement: ResolvedGlyphPlacement {
       left: (bitmap.inner_bearing_x * scale_x).round() as i32,
       top: (top * scale_y).round() as i32,

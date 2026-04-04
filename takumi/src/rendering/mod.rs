@@ -19,9 +19,12 @@ mod text_drawing;
 mod webp;
 mod write;
 
+use std::borrow::Cow;
 use std::{collections::HashMap, rc::Rc, sync::Arc};
 
+use image::RgbaImage;
 use taffy::Size;
+use tiny_skia::{IntSize, Pixmap};
 
 pub(crate) use background_drawing::*;
 pub(crate) use blend::*;
@@ -138,4 +141,79 @@ pub(crate) fn fast_div_255(v: u32) -> u8 {
 #[inline(always)]
 pub(crate) fn fast_div_255_u32(v: u32) -> u32 {
   ((v.wrapping_add(128).wrapping_add(v >> 8)) >> 8).min(255)
+}
+
+#[inline(always)]
+pub(crate) fn write_premultiplied_rgba(dst: &mut [u8], src: &[u8]) {
+  for (dst_px, src_px) in dst.chunks_exact_mut(4).zip(src.chunks_exact(4)) {
+    let alpha = src_px[3];
+    if alpha == u8::MAX {
+      dst_px.copy_from_slice(src_px);
+      continue;
+    }
+    if alpha == 0 {
+      dst_px.copy_from_slice(&[0, 0, 0, 0]);
+      continue;
+    }
+
+    let alpha_u32 = alpha as u32;
+    dst_px[0] = fast_div_255(src_px[0] as u32 * alpha_u32);
+    dst_px[1] = fast_div_255(src_px[1] as u32 * alpha_u32);
+    dst_px[2] = fast_div_255(src_px[2] as u32 * alpha_u32);
+    dst_px[3] = alpha;
+  }
+}
+
+#[inline(always)]
+fn has_opaque_alpha(raw: &[u8]) -> bool {
+  raw.chunks_exact(4).all(|pixel| pixel[3] == u8::MAX)
+}
+
+#[inline(always)]
+fn premultiply_rgba_in_place(raw: &mut [u8]) {
+  for pixel in raw.chunks_exact_mut(4) {
+    let alpha = pixel[3];
+    if alpha == u8::MAX {
+      continue;
+    }
+    if alpha == 0 {
+      pixel[0] = 0;
+      pixel[1] = 0;
+      pixel[2] = 0;
+      continue;
+    }
+    let alpha_u32 = alpha as u32;
+    pixel[0] = fast_div_255(pixel[0] as u32 * alpha_u32);
+    pixel[1] = fast_div_255(pixel[1] as u32 * alpha_u32);
+    pixel[2] = fast_div_255(pixel[2] as u32 * alpha_u32);
+  }
+}
+
+pub(crate) fn premultiplied_pixmap_from_rgba(source: Cow<'_, RgbaImage>) -> Option<Pixmap> {
+  let (width, height, premultiplied) = match source {
+    Cow::Owned(image) => {
+      let width = image.width();
+      let height = image.height();
+      let mut raw = image.into_raw();
+      if !has_opaque_alpha(&raw) {
+        premultiply_rgba_in_place(&mut raw);
+      }
+      (width, height, raw)
+    }
+    Cow::Borrowed(image) => {
+      let width = image.width();
+      let height = image.height();
+      let raw = image.as_raw();
+      if has_opaque_alpha(raw) {
+        (width, height, raw.to_vec())
+      } else {
+        let mut premultiplied = vec![0u8; raw.len()];
+        write_premultiplied_rgba(&mut premultiplied, raw);
+        (width, height, premultiplied)
+      }
+    }
+  };
+
+  let size = IntSize::from_wh(width, height)?;
+  Pixmap::from_vec(premultiplied, size)
 }

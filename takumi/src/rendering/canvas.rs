@@ -36,8 +36,7 @@ pub(crate) use mask::{CanvasViewport, NodeMaskAction, prepare_node_mask, render_
 
 #[derive(Clone, Copy)]
 pub(crate) enum PaintSource<'a> {
-  RgbaImage(&'a RgbaImage),
-  Pixmap(&'a Pixmap),
+  Pixmap(PixmapRef<'a>),
   BackgroundTile(&'a BackgroundTile),
   ColorTile(&'a ColorTile),
 }
@@ -45,7 +44,6 @@ pub(crate) enum PaintSource<'a> {
 impl<'a> PaintSource<'a> {
   pub(crate) fn width(self) -> u32 {
     match self {
-      Self::RgbaImage(image) => image.width(),
       Self::Pixmap(pixmap) => pixmap.width(),
       Self::BackgroundTile(tile) => tile.width(),
       Self::ColorTile(tile) => tile.width(),
@@ -54,7 +52,6 @@ impl<'a> PaintSource<'a> {
 
   pub(crate) fn height(self) -> u32 {
     match self {
-      Self::RgbaImage(image) => image.height(),
       Self::Pixmap(pixmap) => pixmap.height(),
       Self::BackgroundTile(tile) => tile.height(),
       Self::ColorTile(tile) => tile.height(),
@@ -63,24 +60,6 @@ impl<'a> PaintSource<'a> {
 
   pub(crate) fn get_pixel(self, x: u32, y: u32) -> PremultipliedColorU8 {
     match self {
-      Self::RgbaImage(image) => {
-        let width = image.width();
-        let height = image.height();
-        if x >= width || y >= height {
-          return PremultipliedColorU8::TRANSPARENT;
-        }
-        let index = ((y * width + x) * 4) as usize;
-        let raw = image.as_raw();
-        let pixel = [raw[index], raw[index + 1], raw[index + 2], raw[index + 3]];
-        let alpha = pixel[3] as u32;
-        PremultipliedColorU8::from_rgba(
-          fast_div_255(pixel[0] as u32 * alpha),
-          fast_div_255(pixel[1] as u32 * alpha),
-          fast_div_255(pixel[2] as u32 * alpha),
-          pixel[3],
-        )
-        .unwrap_or_else(|| unreachable!())
-      }
       Self::Pixmap(pixmap) => {
         let width = pixmap.width();
         let height = pixmap.height();
@@ -97,7 +76,7 @@ impl<'a> PaintSource<'a> {
 
   fn as_pixmap_ref(self) -> Option<PixmapRef<'a>> {
     match self {
-      Self::Pixmap(source) => Some(source.as_ref()),
+      Self::Pixmap(source) => Some(source),
       Self::BackgroundTile(BackgroundTile::Pixmap(source)) => Some(source.as_ref().as_ref()),
       _ => None,
     }
@@ -119,23 +98,16 @@ impl<'a> PaintSource<'a> {
       return;
     }
 
-    match self {
-      Self::RgbaImage(source) => {
-        write_premultiplied_rgba(dst, source.as_raw());
-      }
-      _ => {
-        let width = self.width();
-        let height = self.height();
-        for y in 0..height {
-          for x in 0..width {
-            let pixel = self.get_pixel(x, y);
-            let offset = ((y * width + x) * 4) as usize;
-            dst[offset] = pixel.red();
-            dst[offset + 1] = pixel.green();
-            dst[offset + 2] = pixel.blue();
-            dst[offset + 3] = pixel.alpha();
-          }
-        }
+    let width = self.width();
+    let height = self.height();
+    for y in 0..height {
+      for x in 0..width {
+        let pixel = self.get_pixel(x, y);
+        let offset = ((y * width + x) * 4) as usize;
+        dst[offset] = pixel.red();
+        dst[offset + 1] = pixel.green();
+        dst[offset + 2] = pixel.blue();
+        dst[offset + 3] = pixel.alpha();
       }
     }
   }
@@ -152,27 +124,27 @@ impl<'a> PaintSource<'a> {
     let width = self.width();
     let height = self.height();
     let source_len = width as usize * height as usize * 4;
-    let mut premul_source = buffer_pool.acquire_dirty(source_len);
-    self.write_premultiplied(&mut premul_source);
-    let result = PixmapRef::from_bytes(&premul_source, width, height).map(f);
-    buffer_pool.release(premul_source);
+    let mut premultiplied = buffer_pool.acquire_dirty(source_len);
+    self.write_premultiplied(&mut premultiplied);
+    let result = PixmapRef::from_bytes(&premultiplied, width, height).map(f);
+    buffer_pool.release(premultiplied);
     result
   }
 
   fn supports_rounded_fill_fast_path(self) -> bool {
-    matches!(self, Self::RgbaImage(_) | Self::Pixmap(_))
+    matches!(self, Self::Pixmap(_))
   }
 }
 
-impl<'a> From<&'a RgbaImage> for PaintSource<'a> {
-  fn from(value: &'a RgbaImage) -> Self {
-    Self::RgbaImage(value)
+impl<'a> From<PixmapRef<'a>> for PaintSource<'a> {
+  fn from(value: PixmapRef<'a>) -> Self {
+    Self::Pixmap(value)
   }
 }
 
 impl<'a> From<&'a Pixmap> for PaintSource<'a> {
   fn from(value: &'a Pixmap) -> Self {
-    Self::Pixmap(value)
+    Self::Pixmap(value.as_ref())
   }
 }
 
@@ -498,9 +470,9 @@ impl Canvas {
   }
 
   #[allow(clippy::too_many_arguments)]
-  pub(crate) fn overlay_sampled_image(
+  pub(crate) fn overlay_sampled_pixmap(
     &mut self,
-    source: &RgbaImage,
+    source: &Pixmap,
     width: u32,
     height: u32,
     border: BorderProperties,
@@ -511,9 +483,9 @@ impl Canvas {
   ) {
     let transform = self.localize_transform(transform);
     self.with_overlay_state(|pixmap, combined_mask, buffer_pool| {
-      overlay_sampled_image(
+      overlay_sampled_paint_source(
         pixmap,
-        source,
+        PaintSource::from(source),
         width,
         height,
         border,
@@ -709,16 +681,6 @@ fn to_tiny_filter_quality(algorithm: ImageScalingAlgorithm) -> TinyFilterQuality
   match algorithm {
     ImageScalingAlgorithm::Pixelated => TinyFilterQuality::Nearest,
     ImageScalingAlgorithm::Auto | ImageScalingAlgorithm::Smooth => TinyFilterQuality::Bilinear,
-  }
-}
-
-fn write_premultiplied_rgba(dst: &mut [u8], src: &[u8]) {
-  for (dst_px, src_px) in dst.chunks_exact_mut(4).zip(src.chunks_exact(4)) {
-    let alpha = src_px[3] as u32;
-    dst_px[0] = fast_div_255(src_px[0] as u32 * alpha);
-    dst_px[1] = fast_div_255(src_px[1] as u32 * alpha);
-    dst_px[2] = fast_div_255(src_px[2] as u32 * alpha);
-    dst_px[3] = src_px[3];
   }
 }
 
@@ -924,88 +886,6 @@ fn sample_pixmap_bilinear(source: PixmapRef<'_>, x: f32, y: f32) -> Option<[u8; 
 }
 
 #[inline(always)]
-fn sample_rgba_nearest(source: &RgbaImage, x: f32, y: f32) -> Option<[u8; 4]> {
-  let width = source.width();
-  let height = source.height();
-  if width == 0 || height == 0 {
-    return None;
-  }
-
-  let px = x.floor().max(0.0) as u32;
-  let py = y.floor().max(0.0) as u32;
-  let px = px.min(width.saturating_sub(1));
-  let py = py.min(height.saturating_sub(1));
-  let raw = source.as_raw();
-  let offset = ((py * width + px) * 4) as usize;
-  Some(premultiply_rgba_pixel(
-    raw[offset],
-    raw[offset + 1],
-    raw[offset + 2],
-    raw[offset + 3],
-  ))
-}
-
-#[inline(always)]
-fn sample_rgba_bilinear(source: &RgbaImage, x: f32, y: f32) -> Option<[u8; 4]> {
-  let width = source.width();
-  let height = source.height();
-  if width == 0 || height == 0 {
-    return None;
-  }
-
-  let x = (x - 0.5).clamp(0.0, width.saturating_sub(1) as f32);
-  let y = (y - 0.5).clamp(0.0, height.saturating_sub(1) as f32);
-  let uf = x.floor() as u32;
-  let vf = y.floor() as u32;
-  let uc = (uf + 1).min(width.saturating_sub(1));
-  let vc = (vf + 1).min(height.saturating_sub(1));
-  let raw = source.as_raw();
-
-  let get_pixel = |x: u32, y: u32| {
-    let offset = ((y * width + x) * 4) as usize;
-    premultiply_rgba_pixel(
-      raw[offset],
-      raw[offset + 1],
-      raw[offset + 2],
-      raw[offset + 3],
-    )
-  };
-
-  let p00 = get_pixel(uf, vf);
-  if uf == uc && vf == vc {
-    return Some(p00);
-  }
-
-  let u_ratio = ((x - uf as f32) * 256.0) as u32;
-  let v_ratio = ((y - vf as f32) * 256.0) as u32;
-  if u_ratio == 0 && v_ratio == 0 {
-    return Some(p00);
-  }
-
-  let p01 = get_pixel(uf, vc);
-  let p10 = get_pixel(uc, vf);
-  let p11 = get_pixel(uc, vc);
-
-  let u_opposite = 256 - u_ratio;
-  let v_opposite = 256 - v_ratio;
-  let w00 = u_opposite * v_opposite;
-  let w01 = u_opposite * v_ratio;
-  let w10 = u_ratio * v_opposite;
-  let w11 = u_ratio * v_ratio;
-
-  let mut out = [0u8; 4];
-  for index in 0..4 {
-    out[index] = ((p00[index] as u32 * w00
-      + p10[index] as u32 * w10
-      + p01[index] as u32 * w01
-      + p11[index] as u32 * w11)
-      >> 16) as u8;
-  }
-
-  Some(out)
-}
-
-#[inline(always)]
 fn sample_paint_source(
   source: PaintSource<'_>,
   algorithm: ImageScalingAlgorithm,
@@ -1013,18 +893,11 @@ fn sample_paint_source(
   y: f32,
 ) -> Option<[u8; 4]> {
   match source {
-    PaintSource::RgbaImage(image) => {
-      if matches!(algorithm, ImageScalingAlgorithm::Pixelated) {
-        sample_rgba_nearest(image, x, y)
-      } else {
-        sample_rgba_bilinear(image, x, y)
-      }
-    }
     PaintSource::Pixmap(pixmap) => {
       if matches!(algorithm, ImageScalingAlgorithm::Pixelated) {
-        sample_pixmap_nearest(pixmap.as_ref(), x, y)
+        sample_pixmap_nearest(pixmap, x, y)
       } else {
-        sample_pixmap_bilinear(pixmap.as_ref(), x, y)
+        sample_pixmap_bilinear(pixmap, x, y)
       }
     }
     _ if matches!(algorithm, ImageScalingAlgorithm::Pixelated) => {
@@ -1035,9 +908,9 @@ fn sample_paint_source(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn blit_sampled_rgba_translation(
+fn blit_sampled_paint_source_translation(
   pixmap: &mut PixmapMut<'_>,
-  source: &RgbaImage,
+  source: PaintSource<'_>,
   size: Size<u32>,
   offset: Point<f32>,
   logical_to_source: Affine,
@@ -1045,6 +918,14 @@ fn blit_sampled_rgba_translation(
   mode: BlendMode,
   combined_mask: Option<&TinyMask>,
 ) {
+  if logical_to_source.is_identity()
+    && size.width == source.width()
+    && size.height == source.height()
+  {
+    blit_paint_source_translation(pixmap, source, offset, mode, combined_mask);
+    return;
+  }
+
   let canvas_width = pixmap.width();
   let canvas_height = pixmap.height();
   let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
@@ -1062,12 +943,8 @@ fn blit_sampled_rgba_translation(
       y: src_y + 0.5,
     });
     for dest_x in dest_x_min..dest_x_max {
-      let mut src = if matches!(algorithm, ImageScalingAlgorithm::Pixelated) {
-        sample_rgba_nearest(source, sample_point.x, sample_point.y)
-      } else {
-        sample_rgba_bilinear(source, sample_point.x, sample_point.y)
-      }
-      .unwrap_or([0, 0, 0, 0]);
+      let mut src = sample_paint_source(source, algorithm, sample_point.x, sample_point.y)
+        .unwrap_or([0, 0, 0, 0]);
       sample_point.x += logical_to_source.a;
       sample_point.y += logical_to_source.b;
       if src[3] == 0 {
@@ -1130,42 +1007,6 @@ fn blit_paint_source_translation(
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
   let mask_data = combined_mask.map(TinyMask::data);
   match source {
-    PaintSource::RgbaImage(source) => {
-      let raw = source.as_raw();
-      let source_width = source.width();
-      for dest_y in dest_y_min..dest_y_max {
-        let src_y = (dest_y - offset_y) as u32;
-        for dest_x in dest_x_min..dest_x_max {
-          let src_x = (dest_x - offset_x) as u32;
-          let raw_offset = ((src_y * source_width + src_x) * 4) as usize;
-          let mut src = premultiply_rgba_pixel(
-            raw[raw_offset],
-            raw[raw_offset + 1],
-            raw[raw_offset + 2],
-            raw[raw_offset + 3],
-          );
-          if src[3] == 0 {
-            continue;
-          }
-
-          let dest_x = dest_x as u32;
-          let dest_y = dest_y as u32;
-          if let Some(mask_data) = mask_data {
-            let alpha = mask_data[mask_index_from_coord(dest_x, dest_y, canvas_width)];
-            if alpha == 0 {
-              continue;
-            }
-            src = scale_premultiplied_pixel(src, alpha);
-            if src[3] == 0 {
-              continue;
-            }
-          }
-
-          let index = (dest_y * canvas_width + dest_x) as usize;
-          blend_premultiplied_pixel(&mut pixels[index], src, mode);
-        }
-      }
-    }
     PaintSource::Pixmap(source) => {
       let source_pixels = source.pixels();
       let source_width = source.width();
@@ -1618,6 +1459,7 @@ fn try_draw_image_with_tiny_skia(
     .unwrap_or(false)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn try_fill_color_with_tiny_skia(
   pixmap: &mut PixmapMut<'_>,
   color: &ColorTile,
@@ -1647,12 +1489,6 @@ fn try_fill_color_with_tiny_skia(
     combined_mask,
   );
   true
-}
-
-fn build_border_path(border: BorderProperties, size: Size<u32>) -> Option<TinyPath> {
-  let mut commands = Vec::new();
-  border.append_mask_commands(&mut commands, size.map(|v| v as f32), Point::ZERO);
-  build_path(&commands)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1701,6 +1537,12 @@ fn try_fill_image_path_with_tiny_skia(
       true
     })
     .unwrap_or(false)
+}
+
+fn build_border_path(border: BorderProperties, size: Size<u32>) -> Option<TinyPath> {
+  let mut commands = Vec::new();
+  border.append_mask_commands(&mut commands, size.map(|v| v as f32), Point::ZERO);
+  build_path(&commands)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1800,9 +1642,9 @@ pub(crate) fn overlay_image<'a, I: Into<PaintSource<'a>>>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn overlay_sampled_image(
+fn overlay_sampled_paint_source(
   pixmap: &mut PixmapMut<'_>,
-  source: &RgbaImage,
+  source: PaintSource<'_>,
   width: u32,
   height: u32,
   border: BorderProperties,
@@ -1813,9 +1655,27 @@ pub(crate) fn overlay_sampled_image(
   combined_mask: Option<&TinyMask>,
   buffer_pool: &mut BufferPool,
 ) {
-  let image = PaintSource::from(source);
+  let direct_identity_mapping = border.is_zero()
+    && logical_to_source.is_identity()
+    && width == source.width()
+    && height == source.height();
+
+  if direct_identity_mapping
+    && try_draw_image_with_tiny_skia(
+      pixmap,
+      source,
+      transform,
+      algorithm,
+      mode,
+      combined_mask,
+      buffer_pool,
+    )
+  {
+    return;
+  }
+
   if border.is_zero() && transform.only_translation() {
-    blit_sampled_rgba_translation(
+    blit_sampled_paint_source_translation(
       pixmap,
       source,
       Size { width, height },
@@ -1825,23 +1685,6 @@ pub(crate) fn overlay_sampled_image(
       mode,
       combined_mask,
     );
-    return;
-  }
-
-  if border.is_zero()
-    && logical_to_source.is_identity()
-    && width == source.width()
-    && height == source.height()
-    && try_draw_image_with_tiny_skia(
-      pixmap,
-      image,
-      transform,
-      algorithm,
-      mode,
-      combined_mask,
-      buffer_pool,
-    )
-  {
     return;
   }
 
@@ -1856,7 +1699,7 @@ pub(crate) fn overlay_sampled_image(
       pixmap,
       &mask,
       placement,
-      image,
+      source,
       logical_to_source,
       Point { x: 0.5, y: 0.5 },
       algorithm,
@@ -1870,7 +1713,7 @@ pub(crate) fn overlay_sampled_image(
       pixmap,
       &mask,
       placement,
-      image,
+      source,
       combined_inverse,
       Point { x: 0.5, y: 0.5 },
       algorithm,
@@ -2264,7 +2107,7 @@ mod tests {
         RadialGradient, RadialGradientTile, StopPosition,
       },
     },
-    rendering::{RenderContext, blend_pixel},
+    rendering::{RenderContext, blend_pixel, premultiplied_pixmap_from_rgba},
   };
 
   use super::*;
@@ -2545,13 +2388,15 @@ mod tests {
         Rgba([0, 0, 255, 255])
       }
     });
+    let source_pixmap = premultiplied_pixmap_from_rgba(std::borrow::Cow::Borrowed(&source))
+      .unwrap_or_else(|| unreachable!());
 
     let mut direct = Canvas::new(Size {
       width: 8,
       height: 6,
     });
-    direct.overlay_sampled_image(
-      &source,
+    direct.overlay_sampled_pixmap(
+      &source_pixmap,
       4,
       2,
       BorderProperties::default(),
@@ -2573,8 +2418,8 @@ mod tests {
         height: 2,
       })
       .unwrap_or_else(|_| unreachable!());
-    isolated.overlay_sampled_image(
-      &source,
+    isolated.overlay_sampled_pixmap(
+      &source_pixmap,
       4,
       2,
       BorderProperties::default(),

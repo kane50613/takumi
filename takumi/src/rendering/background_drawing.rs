@@ -264,19 +264,18 @@ impl BackgroundTile {
         height,
         algo,
       } => {
-        let ImageSource::Bitmap(bitmap) = source.as_ref() else {
+        let ImageSource::Bitmap(source) = source.as_ref() else {
           return PremultipliedColorU8::TRANSPARENT;
         };
-
         let logical_width = (*width).max(1);
         let logical_height = (*height).max(1);
-        let source_width = bitmap.width().max(1);
-        let source_height = bitmap.height().max(1);
+        let source_width = source.width().max(1);
+        let source_height = source.height().max(1);
 
         let mapped_x = (x as f32 + 0.5) * source_width as f32 / logical_width as f32;
         let mapped_y = (y as f32 + 0.5) * source_height as f32 / logical_height as f32;
 
-        let source = PaintSource::from(bitmap);
+        let source = PaintSource::from(source.as_ref());
         if matches!(algo, ImageScalingAlgorithm::Pixelated) {
           interpolate_nearest(source, mapped_x, mapped_y)
             .unwrap_or(PremultipliedColorU8::TRANSPARENT)

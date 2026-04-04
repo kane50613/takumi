@@ -1,10 +1,3 @@
-use image::{
-  ImageError, RgbaImage,
-  error::{ParameterError, ParameterErrorKind},
-};
-
-use crate::Result;
-
 const BUCKET_COUNT: usize = 32;
 
 /// A pool of reusable RGBA image buffers to avoid repeated heap allocations.
@@ -140,20 +133,5 @@ impl BufferPool {
 
     self.current_size += cap_bytes;
     self.u32_pools[index].push(buffer);
-  }
-
-  pub(crate) fn acquire_image(&mut self, width: u32, height: u32) -> Result<RgbaImage> {
-    let raw = self.acquire((width * height * 4) as usize);
-
-    RgbaImage::from_raw(width, height, raw).ok_or_else(|| {
-      ImageError::Parameter(ParameterError::from_kind(
-        ParameterErrorKind::DimensionMismatch,
-      ))
-      .into()
-    })
-  }
-
-  pub(crate) fn release_image(&mut self, image: RgbaImage) {
-    self.release(image.into_raw());
   }
 }

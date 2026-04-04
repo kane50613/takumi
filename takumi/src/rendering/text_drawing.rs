@@ -3,7 +3,7 @@ use std::{borrow::Cow, convert::Into};
 use parley::{GlyphRun, layout::BreakReason};
 use skrifa::color::ColorPalette;
 use taffy::{Layout, Point};
-use tiny_skia::PixmapMut;
+use tiny_skia::Pixmap;
 
 use crate::{
   Result,
@@ -70,31 +70,16 @@ pub(crate) fn draw_glyph_clip_image(
 
       let mask_capacity = (bitmap.placement.width * bitmap.placement.height) as usize;
       let mut mask = canvas.buffer_pool.acquire_dirty(mask_capacity);
-      for (i, alpha) in bitmap
-        .image
-        .as_raw()
-        .iter()
-        .skip(3)
-        .step_by(4)
-        .copied()
-        .enumerate()
-      {
-        if i < mask.len() {
-          mask[i] = alpha;
-        }
+      if mask_capacity > 0 {
+        let mask_len = mask.len();
+        let write_len = mask_capacity.min(mask_len);
+        bitmap.write_alpha_mask(&mut mask[..write_len]);
       }
 
-      let mut bottom = canvas
-        .buffer_pool
-        .acquire_image(bitmap.placement.width, bitmap.placement.height)?;
-
-      let bottom_width = bottom.width();
-      let bottom_height = bottom.height();
-      let Some(mut bottom_pixmap) =
-        PixmapMut::from_bytes(bottom.as_mut(), bottom_width, bottom_height)
-      else {
-        return Ok(());
+      let Some(mut bottom) = Pixmap::new(bitmap.placement.width, bitmap.placement.height) else {
+        unreachable!()
       };
+      let mut bottom_pixmap = bottom.as_mut();
       composite_mask_source_to_pixmap(
         &mut bottom_pixmap,
         &mask,
@@ -115,15 +100,17 @@ pub(crate) fn draw_glyph_clip_image(
         None,
       );
 
-      canvas.overlay_image(
+      canvas.overlay_sampled_pixmap(
         &bottom,
+        bottom.width(),
+        bottom.height(),
         BorderProperties::default(),
         transform,
+        Affine::IDENTITY,
         ImageScalingAlgorithm::Auto,
         BlendMode::Normal,
       );
 
-      canvas.buffer_pool.release_image(bottom);
       canvas.buffer_pool.release(mask);
     }
     ResolvedGlyph::Outline(outline) => {
@@ -192,11 +179,14 @@ pub(crate) fn draw_glyph(
   match glyph {
     ResolvedGlyph::Bitmap(bitmap) => {
       transform *= Affine::translation(bitmap.placement.left as f32, -bitmap.placement.top as f32);
-
-      canvas.overlay_image(
-        &bitmap.image,
+      transform *= Affine::scale(bitmap.scale_x, bitmap.scale_y);
+      canvas.overlay_sampled_pixmap(
+        &bitmap.pixmap,
+        bitmap.pixmap.width(),
+        bitmap.pixmap.height(),
         Default::default(),
         transform,
+        Affine::IDENTITY,
         Default::default(),
         BlendMode::Normal,
       );
