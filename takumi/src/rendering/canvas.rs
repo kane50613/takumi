@@ -874,16 +874,24 @@ fn sample_pixmap_bilinear(source: PixmapRef<'_>, x: f32, y: f32) -> Option<[u8; 
   let y = (y - 0.5).clamp(0.0, height.saturating_sub(1) as f32);
   let uf = x.floor() as u32;
   let vf = y.floor() as u32;
-  let uc = (uf + 1).min(width - 1);
-  let vc = (vf + 1).min(height - 1);
+  let uc = (uf + 1).min(width.saturating_sub(1));
+  let vc = (vf + 1).min(height.saturating_sub(1));
   let pixels = source.pixels();
   let p00 = pixels[(vf * width + uf) as usize];
+  if uf == uc && vf == vc {
+    return Some([p00.red(), p00.green(), p00.blue(), p00.alpha()]);
+  }
+
+  let u_ratio = ((x - uf as f32) * 256.0) as u32;
+  let v_ratio = ((y - vf as f32) * 256.0) as u32;
+  if u_ratio == 0 && v_ratio == 0 {
+    return Some([p00.red(), p00.green(), p00.blue(), p00.alpha()]);
+  }
+
   let p01 = pixels[(vc * width + uf) as usize];
   let p10 = pixels[(vf * width + uc) as usize];
   let p11 = pixels[(vc * width + uc) as usize];
 
-  let u_ratio = ((x - uf as f32) * 256.0) as u32;
-  let v_ratio = ((y - vf as f32) * 256.0) as u32;
   let u_opposite = 256 - u_ratio;
   let v_opposite = 256 - v_ratio;
   let w00 = u_opposite * v_opposite;
@@ -891,37 +899,28 @@ fn sample_pixmap_bilinear(source: PixmapRef<'_>, x: f32, y: f32) -> Option<[u8; 
   let w10 = u_ratio * v_opposite;
   let w11 = u_ratio * v_ratio;
 
-  let mut out = [0u8; 4];
-  for (index, channel) in out.iter_mut().enumerate() {
-    let p00_i = match index {
-      0 => p00.red(),
-      1 => p00.green(),
-      2 => p00.blue(),
-      _ => p00.alpha(),
-    };
-    let p01_i = match index {
-      0 => p01.red(),
-      1 => p01.green(),
-      2 => p01.blue(),
-      _ => p01.alpha(),
-    };
-    let p10_i = match index {
-      0 => p10.red(),
-      1 => p10.green(),
-      2 => p10.blue(),
-      _ => p10.alpha(),
-    };
-    let p11_i = match index {
-      0 => p11.red(),
-      1 => p11.green(),
-      2 => p11.blue(),
-      _ => p11.alpha(),
-    };
-    *channel = ((p00_i as u32 * w00 + p10_i as u32 * w10 + p01_i as u32 * w01 + p11_i as u32 * w11)
-      >> 16) as u8;
-  }
-
-  Some(out)
+  Some([
+    ((p00.red() as u32 * w00
+      + p10.red() as u32 * w10
+      + p01.red() as u32 * w01
+      + p11.red() as u32 * w11)
+      >> 16) as u8,
+    ((p00.green() as u32 * w00
+      + p10.green() as u32 * w10
+      + p01.green() as u32 * w01
+      + p11.green() as u32 * w11)
+      >> 16) as u8,
+    ((p00.blue() as u32 * w00
+      + p10.blue() as u32 * w10
+      + p01.blue() as u32 * w01
+      + p11.blue() as u32 * w11)
+      >> 16) as u8,
+    ((p00.alpha() as u32 * w00
+      + p10.alpha() as u32 * w10
+      + p01.alpha() as u32 * w01
+      + p11.alpha() as u32 * w11)
+      >> 16) as u8,
+  ])
 }
 
 #[inline(always)]
@@ -958,8 +957,8 @@ fn sample_rgba_bilinear(source: &RgbaImage, x: f32, y: f32) -> Option<[u8; 4]> {
   let y = (y - 0.5).clamp(0.0, height.saturating_sub(1) as f32);
   let uf = x.floor() as u32;
   let vf = y.floor() as u32;
-  let uc = (uf + 1).min(width - 1);
-  let vc = (vf + 1).min(height - 1);
+  let uc = (uf + 1).min(width.saturating_sub(1));
+  let vc = (vf + 1).min(height.saturating_sub(1));
   let raw = source.as_raw();
 
   let get_pixel = |x: u32, y: u32| {
@@ -973,12 +972,20 @@ fn sample_rgba_bilinear(source: &RgbaImage, x: f32, y: f32) -> Option<[u8; 4]> {
   };
 
   let p00 = get_pixel(uf, vf);
+  if uf == uc && vf == vc {
+    return Some(p00);
+  }
+
+  let u_ratio = ((x - uf as f32) * 256.0) as u32;
+  let v_ratio = ((y - vf as f32) * 256.0) as u32;
+  if u_ratio == 0 && v_ratio == 0 {
+    return Some(p00);
+  }
+
   let p01 = get_pixel(uf, vc);
   let p10 = get_pixel(uc, vf);
   let p11 = get_pixel(uc, vc);
 
-  let u_ratio = ((x - uf as f32) * 256.0) as u32;
-  let v_ratio = ((y - vf as f32) * 256.0) as u32;
   let u_opposite = 256 - u_ratio;
   let v_opposite = 256 - v_ratio;
   let w00 = u_opposite * v_opposite;
@@ -1517,7 +1524,6 @@ pub(crate) fn interpolate_nearest(
 }
 
 #[inline(always)]
-#[allow(clippy::needless_range_loop)]
 pub(crate) fn interpolate_bilinear(
   image: PaintSource<'_>,
   x: f32,
@@ -1535,16 +1541,23 @@ pub(crate) fn interpolate_bilinear(
 
   let uf = x.floor() as u32;
   let vf = y.floor() as u32;
-  let uc = (uf + 1).min(w - 1);
-  let vc = (vf + 1).min(h - 1);
+  let uc = (uf + 1).min(w.saturating_sub(1));
+  let vc = (vf + 1).min(h.saturating_sub(1));
 
   let p00 = image.get_pixel(uf, vf);
-  let p01 = image.get_pixel(uf, vc);
-  let p10 = image.get_pixel(uc, vf);
-  let p11 = image.get_pixel(uc, vc);
+  if uf == uc && vf == vc {
+    return Some(p00);
+  }
 
   let u_ratio = ((x - uf as f32) * 256.0) as u32;
   let v_ratio = ((y - vf as f32) * 256.0) as u32;
+  if u_ratio == 0 && v_ratio == 0 {
+    return Some(p00);
+  }
+
+  let p01 = image.get_pixel(uf, vc);
+  let p10 = image.get_pixel(uc, vf);
+  let p11 = image.get_pixel(uc, vc);
 
   let u_opposite = 256 - u_ratio;
   let v_opposite = 256 - v_ratio;
@@ -1554,38 +1567,28 @@ pub(crate) fn interpolate_bilinear(
   let w10 = u_ratio * v_opposite;
   let w11 = u_ratio * v_ratio;
 
-  let mut out = [0u8; 4];
-  for (i, channel) in out.iter_mut().enumerate() {
-    let p00_i = match i {
-      0 => p00.red(),
-      1 => p00.green(),
-      2 => p00.blue(),
-      _ => p00.alpha(),
-    };
-    let p01_i = match i {
-      0 => p01.red(),
-      1 => p01.green(),
-      2 => p01.blue(),
-      _ => p01.alpha(),
-    };
-    let p10_i = match i {
-      0 => p10.red(),
-      1 => p10.green(),
-      2 => p10.blue(),
-      _ => p10.alpha(),
-    };
-    let p11_i = match i {
-      0 => p11.red(),
-      1 => p11.green(),
-      2 => p11.blue(),
-      _ => p11.alpha(),
-    };
-    let val =
-      (p00_i as u32 * w00 + p10_i as u32 * w10 + p01_i as u32 * w01 + p11_i as u32 * w11) >> 16;
-    *channel = val as u8;
-  }
-
-  PremultipliedColorU8::from_rgba(out[0], out[1], out[2], out[3])
+  PremultipliedColorU8::from_rgba(
+    ((p00.red() as u32 * w00
+      + p10.red() as u32 * w10
+      + p01.red() as u32 * w01
+      + p11.red() as u32 * w11)
+      >> 16) as u8,
+    ((p00.green() as u32 * w00
+      + p10.green() as u32 * w10
+      + p01.green() as u32 * w01
+      + p11.green() as u32 * w11)
+      >> 16) as u8,
+    ((p00.blue() as u32 * w00
+      + p10.blue() as u32 * w10
+      + p01.blue() as u32 * w01
+      + p11.blue() as u32 * w11)
+      >> 16) as u8,
+    ((p00.alpha() as u32 * w00
+      + p10.alpha() as u32 * w10
+      + p01.alpha() as u32 * w01
+      + p11.alpha() as u32 * w11)
+      >> 16) as u8,
+  )
 }
 
 fn try_draw_image_with_tiny_skia(
