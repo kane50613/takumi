@@ -358,26 +358,29 @@ fn transform_commands(paths: &mut [Command], skew_degrees: f32) {
   }
 }
 
-fn decode_bitmap_image(bitmap: &BitmapGlyph<'_>) -> Option<(RgbaImage, Origin)> {
-  let image = match &bitmap.data {
+fn decode_bitmap_image(bitmap: &BitmapGlyph<'_>) -> Option<(Pixmap, Origin)> {
+  let pixmap = match &bitmap.data {
     BitmapData::Png(bytes) => decode_png(bytes).ok()?,
-    BitmapData::Bgra(bytes) => RgbaImage::from_fn(bitmap.width, bitmap.height, |x, y| {
-      let index = ((y * bitmap.width + x) * 4) as usize;
-      Rgba([
-        bytes[index + 2],
-        bytes[index + 1],
-        bytes[index],
-        bytes[index + 3],
-      ])
-    }),
+    BitmapData::Bgra(bytes) => {
+      let image = RgbaImage::from_fn(bitmap.width, bitmap.height, |x, y| {
+        let index = ((y * bitmap.width + x) * 4) as usize;
+        Rgba([
+          bytes[index + 2],
+          bytes[index + 1],
+          bytes[index],
+          bytes[index + 3],
+        ])
+      });
+      premultiplied_pixmap_from_rgba(Cow::Owned(image))?
+    }
     BitmapData::Mask(_) => return None,
   };
 
-  Some((image, bitmap.placement_origin))
+  Some((pixmap, bitmap.placement_origin))
 }
 
 fn scale_bitmap_glyph(bitmap: BitmapGlyph<'_>, font_size: f32) -> Option<ResolvedBitmapGlyph> {
-  let (image, origin) = decode_bitmap_image(&bitmap)?;
+  let (pixmap, origin) = decode_bitmap_image(&bitmap)?;
   let scale_x = if bitmap.ppem_x > 0.0 {
     font_size / bitmap.ppem_x
   } else {
@@ -388,13 +391,12 @@ fn scale_bitmap_glyph(bitmap: BitmapGlyph<'_>, font_size: f32) -> Option<Resolve
   } else {
     1.0
   };
-  let width = ((image.width() as f32) * scale_x).round().max(1.0) as u32;
-  let height = ((image.height() as f32) * scale_y).round().max(1.0) as u32;
+  let width = ((pixmap.width() as f32) * scale_x).round().max(1.0) as u32;
+  let height = ((pixmap.height() as f32) * scale_y).round().max(1.0) as u32;
   let top = match origin {
     Origin::TopLeft => bitmap.inner_bearing_y,
     Origin::BottomLeft => bitmap.inner_bearing_y + bitmap.height as f32,
   };
-  let pixmap = premultiplied_pixmap_from_rgba(Cow::Owned(image))?;
 
   Some(ResolvedBitmapGlyph {
     pixmap,

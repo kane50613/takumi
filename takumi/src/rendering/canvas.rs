@@ -20,7 +20,10 @@ use tiny_skia::{
 };
 
 use super::stacking_context::blend_pixmap_software;
-use crate::{Result, layout::style::BlendMode};
+use crate::{
+  Result,
+  layout::style::{BlendMode, LinearGradientFastPathKind},
+};
 use crate::{
   layout::style::{
     Affine, GradientOverlayTile, ImageScalingAlgorithm, LinearGradientTile, RadialGradientTile,
@@ -1912,7 +1915,7 @@ fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
   let rows = &mut data[dest_y_min as usize * row_stride..dest_y_max as usize * row_stride];
 
   match fast_path.kind {
-    crate::layout::style::LinearGradientFastPathKind::Horizontal => {
+    LinearGradientFastPathKind::Horizontal => {
       let src_x_start = (dest_x_min - offset_x) as usize;
       let src_x_end = src_x_start + segment_pixel_count;
       let src_pixels = &fast_path.axis_samples[src_x_start..src_x_end];
@@ -1929,7 +1932,7 @@ fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
         }
       }
     }
-    crate::layout::style::LinearGradientFastPathKind::Vertical => {
+    LinearGradientFastPathKind::Vertical => {
       let src_y_start = (dest_y_min - offset_y) as usize;
       let src_pixels = &fast_path.axis_samples[src_y_start..src_y_start + row_count];
 

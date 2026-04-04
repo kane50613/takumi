@@ -94,7 +94,7 @@ pub(crate) struct RenderContext<'g> {
   /// Whether to draw debug borders.
   pub(crate) draw_debug_border: bool,
   /// The resources fetched externally.
-  pub(crate) fetched_resources: HashMap<Arc<str>, Arc<ImageSource>>,
+  pub(crate) fetched_resources: HashMap<Arc<str>, ImageSource>,
   /// The stylesheets to apply before layout/rendering.
   pub(crate) stylesheet: Rc<StyleSheet>,
 }
@@ -103,7 +103,7 @@ impl<'g> RenderContext<'g> {
   pub(crate) fn new(
     global: &'g GlobalContext,
     viewport: Viewport,
-    fetched_resources: HashMap<Arc<str>, Arc<ImageSource>>,
+    fetched_resources: HashMap<Arc<str>, ImageSource>,
     stylesheet: Rc<StyleSheet>,
     time: u64,
   ) -> Self {
