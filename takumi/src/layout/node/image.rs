@@ -187,7 +187,7 @@ fn should_skip_intrinsic_probe_cross_axis_ratio_transfer(
 
 const DATA_URI_PREFIX: &str = "data:";
 
-fn parse_data_uri_image(src: &str) -> std::result::Result<ImageSource, ImageResourceError> {
+fn parse_data_uri_image(src: &str) -> ImageResult {
   let url = DataUrl::process(src).map_err(|_| ImageResourceError::InvalidDataUriFormat)?;
   let (data, _) = url
     .decode_to_vec()
@@ -213,7 +213,7 @@ pub(crate) fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
   }
 
   if let Some(img) = context.global.persistent_image_store.get(src) {
-    return Ok(img.clone());
+    return Ok(img);
   }
 
   Err(ImageResourceError::Unknown)
