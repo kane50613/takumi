@@ -17,12 +17,12 @@ use tiny_skia::Pixmap;
 use crate::{
   layout::style::{Color, ImageScalingAlgorithm},
   rendering::{Sizing, premultiplied_pixmap_from_rgba},
-  resources::image_decoder::decode_image,
+  resources::image_decoder::{DecodedGif, DecodedImage, decode_image},
 };
 use thiserror::Error;
 
 /// Represents the state of an image resource.
-pub type ImageResult = Result<Arc<ImageSource>, ImageResourceError>;
+pub type ImageResult = Result<ImageSource, ImageResourceError>;
 
 #[derive(Debug, Clone)]
 /// Represents the source of an image.
@@ -32,7 +32,9 @@ pub enum ImageSource {
   #[cfg(feature = "svg")]
   Svg(SvgSource),
   /// A bitmap image source
-  Bitmap(Pixmap),
+  Bitmap(Arc<Pixmap>),
+  /// An animated gif source.
+  Gif(GifSource),
 }
 
 /// Represents the resolved SVG source.
@@ -44,8 +46,81 @@ pub struct SvgSource {
   /// Whether the SVG depends on currentColor and must be reparsed per render.
   uses_current_color: bool,
   /// Parsed SVG tree used for size and initial metadata.
-  pub(crate) tree: Box<resvg::usvg::Tree>,
+  pub(crate) tree: Arc<resvg::usvg::Tree>,
   raster_cache: Arc<SvgRasterCache>,
+}
+
+/// A decoded GIF image with frame timing metadata.
+#[derive(Debug, Clone)]
+pub struct GifSource {
+  frames: Vec<GifFrame>,
+  total_duration_ms: u64,
+}
+
+/// A single GIF frame.
+#[derive(Debug, Clone)]
+struct GifFrame {
+  pixmap: Arc<Pixmap>,
+  duration_ms: u32,
+}
+
+impl GifSource {
+  fn from_decoded(decoded: DecodedGif) -> Result<Self, ImageResourceError> {
+    if decoded.frames.is_empty() {
+      return Err(ImageResourceError::InvalidGif);
+    }
+
+    let mut frames = Vec::with_capacity(decoded.frames.len());
+    let mut total_duration_ms = 0_u64;
+    for frame in decoded.frames {
+      total_duration_ms = total_duration_ms.saturating_add(frame.duration_ms as u64);
+      frames.push(GifFrame {
+        pixmap: frame.pixmap,
+        duration_ms: frame.duration_ms,
+      });
+    }
+
+    Ok(Self {
+      frames,
+      total_duration_ms,
+    })
+  }
+
+  pub(crate) fn frame_at_time(&self, time_ms: u64) -> &Pixmap {
+    if self.total_duration_ms == 0 {
+      return &self.frames[0].pixmap;
+    }
+
+    let target_time = time_ms % self.total_duration_ms;
+    let mut elapsed_ms = 0_u64;
+
+    for frame in &self.frames {
+      elapsed_ms = elapsed_ms.saturating_add(frame.duration_ms as u64);
+      if target_time < elapsed_ms {
+        return &frame.pixmap;
+      }
+    }
+
+    &self.frames[0].pixmap
+  }
+
+  pub(crate) fn frame_at_time_arc(&self, time_ms: u64) -> Arc<Pixmap> {
+    if self.total_duration_ms == 0 {
+      return self.frames[0].pixmap.clone();
+    }
+
+    let target_time = time_ms % self.total_duration_ms;
+    let mut elapsed_ms = 0_u64;
+
+    for frame in &self.frames {
+      elapsed_ms = elapsed_ms.saturating_add(frame.duration_ms as u64);
+      if target_time < elapsed_ms {
+        return frame.pixmap.clone();
+      }
+    }
+
+    self.frames[0].pixmap.clone()
+  }
 }
 
 impl From<SvgSource> for ImageSource {
@@ -76,14 +151,14 @@ pub(crate) enum RenderedImage<'a> {
 #[derive(Debug, Default)]
 pub struct PersistentImageStore {
   #[cfg(target_arch = "wasm32")]
-  map: RefCell<HashMap<String, Arc<ImageSource>>>,
+  map: RefCell<HashMap<String, ImageSource>>,
   #[cfg(not(target_arch = "wasm32"))]
-  map: DashMap<String, Arc<ImageSource>>,
+  map: DashMap<String, ImageSource>,
 }
 
 impl PersistentImageStore {
   /// Returns the stored image for the provided source, if present.
-  pub fn get(&self, src: &str) -> Option<Arc<ImageSource>> {
+  pub fn get(&self, src: &str) -> Option<ImageSource> {
     #[cfg(target_arch = "wasm32")]
     {
       self.map.borrow().get(src).cloned()
@@ -96,7 +171,7 @@ impl PersistentImageStore {
   }
 
   /// Stores or replaces a persistent image for the provided source.
-  pub fn insert(&self, src: String, image: Arc<ImageSource>) {
+  pub fn insert(&self, src: String, image: ImageSource) {
     #[cfg(target_arch = "wasm32")]
     {
       self.map.borrow_mut().insert(src, image);
@@ -126,13 +201,13 @@ impl From<RgbaImage> for ImageSource {
   fn from(bitmap: RgbaImage) -> Self {
     let pixmap =
       premultiplied_pixmap_from_rgba(Cow::Owned(bitmap)).unwrap_or_else(|| unreachable!());
-    ImageSource::Bitmap(pixmap)
+    ImageSource::Bitmap(Arc::new(pixmap))
   }
 }
 
 impl From<Pixmap> for ImageSource {
   fn from(pixmap: Pixmap) -> Self {
-    ImageSource::Bitmap(pixmap)
+    ImageSource::Bitmap(Arc::new(pixmap))
   }
 }
 
@@ -216,7 +291,7 @@ impl FromStr for SvgSource {
     Ok(SvgSource {
       uses_current_color: sanitized_svg.contains("currentColor"),
       source: Arc::from(sanitized_svg),
-      tree: Box::new(tree),
+      tree: Arc::new(tree),
       raster_cache: Arc::default(),
     })
   }
@@ -236,12 +311,17 @@ impl ImageSource {
       if let Ok(text) = from_utf8(bytes)
         && is_svg_like(text)
       {
-        return Ok(Arc::new(ImageSource::Svg(text.parse()?)));
+        return Ok(ImageSource::Svg(text.parse()?));
       }
     }
 
-    let img = decode_image(bytes).map_err(ImageResourceError::DecodeError)?;
-    Ok(Arc::new(img.into()))
+    let image = decode_image(bytes).map_err(ImageResourceError::DecodeError)?;
+    let source = match image {
+      DecodedImage::Pixmap(pixmap) => ImageSource::Bitmap(Arc::new(pixmap)),
+      DecodedImage::Gif(gif) => ImageSource::Gif(GifSource::from_decoded(gif)?),
+    };
+
+    Ok(source)
   }
 
   /// Prepare image data for layout rendering.
@@ -253,6 +333,7 @@ impl ImageSource {
     width: u32,
     height: u32,
     image_rendering: ImageScalingAlgorithm,
+    time_ms: u64,
     current_color: Color,
   ) -> Result<RenderedImage<'i>, ImageResourceError> {
     #[cfg(not(feature = "svg"))]
@@ -260,7 +341,13 @@ impl ImageSource {
 
     match self {
       ImageSource::Bitmap(bitmap) => Ok(RenderedImage::Borrowed {
-        source: bitmap,
+        source: bitmap.as_ref(),
+        width,
+        height,
+        algorithm: image_rendering,
+      }),
+      ImageSource::Gif(gif) => Ok(RenderedImage::Borrowed {
+        source: gif.frame_at_time(time_ms),
         width,
         height,
         algorithm: image_rendering,
@@ -317,6 +404,10 @@ impl ImageSource {
       #[cfg(feature = "svg")]
       ImageSource::Svg(svg) => (svg.tree.size().width(), svg.tree.size().height()),
       ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
+      ImageSource::Gif(gif) => {
+        let frame = &gif.frames[0].pixmap;
+        (frame.width() as f32, frame.height() as f32)
+      }
     };
 
     let dpr = sizing.viewport.device_pixel_ratio;
@@ -424,6 +515,9 @@ pub enum ImageResourceError {
   /// The buffer size does not match the target image size
   #[error("The buffer size does not match the target image size")]
   MismatchedBufferSize,
+  /// GIF decoding produced no frames.
+  #[error("The GIF image does not contain any decodable frames")]
+  InvalidGif,
 }
 
 #[cfg(test)]
@@ -450,10 +544,20 @@ mod tests {
     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="currentColor"/></svg>"#;
     let image = ImageSource::from_bytes(svg.as_bytes())?;
 
-    let red =
-      image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0xFF0000))?;
-    let blue =
-      image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?;
+    let red = image.render_for_layout(
+      4,
+      4,
+      ImageScalingAlgorithm::Auto,
+      0,
+      Color::from_rgb(0xFF0000),
+    )?;
+    let blue = image.render_for_layout(
+      4,
+      4,
+      ImageScalingAlgorithm::Auto,
+      0,
+      Color::from_rgb(0x0000FF),
+    )?;
 
     assert_ne!(premul_at(&red, 2, 2), premul_at(&blue, 2, 2));
     Ok(())
@@ -466,7 +570,7 @@ mod tests {
     let image = ImageSource::from_bytes(svg.as_bytes())?;
     let color = Color([255, 0, 0, 128]);
 
-    let rendered = image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, color)?;
+    let rendered = image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, 0, color)?;
     let alpha = premul_at(&rendered, 2, 2).alpha();
 
     assert!((alpha as i16 - 128).abs() <= 1);
@@ -479,10 +583,20 @@ mod tests {
     let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="#ff0000"/></svg>"##;
     let image: ImageSource = SvgSource::from_str(svg)?.into();
 
-    let first =
-      image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x00FF00))?;
-    let second =
-      image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?;
+    let first = image.render_for_layout(
+      4,
+      4,
+      ImageScalingAlgorithm::Auto,
+      0,
+      Color::from_rgb(0x00FF00),
+    )?;
+    let second = image.render_for_layout(
+      4,
+      4,
+      ImageScalingAlgorithm::Auto,
+      0,
+      Color::from_rgb(0x0000FF),
+    )?;
 
     let RenderedImage::Rasterized(first) = first else {
       unreachable!()
@@ -500,10 +614,20 @@ mod tests {
     let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="#ff0000"/></svg>"##;
     let image: ImageSource = SvgSource::from_str(svg)?.into();
 
-    let first =
-      image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x00FF00))?;
-    let second =
-      image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?;
+    let first = image.render_for_layout(
+      4,
+      4,
+      ImageScalingAlgorithm::Auto,
+      0,
+      Color::from_rgb(0x00FF00),
+    )?;
+    let second = image.render_for_layout(
+      4,
+      4,
+      ImageScalingAlgorithm::Auto,
+      0,
+      Color::from_rgb(0x0000FF),
+    )?;
 
     let RenderedImage::Rasterized(first) = first else {
       unreachable!()
@@ -538,10 +662,20 @@ mod tests {
     bitmap.put_pixel(1, 0, Rgba([78, 90, 12, 255]));
     let image = ImageSource::from(bitmap);
 
-    let first =
-      image.render_for_layout(2, 2, ImageScalingAlgorithm::Auto, Color::from_rgb(0xFF0000))?;
-    let second =
-      image.render_for_layout(2, 2, ImageScalingAlgorithm::Auto, Color::from_rgb(0x0000FF))?;
+    let first = image.render_for_layout(
+      2,
+      2,
+      ImageScalingAlgorithm::Auto,
+      0,
+      Color::from_rgb(0xFF0000),
+    )?;
+    let second = image.render_for_layout(
+      2,
+      2,
+      ImageScalingAlgorithm::Auto,
+      0,
+      Color::from_rgb(0x0000FF),
+    )?;
 
     let RenderedImage::Borrowed { source: first, .. } = first else {
       unreachable!()
@@ -564,7 +698,7 @@ mod tests {
     let image = ImageSource::from(bitmap);
 
     let rendered =
-      image.render_for_layout(4, 4, ImageScalingAlgorithm::Pixelated, Color::black())?;
+      image.render_for_layout(4, 4, ImageScalingAlgorithm::Pixelated, 0, Color::black())?;
     let RenderedImage::Borrowed {
       width,
       height,

@@ -42,7 +42,7 @@ pub struct RenderOptions<'g> {
   pub(crate) draw_debug_border: bool,
   /// The resources fetched externally.
   #[builder(default)]
-  pub(crate) fetched_resources: HashMap<Arc<str>, Arc<ImageSource>>,
+  pub(crate) fetched_resources: HashMap<Arc<str>, ImageSource>,
   /// CSS stylesheets to apply before layout/rendering.
   #[builder(default)]
   pub(crate) stylesheet: StyleSheet,

@@ -50,7 +50,7 @@ impl Renderer {
   fn fetch_resources_map(
     &self,
     resources: Option<&[ImageSource]>,
-  ) -> Result<HashMap<Arc<str>, Arc<LoadedImageSource>>, js_sys::Error> {
+  ) -> Result<HashMap<Arc<str>, LoadedImageSource>, js_sys::Error> {
     resources
       .map(|resources| {
         resources

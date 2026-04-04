@@ -3,7 +3,6 @@ use std::sync::Arc;
 use data_url::DataUrl;
 use taffy::{AvailableSpace, Layout, Size};
 
-use crate::resources::image::{ImageResult, ImageSource};
 use crate::{
   Result,
   layout::{
@@ -12,7 +11,7 @@ use crate::{
     style::{Length, Style, StyleDeclaration},
   },
   rendering::{Canvas, RenderContext, draw_image},
-  resources::image::{ImageResourceError, is_svg_like},
+  resources::image::{ImageResourceError, ImageResult, ImageSource, is_svg_like},
 };
 
 pub(crate) fn image_resource_url(image: &ImageData) -> Option<&str> {
@@ -62,12 +61,19 @@ pub(crate) fn measure_image_node(
     return Size::zero();
   };
 
-  let intrinsic_size = match &*image_source {
+  let intrinsic_size = match &image_source {
     #[cfg(feature = "svg")]
     ImageSource::Svg(svg) => Size {
       width: svg.tree.size().width(),
       height: svg.tree.size().height(),
     },
+    ImageSource::Gif(gif) => {
+      let frame = gif.frame_at_time(context.time);
+      Size {
+        width: frame.width() as f32,
+        height: frame.height() as f32,
+      }
+    }
     ImageSource::Bitmap(bitmap) => Size {
       width: bitmap.width() as f32,
       height: bitmap.height() as f32,
@@ -181,7 +187,7 @@ fn should_skip_intrinsic_probe_cross_axis_ratio_transfer(
 
 const DATA_URI_PREFIX: &str = "data:";
 
-fn parse_data_uri_image(src: &str) -> ImageResult {
+fn parse_data_uri_image(src: &str) -> std::result::Result<ImageSource, ImageResourceError> {
   let url = DataUrl::process(src).map_err(|_| ImageResourceError::InvalidDataUriFormat)?;
   let (data, _) = url
     .decode_to_vec()
@@ -207,7 +213,7 @@ pub(crate) fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
   }
 
   if let Some(img) = context.global.persistent_image_store.get(src) {
-    return Ok(img);
+    return Ok(img.clone());
   }
 
   Err(ImageResourceError::Unknown)

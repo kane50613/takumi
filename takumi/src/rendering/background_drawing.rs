@@ -217,7 +217,7 @@ pub(crate) enum BackgroundTile {
   Conic(ConicGradientTile),
   Pixmap(Arc<Pixmap>),
   SampledBitmap {
-    source: Arc<ImageSource>,
+    source: Arc<Pixmap>,
     width: u32,
     height: u32,
     algo: ImageScalingAlgorithm,
@@ -264,9 +264,6 @@ impl BackgroundTile {
         height,
         algo,
       } => {
-        let ImageSource::Bitmap(source) = source.as_ref() else {
-          return PremultipliedColorU8::TRANSPARENT;
-        };
         let logical_width = (*width).max(1);
         let logical_height = (*height).max(1);
         let source_width = source.width().max(1);
@@ -423,18 +420,25 @@ pub(crate) fn render_tile(
     ))),
     BackgroundImage::Url(url) => {
       if let Ok(source) = resolve_image(url, context) {
-        match source.as_ref() {
-          ImageSource::Bitmap(_) => Some(BackgroundTile::SampledBitmap {
-            source: source.clone(),
+        match &source {
+          ImageSource::Bitmap(bitmap) => Some(BackgroundTile::SampledBitmap {
+            source: bitmap.clone(),
+            width: tile_w,
+            height: tile_h,
+            algo: context.style.image_rendering,
+          }),
+          ImageSource::Gif(gif) => Some(BackgroundTile::SampledBitmap {
+            source: gif.frame_at_time_arc(context.time),
             width: tile_w,
             height: tile_h,
             algo: context.style.image_rendering,
           }),
           #[cfg(feature = "svg")]
-          ImageSource::Svg { .. } => match source.render_for_layout(
+          ImageSource::Svg(..) => match source.render_for_layout(
             tile_w,
             tile_h,
             context.style.image_rendering,
+            context.time,
             context.current_color,
           )? {
             RenderedImage::Rasterized(pixmap) => Some(BackgroundTile::Pixmap(pixmap)),
