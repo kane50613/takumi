@@ -1,6 +1,6 @@
 {
   "name": "takumi-js",
-  "version": "1.0.0-rc.13",
+  "version": "1.0.0-rc.14",
   "description": "All-in-one Takumi package for Node.js and WebAssembly runtimes.",
   "license": "(MIT OR Apache-2.0)",
   "author": {

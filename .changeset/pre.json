@@ -10,6 +10,7 @@
     "@takumi-rs/wasm": "0.73.1"
   },
   "changesets": [
+    "afraid-geese-knock",
     "angry-bags-drum",
     "better-squids-pay",
     "big-loops-prove",
@@ -26,6 +27,7 @@
     "dark-chairs-buy",
     "dark-llamas-knock",
     "eager-chairs-brush",
+    "empty-beds-search",
     "empty-frogs-serve",
     "evil-bags-relax",
     "evil-rabbits-cheat",

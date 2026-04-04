@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.0-rc.14
+
+### Patch Changes
+
+- cd47ace: Add bilinear interpolation fast path
+
 ## 1.0.0-rc.13
 
 ### Patch Changes
