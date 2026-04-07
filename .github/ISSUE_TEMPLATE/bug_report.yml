@@ -67,7 +67,8 @@ body:
       multiple: true
       options:
         - takumi (Rust core)
-        - "@takumi-rs/core (N-API)"
+        - "takumi-js"
+        - "@takumi-rs/core"
         - "@takumi-rs/wasm"
         - "@takumi-rs/image-response"
         - "@takumi-rs/helpers"
