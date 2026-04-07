@@ -1,5 +1,12 @@
 # takumi
 
+## 1.0.0-rc.15
+
+### Minor Changes
+
+- 2b68b8a: Selects GIF frame based on `time_ms`
+- b09ce0b: Support buffer input for image node `src` field
+
 ## 1.0.0-rc.14
 
 ### Patch Changes

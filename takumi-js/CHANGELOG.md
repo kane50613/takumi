@@ -1,5 +1,14 @@
 # takumi-js
 
+## 1.0.0-rc.15
+
+### Patch Changes
+
+- 1a4c366: Avoid importing wasm binary in Node environment
+  - @takumi-rs/core@1.0.0-rc.15
+  - @takumi-rs/wasm@1.0.0-rc.15
+  - @takumi-rs/helpers@1.0.0-rc.15
+
 ## 1.0.0-rc.14
 
 ### Patch Changes
