@@ -14,7 +14,7 @@ use crate::{
   },
   rendering::{
     BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, NodeMaskAction, Placement,
-    Sizing, blend_pixel, draw_debug_border, prepare_node_mask,
+    Sizing, blend_pixel, draw_debug_border, prepare_node_mask, transformed_rect_extents,
   },
 };
 
@@ -514,7 +514,7 @@ fn node_paint_bounds(node_paint: &NodePaint) -> Option<SceneBounds> {
 }
 
 fn bounds_for_rect(size: Size<f32>, transform: Affine) -> Option<SceneBounds> {
-  let (min_x, min_y, max_x, max_y) = transformed_rect_extents(size, transform)?;
+  let (min_x, min_y, max_x, max_y) = transformed_rect_extents(Point::ZERO, size, transform)?;
   let left = (min_x.floor() as i32).max(0) as usize;
   let top = (min_y.floor() as i32).max(0) as usize;
   let right = (max_x.ceil() as i32).max(0) as usize;
@@ -530,43 +530,6 @@ fn bounds_for_rect(size: Size<f32>, transform: Affine) -> Option<SceneBounds> {
     right,
     bottom,
   })
-}
-
-fn transformed_rect_extents(size: Size<f32>, transform: Affine) -> Option<(f32, f32, f32, f32)> {
-  let corners = [
-    taffy::Point { x: 0.0, y: 0.0 },
-    taffy::Point {
-      x: size.width,
-      y: 0.0,
-    },
-    taffy::Point {
-      x: 0.0,
-      y: size.height,
-    },
-    taffy::Point {
-      x: size.width,
-      y: size.height,
-    },
-  ];
-
-  let mut min_x = f32::INFINITY;
-  let mut min_y = f32::INFINITY;
-  let mut max_x = f32::NEG_INFINITY;
-  let mut max_y = f32::NEG_INFINITY;
-
-  for corner in corners {
-    let point = transform.transform_point(corner);
-    min_x = min_x.min(point.x);
-    min_y = min_y.min(point.y);
-    max_x = max_x.max(point.x);
-    max_y = max_y.max(point.y);
-  }
-
-  if !min_x.is_finite() || !min_y.is_finite() || !max_x.is_finite() || !max_y.is_finite() {
-    return None;
-  }
-
-  Some((min_x, min_y, max_x, max_y))
 }
 
 fn merge_bounds(left: Option<SceneBounds>, right: Option<SceneBounds>) -> Option<SceneBounds> {
@@ -1020,7 +983,8 @@ fn compute_isolation_bounds(
     return full_viewport_placement(viewport);
   }
 
-  let Some((min_x, min_y, max_x, max_y)) = transformed_rect_extents(size, transform) else {
+  let Some((min_x, min_y, max_x, max_y)) = transformed_rect_extents(Point::ZERO, size, transform)
+  else {
     return full_viewport_placement(viewport);
   };
 

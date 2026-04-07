@@ -10,6 +10,7 @@ use crate::{
   layout::style::{Affine, ComputedStyle, Overflow},
   rendering::{
     BorderProperties, Command, Placement, RenderContext, Style, build_path, create_mask,
+    transformed_rect_extents,
   },
 };
 
@@ -130,26 +131,31 @@ pub(crate) fn prepare_node_mask(
     };
     inner_props.append_mask_commands(&mut paths, padding_box, padding_origin);
 
-    let (mask_data, placement) = render_mask(&paths, None, None, buffer_pool);
-    if placement.width == 0 || placement.height == 0 {
+    let (mask_data, local_placement) = render_mask(&paths, None, None, buffer_pool);
+    if local_placement.width == 0 || local_placement.height == 0 {
       buffer_pool.release(mask_data);
       return Ok(NodeMaskAction::SkipRendering);
     }
 
+    let Some(placement) = transformed_local_placement(local_placement, transform) else {
+      buffer_pool.release(mask_data);
+      return Ok(NodeMaskAction::SkipRendering);
+    };
+
     let from = Point {
-      x: placement.left.max(0) as u32,
-      y: placement.top.max(0) as u32,
+      x: local_placement.left.max(0) as u32,
+      y: local_placement.top.max(0) as u32,
     };
     let to = Point {
-      x: from.x + placement.width,
-      y: from.y + placement.height,
+      x: from.x + local_placement.width,
+      y: from.y + local_placement.height,
     };
     let Some(full_mask) = rasterize_constraint_mask(viewport, placement, |x, y| {
       sample_overflow_alpha(
         from,
         to,
         inverse_transform,
-        Some((&mask_data, placement.width)),
+        Some((&mask_data, local_placement.width)),
         x,
         y,
       )
@@ -313,48 +319,34 @@ fn rasterize_constraint_mask(
   Some(mask)
 }
 
+fn transformed_local_placement(local_placement: Placement, transform: Affine) -> Option<Placement> {
+  let (left, top, right, bottom) = transformed_rect_extents(
+    Point {
+      x: local_placement.left as f32,
+      y: local_placement.top as f32,
+    },
+    Size {
+      width: local_placement.width as f32,
+      height: local_placement.height as f32,
+    },
+    transform,
+  )?;
+  Placement::from_bounds(
+    left.floor() as i32,
+    top.floor() as i32,
+    right.ceil() as i32,
+    bottom.ceil() as i32,
+  )
+}
+
 fn transformed_rect_placement(size: Size<f32>, transform: Affine) -> Option<Placement> {
-  let corners = [
-    transform.transform_point(Point::ZERO),
-    transform.transform_point(Point {
-      x: size.width,
-      y: 0.0,
-    }),
-    transform.transform_point(Point {
-      x: 0.0,
-      y: size.height,
-    }),
-    transform.transform_point(Point {
-      x: size.width,
-      y: size.height,
-    }),
-  ];
-
-  let mut left = f32::INFINITY;
-  let mut top = f32::INFINITY;
-  let mut right = f32::NEG_INFINITY;
-  let mut bottom = f32::NEG_INFINITY;
-  for point in corners {
-    left = left.min(point.x);
-    top = top.min(point.y);
-    right = right.max(point.x);
-    bottom = bottom.max(point.y);
-  }
-
-  let left = left.floor() as i32;
-  let top = top.floor() as i32;
-  let right = right.ceil() as i32;
-  let bottom = bottom.ceil() as i32;
-  if right <= left || bottom <= top {
-    return None;
-  }
-
-  Some(Placement {
-    left,
-    top,
-    width: (right - left) as u32,
-    height: (bottom - top) as u32,
-  })
+  let (left, top, right, bottom) = transformed_rect_extents(Point::ZERO, size, transform)?;
+  Placement::from_bounds(
+    left.floor() as i32,
+    top.floor() as i32,
+    right.ceil() as i32,
+    bottom.ceil() as i32,
+  )
 }
 
 fn sample_mask_image_alpha(
