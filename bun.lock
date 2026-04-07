@@ -69,6 +69,7 @@
       "dependencies": {
         "react": "catalog:",
         "takumi-js": "workspace:*",
+        "takumi-template": "workspace:*",
       },
       "devDependencies": {
         "@types/react": "catalog:",
@@ -296,11 +297,13 @@
     },
     "takumi-template": {
       "name": "takumi-template",
+      "dependencies": {
+        "react": "catalog:",
+      },
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/react": "catalog:",
         "@types/react-dom": "catalog:",
-        "react": "catalog:",
         "react-dom": "catalog:",
         "takumi-js": "workspace:*",
         "typescript": "catalog:",
