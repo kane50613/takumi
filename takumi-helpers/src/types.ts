@@ -33,7 +33,7 @@ export type TextNode = NodeMetadata & {
 
 export type ImageNode = NodeMetadata & {
   type: "image";
-  src: string;
+  src: string | Uint8Array | ArrayBuffer;
   width?: number;
   height?: number;
 };

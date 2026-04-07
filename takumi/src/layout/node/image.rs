@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use data_url::DataUrl;
 use taffy::{AvailableSpace, Layout, Size};
 
@@ -7,7 +5,7 @@ use crate::{
   Result,
   layout::{
     inline::InlineContentKind,
-    node::{ImageData, Node, NodeKind, NodeStyleLayers},
+    node::{ImageData, ImageSourceInput, Node, NodeKind, NodeStyleLayers},
     style::{Length, Style, StyleDeclaration},
   },
   rendering::{Canvas, RenderContext, draw_image},
@@ -15,10 +13,11 @@ use crate::{
 };
 
 pub(crate) fn image_resource_url(image: &ImageData) -> Option<&str> {
-  if image.src.starts_with("https://") || image.src.starts_with("http://") {
-    Some(image.src.as_ref())
-  } else {
-    None
+  match &image.src {
+    ImageSourceInput::Url(src) if src.starts_with("https://") || src.starts_with("http://") => {
+      Some(src.as_ref())
+    }
+    _ => None,
   }
 }
 
@@ -57,7 +56,7 @@ pub(crate) fn measure_image_node(
   known_dimensions: Size<Option<f32>>,
   style: &taffy::Style,
 ) -> Size<f32> {
-  let Ok(image_source) = resolve_image(&image.src, context) else {
+  let Ok(image_source) = image.src.resolve(context) else {
     return Size::zero();
   };
 
@@ -155,7 +154,7 @@ pub(crate) fn draw_image_node_content(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let Ok(image_source) = resolve_image(&image.src, context) else {
+  let Ok(image_source) = image.src.resolve(context) else {
     return Ok(());
   };
 
@@ -219,128 +218,68 @@ pub(crate) fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
   Err(ImageResourceError::Unknown)
 }
 
-impl Default for ImageData {
-  fn default() -> Self {
-    Self {
-      src: Arc::<str>::from(""),
-      width: None,
-      height: None,
-    }
-  }
-}
+#[cfg(test)]
+mod tests {
+  use serde_json::from_value;
+  use tiny_skia::Pixmap;
 
-impl From<&str> for ImageData {
-  fn from(src: &str) -> Self {
-    Self {
-      src: src.into(),
-      width: None,
-      height: None,
-    }
-  }
-}
+  use super::image_resource_url;
+  use crate::{
+    layout::node::{ImageData, ImageSourceInput},
+    resources::image::ImageSource,
+  };
 
-impl From<String> for ImageData {
-  fn from(src: String) -> Self {
-    Self {
-      src: src.into(),
-      width: None,
-      height: None,
-    }
-  }
-}
+  #[test]
+  fn deserialize_image_src_from_string() {
+    let image: ImageData = from_value(serde_json::json!({
+      "src": "https://example.com/image.png"
+    }))
+    .expect("image data should deserialize from src string");
 
-impl From<Arc<str>> for ImageData {
-  fn from(src: Arc<str>) -> Self {
-    Self {
-      src,
-      width: None,
-      height: None,
-    }
-  }
-}
+    let ImageSourceInput::Url(src) = image.src else {
+      panic!("expected url image src");
+    };
 
-impl From<(&str, u32, u32)> for ImageData {
-  fn from((src, width, height): (&str, u32, u32)) -> Self {
-    Self {
-      src: src.into(),
-      width: Some(width as f32),
-      height: Some(height as f32),
-    }
+    assert_eq!(src.as_ref(), "https://example.com/image.png");
+    assert_eq!(
+      image_resource_url(&ImageData {
+        src: ImageSourceInput::Url(src),
+        width: None,
+        height: None
+      }),
+      Some("https://example.com/image.png")
+    );
   }
-}
 
-impl From<(String, u32, u32)> for ImageData {
-  fn from((src, width, height): (String, u32, u32)) -> Self {
-    Self {
-      src: src.into(),
-      width: Some(width as f32),
-      height: Some(height as f32),
-    }
+  #[test]
+  fn deserialize_image_src_from_direct_source() {
+    let image: ImageData = from_value(serde_json::json!({
+      "src": [137, 80, 78, 71]
+    }))
+    .expect("image data should deserialize from direct source");
+
+    let ImageSourceInput::Direct(data) = image.src else {
+      panic!("expected direct image src");
+    };
+
+    assert_eq!(data, vec![137, 80, 78, 71]);
+    assert_eq!(
+      image_resource_url(&ImageData {
+        src: ImageSourceInput::Direct(data),
+        width: None,
+        height: None
+      }),
+      None
+    );
   }
-}
 
-impl From<(Arc<str>, u32, u32)> for ImageData {
-  fn from((src, width, height): (Arc<str>, u32, u32)) -> Self {
-    Self {
-      src,
-      width: Some(width as f32),
-      height: Some(height as f32),
-    }
-  }
-}
+  #[test]
+  fn from_pixmap_creates_loaded_image_source_input() {
+    let pixmap = Pixmap::new(2, 2).expect("pixmap should be created");
+    let image = ImageData::from(pixmap);
 
-impl From<(&str, f32, f32)> for ImageData {
-  fn from((src, width, height): (&str, f32, f32)) -> Self {
-    Self {
-      src: src.into(),
-      width: Some(width),
-      height: Some(height),
-    }
-  }
-}
-
-impl From<(String, f32, f32)> for ImageData {
-  fn from((src, width, height): (String, f32, f32)) -> Self {
-    Self {
-      src: src.into(),
-      width: Some(width),
-      height: Some(height),
-    }
-  }
-}
-
-impl From<(Arc<str>, f32, f32)> for ImageData {
-  fn from((src, width, height): (Arc<str>, f32, f32)) -> Self {
-    Self {
-      src,
-      width: Some(width),
-      height: Some(height),
-    }
-  }
-}
-
-impl From<(&str, Option<f32>, Option<f32>)> for ImageData {
-  fn from((src, width, height): (&str, Option<f32>, Option<f32>)) -> Self {
-    Self {
-      src: src.into(),
-      width,
-      height,
-    }
-  }
-}
-
-impl From<(String, Option<f32>, Option<f32>)> for ImageData {
-  fn from((src, width, height): (String, Option<f32>, Option<f32>)) -> Self {
-    Self {
-      src: src.into(),
-      width,
-      height,
-    }
-  }
-}
-
-impl From<(Arc<str>, Option<f32>, Option<f32>)> for ImageData {
-  fn from((src, width, height): (Arc<str>, Option<f32>, Option<f32>)) -> Self {
-    Self { src, width, height }
+    let ImageSourceInput::Loaded(ImageSource::Bitmap(_)) = image.src else {
+      panic!("expected loaded bitmap image source");
+    };
   }
 }

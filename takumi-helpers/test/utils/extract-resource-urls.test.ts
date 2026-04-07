@@ -51,4 +51,20 @@ describe("extractResourceUrls", () => {
 
     expect(extractResourceUrls(node)).toEqual([validUrl]);
   });
+
+  test("does not collect urls from direct image sources", () => {
+    const remoteStyleUrl = "https://example.com/background.png";
+    const node = container({
+      style: {
+        backgroundImage: `url(${remoteStyleUrl})`,
+      },
+      children: [
+        image({
+          src: new Uint8Array([137, 80, 78, 71]),
+        }),
+      ],
+    });
+
+    expect(extractResourceUrls(node)).toEqual([remoteStyleUrl]);
+  });
 });

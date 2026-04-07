@@ -8,7 +8,7 @@ const STATIC_WASM_IMPORT_PATTERNS = ['from "@takumi-rs/wasm"', 'require("@takumi
 const TAKUMI_JS_ROOT = join(import.meta.dir, "..");
 
 function runBunBuild(cwd: string) {
-  const result = Bun.spawnSync(["bun", "run", "build"], {
+  const result = Bun.spawnSync(["bun", "x", "--bun", "tsdown", "--config", "tsdown.config.ts"], {
     cwd,
     stdout: "pipe",
     stderr: "pipe",

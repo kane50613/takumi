@@ -6,6 +6,7 @@ use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use taffy::{AvailableSpace, Layout, Point, Size};
+use tiny_skia::Pixmap;
 
 use crate::{
   Result, Xxh3HashSet,
@@ -19,7 +20,9 @@ use crate::{
     BorderProperties, Canvas, Fill, PaintSource, RenderContext, SizedShadow,
     collect_background_layers, rasterize_layers, release_rasterized_background_tile,
   },
+  resources::image::{ImageResult, ImageSource},
 };
+use ::image::RgbaImage;
 
 use self::{
   container::{
@@ -63,12 +66,193 @@ pub(crate) struct TextData {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub(crate) enum ImageSourceInput {
+  Url(Arc<str>),
+  Direct(Vec<u8>),
+  #[serde(skip_deserializing)]
+  Loaded(ImageSource),
+}
+
+impl ImageSourceInput {
+  pub(crate) fn resolve(&self, context: &RenderContext) -> ImageResult {
+    match self {
+      Self::Url(src) => resolve_image(src, context),
+      Self::Direct(data) => ImageSource::from_bytes(data),
+      Self::Loaded(source) => Ok(source.clone()),
+    }
+  }
+}
+
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// Variant-specific image node data.
 pub struct ImageData {
-  pub(crate) src: Arc<str>,
+  pub(crate) src: ImageSourceInput,
   pub(crate) width: Option<f32>,
   pub(crate) height: Option<f32>,
+}
+
+impl From<&str> for ImageData {
+  fn from(src: &str) -> Self {
+    Self {
+      src: ImageSourceInput::Url(src.into()),
+      width: None,
+      height: None,
+    }
+  }
+}
+
+impl From<String> for ImageData {
+  fn from(src: String) -> Self {
+    Self {
+      src: ImageSourceInput::Url(src.into()),
+      width: None,
+      height: None,
+    }
+  }
+}
+
+impl From<Arc<str>> for ImageData {
+  fn from(src: Arc<str>) -> Self {
+    Self {
+      src: ImageSourceInput::Url(src),
+      width: None,
+      height: None,
+    }
+  }
+}
+
+impl From<Vec<u8>> for ImageData {
+  fn from(data: Vec<u8>) -> Self {
+    Self {
+      src: ImageSourceInput::Direct(data),
+      width: None,
+      height: None,
+    }
+  }
+}
+
+impl From<&[u8]> for ImageData {
+  fn from(data: &[u8]) -> Self {
+    Self {
+      src: ImageSourceInput::Direct(data.to_vec()),
+      width: None,
+      height: None,
+    }
+  }
+}
+
+impl From<ImageSource> for ImageData {
+  fn from(source: ImageSource) -> Self {
+    Self {
+      src: ImageSourceInput::Loaded(source),
+      width: None,
+      height: None,
+    }
+  }
+}
+
+impl From<Pixmap> for ImageData {
+  fn from(pixmap: Pixmap) -> Self {
+    Self::from(ImageSource::from(pixmap))
+  }
+}
+
+impl From<RgbaImage> for ImageData {
+  fn from(bitmap: RgbaImage) -> Self {
+    Self::from(ImageSource::from(bitmap))
+  }
+}
+
+impl From<(&str, u32, u32)> for ImageData {
+  fn from((src, width, height): (&str, u32, u32)) -> Self {
+    Self {
+      src: ImageSourceInput::Url(src.into()),
+      width: Some(width as f32),
+      height: Some(height as f32),
+    }
+  }
+}
+
+impl From<(String, u32, u32)> for ImageData {
+  fn from((src, width, height): (String, u32, u32)) -> Self {
+    Self {
+      src: ImageSourceInput::Url(src.into()),
+      width: Some(width as f32),
+      height: Some(height as f32),
+    }
+  }
+}
+
+impl From<(Arc<str>, u32, u32)> for ImageData {
+  fn from((src, width, height): (Arc<str>, u32, u32)) -> Self {
+    Self {
+      src: ImageSourceInput::Url(src),
+      width: Some(width as f32),
+      height: Some(height as f32),
+    }
+  }
+}
+
+impl From<(&str, f32, f32)> for ImageData {
+  fn from((src, width, height): (&str, f32, f32)) -> Self {
+    Self {
+      src: ImageSourceInput::Url(src.into()),
+      width: Some(width),
+      height: Some(height),
+    }
+  }
+}
+
+impl From<(String, f32, f32)> for ImageData {
+  fn from((src, width, height): (String, f32, f32)) -> Self {
+    Self {
+      src: ImageSourceInput::Url(src.into()),
+      width: Some(width),
+      height: Some(height),
+    }
+  }
+}
+
+impl From<(Arc<str>, f32, f32)> for ImageData {
+  fn from((src, width, height): (Arc<str>, f32, f32)) -> Self {
+    Self {
+      src: ImageSourceInput::Url(src),
+      width: Some(width),
+      height: Some(height),
+    }
+  }
+}
+
+impl From<(&str, Option<f32>, Option<f32>)> for ImageData {
+  fn from((src, width, height): (&str, Option<f32>, Option<f32>)) -> Self {
+    Self {
+      src: ImageSourceInput::Url(src.into()),
+      width,
+      height,
+    }
+  }
+}
+
+impl From<(String, Option<f32>, Option<f32>)> for ImageData {
+  fn from((src, width, height): (String, Option<f32>, Option<f32>)) -> Self {
+    Self {
+      src: ImageSourceInput::Url(src.into()),
+      width,
+      height,
+    }
+  }
+}
+
+impl From<(Arc<str>, Option<f32>, Option<f32>)> for ImageData {
+  fn from((src, width, height): (Arc<str>, Option<f32>, Option<f32>)) -> Self {
+    Self {
+      src: ImageSourceInput::Url(src),
+      width,
+      height,
+    }
+  }
 }
 
 #[derive(Debug, Clone, Deserialize)]
