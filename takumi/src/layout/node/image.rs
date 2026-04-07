@@ -221,7 +221,6 @@ pub(crate) fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
 #[cfg(test)]
 mod tests {
   use serde_json::from_value;
-  use tiny_skia::Pixmap;
 
   use super::image_resource_url;
   use crate::{
@@ -230,14 +229,15 @@ mod tests {
   };
 
   #[test]
-  fn deserialize_image_src_from_string() {
+  fn deserialize_image_src_from_string() -> std::result::Result<(), serde_json::Error> {
     let image: ImageData = from_value(serde_json::json!({
       "src": "https://example.com/image.png"
-    }))
-    .expect("image data should deserialize from src string");
+    }))?;
 
-    let ImageSourceInput::Url(src) = image.src else {
-      panic!("expected url image src");
+    assert!(matches!(image.src, ImageSourceInput::Url(_)));
+    let src = match image.src {
+      ImageSourceInput::Url(src) => src,
+      _ => return Ok(()),
     };
 
     assert_eq!(src.as_ref(), "https://example.com/image.png");
@@ -249,37 +249,43 @@ mod tests {
       }),
       Some("https://example.com/image.png")
     );
+
+    Ok(())
   }
 
   #[test]
-  fn deserialize_image_src_from_direct_source() {
+  fn deserialize_image_src_from_buffer_source() -> std::result::Result<(), serde_json::Error> {
     let image: ImageData = from_value(serde_json::json!({
       "src": [137, 80, 78, 71]
-    }))
-    .expect("image data should deserialize from direct source");
+    }))?;
 
-    let ImageSourceInput::Direct(data) = image.src else {
-      panic!("expected direct image src");
+    assert!(matches!(image.src, ImageSourceInput::Buffer(_)));
+    let data = match image.src {
+      ImageSourceInput::Buffer(data) => data,
+      _ => return Ok(()),
     };
 
     assert_eq!(data, vec![137, 80, 78, 71]);
     assert_eq!(
       image_resource_url(&ImageData {
-        src: ImageSourceInput::Direct(data),
+        src: ImageSourceInput::Buffer(data),
         width: None,
         height: None
       }),
       None
     );
+
+    Ok(())
   }
 
   #[test]
   fn from_pixmap_creates_loaded_image_source_input() {
-    let pixmap = Pixmap::new(2, 2).expect("pixmap should be created");
-    let image = ImageData::from(pixmap);
+    let bitmap = image::RgbaImage::new(2, 2);
+    let image = ImageData::from(bitmap);
 
-    let ImageSourceInput::Loaded(ImageSource::Bitmap(_)) = image.src else {
-      panic!("expected loaded bitmap image source");
-    };
+    assert!(matches!(
+      image.src,
+      ImageSourceInput::Loaded(ImageSource::Bitmap(_))
+    ));
   }
 }

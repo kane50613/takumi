@@ -69,7 +69,7 @@ pub(crate) struct TextData {
 #[serde(untagged)]
 pub(crate) enum ImageSourceInput {
   Url(Arc<str>),
-  Direct(Vec<u8>),
+  Buffer(Vec<u8>),
   #[serde(skip_deserializing)]
   Loaded(ImageSource),
 }
@@ -78,7 +78,7 @@ impl ImageSourceInput {
   pub(crate) fn resolve(&self, context: &RenderContext) -> ImageResult {
     match self {
       Self::Url(src) => resolve_image(src, context),
-      Self::Direct(data) => ImageSource::from_bytes(data),
+      Self::Buffer(data) => ImageSource::from_bytes(data),
       Self::Loaded(source) => Ok(source.clone()),
     }
   }
@@ -126,7 +126,7 @@ impl From<Arc<str>> for ImageData {
 impl From<Vec<u8>> for ImageData {
   fn from(data: Vec<u8>) -> Self {
     Self {
-      src: ImageSourceInput::Direct(data),
+      src: ImageSourceInput::Buffer(data),
       width: None,
       height: None,
     }
@@ -136,7 +136,7 @@ impl From<Vec<u8>> for ImageData {
 impl From<&[u8]> for ImageData {
   fn from(data: &[u8]) -> Self {
     Self {
-      src: ImageSourceInput::Direct(data.to_vec()),
+      src: ImageSourceInput::Buffer(data.to_vec()),
       width: None,
       height: None,
     }
