@@ -64,7 +64,9 @@
   },
   "scripts": {
     "prepublishOnly": "jq '.dependencies[\"@takumi-rs/core\"] = .version | .dependencies[\"@takumi-rs/helpers\"] = .version | .dependencies[\"@takumi-rs/wasm\"] = .version' package.json > tmp.json && mv tmp.json package.json",
-    "build": "tsdown"
+    "build": "tsdown",
+    "test": "bun test",
+    "test:bundlers": "bun test tests/bundlers.test.ts"
   },
   "dependencies": {
     "@takumi-rs/core": "workspace:*",
@@ -72,6 +74,7 @@
     "@takumi-rs/wasm": "workspace:*"
   },
   "devDependencies": {
+    "@types/bun": "catalog:",
     "@types/react": "^19.2.14",
     "react": "^19.2.4",
     "tsdown": "catalog:"

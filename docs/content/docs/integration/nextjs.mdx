@@ -1,0 +1,83 @@
+---
+title: Next.js
+description: Use Takumi to render your React components on the server.
+---
+
+<Steps>
+  <Step>
+    ### Install Takumi
+
+    ```npm
+    npm i takumi-js
+    ```
+
+  </Step>
+  <Step>
+    ### Mark Takumi core as a server external package
+
+    Add `@takumi-rs/core` to `serverExternalPackages` in your Next.js config.
+
+    ```ts title="next.config.ts"
+    import type { NextConfig } from "next";
+
+    const config: NextConfig = {
+      serverExternalPackages: ["@takumi-rs/core"], // [!code ++]
+    };
+
+    export default config;
+    ```
+
+  </Step>
+  <Step>
+    ### Create an OG image component
+
+    ```tsx title="app/og/OgImage.tsx"
+    type OgImageProps = {
+      title: string;
+      description: string;
+    };
+
+    export default function OgImage({ title, description }: OgImageProps) {
+      return (
+        <div
+          style={{
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            padding: "64px",
+            backgroundImage: "linear-gradient(to bottom right, #fff7ed, #fecaca)",
+          }}
+        >
+          <p style={{ fontSize: 72, fontWeight: 700, color: "#111827" }}>{title}</p>
+          <p style={{ fontSize: 42, fontWeight: 500, color: "#4b5563" }}>{description}</p>
+        </div>
+      );
+    }
+    ```
+
+  </Step>
+  <Step>
+    ### Return an image in an App Router route handler
+
+    Create a route handler, render the component, and return an `ImageResponse`.
+
+    ```tsx title="app/og/route.tsx"
+    import { ImageResponse } from "takumi-js/response";
+    import OgImage from "./OgImage";
+
+    export function GET(request: Request) {
+      const url = new URL(request.url);
+      const title = url.searchParams.get("title") ?? "Takumi + Next.js";
+      const description = url.searchParams.get("description") ?? "Render OG images with React.";
+
+      return new ImageResponse(<OgImage title={title} description={description} />, {
+        width: 1200,
+        height: 630,
+      });
+    }
+    ```
+
+  </Step>
+</Steps>

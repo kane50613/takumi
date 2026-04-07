@@ -17,6 +17,7 @@
     "@react-router/serve": "^7.13.2",
     "@shikijs/monaco": "^4.0.2",
     "@vercel/analytics": "^2.0.1",
+    "beautiful-mermaid": "^1.1.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "csstype": "^3.2.3",

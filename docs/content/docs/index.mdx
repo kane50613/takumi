@@ -1,80 +1,53 @@
 ---
-title: Quick Start
-description: Get Takumi running in minutes with the high-level ImageResponse API.
+title: Introduction
+description: Learn about the core concepts and features of Takumi.
 icon: Axe
 ---
 
-Takumi is a high-performance image renderer in Rust, featuring JSX support and portable runtimes.
-This guide will get you up and running with the high-level `ImageResponse` API in just a few steps.
+Takumi is a image renderer written in Rust, with bindings for Node.js and Browser.
+It allows you to render templates to images, with support for custom fonts, dynamic data, and more.
 
-<Cards>
-  <Card title="Try Playground" href="/playground" icon={<Shovel />}>
-    Run Takumi instantly in the browser.
-  </Card>
-  <Card title="Rust Crate Docs" href="https://docs.rs/takumi" icon={<BookOpen />}>
-    Browse low-level Rust APIs on docs.rs.
-  </Card>
-</Cards>
+This documentation covers the usage and features for JavaScript bindings. If you're looking for the low-level Rust APIs, check out the [Rust crate docs](https://docs.rs/takumi) instead.
 
-## 1. Install
+## Core Concepts
 
-```npm
-npm i takumi-js
+Rather than building a React-specific Satori clone, Takumi aims to be minimal in its core and framework-agnostic.
+Any template format (React JSX, raw HTML, JSON, Svelte, Vue, etc.) can be transformed into a unified [node tree](/docs/reference) that contains three types of nodes: container, image and text.
+
+Finally Takumi renders that tree to an image.
+
+Besides a pure static image, Takumi also has a time axis, allowing you to render animations & GIFs at specific timestamps for GIFs or video encoding.
+
+```mermaid
+flowchart LR
+    A[Templates] --> N[Node Tree] --> P[Rendering Pipeline] --> F[(Raw Pixels)]
+    C[Stylesheets] --> P
+    R[Resources] --> P
+    D(Time Axis) -.-> P
+
+    F --> G[PNG/JPEG/WebP]
+    F --> H[GIFs]
+    F --> I[Videos]
 ```
 
-### Extra bundlers config for Node.js
+## Features
 
-For Next.js users, before [the PR merged](https://github.com/vercel/next.js/pull/91899), you would need to mark Takumi's Node.js bindings as external so it bundles correctly.
+### Advanced Layout
 
-```tsx title="next.config.ts"
-const config: NextConfig = {
-  // [!code ++]
-  serverExternalPackages: ["@takumi-rs/core"],
-};
+Powered by Taffy for high-performance Flexbox, CSS Grid, and block layouts. It supports absolute positioning, z-index stacking, inline text spans, and nested inline blocks.
 
-export default config;
-```
+### Typography
 
-## 2. Return an `ImageResponse`
+Browser-grade text shaping and layout. Supports WOFF/WOFF2 fonts, emoji, and RTL languages out of the box.
 
-`ImageResponse` extends the standard [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response), so you can use it in any environment you want.
+### Animations
 
-```tsx twoslash
-import { ImageResponse } from "takumi-js/response";
+Parses CSS `@keyframes` and the `animation` shorthand property. Render animations and videos frame-by-frame with support for percentage offsets, timing functions (`linear`, `ease`, `steps`, custom `cubic-bezier`), delays, fill modes, and iteration counts. Includes built-in Tailwind presets like `spin`, `ping`, `pulse`, and `bounce`.
 
-export function GET() {
-  return new ImageResponse(
-    <div tw="w-full h-full flex items-center justify-center bg-white">
-      <h1 tw="text-4xl font-bold">Hello Takumi 👋😁</h1>
-    </div>,
-    {
-      width: 1200,
-      height: 630,
-    },
-  );
-}
-```
+### Styling
 
-Internally, Takumi will tries to load the native bindings for your platform. If it fails, it will fallback to the WebAssembly version, which is slightly slower but works everywhere.
+Full CSS stylesheet parsing and native Tailwind v4 support. Handles arbitrary values, linear and radial gradients, box shadows, blend modes, transforms, filters, and complex CSS selectors.
 
-## Templates
+### Flexible Runtime
 
-Need a fast starting point? Use built-in [Templates](/docs/templates) from the registry:
-
-```npm
-npx shadcn@latest add https://takumi.kane.tw/templates/registry/docs-template.json
-```
-
-## Continue
-
-<Cards>
-  <Card title="Migration" href="/docs/migration" icon={<ArrowBigRight />}>
-    Move from Satori or Next.js ImageResponse.
-  </Card>
-  <Card title="Reference" href="/docs/reference" icon={<FileCode2 />}>
-    Full API options and type details.
-  </Card>
-  <Card title="Troubleshooting" href="/docs/troubleshooting" icon={<Wrench />}>
-    Fix bundling, fonts, and runtime issues.
-  </Card>
-</Cards>
+Deploy anywhere. Ships with optimized native bindings for Node.js (via N-API), WebAssembly for Edge environments (Cloudflare Workers, browsers), or embed the native Rust crate directly.

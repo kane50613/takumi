@@ -1,0 +1,86 @@
+---
+title: SvelteKit
+description: Use Takumi to render your Svelte components on the server.
+---
+
+<Steps>
+  <Step>
+    ### Install Takumi
+
+    ```npm
+    npm i takumi-js
+    ```
+
+  </Step>
+  <Step>
+    ### Make a Svelte component
+
+    If you want to write component styles in the same file, you must set the `css` option to `injected` in the component options.
+
+    ```svelte title="src/lib/components/OgImage.svelte"
+    <script lang="ts">
+      let { title, description } = $props();
+
+    </script>
+
+    <!-- [!code highlight] -->
+    <svelte:options css="injected" />
+
+    <div
+      id="og-image"
+      class="w-full h-full flex items-center justify-center p-12 flex-col whitespace-pre-wrap leading-normal"
+    >
+      <p class="text-7xl font-semibold text-black">
+        {title}
+      </p>
+      <p class="text-5xl font-medium text-black/75">
+        {description}
+      </p>
+    </div>
+
+    <style>
+      #og-image {
+        background-image: linear-gradient(to bottom right, var(--color-orange-50), var(--color-red-200));
+      }
+    </style>
+    ```
+
+  </Step>
+  <Step>
+    ### Render the component on a server route
+
+    Import the component and CSS file if Tailwind is used. Then, use `render` from `svelte/server` to render the component to HTML. Finally, return an `ImageResponse`.
+
+    ```ts title="src/routes/og-image/+server.ts"
+    import { render } from "svelte/server";
+    import style from "../app.css?inline";
+    import ImageResponse from "takumi-js/response";
+    import OgImage from "$lib/components/OgImage.svelte";
+    import type { RequestEvent } from "./$types";
+
+    export async function GET({ url }: RequestEvent) {
+      const { body, head } = await render(OgImage, {
+        props: {
+          title: url.searchParams.get("title"),
+          description: url.searchParams.get("description"),
+        },
+      });
+
+      return new ImageResponse(`${head}${body}`, {
+        width: 1200,
+        height: 630,
+        stylesheets: [style],
+        fonts: [
+          {
+            name: "Geist",
+            data: () =>
+              fetch("https://takumi.kane.tw/fonts/Geist.woff2").then((res) => res.arrayBuffer()),
+          },
+        ],
+      });
+    }
+    ```
+
+  </Step>
+
+</Steps>

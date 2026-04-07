@@ -1,7 +1,7 @@
 <script lang="ts">
   import logo from "../../../../../assets/images/takumi.svg";
 
-  let { name = "Goo goo gaga" } = $props();
+  const { name = "Goo goo gaga" } = $props();
 </script>
 
 <svelte:options css="injected" />

@@ -6,7 +6,8 @@
     "dev": "wrangler dev",
     "start": "wrangler dev",
     "cf-typegen": "wrangler types",
-    "build": "wrangler build"
+    "build": "wrangler build",
+    "test": "vitest run"
   },
   "dependencies": {
     "react": "catalog:",
@@ -15,6 +16,7 @@
   "devDependencies": {
     "@types/react": "catalog:",
     "typescript": "catalog:",
+    "vitest": "catalog:",
     "wrangler": "^4.79.0"
   }
 }

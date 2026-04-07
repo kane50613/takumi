@@ -1,4 +1,8 @@
-import { defaultStringifier, rehypeCodeDefaultOptions } from "fumadocs-core/mdx-plugins";
+import {
+  defaultStringifier,
+  rehypeCodeDefaultOptions,
+  remarkMdxMermaid,
+} from "fumadocs-core/mdx-plugins";
 import { defineConfig, defineDocs, frontmatterSchema } from "fumadocs-mdx/config";
 import lastModified from "fumadocs-mdx/plugins/last-modified";
 import { transformerTwoslash } from "fumadocs-twoslash";
@@ -29,6 +33,7 @@ const structureStringifier = defaultStringifier({
 export default defineConfig({
   plugins: [lastModified()],
   mdxOptions: {
+    remarkPlugins: [remarkMdxMermaid],
     remarkStructureOptions: {
       mdxTypes: (node) =>
         node.name === "td" || node.name === "th" || !node.children || node.children.length === 0,
@@ -47,7 +52,7 @@ export default defineConfig({
         light: "github-light",
         dark: "github-dark",
       },
-      langs: ["ts", "tsx", "js"],
+      langs: ["ts", "tsx", "js", "svelte"],
       transformers: [
         ...(rehypeCodeDefaultOptions.transformers ?? []),
         transformerTwoslash({

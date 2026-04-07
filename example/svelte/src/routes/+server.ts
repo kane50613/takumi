@@ -1,10 +1,10 @@
-import type { RequestHandler } from "@sveltejs/kit";
 import { render } from "svelte/server";
 import style from "../app.css?inline";
 import ImageResponse from "takumi-js/response";
 import OgImage from "$lib/components/OgImage.svelte";
+import type { RequestEvent } from "./$types";
 
-export const GET: RequestHandler = async ({ url }) => {
+export async function GET({ url }: RequestEvent) {
   const { body, head } = await render(OgImage, {
     props: {
       name: url.searchParams.get("name") ?? "Goo goo gaga",
@@ -23,4 +23,4 @@ export const GET: RequestHandler = async ({ url }) => {
       },
     ],
   });
-};
+}

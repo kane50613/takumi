@@ -398,6 +398,61 @@ jobs:
         working-directory: takumi-template
         run: bun test
 
+  test-examples:
+    name: Test Example Integrations
+    runs-on: ubuntu-slim
+    needs: [build-helpers, build-js, build-napi, build-wasm]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@main
+        with:
+          bun-version: latest
+
+      - name: Download helpers artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: helpers-dist
+          path: takumi-helpers/dist
+
+      - name: Download N-API bindings artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: bindings-x86_64-unknown-linux-gnu
+          path: takumi-napi-core
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wasm-package
+          path: takumi-wasm
+
+      - name: Download takumi-js artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: js-dist
+          path: takumi-js/dist
+
+      - name: Install dependencies
+        run: >
+          bun install --frozen-lockfile
+          --filter ./example/cloudflare-workers
+          --filter ./example/tanstack-start
+          --filter ./example/waku-ssr
+
+      - name: Test cloudflare-workers example
+        working-directory: example/cloudflare-workers
+        run: bun run test
+
+      - name: Test tanstack-start example
+        working-directory: example/tanstack-start
+        run: bun run test
+
+      - name: Test waku-ssr example
+        working-directory: example/waku-ssr
+        run: bun run test
+
   test-napi:
     needs: [build-napi, build-helpers]
     name: Test @takumi-rs/core for ${{ matrix.settings.target }}
@@ -547,6 +602,66 @@ jobs:
         working-directory: takumi-wasm
         run: bun test
 
+  preview-packages:
+    name: Publish PR preview packages
+    runs-on: ubuntu-slim
+    needs: pass-test
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@main
+        with:
+          bun-version: latest
+
+      - name: Download helpers artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: helpers-dist
+          path: takumi-helpers/dist
+
+      - name: Download all N-API artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: bindings-*
+          path: takumi-napi-core/artifacts
+
+      - name: Download N-API bindings artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: bindings-x86_64-unknown-linux-gnu
+          path: takumi-napi-core
+
+      - name: Download takumi-js artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: js-dist
+          path: takumi-js/dist
+
+      - name: Download image-response artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: image-response-dist
+          path: takumi-image-response/dist
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wasm-package
+          path: takumi-wasm
+
+      - name: Publish PR previews
+        run: >
+          bunx pkg-pr-new@latest publish
+          --bun
+          --packageManager=bun
+          ./takumi-helpers
+          ./takumi-napi-core
+          ./takumi-wasm
+          ./takumi-js
+          ./takumi-image-response
+
   pass-test:
     name: Pass Test
     runs-on: ubuntu-slim
@@ -559,6 +674,7 @@ jobs:
         build-image-response,
         test-napi,
         test-template,
+        test-examples,
         test-wasm,
       ]
     steps:

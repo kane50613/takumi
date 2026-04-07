@@ -2,10 +2,20 @@ import { getPageTreePeers, type Root as PageTreeRoot } from "fumadocs-core/page-
 import * as Twoslash from "fumadocs-twoslash/ui";
 import { Card, Cards } from "fumadocs-ui/components/card";
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
+import { Step, Steps } from "fumadocs-ui/components/steps";
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import defaultMdxComponents from "fumadocs-ui/mdx";
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/page";
-import { ArrowBigRight, BookOpen, FileCode2, Hand, Shovel, Sparkles, Wrench } from "lucide-react";
+import {
+  ArrowBigRight,
+  ToyBrick,
+  BookOpen,
+  FileCode2,
+  Hand,
+  Shovel,
+  Sparkles,
+  Wrench,
+} from "lucide-react";
 import { redirect } from "react-router";
 import { Accordion, Accordions } from "~/components/accordion";
 import { TypeTable } from "~/components/type-table";
@@ -14,6 +24,7 @@ import { baseOptions } from "~/layout-config";
 import { source } from "~/source";
 import browserCollections from "../../.source/browser";
 import type { Route } from "./+types/page";
+import { Mermaid } from "~/components/mdx/mermaid";
 
 const components = {
   ...defaultMdxComponents,
@@ -22,8 +33,12 @@ const components = {
   BookOpen,
   FileCode2,
   Wrench,
-  ArrowBigRight,
   Shovel,
+  ToyBrick,
+  ArrowBigRight,
+  Mermaid,
+  Step,
+  Steps,
   Cards,
   Card,
   DocsCategory,

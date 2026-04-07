@@ -1,4 +1,4 @@
-import * as wasm from "@takumi-rs/wasm";
+import type * as WasmBindings from "@takumi-rs/wasm";
 import type * as WasmAutoBindings from "@takumi-rs/wasm/auto";
 import type * as WasmNextBindings from "@takumi-rs/wasm/next";
 
@@ -6,13 +6,13 @@ export type Imports = Awaited<ReturnType<typeof getImportsImpl>>;
 
 let importPromise: Promise<Imports> | null = null;
 
-export function getImports(module?: wasm.InitInput) {
+export function getImports(module?: WasmBindings.InitInput) {
   importPromise ??= getImportsImpl(module);
 
   return importPromise;
 }
 
-async function getImportsImpl(module?: wasm.InitInput) {
+async function getImportsImpl(module?: WasmBindings.InitInput) {
   if (module) {
     return initializeWasm(module);
   }
@@ -24,6 +24,13 @@ async function getImportsImpl(module?: wasm.InitInput) {
   try {
     return await import("@takumi-rs/core");
   } catch (error) {
+    if (isNodeEnvironment()) {
+      throw new Error(
+        "Failed to load @takumi-rs/core in Node.js runtime. Takumi requires the native napi-rs module in Node environments.",
+        { cause: error },
+      );
+    }
+
     console.warn(
       "Unable to import @takumi-rs/core. Falling back to auto-detection of WASM bindings.",
       {
@@ -36,12 +43,14 @@ async function getImportsImpl(module?: wasm.InitInput) {
 }
 
 type WasmModuleInput =
-  | wasm.InitInput
-  | { default: wasm.InitInput }
-  | Promise<wasm.InitInput | { default: wasm.InitInput }>
-  | (() => Promise<wasm.InitInput | { default: wasm.InitInput }>);
+  | WasmBindings.InitInput
+  | { default: WasmBindings.InitInput }
+  | Promise<WasmBindings.InitInput | { default: WasmBindings.InitInput }>
+  | (() => Promise<WasmBindings.InitInput | { default: WasmBindings.InitInput }>);
 
 async function initializeWasm(module?: WasmModuleInput) {
+  const wasmPath = "@takumi-rs/wasm";
+  const wasm = (await import(/* @vite-ignore */ wasmPath)) as typeof WasmBindings;
   const resolvedModule = typeof module === "function" ? await module() : await module;
   const wasmModule =
     resolvedModule !== undefined &&
@@ -132,4 +141,13 @@ function shouldSkipCoreImport() {
   }
 
   return false;
+}
+
+function isNodeEnvironment() {
+  return (
+    typeof process !== "undefined" &&
+    typeof process.versions === "object" &&
+    process.versions !== null &&
+    typeof process.versions.node === "string"
+  );
 }
