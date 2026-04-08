@@ -1,5 +1,14 @@
 # takumi-js
 
+## 1.0.0-rc.16
+
+### Patch Changes
+
+- d8e5e75: Set default `ImageResponse` format to png
+  - @takumi-rs/core@1.0.0-rc.16
+  - @takumi-rs/wasm@1.0.0-rc.16
+  - @takumi-rs/helpers@1.0.0-rc.16
+
 ## 1.0.0-rc.15
 
 ### Patch Changes
