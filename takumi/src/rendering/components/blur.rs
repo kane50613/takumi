@@ -355,23 +355,19 @@ fn upsample_rgba_bilinear(
 
 macro_rules! update_h_pixel {
   ($src:expr, $dst:expr, $sum:expr, $out:expr, $entering:expr, $leaving:expr, $mul:expr, $shift:expr) => {
-    if $sum[STRIDE - 1] == 0 && unsafe { *$src.get_unchecked($entering + STRIDE - 1) } == 0 {
+    if $sum[STRIDE - 1] == 0 && $src[$entering + STRIDE - 1] == 0 {
       for c in 0..STRIDE {
-        unsafe {
-          *$dst.get_unchecked_mut($out + c) = 0;
-          let entering = *$src.get_unchecked($entering + c) as u32;
-          let leaving = *$src.get_unchecked($leaving + c) as u32;
-          $sum[c] = $sum[c].saturating_add(entering).saturating_sub(leaving);
-        }
+        $dst[$out + c] = 0;
+        let entering = $src[$entering + c] as u32;
+        let leaving = $src[$leaving + c] as u32;
+        $sum[c] = $sum[c].saturating_add(entering).saturating_sub(leaving);
       }
     } else {
       for c in 0..STRIDE {
-        unsafe {
-          *$dst.get_unchecked_mut($out + c) = (($sum[c] * $mul) >> $shift) as u8;
-          let entering = *$src.get_unchecked($entering + c) as u32;
-          let leaving = *$src.get_unchecked($leaving + c) as u32;
-          $sum[c] = $sum[c].saturating_add(entering).saturating_sub(leaving);
-        }
+        $dst[$out + c] = (($sum[c] * $mul) >> $shift) as u8;
+        let entering = $src[$entering + c] as u32;
+        let leaving = $src[$leaving + c] as u32;
+        $sum[c] = $sum[c].saturating_add(entering).saturating_sub(leaving);
       }
     }
   };
@@ -396,14 +392,14 @@ fn box_blur_h<const STRIDE: usize>(src: &[u8], dst: &mut [u8], params: BlurPassP
 
     let first_px = line_offset;
     for c in 0..STRIDE {
-      sum[c] = unsafe { *src.get_unchecked(first_px + c) } as u32 * (radius as u32 + 1);
+      sum[c] = src[first_px + c] as u32 * (radius as u32 + 1);
     }
 
     for dx in 1..=radius {
       let px = dx.min(width - 1);
       let src_offset = line_offset + px * STRIDE;
       for c in 0..STRIDE {
-        sum[c] += unsafe { *src.get_unchecked(src_offset + c) } as u32;
+        sum[c] += src[src_offset + c] as u32;
       }
     }
 
@@ -462,18 +458,14 @@ fn box_blur_h<const STRIDE: usize>(src: &[u8], dst: &mut [u8], params: BlurPassP
 macro_rules! update_v_pixel {
   ($src:expr, $dst:expr, $sums:expr, $x:expr, $out:expr, $entering:expr, $leaving:expr, $mul:expr, $shift:expr) => {
     let sum = $sums[$x];
-    let entering = unsafe { *$src.get_unchecked($entering + $x) } as u32;
-    let leaving = unsafe { *$src.get_unchecked($leaving + $x) } as u32;
+    let entering = $src[$entering + $x] as u32;
+    let leaving = $src[$leaving + $x] as u32;
     if sum == 0 && entering == 0 {
-      unsafe {
-        *$dst.get_unchecked_mut($out + $x) = 0;
-        $sums[$x] = sum.saturating_add(entering).saturating_sub(leaving);
-      }
+      $dst[$out + $x] = 0;
+      $sums[$x] = sum.saturating_add(entering).saturating_sub(leaving);
     } else {
-      unsafe {
-        *$dst.get_unchecked_mut($out + $x) = ((sum * $mul) >> $shift) as u8;
-        $sums[$x] = sum.saturating_add(entering).saturating_sub(leaving);
-      }
+      $dst[$out + $x] = ((sum * $mul) >> $shift) as u8;
+      $sums[$x] = sum.saturating_add(entering).saturating_sub(leaving);
     }
   };
 }
@@ -493,7 +485,7 @@ fn box_blur_v(src: &[u8], dst: &mut [u8], params: BlurPassParams, sums: &mut [u3
 
   // Initialize sums with the first row repeated
   for x in 0..stride {
-    sums[x] = unsafe { *src.get_unchecked(x) } as u32 * (radius as u32 + 1);
+    sums[x] = src[x] as u32 * (radius as u32 + 1);
   }
 
   // Add trailing edge
@@ -501,7 +493,7 @@ fn box_blur_v(src: &[u8], dst: &mut [u8], params: BlurPassParams, sums: &mut [u3
     let py = dy.min(height - 1);
     let row_offset = py * stride;
     for x in 0..stride {
-      sums[x] += unsafe { *src.get_unchecked(row_offset + x) } as u32;
+      sums[x] += src[row_offset + x] as u32;
     }
   }
 

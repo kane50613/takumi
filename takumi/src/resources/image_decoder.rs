@@ -15,6 +15,7 @@ use libwebp_sys::{WebPDecodeRGBA, WebPFree};
 #[cfg(target_arch = "wasm32")]
 use image_webp::WebPDecoder;
 
+use crate::error::WebPError;
 use crate::rendering::premultiplied_pixmap_from_rgba;
 
 const PNG_SIGNATURE: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
@@ -152,17 +153,21 @@ fn decode_webp(bytes: &[u8]) -> ImageResult<Pixmap> {
   };
 
   if decoded_ptr.is_null() {
-    return Err(webp_decode_error(IoError::new(
-      ErrorKind::InvalidData,
-      "libwebp failed to decode image",
-    )));
+    return Err(webp_decode_error(WebPError::EncodeFailed));
   }
 
-  let pixel_count = width
-    .checked_mul(height)
+  if width <= 0 || height <= 0 {
+    unsafe {
+      WebPFree(decoded_ptr.cast());
+    }
+    return Err(webp_decode_error(WebPError::InvalidEncodedData));
+  }
+
+  let pixel_count = (width as usize)
+    .checked_mul(height as usize)
     .and_then(|pixels| pixels.checked_mul(4))
     .ok_or_else(invalid_buffer_error)?;
-  let buffer_len = usize::try_from(pixel_count).map_err(|_| invalid_buffer_error())?;
+  let buffer_len = pixel_count;
   let image_data = unsafe {
     // SAFETY: `decoded_ptr` points to a `buffer_len`-byte RGBA allocation returned by libwebp.
     let slice = std::slice::from_raw_parts(decoded_ptr, buffer_len);
