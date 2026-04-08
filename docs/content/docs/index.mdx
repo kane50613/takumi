@@ -1,37 +1,40 @@
 ---
 title: Introduction
-description: Learn about the core concepts and features of Takumi.
+description: A Rust rendering engine that converts JSX, HTML, and node trees into images. No headless browser required.
 icon: Axe
 ---
 
-Takumi is a image renderer written in Rust, with bindings for Node.js and Browser.
-It allows you to render templates to images, with support for custom fonts, dynamic data, and more.
+Takumi renders JSX, raw HTML, and structured node trees through a full CSS layout and compositing pipeline, then outputs PNG, JPEG, WebP, GIF, APNG, or raw video frames.
 
-This documentation covers the usage and features for JavaScript bindings. If you're looking for the low-level Rust APIs, check out the [Rust crate docs](https://docs.rs/takumi) instead.
+This documentation covers the JavaScript bindings (`takumi-js`). For the low-level Rust API, see the [crate docs on docs.rs](https://docs.rs/takumi).
 
 <Cards>
   <Card
     title="Playground"
     href="https://takumi.kane.tw/playground"
-    description="Try Takumi in your browser"
+    description="Try Takumi in your browser without any setup"
     icon={<Shovel />}
   />
   <Card
     title="Integration"
     href="/docs/integration"
-    description="How to use Takumi in your projects"
+    description="Add Takumi to Next.js, Cloudflare Workers, or any JS runtime"
     icon={<ToyBrick />}
   />
 </Cards>
 
-## Core Concepts
+## How It Works
 
-Rather than building a React-specific Satori clone, Takumi aims to be minimal in its core and framework-agnostic.
-Any template format (React JSX, raw HTML, JSON, Svelte, Vue, etc.) can be transformed into a unified [node tree](/docs/reference) that contains three types of nodes: container, image and text.
+Most image-generation solutions are either a headless Chromium instance eating 300 MB of RAM, or a minimal SVG-to-PNG renderer that falls apart the moment you need real CSS. Takumi is neither of those.
 
-Finally Takumi renders that tree to an image.
+It converts any template into a **node tree** with three node kinds: `container`, `image`, and `text`. That tree runs through:
 
-Besides a pure static image, Takumi also has a time axis, allowing you to render animations & GIFs at specific timestamps for GIFs or video encoding.
+1. **Layout** via [taffy](https://github.com/DioxusLabs/taffy): Flexbox, Grid, block, float, `calc()`, absolute positioning, z-index
+2. **Text shaping** via [parley](https://github.com/linebender/parley) and [skrifa](https://github.com/googlefonts/fontations/tree/main/skrifa): WOFF/WOFF2 fonts, emoji, RTL, multi-span inline blocks
+3. **Compositing**: stacking contexts, blend modes, filters, transforms, SVG via [resvg](https://github.com/linebender/resvg)
+4. **Output**: PNG, JPEG, WebP for statics; GIF, APNG, WebP for animations; raw RGBA frames for video pipelines
+
+A **time axis** threads through the pipeline. Animations, GIFs, and video frames are not a separate API. They're the same renderer called at timestamp `t`.
 
 ```mermaid
 flowchart LR
@@ -40,29 +43,39 @@ flowchart LR
     R[Resources] --> P
     D(Time Axis) -.-> P
 
-    F --> G[PNG/JPEG/WebP]
-    F --> H[GIFs]
-    F --> I[Videos]
+    F --> G[PNG / JPEG / WebP]
+    F --> H[GIF / APNG]
+    F --> I[Video frames]
 ```
 
 ## Features
 
 ### Advanced Layout
 
-Powered by Taffy for high-performance Flexbox, CSS Grid, and block layouts. It supports absolute positioning, z-index stacking, inline text spans, and nested inline blocks.
+Full **Flexbox, CSS Grid, block, and float** layout engine via [taffy](https://github.com/DioxusLabs/taffy). Supports `calc()`, absolute positioning, z-index stacking, inline text spans, and nested inline blocks.
 
 ### Typography
 
-Browser-grade text shaping and layout. Supports WOFF/WOFF2 fonts, emoji, and RTL languages out of the box.
+Browser-grade text shaping and rendering via [parley](https://github.com/linebender/parley), with glyph loading from [skrifa](https://github.com/googlefonts/fontations/tree/main/skrifa). Native support for WOFF and WOFF2 fonts, emoji, RTL languages, and multi-span inline blocks.
+
+### CSS & Tailwind
+
+A full-featured stylesheet engine: complex selectors, CSS variables, shorthand properties, arbitrary values, `@keyframes`, linear/radial gradients, `box-shadow`, `filter`, `backdrop-filter`, `mix-blend-mode`, and `transform`. Tailwind v4 is supported out of the box.
 
 ### Animations
 
-Parses CSS `@keyframes` and the `animation` shorthand property. Render animations and videos frame-by-frame with support for percentage offsets, timing functions (`linear`, `ease`, `steps`, custom `cubic-bezier`), delays, fill modes, and iteration counts. Includes built-in Tailwind presets like `spin`, `ping`, `pulse`, and `bounce`.
+Parse CSS `@keyframes` and the `animation` shorthand property. Render frame-by-frame with support for percentage, `from`, and `to` offsets; `linear`, `ease`, `steps()`, and `cubic-bezier()` timing functions; fill modes, delays, and iteration counts. Built-in Tailwind presets like `spin`, `ping`, `pulse`, and `bounce` work automatically.
 
-### Styling
+### SVG
 
-CSS stylesheet parsing and Tailwind v4 support. Handles arbitrary values, linear and radial gradients, box shadows, blend modes, transforms, filters, and complex CSS selectors.
+Full SVG parsing and rasterization via [resvg](https://github.com/linebender/resvg). Use inline SVG or reference external files.
 
 ### Flexible Runtime
 
-Deploy anywhere. Ships with optimized native bindings for Node.js (via N-API), WebAssembly for Edge environments (Cloudflare Workers, browsers), or embed the native Rust crate directly.
+Takumi runs everywhere without changing your code:
+
+| Target                           | Details                                            |
+| :------------------------------- | :------------------------------------------------- |
+| **Node.js**                      | Native N-API binary with Rayon multithreading      |
+| **Cloudflare Workers / Browser** | WebAssembly with SIMD optimization                 |
+| **Rust crate**                   | Embed `takumi` directly. Zero JS runtime required. |

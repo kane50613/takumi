@@ -3,22 +3,34 @@
 
 # Takumi
 
-**A Rust rendering engine for turning templates into images, with `next/og`-compatible APIs.**
+**A Rust rendering engine that turns JSX, HTML, and node trees into images. No headless browser required.**
 
-One engine for Node.js, Edge, browsers, or embed the Rust crate directly.
+Render OpenGraph cards, animated GIFs, and video frames at the speed of compiled Rust.
+Runs on Node.js, Cloudflare Workers, browsers, or directly as a Rust crate.
+Drop-in compatible with `next/og`.
 
 [Documentation](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground)
 
 </div>
 
-## Core Concepts
+## Why Takumi
 
-Rather than building a React-specific Satori clone, Takumi aims to be minimal in its core and framework-agnostic.
-Any template format that can be converted into Takumi's [node tree](https://takumi.kane.tw/docs/reference) can be rendered. The core node model has three node types: container, image, and text.
+Most image-generation solutions are either a headless Chromium instance eating 300 MB of RAM, or a minimal SVG-to-PNG renderer that falls apart the moment you need real CSS. Takumi is neither of those.
 
-Finally Takumi renders that tree to an image.
+It's a purpose-built Rust rendering pipeline: CSS parsing, layout, compositing, image output. No browser, no V8, no puppeteer. The same binary runs in a serverless edge function and a long-running Node.js server, and the same `takumi` crate embeds directly in any Rust application.
 
-Besides a pure static image, Takumi also has a time axis, allowing you to render animations & GIFs at specific timestamps for GIFs or video encoding.
+## Core Architecture
+
+Takumi converts any template into a **node tree** with three node kinds: `container`, `image`, and `text`. That tree runs through:
+
+1. **Layout** via [taffy](https://github.com/DioxusLabs/taffy): Flexbox, Grid, block, float, `calc()`, absolute positioning, z-index
+2. **Text shaping** via [parley](https://github.com/linebender/parley) and [skrifa](https://github.com/googlefonts/fontations/tree/main/skrifa): WOFF/WOFF2 fonts, emoji, RTL, multi-span inline blocks
+3. **Compositing**: stacking contexts, blend modes, filters, transforms, SVG via [resvg](https://github.com/linebender/resvg)
+4. **Output**: PNG, JPEG, WebP for statics; GIF, APNG, WebP for animations; raw RGBA frames for video pipelines
+
+Because the input contract is just a node tree, any template system that can serialize to HTML or JSON plugs in without glue code. React, Svelte, Vue, plain strings, or your own serializer in any language.
+
+A **time axis** threads through the pipeline. Animations, GIFs, and video frames are not a separate API. They're the same renderer called at timestamp `t`. CSS `@keyframes`, the `animation` shorthand, and Tailwind animation utilities (`animate-spin`, `animate-bounce`, arbitrary values) all resolve at render time.
 
 ```mermaid
 flowchart LR
@@ -27,32 +39,30 @@ flowchart LR
     R[Resources] --> P
     D(Time Axis) -.-> P
 
-    F --> G[PNG/JPEG/WebP]
-    F --> H[GIFs]
-    F --> I[Videos]
+    F --> G[PNG / JPEG / WebP]
+    F --> H[GIF / APNG]
+    F --> I[Video frames]
 ```
 
 ## Comparison
 
-Takumi brings a Satori-like developer experience to a unified Rust pipeline without headless browser dependencies.
+| Feature                 | `next/og` (Satori) |                              Takumi                               |
+| :---------------------- | :----------------: | :---------------------------------------------------------------: |
+| **Runtime**             |    Node / Edge     |          Node, Edge, CF Workers, Browser, **Rust crate**          |
+| **Template input**      |    JSX / React     | JSX, HTML strings, JSON node trees, **any language or framework** |
+| **CSS subset**          |   Tailwind / CSS   |                       **Tailwind v4 / CSS**                       |
+| **Selectors**           |      Limited       |                       **Complex selectors**                       |
+| **Animated output**     |         ✗          |               **WebP / APNG / GIF / Video frames**                |
+| **Headless browser**    |         ✗          |                                 ✗                                 |
+| **`ImageResponse` API** |     ✅ Native      |                         ✅ **Compatible**                         |
 
-| Feature             | `next/og` (Satori)  |                        `Takumi`                         |
-| :------------------ | :-----------------: | :-----------------------------------------------------: |
-| **Runtime**         |      Node/Edge      | Node, Edge, Cloudflare Workers, Browser, **Rust crate** |
-| **Styling**         | Tailwind/CSS subset |                 **Tailwind/CSS subset**                 |
-| **Template Input**  | JSX/React elements  |     **JSX/React elements**, HTML strings, node tree     |
-| **ImageResponse**   |       Native        |          ✅ **Compatible constructor/options**          |
-| **Animated Output** |         N/A         |               **WebP / APNG / GIF** APIs                |
-
-## Quick start
-
-### Install
+## Quick Start
 
 ```bash
 bun i takumi-js
 ```
 
-### `render()`
+### Static image
 
 ```tsx
 import { render } from "takumi-js";
@@ -68,7 +78,7 @@ const image = await render(
 await writeFile("./output.png", image);
 ```
 
-### `new ImageResponse()`
+### API route (`next/og`-compatible)
 
 ```tsx
 import { ImageResponse } from "takumi-js/response";
@@ -83,6 +93,33 @@ export function GET() {
 }
 ```
 
+### Animated WebP
+
+```tsx
+import { Renderer } from "takumi-js/node";
+import { fromJsx } from "takumi-js/helpers/jsx";
+import { writeFile } from "node:fs/promises";
+
+const renderer = new Renderer();
+
+const { node, stylesheets } = await fromJsx(
+  <div tw="w-full h-full flex items-center justify-center">
+    <div tw="w-32 h-32 bg-blue-500 animate-spin rounded-lg" />
+  </div>,
+);
+
+const animation = await renderer.renderAnimation({
+  width: 400,
+  height: 400,
+  fps: 30,
+  format: "webp",
+  stylesheets,
+  scenes: [{ durationMs: 1000, node }],
+});
+
+await writeFile("./output.webp", animation);
+```
+
 ## Showcase
 
 |                                 Takumi OG image [(source)](./example/twitter-images/components/og-image.tsx)                                 |                Package OG card [(source)](./example/twitter-images/components/package-og-image.tsx)                 |
@@ -93,11 +130,15 @@ export function GET() {
 |                             **Keyframe Animation** [(source)](./example/ffmpeg-keyframe-animation/src/index.tsx)                             |                                **[shiki-image](https://github.com/pi0/shiki-image)**                                |
 | [![Keyframe Animation](./example/ffmpeg-keyframe-animation/output/thumbnail.webp)](./example/ffmpeg-keyframe-animation/output/animation.mp4) | ![Shiki Image Example](https://raw.githubusercontent.com/pi0/shiki-image/refs/heads/main/test/.snapshot/image.webp) |
 
+**More examples:** [Next.js](./example/nextjs), [Cloudflare Workers](./example/cloudflare-workers), [TanStack Start](./example/tanstack-start), [Svelte](./example/svelte), [Rust](./example/rust), [ffmpeg keyframe animation](./example/ffmpeg-keyframe-animation)
+
 - [(Unofficial) Takumi Playground](https://takumi-playground.kapadiya.net/)
 
 ## Contributing
 
-Read [CONTRIBUTING.md](./CONTRIBUTING.md).
+Read [CONTRIBUTING.md](./CONTRIBUTING.md). Covers local setup, test commands, fixture workflow, and changeset process.
+
+We welcome bug reports, feature requests, doc improvements, and new example integrations.
 
 ## License
 
