@@ -445,35 +445,6 @@ fn set_sat(mut color: [f32; 3], saturation: f32) -> [f32; 3] {
   color
 }
 
-#[cfg(test)]
-mod tests {
-  use image::Rgba;
-
-  use crate::{layout::style::BlendMode, rendering::blend::blend_pixel};
-
-  // https://github.com/kane50613/takumi/issues/447
-  #[test]
-  fn plus_lighter_issue_447() {
-    let mut bottom = Rgba([0xF5, 0xB1, 0x2D, 0xFF]);
-    let top = Rgba([0xFF, 0xFF, 0xFF, 0x7F]);
-
-    blend_pixel(&mut bottom, top, BlendMode::PlusLighter);
-
-    assert_eq!(bottom, Rgba([0xFF, 0xFF, 0xAC, 0xFF]));
-  }
-
-  // https://github.com/kane50613/takumi/issues/501
-  #[test]
-  fn plus_darker_issue_501() {
-    let mut bottom = Rgba([0x96, 0x77, 0x00, 0xFF]);
-    let top = Rgba([0xFF, 0xFF, 0xFF, 0xFF]);
-
-    blend_pixel(&mut bottom, top, BlendMode::PlusDarker);
-
-    assert_eq!(bottom, Rgba([0x96, 0x77, 0x00, 0xFF]));
-  }
-}
-
 const DEMUL: [f32; 256] = {
   let mut t = [0.0f32; 256];
   let mut i = 1usize;
@@ -663,5 +634,34 @@ pub(crate) fn composite_repeated_premultiplied_pixel_normal(
     );
   } else {
     blend_repeated_premultiplied_pixel(dst, pixel);
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use image::Rgba;
+
+  use crate::{layout::style::BlendMode, rendering::blend::blend_pixel};
+
+  // https://github.com/kane50613/takumi/issues/447
+  #[test]
+  fn plus_lighter_issue_447() {
+    let mut bottom = Rgba([0xF5, 0xB1, 0x2D, 0xFF]);
+    let top = Rgba([0xFF, 0xFF, 0xFF, 0x7F]);
+
+    blend_pixel(&mut bottom, top, BlendMode::PlusLighter);
+
+    assert_eq!(bottom, Rgba([0xFF, 0xFF, 0xAC, 0xFF]));
+  }
+
+  // https://github.com/kane50613/takumi/issues/501
+  #[test]
+  fn plus_darker_issue_501() {
+    let mut bottom = Rgba([0x96, 0x77, 0x00, 0xFF]);
+    let top = Rgba([0xFF, 0xFF, 0xFF, 0xFF]);
+
+    blend_pixel(&mut bottom, top, BlendMode::PlusDarker);
+
+    assert_eq!(bottom, Rgba([0x96, 0x77, 0x00, 0xFF]));
   }
 }
