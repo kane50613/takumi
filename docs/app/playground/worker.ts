@@ -9,8 +9,8 @@ import { messageSchema, optionsSchema, type RenderMessageInput } from "./schema"
 
 const fetchCache = new Map<string, ArrayBuffer>();
 
-function postMessage(message: RenderMessageInput) {
-  return self.postMessage(message);
+function postMessage(message: RenderMessageInput, transfer?: Transferable[]) {
+  return self.postMessage(message, { transfer });
 }
 
 const exportsSchema = z.object({
@@ -67,11 +67,11 @@ self.onmessage = async (event: MessageEvent) => {
         const start = performance.now();
         const effectiveStylesheets = options.stylesheets ?? stylesheets;
         const animationOptions = options.animation;
-        const outputUrl = animationOptions
+        const outputBuffer = animationOptions
           ? (() => {
               const format = animationOptions.format ?? "webp";
               const fps = animationOptions.fps ?? 30;
-              const bytes = renderer.renderAnimation({
+              return renderer.renderAnimation({
                 scenes: [
                   {
                     node,
@@ -87,30 +87,29 @@ self.onmessage = async (event: MessageEvent) => {
                 stylesheets: effectiveStylesheets,
                 fps,
               });
-
-              return URL.createObjectURL(
-                new Blob([bytes as BlobPart], { type: `image/${format}` }),
-              );
             })()
-          : renderer.renderAsDataUrl(node, {
+          : renderer.render(node, {
               ...options,
               stylesheets: effectiveStylesheets,
               fetchedResources,
             });
         const duration = performance.now() - start;
 
-        postMessage({
-          type: "render-result",
-          result: {
-            status: "success",
-            id: payload.id,
-            outputUrl,
-            duration,
-            node,
-            outputFormat: animationOptions?.format ?? options.format ?? "png",
-            options,
+        postMessage(
+          {
+            type: "render-result",
+            result: {
+              status: "success",
+              id: payload.id,
+              outputBuffer,
+              duration,
+              node,
+              outputFormat: animationOptions?.format ?? options.format ?? "png",
+              options,
+            },
           },
-        });
+          [outputBuffer.buffer],
+        );
       } catch (error) {
         postMessage({
           type: "render-result",

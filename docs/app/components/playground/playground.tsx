@@ -31,8 +31,8 @@ import { ComponentEditor } from "./component-editor";
 
 const DEFAULT_TEMPLATE = templates[0];
 
-function isBlobUrl(url: string) {
-  return url.startsWith("blob:");
+function isBlobUrl(url: string | undefined): url is string {
+  return typeof url === "string" && url.startsWith("blob:");
 }
 
 export default function Playground() {
@@ -133,9 +133,17 @@ export default function Playground() {
           throw new Error("request is not possible for response");
         }
         case "render-result": {
+          if (message.result.status === "success") {
+            message.result.outputUrl = URL.createObjectURL(
+              new Blob([message.result.outputBuffer as BlobPart], {
+                type: `image/${message.result.outputFormat}`,
+              }),
+            );
+          }
+
           if (message.result.id === currentRequestIdRef.current) {
             setRendered(message.result);
-          } else if (message.result.status === "success" && isBlobUrl(message.result.outputUrl)) {
+          } else if (message.result.status === "success" && message.result.outputUrl) {
             URL.revokeObjectURL(message.result.outputUrl);
           }
           break;
@@ -177,7 +185,9 @@ export default function Playground() {
     }
 
     return () => {
-      URL.revokeObjectURL(rendered.outputUrl);
+      if (rendered.outputUrl) {
+        URL.revokeObjectURL(rendered.outputUrl);
+      }
     };
   }, [rendered]);
 
@@ -513,12 +523,14 @@ function RenderPreview({ result }: { result: z.infer<typeof renderResultSchema>[
           size="sm"
           className="h-9 rounded-full bg-zinc-100 px-4! font-semibold text-zinc-900 shadow-lg transition-transform hover:scale-105 hover:bg-white active:scale-95"
           onClick={() => {
-            const link = document.createElement("a");
-            link.href = result.outputUrl;
-            link.download = `takumi-image.${result.outputFormat}`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            if (result.outputUrl) {
+              const link = document.createElement("a");
+              link.href = result.outputUrl;
+              link.download = `takumi-image.${result.outputFormat}`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }
           }}
         >
           <DownloadIcon className="h-3.5 w-3.5" />

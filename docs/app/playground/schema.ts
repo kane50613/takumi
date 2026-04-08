@@ -20,7 +20,8 @@ export const optionsSchema = z.object({
 const renderSuccessSchema = z.object({
   status: z.literal("success"),
   id: z.int().check(z.positive(), z.minimum(1)),
-  outputUrl: z.string(),
+  outputBuffer: z.any(),
+  outputUrl: z.optional(z.string()),
   duration: z.number(),
   node: z.unknown(),
   outputFormat: z.string(),
