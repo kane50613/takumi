@@ -1,4 +1,5 @@
 use image::Rgba;
+use tiny_skia::PremultipliedColorU8;
 
 use crate::{
   layout::style::BlendMode,
@@ -470,5 +471,197 @@ mod tests {
     blend_pixel(&mut bottom, top, BlendMode::PlusDarker);
 
     assert_eq!(bottom, Rgba([0x96, 0x77, 0x00, 0xFF]));
+  }
+}
+
+const DEMUL: [f32; 256] = {
+  let mut t = [0.0f32; 256];
+  let mut i = 1usize;
+  while i < 256 {
+    t[i] = 255.0 / i as f32;
+    i += 1;
+  }
+  t
+};
+
+#[inline(always)]
+pub(crate) fn premultiply_rgba_pixel(red: u8, green: u8, blue: u8, alpha: u8) -> [u8; 4] {
+  [
+    fast_div_255(red as u32 * alpha as u32),
+    fast_div_255(green as u32 * alpha as u32),
+    fast_div_255(blue as u32 * alpha as u32),
+    alpha,
+  ]
+}
+
+#[inline(always)]
+pub(crate) fn premultiply_rgba(color: Rgba<u8>) -> [u8; 4] {
+  let [red, green, blue, alpha] = color.0;
+  premultiply_rgba_pixel(red, green, blue, alpha)
+}
+
+#[inline(always)]
+pub(crate) fn premultiplied_from_pixel(pixel: PremultipliedColorU8) -> [u8; 4] {
+  [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]
+}
+
+#[inline(always)]
+pub(crate) fn scale_premultiplied_pixel(pixel: [u8; 4], alpha: u8) -> [u8; 4] {
+  if alpha == u8::MAX {
+    return pixel;
+  }
+
+  [
+    fast_div_255(pixel[0] as u32 * alpha as u32),
+    fast_div_255(pixel[1] as u32 * alpha as u32),
+    fast_div_255(pixel[2] as u32 * alpha as u32),
+    fast_div_255(pixel[3] as u32 * alpha as u32),
+  ]
+}
+
+#[inline(always)]
+pub(crate) fn composite_premultiplied_over(dst: &mut [u8; 4], src: [u8; 4]) {
+  let src_alpha = src[3];
+  if src_alpha == 0 {
+    return;
+  }
+
+  let dst_alpha = dst[3];
+  if src_alpha == u8::MAX || dst_alpha == 0 {
+    *dst = src;
+    return;
+  }
+
+  let inverse_alpha = u8::MAX - src_alpha;
+  dst[0] = src[0].saturating_add(fast_div_255(dst[0] as u32 * inverse_alpha as u32));
+  dst[1] = src[1].saturating_add(fast_div_255(dst[1] as u32 * inverse_alpha as u32));
+  dst[2] = src[2].saturating_add(fast_div_255(dst[2] as u32 * inverse_alpha as u32));
+  dst[3] = src_alpha.saturating_add(fast_div_255(dst_alpha as u32 * inverse_alpha as u32));
+}
+
+#[inline(always)]
+pub(crate) fn blend_premultiplied_pixel(dst: &mut [u8; 4], src: [u8; 4], mode: BlendMode) {
+  if src[3] == 0 {
+    return;
+  }
+
+  if mode == BlendMode::Normal {
+    composite_premultiplied_over(dst, src);
+    return;
+  }
+
+  if src[3] == u8::MAX && dst[3] == u8::MAX {
+    let mut current = Rgba(*dst);
+    let color = Rgba(src);
+    blend_pixel(&mut current, color, mode);
+    *dst = current.0;
+    return;
+  }
+
+  let dst_a = dst[3];
+  let mut current = if dst_a == 0 {
+    Rgba([0, 0, 0, 0])
+  } else if dst_a == u8::MAX {
+    Rgba([dst[0], dst[1], dst[2], dst_a])
+  } else {
+    let inv = DEMUL[dst_a as usize];
+    Rgba([
+      (dst[0] as f32 * inv + 0.5) as u8,
+      (dst[1] as f32 * inv + 0.5) as u8,
+      (dst[2] as f32 * inv + 0.5) as u8,
+      dst_a,
+    ])
+  };
+
+  let src_a = src[3];
+  let color = if src_a == 0 {
+    Rgba([0, 0, 0, 0])
+  } else if src_a == u8::MAX {
+    Rgba([src[0], src[1], src[2], src_a])
+  } else {
+    let inv = DEMUL[src_a as usize];
+    Rgba([
+      (src[0] as f32 * inv + 0.5) as u8,
+      (src[1] as f32 * inv + 0.5) as u8,
+      (src[2] as f32 * inv + 0.5) as u8,
+      src_a,
+    ])
+  };
+
+  blend_pixel(&mut current, color, mode);
+  *dst = premultiply_rgba(current);
+}
+
+#[inline(always)]
+pub(crate) fn blend_premultiplied_pixel_normal(dst: &mut [u8], src: PremultipliedColorU8) {
+  let src_a = src.alpha();
+  if src_a == 0 {
+    return;
+  }
+
+  if src_a == u8::MAX {
+    dst[0] = src.red();
+    dst[1] = src.green();
+    dst[2] = src.blue();
+    dst[3] = src_a;
+    return;
+  }
+
+  let inv_src_a = u8::MAX - src_a;
+  dst[0] = src
+    .red()
+    .saturating_add(fast_div_255(dst[0] as u32 * inv_src_a as u32));
+  dst[1] = src
+    .green()
+    .saturating_add(fast_div_255(dst[1] as u32 * inv_src_a as u32));
+  dst[2] = src
+    .blue()
+    .saturating_add(fast_div_255(dst[2] as u32 * inv_src_a as u32));
+  dst[3] = src_a.saturating_add(fast_div_255(dst[3] as u32 * inv_src_a as u32));
+}
+
+pub(crate) fn composite_premultiplied_over_span(dst: &mut [u8], pixels: &[PremultipliedColorU8]) {
+  for (dst_pixel, src_pixel) in dst.chunks_exact_mut(4).zip(pixels) {
+    let src_a = src_pixel.alpha();
+    let inv_src_a = (u8::MAX - src_a) as u32;
+    dst_pixel[0] = src_pixel
+      .red()
+      .saturating_add(fast_div_255(dst_pixel[0] as u32 * inv_src_a));
+    dst_pixel[1] = src_pixel
+      .green()
+      .saturating_add(fast_div_255(dst_pixel[1] as u32 * inv_src_a));
+    dst_pixel[2] = src_pixel
+      .blue()
+      .saturating_add(fast_div_255(dst_pixel[2] as u32 * inv_src_a));
+    dst_pixel[3] = src_a.saturating_add(fast_div_255(dst_pixel[3] as u32 * inv_src_a));
+  }
+}
+
+pub(crate) fn fill_repeated_premultiplied_pixel(dst: &mut [u8], pixel: [u8; 4]) {
+  bytemuck::cast_slice_mut::<u8, [u8; 4]>(dst).fill(pixel);
+}
+
+pub(crate) fn blend_repeated_premultiplied_pixel(dst: &mut [u8], pixel: PremultipliedColorU8) {
+  for dst_pixel in dst.chunks_exact_mut(4) {
+    blend_premultiplied_pixel_normal(dst_pixel, pixel);
+  }
+}
+
+pub(crate) fn composite_repeated_premultiplied_pixel_normal(
+  dst: &mut [u8],
+  pixel: PremultipliedColorU8,
+) {
+  let alpha = pixel.alpha();
+  if alpha == 0 {
+    return;
+  }
+
+  if alpha == u8::MAX {
+    fill_repeated_premultiplied_pixel(
+      dst,
+      [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()],
+    );
+  } else {
+    blend_repeated_premultiplied_pixel(dst, pixel);
   }
 }

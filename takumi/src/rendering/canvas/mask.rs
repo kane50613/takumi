@@ -280,14 +280,13 @@ fn copy_mask_into_canvas(
 
   let stride = canvas_mask.width() as usize;
   let data = canvas_mask.data_mut();
+  let copy_width = (end_x - start_x) as usize;
   for global_y in start_y..end_y {
     let src_y = (global_y - placement.top) as usize;
-    let canvas_row = (global_y - canvas_top) as usize * stride;
-    let src_row = src_y * placement.width as usize;
-    for global_x in start_x..end_x {
-      let src_x = (global_x - placement.left) as usize;
-      data[canvas_row + (global_x - canvas_left) as usize] = mask[src_row + src_x];
-    }
+    let dst_start = (global_y - canvas_top) as usize * stride + (start_x - canvas_left) as usize;
+    let src_start = src_y * placement.width as usize + (start_x - placement.left) as usize;
+    data[dst_start..dst_start + copy_width]
+      .copy_from_slice(&mask[src_start..src_start + copy_width]);
   }
 }
 

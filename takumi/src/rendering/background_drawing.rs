@@ -75,14 +75,9 @@ fn rasterize_tile(tile: BackgroundTile, buffer_pool: &mut BufferPool) -> Result<
   let mut data = buffer_pool.acquire_dirty((width * height * 4) as usize);
 
   for y in 0..height {
-    for x in 0..width {
-      let pixel = tile.get_pixel(x, y);
-      let offset = ((y * width + x) * 4) as usize;
-      data[offset] = pixel.red();
-      data[offset + 1] = pixel.green();
-      data[offset + 2] = pixel.blue();
-      data[offset + 3] = pixel.alpha();
-    }
+    let row_offset = (y * width * 4) as usize;
+    let dst_row = &mut data[row_offset..row_offset + (width * 4) as usize];
+    tile.rasterize_row(y, width, dst_row);
   }
 
   let Some(pixmap) = Pixmap::from_vec(data, size) else {
@@ -315,6 +310,67 @@ impl BackgroundTile {
         }
       }
       Self::Color(t) => t.get_pixel(x, y),
+    }
+  }
+
+  pub(crate) fn rasterize_row(&self, y: u32, width: u32, dst: &mut [u8]) {
+    debug_assert_eq!(dst.len(), (width * 4) as usize);
+    match self {
+      Self::Linear(t) => {
+        for (x, chunk) in dst.chunks_exact_mut(4).enumerate() {
+          let p = t.sample_pixel(x as u32, y);
+          chunk[0] = p.red();
+          chunk[1] = p.green();
+          chunk[2] = p.blue();
+          chunk[3] = p.alpha();
+        }
+      }
+      Self::Radial(t) => {
+        for (x, chunk) in dst.chunks_exact_mut(4).enumerate() {
+          let p = t.sample_pixel(x as u32, y);
+          chunk[0] = p.red();
+          chunk[1] = p.green();
+          chunk[2] = p.blue();
+          chunk[3] = p.alpha();
+        }
+      }
+      Self::Conic(t) => {
+        for (x, chunk) in dst.chunks_exact_mut(4).enumerate() {
+          let p = t.sample_pixel(x as u32, y);
+          chunk[0] = p.red();
+          chunk[1] = p.green();
+          chunk[2] = p.blue();
+          chunk[3] = p.alpha();
+        }
+      }
+      Self::Pixmap(t) => {
+        let ps = PaintSource::from(t.as_ref());
+        for (x, chunk) in dst.chunks_exact_mut(4).enumerate() {
+          let p = ps.get_pixel(x as u32, y);
+          chunk[0] = p.red();
+          chunk[1] = p.green();
+          chunk[2] = p.blue();
+          chunk[3] = p.alpha();
+        }
+      }
+      Self::SampledBitmap { source: _, .. } => {
+        for (x, chunk) in dst.chunks_exact_mut(4).enumerate() {
+          let p = self.get_pixel(x as u32, y);
+          chunk[0] = p.red();
+          chunk[1] = p.green();
+          chunk[2] = p.blue();
+          chunk[3] = p.alpha();
+        }
+      }
+      Self::Color(t) => {
+        for (x, chunk) in dst.chunks_exact_mut(4).enumerate() {
+          let p = t.get_pixel(x as u32, y);
+          chunk[0] = p.red();
+          chunk[1] = p.green();
+          chunk[2] = p.blue();
+          chunk[3] = p.alpha();
+        }
+      }
     }
   }
 

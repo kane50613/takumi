@@ -5,7 +5,8 @@ use crate::{
   rendering::{BackgroundTile, ColorTile},
 };
 
-use super::{BufferPool, blend::premultiplied_from_pixel};
+use super::BufferPool;
+use crate::rendering::blend::premultiplied_from_pixel;
 
 #[derive(Clone, Copy)]
 pub(crate) enum PaintSource<'a> {

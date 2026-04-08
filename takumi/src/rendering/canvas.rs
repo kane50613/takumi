@@ -3,7 +3,6 @@
 //! This module provides performance-optimized canvas operations including
 //! fast image blending and pixel manipulation operations.
 
-mod blend;
 mod buffer_pool;
 mod mask;
 mod paint_source;
@@ -18,13 +17,11 @@ use taffy::{Point, Size};
 use tiny_skia::{
   FillRule as TinyFillRule, FilterQuality as TinyFilterQuality, Mask as TinyMask,
   Paint as TinyPaint, Path as TinyPath, Pattern as TinyPattern, Pixmap, PixmapMut, PixmapPaint,
-  PixmapRef, PremultipliedColorU8, SpreadMode as TinySpreadMode, Transform as TinyTransform,
+  PixmapRef, SpreadMode as TinySpreadMode, Transform as TinyTransform,
 };
 
-use self::{
-  blend::*,
-  paint_source::{MaskCompositeColor, apply_mask_color_mode, sample_paint_source},
-};
+use self::paint_source::{MaskCompositeColor, apply_mask_color_mode, sample_paint_source};
+use super::blend::*;
 use super::stacking_context::blend_pixmap_software;
 use crate::{
   Result,
@@ -32,18 +29,12 @@ use crate::{
     Affine, BlendMode, GradientOverlayTile, ImageScalingAlgorithm, LinearGradientFastPathKind,
     LinearGradientTile, RadialGradientTile, overlay_gradient_tile_fast_normal_unconstrained,
   },
-  rendering::{BackgroundTile, BorderProperties, ColorTile, Placement, build_path, fast_div_255},
+  rendering::{BackgroundTile, BorderProperties, ColorTile, Placement, build_path},
 };
 
 pub(crate) use buffer_pool::BufferPool;
 pub(crate) use mask::{CanvasViewport, NodeMaskAction, prepare_node_mask, render_mask};
 pub(crate) use paint_source::{PaintSource, interpolate_bilinear, interpolate_nearest};
-
-#[inline(always)]
-pub(crate) fn premultiplied_to_rgba(pixel: PremultipliedColorU8) -> Rgba<u8> {
-  let color = pixel.demultiply();
-  Rgba([color.red(), color.green(), color.blue(), color.alpha()])
-}
 
 #[derive(Clone, Copy)]
 pub(crate) struct SamplingOptions {
@@ -249,12 +240,11 @@ impl Canvas {
     })
   }
 
-  pub(crate) fn recycle_offscreen_image(&mut self, mut image: Pixmap) {
+  pub(crate) fn recycle_offscreen_image(&mut self, image: Pixmap) {
     const MAX_OFFSCREEN_POOL: usize = 8;
     if self.offscreen_pool.len() >= MAX_OFFSCREEN_POOL {
       return;
     }
-    image.data_mut().fill(0);
     self.offscreen_pool.push(image);
   }
 
@@ -499,12 +489,12 @@ impl Canvas {
   fn build_constraint_mask(&self, mask: &TinyMask) -> Option<TinyMask> {
     let mut combined = TinyMask::new(mask.width(), mask.height())?;
     if let Some(previous) = self.constraint_mask_stack.last().and_then(Option::as_ref) {
-      for (dst, (left, right)) in combined
+      for (dst, (&left, &right)) in combined
         .data_mut()
         .iter_mut()
         .zip(previous.data().iter().zip(mask.data().iter()))
       {
-        *dst = fast_div_255(*left as u32 * *right as u32);
+        *dst = ((left as u16 * right as u16 + 128) >> 8) as u8;
       }
     } else {
       combined.data_mut().copy_from_slice(mask.data());
@@ -622,79 +612,14 @@ fn compute_overlay_bounds_for_canvas(
 
 #[inline(always)]
 fn sample_pixmap_nearest(source: PixmapRef<'_>, x: f32, y: f32) -> Option<[u8; 4]> {
-  let width = source.width();
-  let height = source.height();
-  if width == 0 || height == 0 {
-    return None;
-  }
-
-  let px = x.floor().max(0.0) as u32;
-  let py = y.floor().max(0.0) as u32;
-  let px = px.min(width.saturating_sub(1));
-  let py = py.min(height.saturating_sub(1));
-  let pixel = source.pixels()[(py * width + px) as usize];
-  Some([pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()])
+  interpolate_nearest(PaintSource::Pixmap(source), x, y)
+    .map(|p| [p.red(), p.green(), p.blue(), p.alpha()])
 }
 
 #[inline(always)]
 fn sample_pixmap_bilinear(source: PixmapRef<'_>, x: f32, y: f32) -> Option<[u8; 4]> {
-  let width = source.width();
-  let height = source.height();
-  if width == 0 || height == 0 {
-    return None;
-  }
-
-  let x = (x - 0.5).clamp(0.0, width.saturating_sub(1) as f32);
-  let y = (y - 0.5).clamp(0.0, height.saturating_sub(1) as f32);
-  let uf = x.floor() as u32;
-  let vf = y.floor() as u32;
-  let uc = (uf + 1).min(width.saturating_sub(1));
-  let vc = (vf + 1).min(height.saturating_sub(1));
-  let pixels = source.pixels();
-  let p00 = pixels[(vf * width + uf) as usize];
-  if uf == uc && vf == vc {
-    return Some([p00.red(), p00.green(), p00.blue(), p00.alpha()]);
-  }
-
-  let u_ratio = ((x - uf as f32) * 256.0) as u32;
-  let v_ratio = ((y - vf as f32) * 256.0) as u32;
-  if u_ratio == 0 && v_ratio == 0 {
-    return Some([p00.red(), p00.green(), p00.blue(), p00.alpha()]);
-  }
-
-  let p01 = pixels[(vc * width + uf) as usize];
-  let p10 = pixels[(vf * width + uc) as usize];
-  let p11 = pixels[(vc * width + uc) as usize];
-
-  let u_opposite = 256 - u_ratio;
-  let v_opposite = 256 - v_ratio;
-  let w00 = u_opposite * v_opposite;
-  let w01 = u_opposite * v_ratio;
-  let w10 = u_ratio * v_opposite;
-  let w11 = u_ratio * v_ratio;
-
-  Some([
-    ((p00.red() as u32 * w00
-      + p10.red() as u32 * w10
-      + p01.red() as u32 * w01
-      + p11.red() as u32 * w11)
-      >> 16) as u8,
-    ((p00.green() as u32 * w00
-      + p10.green() as u32 * w10
-      + p01.green() as u32 * w01
-      + p11.green() as u32 * w11)
-      >> 16) as u8,
-    ((p00.blue() as u32 * w00
-      + p10.blue() as u32 * w10
-      + p01.blue() as u32 * w01
-      + p11.blue() as u32 * w11)
-      >> 16) as u8,
-    ((p00.alpha() as u32 * w00
-      + p10.alpha() as u32 * w10
-      + p01.alpha() as u32 * w01
-      + p11.alpha() as u32 * w11)
-      >> 16) as u8,
-  ])
+  interpolate_bilinear(PaintSource::Pixmap(source), x, y)
+    .map(|p| [p.red(), p.green(), p.blue(), p.alpha()])
 }
 
 fn blit_sampled_paint_source_translation(
@@ -815,18 +740,18 @@ fn blit_paint_source_translation(
 
       for dest_y in dest_y_min..dest_y_max {
         let src_y = (dest_y - offset_y) as u32;
+        let dst_row = dest_y as usize * canvas_width as usize;
+        let src_row = src_y as usize * source_width as usize;
         for dest_x in dest_x_min..dest_x_max {
           let src_x = (dest_x - offset_x) as u32;
-          let mut src =
-            premultiplied_from_pixel(source_pixels[(src_y * source_width + src_x) as usize]);
+          let mut src = premultiplied_from_pixel(source_pixels[src_row + src_x as usize]);
           if src[3] == 0 {
             continue;
           }
 
           let dest_x = dest_x as u32;
-          let dest_y = dest_y as u32;
           if let Some(mask_data) = mask_data {
-            let alpha = mask_data[mask_index_from_coord(dest_x, dest_y, canvas_width)];
+            let alpha = mask_data[dst_row + dest_x as usize];
             if alpha == 0 {
               continue;
             }
@@ -836,14 +761,14 @@ fn blit_paint_source_translation(
             }
           }
 
-          let index = (dest_y * canvas_width + dest_x) as usize;
-          blend_premultiplied_pixel(&mut pixels[index], src, mode);
+          blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
         }
       }
     }
     _ => {
       for dest_y in dest_y_min..dest_y_max {
         let src_y = (dest_y - offset_y) as f32;
+        let dst_row = dest_y as usize * canvas_width as usize;
         for dest_x in dest_x_min..dest_x_max {
           let src_x = (dest_x - offset_x) as f32;
           let mut src = sample_paint_source(source, ImageScalingAlgorithm::Pixelated, src_x, src_y)
@@ -853,9 +778,8 @@ fn blit_paint_source_translation(
           }
 
           let dest_x = dest_x as u32;
-          let dest_y = dest_y as u32;
           if let Some(mask_data) = mask_data {
-            let alpha = mask_data[mask_index_from_coord(dest_x, dest_y, canvas_width)];
+            let alpha = mask_data[dst_row + dest_x as usize];
             if alpha == 0 {
               continue;
             }
@@ -865,8 +789,7 @@ fn blit_paint_source_translation(
             }
           }
 
-          let index = (dest_y * canvas_width + dest_x) as usize;
-          blend_premultiplied_pixel(&mut pixels[index], src, mode);
+          blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
         }
       }
     }
@@ -925,12 +848,12 @@ fn blit_solid_translation(
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(data);
   let mask_data = combined_mask.map(TinyMask::data);
   for dest_y in dest_y_min..dest_y_max {
+    let dst_row = dest_y as usize * canvas_width as usize;
     for dest_x in dest_x_min..dest_x_max {
       let mut src = color;
       let dest_x = dest_x as u32;
-      let dest_y = dest_y as u32;
       if let Some(mask_data) = mask_data {
-        let alpha = mask_data[mask_index_from_coord(dest_x, dest_y, canvas_width)];
+        let alpha = mask_data[dst_row + dest_x as usize];
         if alpha == 0 {
           continue;
         }
@@ -940,8 +863,7 @@ fn blit_solid_translation(
         }
       }
 
-      let index = (dest_y * canvas_width + dest_x) as usize;
-      blend_premultiplied_pixel(&mut pixels[index], src, mode);
+      blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
     }
   }
 }
@@ -977,11 +899,38 @@ fn composite_masked_constant(
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
   let mask_data = combined_mask.map(TinyMask::data);
+
+  if mode == BlendMode::Normal && mask_data.is_none() {
+    for dest_y in dest_y_min..dest_y_max {
+      let mask_y = (dest_y - offset_y) as u32;
+      let dst_row = dest_y as usize * canvas_width as usize;
+      let mask_row = mask_y as usize * placement.width as usize;
+      let start_x = dest_x_min as usize;
+      let end_x = dest_x_max as usize;
+      let start_m = (dest_x_min - offset_x) as usize;
+      let end_m = (dest_x_max - offset_x) as usize;
+
+      let dst_slice = &mut pixels[dst_row + start_x..dst_row + end_x];
+      let mask_slice = &mask[mask_row + start_m..mask_row + end_m];
+      for (dst, &alpha) in dst_slice.iter_mut().zip(mask_slice) {
+        if alpha != 0 {
+          let src = scale_premultiplied_pixel(color, alpha);
+          if src[3] != 0 {
+            composite_premultiplied_over(dst, src);
+          }
+        }
+      }
+    }
+    return;
+  }
+
   for dest_y in dest_y_min..dest_y_max {
     let mask_y = (dest_y - offset_y) as u32;
+    let dst_row = dest_y as usize * canvas_width as usize;
+    let mask_row = mask_y as usize * placement.width as usize;
     for dest_x in dest_x_min..dest_x_max {
-      let mask_x = (dest_x - offset_x) as u32;
-      let mask_alpha = mask[mask_index_from_coord(mask_x, mask_y, placement.width)];
+      let mask_x = (dest_x - offset_x) as usize;
+      let mask_alpha = mask[mask_row + mask_x];
       if mask_alpha == 0 {
         continue;
       }
@@ -991,9 +940,8 @@ fn composite_masked_constant(
       }
 
       let dest_x = dest_x as u32;
-      let dest_y = dest_y as u32;
       if let Some(mask_data) = mask_data {
-        let alpha = mask_data[mask_index_from_coord(dest_x, dest_y, canvas_width)];
+        let alpha = mask_data[dst_row + dest_x as usize];
         if alpha == 0 {
           continue;
         }
@@ -1003,8 +951,7 @@ fn composite_masked_constant(
         }
       }
 
-      let index = (dest_y * canvas_width + dest_x) as usize;
-      blend_premultiplied_pixel(&mut pixels[index], src, mode);
+      blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
     }
   }
 }
@@ -1051,13 +998,15 @@ fn composite_masked_source(
   let mask_data = options.combined_mask.map(TinyMask::data);
   for dest_y in dest_y_min..dest_y_max {
     let mask_y = (dest_y - offset_y) as u32;
+    let dst_row = dest_y as usize * canvas_width as usize;
+    let mask_row = mask_y as usize * options.placement.width as usize;
     let mut sample_point = options.sampling.canvas_to_source.transform_point(Point {
       x: dest_x_min as f32 + options.sampling.sample_bias.x,
       y: dest_y as f32 + options.sampling.sample_bias.y,
     });
     for dest_x in dest_x_min..dest_x_max {
-      let mask_x = (dest_x - offset_x) as u32;
-      let mask_alpha = mask[mask_index_from_coord(mask_x, mask_y, options.placement.width)];
+      let mask_x = (dest_x - offset_x) as usize;
+      let mask_alpha = mask[mask_row + mask_x];
       let sampled = if mask_alpha == 0 {
         None
       } else {
@@ -1083,9 +1032,8 @@ fn composite_masked_source(
       }
 
       let dest_x = dest_x as u32;
-      let dest_y = dest_y as u32;
       if let Some(mask_data) = mask_data {
-        let alpha = mask_data[mask_index_from_coord(dest_x, dest_y, canvas_width)];
+        let alpha = mask_data[dst_row + dest_x as usize];
         if alpha == 0 {
           continue;
         }
@@ -1095,8 +1043,7 @@ fn composite_masked_source(
         }
       }
 
-      let index = (dest_y * canvas_width + dest_x) as usize;
-      blend_premultiplied_pixel(&mut pixels[index], src, options.mode);
+      blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, options.mode);
     }
   }
 }
@@ -1494,6 +1441,7 @@ pub(crate) fn overlay_gradient_tile<T>(
   let mask_data = combined_mask.map(TinyMask::data);
   for dest_y in dest_y_min..dest_y_max {
     let src_y = (dest_y - offset_y) as u32;
+    let dst_row = dest_y as usize * bottom_width as usize;
     for dest_x in dest_x_min..dest_x_max {
       let src_x = (dest_x - offset_x) as u32;
       let mut src = premultiplied_from_pixel(gradient.sample_pixel(src_x, src_y));
@@ -1502,9 +1450,8 @@ pub(crate) fn overlay_gradient_tile<T>(
       }
 
       let dest_x = dest_x as u32;
-      let dest_y = dest_y as u32;
       if let Some(mask_data) = mask_data {
-        let alpha = mask_data[mask_index_from_coord(dest_x, dest_y, bottom_width)];
+        let alpha = mask_data[dst_row + dest_x as usize];
         if alpha == 0 {
           continue;
         }
@@ -1514,8 +1461,7 @@ pub(crate) fn overlay_gradient_tile<T>(
         }
       }
 
-      let index = (dest_y * bottom_width + dest_x) as usize;
-      blend_premultiplied_pixel(&mut pixels[index], src, mode);
+      blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
     }
   }
 }
