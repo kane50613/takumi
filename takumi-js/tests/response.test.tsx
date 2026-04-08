@@ -6,7 +6,7 @@ describe("ImageResponse", () => {
     const response = new ImageResponse(<div>Hello</div>);
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("content-type")).toBe("image/webp");
+    expect(response.headers.get("content-type")).toBe("image/png");
 
     expect(await response.arrayBuffer()).toBeDefined();
   });

@@ -3,7 +3,7 @@
 
 # Takumi
 
-**Render React components to images, animations, and video frames.**
+**A Rust rendering engine for turning templates into images, with `next/og`-compatible APIs.**
 
 One engine for Node.js, Edge, browsers, or embed the Rust crate directly.
 
@@ -11,27 +11,64 @@ One engine for Node.js, Edge, browsers, or embed the Rust crate directly.
 
 </div>
 
-## What you can build
+## Core Concepts
 
-### Static images
+Rather than building a React-specific Satori clone, Takumi aims to be minimal in its core and framework-agnostic.
+Any template format that can be converted into Takumi's [node tree](https://takumi.kane.tw/docs/reference) can be rendered. The core node model has three node types: container, image, and text.
 
-Open Graph cards, blog covers, social media graphics with proper typography.
+Finally Takumi renders that tree to an image.
 
-### Animations
+Besides a pure static image, Takumi also has a time axis, allowing you to render animations & GIFs at specific timestamps for GIFs or video encoding.
 
-GIFs, WebP animations, or raw frames piped to FFmpeg for video.
+```mermaid
+flowchart LR
+    A[Templates] --> N[Node Tree] --> P[Rendering Pipeline] --> F[(Raw Pixels)]
+    C[Stylesheets] --> P
+    R[Resources] --> P
+    D(Time Axis) -.-> P
 
-### At scale
+    F --> G[PNG/JPEG/WebP]
+    F --> H[GIFs]
+    F --> I[Videos]
+```
 
-Batch processing with Node.js native / WebAssembly bindings.
+## Comparison
 
-## Install
+Takumi brings a Satori-like developer experience to a unified Rust pipeline without headless browser dependencies.
+
+| Feature             | `next/og` (Satori)  |                        `Takumi`                         |
+| :------------------ | :-----------------: | :-----------------------------------------------------: |
+| **Runtime**         |      Node/Edge      | Node, Edge, Cloudflare Workers, Browser, **Rust crate** |
+| **Styling**         | Tailwind/CSS subset |                 **Tailwind/CSS subset**                 |
+| **Template Input**  | JSX/React elements  |     **JSX/React elements**, HTML strings, node tree     |
+| **ImageResponse**   |       Native        |          ✅ **Compatible constructor/options**          |
+| **Animated Output** |         N/A         |               **WebP / APNG / GIF** APIs                |
+
+## Quick start
+
+### Install
 
 ```bash
 bun i takumi-js
 ```
 
-## Quick start
+### `render()`
+
+```tsx
+import { render } from "takumi-js";
+import { writeFile } from "node:fs/promises";
+
+const image = await render(
+  <div tw="w-full h-full flex items-center justify-center bg-gradient-to-b from-blue-100 to-red-50">
+    <h1 tw="text-6xl font-bold">Hello from Takumi</h1>
+  </div>,
+  { width: 1200, height: 630 },
+);
+
+await writeFile("./output.png", image);
+```
+
+### `new ImageResponse()`
 
 ```tsx
 import { ImageResponse } from "takumi-js/response";
@@ -45,95 +82,6 @@ export function GET() {
   );
 }
 ```
-
-## Render animations
-
-```tsx
-import { render } from "takumi-js";
-
-// Single frame at specific time
-const frame = await render(<Scene />, {
-  width: 1200,
-  height: 630,
-  timeMs: 500,
-  keyframes: {
-    move: {
-      from: { transform: "translateX(0)" },
-      to: { transform: "translateX(100px)" },
-    },
-  },
-});
-
-// Or pipe to FFmpeg for video
-for (let i = 0; i < 120; i++) {
-  const frame = await render(<Scene />, {
-    timeMs: (i / 30) * 1000,
-    format: "raw", // RGBA pixels
-  });
-  ffmpeg.stdin.write(frame);
-}
-```
-
-## Use from Rust
-
-```rust
-use takumi::{
-  layout::{node::Node, Viewport, style::{Length::Px, Style, StyleDeclaration}},
-  resources::font::FontResource,
-  rendering::{render, RenderOptions},
-  GlobalContext,
-};
-
-let node = Node::container([Node::text("Hello").with_style(
-  Style::default().with(StyleDeclaration::font_size(Px(32.0).into())),
-)]);
-
-let mut global = GlobalContext::default();
-global.font_context_mut().load_and_store(
-  FontResource::new(include_bytes!("font.woff2"))
-);
-
-let image = render(RenderOptions::builder()
-  .viewport(Viewport::new((1200, 630)))
-  .node(node)
-  .global(&global)
-  .build()
-).unwrap();
-```
-
-## Capabilities
-
-### Layout
-
-Powered by [Taffy](https://github.com/DioxusLabs/taffy) for high-performance Flexbox, CSS Grid, and block layouts. Supports absolute positioning, z-index stacking, inline text spans, and nested inline blocks.
-
-### Typography
-
-Browser-grade text shaping and layout. Supports WOFF/WOFF2 fonts, emoji, and RTL languages out of the box.
-
-### Runtime
-
-Deploy anywhere. Ships with optimized native bindings for Node.js (via N-API), WebAssembly for Edge environments (Cloudflare Workers, browsers), or embed the native [Rust crate](https://docs.rs/takumi) directly.
-
-### Keyframes Animation
-
-Parses CSS `@keyframes` and the `animation` shorthand property. Supports percentage offsets, standard timing functions (`linear`, `ease`, `steps`, custom `cubic-bezier`), delays, fill modes, and iteration counts. Includes built-in Tailwind presets like `spin`, `ping`, `pulse`, and `bounce`.
-
-### Styling
-
-Full CSS stylesheet parsing and native Tailwind v4 support. Handles arbitrary values, linear and radial gradients, box shadows, blend modes, transforms, filters, and complex CSS selectors.
-
-## Comparison
-
-| Feature             | Satori | Takumi |
-| ------------------- | ------ | ------ |
-| Block/Inline layout | No     | Yes    |
-| Flexbox             | Yes    | Yes    |
-| Grid                | No     | Yes    |
-| Animations          | No     | Yes    |
-| WOFF Fonts          | Yes    | Yes    |
-| WOFF2 fonts         | No     | Yes    |
-| RTL languages       | No     | Yes    |
 
 ## Showcase
 

@@ -2,8 +2,6 @@ import type { ReactNode } from "react";
 import { render, type RenderOptions } from "../render";
 import type { ReactElementLike } from "@takumi-rs/helpers";
 
-const defaultFormat = "webp";
-
 export type ImageResponseResult = Response & {
   readonly ready: Promise<void>;
 };
@@ -65,10 +63,7 @@ export function createImageResponse(defaultOptions?: ImageResponseOptions): Imag
     element: ReactNode | ReactElementLike | string,
     options?: ImageResponseOptions,
   ) {
-    const mergedOptions: ImageResponseOptions = {
-      ...mergeOptions(defaultOptions, options),
-      format: options?.format ?? defaultOptions?.format ?? defaultFormat,
-    };
+    const mergedOptions = mergeOptions(defaultOptions, options);
     const {
       promise: ready,
       reject: rejectReady,
@@ -96,7 +91,7 @@ export function createImageResponse(defaultOptions?: ImageResponseOptions): Imag
     const headers = new Headers(mergedOptions?.headers);
 
     if (!headers.get("content-type")) {
-      headers.set("content-type", contentTypeMap[mergedOptions.format ?? defaultFormat]);
+      headers.set("content-type", contentTypeMap[mergedOptions?.format ?? "png"]);
     }
 
     const response = new Response(stream, {

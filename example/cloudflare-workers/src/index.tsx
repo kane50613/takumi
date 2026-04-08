@@ -33,7 +33,6 @@ export default {
         fetchedResources,
         width: 1200,
         height: 630,
-        format: "png",
       },
     );
   },
