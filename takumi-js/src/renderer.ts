@@ -23,9 +23,7 @@ export async function loadRendererResources(
   const tasks: Promise<unknown>[] = [];
 
   if (options?.fonts && options.fonts.length > 0) {
-    if (options.fonts.length > 0) {
-      tasks.push(renderer.loadFonts(options.fonts));
-    }
+    tasks.push(renderer.loadFonts(options.fonts));
   }
 
   if (options?.persistentImages && options.persistentImages.length > 0) {
