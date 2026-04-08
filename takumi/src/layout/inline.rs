@@ -359,8 +359,6 @@ pub(crate) fn measure_inline_layout(layout: &mut InlineLayout, max_width: f32) -
     height: total_height.ceil(),
   }
 }
-
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn create_inline_layout<'c, 'g: 'c>(
   items: impl Iterator<Item = InlineItem<'c, 'g>>,
   available_space: Size<AvailableSpace>,

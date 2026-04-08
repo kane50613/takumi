@@ -93,7 +93,7 @@ fn create_test_context() -> GlobalContext {
 
     let image = ImageSource::from_bytes(&image_data).unwrap();
     context
-      .persistent_image_store_mut()
+      .persistent_image_store
       .insert(image_path.to_string(), image);
   }
 
@@ -105,7 +105,7 @@ fn create_test_context() -> GlobalContext {
       .unwrap();
 
     context
-      .font_context_mut()
+      .font_context
       .load_and_store(
         FontResource::new(font_data)
           .override_info(FontInfoOverride {

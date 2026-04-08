@@ -2,11 +2,11 @@ use taffy::{Layout, Point, Size};
 use tiny_skia::{IntSize, Pixmap};
 
 use crate::{
-  Result,
+  Error, Result,
   layout::style::{Affine, BlendMode, BoxShadow, Color, ImageScalingAlgorithm, Sides, TextShadow},
   rendering::{
-    BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Command, Fill, Placement, Sizing,
-    Style, apply_blur, fast_div_255, render_mask,
+    BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Command, Fill, Placement,
+    SamplingOptions, Sizing, Style, apply_blur, fast_div_255, render_mask,
   },
 };
 
@@ -60,7 +60,6 @@ impl SizedShadow {
   }
 
   /// Draws the outset mask of the shadow.
-  #[allow(clippy::too_many_arguments)]
   pub fn draw_outset(
     &self,
     canvas: &mut Canvas,
@@ -175,12 +174,16 @@ impl SizedShadow {
 
     canvas.overlay_sampled_pixmap(
       &image,
-      image.width(),
-      image.height(),
+      Size {
+        width: image.width(),
+        height: image.height(),
+      },
       border_radius,
       transform,
-      Affine::IDENTITY,
-      ImageScalingAlgorithm::Auto,
+      SamplingOptions {
+        logical_to_source: Affine::IDENTITY,
+        algorithm: ImageScalingAlgorithm::Auto,
+      },
       BlendMode::Normal,
     );
 
@@ -282,7 +285,11 @@ pub(crate) fn draw_inset_shadow(
   }
   buffer_pool.release(shadow_alpha);
 
-  let size = IntSize::from_wh(width, height).unwrap_or_else(|| unreachable!());
-  let pixmap = Pixmap::from_vec(data, size).unwrap_or_else(|| unreachable!());
+  let Some(size) = IntSize::from_wh(width, height) else {
+    return Err(Error::InvalidViewport);
+  };
+  let Some(pixmap) = Pixmap::from_vec(data, size) else {
+    return Err(Error::InvalidViewport);
+  };
   Ok(pixmap)
 }

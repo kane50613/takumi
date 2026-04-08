@@ -28,7 +28,7 @@ fn test_ttf_font_loading() {
 
   assert!(
     context
-      .font_context_mut()
+      .font_context
       .load_and_store(FontResource::new(font_data))
       .is_ok()
   );
@@ -46,7 +46,7 @@ fn test_ttc_font_loading() {
 
   assert!(
     context
-      .font_context_mut()
+      .font_context
       .load_and_store(FontResource::new(font_data))
       .is_ok()
   );
@@ -64,7 +64,7 @@ fn test_woff2_font_loading() {
 
   assert!(
     context
-      .font_context_mut()
+      .font_context
       .load_and_store(FontResource::new(font_data))
       .is_ok()
   );
@@ -77,7 +77,7 @@ fn test_invalid_format_detection() {
   let mut context = GlobalContext::default();
 
   let result = context
-    .font_context_mut()
+    .font_context
     .load_and_store(FontResource::new(invalid_data));
   assert!(matches!(result, Err(FontError::UnsupportedFormat)));
 }
@@ -89,7 +89,7 @@ fn test_empty_data() {
   let mut context = GlobalContext::default();
 
   let result = context
-    .font_context_mut()
+    .font_context
     .load_and_store(FontResource::new(empty_data));
   assert!(matches!(result, Err(FontError::UnsupportedFormat)));
 }
@@ -101,7 +101,7 @@ fn test_too_short_data() {
   let mut context = GlobalContext::default();
 
   let result = context
-    .font_context_mut()
+    .font_context
     .load_and_store(FontResource::new(short_data));
   assert!(matches!(result, Err(FontError::UnsupportedFormat)));
 }

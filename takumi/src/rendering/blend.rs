@@ -176,7 +176,7 @@ fn blend_channel_integer(mode: BlendMode, bottom: u8, top: u8) -> u8 {
     BlendMode::Exclusion => (bottom as u32 + top as u32
       - (2 * fast_div_255_u32(bottom as u32 * top as u32)))
     .min(255) as u8,
-    _ => unreachable!(),
+    _ => top,
   }
 }
 
@@ -323,7 +323,7 @@ fn compute_blend_float(
     }
     BlendMode::Color => set_lum(top.channels, lum(bottom.channels)),
     BlendMode::Luminosity => set_lum(bottom.channels, lum(top.channels)),
-    _ => unreachable!(),
+    _ => top.channels,
   }
 }
 

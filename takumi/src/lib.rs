@@ -10,17 +10,7 @@
   clippy::all,
   clippy::redundant_closure_for_method_calls
 )]
-#![allow(
-  clippy::module_name_repetitions,
-  clippy::missing_errors_doc,
-  clippy::missing_panics_doc,
-  clippy::use_self,
-  clippy::doc_markdown,
-  clippy::must_use_candidate,
-  clippy::missing_const_for_fn
-)]
-
-//! Takumi is a library with different parts to render your React components to images. This crate contains the core logic for layout, rendering.
+//! Takumi is a library with different parts to render UI component trees to images. This crate contains the core logic for layout and rendering.
 //!
 //! Checkout the [Quick Start](https://takumi.kane.tw/docs) if you are looking for napi-rs / WASM bindings.
 //!
@@ -48,7 +38,7 @@
 //! let mut global = GlobalContext::default();
 //!
 //! // Load fonts
-//! global.font_context_mut().load_and_store(
+//! global.font_context.load_and_store(
 //!   FontResource::new(include_bytes!("../../assets/fonts/geist/Geist[wght].woff2"))
 //! );
 //!
@@ -101,6 +91,7 @@ use std::collections::HashSet;
 
 pub use error::{Result, StyleSheetParseError, TakumiError as Error};
 
+use typed_builder::TypedBuilder;
 use xxhash_rust::xxh3::Xxh3DefaultBuilder;
 
 use crate::resources::{font::FontContext, image::PersistentImageStore};
@@ -109,38 +100,13 @@ use crate::resources::{font::FontContext, image::PersistentImageStore};
 ///
 /// This struct holds all the necessary state for rendering images, including
 /// font management, image storage, and debug options.
-#[derive(Default)]
+#[derive(Default, TypedBuilder)]
+#[builder(field_defaults(default))]
 pub struct GlobalContext {
   /// The font context for text rendering
-  font_context: FontContext,
+  pub font_context: FontContext,
   /// The image store for persisting contents
-  persistent_image_store: PersistentImageStore,
-}
-
-impl GlobalContext {
-  /// Returns a reference to the font context.
-  #[inline]
-  pub fn font_context(&self) -> &FontContext {
-    &self.font_context
-  }
-
-  /// Returns a mutable reference to the font context.
-  #[inline]
-  pub fn font_context_mut(&mut self) -> &mut FontContext {
-    &mut self.font_context
-  }
-
-  /// Returns a reference to the persistent image store.
-  #[inline]
-  pub fn persistent_image_store(&self) -> &PersistentImageStore {
-    &self.persistent_image_store
-  }
-
-  /// Returns a mutable reference to the persistent image store.
-  #[inline]
-  pub fn persistent_image_store_mut(&mut self) -> &mut PersistentImageStore {
-    &mut self.persistent_image_store
-  }
+  pub persistent_image_store: PersistentImageStore,
 }
 
 /// Type alias for HashSet using XXH3 hasher

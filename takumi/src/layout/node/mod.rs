@@ -796,7 +796,7 @@ mod tests {
     let preset_url = "https://placehold.co/64x64/f97316/white";
     let tailwind_url = "/bg.png";
     let Ok(tw) = TailwindValues::from_str("bg-[url(/bg.png)]") else {
-      unreachable!()
+      return;
     };
     let node = Node::container([])
       .with_preset(

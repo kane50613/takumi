@@ -20,13 +20,13 @@ impl Task for PutPersistentImageTask {
       unreachable!()
     };
 
-    let mut state = self
+    let state = self
       .state
       .write()
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
     let image = LoadedImageSource::from_bytes(&self.buffer).map_err(map_error)?;
-    state.global.persistent_image_store_mut().insert(src, image);
+    state.global.persistent_image_store.insert(src, image);
 
     Ok(())
   }

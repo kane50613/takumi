@@ -1,10 +1,10 @@
 use smallvec::SmallVec;
-use taffy::{NodeId, Point, geometry::Size};
+use taffy::{NodeId, Point, TaffyError, geometry::Size};
 use tiny_skia::Pixmap;
 use tiny_skia::PixmapMut;
 
 use crate::{
-  Result,
+  Error, Result,
   layout::{
     style::{
       Affine, BackgroundImage, BlendMode, BorderStyle, Color, ComputedStyle, Display, Filter,
@@ -14,7 +14,8 @@ use crate::{
   },
   rendering::{
     BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, NodeMaskAction, Placement,
-    Sizing, blend_pixel, draw_debug_border, prepare_node_mask, transformed_rect_extents,
+    Sizing, blend_pixel, draw_debug_border, get_node_mut_by_path, prepare_node_mask,
+    transformed_rect_extents,
   },
 };
 
@@ -24,8 +25,14 @@ pub(crate) fn blend_pixmap_software(
   mode: BlendMode,
   offset: Point<i32>,
 ) {
-  let Some((dst_left, dst_top, src_left, src_top, width, height)) =
-    overlapping_region(dst, src, offset)
+  let Some(OverlapRegion {
+    dst_left,
+    dst_top,
+    src_left,
+    src_top,
+    width,
+    height,
+  }) = overlapping_region(dst, src, offset)
   else {
     return;
   };
@@ -89,11 +96,7 @@ fn blend_plus_darker_pixel_raw_4(dst_px: &mut [u8], src_px: &[u8]) {
   dst_px[3] = result_alpha;
 }
 
-fn overlapping_region(
-  dst: &Pixmap,
-  src: &Pixmap,
-  offset: Point<i32>,
-) -> Option<(usize, usize, usize, usize, usize, usize)> {
+fn overlapping_region(dst: &Pixmap, src: &Pixmap, offset: Point<i32>) -> Option<OverlapRegion> {
   let dst_left = offset.x.max(0) as usize;
   let dst_top = offset.y.max(0) as usize;
   let src_left = (-offset.x).max(0) as usize;
@@ -109,7 +112,23 @@ fn overlapping_region(
     return None;
   }
 
-  Some((dst_left, dst_top, src_left, src_top, width, height))
+  Some(OverlapRegion {
+    dst_left,
+    dst_top,
+    src_left,
+    src_top,
+    width,
+    height,
+  })
+}
+
+struct OverlapRegion {
+  dst_left: usize,
+  dst_top: usize,
+  src_left: usize,
+  src_top: usize,
+  width: usize,
+  height: usize,
 }
 
 pub(crate) fn apply_transform(
@@ -149,18 +168,6 @@ pub(crate) fn apply_transform(
   *transform *= local;
 }
 
-fn get_node_mut_by_path<'a, 'g>(
-  root: &'a mut RenderNode<'g>,
-  path: &[usize],
-) -> Option<&'a mut RenderNode<'g>> {
-  let mut current = root;
-  for &index in path {
-    let children = current.children.as_deref_mut()?;
-    current = children.get_mut(index)?;
-  }
-  Some(current)
-}
-
 fn get_node_by_path<'a, 'g>(
   root: &'a RenderNode<'g>,
   path: &[usize],
@@ -189,19 +196,20 @@ pub(crate) fn collect_layout_children(
   let mut source_order_child_ids = layout_children.to_vec();
   source_order_child_ids.sort_unstable_by_key(|child_id| usize::from(*child_id));
 
-  Ok(
-    layout_children
-      .iter()
-      .copied()
-      .take(child_count)
-      .map(|node_id| OrderedChild {
-        render_index: source_order_child_ids
-          .binary_search_by_key(&usize::from(node_id), |child_id| usize::from(*child_id))
-          .unwrap_or_else(|_| unreachable!()),
-        node_id,
-      })
-      .collect(),
-  )
+  let mut ordered_children = Vec::with_capacity(child_count);
+  for node_id in layout_children.iter().copied().take(child_count) {
+    let Ok(render_index) = source_order_child_ids
+      .binary_search_by_key(&usize::from(node_id), |child_id| usize::from(*child_id))
+    else {
+      return Err(Error::LayoutError(TaffyError::InvalidInputNode(node_id)));
+    };
+    ordered_children.push(OrderedChild {
+      render_index,
+      node_id,
+    });
+  }
+
+  Ok(ordered_children)
 }
 
 #[derive(Clone)]
@@ -382,7 +390,9 @@ pub(crate) fn build_stacking_contexts<'g>(
 
   while let Some(visit) = visits.pop() {
     let Some(current) = get_node_by_path(root, &visit.path) else {
-      unreachable!()
+      return Err(Error::LayoutError(TaffyError::InvalidInputNode(
+        visit.node_id,
+      )));
     };
     let layout = *layout_results.layout(visit.node_id)?;
     if current.context.style.is_invisible() {
@@ -700,7 +710,9 @@ fn begin_node_render<'g>(
   isolation_bounds_hint: Option<SceneBounds>,
 ) -> Result<Option<DeferredNodeRender>> {
   let Some(current) = get_node_mut_by_path(root, &node_paint.path) else {
-    unreachable!()
+    return Err(Error::LayoutError(TaffyError::InvalidInputNode(
+      node_paint.node_id,
+    )));
   };
   let layout = *layout_results.layout(node_paint.node_id)?;
 
@@ -761,7 +773,7 @@ fn begin_node_render<'g>(
       current.draw_shell(canvas, layout)?;
       canvas.push_mask(mask);
     }
-    NodeMaskAction::SkipRendering => unreachable!(),
+    NodeMaskAction::SkipRendering => return Ok(Some(DeferredNodeRender::SkipRendering)),
   }
 
   current.draw_content(canvas, layout)?;
@@ -807,7 +819,25 @@ fn paint_single_node<'g>(
 ) -> Result<()> {
   match begin_node_render(root, layout_results, canvas, node_paint, false, None)? {
     Some(DeferredNodeRender::SkipRendering) | None => {}
-    Some(DeferredNodeRender::Deferred { .. }) => unreachable!(),
+    Some(DeferredNodeRender::Deferred {
+      path,
+      has_constraint,
+      isolated_canvas,
+      filter_bounds,
+    }) => {
+      let Some(current) = get_node_mut_by_path(root, &path) else {
+        return Err(Error::LayoutError(TaffyError::InvalidInputNode(
+          node_paint.node_id,
+        )));
+      };
+      finish_node_render(
+        current,
+        canvas,
+        has_constraint,
+        isolated_canvas,
+        filter_bounds,
+      )?;
+    }
   }
   Ok(())
 }
@@ -840,7 +870,9 @@ pub(crate) fn paint_context<'g>(
   context_id: usize,
 ) -> Result<()> {
   let Some(context) = contexts.get(context_id) else {
-    unreachable!()
+    return Err(Error::LayoutError(TaffyError::InvalidInputNode(
+      NodeId::new(context_id as u64),
+    )));
   };
 
   let mut deferred_root = None;
@@ -873,7 +905,11 @@ pub(crate) fn paint_context<'g>(
   }) = deferred_root
   {
     let Some(current) = get_node_mut_by_path(root, &path) else {
-      unreachable!()
+      let node_id = context
+        .root
+        .as_ref()
+        .map_or(layout_results.root_node_id(), |node| node.node_id);
+      return Err(Error::LayoutError(TaffyError::InvalidInputNode(node_id)));
     };
     finish_node_render(
       current,

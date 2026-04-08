@@ -518,10 +518,7 @@ mod tests {
   fn parse_stylesheet(css: &str) -> StyleSheet {
     let result = StyleSheet::parse(css);
     assert!(result.is_ok(), "expected stylesheet to parse: {result:?}");
-    let Ok(stylesheet) = result else {
-      unreachable!();
-    };
-    stylesheet
+    result.unwrap_or_default()
   }
 
   fn parse_stylesheet_list<I, S>(stylesheets: I) -> StyleSheet
@@ -534,10 +531,7 @@ mod tests {
       result.is_ok(),
       "expected stylesheet list to parse: {result:?}"
     );
-    let Ok(stylesheet) = result else {
-      unreachable!();
-    };
-    stylesheet
+    result.unwrap_or_default()
   }
 
   #[test]

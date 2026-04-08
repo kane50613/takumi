@@ -280,7 +280,7 @@ fn resolve_auto_background_size(
         (intrinsic_height * scale_factor).round() as u32,
       )
     }
-    (false, false) => unreachable!(),
+    (false, false) => (0, 0),
   }
 }
 

@@ -314,25 +314,38 @@ mod tests {
     let decode_result = decoder_options.read_info(Cursor::new(&bytes));
     assert!(decode_result.is_ok(), "failed to decode animated gif");
 
-    let mut decoder = decode_result.unwrap_or_else(|_| unreachable!());
+    let mut decoder = match decode_result {
+      Ok(decoder) => decoder,
+      Err(_) => return,
+    };
     let frame_one = decoder.read_next_frame();
     assert!(frame_one.is_ok(), "missing first decoded gif frame");
-    let frame_one = frame_one.unwrap_or_else(|_| unreachable!());
+    let frame_one = match frame_one {
+      Ok(frame_one) => frame_one,
+      Err(_) => return,
+    };
     assert!(frame_one.is_some(), "missing first decoded gif frame");
-    let frame_one = frame_one.unwrap_or_else(|| unreachable!());
+    let Some(frame_one) = frame_one else {
+      return;
+    };
     assert_eq!(frame_one.delay, 5);
 
     let frame_two = decoder.read_next_frame();
     assert!(frame_two.is_ok(), "missing second decoded gif frame");
-    let frame_two = frame_two.unwrap_or_else(|_| unreachable!());
+    let frame_two = match frame_two {
+      Ok(frame_two) => frame_two,
+      Err(_) => return,
+    };
     assert!(frame_two.is_some(), "missing second decoded gif frame");
-    let frame_two = frame_two.unwrap_or_else(|| unreachable!());
+    let Some(frame_two) = frame_two else {
+      return;
+    };
     assert_eq!(frame_two.delay, 1);
 
     let frame_three = decoder.read_next_frame();
     assert!(frame_three.is_ok(), "unexpected decoder error");
     assert!(
-      frame_three.unwrap_or_else(|_| unreachable!()).is_none(),
+      frame_three.unwrap_or(None).is_none(),
       "only two frames should be encoded"
     );
 
@@ -384,7 +397,9 @@ mod tests {
     );
     let err = result.err();
     assert!(err.is_some(), "empty frame list should be rejected");
-    let err = err.unwrap_or_else(|| unreachable!());
+    let Some(err) = err else {
+      return;
+    };
     assert_eq!(
       err.to_string(),
       "GIF animation must contain at least one frame",
@@ -398,7 +413,9 @@ mod tests {
     let result = encode_animated_png(&[], &mut bytes, AnimatedPngOptions::default());
     let err = result.err();
     assert!(err.is_some(), "empty frame list should be rejected");
-    let err = err.unwrap_or_else(|| unreachable!());
+    let Some(err) = err else {
+      return;
+    };
     assert_eq!(
       err.to_string(),
       "APNG animation must contain at least one frame",
@@ -423,7 +440,9 @@ mod tests {
     let result = encode_animated_png(&frames, &mut bytes, AnimatedPngOptions::default());
     let err = result.err();
     assert!(err.is_some(), "mismatched frame sizes should be rejected");
-    let err = err.unwrap_or_else(|| unreachable!());
+    let Some(err) = err else {
+      return;
+    };
     assert_eq!(
       err.to_string(),
       "all APNG animation frames must share the same dimensions",
@@ -638,7 +657,9 @@ mod tests {
     );
     let err = result.err();
     assert!(err.is_some(), "zero-sized frame should be rejected");
-    let err = err.unwrap_or_else(|| unreachable!());
+    let Some(err) = err else {
+      return;
+    };
     assert!(
       err
         .to_string()

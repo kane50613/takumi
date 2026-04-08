@@ -1376,7 +1376,7 @@ impl StyleSheet {
   /// Parses a stylesheet while discarding invalid rules.
   pub fn parse_loosy(css: &str) -> Self {
     let Ok(stylesheet) = Self::parse_with_mode(css, true) else {
-      unreachable!();
+      return Self::default();
     };
     stylesheet
   }
@@ -1468,10 +1468,7 @@ mod tests {
   fn parse_stylesheet(css: &str) -> StyleSheet {
     let result = StyleSheet::parse(css);
     assert!(result.is_ok(), "expected stylesheet to parse: {result:?}");
-    let Ok(stylesheet) = result else {
-      unreachable!();
-    };
-    stylesheet
+    result.unwrap_or_default()
   }
 
   fn parse_stylesheet_loosy(css: &str) -> StyleSheet {

@@ -4,7 +4,10 @@ use taffy::{Point, Rect, Size};
 
 use crate::{
   layout::style::{Affine, BlendMode, BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair},
-  rendering::{Canvas, Command, Fill, PaintSource, PathBuilder, RenderContext, render_mask},
+  rendering::{
+    Canvas, Command, Fill, MaskSamplingOptions, PaintSource, PathBuilder, RenderContext,
+    render_mask,
+  },
 };
 
 /// Represents the properties of a border, including corner radii and drawing metadata.
@@ -299,16 +302,20 @@ impl BorderProperties {
       return;
     };
 
-    canvas.composite_mask_source_over_color(
-      &mask,
-      placement,
-      clip_image.unwrap_or_else(|| unreachable!()),
-      self.color,
-      inverse,
-      Point::ZERO,
-      self.image_rendering,
-      BlendMode::Normal,
-    );
+    if let Some(clip_image) = clip_image {
+      canvas.composite_mask_source_over_color(
+        &mask,
+        placement,
+        clip_image,
+        self.color,
+        MaskSamplingOptions {
+          canvas_to_source: inverse,
+          sample_bias: Point::ZERO,
+          algorithm: self.image_rendering,
+        },
+        BlendMode::Normal,
+      );
+    }
 
     canvas.buffer_pool.release(mask);
   }

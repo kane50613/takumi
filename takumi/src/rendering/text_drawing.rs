@@ -2,7 +2,7 @@ use std::{borrow::Cow, convert::Into};
 
 use parley::{GlyphRun, layout::BreakReason};
 use skrifa::color::ColorPalette;
-use taffy::{Layout, Point};
+use taffy::{Layout, Point, Size};
 use tiny_skia::Pixmap;
 
 use crate::{
@@ -15,8 +15,8 @@ use crate::{
     },
   },
   rendering::{
-    BorderProperties, Canvas, ColorTile, Command, PaintSource, Placement, Stroke,
-    composite_mask_source_to_pixmap, render_mask,
+    BorderProperties, Canvas, ColorTile, Command, MaskSamplingOptions, MaskSourceToPixmapOptions,
+    PaintSource, Placement, SamplingOptions, Stroke, composite_mask_source_to_pixmap, render_mask,
   },
   resources::font::{ResolvedColorLayer, ResolvedGlyph},
 };
@@ -77,37 +77,45 @@ pub(crate) fn draw_glyph_clip_image(
       }
 
       let Some(mut bottom) = Pixmap::new(bitmap.placement.width, bitmap.placement.height) else {
-        unreachable!()
+        return Ok(());
       };
       let mut bottom_pixmap = bottom.as_mut();
       composite_mask_source_to_pixmap(
         &mut bottom_pixmap,
         &mask,
-        Placement {
-          left: 0,
-          top: 0,
-          width: bitmap.placement.width,
-          height: bitmap.placement.height,
-        },
         clip_image,
-        Affine::translation(
-          inline_offset.x + bitmap.placement.left as f32,
-          inline_offset.y - bitmap.placement.top as f32,
-        ),
-        Point::ZERO,
-        ImageScalingAlgorithm::Pixelated,
-        BlendMode::Normal,
-        None,
+        MaskSourceToPixmapOptions {
+          placement: Placement {
+            left: 0,
+            top: 0,
+            width: bitmap.placement.width,
+            height: bitmap.placement.height,
+          },
+          sampling: MaskSamplingOptions {
+            canvas_to_source: Affine::translation(
+              inline_offset.x + bitmap.placement.left as f32,
+              inline_offset.y - bitmap.placement.top as f32,
+            ),
+            sample_bias: Point::ZERO,
+            algorithm: ImageScalingAlgorithm::Pixelated,
+          },
+          mode: BlendMode::Normal,
+          combined_mask: None,
+        },
       );
 
       canvas.overlay_sampled_pixmap(
         &bottom,
-        bottom.width(),
-        bottom.height(),
+        Size {
+          width: bottom.width(),
+          height: bottom.height(),
+        },
         BorderProperties::default(),
         transform,
-        Affine::IDENTITY,
-        ImageScalingAlgorithm::Auto,
+        SamplingOptions {
+          logical_to_source: Affine::IDENTITY,
+          algorithm: ImageScalingAlgorithm::Auto,
+        },
         BlendMode::Normal,
       );
 
@@ -130,9 +138,11 @@ pub(crate) fn draw_glyph_clip_image(
         &mask,
         placement,
         clip_image,
-        Affine::translation(inline_offset.x, inline_offset.y) * inverse,
-        Point::ZERO,
-        style.parent.image_rendering,
+        MaskSamplingOptions {
+          canvas_to_source: Affine::translation(inline_offset.x, inline_offset.y) * inverse,
+          sample_bias: Point::ZERO,
+          algorithm: style.parent.image_rendering,
+        },
         BlendMode::Normal,
       );
 
@@ -163,8 +173,6 @@ pub(crate) fn draw_glyph_clip_image(
 
   Ok(())
 }
-
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_glyph(
   glyph: &ResolvedGlyph,
   canvas: &mut Canvas,
@@ -182,12 +190,16 @@ pub(crate) fn draw_glyph(
       transform *= Affine::scale(bitmap.scale_x, bitmap.scale_y);
       canvas.overlay_sampled_pixmap(
         &bitmap.pixmap,
-        bitmap.pixmap.width(),
-        bitmap.pixmap.height(),
+        Size {
+          width: bitmap.pixmap.width(),
+          height: bitmap.pixmap.height(),
+        },
         Default::default(),
         transform,
-        Affine::IDENTITY,
-        Default::default(),
+        SamplingOptions {
+          logical_to_source: Affine::IDENTITY,
+          algorithm: Default::default(),
+        },
         BlendMode::Normal,
       );
     }
@@ -251,9 +263,11 @@ fn draw_text_stroke_clip_image(
     stroke_placement,
     clip_image,
     style.text_stroke_color,
-    Affine::translation(inline_offset.x, inline_offset.y) * inverse,
-    Point::ZERO,
-    style.parent.image_rendering,
+    MaskSamplingOptions {
+      canvas_to_source: Affine::translation(inline_offset.x, inline_offset.y) * inverse,
+      sample_bias: Point::ZERO,
+      algorithm: style.parent.image_rendering,
+    },
     BlendMode::Normal,
   );
 
@@ -291,9 +305,11 @@ fn draw_text_embolden_clip_image(
     &stroke_mask,
     stroke_placement,
     clip_image,
-    Affine::translation(inline_offset.x, inline_offset.y) * inverse,
-    Point::ZERO,
-    style.parent.image_rendering,
+    MaskSamplingOptions {
+      canvas_to_source: Affine::translation(inline_offset.x, inline_offset.y) * inverse,
+      sample_bias: Point::ZERO,
+      algorithm: style.parent.image_rendering,
+    },
     BlendMode::Normal,
   );
 
@@ -389,8 +405,6 @@ pub(crate) fn draw_glyph_text_shadow(
 
   Ok(())
 }
-
-#[allow(clippy::too_many_arguments)]
 fn draw_color_outline_image(
   canvas: &mut Canvas,
   color_layers: &[ResolvedColorLayer],

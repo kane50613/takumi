@@ -111,7 +111,7 @@ impl Renderer {
     for (font, family_name, generic_family) in EMBEDDED_FONTS {
       self
         .context
-        .font_context_mut()
+        .font_context
         .load_and_store(
           FontResource::new((*font).to_vec())
             .override_info(FontInfoOverride {
@@ -168,14 +168,14 @@ impl Renderer {
       Font::Buffer(buffer) => {
         self
           .context
-          .font_context_mut()
+          .font_context
           .load_and_store(FontResource::new(buffer.into_vec()))
           .map_err(map_error)?;
       }
       Font::Object(details) => {
         self
           .context
-          .font_context_mut()
+          .font_context
           .load_and_store(FontResource::new(details.data.into_vec()).override_info(
             FontInfoOverride {
               family_name: details.name.as_deref(),
@@ -203,7 +203,7 @@ impl Renderer {
     let image = LoadedImageSource::from_bytes(&data.data).map_err(map_error)?;
     self
       .context
-      .persistent_image_store_mut()
+      .persistent_image_store
       .insert(data.src.to_string(), image);
 
     Ok(())
@@ -219,7 +219,7 @@ impl Renderer {
   /// Clears the renderer's internal image store.
   #[wasm_bindgen(js_name = clearImageStore)]
   pub fn clear_image_store(&mut self) {
-    self.context.persistent_image_store_mut().clear();
+    self.context.persistent_image_store.clear();
   }
 
   /// Renders a node tree into an image buffer.

@@ -438,7 +438,7 @@ impl From<Color> for PremultipliedColorU8 {
     let premul_b = fast_div_255(b as u32 * a as u32);
 
     PremultipliedColorU8::from_rgba(premul_r, premul_g, premul_b, a)
-      .unwrap_or_else(|| unreachable!())
+      .unwrap_or(PremultipliedColorU8::TRANSPARENT)
   }
 }
 

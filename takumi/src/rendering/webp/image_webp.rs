@@ -108,18 +108,18 @@ mod tests {
 }
 
 fn estimate_vp8_payload_size(buf: &[u8]) -> Result<u32> {
-  let (_, len) = vp8_payload_coords(buf).ok_or(WebPError::MissingVp8Chunk)?;
+  let (_, len) = vp8_payload_coords(buf).ok_or(WebPError::InvalidEncodedData)?;
 
   let padding = len & 1;
-  let len_u32 = u32::try_from(len).map_err(|_| WebPError::Vp8PayloadSizeOverflow)?;
-  let padding_u32 = u32::try_from(padding).map_err(|_| WebPError::Vp8PaddingSizeOverflow)?;
+  let len_u32 = u32::try_from(len).map_err(|_| WebPError::ContainerSizeOverflow)?;
+  let padding_u32 = u32::try_from(padding).map_err(|_| WebPError::ContainerSizeOverflow)?;
 
   BASE_HEADER_SIZE
     .checked_add(ANMF_HEADER_SIZE)
     .and_then(|size| size.checked_add(BASE_HEADER_SIZE))
     .and_then(|size| size.checked_add(len_u32))
     .and_then(|size| size.checked_add(padding_u32))
-    .ok_or(WebPError::EstimatedVp8PayloadSizeOverflow.into())
+    .ok_or(WebPError::ContainerSizeOverflow.into())
 }
 
 fn estimate_riff_size<'a, I: Iterator<Item = &'a [u8]>>(frames: I) -> Result<u32> {
@@ -128,7 +128,7 @@ fn estimate_riff_size<'a, I: Iterator<Item = &'a [u8]>>(frames: I) -> Result<u32
   for frame in frames {
     size = size
       .checked_add(estimate_vp8_payload_size(frame)?)
-      .ok_or(WebPError::EstimatedRiffSizeOverflow)?;
+      .ok_or(WebPError::ContainerSizeOverflow)?;
   }
 
   Ok(size)
@@ -199,7 +199,7 @@ pub fn encode_animated_webp<W: Write>(
           frame.image.height(),
           ColorType::Rgba8,
         )
-        .map_err(|_| WebPError::Encode)?;
+        .map_err(|_| WebPError::EncodeFailed)?;
 
       Ok((frame, buf))
     })
@@ -235,19 +235,19 @@ pub fn encode_animated_webp<W: Write>(
     let w_bytes = (frame.image.width() - 1).to_le_bytes();
     let h_bytes = (frame.image.height() - 1).to_le_bytes();
 
-    let (start, len) = vp8_payload_coords(&vp8_data).ok_or(WebPError::MissingVp8Chunk)?;
+    let (start, len) = vp8_payload_coords(&vp8_data).ok_or(WebPError::InvalidEncodedData)?;
 
     let vp8_payload = &vp8_data[start..start + len];
 
     let padding = vp8_payload.len() & 1;
     let vp8_payload_len_u32 =
-      u32::try_from(vp8_payload.len()).map_err(|_| WebPError::Vp8PayloadSizeOverflow)?;
-    let padding_u32 = u32::try_from(padding).map_err(|_| WebPError::Vp8PaddingSizeOverflow)?;
+      u32::try_from(vp8_payload.len()).map_err(|_| WebPError::ContainerSizeOverflow)?;
+    let padding_u32 = u32::try_from(padding).map_err(|_| WebPError::ContainerSizeOverflow)?;
     let anmf_size = ANMF_HEADER_SIZE
       .checked_add(BASE_HEADER_SIZE)
       .and_then(|size| size.checked_add(vp8_payload_len_u32))
       .and_then(|size| size.checked_add(padding_u32))
-      .ok_or(WebPError::AnmfChunkSizeOverflow)?;
+      .ok_or(WebPError::ContainerSizeOverflow)?;
 
     destination.write_all(b"ANMF")?;
     destination.write_all(&anmf_size.to_le_bytes())?;
@@ -259,12 +259,12 @@ pub fn encode_animated_webp<W: Write>(
     destination.write_all(&[frame_flags])?;
 
     let chunk_tag = vp8_chunk_tag(&vp8_data, start)
-      .ok_or(WebPError::MissingVp8ChunkTag)
+      .ok_or(WebPError::InvalidEncodedData)
       .and_then(|tag| {
         if &tag == b"VP8 " || &tag == b"VP8L" {
           Ok(tag)
         } else {
-          Err(WebPError::InvalidVp8ChunkTag)
+          Err(WebPError::InvalidEncodedData)
         }
       })?;
     destination.write_all(&chunk_tag)?;

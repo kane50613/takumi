@@ -25,7 +25,7 @@ pub fn say_hello_to(name: &str) {
   // by default, takumi WON'T load any system fonts.
   //
   // Example:
-  // context.font_context_mut().load_and_store()
+  // context.font_context.load_and_store()
 
   // Create a text node with custom styling
   // Font size is set to 48.0 and other styles use default values

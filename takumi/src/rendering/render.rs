@@ -20,6 +20,7 @@ use crate::{
   },
   rendering::{
     AnimationFrame, Canvas, DitheringAlgorithm, RenderContext, apply_dithering,
+    get_node_mut_by_path,
     inline_drawing::get_parent_x_height,
     stacking_context::{
       apply_transform, build_stacking_contexts, collect_layout_children, paint_context,
@@ -211,7 +212,7 @@ fn collect_measure_result<'g>(
         container_size,
       }) => {
         let Some(current) = get_node_mut_by_path(node, &path) else {
-          unreachable!()
+          return Err(Error::LayoutError(TaffyError::InvalidInputNode(node_id)));
         };
         let layout = *layout_results.layout(node_id)?;
         current.context.sizing.container_size = container_size;
@@ -361,7 +362,7 @@ fn collect_measure_result<'g>(
         let mut children = Vec::with_capacity(child_ids.len());
         for child_id in child_ids {
           let Some(child) = measured_by_node_id.remove(&usize::from(child_id)) else {
-            unreachable!()
+            return Err(Error::LayoutError(TaffyError::InvalidInputNode(child_id)));
           };
           children.push(child);
         }
@@ -547,18 +548,6 @@ fn resolve_scene_at_time<'a, 'g>(
     .map(|scene| (scene, u64::from(scene.duration_ms.saturating_sub(1))))
 }
 
-fn get_node_mut_by_path<'a, 'g>(
-  root: &'a mut RenderNode<'g>,
-  path: &[usize],
-) -> Option<&'a mut RenderNode<'g>> {
-  let mut current = root;
-  for &index in path {
-    let children = current.children.as_deref_mut()?;
-    current = children.get_mut(index)?;
-  }
-  Some(current)
-}
-
 pub(crate) fn render_node<'g>(
   node: &mut RenderNode<'g>,
   layout_results: &LayoutResults,
@@ -610,16 +599,12 @@ mod tests {
 
     let scene = resolve_scene_at_time(&scenes, 50);
     assert!(scene.is_some());
-    let Some((_, local_time)) = scene else {
-      unreachable!()
-    };
+    let local_time = scene.map_or(0, |(_, local_time)| local_time);
     assert_eq!(local_time, 50);
 
     let scene = resolve_scene_at_time(&scenes, 150);
     assert!(scene.is_some());
-    let Some((_, local_time)) = scene else {
-      unreachable!()
-    };
+    let local_time = scene.map_or(0, |(_, local_time)| local_time);
     assert_eq!(local_time, 50);
   }
 
@@ -630,9 +615,7 @@ mod tests {
 
     let scene = resolve_scene_at_time(&scenes, 500);
     assert!(scene.is_some());
-    let Some((_, local_time)) = scene else {
-      unreachable!()
-    };
+    let local_time = scene.map_or(0, |(_, local_time)| local_time);
     assert_eq!(local_time, 199);
   }
 
@@ -643,9 +626,7 @@ mod tests {
 
     let frames_result = render_sequence_animation(&scenes, 30);
     assert!(frames_result.is_ok());
-    let Ok(frames) = frames_result else {
-      unreachable!()
-    };
+    let frames = frames_result.unwrap_or_default();
 
     assert!(frames.is_empty());
   }
@@ -657,9 +638,7 @@ mod tests {
 
     let frames_result = render_sequence_animation(&scenes, 30);
     assert!(frames_result.is_ok());
-    let Ok(frames) = frames_result else {
-      unreachable!()
-    };
+    let frames = frames_result.unwrap_or_default();
     let durations = frames
       .iter()
       .map(|frame| frame.duration_ms)
@@ -739,8 +718,9 @@ mod tests {
 
     let layout_result = measure_layout(options);
     assert!(layout_result.is_ok());
-    let Ok(layout) = layout_result else {
-      unreachable!()
+    let layout = match layout_result {
+      Ok(layout) => layout,
+      Err(_) => return,
     };
 
     assert_eq!(layout.width, 150.0);

@@ -11,7 +11,7 @@ use crate::{
   Result,
   layout::{node::resolve_image, style::*},
   rendering::{
-    BorderProperties, BufferPool, PaintSource, RenderContext, Sizing, fast_div_255,
+    BorderProperties, BufferPool, OverlayOptions, PaintSource, RenderContext, Sizing, fast_div_255,
     interpolate_bilinear, interpolate_nearest, overlay_gradient_tile, overlay_image,
     overlay_linear_gradient_tile, overlay_radial_gradient_tile,
   },
@@ -26,6 +26,31 @@ pub(crate) struct TileLayer {
 }
 
 pub(crate) type TileLayers = Vec<TileLayer>;
+
+#[derive(Clone, Copy)]
+pub(crate) struct LayerTileStyle {
+  pub pos: BackgroundPosition,
+  pub size: BackgroundSize,
+  pub repeat: BackgroundRepeat,
+  pub blend_mode: BlendMode,
+}
+
+pub(crate) struct ResolveLayerTilesInput<'a> {
+  pub area: Size<u32>,
+  pub context: &'a RenderContext<'a>,
+  pub buffer_pool: &'a mut BufferPool,
+}
+
+pub(crate) struct ResolveTileLayersInput<'a> {
+  pub images: &'a [BackgroundImage],
+  pub positions: &'a [BackgroundPosition],
+  pub sizes: &'a [BackgroundSize],
+  pub repeats: &'a [BackgroundRepeat],
+  pub blend_modes: &'a [BlendMode],
+  pub context: &'a RenderContext<'a>,
+  pub border_box: Size<u32>,
+  pub buffer_pool: &'a mut BufferPool,
+}
 
 fn should_rasterize_repeated_tile(
   tile: &BackgroundTile,
@@ -44,7 +69,9 @@ fn should_rasterize_repeated_tile(
 
 fn rasterize_tile(tile: BackgroundTile, buffer_pool: &mut BufferPool) -> Result<BackgroundTile> {
   let (width, height) = tile.dimensions();
-  let size = IntSize::from_wh(width, height).unwrap_or_else(|| unreachable!());
+  let Some(size) = IntSize::from_wh(width, height) else {
+    return Ok(tile);
+  };
   let mut data = buffer_pool.acquire_dirty((width * height * 4) as usize);
 
   for y in 0..height {
@@ -58,7 +85,9 @@ fn rasterize_tile(tile: BackgroundTile, buffer_pool: &mut BufferPool) -> Result<
     }
   }
 
-  let pixmap = Pixmap::from_vec(data, size).unwrap_or_else(|| unreachable!());
+  let Some(pixmap) = Pixmap::from_vec(data, size) else {
+    return Ok(tile);
+  };
   Ok(BackgroundTile::Pixmap(Arc::new(pixmap)))
 }
 
@@ -143,18 +172,22 @@ pub(crate) fn rasterize_layers(
         overlay_image(
           &mut pixmap,
           &layer.tile,
-          border,
-          layer_transform,
-          context.style.image_rendering,
-          layer.blend_mode,
-          None,
+          OverlayOptions {
+            border,
+            transform: layer_transform,
+            algorithm: context.style.image_rendering,
+            mode: layer.blend_mode,
+            combined_mask: None,
+          },
           buffer_pool,
         );
       }
     }
   }
 
-  let pixmap = Pixmap::from_vec(composed, pixmap_size).unwrap_or_else(|| unreachable!());
+  let Some(pixmap) = Pixmap::from_vec(composed, pixmap_size) else {
+    return Ok(None);
+  };
   Ok(Some(BackgroundTile::Pixmap(Arc::new(pixmap))))
 }
 
@@ -185,7 +218,7 @@ impl ColorTile {
       fast_div_255(color.0[2] as u32 * alpha),
       color.0[3],
     )
-    .unwrap_or_else(|| unreachable!());
+    .unwrap_or(PremultipliedColorU8::TRANSPARENT);
     Self {
       color: color.0.into(),
       premultiplied,
@@ -453,21 +486,15 @@ pub(crate) fn render_tile(
 }
 
 /// Resolve tile image, positions along X and Y for a background-like layer.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn resolve_layer_tiles(
   image: &BackgroundImage,
-  pos: BackgroundPosition,
-  size: BackgroundSize,
-  repeat: BackgroundRepeat,
-  blend_mode: BlendMode,
-  area: Size<u32>,
-  context: &RenderContext,
-  buffer_pool: &mut BufferPool,
+  style: LayerTileStyle,
+  input: ResolveLayerTilesInput<'_>,
 ) -> Result<Option<TileLayer>> {
-  let resolved_size = size.resolve(
-    area,
-    &context.sizing,
-    resolve_intrinsic_size(image, context),
+  let resolved_size = style.size.resolve(
+    input.area,
+    &input.context.sizing,
+    resolve_intrinsic_size(image, input.context),
   );
 
   if resolved_size.width == 0 || resolved_size.height == 0 {
@@ -477,14 +504,14 @@ pub(crate) fn resolve_layer_tiles(
   let (xs, ys, tile_w, tile_h) = match resolved_size.auto_axis {
     Some(AutoBackgroundAxis::Width) => {
       let (ys, tile_h) = resolve_axis_tiles(
-        repeat.1,
-        pos,
+        style.repeat.1,
+        style.pos,
         resolved_size.height,
-        area.height,
-        &context.sizing,
+        input.area.height,
+        &input.context.sizing,
         false,
       );
-      let tile_w = if repeat.1 == BackgroundRepeatStyle::Round {
+      let tile_w = if style.repeat.1 == BackgroundRepeatStyle::Round {
         resolve_auto_axis_from_intrinsic(
           AutoBackgroundAxis::Width,
           resolved_size.intrinsic_size,
@@ -494,20 +521,26 @@ pub(crate) fn resolve_layer_tiles(
       } else {
         resolved_size.width
       };
-      let (xs, tile_w) =
-        resolve_axis_tiles(repeat.0, pos, tile_w, area.width, &context.sizing, true);
+      let (xs, tile_w) = resolve_axis_tiles(
+        style.repeat.0,
+        style.pos,
+        tile_w,
+        input.area.width,
+        &input.context.sizing,
+        true,
+      );
       (xs, ys, tile_w, tile_h)
     }
     Some(AutoBackgroundAxis::Height) => {
       let (xs, tile_w) = resolve_axis_tiles(
-        repeat.0,
-        pos,
+        style.repeat.0,
+        style.pos,
         resolved_size.width,
-        area.width,
-        &context.sizing,
+        input.area.width,
+        &input.context.sizing,
         true,
       );
-      let tile_h = if repeat.0 == BackgroundRepeatStyle::Round {
+      let tile_h = if style.repeat.0 == BackgroundRepeatStyle::Round {
         resolve_auto_axis_from_intrinsic(
           AutoBackgroundAxis::Height,
           resolved_size.intrinsic_size,
@@ -517,25 +550,31 @@ pub(crate) fn resolve_layer_tiles(
       } else {
         resolved_size.height
       };
-      let (ys, tile_h) =
-        resolve_axis_tiles(repeat.1, pos, tile_h, area.height, &context.sizing, false);
+      let (ys, tile_h) = resolve_axis_tiles(
+        style.repeat.1,
+        style.pos,
+        tile_h,
+        input.area.height,
+        &input.context.sizing,
+        false,
+      );
       (xs, ys, tile_w, tile_h)
     }
     None => {
       let (xs, tile_w) = resolve_axis_tiles(
-        repeat.0,
-        pos,
+        style.repeat.0,
+        style.pos,
         resolved_size.width,
-        area.width,
-        &context.sizing,
+        input.area.width,
+        &input.context.sizing,
         true,
       );
       let (ys, tile_h) = resolve_axis_tiles(
-        repeat.1,
-        pos,
+        style.repeat.1,
+        style.pos,
         resolved_size.height,
-        area.height,
-        &context.sizing,
+        input.area.height,
+        &input.context.sizing,
         false,
       );
       (xs, ys, tile_w, tile_h)
@@ -546,11 +585,11 @@ pub(crate) fn resolve_layer_tiles(
     return Ok(None);
   }
 
-  let Some(tile) = render_tile(image, tile_w, tile_h, context)? else {
+  let Some(tile) = render_tile(image, tile_w, tile_h, input.context)? else {
     return Ok(None);
   };
   let tile = if should_rasterize_repeated_tile(&tile, &xs, &ys) {
-    rasterize_tile(tile, buffer_pool)?
+    rasterize_tile(tile, input.buffer_pool)?
   } else {
     tile
   };
@@ -559,7 +598,7 @@ pub(crate) fn resolve_layer_tiles(
     tile,
     xs,
     ys,
-    blend_mode,
+    blend_mode: style.blend_mode,
   }))
 }
 
@@ -632,39 +671,29 @@ pub(crate) fn collect_stretched_tile_positions(
 
   (positions, new_tile_size)
 }
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn resolve_tile_layers(
-  images: &[BackgroundImage],
-  positions: &[BackgroundPosition],
-  sizes: &[BackgroundSize],
-  repeats: &[BackgroundRepeat],
-  blend_modes: &[BlendMode],
-  context: &RenderContext,
-  border_box: Size<u32>,
-  buffer_pool: &mut BufferPool,
-) -> Result<TileLayers> {
-  let last_position = positions.last().copied().unwrap_or_default();
-  let last_size = sizes.last().copied().unwrap_or_default();
-  let last_repeat = repeats.last().copied().unwrap_or_default();
-  let last_blend_mode = blend_modes.last().copied().unwrap_or_default();
+pub(crate) fn resolve_tile_layers(input: ResolveTileLayersInput<'_>) -> Result<TileLayers> {
+  let last_position = input.positions.last().copied().unwrap_or_default();
+  let last_size = input.sizes.last().copied().unwrap_or_default();
+  let last_repeat = input.repeats.last().copied().unwrap_or_default();
+  let last_blend_mode = input.blend_modes.last().copied().unwrap_or_default();
 
   let mut results = Vec::new();
-  for (i, image) in images.iter().enumerate().rev() {
-    let pos = positions.get(i).copied().unwrap_or(last_position);
-    let size = sizes.get(i).copied().unwrap_or(last_size);
-    let repeat = repeats.get(i).copied().unwrap_or(last_repeat);
-    let blend_mode = blend_modes.get(i).copied().unwrap_or(last_blend_mode);
+  for (i, image) in input.images.iter().enumerate().rev() {
+    let style = LayerTileStyle {
+      pos: input.positions.get(i).copied().unwrap_or(last_position),
+      size: input.sizes.get(i).copied().unwrap_or(last_size),
+      repeat: input.repeats.get(i).copied().unwrap_or(last_repeat),
+      blend_mode: input.blend_modes.get(i).copied().unwrap_or(last_blend_mode),
+    };
 
     results.push(resolve_layer_tiles(
       image,
-      pos,
-      size,
-      repeat,
-      blend_mode,
-      border_box,
-      context,
-      buffer_pool,
+      style,
+      ResolveLayerTilesInput {
+        area: input.border_box,
+        context: input.context,
+        buffer_pool: input.buffer_pool,
+      },
     )?);
   }
 
@@ -681,16 +710,16 @@ pub(crate) fn create_mask(
   let mask_size = context.style.mask_size.as_ref();
   let mask_repeat = context.style.mask_repeat.as_ref();
 
-  let layers = resolve_tile_layers(
-    mask_image,
-    mask_position,
-    mask_size,
-    mask_repeat,
-    &[], // no blending mode for mask
+  let layers = resolve_tile_layers(ResolveTileLayersInput {
+    images: mask_image,
+    positions: mask_position,
+    sizes: mask_size,
+    repeats: mask_repeat,
+    blend_modes: &[], // no blending mode for mask
     context,
-    border_box.map(|x| x as u32),
+    border_box: border_box.map(|x| x as u32),
     buffer_pool,
-  )?;
+  })?;
 
   if layers.is_empty() {
     return Ok(None);
@@ -744,16 +773,16 @@ pub(crate) fn collect_background_layers(
   border_box: Size<f32>,
   buffer_pool: &mut BufferPool,
 ) -> Result<TileLayers> {
-  let mut layers = resolve_tile_layers(
-    context.style.background_image.as_deref().unwrap_or(&[]),
-    &context.style.background_position,
-    &context.style.background_size,
-    &context.style.background_repeat,
-    &context.style.background_blend_mode,
+  let mut layers = resolve_tile_layers(ResolveTileLayersInput {
+    images: context.style.background_image.as_deref().unwrap_or(&[]),
+    positions: &context.style.background_position,
+    sizes: &context.style.background_size,
+    repeats: &context.style.background_repeat,
+    blend_modes: &context.style.background_blend_mode,
     context,
-    border_box.map(|x| x as u32),
+    border_box: border_box.map(|x| x as u32),
     buffer_pool,
-  )?;
+  })?;
 
   let background_color = context
     .style

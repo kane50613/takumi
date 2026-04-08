@@ -26,20 +26,20 @@ fn webp_config(quality: u8, speed: u8) -> Result<WebPConfig> {
       requested_quality as f32
     },
   )
-  .map_err(|_| WebPError::ConfigConstruction)?;
+  .map_err(|_| WebPError::EncoderSetupFailed)?;
 
   config.lossless = if is_lossless { 1 } else { 0 };
   config.alpha_compression = if is_lossless { 0 } else { 1 };
   config.method = speed.clamp(0, 6) as i32;
   if unsafe { WebPValidateConfig(&config) } == 0 {
-    return Err(WebPError::InvalidConfig.into());
+    return Err(WebPError::EncoderSetupFailed.into());
   }
 
   Ok(config)
 }
 
 fn import_rgba_picture(image: &RgbaImage) -> Result<WebPPicture> {
-  let mut picture = WebPPicture::new().map_err(|_| WebPError::PictureInitialization)?;
+  let mut picture = WebPPicture::new().map_err(|_| WebPError::EncoderSetupFailed)?;
 
   picture.width = image.width() as i32;
   picture.height = image.height() as i32;
@@ -55,7 +55,7 @@ fn import_rgba_picture(image: &RgbaImage) -> Result<WebPPicture> {
   if import_ok == 0 {
     unsafe { WebPPictureFree(&mut picture) };
     return Err(
-      WebPError::Import {
+      WebPError::EncodeFailedWithCode {
         error_code: format!("{:?}", picture.error_code),
       }
       .into(),
@@ -123,7 +123,7 @@ fn encode_single_frame(
   if encode_ok == 0 {
     unsafe { WebPPictureFree(&raw mut picture) };
     return Err(
-      WebPError::EncodeWithCode {
+      WebPError::EncodeFailedWithCode {
         error_code: format!("{:?}", picture.error_code),
       }
       .into(),
@@ -136,7 +136,7 @@ fn encode_single_frame(
     Some(result) => result,
     None => {
       unsafe { WebPPictureFree(&raw mut picture) };
-      return Err(WebPError::MissingVp8ChunkInEncodedFrame.into());
+      return Err(WebPError::InvalidEncodedData.into());
     }
   };
 
@@ -188,7 +188,7 @@ fn anmf_chunk_bytes(vp8_len: usize) -> Result<usize> {
     .and_then(|v| v.checked_add(8))
     .and_then(|v| v.checked_add(vp8_len))
     .and_then(|v| v.checked_add(vp8_len & 1))
-    .ok_or(WebPError::AnmfChunkSizeOverflow.into())
+    .ok_or(WebPError::ContainerSizeOverflow.into())
 }
 
 fn write_le24<W: Write>(destination: &mut W, value: u32) -> Result<()> {
@@ -212,16 +212,16 @@ fn write_riff_container<W: Write>(
   let frames_total = frames.iter().try_fold(0usize, |acc, frame| {
     acc
       .checked_add(anmf_chunk_bytes(frame.payload().len())?)
-      .ok_or(WebPError::RiffPayloadSizeOverflow)
+      .ok_or(WebPError::ContainerSizeOverflow)
       .map_err(TakumiError::from)
   })?;
   let riff_payload_usize = 4usize
     .checked_add(VP8X_CHUNK_BYTES)
     .and_then(|v| v.checked_add(ANIM_CHUNK_BYTES))
     .and_then(|v| v.checked_add(frames_total))
-    .ok_or(WebPError::RiffPayloadSizeOverflow)?;
+    .ok_or(WebPError::ContainerSizeOverflow)?;
   let riff_payload =
-    u32::try_from(riff_payload_usize).map_err(|_| WebPError::RiffPayloadSizeTooLarge)?;
+    u32::try_from(riff_payload_usize).map_err(|_| WebPError::ContainerSizeOverflow)?;
 
   destination.write_all(b"RIFF")?;
   destination.write_all(&riff_payload.to_le_bytes())?;
@@ -247,9 +247,9 @@ fn write_riff_container<W: Write>(
       .checked_add(8)
       .and_then(|v| v.checked_add(vp8_len))
       .and_then(|v| v.checked_add(padding))
-      .ok_or(WebPError::AnmfPayloadSizeOverflow)?;
+      .ok_or(WebPError::ContainerSizeOverflow)?;
     let anmf_payload_size =
-      u32::try_from(anmf_payload_size_usize).map_err(|_| WebPError::AnmfPayloadSizeTooLarge)?;
+      u32::try_from(anmf_payload_size_usize).map_err(|_| WebPError::ContainerSizeOverflow)?;
 
     destination.write_all(b"ANMF")?;
     destination.write_all(&anmf_payload_size.to_le_bytes())?;
@@ -259,7 +259,7 @@ fn write_riff_container<W: Write>(
     write_le24(destination, frame.duration_ms.clamp(0, U24_MAX))?;
     destination.write_all(&[frame_flags])?;
     destination.write_all(&frame.tag)?;
-    let vp8_len_u32 = u32::try_from(vp8_len).map_err(|_| WebPError::Vp8PayloadSizeTooLarge)?;
+    let vp8_len_u32 = u32::try_from(vp8_len).map_err(|_| WebPError::ContainerSizeOverflow)?;
     destination.write_all(&vp8_len_u32.to_le_bytes())?;
     destination.write_all(vp8_payload)?;
     if padding == 1 {
@@ -292,7 +292,7 @@ pub(crate) fn write_webp(
       WebPPictureFree(&raw mut picture);
     }
     return Err(
-      WebPError::EncodeWithCode {
+      WebPError::EncodeFailedWithCode {
         error_code: format!("{:?}", picture.error_code),
       }
       .into(),

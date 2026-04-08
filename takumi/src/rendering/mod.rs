@@ -26,6 +26,8 @@ use image::RgbaImage;
 use taffy::Size;
 use tiny_skia::{IntSize, Pixmap};
 
+use crate::layout::tree::RenderNode;
+
 pub(crate) use background_drawing::*;
 pub(crate) use blend::*;
 pub(crate) use canvas::*;
@@ -216,4 +218,16 @@ pub(crate) fn premultiplied_pixmap_from_rgba(source: Cow<'_, RgbaImage>) -> Opti
 
   let size = IntSize::from_wh(width, height)?;
   Pixmap::from_vec(premultiplied, size)
+}
+
+pub(crate) fn get_node_mut_by_path<'a, 'g>(
+  root: &'a mut RenderNode<'g>,
+  path: &[usize],
+) -> Option<&'a mut RenderNode<'g>> {
+  let mut current = root;
+  for &index in path {
+    let children = current.children.as_deref_mut()?;
+    current = children.get_mut(index)?;
+  }
+  Some(current)
 }

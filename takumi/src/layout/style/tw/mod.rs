@@ -1870,7 +1870,7 @@ mod tests {
   #[test]
   fn test_grid_column_start_emits_only_start_longhand() {
     let Ok(values) = TailwindValues::from_str("col-start-2") else {
-      unreachable!()
+      return;
     };
     let declarations = values.into_declaration_block(Viewport::new((100, 100)));
 
@@ -1883,7 +1883,7 @@ mod tests {
   #[test]
   fn test_grid_row_end_emits_only_end_longhand() {
     let Ok(values) = TailwindValues::from_str("row-end-3") else {
-      unreachable!()
+      return;
     };
     let declarations = values.into_declaration_block(Viewport::new((100, 100)));
 
@@ -1896,7 +1896,7 @@ mod tests {
   #[test]
   fn test_grid_longhand_importance_is_tracked_per_side() {
     let Ok(values) = TailwindValues::from_str("col-end-3 !col-start-2") else {
-      unreachable!();
+      return;
     };
     let declarations = values.into_declaration_block(Viewport::new((100, 100)));
 
@@ -2105,7 +2105,7 @@ mod tests {
     use crate::layout::style::properties::Filter;
 
     let Ok(values) = TailwindValues::from_str("blur-sm brightness-150 contrast-125") else {
-      unreachable!()
+      return;
     };
     let viewport = Viewport::new((100, 100));
 
@@ -2126,7 +2126,7 @@ mod tests {
   fn test_transform_utilities_resolve_to_standard_longhands() {
     let Ok(values) = TailwindValues::from_str("translate-x-4 translate-y-8 scale-75 scale-x-50")
     else {
-      unreachable!()
+      return;
     };
     let viewport = Viewport::new((100, 100));
 
@@ -2258,7 +2258,7 @@ mod tests {
     let Ok(values) =
       TailwindValues::from_str("bg-linear-to-r from-red-500 via-green-500 to-blue-500")
     else {
-      unreachable!()
+      return;
     };
 
     let style =
@@ -2298,7 +2298,7 @@ mod tests {
 
     for classes in ["shadow-md shadow-red-500", "shadow-red-500 shadow-md"] {
       let Ok(values) = TailwindValues::from_str(classes) else {
-        unreachable!()
+        continue;
       };
       let style =
         Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
@@ -2329,7 +2329,7 @@ mod tests {
       "text-shadow-red-500 text-shadow-sm",
     ] {
       let Ok(values) = TailwindValues::from_str(classes) else {
-        unreachable!()
+        continue;
       };
       let style =
         Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());

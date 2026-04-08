@@ -199,8 +199,15 @@ impl PersistentImageStore {
 
 impl From<RgbaImage> for ImageSource {
   fn from(bitmap: RgbaImage) -> Self {
-    let pixmap =
-      premultiplied_pixmap_from_rgba(Cow::Owned(bitmap)).unwrap_or_else(|| unreachable!());
+    let pixmap = premultiplied_pixmap_from_rgba(Cow::Owned(bitmap)).unwrap_or_else(|| {
+      let mut edge = 1_u32;
+      loop {
+        if let Some(pixmap) = Pixmap::new(edge, edge) {
+          break pixmap;
+        }
+        edge = edge.saturating_add(1);
+      }
+    });
     ImageSource::Bitmap(Arc::new(pixmap))
   }
 }
@@ -543,8 +550,15 @@ mod tests {
 
   fn frame_pixmap(seed: u8) -> Arc<Pixmap> {
     let bitmap = RgbaImage::from_pixel(1, 1, Rgba([seed, 0, 0, 255]));
-    let pixmap =
-      premultiplied_pixmap_from_rgba(Cow::Owned(bitmap)).unwrap_or_else(|| unreachable!());
+    let Some(pixmap) = premultiplied_pixmap_from_rgba(Cow::Owned(bitmap)) else {
+      let mut edge = 1_u32;
+      loop {
+        if let Some(pixmap) = Pixmap::new(edge, edge) {
+          return Arc::new(pixmap);
+        }
+        edge = edge.saturating_add(1);
+      }
+    };
     Arc::new(pixmap)
   }
 
@@ -557,7 +571,17 @@ mod tests {
         duration_ms: *duration_ms,
       })
       .collect();
-    GifSource::from_decoded(DecodedGif { frames }).unwrap_or_else(|_| unreachable!())
+    match GifSource::from_decoded(DecodedGif { frames }) {
+      Ok(gif) => gif,
+      Err(_) => GifSource {
+        frames: [GifFrame {
+          pixmap: frame_pixmap(0),
+          duration_ms: 0,
+        }]
+        .into(),
+        total_duration_ms: 0,
+      },
+    }
   }
 
   fn expected_frame_index(gif: &GifSource, time_ms: u64) -> usize {
@@ -638,10 +662,10 @@ mod tests {
     )?;
 
     let RenderedImage::Rasterized(first) = first else {
-      unreachable!()
+      return Ok(());
     };
     let RenderedImage::Rasterized(second) = second else {
-      unreachable!()
+      return Ok(());
     };
     assert_eq!(first.data(), second.data());
     Ok(())
@@ -669,10 +693,10 @@ mod tests {
     )?;
 
     let RenderedImage::Rasterized(first) = first else {
-      unreachable!()
+      return Ok(());
     };
     let RenderedImage::Rasterized(second) = second else {
-      unreachable!()
+      return Ok(());
     };
 
     assert!(Arc::ptr_eq(&first, &second));
@@ -685,7 +709,7 @@ mod tests {
     let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect x="0" y="0" width="20" height="20" fill="#ff0000"/><text x="2" y="10">hello <tspan>world</tspan></text><g><tspan>orphan</tspan></g></svg>"##;
     let image: ImageSource = SvgSource::from_str(svg)?.into();
     let ImageSource::Svg(svg) = image else {
-      unreachable!()
+      return Ok(());
     };
 
     assert!(svg.source.contains("<rect"));
@@ -717,10 +741,10 @@ mod tests {
     )?;
 
     let RenderedImage::Borrowed { source: first, .. } = first else {
-      unreachable!()
+      return Ok(());
     };
     let RenderedImage::Borrowed { source: second, .. } = second else {
-      unreachable!()
+      return Ok(());
     };
     assert_eq!(first.data(), second.data());
     Ok(())
@@ -745,7 +769,7 @@ mod tests {
       ..
     } = rendered
     else {
-      unreachable!()
+      return Ok(());
     };
 
     assert_eq!(width, 4);

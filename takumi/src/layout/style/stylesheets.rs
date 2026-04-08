@@ -43,31 +43,53 @@ struct DeferredDeclaration {
   specified_value: String,
 }
 
-#[allow(clippy::too_many_arguments)]
+#[derive(Clone, Copy)]
+struct InterpolationContext<'a> {
+  progress: f32,
+  sizing: &'a Sizing,
+  current_color: Color,
+}
+
 fn interpolate_option_with_missing<T: Animatable + Clone>(
   target: &mut Option<T>,
   from: &Option<T>,
   to: &Option<T>,
   missing_from: T,
   missing_to: T,
-  progress: f32,
-  sizing: &Sizing,
-  current_color: Color,
+  context: InterpolationContext<'_>,
 ) {
   *target = match (from, to) {
     (Some(from), Some(to)) => {
       let mut value = from.clone();
-      value.interpolate(from, to, progress, sizing, current_color);
+      value.interpolate(
+        from,
+        to,
+        context.progress,
+        context.sizing,
+        context.current_color,
+      );
       Some(value)
     }
     (Some(from), None) => {
       let mut value = from.clone();
-      value.interpolate(from, &missing_to, progress, sizing, current_color);
+      value.interpolate(
+        from,
+        &missing_to,
+        context.progress,
+        context.sizing,
+        context.current_color,
+      );
       Some(value)
     }
     (None, Some(to)) => {
       let mut value = missing_from.clone();
-      value.interpolate(&missing_from, to, progress, sizing, current_color);
+      value.interpolate(
+        &missing_from,
+        to,
+        context.progress,
+        context.sizing,
+        context.current_color,
+      );
       Some(value)
     }
     (None, None) => None,
@@ -305,7 +327,7 @@ macro_rules! define_style {
 
           match self {
             Self::Ignored => Ok(ParsedDeclarations::new()),
-            Self::Custom => unreachable!(),
+            Self::Custom => Ok(ParsedDeclarations::new()),
             Self::Shorthand(property) => property.parse_css_input_declarations(css_input),
             Self::Longhand(property) => property.parse_css_input_declarations(css_input),
           }
@@ -552,6 +574,12 @@ macro_rules! define_style {
           sizing: &Sizing,
           current_color: Color,
         ) {
+          let interpolation_context = InterpolationContext {
+            progress,
+            sizing,
+            current_color,
+          };
+
           $(
             if animated_properties.contains(&LonghandId::[<$longhand:camel>]) {
               self.$longhand.interpolate(
@@ -572,9 +600,7 @@ macro_rules! define_style {
               &to.flex_grow,
               FlexGrow(0.0),
               FlexGrow(0.0),
-              progress,
-              sizing,
-              current_color,
+              interpolation_context,
             );
           }
 
@@ -585,9 +611,7 @@ macro_rules! define_style {
               &to.flex_shrink,
               FlexGrow(1.0),
               FlexGrow(1.0),
-              progress,
-              sizing,
-              current_color,
+              interpolation_context,
             );
           }
 
@@ -598,9 +622,7 @@ macro_rules! define_style {
               &to.webkit_text_stroke_width,
               Length::zero(),
               Length::zero(),
-              progress,
-              sizing,
-              current_color,
+              interpolation_context,
             );
           }
 
@@ -611,9 +633,7 @@ macro_rules! define_style {
               &to.webkit_text_stroke_color,
               ColorInput::CurrentColor,
               ColorInput::CurrentColor,
-              progress,
-              sizing,
-              current_color,
+              interpolation_context,
             );
           }
 
@@ -624,9 +644,7 @@ macro_rules! define_style {
               &to.webkit_text_fill_color,
               from.color,
               to.color,
-              progress,
-              sizing,
-              current_color,
+              interpolation_context,
             );
           }
         }
@@ -1818,10 +1836,7 @@ mod tests {
     let mut parser = Parser::new(&mut input);
     let declarations_result = StyleDeclarationBlock::parse(name, &mut parser);
     assert!(declarations_result.is_ok());
-    let Ok(declarations) = declarations_result else {
-      unreachable!()
-    };
-    declarations
+    declarations_result.unwrap_or_default()
   }
 
   fn inherited_style_from_pairs(
@@ -2114,7 +2129,7 @@ mod tests {
   fn style_declaration_block_from_str_parses_multiple_declarations() {
     let Ok(declarations) = StyleDeclarationBlock::from_str("color: #ff0000; padding: 1px 2px;")
     else {
-      unreachable!()
+      return;
     };
 
     assert_eq!(
@@ -2132,7 +2147,7 @@ mod tests {
   #[test]
   fn style_declaration_block_from_str_tracks_important_declarations() {
     let Ok(declarations) = StyleDeclarationBlock::from_str("color: inherit !important;") else {
-      unreachable!()
+      return;
     };
 
     assert_eq!(

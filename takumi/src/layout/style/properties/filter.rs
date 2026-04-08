@@ -552,7 +552,7 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
             let shadow = SizedShadow::from_text_shadow(drop_shadow, sizing, current_color, size);
             apply_drop_shadow_filter(pixmap, &shadow, buffer_pool)?;
           }
-          _ => unreachable!(),
+          _ => {}
         }
       }
     }
@@ -962,7 +962,7 @@ mod tests {
     let width = image.width();
     let height = image.height();
     let Some(mut pixmap) = PixmapMut::from_bytes(image.as_mut(), width, height) else {
-      unreachable!()
+      return Ok(());
     };
     apply_filters_to_pixmap(
       &mut pixmap,

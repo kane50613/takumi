@@ -2,7 +2,7 @@
 
 <!-- cargo-rdme start -->
 
-Takumi is a library with different parts to render your React components to images. This crate contains the core logic for layout, rendering.
+Takumi is a library with different parts to render UI component trees to images. This crate contains the core logic for layout and rendering.
 
 Checkout the [Quick Start](https://takumi.kane.tw/docs) if you are looking for napi-rs / WASM bindings.
 
@@ -30,7 +30,7 @@ let node = Node::container([Node::text("Hello, world!").with_style(
 let mut global = GlobalContext::default();
 
 // Load fonts
-global.font_context_mut().load_and_store(
+global.font_context.load_and_store(
   FontResource::new(include_bytes!("../../assets/fonts/geist/Geist[wght].woff2"))
 );
 

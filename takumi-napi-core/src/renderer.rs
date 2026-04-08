@@ -318,7 +318,7 @@ impl Renderer {
 
       for resource in default_fonts_resources {
         global
-          .font_context_mut()
+          .font_context
           .load_and_store(resource)
           .map_err(map_error)?;
       }
@@ -348,14 +348,14 @@ impl Renderer {
       for resource in custom_fonts_resources {
         state
           .global
-          .font_context_mut()
+          .font_context
           .load_and_store(resource)
           .map_err(map_error)?;
       }
     }
 
     if let Some(images) = options.persistent_images {
-      let mut state = renderer
+      let state = renderer
         .state
         .write()
         .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
@@ -365,7 +365,7 @@ impl Renderer {
 
         state
           .global
-          .persistent_image_store_mut()
+          .persistent_image_store
           .insert(image.src, image_source);
       }
     }
@@ -411,7 +411,7 @@ impl Renderer {
 
       state
         .global
-        .font_context_mut()
+        .font_context
         .load_and_store(resource)
         .map_err(map_error)?;
 
@@ -432,7 +432,7 @@ impl Renderer {
 
     state
       .global
-      .font_context_mut()
+      .font_context
       .load_and_store(resource)
       .map_err(map_error)?;
 
@@ -481,8 +481,8 @@ impl Renderer {
   /// Clears the renderer's internal image store.
   #[napi]
   pub fn clear_image_store(&self) {
-    if let Ok(mut state) = self.state.write() {
-      state.global.persistent_image_store_mut().clear();
+    if let Ok(state) = self.state.write() {
+      state.global.persistent_image_store.clear();
     }
   }
 

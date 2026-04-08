@@ -4,7 +4,7 @@ use crate::layout::style::BlendMode;
 use crate::{
   Result,
   layout::style::{Affine, Length, ObjectFit},
-  rendering::{BorderProperties, Canvas, RenderContext},
+  rendering::{BorderProperties, Canvas, RenderContext, SamplingOptions},
   resources::image::{ImageSource, RenderedImage},
 };
 
@@ -312,12 +312,13 @@ pub fn draw_image(
       algorithm: algo,
     } => canvas.overlay_sampled_pixmap(
       source,
-      width,
-      height,
+      Size { width, height },
       border,
       transform_with_content_offset,
-      image.logical_to_source,
-      algo,
+      SamplingOptions {
+        logical_to_source: image.logical_to_source,
+        algorithm: algo,
+      },
       BlendMode::Normal,
     ),
   }

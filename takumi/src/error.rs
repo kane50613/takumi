@@ -184,32 +184,17 @@ impl StyleSheetParseError {
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum WebPError {
-  /// The encoder config could not be constructed.
-  #[error("failed to construct WebP config")]
-  ConfigConstruction,
+  /// Encoder setup failed before actual frame encoding.
+  #[error("WebP encoder setup failed")]
+  EncoderSetupFailed,
 
-  /// The constructed encoder config failed validation.
-  #[error("invalid WebP config")]
-  InvalidConfig,
-
-  /// A `WebPPicture` could not be initialized.
-  #[error("failed to initialize WebP picture")]
-  PictureInitialization,
-
-  /// Importing RGBA pixel data into a `WebPPicture` failed.
-  #[error("WebP import error: {error_code}")]
-  Import {
-    /// The libwebp error code rendered as text.
-    error_code: String,
-  },
-
-  /// Encoding failed without a more specific libwebp error code.
-  #[error("WebP encode error")]
-  Encode,
+  /// Encoding failed.
+  #[error("WebP encode failed")]
+  EncodeFailed,
 
   /// Encoding failed with a libwebp error code.
-  #[error("WebP encode error: {error_code}")]
-  EncodeWithCode {
+  #[error("WebP encode failed ({error_code})")]
+  EncodeFailedWithCode {
     /// The libwebp error code rendered as text.
     error_code: String,
   },
@@ -261,61 +246,13 @@ pub enum WebPError {
   #[error("all animation frames must have the same dimensions")]
   MixedFrameDimensions,
 
-  /// The encoded RIFF container did not contain a VP8 or VP8L chunk.
-  #[error("VP8/VP8L chunk not found")]
-  MissingVp8Chunk,
+  /// Encoded data cannot be parsed as the expected WebP structure.
+  #[error("WebP encoded data is invalid or unsupported")]
+  InvalidEncodedData,
 
-  /// The encoded frame blob did not contain a VP8 or VP8L chunk.
-  #[error("VP8/VP8L chunk not found in encoded frame")]
-  MissingVp8ChunkInEncodedFrame,
-
-  /// The VP8 or VP8L chunk tag could not be read from the buffer.
-  #[error("missing VP8/VP8L chunk tag")]
-  MissingVp8ChunkTag,
-
-  /// The VP8 or VP8L chunk tag bytes were malformed.
-  #[error("invalid VP8/VP8L chunk tag")]
-  InvalidVp8ChunkTag,
-
-  /// The VP8 or VP8L payload length did not fit in `u32`.
-  #[error("VP8/VP8L payload size overflows u32")]
-  Vp8PayloadSizeOverflow,
-
-  /// The VP8 or VP8L chunk padding length did not fit in `u32`.
-  #[error("VP8/VP8L padding size overflows u32")]
-  Vp8PaddingSizeOverflow,
-
-  /// Computing the estimated VP8 or VP8L payload size overflowed.
-  #[error("estimated VP8/VP8L payload size overflow")]
-  EstimatedVp8PayloadSizeOverflow,
-
-  /// Computing the estimated RIFF size overflowed.
-  #[error("estimated RIFF size overflow")]
-  EstimatedRiffSizeOverflow,
-
-  /// Computing the RIFF payload size overflowed `usize`.
-  #[error("RIFF payload size overflow")]
-  RiffPayloadSizeOverflow,
-
-  /// The RIFF payload size did not fit in `u32`.
-  #[error("RIFF payload size overflows u32")]
-  RiffPayloadSizeTooLarge,
-
-  /// Computing the ANMF chunk size overflowed.
-  #[error("ANMF chunk size overflow")]
-  AnmfChunkSizeOverflow,
-
-  /// Computing the ANMF payload size overflowed `usize`.
-  #[error("ANMF payload size overflow")]
-  AnmfPayloadSizeOverflow,
-
-  /// The ANMF payload size did not fit in `u32`.
-  #[error("ANMF payload size overflows u32")]
-  AnmfPayloadSizeTooLarge,
-
-  /// The VP8 payload size did not fit in `u32`.
-  #[error("VP8 payload size overflows u32")]
-  Vp8PayloadSizeTooLarge,
+  /// Internal WebP container size calculations exceeded supported limits.
+  #[error("WebP container size exceeds supported limits")]
+  ContainerSizeOverflow,
 }
 
 /// The main error type for the Takumi crate.

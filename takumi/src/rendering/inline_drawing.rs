@@ -53,6 +53,15 @@ struct InlineOutlineRect {
   height: f32,
 }
 
+#[derive(Clone, Copy)]
+struct UnderlineDrawOptions {
+  color: Color,
+  offset: f32,
+  size: f32,
+  layout: Layout,
+  transform: Affine,
+}
+
 fn build_glyph_bounds_cache(
   canvas: &mut Canvas,
   resolved_glyphs: &HashMap<u32, ResolvedGlyph>,
@@ -137,23 +146,17 @@ fn draw_decoration_segment(
 fn compute_skip_padding(size: f32) -> f32 {
   (size * SKIP_PADDING_RATIO).clamp(SKIP_PADDING_MIN, SKIP_PADDING_MAX)
 }
-
-#[allow(clippy::too_many_arguments)]
 fn draw_underline_with_skip_ink(
   canvas: &mut Canvas,
   glyph_run: &GlyphRun<'_, InlineBrush>,
   glyph_bounds_cache: &HashMap<u32, GlyphSkipInkData>,
-  color: Color,
-  offset: f32,
-  size: f32,
-  layout: Layout,
-  transform: Affine,
+  options: UnderlineDrawOptions,
 ) {
-  let run_start_x = layout.border.left + layout.padding.left + glyph_run.offset();
+  let run_start_x = options.layout.border.left + options.layout.padding.left + glyph_run.offset();
   let run_end_x = run_start_x + glyph_run.advance();
-  let line_top = layout.border.top + layout.padding.top + offset;
-  let line_bottom = line_top + size;
-  let skip_padding = compute_skip_padding(size);
+  let line_top = options.layout.border.top + options.layout.padding.top + options.offset;
+  let line_bottom = line_top + options.size;
+  let skip_padding = compute_skip_padding(options.size);
 
   let mut skip_ranges = Vec::new();
 
@@ -163,8 +166,8 @@ fn draw_underline_with_skip_ink(
     };
     let local_bounds = glyph_data.bounds;
 
-    let inline_x = layout.border.left + layout.padding.left + glyph.x;
-    let inline_y = layout.border.top + layout.padding.top + glyph.y;
+    let inline_x = options.layout.border.left + options.layout.padding.left + glyph.x;
+    let inline_y = options.layout.border.top + options.layout.padding.top + glyph.y;
 
     let glyph_top = inline_y + local_bounds.top;
     let glyph_bottom = inline_y + local_bounds.bottom;
@@ -231,7 +234,15 @@ fn draw_underline_with_skip_ink(
   }
 
   if skip_ranges.is_empty() {
-    draw_decoration(canvas, glyph_run, color, offset, size, layout, transform);
+    draw_decoration(
+      canvas,
+      glyph_run,
+      options.color,
+      options.offset,
+      options.size,
+      options.layout,
+      options.transform,
+    );
     return;
   }
 
@@ -255,7 +266,13 @@ fn draw_underline_with_skip_ink(
   for (skip_start, skip_end) in merged_ranges {
     if skip_start > current_x {
       draw_decoration_segment(
-        canvas, color, current_x, skip_start, line_top, size, transform,
+        canvas,
+        options.color,
+        current_x,
+        skip_start,
+        line_top,
+        options.size,
+        options.transform,
       );
     }
     current_x = current_x.max(skip_end);
@@ -263,7 +280,13 @@ fn draw_underline_with_skip_ink(
 
   if run_end_x > current_x {
     draw_decoration_segment(
-      canvas, color, current_x, run_end_x, line_top, size, transform,
+      canvas,
+      options.color,
+      current_x,
+      run_end_x,
+      line_top,
+      options.size,
+      options.transform,
     );
   }
 }
@@ -299,11 +322,13 @@ fn draw_glyph_run_under_overline(
         canvas,
         glyph_run,
         &glyph_bounds_cache,
-        brush.decoration_color,
-        offset,
-        size,
-        layout,
-        context.transform,
+        UnderlineDrawOptions {
+          color: brush.decoration_color,
+          offset,
+          size,
+          layout,
+          transform: context.transform,
+        },
       );
     } else {
       draw_decoration(

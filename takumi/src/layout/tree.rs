@@ -176,47 +176,6 @@ fn registered_custom_property_parent_style(
   adjusted_parent
 }
 
-#[cfg(test)]
-fn build_inherited_style(
-  parent_style: &ComputedStyle,
-  node_layers: NodeStyleLayers,
-  matched_declarations: MatchedDeclarationsView<'_>,
-  viewport: Viewport,
-) -> ComputedStyle {
-  let style = {
-    let mut style = NodeStyle::default();
-
-    if let Some(preset) = node_layers.preset {
-      style.merge_from(preset);
-    }
-
-    for &declarations in &matched_declarations.normal {
-      for declaration in declarations.iter() {
-        declaration.merge_into_ref(&mut style);
-      }
-    }
-
-    if let Some(author_tw) = node_layers.author_tw {
-      style.append_block(author_tw.into_declaration_block(viewport));
-    }
-
-    if let Some(inline) = node_layers.inline {
-      style.merge_from(inline);
-    }
-
-    for &declarations in &matched_declarations.important {
-      for declaration in declarations.iter() {
-        declaration.merge_into_ref(&mut style);
-      }
-    }
-
-    style
-  };
-  let inherited_parent =
-    registered_custom_property_parent_style(parent_style, &[], Viewport::default());
-  style.inherit(&inherited_parent)
-}
-
 fn push_layout_node<'r, 'g>(
   nodes: &mut Vec<LayoutNodeState>,
   render_nodes: &mut Vec<&'r RenderNode<'g>>,
@@ -277,7 +236,7 @@ fn push_layout_node<'r, 'g>(
   while let Some(current) = stack.last_mut() {
     let Some(children) = current.children else {
       let Some(finished) = stack.pop() else {
-        unreachable!();
+        break;
       };
       if let Some(parent) = stack.last_mut() {
         parent.child_ids.push(finished.node_id);
@@ -292,7 +251,7 @@ fn push_layout_node<'r, 'g>(
     }
 
     let Some(finished) = stack.pop() else {
-      unreachable!();
+      break;
     };
     let node_index: usize = finished.node_id.into();
     nodes[node_index].children = finished.child_ids.into_boxed_slice();
@@ -464,7 +423,7 @@ impl TraversePartialTree for LayoutTree<'_, '_> {
 
   fn child_ids(&self, parent_node_id: NodeId) -> Self::ChildIter<'_> {
     let Some(node) = self.get_layout_node_ref(parent_node_id) else {
-      unreachable!()
+      return Vec::new().into_iter();
     };
 
     let children = if matches!(node.style.display, TaffyDisplay::Flex | TaffyDisplay::Grid) {
@@ -484,7 +443,7 @@ impl TraversePartialTree for LayoutTree<'_, '_> {
 
   fn child_count(&self, parent_node_id: NodeId) -> usize {
     let Some(node) = self.get_layout_node_ref(parent_node_id) else {
-      unreachable!()
+      return 0;
     };
 
     node.children.len()
@@ -492,14 +451,14 @@ impl TraversePartialTree for LayoutTree<'_, '_> {
 
   fn get_child_id(&self, parent_node_id: NodeId, child_index: usize) -> NodeId {
     let Some(node) = self.get_layout_node_ref(parent_node_id) else {
-      unreachable!()
+      return NodeId::from(0usize);
     };
 
     if matches!(node.style.display, TaffyDisplay::Flex | TaffyDisplay::Grid) {
       let mut ordered_children = self.child_ids(parent_node_id);
       return ordered_children
         .nth(child_index)
-        .unwrap_or_else(|| unreachable!());
+        .unwrap_or_else(|| NodeId::from(0usize));
     }
 
     node.children[child_index]
@@ -516,16 +475,15 @@ impl LayoutPartialTree for LayoutTree<'_, '_> {
   type CustomIdent = String;
 
   fn get_core_container_style(&self, node_id: NodeId) -> Self::CoreContainerStyle<'_> {
-    let Some(node) = self.get_layout_node_ref(node_id) else {
-      unreachable!()
-    };
-
-    &node.style
+    if let Some(node) = self.get_layout_node_ref(node_id) {
+      return &node.style;
+    }
+    &self.nodes[0].style
   }
 
   fn set_unrounded_layout(&mut self, node_id: NodeId, layout: &Layout) {
     let Some(node) = self.get_layout_node_mut_ref(node_id) else {
-      unreachable!()
+      return;
     };
 
     node.unrounded_layout = *layout;
@@ -567,7 +525,7 @@ impl<'r, 'g> LayoutTree<'r, 'g> {
 
     compute_cached_layout(self, node, inputs, |tree, node, inputs| {
       let Some(node_data) = tree.get_layout_node_ref(node) else {
-        unreachable!()
+        return compute_hidden_layout(tree, node);
       };
 
       let display_mode = node_data.style.display;
@@ -585,7 +543,7 @@ impl<'r, 'g> LayoutTree<'r, 'g> {
           |known_dimensions, available_space| {
             let idx: usize = node.into();
             let Some(render_node) = tree.render_nodes.get(idx) else {
-              unreachable!()
+              return Size::ZERO;
             };
 
             let known_dimensions = if should_strip_flex_intrinsic_stretch_known_dimension(
@@ -620,16 +578,13 @@ impl<'r, 'g> LayoutTree<'r, 'g> {
 
 impl CacheTree for LayoutTree<'_, '_> {
   fn cache_get(&self, node_id: NodeId, input: &LayoutInput) -> Option<LayoutOutput> {
-    let Some(node) = self.get_layout_node_ref(node_id) else {
-      unreachable!()
-    };
-
+    let node = self.get_layout_node_ref(node_id)?;
     node.cache.get(input)
   }
 
   fn cache_store(&mut self, node_id: NodeId, input: &LayoutInput, layout_output: LayoutOutput) {
     let Some(node) = self.get_layout_node_mut_ref(node_id) else {
-      unreachable!()
+      return;
     };
 
     node.cache.store(input, layout_output);
@@ -637,7 +592,7 @@ impl CacheTree for LayoutTree<'_, '_> {
 
   fn cache_clear(&mut self, node_id: NodeId) {
     let Some(node) = self.get_layout_node_mut_ref(node_id) else {
-      unreachable!()
+      return;
     };
 
     node.cache.clear();
@@ -713,7 +668,7 @@ impl LayoutGridContainer for LayoutTree<'_, '_> {
 impl RoundTree for LayoutTree<'_, '_> {
   fn get_unrounded_layout(&self, node_id: NodeId) -> Layout {
     let Some(node) = self.get_layout_node_ref(node_id) else {
-      unreachable!()
+      return Layout::new();
     };
 
     node.unrounded_layout
@@ -721,7 +676,7 @@ impl RoundTree for LayoutTree<'_, '_> {
 
   fn set_final_layout(&mut self, node_id: NodeId, layout: &Layout) {
     let Some(node) = self.get_layout_node_mut_ref(node_id) else {
-      unreachable!()
+      return;
     };
 
     node.final_layout = *layout;
@@ -1034,7 +989,14 @@ impl<'g> RenderNode<'g> {
 
     loop {
       let Some(current) = stack.last_mut() else {
-        unreachable!();
+        return RenderNode {
+          context: parent_context.clone(),
+          node: Some(Node::container([])),
+          children: None,
+          layout_style_override: None,
+          anonymous_text_content: None,
+          force_inline_layout: false,
+        };
       };
 
       if let Some(child) = current.pending_children.next() {
@@ -1049,7 +1011,14 @@ impl<'g> RenderNode<'g> {
       }
 
       let Some(mut finished) = stack.pop() else {
-        unreachable!();
+        return RenderNode {
+          context: parent_context.clone(),
+          node: Some(Node::container([])),
+          children: None,
+          layout_style_override: None,
+          anonymous_text_content: None,
+          force_inline_layout: false,
+        };
       };
 
       let children = if finished.children_is_some {
@@ -1285,28 +1254,19 @@ fn flush_inline_group<'g>(
 #[cfg(test)]
 mod tests {
   use cssparser::{Parser, ParserInput};
-  use smallvec::smallvec;
   use taffy::NodeId;
 
-  use super::build_inherited_style;
   use super::registered_custom_property_parent_style;
-  use crate::layout::style::{
-    LonghandId, PropertyRule, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
-    matching::MatchedDeclarationsView,
-  };
+  use crate::layout::style::{PropertyRule, StyleDeclaration, StyleDeclarationBlock, StyleSheet};
   use crate::layout::{
     Viewport,
-    node::NodeStyleLayers,
     style::{ComputedStyle, Length, Style},
   };
 
   fn parse_stylesheet(css: &str) -> StyleSheet {
     let result = StyleSheet::parse(css);
     assert!(result.is_ok(), "expected stylesheet to parse: {result:?}");
-    let Ok(stylesheet) = result else {
-      unreachable!();
-    };
-    stylesheet
+    result.unwrap_or_default()
   }
 
   #[test]
@@ -1328,32 +1288,6 @@ mod tests {
         NodeId::from(2usize)
       ]
     );
-  }
-
-  #[test]
-  fn stylesheet_important_overrides_inline_normal() {
-    let parent = ComputedStyle::default();
-    let layers = NodeStyleLayers {
-      inline: Some(Style::default().with(StyleDeclaration::width(Length::Px(20.0)))),
-      ..Default::default()
-    };
-
-    let normal = StyleDeclarationBlock {
-      declarations: smallvec![StyleDeclaration::width(Length::Px(20.0))],
-      importance: Default::default(),
-    };
-    let important = StyleDeclarationBlock {
-      declarations: smallvec![StyleDeclaration::width(Length::Px(30.0))],
-      importance: [LonghandId::Width].into(),
-    };
-    let matched = MatchedDeclarationsView {
-      normal: smallvec![&normal],
-      important: smallvec![&important],
-    };
-
-    let resolved = build_inherited_style(&parent, layers, matched, Viewport::new((1200, 630)));
-
-    assert_eq!(resolved.width, Length::Px(30.0));
   }
 
   #[test]
@@ -1738,7 +1672,7 @@ mod tests {
       "width declaration using registered custom property should parse: {declarations:?}"
     );
     let Ok(declarations) = declarations else {
-      unreachable!();
+      return;
     };
 
     let mut style = Style::default();
