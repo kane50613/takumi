@@ -92,6 +92,55 @@ describe("emoji", () => {
       );
     });
 
+    it("should extract regional indicator flags", () => {
+      const content = "US flag 🇺🇸";
+      const node = text(content);
+      const result = extractEmojis(node, "twemoji");
+
+      expect(result).toEqual(
+        container({
+          children: [
+            text("US flag "),
+            image({
+              src: "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f1fa-1f1f8.svg",
+              style: {
+                display: "inline-block",
+                width: "1em",
+                height: "1em",
+                margin: "0 0.05em 0 0.1em",
+                verticalAlign: "-0.1em",
+              },
+            }),
+          ],
+        }),
+      );
+    });
+
+    it("should extract keycap emojis", () => {
+      const content = "Press 1️⃣ now";
+      const node = text(content);
+      const result = extractEmojis(node, "twemoji");
+
+      expect(result).toEqual(
+        container({
+          children: [
+            text("Press "),
+            image({
+              src: "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/31-20e3.svg",
+              style: {
+                display: "inline-block",
+                width: "1em",
+                height: "1em",
+                margin: "0 0.05em 0 0.1em",
+                verticalAlign: "-0.1em",
+              },
+            }),
+            text(" now"),
+          ],
+        }),
+      );
+    });
+
     it("should support different emoji types", () => {
       const emoji = "😀";
       const configs = [
@@ -111,6 +160,16 @@ describe("emoji", () => {
         {
           type: "openmoji",
           expectedSrc: "https://cdn.jsdelivr.net/npm/@svgmoji/openmoji@2.0.0/svg/1F600.svg",
+        },
+        {
+          type: "fluent",
+          expectedSrc:
+            "https://cdn.jsdelivr.net/gh/shuding/fluentui-emoji-unicode/assets/1f600_color.svg",
+        },
+        {
+          type: "fluentFlat",
+          expectedSrc:
+            "https://cdn.jsdelivr.net/gh/shuding/fluentui-emoji-unicode/assets/1f600_flat.svg",
         },
       ] as const;
 

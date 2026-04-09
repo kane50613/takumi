@@ -1,10 +1,13 @@
 import { container, image, text } from "./helpers";
 import type { Node, TextNode } from "./types";
 
-export type EmojiType = "twemoji" | "blobmoji" | "noto" | "openmoji";
+export type EmojiType = "twemoji" | "blobmoji" | "noto" | "openmoji" | "fluent" | "fluentFlat";
 
 const UFE0Fg = /\uFE0F/g;
 const U200D = String.fromCharCode(0x200d);
+const EXTENDED_PICTOGRAPHIC_REGEX = /\p{Extended_Pictographic}/u;
+const REGIONAL_INDICATOR_PAIR_REGEX = /^(?:\p{Regional_Indicator}){2}$/u;
+const KEYCAP_EMOJI_REGEX = /^[#*0-9]\uFE0F?\u20E3$/u;
 
 function getIconCode(char: string) {
   const c = char.indexOf(U200D) < 0 ? char.replace(UFE0Fg, "") : char;
@@ -30,11 +33,16 @@ const apis = {
   openmoji: "https://cdn.jsdelivr.net/npm/@svgmoji/openmoji@2.0.0/svg/",
   blobmoji: "https://cdn.jsdelivr.net/npm/@svgmoji/blob@2.0.0/svg/",
   noto: "https://cdn.jsdelivr.net/gh/svgmoji/svgmoji/packages/svgmoji__noto/svg/",
+  fluent: (code: string) =>
+    `https://cdn.jsdelivr.net/gh/shuding/fluentui-emoji-unicode/assets/${code.toLowerCase()}_color.svg`,
+  fluentFlat: (code: string) =>
+    `https://cdn.jsdelivr.net/gh/shuding/fluentui-emoji-unicode/assets/${code.toLowerCase()}_flat.svg`,
 };
 
 function getEmojiUrl(icon: string, type: EmojiType) {
   const code = getIconCode(icon);
-  return type === "twemoji" ? apis.twemoji(code) : `${apis[type]}${code.toUpperCase()}.svg`;
+  const api = apis[type];
+  return typeof api === "function" ? api(code) : `${api}${code.toUpperCase()}.svg`;
 }
 
 let segmenter: Intl.Segmenter | null | undefined;
@@ -58,6 +66,14 @@ function getSegments(text: string): { segment: string }[] {
   return Array.from(text).map((s) => ({ segment: s }));
 }
 
+function isEmojiSegment(segment: string): boolean {
+  return (
+    EXTENDED_PICTOGRAPHIC_REGEX.test(segment) ||
+    REGIONAL_INDICATOR_PAIR_REGEX.test(segment) ||
+    KEYCAP_EMOJI_REGEX.test(segment)
+  );
+}
+
 function splitTextToNodes(node: TextNode, emojiType: EmojiType): Node[] {
   const nodes: Node[] = [];
   let currentText = "";
@@ -65,7 +81,7 @@ function splitTextToNodes(node: TextNode, emojiType: EmojiType): Node[] {
   const segments = getSegments(node.text);
 
   for (const { segment } of segments) {
-    if (/\p{Extended_Pictographic}/u.test(segment)) {
+    if (isEmojiSegment(segment)) {
       if (currentText) {
         nodes.push(text({ text: currentText }));
         currentText = "";
@@ -96,9 +112,7 @@ function splitTextToNodes(node: TextNode, emojiType: EmojiType): Node[] {
 
 export function extractEmojis(node: Node, emojiType: EmojiType): Node {
   if (node.type === "text") {
-    const hasEmoji = getSegments(node.text).some(({ segment }) =>
-      /\p{Extended_Pictographic}/u.test(segment),
-    );
+    const hasEmoji = getSegments(node.text).some(({ segment }) => isEmojiSegment(segment));
 
     if (hasEmoji) {
       const { type: _, ...metadata } = node;
