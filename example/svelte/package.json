@@ -15,9 +15,9 @@
   },
   "devDependencies": {
     "@sveltejs/adapter-vercel": "^6.3.3",
-    "@sveltejs/kit": "^2.50.2",
+    "@sveltejs/kit": "^2.57.0",
     "@tailwindcss/vite": "^4.2.2",
-    "svelte": "^5.55.1",
+    "svelte": "^5.55.2",
     "svelte-check": "^4.4.6",
     "tailwindcss": "^4.2.2",
     "typescript": "catalog:",

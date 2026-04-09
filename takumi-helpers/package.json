@@ -58,7 +58,7 @@
     "ultrahtml": "^1.6.0"
   },
   "peerDependencies": {
-    "react": "^18.0.0 || ^19.0.0",
+    "react": "^19.2.5",
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "peerDependenciesMeta": {
