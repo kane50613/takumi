@@ -1,5 +1,11 @@
 # @takumi-rs/helpers
 
+## 1.0.0-rc.17
+
+### Patch Changes
+
+- 6767ad9: Support fluent emoji API
+
 ## 1.0.0-rc.16
 
 ## 1.0.0-rc.15
