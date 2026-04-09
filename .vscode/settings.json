@@ -1,6 +1,4 @@
 {
-  "typescript.tsdk": "node_modules/typescript/lib",
-  "typescript.preferences.importModuleSpecifier": "shortest",
   "rust-analyzer.diagnostics.disabled": ["inactive-code"],
   "tailwindCSS.classAttributes": ["class", "className", "tw"],
   "editor.defaultFormatter": "oxc.oxc-vscode",
