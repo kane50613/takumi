@@ -15,7 +15,6 @@ use libwebp_sys::{WebPDecodeRGBA, WebPFree};
 #[cfg(target_arch = "wasm32")]
 use image_webp::WebPDecoder;
 
-use crate::error::WebPError;
 use crate::rendering::premultiplied_pixmap_from_rgba;
 
 const PNG_SIGNATURE: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
@@ -144,6 +143,8 @@ fn decode_webp(bytes: &[u8]) -> ImageResult<Pixmap> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn decode_webp(bytes: &[u8]) -> ImageResult<Pixmap> {
+  use crate::error::WebPError;
+
   let mut width = 0;
   let mut height = 0;
   let decoded_ptr = unsafe {
