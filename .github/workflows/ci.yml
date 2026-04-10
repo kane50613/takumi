@@ -654,7 +654,6 @@ jobs:
       - name: Publish PR previews
         run: >
           bunx pkg-pr-new@latest publish
-          --bun
           --packageManager=bun
           ./takumi-helpers
           ./takumi-napi-core
