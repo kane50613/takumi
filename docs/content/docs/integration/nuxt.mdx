@@ -1,0 +1,82 @@
+---
+title: Nuxt
+description: Use Takumi through Nuxt OG Image in Nuxt apps.
+---
+
+If you're using Nuxt, the recommended integration is [Nuxt OG Image](https://nuxtseo.com/docs/og-image/getting-started/introduction). It already knows how to render Vue components as OG images, and its [Takumi renderer](https://nuxtseo.com/docs/og-image/renderers/takumi) is the easiest way to use Takumi in a Nuxt app.
+
+<Steps>
+  <Step>
+    ### Install Nuxt OG Image and the Takumi binding
+
+    Add the Nuxt module first, then install the Takumi package that matches your runtime.
+
+    ```bash
+    npx nuxt module add og-image
+    ```
+
+    ```npm
+    npm install -D @takumi-rs/core
+    ```
+
+    For edge runtimes such as Cloudflare Workers or Vercel Edge, install `@takumi-rs/wasm` instead of `@takumi-rs/core`.
+
+  </Step>
+  <Step>
+    ### Set Takumi as the renderer
+
+    Configure Nuxt OG Image to use Takumi by default.
+
+    ```ts title="nuxt.config.ts"
+    export default defineNuxtConfig({
+      ogImage: {
+        defaults: {
+          renderer: "takumi",
+        },
+      },
+    });
+    ```
+
+  </Step>
+  <Step>
+    ### Create a `.takumi.vue` template
+
+    Nuxt OG Image detects the Takumi renderer from the `.takumi.vue` suffix.
+
+    ```vue title="components/OgImage/BlogPost.takumi.vue"
+    <script setup lang="ts">
+    defineProps<{
+      title: string;
+      description?: string;
+    }>();
+    </script>
+
+    <template>
+      <div class="w-full h-full flex flex-col justify-center bg-gray-950 text-white p-16">
+        <p class="text-6xl font-bold leading-tight">
+          {{ title }}
+        </p>
+        <p v-if="description" class="mt-6 text-2xl text-gray-400">
+          {{ description }}
+        </p>
+      </div>
+    </template>
+    ```
+
+  </Step>
+  <Step>
+    ### Attach the template to a page
+
+    Use `defineOgImageComponent()` in the page that should emit the image.
+
+    ```vue title="pages/blog/[slug].vue"
+    <script setup lang="ts">
+    defineOgImageComponent("BlogPost", {
+      title: "Takumi + Nuxt",
+      description: "Render OG images with Nuxt OG Image.",
+    });
+    </script>
+    ```
+
+  </Step>
+</Steps>
