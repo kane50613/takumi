@@ -31,6 +31,7 @@
 
 - 4a114d5: Removed `detailed_css_error` feature
 - 1373f0a: **Replace `TakumiError` with `takumi::error::Error`**
+- 80535ba: Declare `border_style`, `border_color` as shorthand
 
 ### Minor Changes
 
@@ -58,6 +59,7 @@
 - dc6126d: Support `<calc-keyword>`
 - 1aa4442: Optimize gradient performance
 - 3d2eab2: Blockify node when `position: absolute` #572
+- 80535ba: Support `border-top/right/bottom/left` shorthand properties
 
 ## 1.0.0-rc.17
 
