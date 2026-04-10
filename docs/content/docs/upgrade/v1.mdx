@@ -135,7 +135,7 @@ use takumi::error::Error; // [!code ++]
 
 ```rust
 let viewport = (800_u32, 600_u32).into(); // [!code --]
-let viewport = Viewport::new(800, 600); // [!code ++]
+let viewport = Viewport::new((800, 600)); // [!code ++]
 ```
 
 ### `ImageSource::size()` Is Now Private
