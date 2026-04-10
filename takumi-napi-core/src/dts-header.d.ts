@@ -5,6 +5,8 @@ export type { ContainerNode, ImageNode, NodeMetadata, TextNode } from "@takumi-r
 
 export type { Node };
 
+export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
+
 export interface FontDetails {
   /**
    * The name of the font. If not provided, the name in the font file will be used.
@@ -13,7 +15,7 @@ export interface FontDetails {
   /**
    * The font data.
    */
-  data: Uint8Array | ArrayBuffer;
+  data: ByteBuf;
   /**
    * The weight of the font. If not provided, the weight in the font file will be used.
    */
@@ -24,7 +26,7 @@ export interface FontDetails {
   style?: "normal" | "italic" | "oblique" | `oblique ${number}deg` | (string & {});
 }
 
-export type Font = FontDetails | Uint8Array | ArrayBuffer;
+export type Font = FontDetails | ByteBuf;
 
 export type KeyframesMap = Record<string, Record<string, Properties>>;
 export type KeyframesRuleList = {
