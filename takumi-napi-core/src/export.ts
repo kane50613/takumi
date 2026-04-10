@@ -12,7 +12,7 @@ export type FontLoader =
   | Font
   | (Omit<FontDetails, "data"> & {
       key?: string;
-      data: (() => Promise<FontDetails["data"]>) | (() => FontDetails["data"]);
+      data: FontDetails["data"] | (() => Promise<FontDetails["data"]> | FontDetails["data"]);
     });
 
 export type ImageSourceLoaderSync = Omit<ImageSource, "data"> & {
@@ -23,7 +23,7 @@ export type FontLoaderSync =
   | Font
   | (Omit<FontDetails, "data"> & {
       key?: string;
-      data: () => FontDetails["data"];
+      data: FontDetails["data"] | (() => FontDetails["data"]);
     });
 
 export class Renderer extends NativeRenderer {
