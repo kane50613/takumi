@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.1
+
+### Patch Changes
+
+- 25dd037: Fix opacity compositing on sub canvas
+
 ## 1.0.0
 
 ### Major Changes

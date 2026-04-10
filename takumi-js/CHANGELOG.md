@@ -1,5 +1,14 @@
 # takumi-js
 
+## 1.0.1
+
+### Patch Changes
+
+- 0401db2: Fix `fonts` not accepting Node.js `Buffer`
+  - @takumi-rs/core@1.0.1
+  - @takumi-rs/wasm@1.0.1
+  - @takumi-rs/helpers@1.0.1
+
 ## 1.0.0
 
 ### Major Changes
