@@ -649,36 +649,72 @@ fn blit_sampled_paint_source_translation(
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
   let mask_data = combined_mask.map(TinyMask::data);
-  for dest_y in dest_y_min..dest_y_max {
-    let src_y = (dest_y - offset_y) as f32;
-    let mut sample_point = sampling.logical_to_source.transform_point(Point {
-      x: (dest_x_min - offset_x) as f32 + 0.5,
-      y: src_y + 0.5,
-    });
-    for dest_x in dest_x_min..dest_x_max {
-      let mut src = sample_paint_source(source, sampling.algorithm, sample_point.x, sample_point.y)
-        .unwrap_or([0, 0, 0, 0]);
-      sample_point.x += sampling.logical_to_source.a;
-      sample_point.y += sampling.logical_to_source.b;
-      if src[3] == 0 {
-        continue;
-      }
 
-      let dest_x = dest_x as u32;
-      let dest_y = dest_y as u32;
-      if let Some(mask_data) = mask_data {
-        let alpha = mask_data[mask_index_from_coord(dest_x, dest_y, canvas_width)];
-        if alpha == 0 {
-          continue;
-        }
-        src = scale_premultiplied_pixel(src, alpha);
+  if mode == BlendMode::Normal {
+    for dest_y in dest_y_min..dest_y_max {
+      let src_y = (dest_y - offset_y) as f32;
+      let dst_row = dest_y as usize * canvas_width as usize;
+      let mut sample_point = sampling.logical_to_source.transform_point(Point {
+        x: (dest_x_min - offset_x) as f32 + 0.5,
+        y: src_y + 0.5,
+      });
+      for dest_x in dest_x_min..dest_x_max {
+        let mut src =
+          sample_paint_source(source, sampling.algorithm, sample_point.x, sample_point.y)
+            .unwrap_or([0, 0, 0, 0]);
+        sample_point.x += sampling.logical_to_source.a;
+        sample_point.y += sampling.logical_to_source.b;
         if src[3] == 0 {
           continue;
         }
-      }
 
-      let index = (dest_y * canvas_width + dest_x) as usize;
-      blend_premultiplied_pixel(&mut pixels[index], src, mode);
+        let dest_x = dest_x as usize;
+        if let Some(mask_data) = mask_data {
+          let alpha = mask_data[dst_row + dest_x];
+          if alpha == 0 {
+            continue;
+          }
+          src = scale_premultiplied_pixel(src, alpha);
+          if src[3] == 0 {
+            continue;
+          }
+        }
+
+        composite_premultiplied_over(&mut pixels[dst_row + dest_x], src);
+      }
+    }
+  } else {
+    for dest_y in dest_y_min..dest_y_max {
+      let src_y = (dest_y - offset_y) as f32;
+      let dst_row = dest_y as usize * canvas_width as usize;
+      let mut sample_point = sampling.logical_to_source.transform_point(Point {
+        x: (dest_x_min - offset_x) as f32 + 0.5,
+        y: src_y + 0.5,
+      });
+      for dest_x in dest_x_min..dest_x_max {
+        let mut src =
+          sample_paint_source(source, sampling.algorithm, sample_point.x, sample_point.y)
+            .unwrap_or([0, 0, 0, 0]);
+        sample_point.x += sampling.logical_to_source.a;
+        sample_point.y += sampling.logical_to_source.b;
+        if src[3] == 0 {
+          continue;
+        }
+
+        let dest_x = dest_x as usize;
+        if let Some(mask_data) = mask_data {
+          let alpha = mask_data[dst_row + dest_x];
+          if alpha == 0 {
+            continue;
+          }
+          src = scale_premultiplied_pixel(src, alpha);
+          if src[3] == 0 {
+            continue;
+          }
+        }
+
+        blend_premultiplied_pixel(&mut pixels[dst_row + dest_x], src, mode);
+      }
     }
   }
 }
@@ -738,58 +774,148 @@ fn blit_paint_source_translation(
         return;
       }
 
-      for dest_y in dest_y_min..dest_y_max {
-        let src_y = (dest_y - offset_y) as u32;
-        let dst_row = dest_y as usize * canvas_width as usize;
-        let src_row = src_y as usize * source_width as usize;
-        for dest_x in dest_x_min..dest_x_max {
-          let src_x = (dest_x - offset_x) as u32;
-          let mut src = premultiplied_from_pixel(source_pixels[src_row + src_x as usize]);
-          if src[3] == 0 {
-            continue;
-          }
+      if mode == BlendMode::Normal {
+        if let Some(mask_data) = mask_data {
+          // Row-level masked Pixmap blit for Normal blend.
+          let copy_width = (dest_x_max - dest_x_min) as usize;
+          let src_x_start = (dest_x_min - offset_x) as usize;
+          for dest_y in dest_y_min..dest_y_max {
+            let src_y = (dest_y - offset_y) as usize;
+            let src_start = src_y * source_width as usize + src_x_start;
+            let dst_start = (dest_y as u32 * canvas_width + dest_x_min as u32) as usize;
+            let mask_row_start = dest_y as usize * canvas_width as usize + dest_x_min as usize;
+            let mask_row = &mask_data[mask_row_start..mask_row_start + copy_width];
 
-          let dest_x = dest_x as u32;
-          if let Some(mask_data) = mask_data {
-            let alpha = mask_data[dst_row + dest_x as usize];
-            if alpha == 0 {
+            if mask_row.iter().all(|&a| a == 0) {
               continue;
             }
-            src = scale_premultiplied_pixel(src, alpha);
+
+            if mask_row.iter().all(|&a| a == u8::MAX) {
+              let src_end = src_start + copy_width;
+              let dst_end = dst_start + copy_width;
+              let dst = bytemuck::cast_slice_mut(&mut pixels[dst_start..dst_end]);
+              composite_premultiplied_over_span(dst, &source_pixels[src_start..src_end]);
+            } else {
+              for i in 0..copy_width {
+                let mask_alpha = mask_row[i];
+                if mask_alpha == 0 {
+                  continue;
+                }
+                let mut src = premultiplied_from_pixel(source_pixels[src_start + i]);
+                if src[3] == 0 {
+                  continue;
+                }
+                if mask_alpha != u8::MAX {
+                  src = scale_premultiplied_pixel(src, mask_alpha);
+                  if src[3] == 0 {
+                    continue;
+                  }
+                }
+                composite_premultiplied_over(&mut pixels[dst_start + i], src);
+              }
+            }
+          }
+        } else {
+          // Normal blend, no mask — per-pixel with direct composite.
+          for dest_y in dest_y_min..dest_y_max {
+            let src_y = (dest_y - offset_y) as u32;
+            let dst_row = dest_y as usize * canvas_width as usize;
+            let src_row = src_y as usize * source_width as usize;
+            for dest_x in dest_x_min..dest_x_max {
+              let src_x = (dest_x - offset_x) as u32;
+              let src = premultiplied_from_pixel(source_pixels[src_row + src_x as usize]);
+              if src[3] == 0 {
+                continue;
+              }
+              composite_premultiplied_over(&mut pixels[dst_row + dest_x as usize], src);
+            }
+          }
+        }
+      } else {
+        for dest_y in dest_y_min..dest_y_max {
+          let src_y = (dest_y - offset_y) as u32;
+          let dst_row = dest_y as usize * canvas_width as usize;
+          let src_row = src_y as usize * source_width as usize;
+          for dest_x in dest_x_min..dest_x_max {
+            let src_x = (dest_x - offset_x) as u32;
+            let mut src = premultiplied_from_pixel(source_pixels[src_row + src_x as usize]);
             if src[3] == 0 {
               continue;
             }
-          }
 
-          blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
+            let dest_x = dest_x as u32;
+            if let Some(mask_data) = mask_data {
+              let alpha = mask_data[dst_row + dest_x as usize];
+              if alpha == 0 {
+                continue;
+              }
+              src = scale_premultiplied_pixel(src, alpha);
+              if src[3] == 0 {
+                continue;
+              }
+            }
+
+            blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
+          }
         }
       }
     }
     _ => {
-      for dest_y in dest_y_min..dest_y_max {
-        let src_y = (dest_y - offset_y) as f32;
-        let dst_row = dest_y as usize * canvas_width as usize;
-        for dest_x in dest_x_min..dest_x_max {
-          let src_x = (dest_x - offset_x) as f32;
-          let mut src = sample_paint_source(source, ImageScalingAlgorithm::Pixelated, src_x, src_y)
-            .unwrap_or([0; 4]);
-          if src[3] == 0 {
-            continue;
-          }
-
-          let dest_x = dest_x as u32;
-          if let Some(mask_data) = mask_data {
-            let alpha = mask_data[dst_row + dest_x as usize];
-            if alpha == 0 {
-              continue;
-            }
-            src = scale_premultiplied_pixel(src, alpha);
+      if mode == BlendMode::Normal {
+        for dest_y in dest_y_min..dest_y_max {
+          let src_y = (dest_y - offset_y) as f32;
+          let dst_row = dest_y as usize * canvas_width as usize;
+          for dest_x in dest_x_min..dest_x_max {
+            let src_x = (dest_x - offset_x) as f32;
+            let mut src =
+              sample_paint_source(source, ImageScalingAlgorithm::Pixelated, src_x, src_y)
+                .unwrap_or([0; 4]);
             if src[3] == 0 {
               continue;
             }
-          }
 
-          blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
+            let dest_x = dest_x as u32;
+            if let Some(mask_data) = mask_data {
+              let alpha = mask_data[dst_row + dest_x as usize];
+              if alpha == 0 {
+                continue;
+              }
+              src = scale_premultiplied_pixel(src, alpha);
+              if src[3] == 0 {
+                continue;
+              }
+            }
+
+            composite_premultiplied_over(&mut pixels[dst_row + dest_x as usize], src);
+          }
+        }
+      } else {
+        for dest_y in dest_y_min..dest_y_max {
+          let src_y = (dest_y - offset_y) as f32;
+          let dst_row = dest_y as usize * canvas_width as usize;
+          for dest_x in dest_x_min..dest_x_max {
+            let src_x = (dest_x - offset_x) as f32;
+            let mut src =
+              sample_paint_source(source, ImageScalingAlgorithm::Pixelated, src_x, src_y)
+                .unwrap_or([0; 4]);
+            if src[3] == 0 {
+              continue;
+            }
+
+            let dest_x = dest_x as u32;
+            if let Some(mask_data) = mask_data {
+              let alpha = mask_data[dst_row + dest_x as usize];
+              if alpha == 0 {
+                continue;
+              }
+              src = scale_premultiplied_pixel(src, alpha);
+              if src[3] == 0 {
+                continue;
+              }
+            }
+
+            blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
+          }
         }
       }
     }
@@ -843,6 +969,42 @@ fn blit_solid_translation(
       }
     }
     return;
+  }
+
+  if mode == BlendMode::Normal {
+    if let Some(mask_data) = combined_mask.map(TinyMask::data) {
+      let row_stride = canvas_width as usize * 4;
+      let pixel_count = (dest_x_max - dest_x_min) as usize;
+      let color_is_opaque = color[3] == u8::MAX;
+
+      for dest_y in dest_y_min..dest_y_max {
+        let mask_row_start = dest_y as usize * canvas_width as usize + dest_x_min as usize;
+        let mask_row = &mask_data[mask_row_start..mask_row_start + pixel_count];
+
+        if mask_row.iter().all(|&a| a == 0) {
+          continue;
+        }
+
+        let dst_row_start = dest_y as usize * row_stride + dest_x_min as usize * 4;
+        let dst_row = &mut data[dst_row_start..dst_row_start + pixel_count * 4];
+
+        if color_is_opaque && mask_row.iter().all(|&a| a == u8::MAX) {
+          fill_repeated_premultiplied_pixel(dst_row, color);
+        } else {
+          for (dst_pixel, &mask_alpha) in dst_row.chunks_exact_mut(4).zip(mask_row.iter()) {
+            if mask_alpha == 0 {
+              continue;
+            }
+            let src = scale_premultiplied_pixel(color, mask_alpha);
+            if src[3] != 0 {
+              let dst: &mut [u8; 4] = dst_pixel.try_into().unwrap();
+              composite_premultiplied_over(dst, src);
+            }
+          }
+        }
+      }
+      return;
+    }
   }
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(data);
@@ -901,22 +1063,38 @@ fn composite_masked_constant(
   let mask_data = combined_mask.map(TinyMask::data);
 
   if mode == BlendMode::Normal && mask_data.is_none() {
-    for dest_y in dest_y_min..dest_y_max {
-      let mask_y = (dest_y - offset_y) as u32;
-      let dst_row = dest_y as usize * canvas_width as usize;
-      let mask_row = mask_y as usize * placement.width as usize;
-      let start_x = dest_x_min as usize;
-      let end_x = dest_x_max as usize;
-      let start_m = (dest_x_min - offset_x) as usize;
-      let end_m = (dest_x_max - offset_x) as usize;
+    let color_is_opaque = color[3] == u8::MAX;
+    let data: &mut [u8] = bytemuck::cast_slice_mut(pixels);
+    let row_stride = canvas_width as usize * 4;
+    let pixel_count = (dest_x_max - dest_x_min) as usize;
 
-      let dst_slice = &mut pixels[dst_row + start_x..dst_row + end_x];
-      let mask_slice = &mask[mask_row + start_m..mask_row + end_m];
-      for (dst, &alpha) in dst_slice.iter_mut().zip(mask_slice) {
-        if alpha != 0 {
-          let src = scale_premultiplied_pixel(color, alpha);
-          if src[3] != 0 {
-            composite_premultiplied_over(dst, src);
+    for dest_y in dest_y_min..dest_y_max {
+      let mask_y = (dest_y - offset_y) as usize;
+      let mask_row_start = mask_y * placement.width as usize + (dest_x_min - offset_x) as usize;
+      let mask_row = &mask[mask_row_start..mask_row_start + pixel_count];
+
+      if mask_row.iter().all(|&a| a == 0) {
+        continue;
+      }
+
+      let dst_row_start = dest_y as usize * row_stride + dest_x_min as usize * 4;
+      let dst_row = &mut data[dst_row_start..dst_row_start + pixel_count * 4];
+
+      if color_is_opaque && mask_row.iter().all(|&a| a == u8::MAX) {
+        fill_repeated_premultiplied_pixel(dst_row, color);
+      } else {
+        for (dst_pixel, &mask_alpha) in dst_row.chunks_exact_mut(4).zip(mask_row.iter()) {
+          if mask_alpha == 0 {
+            continue;
+          }
+          if color_is_opaque && mask_alpha == u8::MAX {
+            dst_pixel.copy_from_slice(&color);
+          } else {
+            let src = scale_premultiplied_pixel(color, mask_alpha);
+            if src[3] != 0 {
+              let dst: &mut [u8; 4] = dst_pixel.try_into().unwrap();
+              composite_premultiplied_over(dst, src);
+            }
           }
         }
       }
@@ -996,54 +1174,106 @@ fn composite_masked_source(
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
   let mask_data = options.combined_mask.map(TinyMask::data);
-  for dest_y in dest_y_min..dest_y_max {
-    let mask_y = (dest_y - offset_y) as u32;
-    let dst_row = dest_y as usize * canvas_width as usize;
-    let mask_row = mask_y as usize * options.placement.width as usize;
-    let mut sample_point = options.sampling.canvas_to_source.transform_point(Point {
-      x: dest_x_min as f32 + options.sampling.sample_bias.x,
-      y: dest_y as f32 + options.sampling.sample_bias.y,
-    });
-    for dest_x in dest_x_min..dest_x_max {
-      let mask_x = (dest_x - offset_x) as usize;
-      let mask_alpha = mask[mask_row + mask_x];
-      let sampled = if mask_alpha == 0 {
-        None
-      } else {
-        sample_paint_source(
-          source,
-          options.sampling.algorithm,
-          sample_point.x,
-          sample_point.y,
-        )
-      };
-      sample_point.x += options.sampling.canvas_to_source.a;
-      sample_point.y += options.sampling.canvas_to_source.b;
 
-      let Some(mut src) = sampled else {
-        continue;
-      };
+  if options.mode == BlendMode::Normal {
+    for dest_y in dest_y_min..dest_y_max {
+      let mask_y = (dest_y - offset_y) as u32;
+      let dst_row = dest_y as usize * canvas_width as usize;
+      let mask_row = mask_y as usize * options.placement.width as usize;
+      let mut sample_point = options.sampling.canvas_to_source.transform_point(Point {
+        x: dest_x_min as f32 + options.sampling.sample_bias.x,
+        y: dest_y as f32 + options.sampling.sample_bias.y,
+      });
+      for dest_x in dest_x_min..dest_x_max {
+        let mask_x = (dest_x - offset_x) as usize;
+        let mask_alpha = mask[mask_row + mask_x];
+        let sampled = if mask_alpha == 0 {
+          None
+        } else {
+          sample_paint_source(
+            source,
+            options.sampling.algorithm,
+            sample_point.x,
+            sample_point.y,
+          )
+        };
+        sample_point.x += options.sampling.canvas_to_source.a;
+        sample_point.y += options.sampling.canvas_to_source.b;
 
-      src = apply_mask_color_mode(src, options.color_mode);
-
-      src = scale_premultiplied_pixel(src, mask_alpha);
-      if src[3] == 0 {
-        continue;
-      }
-
-      let dest_x = dest_x as u32;
-      if let Some(mask_data) = mask_data {
-        let alpha = mask_data[dst_row + dest_x as usize];
-        if alpha == 0 {
+        let Some(mut src) = sampled else {
           continue;
-        }
-        src = scale_premultiplied_pixel(src, alpha);
+        };
+
+        src = apply_mask_color_mode(src, options.color_mode);
+        src = scale_premultiplied_pixel(src, mask_alpha);
         if src[3] == 0 {
           continue;
         }
-      }
 
-      blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, options.mode);
+        let dest_x = dest_x as usize;
+        if let Some(mask_data) = mask_data {
+          let alpha = mask_data[dst_row + dest_x];
+          if alpha == 0 {
+            continue;
+          }
+          src = scale_premultiplied_pixel(src, alpha);
+          if src[3] == 0 {
+            continue;
+          }
+        }
+
+        composite_premultiplied_over(&mut pixels[dst_row + dest_x], src);
+      }
+    }
+  } else {
+    for dest_y in dest_y_min..dest_y_max {
+      let mask_y = (dest_y - offset_y) as u32;
+      let dst_row = dest_y as usize * canvas_width as usize;
+      let mask_row = mask_y as usize * options.placement.width as usize;
+      let mut sample_point = options.sampling.canvas_to_source.transform_point(Point {
+        x: dest_x_min as f32 + options.sampling.sample_bias.x,
+        y: dest_y as f32 + options.sampling.sample_bias.y,
+      });
+      for dest_x in dest_x_min..dest_x_max {
+        let mask_x = (dest_x - offset_x) as usize;
+        let mask_alpha = mask[mask_row + mask_x];
+        let sampled = if mask_alpha == 0 {
+          None
+        } else {
+          sample_paint_source(
+            source,
+            options.sampling.algorithm,
+            sample_point.x,
+            sample_point.y,
+          )
+        };
+        sample_point.x += options.sampling.canvas_to_source.a;
+        sample_point.y += options.sampling.canvas_to_source.b;
+
+        let Some(mut src) = sampled else {
+          continue;
+        };
+
+        src = apply_mask_color_mode(src, options.color_mode);
+        src = scale_premultiplied_pixel(src, mask_alpha);
+        if src[3] == 0 {
+          continue;
+        }
+
+        let dest_x = dest_x as u32;
+        if let Some(mask_data) = mask_data {
+          let alpha = mask_data[dst_row + dest_x as usize];
+          if alpha == 0 {
+            continue;
+          }
+          src = scale_premultiplied_pixel(src, alpha);
+          if src[3] == 0 {
+            continue;
+          }
+        }
+
+        blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, options.mode);
+      }
     }
   }
 }
@@ -1439,29 +1669,58 @@ pub(crate) fn overlay_gradient_tile<T>(
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
   let mask_data = combined_mask.map(TinyMask::data);
-  for dest_y in dest_y_min..dest_y_max {
-    let src_y = (dest_y - offset_y) as u32;
-    let dst_row = dest_y as usize * bottom_width as usize;
-    for dest_x in dest_x_min..dest_x_max {
-      let src_x = (dest_x - offset_x) as u32;
-      let mut src = premultiplied_from_pixel(gradient.sample_pixel(src_x, src_y));
-      if src[3] == 0 {
-        continue;
-      }
 
-      let dest_x = dest_x as u32;
-      if let Some(mask_data) = mask_data {
-        let alpha = mask_data[dst_row + dest_x as usize];
-        if alpha == 0 {
-          continue;
-        }
-        src = scale_premultiplied_pixel(src, alpha);
+  if mode == BlendMode::Normal {
+    for dest_y in dest_y_min..dest_y_max {
+      let src_y = (dest_y - offset_y) as u32;
+      let dst_row = dest_y as usize * bottom_width as usize;
+      for dest_x in dest_x_min..dest_x_max {
+        let src_x = (dest_x - offset_x) as u32;
+        let mut src = premultiplied_from_pixel(gradient.sample_pixel(src_x, src_y));
         if src[3] == 0 {
           continue;
         }
-      }
 
-      blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
+        let dest_x = dest_x as usize;
+        if let Some(mask_data) = mask_data {
+          let alpha = mask_data[dst_row + dest_x];
+          if alpha == 0 {
+            continue;
+          }
+          src = scale_premultiplied_pixel(src, alpha);
+          if src[3] == 0 {
+            continue;
+          }
+        }
+
+        composite_premultiplied_over(&mut pixels[dst_row + dest_x], src);
+      }
+    }
+  } else {
+    for dest_y in dest_y_min..dest_y_max {
+      let src_y = (dest_y - offset_y) as u32;
+      let dst_row = dest_y as usize * bottom_width as usize;
+      for dest_x in dest_x_min..dest_x_max {
+        let src_x = (dest_x - offset_x) as u32;
+        let mut src = premultiplied_from_pixel(gradient.sample_pixel(src_x, src_y));
+        if src[3] == 0 {
+          continue;
+        }
+
+        let dest_x = dest_x as u32;
+        if let Some(mask_data) = mask_data {
+          let alpha = mask_data[dst_row + dest_x as usize];
+          if alpha == 0 {
+            continue;
+          }
+          src = scale_premultiplied_pixel(src, alpha);
+          if src[3] == 0 {
+            continue;
+          }
+        }
+
+        blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
+      }
     }
   }
 }
