@@ -1,5 +1,11 @@
 # @takumi-rs/core
 
+## 1.0.1
+
+### Patch Changes
+
+- @takumi-rs/helpers@1.0.1
+
 ## 1.0.0
 
 ### Major Changes
