@@ -12,7 +12,7 @@ fn create_test_nodes() -> Vec<Node> {
         Style::default()
           .with_border_width(Sides([Px(1.0); 4]))
           .with_padding(Sides([Px(16.0); 4]))
-          .with(StyleDeclaration::border_style(BorderStyle::Solid))
+          .with_border_style(Sides([BorderStyle::Solid; 4]))
           .with(StyleDeclaration::flex_grow(Some(FlexGrow(1.0))))
           .with(StyleDeclaration::font_size(FontSize::Length(Px(24.0))))
           .with(StyleDeclaration::font_family(

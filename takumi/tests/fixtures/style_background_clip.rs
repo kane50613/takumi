@@ -22,10 +22,8 @@ fn create_container_with_background_clip(
       .with(StyleDeclaration::background_clip(background_clip))
       .with_padding(Sides([Px(padding); 4]))
       .with_border_width(Sides([Px(border_width); 4]))
-      .with(StyleDeclaration::border_style(BorderStyle::Solid))
-      .with(StyleDeclaration::border_color(ColorInput::Value(Color([
-        0, 0, 0, 255,
-      ]))))
+      .with_border_style(Sides([BorderStyle::Solid; 4]))
+      .with_border_color(Sides([ColorInput::Value(Color([0, 0, 0, 255])); 4]))
       .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(8.0)); 4]))),
   )])
   .with_style(
@@ -170,10 +168,8 @@ fn test_style_background_clip_border_area() {
       ))
       .with_padding(Sides([Px(20.0); 4]))
       .with_border_width(Sides([Px(10.0); 4]))
-      .with(StyleDeclaration::border_style(BorderStyle::Solid))
-      .with(StyleDeclaration::border_color(ColorInput::Value(Color([
-        0, 0, 0, 128,
-      ]))))
+      .with_border_style(Sides([BorderStyle::Solid; 4]))
+      .with_border_color(Sides([ColorInput::Value(Color([0, 0, 0, 128])); 4]))
       .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(8.0)); 4]))),
   )])
   .with_style(
@@ -210,10 +206,8 @@ fn test_style_background_clip_with_gradient_background() {
       ))
       .with_padding(Sides([Px(30.0); 4]))
       .with_border_width(Sides([Px(15.0); 4]))
-      .with(StyleDeclaration::border_style(BorderStyle::Solid))
-      .with(StyleDeclaration::border_color(ColorInput::Value(Color([
-        255, 255, 255, 255,
-      ])))),
+      .with_border_style(Sides([BorderStyle::Solid; 4]))
+      .with_border_color(Sides([ColorInput::Value(Color([255, 255, 255, 255])); 4])),
   )])
   .with_style(
     Style::default()
@@ -280,10 +274,8 @@ fn test_style_background_clip_comparison() {
         .with(StyleDeclaration::background_clip(BackgroundClip::BorderBox))
         .with_padding(Sides([Px(15.0); 4]))
         .with_border_width(Sides([Px(8.0); 4]))
-        .with(StyleDeclaration::border_style(BorderStyle::Solid))
-        .with(StyleDeclaration::border_color(ColorInput::Value(Color([
-          0, 0, 0, 128,
-        ])))),
+        .with_border_style(Sides([BorderStyle::Solid; 4]))
+        .with_border_color(Sides([ColorInput::Value(Color([0, 0, 0, 128])); 4])),
     ),
     // Padding Box
     Node::container([Node::text("padding-box".to_string()).with_style(
@@ -305,10 +297,8 @@ fn test_style_background_clip_comparison() {
         ))
         .with_padding(Sides([Px(15.0); 4]))
         .with_border_width(Sides([Px(8.0); 4]))
-        .with(StyleDeclaration::border_style(BorderStyle::Solid))
-        .with(StyleDeclaration::border_color(ColorInput::Value(Color([
-          0, 0, 0, 128,
-        ])))),
+        .with_border_style(Sides([BorderStyle::Solid; 4]))
+        .with_border_color(Sides([ColorInput::Value(Color([0, 0, 0, 128])); 4])),
     ),
     // Content Box
     Node::container([Node::text("content-box".to_string()).with_style(
@@ -330,10 +320,8 @@ fn test_style_background_clip_comparison() {
         ))
         .with_padding(Sides([Px(15.0); 4]))
         .with_border_width(Sides([Px(8.0); 4]))
-        .with(StyleDeclaration::border_style(BorderStyle::Solid))
-        .with(StyleDeclaration::border_color(ColorInput::Value(Color([
-          0, 0, 0, 128,
-        ])))),
+        .with_border_style(Sides([BorderStyle::Solid; 4]))
+        .with_border_color(Sides([ColorInput::Value(Color([0, 0, 0, 128])); 4])),
     ),
   ])
   .with_style(

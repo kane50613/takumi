@@ -13,10 +13,8 @@ fn create_overflow_fixture(overflows: SpacePair<Overflow>) -> Node {
         .with(StyleDeclaration::width(Px(300.0)))
         .with(StyleDeclaration::height(Px(300.0)))
         .with_border_width(Sides([Px(4.0); 4]))
-        .with(StyleDeclaration::border_style(BorderStyle::Solid))
-        .with(StyleDeclaration::border_color(ColorInput::Value(Color([
-          0, 255, 0, 255,
-        ])))),
+        .with_border_style(Sides([BorderStyle::Solid; 4]))
+        .with_border_color(Sides([ColorInput::Value(Color([0, 255, 0, 255])); 4])),
     )])
     .with_style(
       Style::default()
@@ -25,10 +23,8 @@ fn create_overflow_fixture(overflows: SpacePair<Overflow>) -> Node {
         .with(StyleDeclaration::width(Px(200.0)))
         .with(StyleDeclaration::height(Px(200.0)))
         .with_border_width(Sides([Px(4.0); 4]))
-        .with(StyleDeclaration::border_style(BorderStyle::Solid))
-        .with(StyleDeclaration::border_color(
-          Color([255, 0, 0, 255]).into(),
-        ))
+        .with_border_style(Sides([BorderStyle::Solid; 4]))
+        .with_border_color(Sides([Color([255, 0, 0, 255]).into(); 4]))
         .with_overflow(overflows),
     ),
   ])
@@ -54,8 +50,8 @@ fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> Node {
               .with(StyleDeclaration::font_size(Rem(4.0).into()))
               .with(StyleDeclaration::color(ColorInput::Value(Color([0, 0, 0, 255]))))
               .with_border_width(Sides([Px(2.0); 4]))
-              .with(StyleDeclaration::border_style(BorderStyle::Solid))
-              .with(StyleDeclaration::border_color(Color([255, 0, 0, 255]).into())),
+              .with_border_style(Sides([BorderStyle::Solid; 4]))
+              .with_border_color(Sides([Color([255, 0, 0, 255]).into(); 4])),
           ),
       ])
       .with_style(
@@ -64,8 +60,8 @@ fn create_text_overflow_fixture(overflows: SpacePair<Overflow>) -> Node {
           .with(StyleDeclaration::width(Px(400.0)))
           .with(StyleDeclaration::height(Px(200.0)))
           .with_border_width(Sides([Px(4.0); 4]))
-          .with(StyleDeclaration::border_style(BorderStyle::Solid))
-          .with(StyleDeclaration::border_color(Color([0, 0, 0, 255]).into()))
+          .with_border_style(Sides([BorderStyle::Solid; 4]))
+          .with_border_color(Sides([Color([0, 0, 0, 255]).into(); 4]))
           .with_overflow(overflows),
       ),
   ])
@@ -137,10 +133,8 @@ fn create_split_pill_case(
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::height(Px(220.0)))
         .with_border_width(Sides([Px(2.0); 4]))
-        .with(StyleDeclaration::border_style(BorderStyle::Solid))
-        .with(StyleDeclaration::border_color(ColorInput::Value(Color([
-          220, 220, 220, 255,
-        ])))),
+        .with_border_style(Sides([BorderStyle::Solid; 4]))
+        .with_border_color(Sides([ColorInput::Value(Color([220, 220, 220, 255])); 4])),
     ),
   ])
   .with_style(

@@ -608,8 +608,8 @@ fn text_ellipsis_text_nowrap() {
             .with(StyleDeclaration::text_overflow(TextOverflow::Ellipsis))
             .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
             .with_border_width(Sides([Px(1.0); 4]))
-            .with(StyleDeclaration::border_style(BorderStyle::Solid))
-            .with(StyleDeclaration::border_color(ColorInput::Value(Color([255, 0, 0, 255]))))
+            .with_border_style(Sides([BorderStyle::Solid; 4]))
+            .with_border_color(Sides([ColorInput::Value(Color([255, 0, 0, 255])); 4]))
             .with(StyleDeclaration::word_break(WordBreak::BreakAll))
             .with(StyleDeclaration::width(Percentage(100.0))),)
 

@@ -802,8 +802,14 @@ define_style! {
     border_right_width: Length,
     border_bottom_width: Length,
     border_left_width: Length,
-    border_style: BorderStyle,
-    border_color: ColorInput,
+    border_top_style: BorderStyle,
+    border_right_style: BorderStyle,
+    border_bottom_style: BorderStyle,
+    border_left_style: BorderStyle,
+    border_top_color: ColorInput,
+    border_right_color: ColorInput,
+    border_bottom_color: ColorInput,
+    border_left_color: ColorInput,
     outline_width: Length,
     outline_style: BorderStyle,
     outline_color: ColorInput,
@@ -1039,13 +1045,59 @@ define_style! {
         border_bottom_width
       );
     },
-    border: Border => [BorderTopWidth, BorderRightWidth, BorderBottomWidth, BorderLeftWidth, BorderStyle, BorderColor] |value, target| {
+    border: Border => [BorderTopWidth, BorderRightWidth, BorderBottomWidth, BorderLeftWidth, BorderTopStyle, BorderRightStyle, BorderBottomStyle, BorderLeftStyle, BorderTopColor, BorderRightColor, BorderBottomColor, BorderLeftColor] |value, target| {
       target.push(StyleDeclaration::border_top_width(value.width));
       target.push(StyleDeclaration::border_right_width(value.width));
       target.push(StyleDeclaration::border_bottom_width(value.width));
       target.push(StyleDeclaration::border_left_width(value.width));
-      target.push(StyleDeclaration::border_style(value.style));
-      target.push(StyleDeclaration::border_color(value.color));
+      target.push(StyleDeclaration::border_top_style(value.style));
+      target.push(StyleDeclaration::border_right_style(value.style));
+      target.push(StyleDeclaration::border_bottom_style(value.style));
+      target.push(StyleDeclaration::border_left_style(value.style));
+      target.push(StyleDeclaration::border_top_color(value.color));
+      target.push(StyleDeclaration::border_right_color(value.color));
+      target.push(StyleDeclaration::border_bottom_color(value.color));
+      target.push(StyleDeclaration::border_left_color(value.color));
+    },
+    border_top: Border => [BorderTopWidth, BorderTopStyle, BorderTopColor] |value, target| {
+      target.push(StyleDeclaration::border_top_width(value.width));
+      target.push(StyleDeclaration::border_top_style(value.style));
+      target.push(StyleDeclaration::border_top_color(value.color));
+    },
+    border_right: Border => [BorderRightWidth, BorderRightStyle, BorderRightColor] |value, target| {
+      target.push(StyleDeclaration::border_right_width(value.width));
+      target.push(StyleDeclaration::border_right_style(value.style));
+      target.push(StyleDeclaration::border_right_color(value.color));
+    },
+    border_bottom: Border => [BorderBottomWidth, BorderBottomStyle, BorderBottomColor] |value, target| {
+      target.push(StyleDeclaration::border_bottom_width(value.width));
+      target.push(StyleDeclaration::border_bottom_style(value.style));
+      target.push(StyleDeclaration::border_bottom_color(value.color));
+    },
+    border_left: Border => [BorderLeftWidth, BorderLeftStyle, BorderLeftColor] |value, target| {
+      target.push(StyleDeclaration::border_left_width(value.width));
+      target.push(StyleDeclaration::border_left_style(value.style));
+      target.push(StyleDeclaration::border_left_color(value.color));
+    },
+    border_style: Sides<BorderStyle> => [BorderTopStyle, BorderRightStyle, BorderBottomStyle, BorderLeftStyle] |value, target| {
+      push_four_side_declarations!(
+        target,
+        value.0,
+        border_top_style,
+        border_right_style,
+        border_bottom_style,
+        border_left_style
+      );
+    },
+    border_color: Sides<ColorInput> => [BorderTopColor, BorderRightColor, BorderBottomColor, BorderLeftColor] |value, target| {
+      push_four_side_declarations!(
+        target,
+        value.0,
+        border_top_color,
+        border_right_color,
+        border_bottom_color,
+        border_left_color
+      );
     },
     outline: Border => [OutlineWidth, OutlineStyle, OutlineColor] |value, target| {
       target.push(StyleDeclaration::outline_width(value.width));
@@ -1696,17 +1748,29 @@ impl ComputedStyle {
         height: self.height,
       }
       .map(|length| length.resolve_to_dimension(sizing)),
-      border: if self.border_style == BorderStyle::None {
-        Rect::zero()
-      } else {
-        Rect {
-          top: self.border_top_width,
-          right: self.border_right_width,
-          bottom: self.border_bottom_width,
-          left: self.border_left_width,
-        }
-        .map(|border| border.resolve_to_length_percentage(sizing))
-      },
+      border: Rect {
+        top: if self.border_top_style == BorderStyle::None {
+          Length::default()
+        } else {
+          self.border_top_width
+        },
+        right: if self.border_right_style == BorderStyle::None {
+          Length::default()
+        } else {
+          self.border_right_width
+        },
+        bottom: if self.border_bottom_style == BorderStyle::None {
+          Length::default()
+        } else {
+          self.border_bottom_width
+        },
+        left: if self.border_left_style == BorderStyle::None {
+          Length::default()
+        } else {
+          self.border_left_width
+        },
+      }
+      .map(|border| border.resolve_to_length_percentage(sizing)),
       padding: Rect {
         top: self.padding_top,
         right: self.padding_right,
@@ -2114,6 +2178,54 @@ mod tests {
       vec![
         &StyleDeclaration::row_gap(LengthDefaultsToZero::Px(1.0)),
         &StyleDeclaration::column_gap(LengthDefaultsToZero::Px(2.0)),
+      ]
+    );
+  }
+
+  #[test]
+  fn parse_style_declaration_expands_border_side_shorthands() {
+    let border_top = parse_declarations("border-top", "2px solid red");
+    assert_eq!(
+      border_top.iter().collect::<Vec<_>>(),
+      vec![
+        &StyleDeclaration::border_top_width(Length::Px(2.0)),
+        &StyleDeclaration::border_top_style(BorderStyle::Solid),
+        &StyleDeclaration::border_top_color(ColorInput::Value(Color([255, 0, 0, 255]))),
+      ]
+    );
+
+    let border_left = parse_declarations("border-left", "solid #00ff00");
+    assert_eq!(
+      border_left.iter().collect::<Vec<_>>(),
+      vec![
+        &StyleDeclaration::border_left_width(Length::default()),
+        &StyleDeclaration::border_left_style(BorderStyle::Solid),
+        &StyleDeclaration::border_left_color(ColorInput::Value(Color([0, 255, 0, 255]))),
+      ]
+    );
+  }
+
+  #[test]
+  fn parse_style_declaration_expands_border_style_and_color_shorthands() {
+    let border_style = parse_declarations("border-style", "solid none");
+    assert_eq!(
+      border_style.iter().collect::<Vec<_>>(),
+      vec![
+        &StyleDeclaration::border_top_style(BorderStyle::Solid),
+        &StyleDeclaration::border_right_style(BorderStyle::None),
+        &StyleDeclaration::border_bottom_style(BorderStyle::Solid),
+        &StyleDeclaration::border_left_style(BorderStyle::None),
+      ]
+    );
+
+    let border_color = parse_declarations("border-color", "red green blue yellow");
+    assert_eq!(
+      border_color.iter().collect::<Vec<_>>(),
+      vec![
+        &StyleDeclaration::border_top_color(ColorInput::Value(Color([255, 0, 0, 255]))),
+        &StyleDeclaration::border_right_color(ColorInput::Value(Color([0, 128, 0, 255]))),
+        &StyleDeclaration::border_bottom_color(ColorInput::Value(Color([0, 0, 255, 255]))),
+        &StyleDeclaration::border_left_color(ColorInput::Value(Color([255, 255, 0, 255]))),
       ]
     );
   }

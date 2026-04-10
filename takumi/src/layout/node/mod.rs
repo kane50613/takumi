@@ -739,8 +739,8 @@ impl Node {
 
     let mut border = BorderProperties {
       width: Sides([width; 4]).into(),
-      color: context.style.outline_color.resolve(context.current_color),
-      style: context.style.outline_style,
+      color: Sides([context.style.outline_color.resolve(context.current_color); 4]).into(),
+      style: Sides([context.style.outline_style; 4]).into(),
       image_rendering: context.style.image_rendering,
       radius: BorderProperties::resolve_radius_part(context, layout.size),
     };

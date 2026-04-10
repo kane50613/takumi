@@ -10,20 +10,20 @@ pub fn draw_debug_border(canvas: &mut Canvas, layout: Layout, transform: Affine)
   // border-box
   BorderProperties {
     width: Sides([1.0; 4]).into(),
-    color: Color([255, 0, 0, 255]), // red
+    color: Sides([Color([255, 0, 0, 255]); 4]).into(), // red
     radius: Sides([SpacePair::from_single(0.0); 4]),
     image_rendering: ImageScalingAlgorithm::Auto,
-    style: BorderStyle::Solid,
+    style: Sides([BorderStyle::Solid; 4]).into(),
   }
   .draw(canvas, layout.size, transform, None);
 
   // content-box
   BorderProperties {
     width: Sides([1.0; 4]).into(),
-    color: Color([0, 255, 0, 255]), // green
+    color: Sides([Color([0, 255, 0, 255]); 4]).into(), // green
     radius: Sides([SpacePair::from_single(0.0); 4]),
     image_rendering: ImageScalingAlgorithm::Auto,
-    style: BorderStyle::Solid,
+    style: Sides([BorderStyle::Solid; 4]).into(),
   }
   .draw(
     canvas,

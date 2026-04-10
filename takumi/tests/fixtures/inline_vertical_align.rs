@@ -33,10 +33,8 @@ fn inline_vertical_align_types() {
           .with(StyleDeclaration::background_color(ColorInput::Value(color)))
           .with(StyleDeclaration::vertical_align(align))
           .with_border_width(Sides([Px(2.0); 4]))
-          .with(StyleDeclaration::border_style(BorderStyle::Solid))
-          .with(StyleDeclaration::border_color(ColorInput::Value(Color([
-            30, 30, 30, 255,
-          ])))),
+          .with_border_style(Sides([BorderStyle::Solid; 4]))
+          .with_border_color(Sides([ColorInput::Value(Color([30, 30, 30, 255])); 4])),
       ),
       Node::text(" marker".to_string()).with_style(
         Style::default()
@@ -67,10 +65,8 @@ fn inline_vertical_align_types() {
           Color([248, 248, 248, 255]),
         )))
         .with_border_width(Sides([Px(1.0); 4]))
-        .with(StyleDeclaration::border_style(BorderStyle::Solid))
-        .with(StyleDeclaration::border_color(ColorInput::Value(Color([
-          180, 180, 180, 255,
-        ])))),
+        .with_border_style(Sides([BorderStyle::Solid; 4]))
+        .with_border_color(Sides([ColorInput::Value(Color([180, 180, 180, 255])); 4])),
     )
   };
 

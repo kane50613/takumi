@@ -15,12 +15,12 @@ use crate::{
 pub(crate) struct BorderProperties {
   /// The width of the border on each side (top, right, bottom, left)
   pub width: Rect<f32>,
-  /// The color of the border
-  pub color: Color,
+  /// The color of each border side.
+  pub color: Rect<Color>,
   /// Corner radii: top, right, bottom, left (in pixels)
   pub radius: Sides<SpacePair<f32>>,
-  /// The style of the border
-  pub style: BorderStyle,
+  /// The style of each border side.
+  pub style: Rect<BorderStyle>,
   /// The image rendering algorithm to use when sampling the image.
   pub image_rendering: ImageScalingAlgorithm,
 }
@@ -63,11 +63,141 @@ impl BorderProperties {
   ) -> Self {
     Self {
       width: border_width,
-      color: context.style.border_color.resolve(context.current_color),
+      color: Rect {
+        top: context
+          .style
+          .border_top_color
+          .resolve(context.current_color),
+        right: context
+          .style
+          .border_right_color
+          .resolve(context.current_color),
+        bottom: context
+          .style
+          .border_bottom_color
+          .resolve(context.current_color),
+        left: context
+          .style
+          .border_left_color
+          .resolve(context.current_color),
+      },
       radius: Self::resolve_radius_part(context, border_box),
-      style: context.style.border_style,
+      style: Rect {
+        top: context.style.border_top_style,
+        right: context.style.border_right_style,
+        bottom: context.style.border_bottom_style,
+        left: context.style.border_left_style,
+      },
       image_rendering: context.style.image_rendering,
     }
+  }
+
+  fn is_side_visible(style: BorderStyle, width: f32) -> bool {
+    style != BorderStyle::None && width > 0.0
+  }
+
+  fn has_visible_sides(&self) -> bool {
+    Self::is_side_visible(self.style.top, self.width.top)
+      || Self::is_side_visible(self.style.right, self.width.right)
+      || Self::is_side_visible(self.style.bottom, self.width.bottom)
+      || Self::is_side_visible(self.style.left, self.width.left)
+  }
+
+  fn has_uniform_visible_color(&self) -> Option<Color> {
+    let mut color = None;
+
+    if Self::is_side_visible(self.style.top, self.width.top) {
+      color = Some(self.color.top);
+    }
+    if Self::is_side_visible(self.style.right, self.width.right) {
+      if let Some(existing) = color {
+        if existing != self.color.right {
+          return None;
+        }
+      } else {
+        color = Some(self.color.right);
+      }
+    }
+    if Self::is_side_visible(self.style.bottom, self.width.bottom) {
+      if let Some(existing) = color {
+        if existing != self.color.bottom {
+          return None;
+        }
+      } else {
+        color = Some(self.color.bottom);
+      }
+    }
+    if Self::is_side_visible(self.style.left, self.width.left) {
+      if let Some(existing) = color {
+        if existing != self.color.left {
+          return None;
+        }
+      } else {
+        color = Some(self.color.left);
+      }
+    }
+
+    color
+  }
+
+  fn append_border_ring_commands(&self, paths: &mut Vec<Command>, border_box: Size<f32>) {
+    let mut border = *self;
+
+    border.append_mask_commands(paths, border_box, Point::ZERO);
+    border.inset_by_border_width();
+    border.append_mask_commands(
+      paths,
+      border_box
+        - Size {
+          width: border.width.left + border.width.right,
+          height: border.width.top + border.width.bottom,
+        },
+      Point {
+        x: border.width.left,
+        y: border.width.top,
+      },
+    );
+  }
+
+  fn append_side_polygon_commands(
+    &self,
+    side: BorderSide,
+    path: &mut Vec<Command>,
+    border_box: Size<f32>,
+  ) {
+    let inner_left = self.width.left.min(border_box.width);
+    let inner_right = (border_box.width - self.width.right).max(0.0);
+    let inner_top = self.width.top.min(border_box.height);
+    let inner_bottom = (border_box.height - self.width.bottom).max(0.0);
+
+    match side {
+      BorderSide::Top => {
+        path.move_to((0.0, 0.0));
+        path.line_to((border_box.width, 0.0));
+        path.line_to((inner_right, inner_top));
+        path.line_to((inner_left, inner_top));
+      }
+      BorderSide::Right => {
+        path.move_to((border_box.width, 0.0));
+        path.line_to((border_box.width, border_box.height));
+        path.line_to((inner_right, inner_bottom));
+        path.line_to((inner_right, inner_top));
+      }
+      BorderSide::Bottom => {
+        path.move_to((border_box.width, border_box.height));
+        path.line_to((0.0, border_box.height));
+        path.line_to((inner_left, inner_bottom));
+        path.line_to((inner_right, inner_bottom));
+      }
+      BorderSide::Left => {
+        path.move_to((0.0, border_box.height));
+        path.line_to((0.0, 0.0));
+        path.line_to((inner_left, inner_top));
+        path.line_to((inner_left, inner_bottom));
+      }
+    }
+
+    path.close();
   }
 
   /// Returns true if all corner radii are zero.
@@ -244,7 +374,7 @@ impl BorderProperties {
   }
 
   pub(crate) fn draw(
-    mut self,
+    self,
     canvas: &mut Canvas,
     border_box: Size<f32>,
     transform: Affine,
@@ -257,66 +387,125 @@ impl BorderProperties {
       );
     }
 
-    if self.style == BorderStyle::None
-      || (self.width.left == 0.0
-        && self.width.right == 0.0
-        && self.width.top == 0.0
-        && self.width.bottom == 0.0)
-    {
+    if !self.has_visible_sides() {
       return;
     }
 
-    let mut paths = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+    if let Some(color) = self.has_uniform_visible_color() {
+      let mut paths = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+      self.append_border_ring_commands(&mut paths, border_box);
+      let (mask, placement) = render_mask(
+        &paths,
+        Some(transform),
+        Some(Fill::EvenOdd.into()),
+        &mut canvas.buffer_pool,
+      );
 
-    self.append_mask_commands(&mut paths, border_box, Point::ZERO);
+      if clip_image.is_none() {
+        canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
+        canvas.buffer_pool.release(mask);
+        return;
+      }
 
-    self.inset_by_border_width();
-    self.append_mask_commands(
-      &mut paths,
-      border_box
-        - Size {
-          width: self.width.left + self.width.right,
-          height: self.width.top + self.width.bottom,
-        },
-      Point {
-        x: self.width.left,
-        y: self.width.top,
-      },
-    );
+      let Some(inverse) = transform.invert() else {
+        canvas.buffer_pool.release(mask);
+        return;
+      };
 
-    let (mask, placement) = render_mask(
-      &paths,
-      Some(transform),
-      Some(Fill::EvenOdd.into()),
-      &mut canvas.buffer_pool,
-    );
+      if let Some(clip_image) = clip_image {
+        canvas.composite_mask_source_over_color(
+          &mask,
+          placement,
+          clip_image,
+          color,
+          MaskSamplingOptions {
+            canvas_to_source: inverse,
+            sample_bias: Point::ZERO,
+            algorithm: self.image_rendering,
+          },
+          BlendMode::Normal,
+        );
+      }
 
-    if clip_image.is_none() {
-      canvas.draw_mask(&mask, placement, self.color, BlendMode::Normal);
       canvas.buffer_pool.release(mask);
       return;
     }
 
-    let Some(inverse) = transform.invert() else {
-      canvas.buffer_pool.release(mask);
-      return;
+    let inverse = if clip_image.is_some() {
+      transform.invert()
+    } else {
+      None
     };
 
-    if let Some(clip_image) = clip_image {
-      canvas.composite_mask_source_over_color(
-        &mask,
-        placement,
-        clip_image,
-        self.color,
-        MaskSamplingOptions {
-          canvas_to_source: inverse,
-          sample_bias: Point::ZERO,
-          algorithm: self.image_rendering,
-        },
-        BlendMode::Normal,
-      );
-    }
+    for (side, style, width, color) in [
+      (
+        BorderSide::Top,
+        self.style.top,
+        self.width.top,
+        self.color.top,
+      ),
+      (
+        BorderSide::Right,
+        self.style.right,
+        self.width.right,
+        self.color.right,
+      ),
+      (
+        BorderSide::Bottom,
+        self.style.bottom,
+        self.width.bottom,
+        self.color.bottom,
+      ),
+      (
+        BorderSide::Left,
+        self.style.left,
+        self.width.left,
+        self.color.left,
+      ),
+    ] {
+      if !Self::is_side_visible(style, width) {
+        continue;
+      }
 
-    canvas.buffer_pool.release(mask);
+      let mut paths = Vec::with_capacity(5);
+      self.append_side_polygon_commands(side, &mut paths, border_box);
+      let (mask, placement) = render_mask(
+        &paths,
+        Some(transform),
+        Some(Fill::NonZero.into()),
+        &mut canvas.buffer_pool,
+      );
+
+      if let Some(clip_image) = clip_image {
+        let Some(inverse) = inverse else {
+          canvas.buffer_pool.release(mask);
+          continue;
+        };
+        canvas.composite_mask_source_over_color(
+          &mask,
+          placement,
+          clip_image,
+          color,
+          MaskSamplingOptions {
+            canvas_to_source: inverse,
+            sample_bias: Point::ZERO,
+            algorithm: self.image_rendering,
+          },
+          BlendMode::Normal,
+        );
+      } else {
+        canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
+      }
+
+      canvas.buffer_pool.release(mask);
+    }
   }
+}
+
+#[derive(Clone, Copy)]
+enum BorderSide {
+  Top,
+  Right,
+  Bottom,
+  Left,
 }

@@ -211,7 +211,12 @@ impl BasicShape {
 
         let border = BorderProperties {
           width: Rect::zero(),
-          color: Color::transparent(),
+          color: Rect {
+            top: Color::transparent(),
+            right: Color::transparent(),
+            bottom: Color::transparent(),
+            left: Color::transparent(),
+          },
           radius: shape
             .border_radius
             .map(|radius| {
@@ -223,7 +228,12 @@ impl BasicShape {
             })
             .unwrap_or_default(),
           image_rendering: ImageScalingAlgorithm::Auto,
-          style: BorderStyle::Solid,
+          style: Rect {
+            top: BorderStyle::Solid,
+            right: BorderStyle::Solid,
+            bottom: BorderStyle::Solid,
+            left: BorderStyle::Solid,
+          },
         };
 
         border.append_mask_commands(

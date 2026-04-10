@@ -124,8 +124,8 @@ fn overflow_text_fixture() -> Node {
       .with(StyleDeclaration::width(Px(540.0)))
       .with(StyleDeclaration::height(Px(220.0)))
       .with_border_width(Sides([Px(4.0); 4]))
-      .with(StyleDeclaration::border_style(BorderStyle::Solid))
-      .with(StyleDeclaration::border_color(Color([0, 0, 0, 255]).into()))
+      .with_border_style(Sides([BorderStyle::Solid; 4]))
+      .with_border_color(Sides([Color([0, 0, 0, 255]).into(); 4]))
       .with_overflow(SpacePair::from_single(Overflow::Hidden)),
   )])
   .with_style(

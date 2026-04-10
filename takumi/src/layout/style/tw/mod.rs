@@ -1125,7 +1125,10 @@ impl TailwindProperty {
           border_right_width(Length::Px(1.0)),
           border_bottom_width(Length::Px(1.0)),
           border_left_width(Length::Px(1.0)),
-          border_style(BorderStyle::Solid)
+          border_top_style(BorderStyle::Solid),
+          border_right_style(BorderStyle::Solid),
+          border_bottom_style(BorderStyle::Solid),
+          border_left_style(BorderStyle::Solid)
         );
       }
       TailwindProperty::BorderWidth(tw_border_width) => {
@@ -1139,7 +1142,14 @@ impl TailwindProperty {
         );
       }
       TailwindProperty::BorderStyle(border_style) => {
-        push_decl!(builder, important, border_style(border_style))
+        push_decl!(
+          builder,
+          important,
+          border_top_style(border_style),
+          border_right_style(border_style),
+          border_bottom_style(border_style),
+          border_left_style(border_style)
+        )
       }
       TailwindProperty::JustifySelf(align_items) => {
         push_decl!(builder, important, justify_self(align_items))
@@ -1155,7 +1165,14 @@ impl TailwindProperty {
         push_decl!(builder, important, background_color(color_input))
       }
       TailwindProperty::BorderColor(color_input) => {
-        push_decl!(builder, important, border_color(color_input))
+        push_decl!(
+          builder,
+          important,
+          border_top_color(color_input),
+          border_right_color(color_input),
+          border_bottom_color(color_input),
+          border_left_color(color_input)
+        )
       }
       TailwindProperty::BorderTopWidth(tw_border_width) => {
         push_decl!(builder, important, border_top_width(tw_border_width.0))

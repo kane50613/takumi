@@ -74,13 +74,50 @@ fn test_style_border_width() {
         Color::white(),
       )))
       .with_border_width(Sides([Px(10.0); 4]))
-      .with(StyleDeclaration::border_style(BorderStyle::Solid))
-      .with(StyleDeclaration::border_color(ColorInput::Value(Color([
-        255, 0, 0, 255,
-      ])))),
+      .with_border_style(Sides([BorderStyle::Solid; 4]))
+      .with_border_color(Sides([ColorInput::Value(Color([255, 0, 0, 255])); 4])),
   );
 
   run_fixture_test(container, "style_border_width");
+}
+
+#[test]
+fn test_style_border_per_side_color_and_width() {
+  let container = Node::container([Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Px(360.0)))
+      .with(StyleDeclaration::height(Px(220.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      )))
+      .with_border_width(Sides([Px(12.0), Px(24.0), Px(36.0), Px(48.0)]))
+      .with_border_style(Sides([
+        BorderStyle::Solid,
+        BorderStyle::Solid,
+        BorderStyle::Solid,
+        BorderStyle::Solid,
+      ]))
+      .with_border_color(Sides([
+        ColorInput::Value(Color([239, 68, 68, 255])),
+        ColorInput::Value(Color([34, 197, 94, 255])),
+        ColorInput::Value(Color([59, 130, 246, 255])),
+        ColorInput::Value(Color([234, 179, 8, 255])),
+      ])),
+  )])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([17, 24, 39, 255]),
+      )))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::align_items(AlignItems::Center)),
+  );
+
+  run_fixture_test(container, "style_border_per_side_color_and_width");
 }
 
 #[test]
@@ -91,11 +128,9 @@ fn test_style_border_width_with_radius() {
       .with(StyleDeclaration::width(Rem(16.0)))
       .with(StyleDeclaration::height(Rem(8.0)))
       .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(10.0)); 4])))
-      .with(StyleDeclaration::border_color(ColorInput::Value(Color([
-        255, 0, 0, 255,
-      ]))))
+      .with_border_color(Sides([ColorInput::Value(Color([255, 0, 0, 255])); 4]))
       .with_border_width(Sides([Px(4.0); 4]))
-      .with(StyleDeclaration::border_style(BorderStyle::Solid)),
+      .with_border_style(Sides([BorderStyle::Solid; 4])),
   )])
   .with_style(
     Style::default()
@@ -255,11 +290,9 @@ fn test_style_border_radius_width_offset() {
             Color::white(),
           )))
           .with_border_width(Sides([Px(1.0); 4]))
-          .with(StyleDeclaration::border_style(BorderStyle::Solid))
+          .with_border_style(Sides([BorderStyle::Solid; 4]))
           .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(24.0)); 4])))
-          .with(StyleDeclaration::border_color(ColorInput::Value(Color([
-            0, 0, 0, 255,
-          ])))),
+          .with_border_color(Sides([ColorInput::Value(Color([0, 0, 0, 255])); 4])),
       ),
     ])
     .with_style(
@@ -296,11 +329,9 @@ fn test_style_border_radius_circle_avatar() {
       .with_border_radius(BorderRadius(Sides(
         [SpacePair::from_single(Percentage(50.0)); 4],
       )))
-      .with(StyleDeclaration::border_color(ColorInput::Value(Color([
-        128, 128, 128, 128,
-      ]))))
+      .with_border_color(Sides([ColorInput::Value(Color([128, 128, 128, 128])); 4]))
       .with_border_width(Sides([Px(4.0); 4]))
-      .with(StyleDeclaration::border_style(BorderStyle::Solid)),
+      .with_border_style(Sides([BorderStyle::Solid; 4])),
   )])
   .with_style(
     Style::default()
@@ -326,10 +357,8 @@ fn test_style_border_width_on_image_node() {
         [SpacePair::from_single(Percentage(100.0)); 4],
       )))
       .with_border_width(Sides([Px(2.0); 4]))
-      .with(StyleDeclaration::border_style(BorderStyle::Solid))
-      .with(StyleDeclaration::border_color(ColorInput::Value(Color([
-        202, 202, 202, 255,
-      ]))))
+      .with_border_style(Sides([BorderStyle::Solid; 4]))
+      .with_border_color(Sides([ColorInput::Value(Color([202, 202, 202, 255])); 4]))
       .with(StyleDeclaration::width(Px(128.0)))
       .with(StyleDeclaration::height(Px(128.0))),
   );

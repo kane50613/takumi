@@ -72,9 +72,7 @@ fn recursive_visual_node(level: usize, max_depth: usize) -> Node {
       .with_padding(Sides([Px(10.0), Px(10.0), Px(10.0), Px(14.0)]))
       .with_margin(Sides([Px(0.0), Px(0.0), Px(0.0), Px(8.0)]))
       .with_border_width(Sides([Px(0.0), Px(0.0), Px(0.0), Px(3.0)]))
-      .with(StyleDeclaration::border_color(ColorInput::Value(Color([
-        215, 132, 55, 255,
-      ]))))
+      .with_border_color(Sides([ColorInput::Value(Color([215, 132, 55, 255])); 4]))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         recursive_level_background(level),
       ))),

@@ -76,10 +76,8 @@ fn inline_image() {
       Style::default()
         .with(StyleDeclaration::display(Display::Inline))
         .with_border_width(Sides([Px(12.0); 4]))
-        .with(StyleDeclaration::border_style(BorderStyle::Solid))
-        .with(StyleDeclaration::border_color(ColorInput::Value(
-          Color::transparent(),
-        )))
+        .with_border_style(Sides([BorderStyle::Solid; 4]))
+        .with_border_color(Sides([ColorInput::Value(Color::transparent()); 4]))
         .with(StyleDeclaration::background_image(
           BackgroundImages::from_str("linear-gradient(to right, red, blue)").ok(),
         ))
@@ -95,7 +93,7 @@ fn inline_image() {
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with_border_width(Sides([Px(2.0); 4]))
-      .with(StyleDeclaration::border_style(BorderStyle::Solid))
+      .with_border_style(Sides([BorderStyle::Solid; 4]))
       .with(StyleDeclaration::display(Display::Block))
       .with(StyleDeclaration::font_size(Px(48.0).into())),
   )])
@@ -246,7 +244,7 @@ fn inline_outline_span_boundaries() {
       .with(StyleDeclaration::width(Px(320.0)))
       .with_padding(Sides([Px(24.0); 4]))
       .with_border_width(Sides([Px(2.0); 4]))
-      .with(StyleDeclaration::border_style(BorderStyle::Solid))
+      .with_border_style(Sides([BorderStyle::Solid; 4]))
       .with(StyleDeclaration::font_size(Px(28.0).into()))
       .with(StyleDeclaration::line_height(Px(34.0).into()))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -278,7 +276,7 @@ fn inline_atomic_containers() {
         .with_padding(Sides([Px(8.0); 4]))
         .with(StyleDeclaration::background_color(ColorInput::Value(color)))
         .with_border_width(Sides([Px(2.0); 4]))
-        .with(StyleDeclaration::border_style(BorderStyle::Solid)),
+        .with_border_style(Sides([BorderStyle::Solid; 4])),
     )
   };
 
@@ -312,7 +310,7 @@ fn inline_atomic_containers() {
       .with(StyleDeclaration::display(Display::Block))
       .with(StyleDeclaration::font_size(Px(24.0).into()))
       .with_border_width(Sides([Px(2.0); 4]))
-      .with(StyleDeclaration::border_style(BorderStyle::Solid)),
+      .with_border_style(Sides([BorderStyle::Solid; 4])),
   )])
   .with_style(
     Style::default()
@@ -440,10 +438,10 @@ fn inline_complex_nested_fixture() {
             240, 244, 248, 255,
           ]))))
           .with_border_width(Sides([Px(1.0); 4]))
-          .with(StyleDeclaration::border_style(BorderStyle::Solid))
-          .with(StyleDeclaration::border_color(ColorInput::Value(Color([
+          .with_border_style(Sides([BorderStyle::Solid; 4]))
+          .with_border_color(Sides([ColorInput::Value(Color([
             217, 226, 236, 255,
-          ]))))
+          ])); 4]))
           .with_border_radius(BorderRadius(Sides(
             [SpacePair::from_single(Px(4.0)); 4],
           )))
@@ -473,10 +471,10 @@ fn inline_complex_nested_fixture() {
             255, 238, 219, 255,
           ]))))
           .with_border_width(Sides([Px(1.0); 4]))
-          .with(StyleDeclaration::border_style(BorderStyle::Solid))
-          .with(StyleDeclaration::border_color(ColorInput::Value(Color([
+          .with_border_style(Sides([BorderStyle::Solid; 4]))
+          .with_border_color(Sides([ColorInput::Value(Color([
             255, 156, 56, 255,
-          ]))))
+          ])); 4]))
           .with_padding(Sides([Px(10.0); 4]))
           .with_margin(Sides([Px(0.0), Px(5.0), Px(0.0), Px(5.0)])),
       )
