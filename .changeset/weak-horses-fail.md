@@ -2,4 +2,4 @@
 "@takumi-rs/helpers": minor
 ---
 
-Add `fromStaticMarkup` API
+Add `fromHtml` API

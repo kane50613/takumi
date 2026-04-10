@@ -3,9 +3,7 @@
 ---
 
 **Replaced `RenderOptionsBuilder` with `RenderOptions::builder()`**
-
 Switch to [typed-builder](https://docs.rs/typed-builder) for compile time options validation, no unwrap needed.
-
 Before:
 
 ```rust

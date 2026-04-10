@@ -1,5 +1,5 @@
 {
-  "mode": "pre",
+  "mode": "exit",
   "tag": "rc",
   "initialVersions": {
     "takumi": "0.73.1",
@@ -10,7 +10,6 @@
     "@takumi-rs/wasm": "0.73.1"
   },
   "changesets": [
-    "afraid-geese-knock",
     "angry-bags-drum",
     "better-squids-pay",
     "big-loops-prove",

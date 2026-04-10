@@ -35,6 +35,8 @@ Verify your templates and explicitly add `display: flex` (or the `flex` Tailwind
 </div>
 ```
 
+## JavaScript / TypeScript
+
 ### Unified Runtime Dectection & Fallback
 
 For better DX, `takumi-js` now automatically detects the best bindings for your environment Node.js, Workers, etc.
@@ -74,6 +76,75 @@ const image = await renderer.render(node, {
   format: "webp" // [!code ++]
 });
 ```
+
+### `putPersistentImage()` Now Takes `ImageSource`
+
+`renderer.putPersistentImage()` in `@takumi-rs/core` no longer accepts a raw `Buffer` as the second argument. Pass an `ImageSource` object instead.
+
+```ts
+const data = await readFile("foo.png");
+
+await renderer.putPersistentImage("foo.png", data); // [!code --]
+await renderer.putPersistentImage({ src: "foo.png", data }); // [!code ++]
+```
+
+### Deprecated Types & Functions Removed (`@takumi-rs/core`)
+
+All previously deprecated exports in `@takumi-rs/core` have been removed in v1. If you were relying on any deprecated APIs, update to the non-deprecated alternatives before upgrading.
+
+## Rust
+
+### `RenderOptions::builder()` Replaces `RenderOptionsBuilder`
+
+The standalone `RenderOptionsBuilder` struct has been removed. Use the associated `builder()` method on `RenderOptions` instead. This switches to [typed-builder](https://docs.rs/typed-builder), providing compile-time validation without the need for `.unwrap()`.
+
+```rust
+let options = RenderOptionsBuilder::default().build().unwrap(); // [!code --]
+let options = RenderOptions::builder().build(); // [!code ++]
+```
+
+### `FetchTaskCollection` Removed
+
+`FetchTaskCollection` has been removed. Use `Node::resource_urls` and `Style::resource_urls` to retrieve the URLs of resources that need to be fetched, then provide them back to the renderer directly.
+
+### `parse_svg_str` Removed
+
+The free function `parse_svg_str` has been removed. Use `SvgSource::from_str` instead.
+
+```rust
+let svg = parse_svg_str(data)?; // [!code --]
+let svg = SvgSource::from_str(data)?; // [!code ++]
+```
+
+### `SpacePair::from_reversed_pair` Removed
+
+The `SpacePair::from_reversed_pair` constructor has been removed with no direct replacement. Construct `SpacePair` directly with the values in the correct order.
+
+### `TakumiError` Replaced by `takumi::error::Error`
+
+The re-exported `TakumiError` type alias has been removed. Use `takumi::error::Error` directly.
+
+```rust
+use takumi::TakumiError; // [!code --]
+use takumi::error::Error; // [!code ++]
+```
+
+### `Viewport` Constructor Parameter Change
+
+`Viewport` no longer implements `From<(u32, u32)>`. Update any tuple-based constructions to use the explicit constructor.
+
+```rust
+let viewport = (800_u32, 600_u32).into(); // [!code --]
+let viewport = Viewport::new(800, 600); // [!code ++]
+```
+
+### `ImageSource::size()` Is Now Private
+
+`ImageSource::size()` has been made private. It was an internal helper and should not have been part of the public API.
+
+### `detailed_css_error` Feature Removed
+
+The `detailed_css_error` Cargo feature has been removed. Detailed CSS error reporting is no longer gated behind a feature flag.
 
 ## More in Changelog!
 
