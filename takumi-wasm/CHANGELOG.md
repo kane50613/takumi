@@ -21,15 +21,7 @@
 - da2d85f: Support unwasm for `/auto` export
 - b2e304a: Replaced native `extractResourceUrls` with JS version to avoid roundtrip
 - bc6243a: Add `bun` conditional exports
-- Updated dependencies [7ff886b]
-- Updated dependencies [b2e304a]
-- Updated dependencies [b5b8531]
-- Updated dependencies [cc9e63c]
-- Updated dependencies [3142b36]
-- Updated dependencies [f1b6104]
-- Updated dependencies [6767ad9]
-- Updated dependencies [01c4fa3]
-- Updated dependencies [7ff886b]
+- Updated internal dependencies
   - @takumi-rs/helpers@1.0.0
 
 ## 1.0.0-rc.17

@@ -43,15 +43,7 @@
 - 26b5557: Fix dist folder not included
 - 256ef21: Make Woff2/Woff decompression run in parallel
 - 532bc96: Fix bun compile fails to resolve native module #606
-- Updated dependencies [7ff886b]
-- Updated dependencies [b2e304a]
-- Updated dependencies [b5b8531]
-- Updated dependencies [cc9e63c]
-- Updated dependencies [3142b36]
-- Updated dependencies [f1b6104]
-- Updated dependencies [6767ad9]
-- Updated dependencies [01c4fa3]
-- Updated dependencies [7ff886b]
+- Updated internal dependencies
   - @takumi-rs/helpers@1.0.0
 
 ## 1.0.0-rc.17

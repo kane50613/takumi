@@ -21,14 +21,7 @@
 - b9841a7: Fix missing dist folder
 - 4cb7e23: Add `onError` option & `ready` promise
 - 8770210: Skip resolving core package if Workers/edge runtime detected
-- Updated dependencies [d8e5e75]
-- Updated dependencies [1a4c366]
-- Updated dependencies [f637f3b]
-- Updated dependencies [f94f541]
-- Updated dependencies [ddb8245]
-- Updated dependencies [1373f0a]
-- Updated dependencies [30e06f9]
-- Updated dependencies [32b38c3]
+- Updated internal dependencies
   - takumi-js@1.0.0
 
 ## 1.0.0-rc.17
