@@ -1,5 +1,51 @@
 # @takumi-rs/core
 
+## 1.0.0
+
+### Major Changes
+
+- 188079f: Removed all deprecated types, functions
+- 188079f: **Removed pascal case output format (e.g. `WebP`, `Png`), please switch to lowercase.**
+- 188079f: **Changed initial `display` value from `flex` to `inline`**
+
+  This is to comply with [the CSSWG spec](https://drafts.csswg.org/css-display/#the-display-properties).
+
+  You should update your code to use `display: flex` if you want to use flexbox.
+
+- 8566f15: **`renderer.putPersistentImage()` now takes `ImageSource`**
+
+  Before:
+
+  ```tsx
+  const data = await readFile("foo.png");
+  await renderer.putPersistentImage("foo.png", data);
+  ```
+
+  After:
+
+  ```tsx
+  const data = await readFile("foo.png");
+  await renderer.putPersistentImage({
+    src: "foo.png",
+    data,
+  });
+  ```
+
+### Minor Changes
+
+- 1373f0a: Support `ico` format
+
+### Patch Changes
+
+- 0e14dd5: Mark `turbopackOptional: true` to silence errors
+- b2e304a: Replaced native `extractResourceUrls` with JS version to avoid roundtrip
+- 2f6c8b5: Fix missing type definition file
+- 26b5557: Fix dist folder not included
+- 256ef21: Make Woff2/Woff decompression run in parallel
+- 532bc96: Fix bun compile fails to resolve native module #606
+- Updated internal dependencies
+  - @takumi-rs/helpers@1.0.0
+
 ## 1.0.0-rc.17
 
 ### Patch Changes

@@ -1,5 +1,28 @@
 # takumi-js
 
+## 1.0.0
+
+### Major Changes
+
+- 30e06f9: Release all-in-one package
+
+### Minor Changes
+
+- f637f3b: Set default emoji source to "twemoji"
+- 1373f0a: Support `ico` format
+
+### Patch Changes
+
+- d8e5e75: Set default `ImageResponse` format to png
+- 1a4c366: Avoid importing wasm binary in Node environment
+- f94f541: Fix wasm initialization
+- ddb8245: Fix edge runtime check
+- 32b38c3: Fix readme logo
+- Updated internal dependencies
+  - @takumi-rs/wasm@1.0.0
+  - @takumi-rs/helpers@1.0.0
+  - @takumi-rs/core@1.0.0
+
 ## 1.0.0-rc.17
 
 ### Patch Changes
