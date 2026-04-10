@@ -1,5 +1,36 @@
 # @takumi-rs/image-response
 
+## 1.0.0
+
+### Major Changes
+
+- 8566f15: **Unify both Node.js & WASM runtime**
+
+  No longer to choose what runtime to be used, and wasm module will be resolved automatically.
+
+  The existing `@takumi-rs/image-response/wasm` export will continue to work as an alias.
+
+### Minor Changes
+
+- 7c16cb5: Add `createImageResponse` factory API
+- 9a451dd: Support passing function for `fonts` and `persistentImages` to avoid singleton pattern
+- 3142b36: Add `emoji` option
+
+### Patch Changes
+
+- b9841a7: Fix missing dist folder
+- 4cb7e23: Add `onError` option & `ready` promise
+- 8770210: Skip resolving core package if Workers/edge runtime detected
+- Updated dependencies [d8e5e75]
+- Updated dependencies [1a4c366]
+- Updated dependencies [f637f3b]
+- Updated dependencies [f94f541]
+- Updated dependencies [ddb8245]
+- Updated dependencies [1373f0a]
+- Updated dependencies [30e06f9]
+- Updated dependencies [32b38c3]
+  - takumi-js@1.0.0
+
 ## 1.0.0-rc.17
 
 ### Patch Changes

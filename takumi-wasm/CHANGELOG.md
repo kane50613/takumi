@@ -1,5 +1,37 @@
 # @takumi-rs/wasm
 
+## 1.0.0
+
+### Major Changes
+
+- 188079f: **Changed initial `display` value from `flex` to `inline`**
+
+  This is to comply with [the CSSWG spec](https://drafts.csswg.org/css-display/#the-display-properties).
+
+  You should update your code to use `display: flex` if you want to use flexbox.
+
+### Minor Changes
+
+- 79c0c5a: Embed full-axis Manrope as the default font
+- 1373f0a: Support `ico` format
+
+### Patch Changes
+
+- 9b411ce: Reduce wasm size with more stripping
+- da2d85f: Support unwasm for `/auto` export
+- b2e304a: Replaced native `extractResourceUrls` with JS version to avoid roundtrip
+- bc6243a: Add `bun` conditional exports
+- Updated dependencies [7ff886b]
+- Updated dependencies [b2e304a]
+- Updated dependencies [b5b8531]
+- Updated dependencies [cc9e63c]
+- Updated dependencies [3142b36]
+- Updated dependencies [f1b6104]
+- Updated dependencies [6767ad9]
+- Updated dependencies [01c4fa3]
+- Updated dependencies [7ff886b]
+  - @takumi-rs/helpers@1.0.0
+
 ## 1.0.0-rc.17
 
 ### Patch Changes

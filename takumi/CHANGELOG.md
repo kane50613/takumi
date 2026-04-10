@@ -1,5 +1,64 @@
 # takumi
 
+## 1.0.0
+
+### Major Changes
+
+- 3b4f03d: **Removed `FetchTaskCollection`, switch to `Node::resource_urls` & `Style::resource_urls` instead.**
+- 7da94c5: Remove `SpacePair::from_reversed_pair`
+- 188079f: **Replaced `RenderOptionsBuilder` with `RenderOptions::builder()`**
+  Switch to [typed-builder](https://docs.rs/typed-builder) for compile time options validation, no unwrap needed.
+  Before:
+
+  ```rust
+  let options = RenderOptionsBuilder::default().build().unwrap();
+  ```
+
+  After:
+
+  ```rust
+  let options = RenderOptions::builder().build();
+  ```
+
+- 7f0b66b: **Removed `parse_svg_str`, use `SvgSource::from_str` instead.**
+- cac231c: **Updated parameter type in `Viewport` constructor, removed `impl From<(u32, u32)>`**
+- b0e13d8: **Private `ImageSource::size()`**
+- 188079f: **Changed initial `display` value from `flex` to `inline`**
+
+  This is to comply with [the CSSWG spec](https://drafts.csswg.org/css-display/#the-display-properties).
+
+  You should update your code to use `display: flex` if you want to use flexbox.
+
+- 4a114d5: Removed `detailed_css_error` feature
+- 1373f0a: **Replace `TakumiError` with `takumi::error::Error`**
+
+### Minor Changes
+
+- 7da94c5: Support `order`, `z-index` longhand, `flex-flow`, `place-items`, `place-content`, `place-self` shorthand
+- 1ccf8a9: Support `direction`, `float`, `clear` properties
+- 256ef21: Remove public `load_font` function
+- 2b68b8a: Selects GIF frame based on `time_ms`
+- 00013a8: Support repeating gradients
+- b09ce0b: Support buffer input for image node `src` field
+- 1373f0a: Support `ico` format
+- b2e304a: Rework on internal rendering pipeline to be performant
+- 14ac37b: Support `text-indent` property
+
+### Patch Changes
+
+- 7a79268: Fix linear gradient direction keywords handles incorrectly
+- a118b5d: Add blending fast path, blur downscale scaling
+- cd47ace: Add bilinear interpolation fast path
+- 7a79268: Set default color interpolation method to Oklab
+- 27e38bd: Fix `calc()` infnity scaler calculation
+- ef692db: Remove `fast_image_resize` dependency
+- b0e13d8: Fix DPR not applied when resolving image intrinsic size
+- e1de442: Drop `fast_image_resize` with direct sampling approach
+- 02c4000: Fix `background-image` layers drawing order
+- dc6126d: Support `<calc-keyword>`
+- 1aa4442: Optimize gradient performance
+- 3d2eab2: Blockify node when `position: absolute` #572
+
 ## 1.0.0-rc.17
 
 ## 1.0.0-rc.16

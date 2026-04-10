@@ -1,5 +1,22 @@
 # @takumi-rs/helpers
 
+## 1.0.0
+
+### Minor Changes
+
+- b2e304a: Add `extractResourceUrls` helper in JS
+- 3142b36: Add `extractEmojis` helper
+- 01c4fa3: Resolves `useContext` hook (support `lucide-react` v1)
+- 7ff886b: Add `fromHtml` API
+
+### Patch Changes
+
+- 7ff886b: Fallback to react-dom/server if needed to render with hooks
+- b5b8531: Support sourcing class name from `class` field
+- cc9e63c: Bundle `ultrahtml` instead of externalized #621
+- f1b6104: Loosen `cache` map type
+- 6767ad9: Support fluent emoji API
+
 ## 1.0.0-rc.17
 
 ### Patch Changes
