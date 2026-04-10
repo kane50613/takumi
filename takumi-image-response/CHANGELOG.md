@@ -6,7 +6,7 @@
 
 - 8566f15: **Unify both Node.js & WASM runtime**
 
-  No longer to choose what runtime to be used, and wasm module will be resolved automatically.
+  No longer need to choose which runtime will be used, and the WASM module will be resolved automatically.
 
   The existing `@takumi-rs/image-response/wasm` export will continue to work as an alias.
 

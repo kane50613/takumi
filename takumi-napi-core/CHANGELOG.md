@@ -37,7 +37,7 @@
 
 ### Patch Changes
 
-- 0e14dd5: Mark `turbopackOptional: true` to silent errors
+- 0e14dd5: Mark `turbopackOptional: true` to silence errors
 - b2e304a: Replaced native `extractResourceUrls` with JS version to avoid roundtrip
 - 2f6c8b5: Fix missing type definition file
 - 26b5557: Fix dist folder not included

@@ -50,7 +50,7 @@
 - a118b5d: Add blending fast path, blur downscale scaling
 - cd47ace: Add bilinear interpolation fast path
 - 7a79268: Set default color interpolation method to Oklab
-- 27e38bd: Fix `calc()` infnity scaler calculation
+- 27e38bd: Fix `calc()` infinity scaler calculation
 - ef692db: Remove `fast_image_resize` dependency
 - b0e13d8: Fix DPR not applied when resolving image intrinsic size
 - e1de442: Drop `fast_image_resize` with direct sampling approach
