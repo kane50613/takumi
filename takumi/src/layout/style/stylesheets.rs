@@ -1875,6 +1875,7 @@ mod tests {
   use std::{collections::HashMap, rc::Rc, str::FromStr};
 
   use cssparser::{Parser, ParserInput};
+  use serde_json::{from_value, json};
   use taffy::Size;
 
   use super::stylesheets_vars::resolve_var_references;
@@ -1941,6 +1942,14 @@ mod tests {
     assert_eq!(resolved.width, Length::Px(100.0));
     assert_eq!(resolved.height, Length::Rem(20.0));
     assert_eq!(resolved.color, ColorInput::Value(Color([255, 0, 0, 255])));
+  }
+
+  #[test]
+  fn test_deserialize_numeric_opacity_preserves_fraction() {
+    let style = from_value::<Style>(json!({ "opacity": 0.3 })).unwrap();
+    let computed = style.inherit(&ComputedStyle::default());
+
+    assert_eq!(computed.opacity, PercentageNumber(0.3));
   }
 
   #[test]

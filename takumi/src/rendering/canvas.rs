@@ -186,7 +186,23 @@ impl Canvas {
     })
   }
 
-  pub(crate) fn composite_subcanvas(&mut self, subcanvas: CanvasSubcanvas, mode: BlendMode) {
+  pub(crate) fn composite_subcanvas(
+    &mut self,
+    subcanvas: CanvasSubcanvas,
+    mode: BlendMode,
+    opacity: f32,
+  ) {
+    if opacity <= 0.0 {
+      self.recycle_offscreen_image(subcanvas.image);
+      if let Some(origin) = subcanvas.origin {
+        self.origin = origin;
+      }
+      if let Some(constraint_mask_stack) = subcanvas.constraint_mask_stack {
+        self.constraint_mask_stack = constraint_mask_stack;
+      }
+      return;
+    }
+
     let isolated_image = replace(&mut self.image, subcanvas.image);
     if let Some(origin) = subcanvas.origin {
       self.origin = origin;
@@ -197,7 +213,7 @@ impl Canvas {
 
     if let Some(blend_mode) = to_tiny_blend_mode(mode) {
       let paint = PixmapPaint {
-        opacity: 1.0,
+        opacity,
         blend_mode,
         quality: TinyFilterQuality::Nearest,
       };
@@ -210,7 +226,13 @@ impl Canvas {
         None,
       );
     } else {
-      blend_pixmap_software(&mut self.image, &isolated_image, mode, subcanvas.offset);
+      blend_pixmap_software(
+        &mut self.image,
+        &isolated_image,
+        mode,
+        subcanvas.offset,
+        opacity,
+      );
     }
 
     self.recycle_offscreen_image(isolated_image);
@@ -2025,7 +2047,7 @@ mod tests {
       },
       BlendMode::Normal,
     );
-    isolated.composite_subcanvas(subcanvas, BlendMode::Normal);
+    isolated.composite_subcanvas(subcanvas, BlendMode::Normal, 1.0);
 
     assert_eq!(
       direct.into_inner().map(RgbaImage::into_raw).ok(),

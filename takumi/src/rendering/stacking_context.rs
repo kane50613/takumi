@@ -1,4 +1,3 @@
-use smallvec::SmallVec;
 use taffy::{NodeId, Point, TaffyError, geometry::Size};
 use tiny_skia::Pixmap;
 use tiny_skia::PixmapMut;
@@ -24,7 +23,12 @@ pub(crate) fn blend_pixmap_software(
   src: &Pixmap,
   mode: BlendMode,
   offset: Point<i32>,
+  opacity: f32,
 ) {
+  if opacity <= 0.0 {
+    return;
+  }
+
   let Some(OverlapRegion {
     dst_left,
     dst_top,
@@ -49,6 +53,7 @@ pub(crate) fn blend_pixmap_software(
         blend_plus_darker_pixel_raw_4(
           &mut dst_data[(dst_row + dst_left + col) * 4..(dst_row + dst_left + col + 1) * 4],
           &src.data()[(src_row + src_left + col) * 4..(src_row + src_left + col + 1) * 4],
+          opacity,
         );
       }
     }
@@ -69,7 +74,12 @@ pub(crate) fn blend_pixmap_software(
       let s = src_pixel.demultiply();
       let d = dst_pixel.demultiply();
       let mut out = image::Rgba([d.red(), d.green(), d.blue(), d.alpha()]);
-      let top = image::Rgba([s.red(), s.green(), s.blue(), s.alpha()]);
+      let top = image::Rgba([
+        s.red(),
+        s.green(),
+        s.blue(),
+        ((s.alpha() as f32) * opacity).clamp(0.0, 255.0) as u8,
+      ]);
       blend_pixel(&mut out, top, mode);
       *dst_pixel = Color(out.0).into();
     }
@@ -77,8 +87,14 @@ pub(crate) fn blend_pixmap_software(
 }
 
 #[inline(always)]
-fn blend_plus_darker_pixel_raw_4(dst_px: &mut [u8], src_px: &[u8]) {
-  let src_alpha = src_px[3];
+fn blend_plus_darker_pixel_raw_4(dst_px: &mut [u8], src_px: &[u8], opacity: f32) {
+  let src = [
+    ((src_px[0] as f32) * opacity).clamp(0.0, 255.0) as u8,
+    ((src_px[1] as f32) * opacity).clamp(0.0, 255.0) as u8,
+    ((src_px[2] as f32) * opacity).clamp(0.0, 255.0) as u8,
+    ((src_px[3] as f32) * opacity).clamp(0.0, 255.0) as u8,
+  ];
+  let src_alpha = src[3];
   if src_alpha == 0 {
     return;
   }
@@ -86,9 +102,9 @@ fn blend_plus_darker_pixel_raw_4(dst_px: &mut [u8], src_px: &[u8]) {
   let dst_alpha = dst_px[3];
   let result_alpha = src_alpha.saturating_add(dst_alpha);
 
-  let red = ((src_px[0] as u16 + dst_px[0] as u16).saturating_sub(255)) as u8;
-  let green = ((src_px[1] as u16 + dst_px[1] as u16).saturating_sub(255)) as u8;
-  let blue = ((src_px[2] as u16 + dst_px[2] as u16).saturating_sub(255)) as u8;
+  let red = ((src[0] as u16 + dst_px[0] as u16).saturating_sub(255)) as u8;
+  let green = ((src[1] as u16 + dst_px[1] as u16).saturating_sub(255)) as u8;
+  let blue = ((src[2] as u16 + dst_px[2] as u16).saturating_sub(255)) as u8;
 
   dst_px[0] = red;
   dst_px[1] = green;
@@ -562,10 +578,7 @@ fn finish_node_render<'g>(
   isolated_canvas: Option<CanvasSubcanvas>,
   filter_bounds: Option<SceneBounds>,
 ) -> Result<()> {
-  let opacity_filter =
-    (node.context.style.opacity.0 < 1.0).then_some(Filter::Opacity(node.context.style.opacity));
-
-  if !node.context.style.filter.is_empty() || opacity_filter.is_some() {
+  if !node.context.style.filter.is_empty() {
     let viewport = canvas.viewport();
     let filter_padding = filter_padding(
       &node.context.style.filter,
@@ -608,17 +621,12 @@ fn finish_node_render<'g>(
         return Ok(());
       };
 
-      let mut filter_list: SmallVec<[&Filter; 8]> = node.context.style.filter.iter().collect();
-      if let Some(opacity_filter) = opacity_filter.as_ref() {
-        filter_list.push(opacity_filter);
-      }
-
       apply_filters_to_pixmap(
         &mut region_pixmap,
         &node.context.sizing,
         node.context.current_color,
         &mut canvas.buffer_pool,
-        filter_list.iter().copied(),
+        node.context.style.filter.iter(),
       )?;
 
       canvas.with_pixmap_and_pool(|pixmap, _| {
@@ -640,12 +648,7 @@ fn finish_node_render<'g>(
           &node.context.sizing,
           node.context.current_color,
           pool,
-          node
-            .context
-            .style
-            .filter
-            .iter()
-            .chain(opacity_filter.iter()),
+          node.context.style.filter.iter(),
         )
       })?;
     }
@@ -655,7 +658,11 @@ fn finish_node_render<'g>(
     if has_constraint {
       canvas.pop_mask();
     }
-    canvas.composite_subcanvas(isolated_canvas, node.context.style.mix_blend_mode);
+    canvas.composite_subcanvas(
+      isolated_canvas,
+      node.context.style.mix_blend_mode,
+      node.context.style.opacity.0,
+    );
   } else if has_constraint {
     canvas.pop_mask();
   }
@@ -723,20 +730,6 @@ fn begin_node_render<'g>(
   current.context.sizing.container_size = node_paint.container_size;
   current.context.transform = node_paint.transform;
 
-  let mask_action = prepare_node_mask(
-    &current.context,
-    &current.context.style,
-    layout,
-    node_paint.transform,
-    canvas.viewport(),
-    &mut canvas.buffer_pool,
-  )?;
-  if matches!(mask_action, NodeMaskAction::SkipRendering) {
-    return Ok(Some(DeferredNodeRender::SkipRendering));
-  }
-
-  let has_constraint = mask_action.is_some();
-
   if !current.context.style.backdrop_filter.is_empty() {
     let border = BorderProperties::from_context(&current.context, layout.size, layout.border);
     apply_backdrop_filter(
@@ -760,6 +753,23 @@ fn begin_node_render<'g>(
   } else {
     None
   };
+
+  let mask_action = prepare_node_mask(
+    &current.context,
+    &current.context.style,
+    layout,
+    node_paint.transform,
+    canvas.viewport(),
+    &mut canvas.buffer_pool,
+  )?;
+  if matches!(mask_action, NodeMaskAction::SkipRendering) {
+    if let Some(isolated_canvas) = isolated_canvas {
+      canvas.composite_subcanvas(isolated_canvas, BlendMode::Normal, 0.0);
+    }
+    return Ok(Some(DeferredNodeRender::SkipRendering));
+  }
+
+  let has_constraint = mask_action.is_some();
 
   match mask_action {
     NodeMaskAction::None => {

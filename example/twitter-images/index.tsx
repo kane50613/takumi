@@ -9,8 +9,10 @@ import * as OgImage from "./components/og-image";
 import * as PackageOgImage from "./components/package-og-image";
 import * as PrismaOGImage from "./components/prisma-og-image";
 import * as XPostImage from "./components/x-post-image";
+import * as V1 from "./components/v1";
 
 const components = [
+  V1,
   OgImage,
   FiveHundredStars,
   XPostImage,

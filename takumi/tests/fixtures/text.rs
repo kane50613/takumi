@@ -1,4 +1,5 @@
 use parley::{FontVariation, setting::Tag};
+use serde_json::{from_value, json};
 use takumi::layout::{
   node::Node,
   style::{Length::*, *},
@@ -994,4 +995,162 @@ fn text_devanagari_noto_sans() {
   );
 
   run_fixture_test(container, "text_devanagari_noto_sans");
+}
+
+#[test]
+fn text_group_opacity_small_mono_regression() {
+  let root = from_value::<Node>(json!({
+    "type": "container",
+    "style": {
+      "width": "100%",
+      "height": "100%",
+      "display": "flex",
+      "alignItems": "center",
+      "justifyContent": "center",
+      "backgroundColor": "rgb(2, 6, 23)"
+    },
+    "children": [
+      {
+        "type": "container",
+        "style": {
+          "display": "flex",
+          "flexDirection": "column",
+          "alignItems": "center"
+        },
+        "children": [
+          {
+            "type": "text",
+            "text": "opacity + color opacity",
+            "style": {
+              "fontFamily": "Geist Mono",
+              "fontSize": "28px",
+              "fontWeight": 700,
+              "color": "rgb(248, 250, 252)",
+              "marginBottom": "18px"
+            }
+          },
+          {
+            "type": "container",
+            "style": {
+              "width": "340px",
+              "display": "flex",
+              "flexDirection": "column",
+              "gap": "2px",
+              "opacity": 0.3,
+              "overflow": "hidden",
+              "fontSize": "1.25rem",
+              "lineHeight": 1.45,
+              "color": "rgba(226, 232, 240, 0.95)",
+              "fontFamily": "Geist Mono"
+            },
+            "children": [
+              {
+                "type": "container",
+                "tagName": "div",
+                "preset": { "display": "block" },
+                "style": {
+                  "display": "flex",
+                  "alignItems": "center",
+                  "paddingLeft": "0"
+                },
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "Functions",
+                    "tagName": "span",
+                    "style": {
+                      "fontSize": "1.05rem"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "container",
+                "tagName": "div",
+                "preset": { "display": "block" },
+                "style": {
+                  "display": "flex",
+                  "alignItems": "center",
+                  "paddingLeft": "20px"
+                },
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "render",
+                    "tagName": "span",
+                    "style": {
+                      "fontSize": "1.2rem"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "container",
+                "tagName": "div",
+                "preset": { "display": "block" },
+                "style": {
+                  "display": "flex",
+                  "alignItems": "center",
+                  "paddingLeft": "20px"
+                },
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "loadFont",
+                    "tagName": "span",
+                    "style": {
+                      "fontSize": "1.2rem"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "container",
+                "tagName": "div",
+                "preset": { "display": "block" },
+                "style": {
+                  "display": "flex",
+                  "alignItems": "center",
+                  "paddingLeft": "0"
+                },
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "Classes",
+                    "tagName": "span",
+                    "style": {
+                      "fontSize": "1.05rem"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "container",
+                "tagName": "div",
+                "preset": { "display": "block" },
+                "style": {
+                  "display": "flex",
+                  "alignItems": "center",
+                  "paddingLeft": "20px"
+                },
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "Renderer",
+                    "tagName": "span",
+                    "style": {
+                      "fontSize": "1.2rem"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }))
+  .unwrap();
+
+  run_fixture_test(root, "text_group_opacity_small_mono_regression");
 }
