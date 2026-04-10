@@ -89,7 +89,7 @@ pub mod resources;
 
 use std::collections::HashSet;
 
-pub use error::{Result, StyleSheetParseError, TakumiError as Error};
+pub use error::{Error, Result, StyleSheetParseError};
 
 use typed_builder::TypedBuilder;
 use xxhash_rust::xxh3::Xxh3DefaultBuilder;

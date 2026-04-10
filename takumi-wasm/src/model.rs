@@ -66,7 +66,7 @@ pub struct RenderOptions {
   pub width: Option<u32>,
   /// The height of the image in pixels.
   pub height: Option<u32>,
-  /// The output image format (PNG, JPEG, or WebP).
+  /// The output image format (PNG, JPEG, WebP, or ICO).
   pub format: Option<OutputFormat>,
   /// The JPEG quality (0-100), if applicable.
   pub quality: Option<u8>,
@@ -192,6 +192,8 @@ pub enum OutputFormat {
   Jpeg,
   /// WebP format.
   WebP,
+  /// ICO format.
+  Ico,
   /// Raw pixels format.
   Raw,
 }
@@ -202,6 +204,7 @@ impl From<OutputFormat> for takumi::rendering::ImageOutputFormat {
       OutputFormat::Png => takumi::rendering::ImageOutputFormat::Png,
       OutputFormat::Jpeg => takumi::rendering::ImageOutputFormat::Jpeg,
       OutputFormat::WebP => takumi::rendering::ImageOutputFormat::WebP,
+      OutputFormat::Ico => takumi::rendering::ImageOutputFormat::Ico,
       OutputFormat::Raw => unreachable!("Raw format should be handled separately"),
     }
   }

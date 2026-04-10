@@ -1,7 +1,10 @@
 use std::{borrow::Cow, io::Write};
 
 use gif::{Encoder as GifEncoder, Frame as GifFrame, Repeat};
-use image::{ExtendedColorType, ImageEncoder, ImageFormat, RgbaImage, codecs::jpeg::JpegEncoder};
+use image::{
+  ExtendedColorType, ImageEncoder, ImageFormat, RgbaImage,
+  codecs::{ico::IcoEncoder, jpeg::JpegEncoder},
+};
 use png::{ColorType, DeflateCompression, Filter};
 use serde::Deserialize;
 use typed_builder::TypedBuilder;
@@ -10,7 +13,7 @@ use typed_builder::TypedBuilder;
 pub use super::webp::encode_animated_webp;
 use super::webp::{has_any_alpha_pixel, strip_alpha_channel, write_webp};
 
-use crate::{Result, error::TakumiError};
+use crate::{Result, error::Error};
 
 /// Output format for rendered images.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -26,6 +29,9 @@ pub enum ImageOutputFormat {
 
   /// JPEG image format, lossy and does not support transparency.
   Jpeg,
+
+  /// ICO image format for favicons and application icons.
+  Ico,
 }
 
 impl ImageOutputFormat {
@@ -35,6 +41,7 @@ impl ImageOutputFormat {
       ImageOutputFormat::WebP => "image/webp",
       ImageOutputFormat::Png => "image/png",
       ImageOutputFormat::Jpeg => "image/jpeg",
+      ImageOutputFormat::Ico => "image/x-icon",
     }
   }
 }
@@ -45,6 +52,7 @@ impl From<ImageOutputFormat> for ImageFormat {
       ImageOutputFormat::WebP => Self::WebP,
       ImageOutputFormat::Png => Self::Png,
       ImageOutputFormat::Jpeg => Self::Jpeg,
+      ImageOutputFormat::Ico => Self::Ico,
     }
   }
 }
@@ -171,6 +179,12 @@ pub fn write_image<'a, T: Write>(
     ImageOutputFormat::WebP => {
       write_webp(image, destination, quality)?;
     }
+    ImageOutputFormat::Ico => {
+      let width = image.width();
+      let height = image.height();
+      let encoder = IcoEncoder::new(destination);
+      encoder.write_image(image.as_raw(), width, height, ExtendedColorType::Rgba8)?;
+    }
   }
 
   Ok(())
@@ -183,14 +197,14 @@ pub fn encode_animated_gif<W: Write>(
   options: AnimatedGifOptions,
 ) -> Result<()> {
   if frames.is_empty() {
-    return Err(TakumiError::EmptyAnimationFrames { format: "GIF" });
+    return Err(Error::EmptyAnimationFrames { format: "GIF" });
   }
 
   let width = frames[0].image.width();
   let height = frames[0].image.height();
 
   if width > u16::MAX as u32 || height > u16::MAX as u32 {
-    return Err(TakumiError::GifFrameDimensionsTooLarge {
+    return Err(Error::GifFrameDimensionsTooLarge {
       width,
       height,
       max: u16::MAX,
@@ -199,7 +213,7 @@ pub fn encode_animated_gif<W: Write>(
 
   for frame in frames.iter() {
     if frame.image.width() != width || frame.image.height() != height {
-      return Err(TakumiError::MixedAnimationFrameDimensions { format: "GIF" });
+      return Err(Error::MixedAnimationFrameDimensions { format: "GIF" });
     }
   }
 
@@ -225,14 +239,14 @@ pub fn encode_animated_png<W: Write>(
   options: AnimatedPngOptions,
 ) -> Result<()> {
   if frames.is_empty() {
-    return Err(TakumiError::EmptyAnimationFrames { format: "APNG" });
+    return Err(Error::EmptyAnimationFrames { format: "APNG" });
   }
 
   let width = frames[0].image.width();
   let height = frames[0].image.height();
   for frame in frames.iter() {
     if frame.image.width() != width || frame.image.height() != height {
-      return Err(TakumiError::MixedAnimationFrameDimensions { format: "APNG" });
+      return Err(Error::MixedAnimationFrameDimensions { format: "APNG" });
     }
   }
 
@@ -482,6 +496,46 @@ mod tests {
     assert!(encode_dithered.is_ok(), "failed to encode image");
 
     assert_ne!(encoded_none, encoded_dithered);
+  }
+
+  #[test]
+  fn write_image_ico_produces_ico_header() {
+    let image = RgbaImage::from_pixel(16, 16, image::Rgba([255, 0, 0, 255]));
+    let mut encoded = Vec::new();
+    let result = write_image(
+      Cow::Owned(image),
+      &mut encoded,
+      ImageOutputFormat::Ico,
+      None,
+    );
+    assert!(result.is_ok(), "failed to encode ico image");
+    assert!(
+      encoded.starts_with(&[0, 0, 1, 0]),
+      "encoded bytes should begin with ICO header"
+    );
+  }
+
+  #[test]
+  fn write_image_ico_rejects_dimensions_over_256() {
+    let image = RgbaImage::from_pixel(257, 16, image::Rgba([255, 0, 0, 255]));
+    let mut encoded = Vec::new();
+    let result = write_image(
+      Cow::Owned(image),
+      &mut encoded,
+      ImageOutputFormat::Ico,
+      None,
+    );
+
+    let err = result.err();
+    assert!(err.is_some(), "expected oversized ico image to fail");
+    let Some(err) = err else {
+      return;
+    };
+    assert!(
+      err
+        .to_string()
+        .contains("the image width must be `1..=256`, instead width 257 was provided")
+    );
   }
 
   #[test]

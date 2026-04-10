@@ -4,7 +4,7 @@ description: A Rust rendering engine that converts JSX, HTML, and node trees int
 icon: Axe
 ---
 
-Takumi renders JSX, raw HTML, and structured node trees through a full CSS layout and compositing pipeline, then outputs PNG, JPEG, WebP, GIF, APNG, or raw video frames.
+Takumi renders JSX, raw HTML, and structured node trees through a full CSS layout and compositing pipeline, then outputs PNG, JPEG, WebP, ICO, GIF, APNG, or raw video frames.
 
 This documentation covers the JavaScript bindings (`takumi-js`). For the low-level Rust API, see the [crate docs on docs.rs](https://docs.rs/takumi).
 
@@ -32,7 +32,7 @@ It converts any template into a **node tree** with three node kinds: `container`
 1. **Layout** via [taffy](https://github.com/DioxusLabs/taffy): Flexbox, Grid, block, float, `calc()`, absolute positioning, z-index
 2. **Text shaping** via [parley](https://github.com/linebender/parley) and [skrifa](https://github.com/googlefonts/fontations/tree/main/skrifa): WOFF/WOFF2 fonts, emoji, RTL, multi-span inline blocks
 3. **Compositing**: stacking contexts, blend modes, filters, transforms, SVG via [resvg](https://github.com/linebender/resvg)
-4. **Output**: PNG, JPEG, WebP for statics; GIF, APNG, WebP for animations; raw RGBA frames for video pipelines
+4. **Output**: PNG, JPEG, WebP, ICO for statics; GIF, APNG, WebP for animations; raw RGBA frames for video pipelines
 
 A **time axis** threads through the pipeline. Animations, GIFs, and video frames are not a separate API. They're the same renderer called at timestamp `t`.
 
@@ -43,7 +43,7 @@ flowchart LR
     R[Resources] --> P
     D(Time Axis) -.-> P
 
-    F --> G[PNG / JPEG / WebP]
+    F --> G[PNG / JPEG / WebP / ICO]
     F --> H[GIF / APNG]
     F --> I[Video frames]
 ```

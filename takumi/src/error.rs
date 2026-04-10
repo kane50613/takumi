@@ -8,9 +8,6 @@ use crate::{
 };
 use thiserror::Error;
 
-/// Alias to [`TakumiError`].
-pub type Error = TakumiError;
-
 /// Errors raised while parsing a CSS declaration block string.
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -258,7 +255,7 @@ pub enum WebPError {
 /// The main error type for the Takumi crate.
 #[derive(Error, Debug)]
 #[non_exhaustive]
-pub enum TakumiError {
+pub enum Error {
   /// Error resolving an image resource.
   #[error("Image resolution error: {0}")]
   ImageResolveError(#[from] ImageResourceError),
@@ -335,11 +332,11 @@ pub enum TakumiError {
   LayoutError(taffy::TaffyError),
 }
 
-impl From<taffy::TaffyError> for TakumiError {
+impl From<taffy::TaffyError> for Error {
   fn from(err: taffy::TaffyError) -> Self {
     Self::LayoutError(err)
   }
 }
 
 /// A specialized Result type for Takumi operations.
-pub type Result<T> = std::result::Result<T, TakumiError>;
+pub type Result<T> = std::result::Result<T, Error>;

@@ -26,7 +26,7 @@ Takumi converts any template into a **node tree** with three node kinds: `contai
 1. **Layout** via [taffy](https://github.com/DioxusLabs/taffy): Flexbox, Grid, block, float, `calc()`, absolute positioning, z-index
 2. **Text shaping** via [parley](https://github.com/linebender/parley) and [skrifa](https://github.com/googlefonts/fontations/tree/main/skrifa): WOFF/WOFF2 fonts, emoji, RTL, multi-span inline blocks
 3. **Compositing**: stacking contexts, blend modes, filters, transforms, SVG via [resvg](https://github.com/linebender/resvg)
-4. **Output**: PNG, JPEG, WebP for statics; GIF, APNG, WebP for animations; raw RGBA frames for video pipelines
+4. **Output**: PNG, JPEG, WebP, ICO for statics; GIF, APNG, WebP for animations; raw RGBA frames for video pipelines
 
 Because the input contract is just a node tree, any template system that can serialize to HTML or JSON plugs in without glue code. React, Svelte, Vue, plain strings, or your own serializer in any language.
 
@@ -39,7 +39,7 @@ flowchart LR
     R[Resources] --> P
     D(Time Axis) -.-> P
 
-    F --> G[PNG / JPEG / WebP]
+    F --> G[PNG / JPEG / WebP / ICO]
     F --> H[GIF / APNG]
     F --> I[Video frames]
 ```

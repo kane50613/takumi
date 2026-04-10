@@ -12,7 +12,7 @@ declare type PlaygroundOptions = {
    * @description format to render.
    * @default png
    */
-  format?: "png" | "jpeg" | "webp";
+  format?: "png" | "jpeg" | "webp" | "ico";
   /**
    * @description quality of jpeg format (0-100).
    * @default 75

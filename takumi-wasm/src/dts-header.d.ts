@@ -28,7 +28,7 @@ export type RenderOptions = {
    * The format of the image.
    * @default "png"
    */
-  format?: "png" | "jpeg" | "webp" | "raw";
+  format?: "png" | "jpeg" | "webp" | "ico" | "raw";
   /**
    * The quality of JPEG format (0-100).
    */

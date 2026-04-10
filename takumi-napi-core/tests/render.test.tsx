@@ -178,6 +178,18 @@ describe("render", () => {
     expect(result).toBeInstanceOf(Buffer);
   });
 
+  test("ico", async () => {
+    const result = await renderer.render(node, {
+      ...options,
+      width: 256,
+      height: 256,
+      format: "ico",
+    });
+
+    expect(result).toBeInstanceOf(Buffer);
+    expect(result.subarray(0, 4)).toEqual(Buffer.from([0, 0, 1, 0]));
+  });
+
   test("auto-calculated dimensions", async () => {
     const result = await renderer.render(node, {
       format: "png",

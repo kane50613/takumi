@@ -22,6 +22,17 @@ describe("ImageResponse", () => {
     expect(await response.arrayBuffer()).toBeDefined();
   });
 
+  test("should set ico content-type", async () => {
+    const response = new ImageResponse(<div>Hello</div>, {
+      width: 128,
+      height: 128,
+      format: "ico",
+    });
+
+    expect(response.headers.get("content-type")).toBe("image/x-icon");
+    expect(await response.arrayBuffer()).toBeDefined();
+  });
+
   test("should resolve concurrent requests via Promise.all without hanging", async () => {
     const promises = Array.from({ length: 100 }).map(async (_, i) => {
       const response = new ImageResponse(<div>Concurrent {i}</div>);

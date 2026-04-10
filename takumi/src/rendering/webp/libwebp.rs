@@ -7,7 +7,7 @@ use rayon::prelude::*;
 
 use crate::{
   Result,
-  error::{TakumiError, WebPError},
+  error::{Error, WebPError},
 };
 
 use super::{
@@ -213,7 +213,7 @@ fn write_riff_container<W: Write>(
     acc
       .checked_add(anmf_chunk_bytes(frame.payload().len())?)
       .ok_or(WebPError::ContainerSizeOverflow)
-      .map_err(TakumiError::from)
+      .map_err(Error::from)
   })?;
   let riff_payload_usize = 4usize
     .checked_add(VP8X_CHUNK_BYTES)

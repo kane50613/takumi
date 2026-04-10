@@ -50,6 +50,7 @@ const contentTypeMap: Record<NonNullable<RenderOptions["format"]>, string> = {
   png: "image/png",
   jpeg: "image/jpeg",
   webp: "image/webp",
+  ico: "image/x-icon",
   raw: "application/octet-stream",
 };
 

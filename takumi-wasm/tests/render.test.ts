@@ -113,6 +113,17 @@ describe("render", () => {
     expect(result).toBeInstanceOf(Uint8Array);
   });
 
+  test("ico", () => {
+    const result = renderer.render(node, {
+      width: 256,
+      height: 256,
+      format: "ico",
+    });
+
+    expect(result).toBeInstanceOf(Uint8Array);
+    expect(Buffer.from(result.subarray(0, 4))).toEqual(Buffer.from([0, 0, 1, 0]));
+  });
+
   test("auto-calculated dimensions", () => {
     const result = renderer.render(node, {
       format: "png",
@@ -256,6 +267,17 @@ describe("renderAsDataUrl", () => {
     });
 
     expect(result).toMatch(/^data:image\/png;base64,/);
+    expect(result.length).toBeGreaterThan(100);
+  });
+
+  test("ico format", () => {
+    const result = renderer.renderAsDataUrl(node, {
+      width: 256,
+      height: 256,
+      format: "ico",
+    });
+
+    expect(result).toMatch(/^data:image\/x-icon;base64,/);
     expect(result.length).toBeGreaterThan(100);
   });
 

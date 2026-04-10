@@ -235,6 +235,8 @@ pub enum OutputFormat {
   Png,
   /// JPEG format.
   Jpeg,
+  /// ICO format.
+  Ico,
   /// Raw pixels format.
   Raw,
 }
@@ -245,6 +247,7 @@ impl From<OutputFormat> for ImageOutputFormat {
       OutputFormat::WebP => ImageOutputFormat::WebP,
       OutputFormat::Jpeg => ImageOutputFormat::Jpeg,
       OutputFormat::Png => ImageOutputFormat::Png,
+      OutputFormat::Ico => ImageOutputFormat::Ico,
       // SAFETY: It's handled in the render task
       OutputFormat::Raw => unreachable!(),
     }
