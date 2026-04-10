@@ -1945,11 +1945,12 @@ mod tests {
   }
 
   #[test]
-  fn test_deserialize_numeric_opacity_preserves_fraction() {
-    let style = from_value::<Style>(json!({ "opacity": 0.3 })).unwrap();
+  fn test_deserialize_numeric_opacity_preserves_fraction() -> Result<(), serde_json::Error> {
+    let style = from_value::<Style>(json!({ "opacity": 0.3 }))?;
     let computed = style.inherit(&ComputedStyle::default());
 
     assert_eq!(computed.opacity, PercentageNumber(0.3));
+    Ok(())
   }
 
   #[test]
