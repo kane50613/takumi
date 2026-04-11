@@ -53,6 +53,12 @@ export const showcaseProjects: Project[] = [
     width: 1200,
     height: 630,
   },
+    {
+    image: "https://www.motion-gpu.dev/docs/og",
+    url: "https://www.motion-gpu.dev/",
+    width: 1200,
+    height: 630,
+  },
 ];
 
 export const showcaseTemplates: Template[] = [
