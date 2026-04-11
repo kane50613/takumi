@@ -147,3 +147,75 @@ fn test_style_mlx_blend_mode_isolation() {
 
   run_fixture_test(container, "style_mix_blend_mode_isolation");
 }
+
+// https://github.com/kane50613/takumi/issues/643
+// https://github.com/kane50613/takumi/issues/644
+#[test]
+fn test_style_mix_blend_mode_text_regression() {
+  let family = FontFamily::from_str("Geist").unwrap();
+  let label_style = Style::default()
+    .with(StyleDeclaration::display(Display::Block))
+    .with(StyleDeclaration::max_width(Px(500.0)))
+    .with(StyleDeclaration::font_family(family))
+    .with(StyleDeclaration::font_size(Px(60.0).into()))
+    .with(StyleDeclaration::font_weight(FontWeight::from(600.0)))
+    .with(StyleDeclaration::line_height(LineHeight::Length(Px(60.0))))
+    .with(StyleDeclaration::text_align(TextAlign::Center));
+
+  let container = Node::container([Node::container([
+    Node::text("Plus Lighter").with_style(
+      label_style
+        .clone()
+        .with(StyleDeclaration::color(ColorInput::Value(Color([
+          255, 255, 255, 255,
+        ]))))
+        .with(StyleDeclaration::mix_blend_mode(BlendMode::PlusLighter)),
+    ),
+    Node::text("Plus Lighter").with_style(
+      label_style
+        .clone()
+        .with(StyleDeclaration::color(ColorInput::Value(Color([
+          255, 255, 255, 255,
+        ]))))
+        .with(StyleDeclaration::opacity(PercentageNumber(0.1)))
+        .with(StyleDeclaration::mix_blend_mode(BlendMode::PlusLighter)),
+    ),
+    Node::text("Plus Darker").with_style(
+      label_style
+        .clone()
+        .with(StyleDeclaration::color(ColorInput::Value(Color([
+          255, 255, 255, 255,
+        ]))))
+        .with(StyleDeclaration::mix_blend_mode(BlendMode::PlusDarker)),
+    ),
+    Node::text("Plus Darker").with_style(
+      label_style
+        .with(StyleDeclaration::color(ColorInput::Value(Color([
+          0, 0, 0, 255,
+        ]))))
+        .with(StyleDeclaration::opacity(PercentageNumber(0.1)))
+        .with(StyleDeclaration::mix_blend_mode(BlendMode::PlusDarker)),
+    ),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::row_gap(Px(24.0))),
+  )])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([150, 119, 0, 255]),
+      ))),
+  );
+
+  run_fixture_test(container, "style_mix_blend_mode_text_regression");
+}

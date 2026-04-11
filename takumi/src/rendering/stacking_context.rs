@@ -1,10 +1,12 @@
-use taffy::{NodeId, Point, TaffyError, geometry::Size};
+use parley::PositionedLayoutItem;
+use taffy::{AvailableSpace, Layout, NodeId, Point, TaffyError, geometry::Size};
 use tiny_skia::Pixmap;
 use tiny_skia::PixmapMut;
 
 use crate::{
   Error, Result,
   layout::{
+    inline::{InlineLayoutStage, collect_inline_items, create_inline_layout},
     style::{
       Affine, BackgroundImage, BlendMode, BorderStyle, Color, ComputedStyle, Display, Filter,
       SpacePair, apply_backdrop_filter, apply_filters_to_pixmap,
@@ -12,9 +14,9 @@ use crate::{
     tree::{LayoutResults, RenderNode},
   },
   rendering::{
-    BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, NodeMaskAction, Placement,
-    Sizing, blend_pixel, draw_debug_border, get_node_mut_by_path, prepare_node_mask,
-    transformed_rect_extents,
+    BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, MaxHeight, NodeMaskAction,
+    Placement, Sizing, blend_pixel, draw_debug_border, get_node_mut_by_path,
+    inline_drawing::get_parent_x_height, prepare_node_mask, transformed_rect_extents,
   },
 };
 
@@ -41,26 +43,6 @@ pub(crate) fn blend_pixmap_software(
     return;
   };
 
-  if matches!(mode, BlendMode::PlusDarker) {
-    let dst_width = dst.width() as usize;
-    let src_width = src.width() as usize;
-    let dst_data = dst.data_mut();
-
-    for row in 0..height {
-      let dst_row = (dst_top + row) * dst_width;
-      let src_row = (src_top + row) * src_width;
-      for col in 0..width {
-        blend_plus_darker_pixel_raw_4(
-          &mut dst_data[(dst_row + dst_left + col) * 4..(dst_row + dst_left + col + 1) * 4],
-          &src.data()[(src_row + src_left + col) * 4..(src_row + src_left + col + 1) * 4],
-          opacity,
-        );
-      }
-    }
-
-    return;
-  }
-
   let dst_width = dst.width() as usize;
   let src_width = src.width() as usize;
   let dst_pixels = dst.pixels_mut();
@@ -84,32 +66,6 @@ pub(crate) fn blend_pixmap_software(
       *dst_pixel = Color(out.0).into();
     }
   }
-}
-
-#[inline(always)]
-fn blend_plus_darker_pixel_raw_4(dst_px: &mut [u8], src_px: &[u8], opacity: f32) {
-  let src = [
-    ((src_px[0] as f32) * opacity).clamp(0.0, 255.0) as u8,
-    ((src_px[1] as f32) * opacity).clamp(0.0, 255.0) as u8,
-    ((src_px[2] as f32) * opacity).clamp(0.0, 255.0) as u8,
-    ((src_px[3] as f32) * opacity).clamp(0.0, 255.0) as u8,
-  ];
-  let src_alpha = src[3];
-  if src_alpha == 0 {
-    return;
-  }
-
-  let dst_alpha = dst_px[3];
-  let result_alpha = src_alpha.saturating_add(dst_alpha);
-
-  let red = ((src[0] as u16 + dst_px[0] as u16).saturating_sub(255)) as u8;
-  let green = ((src[1] as u16 + dst_px[1] as u16).saturating_sub(255)) as u8;
-  let blue = ((src[2] as u16 + dst_px[2] as u16).saturating_sub(255)) as u8;
-
-  dst_px[0] = red;
-  dst_px[1] = green;
-  dst_px[2] = blue;
-  dst_px[3] = result_alpha;
 }
 
 fn overlapping_region(dst: &Pixmap, src: &Pixmap, offset: Point<i32>) -> Option<OverlapRegion> {
@@ -232,9 +188,9 @@ pub(crate) fn collect_layout_children(
 struct NodePaint {
   path: Vec<usize>,
   node_id: NodeId,
-  size: Size<f32>,
   transform: Affine,
   container_size: Size<Option<f32>>,
+  paint_bounds: Option<SceneBounds>,
 }
 
 #[derive(Clone, Copy)]
@@ -430,9 +386,9 @@ pub(crate) fn build_stacking_contexts<'g>(
     let node_paint = NodePaint {
       path: visit.path.clone(),
       node_id: visit.node_id,
-      size: layout.size,
       transform: current_transform,
       container_size: visit.container_size,
+      paint_bounds: compute_node_paint_bounds(current, layout, current_transform),
     };
 
     let is_flex_or_grid_item = visit.parent_display.is_some_and(|display| {
@@ -519,11 +475,11 @@ pub(crate) fn build_stacking_contexts<'g>(
     let mut paint_bounds = contexts[context_id]
       .root
       .as_ref()
-      .and_then(node_paint_bounds);
+      .and_then(|node| node.paint_bounds);
     for bucket in contexts[context_id].buckets.in_paint_order() {
       for item in bucket {
         let item_bounds = match &item.kind {
-          PaintItemKind::Node(node_paint) => node_paint_bounds(node_paint),
+          PaintItemKind::Node(node_paint) => node_paint.paint_bounds,
           PaintItemKind::Context(child_context_id) => contexts[*child_context_id].paint_bounds,
         };
         paint_bounds = merge_bounds(paint_bounds, item_bounds);
@@ -535,8 +491,104 @@ pub(crate) fn build_stacking_contexts<'g>(
   Ok(contexts)
 }
 
-fn node_paint_bounds(node_paint: &NodePaint) -> Option<SceneBounds> {
-  bounds_for_rect(node_paint.size, node_paint.transform)
+fn compute_node_paint_bounds(
+  node: &RenderNode<'_>,
+  layout: Layout,
+  transform: Affine,
+) -> Option<SceneBounds> {
+  let mut bounds = bounds_for_rect(layout.size, transform);
+  if !has_inline_paint_content(node) {
+    return bounds;
+  }
+
+  let font_style = node.context.style.to_sized_font_style(&node.context);
+  if font_style.sizing.font_size == 0.0 {
+    return bounds;
+  }
+
+  let available_space = Size {
+    width: AvailableSpace::Definite(layout.content_box_width()),
+    height: AvailableSpace::Definite(layout.content_box_height()),
+  };
+  let max_height = match font_style.parent.line_clamp.as_ref() {
+    Some(clamp) => Some(MaxHeight::HeightAndLines(
+      layout.content_box_height(),
+      clamp.count,
+    )),
+    None => Some(MaxHeight::Absolute(layout.content_box_height())),
+  };
+  let (inline_layout, _, spans) = create_inline_layout(
+    collect_inline_items(node).into_iter(),
+    available_space,
+    layout.content_box_width(),
+    max_height,
+    &font_style,
+    node.context.global,
+    InlineLayoutStage::Measure,
+  );
+  let inline_transform = Affine::translation(
+    layout.border.left + layout.padding.left,
+    layout.border.top + layout.padding.top,
+  ) * transform;
+  let parent_x_height = get_parent_x_height(&node.context, &font_style);
+
+  for line in inline_layout.lines() {
+    for item in line.items() {
+      match item {
+        PositionedLayoutItem::GlyphRun(glyph_run) => {
+          let metrics = glyph_run.run().metrics();
+          let glyph_transform =
+            Affine::translation(glyph_run.offset(), glyph_run.baseline() - metrics.ascent)
+              * inline_transform;
+          bounds = merge_bounds(
+            bounds,
+            bounds_for_rect(
+              Size {
+                width: glyph_run.advance(),
+                height: metrics.ascent + metrics.descent,
+              },
+              glyph_transform,
+            ),
+          );
+        }
+        PositionedLayoutItem::InlineBox(mut inline_box) => {
+          let item_index = inline_box.id as usize;
+          if let Some(crate::layout::inline::ProcessedInlineSpan::Box(item)) = spans.get(item_index)
+          {
+            item.vertical_align.apply(
+              &mut inline_box.y,
+              line.metrics(),
+              inline_box.height,
+              parent_x_height,
+            );
+          }
+
+          bounds = merge_bounds(
+            bounds,
+            bounds_for_rect(
+              Size {
+                width: inline_box.width,
+                height: inline_box.height,
+              },
+              Affine::translation(inline_box.x, inline_box.y) * inline_transform,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  bounds
+}
+
+fn has_inline_paint_content(node: &RenderNode<'_>) -> bool {
+  node.should_create_inline_layout()
+    || node.anonymous_text_content.is_some()
+    || node.children.as_ref().is_some_and(|children| {
+      children
+        .iter()
+        .any(|child| child.anonymous_text_content.is_some())
+    })
 }
 
 fn bounds_for_rect(size: Size<f32>, transform: Affine) -> Option<SceneBounds> {
@@ -799,7 +851,7 @@ fn begin_node_render<'g>(
       canvas,
       has_constraint,
       isolated_canvas,
-      node_paint_bounds(node_paint),
+      node_paint.paint_bounds,
     )?;
   } else if !defer_finish {
     finish_node_render(
@@ -807,14 +859,14 @@ fn begin_node_render<'g>(
       canvas,
       has_constraint,
       isolated_canvas,
-      node_paint_bounds(node_paint),
+      node_paint.paint_bounds,
     )?;
   } else {
     return Ok(Some(DeferredNodeRender::Deferred {
       path: node_paint.path.clone(),
       has_constraint,
       isolated_canvas,
-      filter_bounds: node_paint_bounds(node_paint),
+      filter_bounds: node_paint.paint_bounds,
     }));
   }
 
@@ -933,7 +985,7 @@ pub(crate) fn paint_context<'g>(
   Ok(())
 }
 
-fn can_use_bounds_hint(node: &RenderNode<'_>) -> bool {
+fn supports_bounds_hint(node: &RenderNode<'_>, require_child_clipping: bool) -> bool {
   let style = &node.context.style;
   let has_children = node
     .children
@@ -974,19 +1026,7 @@ fn can_use_bounds_hint(node: &RenderNode<'_>) -> bool {
     && !has_text_shadow
     && !has_text_stroke
     && !has_spread_background
-    && (!has_children || clips_children)
-}
-
-fn isolation_hint_is_safe(node: &RenderNode<'_>) -> bool {
-  let style = &node.context.style;
-  style.filter.is_empty()
-    && style.backdrop_filter.is_empty()
-    && style.clip_path.is_none()
-    && style.mask_image.as_ref().is_none_or(|images| {
-      images
-        .iter()
-        .all(|image| matches!(image, BackgroundImage::None))
-    })
+    && (!require_child_clipping || !has_children || clips_children)
 }
 
 fn placement_from_bounds(
@@ -1018,27 +1058,22 @@ fn compute_isolation_bounds(
   viewport: CanvasViewport,
   paint_bounds_hint: Option<SceneBounds>,
 ) -> Placement {
-  if isolation_hint_is_safe(node)
-    && let Some(bounds) = paint_bounds_hint
-    && let Some(placement) = placement_from_bounds(bounds, viewport, 2)
-  {
-    return placement;
-  }
+  let placement = if supports_bounds_hint(node, false) {
+    paint_bounds_hint.and_then(|bounds| placement_from_bounds(bounds, viewport, 2))
+  } else if supports_bounds_hint(node, true) {
+    transformed_rect_extents(Point::ZERO, size, transform).and_then(
+      |(min_x, min_y, max_x, max_y)| {
+        let left = min_x.floor().max(viewport.origin.x as f32) as i32;
+        let top = min_y.floor().max(viewport.origin.y as f32) as i32;
+        let right = max_x.ceil().min(viewport.right() as f32) as i32;
+        let bottom = max_y.ceil().min(viewport.bottom() as f32) as i32;
 
-  if !can_use_bounds_hint(node) {
-    return full_viewport_placement(viewport);
-  }
-
-  let Some((min_x, min_y, max_x, max_y)) = transformed_rect_extents(Point::ZERO, size, transform)
-  else {
-    return full_viewport_placement(viewport);
+        Placement::from_bounds(left, top, right, bottom)
+      },
+    )
+  } else {
+    None
   };
 
-  let left = min_x.floor().max(viewport.origin.x as f32) as i32;
-  let top = min_y.floor().max(viewport.origin.y as f32) as i32;
-  let right = max_x.ceil().min(viewport.right() as f32) as i32;
-  let bottom = max_y.ceil().min(viewport.bottom() as f32) as i32;
-
-  Placement::from_bounds(left, top, right, bottom)
-    .unwrap_or_else(|| full_viewport_placement(viewport))
+  placement.unwrap_or_else(|| full_viewport_placement(viewport))
 }
