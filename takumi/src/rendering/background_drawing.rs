@@ -11,8 +11,8 @@ use crate::{
   Result,
   layout::{node::resolve_image, style::*},
   rendering::{
-    BorderProperties, BufferPool, OverlayOptions, PaintSource, RenderContext, Sizing, fast_div_255,
-    interpolate_bilinear, interpolate_nearest, overlay_gradient_tile, overlay_image,
+    BorderProperties, BufferPool, OverlayOptions, PaintSource, RenderContext, SamplingFootprint,
+    Sizing, fast_div_255, interpolate_with_footprint, overlay_gradient_tile, overlay_image,
     overlay_linear_gradient_tile, overlay_radial_gradient_tile,
   },
   resources::image::ImageSource,
@@ -299,15 +299,14 @@ impl BackgroundTile {
 
         let mapped_x = (x as f32 + 0.5) * source_width as f32 / logical_width as f32;
         let mapped_y = (y as f32 + 0.5) * source_height as f32 / logical_height as f32;
+        let footprint = SamplingFootprint::new(
+          source_width as f32 / logical_width as f32,
+          source_height as f32 / logical_height as f32,
+        );
 
         let source = PaintSource::from(source.as_ref());
-        if matches!(algo, ImageScalingAlgorithm::Pixelated) {
-          interpolate_nearest(source, mapped_x, mapped_y)
-            .unwrap_or(PremultipliedColorU8::TRANSPARENT)
-        } else {
-          interpolate_bilinear(source, mapped_x, mapped_y)
-            .unwrap_or(PremultipliedColorU8::TRANSPARENT)
-        }
+        interpolate_with_footprint(source, *algo, mapped_x, mapped_y, footprint)
+          .unwrap_or(PremultipliedColorU8::TRANSPARENT)
       }
       Self::Color(t) => t.get_pixel(x, y),
     }

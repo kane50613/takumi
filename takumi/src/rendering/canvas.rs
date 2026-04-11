@@ -17,7 +17,7 @@ use taffy::{Point, Size};
 use tiny_skia::{
   FillRule as TinyFillRule, FilterQuality as TinyFilterQuality, Mask as TinyMask,
   Paint as TinyPaint, Path as TinyPath, Pattern as TinyPattern, Pixmap, PixmapMut, PixmapPaint,
-  PixmapRef, SpreadMode as TinySpreadMode, Transform as TinyTransform,
+  SpreadMode as TinySpreadMode, Transform as TinyTransform,
 };
 
 use self::paint_source::{MaskCompositeColor, apply_mask_color_mode, sample_paint_source};
@@ -34,7 +34,7 @@ use crate::{
 
 pub(crate) use buffer_pool::BufferPool;
 pub(crate) use mask::{CanvasViewport, NodeMaskAction, prepare_node_mask, render_mask};
-pub(crate) use paint_source::{PaintSource, interpolate_bilinear, interpolate_nearest};
+pub(crate) use paint_source::{PaintSource, SamplingFootprint, interpolate_with_footprint};
 
 #[derive(Clone, Copy)]
 pub(crate) struct SamplingOptions {
@@ -633,15 +633,11 @@ fn compute_overlay_bounds_for_canvas(
 }
 
 #[inline(always)]
-fn sample_pixmap_nearest(source: PixmapRef<'_>, x: f32, y: f32) -> Option<[u8; 4]> {
-  interpolate_nearest(PaintSource::Pixmap(source), x, y)
-    .map(|p| [p.red(), p.green(), p.blue(), p.alpha()])
-}
-
-#[inline(always)]
-fn sample_pixmap_bilinear(source: PixmapRef<'_>, x: f32, y: f32) -> Option<[u8; 4]> {
-  interpolate_bilinear(PaintSource::Pixmap(source), x, y)
-    .map(|p| [p.red(), p.green(), p.blue(), p.alpha()])
+fn sampling_footprint(transform: Affine) -> SamplingFootprint {
+  SamplingFootprint::new(
+    transform.a.hypot(transform.b),
+    transform.c.hypot(transform.d),
+  )
 }
 
 fn blit_sampled_paint_source_translation(
@@ -671,6 +667,7 @@ fn blit_sampled_paint_source_translation(
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
   let mask_data = combined_mask.map(TinyMask::data);
+  let footprint = sampling_footprint(sampling.logical_to_source);
   for dest_y in dest_y_min..dest_y_max {
     let src_y = (dest_y - offset_y) as f32;
     let mut sample_point = sampling.logical_to_source.transform_point(Point {
@@ -678,8 +675,14 @@ fn blit_sampled_paint_source_translation(
       y: src_y + 0.5,
     });
     for dest_x in dest_x_min..dest_x_max {
-      let mut src = sample_paint_source(source, sampling.algorithm, sample_point.x, sample_point.y)
-        .unwrap_or([0, 0, 0, 0]);
+      let mut src = sample_paint_source(
+        source,
+        sampling.algorithm,
+        sample_point.x,
+        sample_point.y,
+        footprint,
+      )
+      .unwrap_or([0, 0, 0, 0]);
       sample_point.x += sampling.logical_to_source.a;
       sample_point.y += sampling.logical_to_source.b;
       if src[3] == 0 {
@@ -793,8 +796,14 @@ fn blit_paint_source_translation(
         let dst_row = dest_y as usize * canvas_width as usize;
         for dest_x in dest_x_min..dest_x_max {
           let src_x = (dest_x - offset_x) as f32;
-          let mut src = sample_paint_source(source, ImageScalingAlgorithm::Pixelated, src_x, src_y)
-            .unwrap_or([0; 4]);
+          let mut src = sample_paint_source(
+            source,
+            ImageScalingAlgorithm::Pixelated,
+            src_x,
+            src_y,
+            SamplingFootprint::PIXEL,
+          )
+          .unwrap_or([0; 4]);
           if src[3] == 0 {
             continue;
           }
@@ -1018,6 +1027,7 @@ fn composite_masked_source(
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
   let mask_data = options.combined_mask.map(TinyMask::data);
+  let footprint = sampling_footprint(options.sampling.canvas_to_source);
   for dest_y in dest_y_min..dest_y_max {
     let mask_y = (dest_y - offset_y) as u32;
     let dst_row = dest_y as usize * canvas_width as usize;
@@ -1037,6 +1047,7 @@ fn composite_masked_source(
           options.sampling.algorithm,
           sample_point.x,
           sample_point.y,
+          footprint,
         )
       };
       sample_point.x += options.sampling.canvas_to_source.a;

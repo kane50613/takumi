@@ -9,6 +9,35 @@ use super::BufferPool;
 use crate::rendering::blend::premultiplied_from_pixel;
 
 #[derive(Clone, Copy)]
+pub(crate) struct SamplingFootprint {
+  pub(crate) x: f32,
+  pub(crate) y: f32,
+}
+
+impl SamplingFootprint {
+  pub(crate) const PIXEL: Self = Self { x: 1.0, y: 1.0 };
+
+  pub(crate) fn new(x: f32, y: f32) -> Self {
+    Self {
+      x: x.max(0.0),
+      y: y.max(0.0),
+    }
+  }
+
+  fn is_minifying(self) -> bool {
+    self.x > 1.0 || self.y > 1.0
+  }
+
+  fn box_span_x(self) -> f32 {
+    self.x.max(1.0)
+  }
+
+  fn box_span_y(self) -> f32 {
+    self.y.max(1.0)
+  }
+}
+
+#[derive(Clone, Copy)]
 pub(crate) enum PaintSource<'a> {
   Pixmap(PixmapRef<'a>),
   BackgroundTile(&'a BackgroundTile),
@@ -164,20 +193,27 @@ pub(super) fn sample_paint_source(
   algorithm: ImageScalingAlgorithm,
   x: f32,
   y: f32,
+  footprint: SamplingFootprint,
 ) -> Option<[u8; 4]> {
-  match source {
-    PaintSource::Pixmap(pixmap) => {
-      if matches!(algorithm, ImageScalingAlgorithm::Pixelated) {
-        super::sample_pixmap_nearest(pixmap, x, y)
-      } else {
-        super::sample_pixmap_bilinear(pixmap, x, y)
-      }
-    }
-    _ if matches!(algorithm, ImageScalingAlgorithm::Pixelated) => {
-      interpolate_nearest(source, x, y).map(premultiplied_from_pixel)
-    }
-    _ => interpolate_bilinear(source, x, y).map(premultiplied_from_pixel),
+  interpolate_with_footprint(source, algorithm, x, y, footprint).map(premultiplied_from_pixel)
+}
+
+pub(crate) fn interpolate_with_footprint(
+  image: PaintSource<'_>,
+  algorithm: ImageScalingAlgorithm,
+  x: f32,
+  y: f32,
+  footprint: SamplingFootprint,
+) -> Option<PremultipliedColorU8> {
+  if matches!(algorithm, ImageScalingAlgorithm::Pixelated) {
+    return interpolate_nearest(image, x, y);
   }
+
+  if footprint.is_minifying() {
+    return interpolate_box(image, x, y, footprint);
+  }
+
+  interpolate_bilinear(image, x, y)
 }
 
 #[inline(always)]
@@ -265,4 +301,115 @@ pub(crate) fn interpolate_bilinear(
       + p11.alpha() as u32 * w11)
       >> 16) as u8,
   )
+}
+
+fn interpolate_box(
+  image: PaintSource<'_>,
+  x: f32,
+  y: f32,
+  footprint: SamplingFootprint,
+) -> Option<PremultipliedColorU8> {
+  let width = image.width();
+  let height = image.height();
+  if width == 0 || height == 0 {
+    return None;
+  }
+
+  let span_x = footprint.box_span_x();
+  let span_y = footprint.box_span_y();
+  let image_width = width as f32;
+  let image_height = height as f32;
+
+  let center_x = if span_x >= image_width {
+    image_width * 0.5
+  } else {
+    x.clamp(span_x * 0.5, image_width - span_x * 0.5)
+  };
+  let center_y = if span_y >= image_height {
+    image_height * 0.5
+  } else {
+    y.clamp(span_y * 0.5, image_height - span_y * 0.5)
+  };
+
+  let left = (center_x - span_x * 0.5).clamp(0.0, image_width);
+  let right = (center_x + span_x * 0.5).clamp(0.0, image_width);
+  let top = (center_y - span_y * 0.5).clamp(0.0, image_height);
+  let bottom = (center_y + span_y * 0.5).clamp(0.0, image_height);
+
+  let start_x = left.floor() as u32;
+  let end_x = right.ceil().min(image_width) as u32;
+  let start_y = top.floor() as u32;
+  let end_y = bottom.ceil().min(image_height) as u32;
+
+  let mut sum = [0.0; 4];
+  let mut total_weight = 0.0;
+
+  for source_y in start_y..end_y {
+    let pixel_top = source_y as f32;
+    let pixel_bottom = pixel_top + 1.0;
+    let y_weight = (bottom.min(pixel_bottom) - top.max(pixel_top)).max(0.0);
+    if y_weight == 0.0 {
+      continue;
+    }
+
+    for source_x in start_x..end_x {
+      let pixel_left = source_x as f32;
+      let pixel_right = pixel_left + 1.0;
+      let x_weight = (right.min(pixel_right) - left.max(pixel_left)).max(0.0);
+      if x_weight == 0.0 {
+        continue;
+      }
+
+      let weight = x_weight * y_weight;
+      let pixel = image.get_pixel(source_x, source_y);
+      sum[0] += pixel.red() as f32 * weight;
+      sum[1] += pixel.green() as f32 * weight;
+      sum[2] += pixel.blue() as f32 * weight;
+      sum[3] += pixel.alpha() as f32 * weight;
+      total_weight += weight;
+    }
+  }
+
+  if total_weight == 0.0 {
+    return None;
+  }
+
+  PremultipliedColorU8::from_rgba(
+    (sum[0] / total_weight).round() as u8,
+    (sum[1] / total_weight).round() as u8,
+    (sum[2] / total_weight).round() as u8,
+    (sum[3] / total_weight).round() as u8,
+  )
+}
+
+#[cfg(test)]
+mod tests {
+  use tiny_skia::{Pixmap, PremultipliedColorU8};
+
+  use super::{PaintSource, SamplingFootprint, interpolate_with_footprint};
+  use crate::layout::style::ImageScalingAlgorithm;
+
+  #[test]
+  fn minified_sampling_averages_high_frequency_content() {
+    let mut pixmap = Pixmap::new(8, 1).expect("valid pixmap");
+    for (index, pixel) in pixmap.pixels_mut().iter_mut().enumerate() {
+      let value = if index % 2 == 0 { 0 } else { 255 };
+      *pixel = PremultipliedColorU8::from_rgba(value, value, value, 255)
+        .expect("opaque grayscale is premultiplied");
+    }
+
+    let sample = interpolate_with_footprint(
+      PaintSource::from(pixmap.as_ref()),
+      ImageScalingAlgorithm::Auto,
+      4.0,
+      0.5,
+      SamplingFootprint::new(8.0, 1.0),
+    )
+    .expect("sample should be available");
+
+    assert!((sample.red() as i16 - 128).abs() <= 1);
+    assert!((sample.green() as i16 - 128).abs() <= 1);
+    assert!((sample.blue() as i16 - 128).abs() <= 1);
+    assert_eq!(sample.alpha(), 255);
+  }
 }

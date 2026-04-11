@@ -9,7 +9,7 @@ use crate::test_utils::run_fixture_test;
 // This test is to ensure that never happens again.
 #[test]
 fn test_color_artifacts() {
-  let container = Node::container([Node::image(
+  let main_preview = Node::container([Node::image(
     "assets/images/luma-cover-0dfbf65d-0f58-4941-947c-d84a5b131dc0.jpeg",
   )
   .with_style(
@@ -23,6 +23,40 @@ fn test_color_artifacts() {
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Px(640.0)))
+      .with(StyleDeclaration::height(Px(440.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([255, 255, 255, 96]),
+      )))
+      .with_border_radius(BorderRadius::from_str("24px").unwrap())
+      .with_padding(Sides([Px(24.0); 4])),
+  );
+
+  let downscaled_preview = Node::container([Node::image(
+    "assets/images/luma-cover-0dfbf65d-0f58-4941-947c-d84a5b131dc0.jpeg",
+  )
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Px(256.0)))
+      .with(StyleDeclaration::height(Px(256.0)))
+      .with(StyleDeclaration::object_fit(ObjectFit::Cover)),
+  )])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::height(Px(440.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([255, 255, 255, 144]),
+      )))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with_border_radius(BorderRadius::from_str("24px").unwrap()),
+  );
+
+  let container = Node::container([main_preview, downscaled_preview]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -30,6 +64,8 @@ fn test_color_artifacts() {
       )))
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Row))
+      .with_gap(SpacePair::from_single(Px(40.0)))
       .with_padding(Sides([Rem(4.0); 4])),
   );
 
