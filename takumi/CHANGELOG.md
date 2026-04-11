@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.4
+
+### Patch Changes
+
+- 818e2f9: Fix image downscale quality regression
+
 ## 1.0.3
 
 ### Patch Changes
