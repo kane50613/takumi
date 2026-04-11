@@ -7,21 +7,6 @@ use crate::{
 };
 
 #[inline(always)]
-pub(crate) fn premultiply_alpha(color: &mut [u8]) {
-  let alpha = color[3] as u32;
-
-  color[0] = fast_div_255(color[0] as u32 * alpha);
-  color[1] = fast_div_255(color[1] as u32 * alpha);
-  color[2] = fast_div_255(color[2] as u32 * alpha);
-}
-
-#[inline(always)]
-pub(crate) fn premultiply_alpha_imm(mut color: Rgba<u8>) -> Rgba<u8> {
-  premultiply_alpha(&mut color.0);
-  color
-}
-
-#[inline(always)]
 fn composited_alpha(bottom_alpha: u32, top_alpha: u32) -> u32 {
   top_alpha + bottom_alpha - fast_div_255_u32(bottom_alpha * top_alpha)
 }
@@ -33,28 +18,15 @@ fn blend_plus_lighter(bottom: &mut Rgba<u8>, top: Rgba<u8>) {
     return;
   }
 
-  let top_premul = premultiply_alpha_imm(top);
-  let bottom_premul = premultiply_alpha_imm(*bottom);
+  let top_alpha = top.0[3] as u32;
+  let bottom_alpha = bottom.0[3] as u32;
 
-  bottom.0[0] = top_premul.0[0].saturating_add(bottom_premul.0[0]);
-  bottom.0[1] = top_premul.0[1].saturating_add(bottom_premul.0[1]);
-  bottom.0[2] = top_premul.0[2].saturating_add(bottom_premul.0[2]);
-  bottom.0[3] = result_alpha;
-}
-
-#[inline(always)]
-fn blend_plus_darker(bottom: &mut Rgba<u8>, top: Rgba<u8>) {
-  let result_alpha = top.0[3].saturating_add(bottom.0[3]);
-  if result_alpha == 0 {
-    return;
+  for i in 0..3 {
+    let top_premul = fast_div_255(top.0[i] as u32 * top_alpha);
+    let bottom_premul = fast_div_255(bottom.0[i] as u32 * bottom_alpha);
+    bottom.0[i] = top_premul.saturating_add(bottom_premul);
   }
 
-  let top_premul = premultiply_alpha_imm(top);
-  let bottom_premul = premultiply_alpha_imm(*bottom);
-
-  bottom.0[0] = ((top_premul.0[0] as u16 + bottom_premul.0[0] as u16).saturating_sub(255)) as u8;
-  bottom.0[1] = ((top_premul.0[1] as u16 + bottom_premul.0[1] as u16).saturating_sub(255)) as u8;
-  bottom.0[2] = ((top_premul.0[2] as u16 + bottom_premul.0[2] as u16).saturating_sub(255)) as u8;
   bottom.0[3] = result_alpha;
 }
 
@@ -94,7 +66,7 @@ pub(crate) fn blend_pixel(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode)
       blend_plus_lighter(bottom, top);
     }
     BlendMode::PlusDarker => {
-      blend_plus_darker(bottom, top);
+      blend_with_float(bottom, top, mode);
     }
     BlendMode::Multiply
     | BlendMode::Screen
@@ -324,6 +296,11 @@ fn compute_blend_float(
     }
     BlendMode::Color => set_lum(top.channels, lum(bottom.channels)),
     BlendMode::Luminosity => set_lum(bottom.channels, lum(top.channels)),
+    BlendMode::PlusDarker => [
+      (bottom.red() + top.red() - 1.0).max(0.0),
+      (bottom.green() + top.green() - 1.0).max(0.0),
+      (bottom.blue() + top.blue() - 1.0).max(0.0),
+    ],
     _ => top.channels,
   }
 }
@@ -663,5 +640,27 @@ mod tests {
     blend_pixel(&mut bottom, top, BlendMode::PlusDarker);
 
     assert_eq!(bottom, Rgba([0x96, 0x77, 0x00, 0xFF]));
+  }
+
+  // https://github.com/kane50613/takumi/issues/643
+  #[test]
+  fn plus_darker_preserves_opaque_backdrop_under_partial_white() {
+    let mut bottom = Rgba([0x96, 0x77, 0x00, 0xFF]);
+    let top = Rgba([0xFF, 0xFF, 0xFF, 0x7F]);
+
+    blend_pixel(&mut bottom, top, BlendMode::PlusDarker);
+
+    assert_eq!(bottom, Rgba([0x96, 0x77, 0x00, 0xFF]));
+  }
+
+  // https://github.com/kane50613/takumi/issues/643
+  #[test]
+  fn plus_darker_with_low_opacity_black_stays_faint() {
+    let mut bottom = Rgba([0x96, 0x77, 0x00, 0xFF]);
+    let top = Rgba([0x00, 0x00, 0x00, 0x1A]);
+
+    blend_pixel(&mut bottom, top, BlendMode::PlusDarker);
+
+    assert_eq!(bottom, Rgba([0x87, 0x6B, 0x00, 0xFF]));
   }
 }
