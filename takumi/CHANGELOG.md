@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.3
+
+### Patch Changes
+
+- be5b03f: Skip drawing if paint bounds out of canvas viewport
+
 ## 1.0.2
 
 ### Patch Changes
