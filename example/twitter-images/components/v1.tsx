@@ -25,7 +25,7 @@ export default function V1() {
         tw="absolute flex flex-col justify-center"
         style={{ width: 2400, height: 1600, left: -600, top: -450, transform: "rotate(-12deg)" }}
       >
-        {Array.from({ length: 40 }).map((_, i) => (
+        {Array.from({ length: 18 }).map((_, i) => (
           <div
             key={i}
             tw={`m-0 text-[64px] leading-[0.9] font-black text-[#18181b] whitespace-nowrap flex items-center`}
