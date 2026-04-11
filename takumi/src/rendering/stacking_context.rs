@@ -201,6 +201,22 @@ struct SceneBounds {
   bottom: usize,
 }
 
+impl SceneBounds {
+  fn intersects_viewport(self, viewport: CanvasViewport) -> bool {
+    let viewport_left = viewport.origin.x as i32;
+    let viewport_top = viewport.origin.y as i32;
+    let viewport_right = viewport.right();
+    let viewport_bottom = viewport.bottom();
+
+    let left = self.left as i32;
+    let top = self.top as i32;
+    let right = self.right as i32;
+    let bottom = self.bottom as i32;
+
+    right > viewport_left && bottom > viewport_top && left < viewport_right && top < viewport_bottom
+  }
+}
+
 enum DeferredNodeRender {
   Deferred {
     path: Vec<usize>,
@@ -779,6 +795,12 @@ fn begin_node_render<'g>(
     return Ok(None);
   }
 
+  if let Some(bounds) = node_paint.paint_bounds
+    && !bounds.intersects_viewport(canvas.viewport())
+  {
+    return Ok(Some(DeferredNodeRender::SkipRendering));
+  }
+
   current.context.sizing.container_size = node_paint.container_size;
   current.context.transform = node_paint.transform;
 
@@ -936,6 +958,12 @@ pub(crate) fn paint_context<'g>(
       NodeId::new(context_id as u64),
     )));
   };
+
+  if let Some(bounds) = context.paint_bounds
+    && !bounds.intersects_viewport(canvas.viewport())
+  {
+    return Ok(());
+  }
 
   let mut deferred_root = None;
   if let Some(root_paint) = &context.root {
