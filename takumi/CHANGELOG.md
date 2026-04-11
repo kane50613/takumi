@@ -1,5 +1,12 @@
 # takumi
 
+## 1.0.2
+
+### Patch Changes
+
+- 17304ac: Fix paint bound calculation on inline content #644
+- 49ce893: Fix `plus-darker` blending #643
+
 ## 1.0.1
 
 ### Patch Changes
