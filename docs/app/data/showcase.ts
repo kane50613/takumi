@@ -47,6 +47,12 @@ export const showcaseProjects: Project[] = [
     width: 1200,
     height: 630,
   },
+  {
+    image: "https://prmptbio.shard.media/og/home-2026-04-11.jpg",
+    url: "https://prmpt.bio/smart-poster?utm_source=takumi",
+    width: 1200,
+    height: 630,
+  },
 ];
 
 export const showcaseTemplates: Template[] = [
