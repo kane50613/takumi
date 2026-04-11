@@ -390,12 +390,12 @@ mod tests {
   use crate::layout::style::ImageScalingAlgorithm;
 
   #[test]
-  fn minified_sampling_averages_high_frequency_content() {
-    let mut pixmap = Pixmap::new(8, 1).expect("valid pixmap");
+  fn minified_sampling_averages_high_frequency_content() -> Result<(), &'static str> {
+    let mut pixmap = Pixmap::new(8, 1).ok_or("failed to create pixmap")?;
     for (index, pixel) in pixmap.pixels_mut().iter_mut().enumerate() {
       let value = if index % 2 == 0 { 0 } else { 255 };
       *pixel = PremultipliedColorU8::from_rgba(value, value, value, 255)
-        .expect("opaque grayscale is premultiplied");
+        .ok_or("failed to create opaque grayscale pixel")?;
     }
 
     let sample = interpolate_with_footprint(
@@ -405,11 +405,12 @@ mod tests {
       0.5,
       SamplingFootprint::new(8.0, 1.0),
     )
-    .expect("sample should be available");
+    .ok_or("failed to sample minified image")?;
 
     assert!((sample.red() as i16 - 128).abs() <= 1);
     assert!((sample.green() as i16 - 128).abs() <= 1);
     assert!((sample.blue() as i16 - 128).abs() <= 1);
     assert_eq!(sample.alpha(), 255);
+    Ok(())
   }
 }
