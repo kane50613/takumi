@@ -1,5 +1,12 @@
 # @takumi-rs/wasm
 
+## 1.0.5
+
+### Patch Changes
+
+- Updated dependencies [d113fb5]
+  - @takumi-rs/helpers@1.0.5
+
 ## 1.0.4
 
 ### Patch Changes

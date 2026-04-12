@@ -1,5 +1,15 @@
 # takumi-js
 
+## 1.0.5
+
+### Patch Changes
+
+- d113fb5: Fix HTML not decoded
+- Updated dependencies [d113fb5]
+  - @takumi-rs/helpers@1.0.5
+  - @takumi-rs/core@1.0.5
+  - @takumi-rs/wasm@1.0.5
+
 ## 1.0.4
 
 ### Patch Changes

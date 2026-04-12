@@ -1,5 +1,12 @@
 # @takumi-rs/image-response
 
+## 1.0.5
+
+### Patch Changes
+
+- Updated dependencies [d113fb5]
+  - takumi-js@1.0.5
+
 ## 1.0.4
 
 ### Patch Changes
