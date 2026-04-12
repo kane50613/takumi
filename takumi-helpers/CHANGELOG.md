@@ -1,5 +1,11 @@
 # @takumi-rs/helpers
 
+## 1.0.5
+
+### Patch Changes
+
+- d113fb5: Fix HTML not decoded
+
 ## 1.0.4
 
 ## 1.0.3
