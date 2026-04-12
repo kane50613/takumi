@@ -157,9 +157,14 @@ impl ResolvedVerticalAlign {
     y: &mut f32,
     metrics: &LineMetrics,
     box_height: f32,
+    baseline_offset: Option<f32>,
     parent_x_height: Option<f32>,
+    parent_text_metrics: Option<(f32, f32)>,
   ) {
-    let baseline_top = metrics.baseline - box_height;
+    let baseline_offset = baseline_offset.unwrap_or(box_height);
+    let baseline_top = metrics.baseline - baseline_offset;
+    let (parent_text_ascent, parent_text_descent) =
+      parent_text_metrics.unwrap_or((metrics.ascent, metrics.descent));
 
     match self {
       ResolvedVerticalAlign::Keyword(keyword) => match keyword {
@@ -170,12 +175,12 @@ impl ResolvedVerticalAlign {
           *y = metrics.baseline - (x_height * 0.5) - (box_height / 2.0);
         }
         VerticalAlignKeyword::Bottom => *y = metrics.max_coord - box_height,
-        VerticalAlignKeyword::TextTop => *y = metrics.baseline - metrics.ascent,
-        VerticalAlignKeyword::TextBottom => *y = metrics.baseline + metrics.descent - box_height,
-        VerticalAlignKeyword::Sub => *y = metrics.baseline + (metrics.descent * 0.2),
-        VerticalAlignKeyword::Super => {
-          *y = metrics.baseline - metrics.ascent + (metrics.ascent * 0.4)
+        VerticalAlignKeyword::TextTop => *y = metrics.baseline - parent_text_ascent,
+        VerticalAlignKeyword::TextBottom => {
+          *y = metrics.baseline + parent_text_descent - box_height
         }
+        VerticalAlignKeyword::Sub => *y = baseline_top + (metrics.descent * 0.2),
+        VerticalAlignKeyword::Super => *y = baseline_top - metrics.ascent + (metrics.ascent * 0.4),
       },
       ResolvedVerticalAlign::BaselineShift {
         px,
@@ -325,14 +330,14 @@ mod tests {
       px: 5.0,
       line_height_relative: 0.0,
     }
-    .apply(&mut y, &metrics, 4.0, None);
+    .apply(&mut y, &metrics, 4.0, None, None, None);
     assert_eq!(y, baseline - 5.0);
 
     ResolvedVerticalAlign::BaselineShift {
       px: -5.0,
       line_height_relative: 0.0,
     }
-    .apply(&mut y, &metrics, 4.0, None);
+    .apply(&mut y, &metrics, 4.0, None, None, None);
     assert_eq!(y, baseline + 5.0);
   }
 
@@ -346,7 +351,7 @@ mod tests {
       px: 0.0,
       line_height_relative: 0.5,
     }
-    .apply(&mut y, &metrics, 4.0, None);
+    .apply(&mut y, &metrics, 4.0, None, None, None);
     assert_eq!(
       y,
       baseline - ((metrics.ascent - metrics.descent + metrics.leading) * 0.5)
@@ -378,7 +383,7 @@ mod tests {
       px: 3.0,
       line_height_relative: 0.5,
     }
-    .apply(&mut y, &metrics, 4.0, None);
+    .apply(&mut y, &metrics, 4.0, None, None, None);
     assert_eq!(
       y,
       baseline - ((metrics.ascent - metrics.descent + metrics.leading) * 0.5 + 3.0)
@@ -390,7 +395,51 @@ mod tests {
     let metrics = line_metrics();
     let mut y = 0.0;
     ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Baseline)
-      .apply(&mut y, &metrics, 4.0, None);
+      .apply(&mut y, &metrics, 4.0, None, None, None);
     assert_eq!(y, metrics.baseline - 4.0);
+  }
+
+  #[test]
+  fn keyword_apply_uses_inline_box_baseline_when_available() {
+    let metrics = line_metrics();
+    let mut y = 0.0;
+    ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Baseline).apply(
+      &mut y,
+      &metrics,
+      20.0,
+      Some(12.0),
+      None,
+      None,
+    );
+    assert_eq!(y, metrics.baseline - 12.0);
+  }
+
+  #[test]
+  fn sub_and_super_use_inline_box_baseline_when_available() {
+    let metrics = line_metrics();
+    let mut sub_y = 0.0;
+    ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Sub).apply(
+      &mut sub_y,
+      &metrics,
+      20.0,
+      Some(12.0),
+      None,
+      None,
+    );
+    assert_eq!(sub_y, (metrics.baseline - 12.0) + (metrics.descent * 0.2));
+
+    let mut super_y = 0.0;
+    ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Super).apply(
+      &mut super_y,
+      &metrics,
+      20.0,
+      Some(12.0),
+      None,
+      None,
+    );
+    assert_eq!(
+      super_y,
+      (metrics.baseline - 12.0) - metrics.ascent + (metrics.ascent * 0.4)
+    );
   }
 }

@@ -21,7 +21,10 @@ use crate::{
   rendering::{
     AnimationFrame, Canvas, DitheringAlgorithm, RenderContext, apply_dithering,
     get_node_mut_by_path,
-    inline_drawing::get_parent_x_height,
+    inline_drawing::{
+      effective_parent_text_metrics_for_line, effective_parent_x_height_for_line,
+      get_parent_x_height, resolve_inline_line_metrics, resolved_line_metrics_for_apply,
+    },
     stacking_context::{
       apply_transform, build_stacking_contexts, collect_layout_children, paint_context,
     },
@@ -254,8 +257,13 @@ fn collect_measure_result<'g>(
             InlineLayoutStage::Measure,
           );
           let inline_offset = taffy::Point::ZERO;
+          let line_vertical_metrics =
+            resolve_inline_line_metrics(&inline_layout, &spans, parent_x_height);
 
-          for line in inline_layout.lines() {
+          for (line_index, line) in inline_layout.lines().enumerate() {
+            let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
+            let line_parent_x_height = effective_parent_x_height_for_line(&line, parent_x_height);
+            let line_parent_text_metrics = effective_parent_text_metrics_for_line(&line);
             for item in line.items() {
               match item {
                 PositionedLayoutItem::GlyphRun(glyph_run) => {
@@ -269,19 +277,25 @@ fn collect_measure_result<'g>(
                   runs.push(MeasuredTextRun {
                     text: text.to_string(),
                     x: glyph_run.offset() + inline_offset.x,
-                    y: glyph_run.baseline() - metrics.ascent + inline_offset.y,
+                    y: glyph_run.baseline() + baseline_shift - metrics.ascent + inline_offset.y,
                     width: glyph_run.advance(),
                     height: metrics.ascent + metrics.descent,
                   });
                 }
                 PositionedLayoutItem::InlineBox(mut positioned_box) => {
                   let item_index = positioned_box.id as usize;
+                  let adjusted_line_metrics = resolved_line_metrics_for_apply(
+                    line.metrics(),
+                    line_vertical_metrics[line_index],
+                  );
                   if let Some(ProcessedInlineSpan::Box(item)) = spans.get(item_index) {
                     item.vertical_align.apply(
                       &mut positioned_box.y,
-                      line.metrics(),
+                      &adjusted_line_metrics,
                       positioned_box.height,
-                      parent_x_height,
+                      item.baseline_offset,
+                      line_parent_x_height,
+                      line_parent_text_metrics,
                     );
                   }
                   positioned_box.x += inline_offset.x;

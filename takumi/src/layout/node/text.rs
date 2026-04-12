@@ -10,6 +10,7 @@ use crate::{
       create_inline_layout, measure_inline_layout,
     },
     node::TextData,
+    style::TextOverflow,
   },
   rendering::{Canvas, MaxHeight, RenderContext, inline_drawing::draw_inline_layout},
 };
@@ -31,10 +32,14 @@ pub(crate) fn draw_text_node_content(
     return Ok(());
   }
 
-  let max_height = match font_style.parent.line_clamp.as_ref() {
-    Some(clamp) => Some(MaxHeight::HeightAndLines(size.height, clamp.count)),
-    None => Some(MaxHeight::Absolute(size.height)),
-  };
+  let resolved_line_clamp = font_style.parent.text_wrap_mode_and_line_clamp().1;
+  let max_height = resolved_line_clamp
+    .as_ref()
+    .map(|clamp| MaxHeight::HeightAndLines(size.height, clamp.count))
+    .or_else(|| {
+      (font_style.parent.text_overflow == TextOverflow::Ellipsis)
+        .then_some(MaxHeight::Absolute(size.height))
+    });
 
   let inline_text: InlineItem<'_, '_> = InlineItem::Text {
     text: text.text.as_str().into(),
@@ -84,5 +89,5 @@ pub(crate) fn measure_text_node(
     InlineLayoutStage::Measure,
   );
 
-  measure_inline_layout(&mut layout, max_width)
+  measure_inline_layout(&mut layout, max_width, true)
 }

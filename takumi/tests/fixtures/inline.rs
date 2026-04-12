@@ -268,15 +268,18 @@ fn inline_outline_span_boundaries() {
 
 #[test]
 fn inline_atomic_containers() {
-  let atomic = |display, color, label: &str| -> Node {
+  let atomic = |display, bg_color, border_color, label: &str| -> Node {
     Node::container([Node::text(label.to_string())]).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::display(display))
         .with_padding(Sides([Px(8.0); 4]))
-        .with(StyleDeclaration::background_color(ColorInput::Value(color)))
-        .with_border_width(Sides([Px(2.0); 4]))
-        .with_border_style(Sides([BorderStyle::Solid; 4])),
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          bg_color,
+        )))
+        .with_border_width(Sides([Px(5.0); 4]))
+        .with_border_style(Sides([BorderStyle::Solid; 4]))
+        .with_border_color(Sides([ColorInput::Value(border_color); 4])),
     )
   };
 
@@ -289,6 +292,7 @@ fn inline_atomic_containers() {
     atomic(
       Display::InlineBlock,
       Color([255, 0, 0, 100]),
+      Color([180, 20, 20, 255]),
       "inline-block",
     ),
     Node::text(" mid ".to_string()).with_style(
@@ -296,21 +300,32 @@ fn inline_atomic_containers() {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::display(Display::Inline)),
     ),
-    atomic(Display::InlineFlex, Color([0, 255, 0, 100]), "inline-flex"),
+    atomic(
+      Display::InlineFlex,
+      Color([0, 255, 0, 100]),
+      Color([20, 140, 20, 255]),
+      "inline-flex",
+    ),
     Node::text(" end ".to_string()).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::display(Display::Inline)),
     ),
-    atomic(Display::InlineGrid, Color([0, 0, 255, 100]), "inline-grid"),
+    atomic(
+      Display::InlineGrid,
+      Color([0, 0, 255, 100]),
+      Color([20, 20, 180, 255]),
+      "inline-grid",
+    ),
   ])
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::display(Display::Block))
       .with(StyleDeclaration::font_size(Px(24.0).into()))
-      .with_border_width(Sides([Px(2.0); 4]))
-      .with_border_style(Sides([BorderStyle::Solid; 4])),
+      .with_border_width(Sides([Px(6.0); 4]))
+      .with_border_style(Sides([BorderStyle::Solid; 4]))
+      .with_border_color(Sides([ColorInput::Value(Color([40, 40, 40, 255])); 4])),
   )])
   .with_style(
     Style::default()

@@ -19,8 +19,9 @@ use crate::{
     },
     node::{Node, NodeStyleLayers},
     style::{
-      Affine, BlendMode, Color, ComputedStyle, Display, Filters, Isolation, PercentageNumber,
-      Style as NodeStyle, StyleDeclaration, StyleSheet, apply_stylesheet_animations,
+      Affine, BlendMode, Color, ComputedStyle, Display, Filters, Isolation, Overflow,
+      PercentageNumber, Style as NodeStyle, StyleDeclaration, StyleSheet, TextOverflow,
+      TextWrapMode, apply_stylesheet_animations,
       matching::{MatchedDeclarationsView, match_stylesheets_view},
     },
   },
@@ -36,6 +37,7 @@ pub(crate) struct LayoutResults {
 
 struct LayoutResultNode {
   layout: Layout,
+  first_baseline_y: Option<f32>,
   children: Box<[NodeId]>,
 }
 
@@ -61,6 +63,18 @@ impl LayoutResults {
       .map(|node| node.children.as_ref())
       .ok_or(TaffyError::InvalidInputNode(node_id))
   }
+
+  pub(crate) fn first_baseline_y(
+    &self,
+    node_id: NodeId,
+  ) -> std::result::Result<Option<f32>, TaffyError> {
+    let idx: usize = node_id.into();
+    self
+      .nodes
+      .get(idx)
+      .map(|node| node.first_baseline_y)
+      .ok_or(TaffyError::InvalidInputNode(node_id))
+  }
 }
 
 pub(crate) struct LayoutTree<'r, 'g> {
@@ -73,6 +87,7 @@ struct LayoutNodeState {
   cache: Cache,
   unrounded_layout: Layout,
   final_layout: Layout,
+  first_baseline_y: Option<f32>,
   is_inline_children: bool,
   children: Box<[NodeId]>,
 }
@@ -85,6 +100,12 @@ pub(crate) struct RenderNode<'g> {
   pub(crate) layout_style_override: Option<Style>,
   pub(crate) anonymous_text_content: Option<String>,
   pub(crate) force_inline_layout: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct AtomicInlineMetrics {
+  pub(crate) size: Size<f32>,
+  pub(crate) baseline_offset: Option<f32>,
 }
 
 fn build_style_layers(
@@ -217,6 +238,7 @@ fn push_layout_node<'r, 'g>(
       cache: Cache::new(),
       unrounded_layout: Layout::new(),
       final_layout: Layout::new(),
+      first_baseline_y: None,
       is_inline_children,
       children: Box::new([]),
     });
@@ -295,6 +317,7 @@ impl<'r, 'g> LayoutTree<'r, 'g> {
         .into_iter()
         .map(|node| LayoutResultNode {
           layout: node.final_layout,
+          first_baseline_y: node.first_baseline_y,
           children: node.children,
         })
         .collect(),
@@ -523,7 +546,7 @@ impl<'r, 'g> LayoutTree<'r, 'g> {
       return compute_hidden_layout(self, node);
     }
 
-    compute_cached_layout(self, node, inputs, |tree, node, inputs| {
+    let output = compute_cached_layout(self, node, inputs, |tree, node, inputs| {
       let Some(node_data) = tree.get_layout_node_ref(node) else {
         return compute_hidden_layout(tree, node);
       };
@@ -536,17 +559,14 @@ impl<'r, 'g> LayoutTree<'r, 'g> {
         (TaffyDisplay::Block, true) => compute_block_layout(tree, node, inputs, block_ctx),
         (TaffyDisplay::Flex, true) => compute_flexbox_layout(tree, node, inputs),
         (TaffyDisplay::Grid, true) => compute_grid_layout(tree, node, inputs),
-        (_, false) => compute_leaf_layout(
-          inputs,
-          &node_data.style,
-          |val, basis| tree.resolve_calc_value(val, basis),
-          |known_dimensions, available_space| {
-            let idx: usize = node.into();
-            let Some(render_node) = tree.render_nodes.get(idx) else {
-              return Size::ZERO;
-            };
+        (_, false) => {
+          let idx: usize = node.into();
+          let Some(render_node) = tree.render_nodes.get(idx) else {
+            return compute_hidden_layout(tree, node);
+          };
 
-            let known_dimensions = if should_strip_flex_intrinsic_stretch_known_dimension(
+          let stripped_known_dimensions = |known_dimensions| {
+            if should_strip_flex_intrinsic_stretch_known_dimension(
               render_node,
               inputs,
               known_dimensions,
@@ -554,25 +574,43 @@ impl<'r, 'g> LayoutTree<'r, 'g> {
               Size::NONE
             } else {
               known_dimensions
-            };
-            if let Size {
-              width: Some(width),
-              height: Some(height),
-            } = known_dimensions.maybe_apply_aspect_ratio(node_data.style.aspect_ratio)
-            {
-              return Size { width, height };
             }
+          };
 
-            render_node.measure(
-              available_space,
-              known_dimensions,
-              &node_data.style,
-              node_data.is_inline_children,
-            )
-          },
-        ),
+          let output = compute_leaf_layout(
+            inputs,
+            &node_data.style,
+            |val, basis| tree.resolve_calc_value(val, basis),
+            |known_dimensions, available_space| {
+              let known_dimensions = stripped_known_dimensions(known_dimensions);
+
+              if let Size {
+                width: Some(width),
+                height: Some(height),
+              } = known_dimensions.maybe_apply_aspect_ratio(node_data.style.aspect_ratio)
+              {
+                return Size { width, height };
+              }
+
+              render_node.measure(
+                available_space,
+                known_dimensions,
+                &node_data.style,
+                node_data.is_inline_children,
+              )
+            },
+          );
+
+          output
+        }
       }
-    })
+    });
+
+    if let Some(node_data) = self.get_layout_node_mut_ref(node) {
+      node_data.first_baseline_y = output.first_baselines.y;
+    }
+
+    output
   }
 }
 
@@ -679,11 +717,27 @@ impl RoundTree for LayoutTree<'_, '_> {
       return;
     };
 
-    node.final_layout = *layout;
+    let mut final_layout = *layout;
+    if node.is_inline_children {
+      final_layout.size.width = node.unrounded_layout.size.width;
+    }
+    node.final_layout = final_layout;
   }
 }
 
 impl<'g> RenderNode<'g> {
+  #[inline]
+  fn inline_debug_enabled() -> bool {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+      std::env::var_os("TAKUMI_DEBUG_INLINE").is_some()
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+      false
+    }
+  }
+
   fn anonymous_box_context(parent_context: &RenderContext<'g>) -> RenderContext<'g> {
     let mut context = parent_context.clone();
     context.style.display = Display::Block;
@@ -779,13 +833,14 @@ impl<'g> RenderNode<'g> {
 
     let font_style = self.context.style.to_sized_font_style(&self.context);
 
-    let max_height = match font_style.parent.line_clamp.as_ref() {
-      Some(clamp) => Some(MaxHeight::HeightAndLines(
-        layout.content_box_height(),
-        clamp.count,
-      )),
-      None => Some(MaxHeight::Absolute(layout.content_box_height())),
-    };
+    let resolved_line_clamp = font_style.parent.text_wrap_mode_and_line_clamp().1;
+    let max_height = resolved_line_clamp
+      .as_ref()
+      .map(|clamp| MaxHeight::HeightAndLines(layout.content_box_height(), clamp.count))
+      .or_else(|| {
+        (font_style.parent.text_overflow == TextOverflow::Ellipsis)
+          .then_some(MaxHeight::Absolute(layout.content_box_height()))
+      });
 
     let (inline_layout, _, spans) = create_inline_layout(
       collect_inline_items(self).into_iter(),
@@ -1131,7 +1186,86 @@ impl<'g> RenderNode<'g> {
     }
   }
 
-  pub(crate) fn measure_atomic_subtree(&self, available_space: Size<AvailableSpace>) -> Size<f32> {
+  // The baseline of an 'inline-block' is the baseline of its last line box in the normal flow,
+  // unless it has either no in-flow line boxes or if its 'overflow' property has a computed value other than 'visible',
+  // in which case the baseline is the bottom margin edge.
+  //
+  // Ref: https://www.w3.org/TR/CSS22/visudet.html#propdef-vertical-align
+  fn inline_content_baseline_offset(
+    &self,
+    available_space: Size<AvailableSpace>,
+    size: Size<f32>,
+    respect_inline_block_overflow_rule: bool,
+    require_inline_content_context: bool,
+  ) -> Option<f32> {
+    if require_inline_content_context
+      && !(self.should_create_inline_layout() || self.has_anonymous_text_item_child())
+    {
+      return None;
+    }
+
+    if respect_inline_block_overflow_rule
+      && (self.context.style.overflow_x != Overflow::Visible
+        || self.context.style.overflow_y != Overflow::Visible)
+    {
+      return None;
+    }
+
+    let font_style = self.context.style.to_sized_font_style(&self.context);
+    let max_width = size.width.max(0.0);
+    let (inline_layout, _, _) = create_inline_layout(
+      collect_inline_items(self).into_iter(),
+      Size {
+        width: AvailableSpace::Definite(max_width),
+        height: available_space.height,
+      },
+      max_width,
+      None,
+      &font_style,
+      self.context.global,
+      InlineLayoutStage::Measure,
+    );
+    let line = inline_layout.lines().last()?;
+    let metrics = line.metrics();
+    let sizing = &self.context.sizing;
+    let margin_top = self.context.style.margin_top.to_px(sizing, 0.0);
+    let border_top = self.context.style.border_top_width.to_px(sizing, 0.0);
+    let padding_top = self.context.style.padding_top.to_px(sizing, 0.0);
+
+    Some(margin_top + border_top + padding_top + metrics.baseline)
+  }
+
+  fn inline_block_baseline_offset(
+    &self,
+    available_space: Size<AvailableSpace>,
+    size: Size<f32>,
+  ) -> Option<f32> {
+    if self.context.style.display != Display::InlineBlock {
+      return None;
+    }
+
+    self.inline_content_baseline_offset(available_space, size, true, true)
+  }
+
+  fn atomic_container_baseline_offset_from_results(
+    &self,
+    layout_results: &LayoutResults,
+    root_node_id: NodeId,
+  ) -> Option<f32> {
+    let baseline = layout_results
+      .first_baseline_y(root_node_id)
+      .ok()
+      .flatten()?;
+    let sizing = &self.context.sizing;
+    let margin_top = self.context.style.margin_top.to_px(sizing, 0.0);
+
+    Some(margin_top + baseline)
+  }
+
+  pub(crate) fn measure_atomic_subtree(
+    &self,
+    available_space: Size<AvailableSpace>,
+  ) -> AtomicInlineMetrics {
     let measure_with = |width: AvailableSpace| {
       let mut tree = LayoutTree::from_render_node(self);
       tree.compute_layout(Size {
@@ -1187,13 +1321,54 @@ impl<'g> RenderNode<'g> {
         height: available_space.height,
       });
       let results = tree.into_results();
+      let root_node_id = results.root_node_id();
 
-      return results
-        .layout(results.root_node_id())
-        .map_or(Size::zero(), |layout| layout.size);
+      return results.layout(root_node_id).map_or(
+        AtomicInlineMetrics {
+          size: Size::zero(),
+          baseline_offset: None,
+        },
+        |layout| {
+          let size = layout.size;
+          let baseline_offset = match self.context.style.display {
+            Display::InlineBlock => self.inline_block_baseline_offset(available_space, size),
+            Display::InlineFlex | Display::InlineGrid => {
+              let inline_content =
+                self.inline_content_baseline_offset(available_space, size, false, false);
+              let valid_inline_content = inline_content.filter(|baseline| {
+                baseline.is_finite() && *baseline >= 0.0 && *baseline <= size.height + 0.5
+              });
+              let fallback =
+                self.atomic_container_baseline_offset_from_results(&results, root_node_id);
+              let chosen = valid_inline_content.or(fallback);
+              if Self::inline_debug_enabled() {
+                eprintln!(
+                  "[atomic-baseline][display={:?}] size=({:.3},{:.3}) inline_content={:?} fallback={:?} chosen={:?}",
+                  self.context.style.display,
+                  size.width,
+                  size.height,
+                  inline_content,
+                  fallback,
+                  chosen
+                );
+              }
+              chosen
+            }
+            _ => None,
+          };
+          AtomicInlineMetrics {
+            size,
+            baseline_offset,
+          }
+        },
+      );
     }
 
-    measure_with(available_space.width)
+    let size = measure_with(available_space.width);
+    AtomicInlineMetrics {
+      size,
+      baseline_offset: None,
+    }
   }
 
   pub(crate) fn measure(
@@ -1219,7 +1394,8 @@ impl<'g> RenderNode<'g> {
         InlineLayoutStage::Measure,
       );
 
-      return measure_inline_layout(&mut layout, max_width);
+      let ceil_width = font_style.parent.text_wrap_mode_and_line_clamp().0 == TextWrapMode::Wrap;
+      return measure_inline_layout(&mut layout, max_width, ceil_width);
     }
 
     assert_ne!(

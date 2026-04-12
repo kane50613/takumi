@@ -3,6 +3,7 @@ use taffy::{AvailableSpace, Layout, NodeId, Point, TaffyError, geometry::Size};
 use tiny_skia::Pixmap;
 use tiny_skia::PixmapMut;
 
+use crate::layout::style::TextOverflow;
 use crate::{
   Error, Result,
   layout::{
@@ -16,7 +17,11 @@ use crate::{
   rendering::{
     BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, MaxHeight, NodeMaskAction,
     Placement, Sizing, blend_pixel, draw_debug_border, get_node_mut_by_path,
-    inline_drawing::get_parent_x_height, prepare_node_mask, transformed_rect_extents,
+    inline_drawing::{
+      effective_parent_text_metrics_for_line, effective_parent_x_height_for_line,
+      get_parent_x_height, resolve_inline_line_metrics, resolved_line_metrics_for_apply,
+    },
+    prepare_node_mask, transformed_rect_extents,
   },
 };
 
@@ -526,13 +531,15 @@ fn compute_node_paint_bounds(
     width: AvailableSpace::Definite(layout.content_box_width()),
     height: AvailableSpace::Definite(layout.content_box_height()),
   };
-  let max_height = match font_style.parent.line_clamp.as_ref() {
-    Some(clamp) => Some(MaxHeight::HeightAndLines(
-      layout.content_box_height(),
-      clamp.count,
-    )),
-    None => Some(MaxHeight::Absolute(layout.content_box_height())),
-  };
+  let resolved_line_clamp = font_style.parent.text_wrap_mode_and_line_clamp().1;
+  let max_height = resolved_line_clamp
+    .as_ref()
+    .map(|clamp| MaxHeight::HeightAndLines(layout.content_box_height(), clamp.count))
+    .or_else(|| {
+      (font_style.parent.text_overflow == TextOverflow::Ellipsis)
+        .then_some(MaxHeight::Absolute(layout.content_box_height()))
+    });
+
   let (inline_layout, _, spans) = create_inline_layout(
     collect_inline_items(node).into_iter(),
     available_space,
@@ -548,14 +555,19 @@ fn compute_node_paint_bounds(
   ) * transform;
   let parent_x_height = get_parent_x_height(&node.context, &font_style);
 
-  for line in inline_layout.lines() {
+  let line_vertical_metrics = resolve_inline_line_metrics(&inline_layout, &spans, parent_x_height);
+  for (line_index, line) in inline_layout.lines().enumerate() {
+    let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
+    let line_parent_x_height = effective_parent_x_height_for_line(&line, parent_x_height);
+    let line_parent_text_metrics = effective_parent_text_metrics_for_line(&line);
     for item in line.items() {
       match item {
         PositionedLayoutItem::GlyphRun(glyph_run) => {
           let metrics = glyph_run.run().metrics();
-          let glyph_transform =
-            Affine::translation(glyph_run.offset(), glyph_run.baseline() - metrics.ascent)
-              * inline_transform;
+          let glyph_transform = Affine::translation(
+            glyph_run.offset(),
+            glyph_run.baseline() + baseline_shift - metrics.ascent,
+          ) * inline_transform;
           bounds = merge_bounds(
             bounds,
             bounds_for_rect(
@@ -569,13 +581,17 @@ fn compute_node_paint_bounds(
         }
         PositionedLayoutItem::InlineBox(mut inline_box) => {
           let item_index = inline_box.id as usize;
+          let adjusted_line_metrics =
+            resolved_line_metrics_for_apply(line.metrics(), line_vertical_metrics[line_index]);
           if let Some(crate::layout::inline::ProcessedInlineSpan::Box(item)) = spans.get(item_index)
           {
             item.vertical_align.apply(
               &mut inline_box.y,
-              line.metrics(),
+              &adjusted_line_metrics,
               inline_box.height,
-              parent_x_height,
+              item.baseline_offset,
+              line_parent_x_height,
+              line_parent_text_metrics,
             );
           }
 

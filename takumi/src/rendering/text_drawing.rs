@@ -10,7 +10,7 @@ use crate::{
   layout::{
     inline::{InlineBrush, InlineLayout, break_lines},
     style::{
-      Affine, BlendMode, Color, ImageScalingAlgorithm, SizedFontStyle, TextTransform,
+      Affine, BlendMode, Color, ImageScalingAlgorithm, SizedFontStyle, TextTransform, TextWrapMode,
       WhiteSpaceCollapse,
     },
   },
@@ -483,6 +483,7 @@ pub(crate) fn apply_text_transform<'a>(input: &'a str, transform: TextTransform)
 pub(crate) fn apply_white_space_collapse<'a>(
   input: &'a str,
   collapse: WhiteSpaceCollapse,
+  previous_collapsible_space: &mut bool,
 ) -> Cow<'a, str> {
   match collapse {
     WhiteSpaceCollapse::Preserve => Cow::Borrowed(input),
@@ -491,7 +492,7 @@ pub(crate) fn apply_white_space_collapse<'a>(
     // and trim leading/trailing spaces.
     WhiteSpaceCollapse::Collapse => {
       let mut out = String::with_capacity(input.len());
-      let mut last_was_ws = false;
+      let mut last_was_ws = *previous_collapsible_space;
 
       for ch in input.chars() {
         if ch.is_whitespace() {
@@ -505,13 +506,14 @@ pub(crate) fn apply_white_space_collapse<'a>(
         }
       }
 
-      Cow::Owned(out.trim().to_string())
+      *previous_collapsible_space = last_was_ws;
+      Cow::Owned(out)
     }
 
     // Preserve sequences of spaces/tabs but remove line breaks (replace them with a single space).
     WhiteSpaceCollapse::PreserveSpaces => {
       let mut out = String::with_capacity(input.len());
-      let mut last_was_space = false;
+      let mut last_was_space = *previous_collapsible_space;
 
       for ch in input.chars() {
         // treat common line break characters as breaks to be removed/replaced
@@ -526,6 +528,7 @@ pub(crate) fn apply_white_space_collapse<'a>(
         }
       }
 
+      *previous_collapsible_space = last_was_space;
       Cow::Owned(out)
     }
 
@@ -533,7 +536,7 @@ pub(crate) fn apply_white_space_collapse<'a>(
     // Also remove leading spaces after line breaks.
     WhiteSpaceCollapse::PreserveBreaks => {
       let mut out = String::with_capacity(input.len());
-      let mut last_was_space = false;
+      let mut last_was_space = *previous_collapsible_space;
       let mut last_was_line_break = false;
 
       for ch in input.chars() {
@@ -555,7 +558,8 @@ pub(crate) fn apply_white_space_collapse<'a>(
         }
       }
 
-      Cow::Owned(out.trim().to_string())
+      *previous_collapsible_space = last_was_space;
+      Cow::Owned(out)
     }
   }
 }
@@ -599,7 +603,7 @@ pub(crate) fn make_balanced_text(
     iterations += 1;
     let mid = (left + right) / 2.0;
 
-    break_lines(inline_layout, mid, None);
+    break_lines(inline_layout, mid, None, TextWrapMode::Wrap);
     let lines_at_mid = inline_layout.lines().count();
 
     if lines_at_mid > target_lines
@@ -617,11 +621,16 @@ pub(crate) fn make_balanced_text(
   // No meaningful adjustment if within 1px * DPR of max_width
   if (balanced_width - max_width).abs() < device_pixel_ratio {
     // Reset to original max_width
-    break_lines(inline_layout, max_width, max_height);
+    break_lines(inline_layout, max_width, max_height, TextWrapMode::Wrap);
     false
   } else {
     // Apply the balanced width
-    break_lines(inline_layout, balanced_width, max_height);
+    break_lines(
+      inline_layout,
+      balanced_width,
+      max_height,
+      TextWrapMode::Wrap,
+    );
     true
   }
 }
@@ -657,7 +666,7 @@ pub(crate) fn make_pretty_text(
 
   // Try reflowing with 90% width to redistribute words
   let adjusted_width = max_width * 0.9;
-  break_lines(inline_layout, adjusted_width, None);
+  break_lines(inline_layout, adjusted_width, None, TextWrapMode::Wrap);
   let adjusted_lines = inline_layout.lines().count();
 
   // Use the adjusted width only if it doesn't add too many lines (at most 30% more)
@@ -667,7 +676,7 @@ pub(crate) fn make_pretty_text(
     true
   } else {
     // Reset to original max_width
-    break_lines(inline_layout, max_width, max_height);
+    break_lines(inline_layout, max_width, max_height, TextWrapMode::Wrap);
     false
   }
 }
@@ -679,21 +688,36 @@ mod tests {
   #[test]
   fn test_white_space_preserve() {
     let input = "  a \t b\n";
-    let out = apply_white_space_collapse(input, WhiteSpaceCollapse::Preserve);
+    let mut previous_collapsible_space = false;
+    let out = apply_white_space_collapse(
+      input,
+      WhiteSpaceCollapse::Preserve,
+      &mut previous_collapsible_space,
+    );
     assert_eq!(out, input);
   }
 
   #[test]
   fn test_white_space_collapse() {
     let input = "  a \n\t b  c\n\n ";
-    let out = apply_white_space_collapse(input, WhiteSpaceCollapse::Collapse);
-    assert_eq!(out, "a b c");
+    let mut previous_collapsible_space = false;
+    let out = apply_white_space_collapse(
+      input,
+      WhiteSpaceCollapse::Collapse,
+      &mut previous_collapsible_space,
+    );
+    assert_eq!(out, " a b c ");
   }
 
   #[test]
   fn test_white_space_preserve_spaces() {
     let input = "a \n b";
-    let out = apply_white_space_collapse(input, WhiteSpaceCollapse::PreserveSpaces);
+    let mut previous_collapsible_space = false;
+    let out = apply_white_space_collapse(
+      input,
+      WhiteSpaceCollapse::PreserveSpaces,
+      &mut previous_collapsible_space,
+    );
     // line break should be replaced with a single space; existing spaces preserved
     assert_eq!(out, "a  b");
   }
@@ -701,8 +725,52 @@ mod tests {
   #[test]
   fn test_white_space_preserve_breaks() {
     let input = "a \n b\tc";
-    let out = apply_white_space_collapse(input, WhiteSpaceCollapse::PreserveBreaks);
+    let mut previous_collapsible_space = false;
+    let out = apply_white_space_collapse(
+      input,
+      WhiteSpaceCollapse::PreserveBreaks,
+      &mut previous_collapsible_space,
+    );
     // spaces and tabs collapsed to single space, line break preserved
     assert_eq!(out, "a \nb c");
+  }
+
+  #[test]
+  fn test_white_space_collapse_preserves_boundary_space_across_spans() {
+    let mut previous_collapsible_space = false;
+    let left = apply_white_space_collapse(
+      "A",
+      WhiteSpaceCollapse::Collapse,
+      &mut previous_collapsible_space,
+    );
+    let middle = apply_white_space_collapse(
+      " ",
+      WhiteSpaceCollapse::Collapse,
+      &mut previous_collapsible_space,
+    );
+    let right = apply_white_space_collapse(
+      "B",
+      WhiteSpaceCollapse::Collapse,
+      &mut previous_collapsible_space,
+    );
+
+    assert_eq!(format!("{left}{middle}{right}"), "A B");
+  }
+
+  #[test]
+  fn test_white_space_collapse_merges_adjacent_span_spaces() {
+    let mut previous_collapsible_space = false;
+    let left = apply_white_space_collapse(
+      "A ",
+      WhiteSpaceCollapse::Collapse,
+      &mut previous_collapsible_space,
+    );
+    let right = apply_white_space_collapse(
+      " B",
+      WhiteSpaceCollapse::Collapse,
+      &mut previous_collapsible_space,
+    );
+
+    assert_eq!(format!("{left}{right}"), "A B");
   }
 }
