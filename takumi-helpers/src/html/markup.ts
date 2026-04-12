@@ -34,82 +34,78 @@ export function fromStaticMarkup(
   options?: FromStaticMarkupOptions,
 ): FromStaticMarkupResult {
   const document = parse(markup) as UltraHtmlDocumentNode;
-  const nodes: Node[] = [];
-  const stylesheets: string[] = [];
+  const result: FromStaticMarkupResult = { nodes: [], stylesheets: [] };
   const presets = getPresets(options?.defaultStyles);
   const tailwindClassesProperty = options?.tailwindClassesProperty ?? "tw";
 
   for (const child of document.children) {
-    const result = buildStaticNodes(child, presets, tailwindClassesProperty);
-    nodes.push(...result.nodes);
-    stylesheets.push(...result.stylesheets);
+    buildStaticNodes(child, presets, tailwindClassesProperty, result.nodes, result.stylesheets);
   }
 
-  return { nodes, stylesheets };
+  return result;
 }
 
 function buildStaticNodes(
   node: UltraHtmlNode,
   presets: typeof defaultStylePresets | undefined,
   tailwindClassesProperty: string,
-): FromStaticMarkupResult {
+  nodes: Node[],
+  stylesheets: string[],
+): void {
   if (node.type === COMMENT_NODE) {
-    return { nodes: [], stylesheets: [] };
+    return;
   }
 
   if (node.type === TEXT_NODE) {
     const value = node.value ?? "";
-    return {
-      nodes: value
-        ? [
-            text({
-              text: value,
-              preset: presets?.span,
-            }),
-          ]
-        : [],
-      stylesheets: [],
-    };
+    if (value) {
+      nodes.push(
+        text({
+          text: value,
+          preset: presets?.span,
+        }),
+      );
+    }
+    return;
   }
 
   if (node.type === DOCUMENT_NODE) {
-    return node.children.reduce(
-      (result: FromStaticMarkupResult, child: UltraHtmlNode) => {
-        const next = buildStaticNodes(child, presets, tailwindClassesProperty);
-        result.nodes.push(...next.nodes);
-        result.stylesheets.push(...next.stylesheets);
-        return result;
-      },
-      { nodes: [], stylesheets: [] } as FromStaticMarkupResult,
-    );
+    for (const child of node.children) {
+      buildStaticNodes(child, presets, tailwindClassesProperty, nodes, stylesheets);
+    }
+    return;
   }
 
   if (node.type !== ELEMENT_NODE) {
-    return { nodes: [], stylesheets: [] };
+    return;
   }
 
   const element = node as UltraHtmlElementNode;
   if (element.name === "style") {
-    const content = element.children
-      .filter((child) => child.type === TEXT_NODE && typeof child.value === "string")
-      .map((child) => child.value)
-      .join("");
+    let content = "";
 
-    return { nodes: [], stylesheets: content ? [content] : [] };
+    for (const child of element.children) {
+      if (child.type === TEXT_NODE && typeof child.value === "string") {
+        content += child.value;
+      }
+    }
+
+    if (content) {
+      stylesheets.push(content);
+    }
+    return;
   }
 
   const metadata = extractStaticNodeMetadata(element, presets, tailwindClassesProperty);
   if (element.name === "br") {
-    return {
-      nodes: [
-        text({
-          text: "\n",
-          preset: presets?.span,
-          ...metadata,
-        }),
-      ],
-      stylesheets: [],
-    };
+    nodes.push(
+      text({
+        text: "\n",
+        preset: presets?.span,
+        ...metadata,
+      }),
+    );
+    return;
   }
 
   if (element.name === "img") {
@@ -118,65 +114,70 @@ function buildStaticNodes(
       throw new Error("Image element must have a 'src' prop.");
     }
 
-    return {
-      nodes: [
-        image({
-          src,
-          width: parseDimension(element.attributes?.width),
-          height: parseDimension(element.attributes?.height),
-          ...metadata,
-        }),
-      ],
-      stylesheets: [],
-    };
+    nodes.push(
+      image({
+        src,
+        width: parseDimension(element.attributes?.width),
+        height: parseDimension(element.attributes?.height),
+        ...metadata,
+      }),
+    );
+    return;
   }
 
   if (isHtmlVoidElement(element.name)) {
-    return { nodes: [], stylesheets: [] };
+    return;
   }
 
   if (element.name === "svg") {
-    return {
-      nodes: [
-        image({
-          src: renderSync(element),
-          width: parseDimension(element.attributes?.width),
-          height: parseDimension(element.attributes?.height),
-          ...metadata,
-        }),
-      ],
-      stylesheets: [],
-    };
+    nodes.push(
+      image({
+        src: renderSync(element),
+        width: parseDimension(element.attributes?.width),
+        height: parseDimension(element.attributes?.height),
+        ...metadata,
+      }),
+    );
+    return;
   }
 
-  const children = element.children.reduce(
-    (result: FromStaticMarkupResult, child: UltraHtmlNode) => {
-      const next = buildStaticNodes(child, presets, tailwindClassesProperty);
-      result.nodes.push(...next.nodes);
-      result.stylesheets.push(...next.stylesheets);
-      return result;
-    },
-    { nodes: [], stylesheets: [] } as FromStaticMarkupResult,
-  );
+  let onlyTextChildren = true;
+  let textContent = "";
 
-  const onlyTextChildren = element.children.every(
-    (child) => child.type === TEXT_NODE || child.type === COMMENT_NODE,
-  );
+  for (const child of element.children) {
+    if (child.type === COMMENT_NODE) {
+      continue;
+    }
 
-  return {
-    nodes: [
-      onlyTextChildren && children.nodes.length > 0
-        ? text({
-            text: children.nodes.map((child) => (child.type === "text" ? child.text : "")).join(""),
-            ...metadata,
-          })
-        : container({
-            children: children.nodes,
-            ...metadata,
-          }),
-    ],
-    stylesheets: children.stylesheets,
-  };
+    if (child.type !== TEXT_NODE) {
+      onlyTextChildren = false;
+      break;
+    }
+
+    textContent += child.value ?? "";
+  }
+
+  if (onlyTextChildren && textContent) {
+    nodes.push(
+      text({
+        text: textContent,
+        ...metadata,
+      }),
+    );
+    return;
+  }
+
+  const childNodes: Node[] = [];
+  for (const child of element.children) {
+    buildStaticNodes(child, presets, tailwindClassesProperty, childNodes, stylesheets);
+  }
+
+  nodes.push(
+    container({
+      children: childNodes,
+      ...metadata,
+    }),
+  );
 }
 
 function extractStaticNodeMetadata(
@@ -184,7 +185,7 @@ function extractStaticNodeMetadata(
   presets: typeof defaultStylePresets | undefined,
   tailwindClassesProperty: string,
 ): NodeMetadata {
-  const props = node.attributes ?? {};
+  const props = node.attributes ? decodeAttributeMap(node.attributes) : {};
   const style = typeof props.style === "string" ? parseInlineStyle(props.style) : undefined;
   const attributes = extractAttributes(props, tailwindClassesProperty);
   const tw =
@@ -203,6 +204,61 @@ function extractStaticNodeMetadata(
     preset,
   };
 }
+
+function decodeAttributeMap(attributes: Record<string, string>): Record<string, string> {
+  const decodedAttributes: Record<string, string> = {};
+
+  for (const name in attributes) {
+    const value = attributes[name];
+    if (value !== undefined) {
+      decodedAttributes[name] = decodeHtmlEntities(value);
+    }
+  }
+
+  return decodedAttributes;
+}
+
+function decodeHtmlEntities(value: string): string {
+  if (!value.includes("&")) {
+    return value;
+  }
+
+  return value.replace(
+    /&(?:#(\d+)|#x([\da-fA-F]+)|([a-zA-Z][\w-]+));/g,
+    (match, dec, hex, named) => {
+      if (dec) {
+        return decodeCodePoint(Number(dec)) ?? match;
+      }
+
+      if (hex) {
+        return decodeCodePoint(Number.parseInt(hex, 16)) ?? match;
+      }
+
+      return namedHtmlEntities[named] ?? match;
+    },
+  );
+}
+
+function decodeCodePoint(codePoint: number): string | undefined {
+  if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff) {
+    return;
+  }
+
+  try {
+    return String.fromCodePoint(codePoint);
+  } catch {
+    return;
+  }
+}
+
+const namedHtmlEntities: Record<string, string> = {
+  amp: "&",
+  apos: "'",
+  gt: ">",
+  lt: "<",
+  nbsp: "\u00a0",
+  quot: '"',
+};
 
 function parseInlineStyle(styleText: string): CSSProperties | undefined {
   const style: Record<string, string> = {};

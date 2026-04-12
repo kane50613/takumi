@@ -485,6 +485,35 @@ describe("fromJsx", () => {
     expect("src" in node && node.src).toStartWith("<svg");
   });
 
+  test("decodes escaped inline style values in react-dom/server fallback markup", async () => {
+    const { node } = await fromJsx(
+      <div style={{ fontFeatureSettings: "'ss01' on" }}>
+        <User2 />
+        Hello
+      </div>,
+    );
+
+    expect(node).toEqual({
+      type: "container",
+      children: [
+        expect.objectContaining({
+          type: "image",
+          src: expect.stringContaining("<svg"),
+        }),
+        {
+          type: "text",
+          text: "Hello",
+          preset: defaultStylePresets.span,
+        },
+      ],
+      preset: defaultStylePresets.div,
+      style: expect.objectContaining({
+        fontFeatureSettings: "'ss01' on",
+      }),
+      tagName: "div",
+    });
+  });
+
   test("uses react-dom/server fallback when a provider exists", async () => {
     const GreetingContext = createContext("Fallback");
 

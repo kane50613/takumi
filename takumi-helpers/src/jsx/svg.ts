@@ -14,9 +14,17 @@ function escapeAttr(value: string): string {
 }
 
 function styleObjectToString(styleObj: Record<string, unknown>): string {
-  return Object.keys(styleObj)
-    .map((k) => `${k.replace(/([A-Z])/g, "-$1").toLowerCase()}:${String(styleObj[k]).trim()}`)
-    .join(";");
+  const declarations: string[] = [];
+
+  for (const key in styleObj) {
+    if (!Object.hasOwn(styleObj, key)) {
+      continue;
+    }
+
+    declarations.push(`${camelToKebab(key)}:${String(styleObj[key]).trim()}`);
+  }
+
+  return declarations.join(";");
 }
 
 const propertiesToKebabCase = new Set([
@@ -118,58 +126,83 @@ function serializePropToAttrString(key: string, value: unknown): string | undefi
   return `${attrName}="${escapeAttr(String(value))}"`;
 }
 
-function propsToAttrStrings(props: Record<string, unknown>): string[] {
-  return Object.entries(props)
-    .map(([key, value]) => serializePropToAttrString(key, value))
-    .filter((attr): attr is string => attr !== undefined);
+function pushSerializedAttributes(
+  props: Record<string, unknown>,
+  parts: string[],
+  needsXmlns: boolean,
+): void {
+  let injectedXmlns = false;
+
+  for (const key in props) {
+    if (!Object.hasOwn(props, key)) {
+      continue;
+    }
+
+    const attr = serializePropToAttrString(key, props[key]);
+    if (attr === undefined) {
+      continue;
+    }
+
+    parts.push(" ", attr);
+    if (key === "xmlns") {
+      injectedXmlns = true;
+    }
+  }
+
+  if (needsXmlns && !injectedXmlns) {
+    parts.push(' xmlns="http://www.w3.org/2000/svg"');
+  }
 }
 
 const serializeElementNode = (
   obj: ReactElementLike,
-  serializeFn: (n: unknown) => string,
-): string => {
+  parts: string[],
+  injectSvgXmlns: boolean,
+): void => {
   const props = (obj.props as Record<string, unknown>) || {};
 
-  if (isFunctionComponent(obj.type)) return serialize(obj.type(obj.props));
-
-  // Handle symbols (like React fragments) - they can't be serialized as HTML/SVG tags
-  if (typeof obj.type === "symbol") return "";
-
-  // Only string types can be used as HTML/SVG tag names
-  if (typeof obj.type !== "string") return "";
-
-  const attrs = propsToAttrStrings(props);
-  const children = props.children;
-  const childrenString = Array.isArray(children)
-    ? children.map((c) => serializeFn(c)).join("")
-    : serializeFn(children);
-
-  return `<${obj.type}${attrs.length > 0 ? ` ${attrs.join(" ")}` : ""}>${childrenString}</${obj.type}>`;
-};
-
-const serialize = (node: unknown): string => {
-  if (node === null || node === undefined || node === false) return "";
-  if (isTextNode(node)) return String(node);
-  if (Array.isArray(node)) return node.map(serialize).join("");
-  if (!isValidElement(node)) return "";
-
-  return serializeElementNode(node, serialize);
-};
-
-export function serializeSvg(element: ReactElement<ComponentProps<"svg">, "svg">): string {
-  const props = (element.props as Record<string, unknown>) || {};
-
-  if (!("xmlns" in props)) {
-    const cloned: ReactElement<ComponentProps<"svg">, "svg"> = {
-      ...element,
-      props: {
-        ...props,
-        xmlns: "http://www.w3.org/2000/svg",
-      },
-    } as ReactElement<ComponentProps<"svg">, "svg">;
-
-    return serialize(cloned) || "";
+  if (isFunctionComponent(obj.type)) {
+    serializeNode(obj.type(obj.props), parts, false);
+    return;
   }
 
-  return serialize(element) || "";
+  // Handle symbols (like React fragments) - they can't be serialized as HTML/SVG tags
+  if (typeof obj.type === "symbol") return;
+
+  // Only string types can be used as HTML/SVG tag names
+  if (typeof obj.type !== "string") return;
+
+  parts.push("<", obj.type);
+  pushSerializedAttributes(props, parts, injectSvgXmlns && obj.type === "svg");
+
+  const children = props.children;
+  parts.push(">");
+  serializeNode(children, parts, false);
+  parts.push("</", obj.type, ">");
+};
+
+function serializeNode(node: unknown, parts: string[], injectSvgXmlns: boolean): void {
+  if (node === null || node === undefined || node === false) return;
+
+  if (isTextNode(node)) {
+    parts.push(String(node));
+    return;
+  }
+
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      serializeNode(child, parts, false);
+    }
+    return;
+  }
+
+  if (!isValidElement(node)) return;
+
+  serializeElementNode(node, parts, injectSvgXmlns);
+}
+
+export function serializeSvg(element: ReactElement<ComponentProps<"svg">, "svg">): string {
+  const parts: string[] = [];
+  serializeNode(element, parts, true);
+  return parts.join("");
 }

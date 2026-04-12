@@ -24,9 +24,15 @@ export function extractAttributes(
   props: HtmlProps,
   tailwindClassesProperty: string,
 ): Record<string, string> | undefined {
-  const collectedAttributes: Record<string, string> = {};
+  let collectedAttributes: Record<string, string> | undefined;
 
-  for (const [attributeName, attributeValue] of Object.entries(props)) {
+  for (const attributeName in props) {
+    if (!Object.hasOwn(props, attributeName)) {
+      continue;
+    }
+
+    const attributeValue = props[attributeName];
+
     if (
       attributeName === "children" ||
       attributeName === "className" ||
@@ -54,11 +60,8 @@ export function extractAttributes(
       continue;
     }
 
+    collectedAttributes ??= {};
     collectedAttributes[attributeName] = attributeValue === true ? "" : String(attributeValue);
-  }
-
-  if (Object.keys(collectedAttributes).length === 0) {
-    return;
   }
 
   return collectedAttributes;

@@ -57,6 +57,10 @@ interface FromJsxTraversalResult {
   stylesheets: string[];
 }
 
+function emptyTraversalResult(): FromJsxTraversalResult {
+  return { nodes: [], stylesheets: [] };
+}
+
 type ReactModuleLike = {
   default?: ReactModuleLike;
   Fragment?: unknown;
@@ -130,7 +134,7 @@ async function fromJsxInternal(
   options: ResolvedFromJsxOptions,
 ): Promise<FromJsxTraversalResult> {
   if (element === undefined || element === null || element === false) {
-    return { nodes: [], stylesheets: [] };
+    return emptyTraversalResult();
   }
 
   // If element is a server component, wait for it to resolve first
@@ -341,15 +345,15 @@ function tryCollectTextChildren(element: ReactElementLike): string | undefined {
 }
 
 function collectStyleTextFromIterable(children: Iterable<ReactNode>): string | undefined {
-  let output = "";
+  const chunks: string[] = [];
 
   for (const child of children) {
     const chunk = collectStyleText(child);
     if (chunk === undefined) return;
-    output += chunk;
+    chunks.push(chunk);
   }
 
-  return output;
+  return chunks.join("");
 }
 
 function collectStyleText(node: ReactNode | ReactElementLike): string | undefined {
@@ -385,26 +389,26 @@ function collectStyleText(node: ReactNode | ReactElementLike): string | undefine
 }
 
 function collectTextFromIterable(children: Iterable<ReactNode>): string | undefined {
-  let output = "";
+  const chunks: string[] = [];
 
   for (const child of children) {
     // If any child is a React element, this is not pure text
     if (isValidElement(child)) return;
 
     if (typeof child === "string") {
-      output += child;
+      chunks.push(child);
       continue;
     }
 
     if (typeof child === "number") {
-      output += String(child);
+      chunks.push(String(child));
       continue;
     }
 
     return;
   }
 
-  return output;
+  return chunks.join("");
 }
 
 async function processReactElement(
@@ -441,7 +445,7 @@ async function processReactElement(
   }
 
   if (typeof element.type !== "string" || isHtmlVoidElement(element.type)) {
-    return { nodes: [], stylesheets: [] };
+    return emptyTraversalResult();
   }
 
   const metadata = extractNodeMetadata(element, options);
@@ -542,13 +546,11 @@ function extractStyle(
   element: ReactElementLike,
   options: ResolvedFromJsxOptions,
 ): { preset?: CSSProperties; style?: CSSProperties } {
-  let preset: CSSProperties | undefined;
-  let style: CSSProperties | undefined;
-
   const presets = options.presets;
-  if (presets && typeof element.type === "string" && element.type in presets) {
-    preset = presets[element.type as keyof typeof presets];
-  }
+  const preset =
+    presets && typeof element.type === "string" && element.type in presets
+      ? presets[element.type as keyof typeof presets]
+      : undefined;
 
   const inlineStyle =
     typeof element.props === "object" &&
@@ -559,16 +561,17 @@ function extractStyle(
       ? element.props.style
       : undefined;
 
-  if (inlineStyle) {
-    for (const key in inlineStyle) {
-      if (!Object.hasOwn(inlineStyle, key)) continue;
+  if (!inlineStyle) {
+    return { preset };
+  }
 
-      style = inlineStyle;
-      break;
+  for (const key in inlineStyle) {
+    if (Object.hasOwn(inlineStyle, key)) {
+      return { preset, style: inlineStyle };
     }
   }
 
-  return { preset, style };
+  return { preset };
 }
 
 function extractTw(element: ReactElementLike, options: ResolvedFromJsxOptions): string | undefined {
@@ -610,7 +613,7 @@ function collectChildren(
 ): Promise<FromJsxTraversalResult> {
   const children = getElementChildren(element);
   if (children === undefined) {
-    return Promise.resolve({ nodes: [], stylesheets: [] });
+    return Promise.resolve(emptyTraversalResult());
   }
 
   return fromJsxInternal(children, options);

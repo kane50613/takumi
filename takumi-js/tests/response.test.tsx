@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { createContext, useContext } from "react";
 import ImageResponse from "../src/response";
 
 describe("ImageResponse", () => {
@@ -45,6 +46,26 @@ describe("ImageResponse", () => {
     for (const buffer of buffers) {
       expect(buffer).toBeDefined();
     }
+  });
+
+  test("should render escaped fontFeatureSettings in react-dom/server fallback trees", async () => {
+    const GreetingContext = createContext("Fallback");
+    const Message = () => <span>{useContext(GreetingContext)}</span>;
+
+    const response = new ImageResponse(
+      <GreetingContext.Provider value="Hello">
+        <div style={{ display: "flex", fontFeatureSettings: "'ss01' on" }}>
+          <Message />
+        </div>
+      </GreetingContext.Provider>,
+      {
+        width: 400,
+        height: 200,
+        onError() {},
+      },
+    );
+
+    await expect(response.arrayBuffer()).resolves.toBeDefined();
   });
 
   test("should expose rendering errors through ready promise", async () => {
