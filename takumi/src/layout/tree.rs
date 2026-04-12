@@ -577,7 +577,7 @@ impl<'r, 'g> LayoutTree<'r, 'g> {
             }
           };
 
-          let output = compute_leaf_layout(
+          compute_leaf_layout(
             inputs,
             &node_data.style,
             |val, basis| tree.resolve_calc_value(val, basis),
@@ -599,9 +599,7 @@ impl<'r, 'g> LayoutTree<'r, 'g> {
                 node_data.is_inline_children,
               )
             },
-          );
-
-          output
+          )
         }
       }
     });
