@@ -461,7 +461,7 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
             None
           };
           let content_size = atomic_metrics.map_or(Size::zero(), |metrics| metrics.size);
-          let baseline_offset = atomic_metrics.and_then(|metrics| metrics.baseline_offset);
+          let raw_baseline_offset = atomic_metrics.and_then(|metrics| metrics.baseline_offset);
 
           let inline_box = InlineBox {
             index: index_pos,
@@ -483,6 +483,8 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
                 + border.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
             },
           };
+          let baseline_offset = raw_baseline_offset
+            .map(|baseline| (baseline + margin.top).clamp(0.0, inline_box.height));
 
           spans.push(ProcessedInlineSpan::Box(InlineBoxItem {
             render_node,
@@ -539,12 +541,13 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
       max_width,
       max_height,
       line_count,
+      text_wrap_mode,
       style.sizing.viewport.device_pixel_ratio,
     );
   }
 
   if style.parent.text_wrap_style == TextWrapStyle::Pretty {
-    make_pretty_text(&mut layout, max_width, max_height);
+    make_pretty_text(&mut layout, max_width, max_height, text_wrap_mode);
   }
 
   layout.align(

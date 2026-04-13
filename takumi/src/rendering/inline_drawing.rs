@@ -473,6 +473,21 @@ pub(crate) fn get_parent_x_height(
   run.metrics().x_height
 }
 
+pub(crate) fn get_parent_text_metrics(
+  context: &RenderContext,
+  font_style: &SizedFontStyle,
+) -> Option<(f32, f32)> {
+  let (layout, _) = context
+    .global
+    .font_context
+    .tree_builder(font_style.into(), |builder| {
+      builder.push_text("x");
+    });
+
+  let run = layout.lines().next()?.runs().next()?;
+  Some((run.metrics().ascent, run.metrics().descent))
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ResolvedLineMetrics {
   pub(crate) resolved_ascent: f32,
@@ -532,25 +547,28 @@ pub(crate) fn effective_parent_x_height_for_line(
 
 pub(crate) fn effective_parent_text_metrics_for_line(
   line: &Line<'_, InlineBrush>,
+  parent_text_metrics: Option<(f32, f32)>,
 ) -> Option<(f32, f32)> {
-  let mut text_ascent_max = 0.0_f32;
-  let mut text_descent_max = 0.0_f32;
+  if parent_text_metrics.is_some() {
+    return parent_text_metrics;
+  }
+
   let mut has_glyph = false;
   for item in line.items() {
-    if let PositionedLayoutItem::GlyphRun(glyph_run) = item {
-      let metrics = glyph_run.run().metrics();
-      text_ascent_max = text_ascent_max.max(metrics.ascent);
-      text_descent_max = text_descent_max.max(metrics.descent);
+    if matches!(item, PositionedLayoutItem::GlyphRun(_)) {
       has_glyph = true;
+      break;
     }
   }
-  has_glyph.then_some((text_ascent_max, text_descent_max))
+
+  has_glyph.then_some((line.metrics().ascent, line.metrics().descent))
 }
 
 pub(crate) fn resolve_inline_line_metrics(
   inline_layout: &InlineLayout,
   spans: &[ProcessedInlineSpan<'_, '_>],
   parent_x_height: Option<f32>,
+  parent_text_metrics: Option<(f32, f32)>,
 ) -> Vec<ResolvedLineMetrics> {
   let mut result = Vec::with_capacity(inline_layout.lines().count());
   let mut cumulative_flow_shift = 0.0_f32;
@@ -558,7 +576,8 @@ pub(crate) fn resolve_inline_line_metrics(
 
   for line in inline_layout.lines() {
     let effective_parent_x_height = effective_parent_x_height_for_line(&line, parent_x_height);
-    let effective_parent_text_metrics = effective_parent_text_metrics_for_line(&line);
+    let effective_parent_text_metrics =
+      effective_parent_text_metrics_for_line(&line, parent_text_metrics);
 
     let mut resolved_ascent = 0.0_f32;
     let mut resolved_descent = 0.0_f32;
@@ -738,11 +757,13 @@ pub(crate) fn draw_inline_layout(
   };
   let clip_image_source = clip_image.as_ref().map(PaintSource::from);
   let parent_x_height = get_parent_x_height(context, font_style);
+  let parent_text_metrics = get_parent_text_metrics(context, font_style);
 
   let mut positioned_inline_boxes = Vec::new();
   let mut inline_outline_rects = Vec::new();
 
-  let line_vertical_metrics = resolve_inline_line_metrics(&inline_layout, spans, parent_x_height);
+  let line_vertical_metrics =
+    resolve_inline_line_metrics(&inline_layout, spans, parent_x_height, parent_text_metrics);
 
   // Pre-slice resolved glyph runs per line so each CSS painting phase can index
   // directly instead of maintaining fragile in-sync iterator state across separate loops.
@@ -806,7 +827,8 @@ pub(crate) fn draw_inline_layout(
     let resolved_metrics = line_vertical_metrics[line_index];
     let baseline_shift = resolved_metrics.baseline_shift;
     let line_parent_x_height = effective_parent_x_height_for_line(&line, parent_x_height);
-    let line_parent_text_metrics = effective_parent_text_metrics_for_line(&line);
+    let line_parent_text_metrics =
+      effective_parent_text_metrics_for_line(&line, parent_text_metrics);
     let mut resolved_iter = per_line_resolved[line_index].iter();
 
     for item in line.items() {

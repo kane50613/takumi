@@ -590,6 +590,7 @@ pub(crate) fn make_balanced_text(
   max_width: f32,
   max_height: Option<MaxHeight>,
   target_lines: usize,
+  text_wrap_mode: TextWrapMode,
   device_pixel_ratio: f32,
 ) -> bool {
   if target_lines <= 1 {
@@ -610,7 +611,7 @@ pub(crate) fn make_balanced_text(
     iterations += 1;
     let mid = (left + right) / 2.0;
 
-    break_lines(inline_layout, mid, None, TextWrapMode::Wrap);
+    break_lines(inline_layout, mid, None, text_wrap_mode);
     let lines_at_mid = inline_layout.lines().count();
 
     if lines_at_mid > target_lines
@@ -628,16 +629,11 @@ pub(crate) fn make_balanced_text(
   // No meaningful adjustment if within 1px * DPR of max_width
   if (balanced_width - max_width).abs() < device_pixel_ratio {
     // Reset to original max_width
-    break_lines(inline_layout, max_width, max_height, TextWrapMode::Wrap);
+    break_lines(inline_layout, max_width, max_height, text_wrap_mode);
     false
   } else {
     // Apply the balanced width
-    break_lines(
-      inline_layout,
-      balanced_width,
-      max_height,
-      TextWrapMode::Wrap,
-    );
+    break_lines(inline_layout, balanced_width, max_height, text_wrap_mode);
     true
   }
 }
@@ -648,6 +644,7 @@ pub(crate) fn make_pretty_text(
   inline_layout: &mut InlineLayout,
   max_width: f32,
   max_height: Option<MaxHeight>,
+  text_wrap_mode: TextWrapMode,
 ) -> bool {
   // Get the last line width at the current max width (layout should already be broken)
   let Some(last_line_width) = inline_layout
@@ -673,7 +670,7 @@ pub(crate) fn make_pretty_text(
 
   // Try reflowing with 90% width to redistribute words
   let adjusted_width = max_width * 0.9;
-  break_lines(inline_layout, adjusted_width, None, TextWrapMode::Wrap);
+  break_lines(inline_layout, adjusted_width, None, text_wrap_mode);
   let adjusted_lines = inline_layout.lines().count();
 
   // Use the adjusted width only if it doesn't add too many lines (at most 30% more)
@@ -683,7 +680,7 @@ pub(crate) fn make_pretty_text(
     true
   } else {
     // Reset to original max_width
-    break_lines(inline_layout, max_width, max_height, TextWrapMode::Wrap);
+    break_lines(inline_layout, max_width, max_height, text_wrap_mode);
     false
   }
 }

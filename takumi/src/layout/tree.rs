@@ -1247,7 +1247,8 @@ impl<'g> RenderNode<'g> {
     root_node_id: NodeId,
   ) -> Option<f32> {
     let fallback = self.atomic_container_baseline_offset_from_results(layout_results, root_node_id);
-    let resolved = match self.context.style.display {
+
+    match self.context.style.display {
       Display::InlineBlock => {
         let inline_content =
           self.inline_content_baseline_offset(available_space, size, Display::InlineBlock, true);
@@ -1274,8 +1275,7 @@ impl<'g> RenderNode<'g> {
           .or(fallback)
       }
       _ => None,
-    };
-    resolved
+    }
   }
 
   pub(crate) fn measure_atomic_subtree(
