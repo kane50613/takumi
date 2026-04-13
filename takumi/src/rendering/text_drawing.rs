@@ -32,6 +32,21 @@ pub(crate) fn draw_decoration(
 ) {
   let start_x = layout.border.left + layout.padding.left + glyph_run.offset();
   let end_x = start_x + glyph_run.advance();
+  draw_decoration_segment(
+    canvas, color, offset, size, start_x, end_x, layout, transform,
+  );
+}
+
+pub(crate) fn draw_decoration_segment(
+  canvas: &mut Canvas,
+  color: Color,
+  offset: f32,
+  size: f32,
+  start_x: f32,
+  end_x: f32,
+  layout: Layout,
+  transform: Affine,
+) {
   if end_x <= start_x {
     return;
   }
