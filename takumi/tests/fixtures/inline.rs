@@ -114,6 +114,38 @@ fn inline_image() {
 }
 
 #[test]
+fn inline_image_em_regression() {
+  let children: Vec<Node> = vec![
+    Node::text("hello ".to_string())
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+    Node::image(("assets/images/yeecord.png", 64.0, 64.0)).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::InlineBlock))
+        .with(StyleDeclaration::width(Em(1.0)))
+        .with(StyleDeclaration::height(Em(1.0)))
+        .with(StyleDeclaration::vertical_align(VerticalAlign::Length(Em(
+          -0.1,
+        )))),
+    ),
+    Node::text(" world".to_string())
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+  ];
+
+  let container = Node::container(children).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      )))
+      .with(StyleDeclaration::font_size(Px(64.0).into())),
+  );
+
+  run_fixture_test(container, "inline_image_em_regression");
+}
+
+#[test]
 fn inline_block_in_inline() {
   // A block-level container inside inline content: should create anonymous block formatting context
   let children: Vec<Node> = vec![
@@ -601,4 +633,170 @@ fn inline_text_decorations() {
   );
 
   run_fixture_test(node, "inline_text_decorations");
+}
+
+#[test]
+fn inline_social_post_regression() {
+  let post = |name: &str,
+              handle: &str,
+              time: &str,
+              content: &str,
+              likes: &str,
+              comments: &str,
+              with_icons: bool,
+              avatar: Color|
+   -> Node {
+    let content = if with_icons {
+      format!("{content} 🚀🔥")
+    } else {
+      content.to_string()
+    };
+
+    Node::container([
+      Node::container([
+        Node::container([]).with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Flex))
+            .with(StyleDeclaration::width(Px(56.0)))
+            .with(StyleDeclaration::height(Px(56.0)))
+            .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(28.0)); 4])))
+            .with(StyleDeclaration::background_color(ColorInput::Value(
+              avatar,
+            )))
+            .with_margin(Sides([Px(0.0), Px(16.0), Px(0.0), Px(0.0)])),
+        ),
+        Node::container([
+          Node::text(name.to_string()).with_style(
+            Style::default()
+              .with(StyleDeclaration::display(Display::Block))
+              .with(StyleDeclaration::font_size(Px(20.0).into()))
+              .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
+              .with(StyleDeclaration::color(ColorInput::Value(Color::white()))),
+          ),
+          Node::text(format!("{handle} · {time}")).with_style(
+            Style::default()
+              .with(StyleDeclaration::display(Display::Block))
+              .with(StyleDeclaration::font_size(Px(18.0).into()))
+              .with(StyleDeclaration::color(ColorInput::Value(Color([
+                136, 153, 166, 255,
+              ])))),
+          ),
+        ])
+        .with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Flex))
+            .with(StyleDeclaration::display(Display::Flex))
+            .with(StyleDeclaration::flex_direction(FlexDirection::Column)),
+        ),
+      ])
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
+          .with(StyleDeclaration::align_items(AlignItems::Center))
+          .with_margin(Sides([Px(0.0), Px(0.0), Px(16.0), Px(0.0)])),
+      ),
+      Node::text(content).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Block))
+          .with(StyleDeclaration::font_size(Px(22.0).into()))
+          .with(StyleDeclaration::line_height(LineHeight::Length(Em(1.5))))
+          .with(StyleDeclaration::color(ColorInput::Value(Color::white())))
+          .with_margin(Sides([Px(0.0), Px(0.0), Px(20.0), Px(0.0)]))
+          .with_white_space(WhiteSpace::pre_wrap()),
+      ),
+      Node::container([
+        Node::text(format!("💬 {comments}")).with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Inline))
+            .with(StyleDeclaration::font_size(Px(18.0).into())),
+        ),
+        Node::text(format!(" 🔁 {}", likes.parse::<u32>().unwrap_or(0) / 4)).with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Inline))
+            .with(StyleDeclaration::font_size(Px(18.0).into())),
+        ),
+        Node::text(format!(" ❤️ {likes}")).with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Inline))
+            .with(StyleDeclaration::font_size(Px(18.0).into())),
+        ),
+      ])
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
+          .with(StyleDeclaration::color(ColorInput::Value(Color([
+            136, 153, 166, 255,
+          ]))))
+          .with_gap(SpacePair::from_single(Px(24.0))),
+      ),
+    ])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color([25, 39, 52, 255]),
+        )))
+        .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(16.0)); 4])))
+        .with_padding(Sides([Px(24.0); 4]))
+        .with_border_width(Sides([Px(1.0); 4]))
+        .with_border_style(Sides([BorderStyle::Solid; 4]))
+        .with_border_color(Sides([ColorInput::Value(Color([56, 68, 77, 255])); 4])),
+    )
+  };
+
+  let node = Node::container([Node::container([
+    post(
+      "Sarah Jenkins",
+      "@sjenkins",
+      "2h",
+      "Just deployed our new rendering pipeline! The performance gains are absolutely incredible. Seeing a 40% reduction in TTFB across all endpoints.",
+      "1200",
+      "34",
+      true,
+      Color([56, 141, 229, 255]),
+    ),
+    post(
+      "Mike Chen",
+      "@mike_codes",
+      "4h",
+      "Is anyone else obsessed with how clean the Satori APIs are? Moving our open graph image generation to Edge has been a game changer for our latency.",
+      "856",
+      "12",
+      false,
+      Color([111, 66, 193, 255]),
+    ),
+    post(
+      "Design Daily",
+      "@designdaily",
+      "7h",
+      "Remember to check your contrast ratios! Accessibility isn't an afterthought, it's a fundamental part of good software design.",
+      "4500",
+      "128",
+      false,
+      Color([0, 172, 193, 255]),
+    ),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+      .with_gap(SpacePair::from_single(Px(24.0)))
+      .with(StyleDeclaration::flex_grow(Some(FlexGrow(1.0)))),
+  )])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(Color([
+        21, 32, 43, 255,
+      ]))))
+      .with_padding(Sides([Px(40.0); 4]))
+      .with(StyleDeclaration::font_size(Px(22.0).into()))
+      .with(StyleDeclaration::line_height(LineHeight::Length(Em(1.5)))),
+  );
+
+  run_fixture_test(node, "inline_social_post_regression");
 }

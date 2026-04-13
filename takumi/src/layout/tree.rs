@@ -1178,6 +1178,13 @@ impl<'g> RenderNode<'g> {
     display: Display,
     use_last_line: bool,
   ) -> Option<f32> {
+    if matches!(
+      self.node.as_ref().and_then(Node::inline_content),
+      Some(InlineContentKind::Box)
+    ) {
+      return None;
+    }
+
     if display == Display::InlineBlock
       && (self.context.style.overflow_x != Overflow::Visible
         || self.context.style.overflow_y != Overflow::Visible)
