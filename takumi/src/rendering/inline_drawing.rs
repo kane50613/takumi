@@ -15,10 +15,10 @@ use crate::{
     tree::LayoutTree,
   },
   rendering::{
-    BorderProperties, Canvas, Command, PaintSource, PathBuilder, RenderContext, Stroke,
-    collect_background_layers, draw_decoration, draw_decoration_segment, draw_glyph,
-    draw_glyph_clip_image, draw_glyph_text_shadow, mask_index_from_coord, rasterize_layers,
-    release_rasterized_background_tile, render::render_node, render_mask,
+    BorderProperties, Canvas, Command, DecorationSegmentParams, PaintSource, PathBuilder,
+    RenderContext, Stroke, collect_background_layers, draw_decoration, draw_decoration_segment,
+    draw_glyph, draw_glyph_clip_image, draw_glyph_text_shadow, mask_index_from_coord,
+    rasterize_layers, release_rasterized_background_tile, render::render_node, render_mask,
   },
   resources::font::{FontError, ResolvedGlyph},
 };
@@ -200,12 +200,14 @@ fn draw_underline_with_skip_ink(
     draw_decoration_segment(
       canvas,
       options.color,
-      options.offset,
-      options.size,
-      run_start_x,
-      run_end_x,
-      options.layout,
-      options.transform,
+      DecorationSegmentParams {
+        offset: options.offset,
+        size: options.size,
+        start_x: run_start_x,
+        end_x: run_end_x,
+        layout: options.layout,
+        transform: options.transform,
+      },
     );
     return;
   }
@@ -230,12 +232,14 @@ fn draw_underline_with_skip_ink(
       draw_decoration_segment(
         canvas,
         options.color,
-        options.offset,
-        options.size,
-        current_x,
-        skip_start,
-        options.layout,
-        options.transform,
+        DecorationSegmentParams {
+          offset: options.offset,
+          size: options.size,
+          start_x: current_x,
+          end_x: skip_start,
+          layout: options.layout,
+          transform: options.transform,
+        },
       );
     }
     current_x = current_x.max(skip_end);
@@ -245,12 +249,14 @@ fn draw_underline_with_skip_ink(
     draw_decoration_segment(
       canvas,
       options.color,
-      options.offset,
-      options.size,
-      current_x,
-      run_end_x,
-      options.layout,
-      options.transform,
+      DecorationSegmentParams {
+        offset: options.offset,
+        size: options.size,
+        start_x: current_x,
+        end_x: run_end_x,
+        layout: options.layout,
+        transform: options.transform,
+      },
     );
   }
 }
@@ -698,25 +704,16 @@ fn resolve_inline_layout_glyphs(
   Ok(resolved_glyph_runs)
 }
 
-pub(crate) fn get_parent_x_height(
-  context: &RenderContext,
-  font_style: &SizedFontStyle,
-) -> Option<f32> {
-  let (layout, _) = context
-    .global
-    .font_context
-    .tree_builder(font_style.into(), |builder| {
-      builder.push_text("x");
-    });
-
-  let run = layout.lines().next()?.runs().next()?;
-  run.metrics().x_height
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ParentFontMetrics {
+  pub(crate) x_height: Option<f32>,
+  pub(crate) text_metrics: (f32, f32),
 }
 
-pub(crate) fn get_parent_text_metrics(
+pub(crate) fn get_parent_font_metrics(
   context: &RenderContext,
   font_style: &SizedFontStyle,
-) -> Option<(f32, f32)> {
+) -> Option<ParentFontMetrics> {
   let (layout, _) = context
     .global
     .font_context
@@ -725,7 +722,13 @@ pub(crate) fn get_parent_text_metrics(
     });
 
   let run = layout.lines().next()?.runs().next()?;
-  Some((run.metrics().ascent, run.metrics().descent))
+  let metrics = run.metrics();
+  Some((metrics.x_height, metrics.ascent, metrics.descent)).map(|(x_height, ascent, descent)| {
+    ParentFontMetrics {
+      x_height,
+      text_metrics: (ascent, descent),
+    }
+  })
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -996,8 +999,9 @@ pub(crate) fn draw_inline_layout(
     None
   };
   let clip_image_source = clip_image.as_ref().map(PaintSource::from);
-  let parent_x_height = get_parent_x_height(context, font_style);
-  let parent_text_metrics = get_parent_text_metrics(context, font_style);
+  let parent_font_metrics = get_parent_font_metrics(context, font_style);
+  let parent_x_height = parent_font_metrics.and_then(|metrics| metrics.x_height);
+  let parent_text_metrics = parent_font_metrics.map(|metrics| metrics.text_metrics);
 
   let mut positioned_inline_boxes = Vec::new();
   let mut inline_outline_rects = Vec::new();
@@ -1066,6 +1070,7 @@ pub(crate) fn draw_inline_layout(
   for (line_index, line) in inline_layout.lines().enumerate() {
     let resolved_metrics = line_vertical_metrics[line_index];
     let baseline_shift = resolved_metrics.baseline_shift;
+    let adjusted_line_metrics = resolved_line_metrics_for_apply(line.metrics(), resolved_metrics);
     let line_parent_x_height = effective_parent_x_height_for_line(&line, parent_x_height);
     let line_parent_text_metrics =
       effective_parent_text_metrics_for_line(&line, parent_text_metrics);
@@ -1102,8 +1107,6 @@ pub(crate) fn draw_inline_layout(
         }
         PositionedLayoutItem::InlineBox(mut inline_box) => {
           let item_index = inline_box.id as usize;
-          let adjusted_line_metrics =
-            resolved_line_metrics_for_apply(line.metrics(), resolved_metrics);
 
           if let Some(ProcessedInlineSpan::Box(item)) = spans.get(item_index) {
             item.vertical_align.apply(

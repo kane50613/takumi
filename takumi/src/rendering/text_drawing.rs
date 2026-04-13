@@ -21,6 +21,16 @@ use crate::{
   resources::font::{ResolvedColorLayer, ResolvedGlyph},
 };
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DecorationSegmentParams {
+  pub(crate) offset: f32,
+  pub(crate) size: f32,
+  pub(crate) start_x: f32,
+  pub(crate) end_x: f32,
+  pub(crate) layout: Layout,
+  pub(crate) transform: Affine,
+}
+
 pub(crate) fn draw_decoration(
   canvas: &mut Canvas,
   glyph_run: &GlyphRun<'_, InlineBrush>,
@@ -33,36 +43,40 @@ pub(crate) fn draw_decoration(
   let start_x = layout.border.left + layout.padding.left + glyph_run.offset();
   let end_x = start_x + glyph_run.advance();
   draw_decoration_segment(
-    canvas, color, offset, size, start_x, end_x, layout, transform,
+    canvas,
+    color,
+    DecorationSegmentParams {
+      offset,
+      size,
+      start_x,
+      end_x,
+      layout,
+      transform,
+    },
   );
 }
 
 pub(crate) fn draw_decoration_segment(
   canvas: &mut Canvas,
   color: Color,
-  offset: f32,
-  size: f32,
-  start_x: f32,
-  end_x: f32,
-  layout: Layout,
-  transform: Affine,
+  params: DecorationSegmentParams,
 ) {
-  if end_x <= start_x {
+  if params.end_x <= params.start_x {
     return;
   }
 
-  let snapped_start_x = start_x.floor();
-  let width = (end_x.ceil() - snapped_start_x) as u32;
+  let snapped_start_x = params.start_x.floor();
+  let width = (params.end_x.ceil() - snapped_start_x) as u32;
 
-  let tile = ColorTile::new(color.into(), width, size as u32);
+  let tile = ColorTile::new(color.into(), width, params.size as u32);
 
   canvas.overlay_image(
     &tile,
     BorderProperties::default(),
-    transform
+    params.transform
       * Affine::translation(
         snapped_start_x,
-        layout.border.top + layout.padding.top + offset,
+        params.layout.border.top + params.layout.padding.top + params.offset,
       ),
     ImageScalingAlgorithm::Auto,
     BlendMode::Normal,

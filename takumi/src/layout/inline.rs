@@ -483,8 +483,8 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
                 + border.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
             },
           };
-          let baseline_offset = raw_baseline_offset
-            .map(|baseline| (baseline + margin.top).clamp(0.0, inline_box.height));
+          let baseline_offset =
+            raw_baseline_offset.map(|baseline| baseline.clamp(0.0, inline_box.height));
 
           spans.push(ProcessedInlineSpan::Box(InlineBoxItem {
             render_node,
@@ -559,6 +559,20 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
   );
 
   (layout, text, spans)
+}
+
+pub(crate) fn resolve_inline_max_height(
+  font_style: &SizedFontStyle,
+  content_box_height: f32,
+) -> Option<MaxHeight> {
+  let resolved_line_clamp = font_style.parent.text_wrap_mode_and_line_clamp().1;
+  resolved_line_clamp
+    .as_ref()
+    .map(|clamp| MaxHeight::HeightAndLines(content_box_height, clamp.count))
+    .or_else(|| {
+      (font_style.parent.text_overflow == TextOverflow::Ellipsis)
+        .then_some(MaxHeight::Absolute(content_box_height))
+    })
 }
 
 pub(crate) fn create_inline_constraint(

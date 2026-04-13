@@ -23,8 +23,7 @@ use crate::{
     get_node_mut_by_path,
     inline_drawing::{
       effective_parent_text_metrics_for_line, effective_parent_x_height_for_line,
-      get_parent_text_metrics, get_parent_x_height, resolve_inline_line_metrics,
-      resolved_line_metrics_for_apply,
+      get_parent_font_metrics, resolve_inline_line_metrics, resolved_line_metrics_for_apply,
     },
     stacking_context::{
       apply_transform, build_stacking_contexts, collect_layout_children, paint_context,
@@ -235,8 +234,9 @@ fn collect_measure_result<'g>(
 
         if current.should_create_inline_layout() {
           let font_style = current.context.style.to_sized_font_style(&current.context);
-          let parent_x_height = get_parent_x_height(&current.context, &font_style);
-          let parent_text_metrics = get_parent_text_metrics(&current.context, &font_style);
+          let parent_font_metrics = get_parent_font_metrics(&current.context, &font_style);
+          let parent_x_height = parent_font_metrics.and_then(|metrics| metrics.x_height);
+          let parent_text_metrics = parent_font_metrics.map(|metrics| metrics.text_metrics);
           let (max_width, max_height) = create_inline_constraint(
             &current.context,
             Size {
@@ -268,6 +268,8 @@ fn collect_measure_result<'g>(
 
           for (line_index, line) in inline_layout.lines().enumerate() {
             let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
+            let adjusted_line_metrics =
+              resolved_line_metrics_for_apply(line.metrics(), line_vertical_metrics[line_index]);
             let line_parent_x_height = effective_parent_x_height_for_line(&line, parent_x_height);
             let line_parent_text_metrics =
               effective_parent_text_metrics_for_line(&line, parent_text_metrics);
@@ -291,10 +293,6 @@ fn collect_measure_result<'g>(
                 }
                 PositionedLayoutItem::InlineBox(mut positioned_box) => {
                   let item_index = positioned_box.id as usize;
-                  let adjusted_line_metrics = resolved_line_metrics_for_apply(
-                    line.metrics(),
-                    line_vertical_metrics[line_index],
-                  );
                   if let Some(ProcessedInlineSpan::Box(item)) = spans.get(item_index) {
                     item.vertical_align.apply(
                       &mut positioned_box.y,

@@ -16,17 +16,18 @@ use crate::{
     inline::{
       InlineContentKind, InlineLayoutStage, ProcessedInlineSpan, collect_inline_items,
       create_inline_constraint, create_inline_layout, measure_inline_layout,
+      resolve_inline_max_height,
     },
     node::{Node, NodeStyleLayers},
     style::{
       Affine, BlendMode, Color, ComputedStyle, Display, Filters, Isolation, Overflow,
-      PercentageNumber, Style as NodeStyle, StyleDeclaration, StyleSheet, TextOverflow,
-      TextWrapMode, apply_stylesheet_animations,
+      PercentageNumber, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
+      apply_stylesheet_animations,
       matching::{MatchedDeclarationsView, match_stylesheets_view},
     },
   },
   rendering::{
-    Canvas, MaxHeight, RenderContext, Sizing,
+    Canvas, RenderContext, Sizing,
     inline_drawing::{draw_inline_box, draw_inline_layout},
   },
 };
@@ -819,14 +820,7 @@ impl<'g> RenderNode<'g> {
 
     let font_style = self.context.style.to_sized_font_style(&self.context);
 
-    let resolved_line_clamp = font_style.parent.text_wrap_mode_and_line_clamp().1;
-    let max_height = resolved_line_clamp
-      .as_ref()
-      .map(|clamp| MaxHeight::HeightAndLines(layout.content_box_height(), clamp.count))
-      .or_else(|| {
-        (font_style.parent.text_overflow == TextOverflow::Ellipsis)
-          .then_some(MaxHeight::Absolute(layout.content_box_height()))
-      });
+    let max_height = resolve_inline_max_height(&font_style, layout.content_box_height());
 
     let (inline_layout, _, spans) = create_inline_layout(
       collect_inline_items(self).into_iter(),
