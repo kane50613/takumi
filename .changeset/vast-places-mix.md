@@ -1,5 +1,5 @@
 ---
-"@takumi-rs/helpers": major
+"@takumi-rs/helpers": patch
 ---
 
 Update Twemoji to v17
