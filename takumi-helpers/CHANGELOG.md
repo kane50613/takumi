@@ -1,5 +1,12 @@
 # @takumi-rs/helpers
 
+## 1.0.8
+
+### Patch Changes
+
+- 8886c01: Replace noto emoji source with `googlefonts/noto-emoji` with Unicode 17 support
+- b287c43: Update Twemoji to v17
+
 ## 1.0.7
 
 ## 1.0.6
