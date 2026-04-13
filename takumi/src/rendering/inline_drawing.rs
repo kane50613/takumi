@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use parley::{GlyphRun, PositionedInlineBox, PositionedLayoutItem};
+use parley::{GlyphRun, Line, LineMetrics, PositionedInlineBox, PositionedLayoutItem};
 use skrifa::{FontRef, MetadataProvider};
 use taffy::{Layout, Point};
 
@@ -9,16 +9,16 @@ use crate::{
   layout::{
     inline::{InlineBoxItem, InlineBrush, InlineLayout, ProcessedInlineSpan},
     style::{
-      Affine, BackgroundClip, BlendMode, BorderStyle, Color, ImageScalingAlgorithm, SizedFontStyle,
+      Affine, BackgroundClip, BlendMode, BorderStyle, Color, SizedFontStyle,
       SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk,
     },
     tree::LayoutTree,
   },
   rendering::{
-    BorderProperties, Canvas, ColorTile, Command, PaintSource, PathBuilder, RenderContext, Stroke,
-    collect_background_layers, draw_decoration, draw_glyph, draw_glyph_clip_image,
-    draw_glyph_text_shadow, mask_index_from_coord, rasterize_layers,
-    release_rasterized_background_tile, render::render_node, render_mask,
+    BorderProperties, Canvas, Command, DecorationSegmentParams, PaintSource, PathBuilder,
+    RenderContext, Stroke, collect_background_layers, draw_decoration, draw_decoration_segment,
+    draw_glyph, draw_glyph_clip_image, draw_glyph_text_shadow, mask_index_from_coord,
+    rasterize_layers, release_rasterized_background_tile, render::render_node, render_mask,
   },
   resources::font::{FontError, ResolvedGlyph},
 };
@@ -60,6 +60,7 @@ struct UnderlineDrawOptions {
   size: f32,
   layout: Layout,
   transform: Affine,
+  baseline_shift: f32,
 }
 
 fn build_glyph_bounds_cache(
@@ -112,40 +113,10 @@ fn build_glyph_bounds_cache(
   bounds
 }
 
-fn draw_decoration_segment(
-  canvas: &mut Canvas,
-  color: Color,
-  start_x: f32,
-  end_x: f32,
-  y: f32,
-  height: f32,
-  transform: Affine,
-) {
-  if end_x <= start_x {
-    return;
-  }
-
-  let x = start_x.floor();
-  let width = (end_x.ceil() - x) as u32;
-
-  let tile = ColorTile::new(color.into(), width, height as u32);
-
-  if tile.width == 0 || tile.height == 0 {
-    return;
-  }
-
-  canvas.overlay_image(
-    &tile,
-    BorderProperties::default(),
-    transform * Affine::translation(x, y),
-    ImageScalingAlgorithm::Auto,
-    BlendMode::Normal,
-  );
-}
-
 fn compute_skip_padding(size: f32) -> f32 {
   (size * SKIP_PADDING_RATIO).clamp(SKIP_PADDING_MIN, SKIP_PADDING_MAX)
 }
+
 fn draw_underline_with_skip_ink(
   canvas: &mut Canvas,
   glyph_run: &GlyphRun<'_, InlineBrush>,
@@ -157,7 +128,6 @@ fn draw_underline_with_skip_ink(
   let line_top = options.layout.border.top + options.layout.padding.top + options.offset;
   let line_bottom = line_top + options.size;
   let skip_padding = compute_skip_padding(options.size);
-
   let mut skip_ranges = Vec::new();
 
   for glyph in glyph_run.positioned_glyphs() {
@@ -165,26 +135,22 @@ fn draw_underline_with_skip_ink(
       continue;
     };
     let local_bounds = glyph_data.bounds;
-
     let inline_x = options.layout.border.left + options.layout.padding.left + glyph.x;
-    let inline_y = options.layout.border.top + options.layout.padding.top + glyph.y;
-
+    let inline_y =
+      options.layout.border.top + options.layout.padding.top + glyph.y + options.baseline_shift;
     let glyph_top = inline_y + local_bounds.top;
     let glyph_bottom = inline_y + local_bounds.bottom;
 
-    let intersects_underline = glyph_bottom > line_top && glyph_top < line_bottom;
-    if !intersects_underline {
+    if glyph_bottom <= line_top || glyph_top >= line_bottom {
       continue;
     }
 
     let local_line_top = line_top - inline_y;
     let local_line_bottom = line_bottom - inline_y;
-
     let mask_y_start = (local_line_top - local_bounds.top).floor() as i32;
     let mask_y_end = (local_line_bottom - local_bounds.top).ceil() as i32;
     let y_start = mask_y_start.clamp(0, glyph_data.height as i32);
     let y_end = mask_y_end.clamp(0, glyph_data.height as i32);
-
     if y_start >= y_end {
       continue;
     }
@@ -200,7 +166,6 @@ fn draw_underline_with_skip_ink(
           break;
         }
       }
-
       let Some(row_min_x) = row_min_x else {
         continue;
       };
@@ -213,7 +178,6 @@ fn draw_underline_with_skip_ink(
           break;
         }
       }
-
       hit_min_x = Some(hit_min_x.map_or(row_min_x, |min_x| min_x.min(row_min_x)));
       hit_max_x = Some(hit_max_x.map_or(row_max_x, |max_x| max_x.max(row_max_x)));
     }
@@ -227,34 +191,34 @@ fn draw_underline_with_skip_ink(
       (inline_x + local_bounds.left + hit_min_x as f32 - skip_padding).max(run_start_x);
     let skip_end =
       (inline_x + local_bounds.left + hit_max_x as f32 + 1.0 + skip_padding).min(run_end_x);
-
     if skip_end > skip_start {
       skip_ranges.push((skip_start, skip_end));
     }
   }
 
   if skip_ranges.is_empty() {
-    draw_decoration(
+    draw_decoration_segment(
       canvas,
-      glyph_run,
       options.color,
-      options.offset,
-      options.size,
-      options.layout,
-      options.transform,
+      DecorationSegmentParams {
+        offset: options.offset,
+        size: options.size,
+        start_x: run_start_x,
+        end_x: run_end_x,
+        layout: options.layout,
+        transform: options.transform,
+      },
     );
     return;
   }
 
   skip_ranges.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
-
   let mut merged_ranges = Vec::with_capacity(skip_ranges.len());
   for (start, end) in skip_ranges {
     let Some(last) = merged_ranges.last_mut() else {
       merged_ranges.push((start, end));
       continue;
     };
-
     if start <= last.1 {
       last.1 = last.1.max(end);
     } else {
@@ -268,11 +232,14 @@ fn draw_underline_with_skip_ink(
       draw_decoration_segment(
         canvas,
         options.color,
-        current_x,
-        skip_start,
-        line_top,
-        options.size,
-        options.transform,
+        DecorationSegmentParams {
+          offset: options.offset,
+          size: options.size,
+          start_x: current_x,
+          end_x: skip_start,
+          layout: options.layout,
+          transform: options.transform,
+        },
       );
     }
     current_x = current_x.max(skip_end);
@@ -282,11 +249,14 @@ fn draw_underline_with_skip_ink(
     draw_decoration_segment(
       canvas,
       options.color,
-      current_x,
-      run_end_x,
-      line_top,
-      options.size,
-      options.transform,
+      DecorationSegmentParams {
+        offset: options.offset,
+        size: options.size,
+        start_x: current_x,
+        end_x: run_end_x,
+        layout: options.layout,
+        transform: options.transform,
+      },
     );
   }
 }
@@ -297,6 +267,7 @@ fn draw_glyph_run_under_overline(
   canvas: &mut Canvas,
   layout: Layout,
   context: &RenderContext,
+  baseline_shift: f32,
 ) -> Result<()> {
   let brush = &glyph_run.style().brush;
 
@@ -307,7 +278,7 @@ fn draw_glyph_run_under_overline(
     .decoration_line
     .contains(TextDecorationLines::UNDERLINE)
   {
-    let offset = glyph_run.baseline() - metrics.underline_offset;
+    let offset = glyph_run.baseline() + baseline_shift - metrics.underline_offset;
     let size = match brush.decoration_thickness {
       SizedTextDecorationThickness::Value(v) => v,
       SizedTextDecorationThickness::FromFont => metrics.underline_size,
@@ -317,7 +288,6 @@ fn draw_glyph_run_under_overline(
       && brush.decoration_skip_ink != TextDecorationSkipInk::None
     {
       let glyph_bounds_cache = build_glyph_bounds_cache(canvas, resolved_glyphs);
-
       draw_underline_with_skip_ink(
         canvas,
         glyph_run,
@@ -328,6 +298,7 @@ fn draw_glyph_run_under_overline(
           size,
           layout,
           transform: context.transform,
+          baseline_shift,
         },
       );
     } else {
@@ -351,7 +322,7 @@ fn draw_glyph_run_under_overline(
       canvas,
       glyph_run,
       glyph_run.style().brush.decoration_color,
-      glyph_run.baseline() - metrics.ascent - metrics.underline_offset,
+      glyph_run.baseline() + baseline_shift - metrics.ascent - metrics.underline_offset,
       match brush.decoration_thickness {
         SizedTextDecorationThickness::Value(v) => v,
         SizedTextDecorationThickness::FromFont => metrics.underline_size,
@@ -369,6 +340,7 @@ fn draw_glyph_run_line_through(
   canvas: &mut Canvas,
   layout: Layout,
   context: &RenderContext,
+  baseline_shift: f32,
 ) -> Result<()> {
   let brush = &glyph_run.style().brush;
   let decoration_line = brush.decoration_line;
@@ -382,7 +354,7 @@ fn draw_glyph_run_line_through(
     SizedTextDecorationThickness::Value(v) => v,
     SizedTextDecorationThickness::FromFont => metrics.strikethrough_size,
   };
-  let offset = glyph_run.baseline() - metrics.strikethrough_offset;
+  let offset = glyph_run.baseline() + baseline_shift - metrics.strikethrough_offset;
 
   draw_decoration(
     canvas,
@@ -613,7 +585,7 @@ fn draw_glyph_run_content(
   glyph_run: &GlyphRun<'_, InlineBrush>,
   resolved_glyphs: &HashMap<u32, ResolvedGlyph>,
   canvas: &mut Canvas,
-  layout: Layout,
+  glyph_offset: Point<f32>,
   context: &RenderContext,
   clip_image: Option<PaintSource<'_>>,
 ) -> Result<()> {
@@ -631,8 +603,8 @@ fn draw_glyph_run_content(
       };
 
       let inline_offset = Point {
-        x: layout.border.left + layout.padding.left + glyph.x,
-        y: layout.border.top + layout.padding.top + glyph.y,
+        x: glyph_offset.x + glyph.x,
+        y: glyph_offset.y + glyph.y,
       };
 
       draw_glyph_clip_image(
@@ -652,8 +624,8 @@ fn draw_glyph_run_content(
     };
 
     let inline_offset = Point {
-      x: layout.border.left + layout.padding.left + glyph.x,
-      y: layout.border.top + layout.padding.top + glyph.y,
+      x: glyph_offset.x + glyph.x,
+      y: glyph_offset.y + glyph.y,
     };
 
     draw_glyph(
@@ -677,6 +649,7 @@ fn draw_glyph_run_text_shadow(
   canvas: &mut Canvas,
   layout: Layout,
   context: &RenderContext,
+  baseline_shift: f32,
 ) -> Result<()> {
   for glyph in glyph_run.positioned_glyphs() {
     let Some(content) = resolved_glyphs.get(&glyph.id) else {
@@ -685,7 +658,7 @@ fn draw_glyph_run_text_shadow(
 
     let inline_offset = Point {
       x: layout.border.left + layout.padding.left + glyph.x,
-      y: layout.border.top + layout.padding.top + glyph.y,
+      y: layout.border.top + layout.padding.top + glyph.y + baseline_shift,
     };
 
     draw_glyph_text_shadow(content, canvas, style, context.transform, inline_offset)?;
@@ -706,18 +679,6 @@ fn collect_glyph_runs(inline_layout: &InlineLayout) -> Vec<GlyphRun<'_, InlineBr
   }
 
   glyph_runs
-}
-
-fn glyph_runs_with_resolved<'a>(
-  glyph_runs: &'a [GlyphRun<'a, InlineBrush>],
-  resolved_glyph_runs: &'a [HashMap<u32, ResolvedGlyph>],
-) -> impl Iterator<
-  Item = (
-    &'a GlyphRun<'a, InlineBrush>,
-    &'a HashMap<u32, ResolvedGlyph>,
-  ),
-> + 'a {
-  glyph_runs.iter().zip(resolved_glyph_runs.iter())
 }
 
 fn resolve_inline_layout_glyphs(
@@ -743,10 +704,16 @@ fn resolve_inline_layout_glyphs(
   Ok(resolved_glyph_runs)
 }
 
-pub(crate) fn get_parent_x_height(
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ParentFontMetrics {
+  pub(crate) x_height: Option<f32>,
+  pub(crate) text_metrics: (f32, f32),
+}
+
+pub(crate) fn get_parent_font_metrics(
   context: &RenderContext,
   font_style: &SizedFontStyle,
-) -> Option<f32> {
+) -> Option<ParentFontMetrics> {
   let (layout, _) = context
     .global
     .font_context
@@ -755,7 +722,193 @@ pub(crate) fn get_parent_x_height(
     });
 
   let run = layout.lines().next()?.runs().next()?;
-  run.metrics().x_height
+  let metrics = run.metrics();
+  Some((metrics.x_height, metrics.ascent, metrics.descent)).map(|(x_height, ascent, descent)| {
+    ParentFontMetrics {
+      x_height,
+      text_metrics: (ascent, descent),
+    }
+  })
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ResolvedLineMetrics {
+  pub(crate) resolved_ascent: f32,
+  pub(crate) resolved_descent: f32,
+  pub(crate) resolved_line_height: f32,
+  pub(crate) resolved_baseline: f32,
+  pub(crate) resolved_line_top: f32,
+  pub(crate) resolved_line_bottom: f32,
+  pub(crate) baseline_shift: f32,
+}
+
+fn quantized_baseline(line_height: f32, ascent: f32, descent: f32) -> f32 {
+  let leading = line_height - (ascent.round() + descent.round());
+  ascent.round() + (leading * 0.5).round()
+}
+
+fn parent_baseline_offset_for_box(
+  line: &Line<'_, InlineBrush>,
+  item: &InlineBoxItem<'_, '_>,
+  inline_box: &PositionedInlineBox,
+  effective_parent_x_height: Option<f32>,
+  effective_parent_text_metrics: Option<(f32, f32)>,
+) -> f32 {
+  let baseline_in_item = item
+    .baseline_offset
+    .unwrap_or(inline_box.height)
+    .clamp(0.0, inline_box.height);
+  let mut top = 0.0;
+  item.vertical_align.apply(
+    &mut top,
+    line.metrics(),
+    inline_box.height,
+    Some(baseline_in_item),
+    effective_parent_x_height,
+    effective_parent_text_metrics,
+  );
+  top - (line.metrics().baseline - baseline_in_item)
+}
+
+pub(crate) fn effective_parent_x_height_for_line(
+  line: &Line<'_, InlineBrush>,
+  parent_x_height: Option<f32>,
+) -> Option<f32> {
+  if parent_x_height.is_some() {
+    return parent_x_height;
+  }
+
+  let mut text_ascent_max = 0.0_f32;
+  for item in line.items() {
+    if let PositionedLayoutItem::GlyphRun(glyph_run) = item {
+      text_ascent_max = text_ascent_max.max(glyph_run.run().metrics().ascent);
+    }
+  }
+
+  (text_ascent_max > 0.0).then_some(text_ascent_max * 0.5)
+}
+
+pub(crate) fn effective_parent_text_metrics_for_line(
+  line: &Line<'_, InlineBrush>,
+  parent_text_metrics: Option<(f32, f32)>,
+) -> Option<(f32, f32)> {
+  if parent_text_metrics.is_some() {
+    return parent_text_metrics;
+  }
+
+  let mut has_glyph = false;
+  for item in line.items() {
+    if matches!(item, PositionedLayoutItem::GlyphRun(_)) {
+      has_glyph = true;
+      break;
+    }
+  }
+
+  has_glyph.then_some((line.metrics().ascent, line.metrics().descent))
+}
+
+pub(crate) fn resolve_inline_line_metrics(
+  inline_layout: &InlineLayout,
+  spans: &[ProcessedInlineSpan<'_, '_>],
+  parent_x_height: Option<f32>,
+  parent_text_metrics: Option<(f32, f32)>,
+) -> Vec<ResolvedLineMetrics> {
+  let mut result = Vec::with_capacity(inline_layout.lines().count());
+  let mut cumulative_flow_shift = 0.0_f32;
+  let mut next_line_top: Option<f32> = None;
+
+  for line in inline_layout.lines() {
+    let effective_parent_x_height = effective_parent_x_height_for_line(&line, parent_x_height);
+    let effective_parent_text_metrics =
+      effective_parent_text_metrics_for_line(&line, parent_text_metrics);
+
+    let mut resolved_ascent = 0.0_f32;
+    let mut resolved_descent = 0.0_f32;
+    let mut has_item = false;
+
+    for item in line.items() {
+      match item {
+        PositionedLayoutItem::GlyphRun(glyph_run) => {
+          let metrics = glyph_run.run().metrics();
+          resolved_ascent = resolved_ascent.max(metrics.ascent);
+          resolved_descent = resolved_descent.max(metrics.descent);
+          has_item = true;
+        }
+        PositionedLayoutItem::InlineBox(inline_box) => {
+          let Some(ProcessedInlineSpan::Box(item)) = spans.get(inline_box.id as usize) else {
+            continue;
+          };
+          let baseline_in_item = item
+            .baseline_offset
+            .unwrap_or(inline_box.height)
+            .clamp(0.0, inline_box.height);
+          let parent_baseline_offset = parent_baseline_offset_for_box(
+            &line,
+            item,
+            &inline_box,
+            effective_parent_x_height,
+            effective_parent_text_metrics,
+          );
+          let ascent_contrib = (baseline_in_item - parent_baseline_offset).max(0.0);
+          let descent_contrib =
+            (inline_box.height - baseline_in_item + parent_baseline_offset).max(0.0);
+          resolved_ascent = resolved_ascent.max(ascent_contrib);
+          resolved_descent = resolved_descent.max(descent_contrib);
+          has_item = true;
+        }
+      }
+    }
+
+    if !has_item {
+      resolved_ascent = line.metrics().ascent;
+      resolved_descent = line.metrics().descent;
+    }
+
+    let original_line_height = (line.metrics().max_coord - line.metrics().min_coord).max(0.0);
+    let resolved_line_height = original_line_height
+      .max(line.metrics().line_height)
+      .max(resolved_ascent + resolved_descent);
+    let resolved_baseline_in_line =
+      quantized_baseline(resolved_line_height, resolved_ascent, resolved_descent);
+    let resolved_line_top =
+      next_line_top.unwrap_or(line.metrics().min_coord + cumulative_flow_shift);
+    let resolved_line_bottom = resolved_line_top + resolved_line_height;
+    let resolved_baseline = resolved_line_top + resolved_baseline_in_line;
+    let baseline_shift = if (resolved_baseline - line.metrics().baseline).is_finite() {
+      resolved_baseline - line.metrics().baseline
+    } else {
+      0.0
+    };
+
+    result.push(ResolvedLineMetrics {
+      resolved_ascent,
+      resolved_descent,
+      resolved_line_height,
+      resolved_baseline,
+      resolved_line_top,
+      resolved_line_bottom,
+      baseline_shift,
+    });
+
+    cumulative_flow_shift += resolved_line_height - original_line_height;
+    next_line_top = Some(resolved_line_bottom);
+  }
+
+  result
+}
+
+pub(crate) fn resolved_line_metrics_for_apply(
+  line_metrics: &LineMetrics,
+  resolved: ResolvedLineMetrics,
+) -> LineMetrics {
+  let mut adjusted = *line_metrics;
+  adjusted.ascent = resolved.resolved_ascent;
+  adjusted.descent = resolved.resolved_descent;
+  adjusted.baseline = resolved.resolved_baseline;
+  adjusted.min_coord = resolved.resolved_line_top;
+  adjusted.max_coord = resolved.resolved_line_bottom;
+  adjusted.line_height = resolved.resolved_line_height;
+  adjusted
 }
 
 pub(crate) fn draw_inline_box(
@@ -846,35 +999,87 @@ pub(crate) fn draw_inline_layout(
     None
   };
   let clip_image_source = clip_image.as_ref().map(PaintSource::from);
+  let parent_font_metrics = get_parent_font_metrics(context, font_style);
+  let parent_x_height = parent_font_metrics.and_then(|metrics| metrics.x_height);
+  let parent_text_metrics = parent_font_metrics.map(|metrics| metrics.text_metrics);
 
   let mut positioned_inline_boxes = Vec::new();
   let mut inline_outline_rects = Vec::new();
 
+  let line_vertical_metrics =
+    resolve_inline_line_metrics(&inline_layout, spans, parent_x_height, parent_text_metrics);
+
+  // Pre-slice resolved glyph runs per line so each CSS painting phase can index
+  // directly instead of maintaining fragile in-sync iterator state across separate loops.
+  let per_line_resolved: Vec<&[HashMap<u32, ResolvedGlyph>]> = {
+    let mut slices = Vec::with_capacity(line_vertical_metrics.len());
+    let mut offset = 0;
+    for line in inline_layout.lines() {
+      let run_count = line
+        .items()
+        .filter(|i| matches!(i, PositionedLayoutItem::GlyphRun(_)))
+        .count();
+      slices.push(&resolved_glyph_runs[offset..offset + run_count]);
+      offset += run_count;
+    }
+    slices
+  };
+
   // Reference: https://www.w3.org/TR/css-text-decor-3/#painting-order
-  for (glyph_run, resolved_glyphs) in glyph_runs_with_resolved(&glyph_runs, &resolved_glyph_runs) {
-    draw_glyph_run_text_shadow(
-      font_style,
-      glyph_run,
-      resolved_glyphs,
-      canvas,
-      layout,
-      context,
-    )?;
-  }
-
-  for (glyph_run, resolved_glyphs) in glyph_runs_with_resolved(&glyph_runs, &resolved_glyph_runs) {
-    draw_glyph_run_under_overline(glyph_run, resolved_glyphs, canvas, layout, context)?;
-  }
-
-  let parent_x_height = get_parent_x_height(context, font_style);
-  let mut glyph_runs_with_resolved = glyph_runs_with_resolved(&glyph_runs, &resolved_glyph_runs);
   for (line_index, line) in inline_layout.lines().enumerate() {
-    let line_metrics = line.metrics();
+    let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
+    let mut resolved_iter = per_line_resolved[line_index].iter();
+    for item in line.items() {
+      if let PositionedLayoutItem::GlyphRun(glyph_run) = item {
+        let Some(resolved_glyphs) = resolved_iter.next() else {
+          continue;
+        };
+        draw_glyph_run_text_shadow(
+          font_style,
+          &glyph_run,
+          resolved_glyphs,
+          canvas,
+          layout,
+          context,
+          baseline_shift,
+        )?;
+      }
+    }
+  }
+
+  for (line_index, line) in inline_layout.lines().enumerate() {
+    let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
+    let mut resolved_iter = per_line_resolved[line_index].iter();
+    for item in line.items() {
+      if let PositionedLayoutItem::GlyphRun(glyph_run) = item {
+        let Some(resolved_glyphs) = resolved_iter.next() else {
+          continue;
+        };
+        draw_glyph_run_under_overline(
+          &glyph_run,
+          resolved_glyphs,
+          canvas,
+          layout,
+          context,
+          baseline_shift,
+        )?;
+      }
+    }
+  }
+
+  for (line_index, line) in inline_layout.lines().enumerate() {
+    let resolved_metrics = line_vertical_metrics[line_index];
+    let baseline_shift = resolved_metrics.baseline_shift;
+    let adjusted_line_metrics = resolved_line_metrics_for_apply(line.metrics(), resolved_metrics);
+    let line_parent_x_height = effective_parent_x_height_for_line(&line, parent_x_height);
+    let line_parent_text_metrics =
+      effective_parent_text_metrics_for_line(&line, parent_text_metrics);
+    let mut resolved_iter = per_line_resolved[line_index].iter();
 
     for item in line.items() {
       match item {
         PositionedLayoutItem::GlyphRun(glyph_run) => {
-          let Some((_, resolved_glyphs)) = glyph_runs_with_resolved.next() else {
+          let Some(resolved_glyphs) = resolved_iter.next() else {
             continue;
           };
           draw_glyph_run_content(
@@ -882,7 +1087,10 @@ pub(crate) fn draw_inline_layout(
             &glyph_run,
             resolved_glyphs,
             canvas,
-            layout,
+            Point {
+              x: layout.border.left + layout.padding.left,
+              y: layout.border.top + layout.padding.top + baseline_shift,
+            },
             context,
             clip_image_source,
           )?;
@@ -890,8 +1098,9 @@ pub(crate) fn draw_inline_layout(
             &glyph_run,
             layout,
             line_index,
-            layout.border.top + layout.padding.top + glyph_run.baseline() - line_metrics.ascent,
-            line_metrics.line_height,
+            layout.border.top + layout.padding.top + glyph_run.baseline() + baseline_shift
+              - resolved_metrics.resolved_ascent,
+            resolved_metrics.resolved_ascent + resolved_metrics.resolved_descent,
           ) {
             inline_outline_rects.push(outline_rect);
           }
@@ -902,9 +1111,11 @@ pub(crate) fn draw_inline_layout(
           if let Some(ProcessedInlineSpan::Box(item)) = spans.get(item_index) {
             item.vertical_align.apply(
               &mut inline_box.y,
-              line.metrics(),
+              &adjusted_line_metrics,
               inline_box.height,
-              parent_x_height,
+              item.baseline_offset,
+              line_parent_x_height,
+              line_parent_text_metrics,
             );
           }
           positioned_inline_boxes.push(inline_box)
@@ -915,8 +1126,13 @@ pub(crate) fn draw_inline_layout(
 
   draw_merged_outline_rects(inline_outline_rects, canvas, spans, context.transform);
 
-  for glyph_run in &glyph_runs {
-    draw_glyph_run_line_through(glyph_run, canvas, layout, context)?;
+  for (line_index, line) in inline_layout.lines().enumerate() {
+    let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
+    for item in line.items() {
+      if let PositionedLayoutItem::GlyphRun(glyph_run) = item {
+        draw_glyph_run_line_through(&glyph_run, canvas, layout, context, baseline_shift)?;
+      }
+    }
   }
 
   if let Some(tile) = clip_image {

@@ -268,15 +268,18 @@ fn inline_outline_span_boundaries() {
 
 #[test]
 fn inline_atomic_containers() {
-  let atomic = |display, color, label: &str| -> Node {
+  let atomic = |display, bg_color, border_color, label: &str| -> Node {
     Node::container([Node::text(label.to_string())]).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::display(display))
         .with_padding(Sides([Px(8.0); 4]))
-        .with(StyleDeclaration::background_color(ColorInput::Value(color)))
-        .with_border_width(Sides([Px(2.0); 4]))
-        .with_border_style(Sides([BorderStyle::Solid; 4])),
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          bg_color,
+        )))
+        .with_border_width(Sides([Px(5.0); 4]))
+        .with_border_style(Sides([BorderStyle::Solid; 4]))
+        .with_border_color(Sides([ColorInput::Value(border_color); 4])),
     )
   };
 
@@ -289,6 +292,7 @@ fn inline_atomic_containers() {
     atomic(
       Display::InlineBlock,
       Color([255, 0, 0, 100]),
+      Color([180, 20, 20, 255]),
       "inline-block",
     ),
     Node::text(" mid ".to_string()).with_style(
@@ -296,21 +300,32 @@ fn inline_atomic_containers() {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::display(Display::Inline)),
     ),
-    atomic(Display::InlineFlex, Color([0, 255, 0, 100]), "inline-flex"),
+    atomic(
+      Display::InlineFlex,
+      Color([0, 255, 0, 100]),
+      Color([20, 140, 20, 255]),
+      "inline-flex",
+    ),
     Node::text(" end ".to_string()).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::display(Display::Inline)),
     ),
-    atomic(Display::InlineGrid, Color([0, 0, 255, 100]), "inline-grid"),
+    atomic(
+      Display::InlineGrid,
+      Color([0, 0, 255, 100]),
+      Color([20, 20, 180, 255]),
+      "inline-grid",
+    ),
   ])
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::display(Display::Block))
       .with(StyleDeclaration::font_size(Px(24.0).into()))
-      .with_border_width(Sides([Px(2.0); 4]))
-      .with_border_style(Sides([BorderStyle::Solid; 4])),
+      .with_border_width(Sides([Px(6.0); 4]))
+      .with_border_style(Sides([BorderStyle::Solid; 4]))
+      .with_border_color(Sides([ColorInput::Value(Color([40, 40, 40, 255])); 4])),
   )])
   .with_style(
     Style::default()
@@ -391,33 +406,36 @@ fn inline_nested_flex_block() {
 #[test]
 fn inline_complex_nested_fixture() {
   let metadata_children: Vec<Node> = vec![
-    Node::text("Metadata: ".to_string()).with_style(
+    Node::text("METADATA gyjpq: ".to_string()).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Inline))
         .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
         .with(StyleDeclaration::color(ColorInput::Value(Color([
-          16, 42, 67, 255,
+          10, 34, 57, 255,
         ]))))
         .with(StyleDeclaration::text_transform(TextTransform::Uppercase))
-        .with(StyleDeclaration::font_size(Px(12.0).into())),
+        .with(StyleDeclaration::font_size(Px(20.0).into()))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color([208, 230, 248, 255]),
+        ))),
     ),
     Node::container([Node::text("Tag".to_string()).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Inline))
         .with(StyleDeclaration::color(ColorInput::Value(Color::white())))
-        .with(StyleDeclaration::font_size(Px(10.0).into()))
+        .with(StyleDeclaration::font_size(Px(16.0).into()))
         .with(StyleDeclaration::font_weight(FontWeight::from(600.0))),
     )])
     .with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::InlineFlex))
         .with(StyleDeclaration::align_items(AlignItems::Center))
-        .with_gap(SpacePair::from_single(Px(4.0)))
+        .with_gap(SpacePair::from_single(Px(6.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
-          Color([188, 204, 220, 255]),
+          Color([80, 138, 184, 255]),
         )))
         .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(999.0)); 4])))
-        .with_padding(Sides([Px(2.0), Px(8.0), Px(2.0), Px(8.0)]))
+        .with_padding(Sides([Px(4.0), Px(12.0), Px(4.0), Px(12.0)]))
         .with(StyleDeclaration::vertical_align(VerticalAlign::Keyword(
           VerticalAlignKeyword::Baseline,
         ))),
@@ -425,7 +443,7 @@ fn inline_complex_nested_fixture() {
   ];
 
   let children: Vec<Node> = vec![
-    Node::text("Start with some basic inline text. ".to_string())
+    Node::text("Inline baseline probe (Aa Bb Cc g j p q y 012345): ".to_string())
       .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
     Node::container(metadata_children)
       .with_style(
@@ -435,29 +453,29 @@ fn inline_complex_nested_fixture() {
             VerticalAlignKeyword::Middle,
           )))
           .with(StyleDeclaration::background_color(ColorInput::Value(Color([
-            240, 244, 248, 255,
+            231, 241, 250, 255,
           ]))))
-          .with_border_width(Sides([Px(1.0); 4]))
+          .with_border_width(Sides([Px(2.0); 4]))
           .with_border_style(Sides([BorderStyle::Solid; 4]))
           .with_border_color(Sides([ColorInput::Value(Color([
-            217, 226, 236, 255,
+            156, 189, 217, 255,
           ])); 4]))
           .with_border_radius(BorderRadius(Sides(
-            [SpacePair::from_single(Px(4.0)); 4],
+            [SpacePair::from_single(Px(6.0)); 4],
           )))
-          .with_padding(Sides([Px(8.0), Px(12.0), Px(8.0), Px(12.0)]))
-          .with_margin(Sides([Px(0.0), Px(8.0), Px(0.0), Px(8.0)])),
+          .with_padding(Sides([Px(12.0), Px(16.0), Px(12.0), Px(16.0)]))
+          .with_margin(Sides([Px(0.0), Px(12.0), Px(0.0), Px(12.0)])),
       ),
     Node::text(
-        "Followed by a longer sentence that demonstrates how text wraps around inline-block elements. ".to_string(),
+        "After the badge, this sentence verifies wrapping around inline boxes with mixed glyph heights and descenders (g j p q y). ".to_string(),
       )
       .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
       ,
-    Node::container([Node::text("A fixed-width block that sits on the bottom of the line box.".to_string())
+    Node::container([Node::text("BOTTOM inline-block sample: gyjpq, 12345, and punctuation !? to expose baseline drift.".to_string())
         .with_style(
           Style::default()
             .with(StyleDeclaration::display(Display::Block))
-            .with(StyleDeclaration::font_size(Px(12.0).into()))
+            .with(StyleDeclaration::font_size(Px(16.0).into()))
             .with(StyleDeclaration::line_height(LineHeight::Length(Em(1.2)))),
         )])
       .with_style(
@@ -466,20 +484,20 @@ fn inline_complex_nested_fixture() {
           .with(StyleDeclaration::vertical_align(VerticalAlign::Keyword(
             VerticalAlignKeyword::Bottom,
           )))
-          .with(StyleDeclaration::width(Px(120.0)))
+          .with(StyleDeclaration::width(Px(180.0)))
           .with(StyleDeclaration::background_color(ColorInput::Value(Color([
-            255, 238, 219, 255,
+            255, 236, 208, 255,
           ]))))
-          .with_border_width(Sides([Px(1.0); 4]))
+          .with_border_width(Sides([Px(2.0); 4]))
           .with_border_style(Sides([BorderStyle::Solid; 4]))
           .with_border_color(Sides([ColorInput::Value(Color([
-            255, 156, 56, 255,
+            212, 118, 22, 255,
           ])); 4]))
-          .with_padding(Sides([Px(10.0); 4]))
-          .with_margin(Sides([Px(0.0), Px(5.0), Px(0.0), Px(5.0)])),
+          .with_padding(Sides([Px(14.0); 4]))
+          .with_margin(Sides([Px(0.0), Px(8.0), Px(0.0), Px(8.0)])),
       )
       ,
-    Node::text(" And finally some more text to close things out.".to_string())
+    Node::text(" End marker: compare the last line's baseline to the first line.".to_string())
       .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
       ,
   ];
@@ -488,16 +506,16 @@ fn inline_complex_nested_fixture() {
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::display(Display::Block))
-      .with(StyleDeclaration::font_size(Px(16.0).into()))
-      .with(StyleDeclaration::line_height(LineHeight::Length(Em(1.5))))
+      .with(StyleDeclaration::font_size(Px(24.0).into()))
+      .with(StyleDeclaration::line_height(LineHeight::Length(Em(1.4))))
       .with(StyleDeclaration::color(ColorInput::Value(Color([
-        51, 51, 51, 255,
+        38, 38, 38, 255,
       ]))))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color::white(),
       )))
-      .with(StyleDeclaration::width(Px(600.0)))
-      .with_padding(Sides([Px(20.0); 4])),
+      .with(StyleDeclaration::width(Px(900.0)))
+      .with_padding(Sides([Px(24.0); 4])),
   );
 
   run_fixture_test(node, "inline_complex_nested_fixture");

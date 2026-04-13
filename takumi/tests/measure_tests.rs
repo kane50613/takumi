@@ -266,7 +266,7 @@ fn test_measure_inline_layout() {
         MeasuredTextRun {
           text: "Speaking".to_string(),
           x: 0.0,
-          y: 127.9,
+          y: 130.9,
           width: 85.71999,
           height: 26.0,
         },
@@ -368,8 +368,66 @@ fn test_measure_inline_layout_preserves_text_span_boundaries() {
       .iter()
       .map(|run| run.text.as_str())
       .collect::<Vec<_>>(),
-    vec!["STEAM", "education can", "for everyone."]
+    vec!["STEAM ", "education can", " for everyone."]
   );
+}
+
+#[test]
+fn test_measure_inline_layout_preserves_space_only_spans() {
+  let node: Node = Node::container([
+    Node::text("A".to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::display(Display::Inline)),
+    ),
+    Node::text(" ".to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::display(Display::Inline)),
+    ),
+    Node::text("B".to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::display(Display::Inline)),
+    ),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Px(600.0)))
+      .with(StyleDeclaration::height(Px(120.0)))
+      .with(StyleDeclaration::font_size(Px(20.0).into()))
+      .with(StyleDeclaration::display(Display::Block)),
+  );
+
+  let result = measure(node, create_measure_viewport());
+
+  assert_eq!(
+    result
+      .runs
+      .iter()
+      .map(|run| run.text.as_str())
+      .collect::<Vec<_>>(),
+    vec!["A", " ", "B"]
+  );
+}
+
+#[test]
+fn test_measure_text_node_keeps_first_line_when_height_is_smaller_than_line_height() {
+  let node = Node::text("Visible text".to_string()).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Px(200.0)))
+      .with(StyleDeclaration::height(Px(10.0)))
+      .with(StyleDeclaration::font_size(Px(16.0).into()))
+      .with(StyleDeclaration::line_height(Px(30.0).into())),
+  );
+
+  let result = measure(node, create_measure_viewport());
+  let runs = measured_text_runs(&result);
+
+  assert_eq!(runs.len(), 1);
+  assert_eq!(runs[0].text, "Visible text");
 }
 
 #[test]

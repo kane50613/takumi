@@ -8,10 +8,11 @@ use crate::{
   layout::{
     node::Node,
     style::{
-      Color, FontSynthesis, ResolvedVerticalAlign, SizedFontStyle, SizedTextDecorationThickness,
-      TextDecorationLines, TextDecorationSkipInk, TextOverflow, TextWrapStyle, VerticalAlign,
+      BorderStyle, BoxSizing, Color, FontSynthesis, ResolvedVerticalAlign, SizedFontStyle,
+      SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextOverflow,
+      TextWrapMode, TextWrapStyle, VerticalAlign,
     },
-    tree::RenderNode,
+    tree::{AtomicInlineMetrics, RenderNode},
   },
   rendering::{
     MaxHeight, RenderContext, apply_text_transform, apply_white_space_collapse, make_balanced_text,
@@ -31,6 +32,7 @@ pub(crate) struct InlineBoxItem<'c, 'g> {
   pub(crate) margin: Rect<f32>,
   pub(crate) padding: Rect<f32>,
   pub(crate) border: Rect<f32>,
+  pub(crate) baseline_offset: Option<f32>,
   pub(crate) vertical_align: ResolvedVerticalAlign,
 }
 
@@ -341,7 +343,11 @@ fn apply_truncation_plan<'c, 'g>(
   }
 }
 
-pub(crate) fn measure_inline_layout(layout: &mut InlineLayout, max_width: f32) -> Size<f32> {
+pub(crate) fn measure_inline_layout(
+  layout: &mut InlineLayout,
+  max_width: f32,
+  ceil_width: bool,
+) -> Size<f32> {
   let (max_run_width, total_height) =
     layout
       .lines()
@@ -354,8 +360,14 @@ pub(crate) fn measure_inline_layout(layout: &mut InlineLayout, max_width: f32) -
         )
       });
 
+  let measured_width = if ceil_width {
+    max_run_width.ceil()
+  } else {
+    max_run_width
+  };
+
   Size {
-    width: max_run_width.ceil().min(max_width),
+    width: measured_width.min(max_width),
     height: total_height.ceil(),
   }
 }
@@ -372,14 +384,20 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
 
   let (mut layout, text) = global.font_context.tree_builder(style.into(), |builder| {
     let mut index_pos = 0;
+    let mut previous_collapsible_space = false;
+    let mut previous_was_line_break = false;
 
     for item in items {
       match item {
         InlineItem::Text { text, context } => {
           let span_style = context.style.to_sized_font_style(context);
           let transformed = apply_text_transform(&text, context.style.text_transform);
-          let collapsed =
-            apply_white_space_collapse(&transformed, style.parent.white_space_collapse);
+          let collapsed = apply_white_space_collapse(
+            &transformed,
+            style.parent.white_space_collapse,
+            &mut previous_collapsible_space,
+            &mut previous_was_line_break,
+          );
           let span_id = spans.len() as u64;
           let start = index_pos;
           let end = start + collapsed.len();
@@ -426,18 +444,24 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
           }
           .map(|length| length.to_px(&context.sizing, 0.0));
 
-          let content_size = if render_node.is_inline_atomic_container() {
-            render_node.measure_atomic_subtree(available_space)
+          let atomic_metrics = if render_node.is_inline_atomic_container() {
+            Some(render_node.measure_atomic_subtree(available_space))
           } else if let Some(node) = &render_node.node {
-            node.measure(
+            let content_size = node.measure(
               context,
               available_space,
               Size::NONE,
               &taffy::Style::default(),
-            )
+            );
+            Some(AtomicInlineMetrics {
+              size: content_size,
+              baseline_offset: None,
+            })
           } else {
-            Size::zero()
+            None
           };
+          let content_size = atomic_metrics.map_or(Size::zero(), |metrics| metrics.size);
+          let raw_baseline_offset = atomic_metrics.and_then(|metrics| metrics.baseline_offset);
 
           let inline_box = InlineBox {
             index: index_pos,
@@ -459,6 +483,8 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
                 + border.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
             },
           };
+          let baseline_offset =
+            raw_baseline_offset.map(|baseline| baseline.clamp(0.0, inline_box.height));
 
           spans.push(ProcessedInlineSpan::Box(InlineBoxItem {
             render_node,
@@ -466,17 +492,20 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
             margin,
             padding,
             border,
+            baseline_offset,
             vertical_align,
           }));
-
           builder.push_inline_box(inline_box);
+          previous_collapsible_space = false;
+          previous_was_line_break = false;
         }
       }
     }
   });
 
   apply_text_indent(&mut layout, style, max_width);
-  break_lines(&mut layout, max_width, max_height);
+  let text_wrap_mode = style.parent.text_wrap_mode_and_line_clamp().0;
+  break_lines(&mut layout, max_width, max_height, text_wrap_mode);
 
   if stage == InlineLayoutStage::Measure {
     layout.align(
@@ -514,12 +543,13 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
       max_width,
       max_height,
       line_count,
+      text_wrap_mode,
       style.sizing.viewport.device_pixel_ratio,
     );
   }
 
   if style.parent.text_wrap_style == TextWrapStyle::Pretty {
-    make_pretty_text(&mut layout, max_width, max_height);
+    make_pretty_text(&mut layout, max_width, max_height, text_wrap_mode);
   }
 
   layout.align(
@@ -531,19 +561,52 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
   (layout, text, spans)
 }
 
+pub(crate) fn resolve_inline_max_height(
+  font_style: &SizedFontStyle,
+  content_box_height: f32,
+) -> Option<MaxHeight> {
+  let resolved_line_clamp = font_style.parent.text_wrap_mode_and_line_clamp().1;
+  resolved_line_clamp
+    .as_ref()
+    .map(|clamp| MaxHeight::HeightAndLines(content_box_height, clamp.count))
+    .or_else(|| {
+      (font_style.parent.text_overflow == TextOverflow::Ellipsis)
+        .then_some(MaxHeight::Absolute(content_box_height))
+    })
+}
+
 pub(crate) fn create_inline_constraint(
   context: &RenderContext,
   available_space: Size<AvailableSpace>,
   known_dimensions: Size<Option<f32>>,
 ) -> (f32, Option<MaxHeight>) {
-  let width_constraint = known_dimensions
-    .width
-    .or(match available_space.width {
-      AvailableSpace::MinContent => Some(0.0),
-      AvailableSpace::MaxContent => None,
-      AvailableSpace::Definite(width) => Some(width),
-    })
-    .unwrap_or(f32::MAX);
+  let known_width = known_dimensions.width;
+  let available_width = match available_space.width {
+    AvailableSpace::MinContent => Some(0.0),
+    AvailableSpace::MaxContent => None,
+    AvailableSpace::Definite(width) => Some(width),
+  };
+  let mut width_constraint = known_width.or(available_width).unwrap_or(f32::MAX);
+
+  if known_width.is_some()
+    && context.style.box_sizing == BoxSizing::BorderBox
+    && width_constraint.is_finite()
+  {
+    let sizing = &context.sizing;
+    let horizontal_insets = context.style.padding_left.to_px(sizing, 0.0)
+      + context.style.padding_right.to_px(sizing, 0.0)
+      + if context.style.border_left_style == BorderStyle::None {
+        0.0
+      } else {
+        context.style.border_left_width.to_px(sizing, 0.0)
+      }
+      + if context.style.border_right_style == BorderStyle::None {
+        0.0
+      } else {
+        context.style.border_right_width.to_px(sizing, 0.0)
+      };
+    width_constraint = (width_constraint - horizontal_insets).max(0.0);
+  }
 
   // applies a maximum height to reduce unnecessary calculation.
   let max_height = match (
@@ -565,7 +628,12 @@ pub(crate) fn break_lines(
   layout: &mut InlineLayout,
   max_width: f32,
   max_height: Option<MaxHeight>,
+  text_wrap_mode: TextWrapMode,
 ) {
+  if text_wrap_mode == TextWrapMode::NoWrap {
+    return layout.break_all_lines(Some(max_width));
+  }
+
   let Some(max_height) = max_height else {
     return layout.break_all_lines(Some(max_width));
   };
@@ -656,6 +724,7 @@ fn make_ellipsis_layout<'c, 'g: 'c>(
     });
 
   apply_text_indent(&mut final_layout, root_style, max_width);
-  break_lines(&mut final_layout, max_width, max_height);
+  let text_wrap_mode = root_style.parent.text_wrap_mode_and_line_clamp().0;
+  break_lines(&mut final_layout, max_width, max_height, text_wrap_mode);
   *layout = final_layout;
 }

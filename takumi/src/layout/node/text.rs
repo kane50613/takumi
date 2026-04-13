@@ -7,11 +7,11 @@ use crate::{
   layout::{
     inline::{
       InlineContentKind, InlineItem, InlineLayoutStage, create_inline_constraint,
-      create_inline_layout, measure_inline_layout,
+      create_inline_layout, measure_inline_layout, resolve_inline_max_height,
     },
     node::TextData,
   },
-  rendering::{Canvas, MaxHeight, RenderContext, inline_drawing::draw_inline_layout},
+  rendering::{Canvas, RenderContext, inline_drawing::draw_inline_layout},
 };
 
 pub(crate) fn text_inline_content(text: &TextData) -> Option<InlineContentKind<'_>> {
@@ -31,10 +31,7 @@ pub(crate) fn draw_text_node_content(
     return Ok(());
   }
 
-  let max_height = match font_style.parent.line_clamp.as_ref() {
-    Some(clamp) => Some(MaxHeight::HeightAndLines(size.height, clamp.count)),
-    None => Some(MaxHeight::Absolute(size.height)),
-  };
+  let max_height = resolve_inline_max_height(&font_style, size.height);
 
   let inline_text: InlineItem<'_, '_> = InlineItem::Text {
     text: text.text.as_str().into(),
@@ -84,5 +81,5 @@ pub(crate) fn measure_text_node(
     InlineLayoutStage::Measure,
   );
 
-  measure_inline_layout(&mut layout, max_width)
+  measure_inline_layout(&mut layout, max_width, true)
 }
