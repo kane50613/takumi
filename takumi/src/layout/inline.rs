@@ -493,7 +493,6 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
             baseline_offset,
             vertical_align,
           }));
-
           builder.push_inline_box(inline_box);
         }
       }

@@ -489,18 +489,6 @@ fn quantized_baseline(line_height: f32, ascent: f32, descent: f32) -> f32 {
   ascent.round() + (leading * 0.5).round()
 }
 
-#[inline]
-fn inline_metrics_debug_enabled() -> bool {
-  #[cfg(not(target_arch = "wasm32"))]
-  {
-    std::env::var_os("TAKUMI_DEBUG_INLINE").is_some()
-  }
-  #[cfg(target_arch = "wasm32")]
-  {
-    false
-  }
-}
-
 fn parent_baseline_offset_for_box(
   line: &Line<'_, InlineBrush>,
   item: &InlineBoxItem<'_, '_>,
@@ -568,7 +556,7 @@ pub(crate) fn resolve_inline_line_metrics(
   let mut cumulative_flow_shift = 0.0_f32;
   let mut next_line_top: Option<f32> = None;
 
-  for (line_index, line) in inline_layout.lines().enumerate() {
+  for line in inline_layout.lines() {
     let effective_parent_x_height = effective_parent_x_height_for_line(&line, parent_x_height);
     let effective_parent_text_metrics = effective_parent_text_metrics_for_line(&line);
 
@@ -602,17 +590,6 @@ pub(crate) fn resolve_inline_line_metrics(
           let ascent_contrib = (baseline_in_item - parent_baseline_offset).max(0.0);
           let descent_contrib =
             (inline_box.height - baseline_in_item + parent_baseline_offset).max(0.0);
-          if inline_metrics_debug_enabled() {
-            eprintln!(
-              "[inline-metrics][line={line_index}][box={}] h={:.3} baseline_in_item={:.3} parent_baseline_offset={:.3} ascent_contrib={:.3} descent_contrib={:.3}",
-              inline_box.id,
-              inline_box.height,
-              baseline_in_item,
-              parent_baseline_offset,
-              ascent_contrib,
-              descent_contrib
-            );
-          }
           resolved_ascent = resolved_ascent.max(ascent_contrib);
           resolved_descent = resolved_descent.max(descent_contrib);
           has_item = true;
@@ -640,25 +617,6 @@ pub(crate) fn resolve_inline_line_metrics(
     } else {
       0.0
     };
-
-    if inline_metrics_debug_enabled() {
-      eprintln!(
-        "[inline-metrics][line={line_index}] original(min={:.3},max={:.3},baseline={:.3},line_height={:.3},ascent={:.3},descent={:.3}) resolved(top={:.3},bottom={:.3},baseline={:.3},line_height={:.3},ascent={:.3},descent={:.3},baseline_shift={:.3})",
-        line.metrics().min_coord,
-        line.metrics().max_coord,
-        line.metrics().baseline,
-        line.metrics().line_height,
-        line.metrics().ascent,
-        line.metrics().descent,
-        resolved_line_top,
-        resolved_line_bottom,
-        resolved_baseline,
-        resolved_line_height,
-        resolved_ascent,
-        resolved_descent,
-        baseline_shift
-      );
-    }
 
     result.push(ResolvedLineMetrics {
       resolved_ascent,
@@ -894,16 +852,6 @@ pub(crate) fn draw_inline_layout(
               line_parent_x_height,
               line_parent_text_metrics,
             );
-            if inline_metrics_debug_enabled() {
-              eprintln!(
-                "[inline-draw][line={line_index}][box={item_index}] x={:.3} y={:.3} w={:.3} h={:.3} baseline_offset={:?}",
-                inline_box.x,
-                inline_box.y,
-                inline_box.width,
-                inline_box.height,
-                item.baseline_offset
-              );
-            }
           }
           positioned_inline_boxes.push(inline_box)
         }
