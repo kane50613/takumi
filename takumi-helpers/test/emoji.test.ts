@@ -20,7 +20,7 @@ describe("emoji", () => {
           children: [
             text("Hello "),
             image({
-              src: "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f600.svg",
+              src: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f600.svg",
               style: {
                 display: "inline-block",
                 width: "1em",
@@ -43,7 +43,7 @@ describe("emoji", () => {
         container({
           children: [
             image({
-              src: "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f600.svg",
+              src: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f600.svg",
               style: {
                 display: "inline-block",
                 width: "1em",
@@ -54,7 +54,7 @@ describe("emoji", () => {
             }),
             text(" transformation "),
             image({
-              src: "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f680.svg",
+              src: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f680.svg",
               style: {
                 display: "inline-block",
                 width: "1em",
@@ -78,7 +78,7 @@ describe("emoji", () => {
         container({
           children: [
             image({
-              src: "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f468-200d-1f469-200d-1f467-200d-1f466.svg",
+              src: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f468-200d-1f469-200d-1f467-200d-1f466.svg",
               style: {
                 display: "inline-block",
                 width: "1em",
@@ -102,7 +102,7 @@ describe("emoji", () => {
           children: [
             text("US flag "),
             image({
-              src: "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f1fa-1f1f8.svg",
+              src: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f1fa-1f1f8.svg",
               style: {
                 display: "inline-block",
                 width: "1em",
@@ -126,7 +126,7 @@ describe("emoji", () => {
           children: [
             text("Press "),
             image({
-              src: "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/31-20e3.svg",
+              src: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/31-20e3.svg",
               style: {
                 display: "inline-block",
                 width: "1em",
@@ -146,7 +146,7 @@ describe("emoji", () => {
       const configs = [
         {
           type: "twemoji",
-          expectedSrc: "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f600.svg",
+          expectedSrc: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f600.svg",
         },
         {
           type: "blobmoji",
@@ -212,7 +212,7 @@ describe("emoji", () => {
           style: { color: "red" },
           children: [
             image({
-              src: "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f600.svg",
+              src: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f600.svg",
               style: {
                 display: "inline-block",
                 width: "1em",
@@ -250,7 +250,7 @@ describe("emoji", () => {
                   children: [
                     text("Nested "),
                     image({
-                      src: "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f600.svg",
+                      src: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f600.svg",
                       style: {
                         display: "inline-block",
                         width: "1em",
