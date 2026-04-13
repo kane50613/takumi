@@ -155,7 +155,7 @@ describe("emoji", () => {
         {
           type: "noto",
           expectedSrc:
-            "https://cdn.jsdelivr.net/gh/svgmoji/svgmoji/packages/svgmoji__noto/svg/1F600.svg",
+            "https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@v2.051/svg/emoji_u1f600.svg",
         },
         {
           type: "openmoji",

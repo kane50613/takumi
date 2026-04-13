@@ -32,7 +32,8 @@ const apis = {
     `https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/${code.toLowerCase()}.svg`,
   openmoji: "https://cdn.jsdelivr.net/npm/@svgmoji/openmoji@2.0.0/svg/",
   blobmoji: "https://cdn.jsdelivr.net/npm/@svgmoji/blob@2.0.0/svg/",
-  noto: "https://cdn.jsdelivr.net/gh/svgmoji/svgmoji/packages/svgmoji__noto/svg/",
+  noto: (code: string) =>
+    `https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@v2.051/svg/emoji_u${code.toLowerCase().replaceAll("-", "_")}.svg`,
   fluent: (code: string) =>
     `https://cdn.jsdelivr.net/gh/shuding/fluentui-emoji-unicode/assets/${code.toLowerCase()}_color.svg`,
   fluentFlat: (code: string) =>
