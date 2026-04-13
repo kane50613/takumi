@@ -1,5 +1,14 @@
 # takumi-js
 
+## 1.0.7
+
+### Patch Changes
+
+- 6e9b163: Fix stack overflow when inline-block presented
+  - @takumi-rs/core@1.0.7
+  - @takumi-rs/wasm@1.0.7
+  - @takumi-rs/helpers@1.0.7
+
 ## 1.0.6
 
 ### Patch Changes
