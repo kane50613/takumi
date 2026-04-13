@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.6
+
+### Patch Changes
+
+- 2c90eaa: Improve vertical alignment for inline boxes
+
 ## 1.0.5
 
 ## 1.0.4
