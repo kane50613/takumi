@@ -1246,13 +1246,25 @@ impl<'g> RenderNode<'g> {
     layout_results: &LayoutResults,
     root_node_id: NodeId,
   ) -> Option<f32> {
-    let fallback = self.atomic_container_baseline_offset_from_results(layout_results, root_node_id);
+    let overflow_hidden_inline_block = self.context.style.display == Display::InlineBlock
+      && (self.context.style.overflow_x != Overflow::Visible
+        || self.context.style.overflow_y != Overflow::Visible);
+    let fallback = if overflow_hidden_inline_block {
+      None
+    } else {
+      self.atomic_container_baseline_offset_from_results(layout_results, root_node_id)
+    };
+    let sizing = &self.context.sizing;
+    let margin_top = self.context.style.margin_top.to_px(sizing, 0.0);
+    let border_top = self.context.style.border_top_width.to_px(sizing, 0.0);
+    let padding_top = self.context.style.padding_top.to_px(sizing, 0.0);
+    let margin_box_height = size.height + margin_top + border_top + padding_top;
 
     match self.context.style.display {
       Display::InlineBlock => {
         let inline_content =
           self.inline_content_baseline_offset(available_space, size, Display::InlineBlock, true);
-        Self::valid_baseline_offset(inline_content, size.height).or(fallback)
+        Self::valid_baseline_offset(inline_content, margin_box_height).or(fallback)
       }
       Display::InlineFlex | Display::InlineGrid => {
         let inline_content_last = self.inline_content_baseline_offset(
@@ -1267,10 +1279,10 @@ impl<'g> RenderNode<'g> {
           self.context.style.display,
           false,
         );
-        Self::valid_baseline_offset(inline_content_last, size.height)
+        Self::valid_baseline_offset(inline_content_last, margin_box_height)
           .or(Self::valid_baseline_offset(
             inline_content_first,
-            size.height,
+            margin_box_height,
           ))
           .or(fallback)
       }

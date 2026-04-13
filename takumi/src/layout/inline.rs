@@ -496,6 +496,8 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
             vertical_align,
           }));
           builder.push_inline_box(inline_box);
+          previous_collapsible_space = false;
+          previous_was_line_break = false;
         }
       }
     }
