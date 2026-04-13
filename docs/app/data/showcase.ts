@@ -59,6 +59,12 @@ export const showcaseProjects: Project[] = [
     width: 1200,
     height: 630,
   },
+  {
+    image: "https://petit-meme.io/api/og?type=home&locale=en&v=1",
+    url: "https://petit-meme.io",
+    width: 1200,
+    height: 630,
+  },
 ];
 
 export const showcaseTemplates: Template[] = [
