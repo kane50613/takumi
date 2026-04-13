@@ -385,6 +385,7 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
   let (mut layout, text) = global.font_context.tree_builder(style.into(), |builder| {
     let mut index_pos = 0;
     let mut previous_collapsible_space = false;
+    let mut previous_was_line_break = false;
 
     for item in items {
       match item {
@@ -395,6 +396,7 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
             &transformed,
             style.parent.white_space_collapse,
             &mut previous_collapsible_space,
+            &mut previous_was_line_break,
           );
           let span_id = spans.len() as u64;
           let start = index_pos;
@@ -611,7 +613,7 @@ pub(crate) fn break_lines(
   text_wrap_mode: TextWrapMode,
 ) {
   if text_wrap_mode == TextWrapMode::NoWrap {
-    return layout.break_all_lines(None);
+    return layout.break_all_lines(Some(max_width));
   }
 
   let Some(max_height) = max_height else {

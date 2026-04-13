@@ -477,6 +477,7 @@ pub(crate) fn get_parent_x_height(
 pub(crate) struct ResolvedLineMetrics {
   pub(crate) resolved_ascent: f32,
   pub(crate) resolved_descent: f32,
+  pub(crate) resolved_line_height: f32,
   pub(crate) resolved_baseline: f32,
   pub(crate) resolved_line_top: f32,
   pub(crate) resolved_line_bottom: f32,
@@ -662,6 +663,7 @@ pub(crate) fn resolve_inline_line_metrics(
     result.push(ResolvedLineMetrics {
       resolved_ascent,
       resolved_descent,
+      resolved_line_height,
       resolved_baseline,
       resolved_line_top,
       resolved_line_bottom,
@@ -685,7 +687,7 @@ pub(crate) fn resolved_line_metrics_for_apply(
   adjusted.baseline = resolved.resolved_baseline;
   adjusted.min_coord = resolved.resolved_line_top;
   adjusted.max_coord = resolved.resolved_line_bottom;
-  adjusted.line_height = resolved.resolved_ascent + resolved.resolved_descent;
+  adjusted.line_height = resolved.resolved_line_height;
   adjusted
 }
 

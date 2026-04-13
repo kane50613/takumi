@@ -724,18 +724,6 @@ impl RoundTree for LayoutTree<'_, '_> {
 }
 
 impl<'g> RenderNode<'g> {
-  #[inline]
-  fn inline_debug_enabled() -> bool {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-      std::env::var_os("TAKUMI_DEBUG_INLINE").is_some()
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-      false
-    }
-  }
-
   fn anonymous_box_context(parent_context: &RenderContext<'g>) -> RenderContext<'g> {
     let mut context = parent_context.clone();
     context.style.display = Display::Block;
@@ -1193,19 +1181,14 @@ impl<'g> RenderNode<'g> {
     &self,
     available_space: Size<AvailableSpace>,
     size: Size<f32>,
-    respect_inline_block_overflow_rule: bool,
-    require_inline_content_context: bool,
+    display: Display,
+    use_last_line: bool,
   ) -> Option<f32> {
-    if require_inline_content_context
-      && !(self.should_create_inline_layout() || self.has_anonymous_text_item_child())
-    {
-      return None;
-    }
-
-    if respect_inline_block_overflow_rule
+    if display == Display::InlineBlock
       && (self.context.style.overflow_x != Overflow::Visible
         || self.context.style.overflow_y != Overflow::Visible)
     {
+      // inline-block baseline falls back to bottom margin edge when overflow is not visible.
       return None;
     }
 
@@ -1223,7 +1206,11 @@ impl<'g> RenderNode<'g> {
       self.context.global,
       InlineLayoutStage::Measure,
     );
-    let line = inline_layout.lines().last()?;
+    let line = if use_last_line {
+      inline_layout.lines().last()?
+    } else {
+      inline_layout.lines().next()?
+    };
     let metrics = line.metrics();
     let sizing = &self.context.sizing;
     let margin_top = self.context.style.margin_top.to_px(sizing, 0.0);
@@ -1231,18 +1218,6 @@ impl<'g> RenderNode<'g> {
     let padding_top = self.context.style.padding_top.to_px(sizing, 0.0);
 
     Some(margin_top + border_top + padding_top + metrics.baseline)
-  }
-
-  fn inline_block_baseline_offset(
-    &self,
-    available_space: Size<AvailableSpace>,
-    size: Size<f32>,
-  ) -> Option<f32> {
-    if self.context.style.display != Display::InlineBlock {
-      return None;
-    }
-
-    self.inline_content_baseline_offset(available_space, size, true, true)
   }
 
   fn atomic_container_baseline_offset_from_results(
@@ -1258,6 +1233,50 @@ impl<'g> RenderNode<'g> {
     let margin_top = self.context.style.margin_top.to_px(sizing, 0.0);
 
     Some(margin_top + baseline)
+  }
+
+  fn valid_baseline_offset(candidate: Option<f32>, box_height: f32) -> Option<f32> {
+    candidate
+      .filter(|baseline| baseline.is_finite() && *baseline >= 0.0 && *baseline <= box_height + 0.5)
+  }
+
+  fn atomic_inline_baseline_offset(
+    &self,
+    available_space: Size<AvailableSpace>,
+    size: Size<f32>,
+    layout_results: &LayoutResults,
+    root_node_id: NodeId,
+  ) -> Option<f32> {
+    let fallback = self.atomic_container_baseline_offset_from_results(layout_results, root_node_id);
+
+    match self.context.style.display {
+      Display::InlineBlock => {
+        let inline_content =
+          self.inline_content_baseline_offset(available_space, size, Display::InlineBlock, true);
+        Self::valid_baseline_offset(inline_content, size.height).or(fallback)
+      }
+      Display::InlineFlex | Display::InlineGrid => {
+        let inline_content = self.inline_content_baseline_offset(
+          available_space,
+          size,
+          self.context.style.display,
+          true,
+        );
+        let inline_content_first = self.inline_content_baseline_offset(
+          available_space,
+          size,
+          self.context.style.display,
+          false,
+        );
+        Self::valid_baseline_offset(inline_content, size.height)
+          .or(Self::valid_baseline_offset(
+            inline_content_first,
+            size.height,
+          ))
+          .or(fallback)
+      }
+      _ => None,
+    }
   }
 
   pub(crate) fn measure_atomic_subtree(
@@ -1328,32 +1347,8 @@ impl<'g> RenderNode<'g> {
         },
         |layout| {
           let size = layout.size;
-          let baseline_offset = match self.context.style.display {
-            Display::InlineBlock => self.inline_block_baseline_offset(available_space, size),
-            Display::InlineFlex | Display::InlineGrid => {
-              let inline_content =
-                self.inline_content_baseline_offset(available_space, size, false, false);
-              let valid_inline_content = inline_content.filter(|baseline| {
-                baseline.is_finite() && *baseline >= 0.0 && *baseline <= size.height + 0.5
-              });
-              let fallback =
-                self.atomic_container_baseline_offset_from_results(&results, root_node_id);
-              let chosen = valid_inline_content.or(fallback);
-              if Self::inline_debug_enabled() {
-                eprintln!(
-                  "[atomic-baseline][display={:?}] size=({:.3},{:.3}) inline_content={:?} fallback={:?} chosen={:?}",
-                  self.context.style.display,
-                  size.width,
-                  size.height,
-                  inline_content,
-                  fallback,
-                  chosen
-                );
-              }
-              chosen
-            }
-            _ => None,
-          };
+          let baseline_offset =
+            self.atomic_inline_baseline_offset(available_space, size, &results, root_node_id);
           AtomicInlineMetrics {
             size,
             baseline_offset,

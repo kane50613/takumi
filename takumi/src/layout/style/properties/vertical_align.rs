@@ -161,7 +161,7 @@ impl ResolvedVerticalAlign {
     parent_x_height: Option<f32>,
     parent_text_metrics: Option<(f32, f32)>,
   ) {
-    let baseline_offset = baseline_offset.unwrap_or(box_height);
+    let baseline_offset = baseline_offset.unwrap_or(box_height).clamp(0.0, box_height);
     let baseline_top = metrics.baseline - baseline_offset;
     let (parent_text_ascent, parent_text_descent) =
       parent_text_metrics.unwrap_or((metrics.ascent, metrics.descent));
