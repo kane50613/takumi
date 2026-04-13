@@ -648,19 +648,34 @@ pub(crate) fn break_lines(
   let mut line_count = 0;
   let mut breaker = layout.break_lines();
 
-  while total_height < limit_height && line_count < limit_lines {
+  while line_count < limit_lines {
     let Some((_, height)) = breaker.break_next(max_width) else {
       break;
     };
+
+    if !can_commit_line_candidate(total_height, height, line_count, limit_height) {
+      breaker.revert();
+      break;
+    }
+
     total_height += height;
     line_count += 1;
-  }
 
-  if total_height > limit_height {
-    breaker.revert();
+    if total_height >= limit_height {
+      break;
+    }
   }
 
   breaker.finish();
+}
+
+fn can_commit_line_candidate(
+  current_height: f32,
+  candidate_line_height: f32,
+  committed_lines: u32,
+  limit_height: f32,
+) -> bool {
+  committed_lines == 0 || current_height + candidate_line_height <= limit_height
 }
 
 /// Truncates text in the layout to fit within `max_width` and appends an ellipsis.
