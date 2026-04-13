@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.9
+
+### Patch Changes
+
+- 32fa381: Preserve first line when max height is smaller than line height
+
 ## 1.0.8
 
 ## 1.0.7
