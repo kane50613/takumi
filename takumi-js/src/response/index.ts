@@ -59,6 +59,26 @@ function defaultErrorHandler(error: unknown) {
   console.error(error);
 }
 
+/**
+ * Creates a reusable ImageResponse factory with shared configuration.
+ *
+ * Use this to avoid repeating configuration like fonts, stylesheets, or cache headers
+ * across multiple API routes.
+ *
+ * @example
+ * ```tsx
+ * const myImageResponse = createImageResponse({
+ *   fonts: [{ name: "Inter", data: fontBuffer }],
+ *   headers: { "Cache-Control": "public, max-age=31536000" }
+ * });
+ *
+ * export function GET() {
+ *   return myImageResponse(<div>Custom Og Image</div>);
+ * }
+ * ```
+ *
+ * @param defaultOptions - Options that will be applied to every response created by this factory.
+ */
 export function createImageResponse(defaultOptions?: ImageResponseOptions): ImageResponseFactory {
   return function imageResponse(
     element: ReactNode | ReactElementLike | string,
@@ -111,6 +131,29 @@ export function createImageResponse(defaultOptions?: ImageResponseOptions): Imag
 
 let defaultImageResponse: ImageResponseFactory | undefined;
 
+/**
+ * A universal ImageResponse class for generating images in API routes.
+ *
+ * Drop-in compatible with `next/og`'s `ImageResponse`. It supports React elements,
+ * custom fonts, Tailwind CSS (via `tw` prop), and various image formats.
+ *
+ * @example
+ * ```tsx
+ * import { ImageResponse } from "takumi-js/response";
+ *
+ * export function GET() {
+ *   return new ImageResponse(
+ *     <div tw="flex h-full w-full items-center justify-center bg-white">
+ *       <h1 tw="text-6xl font-bold">Hello World</h1>
+ *     </div>,
+ *     { width: 1200, height: 630 }
+ *   );
+ * }
+ * ```
+ *
+ * @param component - The JSX element to render.
+ * @param options - Rendering and response options.
+ */
 export class ImageResponse extends Response {
   readonly ready: Promise<void>;
 

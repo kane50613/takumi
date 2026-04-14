@@ -2,7 +2,7 @@
 
 A universal `ImageResponse` implementation for Takumi in Next.js and other environments.
 
-Checkout the migration guide [From Next.js ImageResponse](https://takumi.kane.tw/docs/migration/migrate-from-image-response) for more details.
+Checkout the migration guide [From Next.js ImageResponse](https://takumi.kane.tw/docs/upgrade/v1) for more details.
 
 ## Installation
 

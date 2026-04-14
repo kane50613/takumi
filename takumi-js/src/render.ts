@@ -38,6 +38,26 @@ function transformElement(element: ReactNode | ReactElementLike | string, option
   return fromJsx(element, options?.jsx);
 }
 
+/**
+ * Renders a React element, HTML string, or Takumi node tree into an image.
+ *
+ * This function automatically detects the best renderer for your environment (native Rust on Node.js,
+ * WASM on Edge/Workers) and handles resource fetching (fonts, images) and emoji extraction.
+ *
+ * @example
+ * ```tsx
+ * import { render } from "takumi-js";
+ *
+ * const buffer = await render(
+ *   <div tw="bg-blue-500 text-white p-4">Hello World</div>,
+ *   { width: 1200, height: 630 }
+ * );
+ * ```
+ *
+ * @param element - The content to render. Can be a JSX element (React-like), an HTML string, or a pre-constructed node tree.
+ * @param options - Configuration for rendering, including dimensions, format, fonts, and more.
+ * @returns A promise that resolves to the rendered image data (Buffer/Uint8Array).
+ */
 export async function render(
   element: ReactNode | ReactElementLike | string,
   options?: RenderOptions,
