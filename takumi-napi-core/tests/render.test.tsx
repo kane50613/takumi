@@ -115,6 +115,44 @@ describe("setup", () => {
       data: async () => imageBuffer,
     });
   });
+
+  test("putPersistentImage caches by src", async () => {
+    const cacheRenderer = new Renderer();
+    let loadCount = 0;
+    const source = {
+      src: `${localImagePath}?cached`,
+      data: async () => {
+        loadCount += 1;
+        return imageBuffer;
+      },
+    };
+
+    await Promise.all([
+      cacheRenderer.putPersistentImage(source),
+      cacheRenderer.putPersistentImage(source),
+      cacheRenderer.putPersistentImage(source),
+    ]);
+
+    expect(loadCount).toBe(1);
+  });
+
+  test("clearImageStore resets persistent image cache", async () => {
+    const cacheRenderer = new Renderer();
+    let loadCount = 0;
+    const source = {
+      src: `${localImagePath}?clear-cache`,
+      data: async () => {
+        loadCount += 1;
+        return imageBuffer;
+      },
+    };
+
+    await cacheRenderer.putPersistentImage(source);
+    cacheRenderer.clearImageStore();
+    await cacheRenderer.putPersistentImage(source);
+
+    expect(loadCount).toBe(2);
+  });
 });
 
 describe("render", () => {

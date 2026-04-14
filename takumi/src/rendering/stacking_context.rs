@@ -172,16 +172,13 @@ pub(crate) fn collect_layout_children(
 ) -> Result<Vec<OrderedChild>> {
   let layout_children = layout_results.children(node_id)?;
   let child_count = render_children.len().min(layout_children.len());
-  let mut source_order_child_ids = layout_children.to_vec();
-  source_order_child_ids.sort_unstable_by_key(|child_id| usize::from(*child_id));
-
   let mut ordered_children = Vec::with_capacity(child_count);
-  for node_id in layout_children.iter().copied().take(child_count) {
-    let Ok(render_index) = source_order_child_ids
-      .binary_search_by_key(&usize::from(node_id), |child_id| usize::from(*child_id))
-    else {
-      return Err(Error::LayoutError(TaffyError::InvalidInputNode(node_id)));
-    };
+  for (render_index, node_id) in layout_children
+    .iter()
+    .copied()
+    .take(child_count)
+    .enumerate()
+  {
     ordered_children.push(OrderedChild {
       render_index,
       node_id,

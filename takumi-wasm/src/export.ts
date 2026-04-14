@@ -36,6 +36,8 @@ export type FontLoaderSync =
 export class Renderer extends RendererInternal {
   private fontsMark = new Set<string>();
   private fontBuffersMark = new WeakSet<ByteBuf>();
+  private persistentImageSrcMark = new Set<string>();
+  private pendingPersistentImages = new Map<string, Promise<void>>();
 
   override putPersistentImage(data: ImageSourceLoaderSync, signal?: AbortSignal): void;
   override putPersistentImage(data: ImageSourceLoader, signal?: AbortSignal): Promise<void>;
@@ -47,19 +49,43 @@ export class Renderer extends RendererInternal {
       return;
     }
 
+    if (!this.isNewPersistentImage(data.src)) {
+      return this.pendingPersistentImages.get(data.src);
+    }
+
     const resolved = resolveImageLoader(data);
 
     if (isPromise(resolved)) {
-      return resolved.then((value) => {
-        if (signal?.aborted) {
-          return;
-        }
+      const pending = resolved
+        .then((value) => {
+          if (signal?.aborted) {
+            return;
+          }
 
-        super.putPersistentImage(value);
-      });
+          super.putPersistentImage(value);
+          this.persistentImageSrcMark.add(data.src);
+        })
+        .finally(() => {
+          this.pendingPersistentImages.delete(data.src);
+        });
+
+      this.pendingPersistentImages.set(data.src, pending);
+
+      return pending;
+    }
+
+    if (signal?.aborted) {
+      return;
     }
 
     super.putPersistentImage(resolved);
+    this.persistentImageSrcMark.add(data.src);
+  }
+
+  override clearImageStore(): void {
+    super.clearImageStore();
+    this.persistentImageSrcMark.clear();
+    this.pendingPersistentImages.clear();
   }
 
   async loadFonts(fonts: FontLoader[], signal?: AbortSignal): Promise<number> {
@@ -149,6 +175,10 @@ export class Renderer extends RendererInternal {
     }
 
     this.fontsMark.delete(key);
+  }
+
+  private isNewPersistentImage(src: string): boolean {
+    return !this.persistentImageSrcMark.has(src) && !this.pendingPersistentImages.has(src);
   }
 }
 

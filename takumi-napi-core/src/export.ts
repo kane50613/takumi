@@ -29,13 +29,33 @@ export type FontLoaderSync =
 export class Renderer extends NativeRenderer {
   private fontsMark = new Set<string>();
   private fontBuffersMark = new WeakSet<FontDetails["data"]>();
+  private persistentImageSrcMark = new Set<string>();
+  private pendingPersistentImages = new Map<string, Promise<void>>();
 
   override async putPersistentImage(
     source: ImageSourceLoader,
     signal?: AbortSignal,
   ): Promise<void> {
-    const resolved = await resolveImageLoader(source);
-    return super.putPersistentImage(resolved, signal);
+    if (!this.isNewPersistentImage(source.src)) {
+      return this.pendingPersistentImages.get(source.src);
+    }
+
+    const pending = resolveImageLoader(source)
+      .then(async (resolved) => {
+        if (signal?.aborted) {
+          return;
+        }
+
+        await super.putPersistentImage(resolved, signal);
+        this.persistentImageSrcMark.add(source.src);
+      })
+      .finally(() => {
+        this.pendingPersistentImages.delete(source.src);
+      });
+
+    this.pendingPersistentImages.set(source.src, pending);
+
+    return pending;
   }
 
   override async loadFonts(fonts: FontLoader[], signal?: AbortSignal) {
@@ -92,6 +112,12 @@ export class Renderer extends NativeRenderer {
     this.checkAndMarkFont(font);
   }
 
+  override clearImageStore(): void {
+    super.clearImageStore();
+    this.persistentImageSrcMark.clear();
+    this.pendingPersistentImages.clear();
+  }
+
   private checkAndMarkFont(font: FontLoader | FontLoaderSync) {
     const key = createFontKey(font);
 
@@ -113,6 +139,10 @@ export class Renderer extends NativeRenderer {
     const key = createFontKey(font);
 
     return isBuffer(key) ? !this.fontBuffersMark.has(key) : !this.fontsMark.has(key);
+  }
+
+  private isNewPersistentImage(src: string) {
+    return !this.persistentImageSrcMark.has(src) && !this.pendingPersistentImages.has(src);
   }
 }
 
