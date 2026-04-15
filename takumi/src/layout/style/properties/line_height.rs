@@ -42,7 +42,7 @@ impl TailwindPropertyParser for LineHeight {
           return None;
         };
 
-        Some(LineHeight::Unitless(value * TW_VAR_SPACING))
+        Some(LineHeight::Length(Length::Rem(value * TW_VAR_SPACING)))
       }
     }
   }
@@ -59,6 +59,10 @@ impl<'i> FromCss<'i> for LineHeight {
 
     if let Ok(number) = input.try_parse(parse_calc_number_expression) {
       return Ok(LineHeight::Unitless(number));
+    }
+
+    if let Ok(percent) = input.try_parse(Parser::expect_percentage) {
+      return Ok(LineHeight::Unitless(percent));
     }
 
     let Ok(number) = input.try_parse(Parser::expect_number) else {
@@ -95,13 +99,34 @@ impl MakeComputed for LineHeight {
 #[cfg(test)]
 mod tests {
   use super::LineHeight;
-  use crate::layout::style::FromCss;
+  use crate::layout::style::{FromCss, Length, tw::TailwindPropertyParser};
 
   #[test]
   fn parses_unitless_calc_expression() {
     assert_eq!(
       LineHeight::from_str("calc(1.75 / 1.125)"),
       Ok(LineHeight::Unitless(1.75 / 1.125))
+    );
+  }
+
+  #[test]
+  fn parses_percentage_as_font_size_relative() {
+    assert_eq!(LineHeight::from_str("90%"), Ok(LineHeight::Unitless(0.9)));
+  }
+
+  #[test]
+  fn tailwind_spacing_scale_uses_absolute_length() {
+    assert_eq!(
+      LineHeight::parse_tw("7"),
+      Some(LineHeight::Length(Length::Rem(1.75)))
+    );
+  }
+
+  #[test]
+  fn tailwind_arbitrary_percentage_is_supported() {
+    assert_eq!(
+      LineHeight::parse_tw_with_arbitrary("[90%]"),
+      Some(LineHeight::Unitless(0.9))
     );
   }
 }
