@@ -1,6 +1,8 @@
 use std::{borrow::Cow, ops::Range};
 
-use parley::{IndentOptions, InlineBox, PositionedLayoutItem, TextStyle};
+use parley::{
+  IndentOptions, InlineBox, Line, LineMetrics, PositionedInlineBox, PositionedLayoutItem, TextStyle,
+};
 use taffy::{AvailableSpace, Layout, Rect, Size};
 
 use crate::{
@@ -118,6 +120,19 @@ pub(crate) enum InlineContentKind<'c> {
 
 pub type InlineLayout = parley::Layout<InlineBrush>;
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ParentFontMetrics {
+  pub(crate) x_height: Option<f32>,
+  pub(crate) text_metrics: (f32, f32),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct InlineMeasureOptions {
+  pub(crate) max_width: f32,
+  pub(crate) ceil_width: bool,
+  pub(crate) parent_font_metrics: Option<ParentFontMetrics>,
+}
+
 #[derive(Clone, PartialEq, Copy, Debug)]
 pub(crate) struct InlineBrush {
   pub source_span_id: Option<u64>,
@@ -215,6 +230,194 @@ fn measure_ellipsis_width(
     .next()
     .map(|line| line.runs().map(|run| run.advance()).sum::<f32>())
     .unwrap_or(0.0)
+}
+
+pub(crate) fn get_parent_font_metrics(layout: &InlineLayout) -> Option<ParentFontMetrics> {
+  let run = layout.lines().find_map(|line| line.runs().next())?;
+  let metrics = run.metrics();
+  Some((metrics.x_height, metrics.ascent, metrics.descent)).map(|(x_height, ascent, descent)| {
+    ParentFontMetrics {
+      x_height,
+      text_metrics: (ascent, descent),
+    }
+  })
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ResolvedLineMetrics {
+  pub(crate) resolved_ascent: f32,
+  pub(crate) resolved_descent: f32,
+  pub(crate) resolved_line_height: f32,
+  pub(crate) resolved_baseline: f32,
+  pub(crate) resolved_line_top: f32,
+  pub(crate) resolved_line_bottom: f32,
+  pub(crate) baseline_shift: f32,
+}
+
+fn quantized_baseline(line_height: f32, ascent: f32, descent: f32) -> f32 {
+  let rounded_ascent = ascent.round();
+  let rounded_descent = descent.round();
+  let leading = line_height - (rounded_ascent + rounded_descent);
+  let leading_above = (leading * 0.5).floor();
+  rounded_ascent + leading_above
+}
+
+fn parent_baseline_offset_for_box(
+  line: &Line<'_, InlineBrush>,
+  item: &InlineBoxItem<'_, '_>,
+  inline_box: &PositionedInlineBox,
+  effective_parent_x_height: Option<f32>,
+  effective_parent_text_metrics: Option<(f32, f32)>,
+) -> f32 {
+  let baseline_in_item = item
+    .baseline_offset
+    .unwrap_or(inline_box.height)
+    .clamp(0.0, inline_box.height);
+  let mut top = 0.0;
+  item.vertical_align.apply(
+    &mut top,
+    line.metrics(),
+    inline_box.height,
+    Some(baseline_in_item),
+    effective_parent_x_height,
+    effective_parent_text_metrics,
+  );
+  top - (line.metrics().baseline - baseline_in_item)
+}
+
+pub(crate) fn effective_parent_x_height_for_line(
+  line: &Line<'_, InlineBrush>,
+  parent_font_metrics: Option<ParentFontMetrics>,
+) -> Option<f32> {
+  let parent_x_height = parent_font_metrics.and_then(|metrics| metrics.x_height);
+  if parent_x_height.is_some() {
+    return parent_x_height;
+  }
+
+  let mut text_ascent_max = 0.0_f32;
+  for item in line.items() {
+    if let PositionedLayoutItem::GlyphRun(glyph_run) = item {
+      text_ascent_max = text_ascent_max.max(glyph_run.run().metrics().ascent);
+    }
+  }
+
+  (text_ascent_max > 0.0).then_some(text_ascent_max * 0.5)
+}
+
+pub(crate) fn effective_parent_text_metrics_for_line(
+  line: &Line<'_, InlineBrush>,
+  parent_font_metrics: Option<ParentFontMetrics>,
+) -> Option<(f32, f32)> {
+  let parent_text_metrics = parent_font_metrics.map(|metrics| metrics.text_metrics);
+  if parent_text_metrics.is_some() {
+    return parent_text_metrics;
+  }
+
+  let mut has_glyph = false;
+  for item in line.items() {
+    if matches!(item, PositionedLayoutItem::GlyphRun(_)) {
+      has_glyph = true;
+      break;
+    }
+  }
+
+  has_glyph.then_some((line.metrics().ascent, line.metrics().descent))
+}
+
+pub(crate) fn resolve_inline_line_metrics(
+  inline_layout: &InlineLayout,
+  spans: &[ProcessedInlineSpan<'_, '_>],
+  parent_font_metrics: Option<ParentFontMetrics>,
+) -> Vec<ResolvedLineMetrics> {
+  let mut result = Vec::with_capacity(inline_layout.lines().count());
+  let mut next_line_top = 0.0_f32;
+
+  for line in inline_layout.lines() {
+    let effective_parent_x_height = effective_parent_x_height_for_line(&line, parent_font_metrics);
+    let effective_parent_text_metrics =
+      effective_parent_text_metrics_for_line(&line, parent_font_metrics);
+
+    let line_metrics = line.metrics();
+    let mut resolved_ascent = 0.0_f32;
+    let mut resolved_descent = 0.0_f32;
+
+    for item in line.items() {
+      match item {
+        PositionedLayoutItem::GlyphRun(glyph_run) => {
+          let metrics = glyph_run.run().metrics();
+          resolved_ascent = resolved_ascent.max(metrics.ascent);
+          resolved_descent = resolved_descent.max(metrics.descent);
+        }
+        PositionedLayoutItem::InlineBox(inline_box) => {
+          let Some(ProcessedInlineSpan::Box(item)) = spans.get(inline_box.id as usize) else {
+            continue;
+          };
+          let baseline_in_item = item
+            .baseline_offset
+            .unwrap_or(inline_box.height)
+            .clamp(0.0, inline_box.height);
+          let parent_baseline_offset = parent_baseline_offset_for_box(
+            &line,
+            item,
+            &inline_box,
+            effective_parent_x_height,
+            effective_parent_text_metrics,
+          );
+          let ascent_contrib = (baseline_in_item - parent_baseline_offset).max(0.0);
+          let descent_contrib =
+            (inline_box.height - baseline_in_item + parent_baseline_offset).max(0.0);
+          resolved_ascent = resolved_ascent.max(ascent_contrib);
+          resolved_descent = resolved_descent.max(descent_contrib);
+        }
+      }
+    }
+
+    if resolved_ascent == 0.0 && resolved_descent == 0.0 {
+      resolved_ascent = line_metrics.ascent.max(0.0);
+      resolved_descent = line_metrics.descent.max(0.0);
+    }
+
+    let resolved_line_height = line_metrics
+      .line_height
+      .max(resolved_ascent + resolved_descent);
+    let resolved_line_top = next_line_top;
+    let resolved_baseline = resolved_line_top
+      + quantized_baseline(resolved_line_height, resolved_ascent, resolved_descent);
+    let resolved_line_bottom = resolved_line_top + resolved_line_height;
+    let baseline_shift = if (resolved_baseline - line_metrics.baseline).is_finite() {
+      resolved_baseline - line_metrics.baseline
+    } else {
+      0.0
+    };
+
+    result.push(ResolvedLineMetrics {
+      resolved_ascent,
+      resolved_descent,
+      resolved_line_height,
+      resolved_baseline,
+      resolved_line_top,
+      resolved_line_bottom,
+      baseline_shift,
+    });
+
+    next_line_top = resolved_line_bottom;
+  }
+
+  result
+}
+
+pub(crate) fn resolved_line_metrics_for_apply(
+  line_metrics: &LineMetrics,
+  resolved: ResolvedLineMetrics,
+) -> LineMetrics {
+  let mut adjusted = *line_metrics;
+  adjusted.ascent = resolved.resolved_ascent;
+  adjusted.descent = resolved.resolved_descent;
+  adjusted.baseline = resolved.resolved_baseline;
+  adjusted.min_coord = resolved.resolved_line_top;
+  adjusted.max_coord = resolved.resolved_line_bottom;
+  adjusted.line_height = resolved.resolved_line_height;
+  adjusted
 }
 
 struct TruncationCheckpoint {
@@ -345,20 +548,22 @@ fn apply_truncation_plan<'c, 'g>(
 
 pub(crate) fn measure_inline_layout(
   layout: &mut InlineLayout,
-  max_width: f32,
-  ceil_width: bool,
+  spans: &[ProcessedInlineSpan<'_, '_>],
+  options: InlineMeasureOptions,
 ) -> Size<f32> {
-  let (max_run_width, total_height) =
-    layout
-      .lines()
-      .fold((0.0, 0.0), |(max_run_width, total_height), line| {
-        let metrics = line.metrics();
-
-        (
-          metrics.advance.max(max_run_width),
-          total_height + metrics.line_height,
-        )
-      });
+  let InlineMeasureOptions {
+    max_width,
+    ceil_width,
+    parent_font_metrics,
+  } = options;
+  let max_run_width = layout
+    .lines()
+    .map(|line| line.metrics().advance)
+    .fold(0.0, f32::max);
+  let total_height = resolve_inline_line_metrics(layout, spans, parent_font_metrics)
+    .into_iter()
+    .map(|metrics| metrics.resolved_line_height)
+    .sum::<f32>();
 
   let measured_width = if ceil_width {
     max_run_width.ceil()

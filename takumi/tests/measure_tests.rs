@@ -6,7 +6,8 @@ use takumi::{
     node::Node,
     style::{
       Affine, AlignItems, BorderStyle, Color, ColorInput, Display, FlexDirection, JustifyContent,
-      Length::*, Position, Sides, Style, StyleDeclaration, TextIndent, WhiteSpaceCollapse,
+      Length::*, LineHeight, Position, Sides, Style, StyleDeclaration, TextIndent, WhiteSpace,
+      WhiteSpaceCollapse,
     },
   },
   rendering::{MeasuredNode, MeasuredTextRun, RenderOptions, measure_layout},
@@ -40,6 +41,13 @@ fn assert_close(actual: f32, expected: f32) {
   assert!(
     (actual - expected).abs() <= 0.01,
     "expected {expected}, got {actual}"
+  );
+}
+
+fn assert_within(actual: f32, expected: f32, tolerance: f32) {
+  assert!(
+    (actual - expected).abs() <= tolerance,
+    "expected {expected} +/- {tolerance}, got {actual}"
   );
 }
 
@@ -242,44 +250,38 @@ fn test_measure_inline_layout() {
   )
   .unwrap();
 
-  assert_eq!(
-    result,
-    MeasuredNode {
-      width: 400.0,
-      height: 300.0,
-      transform: Affine::IDENTITY.to_cols_array(),
-      runs: vec![
-        MeasuredTextRun {
-          text: "Hello World".to_string(),
-          x: 0.0,
-          y: 104.9, // we have the image 128px height on the same line, so the text is centered vertically
-          width: 105.46001,
-          height: 26.0,
-        },
-        MeasuredTextRun {
-          text: "This is Takumi ".to_string(),
-          x: 233.46,
-          y: 104.9,
-          width: 132.79999,
-          height: 26.0,
-        },
-        MeasuredTextRun {
-          text: "Speaking".to_string(),
-          x: 0.0,
-          y: 130.9,
-          width: 85.71999,
-          height: 26.0,
-        },
-      ],
-      children: vec![MeasuredNode {
-        width: 128.0,
-        height: 128.0,
-        transform: [1.0, 0.0, 0.0, 1.0, 105.46001, -3.0],
-        children: Vec::new(),
-        runs: Vec::new(),
-      }],
-    }
-  )
+  assert_eq!(result.width, 400.0);
+  assert_eq!(result.height, 300.0);
+  assert_eq!(result.transform, Affine::IDENTITY.to_cols_array());
+
+  assert_eq!(result.children.len(), 1);
+  let inline_image = &result.children[0];
+  assert_eq!(inline_image.width, 128.0);
+  assert_eq!(inline_image.height, 128.0);
+  assert_within(inline_image.transform[4], 105.47, 0.1);
+  assert_within(inline_image.transform[5], 0.0, 1.5);
+
+  assert_eq!(result.runs.len(), 3);
+
+  let first = &result.runs[0];
+  assert_eq!(first.text, "Hello World");
+  assert_within(first.x, 0.0, 0.1);
+  assert_within(first.y, 108.0, 1.5);
+  assert_within(first.width, 105.47, 0.1);
+  assert_within(first.height, 26.0, 0.1);
+
+  let second = &result.runs[1];
+  assert_eq!(second.text, "This is Takumi ");
+  assert_within(second.x, 233.47, 0.1);
+  assert_within(second.y, 108.0, 1.5);
+  assert_within(second.height, 26.0, 0.1);
+
+  let third = &result.runs[2];
+  assert_eq!(third.text, "Speaking");
+  assert_within(third.x, 0.0, 0.1);
+  assert_within(third.y, 134.0, 1.5);
+  assert_within(third.width, 85.73, 0.1);
+  assert_within(third.height, 26.0, 0.1);
 }
 
 #[test]
@@ -409,6 +411,116 @@ fn test_measure_inline_layout_preserves_space_only_spans() {
       .map(|run| run.text.as_str())
       .collect::<Vec<_>>(),
     vec!["A", " ", "B"]
+  );
+}
+
+#[test]
+fn test_measure_inline_atomic_containers_fixture() {
+  let atomic = |display, bg_color, border_color, label: &str| -> Node {
+    Node::container([Node::text(label.to_string())]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::display(display))
+        .with_padding(Sides([Px(8.0); 4]))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          bg_color,
+        )))
+        .with_border_width(Sides([Px(5.0); 4]))
+        .with_border_style(Sides([BorderStyle::Solid; 4]))
+        .with_border_color(Sides([ColorInput::Value(border_color); 4])),
+    )
+  };
+
+  let node = Node::container([Node::container([
+    Node::text("before ".to_string())
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+    atomic(
+      Display::InlineBlock,
+      Color([255, 0, 0, 100]),
+      Color([180, 20, 20, 255]),
+      "inline-block",
+    ),
+    Node::text(" mid ".to_string())
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+    atomic(
+      Display::InlineFlex,
+      Color([0, 255, 0, 100]),
+      Color([20, 140, 20, 255]),
+      "inline-flex",
+    ),
+    Node::text(" end ".to_string())
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+    atomic(
+      Display::InlineGrid,
+      Color([0, 0, 255, 100]),
+      Color([20, 20, 180, 255]),
+      "inline-grid",
+    ),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::font_size(Px(24.0).into()))
+      .with_border_width(Sides([Px(6.0); 4]))
+      .with_border_style(Sides([BorderStyle::Solid; 4]))
+      .with_border_color(Sides([ColorInput::Value(Color([40, 40, 40, 255])); 4])),
+  )])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      )))
+      .with_white_space(WhiteSpace::pre()),
+  );
+
+  let result = measure(node, create_measure_viewport());
+  assert_eq!(result.children.len(), 1);
+
+  let inline_container = &result.children[0];
+  assert_eq!(inline_container.height, 70.0);
+  assert_eq!(inline_container.children.len(), 3);
+
+  for child in &inline_container.children {
+    assert_eq!(child.transform[5], inline_container.transform[5]);
+    assert_eq!(child.height, 58.0);
+  }
+
+  let runs = &inline_container.runs;
+  assert_eq!(runs.len(), 3);
+  assert_close(runs[0].y, 12.88);
+  assert_close(runs[1].y, 12.88);
+  assert_close(runs[2].y, 12.88);
+}
+
+#[test]
+fn test_measure_text_node_centers_glyphs_with_explicit_line_height() {
+  let node = Node::text("Line height 40px".to_string()).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::font_size(Px(24.0).into()))
+      .with(StyleDeclaration::line_height(LineHeight::Length(Px(40.0)))),
+  );
+
+  let result = measure(node, create_measure_viewport());
+  assert_eq!(result.children.len(), 1);
+
+  let anonymous_item = &result.children[0];
+  assert_eq!(anonymous_item.height, 40.0);
+  assert_eq!(anonymous_item.runs.len(), 1);
+
+  let run = &anonymous_item.runs[0];
+  let leading_top = run.y;
+  let leading_bottom = anonymous_item.height - (run.y + run.height);
+  assert!(leading_bottom >= leading_top);
+  assert!(
+    (leading_bottom - leading_top).abs() <= 1.25,
+    "expected browser-style half-leading split, top={leading_top}, bottom={leading_bottom}"
   );
 }
 

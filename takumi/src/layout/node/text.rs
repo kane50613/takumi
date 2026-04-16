@@ -6,8 +6,9 @@ use crate::{
   Result,
   layout::{
     inline::{
-      InlineContentKind, InlineItem, InlineLayoutStage, create_inline_constraint,
-      create_inline_layout, measure_inline_layout, resolve_inline_max_height,
+      InlineContentKind, InlineItem, InlineLayoutStage, InlineMeasureOptions,
+      create_inline_constraint, create_inline_layout, get_parent_font_metrics,
+      measure_inline_layout, resolve_inline_max_height,
     },
     node::TextData,
   },
@@ -71,7 +72,7 @@ pub(crate) fn measure_text_node(
     create_inline_constraint(context, available_space, known_dimensions);
   let font_style = context.style.to_sized_font_style(context);
 
-  let (mut layout, _, _) = create_inline_layout(
+  let (mut layout, _, spans) = create_inline_layout(
     once(inline_content),
     available_space,
     max_width,
@@ -81,5 +82,15 @@ pub(crate) fn measure_text_node(
     InlineLayoutStage::Measure,
   );
 
-  measure_inline_layout(&mut layout, max_width, true)
+  let parent_font_metrics = get_parent_font_metrics(&layout);
+
+  measure_inline_layout(
+    &mut layout,
+    &spans,
+    InlineMeasureOptions {
+      max_width,
+      ceil_width: true,
+      parent_font_metrics,
+    },
+  )
 }

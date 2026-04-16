@@ -14,9 +14,9 @@ use crate::{
   layout::{
     Viewport,
     inline::{
-      InlineContentKind, InlineLayoutStage, ProcessedInlineSpan, collect_inline_items,
-      create_inline_constraint, create_inline_layout, measure_inline_layout,
-      resolve_inline_max_height,
+      InlineContentKind, InlineLayoutStage, InlineMeasureOptions, ProcessedInlineSpan,
+      collect_inline_items, create_inline_constraint, create_inline_layout,
+      get_parent_font_metrics, measure_inline_layout, resolve_inline_max_height,
     },
     node::{Node, NodeStyleLayers},
     style::{
@@ -1388,7 +1388,7 @@ impl<'g> RenderNode<'g> {
 
       let font_style = self.context.style.to_sized_font_style(&self.context);
 
-      let (mut layout, _, _) = create_inline_layout(
+      let (mut layout, _, spans) = create_inline_layout(
         collect_inline_items(self).into_iter(),
         available_space,
         max_width,
@@ -1399,7 +1399,16 @@ impl<'g> RenderNode<'g> {
       );
 
       let ceil_width = font_style.parent.text_wrap_mode_and_line_clamp().0 == TextWrapMode::Wrap;
-      return measure_inline_layout(&mut layout, max_width, ceil_width);
+      let parent_font_metrics = get_parent_font_metrics(&layout);
+      return measure_inline_layout(
+        &mut layout,
+        &spans,
+        InlineMeasureOptions {
+          max_width,
+          ceil_width,
+          parent_font_metrics,
+        },
+      );
     }
 
     assert_ne!(

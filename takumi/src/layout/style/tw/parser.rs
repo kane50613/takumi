@@ -59,19 +59,19 @@ impl TailwindPropertyParser for TwFontSize {
         Self::new(Rem(2.25).into(), Some(Em(2.5 / 2.25).into())),
       ),
       "5xl" => Some(
-        Self::new(Rem(3.0).into(), Some(Em(1.0).into())),
+        Self::new(Rem(3.0).into(), Some(LineHeight::Unitless(1.0))),
       ),
       "6xl" => Some(
-        Self::new(Rem(3.75).into(), Some(Em(1.0).into())),
+        Self::new(Rem(3.75).into(), Some(LineHeight::Unitless(1.0))),
       ),
       "7xl" => Some(
-        Self::new(Rem(4.5).into(), Some(Em(1.0).into())),
+        Self::new(Rem(4.5).into(), Some(LineHeight::Unitless(1.0))),
       ),
       "8xl" => Some(
-        Self::new(Rem(6.0).into(), Some(Em(1.0).into())),
+        Self::new(Rem(6.0).into(), Some(LineHeight::Unitless(1.0))),
       ),
       "9xl" => Some(
-        Self::new(Rem(8.0).into(), Some(Em(1.0).into())),
+        Self::new(Rem(8.0).into(), Some(LineHeight::Unitless(1.0))),
       ),
       _ => None,
     }

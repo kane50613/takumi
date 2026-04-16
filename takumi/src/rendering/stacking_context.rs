@@ -3,7 +3,10 @@ use taffy::{AvailableSpace, Layout, NodeId, Point, TaffyError, geometry::Size};
 use tiny_skia::Pixmap;
 use tiny_skia::PixmapMut;
 
-use crate::layout::inline::ProcessedInlineSpan;
+use crate::layout::inline::{
+  ProcessedInlineSpan, effective_parent_text_metrics_for_line, effective_parent_x_height_for_line,
+  get_parent_font_metrics, resolve_inline_line_metrics, resolved_line_metrics_for_apply,
+};
 use crate::{
   Error, Result,
   layout::{
@@ -18,12 +21,8 @@ use crate::{
   },
   rendering::{
     BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, NodeMaskAction, Placement,
-    Sizing, blend_pixel, draw_debug_border, get_node_mut_by_path,
-    inline_drawing::{
-      effective_parent_text_metrics_for_line, effective_parent_x_height_for_line,
-      get_parent_font_metrics, resolve_inline_line_metrics, resolved_line_metrics_for_apply,
-    },
-    prepare_node_mask, transformed_rect_extents,
+    Sizing, blend_pixel, draw_debug_border, get_node_mut_by_path, prepare_node_mask,
+    transformed_rect_extents,
   },
 };
 
@@ -545,19 +544,17 @@ fn compute_node_paint_bounds(
     layout.border.left + layout.padding.left,
     layout.border.top + layout.padding.top,
   ) * transform;
-  let parent_font_metrics = get_parent_font_metrics(&node.context, &font_style);
-  let parent_x_height = parent_font_metrics.and_then(|metrics| metrics.x_height);
-  let parent_text_metrics = parent_font_metrics.map(|metrics| metrics.text_metrics);
+  let parent_font_metrics = get_parent_font_metrics(&inline_layout);
 
   let line_vertical_metrics =
-    resolve_inline_line_metrics(&inline_layout, &spans, parent_x_height, parent_text_metrics);
+    resolve_inline_line_metrics(&inline_layout, &spans, parent_font_metrics);
   for (line_index, line) in inline_layout.lines().enumerate() {
     let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
     let adjusted_line_metrics =
       resolved_line_metrics_for_apply(line.metrics(), line_vertical_metrics[line_index]);
-    let line_parent_x_height = effective_parent_x_height_for_line(&line, parent_x_height);
+    let line_parent_x_height = effective_parent_x_height_for_line(&line, parent_font_metrics);
     let line_parent_text_metrics =
-      effective_parent_text_metrics_for_line(&line, parent_text_metrics);
+      effective_parent_text_metrics_for_line(&line, parent_font_metrics);
     for item in line.items() {
       match item {
         PositionedLayoutItem::GlyphRun(glyph_run) => {
