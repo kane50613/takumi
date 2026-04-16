@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.11
+
+### Patch Changes
+
+- b755451: Fix Tailwind font size 5xl above line height
+
 ## 1.0.10
 
 ### Patch Changes
