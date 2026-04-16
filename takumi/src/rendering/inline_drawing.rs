@@ -895,7 +895,7 @@ pub(crate) fn draw_inline_layout(
             line_index,
             layout.border.top + layout.padding.top + glyph_run.baseline() + baseline_shift
               - resolved_metrics.resolved_ascent,
-            resolved_metrics.resolved_ascent + resolved_metrics.resolved_descent,
+            resolved_metrics.resolved_line_height,
           ) {
             inline_outline_rects.push(outline_rect);
           }

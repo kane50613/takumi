@@ -20,8 +20,8 @@ use crate::{
     },
     node::{Node, NodeStyleLayers},
     style::{
-      Affine, BlendMode, Color, ComputedStyle, Display, Filters, Isolation, Overflow,
-      PercentageNumber, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
+      Affine, BlendMode, BorderStyle, BoxSizing, Color, ComputedStyle, Display, Filters, Isolation,
+      Overflow, PercentageNumber, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
       apply_stylesheet_animations,
       matching::{MatchedDeclarationsView, match_stylesheets_view},
     },
@@ -107,6 +107,30 @@ pub(crate) struct RenderNode<'g> {
 pub(crate) struct AtomicInlineMetrics {
   pub(crate) size: Size<f32>,
   pub(crate) baseline_offset: Option<f32>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InlineBaselineSource {
+  InlineContentLastLine,
+  InlineContentFirstLine,
+  LayoutFirstBaseline,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InlineBaselineFallback {
+  BottomMarginEdge,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InlineBaselineBoxKind {
+  AtomicContainer,
+  Replaced,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct InlineBaselineStrategy {
+  sources: &'static [InlineBaselineSource],
+  fallback: InlineBaselineFallback,
 }
 
 fn build_style_layers(
@@ -1166,30 +1190,114 @@ impl<'g> RenderNode<'g> {
     }
   }
 
-  // The baseline of an 'inline-block' is the baseline of its last line box in the normal flow,
-  // unless it has either no in-flow line boxes or if its 'overflow' property has a computed value other than 'visible',
-  // in which case the baseline is the bottom margin edge.
-  //
-  // Ref: https://www.w3.org/TR/CSS22/visudet.html#propdef-vertical-align
+  fn inline_box_margin_box_height(
+    &self,
+    content_size: Size<f32>,
+    include_padding_border: bool,
+  ) -> f32 {
+    let sizing = &self.context.sizing;
+    let mut height = content_size.height
+      + self.context.style.margin_top.to_px(sizing, 0.0)
+      + self.context.style.margin_bottom.to_px(sizing, 0.0);
+
+    if include_padding_border {
+      height += self.context.style.border_top_width.to_px(sizing, 0.0)
+        + self.context.style.border_bottom_width.to_px(sizing, 0.0)
+        + self.context.style.padding_top.to_px(sizing, 0.0)
+        + self.context.style.padding_bottom.to_px(sizing, 0.0);
+    }
+
+    height
+  }
+
+  fn inline_replaced_content_size(
+    &self,
+    measured_size: Size<f32>,
+    layout_style: &Style,
+  ) -> Size<f32> {
+    if self.context.style.box_sizing != BoxSizing::BorderBox {
+      return measured_size;
+    }
+
+    let sizing = &self.context.sizing;
+    let horizontal_insets = self.context.style.padding_left.to_px(sizing, 0.0)
+      + self.context.style.padding_right.to_px(sizing, 0.0)
+      + if self.context.style.border_left_style == BorderStyle::None {
+        0.0
+      } else {
+        self.context.style.border_left_width.to_px(sizing, 0.0)
+      }
+      + if self.context.style.border_right_style == BorderStyle::None {
+        0.0
+      } else {
+        self.context.style.border_right_width.to_px(sizing, 0.0)
+      };
+    let vertical_insets = self.context.style.padding_top.to_px(sizing, 0.0)
+      + self.context.style.padding_bottom.to_px(sizing, 0.0)
+      + if self.context.style.border_top_style == BorderStyle::None {
+        0.0
+      } else {
+        self.context.style.border_top_width.to_px(sizing, 0.0)
+      }
+      + if self.context.style.border_bottom_style == BorderStyle::None {
+        0.0
+      } else {
+        self.context.style.border_bottom_width.to_px(sizing, 0.0)
+      };
+
+    let width_auto = layout_style.size.width.is_auto();
+    let height_auto = layout_style.size.height.is_auto();
+    let measured_ratio = if measured_size.width > 0.0 && measured_size.height > 0.0 {
+      Some(measured_size.width / measured_size.height)
+    } else {
+      None
+    };
+
+    match (width_auto, height_auto) {
+      (false, false) => Size {
+        width: (measured_size.width - horizontal_insets).max(0.0),
+        height: (measured_size.height - vertical_insets).max(0.0),
+      },
+      (false, true) => {
+        let width = (measured_size.width - horizontal_insets).max(0.0);
+        let height = measured_ratio
+          .filter(|ratio| *ratio > 0.0)
+          .map_or(measured_size.height, |ratio| width / ratio);
+        Size { width, height }
+      }
+      (true, false) => {
+        let height = (measured_size.height - vertical_insets).max(0.0);
+        let width = measured_ratio
+          .filter(|ratio| *ratio > 0.0)
+          .map_or(measured_size.width, |ratio| height * ratio);
+        Size { width, height }
+      }
+      (true, true) => measured_size,
+    }
+  }
+
+  fn inline_baseline_box_kind(&self) -> Option<InlineBaselineBoxKind> {
+    if self.is_inline_atomic_container() {
+      return Some(InlineBaselineBoxKind::AtomicContainer);
+    }
+
+    self
+      .node
+      .as_ref()
+      .filter(|node| node.is_replaced_element() && self.context.style.display == Display::Inline)
+      .map(|_| InlineBaselineBoxKind::Replaced)
+  }
+
   fn inline_content_baseline_offset(
     &self,
     available_space: Size<AvailableSpace>,
     size: Size<f32>,
-    display: Display,
     use_last_line: bool,
   ) -> Option<f32> {
     if matches!(
       self.node.as_ref().and_then(Node::inline_content),
       Some(InlineContentKind::Box)
     ) {
-      return None;
-    }
-
-    if display == Display::InlineBlock
-      && (self.context.style.overflow_x != Overflow::Visible
-        || self.context.style.overflow_y != Overflow::Visible)
-    {
-      // inline-block baseline falls back to bottom margin edge when overflow is not visible.
       return None;
     }
 
@@ -1220,7 +1328,7 @@ impl<'g> RenderNode<'g> {
     Some(margin_top + border_top + padding_top + metrics.baseline)
   }
 
-  fn atomic_container_baseline_offset_from_results(
+  fn layout_first_baseline_offset(
     &self,
     layout_results: &LayoutResults,
     root_node_id: NodeId,
@@ -1240,54 +1348,119 @@ impl<'g> RenderNode<'g> {
       .filter(|baseline| baseline.is_finite() && *baseline >= 0.0 && *baseline <= box_height + 0.5)
   }
 
-  fn atomic_inline_baseline_offset(
+  fn inline_baseline_strategy(&self) -> Option<InlineBaselineStrategy> {
+    match self.inline_baseline_box_kind()? {
+      InlineBaselineBoxKind::AtomicContainer => {
+        let display = self.context.style.display;
+        let overflow_hidden_inline_block = display == Display::InlineBlock
+          && (self.context.style.overflow_x != Overflow::Visible
+            || self.context.style.overflow_y != Overflow::Visible);
+
+        Some(match display {
+          Display::InlineBlock if overflow_hidden_inline_block => InlineBaselineStrategy {
+            sources: &[],
+            fallback: InlineBaselineFallback::BottomMarginEdge,
+          },
+          Display::InlineBlock => InlineBaselineStrategy {
+            sources: &[
+              InlineBaselineSource::InlineContentLastLine,
+              InlineBaselineSource::LayoutFirstBaseline,
+            ],
+            fallback: InlineBaselineFallback::BottomMarginEdge,
+          },
+          Display::InlineFlex | Display::InlineGrid => InlineBaselineStrategy {
+            sources: &[
+              InlineBaselineSource::InlineContentLastLine,
+              InlineBaselineSource::InlineContentFirstLine,
+              InlineBaselineSource::LayoutFirstBaseline,
+            ],
+            fallback: InlineBaselineFallback::BottomMarginEdge,
+          },
+          _ => InlineBaselineStrategy {
+            sources: &[],
+            fallback: InlineBaselineFallback::BottomMarginEdge,
+          },
+        })
+      }
+      InlineBaselineBoxKind::Replaced => Some(InlineBaselineStrategy {
+        sources: &[],
+        fallback: InlineBaselineFallback::BottomMarginEdge,
+      }),
+    }
+  }
+
+  fn resolve_inline_baseline_source(
     &self,
     available_space: Size<AvailableSpace>,
     size: Size<f32>,
-    layout_results: &LayoutResults,
-    root_node_id: NodeId,
+    source: InlineBaselineSource,
+    layout_results: Option<(&LayoutResults, NodeId)>,
   ) -> Option<f32> {
-    let overflow_hidden_inline_block = self.context.style.display == Display::InlineBlock
-      && (self.context.style.overflow_x != Overflow::Visible
-        || self.context.style.overflow_y != Overflow::Visible);
-    let fallback = if overflow_hidden_inline_block {
-      None
-    } else {
-      self.atomic_container_baseline_offset_from_results(layout_results, root_node_id)
-    };
-    let sizing = &self.context.sizing;
-    let margin_top = self.context.style.margin_top.to_px(sizing, 0.0);
-    let border_top = self.context.style.border_top_width.to_px(sizing, 0.0);
-    let padding_top = self.context.style.padding_top.to_px(sizing, 0.0);
-    let margin_box_height = size.height + margin_top + border_top + padding_top;
+    match source {
+      InlineBaselineSource::InlineContentLastLine => {
+        self.inline_content_baseline_offset(available_space, size, true)
+      }
+      InlineBaselineSource::InlineContentFirstLine => {
+        self.inline_content_baseline_offset(available_space, size, false)
+      }
+      InlineBaselineSource::LayoutFirstBaseline => {
+        layout_results.and_then(|(results, root_node_id)| {
+          self.layout_first_baseline_offset(results, root_node_id)
+        })
+      }
+    }
+  }
 
-    match self.context.style.display {
-      Display::InlineBlock => {
-        let inline_content =
-          self.inline_content_baseline_offset(available_space, size, Display::InlineBlock, true);
-        Self::valid_baseline_offset(inline_content, margin_box_height).or(fallback)
+  fn resolve_inline_baseline_offset(
+    &self,
+    available_space: Size<AvailableSpace>,
+    size: Size<f32>,
+    layout_results: Option<(&LayoutResults, NodeId)>,
+  ) -> Option<f32> {
+    let strategy = self.inline_baseline_strategy()?;
+    let include_padding_border = !self.is_inline_atomic_container();
+    let margin_box_height = self.inline_box_margin_box_height(size, include_padding_border);
+
+    for source in strategy.sources {
+      let candidate =
+        self.resolve_inline_baseline_source(available_space, size, *source, layout_results);
+
+      if let Some(baseline) = Self::valid_baseline_offset(candidate, margin_box_height) {
+        return Some(baseline);
       }
-      Display::InlineFlex | Display::InlineGrid => {
-        let inline_content_last = self.inline_content_baseline_offset(
-          available_space,
-          size,
-          self.context.style.display,
-          true,
-        );
-        let inline_content_first = self.inline_content_baseline_offset(
-          available_space,
-          size,
-          self.context.style.display,
-          false,
-        );
-        Self::valid_baseline_offset(inline_content_last, margin_box_height)
-          .or(Self::valid_baseline_offset(
-            inline_content_first,
-            margin_box_height,
-          ))
-          .or(fallback)
-      }
-      _ => None,
+    }
+
+    match strategy.fallback {
+      InlineBaselineFallback::BottomMarginEdge => None,
+    }
+  }
+
+  pub(crate) fn measure_inline_box(
+    &self,
+    available_space: Size<AvailableSpace>,
+  ) -> AtomicInlineMetrics {
+    if self.is_inline_atomic_container() {
+      return self.measure_atomic_subtree(available_space);
+    }
+
+    let Some(node) = &self.node else {
+      return AtomicInlineMetrics {
+        size: Size::zero(),
+        baseline_offset: None,
+      };
+    };
+
+    let layout_style = self
+      .layout_style_override
+      .as_ref()
+      .cloned()
+      .unwrap_or_else(|| self.context.style.to_taffy_style(&self.context.sizing));
+    let measured_size = node.measure(&self.context, available_space, Size::NONE, &layout_style);
+    let size = self.inline_replaced_content_size(measured_size, &layout_style);
+
+    AtomicInlineMetrics {
+      size,
+      baseline_offset: self.resolve_inline_baseline_offset(available_space, size, None),
     }
   }
 
@@ -1358,8 +1531,11 @@ impl<'g> RenderNode<'g> {
         },
         |layout| {
           let size = layout.size;
-          let baseline_offset =
-            self.atomic_inline_baseline_offset(available_space, size, &results, root_node_id);
+          let baseline_offset = self.resolve_inline_baseline_offset(
+            available_space,
+            size,
+            Some((&results, root_node_id)),
+          );
           AtomicInlineMetrics {
             size,
             baseline_offset,

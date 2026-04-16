@@ -14,7 +14,7 @@ use crate::{
       SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextOverflow,
       TextWrapMode, TextWrapStyle, VerticalAlign,
     },
-    tree::{AtomicInlineMetrics, RenderNode},
+    tree::RenderNode,
   },
   rendering::{
     MaxHeight, RenderContext, apply_text_transform, apply_white_space_collapse, make_balanced_text,
@@ -247,6 +247,7 @@ pub(crate) fn get_parent_font_metrics(layout: &InlineLayout) -> Option<ParentFon
 pub(crate) struct ResolvedLineMetrics {
   pub(crate) resolved_ascent: f32,
   pub(crate) resolved_descent: f32,
+  pub(crate) resolved_leading: f32,
   pub(crate) resolved_line_height: f32,
   pub(crate) resolved_baseline: f32,
   pub(crate) resolved_line_top: f32,
@@ -260,6 +261,11 @@ fn quantized_baseline(line_height: f32, ascent: f32, descent: f32) -> f32 {
   let leading = line_height - (rounded_ascent + rounded_descent);
   let leading_above = (leading * 0.5).floor();
   rounded_ascent + leading_above
+}
+
+fn text_line_box_contribution(line_height: f32, ascent: f32, descent: f32) -> (f32, f32) {
+  let above = quantized_baseline(line_height, ascent, descent);
+  (above, line_height - above)
 }
 
 fn parent_baseline_offset_for_box(
@@ -338,15 +344,19 @@ pub(crate) fn resolve_inline_line_metrics(
       effective_parent_text_metrics_for_line(&line, parent_font_metrics);
 
     let line_metrics = line.metrics();
-    let mut resolved_ascent = 0.0_f32;
-    let mut resolved_descent = 0.0_f32;
+    let mut resolved_above = 0.0_f32;
+    let mut resolved_below = f32::NEG_INFINITY;
+    let mut has_contribution = false;
 
     for item in line.items() {
       match item {
         PositionedLayoutItem::GlyphRun(glyph_run) => {
           let metrics = glyph_run.run().metrics();
-          resolved_ascent = resolved_ascent.max(metrics.ascent);
-          resolved_descent = resolved_descent.max(metrics.descent);
+          let (above, below) =
+            text_line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
+          resolved_above = resolved_above.max(above);
+          resolved_below = resolved_below.max(below);
+          has_contribution = true;
         }
         PositionedLayoutItem::InlineBox(inline_box) => {
           let Some(ProcessedInlineSpan::Box(item)) = spans.get(inline_box.id as usize) else {
@@ -366,23 +376,29 @@ pub(crate) fn resolve_inline_line_metrics(
           let ascent_contrib = (baseline_in_item - parent_baseline_offset).max(0.0);
           let descent_contrib =
             (inline_box.height - baseline_in_item + parent_baseline_offset).max(0.0);
-          resolved_ascent = resolved_ascent.max(ascent_contrib);
-          resolved_descent = resolved_descent.max(descent_contrib);
+          resolved_above = resolved_above.max(ascent_contrib);
+          resolved_below = resolved_below.max(descent_contrib);
+          has_contribution = true;
         }
       }
     }
 
-    if resolved_ascent == 0.0 && resolved_descent == 0.0 {
-      resolved_ascent = line_metrics.ascent.max(0.0);
-      resolved_descent = line_metrics.descent.max(0.0);
+    if !has_contribution {
+      let (above, below) = text_line_box_contribution(
+        line_metrics.line_height,
+        line_metrics.ascent.max(0.0),
+        line_metrics.descent.max(0.0),
+      );
+      resolved_above = above;
+      resolved_below = below;
     }
 
-    let resolved_line_height = line_metrics
-      .line_height
-      .max(resolved_ascent + resolved_descent);
+    let resolved_line_height = resolved_above + resolved_below;
+    let resolved_ascent = resolved_above.max(0.0);
+    let resolved_descent = resolved_below.max(0.0);
+    let resolved_leading = resolved_line_height - (resolved_ascent + resolved_descent);
     let resolved_line_top = next_line_top;
-    let resolved_baseline = resolved_line_top
-      + quantized_baseline(resolved_line_height, resolved_ascent, resolved_descent);
+    let resolved_baseline = resolved_line_top + resolved_above;
     let resolved_line_bottom = resolved_line_top + resolved_line_height;
     let baseline_shift = if (resolved_baseline - line_metrics.baseline).is_finite() {
       resolved_baseline - line_metrics.baseline
@@ -393,6 +409,7 @@ pub(crate) fn resolve_inline_line_metrics(
     result.push(ResolvedLineMetrics {
       resolved_ascent,
       resolved_descent,
+      resolved_leading,
       resolved_line_height,
       resolved_baseline,
       resolved_line_top,
@@ -413,6 +430,7 @@ pub(crate) fn resolved_line_metrics_for_apply(
   let mut adjusted = *line_metrics;
   adjusted.ascent = resolved.resolved_ascent;
   adjusted.descent = resolved.resolved_descent;
+  adjusted.leading = resolved.resolved_leading;
   adjusted.baseline = resolved.resolved_baseline;
   adjusted.min_coord = resolved.resolved_line_top;
   adjusted.max_coord = resolved.resolved_line_bottom;
@@ -649,24 +667,10 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
           }
           .map(|length| length.to_px(&context.sizing, 0.0));
 
-          let atomic_metrics = if render_node.is_inline_atomic_container() {
-            Some(render_node.measure_atomic_subtree(available_space))
-          } else if let Some(node) = &render_node.node {
-            let layout_style = render_node
-              .layout_style_override
-              .as_ref()
-              .map(Cow::Borrowed)
-              .unwrap_or_else(|| {
-                Cow::Owned(render_node.context.style.to_taffy_style(&context.sizing))
-              });
-            let content_size = node.measure(context, available_space, Size::NONE, &layout_style);
-            Some(AtomicInlineMetrics {
-              size: content_size,
-              baseline_offset: None,
-            })
-          } else {
-            None
-          };
+          let atomic_metrics = render_node
+            .node
+            .as_ref()
+            .map(|_| render_node.measure_inline_box(available_space));
           let content_size = atomic_metrics.map_or(Size::zero(), |metrics| metrics.size);
           let raw_baseline_offset = atomic_metrics.and_then(|metrics| metrics.baseline_offset);
 

@@ -126,18 +126,91 @@ fn text_typography_medium_weight_500() {
 }
 
 #[test]
-fn text_typography_line_height_40px() {
-  let text = Node::text("Line height 40px".to_string()).with_style(
+fn text_typography_line_height_variants() {
+  let sample = "Sphinx of black quartz,\njudge my vow.\nPack my box.";
+  let variant = |label: &str, line_height: LineHeight, panel: Color| {
+    Node::container([
+      Node::text(label.to_string()).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Block))
+          .with(StyleDeclaration::font_size(Px(18.0).into()))
+          .with(StyleDeclaration::font_weight(FontWeight::from(600.0)))
+          .with(StyleDeclaration::margin_bottom(Px(10.0))),
+      ),
+      Node::text(sample.to_string()).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Block))
+          .with(StyleDeclaration::font_size(Px(24.0).into()))
+          .with(StyleDeclaration::line_height(line_height))
+          .with_white_space(WhiteSpace::pre_line()),
+      ),
+    ])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(ColorInput::Value(panel)))
+        .with_padding(Sides([Px(18.0); 4]))
+        .with_border_width(Sides([Px(1.0); 4]))
+        .with_border_style(Sides([BorderStyle::Solid; 4]))
+        .with_border_color(Sides([ColorInput::Value(Color([205, 214, 228, 255])); 4])),
+    )
+  };
+
+  let text = Node::container([
+    Node::text("Line Height Variants".to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::font_size(Px(34.0).into()))
+        .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
+        .with(StyleDeclaration::margin_bottom(Px(18.0))),
+    ),
+    Node::container([
+      variant(
+        "Unitless 0.9",
+        LineHeight::Unitless(0.9),
+        Color([248, 250, 252, 255]),
+      ),
+      variant(
+        "Length 32px",
+        LineHeight::Length(Px(32.0)),
+        Color([241, 245, 249, 255]),
+      ),
+      variant(
+        "Length 40px",
+        LineHeight::Length(Px(40.0)),
+        Color([236, 242, 255, 255]),
+      ),
+      variant(
+        "Length 56px",
+        LineHeight::Length(Px(56.0)),
+        Color([250, 245, 255, 255]),
+      ),
+    ])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with_gap(SpacePair::from_single(Px(16.0)))
+        .with(StyleDeclaration::align_items(AlignItems::Stretch)),
+    ),
+  ])
+  .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
-        Color([240, 240, 240, 255]),
+        Color([232, 236, 241, 255]),
       )))
-      .with(StyleDeclaration::font_size(Px(24.0).into()))
-      .with(StyleDeclaration::line_height(LineHeight::Length(Px(40.0)))),
+      .with_padding(Sides([Px(28.0); 4]))
+      .with(StyleDeclaration::color(ColorInput::Value(Color([
+        15, 23, 42, 255,
+      ])))),
   );
 
-  run_fixture_test(text, "text_typography_line_height_40px");
+  run_fixture_test(text, "text_typography_line_height_variants");
 }
 
 #[test]

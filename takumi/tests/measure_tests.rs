@@ -5,9 +5,9 @@ use takumi::{
     Viewport,
     node::Node,
     style::{
-      Affine, AlignItems, BorderStyle, Color, ColorInput, Display, FlexDirection, JustifyContent,
-      Length::*, LineHeight, Position, Sides, Style, StyleDeclaration, TextIndent, WhiteSpace,
-      WhiteSpaceCollapse,
+      Affine, AlignItems, BorderStyle, BoxSizing, Color, ColorInput, Display, FlexDirection,
+      JustifyContent, Length::*, LineHeight, Position, Sides, SpacePair, Style, StyleDeclaration,
+      TextIndent, WhiteSpace, WhiteSpaceCollapse,
     },
   },
   rendering::{MeasuredNode, MeasuredTextRun, RenderOptions, measure_layout},
@@ -522,6 +522,150 @@ fn test_measure_text_node_centers_glyphs_with_explicit_line_height() {
     (leading_bottom - leading_top).abs() <= 1.25,
     "expected browser-style half-leading split, top={leading_top}, bottom={leading_bottom}"
   );
+}
+
+#[test]
+fn test_measure_text_node_respects_compact_line_height() {
+  let node = Node::text("Compact line height".to_string()).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::font_size(Px(24.0).into()))
+      .with(StyleDeclaration::line_height(LineHeight::Unitless(0.5))),
+  );
+
+  let result = measure(node, create_measure_viewport());
+  assert_eq!(result.children.len(), 1);
+
+  let anonymous_item = &result.children[0];
+  assert_eq!(anonymous_item.height, 12.0);
+  assert_eq!(anonymous_item.runs.len(), 1);
+
+  let run = &anonymous_item.runs[0];
+  assert!(
+    run.y < 0.0,
+    "expected glyphs to overflow above the compact line box"
+  );
+}
+
+#[test]
+fn test_measure_inline_layout_keeps_compact_text_line_height_with_small_inline_box() {
+  let children: Vec<Node> = vec![
+    Node::text("Compact".to_string())
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+    Node::image("assets/images/yeecord.png").with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Inline))
+        .with(StyleDeclaration::width(Px(8.0)))
+        .with(StyleDeclaration::height(Px(8.0))),
+    ),
+    Node::text("line".to_string())
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+  ];
+
+  let node: Node = Node::container(children).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Px(400.0)))
+      .with(StyleDeclaration::font_size(Px(24.0).into()))
+      .with(StyleDeclaration::line_height(LineHeight::Unitless(0.5))),
+  );
+
+  let result = measure(node, create_measure_viewport());
+  assert_eq!(result.height, 14.0);
+  assert_eq!(result.children.len(), 1);
+
+  let inline_box = &result.children[0];
+  assert_eq!(inline_box.width, 8.0);
+  assert_eq!(inline_box.height, 8.0);
+}
+
+#[test]
+fn test_measure_inline_image_uses_replaced_baseline_fallback() {
+  let node: Node = Node::container([
+    Node::text("Hello ".to_string())
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+    Node::image("assets/images/yeecord.png").with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Inline))
+        .with(StyleDeclaration::box_sizing(BoxSizing::ContentBox))
+        .with(StyleDeclaration::width(Px(20.0)))
+        .with(StyleDeclaration::height(Px(20.0)))
+        .with_padding(Sides([Px(4.0); 4]))
+        .with_border_width(Sides([Px(2.0); 4]))
+        .with_border_style(Sides([BorderStyle::Solid; 4])),
+    ),
+    Node::text("world".to_string())
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::font_size(Px(20.0).into()))
+      .with(StyleDeclaration::line_height(LineHeight::Unitless(1.0))),
+  );
+
+  let result = measure(node, create_measure_viewport());
+  assert_eq!(result.children.len(), 1);
+
+  let inline_image = &result.children[0];
+  assert_eq!(inline_image.width, 32.0);
+  assert_eq!(inline_image.height, 32.0);
+  assert_within(inline_image.transform[5], 0.0, 0.1);
+
+  assert_eq!(result.runs.len(), 2);
+  assert_within(result.runs[0].y, 11.9, 1.0);
+  assert_within(result.runs[1].y, 11.9, 1.0);
+}
+
+#[test]
+fn test_measure_inline_image_respects_box_sizing_with_border() {
+  let image_style = |box_sizing| {
+    Style::default()
+      .with(StyleDeclaration::display(Display::Inline))
+      .with(StyleDeclaration::box_sizing(box_sizing))
+      .with(StyleDeclaration::width(Px(20.0)))
+      .with(StyleDeclaration::height(Px(20.0)))
+      .with_border_width(Sides([Px(2.0); 4]))
+      .with_border_style(Sides([BorderStyle::Solid; 4]))
+  };
+
+  let build = |box_sizing| {
+    Node::container([Node::image("assets/images/yeecord.png").with_style(image_style(box_sizing))])
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Block)))
+  };
+
+  let content_box = measure(build(BoxSizing::ContentBox), create_measure_viewport());
+  let border_box = measure(build(BoxSizing::BorderBox), create_measure_viewport());
+
+  assert_eq!(content_box.children.len(), 1);
+  assert_eq!(border_box.children.len(), 1);
+
+  let content_inline_image = &content_box.children[0];
+  let border_inline_image = &border_box.children[0];
+
+  assert_eq!(content_inline_image.width, 24.0);
+  assert_eq!(content_inline_image.height, 24.0);
+  assert_eq!(border_inline_image.width, 20.0);
+  assert_eq!(border_inline_image.height, 20.0);
+}
+
+#[test]
+fn test_measure_inline_image_border_box_single_axis_preserves_aspect_ratio() {
+  let node: Node = Node::container([Node::image("assets/images/yeecord.png").with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Inline))
+      .with(StyleDeclaration::box_sizing(BoxSizing::BorderBox))
+      .with(StyleDeclaration::width(Px(48.0)))
+      .with_padding_inline(SpacePair::from_single(Px(4.0))),
+  )])
+  .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
+
+  let result = measure(node, create_measure_viewport());
+  assert_eq!(result.children.len(), 1);
+
+  let inline_image = &result.children[0];
+  assert_eq!(inline_image.width, 48.0);
+  assert_eq!(inline_image.height, 40.0);
 }
 
 #[test]
