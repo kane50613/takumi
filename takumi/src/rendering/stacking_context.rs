@@ -276,12 +276,8 @@ impl StackingBuckets {
         .cmp(&right.z_index)
         .then_with(|| left.source_order.cmp(&right.source_order))
     });
-    self
-      .inflow
-      .sort_by(|left, right| left.source_order.cmp(&right.source_order));
-    self
-      .auto_zero
-      .sort_by(|left, right| left.source_order.cmp(&right.source_order));
+    self.inflow.sort_by_key(|item| item.source_order);
+    self.auto_zero.sort_by_key(|item| item.source_order);
     self.positive.sort_by(|left, right| {
       left
         .z_index

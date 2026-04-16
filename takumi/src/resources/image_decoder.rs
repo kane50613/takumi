@@ -96,11 +96,7 @@ fn decode_gif(bytes: &[u8]) -> ImageResult<DecodedGif> {
 
   for frame in frames {
     let (numerator, denominator) = frame.delay().numer_denom_ms();
-    let frame_delay_ms = if denominator == 0 {
-      numerator
-    } else {
-      numerator / denominator
-    };
+    let frame_delay_ms = numerator.checked_div(denominator).unwrap_or(numerator);
     let duration_ms = frame_delay_ms.max(1);
     let pixmap = Arc::new(rgba_to_pixmap(frame.into_buffer(), ImageFormat::Gif)?);
     decoded_frames.push(DecodedGifFrame {

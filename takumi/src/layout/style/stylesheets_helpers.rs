@@ -279,23 +279,28 @@ pub(super) fn normalize_camel_property_name(name: &str) -> Cow<'_, str> {
 
 pub(super) fn contains_var_function(specified_value: &str) -> bool {
   fn contains_in_parser(input: &mut Parser<'_, '_>) -> bool {
-    while let Ok(token) = input.next_including_whitespace_and_comments() {
-      match token {
-        Token::Function(name) if name.eq_ignore_ascii_case("var") => return true,
-        Token::Function(_)
-        | Token::ParenthesisBlock
-        | Token::SquareBracketBlock
-        | Token::CurlyBracketBlock => {
-          if input
-            .parse_nested_block(|input| {
-              Ok::<_, ParseError<'_, Cow<'_, str>>>(contains_in_parser(input))
-            })
-            .unwrap_or(true)
-          {
+    loop {
+      let should_check_nested_block = match input.next_including_whitespace_and_comments() {
+        Ok(Token::Function(name)) => {
+          if name.eq_ignore_ascii_case("var") {
             return true;
           }
+
+          true
         }
-        _ => {}
+        Ok(Token::ParenthesisBlock | Token::SquareBracketBlock | Token::CurlyBracketBlock) => true,
+        Ok(_) => false,
+        Err(_) => break,
+      };
+
+      if should_check_nested_block
+        && input
+          .parse_nested_block(|input| {
+            Ok::<_, ParseError<'_, Cow<'_, str>>>(contains_in_parser(input))
+          })
+          .unwrap_or(true)
+      {
+        return true;
       }
     }
 
