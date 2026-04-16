@@ -1,5 +1,5 @@
 use data_url::DataUrl;
-use taffy::{AvailableSpace, Layout, Size};
+use taffy::{AvailableSpace, CompactLength, Layout, MaybeResolve, Size};
 
 use crate::{
   Result,
@@ -100,42 +100,43 @@ pub(crate) fn measure_image_node(
   .map(|value| value * context.sizing.viewport.device_pixel_ratio);
 
   let style_known_dimensions = Size {
-    width: if style.size.width.is_auto() {
-      None
-    } else {
-      match available_space.width {
-        AvailableSpace::Definite(width) => Some(width),
-        _ => None,
-      }
-    },
-    height: if style.size.height.is_auto() {
-      None
-    } else {
-      match available_space.height {
-        AvailableSpace::Definite(height) => Some(height),
-        _ => None,
-      }
-    },
+    width: resolve_style_size_axis(style.size.width, available_space.width, context),
+    height: resolve_style_size_axis(style.size.height, available_space.height, context),
   };
+
+  if let Size {
+    width: Some(width),
+    height: Some(height),
+  } = style_known_dimensions
+  {
+    return Size { width, height };
+  }
 
   let known_dimensions = Size {
-    width: known_dimensions.width.or(style_known_dimensions.width),
-    height: known_dimensions.height.or(style_known_dimensions.height),
+    width: style_known_dimensions.width.or(known_dimensions.width),
+    height: style_known_dimensions.height.or(known_dimensions.height),
   };
 
-  let known_dimensions = if should_skip_intrinsic_probe_cross_axis_ratio_transfer(
-    image,
-    available_space,
-    known_dimensions,
-    style,
-  ) {
-    known_dimensions
+  let known_dimensions = if style.size.width.is_auto()
+    && style.size.height.is_auto()
+    && known_dimensions.width.is_none()
+    && known_dimensions.height.is_none()
+    && matches!(
+      available_space.height,
+      AvailableSpace::MinContent | AvailableSpace::MaxContent
+    ) {
+    Size {
+      width: available_space.width.into_option(),
+      height: None,
+    }
   } else {
-    let aspect_ratio = style.aspect_ratio.or_else(|| {
-      (preferred_size.height != 0.0).then_some(preferred_size.width / preferred_size.height)
-    });
-    known_dimensions.maybe_apply_aspect_ratio(aspect_ratio)
+    known_dimensions
   };
+
+  let aspect_ratio = style.aspect_ratio.or_else(|| {
+    (preferred_size.height != 0.0).then_some(preferred_size.width / preferred_size.height)
+  });
+  let known_dimensions = known_dimensions.maybe_apply_aspect_ratio(aspect_ratio);
 
   if let Size {
     width: Some(width),
@@ -146,6 +147,21 @@ pub(crate) fn measure_image_node(
   }
 
   preferred_size
+}
+
+fn resolve_style_size_axis(
+  size: taffy::Dimension,
+  available: AvailableSpace,
+  context: &RenderContext,
+) -> Option<f32> {
+  match size.tag() {
+    CompactLength::AUTO_TAG => None,
+    CompactLength::LENGTH_TAG => Some(size.value()),
+    CompactLength::PERCENT_TAG => available.into_option(),
+    _ => size.maybe_resolve(available.into_option(), |val, basis| {
+      context.sizing.calc_arena.resolve_calc_value(val, basis)
+    }),
+  }
 }
 
 pub(crate) fn draw_image_node_content(
@@ -160,28 +176,6 @@ pub(crate) fn draw_image_node_content(
 
   draw_image(&image_source, context, canvas, layout)?;
   Ok(())
-}
-
-fn should_skip_intrinsic_probe_cross_axis_ratio_transfer(
-  image: &ImageData,
-  available_space: Size<AvailableSpace>,
-  known_dimensions: Size<Option<f32>>,
-  style: &taffy::Style,
-) -> bool {
-  image.width.is_none()
-    && image.height.is_none()
-    && style.size.width.is_auto()
-    && style.size.height.is_auto()
-    && ((matches!(
-      available_space.width,
-      AvailableSpace::MinContent | AvailableSpace::MaxContent
-    ) && known_dimensions.width.is_none()
-      && known_dimensions.height.is_some())
-      || (matches!(
-        available_space.height,
-        AvailableSpace::MinContent | AvailableSpace::MaxContent
-      ) && known_dimensions.height.is_none()
-        && known_dimensions.width.is_some()))
 }
 
 const DATA_URI_PREFIX: &str = "data:";
@@ -220,11 +214,18 @@ pub(crate) fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
 
 #[cfg(test)]
 mod tests {
+  use image::RgbaImage;
   use serde_json::from_value;
+  use taffy::{AvailableSpace, Dimension, Size, Style};
 
   use super::image_resource_url;
   use crate::{
-    layout::node::{ImageData, ImageSourceInput},
+    GlobalContext,
+    layout::{
+      Viewport,
+      node::{ImageData, ImageSourceInput},
+    },
+    rendering::RenderContext,
     resources::image::ImageSource,
   };
 
@@ -280,12 +281,45 @@ mod tests {
 
   #[test]
   fn from_pixmap_creates_loaded_image_source_input() {
-    let bitmap = image::RgbaImage::new(2, 2);
+    let bitmap = RgbaImage::new(2, 2);
     let image = ImageData::from(bitmap);
 
     assert!(matches!(
       image.src,
       ImageSourceInput::Loaded(ImageSource::Bitmap(_))
     ));
+  }
+
+  #[test]
+  fn fixed_style_size_uses_declared_lengths_instead_of_available_space() {
+    let global = GlobalContext::default();
+    let context = RenderContext::new_test(&global, Viewport::new((1200, 630)));
+    let image = ImageData::from(ImageSource::from(RgbaImage::new(10, 10)));
+    let style = Style {
+      size: Size {
+        width: Dimension::length(42.0),
+        height: Dimension::length(28.0),
+      },
+      ..Style::default()
+    };
+
+    let measured = super::measure_image_node(
+      &image,
+      &context,
+      Size {
+        width: AvailableSpace::Definite(480.0),
+        height: AvailableSpace::Definite(320.0),
+      },
+      Size::NONE,
+      &style,
+    );
+
+    assert_eq!(
+      measured,
+      Size {
+        width: 42.0,
+        height: 28.0,
+      }
+    );
   }
 }

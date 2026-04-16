@@ -1229,6 +1229,7 @@ fn build_border_path(border: BorderProperties, size: Size<u32>) -> Option<TinyPa
   border.append_mask_commands(&mut commands, size.map(|v| v as f32), Point::ZERO);
   build_path(&commands)
 }
+
 pub(crate) fn overlay_image<'a, I: Into<PaintSource<'a>>>(
   pixmap: &mut PixmapMut<'_>,
   image: I,
@@ -1283,7 +1284,11 @@ pub(crate) fn overlay_image<'a, I: Into<PaintSource<'a>>>(
         size,
         border: options.border,
         transform: options.transform,
-        source_to_canvas: options.transform,
+        source_to_canvas: Affine {
+          x: 0.0,
+          y: 0.0,
+          ..options.transform
+        },
         algorithm: options.algorithm,
         mode: options.mode,
         combined_mask: options.combined_mask,

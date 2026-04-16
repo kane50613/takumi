@@ -3,8 +3,8 @@ use taffy::{Layout, Point, Size};
 use crate::layout::style::BlendMode;
 use crate::{
   Result,
-  layout::style::{Affine, Length, ObjectFit},
-  rendering::{BorderProperties, Canvas, RenderContext, SamplingOptions},
+  layout::style::{Affine, ObjectFit, PositionComponent, PositionKeywordX, PositionKeywordY},
+  rendering::{BorderProperties, Canvas, RenderContext, SamplingOptions, Sizing},
   resources::image::{ImageSource, RenderedImage},
 };
 
@@ -13,20 +13,23 @@ pub(crate) struct PreparedImage<'a> {
   logical_to_source: Affine,
 }
 
-/// Calculate offset for object-position within available space.
-/// Position values are resolved to px relative to content_box, so we need to
-/// adjust them to be relative to the available space for proper positioning
-fn calculate_object_position_offset(
+fn resolve_object_position_axis(
+  component: PositionComponent,
+  sizing: &Sizing,
   available_space: f32,
-  total_space: f32,
-  position_value: f32,
 ) -> f32 {
-  if total_space > 0.0 {
-    // Convert position from content-box-relative to available-space-relative
-    // Clamp the ratio to [0, 1] to handle edge cases
-    ((position_value / total_space).clamp(0.0, 1.0) * available_space).max(0.0)
-  } else {
-    0.0
+  match component {
+    PositionComponent::KeywordX(keyword) => match keyword {
+      PositionKeywordX::Left => 0.0,
+      PositionKeywordX::Center => available_space * 0.5,
+      PositionKeywordX::Right => available_space,
+    },
+    PositionComponent::KeywordY(keyword) => match keyword {
+      PositionKeywordY::Top => 0.0,
+      PositionKeywordY::Center => available_space * 0.5,
+      PositionKeywordY::Bottom => available_space,
+    },
+    PositionComponent::Length(length) => length.to_px(sizing, available_space),
   }
 }
 
@@ -55,10 +58,7 @@ pub fn process_image_for_object_fit<'i>(
     Affine::scale(source_width / image_width, source_height / image_height)
   };
 
-  let object_position_x =
-    Length::from(context.style.object_position.0.x).to_px(&context.sizing, content_box.width);
-  let object_position_y =
-    Length::from(context.style.object_position.0.y).to_px(&context.sizing, content_box.height);
+  let object_position = context.style.object_position.0;
 
   match context.style.object_fit {
     ObjectFit::Fill => Ok((
@@ -92,10 +92,8 @@ pub fn process_image_for_object_fit<'i>(
       let available_x = content_box.width - new_width;
       let available_y = content_box.height - new_height;
 
-      let offset_x =
-        calculate_object_position_offset(available_x, content_box.width, object_position_x);
-      let offset_y =
-        calculate_object_position_offset(available_y, content_box.height, object_position_y);
+      let offset_x = resolve_object_position_axis(object_position.x, &context.sizing, available_x);
+      let offset_y = resolve_object_position_axis(object_position.y, &context.sizing, available_y);
 
       Ok((
         PreparedImage {
@@ -130,9 +128,9 @@ pub fn process_image_for_object_fit<'i>(
       let available_crop_y = new_height - content_box.height;
 
       let crop_x =
-        calculate_object_position_offset(available_crop_x, content_box.width, object_position_x);
+        resolve_object_position_axis(object_position.x, &context.sizing, available_crop_x);
       let crop_y =
-        calculate_object_position_offset(available_crop_y, content_box.height, object_position_y);
+        resolve_object_position_axis(object_position.y, &context.sizing, available_crop_y);
 
       Ok((
         PreparedImage {
@@ -182,10 +180,8 @@ pub fn process_image_for_object_fit<'i>(
       let available_x = content_box.width - new_width;
       let available_y = content_box.height - new_height;
 
-      let offset_x =
-        calculate_object_position_offset(available_x, content_box.width, object_position_x);
-      let offset_y =
-        calculate_object_position_offset(available_y, content_box.height, object_position_y);
+      let offset_x = resolve_object_position_axis(object_position.x, &context.sizing, available_x);
+      let offset_y = resolve_object_position_axis(object_position.y, &context.sizing, available_y);
 
       Ok((
         PreparedImage {
@@ -209,9 +205,9 @@ pub fn process_image_for_object_fit<'i>(
         let available_y = (content_box.height - image_height).max(0.0);
 
         let offset_x =
-          calculate_object_position_offset(available_x, content_box.width, object_position_x);
+          resolve_object_position_axis(object_position.x, &context.sizing, available_x);
         let offset_y =
-          calculate_object_position_offset(available_y, content_box.height, object_position_y);
+          resolve_object_position_axis(object_position.y, &context.sizing, available_y);
 
         return Ok((
           PreparedImage {
@@ -235,22 +231,22 @@ pub fn process_image_for_object_fit<'i>(
       let available_crop_y = (image_height - content_box.height).max(0.0);
 
       let crop_x =
-        calculate_object_position_offset(available_crop_x, content_box.width, object_position_x);
+        resolve_object_position_axis(object_position.x, &context.sizing, available_crop_x);
       let crop_y =
-        calculate_object_position_offset(available_crop_y, content_box.height, object_position_y);
+        resolve_object_position_axis(object_position.y, &context.sizing, available_crop_y);
 
       let crop_width = content_box.width.min(image_width);
       let crop_height = content_box.height.min(image_height);
 
-      let offset_x = calculate_object_position_offset(
+      let offset_x = resolve_object_position_axis(
+        object_position.x,
+        &context.sizing,
         (content_box.width - crop_width).max(0.0),
-        content_box.width,
-        object_position_x,
       );
-      let offset_y = calculate_object_position_offset(
+      let offset_y = resolve_object_position_axis(
+        object_position.y,
+        &context.sizing,
         (content_box.height - crop_height).max(0.0),
-        content_box.height,
-        object_position_y,
       );
 
       Ok((
@@ -324,4 +320,58 @@ pub fn draw_image(
   }
 
   Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use std::rc::Rc;
+
+  use super::resolve_object_position_axis;
+  use crate::{
+    layout::{
+      Viewport,
+      style::{CalcArena, Length, PositionComponent, PositionKeywordX},
+    },
+    rendering::Sizing,
+  };
+  use taffy::Size;
+
+  fn sizing() -> Sizing {
+    Sizing {
+      viewport: Viewport::new((1200, 630)),
+      container_size: Size::NONE,
+      font_size: 16.0,
+      calc_arena: Rc::new(CalcArena::default()),
+    }
+  }
+
+  #[test]
+  fn object_position_keyword_center_uses_half_free_space() {
+    let resolved = resolve_object_position_axis(
+      PositionComponent::KeywordX(PositionKeywordX::Center),
+      &sizing(),
+      120.0,
+    );
+    assert_eq!(resolved, 60.0);
+  }
+
+  #[test]
+  fn object_position_length_is_not_scaled_by_container_size() {
+    let resolved = resolve_object_position_axis(
+      PositionComponent::Length(Length::Px(12.0)),
+      &sizing(),
+      120.0,
+    );
+    assert_eq!(resolved, 12.0);
+  }
+
+  #[test]
+  fn object_position_percentage_supports_out_of_range_values() {
+    let resolved = resolve_object_position_axis(
+      PositionComponent::Length(Length::Percentage(150.0)),
+      &sizing(),
+      120.0,
+    );
+    assert_eq!(resolved, 180.0);
+  }
 }

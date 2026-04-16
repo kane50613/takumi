@@ -447,12 +447,14 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
           let atomic_metrics = if render_node.is_inline_atomic_container() {
             Some(render_node.measure_atomic_subtree(available_space))
           } else if let Some(node) = &render_node.node {
-            let content_size = node.measure(
-              context,
-              available_space,
-              Size::NONE,
-              &taffy::Style::default(),
-            );
+            let layout_style = render_node
+              .layout_style_override
+              .as_ref()
+              .map(Cow::Borrowed)
+              .unwrap_or_else(|| {
+                Cow::Owned(render_node.context.style.to_taffy_style(&context.sizing))
+              });
+            let content_size = node.measure(context, available_space, Size::NONE, &layout_style);
             Some(AtomicInlineMetrics {
               size: content_size,
               baseline_offset: None,
