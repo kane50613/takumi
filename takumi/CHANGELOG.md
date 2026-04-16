@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.12
+
+### Patch Changes
+
+- 151a56e: Fix inline replaced sizing with border-box and line-height baseline alignment
+
 ## 1.0.11
 
 ### Patch Changes
