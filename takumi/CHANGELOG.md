@@ -1,5 +1,12 @@
 # takumi
 
+## 1.0.10
+
+### Patch Changes
+
+- b5e38f8: Fix Tailwind leading parsing #665
+- 7d91b9c: Fix image drawing offset #664
+
 ## 1.0.9
 
 ### Patch Changes
