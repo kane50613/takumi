@@ -1,5 +1,14 @@
 # takumi-js
 
+## 1.0.13
+
+### Patch Changes
+
+- ccfaff3: Removed `Promise.withResolvers` usage to be compatibable with older Node.js
+  - @takumi-rs/core@1.0.13
+  - @takumi-rs/wasm@1.0.13
+  - @takumi-rs/helpers@1.0.13
+
 ## 1.0.12
 
 ### Patch Changes
