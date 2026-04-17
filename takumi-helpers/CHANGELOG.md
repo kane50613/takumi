@@ -1,5 +1,11 @@
 # @takumi-rs/helpers
 
+## 1.0.14
+
+### Patch Changes
+
+- b10de08: Improve npm package quality signals by adding richer package metadata (description, homepage, bugs, repository directory, keywords, publish provenance) and expanding the core README with install, usage, and docs links.
+
 ## 1.0.13
 
 ## 1.0.12
