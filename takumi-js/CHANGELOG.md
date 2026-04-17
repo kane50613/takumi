@@ -1,5 +1,14 @@
 # takumi-js
 
+## 1.0.14
+
+### Patch Changes
+
+- 6323299: Add `RenderInput` type, support passing Node
+  - @takumi-rs/core@1.0.14
+  - @takumi-rs/wasm@1.0.14
+  - @takumi-rs/helpers@1.0.14
+
 ## 1.0.13
 
 ### Patch Changes
