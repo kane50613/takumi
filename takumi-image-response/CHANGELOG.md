@@ -1,5 +1,12 @@
 # @takumi-rs/image-response
 
+## 1.0.13
+
+### Patch Changes
+
+- Updated dependencies [ccfaff3]
+  - takumi-js@1.0.13
+
 ## 1.0.12
 
 ### Patch Changes
