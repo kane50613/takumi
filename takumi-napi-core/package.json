@@ -1,15 +1,21 @@
 {
   "name": "@takumi-rs/core",
   "version": "1.0.13",
+  "description": "Native Node.js bindings for the Takumi Rust image rendering engine.",
   "keywords": [
     "css",
     "image",
     "jsx",
     "napi",
     "nodejs",
+    "og-image",
     "react",
     "rendering"
   ],
+  "homepage": "https://takumi.kane.tw/docs/integration",
+  "bugs": {
+    "url": "https://github.com/kane50613/takumi/issues"
+  },
   "license": "(MIT OR Apache-2.0)",
   "author": {
     "name": "Kane Wang",
@@ -17,13 +23,16 @@
     "url": "https://kane.tw"
   },
   "repository": {
-    "url": "git+https://github.com/kane50613/takumi.git"
+    "type": "git",
+    "url": "git+https://github.com/kane50613/takumi.git",
+    "directory": "takumi-napi-core"
   },
   "files": [
     "dist",
     "not-available.js"
   ],
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/export.cjs",
   "module": "./dist/export.mjs",
   "types": "./dist/export.d.cts",
@@ -37,6 +46,10 @@
       "require": "./dist/export.cjs",
       "default": "./dist/export.mjs"
     }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "build": "napi build --release --no-const-enum --platform --esm --strip",

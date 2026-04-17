@@ -2,6 +2,20 @@
   "name": "takumi-js",
   "version": "1.0.13",
   "description": "All-in-one Takumi package for Node.js and WebAssembly runtimes.",
+  "keywords": [
+    "css",
+    "image",
+    "jsx",
+    "next-og",
+    "og-image",
+    "react",
+    "rendering",
+    "wasm"
+  ],
+  "homepage": "https://takumi.kane.tw/docs/",
+  "bugs": {
+    "url": "https://github.com/kane50613/takumi/issues"
+  },
   "license": "(MIT OR Apache-2.0)",
   "author": {
     "name": "Kane Wang",
@@ -9,12 +23,15 @@
     "url": "https://kane.tw"
   },
   "repository": {
-    "url": "git+https://github.com/kane50613/takumi.git"
+    "type": "git",
+    "url": "git+https://github.com/kane50613/takumi.git",
+    "directory": "takumi-js"
   },
   "files": [
     "dist"
   ],
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
@@ -61,6 +78,10 @@
       "require": "./dist/helpers/jsx.cjs",
       "default": "./dist/helpers/jsx.mjs"
     }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "prepublishOnly": "jq '.dependencies[\"@takumi-rs/core\"] = .version | .dependencies[\"@takumi-rs/helpers\"] = .version | .dependencies[\"@takumi-rs/wasm\"] = .version' package.json > tmp.json && mv tmp.json package.json",

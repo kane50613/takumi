@@ -1,6 +1,20 @@
 {
   "name": "@takumi-rs/helpers",
   "version": "1.0.13",
+  "description": "Utility helpers for converting JSX/HTML to Takumi node trees and handling resources.",
+  "keywords": [
+    "css",
+    "emoji",
+    "html",
+    "image",
+    "jsx",
+    "react",
+    "rendering"
+  ],
+  "homepage": "https://takumi.kane.tw/docs/architecture#fromjsx-helper",
+  "bugs": {
+    "url": "https://github.com/kane50613/takumi/issues"
+  },
   "license": "(MIT OR Apache-2.0)",
   "author": {
     "name": "Kane Wang",
@@ -8,12 +22,15 @@
     "url": "https://kane.tw"
   },
   "repository": {
-    "url": "git+https://github.com/kane50613/takumi.git"
+    "type": "git",
+    "url": "git+https://github.com/kane50613/takumi.git",
+    "directory": "takumi-helpers"
   },
   "files": [
     "dist"
   ],
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
@@ -42,6 +59,10 @@
       "require": "./dist/emoji.cjs",
       "default": "./dist/emoji.mjs"
     }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "build": "tsdown"
