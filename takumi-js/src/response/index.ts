@@ -85,11 +85,13 @@ export function createImageResponse(defaultOptions?: ImageResponseOptions): Imag
     options?: ImageResponseOptions,
   ) {
     const mergedOptions = mergeOptions(defaultOptions, options);
-    const {
-      promise: ready,
-      reject: rejectReady,
-      resolve: resolveReady,
-    } = Promise.withResolvers<void>();
+
+    let resolveReady: (value: void | PromiseLike<void>) => void;
+    let rejectReady: (reason?: unknown) => void;
+    const ready = new Promise<void>((resolve, reject) => {
+      resolveReady = resolve;
+      rejectReady = reject;
+    });
 
     const stream = new ReadableStream({
       type: "bytes",
