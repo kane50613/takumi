@@ -1,6 +1,4 @@
-import type { ReactNode } from "react";
-import { render, type RenderOptions } from "../render";
-import type { ReactElementLike } from "@takumi-rs/helpers";
+import { render, type RenderInput, type RenderOptions } from "../render";
 
 export type ImageResponseResult = Response & {
   readonly ready: Promise<void>;
@@ -12,7 +10,7 @@ export type ImageResponseOptions = RenderOptions &
   };
 
 export type ImageResponseFactory = (
-  component: ReactNode,
+  component: RenderInput,
   options?: ImageResponseOptions,
 ) => ImageResponseResult;
 
@@ -80,10 +78,7 @@ function defaultErrorHandler(error: unknown) {
  * @param defaultOptions - Options that will be applied to every response created by this factory.
  */
 export function createImageResponse(defaultOptions?: ImageResponseOptions): ImageResponseFactory {
-  return function imageResponse(
-    element: ReactNode | ReactElementLike | string,
-    options?: ImageResponseOptions,
-  ) {
+  return function imageResponse(element: RenderInput, options?: ImageResponseOptions) {
     const mergedOptions = mergeOptions(defaultOptions, options);
 
     let resolveReady: (value: void | PromiseLike<void>) => void;
@@ -159,7 +154,7 @@ let defaultImageResponse: ImageResponseFactory | undefined;
 export class ImageResponse extends Response {
   readonly ready: Promise<void>;
 
-  constructor(component: ReactNode, options?: ImageResponseOptions) {
+  constructor(component: RenderInput, options?: ImageResponseOptions) {
     defaultImageResponse ??= createImageResponse();
 
     const response = defaultImageResponse(component, options);

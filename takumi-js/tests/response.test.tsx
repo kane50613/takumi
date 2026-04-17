@@ -1,8 +1,29 @@
 import { describe, expect, mock, test } from "bun:test";
 import { createContext, useContext } from "react";
 import ImageResponse from "../src/response";
+import { render } from "../src";
+import type { Node } from "@takumi-rs/helpers";
 
 describe("ImageResponse", () => {
+  test("should accept Takumi Node input in render()", async () => {
+    const node: Node = {
+      type: "container",
+      children: [{ type: "text", text: "Hello from node" }],
+    };
+    const mockedImage = new Uint8Array([1, 2, 3]);
+    const renderer = {
+      render: mock(async (inputNode) => {
+        expect(inputNode).toEqual(node);
+        return mockedImage;
+      }),
+    } as any;
+
+    const output = await render(node, { renderer });
+
+    expect(output).toEqual(mockedImage);
+    expect(renderer.render).toHaveBeenCalledTimes(1);
+  });
+
   test("should not crash", async () => {
     const response = new ImageResponse(<div>Hello</div>);
 

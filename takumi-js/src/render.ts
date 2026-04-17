@@ -6,7 +6,7 @@ import { fromJsx, type FromJsxOptions } from "@takumi-rs/helpers/jsx";
 import { loadRendererResources, type ManagedRendererOptions } from "./renderer";
 import { getImports } from "./import";
 import type { ReactNode } from "react";
-import type { FetchResourcesOptions, ReactElementLike } from "@takumi-rs/helpers";
+import type { FetchResourcesOptions, Node, ReactElementLike } from "@takumi-rs/helpers";
 import { fromHtml } from "@takumi-rs/helpers/html";
 
 type InnerRenderOptions = napi.RenderOptions | wasm.RenderOptions;
@@ -30,7 +30,24 @@ export type RenderOptions = RenderOptionsWithRenderer | RenderOptionsWithoutRend
 
 let globalRenderer: napi.Renderer | wasm.Renderer | undefined;
 
-function transformElement(element: ReactNode | ReactElementLike | string, options?: RenderOptions) {
+export type RenderInput = ReactNode | ReactElementLike | Node | string;
+
+function isTakumiNode(element: unknown): element is Node {
+  if (typeof element !== "object" || element === null || !("type" in element)) {
+    return false;
+  }
+
+  return element.type === "container" || element.type === "text" || element.type === "image";
+}
+
+async function transformElement(element: RenderInput, options?: RenderOptions) {
+  if (isTakumiNode(element)) {
+    return {
+      node: element,
+      stylesheets: [],
+    };
+  }
+
   if (typeof element === "string") {
     return fromHtml(element);
   }
@@ -58,10 +75,7 @@ function transformElement(element: ReactNode | ReactElementLike | string, option
  * @param options - Configuration for rendering, including dimensions, format, fonts, and more.
  * @returns A promise that resolves to the rendered image data (Buffer/Uint8Array).
  */
-export async function render(
-  element: ReactNode | ReactElementLike | string,
-  options?: RenderOptions,
-) {
+export async function render(element: RenderInput, options?: RenderOptions) {
   const imports = await getImports(options && "module" in options ? options.module : undefined);
   const isExternalRenderer = options && "renderer" in options;
   const renderer = isExternalRenderer
