@@ -1,19 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { Box, Brain, Globe, type LucideIcon, Zap } from "lucide-react";
-import { createElement } from "react";
-
-const accentColor = "#ff3535";
-const cardBg = "rgba(255, 255, 255, 0.03)";
-const borderColor = "rgba(255, 255, 255, 0.08)";
-
-const spacing = {
-  outer: "3rem",
-  card: "2.5rem",
-  cardCompact: "2.25rem 2.5rem",
-  large: "2rem",
-  gap: "1.5rem",
-  compact: "0.75rem",
-};
+import { Zap, Globe, Sparkles } from "lucide-react";
 
 export const persistentImages = [
   {
@@ -33,161 +19,111 @@ export default function OgImage() {
   return (
     <div
       style={{
-        backgroundColor: "#09090b",
+        backgroundColor: "#fcfcfc",
+        backgroundImage: "radial-gradient(#e5e5e5 1px, transparent 1px)",
+        backgroundSize: "32px 32px",
         width: "100%",
         height: "100%",
         fontFamily: "Geist, sans-serif",
         display: "flex",
-        flexDirection: "column",
-        padding: spacing.outer,
-        color: "white",
-        gap: spacing.gap,
+        alignItems: "center",
+        justifyContent: "center",
+        color: "#171717",
         position: "relative",
+        padding: "4rem",
       }}
     >
-      {/* Decorative Gradients */}
-      <div
+      <img
+        src={persistentImages[0]?.src}
+        alt=""
         style={{
           position: "absolute",
-          top: -200,
-          right: -200,
-          width: 800,
-          height: 800,
-          backgroundImage: "radial-gradient(circle, rgba(255, 53, 53, 0.08) 0%, transparent 70%)",
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          bottom: -200,
-          left: -200,
-          width: 600,
-          height: 600,
-          backgroundImage: "radial-gradient(circle, rgba(255, 53, 53, 0.05) 0%, transparent 70%)",
+          width: "1200px",
+          height: "1200px",
+          opacity: 0.02,
+          right: "-300px",
+          top: "-300px",
+          transform: "rotate(-15deg)",
+          pointerEvents: "none",
         }}
       />
 
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "1.15fr 1fr",
-          gap: spacing.gap,
-          flexGrow: 1,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "flex-start",
+          width: "100%",
+          maxWidth: "1000px",
+          position: "relative",
+          zIndex: 1,
         }}
       >
-        {/* Hero Card */}
         <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            backgroundColor: cardBg,
-            border: `1px solid ${borderColor}`,
-            borderRadius: "2.5rem",
-            padding: spacing.card,
-            gap: "3rem",
-            position: "relative",
-            justifyContent: "space-between",
-          }}
+          style={{ display: "flex", alignItems: "center", gap: "1.5rem", marginBottom: "2.5rem" }}
         >
           <img
             src={persistentImages[0]?.src}
-            alt="Takumi logo"
+            alt="Takumi"
             style={{
-              width: "5rem",
-              height: "5rem",
-              flexShrink: 0,
+              width: "5.5rem",
+              height: "5.5rem",
             }}
           />
-          <div
+          <h1
             style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: spacing.compact,
+              fontSize: "6.5rem",
+              fontWeight: 800,
+              margin: 0,
+              letterSpacing: "-0.04em",
+              lineHeight: 1,
+              color: "#111111",
             }}
           >
-            <h1
-              style={{
-                fontSize: "5rem",
-                fontWeight: 800,
-                margin: 0,
-                letterSpacing: "-0.04em",
-                lineHeight: 1,
-                whiteSpace: "nowrap",
-              }}
-            >
-              Takumi
-            </h1>
-            <p
-              style={{
-                fontSize: "2rem",
-                color: "rgba(255, 255, 255, 0.5)",
-                fontWeight: 500,
-                maxWidth: "420px",
-                margin: 0,
-                lineHeight: 1.4,
-              }}
-            >
-              Turn JSX into production-ready PNG, GIF, Video fast.
-            </p>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: spacing.compact,
-              backgroundColor: "rgba(255, 53, 53, 0.1)",
-              padding: "0.75rem 1.25rem",
-              borderRadius: "100px",
-              border: "1px solid rgba(255, 53, 53, 0.2)",
-              alignSelf: "flex-start",
-            }}
-          >
-            <div
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                backgroundColor: accentColor,
-              }}
-            />
-            <span
-              style={{
-                fontSize: "1.125rem",
-                fontWeight: 600,
-                color: accentColor,
-                letterSpacing: "0.02em",
-              }}
-            >
-              Built for Developers
-            </span>
-          </div>
+            Takumi
+          </h1>
         </div>
+
+        <p
+          style={{
+            fontSize: "2.5rem",
+            fontWeight: 400,
+            color: "#4a4a4a",
+            maxWidth: "920px",
+            margin: 0,
+            marginBottom: "4rem",
+            lineHeight: 1.35,
+            letterSpacing: "-0.015em",
+          }}
+        >
+          A Rust rendering engine for turning templates into images, with next/og-compatible APIs.
+        </p>
 
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gridTemplateRows: "1fr 1fr",
-            gap: spacing.gap,
+            display: "flex",
+            gap: "2.5rem",
+            alignItems: "center",
+            color: "#555555",
+            fontSize: "1.25rem",
+            fontWeight: 600,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
           }}
         >
-          <Feature
-            title="Direct Rendering"
-            description="No SVG conversion step needed."
-            icon={Box}
-          />
-          <Feature
-            title="Runs at Native Speed"
-            description="Rust engine for Node and WASM."
-            icon={Zap}
-          />
-          <Feature title="Runs Everywhere" description="Node.js, Browser, and Edge." icon={Globe} />
-          <Feature
-            title="Output to Any Format"
-            description="WebP, PNG, JPEG, and GIF."
-            icon={Brain}
-          />
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <Zap size={22} color="#ff3535" strokeWidth={2.5} />
+            <span>Native Speed</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <Globe size={22} color="#ff3535" strokeWidth={2.5} />
+            <span>Runs Everywhere</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <Sparkles size={22} color="#ff3535" strokeWidth={2.5} />
+            <span>Multiple Formats</span>
+          </div>
         </div>
       </div>
     </div>
@@ -208,53 +144,56 @@ function Feature({
       style={{
         display: "flex",
         flexDirection: "column",
+        alignItems: "center",
         backgroundColor: cardBg,
         border: `1px solid ${borderColor}`,
-        borderRadius: "2rem",
-        padding: spacing.cardCompact,
-        gap: spacing.compact,
-        justifyContent: "space-between",
-        textWrap: "balance",
+        borderRadius: "24px",
+        padding: "24px",
+        flex: 1,
+        boxShadow: "0 4px 20px -4px rgba(0,0,0,0.03)",
       }}
     >
       <div
         style={{
-          width: "3rem",
-          height: "3rem",
-          backgroundColor: "rgba(255, 53, 53, 0.15)",
-          borderRadius: "1rem",
+          width: "48px",
+          height: "48px",
+          backgroundColor: paperBg,
+          border: `1px solid ${borderColor}`,
+          borderRadius: "16px",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           color: accentColor,
-          flexShrink: 0,
+          marginBottom: "16px",
         }}
       >
         {createElement(icon, {
           size: 24,
-          strokeWidth: 2,
+          strokeWidth: 1.5,
         })}
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem" }}>
-        <span
-          style={{
-            fontSize: "1.35rem",
-            fontWeight: 700,
-          }}
-        >
-          {title}
-        </span>
-        <span
-          style={{
-            fontSize: "1.125rem",
-            color: "rgba(255, 255, 255, 0.7)",
-            fontWeight: 500,
-            lineHeight: 1.3,
-          }}
-        >
-          {description}
-        </span>
-      </div>
+      <span
+        style={{
+          fontSize: "22px",
+          fontWeight: 700,
+          color: textColor,
+          textAlign: "center",
+          marginBottom: "8px",
+        }}
+      >
+        {title}
+      </span>
+      <span
+        style={{
+          fontSize: "16px",
+          color: textMuted,
+          fontWeight: 500,
+          textAlign: "center",
+          lineHeight: 1.4,
+        }}
+      >
+        {description}
+      </span>
     </div>
   );
 }
