@@ -87,6 +87,16 @@ struct ImagePathFillOptions<'a> {
   combined_mask: Option<MaskView<'a>>,
 }
 
+#[derive(Clone, Copy)]
+struct FillColorOptions<'a> {
+  color: &'a ColorTile,
+  size: Size<u32>,
+  border: BorderProperties,
+  transform: Affine,
+  mode: BlendMode,
+  combined_mask: Option<MaskView<'a>>,
+}
+
 #[derive(Clone)]
 struct MaskStackEntry {
   mask: Arc<TinyMask>,
@@ -757,7 +767,7 @@ fn blit_sampled_paint_source_translation(
       let dest_x = dest_x as u32;
       let dest_y = dest_y as u32;
       if let Some(mask) = combined_mask {
-        let alpha = mask.alpha_at(dest_x, dest_y as u32);
+        let alpha = mask.alpha_at(dest_x, dest_y);
         if alpha == 0 {
           continue;
         }
@@ -1226,33 +1236,30 @@ fn try_draw_image_with_tiny_skia(
 }
 fn try_fill_color_with_tiny_skia(
   pixmap: &mut PixmapMut<'_>,
-  color: &ColorTile,
-  size: Size<u32>,
-  border: BorderProperties,
-  transform: Affine,
-  mode: BlendMode,
-  combined_mask: Option<MaskView<'_>>,
+  options: FillColorOptions<'_>,
   buffer_pool: &mut BufferPool,
 ) -> bool {
-  let Some(blend_mode) = to_tiny_blend_mode(mode) else {
+  let Some(blend_mode) = to_tiny_blend_mode(options.mode) else {
     return false;
   };
-  let Some(path) = build_border_path(border, size) else {
+  let Some(path) = build_border_path(options.border, options.size) else {
     return false;
   };
 
   let mut paint = TinyPaint::default();
-  let [red, green, blue, alpha] = color.color().0;
+  let [red, green, blue, alpha] = options.color.color().0;
   paint.set_color_rgba8(red, green, blue, alpha);
   paint.blend_mode = blend_mode;
   paint.anti_alias = true;
-  let materialized_mask = combined_mask.and_then(|mask| materialize_mask(mask, size, buffer_pool));
+  let materialized_mask = options
+    .combined_mask
+    .and_then(|mask| materialize_mask(mask, options.size, buffer_pool));
   let combined_mask = materialized_mask.as_ref();
   pixmap.fill_path(
     &path,
     &paint,
     TinyFillRule::Winding,
-    transform.into(),
+    options.transform.into(),
     combined_mask,
   );
   true
@@ -1322,12 +1329,14 @@ pub(crate) fn overlay_image<'a, I: Into<PaintSource<'a>>>(
   if let PaintSource::ColorTile(color) = image
     && try_fill_color_with_tiny_skia(
       pixmap,
-      color,
-      size,
-      options.border,
-      options.transform,
-      options.mode,
-      options.combined_mask,
+      FillColorOptions {
+        color,
+        size,
+        border: options.border,
+        transform: options.transform,
+        mode: options.mode,
+        combined_mask: options.combined_mask,
+      },
       buffer_pool,
     )
   {
