@@ -113,8 +113,7 @@ pub(crate) fn rasterize_layers(
   let Some(pixmap_size) = IntSize::from_wh(size.width, size.height) else {
     return Ok(None);
   };
-  let mut composed = buffer_pool.acquire_dirty((size.width * size.height * 4) as usize);
-  composed.fill(0);
+  let mut composed = buffer_pool.acquire((size.width * size.height * 4) as usize);
   let Some(mut pixmap) = PixmapMut::from_bytes(&mut composed, size.width, size.height) else {
     buffer_pool.release(composed);
     return Ok(None);

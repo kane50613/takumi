@@ -90,8 +90,7 @@ impl SizedShadow {
     let shadow_height = placement.height + (blur_padding * 2.0) as u32;
     let mut shadow_alpha = canvas
       .buffer_pool
-      .acquire_dirty((shadow_width * shadow_height) as usize);
-    shadow_alpha.fill(0);
+      .acquire((shadow_width * shadow_height) as usize);
 
     let padding = blur_padding as u32;
     for y in 0..placement.height {

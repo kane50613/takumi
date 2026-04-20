@@ -623,7 +623,7 @@ pub(crate) fn apply_backdrop_filter(
   let backdrop_len = region_row_bytes * region_height as usize;
 
   // Extract the region from the canvas using pooled raw bytes.
-  let mut backdrop_raw = canvas.buffer_pool.acquire(backdrop_len);
+  let mut backdrop_raw = canvas.buffer_pool.acquire_dirty(backdrop_len);
 
   canvas.with_pixmap_ref_and_pool(|pixmap, _| {
     let canvas_width = pixmap.width() as usize;

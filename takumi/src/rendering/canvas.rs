@@ -8,6 +8,7 @@ mod mask;
 mod paint_source;
 
 use std::mem::replace;
+use std::sync::Arc;
 
 use image::{
   ImageError, Rgba, RgbaImage,
@@ -15,7 +16,7 @@ use image::{
 };
 use taffy::{Point, Size};
 use tiny_skia::{
-  FillRule as TinyFillRule, FilterQuality as TinyFilterQuality, Mask as TinyMask,
+  FillRule as TinyFillRule, FilterQuality as TinyFilterQuality, IntSize, Mask as TinyMask,
   Paint as TinyPaint, Path as TinyPath, Pattern as TinyPattern, Pixmap, PixmapMut, PixmapPaint,
   SpreadMode as TinySpreadMode, Transform as TinyTransform,
 };
@@ -55,7 +56,7 @@ pub(crate) struct OverlayOptions<'a> {
   pub transform: Affine,
   pub algorithm: ImageScalingAlgorithm,
   pub mode: BlendMode,
-  pub combined_mask: Option<&'a TinyMask>,
+  pub combined_mask: Option<MaskView<'a>>,
 }
 
 #[derive(Clone, Copy)]
@@ -63,7 +64,7 @@ pub(crate) struct MaskSourceToPixmapOptions<'a> {
   pub placement: Placement,
   pub sampling: MaskSamplingOptions,
   pub mode: BlendMode,
-  pub combined_mask: Option<&'a TinyMask>,
+  pub combined_mask: Option<MaskView<'a>>,
 }
 
 #[derive(Clone, Copy)]
@@ -72,7 +73,7 @@ struct MaskCompositeOptions<'a> {
   sampling: MaskSamplingOptions,
   color_mode: MaskCompositeColor,
   mode: BlendMode,
-  combined_mask: Option<&'a TinyMask>,
+  combined_mask: Option<MaskView<'a>>,
 }
 
 #[derive(Clone, Copy)]
@@ -83,7 +84,37 @@ struct ImagePathFillOptions<'a> {
   source_to_canvas: Affine,
   algorithm: ImageScalingAlgorithm,
   mode: BlendMode,
-  combined_mask: Option<&'a TinyMask>,
+  combined_mask: Option<MaskView<'a>>,
+}
+
+#[derive(Clone)]
+struct MaskStackEntry {
+  mask: Arc<TinyMask>,
+  origin: Point<u32>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct MaskView<'a> {
+  mask: &'a TinyMask,
+  origin: Point<u32>,
+  canvas_origin: Point<u32>,
+}
+
+impl<'a> MaskView<'a> {
+  #[inline]
+  fn alpha_at(self, x: u32, y: u32) -> u8 {
+    let local_x = x as i32 + self.canvas_origin.x as i32 - self.origin.x as i32;
+    let local_y = y as i32 + self.canvas_origin.y as i32 - self.origin.y as i32;
+    if local_x < 0
+      || local_y < 0
+      || local_x >= self.mask.width() as i32
+      || local_y >= self.mask.height() as i32
+    {
+      return 0;
+    }
+
+    self.mask.data()[mask_index_from_coord(local_x as u32, local_y as u32, self.mask.width())]
+  }
 }
 
 /// A canvas that can be used to draw images onto.
@@ -91,14 +122,14 @@ pub(crate) struct Canvas {
   image: Pixmap,
   origin: Point<u32>,
   offscreen_pool: Vec<Pixmap>,
-  constraint_mask_stack: Vec<Option<TinyMask>>,
+  constraint_mask_stack: Vec<Option<MaskStackEntry>>,
   pub(crate) buffer_pool: BufferPool,
 }
 
 pub(crate) struct CanvasSubcanvas {
   image: Pixmap,
   origin: Option<Point<u32>>,
-  constraint_mask_stack: Option<Vec<Option<TinyMask>>>,
+  constraint_mask_stack: Option<Vec<Option<MaskStackEntry>>>,
   offset: Point<i32>,
 }
 
@@ -168,12 +199,7 @@ impl Canvas {
       x: bounds.left as u32,
       y: bounds.top as u32,
     };
-    let constraint_mask_stack = self
-      .constraint_mask_stack
-      .last()
-      .and_then(Option::as_ref)
-      .and_then(|mask| crop_mask(mask, offset, size))
-      .map_or_else(Vec::new, |mask| vec![Some(mask)]);
+    let constraint_mask_stack = self.constraint_mask_stack.clone();
 
     Ok(CanvasSubcanvas {
       image: replace(&mut self.image, image),
@@ -192,24 +218,21 @@ impl Canvas {
     mode: BlendMode,
     opacity: f32,
   ) {
+    let CanvasSubcanvas {
+      image,
+      origin,
+      constraint_mask_stack,
+      offset,
+    } = subcanvas;
+
     if opacity <= 0.0 {
-      self.recycle_offscreen_image(subcanvas.image);
-      if let Some(origin) = subcanvas.origin {
-        self.origin = origin;
-      }
-      if let Some(constraint_mask_stack) = subcanvas.constraint_mask_stack {
-        self.constraint_mask_stack = constraint_mask_stack;
-      }
+      self.recycle_offscreen_image(image);
+      self.restore_subcanvas_state(origin, constraint_mask_stack);
       return;
     }
 
-    let isolated_image = replace(&mut self.image, subcanvas.image);
-    if let Some(origin) = subcanvas.origin {
-      self.origin = origin;
-    }
-    if let Some(constraint_mask_stack) = subcanvas.constraint_mask_stack {
-      self.constraint_mask_stack = constraint_mask_stack;
-    }
+    let isolated_image = replace(&mut self.image, image);
+    self.restore_subcanvas_state(origin, constraint_mask_stack);
 
     if let Some(blend_mode) = to_tiny_blend_mode(mode) {
       let paint = PixmapPaint {
@@ -218,30 +241,29 @@ impl Canvas {
         quality: TinyFilterQuality::Nearest,
       };
       self.image.draw_pixmap(
-        subcanvas.offset.x,
-        subcanvas.offset.y,
+        offset.x,
+        offset.y,
         isolated_image.as_ref(),
         &paint,
         TinyTransform::identity(),
         None,
       );
     } else {
-      blend_pixmap_software(
-        &mut self.image,
-        &isolated_image,
-        mode,
-        subcanvas.offset,
-        opacity,
-      );
+      blend_pixmap_software(&mut self.image, &isolated_image, mode, offset, opacity);
     }
 
     self.recycle_offscreen_image(isolated_image);
   }
 
   pub(crate) fn push_mask(&mut self, mask: TinyMask) {
-    self
-      .constraint_mask_stack
-      .push(self.build_constraint_mask(&mask));
+    self.constraint_mask_stack.push(
+      self
+        .build_constraint_mask(&mask)
+        .map(|mask| MaskStackEntry {
+          mask: Arc::new(mask),
+          origin: self.origin,
+        }),
+    );
   }
 
   pub(crate) fn pop_mask(&mut self) {
@@ -305,11 +327,7 @@ impl Canvas {
     mode: BlendMode,
   ) {
     let placement = self.localize_placement(placement);
-    let sampling = MaskSamplingOptions {
-      canvas_to_source: sampling.canvas_to_source
-        * Affine::translation(self.origin.x as f32, self.origin.y as f32),
-      ..sampling
-    };
+    let sampling = self.localize_mask_sampling(sampling);
     self.with_overlay_state(|pixmap, combined_mask, _| {
       composite_masked_source(
         pixmap,
@@ -335,11 +353,7 @@ impl Canvas {
     mode: BlendMode,
   ) {
     let placement = self.localize_placement(placement);
-    let sampling = MaskSamplingOptions {
-      canvas_to_source: sampling.canvas_to_source
-        * Affine::translation(self.origin.x as f32, self.origin.y as f32),
-      ..sampling
-    };
+    let sampling = self.localize_mask_sampling(sampling);
     self.with_overlay_state(|pixmap, combined_mask, _| {
       composite_masked_source(
         pixmap,
@@ -365,11 +379,7 @@ impl Canvas {
     mode: BlendMode,
   ) {
     let placement = self.localize_placement(placement);
-    let sampling = MaskSamplingOptions {
-      canvas_to_source: sampling.canvas_to_source
-        * Affine::translation(self.origin.x as f32, self.origin.y as f32),
-      ..sampling
-    };
+    let sampling = self.localize_mask_sampling(sampling);
     self.with_overlay_state(|pixmap, combined_mask, _| {
       composite_masked_source(
         pixmap,
@@ -501,9 +511,14 @@ impl Canvas {
 
   fn with_overlay_state<R>(
     &mut self,
-    f: impl FnOnce(&mut PixmapMut<'_>, Option<&TinyMask>, &mut BufferPool) -> R,
+    f: impl FnOnce(&mut PixmapMut<'_>, Option<MaskView<'_>>, &mut BufferPool) -> R,
   ) -> R {
     let combined_mask = self.constraint_mask_stack.last().and_then(Option::as_ref);
+    let combined_mask = combined_mask.map(|entry| MaskView {
+      mask: entry.mask.as_ref(),
+      origin: entry.origin,
+      canvas_origin: self.origin,
+    });
     let mut pixmap = self.image.as_mut();
     f(&mut pixmap, combined_mask, &mut self.buffer_pool)
   }
@@ -511,12 +526,21 @@ impl Canvas {
   fn build_constraint_mask(&self, mask: &TinyMask) -> Option<TinyMask> {
     let mut combined = TinyMask::new(mask.width(), mask.height())?;
     if let Some(previous) = self.constraint_mask_stack.last().and_then(Option::as_ref) {
-      for (dst, (&left, &right)) in combined
-        .data_mut()
-        .iter_mut()
-        .zip(previous.data().iter().zip(mask.data().iter()))
-      {
-        *dst = ((left as u16 * right as u16 + 128) >> 8) as u8;
+      let previous = MaskView {
+        mask: previous.mask.as_ref(),
+        origin: previous.origin,
+        canvas_origin: self.origin,
+      };
+      let mask_data = mask.data();
+      let mask_width = mask.width();
+      let combined_data = combined.data_mut();
+      for y in 0..mask.height() {
+        let row_start = y as usize * mask_width as usize;
+        for x in 0..mask.width() {
+          let left = previous.alpha_at(x, y);
+          let right = mask_data[row_start + x as usize];
+          combined_data[row_start + x as usize] = ((left as u16 * right as u16 + 128) >> 8) as u8;
+        }
       }
     } else {
       combined.data_mut().copy_from_slice(mask.data());
@@ -528,6 +552,14 @@ impl Canvas {
     Affine::translation(-(self.origin.x as f32), -(self.origin.y as f32)) * transform
   }
 
+  fn localize_mask_sampling(&self, sampling: MaskSamplingOptions) -> MaskSamplingOptions {
+    MaskSamplingOptions {
+      canvas_to_source: sampling.canvas_to_source
+        * Affine::translation(self.origin.x as f32, self.origin.y as f32),
+      ..sampling
+    }
+  }
+
   fn localize_placement(&self, placement: Placement) -> Placement {
     Placement {
       left: placement.left - self.origin.x as i32,
@@ -535,14 +567,37 @@ impl Canvas {
       ..placement
     }
   }
+
+  fn restore_subcanvas_state(
+    &mut self,
+    origin: Option<Point<u32>>,
+    constraint_mask_stack: Option<Vec<Option<MaskStackEntry>>>,
+  ) {
+    if let Some(origin) = origin {
+      self.origin = origin;
+    }
+    if let Some(constraint_mask_stack) = constraint_mask_stack {
+      self.constraint_mask_stack = constraint_mask_stack;
+    }
+  }
 }
 
-fn crop_mask(mask: &TinyMask, offset: Point<i32>, size: Size<u32>) -> Option<TinyMask> {
-  let mut cropped = TinyMask::new(size.width, size.height)?;
-  cropped.data_mut().fill(0);
+fn materialize_mask(
+  mask: MaskView<'_>,
+  size: Size<u32>,
+  buffer_pool: &mut BufferPool,
+) -> Option<TinyMask> {
+  let mut cropped = TinyMask::from_vec(
+    buffer_pool.acquire((size.width as usize) * (size.height as usize)),
+    IntSize::from_wh(size.width, size.height)?,
+  )?;
 
-  let src_width = mask.width() as i32;
-  let src_height = mask.height() as i32;
+  let offset = Point {
+    x: mask.canvas_origin.x as i32 - mask.origin.x as i32,
+    y: mask.canvas_origin.y as i32 - mask.origin.y as i32,
+  };
+  let src_width = mask.mask.width() as i32;
+  let src_height = mask.mask.height() as i32;
   let start_x = offset.x.max(0);
   let start_y = offset.y.max(0);
   let end_x = (offset.x + size.width as i32).min(src_width);
@@ -551,8 +606,19 @@ fn crop_mask(mask: &TinyMask, offset: Point<i32>, size: Size<u32>) -> Option<Tin
     return Some(cropped);
   }
 
-  let src = mask.data();
+  let src = mask.mask.data();
   let dst = cropped.data_mut();
+  if start_x == 0
+    && start_y == 0
+    && end_x == src_width
+    && end_y == src_height
+    && src_width as u32 == size.width
+    && src_height as u32 == size.height
+  {
+    dst.copy_from_slice(src);
+    return Some(cropped);
+  }
+
   let dst_width = size.width as usize;
   let src_width = src_width as usize;
   let copy_width = (end_x - start_x) as usize;
@@ -647,7 +713,7 @@ fn blit_sampled_paint_source_translation(
   offset: Point<f32>,
   sampling: SamplingOptions,
   mode: BlendMode,
-  combined_mask: Option<&TinyMask>,
+  combined_mask: Option<MaskView<'_>>,
 ) {
   if sampling.logical_to_source.is_identity()
     && size.width == source.width()
@@ -666,7 +732,6 @@ fn blit_sampled_paint_source_translation(
   };
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-  let mask_data = combined_mask.map(TinyMask::data);
   let footprint = sampling_footprint(sampling.logical_to_source);
   for dest_y in dest_y_min..dest_y_max {
     let src_y = (dest_y - offset_y) as f32;
@@ -691,8 +756,8 @@ fn blit_sampled_paint_source_translation(
 
       let dest_x = dest_x as u32;
       let dest_y = dest_y as u32;
-      if let Some(mask_data) = mask_data {
-        let alpha = mask_data[mask_index_from_coord(dest_x, dest_y, canvas_width)];
+      if let Some(mask) = combined_mask {
+        let alpha = mask.alpha_at(dest_x, dest_y as u32);
         if alpha == 0 {
           continue;
         }
@@ -713,7 +778,7 @@ fn blit_paint_source_translation(
   source: PaintSource<'_>,
   offset: Point<f32>,
   mode: BlendMode,
-  combined_mask: Option<&TinyMask>,
+  combined_mask: Option<MaskView<'_>>,
 ) {
   if let Some(color) = source.premultiplied_constant() {
     blit_solid_translation(
@@ -743,12 +808,11 @@ fn blit_paint_source_translation(
   };
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-  let mask_data = combined_mask.map(TinyMask::data);
   match source {
     PaintSource::Pixmap(source) => {
       let source_pixels = source.pixels();
       let source_width = source.width();
-      if mode == BlendMode::Normal && mask_data.is_none() {
+      if mode == BlendMode::Normal && combined_mask.is_none() {
         let copy_width = (dest_x_max - dest_x_min) as usize;
         let src_x_start = (dest_x_min - offset_x) as usize;
         for dest_y in dest_y_min..dest_y_max {
@@ -775,8 +839,8 @@ fn blit_paint_source_translation(
           }
 
           let dest_x = dest_x as u32;
-          if let Some(mask_data) = mask_data {
-            let alpha = mask_data[dst_row + dest_x as usize];
+          if let Some(mask) = combined_mask {
+            let alpha = mask.alpha_at(dest_x, dest_y as u32);
             if alpha == 0 {
               continue;
             }
@@ -809,8 +873,8 @@ fn blit_paint_source_translation(
           }
 
           let dest_x = dest_x as u32;
-          if let Some(mask_data) = mask_data {
-            let alpha = mask_data[dst_row + dest_x as usize];
+          if let Some(mask) = combined_mask {
+            let alpha = mask.alpha_at(dest_x, dest_y as u32);
             if alpha == 0 {
               continue;
             }
@@ -834,7 +898,7 @@ fn blit_solid_translation(
   color: [u8; 4],
   offset: Point<f32>,
   mode: BlendMode,
-  combined_mask: Option<&TinyMask>,
+  combined_mask: Option<MaskView<'_>>,
 ) {
   if color[3] == 0 {
     return;
@@ -877,14 +941,13 @@ fn blit_solid_translation(
   }
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(data);
-  let mask_data = combined_mask.map(TinyMask::data);
   for dest_y in dest_y_min..dest_y_max {
     let dst_row = dest_y as usize * canvas_width as usize;
     for dest_x in dest_x_min..dest_x_max {
       let mut src = color;
       let dest_x = dest_x as u32;
-      if let Some(mask_data) = mask_data {
-        let alpha = mask_data[dst_row + dest_x as usize];
+      if let Some(mask) = combined_mask {
+        let alpha = mask.alpha_at(dest_x, dest_y as u32);
         if alpha == 0 {
           continue;
         }
@@ -905,7 +968,7 @@ fn composite_masked_constant(
   placement: Placement,
   color: [u8; 4],
   mode: BlendMode,
-  combined_mask: Option<&TinyMask>,
+  combined_mask: Option<MaskView<'_>>,
 ) {
   if color[3] == 0 {
     return;
@@ -929,9 +992,7 @@ fn composite_masked_constant(
   };
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-  let mask_data = combined_mask.map(TinyMask::data);
-
-  if mode == BlendMode::Normal && mask_data.is_none() {
+  if mode == BlendMode::Normal && combined_mask.is_none() {
     for dest_y in dest_y_min..dest_y_max {
       let mask_y = (dest_y - offset_y) as u32;
       let dst_row = dest_y as usize * canvas_width as usize;
@@ -971,8 +1032,8 @@ fn composite_masked_constant(
       }
 
       let dest_x = dest_x as u32;
-      if let Some(mask_data) = mask_data {
-        let alpha = mask_data[dst_row + dest_x as usize];
+      if let Some(mask) = combined_mask {
+        let alpha = mask.alpha_at(dest_x, dest_y as u32);
         if alpha == 0 {
           continue;
         }
@@ -1026,7 +1087,6 @@ fn composite_masked_source(
   };
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-  let mask_data = options.combined_mask.map(TinyMask::data);
   let footprint = sampling_footprint(options.sampling.canvas_to_source);
   for dest_y in dest_y_min..dest_y_max {
     let mask_y = (dest_y - offset_y) as u32;
@@ -1065,8 +1125,8 @@ fn composite_masked_source(
       }
 
       let dest_x = dest_x as u32;
-      if let Some(mask_data) = mask_data {
-        let alpha = mask_data[dst_row + dest_x as usize];
+      if let Some(mask) = options.combined_mask {
+        let alpha = mask.alpha_at(dest_x, dest_y as u32);
         if alpha == 0 {
           continue;
         }
@@ -1106,7 +1166,7 @@ pub(crate) fn draw_mask(
   placement: Placement,
   color: Rgba<u8>,
   mode: BlendMode,
-  combined_mask: Option<&TinyMask>,
+  combined_mask: Option<MaskView<'_>>,
 ) {
   if mask.is_empty() {
     return;
@@ -1133,7 +1193,7 @@ fn try_draw_image_with_tiny_skia(
   transform: Affine,
   algorithm: ImageScalingAlgorithm,
   mode: BlendMode,
-  combined_mask: Option<&TinyMask>,
+  combined_mask: Option<MaskView<'_>>,
   buffer_pool: &mut BufferPool,
 ) -> bool {
   let Some(blend_mode) = to_tiny_blend_mode(mode) else {
@@ -1145,6 +1205,17 @@ fn try_draw_image_with_tiny_skia(
     blend_mode,
     quality: to_tiny_filter_quality(algorithm),
   };
+  let materialized_mask = combined_mask.and_then(|mask| {
+    materialize_mask(
+      mask,
+      Size {
+        width: pixmap.width(),
+        height: pixmap.height(),
+      },
+      buffer_pool,
+    )
+  });
+  let combined_mask = materialized_mask.as_ref();
 
   image
     .with_pixmap_ref(buffer_pool, |source_pixmap| {
@@ -1160,7 +1231,8 @@ fn try_fill_color_with_tiny_skia(
   border: BorderProperties,
   transform: Affine,
   mode: BlendMode,
-  combined_mask: Option<&TinyMask>,
+  combined_mask: Option<MaskView<'_>>,
+  buffer_pool: &mut BufferPool,
 ) -> bool {
   let Some(blend_mode) = to_tiny_blend_mode(mode) else {
     return false;
@@ -1174,6 +1246,8 @@ fn try_fill_color_with_tiny_skia(
   paint.set_color_rgba8(red, green, blue, alpha);
   paint.blend_mode = blend_mode;
   paint.anti_alias = true;
+  let materialized_mask = combined_mask.and_then(|mask| materialize_mask(mask, size, buffer_pool));
+  let combined_mask = materialized_mask.as_ref();
   pixmap.fill_path(
     &path,
     &paint,
@@ -1195,6 +1269,10 @@ fn try_fill_image_path_with_tiny_skia(
   let Some(path) = build_border_path(options.border, options.size) else {
     return false;
   };
+  let materialized_mask = options
+    .combined_mask
+    .and_then(|mask| materialize_mask(mask, options.size, buffer_pool));
+  let combined_mask = materialized_mask.as_ref();
 
   image
     .with_pixmap_ref(buffer_pool, |source_pixmap| {
@@ -1216,7 +1294,7 @@ fn try_fill_image_path_with_tiny_skia(
         &paint,
         TinyFillRule::Winding,
         options.transform.into(),
-        options.combined_mask,
+        combined_mask,
       );
 
       true
@@ -1250,6 +1328,7 @@ pub(crate) fn overlay_image<'a, I: Into<PaintSource<'a>>>(
       options.transform,
       options.mode,
       options.combined_mask,
+      buffer_pool,
     )
   {
     return;
@@ -1440,7 +1519,7 @@ pub(crate) fn overlay_gradient_tile<T>(
   gradient: &T,
   offset: Point<f32>,
   mode: BlendMode,
-  combined_mask: Option<&TinyMask>,
+  combined_mask: Option<MaskView<'_>>,
 ) where
   T: GradientOverlayTile,
 {
@@ -1476,7 +1555,6 @@ pub(crate) fn overlay_gradient_tile<T>(
   };
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-  let mask_data = combined_mask.map(TinyMask::data);
   for dest_y in dest_y_min..dest_y_max {
     let src_y = (dest_y - offset_y) as u32;
     let dst_row = dest_y as usize * bottom_width as usize;
@@ -1488,8 +1566,8 @@ pub(crate) fn overlay_gradient_tile<T>(
       }
 
       let dest_x = dest_x as u32;
-      if let Some(mask_data) = mask_data {
-        let alpha = mask_data[dst_row + dest_x as usize];
+      if let Some(mask) = combined_mask {
+        let alpha = mask.alpha_at(dest_x, dest_y as u32);
         if alpha == 0 {
           continue;
         }
@@ -1579,7 +1657,7 @@ pub(crate) fn overlay_linear_gradient_tile(
   gradient: &LinearGradientTile,
   offset: Point<f32>,
   mode: BlendMode,
-  combined_mask: Option<&TinyMask>,
+  combined_mask: Option<MaskView<'_>>,
 ) {
   overlay_gradient_tile_with_fast_path(
     pixmap,
@@ -1596,7 +1674,7 @@ fn overlay_gradient_tile_with_fast_path<T>(
   gradient: &T,
   offset: Point<f32>,
   mode: BlendMode,
-  combined_mask: Option<&TinyMask>,
+  combined_mask: Option<MaskView<'_>>,
   try_fast_path: impl FnOnce(&mut [u8], u32, u32, &T, Point<f32>) -> bool,
 ) where
   T: GradientOverlayTile,
@@ -1703,7 +1781,7 @@ pub(crate) fn overlay_radial_gradient_tile(
   gradient: &RadialGradientTile,
   offset: Point<f32>,
   mode: BlendMode,
-  combined_mask: Option<&TinyMask>,
+  combined_mask: Option<MaskView<'_>>,
 ) {
   overlay_gradient_tile_with_fast_path(
     pixmap,

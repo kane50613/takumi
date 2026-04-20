@@ -1,7 +1,7 @@
 use taffy::{Layout, Point, Size};
 use tiny_skia::{
-  FillRule as TinyFillRule, Mask as TinyMask, PathBuilder as TinyPathBuilder, Rect as TinyRect,
-  Transform as TinyTransform,
+  FillRule as TinyFillRule, IntSize, Mask as TinyMask, PathBuilder as TinyPathBuilder,
+  Rect as TinyRect, Transform as TinyTransform,
 };
 
 use super::{BufferPool, mask_index_from_coord};
@@ -65,7 +65,6 @@ pub(crate) fn prepare_node_mask(
       buffer_pool.release(mask);
       return Ok(NodeMaskAction::SkipRendering);
     };
-    full_mask.data_mut().fill(0);
     copy_mask_into_canvas(&mut full_mask, viewport.origin, &mask, placement);
     buffer_pool.release(mask);
     return Ok(NodeMaskAction::Shell(full_mask));
@@ -296,7 +295,6 @@ fn rasterize_constraint_mask(
   alpha_at: impl Fn(u32, u32) -> u8,
 ) -> Option<TinyMask> {
   let mut mask = TinyMask::new(viewport.size.width, viewport.size.height)?;
-  mask.data_mut().fill(0);
 
   let start_x = placement.left.max(viewport.origin.x as i32);
   let start_y = placement.top.max(viewport.origin.y as i32);
@@ -445,7 +443,12 @@ pub(crate) fn render_mask(
 
   let width = (right - left) as u32;
   let height = (bottom - top) as u32;
-  let Some(mut mask) = TinyMask::new(width, height) else {
+  let Some(size) = IntSize::from_wh(width, height) else {
+    return (Vec::new(), Placement::default());
+  };
+  let buffer_len = (width as usize) * (height as usize);
+  let buffer = buffer_pool.acquire(buffer_len);
+  let Some(mut mask) = TinyMask::from_vec(buffer, size) else {
     return (Vec::new(), Placement::default());
   };
   let Some(local_path) =
@@ -460,10 +463,8 @@ pub(crate) fn render_mask(
     TinyTransform::identity(),
   );
 
-  let mut buffer = buffer_pool.acquire(mask.data().len());
-  buffer.copy_from_slice(mask.data());
   (
-    buffer,
+    mask.take(),
     Placement {
       left,
       top,
