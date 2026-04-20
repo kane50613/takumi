@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.15
+
+### Patch Changes
+
+- 3be6898: Reduce path rendering allocation
+
 ## 1.0.14
 
 ## 1.0.13
