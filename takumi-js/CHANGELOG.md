@@ -1,5 +1,14 @@
 # takumi-js
 
+## 1.0.15
+
+### Patch Changes
+
+- 3f96f48: Remove `ReadableStream.type` param
+  - @takumi-rs/core@1.0.15
+  - @takumi-rs/wasm@1.0.15
+  - @takumi-rs/helpers@1.0.15
+
 ## 1.0.14
 
 ### Patch Changes
