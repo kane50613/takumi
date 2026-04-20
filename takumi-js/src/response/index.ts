@@ -89,7 +89,6 @@ export function createImageResponse(defaultOptions?: ImageResponseOptions): Imag
     });
 
     const stream = new ReadableStream({
-      type: "bytes",
       async start(controller) {
         try {
           const image = await render(element, mergedOptions);
