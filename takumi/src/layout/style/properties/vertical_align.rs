@@ -169,12 +169,12 @@ impl ResolvedVerticalAlign {
     match self {
       ResolvedVerticalAlign::Keyword(keyword) => match keyword {
         VerticalAlignKeyword::Baseline => *y = baseline_top,
-        VerticalAlignKeyword::Top => *y = metrics.min_coord,
+        VerticalAlignKeyword::Top => *y = metrics.block_min_coord,
         VerticalAlignKeyword::Middle => {
           let x_height = parent_x_height.unwrap_or(metrics.ascent * 0.5);
           *y = metrics.baseline - (x_height * 0.5) - (box_height / 2.0);
         }
-        VerticalAlignKeyword::Bottom => *y = metrics.max_coord - box_height,
+        VerticalAlignKeyword::Bottom => *y = metrics.block_max_coord - box_height,
         VerticalAlignKeyword::TextTop => *y = metrics.baseline - parent_text_ascent,
         VerticalAlignKeyword::TextBottom => {
           *y = metrics.baseline + parent_text_descent - box_height
@@ -243,8 +243,10 @@ mod tests {
       offset: 0.0,
       advance: 100.0,
       trailing_whitespace: 0.0,
-      min_coord: 10.0,
-      max_coord: 24.0,
+      inline_min_coord: 0.0,
+      inline_max_coord: 100.0,
+      block_min_coord: 10.0,
+      block_max_coord: 24.0,
     }
   }
 

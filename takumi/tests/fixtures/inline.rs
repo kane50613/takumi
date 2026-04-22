@@ -146,6 +146,70 @@ fn inline_image_em_regression() {
 }
 
 #[test]
+fn inline_float_wrap() {
+  let node = Node::container([
+    Node::image("assets/images/yeecord.png").with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Inline))
+        .with(StyleDeclaration::float(Float::Left))
+        .with(StyleDeclaration::width(Px(144.0)))
+        .with(StyleDeclaration::height(Px(144.0)))
+        .with_margin(Sides([Px(0.0), Px(20.0), Px(12.0), Px(0.0)]))
+        .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(20.0)); 4]))),
+    ),
+    Node::container([
+      Node::text("Float Card".to_string()).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Block))
+          .with(StyleDeclaration::font_size(Px(20.0).into()))
+          .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
+          .with(StyleDeclaration::color(ColorInput::Value(Color::white()))),
+      ),
+      Node::text("A floated inline-block container should keep participating in inline layout and push adjacent text away until its bottom edge.".to_string()).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Block))
+          .with(StyleDeclaration::font_size(Px(15.0).into()))
+          .with(StyleDeclaration::line_height(LineHeight::Unitless(1.35)))
+          .with(StyleDeclaration::color(ColorInput::Value(Color([231, 239, 255, 255])))),
+      ),
+    ])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::InlineBlock))
+        .with(StyleDeclaration::float(Float::Right))
+        .with(StyleDeclaration::width(Px(220.0)))
+        .with_margin(Sides([Px(0.0), Px(0.0), Px(12.0), Px(20.0)]))
+        .with_padding(Sides([Px(16.0); 4]))
+        .with(StyleDeclaration::background_color(ColorInput::Value(Color([
+          31, 64, 122, 255,
+        ]))))
+        .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(18.0)); 4]))),
+    ),
+    Node::text(
+      "Parley 0.9 adds caller-controlled line geometry so Takumi can place floats during line breaking instead of merely recording out-of-flow boxes. This fixture checks that the first lines narrow between the left image and the right card, then expand back to the full measure width after both floated boxes end. The text should read naturally, with no overlap and no duplicated boxes in the measured or painted output."
+        .to_string(),
+    )
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Px(920.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(Color([
+        248, 250, 252, 255,
+      ]))))
+      .with_padding(Sides([Px(28.0); 4]))
+      .with(StyleDeclaration::font_size(Px(30.0).into()))
+      .with(StyleDeclaration::line_height(LineHeight::Unitless(1.25)))
+      .with(StyleDeclaration::color(ColorInput::Value(Color([
+        24, 34, 53, 255,
+      ])))),
+  );
+
+  run_fixture_test(node, "inline_float_wrap");
+}
+
+#[test]
 fn inline_block_in_inline() {
   // A block-level container inside inline content: should create anonymous block formatting context
   let children: Vec<Node> = vec![

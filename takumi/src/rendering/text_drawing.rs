@@ -8,7 +8,7 @@ use tiny_skia::Pixmap;
 use crate::{
   Result,
   layout::{
-    inline::{InlineBrush, InlineLayout, break_lines},
+    inline::{InlineBrush, InlineLayout, ProcessedInlineSpan, break_lines},
     style::{
       Affine, BlendMode, Color, ImageScalingAlgorithm, SizedFontStyle, TextTransform, TextWrapMode,
       WhiteSpaceCollapse,
@@ -621,6 +621,8 @@ pub(crate) fn make_balanced_text(
   target_lines: usize,
   text_wrap_mode: TextWrapMode,
   device_pixel_ratio: f32,
+  spans: &[ProcessedInlineSpan<'_, '_>],
+  custom_inline_boxes: &mut Vec<parley::PositionedInlineBox>,
 ) -> bool {
   if target_lines <= 1 {
     return false;
@@ -640,7 +642,15 @@ pub(crate) fn make_balanced_text(
     iterations += 1;
     let mid = (left + right) / 2.0;
 
-    break_lines(inline_layout, mid, None, text_wrap_mode);
+    custom_inline_boxes.clear();
+    break_lines(
+      inline_layout,
+      mid,
+      None,
+      text_wrap_mode,
+      spans,
+      custom_inline_boxes,
+    );
     let lines_at_mid = inline_layout.lines().count();
 
     if lines_at_mid > target_lines
@@ -658,11 +668,27 @@ pub(crate) fn make_balanced_text(
   // No meaningful adjustment if within 1px * DPR of max_width
   if (balanced_width - max_width).abs() < device_pixel_ratio {
     // Reset to original max_width
-    break_lines(inline_layout, max_width, max_height, text_wrap_mode);
+    custom_inline_boxes.clear();
+    break_lines(
+      inline_layout,
+      max_width,
+      max_height,
+      text_wrap_mode,
+      spans,
+      custom_inline_boxes,
+    );
     false
   } else {
     // Apply the balanced width
-    break_lines(inline_layout, balanced_width, max_height, text_wrap_mode);
+    custom_inline_boxes.clear();
+    break_lines(
+      inline_layout,
+      balanced_width,
+      max_height,
+      text_wrap_mode,
+      spans,
+      custom_inline_boxes,
+    );
     true
   }
 }
@@ -674,6 +700,8 @@ pub(crate) fn make_pretty_text(
   max_width: f32,
   max_height: Option<MaxHeight>,
   text_wrap_mode: TextWrapMode,
+  spans: &[ProcessedInlineSpan<'_, '_>],
+  custom_inline_boxes: &mut Vec<parley::PositionedInlineBox>,
 ) -> bool {
   // Get the last line width at the current max width (layout should already be broken)
   let Some(last_line_width) = inline_layout
@@ -699,7 +727,15 @@ pub(crate) fn make_pretty_text(
 
   // Try reflowing with 90% width to redistribute words
   let adjusted_width = max_width * 0.9;
-  break_lines(inline_layout, adjusted_width, None, text_wrap_mode);
+  custom_inline_boxes.clear();
+  break_lines(
+    inline_layout,
+    adjusted_width,
+    None,
+    text_wrap_mode,
+    spans,
+    custom_inline_boxes,
+  );
   let adjusted_lines = inline_layout.lines().count();
 
   // Use the adjusted width only if it doesn't add too many lines (at most 30% more)
@@ -709,7 +745,15 @@ pub(crate) fn make_pretty_text(
     true
   } else {
     // Reset to original max_width
-    break_lines(inline_layout, max_width, max_height, text_wrap_mode);
+    custom_inline_boxes.clear();
+    break_lines(
+      inline_layout,
+      max_width,
+      max_height,
+      text_wrap_mode,
+      spans,
+      custom_inline_boxes,
+    );
     false
   }
 }

@@ -5,7 +5,7 @@ use takumi::{
     Viewport,
     node::Node,
     style::{
-      Affine, AlignItems, BorderStyle, BoxSizing, Color, ColorInput, Display, FlexDirection,
+      Affine, AlignItems, BorderStyle, BoxSizing, Color, ColorInput, Display, FlexDirection, Float,
       JustifyContent, Length::*, LineHeight, Position, Sides, SpacePair, Style, StyleDeclaration,
       TextIndent, WhiteSpace, WhiteSpaceCollapse,
     },
@@ -282,6 +282,104 @@ fn test_measure_inline_layout() {
   assert_within(third.y, 134.0, 1.5);
   assert_within(third.width, 85.73, 0.1);
   assert_within(third.height, 26.0, 0.1);
+}
+
+#[test]
+fn test_measure_left_float_offsets_text_runs_until_float_bottom() {
+  let node = Node::container([
+    Node::image("assets/images/yeecord.png").with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Inline))
+        .with(StyleDeclaration::float(Float::Left))
+        .with(StyleDeclaration::width(Px(72.0)))
+        .with(StyleDeclaration::height(Px(72.0))),
+    ),
+    Node::text(
+      "Takumi should wrap this sentence around the floated image for the first few lines before returning to the full measure width once the float ends.".to_string(),
+    )
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Px(240.0)))
+      .with(StyleDeclaration::font_size(Px(20.0).into()))
+      .with(StyleDeclaration::line_height(LineHeight::Unitless(1.2))),
+  );
+
+  let result = measure(node, create_measure_viewport());
+  let float_box = result
+    .children
+    .iter()
+    .find(|child| (child.width - 72.0).abs() <= 0.01 && (child.height - 72.0).abs() <= 0.01)
+    .expect("expected floated inline box to be measured");
+
+  assert_close(float_box.transform[4], 0.0);
+  assert_close(float_box.transform[5], 0.0);
+
+  let mut saw_wrapped_line = false;
+  let mut saw_full_width_line_below_float = false;
+  for run in &result.runs {
+    if run.x >= 70.0 {
+      saw_wrapped_line = true;
+    }
+
+    if run.y >= 72.0 && run.x <= 1.0 {
+      saw_full_width_line_below_float = true;
+    }
+  }
+
+  assert!(
+    saw_wrapped_line,
+    "expected at least one line to start after the float"
+  );
+  assert!(
+    saw_full_width_line_below_float,
+    "expected text to return to the full line width below the float"
+  );
+}
+
+#[test]
+fn test_measure_floated_inline_block_container_is_not_dropped() {
+  let node = Node::container([
+    Node::container([Node::text("Card".to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::font_size(Px(18.0).into())),
+    )])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::InlineBlock))
+        .with(StyleDeclaration::float(Float::Left))
+        .with(StyleDeclaration::width(Px(96.0)))
+        .with(StyleDeclaration::height(Px(56.0))),
+    ),
+    Node::text(
+      "Floated inline-block containers should remain in the inline formatting context instead of disappearing after blockification.".to_string(),
+    )
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Px(260.0)))
+      .with(StyleDeclaration::font_size(Px(20.0).into()))
+      .with(StyleDeclaration::line_height(LineHeight::Unitless(1.2))),
+  );
+
+  let result = measure(node, create_measure_viewport());
+  let float_box = result
+    .children
+    .iter()
+    .find(|child| (child.width - 96.0).abs() <= 0.01 && (child.height - 56.0).abs() <= 0.01)
+    .expect("expected floated inline-block container to be measured");
+
+  assert_close(float_box.transform[4], 0.0);
+  assert_close(float_box.transform[5], 0.0);
+  assert!(
+    result.runs.iter().any(|run| run.x >= 95.0),
+    "expected text runs to wrap around the floated inline-block container"
+  );
 }
 
 #[test]

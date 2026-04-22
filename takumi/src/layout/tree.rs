@@ -14,15 +14,15 @@ use crate::{
   layout::{
     Viewport,
     inline::{
-      InlineContentKind, InlineLayoutStage, InlineMeasureOptions, ProcessedInlineSpan,
-      collect_inline_items, create_inline_constraint, create_inline_layout,
+      InlineContentKind, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
+      ProcessedInlineSpan, collect_inline_items, create_inline_constraint, create_inline_layout,
       get_parent_font_metrics, measure_inline_layout, resolve_inline_max_height,
     },
     node::{Node, NodeStyleLayers},
     style::{
-      Affine, BlendMode, BorderStyle, BoxSizing, Color, ComputedStyle, Display, Filters, Isolation,
-      Overflow, PercentageNumber, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
-      apply_stylesheet_animations,
+      Affine, BlendMode, BorderStyle, BoxSizing, Color, ComputedStyle, Display, Filters, Float,
+      Isolation, Overflow, PercentageNumber, Position, Style as NodeStyle, StyleDeclaration,
+      StyleSheet, TextWrapMode, apply_stylesheet_animations,
       matching::{MatchedDeclarationsView, match_stylesheets_view},
     },
   },
@@ -846,21 +846,21 @@ impl<'g> RenderNode<'g> {
 
     let max_height = resolve_inline_max_height(&font_style, layout.content_box_height());
 
-    let (inline_layout, _, spans) = create_inline_layout(
-      collect_inline_items(self).into_iter(),
-      Size {
+    let built = create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(self),
+      available_space: Size {
         width: AvailableSpace::Definite(layout.content_box_width()),
         height: AvailableSpace::Definite(layout.content_box_height()),
       },
-      layout.content_box_width(),
+      max_width: layout.content_box_width(),
       max_height,
-      &font_style,
-      self.context.global,
-      InlineLayoutStage::Draw,
-    );
+      style: &font_style,
+      global: self.context.global,
+      mode: InlineLayoutMode::Draw,
+    });
     let inline_layout_box = layout;
 
-    let boxes = spans.iter().filter_map(|span| match span {
+    let boxes = built.spans.iter().filter_map(|span| match span {
       ProcessedInlineSpan::Box(item) => Some(item),
       _ => None,
     });
@@ -869,9 +869,10 @@ impl<'g> RenderNode<'g> {
       &self.context,
       canvas,
       inline_layout_box,
-      inline_layout,
+      built.layout,
       &font_style,
-      &spans,
+      &built.spans,
+      &built.custom_inline_boxes,
     )?;
 
     let inline_transform = Affine::translation(
@@ -896,13 +897,28 @@ impl<'g> RenderNode<'g> {
     )
   }
 
+  pub fn participates_as_inline_box(&self) -> bool {
+    self.is_inline_atomic_container()
+      || matches!(self.context.style.position, Position::Absolute)
+      || self.context.style.float != Float::None
+  }
+
+  fn participates_in_inline_formatting_context(&self) -> bool {
+    self.is_inline_level()
+      || self.participates_as_inline_box()
+      || self.anonymous_text_content.is_some()
+  }
+
   pub fn should_create_inline_layout(&self) -> bool {
     self.force_inline_layout
       || (matches!(
         self.context.style.display,
         Display::Block | Display::InlineBlock
       ) && self.children.as_ref().is_some_and(|children| {
-        !children.is_empty() && children.iter().all(RenderNode::is_inline_level)
+        !children.is_empty()
+          && children
+            .iter()
+            .all(RenderNode::participates_in_inline_formatting_context)
       }))
   }
 
@@ -1101,8 +1117,12 @@ impl<'g> RenderNode<'g> {
             force_inline_layout: false,
           }
         } else {
-          let has_inline = children.iter().any(RenderNode::is_inline_level);
-          let has_block = children.iter().any(|child| !child.is_inline_level());
+          let has_inline = children
+            .iter()
+            .any(RenderNode::participates_in_inline_formatting_context);
+          let has_block = children
+            .iter()
+            .any(|child| !child.participates_in_inline_formatting_context());
           let requires_inline_parent_blockification =
             finished.context.style.display.is_inline() && has_block;
           let needs_anonymous_boxes = has_inline && has_block;
@@ -1125,7 +1145,7 @@ impl<'g> RenderNode<'g> {
             let mut inline_group = Vec::new();
 
             for item in children {
-              if item.is_inline_level() {
+              if item.participates_in_inline_formatting_context() {
                 inline_group.push(item);
                 continue;
               }
@@ -1277,7 +1297,7 @@ impl<'g> RenderNode<'g> {
   }
 
   fn inline_baseline_box_kind(&self) -> Option<InlineBaselineBoxKind> {
-    if self.is_inline_atomic_container() {
+    if self.participates_as_inline_box() {
       return Some(InlineBaselineBoxKind::AtomicContainer);
     }
 
@@ -1303,22 +1323,22 @@ impl<'g> RenderNode<'g> {
 
     let font_style = self.context.style.to_sized_font_style(&self.context);
     let max_width = size.width.max(0.0);
-    let (inline_layout, _, _) = create_inline_layout(
-      collect_inline_items(self).into_iter(),
-      Size {
+    let built = create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(self),
+      available_space: Size {
         width: AvailableSpace::Definite(max_width),
         height: available_space.height,
       },
       max_width,
-      None,
-      &font_style,
-      self.context.global,
-      InlineLayoutStage::Measure,
-    );
+      max_height: None,
+      style: &font_style,
+      global: self.context.global,
+      mode: InlineLayoutMode::Measure,
+    });
     let line = if use_last_line {
-      inline_layout.lines().last()?
+      built.layout.lines().last()?
     } else {
-      inline_layout.lines().next()?
+      built.layout.lines().next()?
     };
     let metrics = line.metrics();
     let sizing = &self.context.sizing;
@@ -1418,7 +1438,7 @@ impl<'g> RenderNode<'g> {
     layout_results: Option<(&LayoutResults, NodeId)>,
   ) -> Option<f32> {
     let strategy = self.inline_baseline_strategy()?;
-    let include_padding_border = !self.is_inline_atomic_container();
+    let include_padding_border = !self.participates_as_inline_box();
     let margin_box_height = self.inline_box_margin_box_height(size, include_padding_border);
 
     for source in strategy.sources {
@@ -1439,7 +1459,7 @@ impl<'g> RenderNode<'g> {
     &self,
     available_space: Size<AvailableSpace>,
   ) -> AtomicInlineMetrics {
-    if self.is_inline_atomic_container() {
+    if self.participates_as_inline_box() {
       return self.measure_atomic_subtree(available_space);
     }
 
@@ -1481,7 +1501,7 @@ impl<'g> RenderNode<'g> {
         .map_or(Size::zero(), |layout| layout.size)
     };
 
-    if self.is_inline_atomic_container() {
+    if self.participates_as_inline_box() {
       // CSS shrink-to-fit for inline-level atomic boxes:
       // width = min(max-content, max(min-content, available)).
       // Reference: https://www.w3.org/TR/CSS22/visudet.html#float-width
@@ -1564,21 +1584,22 @@ impl<'g> RenderNode<'g> {
 
       let font_style = self.context.style.to_sized_font_style(&self.context);
 
-      let (mut layout, _, spans) = create_inline_layout(
-        collect_inline_items(self).into_iter(),
+      let mut built = create_inline_layout(InlineLayoutRequest {
+        items: collect_inline_items(self),
         available_space,
         max_width,
         max_height,
-        &font_style,
-        self.context.global,
-        InlineLayoutStage::Measure,
-      );
+        style: &font_style,
+        global: self.context.global,
+        mode: InlineLayoutMode::Measure,
+      });
 
       let ceil_width = font_style.parent.text_wrap_mode_and_line_clamp().0 == TextWrapMode::Wrap;
-      let parent_font_metrics = get_parent_font_metrics(&layout);
+      let parent_font_metrics = get_parent_font_metrics(&built.layout);
       return measure_inline_layout(
-        &mut layout,
-        &spans,
+        &mut built.layout,
+        &built.spans,
+        &built.custom_inline_boxes,
         InlineMeasureOptions {
           max_width,
           ceil_width,

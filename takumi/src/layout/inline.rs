@@ -1,7 +1,8 @@
 use std::{borrow::Cow, ops::Range};
 
 use parley::{
-  IndentOptions, InlineBox, Line, LineMetrics, PositionedInlineBox, PositionedLayoutItem, TextStyle,
+  IndentOptions, InlineBox, InlineBoxKind, Line, LineMetrics, PositionedInlineBox,
+  PositionedLayoutItem, TextStyle, YieldData,
 };
 use taffy::{AvailableSpace, Layout, Rect, Size};
 
@@ -10,9 +11,9 @@ use crate::{
   layout::{
     node::Node,
     style::{
-      BorderStyle, BoxSizing, Color, FontSynthesis, ResolvedVerticalAlign, SizedFontStyle,
-      SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextOverflow,
-      TextWrapMode, TextWrapStyle, VerticalAlign,
+      BorderStyle, BoxSizing, Color, Float, FontSynthesis, Position, ResolvedVerticalAlign,
+      SizedFontStyle, SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk,
+      TextOverflow, TextWrapMode, TextWrapStyle, VerticalAlign,
     },
     tree::RenderNode,
   },
@@ -22,8 +23,25 @@ use crate::{
   },
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum InlineLayoutStage {
+pub(crate) struct InlineLayoutRequest<'c, 'g> {
+  pub(crate) items: Vec<InlineItem<'c, 'g>>,
+  pub(crate) available_space: Size<AvailableSpace>,
+  pub(crate) max_width: f32,
+  pub(crate) max_height: Option<MaxHeight>,
+  pub(crate) style: &'c SizedFontStyle<'c>,
+  pub(crate) global: &'g GlobalContext,
+  pub(crate) mode: InlineLayoutMode,
+}
+
+pub(crate) struct BuiltInlineLayout<'c, 'g> {
+  pub(crate) layout: InlineLayout,
+  pub(crate) text: String,
+  pub(crate) spans: Vec<ProcessedInlineSpan<'c, 'g>>,
+  pub(crate) custom_inline_boxes: Vec<PositionedInlineBox>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum InlineLayoutMode {
   Measure,
   Draw,
 }
@@ -50,6 +68,16 @@ impl From<&InlineBoxItem<'_, '_>> for Layout {
       border: value.border,
       ..Default::default()
     }
+  }
+}
+
+fn inline_box_kind(render_node: &RenderNode<'_>) -> InlineBoxKind {
+  if matches!(render_node.context.style.position, Position::Absolute) {
+    InlineBoxKind::OutOfFlow
+  } else if render_node.context.style.float != Float::None {
+    InlineBoxKind::CustomOutOfFlow
+  } else {
+    InlineBoxKind::InFlow
   }
 }
 
@@ -84,7 +112,7 @@ fn collect_inline_items_impl<'n, 'g>(
   depth: usize,
   items: &mut Vec<InlineItem<'n, 'g>>,
 ) {
-  if depth > 0 && node.is_inline_atomic_container() {
+  if depth > 0 && node.participates_as_inline_box() {
     items.push(InlineItem::RenderNode { render_node: node });
     return;
   }
@@ -255,6 +283,168 @@ pub(crate) struct ResolvedLineMetrics {
   pub(crate) baseline_shift: f32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FloatSide {
+  Left,
+  Right,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ActiveFloat {
+  side: FloatSide,
+  x: f32,
+  y: f32,
+  width: f32,
+  height: f32,
+}
+
+impl ActiveFloat {
+  fn bottom(self) -> f32 {
+    self.y + self.height
+  }
+
+  fn overlaps_line(self, line_y: f32) -> bool {
+    self.y <= line_y && line_y < self.bottom()
+  }
+}
+
+struct FloatLayoutState {
+  max_width: f32,
+  active_floats: Vec<ActiveFloat>,
+}
+
+impl FloatLayoutState {
+  fn new(max_width: f32) -> Self {
+    Self {
+      max_width,
+      active_floats: Vec::new(),
+    }
+  }
+
+  fn side_for_inline_box(
+    &self,
+    spans: &[ProcessedInlineSpan<'_, '_>],
+    inline_box_id: u64,
+  ) -> Option<FloatSide> {
+    let ProcessedInlineSpan::Box(item) = spans.get(inline_box_id as usize)? else {
+      return None;
+    };
+
+    match item
+      .render_node
+      .context
+      .style
+      .float
+      .resolve(item.render_node.context.style.direction)
+    {
+      taffy::Float::Left => Some(FloatSide::Left),
+      taffy::Float::Right => Some(FloatSide::Right),
+      taffy::Float::None => None,
+    }
+  }
+
+  fn next_float_bottom(&self, line_y: f32) -> Option<f32> {
+    self
+      .active_floats
+      .iter()
+      .filter_map(|float| (float.bottom() > line_y).then_some(float.bottom()))
+      .min_by(|left, right| left.total_cmp(right))
+  }
+
+  fn line_bounds(&self, line_y: f32) -> (f32, f32) {
+    let mut left = 0.0_f32;
+    let mut right = self.max_width;
+
+    for active_float in &self.active_floats {
+      if !active_float.overlaps_line(line_y) {
+        continue;
+      }
+
+      match active_float.side {
+        FloatSide::Left => left = left.max(active_float.x + active_float.width),
+        FloatSide::Right => right = right.min(active_float.x),
+      }
+    }
+
+    (
+      left.min(self.max_width),
+      right.max(left).min(self.max_width),
+    )
+  }
+
+  fn find_float_y(&self, start_y: f32, width: f32) -> f32 {
+    let mut line_y = start_y.max(0.0);
+
+    loop {
+      let (left, right) = self.line_bounds(line_y);
+      if width <= right - left || (left == 0.0 && right == self.max_width) {
+        return line_y;
+      }
+
+      let Some(next_y) = self.next_float_bottom(line_y) else {
+        return line_y;
+      };
+      line_y = next_y;
+    }
+  }
+
+  fn find_line_y_for_advance(&self, start_y: f32, current_advance: f32) -> f32 {
+    let mut line_y = start_y.max(0.0);
+
+    loop {
+      let (left, right) = self.line_bounds(line_y);
+      if current_advance <= right - left {
+        return line_y;
+      }
+
+      let Some(next_y) = self.next_float_bottom(line_y) else {
+        return line_y;
+      };
+      line_y = next_y;
+    }
+  }
+
+  fn push_float(
+    &mut self,
+    side: FloatSide,
+    start_y: f32,
+    inline_box: &InlineBox,
+  ) -> PositionedInlineBox {
+    let float_y = self.find_float_y(start_y, inline_box.width);
+    let (left, right) = self.line_bounds(float_y);
+    let float_x = match side {
+      FloatSide::Left => left,
+      FloatSide::Right => (right - inline_box.width).max(left),
+    };
+
+    self.active_floats.push(ActiveFloat {
+      side,
+      x: float_x,
+      y: float_y,
+      width: inline_box.width,
+      height: inline_box.height,
+    });
+
+    PositionedInlineBox {
+      x: float_x,
+      y: float_y,
+      width: inline_box.width,
+      height: inline_box.height,
+      id: inline_box.id,
+      kind: inline_box.kind,
+    }
+  }
+
+  fn update_breaker_line(&self, breaker: &mut parley::BreakLines<'_, InlineBrush>, line_y: f32) {
+    let (line_x, line_right) = self.line_bounds(line_y);
+    let state = breaker.state_mut();
+    state.set_layout_max_advance(self.max_width);
+    state.set_line_x(line_x);
+    state.set_line_y(f64::from(line_y));
+    state.set_line_max_advance((line_right - line_x).max(0.0));
+  }
+}
+
 fn quantized_baseline(line_height: f32, ascent: f32, descent: f32) -> f32 {
   let rounded_ascent = ascent.round();
   let rounded_descent = descent.round();
@@ -336,7 +526,8 @@ pub(crate) fn resolve_inline_line_metrics(
   parent_font_metrics: Option<ParentFontMetrics>,
 ) -> Vec<ResolvedLineMetrics> {
   let mut result = Vec::with_capacity(inline_layout.lines().count());
-  let mut next_line_top = 0.0_f32;
+  let mut previous_parley_bottom = 0.0_f32;
+  let mut previous_resolved_bottom = 0.0_f32;
 
   for line in inline_layout.lines() {
     let effective_parent_x_height = effective_parent_x_height_for_line(&line, parent_font_metrics);
@@ -359,6 +550,9 @@ pub(crate) fn resolve_inline_line_metrics(
           has_contribution = true;
         }
         PositionedLayoutItem::InlineBox(inline_box) => {
+          if inline_box.kind != InlineBoxKind::InFlow {
+            continue;
+          }
           let Some(ProcessedInlineSpan::Box(item)) = spans.get(inline_box.id as usize) else {
             continue;
           };
@@ -397,7 +591,12 @@ pub(crate) fn resolve_inline_line_metrics(
     let resolved_ascent = resolved_above.max(0.0);
     let resolved_descent = resolved_below.max(0.0);
     let resolved_leading = resolved_line_height - (resolved_ascent + resolved_descent);
-    let resolved_line_top = next_line_top;
+    let interline_gap = if result.is_empty() {
+      line_metrics.block_min_coord.max(0.0)
+    } else {
+      (line_metrics.block_min_coord - previous_parley_bottom).max(0.0)
+    };
+    let resolved_line_top = previous_resolved_bottom + interline_gap;
     let resolved_baseline = resolved_line_top + resolved_above;
     let resolved_line_bottom = resolved_line_top + resolved_line_height;
     let baseline_shift = if (resolved_baseline - line_metrics.baseline).is_finite() {
@@ -417,7 +616,8 @@ pub(crate) fn resolve_inline_line_metrics(
       baseline_shift,
     });
 
-    next_line_top = resolved_line_bottom;
+    previous_parley_bottom = line_metrics.block_max_coord;
+    previous_resolved_bottom = resolved_line_bottom;
   }
 
   result
@@ -432,8 +632,8 @@ pub(crate) fn resolved_line_metrics_for_apply(
   adjusted.descent = resolved.resolved_descent;
   adjusted.leading = resolved.resolved_leading;
   adjusted.baseline = resolved.resolved_baseline;
-  adjusted.min_coord = resolved.resolved_line_top;
-  adjusted.max_coord = resolved.resolved_line_bottom;
+  adjusted.block_min_coord = resolved.resolved_line_top;
+  adjusted.block_max_coord = resolved.resolved_line_bottom;
   adjusted.line_height = resolved.resolved_line_height;
   adjusted
 }
@@ -455,6 +655,9 @@ fn collect_truncation_checkpoints(layout: &InlineLayout) -> Vec<TruncationCheckp
   for item in last_line.items() {
     match item {
       PositionedLayoutItem::InlineBox(inline_box) => {
+        if inline_box.kind != InlineBoxKind::InFlow {
+          continue;
+        }
         cumulative_width += inline_box.width;
       }
       PositionedLayoutItem::GlyphRun(glyph_run) => {
@@ -567,6 +770,7 @@ fn apply_truncation_plan<'c, 'g>(
 pub(crate) fn measure_inline_layout(
   layout: &mut InlineLayout,
   spans: &[ProcessedInlineSpan<'_, '_>],
+  custom_inline_boxes: &[PositionedInlineBox],
   options: InlineMeasureOptions,
 ) -> Size<f32> {
   let InlineMeasureOptions {
@@ -576,36 +780,42 @@ pub(crate) fn measure_inline_layout(
   } = options;
   let max_run_width = layout
     .lines()
-    .map(|line| line.metrics().advance)
+    .map(|line| line.metrics().inline_min_coord + line.metrics().advance)
     .fold(0.0, f32::max);
   let total_height = resolve_inline_line_metrics(layout, spans, parent_font_metrics)
     .into_iter()
-    .map(|metrics| metrics.resolved_line_height)
-    .sum::<f32>();
+    .map(|metrics| metrics.resolved_line_bottom)
+    .fold(0.0, f32::max);
+  let custom_box_width = custom_inline_boxes
+    .iter()
+    .map(|inline_box| inline_box.x + inline_box.width)
+    .fold(0.0, f32::max);
+  let custom_box_height = custom_inline_boxes
+    .iter()
+    .map(|inline_box| inline_box.y + inline_box.height)
+    .fold(0.0, f32::max);
 
   let measured_width = if ceil_width {
-    max_run_width.ceil()
+    max_run_width.max(custom_box_width).ceil()
   } else {
-    max_run_width
+    max_run_width.max(custom_box_width)
   };
 
   Size {
     width: measured_width.min(max_width),
-    height: total_height.ceil(),
+    height: total_height.max(custom_box_height).ceil(),
   }
 }
-pub(crate) fn create_inline_layout<'c, 'g: 'c>(
-  items: impl Iterator<Item = InlineItem<'c, 'g>>,
+
+fn build_inline_layout_tree<'c, 'g: 'c>(
+  items: Vec<InlineItem<'c, 'g>>,
   available_space: Size<AvailableSpace>,
-  max_width: f32,
-  max_height: Option<MaxHeight>,
   style: &'c SizedFontStyle,
   global: &'g GlobalContext,
-  stage: InlineLayoutStage,
-) -> (InlineLayout, String, Vec<ProcessedInlineSpan<'c, 'g>>) {
+) -> BuiltInlineLayout<'c, 'g> {
   let mut spans: Vec<ProcessedInlineSpan<'c, 'g>> = Vec::new();
 
-  let (mut layout, text) = global.font_context.tree_builder(style.into(), |builder| {
+  let (layout, text) = global.font_context.tree_builder(style.into(), |builder| {
     let mut index_pos = 0;
     let mut previous_collapsible_space = false;
     let mut previous_was_line_break = false;
@@ -677,7 +887,8 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
           let inline_box = InlineBox {
             index: index_pos,
             id: spans.len() as u64,
-            width: if render_node.is_inline_atomic_container() {
+            kind: inline_box_kind(render_node),
+            width: if render_node.participates_as_inline_box() {
               content_size.width + margin.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
             } else {
               content_size.width
@@ -685,7 +896,7 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
                 + padding.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
                 + border.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
             },
-            height: if render_node.is_inline_atomic_container() {
+            height: if render_node.participates_as_inline_box() {
               content_size.height + margin.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
             } else {
               content_size.height
@@ -714,62 +925,106 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
     }
   });
 
-  apply_text_indent(&mut layout, style, max_width);
-  let text_wrap_mode = style.parent.text_wrap_mode_and_line_clamp().0;
-  break_lines(&mut layout, max_width, max_height, text_wrap_mode);
-
-  if stage == InlineLayoutStage::Measure {
-    layout.align(
-      Some(max_width),
-      style.parent.text_align.into(),
-      Default::default(),
-    );
-    return (layout, text, spans);
+  BuiltInlineLayout {
+    layout,
+    text,
+    spans,
+    custom_inline_boxes: Vec::new(),
   }
+}
 
-  // Handle ellipsis when text overflows
-  if style.parent.text_overflow == TextOverflow::Ellipsis {
-    let is_overflowing = layout
-      .lines()
-      .last()
-      .is_some_and(|last_line| last_line.text_range().end < text.len());
+fn prepare_inline_layout(
+  built: &mut BuiltInlineLayout<'_, '_>,
+  max_width: f32,
+  max_height: Option<MaxHeight>,
+  style: &SizedFontStyle,
+) -> TextWrapMode {
+  let text_wrap_mode = style.parent.text_wrap_mode_and_line_clamp().0;
+  apply_text_indent(&mut built.layout, style, max_width);
+  break_lines(
+    &mut built.layout,
+    max_width,
+    max_height,
+    text_wrap_mode,
+    &built.spans,
+    &mut built.custom_inline_boxes,
+  );
+  text_wrap_mode
+}
 
-    if is_overflowing {
-      make_ellipsis_layout(
-        &mut layout,
-        &mut spans,
+pub(crate) fn create_inline_layout<'c, 'g: 'c>(
+  request: InlineLayoutRequest<'c, 'g>,
+) -> BuiltInlineLayout<'c, 'g> {
+  let InlineLayoutRequest {
+    items,
+    available_space,
+    max_width,
+    max_height,
+    style,
+    global,
+    mode,
+  } = request;
+  let mut built = build_inline_layout_tree(items, available_space, style, global);
+  let text_wrap_mode = prepare_inline_layout(&mut built, max_width, max_height, style);
+
+  if mode == InlineLayoutMode::Draw {
+    let BuiltInlineLayout {
+      layout,
+      text,
+      spans,
+      custom_inline_boxes,
+    } = &mut built;
+
+    if style.parent.text_overflow == TextOverflow::Ellipsis {
+      let is_overflowing = layout
+        .lines()
+        .last()
+        .is_some_and(|last_line| last_line.text_range().end < text.len());
+
+      if is_overflowing {
+        make_ellipsis_layout(
+          layout,
+          spans,
+          max_width,
+          max_height,
+          style,
+          global,
+          custom_inline_boxes,
+        );
+      }
+    }
+
+    let line_count = layout.lines().count();
+
+    if style.parent.text_wrap_style == TextWrapStyle::Balance {
+      make_balanced_text(
+        layout,
         max_width,
         max_height,
-        style,
-        global,
+        line_count,
+        text_wrap_mode,
+        style.sizing.viewport.device_pixel_ratio,
+        spans,
+        custom_inline_boxes,
+      );
+    }
+
+    if style.parent.text_wrap_style == TextWrapStyle::Pretty {
+      make_pretty_text(
+        layout,
+        max_width,
+        max_height,
+        text_wrap_mode,
+        spans,
+        custom_inline_boxes,
       );
     }
   }
 
-  let line_count = layout.lines().count();
-
-  if style.parent.text_wrap_style == TextWrapStyle::Balance {
-    make_balanced_text(
-      &mut layout,
-      max_width,
-      max_height,
-      line_count,
-      text_wrap_mode,
-      style.sizing.viewport.device_pixel_ratio,
-    );
-  }
-
-  if style.parent.text_wrap_style == TextWrapStyle::Pretty {
-    make_pretty_text(&mut layout, max_width, max_height, text_wrap_mode);
-  }
-
-  layout.align(
-    Some(max_width),
-    style.parent.text_align.into(),
-    Default::default(),
-  );
-
-  (layout, text, spans)
+  built
+    .layout
+    .align(style.parent.text_align.into(), Default::default());
+  built
 }
 
 pub(crate) fn resolve_inline_max_height(
@@ -840,28 +1095,54 @@ pub(crate) fn break_lines(
   max_width: f32,
   max_height: Option<MaxHeight>,
   text_wrap_mode: TextWrapMode,
+  spans: &[ProcessedInlineSpan<'_, '_>],
+  custom_inline_boxes: &mut Vec<PositionedInlineBox>,
 ) {
-  if text_wrap_mode == TextWrapMode::NoWrap {
+  let inline_boxes = layout.inline_boxes().to_vec();
+  let mut float_layout = FloatLayoutState::new(max_width);
+  let has_custom_out_of_flow = inline_boxes
+    .iter()
+    .any(|inline_box| inline_box.kind == InlineBoxKind::CustomOutOfFlow);
+
+  if text_wrap_mode == TextWrapMode::NoWrap && !has_custom_out_of_flow {
     return layout.break_all_lines(Some(max_width));
   }
 
-  let Some(max_height) = max_height else {
+  if max_height.is_none() && !has_custom_out_of_flow {
     return layout.break_all_lines(Some(max_width));
-  };
+  }
 
   let (limit_height, limit_lines) = match max_height {
-    MaxHeight::Lines(lines) => (f32::MAX, lines),
-    MaxHeight::Absolute(height) => (height, u32::MAX),
-    MaxHeight::HeightAndLines(height, lines) => (height, lines),
+    Some(MaxHeight::Lines(lines)) => (f32::MAX, lines),
+    Some(MaxHeight::Absolute(height)) => (height, u32::MAX),
+    Some(MaxHeight::HeightAndLines(height, lines)) => (height, lines),
+    None => (f32::MAX, u32::MAX),
   };
 
   let mut total_height = 0.0;
   let mut line_count = 0;
   let mut breaker = layout.break_lines();
+  float_layout.update_breaker_line(&mut breaker, 0.0);
 
   while line_count < limit_lines {
-    let Some((_, height)) = breaker.break_next(max_width) else {
+    let Some(yield_data) = breaker.break_next() else {
       break;
+    };
+    let height = match yield_data {
+      YieldData::LineBreak(data) => data.line_height,
+      YieldData::MaxHeightExceeded(data) => data.line_height,
+      YieldData::InlineBoxBreak(data) => {
+        let inline_box = inline_boxes[data.inline_box_index].clone();
+        let Some(side) = float_layout.side_for_inline_box(spans, inline_box.id) else {
+          continue;
+        };
+        let start_y = breaker.state().line_y() as f32;
+        let positioned_float = float_layout.push_float(side, start_y, &inline_box);
+        let line_y = float_layout.find_line_y_for_advance(start_y, data.advance);
+        float_layout.update_breaker_line(&mut breaker, line_y);
+        custom_inline_boxes.push(positioned_float);
+        continue;
+      }
     };
 
     if !can_commit_line_candidate(total_height, height, line_count, limit_height) {
@@ -871,6 +1152,8 @@ pub(crate) fn break_lines(
 
     total_height += height;
     line_count += 1;
+    let next_line_y = breaker.state().line_y() as f32;
+    float_layout.update_breaker_line(&mut breaker, next_line_y);
 
     if total_height >= limit_height {
       break;
@@ -897,6 +1180,7 @@ fn make_ellipsis_layout<'c, 'g: 'c>(
   max_height: Option<MaxHeight>,
   root_style: &'c SizedFontStyle,
   global: &GlobalContext,
+  custom_inline_boxes: &mut Vec<PositionedInlineBox>,
 ) {
   let ellipsis_char = root_style.parent.ellipsis_char();
   let checkpoints = collect_truncation_checkpoints(layout);
@@ -951,6 +1235,14 @@ fn make_ellipsis_layout<'c, 'g: 'c>(
 
   apply_text_indent(&mut final_layout, root_style, max_width);
   let text_wrap_mode = root_style.parent.text_wrap_mode_and_line_clamp().0;
-  break_lines(&mut final_layout, max_width, max_height, text_wrap_mode);
+  custom_inline_boxes.clear();
+  break_lines(
+    &mut final_layout,
+    max_width,
+    max_height,
+    text_wrap_mode,
+    spans,
+    custom_inline_boxes,
+  );
   *layout = final_layout;
 }

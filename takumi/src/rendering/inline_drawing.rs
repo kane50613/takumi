@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use parley::{GlyphRun, PositionedInlineBox, PositionedLayoutItem};
+use parley::{GlyphRun, InlineBoxKind, PositionedInlineBox, PositionedLayoutItem};
 use skrifa::{FontRef, MetadataProvider};
 use taffy::{Layout, Point};
 
@@ -718,7 +718,7 @@ pub(crate) fn draw_inline_box(
     return Ok(());
   }
 
-  if item.render_node.is_inline_atomic_container() {
+  if item.render_node.participates_as_inline_box() {
     let mut subtree_root = item.render_node.clone();
     let mut layout_tree = LayoutTree::from_render_node(&subtree_root);
 
@@ -778,6 +778,7 @@ pub(crate) fn draw_inline_layout(
   inline_layout: InlineLayout,
   font_style: &SizedFontStyle,
   spans: &[ProcessedInlineSpan<'_, '_>],
+  custom_inline_boxes: &[PositionedInlineBox],
 ) -> Result<Vec<PositionedInlineBox>> {
   let glyph_runs = collect_glyph_runs(&inline_layout);
   let resolved_glyph_runs = resolve_inline_layout_glyphs(context, &glyph_runs)?;
@@ -798,7 +799,7 @@ pub(crate) fn draw_inline_layout(
   let clip_image_source = clip_image.as_ref().map(PaintSource::from);
   let parent_font_metrics = get_parent_font_metrics(&inline_layout);
 
-  let mut positioned_inline_boxes = Vec::new();
+  let mut positioned_inline_boxes = HashMap::new();
   let mut inline_outline_rects = Vec::new();
 
   let line_vertical_metrics =
@@ -901,9 +902,14 @@ pub(crate) fn draw_inline_layout(
           }
         }
         PositionedLayoutItem::InlineBox(mut inline_box) => {
+          if inline_box.kind == InlineBoxKind::CustomOutOfFlow {
+            continue;
+          }
           let item_index = inline_box.id as usize;
 
-          if let Some(ProcessedInlineSpan::Box(item)) = spans.get(item_index) {
+          if inline_box.kind == InlineBoxKind::InFlow
+            && let Some(ProcessedInlineSpan::Box(item)) = spans.get(item_index)
+          {
             item.vertical_align.apply(
               &mut inline_box.y,
               &adjusted_line_metrics,
@@ -913,10 +919,14 @@ pub(crate) fn draw_inline_layout(
               line_parent_text_metrics,
             );
           }
-          positioned_inline_boxes.push(inline_box)
+          positioned_inline_boxes.insert(inline_box.id, inline_box);
         }
       }
     }
+  }
+
+  for inline_box in custom_inline_boxes {
+    positioned_inline_boxes.insert(inline_box.id, inline_box.clone());
   }
 
   draw_merged_outline_rects(inline_outline_rects, canvas, spans, context.transform);
@@ -934,5 +944,7 @@ pub(crate) fn draw_inline_layout(
     release_rasterized_background_tile(tile, &mut canvas.buffer_pool);
   }
 
+  let mut positioned_inline_boxes: Vec<_> = positioned_inline_boxes.into_values().collect();
+  positioned_inline_boxes.sort_by_key(|inline_box| inline_box.id);
   Ok(positioned_inline_boxes)
 }

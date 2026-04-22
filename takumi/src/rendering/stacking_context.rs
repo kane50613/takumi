@@ -1,18 +1,17 @@
-use parley::PositionedLayoutItem;
+use parley::{InlineBoxKind, PositionedLayoutItem};
 use taffy::{AvailableSpace, Layout, NodeId, Point, TaffyError, geometry::Size};
 use tiny_skia::Pixmap;
 use tiny_skia::PixmapMut;
 
 use crate::layout::inline::{
-  ProcessedInlineSpan, effective_parent_text_metrics_for_line, effective_parent_x_height_for_line,
+  InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan,
+  effective_parent_text_metrics_for_line, effective_parent_x_height_for_line,
   get_parent_font_metrics, resolve_inline_line_metrics, resolved_line_metrics_for_apply,
 };
 use crate::{
   Error, Result,
   layout::{
-    inline::{
-      InlineLayoutStage, collect_inline_items, create_inline_layout, resolve_inline_max_height,
-    },
+    inline::{collect_inline_items, create_inline_layout, resolve_inline_max_height},
     style::{
       Affine, BackgroundImage, BlendMode, BorderStyle, Color, ComputedStyle, Display, Filter,
       SpacePair, apply_backdrop_filter, apply_filters_to_pixmap,
@@ -527,24 +526,24 @@ fn compute_node_paint_bounds(
   };
   let max_height = resolve_inline_max_height(&font_style, layout.content_box_height());
 
-  let (inline_layout, _, spans) = create_inline_layout(
-    collect_inline_items(node).into_iter(),
+  let built = create_inline_layout(InlineLayoutRequest {
+    items: collect_inline_items(node),
     available_space,
-    layout.content_box_width(),
+    max_width: layout.content_box_width(),
     max_height,
-    &font_style,
-    node.context.global,
-    InlineLayoutStage::Measure,
-  );
+    style: &font_style,
+    global: node.context.global,
+    mode: InlineLayoutMode::Measure,
+  });
   let inline_transform = Affine::translation(
     layout.border.left + layout.padding.left,
     layout.border.top + layout.padding.top,
   ) * transform;
-  let parent_font_metrics = get_parent_font_metrics(&inline_layout);
+  let parent_font_metrics = get_parent_font_metrics(&built.layout);
 
   let line_vertical_metrics =
-    resolve_inline_line_metrics(&inline_layout, &spans, parent_font_metrics);
-  for (line_index, line) in inline_layout.lines().enumerate() {
+    resolve_inline_line_metrics(&built.layout, &built.spans, parent_font_metrics);
+  for (line_index, line) in built.layout.lines().enumerate() {
     let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
     let adjusted_line_metrics =
       resolved_line_metrics_for_apply(line.metrics(), line_vertical_metrics[line_index]);
@@ -571,8 +570,13 @@ fn compute_node_paint_bounds(
           );
         }
         PositionedLayoutItem::InlineBox(mut inline_box) => {
+          if inline_box.kind == InlineBoxKind::CustomOutOfFlow {
+            continue;
+          }
           let item_index = inline_box.id as usize;
-          if let Some(ProcessedInlineSpan::Box(item)) = spans.get(item_index) {
+          if inline_box.kind == InlineBoxKind::InFlow
+            && let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(item_index)
+          {
             item.vertical_align.apply(
               &mut inline_box.y,
               &adjusted_line_metrics,
@@ -596,6 +600,19 @@ fn compute_node_paint_bounds(
         }
       }
     }
+  }
+
+  for inline_box in built.custom_inline_boxes {
+    bounds = merge_bounds(
+      bounds,
+      bounds_for_rect(
+        Size {
+          width: inline_box.width,
+          height: inline_box.height,
+        },
+        Affine::translation(inline_box.x, inline_box.y) * inline_transform,
+      ),
+    );
   }
 
   bounds
