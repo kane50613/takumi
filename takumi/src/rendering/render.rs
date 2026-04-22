@@ -11,10 +11,9 @@ use crate::{
   layout::{
     Viewport,
     inline::{
-      InlineBrush, InlineLayoutStage, ProcessedInlineSpan, collect_inline_items,
-      create_inline_constraint, create_inline_layout, effective_parent_text_metrics_for_line,
-      effective_parent_x_height_for_line, get_parent_font_metrics, resolve_inline_line_metrics,
-      resolved_line_metrics_for_apply,
+      InlineBrush, InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan,
+      collect_inline_items, create_inline_constraint, create_inline_layout,
+      get_parent_font_metrics, normalize_inline_box, resolve_inline_line_states,
     },
     node::Node,
     style::{Affine, StyleSheet},
@@ -241,35 +240,29 @@ fn collect_measure_result<'g>(
             Size::NONE,
           );
 
-          let (inline_layout, text, spans) = create_inline_layout(
-            collect_inline_items(current).into_iter(),
-            Size {
+          let built = create_inline_layout(InlineLayoutRequest {
+            items: collect_inline_items(current),
+            available_space: Size {
               width: AvailableSpace::Definite(layout.content_box_width()),
               height: AvailableSpace::Definite(layout.content_box_height()),
             },
             max_width,
             max_height,
-            &font_style,
-            current.context.global,
-            InlineLayoutStage::Measure,
-          );
-          let parent_font_metrics = get_parent_font_metrics(&inline_layout);
+            style: &font_style,
+            global: current.context.global,
+            mode: InlineLayoutMode::Measure,
+          });
+          let parent_font_metrics = get_parent_font_metrics(&built.layout);
           let inline_offset = taffy::Point::ZERO;
-          let line_vertical_metrics =
-            resolve_inline_line_metrics(&inline_layout, &spans, parent_font_metrics);
+          let line_states =
+            resolve_inline_line_states(&built.layout, &built.spans, parent_font_metrics);
 
-          for (line_index, line) in inline_layout.lines().enumerate() {
-            let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
-            let adjusted_line_metrics =
-              resolved_line_metrics_for_apply(line.metrics(), line_vertical_metrics[line_index]);
-            let line_parent_x_height =
-              effective_parent_x_height_for_line(&line, parent_font_metrics);
-            let line_parent_text_metrics =
-              effective_parent_text_metrics_for_line(&line, parent_font_metrics);
+          for (line_index, line) in built.layout.lines().enumerate() {
+            let baseline_shift = line_states[line_index].baseline_shift;
             for item in line.items() {
               match item {
                 PositionedLayoutItem::GlyphRun(glyph_run) => {
-                  let text = measured_run_text(&text, &spans, &glyph_run);
+                  let text = measured_run_text(&built.text, &built.spans, &glyph_run);
                   if text.is_empty() {
                     continue;
                   }
@@ -284,18 +277,12 @@ fn collect_measure_result<'g>(
                     height: metrics.ascent + metrics.descent,
                   });
                 }
-                PositionedLayoutItem::InlineBox(mut positioned_box) => {
-                  let item_index = positioned_box.id as usize;
-                  if let Some(ProcessedInlineSpan::Box(item)) = spans.get(item_index) {
-                    item.vertical_align.apply(
-                      &mut positioned_box.y,
-                      &adjusted_line_metrics,
-                      positioned_box.height,
-                      item.baseline_offset,
-                      line_parent_x_height,
-                      line_parent_text_metrics,
-                    );
-                  }
+                PositionedLayoutItem::InlineBox(positioned_box) => {
+                  let Some(mut positioned_box) =
+                    normalize_inline_box(positioned_box, line_states[line_index], &built.spans)
+                  else {
+                    continue;
+                  };
                   positioned_box.x += inline_offset.x;
                   positioned_box.y += inline_offset.y;
 
@@ -312,6 +299,18 @@ fn collect_measure_result<'g>(
                 }
               }
             }
+          }
+
+          for positioned_box in built.custom_inline_boxes {
+            let inline_transform =
+              Affine::translation(positioned_box.x, positioned_box.y) * local_transform;
+            children.push(MeasuredNode {
+              width: positioned_box.width,
+              height: positioned_box.height,
+              transform: inline_transform.to_cols_array(),
+              children: Vec::new(),
+              runs: Vec::new(),
+            });
           }
 
           measured_by_node_id.insert(

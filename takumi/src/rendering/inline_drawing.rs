@@ -8,9 +8,8 @@ use crate::{
   Result,
   layout::{
     inline::{
-      InlineBoxItem, InlineBrush, InlineLayout, ProcessedInlineSpan,
-      effective_parent_text_metrics_for_line, effective_parent_x_height_for_line,
-      get_parent_font_metrics, resolve_inline_line_metrics, resolved_line_metrics_for_apply,
+      InlineBoxItem, InlineBrush, InlineLayout, ProcessedInlineSpan, get_parent_font_metrics,
+      normalize_inline_box, resolve_inline_line_metrics, resolve_inline_line_states,
     },
     style::{
       Affine, BackgroundClip, BlendMode, BorderStyle, Color, SizedFontStyle,
@@ -718,7 +717,7 @@ pub(crate) fn draw_inline_box(
     return Ok(());
   }
 
-  if item.render_node.is_inline_atomic_container() {
+  if item.render_node.participates_as_inline_box() {
     let mut subtree_root = item.render_node.clone();
     let mut layout_tree = LayoutTree::from_render_node(&subtree_root);
 
@@ -778,6 +777,7 @@ pub(crate) fn draw_inline_layout(
   inline_layout: InlineLayout,
   font_style: &SizedFontStyle,
   spans: &[ProcessedInlineSpan<'_, '_>],
+  custom_inline_boxes: &[PositionedInlineBox],
 ) -> Result<Vec<PositionedInlineBox>> {
   let glyph_runs = collect_glyph_runs(&inline_layout);
   let resolved_glyph_runs = resolve_inline_layout_glyphs(context, &glyph_runs)?;
@@ -798,11 +798,12 @@ pub(crate) fn draw_inline_layout(
   let clip_image_source = clip_image.as_ref().map(PaintSource::from);
   let parent_font_metrics = get_parent_font_metrics(&inline_layout);
 
-  let mut positioned_inline_boxes = Vec::new();
+  let mut positioned_inline_boxes = HashMap::new();
   let mut inline_outline_rects = Vec::new();
 
   let line_vertical_metrics =
     resolve_inline_line_metrics(&inline_layout, spans, parent_font_metrics);
+  let line_states = resolve_inline_line_states(&inline_layout, spans, parent_font_metrics);
 
   // Pre-slice resolved glyph runs per line so each CSS painting phase can index
   // directly instead of maintaining fragile in-sync iterator state across separate loops.
@@ -865,10 +866,6 @@ pub(crate) fn draw_inline_layout(
   for (line_index, line) in inline_layout.lines().enumerate() {
     let resolved_metrics = line_vertical_metrics[line_index];
     let baseline_shift = resolved_metrics.baseline_shift;
-    let adjusted_line_metrics = resolved_line_metrics_for_apply(line.metrics(), resolved_metrics);
-    let line_parent_x_height = effective_parent_x_height_for_line(&line, parent_font_metrics);
-    let line_parent_text_metrics =
-      effective_parent_text_metrics_for_line(&line, parent_font_metrics);
     let mut resolved_iter = per_line_resolved[line_index].iter();
 
     for item in line.items() {
@@ -900,23 +897,21 @@ pub(crate) fn draw_inline_layout(
             inline_outline_rects.push(outline_rect);
           }
         }
-        PositionedLayoutItem::InlineBox(mut inline_box) => {
-          let item_index = inline_box.id as usize;
-
-          if let Some(ProcessedInlineSpan::Box(item)) = spans.get(item_index) {
-            item.vertical_align.apply(
-              &mut inline_box.y,
-              &adjusted_line_metrics,
-              inline_box.height,
-              item.baseline_offset,
-              line_parent_x_height,
-              line_parent_text_metrics,
-            );
-          }
-          positioned_inline_boxes.push(inline_box)
+        PositionedLayoutItem::InlineBox(inline_box) => {
+          let Some(inline_box) = normalize_inline_box(inline_box, line_states[line_index], spans)
+          else {
+            continue;
+          };
+          let replaced = positioned_inline_boxes.insert(inline_box.id, inline_box);
+          debug_assert!(replaced.is_none());
         }
       }
     }
+  }
+
+  for inline_box in custom_inline_boxes {
+    let replaced = positioned_inline_boxes.insert(inline_box.id, inline_box.clone());
+    debug_assert!(replaced.is_none());
   }
 
   draw_merged_outline_rects(inline_outline_rects, canvas, spans, context.transform);
@@ -934,5 +929,7 @@ pub(crate) fn draw_inline_layout(
     release_rasterized_background_tile(tile, &mut canvas.buffer_pool);
   }
 
+  let mut positioned_inline_boxes: Vec<_> = positioned_inline_boxes.into_values().collect();
+  positioned_inline_boxes.sort_by_key(|inline_box| inline_box.id);
   Ok(positioned_inline_boxes)
 }

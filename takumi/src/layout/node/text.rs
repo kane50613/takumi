@@ -1,12 +1,10 @@
-use std::iter::once;
-
 use taffy::{AvailableSpace, Layout, Size};
 
 use crate::{
   Result,
   layout::{
     inline::{
-      InlineContentKind, InlineItem, InlineLayoutStage, InlineMeasureOptions,
+      InlineContentKind, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
       create_inline_constraint, create_inline_layout, get_parent_font_metrics,
       measure_inline_layout, resolve_inline_max_height,
     },
@@ -39,20 +37,28 @@ pub(crate) fn draw_text_node_content(
     context,
   };
 
-  let (inline_layout, _, spans) = create_inline_layout(
-    once(inline_text),
-    Size {
+  let built = create_inline_layout(InlineLayoutRequest {
+    items: vec![inline_text],
+    available_space: Size {
       width: AvailableSpace::Definite(size.width),
       height: AvailableSpace::Definite(size.height),
     },
-    size.width,
+    max_width: size.width,
     max_height,
-    &font_style,
-    context.global,
-    InlineLayoutStage::Draw,
-  );
+    style: &font_style,
+    global: context.global,
+    mode: InlineLayoutMode::Draw,
+  });
 
-  draw_inline_layout(context, canvas, layout, inline_layout, &font_style, &spans)?;
+  draw_inline_layout(
+    context,
+    canvas,
+    layout,
+    built.layout,
+    &font_style,
+    &built.spans,
+    &built.custom_inline_boxes,
+  )?;
 
   Ok(())
 }
@@ -72,21 +78,22 @@ pub(crate) fn measure_text_node(
     create_inline_constraint(context, available_space, known_dimensions);
   let font_style = context.style.to_sized_font_style(context);
 
-  let (mut layout, _, spans) = create_inline_layout(
-    once(inline_content),
+  let mut built = create_inline_layout(InlineLayoutRequest {
+    items: vec![inline_content],
     available_space,
     max_width,
     max_height,
-    &font_style,
-    context.global,
-    InlineLayoutStage::Measure,
-  );
+    style: &font_style,
+    global: context.global,
+    mode: InlineLayoutMode::Measure,
+  });
 
-  let parent_font_metrics = get_parent_font_metrics(&layout);
+  let parent_font_metrics = get_parent_font_metrics(&built.layout);
 
   measure_inline_layout(
-    &mut layout,
-    &spans,
+    &mut built.layout,
+    &built.spans,
+    &built.custom_inline_boxes,
     InlineMeasureOptions {
       max_width,
       ceil_width: true,
