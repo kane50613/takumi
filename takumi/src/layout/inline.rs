@@ -727,7 +727,9 @@ pub(crate) fn normalize_inline_box(
   line_state: ResolvedInlineLineState,
   spans: &[ProcessedInlineSpan<'_, '_>],
 ) -> Option<PositionedInlineBox> {
-  if inline_box.kind == InlineBoxKind::CustomOutOfFlow {
+  if inline_box.kind == InlineBoxKind::CustomOutOfFlow
+    || inline_box.kind == InlineBoxKind::OutOfFlow
+  {
     return None;
   }
 
@@ -1047,7 +1049,7 @@ fn prepare_inline_layout(
   max_width: f32,
   max_height: Option<MaxHeight>,
   style: &SizedFontStyle,
-) -> TextWrapMode {
+) -> (TextWrapMode, f32) {
   let text_wrap_mode = style.parent.text_wrap_mode_and_line_clamp().0;
   let line_height_hint = inline_line_height_hint(style);
   apply_text_indent(&mut built.layout, style, max_width);
@@ -1060,7 +1062,7 @@ fn prepare_inline_layout(
     &built.spans,
     &mut built.custom_inline_boxes,
   );
-  text_wrap_mode
+  (text_wrap_mode, line_height_hint)
 }
 
 pub(crate) fn create_inline_layout<'c, 'g: 'c>(
@@ -1076,8 +1078,8 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
     mode,
   } = request;
   let mut built = build_inline_layout_tree(items, available_space, style, global);
-  let text_wrap_mode = prepare_inline_layout(&mut built, max_width, max_height, style);
-  let line_height_hint = inline_line_height_hint(style);
+  let (text_wrap_mode, line_height_hint) =
+    prepare_inline_layout(&mut built, max_width, max_height, style);
 
   if mode == InlineLayoutMode::Draw {
     let BuiltInlineLayout {
