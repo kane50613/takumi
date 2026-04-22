@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/helpers",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "description": "Utility helpers for converting JSX/HTML to Takumi node trees and handling resources.",
   "keywords": [
     "css",
