@@ -9,10 +9,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@cloudflare/vite-plugin": "^1.32.3",
-    "@tanstack/react-router": "^1.168.22",
+    "@cloudflare/vite-plugin": "^1.33.1",
+    "@tanstack/react-router": "^1.168.23",
     "@tanstack/react-router-ssr-query": "^1.166.11",
-    "@tanstack/react-start": "^1.167.41",
+    "@tanstack/react-start": "^1.167.42",
     "@tanstack/router-plugin": "^1.167.22",
     "lucide-react": "catalog:",
     "react": "catalog:",

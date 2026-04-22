@@ -13,15 +13,15 @@
     "react": "~19.2.5",
     "react-dom": "~19.2.5",
     "takumi-js": "workspace:*",
-    "waku": "1.0.0-alpha.7"
+    "waku": "1.0.0-alpha.8"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "4.2.2",
+    "@tailwindcss/vite": "4.2.4",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "babel-plugin-react-compiler": "^1.0.0",
-    "tailwindcss": "^4.2.1",
+    "tailwindcss": "^4.2.4",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }
