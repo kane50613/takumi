@@ -612,18 +612,30 @@ fn count_emergency_line_breaks(layout: &InlineLayout) -> usize {
     .count()
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct RebreakOptions {
+  pub(crate) max_width: f32,
+  pub(crate) max_height: Option<MaxHeight>,
+  pub(crate) line_height_hint: f32,
+  pub(crate) text_wrap_mode: TextWrapMode,
+}
+
 /// Use binary search to find the minimum width that maintains the same number of lines.
 /// Returns `true` if a meaningful adjustment was made.
 pub(crate) fn make_balanced_text(
   inline_layout: &mut InlineLayout,
-  max_width: f32,
-  max_height: Option<MaxHeight>,
+  options: RebreakOptions,
   target_lines: usize,
-  text_wrap_mode: TextWrapMode,
   device_pixel_ratio: f32,
   spans: &[ProcessedInlineSpan<'_, '_>],
   custom_inline_boxes: &mut Vec<parley::PositionedInlineBox>,
 ) -> bool {
+  let RebreakOptions {
+    max_width,
+    max_height,
+    line_height_hint,
+    text_wrap_mode,
+  } = options;
   if target_lines <= 1 {
     return false;
   }
@@ -647,6 +659,7 @@ pub(crate) fn make_balanced_text(
       inline_layout,
       mid,
       None,
+      line_height_hint,
       text_wrap_mode,
       spans,
       custom_inline_boxes,
@@ -673,6 +686,7 @@ pub(crate) fn make_balanced_text(
       inline_layout,
       max_width,
       max_height,
+      line_height_hint,
       text_wrap_mode,
       spans,
       custom_inline_boxes,
@@ -685,6 +699,7 @@ pub(crate) fn make_balanced_text(
       inline_layout,
       balanced_width,
       max_height,
+      line_height_hint,
       text_wrap_mode,
       spans,
       custom_inline_boxes,
@@ -697,12 +712,16 @@ pub(crate) fn make_balanced_text(
 /// Returns `true` if a meaningful adjustment was made.
 pub(crate) fn make_pretty_text(
   inline_layout: &mut InlineLayout,
-  max_width: f32,
-  max_height: Option<MaxHeight>,
-  text_wrap_mode: TextWrapMode,
+  options: RebreakOptions,
   spans: &[ProcessedInlineSpan<'_, '_>],
   custom_inline_boxes: &mut Vec<parley::PositionedInlineBox>,
 ) -> bool {
+  let RebreakOptions {
+    max_width,
+    max_height,
+    line_height_hint,
+    text_wrap_mode,
+  } = options;
   // Get the last line width at the current max width (layout should already be broken)
   let Some(last_line_width) = inline_layout
     .lines()
@@ -732,6 +751,7 @@ pub(crate) fn make_pretty_text(
     inline_layout,
     adjusted_width,
     None,
+    line_height_hint,
     text_wrap_mode,
     spans,
     custom_inline_boxes,
@@ -750,6 +770,7 @@ pub(crate) fn make_pretty_text(
       inline_layout,
       max_width,
       max_height,
+      line_height_hint,
       text_wrap_mode,
       spans,
       custom_inline_boxes,

@@ -902,14 +902,16 @@ pub(crate) fn draw_inline_layout(
           else {
             continue;
           };
-          positioned_inline_boxes.insert(inline_box.id, inline_box);
+          let replaced = positioned_inline_boxes.insert(inline_box.id, inline_box);
+          debug_assert!(replaced.is_none());
         }
       }
     }
   }
 
   for inline_box in custom_inline_boxes {
-    positioned_inline_boxes.insert(inline_box.id, inline_box.clone());
+    let replaced = positioned_inline_boxes.insert(inline_box.id, inline_box.clone());
+    debug_assert!(replaced.is_none());
   }
 
   draw_merged_outline_rects(inline_outline_rects, canvas, spans, context.transform);

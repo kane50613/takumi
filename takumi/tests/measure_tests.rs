@@ -5,9 +5,9 @@ use takumi::{
     Viewport,
     node::Node,
     style::{
-      Affine, AlignItems, BorderStyle, BoxSizing, Color, ColorInput, Display, FlexDirection, Float,
-      JustifyContent, Length::*, LineHeight, Position, Sides, SpacePair, Style, StyleDeclaration,
-      TextIndent, WhiteSpace, WhiteSpaceCollapse,
+      Affine, AlignItems, BorderStyle, BoxSizing, Clear, Color, ColorInput, Display, FlexDirection,
+      Float, JustifyContent, Length::*, LineHeight, Position, Sides, SpacePair, Style,
+      StyleDeclaration, TextIndent, WhiteSpace, WhiteSpaceCollapse,
     },
   },
   rendering::{MeasuredNode, MeasuredTextRun, RenderOptions, measure_layout},
@@ -379,6 +379,118 @@ fn test_measure_floated_inline_block_container_is_not_dropped() {
   assert!(
     result.runs.iter().any(|run| run.x >= 95.0),
     "expected text runs to wrap around the floated inline-block container"
+  );
+}
+
+#[test]
+fn test_measure_clear_left_moves_following_float_below_previous_left_float() {
+  let node = Node::container([
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::InlineBlock))
+        .with(StyleDeclaration::float(Float::Left))
+        .with(StyleDeclaration::width(Px(72.0)))
+        .with(StyleDeclaration::height(Px(72.0))),
+    ),
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::InlineBlock))
+        .with(StyleDeclaration::float(Float::Left))
+        .with(StyleDeclaration::clear(Clear::Left))
+        .with(StyleDeclaration::width(Px(48.0)))
+        .with(StyleDeclaration::height(Px(48.0))),
+    ),
+    Node::text(
+      "A cleared float should begin below the previous left float instead of sitting beside it."
+        .to_string(),
+    )
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Px(240.0)))
+      .with(StyleDeclaration::font_size(Px(20.0).into()))
+      .with(StyleDeclaration::line_height(LineHeight::Unitless(1.2))),
+  );
+
+  let result = measure(node, create_measure_viewport());
+  let first_float = result
+    .children
+    .iter()
+    .find(|child| (child.width - 72.0).abs() <= 0.01 && (child.height - 72.0).abs() <= 0.01)
+    .expect("expected first floated box to be measured");
+  let cleared_float = result
+    .children
+    .iter()
+    .find(|child| (child.width - 48.0).abs() <= 0.01 && (child.height - 48.0).abs() <= 0.01)
+    .expect("expected cleared floated box to be measured");
+
+  assert_close(first_float.transform[4], 0.0);
+  assert_close(first_float.transform[5], 0.0);
+  assert_close(cleared_float.transform[4], 0.0);
+  assert!(
+    cleared_float.transform[5] >= 72.0,
+    "expected cleared float to start below the first left float"
+  );
+}
+
+#[test]
+fn test_measure_line_box_reflows_below_float_that_intersects_tall_line() {
+  let node = Node::container([
+    Node::container([])
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::InlineBlock))
+          .with(StyleDeclaration::float(Float::Left))
+          .with(StyleDeclaration::width(Px(80.0)))
+          .with(StyleDeclaration::height(Px(40.0))),
+      ),
+    Node::container([])
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::InlineBlock))
+          .with(StyleDeclaration::width(Px(100.0)))
+          .with(StyleDeclaration::height(Px(20.0))),
+      ),
+    Node::container([])
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::InlineBlock))
+          .with(StyleDeclaration::float(Float::Left))
+          .with(StyleDeclaration::width(Px(120.0)))
+          .with(StyleDeclaration::height(Px(40.0))),
+      ),
+    Node::text(
+      "Text after the second float should move below it when the current line box height intersects that float."
+        .to_string(),
+    )
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Px(180.0)))
+      .with(StyleDeclaration::font_size(Px(20.0).into()))
+      .with(StyleDeclaration::line_height(LineHeight::Unitless(3.0))),
+  );
+
+  let result = measure(node, create_measure_viewport());
+  let second_float = result
+    .children
+    .iter()
+    .find(|child| (child.width - 120.0).abs() <= 0.01 && (child.height - 40.0).abs() <= 0.01)
+    .expect("expected second floated box to be measured");
+  let first_run = result
+    .runs
+    .first()
+    .expect("expected text after the floats to be measured");
+
+  assert_close(second_float.transform[4], 0.0);
+  assert_close(second_float.transform[5], 40.0);
+  assert!(
+    first_run.y >= 80.0,
+    "expected text to reflow below the intersecting float instead of overlapping it"
   );
 }
 

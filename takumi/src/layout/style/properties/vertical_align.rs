@@ -169,12 +169,18 @@ impl ResolvedVerticalAlign {
     match self {
       ResolvedVerticalAlign::Keyword(keyword) => match keyword {
         VerticalAlignKeyword::Baseline => *y = baseline_top,
-        VerticalAlignKeyword::Top => *y = metrics.block_min_coord,
+        VerticalAlignKeyword::Top => {
+          debug_assert!(metrics.block_min_coord.is_finite());
+          *y = metrics.block_min_coord;
+        }
         VerticalAlignKeyword::Middle => {
           let x_height = parent_x_height.unwrap_or(metrics.ascent * 0.5);
           *y = metrics.baseline - (x_height * 0.5) - (box_height / 2.0);
         }
-        VerticalAlignKeyword::Bottom => *y = metrics.block_max_coord - box_height,
+        VerticalAlignKeyword::Bottom => {
+          debug_assert!(metrics.block_max_coord.is_finite());
+          *y = metrics.block_max_coord - box_height;
+        }
         VerticalAlignKeyword::TextTop => *y = metrics.baseline - parent_text_ascent,
         VerticalAlignKeyword::TextBottom => {
           *y = metrics.baseline + parent_text_descent - box_height
@@ -341,6 +347,29 @@ mod tests {
     }
     .apply(&mut y, &metrics, 4.0, None, None, None);
     assert_eq!(y, baseline + 5.0);
+  }
+
+  #[test]
+  fn apply_keyword_top_uses_block_min_coord() {
+    let mut y = 0.0;
+    let metrics = line_metrics();
+
+    ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Top)
+      .apply(&mut y, &metrics, 8.0, None, None, None);
+
+    assert_eq!(y, metrics.block_min_coord);
+  }
+
+  #[test]
+  fn apply_keyword_bottom_uses_block_max_coord() {
+    let mut y = 0.0;
+    let metrics = line_metrics();
+    let box_height = 8.0;
+
+    ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Bottom)
+      .apply(&mut y, &metrics, box_height, None, None, None);
+
+    assert_eq!(y, metrics.block_max_coord - box_height);
   }
 
   #[test]

@@ -18,8 +18,8 @@ use crate::{
     tree::RenderNode,
   },
   rendering::{
-    MaxHeight, RenderContext, apply_text_transform, apply_white_space_collapse, make_balanced_text,
-    make_pretty_text,
+    MaxHeight, RebreakOptions, RenderContext, apply_text_transform, apply_white_space_collapse,
+    make_balanced_text, make_pretty_text,
   },
 };
 
@@ -217,6 +217,17 @@ fn apply_text_indent(layout: &mut InlineLayout, style: &SizedFontStyle, max_widt
   layout.set_text_indent(amount, options);
 }
 
+fn inline_line_height_hint(style: &SizedFontStyle) -> f32 {
+  match style.line_height {
+    parley::LineHeight::Absolute(value) => value,
+    parley::LineHeight::FontSizeRelative(value) | parley::LineHeight::MetricsRelative(value) => {
+      value * style.sizing.font_size
+    }
+  }
+  .max(style.sizing.font_size)
+  .max(1.0)
+}
+
 fn refresh_text_span_ranges(spans: &mut [ProcessedInlineSpan<'_, '_>]) {
   let mut byte_offset = 0;
 
@@ -303,20 +314,22 @@ impl ActiveFloat {
     self.y + self.height
   }
 
-  fn overlaps_line(self, line_y: f32) -> bool {
-    self.y <= line_y && line_y < self.bottom()
+  fn overlaps_range(self, top: f32, bottom: f32) -> bool {
+    self.y < bottom && top < self.bottom()
   }
 }
 
 struct FloatLayoutState {
   max_width: f32,
+  line_height_hint: f32,
   active_floats: Vec<ActiveFloat>,
 }
 
 impl FloatLayoutState {
-  fn new(max_width: f32) -> Self {
+  fn new(max_width: f32, line_height_hint: f32) -> Self {
     Self {
       max_width,
+      line_height_hint,
       active_floats: Vec::new(),
     }
   }
@@ -343,20 +356,39 @@ impl FloatLayoutState {
     }
   }
 
-  fn next_float_bottom(&self, line_y: f32) -> Option<f32> {
+  fn clear_for_inline_box(
+    &self,
+    spans: &[ProcessedInlineSpan<'_, '_>],
+    inline_box_id: u64,
+  ) -> taffy::Clear {
+    let Some(ProcessedInlineSpan::Box(item)) = spans.get(inline_box_id as usize) else {
+      return taffy::Clear::None;
+    };
+
+    item
+      .render_node
+      .context
+      .style
+      .clear
+      .resolve(item.render_node.context.style.direction)
+  }
+
+  fn next_float_bottom(&self, top: f32, height: f32) -> Option<f32> {
+    let bottom = top + height.max(0.0);
     self
       .active_floats
       .iter()
-      .filter_map(|float| (float.bottom() > line_y).then_some(float.bottom()))
-      .min_by(|left, right| left.total_cmp(right))
+      .filter_map(|float| float.overlaps_range(top, bottom).then_some(float.bottom()))
+      .min_by(f32::total_cmp)
   }
 
-  fn line_bounds(&self, line_y: f32) -> (f32, f32) {
+  fn bounds_for_range(&self, top: f32, height: f32) -> (f32, f32) {
+    let bottom = top + height.max(0.0);
     let mut left = 0.0_f32;
     let mut right = self.max_width;
 
     for active_float in &self.active_floats {
-      if !active_float.overlaps_line(line_y) {
+      if !active_float.overlaps_range(top, bottom) {
         continue;
       }
 
@@ -372,16 +404,37 @@ impl FloatLayoutState {
     )
   }
 
-  fn find_float_y(&self, start_y: f32, width: f32) -> f32 {
+  fn line_bounds(&self, line_y: f32) -> (f32, f32) {
+    self.bounds_for_range(line_y, self.line_height_hint)
+  }
+
+  fn clearance_y(&self, start_y: f32, clear: taffy::Clear) -> f32 {
+    self
+      .active_floats
+      .iter()
+      .filter(|float| float.bottom() > start_y)
+      .filter(|float| {
+        matches!(
+          (clear, float.side),
+          (taffy::Clear::Left, FloatSide::Left)
+            | (taffy::Clear::Right, FloatSide::Right)
+            | (taffy::Clear::Both, _)
+        )
+      })
+      .map(|float| float.bottom())
+      .fold(start_y.max(0.0), f32::max)
+  }
+
+  fn find_float_y(&self, start_y: f32, width: f32, height: f32) -> f32 {
     let mut line_y = start_y.max(0.0);
 
     loop {
-      let (left, right) = self.line_bounds(line_y);
+      let (left, right) = self.bounds_for_range(line_y, height);
       if width <= right - left || (left == 0.0 && right == self.max_width) {
         return line_y;
       }
 
-      let Some(next_y) = self.next_float_bottom(line_y) else {
+      let Some(next_y) = self.next_float_bottom(line_y, height) else {
         return line_y;
       };
       line_y = next_y;
@@ -393,11 +446,11 @@ impl FloatLayoutState {
 
     loop {
       let (left, right) = self.line_bounds(line_y);
-      if current_advance <= right - left {
+      if current_advance <= right - left || (left == 0.0 && right == self.max_width) {
         return line_y;
       }
 
-      let Some(next_y) = self.next_float_bottom(line_y) else {
+      let Some(next_y) = self.next_float_bottom(line_y, self.line_height_hint) else {
         return line_y;
       };
       line_y = next_y;
@@ -407,11 +460,13 @@ impl FloatLayoutState {
   fn push_float(
     &mut self,
     side: FloatSide,
+    clear: taffy::Clear,
     start_y: f32,
     inline_box: &InlineBox,
   ) -> PositionedInlineBox {
-    let float_y = self.find_float_y(start_y, inline_box.width);
-    let (left, right) = self.line_bounds(float_y);
+    let cleared_y = self.clearance_y(start_y, clear);
+    let float_y = self.find_float_y(cleared_y, inline_box.width, inline_box.height);
+    let (left, right) = self.bounds_for_range(float_y, inline_box.height);
     let float_x = match side {
       FloatSide::Left => left,
       FloatSide::Right => (right - inline_box.width).max(left),
@@ -994,11 +1049,13 @@ fn prepare_inline_layout(
   style: &SizedFontStyle,
 ) -> TextWrapMode {
   let text_wrap_mode = style.parent.text_wrap_mode_and_line_clamp().0;
+  let line_height_hint = inline_line_height_hint(style);
   apply_text_indent(&mut built.layout, style, max_width);
   break_lines(
     &mut built.layout,
     max_width,
     max_height,
+    line_height_hint,
     text_wrap_mode,
     &built.spans,
     &mut built.custom_inline_boxes,
@@ -1020,6 +1077,7 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
   } = request;
   let mut built = build_inline_layout_tree(items, available_space, style, global);
   let text_wrap_mode = prepare_inline_layout(&mut built, max_width, max_height, style);
+  let line_height_hint = inline_line_height_hint(style);
 
   if mode == InlineLayoutMode::Draw {
     let BuiltInlineLayout {
@@ -1053,10 +1111,13 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
     if style.parent.text_wrap_style == TextWrapStyle::Balance {
       make_balanced_text(
         layout,
-        max_width,
-        max_height,
+        RebreakOptions {
+          max_width,
+          max_height,
+          line_height_hint,
+          text_wrap_mode,
+        },
         line_count,
-        text_wrap_mode,
         style.sizing.viewport.device_pixel_ratio,
         spans,
         custom_inline_boxes,
@@ -1066,9 +1127,12 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
     if style.parent.text_wrap_style == TextWrapStyle::Pretty {
       make_pretty_text(
         layout,
-        max_width,
-        max_height,
-        text_wrap_mode,
+        RebreakOptions {
+          max_width,
+          max_height,
+          line_height_hint,
+          text_wrap_mode,
+        },
         spans,
         custom_inline_boxes,
       );
@@ -1148,12 +1212,13 @@ pub(crate) fn break_lines(
   layout: &mut InlineLayout,
   max_width: f32,
   max_height: Option<MaxHeight>,
+  line_height_hint: f32,
   text_wrap_mode: TextWrapMode,
   spans: &[ProcessedInlineSpan<'_, '_>],
   custom_inline_boxes: &mut Vec<PositionedInlineBox>,
 ) {
   let inline_boxes = layout.inline_boxes().to_vec();
-  let mut float_layout = FloatLayoutState::new(max_width);
+  let mut float_layout = FloatLayoutState::new(max_width, line_height_hint);
   let has_custom_out_of_flow = inline_boxes
     .iter()
     .any(|inline_box| inline_box.kind == InlineBoxKind::CustomOutOfFlow);
@@ -1186,12 +1251,15 @@ pub(crate) fn break_lines(
       YieldData::LineBreak(data) => data.line_height,
       YieldData::MaxHeightExceeded(data) => data.line_height,
       YieldData::InlineBoxBreak(data) => {
-        let inline_box = inline_boxes[data.inline_box_index].clone();
+        let Some(inline_box) = inline_boxes.get(data.inline_box_index).cloned() else {
+          continue;
+        };
         let Some(side) = float_layout.side_for_inline_box(spans, inline_box.id) else {
           continue;
         };
+        let clear = float_layout.clear_for_inline_box(spans, inline_box.id);
         let start_y = breaker.state().line_y() as f32;
-        let positioned_float = float_layout.push_float(side, start_y, &inline_box);
+        let positioned_float = float_layout.push_float(side, clear, start_y, &inline_box);
         let line_y = float_layout.find_line_y_for_advance(start_y, data.advance);
         float_layout.update_breaker_line(&mut breaker, line_y);
         custom_inline_boxes.push(positioned_float);
@@ -1294,6 +1362,7 @@ fn make_ellipsis_layout<'c, 'g: 'c>(
     &mut final_layout,
     max_width,
     max_height,
+    inline_line_height_hint(root_style),
     text_wrap_mode,
     spans,
     custom_inline_boxes,
