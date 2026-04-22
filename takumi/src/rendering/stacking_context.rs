@@ -1,12 +1,11 @@
-use parley::{InlineBoxKind, PositionedLayoutItem};
+use parley::PositionedLayoutItem;
 use taffy::{AvailableSpace, Layout, NodeId, Point, TaffyError, geometry::Size};
 use tiny_skia::Pixmap;
 use tiny_skia::PixmapMut;
 
 use crate::layout::inline::{
-  InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan,
-  effective_parent_text_metrics_for_line, effective_parent_x_height_for_line,
-  get_parent_font_metrics, resolve_inline_line_metrics, resolved_line_metrics_for_apply,
+  InlineLayoutMode, InlineLayoutRequest, get_parent_font_metrics, normalize_inline_box,
+  resolve_inline_line_states,
 };
 use crate::{
   Error, Result,
@@ -541,15 +540,9 @@ fn compute_node_paint_bounds(
   ) * transform;
   let parent_font_metrics = get_parent_font_metrics(&built.layout);
 
-  let line_vertical_metrics =
-    resolve_inline_line_metrics(&built.layout, &built.spans, parent_font_metrics);
+  let line_states = resolve_inline_line_states(&built.layout, &built.spans, parent_font_metrics);
   for (line_index, line) in built.layout.lines().enumerate() {
-    let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
-    let adjusted_line_metrics =
-      resolved_line_metrics_for_apply(line.metrics(), line_vertical_metrics[line_index]);
-    let line_parent_x_height = effective_parent_x_height_for_line(&line, parent_font_metrics);
-    let line_parent_text_metrics =
-      effective_parent_text_metrics_for_line(&line, parent_font_metrics);
+    let baseline_shift = line_states[line_index].baseline_shift;
     for item in line.items() {
       match item {
         PositionedLayoutItem::GlyphRun(glyph_run) => {
@@ -569,23 +562,12 @@ fn compute_node_paint_bounds(
             ),
           );
         }
-        PositionedLayoutItem::InlineBox(mut inline_box) => {
-          if inline_box.kind == InlineBoxKind::CustomOutOfFlow {
+        PositionedLayoutItem::InlineBox(inline_box) => {
+          let Some(inline_box) =
+            normalize_inline_box(inline_box, line_states[line_index], &built.spans)
+          else {
             continue;
-          }
-          let item_index = inline_box.id as usize;
-          if inline_box.kind == InlineBoxKind::InFlow
-            && let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(item_index)
-          {
-            item.vertical_align.apply(
-              &mut inline_box.y,
-              &adjusted_line_metrics,
-              inline_box.height,
-              item.baseline_offset,
-              line_parent_x_height,
-              line_parent_text_metrics,
-            );
-          }
+          };
 
           bounds = merge_bounds(
             bounds,

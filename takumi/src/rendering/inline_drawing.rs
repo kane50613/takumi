@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use parley::{GlyphRun, InlineBoxKind, PositionedInlineBox, PositionedLayoutItem};
+use parley::{GlyphRun, PositionedInlineBox, PositionedLayoutItem};
 use skrifa::{FontRef, MetadataProvider};
 use taffy::{Layout, Point};
 
@@ -8,9 +8,8 @@ use crate::{
   Result,
   layout::{
     inline::{
-      InlineBoxItem, InlineBrush, InlineLayout, ProcessedInlineSpan,
-      effective_parent_text_metrics_for_line, effective_parent_x_height_for_line,
-      get_parent_font_metrics, resolve_inline_line_metrics, resolved_line_metrics_for_apply,
+      InlineBoxItem, InlineBrush, InlineLayout, ProcessedInlineSpan, get_parent_font_metrics,
+      normalize_inline_box, resolve_inline_line_metrics, resolve_inline_line_states,
     },
     style::{
       Affine, BackgroundClip, BlendMode, BorderStyle, Color, SizedFontStyle,
@@ -804,6 +803,7 @@ pub(crate) fn draw_inline_layout(
 
   let line_vertical_metrics =
     resolve_inline_line_metrics(&inline_layout, spans, parent_font_metrics);
+  let line_states = resolve_inline_line_states(&inline_layout, spans, parent_font_metrics);
 
   // Pre-slice resolved glyph runs per line so each CSS painting phase can index
   // directly instead of maintaining fragile in-sync iterator state across separate loops.
@@ -866,10 +866,6 @@ pub(crate) fn draw_inline_layout(
   for (line_index, line) in inline_layout.lines().enumerate() {
     let resolved_metrics = line_vertical_metrics[line_index];
     let baseline_shift = resolved_metrics.baseline_shift;
-    let adjusted_line_metrics = resolved_line_metrics_for_apply(line.metrics(), resolved_metrics);
-    let line_parent_x_height = effective_parent_x_height_for_line(&line, parent_font_metrics);
-    let line_parent_text_metrics =
-      effective_parent_text_metrics_for_line(&line, parent_font_metrics);
     let mut resolved_iter = per_line_resolved[line_index].iter();
 
     for item in line.items() {
@@ -901,24 +897,11 @@ pub(crate) fn draw_inline_layout(
             inline_outline_rects.push(outline_rect);
           }
         }
-        PositionedLayoutItem::InlineBox(mut inline_box) => {
-          if inline_box.kind == InlineBoxKind::CustomOutOfFlow {
+        PositionedLayoutItem::InlineBox(inline_box) => {
+          let Some(inline_box) = normalize_inline_box(inline_box, line_states[line_index], spans)
+          else {
             continue;
-          }
-          let item_index = inline_box.id as usize;
-
-          if inline_box.kind == InlineBoxKind::InFlow
-            && let Some(ProcessedInlineSpan::Box(item)) = spans.get(item_index)
-          {
-            item.vertical_align.apply(
-              &mut inline_box.y,
-              &adjusted_line_metrics,
-              inline_box.height,
-              item.baseline_offset,
-              line_parent_x_height,
-              line_parent_text_metrics,
-            );
-          }
+          };
           positioned_inline_boxes.insert(inline_box.id, inline_box);
         }
       }

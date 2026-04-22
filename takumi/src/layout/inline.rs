@@ -638,6 +638,60 @@ pub(crate) fn resolved_line_metrics_for_apply(
   adjusted
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ResolvedInlineLineState {
+  pub(crate) adjusted_metrics: LineMetrics,
+  pub(crate) baseline_shift: f32,
+  pub(crate) parent_x_height: Option<f32>,
+  pub(crate) parent_text_metrics: Option<(f32, f32)>,
+}
+
+pub(crate) fn resolve_inline_line_states(
+  inline_layout: &InlineLayout,
+  spans: &[ProcessedInlineSpan<'_, '_>],
+  parent_font_metrics: Option<ParentFontMetrics>,
+) -> Vec<ResolvedInlineLineState> {
+  inline_layout
+    .lines()
+    .zip(resolve_inline_line_metrics(
+      inline_layout,
+      spans,
+      parent_font_metrics,
+    ))
+    .map(|(line, resolved)| ResolvedInlineLineState {
+      adjusted_metrics: resolved_line_metrics_for_apply(line.metrics(), resolved),
+      baseline_shift: resolved.baseline_shift,
+      parent_x_height: effective_parent_x_height_for_line(&line, parent_font_metrics),
+      parent_text_metrics: effective_parent_text_metrics_for_line(&line, parent_font_metrics),
+    })
+    .collect()
+}
+
+pub(crate) fn normalize_inline_box(
+  mut inline_box: PositionedInlineBox,
+  line_state: ResolvedInlineLineState,
+  spans: &[ProcessedInlineSpan<'_, '_>],
+) -> Option<PositionedInlineBox> {
+  if inline_box.kind == InlineBoxKind::CustomOutOfFlow {
+    return None;
+  }
+
+  if inline_box.kind == InlineBoxKind::InFlow
+    && let Some(ProcessedInlineSpan::Box(item)) = spans.get(inline_box.id as usize)
+  {
+    item.vertical_align.apply(
+      &mut inline_box.y,
+      &line_state.adjusted_metrics,
+      inline_box.height,
+      item.baseline_offset,
+      line_state.parent_x_height,
+      line_state.parent_text_metrics,
+    );
+  }
+
+  Some(inline_box)
+}
+
 struct TruncationCheckpoint {
   cumulative_width: f32,
   byte_end: usize,

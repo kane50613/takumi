@@ -1,7 +1,7 @@
 use std::{collections::HashMap, ops::Range, sync::Arc};
 
 use image::RgbaImage;
-use parley::{GlyphRun, InlineBoxKind, PositionedLayoutItem};
+use parley::{GlyphRun, PositionedLayoutItem};
 use serde::Serialize;
 use taffy::{AvailableSpace, Layout, NodeId, TaffyError, geometry::Size};
 use typed_builder::TypedBuilder;
@@ -13,8 +13,7 @@ use crate::{
     inline::{
       InlineBrush, InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan,
       collect_inline_items, create_inline_constraint, create_inline_layout,
-      effective_parent_text_metrics_for_line, effective_parent_x_height_for_line,
-      get_parent_font_metrics, resolve_inline_line_metrics, resolved_line_metrics_for_apply,
+      get_parent_font_metrics, normalize_inline_box, resolve_inline_line_states,
     },
     node::Node,
     style::{Affine, StyleSheet},
@@ -255,17 +254,11 @@ fn collect_measure_result<'g>(
           });
           let parent_font_metrics = get_parent_font_metrics(&built.layout);
           let inline_offset = taffy::Point::ZERO;
-          let line_vertical_metrics =
-            resolve_inline_line_metrics(&built.layout, &built.spans, parent_font_metrics);
+          let line_states =
+            resolve_inline_line_states(&built.layout, &built.spans, parent_font_metrics);
 
           for (line_index, line) in built.layout.lines().enumerate() {
-            let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
-            let adjusted_line_metrics =
-              resolved_line_metrics_for_apply(line.metrics(), line_vertical_metrics[line_index]);
-            let line_parent_x_height =
-              effective_parent_x_height_for_line(&line, parent_font_metrics);
-            let line_parent_text_metrics =
-              effective_parent_text_metrics_for_line(&line, parent_font_metrics);
+            let baseline_shift = line_states[line_index].baseline_shift;
             for item in line.items() {
               match item {
                 PositionedLayoutItem::GlyphRun(glyph_run) => {
@@ -284,23 +277,12 @@ fn collect_measure_result<'g>(
                     height: metrics.ascent + metrics.descent,
                   });
                 }
-                PositionedLayoutItem::InlineBox(mut positioned_box) => {
-                  if positioned_box.kind == InlineBoxKind::CustomOutOfFlow {
+                PositionedLayoutItem::InlineBox(positioned_box) => {
+                  let Some(mut positioned_box) =
+                    normalize_inline_box(positioned_box, line_states[line_index], &built.spans)
+                  else {
                     continue;
-                  }
-                  let item_index = positioned_box.id as usize;
-                  if positioned_box.kind == InlineBoxKind::InFlow
-                    && let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(item_index)
-                  {
-                    item.vertical_align.apply(
-                      &mut positioned_box.y,
-                      &adjusted_line_metrics,
-                      positioned_box.height,
-                      item.baseline_offset,
-                      line_parent_x_height,
-                      line_parent_text_metrics,
-                    );
-                  }
+                  };
                   positioned_box.x += inline_offset.x;
                   positioned_box.y += inline_offset.y;
 
