@@ -1,5 +1,11 @@
 # takumi
 
+## 1.0.16
+
+### Patch Changes
+
+- 092b4fd: Support inline float flow
+
 ## 1.0.15
 
 ### Patch Changes
