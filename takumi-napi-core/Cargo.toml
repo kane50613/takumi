@@ -15,7 +15,7 @@ rayon = "1.10"
 [dependencies.parley]
 version = "0.9"
 default-features = false
-features = ["libm"]
+features = ["std"]
 
 [dependencies.takumi]
 path = "../takumi"

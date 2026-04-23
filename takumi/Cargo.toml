@@ -19,7 +19,6 @@ gif = "0.14"
 data-url = "0.3"
 color = "0.3"
 thiserror = "2.0"
-libm = "0.2"
 typed-builder = "0.23"
 tiny-skia = "0.12"
 svgtypes = "0.16"
@@ -54,12 +53,12 @@ features = ["serde"]
 [dependencies.parley]
 version = "0.9"
 default-features = false
-features = ["libm"]
+features = ["std"]
 
 [dependencies.skrifa]
 version = "0.42"
 default-features = false
-features = ["libm"]
+features = ["std"]
 
 [dependencies.selectors]
 version = "0.37"

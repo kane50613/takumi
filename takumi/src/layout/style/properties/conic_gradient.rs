@@ -88,7 +88,7 @@ impl ConicGradientTile {
 
   #[inline(always)]
   fn angle_from_top_normalized(dx: f32, dy: f32) -> f32 {
-    let angle = libm::atan2f(dx, -dy);
+    let angle = dx.atan2(-dy);
     if angle < 0.0 { angle + TAU } else { angle }
   }
 
