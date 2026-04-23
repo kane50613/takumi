@@ -899,14 +899,18 @@ impl<'g> RenderNode<'g> {
 
   pub fn participates_as_inline_box(&self) -> bool {
     self.is_inline_atomic_container()
-      || matches!(self.context.style.position, Position::Absolute)
-      || self.context.style.float != Float::None
   }
 
-  fn participates_in_inline_formatting_context(&self) -> bool {
+  fn participates_in_inflow_inline_formatting_context(&self) -> bool {
     self.is_inline_level()
       || self.participates_as_inline_box()
       || self.anonymous_text_content.is_some()
+  }
+
+  fn participates_in_inline_formatting_context(&self) -> bool {
+    self.participates_in_inflow_inline_formatting_context()
+      || matches!(self.context.style.position, Position::Absolute)
+      || self.context.style.float != Float::None
   }
 
   pub fn should_create_inline_layout(&self) -> bool {
@@ -915,7 +919,9 @@ impl<'g> RenderNode<'g> {
         self.context.style.display,
         Display::Block | Display::InlineBlock
       ) && self.children.as_ref().is_some_and(|children| {
-        !children.is_empty()
+        children
+          .iter()
+          .any(RenderNode::participates_in_inflow_inline_formatting_context)
           && children
             .iter()
             .all(RenderNode::participates_in_inline_formatting_context)
@@ -1119,10 +1125,10 @@ impl<'g> RenderNode<'g> {
         } else {
           let has_inline = children
             .iter()
-            .any(RenderNode::participates_in_inline_formatting_context);
+            .any(RenderNode::participates_in_inflow_inline_formatting_context);
           let has_block = children
             .iter()
-            .any(|child| !child.participates_in_inline_formatting_context());
+            .any(|child| !child.participates_in_inflow_inline_formatting_context());
           let requires_inline_parent_blockification =
             finished.context.style.display.is_inline() && has_block;
           let needs_anonymous_boxes = has_inline && has_block;
@@ -1145,7 +1151,7 @@ impl<'g> RenderNode<'g> {
             let mut inline_group = Vec::new();
 
             for item in children {
-              if item.participates_in_inline_formatting_context() {
+              if item.participates_in_inflow_inline_formatting_context() {
                 inline_group.push(item);
                 continue;
               }

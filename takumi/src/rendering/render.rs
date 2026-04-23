@@ -573,8 +573,10 @@ pub(crate) fn render_node<'g>(
 
 #[cfg(test)]
 mod tests {
+  use image::Rgba;
+
   use super::{
-    RenderOptions, SequentialScene, render_sequence_animation, resolve_scene_at_time,
+    RenderOptions, SequentialScene, render, render_sequence_animation, resolve_scene_at_time,
     slice_text_at_char_boundaries,
   };
   use crate::{
@@ -583,8 +585,8 @@ mod tests {
       Viewport,
       node::Node,
       style::{
-        AnimationFillMode, AnimationTime, AnimationTimingFunction, KeyframeRule, KeyframesRule,
-        Length::Px, Style, StyleDeclaration,
+        AnimationFillMode, AnimationTime, AnimationTimingFunction, Color, ColorInput, KeyframeRule,
+        KeyframesRule, Length, Length::Px, Position, Style, StyleDeclaration,
       },
     },
     rendering::measure_layout,
@@ -735,5 +737,56 @@ mod tests {
     };
 
     assert_eq!(layout.width, 150.0);
+  }
+
+  #[test]
+  fn absolute_positioned_children_paint_over_in_flow_background() {
+    // CSS 2.1 paint order requires positioned descendants with z-index:auto/0
+    // to paint above in-flow non-positioned descendants in the same stacking context.
+    // Ref: https://www.w3.org/TR/CSS22/zindex.html#painting-order
+    let node = Node::container([Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::position(Position::Absolute))
+        .with(StyleDeclaration::left(Length::Px(0.0)))
+        .with(StyleDeclaration::top(Length::Px(0.0)))
+        .with(StyleDeclaration::width(Length::Px(128.0)))
+        .with(StyleDeclaration::height(Length::Px(128.0)))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color::from_rgb(0xff0000),
+        ))),
+    )])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::position(Position::Relative))
+        .with(StyleDeclaration::width(Length::Px(256.0)))
+        .with(StyleDeclaration::height(Length::Px(256.0)))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color::from_rgb(0x0b1020),
+        ))),
+    );
+    let global = GlobalContext::default();
+    let options = RenderOptions::builder()
+      .global(&global)
+      .viewport(Viewport::new((256, 256)))
+      .node(node.clone())
+      .build();
+    let measured = match measure_layout(options.clone()) {
+      Ok(measured) => measured,
+      Err(_) => return,
+    };
+    assert_eq!(measured.children.len(), 1);
+    assert_eq!(measured.children[0].width, 128.0);
+    assert_eq!(measured.children[0].height, 128.0);
+
+    let rendered = match render(options) {
+      Ok(rendered) => rendered,
+      Err(_) => return,
+    };
+
+    let top_left = rendered.get_pixel(10, 10);
+    let bottom_right = rendered.get_pixel(220, 220);
+
+    assert_eq!(top_left, &Rgba([255, 0, 0, 255]));
+    assert_eq!(bottom_right, &Rgba([11, 16, 32, 255]));
   }
 }
