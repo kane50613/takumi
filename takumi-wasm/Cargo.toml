@@ -18,7 +18,7 @@ js-sys = "0.3"
 [dependencies.parley]
 version = "0.9"
 default-features = false
-features = ["libm"]
+features = ["std"]
 
 [dependencies.serde]
 version = "1.0"
