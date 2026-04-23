@@ -6,7 +6,7 @@ use crate::{
   layout::style::{Affine, BlendMode, BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair},
   rendering::{
     Canvas, Cap, Command, DashPattern, Fill, MaskSamplingOptions, PaintSource, PathBuilder,
-    Placement, RenderContext, Stroke, Style, fast_div_255, render_mask,
+    Placement, RenderContext, Stroke, Style, intersect_alpha_masks, render_mask,
   },
 };
 
@@ -1074,7 +1074,7 @@ impl BorderProperties {
       );
 
       if let Some((mask, placement)) =
-        intersect_masks(&ring_mask, ring_placement, &clip_mask, clip_placement)
+        intersect_alpha_masks(&ring_mask, ring_placement, &clip_mask, clip_placement)
       {
         paint_mask_with_inverse(
           paint.canvas,
@@ -1132,7 +1132,7 @@ impl BorderProperties {
       );
 
       if let Some((mask, placement)) =
-        intersect_masks(&pattern_mask, pattern_placement, &clip_mask, clip_placement)
+        intersect_alpha_masks(&pattern_mask, pattern_placement, &clip_mask, clip_placement)
       {
         paint_mask_with_inverse(
           paint.canvas,
@@ -1358,37 +1358,6 @@ fn paint_mask_with_inverse(
   } else {
     canvas.draw_mask(mask, placement, color, BlendMode::Normal);
   }
-}
-
-fn intersect_masks(
-  lhs: &[u8],
-  lhs_placement: Placement,
-  rhs: &[u8],
-  rhs_placement: Placement,
-) -> Option<(Vec<u8>, Placement)> {
-  let left = lhs_placement.left.max(rhs_placement.left);
-  let top = lhs_placement.top.max(rhs_placement.top);
-  let right = lhs_placement.right().min(rhs_placement.right());
-  let bottom = lhs_placement.bottom().min(rhs_placement.bottom());
-  let placement = Placement::from_bounds(left, top, right, bottom)?;
-
-  let mut mask = vec![0; (placement.width * placement.height) as usize];
-
-  for y in 0..placement.height {
-    for x in 0..placement.width {
-      let canvas_x = placement.left + x as i32;
-      let canvas_y = placement.top + y as i32;
-      let lhs_x = (canvas_x - lhs_placement.left) as u32;
-      let lhs_y = (canvas_y - lhs_placement.top) as u32;
-      let rhs_x = (canvas_x - rhs_placement.left) as u32;
-      let rhs_y = (canvas_y - rhs_placement.top) as u32;
-      let lhs_alpha = lhs[(lhs_y * lhs_placement.width + lhs_x) as usize] as u32;
-      let rhs_alpha = rhs[(rhs_y * rhs_placement.width + rhs_x) as usize] as u32;
-      mask[(y * placement.width + x) as usize] = fast_div_255(lhs_alpha * rhs_alpha);
-    }
-  }
-
-  Some((mask, placement))
 }
 
 fn rect_offset(rect: Rect<f32>) -> Point<f32> {

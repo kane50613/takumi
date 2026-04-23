@@ -34,7 +34,10 @@ use crate::{
 };
 
 pub(crate) use buffer_pool::BufferPool;
-pub(crate) use mask::{CanvasViewport, NodeMaskAction, prepare_node_mask, render_mask};
+pub(crate) use mask::{
+  CanvasViewport, NodeMaskAction, attenuate_alpha_by_mask, intersect_alpha_masks,
+  prepare_node_mask, render_mask,
+};
 pub(crate) use paint_source::{PaintSource, SamplingFootprint, interpolate_with_footprint};
 
 #[derive(Clone, Copy)]

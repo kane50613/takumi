@@ -10,7 +10,7 @@ use crate::{
   layout::style::{Affine, ComputedStyle, Overflow},
   rendering::{
     BorderProperties, Command, Placement, RenderContext, Style, build_path, create_mask,
-    transformed_rect_extents,
+    fast_div_255, transformed_rect_extents,
   },
 };
 
@@ -223,6 +223,89 @@ pub(crate) fn prepare_node_mask(
   Ok(NodeMaskAction::Content(mask))
 }
 
+pub(crate) fn intersect_alpha_masks(
+  lhs: &[u8],
+  lhs_placement: Placement,
+  rhs: &[u8],
+  rhs_placement: Placement,
+) -> Option<(Vec<u8>, Placement)> {
+  let left = lhs_placement.left.max(rhs_placement.left);
+  let top = lhs_placement.top.max(rhs_placement.top);
+  let right = lhs_placement.right().min(rhs_placement.right());
+  let bottom = lhs_placement.bottom().min(rhs_placement.bottom());
+  let placement = Placement::from_bounds(left, top, right, bottom)?;
+
+  let width = placement.width as usize;
+  let height = placement.height as usize;
+  let lhs_stride = lhs_placement.width as usize;
+  let rhs_stride = rhs_placement.width as usize;
+  let lhs_x_offset = (placement.left - lhs_placement.left) as usize;
+  let rhs_x_offset = (placement.left - rhs_placement.left) as usize;
+  let lhs_y_start = (placement.top - lhs_placement.top) as usize;
+  let rhs_y_start = (placement.top - rhs_placement.top) as usize;
+
+  let mut mask = vec![0; width * height];
+  for (row_index, mask_row) in mask.chunks_exact_mut(width).enumerate() {
+    let lhs_row_start = (lhs_y_start + row_index) * lhs_stride + lhs_x_offset;
+    let rhs_row_start = (rhs_y_start + row_index) * rhs_stride + rhs_x_offset;
+    let lhs_row = &lhs[lhs_row_start..lhs_row_start + width];
+    let rhs_row = &rhs[rhs_row_start..rhs_row_start + width];
+
+    if lhs_row.iter().all(|&alpha| alpha == 0) || rhs_row.iter().all(|&alpha| alpha == 0) {
+      continue;
+    }
+
+    for index in 0..width {
+      mask_row[index] = fast_div_255(lhs_row[index] as u32 * rhs_row[index] as u32);
+    }
+  }
+
+  Some((mask, placement))
+}
+
+pub(crate) fn attenuate_alpha_by_mask(
+  dst: &mut [u8],
+  dst_placement: Placement,
+  mask: &[u8],
+  mask_placement: Placement,
+) {
+  let left = dst_placement.left.max(mask_placement.left);
+  let top = dst_placement.top.max(mask_placement.top);
+  let right = dst_placement.right().min(mask_placement.right());
+  let bottom = dst_placement.bottom().min(mask_placement.bottom());
+  let Some(overlap) = Placement::from_bounds(left, top, right, bottom) else {
+    return;
+  };
+
+  let width = overlap.width as usize;
+  let dst_stride = dst_placement.width as usize;
+  let mask_stride = mask_placement.width as usize;
+  let dst_x_offset = (overlap.left - dst_placement.left) as usize;
+  let dst_y_start = (overlap.top - dst_placement.top) as usize;
+  let mask_x_offset = (overlap.left - mask_placement.left) as usize;
+  let mask_y_start = (overlap.top - mask_placement.top) as usize;
+
+  for row_index in 0..overlap.height as usize {
+    let dst_row_start = (dst_y_start + row_index) * dst_stride + dst_x_offset;
+    let mask_row_start = (mask_y_start + row_index) * mask_stride + mask_x_offset;
+    let dst_row = &mut dst[dst_row_start..dst_row_start + width];
+    let mask_row = &mask[mask_row_start..mask_row_start + width];
+
+    if mask_row.iter().all(|&alpha| alpha == 0) {
+      continue;
+    }
+
+    for index in 0..width {
+      let mask_alpha = mask_row[index] as u32;
+      if mask_alpha == 0 {
+        continue;
+      }
+      let factor = 255 - mask_alpha;
+      dst_row[index] = fast_div_255(dst_row[index] as u32 * factor);
+    }
+  }
+}
+
 fn overflow_mask_placement(
   size: Size<f32>,
   transform: Affine,
@@ -256,6 +339,86 @@ fn overflow_mask_placement(
   }
 
   Some(placement)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn intersect_alpha_masks_respects_overlap_placement() {
+    let lhs = vec![
+      0, 64, 0, 0, //
+      0, 255, 0, 0, //
+      0, 0, 0, 0, //
+    ];
+    let rhs = vec![
+      0, 0, 0, //
+      255, 255, 128, //
+      0, 0, 0, //
+    ];
+
+    let lhs_placement = Placement {
+      left: 0,
+      top: 0,
+      width: 4,
+      height: 3,
+    };
+    let rhs_placement = Placement {
+      left: 1,
+      top: 0,
+      width: 3,
+      height: 3,
+    };
+
+    let (mask, placement) =
+      intersect_alpha_masks(&lhs, lhs_placement, &rhs, rhs_placement).expect("should overlap");
+    assert_eq!(
+      placement,
+      Placement {
+        left: 1,
+        top: 0,
+        width: 3,
+        height: 3
+      }
+    );
+    assert_eq!(mask[0], 0);
+    assert_eq!(mask[3 + 0], 255);
+    assert_eq!(mask[3 + 1], 0);
+  }
+
+  #[test]
+  fn attenuate_alpha_by_mask_applies_overlap_only() {
+    let mut dst = vec![
+      255, 255, 255, //
+      255, 255, 255, //
+      255, 255, 255, //
+    ];
+    let mask = vec![
+      0, 128, 0, //
+      255, 0, 0, //
+    ];
+
+    let dst_placement = Placement {
+      left: 0,
+      top: 0,
+      width: 3,
+      height: 3,
+    };
+    let mask_placement = Placement {
+      left: 1,
+      top: 1,
+      width: 3,
+      height: 2,
+    };
+
+    attenuate_alpha_by_mask(&mut dst, dst_placement, &mask, mask_placement);
+
+    assert_eq!(dst[0], 255);
+    assert_eq!(dst[4], 255);
+    assert_eq!(dst[5], fast_div_255(255 * (255 - 128)));
+    assert_eq!(dst[7], 0);
+  }
 }
 
 fn copy_mask_into_canvas(
