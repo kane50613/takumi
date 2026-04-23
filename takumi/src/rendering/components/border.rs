@@ -103,6 +103,31 @@ impl BorderProperties {
       || Self::is_side_visible(self.style.left, self.width.left)
   }
 
+  fn visible_side_widths(&self) -> Rect<f32> {
+    Rect {
+      top: if Self::is_side_visible(self.style.top, self.width.top) {
+        self.width.top
+      } else {
+        0.0
+      },
+      right: if Self::is_side_visible(self.style.right, self.width.right) {
+        self.width.right
+      } else {
+        0.0
+      },
+      bottom: if Self::is_side_visible(self.style.bottom, self.width.bottom) {
+        self.width.bottom
+      } else {
+        0.0
+      },
+      left: if Self::is_side_visible(self.style.left, self.width.left) {
+        self.width.left
+      } else {
+        0.0
+      },
+    }
+  }
+
   fn has_uniform_visible_color(&self) -> Option<Color> {
     let mut color = None;
 
@@ -757,8 +782,10 @@ impl BorderProperties {
     };
 
     if self.visible_sides_match(BorderStyle::Solid) {
+      let mut border = self;
+      border.width = self.visible_side_widths();
       let mut paths = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
-      self.append_border_ring_commands(&mut paths, border_box);
+      border.append_border_ring_commands(&mut paths, border_box);
       let (mask, placement) = render_mask(
         &paths,
         Some(transform),
@@ -780,7 +807,9 @@ impl BorderProperties {
     }
 
     if self.visible_sides_match(BorderStyle::Double) {
-      self.draw_uniform_double(canvas, border_box, transform, clip_image, color);
+      let mut border = self;
+      border.width = self.visible_side_widths();
+      border.draw_uniform_double(canvas, border_box, transform, clip_image, color);
       return true;
     }
 
@@ -1668,6 +1697,76 @@ mod tests {
       image.get_pixel(24, 45).0[3],
       0,
       "Bottom side should stay transparent for left-only dotted border"
+    );
+  }
+
+  #[test]
+  fn solid_fast_path_skips_hidden_side_with_positive_width() {
+    let mut canvas = Canvas::new(Size {
+      width: 48,
+      height: 48,
+    });
+    let mut border = test_border(BorderStyle::Solid, 4.0);
+    border.style.top = BorderStyle::Hidden;
+
+    border.draw(
+      &mut canvas,
+      Size {
+        width: 48.0,
+        height: 48.0,
+      },
+      Affine::IDENTITY,
+      None,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+
+    assert_eq!(
+      image.get_pixel(24, 2).0[3],
+      0,
+      "Hidden top side should stay transparent"
+    );
+    let right_band_has_ink = (44..48).any(|x| image.get_pixel(x, 24).0[3] > 0);
+    assert!(
+      right_band_has_ink,
+      "Visible right side should still be painted"
+    );
+  }
+
+  #[test]
+  fn double_fast_path_skips_hidden_side_with_positive_width() {
+    let mut canvas = Canvas::new(Size {
+      width: 48,
+      height: 48,
+    });
+    let mut border = test_border(BorderStyle::Double, 6.0);
+    border.style.top = BorderStyle::Hidden;
+
+    border.draw(
+      &mut canvas,
+      Size {
+        width: 48.0,
+        height: 48.0,
+      },
+      Affine::IDENTITY,
+      None,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+
+    assert_eq!(
+      image.get_pixel(24, 2).0[3],
+      0,
+      "Hidden top side should stay transparent"
+    );
+    let right_band_has_ink = (42..48).any(|x| image.get_pixel(x, 24).0[3] > 0);
+    assert!(
+      right_band_has_ink,
+      "Visible right side should still be painted"
     );
   }
 }
