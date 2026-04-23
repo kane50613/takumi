@@ -1140,24 +1140,21 @@ impl BorderProperties {
         &mut paint.canvas.buffer_pool,
       );
 
-      if !ring_mask.is_empty() {
-        if let Some((mask, placement)) =
+      if !ring_mask.is_empty()
+        && let Some((mask, placement)) =
           intersect_alpha_masks(&pattern_mask, pattern_placement, &clip_mask, clip_placement)
-        {
-          if let Some((mask, placement)) =
-            intersect_alpha_masks(&mask, placement, &ring_mask, ring_placement)
-          {
-            paint_mask_with_inverse(
-              paint.canvas,
-              &mask,
-              placement,
-              color,
-              paint.clip_image,
-              paint.inverse,
-              self.image_rendering,
-            );
-          }
-        }
+        && let Some((mask, placement)) =
+          intersect_alpha_masks(&mask, placement, &ring_mask, ring_placement)
+      {
+        paint_mask_with_inverse(
+          paint.canvas,
+          &mask,
+          placement,
+          color,
+          paint.clip_image,
+          paint.inverse,
+          self.image_rendering,
+        );
       }
       paint.canvas.buffer_pool.release(clip_mask);
       paint.canvas.buffer_pool.release(ring_mask);
