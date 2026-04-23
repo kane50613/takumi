@@ -1186,7 +1186,14 @@ fn compute_side_stroke(width: f32, style: BorderStyle, length: f32, closed: bool
       stroke.cap = Cap::Round;
     }
     stroke.dash = Some(DashPattern {
-      intervals: [dash, gap],
+      intervals: [
+        if style == BorderStyle::Dotted {
+          0.0
+        } else {
+          dash
+        },
+        gap,
+      ],
       offset: 0.0,
     });
     return stroke;
@@ -1601,6 +1608,17 @@ mod tests {
       has_transparent,
       "Dotted border should have transparent gaps"
     );
+  }
+
+  #[test]
+  fn dotted_border_thin_width_uses_zero_dash_length() {
+    let stroke = compute_side_stroke(2.0, BorderStyle::Dotted, 48.0, false);
+    let Some(dash_pattern) = stroke.dash else {
+      unreachable!("thin dotted stroke should produce a dash pattern");
+    };
+    assert_eq!(stroke.cap, Cap::Round);
+    assert_eq!(dash_pattern.intervals[0], 0.0);
+    assert!(dash_pattern.intervals[1] > 0.0);
   }
 
   #[test]
