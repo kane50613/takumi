@@ -1176,24 +1176,12 @@ fn compute_side_stroke(width: f32, style: BorderStyle, length: f32, closed: bool
     return stroke;
   }
 
-  if style == BorderStyle::Dashed
-    || (style == BorderStyle::Dotted && width <= DASHED_THICK_WIDTH_THRESHOLD)
-  {
+  if style == BorderStyle::Dashed {
     let Some((dash, gap)) = compute_dashed_intervals(width, style, length, closed) else {
       return stroke;
     };
-    if style == BorderStyle::Dotted {
-      stroke.cap = Cap::Round;
-    }
     stroke.dash = Some(DashPattern {
-      intervals: [
-        if style == BorderStyle::Dotted {
-          0.0
-        } else {
-          dash
-        },
-        gap,
-      ],
+      intervals: [dash, gap],
       offset: 0.0,
     });
     return stroke;
