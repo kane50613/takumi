@@ -1,5 +1,11 @@
 # takumi
 
+## 1.1.2
+
+### Patch Changes
+
+- 903f0ea: Drop libm dependency
+
 ## 1.1.1
 
 ### Patch Changes
