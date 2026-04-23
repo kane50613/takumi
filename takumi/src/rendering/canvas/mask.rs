@@ -416,10 +416,9 @@ pub(crate) fn render_mask(
   };
 
   if let Some(stroke) = style.stroke() {
-    if let Some(dash) = &stroke.dash {
-      let Some(dashed_path) = path.dash(dash, 1.0) else {
-        return (Vec::new(), Placement::default());
-      };
+    if let Some(dash) = &stroke.dash
+      && let Some(dashed_path) = path.dash(dash, 1.0)
+    {
       path = dashed_path;
     }
 

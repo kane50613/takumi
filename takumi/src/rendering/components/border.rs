@@ -148,6 +148,19 @@ impl BorderProperties {
       && (!Self::is_side_visible(self.style.left, self.width.left) || self.style.left == style)
   }
 
+  fn is_uniform_all_sides_style(&self, style: BorderStyle) -> bool {
+    let has_uniform_width = self.width.top > 0.0
+      && (self.width.top - self.width.right).abs() <= f32::EPSILON
+      && (self.width.top - self.width.bottom).abs() <= f32::EPSILON
+      && (self.width.top - self.width.left).abs() <= f32::EPSILON;
+
+    has_uniform_width
+      && self.style.top == style
+      && self.style.right == style
+      && self.style.bottom == style
+      && self.style.left == style
+  }
+
   fn append_border_ring_commands(&self, paths: &mut Vec<Command>, border_box: Size<f32>) {
     self.append_border_ring_commands_at(paths, border_box, Point::ZERO);
   }
@@ -683,58 +696,8 @@ impl BorderProperties {
       return;
     }
 
-    if let Some(color) = self.has_uniform_visible_color() {
-      if self.visible_sides_match(BorderStyle::Solid) {
-        let mut paths = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
-        self.append_border_ring_commands(&mut paths, border_box);
-        let (mask, placement) = render_mask(
-          &paths,
-          Some(transform),
-          Some(Fill::EvenOdd.into()),
-          &mut canvas.buffer_pool,
-        );
-
-        paint_mask(
-          canvas,
-          &mask,
-          placement,
-          color,
-          clip_image,
-          transform,
-          self.image_rendering,
-        );
-        canvas.buffer_pool.release(mask);
-        return;
-      }
-
-      if self.visible_sides_match(BorderStyle::Double) {
-        self.draw_uniform_double(canvas, border_box, transform, clip_image, color);
-        return;
-      }
-
-      if self.visible_sides_match(BorderStyle::Dashed) {
-        self.draw_uniform_pattern(
-          canvas,
-          border_box,
-          transform,
-          clip_image,
-          color,
-          BorderStyle::Dashed,
-        );
-        return;
-      }
-
-      if self.visible_sides_match(BorderStyle::Dotted) {
-        self.draw_uniform_pattern(
-          canvas,
-          border_box,
-          transform,
-          clip_image,
-          color,
-          BorderStyle::Dotted,
-        );
-        return;
-      }
+    if self.draw_uniform_fast_path(canvas, border_box, transform, clip_image) {
+      return;
     }
 
     let inverse = if clip_image.is_some() {
@@ -778,72 +741,136 @@ impl BorderProperties {
       if !Self::is_side_visible(style, width) {
         continue;
       }
+      self.draw_visible_side(&mut paint, side, border_box, style, color);
+    }
+  }
 
-      match style {
-        BorderStyle::Dashed | BorderStyle::Dotted => {
-          self.draw_side_pattern_border(&mut paint, side, border_box, color, style);
-        }
-        BorderStyle::Double => {
-          let stripe_width = self.width.map(|value| value / 3.0);
-          self.draw_side_band(
-            &mut paint,
-            side,
-            border_box,
-            Rect::ZERO,
-            stripe_width,
-            color,
-          );
+  fn draw_uniform_fast_path(
+    self,
+    canvas: &mut Canvas,
+    border_box: Size<f32>,
+    transform: Affine,
+    clip_image: Option<PaintSource<'_>>,
+  ) -> bool {
+    let Some(color) = self.has_uniform_visible_color() else {
+      return false;
+    };
 
-          let inset = self.width.map(|value| value * (2.0 / 3.0));
-          self.draw_side_band(&mut paint, side, border_box, inset, stripe_width, color);
-        }
-        BorderStyle::Inset | BorderStyle::Outset => {
-          self.draw_side_band(
-            &mut paint,
-            side,
-            border_box,
-            Rect::ZERO,
-            self.width,
-            shade_3d_border_color(color, side, style),
-          );
-        }
-        BorderStyle::Groove | BorderStyle::Ridge => {
-          let outer_width = self.width.map(|value| value / 2.0);
-          let inner_inset = outer_width;
-          let inner_width = subtract_rect(self.width, outer_width);
-          let outer_style = match style {
-            BorderStyle::Groove => BorderStyle::Inset,
-            BorderStyle::Ridge => BorderStyle::Outset,
-            _ => style,
-          };
-          let inner_style = match style {
-            BorderStyle::Groove => BorderStyle::Outset,
-            BorderStyle::Ridge => BorderStyle::Inset,
-            _ => style,
-          };
+    if self.visible_sides_match(BorderStyle::Solid) {
+      let mut paths = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+      self.append_border_ring_commands(&mut paths, border_box);
+      let (mask, placement) = render_mask(
+        &paths,
+        Some(transform),
+        Some(Fill::EvenOdd.into()),
+        &mut canvas.buffer_pool,
+      );
 
-          self.draw_side_band(
-            &mut paint,
-            side,
-            border_box,
-            Rect::ZERO,
-            outer_width,
-            shade_3d_border_color(color, side, outer_style),
-          );
-          self.draw_side_band(
-            &mut paint,
-            side,
-            border_box,
-            inner_inset,
-            inner_width,
-            shade_3d_border_color(color, side, inner_style),
-          );
-        }
-        BorderStyle::None | BorderStyle::Hidden => {}
-        BorderStyle::Solid => {
-          self.draw_side_band(&mut paint, side, border_box, Rect::ZERO, self.width, color);
-        }
+      paint_mask(
+        canvas,
+        &mask,
+        placement,
+        color,
+        clip_image,
+        transform,
+        self.image_rendering,
+      );
+      canvas.buffer_pool.release(mask);
+      return true;
+    }
+
+    if self.visible_sides_match(BorderStyle::Double) {
+      self.draw_uniform_double(canvas, border_box, transform, clip_image, color);
+      return true;
+    }
+
+    if self.is_uniform_all_sides_style(BorderStyle::Dashed) {
+      self.draw_uniform_pattern(
+        canvas,
+        border_box,
+        transform,
+        clip_image,
+        color,
+        BorderStyle::Dashed,
+      );
+      return true;
+    }
+
+    if self.is_uniform_all_sides_style(BorderStyle::Dotted) {
+      self.draw_uniform_pattern(
+        canvas,
+        border_box,
+        transform,
+        clip_image,
+        color,
+        BorderStyle::Dotted,
+      );
+      return true;
+    }
+
+    false
+  }
+
+  fn draw_visible_side(
+    self,
+    paint: &mut SidePaintContext<'_, '_>,
+    side: BorderSide,
+    border_box: Size<f32>,
+    style: BorderStyle,
+    color: Color,
+  ) {
+    match style {
+      BorderStyle::Dashed | BorderStyle::Dotted => {
+        self.draw_side_pattern_border(paint, side, border_box, color, style);
       }
+      BorderStyle::Double => {
+        let stripe_width = self.width.map(|value| value / 3.0);
+        self.draw_side_band(paint, side, border_box, Rect::ZERO, stripe_width, color);
+
+        let inset = self.width.map(|value| value * (2.0 / 3.0));
+        self.draw_side_band(paint, side, border_box, inset, stripe_width, color);
+      }
+      BorderStyle::Inset | BorderStyle::Outset => {
+        self.draw_side_band(
+          paint,
+          side,
+          border_box,
+          Rect::ZERO,
+          self.width,
+          shade_3d_border_color(color, side, style),
+        );
+      }
+      BorderStyle::Groove | BorderStyle::Ridge => {
+        let outer_width = self.width.map(|value| value / 2.0);
+        let inner_inset = outer_width;
+        let inner_width = subtract_rect(self.width, outer_width);
+        let (outer_style, inner_style) = match style {
+          BorderStyle::Groove => (BorderStyle::Inset, BorderStyle::Outset),
+          BorderStyle::Ridge => (BorderStyle::Outset, BorderStyle::Inset),
+          _ => unreachable!("non groove/ridge style in groove/ridge branch"),
+        };
+
+        self.draw_side_band(
+          paint,
+          side,
+          border_box,
+          Rect::ZERO,
+          outer_width,
+          shade_3d_border_color(color, side, outer_style),
+        );
+        self.draw_side_band(
+          paint,
+          side,
+          border_box,
+          inner_inset,
+          inner_width,
+          shade_3d_border_color(color, side, inner_style),
+        );
+      }
+      BorderStyle::Solid => {
+        self.draw_side_band(paint, side, border_box, Rect::ZERO, self.width, color);
+      }
+      BorderStyle::None | BorderStyle::Hidden => {}
     }
   }
 
@@ -1027,51 +1054,21 @@ impl BorderProperties {
     color: Color,
     style: BorderStyle,
   ) {
-    let (width, is_horizontal, fixed, start, end) = match side {
-      BorderSide::Top => (
-        self.width.top,
-        true,
-        self.width.top / 2.0,
-        self.width.left / 2.0,
-        border_box.width - self.width.right / 2.0,
-      ),
-      BorderSide::Right => (
-        self.width.right,
-        false,
-        border_box.width - self.width.right / 2.0,
-        self.width.top / 2.0,
-        border_box.height - self.width.bottom / 2.0,
-      ),
-      BorderSide::Bottom => (
-        self.width.bottom,
-        true,
-        border_box.height - self.width.bottom / 2.0,
-        self.width.left / 2.0,
-        border_box.width - self.width.right / 2.0,
-      ),
-      BorderSide::Left => (
-        self.width.left,
-        false,
-        self.width.left / 2.0,
-        self.width.top / 2.0,
-        border_box.height - self.width.bottom / 2.0,
-      ),
-    };
-
-    if width <= 0.0 || end <= start {
+    let line = SidePatternLine::from_border(self.width, border_box, side);
+    if line.width <= 0.0 || line.end <= line.start {
       return;
     }
 
     let mut path = Vec::with_capacity(2);
-    if is_horizontal {
-      path.move_to((start, fixed));
-      path.line_to((end, fixed));
+    if line.is_horizontal {
+      path.move_to((line.start, line.fixed));
+      path.line_to((line.end, line.fixed));
     } else {
-      path.move_to((fixed, start));
-      path.line_to((fixed, end));
+      path.move_to((line.fixed, line.start));
+      path.line_to((line.fixed, line.end));
     }
 
-    let stroke = compute_side_stroke(width, style, end - start, false);
+    let stroke = compute_side_stroke(line.width, style, line.end - line.start, false);
     let (pattern_mask, pattern_placement) = render_mask(
       &path,
       Some(paint.transform),
@@ -1108,60 +1105,104 @@ impl BorderProperties {
   }
 }
 
+const DASHED_THICK_WIDTH_THRESHOLD: f32 = 3.0;
+const DASHED_LENGTH_RATIO_THICK: f32 = 2.0;
+const DASHED_LENGTH_RATIO_THIN: f32 = 3.0;
+const DASHED_GAP_RATIO_THICK: f32 = 1.0;
+const DASHED_GAP_RATIO_THIN: f32 = 2.0;
+const DOTTED_ENDPOINT_EPSILON: f32 = 1.0e-2;
+
 fn compute_side_stroke(width: f32, style: BorderStyle, length: f32, closed: bool) -> Stroke {
   let mut stroke = Stroke::new(width);
-  let (dash, gap, is_dotted) = match style {
-    BorderStyle::Dashed => (
-      if width < 3.0 {
-        width * 3.0
-      } else {
-        width * 2.0
-      },
-      if width < 3.0 { width * 2.0 } else { width },
-      false,
-    ),
-    BorderStyle::Dotted => (width, width * 2.0, true),
-    _ => (0.0, 0.0, false),
-  };
-
-  if is_dotted && width > 3.0 {
-    stroke.cap = Cap::Round;
-    let adjusted_gap = select_best_dash_gap(length, 0.0, width * 2.0, closed);
-    stroke.dash = Some(DashPattern {
-      intervals: [0.0, adjusted_gap],
-      offset: 0.0,
-    });
-  } else {
-    let adjusted_gap = select_best_dash_gap(length, dash, gap, closed);
-    stroke.dash = Some(DashPattern {
-      intervals: [dash, adjusted_gap],
-      offset: 0.0,
-    });
+  if !matches!(style, BorderStyle::Dashed | BorderStyle::Dotted) || width <= 0.0 || length <= 0.0 {
+    return stroke;
   }
+
+  if style == BorderStyle::Dashed
+    || (style == BorderStyle::Dotted && width <= DASHED_THICK_WIDTH_THRESHOLD)
+  {
+    let Some((dash, gap)) = compute_dashed_intervals(width, style, length, closed) else {
+      return stroke;
+    };
+    stroke.dash = Some(DashPattern {
+      intervals: [dash, gap],
+      offset: 0.0,
+    });
+    return stroke;
+  }
+
+  stroke.cap = Cap::Round;
+  let per_dot_length = width * 2.0;
+  let gap = if length < per_dot_length {
+    per_dot_length
+  } else {
+    select_best_dash_gap(length, width, width, closed) + width - DOTTED_ENDPOINT_EPSILON
+  };
+  stroke.dash = Some(DashPattern {
+    intervals: [0.0, gap],
+    offset: 0.0,
+  });
   stroke
+}
+
+fn compute_dashed_intervals(
+  width: f32,
+  style: BorderStyle,
+  length: f32,
+  closed: bool,
+) -> Option<(f32, f32)> {
+  let mut dash = width;
+  let mut gap = width;
+  if style == BorderStyle::Dashed {
+    dash *= if width >= DASHED_THICK_WIDTH_THRESHOLD {
+      DASHED_LENGTH_RATIO_THICK
+    } else {
+      DASHED_LENGTH_RATIO_THIN
+    };
+    gap *= if width >= DASHED_THICK_WIDTH_THRESHOLD {
+      DASHED_GAP_RATIO_THICK
+    } else {
+      DASHED_GAP_RATIO_THIN
+    };
+  }
+
+  if length <= dash * 2.0 {
+    return None;
+  }
+
+  let mut applied_dash = dash;
+  let mut applied_gap = gap;
+  let mut two_dashes_with_gap = 2.0 * dash + gap;
+  if closed {
+    two_dashes_with_gap += gap;
+  }
+  if length <= two_dashes_with_gap {
+    let multiplier = length / two_dashes_with_gap;
+    applied_dash *= multiplier;
+    applied_gap *= multiplier;
+  } else if style == BorderStyle::Dashed {
+    applied_gap = select_best_dash_gap(length, dash, gap, closed);
+  }
+  Some((applied_dash, applied_gap))
 }
 
 fn select_best_dash_gap(length: f32, dash: f32, gap: f32, closed: bool) -> f32 {
   let available = if closed { length } else { length + gap };
-  let n = (available / (dash + gap))
-    .floor()
-    .max(if closed { 1.0 } else { 2.0 });
+  let min_dashes = (available / (dash + gap)).floor();
+  let max_dashes = min_dashes + 1.0;
+  let min_gaps = if closed { min_dashes } else { min_dashes - 1.0 };
+  let max_gaps = if closed { max_dashes } else { max_dashes - 1.0 };
 
-  let g1 = if closed {
-    length / n - dash
-  } else {
-    (length - n * dash) / (n - 1.0)
-  };
-  let g2 = if closed {
-    length / (n + 1.0) - dash
-  } else {
-    (length - (n + 1.0) * dash) / n
-  };
+  if min_gaps <= 0.0 || max_gaps <= 0.0 {
+    return gap.max(0.0);
+  }
 
-  if (g1 - gap).abs() <= (g2 - gap).abs() {
-    g1.max(0.0)
+  let min_gap = (length - min_dashes * dash) / min_gaps;
+  let max_gap = (length - max_dashes * dash) / max_gaps;
+  if max_gap <= 0.0 || (min_gap - gap).abs() < (max_gap - gap).abs() {
+    min_gap.max(0.0)
   } else {
-    g2.max(0.0)
+    max_gap.max(0.0)
   }
 }
 
@@ -1171,6 +1212,50 @@ enum BorderSide {
   Right,
   Bottom,
   Left,
+}
+
+#[derive(Clone, Copy)]
+struct SidePatternLine {
+  width: f32,
+  is_horizontal: bool,
+  fixed: f32,
+  start: f32,
+  end: f32,
+}
+
+impl SidePatternLine {
+  fn from_border(width: Rect<f32>, border_box: Size<f32>, side: BorderSide) -> Self {
+    match side {
+      BorderSide::Top => Self {
+        width: width.top,
+        is_horizontal: true,
+        fixed: width.top / 2.0,
+        start: width.left / 2.0,
+        end: border_box.width - width.right / 2.0,
+      },
+      BorderSide::Right => Self {
+        width: width.right,
+        is_horizontal: false,
+        fixed: border_box.width - width.right / 2.0,
+        start: width.top / 2.0,
+        end: border_box.height - width.bottom / 2.0,
+      },
+      BorderSide::Bottom => Self {
+        width: width.bottom,
+        is_horizontal: true,
+        fixed: border_box.height - width.bottom / 2.0,
+        start: width.left / 2.0,
+        end: border_box.width - width.right / 2.0,
+      },
+      BorderSide::Left => Self {
+        width: width.left,
+        is_horizontal: false,
+        fixed: width.left / 2.0,
+        start: width.top / 2.0,
+        end: border_box.height - width.bottom / 2.0,
+      },
+    }
+  }
 }
 
 struct SidePaintContext<'canvas, 'source> {
@@ -1485,6 +1570,104 @@ mod tests {
     assert!(
       has_transparent,
       "Dotted border should have transparent gaps"
+    );
+  }
+
+  #[test]
+  fn dashed_border_top_only_draws_pattern() {
+    let mut canvas = Canvas::new(Size {
+      width: 48,
+      height: 48,
+    });
+    let mut border = test_border(BorderStyle::Dashed, 0.0);
+    border.width.top = 4.0;
+
+    border.draw(
+      &mut canvas,
+      Size {
+        width: 48.0,
+        height: 48.0,
+      },
+      Affine::IDENTITY,
+      None,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+    let top_row: Vec<u8> = (8..40).map(|x| image.get_pixel(x, 2).0[3]).collect();
+
+    assert!(
+      top_row.iter().any(|&alpha| alpha > 0),
+      "Top dashed side should contain opaque pixels"
+    );
+    assert!(
+      top_row.contains(&0),
+      "Top dashed side should contain transparent gaps"
+    );
+    assert_eq!(
+      image.get_pixel(24, 45).0[3],
+      0,
+      "Bottom side should stay transparent for top-only dashed border"
+    );
+    assert_eq!(
+      image.get_pixel(2, 24).0[3],
+      0,
+      "Left side should stay transparent for top-only dashed border"
+    );
+    assert_eq!(
+      image.get_pixel(45, 24).0[3],
+      0,
+      "Right side should stay transparent for top-only dashed border"
+    );
+  }
+
+  #[test]
+  fn dotted_border_left_only_draws_pattern() {
+    let mut canvas = Canvas::new(Size {
+      width: 48,
+      height: 48,
+    });
+    let mut border = test_border(BorderStyle::Dotted, 0.0);
+    border.width.left = 4.0;
+
+    border.draw(
+      &mut canvas,
+      Size {
+        width: 48.0,
+        height: 48.0,
+      },
+      Affine::IDENTITY,
+      None,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+    let left_column: Vec<u8> = (8..40).map(|y| image.get_pixel(2, y).0[3]).collect();
+
+    assert!(
+      left_column.iter().any(|&alpha| alpha > 0),
+      "Left dotted side should contain opaque pixels"
+    );
+    assert!(
+      left_column.contains(&0),
+      "Left dotted side should contain transparent gaps"
+    );
+    assert_eq!(
+      image.get_pixel(24, 2).0[3],
+      0,
+      "Top side should stay transparent for left-only dotted border"
+    );
+    assert_eq!(
+      image.get_pixel(45, 24).0[3],
+      0,
+      "Right side should stay transparent for left-only dotted border"
+    );
+    assert_eq!(
+      image.get_pixel(24, 45).0[3],
+      0,
+      "Bottom side should stay transparent for left-only dotted border"
     );
   }
 }

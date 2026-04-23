@@ -448,6 +448,36 @@ fn demo_card(label: &str, preview: Node) -> Node {
   )
 }
 
+fn non_uniform_border_demo(label: &str, style: Sides<BorderStyle>, width: Sides<Length>) -> Node {
+  let preview = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Px(164.0)))
+      .with(StyleDeclaration::height(Px(92.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([56, 189, 248, 255]),
+      )))
+      .with_border_style(style)
+      .with_border_width(width)
+      .with_border_color(Sides([ColorInput::Value(Color([17, 24, 39, 255])); 4])),
+  );
+
+  Node::container([
+    preview,
+    Node::text(label.to_string()).with_style(Style::default().with(StyleDeclaration::color(
+      ColorInput::Value(Color([31, 41, 55, 255])),
+    ))),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+      .with(StyleDeclaration::width(Px(220.0)))
+      .with_gap(SpacePair::from_single(Px(12.0)))
+      .with(StyleDeclaration::align_items(AlignItems::Center)),
+  )
+}
+
 fn border_style_demo(label: &str, style: BorderStyle) -> Node {
   let preview = Node::container([]).with_style(
     Style::default()
@@ -523,6 +553,63 @@ fn test_style_border_styles() {
   );
 
   run_fixture_test(container, "style_border_styles");
+}
+
+#[test]
+fn test_style_border_non_uniform_patterns() {
+  let demos = vec![
+    non_uniform_border_demo(
+      "dashed top only",
+      Sides([
+        BorderStyle::Dashed,
+        BorderStyle::None,
+        BorderStyle::None,
+        BorderStyle::None,
+      ]),
+      Sides([Px(10.0), Px(0.0), Px(0.0), Px(0.0)]),
+    ),
+    non_uniform_border_demo(
+      "dotted left only",
+      Sides([
+        BorderStyle::None,
+        BorderStyle::None,
+        BorderStyle::None,
+        BorderStyle::Dotted,
+      ]),
+      Sides([Px(0.0), Px(0.0), Px(0.0), Px(10.0)]),
+    ),
+    non_uniform_border_demo(
+      "dashed uneven widths",
+      Sides([BorderStyle::Dashed; 4]),
+      Sides([Px(10.0), Px(4.0), Px(7.0), Px(13.0)]),
+    ),
+    non_uniform_border_demo(
+      "mixed dash + dot",
+      Sides([
+        BorderStyle::Dotted,
+        BorderStyle::Dashed,
+        BorderStyle::Dotted,
+        BorderStyle::Dashed,
+      ]),
+      Sides([Px(10.0), Px(8.0), Px(10.0), Px(8.0)]),
+    ),
+  ];
+
+  let container = Node::container(demos).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
+      .with_gap(SpacePair::from_single(Px(20.0)))
+      .with_padding(Sides([Px(32.0); 4]))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([255, 255, 255, 255]),
+      ))),
+  );
+
+  run_fixture_test(container, "style_border_non_uniform_patterns");
 }
 
 #[test]

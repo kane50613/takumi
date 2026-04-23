@@ -503,7 +503,12 @@ fn draw_outline_island(
         offset: 0.0,
       });
     }
-    BorderStyle::Hidden => return,
+    BorderStyle::Hidden
+    | BorderStyle::Double
+    | BorderStyle::Groove
+    | BorderStyle::Ridge
+    | BorderStyle::Inset
+    | BorderStyle::Outset => return,
     _ => {}
   }
   let (mask, placement) = render_mask(
