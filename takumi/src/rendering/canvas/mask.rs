@@ -341,86 +341,6 @@ fn overflow_mask_placement(
   Some(placement)
 }
 
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn intersect_alpha_masks_respects_overlap_placement() {
-    let lhs = vec![
-      0, 64, 0, 0, //
-      0, 255, 0, 0, //
-      0, 0, 0, 0, //
-    ];
-    let rhs = vec![
-      0, 0, 0, //
-      255, 255, 128, //
-      0, 0, 0, //
-    ];
-
-    let lhs_placement = Placement {
-      left: 0,
-      top: 0,
-      width: 4,
-      height: 3,
-    };
-    let rhs_placement = Placement {
-      left: 1,
-      top: 0,
-      width: 3,
-      height: 3,
-    };
-
-    let (mask, placement) =
-      intersect_alpha_masks(&lhs, lhs_placement, &rhs, rhs_placement).expect("should overlap");
-    assert_eq!(
-      placement,
-      Placement {
-        left: 1,
-        top: 0,
-        width: 3,
-        height: 3
-      }
-    );
-    assert_eq!(mask[0], 0);
-    assert_eq!(mask[3 + 0], 255);
-    assert_eq!(mask[3 + 1], 0);
-  }
-
-  #[test]
-  fn attenuate_alpha_by_mask_applies_overlap_only() {
-    let mut dst = vec![
-      255, 255, 255, //
-      255, 255, 255, //
-      255, 255, 255, //
-    ];
-    let mask = vec![
-      0, 128, 0, //
-      255, 0, 0, //
-    ];
-
-    let dst_placement = Placement {
-      left: 0,
-      top: 0,
-      width: 3,
-      height: 3,
-    };
-    let mask_placement = Placement {
-      left: 1,
-      top: 1,
-      width: 3,
-      height: 2,
-    };
-
-    attenuate_alpha_by_mask(&mut dst, dst_placement, &mask, mask_placement);
-
-    assert_eq!(dst[0], 255);
-    assert_eq!(dst[4], 255);
-    assert_eq!(dst[5], fast_div_255(255 * (255 - 128)));
-    assert_eq!(dst[7], 0);
-  }
-}
-
 fn copy_mask_into_canvas(
   canvas_mask: &mut TinyMask,
   canvas_origin: Point<u32>,
@@ -641,4 +561,86 @@ pub(crate) fn render_mask(
       height,
     },
   )
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn intersect_alpha_masks_respects_overlap_placement() {
+    let lhs = vec![
+      0, 64, 0, 0, //
+      0, 255, 0, 0, //
+      0, 0, 0, 0, //
+    ];
+    let rhs = vec![
+      0, 0, 0, //
+      255, 255, 128, //
+      0, 0, 0, //
+    ];
+
+    let lhs_placement = Placement {
+      left: 0,
+      top: 0,
+      width: 4,
+      height: 3,
+    };
+    let rhs_placement = Placement {
+      left: 1,
+      top: 0,
+      width: 3,
+      height: 3,
+    };
+
+    let Some((mask, placement)) = intersect_alpha_masks(&lhs, lhs_placement, &rhs, rhs_placement)
+    else {
+      unreachable!("should overlap");
+    };
+    assert_eq!(
+      placement,
+      Placement {
+        left: 1,
+        top: 0,
+        width: 3,
+        height: 3
+      }
+    );
+    assert_eq!(mask[0], 0);
+    assert_eq!(mask[3], 255);
+    assert_eq!(mask[4], 0);
+  }
+
+  #[test]
+  fn attenuate_alpha_by_mask_applies_overlap_only() {
+    let mut dst = vec![
+      255, 255, 255, //
+      255, 255, 255, //
+      255, 255, 255, //
+    ];
+    let mask = vec![
+      0, 128, 0, //
+      255, 0, 0, //
+    ];
+
+    let dst_placement = Placement {
+      left: 0,
+      top: 0,
+      width: 3,
+      height: 3,
+    };
+    let mask_placement = Placement {
+      left: 1,
+      top: 1,
+      width: 3,
+      height: 2,
+    };
+
+    attenuate_alpha_by_mask(&mut dst, dst_placement, &mask, mask_placement);
+
+    assert_eq!(dst[0], 255);
+    assert_eq!(dst[4], 255);
+    assert_eq!(dst[5], fast_div_255(255 * (255 - 128)));
+    assert_eq!(dst[7], 0);
+  }
 }
