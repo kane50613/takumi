@@ -1629,14 +1629,45 @@ pub enum BorderStyle {
   /// No border will be rendered.
   #[default]
   None,
+  /// Forces the border to be hidden.
+  Hidden,
+  /// Dotted border style.
+  Dotted,
+  /// Dashed border style.
+  Dashed,
   /// Solid border style.
   Solid,
+  /// Double border style.
+  Double,
+  /// Groove border style.
+  Groove,
+  /// Ridge border style.
+  Ridge,
+  /// Inset border style.
+  Inset,
+  /// Outset border style.
+  Outset,
+}
+
+impl BorderStyle {
+  /// Returns whether this border style should paint and reserve border width.
+  pub const fn is_rendered(self) -> bool {
+    !matches!(self, Self::None | Self::Hidden)
+  }
 }
 
 declare_enum_from_css_impl!(
   BorderStyle,
   "none" => BorderStyle::None,
+  "hidden" => BorderStyle::Hidden,
+  "dotted" => BorderStyle::Dotted,
+  "dashed" => BorderStyle::Dashed,
   "solid" => BorderStyle::Solid,
+  "double" => BorderStyle::Double,
+  "groove" => BorderStyle::Groove,
+  "ridge" => BorderStyle::Ridge,
+  "inset" => BorderStyle::Inset,
+  "outset" => BorderStyle::Outset,
 );
 
 impl TailwindPropertyParser for BorderStyle {

@@ -11,9 +11,9 @@ use crate::{
   layout::{
     node::Node,
     style::{
-      BorderStyle, BoxSizing, Color, Float, FontSynthesis, Position, ResolvedVerticalAlign,
-      SizedFontStyle, SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk,
-      TextOverflow, TextWrapMode, TextWrapStyle, VerticalAlign,
+      BoxSizing, Color, Float, FontSynthesis, Position, ResolvedVerticalAlign, SizedFontStyle,
+      SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextOverflow,
+      TextWrapMode, TextWrapStyle, VerticalAlign,
     },
     tree::RenderNode,
   },
@@ -1181,12 +1181,12 @@ pub(crate) fn create_inline_constraint(
     let sizing = &context.sizing;
     let horizontal_insets = context.style.padding_left.to_px(sizing, 0.0)
       + context.style.padding_right.to_px(sizing, 0.0)
-      + if context.style.border_left_style == BorderStyle::None {
+      + if !context.style.border_left_style.is_rendered() {
         0.0
       } else {
         context.style.border_left_width.to_px(sizing, 0.0)
       }
-      + if context.style.border_right_style == BorderStyle::None {
+      + if !context.style.border_right_style.is_rendered() {
         0.0
       } else {
         context.style.border_right_width.to_px(sizing, 0.0)

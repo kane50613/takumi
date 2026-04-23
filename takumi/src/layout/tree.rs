@@ -20,9 +20,9 @@ use crate::{
     },
     node::{Node, NodeStyleLayers},
     style::{
-      Affine, BlendMode, BorderStyle, BoxSizing, Color, ComputedStyle, Display, Filters, Float,
-      Isolation, Overflow, PercentageNumber, Position, Style as NodeStyle, StyleDeclaration,
-      StyleSheet, TextWrapMode, apply_stylesheet_animations,
+      Affine, BlendMode, BoxSizing, Color, ComputedStyle, Display, Filters, Float, Isolation,
+      Overflow, PercentageNumber, Position, Style as NodeStyle, StyleDeclaration, StyleSheet,
+      TextWrapMode, apply_stylesheet_animations,
       matching::{MatchedDeclarationsView, match_stylesheets_view},
     },
   },
@@ -1242,24 +1242,24 @@ impl<'g> RenderNode<'g> {
     let sizing = &self.context.sizing;
     let horizontal_insets = self.context.style.padding_left.to_px(sizing, 0.0)
       + self.context.style.padding_right.to_px(sizing, 0.0)
-      + if self.context.style.border_left_style == BorderStyle::None {
+      + if !self.context.style.border_left_style.is_rendered() {
         0.0
       } else {
         self.context.style.border_left_width.to_px(sizing, 0.0)
       }
-      + if self.context.style.border_right_style == BorderStyle::None {
+      + if !self.context.style.border_right_style.is_rendered() {
         0.0
       } else {
         self.context.style.border_right_width.to_px(sizing, 0.0)
       };
     let vertical_insets = self.context.style.padding_top.to_px(sizing, 0.0)
       + self.context.style.padding_bottom.to_px(sizing, 0.0)
-      + if self.context.style.border_top_style == BorderStyle::None {
+      + if !self.context.style.border_top_style.is_rendered() {
         0.0
       } else {
         self.context.style.border_top_width.to_px(sizing, 0.0)
       }
-      + if self.context.style.border_bottom_style == BorderStyle::None {
+      + if !self.context.style.border_bottom_style.is_rendered() {
         0.0
       } else {
         self.context.style.border_bottom_width.to_px(sizing, 0.0)

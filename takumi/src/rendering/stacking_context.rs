@@ -12,8 +12,8 @@ use crate::{
   layout::{
     inline::{collect_inline_items, create_inline_layout, resolve_inline_max_height},
     style::{
-      Affine, BackgroundImage, BlendMode, BorderStyle, Color, ComputedStyle, Display, Filter,
-      SpacePair, apply_backdrop_filter, apply_filters_to_pixmap,
+      Affine, BackgroundImage, BlendMode, Color, ComputedStyle, Display, Filter, SpacePair,
+      apply_backdrop_filter, apply_filters_to_pixmap,
     },
     tree::{LayoutResults, RenderNode},
   },
@@ -1027,7 +1027,7 @@ fn supports_bounds_hint(node: &RenderNode<'_>, require_child_clipping: bool) -> 
     .box_shadow
     .as_ref()
     .is_some_and(|shadows| !shadows.is_empty());
-  let has_outline = style.outline_style != BorderStyle::None;
+  let has_outline = style.outline_style.is_rendered();
   let has_text_shadow = style
     .text_shadow
     .as_ref()

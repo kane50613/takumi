@@ -18,10 +18,11 @@ use crate::{
     tree::LayoutTree,
   },
   rendering::{
-    BorderProperties, Canvas, Command, DecorationSegmentParams, PaintSource, PathBuilder,
-    RenderContext, Stroke, collect_background_layers, draw_decoration, draw_decoration_segment,
-    draw_glyph, draw_glyph_clip_image, draw_glyph_text_shadow, mask_index_from_coord,
-    rasterize_layers, release_rasterized_background_tile, render::render_node, render_mask,
+    BorderProperties, Canvas, Cap, Command, DashPattern, DecorationSegmentParams, PaintSource,
+    PathBuilder, RenderContext, Stroke, collect_background_layers, draw_decoration,
+    draw_decoration_segment, draw_glyph, draw_glyph_clip_image, draw_glyph_text_shadow,
+    mask_index_from_coord, rasterize_layers, release_rasterized_background_tile,
+    render::render_node, render_mask,
   },
   resources::font::{FontError, ResolvedGlyph},
 };
@@ -476,7 +477,7 @@ fn draw_outline_island(
   };
 
   let width = style.outline_width;
-  if width == 0.0 || style.outline_style == BorderStyle::None {
+  if width == 0.0 || !style.outline_style.is_rendered() {
     return;
   }
 
@@ -487,7 +488,24 @@ fn draw_outline_island(
     return;
   }
 
-  let stroke = Stroke::new(width);
+  let mut stroke = Stroke::new(width);
+  match style.outline_style {
+    BorderStyle::Dotted => {
+      stroke.cap = Cap::Round;
+      stroke.dash = Some(DashPattern {
+        intervals: [0.0, width * 2.0],
+        offset: 0.0,
+      });
+    }
+    BorderStyle::Dashed => {
+      stroke.dash = Some(DashPattern {
+        intervals: [width * 3.0, width * 2.0],
+        offset: 0.0,
+      });
+    }
+    BorderStyle::Hidden => return,
+    _ => {}
+  }
   let (mask, placement) = render_mask(
     &path,
     Some(transform),

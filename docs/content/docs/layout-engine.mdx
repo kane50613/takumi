@@ -44,9 +44,7 @@ By default, the image would be measured based on its intrinsic size, you can ove
 import { ImageResponse } from "takumi-js/response";
 
 export function GET() {
-  return new ImageResponse(
-    <img src="https://placehold.co/1200x600" width={1200} height={600} />,
-  );
+  return new ImageResponse(<img src="https://placehold.co/1200x600" width={1200} height={600} />);
 }
 ```
 

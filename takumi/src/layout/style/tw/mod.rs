@@ -1837,6 +1837,14 @@ mod tests {
       Some(TailwindProperty::BorderStyle(BorderStyle::Solid))
     );
     assert_eq!(
+      TailwindProperty::parse("border-dashed"),
+      Some(TailwindProperty::BorderStyle(BorderStyle::Dashed))
+    );
+    assert_eq!(
+      TailwindProperty::parse("border-dotted"),
+      Some(TailwindProperty::BorderStyle(BorderStyle::Dotted))
+    );
+    assert_eq!(
       TailwindProperty::parse("border-none"),
       Some(TailwindProperty::BorderStyle(BorderStyle::None))
     );
@@ -1863,6 +1871,10 @@ mod tests {
     assert_eq!(
       TailwindProperty::parse("outline-solid"),
       Some(TailwindProperty::OutlineStyle(BorderStyle::Solid))
+    );
+    assert_eq!(
+      TailwindProperty::parse("outline-dashed"),
+      Some(TailwindProperty::OutlineStyle(BorderStyle::Dashed))
     );
     assert_eq!(
       TailwindProperty::parse("outline-offset-4"),

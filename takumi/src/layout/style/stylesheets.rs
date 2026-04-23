@@ -1749,22 +1749,22 @@ impl ComputedStyle {
       }
       .map(|length| length.resolve_to_dimension(sizing)),
       border: Rect {
-        top: if self.border_top_style == BorderStyle::None {
+        top: if !self.border_top_style.is_rendered() {
           Length::default()
         } else {
           self.border_top_width
         },
-        right: if self.border_right_style == BorderStyle::None {
+        right: if !self.border_right_style.is_rendered() {
           Length::default()
         } else {
           self.border_right_width
         },
-        bottom: if self.border_bottom_style == BorderStyle::None {
+        bottom: if !self.border_bottom_style.is_rendered() {
           Length::default()
         } else {
           self.border_bottom_width
         },
-        left: if self.border_left_style == BorderStyle::None {
+        left: if !self.border_left_style.is_rendered() {
           Length::default()
         } else {
           self.border_left_width
@@ -2217,14 +2217,14 @@ mod tests {
 
   #[test]
   fn parse_style_declaration_expands_border_style_and_color_shorthands() {
-    let border_style = parse_declarations("border-style", "solid none");
+    let border_style = parse_declarations("border-style", "dashed hidden");
     assert_eq!(
       border_style.iter().collect::<Vec<_>>(),
       vec![
-        &StyleDeclaration::border_top_style(BorderStyle::Solid),
-        &StyleDeclaration::border_right_style(BorderStyle::None),
-        &StyleDeclaration::border_bottom_style(BorderStyle::Solid),
-        &StyleDeclaration::border_left_style(BorderStyle::None),
+        &StyleDeclaration::border_top_style(BorderStyle::Dashed),
+        &StyleDeclaration::border_right_style(BorderStyle::Hidden),
+        &StyleDeclaration::border_bottom_style(BorderStyle::Dashed),
+        &StyleDeclaration::border_left_style(BorderStyle::Hidden),
       ]
     );
 
