@@ -199,15 +199,16 @@ impl BorderProperties {
     let mut border = *self;
 
     border.append_mask_commands(paths, border_box, offset);
-    let inner_offset = Point {
-      x: offset.x + border.width.left,
-      y: offset.y + border.width.top,
+    let inner_size = Size {
+      width: (border_box.width - border.width.left - border.width.right).max(0.0),
+      height: (border_box.height - border.width.top - border.width.bottom).max(0.0),
     };
-    let inner_size = border_box
-      - Size {
-        width: border.width.left + border.width.right,
-        height: border.width.top + border.width.bottom,
-      };
+    let max_inner_x = (offset.x + border_box.width - inner_size.width).max(offset.x);
+    let max_inner_y = (offset.y + border_box.height - inner_size.height).max(offset.y);
+    let inner_offset = Point {
+      x: (offset.x + border.width.left).clamp(offset.x, max_inner_x),
+      y: (offset.y + border.width.top).clamp(offset.y, max_inner_y),
+    };
     border.inset_by_border_width();
     border.append_mask_commands(paths, inner_size, inner_offset);
   }
@@ -219,10 +220,14 @@ impl BorderProperties {
     border_box: Size<f32>,
     offset: Point<f32>,
   ) {
+    if border_box.width <= 0.0 || border_box.height <= 0.0 {
+      return;
+    }
+
     let inner_left = self.width.left.min(border_box.width);
-    let inner_right = (border_box.width - self.width.right).max(0.0);
+    let inner_right = (border_box.width - self.width.right).max(inner_left);
     let inner_top = self.width.top.min(border_box.height);
-    let inner_bottom = (border_box.height - self.width.bottom).max(0.0);
+    let inner_bottom = (border_box.height - self.width.bottom).max(inner_top);
 
     match side {
       BorderSide::Top => {
@@ -261,6 +266,10 @@ impl BorderProperties {
     border_box: Size<f32>,
     offset: Point<f32>,
   ) {
+    if border_box.width <= 0.0 || border_box.height <= 0.0 {
+      return;
+    }
+
     if self.is_zero() {
       self.append_side_polygon_commands_at(side, path, border_box, offset);
       return;
@@ -514,6 +523,10 @@ impl BorderProperties {
     border_box: Size<f32>,
     offset: Point<f32>,
   ) {
+    if border_box.width <= 0.0 || border_box.height <= 0.0 {
+      return;
+    }
+
     path.reserve_exact(BorderProperties::PATH_COMMANDS_AMOUNT);
 
     // The magic number for the cubic bezier curve
@@ -737,36 +750,39 @@ impl BorderProperties {
       inverse,
     };
 
+    let mut border = self;
+    border.width = self.visible_side_widths();
+
     for (side, style, width, color) in [
       (
         BorderSide::Top,
-        self.style.top,
-        self.width.top,
-        self.color.top,
+        border.style.top,
+        border.width.top,
+        border.color.top,
       ),
       (
         BorderSide::Right,
-        self.style.right,
-        self.width.right,
-        self.color.right,
+        border.style.right,
+        border.width.right,
+        border.color.right,
       ),
       (
         BorderSide::Bottom,
-        self.style.bottom,
-        self.width.bottom,
-        self.color.bottom,
+        border.style.bottom,
+        border.width.bottom,
+        border.color.bottom,
       ),
       (
         BorderSide::Left,
-        self.style.left,
-        self.width.left,
-        self.color.left,
+        border.style.left,
+        border.width.left,
+        border.color.left,
       ),
     ] {
       if !Self::is_side_visible(style, width) {
         continue;
       }
-      self.draw_visible_side(&mut paint, side, border_box, style, color);
+      border.draw_visible_side(&mut paint, side, border_box, style, color);
     }
   }
 
@@ -1767,6 +1783,72 @@ mod tests {
     assert!(
       right_band_has_ink,
       "Visible right side should still be painted"
+    );
+  }
+
+  #[test]
+  fn solid_fallback_ignores_hidden_neighbor_widths() {
+    let mut canvas = Canvas::new(Size {
+      width: 64,
+      height: 64,
+    });
+    let mut border = test_border(BorderStyle::Hidden, 0.0);
+    border.style.top = BorderStyle::Solid;
+    border.width.top = 8.0;
+    border.style.right = BorderStyle::Dashed;
+    border.width.right = 8.0;
+    border.width.left = 24.0;
+
+    border.draw(
+      &mut canvas,
+      Size {
+        width: 64.0,
+        height: 64.0,
+      },
+      Affine::IDENTITY,
+      None,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+
+    assert!(
+      image.get_pixel(4, 3).0[3] > 0,
+      "Visible top side should not be clipped by hidden left width"
+    );
+    assert_eq!(
+      image.get_pixel(3, 32).0[3],
+      0,
+      "Hidden left side should stay transparent"
+    );
+  }
+
+  #[test]
+  fn oversized_solid_border_fills_without_panicking() {
+    let mut canvas = Canvas::new(Size {
+      width: 20,
+      height: 20,
+    });
+    let border = test_border(BorderStyle::Solid, 40.0);
+
+    border.draw(
+      &mut canvas,
+      Size {
+        width: 20.0,
+        height: 20.0,
+      },
+      Affine::IDENTITY,
+      None,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+
+    assert!(
+      image.get_pixel(10, 10).0[3] > 0,
+      "Oversized border should still render a valid filled mask"
     );
   }
 }
