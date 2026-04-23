@@ -1122,6 +1122,15 @@ impl BorderProperties {
     );
 
     if !pattern_mask.is_empty() {
+      let mut ring_path = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+      self.append_border_ring_commands(&mut ring_path, border_box);
+      let (ring_mask, ring_placement) = render_mask(
+        &ring_path,
+        Some(paint.transform),
+        Some(Fill::EvenOdd.into()),
+        &mut paint.canvas.buffer_pool,
+      );
+
       let mut clip_path = Vec::with_capacity(5);
       self.append_side_clip_polygon_commands_at(side, &mut clip_path, border_box, Point::ZERO);
       let (clip_mask, clip_placement) = render_mask(
@@ -1131,20 +1140,27 @@ impl BorderProperties {
         &mut paint.canvas.buffer_pool,
       );
 
-      if let Some((mask, placement)) =
-        intersect_alpha_masks(&pattern_mask, pattern_placement, &clip_mask, clip_placement)
-      {
-        paint_mask_with_inverse(
-          paint.canvas,
-          &mask,
-          placement,
-          color,
-          paint.clip_image,
-          paint.inverse,
-          self.image_rendering,
-        );
+      if !ring_mask.is_empty() {
+        if let Some((mask, placement)) =
+          intersect_alpha_masks(&pattern_mask, pattern_placement, &clip_mask, clip_placement)
+        {
+          if let Some((mask, placement)) =
+            intersect_alpha_masks(&mask, placement, &ring_mask, ring_placement)
+          {
+            paint_mask_with_inverse(
+              paint.canvas,
+              &mask,
+              placement,
+              color,
+              paint.clip_image,
+              paint.inverse,
+              self.image_rendering,
+            );
+          }
+        }
       }
       paint.canvas.buffer_pool.release(clip_mask);
+      paint.canvas.buffer_pool.release(ring_mask);
     }
     paint.canvas.buffer_pool.release(pattern_mask);
   }
@@ -1169,6 +1185,9 @@ fn compute_side_stroke(width: f32, style: BorderStyle, length: f32, closed: bool
     let Some((dash, gap)) = compute_dashed_intervals(width, style, length, closed) else {
       return stroke;
     };
+    if style == BorderStyle::Dotted {
+      stroke.cap = Cap::Round;
+    }
     stroke.dash = Some(DashPattern {
       intervals: [dash, gap],
       offset: 0.0,
