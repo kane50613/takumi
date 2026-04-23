@@ -1,5 +1,11 @@
 # takumi
 
+## 1.1.1
+
+### Patch Changes
+
+- adc48da: Treat absolute/floated children as out-of-flow for inline layout detection
+
 ## 1.1.0
 
 ### Minor Changes
