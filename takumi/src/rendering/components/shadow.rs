@@ -6,7 +6,7 @@ use crate::{
   layout::style::{Affine, BlendMode, BoxShadow, Color, ImageScalingAlgorithm, Sides, TextShadow},
   rendering::{
     BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Command, Fill, Placement,
-    SamplingOptions, Sizing, Style, apply_blur, fast_div_255, render_mask,
+    SamplingOptions, Sizing, Style, apply_blur, attenuate_alpha_by_mask, fast_div_255, render_mask,
   },
 };
 
@@ -124,27 +124,20 @@ impl SizedShadow {
       );
 
       if !erase_mask.is_empty() {
-        let shadow_width_usize = shadow_width as usize;
-        for my in 0..erase_placement.height as i32 {
-          for mx in 0..erase_placement.width as i32 {
-            let canvas_x = erase_placement.left + mx;
-            let canvas_y = erase_placement.top + my;
-            let ix = canvas_x - img_origin_x as i32;
-            let iy = canvas_y - img_origin_y as i32;
-
-            if ix >= 0 && iy >= 0 && ix < shadow_width as i32 && iy < shadow_height as i32 {
-              let mask_alpha =
-                erase_mask[(my as u32 * erase_placement.width + mx as u32) as usize] as u32;
-              if mask_alpha > 0 {
-                let idx = iy as usize * shadow_width_usize + ix as usize;
-                let factor = 255 - mask_alpha;
-                shadow_alpha[idx] = fast_div_255(shadow_alpha[idx] as u32 * factor);
-              }
-            }
-          }
-        }
-        canvas.buffer_pool.release(erase_mask);
+        let shadow_placement = Placement {
+          left: img_origin_x as i32,
+          top: img_origin_y as i32,
+          width: shadow_width,
+          height: shadow_height,
+        };
+        attenuate_alpha_by_mask(
+          &mut shadow_alpha,
+          shadow_placement,
+          &erase_mask,
+          erase_placement,
+        );
       }
+      canvas.buffer_pool.release(erase_mask);
     }
 
     canvas.draw_mask(
@@ -227,27 +220,15 @@ pub(crate) fn draw_inset_shadow(
   let (mask, placement) = render_mask(&paths, None, Some(Fill::NonZero.into()), buffer_pool);
 
   if !mask.is_empty() {
-    let img_w = width as i32;
-    let img_h = height as i32;
-    let img_w_usize = img_w as usize;
-
-    for my in 0..placement.height as i32 {
-      for mx in 0..placement.width as i32 {
-        let ix = placement.left + mx;
-        let iy = placement.top + my;
-
-        if ix >= 0 && iy >= 0 && ix < img_w && iy < img_h {
-          let mask_alpha = mask[(my as u32 * placement.width + mx as u32) as usize] as u32;
-          if mask_alpha > 0 {
-            let idx = iy as usize * img_w_usize + ix as usize;
-            let factor = 255 - mask_alpha;
-            shadow_alpha[idx] = fast_div_255(shadow_alpha[idx] as u32 * factor);
-          }
-        }
-      }
-    }
-    buffer_pool.release(mask);
+    let shadow_placement = Placement {
+      left: 0,
+      top: 0,
+      width,
+      height,
+    };
+    attenuate_alpha_by_mask(&mut shadow_alpha, shadow_placement, &mask, placement);
   }
+  buffer_pool.release(mask);
 
   apply_blur(
     BlurFormat::Alpha {

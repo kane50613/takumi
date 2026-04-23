@@ -1,9 +1,9 @@
 use svgtypes::{SimplePathSegment, SimplifyingPathParser};
 use taffy::{Point, Size};
 use tiny_skia::{
-  FillRule as TinyFillRule, LineJoin as TinyLineJoin, Path as TinyPath,
+  FillRule as TinyFillRule, LineCap as TinyLineCap, LineJoin as TinyLineJoin, Path as TinyPath,
   PathBuilder as TinyPathBuilder, PathSegment as TinyPathSegment, Point as TinyPoint,
-  Rect as TinyRect, Stroke as TinyStroke,
+  Rect as TinyRect, Stroke as TinyStroke, StrokeDash as TinyStrokeDash,
 };
 
 use crate::layout::style::Affine;
@@ -23,10 +23,25 @@ pub(crate) enum Join {
   Bevel,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub(crate) enum Cap {
+  #[default]
+  Butt,
+  Round,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct DashPattern {
+  pub(crate) intervals: [f32; 2],
+  pub(crate) offset: f32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Stroke {
   pub(crate) width: f32,
   pub(crate) join: Join,
+  pub(crate) cap: Cap,
+  pub(crate) dash: Option<DashPattern>,
 }
 
 impl Stroke {
@@ -34,6 +49,8 @@ impl Stroke {
     Self {
       width,
       join: Join::Miter,
+      cap: Cap::Butt,
+      dash: None,
     }
   }
 }
@@ -80,11 +97,24 @@ impl From<Join> for TinyLineJoin {
   }
 }
 
+impl From<Cap> for TinyLineCap {
+  fn from(cap: Cap) -> Self {
+    match cap {
+      Cap::Butt => TinyLineCap::Butt,
+      Cap::Round => TinyLineCap::Round,
+    }
+  }
+}
+
 impl From<Stroke> for TinyStroke {
   fn from(stroke: Stroke) -> Self {
     Self {
       width: stroke.width,
+      line_cap: stroke.cap.into(),
       line_join: stroke.join.into(),
+      dash: stroke
+        .dash
+        .and_then(|pattern| TinyStrokeDash::new(pattern.intervals.into(), pattern.offset)),
       ..TinyStroke::default()
     }
   }
@@ -317,4 +347,27 @@ fn parse_svg_path_segments(input: &str) -> Option<Vec<Command>> {
   }
 
   Some(commands)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn stroke_dash_is_forwarded_to_tiny_skia() {
+    let tiny: TinyStroke = Stroke {
+      width: 4.0,
+      join: Join::Miter,
+      cap: Cap::Round,
+      dash: Some(DashPattern {
+        intervals: [12.0, 8.0],
+        offset: 1.5,
+      }),
+    }
+    .into();
+
+    assert_eq!(tiny.width, 4.0);
+    assert_eq!(tiny.line_cap, TinyLineCap::Round);
+    assert!(tiny.dash.is_some());
+  }
 }

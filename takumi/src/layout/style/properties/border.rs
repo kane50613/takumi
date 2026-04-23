@@ -85,8 +85,8 @@ mod tests {
   }
 
   #[test]
-  fn test_parse_border_style_invalid() {
-    assert!(BorderStyle::from_str("dashed").is_err());
+  fn test_parse_border_style_dashed() {
+    assert_eq!(BorderStyle::from_str("dashed"), Ok(BorderStyle::Dashed));
   }
 
   #[test]
@@ -210,8 +210,15 @@ mod tests {
   }
 
   #[test]
-  fn test_parse_border_invalid_style() {
-    assert!(Border::from_str("2px dashed red").is_err());
+  fn test_parse_border_dashed() {
+    assert_eq!(
+      Border::from_str("2px dashed red"),
+      Ok(Border {
+        width: Length::Px(2.0),
+        style: BorderStyle::Dashed,
+        color: ColorInput::Value(Color([255, 0, 0, 255])),
+      })
+    );
   }
 
   #[test]

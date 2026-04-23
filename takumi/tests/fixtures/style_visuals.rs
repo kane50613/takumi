@@ -411,3 +411,238 @@ fn test_style_outline() {
 
   run_fixture_test(container, "style_outline");
 }
+
+fn label_text(label: &str) -> Node {
+  Node::text(label.to_string()).with_style(
+    Style::default()
+      .with(StyleDeclaration::font_size(Px(16.0).into()))
+      .with(StyleDeclaration::color(ColorInput::Value(Color([
+        31, 41, 55, 255,
+      ])))),
+  )
+}
+
+fn preview_frame(node: Node) -> Node {
+  Node::container([node]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Px(196.0)))
+      .with(StyleDeclaration::height(Px(112.0)))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([243, 244, 246, 255]),
+      )))
+      .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(20.0)); 4]))),
+  )
+}
+
+fn demo_card(label: &str, preview: Node) -> Node {
+  Node::container([preview_frame(preview), label_text(label)]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+      .with(StyleDeclaration::width(Px(208.0)))
+      .with_gap(SpacePair::from_single(Px(12.0)))
+      .with(StyleDeclaration::align_items(AlignItems::Center)),
+  )
+}
+
+fn non_uniform_border_demo(label: &str, style: Sides<BorderStyle>, width: Sides<Length>) -> Node {
+  let preview = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Px(164.0)))
+      .with(StyleDeclaration::height(Px(92.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([56, 189, 248, 255]),
+      )))
+      .with_border_style(style)
+      .with_border_width(width)
+      .with_border_color(Sides([ColorInput::Value(Color([17, 24, 39, 255])); 4])),
+  );
+
+  Node::container([
+    preview,
+    Node::text(label.to_string()).with_style(Style::default().with(StyleDeclaration::color(
+      ColorInput::Value(Color([31, 41, 55, 255])),
+    ))),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+      .with(StyleDeclaration::width(Px(220.0)))
+      .with_gap(SpacePair::from_single(Px(12.0)))
+      .with(StyleDeclaration::align_items(AlignItems::Center)),
+  )
+}
+
+fn border_style_demo(label: &str, style: BorderStyle) -> Node {
+  let preview = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Px(152.0)))
+      .with(StyleDeclaration::height(Px(72.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([14, 165, 233, 255]),
+      )))
+      .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(18.0)); 4])))
+      .with_border_width(Sides([Px(8.0); 4]))
+      .with_border_style(Sides([style; 4]))
+      .with_border_color(Sides([ColorInput::Value(Color([17, 24, 39, 255])); 4])),
+  );
+
+  demo_card(label, preview)
+}
+
+fn outline_style_demo(label: &str, style: BorderStyle) -> Node {
+  let preview = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Px(152.0)))
+      .with(StyleDeclaration::height(Px(72.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([251, 191, 36, 255]),
+      )))
+      .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(18.0)); 4])))
+      .with_border_width(Sides([Px(2.0); 4]))
+      .with_border_style(Sides([BorderStyle::Solid; 4]))
+      .with_border_color(Sides([ColorInput::Value(Color([255, 255, 255, 255])); 4]))
+      .with(StyleDeclaration::outline_width(Px(8.0)))
+      .with(StyleDeclaration::outline_offset(Px(8.0)))
+      .with(StyleDeclaration::outline_style(style))
+      .with(StyleDeclaration::outline_color(ColorInput::Value(Color([
+        17, 24, 39, 255,
+      ])))),
+  );
+
+  demo_card(label, preview)
+}
+
+#[test]
+fn test_style_border_styles() {
+  let demos = [
+    ("none", BorderStyle::None),
+    ("hidden", BorderStyle::Hidden),
+    ("dotted", BorderStyle::Dotted),
+    ("dashed", BorderStyle::Dashed),
+    ("solid", BorderStyle::Solid),
+    ("double", BorderStyle::Double),
+    ("groove", BorderStyle::Groove),
+    ("ridge", BorderStyle::Ridge),
+    ("inset", BorderStyle::Inset),
+    ("outset", BorderStyle::Outset),
+  ]
+  .into_iter()
+  .map(|(label, style)| border_style_demo(label, style))
+  .collect::<Vec<_>>();
+
+  let container = Node::container(demos).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
+      .with_gap(SpacePair::from_single(Px(16.0)))
+      .with_padding(Sides([Px(32.0); 4]))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([255, 255, 255, 255]),
+      ))),
+  );
+
+  run_fixture_test(container, "style_border_styles");
+}
+
+#[test]
+fn test_style_border_non_uniform_patterns() {
+  let demos = vec![
+    non_uniform_border_demo(
+      "dashed top only",
+      Sides([
+        BorderStyle::Dashed,
+        BorderStyle::None,
+        BorderStyle::None,
+        BorderStyle::None,
+      ]),
+      Sides([Px(10.0), Px(0.0), Px(0.0), Px(0.0)]),
+    ),
+    non_uniform_border_demo(
+      "dotted left only",
+      Sides([
+        BorderStyle::None,
+        BorderStyle::None,
+        BorderStyle::None,
+        BorderStyle::Dotted,
+      ]),
+      Sides([Px(0.0), Px(0.0), Px(0.0), Px(10.0)]),
+    ),
+    non_uniform_border_demo(
+      "dashed uneven widths",
+      Sides([BorderStyle::Dashed; 4]),
+      Sides([Px(10.0), Px(4.0), Px(7.0), Px(13.0)]),
+    ),
+    non_uniform_border_demo(
+      "mixed dash + dot",
+      Sides([
+        BorderStyle::Dotted,
+        BorderStyle::Dashed,
+        BorderStyle::Dotted,
+        BorderStyle::Dashed,
+      ]),
+      Sides([Px(10.0), Px(8.0), Px(10.0), Px(8.0)]),
+    ),
+  ];
+
+  let container = Node::container(demos).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
+      .with_gap(SpacePair::from_single(Px(20.0)))
+      .with_padding(Sides([Px(32.0); 4]))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([255, 255, 255, 255]),
+      ))),
+  );
+
+  run_fixture_test(container, "style_border_non_uniform_patterns");
+}
+
+#[test]
+fn test_style_outline_styles() {
+  let demos = [
+    ("none", BorderStyle::None),
+    ("hidden", BorderStyle::Hidden),
+    ("dotted", BorderStyle::Dotted),
+    ("dashed", BorderStyle::Dashed),
+    ("solid", BorderStyle::Solid),
+    ("double", BorderStyle::Double),
+    ("groove", BorderStyle::Groove),
+    ("ridge", BorderStyle::Ridge),
+    ("inset", BorderStyle::Inset),
+    ("outset", BorderStyle::Outset),
+  ]
+  .into_iter()
+  .map(|(label, style)| outline_style_demo(label, style))
+  .collect::<Vec<_>>();
+
+  let container = Node::container(demos).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
+      .with_gap(SpacePair::from_single(Px(16.0)))
+      .with_padding(Sides([Px(32.0); 4]))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([255, 255, 255, 255]),
+      ))),
+  );
+
+  run_fixture_test(container, "style_outline_styles");
+}
