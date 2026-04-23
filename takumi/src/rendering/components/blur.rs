@@ -321,36 +321,57 @@ fn upsample_rgba_bilinear(
     return;
   }
 
-  let max_x = src_width.saturating_sub(1) as f32;
-  let max_y = src_height.saturating_sub(1) as f32;
-  let scale_f = scale as f32;
+  let x_positions = bilinear_axis_positions(dst_width, src_width, scale);
+  let y_positions = bilinear_axis_positions(dst_height, src_height, scale);
 
-  for y in 0..dst_height {
-    let src_y = ((y as f32 + 0.5) / scale_f - 0.5).clamp(0.0, max_y);
-    let y0 = src_y.floor() as u32;
-    let y1 = (y0 + 1).min(src_height - 1);
-    let wy = src_y - y0 as f32;
-    for x in 0..dst_width {
-      let src_x = ((x as f32 + 0.5) / scale_f - 0.5).clamp(0.0, max_x);
-      let x0 = src_x.floor() as u32;
-      let x1 = (x0 + 1).min(src_width - 1);
-      let wx = src_x - x0 as f32;
+  for (y, y_position) in y_positions.iter().enumerate() {
+    let top_row = y_position.start * src_width as usize * 4;
+    let bottom_row = y_position.end * src_width as usize * 4;
+    let dst_row = y * dst_width as usize * 4;
 
-      let top_left = ((y0 as usize * src_width as usize) + x0 as usize) * 4;
-      let top_right = ((y0 as usize * src_width as usize) + x1 as usize) * 4;
-      let bottom_left = ((y1 as usize * src_width as usize) + x0 as usize) * 4;
-      let bottom_right = ((y1 as usize * src_width as usize) + x1 as usize) * 4;
-      let dst_index = ((y as usize * dst_width as usize) + x as usize) * 4;
+    for (x, x_position) in x_positions.iter().enumerate() {
+      let top_left = top_row + x_position.start * 4;
+      let top_right = top_row + x_position.end * 4;
+      let bottom_left = bottom_row + x_position.start * 4;
+      let bottom_right = bottom_row + x_position.end * 4;
+      let dst_index = dst_row + x * 4;
 
       for channel in 0..4 {
-        let top =
-          src[top_left + channel] as f32 * (1.0 - wx) + src[top_right + channel] as f32 * wx;
-        let bottom =
-          src[bottom_left + channel] as f32 * (1.0 - wx) + src[bottom_right + channel] as f32 * wx;
-        dst[dst_index + channel] = (top * (1.0 - wy) + bottom * wy).round().clamp(0.0, 255.0) as u8;
+        let top = src[top_left + channel] as f32 * (1.0 - x_position.weight)
+          + src[top_right + channel] as f32 * x_position.weight;
+        let bottom = src[bottom_left + channel] as f32 * (1.0 - x_position.weight)
+          + src[bottom_right + channel] as f32 * x_position.weight;
+        dst[dst_index + channel] = (top * (1.0 - y_position.weight) + bottom * y_position.weight)
+          .round()
+          .clamp(0.0, 255.0) as u8;
       }
     }
   }
+}
+
+#[derive(Clone, Copy)]
+struct BilinearAxisPosition {
+  start: usize,
+  end: usize,
+  weight: f32,
+}
+
+fn bilinear_axis_positions(dst_len: u32, src_len: u32, scale: u32) -> Vec<BilinearAxisPosition> {
+  let max_source = src_len.saturating_sub(1) as f32;
+  let scale = scale as f32;
+
+  (0..dst_len)
+    .map(|index| {
+      let source = ((index as f32 + 0.5) / scale - 0.5).clamp(0.0, max_source);
+      let start = source.floor() as u32;
+      let end = (start + 1).min(src_len - 1);
+      BilinearAxisPosition {
+        start: start as usize,
+        end: end as usize,
+        weight: source - start as f32,
+      }
+    })
+    .collect()
 }
 
 macro_rules! update_h_pixel {
@@ -569,7 +590,7 @@ fn compute_mul_shg(d: u32) -> (u32, i32) {
 
 #[cfg(test)]
 mod tests {
-  use super::{BlurType, apply_blur_rgba_bytes, blur_downsample_scale};
+  use super::{BlurType, apply_blur_rgba_bytes, blur_downsample_scale, upsample_rgba_bilinear};
   use crate::{Error, rendering::BufferPool};
 
   #[test]
@@ -592,5 +613,82 @@ mod tests {
     assert_eq!(blur_downsample_scale(256, 256, 6.0, BlurType::Filter), 1);
     assert_eq!(blur_downsample_scale(256, 256, 16.0, BlurType::Filter), 2);
     assert_eq!(blur_downsample_scale(1024, 1024, 64.0, BlurType::Filter), 8);
+  }
+
+  #[test]
+  fn upsample_rgba_bilinear_matches_reference() {
+    let src_width = 3;
+    let src_height = 2;
+    let dst_width = 7;
+    let dst_height = 5;
+    let scale = 3;
+    let src = (0..src_width * src_height * 4)
+      .map(|value| ((value * 17 + 11) % 251) as u8)
+      .collect::<Vec<_>>();
+    let mut actual = vec![0; (dst_width * dst_height * 4) as usize];
+    let mut expected = actual.clone();
+
+    upsample_rgba_bilinear(
+      &src,
+      src_width,
+      src_height,
+      &mut actual,
+      dst_width,
+      dst_height,
+      scale,
+    );
+    upsample_rgba_bilinear_reference(
+      &src,
+      src_width,
+      src_height,
+      &mut expected,
+      dst_width,
+      dst_height,
+      scale,
+    );
+
+    assert_eq!(actual, expected);
+  }
+
+  fn upsample_rgba_bilinear_reference(
+    src: &[u8],
+    src_width: u32,
+    src_height: u32,
+    dst: &mut [u8],
+    dst_width: u32,
+    dst_height: u32,
+    scale: u32,
+  ) {
+    let max_x = src_width.saturating_sub(1) as f32;
+    let max_y = src_height.saturating_sub(1) as f32;
+    let scale_f = scale as f32;
+
+    for y in 0..dst_height {
+      let src_y = ((y as f32 + 0.5) / scale_f - 0.5).clamp(0.0, max_y);
+      let y0 = src_y.floor() as u32;
+      let y1 = (y0 + 1).min(src_height - 1);
+      let wy = src_y - y0 as f32;
+      for x in 0..dst_width {
+        let src_x = ((x as f32 + 0.5) / scale_f - 0.5).clamp(0.0, max_x);
+        let x0 = src_x.floor() as u32;
+        let x1 = (x0 + 1).min(src_width - 1);
+        let wx = src_x - x0 as f32;
+
+        let top_left = ((y0 as usize * src_width as usize) + x0 as usize) * 4;
+        let top_right = ((y0 as usize * src_width as usize) + x1 as usize) * 4;
+        let bottom_left = ((y1 as usize * src_width as usize) + x0 as usize) * 4;
+        let bottom_right = ((y1 as usize * src_width as usize) + x1 as usize) * 4;
+        let dst_index = ((y as usize * dst_width as usize) + x as usize) * 4;
+
+        for channel in 0..4 {
+          let top =
+            src[top_left + channel] as f32 * (1.0 - wx) + src[top_right + channel] as f32 * wx;
+          let bottom = src[bottom_left + channel] as f32 * (1.0 - wx)
+            + src[bottom_right + channel] as f32 * wx;
+          dst[dst_index + channel] =
+            (top * (1.0 - wy) + bottom * wy).round().clamp(0.0, 255.0) as u8;
+        }
+      }
+    }
   }
 }
