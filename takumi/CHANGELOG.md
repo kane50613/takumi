@@ -1,5 +1,11 @@
 # takumi
 
+## 1.1.0
+
+### Minor Changes
+
+- 785d760: Support more border styles
+
 ## 1.0.16
 
 ### Patch Changes
