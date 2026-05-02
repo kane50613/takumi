@@ -48,7 +48,7 @@ export const showcaseProjects: Project[] = [
     height: 630,
   },
   {
-    image: "https://prmptbio.shard.media/og/home-2026-04-11.jpg",
+    image: "https://prmpt.bio/og/smart-poster.jpg",
     url: "https://prmpt.bio/smart-poster?utm_source=takumi",
     width: 1200,
     height: 630,
