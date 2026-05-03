@@ -9,11 +9,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "hono": "^4.12.14",
+    "hono": "^4.12.16",
     "react": "~19.2.5",
     "react-dom": "~19.2.5",
     "takumi-js": "workspace:*",
-    "waku": "1.0.0-alpha.8"
+    "waku": "1.0.0-alpha.9"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.2.4",
