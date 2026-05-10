@@ -22,7 +22,7 @@
     "clsx": "^2.1.1",
     "csstype": "^3.2.3",
     "fumadocs-core": "^16.8.5",
-    "fumadocs-mdx": "^14.3.2",
+    "fumadocs-mdx": "^15.0.0",
     "fumadocs-twoslash": "^3.2.0",
     "fumadocs-ui": "^16.8.5",
     "isbot": "^5.1.39",
