@@ -3,8 +3,9 @@ import {
   rehypeCodeDefaultOptions,
   remarkMdxMermaid,
 } from "fumadocs-core/mdx-plugins";
-import { defineConfig, defineDocs, frontmatterSchema } from "fumadocs-mdx/config";
+import { defineConfig, defineDocs } from "fumadocs-mdx/config";
 import lastModified from "fumadocs-mdx/plugins/last-modified";
+import { metaSchema, pageSchema } from "fumadocs-core/source/schema";
 import { transformerTwoslash } from "fumadocs-twoslash";
 import { createFileSystemTypesCache } from "fumadocs-twoslash/cache-fs";
 import type { ShikiTransformer } from "shiki";
@@ -13,12 +14,15 @@ import * as z from "zod";
 export const docs = defineDocs({
   dir: "content/docs",
   docs: {
-    schema: frontmatterSchema.extend({
-      index: z.boolean().default(false),
+    schema: pageSchema.extend({
+      index: z.boolean().optional(),
     }),
     postprocess: {
       includeProcessedMarkdown: true,
     },
+  },
+  meta: {
+    schema: metaSchema,
   },
 });
 
