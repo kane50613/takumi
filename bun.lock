@@ -240,6 +240,7 @@
         "tsdown": "catalog:",
         "typescript": "catalog:",
         "ultrahtml": "^1.6.0",
+        "unrun": "catalog:",
       },
       "peerDependencies": {
         "react": "^19.2.5",
@@ -260,6 +261,7 @@
         "@types/bun": "catalog:",
         "tsdown": "catalog:",
         "typescript": "catalog:",
+        "unrun": "catalog:",
       },
     },
     "takumi-js": {
@@ -275,6 +277,7 @@
         "@types/react": "^19.2.14",
         "react": "^19.2.6",
         "tsdown": "catalog:",
+        "unrun": "catalog:",
       },
     },
     "takumi-napi-core": {
@@ -294,6 +297,7 @@
         "react": "catalog:",
         "tsdown": "catalog:",
         "typescript": "catalog:",
+        "unrun": "catalog:",
       },
     },
     "takumi-template": {
@@ -321,6 +325,7 @@
         "csstype": "^3.2.3",
         "tsdown": "catalog:",
         "typescript": "catalog:",
+        "unrun": "catalog:",
       },
     },
   },
@@ -334,6 +339,7 @@
     "react-dom": "^19.2.6",
     "tsdown": "^0.22.0",
     "typescript": "6.0.3",
+    "unrun": "^0.3.0",
     "vite": "^8.0.12",
     "vitest": "^4.1.5",
   },
@@ -2535,6 +2541,8 @@
     "unplugin": ["unplugin@3.0.0", "", { "dependencies": { "@jridgewell/remapping": "^2.3.5", "picomatch": "^4.0.3", "webpack-virtual-modules": "^0.6.2" } }, "sha512-0Mqk3AT2TZCXWKdcoaufeXNukv2mTrEZExeXlHIOZXdqYoHHr4n51pymnwV8x2BOVxwXbK2HLlI7usrqMpycdg=="],
 
     "unplugin-utils": ["unplugin-utils@0.3.1", "", { "dependencies": { "pathe": "^2.0.3", "picomatch": "^4.0.3" } }, "sha512-5lWVjgi6vuHhJ526bI4nlCOmkCIF3nnfXkCMDeMJrtdvxTs6ZFCM8oNufGTsDbKv/tJ/xj8RpvXjRuPBZJuJog=="],
+
+    "unrun": ["unrun@0.3.0", "", { "dependencies": { "rolldown": "^1.0.0" }, "peerDependencies": { "synckit": "^0.11.11" }, "optionalPeers": ["synckit"], "bin": { "unrun": "./dist/cli.mjs" } }, "sha512-5xw2AIVS2WR9Lqhz76qDIQLxipKRidf7Nq+Iz5SZ8shk1OmRlxnc6FyI/1Q2m99WLj6cbqaKFdESfWE99KPzlA=="],
 
     "update-browserslist-db": ["update-browserslist-db@1.2.3", "", { "dependencies": { "escalade": "^3.2.0", "picocolors": "^1.1.1" }, "peerDependencies": { "browserslist": ">= 4.21.0" }, "bin": { "update-browserslist-db": "cli.js" } }, "sha512-Js0m9cx+qOgDxo0eMiFGEueWztz+d4+M3rGlmKPT+T4IS/jP4ylw3Nwpu6cpTTP8R1MAC1kF4VbdLt3ARf209w=="],
 

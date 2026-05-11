@@ -41,6 +41,7 @@
   "devDependencies": {
     "@types/bun": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "unrun": "catalog:"
   }
 }

@@ -82,7 +82,8 @@
     "@types/bun": "catalog:",
     "csstype": "^3.2.3",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "unrun": "catalog:"
   },
   "readme": "README.md"
 }
