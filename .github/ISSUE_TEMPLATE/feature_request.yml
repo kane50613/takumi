@@ -56,16 +56,6 @@ body:
         - "@takumi-rs/helpers"
         - Documentation
 
-  - type: dropdown
-    id: willing
-    attributes:
-      label: Contribution
-      description: Are you willing to contribute this feature?
-      options:
-        - "Yes, I'd like to implement this"
-        - "Yes, I can help with guidance"
-        - "No, but I'd love to see it"
-
   - type: textarea
     id: additional
     attributes:
