@@ -12,7 +12,7 @@ rust-version = "1.91"
 
 [dependencies]
 bitflags = "2.11"
-cssparser = "0.36"
+cssparser = "0.37"
 paste = "1.0"
 png = "0.18"
 gif = "0.14"
@@ -61,7 +61,7 @@ default-features = false
 features = ["std"]
 
 [dependencies.selectors]
-version = "0.37"
+version = "0.38"
 
 [dependencies.precomputed-hash]
 version = "0.1"
