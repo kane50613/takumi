@@ -5,7 +5,7 @@ use tiny_skia::PixmapMut;
 
 use crate::layout::inline::{
   InlineLayoutMode, InlineLayoutRequest, get_parent_font_metrics, resolve_inline_line_metrics,
-  resolve_inline_line_states, resolve_visual_inline_box,
+  resolve_inline_line_states, resolve_visual_inline_box, text_fit_line_alignment_correction,
 };
 use crate::{
   Error, Result,
@@ -556,8 +556,10 @@ fn compute_node_paint_bounds(
     let baseline_shift = line_states[line_index].baseline_shift;
     let resolved_metrics = line_vertical_metrics[line_index];
     let line_scale = built.line_scales.get(line_index).copied().unwrap_or(1.0);
+    let (line_scale_origin_x, line_alignment_correction) =
+      text_fit_line_alignment_correction(&line, &font_style, line_scale);
     let line_scale_origin = Point {
-      x: line.metrics().inline_min_coord,
+      x: line_scale_origin_x,
       y: resolved_metrics.resolved_baseline,
     };
     let mut static_inline_prefix = 0.0_f32;
@@ -580,6 +582,7 @@ fn compute_node_paint_bounds(
                 line_scale_origin.x,
                 line_scale,
                 static_inline_prefix,
+                line_alignment_correction,
               ),
               y: line_scale_origin.y + (glyph_origin.y - line_scale_origin.y) * line_scale,
             };
@@ -601,9 +604,10 @@ fn compute_node_paint_bounds(
           };
           let inline_box_x = scale_text_fit_x(
             inline_box.x,
-            line.metrics().inline_min_coord,
+            line_scale_origin_x,
             line_scale,
             static_inline_prefix,
+            line_alignment_correction,
           );
           static_inline_prefix += inline_box.width;
 

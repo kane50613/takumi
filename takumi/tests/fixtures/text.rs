@@ -424,6 +424,29 @@ fn text_fit_overview() {
 }
 
 #[test]
+fn text_fit_center_aligned_per_line_all() {
+  let text = Node::text("Takumi 1.2 now support the latest.".to_string()).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::font_size(Px(48.0).into()))
+      .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
+      .with(StyleDeclaration::text_align(TextAlign::Center))
+      .with(StyleDeclaration::text_fit(text_fit(
+        TextFitMode::Grow,
+        TextFitTarget::PerLineAll,
+        None,
+      )))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([255, 255, 255, 255]),
+      ))),
+  );
+
+  run_fixture_test(text, "text_fit_center_aligned_per_line_all");
+}
+
+#[test]
 fn text_align_start() {
   let text = Node::text("Start aligned".to_string()).with_style(
     Style::default()

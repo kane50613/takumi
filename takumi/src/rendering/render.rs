@@ -14,7 +14,7 @@ use crate::{
       InlineBrush, InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan,
       collect_inline_items, create_inline_constraint, create_inline_layout,
       get_parent_font_metrics, resolve_inline_line_metrics, resolve_inline_line_states,
-      resolve_visual_inline_box,
+      resolve_visual_inline_box, text_fit_line_alignment_correction,
     },
     node::Node,
     style::{Affine, StyleSheet},
@@ -271,8 +271,10 @@ fn collect_measure_result<'g>(
             let baseline_shift = line_states[line_index].baseline_shift;
             let resolved_metrics = line_metrics[line_index];
             let line_scale = built.line_scales.get(line_index).copied().unwrap_or(1.0);
+            let (line_scale_origin_x, line_alignment_correction) =
+              text_fit_line_alignment_correction(&line, &font_style, line_scale);
             let line_scale_origin = taffy::Point {
-              x: line.metrics().inline_min_coord + inline_offset.x,
+              x: line_scale_origin_x + inline_offset.x,
               y: resolved_metrics.resolved_baseline + inline_offset.y,
             };
             let mut static_inline_prefix = 0.0_f32;
@@ -291,7 +293,13 @@ fn collect_measure_result<'g>(
                   let mut width = glyph_run.advance();
                   let mut height = metrics.ascent + metrics.descent;
                   if (line_scale - 1.0).abs() > f32::EPSILON {
-                    x = scale_text_fit_x(x, line_scale_origin.x, line_scale, static_inline_prefix);
+                    x = scale_text_fit_x(
+                      x,
+                      line_scale_origin.x,
+                      line_scale,
+                      static_inline_prefix,
+                      line_alignment_correction,
+                    );
                     y = line_scale_origin.y + (y - line_scale_origin.y) * line_scale;
                     width *= line_scale;
                     height *= line_scale;
@@ -318,9 +326,10 @@ fn collect_measure_result<'g>(
                   };
                   let positioned_box_x = scale_text_fit_x(
                     positioned_box.x,
-                    line_scale_origin.x,
+                    line_scale_origin_x,
                     line_scale,
                     static_inline_prefix,
+                    line_alignment_correction,
                   );
                   static_inline_prefix += positioned_box.width;
 

@@ -10,7 +10,7 @@ use crate::{
     inline::{
       InlineBoxItem, InlineBrush, InlineLayout, ProcessedInlineSpan, VisualInlineBox,
       get_parent_font_metrics, resolve_inline_line_metrics, resolve_inline_line_states,
-      resolve_visual_inline_box,
+      resolve_visual_inline_box, text_fit_line_alignment_correction,
     },
     style::{
       Affine, BackgroundClip, BlendMode, BorderStyle, Color, SizedFontStyle,
@@ -23,7 +23,7 @@ use crate::{
     PathBuilder, RenderContext, Stroke, collect_background_layers, draw_decoration,
     draw_decoration_segment, draw_glyph, draw_glyph_clip_image, draw_glyph_text_shadow,
     mask_index_from_coord, rasterize_layers, release_rasterized_background_tile,
-    render::render_node, render_mask, scale_text_fit_x, text_fit_static_x_correction,
+    render::render_node, render_mask, scale_text_fit_x, text_fit_x_correction,
   },
   resources::font::{FontError, ResolvedGlyph},
 };
@@ -85,6 +85,7 @@ struct GlyphRunContentOptions<'a> {
 #[derive(Clone, Copy)]
 struct LineScaleState {
   scale: f32,
+  alignment_correction: f32,
   layout_origin: Point<f32>,
 }
 
@@ -99,7 +100,11 @@ fn line_scale_transform_with_static_prefix(
   state: LineScaleState,
   static_inline_prefix: f32,
 ) -> Affine {
-  let x_correction = text_fit_static_x_correction(state.scale, static_inline_prefix);
+  let x_correction = text_fit_x_correction(
+    state.scale,
+    static_inline_prefix,
+    state.alignment_correction,
+  );
 
   base
     * Affine::translation(x_correction, 0.0)
@@ -117,7 +122,11 @@ fn scale_outline_rect(
     return rect;
   }
 
-  let x_correction = text_fit_static_x_correction(state.scale, static_inline_prefix);
+  let x_correction = text_fit_x_correction(
+    state.scale,
+    static_inline_prefix,
+    state.alignment_correction,
+  );
 
   InlineOutlineRect {
     x: x_correction + state.layout_origin.x + (rect.x - state.layout_origin.x) * state.scale,
@@ -911,10 +920,13 @@ pub(crate) fn draw_inline_layout(
     let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
     let resolved_metrics = line_vertical_metrics[line_index];
     let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
+    let (line_scale_origin_x, line_alignment_correction) =
+      text_fit_line_alignment_correction(&line, font_style, line_scale);
     let line_scale_state = LineScaleState {
       scale: line_scale,
+      alignment_correction: line_alignment_correction,
       layout_origin: Point {
-        x: layout.border.left + layout.padding.left + line.metrics().inline_min_coord,
+        x: layout.border.left + layout.padding.left + line_scale_origin_x,
         y: layout.border.top + layout.padding.top + resolved_metrics.resolved_baseline,
       },
     };
@@ -954,10 +966,13 @@ pub(crate) fn draw_inline_layout(
     let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
     let resolved_metrics = line_vertical_metrics[line_index];
     let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
+    let (line_scale_origin_x, line_alignment_correction) =
+      text_fit_line_alignment_correction(&line, font_style, line_scale);
     let line_scale_state = LineScaleState {
       scale: line_scale,
+      alignment_correction: line_alignment_correction,
       layout_origin: Point {
-        x: layout.border.left + layout.padding.left + line.metrics().inline_min_coord,
+        x: layout.border.left + layout.padding.left + line_scale_origin_x,
         y: layout.border.top + layout.padding.top + resolved_metrics.resolved_baseline,
       },
     };
@@ -996,10 +1011,13 @@ pub(crate) fn draw_inline_layout(
     let resolved_metrics = line_vertical_metrics[line_index];
     let baseline_shift = resolved_metrics.baseline_shift;
     let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
+    let (line_scale_origin_x, line_alignment_correction) =
+      text_fit_line_alignment_correction(&line, font_style, line_scale);
     let line_scale_state = LineScaleState {
       scale: line_scale,
+      alignment_correction: line_alignment_correction,
       layout_origin: Point {
-        x: layout.border.left + layout.padding.left + line.metrics().inline_min_coord,
+        x: layout.border.left + layout.padding.left + line_scale_origin_x,
         y: layout.border.top + layout.padding.top + resolved_metrics.resolved_baseline,
       },
     };
@@ -1055,9 +1073,10 @@ pub(crate) fn draw_inline_layout(
           let inline_box = VisualInlineBox {
             x: scale_text_fit_x(
               inline_box.layout_x,
-              line.metrics().inline_min_coord,
+              line_scale_origin_x,
               line_scale,
               static_inline_prefix,
+              line_scale_state.alignment_correction,
             ),
             ..inline_box
           };
@@ -1083,10 +1102,13 @@ pub(crate) fn draw_inline_layout(
     let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
     let resolved_metrics = line_vertical_metrics[line_index];
     let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
+    let (line_scale_origin_x, line_alignment_correction) =
+      text_fit_line_alignment_correction(&line, font_style, line_scale);
     let line_scale_state = LineScaleState {
       scale: line_scale,
+      alignment_correction: line_alignment_correction,
       layout_origin: Point {
-        x: layout.border.left + layout.padding.left + line.metrics().inline_min_coord,
+        x: layout.border.left + layout.padding.left + line_scale_origin_x,
         y: layout.border.top + layout.padding.top + resolved_metrics.resolved_baseline,
       },
     };

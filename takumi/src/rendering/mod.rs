@@ -145,8 +145,12 @@ pub(crate) fn fast_div_255_u32(v: u32) -> u32 {
   ((v.wrapping_add(128).wrapping_add(v >> 8)) >> 8).min(255)
 }
 
-pub(crate) fn text_fit_static_x_correction(scale: f32, static_inline_prefix: f32) -> f32 {
-  static_inline_prefix * (1.0 - scale)
+pub(crate) fn text_fit_x_correction(
+  scale: f32,
+  static_inline_prefix: f32,
+  line_alignment_correction: f32,
+) -> f32 {
+  static_inline_prefix * (1.0 - scale) + line_alignment_correction
 }
 
 pub(crate) fn scale_text_fit_x(
@@ -154,12 +158,15 @@ pub(crate) fn scale_text_fit_x(
   origin_x: f32,
   scale: f32,
   static_inline_prefix: f32,
+  line_alignment_correction: f32,
 ) -> f32 {
   if (scale - 1.0).abs() <= f32::EPSILON {
     return x;
   }
 
-  text_fit_static_x_correction(scale, static_inline_prefix) + origin_x + (x - origin_x) * scale
+  text_fit_x_correction(scale, static_inline_prefix, line_alignment_correction)
+    + origin_x
+    + (x - origin_x) * scale
 }
 
 #[inline(always)]

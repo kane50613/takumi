@@ -6,9 +6,9 @@ use takumi::{
     node::Node,
     style::{
       Affine, AlignItems, BorderStyle, BoxSizing, Clear, Color, ColorInput, Display, FlexDirection,
-      Float, JustifyContent, Length::*, LineHeight, Position, Sides, SpacePair, Style,
-      StyleDeclaration, TextFit, TextFitMode, TextFitTarget, TextIndent, TextWrapMode, WhiteSpace,
-      WhiteSpaceCollapse,
+      Float, FontWeight, JustifyContent, Length::*, LineHeight, Position, Sides, SpacePair, Style,
+      StyleDeclaration, TextAlign, TextFit, TextFitMode, TextFitTarget, TextIndent, TextWrapMode,
+      WhiteSpace, WhiteSpaceCollapse,
     },
   },
   rendering::{MeasuredNode, MeasuredTextRun, RenderOptions, measure_layout},
@@ -485,6 +485,41 @@ fn test_measure_text_fit_grow_preserves_line_height_when_glyphs_fit_inside_it() 
   assert!(fit_runs[0].width > no_fit_runs[0].width);
   assert!(fit_runs[0].height > no_fit_runs[0].height);
   assert_within(fit.children[0].height, no_fit.children[0].height, 0.05);
+}
+
+#[test]
+fn test_measure_text_fit_center_alignment_keeps_scaled_text_centered() {
+  let viewport = create_measure_viewport();
+  let text = "Takumi 1.2 now support the latest.".to_string();
+  let base = Style::default()
+    .with(StyleDeclaration::display(Display::Block))
+    .with(StyleDeclaration::width(Percentage(100.0)))
+    .with(StyleDeclaration::font_size(Px(48.0).into()))
+    .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
+    .with(StyleDeclaration::text_align(TextAlign::Center));
+  let no_fit = measure(
+    Node::container([Node::text(text.clone())]).with_style(base.clone()),
+    viewport,
+  );
+  let measured = measure(
+    Node::container([Node::text(text)]).with_style(
+      base.with(StyleDeclaration::text_fit(
+        TextFit::builder()
+          .mode(TextFitMode::Grow)
+          .target(TextFitTarget::PerLineAll)
+          .build(),
+      )),
+    ),
+    viewport,
+  );
+  let no_fit_runs = measured_text_runs(&no_fit);
+  let runs = measured_text_runs(&measured);
+  assert_eq!(no_fit_runs.len(), 1);
+  assert_eq!(runs.len(), 1);
+  assert!(runs[0].width > no_fit_runs[0].width);
+
+  let run = &runs[0];
+  assert_within(run.x, (1200.0 - run.width) * 0.5, 0.1);
 }
 
 #[test]

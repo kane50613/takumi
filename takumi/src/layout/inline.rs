@@ -1240,6 +1240,64 @@ fn text_fit_line_scales(layout: &InlineLayout, max_width: f32, style: &SizedFont
   scales
 }
 
+pub(crate) fn text_fit_line_alignment_correction(
+  line: &Line<'_, InlineBrush>,
+  style: &SizedFontStyle,
+  line_scale: f32,
+) -> (f32, f32) {
+  if (line_scale - 1.0).abs() <= f32::EPSILON {
+    return (line.metrics().inline_min_coord, 0.0);
+  }
+
+  let align_factor = style
+    .parent
+    .text_align
+    .alignment_factor(style.parent.direction);
+
+  let mut line_start = f32::INFINITY;
+  let mut line_end = f32::NEG_INFINITY;
+  let mut scalable_advance = 0.0_f32;
+  let mut static_advance = 0.0_f32;
+
+  for item in line.items() {
+    match item {
+      PositionedLayoutItem::GlyphRun(glyph_run) => {
+        let start = glyph_run.offset();
+        let end = start + glyph_run.advance();
+        line_start = line_start.min(start);
+        line_end = line_end.max(end);
+        scalable_advance += glyph_run.advance();
+      }
+      PositionedLayoutItem::InlineBox(inline_box) => {
+        if inline_box.kind != InlineBoxKind::InFlow {
+          continue;
+        }
+
+        let start = inline_box.x;
+        let end = start + inline_box.width;
+        line_start = line_start.min(start);
+        line_end = line_end.max(end);
+        static_advance += inline_box.width;
+      }
+    }
+  }
+
+  if !line_start.is_finite() || !line_end.is_finite() {
+    return (line.metrics().inline_min_coord, 0.0);
+  }
+
+  if align_factor == 0.0 {
+    return (line_start, 0.0);
+  }
+
+  let unscaled_line_width = (line_end - line_start).max(0.0);
+  let scaled_line_width = static_advance + scalable_advance * line_scale;
+  let available_line_width = unscaled_line_width + line_start / align_factor;
+  let aligned_line_start = ((available_line_width - scaled_line_width).max(0.0)) * align_factor;
+
+  (line_start, aligned_line_start - line_start)
+}
+
 pub(crate) fn create_inline_layout<'c, 'g: 'c>(
   request: InlineLayoutRequest<'c, 'g>,
 ) -> BuiltInlineLayout<'c, 'g> {
