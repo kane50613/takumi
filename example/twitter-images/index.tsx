@@ -10,8 +10,10 @@ import * as PackageOgImage from "./components/package-og-image";
 import * as PrismaOGImage from "./components/prisma-og-image";
 import * as XPostImage from "./components/x-post-image";
 import * as V1 from "./components/v1";
+import * as TextFit from "./components/text-fit";
 
 const components = [
+  TextFit,
   V1,
   OgImage,
   FiveHundredStars,
