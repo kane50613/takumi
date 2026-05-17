@@ -1,5 +1,11 @@
 # takumi
 
+## 1.2.0
+
+### Minor Changes
+
+- 0f84a52: Support `text-fit` property
+
 ## 1.1.2
 
 ### Patch Changes
