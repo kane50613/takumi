@@ -781,6 +781,8 @@ pub(crate) struct VisualInlineBox {
   pub(crate) y: f32,
   pub(crate) width: f32,
   pub(crate) height: f32,
+  pub(crate) layout_x: f32,
+  pub(crate) layout_advance: f32,
 }
 
 pub(crate) fn resolve_visual_inline_box(
@@ -804,6 +806,8 @@ pub(crate) fn resolve_visual_inline_box(
     y: positioned.y,
     width: item.paint_width,
     height: item.paint_height,
+    layout_x: positioned.x,
+    layout_advance: positioned.width,
   })
 }
 

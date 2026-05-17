@@ -1068,7 +1068,7 @@ pub(crate) fn draw_inline_layout(
           };
           let inline_box = VisualInlineBox {
             x: scale_inline_box_x(
-              inline_box.x,
+              inline_box.layout_x,
               line.metrics().inline_min_coord,
               line_scale,
               static_inline_prefix,
@@ -1077,7 +1077,7 @@ pub(crate) fn draw_inline_layout(
           };
           let replaced = positioned_inline_boxes.insert(inline_box.id, inline_box);
           debug_assert!(replaced.is_none());
-          static_inline_prefix += inline_box.width;
+          static_inline_prefix += inline_box.layout_advance;
         }
       }
     }
