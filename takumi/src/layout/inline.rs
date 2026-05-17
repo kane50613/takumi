@@ -167,6 +167,7 @@ pub(crate) struct InlineMeasureOptions {
 #[derive(Clone, PartialEq, Copy, Debug)]
 pub(crate) struct InlineBrush {
   pub source_span_id: Option<u64>,
+  pub opacity: f32,
   pub color: Color,
   pub decoration_color: Color,
   pub decoration_thickness: SizedTextDecorationThickness,
@@ -182,6 +183,7 @@ impl Default for InlineBrush {
   fn default() -> Self {
     Self {
       source_span_id: None,
+      opacity: 1.0,
       color: Color::black(),
       decoration_color: Color::black(),
       decoration_thickness: SizedTextDecorationThickness::Value(0.0),

@@ -20,7 +20,7 @@ use crate::{
   },
   rendering::{
     BorderProperties, Canvas, Cap, Command, DashPattern, DecorationSegmentParams, PaintSource,
-    PathBuilder, RenderContext, Stroke, collect_background_layers, draw_decoration,
+    PathBuilder, Placement, RenderContext, Stroke, collect_background_layers, draw_decoration,
     draw_decoration_segment, draw_glyph, draw_glyph_clip_image, draw_glyph_text_shadow,
     mask_index_from_coord, rasterize_layers, release_rasterized_background_tile,
     render::render_node, render_mask, scale_text_fit_x, text_fit_x_correction,
@@ -28,6 +28,33 @@ use crate::{
   resources::font::{FontError, ResolvedGlyph},
 };
 use taffy::{AvailableSpace, geometry::Size};
+
+fn draw_with_inline_opacity(
+  canvas: &mut Canvas,
+  opacity: f32,
+  draw: impl FnOnce(&mut Canvas) -> Result<()>,
+) -> Result<()> {
+  if opacity >= 1.0 {
+    return draw(canvas);
+  }
+
+  if opacity <= 0.0 {
+    return Ok(());
+  }
+
+  let viewport = canvas.viewport();
+  let subcanvas = canvas.begin_subcanvas(Placement {
+    left: viewport.origin.x as i32,
+    top: viewport.origin.y as i32,
+    width: viewport.size.width,
+    height: viewport.size.height,
+  })?;
+
+  draw(canvas)?;
+  canvas.composite_subcanvas(subcanvas, BlendMode::Normal, opacity);
+
+  Ok(())
+}
 
 const UNDERLINE_SKIP_INK_ALPHA_THRESHOLD: u8 = 16;
 const SKIP_PADDING_RATIO: f32 = 0.6;
@@ -540,18 +567,33 @@ fn draw_outline_island(
   canvas: &mut Canvas,
   spans: &[ProcessedInlineSpan<'_, '_>],
   transform: Affine,
-) {
+) -> Result<()> {
   let Some(first_rect) = outline_rects.first().copied() else {
-    return;
+    return Ok(());
   };
   let Some(ProcessedInlineSpan::Text { style, .. }) = spans.get(first_rect.span_id as usize) else {
-    return;
+    return Ok(());
   };
 
   let width = style.outline_width;
   if width == 0.0 || !style.outline_style.is_rendered() {
-    return;
+    return Ok(());
   }
+
+  let opacity = style.parent.opacity.0;
+  draw_with_inline_opacity(canvas, opacity, |canvas| {
+    draw_outline_island_content(outline_rects, canvas, style, transform);
+    Ok(())
+  })
+}
+
+fn draw_outline_island_content(
+  outline_rects: &[InlineOutlineRect],
+  canvas: &mut Canvas,
+  style: &SizedFontStyle,
+  transform: Affine,
+) {
+  let width = style.outline_width;
 
   let expansion = style.outline_offset + width / 2.0;
   let mut path = Vec::with_capacity(outline_rects.len() * 6);
@@ -599,7 +641,7 @@ fn draw_merged_outline_rects(
   canvas: &mut Canvas,
   spans: &[ProcessedInlineSpan<'_, '_>],
   transform: Affine,
-) {
+) -> Result<()> {
   outline_rects.sort_by(|left, right| {
     left
       .span_id
@@ -674,8 +716,10 @@ fn draw_merged_outline_rects(
   }
 
   for island in islands {
-    draw_outline_island(&island, canvas, spans, transform);
+    draw_outline_island(&island, canvas, spans, transform)?;
   }
+
+  Ok(())
 }
 
 fn draw_glyph_run_content(
@@ -938,21 +982,23 @@ pub(crate) fn draw_inline_layout(
           let Some(resolved_glyphs) = resolved_iter.next() else {
             continue;
           };
-          draw_glyph_run_text_shadow(
-            font_style,
-            &glyph_run,
-            resolved_glyphs,
-            canvas,
-            GlyphRunLineOptions {
-              layout,
-              baseline_shift,
-              transform: line_scale_transform_with_static_prefix(
-                context.transform,
-                line_scale_state,
-                static_inline_prefix,
-              ),
-            },
-          )?;
+          draw_with_inline_opacity(canvas, glyph_run.style().brush.opacity, |canvas| {
+            draw_glyph_run_text_shadow(
+              font_style,
+              &glyph_run,
+              resolved_glyphs,
+              canvas,
+              GlyphRunLineOptions {
+                layout,
+                baseline_shift,
+                transform: line_scale_transform_with_static_prefix(
+                  context.transform,
+                  line_scale_state,
+                  static_inline_prefix,
+                ),
+              },
+            )
+          })?;
         }
         PositionedLayoutItem::InlineBox(inline_box) if inline_box.kind == InlineBoxKind::InFlow => {
           static_inline_prefix += inline_box.width;
@@ -984,20 +1030,22 @@ pub(crate) fn draw_inline_layout(
           let Some(resolved_glyphs) = resolved_iter.next() else {
             continue;
           };
-          draw_glyph_run_under_overline(
-            &glyph_run,
-            resolved_glyphs,
-            canvas,
-            GlyphRunLineOptions {
-              layout,
-              baseline_shift,
-              transform: line_scale_transform_with_static_prefix(
-                context.transform,
-                line_scale_state,
-                static_inline_prefix,
-              ),
-            },
-          )?;
+          draw_with_inline_opacity(canvas, glyph_run.style().brush.opacity, |canvas| {
+            draw_glyph_run_under_overline(
+              &glyph_run,
+              resolved_glyphs,
+              canvas,
+              GlyphRunLineOptions {
+                layout,
+                baseline_shift,
+                transform: line_scale_transform_with_static_prefix(
+                  context.transform,
+                  line_scale_state,
+                  static_inline_prefix,
+                ),
+              },
+            )
+          })?;
         }
         PositionedLayoutItem::InlineBox(inline_box) if inline_box.kind == InlineBoxKind::InFlow => {
           static_inline_prefix += inline_box.width;
@@ -1030,24 +1078,26 @@ pub(crate) fn draw_inline_layout(
           let Some(resolved_glyphs) = resolved_iter.next() else {
             continue;
           };
-          draw_glyph_run_content(
-            &glyph_run,
-            resolved_glyphs,
-            canvas,
-            GlyphRunContentOptions {
-              glyph_offset: Point {
-                x: layout.border.left + layout.padding.left,
-                y: layout.border.top + layout.padding.top + baseline_shift,
+          draw_with_inline_opacity(canvas, glyph_run.style().brush.opacity, |canvas| {
+            draw_glyph_run_content(
+              &glyph_run,
+              resolved_glyphs,
+              canvas,
+              GlyphRunContentOptions {
+                glyph_offset: Point {
+                  x: layout.border.left + layout.padding.left,
+                  y: layout.border.top + layout.padding.top + baseline_shift,
+                },
+                clip_image: clip_image_source,
+                transform: line_scale_transform_with_static_prefix(
+                  context.transform,
+                  line_scale_state,
+                  static_inline_prefix,
+                ),
+                style: font_style,
               },
-              clip_image: clip_image_source,
-              transform: line_scale_transform_with_static_prefix(
-                context.transform,
-                line_scale_state,
-                static_inline_prefix,
-              ),
-              style: font_style,
-            },
-          )?;
+            )
+          })?;
           if let Some(outline_rect) = collect_glyph_run_outline_rect(
             &glyph_run,
             layout,
@@ -1096,7 +1146,7 @@ pub(crate) fn draw_inline_layout(
     debug_assert!(replaced.is_none());
   }
 
-  draw_merged_outline_rects(inline_outline_rects, canvas, spans, context.transform);
+  draw_merged_outline_rects(inline_outline_rects, canvas, spans, context.transform)?;
 
   for (line_index, line) in inline_layout.lines().enumerate() {
     let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
@@ -1116,19 +1166,21 @@ pub(crate) fn draw_inline_layout(
     for item in line.items() {
       match item {
         PositionedLayoutItem::GlyphRun(glyph_run) => {
-          draw_glyph_run_line_through(
-            &glyph_run,
-            canvas,
-            GlyphRunLineOptions {
-              layout,
-              baseline_shift,
-              transform: line_scale_transform_with_static_prefix(
-                context.transform,
-                line_scale_state,
-                static_inline_prefix,
-              ),
-            },
-          )?;
+          draw_with_inline_opacity(canvas, glyph_run.style().brush.opacity, |canvas| {
+            draw_glyph_run_line_through(
+              &glyph_run,
+              canvas,
+              GlyphRunLineOptions {
+                layout,
+                baseline_shift,
+                transform: line_scale_transform_with_static_prefix(
+                  context.transform,
+                  line_scale_state,
+                  static_inline_prefix,
+                ),
+              },
+            )
+          })?;
         }
         PositionedLayoutItem::InlineBox(inline_box) if inline_box.kind == InlineBoxKind::InFlow => {
           static_inline_prefix += inline_box.width;

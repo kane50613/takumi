@@ -1487,6 +1487,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
       },
       brush: InlineBrush {
         source_span_id: None,
+        opacity: style.parent.opacity.0,
         color: style.color,
         decoration_color: style.text_decoration_color,
         decoration_thickness: style.text_decoration_thickness,
