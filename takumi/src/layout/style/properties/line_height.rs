@@ -9,7 +9,7 @@ use crate::{
   rendering::Sizing,
 };
 
-/// Represents a line height value, number value is parsed as em.
+/// Represents a line height value.
 #[derive(Debug, Clone, PartialEq, Copy, Default)]
 #[non_exhaustive]
 pub enum LineHeight {
@@ -62,7 +62,7 @@ impl<'i> FromCss<'i> for LineHeight {
     }
 
     if let Ok(percent) = input.try_parse(Parser::expect_percentage) {
-      return Ok(LineHeight::Unitless(percent));
+      return Ok(LineHeight::Length(Length::Percentage(percent * 100.0)));
     }
 
     let Ok(number) = input.try_parse(Parser::expect_number) else {
@@ -75,10 +75,17 @@ impl<'i> FromCss<'i> for LineHeight {
   const VALID_TOKENS: &'static [CssToken] = &[
     CssToken::Syntax(CssSyntaxKind::Number),
     CssToken::Syntax(CssSyntaxKind::Length),
+    CssToken::Syntax(CssSyntaxKind::Percentage),
   ];
 }
 
 impl LineHeight {
+  // Match Blink text-fit line-height scaling: non-fixed line heights scale, fixed and percentage line heights do not.
+  // Reference: https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_box_state.cc;l=137
+  pub(crate) const fn scales_with_text_fit(self) -> bool {
+    matches!(self, Self::Normal | Self::Unitless(_))
+  }
+
   pub(crate) fn into_parley(self, sizing: &Sizing) -> parley::LineHeight {
     match self {
       Self::Normal => parley::LineHeight::MetricsRelative(1.0),
@@ -90,8 +97,19 @@ impl LineHeight {
 
 impl MakeComputed for LineHeight {
   fn make_computed(&mut self, sizing: &Sizing) {
-    if let Self::Length(length) = self {
-      length.make_computed(sizing);
+    match self {
+      Self::Length(Length::Percentage(value)) => {
+        let dpr = sizing.viewport.device_pixel_ratio;
+        let font_size = if dpr > 0.0 {
+          sizing.font_size / dpr
+        } else {
+          sizing.font_size
+        };
+
+        *self = Self::Length(Length::Px((*value / 100.0) * font_size));
+      }
+      Self::Length(length) => length.make_computed(sizing),
+      Self::Normal | Self::Unitless(_) => {}
     }
   }
 }
@@ -111,7 +129,10 @@ mod tests {
 
   #[test]
   fn parses_percentage_as_font_size_relative() {
-    assert_eq!(LineHeight::from_str("90%"), Ok(LineHeight::Unitless(0.9)));
+    assert_eq!(
+      LineHeight::from_str("90%"),
+      Ok(LineHeight::Length(Length::Percentage(90.0)))
+    );
   }
 
   #[test]
@@ -126,7 +147,7 @@ mod tests {
   fn tailwind_arbitrary_percentage_is_supported() {
     assert_eq!(
       LineHeight::parse_tw_with_arbitrary("[90%]"),
-      Some(LineHeight::Unitless(0.9))
+      Some(LineHeight::Length(Length::Percentage(90.0)))
     );
   }
 }

@@ -448,13 +448,20 @@ fn test_measure_text_fit_per_line_skips_forced_break_lines() {
   assert!(per_line_all_runs[0].height > no_fit_runs[0].height);
 }
 
-#[test]
-fn test_measure_text_fit_grow_preserves_line_height_when_glyphs_fit_inside_it() {
+fn grow_per_line_all_text_fit() -> TextFit {
+  TextFit::builder()
+    .mode(TextFitMode::Grow)
+    .target(TextFitTarget::PerLineAll)
+    .limit(Some(1.8))
+    .build()
+}
+
+fn measure_text_fit_line_height(line_height: LineHeight) -> (MeasuredNode, MeasuredNode) {
   let base_style = Style::default()
     .with(StyleDeclaration::display(Display::Flex))
     .with(StyleDeclaration::width(Px(320.0)))
     .with(StyleDeclaration::font_size(Px(34.0).into()))
-    .with(StyleDeclaration::line_height(LineHeight::Unitless(4.0)))
+    .with(StyleDeclaration::line_height(line_height))
     .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
     .with(StyleDeclaration::white_space_collapse(
       WhiteSpaceCollapse::PreserveBreaks,
@@ -466,17 +473,43 @@ fn test_measure_text_fit_grow_preserves_line_height_when_glyphs_fit_inside_it() 
     create_measure_viewport(),
   );
   let fit = measure(
-    Node::text(text).with_style(
-      base_style.with(StyleDeclaration::text_fit(
-        TextFit::builder()
-          .mode(TextFitMode::Grow)
-          .target(TextFitTarget::PerLineAll)
-          .limit(Some(1.8))
-          .build(),
-      )),
-    ),
+    Node::text(text)
+      .with_style(base_style.with(StyleDeclaration::text_fit(grow_per_line_all_text_fit()))),
     create_measure_viewport(),
   );
+
+  (no_fit, fit)
+}
+
+#[test]
+fn test_measure_text_fit_grow_scales_unitless_line_height() {
+  let (no_fit, fit) = measure_text_fit_line_height(LineHeight::Unitless(4.0));
+
+  let no_fit_runs = measured_text_runs(&no_fit);
+  let fit_runs = measured_text_runs(&fit);
+  assert_eq!(no_fit_runs.len(), 2);
+  assert_eq!(fit_runs.len(), 2);
+  assert!(fit_runs[0].width > no_fit_runs[0].width);
+  assert!(fit_runs[0].height > no_fit_runs[0].height);
+  assert!(fit.children[0].height > no_fit.children[0].height);
+}
+
+#[test]
+fn test_measure_text_fit_grow_preserves_absolute_line_height() {
+  let (no_fit, fit) = measure_text_fit_line_height(LineHeight::Length(Px(40.0)));
+
+  let no_fit_runs = measured_text_runs(&no_fit);
+  let fit_runs = measured_text_runs(&fit);
+  assert_eq!(no_fit_runs.len(), 2);
+  assert_eq!(fit_runs.len(), 2);
+  assert!(fit_runs[0].width > no_fit_runs[0].width);
+  assert!(fit_runs[0].height > no_fit_runs[0].height);
+  assert_within(fit.children[0].height, no_fit.children[0].height, 0.05);
+}
+
+#[test]
+fn test_measure_text_fit_grow_preserves_percentage_line_height() {
+  let (no_fit, fit) = measure_text_fit_line_height(LineHeight::Length(Percentage(150.0)));
 
   let no_fit_runs = measured_text_runs(&no_fit);
   let fit_runs = measured_text_runs(&fit);

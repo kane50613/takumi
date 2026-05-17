@@ -1447,6 +1447,7 @@ impl FromStr for StyleDeclarationBlock {
 pub(crate) struct SizedFontStyle<'s> {
   pub parent: &'s ComputedStyle,
   pub line_height: parley::LineHeight,
+  pub line_height_scales_with_text_fit: bool,
   pub stroke_width: f32,
   pub outline_width: f32,
   pub outline_offset: f32,
@@ -1496,6 +1497,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
           weight: style.parent.font_synthesis_weight,
           style: style.parent.font_synthesis_style,
         },
+        line_height_scales_with_text_fit: style.line_height_scales_with_text_fit,
         vertical_align: style.parent.vertical_align,
       },
       text_wrap_mode: style.parent.text_wrap_mode_and_line_clamp().0.into(),
@@ -1704,6 +1706,7 @@ impl ComputedStyle {
       sizing: context.sizing.to_owned(),
       parent: self,
       line_height,
+      line_height_scales_with_text_fit: self.line_height.scales_with_text_fit(),
       stroke_width: self
         .webkit_text_stroke_width
         .unwrap_or_default()

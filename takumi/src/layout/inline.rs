@@ -174,6 +174,7 @@ pub(crate) struct InlineBrush {
   pub decoration_skip_ink: TextDecorationSkipInk,
   pub stroke_color: Color,
   pub font_synthesis: FontSynthesis,
+  pub line_height_scales_with_text_fit: bool,
   pub vertical_align: VerticalAlign,
 }
 
@@ -188,6 +189,7 @@ impl Default for InlineBrush {
       decoration_skip_ink: TextDecorationSkipInk::default(),
       stroke_color: Color::black(),
       font_synthesis: FontSynthesis::default(),
+      line_height_scales_with_text_fit: false,
       vertical_align: VerticalAlign::default(),
     }
   }
@@ -617,9 +619,12 @@ pub(crate) fn resolve_inline_line_metrics(
           if (line_scale - 1.0).abs() <= f32::EPSILON {
             resolved_above = resolved_above.max(base_above);
             resolved_below = resolved_below.max(base_below);
+          } else if glyph_run.style().brush.line_height_scales_with_text_fit {
+            resolved_above = resolved_above.max(base_above * line_scale);
+            resolved_below = resolved_below.max(base_below * line_scale);
           } else {
-            resolved_above = resolved_above.max(base_above.max(metrics.ascent * line_scale));
-            resolved_below = resolved_below.max(base_below.max(metrics.descent * line_scale));
+            resolved_above = resolved_above.max(base_above);
+            resolved_below = resolved_below.max(base_below);
           }
           has_contribution = true;
         }
@@ -1610,4 +1615,139 @@ fn make_ellipsis_layout<'c, 'g: 'c>(
     custom_inline_boxes,
   );
   *layout = final_layout;
+}
+
+#[cfg(test)]
+#[allow(clippy::panic, clippy::unwrap_used)]
+mod tests {
+  use super::*;
+  use std::{fs::File, io::Read, path::Path};
+
+  use crate::{
+    GlobalContext,
+    layout::{
+      Viewport,
+      node::Node,
+      style::{Color, ColorInput, Display, Style, StyleDeclaration, WhiteSpace},
+      tree::RenderNode,
+    },
+    rendering::RenderContext,
+    resources::font::FontResource,
+  };
+  use parley::{GenericFamily, fontique::FontInfoOverride};
+
+  fn create_test_context() -> GlobalContext {
+    let mut context = GlobalContext::default();
+    let path =
+      Path::new(env!("CARGO_MANIFEST_DIR")).join("../assets/fonts/geist/Geist[wght].woff2");
+    let mut font_data = Vec::new();
+    let mut file = File::open(&path)
+      .unwrap_or_else(|error| panic!("failed to open test font {}: {error}", path.display()));
+    file
+      .read_to_end(&mut font_data)
+      .unwrap_or_else(|error| panic!("failed to read test font {}: {error}", path.display()));
+    context
+      .font_context
+      .load_and_store(
+        FontResource::new(font_data)
+          .override_info(FontInfoOverride {
+            family_name: Some("Geist"),
+            ..Default::default()
+          })
+          .generic_family(GenericFamily::SansSerif),
+      )
+      .unwrap_or_else(|error| panic!("failed to load test font {}: {error}", path.display()));
+    context
+  }
+
+  fn glyph_run_segments(node: Node, global: &GlobalContext) -> Vec<(Option<u64>, String, Color)> {
+    let context = RenderContext::new_test(global, Viewport::new((1200, 630)));
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = render_node
+      .context
+      .style
+      .to_sized_font_style(&render_node.context);
+    let (max_width, max_height) = create_inline_constraint(
+      &render_node.context,
+      Size {
+        width: AvailableSpace::Definite(1200.0),
+        height: AvailableSpace::Definite(630.0),
+      },
+      Size::NONE,
+    );
+    let built = create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(&render_node),
+      available_space: Size {
+        width: AvailableSpace::Definite(1200.0),
+        height: AvailableSpace::Definite(630.0),
+      },
+      max_width,
+      max_height,
+      style: &font_style,
+      global,
+      mode: InlineLayoutMode::Measure,
+    });
+
+    built
+      .layout
+      .lines()
+      .flat_map(|line| line.items())
+      .filter_map(|item| match item {
+        PositionedLayoutItem::GlyphRun(glyph_run) => {
+          let range = glyph_run.run().text_range();
+          Some((
+            glyph_run.style().brush.source_span_id,
+            built.text[range].to_string(),
+            glyph_run.style().brush.color,
+          ))
+        }
+        PositionedLayoutItem::InlineBox(_) => None,
+      })
+      .collect()
+  }
+
+  #[test]
+  fn pre_wrap_keeps_style_boundary_for_same_edge_character() {
+    let global = create_test_context();
+    let orange = Color([238, 102, 51, 255]);
+    let blue = Color([26, 110, 245, 255]);
+
+    let node = Node::container([
+      Node::text("now support".to_string()).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with(StyleDeclaration::color(ColorInput::Value(orange))),
+      ),
+      Node::text("\n      ".to_string())
+        .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+      Node::text("text-fit".to_string()).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with(StyleDeclaration::color(ColorInput::Value(blue))),
+      ),
+      Node::text(" property.".to_string())
+        .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+    ])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::width(300.0.into()))
+        .with_white_space(WhiteSpace::pre_wrap()),
+    );
+
+    let segments = glyph_run_segments(node, &global);
+
+    assert!(
+      segments
+        .iter()
+        .any(|(span_id, _, color)| *span_id == Some(0) && *color == orange),
+      "{segments:#?}"
+    );
+    assert!(
+      segments
+        .iter()
+        .any(|(span_id, _, color)| *span_id == Some(2) && *color == blue),
+      "{segments:#?}"
+    );
+  }
 }

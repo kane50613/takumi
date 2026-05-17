@@ -424,6 +424,42 @@ fn text_fit_overview() {
 }
 
 #[test]
+fn text_fit_line_height_behavior() {
+  let sample = "Short\nA much longer line";
+  let fit = text_fit(TextFitMode::Grow, TextFitTarget::PerLineAll, Some(1.8));
+  let card = |label: &str, line_height: LineHeight, panel: Color| {
+    text_fit_text_card_with_style(
+      label,
+      sample,
+      text_fit_text_style(fit)
+        .with(StyleDeclaration::line_height(line_height))
+        .with(StyleDeclaration::background_color(ColorInput::Value(panel))),
+    )
+  };
+
+  let container = text_fit_overview_container([
+    card("normal", LineHeight::Normal, Color([255, 255, 255, 255])),
+    card(
+      "1.4",
+      LineHeight::Unitless(1.4),
+      Color([248, 250, 252, 255]),
+    ),
+    card(
+      "1.5em (150%)",
+      LineHeight::Length(Em(1.5)),
+      Color([241, 245, 249, 255]),
+    ),
+    card(
+      "40px",
+      LineHeight::Length(Px(40.0)),
+      Color([236, 242, 255, 255]),
+    ),
+  ]);
+
+  run_fixture_test(container, "text_fit_line_height_behavior");
+}
+
+#[test]
 fn text_fit_center_aligned_per_line_all() {
   let text = Node::text("Takumi 1.2 now support the latest.".to_string()).with_style(
     Style::default()
