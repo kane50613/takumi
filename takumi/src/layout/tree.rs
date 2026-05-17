@@ -28,7 +28,7 @@ use crate::{
   },
   rendering::{
     Canvas, RenderContext, Sizing,
-    inline_drawing::{draw_inline_box, draw_inline_layout},
+    inline_drawing::{InlineLayoutDrawData, draw_inline_box, draw_inline_layout},
   },
 };
 
@@ -871,8 +871,11 @@ impl<'g> RenderNode<'g> {
       inline_layout_box,
       built.layout,
       &font_style,
-      &built.spans,
-      &built.custom_inline_boxes,
+      InlineLayoutDrawData {
+        spans: &built.spans,
+        custom_inline_boxes: &built.custom_inline_boxes,
+        line_scales: &built.line_scales,
+      },
     )?;
 
     let inline_transform = Affine::translation(
@@ -1606,6 +1609,7 @@ impl<'g> RenderNode<'g> {
         &mut built.layout,
         &built.spans,
         &built.custom_inline_boxes,
+        &built.line_scales,
         InlineMeasureOptions {
           max_width,
           ceil_width,

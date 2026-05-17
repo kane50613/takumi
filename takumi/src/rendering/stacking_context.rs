@@ -1,11 +1,11 @@
-use parley::PositionedLayoutItem;
+use parley::{InlineBoxKind, PositionedLayoutItem};
 use taffy::{AvailableSpace, Layout, NodeId, Point, TaffyError, geometry::Size};
 use tiny_skia::Pixmap;
 use tiny_skia::PixmapMut;
 
 use crate::layout::inline::{
-  InlineLayoutMode, InlineLayoutRequest, get_parent_font_metrics, normalize_inline_box,
-  resolve_inline_line_states,
+  InlineLayoutMode, InlineLayoutRequest, get_parent_font_metrics, resolve_inline_line_metrics,
+  resolve_inline_line_states, resolve_visual_inline_box,
 };
 use crate::{
   Error, Result,
@@ -20,7 +20,7 @@ use crate::{
   rendering::{
     BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, NodeMaskAction, Placement,
     Sizing, blend_pixel, draw_debug_border, get_node_mut_by_path, prepare_node_mask,
-    transformed_rect_extents,
+    scale_text_fit_x, transformed_rect_extents,
   },
 };
 
@@ -540,34 +540,72 @@ fn compute_node_paint_bounds(
   ) * transform;
   let parent_font_metrics = get_parent_font_metrics(&built.layout);
 
-  let line_states = resolve_inline_line_states(&built.layout, &built.spans, parent_font_metrics);
+  let line_vertical_metrics = resolve_inline_line_metrics(
+    &built.layout,
+    &built.spans,
+    parent_font_metrics,
+    &built.line_scales,
+  );
+  let line_states = resolve_inline_line_states(
+    &built.layout,
+    &built.spans,
+    parent_font_metrics,
+    &built.line_scales,
+  );
   for (line_index, line) in built.layout.lines().enumerate() {
     let baseline_shift = line_states[line_index].baseline_shift;
+    let resolved_metrics = line_vertical_metrics[line_index];
+    let line_scale = built.line_scales.get(line_index).copied().unwrap_or(1.0);
+    let line_scale_origin = Point {
+      x: line.metrics().inline_min_coord,
+      y: resolved_metrics.resolved_baseline,
+    };
+    let mut static_inline_prefix = 0.0_f32;
     for item in line.items() {
       match item {
         PositionedLayoutItem::GlyphRun(glyph_run) => {
           let metrics = glyph_run.run().metrics();
-          let glyph_transform = Affine::translation(
-            glyph_run.offset(),
-            glyph_run.baseline() + baseline_shift - metrics.ascent,
-          ) * inline_transform;
-          bounds = merge_bounds(
-            bounds,
-            bounds_for_rect(
-              Size {
-                width: glyph_run.advance(),
-                height: metrics.ascent + metrics.descent,
-              },
-              glyph_transform,
-            ),
-          );
+          let mut glyph_origin = Point {
+            x: glyph_run.offset(),
+            y: glyph_run.baseline() + baseline_shift - metrics.ascent,
+          };
+          let mut glyph_size = Size {
+            width: glyph_run.advance(),
+            height: metrics.ascent + metrics.descent,
+          };
+          if (line_scale - 1.0).abs() > f32::EPSILON {
+            glyph_origin = Point {
+              x: scale_text_fit_x(
+                glyph_origin.x,
+                line_scale_origin.x,
+                line_scale,
+                static_inline_prefix,
+              ),
+              y: line_scale_origin.y + (glyph_origin.y - line_scale_origin.y) * line_scale,
+            };
+            glyph_size.width *= line_scale;
+            glyph_size.height *= line_scale;
+          }
+          let glyph_transform =
+            Affine::translation(glyph_origin.x, glyph_origin.y) * inline_transform;
+          bounds = merge_bounds(bounds, bounds_for_rect(glyph_size, glyph_transform));
         }
         PositionedLayoutItem::InlineBox(inline_box) => {
+          if inline_box.kind != InlineBoxKind::InFlow {
+            continue;
+          }
           let Some(inline_box) =
-            normalize_inline_box(inline_box, line_states[line_index], &built.spans)
+            resolve_visual_inline_box(inline_box, Some(line_states[line_index]), &built.spans)
           else {
             continue;
           };
+          let inline_box_x = scale_text_fit_x(
+            inline_box.x,
+            line.metrics().inline_min_coord,
+            line_scale,
+            static_inline_prefix,
+          );
+          static_inline_prefix += inline_box.width;
 
           bounds = merge_bounds(
             bounds,
@@ -576,7 +614,7 @@ fn compute_node_paint_bounds(
                 width: inline_box.width,
                 height: inline_box.height,
               },
-              Affine::translation(inline_box.x, inline_box.y) * inline_transform,
+              Affine::translation(inline_box_x, inline_box.y) * inline_transform,
             ),
           );
         }

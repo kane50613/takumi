@@ -7,7 +7,8 @@ use takumi::{
     style::{
       Affine, AlignItems, BorderStyle, BoxSizing, Clear, Color, ColorInput, Display, FlexDirection,
       Float, JustifyContent, Length::*, LineHeight, Position, Sides, SpacePair, Style,
-      StyleDeclaration, TextIndent, WhiteSpace, WhiteSpaceCollapse,
+      StyleDeclaration, TextFit, TextFitMode, TextFitTarget, TextIndent, TextWrapMode, WhiteSpace,
+      WhiteSpaceCollapse,
     },
   },
   rendering::{MeasuredNode, MeasuredTextRun, RenderOptions, measure_layout},
@@ -52,8 +53,43 @@ fn assert_within(actual: f32, expected: f32, tolerance: f32) {
 }
 
 fn measured_text_runs(result: &MeasuredNode) -> &[MeasuredTextRun] {
+  if !result.runs.is_empty() {
+    return &result.runs;
+  }
+
+  assert!(
+    !result.children.is_empty(),
+    "no measured text runs found in {result:#?}"
+  );
   assert_eq!(result.children.len(), 1);
   &result.children[0].runs
+}
+
+fn assert_text_runs_same(actual: &[MeasuredTextRun], expected: &[MeasuredTextRun]) {
+  assert_eq!(actual.len(), expected.len());
+
+  for (actual, expected) in actual.iter().zip(expected) {
+    assert_eq!(actual.text, expected.text);
+    assert_within(actual.x, expected.x, 0.05);
+    assert_within(actual.y, expected.y, 0.05);
+    assert_within(actual.width, expected.width, 0.05);
+    assert_within(actual.height, expected.height, 0.05);
+  }
+}
+
+fn assert_measured_node_same(actual: &MeasuredNode, expected: &MeasuredNode) {
+  assert_within(actual.width, expected.width, 0.05);
+  assert_within(actual.height, expected.height, 0.05);
+
+  for (actual, expected) in actual.transform.iter().zip(expected.transform.iter()) {
+    assert_within(*actual, *expected, 0.05);
+  }
+
+  assert_text_runs_same(&actual.runs, &expected.runs);
+  assert_eq!(actual.children.len(), expected.children.len());
+  for (actual, expected) in actual.children.iter().zip(expected.children.iter()) {
+    assert_measured_node_same(actual, expected);
+  }
 }
 
 #[test]
@@ -282,6 +318,302 @@ fn test_measure_inline_layout() {
   assert_within(third.y, 134.0, 1.5);
   assert_within(third.width, 85.73, 0.1);
   assert_within(third.height, 26.0, 0.1);
+}
+
+#[test]
+fn test_measure_text_fit_per_line_grow_scales_run_geometry() {
+  let base_style = Style::default()
+    .with(StyleDeclaration::display(Display::Flex))
+    .with(StyleDeclaration::width(Px(320.0)))
+    .with(StyleDeclaration::font_size(Px(34.0).into()))
+    .with(StyleDeclaration::line_height(LineHeight::Unitless(1.0)))
+    .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
+    .with(StyleDeclaration::white_space_collapse(
+      WhiteSpaceCollapse::PreserveBreaks,
+    ));
+  let text = "Short\nA much longer line".to_string();
+
+  let no_fit = measure(
+    Node::text(text.clone()).with_style(base_style.clone()),
+    create_measure_viewport(),
+  );
+  let fit = measure(
+    Node::text(text).with_style(
+      base_style.clone().with(StyleDeclaration::text_fit(
+        TextFit::builder()
+          .mode(TextFitMode::Grow)
+          .target(TextFitTarget::PerLineAll)
+          .limit(Some(1.8))
+          .build(),
+      )),
+    ),
+    create_measure_viewport(),
+  );
+
+  let no_fit_runs = measured_text_runs(&no_fit);
+  let fit_runs = measured_text_runs(&fit);
+  assert_eq!(no_fit_runs.len(), 2);
+  assert_eq!(fit_runs.len(), 2);
+  assert!(fit_runs[0].width > no_fit_runs[0].width);
+  assert!(fit_runs[0].height > no_fit_runs[0].height);
+  assert!(fit.children[0].height > no_fit.children[0].height);
+}
+
+#[test]
+fn test_measure_text_fit_per_line_shrink_scales_run_geometry() {
+  let base_style = Style::default()
+    .with(StyleDeclaration::display(Display::Flex))
+    .with(StyleDeclaration::width(Px(320.0)))
+    .with(StyleDeclaration::font_size(Px(34.0).into()))
+    .with(StyleDeclaration::line_height(LineHeight::Unitless(1.0)))
+    .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
+    .with(StyleDeclaration::white_space_collapse(
+      WhiteSpaceCollapse::PreserveBreaks,
+    ));
+  let text =
+    "This first line is intentionally wide\nThis second line also needs shrinking".to_string();
+
+  let no_fit = measure(
+    Node::text(text.clone()).with_style(base_style.clone()),
+    create_measure_viewport(),
+  );
+  let fit = measure(
+    Node::text(text).with_style(
+      base_style.with(StyleDeclaration::text_fit(
+        TextFit::builder()
+          .mode(TextFitMode::Shrink)
+          .target(TextFitTarget::PerLineAll)
+          .build(),
+      )),
+    ),
+    create_measure_viewport(),
+  );
+
+  let no_fit_runs = measured_text_runs(&no_fit);
+  let fit_runs = measured_text_runs(&fit);
+  assert_eq!(no_fit_runs.len(), 2);
+  assert_eq!(fit_runs.len(), 2);
+  assert!(fit_runs[0].width < no_fit_runs[0].width);
+  assert!(fit_runs[0].height < no_fit_runs[0].height);
+}
+
+#[test]
+fn test_measure_text_fit_per_line_skips_forced_break_lines() {
+  let base_style = Style::default()
+    .with(StyleDeclaration::display(Display::Flex))
+    .with(StyleDeclaration::width(Px(320.0)))
+    .with(StyleDeclaration::font_size(Px(34.0).into()))
+    .with(StyleDeclaration::line_height(LineHeight::Unitless(1.0)))
+    .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
+    .with(StyleDeclaration::white_space_collapse(
+      WhiteSpaceCollapse::PreserveBreaks,
+    ));
+  let text = "Short\nA much longer line".to_string();
+
+  let no_fit = measure(
+    Node::text(text.clone()).with_style(base_style.clone()),
+    create_measure_viewport(),
+  );
+  let per_line = measure(
+    Node::text(text.clone()).with_style(
+      base_style.clone().with(StyleDeclaration::text_fit(
+        TextFit::builder()
+          .mode(TextFitMode::Grow)
+          .target(TextFitTarget::PerLine)
+          .limit(Some(1.8))
+          .build(),
+      )),
+    ),
+    create_measure_viewport(),
+  );
+  let per_line_all = measure(
+    Node::text(text).with_style(
+      base_style.with(StyleDeclaration::text_fit(
+        TextFit::builder()
+          .mode(TextFitMode::Grow)
+          .target(TextFitTarget::PerLineAll)
+          .limit(Some(1.8))
+          .build(),
+      )),
+    ),
+    create_measure_viewport(),
+  );
+
+  let no_fit_runs = measured_text_runs(&no_fit);
+  let per_line_runs = measured_text_runs(&per_line);
+  let per_line_all_runs = measured_text_runs(&per_line_all);
+
+  assert_text_runs_same(per_line_runs, no_fit_runs);
+  assert!(per_line_all_runs[0].width > no_fit_runs[0].width);
+  assert!(per_line_all_runs[0].height > no_fit_runs[0].height);
+}
+
+#[test]
+fn test_measure_text_fit_grow_preserves_line_height_when_glyphs_fit_inside_it() {
+  let base_style = Style::default()
+    .with(StyleDeclaration::display(Display::Flex))
+    .with(StyleDeclaration::width(Px(320.0)))
+    .with(StyleDeclaration::font_size(Px(34.0).into()))
+    .with(StyleDeclaration::line_height(LineHeight::Unitless(4.0)))
+    .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
+    .with(StyleDeclaration::white_space_collapse(
+      WhiteSpaceCollapse::PreserveBreaks,
+    ));
+  let text = "Short\nA much longer line".to_string();
+
+  let no_fit = measure(
+    Node::text(text.clone()).with_style(base_style.clone()),
+    create_measure_viewport(),
+  );
+  let fit = measure(
+    Node::text(text).with_style(
+      base_style.with(StyleDeclaration::text_fit(
+        TextFit::builder()
+          .mode(TextFitMode::Grow)
+          .target(TextFitTarget::PerLineAll)
+          .limit(Some(1.8))
+          .build(),
+      )),
+    ),
+    create_measure_viewport(),
+  );
+
+  let no_fit_runs = measured_text_runs(&no_fit);
+  let fit_runs = measured_text_runs(&fit);
+  assert_eq!(no_fit_runs.len(), 2);
+  assert_eq!(fit_runs.len(), 2);
+  assert!(fit_runs[0].width > no_fit_runs[0].width);
+  assert!(fit_runs[0].height > no_fit_runs[0].height);
+  assert_within(fit.children[0].height, no_fit.children[0].height, 0.05);
+}
+
+#[test]
+fn test_measure_text_fit_is_disabled_by_floats() {
+  let base_style = Style::default()
+    .with(StyleDeclaration::display(Display::Block))
+    .with(StyleDeclaration::width(Px(240.0)))
+    .with(StyleDeclaration::font_size(Px(20.0).into()))
+    .with(StyleDeclaration::line_height(LineHeight::Unitless(1.2)));
+  let fit_style = base_style.clone().with(StyleDeclaration::text_fit(
+    TextFit::builder()
+      .mode(TextFitMode::Shrink)
+      .target(TextFitTarget::Consistent)
+      .build(),
+  ));
+  let node = |style: Style| {
+    Node::container([
+      Node::image("assets/images/yeecord.png").with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with(StyleDeclaration::float(Float::Left))
+          .with(StyleDeclaration::width(Px(72.0)))
+          .with(StyleDeclaration::height(Px(72.0))),
+      ),
+      Node::text(
+        "Takumi should wrap this sentence around the floated image for the first few lines before returning to the full measure width once the float ends.".to_string(),
+      )
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+    ])
+    .with_style(style)
+  };
+
+  let no_fit = measure(node(base_style), create_measure_viewport());
+  let fit = measure(node(fit_style), create_measure_viewport());
+
+  assert_measured_node_same(&fit, &no_fit);
+}
+
+#[test]
+fn test_measure_text_fit_scales_text_around_inline_atomic_content() {
+  let base_style = Style::default()
+    .with(StyleDeclaration::display(Display::Block))
+    .with(StyleDeclaration::width(Px(320.0)))
+    .with(StyleDeclaration::font_size(Px(34.0).into()))
+    .with(StyleDeclaration::line_height(LineHeight::Unitless(1.0)))
+    .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap));
+  let fit_style = base_style.clone().with(StyleDeclaration::text_fit(
+    TextFit::builder()
+      .mode(TextFitMode::Grow)
+      .target(TextFitTarget::Consistent)
+      .limit(Some(1.8))
+      .build(),
+  ));
+  let node = |style: Style| {
+    Node::container([
+      Node::text("Ship ".to_string())
+        .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+      Node::image(("assets/images/yeecord.png", 64.0, 64.0)).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::InlineBlock))
+          .with(StyleDeclaration::width(Em(1.0)))
+          .with(StyleDeclaration::height(Em(1.0))),
+      ),
+      Node::text(" now".to_string())
+        .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+    ])
+    .with_style(style)
+  };
+
+  let no_fit = measure(node(base_style), create_measure_viewport());
+  let fit = measure(node(fit_style), create_measure_viewport());
+
+  let no_fit_runs = measured_text_runs(&no_fit);
+  let fit_runs = measured_text_runs(&fit);
+
+  assert_eq!(no_fit_runs.len(), 2);
+  assert_eq!(fit_runs.len(), 2);
+  assert!(fit_runs[0].width > no_fit_runs[0].width);
+  assert!(fit_runs[1].width > no_fit_runs[1].width);
+  assert!(fit.height > no_fit.height);
+
+  assert_eq!(no_fit.children.len(), 1);
+  assert_eq!(fit.children.len(), 1);
+  assert_within(fit.children[0].width, no_fit.children[0].width, 0.05);
+  assert_within(fit.children[0].height, no_fit.children[0].height, 0.05);
+  assert_within(no_fit.children[0].transform[4], no_fit_runs[0].width, 0.1);
+  assert_within(fit.children[0].transform[4], fit_runs[0].width, 0.1);
+  assert_within(
+    fit_runs[1].x,
+    fit.children[0].transform[4] + fit.children[0].width,
+    0.1,
+  );
+}
+
+#[test]
+fn test_measure_text_fit_is_disabled_by_spacing_adjustments() {
+  let base_style = Style::default()
+    .with(StyleDeclaration::display(Display::Flex))
+    .with(StyleDeclaration::width(Px(320.0)))
+    .with(StyleDeclaration::font_size(Px(34.0).into()))
+    .with(StyleDeclaration::line_height(LineHeight::Unitless(1.0)))
+    .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap));
+  let cases = [
+    base_style
+      .clone()
+      .with(StyleDeclaration::letter_spacing(Px(2.0))),
+    base_style.with(StyleDeclaration::word_spacing(Px(10.0))),
+  ];
+
+  for style in cases {
+    let no_fit = measure(
+      Node::text("Space words".to_string()).with_style(style.clone()),
+      create_measure_viewport(),
+    );
+    let fit = measure(
+      Node::text("Space words".to_string()).with_style(
+        style.with(StyleDeclaration::text_fit(
+          TextFit::builder()
+            .mode(TextFitMode::Grow)
+            .target(TextFitTarget::Consistent)
+            .limit(Some(1.8))
+            .build(),
+        )),
+      ),
+      create_measure_viewport(),
+    );
+
+    assert_measured_node_same(&fit, &no_fit);
+  }
 }
 
 #[test]

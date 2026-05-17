@@ -10,7 +10,10 @@ use crate::{
     },
     node::TextData,
   },
-  rendering::{Canvas, RenderContext, inline_drawing::draw_inline_layout},
+  rendering::{
+    Canvas, RenderContext,
+    inline_drawing::{InlineLayoutDrawData, draw_inline_layout},
+  },
 };
 
 pub(crate) fn text_inline_content(text: &TextData) -> Option<InlineContentKind<'_>> {
@@ -56,8 +59,11 @@ pub(crate) fn draw_text_node_content(
     layout,
     built.layout,
     &font_style,
-    &built.spans,
-    &built.custom_inline_boxes,
+    InlineLayoutDrawData {
+      spans: &built.spans,
+      custom_inline_boxes: &built.custom_inline_boxes,
+      line_scales: &built.line_scales,
+    },
   )?;
 
   Ok(())
@@ -94,6 +100,7 @@ pub(crate) fn measure_text_node(
     &mut built.layout,
     &built.spans,
     &built.custom_inline_boxes,
+    &built.line_scales,
     InlineMeasureOptions {
       max_width,
       ceil_width: true,

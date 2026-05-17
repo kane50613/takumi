@@ -1,7 +1,7 @@
 use std::{collections::HashMap, ops::Range, sync::Arc};
 
 use image::RgbaImage;
-use parley::{GlyphRun, PositionedLayoutItem};
+use parley::{GlyphRun, InlineBoxKind, PositionedLayoutItem};
 use serde::Serialize;
 use taffy::{AvailableSpace, Layout, NodeId, TaffyError, geometry::Size};
 use typed_builder::TypedBuilder;
@@ -13,7 +13,8 @@ use crate::{
     inline::{
       InlineBrush, InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan,
       collect_inline_items, create_inline_constraint, create_inline_layout,
-      get_parent_font_metrics, normalize_inline_box, resolve_inline_line_states,
+      get_parent_font_metrics, resolve_inline_line_metrics, resolve_inline_line_states,
+      resolve_visual_inline_box,
     },
     node::Node,
     style::{Affine, StyleSheet},
@@ -21,7 +22,7 @@ use crate::{
   },
   rendering::{
     AnimationFrame, Canvas, DitheringAlgorithm, RenderContext, apply_dithering,
-    get_node_mut_by_path,
+    get_node_mut_by_path, scale_text_fit_x,
     stacking_context::{
       apply_transform, build_stacking_contexts, collect_layout_children, paint_context,
     },
@@ -254,11 +255,27 @@ fn collect_measure_result<'g>(
           });
           let parent_font_metrics = get_parent_font_metrics(&built.layout);
           let inline_offset = taffy::Point::ZERO;
-          let line_states =
-            resolve_inline_line_states(&built.layout, &built.spans, parent_font_metrics);
-
+          let line_metrics = resolve_inline_line_metrics(
+            &built.layout,
+            &built.spans,
+            parent_font_metrics,
+            &built.line_scales,
+          );
+          let line_states = resolve_inline_line_states(
+            &built.layout,
+            &built.spans,
+            parent_font_metrics,
+            &built.line_scales,
+          );
           for (line_index, line) in built.layout.lines().enumerate() {
             let baseline_shift = line_states[line_index].baseline_shift;
+            let resolved_metrics = line_metrics[line_index];
+            let line_scale = built.line_scales.get(line_index).copied().unwrap_or(1.0);
+            let line_scale_origin = taffy::Point {
+              x: line.metrics().inline_min_coord + inline_offset.x,
+              y: resolved_metrics.resolved_baseline + inline_offset.y,
+            };
+            let mut static_inline_prefix = 0.0_f32;
             for item in line.items() {
               match item {
                 PositionedLayoutItem::GlyphRun(glyph_run) => {
@@ -268,26 +285,47 @@ fn collect_measure_result<'g>(
                   }
                   let run = glyph_run.run();
                   let metrics = run.metrics();
+                  let mut x = glyph_run.offset() + inline_offset.x;
+                  let mut y =
+                    glyph_run.baseline() + baseline_shift - metrics.ascent + inline_offset.y;
+                  let mut width = glyph_run.advance();
+                  let mut height = metrics.ascent + metrics.descent;
+                  if (line_scale - 1.0).abs() > f32::EPSILON {
+                    x = scale_text_fit_x(x, line_scale_origin.x, line_scale, static_inline_prefix);
+                    y = line_scale_origin.y + (y - line_scale_origin.y) * line_scale;
+                    width *= line_scale;
+                    height *= line_scale;
+                  }
 
                   runs.push(MeasuredTextRun {
                     text: text.to_string(),
-                    x: glyph_run.offset() + inline_offset.x,
-                    y: glyph_run.baseline() + baseline_shift - metrics.ascent + inline_offset.y,
-                    width: glyph_run.advance(),
-                    height: metrics.ascent + metrics.descent,
+                    x,
+                    y,
+                    width,
+                    height,
                   });
                 }
                 PositionedLayoutItem::InlineBox(positioned_box) => {
-                  let Some(mut positioned_box) =
-                    normalize_inline_box(positioned_box, line_states[line_index], &built.spans)
-                  else {
+                  if positioned_box.kind != InlineBoxKind::InFlow {
+                    continue;
+                  }
+                  let Some(positioned_box) = resolve_visual_inline_box(
+                    positioned_box,
+                    Some(line_states[line_index]),
+                    &built.spans,
+                  ) else {
                     continue;
                   };
-                  positioned_box.x += inline_offset.x;
-                  positioned_box.y += inline_offset.y;
+                  let positioned_box_x = scale_text_fit_x(
+                    positioned_box.x,
+                    line.metrics().inline_min_coord,
+                    line_scale,
+                    static_inline_prefix,
+                  );
+                  static_inline_prefix += positioned_box.width;
 
                   let inline_transform =
-                    Affine::translation(positioned_box.x, positioned_box.y) * local_transform;
+                    Affine::translation(positioned_box_x, positioned_box.y) * local_transform;
 
                   children.push(MeasuredNode {
                     width: positioned_box.width,
