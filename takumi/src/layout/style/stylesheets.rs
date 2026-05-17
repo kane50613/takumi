@@ -837,6 +837,7 @@ define_style! {
     grid_template_rows: Option<GridTemplateComponents>,
     grid_template_areas: Option<GridTemplateAreas>,
     text_overflow: TextOverflow,
+    text_fit: TextFit,
     text_transform: TextTransform where inherit = true,
     font_style: FontStyle where inherit = true,
     font_stretch: FontStretch where inherit = true,
@@ -1904,6 +1905,12 @@ mod tests {
     declarations_result.unwrap_or_default()
   }
 
+  fn parse_declarations_is_err(name: &str, css: &str) -> bool {
+    let mut input = ParserInput::new(css);
+    let mut parser = Parser::new(&mut input);
+    StyleDeclarationBlock::parse(name, &mut parser).is_err()
+  }
+
   fn inherited_style_from_pairs(
     declarations: impl IntoIterator<Item = (&'static str, &'static str)>,
     parent: &ComputedStyle,
@@ -2056,6 +2063,67 @@ mod tests {
       declarations.iter().collect::<Vec<_>>(),
       vec![&StyleDeclaration::order(Order(-2))]
     );
+  }
+
+  #[test]
+  fn parse_text_fit_values() {
+    let cases = [
+      (
+        "none",
+        TextFit {
+          mode: TextFitMode::None,
+          target: TextFitTarget::Consistent,
+          limit: None,
+        },
+      ),
+      (
+        "grow",
+        TextFit {
+          mode: TextFitMode::Grow,
+          target: TextFitTarget::Consistent,
+          limit: None,
+        },
+      ),
+      (
+        "shrink",
+        TextFit {
+          mode: TextFitMode::Shrink,
+          target: TextFitTarget::Consistent,
+          limit: None,
+        },
+      ),
+      (
+        "grow per-line 200%",
+        TextFit {
+          mode: TextFitMode::Grow,
+          target: TextFitTarget::PerLine,
+          limit: Some(2.0),
+        },
+      ),
+      (
+        "shrink consistent 50%",
+        TextFit {
+          mode: TextFitMode::Shrink,
+          target: TextFitTarget::Consistent,
+          limit: Some(0.5),
+        },
+      ),
+    ];
+
+    for (input, expected) in cases {
+      let declarations = parse_declarations("text-fit", input);
+      assert_eq!(
+        declarations.iter().collect::<Vec<_>>(),
+        vec![&StyleDeclaration::text_fit(expected)]
+      );
+    }
+  }
+
+  #[test]
+  fn parse_text_fit_rejects_duplicate_components() {
+    for input in ["grow shrink", "grow per-line consistent", "grow 120% 140%"] {
+      assert!(parse_declarations_is_err("text-fit", input));
+    }
   }
 
   #[test]

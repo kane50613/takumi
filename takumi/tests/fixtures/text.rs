@@ -228,6 +228,201 @@ fn text_typography_letter_spacing_2px() {
   run_fixture_test(text, "text_typography_letter_spacing_2px");
 }
 
+const TEXT_FIT_CARD_WIDTH: Length = Px(258.0);
+const TEXT_FIT_CARD_CONTENT_WIDTH: Length = Px(226.0);
+const TEXT_FIT_CARD_MIN_HEIGHT: Length = Px(68.0);
+
+fn text_fit_card_container(label: &str, content: Node) -> Node {
+  Node::container([
+    Node::text(label.to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::font_size(Px(14.0).into()))
+        .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
+        .with(StyleDeclaration::margin_bottom(Px(5.0))),
+    ),
+    content,
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(TEXT_FIT_CARD_WIDTH))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([229, 234, 240, 255]),
+      )))
+      .with_padding(Sides([Px(10.0); 4])),
+  )
+}
+
+fn text_fit_text_style(text_fit: TextFit) -> Style {
+  Style::default()
+    .with(StyleDeclaration::display(Display::Block))
+    .with(StyleDeclaration::width(TEXT_FIT_CARD_CONTENT_WIDTH))
+    .with(StyleDeclaration::min_height(TEXT_FIT_CARD_MIN_HEIGHT))
+    .with(StyleDeclaration::font_size(Px(26.0).into()))
+    .with(StyleDeclaration::line_height(LineHeight::Unitless(1.0)))
+    .with(StyleDeclaration::text_fit(text_fit))
+    .with(StyleDeclaration::white_space_collapse(
+      WhiteSpaceCollapse::PreserveBreaks,
+    ))
+    .with(StyleDeclaration::background_color(ColorInput::Value(
+      Color([255, 255, 255, 255]),
+    )))
+    .with_padding(Sides([Px(8.0); 4]))
+}
+
+fn text_fit_text_card(label: &str, content: &str, text_fit: TextFit) -> Node {
+  text_fit_card_container(
+    label,
+    Node::text(content.to_string()).with_style(text_fit_text_style(text_fit)),
+  )
+}
+
+fn text_fit_text_card_with_style(label: &str, content: &str, style: Style) -> Node {
+  text_fit_card_container(label, Node::text(content.to_string()).with_style(style))
+}
+
+fn text_fit(mode: TextFitMode, target: TextFitTarget, limit: Option<f32>) -> TextFit {
+  TextFit::builder()
+    .mode(mode)
+    .target(target)
+    .limit(limit)
+    .build()
+}
+
+fn text_fit_overview_container(cards: impl Into<Box<[Node]>>) -> Node {
+  Node::container(cards.into()).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
+      .with_gap(SpacePair::from_single(Px(14.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([246, 248, 251, 255]),
+      )))
+      .with_padding(Sides([Px(18.0); 4])),
+  )
+}
+
+#[test]
+fn text_fit_overview() {
+  let image = || {
+    Node::image(("assets/images/yeecord.png", 64.0, 64.0)).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::InlineBlock))
+        .with(StyleDeclaration::width(Em(1.0)))
+        .with(StyleDeclaration::height(Em(1.0)))
+        .with(StyleDeclaration::vertical_align(VerticalAlign::Keyword(
+          VerticalAlignKeyword::Middle,
+        ))),
+    )
+  };
+  let shadows = [TextShadow::builder()
+    .offset_x(Px(1.0))
+    .offset_y(Px(2.0))
+    .blur_radius(Px(6.0))
+    .color(ColorInput::Value(Color([69, 85, 110, 180])))
+    .build()];
+  let decorated_fit = text_fit(TextFitMode::Grow, TextFitTarget::Consistent, Some(2.25));
+
+  let container = text_fit_overview_container([
+    text_fit_text_card_with_style(
+      "none",
+      "No fit",
+      text_fit_text_style(TextFit::default())
+        .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap)),
+    ),
+    text_fit_text_card_with_style(
+      "grow",
+      "Quick note",
+      text_fit_text_style(text_fit(TextFitMode::Grow, TextFitTarget::Consistent, None))
+        .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap)),
+    ),
+    text_fit_text_card_with_style(
+      "grow 150%",
+      "Quick note",
+      text_fit_text_style(text_fit(
+        TextFitMode::Grow,
+        TextFitTarget::Consistent,
+        Some(1.5),
+      ))
+      .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap)),
+    ),
+    text_fit_text_card_with_style(
+      "shrink",
+      "This headline is intentionally long",
+      text_fit_text_style(text_fit(
+        TextFitMode::Shrink,
+        TextFitTarget::Consistent,
+        None,
+      ))
+      .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap)),
+    ),
+    text_fit_text_card_with_style(
+      "shrink min 80%",
+      "This headline is intentionally long",
+      text_fit_text_style(text_fit(
+        TextFitMode::Shrink,
+        TextFitTarget::Consistent,
+        Some(0.8),
+      ))
+      .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap)),
+    ),
+    text_fit_text_card(
+      "per-line",
+      "Short\nA much longer line",
+      text_fit(TextFitMode::Grow, TextFitTarget::PerLine, Some(1.8)),
+    ),
+    text_fit_text_card(
+      "per-line-all",
+      "Short\nA much longer line",
+      text_fit(TextFitMode::Grow, TextFitTarget::PerLineAll, Some(1.8)),
+    ),
+    text_fit_card_container(
+      "mixed inline",
+      Node::container([
+        Node::text("Ship ".to_string())
+          .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+        image(),
+        Node::text(" now".to_string())
+          .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+      ])
+      .with_style(
+        text_fit_text_style(decorated_fit)
+          .with_white_space(WhiteSpace::pre())
+          .with_text_decoration(
+            TextDecoration::builder()
+              .line(TextDecorationLines::UNDERLINE)
+              .color(ColorInput::Value(Color([49, 130, 206, 255])))
+              .build(),
+          )
+          .with(StyleDeclaration::text_shadow(Some(shadows.into()))),
+      ),
+    ),
+    text_fit_text_card(
+      "consistent multiline",
+      "Tiny\nA much longer line\nEnd",
+      text_fit(TextFitMode::Grow, TextFitTarget::Consistent, Some(1.6)),
+    ),
+    text_fit_text_card(
+      "per-line wrapped",
+      "Short\nA much longer line that wraps again",
+      text_fit(TextFitMode::Grow, TextFitTarget::PerLine, Some(1.8)),
+    ),
+    text_fit_text_card(
+      "per-line-all wrapped",
+      "Short\nA much longer line that wraps again",
+      text_fit(TextFitMode::Grow, TextFitTarget::PerLineAll, Some(1.8)),
+    ),
+    text_fit_text_card(
+      "grow paragraph",
+      "Tiny intro\nThis paragraph should grow without forcing a single line",
+      text_fit(TextFitMode::Grow, TextFitTarget::Consistent, Some(1.4)),
+    ),
+  ]);
+
+  run_fixture_test(container, "text_fit_overview");
+}
+
 #[test]
 fn text_align_start() {
   let text = Node::text("Start aligned".to_string()).with_style(

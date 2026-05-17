@@ -1,7 +1,7 @@
 use std::{borrow::Cow, ops::Range};
 
 use parley::{
-  IndentOptions, InlineBox, InlineBoxKind, Line, LineMetrics, PositionedInlineBox,
+  BreakReason, IndentOptions, InlineBox, InlineBoxKind, Line, LineMetrics, PositionedInlineBox,
   PositionedLayoutItem, TextStyle, YieldData,
 };
 use taffy::{AvailableSpace, Layout, Rect, Size};
@@ -12,8 +12,8 @@ use crate::{
     node::Node,
     style::{
       BoxSizing, Color, Float, FontSynthesis, Position, ResolvedVerticalAlign, SizedFontStyle,
-      SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextOverflow,
-      TextWrapMode, TextWrapStyle, VerticalAlign,
+      SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
+      TextFitTarget, TextOverflow, TextWrapMode, TextWrapStyle, VerticalAlign,
     },
     tree::RenderNode,
   },
@@ -38,6 +38,7 @@ pub(crate) struct BuiltInlineLayout<'c, 'g> {
   pub(crate) text: String,
   pub(crate) spans: Vec<ProcessedInlineSpan<'c, 'g>>,
   pub(crate) custom_inline_boxes: Vec<PositionedInlineBox>,
+  pub(crate) line_scales: Vec<f32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -49,6 +50,8 @@ pub(crate) enum InlineLayoutMode {
 pub(crate) struct InlineBoxItem<'c, 'g> {
   pub(crate) render_node: &'c RenderNode<'g>,
   pub(crate) inline_box: InlineBox,
+  pub(crate) paint_width: f32,
+  pub(crate) paint_height: f32,
   pub(crate) margin: Rect<f32>,
   pub(crate) padding: Rect<f32>,
   pub(crate) border: Rect<f32>,
@@ -60,8 +63,8 @@ impl From<&InlineBoxItem<'_, '_>> for Layout {
   fn from(value: &InlineBoxItem<'_, '_>) -> Self {
     Layout {
       size: Size {
-        width: value.inline_box.width,
-        height: value.inline_box.height,
+        width: value.paint_width,
+        height: value.paint_height,
       },
       margin: value.margin,
       padding: value.padding,
@@ -579,12 +582,23 @@ pub(crate) fn resolve_inline_line_metrics(
   inline_layout: &InlineLayout,
   spans: &[ProcessedInlineSpan<'_, '_>],
   parent_font_metrics: Option<ParentFontMetrics>,
+  line_scales: &[f32],
 ) -> Vec<ResolvedLineMetrics> {
   let mut result = Vec::with_capacity(inline_layout.lines().count());
   let mut previous_parley_bottom = 0.0_f32;
   let mut previous_resolved_bottom = 0.0_f32;
+  let preserve_first_line_top = spans.iter().any(|span| match span {
+    ProcessedInlineSpan::Box(item) => {
+      matches!(
+        item.inline_box.kind,
+        InlineBoxKind::CustomOutOfFlow | InlineBoxKind::OutOfFlow
+      )
+    }
+    ProcessedInlineSpan::Text { .. } => false,
+  });
 
-  for line in inline_layout.lines() {
+  for (line_index, line) in inline_layout.lines().enumerate() {
+    let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
     let effective_parent_x_height = effective_parent_x_height_for_line(&line, parent_font_metrics);
     let effective_parent_text_metrics =
       effective_parent_text_metrics_for_line(&line, parent_font_metrics);
@@ -598,10 +612,15 @@ pub(crate) fn resolve_inline_line_metrics(
       match item {
         PositionedLayoutItem::GlyphRun(glyph_run) => {
           let metrics = glyph_run.run().metrics();
-          let (above, below) =
+          let (base_above, base_below) =
             text_line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
-          resolved_above = resolved_above.max(above);
-          resolved_below = resolved_below.max(below);
+          if (line_scale - 1.0).abs() <= f32::EPSILON {
+            resolved_above = resolved_above.max(base_above);
+            resolved_below = resolved_below.max(base_below);
+          } else {
+            resolved_above = resolved_above.max(base_above.max(metrics.ascent * line_scale));
+            resolved_below = resolved_below.max(base_below.max(metrics.descent * line_scale));
+          }
           has_contribution = true;
         }
         PositionedLayoutItem::InlineBox(inline_box) => {
@@ -647,7 +666,11 @@ pub(crate) fn resolve_inline_line_metrics(
     let resolved_descent = resolved_below.max(0.0);
     let resolved_leading = resolved_line_height - (resolved_ascent + resolved_descent);
     let interline_gap = if result.is_empty() {
-      line_metrics.block_min_coord.max(0.0)
+      if preserve_first_line_top {
+        line_metrics.block_min_coord.max(0.0)
+      } else {
+        0.0
+      }
     } else {
       (line_metrics.block_min_coord - previous_parley_bottom).max(0.0)
     };
@@ -705,6 +728,7 @@ pub(crate) fn resolve_inline_line_states(
   inline_layout: &InlineLayout,
   spans: &[ProcessedInlineSpan<'_, '_>],
   parent_font_metrics: Option<ParentFontMetrics>,
+  line_scales: &[f32],
 ) -> Vec<ResolvedInlineLineState> {
   inline_layout
     .lines()
@@ -712,6 +736,7 @@ pub(crate) fn resolve_inline_line_states(
       inline_layout,
       spans,
       parent_font_metrics,
+      line_scales,
     ))
     .map(|(line, resolved)| ResolvedInlineLineState {
       adjusted_metrics: resolved_line_metrics_for_apply(line.metrics(), resolved),
@@ -747,6 +772,39 @@ pub(crate) fn normalize_inline_box(
   }
 
   Some(inline_box)
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct VisualInlineBox {
+  pub(crate) id: u64,
+  pub(crate) x: f32,
+  pub(crate) y: f32,
+  pub(crate) width: f32,
+  pub(crate) height: f32,
+}
+
+pub(crate) fn resolve_visual_inline_box(
+  inline_box: PositionedInlineBox,
+  line_state: Option<ResolvedInlineLineState>,
+  spans: &[ProcessedInlineSpan<'_, '_>],
+) -> Option<VisualInlineBox> {
+  let Some(ProcessedInlineSpan::Box(item)) = spans.get(inline_box.id as usize) else {
+    return None;
+  };
+
+  let positioned = if inline_box.kind == InlineBoxKind::InFlow {
+    normalize_inline_box(inline_box, line_state?, spans)?
+  } else {
+    inline_box
+  };
+
+  Some(VisualInlineBox {
+    id: positioned.id,
+    x: positioned.x,
+    y: positioned.y,
+    width: item.paint_width,
+    height: item.paint_height,
+  })
 }
 
 struct TruncationCheckpoint {
@@ -882,6 +940,7 @@ pub(crate) fn measure_inline_layout(
   layout: &mut InlineLayout,
   spans: &[ProcessedInlineSpan<'_, '_>],
   custom_inline_boxes: &[PositionedInlineBox],
+  line_scales: &[f32],
   options: InlineMeasureOptions,
 ) -> Size<f32> {
   let InlineMeasureOptions {
@@ -893,10 +952,11 @@ pub(crate) fn measure_inline_layout(
     .lines()
     .map(|line| line.metrics().inline_min_coord + line.metrics().advance)
     .fold(0.0, f32::max);
-  let total_height = resolve_inline_line_metrics(layout, spans, parent_font_metrics)
-    .into_iter()
+  let line_metrics = resolve_inline_line_metrics(layout, spans, parent_font_metrics, line_scales);
+  let total_height = line_metrics
+    .last()
     .map(|metrics| metrics.resolved_line_bottom)
-    .fold(0.0, f32::max);
+    .unwrap_or(0.0);
   let custom_box_width = custom_inline_boxes
     .iter()
     .map(|inline_box| inline_box.x + inline_box.width)
@@ -919,13 +979,12 @@ pub(crate) fn measure_inline_layout(
 }
 
 fn build_inline_layout_tree<'c, 'g: 'c>(
-  items: Vec<InlineItem<'c, 'g>>,
+  items: &[InlineItem<'c, 'g>],
   available_space: Size<AvailableSpace>,
   style: &'c SizedFontStyle,
   global: &'g GlobalContext,
 ) -> BuiltInlineLayout<'c, 'g> {
   let mut spans: Vec<ProcessedInlineSpan<'c, 'g>> = Vec::new();
-
   let (layout, text) = global.font_context.tree_builder(style.into(), |builder| {
     let mut index_pos = 0;
     let mut previous_collapsible_space = false;
@@ -935,7 +994,7 @@ fn build_inline_layout_tree<'c, 'g: 'c>(
       match item {
         InlineItem::Text { text, context } => {
           let span_style = context.style.to_sized_font_style(context);
-          let transformed = apply_text_transform(&text, context.style.text_transform);
+          let transformed = apply_text_transform(text, context.style.text_transform);
           let collapsed = apply_white_space_collapse(
             &transformed,
             style.parent.white_space_collapse,
@@ -995,26 +1054,28 @@ fn build_inline_layout_tree<'c, 'g: 'c>(
           let content_size = atomic_metrics.map_or(Size::zero(), |metrics| metrics.size);
           let raw_baseline_offset = atomic_metrics.and_then(|metrics| metrics.baseline_offset);
 
+          let paint_width = if render_node.participates_as_inline_box() {
+            content_size.width + margin.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
+          } else {
+            content_size.width
+              + margin.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
+              + padding.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
+              + border.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
+          };
+          let paint_height = if render_node.participates_as_inline_box() {
+            content_size.height + margin.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
+          } else {
+            content_size.height
+              + margin.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
+              + padding.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
+              + border.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
+          };
           let inline_box = InlineBox {
             index: index_pos,
             id: spans.len() as u64,
             kind: inline_box_kind(render_node),
-            width: if render_node.participates_as_inline_box() {
-              content_size.width + margin.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
-            } else {
-              content_size.width
-                + margin.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
-                + padding.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
-                + border.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
-            },
-            height: if render_node.participates_as_inline_box() {
-              content_size.height + margin.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
-            } else {
-              content_size.height
-                + margin.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
-                + padding.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
-                + border.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
-            },
+            width: paint_width,
+            height: paint_height,
           };
           let baseline_offset =
             raw_baseline_offset.map(|baseline| baseline.clamp(0.0, inline_box.height));
@@ -1022,6 +1083,8 @@ fn build_inline_layout_tree<'c, 'g: 'c>(
           spans.push(ProcessedInlineSpan::Box(InlineBoxItem {
             render_node,
             inline_box: inline_box.clone(),
+            paint_width,
+            paint_height,
             margin,
             padding,
             border,
@@ -1041,6 +1104,7 @@ fn build_inline_layout_tree<'c, 'g: 'c>(
     text,
     spans,
     custom_inline_boxes: Vec::new(),
+    line_scales: Vec::new(),
   }
 }
 
@@ -1065,6 +1129,113 @@ fn prepare_inline_layout(
   (text_wrap_mode, line_height_hint)
 }
 
+fn line_fit_width(line: &Line<'_, InlineBrush>, max_width: f32) -> f32 {
+  if max_width.is_finite() {
+    (max_width - line.metrics().inline_min_coord).max(0.0)
+  } else {
+    max_width
+  }
+}
+
+fn text_fit_line_is_scalable(
+  line: &Line<'_, InlineBrush>,
+  line_index: usize,
+  line_count: usize,
+  target: TextFitTarget,
+) -> bool {
+  if target != TextFitTarget::PerLine {
+    return true;
+  }
+
+  line_index + 1 != line_count && line.break_reason() != BreakReason::Explicit
+}
+
+fn clamp_text_fit_scale(style: &SizedFontStyle, scale: f32) -> f32 {
+  match (style.parent.text_fit.mode, style.parent.text_fit.limit) {
+    (TextFitMode::Grow, Some(limit)) if limit >= 1.0 => scale.min(limit),
+    (TextFitMode::Shrink, Some(limit)) if limit <= 1.0 => scale.max(limit),
+    _ => scale,
+  }
+}
+
+fn text_span_disables_text_fit(style: &SizedFontStyle) -> bool {
+  style.letter_spacing != 0.0 || style.word_spacing != 0.0
+}
+
+fn text_fit_is_applicable(
+  spans: &[ProcessedInlineSpan<'_, '_>],
+  custom_inline_boxes: &[PositionedInlineBox],
+) -> bool {
+  custom_inline_boxes.is_empty()
+    && spans.iter().all(|span| match span {
+      ProcessedInlineSpan::Text { style, .. } => !text_span_disables_text_fit(style),
+      ProcessedInlineSpan::Box(_) => true,
+    })
+}
+
+fn text_fit_line_scales(layout: &InlineLayout, max_width: f32, style: &SizedFontStyle) -> Vec<f32> {
+  let text_fit = style.parent.text_fit;
+  if text_fit.mode == TextFitMode::None || !max_width.is_finite() {
+    return Vec::new();
+  }
+
+  let line_count = layout.lines().count();
+  if line_count == 0 {
+    return Vec::new();
+  }
+
+  let mut scales = Vec::with_capacity(line_count);
+  for (index, line) in layout.lines().enumerate() {
+    if !text_fit_line_is_scalable(&line, index, line_count, text_fit.target) {
+      scales.push(1.0);
+      continue;
+    }
+
+    let mut flexible_advance = 0.0;
+    let mut static_advance = 0.0;
+    for item in line.items() {
+      match item {
+        PositionedLayoutItem::GlyphRun(glyph_run) => flexible_advance += glyph_run.advance(),
+        PositionedLayoutItem::InlineBox(inline_box) => {
+          if inline_box.kind == InlineBoxKind::InFlow {
+            static_advance += inline_box.width;
+          }
+        }
+      }
+    }
+
+    let advance = (flexible_advance - line.metrics().trailing_whitespace).max(0.0);
+    let fit_width = line_fit_width(&line, max_width);
+    let flexible_fit_width = (fit_width - static_advance).max(0.0);
+    let scale = if advance <= 0.0 || flexible_fit_width <= 0.0 {
+      1.0
+    } else {
+      match text_fit.mode {
+        TextFitMode::Grow if advance < flexible_fit_width => flexible_fit_width / advance,
+        TextFitMode::Shrink if advance > flexible_fit_width => flexible_fit_width / advance,
+        _ => 1.0,
+      }
+    };
+    scales.push(clamp_text_fit_scale(style, scale));
+  }
+
+  if text_fit.target == TextFitTarget::Consistent {
+    let consistent_scale = match text_fit.mode {
+      TextFitMode::Grow => scales.iter().copied().fold(f32::INFINITY, f32::min),
+      TextFitMode::Shrink => scales.iter().copied().fold(1.0, f32::min),
+      TextFitMode::None => 1.0,
+    };
+    let consistent_scale = if consistent_scale.is_finite() {
+      clamp_text_fit_scale(style, consistent_scale)
+    } else {
+      1.0
+    };
+    scales.fill(consistent_scale);
+  }
+
+  scales
+}
+
 pub(crate) fn create_inline_layout<'c, 'g: 'c>(
   request: InlineLayoutRequest<'c, 'g>,
 ) -> BuiltInlineLayout<'c, 'g> {
@@ -1077,7 +1248,7 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
     global,
     mode,
   } = request;
-  let mut built = build_inline_layout_tree(items, available_space, style, global);
+  let mut built = build_inline_layout_tree(&items, available_space, style, global);
   let (text_wrap_mode, line_height_hint) =
     prepare_inline_layout(&mut built, max_width, max_height, style);
 
@@ -1087,6 +1258,7 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
       text,
       spans,
       custom_inline_boxes,
+      ..
     } = &mut built;
 
     if style.parent.text_overflow == TextOverflow::Ellipsis {
@@ -1139,6 +1311,12 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
         custom_inline_boxes,
       );
     }
+  }
+
+  if style.parent.text_fit.mode != TextFitMode::None
+    && text_fit_is_applicable(&built.spans, &built.custom_inline_boxes)
+  {
+    built.line_scales = text_fit_line_scales(&built.layout, max_width, style);
   }
 
   built
