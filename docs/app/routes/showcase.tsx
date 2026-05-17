@@ -1,3 +1,5 @@
+"use client";
+
 import { HomeLayout } from "fumadocs-ui/layouts/home";
 import JSConfetti from "js-confetti";
 import { ArrowRight, Heart } from "lucide-react";
@@ -6,7 +8,7 @@ import { GithubIcon } from "~/components/showcase/github-icon";
 import { ShowcaseCard } from "~/components/showcase/showcase-card";
 import { TemplateCard } from "~/components/showcase/template-card";
 import { baseOptions } from "~/layout-config";
-import { showcaseProjects, showcaseTemplates } from "../data/showcase";
+import { showcaseProjects, showcaseTemplates } from "~/data/showcase";
 
 export default function Showcase() {
   const confettiRef = useRef<JSConfetti | null>(null);
@@ -41,7 +43,7 @@ export default function Showcase() {
         <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] opacity-[0.03] bg-[radial-gradient(circle_at_center,var(--color-primary)_0%,transparent_70%)] blur-[100px]" />
       </div>
 
-      <div className="max-w-[1200px] mx-auto px-6 py-24 max-sm:py-16">
+      <div className="max-w-300 mx-auto px-6 py-24 max-sm:py-16">
         <div className="flex flex-col items-center text-center mb-24 max-w-3xl mx-auto">
           <div className="mb-8 relative group">
             <div className="absolute -inset-4 bg-primary/20 blur-2xl rounded-full animate-pulse duration-700 opacity-50 group-hover:opacity-100 transition-opacity" />
@@ -96,7 +98,7 @@ export default function Showcase() {
 
         <section className="relative overflow-hidden rounded-3xl border border-border/40 bg-zinc-950/50 dark:bg-zinc-900/20 backdrop-blur-xl">
           <div className="absolute inset-0 bg-[linear-gradient(to_right,--theme(--color-zinc-800/0.1)_1px,transparent_1px),linear-gradient(to_bottom,--theme(--color-zinc-800/0.1)_1px,transparent_1px)] bg-size-[40px_40px] opacity-20 pointer-events-none" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-primary/10 blur-[100px] rounded-full pointer-events-none" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-150 h-100 bg-primary/10 blur-[100px] rounded-full pointer-events-none" />
 
           <div className="relative px-8 py-20 md:py-24 flex flex-col items-center text-center z-10">
             <div className="text-primary/80 mb-6">
@@ -105,7 +107,7 @@ export default function Showcase() {
             <h2 className="font-display text-3xl md:text-4xl font-[750] tracking-tighter mb-4 text-foreground">
               Feature your creation
             </h2>
-            <p className="text-muted-foreground text-lg mb-10 max-w-[500px]">
+            <p className="text-muted-foreground text-lg mb-10 max-w-125">
               Forged something exceptional? Submit your project to the showcase and share your craft
               with the community.
             </p>

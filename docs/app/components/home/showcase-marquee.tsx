@@ -1,5 +1,7 @@
+"use client";
+
 import { useMemo } from "react";
-import { showcaseProjects } from "../../data/showcase";
+import { showcaseProjects } from "~/data/showcase";
 
 export function ShowcaseMarquee() {
   const projects = useMemo(() => [...showcaseProjects, ...showcaseProjects], []);

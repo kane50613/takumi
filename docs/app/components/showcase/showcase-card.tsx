@@ -1,6 +1,8 @@
+"use client";
+
 import { Link2Icon } from "lucide-react";
 import { useMemo } from "react";
-import type { Project } from "../../data/showcase";
+import type { Project } from "~/data/showcase";
 import { GithubIcon } from "./github-icon";
 
 export interface ShowcaseCardProps {

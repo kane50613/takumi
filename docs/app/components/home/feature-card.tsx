@@ -1,4 +1,4 @@
-import type { showcaseFeatures } from "../../data/showcase";
+import type { showcaseFeatures } from "~/data/showcase";
 
 export interface FeatureCardProps {
   feature: (typeof showcaseFeatures)[number];

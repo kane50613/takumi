@@ -1,6 +1,6 @@
 import { source } from "~/source";
 
-export function loader() {
+export function GET() {
   const pages = [
     page({
       path: "/",
@@ -63,4 +63,10 @@ function page({
   content += "</url>";
 
   return content;
+}
+
+export async function getConfig() {
+  return {
+    render: "static" as const,
+  };
 }

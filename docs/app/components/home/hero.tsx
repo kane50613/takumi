@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link } from "waku";
 import { Button } from "~/components/ui/button";
 import { AnimatedOrb } from "./animated-orb";
 

@@ -1,9 +1,9 @@
 import type { ImageSource } from "takumi-js";
 import { ImageResponse } from "takumi-js/response";
+import type { ApiContext } from "waku/router";
+import DocsTemplate from "../../../../../../../takumi-template/src/templates/docs-template";
 import { source } from "~/source";
-import DocsTemplate from "../../../takumi-template/src/templates/docs-template";
-import logo from "../../public/logo.svg?raw";
-import type { Route } from "./+types/og";
+import logo from "../../../../../../public/logo.svg?raw";
 
 const persistentImages: ImageSource[] = [
   {
@@ -12,14 +12,12 @@ const persistentImages: ImageSource[] = [
   },
 ];
 
-export function loader({ params }: Route.LoaderArgs) {
-  const slugs = params["*"]
-    .split("/")
-    .filter((v) => v.length > 0)
-    .slice(0, -1);
-  const page = source.getPage(slugs);
+export function GET(_: Request, { params }: ApiContext<"/og/docs/[...slugs]/image.webp">) {
+  const page = source.getPage(params.slugs ?? []);
 
-  if (!page) throw new Response(undefined, { status: 404 });
+  if (!page) {
+    return new Response(undefined, { status: 404 });
+  }
 
   return new ImageResponse(
     <DocsTemplate
@@ -37,4 +35,10 @@ export function loader({ params }: Route.LoaderArgs) {
       format: "webp",
     },
   );
+}
+
+export async function getConfig() {
+  return {
+    render: "dynamic" as const,
+  };
 }

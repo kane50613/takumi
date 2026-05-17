@@ -1,4 +1,4 @@
-import { showcaseFeatures } from "../../data/showcase";
+import { showcaseFeatures } from "~/data/showcase";
 import { FeatureCard } from "./feature-card";
 
 export function Features() {

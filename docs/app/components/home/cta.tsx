@@ -1,11 +1,11 @@
-import { Link } from "react-router";
+import { Link } from "waku";
 import { Button } from "~/components/ui/button";
 
 export function CTA({ highlightedHtml }: { highlightedHtml: string }) {
   return (
     <section className="px-6 py-24 pb-32 max-sm:py-12 max-sm:pb-20">
-      <div className="relative max-w-[900px] mx-auto rounded-3xl border border-border overflow-hidden">
-        <div className="absolute -top-1/2 -left-[20%] w-[140%] h-[200%] bg-[radial-gradient(ellipse_at_50%_0%,rgba(var(--primary),0.08),transparent_60%)] pointer-events-none" />
+      <div className="relative max-w-225 mx-auto rounded-3xl border border-border overflow-hidden">
+        <div className="absolute -top-1/2 left-[-20%] w-[140%] h-[200%] bg-[radial-gradient(ellipse_at_50%_0%,rgba(var(--primary),0.08),transparent_60%)] pointer-events-none" />
 
         <div className="relative px-12 py-16 max-sm:px-6 max-sm:py-10 text-center">
           <h2 className="font-display text-[clamp(2rem,4vw,3rem)] font-[750] tracking-tighter leading-tight mb-4">
@@ -15,7 +15,7 @@ export function CTA({ highlightedHtml }: { highlightedHtml: string }) {
               in minutes.
             </span>
           </h2>
-          <p className="text-[1.05rem] text-muted-foreground max-w-[420px] mx-auto mb-8 leading-relaxed">
+          <p className="text-[1.05rem] text-muted-foreground max-w-105 mx-auto mb-8 leading-relaxed">
             Install the package, write your first component, and generate your image. It's that
             simple.
           </p>

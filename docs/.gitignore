@@ -4,6 +4,7 @@
 # React Router
 /.react-router/
 /build/
+/.waku/
 *.generated.ts
 .source
 .remote-assets

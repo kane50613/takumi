@@ -1,3 +1,5 @@
+"use client";
+
 import { HomeLayout } from "fumadocs-ui/layouts/home";
 import { useTheme } from "next-themes";
 import { createHighlighterCore } from "shiki/core";

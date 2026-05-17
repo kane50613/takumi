@@ -11,6 +11,12 @@ const server = createSearchAPI("advanced", {
   })),
 });
 
-export function loader() {
+export function GET() {
   return server.staticGET();
+}
+
+export async function getConfig() {
+  return {
+    render: "static" as const,
+  };
 }

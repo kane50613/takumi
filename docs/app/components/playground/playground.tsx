@@ -1,3 +1,5 @@
+"use client";
+
 import {
   ChevronDownIcon,
   Code2Icon,
@@ -8,7 +10,6 @@ import {
   Wand2Icon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router";
 import type { z } from "zod/mini";
 import { cn } from "~/lib/utils";
 import {
@@ -40,16 +41,43 @@ export default function Playground() {
   const [rendered, setRendered] = useState<z.infer<typeof renderResultSchema>["result"]>();
   const [isReady, setIsReady] = useState(false);
   const [isFormatting, setIsFormatting] = useState(false);
+  const [searchParams, setSearchParams] = useState(() => {
+    if (typeof window === "undefined") {
+      return new URLSearchParams();
+    }
+
+    return new URLSearchParams(window.location.search);
+  });
   const currentRequestIdRef = useRef(0);
 
   const workerRef = useRef<Worker | undefined>(undefined);
-  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<"code" | "preview">("code");
 
   const codeQuery = searchParams.get("code");
   const templateQuery = searchParams.get("template");
   const matchedTemplate = templates.find((template) => template.code === code);
   const selectedTemplateName = matchedTemplate?.name ?? "Templates";
+
+  useEffect(() => {
+    const onPopState = () => {
+      setSearchParams(new URLSearchParams(window.location.search));
+    };
+
+    window.addEventListener("popstate", onPopState);
+
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, []);
+
+  const replaceSearchParams = (updater: (current: URLSearchParams) => URLSearchParams) => {
+    const next = updater(new URLSearchParams(window.location.search));
+    const search = next.toString();
+    const url = `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`;
+
+    window.history.replaceState(window.history.state, "", url);
+    setSearchParams(next);
+  };
 
   useEffect(() => {
     if (code !== undefined) return;
@@ -76,47 +104,38 @@ export default function Playground() {
     if (!code) return;
 
     if (code === defaultTemplate) {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          next.delete("code");
-          next.delete("template");
-          return next;
-        },
-        { replace: true },
-      );
+      replaceSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.delete("code");
+        next.delete("template");
+        return next;
+      });
       return;
     }
 
     if (matchedTemplate) {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          next.delete("code");
-          next.set("template", matchedTemplate.id);
-          return next;
-        },
-        { replace: true },
-      );
+      replaceSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.delete("code");
+        next.set("template", matchedTemplate.id);
+        return next;
+      });
       return;
     }
 
     const timer = setTimeout(() => {
       compressCode(code).then((base64) => {
-        setSearchParams(
-          (prev) => {
-            const next = new URLSearchParams(prev);
-            next.delete("template");
-            next.set("code", base64);
-            return next;
-          },
-          { replace: true },
-        );
+        replaceSearchParams((current) => {
+          const next = new URLSearchParams(current);
+          next.delete("template");
+          next.set("code", base64);
+          return next;
+        });
       });
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [code, matchedTemplate, setSearchParams]);
+  }, [code, matchedTemplate]);
 
   useEffect(() => {
     const worker = new TakumiWorker();

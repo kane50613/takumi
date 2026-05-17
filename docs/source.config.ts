@@ -68,7 +68,7 @@ export default defineConfig({
             },
           },
           typesCache: createFileSystemTypesCache({
-            dir: ".react-router/twoslash",
+            dir: ".waku/twoslash",
             cwd: process.cwd(),
           }),
         }) as ShikiTransformer,

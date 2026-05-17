@@ -1,3 +1,5 @@
+"use client";
+
 import { HomeLayout } from "fumadocs-ui/layouts/home";
 import { Loader2 } from "lucide-react";
 import { lazy, Suspense } from "react";
