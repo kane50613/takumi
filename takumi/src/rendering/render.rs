@@ -22,7 +22,7 @@ use crate::{
   },
   rendering::{
     AnimationFrame, Canvas, DitheringAlgorithm, RenderContext, apply_dithering,
-    get_node_mut_by_path,
+    get_node_mut_by_path, scale_text_fit_x,
     stacking_context::{
       apply_transform, build_stacking_contexts, collect_layout_children, paint_context,
     },
@@ -129,18 +129,6 @@ fn slice_text_at_char_boundaries(text: &str, byte_range: Range<usize>) -> &str {
   }
 
   &text[start..end]
-}
-
-fn text_fit_static_x_correction(scale: f32, static_inline_prefix: f32) -> f32 {
-  static_inline_prefix * (1.0 - scale)
-}
-
-fn scale_text_fit_x(x: f32, origin_x: f32, scale: f32, static_inline_prefix: f32) -> f32 {
-  if (scale - 1.0).abs() <= f32::EPSILON {
-    return x;
-  }
-
-  text_fit_static_x_correction(scale, static_inline_prefix) + origin_x + (x - origin_x) * scale
 }
 
 struct TraversalEnter {

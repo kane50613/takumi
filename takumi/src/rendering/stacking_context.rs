@@ -20,7 +20,7 @@ use crate::{
   rendering::{
     BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, NodeMaskAction, Placement,
     Sizing, blend_pixel, draw_debug_border, get_node_mut_by_path, prepare_node_mask,
-    transformed_rect_extents,
+    scale_text_fit_x, transformed_rect_extents,
   },
 };
 
@@ -777,18 +777,6 @@ fn finish_node_render<'g>(
   }
 
   Ok(())
-}
-
-fn text_fit_static_x_correction(scale: f32, static_inline_prefix: f32) -> f32 {
-  static_inline_prefix * (1.0 - scale)
-}
-
-fn scale_text_fit_x(x: f32, origin_x: f32, scale: f32, static_inline_prefix: f32) -> f32 {
-  if (scale - 1.0).abs() <= f32::EPSILON {
-    return x;
-  }
-
-  text_fit_static_x_correction(scale, static_inline_prefix) + origin_x + (x - origin_x) * scale
 }
 
 fn filter_padding(filters: &[Filter], sizing: &Sizing, transform: Affine) -> i32 {

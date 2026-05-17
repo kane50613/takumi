@@ -23,7 +23,7 @@ use crate::{
     PathBuilder, RenderContext, Stroke, collect_background_layers, draw_decoration,
     draw_decoration_segment, draw_glyph, draw_glyph_clip_image, draw_glyph_text_shadow,
     mask_index_from_coord, rasterize_layers, release_rasterized_background_tile,
-    render::render_node, render_mask,
+    render::render_node, render_mask, scale_text_fit_x, text_fit_static_x_correction,
   },
   resources::font::{FontError, ResolvedGlyph},
 };
@@ -94,10 +94,6 @@ pub(crate) struct InlineLayoutDrawData<'a, 'c, 'g> {
   pub(crate) line_scales: &'a [f32],
 }
 
-fn text_fit_static_x_correction(scale: f32, static_inline_prefix: f32) -> f32 {
-  static_inline_prefix * (1.0 - scale)
-}
-
 fn line_scale_transform_with_static_prefix(
   base: Affine,
   state: LineScaleState,
@@ -130,16 +126,6 @@ fn scale_outline_rect(
     height: rect.height * state.scale,
     ..rect
   }
-}
-
-fn scale_inline_box_x(x: f32, line_origin_x: f32, scale: f32, static_inline_prefix: f32) -> f32 {
-  if (scale - 1.0).abs() <= f32::EPSILON {
-    return x;
-  }
-
-  text_fit_static_x_correction(scale, static_inline_prefix)
-    + line_origin_x
-    + (x - line_origin_x) * scale
 }
 
 fn build_glyph_bounds_cache(
@@ -1067,7 +1053,7 @@ pub(crate) fn draw_inline_layout(
             continue;
           };
           let inline_box = VisualInlineBox {
-            x: scale_inline_box_x(
+            x: scale_text_fit_x(
               inline_box.layout_x,
               line.metrics().inline_min_coord,
               line_scale,
