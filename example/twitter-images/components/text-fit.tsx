@@ -23,7 +23,7 @@ export default function TextFit() {
   return (
     <div tw="w-full h-full bg-[#f8fafc] text-slate-900 flex flex-col items-center justify-center">
       <div
-        tw="font-semibold leading-[1.05] text-balance w-[85%]"
+        tw="font-semibold leading-[1.2] text-balance w-[85%] font-mono"
         style={{
           // @ts-expect-error: text-fit is not yet in the type definitions
           textFit: "grow per-line-all",
@@ -35,13 +35,16 @@ export default function TextFit() {
           comes with
           <br />
         </span>
-        <span tw="text-[#1a6ef5] font-bold font-mono" style={{ whiteSpace: "nowrap" }}>
+        <span
+          tw="text-[#1a6ef5] font-bold bg-slate-400 border-gray-500 rounded-sm p-2"
+          style={{ whiteSpace: "nowrap" }}
+        >
           text-fit
           <br />
         </span>
         property support
       </div>
-      <div tw="absolute bottom-10 flex items-center justify-center gap-4 opacity-50 text-2xl font-medium">
+      <div tw="mt-12 -mb-12 flex items-center justify-center gap-4 opacity-50 text-2xl font-medium">
         <Logo />
         takumi.kane.tw
       </div>
