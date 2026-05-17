@@ -318,7 +318,7 @@ fn collect_measure_result<'g>(
                   };
                   let positioned_box_x = scale_text_fit_x(
                     positioned_box.x,
-                    line.metrics().inline_min_coord,
+                    line_scale_origin.x,
                     line_scale,
                     static_inline_prefix,
                   );
