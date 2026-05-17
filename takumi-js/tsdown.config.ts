@@ -4,8 +4,8 @@ export default defineConfig({
   entry: {
     index: "src/index.ts",
     response: "src/response/index.ts",
-    node: "src/node/index.js",
-    wasm: "src/wasm/index.js",
+    node: "src/node/index.ts",
+    wasm: "src/wasm/index.ts",
     "helpers/index": "src/helpers/index.ts",
     "helpers/emoji": "src/helpers/emoji.ts",
     "helpers/jsx": "src/helpers/jsx.ts",

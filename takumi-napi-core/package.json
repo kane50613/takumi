@@ -35,10 +35,10 @@
   "sideEffects": false,
   "main": "./dist/export.cjs",
   "module": "./dist/export.mjs",
-  "types": "./dist/export.d.cts",
+  "types": "./dist/export.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/export.d.cts",
+      "types": "./dist/export.d.ts",
       "workerd": "./not-available.js",
       "browser": "./not-available.js",
       "node": "./dist/export.mjs",
