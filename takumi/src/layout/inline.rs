@@ -1247,60 +1247,51 @@ fn text_fit_line_scales(layout: &InlineLayout, max_width: f32, style: &SizedFont
   scales
 }
 
+/// Computes the X-origin and alignment correction for a scaled line.
+///
+/// Why: `parley` aligns text within its own line box (which may be shrunk by `text-balance`),
+/// but `text-fit` scales text to the full `container_width`.
+///
+/// How:
+/// 1. We derive the text alignment ratio directly from parley's layout `offset`.
+/// 2. We align the scaled text within the full `container_width`, clamping to
+///    the start edge (`.max(0.0)`) on overflow to prevent off-screen shifting.
 pub(crate) fn text_fit_line_alignment_correction(
   line: &Line<'_, InlineBrush>,
-  style: &SizedFontStyle,
   line_scale: f32,
+  container_width: f32,
 ) -> (f32, f32) {
+  let metrics = line.metrics();
+  let line_start = metrics.inline_min_coord + metrics.offset;
+
   if (line_scale - 1.0).abs() <= f32::EPSILON {
-    return (line.metrics().inline_min_coord, 0.0);
-  }
-
-  let align_factor = style
-    .parent
-    .text_align
-    .alignment_factor(style.parent.direction);
-
-  let mut line_start = f32::INFINITY;
-  let mut line_end = f32::NEG_INFINITY;
-  let mut scalable_advance = 0.0_f32;
-  let mut static_advance = 0.0_f32;
-
-  for item in line.items() {
-    match item {
-      PositionedLayoutItem::GlyphRun(glyph_run) => {
-        let start = glyph_run.offset();
-        let end = start + glyph_run.advance();
-        line_start = line_start.min(start);
-        line_end = line_end.max(end);
-        scalable_advance += glyph_run.advance();
-      }
-      PositionedLayoutItem::InlineBox(inline_box) => {
-        if inline_box.kind != InlineBoxKind::InFlow {
-          continue;
-        }
-
-        let start = inline_box.x;
-        let end = start + inline_box.width;
-        line_start = line_start.min(start);
-        line_end = line_end.max(end);
-        static_advance += inline_box.width;
-      }
-    }
-  }
-
-  if !line_start.is_finite() || !line_end.is_finite() {
-    return (line.metrics().inline_min_coord, 0.0);
-  }
-
-  if align_factor == 0.0 {
     return (line_start, 0.0);
   }
 
-  let unscaled_line_width = (line_end - line_start).max(0.0);
-  let scaled_line_width = static_advance + scalable_advance * line_scale;
-  let available_line_width = unscaled_line_width + line_start / align_factor;
-  let aligned_line_start = ((available_line_width - scaled_line_width).max(0.0)) * align_factor;
+  let mut static_advance = 0.0_f32;
+  for item in line.items() {
+    if let PositionedLayoutItem::InlineBox(inline_box) = item
+      && inline_box.kind == InlineBoxKind::InFlow
+    {
+      static_advance += inline_box.width;
+    }
+  }
+
+  let visual_scalable = (metrics.advance - metrics.trailing_whitespace - static_advance).max(0.0);
+  let scaled_line_width = static_advance + visual_scalable * line_scale;
+
+  // Derive the alignment factor directly from how much parley shifted the line
+  // within its available line box. This naturally handles RTL, center, and right alignments.
+  let line_width = metrics.inline_max_coord - metrics.inline_min_coord;
+  let free_space = (line_width - visual_scalable).max(0.0);
+  let align_ratio = if free_space > 0.0 {
+    metrics.offset / free_space
+  } else {
+    0.0
+  };
+
+  let aligned_line_start =
+    metrics.inline_min_coord + (container_width - scaled_line_width).max(0.0) * align_ratio;
 
   (line_start, aligned_line_start - line_start)
 }

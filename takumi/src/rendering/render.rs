@@ -272,7 +272,11 @@ fn collect_measure_result<'g>(
             let resolved_metrics = line_metrics[line_index];
             let line_scale = built.line_scales.get(line_index).copied().unwrap_or(1.0);
             let (line_scale_origin_x, line_alignment_correction) =
-              text_fit_line_alignment_correction(&line, &font_style, line_scale);
+              text_fit_line_alignment_correction(
+                &line,
+                line_scale,
+                layout.content_box_size().width,
+              );
             let line_scale_origin = taffy::Point {
               x: line_scale_origin_x + inline_offset.x,
               y: resolved_metrics.resolved_baseline + inline_offset.y,

@@ -1021,31 +1021,6 @@ impl TailwindPropertyParser for TextAlign {
   }
 }
 
-impl TextAlign {
-  pub(crate) fn alignment_factor(self, direction: Direction) -> f32 {
-    match self {
-      TextAlign::Left => 0.0,
-      TextAlign::Center => 0.5,
-      TextAlign::Right => 1.0,
-      TextAlign::Justify => 0.0,
-      TextAlign::Start => {
-        if direction == Direction::Rtl {
-          1.0
-        } else {
-          0.0
-        }
-      }
-      TextAlign::End => {
-        if direction == Direction::Rtl {
-          0.0
-        } else {
-          1.0
-        }
-      }
-    }
-  }
-}
-
 impl_from_taffy_enum!(
   TextAlign, Alignment, Left, Right, Center, Justify, Start, End
 );
