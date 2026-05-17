@@ -1,5 +1,13 @@
 # takumi
 
+## 1.2.1
+
+### Patch Changes
+
+- 1fb35bb: Fix text-fit with text-align
+- fa9abe6: Fix opacity not applied in inline layout
+- fa7c55c: Fix line height resolves percentage to unitless
+
 ## 1.2.0
 
 ### Minor Changes
