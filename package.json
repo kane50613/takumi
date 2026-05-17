@@ -20,10 +20,12 @@
     "postinstall": "lefthook install"
   },
   "devDependencies": {
+    "@arethetypeswrong/core": "^0.18.2",
     "@changesets/cli": "^2.31.0",
     "lefthook": "^2.1.6",
     "oxfmt": "^0.48.0",
     "oxlint": "^1.63.0",
+    "publint": "^0.3.21",
     "takumi-js": "workspace:*",
     "typescript": "catalog:"
   },

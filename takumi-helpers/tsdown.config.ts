@@ -9,6 +9,10 @@ export default defineConfig({
   },
   format: ["esm", "cjs"],
   dts: true,
+  publint: {
+    enabled: "ci-only",
+    level: "error",
+  },
   deps: {
     onlyBundle: ["ultrahtml"],
   },
