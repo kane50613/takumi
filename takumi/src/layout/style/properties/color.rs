@@ -631,6 +631,142 @@ impl<'i, const DEFAULT_CURRENT_COLOR: bool> FromCss<'i> for ColorInput<DEFAULT_C
   ];
 }
 
+/// Reference: https://www.w3.org/TR/css-color-5/#relative-colors
+fn relative_target_cs(name: &str) -> Option<ColorSpaceTag> {
+  Some(match_ignore_ascii_case! { name,
+    "rgb" | "rgba" => ColorSpaceTag::Srgb,
+    "hsl" | "hsla" => ColorSpaceTag::Hsl,
+    "hwb" => ColorSpaceTag::Hwb,
+    "lab" => ColorSpaceTag::Lab,
+    "lch" => ColorSpaceTag::Lch,
+    "oklab" => ColorSpaceTag::Oklab,
+    "oklch" => ColorSpaceTag::Oklch,
+    _ => return None,
+  })
+}
+
+fn channel_names(cs: ColorSpaceTag) -> [&'static str; 3] {
+  match cs {
+    ColorSpaceTag::Srgb => ["r", "g", "b"],
+    ColorSpaceTag::Hsl => ["h", "s", "l"],
+    ColorSpaceTag::Hwb => ["h", "w", "b"],
+    ColorSpaceTag::Lab | ColorSpaceTag::Oklab => ["l", "a", "b"],
+    ColorSpaceTag::Lch | ColorSpaceTag::Oklch => ["l", "c", "h"],
+    _ => ["", "", ""],
+  }
+}
+
+/// sRGB stores 0..1 but `r`/`g`/`b` keywords resolve to 0..255 per spec.
+fn channel_keyword_scale(cs: ColorSpaceTag) -> f32 {
+  if cs == ColorSpaceTag::Srgb {
+    255.0
+  } else {
+    1.0
+  }
+}
+
+fn channel_percentage_scale(cs: ColorSpaceTag, index: usize) -> f32 {
+  match (cs, index) {
+    (_, 3) => 1.0,
+    (ColorSpaceTag::Srgb, _) => 255.0,
+    (ColorSpaceTag::Hsl, _) | (ColorSpaceTag::Hwb, _) => 100.0,
+    (ColorSpaceTag::Lab, 0) | (ColorSpaceTag::Lch, 0) => 100.0,
+    (ColorSpaceTag::Lab, _) => 125.0,
+    (ColorSpaceTag::Lch, 1) => 150.0,
+    (ColorSpaceTag::Oklab, 0) | (ColorSpaceTag::Oklch, 0) => 1.0,
+    (ColorSpaceTag::Oklab, _) | (ColorSpaceTag::Oklch, 1) => 0.4,
+    _ => 1.0,
+  }
+}
+
+fn is_hue_slot(cs: ColorSpaceTag, index: usize) -> bool {
+  matches!(
+    (cs, index),
+    (ColorSpaceTag::Hsl | ColorSpaceTag::Hwb, 0) | (ColorSpaceTag::Lch | ColorSpaceTag::Oklch, 2)
+  )
+}
+
+fn parse_relative_slot<'i>(
+  input: &mut Parser<'i, '_>,
+  target_cs: ColorSpaceTag,
+  index: usize,
+  keyword_values: [f32; 4],
+) -> ParseResult<'i, f32> {
+  let location = input.current_source_location();
+  let token = input.next()?.clone();
+  let is_hue = is_hue_slot(target_cs, index);
+  match &token {
+    Token::Ident(ident) => {
+      if ident.eq_ignore_ascii_case("none") {
+        return Ok(0.0);
+      }
+      if ident.eq_ignore_ascii_case("alpha") {
+        return Ok(keyword_values[3]);
+      }
+      for (i, name) in channel_names(target_cs).iter().enumerate() {
+        if !name.is_empty() && ident.eq_ignore_ascii_case(name) {
+          return Ok(keyword_values[i]);
+        }
+      }
+      Err(unexpected_token!(Color, location, &token))
+    }
+    Token::Number { value, .. } => Ok(*value),
+    Token::Percentage { unit_value, .. } if !is_hue => {
+      Ok(*unit_value * channel_percentage_scale(target_cs, index))
+    }
+    Token::Dimension { value, unit, .. } if is_hue => Ok(match_ignore_ascii_case! { unit.as_ref(),
+      "deg" => *value,
+      "grad" => *value / 400.0 * 360.0,
+      "turn" => *value * 360.0,
+      "rad" => value.to_degrees(),
+      _ => return Err(unexpected_token!(Color, location, &token)),
+    }),
+    _ => Err(unexpected_token!(Color, location, &token)),
+  }
+}
+
+/// `calc()` expressions in component slots are not yet supported.
+fn parse_relative_color<'i>(
+  input: &mut Parser<'i, '_>,
+  target_cs: ColorSpaceTag,
+) -> ParseResult<'i, Color> {
+  let origin_start = input.position();
+  let origin_location = input.current_source_location();
+  let origin_token = input.next()?.clone();
+  match &origin_token {
+    Token::Hash(_) | Token::IDHash(_) | Token::Ident(_) => {}
+    Token::Function(_) => {
+      input.parse_nested_block(|inner| -> ParseResult<'i, ()> {
+        while inner.next().is_ok() {}
+        Ok(())
+      })?;
+    }
+    _ => return Err(unexpected_token!(Color, origin_location, &origin_token)),
+  }
+
+  let scale = channel_keyword_scale(target_cs);
+  let converted = parse_color(input.slice_from(origin_start).trim())
+    .map_err(|_| unexpected_token!(Color, origin_location, &origin_token))?
+    .convert(target_cs);
+  let [k0, k1, k2, k_alpha] = converted.components;
+  let keyword_values = [k0 * scale, k1 * scale, k2 * scale, k_alpha];
+
+  let s0 = parse_relative_slot(input, target_cs, 0, keyword_values)?;
+  let s1 = parse_relative_slot(input, target_cs, 1, keyword_values)?;
+  let s2 = parse_relative_slot(input, target_cs, 2, keyword_values)?;
+  let alpha = if input.try_parse(|i| i.expect_delim('/')).is_ok() {
+    parse_relative_slot(input, target_cs, 3, keyword_values)?
+  } else {
+    k_alpha
+  };
+
+  let new_components = [s0 / scale, s1 / scale, s2 / scale, alpha.clamp(0.0, 1.0)];
+  let result = converted.map(|_, _, _, _| new_components);
+  Ok(Color(
+    result.to_alpha_color::<Srgb>().to_rgba8().to_u8_array(),
+  ))
+}
+
 impl<'i> FromCss<'i> for Color {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let location = input.current_source_location();
@@ -665,7 +801,19 @@ impl<'i> FromCss<'i> for Color {
           });
         }
 
+        let target_cs = if let Token::Function(name) = &token {
+          relative_target_cs(name)
+        } else {
+          None
+        };
+
         input.parse_nested_block(|input| {
+          if let Some(cs) = target_cs
+            && input.try_parse(|i| i.expect_ident_matching("from")).is_ok()
+          {
+            return parse_relative_color(input, cs);
+          }
+
           while input.next().is_ok() {}
 
           // Slice from the function name till before the closing parenthesis
@@ -952,6 +1100,59 @@ mod tests {
     assert!(
       ColorInput::<true>::from_str("color-mix(in srgb, color-mix(in srgb, red, blue), white)")
         .is_ok()
+    );
+  }
+
+  #[test]
+  fn test_parse_relative_oklch_keywords_only() {
+    let relative = ColorInput::<true>::from_str("oklch(from oklch(0.7 0.15 30) l c h / 0.5)");
+    let direct = ColorInput::<true>::from_str("oklch(0.7 0.15 30 / 0.5)");
+    assert_eq!(relative, direct);
+  }
+
+  #[test]
+  fn test_parse_relative_oklch_keywords_only_from_named_color() {
+    assert!(ColorInput::<true>::from_str("oklch(from red l c h)").is_ok());
+  }
+
+  #[test]
+  fn test_parse_relative_rgb_keywords_only_scales_to_255() {
+    assert_eq!(
+      ColorInput::<true>::from_str("rgb(from #336699 r g b)"),
+      ColorInput::<true>::from_str("rgb(51 102 153)"),
+    );
+  }
+
+  #[test]
+  fn test_parse_relative_rgb_drops_origin_alpha_when_alpha_omitted() {
+    assert_eq!(
+      ColorInput::<true>::from_str("rgb(from rgb(10 20 30 / 0.5) r g b / 0.25)"),
+      ColorInput::<true>::from_str("rgba(10, 20, 30, 0.25)"),
+    );
+  }
+
+  #[test]
+  fn test_parse_relative_hsl_with_dimension_hue() {
+    assert!(ColorInput::<true>::from_str("hsl(from red 120deg s l)").is_ok());
+  }
+
+  #[test]
+  fn test_parse_relative_oklch_substitutes_origin_alpha() {
+    assert_eq!(
+      ColorInput::<true>::from_str("oklch(from oklch(0.5 0.1 200 / 0.4) l c h / alpha)",),
+      ColorInput::<true>::from_str("oklch(0.5 0.1 200 / 0.4)"),
+    );
+  }
+
+  #[test]
+  fn test_parse_relative_color_in_linear_gradient() {
+    use crate::layout::style::properties::linear_gradient::LinearGradient;
+
+    assert!(
+      LinearGradient::from_str(
+        "linear-gradient(to right, oklch(from oklch(0.7 0.15 30) l c h / 0.5), white)",
+      )
+      .is_ok()
     );
   }
 
