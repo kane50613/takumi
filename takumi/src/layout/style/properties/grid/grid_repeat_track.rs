@@ -79,19 +79,19 @@ impl ToCss for GridRepeatTrack {
       dest.write_str("] ")?;
     }
     self.size.to_css(dest)?;
-    if let Some(end_names) = &self.end_names {
-      if !end_names.is_empty() {
-        dest.write_str(" [")?;
-        let mut first = true;
-        for name in end_names {
-          if !first {
-            dest.write_str(" ")?;
-          }
-          first = false;
-          dest.write_str(name)?;
+    if let Some(end_names) = &self.end_names
+      && !end_names.is_empty()
+    {
+      dest.write_str(" [")?;
+      let mut first = true;
+      for name in end_names {
+        if !first {
+          dest.write_str(" ")?;
         }
-        dest.write_str("]")?;
+        first = false;
+        dest.write_str(name)?;
       }
+      dest.write_str("]")?;
     }
     Ok(())
   }

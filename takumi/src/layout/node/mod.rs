@@ -416,13 +416,10 @@ impl Node {
       }
     }
 
-    if let NodeKind::Image(image) = &self.kind {
-      match &image.src {
-        ImageSourceInput::Url(url) => {
-          attrs.push(format!("src=\"{}\"", escape_attr(url)));
-        }
-        _ => {}
-      }
+    if let NodeKind::Image(image) = &self.kind
+      && let ImageSourceInput::Url(url) = &image.src
+    {
+      attrs.push(format!("src=\"{}\"", escape_attr(url)));
     }
 
     let mut inline_styles = Vec::new();
