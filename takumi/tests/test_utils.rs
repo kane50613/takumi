@@ -141,8 +141,8 @@ pub fn run_fixture_test(node: Node, fixture_name: &str) {
 
 #[allow(dead_code)]
 pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &str) {
-  let viewport_width = options.viewport().size.width.unwrap_or(1200) as u32;
-  let viewport_height = options.viewport().size.height.unwrap_or(630) as u32;
+  let viewport_width = options.viewport().size.width.unwrap_or(1200);
+  let viewport_height = options.viewport().size.height.unwrap_or(630);
 
   create_dir_all("tests/fixtures-generated").ok();
 
