@@ -692,7 +692,7 @@ impl<const DEFAULT_AUTO: bool> ToCss for Length<DEFAULT_AUTO> {
       Self::Calc(f) => {
         let terms: &[(&str, f32)] = &[
           ("px", f.px),
-          ("%", f.percent),
+          ("%", f.percent * 100.0),
           ("rem", f.rem),
           ("em", f.em),
           ("vh", f.vh),

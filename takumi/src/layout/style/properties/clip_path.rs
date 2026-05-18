@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::layout::style::{ToCss, unexpected_token};
+use crate::layout::style::{ToCss, properties::write_css_string, unexpected_token};
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use taffy::{AbsoluteAxis, Point, Rect, Size};
 
@@ -506,7 +506,7 @@ impl ToCss for BasicShape {
           rule.to_css(dest)?;
           dest.write_str(", ")?;
         }
-        write!(dest, "\"{}\"", shape.path)?;
+        write_css_string(dest, &shape.path)?;
         dest.write_char(')')
       }
     }

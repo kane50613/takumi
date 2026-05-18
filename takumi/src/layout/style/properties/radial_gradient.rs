@@ -488,6 +488,86 @@ impl<'i> FromCss<'i> for RadialGradient {
     &[CssToken::Descriptor(CssDescriptorKind::RadialGradientFn)];
 }
 
+impl ToCss for RadialSize {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::ClosestSide => dest.write_str("closest-side"),
+      Self::FarthestSide => dest.write_str("farthest-side"),
+      Self::ClosestCorner => dest.write_str("closest-corner"),
+      Self::FarthestCorner => dest.write_str("farthest-corner"),
+      Self::Explicit { radius_x, radius_y } => {
+        radius_x.to_css(dest)?;
+        if radius_x != radius_y {
+          dest.write_char(' ')?;
+          radius_y.to_css(dest)?;
+        }
+        Ok(())
+      }
+    }
+  }
+}
+
+impl ToCss for RadialGradient {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    let name = if self.repeating {
+      "repeating-radial-gradient"
+    } else {
+      "radial-gradient"
+    };
+    dest.write_str(name)?;
+    dest.write_char('(')?;
+    let mut first = true;
+
+    // Build shape/size/center as a temp buffer to check if anything is non-default
+    let mut shape_size_buf = String::new();
+    if self.shape != RadialShape::Ellipse {
+      self.shape.to_css(&mut shape_size_buf)?;
+    }
+    if self.size != RadialSize::FarthestCorner {
+      if !shape_size_buf.is_empty() {
+        shape_size_buf.push(' ');
+      }
+      self.size.to_css(&mut shape_size_buf)?;
+    }
+
+    let mut center_buf = String::new();
+    self.center.to_css(&mut center_buf)?;
+    let is_center_default = center_buf == "center center" || center_buf == "50% 50%";
+
+    if !shape_size_buf.is_empty() || !is_center_default {
+      dest.write_str(&shape_size_buf)?;
+      if !is_center_default {
+        if !shape_size_buf.is_empty() {
+          dest.write_char(' ')?;
+        }
+        dest.write_str("at ")?;
+        dest.write_str(&center_buf)?;
+      }
+      first = false;
+    }
+
+    let mut interp_buf = String::new();
+    self.interpolation.to_css(&mut interp_buf)?;
+    if !interp_buf.is_empty() {
+      if !first {
+        dest.write_str(", ")?;
+      }
+      dest.write_str(&interp_buf)?;
+      first = false;
+    }
+
+    for stop in self.stops.iter() {
+      if !first {
+        dest.write_str(", ")?;
+      }
+      stop.to_css(dest)?;
+      first = false;
+    }
+
+    dest.write_char(')')
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use color::{ColorSpaceTag, HueDirection};
@@ -931,85 +1011,5 @@ mod tests {
     // radius_x = 80 * 0.25 = 20, radius_y = 80 * 0.25 = 20
     assert!((tile.inv_radius_x - (1.0 / 20.0)).abs() < 1e-3);
     assert!((tile.inv_radius_y - (1.0 / 20.0)).abs() < 1e-3);
-  }
-}
-
-impl ToCss for RadialSize {
-  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    match self {
-      Self::ClosestSide => dest.write_str("closest-side"),
-      Self::FarthestSide => dest.write_str("farthest-side"),
-      Self::ClosestCorner => dest.write_str("closest-corner"),
-      Self::FarthestCorner => dest.write_str("farthest-corner"),
-      Self::Explicit { radius_x, radius_y } => {
-        radius_x.to_css(dest)?;
-        if radius_x != radius_y {
-          dest.write_char(' ')?;
-          radius_y.to_css(dest)?;
-        }
-        Ok(())
-      }
-    }
-  }
-}
-
-impl ToCss for RadialGradient {
-  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    let name = if self.repeating {
-      "repeating-radial-gradient"
-    } else {
-      "radial-gradient"
-    };
-    dest.write_str(name)?;
-    dest.write_char('(')?;
-    let mut first = true;
-
-    // Build shape/size/center as a temp buffer to check if anything is non-default
-    let mut shape_size_buf = String::new();
-    if self.shape != RadialShape::Ellipse {
-      self.shape.to_css(&mut shape_size_buf)?;
-    }
-    if self.size != RadialSize::FarthestCorner {
-      if !shape_size_buf.is_empty() {
-        shape_size_buf.push(' ');
-      }
-      self.size.to_css(&mut shape_size_buf)?;
-    }
-
-    let mut center_buf = String::new();
-    self.center.to_css(&mut center_buf)?;
-    let is_center_default = center_buf == "center center" || center_buf == "50% 50%";
-
-    if !shape_size_buf.is_empty() || !is_center_default {
-      dest.write_str(&shape_size_buf)?;
-      if !is_center_default {
-        if !shape_size_buf.is_empty() {
-          dest.write_char(' ')?;
-        }
-        dest.write_str("at ")?;
-        dest.write_str(&center_buf)?;
-      }
-      first = false;
-    }
-
-    let mut interp_buf = String::new();
-    self.interpolation.to_css(&mut interp_buf)?;
-    if !interp_buf.is_empty() {
-      if !first {
-        dest.write_str(", ")?;
-      }
-      dest.write_str(&interp_buf)?;
-      first = false;
-    }
-
-    for stop in self.stops.iter() {
-      if !first {
-        dest.write_str(", ")?;
-      }
-      stop.to_css(dest)?;
-      first = false;
-    }
-
-    dest.write_char(')')
   }
 }

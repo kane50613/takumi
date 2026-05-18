@@ -1212,7 +1212,10 @@ fn text_fit_line_scales(layout: &InlineLayout, max_width: f32, style: &SizedFont
     let flexible_fit_width =
       (max_width - line.metrics().inline_min_coord - static_advance).max(0.0);
 
-    if text_advance <= 0.0 || flexible_fit_width <= 0.0 {
+    if text_advance <= 0.0 {
+      continue;
+    }
+    if flexible_fit_width <= 0.0 && text_fit.mode != TextFitMode::Shrink {
       continue;
     }
 

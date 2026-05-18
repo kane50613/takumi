@@ -1,4 +1,4 @@
-use crate::layout::style::{ToCss, unexpected_token};
+use crate::layout::style::{ToCss, properties::write_css_string, unexpected_token};
 use std::fmt;
 use std::sync::Arc;
 
@@ -118,7 +118,11 @@ impl ToCss for BackgroundImage {
       Self::Linear(linear) => linear.to_css(dest),
       Self::Radial(radial) => radial.to_css(dest),
       Self::Conic(conic) => conic.to_css(dest),
-      Self::Url(url) => write!(dest, "url({})", url),
+      Self::Url(url) => {
+        dest.write_str("url(")?;
+        write_css_string(dest, url)?;
+        dest.write_char(')')
+      }
     }
   }
 }

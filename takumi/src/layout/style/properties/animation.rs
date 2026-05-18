@@ -1,4 +1,4 @@
-use crate::layout::style::{ToCss, unexpected_token};
+use crate::layout::style::{ToCss, properties::write_css_string, unexpected_token};
 use std::{borrow::Cow, fmt, vec::Vec};
 
 use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case};
@@ -694,7 +694,14 @@ impl ToCss for AnimationIterationCount {
 impl ToCss for Animation {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     if let Some(ref name) = self.name {
-      dest.write_str(name)?;
+      let needs_quoting = name
+        .chars()
+        .any(|c| !matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_' | '-'));
+      if needs_quoting {
+        write_css_string(dest, name)?;
+      } else {
+        dest.write_str(name)?;
+      }
     } else {
       dest.write_str("none")?;
     }

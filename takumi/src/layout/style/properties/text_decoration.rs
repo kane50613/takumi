@@ -157,6 +157,9 @@ impl TailwindPropertyParser for TextDecorationThickness {
 
 impl ToCss for TextDecorationLines {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    if self.is_empty() {
+      return dest.write_str("none");
+    }
     let mut first = true;
     if self.contains(TextDecorationLines::UNDERLINE) {
       dest.write_str("underline")?;

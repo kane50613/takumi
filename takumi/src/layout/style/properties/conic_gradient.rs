@@ -419,6 +419,60 @@ impl<'i> FromCss<'i> for ConicGradient {
     &[CssToken::Descriptor(CssDescriptorKind::ConicGradientFn)];
 }
 
+impl ToCss for ConicGradient {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    let name = if self.repeating {
+      "repeating-conic-gradient"
+    } else {
+      "conic-gradient"
+    };
+    dest.write_str(name)?;
+    dest.write_char('(')?;
+    let mut first = true;
+
+    // Build "from <angle> at <center>" as a temp buffer
+    let mut params_buf = String::new();
+    if self.from_angle != Angle::zero() {
+      params_buf.push_str("from ");
+      self.from_angle.to_css(&mut params_buf)?;
+    }
+    let mut center_buf = String::new();
+    self.center.to_css(&mut center_buf)?;
+    let is_center_default = center_buf == "center center" || center_buf == "50% 50%";
+    if !is_center_default {
+      if !params_buf.is_empty() {
+        params_buf.push(' ');
+      }
+      params_buf.push_str("at ");
+      params_buf.push_str(&center_buf);
+    }
+    if !params_buf.is_empty() {
+      dest.write_str(&params_buf)?;
+      first = false;
+    }
+
+    let mut interp_buf = String::new();
+    self.interpolation.to_css(&mut interp_buf)?;
+    if !interp_buf.is_empty() {
+      if !first {
+        dest.write_str(", ")?;
+      }
+      dest.write_str(&interp_buf)?;
+      first = false;
+    }
+
+    for stop in self.stops.iter() {
+      if !first {
+        dest.write_str(", ")?;
+      }
+      stop.to_css(dest)?;
+      first = false;
+    }
+
+    dest.write_char(')')
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use color::{ColorSpaceTag, HueDirection};
@@ -745,59 +799,5 @@ mod tests {
   fn test_conic_gradient_lut_index_snaps_near_round_boundary() {
     assert_eq!(ConicGradientTile::stable_round_index(127.4995, 360), 128);
     assert_eq!(ConicGradientTile::stable_round_index(127.498, 360), 127);
-  }
-}
-
-impl ToCss for ConicGradient {
-  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    let name = if self.repeating {
-      "repeating-conic-gradient"
-    } else {
-      "conic-gradient"
-    };
-    dest.write_str(name)?;
-    dest.write_char('(')?;
-    let mut first = true;
-
-    // Build "from <angle> at <center>" as a temp buffer
-    let mut params_buf = String::new();
-    if self.from_angle != Angle::zero() {
-      params_buf.push_str("from ");
-      self.from_angle.to_css(&mut params_buf)?;
-    }
-    let mut center_buf = String::new();
-    self.center.to_css(&mut center_buf)?;
-    let is_center_default = center_buf == "center center" || center_buf == "50% 50%";
-    if !is_center_default {
-      if !params_buf.is_empty() {
-        params_buf.push(' ');
-      }
-      params_buf.push_str("at ");
-      params_buf.push_str(&center_buf);
-    }
-    if !params_buf.is_empty() {
-      dest.write_str(&params_buf)?;
-      first = false;
-    }
-
-    let mut interp_buf = String::new();
-    self.interpolation.to_css(&mut interp_buf)?;
-    if !interp_buf.is_empty() {
-      if !first {
-        dest.write_str(", ")?;
-      }
-      dest.write_str(&interp_buf)?;
-      first = false;
-    }
-
-    for stop in self.stops.iter() {
-      if !first {
-        dest.write_str(", ")?;
-      }
-      stop.to_css(dest)?;
-      first = false;
-    }
-
-    dest.write_char(')')
   }
 }

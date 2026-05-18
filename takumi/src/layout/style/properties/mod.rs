@@ -863,6 +863,19 @@ impl ToCss for std::sync::Arc<str> {
   }
 }
 
+/// Write a CSS quoted string, escaping backslashes and double quotes.
+pub(crate) fn write_css_string<W: fmt::Write>(dest: &mut W, s: &str) -> fmt::Result {
+  dest.write_char('"')?;
+  for ch in s.chars() {
+    match ch {
+      '\\' => dest.write_str("\\\\")?,
+      '"' => dest.write_str("\\\"")?,
+      c => dest.write_char(c)?,
+    }
+  }
+  dest.write_char('"')
+}
+
 /// Macro to implement From trait for Taffy enum conversions.
 macro_rules! impl_from_taffy_enum {
   ($from_ty:ty, $to_ty:ty, $($variant:ident),*) => {

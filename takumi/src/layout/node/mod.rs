@@ -15,7 +15,8 @@ use crate::{
     inline::InlineContentKind,
     node::image::image_resource_url,
     style::{
-      Affine, BackgroundClip, BlendMode, Direction, Sides, Style, ToCss, tw::TailwindValues,
+      Affine, BackgroundClip, BlendMode, Direction, Sides, Style, StyleDeclaration, ToCss,
+      tw::TailwindValues,
     },
   },
   rendering::{
@@ -410,6 +411,13 @@ impl Node {
     if let Some(class_name) = &self.metadata.class_name {
       attrs.push(format!("class=\"{}\"", escape_attr(class_name)));
     }
+    if let Some(dir) = &self.metadata.dir {
+      let dir_str = match dir {
+        Direction::Ltr => "ltr",
+        Direction::Rtl => "rtl",
+      };
+      attrs.push(format!("dir=\"{}\"", dir_str));
+    }
     if let Some(attributes) = &self.metadata.attributes {
       for (k, v) in attributes {
         attrs.push(format!("{}=\"{}\"", k, escape_attr(v)));
@@ -422,27 +430,47 @@ impl Node {
       attrs.push(format!("src=\"{}\"", escape_attr(url)));
     }
 
-    let mut inline_styles = Vec::new();
-    if let Some(style) = &self.metadata.style {
-      for decl in style.declarations.iter() {
-        let mut buf = String::new();
-        if decl.to_css(&mut buf).is_ok() && !buf.is_empty() {
-          inline_styles.push(buf);
+    // Each entry is (prefix_len, css_string) where css_string[..prefix_len] is the property name.
+    // Inline overwrites preset for the same property — no extra key allocation needed.
+    let mut inline_styles: Vec<(usize, String)> = Vec::new();
+    let mut push_decl = |decl: &StyleDeclaration| {
+      let mut buf = String::new();
+      if decl.to_css(&mut buf).is_ok() && !buf.is_empty() {
+        let prop_len = buf.find(':').unwrap_or(buf.len());
+        if let Some(pos) = inline_styles
+          .iter()
+          .position(|(len, s)| s.get(..*len) == buf.get(..prop_len))
+        {
+          inline_styles[pos].1 = buf;
+        } else {
+          inline_styles.push((prop_len, buf));
         }
       }
-    }
+    };
     if let Some(preset) = &self.metadata.preset {
       for decl in preset.declarations.iter() {
-        let mut buf = String::new();
-        if decl.to_css(&mut buf).is_ok() && !buf.is_empty() {
-          inline_styles.push(buf);
-        }
+        push_decl(decl);
+      }
+    }
+    if let Some(style) = &self.metadata.style {
+      for decl in style.declarations.iter() {
+        push_decl(decl);
       }
     }
 
     if !inline_styles.is_empty() {
-      let style_value = escape_attr(&inline_styles.join(" "));
-      attrs.push(format!("style=\"{style_value}\""));
+      let joined: String =
+        inline_styles
+          .iter()
+          .enumerate()
+          .fold(String::new(), |mut acc, (i, (_, s))| {
+            if i > 0 {
+              acc.push(' ');
+            }
+            acc.push_str(s);
+            acc
+          });
+      attrs.push(format!("style=\"{}\"", escape_attr(&joined)));
     }
 
     let attrs_str = if attrs.is_empty() {

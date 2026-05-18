@@ -107,28 +107,13 @@ declare_enum_from_css_impl!(
 
 impl ToCss for TextFit {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    if self.mode == TextFitMode::None
-      && self.target == TextFitTarget::Consistent
-      && self.limit.is_none()
-    {
-      return dest.write_str("none");
-    }
-    let mut first = true;
-    if self.mode != TextFitMode::None {
-      self.mode.to_css(dest)?;
-      first = false;
-    }
+    self.mode.to_css(dest)?;
     if self.target != TextFitTarget::Consistent {
-      if !first {
-        dest.write_char(' ')?;
-      }
+      dest.write_char(' ')?;
       self.target.to_css(dest)?;
-      first = false;
     }
     if let Some(limit) = self.limit {
-      if !first {
-        dest.write_char(' ')?;
-      }
+      dest.write_char(' ')?;
       write!(dest, "{}%", limit * 100.0)?;
     }
     Ok(())

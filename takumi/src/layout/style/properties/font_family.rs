@@ -5,7 +5,8 @@ use cssparser::{Parser, match_ignore_ascii_case};
 use parley::{FontFamily as ParleyFontFamily, FontFamilyName, GenericFamily};
 
 use crate::layout::style::{
-  CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, tw::TailwindPropertyParser,
+  CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, properties::write_css_string,
+  tw::TailwindPropertyParser,
 };
 
 /// Represents a font family for text rendering.
@@ -114,8 +115,12 @@ impl ToCss for FontFamilyToken {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::Owned(name) => {
-        if name.contains(' ') {
-          write!(dest, "\"{}\"", name)
+        let needs_quoting = name.contains(' ')
+          || name.contains('"')
+          || name.contains('\\')
+          || name.chars().next().is_some_and(|c| c.is_ascii_digit());
+        if needs_quoting {
+          write_css_string(dest, name)
         } else {
           dest.write_str(name)
         }

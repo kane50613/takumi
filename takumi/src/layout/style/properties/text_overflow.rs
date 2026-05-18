@@ -2,7 +2,9 @@ use std::fmt;
 
 use cssparser::{Parser, match_ignore_ascii_case};
 
-use crate::layout::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss};
+use crate::layout::style::{
+  CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, properties::write_css_string,
+};
 
 /// Defines how text should be overflowed.
 ///
@@ -44,7 +46,7 @@ impl ToCss for TextOverflow {
     match self {
       Self::Clip => dest.write_str("clip"),
       Self::Ellipsis => dest.write_str("ellipsis"),
-      Self::Custom(s) => write!(dest, "\"{}\"", s),
+      Self::Custom(s) => write_css_string(dest, s),
     }
   }
 }
