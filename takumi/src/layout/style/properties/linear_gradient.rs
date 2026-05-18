@@ -1,6 +1,8 @@
-use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
-use std::ops::{Deref, Neg};
+use std::{
+  fmt,
+  ops::{Deref, Neg},
+};
 use tiny_skia::PremultipliedColorU8;
 
 use typed_builder::TypedBuilder;
@@ -11,8 +13,8 @@ use super::gradient_utils::{
 };
 use crate::layout::style::{
   Animatable, Color, ColorInterpolationMethod, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
-  Length, MakeComputed, ParseResult, declare_enum_from_css_impl, properties::ColorInput,
-  tw::TailwindPropertyParser,
+  Length, MakeComputed, ParseResult, ToCss, declare_enum_from_css_impl, properties::ColorInput,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 use crate::rendering::{RenderContext, Sizing};
 
@@ -491,6 +493,12 @@ impl<'i> FromCss<'i> for GradientStop {
 pub struct Angle(f32);
 
 impl MakeComputed for Angle {}
+
+impl ToCss for Angle {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    write!(dest, "{}deg", **self)
+  }
+}
 
 impl Animatable for Angle {
   fn missing_value() -> Option<Self> {
@@ -1614,5 +1622,91 @@ mod tests {
     assert_eq!(resolved.len(), 2);
     assert!((resolved[0].position - 0.0).abs() < 1e-3);
     assert!((resolved[1].position - 0.0).abs() < 1e-3);
+  }
+}
+
+impl ToCss for StopPosition {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    self.0.to_css(dest)
+  }
+}
+
+impl ToCss for GradientStop {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::ColorHint { color, hint } => {
+        color.to_css(dest)?;
+        if let Some(h) = hint {
+          dest.write_char(' ')?;
+          h.to_css(dest)?;
+        }
+        Ok(())
+      }
+      Self::Hint(h) => h.to_css(dest),
+    }
+  }
+}
+
+impl ToCss for GradientKeywordDirection {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    dest.write_str("to")?;
+    if let Some(v) = self.vertical {
+      dest.write_char(' ')?;
+      v.to_css(dest)?;
+    }
+    if let Some(h) = self.horizontal {
+      dest.write_char(' ')?;
+      h.to_css(dest)?;
+    }
+    Ok(())
+  }
+}
+
+impl ToCss for LinearGradientDirection {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Angle(a) => a.to_css(dest),
+      Self::Keyword(kw) => kw.to_css(dest),
+    }
+  }
+}
+
+impl ToCss for LinearGradient {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    let name = if self.repeating {
+      "repeating-linear-gradient"
+    } else {
+      "linear-gradient"
+    };
+    dest.write_str(name)?;
+    dest.write_char('(')?;
+    let mut first = true;
+
+    let mut dir_buf = String::new();
+    self.direction.to_css(&mut dir_buf)?;
+    if dir_buf != "180deg" && dir_buf != "to bottom" {
+      dest.write_str(&dir_buf)?;
+      first = false;
+    }
+
+    let mut interp_buf = String::new();
+    self.interpolation.to_css(&mut interp_buf)?;
+    if !interp_buf.is_empty() {
+      if !first {
+        dest.write_str(", ")?;
+      }
+      dest.write_str(&interp_buf)?;
+      first = false;
+    }
+
+    for stop in self.stops.iter() {
+      if !first {
+        dest.write_str(", ")?;
+      }
+      stop.to_css(dest)?;
+      first = false;
+    }
+
+    dest.write_char(')')
   }
 }

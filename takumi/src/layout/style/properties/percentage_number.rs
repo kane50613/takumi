@@ -1,5 +1,8 @@
-use crate::layout::style::unexpected_token;
-use std::ops::{Deref, Neg};
+use crate::layout::style::{ToCss, unexpected_token};
+use std::{
+  fmt,
+  ops::{Deref, Neg},
+};
 
 use cssparser::{Parser, Token};
 
@@ -10,7 +13,7 @@ use crate::layout::style::{
 };
 use crate::rendering::Sizing;
 
-use super::{CssSyntaxKind, CssToken};
+use crate::layout::style::{CssSyntaxKind, CssToken};
 
 /// Represents a percentage value (0.0-1.0) in CSS parsing.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -77,4 +80,10 @@ impl<'i> FromCss<'i> for PercentageNumber {
     CssToken::Syntax(CssSyntaxKind::Number),
     CssToken::Syntax(CssSyntaxKind::Percentage),
   ];
+}
+
+impl ToCss for PercentageNumber {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    write!(dest, "{}", self.0)
+  }
 }

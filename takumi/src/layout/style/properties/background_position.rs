@@ -1,5 +1,6 @@
-use crate::layout::style::unexpected_token;
+use crate::layout::style::{ToCss, unexpected_token};
 use cssparser::{Parser, Token, match_ignore_ascii_case};
+use std::fmt;
 use taffy::{Point, Size};
 
 use crate::{
@@ -274,4 +275,40 @@ impl<'i> FromCss<'i> for BackgroundPositions {
   }
 
   const VALID_TOKENS: &'static [CssToken] = BackgroundPosition::<true>::VALID_TOKENS;
+}
+
+impl ToCss for PositionKeywordX {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Left => dest.write_str("left"),
+      Self::Center => dest.write_str("center"),
+      Self::Right => dest.write_str("right"),
+    }
+  }
+}
+
+impl ToCss for PositionKeywordY {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Top => dest.write_str("top"),
+      Self::Center => dest.write_str("center"),
+      Self::Bottom => dest.write_str("bottom"),
+    }
+  }
+}
+
+impl ToCss for PositionComponent {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::KeywordX(k) => k.to_css(dest),
+      Self::KeywordY(k) => k.to_css(dest),
+      Self::Length(l) => l.to_css(dest),
+    }
+  }
+}
+
+impl<const DEFAULT_TOP_LEFT: bool> ToCss for BackgroundPosition<DEFAULT_TOP_LEFT> {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    self.0.to_css(dest)
+  }
 }

@@ -1,4 +1,6 @@
-use crate::layout::style::unexpected_token;
+use std::fmt;
+
+use crate::layout::style::{ToCss, unexpected_token};
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use taffy::{AbsoluteAxis, Point, Rect, Size};
 
@@ -25,8 +27,6 @@ pub enum FillRule {
   /// Counts the total number of crossings - if even, the point is outside
   EvenOdd,
 }
-
-impl MakeComputed for FillRule {}
 
 impl From<FillRule> for Fill {
   fn from(value: FillRule) -> Self {
@@ -294,21 +294,11 @@ impl BasicShape {
   }
 }
 
-impl<'i> FromCss<'i> for FillRule {
-  fn from_css(parser: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = parser.current_source_location();
-    let ident = parser.expect_ident()?;
-
-    match_ignore_ascii_case! { &ident,
-      "nonzero" => Ok(FillRule::NonZero),
-      "evenodd" => Ok(FillRule::EvenOdd),
-      _ => Err(unexpected_token!(location, &Token::Ident(ident.clone()))),
-    }
-  }
-
-  const VALID_TOKENS: &'static [CssToken] =
-    &[CssToken::Keyword("nonzero"), CssToken::Keyword("evenodd")];
-}
+crate::layout::style::properties::declare_enum_from_css_impl!(
+  FillRule,
+  "nonzero" => FillRule::NonZero,
+  "evenodd" => FillRule::EvenOdd,
+);
 
 impl<'i> FromCss<'i> for ShapeRadius {
   fn from_css(parser: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
@@ -436,6 +426,91 @@ impl<'i> FromCss<'i> for BasicShape {
     CssToken::Descriptor(CssDescriptorKind::PolygonFn),
     CssToken::Descriptor(CssDescriptorKind::PathFn),
   ];
+}
+
+impl ToCss for ShapeRadius {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::ClosestSide => dest.write_str("closest-side"),
+      Self::FarthestSide => dest.write_str("farthest-side"),
+      Self::Length(l) => l.to_css(dest),
+    }
+  }
+}
+
+impl ToCss for ShapePosition {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    self.0.to_css(dest)
+  }
+}
+
+impl ToCss for BasicShape {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Inset(shape) => {
+        dest.write_str("inset(")?;
+        shape.inset.to_css(dest)?;
+        if let Some(radius) = &shape.border_radius {
+          dest.write_str(" round ")?;
+          radius.to_css(dest)?;
+        }
+        dest.write_char(')')
+      }
+      Self::Ellipse(shape) => {
+        if shape.radius_x == shape.radius_y {
+          dest.write_str("circle(")?;
+          let mut has_radius = false;
+          if shape.radius_x != ShapeRadius::ClosestSide {
+            shape.radius_x.to_css(dest)?;
+            has_radius = true;
+          }
+          if shape.position != ShapePosition::default() {
+            if has_radius {
+              dest.write_char(' ')?;
+            }
+            dest.write_str("at ")?;
+            shape.position.to_css(dest)?;
+          }
+          dest.write_char(')')
+        } else {
+          dest.write_str("ellipse(")?;
+          shape.radius_x.to_css(dest)?;
+          dest.write_char(' ')?;
+          shape.radius_y.to_css(dest)?;
+          if shape.position != ShapePosition::default() {
+            dest.write_str(" at ")?;
+            shape.position.to_css(dest)?;
+          }
+          dest.write_char(')')
+        }
+      }
+      Self::Polygon(shape) => {
+        dest.write_str("polygon(")?;
+        if let Some(rule) = shape.fill_rule {
+          rule.to_css(dest)?;
+          dest.write_str(", ")?;
+        }
+        let mut first = true;
+        for coord in shape.coordinates.iter() {
+          if !first {
+            dest.write_str(", ")?;
+          }
+          coord.to_css(dest)?;
+          first = false;
+        }
+        dest.write_char(')')
+      }
+      Self::Path(shape) => {
+        dest.write_str("path(")?;
+        if let Some(rule) = shape.fill_rule {
+          rule.to_css(dest)?;
+          dest.write_str(", ")?;
+        }
+        write!(dest, "\"{}\"", shape.path)?;
+        dest.write_char(')')
+      }
+    }
+  }
 }
 
 #[cfg(test)]

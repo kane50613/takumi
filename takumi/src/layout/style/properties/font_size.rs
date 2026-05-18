@@ -1,4 +1,6 @@
-use crate::layout::style::unexpected_token;
+use std::fmt;
+
+use crate::layout::style::{ToCss, unexpected_token};
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::{
@@ -167,6 +169,30 @@ impl Animatable for FontSize {
     let mut value = from_length;
     value.interpolate(&from_length, &to_length, progress, sizing, current_color);
     *self = Self::Length(value);
+  }
+}
+
+impl ToCss for FontSizeKeyword {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::XXSmall => dest.write_str("xx-small"),
+      Self::XSmall => dest.write_str("x-small"),
+      Self::Small => dest.write_str("small"),
+      Self::Medium => dest.write_str("medium"),
+      Self::Large => dest.write_str("large"),
+      Self::XLarge => dest.write_str("x-large"),
+      Self::XXLarge => dest.write_str("xx-large"),
+      Self::XXXLarge => dest.write_str("xxx-large"),
+    }
+  }
+}
+
+impl ToCss for FontSize {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Keyword(k) => k.to_css(dest),
+      Self::Length(l) => l.to_css(dest),
+    }
   }
 }
 

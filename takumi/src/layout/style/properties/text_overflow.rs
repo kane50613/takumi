@@ -1,6 +1,8 @@
+use std::fmt;
+
 use cssparser::{Parser, match_ignore_ascii_case};
 
-use crate::layout::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult};
+use crate::layout::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss};
 
 /// Defines how text should be overflowed.
 ///
@@ -35,4 +37,14 @@ impl<'i> FromCss<'i> for TextOverflow {
     CssToken::Keyword("ellipsis"),
     CssToken::Syntax(CssSyntaxKind::String),
   ];
+}
+
+impl ToCss for TextOverflow {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Clip => dest.write_str("clip"),
+      Self::Ellipsis => dest.write_str("ellipsis"),
+      Self::Custom(s) => write!(dest, "\"{}\"", s),
+    }
+  }
 }

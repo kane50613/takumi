@@ -1,7 +1,8 @@
 use cssparser::Parser;
+use std::fmt;
 
 use crate::layout::style::{
-  Animatable, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult,
+  Animatable, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss,
 };
 
 /// Represents the CSS `z-index` value for stacking order.
@@ -43,10 +44,18 @@ impl<'i> FromCss<'i> for ZIndex {
   ];
 }
 
+impl ToCss for ZIndex {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Auto => dest.write_str("auto"),
+      Self::Integer(i) => write!(dest, "{}", i),
+    }
+  }
+}
+
 #[cfg(test)]
 mod tests {
-  use super::ZIndex;
-  use crate::layout::style::FromCss;
+  use crate::layout::style::{FromCss, ZIndex};
 
   #[test]
   fn parses_auto() {

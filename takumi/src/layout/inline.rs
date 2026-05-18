@@ -1140,14 +1140,6 @@ fn prepare_inline_layout(
   (text_wrap_mode, line_height_hint)
 }
 
-fn line_fit_width(line: &Line<'_, InlineBrush>, max_width: f32) -> f32 {
-  if max_width.is_finite() {
-    (max_width - line.metrics().inline_min_coord).max(0.0)
-  } else {
-    max_width
-  }
-}
-
 fn text_fit_line_is_scalable(
   line: &Line<'_, InlineBrush>,
   line_index: usize,
@@ -1184,6 +1176,21 @@ fn text_fit_is_applicable(
     })
 }
 
+/// Returns `(text_advance, static_advance)` for a line.
+/// `text_advance` excludes trailing whitespace and inline boxes; `static_advance` is inline-box width only.
+fn text_fit_line_advance(line: &Line<'_, InlineBrush>) -> (f32, f32) {
+  let metrics = line.metrics();
+  let static_advance: f32 = line
+    .items()
+    .filter_map(|item| match item {
+      PositionedLayoutItem::InlineBox(b) if b.kind == InlineBoxKind::InFlow => Some(b.width),
+      _ => None,
+    })
+    .sum();
+  let text_advance = (metrics.advance - metrics.trailing_whitespace - static_advance).max(0.0);
+  (text_advance, static_advance)
+}
+
 fn text_fit_line_scales(layout: &InlineLayout, max_width: f32, style: &SizedFontStyle) -> Vec<f32> {
   let text_fit = style.parent.text_fit;
   if text_fit.mode == TextFitMode::None || !max_width.is_finite() {
@@ -1195,67 +1202,53 @@ fn text_fit_line_scales(layout: &InlineLayout, max_width: f32, style: &SizedFont
     return Vec::new();
   }
 
-  let mut scales = Vec::with_capacity(line_count);
+  let mut scales: Vec<(usize, f32)> = Vec::with_capacity(line_count);
   for (index, line) in layout.lines().enumerate() {
     if !text_fit_line_is_scalable(&line, index, line_count, text_fit.target) {
-      scales.push(1.0);
       continue;
     }
 
-    let mut flexible_advance = 0.0;
-    let mut static_advance = 0.0;
-    for item in line.items() {
-      match item {
-        PositionedLayoutItem::GlyphRun(glyph_run) => flexible_advance += glyph_run.advance(),
-        PositionedLayoutItem::InlineBox(inline_box) => {
-          if inline_box.kind == InlineBoxKind::InFlow {
-            static_advance += inline_box.width;
-          }
-        }
-      }
+    let (text_advance, static_advance) = text_fit_line_advance(&line);
+    let flexible_fit_width =
+      (max_width - line.metrics().inline_min_coord - static_advance).max(0.0);
+
+    if text_advance <= 0.0 || flexible_fit_width <= 0.0 {
+      continue;
     }
 
-    let advance = (flexible_advance - line.metrics().trailing_whitespace).max(0.0);
-    let fit_width = line_fit_width(&line, max_width);
-    let flexible_fit_width = (fit_width - static_advance).max(0.0);
-    let scale = if advance <= 0.0 || flexible_fit_width <= 0.0 {
-      1.0
-    } else {
-      match text_fit.mode {
-        TextFitMode::Grow if advance < flexible_fit_width => flexible_fit_width / advance,
-        TextFitMode::Shrink if advance > flexible_fit_width => flexible_fit_width / advance,
-        _ => 1.0,
-      }
+    let scale = match text_fit.mode {
+      TextFitMode::Grow if text_advance < flexible_fit_width => flexible_fit_width / text_advance,
+      TextFitMode::Shrink if text_advance > flexible_fit_width => flexible_fit_width / text_advance,
+      _ => 1.0,
     };
-    scales.push(clamp_text_fit_scale(style, scale));
+    scales.push((index, clamp_text_fit_scale(style, scale)));
   }
 
   if text_fit.target == TextFitTarget::Consistent {
-    let consistent_scale = match text_fit.mode {
-      TextFitMode::Grow => scales.iter().copied().fold(f32::INFINITY, f32::min),
-      TextFitMode::Shrink => scales.iter().copied().fold(1.0, f32::min),
+    let raw = match text_fit.mode {
+      TextFitMode::Grow => scales.iter().map(|(_, s)| *s).fold(f32::INFINITY, f32::min),
+      TextFitMode::Shrink => scales
+        .iter()
+        .map(|(_, s)| *s)
+        .filter(|s| *s < 1.0)
+        .fold(1.0_f32, f32::min),
       TextFitMode::None => 1.0,
     };
-    let consistent_scale = if consistent_scale.is_finite() {
-      clamp_text_fit_scale(style, consistent_scale)
+    let consistent_scale = if raw.is_finite() {
+      clamp_text_fit_scale(style, raw)
     } else {
       1.0
     };
-    scales.fill(consistent_scale);
+    return vec![consistent_scale; line_count];
   }
 
-  scales
+  let mut result = vec![1.0; line_count];
+  for (index, scale) in scales {
+    result[index] = scale;
+  }
+  result
 }
 
-/// Computes the X-origin and alignment correction for a scaled line.
-///
-/// Why: `parley` aligns text within its own line box (which may be shrunk by `text-balance`),
-/// but `text-fit` scales text to the full `container_width`.
-///
-/// How:
-/// 1. We derive the text alignment ratio directly from parley's layout `offset`.
-/// 2. We align the scaled text within the full `container_width`, clamping to
-///    the start edge (`.max(0.0)`) on overflow to prevent off-screen shifting.
 pub(crate) fn text_fit_line_alignment_correction(
   line: &Line<'_, InlineBrush>,
   line_scale: f32,
@@ -1268,30 +1261,22 @@ pub(crate) fn text_fit_line_alignment_correction(
     return (line_start, 0.0);
   }
 
-  let mut static_advance = 0.0_f32;
-  for item in line.items() {
-    if let PositionedLayoutItem::InlineBox(inline_box) = item
-      && inline_box.kind == InlineBoxKind::InFlow
-    {
-      static_advance += inline_box.width;
-    }
-  }
+  let (text_advance, static_advance) = text_fit_line_advance(line);
+  let scaled_line_width = static_advance + text_advance * line_scale;
 
-  let visual_scalable = (metrics.advance - metrics.trailing_whitespace - static_advance).max(0.0);
-  let scaled_line_width = static_advance + visual_scalable * line_scale;
-
-  // Derive the alignment factor directly from how much parley shifted the line
-  // within its available line box. This naturally handles RTL, center, and right alignments.
+  // free_space_pre_scale = room left for alignment before text-fit scaling.
+  // metrics.offset encodes alignment shift (LTR start = 0, center = 0.5×free, end = free).
+  // For RTL, offset is negative (−trailing_whitespace); clamping ratio to [0,1] handles it.
   let line_width = metrics.inline_max_coord - metrics.inline_min_coord;
-  let free_space = (line_width - visual_scalable).max(0.0);
-  let align_ratio = if free_space > 0.0 {
-    metrics.offset / free_space
+  let free_space_pre_scale = (line_width - static_advance - text_advance).max(0.0);
+  let align_ratio = if free_space_pre_scale > 0.0 {
+    (metrics.offset / free_space_pre_scale).clamp(0.0, 1.0)
   } else {
-    0.0
+    if metrics.offset < 0.0 { 1.0 } else { 0.0 }
   };
 
-  let aligned_line_start =
-    metrics.inline_min_coord + (container_width - scaled_line_width).max(0.0) * align_ratio;
+  let free_space_post_scale = (container_width - scaled_line_width).max(0.0);
+  let aligned_line_start = metrics.inline_min_coord + free_space_post_scale * align_ratio;
 
   (line_start, aligned_line_start - line_start)
 }

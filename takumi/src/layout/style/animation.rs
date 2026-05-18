@@ -4,14 +4,16 @@ use parley::{FontFeature, FontVariation};
 use std::cmp::Ordering;
 use typed_builder::TypedBuilder;
 
-use super::StyleDeclarationBlock;
-use super::selector::MediaQueryList;
 use serde::Deserialize;
 
 use crate::{
   layout::{
     Viewport,
-    style::{selector::StyleSheet, *},
+    style::{
+      StyleDeclarationBlock,
+      selector::{MediaQueryList, StyleSheet},
+      *,
+    },
   },
   rendering::{RenderContext, Sizing},
 };
@@ -650,7 +652,7 @@ mod tests {
   use taffy::Size;
 
   use crate::{
-    layout::style::animation::sample_animation_progress,
+    layout::style::animation::{sample_animation_progress, tailwind_animation_keyframes},
     layout::{Viewport, style::*},
     rendering::Sizing,
   };
@@ -1096,10 +1098,10 @@ mod tests {
 
   #[test]
   fn tailwind_animation_presets_include_built_in_keyframes() {
-    assert!(super::tailwind_animation_keyframes("spin").is_some());
-    assert!(super::tailwind_animation_keyframes("ping").is_some());
-    assert!(super::tailwind_animation_keyframes("pulse").is_some());
-    assert!(super::tailwind_animation_keyframes("bounce").is_some());
+    assert!(tailwind_animation_keyframes("spin").is_some());
+    assert!(tailwind_animation_keyframes("ping").is_some());
+    assert!(tailwind_animation_keyframes("pulse").is_some());
+    assert!(tailwind_animation_keyframes("bounce").is_some());
   }
 
   #[test]

@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Debug};
+use std::{borrow::Cow, fmt, fmt::Debug};
 
 use cssparser::{BasicParseErrorKind, ParseError, Parser};
 use typed_builder::TypedBuilder;
@@ -6,7 +6,7 @@ use typed_builder::TypedBuilder;
 use crate::{
   layout::style::{
     Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length, LengthDefaultsToZero,
-    ListInterpolationStrategy, MakeComputed, ParseResult, next_is_comma,
+    ListInterpolationStrategy, MakeComputed, ParseResult, ToCss, next_is_comma,
   },
   rendering::Sizing,
 };
@@ -203,6 +203,31 @@ impl Animatable for BoxShadow {
   }
 }
 
+impl ToCss for BoxShadow {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    if self.inset {
+      dest.write_str("inset ")?;
+    }
+    self.offset_x.to_css(dest)?;
+    dest.write_char(' ')?;
+    self.offset_y.to_css(dest)?;
+
+    let blur_zero = self.blur_radius == Length::zero();
+    let spread_zero = self.spread_radius == Length::zero();
+    if !spread_zero {
+      dest.write_char(' ')?;
+      self.blur_radius.to_css(dest)?;
+      dest.write_char(' ')?;
+      self.spread_radius.to_css(dest)?;
+    } else if !blur_zero {
+      dest.write_char(' ')?;
+      self.blur_radius.to_css(dest)?;
+    }
+
+    dest.write_char(' ')?;
+    self.color.to_css(dest)
+  }
+}
 #[cfg(test)]
 mod tests {
   use super::*;

@@ -1,10 +1,12 @@
+use std::fmt::Write;
+
 use cssparser::{Parser, match_ignore_ascii_case};
 use taffy::{MaxTrackSizingFunction, MinTrackSizingFunction, TrackSizingFunction};
 
 use crate::{
   layout::style::{
     CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, GridLength, GridMinMaxSize, Length,
-    MakeComputed, ParseResult, tw::TailwindPropertyParser,
+    MakeComputed, ParseResult, ToCss, tw::TailwindPropertyParser,
   },
   rendering::Sizing,
 };
@@ -102,6 +104,15 @@ impl MakeComputed for GridTrackSize {
     match self {
       GridTrackSize::MinMax(min_max) => min_max.make_computed(sizing),
       GridTrackSize::Fixed(length) => length.make_computed(sizing),
+    }
+  }
+}
+
+impl ToCss for GridTrackSize {
+  fn to_css<W: Write>(&self, dest: &mut W) -> std::fmt::Result {
+    match self {
+      Self::MinMax(mm) => mm.to_css(dest),
+      Self::Fixed(gl) => gl.to_css(dest),
     }
   }
 }

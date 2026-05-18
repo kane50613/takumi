@@ -2,9 +2,8 @@ use std::{borrow::Cow, collections::HashMap};
 
 use cssparser::{Parser, ParserInput, Token};
 
-use crate::layout::style::CssInput;
-
 use super::DeferredDeclaration;
+use crate::layout::style::{ComputedStyle, CssInput};
 
 pub(super) fn resolve_var_function(
   input: &mut Parser<'_, '_>,
@@ -126,8 +125,8 @@ pub(crate) fn resolve_var_references(
 }
 
 pub(super) fn apply_deferred_declaration(
-  style: &mut super::ComputedStyle,
-  parent: Option<&super::ComputedStyle>,
+  style: &mut ComputedStyle,
+  parent: Option<&ComputedStyle>,
   deferred: &DeferredDeclaration,
 ) {
   let Some(resolved_value) = resolve_var_references(

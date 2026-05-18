@@ -1,7 +1,8 @@
-use crate::layout::style::unexpected_token;
 use crate::layout::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult};
+use crate::layout::style::{ToCss, unexpected_token};
 use cssparser::{Parser, Token};
 use parley::{FontVariation, setting::Tag};
+use std::fmt;
 
 /// Controls variable font axis values via CSS font-variation-settings property.
 ///
@@ -45,4 +46,10 @@ impl<'i> FromCss<'i> for FontVariationSettings {
     CssToken::Keyword("normal"),
     CssToken::Syntax(CssSyntaxKind::String),
   ];
+}
+
+impl ToCss for parley::FontVariation {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    write!(dest, "\"{}\" {}", self.tag, self.value)
+  }
 }

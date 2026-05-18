@@ -2,11 +2,10 @@ use std::{borrow::Cow, fmt::Write};
 
 use cssparser::{ParseError, Parser, ParserInput, SourceLocation, Token};
 
+use super::{LonghandId, ParsedDeclarations, PropertyId, ShorthandId};
 use crate::layout::style::{
   CssInput, CssNumber, CssUnexpected, CssWideKeyword, FromCss, merge_enum_values,
 };
-
-use super::{LonghandId, ParsedDeclarations, PropertyId, ShorthandId};
 
 #[derive(Debug, Clone)]
 pub(super) struct CssInputParseFailure {

@@ -1668,7 +1668,7 @@ mod tests {
   use cssparser::{Parser, ParserInput};
   use taffy::NodeId;
 
-  use super::registered_custom_property_parent_style;
+  use super::{registered_custom_property_parent_style, sort_children_by_order};
   use crate::layout::style::{PropertyRule, StyleDeclaration, StyleDeclarationBlock, StyleSheet};
   use crate::layout::{
     Viewport,
@@ -1688,7 +1688,7 @@ mod tests {
       NodeId::from(1usize),
       NodeId::from(2usize),
     ];
-    let sorted = super::sort_children_by_order(&children, |child_id| match usize::from(child_id) {
+    let sorted = sort_children_by_order(&children, |child_id| match usize::from(child_id) {
       1 => -1,
       _ => 0,
     });

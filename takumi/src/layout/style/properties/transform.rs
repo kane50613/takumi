@@ -1,5 +1,8 @@
-use crate::layout::style::unexpected_token;
-use std::ops::{Mul, MulAssign};
+use crate::layout::style::{ToCss, unexpected_token};
+use std::{
+  fmt,
+  ops::{Mul, MulAssign},
+};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use taffy::{Point, Size};
@@ -357,7 +360,8 @@ impl<'i> FromCss<'i> for Affine {
 }
 
 /// A collection of transform operations that can be applied together
-pub type Transforms = Box<[Transform]>;
+#[derive(Debug, Clone, PartialEq)]
+pub struct Transforms(pub Box<[Transform]>);
 
 impl<'i> FromCss<'i> for Transforms {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
@@ -368,10 +372,119 @@ impl<'i> FromCss<'i> for Transforms {
       transforms.push(transform);
     }
 
-    Ok(transforms.into_boxed_slice())
+    Ok(Transforms(transforms.into_boxed_slice()))
   }
 
   const VALID_TOKENS: &'static [CssToken] = Transform::VALID_TOKENS;
+}
+
+impl MakeComputed for Transforms {
+  fn make_computed(&mut self, sizing: &Sizing) {
+    for transform in self.0.iter_mut() {
+      transform.make_computed(sizing);
+    }
+  }
+}
+
+impl Animatable for Transforms {
+  fn missing_value() -> Option<Self> {
+    <Box<[Transform]>>::missing_value().map(Self)
+  }
+
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &Sizing,
+    current_color: Color,
+  ) {
+    self
+      .0
+      .interpolate(&from.0, &to.0, progress, sizing, current_color);
+  }
+}
+
+impl std::ops::Deref for Transforms {
+  type Target = Box<[Transform]>;
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
+}
+
+impl std::ops::DerefMut for Transforms {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut self.0
+  }
+}
+
+impl From<Box<[Transform]>> for Transforms {
+  fn from(box_slice: Box<[Transform]>) -> Self {
+    Self(box_slice)
+  }
+}
+
+impl From<Vec<Transform>> for Transforms {
+  fn from(vec: Vec<Transform>) -> Self {
+    Self(vec.into_boxed_slice())
+  }
+}
+
+impl<const N: usize> From<[Transform; N]> for Transforms {
+  fn from(arr: [Transform; N]) -> Self {
+    Self(Box::from(arr))
+  }
+}
+
+impl ToCss for Transform {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Translate(x, y) => {
+        dest.write_str("translate(")?;
+        x.to_css(dest)?;
+        dest.write_str(", ")?;
+        y.to_css(dest)?;
+        dest.write_char(')')
+      }
+      Self::Scale(x, y) => write!(dest, "scale({x}, {y})"),
+      Self::Rotate(a) => {
+        dest.write_str("rotate(")?;
+        a.to_css(dest)?;
+        dest.write_char(')')
+      }
+      Self::Skew(x, y) => {
+        dest.write_str("skew(")?;
+        x.to_css(dest)?;
+        dest.write_str(", ")?;
+        y.to_css(dest)?;
+        dest.write_char(')')
+      }
+      Self::Matrix(Affine { a, b, c, d, x, y }) => {
+        write!(dest, "matrix({a}, {b}, {c}, {d}, {x}, {y})")
+      }
+    }
+  }
+}
+
+impl ToCss for Affine {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    let Self { a, b, c, d, x, y } = self;
+    write!(dest, "matrix({a}, {b}, {c}, {d}, {x}, {y})")
+  }
+}
+
+impl ToCss for Transforms {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    let mut first = true;
+    for transform in self.iter() {
+      if !first {
+        dest.write_char(' ')?;
+      }
+      transform.to_css(dest)?;
+      first = false;
+    }
+    Ok(())
+  }
 }
 
 impl<'i> FromCss<'i> for Transform {

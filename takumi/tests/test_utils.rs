@@ -1,6 +1,7 @@
 use std::{
   borrow::Cow,
-  fs::File,
+  env,
+  fs::{File, create_dir_all, remove_file, write},
   io::Read,
   path::{Path, PathBuf},
   sync::LazyLock,
@@ -140,13 +141,103 @@ pub fn run_fixture_test(node: Node, fixture_name: &str) {
 
 #[allow(dead_code)]
 pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &str) {
-  let image = render(options).unwrap();
+  let viewport_width = options.viewport().size.width.unwrap_or(800) as u32;
+  let viewport_height = options.viewport().size.height.unwrap_or(600) as u32;
 
-  save_image(
-    image,
-    format!("tests/fixtures-generated/{}.webp", fixture_name),
-    ImageOutputFormat::WebP,
+  create_dir_all("tests/fixtures-generated").ok();
+
+  let html_content = format!(
+    r#"<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{}</title>
+  <link rel="stylesheet" href="../shared.css">
+</head>
+<body style="width: {}px; height: {}px;">
+  {}
+</body>
+</html>"#,
+    fixture_name,
+    viewport_width,
+    viewport_height,
+    options.node().to_html()
   );
+
+  write(
+    format!("tests/fixtures-generated/{fixture_name}.html"),
+    html_content,
+  )
+  .unwrap();
+
+  let image = render(options).unwrap();
+  let golden_path = format!("tests/fixtures-generated/{fixture_name}.webp");
+
+  if env::var("CI").is_ok() {
+    let expected_image = match image::open(&golden_path) {
+      Ok(img) => img.to_rgba8(),
+      Err(err) => panic!("Golden image missing or invalid at {golden_path}: {err}"),
+    };
+
+    if let Some(diff_image) = run_pixelmatch(&image, &expected_image) {
+      let actual_path = format!("tests/fixtures-generated/{fixture_name}.actual.webp");
+      let diff_path = format!("tests/fixtures-generated/{fixture_name}.diff.webp");
+
+      save_image(image, &actual_path, ImageOutputFormat::WebP);
+      save_image(diff_image, &diff_path, ImageOutputFormat::WebP);
+
+      panic!(
+        "Visual regression test failed for fixture '{fixture_name}'!\n\
+         - Golden image: {golden_path}\n\
+         - Fresh actual image: {actual_path}\n\
+         - Pixel diff highlight: {diff_path}\n\
+         Please inspect the diff and update the golden image locally (without CI=true)."
+      );
+    }
+  } else {
+    save_image(image, &golden_path, ImageOutputFormat::WebP);
+    remove_file(format!(
+      "tests/fixtures-generated/{fixture_name}.actual.webp"
+    ))
+    .ok();
+    remove_file(format!("tests/fixtures-generated/{fixture_name}.diff.webp")).ok();
+  }
+}
+
+fn run_pixelmatch(actual: &RgbaImage, expected: &RgbaImage) -> Option<RgbaImage> {
+  if actual.dimensions() != expected.dimensions() {
+    let mut diff = RgbaImage::new(
+      actual.width().max(expected.width()),
+      actual.height().max(expected.height()),
+    );
+    for pixel in diff.pixels_mut() {
+      *pixel = image::Rgba([255, 0, 0, 255]);
+    }
+    return Some(diff);
+  }
+
+  let (w, h) = actual.dimensions();
+  let mut diff = RgbaImage::new(w, h);
+  let mut mismatch_count = 0;
+
+  for y in 0..h {
+    for x in 0..w {
+      let p1 = actual.get_pixel(x, y);
+      let p2 = expected.get_pixel(x, y);
+
+      if p1 != p2 {
+        mismatch_count += 1;
+        diff.put_pixel(x, y, image::Rgba([255, 0, 0, 255]));
+      } else {
+        let r = (p1[0] as f32 * 0.3 + 255.0 * 0.7) as u8;
+        let g = (p1[1] as f32 * 0.3 + 255.0 * 0.7) as u8;
+        let b = (p1[2] as f32 * 0.3 + 255.0 * 0.7) as u8;
+        diff.put_pixel(x, y, image::Rgba([r, g, b, 255]));
+      }
+    }
+  }
+
+  if mismatch_count > 0 { Some(diff) } else { None }
 }
 
 fn save_image<P: AsRef<Path>>(image: RgbaImage, path: P, format: ImageOutputFormat) {

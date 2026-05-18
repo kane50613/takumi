@@ -1,0 +1,45 @@
+@font-face {
+  font-family: "Geist";
+  src: url("../../assets/fonts/geist/Geist[wght].woff2") format("woff2");
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../../assets/fonts/geist/GeistMono[wght].woff2") format("woff2");
+}
+@font-face {
+  font-family: "Twemoji Mozilla";
+  src: url("../../assets/fonts/twemoji/TwemojiMozilla-colr.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Archivo";
+  src: url("../../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Scheherazade New Test";
+  src: url("../../assets/fonts/sil/scheherazade-new-v17-arabic-regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Sans TC";
+  src: url("../../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Sans Devanagari";
+  src: url("../../assets/fonts/noto-sans/noto-sans-devanagari-v30-devanagari-regular.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "Poppins";
+  src: url("../../assets/fonts/poppins/poppins-v24-devanagari_latin-regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Poppins Bold";
+  src: url("../../assets/fonts/poppins/poppins-v24-devanagari_latin-700.woff2") format("woff2");
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: transparent;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}

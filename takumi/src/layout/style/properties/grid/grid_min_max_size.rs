@@ -1,7 +1,9 @@
 use cssparser::Parser;
 
 use crate::{
-  layout::style::{CssDescriptorKind, CssToken, FromCss, GridLength, MakeComputed, ParseResult},
+  layout::style::{
+    CssDescriptorKind, CssToken, FromCss, GridLength, MakeComputed, ParseResult, ToCss,
+  },
   rendering::Sizing,
 };
 
@@ -33,5 +35,15 @@ impl MakeComputed for GridMinMaxSize {
   fn make_computed(&mut self, sizing: &Sizing) {
     self.min.make_computed(sizing);
     self.max.make_computed(sizing);
+  }
+}
+
+impl ToCss for GridMinMaxSize {
+  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+    dest.write_str("minmax(")?;
+    self.min.to_css(dest)?;
+    dest.write_str(", ")?;
+    self.max.to_css(dest)?;
+    dest.write_str(")")
   }
 }

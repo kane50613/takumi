@@ -22,8 +22,8 @@ use tiny_skia::{
 };
 
 use self::paint_source::{MaskCompositeColor, apply_mask_color_mode, sample_paint_source};
-use super::blend::*;
-use super::stacking_context::blend_pixmap_software;
+use crate::rendering::blend::*;
+use crate::rendering::stacking_context::blend_pixmap_software;
 use crate::{
   Result,
   layout::style::{

@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>text_inline</title>
+    <link rel="stylesheet" href="../shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div
+      style="
+        display: flex;
+        background-color: rgb(255, 255, 255);
+        width: 100%;
+        display: block;
+        justify-content: center;
+        line-clamp: 3;
+        text-overflow: ellipsis;
+        font-size: 48px;
+        text-wrap-mode: wrap;
+        white-space-collapse: preserve;
+      "
+    >
+      <span style="display: flex; display: inline"
+        >The quick brown fox jumps over the lazy dog.</span
+      ><span style="display: flex; text-transform: uppercase; display: inline"
+        >Lorem ipsum dolor sit amet, consectetur adipiscing elit. </span
+      ><span style="display: flex; color: rgb(255, 0, 0); display: inline"
+        >Nothing beats a jet2 holiday! </span
+      ><span
+        style="
+          display: flex;
+          font-weight: 600;
+          display: inline;
+          color: rgb(0, 0, 255);
+          font-style: italic;
+        "
+        >I&#x27;m making a browser at this point.
+      </span>
+    </div>
+  </body>
+</html>

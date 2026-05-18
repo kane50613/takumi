@@ -1,7 +1,8 @@
 use cssparser::Parser;
+use std::fmt;
 
 use crate::layout::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, lerp,
+  Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, lerp,
   tw::TailwindPropertyParser,
 };
 use crate::rendering::Sizing;
@@ -38,5 +39,11 @@ impl TailwindPropertyParser for FlexGrow {
     let value = token.parse::<f32>().ok()?;
 
     Some(FlexGrow(value))
+  }
+}
+
+impl ToCss for FlexGrow {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    write!(dest, "{}", self.0)
   }
 }

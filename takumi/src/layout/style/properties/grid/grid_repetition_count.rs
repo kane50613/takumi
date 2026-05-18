@@ -1,7 +1,7 @@
 use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token};
 
-use crate::layout::style::{CssSyntaxKind, CssToken, FromCss, ParseResult};
+use crate::layout::style::{CssSyntaxKind, CssToken, FromCss, ParseResult, ToCss};
 
 /// Represents grid track repetition keywords
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -82,6 +82,24 @@ impl<'i> FromCss<'i> for GridRepetitionCount {
     CssToken::Keyword("auto-fit"),
     CssToken::Syntax(CssSyntaxKind::Number),
   ];
+}
+
+impl ToCss for GridRepetitionKeyword {
+  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+    match self {
+      Self::AutoFill => dest.write_str("auto-fill"),
+      Self::AutoFit => dest.write_str("auto-fit"),
+    }
+  }
+}
+
+impl ToCss for GridRepetitionCount {
+  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+    match self {
+      Self::Keyword(kw) => kw.to_css(dest),
+      Self::Count(c) => write!(dest, "{}", c),
+    }
+  }
 }
 
 #[cfg(test)]

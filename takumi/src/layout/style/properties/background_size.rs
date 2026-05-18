@@ -1,5 +1,6 @@
-use crate::layout::style::unexpected_token;
+use crate::layout::style::{ToCss, unexpected_token};
 use cssparser::{Parser, Token, match_ignore_ascii_case};
+use std::fmt;
 use taffy::Size;
 
 use crate::{
@@ -302,6 +303,23 @@ impl<'i> FromCss<'i> for BackgroundSizes {
   const VALID_TOKENS: &'static [CssToken] = BackgroundSize::VALID_TOKENS;
 }
 
+impl ToCss for BackgroundSize {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Cover => dest.write_str("cover"),
+      Self::Contain => dest.write_str("contain"),
+      Self::Explicit { width, height } => {
+        if *height == Length::Auto {
+          width.to_css(dest)
+        } else {
+          width.to_css(dest)?;
+          dest.write_str(" ")?;
+          height.to_css(dest)
+        }
+      }
+    }
+  }
+}
 #[cfg(test)]
 mod tests {
   use super::*;

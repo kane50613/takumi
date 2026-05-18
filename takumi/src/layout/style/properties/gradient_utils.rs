@@ -5,7 +5,7 @@ use smallvec::SmallVec;
 use taffy::Point;
 use tiny_skia::{ColorU8, PremultipliedColorU8};
 
-use super::{Color, GradientStop, ResolvedGradientStop};
+use crate::layout::style::{Color, GradientStop, ResolvedGradientStop};
 use crate::rendering::{RenderContext, fast_div_255};
 
 const MIN_GRADIENT_LUT_SIZE: usize = 2;

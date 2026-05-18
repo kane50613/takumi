@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Debug};
+use std::{borrow::Cow, fmt, fmt::Debug};
 
 use cssparser::{BasicParseErrorKind, ParseError, Parser};
 use typed_builder::TypedBuilder;
@@ -6,7 +6,7 @@ use typed_builder::TypedBuilder;
 use crate::{
   layout::style::{
     Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length, LengthDefaultsToZero,
-    ListInterpolationStrategy, MakeComputed, ParseResult, next_is_comma,
+    ListInterpolationStrategy, MakeComputed, ParseResult, ToCss, next_is_comma,
   },
   rendering::Sizing,
 };
@@ -160,6 +160,23 @@ impl Animatable for TextShadow {
     self
       .color
       .interpolate(&from.color, &to.color, progress, sizing, current_color);
+  }
+}
+
+impl ToCss for TextShadow {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    self.offset_x.to_css(dest)?;
+    dest.write_char(' ')?;
+    self.offset_y.to_css(dest)?;
+    if self.blur_radius != Length::zero() {
+      dest.write_char(' ')?;
+      self.blur_radius.to_css(dest)?;
+    }
+    if self.color != ColorInput::CurrentColor {
+      dest.write_char(' ')?;
+      self.color.to_css(dest)?;
+    }
+    Ok(())
   }
 }
 

@@ -1,8 +1,10 @@
+use std::fmt;
+
 use cssparser::{Parser, Token};
 use typed_builder::TypedBuilder;
 
 use crate::layout::style::{
-  Animatable, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult,
+  Animatable, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss,
   declare_enum_from_css_impl, unexpected_token,
 };
 
@@ -23,37 +25,31 @@ impl MakeComputed for TextFit {}
 impl Animatable for TextFit {}
 
 impl<'i> FromCss<'i> for TextFit {
+  // Syntax: [ none | grow | shrink ] [ consistent | per-line | per-line-all ]? <percentage>?
+  // The type keyword is mandatory and must appear first, matching the spec and Chromium.
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut mode = None;
-    let mut target = None;
-    let mut limit = None;
+    let mode = TextFitMode::from_css(input)?;
 
-    while !input.is_exhausted() {
-      if let Ok(parsed) = input.try_parse(TextFitMode::from_css) {
-        if mode.replace(parsed).is_some() {
-          return Err(input.new_error_for_next_token());
+    let target = input.try_parse(TextFitTarget::from_css).unwrap_or_default();
+
+    let limit: Option<f32> = input
+      .try_parse(|input| -> ParseResult<'i, f32> {
+        let location = input.current_source_location();
+        match input.next()? {
+          Token::Percentage { unit_value, .. } => Ok(unit_value.max(0.0)),
+          token => Err(unexpected_token!(location, token)),
         }
-        continue;
-      }
+      })
+      .ok();
 
-      if let Ok(parsed) = input.try_parse(TextFitTarget::from_css) {
-        if target.replace(parsed).is_some() {
-          return Err(input.new_error_for_next_token());
-        }
-        continue;
-      }
-
-      let location = input.current_source_location();
-      let token = input.next()?;
-      match token {
-        Token::Percentage { unit_value, .. } if limit.replace(unit_value.max(0.0)).is_none() => {}
-        _ => return Err(unexpected_token!(location, token)),
-      }
+    // Reject trailing tokens (e.g. duplicate target or two percentages).
+    if !input.is_exhausted() {
+      return Err(input.new_error_for_next_token());
     }
 
     Ok(Self {
-      mode: mode.unwrap_or_default(),
-      target: target.unwrap_or_default(),
+      mode,
+      target,
       limit,
     })
   }
@@ -108,3 +104,33 @@ declare_enum_from_css_impl!(
   "per-line" => TextFitTarget::PerLine,
   "per-line-all" => TextFitTarget::PerLineAll,
 );
+
+impl ToCss for TextFit {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    if self.mode == TextFitMode::None
+      && self.target == TextFitTarget::Consistent
+      && self.limit.is_none()
+    {
+      return dest.write_str("none");
+    }
+    let mut first = true;
+    if self.mode != TextFitMode::None {
+      self.mode.to_css(dest)?;
+      first = false;
+    }
+    if self.target != TextFitTarget::Consistent {
+      if !first {
+        dest.write_char(' ')?;
+      }
+      self.target.to_css(dest)?;
+      first = false;
+    }
+    if let Some(limit) = self.limit {
+      if !first {
+        dest.write_char(' ')?;
+      }
+      write!(dest, "{}%", limit * 100.0)?;
+    }
+    Ok(())
+  }
+}

@@ -1,5 +1,5 @@
 use crate::layout::style::unexpected_token;
-use std::{borrow::Cow, collections::HashMap, marker::PhantomData, str::FromStr};
+use std::{borrow::Cow, collections::HashMap, fmt, marker::PhantomData, str::FromStr};
 
 use cssparser::{Parser, ParserInput, Token, match_ignore_ascii_case};
 use parley::{FontFeatures, FontVariations, TextStyle};
@@ -730,6 +730,42 @@ macro_rules! define_style {
 
         pub(crate) fn merge_into_ref(&self, style: &mut Style) {
           style.declarations.push(self.to_owned(), false);
+        }
+
+      }
+
+      impl crate::layout::style::properties::ToCss for StyleDeclaration {
+        fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+          match self {
+            $(
+              Self::[<$longhand:camel>](value) => {
+                dest.write_str(&stringify!($longhand).replace("_", "-"))?;
+                dest.write_str(": ")?;
+                value.to_css(dest)?;
+                dest.write_str(";")
+              }
+            )*
+            Self::CustomProperty(name, value) => {
+              write!(dest, "{}: {};", name, value)
+            }
+            Self::Deferred(deferred) => {
+              let name = match deferred.property {
+                PropertyId::Longhand(id) => format!("{:?}", id),
+                PropertyId::Shorthand(id) => format!("{:?}", id),
+                _ => return Ok(()),
+              };
+              write!(dest, "{}: {};", to_kebab_case(&name), deferred.specified_value)
+            }
+            Self::CssWideKeyword(id, keyword) => {
+              let name = format!("{:?}", id);
+              let keyword_str = match keyword {
+                CssWideKeyword::Initial => "initial",
+                CssWideKeyword::Inherit => "inherit",
+                CssWideKeyword::Unset => "unset",
+              };
+              write!(dest, "{}: {};", to_kebab_case(&name), keyword_str)
+            }
+          }
         }
       }
 
@@ -1878,6 +1914,21 @@ impl ComputedStyle {
       text_align: taffy::TextAlign::Auto,
     }
   }
+}
+
+pub(crate) fn to_kebab_case(s: &str) -> String {
+  let mut result = String::new();
+  for (i, c) in s.chars().enumerate() {
+    if c.is_uppercase() {
+      if i > 0 {
+        result.push('-');
+      }
+      result.push(c.to_ascii_lowercase());
+    } else {
+      result.push(c);
+    }
+  }
+  result
 }
 
 #[cfg(test)]

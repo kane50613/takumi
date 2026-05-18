@@ -1,7 +1,8 @@
 use cssparser::Parser;
+use std::fmt;
 
 use crate::layout::style::{
-  CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, tw::TailwindPropertyParser,
+  CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, tw::TailwindPropertyParser,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -50,4 +51,13 @@ impl<'i> FromCss<'i> for LineClamp {
     CssToken::Syntax(CssSyntaxKind::Integer),
     CssToken::Syntax(CssSyntaxKind::String),
   ];
+}
+
+impl ToCss for LineClamp {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match &self.ellipsis {
+      Some(e) => write!(dest, "{} \"{}\"", self.count, e),
+      None => write!(dest, "{}", self.count),
+    }
+  }
 }

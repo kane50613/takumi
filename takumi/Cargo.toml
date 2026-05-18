@@ -118,6 +118,7 @@ rayon = ["dep:rayon"]
 criterion = "0.8"
 serde_json = "1"
 
+
 [[bench]]
 name = "effects"
 harness = false

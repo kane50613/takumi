@@ -1,4 +1,6 @@
-use crate::layout::style::unexpected_token;
+use std::fmt;
+
+use crate::layout::style::{ToCss, unexpected_token};
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use parley::style::FontWeight as ParleyFontWeight;
 
@@ -82,6 +84,12 @@ impl From<FontWeight> for ParleyFontWeight {
 impl From<f32> for FontWeight {
   fn from(value: f32) -> Self {
     FontWeight(ParleyFontWeight::new(value))
+  }
+}
+
+impl ToCss for FontWeight {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    write!(dest, "{}", self.value())
   }
 }
 

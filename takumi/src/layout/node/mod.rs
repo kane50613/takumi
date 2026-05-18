@@ -14,7 +14,9 @@ use crate::{
     Viewport,
     inline::InlineContentKind,
     node::image::image_resource_url,
-    style::{Affine, BackgroundClip, BlendMode, Direction, Sides, Style, tw::TailwindValues},
+    style::{
+      Affine, BackgroundClip, BlendMode, Direction, Sides, Style, ToCss, tw::TailwindValues,
+    },
   },
   rendering::{
     BorderProperties, Canvas, Fill, PaintSource, RenderContext, SizedShadow,
@@ -384,6 +386,96 @@ impl Node {
   pub fn with_tw(mut self, tw: TailwindValues) -> Self {
     self.metadata.tw = Some(tw);
     self
+  }
+
+  // Internal, do not use in production.
+  #[doc(hidden)]
+  pub fn to_html(&self) -> String {
+    let tag = self
+      .metadata
+      .tag_name
+      .as_deref()
+      .unwrap_or(match &self.kind {
+        NodeKind::Text(_) => "span",
+        NodeKind::Image(_) => "img",
+        NodeKind::Container { .. } => "div",
+      });
+
+    let escape_attr = |s: &str| s.replace('&', "&amp;").replace('"', "&quot;");
+
+    let mut attrs = Vec::new();
+    if let Some(id) = &self.metadata.id {
+      attrs.push(format!("id=\"{}\"", escape_attr(id)));
+    }
+    if let Some(class_name) = &self.metadata.class_name {
+      attrs.push(format!("class=\"{}\"", escape_attr(class_name)));
+    }
+    if let Some(attributes) = &self.metadata.attributes {
+      for (k, v) in attributes {
+        attrs.push(format!("{}=\"{}\"", k, escape_attr(v)));
+      }
+    }
+
+    if let NodeKind::Image(image) = &self.kind {
+      match &image.src {
+        ImageSourceInput::Url(url) => {
+          attrs.push(format!("src=\"{}\"", escape_attr(url)));
+        }
+        _ => {}
+      }
+    }
+
+    let mut inline_styles = Vec::new();
+    if let Some(style) = &self.metadata.style {
+      for decl in style.declarations.iter() {
+        let mut buf = String::new();
+        if decl.to_css(&mut buf).is_ok() && !buf.is_empty() {
+          inline_styles.push(buf);
+        }
+      }
+    }
+    if let Some(preset) = &self.metadata.preset {
+      for decl in preset.declarations.iter() {
+        let mut buf = String::new();
+        if decl.to_css(&mut buf).is_ok() && !buf.is_empty() {
+          inline_styles.push(buf);
+        }
+      }
+    }
+
+    if !inline_styles.is_empty() {
+      let style_value = escape_attr(&inline_styles.join(" "));
+      attrs.push(format!("style=\"{style_value}\""));
+    }
+
+    let attrs_str = if attrs.is_empty() {
+      "".to_string()
+    } else {
+      format!(" {}", attrs.join(" "))
+    };
+
+    match &self.kind {
+      NodeKind::Text(text) => {
+        let escaped = text
+          .text
+          .replace('&', "&amp;")
+          .replace('<', "&lt;")
+          .replace('>', "&gt;")
+          .replace('"', "&quot;")
+          .replace('\'', "&#x27;");
+        format!("<{}{}>{}</{}>", tag, attrs_str, escaped, tag)
+      }
+      NodeKind::Image(_) => {
+        format!("<{}{} />", tag, attrs_str)
+      }
+      NodeKind::Container { children } => {
+        let mut children_html = String::new();
+        for child in children {
+          children_html.push_str(&child.to_html());
+        }
+        format!("<{}{}>{}</{}>", tag, attrs_str, children_html, tag)
+      }
+    }
   }
 
   pub(crate) fn take_style_layers(&mut self) -> NodeStyleLayers {

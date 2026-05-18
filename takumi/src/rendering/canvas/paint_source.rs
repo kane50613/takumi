@@ -2,11 +2,12 @@ use tiny_skia::{PixmapRef, PremultipliedColorU8};
 
 use crate::{
   layout::style::ImageScalingAlgorithm,
-  rendering::{BackgroundTile, ColorTile},
+  rendering::{
+    BackgroundTile, ColorTile,
+    blend::premultiplied_from_pixel,
+    canvas::{BufferPool, composite_premultiplied_over},
+  },
 };
-
-use super::BufferPool;
-use crate::rendering::blend::premultiplied_from_pixel;
 
 #[derive(Clone, Copy)]
 pub(crate) struct SamplingFootprint {
@@ -176,12 +177,12 @@ pub(super) fn apply_mask_color_mode(src: [u8; 4], color_mode: MaskCompositeColor
     MaskCompositeColor::SourceOnly => src,
     MaskCompositeColor::SourceOverColor(color) => {
       let mut out = color;
-      super::composite_premultiplied_over(&mut out, src);
+      composite_premultiplied_over(&mut out, src);
       out
     }
     MaskCompositeColor::ColorOverSource(color) => {
       let mut out = src;
-      super::composite_premultiplied_over(&mut out, color);
+      composite_premultiplied_over(&mut out, color);
       out
     }
   }

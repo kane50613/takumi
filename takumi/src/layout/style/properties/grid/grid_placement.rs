@@ -1,9 +1,8 @@
-use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token};
 
 use crate::layout::style::{
-  Animatable, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult,
-  tw::TailwindPropertyParser,
+  Animatable, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Represents a grid placement with serde support
@@ -145,6 +144,36 @@ impl<'i> FromCss<'i> for GridPlacement {
     CssToken::Syntax(CssSyntaxKind::Number),
     CssToken::Syntax(CssSyntaxKind::Ident),
   ];
+}
+
+impl ToCss for GridPlacementKeyword {
+  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+    match self {
+      Self::Auto => dest.write_str("auto"),
+    }
+  }
+}
+
+impl ToCss for GridPlacementSpan {
+  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+    match self {
+      Self::Span(span) => write!(dest, "{}", span),
+    }
+  }
+}
+
+impl ToCss for GridPlacement {
+  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+    match self {
+      Self::Keyword(kw) => kw.to_css(dest),
+      Self::Span(span) => {
+        dest.write_str("span ")?;
+        span.to_css(dest)
+      }
+      Self::Line(line) => write!(dest, "{}", line),
+      Self::Named(name) => dest.write_str(name),
+    }
+  }
 }
 
 #[cfg(test)]

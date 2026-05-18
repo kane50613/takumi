@@ -1,8 +1,10 @@
+use std::fmt;
+
 use cssparser::{Parser, match_ignore_ascii_case};
 use parley::LineMetrics;
 
 use crate::{
-  layout::style::{tw::TailwindPropertyParser, *},
+  layout::style::{ToCss, tw::TailwindPropertyParser, *},
   rendering::Sizing,
 };
 
@@ -49,6 +51,15 @@ pub enum VerticalAlign {
   Keyword(VerticalAlignKeyword),
   /// A baseline shift in `<length-percentage>` form.
   Length(Length),
+}
+
+impl ToCss for VerticalAlign {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Keyword(kw) => kw.to_css(dest),
+      Self::Length(l) => l.to_css(dest),
+    }
+  }
 }
 
 /// Computed `vertical-align` data used for placement.

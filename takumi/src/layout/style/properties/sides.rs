@@ -1,8 +1,11 @@
 use cssparser::Parser;
+use std::fmt;
 use taffy::Rect;
 
 use crate::{
-  layout::style::{CssExpectedMessage, CssToken, FromCss, Length, MakeComputed, ParseResult},
+  layout::style::{
+    CssExpectedMessage, CssToken, FromCss, Length, MakeComputed, ParseResult, ToCss,
+  },
   rendering::Sizing,
 };
 
@@ -65,7 +68,7 @@ impl<'i, T: Copy + for<'j> FromCss<'j>> FromCss<'i> for Sides<T> {
 
   const VALID_TOKENS: &'static [CssToken] = T::VALID_TOKENS;
 
-  const EXPECT_MESSAGE: super::CssExpectedMessage = CssExpectedMessage::OneToFourValues;
+  const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::OneToFourValues;
 }
 
 impl<T: Copy> From<Sides<T>> for Rect<T> {
@@ -108,6 +111,18 @@ impl Sides<Length> {
   /// Creates a new autoable Sides.
   pub const fn auto() -> Self {
     Self([Length::Auto; 4])
+  }
+}
+
+impl<T: Copy + ToCss> ToCss for Sides<T> {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    self.0[0].to_css(dest)?;
+    dest.write_str(" ")?;
+    self.0[1].to_css(dest)?;
+    dest.write_str(" ")?;
+    self.0[2].to_css(dest)?;
+    dest.write_str(" ")?;
+    self.0[3].to_css(dest)
   }
 }
 
