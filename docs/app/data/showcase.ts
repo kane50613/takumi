@@ -65,6 +65,12 @@ export const showcaseProjects: Project[] = [
     width: 1200,
     height: 630,
   },
+  {
+    image: "https://bannx.com/og/default.png",
+    url: "https://bannx.com",
+    width: 1200,
+    height: 630,
+  },
 ];
 
 export const showcaseTemplates: Template[] = [
