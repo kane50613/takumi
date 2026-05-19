@@ -1084,6 +1084,16 @@ impl<'g> RenderNode<'g> {
       };
 
       if let Some(child) = current.pending_children.next() {
+        // CSS Grid L1 §6 / Flexbox L1 §4: whitespace-only anonymous items
+        // are not rendered. Advance the preorder cursor to keep
+        // `matched_declarations` indices aligned with the original tree.
+        if current.context.style.display.should_blockify_children()
+          && child.is_whitespace_only_text()
+        {
+          next_preorder_index(&mut preorder_cursor);
+          continue;
+        }
+
         let child_pending = build_pending_node(
           &current.context,
           child,

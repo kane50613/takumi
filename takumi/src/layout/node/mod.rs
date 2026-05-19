@@ -328,6 +328,16 @@ impl Node {
     take_container_children(&mut self.kind)
   }
 
+  pub(crate) fn is_whitespace_only_text(&self) -> bool {
+    let NodeKind::Text(data) = &self.kind else {
+      return false;
+    };
+    data
+      .text
+      .bytes()
+      .all(|b| matches!(b, b' ' | b'\t' | b'\n' | b'\r' | 0x0C))
+  }
+
   /// Sets the tag name and returns the updated node.
   pub fn with_tag_name(mut self, tag_name: impl Into<Box<str>>) -> Self {
     self.metadata.tag_name = Some(tag_name.into());
