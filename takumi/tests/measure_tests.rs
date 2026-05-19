@@ -1582,3 +1582,31 @@ fn test_measure_img_svg_attribute_sizing_cases() {
     assert_eq!(image.height, expected_height, "case {} height", case_index);
   }
 }
+
+#[test]
+fn test_grid_container_drops_whitespace_only_text_children() {
+  // Regression test for https://github.com/kane50613/takumi/issues/695
+  // Whitespace-only text nodes between grid-item siblings should not
+  // produce extra grid rows (per CSS Grid L1 §6).
+  let row = || {
+    Node::container([Node::text("row".to_string())
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))])
+  };
+  let grid_style = || {
+    Style::default()
+      .with(StyleDeclaration::display(Display::Grid))
+      .with(StyleDeclaration::width(Px(200.0)))
+  };
+
+  let with_whitespace =
+    Node::container([row(), Node::text("\n  \t".to_string()), row()]).with_style(grid_style());
+
+  let without_whitespace = Node::container([row(), row()]).with_style(grid_style());
+
+  let with_result = measure(with_whitespace, create_measure_viewport());
+  let without_result = measure(without_whitespace, create_measure_viewport());
+
+  assert_eq!(with_result.children.len(), 2);
+  assert_eq!(without_result.children.len(), 2);
+  assert_close(with_result.height, without_result.height);
+}
