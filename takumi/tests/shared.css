@@ -1,5 +1,5 @@
 @font-face {
-  font-family: "Geist";
+  font-family: Geist;
   src: url("../../assets/fonts/geist/Geist[wght].woff2") format("woff2");
 }
 @font-face {
@@ -11,7 +11,7 @@
   src: url("../../assets/fonts/twemoji/TwemojiMozilla-colr.woff2") format("woff2");
 }
 @font-face {
-  font-family: "Archivo";
+  font-family: Archivo;
   src: url("../../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf") format("truetype");
 }
 @font-face {
@@ -28,7 +28,7 @@
     format("woff2");
 }
 @font-face {
-  font-family: "Poppins";
+  font-family: Poppins;
   src: url("../../assets/fonts/poppins/poppins-v24-devanagari_latin-regular.woff2") format("woff2");
 }
 @font-face {
