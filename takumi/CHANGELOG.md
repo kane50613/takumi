@@ -1,5 +1,17 @@
 # takumi
 
+## 1.3.0
+
+### Minor Changes
+
+- 832ecd2: Add `ToCss` trait
+- c4f705e: Support relative color syntax #693
+
+### Patch Changes
+
+- e073060: Resolve `rem` against the root element's computed font-size
+- 7dbff69: Drop whitespace-only text nodes in block-like HTML containers #695
+
 ## 1.2.1
 
 ### Patch Changes
