@@ -62,14 +62,27 @@ pub(crate) struct Sizing {
   /// the root has been resolved; readers should fall back to `viewport.font_size`.
   /// https://www.w3.org/TR/css-values-4/#rem
   pub(crate) root_font_size: Option<f32>,
+  /// Pixel basis for the `lh` unit.
+  pub(crate) line_height: f32,
+  /// Pixel basis for the `rlh` unit; `None` before root is resolved.
+  pub(crate) root_line_height: Option<f32>,
   /// The calc arena shared by the current layout tree.
   pub(crate) calc_arena: Rc<CalcArena>,
 }
+
+/// Fallback `line-height: normal` ratio when font metrics are unavailable.
+pub(crate) const NORMAL_LINE_HEIGHT_RATIO: f32 = 1.2;
 
 impl Sizing {
   /// Pixel basis for the `rem` unit.
   pub(crate) fn rem_basis(&self) -> f32 {
     self.root_font_size.unwrap_or(self.viewport.font_size)
+  }
+
+  pub(crate) fn root_line_height_basis(&self) -> f32 {
+    self
+      .root_line_height
+      .unwrap_or(self.viewport.font_size * NORMAL_LINE_HEIGHT_RATIO)
   }
 
   pub(crate) fn query_container_width(&self) -> f32 {
@@ -125,6 +138,8 @@ impl<'g> RenderContext<'g> {
         container_size: Size::NONE,
         font_size: viewport.font_size,
         root_font_size: None,
+        line_height: viewport.font_size * NORMAL_LINE_HEIGHT_RATIO,
+        root_line_height: None,
         calc_arena: Rc::new(CalcArena::default()),
       },
       transform: Affine::IDENTITY,

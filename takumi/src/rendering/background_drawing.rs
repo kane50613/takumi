@@ -887,6 +887,8 @@ mod tests {
       container_size: Size::NONE,
       font_size: viewport.font_size,
       root_font_size: None,
+      line_height: 0.0,
+      root_line_height: None,
       calc_arena: Rc::new(CalcArena::default()),
     }
   }

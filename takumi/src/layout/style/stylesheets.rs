@@ -2540,6 +2540,8 @@ mod tests {
       container_size: Size::NONE,
       font_size: 16.0,
       root_font_size: None,
+      line_height: 0.0,
+      root_line_height: None,
       calc_arena: Rc::new(CalcArena::default()),
     };
     let border_box = Size {
@@ -2571,6 +2573,8 @@ mod tests {
       container_size: Size::NONE,
       font_size: 16.0,
       root_font_size: None,
+      line_height: 0.0,
+      root_line_height: None,
       calc_arena: Rc::new(CalcArena::default()),
     };
     let border_box = Size {
@@ -2595,6 +2599,8 @@ mod tests {
       container_size: Size::NONE,
       font_size: 16.0,
       root_font_size: None,
+      line_height: 0.0,
+      root_line_height: None,
       calc_arena: Rc::new(CalcArena::default()),
     };
     let border_box = Size {
@@ -2641,6 +2647,8 @@ mod tests {
       container_size: Size::NONE,
       font_size: 16.0,
       root_font_size: None,
+      line_height: 0.0,
+      root_line_height: None,
       calc_arena: Rc::new(CalcArena::default()),
     };
 
@@ -2662,6 +2670,8 @@ mod tests {
       container_size: Size::NONE,
       font_size: 32.0,
       root_font_size: None,
+      line_height: 0.0,
+      root_line_height: None,
       calc_arena: Rc::new(CalcArena::default()),
     });
 
@@ -2671,6 +2681,8 @@ mod tests {
       container_size: Size::NONE,
       font_size: 32.0,
       root_font_size: None,
+      line_height: 0.0,
+      root_line_height: None,
       calc_arena: Rc::new(CalcArena::default()),
     };
     let inherited_font_size = inherited_child
@@ -2685,6 +2697,8 @@ mod tests {
       container_size: Size::NONE,
       font_size: 10.0,
       root_font_size: None,
+      line_height: 0.0,
+      root_line_height: None,
       calc_arena: Rc::new(CalcArena::default()),
     };
 
@@ -2870,6 +2884,8 @@ mod tests {
       container_size: Size::NONE,
       font_size: 16.0,
       root_font_size: None,
+      line_height: 0.0,
+      root_line_height: None,
       calc_arena: Rc::new(CalcArena::default()),
     };
     let radius = style.border_top_left_radius.x.to_px(
