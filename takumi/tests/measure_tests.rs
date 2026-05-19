@@ -1583,11 +1583,9 @@ fn test_measure_img_svg_attribute_sizing_cases() {
   }
 }
 
+// https://github.com/kane50613/takumi/issues/695
 #[test]
 fn test_grid_container_drops_whitespace_only_text_children() {
-  // Regression test for https://github.com/kane50613/takumi/issues/695
-  // Whitespace-only text nodes between grid-item siblings should not
-  // produce extra grid rows (per CSS Grid L1 §6).
   let row = || {
     Node::container([Node::text("row".to_string())
       .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))])

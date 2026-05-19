@@ -18,7 +18,7 @@ use crate::{
       ProcessedInlineSpan, collect_inline_items, create_inline_constraint, create_inline_layout,
       get_parent_font_metrics, measure_inline_layout, resolve_inline_max_height,
     },
-    node::{Node, NodeKind, NodeStyleLayers},
+    node::{Node, NodeStyleLayers},
     style::{
       Affine, BlendMode, BoxSizing, Color, ComputedStyle, Display, Filters, Float, Isolation,
       Overflow, PercentageNumber, Position, Style as NodeStyle, StyleDeclaration, StyleSheet,
@@ -965,19 +965,6 @@ impl<'g> RenderNode<'g> {
       node_index
     }
 
-    fn is_whitespace_only_text_node(node: &Node) -> bool {
-      let NodeKind::Text(data) = &node.kind else {
-        return false;
-      };
-      // ASCII whitespace per CSS Text 3 §1.1: space, tab, LF, CR, FF.
-      // Restricting to ASCII keeps NBSP (U+00A0) and other non-collapsible
-      // whitespace from being dropped.
-      data
-        .text
-        .bytes()
-        .all(|b| matches!(b, b' ' | b'\t' | b'\n' | b'\r' | 0x0C))
-    }
-
     fn take_children_vec(node: &mut Node) -> (bool, Vec<Node>) {
       let children = node.take_children();
       let children_is_some = children.is_some();
@@ -1097,13 +1084,11 @@ impl<'g> RenderNode<'g> {
       };
 
       if let Some(child) = current.pending_children.next() {
-        // Per CSS Grid L1 §6 and Flexbox L1 §4: a sequence of child text runs
-        // containing only collapsible white space is not rendered (treated as
-        // if `display: none`). Skip the child but still advance the preorder
-        // cursor so `matched_declarations` indices stay aligned with the
-        // original node tree.
+        // CSS Grid L1 §6 / Flexbox L1 §4: whitespace-only anonymous items
+        // are not rendered. Advance the preorder cursor to keep
+        // `matched_declarations` indices aligned with the original tree.
         if current.context.style.display.should_blockify_children()
-          && is_whitespace_only_text_node(&child)
+          && child.is_whitespace_only_text()
         {
           next_preorder_index(&mut preorder_cursor);
           continue;
