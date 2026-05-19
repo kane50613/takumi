@@ -167,8 +167,16 @@ function buildStaticNodes(
     return;
   }
 
+  const dropWhitespaceTextChildren = isBlockLikeContainer(element, metadata.style);
   const childNodes: Node[] = [];
   for (const child of element.children) {
+    if (
+      dropWhitespaceTextChildren &&
+      child.type === TEXT_NODE &&
+      isWhitespaceOnly(child.value ?? "")
+    ) {
+      continue;
+    }
     buildStaticNodes(child, presets, tailwindClassesProperty, childNodes, stylesheets);
   }
 
@@ -178,6 +186,78 @@ function buildStaticNodes(
       ...metadata,
     }),
   );
+}
+
+// Per CSS Grid L1 §6, Flexbox L1 §4, and CSS 2.2 §9.2.2.1: whitespace-only
+// anonymous items inside grid/flex/block containers are not rendered.
+const BLOCK_LEVEL_DEFAULT_DISPLAY_TAGS = new Set([
+  "address",
+  "article",
+  "aside",
+  "blockquote",
+  "body",
+  "details",
+  "dialog",
+  "dd",
+  "div",
+  "dl",
+  "dt",
+  "fieldset",
+  "figcaption",
+  "figure",
+  "footer",
+  "form",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "header",
+  "hgroup",
+  "hr",
+  "html",
+  "li",
+  "main",
+  "menu",
+  "nav",
+  "ol",
+  "p",
+  "pre",
+  "section",
+  "table",
+  "tbody",
+  "td",
+  "tfoot",
+  "th",
+  "thead",
+  "tr",
+  "ul",
+]);
+
+const BLOCK_LIKE_DISPLAY =
+  /^(block|inline-block|flow-root|grid|inline-grid|flex|inline-flex|table|table-[a-z-]+|list-item)$/;
+
+function isBlockLikeContainer(
+  element: UltraHtmlElementNode,
+  style: CSSProperties | undefined,
+): boolean {
+  const display = style?.display;
+  if (typeof display === "string") {
+    return BLOCK_LIKE_DISPLAY.test(display.trim());
+  }
+  return BLOCK_LEVEL_DEFAULT_DISPLAY_TAGS.has(element.name);
+}
+
+function isWhitespaceOnly(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    // ASCII whitespace per HTML spec: tab, LF, FF, CR, space
+    if (code !== 0x09 && code !== 0x0a && code !== 0x0c && code !== 0x0d && code !== 0x20) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function extractStaticNodeMetadata(
