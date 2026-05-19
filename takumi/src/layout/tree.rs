@@ -1066,7 +1066,9 @@ impl<'g> RenderNode<'g> {
 
       let font_size = style.font_size.to_px(&child_sizing, child_sizing.font_size);
       let normal_basis = resolve_normal_line_height(parent_context.global, &style, font_size);
-      let line_height = style.line_height.to_px(&child_sizing, normal_basis);
+      let line_height = style
+        .line_height
+        .to_px(&parent_context.sizing, normal_basis);
       let sizing = Sizing {
         font_size,
         root_font_size: Some(parent_root_font_size.unwrap_or(font_size)),
