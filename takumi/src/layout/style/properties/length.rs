@@ -719,10 +719,17 @@ impl<const DEFAULT_AUTO: bool> ToCss for Length<DEFAULT_AUTO> {
           if *value == 0.0 {
             continue;
           }
-          if !first {
-            dest.write_str(" + ")?;
+          if first {
+            if *value < 0.0 {
+              write!(dest, "-{}{}", -value, unit)?;
+            } else {
+              write!(dest, "{}{}", value, unit)?;
+            }
+          } else if *value < 0.0 {
+            write!(dest, " - {}{}", -value, unit)?;
+          } else {
+            write!(dest, " + {}{}", value, unit)?;
           }
-          write!(dest, "{}{}", value, unit)?;
           first = false;
         }
         dest.write_str(")")
