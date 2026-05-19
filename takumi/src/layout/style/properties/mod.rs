@@ -112,6 +112,7 @@ use cssparser::{ParseError, Parser, ParserInput, match_ignore_ascii_case};
 use image::imageops::FilterType;
 use parley::Alignment;
 use std::borrow::Cow;
+use std::fmt;
 
 use crate::{
   layout::style::tw::TailwindPropertyParser,
@@ -787,6 +788,94 @@ pub(crate) fn merge_enum_values(values: &[CssToken]) -> String {
   }
 }
 
+/// Serialize a style value to its CSS string representation.
+pub trait ToCss {
+  /// Write the CSS representation of this value into `dest`.
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result;
+}
+
+impl<T: ToCss + ?Sized> ToCss for &T {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    (*self).to_css(dest)
+  }
+}
+
+impl<T: ToCss> ToCss for Option<T> {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Some(v) => v.to_css(dest),
+      None => dest.write_str("none"),
+    }
+  }
+}
+
+impl<T: ToCss> ToCss for Box<[T]> {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    for (i, item) in self.iter().enumerate() {
+      if i > 0 {
+        dest.write_str(", ")?;
+      }
+      item.to_css(dest)?;
+    }
+    Ok(())
+  }
+}
+
+impl<T: ToCss> ToCss for Vec<T> {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    for (i, item) in self.iter().enumerate() {
+      if i > 0 {
+        dest.write_str(", ")?;
+      }
+      item.to_css(dest)?;
+    }
+    Ok(())
+  }
+}
+
+impl ToCss for f32 {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    write!(dest, "{}", self)
+  }
+}
+
+impl ToCss for u32 {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    write!(dest, "{}", self)
+  }
+}
+
+impl ToCss for i32 {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    write!(dest, "{}", self)
+  }
+}
+
+impl ToCss for String {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    dest.write_str(self)
+  }
+}
+
+impl ToCss for std::sync::Arc<str> {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    dest.write_str(self)
+  }
+}
+
+/// Write a CSS quoted string, escaping backslashes and double quotes.
+pub(crate) fn write_css_string<W: fmt::Write>(dest: &mut W, s: &str) -> fmt::Result {
+  dest.write_char('"')?;
+  for ch in s.chars() {
+    match ch {
+      '\\' => dest.write_str("\\\\")?,
+      '"' => dest.write_str("\\\"")?,
+      c => dest.write_char(c)?,
+    }
+  }
+  dest.write_char('"')
+}
+
 /// Macro to implement From trait for Taffy enum conversions.
 macro_rules! impl_from_taffy_enum {
   ($from_ty:ty, $to_ty:ty, $($variant:ident),*) => {
@@ -804,7 +893,7 @@ macro_rules! impl_from_taffy_enum {
 macro_rules! declare_enum_from_css_impl {
   (
     $enum_type:ty,
-    $($css_value:expr => $variant:expr),* $(,)?
+    $($css_value:expr => $variant:path),* $(,)?
   ) => {
     impl crate::layout::style::MakeComputed for $enum_type {}
 
@@ -825,6 +914,16 @@ macro_rules! declare_enum_from_css_impl {
             $css_value => Ok($variant),
           )*
           _ => Err($crate::layout::style::unexpected_token!(location, token)),
+        }
+      }
+    }
+
+    impl crate::layout::style::properties::ToCss for $enum_type {
+      fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+        match self {
+          $(
+            $variant => dest.write_str($css_value),
+          )*
         }
       }
     }

@@ -1,4 +1,6 @@
-use crate::layout::style::unexpected_token;
+use std::fmt;
+
+use crate::layout::style::{ToCss, unexpected_token};
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use parley::style::FontStyle as ParleyFontStyle;
 
@@ -53,5 +55,18 @@ impl FontStyle {
 impl From<FontStyle> for ParleyFontStyle {
   fn from(value: FontStyle) -> Self {
     value.0
+  }
+}
+
+impl ToCss for FontStyle {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match &self.0 {
+      ParleyFontStyle::Normal => dest.write_str("normal"),
+      ParleyFontStyle::Italic => dest.write_str("italic"),
+      ParleyFontStyle::Oblique(angle) => match angle {
+        Some(a) => write!(dest, "oblique {}deg", a),
+        None => dest.write_str("oblique"),
+      },
+    }
   }
 }

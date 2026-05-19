@@ -1,4 +1,5 @@
-use crate::layout::style::unexpected_token;
+use crate::layout::style::{ToCss, properties::write_css_string, unexpected_token};
+use std::fmt;
 use std::sync::Arc;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
@@ -110,6 +111,21 @@ impl<'i> FromCss<'i> for BackgroundImages {
   const VALID_TOKENS: &'static [CssToken] = BackgroundImage::VALID_TOKENS;
 }
 
+impl ToCss for BackgroundImage {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::None => dest.write_str("none"),
+      Self::Linear(linear) => linear.to_css(dest),
+      Self::Radial(radial) => radial.to_css(dest),
+      Self::Conic(conic) => conic.to_css(dest),
+      Self::Url(url) => {
+        dest.write_str("url(")?;
+        write_css_string(dest, url)?;
+        dest.write_char(')')
+      }
+    }
+  }
+}
 #[cfg(test)]
 mod tests {
   use crate::layout::style::{

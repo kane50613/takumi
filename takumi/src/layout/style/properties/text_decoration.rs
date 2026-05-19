@@ -1,4 +1,6 @@
-use crate::layout::style::unexpected_token;
+use std::fmt;
+
+use crate::layout::style::{ToCss, unexpected_token};
 use bitflags::bitflags;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use typed_builder::TypedBuilder;
@@ -150,6 +152,42 @@ impl TailwindPropertyParser for TextDecorationThickness {
     }
 
     Self::from_str(token).ok()
+  }
+}
+
+impl ToCss for TextDecorationLines {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    if self.is_empty() {
+      return dest.write_str("none");
+    }
+    let mut first = true;
+    if self.contains(TextDecorationLines::UNDERLINE) {
+      dest.write_str("underline")?;
+      first = false;
+    }
+    if self.contains(TextDecorationLines::LINE_THROUGH) {
+      if !first {
+        dest.write_char(' ')?;
+      }
+      dest.write_str("line-through")?;
+      first = false;
+    }
+    if self.contains(TextDecorationLines::OVERLINE) {
+      if !first {
+        dest.write_char(' ')?;
+      }
+      dest.write_str("overline")?;
+    }
+    Ok(())
+  }
+}
+
+impl ToCss for TextDecorationThickness {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::FromFont => dest.write_str("from-font"),
+      Self::Length(l) => l.to_css(dest),
+    }
   }
 }
 

@@ -1,12 +1,14 @@
 use cssparser::Parser;
+use std::fmt;
 use taffy::{Point, Size};
 
 use crate::{
-  layout::style::{CssToken, FromCss, LengthDefaultsToZero, MakeComputed, Overflow, ParseResult},
+  layout::style::{
+    CssExpectedMessage, CssToken, FromCss, LengthDefaultsToZero, MakeComputed, Overflow,
+    ParseResult, ToCss,
+  },
   rendering::Sizing,
 };
-
-use super::CssExpectedMessage;
 
 /// A pair of values for horizontal and vertical axes.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -83,5 +85,13 @@ impl BorderRadiusPair {
       self.x.to_px(sizing, border_box.width).max(0.0),
       self.y.to_px(sizing, border_box.height).max(0.0),
     )
+  }
+}
+
+impl<T: Copy + ToCss> ToCss for SpacePair<T> {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    self.x.to_css(dest)?;
+    dest.write_str(" ")?;
+    self.y.to_css(dest)
   }
 }

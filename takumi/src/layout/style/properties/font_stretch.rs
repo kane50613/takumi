@@ -1,4 +1,6 @@
-use crate::layout::style::unexpected_token;
+use std::fmt;
+
+use crate::layout::style::{ToCss, unexpected_token};
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use parley::FontWidth;
 
@@ -83,6 +85,23 @@ impl FontStretch {
 impl From<FontStretch> for FontWidth {
   fn from(value: FontStretch) -> Self {
     value.0
+  }
+}
+
+impl ToCss for FontStretch {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self.0 {
+      FontWidth::ULTRA_CONDENSED => dest.write_str("ultra-condensed"),
+      FontWidth::EXTRA_CONDENSED => dest.write_str("extra-condensed"),
+      FontWidth::CONDENSED => dest.write_str("condensed"),
+      FontWidth::SEMI_CONDENSED => dest.write_str("semi-condensed"),
+      FontWidth::NORMAL => dest.write_str("normal"),
+      FontWidth::SEMI_EXPANDED => dest.write_str("semi-expanded"),
+      FontWidth::EXPANDED => dest.write_str("expanded"),
+      FontWidth::EXTRA_EXPANDED => dest.write_str("extra-expanded"),
+      FontWidth::ULTRA_EXPANDED => dest.write_str("ultra-expanded"),
+      _ => write!(dest, "{}%", self.0.percentage()),
+    }
   }
 }
 

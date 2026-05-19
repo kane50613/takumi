@@ -6,7 +6,7 @@ use crate::layout::style::{
 };
 use crate::rendering::Sizing;
 
-use super::GridPlacement;
+use crate::layout::style::GridPlacement;
 
 /// Represents a grid line placement with serde support
 #[derive(Debug, Clone, Default, PartialEq)]

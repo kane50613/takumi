@@ -1,10 +1,13 @@
 use cssparser::Parser;
+use std::fmt;
 
-use crate::layout::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, lerp,
-  tw::TailwindPropertyParser,
+use crate::{
+  layout::style::{
+    Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, lerp,
+    tw::TailwindPropertyParser,
+  },
+  rendering::Sizing,
 };
-use crate::rendering::Sizing;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 /// Represents a aspect ratio.
@@ -81,6 +84,15 @@ impl<'i> FromCss<'i> for AspectRatio {
     CssToken::Keyword("auto"),
     CssToken::Syntax(CssSyntaxKind::Number),
   ];
+}
+
+impl ToCss for AspectRatio {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Auto => dest.write_str("auto"),
+      Self::Ratio(v) => write!(dest, "{}", v),
+    }
+  }
 }
 
 #[cfg(test)]

@@ -1,10 +1,11 @@
-use crate::layout::style::unexpected_token;
+use std::fmt;
+
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::{
   layout::style::{
     Animatable, Color, CssSyntaxKind, CssToken, FromCss, LengthDefaultsToZero, MakeComputed,
-    ParseResult,
+    ParseResult, ToCss, unexpected_token,
   },
   rendering::Sizing,
 };
@@ -114,10 +115,22 @@ impl<'i> FromCss<'i> for TextIndent {
   ];
 }
 
+impl ToCss for TextIndent {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    self.amount.to_css(dest)?;
+    if self.each_line {
+      dest.write_str(" each-line")?;
+    }
+    if self.hanging {
+      dest.write_str(" hanging")?;
+    }
+    Ok(())
+  }
+}
+
 #[cfg(test)]
 mod tests {
-  use super::TextIndent;
-  use crate::layout::style::{FromCss, LengthDefaultsToZero};
+  use crate::layout::style::{FromCss, LengthDefaultsToZero, TextIndent};
 
   #[test]
   fn parses_indent_keywords_in_any_order() {

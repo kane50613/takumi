@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use cssparser::{Parser, Token};
 
-use crate::layout::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult};
+use crate::layout::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss};
 
 /// Represents `grid-template-areas` value
 ///
@@ -87,4 +87,31 @@ impl<'i> FromCss<'i> for GridTemplateAreas {
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::String)];
+}
+
+impl ToCss for GridTemplateAreas {
+  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+    if self.0.is_empty() {
+      dest.write_str("none")
+    } else {
+      let mut first = true;
+      for row in &self.0 {
+        if !first {
+          dest.write_str(" ")?;
+        }
+        first = false;
+        dest.write_str("\"")?;
+        let mut first_col = true;
+        for col in row {
+          if !first_col {
+            dest.write_str(" ")?;
+          }
+          first_col = false;
+          dest.write_str(col)?;
+        }
+        dest.write_str("\"")?;
+      }
+      Ok(())
+    }
+  }
 }

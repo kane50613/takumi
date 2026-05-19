@@ -66,6 +66,14 @@ jobs:
       - name: Run tests
         run: CARGO_PROFILE_TEST_STRIP="debuginfo" cargo test
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@main
+        with:
+          bun-version: latest
+
+      - name: Format generated fixtures
+        run: bunx oxfmt --write takumi/tests/fixtures-generated
+
       - name: Check for git changes and prepare artifact
         id: check_changes
         run: |

@@ -1,5 +1,5 @@
-use crate::layout::style::unexpected_token;
-use std::fmt::Display;
+use crate::layout::style::{ToCss, unexpected_token};
+use std::fmt::{self, Display};
 
 use color::{AlphaColor, ColorSpaceTag, DynamicColor, HueDirection, Srgb, parse_color};
 use cssparser::{
@@ -113,6 +113,41 @@ impl<'i> FromCss<'i> for ColorInterpolationMethod {
 
   const VALID_TOKENS: &'static [CssToken] =
     &[CssToken::Descriptor(CssDescriptorKind::InColorSpace)];
+}
+
+impl ToCss for ColorInterpolationMethod {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    if self.color_space == color::ColorSpaceTag::Oklab
+      && self.hue_direction == color::HueDirection::Shorter
+    {
+      return Ok(());
+    }
+    let space = match self.color_space {
+      color::ColorSpaceTag::Srgb => "srgb",
+      color::ColorSpaceTag::LinearSrgb => "srgb-linear",
+      color::ColorSpaceTag::Lab => "lab",
+      color::ColorSpaceTag::Oklab => "oklab",
+      color::ColorSpaceTag::Lch => "lch",
+      color::ColorSpaceTag::Oklch => "oklch",
+      color::ColorSpaceTag::Hsl => "hsl",
+      color::ColorSpaceTag::Hwb => "hwb",
+      color::ColorSpaceTag::DisplayP3 => "display-p3",
+      color::ColorSpaceTag::A98Rgb => "a98-rgb",
+      color::ColorSpaceTag::ProphotoRgb => "prophoto-rgb",
+      color::ColorSpaceTag::Rec2020 => "rec2020",
+      color::ColorSpaceTag::XyzD65 => "xyz-d65",
+      color::ColorSpaceTag::XyzD50 => "xyz-d50",
+      _ => "oklab",
+    };
+    let hue = match self.hue_direction {
+      color::HueDirection::Shorter => "",
+      color::HueDirection::Longer => " longer hue",
+      color::HueDirection::Increasing => " increasing hue",
+      color::HueDirection::Decreasing => " decreasing hue",
+      _ => "",
+    };
+    write!(dest, "in {}{}", space, hue)
+  }
 }
 
 /// Represents a color with 8-bit RGBA components.
@@ -462,6 +497,21 @@ impl Display for Color {
       self.0[2],
       self.0[3] as f32 / 255.0
     )
+  }
+}
+
+impl ToCss for Color {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    write!(dest, "{}", self)
+  }
+}
+
+impl<const DEFAULT_CURRENT_COLOR: bool> ToCss for ColorInput<DEFAULT_CURRENT_COLOR> {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::CurrentColor => dest.write_str("currentColor"),
+      Self::Value(c) => c.to_css(dest),
+    }
   }
 }
 

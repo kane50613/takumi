@@ -1,4 +1,6 @@
-use crate::layout::style::unexpected_token;
+use std::fmt;
+
+use crate::layout::style::{ToCss, unexpected_token};
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use image::Rgba;
 use smallvec::SmallVec;
@@ -873,6 +875,31 @@ impl<'i> FromCss<'i> for Filter {
     CssToken::Descriptor(CssDescriptorKind::BlurFn),
     CssToken::Descriptor(CssDescriptorKind::DropShadowFn),
   ];
+}
+
+impl ToCss for Filter {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    macro_rules! write_fn {
+      ($name:expr, $v:expr) => {{
+        dest.write_str($name)?;
+        dest.write_char('(')?;
+        $v.to_css(dest)?;
+        dest.write_char(')')
+      }};
+    }
+    match self {
+      Self::Brightness(v) => write_fn!("brightness", v),
+      Self::Contrast(v) => write_fn!("contrast", v),
+      Self::Grayscale(v) => write_fn!("grayscale", v),
+      Self::Saturate(v) => write_fn!("saturate", v),
+      Self::HueRotate(v) => write_fn!("hue-rotate", v),
+      Self::Invert(v) => write_fn!("invert", v),
+      Self::Sepia(v) => write_fn!("sepia", v),
+      Self::Opacity(v) => write_fn!("opacity", v),
+      Self::Blur(v) => write_fn!("blur", v),
+      Self::DropShadow(v) => write_fn!("drop-shadow", v),
+    }
+  }
 }
 
 #[cfg(test)]

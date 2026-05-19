@@ -1,6 +1,6 @@
 use std::{
   borrow::Cow,
-  fs::File,
+  fs::{File, create_dir_all, write},
   io::Read,
   path::{Path, PathBuf},
   sync::LazyLock,
@@ -140,13 +140,39 @@ pub fn run_fixture_test(node: Node, fixture_name: &str) {
 
 #[allow(dead_code)]
 pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &str) {
-  let image = render(options).unwrap();
+  let viewport_width = options.viewport().size.width.unwrap_or(1200);
+  let viewport_height = options.viewport().size.height.unwrap_or(630);
 
-  save_image(
-    image,
-    format!("tests/fixtures-generated/{}.webp", fixture_name),
-    ImageOutputFormat::WebP,
+  create_dir_all("tests/fixtures-generated").ok();
+
+  let html_content = format!(
+    r#"<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{}</title>
+  <link rel="stylesheet" href="../shared.css">
+</head>
+<body style="width: {}px; height: {}px;">
+  {}
+</body>
+</html>"#,
+    fixture_name,
+    viewport_width,
+    viewport_height,
+    options.node().to_html()
   );
+
+  write(
+    format!("tests/fixtures-generated/{fixture_name}.html"),
+    html_content,
+  )
+  .unwrap();
+
+  let image = render(options).unwrap();
+  let golden_path = format!("tests/fixtures-generated/{fixture_name}.webp");
+
+  save_image(image, &golden_path, ImageOutputFormat::WebP);
 }
 
 fn save_image<P: AsRef<Path>>(image: RgbaImage, path: P, format: ImageOutputFormat) {

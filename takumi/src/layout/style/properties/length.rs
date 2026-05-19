@@ -1,5 +1,5 @@
-use crate::layout::style::unexpected_token;
-use std::{cell::RefCell, ops::Neg};
+use crate::layout::style::{ToCss, unexpected_token};
+use std::{cell::RefCell, fmt, ops::Neg};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use taffy::{CompactLength, Dimension, LengthPercentage, LengthPercentageAuto};
@@ -663,6 +663,77 @@ impl<const DEFAULT_AUTO: bool> TailwindPropertyParser for Length<DEFAULT_AUTO> {
       "6xl" => Some(Length::Rem(72.0)),
       "7xl" => Some(Length::Rem(80.0)),
       _ => None,
+    }
+  }
+}
+
+impl<const DEFAULT_AUTO: bool> ToCss for Length<DEFAULT_AUTO> {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Auto => dest.write_str("auto"),
+      Self::Percentage(v) => write!(dest, "{}%", v),
+      Self::Rem(v) => write!(dest, "{}rem", v),
+      Self::Em(v) => write!(dest, "{}em", v),
+      Self::Vh(v) => write!(dest, "{}vh", v),
+      Self::Vw(v) => write!(dest, "{}vw", v),
+      Self::CqH(v) => write!(dest, "{}cqh", v),
+      Self::CqW(v) => write!(dest, "{}cqw", v),
+      Self::CqMin(v) => write!(dest, "{}cqmin", v),
+      Self::CqMax(v) => write!(dest, "{}cqmax", v),
+      Self::VMin(v) => write!(dest, "{}vmin", v),
+      Self::VMax(v) => write!(dest, "{}vmax", v),
+      Self::Cm(v) => write!(dest, "{}cm", v),
+      Self::Mm(v) => write!(dest, "{}mm", v),
+      Self::In(v) => write!(dest, "{}in", v),
+      Self::Q(v) => write!(dest, "{}q", v),
+      Self::Pt(v) => write!(dest, "{}pt", v),
+      Self::Pc(v) => write!(dest, "{}pc", v),
+      Self::Px(v) => write!(dest, "{}px", v),
+      Self::Calc(f) => {
+        let terms: &[(&str, f32)] = &[
+          ("px", f.px),
+          ("%", f.percent * 100.0),
+          ("rem", f.rem),
+          ("em", f.em),
+          ("vh", f.vh),
+          ("vw", f.vw),
+          ("cqh", f.cqh),
+          ("cqw", f.cqw),
+          ("cqmin", f.cqmin),
+          ("cqmax", f.cqmax),
+          ("vmin", f.vmin),
+          ("vmax", f.vmax),
+          ("cm", f.cm),
+          ("mm", f.mm),
+          ("in", f.inch),
+          ("q", f.q),
+          ("pt", f.pt),
+          ("pc", f.pc),
+        ];
+        if terms.iter().all(|(_, v)| *v == 0.0) {
+          return dest.write_str("0px");
+        }
+        dest.write_str("calc(")?;
+        let mut first = true;
+        for (unit, value) in terms {
+          if *value == 0.0 {
+            continue;
+          }
+          if first {
+            if *value < 0.0 {
+              write!(dest, "-{}{}", -value, unit)?;
+            } else {
+              write!(dest, "{}{}", value, unit)?;
+            }
+          } else if *value < 0.0 {
+            write!(dest, " - {}{}", -value, unit)?;
+          } else {
+            write!(dest, " + {}{}", value, unit)?;
+          }
+          first = false;
+        }
+        dest.write_str(")")
+      }
     }
   }
 }

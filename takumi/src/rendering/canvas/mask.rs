@@ -4,13 +4,13 @@ use tiny_skia::{
   Rect as TinyRect, Transform as TinyTransform,
 };
 
-use super::{BufferPool, mask_index_from_coord};
 use crate::{
   Result,
   layout::style::{Affine, ComputedStyle, Overflow},
   rendering::{
-    BorderProperties, Command, Placement, RenderContext, Style, build_path, create_mask,
-    fast_div_255, transformed_rect_extents,
+    BorderProperties, Command, Placement, RenderContext, Style, build_path,
+    canvas::{BufferPool, mask_index_from_coord},
+    create_mask, fast_div_255, transformed_rect_extents,
   },
 };
 

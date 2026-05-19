@@ -1,10 +1,12 @@
+use std::fmt;
 use std::string::ToString;
 
 use cssparser::{Parser, match_ignore_ascii_case};
 use parley::{FontFamily as ParleyFontFamily, FontFamilyName, GenericFamily};
 
 use crate::layout::style::{
-  CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, tw::TailwindPropertyParser,
+  CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, properties::write_css_string,
+  tw::TailwindPropertyParser,
 };
 
 /// Represents a font family for text rendering.
@@ -106,6 +108,48 @@ impl<'a> From<&'a FontFamily> for ParleyFontFamily<'a> {
 impl From<GenericFamily> for FontFamily {
   fn from(generic: GenericFamily) -> Self {
     Self(Box::new([FontFamilyToken::Generic(generic)]))
+  }
+}
+
+impl ToCss for FontFamilyToken {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Owned(name) => {
+        let needs_quoting = name.contains(' ')
+          || name.contains('"')
+          || name.contains('\\')
+          || name.chars().next().is_some_and(|c| c.is_ascii_digit());
+        if needs_quoting {
+          write_css_string(dest, name)
+        } else {
+          dest.write_str(name)
+        }
+      }
+      Self::Generic(generic) => dest.write_str(match generic {
+        GenericFamily::Serif => "serif",
+        GenericFamily::SansSerif => "sans-serif",
+        GenericFamily::Monospace => "monospace",
+        GenericFamily::Cursive => "cursive",
+        GenericFamily::Fantasy => "fantasy",
+        GenericFamily::SystemUi => "system-ui",
+        GenericFamily::Emoji => "emoji",
+        _ => "sans-serif",
+      }),
+    }
+  }
+}
+
+impl ToCss for FontFamily {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    let mut first = true;
+    for token in self.0.iter() {
+      if !first {
+        dest.write_str(", ")?;
+      }
+      first = false;
+      token.to_css(dest)?;
+    }
+    Ok(())
   }
 }
 

@@ -1,7 +1,8 @@
 use cssparser::Parser;
+use std::fmt;
 
 use crate::layout::style::{
-  Animatable, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult,
+  Animatable, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -17,4 +18,10 @@ impl<'i> FromCss<'i> for Order {
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Integer)];
+}
+
+impl ToCss for Order {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    write!(dest, "{}", self.0)
+  }
 }

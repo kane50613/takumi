@@ -3,11 +3,10 @@ use std::mem::take;
 use cssparser::Parser;
 
 use crate::layout::style::{
-  CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult,
+  CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, GridRepeatTrack, GridRepetitionCount,
+  GridTrackSize, MakeComputed, ParseResult, ToCss,
 };
 use crate::rendering::Sizing;
-
-use super::{GridRepeatTrack, GridRepetitionCount, GridTrackSize};
 
 /// A transparent wrapper around a list of `GridTemplateComponent`.
 ///
@@ -202,6 +201,40 @@ impl GridTemplateComponentsExt for [GridTemplateComponent] {
     line_name_sets.push(pending_line_names);
 
     (track_components, line_name_sets)
+  }
+}
+
+impl ToCss for GridTemplateComponent {
+  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+    match self {
+      Self::LineNames(names) => {
+        dest.write_str("[")?;
+        let mut first = true;
+        for name in names {
+          if !first {
+            dest.write_str(" ")?;
+          }
+          first = false;
+          dest.write_str(name)?;
+        }
+        dest.write_str("]")
+      }
+      Self::Single(size) => size.to_css(dest),
+      Self::Repeat(count, tracks) => {
+        dest.write_str("repeat(")?;
+        count.to_css(dest)?;
+        dest.write_str(", ")?;
+        let mut first = true;
+        for track in tracks {
+          if !first {
+            dest.write_str(" ")?;
+          }
+          first = false;
+          track.to_css(dest)?;
+        }
+        dest.write_str(")")
+      }
+    }
   }
 }
 

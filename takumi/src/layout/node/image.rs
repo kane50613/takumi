@@ -218,7 +218,7 @@ mod tests {
   use serde_json::from_value;
   use taffy::{AvailableSpace, Dimension, Size, Style};
 
-  use super::image_resource_url;
+  use super::{image_resource_url, measure_image_node};
   use crate::{
     GlobalContext,
     layout::{
@@ -303,7 +303,7 @@ mod tests {
       ..Style::default()
     };
 
-    let measured = super::measure_image_node(
+    let measured = measure_image_node(
       &image,
       &context,
       Size {

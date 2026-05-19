@@ -1,7 +1,7 @@
 use cssparser::Parser;
 
 use crate::layout::style::{
-  CssSyntaxKind, CssToken, FromCss, GridTrackSize, MakeComputed, ParseResult,
+  CssSyntaxKind, CssToken, FromCss, GridTrackSize, MakeComputed, ParseResult, ToCss,
 };
 use crate::rendering::Sizing;
 
@@ -62,6 +62,39 @@ impl<'i> FromCss<'i> for GridRepeatTrack {
     CssToken::Syntax(CssSyntaxKind::LineNames),
     CssToken::Syntax(CssSyntaxKind::TrackSize),
   ];
+}
+
+impl ToCss for GridRepeatTrack {
+  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+    if !self.names.is_empty() {
+      dest.write_str("[")?;
+      let mut first = true;
+      for name in &self.names {
+        if !first {
+          dest.write_str(" ")?;
+        }
+        first = false;
+        dest.write_str(name)?;
+      }
+      dest.write_str("] ")?;
+    }
+    self.size.to_css(dest)?;
+    if let Some(end_names) = &self.end_names
+      && !end_names.is_empty()
+    {
+      dest.write_str(" [")?;
+      let mut first = true;
+      for name in end_names {
+        if !first {
+          dest.write_str(" ")?;
+        }
+        first = false;
+        dest.write_str(name)?;
+      }
+      dest.write_str("]")?;
+    }
+    Ok(())
+  }
 }
 
 #[cfg(test)]

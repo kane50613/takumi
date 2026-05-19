@@ -1,9 +1,8 @@
-use crate::layout::style::unexpected_token;
 use cssparser::{Parser, Token};
 use taffy::CompactLength;
 
 use crate::{
-  layout::style::{CssToken, FromCss, Length, MakeComputed, ParseResult},
+  layout::style::{CssToken, FromCss, Length, MakeComputed, ParseResult, ToCss, unexpected_token},
   rendering::Sizing,
 };
 
@@ -63,6 +62,15 @@ impl MakeComputed for GridLength {
   fn make_computed(&mut self, sizing: &Sizing) {
     if let GridLength::Unit(unit) = self {
       unit.make_computed(sizing);
+    }
+  }
+}
+
+impl ToCss for GridLength {
+  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+    match self {
+      Self::Fr(fr) => write!(dest, "{}fr", fr),
+      Self::Unit(u) => u.to_css(dest),
     }
   }
 }

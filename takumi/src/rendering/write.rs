@@ -10,8 +10,8 @@ use serde::Deserialize;
 use typed_builder::TypedBuilder;
 
 /// Encode a sequence of RGBA frames into an animated WebP and write to `destination`.
-pub use super::webp::encode_animated_webp;
-use super::webp::{has_any_alpha_pixel, strip_alpha_channel, write_webp};
+pub use crate::rendering::webp::encode_animated_webp;
+use crate::rendering::webp::{has_any_alpha_pixel, strip_alpha_channel, write_webp};
 
 use crate::{Result, error::Error};
 

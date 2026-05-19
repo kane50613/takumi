@@ -56,6 +56,18 @@ pub struct RenderOptions<'g> {
   pub(crate) dithering: DitheringAlgorithm,
 }
 
+impl<'g> RenderOptions<'g> {
+  /// Returns a reference to the viewport.
+  pub fn viewport(&self) -> &Viewport {
+    &self.viewport
+  }
+
+  /// Returns a reference to the root node.
+  pub fn node(&self) -> &Node {
+    &self.node
+  }
+}
+
 #[derive(Clone, TypedBuilder)]
 /// A single scene in a sequential animation timeline.
 pub struct SequentialScene<'g> {

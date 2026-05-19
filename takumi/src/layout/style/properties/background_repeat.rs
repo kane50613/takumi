@@ -1,7 +1,8 @@
 use cssparser::{Parser, match_ignore_ascii_case};
+use std::fmt;
 
 use crate::layout::style::{
-  Animatable, CssToken, FromCss, ListInterpolationStrategy, MakeComputed, ParseResult,
+  Animatable, CssToken, FromCss, ListInterpolationStrategy, MakeComputed, ParseResult, ToCss,
   declare_enum_from_css_impl,
 };
 
@@ -111,4 +112,26 @@ impl<'i> FromCss<'i> for BackgroundRepeats {
   }
 
   const VALID_TOKENS: &'static [CssToken] = BackgroundRepeat::VALID_TOKENS;
+}
+
+impl ToCss for BackgroundRepeat {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match (self.0, self.1) {
+      (BackgroundRepeatStyle::Repeat, BackgroundRepeatStyle::NoRepeat) => {
+        dest.write_str("repeat-x")
+      }
+      (BackgroundRepeatStyle::NoRepeat, BackgroundRepeatStyle::Repeat) => {
+        dest.write_str("repeat-y")
+      }
+      (x, y) => {
+        if x == y {
+          x.to_css(dest)
+        } else {
+          x.to_css(dest)?;
+          dest.write_str(" ")?;
+          y.to_css(dest)
+        }
+      }
+    }
+  }
 }

@@ -1,5 +1,5 @@
-use crate::layout::style::unexpected_token;
-use std::{borrow::Cow, vec::Vec};
+use crate::layout::style::{ToCss, properties::write_css_string, unexpected_token};
+use std::{borrow::Cow, fmt, vec::Vec};
 
 use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case};
 use typed_builder::TypedBuilder;
@@ -642,6 +642,83 @@ pub(crate) fn apply_timing_function(function: &AnimationTimingFunction, progress
     AnimationTimingFunction::CubicBezier(x1, y1, x2, y2) => {
       cubic_bezier_sample(*x1, *y1, *x2, *y2, progress)
     }
+  }
+}
+
+impl ToCss for AnimationTime {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    write!(dest, "{}ms", self.milliseconds)
+  }
+}
+
+impl ToCss for StepPosition {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Start => dest.write_str("start"),
+      Self::End => dest.write_str("end"),
+    }
+  }
+}
+
+impl ToCss for AnimationTimingFunction {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Linear => dest.write_str("linear"),
+      Self::Ease => dest.write_str("ease"),
+      Self::EaseIn => dest.write_str("ease-in"),
+      Self::EaseOut => dest.write_str("ease-out"),
+      Self::EaseInOut => dest.write_str("ease-in-out"),
+      Self::StepStart => dest.write_str("step-start"),
+      Self::StepEnd => dest.write_str("step-end"),
+      Self::Steps(count, position) => {
+        dest.write_str("steps(")?;
+        write!(dest, "{}", count)?;
+        dest.write_str(", ")?;
+        position.to_css(dest)?;
+        dest.write_char(')')
+      }
+      Self::CubicBezier(x1, y1, x2, y2) => write!(dest, "cubic-bezier({x1}, {y1}, {x2}, {y2})"),
+    }
+  }
+}
+
+impl ToCss for AnimationIterationCount {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Number(n) => write!(dest, "{}", n),
+      Self::Infinite => dest.write_str("infinite"),
+    }
+  }
+}
+
+impl ToCss for Animation {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    if let Some(ref name) = self.name {
+      let needs_quoting = name
+        .chars()
+        .any(|c| !matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_' | '-'));
+      if needs_quoting {
+        write_css_string(dest, name)?;
+      } else {
+        dest.write_str(name)?;
+      }
+    } else {
+      dest.write_str("none")?;
+    }
+    dest.write_char(' ')?;
+    self.duration.to_css(dest)?;
+    dest.write_char(' ')?;
+    self.timing_function.to_css(dest)?;
+    dest.write_char(' ')?;
+    self.delay.to_css(dest)?;
+    dest.write_char(' ')?;
+    self.iteration_count.to_css(dest)?;
+    dest.write_char(' ')?;
+    self.direction.to_css(dest)?;
+    dest.write_char(' ')?;
+    self.fill_mode.to_css(dest)?;
+    dest.write_char(' ')?;
+    self.play_state.to_css(dest)
   }
 }
 

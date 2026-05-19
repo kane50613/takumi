@@ -1,6 +1,7 @@
-use crate::layout::style::unexpected_token;
+use crate::layout::style::{ToCss, unexpected_token};
 use cssparser::{Parser, Token};
 use parley::{FontFeature, setting::Tag};
+use std::fmt;
 
 use crate::layout::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult};
 
@@ -59,4 +60,10 @@ impl<'i> FromCss<'i> for FontFeatureSettings {
     CssToken::Keyword("normal"),
     CssToken::Syntax(CssSyntaxKind::String),
   ];
+}
+
+impl ToCss for parley::FontFeature {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    write!(dest, "\"{}\" {}", self.tag, self.value)
+  }
 }

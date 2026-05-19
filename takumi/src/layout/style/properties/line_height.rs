@@ -2,7 +2,7 @@ use cssparser::{Parser, match_ignore_ascii_case};
 
 use crate::{
   layout::style::{
-    CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
+    CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult, ToCss,
     parse_calc_number_expression,
     tw::{TW_VAR_SPACING, TailwindPropertyParser},
   },
@@ -114,10 +114,19 @@ impl MakeComputed for LineHeight {
   }
 }
 
+impl ToCss for LineHeight {
+  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+    match self {
+      Self::Normal => dest.write_str("normal"),
+      Self::Unitless(v) => write!(dest, "{}", v),
+      Self::Length(l) => l.to_css(dest),
+    }
+  }
+}
+
 #[cfg(test)]
 mod tests {
-  use super::LineHeight;
-  use crate::layout::style::{FromCss, Length, tw::TailwindPropertyParser};
+  use crate::layout::style::{FromCss, Length, LineHeight, tw::TailwindPropertyParser};
 
   #[test]
   fn parses_unitless_calc_expression() {
