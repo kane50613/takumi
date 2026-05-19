@@ -44,6 +44,10 @@ describe("fromJsx - stylePresets overriding", () => {
         preset: defaultStylePresets.span,
       } satisfies TextNode);
     });
+
+    test("pre element preset includes white-space: pre", () => {
+      expect(defaultStylePresets.pre?.whiteSpace).toBe("pre");
+    });
   });
 
   describe("disabling default styles with false", () => {
