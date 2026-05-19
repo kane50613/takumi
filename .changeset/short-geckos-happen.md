@@ -2,4 +2,4 @@
 "takumi": patch
 ---
 
-Ｒesolve `rem` against the root element's computed font-size
+Resolve `rem` against the root element's computed font-size
