@@ -1292,10 +1292,10 @@ mod tests {
   }
 
   #[test]
-  fn rlh_falls_back_to_viewport_normal_when_root_unresolved() {
+  fn rlh_falls_back_to_element_line_height_when_root_unresolved() {
     let mut sizing = sizing();
     sizing.root_line_height = None;
-    assert_near(Length::<true>::Rlh(1.0).to_px(&sizing, 0.0), 19.2);
+    assert_near(Length::<true>::Rlh(1.0).to_px(&sizing, 0.0), 30.0);
   }
 
   #[test]

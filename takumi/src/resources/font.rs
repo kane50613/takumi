@@ -11,7 +11,8 @@ use image::{Rgba, RgbaImage};
 use parley::{
   GenericFamily, GlyphRun, LayoutContext, TextStyle, TreeBuilder,
   fontique::{
-    Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, Script, ScriptExt,
+    Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, QueryFamily,
+    QueryStatus, Script, ScriptExt,
   },
 };
 use skrifa::{
@@ -606,6 +607,35 @@ impl FontContext {
       }
     }
 
+    result
+  }
+
+  /// Line spacing (ascent + descent + leading) of the first available font
+  /// matching the given families and attributes, scaled to `font_size`.
+  /// Used as the `lh`/`rlh` basis when `line-height: normal`.
+  pub(crate) fn first_font_line_spacing<'a>(
+    &self,
+    families: impl IntoIterator<Item = QueryFamily<'a>>,
+    attributes: Attributes,
+    font_size: f32,
+  ) -> Option<f32> {
+    let mut ctx = self.clone();
+    let parley::FontContext {
+      collection,
+      source_cache,
+    } = &mut ctx.inner;
+    let mut query = collection.query(source_cache);
+    query.set_families(families);
+    query.set_attributes(attributes);
+    let mut result = None;
+    query.matches_with(|font| {
+      let Ok(font_ref) = FontRef::from_index(font.blob.data(), font.index) else {
+        return QueryStatus::Continue;
+      };
+      let metrics = font_ref.metrics(Size::new(font_size), LocationRef::default());
+      result = Some(metrics.ascent + metrics.descent + metrics.leading);
+      QueryStatus::Stop
+    });
     result
   }
 

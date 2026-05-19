@@ -1335,6 +1335,53 @@ fn test_measure_text_node_rem_font_size_matches_px_when_dpr_is_below_one() {
 }
 
 #[test]
+fn test_measure_lh_resolves_against_explicit_line_height() {
+  let viewport = create_measure_viewport();
+
+  let result = measure(
+    Node::container([Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::width(Px(40.0)))
+        .with(StyleDeclaration::height(Lh(1.0))),
+    )])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::line_height(LineHeight::Length(Px(60.0)))),
+    ),
+    viewport,
+  );
+
+  assert_eq!(result.children.len(), 1);
+  assert_close(result.children[0].height, 60.0);
+}
+
+#[test]
+fn test_measure_rlh_resolves_against_root_computed_line_height() {
+  let viewport = create_measure_viewport();
+
+  let result = measure(
+    Node::container([Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::width(Px(40.0)))
+        .with(StyleDeclaration::height(Rlh(1.0)))
+        .with(StyleDeclaration::line_height(LineHeight::Length(Px(20.0)))),
+    )])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::line_height(LineHeight::Length(Px(48.0)))),
+    ),
+    viewport,
+  );
+
+  assert_eq!(result.children.len(), 1);
+  assert_close(result.children[0].height, 48.0);
+}
+
+#[test]
 fn test_measure_rem_resolves_against_root_computed_font_size() {
   // CSS Values 4 §6.1: `rem` is the computed value of `font-size` on the root
   // element. Setting font-size on the root should change what `1rem` means for

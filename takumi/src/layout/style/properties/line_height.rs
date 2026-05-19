@@ -6,7 +6,7 @@ use crate::{
     parse_calc_number_expression,
     tw::{TW_VAR_SPACING, TailwindPropertyParser},
   },
-  rendering::{NORMAL_LINE_HEIGHT_RATIO, Sizing},
+  rendering::Sizing,
 };
 
 /// Represents a line height value.
@@ -94,9 +94,9 @@ impl LineHeight {
     }
   }
 
-  pub(crate) fn to_px(self, sizing: &Sizing) -> f32 {
+  pub(crate) fn to_px(self, sizing: &Sizing, normal_basis: f32) -> f32 {
     match self {
-      Self::Normal => sizing.font_size * NORMAL_LINE_HEIGHT_RATIO,
+      Self::Normal => normal_basis,
       Self::Unitless(value) => value * sizing.font_size,
       Self::Length(length) => length.to_px(sizing, sizing.font_size),
     }

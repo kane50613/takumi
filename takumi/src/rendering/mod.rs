@@ -70,9 +70,6 @@ pub(crate) struct Sizing {
   pub(crate) calc_arena: Rc<CalcArena>,
 }
 
-/// Fallback `line-height: normal` ratio when font metrics are unavailable.
-pub(crate) const NORMAL_LINE_HEIGHT_RATIO: f32 = 1.2;
-
 impl Sizing {
   /// Pixel basis for the `rem` unit.
   pub(crate) fn rem_basis(&self) -> f32 {
@@ -80,9 +77,7 @@ impl Sizing {
   }
 
   pub(crate) fn root_line_height_basis(&self) -> f32 {
-    self
-      .root_line_height
-      .unwrap_or(self.viewport.font_size * NORMAL_LINE_HEIGHT_RATIO)
+    self.root_line_height.unwrap_or(self.line_height)
   }
 
   pub(crate) fn query_container_width(&self) -> f32 {
@@ -138,7 +133,7 @@ impl<'g> RenderContext<'g> {
         container_size: Size::NONE,
         font_size: viewport.font_size,
         root_font_size: None,
-        line_height: viewport.font_size * NORMAL_LINE_HEIGHT_RATIO,
+        line_height: 0.0,
         root_line_height: None,
         calc_arena: Rc::new(CalcArena::default()),
       },
