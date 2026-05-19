@@ -196,6 +196,7 @@ mod tests {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
       font_size: 16.0,
+      root_font_size: None,
       calc_arena: Rc::new(CalcArena::default()),
     };
 

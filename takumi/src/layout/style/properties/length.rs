@@ -334,7 +334,7 @@ impl CalcFormula {
 
     CalcLinear {
       px: self.px * sizing.viewport.device_pixel_ratio
-        + self.rem * sizing.viewport.font_size * sizing.viewport.device_pixel_ratio
+        + self.rem * sizing.rem_basis() * sizing.viewport.device_pixel_ratio
         + self.em * sizing.font_size
         + self.vh * viewport_height / 100.0
         + self.vw * viewport_width / 100.0
@@ -777,7 +777,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
       Length::Auto => 0.0,
       Length::Px(value) => value,
       Length::Percentage(value) => (value / 100.0) * percentage_full_px,
-      Length::Rem(value) => value * sizing.viewport.font_size,
+      Length::Rem(value) => value * sizing.rem_basis(),
       Length::Em(value) => value * sizing.font_size,
       Length::Vh(value) => value * sizing.viewport.size.height.unwrap_or_default() as f32 / 100.0,
       Length::Vw(value) => value * sizing.viewport.size.width.unwrap_or_default() as f32 / 100.0,
@@ -822,9 +822,9 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
     match self {
       Length::Auto => CompactLength::auto(),
       Length::Percentage(value) => CompactLength::percent(value / 100.0),
-      Length::Rem(value) => CompactLength::length(
-        value * sizing.viewport.font_size * sizing.viewport.device_pixel_ratio,
-      ),
+      Length::Rem(value) => {
+        CompactLength::length(value * sizing.rem_basis() * sizing.viewport.device_pixel_ratio)
+      }
       Length::Em(value) => CompactLength::length(value * sizing.font_size),
       Length::Vh(value) => CompactLength::length(
         sizing.viewport.size.height.unwrap_or_default() as f32 * value / 100.0,
@@ -970,6 +970,7 @@ mod tests {
       },
       container_size: Size::NONE,
       font_size: 10.0,
+      root_font_size: None,
       calc_arena: Rc::new(CalcArena::default()),
     }
   }

@@ -591,6 +591,7 @@ impl MediaQueryList {
       viewport,
       container_size: Size::NONE,
       font_size: viewport.font_size,
+      root_font_size: None,
       calc_arena: Rc::new(CalcArena::default()),
     };
 

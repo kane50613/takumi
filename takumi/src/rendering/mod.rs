@@ -58,11 +58,20 @@ pub(crate) struct Sizing {
   pub(crate) container_size: Size<Option<f32>>,
   /// The font size in pixels.
   pub(crate) font_size: f32,
+  /// Computed `font-size` of the root element in device pixels. `None` before
+  /// the root has been resolved; readers should fall back to `viewport.font_size`.
+  /// https://www.w3.org/TR/css-values-4/#rem
+  pub(crate) root_font_size: Option<f32>,
   /// The calc arena shared by the current layout tree.
   pub(crate) calc_arena: Rc<CalcArena>,
 }
 
 impl Sizing {
+  /// Pixel basis for the `rem` unit.
+  pub(crate) fn rem_basis(&self) -> f32 {
+    self.root_font_size.unwrap_or(self.viewport.font_size)
+  }
+
   pub(crate) fn query_container_width(&self) -> f32 {
     self
       .container_size
@@ -115,6 +124,7 @@ impl<'g> RenderContext<'g> {
         viewport,
         container_size: Size::NONE,
         font_size: viewport.font_size,
+        root_font_size: None,
         calc_arena: Rc::new(CalcArena::default()),
       },
       transform: Affine::IDENTITY,

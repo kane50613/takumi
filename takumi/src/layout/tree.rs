@@ -1010,11 +1010,16 @@ impl<'g> RenderNode<'g> {
       );
       let mut style = style_layers.inherit(&inherited_parent);
 
+      // On the root element, `parent_root_font_size` is `None` so `rem` inside
+      // its own `font-size` falls back to `viewport.font_size`, per CSS Values 4
+      // §6.1. Descendants see `Some(root_font_size)`.
+      let parent_root_font_size = parent_context.sizing.root_font_size;
       let font_size = style
         .font_size
         .to_px(&parent_context.sizing, parent_context.sizing.font_size);
       let child_sizing = Sizing {
         font_size,
+        root_font_size: parent_root_font_size,
         ..parent_context.sizing.clone()
       };
       let child_current_color = style.color.resolve(parent_context.current_color);
@@ -1035,6 +1040,7 @@ impl<'g> RenderNode<'g> {
       let font_size = style.font_size.to_px(&child_sizing, child_sizing.font_size);
       let sizing = Sizing {
         font_size,
+        root_font_size: Some(parent_root_font_size.unwrap_or(font_size)),
         ..parent_context.sizing.clone()
       };
       let current_color = style.color.resolve(parent_context.current_color);
