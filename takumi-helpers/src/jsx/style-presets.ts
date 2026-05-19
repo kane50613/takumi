@@ -43,6 +43,44 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     marginRight: 40,
     display: "block",
   },
+  figure: {
+    marginTop: "1em",
+    marginBottom: "1em",
+    marginLeft: 40,
+    marginRight: 40,
+    display: "block",
+  },
+  figcaption: {
+    display: "block",
+  },
+  address: {
+    fontStyle: "italic",
+    display: "block",
+  },
+  article: {
+    display: "block",
+  },
+  aside: {
+    display: "block",
+  },
+  footer: {
+    display: "block",
+  },
+  header: {
+    display: "block",
+  },
+  hgroup: {
+    display: "block",
+  },
+  main: {
+    display: "block",
+  },
+  nav: {
+    display: "block",
+  },
+  section: {
+    display: "block",
+  },
   center: {
     textAlign: "center",
     display: "block",
@@ -124,14 +162,24 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
   em: {
     fontStyle: "italic",
   },
+  cite: {
+    fontStyle: "italic",
+  },
+  dfn: {
+    fontStyle: "italic",
+  },
   code: {
     fontFamily: "monospace",
   },
   kbd: {
     fontFamily: "monospace",
   },
+  samp: {
+    fontFamily: "monospace",
+  },
   pre: {
     fontFamily: "monospace",
+    whiteSpace: "pre",
     margin: "1em 0",
     display: "block",
   },
