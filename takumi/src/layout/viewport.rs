@@ -12,7 +12,8 @@ pub const DEFAULT_DEVICE_PIXEL_RATIO: f32 = 1.0;
 pub struct Viewport {
   /// Size of the viewport
   pub size: ViewportSize,
-  /// The font size in pixels, used for em and rem units.
+  /// Initial font size in pixels, used as the fallback when no root element
+  /// has set its computed `font-size` (see CSS Values 4 §6.1 for `rem`).
   pub font_size: f32,
   /// The device pixel ratio.
   pub device_pixel_ratio: f32,

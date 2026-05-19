@@ -1335,6 +1335,34 @@ fn test_measure_text_node_rem_font_size_matches_px_when_dpr_is_below_one() {
 }
 
 #[test]
+fn test_measure_rem_resolves_against_root_computed_font_size() {
+  // CSS Values 4 §6.1: `rem` is the computed value of `font-size` on the root
+  // element. Setting font-size on the root should change what `1rem` means for
+  // descendants, regardless of the viewport's default font size.
+  let viewport = create_measure_viewport();
+
+  let result = measure(
+    Node::container([Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::width(Rem(1.0)))
+        .with(StyleDeclaration::height(Rem(1.0))),
+    )])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::font_size(Px(22.0).into())),
+    ),
+    viewport,
+  );
+
+  assert_eq!(result.children.len(), 1);
+  let inner = &result.children[0];
+  assert_close(inner.width, 22.0);
+  assert_close(inner.height, 22.0);
+}
+
+#[test]
 fn test_measure_nested_em_font_size_inherits_correctly_from_rem_when_dpr_is_below_one() {
   let viewport = create_measure_viewport_with_dpr(0.75);
 

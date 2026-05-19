@@ -2488,6 +2488,7 @@ mod tests {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
       font_size: 16.0,
+      root_font_size: None,
       calc_arena: Rc::new(CalcArena::default()),
     };
     let border_box = Size {
@@ -2518,6 +2519,7 @@ mod tests {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
       font_size: 16.0,
+      root_font_size: None,
       calc_arena: Rc::new(CalcArena::default()),
     };
     let border_box = Size {
@@ -2541,6 +2543,7 @@ mod tests {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
       font_size: 16.0,
+      root_font_size: None,
       calc_arena: Rc::new(CalcArena::default()),
     };
     let border_box = Size {
@@ -2586,6 +2589,7 @@ mod tests {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
       font_size: 16.0,
+      root_font_size: None,
       calc_arena: Rc::new(CalcArena::default()),
     };
 
@@ -2606,6 +2610,7 @@ mod tests {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
       font_size: 32.0,
+      root_font_size: None,
       calc_arena: Rc::new(CalcArena::default()),
     });
 
@@ -2614,6 +2619,7 @@ mod tests {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
       font_size: 32.0,
+      root_font_size: None,
       calc_arena: Rc::new(CalcArena::default()),
     };
     let inherited_font_size = inherited_child
@@ -2627,6 +2633,7 @@ mod tests {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
       font_size: 10.0,
+      root_font_size: None,
       calc_arena: Rc::new(CalcArena::default()),
     };
 
@@ -2811,6 +2818,7 @@ mod tests {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
       font_size: 16.0,
+      root_font_size: None,
       calc_arena: Rc::new(CalcArena::default()),
     };
     let radius = style.border_top_left_radius.x.to_px(

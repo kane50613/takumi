@@ -235,6 +235,7 @@ mod tests {
       },
       container_size: Size::NONE,
       font_size: 10.0,
+      root_font_size: None,
       calc_arena: Rc::new(CalcArena::default()),
     }
   }
