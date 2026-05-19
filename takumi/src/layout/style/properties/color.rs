@@ -745,9 +745,11 @@ fn parse_relative_color<'i>(
   }
 
   let scale = channel_keyword_scale(target_cs);
-  let converted = parse_color(input.slice_from(origin_start).trim())
-    .map_err(|_| unexpected_token!(Color, origin_location, &origin_token))?
-    .convert(target_cs);
+  let origin_color = Color::from_str(input.slice_from(origin_start).trim())
+    .map_err(|_| unexpected_token!(Color, origin_location, &origin_token))?;
+  let [r, g, b, a] = origin_color.0;
+  let converted =
+    DynamicColor::from_alpha_color(AlphaColor::<Srgb>::from_rgba8(r, g, b, a)).convert(target_cs);
   let [k0, k1, k2, k_alpha] = converted.components;
   let keyword_values = [k0 * scale, k1 * scale, k2 * scale, k_alpha];
 
@@ -1142,6 +1144,11 @@ mod tests {
       ColorInput::<true>::from_str("oklch(from oklch(0.5 0.1 200 / 0.4) l c h / alpha)",),
       ColorInput::<true>::from_str("oklch(0.5 0.1 200 / 0.4)"),
     );
+  }
+
+  #[test]
+  fn test_parse_relative_color_with_color_mix_origin() {
+    assert!(ColorInput::<true>::from_str("lch(from color-mix(in srgb, red, blue) l c h)").is_ok());
   }
 
   #[test]
