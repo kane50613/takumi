@@ -200,9 +200,22 @@ pub(crate) fn write_premultiplied_rgba(dst: &mut [u8], src: &[u8]) {
   }
 }
 
+const ALPHA_MASK_U128: u128 =
+  u128::from_ne_bytes([0, 0, 0, 0xFF, 0, 0, 0, 0xFF, 0, 0, 0, 0xFF, 0, 0, 0, 0xFF]);
+
 #[inline(always)]
 fn has_opaque_alpha(raw: &[u8]) -> bool {
-  raw.chunks_exact(4).all(|pixel| pixel[3] == u8::MAX)
+  let mut chunks = raw.chunks_exact(16);
+  for chunk in chunks.by_ref() {
+    let bytes: [u8; 16] = chunk.try_into().unwrap_or([0; 16]);
+    if u128::from_ne_bytes(bytes) & ALPHA_MASK_U128 != ALPHA_MASK_U128 {
+      return false;
+    }
+  }
+  chunks
+    .remainder()
+    .chunks_exact(4)
+    .all(|pixel| pixel[3] == u8::MAX)
 }
 
 #[inline(always)]
@@ -264,4 +277,78 @@ pub(crate) fn get_node_mut_by_path<'a, 'g>(
     current = children.get_mut(index)?;
   }
   Some(current)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::has_opaque_alpha;
+
+  fn pixel(r: u8, g: u8, b: u8, a: u8) -> [u8; 4] {
+    [r, g, b, a]
+  }
+
+  fn flatten(pixels: &[[u8; 4]]) -> Vec<u8> {
+    pixels.iter().flatten().copied().collect()
+  }
+
+  #[test]
+  fn empty_slice_is_opaque() {
+    assert!(has_opaque_alpha(&[]));
+  }
+
+  #[test]
+  fn fully_opaque_short_under_16_bytes() {
+    // 3 pixels = 12 bytes, falls entirely into the tail path.
+    let raw = flatten(&[
+      pixel(1, 2, 3, 255),
+      pixel(4, 5, 6, 255),
+      pixel(7, 8, 9, 255),
+    ]);
+    assert!(has_opaque_alpha(&raw));
+  }
+
+  #[test]
+  fn fully_opaque_exactly_one_chunk() {
+    let raw = flatten(&[pixel(1, 2, 3, 255); 4]);
+    assert!(has_opaque_alpha(&raw));
+  }
+
+  #[test]
+  fn fully_opaque_chunk_plus_tail() {
+    let mut raw = flatten(&[pixel(1, 2, 3, 255); 4]);
+    raw.extend_from_slice(&[pixel(9, 9, 9, 255), pixel(8, 8, 8, 255)].concat());
+    assert!(has_opaque_alpha(&raw));
+  }
+
+  #[test]
+  fn detects_non_opaque_inside_chunk() {
+    let mut pixels = [pixel(1, 2, 3, 255); 4];
+    pixels[2][3] = 254;
+    assert!(!has_opaque_alpha(&flatten(&pixels)));
+  }
+
+  #[test]
+  fn detects_non_opaque_in_tail() {
+    let mut raw = flatten(&[pixel(1, 2, 3, 255); 4]);
+    raw.extend_from_slice(&pixel(0, 0, 0, 0));
+    assert!(!has_opaque_alpha(&raw));
+  }
+
+  #[test]
+  fn detects_first_non_opaque() {
+    let mut pixels = [pixel(1, 2, 3, 255); 8];
+    pixels[0][3] = 0;
+    assert!(!has_opaque_alpha(&flatten(&pixels)));
+  }
+
+  #[test]
+  fn rgb_values_do_not_affect_result() {
+    // Alpha 0xFF everywhere; RGB has 0xFF bytes scattered that must not be
+    // mistakenly counted as alpha.
+    let raw = flatten(&[pixel(255, 255, 255, 255); 8]);
+    assert!(has_opaque_alpha(&raw));
+    // Inverse: every byte except alpha is 0xFF, alpha is 0.
+    let raw = flatten(&[pixel(255, 255, 255, 0); 8]);
+    assert!(!has_opaque_alpha(&raw));
+  }
 }

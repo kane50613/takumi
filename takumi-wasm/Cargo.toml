@@ -33,6 +33,8 @@ default-features = false
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = [
   '-O4',
+  '--converge',
+  '--code-folding',
   '--all-features',
   '--strip-debug',
   '--strip-dwarf',

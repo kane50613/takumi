@@ -1,5 +1,6 @@
 use std::{
   borrow::Cow,
+  cell::RefCell,
   collections::{HashMap, HashSet},
   iter::once,
   ops::{Deref, DerefMut},
@@ -511,6 +512,17 @@ fn guess_font_format(source: &[u8]) -> Result<FontFormat, FontError> {
   }
 }
 
+thread_local! {
+  static LAYOUT_CONTEXT: RefCell<LayoutContext<InlineBrush>> = RefCell::new(LayoutContext::new());
+}
+
+fn with_layout_context<R>(f: impl FnOnce(&mut LayoutContext<InlineBrush>) -> R) -> R {
+  LAYOUT_CONTEXT.with(|cell| match cell.try_borrow_mut() {
+    Ok(mut ctx) => f(&mut ctx),
+    Err(_) => f(&mut LayoutContext::new()),
+  })
+}
+
 /// A context for managing fonts in the rendering system.
 #[derive(Clone)]
 pub struct FontContext {
@@ -604,13 +616,12 @@ impl FontContext {
     func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),
   ) -> (InlineLayout, String) {
     let mut font_context = self.clone();
-    let mut layout_context = LayoutContext::new();
 
-    let mut builder = layout_context.tree_builder(&mut font_context, 1.0, true, &root_style);
-
-    func(&mut builder);
-
-    builder.build()
+    with_layout_context(|layout_context| {
+      let mut builder = layout_context.tree_builder(&mut font_context, 1.0, true, &root_style);
+      func(&mut builder);
+      builder.build()
+    })
   }
 
   /// Loads font into internal font db with caching
