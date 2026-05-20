@@ -1024,6 +1024,7 @@ define_style! {
     mix_blend_mode: BlendMode,
     visibility: Visibility where inherit = true,
     vertical_align: VerticalAlign,
+    content: ContentValue,
   }
   transient_longhands {
     margin_inline_start: LengthDefaultsToZero => (margin_left, margin_right),

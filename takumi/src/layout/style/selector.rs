@@ -124,19 +124,43 @@ impl NonTSPseudoClass for IgnoredPseudoClass {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct IgnoredPseudoElement(TakumiIdent);
+pub(crate) enum ParsedPseudoElement {
+  Before,
+  After,
+  Other(TakumiIdent),
+}
 
-impl ToCss for IgnoredPseudoElement {
+impl ParsedPseudoElement {
+  fn from_name(name: &str) -> Self {
+    if name.eq_ignore_ascii_case("before") {
+      Self::Before
+    } else if name.eq_ignore_ascii_case("after") {
+      Self::After
+    } else {
+      Self::Other(TakumiIdent::from(name))
+    }
+  }
+
+  fn as_str(&self) -> &str {
+    match self {
+      Self::Before => "before",
+      Self::After => "after",
+      Self::Other(name) => name,
+    }
+  }
+}
+
+impl ToCss for ParsedPseudoElement {
   fn to_css<W>(&self, dest: &mut W) -> fmt::Result
   where
     W: Write,
   {
     dest.write_str("::")?;
-    self.0.to_css(dest)
+    serialize_identifier(self.as_str(), dest)
   }
 }
 
-impl PseudoElement for IgnoredPseudoElement {
+impl PseudoElement for ParsedPseudoElement {
   type Impl = TakumiSelectorImpl;
 }
 
@@ -150,7 +174,7 @@ impl SelectorImpl for TakumiSelectorImpl {
   type BorrowedNamespaceUrl = TakumiIdent;
   type BorrowedLocalName = TakumiIdent;
   type NonTSPseudoClass = IgnoredPseudoClass;
-  type PseudoElement = IgnoredPseudoElement;
+  type PseudoElement = ParsedPseudoElement;
 }
 
 struct TakumiSelectorParser;
@@ -194,7 +218,7 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
     _location: SourceLocation,
     name: CowRcStr<'i>,
   ) -> Result<<Self::Impl as SelectorImpl>::PseudoElement, ParseError<'i, Self::Error>> {
-    Ok(IgnoredPseudoElement(TakumiIdent::from(&*name)))
+    Ok(ParsedPseudoElement::from_name(&name))
   }
 
   fn parse_functional_pseudo_element<'t>(
@@ -203,7 +227,7 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
     arguments: &mut Parser<'i, 't>,
   ) -> Result<<Self::Impl as SelectorImpl>::PseudoElement, ParseError<'i, Self::Error>> {
     while arguments.next_including_whitespace_and_comments().is_ok() {}
-    Ok(IgnoredPseudoElement(TakumiIdent::from(&*name)))
+    Ok(ParsedPseudoElement::Other(TakumiIdent::from(&*name)))
   }
 }
 
