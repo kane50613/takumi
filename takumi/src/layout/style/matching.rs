@@ -316,17 +316,17 @@ impl<'a> Element for ArenaElement<'a> {
   }
   fn match_non_ts_pseudo_class(
     &self,
-    pc: &<Self::Impl as SelectorImpl>::NonTSPseudoClass,
+    _pc: &<Self::Impl as SelectorImpl>::NonTSPseudoClass,
     _context: &mut MatchingContext<'_, Self::Impl>,
   ) -> bool {
-    match *pc {}
+    false
   }
   fn match_pseudo_element(
     &self,
-    pe: &<Self::Impl as SelectorImpl>::PseudoElement,
+    _pe: &<Self::Impl as SelectorImpl>::PseudoElement,
     _context: &mut MatchingContext<'_, Self::Impl>,
   ) -> bool {
-    match *pe {}
+    false
   }
 
   fn apply_selector_flags(&self, _flags: selectors::matching::ElementSelectorFlags) {}
