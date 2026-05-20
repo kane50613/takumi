@@ -52,18 +52,25 @@ fn box_node(class: &str) -> Node {
 
 #[test]
 fn before_string_content_inserts_text_at_start() {
-  let root = box_node("greet");
+  let root = Node::container([Node::text("body".to_string())])
+    .with_class_name("greet")
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
   let result = measure_with_css(root, r#".greet::before { content: "hello"; }"#);
-  let runs = measured_text_runs(&result);
-  assert!(runs.iter().any(|t| t == "hello"), "runs = {runs:?}");
+  let text: String = measured_text_runs(&result).concat();
+  assert!(
+    text.starts_with("hello"),
+    "expected leading 'hello' in {text:?}"
+  );
 }
 
 #[test]
 fn after_string_content_inserts_text_at_end() {
-  let root = box_node("greet");
+  let root = Node::container([Node::text("body".to_string())])
+    .with_class_name("greet")
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
   let result = measure_with_css(root, r#".greet::after { content: "bye"; }"#);
-  let runs = measured_text_runs(&result);
-  assert!(runs.iter().any(|t| t == "bye"), "runs = {runs:?}");
+  let text: String = measured_text_runs(&result).concat();
+  assert!(text.ends_with("bye"), "expected trailing 'bye' in {text:?}");
 }
 
 #[test]
@@ -175,13 +182,29 @@ fn display_block_pseudo_creates_block_level_box() {
     "#,
   );
 
-  // The block pseudo should make the card at least as tall as the inline variant.
+  // `display: block` should force the pseudo onto its own line, making the
+  // container strictly taller than the inline-flow variant.
   assert!(
-    block.height >= inline.height,
-    "block ({}) >= inline ({})",
+    block.height > inline.height,
+    "expected block ({}) > inline ({})",
     block.height,
     inline.height
   );
+}
+
+#[test]
+fn gradient_content_renders_with_default_object_size() {
+  let root = box_node("hero").with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Px(400.0))),
+  );
+  let result = measure_with_css(
+    root,
+    r#".hero::before { content: linear-gradient(red, blue); display: block; }"#,
+  );
+  // css-images-3 §5.1 default object size for gradients: 300x150.
+  assert_eq!(result.height, 150.0, "result = {result:?}");
 }
 
 #[test]

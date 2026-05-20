@@ -49,9 +49,9 @@ We mirror this in idiomatic Rust. Differences from Blink: no GC, no separate `El
 
 For an element with both pseudos and original children:
 
-```
+```text
 RenderNode (originating element)
-├── RenderNode (::before pseudo box, node: None, ComputedStyle from ::before cascade)
+├── RenderNode (::before pseudo box, synthetic Node::container, ComputedStyle from ::before cascade)
 │   ├── anonymous_text_item("Prefix: ")        ← from `<string>`
 │   ├── anonymous_image_item(url(icon.png))    ← from `<image>`, NEW helper
 │   └── anonymous_text_item(attr(label) value) ← from attr(), resolved
@@ -195,7 +195,7 @@ Mirror of `anonymous_text_item` but carrying an `ImageData` (or `ImageSourceInpu
 
 `StyleDeclarationBlock::parse` handles `content:` by dispatching to a new parser in `layout/style/properties/content.rs`. The grammar we accept (a subset of [css-content-3 §2.1](https://www.w3.org/TR/css-content-3/#content-property)):
 
-```
+```text
 content        = normal | none | <content-list>
 content-list   = [ <string> | <image> | <attr-fn> ]+
 attr-fn        = attr( <ident> [, <string>]? )

@@ -823,6 +823,38 @@ impl<'g> RenderNode<'g> {
     }
   }
 
+  fn anonymous_image_item(parent_context: &RenderContext<'g>, image: BackgroundImage) -> Self {
+    match image {
+      BackgroundImage::Url(url) => Self {
+        context: Self::anonymous_box_context(parent_context),
+        node: Some(Node::image(url)),
+        children: None,
+        layout_style_override: Some(Style::default()),
+        anonymous_text_content: None,
+        force_inline_layout: false,
+      },
+      gradient => {
+        let mut context = Self::anonymous_box_context(parent_context);
+        context.style.background_image = Some(Box::from([gradient]));
+        Self {
+          context,
+          node: Some(Node::container([])),
+          children: None,
+          // css-images-3 §5.1 default object size: 300x150.
+          layout_style_override: Some(Style {
+            size: Size {
+              width: taffy::Dimension::length(300.0),
+              height: taffy::Dimension::length(150.0),
+            },
+            ..Style::default()
+          }),
+          anonymous_text_content: None,
+          force_inline_layout: false,
+        }
+      }
+    }
+  }
+
   fn is_anonymous_text_item(&self) -> bool {
     self.anonymous_text_content.is_some() && self.node.is_none()
   }
@@ -1152,12 +1184,15 @@ impl<'g> RenderNode<'g> {
       pseudo_context: &RenderContext<'g>,
       item: &ContentItem,
     ) -> Option<RenderNode<'g>> {
-      let synthetic_node = match item {
+      match item {
         ContentItem::Text(text) => {
           if text.is_empty() {
             return None;
           }
-          Node::text(text.as_ref().to_owned())
+          Some(RenderNode::anonymous_text_item(
+            pseudo_context,
+            text.as_ref().to_owned(),
+          ))
         }
         ContentItem::AttrRef { name, fallback } => {
           let value = lookup_attribute(originating_node, name)
@@ -1166,23 +1201,13 @@ impl<'g> RenderNode<'g> {
           if value.is_empty() {
             return None;
           }
-          Node::text(value)
+          Some(RenderNode::anonymous_text_item(pseudo_context, value))
         }
-        ContentItem::Image(image) => match image.as_ref() {
-          BackgroundImage::Url(url) => Node::image(url.clone()),
-          // Gradients/other generated images as content are not yet supported.
-          _ => return None,
-        },
-      };
-
-      Some(RenderNode {
-        context: pseudo_context.clone(),
-        node: Some(synthetic_node),
-        children: None,
-        layout_style_override: None,
-        anonymous_text_content: None,
-        force_inline_layout: false,
-      })
+        ContentItem::Image(image) => Some(RenderNode::anonymous_image_item(
+          pseudo_context,
+          image.as_ref().clone(),
+        )),
+      }
     }
 
     fn build_pseudo_render_node<'g>(
@@ -1218,7 +1243,7 @@ impl<'g> RenderNode<'g> {
 
       Some(RenderNode {
         context: pseudo_context,
-        node: None,
+        node: Some(Node::container([])),
         children: Some(children.into_boxed_slice()),
         layout_style_override: None,
         anonymous_text_content: None,

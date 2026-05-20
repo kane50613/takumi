@@ -1557,20 +1557,31 @@ impl StyleDeclarationBlock {
 
   /// Collects resource URLs referenced by declarations in this block.
   pub fn resource_urls(&self) -> impl Iterator<Item = &str> {
+    fn background_image_url(image: &BackgroundImage) -> Option<&str> {
+      if let BackgroundImage::Url(url) = image {
+        Some(url.as_ref())
+      } else {
+        None
+      }
+    }
+
     self
       .iter()
-      .filter_map(|declaration| match declaration {
-        StyleDeclaration::BackgroundImage(Some(images))
-        | StyleDeclaration::MaskImage(Some(images)) => Some(images.iter().filter_map(|image| {
-          if let BackgroundImage::Url(url) = image {
-            Some(url.as_ref())
-          } else {
-            None
+      .flat_map(|declaration| -> Box<dyn Iterator<Item = &str> + '_> {
+        match declaration {
+          StyleDeclaration::BackgroundImage(Some(images))
+          | StyleDeclaration::MaskImage(Some(images)) => {
+            Box::new(images.iter().filter_map(background_image_url))
           }
-        })),
-        _ => None,
+          StyleDeclaration::Content(ContentValue::Items(items)) => {
+            Box::new(items.iter().filter_map(|item| match item {
+              ContentItem::Image(image) => background_image_url(image.as_ref()),
+              _ => None,
+            }))
+          }
+          _ => Box::new(std::iter::empty()),
+        }
       })
-      .flatten()
   }
 
   pub(crate) fn parse<'i>(name: &str, input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
