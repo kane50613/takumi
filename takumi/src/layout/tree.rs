@@ -10,7 +10,7 @@ use taffy::{
 };
 
 use crate::{
-  Result,
+  GlobalContext, Result,
   layout::{
     Viewport,
     inline::{
@@ -21,8 +21,8 @@ use crate::{
     node::{Node, NodeStyleLayers},
     style::{
       Affine, BlendMode, BoxSizing, Color, ComputedStyle, Display, Filters, Float, Isolation,
-      Overflow, PercentageNumber, Position, Style as NodeStyle, StyleDeclaration, StyleSheet,
-      TextWrapMode, apply_stylesheet_animations,
+      LineHeight, Overflow, PercentageNumber, Position, Style as NodeStyle, StyleDeclaration,
+      StyleSheet, TextWrapMode, apply_stylesheet_animations,
       matching::{MatchedDeclarationsView, match_stylesheets_view},
     },
   },
@@ -31,6 +31,7 @@ use crate::{
     inline_drawing::{InlineLayoutDrawData, draw_inline_box, draw_inline_layout},
   },
 };
+use parley::fontique::Attributes;
 
 pub(crate) struct LayoutResults {
   nodes: Vec<LayoutResultNode>,
@@ -131,6 +132,25 @@ enum InlineBaselineBoxKind {
 struct InlineBaselineStrategy {
   sources: &'static [InlineBaselineSource],
   fallback: InlineBaselineFallback,
+}
+
+fn resolve_normal_line_height(
+  global: &GlobalContext,
+  style: &ComputedStyle,
+  font_size: f32,
+) -> f32 {
+  if !matches!(style.line_height, LineHeight::Normal) {
+    return 0.0;
+  }
+  let attributes = Attributes {
+    width: style.font_stretch.into(),
+    style: style.font_style.into(),
+    weight: style.font_weight.into(),
+  };
+  global
+    .font_context
+    .first_font_line_spacing(style.font_family.query_families(), attributes, font_size)
+    .unwrap_or(font_size)
 }
 
 fn build_style_layers(
@@ -1014,12 +1034,19 @@ impl<'g> RenderNode<'g> {
       // its own `font-size` falls back to `viewport.font_size`, per CSS Values 4
       // §6.1. Descendants see `Some(root_font_size)`.
       let parent_root_font_size = parent_context.sizing.root_font_size;
+      let parent_root_line_height = parent_context.sizing.root_line_height;
       let font_size = style
         .font_size
         .to_px(&parent_context.sizing, parent_context.sizing.font_size);
+      let normal_basis = resolve_normal_line_height(parent_context.global, &style, font_size);
+      let line_height = style
+        .line_height
+        .to_px(&parent_context.sizing, normal_basis);
       let child_sizing = Sizing {
         font_size,
         root_font_size: parent_root_font_size,
+        line_height,
+        root_line_height: parent_root_line_height,
         ..parent_context.sizing.clone()
       };
       let child_current_color = style.color.resolve(parent_context.current_color);
@@ -1038,9 +1065,15 @@ impl<'g> RenderNode<'g> {
       }
 
       let font_size = style.font_size.to_px(&child_sizing, child_sizing.font_size);
+      let normal_basis = resolve_normal_line_height(parent_context.global, &style, font_size);
+      let line_height = style
+        .line_height
+        .to_px(&parent_context.sizing, normal_basis);
       let sizing = Sizing {
         font_size,
         root_font_size: Some(parent_root_font_size.unwrap_or(font_size)),
+        line_height,
+        root_line_height: Some(parent_root_line_height.unwrap_or(line_height)),
         ..parent_context.sizing.clone()
       };
       let current_color = style.color.resolve(parent_context.current_color);

@@ -83,6 +83,8 @@ pub struct CalcFormula {
   percent: f32,
   rem: f32,
   em: f32,
+  lh: f32,
+  rlh: f32,
   vh: f32,
   vw: f32,
   cqh: f32,
@@ -128,6 +130,20 @@ impl CalcFormula {
   fn em(value: f32) -> Self {
     Self {
       em: value,
+      ..Default::default()
+    }
+  }
+
+  fn lh(value: f32) -> Self {
+    Self {
+      lh: value,
+      ..Default::default()
+    }
+  }
+
+  fn rlh(value: f32) -> Self {
+    Self {
+      rlh: value,
       ..Default::default()
     }
   }
@@ -236,6 +252,8 @@ impl CalcFormula {
       percent: -self.percent,
       rem: -self.rem,
       em: -self.em,
+      lh: -self.lh,
+      rlh: -self.rlh,
       vh: -self.vh,
       vw: -self.vw,
       cqh: -self.cqh,
@@ -259,6 +277,8 @@ impl CalcFormula {
       percent: self.percent + rhs.percent,
       rem: self.rem + rhs.rem,
       em: self.em + rhs.em,
+      lh: self.lh + rhs.lh,
+      rlh: self.rlh + rhs.rlh,
       vh: self.vh + rhs.vh,
       vw: self.vw + rhs.vw,
       cqh: self.cqh + rhs.cqh,
@@ -282,6 +302,8 @@ impl CalcFormula {
       percent: self.percent - rhs.percent,
       rem: self.rem - rhs.rem,
       em: self.em - rhs.em,
+      lh: self.lh - rhs.lh,
+      rlh: self.rlh - rhs.rlh,
       vh: self.vh - rhs.vh,
       vw: self.vw - rhs.vw,
       cqh: self.cqh - rhs.cqh,
@@ -305,6 +327,8 @@ impl CalcFormula {
       percent: Self::scale_component(self.percent, factor),
       rem: Self::scale_component(self.rem, factor),
       em: Self::scale_component(self.em, factor),
+      lh: Self::scale_component(self.lh, factor),
+      rlh: Self::scale_component(self.rlh, factor),
       vh: Self::scale_component(self.vh, factor),
       vw: Self::scale_component(self.vw, factor),
       cqh: Self::scale_component(self.cqh, factor),
@@ -336,6 +360,8 @@ impl CalcFormula {
       px: self.px * sizing.viewport.device_pixel_ratio
         + self.rem * sizing.rem_basis() * sizing.viewport.device_pixel_ratio
         + self.em * sizing.font_size
+        + self.lh * sizing.line_height
+        + self.rlh * sizing.root_line_height_basis()
         + self.vh * viewport_height / 100.0
         + self.vw * viewport_width / 100.0
         + self.cqh * container_height / 100.0
@@ -496,6 +522,8 @@ fn parse_calc_factor<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcValu
         "px" => Ok(CalcValue::Formula(CalcFormula::px(*value))),
         "em" => Ok(CalcValue::Formula(CalcFormula::em(*value))),
         "rem" => Ok(CalcValue::Formula(CalcFormula::rem(*value))),
+        "lh" => Ok(CalcValue::Formula(CalcFormula::lh(*value))),
+        "rlh" => Ok(CalcValue::Formula(CalcFormula::rlh(*value))),
         "vw" => Ok(CalcValue::Formula(CalcFormula::vw(*value))),
         "dvw" => Ok(CalcValue::Formula(CalcFormula::vw(*value))),
         "svw" => Ok(CalcValue::Formula(CalcFormula::vw(*value))),
@@ -573,6 +601,10 @@ pub enum Length<const DEFAULT_AUTO: bool = true> {
   Rem(f32),
   /// Em value relative to the font size
   Em(f32),
+  /// Lh value relative to the element's computed line-height
+  Lh(f32),
+  /// Rlh value relative to the root element's computed line-height
+  Rlh(f32),
   /// Vh value relative to the viewport height (0-100)
   Vh(f32),
   /// Vw value relative to the viewport width (0-100)
@@ -674,6 +706,8 @@ impl<const DEFAULT_AUTO: bool> ToCss for Length<DEFAULT_AUTO> {
       Self::Percentage(v) => write!(dest, "{}%", v),
       Self::Rem(v) => write!(dest, "{}rem", v),
       Self::Em(v) => write!(dest, "{}em", v),
+      Self::Lh(v) => write!(dest, "{}lh", v),
+      Self::Rlh(v) => write!(dest, "{}rlh", v),
       Self::Vh(v) => write!(dest, "{}vh", v),
       Self::Vw(v) => write!(dest, "{}vw", v),
       Self::CqH(v) => write!(dest, "{}cqh", v),
@@ -695,6 +729,8 @@ impl<const DEFAULT_AUTO: bool> ToCss for Length<DEFAULT_AUTO> {
           ("%", f.percent * 100.0),
           ("rem", f.rem),
           ("em", f.em),
+          ("lh", f.lh),
+          ("rlh", f.rlh),
           ("vh", f.vh),
           ("vw", f.vw),
           ("cqh", f.cqh),
@@ -759,6 +795,8 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
       Length::Percentage(v) => Length::Percentage(-v),
       Length::Rem(v) => Length::Rem(-v),
       Length::Em(v) => Length::Em(-v),
+      Length::Lh(v) => Length::Lh(-v),
+      Length::Rlh(v) => Length::Rlh(-v),
       Length::Vh(v) => Length::Vh(-v),
       Length::Vw(v) => Length::Vw(-v),
       Length::CqH(v) => Length::CqH(-v),
@@ -806,6 +844,8 @@ impl<'i, const DEFAULT_AUTO: bool> FromCss<'i> for Length<DEFAULT_AUTO> {
           "px" => Ok(Self::Px(*value)),
           "em" => Ok(Self::Em(*value)),
           "rem" => Ok(Self::Rem(*value)),
+          "lh" => Ok(Self::Lh(*value)),
+          "rlh" => Ok(Self::Rlh(*value)),
           "vw" => Ok(Self::Vw(*value)),
           "dvw" => Ok(Self::Vw(*value)),
           "svw" => Ok(Self::Vw(*value)),
@@ -850,6 +890,8 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
       Length::Percentage(value) => (value / 100.0) * percentage_full_px,
       Length::Rem(value) => value * sizing.rem_basis(),
       Length::Em(value) => value * sizing.font_size,
+      Length::Lh(value) => value * sizing.line_height,
+      Length::Rlh(value) => value * sizing.root_line_height_basis(),
       Length::Vh(value) => value * sizing.viewport.size.height.unwrap_or_default() as f32 / 100.0,
       Length::Vw(value) => value * sizing.viewport.size.width.unwrap_or_default() as f32 / 100.0,
       Length::CqH(value) => value * sizing.query_container_height() / 100.0,
@@ -897,6 +939,8 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
         CompactLength::length(value * sizing.rem_basis() * sizing.viewport.device_pixel_ratio)
       }
       Length::Em(value) => CompactLength::length(value * sizing.font_size),
+      Length::Lh(value) => CompactLength::length(value * sizing.line_height),
+      Length::Rlh(value) => CompactLength::length(value * sizing.root_line_height_basis()),
       Length::Vh(value) => CompactLength::length(
         sizing.viewport.size.height.unwrap_or_default() as f32 * value / 100.0,
       ),
@@ -975,6 +1019,8 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
         | Length::VMin(_)
         | Length::VMax(_)
         | Length::Em(_)
+        | Length::Lh(_)
+        | Length::Rlh(_)
         | Length::Calc(_)
     ) {
       value
@@ -1005,6 +1051,27 @@ impl<const DEFAULT_AUTO: bool> MakeComputed for Length<DEFAULT_AUTO> {
       };
 
       *self = Self::Px(em * font_size);
+      return;
+    }
+
+    if let Self::Lh(lh) = *self {
+      let dpr = sizing.viewport.device_pixel_ratio;
+      let line_height = if dpr > 0.0 {
+        sizing.line_height / dpr
+      } else {
+        sizing.line_height
+      };
+
+      *self = Self::Px(lh * line_height);
+      return;
+    }
+
+    if let Self::Rlh(rlh) = *self {
+      let dpr = sizing.viewport.device_pixel_ratio;
+      let basis = sizing.root_line_height_basis();
+      let line_height = if dpr > 0.0 { basis / dpr } else { basis };
+
+      *self = Self::Px(rlh * line_height);
       return;
     }
 
@@ -1042,6 +1109,8 @@ mod tests {
       container_size: Size::NONE,
       font_size: 10.0,
       root_font_size: None,
+      line_height: 30.0,
+      root_line_height: Some(40.0),
       calc_arena: Rc::new(CalcArena::default()),
     }
   }
@@ -1205,6 +1274,68 @@ mod tests {
     assert_eq!(Length::<true>::from_str("12cqmin"), Ok(Length::CqMin(12.0)));
     assert_eq!(Length::<true>::from_str("12vmax"), Ok(Length::VMax(12.0)));
     assert_eq!(Length::<true>::from_str("12cqmax"), Ok(Length::CqMax(12.0)));
+  }
+
+  #[test]
+  fn parse_supports_lh_and_rlh_units() {
+    assert_eq!(Length::<true>::from_str("1.5lh"), Ok(Length::Lh(1.5)));
+    assert_eq!(Length::<true>::from_str("2rlh"), Ok(Length::Rlh(2.0)));
+  }
+
+  #[test]
+  fn lh_and_rlh_resolve_to_line_height_basis() {
+    let sizing = sizing();
+    assert_near(Length::<true>::Lh(1.0).to_px(&sizing, 0.0), 30.0);
+    assert_near(Length::<true>::Lh(2.0).to_px(&sizing, 0.0), 60.0);
+    assert_near(Length::<true>::Rlh(1.0).to_px(&sizing, 0.0), 40.0);
+    assert_near(Length::<true>::Rlh(0.5).to_px(&sizing, 0.0), 20.0);
+  }
+
+  #[test]
+  fn rlh_falls_back_to_element_line_height_when_root_unresolved() {
+    let mut sizing = sizing();
+    sizing.root_line_height = None;
+    assert_near(Length::<true>::Rlh(1.0).to_px(&sizing, 0.0), 30.0);
+  }
+
+  #[test]
+  fn parse_calc_supports_lh_and_rlh() {
+    let parsed = Length::<true>::from_str("calc(1lh + 2rlh - 3px)");
+    assert_eq!(
+      parsed,
+      Ok(Length::Calc(CalcFormula {
+        lh: 1.0,
+        rlh: 2.0,
+        px: -3.0,
+        ..Default::default()
+      }))
+    );
+  }
+
+  #[test]
+  fn calc_lh_resolves_through_line_height_basis() {
+    let sizing = sizing();
+    let parsed = Length::<true>::from_str("calc(1lh + 2px)");
+    assert_eq!(
+      parsed,
+      Ok(Length::Calc(CalcFormula {
+        lh: 1.0,
+        px: 2.0,
+        ..Default::default()
+      }))
+    );
+    if let Ok(value) = parsed {
+      assert_near(value.to_px(&sizing, 0.0), 34.0);
+    }
+  }
+
+  #[test]
+  fn make_computed_lh_collapses_to_px_in_pre_dpr_space() {
+    let mut value: Length<true> = Length::Lh(1.5);
+    let sizing = sizing();
+    value.make_computed(&sizing);
+    assert_eq!(value, Length::Px(22.5));
+    assert_eq!(value.to_px(&sizing, 0.0), 45.0);
   }
 
   #[test]

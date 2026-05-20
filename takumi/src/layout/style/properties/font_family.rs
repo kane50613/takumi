@@ -2,7 +2,9 @@ use std::fmt;
 use std::string::ToString;
 
 use cssparser::{Parser, match_ignore_ascii_case};
-use parley::{FontFamily as ParleyFontFamily, FontFamilyName, GenericFamily};
+use parley::{
+  FontFamily as ParleyFontFamily, FontFamilyName, GenericFamily, fontique::QueryFamily,
+};
 
 use crate::layout::style::{
   CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, properties::write_css_string,
@@ -21,6 +23,15 @@ enum FontFamilyToken {
 }
 
 impl MakeComputed for FontFamily {}
+
+impl FontFamily {
+  pub(crate) fn query_families(&self) -> impl Iterator<Item = QueryFamily<'_>> + Clone {
+    self.0.iter().map(|token| match token {
+      FontFamilyToken::Owned(name) => QueryFamily::Named(name.as_str()),
+      FontFamilyToken::Generic(generic) => QueryFamily::Generic(*generic),
+    })
+  }
+}
 
 impl<'i> FromCss<'i> for FontFamilyToken {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {

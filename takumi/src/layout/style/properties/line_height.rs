@@ -93,6 +93,14 @@ impl LineHeight {
       Self::Unitless(value) => parley::LineHeight::FontSizeRelative(value),
     }
   }
+
+  pub(crate) fn to_px(self, sizing: &Sizing, normal_basis: f32) -> f32 {
+    match self {
+      Self::Normal => normal_basis,
+      Self::Unitless(value) => value * sizing.font_size,
+      Self::Length(length) => length.to_px(sizing, sizing.font_size),
+    }
+  }
 }
 
 impl MakeComputed for LineHeight {

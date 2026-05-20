@@ -592,6 +592,8 @@ impl MediaQueryList {
       container_size: Size::NONE,
       font_size: viewport.font_size,
       root_font_size: None,
+      line_height: viewport.font_size,
+      root_line_height: Some(viewport.font_size),
       calc_arena: Rc::new(CalcArena::default()),
     };
 
