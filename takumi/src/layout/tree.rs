@@ -23,7 +23,7 @@ use crate::{
       Affine, BlendMode, BoxSizing, Color, ComputedStyle, Display, Filters, Float, Isolation,
       LineHeight, Overflow, PercentageNumber, Position, Style as NodeStyle, StyleDeclaration,
       StyleSheet, TextWrapMode, apply_stylesheet_animations,
-      matching::{MatchedDeclarationsView, match_stylesheets_view},
+      matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
     },
   },
   rendering::{
@@ -976,7 +976,7 @@ impl<'g> RenderNode<'g> {
   fn from_node_iterative(
     parent_context: &RenderContext<'g>,
     root: Node,
-    matched_declarations: &[MatchedDeclarationsView<'_>],
+    matched_declarations: &[NodeMatchedDeclarations<'_>],
   ) -> Self {
     struct PendingRenderNode<'g> {
       context: RenderContext<'g>,
@@ -1022,11 +1022,12 @@ impl<'g> RenderNode<'g> {
       parent_context: &RenderContext<'g>,
       node: &mut Node,
       node_index: usize,
-      matched_declarations: &[MatchedDeclarationsView<'_>],
+      matched_declarations: &[NodeMatchedDeclarations<'_>],
     ) -> (ComputedStyle, Sizing, Color) {
       let default_matched = MatchedDeclarationsView::default();
       let matched = matched_declarations
         .get(node_index)
+        .map(|m| &m.element)
         .unwrap_or(&default_matched);
       let layers = node.take_style_layers();
       let style_layers = build_style_layers(layers, matched, parent_context.sizing.viewport);
@@ -1097,7 +1098,7 @@ impl<'g> RenderNode<'g> {
     fn build_pending_node<'g>(
       parent_context: &RenderContext<'g>,
       mut node: Node,
-      matched_declarations: &[MatchedDeclarationsView<'_>],
+      matched_declarations: &[NodeMatchedDeclarations<'_>],
       preorder_cursor: &mut usize,
     ) -> PendingRenderNode<'g> {
       let node_index = next_preorder_index(preorder_cursor);

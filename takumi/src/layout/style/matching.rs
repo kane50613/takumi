@@ -347,6 +347,15 @@ pub(crate) struct MatchedDeclarationsView<'a> {
   pub(crate) important: SmallVec<[&'a StyleDeclarationBlock; 4]>,
 }
 
+/// Per-node matching result: the element's own declarations plus declarations
+/// for any matched `::before` / `::after` pseudo-elements.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct NodeMatchedDeclarations<'a> {
+  pub(crate) element: MatchedDeclarationsView<'a>,
+  pub(crate) before: Option<MatchedDeclarationsView<'a>>,
+  pub(crate) after: Option<MatchedDeclarationsView<'a>>,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct MatchedRule<'a> {
   important: bool,
@@ -356,16 +365,27 @@ struct MatchedRule<'a> {
   declarations: &'a StyleDeclarationBlock,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SelectorTarget {
+  Element,
+  Before,
+  After,
+}
+
 pub(crate) fn match_stylesheets_view<'a>(
   root: &Node,
   stylesheet: &'a StyleSheet,
   viewport: Viewport,
-) -> Vec<MatchedDeclarationsView<'a>> {
+) -> Vec<NodeMatchedDeclarations<'a>> {
   let arena = StyleArena::new(root);
-  let mut per_node = vec![MatchedDeclarationsView::default(); arena.nodes.len()];
+  let node_count = arena.nodes.len();
+  let mut per_node = vec![NodeMatchedDeclarations::default(); node_count];
 
-  let mut matched_rules: Vec<Vec<MatchedRule<'a>>> = vec![Vec::new(); arena.nodes.len()];
-  let mut ancestor_bloom_filters = vec![BloomFilter::new(); arena.nodes.len()];
+  let mut matched_element: Vec<Vec<MatchedRule<'a>>> = vec![Vec::new(); node_count];
+  let mut matched_before: Vec<Vec<MatchedRule<'a>>> = vec![Vec::new(); node_count];
+  let mut matched_after: Vec<Vec<MatchedRule<'a>>> = vec![Vec::new(); node_count];
+
+  let mut ancestor_bloom_filters = vec![BloomFilter::new(); node_count];
   let mut selector_ancestor_hashes_cache: HashMap<usize, AncestorHashes> = HashMap::new();
   let flattened_rules: Vec<&CssRule> = stylesheet
     .rules
@@ -378,7 +398,7 @@ pub(crate) fn match_stylesheets_view<'a>(
     })
     .collect();
 
-  for i in 0..arena.nodes.len() {
+  for i in 0..node_count {
     let Some(parent) = arena.nodes[i].parent else {
       continue;
     };
@@ -386,87 +406,178 @@ pub(crate) fn match_stylesheets_view<'a>(
     add_node_unique_hashes_to_filter(arena.nodes[parent].node, &mut ancestor_bloom_filters[i]);
   }
 
-  let mut caches = SelectorCaches::default();
+  let mut element_caches = SelectorCaches::default();
+  let mut pseudo_caches = SelectorCaches::default();
 
-  for (i, matched_rule) in matched_rules.iter_mut().enumerate() {
+  for i in 0..node_count {
     let element = ArenaElement {
       tree: &arena,
       index: i,
     };
-    let mut ctx = MatchingContext::new(
+    let is_replaced = node_is_replaced(arena.nodes[i].node);
+
+    let mut element_ctx = MatchingContext::new(
       MatchingMode::Normal,
       Some(&ancestor_bloom_filters[i]),
-      &mut caches,
+      &mut element_caches,
+      QuirksMode::NoQuirks,
+      NeedsSelectorFlags::No,
+      MatchingForInvalidation::No,
+    );
+    let mut pseudo_ctx = MatchingContext::new(
+      MatchingMode::ForStatelessPseudoElement,
+      Some(&ancestor_bloom_filters[i]),
+      &mut pseudo_caches,
       QuirksMode::NoQuirks,
       NeedsSelectorFlags::No,
       MatchingForInvalidation::No,
     );
 
     for (source_order, &rule) in flattened_rules.iter().enumerate() {
-      let mut best_specificity: Option<u32> = None;
+      let mut best_element: Option<u32> = None;
+      let mut best_before: Option<u32> = None;
+      let mut best_after: Option<u32> = None;
+
       for selector in rule.selectors.slice() {
+        let Some(target) = selector_target(selector) else {
+          continue;
+        };
+        if is_replaced && target != SelectorTarget::Element {
+          continue;
+        }
+
         let selector_key = selector as *const _ as usize;
         let ancestor_hashes = selector_ancestor_hashes_cache
           .entry(selector_key)
           .or_insert_with(|| AncestorHashes::new(selector, QuirksMode::NoQuirks));
-        let is_match = if early_reject_by_local_name(selector, 0, &element) {
-          false
+
+        if early_reject_by_local_name(selector, 0, &element) {
+          continue;
+        }
+
+        let ctx = if target == SelectorTarget::Element {
+          &mut element_ctx
         } else {
-          matches_selector(selector, 0, Some(ancestor_hashes), &element, &mut ctx)
+          &mut pseudo_ctx
         };
 
-        if is_match {
+        if matches_selector(selector, 0, Some(ancestor_hashes), &element, ctx) {
           let specificity = selector.specificity();
-          best_specificity =
-            Some(best_specificity.map_or(specificity, |best| best.max(specificity)));
+          let slot = match target {
+            SelectorTarget::Element => &mut best_element,
+            SelectorTarget::Before => &mut best_before,
+            SelectorTarget::After => &mut best_after,
+          };
+          *slot = Some(slot.map_or(specificity, |best| best.max(specificity)));
         }
       }
 
-      if let Some(specificity) = best_specificity {
-        let normal_layer_order = rule
-          .layer_order
-          .map_or(stylesheet.layer_count, |order| order);
-        matched_rule.push(MatchedRule {
-          important: false,
-          layer_order: normal_layer_order,
-          specificity,
-          source_order,
-          declarations: &rule.normal_declarations,
-        });
-        let important_layer_order = rule
-          .layer_order
-          .map_or(0, |order| stylesheet.layer_count - order);
-        matched_rule.push(MatchedRule {
-          important: true,
-          layer_order: important_layer_order,
-          specificity,
-          source_order,
-          declarations: &rule.important_declarations,
-        });
-      }
+      record_matches(
+        rule,
+        source_order,
+        stylesheet.layer_count,
+        best_element,
+        &mut matched_element[i],
+      );
+      record_matches(
+        rule,
+        source_order,
+        stylesheet.layer_count,
+        best_before,
+        &mut matched_before[i],
+      );
+      record_matches(
+        rule,
+        source_order,
+        stylesheet.layer_count,
+        best_after,
+        &mut matched_after[i],
+      );
     }
   }
 
-  for (matched, mut rules) in per_node.iter_mut().zip(matched_rules) {
-    rules.sort_by_key(|rule| {
-      (
-        rule.important,
-        rule.layer_order,
-        rule.specificity,
-        rule.source_order,
-      )
-    });
-
-    for rule in rules {
-      if rule.important {
-        matched.important.push(rule.declarations);
-      } else {
-        matched.normal.push(rule.declarations);
-      }
-    }
+  for (i, matched) in per_node.iter_mut().enumerate() {
+    finalize_bucket(&mut matched_element[i], &mut matched.element);
+    matched.before = take_pseudo_bucket(&mut matched_before[i]);
+    matched.after = take_pseudo_bucket(&mut matched_after[i]);
   }
 
   per_node
+}
+
+fn selector_target(
+  selector: &selectors::parser::Selector<TakumiSelectorImpl>,
+) -> Option<SelectorTarget> {
+  match selector.pseudo_element() {
+    None => Some(SelectorTarget::Element),
+    Some(crate::layout::style::selector::ParsedPseudoElement::Before) => {
+      Some(SelectorTarget::Before)
+    }
+    Some(crate::layout::style::selector::ParsedPseudoElement::After) => Some(SelectorTarget::After),
+    Some(crate::layout::style::selector::ParsedPseudoElement::Other(_)) => None,
+  }
+}
+
+fn node_is_replaced(node: &Node) -> bool {
+  matches!(node.kind, crate::layout::node::NodeKind::Image(_))
+}
+
+fn record_matches<'a>(
+  rule: &'a CssRule,
+  source_order: usize,
+  layer_count: usize,
+  best_specificity: Option<u32>,
+  bucket: &mut Vec<MatchedRule<'a>>,
+) {
+  let Some(specificity) = best_specificity else {
+    return;
+  };
+  let normal_layer_order = rule.layer_order.map_or(layer_count, |order| order);
+  bucket.push(MatchedRule {
+    important: false,
+    layer_order: normal_layer_order,
+    specificity,
+    source_order,
+    declarations: &rule.normal_declarations,
+  });
+  let important_layer_order = rule.layer_order.map_or(0, |order| layer_count - order);
+  bucket.push(MatchedRule {
+    important: true,
+    layer_order: important_layer_order,
+    specificity,
+    source_order,
+    declarations: &rule.important_declarations,
+  });
+}
+
+fn finalize_bucket<'a>(
+  rules: &mut Vec<MatchedRule<'a>>,
+  matched: &mut MatchedDeclarationsView<'a>,
+) {
+  rules.sort_by_key(|rule| {
+    (
+      rule.important,
+      rule.layer_order,
+      rule.specificity,
+      rule.source_order,
+    )
+  });
+  for rule in rules.drain(..) {
+    if rule.important {
+      matched.important.push(rule.declarations);
+    } else {
+      matched.normal.push(rule.declarations);
+    }
+  }
+}
+
+fn take_pseudo_bucket<'a>(rules: &mut Vec<MatchedRule<'a>>) -> Option<MatchedDeclarationsView<'a>> {
+  if rules.is_empty() {
+    return None;
+  }
+  let mut view = MatchedDeclarationsView::default();
+  finalize_bucket(rules, &mut view);
+  Some(view)
 }
 
 #[cfg(test)]
@@ -551,7 +662,10 @@ mod tests {
 
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
-    assert_eq!(computed_width_from_matches(&matched[0]), Length::Px(10.0));
+    assert_eq!(
+      computed_width_from_matches(&matched[0].element),
+      Length::Px(10.0)
+    );
   }
 
   #[test]
@@ -570,7 +684,10 @@ mod tests {
 
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 2);
-    assert_eq!(computed_width_from_matches(&matched[1]), Length::Px(10.0));
+    assert_eq!(
+      computed_width_from_matches(&matched[1].element),
+      Length::Px(10.0)
+    );
   }
 
   #[test]
@@ -591,7 +708,10 @@ mod tests {
 
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
-    assert_eq!(computed_width_from_matches(&matched[0]), Length::Px(20.0));
+    assert_eq!(
+      computed_width_from_matches(&matched[0].element),
+      Length::Px(20.0)
+    );
   }
 
   #[test]
@@ -601,7 +721,10 @@ mod tests {
 
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
-    assert_eq!(computed_width_from_matches(&matched[0]), Length::Px(20.0));
+    assert_eq!(
+      computed_width_from_matches(&matched[0].element),
+      Length::Px(20.0)
+    );
   }
 
   #[test]
@@ -623,7 +746,10 @@ mod tests {
 
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
-    assert_eq!(computed_width_from_matches(&matched[0]), Length::Px(10.0));
+    assert_eq!(
+      computed_width_from_matches(&matched[0].element),
+      Length::Px(10.0)
+    );
   }
 
   #[test]
@@ -639,7 +765,10 @@ mod tests {
 
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
-    assert_eq!(computed_width_from_matches(&matched[0]), Length::Px(10.0));
+    assert_eq!(
+      computed_width_from_matches(&matched[0].element),
+      Length::Px(10.0)
+    );
   }
 
   #[test]
@@ -661,10 +790,22 @@ mod tests {
 
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 5);
-    assert_eq!(computed_width_from_matches(&matched[2]), Length::Px(10.0));
-    assert_eq!(computed_height_from_matches(&matched[2]), Length::Px(30.0));
-    assert_eq!(computed_width_from_matches(&matched[4]), Length::Px(20.0));
-    assert_eq!(computed_height_from_matches(&matched[4]), Length::Px(30.0));
+    assert_eq!(
+      computed_width_from_matches(&matched[2].element),
+      Length::Px(10.0)
+    );
+    assert_eq!(
+      computed_height_from_matches(&matched[2].element),
+      Length::Px(30.0)
+    );
+    assert_eq!(
+      computed_width_from_matches(&matched[4].element),
+      Length::Px(20.0)
+    );
+    assert_eq!(
+      computed_height_from_matches(&matched[4].element),
+      Length::Px(30.0)
+    );
   }
 
   #[test]
@@ -690,8 +831,14 @@ mod tests {
 
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 2);
-    assert_eq!(computed_width_from_matches(&matched[1]), Length::Px(30.0));
-    assert_eq!(computed_height_from_matches(&matched[1]), Length::Px(40.0));
+    assert_eq!(
+      computed_width_from_matches(&matched[1].element),
+      Length::Px(30.0)
+    );
+    assert_eq!(
+      computed_height_from_matches(&matched[1].element),
+      Length::Px(40.0)
+    );
   }
 
   #[test]
@@ -703,10 +850,51 @@ mod tests {
     // Matched normal: should have width: 10px.
     // Matched important: should have height: 20px.
 
-    assert_eq!(matched[0].normal[0].declarations.len(), 1);
-    assert!(matched[0].normal[0].importance.is_empty());
+    assert_eq!(matched[0].element.normal[0].declarations.len(), 1);
+    assert!(matched[0].element.normal[0].importance.is_empty());
 
-    assert_eq!(matched[0].important[0].declarations.len(), 1);
-    assert!(!matched[0].important[0].importance.is_empty());
+    assert_eq!(matched[0].element.important[0].declarations.len(), 1);
+    assert!(!matched[0].element.important[0].importance.is_empty());
+  }
+
+  #[test]
+  fn pseudo_element_rules_land_in_before_after_buckets() {
+    let root = Node::container([]).with_class_name("card");
+    let stylesheet = parse_stylesheet(
+      r#"
+        .card::before { content: "x"; }
+        .card::after  { content: "y"; }
+        .card         { width: 10px; }
+      "#,
+    );
+
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    assert_eq!(matched.len(), 1);
+
+    assert!(!matched[0].element.normal.is_empty());
+    assert!(matched[0].before.is_some());
+    assert!(matched[0].after.is_some());
+  }
+
+  #[test]
+  fn pseudo_element_rules_are_skipped_on_replaced_elements() {
+    let root = Node::image("data:image/png;base64,iVBOR").with_class_name("logo");
+    let stylesheet = parse_stylesheet(r#".logo::before { content: "x"; }"#);
+
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    assert_eq!(matched.len(), 1);
+    assert!(matched[0].before.is_none());
+    assert!(matched[0].after.is_none());
+  }
+
+  #[test]
+  fn unsupported_pseudo_element_does_not_create_bucket() {
+    let root = Node::container([]).with_class_name("card");
+    let stylesheet = parse_stylesheet(r#".card::placeholder { color: red; }"#);
+
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    assert_eq!(matched.len(), 1);
+    assert!(matched[0].before.is_none());
+    assert!(matched[0].after.is_none());
   }
 }
