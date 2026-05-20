@@ -2,7 +2,6 @@ use cssparser::*;
 use precomputed_hash::PrecomputedHash;
 use selectors::parser::{
   NonTSPseudoClass, ParseRelative, PseudoElement, SelectorImpl, SelectorList,
-  SelectorParseErrorKind,
 };
 use std::{
   collections::HashMap,
@@ -99,41 +98,45 @@ impl PrecomputedHash for TakumiIdent {
 #[derive(Debug, Clone)]
 pub(crate) struct TakumiSelectorImpl;
 
+// Parsed but never matched, so rules with `:hover`, `::before`, etc. survive
+// alongside their sibling selectors instead of getting dropped wholesale.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum UnsupportedPseudoClass {}
+pub(crate) struct IgnoredPseudoClass(TakumiIdent);
 
-impl ToCss for UnsupportedPseudoClass {
-  fn to_css<W>(&self, _dest: &mut W) -> fmt::Result
+impl ToCss for IgnoredPseudoClass {
+  fn to_css<W>(&self, dest: &mut W) -> fmt::Result
   where
     W: Write,
   {
-    match *self {}
+    dest.write_char(':')?;
+    self.0.to_css(dest)
   }
 }
 
-impl NonTSPseudoClass for UnsupportedPseudoClass {
+impl NonTSPseudoClass for IgnoredPseudoClass {
   type Impl = TakumiSelectorImpl;
   fn is_active_or_hover(&self) -> bool {
-    match *self {}
+    false
   }
   fn is_user_action_state(&self) -> bool {
-    match *self {}
+    false
   }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum UnsupportedPseudoElement {}
+pub(crate) struct IgnoredPseudoElement(TakumiIdent);
 
-impl ToCss for UnsupportedPseudoElement {
-  fn to_css<W>(&self, _dest: &mut W) -> fmt::Result
+impl ToCss for IgnoredPseudoElement {
+  fn to_css<W>(&self, dest: &mut W) -> fmt::Result
   where
     W: Write,
   {
-    match *self {}
+    dest.write_str("::")?;
+    self.0.to_css(dest)
   }
 }
 
-impl PseudoElement for UnsupportedPseudoElement {
+impl PseudoElement for IgnoredPseudoElement {
   type Impl = TakumiSelectorImpl;
 }
 
@@ -146,8 +149,8 @@ impl SelectorImpl for TakumiSelectorImpl {
   type NamespacePrefix = TakumiIdent;
   type BorrowedNamespaceUrl = TakumiIdent;
   type BorrowedLocalName = TakumiIdent;
-  type NonTSPseudoClass = UnsupportedPseudoClass;
-  type PseudoElement = UnsupportedPseudoElement;
+  type NonTSPseudoClass = IgnoredPseudoClass;
+  type PseudoElement = IgnoredPseudoElement;
 }
 
 struct TakumiSelectorParser;
@@ -164,28 +167,43 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
     true
   }
 
+  fn parse_is_and_where(&self) -> bool {
+    true
+  }
+
   fn parse_non_ts_pseudo_class(
     &self,
-    location: SourceLocation,
+    _location: SourceLocation,
     name: CowRcStr<'i>,
   ) -> Result<<Self::Impl as SelectorImpl>::NonTSPseudoClass, ParseError<'i, Self::Error>> {
-    Err(
-      location.new_custom_error(SelectorParseErrorKind::UnsupportedPseudoClassOrElement(
-        name,
-      )),
-    )
+    Ok(IgnoredPseudoClass(TakumiIdent::from(&*name)))
+  }
+
+  fn parse_non_ts_functional_pseudo_class<'t>(
+    &self,
+    name: CowRcStr<'i>,
+    parser: &mut Parser<'i, 't>,
+    _after_part: bool,
+  ) -> Result<<Self::Impl as SelectorImpl>::NonTSPseudoClass, ParseError<'i, Self::Error>> {
+    while parser.next_including_whitespace_and_comments().is_ok() {}
+    Ok(IgnoredPseudoClass(TakumiIdent::from(&*name)))
   }
 
   fn parse_pseudo_element(
     &self,
-    location: SourceLocation,
+    _location: SourceLocation,
     name: CowRcStr<'i>,
   ) -> Result<<Self::Impl as SelectorImpl>::PseudoElement, ParseError<'i, Self::Error>> {
-    Err(
-      location.new_custom_error(SelectorParseErrorKind::UnsupportedPseudoClassOrElement(
-        name,
-      )),
-    )
+    Ok(IgnoredPseudoElement(TakumiIdent::from(&*name)))
+  }
+
+  fn parse_functional_pseudo_element<'t>(
+    &self,
+    name: CowRcStr<'i>,
+    arguments: &mut Parser<'i, 't>,
+  ) -> Result<<Self::Impl as SelectorImpl>::PseudoElement, ParseError<'i, Self::Error>> {
+    while arguments.next_including_whitespace_and_comments().is_ok() {}
+    Ok(IgnoredPseudoElement(TakumiIdent::from(&*name)))
   }
 }
 
@@ -1680,14 +1698,35 @@ mod tests {
   }
 
   #[test]
-  fn test_unsupported_pseudo_selector_rule_is_rejected() {
+  fn test_ignored_pseudo_selector_rule_is_kept_but_never_matches() {
     let sheet = parse_stylesheet_loosy(
       r#"
         .a:hover { width: 10px; }
+        .a, .a:hover { height: 20px; }
+        .a::before { color: red; }
+        .a:lang(en) { color: blue; }
       "#,
     );
 
-    assert!(sheet.rules.is_empty());
+    assert_eq!(sheet.rules.len(), 4);
+    assert_eq!(selector_text(&sheet.rules[0]), ".a:hover");
+    assert_eq!(selector_text(&sheet.rules[1]), ".a, .a:hover");
+    assert_eq!(selector_text(&sheet.rules[2]), ".a::before");
+    assert_eq!(selector_text(&sheet.rules[3]), ".a:lang");
+  }
+
+  #[test]
+  fn test_is_and_where_selectors_are_accepted() {
+    let sheet = parse_stylesheet_loosy(
+      r#"
+        .a:where(.b) div { background: red; }
+        .a:is(.b, .c) { color: blue; }
+      "#,
+    );
+
+    assert_eq!(sheet.rules.len(), 2);
+    assert_eq!(selector_text(&sheet.rules[0]), ".a:where(.b) div");
+    assert_eq!(selector_text(&sheet.rules[1]), ".a:is(.b, .c)");
   }
 
   #[test]
