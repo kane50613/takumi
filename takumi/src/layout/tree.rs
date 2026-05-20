@@ -20,9 +20,10 @@ use crate::{
     },
     node::{Node, NodeStyleLayers},
     style::{
-      Affine, BlendMode, BoxSizing, Color, ComputedStyle, Display, Filters, Float, Isolation,
-      LineHeight, Overflow, PercentageNumber, Position, Style as NodeStyle, StyleDeclaration,
-      StyleSheet, TextWrapMode, apply_stylesheet_animations,
+      Affine, BackgroundImage, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem,
+      ContentValue, Display, Filters, Float, Isolation, LineHeight, Overflow, PercentageNumber,
+      Position, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
+      apply_stylesheet_animations,
       matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
     },
   },
@@ -984,6 +985,7 @@ impl<'g> RenderNode<'g> {
       children_is_some: bool,
       pending_children: IntoIter<Node>,
       rendered_children: Vec<RenderNode<'g>>,
+      pseudo_after: Option<RenderNode<'g>>,
     }
 
     fn next_preorder_index(preorder_cursor: &mut usize) -> usize {
@@ -1095,6 +1097,135 @@ impl<'g> RenderNode<'g> {
       (style, sizing, current_color)
     }
 
+    fn build_pseudo_computed_style<'g>(
+      parent_context: &RenderContext<'g>,
+      pseudo_matched: &MatchedDeclarationsView<'_>,
+    ) -> (ComputedStyle, Sizing, Color) {
+      let style_layers = build_style_layers(
+        NodeStyleLayers::default(),
+        pseudo_matched,
+        parent_context.sizing.viewport,
+      );
+      let inherited_parent = registered_custom_property_parent_style(
+        &parent_context.style,
+        std::slice::from_ref(parent_context.stylesheet.as_ref()),
+        parent_context.sizing.viewport,
+      );
+      let mut style = style_layers.inherit(&inherited_parent);
+
+      let parent_root_font_size = parent_context.sizing.root_font_size;
+      let parent_root_line_height = parent_context.sizing.root_line_height;
+      let font_size = style
+        .font_size
+        .to_px(&parent_context.sizing, parent_context.sizing.font_size);
+      let normal_basis = resolve_normal_line_height(parent_context.global, &style, font_size);
+      let line_height = style
+        .line_height
+        .to_px(&parent_context.sizing, normal_basis);
+      let sizing = Sizing {
+        font_size,
+        root_font_size: Some(parent_root_font_size.unwrap_or(font_size)),
+        line_height,
+        root_line_height: Some(parent_root_line_height.unwrap_or(line_height)),
+        ..parent_context.sizing.clone()
+      };
+      let current_color = style.color.resolve(parent_context.current_color);
+      style.make_computed(&sizing);
+      (style, sizing, current_color)
+    }
+
+    fn lookup_attribute<'a>(node: &'a Node, name: &str) -> Option<&'a str> {
+      node
+        .metadata
+        .attributes
+        .as_ref()
+        .and_then(|attrs| {
+          attrs
+            .iter()
+            .find(|(attr_name, _)| attr_name.eq_ignore_ascii_case(name))
+        })
+        .map(|(_, value)| value.as_ref())
+    }
+
+    fn build_content_item_render_node<'g>(
+      originating_node: &Node,
+      pseudo_context: &RenderContext<'g>,
+      item: &ContentItem,
+    ) -> Option<RenderNode<'g>> {
+      let synthetic_node = match item {
+        ContentItem::Text(text) => {
+          if text.is_empty() {
+            return None;
+          }
+          Node::text(text.as_ref().to_owned())
+        }
+        ContentItem::AttrRef { name, fallback } => {
+          let value = lookup_attribute(originating_node, name)
+            .map(str::to_owned)
+            .unwrap_or_else(|| fallback.as_ref().to_owned());
+          if value.is_empty() {
+            return None;
+          }
+          Node::text(value)
+        }
+        ContentItem::Image(image) => match image.as_ref() {
+          BackgroundImage::Url(url) => Node::image(url.clone()),
+          // Gradients/other generated images as content are not yet supported.
+          _ => return None,
+        },
+      };
+
+      Some(RenderNode {
+        context: pseudo_context.clone(),
+        node: Some(synthetic_node),
+        children: None,
+        layout_style_override: None,
+        anonymous_text_content: None,
+        force_inline_layout: false,
+      })
+    }
+
+    fn build_pseudo_render_node<'g>(
+      parent_context: &RenderContext<'g>,
+      originating_node: &Node,
+      pseudo_matched: &MatchedDeclarationsView<'_>,
+    ) -> Option<RenderNode<'g>> {
+      let (style, sizing, current_color) =
+        build_pseudo_computed_style(parent_context, pseudo_matched);
+
+      if matches!(style.display, Display::None) {
+        return None;
+      }
+
+      let items = match &style.content {
+        ContentValue::Items(items) => items.clone(),
+        ContentValue::None | ContentValue::Normal => return None,
+      };
+
+      let pseudo_context = build_render_context(parent_context, style, sizing, current_color);
+
+      let mut children = Vec::with_capacity(items.len());
+      for item in items.iter() {
+        if let Some(child) = build_content_item_render_node(originating_node, &pseudo_context, item)
+        {
+          children.push(child);
+        }
+      }
+
+      if children.is_empty() {
+        return None;
+      }
+
+      Some(RenderNode {
+        context: pseudo_context,
+        node: None,
+        children: Some(children.into_boxed_slice()),
+        layout_style_override: None,
+        anonymous_text_content: None,
+        force_inline_layout: false,
+      })
+    }
+
     fn build_pending_node<'g>(
       parent_context: &RenderContext<'g>,
       mut node: Node,
@@ -1107,12 +1238,27 @@ impl<'g> RenderNode<'g> {
       let (children_is_some, children) = take_children_vec(&mut node);
       let context = build_render_context(parent_context, style, sizing, current_color);
 
+      let element_matched = matched_declarations.get(node_index);
+      let pseudo_before = element_matched
+        .and_then(|m| m.before.as_ref())
+        .and_then(|m| build_pseudo_render_node(&context, &node, m));
+      let pseudo_after = element_matched
+        .and_then(|m| m.after.as_ref())
+        .and_then(|m| build_pseudo_render_node(&context, &node, m));
+
+      let has_pseudo = pseudo_before.is_some() || pseudo_after.is_some();
+      let mut rendered_children = Vec::with_capacity(children.len() + 2);
+      if let Some(before) = pseudo_before {
+        rendered_children.push(before);
+      }
+
       PendingRenderNode {
         context,
         node,
-        children_is_some,
-        rendered_children: Vec::with_capacity(children.len()),
+        children_is_some: children_is_some || has_pseudo,
+        rendered_children,
         pending_children: children.into_iter(),
+        pseudo_after,
       }
     }
 
@@ -1167,6 +1313,10 @@ impl<'g> RenderNode<'g> {
           force_inline_layout: false,
         };
       };
+
+      if let Some(after) = finished.pseudo_after.take() {
+        finished.rendered_children.push(after);
+      }
 
       let children = if finished.children_is_some {
         Some(finished.rendered_children.into_boxed_slice())

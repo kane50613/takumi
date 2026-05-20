@@ -24,7 +24,7 @@ pub enum ContentItem {
   /// A literal string, e.g. `content: "Hello"`.
   Text(Arc<str>),
   /// An image value: `url(...)`, `linear-gradient(...)`, etc.
-  Image(BackgroundImage),
+  Image(Box<BackgroundImage>),
   /// `attr(name)` or `attr(name, "fallback")`, resolved at render-tree-build time
   /// against the originating element's attributes.
   AttrRef {
@@ -40,7 +40,7 @@ impl MakeComputed for ContentValue {
     if let ContentValue::Items(items) = self {
       for item in items.iter_mut() {
         if let ContentItem::Image(image) = item {
-          image.make_computed(sizing);
+          image.as_mut().make_computed(sizing);
         }
       }
     }
@@ -113,9 +113,9 @@ fn parse_content_item<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Option<
 
   match token {
     Token::QuotedString(value) => Ok(Some(ContentItem::Text(value.as_ref().into()))),
-    Token::UnquotedUrl(url) => Ok(Some(ContentItem::Image(BackgroundImage::Url(
+    Token::UnquotedUrl(url) => Ok(Some(ContentItem::Image(Box::new(BackgroundImage::Url(
       url.as_ref().into(),
-    )))),
+    ))))),
     Token::Function(ref name) if name.eq_ignore_ascii_case("attr") => {
       let item = input.parse_nested_block(parse_attr_inner)?;
       Ok(Some(item))
@@ -123,7 +123,7 @@ fn parse_content_item<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Option<
     Token::Function(ref name) if is_image_function(name) => {
       input.reset(&start);
       let image = BackgroundImage::from_css(input)?;
-      Ok(Some(ContentItem::Image(image)))
+      Ok(Some(ContentItem::Image(Box::new(image))))
     }
     Token::Function(_) => {
       drain_block(input)?;
@@ -153,7 +153,7 @@ fn drain_block<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, ()> {
 
 fn parse_attr_inner<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, ContentItem> {
   let name: Arc<str> = input.expect_ident()?.as_ref().into();
-  let fallback: Arc<str> = if input.try_parse(|input| input.expect_comma()).is_ok() {
+  let fallback: Arc<str> = if input.try_parse(Parser::expect_comma).is_ok() {
     input.expect_string()?.as_ref().into()
   } else {
     "".into()
@@ -198,6 +198,7 @@ impl ToCss for ContentItem {
 }
 
 #[cfg(test)]
+#[allow(clippy::panic, clippy::expect_used)]
 mod tests {
   use super::*;
 
@@ -258,7 +259,7 @@ mod tests {
     };
     assert!(matches!(
       &items[0],
-      ContentItem::Image(BackgroundImage::Url(_))
+      ContentItem::Image(image) if matches!(**image, BackgroundImage::Url(_)),
     ));
   }
 
