@@ -853,7 +853,7 @@ define_style! {
     object_fit: ObjectFit,
     overflow_x: Overflow,
     overflow_y: Overflow,
-    object_position: ObjectPosition where inherit = true,
+    object_position: ObjectPosition,
     background_image: Option<BackgroundImages>,
     background_position: BackgroundPositions,
     background_size: BackgroundSizes,
@@ -916,7 +916,7 @@ define_style! {
     clear: Clear,
     isolation: Isolation,
     mix_blend_mode: BlendMode,
-    visibility: Visibility,
+    visibility: Visibility where inherit = true,
     vertical_align: VerticalAlign,
   }
   shorthands {
