@@ -123,6 +123,7 @@ impl GifSource {
   }
 }
 
+#[cfg(feature = "svg")]
 impl From<SvgSource> for ImageSource {
   fn from(svg: SvgSource) -> Self {
     ImageSource::Svg(svg)
