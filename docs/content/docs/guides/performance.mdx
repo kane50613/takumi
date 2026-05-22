@@ -4,23 +4,31 @@ description: Best practices for building high-performance rendering pipelines wi
 icon: Zap
 ---
 
-Takumi is designed from the ground up for speed. However, as your node trees grow in complexity, following these best practices will ensure you get the most out of the engine.
+The renderer is fast. Most performance problems come from rebuilding it on every request, fetching the same image twice, or stacking filters that allocate full-viewport buffers. Avoid those three things and you'll be on the happy path.
 
-## The Renderer
+## Reuse the Renderer
 
-### Reuse the Renderer Instance
+The `Renderer` owns parsed fonts, the persistent image store, and the WASM/native module handle. Build it once per process; pass it into every render.
 
-For both `@takumi-rs/core` and `@takumi-rs/wasm`, the `Renderer` is the heart of Takumi's resource management. Try to reuse the renderer instance across multiple renderings.
+```tsx title="server.ts"
+import { Renderer } from "takumi-js/node";
 
-#### For ImageResponse
+const renderer = new Renderer({
+  fonts: [
+    /* ... */
+  ],
+});
 
-An internal renderer instance is managed automatically, or you can pass your own renderer instance via `renderer` option.
+export function GET() {
+  return new ImageResponse(<OgImage />, { renderer, width: 1200, height: 630 });
+}
+```
 
-Refer to both [Typography & Fonts](/docs/guides/typography) and [Load Images](/docs/guides/images) for more details.
+`ImageResponse` manages an internal renderer if you don't pass one — fine for getting started, wasteful in production.
 
-#### For Cloudflare Workers
+## Cloudflare Workers: init outside the handler
 
-Initialize the WASM module and renderer instance out side of the `fetch()` handler so it won't be re-run everytime a request comes in.
+On Workers the WASM module must be instantiated, and the renderer constructed, in module scope. Doing it inside `fetch` pays the init cost on every cold request.
 
 ```tsx title="index.tsx"
 import { ImageResponse } from "takumi-js/response";
@@ -28,45 +36,48 @@ import { initSync, Renderer } from "takumi-js/wasm";
 import module from "takumi-js/wasm/takumi_wasm_bg.wasm";
 import archivo from "path-to-font.ttf";
 
-const fetchCache = new Map();
-const logoUrl = "https://yeecord.com/img/logo.png";
-
 initSync(module); // [!code highlight]
-
-// [!code highlight:3]
-const renderer = new Renderer({
-  fonts: [archivo],
-});
+const renderer = new Renderer({ fonts: [archivo] }); // [!code highlight]
 
 export default {
-  fetch(request) {
-    return new ImageResponse(<div />, {
-      width: 1200,
-      height: 630,
-      renderer, // [!code highlight]
-    });
+  fetch(request: Request) {
+    return new ImageResponse(<OgImage />, { renderer, width: 1200, height: 630 });
   },
 };
 ```
 
-### Preload Frequently Used Images
+## Image preloading
 
-Loading images from URLs or bytes during the rendering pass can be a bottleneck. Register [Load Images](/docs/guides/images) to avoid re-decoding.
+<Callout type="info">
+  Frequently used assets — logos, backgrounds, avatars — belong in the persistent image store. See
+  [Persistent image store](/docs/guides/images#persistent-image-store) for the full pattern and the
+  Cloudflare memory caveat.
+</Callout>
 
-### Parallel Rendering
+## Filter cost
 
-Always prefer `@takumi-rs/core` over `@takumi-rs/wasm` for utilizing multiple threads.
+Every `filter`, `backdrop-filter`, and `box-shadow` with non-zero blur allocates a composition buffer the size of the affected node. Stacking multiple filters on a single node is cheaper than splitting them across nested nodes, because one buffer holds the whole chain.
 
-## Component Design
+```tsx
+// Cheaper — one composition layer
+<div style={{ filter: "blur(8px) brightness(1.1) saturate(1.2)" }}>{content}</div>
 
-### Stack Filters in a Single Node
-
-A composition layer with the same size as viewport has to be created in order to apply filters and blurs, which incurs additional memory usage.
+// More expensive — three nested layers
+<div style={{ filter: "blur(8px)" }}>
+  <div style={{ filter: "brightness(1.1)" }}>
+    <div style={{ filter: "saturate(1.2)" }}>{content}</div>
+  </div>
+</div>
+```
 
 ## Fonts
 
-### Prefer TTF over WOFF2
+See [Typography & Fonts](/docs/guides/typography). The short version: prefer TTF over WOFF2 if file size isn't the binding constraint — decompression isn't free, and you pay it every time the renderer initializes.
 
-WOFF2 is a compressed format, which requires decompression before use. TTF is a raw format, which can be used directly.
+## Parallel rendering
 
-You should only use WOFF2 if the concern of file size is more important than the concern of performance.
+`@takumi-rs/core` (native) renders on a thread pool and scales with cores. `@takumi-rs/wasm` is single-threaded. If you need throughput on a multi-core host, use the native binding.
+
+## Measure cost
+
+For ground truth, run the benchmark suite in [`takumi/benches/`](https://github.com/kane50613/takumi/tree/master/takumi/benches). The numbers there reflect the engine without framework overhead — a useful baseline when you're trying to figure out whether a regression is yours or ours.

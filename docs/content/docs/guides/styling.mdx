@@ -1,79 +1,97 @@
 ---
-title: Tailwind CSS
-description: Use Tailwind CSS classes to style your Takumi components.
+title: Styling
+description: Three ways to style a Takumi node. Pick based on what you already have.
 icon: Wind
 ---
 
-There are two ways to use Tailwind CSS with Takumi, you can either bring your bundler compiled stylesheet, or use the native parser.
+<Banner variant="rainbow">
+  Moved from <code>/docs/tailwind-css</code>.
+</Banner>
 
-## Bring your Stylesheet
+Inline `style`, the `tw` prop, or external stylesheets. They compose; you'll usually pick one as the primary and reach for the others when it's convenient.
 
-This require you to have Tailwind setup with your bundler or manually compiled to CSS file that browser understands.
+## Inline style
 
-### Vite Powered Frameworks
+The `style` prop accepts the same shape as React's. CSS property names are camelCased, values are strings or numbers. Type-checked against `csstype`, so the editor catches typos.
 
-Just import your stylesheet with `?inline` query and pass it to the `stylesheets` option of `ImageResponse`.
+```tsx twoslash
+import { render } from "takumi-js";
+import type { CSSProperties } from "react";
 
-```tsx title="og.tsx"
-// [!code ++]
-import stylesheet from "~/styles/global.css?inline";
+const card: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  padding: 48,
+  background: "linear-gradient(135deg, #6366f1 0%, #ec4899 100%)",
+  color: "white",
+  fontSize: 48,
+  fontWeight: 700,
+};
 
-export async function loader() {
-  return ImageResponse(
-    <div className="bg-background text-foreground flex justify-center items-center w-full h-full text-4xl">
-      Hello Tailwind!
-    </div>,
-    {
-      width: 1200,
-      height: 630,
-      // [!code ++]
-      stylesheets: [stylesheet],
-    },
-  );
-}
+await render(<div style={card}>Hello Takumi</div>, { width: 1200, height: 630 });
 ```
 
-```tsx title="vite.config.ts"
-import { defineConfig } from "vite";
-import tailwindcss from "@tailwindcss/vite";
+Reach for inline `style` when the value is dynamic (a brand color from the database, a chart bar height), when you want zero build steps, or when a one-shot OG image doesn't justify a CSS pipeline.
 
-export default defineConfig({
-  // [!code ++]
-  plugins: [tailwindcss()],
-});
-```
+## Tailwind via tw prop
 
-## Native Parser
-
-Prior Takumi has abaility to parse stylesheets, a built in parser is built for Tailwind CSS.
-
-Generally speaking, this is not recommended as it won't be able to cover all the features of Tailwind CSS, but as a quick solution for simple use cases, it can be a good option.
-
-### Limitations
-
-- No custom theme config, but arbitrary values are supported.
-- Read the [parser mapping](https://github.com/kane50613/takumi/blob/master/takumi/src/layout/style/tw/map.rs) for all supported classes.
-
-### Usage
-
-You can use the `tw` prop on any element (`div`, `span`, `img`, etc.) in your JSX.
+`tw` is the fastest path for users coming from `next/og`. Classes are parsed at render time by Takumi's built-in mapping — no Tailwind compiler, no PostCSS, no build config.
 
 ```tsx
-<div tw="bg-blue-500 p-4 rounded-lg">
-  <h1 tw="text-white text-2xl font-bold">Hello Tailwind!</h1>
+<div tw="flex items-center justify-center w-full h-full bg-blue-500">
+  <h1 tw="text-white text-6xl font-bold">Hello Tailwind</h1>
 </div>
 ```
 
-### Dynamic Classes
+What's compiled: the core utilities (layout, spacing, sizing, color, typography, flexbox, grid), arbitrary values (`text-[#1a6ef5]`, `w-[640px]`), and animation presets (`animate-spin`, `animate-pulse`).
 
-Since `tw` is just a prop, you can use template literals or conditional logic to apply classes dynamically.
+Limitations: no custom theme config (use arbitrary values), no plugins, no `@apply`. The full mapping lives at [`takumi/src/layout/style/tw/map.rs`](https://github.com/kane50613/takumi/blob/master/takumi/src/layout/style/tw/map.rs). When you outgrow it, switch to an external stylesheet — the syntax is the same.
+
+`tw` is a plain prop, so dynamic class composition works:
 
 ```tsx
 import clsx from "clsx";
 
-const isError = true;
-
-<div tw={clsx("p-4 rounded", isError ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700")}>
-  {isError ? "Something went wrong" : "Success!"}
-</div>;
+<div tw={clsx("p-4 rounded", isError ? "bg-red-100" : "bg-green-100")}>{children}</div>;
 ```
+
+## External stylesheets
+
+Pass compiled CSS to `render` via `stylesheets`. Works with anything that emits CSS — Tailwind v4, UnoCSS, Panda, vanilla `.css` files, a string you wrote by hand.
+
+```tsx
+import { render } from "takumi-js";
+import { compileTailwindStylesheet } from "./tailwind-compile";
+
+const css = await compileTailwindStylesheet(currentDir);
+
+await render(<Card />, {
+  width: 1200,
+  height: 630,
+  stylesheets: [css],
+});
+```
+
+The Vite path is even smaller — `?inline` gives you the compiled stylesheet as a string:
+
+```tsx title="og.tsx"
+import stylesheet from "~/styles/global.css?inline";
+
+return new ImageResponse(<Card />, {
+  width: 1200,
+  height: 630,
+  stylesheets: [stylesheet],
+});
+```
+
+The [`css-library-integration` example](https://github.com/kane50613/takumi/tree/master/example/css-library-integration) shows the same JSX rendered through both Tailwind and UnoCSS pipelines — useful as a starting point for either.
+
+External stylesheets get you the full framework: theme tokens, plugins, `@apply`, custom utilities, complex selectors. Cost is a build step and an extra dependency.
+
+## When to use which
+
+| Strategy   | Reach for it when                                                |
+| ---------- | ---------------------------------------------------------------- |
+| Inline     | Values are dynamic; no build step; one-shot images.              |
+| `tw` prop  | Coming from `next/og`; want zero config; core utilities suffice. |
+| Stylesheet | You already run Tailwind/UnoCSS; need themes, plugins, `@apply`. |

@@ -123,3 +123,58 @@ Takumi supports both `balance` and `pretty` text wrapping. The algorithm is modi
 ```tsx
 <div style={{ textWrap: "balance" }}>Super Long Text</div>
 ```
+
+## Variable fonts
+
+A single variable font file replaces a whole family. Drive its axes through `font-variation-settings`; the renderer passes them straight to the shaper.
+
+```tsx twoslash
+import { ImageResponse } from "takumi-js/response";
+
+export function GET() {
+  return new ImageResponse(
+    <div
+      style={{
+        fontFamily: "Manrope",
+        fontVariationSettings: "'wght' 700, 'wdth' 110, 'opsz' 48",
+        fontSize: 64,
+      }}
+    >
+      Variable font axes
+    </div>,
+    { width: 800, height: 200 },
+  );
+}
+```
+
+`font-weight: 700` is shorthand for `font-variation-settings: 'wght' 700`. Use the longhand when you need to set axes other than weight (width, optical size, slant, italic, or any custom axis the font ships).
+
+## Fallback chain
+
+Takumi resolves glyphs in load order. Every font you pass to the renderer becomes a fallback candidate for every Unicode script; when the primary family is missing a glyph, the shaper walks the registered fonts until one supplies it.
+
+Practical consequence: load your text font first, then a color emoji font, then a CJK font, then any script-specific fallback. The first font that owns the glyph wins.
+
+```tsx
+const renderer = new Renderer({
+  fonts: [
+    interRegular, // primary Latin
+    notoColorEmoji, // emoji fallback
+    notoSansJP, // CJK fallback
+    notoSansArabic, // Arabic fallback
+  ],
+});
+```
+
+A character with no provider anywhere in the chain renders as `.notdef` (the font's "tofu" box). If you see those, you're missing a font for that script.
+
+## COLR vs bitmap glyphs
+
+Color emoji ship in two main formats:
+
+| Format         | Storage       | File size | Best for                          |
+| -------------- | ------------- | --------- | --------------------------------- |
+| COLR (v0 / v1) | Vector layers | ~1 MB     | Default. Scales cleanly.          |
+| CBDT / sbix    | Raster bitmap | 5-20 MB   | Pixel-accurate match to a target. |
+
+Reach for COLR unless you need byte-identical output with a specific platform (Apple's `sbix` Apple Color Emoji, for example). `Twemoji-COLR` and `Noto Color Emoji` are both COLR. If you want a per-glyph image instead of a font, see [Emoji](/docs/guides/emoji).

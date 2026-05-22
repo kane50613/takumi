@@ -1,5 +1,6 @@
 import { getPageTreePeers, type Root as PageTreeRoot } from "fumadocs-core/page-tree";
 import * as Twoslash from "fumadocs-twoslash/ui";
+import { Banner } from "fumadocs-ui/components/banner";
 import { Card, Cards } from "fumadocs-ui/components/card";
 import { File, Files, Folder } from "fumadocs-ui/components/files";
 import { Step, Steps } from "fumadocs-ui/components/steps";
@@ -27,6 +28,7 @@ const components = {
   Shovel,
   ToyBrick,
   ArrowBigRight,
+  Banner,
   Mermaid,
   Step,
   Steps,
