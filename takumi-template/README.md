@@ -1,6 +1,6 @@
 # Takumi Templates
 
-A collection of pre-designed templates for [Takumi](https://takumi.kane.tw). Check the documentation page [Templates](https://takumi.kane.tw/docs/templates) for more information.
+A collection of pre-designed templates for [Takumi](https://takumi.kane.tw). Check the documentation page [Recipes](https://takumi.kane.tw/docs/recipes) for more information.
 
 ## Distribution
 
