@@ -1,0 +1,59 @@
+---
+title: Installation
+description: Add Takumi to your project in any JS runtime.
+icon: Hand
+---
+
+One package, every runtime. Install it the way you'd install anything else.
+
+<Tabs items={["Bun", "npm", "pnpm", "yarn"]}>
+
+<Tab value="Bun">
+
+```bash
+bun add takumi-js
+```
+
+</Tab>
+
+<Tab value="npm">
+
+```bash
+npm install takumi-js
+```
+
+</Tab>
+
+<Tab value="pnpm">
+
+```bash
+pnpm add takumi-js
+```
+
+</Tab>
+
+<Tab value="yarn">
+
+```bash
+yarn add takumi-js
+```
+
+</Tab>
+
+</Tabs>
+
+## Runtime quick reference
+
+| Runtime                   | Import                                      |
+| ------------------------- | ------------------------------------------- |
+| Node.js                   | `import { Renderer } from "takumi-js/node"` |
+| Bun                       | `import { Renderer } from "takumi-js/node"` |
+| Cloudflare Workers / Edge | `import { Renderer } from "takumi-js/wasm"` |
+| Browser                   | `import { Renderer } from "takumi-js/wasm"` |
+| Any (auto-detect)         | `import { render } from "takumi-js"`        |
+
+<Callout type="info">
+  Most projects use the root `import {render} from "takumi-js"` and let Takumi pick the right
+  runtime. Reach for the explicit `Renderer` only when you want to reuse it across calls or load
+  fonts up front.
+</Callout>
