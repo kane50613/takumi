@@ -16,7 +16,7 @@ Match the README. Punchy, opinionated, contrastive. No "Let's explore," no "In t
 
 ## IA
 
-```
+```text
 [For LLMs]                                          (existing)
   Leaf   → /llms.txt
   Brain  → /llms-full.txt

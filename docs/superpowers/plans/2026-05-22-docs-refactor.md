@@ -54,8 +54,8 @@ git commit -m "Docs: add fumadocs-typescript for AutoTypeTable"
 
 **Files:**
 
-- Create: `docs/src/components/mdx/node-tree.tsx`
-- Create: `docs/src/components/mdx/style-property.tsx`
+- Create: `docs/app/components/mdx/node-tree.tsx`
+- Create: `docs/app/components/mdx/style-property.tsx`
 - Modify: `docs/src/pages/docs/[...slugs].tsx`
 
 - [ ] **Step 1:** Create `node-tree.tsx`. Pretty-prints a Takumi node tree alongside its rendered image.
@@ -150,7 +150,7 @@ const components = {
 - [ ] **Step 5:** Commit.
 
 ```bash
-git add docs/src/components/mdx/ docs/src/pages/docs/[...slugs].tsx
+git add docs/app/components/mdx/ docs/src/pages/docs/[...slugs].tsx
 git commit -m "Docs: add NodeTree and StyleProperty MDX components"
 ```
 
@@ -160,7 +160,7 @@ Wire `fumadocs-typescript`'s `AutoTypeTable` so MDX pages can reference types fr
 
 **Files:**
 
-- Create: `docs/src/components/mdx/auto-type-table.tsx`
+- Create: `docs/app/components/mdx/auto-type-table.tsx`
 - Modify: `docs/src/pages/docs/[...slugs].tsx`
 - Modify: `docs/source.config.ts` (only if needed for type resolution; revisit during step 3)
 
@@ -193,7 +193,7 @@ title: AutoTypeTable Probe
 description: temp
 ---
 
-<AutoTypeTable path="../../../takumi-js/src/render.ts" name="RenderOptions" />
+<AutoTypeTable path="../../../../takumi-js/src/render.ts" name="RenderOptions" />
 ```
 
 - [ ] **Step 4:** `VERIFY-BUILD`. If TypeScript resolution fails, fall back to extracting types to `docs/.types/` via a small `scripts/extract-types.ts` script that copies `.d.ts` from `takumi-js/dist`, `takumi-napi-core/index.d.ts`, `takumi-helpers/dist`, and run it in the `typecheck` script. Update the wrapper's resolver accordingly.
@@ -209,7 +209,7 @@ rm docs/content/docs/reference/_test.mdx
 - [ ] **Step 7:** Commit.
 
 ```bash
-git add docs/src/components/mdx/auto-type-table.tsx docs/src/pages/docs/[...slugs].tsx docs/source.config.ts docs/scripts/ docs/package.json docs/bun.lock 2>/dev/null || true
+git add docs/app/components/mdx/auto-type-table.tsx docs/src/pages/docs/[...slugs].tsx docs/source.config.ts docs/scripts/ docs/package.json docs/bun.lock 2>/dev/null || true
 git commit -m "Docs: wire AutoTypeTable via fumadocs-typescript"
 ```
 
@@ -857,12 +857,12 @@ One task per guide. Each guide is one commit.
   - `## Block & Float`: short, with note that Float layout is partial.
   - `## Common pitfalls`: 3-4 entries — height-auto behavior, image intrinsic sizing, percentage parents requiring fixed sizing, etc.
 
-- [ ] **Step 2:** Generate preview images via a small script: write a Bun script at `docs/scripts/render-guide-images.ts` that takes a list of `{ slug, jsx, width, height }` and renders to `docs/public/guides/<slug>.webp`. Run it.
+- [ ] **Step 2:** Generate preview images via a small script: write a Bun script at `docs/scripts/render-guide-images.tsx` that takes a list of `{ slug, jsx, width, height }` and renders to `docs/public/guides/<slug>.webp`. Run it.
 
 - [ ] **Step 3:** Commit.
 
 ```bash
-git add docs/content/docs/guides/layout.mdx docs/public/guides/ docs/scripts/render-guide-images.ts
+git add docs/content/docs/guides/layout.mdx docs/public/guides/ docs/scripts/render-guide-images.tsx
 git commit -m "Docs: rewrite Layout guide with Flex / Grid / Block + previews"
 ```
 
