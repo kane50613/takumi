@@ -1183,18 +1183,11 @@ impl<'g> RenderNode<'g> {
           }
         } else {
           // https://github.com/kane50613/takumi/issues/711
-          let has_block_level = children
+          if children
             .iter()
-            .any(|child| !child.participates_in_inline_formatting_context());
-          if has_block_level
-            && children
-              .iter()
-              .any(RenderNode::is_whitespace_only_text_node)
+            .any(|child| !child.participates_in_inline_formatting_context())
           {
-            children = Vec::from(children)
-              .into_iter()
-              .filter(|child| !child.is_whitespace_only_text_node())
-              .collect();
+            children = drop_block_boundary_whitespace(Vec::from(children)).into_boxed_slice();
           }
 
           let has_inline = children
@@ -1716,6 +1709,33 @@ fn flush_inline_group<'g>(
     parent_render_context,
     take(inline_group),
   ));
+}
+
+fn drop_block_boundary_whitespace<'g>(input: Vec<RenderNode<'g>>) -> Vec<RenderNode<'g>> {
+  let mut result = Vec::with_capacity(input.len());
+  let mut run: Vec<RenderNode<'g>> = Vec::new();
+
+  fn flush<'g>(run: &mut Vec<RenderNode<'g>>, out: &mut Vec<RenderNode<'g>>) {
+    let has_meaningful_inline = run.iter().any(|c| {
+      c.participates_in_inflow_inline_formatting_context() && !c.is_whitespace_only_text_node()
+    });
+    if has_meaningful_inline {
+      out.append(run);
+    } else {
+      out.extend(run.drain(..).filter(|c| !c.is_whitespace_only_text_node()));
+    }
+  }
+
+  for child in input {
+    if !child.participates_in_inline_formatting_context() {
+      flush(&mut run, &mut result);
+      result.push(child);
+    } else {
+      run.push(child);
+    }
+  }
+  flush(&mut run, &mut result);
+  result
 }
 
 #[cfg(test)]

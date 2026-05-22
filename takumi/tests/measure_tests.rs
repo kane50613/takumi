@@ -1752,3 +1752,45 @@ fn test_block_container_drops_whitespace_between_absolute_and_in_flow_sibling() 
 
   assert_eq!(with_result, without_result);
 }
+
+// https://github.com/kane50613/takumi/issues/711
+#[test]
+fn test_block_container_preserves_whitespace_between_inline_siblings() {
+  let inline_span = |label: &'static str| {
+    Node::text(label.to_string())
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))
+  };
+  let block_child = || {
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::width(Px(50.0)))
+        .with(StyleDeclaration::height(Px(50.0))),
+    )
+  };
+  let block_style = || {
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Px(400.0)))
+  };
+
+  let with_space = Node::container([
+    inline_span("a"),
+    Node::text(" ".to_string()),
+    inline_span("b"),
+    block_child(),
+  ])
+  .with_style(block_style());
+
+  let without_space =
+    Node::container([inline_span("a"), inline_span("b"), block_child()]).with_style(block_style());
+
+  let with_result = measure(with_space, create_measure_viewport());
+  let without_result = measure(without_space, create_measure_viewport());
+
+  assert!(
+    with_result.height > without_result.height
+      || with_result.children[0] != without_result.children[0],
+    "inline-interior whitespace should change layout (preserved space between siblings)"
+  );
+}
