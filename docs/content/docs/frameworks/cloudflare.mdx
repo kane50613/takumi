@@ -1,0 +1,123 @@
+---
+title: Cloudflare Workers
+description: Edge-render images with the WASM renderer.
+---
+
+Workers are a special target. No filesystem, no Node APIs, a strict bundle-size budget, and every cold start pays to instantiate the WebAssembly module. Takumi handles this by shipping a WASM build through `takumi-js/wasm` — same API as the Node renderer, different binary.
+
+<Files>
+  <Folder name="src" defaultOpen>
+    <File name="index.tsx" />
+  </Folder>
+  <File name="wrangler.jsonc" />
+  <File name="package.json" />
+</Files>
+
+<Steps>
+  <Step>
+    ### Install
+
+    See [Installation](/docs/install). On Workers you only need `takumi-js` — the WASM binding ships with it.
+
+  </Step>
+  <Step>
+    ### Bundle the WASM and any fonts as data modules
+
+    Wrangler needs to know that `.wasm` and font files are byte payloads, not source. Add a `rules` entry to `wrangler.jsonc`:
+
+    ```json title="wrangler.jsonc"
+    {
+      "name": "my-og-worker",
+      "main": "src/index.tsx",
+      "compatibility_date": "2025-10-30",
+      "rules": [
+        {
+          "type": "Data",
+          "globs": ["**/*.ttf", "**/*.woff", "**/*.woff2"],
+          "fallthrough": true
+        }
+      ]
+    }
+    ```
+
+  </Step>
+  <Step>
+    ### Reuse the fetch cache across requests
+
+    A `Map` declared at module scope persists for the lifetime of the isolate. Pass it as `resourcesOptions.cache` and Takumi will short-circuit repeated remote fetches.
+
+    ```tsx title="src/index.tsx"
+    import { ImageResponse } from "takumi-js/response";
+
+    const fetchCache = new Map();
+
+    export default {
+      async fetch(request) {
+        const { searchParams } = new URL(request.url);
+        const name = searchParams.get("name") ?? "Wizard";
+
+        return new ImageResponse(
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 80,
+              fontWeight: 700,
+              background: "#F48120",
+              color: "#fff",
+            }}
+          >
+            Hello, {name}
+          </div>,
+          {
+            width: 1200,
+            height: 630,
+            resourcesOptions: { cache: fetchCache },
+          },
+        );
+      },
+    } satisfies ExportedHandler<Env>;
+    ```
+
+  </Step>
+</Steps>
+
+<Callout type="warn">
+  Workers have a 128 MB memory ceiling and pay for every cold start. Keep the persistent cache
+  bounded (cap entries or use an LRU), preload fonts and frequently used images once, and avoid
+  rendering at sizes larger than the consumer actually needs.
+</Callout>
+
+## Asset preloading
+
+Cold starts on Workers are where remote `fetch` hurts most. If your design pulls in the same logo, font, or background image on every render, load them once with `putPersistentImage` outside the fetch handler:
+
+```tsx title="src/index.tsx"
+import { Renderer } from "takumi-js/wasm";
+
+const renderer = new Renderer();
+const ready = Promise.all([
+  renderer.loadFonts([
+    {
+      name: "Geist",
+      data: () => fetch("https://example.com/Geist.woff2").then((r) => r.arrayBuffer()),
+    },
+  ]),
+  renderer.putPersistentImage({
+    src: "https://example.com/logo.png",
+    data: () => fetch("https://example.com/logo.png").then((r) => r.arrayBuffer()),
+  }),
+]);
+
+export default {
+  async fetch() {
+    await ready;
+    // ...renderer.render(...) and wrap in a Response
+  },
+} satisfies ExportedHandler<Env>;
+```
+
+The first request still pays for the load, but every subsequent request inside that isolate skips it entirely.

@@ -1,0 +1,89 @@
+---
+title: Svelte
+description: Render Svelte components to images via svelte/server.
+---
+
+For a plain Svelte project (no SvelteKit), render the component to HTML with `svelte/server` and hand the string to `ImageResponse`. Same renderer, no SvelteKit-specific glue. If you're on SvelteKit, see the [SvelteKit guide](/docs/frameworks/sveltekit) — it builds on the same `svelte/server` API but inside a `+server.ts`.
+
+<Files>
+  <Folder name="src" defaultOpen>
+    <Folder name="lib">
+      <Folder name="components">
+        <File name="OgImage.svelte" />
+      </Folder>
+    </Folder>
+    <Folder name="routes" defaultOpen>
+      <File name="+server.ts" />
+    </Folder>
+    <File name="app.css" />
+  </Folder>
+</Files>
+
+<Steps>
+  <Step>
+    ### Install
+
+    See [Installation](/docs/install) for the package commands. You need `takumi-js` plus the Tailwind toolchain if your component uses utility classes.
+
+  </Step>
+  <Step>
+    ### Write the component
+
+    `css="injected"` ships the `<style>` block inline with the HTML — Takumi reads CSS from the markup, not from imports the browser would resolve.
+
+    ```svelte title="src/lib/components/OgImage.svelte"
+    <script lang="ts">
+      const { name = "Goo goo gaga" } = $props();
+    </script>
+
+    <svelte:options css="injected" />
+
+    <div
+      id="og-image"
+      class="text-7xl font-semibold text-black w-full h-full flex items-center justify-center p-12 flex-col gap-4"
+    >
+      <div class="text-center whitespace-pre-wrap leading-normal">
+        Welcome {name} to
+        <span class="text-svelte font-bold">Svelte</span> world
+      </div>
+    </div>
+
+    <style>
+      #og-image {
+        background-image: linear-gradient(to bottom right, var(--color-orange-50), var(--color-red-200));
+      }
+    </style>
+    ```
+
+  </Step>
+  <Step>
+    ### Render in the handler
+
+    ```ts title="src/routes/+server.ts"
+    import { render } from "svelte/server";
+    import style from "../app.css?inline";
+    import ImageResponse from "takumi-js/response";
+    import OgImage from "$lib/components/OgImage.svelte";
+
+    export async function GET({ url }) {
+      const { body, head } = await render(OgImage, {
+        props: { name: url.searchParams.get("name") ?? "Goo goo gaga" },
+      });
+
+      return new ImageResponse(`${head}${body}`, {
+        width: 1200,
+        height: 630,
+        stylesheets: [style],
+        fonts: [
+          {
+            name: "Geist",
+            data: () =>
+              fetch("https://takumi.kane.tw/fonts/Geist.woff2").then((res) => res.arrayBuffer()),
+          },
+        ],
+      });
+    }
+    ```
+
+  </Step>
+</Steps>

@@ -1,0 +1,61 @@
+---
+title: Waku
+description: Generate images from a Waku API route.
+---
+
+Waku exposes file-based API routes under `src/pages/_api/`. The handler is a plain function that returns a `Response` — so `ImageResponse` from `takumi-js/response` slots in directly.
+
+<Files>
+  <Folder name="src" defaultOpen>
+    <Folder name="pages" defaultOpen>
+      <Folder name="_api" defaultOpen>
+        <File name="image.png.tsx" />
+      </Folder>
+      <File name="_layout.tsx" />
+    </Folder>
+  </Folder>
+  <File name="waku.config.ts" />
+</Files>
+
+<Steps>
+  <Step>
+    ### Install
+
+    See [Installation](/docs/install). Waku gives you React out of the box; you only need to add `takumi-js`.
+
+  </Step>
+  <Step>
+    ### Add an API route
+
+    The filename becomes the URL. `image.png.tsx` → `/image.png`. Export `getConfig` with `render: "dynamic"` so the image regenerates per request.
+
+    ```tsx title="src/pages/_api/image.png.tsx"
+    import { ImageResponse } from "takumi-js/response";
+
+    export function GET() {
+      return new ImageResponse(
+        <div
+          style={{
+            alignItems: "center",
+            background: "linear-gradient(120deg, #111827, #1f2937)",
+            color: "#f9fafb",
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
+            height: "100%",
+            justifyContent: "center",
+            width: "100%",
+          }}
+        >
+          <div style={{ fontSize: 88, fontWeight: 700 }}>Waku SSR</div>
+          <div style={{ fontSize: 40, opacity: 0.9 }}>Generated with Takumi ImageResponse</div>
+        </div>,
+        { width: 1200, height: 630 },
+      );
+    }
+
+    export const getConfig = async () => ({ render: "dynamic" }) as const;
+    ```
+
+  </Step>
+</Steps>

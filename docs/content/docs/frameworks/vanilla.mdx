@@ -1,0 +1,71 @@
+---
+title: Bun & Vanilla JS
+description: Use Takumi from any Node-compatible runtime without a framework.
+---
+
+When you don't have a framework — a CLI, a worker, a one-shot script — go straight to `takumi-js/node`. Construct a `Renderer` once, call `render` with a JSX tree, write the bytes wherever you want them.
+
+<Tabs items={["Bun", "Node"]}>
+
+<Tab value="Bun">
+
+```ts title="render.tsx"
+import { Renderer } from "takumi-js/node";
+import { fromJsx } from "takumi-js/helpers/jsx";
+
+const renderer = new Renderer();
+
+const { node, stylesheets } = await fromJsx(
+  <div tw="w-full h-full flex items-center justify-center bg-blue-500 text-white text-6xl">
+    Hello from Bun
+  </div>,
+);
+
+const image = await renderer.render({
+  width: 1200,
+  height: 630,
+  node,
+  stylesheets,
+  format: "webp",
+});
+
+await Bun.write("./output.webp", image);
+```
+
+Run with `bun render.tsx`.
+
+</Tab>
+
+<Tab value="Node">
+
+```ts title="render.tsx"
+import { Renderer } from "takumi-js/node";
+import { fromJsx } from "takumi-js/helpers/jsx";
+import { writeFile } from "node:fs/promises";
+
+const renderer = new Renderer();
+
+const { node, stylesheets } = await fromJsx(
+  <div tw="w-full h-full flex items-center justify-center bg-blue-500 text-white text-6xl">
+    Hello from Node
+  </div>,
+);
+
+const image = await renderer.render({
+  width: 1200,
+  height: 630,
+  node,
+  stylesheets,
+  format: "webp",
+});
+
+await writeFile("./output.webp", image);
+```
+
+Run with `node --experimental-strip-types render.tsx` (or `tsx render.tsx`).
+
+</Tab>
+
+</Tabs>
+
+For OG-card style design patterns, see [Recipes](/docs/recipes).
