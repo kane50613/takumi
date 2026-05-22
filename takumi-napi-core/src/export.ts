@@ -1,6 +1,6 @@
-import type { Font, FontDetails, ImageSource } from "../index";
-export type * from "../index";
-import { Renderer as NativeRenderer } from "../index";
+import type { Font, FontDetails, ImageSource } from "../index.js";
+export type * from "../index.js";
+import { Renderer as NativeRenderer } from "../index.js";
 
 export { extractResourceUrls } from "@takumi-rs/helpers";
 

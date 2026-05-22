@@ -527,6 +527,37 @@ jobs:
           docker run --rm -v $PWD:/workspace -w /workspace/takumi-napi-core \
             oven/bun:alpine bun test
 
+  verify-napi-pkg:
+    name: Verify @takumi-rs/core package
+    needs: [build-napi, build-helpers]
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@main
+        with:
+          bun-version: latest
+
+      - name: Download helpers artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: helpers-dist
+          path: takumi-helpers/dist
+
+      - name: Download N-API bindings artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: bindings-x86_64-unknown-linux-gnu
+          path: takumi-napi-core
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --filter ./takumi-napi-core
+
+      - name: Verify published package contents and types
+        working-directory: takumi-napi-core
+        run: bun run verify:pkg
+
   build-wasm:
     name: Build @takumi-rs/wasm
     runs-on: ubuntu-latest
@@ -687,6 +718,7 @@ jobs:
         test-js,
         build-image-response,
         test-napi,
+        verify-napi-pkg,
         test-template,
         test-examples,
         test-wasm,
