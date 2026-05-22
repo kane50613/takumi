@@ -77,19 +77,13 @@ export const showcaseTemplates: Template[] = [
   {
     title: "Blog Post",
     image: "/templates/previews/blog-post-template.webp",
-    href: "/docs/recipes#blog-post-template",
+    href: "/docs/recipes/blog-card",
     color: "from-orange-500/20 to-red-500/20",
-  },
-  {
-    title: "Documentation",
-    image: "/templates/previews/docs-template.webp",
-    href: "/docs/recipes#docs-template",
-    color: "from-blue-500/20 to-cyan-500/20",
   },
   {
     title: "Product Card",
     image: "/templates/previews/product-card-template.webp",
-    href: "/docs/recipes#product-card-template",
+    href: "/docs/recipes/product-card",
     color: "from-green-500/20 to-emerald-500/20",
   },
 ];

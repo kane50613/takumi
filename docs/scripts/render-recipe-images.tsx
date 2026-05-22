@@ -10,18 +10,7 @@ import { fileURLToPath } from "node:url";
 import { createElement, type ReactElement } from "react";
 import { Renderer } from "takumi-js/node";
 import { fromJsx } from "takumi-js/helpers/jsx";
-import {
-  Code,
-  File,
-  Folder,
-  GitBranch,
-  Globe,
-  Heart,
-  Scale,
-  Sparkles,
-  Star,
-  Zap,
-} from "lucide-react";
+import { Code, GitBranch, Globe, Heart, Scale, Sparkles, Star, Zap } from "lucide-react";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "../..");

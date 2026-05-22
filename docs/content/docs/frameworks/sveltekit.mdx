@@ -59,7 +59,7 @@ description: Use Takumi to render your Svelte components on the server.
 
     ```ts title="src/routes/og-image/+server.ts"
     import { render } from "svelte/server";
-    import style from "../app.css?inline";
+    import style from "../../app.css?inline";
     import ImageResponse from "takumi-js/response";
     import OgImage from "$lib/components/OgImage.svelte";
     import type { RequestEvent } from "./$types";

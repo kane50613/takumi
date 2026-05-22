@@ -49,6 +49,8 @@ Workers are a special target. No filesystem, no Node APIs, a strict bundle-size 
     ```tsx title="src/index.tsx"
     import { ImageResponse } from "takumi-js/response";
 
+    interface Env {}
+
     const fetchCache = new Map();
 
     export default {
@@ -97,6 +99,8 @@ Cold starts on Workers are where remote `fetch` hurts most. If your design pulls
 
 ```tsx title="src/index.tsx"
 import { Renderer } from "takumi-js/wasm";
+
+interface Env {}
 
 const renderer = new Renderer();
 const ready = Promise.all([

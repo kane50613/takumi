@@ -5,7 +5,7 @@ description: Render time-stepped raw RGBA frames into an MP4.
 
 ![Preview](/recipes/video.webp)
 
-For real video — high frame rate, MP4, audio later — `renderAnimation()` doesn't fit. Instead, loop over time with `render(..., { format: "raw", timeMs })` and pipe each frame's raw RGBA bytes straight to ffmpeg's stdin. The Promise array lets Takumi render frames in parallel while ffmpeg drains them serially.
+For real video — high frame rate, MP4, audio later — `renderAnimation()` doesn't fit. Instead, loop over time with `render(..., { format: "raw", timeMs })` and pipe each frame's raw RGBA bytes straight to ffmpeg's stdin. Render and write one frame at a time so memory stays bounded no matter how long the clip is.
 
 ```tsx
 import { render } from "takumi-js";
@@ -44,19 +44,13 @@ const ffmpeg = spawn(
 
 const scene = <Scene />;
 
-const framePromises = Array.from({ length: totalFrames }, (_, i) =>
-  render(scene, {
+for (let i = 0; i < totalFrames; i++) {
+  const frame = await render(scene, {
     width,
     height,
     format: "raw",
-    keyframes,
     timeMs: (i / fps) * 1000,
-  }),
-);
-
-for (let i = 0; i < totalFrames; i++) {
-  const frame = await framePromises[i];
-  if (!frame) throw new Error("Frame is undefined");
+  });
   ffmpeg.stdin.write(frame);
 }
 

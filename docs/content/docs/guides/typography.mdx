@@ -52,7 +52,7 @@ For variable fonts, `font-weight` has the same effect as `font-variation-setting
 
 #### Dynamic fetching
 
-If you are using `ImageResponse` API, theres a satori compatible `emoji` option.
+If you are using `ImageResponse` API, there's a satori compatible `emoji` option.
 
 ```tsx twoslash
 import { ImageResponse } from "takumi-js/response";
@@ -177,4 +177,4 @@ Color emoji ship in two main formats:
 | COLR (v0 / v1) | Vector layers | ~1 MB     | Default. Scales cleanly.          |
 | CBDT / sbix    | Raster bitmap | 5-20 MB   | Pixel-accurate match to a target. |
 
-Reach for COLR unless you need byte-identical output with a specific platform (Apple's `sbix` Apple Color Emoji, for example). `Twemoji-COLR` and `Noto Color Emoji` are both COLR. If you want a per-glyph image instead of a font, see [Emoji](/docs/guides/emoji).
+Reach for COLR unless you need byte-identical output with a specific platform (Apple's `sbix` Apple Color Emoji, for example). `Twemoji-COLR` is COLR; Google's `Noto Color Emoji` ships primarily as CBDT/CBLC bitmaps, with separate COLR/COLRv1 builds derived from the same artwork. If you want a per-glyph image instead of a font, see [Emoji](/docs/guides/emoji).

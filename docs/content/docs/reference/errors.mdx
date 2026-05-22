@@ -76,7 +76,7 @@ A structured WebP error. Sub-cases:
 - `WebP encoder setup failed`: usually OOM in WASM.
 - `... must be in 1..=<max>, got <n>`: dimension exceeds WebP's 16777215 limit.
 - `frame X dimensions ... exceed canvas ...`: an `encodeFrames` frame is larger than the declared canvas. Make every frame the same size as `width × height`.
-- `all animation frames must have the same dimensions`: mixed-size frames passed to `encodeFrames`. WebP/APNG/GIF don't support per-frame canvases.
+- `all animation frames must have the same dimensions`: mixed-size frames passed to `encodeFrames`. The underlying formats allow per-frame sub-rectangles, but Takumi's `encodeFrames` requires every frame match the declared canvas size.
 - `WebP container size exceeds supported limits`: the encoded output is over 4GiB. Reduce dimensions, frame count, or quality.
 
 ### `GIF encoding error`
