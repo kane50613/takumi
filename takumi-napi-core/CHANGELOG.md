@@ -1,5 +1,13 @@
 # @takumi-rs/core
 
+## 1.4.0
+
+### Patch Changes
+
+- 1d5daed: Fix missing `index.d.ts` file #715
+- Updated dependencies [e83ab19]
+  - @takumi-rs/helpers@1.4.0
+
 ## 1.3.0
 
 ### Patch Changes
