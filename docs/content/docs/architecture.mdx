@@ -18,15 +18,7 @@ The details are described in the [Reference](/docs/reference#node-types) section
 
 ### `fromJsx` helper
 
-To bridge the gap between JSX and nodes, we provide a `fromJsx` helper function that helps mapping elements to nodes, and handle React specific features like Server Components and Fragments.
-
-The rules for this function are simple, you can just [look at the implementation](https://github.com/kane50613/takumi/blob/master/takumi-helpers/src/jsx/jsx.ts) to understand it.
-
-- React (Server) Components are resolved to their final values before processing.
-- `<img>` and `<svg>` elements become an Image node with style applied.
-- All other React elements become a Container node with style and style presets applied.
-- Rest of the primitive types (string/number) are automatically converted to Text node.
-- `props.style` is passed on to the container node as is.
+To bridge the gap between JSX and nodes, we provide a `fromJsx` helper function that walks a React element tree and emits Takumi nodes. The full rule set is in [`## fromJsx rules`](#fromjsx-rules) below.
 
 ## Styling
 
@@ -66,3 +58,43 @@ The package is published as [`@takumi-rs/core`](https://www.npmjs.com/package/@t
 This is relatively rare, but if you are using a Edge runtime or browser, you can use the `@takumi-rs/wasm` entrypoint.
 
 And to keep the wasm file small, woff font loading is not supported and theres no bundled fonts (so font needs to be loaded to render text).
+
+## Why no headless browser
+
+Most image-generation solutions are either a headless Chromium eating 300 MB of RAM, or a minimal SVG-to-PNG renderer that falls apart the moment you need real CSS. Takumi is neither.
+
+It's a purpose-built Rust pipeline: CSS parsing, layout, compositing, image output. No browser, no V8, no puppeteer. The same binary runs in a serverless edge function and a long-running Node server, and the same `takumi` crate embeds directly in any Rust application.
+
+The cost of that choice is a CSS subset, not the whole platform. The benefit is megabytes of memory instead of hundreds, deterministic output across runtimes, and a renderer that fits in a Cloudflare Worker.
+
+## `fromJsx` rules
+
+`fromJsx` walks a React element tree and emits a Takumi node tree. The mapping is intentionally narrow — there is no DOM at render time, so anything that depends on one is dropped.
+
+**Supported:**
+
+- **Function components** are invoked with their props and their return value is walked.
+- **Server Components** that resolve to a `Promise` are awaited before walking.
+- **Fragments** (`<>...</>`) are flattened into the parent.
+- **`memo`** components are unwrapped to their inner component.
+- **`forwardRef`** components are invoked with `ref = null`.
+- **`<img>`** becomes an Image node (`src`, `width`, `height`, style passthrough).
+- **`<svg>`** is serialized to a string and rendered through `resvg` as an Image node.
+- **`<br>`** becomes a Text node with `"\n"`.
+- **`<style>`** is collected as a stylesheet (children must be plain text).
+- **Other HTML elements** become Container nodes with style and style presets applied.
+- **Strings and numbers** become Text nodes.
+- **Iterables** (arrays, generators) are walked in order; up to 8 children resolve concurrently.
+
+**Fallback:**
+
+- **React Context providers** and **hooks that need the React dispatcher** trigger a one-shot fallback through `react-dom/server`'s `renderToStaticMarkup`. The resulting HTML is parsed back into nodes — context and stateless hooks work, side effects don't.
+
+**Stripped or ignored:**
+
+- **Event handlers** (`onClick`, `onChange`, ...) — no event loop at render time.
+- **`ref`** — no DOM to bind to.
+- **HTML void elements with no semantics here** (`<input>`, `<meta>`, ...) emit nothing.
+- **Anything outside the `style` prop, `tw` prop, or extracted HTML attributes** is ignored.
+
+The full implementation lives in [`takumi-helpers/src/jsx/index.ts`](https://github.com/kane50613/takumi/blob/master/takumi-helpers/src/jsx/index.ts).
