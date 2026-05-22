@@ -8,8 +8,11 @@ import lastModified from "fumadocs-mdx/plugins/last-modified";
 import { metaSchema, pageSchema } from "fumadocs-core/source/schema";
 import { transformerTwoslash } from "fumadocs-twoslash";
 import { createFileSystemTypesCache } from "fumadocs-twoslash/cache-fs";
+import { createGenerator, remarkAutoTypeTable } from "fumadocs-typescript";
 import type { ShikiTransformer } from "shiki";
 import * as z from "zod";
+
+const typeTableGenerator = createGenerator();
 
 export const docs = defineDocs({
   dir: "content/docs",
@@ -37,7 +40,10 @@ const structureStringifier = defaultStringifier({
 export default defineConfig({
   plugins: [lastModified()],
   mdxOptions: {
-    remarkPlugins: [remarkMdxMermaid],
+    remarkPlugins: [
+      remarkMdxMermaid,
+      [remarkAutoTypeTable, { name: "AutoTypeTable", generator: typeTableGenerator }],
+    ],
     remarkStructureOptions: {
       mdxTypes: (node) =>
         node.name === "td" || node.name === "th" || !node.children || node.children.length === 0,
