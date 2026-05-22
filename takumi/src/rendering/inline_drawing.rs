@@ -918,6 +918,21 @@ pub(crate) fn draw_inline_layout(
   } = data;
   let glyph_runs = collect_glyph_runs(&inline_layout);
   let resolved_glyph_runs = resolve_inline_layout_glyphs(context, &glyph_runs)?;
+  let decoration_mask = glyph_runs
+    .iter()
+    .fold(TextDecorationLines::empty(), |acc, run| {
+      acc | run.style().brush.decoration_line
+    });
+  let need_text_shadow = !font_style.text_shadow.is_empty();
+  let need_under_overline =
+    decoration_mask.intersects(TextDecorationLines::UNDERLINE | TextDecorationLines::OVERLINE);
+  let need_line_through = decoration_mask.contains(TextDecorationLines::LINE_THROUGH);
+  let need_outline_collect = spans.iter().any(|span| match span {
+    ProcessedInlineSpan::Text { style, .. } => {
+      style.outline_width > 0.0 && style.outline_style.is_rendered()
+    }
+    _ => false,
+  });
   let clip_image = if context.style.background_clip == BackgroundClip::Text {
     let layers = collect_background_layers(context, layout.size, &mut canvas.buffer_pool)?;
 
@@ -960,97 +975,105 @@ pub(crate) fn draw_inline_layout(
   };
 
   // Reference: https://www.w3.org/TR/css-text-decor-3/#painting-order
-  for (line_index, line) in inline_layout.lines().enumerate() {
-    let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
-    let resolved_metrics = line_vertical_metrics[line_index];
-    let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
-    let (line_scale_origin_x, line_alignment_correction) =
-      text_fit_line_alignment_correction(&line, line_scale, layout.content_box_size().width);
-    let line_scale_state = LineScaleState {
-      scale: line_scale,
-      alignment_correction: line_alignment_correction,
-      layout_origin: Point {
-        x: layout.border.left + layout.padding.left + line_scale_origin_x,
-        y: layout.border.top + layout.padding.top + resolved_metrics.resolved_baseline,
-      },
-    };
-    let mut resolved_iter = per_line_resolved[line_index].iter();
-    let mut static_inline_prefix = 0.0_f32;
-    for item in line.items() {
-      match item {
-        PositionedLayoutItem::GlyphRun(glyph_run) => {
-          let Some(resolved_glyphs) = resolved_iter.next() else {
-            continue;
-          };
-          draw_with_inline_opacity(canvas, glyph_run.style().brush.opacity, |canvas| {
-            draw_glyph_run_text_shadow(
-              font_style,
-              &glyph_run,
-              resolved_glyphs,
-              canvas,
-              GlyphRunLineOptions {
-                layout,
-                baseline_shift,
-                transform: line_scale_transform_with_static_prefix(
-                  context.transform,
-                  line_scale_state,
-                  static_inline_prefix,
-                ),
-              },
-            )
-          })?;
+  if need_text_shadow {
+    for (line_index, line) in inline_layout.lines().enumerate() {
+      let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
+      let resolved_metrics = line_vertical_metrics[line_index];
+      let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
+      let (line_scale_origin_x, line_alignment_correction) =
+        text_fit_line_alignment_correction(&line, line_scale, layout.content_box_size().width);
+      let line_scale_state = LineScaleState {
+        scale: line_scale,
+        alignment_correction: line_alignment_correction,
+        layout_origin: Point {
+          x: layout.border.left + layout.padding.left + line_scale_origin_x,
+          y: layout.border.top + layout.padding.top + resolved_metrics.resolved_baseline,
+        },
+      };
+      let mut resolved_iter = per_line_resolved[line_index].iter();
+      let mut static_inline_prefix = 0.0_f32;
+      for item in line.items() {
+        match item {
+          PositionedLayoutItem::GlyphRun(glyph_run) => {
+            let Some(resolved_glyphs) = resolved_iter.next() else {
+              continue;
+            };
+            draw_with_inline_opacity(canvas, glyph_run.style().brush.opacity, |canvas| {
+              draw_glyph_run_text_shadow(
+                font_style,
+                &glyph_run,
+                resolved_glyphs,
+                canvas,
+                GlyphRunLineOptions {
+                  layout,
+                  baseline_shift,
+                  transform: line_scale_transform_with_static_prefix(
+                    context.transform,
+                    line_scale_state,
+                    static_inline_prefix,
+                  ),
+                },
+              )
+            })?;
+          }
+          PositionedLayoutItem::InlineBox(inline_box)
+            if inline_box.kind == InlineBoxKind::InFlow =>
+          {
+            static_inline_prefix += inline_box.width;
+          }
+          PositionedLayoutItem::InlineBox(_) => {}
         }
-        PositionedLayoutItem::InlineBox(inline_box) if inline_box.kind == InlineBoxKind::InFlow => {
-          static_inline_prefix += inline_box.width;
-        }
-        PositionedLayoutItem::InlineBox(_) => {}
       }
     }
   }
 
-  for (line_index, line) in inline_layout.lines().enumerate() {
-    let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
-    let resolved_metrics = line_vertical_metrics[line_index];
-    let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
-    let (line_scale_origin_x, line_alignment_correction) =
-      text_fit_line_alignment_correction(&line, line_scale, layout.content_box_size().width);
-    let line_scale_state = LineScaleState {
-      scale: line_scale,
-      alignment_correction: line_alignment_correction,
-      layout_origin: Point {
-        x: layout.border.left + layout.padding.left + line_scale_origin_x,
-        y: layout.border.top + layout.padding.top + resolved_metrics.resolved_baseline,
-      },
-    };
-    let mut resolved_iter = per_line_resolved[line_index].iter();
-    let mut static_inline_prefix = 0.0_f32;
-    for item in line.items() {
-      match item {
-        PositionedLayoutItem::GlyphRun(glyph_run) => {
-          let Some(resolved_glyphs) = resolved_iter.next() else {
-            continue;
-          };
-          draw_with_inline_opacity(canvas, glyph_run.style().brush.opacity, |canvas| {
-            draw_glyph_run_under_overline(
-              &glyph_run,
-              resolved_glyphs,
-              canvas,
-              GlyphRunLineOptions {
-                layout,
-                baseline_shift,
-                transform: line_scale_transform_with_static_prefix(
-                  context.transform,
-                  line_scale_state,
-                  static_inline_prefix,
-                ),
-              },
-            )
-          })?;
+  if need_under_overline {
+    for (line_index, line) in inline_layout.lines().enumerate() {
+      let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
+      let resolved_metrics = line_vertical_metrics[line_index];
+      let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
+      let (line_scale_origin_x, line_alignment_correction) =
+        text_fit_line_alignment_correction(&line, line_scale, layout.content_box_size().width);
+      let line_scale_state = LineScaleState {
+        scale: line_scale,
+        alignment_correction: line_alignment_correction,
+        layout_origin: Point {
+          x: layout.border.left + layout.padding.left + line_scale_origin_x,
+          y: layout.border.top + layout.padding.top + resolved_metrics.resolved_baseline,
+        },
+      };
+      let mut resolved_iter = per_line_resolved[line_index].iter();
+      let mut static_inline_prefix = 0.0_f32;
+      for item in line.items() {
+        match item {
+          PositionedLayoutItem::GlyphRun(glyph_run) => {
+            let Some(resolved_glyphs) = resolved_iter.next() else {
+              continue;
+            };
+            draw_with_inline_opacity(canvas, glyph_run.style().brush.opacity, |canvas| {
+              draw_glyph_run_under_overline(
+                &glyph_run,
+                resolved_glyphs,
+                canvas,
+                GlyphRunLineOptions {
+                  layout,
+                  baseline_shift,
+                  transform: line_scale_transform_with_static_prefix(
+                    context.transform,
+                    line_scale_state,
+                    static_inline_prefix,
+                  ),
+                },
+              )
+            })?;
+          }
+          PositionedLayoutItem::InlineBox(inline_box)
+            if inline_box.kind == InlineBoxKind::InFlow =>
+          {
+            static_inline_prefix += inline_box.width;
+          }
+          PositionedLayoutItem::InlineBox(_) => {}
         }
-        PositionedLayoutItem::InlineBox(inline_box) if inline_box.kind == InlineBoxKind::InFlow => {
-          static_inline_prefix += inline_box.width;
-        }
-        PositionedLayoutItem::InlineBox(_) => {}
       }
     }
   }
@@ -1098,16 +1121,18 @@ pub(crate) fn draw_inline_layout(
               },
             )
           })?;
-          if let Some(outline_rect) = collect_glyph_run_outline_rect(
-            &glyph_run,
-            layout,
-            line_index,
-            layout.border.top + layout.padding.top + glyph_run.baseline() + baseline_shift
-              - resolved_metrics.resolved_ascent,
-            resolved_metrics.resolved_line_height,
-            line_scale_state,
-            static_inline_prefix,
-          ) {
+          if need_outline_collect
+            && let Some(outline_rect) = collect_glyph_run_outline_rect(
+              &glyph_run,
+              layout,
+              line_index,
+              layout.border.top + layout.padding.top + glyph_run.baseline() + baseline_shift
+                - resolved_metrics.resolved_ascent,
+              resolved_metrics.resolved_line_height,
+              line_scale_state,
+              static_inline_prefix,
+            )
+          {
             inline_outline_rects.push(outline_rect);
           }
         }
@@ -1146,46 +1171,52 @@ pub(crate) fn draw_inline_layout(
     debug_assert!(replaced.is_none());
   }
 
-  draw_merged_outline_rects(inline_outline_rects, canvas, spans, context.transform)?;
+  if need_outline_collect {
+    draw_merged_outline_rects(inline_outline_rects, canvas, spans, context.transform)?;
+  }
 
-  for (line_index, line) in inline_layout.lines().enumerate() {
-    let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
-    let resolved_metrics = line_vertical_metrics[line_index];
-    let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
-    let (line_scale_origin_x, line_alignment_correction) =
-      text_fit_line_alignment_correction(&line, line_scale, layout.content_box_size().width);
-    let line_scale_state = LineScaleState {
-      scale: line_scale,
-      alignment_correction: line_alignment_correction,
-      layout_origin: Point {
-        x: layout.border.left + layout.padding.left + line_scale_origin_x,
-        y: layout.border.top + layout.padding.top + resolved_metrics.resolved_baseline,
-      },
-    };
-    let mut static_inline_prefix = 0.0_f32;
-    for item in line.items() {
-      match item {
-        PositionedLayoutItem::GlyphRun(glyph_run) => {
-          draw_with_inline_opacity(canvas, glyph_run.style().brush.opacity, |canvas| {
-            draw_glyph_run_line_through(
-              &glyph_run,
-              canvas,
-              GlyphRunLineOptions {
-                layout,
-                baseline_shift,
-                transform: line_scale_transform_with_static_prefix(
-                  context.transform,
-                  line_scale_state,
-                  static_inline_prefix,
-                ),
-              },
-            )
-          })?;
+  if need_line_through {
+    for (line_index, line) in inline_layout.lines().enumerate() {
+      let baseline_shift = line_vertical_metrics[line_index].baseline_shift;
+      let resolved_metrics = line_vertical_metrics[line_index];
+      let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
+      let (line_scale_origin_x, line_alignment_correction) =
+        text_fit_line_alignment_correction(&line, line_scale, layout.content_box_size().width);
+      let line_scale_state = LineScaleState {
+        scale: line_scale,
+        alignment_correction: line_alignment_correction,
+        layout_origin: Point {
+          x: layout.border.left + layout.padding.left + line_scale_origin_x,
+          y: layout.border.top + layout.padding.top + resolved_metrics.resolved_baseline,
+        },
+      };
+      let mut static_inline_prefix = 0.0_f32;
+      for item in line.items() {
+        match item {
+          PositionedLayoutItem::GlyphRun(glyph_run) => {
+            draw_with_inline_opacity(canvas, glyph_run.style().brush.opacity, |canvas| {
+              draw_glyph_run_line_through(
+                &glyph_run,
+                canvas,
+                GlyphRunLineOptions {
+                  layout,
+                  baseline_shift,
+                  transform: line_scale_transform_with_static_prefix(
+                    context.transform,
+                    line_scale_state,
+                    static_inline_prefix,
+                  ),
+                },
+              )
+            })?;
+          }
+          PositionedLayoutItem::InlineBox(inline_box)
+            if inline_box.kind == InlineBoxKind::InFlow =>
+          {
+            static_inline_prefix += inline_box.width;
+          }
+          PositionedLayoutItem::InlineBox(_) => {}
         }
-        PositionedLayoutItem::InlineBox(inline_box) if inline_box.kind == InlineBoxKind::InFlow => {
-          static_inline_prefix += inline_box.width;
-        }
-        PositionedLayoutItem::InlineBox(_) => {}
       }
     }
   }

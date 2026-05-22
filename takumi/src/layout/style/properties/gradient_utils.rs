@@ -134,6 +134,10 @@ pub(crate) trait GradientOverlayTile {
   fn begin_row(&self, src_x_start: u32, src_y: u32, lut_len: usize) -> Self::RowState;
   /// Returns an index in `0..lut_len` where `lut_len` is the value passed to `begin_row`.
   fn next_lut_index(&self, row_state: &mut Self::RowState) -> usize;
+  /// Returns true when every LUT entry has alpha = 255; allows the overlay loop to skip blending.
+  fn fully_opaque(&self) -> bool {
+    false
+  }
 }
 
 #[cfg(test)]
@@ -176,41 +180,44 @@ pub(crate) fn overlay_gradient_tile_fast_normal_unconstrained<T: GradientOverlay
   if lut_len == 0 {
     return;
   }
-  let row_stride = bottom_width as usize * 4;
+
+  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(data);
+  let row_pixels = bottom_width as usize;
+  let dest_x_min_usize = dest_x_min as usize;
+  let dest_x_max_usize = dest_x_max as usize;
+  let fully_opaque = tile.fully_opaque();
 
   for dest_y in dest_y_min..dest_y_max {
     let src_y = (dest_y - offset_y) as u32;
     let src_x_start = (dest_x_min - offset_x) as u32;
     let mut row_state = tile.begin_row(src_x_start, src_y, lut_len);
-    for dest_x in dest_x_min..dest_x_max {
-      let lut_idx = tile.next_lut_index(&mut row_state);
-      debug_assert!(lut_idx < lut_len);
-      let pixel = tile.sample_at(lut_idx);
-      let src_a = pixel.alpha();
-      if src_a == 0 {
-        continue;
-      }
+    let row_start = dest_y as usize * row_pixels;
+    let row = &mut pixels[row_start + dest_x_min_usize..row_start + dest_x_max_usize];
 
-      let pixel_offset = dest_y as usize * row_stride + dest_x as usize * 4;
-      if src_a == u8::MAX {
-        data[pixel_offset] = pixel.red();
-        data[pixel_offset + 1] = pixel.green();
-        data[pixel_offset + 2] = pixel.blue();
-        data[pixel_offset + 3] = src_a;
-      } else {
-        let inv_src_a = u8::MAX - src_a;
-        data[pixel_offset] = pixel
+    if fully_opaque {
+      for dst in row.iter_mut() {
+        let lut_idx = tile.next_lut_index(&mut row_state);
+        debug_assert!(lut_idx < lut_len);
+        let pixel = tile.sample_at(lut_idx);
+        *dst = [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()];
+      }
+    } else {
+      for dst in row.iter_mut() {
+        let lut_idx = tile.next_lut_index(&mut row_state);
+        debug_assert!(lut_idx < lut_len);
+        let pixel = tile.sample_at(lut_idx);
+        let src_a = pixel.alpha();
+        let inv_src_a = (u8::MAX - src_a) as u32;
+        dst[0] = pixel
           .red()
-          .saturating_add(fast_div_255(data[pixel_offset] as u32 * inv_src_a as u32));
-        data[pixel_offset + 1] = pixel.green().saturating_add(fast_div_255(
-          data[pixel_offset + 1] as u32 * inv_src_a as u32,
-        ));
-        data[pixel_offset + 2] = pixel.blue().saturating_add(fast_div_255(
-          data[pixel_offset + 2] as u32 * inv_src_a as u32,
-        ));
-        data[pixel_offset + 3] = src_a.saturating_add(fast_div_255(
-          data[pixel_offset + 3] as u32 * inv_src_a as u32,
-        ));
+          .saturating_add(fast_div_255(dst[0] as u32 * inv_src_a));
+        dst[1] = pixel
+          .green()
+          .saturating_add(fast_div_255(dst[1] as u32 * inv_src_a));
+        dst[2] = pixel
+          .blue()
+          .saturating_add(fast_div_255(dst[2] as u32 * inv_src_a));
+        dst[3] = src_a.saturating_add(fast_div_255(dst[3] as u32 * inv_src_a));
       }
     }
   }

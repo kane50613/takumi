@@ -347,6 +347,11 @@ impl GradientOverlayTile for LinearGradientTile {
     row_state.projection += row_state.projection_step;
     lut_idx
   }
+
+  #[inline(always)]
+  fn fully_opaque(&self) -> bool {
+    self.fully_opaque
+  }
 }
 
 /// Represents a gradient stop position.

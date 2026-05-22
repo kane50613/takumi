@@ -1,4 +1,4 @@
-use std::{borrow::Cow, convert::Into};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, convert::Into};
 
 use parley::{GlyphRun, layout::BreakReason};
 use skrifa::color::ColorPalette;
@@ -20,6 +20,65 @@ use crate::{
   },
   resources::font::{ResolvedColorLayer, ResolvedGlyph},
 };
+
+pub(crate) type GlyphMaskCache = HashMap<u64, (Vec<u8>, Placement)>;
+
+const GLYPH_MASK_CACHE_MAX_ENTRIES: usize = 4096;
+
+thread_local! {
+  static SHARED_GLYPH_MASK_CACHE: RefCell<GlyphMaskCache> = RefCell::new(HashMap::new());
+}
+
+pub(crate) fn with_shared_glyph_cache<R>(f: impl FnOnce(&mut GlyphMaskCache) -> R) -> R {
+  SHARED_GLYPH_MASK_CACHE.with(|c| match c.try_borrow_mut() {
+    Ok(mut cache) => {
+      if cache.len() > GLYPH_MASK_CACHE_MAX_ENTRIES {
+        cache.clear();
+      }
+      f(&mut cache)
+    }
+    Err(_) => {
+      let mut local = HashMap::new();
+      f(&mut local)
+    }
+  })
+}
+
+fn glyph_cache_key_and_offset(transform: Affine, glyph_signature: u64) -> Option<(u64, i32, i32)> {
+  if !transform.only_translation() {
+    return None;
+  }
+  let scaled_x = (transform.x * 4.0).round() as i64;
+  let int_x = scaled_x.div_euclid(4) as i32;
+  let bucket_x = scaled_x.rem_euclid(4) as u64;
+  let int_y = transform.y.round() as i32;
+  let key = (glyph_signature << 2) | bucket_x;
+  Some((key, int_x, int_y))
+}
+
+fn draw_outline_with_cache(
+  paths: &[Command],
+  glyph_signature: u64,
+  transform: Affine,
+  color: Color,
+  canvas: &mut Canvas,
+) {
+  let Some((key, int_x, int_y)) = glyph_cache_key_and_offset(transform, glyph_signature) else {
+    let (mask, placement) = render_mask(paths, Some(transform), None, &mut canvas.buffer_pool);
+    canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
+    canvas.buffer_pool.release(mask);
+    return;
+  };
+  with_shared_glyph_cache(|cache| {
+    let (cached_mask, cached_placement) = cache.entry(key).or_insert_with(|| {
+      let bucket_x = (key & 3) as f32 * 0.25;
+      let cache_transform = Affine::translation(bucket_x, 0.0);
+      render_mask(paths, Some(cache_transform), None, &mut canvas.buffer_pool)
+    });
+    let placement = cached_placement.translate(int_x, int_y);
+    canvas.draw_mask(cached_mask, placement, color, BlendMode::Normal);
+  });
+}
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct DecorationSegmentParams {
@@ -156,26 +215,45 @@ pub(crate) fn draw_glyph_clip_image(
         return Ok(());
       };
 
-      let (mask, placement) = render_mask(
-        outline.paths(),
-        Some(transform),
-        None,
-        &mut canvas.buffer_pool,
-      );
+      let sampling = MaskSamplingOptions {
+        canvas_to_source: Affine::translation(inline_offset.x, inline_offset.y) * inverse,
+        sample_bias: Point::ZERO,
+        algorithm: style.parent.image_rendering,
+      };
 
-      canvas.composite_mask_source(
-        &mask,
-        placement,
-        clip_image,
-        MaskSamplingOptions {
-          canvas_to_source: Affine::translation(inline_offset.x, inline_offset.y) * inverse,
-          sample_bias: Point::ZERO,
-          algorithm: style.parent.image_rendering,
-        },
-        BlendMode::Normal,
-      );
-
-      canvas.buffer_pool.release(mask);
+      if let Some((key, int_x, int_y)) =
+        glyph_cache_key_and_offset(transform, outline.cache_signature())
+      {
+        with_shared_glyph_cache(|cache| {
+          let (cached_mask, cached_placement) = cache.entry(key).or_insert_with(|| {
+            let bucket_x = (key & 3) as f32 * 0.25;
+            let cache_transform = Affine::translation(bucket_x, 0.0);
+            render_mask(
+              outline.paths(),
+              Some(cache_transform),
+              None,
+              &mut canvas.buffer_pool,
+            )
+          });
+          let placement = cached_placement.translate(int_x, int_y);
+          canvas.composite_mask_source(
+            cached_mask,
+            placement,
+            clip_image,
+            sampling,
+            BlendMode::Normal,
+          );
+        });
+      } else {
+        let (mask, placement) = render_mask(
+          outline.paths(),
+          Some(transform),
+          None,
+          &mut canvas.buffer_pool,
+        );
+        canvas.composite_mask_source(&mask, placement, clip_image, sampling, BlendMode::Normal);
+        canvas.buffer_pool.release(mask);
+      }
 
       if let Some(embolden) = outline.embolden() {
         draw_text_embolden_clip_image(
@@ -238,16 +316,13 @@ pub(crate) fn draw_glyph(
       {
         draw_color_outline_image(canvas, color_layers, palette, color, transform);
       } else {
-        let (mask, placement) = render_mask(
+        draw_outline_with_cache(
           outline.paths(),
-          Some(transform),
-          None,
-          &mut canvas.buffer_pool,
+          outline.cache_signature(),
+          transform,
+          color,
+          canvas,
         );
-
-        canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
-
-        canvas.buffer_pool.release(mask);
       }
 
       if let Some(embolden) = outline.embolden() {

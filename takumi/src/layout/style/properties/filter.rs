@@ -210,16 +210,34 @@ impl Filter {
     }
   }
 
-  /// Returns a LUT if this filter is a simple 1D channel transfer.
-  /// Returns (RGB_LUT, Alpha_LUT).
-  pub(crate) fn transfer_tables(&self) -> (Option<TransferTable>, Option<TransferTable>) {
+  /// Returns the 1D channel transfer table for this filter, if any.
+  pub(crate) fn transfer_table(&self) -> Option<TransferChannel> {
     match *self {
-      Filter::Brightness(PercentageNumber(v)) => (Some(build_brightness_table(v)), None),
-      Filter::Contrast(PercentageNumber(v)) => (Some(build_contrast_table(v)), None),
-      Filter::Invert(PercentageNumber(v)) => (Some(build_invert_table(v)), None),
-      Filter::Opacity(PercentageNumber(v)) => (None, Some(build_opacity_table(v))),
-      _ => (None, None),
+      Filter::Brightness(PercentageNumber(v)) => {
+        Some(TransferChannel::Rgb(build_brightness_table(v)))
+      }
+      Filter::Contrast(PercentageNumber(v)) => Some(TransferChannel::Rgb(build_contrast_table(v))),
+      Filter::Invert(PercentageNumber(v)) => Some(TransferChannel::Rgb(build_invert_table(v))),
+      Filter::Opacity(PercentageNumber(v)) => Some(TransferChannel::Alpha(build_opacity_table(v))),
+      _ => None,
     }
+  }
+}
+
+/// A 1D channel transfer for a filter, tagged with which channels it touches.
+pub(crate) enum TransferChannel {
+  /// Applies to R, G, B (leaves alpha untouched).
+  Rgb(TransferTable),
+  /// Applies to alpha only.
+  Alpha(TransferTable),
+}
+
+/// Composes `next` after `existing` so that `existing[i] = next[existing[i]]`,
+/// collapsing two LUTs into a single equivalent LUT.
+#[inline]
+fn compose_transfer_table(existing: &mut TransferTable, next: &TransferTable) {
+  for entry in existing.iter_mut() {
+    *entry = next[*entry as usize];
   }
 }
 
@@ -297,7 +315,46 @@ enum PreparedFilter<'a> {
   Matrix(&'a Filter),
   RgbLut(Box<TransferTable>),
   AlphaLut(Box<TransferTable>),
-  BothLut(Box<TransferTable>, Box<TransferTable>),
+}
+
+/// Builds an execution plan that fuses consecutive RGB or alpha transfer tables
+/// into a single composed LUT, so each LUT-only run costs one lookup per channel
+/// regardless of how many filters it represents.
+fn prepare_pixel_filters<'a>(filters: &[&'a Filter]) -> SmallVec<[PreparedFilter<'a>; 4]> {
+  let mut prepared: SmallVec<[PreparedFilter; 4]> = SmallVec::new();
+  let mut pending_rgb: Option<TransferTable> = None;
+  let mut pending_alpha: Option<TransferTable> = None;
+
+  for &filter in filters {
+    match filter.transfer_table() {
+      Some(TransferChannel::Rgb(table)) => match &mut pending_rgb {
+        Some(existing) => compose_transfer_table(existing, &table),
+        slot @ None => *slot = Some(table),
+      },
+      Some(TransferChannel::Alpha(table)) => match &mut pending_alpha {
+        Some(existing) => compose_transfer_table(existing, &table),
+        slot @ None => *slot = Some(table),
+      },
+      None => {
+        if let Some(table) = pending_rgb.take() {
+          prepared.push(PreparedFilter::RgbLut(Box::new(table)));
+        }
+        if let Some(table) = pending_alpha.take() {
+          prepared.push(PreparedFilter::AlphaLut(Box::new(table)));
+        }
+        prepared.push(PreparedFilter::Matrix(filter));
+      }
+    }
+  }
+
+  if let Some(table) = pending_rgb {
+    prepared.push(PreparedFilter::RgbLut(Box::new(table)));
+  }
+  if let Some(table) = pending_alpha {
+    prepared.push(PreparedFilter::AlphaLut(Box::new(table)));
+  }
+
+  prepared
 }
 
 /// Applies batched pixel filters in a single pass over the image
@@ -306,16 +363,7 @@ fn apply_batched_pixel_filters(data: &mut [u8], filters: &[&Filter]) {
     return;
   }
 
-  // Pre-calculate LUTs and categorize filters
-  let prepared: SmallVec<[PreparedFilter; 4]> = filters
-    .iter()
-    .map(|&f| match f.transfer_tables() {
-      (Some(rgb), Some(alpha)) => PreparedFilter::BothLut(Box::new(rgb), Box::new(alpha)),
-      (Some(rgb), None) => PreparedFilter::RgbLut(Box::new(rgb)),
-      (None, Some(alpha)) => PreparedFilter::AlphaLut(Box::new(alpha)),
-      (None, None) => PreparedFilter::Matrix(f),
-    })
-    .collect();
+  let prepared = prepare_pixel_filters(filters);
 
   for pixel in bytemuck::cast_slice_mut::<u8, [u8; 4]>(data) {
     if pixel[3] == 0 {
@@ -332,12 +380,6 @@ fn apply_batched_pixel_filters(data: &mut [u8], filters: &[&Filter]) {
         }
         PreparedFilter::AlphaLut(t) => {
           pixel[3] = t[pixel[3] as usize];
-        }
-        PreparedFilter::BothLut(rgb, alpha) => {
-          pixel[0] = rgb[pixel[0] as usize];
-          pixel[1] = rgb[pixel[1] as usize];
-          pixel[2] = rgb[pixel[2] as usize];
-          pixel[3] = alpha[pixel[3] as usize];
         }
       }
     }

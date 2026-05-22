@@ -78,7 +78,7 @@ impl<'a> PaintSource<'a> {
     }
   }
 
-  fn as_pixmap_ref(self) -> Option<PixmapRef<'a>> {
+  pub(crate) fn as_pixmap_ref(self) -> Option<PixmapRef<'a>> {
     match self {
       Self::Pixmap(source) => Some(source),
       Self::BackgroundTile(BackgroundTile::Pixmap(source)) => Some(source.as_ref().as_ref()),
@@ -164,7 +164,7 @@ impl<'a> From<&'a ColorTile> for PaintSource<'a> {
   }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum MaskCompositeColor {
   SourceOnly,
   SourceOverColor([u8; 4]),

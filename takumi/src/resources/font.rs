@@ -1,10 +1,13 @@
 use std::{
   borrow::Cow,
   cell::RefCell,
-  collections::{HashMap, HashSet},
+  collections::{HashMap, hash_map::Entry},
   iter::once,
   ops::{Deref, DerefMut},
-  sync::Arc,
+  sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+  },
 };
 
 use image::{Rgba, RgbaImage};
@@ -17,10 +20,13 @@ use parley::{
 };
 use skrifa::{
   FontRef, GlyphId, MetadataProvider,
-  bitmap::{BitmapData, BitmapGlyph, Origin},
-  color::{Brush, ColorGlyphFormat, ColorPainter, CompositeMode, PaintCachedColorGlyph, Transform},
+  bitmap::{BitmapData, BitmapGlyph, BitmapStrikes, Origin},
+  color::{
+    Brush, ColorGlyphCollection, ColorGlyphFormat, ColorPainter, CompositeMode,
+    PaintCachedColorGlyph, Transform,
+  },
   instance::{LocationRef, Size},
-  outline::{DrawSettings, OutlinePen},
+  outline::{DrawSettings, OutlineGlyphCollection, OutlinePen},
   raw::types::{BoundingBox, F2Dot14},
 };
 use thiserror::Error;
@@ -99,10 +105,12 @@ pub(crate) enum ResolvedOutlineGlyph {
   Plain {
     paths: Vec<Command>,
     embolden: Option<f32>,
+    cache_signature: u64,
   },
   Color {
     paths: Vec<Command>,
     layers: Vec<ResolvedColorLayer>,
+    cache_signature: u64,
   },
 }
 
@@ -128,6 +136,17 @@ impl ResolvedOutlineGlyph {
     }
   }
 
+  pub(crate) fn cache_signature(&self) -> u64 {
+    match self {
+      Self::Plain {
+        cache_signature, ..
+      }
+      | Self::Color {
+        cache_signature, ..
+      } => *cache_signature,
+    }
+  }
+
   pub(crate) fn embolden(&self) -> Option<f32> {
     match self {
       Self::Plain { embolden, .. } => *embolden,
@@ -148,6 +167,45 @@ const SYNTHESIS_EMBOLDEN_FACTOR: f32 = 1.0 / 24.0;
 
 pub(crate) fn synthesis_embolden_strength(font_size: f32) -> f32 {
   font_size * SYNTHESIS_EMBOLDEN_FACTOR
+}
+
+fn hash_path_commands(paths: &[Command]) -> u64 {
+  use xxhash_rust::xxh3::Xxh3;
+  let mut h = Xxh3::new();
+  for cmd in paths {
+    match cmd {
+      Command::MoveTo(p) => {
+        h.update(&[0u8]);
+        h.update(&p.x.to_le_bytes());
+        h.update(&p.y.to_le_bytes());
+      }
+      Command::LineTo(p) => {
+        h.update(&[1u8]);
+        h.update(&p.x.to_le_bytes());
+        h.update(&p.y.to_le_bytes());
+      }
+      Command::QuadTo(p1, p2) => {
+        h.update(&[2u8]);
+        h.update(&p1.x.to_le_bytes());
+        h.update(&p1.y.to_le_bytes());
+        h.update(&p2.x.to_le_bytes());
+        h.update(&p2.y.to_le_bytes());
+      }
+      Command::CubicTo(p1, p2, p3) => {
+        h.update(&[3u8]);
+        h.update(&p1.x.to_le_bytes());
+        h.update(&p1.y.to_le_bytes());
+        h.update(&p2.x.to_le_bytes());
+        h.update(&p2.y.to_le_bytes());
+        h.update(&p3.x.to_le_bytes());
+        h.update(&p3.y.to_le_bytes());
+      }
+      Command::Close => {
+        h.update(&[4u8]);
+      }
+    }
+  }
+  h.digest()
 }
 
 #[derive(Default)]
@@ -194,17 +252,21 @@ impl OutlinePen for GlyphOutlinePen {
   }
 }
 
-struct ColorLayerCollector<'a, 'font> {
-  font_ref: &'font FontRef<'a>,
+struct ColorLayerCollector<'a, 'g> {
+  outline_glyphs: &'g OutlineGlyphCollection<'a>,
   size: Size,
   location: LocationRef<'a>,
   layers: Vec<ResolvedColorLayer>,
 }
 
-impl<'a, 'font> ColorLayerCollector<'a, 'font> {
-  fn new(font_ref: &'font FontRef<'a>, size: Size, location: LocationRef<'a>) -> Self {
+impl<'a, 'g> ColorLayerCollector<'a, 'g> {
+  fn new(
+    outline_glyphs: &'g OutlineGlyphCollection<'a>,
+    size: Size,
+    location: LocationRef<'a>,
+  ) -> Self {
     Self {
-      font_ref,
+      outline_glyphs,
       size,
       location,
       layers: Vec::new(),
@@ -216,8 +278,10 @@ impl<'a, 'font> ColorLayerCollector<'a, 'font> {
   }
 }
 
-struct GlyphResolveContext<'a, 'font> {
-  font_ref: &'font FontRef<'a>,
+struct GlyphResolveContext<'a> {
+  outline_glyphs: OutlineGlyphCollection<'a>,
+  color_glyphs: ColorGlyphCollection<'a>,
+  bitmap_strikes: BitmapStrikes<'a>,
   font_size: f32,
   size: Size,
   location: LocationRef<'a>,
@@ -225,7 +289,7 @@ struct GlyphResolveContext<'a, 'font> {
   embolden: Option<f32>,
 }
 
-impl<'a, 'font> GlyphResolveContext<'a, 'font> {
+impl<'a> GlyphResolveContext<'a> {
   fn resolve_glyph(&self, glyph_id: u32) -> Option<ResolvedGlyph> {
     let glyph_id = GlyphId::new(glyph_id);
 
@@ -233,8 +297,6 @@ impl<'a, 'font> GlyphResolveContext<'a, 'font> {
       .resolve_bitmap_glyph(glyph_id)
       .map(ResolvedGlyph::Bitmap)
       .or_else(|| {
-        // Color outline glyphs intentionally bypass skew synthesis so COLR
-        // layer metrics stay aligned and stacked color layers are not deformed.
         self
           .resolve_color_outline_glyph(glyph_id)
           .map(ResolvedGlyph::Outline)
@@ -247,26 +309,46 @@ impl<'a, 'font> GlyphResolveContext<'a, 'font> {
   }
 
   fn resolve_bitmap_glyph(&self, glyph_id: GlyphId) -> Option<ResolvedBitmapGlyph> {
-    let bitmap = self
-      .font_ref
-      .bitmap_strikes()
-      .glyph_for_size(self.size, glyph_id)?;
+    let bitmap = self.bitmap_strikes.glyph_for_size(self.size, glyph_id)?;
     scale_bitmap_glyph(bitmap, self.font_size)
   }
 
   fn resolve_color_outline_glyph(&self, glyph_id: GlyphId) -> Option<ResolvedOutlineGlyph> {
-    resolve_color_outline_glyph(self.font_ref, glyph_id, self.size, self.location)
+    let color_glyph = self
+      .color_glyphs
+      .get_with_format(glyph_id, ColorGlyphFormat::ColrV0)?;
+    let mut collector = ColorLayerCollector::new(&self.outline_glyphs, self.size, self.location);
+    color_glyph.paint(self.location, &mut collector).ok()?;
+    let color_layers = collector.into_layers();
+    if color_layers.is_empty() {
+      return None;
+    }
+
+    let mut paths = Vec::new();
+    for layer in &color_layers {
+      paths.extend(layer.paths.iter().copied());
+    }
+    let cache_signature = hash_path_commands(&paths);
+
+    Some(ResolvedOutlineGlyph::Color {
+      paths,
+      layers: color_layers,
+      cache_signature,
+    })
   }
 
   fn resolve_plain_outline_glyph(&self, glyph_id: GlyphId) -> Option<ResolvedOutlineGlyph> {
-    let mut paths = resolve_outline_commands(self.font_ref, glyph_id, self.size, self.location)?;
+    let mut paths =
+      resolve_outline_commands(&self.outline_glyphs, glyph_id, self.size, self.location)?;
     if let Some(skew_degrees) = self.skew {
       transform_commands(&mut paths, skew_degrees);
     }
+    let cache_signature = hash_path_commands(&paths);
 
     Some(ResolvedOutlineGlyph::Plain {
       paths,
       embolden: self.embolden,
+      cache_signature,
     })
   }
 }
@@ -303,7 +385,8 @@ impl ColorPainter for ColorLayerCollector<'_, '_> {
       return;
     };
 
-    let Some(paths) = resolve_outline_commands(self.font_ref, glyph_id, self.size, self.location)
+    let Some(paths) =
+      resolve_outline_commands(self.outline_glyphs, glyph_id, self.size, self.location)
     else {
       return;
     };
@@ -326,12 +409,12 @@ impl ColorPainter for ColorLayerCollector<'_, '_> {
 }
 
 fn resolve_outline_commands(
-  font_ref: &FontRef<'_>,
+  outline_glyphs: &OutlineGlyphCollection<'_>,
   glyph_id: GlyphId,
   size: Size,
   location: LocationRef<'_>,
 ) -> Option<Vec<Command>> {
-  let glyph = font_ref.outline_glyphs().get(glyph_id)?;
+  let glyph = outline_glyphs.get(glyph_id)?;
   let mut pen = GlyphOutlinePen::default();
   glyph
     .draw(DrawSettings::unhinted(size, location), &mut pen)
@@ -413,33 +496,6 @@ fn scale_bitmap_glyph(bitmap: BitmapGlyph<'_>, font_size: f32) -> Option<Resolve
   })
 }
 
-fn resolve_color_outline_glyph(
-  font_ref: &FontRef<'_>,
-  glyph_id: GlyphId,
-  size: Size,
-  location: LocationRef<'_>,
-) -> Option<ResolvedOutlineGlyph> {
-  let color_glyph = font_ref
-    .color_glyphs()
-    .get_with_format(glyph_id, ColorGlyphFormat::ColrV0)?;
-  let mut collector = ColorLayerCollector::new(font_ref, size, location);
-  color_glyph.paint(location, &mut collector).ok()?;
-  let color_layers = collector.into_layers();
-  if color_layers.is_empty() {
-    return None;
-  }
-
-  let mut paths = Vec::new();
-  for layer in &color_layers {
-    paths.extend(layer.paths.iter().copied());
-  }
-
-  Some(ResolvedOutlineGlyph::Color {
-    paths,
-    layers: color_layers,
-  })
-}
-
 /// Errors that can occur during font loading and conversion.
 #[derive(Debug, Error)]
 #[non_exhaustive]
@@ -515,6 +571,47 @@ fn guess_font_format(source: &[u8]) -> Result<FontFormat, FontError> {
 
 thread_local! {
   static LAYOUT_CONTEXT: RefCell<LayoutContext<InlineBrush>> = RefCell::new(LayoutContext::new());
+  static FONT_CONTEXT_CACHE: RefCell<Option<(u64, u64, parley::FontContext)>> =
+    const { RefCell::new(None) };
+  static SHARED_RESOLVED_GLYPH_CACHE: RefCell<HashMap<u64, ResolvedGlyph>> =
+    RefCell::new(HashMap::new());
+}
+
+const RESOLVED_GLYPH_CACHE_MAX_ENTRIES: usize = 4096;
+
+fn resolved_glyph_cache_key(
+  font_data_ptr: usize,
+  font_index: u32,
+  font_size: f32,
+  coords: &[F2Dot14],
+  embolden: Option<f32>,
+  skew: Option<f32>,
+  glyph_id: u32,
+) -> u64 {
+  use xxhash_rust::xxh3::Xxh3;
+  let mut h = Xxh3::new();
+  h.update(&font_data_ptr.to_le_bytes());
+  h.update(&font_index.to_le_bytes());
+  h.update(&font_size.to_le_bytes());
+  for c in coords {
+    h.update(&c.to_bits().to_le_bytes());
+  }
+  match embolden {
+    Some(e) => {
+      h.update(&[1u8]);
+      h.update(&e.to_le_bytes());
+    }
+    None => h.update(&[0u8]),
+  }
+  match skew {
+    Some(s) => {
+      h.update(&[1u8]);
+      h.update(&s.to_le_bytes());
+    }
+    None => h.update(&[0u8]),
+  }
+  h.update(&glyph_id.to_le_bytes());
+  h.digest()
 }
 
 fn with_layout_context<R>(f: impl FnOnce(&mut LayoutContext<InlineBrush>) -> R) -> R {
@@ -524,15 +621,30 @@ fn with_layout_context<R>(f: impl FnOnce(&mut LayoutContext<InlineBrush>) -> R) 
   })
 }
 
+static FONT_CONTEXT_NEXT_ID: AtomicU64 = AtomicU64::new(1);
+
 /// A context for managing fonts in the rendering system.
-#[derive(Clone)]
 pub struct FontContext {
+  id: u64,
+  version: AtomicU64,
   inner: parley::FontContext,
+}
+
+impl Clone for FontContext {
+  fn clone(&self) -> Self {
+    Self {
+      id: FONT_CONTEXT_NEXT_ID.fetch_add(1, Ordering::Relaxed),
+      version: AtomicU64::new(self.version.load(Ordering::Relaxed)),
+      inner: self.inner.clone(),
+    }
+  }
 }
 
 impl Default for FontContext {
   fn default() -> Self {
     Self {
+      id: FONT_CONTEXT_NEXT_ID.fetch_add(1, Ordering::Relaxed),
+      version: AtomicU64::new(0),
       inner: parley::FontContext {
         collection: Collection::new(CollectionOptions {
           system_fonts: false,
@@ -559,17 +671,40 @@ impl DerefMut for FontContext {
 }
 
 impl FontContext {
+  #[inline]
+  fn with_inner_mut<R>(&self, f: impl FnOnce(&mut parley::FontContext) -> R) -> R {
+    let current_version = self.version.load(Ordering::Relaxed);
+    let id = self.id;
+    let outcome = FONT_CONTEXT_CACHE.with(|cell| {
+      let Ok(mut borrow) = cell.try_borrow_mut() else {
+        return Err(f);
+      };
+      let needs_clone = match &*borrow {
+        Some((cached_id, cached_version, _)) => {
+          *cached_id != id || *cached_version != current_version
+        }
+        None => true,
+      };
+      if needs_clone {
+        *borrow = Some((id, current_version, self.inner.clone()));
+      }
+      let Some((_, _, inner)) = borrow.as_mut() else {
+        return Err(f);
+      };
+      Ok(f(inner))
+    });
+    match outcome {
+      Ok(r) => r,
+      Err(f) => f(&mut self.inner.clone()),
+    }
+  }
+
   pub(crate) fn resolve_glyphs(
     &self,
     run: &GlyphRun<'_, InlineBrush>,
     font_ref: FontRef,
     glyph_ids: impl Iterator<Item = u32> + Clone,
   ) -> HashMap<u32, ResolvedGlyph> {
-    let unique_glyph_ids: HashSet<u32> = glyph_ids.collect();
-    if unique_glyph_ids.is_empty() {
-      return HashMap::new();
-    }
-
     let has_emoji_cluster = run
       .run()
       .visual_clusters()
@@ -582,28 +717,62 @@ impl FontContext {
       .copied()
       .map(F2Dot14::from_bits)
       .collect::<Vec<_>>();
+    let embolden = (!has_emoji_cluster
+      && run.run().synthesis().embolden()
+      && run.style().brush.font_synthesis.weight.is_allowed())
+    .then_some(synthesis_embolden_strength(font_size));
+    let skew = run
+      .run()
+      .synthesis()
+      .skew()
+      .filter(|_| !has_emoji_cluster)
+      .filter(|_| run.style().brush.font_synthesis.style.is_allowed())
+      .map(|degrees| -degrees);
+
+    let font_data_ptr = run.run().font().data.as_ref().as_ptr() as usize;
+    let font_index = run.run().font().index;
     let resolver = GlyphResolveContext {
-      font_ref: &font_ref,
+      outline_glyphs: font_ref.outline_glyphs(),
+      color_glyphs: font_ref.color_glyphs(),
+      bitmap_strikes: font_ref.bitmap_strikes(),
       font_size,
       size: Size::new(font_size),
       location: LocationRef::new(&normalized_coords),
-      embolden: (!has_emoji_cluster
-        && run.run().synthesis().embolden()
-        && run.style().brush.font_synthesis.weight.is_allowed())
-      .then_some(synthesis_embolden_strength(font_size)),
-      skew: run
-        .run()
-        .synthesis()
-        .skew()
-        .filter(|_| !has_emoji_cluster)
-        .filter(|_| run.style().brush.font_synthesis.style.is_allowed())
-        .map(|degrees| -degrees),
+      embolden,
+      skew,
     };
 
-    let mut result = HashMap::with_capacity(unique_glyph_ids.len());
-    for glyph_id in unique_glyph_ids {
-      if let Some(glyph) = resolver.resolve_glyph(glyph_id) {
-        result.insert(glyph_id, glyph);
+    let mut result: HashMap<u32, ResolvedGlyph> = HashMap::new();
+    for glyph_id in glyph_ids {
+      if let Entry::Vacant(slot) = result.entry(glyph_id) {
+        let key = resolved_glyph_cache_key(
+          font_data_ptr,
+          font_index,
+          font_size,
+          &normalized_coords,
+          embolden,
+          skew,
+          glyph_id,
+        );
+        let cached = SHARED_RESOLVED_GLYPH_CACHE.with(|c| c.borrow().get(&key).cloned());
+        let glyph = if let Some(g) = cached {
+          Some(g)
+        } else {
+          let resolved = resolver.resolve_glyph(glyph_id);
+          if let Some(g) = resolved.as_ref() {
+            SHARED_RESOLVED_GLYPH_CACHE.with(|c| {
+              let mut cache = c.borrow_mut();
+              if cache.len() > RESOLVED_GLYPH_CACHE_MAX_ENTRIES {
+                cache.clear();
+              }
+              cache.insert(key, g.clone());
+            });
+          }
+          resolved
+        };
+        if let Some(g) = glyph {
+          slot.insert(g);
+        }
       }
     }
 
@@ -619,24 +788,25 @@ impl FontContext {
     attributes: Attributes,
     font_size: f32,
   ) -> Option<f32> {
-    let mut ctx = self.clone();
-    let parley::FontContext {
-      collection,
-      source_cache,
-    } = &mut ctx.inner;
-    let mut query = collection.query(source_cache);
-    query.set_families(families);
-    query.set_attributes(attributes);
-    let mut result = None;
-    query.matches_with(|font| {
-      let Ok(font_ref) = FontRef::from_index(font.blob.data(), font.index) else {
-        return QueryStatus::Continue;
-      };
-      let metrics = font_ref.metrics(Size::new(font_size), LocationRef::default());
-      result = Some(metrics.ascent + metrics.descent + metrics.leading);
-      QueryStatus::Stop
-    });
-    result
+    self.with_inner_mut(|ctx| {
+      let parley::FontContext {
+        collection,
+        source_cache,
+      } = ctx;
+      let mut query = collection.query(source_cache);
+      query.set_families(families);
+      query.set_attributes(attributes);
+      let mut result = None;
+      query.matches_with(|font| {
+        let Ok(font_ref) = FontRef::from_index(font.blob.data(), font.index) else {
+          return QueryStatus::Continue;
+        };
+        let metrics = font_ref.metrics(Size::new(font_size), LocationRef::default());
+        result = Some(metrics.ascent + metrics.descent + metrics.leading);
+        QueryStatus::Stop
+      });
+      result
+    })
   }
 
   /// Create an inline layout with the given root style and function
@@ -645,12 +815,12 @@ impl FontContext {
     root_style: TextStyle<'_, '_, InlineBrush>,
     func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),
   ) -> (InlineLayout, String) {
-    let mut font_context = self.clone();
-
-    with_layout_context(|layout_context| {
-      let mut builder = layout_context.tree_builder(&mut font_context, 1.0, true, &root_style);
-      func(&mut builder);
-      builder.build()
+    self.with_inner_mut(|font_context| {
+      with_layout_context(|layout_context| {
+        let mut builder = layout_context.tree_builder(font_context, 1.0, true, &root_style);
+        func(&mut builder);
+        builder.build()
+      })
     })
   }
 
@@ -682,6 +852,8 @@ impl FontContext {
           .append_fallbacks(FallbackKey::new(*script, None), once(family));
       }
     }
+
+    self.version.fetch_add(1, Ordering::Relaxed);
 
     Ok(())
   }

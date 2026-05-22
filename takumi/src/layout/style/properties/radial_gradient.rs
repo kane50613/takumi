@@ -135,6 +135,8 @@ pub(crate) struct RadialGradientTile {
   pub repeat_period: f32,
   /// Scale converting axis-space distance in pixels into LUT index space.
   pub position_to_lut_scale: f32,
+  /// Whether every LUT entry has alpha = 255.
+  pub fully_opaque: bool,
   /// Pre-computed color lookup table for fast gradient sampling.
   /// Maps axis-space distance to color.
   pub color_lut: Vec<PremultipliedColorU8>,
@@ -332,6 +334,7 @@ impl RadialGradientTile {
     } else {
       (lut_len - 1) as f32 / lut_axis_length
     };
+    let fully_opaque = color_lut.iter().all(|p| p.alpha() == u8::MAX);
 
     RadialGradientTile {
       width,
@@ -345,6 +348,7 @@ impl RadialGradientTile {
       repeat_start,
       repeat_period,
       position_to_lut_scale,
+      fully_opaque,
       color_lut,
     }
   }
@@ -418,6 +422,11 @@ impl GradientOverlayTile for RadialGradientTile {
     row_state.dx2 += row_state.dx2_step;
     row_state.dx2_step += row_state.dx2_step_delta;
     lut_idx
+  }
+
+  #[inline(always)]
+  fn fully_opaque(&self) -> bool {
+    self.fully_opaque
   }
 }
 

@@ -17,7 +17,7 @@ use crate::layout::style::{
 pub struct FontFamily(Box<[FontFamilyToken]>);
 
 #[derive(Debug, Clone, PartialEq)]
-enum FontFamilyToken {
+pub(crate) enum FontFamilyToken {
   Owned(String),
   Generic(GenericFamily),
 }
@@ -30,6 +30,33 @@ impl FontFamily {
       FontFamilyToken::Owned(name) => QueryFamily::Named(name.as_str()),
       FontFamilyToken::Generic(generic) => QueryFamily::Generic(*generic),
     })
+  }
+
+  pub(crate) fn tokens(&self) -> impl Iterator<Item = &FontFamilyToken> {
+    self.0.iter()
+  }
+}
+
+impl FontFamilyToken {
+  pub(crate) fn fingerprint_bytes(&self) -> &[u8] {
+    match self {
+      FontFamilyToken::Owned(name) => name.as_bytes(),
+      FontFamilyToken::Generic(generic) => match generic {
+        GenericFamily::Serif => b"\x01serif",
+        GenericFamily::SansSerif => b"\x02sans-serif",
+        GenericFamily::Monospace => b"\x03monospace",
+        GenericFamily::Cursive => b"\x04cursive",
+        GenericFamily::Fantasy => b"\x05fantasy",
+        GenericFamily::SystemUi => b"\x06system-ui",
+        GenericFamily::UiSerif => b"\x07ui-serif",
+        GenericFamily::UiSansSerif => b"\x08ui-sans-serif",
+        GenericFamily::UiMonospace => b"\x09ui-monospace",
+        GenericFamily::UiRounded => b"\x0aui-rounded",
+        GenericFamily::Emoji => b"\x0bemoji",
+        GenericFamily::Math => b"\x0cmath",
+        GenericFamily::FangSong => b"\x0dfang-song",
+      },
+    }
   }
 }
 

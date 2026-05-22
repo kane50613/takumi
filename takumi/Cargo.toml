@@ -130,3 +130,11 @@ harness = false
 [[bench]]
 name = "fixtures"
 harness = false
+
+[[bench]]
+name = "canvas"
+harness = false
+
+[[bench]]
+name = "text"
+harness = false
