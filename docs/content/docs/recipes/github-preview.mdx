@@ -1,0 +1,28 @@
+---
+title: GitHub Social Preview
+description: Same OG layout retargeted to GitHub's 1280×640 canvas.
+---
+
+![Preview](/recipes/github-preview.webp)
+
+GitHub's social preview slot is 1280×640. Rather than rewriting the OG layout, this recipe re-exports the same component with the new dimensions — one file, three lines. Most of the time that's all you need; the OG card was already designed at 2:1.
+
+```tsx
+import OgImage, { persistentImages, fonts } from "./og-image";
+
+export { persistentImages, fonts };
+
+export const name = "github-social-preview";
+
+// GitHub social preview canonical size: 1280×640
+export const width = 1280;
+export const height = 640;
+
+export default OgImage;
+```
+
+<Callout type="info">
+  Source:
+  [`example/twitter-images/components/github-social-preview.tsx`](https://github.com/kane50613/takumi/tree/master/example/twitter-images/components/github-social-preview.tsx).
+  See [OG Image](/docs/recipes/og-image) for the underlying component.
+</Callout>

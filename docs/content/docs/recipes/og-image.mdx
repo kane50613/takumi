@@ -1,0 +1,119 @@
+---
+title: OG Image
+description: Generic Open Graph card with logo, headline, and feature row.
+---
+
+![Preview](/recipes/og-image.webp)
+
+A 1280×640 hero: subtle radial-dot background, oversized rotated logo at 2% opacity, and a feature row of lucide icons. The headline uses tight letter-spacing (`-0.04em`) and a 6.5rem font-size — bigger than feels right in code, exactly right in a 1.91:1 social preview.
+
+```tsx
+import { Zap, Globe, Sparkles } from "lucide-react";
+
+export default function OgImage() {
+  return (
+    <div
+      style={{
+        backgroundColor: "#fcfcfc",
+        backgroundImage: "radial-gradient(#e5e5e5 1px, transparent 1px)",
+        backgroundSize: "32px 32px",
+        width: "100%",
+        height: "100%",
+        fontFamily: "Geist, sans-serif",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "#171717",
+        position: "relative",
+        padding: "4rem",
+      }}
+    >
+      <img
+        src="takumi.svg"
+        alt=""
+        style={{
+          position: "absolute",
+          width: "1200px",
+          height: "1200px",
+          opacity: 0.02,
+          right: "-300px",
+          top: "-300px",
+          transform: "rotate(-15deg)",
+        }}
+      />
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-start",
+          width: "100%",
+          maxWidth: "1000px",
+          position: "relative",
+        }}
+      >
+        <div
+          style={{ display: "flex", alignItems: "center", gap: "1.5rem", marginBottom: "2.5rem" }}
+        >
+          <img src="takumi.svg" alt="Takumi" style={{ width: "5.5rem", height: "5.5rem" }} />
+          <h1
+            style={{
+              fontSize: "6.5rem",
+              fontWeight: 800,
+              margin: 0,
+              letterSpacing: "-0.04em",
+              lineHeight: 1,
+              color: "#111111",
+            }}
+          >
+            Takumi
+          </h1>
+        </div>
+
+        <p
+          style={{
+            fontSize: "2.5rem",
+            color: "#4a4a4a",
+            maxWidth: "920px",
+            margin: 0,
+            marginBottom: "4rem",
+            lineHeight: 1.35,
+            letterSpacing: "-0.015em",
+          }}
+        >
+          A Rust rendering engine for turning templates into images, with next/og-compatible APIs.
+        </p>
+
+        <div
+          style={{
+            display: "flex",
+            gap: "2.5rem",
+            alignItems: "center",
+            color: "#555555",
+            fontSize: "1.25rem",
+            fontWeight: 600,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+          }}
+        >
+          {[
+            { Icon: Zap, label: "Native Speed" },
+            { Icon: Globe, label: "Runs Everywhere" },
+            { Icon: Sparkles, label: "Multiple Formats" },
+          ].map(({ Icon, label }) => (
+            <div key={label} style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+              <Icon size={22} color="#ff3535" strokeWidth={2.5} />
+              <span>{label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+<Callout type="info">
+  Source:
+  [`example/twitter-images/components/og-image.tsx`](https://github.com/kane50613/takumi/tree/master/example/twitter-images/components/og-image.tsx)
+</Callout>

@@ -1,0 +1,71 @@
+---
+title: Video via ffmpeg
+description: Render time-stepped raw RGBA frames into an MP4.
+---
+
+![Preview](/recipes/video.webp)
+
+For real video — high frame rate, MP4, audio later — `renderAnimation()` doesn't fit. Instead, loop over time with `render(..., { format: "raw", timeMs })` and pipe each frame's raw RGBA bytes straight to ffmpeg's stdin. The Promise array lets Takumi render frames in parallel while ffmpeg drains them serially.
+
+```tsx
+import { render } from "takumi-js";
+import { spawn } from "bun";
+
+const fps = 30;
+const durationSeconds = 4;
+const totalFrames = fps * durationSeconds;
+const width = 1200;
+const height = 630;
+
+const ffmpeg = spawn(
+  [
+    "ffmpeg",
+    "-y",
+    "-f",
+    "rawvideo",
+    "-pixel_format",
+    "rgba",
+    "-video_size",
+    `${width}x${height}`,
+    "-framerate",
+    `${fps}`,
+    "-i",
+    "pipe:0",
+    "-vf",
+    "format=yuv420p",
+    "-c:v",
+    "libx264",
+    "-crf",
+    "18",
+    "output.mp4",
+  ],
+  { stdin: "pipe" },
+);
+
+const scene = <Scene />;
+
+const framePromises = Array.from({ length: totalFrames }, (_, i) =>
+  render(scene, {
+    width,
+    height,
+    format: "raw",
+    keyframes,
+    timeMs: (i / fps) * 1000,
+  }),
+);
+
+for (let i = 0; i < totalFrames; i++) {
+  const frame = await framePromises[i];
+  if (!frame) throw new Error("Frame is undefined");
+  ffmpeg.stdin.write(frame);
+}
+
+ffmpeg.stdin.end();
+await ffmpeg.exited;
+```
+
+<Callout type="info">
+  Source:
+  [`example/ffmpeg-keyframe-animation`](https://github.com/kane50613/takumi/tree/master/example/ffmpeg-keyframe-animation)
+  — full Scene with shiki tokens, keyframe definitions, and `ffplay` variant.
+</Callout>
