@@ -1,0 +1,80 @@
+---
+title: Quickstart
+description: Render your first image with Takumi in under five minutes.
+icon: Shovel
+---
+
+Three working examples, copy-paste runnable. Pick the one that matches your runtime.
+
+## Static OG image
+
+```tsx twoslash
+import { render } from "takumi-js";
+
+const image = await render(
+  <div tw="w-full h-full flex items-center justify-center bg-gradient-to-b from-blue-100 to-red-50">
+    <h1 tw="text-6xl font-bold">Hello from Takumi</h1>
+  </div>,
+  { width: 1200, height: 630 },
+);
+
+// `image` is a Uint8Array — pipe to disk, `Response`, or any writable stream.
+```
+
+## Animated WebP
+
+```tsx twoslash
+import { Renderer } from "takumi-js/node";
+import { fromJsx } from "takumi-js/helpers/jsx";
+
+const renderer = new Renderer();
+
+const { node, stylesheets } = await fromJsx(
+  <div tw="w-full h-full flex items-center justify-center">
+    <div tw="w-32 h-32 bg-blue-500 animate-spin rounded-lg" />
+  </div>,
+);
+
+const animation = await renderer.renderAnimation({
+  width: 400,
+  height: 400,
+  fps: 30,
+  format: "webp",
+  stylesheets,
+  scenes: [{ durationMs: 1000, node }],
+});
+```
+
+## Cloudflare Workers route
+
+```tsx twoslash
+import { ImageResponse } from "takumi-js/response";
+
+export default {
+  fetch(request: Request) {
+    const name = new URL(request.url).searchParams.get("name") ?? "world";
+
+    return new ImageResponse(
+      <div tw="w-full h-full flex items-center justify-center bg-slate-900 text-white">
+        <h1 tw="text-7xl font-bold">Hello, {name}</h1>
+      </div>,
+      { width: 1200, height: 630 },
+    );
+  },
+};
+```
+
+<Cards>
+  <Card
+    title="Pick your framework"
+    href="/docs/frameworks"
+    description="Production setup for Next.js, Cloudflare Workers, SvelteKit, and more"
+    icon={<ToyBrick />}
+  />
+  <Card
+    title="Browse Recipes"
+    href="/docs/recipes"
+    description="Copy-paste designs for OG images, social cards, and animations"
+    icon={<Wrench />}
+  />
+</Cards>
