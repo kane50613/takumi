@@ -4,44 +4,199 @@ description: Common issues and solutions when using Takumi.
 icon: Bug
 ---
 
-## General Issues
+Symptoms grouped by area. Each entry: what you see, why, what to do.
 
-<Accordions type="single">
-  <Accordion title="Layout is not correct">
-You can try to use the `drawDebugBorder` option to draw a border around the nodes.
+## Runtime
 
-```tsx
-import { ImageResponse } from "takumi-js/response";
+<Accordions type="multiple">
+  <Accordion title="Cannot find native binding">
+**Symptom.** `Error: Cannot find module '@takumi-rs/core-<platform>'` at import time on Node.
 
-export function GET() {
-  return new ImageResponse(<></>, {
-    width: 100,
-    height: 100,
-    drawDebugBorder: true,
-    // ...
-  });
-}
-```
+**Cause.** With pnpm or yarn's strict store, the platform-specific native package is not hoisted next to `@takumi-rs/core`, so its loader can't resolve it.
 
-If the issue still exists, please file an issue on [our GitHub repository](https://github.com/kane50613/takumi/issues).
-
-  </Accordion>
-</Accordions>
-
-## Node.js Related issues
-
-<Accordions type="single">
-  <Accordion title="Cannot find native binding.">
-This happens when the `@takumi-rs/core` package failed to find the native binding. Make sure you have finished the [Additional Bundler Setup](/docs/index#additional-bundler-setup) step.
-
-If you are using package manager with virtual store such as `pnpm` or `yarn`, add the following to your `.npmrc` file and re-run `pnpm i` to allow hoisting of the native binary.
+**Fix.** Add a hoist pattern to `.npmrc` at the repo root and reinstall:
 
 ```text title=".npmrc"
 public-hoist-pattern[]=@takumi-rs/core-*
 ```
 
   </Accordion>
-  <Accordion title="TypeError: fetch failed">
-Node.js fetch implementation with [undici](https://github.com/nodejs/undici) is not really stable in my experience and [#349](https://github.com/kane50613/takumi/issues/349). Try using [bun](https://bun.sh) runtime instead.
+  <Accordion title="WASM module not initialized">
+**Symptom.** `Renderer is not constructed` or `wasm-bindgen: unable to instantiate` on the first render.
+
+**Cause.** The WASM binary is lazy-loaded. Calling `Renderer` before the `.wasm` import resolves throws.
+
+**Fix.** Use `takumi-js/wasm` (which handles initialization) or `await` the explicit `init()` from `@takumi-rs/wasm` before constructing the renderer. On bundlers, make sure `.wasm` is treated as an asset, not source — see the Cloudflare Workers `rules` example in [Frameworks → Cloudflare Workers](/docs/frameworks/cloudflare).
+
+  </Accordion>
+  <Accordion title="Memory limit exceeded on Cloudflare Workers">
+**Symptom.** Worker isolate is killed mid-render, or `Error: Worker exceeded memory limit`.
+
+**Cause.** Workers cap each isolate at 128 MB. Decoded images, persistent caches, and oversized output buffers all count.
+
+**Fix.** Bound the fetch cache (cap entries or use an LRU), preload only assets reused across requests, render at the size the consumer actually displays, and prefer streaming WebP over multi-frame PNG. See [Frameworks → Cloudflare Workers](/docs/frameworks/cloudflare).
+
+  </Accordion>
+  <Accordion title="TypeError: fetch failed (Node.js)">
+**Symptom.** Random `TypeError: fetch failed` when the renderer loads remote images or fonts on Node.
+
+**Cause.** Node's bundled `undici` fetch is flaky under concurrent load — see [#349](https://github.com/kane50613/takumi/issues/349).
+
+**Fix.** Either run on [Bun](https://bun.sh), which has a more stable fetch, or preload the resources yourself with `fetchResources` and pass them via `fetchedResources` so the renderer never calls `fetch`.
+
+  </Accordion>
+</Accordions>
+
+## Fonts & text
+
+<Accordions type="multiple">
+  <Accordion title="Glyph not rendered (tofu boxes)">
+**Symptom.** Characters render as `.notdef` boxes — usually CJK, Arabic, or emoji on top of a Latin-only font.
+
+**Cause.** No registered font owns that codepoint. Takumi walks the font list in load order; a glyph with no provider anywhere in the chain falls through.
+
+**Fix.** Add a fallback for the script, in load order: primary Latin, then color emoji, then CJK, then any other script you ship. See [Typography → Fallback chain](/docs/guides/typography#fallback-chain).
+
+  </Accordion>
+  <Accordion title="Variable font axis ignored">
+**Symptom.** `font-weight: 750` or a width axis change has no visible effect, even with a variable font loaded.
+
+**Cause.** `font-weight` only maps to the `wght` axis. Other axes (width, optical size, slant, custom) need explicit `font-variation-settings`.
+
+**Fix.** Use the longhand:
+
+```tsx
+<div style={{ fontVariationSettings: "'wght' 750, 'wdth' 110, 'opsz' 48" }} />
+```
+
+  </Accordion>
+  <Accordion title="Color emoji shows as black squares">
+**Symptom.** Emoji render as monochrome silhouettes or black squares instead of full color.
+
+**Cause.** The registered emoji font is a monochrome fallback, or no emoji font is registered at all and a Latin font supplied a black-and-white glyph.
+
+**Fix.** Register a COLR font (`Twemoji-COLR`, `Noto Color Emoji`) as a fallback. Or use the `emoji` option on `ImageResponse` to pull per-glyph images from Twemoji / OpenMoji / Noto. See [Guides → Emoji](/docs/guides/emoji).
+
+  </Accordion>
+  <Accordion title="WOFF font fails to load on WASM">
+**Symptom.** Font load throws or silently no-ops in the WASM build; same font works on Node.
+
+**Cause.** The `@takumi-rs/wasm` build drops WOFF support to keep the binary small. WOFF2 and TTF only.
+
+**Fix.** Ship the TTF or WOFF2 version of the font for Worker / browser targets.
+
+  </Accordion>
+</Accordions>
+
+## Images & assets
+
+<Accordions type="multiple">
+  <Accordion title="Remote image not loading">
+**Symptom.** `<img src="https://...">` renders as a blank box; logs show a fetch error or 4xx.
+
+**Cause.** The URL is unreachable from the runtime, blocked by CORS at the origin, or the request was dropped under load.
+
+**Fix.** Fetch the bytes yourself and pass them via `fetchedResources`, or preload into the persistent store with `putPersistentImage`. Both bypass the runtime fetch. See [Guides → Images](/docs/guides/images#fetching-strategies).
+
+  </Accordion>
+  <Accordion title="SVG rasterized blurry">
+**Symptom.** Inline or remote SVG looks soft compared to a browser render.
+
+**Cause.** `resvg` rasterizes at the node's display size, not the SVG's intrinsic size. A 24 x 24 viewBox drawn at 24 x 24 with no explicit width/height will be tiny and then upscaled by the layout.
+
+**Fix.** Set `width` / `height` on the `<svg>` or `<img>` to the actual rendered pixel size you want. For backgrounds, the size of the container drives rasterization.
+
+  </Accordion>
+  <Accordion title="Image stretched or wrong aspect">
+**Symptom.** `<img>` fills its box edge to edge and looks squashed.
+
+**Cause.** Default `object-fit` on `<img>` is `fill`, which stretches.
+
+**Fix.** Set `object-fit: cover` to crop or `object-fit: contain` to letterbox. See [Guides → Images](/docs/guides/images#object-fit-and-image-rendering).
+
+  </Accordion>
+  <Accordion title="Pixel art / QR codes blurred">
+**Symptom.** Tiny source images are smooth when scaled up. You wanted hard pixels.
+
+**Cause.** Default `image-rendering: auto` picks a smooth resampler.
+
+**Fix.** Set `image-rendering: pixelated`.
+
+  </Accordion>
+</Accordions>
+
+## CSS & layout
+
+<Accordions type="multiple">
+  <Accordion title="Tailwind class not applied">
+**Symptom.** A class works in the browser but does nothing in the rendered image.
+
+**Cause.** Takumi parses Tailwind natively and supports a subset of properties — anything outside [the supported CSS reference](/docs/reference/style) is silently dropped. Pseudo-classes other than `:is()` / `:where()` and stateful variants like `hover:` have no meaning at render time.
+
+**Fix.** Move the style into plain inline `style={{}}` and check it renders, then either find a supported equivalent or open an issue for the missing property.
+
+  </Accordion>
+  <Accordion title="Layout collapses to zero size">
+**Symptom.** A container measures 0 x 0, children are invisible.
+
+**Cause.** The root or some ancestor has no width / height and no flex children to drive it. Takumi expects a sized root.
+
+**Fix.** Set `width` and `height` on the renderer's output dimensions, and use `width: "100%"` / `height: "100%"` on the root JSX node so it fills that box.
+
+  </Accordion>
+  <Accordion title="Text overflows container">
+**Symptom.** Text spills out the side; `text-overflow: ellipsis` does nothing.
+
+**Cause.** The container has no constrained width, or the text node is in a flex row without `min-width: 0`.
+
+**Fix.** Constrain the container, and set `lineClamp` for multi-line ellipsis. `white-space: nowrap` is not required — Takumi does multiline ellipsis. See [Typography → Overflow Ellipsis](/docs/guides/typography#overflow-ellipsis).
+
+  </Accordion>
+  <Accordion title="Layout is not correct">
+**Symptom.** Nodes are positioned in places you didn't expect.
+
+**Cause.** Hard to tell without seeing the boxes.
+
+**Fix.** Pass `drawDebugBorder: true` to draw a 1px border on every node. Visual diff against your intent:
+
+```tsx
+new ImageResponse(<MyDesign />, {
+  width: 1200,
+  height: 630,
+  drawDebugBorder: true,
+});
+```
+
+If you've narrowed it down and the layout still disagrees with the browser, file an issue with a reduced repro on [GitHub](https://github.com/kane50613/takumi/issues).
+
+  </Accordion>
+</Accordions>
+
+## Animation & video
+
+<Accordions type="multiple">
+  <Accordion title="Animation never plays">
+**Symptom.** `renderAnimation` returns a static-looking frame, or `timeMs` has no effect.
+
+**Cause.** Missing `animation` shorthand on the target node, or the `@keyframes` rule is in a stylesheet that didn't reach the renderer.
+
+**Fix.** Use the `animation` shorthand (or the Tailwind `animate-[...]` form) on the node itself, and make sure stylesheets returned from `fromJsx` are passed into `renderer.render` / `renderAnimation`. See [Guides → Animations](/docs/guides/animations).
+
+  </Accordion>
+  <Accordion title="animate-(--var) does nothing">
+**Symptom.** `animate-(--my-anim)` or any Tailwind animation form referencing a CSS custom property silently fails.
+
+**Cause.** CSS custom property resolution for the `animation` shorthand is not implemented.
+
+**Fix.** Use the literal Tailwind form `animate-[name_2s_linear_infinite]` or set `style={{ animation: "..." }}` directly.
+
+  </Accordion>
+  <Accordion title="WebP / GIF output is huge">
+**Symptom.** Animated output is megabytes for a few seconds.
+
+**Cause.** High frame rate at a large canvas size adds up. GIF in particular has poor compression.
+
+**Fix.** Drop the frame rate (24 or 30 is usually enough), shrink the canvas, prefer WebP over GIF, and for anything more than a few seconds switch to raw frames + ffmpeg. See [Guides → Video Frames](/docs/guides/video).
+
   </Accordion>
 </Accordions>
