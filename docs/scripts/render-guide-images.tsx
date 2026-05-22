@@ -268,28 +268,6 @@ const previews: Preview[] = [
       </div>
     ),
   },
-  {
-    slug: "emoji-providers",
-    width: 1200,
-    height: 200,
-    jsx: (
-      <div tw="flex w-full h-full bg-slate-50 items-center">
-        {[
-          { name: "twemoji", color: "#1DA1F2" },
-          { name: "blobmoji", color: "#34A853" },
-          { name: "noto", color: "#4285F4" },
-          { name: "openmoji", color: "#F2C94C" },
-          { name: "fluent", color: "#0078D4" },
-          { name: "fluentFlat", color: "#005A9E" },
-        ].map(({ name, color }) => (
-          <div key={name} tw="flex-1 flex flex-col items-center justify-center gap-3">
-            <div tw="w-20 h-20 rounded-full" style={{ background: color }} />
-            <span tw="text-sm font-mono text-slate-700">{name}</span>
-          </div>
-        ))}
-      </div>
-    ),
-  },
 ];
 
 await mkdir(outDir, { recursive: true });

@@ -115,10 +115,11 @@ For SVG with text, register the font with the renderer (not inside the SVG with 
 
 `image-rendering` controls the resampling algorithm.
 
-| Value                       | Use for                                               |
-| --------------------------- | ----------------------------------------------------- |
-| `auto` / `smooth`           | Photos. High-quality bilinear/bicubic. Default.       |
-| `pixelated` / `crisp-edges` | Pixel art, QR codes, anything you don't want blurred. |
+| Value       | Use for                                               |
+| ----------- | ----------------------------------------------------- |
+| `auto`      | Default. Engine chooses.                              |
+| `smooth`    | Photos. Lanczos3 resampling.                          |
+| `pixelated` | Pixel art, QR codes, anything you don't want blurred. |
 
 ## Persistent image store
 
