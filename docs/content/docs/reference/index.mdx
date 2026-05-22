@@ -1,0 +1,71 @@
+---
+title: Reference
+description: API reference for the takumi-js package and its seven entrypoints.
+icon: FileCode2
+---
+
+Takumi ships as one npm package with seven entrypoints. Pick the subpath that matches your runtime and use case.
+
+| Subpath                   | Purpose                                                               | Page                                             |
+| ------------------------- | --------------------------------------------------------------------- | ------------------------------------------------ |
+| `takumi-js`               | Runtime-detecting `render()` plus shared types.                       | [Core](/docs/reference/core)                     |
+| `takumi-js/response`      | `Response`-compatible class for API routes (drop-in for `next/og`).   | [Response](/docs/reference/response)             |
+| `takumi-js/node`          | Native `Renderer` class for Node.js.                                  | [Node](/docs/reference/node)                     |
+| `takumi-js/wasm`          | WASM `Renderer` for edge runtimes and browsers.                       | [WASM](/docs/reference/wasm)                     |
+| `takumi-js/helpers`       | Node builders, unit helpers, and resource fetchers.                   | [Helpers](/docs/reference/helpers)               |
+| `takumi-js/helpers/jsx`   | `fromJsx` — turn a React tree into Takumi nodes outside the renderer. | [Helpers / JSX](/docs/reference/helpers-jsx)     |
+| `takumi-js/helpers/emoji` | `extractEmojis` — replace emoji glyphs with provider-hosted SVGs.     | [Helpers / Emoji](/docs/reference/helpers-emoji) |
+
+Four cross-cutting pages cover surfaces that live outside any single entrypoint:
+
+<Cards>
+  <Card
+    title="Core"
+    href="/docs/reference/core"
+    description="render() and the universal entrypoint."
+  />
+  <Card
+    title="Response"
+    href="/docs/reference/response"
+    description="ImageResponse and createImageResponse."
+  />
+  <Card title="Node" href="/docs/reference/node" description="Native Renderer for Node.js." />
+  <Card
+    title="WASM"
+    href="/docs/reference/wasm"
+    description="WASM Renderer for Workers, Vite, and browsers."
+  />
+  <Card
+    title="Helpers"
+    href="/docs/reference/helpers"
+    description="container, text, image, vw, rgba, fromHtml."
+  />
+  <Card
+    title="Helpers / JSX"
+    href="/docs/reference/helpers-jsx"
+    description="fromJsx and style presets."
+  />
+  <Card
+    title="Helpers / Emoji"
+    href="/docs/reference/helpers-emoji"
+    description="extractEmojis and provider list."
+  />
+  <Card
+    title="Nodes"
+    href="/docs/reference/nodes"
+    description="Container, Text, and Image node shapes."
+  />
+  <Card title="Style" href="/docs/reference/style" description="Supported CSS property surface." />
+  <Card
+    title="Output formats"
+    href="/docs/reference/output-formats"
+    description="PNG, JPEG, WebP, ICO, GIF, APNG, raw."
+  />
+  <Card
+    title="Errors"
+    href="/docs/reference/errors"
+    description="What goes wrong and how to recover."
+  />
+</Cards>
+
+Using the Rust crate directly? See [docs.rs/takumi](https://docs.rs/takumi).
