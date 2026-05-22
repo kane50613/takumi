@@ -352,28 +352,27 @@ macro_rules! define_style {
       ) -> ParseResult<'i, StyleDeclarationBlock> {
         let property = PropertyId::from_kebab_case(name);
         let start = input.position();
-        match property.parse_declarations(name, input) {
-          Ok(declarations) => Ok(StyleDeclarationBlock::from_parsed_declarations(
-            declarations,
-            false,
-          )),
-          Err(error) if !matches!(property, PropertyId::Ignored | PropertyId::Custom) => {
-            while input.next_including_whitespace_and_comments().is_ok() {}
-            let specified_value = input.slice_from(start).trim();
-            if contains_var_function(specified_value) {
-              Ok(StyleDeclarationBlock::from_parsed_declarations(
-                smallvec![StyleDeclaration::Deferred(DeferredDeclaration {
-                  property,
-                  specified_value: specified_value.to_owned(),
-                })],
-                false,
-              ))
-            } else {
-              Err(error)
-            }
+        // Detect var() up-front; otherwise a partial parse (e.g. `0 var(--y)`)
+        // would commit before deferral. See #712.
+        if !matches!(property, PropertyId::Ignored | PropertyId::Custom) {
+          let state = input.state();
+          while input.next_including_whitespace_and_comments().is_ok() {}
+          let specified_value = input.slice_from(start).trim();
+          if contains_var_function(specified_value) {
+            return Ok(StyleDeclarationBlock::from_parsed_declarations(
+              smallvec![StyleDeclaration::Deferred(DeferredDeclaration {
+                property,
+                specified_value: specified_value.to_owned(),
+              })],
+              false,
+            ));
           }
-          Err(error) => Err(error),
+          input.reset(&state);
         }
+
+        property.parse_declarations(name, input).map(|declarations| {
+          StyleDeclarationBlock::from_parsed_declarations(declarations, false)
+        })
       }
 
       /// Defines the style of an element.
@@ -555,8 +554,16 @@ macro_rules! define_style {
       impl ComputedStyle {
         pub(crate) fn from_parent(parent: &Self) -> Self {
           Self {
-            custom_properties: parent.custom_properties.clone(),
-                        registered_custom_properties: parent.registered_custom_properties.clone(),
+            custom_properties: if parent.custom_properties.is_empty() {
+              HashMap::new()
+            } else {
+              parent.custom_properties.clone()
+            },
+            registered_custom_properties: if parent.registered_custom_properties.is_empty() {
+              HashMap::new()
+            } else {
+              parent.registered_custom_properties.clone()
+            },
             $($longhand: define_inherited_default!(parent.$longhand $(, $longhand_inherit)?),)*
           }
         }
@@ -580,17 +587,21 @@ macro_rules! define_style {
             current_color,
           };
 
-          $(
-            if animated_properties.contains(&LonghandId::[<$longhand:camel>]) {
-              self.$longhand.interpolate(
-                &from.$longhand,
-                &to.$longhand,
-                progress,
-                sizing,
-                current_color,
-              );
+          for property in animated_properties.iter() {
+            match property {
+              $(
+                LonghandId::[<$longhand:camel>] => {
+                  self.$longhand.interpolate(
+                    &from.$longhand,
+                    &to.$longhand,
+                    progress,
+                    sizing,
+                    current_color,
+                  );
+                }
+              )*
             }
-          )*
+          }
 
           // special cases
           if animated_properties.contains(&LonghandId::FlexGrow) {
@@ -1283,7 +1294,12 @@ impl PropertyMask {
   pub(crate) fn iter(&self) -> PropertyMaskIter<'_> {
     PropertyMaskIter {
       mask: self,
-      next_index: 0,
+      word_index: 0,
+      current_word: if Self::WORD_COUNT > 0 {
+        self.words[0]
+      } else {
+        0
+      },
     }
   }
 }
@@ -1312,22 +1328,30 @@ impl FromIterator<LonghandId> for PropertyMask {
 
 pub(crate) struct PropertyMaskIter<'a> {
   mask: &'a PropertyMask,
-  next_index: usize,
+  word_index: usize,
+  current_word: usize,
 }
 
 impl Iterator for PropertyMaskIter<'_> {
   type Item = LonghandId;
 
   fn next(&mut self) -> Option<Self::Item> {
-    while self.next_index < LonghandId::COUNT {
-      let property = LonghandId::ALL[self.next_index];
-      self.next_index += 1;
-      if self.mask.contains(&property) {
-        return Some(property);
+    loop {
+      if self.current_word != 0 {
+        let bit = self.current_word.trailing_zeros() as usize;
+        self.current_word &= self.current_word - 1;
+        let index = self.word_index * PropertyMask::BITS_PER_WORD + bit;
+        if index >= LonghandId::COUNT {
+          return None;
+        }
+        return Some(LonghandId::ALL[index]);
       }
+      self.word_index += 1;
+      if self.word_index >= PropertyMask::WORD_COUNT {
+        return None;
+      }
+      self.current_word = self.mask.words[self.word_index];
     }
-
-    None
   }
 }
 
@@ -1940,7 +1964,9 @@ mod tests {
   use taffy::Size;
 
   use super::stylesheets_vars::resolve_var_references;
-  use super::{CssWideKeyword, LonghandId, PropertyId, ShorthandId, StyleDeclarationBlock};
+  use super::{
+    CssWideKeyword, LonghandId, PropertyId, PropertyMask, ShorthandId, StyleDeclarationBlock,
+  };
   use crate::{
     layout::{
       Viewport,
@@ -2871,6 +2897,46 @@ mod tests {
     );
 
     assert_eq!(style.width, Length::default());
+  }
+
+  #[test]
+  fn test_property_mask_iter_yields_only_set_bits_in_order() {
+    let mut mask = PropertyMask::new();
+    mask.insert(LonghandId::Width);
+    mask.insert(LonghandId::Color);
+    mask.insert(LonghandId::ALL[LonghandId::COUNT - 1]);
+
+    let collected: Vec<_> = mask.iter().collect();
+    let mut expected = [
+      LonghandId::Width,
+      LonghandId::Color,
+      LonghandId::ALL[LonghandId::COUNT - 1],
+    ];
+    expected.sort_by_key(|id| id.index());
+
+    assert_eq!(collected, expected);
+    assert_eq!(PropertyMask::new().iter().count(), 0);
+  }
+
+  #[test]
+  fn test_var_defers_when_property_parser_accepts_a_prefix() {
+    // https://github.com/kane50613/takumi/issues/712
+    let style = inherited_style_from_pairs(
+      [
+        ("--onefifty", "150px"),
+        ("background-position", "0 var(--onefifty)"),
+      ],
+      &ComputedStyle::default(),
+    );
+
+    assert_eq!(
+      style.background_position.as_ref(),
+      [BackgroundPosition(SpacePair::from_pair(
+        PositionComponent::Length(Length::Px(0.0)),
+        PositionComponent::Length(Length::Px(150.0)),
+      ))]
+      .as_slice(),
+    );
   }
 
   #[test]
