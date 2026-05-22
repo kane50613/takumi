@@ -1,0 +1,250 @@
+---
+title: Style
+description: CSS property surface — what Takumi supports, what's partial, what's silently ignored.
+---
+
+Takumi parses inline `style`, the `tw` Tailwind prop, and external stylesheets through one CSS engine. The table below lists every property the engine recognises, grouped by category. Anything not listed is parsed leniently (it won't throw) but has no effect on layout or rasterization.
+
+Status legend: **Supported** behaves like a browser, **Partial** parses but only honours a subset of values, **Unsupported** is accepted by the parser for forward-compat but does nothing.
+
+## Box model
+
+<StyleProperty
+  name="display"
+  status="supported"
+  example="flex | inline-flex | grid | inline-grid | block | inline-block | inline | none"
+/>
+<StyleProperty
+  name="position"
+  status="partial"
+  example="relative | absolute"
+  note="static and fixed are treated as relative."
+/>
+<StyleProperty
+  name="width / height / min-* / max-*"
+  status="supported"
+  example="px, %, vw, vh, em, rem, auto"
+/>
+<StyleProperty name="aspect-ratio" status="supported" />
+<StyleProperty name="padding / padding-*" status="supported" />
+<StyleProperty name="margin / margin-*" status="supported" />
+<StyleProperty name="inset / top / right / bottom / left" status="supported" />
+<StyleProperty name="box-sizing" status="supported" />
+<StyleProperty
+  name="overflow / overflow-x / overflow-y"
+  status="partial"
+  example="visible | clip | hidden"
+  note="scroll is treated as hidden."
+/>
+<StyleProperty name="visibility" status="partial" example="visible | hidden" />
+<StyleProperty name="z-index" status="supported" />
+<StyleProperty
+  name="float / clear"
+  status="partial"
+  note="Block-level float layout — inline wrapping around floats is not implemented."
+/>
+<StyleProperty name="direction" status="supported" example="ltr | rtl" />
+
+## Flexbox
+
+<StyleProperty name="flex / flex-grow / flex-shrink / flex-basis" status="supported" />
+<StyleProperty name="flex-direction / flex-flow" status="supported" />
+<StyleProperty name="flex-wrap" status="partial" example="nowrap | wrap | wrap-reverse" />
+<StyleProperty name="justify-content / justify-items / justify-self" status="supported" />
+<StyleProperty name="align-content / align-items / align-self" status="supported" />
+<StyleProperty name="place-content / place-items / place-self" status="supported" />
+<StyleProperty name="gap / row-gap / column-gap" status="supported" />
+<StyleProperty name="order" status="supported" />
+
+## Grid
+
+<StyleProperty
+  name="grid-template-columns / grid-template-rows"
+  status="supported"
+  example="repeat(3, 1fr) | 100px auto 1fr | [a] 1fr [b] 2fr"
+  note="Named lines, repeat(), and minmax() are supported."
+/>
+<StyleProperty name="grid-template-areas" status="supported" />
+<StyleProperty name="grid-auto-columns / grid-auto-rows / grid-auto-flow" status="supported" />
+<StyleProperty
+  name="grid-column / grid-row / grid-area"
+  status="supported"
+  example="span 2 / auto | 1 / 3"
+/>
+
+## Typography
+
+<StyleProperty name="color" status="supported" />
+<StyleProperty
+  name="font-family"
+  status="supported"
+  note="Fallback chain resolved per-glyph across loaded fonts."
+/>
+<StyleProperty name="font-size" status="supported" />
+<StyleProperty name="font-weight / font-style / font-stretch" status="supported" />
+<StyleProperty
+  name="font-variation-settings"
+  status="supported"
+  note="Variable-font axis tuning."
+/>
+<StyleProperty name="font-feature-settings" status="supported" />
+<StyleProperty
+  name="font-synthesis / font-synthesis-weight / font-synthesis-style"
+  status="partial"
+  example="none | weight | style | auto"
+/>
+<StyleProperty name="line-height" status="supported" />
+<StyleProperty name="letter-spacing / word-spacing" status="supported" />
+<StyleProperty name="text-align" status="supported" />
+<StyleProperty name="vertical-align" status="supported" />
+<StyleProperty name="text-overflow" status="partial" example="ellipsis | clip | <string>" />
+<StyleProperty
+  name="text-transform"
+  status="partial"
+  example="none | uppercase | lowercase | capitalize"
+/>
+<StyleProperty name="text-shadow" status="supported" />
+<StyleProperty
+  name="text-decoration / text-decoration-line / -color / -thickness"
+  status="partial"
+  example="underline | line-through | overline"
+  note="text-decoration-style only accepts solid."
+/>
+<StyleProperty name="text-decoration-skip-ink" status="partial" example="auto | none" />
+<StyleProperty
+  name="text-wrap / text-wrap-mode / text-wrap-style"
+  status="partial"
+  example="wrap | nowrap | balance | pretty"
+/>
+<StyleProperty
+  name="white-space / white-space-collapse"
+  status="partial"
+  example="normal | pre | pre-wrap | pre-line | preserve | collapse | preserve-spaces | preserve-breaks"
+/>
+<StyleProperty
+  name="word-break"
+  status="partial"
+  example="normal | break-all | keep-all | break-word"
+/>
+<StyleProperty name="overflow-wrap" status="supported" />
+<StyleProperty
+  name="line-clamp"
+  status="supported"
+  example="3 | 1 '…'"
+  note="Pass a number, or a number followed by a string literal to override the trailing ellipsis."
+/>
+<StyleProperty
+  name="text-fit"
+  status="supported"
+  note="See the css-text-4 spec — auto-resize text to fill a fixed-size container."
+/>
+<StyleProperty
+  name="-webkit-text-stroke / -webkit-text-stroke-width / -color / -webkit-text-fill-color"
+  status="supported"
+/>
+<StyleProperty name="stroke-linejoin" status="partial" example="miter | round | bevel" />
+
+## Background & color
+
+<StyleProperty name="background-color" status="supported" />
+<StyleProperty
+  name="background-image"
+  status="supported"
+  example="url() | linear-gradient() | radial-gradient() | conic-gradient() | repeating-*"
+/>
+<StyleProperty
+  name="background-position / background-size / background-repeat / background-clip"
+  status="supported"
+/>
+<StyleProperty name="background-blend-mode" status="supported" />
+<StyleProperty name="opacity" status="supported" />
+
+### Color spaces
+
+Modern CSS color syntax is supported across every color-accepting property:
+
+<StyleProperty name="rgb() / rgba() / hsl() / hsla()" status="supported" />
+<StyleProperty
+  name="oklch() / oklab() / lch() / lab()"
+  status="supported"
+  note="Perceptually-uniform spaces; useful for gradient stops without grey banding."
+/>
+<StyleProperty
+  name="color()"
+  status="supported"
+  example="color(display-p3 1 0 0) | color(rec2020 …)"
+  note="Wide-gamut colors are output 1:1 — what the consumer does with them depends on the format."
+/>
+<StyleProperty name="color-mix()" status="supported" example="color-mix(in oklch, red 40%, blue)" />
+
+## Borders & outlines
+
+<StyleProperty name="border / border-* / border-width / -color" status="supported" />
+<StyleProperty name="border-style" status="partial" example="solid | none" />
+<StyleProperty name="border-radius / border-*-radius" status="supported" />
+<StyleProperty name="outline / outline-width / -color / -offset" status="supported" />
+<StyleProperty name="outline-style" status="partial" example="solid | none" />
+
+## Effects
+
+<StyleProperty
+  name="box-shadow"
+  status="supported"
+  note="Comma-separated multi-shadow stacks supported. inset works."
+/>
+<StyleProperty
+  name="filter"
+  status="supported"
+  example="blur() | brightness() | contrast() | drop-shadow() | grayscale() | hue-rotate() | invert() | saturate() | sepia() | opacity()"
+/>
+<StyleProperty
+  name="backdrop-filter"
+  status="supported"
+  note="Same function set as filter; applied to content behind the element."
+/>
+<StyleProperty
+  name="mix-blend-mode"
+  status="supported"
+  note="All 16 standard modes: normal, multiply, screen, overlay, darken, lighten, color-dodge, color-burn, hard-light, soft-light, difference, exclusion, hue, saturation, color, luminosity."
+/>
+<StyleProperty name="isolation" status="supported" />
+<StyleProperty name="image-rendering" status="partial" example="auto | smooth | pixelated" />
+
+### Transforms
+
+<StyleProperty
+  name="transform"
+  status="partial"
+  example="translate() | scale() | rotate() | skew() | matrix()"
+  note="2D only. 3D transforms and matrix3d() are accepted but flattened."
+/>
+<StyleProperty name="transform-origin" status="supported" />
+<StyleProperty
+  name="perspective"
+  status="unsupported"
+  note="Parsed for forward-compat; has no effect since 3D transforms are flattened."
+/>
+
+### Clipping & masking
+
+<StyleProperty
+  name="clip-path"
+  status="supported"
+  example="inset() | circle() | ellipse() | polygon() | path()"
+/>
+<StyleProperty name="clip-rule" status="supported" />
+<StyleProperty name="mask-image / mask-size / mask-position / mask-repeat" status="supported" />
+<StyleProperty name="object-fit / object-position" status="supported" />
+
+## Animation
+
+<StyleProperty
+  name="animation / animation-name / -duration / -delay / -iteration-count / -direction / -fill-mode / -play-state"
+  status="supported"
+  note="Backed by @keyframes registered through stylesheets or the keyframes option."
+/>
+<StyleProperty
+  name="animation-timing-function"
+  status="partial"
+  example="linear | ease | ease-in | ease-out | ease-in-out | step-start | step-end | steps() | cubic-bezier()"
+/>

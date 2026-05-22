@@ -1,0 +1,75 @@
+---
+title: Output formats
+description: Static and animated image formats Takumi can encode, and when to pick which.
+---
+
+`format` on `RenderOptions` picks the static encoder; `format` on `RenderAnimationOptions` / `EncodeFramesOptions` picks the animated encoder. The two sets are disjoint — use `render` for static, `renderAnimation` / `encodeFrames` for animated.
+
+| Format          | Kind     | Lossless           | Quality knob      | Use it for                                                                                                     |
+| --------------- | -------- | ------------------ | ----------------- | -------------------------------------------------------------------------------------------------------------- |
+| `png`           | Static   | Yes                | —                 | Default for OG cards, screenshots, transparency.                                                               |
+| `jpeg`          | Static   | No                 | `quality` (0–100) | Photo-heavy renders where file size matters more than crisp edges.                                             |
+| `webp` (static) | Static   | Optional           | `quality` (0–100) | Smaller than PNG at the same visual quality. Best general-purpose.                                             |
+| `ico`           | Static   | Yes                | —                 | Favicons. Multi-resolution packing happens automatically.                                                      |
+| `raw`           | Static   | n/a                | —                 | RGBA8 bytes, no encoding. Pipe to ffmpeg, a canvas, or your own encoder.                                       |
+| `gif`           | Animated | No (palette-quant) | `dithering`       | Universal compatibility, but capped at 256 colors per frame.                                                   |
+| `apng`          | Animated | Yes                | —                 | Lossless animation, broad browser support, larger files than WebP.                                             |
+| `webp` (anim)   | Animated | Optional           | `quality` (0–100) | Best compression for animated output. Use this unless you need APNG's lossless guarantee or GIF compatibility. |
+
+## Static
+
+```tsx twoslash
+import { render } from "takumi-js";
+
+const png = await render(<div tw="bg-white">hi</div>, { width: 400, height: 200, format: "png" });
+const jpeg = await render(<div tw="bg-white">hi</div>, {
+  width: 400,
+  height: 200,
+  format: "jpeg",
+  quality: 85,
+});
+const webp = await render(<div tw="bg-white">hi</div>, {
+  width: 400,
+  height: 200,
+  format: "webp",
+  quality: 90,
+});
+const ico = await render(<div tw="bg-white">hi</div>, { width: 64, height: 64, format: "ico" });
+const rgba = await render(<div tw="bg-white">hi</div>, { width: 400, height: 200, format: "raw" });
+```
+
+`raw` returns width × height × 4 bytes in RGBA order. No header, no padding — feed it straight into a frame pipeline.
+
+## Animated
+
+```tsx twoslash
+import { Renderer } from "takumi-js/node";
+
+const renderer = new Renderer();
+
+// Scene timeline sampled at fps
+await renderer.renderAnimation({
+  width: 600,
+  height: 600,
+  fps: 30,
+  format: "webp",
+  quality: 80,
+  scenes: [
+    { node: { type: "text" as const, text: "0s" }, durationMs: 1000 },
+    { node: { type: "text" as const, text: "1s" }, durationMs: 1000 },
+  ],
+});
+
+// Precomputed frames (each frame is its own node tree)
+await renderer.encodeFrames(
+  [
+    { node: { type: "text" as const, text: "frame 1" }, durationMs: 100 },
+    { node: { type: "text" as const, text: "frame 2" }, durationMs: 100 },
+  ],
+  { width: 200, height: 100, format: "apng" },
+);
+```
+
+`renderAnimation` re-renders the scene at each `1000 / fps`-ms tick — best when you have a CSS-driven scene and want a clean timeline. `encodeFrames` skips re-rendering and just encodes the frames you hand it — use it when frames come from disparate sources or a frame-by-frame simulation.
+
+For frame-by-frame video pipelines (mp4, h.264/h.265, audio mux) render to `raw` in a loop and pipe to `ffmpeg`. See the [Video guide](/docs/guides/video).

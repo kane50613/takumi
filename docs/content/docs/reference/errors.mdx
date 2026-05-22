@@ -1,0 +1,110 @@
+---
+title: Errors
+description: Errors Takumi throws, what triggers each, and how to recover.
+---
+
+Takumi surfaces errors as plain `Error` instances on the JS side — the variant name is in the `message`. The Rust crate uses a typed `Error` enum (see [`takumi::Error`](https://docs.rs/takumi/latest/takumi/enum.Error.html)) if you're calling the Rust API directly.
+
+Catch errors at the renderer boundary. The `ImageResponse` factory accepts an `onError` callback so you can log without crashing the stream.
+
+## Resource loading
+
+### `Image resolution error`
+
+An image referenced by `src`, `background-image: url(...)`, or `mask-image` failed to fetch or decode. Common causes: 404, CORS rejection on the edge, malformed data URL, unsupported format (e.g. AVIF in Workers without polyfill).
+
+Fix: pre-fetch via `fetchResources` so you get the error before render starts, validate URLs at write time, or pass `throwOnError: false` to swallow individual failures.
+
+### `Font error`
+
+Font bytes couldn't be parsed, or the font name conflicts with one already loaded. Variable-font axis values out of range can also surface here.
+
+Fix: confirm the file is a valid `.ttf`, `.otf`, or `.woff2`. If you load multiple weights of the same family, use the `name` override on `FontDetails` to disambiguate.
+
+### `HTTP 4xx/5xx for <url>`
+
+`fetchResources` raises this when an upstream returns a non-OK status. Includes the URL in the message.
+
+Fix: handle upstream availability, set a reasonable `timeout`, or pass a custom `cache` so transient failures don't repeat on every render.
+
+## Style parsing
+
+### `failed to parse CSS declaration block`
+
+An inline `style` value couldn't be parsed — usually a malformed `transform()`, an unbalanced gradient, or a `var(...)` referencing something that doesn't resolve.
+
+Fix: the error includes the input slice. Most cases are typos in inline strings.
+
+### `failed to parse stylesheet`
+
+A `<style>` block or `stylesheets` entry tripped the CSS parser. The message contains the parser context (the slice being read when the error fired).
+
+Fix: paste the offending block into a CSS validator. Common gotchas: nested at-rules, `@property` without `syntax` / `inherits`, `@layer` with multiple names, `@supports` mixing `and` and `or` without parentheses.
+
+### `unsupported media feature`
+
+A `@media` query references a feature the renderer doesn't evaluate (e.g. `pointer`, `hover`). The rule body is skipped.
+
+Fix: gate the rule on a feature Takumi understands (`prefers-color-scheme`, `min-width`) or move it to a `tw` prop.
+
+## Layout
+
+### `Layout error`
+
+The Taffy layout engine refused to lay out the tree. Almost always means an invalid combination of sizing constraints — a grid `auto` track with no minimum, conflicting min/max bounds, or a deeply broken `flex-basis`.
+
+Fix: simplify the offending subtree, run `Renderer.measure` to localise the failure, or set `drawDebugBorder: true` on `RenderOptions` to see the layout boxes.
+
+### `Invalid viewport: width or height cannot be 0`
+
+You called `render` (or `measure`) with `width: 0`, `height: 0`, or omitted both on a tree with no intrinsic size.
+
+Fix: pass explicit `width` and `height`, or guarantee the root node sets a non-zero size.
+
+## Rendering & encoding
+
+### `PNG encoding error`
+
+The PNG encoder rejected the frame. Typically a dimension overflow (PNG max is 2^31) or an internal buffer mismatch.
+
+Fix: cap output dimensions, or fall back to WebP.
+
+### `WebP error: ...`
+
+A structured WebP error. Sub-cases:
+
+- `WebP encoder setup failed`: usually OOM in WASM.
+- `... must be in 1..=<max>, got <n>`: dimension exceeds WebP's 16777215 limit.
+- `frame X dimensions ... exceed canvas ...`: an `encodeFrames` frame is larger than the declared canvas. Make every frame the same size as `width × height`.
+- `all animation frames must have the same dimensions`: mixed-size frames passed to `encodeFrames`. WebP/APNG/GIF don't support per-frame canvases.
+- `WebP container size exceeds supported limits`: the encoded output is over 4GiB. Reduce dimensions, frame count, or quality.
+
+### `GIF encoding error`
+
+Most commonly `GifFrameDimensionsTooLarge`: GIF caps frame dimensions at 65535 px. Use WebP or APNG for larger output.
+
+### `<format> animation must contain at least one frame`
+
+You called `renderAnimation` with `scenes: []` or `encodeFrames` with `[]`.
+
+Fix: ensure at least one scene/frame before calling.
+
+### `invalid RGBA buffer length`
+
+You passed a `raw`-format buffer to a consumer expecting a different stride. The error includes `expected` and `actual`. Almost always means the consumer ignored `devicePixelRatio` and didn't account for the scaled output.
+
+Fix: read `width * height * 4` after multiplying by `devicePixelRatio`.
+
+## Runtime
+
+### `Cannot find module @takumi-rs/core-<platform>`
+
+The N-API binding for your platform / Node.js version isn't installed. Common on pnpm with strict hoisting and on Alpine (musl) when the Linux build expects glibc.
+
+Fix: switch to `takumi-js/wasm`, install the right optional dep, or use `--no-strict-peer-dependencies` / `--shamefully-hoist` on pnpm.
+
+### `WebAssembly module not initialized`
+
+A `Renderer` was constructed before `await init()` resolved.
+
+Fix: await `init()` at the top of the request handler (or once at module scope) before constructing any renderer.

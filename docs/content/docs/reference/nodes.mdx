@@ -1,0 +1,59 @@
+---
+title: Nodes
+description: Container, Text, and Image node shapes that make up every Takumi tree.
+---
+
+A Takumi tree is built from three node kinds. Every node carries the same metadata (`tagName`, `className`, `id`, `dir`, `attributes`, `tw`, `style`, `preset`) and differs only in what _content_ it holds.
+
+Style precedence runs `preset` (lowest) → `tw` → `style` (highest). Selector matching uses `tagName` / `className` / `id` against external stylesheets you pass to `render`.
+
+## Container
+
+Groups children and arranges them with Flexbox, Grid, or block layout. Containers are the only nodes that hold other nodes.
+
+<AutoTypeTable path="../../../../takumi-helpers/src/types.ts" name="ContainerNode" />
+
+<NodeTree
+  node={{
+    type: "container",
+    style: { display: "flex", padding: 24, gap: 12 },
+    children: [
+      { type: "text", text: "Left" },
+      { type: "text", text: "Right" },
+    ],
+  }}
+/>
+
+## Text
+
+Holds a string. `text` is required and cannot contain markup — wrap multi-style runs in sibling text nodes instead.
+
+<AutoTypeTable path="../../../../takumi-helpers/src/types.ts" name="TextNode" />
+
+<NodeTree
+  node={{
+    type: "text",
+    text: "Hello",
+    style: { fontSize: 96, color: "#111" },
+  }}
+/>
+
+## Image
+
+References an image by URL, data URL, or raw bytes. `width` / `height` override the file's intrinsic dimensions; leave them undefined to let layout pick natural size.
+
+<AutoTypeTable path="../../../../takumi-helpers/src/types.ts" name="ImageNode" />
+
+<NodeTree
+  node={{
+    type: "image",
+    src: "https://example.com/avatar.png",
+    width: 96,
+    height: 96,
+    style: { borderRadius: 48 },
+  }}
+/>
+
+## Shared metadata
+
+<AutoTypeTable path="../../../../takumi-helpers/src/types.ts" name="NodeMetadata" />
