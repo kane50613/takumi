@@ -1,5 +1,43 @@
 ---
-title: Integration
-description: Use Takumi with the framework you love!
-index: true
+title: Frameworks
+description: Wire Takumi into your framework of choice.
+icon: ToyBrick
 ---
+
+Takumi works the same way in every framework — you build a node tree and hand it to a renderer. These guides cover the integration glue.
+
+## Pick yours
+
+| Framework                    | Runtime           | Entrypoint                              | Example                                                                                                  |
+| ---------------------------- | ----------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Next.js (App / Pages / Edge) | Node + Edge       | `takumi-js/response`                    | [example/nextjs](https://github.com/kane50613/takumi/tree/master/example/nextjs)                         |
+| Nuxt                         | Node              | `takumi-js/response`                    | —                                                                                                        |
+| SvelteKit                    | Node              | `takumi-js/response`                    | —                                                                                                        |
+| Svelte (raw)                 | Node              | `takumi-js/response` + `svelte/server`  | [example/svelte](https://github.com/kane50613/takumi/tree/master/example/svelte)                         |
+| TanStack Start               | Node + Cloudflare | `takumi-js/response`                    | [example/tanstack-start](https://github.com/kane50613/takumi/tree/master/example/tanstack-start)         |
+| Waku                         | Node              | `takumi-js/response`                    | [example/waku-ssr](https://github.com/kane50613/takumi/tree/master/example/waku-ssr)                     |
+| Cloudflare Workers           | Workers           | `takumi-js/wasm` + `takumi-js/response` | [example/cloudflare-workers](https://github.com/kane50613/takumi/tree/master/example/cloudflare-workers) |
+| Bun / Vanilla                | Node-compatible   | `takumi-js/node`                        | —                                                                                                        |
+
+<Cards>
+  <Card
+    title="Next.js"
+    href="/docs/frameworks/nextjs"
+    description="App Router, Pages Router, and Edge runtime."
+  />
+  <Card
+    title="SvelteKit"
+    href="/docs/frameworks/sveltekit"
+    description="Render Svelte components in a +server.ts handler."
+  />
+  <Card
+    title="Cloudflare Workers"
+    href="/docs/frameworks/cloudflare"
+    description="Edge-render via the WASM build."
+  />
+  <Card
+    title="TanStack Start"
+    href="/docs/frameworks/tanstack-start"
+    description="File-route server handlers on Node or Cloudflare."
+  />
+</Cards>
