@@ -13,6 +13,16 @@ This means we've locked down the public API and are committed to maintaining bac
 npm i takumi-js@1
 ```
 
+## What's new in v1
+
+- **One package, every runtime.** `takumi-js` ships native, WASM, and helper bindings under one install, auto-detecting the right binding at runtime. No more importing from `@takumi-rs/core` or `@takumi-rs/image-response` directly. See [Installation](/docs/install).
+- **`fromJsx` and `fromHtml` helpers.** Turn React elements or raw HTML strings into a node tree without writing builders by hand. See [`takumi-js/helpers/jsx`](/docs/reference/helpers-jsx) and [`fromHtml`](/docs/reference/helpers).
+- **ICO output plus richer animation.** Add `ico` alongside PNG / JPEG / WebP; render WebP / APNG / GIF animations through the same `renderAnimation` call. See [Output formats](/docs/reference/output-formats).
+- **Built-in emoji providers.** `extractEmojis` swaps in Twemoji, Noto, Blobmoji, OpenMoji, or two Fluent variants without hosting your own glyphs; `ImageResponse` defaults to `twemoji`.
+- **Wider CSS surface.** `text-fit`, relative color syntax, repeating gradients, `direction` / `float` / `clear`, `flex-flow`, `place-items` / `place-content` / `place-self`, `text-indent`, and more border styles all land in v1.
+- **Resource preflight.** `extractResourceUrls` + `fetchResources` let you pre-fetch every URL a tree references in one round trip, then hand the cache to the renderer. See [Performance](/docs/guides/performance).
+- **`renderer.measure`.** Run layout without rasterizing — useful for text-fit, responsive cards, and layout-aware truncation. See the [Measure guide](/docs/guides/measure).
+
 ## What has changed?
 
 ### `display` defaults to `inline`
