@@ -1,11 +1,10 @@
-use std::{borrow::Cow, cell::RefCell, collections::HashMap, ops::Range};
+use std::{borrow::Cow, ops::Range};
 
 use parley::{
   BreakReason, IndentOptions, InlineBox, InlineBoxKind, Line, LineMetrics, PositionedInlineBox,
-  PositionedLayoutItem, TextStyle, TreeBuilder, YieldData,
+  PositionedLayoutItem, TextStyle, YieldData,
 };
 use taffy::{AvailableSpace, Layout, Rect, Size};
-use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   GlobalContext,
@@ -23,72 +22,6 @@ use crate::{
     make_balanced_text, make_pretty_text,
   },
 };
-
-const INLINE_LAYOUT_CACHE_MAX_ENTRIES: usize = 1024;
-
-thread_local! {
-  static INLINE_LAYOUT_CACHE: RefCell<HashMap<u64, parley::Layout<InlineBrush>>> =
-    RefCell::new(HashMap::new());
-}
-
-pub(crate) fn clear_inline_layout_cache() {
-  INLINE_LAYOUT_CACHE.with(|c| {
-    let mut cache = c.borrow_mut();
-    if cache.len() > INLINE_LAYOUT_CACHE_MAX_ENTRIES {
-      cache.clear();
-    }
-  });
-}
-
-fn hash_shape_relevant(
-  h: &mut Xxh3,
-  style: &crate::layout::style::ComputedStyle,
-  sizing: &crate::rendering::Sizing,
-) {
-  h.update(&sizing.font_size.to_le_bytes());
-  h.update(&sizing.line_height.to_le_bytes());
-  h.update(&style.font_weight.value().to_le_bytes());
-  // FontStyle / WordBreak / OverflowWrap / WhiteSpaceCollapse / Direction wrap
-  // parley/internal enums; hashing the parley LineHeight bytes captures the
-  // shape-relevant subset cheaply by Debug-fmt-ing into a small stack buffer.
-  use std::io::Write;
-  let mut buf = [0u8; 256];
-  let mut cursor = &mut buf[..];
-  let _ = write!(
-    cursor,
-    "{:?}|{:?}|{:?}|{:?}|{:?}",
-    style.font_style,
-    style.word_break,
-    style.overflow_wrap,
-    style.white_space_collapse,
-    style.direction,
-  );
-  let written = 256 - cursor.len();
-  h.update(&buf[..written]);
-  for token in style.font_family.tokens() {
-    h.update(token.fingerprint_bytes());
-  }
-}
-
-fn inline_layout_cache_key(items: &[InlineItem<'_, '_>], root_style: &SizedFontStyle<'_>) -> u64 {
-  let mut h = Xxh3::new();
-  hash_shape_relevant(&mut h, root_style.parent, &root_style.sizing);
-  for item in items {
-    match item {
-      InlineItem::Text { text, context } => {
-        h.update(&[0u8]);
-        h.update(text.as_bytes());
-        hash_shape_relevant(&mut h, &context.style, &context.sizing);
-      }
-      InlineItem::RenderNode { render_node } => {
-        h.update(&[1u8]);
-        let node_ptr = std::ptr::from_ref::<RenderNode<'_>>(*render_node) as usize;
-        h.update(&node_ptr.to_le_bytes());
-      }
-    }
-  }
-  h.digest()
-}
 
 pub(crate) struct InlineLayoutRequest<'c, 'g> {
   pub(crate) items: Vec<InlineItem<'c, 'g>>,
@@ -1056,187 +989,131 @@ pub(crate) fn measure_inline_layout(
   }
 }
 
-fn process_inline_items<'c, 'g: 'c>(
-  items: &[InlineItem<'c, 'g>],
-  available_space: Size<AvailableSpace>,
-  style: &SizedFontStyle<'_>,
-  mut builder: Option<&mut TreeBuilder<'_, InlineBrush>>,
-) -> (Vec<ProcessedInlineSpan<'c, 'g>>, String) {
-  let mut spans: Vec<ProcessedInlineSpan<'c, 'g>> = Vec::new();
-  let mut text = String::new();
-  let mut index_pos = 0;
-  let mut previous_collapsible_space = false;
-  let mut previous_was_line_break = false;
-
-  for item in items {
-    match item {
-      InlineItem::Text { text: t, context } => {
-        let span_style = context.style.to_sized_font_style(context);
-        let transformed = apply_text_transform(t, context.style.text_transform);
-        let collapsed = apply_white_space_collapse(
-          &transformed,
-          style.parent.white_space_collapse,
-          &mut previous_collapsible_space,
-          &mut previous_was_line_break,
-        );
-        let span_id = spans.len() as u64;
-        let start = index_pos;
-        let end = start + collapsed.len();
-
-        if let Some(b) = builder.as_deref_mut() {
-          b.push_style_span(text_style_with_span_id(&span_style, Some(span_id)));
-          b.push_text(&collapsed);
-          b.pop_style_span();
-        }
-
-        text.push_str(&collapsed);
-        index_pos = end;
-
-        spans.push(ProcessedInlineSpan::Text {
-          span_id,
-          byte_range: start..end,
-          text: collapsed.into_owned(),
-          style: span_style,
-        });
-      }
-      InlineItem::RenderNode { render_node } => {
-        let context = &render_node.context;
-        let vertical_align = context.style.vertical_align.resolve(
-          &context.sizing,
-          context.sizing.font_size,
-          context.style.line_height,
-        );
-        let margin = Rect {
-          top: context.style.margin_top,
-          right: context.style.margin_right,
-          bottom: context.style.margin_bottom,
-          left: context.style.margin_left,
-        }
-        .map(|length| length.to_px(&context.sizing, 0.0));
-        let padding = Rect {
-          top: context.style.padding_top,
-          right: context.style.padding_right,
-          bottom: context.style.padding_bottom,
-          left: context.style.padding_left,
-        }
-        .map(|length| length.to_px(&context.sizing, 0.0));
-        let border = Rect {
-          top: context.style.border_top_width,
-          right: context.style.border_right_width,
-          bottom: context.style.border_bottom_width,
-          left: context.style.border_left_width,
-        }
-        .map(|length| length.to_px(&context.sizing, 0.0));
-
-        let atomic_metrics = render_node
-          .node
-          .as_ref()
-          .map(|_| render_node.measure_inline_box(available_space));
-        let content_size = atomic_metrics.map_or(Size::zero(), |metrics| metrics.size);
-        let raw_baseline_offset = atomic_metrics.and_then(|metrics| metrics.baseline_offset);
-
-        let paint_width = if render_node.participates_as_inline_box() {
-          content_size.width + margin.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
-        } else {
-          content_size.width
-            + margin.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
-            + padding.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
-            + border.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
-        };
-        let paint_height = if render_node.participates_as_inline_box() {
-          content_size.height + margin.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
-        } else {
-          content_size.height
-            + margin.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
-            + padding.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
-            + border.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
-        };
-        let inline_box = InlineBox {
-          index: index_pos,
-          id: spans.len() as u64,
-          kind: inline_box_kind(render_node),
-          width: paint_width,
-          height: paint_height,
-        };
-        let baseline_offset =
-          raw_baseline_offset.map(|baseline| baseline.clamp(0.0, inline_box.height));
-
-        spans.push(ProcessedInlineSpan::Box(InlineBoxItem {
-          render_node,
-          inline_box: inline_box.clone(),
-          paint_width,
-          paint_height,
-          margin,
-          padding,
-          border,
-          baseline_offset,
-          vertical_align,
-        }));
-        if let Some(b) = builder.as_deref_mut() {
-          b.push_inline_box(inline_box);
-        }
-        previous_collapsible_space = false;
-        previous_was_line_break = false;
-      }
-    }
-  }
-
-  (spans, text)
-}
-
-fn has_render_node_items(items: &[InlineItem<'_, '_>]) -> bool {
-  items
-    .iter()
-    .any(|i| matches!(i, InlineItem::RenderNode { .. }))
-}
-
 fn build_inline_layout_tree<'c, 'g: 'c>(
   items: &[InlineItem<'c, 'g>],
   available_space: Size<AvailableSpace>,
   style: &'c SizedFontStyle,
   global: &'g GlobalContext,
 ) -> BuiltInlineLayout<'c, 'g> {
-  // Items that contain inline RenderNodes can affect layout via measure_inline_box,
-  // which depends on available_space and may not be deterministic across cache hits.
-  let cacheable = !has_render_node_items(items);
-  let cache_key = if cacheable {
-    Some(inline_layout_cache_key(items, style))
-  } else {
-    None
-  };
+  let mut spans: Vec<ProcessedInlineSpan<'c, 'g>> = Vec::new();
+  let (layout, text) = global.font_context.tree_builder(style.into(), |builder| {
+    let mut index_pos = 0;
+    let mut previous_collapsible_space = false;
+    let mut previous_was_line_break = false;
 
-  if let Some(key) = cache_key {
-    let cached = INLINE_LAYOUT_CACHE.with(|c| c.borrow().get(&key).cloned());
-    if let Some(layout) = cached {
-      let (spans, text) = process_inline_items(items, available_space, style, None);
-      return BuiltInlineLayout {
-        layout,
-        text,
-        spans,
-        custom_inline_boxes: Vec::new(),
-        line_scales: Vec::new(),
-      };
+    for item in items {
+      match item {
+        InlineItem::Text { text, context } => {
+          let span_style = context.style.to_sized_font_style(context);
+          let transformed = apply_text_transform(text, context.style.text_transform);
+          let collapsed = apply_white_space_collapse(
+            &transformed,
+            style.parent.white_space_collapse,
+            &mut previous_collapsible_space,
+            &mut previous_was_line_break,
+          );
+          let span_id = spans.len() as u64;
+          let start = index_pos;
+          let end = start + collapsed.len();
+
+          builder.push_style_span(text_style_with_span_id(&span_style, Some(span_id)));
+          builder.push_text(&collapsed);
+          builder.pop_style_span();
+
+          index_pos = end;
+
+          spans.push(ProcessedInlineSpan::Text {
+            span_id,
+            byte_range: start..end,
+            text: collapsed.into_owned(),
+            style: span_style,
+          });
+        }
+        InlineItem::RenderNode { render_node } => {
+          let context = &render_node.context;
+          let vertical_align = context.style.vertical_align.resolve(
+            &context.sizing,
+            context.sizing.font_size,
+            context.style.line_height,
+          );
+          let margin = Rect {
+            top: context.style.margin_top,
+            right: context.style.margin_right,
+            bottom: context.style.margin_bottom,
+            left: context.style.margin_left,
+          }
+          .map(|length| length.to_px(&context.sizing, 0.0));
+          let padding = Rect {
+            top: context.style.padding_top,
+            right: context.style.padding_right,
+            bottom: context.style.padding_bottom,
+            left: context.style.padding_left,
+          }
+          .map(|length| length.to_px(&context.sizing, 0.0));
+          let border = Rect {
+            top: context.style.border_top_width,
+            right: context.style.border_right_width,
+            bottom: context.style.border_bottom_width,
+            left: context.style.border_left_width,
+          }
+          .map(|length| length.to_px(&context.sizing, 0.0));
+
+          let atomic_metrics = render_node
+            .node
+            .as_ref()
+            .map(|_| render_node.measure_inline_box(available_space));
+          let content_size = atomic_metrics.map_or(Size::zero(), |metrics| metrics.size);
+          let raw_baseline_offset = atomic_metrics.and_then(|metrics| metrics.baseline_offset);
+
+          let paint_width = if render_node.participates_as_inline_box() {
+            content_size.width + margin.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
+          } else {
+            content_size.width
+              + margin.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
+              + padding.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
+              + border.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
+          };
+          let paint_height = if render_node.participates_as_inline_box() {
+            content_size.height + margin.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
+          } else {
+            content_size.height
+              + margin.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
+              + padding.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
+              + border.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
+          };
+          let inline_box = InlineBox {
+            index: index_pos,
+            id: spans.len() as u64,
+            kind: inline_box_kind(render_node),
+            width: paint_width,
+            height: paint_height,
+          };
+          let baseline_offset =
+            raw_baseline_offset.map(|baseline| baseline.clamp(0.0, inline_box.height));
+
+          spans.push(ProcessedInlineSpan::Box(InlineBoxItem {
+            render_node,
+            inline_box: inline_box.clone(),
+            paint_width,
+            paint_height,
+            margin,
+            padding,
+            border,
+            baseline_offset,
+            vertical_align,
+          }));
+          builder.push_inline_box(inline_box);
+          previous_collapsible_space = false;
+          previous_was_line_break = false;
+        }
+      }
     }
-  }
-
-  let mut spans_out: Vec<ProcessedInlineSpan<'c, 'g>> = Vec::new();
-  let mut text_out = String::new();
-  let (layout, _text) = global.font_context.tree_builder(style.into(), |builder| {
-    let (s, t) = process_inline_items(items, available_space, style, Some(builder));
-    spans_out = s;
-    text_out = t;
   });
-
-  if let Some(key) = cache_key {
-    INLINE_LAYOUT_CACHE.with(|c| {
-      c.borrow_mut().insert(key, layout.clone());
-    });
-  }
 
   BuiltInlineLayout {
     layout,
-    text: text_out,
-    spans: spans_out,
+    text,
+    spans,
     custom_inline_boxes: Vec::new(),
     line_scales: Vec::new(),
   }

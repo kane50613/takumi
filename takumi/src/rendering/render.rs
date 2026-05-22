@@ -477,11 +477,6 @@ fn create_measured_node(
 
 /// Renders a node to an image.
 pub fn render<'g>(options: RenderOptions<'g>) -> Result<RgbaImage> {
-  // Persistent inline-layout cache: bounded by entry count (cleared inside
-  // the helper when the cap is exceeded), so repeated renders of the same
-  // content reuse the parley layout across renders.
-  crate::layout::inline::clear_inline_layout_cache();
-
   let RenderOptions {
     viewport,
     global,
