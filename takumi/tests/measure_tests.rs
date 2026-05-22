@@ -1709,3 +1709,46 @@ fn test_flex_container_drops_whitespace_only_text_children() {
   assert_eq!(without_result.children.len(), 2);
   assert_close(with_result.height, without_result.height);
 }
+
+// https://github.com/kane50613/takumi/issues/711
+#[test]
+fn test_block_container_drops_whitespace_between_absolute_and_in_flow_sibling() {
+  let absolute_child = || {
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::position(Position::Absolute))
+        .with(StyleDeclaration::width(Px(40.0)))
+        .with(StyleDeclaration::height(Px(40.0))),
+    )
+  };
+  let in_flow_child = || {
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::width(Px(100.0)))
+        .with(StyleDeclaration::height(Px(100.0))),
+    )
+  };
+  let block_style = || {
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::position(Position::Relative))
+      .with(StyleDeclaration::width(Px(200.0)))
+  };
+
+  let with_whitespace = Node::container([
+    absolute_child(),
+    Node::text("\n  \t".to_string()),
+    in_flow_child(),
+  ])
+  .with_style(block_style());
+
+  let without_whitespace =
+    Node::container([absolute_child(), in_flow_child()]).with_style(block_style());
+
+  let with_result = measure(with_whitespace, create_measure_viewport());
+  let without_result = measure(without_whitespace, create_measure_viewport());
+
+  assert_eq!(with_result, without_result);
+}

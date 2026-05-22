@@ -826,6 +826,13 @@ impl<'g> RenderNode<'g> {
     self.anonymous_text_content.is_some() && self.node.is_none()
   }
 
+  fn is_whitespace_only_text_node(&self) -> bool {
+    self
+      .node
+      .as_ref()
+      .is_some_and(Node::is_whitespace_only_text)
+  }
+
   fn has_anonymous_text_item_child(&self) -> bool {
     self
       .children
@@ -1175,6 +1182,21 @@ impl<'g> RenderNode<'g> {
             force_inline_layout: false,
           }
         } else {
+          // https://github.com/kane50613/takumi/issues/711
+          let has_block_level = children
+            .iter()
+            .any(|child| !child.participates_in_inline_formatting_context());
+          if has_block_level
+            && children
+              .iter()
+              .any(RenderNode::is_whitespace_only_text_node)
+          {
+            children = Vec::from(children)
+              .into_iter()
+              .filter(|child| !child.is_whitespace_only_text_node())
+              .collect();
+          }
+
           let has_inline = children
             .iter()
             .any(RenderNode::participates_in_inline_formatting_context);
