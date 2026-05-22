@@ -29,6 +29,7 @@
   },
   "files": [
     "dist",
+    "index.d.ts",
     "not-available.js"
   ],
   "type": "module",
