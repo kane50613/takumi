@@ -1,0 +1,168 @@
+---
+title: Video Frames
+description: Drive the renderer with a time axis and pipe raw frames into ffmpeg or ffplay.
+icon: Film
+---
+
+Animated WebP and GIF tap out around a few seconds at 30 fps before the file size gets uncomfortable. For longer clips, higher frame rates, or any output you'd want to embed in a video player, render raw frames and hand them to a real video encoder. Takumi gives you the frames; ffmpeg gives you the codec.
+
+## Raw frame loop
+
+Call `render` with `timeMs` in a loop, ask for `format: "raw"`, and you get back an RGBA byte buffer per frame. Pipe it anywhere that takes raw pixels — ffmpeg, ffplay, a Sharp/WASM encoder, your own muxer.
+
+```tsx twoslash
+// @noErrors
+import { render } from "takumi-js";
+
+const fps = 30;
+const durationSeconds = 4;
+const width = 1200;
+const height = 630;
+const totalFrames = fps * durationSeconds;
+
+for (let i = 0; i < totalFrames; i++) {
+  const frame = await render(<Scene />, {
+    width,
+    height,
+    format: "raw",
+    keyframes,
+    timeMs: (i / fps) * 1000,
+  });
+  // frame is a Uint8Array of width * height * 4 RGBA bytes.
+  consumer.write(frame);
+}
+```
+
+Two things to know:
+
+- The same renderer can run frames in parallel. Build an array of promises and await them in order before writing to the encoder; keeps all cores busy without reordering the stream.
+- `devicePixelRatio` works here. Render at `dpr: 1.5` or `2` and the output is sharp on high-DPI displays.
+
+## ffmpeg pipeline
+
+The full example lives at [`example/ffmpeg-keyframe-animation`](https://github.com/kane50613/takumi/tree/master/example/ffmpeg-keyframe-animation). Pared down:
+
+```tsx twoslash
+// @noErrors
+import { spawn } from "bun";
+import { render } from "takumi-js";
+import { Scene, keyframes } from "./Scene";
+
+const fps = 30;
+const width = 1200;
+const height = 630;
+const totalFrames = fps * 4;
+
+const ffmpeg = spawn(
+  [
+    "ffmpeg",
+    "-y",
+    "-f",
+    "rawvideo",
+    "-pixel_format",
+    "rgba",
+    "-video_size",
+    `${width}x${height}`,
+    "-framerate",
+    `${fps}`,
+    "-i",
+    "pipe:0",
+    "-vf",
+    "format=yuv420p10le",
+    "-c:v",
+    "libx265",
+    "-crf",
+    "16",
+    "-preset",
+    "medium",
+    "-tag:v",
+    "hvc1",
+    "output.mp4",
+  ],
+  { stdin: "pipe", stdout: "ignore", stderr: "ignore" },
+);
+
+const scene = <Scene />;
+const framePromises = Array.from({ length: totalFrames }, (_, i) =>
+  render(scene, {
+    width,
+    height,
+    format: "raw",
+    keyframes,
+    timeMs: (i / fps) * 1000,
+  }),
+);
+
+for (let i = 0; i < totalFrames; i++) {
+  const frame = await framePromises[i];
+  ffmpeg.stdin.write(frame);
+}
+
+ffmpeg.stdin.end();
+await ffmpeg.exited;
+```
+
+The flags worth knowing:
+
+- `-pixel_format rgba` matches Takumi's output. No conversion before encoding.
+- `-vf format=yuv420p10le` converts to a 10-bit yuv space ffmpeg's encoders prefer.
+- `-c:v libx265 -crf 16` produces a high-quality H.265 stream. `-c:v libx264 -crf 18` is the H.264 equivalent if you care about playback compatibility over file size.
+- `-tag:v hvc1` makes the resulting MP4 play in Safari and QuickTime.
+
+## ffplay live preview
+
+The same frame loop drives a live preview via `ffplay`. Useful for iterating on an animation without re-encoding on every change. Full example: [`example/ffplay`](https://github.com/kane50613/takumi/tree/master/example/ffplay).
+
+```tsx twoslash
+// @noErrors
+import { spawn } from "bun";
+import { Renderer } from "takumi-js/node";
+
+const fps = 60;
+const width = 960;
+const height = 540;
+
+const renderer = new Renderer();
+
+const ffplay = spawn(
+  [
+    "ffplay",
+    "-f",
+    "rawvideo",
+    "-pixel_format",
+    "rgba",
+    "-video_size",
+    `${width}x${height}`,
+    "-framerate",
+    `${fps}`,
+    "-fflags",
+    "nobuffer",
+    "-flags",
+    "low_delay",
+    "-framedrop",
+    "-i",
+    "pipe:0",
+  ],
+  { stdin: "pipe" },
+);
+
+let rendering = false;
+setInterval(async () => {
+  if (rendering) return; // skip frame if last one isn't done
+  rendering = true;
+  try {
+    const frame = await renderer.render(createFrame(Date.now()), {
+      width,
+      height,
+      format: "raw",
+    });
+    ffplay.stdin.write(frame);
+  } finally {
+    rendering = false;
+  }
+}, 1000 / fps);
+```
+
+`nobuffer`, `low_delay`, and `framedrop` together push ffplay into the lowest-latency mode it has. Without `framedrop`, a slow frame stalls the whole stream; with it, ffplay drops frames to stay synced.
+
+For frames that depend on outside state — a clock, a websocket message, mouse input — call `render` each tick and stream the result. Takumi has no opinion about the source of truth.

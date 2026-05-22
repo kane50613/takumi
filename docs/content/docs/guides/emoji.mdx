@@ -1,0 +1,77 @@
+---
+title: Emoji
+description: Render emoji via color fonts or per-glyph image extraction.
+icon: Smile
+---
+
+Two ways to put emoji in an image: load a color emoji font and let the shaper handle them like any other glyph, or extract emoji from the text and render each as its own image. Pick based on whether you care about consistent style across deployments.
+
+## Using a color emoji font
+
+Load the font once, reference it in the fallback chain, and you're done. The shaper picks up emoji glyphs from the fallback the same way it picks up Latin from Inter.
+
+```tsx
+import { Renderer } from "takumi-js/node";
+
+const renderer = new Renderer({
+  fonts: [interRegular, notoColorEmoji], // emoji as fallback
+});
+
+await renderer.render(<div tw="text-4xl">Hello 👋😁🌍</div>, { width: 600, height: 200 });
+```
+
+This is the lowest-overhead path. The whole file (typically ~1 MB for a COLR font) loads once and serves every emoji you'll ever need. The style is whatever font you picked — Noto, Twemoji-COLR, etc.
+
+## Image-per-emoji via extractEmojis
+
+When you want a specific provider's style — Twemoji's flat illustrations, Fluent's 3D, Blob's round faces — and you don't have a font for it, use `extractEmojis`. It walks the node tree, finds emoji code points, and replaces each with an `<img>` pointing at the provider's CDN.
+
+```tsx
+import { extractEmojis } from "takumi-js/helpers/emoji";
+import { fromJsx } from "takumi-js/helpers/jsx";
+import { extractResourceUrls, fetchResources } from "takumi-js/helpers";
+import { Renderer } from "takumi-js/node";
+
+let { node, stylesheets } = await fromJsx(
+  <div tw="flex items-center justify-center text-4xl">Hello 👋😁🌍</div>,
+);
+node = extractEmojis(node, "twemoji");
+
+const fetchedResources = await fetchResources(extractResourceUrls(node));
+const renderer = new Renderer();
+await renderer.render(node, { stylesheets, fetchedResources });
+```
+
+Six providers ship in `takumi-js/helpers/emoji`:
+
+| Provider     | Style                    |
+| ------------ | ------------------------ |
+| `twemoji`    | Twitter / flat vector    |
+| `blobmoji`   | Google blob, round       |
+| `noto`       | Noto Color Emoji         |
+| `openmoji`   | Open-source line-art     |
+| `fluent`     | Microsoft Fluent 3D      |
+| `fluentFlat` | Microsoft Fluent flat 2D |
+
+![Provider comparison](/guides/emoji-providers.webp)
+
+If you're shipping the `ImageResponse` API, the `emoji` option does the same thing in one line:
+
+```tsx
+new ImageResponse(<div>Hello 👋😁</div>, { emoji: "fluent" });
+```
+
+## Mixing
+
+The two strategies compose. Load a font for the common cases, then use `extractEmojis` selectively when you want a hero emoji to match a specific brand aesthetic.
+
+```tsx
+// Default emoji come from the loaded font.
+const renderer = new Renderer({ fonts: [interRegular, notoColorEmoji] });
+
+// One special component opts into Fluent.
+let { node } = await fromJsx(<HeroBanner emoji="🚀" />);
+node = extractEmojis(node, "fluent");
+```
+
+Image extraction wins whenever both apply — the `<img>` is the rendered glyph; the font fallback never sees that code point.

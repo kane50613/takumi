@@ -1,64 +1,162 @@
 ---
-title: Load Images
-description: Choose the right way to load images.
+title: Images & SVG
+description: Load raster and vector images into Takumi nodes.
 icon: Image
 ---
 
-## External Images
+<Banner variant="rainbow">
+  Moved from <code>/docs/load-images</code>.
+</Banner>
 
-By default, Takumi will fetch external images in `src` attributes and CSS properties like `background-image` and `mask-image`.
+Images get into Takumi through three paths: a URL the renderer fetches, a data URL embedded in the JSX, or raw bytes you load yourself. Pick based on where the source lives and how often you need it.
 
-If you want to add additional caching layer, you can pass `resourcesOptions.cache` to `render` function.
+## Image sources
+
+```tsx
+// 1. URL — renderer fetches before rendering.
+<img src="https://example.com/avatar.png" width={64} height={64} />;
+
+// 2. Data URL — bytes inline in the JSX, no network call.
+<img src="data:image/png;base64,iVBORw0KGgo..." width={64} height={64} />;
+
+// 3. Persistent store key — see "Persistent image store" below.
+<img src="my-logo" width={64} height={64} />;
+```
+
+Background images work the same way:
+
+```tsx
+<div style={{ backgroundImage: "url(https://example.com/hero.jpg)" }} />
+```
+
+## Fetching strategies
+
+For one-off renders the default behavior — Takumi fetches every `src` it sees — is fine. For production workloads you want to control when and how fetches happen.
+
+### Inline cache
+
+Pass a `Map` to `resourcesOptions.cache` and the renderer will check it before fetching. Cheapest way to avoid re-decoding the same URL across requests.
 
 ```tsx twoslash
 import { render } from "takumi-js";
 
-const element = <img src="https://example.com/image.png" />;
-
 const cache = new Map<string, ArrayBuffer>();
 
-const image = await render(element, {
-  resourcesOptions: {
-    cache,
-  },
+const image = await render(<img src="https://example.com/image.png" />, {
+  resourcesOptions: { cache },
 });
 ```
 
-## Persistent Images
+### Extract, fetch, render
 
-Preload frequently used images like logo, background, etc. to avoid redundant image decoding and improve performance.
+For multi-image scenes you can walk the node tree once, fetch every URL in parallel, and hand the byte map to the renderer.
 
-The image key can be used in any `src` field or `background-image`, `mask-image` CSS property.
+```tsx twoslash
+import { Renderer } from "takumi-js/node";
+import { fromJsx } from "takumi-js/helpers/jsx";
+import { extractResourceUrls, fetchResources } from "takumi-js/helpers";
+
+const renderer = new Renderer();
+const { node, stylesheets } = await fromJsx(<Gallery />);
+
+const urls = extractResourceUrls(node);
+const fetchedResources = await fetchResources(urls);
+
+const image = await renderer.render(node, { stylesheets, fetchedResources });
+
+function Gallery() {
+  return <div />;
+}
+```
+
+This is the path to take when you want to add retries, parallelism limits, or a CDN in front of the fetch.
+
+### Persistent store
+
+For assets that appear on every render — logos, backgrounds, brand fonts — preload them once and reference by a stable key. See [Persistent image store](#persistent-image-store) below.
+
+## SVG
+
+SVG is supported through [`resvg`](https://github.com/linebender/resvg). It rasterizes at render time, at the node's display size, so the output is sharp at any scale.
+
+Inline SVG works as a JSX child:
+
+```tsx
+<svg width="64" height="64" viewBox="0 0 24 24">
+  <circle cx="12" cy="12" r="10" fill="#6366f1" />
+</svg>
+```
+
+External SVG works through `<img>`:
+
+```tsx
+<img src="https://example.com/logo.svg" width={120} height={32} />
+```
+
+Supported subset: shapes, paths, transforms, gradients, masks, basic filters, embedded raster images, text using fonts the renderer already knows about. CSS animations and JS handlers are ignored — Takumi rasterizes a static frame.
+
+For SVG with text, register the font with the renderer (not inside the SVG with `@font-face`) so glyphs resolve through the same fallback chain as the rest of the scene.
+
+## object-fit and image-rendering
+
+`object-fit` controls how an image fills its box when the box's aspect ratio differs from the image's.
+
+| Value        | Behavior                                       |
+| ------------ | ---------------------------------------------- |
+| `fill`       | Stretch to fill the box. Default for `<img>`.  |
+| `contain`    | Scale to fit inside the box. Letterbox.        |
+| `cover`      | Scale to cover the box. Crops the overflow.    |
+| `none`       | No resize. Source-size pixels, clipped to box. |
+| `scale-down` | `none` or `contain`, whichever is smaller.     |
+
+```tsx
+<img src="/hero.jpg" width={1200} height={400} style={{ objectFit: "cover" }} />
+```
+
+`image-rendering` controls the resampling algorithm.
+
+| Value                       | Use for                                               |
+| --------------------------- | ----------------------------------------------------- |
+| `auto` / `smooth`           | Photos. High-quality bilinear/bicubic. Default.       |
+| `pixelated` / `crisp-edges` | Pixel art, QR codes, anything you don't want blurred. |
+
+## Persistent image store
+
+Assets that show up in every render shouldn't be re-fetched and re-decoded every time. The persistent image store keeps decoded buffers alive on the renderer; you reference them by a string key.
 
 ```tsx twoslash
 import { ImageResponse } from "takumi-js/response";
-import type { ImageSource } from "takumi-js";
 
 export function GET() {
   return new ImageResponse(<OgImage />, {
     // [!code ++]
     persistentImages: [
-      {
-        src: "my-logo",
-        data: () => fetch("/logo.png").then((res) => res.arrayBuffer()),
-      },
-      {
-        src: "background",
-        data: () => fetch("/background.png").then((res) => res.arrayBuffer()),
-      },
+      { src: "my-logo", data: () => fetch("/logo.png").then((res) => res.arrayBuffer()) },
+      { src: "background", data: () => fetch("/background.jpg").then((res) => res.arrayBuffer()) },
     ],
   });
 }
 
 function OgImage() {
   return (
-    <div
-      style={{
-        backgroundImage: "url(background)",
-      }}
-    >
+    <div style={{ backgroundImage: "url(background)" }}>
       <img src="my-logo" />
     </div>
   );
 }
 ```
+
+The same key works in `src` attributes and any `background-image`, `mask-image` CSS property.
+
+For long-running servers, build the renderer once and call `putPersistentImage` directly:
+
+```tsx
+const renderer = new Renderer({ fonts: [...] });
+await renderer.putPersistentImage("my-logo", await fetch("/logo.png").then(r => r.arrayBuffer()));
+```
+
+<Callout type="warn">
+  On Cloudflare Workers, every decoded image counts against the per-isolate memory budget (128 MB
+  for paid plans). Preload only what you know you'll reuse; reach for the inline cache for
+  per-request images.
+</Callout>
