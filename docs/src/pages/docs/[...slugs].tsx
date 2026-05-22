@@ -10,6 +10,8 @@ import type { PageProps } from "waku/router";
 import { unstable_notFound } from "waku/router/server";
 import { Accordion, Accordions } from "~/components/accordion";
 import { Mermaid } from "~/components/mdx/mermaid";
+import { NodeTree } from "~/components/mdx/node-tree";
+import { StyleProperty } from "~/components/mdx/style-property";
 import { TypeTable } from "~/components/type-table";
 import { Video } from "~/components/video";
 import { source } from "~/source";
@@ -36,6 +38,8 @@ const components = {
   Accordions,
   TypeTable,
   Video,
+  NodeTree,
+  StyleProperty,
 };
 
 export default function Page({ slugs = [] }: PageProps<"/docs/[...slugs]">) {
