@@ -3,19 +3,21 @@ title: TanStack Start
 description: Use Takumi to render your React components on the server.
 ---
 
+<Files>
+  <Folder name="src" defaultOpen>
+    <Folder name="routes" defaultOpen>
+      <File name="og-image.tsx" />
+    </Folder>
+  </Folder>
+  <File name="vite.config.ts" />
+  <File name="wrangler.toml" />
+</Files>
+
 <Steps>
-  <Step>
-    ### Install Takumi
-
-    ```npm
-    npm i takumi-js
-    ```
-
-  </Step>
   <Step>
     ### Create a server file route
 
-    TanStack Start lets you define HTTP handlers on a file route with `server.handlers`.
+    TanStack Start exposes HTTP handlers on a file route via `server.handlers`. Drop `ImageResponse` straight into the GET.
 
     ```tsx title="src/routes/og-image.tsx"
     import { createFileRoute } from "@tanstack/react-router";
@@ -58,9 +60,13 @@ description: Use Takumi to render your React components on the server.
 
   </Step>
   <Step>
-    ### Request the endpoint
+    ### Hit the route
 
-    Visit `/og-image?title=Hello&description=From%20TanStack%20Start` to generate an image.
+    Open `/og-image?title=Hello&description=World` and you have an image.
 
   </Step>
 </Steps>
+
+## Gotchas
+
+**Deploying to Cloudflare.** Add the `@cloudflare/vite-plugin` to `vite.config.ts` with `viteEnvironment: { name: "ssr" }`. Takumi's response entrypoint picks the WASM build automatically when the SSR target is Workers — no separate import.

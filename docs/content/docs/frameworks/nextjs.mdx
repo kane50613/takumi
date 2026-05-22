@@ -3,19 +3,21 @@ title: Next.js
 description: Use Takumi to render your React components on the server.
 ---
 
+<Files>
+  <Folder name="app" defaultOpen>
+    <Folder name="og" defaultOpen>
+      <File name="route.tsx" />
+      <File name="OgImage.tsx" />
+    </Folder>
+  </Folder>
+  <File name="next.config.ts" />
+</Files>
+
 <Steps>
   <Step>
-    ### Install Takumi
+    ### Mark Takumi core as a server-external package
 
-    ```npm
-    npm i takumi-js
-    ```
-
-  </Step>
-  <Step>
-    ### Mark Takumi core as a server external package
-
-    Add `@takumi-rs/core` to `serverExternalPackages` in your Next.js config.
+    Next.js bundles server code by default. The Rust binding is loaded via `require`, so it has to stay external.
 
     ```ts title="next.config.ts"
     import type { NextConfig } from "next";
@@ -29,13 +31,10 @@ description: Use Takumi to render your React components on the server.
 
   </Step>
   <Step>
-    ### Create an OG image component
+    ### Write the OG component
 
     ```tsx title="app/og/OgImage.tsx"
-    type OgImageProps = {
-      title: string;
-      description: string;
-    };
+    type OgImageProps = { title: string; description: string };
 
     export default function OgImage({ title, description }: OgImageProps) {
       return (
@@ -59,9 +58,7 @@ description: Use Takumi to render your React components on the server.
 
   </Step>
   <Step>
-    ### Return an image in an App Router route handler
-
-    Create a route handler, render the component, and return an `ImageResponse`.
+    ### Return it from a route handler
 
     ```tsx title="app/og/route.tsx"
     import { ImageResponse } from "takumi-js/response";
@@ -81,3 +78,13 @@ description: Use Takumi to render your React components on the server.
 
   </Step>
 </Steps>
+
+## Gotchas
+
+**`Cannot find native binding` on pnpm or yarn.** The `@takumi-rs/core` native binding has to be hoisted next to the package that requires it. Add a hoist pattern to `.npmrc` and reinstall:
+
+```text title=".npmrc"
+public-hoist-pattern[]=@takumi-rs/core-*
+```
+
+**Edge runtime.** Switch to `export const runtime = "edge"` in your route file. Takumi auto-selects the WASM build through the `takumi-js/response` entrypoint — no other config required.

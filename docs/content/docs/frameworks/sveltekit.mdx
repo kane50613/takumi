@@ -3,27 +3,33 @@ title: SvelteKit
 description: Use Takumi to render your Svelte components on the server.
 ---
 
+<Files>
+  <Folder name="src" defaultOpen>
+    <Folder name="lib">
+      <Folder name="components">
+        <File name="OgImage.svelte" />
+      </Folder>
+    </Folder>
+    <Folder name="routes" defaultOpen>
+      <Folder name="og-image" defaultOpen>
+        <File name="+server.ts" />
+      </Folder>
+    </Folder>
+    <File name="app.css" />
+  </Folder>
+</Files>
+
 <Steps>
   <Step>
-    ### Install Takumi
+    ### Write a component
 
-    ```npm
-    npm i takumi-js
-    ```
-
-  </Step>
-  <Step>
-    ### Make a Svelte component
-
-    If you want to write component styles in the same file, you must set the `css` option to `injected` in the component options.
+    Set `css="injected"` so component styles travel with the rendered HTML — Takumi reads CSS from the markup, not from external file imports the browser would resolve.
 
     ```svelte title="src/lib/components/OgImage.svelte"
     <script lang="ts">
       let { title, description } = $props();
-
     </script>
 
-    <!-- [!code highlight] -->
     <svelte:options css="injected" />
 
     <div
@@ -47,9 +53,9 @@ description: Use Takumi to render your Svelte components on the server.
 
   </Step>
   <Step>
-    ### Render the component on a server route
+    ### Render it from a `+server.ts`
 
-    Import the component and CSS file if Tailwind is used. Then, use `render` from `svelte/server` to render the component to HTML. Finally, return an `ImageResponse`.
+    `render` from `svelte/server` returns `{ head, body }` — concatenate them and pass to `ImageResponse`. Tailwind (or any other CSS) goes in via the `stylesheets` option.
 
     ```ts title="src/routes/og-image/+server.ts"
     import { render } from "svelte/server";
@@ -82,5 +88,10 @@ description: Use Takumi to render your Svelte components on the server.
     ```
 
   </Step>
-
 </Steps>
+
+## Gotchas
+
+**Component styles disappear in the rendered image.** SvelteKit's default scoping strips `<style>` blocks during server render. Use `<svelte:options css="injected" />` so the styles ship inline with the HTML Takumi reads.
+
+**Tailwind classes don't apply.** Pass your compiled stylesheet via `stylesheets`. The `?inline` Vite import is the simplest way — it gives you the CSS as a string at build time.
