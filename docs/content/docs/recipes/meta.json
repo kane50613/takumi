@@ -1,0 +1,16 @@
+{
+  "defaultOpen": false,
+  "icon": "Wrench",
+  "pages": [
+    "index",
+    "og-image",
+    "x-card",
+    "product-card",
+    "blog-card",
+    "github-preview",
+    "package-og",
+    "spinner",
+    "video",
+    "template-gallery"
+  ]
+}

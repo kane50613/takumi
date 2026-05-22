@@ -1,0 +1,18 @@
+{
+  "defaultOpen": true,
+  "icon": "FileCode2",
+  "pages": [
+    "index",
+    "core",
+    "response",
+    "node",
+    "wasm",
+    "helpers",
+    "helpers-jsx",
+    "helpers-emoji",
+    "nodes",
+    "style",
+    "output-formats",
+    "errors"
+  ]
+}

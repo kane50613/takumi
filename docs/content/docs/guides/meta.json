@@ -1,0 +1,17 @@
+{
+  "defaultOpen": true,
+  "icon": "BookOpen",
+  "pages": [
+    "layout",
+    "typography",
+    "styling",
+    "colors",
+    "effects",
+    "images",
+    "emoji",
+    "animations",
+    "video",
+    "measure",
+    "performance"
+  ]
+}
