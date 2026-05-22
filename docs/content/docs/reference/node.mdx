@@ -1,0 +1,83 @@
+---
+title: Node
+description: Native N-API renderer for Node.js, Bun, and Deno.
+---
+
+<Callout type="info">
+  `takumi-js/node` re-exports `@takumi-rs/core` — the native binding built per-platform via N-API.
+  It loads only on runtimes with native module support (Node.js, Bun, Deno). For Workers, Vite, or
+  the browser use [`takumi-js/wasm`](/docs/reference/wasm) instead.
+</Callout>
+
+The native renderer is the fastest path and the only one that supports `loadFontSync`, font fallback, animation pipelines, and persistent image preloading at full throughput. Use it directly when you want to manage one renderer across many requests instead of paying construction cost per call.
+
+## Classes
+
+### `Renderer`
+
+```tsx twoslash
+import { Renderer } from "takumi-js/node";
+import { container, text } from "takumi-js/helpers";
+
+const renderer = new Renderer({ loadDefaultFonts: true });
+renderer.loadFontSync(new Uint8Array());
+
+const png = await renderer.render(container({ children: [text("Hello")] }), {
+  width: 1200,
+  height: 630,
+  format: "png",
+});
+```
+
+Methods on the `Renderer` instance:
+
+| Method                                   | Returns                 | Purpose                                                            |
+| ---------------------------------------- | ----------------------- | ------------------------------------------------------------------ |
+| `loadFontSync(font)`                     | `void`                  | Block on font registration. Safe at startup, not inside a handler. |
+| `loadFont(font, signal?)`                | `Promise<number>`       | Register one font without blocking.                                |
+| `loadFonts(fonts, signal?)`              | `Promise<number>`       | Register many fonts concurrently.                                  |
+| `render(node, options?, signal?)`        | `Promise<Buffer>`       | Render a node tree to a static image buffer.                       |
+| `measure(node, options?, signal?)`       | `Promise<MeasuredNode>` | Run layout only. See the [Measure guide](/docs/guides/measure).    |
+| `renderAnimation(options, signal?)`      | `Promise<Buffer>`       | Sample a scene timeline at `fps` and encode WebP / APNG / GIF.     |
+| `encodeFrames(frames, options, signal?)` | `Promise<Buffer>`       | Encode a precomputed frame sequence (each frame has its own node). |
+| `putPersistentImage(source, signal?)`    | `Promise<void>`         | Add an image to the in-memory store referenced by `src` URL.       |
+| `clearImageStore()`                      | `void`                  | Drop every persistent image. Useful on memory-constrained hosts.   |
+
+## Options
+
+### `ConstructRendererOptions`
+
+<AutoTypeTable path="../../../../takumi-napi-core/index.d.ts" name="ConstructRendererOptions" />
+
+### `RenderOptions`
+
+<AutoTypeTable path="../../../../takumi-napi-core/index.d.ts" name="RenderOptions" />
+
+### `RenderAnimationOptions`
+
+<AutoTypeTable path="../../../../takumi-napi-core/index.d.ts" name="RenderAnimationOptions" />
+
+### `EncodeFramesOptions`
+
+<AutoTypeTable path="../../../../takumi-napi-core/index.d.ts" name="EncodeFramesOptions" />
+
+## Supporting types
+
+### `Font` / `FontDetails`
+
+<AutoTypeTable path="../../../../takumi-napi-core/index.d.ts" name="FontDetails" />
+
+`Font` is `FontDetails | Uint8Array | ArrayBuffer | Buffer`. Passing raw bytes works when the font file contains its own metadata.
+
+### `MeasuredNode`
+
+<AutoTypeTable path="../../../../takumi-napi-core/index.d.ts" name="MeasuredNode" />
+
+### `ImageSource`
+
+<AutoTypeTable path="../../../../takumi-napi-core/index.d.ts" name="ImageSource" />
+
+### `AnimationFrameSource` / `AnimationSceneSource`
+
+<AutoTypeTable path="../../../../takumi-napi-core/index.d.ts" name="AnimationFrameSource" />
+<AutoTypeTable path="../../../../takumi-napi-core/index.d.ts" name="AnimationSceneSource" />

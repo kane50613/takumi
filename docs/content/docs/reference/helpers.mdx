@@ -1,0 +1,107 @@
+---
+title: Helpers
+description: Node builders, unit helpers, color helper, and resource utilities.
+---
+
+`takumi-js/helpers` re-exports `@takumi-rs/helpers` — small functions for building node trees by hand, expressing units, and prefetching resources outside the renderer. Use them when you want a node tree without writing JSX, or when you're streaming many renders and want to control the fetch budget yourself.
+
+## Node builders
+
+Each builder returns the matching [node](/docs/reference/nodes) discriminant. Style and metadata fields stay optional.
+
+```tsx twoslash
+import { container, text, image, vw, percentage, rgba } from "takumi-js/helpers";
+
+const tree = container({
+  style: { width: vw(100), height: percentage(100), backgroundColor: rgba(0, 0, 0) },
+  children: [
+    text("Hello", { color: "white", fontSize: 96 }),
+    image({ src: "https://example.com/logo.png", width: 200, height: 200 }),
+  ],
+});
+```
+
+### `container`
+
+Returns a `ContainerNode`. Accepts every metadata field plus `children`.
+
+### `text`
+
+Two overloads: `text(string, style?)` for the common case, or `text({ text, style, tw, ... })` for full metadata.
+
+### `image`
+
+Requires `src` (URL, data URL, `Uint8Array`, or `ArrayBuffer`). `width` / `height` override intrinsic dimensions.
+
+## Unit helpers
+
+Type-safe wrappers that return CSS strings with the right suffix — useful inside type-checked style objects where `string` is too loose.
+
+| Helper          | Returns         | Use                          |
+| --------------- | --------------- | ---------------------------- |
+| `vw(n)`         | `` `${n}vw` ``  | Viewport width.              |
+| `vh(n)`         | `` `${n}vh` ``  | Viewport height.             |
+| `em(n)`         | `` `${n}em` ``  | Relative to local font size. |
+| `rem(n)`        | `` `${n}rem` `` | Relative to root font size.  |
+| `fr(n)`         | `` `${n}fr` ``  | Grid track fraction.         |
+| `percentage(n)` | `` `${n}%` ``   | Percentage of parent.        |
+
+## Color
+
+### `rgba`
+
+```tsx twoslash
+import { rgba } from "takumi-js/helpers";
+
+const semi = rgba(0, 0, 0, 0.5); // "rgb(0 0 0 / 0.5)"
+```
+
+Emits the modern space-separated `rgb()` syntax with the slash alpha. Pass any numeric channels; `a` defaults to `1`.
+
+## Resources
+
+### `extractResourceUrls`
+
+Walks a node tree and returns every external image URL found in `src`, `backgroundImage`, or `maskImage`. Use this when you want to prefetch outside the renderer to share a cache across requests.
+
+### `fetchResources`
+
+<AutoTypeTable path="../../../../takumi-helpers/src/utils.ts" name="FetchResourcesOptions" />
+
+```tsx twoslash
+import { extractResourceUrls, fetchResources } from "takumi-js/helpers";
+import { render } from "takumi-js";
+
+const node = {
+  type: "container" as const,
+  children: [{ type: "image" as const, src: "https://example.com/avatar.png" }],
+};
+const fetchedResources = await fetchResources(extractResourceUrls(node), { timeout: 3000 });
+await render(node, { width: 800, height: 200, fetchedResources });
+```
+
+Returns `Array<{ src: string; data: ArrayBuffer }>`. Deduplicates URLs, validates HTTP status, supports a custom `fetch` and an optional `cache` shaped like `Map<string, ArrayBuffer>`.
+
+## HTML
+
+### `fromHtml`
+
+```tsx twoslash
+import { fromHtml } from "@takumi-rs/helpers/html";
+
+const { node, stylesheets } = fromHtml("<div class='card'><h1>Hi</h1></div>");
+```
+
+Parses a static HTML string into a node tree plus the inline stylesheets that came with it. Pass `stylesheets` along to `render` or to the underlying `Renderer` to apply class-based styling.
+
+## Style identity
+
+### `style`
+
+```tsx twoslash
+import { style } from "takumi-js/helpers";
+
+const card = style({ display: "flex", padding: 24, borderRadius: 12 });
+```
+
+Identity function typed as `CSSProperties`. Use it for type-checking standalone style objects without committing them to a node.

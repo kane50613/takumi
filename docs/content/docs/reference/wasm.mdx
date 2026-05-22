@@ -1,0 +1,92 @@
+---
+title: WASM
+description: WebAssembly renderer for Cloudflare Workers, Vite, Next.js edge, and browsers.
+---
+
+<Callout type="info">
+  `takumi-js/wasm` re-exports `@takumi-rs/wasm` plus its `/auto` bundler-detecting variant. Use it
+  whenever the native binding can't load — Workers, edge runtimes, browser bundles, deno deploy.
+</Callout>
+
+The WASM build runs the same renderer as Node, just compiled to wasm32 and instantiated through the host's `WebAssembly` API. The only thing you have to do that the Node entrypoint hides is decide _how_ the `.wasm` bytes reach the runtime.
+
+## Initialization
+
+The WASM module has to be instantiated before the first `Renderer`. `takumi-js/wasm` re-exports both `init` (async) and `initSync` from `@takumi-rs/wasm`. The default export uses `@takumi-rs/wasm/auto`, which picks a bundler-specific strategy via package `exports` conditions.
+
+| Environment                             | Recommended import path        | Why                                                                    |
+| --------------------------------------- | ------------------------------ | ---------------------------------------------------------------------- |
+| Cloudflare Workers, Vite, generic edge  | `takumi-js/wasm`               | The `/auto` default re-export resolves to the correct bundler shim.    |
+| Next.js (edge runtime, `unwasm` plugin) | `@takumi-rs/wasm/next`         | Returns the `WebAssembly.Module` for `await init({ module_or_path })`. |
+| Node.js (force WASM, no native)         | `@takumi-rs/wasm/node`         | Loads the `.wasm` file from disk via `fs`.                             |
+| Bring your own bytes                    | `@takumi-rs/wasm` + `initSync` | Pass `BufferSource` or `WebAssembly.Module` directly.                  |
+
+```tsx twoslash
+// Vite / Cloudflare Workers / most edge runtimes
+import init, { Renderer } from "@takumi-rs/wasm";
+
+await init();
+const renderer = new Renderer();
+const png = renderer.render(
+  { type: "container", children: [{ type: "text" as const, text: "edge!" }] },
+  { width: 600, height: 200, format: "png" },
+);
+```
+
+```tsx twoslash
+// Bring your own module (e.g. compiled in at build time)
+import { initSync, Renderer } from "@takumi-rs/wasm";
+import wasmModule from "@takumi-rs/wasm/next";
+
+initSync({ module: wasmModule });
+const renderer = new Renderer();
+```
+
+The WASM `Renderer` API is **synchronous** — `render`, `measure`, `renderAnimation`, `encodeFrames` all return immediately. There's no separate worker thread, so a long render will block the event loop. Hoist the renderer outside your request handler so the cold-start cost is paid once per isolate.
+
+## Classes
+
+### `Renderer`
+
+<AutoTypeTable path="../../../../takumi-wasm/pkg/takumi_wasm.d.ts" name="Renderer" />
+
+The WASM build adds `renderAsDataUrl(node, options)` — convenient for inline browser previews; `raw` format is not supported. It does not have `loadFontSync` (use `loadFont`), does not split `loadFont` / `loadFonts` (call `loadFont` per file), and `putPersistentImage` is synchronous.
+
+## Options
+
+### `ConstructRendererOptions`
+
+<AutoTypeTable
+  path="../../../../takumi-wasm/pkg/takumi_wasm.d.ts"
+  name="ConstructRendererOptions"
+/>
+
+### `RenderOptions`
+
+<AutoTypeTable path="../../../../takumi-wasm/pkg/takumi_wasm.d.ts" name="RenderOptions" />
+
+### `RenderAnimationOptions`
+
+<AutoTypeTable path="../../../../takumi-wasm/pkg/takumi_wasm.d.ts" name="RenderAnimationOptions" />
+
+### `EncodeFramesOptions`
+
+<AutoTypeTable path="../../../../takumi-wasm/pkg/takumi_wasm.d.ts" name="EncodeFramesOptions" />
+
+## Supporting types
+
+### `Font` / `FontDetails`
+
+<AutoTypeTable path="../../../../takumi-wasm/pkg/takumi_wasm.d.ts" name="FontDetails" />
+
+### `ImageSource`
+
+<AutoTypeTable path="../../../../takumi-wasm/pkg/takumi_wasm.d.ts" name="ImageSource" />
+
+### `MeasuredNode`
+
+<AutoTypeTable path="../../../../takumi-wasm/pkg/takumi_wasm.d.ts" name="MeasuredNode" />
+
+### `InitInput` / `SyncInitInput`
+
+`InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module` for the async `init`. `SyncInitInput = BufferSource | WebAssembly.Module` for `initSync`. The `module_or_path` / `module` wrapper objects are the non-deprecated calling convention.

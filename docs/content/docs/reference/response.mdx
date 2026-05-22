@@ -1,0 +1,57 @@
+---
+title: Response
+description: Web Response subclass and factory for serving images from API routes.
+---
+
+`takumi-js/response` wraps `render()` in a `Response`-compatible object: stream the image directly back to the client, set headers once, drop into any handler that returns a `Response`. The class is a drop-in for `next/og`'s `ImageResponse`.
+
+## Classes
+
+### `ImageResponse`
+
+A `Response` subclass that begins rendering on construction and resolves through the `ready` promise.
+
+```tsx twoslash
+import { ImageResponse } from "takumi-js/response";
+
+export function GET() {
+  return new ImageResponse(
+    <div tw="flex h-full w-full items-center justify-center bg-white text-6xl">Hello</div>,
+    { width: 1200, height: 630 },
+  );
+}
+```
+
+## Functions
+
+### `createImageResponse`
+
+Returns a factory pre-bound to shared options — fonts, stylesheets, cache headers — so individual routes only supply per-request overrides.
+
+```tsx twoslash
+import { createImageResponse } from "takumi-js/response";
+
+const ogImage = createImageResponse({
+  width: 1200,
+  height: 630,
+  headers: { "Cache-Control": "public, max-age=31536000, immutable" },
+});
+
+export function GET() {
+  return ogImage(<div tw="flex h-full w-full bg-black text-white">OG</div>);
+}
+```
+
+## Options
+
+<AutoTypeTable path="../../../../takumi-js/src/response/index.ts" name="ImageResponseOptions" />
+
+## Result
+
+<AutoTypeTable path="../../../../takumi-js/src/response/index.ts" name="ImageResponseResult" />
+
+## Factory
+
+<AutoTypeTable path="../../../../takumi-js/src/response/index.ts" name="ImageResponseFactory" />
+
+`ImageResponseOptions` extends [`RenderOptions`](/docs/reference/core) and `ResponseInit`, plus `onError` for catching render failures without crashing the stream. The default `Content-Type` is derived from `format` (`png` → `image/png`, etc.).

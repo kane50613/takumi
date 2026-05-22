@@ -1,0 +1,49 @@
+---
+title: Helpers / JSX
+description: fromJsx — convert a React tree into Takumi nodes outside the renderer.
+---
+
+`takumi-js/helpers/jsx` exposes `fromJsx`, the same function `render()` calls internally. Import it directly when you want to inspect or cache the resulting node tree, or when you want to assemble nodes from multiple JSX islands before handing them to the renderer.
+
+## Functions
+
+### `fromJsx`
+
+```tsx twoslash
+import { fromJsx } from "takumi-js/helpers/jsx";
+import { render } from "takumi-js";
+
+const { node, stylesheets } = await fromJsx(
+  <div tw="flex items-center justify-center bg-black text-white">
+    <h1>Hello</h1>
+  </div>,
+);
+
+await render(node, { width: 800, height: 200, stylesheets });
+```
+
+Walks the React element tree and returns `{ node, stylesheets }`. Fragments, `memo`, and `forwardRef` are followed directly. Function components are invoked synchronously; if they throw the "invalid hook call" error (i.e. they use hooks or context), `fromJsx` falls back to `react-dom/server`'s `renderToStaticMarkup` and re-parses the result as HTML.
+
+The JSX you pass must therefore be serializable. Event handlers and refs are stripped. `<style>` children are collected into `stylesheets` rather than rendered as nodes.
+
+## Options
+
+<AutoTypeTable path="../../../../takumi-helpers/src/jsx/index.ts" name="FromJsxOptions" />
+
+## Result
+
+<AutoTypeTable path="../../../../takumi-helpers/src/jsx/index.ts" name="FromJsxResult" />
+
+## Style presets
+
+### `defaultStylePresets`
+
+A `Partial<Record<keyof JSX.IntrinsicElements, CSSProperties>>` mirroring Chromium's `html.css` user-agent stylesheet — `body` has `margin: 8`, `p` has block margins, headings have their `<hN>` font sizes, and so on. Pass `defaultStyles: false` to `fromJsx` to opt out entirely, or pass your own object to override.
+
+```tsx twoslash
+import { fromJsx, defaultStylePresets } from "takumi-js/helpers/jsx";
+
+await fromJsx(<p>no margins please</p>, {
+  defaultStyles: { ...defaultStylePresets, p: { display: "block" } },
+});
+```

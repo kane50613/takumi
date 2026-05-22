@@ -1,0 +1,33 @@
+---
+title: Core
+description: The runtime-detecting render() function and the types every other entrypoint inherits.
+---
+
+The root `takumi-js` import auto-detects your runtime (native binding on Node, WASM elsewhere), creates a shared `Renderer` on first call, and gives you one async function: `render()`. Reach for this unless you need to manage the renderer yourself.
+
+## Functions
+
+### `render`
+
+<AutoTypeTable path="../../../../takumi-js/src/render.ts" name="RenderOptions" />
+
+```tsx twoslash
+import { render } from "takumi-js";
+
+const png = await render(
+  <div tw="flex h-full w-full items-center justify-center bg-blue-500 text-6xl text-white">
+    Hello
+  </div>,
+  { width: 1200, height: 630 },
+);
+```
+
+## Re-exported types
+
+`takumi-js` re-exports the runtime-agnostic types so you don't need to import from `@takumi-rs/core`, `@takumi-rs/helpers`, or the WASM package directly.
+
+From `@takumi-rs/helpers`: `Node`, `ContainerNode`, `TextNode`, `ImageNode`, `NodeAttributes`, `NodeMetadata`, `ReactElementLike`, `FetchResourcesOptions`.
+
+From `@takumi-rs/core`: `Font`, `FontDetails`, `OutputFormat`, `AnimationOutputFormat`, `AnimationFrameSource`, `AnimationSceneSource`, `ConstructRendererOptions`, `DitheringAlgorithm`, `EncodeFramesOptions`, `ImageSource`, `Keyframes`, `KeyframesMap`, `KeyframesRuleList`, `MeasuredNode`, `MeasuredTextRun`, `RenderAnimationOptions`.
+
+See [Nodes](/docs/reference/nodes), [Output formats](/docs/reference/output-formats), and the per-runtime [Node](/docs/reference/node) / [WASM](/docs/reference/wasm) pages for usage.

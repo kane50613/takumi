@@ -1,0 +1,42 @@
+---
+title: Helpers / Emoji
+description: Replace emoji glyphs in a node tree with provider-hosted SVG images.
+---
+
+`takumi-js/helpers/emoji` solves the "emoji renders as a black square" problem without bundling a color emoji font. It walks a node tree, splits each emoji grapheme out of text runs, and swaps in an `<img>` pointing at one of six providers' CDN-hosted SVG.
+
+`render()` already calls this for you via the `emoji` option. Import `extractEmojis` directly only when you want to control the output tree — say, to swap providers per locale or to inspect what got extracted.
+
+## Functions
+
+### `extractEmojis`
+
+```tsx twoslash
+import { extractEmojis } from "takumi-js/helpers/emoji";
+
+const tree = { type: "text" as const, text: "Hello 👋 from Takumi 🎨" };
+const withEmoji = extractEmojis(tree, "twemoji");
+```
+
+Returns a new node tree. Text nodes containing emoji are replaced with containers holding alternating text and image children; non-emoji text is preserved verbatim. Image nodes get `style: { display: "inline-block", width: "1em", height: "1em", margin: "0 0.05em 0 0.1em", verticalAlign: "-0.1em" }` so they line up with surrounding text.
+
+Detection uses `\p{Extended_Pictographic}`, regional-indicator pairs, and keycap sequences. Multi-codepoint emoji (ZWJ sequences like 👨‍👩‍👧) are resolved through `Intl.Segmenter` when available.
+
+## Types
+
+### `EmojiType`
+
+```ts
+type EmojiType = "twemoji" | "blobmoji" | "noto" | "openmoji" | "fluent" | "fluentFlat";
+```
+
+| Provider     | Source                                     | Look                          |
+| ------------ | ------------------------------------------ | ----------------------------- |
+| `twemoji`    | jdecked/twemoji 17.0.2 (X / Discord style) | Default. Flat, vector-clean.  |
+| `noto`       | googlefonts/noto-emoji (Android)           | Soft, rounded.                |
+| `openmoji`   | hfg-gmuend/openmoji                        | Geometric, branding-friendly. |
+| `blobmoji`   | C1710/blobmoji                             | Old Android blob style.       |
+| `fluent`     | microsoft/fluentui-emoji color             | Polished, gradient-heavy.     |
+| `fluentFlat` | microsoft/fluentui-emoji flat              | Same shapes, flat fills.      |
+
+All providers serve `.svg` from jsDelivr. See the [Emoji guide](/docs/guides/emoji) for side-by-side renders.
