@@ -1,0 +1,45 @@
+{
+  "redirects": [
+    { "source": "/docs/integration", "destination": "/docs/frameworks", "permanent": true },
+    {
+      "source": "/docs/integration/nextjs",
+      "destination": "/docs/frameworks/nextjs",
+      "permanent": true
+    },
+    {
+      "source": "/docs/integration/nuxt",
+      "destination": "/docs/frameworks/nuxt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/integration/sveltekit",
+      "destination": "/docs/frameworks/sveltekit",
+      "permanent": true
+    },
+    {
+      "source": "/docs/integration/tanstack-start",
+      "destination": "/docs/frameworks/tanstack-start",
+      "permanent": true
+    },
+    { "source": "/docs/layout-engine", "destination": "/docs/guides/layout", "permanent": true },
+    {
+      "source": "/docs/typography-and-fonts",
+      "destination": "/docs/guides/typography",
+      "permanent": true
+    },
+    { "source": "/docs/tailwind-css", "destination": "/docs/guides/styling", "permanent": true },
+    { "source": "/docs/load-images", "destination": "/docs/guides/images", "permanent": true },
+    {
+      "source": "/docs/keyframe-animation",
+      "destination": "/docs/guides/animations",
+      "permanent": true
+    },
+    { "source": "/docs/measure-api", "destination": "/docs/guides/measure", "permanent": true },
+    {
+      "source": "/docs/performance-and-optimization",
+      "destination": "/docs/guides/performance",
+      "permanent": true
+    },
+    { "source": "/docs/templates", "destination": "/docs/recipes", "permanent": true }
+  ]
+}
