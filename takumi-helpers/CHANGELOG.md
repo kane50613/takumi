@@ -1,5 +1,11 @@
 # @takumi-rs/helpers
 
+## 1.4.0
+
+### Patch Changes
+
+- e83ab19: Fix `<pre>` default preset omitting `white-space: pre`
+
 ## 1.3.0
 
 ## 1.2.1

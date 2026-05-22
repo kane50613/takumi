@@ -1,5 +1,18 @@
 # takumi
 
+## 1.4.0
+
+### Minor Changes
+
+- a607651: Support `:is()` / `:where()` and stop dropping rules that contain unsupported pseudo-classes/elements
+- 15fdabb: Support `lh` and `rlh` CSS length units
+
+### Patch Changes
+
+- dc04e09: Drop whitespace-only text nodes in block containers #711
+- 26f1276: Fixes `var()` function detection #712
+- dc31096: **Fix `object-position` is not inherited**
+
 ## 1.3.0
 
 ### Minor Changes
