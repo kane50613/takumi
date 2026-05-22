@@ -1,6 +1,7 @@
 import { getPageTreePeers, type Root as PageTreeRoot } from "fumadocs-core/page-tree";
 import * as Twoslash from "fumadocs-twoslash/ui";
 import { Card, Cards } from "fumadocs-ui/components/card";
+import { File, Files, Folder } from "fumadocs-ui/components/files";
 import { Step, Steps } from "fumadocs-ui/components/steps";
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 import defaultMdxComponents, { createRelativeLink } from "fumadocs-ui/mdx";
@@ -34,6 +35,9 @@ const components = {
   DocsCategory,
   Tabs,
   Tab,
+  Files,
+  File,
+  Folder,
   Accordion,
   Accordions,
   TypeTable,
