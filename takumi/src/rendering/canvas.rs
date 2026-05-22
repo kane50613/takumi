@@ -4,6 +4,7 @@
 //! fast image blending and pixel manipulation operations.
 
 mod buffer_pool;
+mod composite;
 mod mask;
 mod paint_source;
 
@@ -21,7 +22,8 @@ use tiny_skia::{
   SpreadMode as TinySpreadMode, Transform as TinyTransform,
 };
 
-use self::paint_source::{MaskCompositeColor, apply_mask_color_mode, sample_paint_source};
+use self::composite::sampling_footprint;
+use self::paint_source::{MaskCompositeColor, sample_paint_source};
 use crate::rendering::blend::*;
 use crate::rendering::stacking_context::blend_pixmap_software;
 use crate::{
@@ -68,15 +70,6 @@ pub(crate) struct MaskSourceToPixmapOptions<'a> {
   pub sampling: MaskSamplingOptions,
   pub mode: BlendMode,
   pub combined_mask: Option<MaskView<'a>>,
-}
-
-#[derive(Clone, Copy)]
-struct MaskCompositeOptions<'a> {
-  placement: Placement,
-  sampling: MaskSamplingOptions,
-  color_mode: MaskCompositeColor,
-  mode: BlendMode,
-  combined_mask: Option<MaskView<'a>>,
 }
 
 #[derive(Clone, Copy)]
@@ -127,6 +120,50 @@ impl<'a> MaskView<'a> {
     }
 
     self.mask.data()[mask_index_from_coord(local_x as u32, local_y as u32, self.mask.width())]
+  }
+
+  #[inline]
+  pub(crate) fn row(&self, canvas_y: i32, canvas_x_start: i32) -> MaskRow<'a> {
+    let local_y = canvas_y + self.canvas_origin.y as i32 - self.origin.y as i32;
+    let mask_width = self.mask.width() as i32;
+    let mask_height = self.mask.height() as i32;
+    if local_y < 0 || local_y >= mask_height {
+      return MaskRow::EMPTY;
+    }
+    let local_x_start = canvas_x_start + self.canvas_origin.x as i32 - self.origin.x as i32;
+    let row_offset = local_y as usize * self.mask.width() as usize;
+    MaskRow {
+      data: self.mask.data(),
+      row_offset,
+      local_x_start,
+      mask_width,
+    }
+  }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct MaskRow<'a> {
+  data: &'a [u8],
+  row_offset: usize,
+  local_x_start: i32,
+  mask_width: i32,
+}
+
+impl<'a> MaskRow<'a> {
+  const EMPTY: Self = Self {
+    data: &[],
+    row_offset: 0,
+    local_x_start: 0,
+    mask_width: 0,
+  };
+
+  #[inline]
+  pub(crate) fn alpha_at_offset(&self, offset: usize) -> u8 {
+    let local_x = self.local_x_start + offset as i32;
+    if local_x < 0 || local_x >= self.mask_width {
+      return 0;
+    }
+    self.data[self.row_offset + local_x as usize]
   }
 }
 
@@ -268,6 +305,10 @@ impl Canvas {
     self.recycle_offscreen_image(isolated_image);
   }
 
+  pub(crate) fn has_no_constraint_mask(&self) -> bool {
+    self.constraint_mask_stack.iter().all(Option::is_none)
+  }
+
   pub(crate) fn push_mask(&mut self, mask: TinyMask) {
     self.constraint_mask_stack.push(
       self
@@ -342,11 +383,11 @@ impl Canvas {
     let placement = self.localize_placement(placement);
     let sampling = self.localize_mask_sampling(sampling);
     self.with_overlay_state(|pixmap, combined_mask, _| {
-      composite_masked_source(
+      composite::source(
         pixmap,
         mask,
         source,
-        MaskCompositeOptions {
+        composite::Options {
           placement,
           sampling,
           color_mode: MaskCompositeColor::SourceOnly,
@@ -368,11 +409,11 @@ impl Canvas {
     let placement = self.localize_placement(placement);
     let sampling = self.localize_mask_sampling(sampling);
     self.with_overlay_state(|pixmap, combined_mask, _| {
-      composite_masked_source(
+      composite::source(
         pixmap,
         mask,
         source,
-        MaskCompositeOptions {
+        composite::Options {
           placement,
           sampling,
           color_mode: MaskCompositeColor::SourceOverColor(premultiply_rgba(color.into())),
@@ -394,11 +435,11 @@ impl Canvas {
     let placement = self.localize_placement(placement);
     let sampling = self.localize_mask_sampling(sampling);
     self.with_overlay_state(|pixmap, combined_mask, _| {
-      composite_masked_source(
+      composite::source(
         pixmap,
         mask,
         source,
-        MaskCompositeOptions {
+        composite::Options {
           placement,
           sampling,
           color_mode: MaskCompositeColor::ColorOverSource(premultiply_rgba(color.into())),
@@ -538,25 +579,40 @@ impl Canvas {
 
   fn build_constraint_mask(&self, mask: &TinyMask) -> Option<TinyMask> {
     let mut combined = TinyMask::new(mask.width(), mask.height())?;
-    if let Some(previous) = self.constraint_mask_stack.last().and_then(Option::as_ref) {
-      let previous = MaskView {
-        mask: previous.mask.as_ref(),
-        origin: previous.origin,
-        canvas_origin: self.origin,
-      };
-      let mask_data = mask.data();
-      let mask_width = mask.width();
-      let combined_data = combined.data_mut();
-      for y in 0..mask.height() {
-        let row_start = y as usize * mask_width as usize;
-        for x in 0..mask.width() {
-          let left = previous.alpha_at(x, y);
-          let right = mask_data[row_start + x as usize];
-          combined_data[row_start + x as usize] = ((left as u16 * right as u16 + 128) >> 8) as u8;
-        }
-      }
-    } else {
+    let Some(previous) = self.constraint_mask_stack.last().and_then(Option::as_ref) else {
       combined.data_mut().copy_from_slice(mask.data());
+      return Some(combined);
+    };
+
+    let previous = MaskView {
+      mask: previous.mask.as_ref(),
+      origin: previous.origin,
+      canvas_origin: self.origin,
+    };
+    let mask_data = mask.data();
+    let mask_width = mask.width();
+    let combined_data = combined.data_mut();
+    for y in 0..mask.height() {
+      let row = previous.row(y as i32, 0);
+      let row_start = y as usize * mask_width as usize;
+      let dst = &mut combined_data[row_start..row_start + mask_width as usize];
+      let new_row = &mask_data[row_start..row_start + mask_width as usize];
+      for (x, (out, &right)) in dst.iter_mut().zip(new_row).enumerate() {
+        if right == 0 {
+          continue;
+        }
+        let left = row.alpha_at_offset(x);
+        if left == 0 {
+          continue;
+        }
+        *out = if left == u8::MAX {
+          right
+        } else if right == u8::MAX {
+          left
+        } else {
+          ((left as u16 * right as u16 + 128) >> 8) as u8
+        };
+      }
     }
     Some(combined)
   }
@@ -709,14 +765,6 @@ fn compute_overlay_bounds_for_canvas(
   Some((
     offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max,
   ))
-}
-
-#[inline(always)]
-fn sampling_footprint(transform: Affine) -> SamplingFootprint {
-  SamplingFootprint::new(
-    transform.a.hypot(transform.b),
-    transform.c.hypot(transform.d),
-  )
 }
 
 fn blit_sampled_paint_source_translation(
@@ -975,195 +1023,17 @@ fn blit_solid_translation(
   }
 }
 
-fn composite_masked_constant(
-  pixmap: &mut PixmapMut<'_>,
-  mask: &[u8],
-  placement: Placement,
-  color: [u8; 4],
-  mode: BlendMode,
-  combined_mask: Option<MaskView<'_>>,
-) {
-  if color[3] == 0 {
-    return;
-  }
-
-  let canvas_width = pixmap.width();
-  let canvas_height = pixmap.height();
-  let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
-    compute_overlay_bounds_for_canvas(
-      canvas_width,
-      canvas_height,
-      Point {
-        x: placement.left as f32,
-        y: placement.top as f32,
-      },
-      placement.width,
-      placement.height,
-    )
-  else {
-    return;
-  };
-
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-  if mode == BlendMode::Normal && combined_mask.is_none() {
-    for dest_y in dest_y_min..dest_y_max {
-      let mask_y = (dest_y - offset_y) as u32;
-      let dst_row = dest_y as usize * canvas_width as usize;
-      let mask_row = mask_y as usize * placement.width as usize;
-      let start_x = dest_x_min as usize;
-      let end_x = dest_x_max as usize;
-      let start_m = (dest_x_min - offset_x) as usize;
-      let end_m = (dest_x_max - offset_x) as usize;
-
-      let dst_slice = &mut pixels[dst_row + start_x..dst_row + end_x];
-      let mask_slice = &mask[mask_row + start_m..mask_row + end_m];
-      for (dst, &alpha) in dst_slice.iter_mut().zip(mask_slice) {
-        if alpha != 0 {
-          let src = scale_premultiplied_pixel(color, alpha);
-          if src[3] != 0 {
-            composite_premultiplied_over(dst, src);
-          }
-        }
-      }
-    }
-    return;
-  }
-
-  for dest_y in dest_y_min..dest_y_max {
-    let mask_y = (dest_y - offset_y) as u32;
-    let dst_row = dest_y as usize * canvas_width as usize;
-    let mask_row = mask_y as usize * placement.width as usize;
-    for dest_x in dest_x_min..dest_x_max {
-      let mask_x = (dest_x - offset_x) as usize;
-      let mask_alpha = mask[mask_row + mask_x];
-      if mask_alpha == 0 {
-        continue;
-      }
-      let mut src = scale_premultiplied_pixel(color, mask_alpha);
-      if src[3] == 0 {
-        continue;
-      }
-
-      let dest_x = dest_x as u32;
-      if let Some(mask) = combined_mask {
-        let alpha = mask.alpha_at(dest_x, dest_y as u32);
-        if alpha == 0 {
-          continue;
-        }
-        src = scale_premultiplied_pixel(src, alpha);
-        if src[3] == 0 {
-          continue;
-        }
-      }
-
-      blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
-    }
-  }
-}
-fn composite_masked_source(
-  pixmap: &mut PixmapMut<'_>,
-  mask: &[u8],
-  source: PaintSource<'_>,
-  options: MaskCompositeOptions<'_>,
-) {
-  if mask.is_empty() {
-    return;
-  }
-
-  if let Some(color) = source.premultiplied_constant() {
-    composite_masked_constant(
-      pixmap,
-      mask,
-      options.placement,
-      apply_mask_color_mode(color, options.color_mode),
-      options.mode,
-      options.combined_mask,
-    );
-    return;
-  }
-
-  let canvas_width = pixmap.width();
-  let canvas_height = pixmap.height();
-  let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
-    compute_overlay_bounds_for_canvas(
-      canvas_width,
-      canvas_height,
-      Point {
-        x: options.placement.left as f32,
-        y: options.placement.top as f32,
-      },
-      options.placement.width,
-      options.placement.height,
-    )
-  else {
-    return;
-  };
-
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-  let footprint = sampling_footprint(options.sampling.canvas_to_source);
-  for dest_y in dest_y_min..dest_y_max {
-    let mask_y = (dest_y - offset_y) as u32;
-    let dst_row = dest_y as usize * canvas_width as usize;
-    let mask_row = mask_y as usize * options.placement.width as usize;
-    let mut sample_point = options.sampling.canvas_to_source.transform_point(Point {
-      x: dest_x_min as f32 + options.sampling.sample_bias.x,
-      y: dest_y as f32 + options.sampling.sample_bias.y,
-    });
-    for dest_x in dest_x_min..dest_x_max {
-      let mask_x = (dest_x - offset_x) as usize;
-      let mask_alpha = mask[mask_row + mask_x];
-      let sampled = if mask_alpha == 0 {
-        None
-      } else {
-        sample_paint_source(
-          source,
-          options.sampling.algorithm,
-          sample_point.x,
-          sample_point.y,
-          footprint,
-        )
-      };
-      sample_point.x += options.sampling.canvas_to_source.a;
-      sample_point.y += options.sampling.canvas_to_source.b;
-
-      let Some(mut src) = sampled else {
-        continue;
-      };
-
-      src = apply_mask_color_mode(src, options.color_mode);
-
-      src = scale_premultiplied_pixel(src, mask_alpha);
-      if src[3] == 0 {
-        continue;
-      }
-
-      let dest_x = dest_x as u32;
-      if let Some(mask) = options.combined_mask {
-        let alpha = mask.alpha_at(dest_x, dest_y as u32);
-        if alpha == 0 {
-          continue;
-        }
-        src = scale_premultiplied_pixel(src, alpha);
-        if src[3] == 0 {
-          continue;
-        }
-      }
-
-      blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, options.mode);
-    }
-  }
-}
 pub(crate) fn composite_mask_source_to_pixmap(
   pixmap: &mut PixmapMut<'_>,
   mask: &[u8],
   source: PaintSource<'_>,
   options: MaskSourceToPixmapOptions<'_>,
 ) {
-  composite_masked_source(
+  composite::source(
     pixmap,
     mask,
     source,
-    MaskCompositeOptions {
+    composite::Options {
       placement: options.placement,
       sampling: options.sampling,
       color_mode: MaskCompositeColor::SourceOnly,
@@ -1190,7 +1060,7 @@ pub(crate) fn draw_mask(
     placement.width as usize * placement.height as usize,
   );
 
-  composite_masked_constant(
+  composite::constant(
     pixmap,
     mask,
     placement,
@@ -1398,11 +1268,11 @@ pub(crate) fn overlay_image<'a, I: Into<PaintSource<'a>>>(
   let (mask, placement) = render_mask(&paths, Some(options.transform), None, buffer_pool);
   let inverse = options.transform.invert();
   if options.transform.is_identity() && placement.left >= 0 && placement.top >= 0 {
-    composite_masked_source(
+    composite::source(
       pixmap,
       &mask,
       image,
-      MaskCompositeOptions {
+      composite::Options {
         placement,
         sampling: MaskSamplingOptions {
           canvas_to_source: Affine::IDENTITY,
@@ -1415,11 +1285,11 @@ pub(crate) fn overlay_image<'a, I: Into<PaintSource<'a>>>(
       },
     );
   } else if let Some(inverse) = inverse {
-    composite_masked_source(
+    composite::source(
       pixmap,
       &mask,
       image,
-      MaskCompositeOptions {
+      composite::Options {
         placement,
         sampling: MaskSamplingOptions {
           canvas_to_source: inverse,
@@ -1483,11 +1353,11 @@ fn overlay_sampled_paint_source(
 
   let inverse = options.transform.invert();
   if options.transform.is_identity() && placement.left >= 0 && placement.top >= 0 {
-    composite_masked_source(
+    composite::source(
       pixmap,
       &mask,
       source,
-      MaskCompositeOptions {
+      composite::Options {
         placement,
         sampling: MaskSamplingOptions {
           canvas_to_source: sampling.logical_to_source,
@@ -1501,11 +1371,11 @@ fn overlay_sampled_paint_source(
     );
   } else if let Some(inverse) = inverse {
     let combined_inverse = sampling.logical_to_source * inverse;
-    composite_masked_source(
+    composite::source(
       pixmap,
       &mask,
       source,
-      MaskCompositeOptions {
+      composite::Options {
         placement,
         sampling: MaskSamplingOptions {
           canvas_to_source: combined_inverse,

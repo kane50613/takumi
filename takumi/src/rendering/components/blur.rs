@@ -113,8 +113,8 @@ pub(crate) fn apply_blur(
       let temp_data = &mut *temp_image;
 
       for _ in 0..3 {
-        box_blur_h::<1>(data, temp_data, pass_params);
-        box_blur_v(temp_data, data, pass_params, &mut col_sums);
+        box_blur_h_alpha(data, temp_data, pass_params);
+        box_blur_v_alpha(temp_data, data, pass_params, &mut col_sums);
       }
 
       pool.release(temp_image);
@@ -174,9 +174,11 @@ fn apply_blur_rgba_bytes_internal(
   let mut col_sums = pool.acquire_u32(pass_params.stride);
 
   let mut temp = pool.acquire_dirty(expected);
+  let src_pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(data);
+  let temp_pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(&mut temp);
   for _ in 0..3 {
-    box_blur_h::<4>(data, &mut temp, pass_params);
-    box_blur_v(&temp, data, pass_params, &mut col_sums);
+    box_blur_h_rgba(src_pixels, temp_pixels, pass_params);
+    box_blur_v_rgba(temp_pixels, src_pixels, pass_params, &mut col_sums);
   }
   pool.release(temp);
   pool.release_u32(col_sums);
@@ -374,209 +376,249 @@ fn bilinear_axis_positions(dst_len: u32, src_len: u32, scale: u32) -> Vec<Biline
     .collect()
 }
 
-macro_rules! update_h_pixel {
-  ($src:expr, $dst:expr, $sum:expr, $out:expr, $entering:expr, $leaving:expr, $mul:expr, $shift:expr) => {
-    if $sum[STRIDE - 1] == 0 && $src[$entering + STRIDE - 1] == 0 {
-      for c in 0..STRIDE {
-        $dst[$out + c] = 0;
-        let entering = $src[$entering + c] as u32;
-        let leaving = $src[$leaving + c] as u32;
-        $sum[c] = $sum[c].saturating_add(entering).saturating_sub(leaving);
-      }
-    } else {
-      for c in 0..STRIDE {
-        $dst[$out + c] = (($sum[c] * $mul) >> $shift) as u8;
-        let entering = $src[$entering + c] as u32;
-        let leaving = $src[$leaving + c] as u32;
-        $sum[c] = $sum[c].saturating_add(entering).saturating_sub(leaving);
-      }
-    }
-  };
+#[inline(always)]
+fn pack_pixel(sum: [u32; 4], mul: u32, shift: i32) -> [u8; 4] {
+  [
+    ((sum[0] * mul) >> shift) as u8,
+    ((sum[1] * mul) >> shift) as u8,
+    ((sum[2] * mul) >> shift) as u8,
+    ((sum[3] * mul) >> shift) as u8,
+  ]
 }
 
-/// Horizontal Box Blur Pass
-// Kept as a range loop for forced unrolling and to avoid iterator overhead
-#[allow(clippy::needless_range_loop)]
-fn box_blur_h<const STRIDE: usize>(src: &[u8], dst: &mut [u8], params: BlurPassParams) {
+#[inline(always)]
+fn slide_pixel(sum: [u32; 4], entering: [u8; 4], leaving: [u8; 4]) -> [u32; 4] {
+  [
+    sum[0] + entering[0] as u32 - leaving[0] as u32,
+    sum[1] + entering[1] as u32 - leaving[1] as u32,
+    sum[2] + entering[2] as u32 - leaving[2] as u32,
+    sum[3] + entering[3] as u32 - leaving[3] as u32,
+  ]
+}
+
+#[inline(always)]
+fn scale_pixel(p: [u8; 4], k: u32) -> [u32; 4] {
+  [
+    p[0] as u32 * k,
+    p[1] as u32 * k,
+    p[2] as u32 * k,
+    p[3] as u32 * k,
+  ]
+}
+
+#[inline(always)]
+fn widen_pixel(p: [u8; 4]) -> [u32; 4] {
+  [p[0] as u32, p[1] as u32, p[2] as u32, p[3] as u32]
+}
+
+#[inline(always)]
+fn add_pixel(a: [u32; 4], b: [u32; 4]) -> [u32; 4] {
+  [a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3]]
+}
+
+fn box_blur_h_rgba(src: &[[u8; 4]], dst: &mut [[u8; 4]], params: BlurPassParams) {
   let radius = params.radius as usize;
   let width = params.width as usize;
-  let multiplier = params.mul_val;
+  let height = params.height as usize;
+  let mul = params.mul_val;
   let shift = params.shg;
-  let stride = params.stride;
+  let k = radius as u32 + 1;
 
-  assert!(src.len() >= params.height as usize * stride);
-  assert!(dst.len() >= params.height as usize * stride);
+  for y in 0..height {
+    let row_start = y * width;
+    let src_row = &src[row_start..row_start + width];
+    let dst_row = &mut dst[row_start..row_start + width];
 
-  for y in 0..params.height as usize {
-    let line_offset = y * stride;
-    let mut sum = [0u32; STRIDE];
-
-    let first_px = line_offset;
-    for c in 0..STRIDE {
-      sum[c] = src[first_px + c] as u32 * (radius as u32 + 1);
-    }
-
+    let first = src_row[0];
+    let mut sum = scale_pixel(first, k);
     for dx in 1..=radius {
       let px = dx.min(width - 1);
-      let src_offset = line_offset + px * STRIDE;
-      for c in 0..STRIDE {
-        sum[c] += src[src_offset + c] as u32;
-      }
+      sum = add_pixel(sum, widen_pixel(src_row[px]));
     }
 
     let left_end = (radius + 1).min(width);
     for x in 0..left_end {
-      let out_offset = line_offset + x * STRIDE;
-      let entering_x = (x + radius + 1).min(width - 1);
-      let entering_offset = line_offset + entering_x * STRIDE;
-      update_h_pixel!(
-        src,
-        dst,
-        sum,
-        out_offset,
-        entering_offset,
-        first_px,
-        multiplier,
-        shift
-      );
+      let entering = src_row[(x + radius + 1).min(width - 1)];
+      dst_row[x] = pack_pixel(sum, mul, shift);
+      sum = slide_pixel(sum, entering, first);
     }
 
     let middle_end = width.saturating_sub(radius + 1).max(left_end);
     for x in left_end..middle_end {
-      let out_offset = line_offset + x * STRIDE;
-      let leaving_offset = line_offset + (x - radius) * STRIDE;
-      let entering_offset = line_offset + (x + radius + 1) * STRIDE;
-      update_h_pixel!(
-        src,
-        dst,
-        sum,
-        out_offset,
-        entering_offset,
-        leaving_offset,
-        multiplier,
-        shift
-      );
+      let entering = src_row[x + radius + 1];
+      let leaving = src_row[x - radius];
+      dst_row[x] = pack_pixel(sum, mul, shift);
+      sum = slide_pixel(sum, entering, leaving);
     }
 
-    let last_px = line_offset + (width - 1) * STRIDE;
+    let last = src_row[width - 1];
     for x in middle_end..width {
-      let out_offset = line_offset + x * STRIDE;
-      let leaving_offset = line_offset + (x - radius) * STRIDE;
-      update_h_pixel!(
-        src,
-        dst,
-        sum,
-        out_offset,
-        last_px,
-        leaving_offset,
-        multiplier,
-        shift
-      );
+      let leaving = src_row[x - radius];
+      dst_row[x] = pack_pixel(sum, mul, shift);
+      sum = slide_pixel(sum, last, leaving);
     }
   }
 }
 
-macro_rules! update_v_pixel {
-  ($src:expr, $dst:expr, $sums:expr, $x:expr, $out:expr, $entering:expr, $leaving:expr, $mul:expr, $shift:expr) => {
-    let sum = $sums[$x];
-    let entering = $src[$entering + $x] as u32;
-    let leaving = $src[$leaving + $x] as u32;
-    if sum == 0 && entering == 0 {
-      $dst[$out + $x] = 0;
-      $sums[$x] = sum.saturating_add(entering).saturating_sub(leaving);
-    } else {
-      $dst[$out + $x] = ((sum * $mul) >> $shift) as u8;
-      $sums[$x] = sum.saturating_add(entering).saturating_sub(leaving);
-    }
-  };
-}
-
-/// Vertical Box Blur Pass
-// Kept as a range loop for forced unrolling and to avoid iterator overhead in WASM
-#[allow(clippy::needless_range_loop)]
-fn box_blur_v(src: &[u8], dst: &mut [u8], params: BlurPassParams, sums: &mut [u32]) {
+fn box_blur_v_rgba(
+  src: &[[u8; 4]],
+  dst: &mut [[u8; 4]],
+  params: BlurPassParams,
+  sum_bytes: &mut [u32],
+) {
   let radius = params.radius as usize;
+  let width = params.width as usize;
   let height = params.height as usize;
-  let multiplier = params.mul_val;
+  let mul = params.mul_val;
   let shift = params.shg;
-  let stride = params.stride;
+  let k = radius as u32 + 1;
 
-  assert!(src.len() >= params.height as usize * stride);
-  assert!(dst.len() >= params.height as usize * stride);
+  let sums: &mut [[u32; 4]] = bytemuck::cast_slice_mut(sum_bytes);
+  let sums = &mut sums[..width];
 
-  // Initialize sums with the first row repeated
-  for x in 0..stride {
-    sums[x] = src[x] as u32 * (radius as u32 + 1);
+  for x in 0..width {
+    sums[x] = scale_pixel(src[x], k);
   }
-
-  // Add trailing edge
   for dy in 1..=radius {
     let py = dy.min(height - 1);
-    let row_offset = py * stride;
-    for x in 0..stride {
-      sums[x] += src[row_offset + x] as u32;
+    let row = &src[py * width..py * width + width];
+    for x in 0..width {
+      sums[x] = add_pixel(sums[x], widen_pixel(row[x]));
     }
   }
 
   let left_end = (radius + 1).min(height);
+  let first_row_start = 0;
   for y in 0..left_end {
-    let out_offset = y * stride;
     let entering_y = (y + radius + 1).min(height - 1);
-    let entering_row = entering_y * stride;
-
-    for x in 0..stride {
-      update_v_pixel!(
-        src,
-        dst,
-        sums,
-        x,
-        out_offset,
-        entering_row,
-        0,
-        multiplier,
-        shift
-      );
+    let entering_row = &src[entering_y * width..entering_y * width + width];
+    let leaving_row = &src[first_row_start..first_row_start + width];
+    let dst_row = &mut dst[y * width..y * width + width];
+    for x in 0..width {
+      dst_row[x] = pack_pixel(sums[x], mul, shift);
+      sums[x] = slide_pixel(sums[x], entering_row[x], leaving_row[x]);
     }
   }
 
   let middle_end = height.saturating_sub(radius + 1).max(left_end);
   for y in left_end..middle_end {
-    let out_offset = y * stride;
-    let leaving_row = (y - radius) * stride;
-    let entering_row = (y + radius + 1) * stride;
-
-    for x in 0..stride {
-      update_v_pixel!(
-        src,
-        dst,
-        sums,
-        x,
-        out_offset,
-        entering_row,
-        leaving_row,
-        multiplier,
-        shift
-      );
+    let entering_row = &src[(y + radius + 1) * width..(y + radius + 1) * width + width];
+    let leaving_row = &src[(y - radius) * width..(y - radius) * width + width];
+    let dst_row = &mut dst[y * width..y * width + width];
+    for x in 0..width {
+      dst_row[x] = pack_pixel(sums[x], mul, shift);
+      sums[x] = slide_pixel(sums[x], entering_row[x], leaving_row[x]);
     }
   }
 
-  let last_row = (height - 1) * stride;
+  let last_row_start = (height - 1) * width;
+  let last_row = &src[last_row_start..last_row_start + width];
   for y in middle_end..height {
-    let out_offset = y * stride;
-    let leaving_row = (y - radius) * stride;
+    let leaving_row = &src[(y - radius) * width..(y - radius) * width + width];
+    let dst_row = &mut dst[y * width..y * width + width];
+    for x in 0..width {
+      dst_row[x] = pack_pixel(sums[x], mul, shift);
+      sums[x] = slide_pixel(sums[x], last_row[x], leaving_row[x]);
+    }
+  }
+}
 
-    for x in 0..stride {
-      update_v_pixel!(
-        src,
-        dst,
-        sums,
-        x,
-        out_offset,
-        last_row,
-        leaving_row,
-        multiplier,
-        shift
-      );
+#[inline(always)]
+fn pack_alpha(sum: u32, mul: u32, shift: i32) -> u8 {
+  ((sum * mul) >> shift) as u8
+}
+
+fn box_blur_h_alpha(src: &[u8], dst: &mut [u8], params: BlurPassParams) {
+  let radius = params.radius as usize;
+  let width = params.width as usize;
+  let height = params.height as usize;
+  let mul = params.mul_val;
+  let shift = params.shg;
+  let k = radius as u32 + 1;
+
+  for y in 0..height {
+    let row_start = y * width;
+    let src_row = &src[row_start..row_start + width];
+    let dst_row = &mut dst[row_start..row_start + width];
+
+    let first = src_row[0] as u32;
+    let mut sum = first * k;
+    for dx in 1..=radius {
+      sum += src_row[dx.min(width - 1)] as u32;
+    }
+
+    let left_end = (radius + 1).min(width);
+    for x in 0..left_end {
+      let entering = src_row[(x + radius + 1).min(width - 1)] as u32;
+      dst_row[x] = pack_alpha(sum, mul, shift);
+      sum = sum + entering - first;
+    }
+
+    let middle_end = width.saturating_sub(radius + 1).max(left_end);
+    for x in left_end..middle_end {
+      let entering = src_row[x + radius + 1] as u32;
+      let leaving = src_row[x - radius] as u32;
+      dst_row[x] = pack_alpha(sum, mul, shift);
+      sum = sum + entering - leaving;
+    }
+
+    let last = src_row[width - 1] as u32;
+    for x in middle_end..width {
+      let leaving = src_row[x - radius] as u32;
+      dst_row[x] = pack_alpha(sum, mul, shift);
+      sum = sum + last - leaving;
+    }
+  }
+}
+
+fn box_blur_v_alpha(src: &[u8], dst: &mut [u8], params: BlurPassParams, sums: &mut [u32]) {
+  let radius = params.radius as usize;
+  let width = params.width as usize;
+  let height = params.height as usize;
+  let mul = params.mul_val;
+  let shift = params.shg;
+  let k = radius as u32 + 1;
+
+  for x in 0..width {
+    sums[x] = src[x] as u32 * k;
+  }
+  for dy in 1..=radius {
+    let py = dy.min(height - 1);
+    let row_start = py * width;
+    for x in 0..width {
+      sums[x] += src[row_start + x] as u32;
+    }
+  }
+
+  let left_end = (radius + 1).min(height);
+  for y in 0..left_end {
+    let entering_y = (y + radius + 1).min(height - 1);
+    let entering_row = entering_y * width;
+    let out_row = y * width;
+    for x in 0..width {
+      dst[out_row + x] = pack_alpha(sums[x], mul, shift);
+      sums[x] = sums[x] + src[entering_row + x] as u32 - src[x] as u32;
+    }
+  }
+
+  let middle_end = height.saturating_sub(radius + 1).max(left_end);
+  for y in left_end..middle_end {
+    let entering_row = (y + radius + 1) * width;
+    let leaving_row = (y - radius) * width;
+    let out_row = y * width;
+    for x in 0..width {
+      dst[out_row + x] = pack_alpha(sums[x], mul, shift);
+      sums[x] = sums[x] + src[entering_row + x] as u32 - src[leaving_row + x] as u32;
+    }
+  }
+
+  let last_row = (height - 1) * width;
+  for y in middle_end..height {
+    let leaving_row = (y - radius) * width;
+    let out_row = y * width;
+    for x in 0..width {
+      dst[out_row + x] = pack_alpha(sums[x], mul, shift);
+      sums[x] = sums[x] + src[last_row + x] as u32 - src[leaving_row + x] as u32;
     }
   }
 }

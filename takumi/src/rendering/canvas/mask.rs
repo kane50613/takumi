@@ -79,19 +79,30 @@ pub(crate) fn prepare_node_mask(
       buffer_pool.release(mask);
       return Ok(NodeMaskAction::SkipRendering);
     };
-    let Some(full_mask) = rasterize_constraint_mask(viewport, placement, |x, y| {
-      sample_mask_image_alpha(
-        &mask,
-        Point { x: 0, y: 0 },
-        Point {
-          x: layout.size.width as u32,
-          y: layout.size.height as u32,
-        },
-        inverse_transform,
-        x,
-        y,
-      )
-    }) else {
+    let mask_placement = Placement {
+      left: 0,
+      top: 0,
+      width: layout.size.width as u32,
+      height: layout.size.height as u32,
+    };
+    let full_mask = if transform.is_identity() {
+      copy_mask_to_viewport(viewport, &mask, mask_placement)
+    } else {
+      rasterize_constraint_mask(viewport, placement, |x, y| {
+        sample_mask_image_alpha(
+          &mask,
+          Point { x: 0, y: 0 },
+          Point {
+            x: mask_placement.width,
+            y: mask_placement.height,
+          },
+          inverse_transform,
+          x,
+          y,
+        )
+      })
+    };
+    let Some(full_mask) = full_mask else {
       buffer_pool.release(mask);
       return Ok(NodeMaskAction::SkipRendering);
     };
@@ -149,16 +160,21 @@ pub(crate) fn prepare_node_mask(
       x: from.x + local_placement.width,
       y: from.y + local_placement.height,
     };
-    let Some(full_mask) = rasterize_constraint_mask(viewport, placement, |x, y| {
-      sample_overflow_alpha(
-        from,
-        to,
-        inverse_transform,
-        Some((&mask_data, local_placement.width)),
-        x,
-        y,
-      )
-    }) else {
+    let full_mask = if transform.is_identity() {
+      copy_mask_to_viewport(viewport, &mask_data, local_placement)
+    } else {
+      rasterize_constraint_mask(viewport, placement, |x, y| {
+        sample_overflow_alpha(
+          from,
+          to,
+          inverse_transform,
+          Some((&mask_data, local_placement.width)),
+          x,
+          y,
+        )
+      })
+    };
+    let Some(full_mask) = full_mask else {
       buffer_pool.release(mask_data);
       return Ok(NodeMaskAction::SkipRendering);
     };
@@ -215,12 +231,69 @@ pub(crate) fn prepare_node_mask(
   else {
     return Ok(NodeMaskAction::SkipRendering);
   };
-  let Some(mask) = rasterize_constraint_mask(viewport, placement, |x, y| {
-    sample_overflow_alpha(from, to, inverse_transform, None, x, y)
-  }) else {
+  let mask = if transform.is_identity() {
+    fill_rect_mask(viewport, from, to)
+  } else {
+    rasterize_constraint_mask(viewport, placement, |x, y| {
+      sample_overflow_alpha(from, to, inverse_transform, None, x, y)
+    })
+  };
+  let Some(mask) = mask else {
     return Ok(NodeMaskAction::SkipRendering);
   };
   Ok(NodeMaskAction::Content(mask))
+}
+
+fn fill_rect_mask(viewport: CanvasViewport, from: Point<u32>, to: Point<u32>) -> Option<TinyMask> {
+  let mut mask = TinyMask::new(viewport.size.width, viewport.size.height)?;
+  let viewport_right = viewport.right();
+  let viewport_bottom = viewport.bottom();
+  let start_x = (from.x as i32).max(viewport.origin.x as i32);
+  let start_y = (from.y as i32).max(viewport.origin.y as i32);
+  let end_x = (to.x as i32).min(viewport_right);
+  let end_y = (to.y as i32).min(viewport_bottom);
+  if start_x >= end_x || start_y >= end_y {
+    return Some(mask);
+  }
+  let stride = viewport.size.width as usize;
+  let data = mask.data_mut();
+  let span = (end_x - start_x) as usize;
+  for global_y in start_y..end_y {
+    let row = (global_y - viewport.origin.y as i32) as usize * stride
+      + (start_x - viewport.origin.x as i32) as usize;
+    data[row..row + span].fill(u8::MAX);
+  }
+  Some(mask)
+}
+
+struct AlphaOverlap {
+  placement: Placement,
+  lhs_stride: usize,
+  rhs_stride: usize,
+  lhs_origin: usize,
+  rhs_origin: usize,
+}
+
+impl AlphaOverlap {
+  fn new(lhs: Placement, rhs: Placement) -> Option<Self> {
+    let placement = Placement::from_bounds(
+      lhs.left.max(rhs.left),
+      lhs.top.max(rhs.top),
+      lhs.right().min(rhs.right()),
+      lhs.bottom().min(rhs.bottom()),
+    )?;
+    let lhs_stride = lhs.width as usize;
+    let rhs_stride = rhs.width as usize;
+    Some(Self {
+      lhs_origin: (placement.top - lhs.top) as usize * lhs_stride
+        + (placement.left - lhs.left) as usize,
+      rhs_origin: (placement.top - rhs.top) as usize * rhs_stride
+        + (placement.left - rhs.left) as usize,
+      lhs_stride,
+      rhs_stride,
+      placement,
+    })
+  }
 }
 
 pub(crate) fn intersect_alpha_masks(
@@ -229,25 +302,14 @@ pub(crate) fn intersect_alpha_masks(
   rhs: &[u8],
   rhs_placement: Placement,
 ) -> Option<(Vec<u8>, Placement)> {
-  let left = lhs_placement.left.max(rhs_placement.left);
-  let top = lhs_placement.top.max(rhs_placement.top);
-  let right = lhs_placement.right().min(rhs_placement.right());
-  let bottom = lhs_placement.bottom().min(rhs_placement.bottom());
-  let placement = Placement::from_bounds(left, top, right, bottom)?;
-
-  let width = placement.width as usize;
-  let height = placement.height as usize;
-  let lhs_stride = lhs_placement.width as usize;
-  let rhs_stride = rhs_placement.width as usize;
-  let lhs_x_offset = (placement.left - lhs_placement.left) as usize;
-  let rhs_x_offset = (placement.left - rhs_placement.left) as usize;
-  let lhs_y_start = (placement.top - lhs_placement.top) as usize;
-  let rhs_y_start = (placement.top - rhs_placement.top) as usize;
+  let overlap = AlphaOverlap::new(lhs_placement, rhs_placement)?;
+  let width = overlap.placement.width as usize;
+  let height = overlap.placement.height as usize;
 
   let mut mask = vec![0; width * height];
   for (row_index, mask_row) in mask.chunks_exact_mut(width).enumerate() {
-    let lhs_row_start = (lhs_y_start + row_index) * lhs_stride + lhs_x_offset;
-    let rhs_row_start = (rhs_y_start + row_index) * rhs_stride + rhs_x_offset;
+    let lhs_row_start = overlap.lhs_origin + row_index * overlap.lhs_stride;
+    let rhs_row_start = overlap.rhs_origin + row_index * overlap.rhs_stride;
     let lhs_row = &lhs[lhs_row_start..lhs_row_start + width];
     let rhs_row = &rhs[rhs_row_start..rhs_row_start + width];
 
@@ -260,7 +322,7 @@ pub(crate) fn intersect_alpha_masks(
     }
   }
 
-  Some((mask, placement))
+  Some((mask, overlap.placement))
 }
 
 pub(crate) fn attenuate_alpha_by_mask(
@@ -269,25 +331,14 @@ pub(crate) fn attenuate_alpha_by_mask(
   mask: &[u8],
   mask_placement: Placement,
 ) {
-  let left = dst_placement.left.max(mask_placement.left);
-  let top = dst_placement.top.max(mask_placement.top);
-  let right = dst_placement.right().min(mask_placement.right());
-  let bottom = dst_placement.bottom().min(mask_placement.bottom());
-  let Some(overlap) = Placement::from_bounds(left, top, right, bottom) else {
+  let Some(overlap) = AlphaOverlap::new(dst_placement, mask_placement) else {
     return;
   };
+  let width = overlap.placement.width as usize;
 
-  let width = overlap.width as usize;
-  let dst_stride = dst_placement.width as usize;
-  let mask_stride = mask_placement.width as usize;
-  let dst_x_offset = (overlap.left - dst_placement.left) as usize;
-  let dst_y_start = (overlap.top - dst_placement.top) as usize;
-  let mask_x_offset = (overlap.left - mask_placement.left) as usize;
-  let mask_y_start = (overlap.top - mask_placement.top) as usize;
-
-  for row_index in 0..overlap.height as usize {
-    let dst_row_start = (dst_y_start + row_index) * dst_stride + dst_x_offset;
-    let mask_row_start = (mask_y_start + row_index) * mask_stride + mask_x_offset;
+  for row_index in 0..overlap.placement.height as usize {
+    let dst_row_start = overlap.lhs_origin + row_index * overlap.lhs_stride;
+    let mask_row_start = overlap.rhs_origin + row_index * overlap.rhs_stride;
     let dst_row = &mut dst[dst_row_start..dst_row_start + width];
     let mask_row = &mask[mask_row_start..mask_row_start + width];
 
@@ -372,6 +423,16 @@ fn copy_mask_into_canvas(
   }
 }
 
+fn copy_mask_to_viewport(
+  viewport: CanvasViewport,
+  mask: &[u8],
+  placement: Placement,
+) -> Option<TinyMask> {
+  let mut full_mask = TinyMask::new(viewport.size.width, viewport.size.height)?;
+  copy_mask_into_canvas(&mut full_mask, viewport.origin, mask, placement);
+  Some(full_mask)
+}
+
 fn rasterize_constraint_mask(
   viewport: CanvasViewport,
   placement: Placement,
@@ -399,18 +460,12 @@ fn rasterize_constraint_mask(
   Some(mask)
 }
 
-fn transformed_local_placement(local_placement: Placement, transform: Affine) -> Option<Placement> {
-  let (left, top, right, bottom) = transformed_rect_extents(
-    Point {
-      x: local_placement.left as f32,
-      y: local_placement.top as f32,
-    },
-    Size {
-      width: local_placement.width as f32,
-      height: local_placement.height as f32,
-    },
-    transform,
-  )?;
+fn transformed_placement(
+  origin: Point<f32>,
+  size: Size<f32>,
+  transform: Affine,
+) -> Option<Placement> {
+  let (left, top, right, bottom) = transformed_rect_extents(origin, size, transform)?;
   Placement::from_bounds(
     left.floor() as i32,
     top.floor() as i32,
@@ -420,12 +475,20 @@ fn transformed_local_placement(local_placement: Placement, transform: Affine) ->
 }
 
 fn transformed_rect_placement(size: Size<f32>, transform: Affine) -> Option<Placement> {
-  let (left, top, right, bottom) = transformed_rect_extents(Point::ZERO, size, transform)?;
-  Placement::from_bounds(
-    left.floor() as i32,
-    top.floor() as i32,
-    right.ceil() as i32,
-    bottom.ceil() as i32,
+  transformed_placement(Point::ZERO, size, transform)
+}
+
+fn transformed_local_placement(local_placement: Placement, transform: Affine) -> Option<Placement> {
+  transformed_placement(
+    Point {
+      x: local_placement.left as f32,
+      y: local_placement.top as f32,
+    },
+    Size {
+      width: local_placement.width as f32,
+      height: local_placement.height as f32,
+    },
+    transform,
   )
 }
 

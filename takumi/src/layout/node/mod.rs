@@ -20,8 +20,8 @@ use crate::{
     },
   },
   rendering::{
-    BorderProperties, Canvas, Fill, PaintSource, RenderContext, SizedShadow,
-    collect_background_layers, rasterize_layers, release_rasterized_background_tile,
+    BackgroundTile, BorderProperties, Canvas, Fill, PaintSource, RenderContext, SizedShadow,
+    TileLayer, collect_background_layers, rasterize_layers, release_rasterized_background_tile,
   },
   resources::image::{ImageResult, ImageSource},
 };
@@ -718,6 +718,15 @@ impl Node {
               }
             }
           }
+        } else if let Some(layer) = single_solid_color_layer(&layers, canvas) {
+          let transform = context.transform * Affine::translation(layer.x as f32, layer.y as f32);
+          canvas.overlay_image(
+            layer.tile,
+            border_radius,
+            transform,
+            context.style.image_rendering,
+            layer.blend_mode,
+          );
         } else if let Some(tile) = rasterize_layers(
           layers,
           layout.size.map(|x| x as u32),
@@ -881,6 +890,37 @@ impl Node {
 
     Ok(())
   }
+}
+
+struct SolidColorLayer<'a> {
+  tile: &'a BackgroundTile,
+  x: i32,
+  y: i32,
+  blend_mode: BlendMode,
+}
+
+fn single_solid_color_layer<'a>(
+  layers: &'a [TileLayer],
+  canvas: &Canvas,
+) -> Option<SolidColorLayer<'a>> {
+  if !canvas.has_no_constraint_mask() {
+    return None;
+  }
+  let [layer] = layers else {
+    return None;
+  };
+  if !matches!(layer.tile, BackgroundTile::Color(_)) {
+    return None;
+  }
+  if layer.xs.len() != 1 || layer.ys.len() != 1 {
+    return None;
+  }
+  Some(SolidColorLayer {
+    tile: &layer.tile,
+    x: layer.xs[0],
+    y: layer.ys[0],
+    blend_mode: layer.blend_mode,
+  })
 }
 
 /// Style layers contributed by a node before cascade/inheritance assembly.

@@ -712,7 +712,14 @@ fn finish_node_render<'g>(
       })
     });
 
-    if let Some(region) = filter_region {
+    let canvas_size = canvas.viewport().size;
+    let region_is_full_canvas = filter_region.is_some_and(|r| {
+      r.left == 0 && r.top == 0 && r.width == canvas_size.width && r.height == canvas_size.height
+    });
+
+    if let Some(region) = filter_region
+      && !region_is_full_canvas
+    {
       let row_bytes = region.width as usize * 4;
       let region_len = row_bytes * region.height as usize;
       let mut region_raw = canvas.buffer_pool.acquire(region_len);

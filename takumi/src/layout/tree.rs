@@ -1042,28 +1042,33 @@ impl<'g> RenderNode<'g> {
       // §6.1. Descendants see `Some(root_font_size)`.
       let parent_root_font_size = parent_context.sizing.root_font_size;
       let parent_root_line_height = parent_context.sizing.root_line_height;
-      let font_size = style
-        .font_size
-        .to_px(&parent_context.sizing, parent_context.sizing.font_size);
-      let normal_basis = resolve_normal_line_height(parent_context.global, &style, font_size);
-      let line_height = style
-        .line_height
-        .to_px(&parent_context.sizing, normal_basis);
-      let child_sizing = Sizing {
-        font_size,
-        root_font_size: parent_root_font_size,
-        line_height,
-        root_line_height: parent_root_line_height,
-        ..parent_context.sizing.clone()
-      };
-      let child_current_color = style.color.resolve(parent_context.current_color);
-      let child_context = build_render_context(
-        parent_context,
-        style.clone(),
-        child_sizing.clone(),
-        child_current_color,
-      );
-      style = apply_stylesheet_animations(style, &child_context);
+
+      let mut child_sizing_for_final: Option<Sizing> = None;
+      if !style.animation_name.is_empty() {
+        let font_size = style
+          .font_size
+          .to_px(&parent_context.sizing, parent_context.sizing.font_size);
+        let normal_basis = resolve_normal_line_height(parent_context.global, &style, font_size);
+        let line_height = style
+          .line_height
+          .to_px(&parent_context.sizing, normal_basis);
+        let child_sizing = Sizing {
+          font_size,
+          root_font_size: parent_root_font_size,
+          line_height,
+          root_line_height: parent_root_line_height,
+          ..parent_context.sizing.clone()
+        };
+        let child_current_color = style.color.resolve(parent_context.current_color);
+        let child_context = build_render_context(
+          parent_context,
+          style.clone(),
+          child_sizing.clone(),
+          child_current_color,
+        );
+        style = apply_stylesheet_animations(style, &child_context);
+        child_sizing_for_final = Some(child_sizing);
+      }
 
       for &declarations in &matched.important {
         for declaration in declarations.iter() {
@@ -1071,7 +1076,8 @@ impl<'g> RenderNode<'g> {
         }
       }
 
-      let font_size = style.font_size.to_px(&child_sizing, child_sizing.font_size);
+      let sizing_basis = child_sizing_for_final.unwrap_or_else(|| parent_context.sizing.clone());
+      let font_size = style.font_size.to_px(&sizing_basis, sizing_basis.font_size);
       let normal_basis = resolve_normal_line_height(parent_context.global, &style, font_size);
       let line_height = style
         .line_height

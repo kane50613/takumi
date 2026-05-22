@@ -17,7 +17,7 @@ use crate::layout::style::{
 pub struct FontFamily(Box<[FontFamilyToken]>);
 
 #[derive(Debug, Clone, PartialEq)]
-enum FontFamilyToken {
+pub(crate) enum FontFamilyToken {
   Owned(String),
   Generic(GenericFamily),
 }

@@ -1,4 +1,4 @@
-use std::{f32::consts::TAU, f64::consts::TAU as TAU_F64, fmt};
+use std::{f32::consts::TAU, fmt};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use tiny_skia::PremultipliedColorU8;
@@ -17,7 +17,7 @@ use crate::{
   rendering::{RenderContext, Sizing},
 };
 
-const LUT_INDEX_BOUNDARY_EPSILON: f64 = 0.001;
+const LUT_INDEX_BOUNDARY_EPSILON: f32 = 0.001;
 
 /// Represents a CSS conic-gradient.
 #[derive(Debug, Clone, PartialEq, TypedBuilder)]
@@ -68,6 +68,8 @@ pub(crate) struct ConicGradientTile {
   pub repeat_period_deg: f32,
   /// Scale converting an adjusted angle in radians to LUT index.
   pub angle_to_lut_scale: f32,
+  /// Whether every LUT entry has alpha = 255.
+  pub fully_opaque: bool,
   /// Pre-computed color lookup table for fast gradient sampling.
   /// Maps normalized angle [0.0, 1.0] (fraction of full turn) to color.
   pub color_lut: Vec<PremultipliedColorU8>,
@@ -88,23 +90,23 @@ impl ConicGradientTile {
   }
 
   #[inline(always)]
-  fn angle_from_top_normalized(dx: f32, dy: f32) -> f64 {
-    let angle = f64::from(dx).atan2(f64::from(-dy));
-    if angle < 0.0 { angle + TAU_F64 } else { angle }
+  fn angle_from_top_normalized(dx: f32, dy: f32) -> f32 {
+    let angle = dx.atan2(-dy);
+    if angle < 0.0 { angle + TAU } else { angle }
   }
 
   #[inline(always)]
-  fn adjusted_angle(&self, angle_from_top: f64) -> f64 {
-    let adjusted = angle_from_top - f64::from(self.start_rad);
+  fn adjusted_angle(&self, angle_from_top: f32) -> f32 {
+    let adjusted = angle_from_top - self.start_rad;
     if adjusted < 0.0 {
-      adjusted + TAU_F64
+      adjusted + TAU
     } else {
       adjusted
     }
   }
 
   #[inline(always)]
-  fn stable_floor_index(scaled_position: f64, max_index: usize) -> usize {
+  fn stable_floor_index(scaled_position: f32, max_index: usize) -> usize {
     let nearest = scaled_position.round();
     let sample = if (scaled_position - nearest).abs() <= LUT_INDEX_BOUNDARY_EPSILON {
       nearest
@@ -115,7 +117,7 @@ impl ConicGradientTile {
   }
 
   #[inline(always)]
-  fn stable_round_index(scaled_position: f64, max_index: usize) -> usize {
+  fn stable_round_index(scaled_position: f32, max_index: usize) -> usize {
     let floor = scaled_position.floor();
     let fraction = scaled_position - floor;
     let sample = if fraction >= 0.5 - LUT_INDEX_BOUNDARY_EPSILON {
@@ -129,7 +131,7 @@ impl ConicGradientTile {
   #[inline(always)]
   pub(crate) fn lut_index_for_adjusted_angle_with_len(
     &self,
-    adjusted_angle: f64,
+    adjusted_angle: f32,
     lut_len: usize,
   ) -> usize {
     if lut_len <= 1 {
@@ -138,15 +140,11 @@ impl ConicGradientTile {
 
     let max_index = lut_len - 1;
     if self.repeating && self.repeat_period_deg > 1e-6 {
-      let degrees = adjusted_angle / TAU_F64 * 360.0;
-      let wrapped =
-        (degrees - f64::from(self.repeat_start_deg)).rem_euclid(f64::from(self.repeat_period_deg));
-      Self::stable_round_index(wrapped * f64::from(self.angle_to_lut_scale), max_index)
+      let degrees = adjusted_angle / TAU * 360.0;
+      let wrapped = (degrees - self.repeat_start_deg).rem_euclid(self.repeat_period_deg);
+      Self::stable_round_index(wrapped * self.angle_to_lut_scale, max_index)
     } else {
-      Self::stable_floor_index(
-        adjusted_angle * f64::from(self.angle_to_lut_scale),
-        max_index,
-      )
+      Self::stable_floor_index(adjusted_angle * self.angle_to_lut_scale, max_index)
     }
   }
 
@@ -209,6 +207,8 @@ impl ConicGradientTile {
       lut_len as f32 / TAU
     };
 
+    let fully_opaque = color_lut.iter().all(|p| p.alpha() == u8::MAX);
+
     ConicGradientTile {
       width,
       height,
@@ -219,6 +219,7 @@ impl ConicGradientTile {
       repeat_start_deg,
       repeat_period_deg,
       angle_to_lut_scale,
+      fully_opaque,
       color_lut,
     }
   }
@@ -290,6 +291,11 @@ impl GradientOverlayTile for ConicGradientTile {
     };
     row_state.dx += 1.0;
     lut_idx
+  }
+
+  #[inline(always)]
+  fn fully_opaque(&self) -> bool {
+    self.fully_opaque
   }
 }
 
