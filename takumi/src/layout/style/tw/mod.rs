@@ -765,9 +765,7 @@ pub enum TailwindProperty {
   MarginBottom(LengthDefaultsToZero),
   /// `margin-left` property.
   MarginLeft(LengthDefaultsToZero),
-  /// `margin-inline-start` property.
   MarginInlineStart(LengthDefaultsToZero),
-  /// `margin-inline-end` property.
   MarginInlineEnd(LengthDefaultsToZero),
   /// `padding` property.
   Padding(LengthDefaultsToZero),
@@ -783,9 +781,7 @@ pub enum TailwindProperty {
   PaddingBottom(LengthDefaultsToZero),
   /// `padding-left` property.
   PaddingLeft(LengthDefaultsToZero),
-  /// `padding-inline-start` property.
   PaddingInlineStart(LengthDefaultsToZero),
-  /// `padding-inline-end` property.
   PaddingInlineEnd(LengthDefaultsToZero),
   /// `inset` property.
   Inset(Length),
@@ -845,9 +841,7 @@ pub enum TailwindProperty {
   TextShadow(TextShadow),
   /// `text-shadow` color override.
   TextShadowColor(ColorInput),
-  /// Multi-layer `box-shadow` preset.
   ShadowList(&'static [BoxShadow]),
-  /// Multi-layer `text-shadow` preset.
   TextShadowList(&'static [TextShadow]),
   /// `isolation` property.
   Isolation(Isolation),
@@ -873,11 +867,8 @@ pub enum TailwindProperty {
   GradientTo(ColorInput),
   /// `via` property.
   GradientVia(ColorInput),
-  /// `from-{position}` (e.g. `from-20%`).
   GradientFromPosition(Length),
-  /// `via-{position}` (e.g. `via-60%`).
   GradientViaPosition(Length),
-  /// `to-{position}` (e.g. `to-90%`).
   GradientToPosition(Length),
 }
 

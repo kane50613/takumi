@@ -136,9 +136,7 @@ macro_rules! define_style {
           $(where inherit = $longhand_inherit:expr)?,
       )*
     }
-    // Longhands without a `ComputedStyle` field — applying one writes through
-    // to the physical side selected by `style.direction`.
-    // Form: `name: type => (ltr_field, rtl_field),`
+    // `name: type => (ltr_field, rtl_field)` — apply resolves to one of them.
     transient_longhands {
       $(
         $transient:ident: $transient_ty:ty
@@ -642,7 +640,6 @@ macro_rules! define_style {
                   );
                 }
               )*
-              // Transient longhands have no field of their own to interpolate.
               $(LonghandId::[<$transient:camel>] => {})*
             }
           }
@@ -761,10 +758,7 @@ macro_rules! define_style {
                   LonghandId::[<$transient:camel>] => {
                     let target = if is_rtl { &mut style.$transient_rtl } else { &mut style.$transient_ltr };
                     *target = match keyword {
-                      // margin/padding aren't inherited; unset resolves to initial.
                       CssWideKeyword::Initial | CssWideKeyword::Unset => Default::default(),
-                      // Inherit reads the parent's logical-resolved physical side
-                      // — selected by the *parent's* direction, not the child's.
                       CssWideKeyword::Inherit => {
                         if parent.direction == Direction::Rtl {
                           parent.$transient_rtl.to_owned()

@@ -216,10 +216,6 @@ impl<'i> FromCss<'i> for TwGradientPosition {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let location = input.current_source_location();
     let state = input.state();
-    // Stop positions accept `<length-percentage>` only — reject bare numbers
-    // (`from-[10]`) and `calc()` (since takumi normalises a unitless calc
-    // such as `calc(2)` to a plain `Length::Px`, making it indistinguishable
-    // from a real length).
     let token_label: Option<&'static str> = match input.next()? {
       cssparser::Token::Number { .. } => Some("<unitless>"),
       cssparser::Token::Function(name) if name.eq_ignore_ascii_case("calc") => Some("calc()"),
