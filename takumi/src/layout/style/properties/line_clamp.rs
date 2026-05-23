@@ -27,6 +27,9 @@ impl TailwindPropertyParser for LineClamp {
       });
     }
     let count = token.parse::<u32>().ok()?;
+    if count == 0 {
+      return None;
+    }
     Some(LineClamp {
       count,
       ellipsis: None,
@@ -62,6 +65,9 @@ impl<'i> FromCss<'i> for LineClamp {
 
 impl ToCss for LineClamp {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    if self.count == 0 && self.ellipsis.is_none() {
+      return dest.write_str("none");
+    }
     match &self.ellipsis {
       Some(e) => {
         write!(dest, "{} ", self.count)?;

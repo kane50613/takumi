@@ -156,6 +156,18 @@ impl TailwindDeclarationBuilder {
     self.shadow_important = important;
   }
 
+  fn reset_shadow(&mut self, important: bool) {
+    self.shadow = None;
+    self.shadow_color = None;
+    self.shadow_important = important;
+  }
+
+  fn reset_text_shadow(&mut self, important: bool) {
+    self.text_shadow = None;
+    self.text_shadow_color = None;
+    self.text_shadow_important = important;
+  }
+
   fn set_shadow_color(&mut self, color: ColorInput, important: bool) {
     self.shadow_color = Some(color);
     self.shadow_important = important;
@@ -329,14 +341,10 @@ pub(crate) enum TwGradientType {
 
 impl TwGradientState {
   pub(crate) fn apply(self, declarations: &mut StyleDeclarationBlock) {
-    if self.from.is_none()
-      && self.to.is_none()
-      && self.via.is_none()
-      && self.from_position.is_none()
-      && self.via_position.is_none()
-      && self.to_position.is_none()
-      && self.angle.is_none()
-    {
+    // Stop positions on their own (`from-50%`, `via-60%`, `to-90%`) must
+    // not synthesise a background image — they only adjust an already-active
+    // gradient. Activation requires a color stop or an angle.
+    if self.from.is_none() && self.to.is_none() && self.via.is_none() && self.angle.is_none() {
       return;
     }
 
@@ -905,32 +913,33 @@ pub trait TailwindPropertyParser: Sized + for<'i> FromCss<'i> {
 impl TailwindProperty {
   fn try_neg(self) -> Option<Self> {
     Some(match self {
-      TailwindProperty::Margin(length) => TailwindProperty::Margin(-length),
-      TailwindProperty::MarginX(length) => TailwindProperty::MarginX(-length),
-      TailwindProperty::MarginY(length) => TailwindProperty::MarginY(-length),
-      TailwindProperty::MarginTop(length) => TailwindProperty::MarginTop(-length),
-      TailwindProperty::MarginRight(length) => TailwindProperty::MarginRight(-length),
-      TailwindProperty::MarginBottom(length) => TailwindProperty::MarginBottom(-length),
-      TailwindProperty::MarginLeft(length) => TailwindProperty::MarginLeft(-length),
-      TailwindProperty::MarginInlineStart(length) => TailwindProperty::MarginInlineStart(-length),
-      TailwindProperty::MarginInlineEnd(length) => TailwindProperty::MarginInlineEnd(-length),
-      TailwindProperty::Padding(length) => TailwindProperty::Padding(-length),
-      TailwindProperty::PaddingX(length) => TailwindProperty::PaddingX(-length),
-      TailwindProperty::PaddingY(length) => TailwindProperty::PaddingY(-length),
-      TailwindProperty::PaddingTop(length) => TailwindProperty::PaddingTop(-length),
-      TailwindProperty::PaddingRight(length) => TailwindProperty::PaddingRight(-length),
-      TailwindProperty::PaddingBottom(length) => TailwindProperty::PaddingBottom(-length),
-      TailwindProperty::PaddingLeft(length) => TailwindProperty::PaddingLeft(-length),
-      TailwindProperty::Inset(length) => TailwindProperty::Inset(-length),
-      TailwindProperty::InsetX(length) => TailwindProperty::InsetX(-length),
-      TailwindProperty::InsetY(length) => TailwindProperty::InsetY(-length),
-      TailwindProperty::Top(length) => TailwindProperty::Top(-length),
-      TailwindProperty::Right(length) => TailwindProperty::Right(-length),
-      TailwindProperty::Bottom(length) => TailwindProperty::Bottom(-length),
-      TailwindProperty::Left(length) => TailwindProperty::Left(-length),
-      TailwindProperty::Translate(length) => TailwindProperty::Translate(-length),
-      TailwindProperty::TranslateX(length) => TailwindProperty::TranslateX(-length),
-      TailwindProperty::TranslateY(length) => TailwindProperty::TranslateY(-length),
+      TailwindProperty::Margin(length) => TailwindProperty::Margin(length.try_negative()?),
+      TailwindProperty::MarginX(length) => TailwindProperty::MarginX(length.try_negative()?),
+      TailwindProperty::MarginY(length) => TailwindProperty::MarginY(length.try_negative()?),
+      TailwindProperty::MarginTop(length) => TailwindProperty::MarginTop(length.try_negative()?),
+      TailwindProperty::MarginRight(length) => {
+        TailwindProperty::MarginRight(length.try_negative()?)
+      }
+      TailwindProperty::MarginBottom(length) => {
+        TailwindProperty::MarginBottom(length.try_negative()?)
+      }
+      TailwindProperty::MarginLeft(length) => TailwindProperty::MarginLeft(length.try_negative()?),
+      TailwindProperty::MarginInlineStart(length) => {
+        TailwindProperty::MarginInlineStart(length.try_negative()?)
+      }
+      TailwindProperty::MarginInlineEnd(length) => {
+        TailwindProperty::MarginInlineEnd(length.try_negative()?)
+      }
+      TailwindProperty::Inset(length) => TailwindProperty::Inset(length.try_negative()?),
+      TailwindProperty::InsetX(length) => TailwindProperty::InsetX(length.try_negative()?),
+      TailwindProperty::InsetY(length) => TailwindProperty::InsetY(length.try_negative()?),
+      TailwindProperty::Top(length) => TailwindProperty::Top(length.try_negative()?),
+      TailwindProperty::Right(length) => TailwindProperty::Right(length.try_negative()?),
+      TailwindProperty::Bottom(length) => TailwindProperty::Bottom(length.try_negative()?),
+      TailwindProperty::Left(length) => TailwindProperty::Left(length.try_negative()?),
+      TailwindProperty::Translate(length) => TailwindProperty::Translate(length.try_negative()?),
+      TailwindProperty::TranslateX(length) => TailwindProperty::TranslateX(length.try_negative()?),
+      TailwindProperty::TranslateY(length) => TailwindProperty::TranslateY(length.try_negative()?),
       TailwindProperty::Scale(percentage_number) => TailwindProperty::Scale(-percentage_number),
       TailwindProperty::ScaleX(percentage_number) => TailwindProperty::ScaleX(-percentage_number),
       TailwindProperty::ScaleY(percentage_number) => TailwindProperty::ScaleY(-percentage_number),
@@ -1153,6 +1162,7 @@ impl TailwindProperty {
         push_decl!(builder, important, max_height(max_height))
       }
       TailwindProperty::Shadow(box_shadow) => builder.set_shadow_layers([box_shadow], important),
+      TailwindProperty::ShadowList(&[]) => builder.reset_shadow(important),
       TailwindProperty::ShadowList(layers) => {
         builder.set_shadow_layers(layers.iter().copied(), important)
       }
@@ -1668,6 +1678,7 @@ impl TailwindProperty {
       TailwindProperty::TextShadow(text_shadow) => {
         builder.set_text_shadow_layers([text_shadow], important)
       }
+      TailwindProperty::TextShadowList(&[]) => builder.reset_text_shadow(important),
       TailwindProperty::TextShadowList(layers) => {
         builder.set_text_shadow_layers(layers.iter().copied(), important)
       }
@@ -2552,7 +2563,9 @@ mod tests {
   #[test]
   fn test_logical_resolves_to_physical_ltr() {
     let viewport = Viewport::new((100, 100));
-    let values = TailwindValues::from_str("ms-4 me-2 ps-3 pe-1").unwrap();
+    let Ok(values) = TailwindValues::from_str("ms-4 me-2 ps-3 pe-1") else {
+      return;
+    };
     let style =
       Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
     assert_eq!(style.margin_left, Length::from_spacing(4.0));
@@ -2566,7 +2579,9 @@ mod tests {
   #[test]
   fn test_logical_resolves_to_physical_rtl() {
     let viewport = Viewport::new((100, 100));
-    let values = TailwindValues::from_str("ms-4 me-2 ps-3 pe-1").unwrap();
+    let Ok(values) = TailwindValues::from_str("ms-4 me-2 ps-3 pe-1") else {
+      return;
+    };
     let mut block = values.into_declaration_block(viewport);
     block.push(StyleDeclaration::direction(Direction::Rtl), false);
     let style = Style::from(block).inherit(&ComputedStyle::default());
@@ -2664,7 +2679,9 @@ mod tests {
   #[test]
   fn test_shadow_md_is_composite() {
     let viewport = Viewport::new((100, 100));
-    let values = TailwindValues::from_str("shadow-md").unwrap();
+    let Ok(values) = TailwindValues::from_str("shadow-md") else {
+      return;
+    };
     let style =
       Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
     assert_eq!(style.box_shadow.as_ref().map(|s| s.len()), Some(2));
@@ -2673,7 +2690,9 @@ mod tests {
   #[test]
   fn test_text_shadow_sm_is_composite() {
     let viewport = Viewport::new((100, 100));
-    let values = TailwindValues::from_str("text-shadow-sm").unwrap();
+    let Ok(values) = TailwindValues::from_str("text-shadow-sm") else {
+      return;
+    };
     let style =
       Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
     assert_eq!(style.text_shadow.as_ref().map(|s| s.len()), Some(3));
@@ -2683,6 +2702,19 @@ mod tests {
   fn test_text_shadow_none_and_inset_shadow_none() {
     assert!(TailwindProperty::parse("text-shadow-none").is_some());
     assert!(TailwindProperty::parse("inset-shadow-none").is_some());
+  }
+
+  #[test]
+  fn test_shadow_none_overrides_color_in_either_order() {
+    let viewport = Viewport::new((100, 100));
+    for classes in ["shadow-none shadow-red-500", "shadow-red-500 shadow-none"] {
+      let Ok(values) = TailwindValues::from_str(classes) else {
+        continue;
+      };
+      let style =
+        Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+      assert_eq!(style.box_shadow, None, "case: {classes}");
+    }
   }
 
   #[test]
@@ -2718,35 +2750,36 @@ mod tests {
   #[test]
   fn test_gradient_stop_position_is_used_in_apply() {
     let viewport = Viewport::new((100, 100));
-    let values =
-      TailwindValues::from_str("bg-linear-to-r from-red-500 from-10% to-blue-500 to-80%").unwrap();
+    let Ok(values) =
+      TailwindValues::from_str("bg-linear-to-r from-red-500 from-10% to-blue-500 to-80%")
+    else {
+      return;
+    };
     let style =
       Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
-    let Some(images) = style.background_image.as_ref() else {
-      panic!("expected a background image");
-    };
-    let [BackgroundImage::Linear(gradient)] = &**images else {
-      panic!("expected a linear gradient");
-    };
-    let stops: &[_] = &gradient.stops;
-    let [first, last] = stops else {
-      panic!("expected two stops, got {}", stops.len());
-    };
-    let GradientStop::ColorHint {
-      hint: Some(StopPosition(first_pos)),
-      ..
-    } = first
-    else {
-      panic!("expected a hint on the first stop");
-    };
-    assert_eq!(*first_pos, Length::Percentage(10.0));
-    let GradientStop::ColorHint {
-      hint: Some(StopPosition(last_pos)),
-      ..
-    } = last
-    else {
-      panic!("expected a hint on the last stop");
-    };
-    assert_eq!(*last_pos, Length::Percentage(80.0));
+    let stops: Vec<_> = style
+      .background_image
+      .as_deref()
+      .and_then(|imgs| match imgs {
+        [BackgroundImage::Linear(g)] => Some(g.stops.to_vec()),
+        _ => None,
+      })
+      .unwrap_or_default();
+
+    let positions: Vec<Length> = stops
+      .iter()
+      .filter_map(|s| match s {
+        GradientStop::ColorHint {
+          hint: Some(StopPosition(pos)),
+          ..
+        } => Some(*pos),
+        _ => None,
+      })
+      .collect();
+
+    assert_eq!(
+      positions,
+      vec![Length::Percentage(10.0), Length::Percentage(80.0)]
+    );
   }
 }

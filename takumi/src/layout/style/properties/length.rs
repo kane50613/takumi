@@ -796,6 +796,15 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
     Self::Px(0.0)
   }
 
+  /// Returns the negated value, or `None` if the length has no meaningful
+  /// negative form (e.g. `auto`).
+  pub fn try_negative(self) -> Option<Self> {
+    if matches!(self, Length::Auto) {
+      return None;
+    }
+    Some(self.negative())
+  }
+
   /// Returns a negative length unit.
   pub fn negative(self) -> Self {
     match self {

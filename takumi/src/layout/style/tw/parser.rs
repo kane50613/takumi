@@ -208,13 +208,25 @@ impl TailwindPropertyParser for TwRounded {
   }
 }
 
-/// Stop position for `from-N%` / `via-N%` / `to-N%`.
+/// Stop position for `from-N%` / `via-N%` / `to-N%`. Only accepts a
+/// `<length-percentage>` — `auto` and other Length-only values are rejected
+/// for both bracketed (`from-[10px]` OK, `from-[auto]` rejected) and bare
+/// (`from-50%`) forms.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TwGradientPosition(pub Length);
 
 impl<'i> FromCss<'i> for TwGradientPosition {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    Ok(TwGradientPosition(Length::from_css(input)?))
+    let location = input.current_source_location();
+    let length = Length::from_css(input)?;
+    if matches!(length, Length::Auto) {
+      return Err(
+        location
+          .new_basic_unexpected_token_error(cssparser::Token::Ident("auto".into()))
+          .into(),
+      );
+    }
+    Ok(TwGradientPosition(length))
   }
 
   const VALID_TOKENS: &'static [CssToken] = Length::<true>::VALID_TOKENS;
