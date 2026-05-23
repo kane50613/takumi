@@ -761,9 +761,16 @@ macro_rules! define_style {
                   LonghandId::[<$transient:camel>] => {
                     let target = if is_rtl { &mut style.$transient_rtl } else { &mut style.$transient_ltr };
                     *target = match keyword {
-                      CssWideKeyword::Initial => Default::default(),
-                      CssWideKeyword::Inherit | CssWideKeyword::Unset => {
-                        if is_rtl { parent.$transient_rtl.to_owned() } else { parent.$transient_ltr.to_owned() }
+                      // margin/padding aren't inherited; unset resolves to initial.
+                      CssWideKeyword::Initial | CssWideKeyword::Unset => Default::default(),
+                      // Inherit reads the parent's logical-resolved physical side
+                      // — selected by the *parent's* direction, not the child's.
+                      CssWideKeyword::Inherit => {
+                        if parent.direction == Direction::Rtl {
+                          parent.$transient_rtl.to_owned()
+                        } else {
+                          parent.$transient_ltr.to_owned()
+                        }
                       }
                     };
                   }

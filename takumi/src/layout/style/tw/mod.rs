@@ -1638,8 +1638,13 @@ impl TailwindProperty {
         builder.push_filter(Filter::Sepia(percentage_number), important)
       }
       TailwindProperty::Filter(filters) => {
-        for filter in filters {
-          builder.push_filter(filter, important);
+        if filters.is_empty() {
+          builder.filter = Some(Filters::default());
+          builder.filter_important = important;
+        } else {
+          for filter in filters {
+            builder.push_filter(filter, important);
+          }
         }
       }
       TailwindProperty::BackdropBlur(tw_blur) => {
@@ -1670,8 +1675,13 @@ impl TailwindProperty {
         builder.push_backdrop_filter(Filter::Sepia(percentage_number), important)
       }
       TailwindProperty::BackdropFilter(filters) => {
-        for filter in filters {
-          builder.push_backdrop_filter(filter, important);
+        if filters.is_empty() {
+          builder.backdrop_filter = Some(Filters::default());
+          builder.backdrop_filter_important = important;
+        } else {
+          for filter in filters {
+            builder.push_backdrop_filter(filter, important);
+          }
         }
       }
       TailwindProperty::TextShadow(text_shadow) => {
@@ -2617,6 +2627,20 @@ mod tests {
       TailwindProperty::parse("backdrop-filter-none"),
       Some(TailwindProperty::BackdropFilter(Filters::default()))
     );
+  }
+
+  #[test]
+  fn test_filter_none_clears_previous_filters() {
+    let viewport = Viewport::new((100, 100));
+    let values = TailwindValues::from_str("blur-sm brightness-150 filter-none").unwrap();
+    let style =
+      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+    assert_eq!(style.filter, Filters::default());
+
+    let values = TailwindValues::from_str("backdrop-blur-sm backdrop-filter-none").unwrap();
+    let style =
+      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+    assert_eq!(style.backdrop_filter, Filters::default());
   }
 
   #[test]
