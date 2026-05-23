@@ -218,6 +218,16 @@ pub struct TwGradientPosition(pub Length);
 impl<'i> FromCss<'i> for TwGradientPosition {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let location = input.current_source_location();
+    let state = input.state();
+    let is_unitless_number = matches!(input.next()?, cssparser::Token::Number { .. });
+    input.reset(&state);
+    if is_unitless_number {
+      return Err(
+        location
+          .new_basic_unexpected_token_error(cssparser::Token::Ident("<unitless>".into()))
+          .into(),
+      );
+    }
     let length = Length::from_css(input)?;
     if matches!(length, Length::Auto) {
       return Err(

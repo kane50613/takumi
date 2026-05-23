@@ -1740,6 +1740,7 @@ impl TailwindProperty {
 }
 
 #[cfg(test)]
+#[allow(clippy::panic, clippy::unwrap_used)]
 mod tests {
   use crate::layout::style::{ComputedStyle, LonghandId, Style, properties::BackgroundImage};
 
@@ -2563,9 +2564,7 @@ mod tests {
   #[test]
   fn test_logical_resolves_to_physical_ltr() {
     let viewport = Viewport::new((100, 100));
-    let Ok(values) = TailwindValues::from_str("ms-4 me-2 ps-3 pe-1") else {
-      return;
-    };
+    let values = TailwindValues::from_str("ms-4 me-2 ps-3 pe-1").unwrap();
     let style =
       Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
     assert_eq!(style.margin_left, Length::from_spacing(4.0));
@@ -2578,17 +2577,13 @@ mod tests {
   fn test_logical_physical_cascade_order_ltr() {
     let viewport = Viewport::new((100, 100));
     // ms-2 first, then ml-4 → physical wins (last declared).
-    let Ok(values) = TailwindValues::from_str("ms-2 ml-4") else {
-      return;
-    };
+    let values = TailwindValues::from_str("ms-2 ml-4").unwrap();
     let style =
       Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
     assert_eq!(style.margin_left, Length::from_spacing(4.0));
 
     // ml-4 first, then ms-2 → logical wins.
-    let Ok(values) = TailwindValues::from_str("ml-4 ms-2") else {
-      return;
-    };
+    let values = TailwindValues::from_str("ml-4 ms-2").unwrap();
     let style =
       Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
     assert_eq!(style.margin_left, Length::from_spacing(2.0));
@@ -2597,9 +2592,7 @@ mod tests {
   #[test]
   fn test_logical_resolves_to_physical_rtl() {
     let viewport = Viewport::new((100, 100));
-    let Ok(values) = TailwindValues::from_str("ms-4 me-2 ps-3 pe-1") else {
-      return;
-    };
+    let values = TailwindValues::from_str("ms-4 me-2 ps-3 pe-1").unwrap();
     let mut block = values.into_declaration_block(viewport);
     block.push(StyleDeclaration::direction(Direction::Rtl), false);
     let style = Style::from(block).inherit(&ComputedStyle::default());
@@ -2607,6 +2600,19 @@ mod tests {
     assert_eq!(style.margin_left, Length::from_spacing(2.0));
     assert_eq!(style.padding_right, Length::from_spacing(3.0));
     assert_eq!(style.padding_left, Length::from_spacing(1.0));
+  }
+
+  #[test]
+  fn test_logical_resolves_when_direction_declared_after() {
+    // `direction: rtl` comes AFTER `ms-4`. Two-pass cascade should still
+    // route ms-4 to the RTL side because direction is pre-resolved.
+    let viewport = Viewport::new((100, 100));
+    let values = TailwindValues::from_str("ms-4").unwrap();
+    let mut block = values.into_declaration_block(viewport);
+    block.push(StyleDeclaration::direction(Direction::Rtl), false);
+    let style = Style::from(block).inherit(&ComputedStyle::default());
+    assert_eq!(style.margin_right, Length::from_spacing(4.0));
+    assert_eq!(style.margin_left, Length::Px(0.0));
   }
 
   #[test]
@@ -2697,9 +2703,7 @@ mod tests {
   #[test]
   fn test_shadow_md_is_composite() {
     let viewport = Viewport::new((100, 100));
-    let Ok(values) = TailwindValues::from_str("shadow-md") else {
-      return;
-    };
+    let values = TailwindValues::from_str("shadow-md").unwrap();
     let style =
       Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
     assert_eq!(style.box_shadow.as_ref().map(|s| s.len()), Some(2));
@@ -2708,9 +2712,7 @@ mod tests {
   #[test]
   fn test_text_shadow_sm_is_composite() {
     let viewport = Viewport::new((100, 100));
-    let Ok(values) = TailwindValues::from_str("text-shadow-sm") else {
-      return;
-    };
+    let values = TailwindValues::from_str("text-shadow-sm").unwrap();
     let style =
       Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
     assert_eq!(style.text_shadow.as_ref().map(|s| s.len()), Some(3));
@@ -2726,9 +2728,7 @@ mod tests {
   fn test_shadow_none_overrides_color_in_either_order() {
     let viewport = Viewport::new((100, 100));
     for classes in ["shadow-none shadow-red-500", "shadow-red-500 shadow-none"] {
-      let Ok(values) = TailwindValues::from_str(classes) else {
-        continue;
-      };
+      let values = TailwindValues::from_str(classes).unwrap();
       let style =
         Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
       assert_eq!(style.box_shadow, None, "case: {classes}");
@@ -2768,23 +2768,16 @@ mod tests {
   #[test]
   fn test_gradient_stop_position_is_used_in_apply() {
     let viewport = Viewport::new((100, 100));
-    let Ok(values) =
-      TailwindValues::from_str("bg-linear-to-r from-red-500 from-10% to-blue-500 to-80%")
-    else {
-      return;
-    };
+    let values =
+      TailwindValues::from_str("bg-linear-to-r from-red-500 from-10% to-blue-500 to-80%").unwrap();
     let style =
       Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
-    let stops: Vec<_> = style
-      .background_image
-      .as_deref()
-      .and_then(|imgs| match imgs {
-        [BackgroundImage::Linear(g)] => Some(g.stops.to_vec()),
-        _ => None,
-      })
-      .unwrap_or_default();
-
-    let positions: Vec<Length> = stops
+    let images = style.background_image.as_deref().unwrap();
+    let [BackgroundImage::Linear(gradient)] = images else {
+      panic!("expected a single linear gradient");
+    };
+    let positions: Vec<Length> = gradient
+      .stops
       .iter()
       .filter_map(|s| match s {
         GradientStop::ColorHint {
@@ -2794,7 +2787,6 @@ mod tests {
         _ => None,
       })
       .collect();
-
     assert_eq!(
       positions,
       vec![Length::Percentage(10.0), Length::Percentage(80.0)]

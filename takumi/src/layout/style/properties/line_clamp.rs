@@ -48,6 +48,12 @@ impl From<u32> for LineClamp {
 
 impl<'i> FromCss<'i> for LineClamp {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+      return Ok(LineClamp {
+        count: 0,
+        ellipsis: None,
+      });
+    }
     let count = input.try_parse(Parser::expect_integer)?;
     let ellipsis = input.try_parse(Parser::expect_string_cloned).ok();
 
@@ -58,6 +64,7 @@ impl<'i> FromCss<'i> for LineClamp {
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[
+    CssToken::Keyword("none"),
     CssToken::Syntax(CssSyntaxKind::Integer),
     CssToken::Syntax(CssSyntaxKind::String),
   ];
