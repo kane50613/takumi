@@ -204,6 +204,13 @@ impl Affine {
     }
   }
 
+  /// Geometric mean of the X and Y axis scales.
+  pub(crate) fn uniform_scale(self) -> f32 {
+    let sx = (self.a * self.a + self.b * self.b).sqrt();
+    let sy = (self.c * self.c + self.d * self.d).sqrt();
+    (sx * sy).sqrt()
+  }
+
   /// Returns true if the transform is only a translation
   pub(crate) fn only_translation(self) -> bool {
     (self.a - 1.0).abs() < 1e-8

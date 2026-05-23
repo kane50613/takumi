@@ -1023,6 +1023,46 @@ fn text_super_bold_stroke_background_clip() {
 }
 
 #[test]
+fn text_fit_with_webkit_text_stroke() {
+  let card = |label: &str, mode: TextFitMode, limit: Option<f32>, content: &str| {
+    text_fit_card_container(
+      label,
+      Node::text(content.to_string()).with_style(
+        text_fit_text_style(text_fit(mode, TextFitTarget::Consistent, limit))
+          .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
+          .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
+          .with(StyleDeclaration::color(ColorInput::Value(Color([
+            0, 0, 0, 255,
+          ]))))
+          .with(StyleDeclaration::webkit_text_stroke_width(Some(Px(3.0))))
+          .with(StyleDeclaration::webkit_text_stroke_color(Some(
+            ColorInput::Value(Color([255, 0, 0, 255])),
+          ))),
+      ),
+    )
+  };
+
+  let container = text_fit_overview_container([
+    card("grow", TextFitMode::Grow, None, "Stroke"),
+    card("grow 150%", TextFitMode::Grow, Some(1.5), "Stroke"),
+    card(
+      "shrink",
+      TextFitMode::Shrink,
+      None,
+      "This headline is intentionally long",
+    ),
+    card(
+      "shrink min 70%",
+      TextFitMode::Shrink,
+      Some(0.7),
+      "This headline is intentionally long",
+    ),
+  ]);
+
+  run_fixture_test(container, "text_fit_with_webkit_text_stroke");
+}
+
+#[test]
 fn text_font_stretch() {
   let stretches = [
     (

@@ -352,7 +352,8 @@ fn draw_text_stroke_clip_image(
     return;
   };
 
-  let mut stroke = Stroke::new(style.stroke_width);
+  let scale = transform.uniform_scale().max(f32::EPSILON);
+  let mut stroke = Stroke::new(style.stroke_width / scale);
   stroke.join = style.parent.stroke_linejoin.into();
 
   let (stroke_mask, stroke_placement) = render_mask(
@@ -430,7 +431,8 @@ fn draw_text_stroke(
     return;
   }
 
-  let mut stroke = Stroke::new(style.stroke_width);
+  let scale = transform.uniform_scale().max(f32::EPSILON);
+  let mut stroke = Stroke::new(style.stroke_width / scale);
   stroke.join = style.parent.stroke_linejoin.into();
 
   let (stroke_mask, stroke_placement) = render_mask(
