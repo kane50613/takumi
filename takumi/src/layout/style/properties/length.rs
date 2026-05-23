@@ -650,10 +650,7 @@ impl<const DEFAULT_AUTO: bool> Default for Length<DEFAULT_AUTO> {
 }
 
 impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
-  /// Construct a length from a Tailwind spacing-scale multiplier.
-  ///
-  /// `Length::from_spacing(4)` is the value emitted by `p-4`, `m-4`, etc. —
-  /// equivalent to `4 * --spacing` (i.e. `1rem` by default).
+  /// `N` spacing units (`p-4` → `from_spacing(4.0)` = `1rem`).
   #[inline]
   pub(crate) fn from_spacing(units: f32) -> Self {
     Length::Rem(units * TW_VAR_SPACING)

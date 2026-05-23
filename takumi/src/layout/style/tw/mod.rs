@@ -18,17 +18,7 @@ use crate::layout::{
   },
 };
 
-/// Tailwind `--spacing` variable value (rem per spacing unit).
-///
-/// In Tailwind v4 the `--spacing` theme variable defaults to `0.25rem`, and
-/// every numeric utility on the spacing scale (`p-4`, `m-8`, `gap-2`, ...) is
-/// `N * --spacing`. So `p-4` evaluates to `4 * 0.25rem = 1rem`.
-///
-/// Prefer the [`Length::from_spacing`](crate::layout::style::Length::from_spacing)
-/// constructor over multiplying by this constant directly — it expresses
-/// "N spacing units" rather than the raw rem amount, which keeps the unit
-/// factor (`0.25`) and the class multiplier (`4`) from being confused at
-/// call sites.
+/// Tailwind v4 `--spacing` (rem per unit). Prefer [`Length::from_spacing`].
 pub(crate) const TW_VAR_SPACING: f32 = 0.25;
 
 /// Represents a collection of tailwind properties.
@@ -840,9 +830,9 @@ pub enum TailwindProperty {
   TextShadow(TextShadow),
   /// `text-shadow` color override.
   TextShadowColor(ColorInput),
-  /// Composite `box-shadow` preset (multi-layer; used by `shadow-sm/md/lg/xl`).
+  /// Multi-layer `box-shadow` preset.
   ShadowList(&'static [BoxShadow]),
-  /// Composite `text-shadow` preset (multi-layer; used by `text-shadow-sm/md/lg`).
+  /// Multi-layer `text-shadow` preset.
   TextShadowList(&'static [TextShadow]),
   /// `isolation` property.
   Isolation(Isolation),
@@ -905,9 +895,6 @@ pub trait TailwindPropertyParser: Sized + for<'i> FromCss<'i> {
 }
 
 impl TailwindProperty {
-  /// Try to negate this property. Returns `None` if the property has no
-  /// meaningful negative form (e.g. colors), so a class like `-bg-red-500`
-  /// is rejected instead of silently passing through as `bg-red-500`.
   fn try_neg(self) -> Option<Self> {
     Some(match self {
       TailwindProperty::Margin(length) => TailwindProperty::Margin(-length),
@@ -983,9 +970,6 @@ impl TailwindProperty {
       return Some(property.clone());
     }
 
-    // Handle negative values like "-top-4". Properties that have no
-    // meaningful negative form (e.g. colors) are rejected here rather than
-    // silently passing through as the positive version.
     if let Some(stripped) = token.strip_prefix('-') {
       return Self::parse_prefix_suffix(stripped).and_then(Self::try_neg);
     }
@@ -2487,7 +2471,6 @@ mod tests {
 
   #[test]
   fn test_v4_palette_red_500() {
-    // V4 OKLCH-derived sRGB hex; was V3 #ef4444 prior to the audit.
     assert_eq!(
       TailwindProperty::parse("bg-red-500"),
       Some(TailwindProperty::BackgroundColor(ColorInput::Value(Color(
@@ -2498,7 +2481,6 @@ mod tests {
 
   #[test]
   fn test_bare_rounded_is_radius_sm() {
-    // v4: bare `rounded` aliases `rounded-sm` (0.25rem).
     assert_eq!(
       TailwindProperty::parse("rounded"),
       Some(TailwindProperty::Rounded(TwRounded(Length::Rem(0.25))))
@@ -2507,15 +2489,12 @@ mod tests {
 
   #[test]
   fn test_negative_color_is_rejected() {
-    // Colors have no negative form. `-bg-red-500` must be unparseable rather
-    // than silently passing through as `bg-red-500`.
     assert_eq!(TailwindProperty::parse("-bg-red-500"), None);
     assert_eq!(TailwindProperty::parse("-text-blue-500"), None);
   }
 
   #[test]
   fn test_negative_grid_line() {
-    // `-col-start-1` must produce GridColumnStart(Line(-1)).
     assert_eq!(
       TailwindProperty::parse("-col-start-1"),
       Some(TailwindProperty::GridColumnStart(GridPlacement::Line(-1)))
@@ -2524,8 +2503,6 @@ mod tests {
 
   #[test]
   fn test_logical_margin_padding_aliases() {
-    // v3/v4 logical-side aliases must map to start/end (LTR: left/right) —
-    // not to the two-sided MarginX/Y as the old code did.
     assert_eq!(
       TailwindProperty::parse("ms-4"),
       Some(TailwindProperty::MarginLeft(Length::from_spacing(4.0)))
@@ -2631,7 +2608,6 @@ mod tests {
 
   #[test]
   fn test_shadow_md_is_composite() {
-    // `shadow-md` in v4 is a two-layer composite, not a single shadow.
     let viewport = Viewport::new((100, 100));
     let values = TailwindValues::from_str("shadow-md").unwrap();
     let style =
@@ -2641,7 +2617,6 @@ mod tests {
 
   #[test]
   fn test_text_shadow_sm_is_composite() {
-    // `text-shadow-sm` in v4 is a three-layer composite.
     let viewport = Viewport::new((100, 100));
     let values = TailwindValues::from_str("text-shadow-sm").unwrap();
     let style =
@@ -2665,7 +2640,6 @@ mod tests {
 
   #[test]
   fn test_gradient_stop_positions() {
-    // v4 lets you fix a stop's position with `from-N%`, `via-N%`, `to-N%`.
     assert_eq!(
       TailwindProperty::parse("from-20%"),
       Some(TailwindProperty::GradientFromPosition(Length::Percentage(

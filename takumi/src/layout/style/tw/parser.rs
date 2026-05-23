@@ -208,10 +208,7 @@ impl TailwindPropertyParser for TwRounded {
   }
 }
 
-/// Wrapper around `Length` used for gradient stop positions
-/// (`from-N%`, `via-N%`, `to-N%`). Unlike the bare `Length::parse_tw`,
-/// this does NOT route a plain number through the spacing scale — the
-/// suffix must explicitly carry a `%` or be an arbitrary value.
+/// Stop position for `from-N%` / `via-N%` / `to-N%`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TwGradientPosition(pub Length);
 

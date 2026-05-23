@@ -224,8 +224,6 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
   "mt" => &[PropertyParser::LengthZero(TailwindProperty::MarginTop)],
   "mr" => &[PropertyParser::LengthZero(TailwindProperty::MarginRight)],
   "mb" => &[PropertyParser::LengthZero(TailwindProperty::MarginBottom)],
-  // logical `ms`/`me` map to physical left/right (LTR assumption — Takumi
-  // does not yet implement full margin-inline-start/end logical properties).
   "ml" | "ms" => &[PropertyParser::LengthZero(TailwindProperty::MarginLeft)],
   "me" => &[PropertyParser::LengthZero(TailwindProperty::MarginRight)],
   "p" => &[PropertyParser::LengthZero(TailwindProperty::Padding)],
@@ -295,9 +293,7 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
   "animate" => &[PropertyParser::Animation(TailwindProperty::Animation)],
 };
 
-// Multi-layer shadow presets from Tailwind v4's `theme.css` (`--shadow-*`).
-// Each shadow class with a composite spec expands to a list of BoxShadows.
-// Alpha values are derived from the percentage form: `/ .1` ≈ 26, `/ .25` ≈ 64.
+// `--shadow-*` composites from v4 `theme.css`. Alpha: `/ .1` ≈ 26, `/ .25` ≈ 64.
 const SHADOW_SM: [BoxShadow; 2] = [
   BoxShadow {
     inset: false,
@@ -374,8 +370,7 @@ const SHADOW_XL: [BoxShadow; 2] = [
   },
 ];
 
-// Multi-layer text-shadow presets from Tailwind v4's `theme.css`
-// (`--text-shadow-*`). Alphas: `/ .075` ≈ 19, `/ .1` ≈ 26.
+// `--text-shadow-*` composites. Alpha: `/ .075` ≈ 19, `/ .1` ≈ 26.
 const TEXT_SHADOW_SM: [TextShadow; 3] = [
   TextShadow {
     offset_x: Length::Px(0.0),
@@ -532,7 +527,6 @@ pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
     spread_radius: Length::Px(0.0),
     color: ColorInput::Value(Color([0, 0, 0, 13])),
   }),
-  // v4 composite shadows (--shadow-*). `shadow` aliases `--shadow-sm`.
   "shadow-sm" | "shadow" => TailwindProperty::ShadowList(&SHADOW_SM),
   "shadow-md" => TailwindProperty::ShadowList(&SHADOW_MD),
   "shadow-lg" => TailwindProperty::ShadowList(&SHADOW_LG),
