@@ -1022,6 +1022,63 @@ fn text_super_bold_stroke_background_clip() {
   run_fixture_test(container, "text_super_bold_stroke_background_clip");
 }
 
+/// Reproduces yeecord Quote.tsx layout where text fails to render with
+/// `text-fit: grow` + `background-clip: text` + transparent webkit-text-stroke.
+#[test]
+fn text_fit_grow_bg_clip_transparent_stroke() {
+  let root = from_value::<Node>(json!({
+    "type": "container",
+    "style": {
+      "width": "100%",
+      "height": "100%",
+      "display": "flex",
+      "position": "relative",
+      "fontFamily": "Noto Sans TC",
+      "backgroundColor": "rgb(186, 169, 207)"
+    },
+    "children": [
+      {
+        "type": "container",
+        "style": {
+          "position": "absolute",
+          "left": "474px",
+          "top": "50px",
+          "width": "626px",
+          "height": "420px",
+          "display": "flex",
+          "justifyContent": "center",
+          "alignItems": "center"
+        },
+        "children": [
+          {
+            "type": "text",
+            "text": "支離滅裂な思考・発言",
+            "style": {
+              "fontSize": "60px",
+              "lineHeight": 1.5,
+              "fontWeight": 700,
+              "textOverflow": "ellipsis",
+              "backgroundColor": "black",
+              "backgroundClip": "text",
+              "color": "transparent",
+              "paddingTop": "24px",
+              "paddingBottom": "24px",
+              "paddingLeft": "6px",
+              "paddingRight": "6px",
+              "webkitTextStrokeWidth": "12px",
+              "webkitTextStrokeColor": "transparent",
+              "textFit": "grow"
+            }
+          }
+        ]
+      }
+    ]
+  }))
+  .unwrap();
+
+  run_fixture_test(root, "text_fit_grow_bg_clip_transparent_stroke");
+}
+
 #[test]
 fn text_font_stretch() {
   let stretches = [

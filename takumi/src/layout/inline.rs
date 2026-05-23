@@ -1398,7 +1398,7 @@ pub(crate) fn create_inline_constraint(
     AvailableSpace::MaxContent => None,
     AvailableSpace::Definite(width) => Some(width),
   };
-  let mut width_constraint = known_width.or(available_width).unwrap_or(f32::MAX);
+  let mut width_constraint = known_width.or(available_width).unwrap_or(f32::INFINITY);
 
   if known_width.is_some()
     && context.style.box_sizing == BoxSizing::BorderBox
