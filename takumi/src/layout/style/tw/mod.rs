@@ -341,9 +341,8 @@ pub(crate) enum TwGradientType {
 
 impl TwGradientState {
   pub(crate) fn apply(self, declarations: &mut StyleDeclarationBlock) {
-    // Stop positions on their own (`from-50%`, `via-60%`, `to-90%`) must
-    // not synthesise a background image — they only adjust an already-active
-    // gradient. Activation requires a color stop or an angle.
+    // Stop positions alone (`from-50%` etc.) must not synthesise a gradient —
+    // a color or angle has to be present.
     if self.from.is_none() && self.to.is_none() && self.via.is_none() && self.angle.is_none() {
       return;
     }
@@ -2430,8 +2429,6 @@ mod tests {
       let style =
         Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
 
-      // `shadow-md` is a 2-layer composite in v4; the color override must
-      // apply to every layer.
       assert_eq!(
         style.box_shadow,
         Some(
@@ -2473,7 +2470,6 @@ mod tests {
       let style =
         Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
 
-      // `text-shadow-sm` is a 3-layer composite in v4.
       assert_eq!(
         style.text_shadow,
         Some(
@@ -2576,13 +2572,11 @@ mod tests {
   #[test]
   fn test_logical_physical_cascade_order_ltr() {
     let viewport = Viewport::new((100, 100));
-    // ms-2 first, then ml-4 → physical wins (last declared).
     let values = TailwindValues::from_str("ms-2 ml-4").unwrap();
     let style =
       Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
     assert_eq!(style.margin_left, Length::from_spacing(4.0));
 
-    // ml-4 first, then ms-2 → logical wins.
     let values = TailwindValues::from_str("ml-4 ms-2").unwrap();
     let style =
       Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
@@ -2604,8 +2598,6 @@ mod tests {
 
   #[test]
   fn test_logical_resolves_when_direction_declared_after() {
-    // `direction: rtl` comes AFTER `ms-4`. Two-pass cascade should still
-    // route ms-4 to the RTL side because direction is pre-resolved.
     let viewport = Viewport::new((100, 100));
     let values = TailwindValues::from_str("ms-4").unwrap();
     let mut block = values.into_declaration_block(viewport);

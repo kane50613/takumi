@@ -136,12 +136,9 @@ macro_rules! define_style {
           $(where inherit = $longhand_inherit:expr)?,
       )*
     }
-    // Transient longhands have no field on `ComputedStyle`. They live only
-    // as `StyleDeclaration` variants; applying one writes through to the
-    // physical side picked by `style.direction`. Currently used for the
-    // logical inline-axis margins/paddings.
-    //
-    // Form: `name: type => (ltr_physical_field, rtl_physical_field),`
+    // Longhands without a `ComputedStyle` field — applying one writes through
+    // to the physical side selected by `style.direction`.
+    // Form: `name: type => (ltr_field, rtl_field),`
     transient_longhands {
       $(
         $transient:ident: $transient_ty:ty
@@ -536,10 +533,8 @@ macro_rules! define_style {
             }
           }
 
-          // Pre-resolve `direction` (last-declared wins) so the apply pass
-          // below knows which physical side every logical-axis declaration
-          // resolves to. Without this, `ms-4` declared before `direction: rtl`
-          // in the same block would land on the wrong side.
+          // Pre-resolve `direction` so logical-axis applies below see the
+          // final value even if `direction:` is declared later in the block.
           for declaration in &declarations {
             if let StyleDeclaration::Direction(d) = declaration {
               style.direction = *d;
@@ -587,8 +582,7 @@ macro_rules! define_style {
           [<$longhand:camel>]($longhand_ty),
         )*
         $(
-          /// A specified value for a logical-axis longhand that resolves to a
-          /// physical side via `ComputedStyle::direction`.
+          /// Logical-axis value, resolved to a physical side at apply time.
           [<$transient:camel>]($transient_ty),
         )*
         /// A custom property declaration such as `--token: value`.
@@ -648,9 +642,7 @@ macro_rules! define_style {
                   );
                 }
               )*
-              // Transient (logical-side) longhands have no `ComputedStyle` field
-              // to interpolate; the physical sides they resolve to handle
-              // animation on their own.
+              // Transient longhands have no field of their own to interpolate.
               $(LonghandId::[<$transient:camel>] => {})*
             }
           }
@@ -721,7 +713,7 @@ macro_rules! define_style {
           }
         )*
         $(
-          /// Returns a declaration for this logical-axis property.
+          /// Returns a declaration for this property.
           pub fn $transient(value: $transient_ty) -> Self {
             Self::[<$transient:camel>](value)
           }

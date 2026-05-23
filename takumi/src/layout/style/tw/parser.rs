@@ -208,10 +208,7 @@ impl TailwindPropertyParser for TwRounded {
   }
 }
 
-/// Stop position for `from-N%` / `via-N%` / `to-N%`. Only accepts a
-/// `<length-percentage>` — `auto` and other Length-only values are rejected
-/// for both bracketed (`from-[10px]` OK, `from-[auto]` rejected) and bare
-/// (`from-50%`) forms.
+/// `<length-percentage>` for `from-N%` / `via-N%` / `to-N%` stop positions.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TwGradientPosition(pub Length);
 

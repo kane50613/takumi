@@ -246,10 +246,8 @@ impl<const DEFAULT_CURRENT_COLOR: bool> TailwindPropertyParser
   }
 }
 
-/// Tailwind v4 color shades and their corresponding sRGB values
-/// (converted from OKLCH definitions in tailwindcss `theme.css` via the
-/// CSS Color 4 OKLCH→sRGB transform with binary-search chroma gamut mapping).
-/// Each color has 11 shades: 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950
+/// Tailwind v4 palette (OKLCH→sRGB via CSS Color 4 with gamut mapping).
+/// Shades: 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950.
 const SLATE: [u32; 11] = [
   0xf8fafc, 0xf1f5f9, 0xe2e8f0, 0xcad5e2, 0x90a1b9, 0x62748e, 0x45556c, 0x314158, 0x1d293d,
   0x0f172b, 0x020618,

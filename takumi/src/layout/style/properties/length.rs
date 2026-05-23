@@ -650,7 +650,7 @@ impl<const DEFAULT_AUTO: bool> Default for Length<DEFAULT_AUTO> {
 }
 
 impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
-  /// `N` spacing units (`p-4` → `from_spacing(4.0)` = `1rem`).
+  /// Construct a length from a Tailwind spacing-scale multiplier.
   #[inline]
   pub(crate) fn from_spacing(units: f32) -> Self {
     Length::Rem(units * TW_VAR_SPACING)
@@ -796,8 +796,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
     Self::Px(0.0)
   }
 
-  /// Returns the negated value, or `None` if the length has no meaningful
-  /// negative form (e.g. `auto`).
+  /// Negated value, or `None` for non-negatable forms like `auto`.
   pub fn try_negative(self) -> Option<Self> {
     if matches!(self, Length::Auto) {
       return None;
