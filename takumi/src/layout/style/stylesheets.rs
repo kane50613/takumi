@@ -750,7 +750,11 @@ macro_rules! define_style {
           match self {
             $(
               Self::[<$longhand:camel>](value) => {
-                dest.write_str(&stringify!($longhand).replace("_", "-"))?;
+                let name = stringify!($longhand).replace("_", "-");
+                if name.starts_with("webkit-") {
+                  dest.write_str("-")?;
+                }
+                dest.write_str(&name)?;
                 dest.write_str(": ")?;
                 value.to_css(dest)?;
                 dest.write_str(";")
@@ -1951,6 +1955,9 @@ pub(crate) fn to_kebab_case(s: &str) -> String {
     } else {
       result.push(c);
     }
+  }
+  if result.starts_with("webkit-") {
+    result.insert(0, '-');
   }
   result
 }

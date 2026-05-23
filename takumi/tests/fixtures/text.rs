@@ -1022,6 +1022,53 @@ fn text_super_bold_stroke_background_clip() {
   run_fixture_test(container, "text_super_bold_stroke_background_clip");
 }
 
+/// Reproduces yeecord Quote.tsx layout where text fails to render with
+/// `text-fit: grow` + `background-clip: text` + transparent webkit-text-stroke.
+#[test]
+fn text_fit_grow_bg_clip_transparent_stroke() {
+  let root = from_value::<Node>(json!({
+    "type": "container",
+    "style": {
+      "width": "100%",
+      "height": "100%",
+      "display": "flex",
+      "justifyContent": "center",
+      "alignItems": "center",
+      "fontFamily": "Noto Sans TC",
+      "backgroundColor": "rgb(186, 169, 207)"
+    },
+    "children": [
+      {
+        "type": "container",
+        "style": {
+          "display": "block",
+          "textOverflow": "ellipsis",
+          "textAlign": "center",
+          "backgroundColor": "black",
+          "backgroundClip": "text",
+          "webkitTextStrokeWidth": "12px",
+          "webkitTextStrokeColor": "transparent",
+          "width": "100%",
+          "textFit": "grow",
+          "fontSize": "60px",
+          "lineHeight": 1.5,
+          "fontWeight": 700,
+          "color": "white",
+        },
+        "children": [
+          {
+            "type": "text",
+            "text": "Goo goo ga ga",
+          }
+        ]
+      }
+    ]
+  }))
+  .unwrap();
+
+  run_fixture_test(root, "text_fit_grow_bg_clip_transparent_stroke");
+}
+
 #[test]
 fn text_font_stretch() {
   let stretches = [
