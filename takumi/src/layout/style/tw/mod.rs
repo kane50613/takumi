@@ -758,6 +758,10 @@ pub enum TailwindProperty {
   MarginBottom(LengthDefaultsToZero),
   /// `margin-left` property.
   MarginLeft(LengthDefaultsToZero),
+  /// `margin-inline-start` property.
+  MarginInlineStart(LengthDefaultsToZero),
+  /// `margin-inline-end` property.
+  MarginInlineEnd(LengthDefaultsToZero),
   /// `padding` property.
   Padding(LengthDefaultsToZero),
   /// `padding-inline` property.
@@ -772,6 +776,10 @@ pub enum TailwindProperty {
   PaddingBottom(LengthDefaultsToZero),
   /// `padding-left` property.
   PaddingLeft(LengthDefaultsToZero),
+  /// `padding-inline-start` property.
+  PaddingInlineStart(LengthDefaultsToZero),
+  /// `padding-inline-end` property.
+  PaddingInlineEnd(LengthDefaultsToZero),
   /// `inset` property.
   Inset(Length),
   /// `inset-inline` property.
@@ -904,6 +912,8 @@ impl TailwindProperty {
       TailwindProperty::MarginRight(length) => TailwindProperty::MarginRight(-length),
       TailwindProperty::MarginBottom(length) => TailwindProperty::MarginBottom(-length),
       TailwindProperty::MarginLeft(length) => TailwindProperty::MarginLeft(-length),
+      TailwindProperty::MarginInlineStart(length) => TailwindProperty::MarginInlineStart(-length),
+      TailwindProperty::MarginInlineEnd(length) => TailwindProperty::MarginInlineEnd(-length),
       TailwindProperty::Padding(length) => TailwindProperty::Padding(-length),
       TailwindProperty::PaddingX(length) => TailwindProperty::PaddingX(-length),
       TailwindProperty::PaddingY(length) => TailwindProperty::PaddingY(-length),
@@ -1462,6 +1472,12 @@ impl TailwindProperty {
         push_decl!(builder, important, margin_bottom(length))
       }
       TailwindProperty::MarginLeft(length) => push_decl!(builder, important, margin_left(length)),
+      TailwindProperty::MarginInlineStart(length) => {
+        push_decl!(builder, important, margin_inline_start(Some(length)))
+      }
+      TailwindProperty::MarginInlineEnd(length) => {
+        push_decl!(builder, important, margin_inline_end(Some(length)))
+      }
       TailwindProperty::Padding(length) => {
         push_decl!(
           builder,
@@ -1496,6 +1512,12 @@ impl TailwindProperty {
         push_decl!(builder, important, padding_bottom(length))
       }
       TailwindProperty::PaddingLeft(length) => push_decl!(builder, important, padding_left(length)),
+      TailwindProperty::PaddingInlineStart(length) => {
+        push_decl!(builder, important, padding_inline_start(Some(length)))
+      }
+      TailwindProperty::PaddingInlineEnd(length) => {
+        push_decl!(builder, important, padding_inline_end(Some(length)))
+      }
       TailwindProperty::Inset(length) => {
         push_decl!(
           builder,
@@ -2505,20 +2527,53 @@ mod tests {
   fn test_logical_margin_padding_aliases() {
     assert_eq!(
       TailwindProperty::parse("ms-4"),
-      Some(TailwindProperty::MarginLeft(Length::from_spacing(4.0)))
+      Some(TailwindProperty::MarginInlineStart(Length::from_spacing(
+        4.0
+      )))
     );
     assert_eq!(
       TailwindProperty::parse("me-4"),
-      Some(TailwindProperty::MarginRight(Length::from_spacing(4.0)))
+      Some(TailwindProperty::MarginInlineEnd(Length::from_spacing(4.0)))
     );
     assert_eq!(
       TailwindProperty::parse("ps-2"),
-      Some(TailwindProperty::PaddingLeft(Length::from_spacing(2.0)))
+      Some(TailwindProperty::PaddingInlineStart(Length::from_spacing(
+        2.0
+      )))
     );
     assert_eq!(
       TailwindProperty::parse("pe-2"),
-      Some(TailwindProperty::PaddingRight(Length::from_spacing(2.0)))
+      Some(TailwindProperty::PaddingInlineEnd(Length::from_spacing(
+        2.0
+      )))
     );
+  }
+
+  #[test]
+  fn test_logical_resolves_to_physical_ltr() {
+    let viewport = Viewport::new((100, 100));
+    let values = TailwindValues::from_str("ms-4 me-2 ps-3 pe-1").unwrap();
+    let style =
+      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+    assert_eq!(style.margin_left, Length::from_spacing(4.0));
+    assert_eq!(style.margin_right, Length::from_spacing(2.0));
+    assert_eq!(style.padding_left, Length::from_spacing(3.0));
+    assert_eq!(style.padding_right, Length::from_spacing(1.0));
+    assert_eq!(style.margin_inline_start, None);
+    assert_eq!(style.margin_inline_end, None);
+  }
+
+  #[test]
+  fn test_logical_resolves_to_physical_rtl() {
+    let viewport = Viewport::new((100, 100));
+    let values = TailwindValues::from_str("ms-4 me-2 ps-3 pe-1").unwrap();
+    let mut block = values.into_declaration_block(viewport);
+    block.push(StyleDeclaration::direction(Direction::Rtl), false);
+    let style = Style::from(block).inherit(&ComputedStyle::default());
+    assert_eq!(style.margin_right, Length::from_spacing(4.0));
+    assert_eq!(style.margin_left, Length::from_spacing(2.0));
+    assert_eq!(style.padding_right, Length::from_spacing(3.0));
+    assert_eq!(style.padding_left, Length::from_spacing(1.0));
   }
 
   #[test]

@@ -506,6 +506,7 @@ macro_rules! define_style {
           for declaration in declarations {
             declaration.apply_with_parent(&mut style, parent);
           }
+          style.resolve_logical_sides();
           style
         }
 
@@ -812,10 +813,14 @@ define_style! {
     padding_right: LengthDefaultsToZero,
     padding_bottom: LengthDefaultsToZero,
     padding_left: LengthDefaultsToZero,
+    padding_inline_start: Option<LengthDefaultsToZero>,
+    padding_inline_end: Option<LengthDefaultsToZero>,
     margin_top: LengthDefaultsToZero,
     margin_right: LengthDefaultsToZero,
     margin_bottom: LengthDefaultsToZero,
     margin_left: LengthDefaultsToZero,
+    margin_inline_start: Option<LengthDefaultsToZero>,
+    margin_inline_end: Option<LengthDefaultsToZero>,
     top: Length,
     right: Length,
     bottom: Length,
@@ -1604,6 +1609,41 @@ impl ComputedStyle {
     // Elements with position: absolute or fixed are blockified
     if self.position == Position::Absolute || self.float != Float::None {
       self.display.blockify();
+    }
+  }
+
+  /// Map `margin-inline-{start,end}` and `padding-inline-{start,end}` onto
+  /// physical sides using the element's `direction`. Logical declarations
+  /// overwrite the physical sides they resolve to.
+  pub(crate) fn resolve_logical_sides(&mut self) {
+    let is_rtl = self.direction == Direction::Rtl;
+    if let Some(v) = self.margin_inline_start.take() {
+      if is_rtl {
+        self.margin_right = v;
+      } else {
+        self.margin_left = v;
+      }
+    }
+    if let Some(v) = self.margin_inline_end.take() {
+      if is_rtl {
+        self.margin_left = v;
+      } else {
+        self.margin_right = v;
+      }
+    }
+    if let Some(v) = self.padding_inline_start.take() {
+      if is_rtl {
+        self.padding_right = v;
+      } else {
+        self.padding_left = v;
+      }
+    }
+    if let Some(v) = self.padding_inline_end.take() {
+      if is_rtl {
+        self.padding_left = v;
+      } else {
+        self.padding_right = v;
+      }
     }
   }
 
