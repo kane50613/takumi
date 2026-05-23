@@ -655,7 +655,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
   /// `Length::from_spacing(4)` is the value emitted by `p-4`, `m-4`, etc. —
   /// equivalent to `4 * --spacing` (i.e. `1rem` by default).
   #[inline]
-  pub fn from_spacing(units: f32) -> Self {
+  pub(crate) fn from_spacing(units: f32) -> Self {
     Length::Rem(units * TW_VAR_SPACING)
   }
 }
