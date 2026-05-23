@@ -77,6 +77,12 @@
       "import": "./dist/helpers/jsx.mjs",
       "require": "./dist/helpers/jsx.cjs",
       "default": "./dist/helpers/jsx.mjs"
+    },
+    "./helpers/html": {
+      "types": "./dist/helpers/html.d.mts",
+      "import": "./dist/helpers/html.mjs",
+      "require": "./dist/helpers/html.cjs",
+      "default": "./dist/helpers/html.mjs"
     }
   },
   "publishConfig": {
