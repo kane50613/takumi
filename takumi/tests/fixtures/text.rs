@@ -1032,7 +1032,8 @@ fn text_fit_grow_bg_clip_transparent_stroke() {
       "width": "100%",
       "height": "100%",
       "display": "flex",
-      "position": "relative",
+      "justifyContent": "center",
+      "alignItems": "center",
       "fontFamily": "Noto Sans TC",
       "backgroundColor": "rgb(186, 169, 207)"
     },
@@ -1040,37 +1041,24 @@ fn text_fit_grow_bg_clip_transparent_stroke() {
       {
         "type": "container",
         "style": {
-          "position": "absolute",
-          "left": "474px",
-          "top": "50px",
-          "width": "626px",
-          "height": "420px",
-          "display": "flex",
-          "justifyContent": "center",
-          "alignItems": "center"
+          "display": "block",
+          "textOverflow": "ellipsis",
+          "textAlign": "center",
+          "backgroundColor": "black",
+          "backgroundClip": "text",
+          "webkitTextStrokeWidth": "12px",
+          "webkitTextStrokeColor": "transparent",
+          "width": "100%",
+          "textFit": "grow",
+          "fontSize": "60px",
+          "lineHeight": 1.5,
+          "fontWeight": 700,
+          "color": "white",
         },
         "children": [
           {
             "type": "text",
-            "text": "支離滅裂",
-            "style": {
-              "width": "100%",
-              "height": "100%",
-              "fontSize": "60px",
-              "lineHeight": 1.5,
-              "fontWeight": 700,
-              "textOverflow": "ellipsis",
-              "backgroundColor": "black",
-              "backgroundClip": "text",
-              "color": "transparent",
-              "paddingTop": "24px",
-              "paddingBottom": "24px",
-              "paddingLeft": "6px",
-              "paddingRight": "6px",
-              "webkitTextStrokeWidth": "12px",
-              "webkitTextStrokeColor": "transparent",
-              "textFit": "grow"
-            }
+            "text": "Goo goo ga ga",
           }
         ]
       }
