@@ -113,6 +113,14 @@ macro_rules! push_axis_declarations {
       StyleDeclaration::$second(value.y),
     );
   }};
+  ($target:expr, $value:expr, Option, $first:ident, $second:ident) => {{
+    let value = $value;
+    push_expanded_declarations!(
+      $target;
+      StyleDeclaration::$first(Some(value.x)),
+      StyleDeclaration::$second(Some(value.y)),
+    );
+  }};
 }
 
 macro_rules! push_four_side_declarations {
@@ -976,8 +984,8 @@ define_style! {
         padding_left
       );
     },
-    padding_inline: SpacePair<LengthDefaultsToZero> => [PaddingLeft, PaddingRight] |value, target| {
-      push_axis_declarations!(target, value, padding_left, padding_right);
+    padding_inline: SpacePair<LengthDefaultsToZero> => [PaddingInlineStart, PaddingInlineEnd] |value, target| {
+      push_axis_declarations!(target, value, Option, padding_inline_start, padding_inline_end);
     },
     padding_block: SpacePair<LengthDefaultsToZero> => [PaddingTop, PaddingBottom] |value, target| {
       push_axis_declarations!(target, value, padding_top, padding_bottom);
@@ -992,8 +1000,8 @@ define_style! {
         margin_left
       );
     },
-    margin_inline: SpacePair<LengthDefaultsToZero> => [MarginLeft, MarginRight] |value, target| {
-      push_axis_declarations!(target, value, margin_left, margin_right);
+    margin_inline: SpacePair<LengthDefaultsToZero> => [MarginInlineStart, MarginInlineEnd] |value, target| {
+      push_axis_declarations!(target, value, Option, margin_inline_start, margin_inline_end);
     },
     margin_block: SpacePair<LengthDefaultsToZero> => [MarginTop, MarginBottom] |value, target| {
       push_axis_declarations!(target, value, margin_top, margin_bottom);
