@@ -1052,8 +1052,10 @@ fn text_fit_grow_bg_clip_transparent_stroke() {
         "children": [
           {
             "type": "text",
-            "text": "支離滅裂な思考・発言",
+            "text": "支離滅裂",
             "style": {
+              "width": "100%",
+              "height": "100%",
               "fontSize": "60px",
               "lineHeight": 1.5,
               "fontWeight": 700,
