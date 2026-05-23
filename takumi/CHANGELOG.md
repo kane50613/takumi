@@ -1,5 +1,11 @@
 # takumi
 
+## 1.4.1
+
+### Patch Changes
+
+- 72c19fd: Fix `text-fit: grow` with `background-clip: text` and `-webkit-text-stroke`
+
 ## 1.4.0
 
 ### Minor Changes

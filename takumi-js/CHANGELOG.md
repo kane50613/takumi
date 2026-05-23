@@ -1,5 +1,14 @@
 # takumi-js
 
+## 1.4.1
+
+### Patch Changes
+
+- d6936e5: Expose `takumi-js/helpers/html` subpath export
+  - @takumi-rs/core@1.4.1
+  - @takumi-rs/wasm@1.4.1
+  - @takumi-rs/helpers@1.4.1
+
 ## 1.4.0
 
 ### Patch Changes
