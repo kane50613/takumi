@@ -1,5 +1,11 @@
 # @takumi-rs/wasm
 
+## 1.4.1
+
+### Patch Changes
+
+- @takumi-rs/helpers@1.4.1
+
 ## 1.4.0
 
 ### Patch Changes
