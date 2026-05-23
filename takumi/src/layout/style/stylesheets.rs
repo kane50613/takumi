@@ -113,14 +113,6 @@ macro_rules! push_axis_declarations {
       StyleDeclaration::$second(value.y),
     );
   }};
-  ($target:expr, $value:expr, Option, $first:ident, $second:ident) => {{
-    let value = $value;
-    push_expanded_declarations!(
-      $target;
-      StyleDeclaration::$first(Some(value.x)),
-      StyleDeclaration::$second(Some(value.y)),
-    );
-  }};
 }
 
 macro_rules! push_four_side_declarations {
@@ -144,6 +136,18 @@ macro_rules! define_style {
           $(where inherit = $longhand_inherit:expr)?,
       )*
     }
+    // Transient longhands have no field on `ComputedStyle`. They live only
+    // as `StyleDeclaration` variants; applying one writes through to the
+    // physical side picked by `style.direction`. Currently used for the
+    // logical inline-axis margins/paddings.
+    //
+    // Form: `name: type => (ltr_physical_field, rtl_physical_field),`
+    transient_longhands {
+      $(
+        $transient:ident: $transient_ty:ty
+          => ($transient_ltr:ident, $transient_rtl:ident),
+      )*
+    }
     shorthands {
       $(
         $shorthand:ident: $shorthand_ty:ty
@@ -159,11 +163,15 @@ macro_rules! define_style {
       #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
       pub(crate) enum LonghandId {
         $([<$longhand:camel>],)*
+        $([<$transient:camel>],)*
       }
 
       impl LonghandId {
-        const COUNT: usize = [$(Self::[<$longhand:camel>]),*].len();
-        const ALL: [Self; Self::COUNT] = [$(Self::[<$longhand:camel>],)*];
+        const COUNT: usize = [$(Self::[<$longhand:camel>]),* $(, Self::[<$transient:camel>])*].len();
+        const ALL: [Self; Self::COUNT] = [
+          $(Self::[<$longhand:camel>],)*
+          $(Self::[<$transient:camel>],)*
+        ];
 
         const fn index(self) -> usize {
           self as usize
@@ -195,6 +203,11 @@ macro_rules! define_style {
                 <$longhand_ty as FromCss>::from_css(input)?,
               )]),
             )*
+            $(
+              Self::[<$transient:camel>] => Ok(smallvec![StyleDeclaration::[<$transient:camel>](
+                <$transient_ty as FromCss>::from_css(input)?,
+              )]),
+            )*
           }
         }
 
@@ -210,6 +223,17 @@ macro_rules! define_style {
                 }
 
                 Ok(smallvec![StyleDeclaration::[<$longhand:camel>](
+                  parse_css_input_value(css_input)?,
+                )])
+              }
+            )*
+            $(
+              Self::[<$transient:camel>] => {
+                if let Some(keyword) = parse_css_wide_keyword(&css_input) {
+                  return Ok(smallvec![StyleDeclaration::CssWideKeyword(self, keyword)]);
+                }
+
+                Ok(smallvec![StyleDeclaration::[<$transient:camel>](
                   parse_css_input_value(css_input)?,
                 )])
               }
@@ -274,6 +298,7 @@ macro_rules! define_style {
         fn from_normalized_name(name: &str) -> Self {
           match name {
             $(stringify!($longhand) => Self::Longhand(LonghandId::[<$longhand:camel>]),)*
+            $(stringify!($transient) => Self::Longhand(LonghandId::[<$transient:camel>]),)*
             $(stringify!($shorthand) => Self::Shorthand(ShorthandId::[<$shorthand:camel>]),)*
             _ => Self::Ignored,
           }
@@ -511,10 +536,19 @@ macro_rules! define_style {
             }
           }
 
+          // Pre-resolve `direction` (last-declared wins) so the apply pass
+          // below knows which physical side every logical-axis declaration
+          // resolves to. Without this, `ms-4` declared before `direction: rtl`
+          // in the same block would land on the wrong side.
+          for declaration in &declarations {
+            if let StyleDeclaration::Direction(d) = declaration {
+              style.direction = *d;
+            }
+          }
+
           for declaration in declarations {
             declaration.apply_with_parent(&mut style, parent);
           }
-          style.resolve_logical_sides();
           style
         }
 
@@ -551,6 +585,11 @@ macro_rules! define_style {
         $(
           /// An explicit specified value for a non-shorthand property.
           [<$longhand:camel>]($longhand_ty),
+        )*
+        $(
+          /// A specified value for a logical-axis longhand that resolves to a
+          /// physical side via `ComputedStyle::direction`.
+          [<$transient:camel>]($transient_ty),
         )*
         /// A custom property declaration such as `--token: value`.
         CustomProperty(String, String),
@@ -609,6 +648,10 @@ macro_rules! define_style {
                   );
                 }
               )*
+              // Transient (logical-side) longhands have no `ComputedStyle` field
+              // to interpolate; the physical sides they resolve to handle
+              // animation on their own.
+              $(LonghandId::[<$transient:camel>] => {})*
             }
           }
 
@@ -677,10 +720,17 @@ macro_rules! define_style {
             Self::[<$longhand:camel>](value)
           }
         )*
+        $(
+          /// Returns a declaration for this logical-axis property.
+          pub fn $transient(value: $transient_ty) -> Self {
+            Self::[<$transient:camel>](value)
+          }
+        )*
 
         pub(crate) fn longhand_id(&self) -> LonghandId {
           match self {
             $(Self::[<$longhand:camel>](..) => LonghandId::[<$longhand:camel>],)*
+            $(Self::[<$transient:camel>](..) => LonghandId::[<$transient:camel>],)*
             Self::CustomProperty(..) | Self::Deferred(..) => {
               unreachable!("custom and deferred declarations do not map to a single longhand")
             }
@@ -702,6 +752,7 @@ macro_rules! define_style {
           style: &mut ComputedStyle,
           parent: &ComputedStyle,
         ) {
+          let is_rtl = style.direction == Direction::Rtl;
           match self {
             Self::CssWideKeyword(property, keyword) => {
               match property {
@@ -714,6 +765,17 @@ macro_rules! define_style {
                     };
                   }
                 )*
+                $(
+                  LonghandId::[<$transient:camel>] => {
+                    let target = if is_rtl { &mut style.$transient_rtl } else { &mut style.$transient_ltr };
+                    *target = match keyword {
+                      CssWideKeyword::Initial => Default::default(),
+                      CssWideKeyword::Inherit | CssWideKeyword::Unset => {
+                        if is_rtl { parent.$transient_rtl.to_owned() } else { parent.$transient_ltr.to_owned() }
+                      }
+                    };
+                  }
+                )*
               }
             }
             Self::CustomProperty(name, value) => {
@@ -723,16 +785,28 @@ macro_rules! define_style {
               apply_deferred_declaration(style, Some(parent), &deferred);
             }
             $(Self::[<$longhand:camel>](value) => style.$longhand = value,)*
+            $(
+              Self::[<$transient:camel>](value) => {
+                if is_rtl { style.$transient_rtl = value } else { style.$transient_ltr = value }
+              }
+            )*
           }
         }
 
         pub(crate) fn apply_to_computed(&self, style: &mut ComputedStyle) {
+          let is_rtl = style.direction == Direction::Rtl;
           match self {
             Self::CssWideKeyword(property, keyword) => match keyword {
               CssWideKeyword::Initial => match property {
                 $(
                   LonghandId::[<$longhand:camel>] => {
                     style.$longhand = Default::default();
+                  }
+                )*
+                $(
+                  LonghandId::[<$transient:camel>] => {
+                    if is_rtl { style.$transient_rtl = Default::default() }
+                    else { style.$transient_ltr = Default::default() }
                   }
                 )*
               },
@@ -745,6 +819,12 @@ macro_rules! define_style {
             }
             Self::Deferred(deferred) => apply_deferred_declaration(style, None, deferred),
             $(Self::[<$longhand:camel>](value) => style.$longhand.clone_from(value),)*
+            $(
+              Self::[<$transient:camel>](value) => {
+                if is_rtl { style.$transient_rtl.clone_from(value) }
+                else { style.$transient_ltr.clone_from(value) }
+              }
+            )*
           }
         }
 
@@ -763,6 +843,15 @@ macro_rules! define_style {
                 if name.starts_with("webkit-") {
                   dest.write_str("-")?;
                 }
+                dest.write_str(&name)?;
+                dest.write_str(": ")?;
+                value.to_css(dest)?;
+                dest.write_str(";")
+              }
+            )*
+            $(
+              Self::[<$transient:camel>](value) => {
+                let name = stringify!($transient).replace("_", "-");
                 dest.write_str(&name)?;
                 dest.write_str(": ")?;
                 value.to_css(dest)?;
@@ -821,14 +910,10 @@ define_style! {
     padding_right: LengthDefaultsToZero,
     padding_bottom: LengthDefaultsToZero,
     padding_left: LengthDefaultsToZero,
-    padding_inline_start: Option<LengthDefaultsToZero>,
-    padding_inline_end: Option<LengthDefaultsToZero>,
     margin_top: LengthDefaultsToZero,
     margin_right: LengthDefaultsToZero,
     margin_bottom: LengthDefaultsToZero,
     margin_left: LengthDefaultsToZero,
-    margin_inline_start: Option<LengthDefaultsToZero>,
-    margin_inline_end: Option<LengthDefaultsToZero>,
     top: Length,
     right: Length,
     bottom: Length,
@@ -947,6 +1032,12 @@ define_style! {
     visibility: Visibility where inherit = true,
     vertical_align: VerticalAlign,
   }
+  transient_longhands {
+    margin_inline_start: LengthDefaultsToZero => (margin_left, margin_right),
+    margin_inline_end: LengthDefaultsToZero => (margin_right, margin_left),
+    padding_inline_start: LengthDefaultsToZero => (padding_left, padding_right),
+    padding_inline_end: LengthDefaultsToZero => (padding_right, padding_left),
+  }
   shorthands {
     animation: Animations => [AnimationName, AnimationDuration, AnimationDelay, AnimationTimingFunction, AnimationIterationCount, AnimationDirection, AnimationFillMode, AnimationPlayState] |value, target| {
       target.push(StyleDeclaration::animation_duration(value.iter().map(|animation| animation.duration).collect()));
@@ -985,7 +1076,7 @@ define_style! {
       );
     },
     padding_inline: SpacePair<LengthDefaultsToZero> => [PaddingInlineStart, PaddingInlineEnd] |value, target| {
-      push_axis_declarations!(target, value, Option, padding_inline_start, padding_inline_end);
+      push_axis_declarations!(target, value, padding_inline_start, padding_inline_end);
     },
     padding_block: SpacePair<LengthDefaultsToZero> => [PaddingTop, PaddingBottom] |value, target| {
       push_axis_declarations!(target, value, padding_top, padding_bottom);
@@ -1001,7 +1092,7 @@ define_style! {
       );
     },
     margin_inline: SpacePair<LengthDefaultsToZero> => [MarginInlineStart, MarginInlineEnd] |value, target| {
-      push_axis_declarations!(target, value, Option, margin_inline_start, margin_inline_end);
+      push_axis_declarations!(target, value, margin_inline_start, margin_inline_end);
     },
     margin_block: SpacePair<LengthDefaultsToZero> => [MarginTop, MarginBottom] |value, target| {
       push_axis_declarations!(target, value, margin_top, margin_bottom);
@@ -1617,41 +1708,6 @@ impl ComputedStyle {
     // Elements with position: absolute or fixed are blockified
     if self.position == Position::Absolute || self.float != Float::None {
       self.display.blockify();
-    }
-  }
-
-  /// Map `margin-inline-{start,end}` and `padding-inline-{start,end}` onto
-  /// physical sides using the element's `direction`. Logical declarations
-  /// overwrite the physical sides they resolve to.
-  pub(crate) fn resolve_logical_sides(&mut self) {
-    let is_rtl = self.direction == Direction::Rtl;
-    if let Some(v) = self.margin_inline_start.take() {
-      if is_rtl {
-        self.margin_right = v;
-      } else {
-        self.margin_left = v;
-      }
-    }
-    if let Some(v) = self.margin_inline_end.take() {
-      if is_rtl {
-        self.margin_left = v;
-      } else {
-        self.margin_right = v;
-      }
-    }
-    if let Some(v) = self.padding_inline_start.take() {
-      if is_rtl {
-        self.padding_right = v;
-      } else {
-        self.padding_left = v;
-      }
-    }
-    if let Some(v) = self.padding_inline_end.take() {
-      if is_rtl {
-        self.padding_left = v;
-      } else {
-        self.padding_right = v;
-      }
     }
   }
 

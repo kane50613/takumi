@@ -1483,10 +1483,10 @@ impl TailwindProperty {
       }
       TailwindProperty::MarginLeft(length) => push_decl!(builder, important, margin_left(length)),
       TailwindProperty::MarginInlineStart(length) => {
-        push_decl!(builder, important, margin_inline_start(Some(length)))
+        push_decl!(builder, important, margin_inline_start(length))
       }
       TailwindProperty::MarginInlineEnd(length) => {
-        push_decl!(builder, important, margin_inline_end(Some(length)))
+        push_decl!(builder, important, margin_inline_end(length))
       }
       TailwindProperty::Padding(length) => {
         push_decl!(
@@ -1523,10 +1523,10 @@ impl TailwindProperty {
       }
       TailwindProperty::PaddingLeft(length) => push_decl!(builder, important, padding_left(length)),
       TailwindProperty::PaddingInlineStart(length) => {
-        push_decl!(builder, important, padding_inline_start(Some(length)))
+        push_decl!(builder, important, padding_inline_start(length))
       }
       TailwindProperty::PaddingInlineEnd(length) => {
-        push_decl!(builder, important, padding_inline_end(Some(length)))
+        push_decl!(builder, important, padding_inline_end(length))
       }
       TailwindProperty::Inset(length) => {
         push_decl!(
@@ -2572,8 +2572,26 @@ mod tests {
     assert_eq!(style.margin_right, Length::from_spacing(2.0));
     assert_eq!(style.padding_left, Length::from_spacing(3.0));
     assert_eq!(style.padding_right, Length::from_spacing(1.0));
-    assert_eq!(style.margin_inline_start, None);
-    assert_eq!(style.margin_inline_end, None);
+  }
+
+  #[test]
+  fn test_logical_physical_cascade_order_ltr() {
+    let viewport = Viewport::new((100, 100));
+    // ms-2 first, then ml-4 → physical wins (last declared).
+    let Ok(values) = TailwindValues::from_str("ms-2 ml-4") else {
+      return;
+    };
+    let style =
+      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+    assert_eq!(style.margin_left, Length::from_spacing(4.0));
+
+    // ml-4 first, then ms-2 → logical wins.
+    let Ok(values) = TailwindValues::from_str("ml-4 ms-2") else {
+      return;
+    };
+    let style =
+      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+    assert_eq!(style.margin_left, Length::from_spacing(2.0));
   }
 
   #[test]
