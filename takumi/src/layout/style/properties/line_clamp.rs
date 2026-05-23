@@ -20,6 +20,12 @@ impl MakeComputed for LineClamp {}
 
 impl TailwindPropertyParser for LineClamp {
   fn parse_tw(token: &str) -> Option<Self> {
+    if token.eq_ignore_ascii_case("none") {
+      return Some(LineClamp {
+        count: 0,
+        ellipsis: None,
+      });
+    }
     let count = token.parse::<u32>().ok()?;
     Some(LineClamp {
       count,

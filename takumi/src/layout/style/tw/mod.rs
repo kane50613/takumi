@@ -1,7 +1,7 @@
 pub(crate) mod map;
 pub(crate) mod parser;
 
-use std::{borrow::Cow, cmp::Ordering, ops::Neg, str::FromStr};
+use std::{borrow::Cow, cmp::Ordering, str::FromStr};
 
 use cssparser::match_ignore_ascii_case;
 use serde::{Deserializer, de::Error as DeError};
@@ -18,8 +18,18 @@ use crate::layout::{
   },
 };
 
-/// Tailwind `--spacing` variable value.
-pub const TW_VAR_SPACING: f32 = 0.25;
+/// Tailwind `--spacing` variable value (rem per spacing unit).
+///
+/// In Tailwind v4 the `--spacing` theme variable defaults to `0.25rem`, and
+/// every numeric utility on the spacing scale (`p-4`, `m-8`, `gap-2`, ...) is
+/// `N * --spacing`. So `p-4` evaluates to `4 * 0.25rem = 1rem`.
+///
+/// Prefer the [`Length::from_spacing`](crate::layout::style::Length::from_spacing)
+/// constructor over multiplying by this constant directly — it expresses
+/// "N spacing units" rather than the raw rem amount, which keeps the unit
+/// factor (`0.25`) and the class multiplier (`4`) from being confused at
+/// call sites.
+pub(crate) const TW_VAR_SPACING: f32 = 0.25;
 
 /// Represents a collection of tailwind properties.
 #[derive(Debug, Clone, PartialEq)]
@@ -85,10 +95,10 @@ struct TailwindDeclarationBuilder {
   declarations: StyleDeclarationBlock,
   gradient_state: TwGradientState,
   transform_state: TwTransformState,
-  shadow: Option<BoxShadow>,
+  shadow: Option<Vec<BoxShadow>>,
   shadow_important: bool,
   shadow_color: Option<ColorInput>,
-  text_shadow: Option<TextShadow>,
+  text_shadow: Option<Vec<TextShadow>>,
   text_shadow_important: bool,
   text_shadow_color: Option<ColorInput>,
   filter: Option<Filters>,
@@ -144,12 +154,15 @@ impl TailwindDeclarationBuilder {
     self.declarations.push(declaration, important);
   }
 
-  fn set_shadow(&mut self, mut shadow: BoxShadow, important: bool) {
+  fn set_shadow_layers<I: IntoIterator<Item = BoxShadow>>(&mut self, layers: I, important: bool) {
+    let mut shadows: Vec<BoxShadow> = layers.into_iter().collect();
     if let Some(color) = self.shadow_color {
-      shadow.color = color;
+      for shadow in &mut shadows {
+        shadow.color = color;
+      }
     }
 
-    self.shadow = Some(shadow);
+    self.shadow = Some(shadows);
     self.shadow_important = important;
   }
 
@@ -157,17 +170,26 @@ impl TailwindDeclarationBuilder {
     self.shadow_color = Some(color);
     self.shadow_important = important;
 
-    if let Some(shadow) = self.shadow.as_mut() {
-      shadow.color = color;
+    if let Some(shadows) = self.shadow.as_mut() {
+      for shadow in shadows {
+        shadow.color = color;
+      }
     }
   }
 
-  fn set_text_shadow(&mut self, mut text_shadow: TextShadow, important: bool) {
+  fn set_text_shadow_layers<I: IntoIterator<Item = TextShadow>>(
+    &mut self,
+    layers: I,
+    important: bool,
+  ) {
+    let mut shadows: Vec<TextShadow> = layers.into_iter().collect();
     if let Some(color) = self.text_shadow_color {
-      text_shadow.color = color;
+      for shadow in &mut shadows {
+        shadow.color = color;
+      }
     }
 
-    self.text_shadow = Some(text_shadow);
+    self.text_shadow = Some(shadows);
     self.text_shadow_important = important;
   }
 
@@ -175,8 +197,10 @@ impl TailwindDeclarationBuilder {
     self.text_shadow_color = Some(color);
     self.text_shadow_important = important;
 
-    if let Some(text_shadow) = self.text_shadow.as_mut() {
-      text_shadow.color = color;
+    if let Some(shadows) = self.text_shadow.as_mut() {
+      for shadow in shadows {
+        shadow.color = color;
+      }
     }
   }
 
@@ -202,16 +226,16 @@ impl TailwindDeclarationBuilder {
   }
 
   fn finish(mut self) -> StyleDeclarationBlock {
-    if let Some(shadow) = self.shadow.take() {
+    if let Some(shadows) = self.shadow.take() {
       self.push(
-        StyleDeclaration::box_shadow(Some([shadow].into())),
+        StyleDeclaration::box_shadow(Some(shadows.into_boxed_slice())),
         self.shadow_important,
       );
     }
 
-    if let Some(text_shadow) = self.text_shadow.take() {
+    if let Some(shadows) = self.text_shadow.take() {
       self.push(
-        StyleDeclaration::text_shadow(Some([text_shadow].into())),
+        StyleDeclaration::text_shadow(Some(shadows.into_boxed_slice())),
         self.text_shadow_important,
       );
     }
@@ -299,6 +323,9 @@ pub(crate) struct TwGradientState {
   pub from: Option<ColorInput>,
   pub to: Option<ColorInput>,
   pub via: Option<ColorInput>,
+  pub from_position: Option<Length>,
+  pub via_position: Option<Length>,
+  pub to_position: Option<Length>,
   pub important: bool,
 }
 
@@ -312,7 +339,14 @@ pub(crate) enum TwGradientType {
 
 impl TwGradientState {
   pub(crate) fn apply(self, declarations: &mut StyleDeclarationBlock) {
-    if self.from.is_none() && self.to.is_none() && self.via.is_none() && self.angle.is_none() {
+    if self.from.is_none()
+      && self.to.is_none()
+      && self.via.is_none()
+      && self.from_position.is_none()
+      && self.via_position.is_none()
+      && self.to_position.is_none()
+      && self.angle.is_none()
+    {
       return;
     }
 
@@ -330,19 +364,25 @@ impl TwGradientState {
     let mut stops = Vec::new();
     stops.push(GradientStop::ColorHint {
       color: from_color,
-      hint: Some(StopPosition(Length::Percentage(0.0))),
+      hint: Some(StopPosition(
+        self.from_position.unwrap_or(Length::Percentage(0.0)),
+      )),
     });
 
     if let Some(via_color) = self.via {
       stops.push(GradientStop::ColorHint {
         color: via_color,
-        hint: Some(StopPosition(Length::Percentage(50.0))),
+        hint: Some(StopPosition(
+          self.via_position.unwrap_or(Length::Percentage(50.0)),
+        )),
       });
     }
 
     stops.push(GradientStop::ColorHint {
       color: to_color,
-      hint: Some(StopPosition(Length::Percentage(100.0))),
+      hint: Some(StopPosition(
+        self.to_position.unwrap_or(Length::Percentage(100.0)),
+      )),
     });
 
     match self.gradient_type {
@@ -800,6 +840,10 @@ pub enum TailwindProperty {
   TextShadow(TextShadow),
   /// `text-shadow` color override.
   TextShadowColor(ColorInput),
+  /// Composite `box-shadow` preset (multi-layer; used by `shadow-sm/md/lg/xl`).
+  ShadowList(&'static [BoxShadow]),
+  /// Composite `text-shadow` preset (multi-layer; used by `text-shadow-sm/md/lg`).
+  TextShadowList(&'static [TextShadow]),
   /// `isolation` property.
   Isolation(Isolation),
   /// `mix-blend-mode` property.
@@ -824,6 +868,12 @@ pub enum TailwindProperty {
   GradientTo(ColorInput),
   /// `via` property.
   GradientVia(ColorInput),
+  /// `from-{position}` (e.g. `from-20%`).
+  GradientFromPosition(Length),
+  /// `via-{position}` (e.g. `via-60%`).
+  GradientViaPosition(Length),
+  /// `to-{position}` (e.g. `to-90%`).
+  GradientToPosition(Length),
 }
 
 fn extract_arbitrary_value(suffix: &str) -> Option<Cow<'_, str>> {
@@ -854,11 +904,12 @@ pub trait TailwindPropertyParser: Sized + for<'i> FromCss<'i> {
   }
 }
 
-impl Neg for TailwindProperty {
-  type Output = Self;
-
-  fn neg(self) -> Self::Output {
-    match self {
+impl TailwindProperty {
+  /// Try to negate this property. Returns `None` if the property has no
+  /// meaningful negative form (e.g. colors), so a class like `-bg-red-500`
+  /// is rejected instead of silently passing through as `bg-red-500`.
+  fn try_neg(self) -> Option<Self> {
+    Some(match self {
       TailwindProperty::Margin(length) => TailwindProperty::Margin(-length),
       TailwindProperty::MarginX(length) => TailwindProperty::MarginX(-length),
       TailwindProperty::MarginY(length) => TailwindProperty::MarginY(-length),
@@ -890,8 +941,21 @@ impl Neg for TailwindProperty {
       TailwindProperty::LetterSpacing(length) => TailwindProperty::LetterSpacing(-length),
       TailwindProperty::HueRotate(angle) => TailwindProperty::HueRotate(-angle),
       TailwindProperty::BackdropHueRotate(angle) => TailwindProperty::BackdropHueRotate(-angle),
-      _ => self,
-    }
+      TailwindProperty::GridColumnStart(p) => {
+        TailwindProperty::GridColumnStart(neg_grid_placement(p)?)
+      }
+      TailwindProperty::GridColumnEnd(p) => TailwindProperty::GridColumnEnd(neg_grid_placement(p)?),
+      TailwindProperty::GridRowStart(p) => TailwindProperty::GridRowStart(neg_grid_placement(p)?),
+      TailwindProperty::GridRowEnd(p) => TailwindProperty::GridRowEnd(neg_grid_placement(p)?),
+      _ => return None,
+    })
+  }
+}
+
+fn neg_grid_placement(p: GridPlacement) -> Option<GridPlacement> {
+  match p {
+    GridPlacement::Line(n) => Some(GridPlacement::Line(-n)),
+    _ => None,
   }
 }
 
@@ -919,13 +983,11 @@ impl TailwindProperty {
       return Some(property.clone());
     }
 
-    // Handle negative values like "-top-4"
+    // Handle negative values like "-top-4". Properties that have no
+    // meaningful negative form (e.g. colors) are rejected here rather than
+    // silently passing through as the positive version.
     if let Some(stripped) = token.strip_prefix('-') {
-      if let Some(property) = Self::parse_prefix_suffix(stripped) {
-        return Some(-property);
-      }
-
-      return None;
+      return Self::parse_prefix_suffix(stripped).and_then(Self::try_neg);
     }
 
     Self::parse_prefix_suffix(token)
@@ -982,6 +1044,18 @@ impl TailwindProperty {
       }
       TailwindProperty::GradientVia(color) => {
         builder.gradient_state.via = Some(color);
+        builder.gradient_state.important = important;
+      }
+      TailwindProperty::GradientFromPosition(pos) => {
+        builder.gradient_state.from_position = Some(pos);
+        builder.gradient_state.important = important;
+      }
+      TailwindProperty::GradientViaPosition(pos) => {
+        builder.gradient_state.via_position = Some(pos);
+        builder.gradient_state.important = important;
+      }
+      TailwindProperty::GradientToPosition(pos) => {
+        builder.gradient_state.to_position = Some(pos);
         builder.gradient_state.important = important;
       }
       TailwindProperty::BackgroundClip(background_clip) => {
@@ -1084,7 +1158,10 @@ impl TailwindProperty {
       TailwindProperty::MaxHeight(max_height) => {
         push_decl!(builder, important, max_height(max_height))
       }
-      TailwindProperty::Shadow(box_shadow) => builder.set_shadow(box_shadow, important),
+      TailwindProperty::Shadow(box_shadow) => builder.set_shadow_layers([box_shadow], important),
+      TailwindProperty::ShadowList(layers) => {
+        builder.set_shadow_layers(layers.iter().copied(), important)
+      }
       TailwindProperty::ShadowColor(color) => builder.set_shadow_color(color, important),
       TailwindProperty::Display(display) => {
         push_decl!(builder, important, display(display));
@@ -1582,7 +1659,12 @@ impl TailwindProperty {
           builder.push_backdrop_filter(filter, important);
         }
       }
-      TailwindProperty::TextShadow(text_shadow) => builder.set_text_shadow(text_shadow, important),
+      TailwindProperty::TextShadow(text_shadow) => {
+        builder.set_text_shadow_layers([text_shadow], important)
+      }
+      TailwindProperty::TextShadowList(layers) => {
+        builder.set_text_shadow_layers(layers.iter().copied(), important)
+      }
       TailwindProperty::TextShadowColor(color) => builder.set_text_shadow_color(color, important),
       TailwindProperty::Visibility(visibility) => {
         push_decl!(builder, important, visibility(visibility))
@@ -1658,11 +1740,11 @@ mod tests {
   fn test_parse_width() {
     assert_eq!(
       TailwindProperty::parse("w-64"),
-      Some(TailwindProperty::Width(Length::Rem(64.0 * TW_VAR_SPACING)))
+      Some(TailwindProperty::Width(Length::from_spacing(64.0)))
     );
     assert_eq!(
       TailwindProperty::parse("h-32"),
-      Some(TailwindProperty::Height(Length::Rem(32.0 * TW_VAR_SPACING)))
+      Some(TailwindProperty::Height(Length::from_spacing(32.0)))
     );
     assert_eq!(
       TailwindProperty::parse("justify-self-center"),
@@ -1688,7 +1770,7 @@ mod tests {
     assert_eq!(
       TailwindProperty::parse("shadow-red-500"),
       Some(TailwindProperty::ShadowColor(ColorInput::Value(Color([
-        239, 68, 68, 255
+        251, 44, 54, 255
       ]))))
     );
   }
@@ -1698,7 +1780,7 @@ mod tests {
     assert_eq!(
       TailwindProperty::parse("text-shadow-red-500"),
       Some(TailwindProperty::TextShadowColor(ColorInput::Value(Color(
-        [239, 68, 68, 255]
+        [251, 44, 54, 255]
       ))))
     );
   }
@@ -1708,7 +1790,7 @@ mod tests {
     assert_eq!(
       TailwindProperty::parse("decoration-red-500"),
       Some(TailwindProperty::TextDecorationColor(ColorInput::Value(
-        Color([239, 68, 68, 255])
+        Color([251, 44, 54, 255])
       )))
     );
   }
@@ -1785,9 +1867,7 @@ mod tests {
   fn test_parse_negative_margin() {
     assert_eq!(
       TailwindProperty::parse("-ml-4"),
-      Some(TailwindProperty::MarginLeft(Length::Rem(
-        -4.0 * TW_VAR_SPACING
-      )))
+      Some(TailwindProperty::MarginLeft(Length::from_spacing(-4.0)))
     );
   }
 
@@ -1865,7 +1945,7 @@ mod tests {
     assert_eq!(
       TailwindProperty::parse("outline-red-500"),
       Some(TailwindProperty::OutlineColor(ColorInput::Value(Color([
-        239, 68, 68, 255
+        251, 44, 54, 255
       ]))))
     );
     assert_eq!(
@@ -2302,15 +2382,15 @@ mod tests {
           interpolation: ColorInterpolationMethod::default(),
           stops: [
             GradientStop::ColorHint {
-              color: ColorInput::Value(Color([239, 68, 68, 255])),
+              color: ColorInput::Value(Color([251, 44, 54, 255])),
               hint: Some(StopPosition(Length::Percentage(0.0))),
             },
             GradientStop::ColorHint {
-              color: ColorInput::Value(Color([34, 197, 94, 255])),
+              color: ColorInput::Value(Color([0, 201, 80, 255])),
               hint: Some(StopPosition(Length::Percentage(50.0))),
             },
             GradientStop::ColorHint {
-              color: ColorInput::Value(Color([59, 130, 246, 255])),
+              color: ColorInput::Value(Color([43, 127, 255, 255])),
               hint: Some(StopPosition(Length::Percentage(100.0))),
             },
           ]
@@ -2332,17 +2412,29 @@ mod tests {
       let style =
         Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
 
+      // `shadow-md` is a 2-layer composite in v4; the color override must
+      // apply to every layer.
       assert_eq!(
         style.box_shadow,
         Some(
-          [BoxShadow {
-            inset: false,
-            offset_x: Length::Px(1.0),
-            offset_y: Length::Px(1.0),
-            blur_radius: Length::Px(3.0),
-            spread_radius: Length::Px(0.0),
-            color: ColorInput::Value(Color([239, 68, 68, 255])),
-          }]
+          [
+            BoxShadow {
+              inset: false,
+              offset_x: Length::Px(0.0),
+              offset_y: Length::Px(4.0),
+              blur_radius: Length::Px(6.0),
+              spread_radius: Length::Px(-1.0),
+              color: ColorInput::Value(Color([251, 44, 54, 255])),
+            },
+            BoxShadow {
+              inset: false,
+              offset_x: Length::Px(0.0),
+              offset_y: Length::Px(2.0),
+              blur_radius: Length::Px(4.0),
+              spread_radius: Length::Px(-2.0),
+              color: ColorInput::Value(Color([251, 44, 54, 255])),
+            },
+          ]
           .into()
         )
       );
@@ -2363,18 +2455,269 @@ mod tests {
       let style =
         Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
 
+      // `text-shadow-sm` is a 3-layer composite in v4.
       assert_eq!(
         style.text_shadow,
         Some(
-          [TextShadow {
-            offset_x: Length::Px(0.0),
-            offset_y: Length::Px(1.0),
-            blur_radius: Length::Px(2.0),
-            color: ColorInput::Value(Color([239, 68, 68, 255])),
-          }]
+          [
+            TextShadow {
+              offset_x: Length::Px(0.0),
+              offset_y: Length::Px(1.0),
+              blur_radius: Length::Px(0.0),
+              color: ColorInput::Value(Color([251, 44, 54, 255])),
+            },
+            TextShadow {
+              offset_x: Length::Px(0.0),
+              offset_y: Length::Px(1.0),
+              blur_radius: Length::Px(1.0),
+              color: ColorInput::Value(Color([251, 44, 54, 255])),
+            },
+            TextShadow {
+              offset_x: Length::Px(0.0),
+              offset_y: Length::Px(2.0),
+              blur_radius: Length::Px(2.0),
+              color: ColorInput::Value(Color([251, 44, 54, 255])),
+            },
+          ]
           .into()
         )
       );
     }
+  }
+
+  #[test]
+  fn test_v4_palette_red_500() {
+    // V4 OKLCH-derived sRGB hex; was V3 #ef4444 prior to the audit.
+    assert_eq!(
+      TailwindProperty::parse("bg-red-500"),
+      Some(TailwindProperty::BackgroundColor(ColorInput::Value(Color(
+        [251, 44, 54, 255]
+      ))))
+    );
+  }
+
+  #[test]
+  fn test_bare_rounded_is_radius_sm() {
+    // v4: bare `rounded` aliases `rounded-sm` (0.25rem).
+    assert_eq!(
+      TailwindProperty::parse("rounded"),
+      Some(TailwindProperty::Rounded(TwRounded(Length::Rem(0.25))))
+    );
+  }
+
+  #[test]
+  fn test_negative_color_is_rejected() {
+    // Colors have no negative form. `-bg-red-500` must be unparseable rather
+    // than silently passing through as `bg-red-500`.
+    assert_eq!(TailwindProperty::parse("-bg-red-500"), None);
+    assert_eq!(TailwindProperty::parse("-text-blue-500"), None);
+  }
+
+  #[test]
+  fn test_negative_grid_line() {
+    // `-col-start-1` must produce GridColumnStart(Line(-1)).
+    assert_eq!(
+      TailwindProperty::parse("-col-start-1"),
+      Some(TailwindProperty::GridColumnStart(GridPlacement::Line(-1)))
+    );
+  }
+
+  #[test]
+  fn test_logical_margin_padding_aliases() {
+    // v3/v4 logical-side aliases must map to start/end (LTR: left/right) —
+    // not to the two-sided MarginX/Y as the old code did.
+    assert_eq!(
+      TailwindProperty::parse("ms-4"),
+      Some(TailwindProperty::MarginLeft(Length::from_spacing(4.0)))
+    );
+    assert_eq!(
+      TailwindProperty::parse("me-4"),
+      Some(TailwindProperty::MarginRight(Length::from_spacing(4.0)))
+    );
+    assert_eq!(
+      TailwindProperty::parse("ps-2"),
+      Some(TailwindProperty::PaddingLeft(Length::from_spacing(2.0)))
+    );
+    assert_eq!(
+      TailwindProperty::parse("pe-2"),
+      Some(TailwindProperty::PaddingRight(Length::from_spacing(2.0)))
+    );
+  }
+
+  #[test]
+  fn test_filter_none_parses() {
+    assert_eq!(
+      TailwindProperty::parse("filter-none"),
+      Some(TailwindProperty::Filter(Filters::default()))
+    );
+    assert_eq!(
+      TailwindProperty::parse("backdrop-filter-none"),
+      Some(TailwindProperty::BackdropFilter(Filters::default()))
+    );
+  }
+
+  #[test]
+  fn test_font_numeric_weight() {
+    assert_eq!(
+      TailwindProperty::parse("font-700"),
+      Some(TailwindProperty::FontWeight(FontWeight::from(700.0)))
+    );
+  }
+
+  #[test]
+  fn test_line_clamp_none() {
+    assert_eq!(
+      TailwindProperty::parse("line-clamp-none"),
+      Some(TailwindProperty::LineClamp(LineClamp::from(0)))
+    );
+  }
+
+  #[test]
+  fn test_bg_auto() {
+    assert_eq!(
+      TailwindProperty::parse("bg-auto"),
+      Some(TailwindProperty::BackgroundSize(BackgroundSize::Explicit {
+        width: Length::Auto,
+        height: Length::Auto,
+      }))
+    );
+  }
+
+  #[test]
+  fn test_bg_repeat_v4_names() {
+    assert_eq!(
+      TailwindProperty::parse("bg-repeat-round"),
+      Some(TailwindProperty::BackgroundRepeat(BackgroundRepeat::round()))
+    );
+    assert_eq!(
+      TailwindProperty::parse("bg-repeat-space"),
+      Some(TailwindProperty::BackgroundRepeat(BackgroundRepeat::space()))
+    );
+  }
+
+  #[test]
+  fn test_grid_cols_none() {
+    assert_eq!(
+      TailwindProperty::parse("grid-cols-none"),
+      Some(TailwindProperty::GridTemplateColumns(TwGridTemplate(
+        Vec::new()
+      )))
+    );
+  }
+
+  #[test]
+  fn test_col_auto_row_auto() {
+    assert_eq!(
+      TailwindProperty::parse("col-auto"),
+      Some(TailwindProperty::GridColumn(GridLine {
+        start: GridPlacement::auto(),
+        end: GridPlacement::auto(),
+      }))
+    );
+    assert_eq!(
+      TailwindProperty::parse("row-auto"),
+      Some(TailwindProperty::GridRow(GridLine {
+        start: GridPlacement::auto(),
+        end: GridPlacement::auto(),
+      }))
+    );
+  }
+
+  #[test]
+  fn test_shadow_2xs_xs_present() {
+    assert!(TailwindProperty::parse("shadow-2xs").is_some());
+    assert!(TailwindProperty::parse("shadow-xs").is_some());
+  }
+
+  #[test]
+  fn test_shadow_md_is_composite() {
+    // `shadow-md` in v4 is a two-layer composite, not a single shadow.
+    let viewport = Viewport::new((100, 100));
+    let values = TailwindValues::from_str("shadow-md").unwrap();
+    let style =
+      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+    assert_eq!(style.box_shadow.as_ref().map(|s| s.len()), Some(2));
+  }
+
+  #[test]
+  fn test_text_shadow_sm_is_composite() {
+    // `text-shadow-sm` in v4 is a three-layer composite.
+    let viewport = Viewport::new((100, 100));
+    let values = TailwindValues::from_str("text-shadow-sm").unwrap();
+    let style =
+      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+    assert_eq!(style.text_shadow.as_ref().map(|s| s.len()), Some(3));
+  }
+
+  #[test]
+  fn test_text_shadow_none_and_inset_shadow_none() {
+    assert!(TailwindProperty::parse("text-shadow-none").is_some());
+    assert!(TailwindProperty::parse("inset-shadow-none").is_some());
+  }
+
+  #[test]
+  fn test_bg_conic_standalone() {
+    assert_eq!(
+      TailwindProperty::parse("bg-conic"),
+      Some(TailwindProperty::BgConicAngle(Angle::zero()))
+    );
+  }
+
+  #[test]
+  fn test_gradient_stop_positions() {
+    // v4 lets you fix a stop's position with `from-N%`, `via-N%`, `to-N%`.
+    assert_eq!(
+      TailwindProperty::parse("from-20%"),
+      Some(TailwindProperty::GradientFromPosition(Length::Percentage(
+        20.0
+      )))
+    );
+    assert_eq!(
+      TailwindProperty::parse("via-60%"),
+      Some(TailwindProperty::GradientViaPosition(Length::Percentage(
+        60.0
+      )))
+    );
+    assert_eq!(
+      TailwindProperty::parse("to-90%"),
+      Some(TailwindProperty::GradientToPosition(Length::Percentage(
+        90.0
+      )))
+    );
+  }
+
+  #[test]
+  fn test_gradient_stop_position_is_used_in_apply() {
+    let viewport = Viewport::new((100, 100));
+    let values =
+      TailwindValues::from_str("bg-linear-to-r from-red-500 from-10% to-blue-500 to-80%").unwrap();
+    let style =
+      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+    let Some(images) = style.background_image.as_ref() else {
+      panic!("expected a background image");
+    };
+    let [BackgroundImage::Linear(gradient)] = &**images else {
+      panic!("expected a linear gradient");
+    };
+    let stops: &[_] = &gradient.stops;
+    let [first, last] = stops else {
+      panic!("expected two stops, got {}", stops.len());
+    };
+    let GradientStop::ColorHint {
+      hint: Some(StopPosition(first_pos)),
+      ..
+    } = first
+    else {
+      panic!("expected a hint on the first stop");
+    };
+    assert_eq!(*first_pos, Length::Percentage(10.0));
+    let GradientStop::ColorHint {
+      hint: Some(StopPosition(last_pos)),
+      ..
+    } = last
+    else {
+      panic!("expected a hint on the last stop");
+    };
+    assert_eq!(*last_pos, Length::Percentage(80.0));
   }
 }

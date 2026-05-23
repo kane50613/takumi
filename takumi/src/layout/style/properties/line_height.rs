@@ -3,8 +3,7 @@ use cssparser::{Parser, match_ignore_ascii_case};
 use crate::{
   layout::style::{
     CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult, ToCss,
-    parse_calc_number_expression,
-    tw::{TW_VAR_SPACING, TailwindPropertyParser},
+    parse_calc_number_expression, tw::TailwindPropertyParser,
   },
   rendering::Sizing,
 };
@@ -42,7 +41,7 @@ impl TailwindPropertyParser for LineHeight {
           return None;
         };
 
-        Some(LineHeight::Length(Length::Rem(value * TW_VAR_SPACING)))
+        Some(LineHeight::Length(Length::from_spacing(value)))
       }
     }
   }

@@ -649,10 +649,21 @@ impl<const DEFAULT_AUTO: bool> Default for Length<DEFAULT_AUTO> {
   }
 }
 
+impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
+  /// Construct a length from a Tailwind spacing-scale multiplier.
+  ///
+  /// `Length::from_spacing(4)` is the value emitted by `p-4`, `m-4`, etc. —
+  /// equivalent to `4 * --spacing` (i.e. `1rem` by default).
+  #[inline]
+  pub fn from_spacing(units: f32) -> Self {
+    Length::Rem(units * TW_VAR_SPACING)
+  }
+}
+
 impl<const DEFAULT_AUTO: bool> TailwindPropertyParser for Length<DEFAULT_AUTO> {
   fn parse_tw(token: &str) -> Option<Self> {
     if let Ok(value) = token.parse::<f32>() {
-      return Some(Length::Rem(value * TW_VAR_SPACING));
+      return Some(Length::from_spacing(value));
     }
 
     match AspectRatio::from_str(token) {
