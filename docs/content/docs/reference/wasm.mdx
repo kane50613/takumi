@@ -50,7 +50,7 @@ The WASM `Renderer` API is **synchronous** — `render`, `measure`, `renderAnima
 
 <AutoTypeTable path="../../../../takumi-wasm/pkg/takumi_wasm.d.ts" name="Renderer" />
 
-The WASM build adds `renderAsDataUrl(node, options)` — convenient for inline browser previews; `raw` format is not supported. It does not have `loadFontSync` (use `loadFont`), does not split `loadFont` / `loadFonts` (call `loadFont` per file), and `putPersistentImage` is synchronous.
+The WASM build adds `renderAsDataUrl(node, options)` — convenient for inline browser previews; `raw` format is not supported. There's no `loadFontSync`. `loadFont`, `loadFonts`, and `putPersistentImage` accept either bytes or a `() => Promise<ByteBuf>` loader — they return `void` when bytes are passed directly and `Promise<void>` when the loader is async, so `await` accordingly.
 
 ## Options
 

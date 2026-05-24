@@ -87,12 +87,12 @@ Returns `Array<{ src: string; data: ArrayBuffer }>`. Deduplicates URLs, validate
 ### `fromHtml`
 
 <Callout type="info">
-  `fromHtml` is not re-exported from `takumi-js/helpers`. Import it from the deeper
-  `@takumi-rs/helpers/html` subpath.
+  `fromHtml` lives in the `takumi-js/helpers/html` subpath — kept off the top-level export to avoid
+  pulling the HTML parser into bundles that don't need it.
 </Callout>
 
 ```tsx twoslash
-import { fromHtml } from "@takumi-rs/helpers/html";
+import { fromHtml } from "takumi-js/helpers/html";
 
 const { node, stylesheets } = fromHtml("<div class='card'><h1>Hi</h1></div>");
 ```
