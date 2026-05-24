@@ -161,22 +161,6 @@ fn add_node_unique_hashes_to_filter(node: &Node, filter: &mut BloomFilter) -> bo
   added
 }
 
-fn attribute_value<'a>(node: &'a Node, local_name: &TakumiIdent) -> Option<&'a str> {
-  if &**local_name == "id" {
-    return node.metadata.id.as_deref();
-  }
-  if &**local_name == "class" {
-    return node.metadata.class_name.as_deref();
-  }
-
-  node.metadata.attributes.as_ref().and_then(|attributes| {
-    attributes
-      .iter()
-      .find(|(name, _)| name.eq_ignore_ascii_case(local_name))
-      .map(|(_, value)| value.as_ref())
-  })
-}
-
 impl<'a> Element for ArenaElement<'a> {
   type Impl = TakumiSelectorImpl;
 
@@ -311,7 +295,9 @@ impl<'a> Element for ArenaElement<'a> {
       return false;
     }
 
-    attribute_value(self.tree.nodes[self.index].node, local_name)
+    self.tree.nodes[self.index]
+      .node
+      .attribute(local_name)
       .is_some_and(|value| operation.eval_str(value))
   }
   fn match_non_ts_pseudo_class(
@@ -414,7 +400,7 @@ pub(crate) fn match_stylesheets_view<'a>(
       tree: &arena,
       index: i,
     };
-    let is_replaced = node_is_replaced(arena.nodes[i].node);
+    let is_replaced = arena.nodes[i].node.is_replaced_element();
 
     let mut element_ctx = MatchingContext::new(
       MatchingMode::Normal,
@@ -516,10 +502,6 @@ fn selector_target(
     Some(crate::layout::style::selector::ParsedPseudoElement::After) => Some(SelectorTarget::After),
     Some(crate::layout::style::selector::ParsedPseudoElement::Other(_)) => None,
   }
-}
-
-fn node_is_replaced(node: &Node) -> bool {
-  matches!(node.kind, crate::layout::node::NodeKind::Image(_))
 }
 
 fn record_matches<'a>(

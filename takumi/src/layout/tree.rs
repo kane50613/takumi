@@ -243,6 +243,65 @@ fn registered_custom_property_parent_style(
   adjusted_parent
 }
 
+fn build_render_context<'g>(
+  parent_context: &RenderContext<'g>,
+  style: ComputedStyle,
+  sizing: Sizing,
+  current_color: Color,
+) -> RenderContext<'g> {
+  RenderContext {
+    global: parent_context.global,
+    transform: parent_context.transform,
+    style: Box::new(style),
+    current_color,
+    time: parent_context.time,
+    draw_debug_border: parent_context.draw_debug_border,
+    fetched_resources: parent_context.fetched_resources.clone(),
+    sizing,
+    stylesheet: parent_context.stylesheet.clone(),
+  }
+}
+
+fn pseudo_computed_style<'g>(
+  parent_context: &RenderContext<'g>,
+  pseudo_matched: &MatchedDeclarationsView<'_>,
+) -> (ComputedStyle, Sizing, Color) {
+  let style_layers = build_style_layers(
+    NodeStyleLayers::default(),
+    pseudo_matched,
+    parent_context.sizing.viewport,
+  );
+  let inherited_parent = registered_custom_property_parent_style(
+    &parent_context.style,
+    std::slice::from_ref(parent_context.stylesheet.as_ref()),
+    parent_context.sizing.viewport,
+  );
+  let mut style = style_layers.inherit(&inherited_parent);
+
+  let font_size = style
+    .font_size
+    .to_px(&parent_context.sizing, parent_context.sizing.font_size);
+  let normal_basis = resolve_normal_line_height(parent_context.global, &style, font_size);
+  let line_height = style
+    .line_height
+    .to_px(&parent_context.sizing, normal_basis);
+  let sizing = Sizing {
+    font_size,
+    root_font_size: Some(parent_context.sizing.root_font_size.unwrap_or(font_size)),
+    line_height,
+    root_line_height: Some(
+      parent_context
+        .sizing
+        .root_line_height
+        .unwrap_or(line_height),
+    ),
+    ..parent_context.sizing.clone()
+  };
+  let current_color = style.color.resolve(parent_context.current_color);
+  style.make_computed(&sizing);
+  (style, sizing, current_color)
+}
+
 fn push_layout_node<'r, 'g>(
   nodes: &mut Vec<LayoutNodeState>,
   render_nodes: &mut Vec<&'r RenderNode<'g>>,
@@ -855,6 +914,71 @@ impl<'g> RenderNode<'g> {
     }
   }
 
+  fn pseudo_content_child(
+    originating_node: &Node,
+    pseudo_context: &RenderContext<'g>,
+    item: ContentItem,
+  ) -> Option<Self> {
+    let text = match item {
+      ContentItem::Text(text) => text.as_ref().to_owned(),
+      ContentItem::AttrRef { name, fallback } => originating_node
+        .attribute(&name)
+        .map(str::to_owned)
+        .unwrap_or_else(|| fallback.as_ref().to_owned()),
+      ContentItem::Image(image) => {
+        return Some(Self::anonymous_image_item(pseudo_context, *image));
+      }
+    };
+
+    (!text.is_empty()).then(|| Self::anonymous_text_item(pseudo_context, text))
+  }
+
+  fn from_pseudo_match(
+    parent_context: &RenderContext<'g>,
+    originating_node: &Node,
+    pseudo_matched: &MatchedDeclarationsView<'_>,
+  ) -> Option<Self> {
+    let (mut style, sizing, current_color) = pseudo_computed_style(parent_context, pseudo_matched);
+
+    if matches!(style.display, Display::None) {
+      return None;
+    }
+
+    // flex/grid add no semantics over a flat content list; downgrade per spec §8.
+    if matches!(
+      style.display,
+      Display::Flex | Display::InlineFlex | Display::Grid | Display::InlineGrid
+    ) {
+      style.display = Display::Block;
+    }
+
+    let items = match std::mem::take(&mut style.content) {
+      ContentValue::Items(items) => items,
+      ContentValue::None | ContentValue::Normal => return None,
+    };
+
+    let pseudo_context = build_render_context(parent_context, style, sizing, current_color);
+
+    let children: Box<[Self]> = items
+      .into_vec()
+      .into_iter()
+      .filter_map(|item| Self::pseudo_content_child(originating_node, &pseudo_context, item))
+      .collect();
+
+    if children.is_empty() {
+      return None;
+    }
+
+    Some(Self {
+      context: pseudo_context,
+      node: Some(Node::container([])),
+      children: Some(children),
+      layout_style_override: None,
+      anonymous_text_content: None,
+      force_inline_layout: false,
+    })
+  }
+
   fn is_anonymous_text_item(&self) -> bool {
     self.anonymous_text_content.is_some() && self.node.is_none()
   }
@@ -1033,25 +1157,6 @@ impl<'g> RenderNode<'g> {
       (children_is_some, children)
     }
 
-    fn build_render_context<'g>(
-      parent_context: &RenderContext<'g>,
-      style: ComputedStyle,
-      sizing: Sizing,
-      current_color: Color,
-    ) -> RenderContext<'g> {
-      RenderContext {
-        global: parent_context.global,
-        transform: parent_context.transform,
-        style: Box::new(style),
-        current_color,
-        time: parent_context.time,
-        draw_debug_border: parent_context.draw_debug_border,
-        fetched_resources: parent_context.fetched_resources.clone(),
-        sizing,
-        stylesheet: parent_context.stylesheet.clone(),
-      }
-    }
-
     fn resolve_computed_style<'g>(
       parent_context: &RenderContext<'g>,
       node: &mut Node,
@@ -1129,128 +1234,6 @@ impl<'g> RenderNode<'g> {
       (style, sizing, current_color)
     }
 
-    fn build_pseudo_computed_style<'g>(
-      parent_context: &RenderContext<'g>,
-      pseudo_matched: &MatchedDeclarationsView<'_>,
-    ) -> (ComputedStyle, Sizing, Color) {
-      let style_layers = build_style_layers(
-        NodeStyleLayers::default(),
-        pseudo_matched,
-        parent_context.sizing.viewport,
-      );
-      let inherited_parent = registered_custom_property_parent_style(
-        &parent_context.style,
-        std::slice::from_ref(parent_context.stylesheet.as_ref()),
-        parent_context.sizing.viewport,
-      );
-      let mut style = style_layers.inherit(&inherited_parent);
-
-      let parent_root_font_size = parent_context.sizing.root_font_size;
-      let parent_root_line_height = parent_context.sizing.root_line_height;
-      let font_size = style
-        .font_size
-        .to_px(&parent_context.sizing, parent_context.sizing.font_size);
-      let normal_basis = resolve_normal_line_height(parent_context.global, &style, font_size);
-      let line_height = style
-        .line_height
-        .to_px(&parent_context.sizing, normal_basis);
-      let sizing = Sizing {
-        font_size,
-        root_font_size: Some(parent_root_font_size.unwrap_or(font_size)),
-        line_height,
-        root_line_height: Some(parent_root_line_height.unwrap_or(line_height)),
-        ..parent_context.sizing.clone()
-      };
-      let current_color = style.color.resolve(parent_context.current_color);
-      style.make_computed(&sizing);
-      (style, sizing, current_color)
-    }
-
-    fn lookup_attribute<'a>(node: &'a Node, name: &str) -> Option<&'a str> {
-      node
-        .metadata
-        .attributes
-        .as_ref()
-        .and_then(|attrs| {
-          attrs
-            .iter()
-            .find(|(attr_name, _)| attr_name.eq_ignore_ascii_case(name))
-        })
-        .map(|(_, value)| value.as_ref())
-    }
-
-    fn build_content_item_render_node<'g>(
-      originating_node: &Node,
-      pseudo_context: &RenderContext<'g>,
-      item: &ContentItem,
-    ) -> Option<RenderNode<'g>> {
-      match item {
-        ContentItem::Text(text) => {
-          if text.is_empty() {
-            return None;
-          }
-          Some(RenderNode::anonymous_text_item(
-            pseudo_context,
-            text.as_ref().to_owned(),
-          ))
-        }
-        ContentItem::AttrRef { name, fallback } => {
-          let value = lookup_attribute(originating_node, name)
-            .map(str::to_owned)
-            .unwrap_or_else(|| fallback.as_ref().to_owned());
-          if value.is_empty() {
-            return None;
-          }
-          Some(RenderNode::anonymous_text_item(pseudo_context, value))
-        }
-        ContentItem::Image(image) => Some(RenderNode::anonymous_image_item(
-          pseudo_context,
-          image.as_ref().clone(),
-        )),
-      }
-    }
-
-    fn build_pseudo_render_node<'g>(
-      parent_context: &RenderContext<'g>,
-      originating_node: &Node,
-      pseudo_matched: &MatchedDeclarationsView<'_>,
-    ) -> Option<RenderNode<'g>> {
-      let (style, sizing, current_color) =
-        build_pseudo_computed_style(parent_context, pseudo_matched);
-
-      if matches!(style.display, Display::None) {
-        return None;
-      }
-
-      let items = match &style.content {
-        ContentValue::Items(items) => items.clone(),
-        ContentValue::None | ContentValue::Normal => return None,
-      };
-
-      let pseudo_context = build_render_context(parent_context, style, sizing, current_color);
-
-      let mut children = Vec::with_capacity(items.len());
-      for item in items.iter() {
-        if let Some(child) = build_content_item_render_node(originating_node, &pseudo_context, item)
-        {
-          children.push(child);
-        }
-      }
-
-      if children.is_empty() {
-        return None;
-      }
-
-      Some(RenderNode {
-        context: pseudo_context,
-        node: Some(Node::container([])),
-        children: Some(children.into_boxed_slice()),
-        layout_style_override: None,
-        anonymous_text_content: None,
-        force_inline_layout: false,
-      })
-    }
-
     fn build_pending_node<'g>(
       parent_context: &RenderContext<'g>,
       mut node: Node,
@@ -1266,10 +1249,10 @@ impl<'g> RenderNode<'g> {
       let element_matched = matched_declarations.get(node_index);
       let pseudo_before = element_matched
         .and_then(|m| m.before.as_ref())
-        .and_then(|m| build_pseudo_render_node(&context, &node, m));
+        .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
       let pseudo_after = element_matched
         .and_then(|m| m.after.as_ref())
-        .and_then(|m| build_pseudo_render_node(&context, &node, m));
+        .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
 
       let has_pseudo = pseudo_before.is_some() || pseudo_after.is_some();
       let mut rendered_children = Vec::with_capacity(children.len() + 2);

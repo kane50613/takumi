@@ -114,6 +114,17 @@ fn attr_resolves_against_originating_attributes() {
 }
 
 #[test]
+fn attr_resolves_id_against_structured_metadata() {
+  let root = Node::container([])
+    .with_id("hero")
+    .with_class_name("badge")
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
+  let result = measure_with_css(root, r#".badge::before { content: attr(id); }"#);
+  let runs = measured_text_runs(&result);
+  assert!(runs.iter().any(|t| t == "hero"), "runs = {runs:?}");
+}
+
+#[test]
 fn attr_uses_fallback_when_attribute_is_missing() {
   let root = box_node("badge");
   let result = measure_with_css(
@@ -158,6 +169,36 @@ fn pseudo_does_not_apply_to_replaced_image_element() {
     );
   let result = measure_with_css(root, r#".logo::before { content: "x"; }"#);
   assert!(measured_text_runs(&result).is_empty());
+}
+
+#[test]
+fn display_none_on_pseudo_creates_no_box() {
+  let root = box_node("greet");
+  let result = measure_with_css(root, r#".greet::before { content: "x"; display: none; }"#);
+  assert!(measured_text_runs(&result).is_empty());
+}
+
+#[test]
+fn display_flex_pseudo_downgrades_to_block() {
+  let root = Node::container([Node::text("body".to_string())])
+    .with_class_name("card")
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::width(Px(200.0))),
+    );
+  let block = measure_with_css(
+    root.clone(),
+    r#".card::before { content: "header"; display: block; }"#,
+  );
+  let flex = measure_with_css(
+    root,
+    r#".card::before { content: "header"; display: flex; }"#,
+  );
+  assert_eq!(
+    flex.height, block.height,
+    "flex pseudo should match block; got flex={flex:?} block={block:?}"
+  );
 }
 
 #[test]
