@@ -1,5 +1,12 @@
 # takumi
 
+## 1.5.0
+
+### Minor Changes
+
+- 9dc58e3: Add `margin-inline-start`, `margin-inline-end`, `padding-inline-start`, `padding-inline-end` CSS longhands, resolved to physical sides via `direction`
+- 9dc58e3: Audit Tailwind utilities against v4 spec and fix the drift
+
 ## 1.4.1
 
 ### Patch Changes
