@@ -295,146 +295,34 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
   "animate" => &[PropertyParser::Animation(TailwindProperty::Animation)],
 };
 
-// `--shadow-*` composites from v4 `theme.css`. Alpha: `/ .1` ≈ 26, `/ .25` ≈ 64.
-const SHADOW_SM: [BoxShadow; 2] = [
+// v4 `theme.css` composites. Alpha: `/ .075` ≈ 19, `/ .1` ≈ 26, `/ .25` ≈ 64.
+const fn bs(oy: f32, blur: f32, spread: f32, alpha: u8) -> BoxShadow {
   BoxShadow {
     inset: false,
     offset_x: Length::Px(0.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(3.0),
-    spread_radius: Length::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 26])),
-  },
-  BoxShadow {
-    inset: false,
+    offset_y: Length::Px(oy),
+    blur_radius: Length::Px(blur),
+    spread_radius: Length::Px(spread),
+    color: ColorInput::Value(Color([0, 0, 0, alpha])),
+  }
+}
+const fn ts(oy: f32, blur: f32, alpha: u8) -> TextShadow {
+  TextShadow {
     offset_x: Length::Px(0.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(2.0),
-    spread_radius: Length::Px(-1.0),
-    color: ColorInput::Value(Color([0, 0, 0, 26])),
-  },
-];
+    offset_y: Length::Px(oy),
+    blur_radius: Length::Px(blur),
+    color: ColorInput::Value(Color([0, 0, 0, alpha])),
+  }
+}
 
-const SHADOW_MD: [BoxShadow; 2] = [
-  BoxShadow {
-    inset: false,
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(4.0),
-    blur_radius: Length::Px(6.0),
-    spread_radius: Length::Px(-1.0),
-    color: ColorInput::Value(Color([0, 0, 0, 26])),
-  },
-  BoxShadow {
-    inset: false,
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(2.0),
-    blur_radius: Length::Px(4.0),
-    spread_radius: Length::Px(-2.0),
-    color: ColorInput::Value(Color([0, 0, 0, 26])),
-  },
-];
+const SHADOW_SM: [BoxShadow; 2] = [bs(1.0, 3.0, 0.0, 26), bs(1.0, 2.0, -1.0, 26)];
+const SHADOW_MD: [BoxShadow; 2] = [bs(4.0, 6.0, -1.0, 26), bs(2.0, 4.0, -2.0, 26)];
+const SHADOW_LG: [BoxShadow; 2] = [bs(10.0, 15.0, -3.0, 26), bs(4.0, 6.0, -4.0, 26)];
+const SHADOW_XL: [BoxShadow; 2] = [bs(20.0, 25.0, -5.0, 26), bs(8.0, 10.0, -6.0, 26)];
 
-const SHADOW_LG: [BoxShadow; 2] = [
-  BoxShadow {
-    inset: false,
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(10.0),
-    blur_radius: Length::Px(15.0),
-    spread_radius: Length::Px(-3.0),
-    color: ColorInput::Value(Color([0, 0, 0, 26])),
-  },
-  BoxShadow {
-    inset: false,
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(4.0),
-    blur_radius: Length::Px(6.0),
-    spread_radius: Length::Px(-4.0),
-    color: ColorInput::Value(Color([0, 0, 0, 26])),
-  },
-];
-
-const SHADOW_XL: [BoxShadow; 2] = [
-  BoxShadow {
-    inset: false,
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(20.0),
-    blur_radius: Length::Px(25.0),
-    spread_radius: Length::Px(-5.0),
-    color: ColorInput::Value(Color([0, 0, 0, 26])),
-  },
-  BoxShadow {
-    inset: false,
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(8.0),
-    blur_radius: Length::Px(10.0),
-    spread_radius: Length::Px(-6.0),
-    color: ColorInput::Value(Color([0, 0, 0, 26])),
-  },
-];
-
-// `--text-shadow-*` composites. Alpha: `/ .075` ≈ 19, `/ .1` ≈ 26.
-const TEXT_SHADOW_SM: [TextShadow; 3] = [
-  TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 19])),
-  },
-  TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(1.0),
-    color: ColorInput::Value(Color([0, 0, 0, 19])),
-  },
-  TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(2.0),
-    blur_radius: Length::Px(2.0),
-    color: ColorInput::Value(Color([0, 0, 0, 19])),
-  },
-];
-
-const TEXT_SHADOW_MD: [TextShadow; 3] = [
-  TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(1.0),
-    color: ColorInput::Value(Color([0, 0, 0, 26])),
-  },
-  TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(2.0),
-    color: ColorInput::Value(Color([0, 0, 0, 26])),
-  },
-  TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(2.0),
-    blur_radius: Length::Px(4.0),
-    color: ColorInput::Value(Color([0, 0, 0, 26])),
-  },
-];
-
-const TEXT_SHADOW_LG: [TextShadow; 3] = [
-  TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(2.0),
-    color: ColorInput::Value(Color([0, 0, 0, 26])),
-  },
-  TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(3.0),
-    blur_radius: Length::Px(2.0),
-    color: ColorInput::Value(Color([0, 0, 0, 26])),
-  },
-  TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(4.0),
-    blur_radius: Length::Px(8.0),
-    color: ColorInput::Value(Color([0, 0, 0, 26])),
-  },
-];
+const TEXT_SHADOW_SM: [TextShadow; 3] = [ts(1.0, 0.0, 19), ts(1.0, 1.0, 19), ts(2.0, 2.0, 19)];
+const TEXT_SHADOW_MD: [TextShadow; 3] = [ts(1.0, 1.0, 26), ts(1.0, 2.0, 26), ts(2.0, 4.0, 26)];
+const TEXT_SHADOW_LG: [TextShadow; 3] = [ts(1.0, 2.0, 26), ts(3.0, 2.0, 26), ts(4.0, 8.0, 26)];
 
 pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
   "border" => TailwindProperty::BorderDefault,
