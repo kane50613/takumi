@@ -215,20 +215,6 @@ pub struct TwGradientPosition(pub Length);
 impl<'i> FromCss<'i> for TwGradientPosition {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let location = input.current_source_location();
-    let state = input.state();
-    let token_label: Option<&'static str> = match input.next()? {
-      cssparser::Token::Number { .. } => Some("<unitless>"),
-      cssparser::Token::Function(name) if name.eq_ignore_ascii_case("calc") => Some("calc()"),
-      _ => None,
-    };
-    input.reset(&state);
-    if let Some(label) = token_label {
-      return Err(
-        location
-          .new_basic_unexpected_token_error(cssparser::Token::Ident(label.into()))
-          .into(),
-      );
-    }
     let length = Length::from_css(input)?;
     if matches!(length, Length::Auto) {
       return Err(
