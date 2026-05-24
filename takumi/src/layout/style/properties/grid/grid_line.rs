@@ -114,6 +114,12 @@ impl<'i> FromCss<'i> for GridLine {
 
 impl TailwindPropertyParser for GridLine {
   fn parse_tw(suffix: &str) -> Option<Self> {
+    if suffix.eq_ignore_ascii_case("auto") {
+      return Some(GridLine {
+        start: GridPlacement::auto(),
+        end: GridPlacement::auto(),
+      });
+    }
     let number = suffix.parse::<i16>().ok()?;
 
     Some(GridLine {

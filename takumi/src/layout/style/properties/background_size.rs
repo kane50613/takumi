@@ -44,7 +44,11 @@ pub enum BackgroundSize {
 
 impl TailwindPropertyParser for BackgroundSize {
   fn parse_tw(token: &str) -> Option<Self> {
-    match token {
+    match_ignore_ascii_case! {token,
+      "auto" => Some(BackgroundSize::Explicit {
+        width: Length::Auto,
+        height: Length::Auto,
+      }),
       "cover" => Some(BackgroundSize::Cover),
       "contain" => Some(BackgroundSize::Contain),
       _ => None,

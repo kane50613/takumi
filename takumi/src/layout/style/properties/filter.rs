@@ -195,7 +195,10 @@ impl Animatable for Filter {
 }
 
 impl TailwindPropertyParser for Filters {
-  fn parse_tw(_token: &str) -> Option<Self> {
+  fn parse_tw(token: &str) -> Option<Self> {
+    if token.eq_ignore_ascii_case("none") {
+      return Some(Filters::default());
+    }
     None
   }
 }

@@ -136,6 +136,13 @@ macro_rules! define_style {
           $(where inherit = $longhand_inherit:expr)?,
       )*
     }
+    // `name: type => (ltr_field, rtl_field)` — apply resolves to one of them.
+    transient_longhands {
+      $(
+        $transient:ident: $transient_ty:ty
+          => ($transient_ltr:ident, $transient_rtl:ident),
+      )*
+    }
     shorthands {
       $(
         $shorthand:ident: $shorthand_ty:ty
@@ -151,11 +158,15 @@ macro_rules! define_style {
       #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
       pub(crate) enum LonghandId {
         $([<$longhand:camel>],)*
+        $([<$transient:camel>],)*
       }
 
       impl LonghandId {
-        const COUNT: usize = [$(Self::[<$longhand:camel>]),*].len();
-        const ALL: [Self; Self::COUNT] = [$(Self::[<$longhand:camel>],)*];
+        const COUNT: usize = [$(Self::[<$longhand:camel>]),* $(, Self::[<$transient:camel>])*].len();
+        const ALL: [Self; Self::COUNT] = [
+          $(Self::[<$longhand:camel>],)*
+          $(Self::[<$transient:camel>],)*
+        ];
 
         const fn index(self) -> usize {
           self as usize
@@ -187,6 +198,11 @@ macro_rules! define_style {
                 <$longhand_ty as FromCss>::from_css(input)?,
               )]),
             )*
+            $(
+              Self::[<$transient:camel>] => Ok(smallvec![StyleDeclaration::[<$transient:camel>](
+                <$transient_ty as FromCss>::from_css(input)?,
+              )]),
+            )*
           }
         }
 
@@ -202,6 +218,17 @@ macro_rules! define_style {
                 }
 
                 Ok(smallvec![StyleDeclaration::[<$longhand:camel>](
+                  parse_css_input_value(css_input)?,
+                )])
+              }
+            )*
+            $(
+              Self::[<$transient:camel>] => {
+                if let Some(keyword) = parse_css_wide_keyword(&css_input) {
+                  return Ok(smallvec![StyleDeclaration::CssWideKeyword(self, keyword)]);
+                }
+
+                Ok(smallvec![StyleDeclaration::[<$transient:camel>](
                   parse_css_input_value(css_input)?,
                 )])
               }
@@ -266,6 +293,7 @@ macro_rules! define_style {
         fn from_normalized_name(name: &str) -> Self {
           match name {
             $(stringify!($longhand) => Self::Longhand(LonghandId::[<$longhand:camel>]),)*
+            $(stringify!($transient) => Self::Longhand(LonghandId::[<$transient:camel>]),)*
             $(stringify!($shorthand) => Self::Shorthand(ShorthandId::[<$shorthand:camel>]),)*
             _ => Self::Ignored,
           }
@@ -503,6 +531,14 @@ macro_rules! define_style {
             }
           }
 
+          // Pre-resolve `direction` so logical-axis applies below see the
+          // final value even if `direction:` is declared later in the block.
+          for declaration in &declarations {
+            if let StyleDeclaration::Direction(d) = declaration {
+              style.direction = *d;
+            }
+          }
+
           for declaration in declarations {
             declaration.apply_with_parent(&mut style, parent);
           }
@@ -542,6 +578,10 @@ macro_rules! define_style {
         $(
           /// An explicit specified value for a non-shorthand property.
           [<$longhand:camel>]($longhand_ty),
+        )*
+        $(
+          /// Logical-axis value, resolved to a physical side at apply time.
+          [<$transient:camel>]($transient_ty),
         )*
         /// A custom property declaration such as `--token: value`.
         CustomProperty(String, String),
@@ -600,6 +640,7 @@ macro_rules! define_style {
                   );
                 }
               )*
+              $(LonghandId::[<$transient:camel>] => {})*
             }
           }
 
@@ -668,10 +709,17 @@ macro_rules! define_style {
             Self::[<$longhand:camel>](value)
           }
         )*
+        $(
+          /// Returns a declaration for this property.
+          pub fn $transient(value: $transient_ty) -> Self {
+            Self::[<$transient:camel>](value)
+          }
+        )*
 
         pub(crate) fn longhand_id(&self) -> LonghandId {
           match self {
             $(Self::[<$longhand:camel>](..) => LonghandId::[<$longhand:camel>],)*
+            $(Self::[<$transient:camel>](..) => LonghandId::[<$transient:camel>],)*
             Self::CustomProperty(..) | Self::Deferred(..) => {
               unreachable!("custom and deferred declarations do not map to a single longhand")
             }
@@ -693,6 +741,7 @@ macro_rules! define_style {
           style: &mut ComputedStyle,
           parent: &ComputedStyle,
         ) {
+          let is_rtl = style.direction == Direction::Rtl;
           match self {
             Self::CssWideKeyword(property, keyword) => {
               match property {
@@ -705,6 +754,21 @@ macro_rules! define_style {
                     };
                   }
                 )*
+                $(
+                  LonghandId::[<$transient:camel>] => {
+                    let target = if is_rtl { &mut style.$transient_rtl } else { &mut style.$transient_ltr };
+                    *target = match keyword {
+                      CssWideKeyword::Initial | CssWideKeyword::Unset => Default::default(),
+                      CssWideKeyword::Inherit => {
+                        if parent.direction == Direction::Rtl {
+                          parent.$transient_rtl.to_owned()
+                        } else {
+                          parent.$transient_ltr.to_owned()
+                        }
+                      }
+                    };
+                  }
+                )*
               }
             }
             Self::CustomProperty(name, value) => {
@@ -714,16 +778,28 @@ macro_rules! define_style {
               apply_deferred_declaration(style, Some(parent), &deferred);
             }
             $(Self::[<$longhand:camel>](value) => style.$longhand = value,)*
+            $(
+              Self::[<$transient:camel>](value) => {
+                if is_rtl { style.$transient_rtl = value } else { style.$transient_ltr = value }
+              }
+            )*
           }
         }
 
         pub(crate) fn apply_to_computed(&self, style: &mut ComputedStyle) {
+          let is_rtl = style.direction == Direction::Rtl;
           match self {
             Self::CssWideKeyword(property, keyword) => match keyword {
               CssWideKeyword::Initial => match property {
                 $(
                   LonghandId::[<$longhand:camel>] => {
                     style.$longhand = Default::default();
+                  }
+                )*
+                $(
+                  LonghandId::[<$transient:camel>] => {
+                    if is_rtl { style.$transient_rtl = Default::default() }
+                    else { style.$transient_ltr = Default::default() }
                   }
                 )*
               },
@@ -736,6 +812,12 @@ macro_rules! define_style {
             }
             Self::Deferred(deferred) => apply_deferred_declaration(style, None, deferred),
             $(Self::[<$longhand:camel>](value) => style.$longhand.clone_from(value),)*
+            $(
+              Self::[<$transient:camel>](value) => {
+                if is_rtl { style.$transient_rtl.clone_from(value) }
+                else { style.$transient_ltr.clone_from(value) }
+              }
+            )*
           }
         }
 
@@ -754,6 +836,15 @@ macro_rules! define_style {
                 if name.starts_with("webkit-") {
                   dest.write_str("-")?;
                 }
+                dest.write_str(&name)?;
+                dest.write_str(": ")?;
+                value.to_css(dest)?;
+                dest.write_str(";")
+              }
+            )*
+            $(
+              Self::[<$transient:camel>](value) => {
+                let name = stringify!($transient).replace("_", "-");
                 dest.write_str(&name)?;
                 dest.write_str(": ")?;
                 value.to_css(dest)?;
@@ -934,6 +1025,12 @@ define_style! {
     visibility: Visibility where inherit = true,
     vertical_align: VerticalAlign,
   }
+  transient_longhands {
+    margin_inline_start: LengthDefaultsToZero => (margin_left, margin_right),
+    margin_inline_end: LengthDefaultsToZero => (margin_right, margin_left),
+    padding_inline_start: LengthDefaultsToZero => (padding_left, padding_right),
+    padding_inline_end: LengthDefaultsToZero => (padding_right, padding_left),
+  }
   shorthands {
     animation: Animations => [AnimationName, AnimationDuration, AnimationDelay, AnimationTimingFunction, AnimationIterationCount, AnimationDirection, AnimationFillMode, AnimationPlayState] |value, target| {
       target.push(StyleDeclaration::animation_duration(value.iter().map(|animation| animation.duration).collect()));
@@ -971,8 +1068,8 @@ define_style! {
         padding_left
       );
     },
-    padding_inline: SpacePair<LengthDefaultsToZero> => [PaddingLeft, PaddingRight] |value, target| {
-      push_axis_declarations!(target, value, padding_left, padding_right);
+    padding_inline: SpacePair<LengthDefaultsToZero> => [PaddingInlineStart, PaddingInlineEnd] |value, target| {
+      push_axis_declarations!(target, value, padding_inline_start, padding_inline_end);
     },
     padding_block: SpacePair<LengthDefaultsToZero> => [PaddingTop, PaddingBottom] |value, target| {
       push_axis_declarations!(target, value, padding_top, padding_bottom);
@@ -987,8 +1084,8 @@ define_style! {
         margin_left
       );
     },
-    margin_inline: SpacePair<LengthDefaultsToZero> => [MarginLeft, MarginRight] |value, target| {
-      push_axis_declarations!(target, value, margin_left, margin_right);
+    margin_inline: SpacePair<LengthDefaultsToZero> => [MarginInlineStart, MarginInlineEnd] |value, target| {
+      push_axis_declarations!(target, value, margin_inline_start, margin_inline_end);
     },
     margin_block: SpacePair<LengthDefaultsToZero> => [MarginTop, MarginBottom] |value, target| {
       push_axis_declarations!(target, value, margin_top, margin_bottom);

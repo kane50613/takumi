@@ -100,7 +100,14 @@ impl<'i> FromCss<'i> for TwGridTemplate {
 
 impl TailwindPropertyParser for TwGridTemplate {
   fn parse_tw(token: &str) -> Option<Self> {
+    if token.eq_ignore_ascii_case("none") {
+      return Some(TwGridTemplate(GridTemplateComponents::default()));
+    }
+
     let count = token.parse::<u32>().ok()?;
+    if count == 0 {
+      return None;
+    }
 
     // Create repeat(count, minmax(0, 1fr))
     let track_sizes = vec![
@@ -198,6 +205,35 @@ impl TailwindPropertyParser for TwRounded {
       "4xl" => Some(TwRounded(Length::Rem(2.0))),
       _ => None,
     }
+  }
+}
+
+/// `<length-percentage>` for `from-N%` / `via-N%` / `to-N%` stop positions.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TwGradientPosition(pub Length);
+
+impl<'i> FromCss<'i> for TwGradientPosition {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let location = input.current_source_location();
+    let length = Length::from_css(input)?;
+    if matches!(length, Length::Auto) {
+      return Err(
+        location
+          .new_basic_unexpected_token_error(cssparser::Token::Ident("auto".into()))
+          .into(),
+      );
+    }
+    Ok(TwGradientPosition(length))
+  }
+
+  const VALID_TOKENS: &'static [CssToken] = Length::<true>::VALID_TOKENS;
+}
+
+impl TailwindPropertyParser for TwGradientPosition {
+  fn parse_tw(token: &str) -> Option<Self> {
+    let stripped = token.strip_suffix('%')?;
+    let value = stripped.parse::<f32>().ok()?;
+    Some(TwGradientPosition(Length::Percentage(value)))
   }
 }
 

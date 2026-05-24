@@ -54,6 +54,10 @@ impl<'i> FromCss<'i> for FontWeight {
 
 impl TailwindPropertyParser for FontWeight {
   fn parse_tw(token: &str) -> Option<Self> {
+    if let Ok(value) = token.parse::<f32>() {
+      return Some(value.into());
+    }
+
     match_ignore_ascii_case! {&token,
       "thin" => Some(100.0.into()),
       "extralight" => Some(200.0.into()),

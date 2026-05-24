@@ -649,10 +649,18 @@ impl<const DEFAULT_AUTO: bool> Default for Length<DEFAULT_AUTO> {
   }
 }
 
+impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
+  /// Construct a length from a Tailwind spacing-scale multiplier.
+  #[inline]
+  pub(crate) fn from_spacing(units: f32) -> Self {
+    Length::Rem(units * TW_VAR_SPACING)
+  }
+}
+
 impl<const DEFAULT_AUTO: bool> TailwindPropertyParser for Length<DEFAULT_AUTO> {
   fn parse_tw(token: &str) -> Option<Self> {
     if let Ok(value) = token.parse::<f32>() {
-      return Some(Length::Rem(value * TW_VAR_SPACING));
+      return Some(Length::from_spacing(value));
     }
 
     match AspectRatio::from_str(token) {
@@ -786,6 +794,14 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
   /// Returns a zero pixel length unit.
   pub const fn zero() -> Self {
     Self::Px(0.0)
+  }
+
+  /// Negated value, or `None` for non-negatable forms like `auto`.
+  pub fn try_negative(self) -> Option<Self> {
+    if matches!(self, Length::Auto) {
+      return None;
+    }
+    Some(self.negative())
   }
 
   /// Returns a negative length unit.

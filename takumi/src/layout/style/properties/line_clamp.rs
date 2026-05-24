@@ -20,7 +20,16 @@ impl MakeComputed for LineClamp {}
 
 impl TailwindPropertyParser for LineClamp {
   fn parse_tw(token: &str) -> Option<Self> {
+    if token.eq_ignore_ascii_case("none") {
+      return Some(LineClamp {
+        count: 0,
+        ellipsis: None,
+      });
+    }
     let count = token.parse::<u32>().ok()?;
+    if count == 0 {
+      return None;
+    }
     Some(LineClamp {
       count,
       ellipsis: None,
@@ -39,6 +48,12 @@ impl From<u32> for LineClamp {
 
 impl<'i> FromCss<'i> for LineClamp {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+      return Ok(LineClamp {
+        count: 0,
+        ellipsis: None,
+      });
+    }
     let count = input.try_parse(Parser::expect_integer)?;
     let ellipsis = input.try_parse(Parser::expect_string_cloned).ok();
 
@@ -49,6 +64,7 @@ impl<'i> FromCss<'i> for LineClamp {
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[
+    CssToken::Keyword("none"),
     CssToken::Syntax(CssSyntaxKind::Integer),
     CssToken::Syntax(CssSyntaxKind::String),
   ];
@@ -56,6 +72,9 @@ impl<'i> FromCss<'i> for LineClamp {
 
 impl ToCss for LineClamp {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    if self.count == 0 && self.ellipsis.is_none() {
+      return dest.write_str("none");
+    }
     match &self.ellipsis {
       Some(e) => {
         write!(dest, "{} ", self.count)?;

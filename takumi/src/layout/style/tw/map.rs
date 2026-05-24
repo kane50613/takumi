@@ -55,6 +55,7 @@ pub enum PropertyParser {
   VerticalAlign(fn(VerticalAlign) -> TailwindProperty),
   DecorationThickness(fn(TextDecorationThickness) -> TailwindProperty),
   Animation(fn(Animations) -> TailwindProperty),
+  GradientPosition(fn(Length) -> TailwindProperty),
 }
 
 impl PropertyParser {
@@ -109,6 +110,9 @@ impl PropertyParser {
         TextDecorationThickness::parse_tw_with_arbitrary(suffix).map(f)
       }
       Self::Animation(f) => Animations::parse_tw_with_arbitrary(suffix).map(f),
+      Self::GradientPosition(f) => {
+        TwGradientPosition::parse_tw_with_arbitrary(suffix).map(|p| f(p.0))
+      }
     }
   }
 }
@@ -127,9 +131,18 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
   "bg-clip" => &[PropertyParser::BackgroundClip(TailwindProperty::BackgroundClip)],
   "bg-linear" => &[PropertyParser::Angle(TailwindProperty::BgLinearAngle)],
   "bg-conic" => &[PropertyParser::Angle(TailwindProperty::BgConicAngle)],
-  "from" => &[PropertyParser::ColorCurrent(TailwindProperty::GradientFrom)],
-  "to" => &[PropertyParser::ColorCurrent(TailwindProperty::GradientTo)],
-  "via" => &[PropertyParser::ColorCurrent(TailwindProperty::GradientVia)],
+  "from" => &[
+    PropertyParser::ColorCurrent(TailwindProperty::GradientFrom),
+    PropertyParser::GradientPosition(TailwindProperty::GradientFromPosition),
+  ],
+  "to" => &[
+    PropertyParser::ColorCurrent(TailwindProperty::GradientTo),
+    PropertyParser::GradientPosition(TailwindProperty::GradientToPosition),
+  ],
+  "via" => &[
+    PropertyParser::ColorCurrent(TailwindProperty::GradientVia),
+    PropertyParser::GradientPosition(TailwindProperty::GradientViaPosition),
+  ],
   "bg-size" => &[PropertyParser::BgSize(TailwindProperty::BackgroundSize)],
   "bg-position" => &[PropertyParser::BgPosition(TailwindProperty::BackgroundPosition)],
   "w" => &[PropertyParser::LengthAuto(TailwindProperty::Width)],
@@ -206,19 +219,23 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
   "translate-x" => &[PropertyParser::LengthAuto(TailwindProperty::TranslateX)],
   "translate-y" => &[PropertyParser::LengthAuto(TailwindProperty::TranslateY)],
   "m" => &[PropertyParser::LengthZero(TailwindProperty::Margin)],
-  "mx" | "ms" => &[PropertyParser::LengthZero(TailwindProperty::MarginX)],
-  "my" | "me" => &[PropertyParser::LengthZero(TailwindProperty::MarginY)],
+  "mx" => &[PropertyParser::LengthZero(TailwindProperty::MarginX)],
+  "my" => &[PropertyParser::LengthZero(TailwindProperty::MarginY)],
   "mt" => &[PropertyParser::LengthZero(TailwindProperty::MarginTop)],
   "mr" => &[PropertyParser::LengthZero(TailwindProperty::MarginRight)],
   "mb" => &[PropertyParser::LengthZero(TailwindProperty::MarginBottom)],
   "ml" => &[PropertyParser::LengthZero(TailwindProperty::MarginLeft)],
+  "ms" => &[PropertyParser::LengthZero(TailwindProperty::MarginInlineStart)],
+  "me" => &[PropertyParser::LengthZero(TailwindProperty::MarginInlineEnd)],
   "p" => &[PropertyParser::LengthZero(TailwindProperty::Padding)],
-  "px" | "ps" => &[PropertyParser::LengthZero(TailwindProperty::PaddingX)],
-  "py" | "pe" => &[PropertyParser::LengthZero(TailwindProperty::PaddingY)],
+  "px" => &[PropertyParser::LengthZero(TailwindProperty::PaddingX)],
+  "py" => &[PropertyParser::LengthZero(TailwindProperty::PaddingY)],
   "pt" => &[PropertyParser::LengthZero(TailwindProperty::PaddingTop)],
   "pr" => &[PropertyParser::LengthZero(TailwindProperty::PaddingRight)],
   "pb" => &[PropertyParser::LengthZero(TailwindProperty::PaddingBottom)],
   "pl" => &[PropertyParser::LengthZero(TailwindProperty::PaddingLeft)],
+  "ps" => &[PropertyParser::LengthZero(TailwindProperty::PaddingInlineStart)],
+  "pe" => &[PropertyParser::LengthZero(TailwindProperty::PaddingInlineEnd)],
   "inset" => &[PropertyParser::LengthAuto(TailwindProperty::Inset)],
   "inset-x" => &[PropertyParser::LengthAuto(TailwindProperty::InsetX)],
   "inset-y" => &[PropertyParser::LengthAuto(TailwindProperty::InsetY)],
@@ -278,6 +295,35 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
   "animate" => &[PropertyParser::Animation(TailwindProperty::Animation)],
 };
 
+// v4 `theme.css` composites. Alpha: `/ .075` ≈ 19, `/ .1` ≈ 26, `/ .25` ≈ 64.
+const fn bs(oy: f32, blur: f32, spread: f32, alpha: u8) -> BoxShadow {
+  BoxShadow {
+    inset: false,
+    offset_x: Length::Px(0.0),
+    offset_y: Length::Px(oy),
+    blur_radius: Length::Px(blur),
+    spread_radius: Length::Px(spread),
+    color: ColorInput::Value(Color([0, 0, 0, alpha])),
+  }
+}
+const fn ts(oy: f32, blur: f32, alpha: u8) -> TextShadow {
+  TextShadow {
+    offset_x: Length::Px(0.0),
+    offset_y: Length::Px(oy),
+    blur_radius: Length::Px(blur),
+    color: ColorInput::Value(Color([0, 0, 0, alpha])),
+  }
+}
+
+const SHADOW_SM: [BoxShadow; 2] = [bs(1.0, 3.0, 0.0, 26), bs(1.0, 2.0, -1.0, 26)];
+const SHADOW_MD: [BoxShadow; 2] = [bs(4.0, 6.0, -1.0, 26), bs(2.0, 4.0, -2.0, 26)];
+const SHADOW_LG: [BoxShadow; 2] = [bs(10.0, 15.0, -3.0, 26), bs(4.0, 6.0, -4.0, 26)];
+const SHADOW_XL: [BoxShadow; 2] = [bs(20.0, 25.0, -5.0, 26), bs(8.0, 10.0, -6.0, 26)];
+
+const TEXT_SHADOW_SM: [TextShadow; 3] = [ts(1.0, 0.0, 19), ts(1.0, 1.0, 19), ts(2.0, 2.0, 19)];
+const TEXT_SHADOW_MD: [TextShadow; 3] = [ts(1.0, 1.0, 26), ts(1.0, 2.0, 26), ts(2.0, 4.0, 26)];
+const TEXT_SHADOW_LG: [TextShadow; 3] = [ts(1.0, 2.0, 26), ts(3.0, 2.0, 26), ts(4.0, 8.0, 26)];
+
 pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
   "border" => TailwindProperty::BorderDefault,
   "outline" => TailwindProperty::OutlineDefault,
@@ -287,6 +333,7 @@ pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
   "inline-block" => TailwindProperty::Display(Display::InlineBlock),
   "inline-flex" => TailwindProperty::Display(Display::InlineFlex),
   "bg-radial" => TailwindProperty::BgRadial,
+  "bg-conic" => TailwindProperty::BgConicAngle(Angle::zero()),
   "inline-grid" => TailwindProperty::Display(Display::InlineGrid),
   "block" => TailwindProperty::Display(Display::Block),
   "flex" => TailwindProperty::Display(Display::Flex),
@@ -294,8 +341,9 @@ pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
   "hidden" => TailwindProperty::Display(Display::None),
   "bg-repeat" => TailwindProperty::BackgroundRepeat(BackgroundRepeat::repeat()),
   "bg-no-repeat" => TailwindProperty::BackgroundRepeat(BackgroundRepeat::no_repeat()),
-  "bg-space" => TailwindProperty::BackgroundRepeat(BackgroundRepeat::space()),
-  "bg-round" => TailwindProperty::BackgroundRepeat(BackgroundRepeat::round()),
+  "bg-space" | "bg-repeat-space" => TailwindProperty::BackgroundRepeat(BackgroundRepeat::space()),
+  "bg-round" | "bg-repeat-round" => TailwindProperty::BackgroundRepeat(BackgroundRepeat::round()),
+  "rounded" => TailwindProperty::Rounded(TwRounded(Length::Rem(0.25))),
   "bg-repeat-x" => TailwindProperty::BackgroundRepeat(BackgroundRepeat(
     BackgroundRepeatStyle::Repeat,
     BackgroundRepeatStyle::NoRepeat,
@@ -353,62 +401,35 @@ pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
   "col-end-auto" => TailwindProperty::GridColumnEnd(GridPlacement::Keyword(GridPlacementKeyword::Auto)),
   "row-start-auto" => TailwindProperty::GridRowStart(GridPlacement::Keyword(GridPlacementKeyword::Auto)),
   "row-end-auto" => TailwindProperty::GridRowEnd(GridPlacement::Keyword(GridPlacementKeyword::Auto)),
-  "shadow-sm" => TailwindProperty::Shadow(BoxShadow {
-    inset: false,
-    offset_x: Length::Px(1.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(1.0),
-    spread_radius: Length::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 6])),
-  }),
-  "shadow" => TailwindProperty::Shadow(BoxShadow {
-    inset: false,
-    offset_x: Length::Px(1.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(1.0),
-    spread_radius: Length::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 19])),
-  }),
-  "shadow-md" => TailwindProperty::Shadow(BoxShadow {
-    inset: false,
-    offset_x: Length::Px(1.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(3.0),
-    spread_radius: Length::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 32])),
-  }),
-  "shadow-lg" => TailwindProperty::Shadow(BoxShadow {
-    inset: false,
-    offset_x: Length::Px(1.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(8.0),
-    spread_radius: Length::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 38])),
-  }),
-  "shadow-xl" => TailwindProperty::Shadow(BoxShadow {
-    inset: false,
-    offset_x: Length::Px(1.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(20.0),
-    spread_radius: Length::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 48])),
-  }),
-  "shadow-2xl" => TailwindProperty::Shadow(BoxShadow {
-    inset: false,
-    offset_x: Length::Px(1.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(30.0),
-    spread_radius: Length::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 64])),
-  }),
-  "shadow-none" => TailwindProperty::Shadow(BoxShadow {
+  "shadow-2xs" => TailwindProperty::Shadow(BoxShadow {
     inset: false,
     offset_x: Length::Px(0.0),
-    offset_y: Length::Px(0.0),
+    offset_y: Length::Px(1.0),
     blur_radius: Length::Px(0.0),
     spread_radius: Length::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 0])),
+    color: ColorInput::Value(Color([0, 0, 0, 13])),
   }),
+  "shadow-xs" => TailwindProperty::Shadow(BoxShadow {
+    inset: false,
+    offset_x: Length::Px(0.0),
+    offset_y: Length::Px(1.0),
+    blur_radius: Length::Px(2.0),
+    spread_radius: Length::Px(0.0),
+    color: ColorInput::Value(Color([0, 0, 0, 13])),
+  }),
+  "shadow-sm" | "shadow" => TailwindProperty::ShadowList(&SHADOW_SM),
+  "shadow-md" => TailwindProperty::ShadowList(&SHADOW_MD),
+  "shadow-lg" => TailwindProperty::ShadowList(&SHADOW_LG),
+  "shadow-xl" => TailwindProperty::ShadowList(&SHADOW_XL),
+  "shadow-2xl" => TailwindProperty::Shadow(BoxShadow {
+    inset: false,
+    offset_x: Length::Px(0.0),
+    offset_y: Length::Px(25.0),
+    blur_radius: Length::Px(50.0),
+    spread_radius: Length::Px(-12.0),
+    color: ColorInput::Value(Color([0, 0, 0, 64])),
+  }),
+  "shadow-none" => TailwindProperty::ShadowList(&[]),
   "grayscale" => TailwindProperty::Grayscale(PercentageNumber(1.0)),
   "invert" => TailwindProperty::Invert(PercentageNumber(1.0)),
   "sepia" => TailwindProperty::Sepia(PercentageNumber(1.0)),
@@ -488,6 +509,7 @@ pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
     spread_radius: Length::Px(0.0),
     color: ColorInput::Value(Color([0, 0, 0, 13])),
   }),
+  "inset-shadow-none" => TailwindProperty::ShadowList(&[]),
   // Text shadows (--text-shadow-*)
   "text-shadow-2xs" => TailwindProperty::TextShadow(TextShadow {
     offset_x: Length::Px(0.0),
@@ -501,24 +523,10 @@ pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
     blur_radius: Length::Px(1.0),
     color: ColorInput::Value(Color([0, 0, 0, 51])),
   }),
-  "text-shadow-sm" => TailwindProperty::TextShadow(TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(2.0),
-    color: ColorInput::Value(Color([0, 0, 0, 19])),
-  }),
-  "text-shadow-md" => TailwindProperty::TextShadow(TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(4.0),
-    color: ColorInput::Value(Color([0, 0, 0, 26])),
-  }),
-  "text-shadow-lg" => TailwindProperty::TextShadow(TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(8.0),
-    color: ColorInput::Value(Color([0, 0, 0, 26])),
-  }),
+  "text-shadow-sm" => TailwindProperty::TextShadowList(&TEXT_SHADOW_SM),
+  "text-shadow-md" => TailwindProperty::TextShadowList(&TEXT_SHADOW_MD),
+  "text-shadow-lg" => TailwindProperty::TextShadowList(&TEXT_SHADOW_LG),
+  "text-shadow-none" => TailwindProperty::TextShadowList(&[]),
   "isolate" => TailwindProperty::Isolation(Isolation::Isolate),
   "isolation-auto" => TailwindProperty::Isolation(Isolation::Auto),
   "visible" => TailwindProperty::Visibility(Visibility::Visible),
