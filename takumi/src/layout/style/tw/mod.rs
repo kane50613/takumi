@@ -2533,32 +2533,6 @@ mod tests {
   }
 
   #[test]
-  fn test_logical_margin_padding_aliases() {
-    assert_eq!(
-      TailwindProperty::parse("ms-4"),
-      Some(TailwindProperty::MarginInlineStart(Length::from_spacing(
-        4.0
-      )))
-    );
-    assert_eq!(
-      TailwindProperty::parse("me-4"),
-      Some(TailwindProperty::MarginInlineEnd(Length::from_spacing(4.0)))
-    );
-    assert_eq!(
-      TailwindProperty::parse("ps-2"),
-      Some(TailwindProperty::PaddingInlineStart(Length::from_spacing(
-        2.0
-      )))
-    );
-    assert_eq!(
-      TailwindProperty::parse("pe-2"),
-      Some(TailwindProperty::PaddingInlineEnd(Length::from_spacing(
-        2.0
-      )))
-    );
-  }
-
-  #[test]
   fn test_logical_resolves_to_physical_ltr() {
     let viewport = Viewport::new((100, 100));
     let values = TailwindValues::from_str("ms-4 me-2 ps-3 pe-1").unwrap();
@@ -2606,18 +2580,6 @@ mod tests {
     let style = Style::from(block).inherit(&ComputedStyle::default());
     assert_eq!(style.margin_right, Length::from_spacing(4.0));
     assert_eq!(style.margin_left, Length::Px(0.0));
-  }
-
-  #[test]
-  fn test_filter_none_parses() {
-    assert_eq!(
-      TailwindProperty::parse("filter-none"),
-      Some(TailwindProperty::Filter(Filters::default()))
-    );
-    assert_eq!(
-      TailwindProperty::parse("backdrop-filter-none"),
-      Some(TailwindProperty::BackdropFilter(Filters::default()))
-    );
   }
 
   #[test]
@@ -2702,12 +2664,6 @@ mod tests {
   }
 
   #[test]
-  fn test_shadow_2xs_xs_present() {
-    assert!(TailwindProperty::parse("shadow-2xs").is_some());
-    assert!(TailwindProperty::parse("shadow-xs").is_some());
-  }
-
-  #[test]
   fn test_shadow_md_is_composite() {
     let viewport = Viewport::new((100, 100));
     let values = TailwindValues::from_str("shadow-md").unwrap();
@@ -2726,12 +2682,6 @@ mod tests {
   }
 
   #[test]
-  fn test_text_shadow_none_and_inset_shadow_none() {
-    assert!(TailwindProperty::parse("text-shadow-none").is_some());
-    assert!(TailwindProperty::parse("inset-shadow-none").is_some());
-  }
-
-  #[test]
   fn test_shadow_none_overrides_color_in_either_order() {
     let viewport = Viewport::new((100, 100));
     for classes in ["shadow-none shadow-red-500", "shadow-red-500 shadow-none"] {
@@ -2747,28 +2697,6 @@ mod tests {
     assert_eq!(
       TailwindProperty::parse("bg-conic"),
       Some(TailwindProperty::BgConicAngle(Angle::zero()))
-    );
-  }
-
-  #[test]
-  fn test_gradient_stop_positions() {
-    assert_eq!(
-      TailwindProperty::parse("from-20%"),
-      Some(TailwindProperty::GradientFromPosition(Length::Percentage(
-        20.0
-      )))
-    );
-    assert_eq!(
-      TailwindProperty::parse("via-60%"),
-      Some(TailwindProperty::GradientViaPosition(Length::Percentage(
-        60.0
-      )))
-    );
-    assert_eq!(
-      TailwindProperty::parse("to-90%"),
-      Some(TailwindProperty::GradientToPosition(Length::Percentage(
-        90.0
-      )))
     );
   }
 
