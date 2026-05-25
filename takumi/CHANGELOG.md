@@ -1,5 +1,11 @@
 # takumi
 
+## 1.5.1
+
+### Patch Changes
+
+- 2321dbf: Fix `rem` units double-applying device-pixel ratio on descendant elements
+
 ## 1.5.0
 
 ### Minor Changes
