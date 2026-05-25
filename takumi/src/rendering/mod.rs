@@ -71,9 +71,11 @@ pub(crate) struct Sizing {
 }
 
 impl Sizing {
-  /// Pixel basis for the `rem` unit.
+  /// Device-pixel basis for the `rem` unit.
   pub(crate) fn rem_basis(&self) -> f32 {
-    self.root_font_size.unwrap_or(self.viewport.font_size)
+    self
+      .root_font_size
+      .unwrap_or(self.viewport.font_size * self.viewport.device_pixel_ratio)
   }
 
   pub(crate) fn root_line_height_basis(&self) -> f32 {

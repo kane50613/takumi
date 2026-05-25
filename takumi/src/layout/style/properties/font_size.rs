@@ -230,4 +230,30 @@ mod tests {
 
     assert_eq!(FontSize::default().to_px(&sizing, sizing.font_size), 16.0);
   }
+
+  #[test]
+  fn rem_font_size_in_descendant_does_not_double_apply_dpr() {
+    use crate::layout::viewport::DEFAULT_FONT_SIZE;
+
+    let viewport = Viewport::new((1200, 630)).with_device_pixel_ratio(2.0);
+    let root_font_size_device_px = DEFAULT_FONT_SIZE * viewport.device_pixel_ratio;
+    let sizing = Sizing {
+      viewport,
+      container_size: Size::NONE,
+      font_size: root_font_size_device_px,
+      root_font_size: Some(root_font_size_device_px),
+      line_height: 0.0,
+      root_line_height: None,
+      calc_arena: Rc::new(CalcArena::default()),
+    };
+
+    assert_eq!(
+      FontSize::Length(Length::Rem(0.5)).to_px(&sizing, sizing.font_size),
+      16.0
+    );
+    assert_eq!(
+      FontSize::Length(Length::Rem(1.0)).to_px(&sizing, sizing.font_size),
+      32.0
+    );
+  }
 }

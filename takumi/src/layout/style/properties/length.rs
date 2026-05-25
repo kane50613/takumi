@@ -358,7 +358,7 @@ impl CalcFormula {
 
     CalcLinear {
       px: self.px * sizing.viewport.device_pixel_ratio
-        + self.rem * sizing.rem_basis() * sizing.viewport.device_pixel_ratio
+        + self.rem * sizing.rem_basis()
         + self.em * sizing.font_size
         + self.lh * sizing.line_height
         + self.rlh * sizing.root_line_height_basis()
@@ -951,9 +951,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
     match self {
       Length::Auto => CompactLength::auto(),
       Length::Percentage(value) => CompactLength::percent(value / 100.0),
-      Length::Rem(value) => {
-        CompactLength::length(value * sizing.rem_basis() * sizing.viewport.device_pixel_ratio)
-      }
+      Length::Rem(value) => CompactLength::length(value * sizing.rem_basis()),
       Length::Em(value) => CompactLength::length(value * sizing.font_size),
       Length::Lh(value) => CompactLength::length(value * sizing.line_height),
       Length::Rlh(value) => CompactLength::length(value * sizing.root_line_height_basis()),
@@ -1035,6 +1033,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
         | Length::VMin(_)
         | Length::VMax(_)
         | Length::Em(_)
+        | Length::Rem(_)
         | Length::Lh(_)
         | Length::Rlh(_)
         | Length::Calc(_)
@@ -1261,6 +1260,61 @@ mod tests {
   fn to_px_applies_device_pixel_ratio_for_absolute_units() {
     let px = Length::<true>::Rem(2.0).to_px(&sizing(), 100.0);
     assert_near(px, 64.0);
+  }
+
+  fn descendant_sizing() -> Sizing {
+    let mut sizing = sizing();
+    sizing.root_font_size = Some(32.0);
+    sizing
+  }
+
+  #[test]
+  fn rem_to_px_does_not_double_apply_dpr_when_root_font_size_set() {
+    let sizing = descendant_sizing();
+    assert_near(Length::<true>::Rem(1.0).to_px(&sizing, 0.0), 32.0);
+    assert_near(Length::<true>::Rem(2.0).to_px(&sizing, 0.0), 64.0);
+    assert_near(Length::<true>::Rem(0.5).to_px(&sizing, 0.0), 16.0);
+  }
+
+  #[test]
+  fn rem_to_compact_length_does_not_double_apply_dpr_when_root_font_size_set() {
+    let sizing = descendant_sizing();
+    let compact = Length::<true>::Rem(1.0).to_compact_length(&sizing);
+    assert_near(compact.value(), 32.0);
+  }
+
+  #[test]
+  fn calc_with_rem_does_not_double_apply_dpr_when_root_font_size_set() {
+    let sizing = descendant_sizing();
+    let value: Length<true> = Length::Calc(CalcFormula {
+      rem: 1.0,
+      ..Default::default()
+    });
+    assert_near(value.to_px(&sizing, 0.0), 32.0);
+  }
+
+  #[test]
+  fn calc_with_rem_and_px_does_not_double_apply_dpr_when_root_font_size_set() {
+    let sizing = descendant_sizing();
+    let value: Length<true> = Length::Calc(CalcFormula {
+      rem: 1.0,
+      px: 5.0,
+      ..Default::default()
+    });
+    assert_near(value.to_px(&sizing, 0.0), 42.0);
+  }
+
+  #[test]
+  fn make_computed_calc_with_rem_collapses_correctly_when_root_font_size_set() {
+    let mut value: Length<true> = Length::Calc(CalcFormula {
+      rem: 1.0,
+      px: 5.0,
+      ..Default::default()
+    });
+    let sizing = descendant_sizing();
+    value.make_computed(&sizing);
+    assert_eq!(value, Length::Px(21.0));
+    assert_near(value.to_px(&sizing, 0.0), 42.0);
   }
 
   #[test]
