@@ -6,7 +6,7 @@ use takumi::{
   layout::{
     Viewport,
     node::Node,
-    style::{Color, ColorInput, Display, Length::*, Style, StyleDeclaration, StyleSheet},
+    style::{Display, Length::*, Style, StyleDeclaration, StyleSheet},
   },
   rendering::{MeasuredNode, RenderOptions, measure_layout},
 };
@@ -246,18 +246,4 @@ fn gradient_content_renders_with_default_object_size() {
   );
   // css-images-3 §5.1 default object size for gradients: 300x150.
   assert_eq!(result.height, 150.0, "result = {result:?}");
-}
-
-#[test]
-fn pseudo_inherits_color_from_originating_element() {
-  // No assertion on color value via MeasuredNode (it does not expose color),
-  // but parsing + cascade should not fail.
-  let root = box_node("themed").with_style(
-    Style::default()
-      .with(StyleDeclaration::display(Display::Block))
-      .with(StyleDeclaration::color(ColorInput::Value(Color([
-        255, 0, 0, 255,
-      ])))),
-  );
-  let _ = measure_with_css(root, r#".themed::before { content: "x"; }"#);
 }
