@@ -107,23 +107,21 @@ impl<'i> FromCss<'i> for ContentValue {
 }
 
 fn parse_content_item<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Option<ContentItem>> {
-  let start = input.state();
+  if let Ok(image) = input.try_parse(BackgroundImage::from_css) {
+    return Ok(match image {
+      // Bare `none` ident inside a content list is unsupported, not an image.
+      BackgroundImage::None => None,
+      image => Some(ContentItem::Image(Box::new(image))),
+    });
+  }
+
   let location = input.current_source_location();
   let token = input.next()?.clone();
 
   match token {
     Token::QuotedString(value) => Ok(Some(ContentItem::Text(value.as_ref().into()))),
-    Token::UnquotedUrl(url) => Ok(Some(ContentItem::Image(Box::new(BackgroundImage::Url(
-      url.as_ref().into(),
-    ))))),
     Token::Function(ref name) if name.eq_ignore_ascii_case("attr") => {
-      let item = input.parse_nested_block(parse_attr_inner)?;
-      Ok(Some(item))
-    }
-    Token::Function(ref name) if is_image_function(name) => {
-      input.reset(&start);
-      let image = BackgroundImage::from_css(input)?;
-      Ok(Some(ContentItem::Image(Box::new(image))))
+      input.parse_nested_block(parse_attr_inner).map(Some)
     }
     Token::Function(_) => {
       drain_block(input)?;
@@ -132,16 +130,6 @@ fn parse_content_item<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Option<
     Token::Ident(_) => Ok(None),
     other => Err(unexpected_token!(ContentValue, location, &other)),
   }
-}
-
-fn is_image_function(name: &str) -> bool {
-  name.eq_ignore_ascii_case("url")
-    || name.eq_ignore_ascii_case("linear-gradient")
-    || name.eq_ignore_ascii_case("repeating-linear-gradient")
-    || name.eq_ignore_ascii_case("radial-gradient")
-    || name.eq_ignore_ascii_case("repeating-radial-gradient")
-    || name.eq_ignore_ascii_case("conic-gradient")
-    || name.eq_ignore_ascii_case("repeating-conic-gradient")
 }
 
 fn drain_block<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, ()> {
