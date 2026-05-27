@@ -22,9 +22,9 @@
   "devDependencies": {
     "@arethetypeswrong/core": "^0.18.2",
     "@changesets/cli": "^2.31.0",
-    "lefthook": "^2.1.6",
-    "oxfmt": "^0.50.0",
-    "oxlint": "^1.65.0",
+    "lefthook": "^2.1.8",
+    "oxfmt": "^0.52.0",
+    "oxlint": "^1.67.0",
     "publint": "^0.3.21",
     "takumi-js": "workspace:*",
     "typescript": "catalog:"
