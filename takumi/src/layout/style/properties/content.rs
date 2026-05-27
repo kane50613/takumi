@@ -8,6 +8,7 @@ use crate::layout::style::{
 
 /// CSS `content` property value for `::before` / `::after` pseudo-elements.
 #[derive(Debug, Clone, Default, PartialEq)]
+#[non_exhaustive]
 pub enum ContentValue {
   /// `content: normal`. For `::before` / `::after` this behaves as `None`.
   #[default]
@@ -20,6 +21,7 @@ pub enum ContentValue {
 
 /// A single item in a `content: ...` list.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum ContentItem {
   /// A literal string, e.g. `content: "Hello"`.
   Text(Arc<str>),
@@ -78,15 +80,18 @@ impl<'i> FromCss<'i> for ContentValue {
     let mut items = Vec::new();
     let mut unsupported = false;
     while !input.is_exhausted() {
-      match parse_content_item(input)? {
-        Some(item) => items.push(item),
-        None => unsupported = true,
+      match input.try_parse(ContentItem::from_css) {
+        Ok(item) => items.push(item),
+        // Recognized-but-unsupported tokens (counter(), open-quote, …) advance
+        // the parser past them and collapse the whole declaration to `none`.
+        Err(_) => {
+          skip_unsupported_item(input)?;
+          unsupported = true;
+        }
       }
     }
 
     if unsupported {
-      // Recognized-but-unsupported values (counter, open-quote, etc.)
-      // collapse the whole declaration to `none`.
       return Ok(ContentValue::None);
     }
 
@@ -106,37 +111,42 @@ impl<'i> FromCss<'i> for ContentValue {
   ];
 }
 
-fn parse_content_item<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Option<ContentItem>> {
-  if let Ok(image) = input.try_parse(BackgroundImage::from_css) {
-    return Ok(match image {
-      // Bare `none` ident inside a content list is unsupported, not an image.
-      BackgroundImage::None => None,
-      image => Some(ContentItem::Image(Box::new(image))),
-    });
+impl<'i> FromCss<'i> for ContentItem {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    if let Ok(image) = input.try_parse(BackgroundImage::from_css)
+      && !matches!(image, BackgroundImage::None)
+    {
+      return Ok(ContentItem::Image(Box::new(image)));
+    }
+
+    let location = input.current_source_location();
+    let token = input.next()?.clone();
+    match token {
+      Token::QuotedString(value) => Ok(ContentItem::Text(value.as_ref().into())),
+      Token::Function(ref name) if name.eq_ignore_ascii_case("attr") => {
+        input.parse_nested_block(parse_attr_inner)
+      }
+      other => Err(unexpected_token!(ContentValue, location, &other)),
+    }
   }
 
-  let location = input.current_source_location();
-  let token = input.next()?.clone();
-
-  match token {
-    Token::QuotedString(value) => Ok(Some(ContentItem::Text(value.as_ref().into()))),
-    Token::Function(ref name) if name.eq_ignore_ascii_case("attr") => {
-      input.parse_nested_block(parse_attr_inner).map(Some)
-    }
-    Token::Function(_) => {
-      drain_block(input)?;
-      Ok(None)
-    }
-    Token::Ident(_) => Ok(None),
-    other => Err(unexpected_token!(ContentValue, location, &other)),
-  }
+  const VALID_TOKENS: &'static [CssToken] = &[
+    CssToken::Syntax(CssSyntaxKind::String),
+    CssToken::Syntax(CssSyntaxKind::Image),
+  ];
 }
 
-fn drain_block<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, ()> {
-  input.parse_nested_block(|input| -> ParseResult<'i, ()> {
-    while input.next().is_ok() {}
-    Ok(())
-  })
+fn skip_unsupported_item<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, ()> {
+  let location = input.current_source_location();
+  let token = input.next()?.clone();
+  match token {
+    Token::Function(_) => input.parse_nested_block(|input| -> ParseResult<'i, ()> {
+      while input.next().is_ok() {}
+      Ok(())
+    }),
+    Token::Ident(_) => Ok(()),
+    other => Err(unexpected_token!(ContentValue, location, &other)),
+  }
 }
 
 fn parse_attr_inner<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, ContentItem> {
