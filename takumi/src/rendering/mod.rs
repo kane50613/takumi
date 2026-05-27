@@ -152,6 +152,25 @@ impl<'g> RenderContext<'g> {
   pub(crate) fn new_test(global: &'g GlobalContext, viewport: Viewport) -> Self {
     Self::new(global, viewport, Default::default(), Default::default(), 0)
   }
+
+  pub(crate) fn from_parent(
+    parent: &Self,
+    style: ComputedStyle,
+    sizing: Sizing,
+    current_color: Color,
+  ) -> Self {
+    Self {
+      global: parent.global,
+      transform: parent.transform,
+      style: Box::new(style),
+      current_color,
+      time: parent.time,
+      draw_debug_border: parent.draw_debug_border,
+      fetched_resources: parent.fetched_resources.clone(),
+      sizing,
+      stylesheet: parent.stylesheet.clone(),
+    }
+  }
 }
 
 #[inline(always)]

@@ -243,25 +243,6 @@ fn registered_custom_property_parent_style(
   adjusted_parent
 }
 
-fn build_render_context<'g>(
-  parent_context: &RenderContext<'g>,
-  style: ComputedStyle,
-  sizing: Sizing,
-  current_color: Color,
-) -> RenderContext<'g> {
-  RenderContext {
-    global: parent_context.global,
-    transform: parent_context.transform,
-    style: Box::new(style),
-    current_color,
-    time: parent_context.time,
-    draw_debug_border: parent_context.draw_debug_border,
-    fetched_resources: parent_context.fetched_resources.clone(),
-    sizing,
-    stylesheet: parent_context.stylesheet.clone(),
-  }
-}
-
 fn pseudo_computed_style<'g>(
   parent_context: &RenderContext<'g>,
   pseudo_matched: &MatchedDeclarationsView<'_>,
@@ -957,7 +938,7 @@ impl<'g> RenderNode<'g> {
       ContentValue::None | ContentValue::Normal => return None,
     };
 
-    let pseudo_context = build_render_context(parent_context, style, sizing, current_color);
+    let pseudo_context = RenderContext::from_parent(parent_context, style, sizing, current_color);
 
     let children: Box<[Self]> = items
       .into_vec()
@@ -1200,7 +1181,7 @@ impl<'g> RenderNode<'g> {
           ..parent_context.sizing.clone()
         };
         let child_current_color = style.color.resolve(parent_context.current_color);
-        let child_context = build_render_context(
+        let child_context = RenderContext::from_parent(
           parent_context,
           style.clone(),
           child_sizing.clone(),
@@ -1244,7 +1225,7 @@ impl<'g> RenderNode<'g> {
       let (style, sizing, current_color) =
         resolve_computed_style(parent_context, &mut node, node_index, matched_declarations);
       let (children_is_some, children) = take_children_vec(&mut node);
-      let context = build_render_context(parent_context, style, sizing, current_color);
+      let context = RenderContext::from_parent(parent_context, style, sizing, current_color);
 
       let element_matched = matched_declarations.get(node_index);
       let pseudo_before = element_matched
