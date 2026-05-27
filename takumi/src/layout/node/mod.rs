@@ -597,6 +597,24 @@ impl Node {
     matches!(self.kind, NodeKind::Image(_))
   }
 
+  /// `id` and `class` resolve to the structured metadata fields rather than
+  /// the `attributes` map.
+  pub(crate) fn attribute(&self, name: &str) -> Option<&str> {
+    if name.eq_ignore_ascii_case("id") {
+      return self.metadata.id.as_deref();
+    }
+    if name.eq_ignore_ascii_case("class") {
+      return self.metadata.class_name.as_deref();
+    }
+    self
+      .metadata
+      .attributes
+      .as_ref()?
+      .iter()
+      .find(|(attr_name, _)| attr_name.eq_ignore_ascii_case(name))
+      .map(|(_, value)| value.as_ref())
+  }
+
   pub(crate) fn draw_outset_box_shadow(
     &self,
     context: &RenderContext,

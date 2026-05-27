@@ -20,10 +20,11 @@ use crate::{
     },
     node::{Node, NodeStyleLayers},
     style::{
-      Affine, BlendMode, BoxSizing, Color, ComputedStyle, Display, Filters, Float, Isolation,
-      LineHeight, Overflow, PercentageNumber, Position, Style as NodeStyle, StyleDeclaration,
-      StyleSheet, TextWrapMode, apply_stylesheet_animations,
-      matching::{MatchedDeclarationsView, match_stylesheets_view},
+      Affine, BackgroundImage, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem,
+      ContentValue, Display, Filters, Float, Isolation, LineHeight, Overflow, PercentageNumber,
+      Position, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
+      apply_stylesheet_animations,
+      matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
     },
   },
   rendering::{
@@ -240,6 +241,46 @@ fn registered_custom_property_parent_style(
   }
 
   adjusted_parent
+}
+
+fn pseudo_computed_style<'g>(
+  parent_context: &RenderContext<'g>,
+  pseudo_matched: &MatchedDeclarationsView<'_>,
+) -> (ComputedStyle, Sizing, Color) {
+  let style_layers = build_style_layers(
+    NodeStyleLayers::default(),
+    pseudo_matched,
+    parent_context.sizing.viewport,
+  );
+  let inherited_parent = registered_custom_property_parent_style(
+    &parent_context.style,
+    std::slice::from_ref(parent_context.stylesheet.as_ref()),
+    parent_context.sizing.viewport,
+  );
+  let mut style = style_layers.inherit(&inherited_parent);
+
+  let font_size = style
+    .font_size
+    .to_px(&parent_context.sizing, parent_context.sizing.font_size);
+  let normal_basis = resolve_normal_line_height(parent_context.global, &style, font_size);
+  let line_height = style
+    .line_height
+    .to_px(&parent_context.sizing, normal_basis);
+  let sizing = Sizing {
+    font_size,
+    root_font_size: Some(parent_context.sizing.root_font_size.unwrap_or(font_size)),
+    line_height,
+    root_line_height: Some(
+      parent_context
+        .sizing
+        .root_line_height
+        .unwrap_or(line_height),
+    ),
+    ..parent_context.sizing.clone()
+  };
+  let current_color = style.color.resolve(parent_context.current_color);
+  style.make_computed(&sizing);
+  (style, sizing, current_color)
 }
 
 fn push_layout_node<'r, 'g>(
@@ -822,6 +863,114 @@ impl<'g> RenderNode<'g> {
     }
   }
 
+  fn anonymous_image_item(parent_context: &RenderContext<'g>, image: BackgroundImage) -> Self {
+    // Cap image content to the parent pseudo's box so explicit `width` / `height`
+    // on the pseudo wins over intrinsic / default sizing.
+    let max_size = Size {
+      width: taffy::Dimension::percent(1.0),
+      height: taffy::Dimension::percent(1.0),
+    };
+
+    match image {
+      BackgroundImage::Url(url) => Self {
+        context: Self::anonymous_box_context(parent_context),
+        node: Some(Node::image(url)),
+        children: None,
+        layout_style_override: Some(Style {
+          max_size,
+          ..Style::default()
+        }),
+        anonymous_text_content: None,
+        force_inline_layout: false,
+      },
+      gradient => {
+        let mut context = Self::anonymous_box_context(parent_context);
+        context.style.background_image = Some(Box::from([gradient]));
+        Self {
+          context,
+          node: Some(Node::container([])),
+          children: None,
+          // css-images-3 §5.1 default object size when the parent is auto.
+          layout_style_override: Some(Style {
+            size: Size {
+              width: taffy::Dimension::length(300.0),
+              height: taffy::Dimension::length(150.0),
+            },
+            max_size,
+            ..Style::default()
+          }),
+          anonymous_text_content: None,
+          force_inline_layout: false,
+        }
+      }
+    }
+  }
+
+  fn pseudo_content_child(
+    originating_node: &Node,
+    pseudo_context: &RenderContext<'g>,
+    item: ContentItem,
+  ) -> Option<Self> {
+    let text = match item {
+      ContentItem::Text(text) => text.as_ref().to_owned(),
+      ContentItem::Attr(attr) => originating_node
+        .attribute(&attr.name)
+        .map(str::to_owned)
+        .unwrap_or_else(|| attr.fallback.as_ref().to_owned()),
+      ContentItem::Image(image) => {
+        return Some(Self::anonymous_image_item(pseudo_context, *image));
+      }
+    };
+
+    (!text.is_empty()).then(|| Self::anonymous_text_item(pseudo_context, text))
+  }
+
+  fn from_pseudo_match(
+    parent_context: &RenderContext<'g>,
+    originating_node: &Node,
+    pseudo_matched: &MatchedDeclarationsView<'_>,
+  ) -> Option<Self> {
+    let (mut style, sizing, current_color) = pseudo_computed_style(parent_context, pseudo_matched);
+
+    if matches!(style.display, Display::None) {
+      return None;
+    }
+
+    // flex/grid add no semantics over a flat content list; downgrade per spec §8.
+    if matches!(
+      style.display,
+      Display::Flex | Display::InlineFlex | Display::Grid | Display::InlineGrid
+    ) {
+      style.display = Display::Block;
+    }
+
+    let items = match std::mem::take(&mut style.content) {
+      ContentValue::Items(items) => items,
+      ContentValue::None | ContentValue::Normal => return None,
+    };
+
+    let pseudo_context = RenderContext::from_parent(parent_context, style, sizing, current_color);
+
+    let children: Box<[Self]> = items
+      .into_vec()
+      .into_iter()
+      .filter_map(|item| Self::pseudo_content_child(originating_node, &pseudo_context, item))
+      .collect();
+
+    if children.is_empty() {
+      return None;
+    }
+
+    Some(Self {
+      context: pseudo_context,
+      node: Some(Node::container([])),
+      children: Some(children),
+      layout_style_override: None,
+      anonymous_text_content: None,
+      force_inline_layout: false,
+    })
+  }
+
   fn is_anonymous_text_item(&self) -> bool {
     self.anonymous_text_content.is_some() && self.node.is_none()
   }
@@ -976,7 +1125,7 @@ impl<'g> RenderNode<'g> {
   fn from_node_iterative(
     parent_context: &RenderContext<'g>,
     root: Node,
-    matched_declarations: &[MatchedDeclarationsView<'_>],
+    matched_declarations: &[NodeMatchedDeclarations<'_>],
   ) -> Self {
     struct PendingRenderNode<'g> {
       context: RenderContext<'g>,
@@ -984,6 +1133,7 @@ impl<'g> RenderNode<'g> {
       children_is_some: bool,
       pending_children: IntoIter<Node>,
       rendered_children: Vec<RenderNode<'g>>,
+      pseudo_after: Option<RenderNode<'g>>,
     }
 
     fn next_preorder_index(preorder_cursor: &mut usize) -> usize {
@@ -999,34 +1149,16 @@ impl<'g> RenderNode<'g> {
       (children_is_some, children)
     }
 
-    fn build_render_context<'g>(
-      parent_context: &RenderContext<'g>,
-      style: ComputedStyle,
-      sizing: Sizing,
-      current_color: Color,
-    ) -> RenderContext<'g> {
-      RenderContext {
-        global: parent_context.global,
-        transform: parent_context.transform,
-        style: Box::new(style),
-        current_color,
-        time: parent_context.time,
-        draw_debug_border: parent_context.draw_debug_border,
-        fetched_resources: parent_context.fetched_resources.clone(),
-        sizing,
-        stylesheet: parent_context.stylesheet.clone(),
-      }
-    }
-
     fn resolve_computed_style<'g>(
       parent_context: &RenderContext<'g>,
       node: &mut Node,
       node_index: usize,
-      matched_declarations: &[MatchedDeclarationsView<'_>],
+      matched_declarations: &[NodeMatchedDeclarations<'_>],
     ) -> (ComputedStyle, Sizing, Color) {
       let default_matched = MatchedDeclarationsView::default();
       let matched = matched_declarations
         .get(node_index)
+        .map(|m| &m.element)
         .unwrap_or(&default_matched);
       let layers = node.take_style_layers();
       let style_layers = build_style_layers(layers, matched, parent_context.sizing.viewport);
@@ -1060,7 +1192,7 @@ impl<'g> RenderNode<'g> {
           ..parent_context.sizing.clone()
         };
         let child_current_color = style.color.resolve(parent_context.current_color);
-        let child_context = build_render_context(
+        let child_context = RenderContext::from_parent(
           parent_context,
           style.clone(),
           child_sizing.clone(),
@@ -1097,21 +1229,36 @@ impl<'g> RenderNode<'g> {
     fn build_pending_node<'g>(
       parent_context: &RenderContext<'g>,
       mut node: Node,
-      matched_declarations: &[MatchedDeclarationsView<'_>],
+      matched_declarations: &[NodeMatchedDeclarations<'_>],
       preorder_cursor: &mut usize,
     ) -> PendingRenderNode<'g> {
       let node_index = next_preorder_index(preorder_cursor);
       let (style, sizing, current_color) =
         resolve_computed_style(parent_context, &mut node, node_index, matched_declarations);
       let (children_is_some, children) = take_children_vec(&mut node);
-      let context = build_render_context(parent_context, style, sizing, current_color);
+      let context = RenderContext::from_parent(parent_context, style, sizing, current_color);
+
+      let element_matched = matched_declarations.get(node_index);
+      let pseudo_before = element_matched
+        .and_then(|m| m.before.as_ref())
+        .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
+      let pseudo_after = element_matched
+        .and_then(|m| m.after.as_ref())
+        .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
+
+      let has_pseudo = pseudo_before.is_some() || pseudo_after.is_some();
+      let mut rendered_children = Vec::with_capacity(children.len() + 2);
+      if let Some(before) = pseudo_before {
+        rendered_children.push(before);
+      }
 
       PendingRenderNode {
         context,
         node,
-        children_is_some,
-        rendered_children: Vec::with_capacity(children.len()),
+        children_is_some: children_is_some || has_pseudo,
+        rendered_children,
         pending_children: children.into_iter(),
+        pseudo_after,
       }
     }
 
@@ -1166,6 +1313,10 @@ impl<'g> RenderNode<'g> {
           force_inline_layout: false,
         };
       };
+
+      if let Some(after) = finished.pseudo_after.take() {
+        finished.rendered_children.push(after);
+      }
 
       let children = if finished.children_is_some {
         Some(finished.rendered_children.into_boxed_slice())
