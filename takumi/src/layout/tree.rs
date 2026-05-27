@@ -864,12 +864,22 @@ impl<'g> RenderNode<'g> {
   }
 
   fn anonymous_image_item(parent_context: &RenderContext<'g>, image: BackgroundImage) -> Self {
+    // Cap image content to the parent pseudo's box so explicit `width` / `height`
+    // on the pseudo wins over intrinsic / default sizing.
+    let max_size = Size {
+      width: taffy::Dimension::percent(1.0),
+      height: taffy::Dimension::percent(1.0),
+    };
+
     match image {
       BackgroundImage::Url(url) => Self {
         context: Self::anonymous_box_context(parent_context),
         node: Some(Node::image(url)),
         children: None,
-        layout_style_override: Some(Style::default()),
+        layout_style_override: Some(Style {
+          max_size,
+          ..Style::default()
+        }),
         anonymous_text_content: None,
         force_inline_layout: false,
       },
@@ -880,12 +890,13 @@ impl<'g> RenderNode<'g> {
           context,
           node: Some(Node::container([])),
           children: None,
-          // css-images-3 §5.1 default object size: 300x150.
+          // css-images-3 §5.1 default object size when the parent is auto.
           layout_style_override: Some(Style {
             size: Size {
               width: taffy::Dimension::length(300.0),
               height: taffy::Dimension::length(150.0),
             },
+            max_size,
             ..Style::default()
           }),
           anonymous_text_content: None,
