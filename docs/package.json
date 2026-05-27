@@ -37,7 +37,7 @@
     "tailwind-merge": "^3.6.0",
     "takumi-js": "workspace:*",
     "twoslash": "^0.3.8",
-    "waku": "1.0.0-beta.0",
+    "waku": "1.0.0-beta.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
