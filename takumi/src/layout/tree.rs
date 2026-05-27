@@ -913,10 +913,10 @@ impl<'g> RenderNode<'g> {
   ) -> Option<Self> {
     let text = match item {
       ContentItem::Text(text) => text.as_ref().to_owned(),
-      ContentItem::AttrRef { name, fallback } => originating_node
-        .attribute(&name)
+      ContentItem::Attr(attr) => originating_node
+        .attribute(&attr.name)
         .map(str::to_owned)
-        .unwrap_or_else(|| fallback.as_ref().to_owned()),
+        .unwrap_or_else(|| attr.fallback.as_ref().to_owned()),
       ContentItem::Image(image) => {
         return Some(Self::anonymous_image_item(pseudo_context, *image));
       }

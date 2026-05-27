@@ -27,14 +27,18 @@ pub enum ContentItem {
   Text(Arc<str>),
   /// An image value: `url(...)`, `linear-gradient(...)`, etc.
   Image(Box<BackgroundImage>),
-  /// `attr(name)` or `attr(name, "fallback")`, resolved at render-tree-build time
-  /// against the originating element's attributes.
-  AttrRef {
-    /// The attribute name (case-insensitive lookup).
-    name: Arc<str>,
-    /// Fallback string when the attribute is missing.
-    fallback: Arc<str>,
-  },
+  /// `attr(name [, "fallback"])`, resolved at render-tree-build time against
+  /// the originating element's attributes.
+  Attr(AttrRef),
+}
+
+/// A parsed `attr(<name> [, <fallback>])` expression.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AttrRef {
+  /// The attribute name (case-insensitive lookup).
+  pub name: Arc<str>,
+  /// Fallback string when the attribute is missing.
+  pub fallback: Arc<str>,
 }
 
 impl MakeComputed for ContentValue {
@@ -78,21 +82,8 @@ impl<'i> FromCss<'i> for ContentValue {
     }
 
     let mut items = Vec::new();
-    let mut unsupported = false;
     while !input.is_exhausted() {
-      match input.try_parse(ContentItem::from_css) {
-        Ok(item) => items.push(item),
-        // Recognized-but-unsupported tokens (counter(), open-quote, …) advance
-        // the parser past them and collapse the whole declaration to `none`.
-        Err(_) => {
-          skip_unsupported_item(input)?;
-          unsupported = true;
-        }
-      }
-    }
-
-    if unsupported {
-      return Ok(ContentValue::None);
+      items.push(ContentItem::from_css(input)?);
     }
 
     if items.is_empty() {
@@ -113,20 +104,24 @@ impl<'i> FromCss<'i> for ContentValue {
 
 impl<'i> FromCss<'i> for ContentItem {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    if let Ok(image) = input.try_parse(BackgroundImage::from_css)
-      && !matches!(image, BackgroundImage::None)
-    {
-      return Ok(ContentItem::Image(Box::new(image)));
+    let start = input.state();
+    if let Ok(image) = input.try_parse(BackgroundImage::from_css) {
+      if !matches!(image, BackgroundImage::None) {
+        return Ok(ContentItem::Image(Box::new(image)));
+      }
+      // Bare `none` ident inside a list isn't a valid item; report it from
+      // the same position rather than letting it pass as an image.
+      input.reset(&start);
     }
 
     let location = input.current_source_location();
     let token = input.next()?.clone();
     match token {
       Token::QuotedString(value) => Ok(ContentItem::Text(value.as_ref().into())),
-      Token::Function(ref name) if name.eq_ignore_ascii_case("attr") => {
-        input.parse_nested_block(parse_attr_inner)
-      }
-      other => Err(unexpected_token!(ContentValue, location, &other)),
+      Token::Function(ref name) if name.eq_ignore_ascii_case("attr") => input
+        .parse_nested_block(AttrRef::from_css)
+        .map(ContentItem::Attr),
+      other => Err(unexpected_token!(Self, location, &other)),
     }
   }
 
@@ -136,27 +131,18 @@ impl<'i> FromCss<'i> for ContentItem {
   ];
 }
 
-fn skip_unsupported_item<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, ()> {
-  let location = input.current_source_location();
-  let token = input.next()?.clone();
-  match token {
-    Token::Function(_) => input.parse_nested_block(|input| -> ParseResult<'i, ()> {
-      while input.next().is_ok() {}
-      Ok(())
-    }),
-    Token::Ident(_) => Ok(()),
-    other => Err(unexpected_token!(ContentValue, location, &other)),
+impl<'i> FromCss<'i> for AttrRef {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let name: Arc<str> = input.expect_ident()?.as_ref().into();
+    let fallback: Arc<str> = if input.try_parse(Parser::expect_comma).is_ok() {
+      input.expect_string()?.as_ref().into()
+    } else {
+      "".into()
+    };
+    Ok(Self { name, fallback })
   }
-}
 
-fn parse_attr_inner<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, ContentItem> {
-  let name: Arc<str> = input.expect_ident()?.as_ref().into();
-  let fallback: Arc<str> = if input.try_parse(Parser::expect_comma).is_ok() {
-    input.expect_string()?.as_ref().into()
-  } else {
-    "".into()
-  };
-  Ok(ContentItem::AttrRef { name, fallback })
+  const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Ident)];
 }
 
 impl ToCss for ContentValue {
@@ -182,16 +168,20 @@ impl ToCss for ContentItem {
     match self {
       ContentItem::Text(value) => write_css_string(dest, value),
       ContentItem::Image(image) => image.to_css(dest),
-      ContentItem::AttrRef { name, fallback } => {
-        dest.write_str("attr(")?;
-        dest.write_str(name)?;
-        if !fallback.is_empty() {
-          dest.write_str(", ")?;
-          write_css_string(dest, fallback)?;
-        }
-        dest.write_char(')')
-      }
+      ContentItem::Attr(attr) => attr.to_css(dest),
     }
+  }
+}
+
+impl ToCss for AttrRef {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    dest.write_str("attr(")?;
+    dest.write_str(&self.name)?;
+    if !self.fallback.is_empty() {
+      dest.write_str(", ")?;
+      write_css_string(dest, &self.fallback)?;
+    }
+    dest.write_char(')')
   }
 }
 
@@ -232,11 +222,11 @@ mod tests {
     let ContentValue::Items(items) = parse("attr(label)") else {
       panic!("expected items");
     };
-    let ContentItem::AttrRef { name, fallback } = &items[0] else {
+    let ContentItem::Attr(attr) = &items[0] else {
       panic!("expected attr");
     };
-    assert_eq!(&**name, "label");
-    assert_eq!(&**fallback, "");
+    assert_eq!(&*attr.name, "label");
+    assert_eq!(&*attr.fallback, "");
   }
 
   #[test]
@@ -244,10 +234,10 @@ mod tests {
     let ContentValue::Items(items) = parse("attr(label, \"unknown\")") else {
       panic!("expected items");
     };
-    let ContentItem::AttrRef { fallback, .. } = &items[0] else {
+    let ContentItem::Attr(attr) = &items[0] else {
       panic!("expected attr");
     };
-    assert_eq!(&**fallback, "unknown");
+    assert_eq!(&*attr.fallback, "unknown");
   }
 
   #[test]
@@ -270,14 +260,14 @@ mod tests {
   }
 
   #[test]
-  fn counter_drops_whole_value_to_none() {
-    assert_eq!(parse("counter(foo)"), ContentValue::None);
-    assert_eq!(parse("\"prefix\" counter(foo)"), ContentValue::None);
+  fn unsupported_function_is_rejected() {
+    assert!(ContentValue::from_str("counter(foo)").is_err());
+    assert!(ContentValue::from_str("\"prefix\" counter(foo)").is_err());
   }
 
   #[test]
-  fn quote_keywords_drop_whole_value_to_none() {
-    assert_eq!(parse("open-quote"), ContentValue::None);
-    assert_eq!(parse("\"x\" close-quote"), ContentValue::None);
+  fn unsupported_keyword_is_rejected() {
+    assert!(ContentValue::from_str("open-quote").is_err());
+    assert!(ContentValue::from_str("\"x\" close-quote").is_err());
   }
 }
