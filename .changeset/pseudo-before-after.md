@@ -2,4 +2,4 @@
 "takumi": minor
 ---
 
-Render `::before` / `::after` pseudo-elements with `content: <string>`, `attr()`, and `url(...)` images
+Render `::before` / `::after` pseudo-elements #703
