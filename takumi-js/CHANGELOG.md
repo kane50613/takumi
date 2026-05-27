@@ -1,5 +1,13 @@
 # takumi-js
 
+## 1.6.0
+
+### Patch Changes
+
+- @takumi-rs/core@1.6.0
+- @takumi-rs/wasm@1.6.0
+- @takumi-rs/helpers@1.6.0
+
 ## 1.5.1
 
 ### Patch Changes

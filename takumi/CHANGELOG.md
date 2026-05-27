@@ -1,5 +1,11 @@
 # takumi
 
+## 1.6.0
+
+### Minor Changes
+
+- 9d9b65e: Render `::before` / `::after` pseudo-elements #703
+
 ## 1.5.1
 
 ### Patch Changes
