@@ -124,10 +124,17 @@ await response.ready;
 return response;
 ```
 
-You can also provide `onError` to render a fallback image instead of failing the response stream.
+You can also provide `onError`, a notification hook that runs after rendering fails. It's for side effects like logging; its return value is ignored and the response stream still errors, so it cannot substitute a fallback image. To serve a fallback, catch the `ready` rejection and return your own response.
 
 ```tsx
 const response = new ImageResponse(<OgImage />, {
-  onError: () => <div>Failed to generate image</div>,
+  onError: (error) => console.error(error),
 });
+
+try {
+  await response.ready;
+  return response;
+} catch {
+  return new Response("Failed to generate image", { status: 500 });
+}
 ```
