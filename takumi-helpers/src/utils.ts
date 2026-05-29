@@ -89,7 +89,7 @@ export type FetchResourcesOptions = {
  * @returns Array of { src: string, data: ArrayBuffer }
  */
 export async function fetchResources(urls: string[], options?: FetchResourcesOptions) {
-  const signal = AbortSignal.timeout(options?.timeout ?? defaultTimeout);
+  const timeout = options?.timeout ?? defaultTimeout;
   const fetch = options?.fetch ?? globalThis.fetch;
   const throwOnError = options?.throwOnError ?? true;
 
@@ -105,7 +105,7 @@ export async function fetchResources(urls: string[], options?: FetchResourcesOpt
       }
     }
 
-    const response = await fetch(url, { signal });
+    const response = await fetch(url, { signal: AbortSignal.timeout(timeout) });
 
     // Validate HTTP status
     if (!response.ok) {

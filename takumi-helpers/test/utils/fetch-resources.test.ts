@@ -141,7 +141,7 @@ describe("fetchResources", () => {
     });
   });
 
-  test("all requests share the same AbortSignal", async () => {
+  test("each request gets its own timeout AbortSignal", async () => {
     const signals: AbortSignal[] = [];
 
     const mockFetch = mock((_url: string, init?: RequestInit) => {
@@ -155,9 +155,9 @@ describe("fetchResources", () => {
       fetch: mockFetch,
     });
 
-    // All requests share the same signal instance
+    // Per-request signals so one slow URL can't consume the whole batch's budget
     expect(signals.length).toBe(2);
-    expect(signals[0]).toBe(signals[1]);
+    expect(signals[0]).not.toBe(signals[1]);
   });
 
   test("deduplicates URLs before fetching", async () => {
