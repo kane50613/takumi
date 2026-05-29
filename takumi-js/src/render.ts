@@ -76,6 +76,8 @@ async function transformElement(element: RenderInput, options?: RenderOptions) {
  * @returns A promise that resolves to the rendered image data (Buffer/Uint8Array).
  */
 export async function render(element: RenderInput, options?: RenderOptions) {
+  options?.signal?.throwIfAborted();
+
   const imports = await getImports(options && "module" in options ? options.module : undefined);
   const isExternalRenderer = options && "renderer" in options;
   const renderer = isExternalRenderer
@@ -101,6 +103,10 @@ export async function render(element: RenderInput, options?: RenderOptions) {
     fetchedResources,
     stylesheets: [...(options?.stylesheets ?? []), ...stylesheets],
   };
+
+  // The WASM renderer is synchronous and ignores the signal argument, so honor an
+  // abort that happened during the async font/resource loading before the blocking call.
+  options?.signal?.throwIfAborted();
 
   return renderer.render(node, renderOptions, options?.signal);
 }

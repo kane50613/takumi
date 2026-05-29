@@ -128,6 +128,11 @@ function shouldSkipCoreImport() {
     return true;
   }
 
+  // Deno (incl. Supabase Edge Functions / Deno Deploy) can't load the native napi addon; use WASM.
+  if ("Deno" in globalThis) {
+    return true;
+  }
+
   const maybeWorkerGlobalScope = (
     globalThis as typeof globalThis & {
       WorkerGlobalScope?: { prototype: object };

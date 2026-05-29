@@ -24,6 +24,16 @@ describe("ImageResponse", () => {
     expect(renderer.render).toHaveBeenCalledTimes(1);
   });
 
+  test("rejects without invoking the renderer when the signal is already aborted", async () => {
+    const node: Node = { type: "container", children: [{ type: "text", text: "x" }] };
+    const renderer = { render: mock(async () => new Uint8Array()) } as any;
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(render(node, { renderer, signal: controller.signal })).rejects.toThrow();
+    expect(renderer.render).not.toHaveBeenCalled();
+  });
+
   test("should not crash", async () => {
     const response = new ImageResponse(<div>Hello</div>);
 
