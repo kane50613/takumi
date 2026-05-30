@@ -60,7 +60,7 @@ function buildCssUrl(
     axis = `wght@${weights.join(";")}`;
   }
 
-  let url = `https://fonts.googleapis.com/css2?family=${family.replace(/ /g, "+")}:${axis}`;
+  let url = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:${axis}`;
   if (display) {
     url += `&display=${display}`;
   }

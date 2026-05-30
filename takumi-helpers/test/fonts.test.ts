@@ -91,7 +91,7 @@ describe("googleFont", () => {
       fetch: fetchMock,
     });
 
-    expect(requestedUrl).toContain("family=Open+Sans:ital,wght@0,400;0,700;1,400;1,700");
+    expect(requestedUrl).toContain("family=Open%20Sans:ital,wght@0,400;0,700;1,400;1,700");
     expect(ua).toContain("Chrome");
   });
 
