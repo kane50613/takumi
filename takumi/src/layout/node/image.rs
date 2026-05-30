@@ -266,7 +266,7 @@ mod tests {
       _ => return Ok(()),
     };
 
-    assert_eq!(data, vec![137, 80, 78, 71]);
+    assert_eq!(&data[..], [137, 80, 78, 71]);
     assert_eq!(
       image_resource_url(&ImageData {
         src: ImageSourceInput::Buffer(data),
@@ -276,6 +276,41 @@ mod tests {
       None
     );
 
+    Ok(())
+  }
+
+  #[test]
+  fn deserialize_image_src_from_bytes_value() -> std::result::Result<(), serde::de::value::Error> {
+    use serde::de::{Deserializer, Visitor, value::Error};
+    use serde::{Deserialize, forward_to_deserialize_any};
+
+    // Mirror how napi / wasm surface a `Uint8Array`/`ArrayBuffer`: a bytes value
+    // via `deserialize_any`, not a JSON-style number array.
+    struct BytesValue<'a>(&'a [u8]);
+
+    impl<'de> Deserializer<'de> for BytesValue<'_> {
+      type Error = Error;
+
+      fn deserialize_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        visitor.visit_bytes(self.0)
+      }
+
+      forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+        bytes byte_buf option unit unit_struct newtype_struct seq tuple
+        tuple_struct map struct enum identifier ignored_any
+      }
+    }
+
+    // PNG signature: invalid UTF-8, so it can't be captured as a URL string.
+    let src = ImageSourceInput::deserialize(BytesValue(&[0x89, 0x50, 0x4e, 0x47]))?;
+
+    assert!(matches!(src, ImageSourceInput::Buffer(_)));
+    let data = match src {
+      ImageSourceInput::Buffer(data) => data,
+      _ => return Ok(()),
+    };
+    assert_eq!(&data[..], [0x89, 0x50, 0x4e, 0x47]);
     Ok(())
   }
 

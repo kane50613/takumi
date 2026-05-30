@@ -2175,6 +2175,7 @@ dependencies = [
  "roxmltree",
  "selectors",
  "serde",
+ "serde_bytes",
  "serde_json",
  "skrifa",
  "smallvec",
