@@ -75,6 +75,56 @@ describe("binary inputs", () => {
     ).resolves.toBeUndefined();
   });
 
+  test("render accepts inline image bytes as src", async () => {
+    const renderer = new Renderer();
+
+    const reference = await renderer.render(imageNode, {
+      width: 64,
+      height: 64,
+      fetchedResources: [{ src: "test://binary-input-image", data: imageUint8Array }],
+    });
+
+    const inline = (src: Uint8Array | ArrayBuffer) =>
+      container({
+        style: { width: 64, height: 64 },
+        children: [image({ src, width: 64, height: 64 })],
+      });
+
+    const fromUint8Array = await renderer.render(inline(imageUint8Array), {
+      width: 64,
+      height: 64,
+    });
+    expect(fromUint8Array).toBeInstanceOf(Buffer);
+    expect(Buffer.compare(fromUint8Array, reference)).toBe(0);
+
+    const fromArrayBuffer = await renderer.render(inline(imageArrayBuffer), {
+      width: 64,
+      height: 64,
+    });
+    expect(Buffer.compare(fromArrayBuffer, reference)).toBe(0);
+  });
+
+  test("render accepts inline SVG markup as bytes", async () => {
+    const renderer = new Renderer();
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="red"/></svg>';
+
+    const inline = (src: string | Uint8Array) =>
+      container({
+        style: { width: 64, height: 64 },
+        children: [image({ src, width: 64, height: 64 })],
+      });
+
+    const fromString = await renderer.render(inline(svg), { width: 64, height: 64 });
+    const fromBytes = await renderer.render(inline(new TextEncoder().encode(svg)), {
+      width: 64,
+      height: 64,
+    });
+
+    expect(fromBytes).toBeInstanceOf(Buffer);
+    expect(Buffer.compare(fromBytes, fromString)).toBe(0);
+  });
+
   test("render fetchedResources accepts Buffer, Uint8Array, and ArrayBuffer", async () => {
     const renderer = new Renderer();
 

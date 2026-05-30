@@ -3,6 +3,7 @@ mod image;
 mod text;
 
 use serde::Deserialize;
+use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use taffy::{AvailableSpace, Layout, Point, Size};
@@ -72,7 +73,9 @@ pub(crate) struct TextData {
 #[serde(untagged)]
 pub(crate) enum ImageSourceInput {
   Url(Arc<str>),
-  Buffer(Vec<u8>),
+  // `ByteBuf` (not `Vec<u8>`) so an FFI `Uint8Array`/`ArrayBuffer`, surfaced as a
+  // bytes value rather than a number array, deserializes here.
+  Buffer(ByteBuf),
   #[serde(skip_deserializing)]
   Loaded(ImageSource),
 }
@@ -129,7 +132,7 @@ impl From<Arc<str>> for ImageData {
 impl From<Vec<u8>> for ImageData {
   fn from(data: Vec<u8>) -> Self {
     Self {
-      src: ImageSourceInput::Buffer(data),
+      src: ImageSourceInput::Buffer(ByteBuf::from(data)),
       width: None,
       height: None,
     }
@@ -139,7 +142,7 @@ impl From<Vec<u8>> for ImageData {
 impl From<&[u8]> for ImageData {
   fn from(data: &[u8]) -> Self {
     Self {
-      src: ImageSourceInput::Buffer(data.to_vec()),
+      src: ImageSourceInput::Buffer(ByteBuf::from(data.to_vec())),
       width: None,
       height: None,
     }
