@@ -27,13 +27,14 @@ type FontStyle = "normal" | "italic";
 
 export type GoogleFontOptions = FontOptions & {
   /**
-   * `400` for one weight, `[400, 700]` for several, or a range like `"100..900"` to fetch
-   * the variable font (weight stays fluid, driven by CSS `font-weight`). @default 400
+   * `400` for one weight, `[400, 700]` for several, or a range like `"100..900"` to load
+   * the variable font. A range leaves the weight unset so CSS `font-weight` controls it.
+   * @default 400
    */
   weight?: number | number[] | `${number}..${number}`;
   /** `"normal"`, `"italic"`, or both. @default "normal" */
   style?: FontStyle | FontStyle[];
-  /** Subset the download to just the glyphs in this text — recommended for OG images. */
+  /** Limit the download to the glyphs used in this text. Recommended for OG images. */
   text?: string;
   /** `font-display` strategy passed through to the CSS request. */
   display?: "auto" | "block" | "swap" | "fallback" | "optional";
@@ -101,7 +102,7 @@ function parseFontFaces(css: string) {
     }
     seen.add(url);
 
-    // A range (`100 900`) marks a variable file — leave weight unset so the engine keeps it fluid.
+    // A range like `100 900` means a variable file. Leave weight unset so CSS controls it.
     const weight = body.match(/font-weight:\s*(\d+)(?:\s+(\d+))?/);
     faces.push({
       url,
@@ -114,9 +115,9 @@ function parseFontFaces(css: string) {
 }
 
 /**
- * Resolve a Google Font into lazy, dedup-keyed loaders — handles the CSS lookup, `woff2`
- * URL extraction, and weight/style expansion that OG repos otherwise hand-roll. Only the CSS
- * is fetched eagerly; each file downloads lazily and the renderer skips ones already loaded.
+ * Load a Google Font as descriptors you can pass to a renderer's `fonts`. Fetches the
+ * Google Fonts CSS, reads the `woff2` URLs, and returns one loader per file. Each file
+ * downloads when the renderer first needs it; the renderer skips files it already loaded.
  *
  * @example
  * fonts: await googleFont("Inter", { weight: [400, 700] })
