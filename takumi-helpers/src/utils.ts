@@ -57,17 +57,28 @@ export function extractResourceUrls(node: Node): string[] {
   return [...urls];
 }
 
-export type FetchResourcesOptions = {
-  /**
-   * Timeout in milliseconds.
-   * @default 5000
-   */
+export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
+export type FetchOptions = {
+  /** Custom fetch implementation. @default globalThis.fetch */
+  fetch?: FetchLike;
+  /** Abort the request after this many milliseconds. */
   timeout?: number;
-  /**
-   * Custom fetch function.
-   * @default {globalThis.fetch}
-   */
-  fetch?: (input: string, init?: RequestInit) => Promise<Response>;
+};
+
+/** Fetches a URL, applying a timeout signal and throwing on a non-OK status. */
+export async function fetchOk(url: string, options: FetchOptions & { init?: RequestInit } = {}) {
+  const fetchImpl = options.fetch ?? globalThis.fetch;
+  const signal =
+    options.timeout === undefined ? options.init?.signal : AbortSignal.timeout(options.timeout);
+  const response = await fetchImpl(url, { ...options.init, signal });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} ${response.statusText} fetching ${url}`);
+  }
+  return response;
+}
+
+export type FetchResourcesOptions = FetchOptions & {
   /**
    * Whether to throw on any fetch failure. If false, returns only successful fetches.
    * @default true
@@ -81,23 +92,18 @@ export type FetchResourcesOptions = {
 };
 
 /**
- * Fetches multiple resources concurrently.
- * Validates HTTP status codes and automatically deduplicates URLs.
+ * Fetches multiple resources concurrently, deduplicating URLs.
  *
  * @param urls - URLs to fetch
- * @param options - Fetch options
+ * @param options - Fetch options; `timeout` defaults to 5000ms
  * @returns Array of { src: string, data: ArrayBuffer }
  */
 export async function fetchResources(urls: string[], options?: FetchResourcesOptions) {
-  const timeout = options?.timeout ?? defaultTimeout;
-  const fetch = options?.fetch ?? globalThis.fetch;
   const throwOnError = options?.throwOnError ?? true;
+  // Per-request timeout so one slow URL can't consume the whole batch's budget.
+  const timeout = options?.timeout ?? defaultTimeout;
 
-  // Deduplicate URLs to avoid redundant fetches
-  const uniqueUrls = [...new Set(urls)];
-
-  const promises = uniqueUrls.map(async (url) => {
-    // Check cache first if provided
+  const promises = [...new Set(urls)].map(async (url) => {
     if (options?.cache?.has(url)) {
       const cached = options.cache.get(url);
       if (cached) {
@@ -105,27 +111,17 @@ export async function fetchResources(urls: string[], options?: FetchResourcesOpt
       }
     }
 
-    const response = await fetch(url, { signal: AbortSignal.timeout(timeout) });
-
-    // Validate HTTP status
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText} for ${url}`);
-    }
-
-    const buffer = await response.arrayBuffer();
-
-    // Store in cache if provided
+    const buffer = await fetchOk(url, { fetch: options?.fetch, timeout }).then((r) =>
+      r.arrayBuffer(),
+    );
     options?.cache?.set(url, buffer);
-
     return { src: url, data: buffer };
   });
 
   if (throwOnError) {
-    // Original behavior: throw on any error
     return Promise.all(promises);
   }
 
-  // Graceful error handling: return successful fetches only
   const results = await Promise.allSettled(promises);
   return results
     .filter(
