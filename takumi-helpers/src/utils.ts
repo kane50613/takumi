@@ -57,6 +57,8 @@ export function extractResourceUrls(node: Node): string[] {
   return [...urls];
 }
 
+export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
 export type FetchResourcesOptions = {
   /**
    * Timeout in milliseconds.
@@ -67,7 +69,7 @@ export type FetchResourcesOptions = {
    * Custom fetch function.
    * @default {globalThis.fetch}
    */
-  fetch?: (input: string, init?: RequestInit) => Promise<Response>;
+  fetch?: FetchLike;
   /**
    * Whether to throw on any fetch failure. If false, returns only successful fetches.
    * @default true

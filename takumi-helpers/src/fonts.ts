@@ -1,8 +1,7 @@
-// Chrome UA so the Google Fonts CSS API returns `woff2` `src` URLs.
+import type { FetchLike } from "./utils";
+
 const chromeUserAgent =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-
-type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export type FontOptions = {
   /** Custom fetch implementation. @default globalThis.fetch */
@@ -11,12 +10,11 @@ export type FontOptions = {
   timeout?: number;
 };
 
-function withTimeout(init: RequestInit, timeout?: number): RequestInit {
-  return timeout === undefined ? init : { ...init, signal: AbortSignal.timeout(timeout) };
-}
+const timeoutSignal = (timeout?: number) =>
+  timeout === undefined ? undefined : AbortSignal.timeout(timeout);
 
 async function fetchBytes(url: string, fetchImpl: FetchLike, timeout?: number) {
-  const response = await fetchImpl(url, withTimeout({}, timeout));
+  const response = await fetchImpl(url, { signal: timeoutSignal(timeout) });
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} fetching font: ${url}`);
   }
@@ -71,10 +69,10 @@ function buildCssUrl(
 }
 
 async function fetchCss(url: string, fetchImpl: FetchLike, timeout?: number) {
-  const response = await fetchImpl(
-    url,
-    withTimeout({ headers: { "User-Agent": chromeUserAgent } }, timeout),
-  );
+  const response = await fetchImpl(url, {
+    headers: { "User-Agent": chromeUserAgent },
+    signal: timeoutSignal(timeout),
+  });
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} fetching Google Fonts CSS: ${url}`);
   }
@@ -102,7 +100,6 @@ function parseFontFaces(css: string) {
     }
     seen.add(url);
 
-    // A range like `100 900` means a variable file. Leave weight unset so CSS controls it.
     const weight = body.match(/font-weight:\s*(\d+)(?:\s+(\d+))?/);
     faces.push({
       url,
