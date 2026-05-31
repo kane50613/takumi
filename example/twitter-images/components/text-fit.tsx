@@ -25,7 +25,6 @@ export default function TextFit() {
       <div
         tw="font-semibold leading-[1.2] text-balance w-[85%] font-mono"
         style={{
-          // @ts-expect-error: text-fit is not yet in the type definitions
           textFit: "grow per-line-all",
           whiteSpace: "pre-wrap",
         }}

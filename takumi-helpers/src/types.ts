@@ -1,5 +1,26 @@
 import type { CSSProperties } from "react";
 
+/**
+ * Value of the `text-fit` longhand: `[ none | grow | shrink ] [ consistent | per-line | per-line-all ]? <percentage>?`.
+ *
+ * @see https://drafts.csswg.org/css-text-4/#text-fit-property
+ */
+export type TextFit =
+  | "none"
+  | "grow"
+  | "shrink"
+  | "consistent"
+  | "per-line"
+  | "per-line-all"
+  | `${number}%`
+  | (string & {});
+
+declare module "react" {
+  interface CSSProperties {
+    textFit?: TextFit;
+  }
+}
+
 export type NodeAttributes = Record<string, string>;
 
 export type ReactElementLike = {
