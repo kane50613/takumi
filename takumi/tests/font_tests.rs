@@ -1,4 +1,5 @@
 use std::{
+  assert_matches,
   fs::File,
   io::Read,
   path::{Path, PathBuf},
@@ -79,7 +80,7 @@ fn test_invalid_format_detection() {
   let result = context
     .font_context
     .load_and_store(FontResource::new(invalid_data));
-  assert!(matches!(result, Err(FontError::UnsupportedFormat)));
+  assert_matches!(result, Err(FontError::UnsupportedFormat));
 }
 
 #[test]
@@ -91,7 +92,7 @@ fn test_empty_data() {
   let result = context
     .font_context
     .load_and_store(FontResource::new(empty_data));
-  assert!(matches!(result, Err(FontError::UnsupportedFormat)));
+  assert_matches!(result, Err(FontError::UnsupportedFormat));
 }
 
 #[test]
@@ -103,5 +104,5 @@ fn test_too_short_data() {
   let result = context
     .font_context
     .load_and_store(FontResource::new(short_data));
-  assert!(matches!(result, Err(FontError::UnsupportedFormat)));
+  assert_matches!(result, Err(FontError::UnsupportedFormat));
 }

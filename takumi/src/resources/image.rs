@@ -530,7 +530,7 @@ pub enum ImageResourceError {
 
 #[cfg(test)]
 mod tests {
-  use std::borrow::Cow;
+  use std::{assert_matches, borrow::Cow};
 
   use image::Rgba;
   use tiny_skia::PremultipliedColorU8;
@@ -775,14 +775,14 @@ mod tests {
 
     assert_eq!(width, 4);
     assert_eq!(height, 4);
-    assert!(matches!(algo, ImageScalingAlgorithm::Pixelated));
+    assert_matches!(algo, ImageScalingAlgorithm::Pixelated);
     Ok(())
   }
 
   #[test]
   fn gif_source_from_decoded_rejects_empty_frames() {
     let result = GifSource::from_decoded(DecodedGif { frames: Vec::new() });
-    assert!(matches!(result, Err(ImageResourceError::InvalidGif)));
+    assert_matches!(result, Err(ImageResourceError::InvalidGif));
   }
 
   #[test]

@@ -724,6 +724,8 @@ impl ToCss for Animation {
 
 #[cfg(test)]
 mod tests {
+  use std::assert_matches;
+
   use super::*;
 
   #[test]
@@ -740,26 +742,26 @@ mod tests {
 
   #[test]
   fn parse_animation_names() {
-    assert!(matches!(
+    assert_matches!(
       AnimationNames::from_str("fade, slide"),
       Ok(names) if names.as_ref() == [Some("fade".to_string()), Some("slide".to_string())]
-    ));
+    );
   }
 
   #[test]
   fn parse_quoted_animation_names() {
-    assert!(matches!(
+    assert_matches!(
       AnimationNames::from_str("\"fade\", slide"),
       Ok(names) if names.as_ref() == [Some("fade".to_string()), Some("slide".to_string())]
-    ));
+    );
   }
 
   #[test]
   fn parse_animation_names_with_none_entry() {
-    assert!(matches!(
+    assert_matches!(
       AnimationNames::from_str("none, slide"),
       Ok(names) if names.as_ref() == [None, Some("slide".to_string())]
-    ));
+    );
   }
 
   #[test]

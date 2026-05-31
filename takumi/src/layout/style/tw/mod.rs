@@ -1742,6 +1742,8 @@ impl TailwindProperty {
 #[cfg(test)]
 #[allow(clippy::panic, clippy::unwrap_used)]
 mod tests {
+  use std::assert_matches;
+
   use crate::layout::style::{ComputedStyle, LonghandId, Style, properties::BackgroundImage};
 
   use super::*;
@@ -1853,7 +1855,7 @@ mod tests {
 
   #[test]
   fn test_parse_tailwind_animation_preset() {
-    assert!(matches!(
+    assert_matches!(
       TailwindProperty::parse("animate-spin"),
       Some(TailwindProperty::Animation(animations))
         if animations.as_ref() == [Animation {
@@ -1863,12 +1865,12 @@ mod tests {
           name: Some("spin".to_string()),
           ..Animation::default()
         }]
-    ));
+    );
   }
 
   #[test]
   fn test_parse_tailwind_animation_arbitrary_value() {
-    assert!(matches!(
+    assert_matches!(
       TailwindProperty::parse("animate-[wiggle_1s_ease-in-out_infinite]"),
       Some(TailwindProperty::Animation(animations))
         if animations.as_ref() == [Animation {
@@ -1878,7 +1880,7 @@ mod tests {
           name: Some("wiggle".to_string()),
           ..Animation::default()
         }]
-    ));
+    );
   }
 
   #[test]

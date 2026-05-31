@@ -211,6 +211,8 @@ fn unsupported_keyframe_selector(selector: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+  use std::assert_matches;
+
   use serde::Deserialize;
   use serde_json::from_value;
 
@@ -245,10 +247,10 @@ mod tests {
       result.is_err(),
       "expected empty selector to fail: {result:?}"
     );
-    assert!(matches!(
+    assert_matches!(
       result.as_ref(),
       Err(error) if error.to_string().contains("empty keyframe selector")
-    ));
+    );
   }
 
   #[test]

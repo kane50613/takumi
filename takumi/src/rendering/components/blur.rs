@@ -632,6 +632,8 @@ fn compute_mul_shg(d: u32) -> (u32, i32) {
 
 #[cfg(test)]
 mod tests {
+  use std::assert_matches;
+
   use super::{BlurType, apply_blur_rgba_bytes, blur_downsample_scale, upsample_rgba_bilinear};
   use crate::{Error, rendering::BufferPool};
 
@@ -640,13 +642,13 @@ mod tests {
     let mut data = vec![0u8; 3];
     let mut pool = BufferPool::default();
 
-    assert!(matches!(
+    assert_matches!(
       apply_blur_rgba_bytes(&mut data, 1, 1, 4.0, BlurType::Filter, &mut pool),
       Err(Error::InvalidRgbaBufferLength {
         actual: 3,
         expected: 4
       })
-    ));
+    );
   }
 
   #[test]
