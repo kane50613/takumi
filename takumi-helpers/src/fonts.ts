@@ -1,29 +1,11 @@
-import type { FetchLike } from "./utils";
+import { fetchOk, type FetchOptions } from "./utils";
 
 const chromeUserAgent =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
-export type FontOptions = {
-  /** Custom fetch implementation. @default globalThis.fetch */
-  fetch?: FetchLike;
-  /** Abort each underlying request after this many milliseconds. */
-  timeout?: number;
-};
-
-const timeoutSignal = (timeout?: number) =>
-  timeout === undefined ? undefined : AbortSignal.timeout(timeout);
-
-async function fetchBytes(url: string, fetchImpl: FetchLike, timeout?: number) {
-  const response = await fetchImpl(url, { signal: timeoutSignal(timeout) });
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status} fetching font: ${url}`);
-  }
-  return response.arrayBuffer();
-}
-
 type FontStyle = "normal" | "italic";
 
-export type GoogleFontOptions = FontOptions & {
+export type GoogleFontOptions = FetchOptions & {
   /**
    * `400` for one weight, `[400, 700]` for several, or a range like `"100..900"` to load
    * the variable font. A range leaves the weight unset so CSS `font-weight` controls it.
@@ -68,15 +50,11 @@ function buildCssUrl(
   return url;
 }
 
-async function fetchCss(url: string, fetchImpl: FetchLike, timeout?: number) {
-  const response = await fetchImpl(url, {
-    headers: { "User-Agent": chromeUserAgent },
-    signal: timeoutSignal(timeout),
-  });
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status} fetching Google Fonts CSS: ${url}`);
-  }
-  return response.text();
+function fetchCss(url: string, options: FetchOptions) {
+  return fetchOk(url, {
+    ...options,
+    init: { headers: { "User-Agent": chromeUserAgent } },
+  }).then((r) => r.text());
 }
 
 const fontFacePattern = /@font-face\s*\{([^}]*)\}/g;
@@ -124,14 +102,13 @@ function parseFontFaces(css: string) {
  * fonts: await googleFont("Inter", { weight: 700, style: "italic", text: "Hello" })
  */
 export async function googleFont(family: string, options: GoogleFontOptions = {}) {
-  const fetchImpl = options.fetch ?? globalThis.fetch;
-  const css = await fetchCss(buildCssUrl(family, options), fetchImpl, options.timeout);
+  const css = await fetchCss(buildCssUrl(family, options), options);
 
   return parseFontFaces(css).map((face) => ({
     name: family,
     key: face.url,
     weight: face.weight,
     style: face.style,
-    data: () => fetchBytes(face.url, fetchImpl, options.timeout),
+    data: () => fetchOk(face.url, options).then((r) => r.arrayBuffer()),
   }));
 }
