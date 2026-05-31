@@ -188,6 +188,8 @@ impl ToCss for AttrRef {
 #[cfg(test)]
 #[allow(clippy::panic, clippy::expect_used)]
 mod tests {
+  use std::assert_matches;
+
   use super::*;
 
   fn parse(input: &str) -> ContentValue {
@@ -245,10 +247,10 @@ mod tests {
     let ContentValue::Items(items) = parse("url(\"icon.png\")") else {
       panic!("expected items");
     };
-    assert!(matches!(
+    assert_matches!(
       &items[0],
-      ContentItem::Image(image) if matches!(**image, BackgroundImage::Url(_)),
-    ));
+      ContentItem::Image(image) if matches!(**image, BackgroundImage::Url(_))
+    );
   }
 
   #[test]

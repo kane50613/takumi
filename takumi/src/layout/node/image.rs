@@ -214,6 +214,8 @@ pub(crate) fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
 
 #[cfg(test)]
 mod tests {
+  use std::assert_matches;
+
   use image::RgbaImage;
   use serde_json::from_value;
   use taffy::{AvailableSpace, Dimension, Size, Style};
@@ -235,7 +237,7 @@ mod tests {
       "src": "https://example.com/image.png"
     }))?;
 
-    assert!(matches!(image.src, ImageSourceInput::Url(_)));
+    assert_matches!(image.src, ImageSourceInput::Url(_));
     let src = match image.src {
       ImageSourceInput::Url(src) => src,
       _ => return Ok(()),
@@ -260,7 +262,7 @@ mod tests {
       "src": [137, 80, 78, 71]
     }))?;
 
-    assert!(matches!(image.src, ImageSourceInput::Buffer(_)));
+    assert_matches!(image.src, ImageSourceInput::Buffer(_));
     let data = match image.src {
       ImageSourceInput::Buffer(data) => data,
       _ => return Ok(()),
@@ -305,7 +307,7 @@ mod tests {
     // PNG signature: invalid UTF-8, so it can't be captured as a URL string.
     let src = ImageSourceInput::deserialize(BytesValue(&[0x89, 0x50, 0x4e, 0x47]))?;
 
-    assert!(matches!(src, ImageSourceInput::Buffer(_)));
+    assert_matches!(src, ImageSourceInput::Buffer(_));
     let data = match src {
       ImageSourceInput::Buffer(data) => data,
       _ => return Ok(()),
@@ -319,10 +321,7 @@ mod tests {
     let bitmap = RgbaImage::new(2, 2);
     let image = ImageData::from(bitmap);
 
-    assert!(matches!(
-      image.src,
-      ImageSourceInput::Loaded(ImageSource::Bitmap(_))
-    ));
+    assert_matches!(image.src, ImageSourceInput::Loaded(ImageSource::Bitmap(_)));
   }
 
   #[test]

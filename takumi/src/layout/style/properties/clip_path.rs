@@ -515,6 +515,8 @@ impl ToCss for BasicShape {
 
 #[cfg(test)]
 mod tests {
+  use std::assert_matches;
+
   use super::*;
   use Length::*;
 
@@ -633,7 +635,7 @@ mod tests {
 
   #[test]
   fn test_parse_polygon_triangle() {
-    assert!(matches!(
+    assert_matches!(
       BasicShape::from_str("polygon(50% 0%, 0% 100%, 100% 100%)"),
       Ok(BasicShape::Polygon(PolygonShape {
         fill_rule: None,
@@ -642,18 +644,18 @@ mod tests {
             coords[0] == SpacePair { x: Length::Percentage(50.0), y: Length::Percentage(0.0) } &&
             coords[1] == SpacePair { x: Length::Percentage(0.0), y: Length::Percentage(100.0) } &&
             coords[2] == SpacePair { x: Length::Percentage(100.0), y: Length::Percentage(100.0) }
-    ));
+    );
   }
 
   #[test]
   fn test_parse_polygon_with_fill_rule() {
-    assert!(matches!(
+    assert_matches!(
       BasicShape::from_str("polygon(evenodd, 50% 0%, 0% 100%, 100% 100%)"),
       Ok(BasicShape::Polygon(PolygonShape {
         fill_rule: Some(FillRule::EvenOdd),
         coordinates: coords,
       })) if coords.len() == 3
-    ));
+    );
   }
 
   #[test]

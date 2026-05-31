@@ -1107,7 +1107,7 @@ impl<const DEFAULT_AUTO: bool> MakeComputed for Length<DEFAULT_AUTO> {
 
 #[cfg(test)]
 mod tests {
-  use std::rc::Rc;
+  use std::{assert_matches, rc::Rc};
 
   use taffy::Size;
 
@@ -1454,13 +1454,13 @@ mod tests {
     );
 
     let inf = Length::<true>::from_str("calc(infinity)");
-    assert!(matches!(inf, Ok(Length::Px(v)) if v.is_infinite() && v.is_sign_positive()));
+    assert_matches!(inf, Ok(Length::Px(v)) if v.is_infinite() && v.is_sign_positive());
 
     let neg_inf = Length::<true>::from_str("calc(-infinity)");
-    assert!(matches!(neg_inf, Ok(Length::Px(v)) if v.is_infinite() && v.is_sign_negative()));
+    assert_matches!(neg_inf, Ok(Length::Px(v)) if v.is_infinite() && v.is_sign_negative());
 
     let nan = Length::<true>::from_str("calc(nan)");
-    assert!(matches!(nan, Ok(Length::Px(v)) if v.is_nan()));
+    assert_matches!(nan, Ok(Length::Px(v)) if v.is_nan());
   }
 
   #[test]
