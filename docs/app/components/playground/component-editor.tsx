@@ -42,30 +42,6 @@ declare namespace React {
 }
 `;
 
-const patchedCssTypings = `${cssTypings}
-
-export namespace Property {
-  export type TextFit =
-    | Globals
-    | "none"
-    | "grow"
-    | "shrink"
-    | "consistent"
-    | "per-line"
-    | "per-line-all"
-    | \`\${number}%\`
-    | (string & {});
-}
-
-export interface StandardLonghandProperties<TLength = (string & {}) | 0, TTime = string & {}> {
-  textFit?: Property.TextFit | undefined;
-}
-
-export interface StandardLonghandPropertiesHyphen<TLength = (string & {}) | 0, TTime = string & {}> {
-  "text-fit"?: Property.TextFit | undefined;
-}
-`;
-
 export function ComponentEditor({
   code,
   setCode,
@@ -134,7 +110,7 @@ export function ComponentEditor({
             filePath: "file:///node_modules/react/jsx-runtime.d.ts",
           },
           {
-            content: patchedCssTypings,
+            content: cssTypings,
             filePath: "file:///node_modules/csstype/index.d.ts",
           },
           {
