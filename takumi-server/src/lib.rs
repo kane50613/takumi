@@ -2,7 +2,7 @@ use std::{fs::read, net::SocketAddr, sync::Arc};
 
 use axum::{Router, extract::State, http::StatusCode, response::Response, routing::get};
 use globwalk::glob;
-use takumi::base::{GlobalContext, resources::font::FontResource};
+use takumi::base::{FontContext, resources::font::FontResource};
 use tokio::net::TcpListener;
 use tracing::{error, info};
 
@@ -17,12 +17,12 @@ pub type AxumState = State<Arc<AxumStateInner>>;
 pub type AxumResult<T = Response> = Result<T, (StatusCode, String)>;
 
 pub struct AxumStateInner {
-  pub context: GlobalContext,
+  pub context: FontContext,
   #[cfg(feature = "hmac_verify")]
   pub hmac_key: Option<Vec<u8>>,
 }
 
-pub fn create_state(args: Args, context: GlobalContext) -> AxumState {
+pub fn create_state(args: Args, context: FontContext) -> AxumState {
   let state = Arc::new(AxumStateInner {
     context,
     #[cfg(feature = "hmac_verify")]
@@ -54,7 +54,7 @@ pub fn create_app(state: AxumState) -> Router {
   app
 }
 
-pub async fn run_server(args: Args, mut context: GlobalContext) {
+pub async fn run_server(args: Args, mut context: FontContext) {
   if let Some(font_glob) = args.font_glob.as_ref() {
     for font in glob(font_glob).unwrap() {
       match font {
@@ -65,7 +65,7 @@ pub async fn run_server(args: Args, mut context: GlobalContext) {
 
           let file = read(path.path()).unwrap();
 
-          if let Err(e) = context.font_context.load_and_store(FontResource::new(file)) {
+          if let Err(e) = context.load_and_store(FontResource::new(file)) {
             error!("Failed to load font {}: {e:?}", path.file_name().display());
             continue;
           }

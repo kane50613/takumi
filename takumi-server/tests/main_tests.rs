@@ -2,12 +2,12 @@ use axum::http::Request;
 use hmac::KeyInit;
 use tower::ServiceExt;
 
-use takumi::base::GlobalContext;
+use takumi::base::FontContext;
 use takumi_server::{Args, create_app, create_state};
 
 #[test]
 fn test_create_state() {
-  let state = create_state(Args::default(), GlobalContext::default());
+  let state = create_state(Args::default(), FontContext::default());
   #[cfg(feature = "hmac_verify")]
   assert!(state.hmac_key.is_none());
 }
@@ -22,7 +22,7 @@ async fn test_generate_image_handler_with_hmac_verify() {
   use query_string_builder::QueryString;
   use sha2::Sha256;
 
-  let app = create_app(create_state(Args::default(), GlobalContext::default()));
+  let app = create_app(create_state(Args::default(), FontContext::default()));
 
   const NODE: &str = r#"{
     "type": "container",

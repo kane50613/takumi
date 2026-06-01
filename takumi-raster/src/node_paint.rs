@@ -383,7 +383,7 @@ fn draw_text_node_content(
     max_width: size.width,
     max_height,
     style: &font_style,
-    global: context.global,
+    font_context: context.font_context,
     mode: InlineLayoutMode::Draw,
   });
 

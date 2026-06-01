@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use taffy::{AbsoluteAxis, AvailableSpace, NodeId, Point, Rect, Size};
 use takumi_base::{
-  GlobalContext,
+  FontContext,
   context::RenderContext,
   error::Result,
   layout::{
@@ -34,14 +34,14 @@ use crate::text::{emit_inline_content, emit_text};
 use crate::{APPROX_CHARS_PER_NUMBER, IDENTITY, Num, Rgba, SvgDocument};
 
 /// Inputs for [`render`]. Built with [`SvgOptions::builder`]; only `node`,
-/// `viewport`, and `global` are required. Carrying inputs in a builder struct
+/// `viewport`, and `font_context` are required. Carrying inputs in a builder struct
 /// keeps new options from being breaking changes.
 #[derive(TypedBuilder)]
 pub struct SvgOptions<'g> {
   /// The viewport to render in.
   pub(crate) viewport: Viewport,
-  /// The global context (fonts, persistent images).
-  pub(crate) global: &'g GlobalContext,
+  /// The font context.
+  pub(crate) font_context: &'g FontContext,
   /// The root node to render.
   pub(crate) node: Node,
   /// Resources fetched externally, keyed by URL.
@@ -61,7 +61,7 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
   let canvas_w = viewport.size.width;
   let canvas_h = viewport.size.height;
   let context = RenderContext::new(
-    options.global,
+    options.font_context,
     viewport,
     options.fetched_resources,
     Rc::new(options.stylesheet),
@@ -1156,12 +1156,12 @@ mod tests {
 
   #[test]
   fn renders_svg_wrapper_at_viewport_size() {
-    let global = GlobalContext::default();
+    let font_context = FontContext::default();
     let svg = render(
       SvgOptions::builder()
         .node(Node::container([]))
         .viewport(Viewport::new((120, 80)))
-        .global(&global)
+        .font_context(&font_context)
         .build(),
     )
     .unwrap();

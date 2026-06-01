@@ -12,7 +12,7 @@ as [`svg`]).
 
 ```rust
 use takumi::base::{
-  GlobalContext,
+  FontContext,
   layout::{Viewport, node::Node, style::{Length::Px, Style, StyleDeclaration}},
   resources::font::FontResource,
 };
@@ -22,9 +22,11 @@ let node = Node::container([Node::text("Hello, world!").with_style(
   Style::default().with(StyleDeclaration::font_size(Px(32.0).into())),
 )]);
 
-let mut global = GlobalContext::default();
+// Create a font context. Reuse it across renders to share the decode cache.
+let mut font_context = FontContext::default();
 
-global.font_context.load_and_store(
+// Load fonts
+font_context.load_and_store(
   FontResource::new(include_bytes!("../../assets/fonts/geist/Geist[wght].woff2"))
 );
 
@@ -33,7 +35,7 @@ let viewport = Viewport::new((1200, 630));
 let options = RenderOptions::builder()
   .viewport(viewport)
   .node(node)
-  .global(&global)
+  .font_context(&font_context)
   .build();
 
 let image = render(options).unwrap();

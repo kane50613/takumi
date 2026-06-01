@@ -166,56 +166,6 @@ pub enum RenderedImage<'a> {
   },
 }
 
-/// Represents a persistent image store.
-#[derive(Debug, Default)]
-pub struct PersistentImageStore {
-  #[cfg(target_arch = "wasm32")]
-  map: RefCell<HashMap<String, ImageSource>>,
-  #[cfg(not(target_arch = "wasm32"))]
-  map: DashMap<String, ImageSource>,
-}
-
-impl PersistentImageStore {
-  /// Returns the stored image for the provided source, if present.
-  pub fn get(&self, src: &str) -> Option<ImageSource> {
-    #[cfg(target_arch = "wasm32")]
-    {
-      self.map.borrow().get(src).cloned()
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-      self.map.get(src).map(|image| image.clone())
-    }
-  }
-
-  /// Stores or replaces a persistent image for the provided source.
-  pub fn insert(&self, src: String, image: ImageSource) {
-    #[cfg(target_arch = "wasm32")]
-    {
-      self.map.borrow_mut().insert(src, image);
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-      self.map.insert(src, image);
-    }
-  }
-
-  /// Removes all stored persistent images.
-  pub fn clear(&self) {
-    #[cfg(target_arch = "wasm32")]
-    {
-      self.map.borrow_mut().clear();
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-      self.map.clear();
-    }
-  }
-}
-
 impl From<RgbaImage> for ImageSource {
   fn from(bitmap: RgbaImage) -> Self {
     let buffer = ImageBuffer::from_rgba(Cow::Owned(bitmap)).unwrap_or_else(|| {

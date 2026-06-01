@@ -1,6 +1,6 @@
 use clap::Parser;
 use mimalloc::MiMalloc;
-use takumi::base::GlobalContext;
+use takumi::base::FontContext;
 use tracing::Level;
 use tracing_subscriber::fmt;
 
@@ -15,7 +15,7 @@ async fn main() {
 
   let args = Args::parse();
 
-  let context = GlobalContext::default();
+  let context = FontContext::default();
 
   run_server(args, context).await;
 }

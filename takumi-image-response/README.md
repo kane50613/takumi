@@ -85,7 +85,7 @@ export function GET(request: Request) {
 }
 ```
 
-The same pattern also works for `persistentImages`. Caches are scoped to each `createImageResponse()` instance.
+Images can likewise be provided up front via `fetchedResources`, keyed by `src`.
 
 `loadDefaultFonts` is only supported by the native `@takumi-rs/core` renderer. It has no effect when using the WASM renderer.
 

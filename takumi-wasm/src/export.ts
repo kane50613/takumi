@@ -3,7 +3,6 @@ import {
   type ByteBuf,
   type Font,
   type FontDetails,
-  type ImageSource,
 } from "../pkg/takumi_wasm";
 
 export * from "../pkg/takumi_wasm";
@@ -11,20 +10,12 @@ export { default } from "../pkg/takumi_wasm";
 
 export { extractResourceUrls } from "@takumi-rs/helpers";
 
-export type ImageSourceLoader = Omit<ImageSource, "data"> & {
-  data: ImageSource["data"] | (() => Promise<ImageSource["data"]> | ImageSource["data"]);
-};
-
 export type FontLoader =
   | Font
   | (Omit<FontDetails, "data"> & {
       key?: string;
       data: FontDetails["data"] | (() => Promise<FontDetails["data"]> | FontDetails["data"]);
     });
-
-export type ImageSourceLoaderSync = Omit<ImageSource, "data"> & {
-  data: ImageSource["data"] | (() => ImageSource["data"]);
-};
 
 export type FontLoaderSync =
   | Font
@@ -36,57 +27,6 @@ export type FontLoaderSync =
 export class Renderer extends RendererInternal {
   private fontsMark = new Set<string>();
   private fontBuffersMark = new WeakSet<ByteBuf>();
-  private persistentImageSrcMark = new Set<string>();
-  private pendingPersistentImages = new Map<string, Promise<void>>();
-
-  override putPersistentImage(data: ImageSourceLoaderSync, signal?: AbortSignal): void;
-  override putPersistentImage(data: ImageSourceLoader, signal?: AbortSignal): Promise<void>;
-  override putPersistentImage(
-    data: ImageSourceLoaderSync | ImageSourceLoader,
-    signal?: AbortSignal,
-  ): void | Promise<void> {
-    if (signal?.aborted) {
-      return;
-    }
-
-    if (!this.isNewPersistentImage(data.src)) {
-      return this.pendingPersistentImages.get(data.src);
-    }
-
-    const resolved = resolveImageLoader(data);
-
-    if (isPromise(resolved)) {
-      const pending = resolved
-        .then((value) => {
-          if (signal?.aborted) {
-            return;
-          }
-
-          super.putPersistentImage(value);
-          this.persistentImageSrcMark.add(data.src);
-        })
-        .finally(() => {
-          this.pendingPersistentImages.delete(data.src);
-        });
-
-      this.pendingPersistentImages.set(data.src, pending);
-
-      return pending;
-    }
-
-    if (signal?.aborted) {
-      return;
-    }
-
-    super.putPersistentImage(resolved);
-    this.persistentImageSrcMark.add(data.src);
-  }
-
-  override clearImageStore(): void {
-    super.clearImageStore();
-    this.persistentImageSrcMark.clear();
-    this.pendingPersistentImages.clear();
-  }
 
   async loadFonts(fonts: FontLoader[], signal?: AbortSignal): Promise<number> {
     let loaded = 0;
@@ -176,10 +116,6 @@ export class Renderer extends RendererInternal {
 
     this.fontsMark.delete(key);
   }
-
-  private isNewPersistentImage(src: string): boolean {
-    return !this.persistentImageSrcMark.has(src) && !this.pendingPersistentImages.has(src);
-  }
 }
 
 function createFontKey(font: FontLoaderSync | FontLoader) {
@@ -206,25 +142,6 @@ function resolveFontLoader(font: FontLoaderSync | FontLoader): Font | Promise<Fo
   }
 
   return font as Font;
-}
-
-function resolveImageLoader(
-  source: ImageSourceLoaderSync | ImageSourceLoader,
-): ImageSource | Promise<ImageSource> {
-  if (typeof source.data === "function") {
-    const resolved = source.data();
-
-    if (isPromise(resolved)) {
-      return resolved.then((data) => ({ ...source, data }));
-    }
-
-    return {
-      ...source,
-      data: resolved,
-    };
-  }
-
-  return source as ImageSource;
 }
 
 function isPromise<T>(value: T | Promise<T>): value is Promise<T> {

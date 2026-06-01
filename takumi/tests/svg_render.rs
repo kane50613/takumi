@@ -9,7 +9,7 @@ use std::path::Path;
 
 use resvg::tiny_skia::{Pixmap, Transform};
 use resvg::usvg::{Options, Tree};
-use takumi::base::GlobalContext;
+use takumi::base::FontContext;
 use takumi::base::layout::Viewport;
 use takumi::base::layout::node::Node;
 use takumi::base::layout::style::{Length::*, *};
@@ -19,24 +19,23 @@ use takumi_svg::{SvgOptions, render};
 const W: u32 = 200;
 const H: u32 = 100;
 
-fn context() -> GlobalContext {
-  let mut global = GlobalContext::default();
+fn context() -> FontContext {
+  let mut font_context = FontContext::default();
   let path = Path::new(env!("CARGO_MANIFEST_DIR"))
     .join("../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf");
   let data = fs::read(&path).expect("read test font");
-  global
-    .font_context
+  font_context
     .load_and_store(FontResource::new(data))
     .expect("load test font");
-  global
+  font_context
 }
 
-fn rasterize(node: Node, global: &GlobalContext) -> Pixmap {
+fn rasterize(node: Node, font_context: &FontContext) -> Pixmap {
   let svg = render(
     SvgOptions::builder()
       .node(node)
       .viewport(Viewport::new((W, H)))
-      .global(global)
+      .font_context(font_context)
       .build(),
   )
   .expect("render svg");

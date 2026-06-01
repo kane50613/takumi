@@ -144,10 +144,6 @@ export type Font = FontDetails | ByteBuf;
 
 export type ConstructRendererOptions = {
   /**
-   * The images that needs to be preloaded into the renderer.
-   */
-  persistentImages?: ImageSource[];
-  /**
    * The fonts being used.
    */
   fonts?: Font[];

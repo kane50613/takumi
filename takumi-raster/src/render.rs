@@ -7,7 +7,7 @@ use taffy::{AvailableSpace, Layout, NodeId, TaffyError, geometry::Size};
 use typed_builder::TypedBuilder;
 
 use crate::{
-  AnimationFrame, Canvas, DitheringAlgorithm, Error, GlobalContext, RenderContext, Result,
+  AnimationFrame, Canvas, DitheringAlgorithm, Error, FontContext, RenderContext, Result,
   SizedFontStyle, apply_dithering, get_node_mut_by_path,
   layout::{
     Viewport,
@@ -33,8 +33,8 @@ use crate::{
 pub struct RenderOptions<'g> {
   /// The viewport to render the node in.
   pub(crate) viewport: Viewport,
-  /// The global context.
-  pub(crate) global: &'g GlobalContext,
+  /// The font context.
+  pub(crate) font_context: &'g FontContext,
   /// The node to render.
   pub(crate) node: Node,
   /// Whether to draw debug borders.
@@ -65,9 +65,9 @@ impl<'g> RenderOptions<'g> {
     &self.node
   }
 
-  /// Returns the global context.
-  pub fn global(&self) -> &'g GlobalContext {
-    self.global
+  /// Returns the font context.
+  pub fn font_context(&self) -> &'g FontContext {
+    self.font_context
   }
 
   /// Returns the CSS stylesheet applied before layout.
@@ -181,7 +181,7 @@ struct MeasureExit {
 pub fn measure_layout<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
   let RenderOptions {
     viewport,
-    global,
+    font_context,
     node,
     draw_debug_border,
     fetched_resources,
@@ -190,7 +190,7 @@ pub fn measure_layout<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
     dithering: _,
   } = options;
   let mut render_context = RenderContext::new(
-    global,
+    font_context,
     viewport,
     fetched_resources,
     stylesheet.into(),
@@ -280,7 +280,7 @@ fn collect_measure_result<'g>(
             max_width,
             max_height,
             style: &font_style,
-            global: current.context.global,
+            font_context: current.context.font_context,
             mode: InlineLayoutMode::Measure,
           });
           let parent_font_metrics = get_parent_font_metrics(&built.layout);
@@ -505,7 +505,7 @@ fn create_measured_node(
 pub fn render<'g>(options: RenderOptions<'g>) -> Result<RgbaImage> {
   let RenderOptions {
     viewport,
-    global,
+    font_context,
     node,
     draw_debug_border,
     fetched_resources,
@@ -515,7 +515,7 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<RgbaImage> {
   } = options;
 
   let mut render_context = RenderContext::new(
-    global,
+    font_context,
     viewport,
     fetched_resources,
     stylesheet.into(),
@@ -669,7 +669,7 @@ mod tests {
     slice_text_at_char_boundaries,
   };
   use crate::{
-    GlobalContext,
+    FontContext,
     layout::{
       Viewport,
       node::Node,
@@ -681,9 +681,9 @@ mod tests {
     measure_layout,
   };
 
-  fn make_scene<'g>(global: &'g GlobalContext, duration_ms: u32) -> SequentialScene<'g> {
+  fn make_scene<'g>(font_context: &'g FontContext, duration_ms: u32) -> SequentialScene<'g> {
     let options = RenderOptions::builder()
-      .global(global)
+      .font_context(font_context)
       .viewport(Viewport::new((10, 10)))
       .node(Node::container([]))
       .build();
@@ -696,8 +696,11 @@ mod tests {
 
   #[test]
   fn resolve_scene_at_time_uses_cumulative_durations() {
-    let global = GlobalContext::default();
-    let scenes = vec![make_scene(&global, 100), make_scene(&global, 200)];
+    let font_context = FontContext::default();
+    let scenes = vec![
+      make_scene(&font_context, 100),
+      make_scene(&font_context, 200),
+    ];
 
     let scene = resolve_scene_at_time(&scenes, 50);
     assert!(scene.is_some());
@@ -712,8 +715,11 @@ mod tests {
 
   #[test]
   fn resolve_scene_at_time_clamps_to_last_scene() {
-    let global = GlobalContext::default();
-    let scenes = vec![make_scene(&global, 100), make_scene(&global, 200)];
+    let font_context = FontContext::default();
+    let scenes = vec![
+      make_scene(&font_context, 100),
+      make_scene(&font_context, 200),
+    ];
 
     let scene = resolve_scene_at_time(&scenes, 500);
     assert!(scene.is_some());
@@ -723,8 +729,8 @@ mod tests {
 
   #[test]
   fn render_sequence_animation_returns_no_frames_for_zero_duration_timelines() {
-    let global = GlobalContext::default();
-    let scenes = vec![make_scene(&global, 0)];
+    let font_context = FontContext::default();
+    let scenes = vec![make_scene(&font_context, 0)];
 
     let frames_result = render_sequence_animation(&scenes, 30);
     assert!(frames_result.is_ok());
@@ -735,8 +741,8 @@ mod tests {
 
   #[test]
   fn render_sequence_animation_uses_per_frame_integer_durations() {
-    let global = GlobalContext::default();
-    let scenes = vec![make_scene(&global, 150)];
+    let font_context = FontContext::default();
+    let scenes = vec![make_scene(&font_context, 150)];
 
     let frames_result = render_sequence_animation(&scenes, 30);
     assert!(frames_result.is_ok());
@@ -768,7 +774,7 @@ mod tests {
 
   #[test]
   fn measure_layout_supports_structured_keyframes() {
-    let global = GlobalContext::default();
+    let font_context = FontContext::default();
     let node = Node::container([]).with_tag_name("div").with_style(
       Style::default()
         .with(StyleDeclaration::width(Px(100.0)))
@@ -787,7 +793,7 @@ mod tests {
     );
 
     let options = RenderOptions::builder()
-      .global(&global)
+      .font_context(&font_context)
       .viewport(Viewport::new((200, 100)))
       .node(node)
       .stylesheet(
@@ -834,7 +840,7 @@ mod tests {
     // The absolute's containing block is the relative root, not the static
     // middle, so its transform must resolve against the root's origin (0, 0)
     // plus its own insets — independent of the static middle's offset.
-    let global = GlobalContext::default();
+    let font_context = FontContext::default();
     let abs = Node::container([]).with_style(
       Style::default()
         .with(StyleDeclaration::position(Position::Absolute))
@@ -861,7 +867,7 @@ mod tests {
     );
 
     let options = RenderOptions::builder()
-      .global(&global)
+      .font_context(&font_context)
       .viewport(Viewport::new((200, 200)))
       .node(root)
       .build();
@@ -904,9 +910,9 @@ mod tests {
           Color::from_rgb(0x0b1020),
         ))),
     );
-    let global = GlobalContext::default();
+    let font_context = FontContext::default();
     let options = RenderOptions::builder()
-      .global(&global)
+      .font_context(&font_context)
       .viewport(Viewport::new((256, 256)))
       .node(node.clone())
       .build();

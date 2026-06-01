@@ -1,7 +1,7 @@
 use std::{
   borrow::Cow,
   cell::RefCell,
-  collections::{HashMap, hash_map::Entry},
+  collections::{HashMap, HashSet, hash_map::Entry},
   iter::once,
   ops::{Deref, DerefMut},
   sync::{
@@ -32,9 +32,11 @@ use skrifa::{
 use thiserror::Error;
 use tiny_skia::{IntSize, PathSegment as Command, Pixmap};
 
+use xxhash_rust::xxh3::{Xxh3, xxh3_64};
+
 use crate::{
   layout::inline::{InlineBrush, InlineLayout},
-  resources::{image_buffer::ImageBuffer, image_decoder::decode_png},
+  resources::{font_cache::FontDecodeCache, image_buffer::ImageBuffer, image_decoder::decode_png},
 };
 
 fn pixmap_from_image_buffer(buffer: ImageBuffer) -> Option<Pixmap> {
@@ -632,6 +634,11 @@ pub struct FontContext {
   id: u64,
   version: AtomicU64,
   inner: parley::FontContext,
+  /// Content-addressed decoded-font cache, shared across clones/forks of this context.
+  decode_cache: Arc<FontDecodeCache>,
+  /// Keys of fonts already registered, so re-registering the same font is a no-op
+  /// (keyed by content + family-name override).
+  registered: HashSet<u64>,
 }
 
 impl Clone for FontContext {
@@ -640,6 +647,8 @@ impl Clone for FontContext {
       id: FONT_CONTEXT_NEXT_ID.fetch_add(1, Ordering::Relaxed),
       version: AtomicU64::new(self.version.load(Ordering::Relaxed)),
       inner: self.inner.clone(),
+      decode_cache: Arc::clone(&self.decode_cache),
+      registered: self.registered.clone(),
     }
   }
 }
@@ -656,6 +665,8 @@ impl Default for FontContext {
         }),
         source_cache: Default::default(),
       },
+      decode_cache: Arc::new(FontDecodeCache::default()),
+      registered: HashSet::new(),
     }
   }
 }
@@ -828,7 +839,19 @@ impl FontContext {
     })
   }
 
-  /// Loads font into internal font db with caching
+  /// The decoded-font cache owned by this context (shared across its clones/forks).
+  pub fn decode_cache(&self) -> &FontDecodeCache {
+    &self.decode_cache
+  }
+
+  /// A shared handle to this context's decoded-font cache, for use off the context borrow
+  /// (e.g. a parallel decode phase before `load_and_store`).
+  pub fn decode_cache_arc(&self) -> Arc<FontDecodeCache> {
+    Arc::clone(&self.decode_cache)
+  }
+
+  /// Loads font into internal font db, decoding through the cache and skipping
+  /// fonts already registered in this context (deduped by content + family name).
   pub fn load_and_store(&mut self, font: FontResource) -> Result<(), FontError> {
     let FontResource {
       source,
@@ -836,10 +859,14 @@ impl FontContext {
       generic_family,
     } = font;
 
-    let fonts = self
-      .inner
-      .collection
-      .register_fonts(source.into_blob()?, info_override);
+    let key = registration_key(source.as_ref(), info_override.as_ref());
+    if self.registered.contains(&key) {
+      return Ok(());
+    }
+
+    let cache = Arc::clone(&self.decode_cache);
+    let blob = source.into_blob(&cache)?;
+    let fonts = self.inner.collection.register_fonts(blob, info_override);
 
     for (family, _) in fonts {
       if let Some(generic_family) = generic_family {
@@ -857,9 +884,58 @@ impl FontContext {
       }
     }
 
+    self.registered.insert(key);
     self.version.fetch_add(1, Ordering::Relaxed);
 
     Ok(())
+  }
+}
+
+/// Dedup key for a registered font: its content plus any family-name override
+/// (the same bytes under a different name is a distinct family, so both count).
+fn registration_key(bytes: &[u8], info: Option<&FontInfoOverride>) -> u64 {
+  let mut h = Xxh3::new();
+  h.update(bytes);
+  if let Some(name) = info.and_then(|info| info.family_name) {
+    h.update(&[0]);
+    h.update(name.as_bytes());
+  }
+  h.digest()
+}
+
+#[cfg(test)]
+mod dedup_tests {
+  use super::*;
+
+  #[test]
+  fn skips_duplicate_registration() {
+    let font = std::fs::read(concat!(
+      env!("CARGO_MANIFEST_DIR"),
+      "/../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf"
+    ))
+    .unwrap();
+
+    let mut ctx = FontContext::default();
+    ctx
+      .load_and_store(FontResource::new(font.as_slice()))
+      .unwrap();
+    ctx
+      .load_and_store(FontResource::new(font.as_slice()))
+      .unwrap();
+
+    // The same font registered twice counts once.
+    assert_eq!(ctx.registered.len(), 1);
+
+    // The same bytes under a different family name is a distinct registration.
+    ctx
+      .load_and_store(
+        FontResource::new(font.as_slice()).override_info(FontInfoOverride {
+          family_name: Some("Renamed"),
+          ..Default::default()
+        }),
+      )
+      .unwrap();
+    assert_eq!(ctx.registered.len(), 2);
   }
 }
 
@@ -883,25 +959,30 @@ where
 }
 
 impl<'a> FontSource<'a> {
-  fn into_blob_variant(self) -> Result<Self, FontError> {
+  fn into_blob_variant(self, cache: &FontDecodeCache) -> Result<Self, FontError> {
     match self {
-      Self::Raw(raw) => {
-        let font = load_font(raw, None)?;
-        Ok(Self::Blob(Blob::new(Arc::new(font))))
-      }
+      Self::Raw(raw) => Ok(Self::Blob(decode_cached(raw, cache)?)),
       Self::Blob(_) => Ok(self),
     }
   }
 
-  fn into_blob(self) -> Result<Blob<u8>, FontError> {
+  fn into_blob(self, cache: &FontDecodeCache) -> Result<Blob<u8>, FontError> {
     match self {
-      Self::Raw(raw) => {
-        let font = load_font(raw, None)?;
-        Ok(Blob::new(Arc::new(font)))
-      }
+      Self::Raw(raw) => decode_cached(raw, cache),
       Self::Blob(blob) => Ok(blob),
     }
   }
+}
+
+/// Decodes raw font bytes to a blob, memoizing the (expensive) woff2/woff decode by content.
+fn decode_cached(raw: Cow<'_, [u8]>, cache: &FontDecodeCache) -> Result<Blob<u8>, FontError> {
+  let key = xxh3_64(raw.as_ref());
+  if let Some(blob) = cache.get(key) {
+    return Ok(blob);
+  }
+  let blob = Blob::new(Arc::new(load_font(raw, None)?));
+  cache.insert(key, blob.clone());
+  Ok(blob)
 }
 
 impl<'a> AsRef<[u8]> for FontSource<'a> {
@@ -950,10 +1031,10 @@ impl<'a> FontResource<'a> {
     }
   }
 
-  /// Convert to resolved font resource
-  /// Woff2 and Woff should be decompressed into raw buffer.
-  pub fn into_resolved(self) -> Result<Self, FontError> {
-    let source = self.source.into_blob_variant()?;
+  /// Convert to resolved font resource, decoding (and caching) via the given context cache.
+  /// Woff2 and Woff are decompressed into a raw buffer.
+  pub fn into_resolved(self, cache: &FontDecodeCache) -> Result<Self, FontError> {
+    let source = self.source.into_blob_variant(cache)?;
     Ok(Self {
       source,
       info_override: self.info_override,

@@ -20,8 +20,6 @@ export type {
   FontLoader,
   FontLoaderSync,
   ImageSource,
-  ImageSourceLoader,
-  ImageSourceLoaderSync,
   Keyframes,
   KeyframesMap,
   KeyframesRuleList,

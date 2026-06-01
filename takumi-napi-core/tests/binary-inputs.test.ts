@@ -31,16 +31,6 @@ describe("binary inputs", () => {
       () =>
         new Renderer({
           fonts: [fontArrayBuffer],
-          persistentImages: [
-            {
-              src: "test://ctor-arraybuffer",
-              data: imageArrayBuffer,
-            },
-            {
-              src: "test://ctor-uint8array",
-              data: imageUint8Array,
-            },
-          ],
         }),
     ).not.toThrow();
   });
@@ -59,20 +49,6 @@ describe("binary inputs", () => {
     const count = await renderer.loadFonts([fontBuffer, fontUint8Array, fontArrayBuffer]);
 
     expect(count).toBe(3);
-  });
-
-  test("putPersistentImage accepts Buffer, Uint8Array, and ArrayBuffer", async () => {
-    const renderer = new Renderer();
-
-    expect(
-      renderer.putPersistentImage({ src: "test://img-buffer", data: imageBuffer }),
-    ).resolves.toBeUndefined();
-    expect(
-      renderer.putPersistentImage({ src: "test://img-uint8array", data: imageUint8Array }),
-    ).resolves.toBeUndefined();
-    expect(
-      renderer.putPersistentImage({ src: "test://img-arraybuffer", data: imageArrayBuffer }),
-    ).resolves.toBeUndefined();
   });
 
   test("render accepts inline image bytes as src", async () => {

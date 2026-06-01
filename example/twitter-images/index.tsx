@@ -31,7 +31,6 @@ type Component = (typeof components)[number];
 
 async function createRenderer(module: Component) {
   return new Renderer({
-    persistentImages: module.persistentImages,
     fonts:
       module.fonts.length > 0
         ? await Promise.all(module.fonts.map((font) => readFile(join("../../assets/fonts", font))))

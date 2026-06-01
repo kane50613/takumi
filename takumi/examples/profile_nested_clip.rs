@@ -1,6 +1,6 @@
 use std::hint::black_box;
 use takumi::base::{
-  GlobalContext,
+  FontContext,
   layout::{
     Viewport,
     node::Node,
@@ -58,12 +58,12 @@ fn nested_clip_masks_fixture() -> Node {
 }
 
 fn main() {
-  let global = GlobalContext::default();
+  let font_context = FontContext::default();
   for _ in 0..ITERS {
     let options = RenderOptions::builder()
       .viewport(Viewport::new((800, 800)))
       .node(nested_clip_masks_fixture())
-      .global(&global)
+      .font_context(&font_context)
       .build();
     let image = render(options).unwrap();
     black_box(image);

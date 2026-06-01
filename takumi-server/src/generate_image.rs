@@ -42,7 +42,7 @@ pub async fn generate_image_handler(
     let options = RenderOptions::builder()
       .viewport(viewport)
       .node(root_node)
-      .global(&state.context)
+      .font_context(&state.context)
       .draw_debug_border(query.draw_debug_border.unwrap_or(false))
       .dithering(dithering)
       .build();

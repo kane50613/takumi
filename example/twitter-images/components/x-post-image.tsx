@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-
 export const name = "x-post-image";
 
 export const width = 1200;
@@ -7,20 +5,7 @@ export const height = 630;
 
 export const fonts = [];
 
-export const persistentImages = [
-  {
-    src: "takumi.svg",
-    data: await readFile("../../assets/images/takumi.svg"),
-  },
-  {
-    src: "fuma.jpg",
-    data: await readFile("../../assets/images/fuma.jpg"),
-  },
-  {
-    src: "large.jpg",
-    data: await readFile("../../assets/images/fumadocs-core-v16.jpg"),
-  },
-];
+// TODO: provide images (takumi.svg, fuma.jpg, large.jpg) via fetchedResources
 
 // https://x.com/kanewang_/status/1976314376102740338
 export default function XPostImage() {

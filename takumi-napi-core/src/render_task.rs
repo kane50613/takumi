@@ -97,7 +97,7 @@ impl Task for RenderTask {
         .time_ms(self.time_ms)
         .dithering(self.dithering)
         .node(node)
-        .global(&state.global)
+        .font_context(&state.font_context)
         .draw_debug_border(self.draw_debug_border)
         .build(),
     )

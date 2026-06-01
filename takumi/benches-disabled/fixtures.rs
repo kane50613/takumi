@@ -1,7 +1,7 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 use takumi::{
-  GlobalContext,
+  FontContext,
   layout::{
     Viewport,
     node::Node,
@@ -20,11 +20,11 @@ const BENCH_WIDTH: u32 = 1200;
 const BENCH_HEIGHT: u32 = 630;
 const IMAGE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../assets/images/yeecord.png");
 
-fn render_fixture(global: &GlobalContext, node: Node) {
+fn render_fixture(font_context: &FontContext, node: Node) {
   let options = RenderOptions::builder()
     .viewport(Viewport::new((BENCH_WIDTH, BENCH_HEIGHT)))
     .node(node)
-    .global(global)
+    .font_context(font_context)
     .build();
 
   let image = render(options).unwrap();
@@ -139,17 +139,17 @@ fn emoji_social_fixture() -> Node {
 }
 
 fn bench_fixtures(c: &mut Criterion) {
-  let global = GlobalContext::default();
+  let font_context = FontContext::default();
   let mut group = c.benchmark_group("fixtures");
 
   group.bench_function("simple_image_blit", |b| {
-    b.iter(|| render_fixture(&global, black_box(simple_image_blit_fixture())))
+    b.iter(|| render_fixture(&font_context, black_box(simple_image_blit_fixture())))
   });
   group.bench_function("gradient_clip_text", |b| {
-    b.iter(|| render_fixture(&global, black_box(gradient_clip_text_fixture())))
+    b.iter(|| render_fixture(&font_context, black_box(gradient_clip_text_fixture())))
   });
   group.bench_function("emoji_social", |b| {
-    b.iter(|| render_fixture(&global, black_box(emoji_social_fixture())))
+    b.iter(|| render_fixture(&font_context, black_box(emoji_social_fixture())))
   });
 
   group.finish();

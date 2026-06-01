@@ -7,7 +7,6 @@ mod encode_frames_task;
 mod load_font_task;
 mod measure_task;
 mod pool;
-mod put_persistent_image_task;
 mod render_animation_task;
 mod render_task;
 pub(crate) mod renderer;
@@ -15,14 +14,22 @@ pub(crate) mod renderer;
 use std::{fmt::Display, ops::Deref};
 
 use napi::{De, Env, Error, bindgen_prelude::*};
+use napi_derive::napi;
 use parley::{FontStyle, FontWeight, fontique::FontInfoOverride};
 use serde::{Deserialize, Deserializer, de::DeserializeOwned};
 use takumi_base::{
   layout::style::{KeyframesRule, StyleSheet},
-  resources::font::FontResource,
+  resources::{font::FontResource, font_cache::FontDecodeCache},
 };
 
 pub use renderer::Renderer;
+
+/// Options for `Renderer.configureFontCache`.
+#[napi(object)]
+pub struct FontCacheOptions {
+  /// Maximum bytes of decoded fonts to keep in this renderer's cache. `0` disables (and clears) it.
+  pub max_bytes: Option<f64>,
+}
 
 #[derive(Deserialize, Default)]
 pub(crate) struct FontInput {
@@ -70,6 +77,7 @@ pub(crate) fn parse_font_input(env: Env, font: Object) -> Result<(FontInput, Buf
 pub(crate) fn resolve_font_resource<'a>(
   font: &'a FontInput,
   buffer: &'a [u8],
+  cache: &FontDecodeCache,
 ) -> Result<FontResource<'a>> {
   FontResource::new(buffer)
     .override_info(FontInfoOverride {
@@ -79,7 +87,7 @@ pub(crate) fn resolve_font_resource<'a>(
       weight: font.weight.map(|weight| FontWeight::new(weight as f32)),
       axes: None,
     })
-    .into_resolved()
+    .into_resolved(cache)
     .map_err(|e| Error::from_reason(format!("Failed to load font: {e}")))
 }
 

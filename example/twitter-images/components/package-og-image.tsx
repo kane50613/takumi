@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import {
   Box,
   Code,
@@ -164,12 +163,7 @@ export const height = 630;
 
 export const fonts = ["geist/Geist[wght].woff2", "geist/GeistMono[wght].woff2"];
 
-export const persistentImages = [
-  {
-    src: "logo.svg",
-    data: await readFile("../../docs/public/logo.svg"),
-  },
-];
+// TODO: provide image (logo.svg) via fetchedResources
 
 function smoothPath(points: { x: number; y: number }[]) {
   if (points.length < 2) {

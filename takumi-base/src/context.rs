@@ -5,7 +5,7 @@ use std::sync::Arc;
 use taffy::Size;
 
 use crate::{
-  GlobalContext,
+  FontContext,
   layout::{
     Viewport,
     style::{Affine, CalcArena, Color, ComputedStyle, SizingContext, StyleSheet},
@@ -16,8 +16,8 @@ use crate::{
 /// The context for the internal rendering. You should not construct this directly.
 #[derive(Clone)]
 pub struct RenderContext<'g> {
-  /// The global context.
-  pub global: &'g GlobalContext,
+  /// The font context.
+  pub font_context: &'g FontContext,
   /// The scale factor for the image renderer.
   pub transform: Affine,
   /// The sizing context.
@@ -38,14 +38,14 @@ pub struct RenderContext<'g> {
 
 impl<'g> RenderContext<'g> {
   pub fn new(
-    global: &'g GlobalContext,
+    font_context: &'g FontContext,
     viewport: Viewport,
     fetched_resources: HashMap<Arc<str>, ImageSource>,
     stylesheet: Rc<StyleSheet>,
     time: u64,
   ) -> Self {
     Self {
-      global,
+      font_context,
       sizing: SizingContext {
         viewport,
         container_size: Size::NONE,
@@ -66,8 +66,14 @@ impl<'g> RenderContext<'g> {
   }
 
   /// Internal, only used in tests.
-  pub fn new_test(global: &'g GlobalContext, viewport: Viewport) -> Self {
-    Self::new(global, viewport, Default::default(), Default::default(), 0)
+  pub fn new_test(font_context: &'g FontContext, viewport: Viewport) -> Self {
+    Self::new(
+      font_context,
+      viewport,
+      Default::default(),
+      Default::default(),
+      0,
+    )
   }
 
   pub fn from_parent(
@@ -77,7 +83,7 @@ impl<'g> RenderContext<'g> {
     current_color: Color,
   ) -> Self {
     Self {
-      global: parent.global,
+      font_context: parent.font_context,
       transform: parent.transform,
       style: Box::new(style),
       current_color,

@@ -76,12 +76,6 @@ test("Renderer initialization with fonts and images", async () => {
 
   new Renderer({
     fonts: [font],
-    persistentImages: [
-      {
-        src: localImagePath,
-        data: imageBuffer,
-      },
-    ],
   });
 });
 
@@ -93,65 +87,6 @@ describe("setup", () => {
   test("loadFonts", async () => {
     const count = await renderer.loadFonts(fontBuffers);
     expect(count).toBe(files.length);
-  });
-
-  test("putPersistentImage", async () => {
-    await renderer.putPersistentImage({
-      src: localImagePath,
-      data: imageBuffer,
-    });
-  });
-
-  test("putPersistentImage with sync data loader", async () => {
-    await renderer.putPersistentImage({
-      src: `${localImagePath}?sync-loader`,
-      data: () => imageBuffer,
-    });
-  });
-
-  test("putPersistentImage with async data loader", async () => {
-    await renderer.putPersistentImage({
-      src: `${localImagePath}?async-loader`,
-      data: async () => imageBuffer,
-    });
-  });
-
-  test("putPersistentImage caches by src", async () => {
-    const cacheRenderer = new Renderer();
-    let loadCount = 0;
-    const source = {
-      src: `${localImagePath}?cached`,
-      data: async () => {
-        loadCount += 1;
-        return imageBuffer;
-      },
-    };
-
-    await Promise.all([
-      cacheRenderer.putPersistentImage(source),
-      cacheRenderer.putPersistentImage(source),
-      cacheRenderer.putPersistentImage(source),
-    ]);
-
-    expect(loadCount).toBe(1);
-  });
-
-  test("clearImageStore resets persistent image cache", async () => {
-    const cacheRenderer = new Renderer();
-    let loadCount = 0;
-    const source = {
-      src: `${localImagePath}?clear-cache`,
-      data: async () => {
-        loadCount += 1;
-        return imageBuffer;
-      },
-    };
-
-    await cacheRenderer.putPersistentImage(source);
-    cacheRenderer.clearImageStore();
-    await cacheRenderer.putPersistentImage(source);
-
-    expect(loadCount).toBe(2);
   });
 });
 
@@ -425,8 +360,4 @@ describe("encodeFrames", () => {
     expect(result).toBeInstanceOf(Buffer);
     expect(result.subarray(0, 6).toString("ascii")).toMatch(/^GIF8[79]a$/);
   });
-});
-
-describe("clean up", () => {
-  test("clearImageStore", () => renderer.clearImageStore());
 });

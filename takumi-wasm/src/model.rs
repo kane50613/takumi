@@ -164,7 +164,6 @@ pub enum Font {
 #[serde(rename_all = "camelCase")]
 pub struct ConstructRendererOptions {
   /// The images that needs to be preloaded into the renderer.
-  pub persistent_images: Option<Vec<ImageSource>>,
   /// The fonts being used.
   pub fonts: Option<Vec<Font>>,
   /// Whether to load the default fonts.

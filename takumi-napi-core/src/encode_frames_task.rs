@@ -104,7 +104,7 @@ impl Task for EncodeFramesTask {
                 .fetched_resources(initialized_images.clone())
                 .stylesheet(stylesheet.clone())
                 .node(node)
-                .global(&state.global)
+                .font_context(&state.font_context)
                 .draw_debug_border(draw_debug_border)
                 .build(),
             )

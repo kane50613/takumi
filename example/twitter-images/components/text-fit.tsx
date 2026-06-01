@@ -1,6 +1,5 @@
 export const name = "text-fit";
 
-export const persistentImages = [];
 export const fonts = [];
 
 export const width = 1200;

@@ -10,7 +10,7 @@ use std::{
   sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 use takumi_base::{
-  GlobalContext,
+  FontContext,
   layout::{
     DEFAULT_DEVICE_PIXEL_RATIO, Viewport,
     node::Node,
@@ -39,40 +39,33 @@ const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[(
 #[wasm_bindgen]
 #[derive(Default)]
 pub struct Renderer {
-  state: RwLock<GlobalContext>,
+  state: RwLock<FontContext>,
 }
 
-fn load_default_fonts(context: &mut GlobalContext) -> Result<(), js_sys::Error> {
+fn load_default_fonts(context: &mut FontContext) -> Result<(), js_sys::Error> {
   for (font, family_name, generic_family) in EMBEDDED_FONTS {
     let resource = FontResource::new((*font).to_vec())
       .override_info(FontInfoOverride {
         family_name: Some(*family_name),
         ..Default::default()
       })
-      .generic_family(*generic_family)
-      .into_resolved()
-      .map_err(|error| js_sys::Error::new(&format!("Failed to load default font: {error}")))?;
+      .generic_family(*generic_family);
 
-    context
-      .font_context
-      .load_and_store(resource)
-      .map_err(map_error)?;
+    context.load_and_store(resource).map_err(map_error)?;
   }
 
   Ok(())
 }
 
-fn load_font_internal(context: &mut GlobalContext, font: Font) -> Result<(), js_sys::Error> {
+fn load_font_internal(context: &mut FontContext, font: Font) -> Result<(), js_sys::Error> {
   match font {
     Font::Buffer(buffer) => {
       context
-        .font_context
         .load_and_store(FontResource::new(buffer.into_vec()))
         .map_err(map_error)?;
     }
     Font::Object(details) => {
       context
-        .font_context
         .load_and_store(FontResource::new(details.data.into_vec()).override_info(
           FontInfoOverride {
             family_name: details.name.as_deref(),
@@ -88,27 +81,15 @@ fn load_font_internal(context: &mut GlobalContext, font: Font) -> Result<(), js_
   Ok(())
 }
 
-fn put_persistent_image_internal(
-  context: &mut GlobalContext,
-  data: &ImageSource,
-) -> Result<(), js_sys::Error> {
-  let image = LoadedImageSource::from_bytes(&data.data).map_err(map_error)?;
-  context
-    .persistent_image_store
-    .insert(data.src.to_string(), image);
-
-  Ok(())
-}
-
 impl Renderer {
-  fn read_state(&self) -> Result<RwLockReadGuard<'_, GlobalContext>, js_sys::Error> {
+  fn read_state(&self) -> Result<RwLockReadGuard<'_, FontContext>, js_sys::Error> {
     self
       .state
       .try_read()
       .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))
   }
 
-  fn write_state(&self) -> Result<RwLockWriteGuard<'_, GlobalContext>, js_sys::Error> {
+  fn write_state(&self) -> Result<RwLockWriteGuard<'_, FontContext>, js_sys::Error> {
     self
       .state
       .try_write()
@@ -189,6 +170,19 @@ impl Renderer {
     Ok(buffer)
   }
 
+  /// Configures this renderer's decoded-font cache (on by default, 256 MiB).
+  #[wasm_bindgen(js_name = configureFontCache)]
+  pub fn configure_font_cache(&self, options: wasm_bindgen::JsValue) -> Result<(), js_sys::Error> {
+    let options: crate::FontCacheOptions = from_value(options).map_err(map_error)?;
+    if let Some(max_bytes) = options.max_bytes {
+      self
+        .read_state()?
+        .decode_cache()
+        .set_max_bytes(max_bytes.max(0.0) as usize);
+    }
+    Ok(())
+  }
+
   /// Creates a new Renderer instance.
   #[wasm_bindgen(constructor)]
   pub fn new(options: Option<ConstructRendererOptionsType>) -> Result<Renderer, js_sys::Error> {
@@ -197,7 +191,7 @@ impl Renderer {
       .transpose()?
       .unwrap_or_default();
 
-    let mut context = GlobalContext::default();
+    let mut context = FontContext::default();
 
     let should_load_default_fonts = options
       .load_default_fonts
@@ -213,12 +207,6 @@ impl Renderer {
       }
     }
 
-    if let Some(images) = options.persistent_images {
-      for image in images {
-        put_persistent_image_internal(&mut context, &image)?;
-      }
-    }
-
     Ok(Renderer {
       state: RwLock::new(context),
     })
@@ -230,21 +218,6 @@ impl Renderer {
     let input: Font = from_value(font.into()).map_err(map_error)?;
     let mut state = self.write_state()?;
     load_font_internal(&mut state, input)
-  }
-
-  /// Puts a persistent image into the renderer's internal store.
-  #[wasm_bindgen(js_name = putPersistentImage)]
-  pub fn put_persistent_image(&self, data: ImageSourceType) -> Result<(), js_sys::Error> {
-    let data: ImageSource = from_value(data.into()).map_err(map_error)?;
-    let mut state = self.write_state()?;
-    put_persistent_image_internal(&mut state, &data)
-  }
-
-  /// Clears the renderer's internal image store.
-  #[wasm_bindgen(js_name = clearImageStore)]
-  pub fn clear_image_store(&self) -> Result<(), js_sys::Error> {
-    self.write_state()?.persistent_image_store.clear();
-    Ok(())
   }
 
   /// Renders a node tree into an image buffer.
@@ -266,7 +239,7 @@ impl Renderer {
 
   fn render_internal(
     &self,
-    context: &GlobalContext,
+    context: &FontContext,
     node: Node,
     options: RenderOptions,
   ) -> Result<Vec<u8>, JsValue> {
@@ -289,7 +262,7 @@ impl Renderer {
       .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
       .dithering(dithering)
       .node(node)
-      .global(context)
+      .font_context(context)
       .build();
 
     let image = render(render_options).map_err(map_error)?;
@@ -344,7 +317,7 @@ impl Renderer {
       .stylesheet(stylesheet)
       .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
       .node(node)
-      .global(&state)
+      .font_context(&state)
       .build();
 
     let layout = measure_layout(render_options).map_err(map_error)?;
@@ -426,7 +399,7 @@ impl Renderer {
               .fetched_resources(fetched_resources.clone())
               .stylesheet(stylesheet.clone())
               .node(scene.node)
-              .global(&state)
+              .font_context(&state)
               .draw_debug_border(draw_debug_border)
               .build(),
           )
@@ -462,7 +435,7 @@ impl Renderer {
           .viewport(viewport)
           .fetched_resources(fetched_resources.clone())
           .node(frame.node)
-          .global(&state)
+          .font_context(&state)
           .draw_debug_border(options.draw_debug_border.unwrap_or_default())
           .stylesheet(stylesheet.clone())
           .build();

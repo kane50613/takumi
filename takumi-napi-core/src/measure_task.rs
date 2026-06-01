@@ -86,7 +86,7 @@ impl Task for MeasureTask {
       .stylesheet(take(&mut self.stylesheet))
       .time_ms(self.time_ms)
       .node(node)
-      .global(&state.global)
+      .font_context(&state.font_context)
       .build();
 
     measure_layout(options).map_err(map_error)

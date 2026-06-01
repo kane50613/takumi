@@ -1,12 +1,3 @@
-import { readFile } from "node:fs/promises";
-
-export const persistentImages = [
-  {
-    src: "takumi.svg",
-    data: await readFile("../../assets/images/takumi.svg"),
-  },
-];
-
 export const name = "500-stars";
 
 export const width = 1200;
@@ -83,8 +74,9 @@ export default function FiveHundredStars() {
       >
         {/* Logo */}
         <div style={{ marginBottom: "3rem" }}>
+          {/* TODO: provide image via fetchedResources */}
           <img
-            src={persistentImages[0]?.src}
+            src="takumi.svg"
             alt="Takumi Logo"
             style={{
               width: "6rem",

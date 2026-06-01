@@ -190,10 +190,6 @@ pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
     return Ok(img.clone());
   }
 
-  if let Some(img) = context.global.persistent_image_store.get(src) {
-    return Ok(img);
-  }
-
   Err(ImageResourceError::Unknown)
 }
 
@@ -207,7 +203,7 @@ mod tests {
 
   use super::{image_resource_url, measure_image_node};
   use crate::{
-    GlobalContext,
+    FontContext,
     context::RenderContext,
     layout::{
       Viewport,
@@ -311,8 +307,8 @@ mod tests {
 
   #[test]
   fn fixed_style_size_uses_declared_lengths_instead_of_available_space() {
-    let global = GlobalContext::default();
-    let context = RenderContext::new_test(&global, Viewport::new((1200, 630)));
+    let font_context = FontContext::default();
+    let context = RenderContext::new_test(&font_context, Viewport::new((1200, 630)));
     let image = ImageData::from(ImageSource::from(RgbaImage::new(10, 10)));
     let style = Style {
       size: Size {

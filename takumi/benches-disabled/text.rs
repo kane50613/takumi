@@ -2,7 +2,7 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use std::hint::black_box;
 use takumi::{
-  GlobalContext,
+  FontContext,
   layout::{Viewport, node::Node},
   rendering::{RenderOptions, render},
   resources::font::FontResource,
@@ -19,38 +19,36 @@ const LONG_TEXT: &str = "Typography is the art and technique of arranging type t
    closely related craft, sometimes considered part of typography; most typographers do not \
    design typefaces, and some type designers do not consider themselves typographers.";
 
-fn load_global() -> GlobalContext {
-  let mut g = GlobalContext::default();
+fn load_global() -> FontContext {
+  let mut g = FontContext::default();
   let regular: &[u8] = include_bytes!("../../assets/fonts/geist/Geist[wght].woff2");
-  g.font_context
-    .load_and_store(
-      FontResource::new(regular.to_vec())
-        .override_info(FontInfoOverride {
-          family_name: Some("Geist"),
-          ..Default::default()
-        })
-        .generic_family(GenericFamily::SansSerif),
-    )
-    .unwrap();
+  g.load_and_store(
+    FontResource::new(regular.to_vec())
+      .override_info(FontInfoOverride {
+        family_name: Some("Geist"),
+        ..Default::default()
+      })
+      .generic_family(GenericFamily::SansSerif),
+  )
+  .unwrap();
   let emoji: &[u8] = include_bytes!("../../assets/fonts/twemoji/TwemojiMozilla-colr.woff2");
-  g.font_context
-    .load_and_store(
-      FontResource::new(emoji.to_vec())
-        .override_info(FontInfoOverride {
-          family_name: Some("Twemoji Mozilla"),
-          ..Default::default()
-        })
-        .generic_family(GenericFamily::Emoji),
-    )
-    .unwrap();
+  g.load_and_store(
+    FontResource::new(emoji.to_vec())
+      .override_info(FontInfoOverride {
+        family_name: Some("Twemoji Mozilla"),
+        ..Default::default()
+      })
+      .generic_family(GenericFamily::Emoji),
+  )
+  .unwrap();
   g
 }
 
-fn render_node(global: &GlobalContext, node: Node) {
+fn render_node(font_context: &FontContext, node: Node) {
   let opts = RenderOptions::builder()
     .viewport(Viewport::new((BENCH_WIDTH, BENCH_HEIGHT)))
     .node(node)
-    .global(global)
+    .font_context(font_context)
     .build();
   black_box(render(opts).unwrap());
 }

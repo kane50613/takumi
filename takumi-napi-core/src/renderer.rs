@@ -5,17 +5,17 @@ use napi_derive::napi;
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use rayon::prelude::*;
 use takumi_base::{
-  GlobalContext,
+  FontContext,
   layout::{node::Node, style::KeyframesRule as CoreKeyframesRule},
-  resources::{font::FontResource, image::ImageSource as LoadedImageSource},
+  resources::font::FontResource,
 };
 use takumi_raster::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat};
 
 use crate::{
-  De, FontInput, buffer_from_object, buffer_slice_from_object, deserialize_with_tracing,
+  De, FontInput, buffer_slice_from_object, deserialize_with_tracing,
   encode_frames_task::EncodeFramesTask, load_font_task::LoadFontTask, map_error,
-  measure_task::MeasureTask, parse_font_input, put_persistent_image_task::PutPersistentImageTask,
-  render_animation_task::RenderAnimationTask, render_task::RenderTask, resolve_font_resource,
+  measure_task::MeasureTask, parse_font_input, render_animation_task::RenderAnimationTask,
+  render_task::RenderTask, resolve_font_resource,
 };
 
 /// Represents a single run of text in a measured node.
@@ -80,7 +80,7 @@ pub struct Renderer {
 }
 
 pub(crate) struct RendererState {
-  pub(crate) global: GlobalContext,
+  pub(crate) font_context: FontContext,
 }
 
 pub(crate) fn deserialize_keyframes(keyframes: Option<Object>) -> Result<Vec<CoreKeyframesRule>> {
@@ -268,8 +268,6 @@ pub struct ImageSource<'ctx> {
 #[napi(object)]
 #[derive(Default)]
 pub struct ConstructRendererOptions<'ctx> {
-  /// The images that needs to be preloaded into the renderer.
-  pub persistent_images: Option<Vec<ImageSource<'ctx>>>,
   /// The fonts being used.
   #[napi(ts_type = "Font[] | undefined")]
   pub fonts: Option<Vec<Object<'ctx>>>,
@@ -304,9 +302,10 @@ impl Renderer {
       .load_default_fonts
       .unwrap_or_else(|| options.fonts.is_none());
 
-    let mut global = GlobalContext::default();
+    let mut font_context = FontContext::default();
 
     if load_default_fonts {
+      let cache = font_context.decode_cache_arc();
       let default_fonts_resources = crate::pool::install(|| {
         EMBEDDED_FONTS
           .par_iter()
@@ -317,22 +316,19 @@ impl Renderer {
                 ..Default::default()
               })
               .generic_family(*generic)
-              .into_resolved()
+              .into_resolved(&cache)
               .map_err(|e| Error::from_reason(format!("Failed to load default font: {e}")))
           })
           .collect::<Result<Vec<_>>>()
       })?;
 
       for resource in default_fonts_resources {
-        global
-          .font_context
-          .load_and_store(resource)
-          .map_err(map_error)?;
+        font_context.load_and_store(resource).map_err(map_error)?;
       }
     }
 
     let renderer = Self {
-      state: Arc::new(RwLock::new(RendererState { global })),
+      state: Arc::new(RwLock::new(RendererState { font_context })),
     };
 
     if let Some(fonts) = options.fonts {
@@ -341,11 +337,21 @@ impl Renderer {
         .map(|font| parse_font_input(env, font))
         .collect::<Result<Vec<_>>>()?;
 
+      let cache = {
+        let state = renderer
+          .state
+          .read()
+          .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
+        state.font_context.decode_cache_arc()
+      };
+
       let custom_fonts_resources = crate::pool::install(|| {
         buffers
           .par_iter()
           .with_min_len(2)
-          .map(|(font, buffer): &(FontInput, Buffer)| resolve_font_resource(font, buffer.as_ref()))
+          .map(|(font, buffer): &(FontInput, Buffer)| {
+            resolve_font_resource(font, buffer.as_ref(), &cache)
+          })
           .collect::<Result<Vec<_>>>()
       })?;
 
@@ -356,72 +362,28 @@ impl Renderer {
 
       for resource in custom_fonts_resources {
         state
-          .global
           .font_context
           .load_and_store(resource)
           .map_err(map_error)?;
       }
     }
 
-    if let Some(images) = options.persistent_images {
-      let state = renderer
-        .state
-        .write()
-        .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-      for image in images {
-        let buffer = buffer_slice_from_object(env, image.data)?;
-        let image_source = LoadedImageSource::from_bytes(&buffer).map_err(map_error)?;
-
-        state
-          .global
-          .persistent_image_store
-          .insert(image.src, image_source);
-      }
-    }
-
     Ok(renderer)
-  }
-
-  /// Puts a persistent image into the renderer's internal store asynchronously.
-  #[napi(
-    ts_args_type = "source: ImageSource, signal?: AbortSignal",
-    ts_return_type = "Promise<void>"
-  )]
-  pub fn put_persistent_image(
-    &self,
-    env: Env,
-    source: ImageSource,
-    signal: Option<AbortSignal>,
-  ) -> Result<AsyncTask<PutPersistentImageTask>> {
-    let buffer = buffer_from_object(env, source.data)?;
-
-    Ok(AsyncTask::with_optional_signal(
-      PutPersistentImageTask {
-        src: Some(source.src),
-        state: Arc::clone(&self.state),
-        buffer,
-      },
-      signal,
-    ))
   }
 
   /// Loads a font synchronously.
   #[napi(ts_args_type = "font: Font")]
   pub fn load_font_sync(&self, env: Env, font: Object) -> Result<()> {
     if let Ok(buffer) = buffer_slice_from_object(env, font) {
-      let resource = FontResource::new(buffer.as_ref())
-        .into_resolved()
-        .map_err(map_error)?;
-
       let mut state = self
         .state
         .write()
         .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
+      // `load_and_store` decodes through this context's cache.
       state
-        .global
         .font_context
-        .load_and_store(resource)
+        .load_and_store(FontResource::new(buffer.as_ref()))
         .map_err(map_error)?;
 
       return Ok(());
@@ -432,19 +394,34 @@ impl Renderer {
       .and_then(|buffer| buffer_slice_from_object(env, buffer))?;
     let font_input: FontInput = deserialize_with_tracing(font)?;
 
-    let resource = resolve_font_resource(&font_input, buffer.as_ref())?;
-
     let mut state = self
       .state
       .write()
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
+    let cache = state.font_context.decode_cache_arc();
+    let resource = resolve_font_resource(&font_input, buffer.as_ref(), &cache)?;
     state
-      .global
       .font_context
       .load_and_store(resource)
       .map_err(map_error)?;
 
+    Ok(())
+  }
+
+  /// Configures this renderer's decoded-font cache (on by default, 256 MiB).
+  #[napi(js_name = "configureFontCache")]
+  pub fn configure_font_cache(&self, options: crate::FontCacheOptions) -> Result<()> {
+    if let Some(max_bytes) = options.max_bytes {
+      let state = self
+        .state
+        .read()
+        .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
+      state
+        .font_context
+        .decode_cache()
+        .set_max_bytes(max_bytes.max(0.0) as usize);
+    }
     Ok(())
   }
 
@@ -485,14 +462,6 @@ impl Renderer {
       },
       signal,
     ))
-  }
-
-  /// Clears the renderer's internal image store.
-  #[napi]
-  pub fn clear_image_store(&self) {
-    if let Ok(state) = self.state.write() {
-      state.global.persistent_image_store.clear();
-    }
   }
 
   /// Renders a node tree into an image buffer asynchronously.

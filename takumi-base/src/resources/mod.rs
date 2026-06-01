@@ -1,5 +1,7 @@
 /// Font loading and processing functionality
 pub mod font;
+/// Global content-addressed cache of decoded font bytes
+pub mod font_cache;
 /// Image state and resource management
 pub mod image;
 /// Backend-agnostic decoded-image buffer

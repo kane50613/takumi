@@ -14,3 +14,10 @@ use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen(typescript_custom_section)]
 const TS_APPEND_CONTENT: &'static str = include_str!("./dts-header.d.ts");
+
+/// Options for `Renderer.configureFontCache`.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct FontCacheOptions {
+  pub(crate) max_bytes: Option<f64>,
+}

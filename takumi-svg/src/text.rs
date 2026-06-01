@@ -56,7 +56,7 @@ pub(crate) fn emit_text(
     max_width: content.width,
     max_height: resolve_inline_max_height(&font_style, content.height),
     style: &font_style,
-    global: context.global,
+    font_context: context.font_context,
     mode: InlineLayoutMode::Draw,
   });
 
@@ -100,7 +100,7 @@ pub(crate) fn emit_inline_content(
     max_width: content.width,
     max_height: resolve_inline_max_height(&font_style, content.height),
     style: &font_style,
-    global: context.global,
+    font_context: context.font_context,
     mode: InlineLayoutMode::Draw,
   });
 
@@ -590,7 +590,7 @@ fn offset(transform: [f32; 6], origin_x: f32, origin_y: f32) -> Affine {
 mod tests {
   use std::path::Path;
 
-  use takumi_base::GlobalContext;
+  use takumi_base::FontContext;
   use takumi_base::layout::Viewport;
   use takumi_base::layout::node::Node;
   use takumi_base::resources::font::FontResource;
@@ -599,27 +599,26 @@ mod tests {
 
   /// Registers the raw-TTF test font as a fallback for all scripts so the
   /// default font-family resolves to it (no `woff2` feature required).
-  fn global_with_font() -> GlobalContext {
-    let mut global = GlobalContext::default();
+  fn font_context_with_font() -> FontContext {
+    let mut font_context = FontContext::default();
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
       .join("../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf");
     let data = std::fs::read(&path).expect("read test font");
-    global
-      .font_context
+    font_context
       .load_and_store(FontResource::new(data))
       .expect("load test font");
-    global
+    font_context
   }
 
   #[test]
   fn text_renders_glyph_paths_not_bitmap() {
-    let global = global_with_font();
+    let font_context = font_context_with_font();
     let node = Node::text("Hi".to_string());
     let svg = render(
       SvgOptions::builder()
         .node(node)
         .viewport(Viewport::new((200, 80)))
-        .global(&global)
+        .font_context(&font_context)
         .build(),
     )
     .unwrap();
