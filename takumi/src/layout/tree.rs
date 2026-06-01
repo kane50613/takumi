@@ -1092,6 +1092,10 @@ impl<'g> RenderNode<'g> {
       || self.context.style.float != Float::None
   }
 
+  fn is_out_of_flow(&self) -> bool {
+    matches!(self.context.style.position, Position::Absolute)
+  }
+
   pub fn should_create_inline_layout(&self) -> bool {
     self.force_inline_layout
       || (matches!(
@@ -1347,9 +1351,11 @@ impl<'g> RenderNode<'g> {
             children = drop_block_boundary_whitespace(Vec::from(children)).into_boxed_slice();
           }
 
-          let has_inline = children
-            .iter()
-            .any(RenderNode::participates_in_inline_formatting_context);
+          // https://github.com/kane50613/takumi/issues/738: out-of-flow boxes
+          // must not be swept into an anonymous block box.
+          let has_inline = children.iter().any(|child| {
+            child.participates_in_inline_formatting_context() && !child.is_out_of_flow()
+          });
           let has_block = children
             .iter()
             .any(|child| !child.participates_in_inline_formatting_context());
@@ -1375,7 +1381,7 @@ impl<'g> RenderNode<'g> {
             let mut inline_group = Vec::new();
 
             for item in children {
-              if item.participates_in_inline_formatting_context() {
+              if item.participates_in_inline_formatting_context() && !item.is_out_of_flow() {
                 inline_group.push(item);
                 continue;
               }

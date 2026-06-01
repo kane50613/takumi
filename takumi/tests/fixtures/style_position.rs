@@ -1,7 +1,7 @@
 use takumi::layout::{
   node::Node,
   style::{
-    Color, ColorInput, Display,
+    AlignItems, Color, ColorInput, Display, JustifyContent,
     Length::{Percentage, Px},
     Position, Sides, Style, StyleDeclaration, ZIndex,
   },
@@ -184,4 +184,54 @@ fn test_style_stacking_context_flex_item_z_index() {
   );
 
   run_fixture_test(container, "style_stacking_context_flex_item_z_index");
+}
+
+#[test]
+fn test_style_absolute_in_block_relative_with_sibling() {
+  let absolute = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::position(Position::Absolute))
+      .with(StyleDeclaration::width(Px(100.0)))
+      .with(StyleDeclaration::height(Px(20.0)))
+      .with(StyleDeclaration::bottom(Px(0.0)))
+      .with(StyleDeclaration::left(Px(0.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([128, 128, 255, 255]),
+      ))),
+  );
+
+  let sibling = Node::container([Node::text("ERR".to_string())]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::color(ColorInput::Value(Color::white())))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::black(),
+      ))),
+  );
+
+  let container = Node::container([absolute, sibling]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::position(Position::Relative))
+      .with(StyleDeclaration::width(Px(300.0)))
+      .with(StyleDeclaration::height(Px(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([0, 0, 245, 255]),
+      ))),
+  );
+
+  let root = Node::container([container]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      ))),
+  );
+
+  run_fixture_test(root, "style_absolute_in_block_relative_with_sibling");
 }
