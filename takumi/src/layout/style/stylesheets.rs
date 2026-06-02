@@ -1711,7 +1711,7 @@ impl ComputedStyle {
 
     // https://www.w3.org/TR/css-display-3/#transformations
     // Elements with position: absolute or fixed are blockified
-    if self.position == Position::Absolute || self.float != Float::None {
+    if self.position.is_out_of_flow() || self.float != Float::None {
       self.display.blockify();
     }
   }
@@ -1721,13 +1721,11 @@ impl ComputedStyle {
   }
 
   pub(crate) fn is_z_index_applicable(&self, is_flex_or_grid_item: bool) -> bool {
-    !matches!(self.z_index, ZIndex::Auto)
-      && (matches!(self.position, Position::Absolute | Position::Relative) || is_flex_or_grid_item)
+    !matches!(self.z_index, ZIndex::Auto) && (self.position.is_positioned() || is_flex_or_grid_item)
   }
 
   pub(crate) fn participates_in_positioned_paint_bucket(&self, is_flex_or_grid_item: bool) -> bool {
-    matches!(self.position, Position::Absolute | Position::Relative)
-      || self.is_z_index_applicable(is_flex_or_grid_item)
+    self.position.is_positioned() || self.is_z_index_applicable(is_flex_or_grid_item)
   }
 
   pub(crate) fn creates_stacking_context(
@@ -1961,13 +1959,17 @@ impl ComputedStyle {
         left: self.padding_left,
       }
       .map(|padding| padding.resolve_to_length_percentage(sizing)),
-      inset: Rect {
-        top: self.top,
-        right: self.right,
-        bottom: self.bottom,
-        left: self.left,
-      }
-      .map(|inset| inset.resolve_to_length_percentage_auto(sizing)),
+      inset: if self.position == Position::Static {
+        Rect::auto()
+      } else {
+        Rect {
+          top: self.top,
+          right: self.right,
+          bottom: self.bottom,
+          left: self.left,
+        }
+        .map(|inset| inset.resolve_to_length_percentage_auto(sizing))
+      },
       margin: Rect {
         top: self.margin_top,
         right: self.margin_right,
