@@ -1212,15 +1212,42 @@ pub enum Position {
   /// The element is removed from the normal document flow and positioned relative to its nearest positioned ancestor.
   /// Offsets (top, right, bottom, left) specify the distance from the ancestor.
   Absolute,
+  /// The element is laid out in the normal flow and is not a containing block.
+  /// Offsets (top, right, bottom, left) have no effect.
+  Static,
+  /// The element is removed from the normal document flow and positioned relative to the viewport (root).
+  Fixed,
 }
 
 declare_enum_from_css_impl!(
   Position,
   "relative" => Position::Relative,
-  "absolute" => Position::Absolute
+  "absolute" => Position::Absolute,
+  "static" => Position::Static,
+  "fixed" => Position::Fixed
 );
 
-impl_from_taffy_enum!(Position, taffy::Position, Relative, Absolute);
+impl From<Position> for taffy::Position {
+  fn from(value: Position) -> Self {
+    match value {
+      Position::Relative | Position::Static => Self::Relative,
+      Position::Absolute | Position::Fixed => Self::Absolute,
+    }
+  }
+}
+
+impl Position {
+  /// A positioned element (anything but `static`): establishes a containing
+  /// block for absolutely-positioned descendants and honors `z-index`.
+  pub(crate) const fn is_positioned(self) -> bool {
+    matches!(self, Self::Relative | Self::Absolute | Self::Fixed)
+  }
+
+  /// Removed from normal flow.
+  pub(crate) const fn is_out_of_flow(self) -> bool {
+    matches!(self, Self::Absolute | Self::Fixed)
+  }
+}
 
 /// Defines the direction of layout.
 #[derive(Default, Debug, Clone, Copy, PartialEq, Deserialize)]

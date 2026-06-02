@@ -1,4 +1,4 @@
-use std::{mem::take, vec::IntoIter};
+use std::{collections::HashMap, mem::take, vec::IntoIter};
 
 use taffy::{
   AvailableSpace, BlockContext, Cache, CacheTree, Display as TaffyDisplay, Layout,
@@ -34,6 +34,16 @@ use crate::{
 };
 use parley::fontique::Attributes;
 
+/// A render-tree child paired with its layout `NodeId`. `hoisted_cb` is set
+/// when the child is out-of-flow and was re-parented to a containing block in
+/// the taffy tree; its geometry then resolves against that block.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct OrderedChild {
+  pub(crate) render_index: usize,
+  pub(crate) node_id: NodeId,
+  pub(crate) hoisted_cb: Option<NodeId>,
+}
+
 pub(crate) struct LayoutResults {
   nodes: Vec<LayoutResultNode>,
 }
@@ -41,7 +51,7 @@ pub(crate) struct LayoutResults {
 struct LayoutResultNode {
   layout: Layout,
   first_baseline_y: Option<f32>,
-  children: Box<[NodeId]>,
+  box_children: Box<[OrderedChild]>,
 }
 
 impl LayoutResults {
@@ -58,12 +68,15 @@ impl LayoutResults {
       .ok_or(TaffyError::InvalidInputNode(node_id))
   }
 
-  pub(crate) fn children(&self, node_id: NodeId) -> std::result::Result<&[NodeId], TaffyError> {
+  pub(crate) fn box_children(
+    &self,
+    node_id: NodeId,
+  ) -> std::result::Result<&[OrderedChild], TaffyError> {
     let idx: usize = node_id.into();
     self
       .nodes
       .get(idx)
-      .map(|node| node.children.as_ref())
+      .map(|node| node.box_children.as_ref())
       .ok_or(TaffyError::InvalidInputNode(node_id))
   }
 
@@ -93,6 +106,7 @@ struct LayoutNodeState {
   first_baseline_y: Option<f32>,
   is_inline_children: bool,
   children: Box<[NodeId]>,
+  box_children: Box<[OrderedChild]>,
 }
 
 #[derive(Clone)]
@@ -290,9 +304,11 @@ fn push_layout_node<'r, 'g>(
 ) -> NodeId {
   struct PendingNode<'r, 'g> {
     node_id: NodeId,
+    position: Position,
     next_child_index: usize,
     children: Option<&'r [RenderNode<'g>]>,
-    child_ids: Vec<NodeId>,
+    taffy_child_ids: Vec<NodeId>,
+    box_children: Vec<OrderedChild>,
   }
 
   fn push_node_state<'r, 'g>(
@@ -308,6 +324,7 @@ fn push_layout_node<'r, 'g>(
     } else {
       render_node.children.as_deref()
     };
+    let position = render_node.context.style.position;
 
     render_nodes.push(render_node);
 
@@ -327,45 +344,87 @@ fn push_layout_node<'r, 'g>(
       first_baseline_y: None,
       is_inline_children,
       children: Box::new([]),
+      box_children: Box::new([]),
     });
 
+    let capacity = children.map_or(0, <[RenderNode<'g>]>::len);
     PendingNode {
       node_id,
+      position,
       next_child_index: 0,
       children,
-      child_ids: Vec::with_capacity(children.map_or(0, <[RenderNode<'g>]>::len)),
+      taffy_child_ids: Vec::with_capacity(capacity),
+      box_children: Vec::with_capacity(capacity),
     }
   }
 
+  // Out-of-flow nodes are re-parented (hoisted) in the taffy tree so taffy's
+  // direct-parent positioning resolves against the correct CSS containing
+  // block: nearest CB ancestor for `absolute`, the root for `fixed`. The box
+  // (render) tree is preserved separately for painting.
+  let mut cb_stack: Vec<NodeId> = Vec::new();
+  let mut hoisted: HashMap<NodeId, Vec<NodeId>> = HashMap::new();
+
   let root = push_node_state(nodes, render_nodes, render_root);
   let root_id = root.node_id;
+  cb_stack.push(root_id);
   let mut stack = vec![root];
 
   while let Some(current) = stack.last_mut() {
-    let Some(children) = current.children else {
-      let Some(finished) = stack.pop() else {
-        break;
-      };
-      if let Some(parent) = stack.last_mut() {
-        parent.child_ids.push(finished.node_id);
-      }
-      continue;
-    };
-
-    if let Some(child) = children.get(current.next_child_index) {
+    if let Some(children) = current.children
+      && let Some(child) = children.get(current.next_child_index)
+    {
       current.next_child_index += 1;
-      stack.push(push_node_state(nodes, render_nodes, child));
+      let pending = push_node_state(nodes, render_nodes, child);
+      if pending.position.is_positioned() {
+        cb_stack.push(pending.node_id);
+      }
+      stack.push(pending);
       continue;
     }
 
     let Some(finished) = stack.pop() else {
       break;
     };
-    let node_index: usize = finished.node_id.into();
-    nodes[node_index].children = finished.child_ids.into_boxed_slice();
+    let fid = finished.node_id;
+
+    let mut taffy_children = finished.taffy_child_ids;
+    if let Some(extra) = hoisted.remove(&fid) {
+      taffy_children.extend(extra);
+    }
+    let idx: usize = fid.into();
+    nodes[idx].children = taffy_children.into_boxed_slice();
+    nodes[idx].box_children = finished.box_children.into_boxed_slice();
+
+    if finished.position.is_positioned() {
+      cb_stack.pop();
+    }
 
     if let Some(parent) = stack.last_mut() {
-      parent.child_ids.push(finished.node_id);
+      let render_index = parent.next_child_index - 1;
+      let cb = match finished.position {
+        Position::Static | Position::Relative => None,
+        Position::Absolute => Some(*cb_stack.last().unwrap_or(&root_id)),
+        Position::Fixed => Some(root_id),
+      };
+      // Only re-parent when the containing block differs from the structural
+      // parent; otherwise keep the node in place to preserve DOM order (and the
+      // in-flow static position for auto-inset out-of-flow boxes).
+      let hoisted_cb = match cb {
+        Some(cb) if cb != parent.node_id => {
+          hoisted.entry(cb).or_default().push(fid);
+          Some(cb)
+        }
+        _ => {
+          parent.taffy_child_ids.push(fid);
+          None
+        }
+      };
+      parent.box_children.push(OrderedChild {
+        render_index,
+        node_id: fid,
+        hoisted_cb,
+      });
     }
   }
 
@@ -404,7 +463,7 @@ impl<'r, 'g> LayoutTree<'r, 'g> {
         .map(|node| LayoutResultNode {
           layout: node.final_layout,
           first_baseline_y: node.first_baseline_y,
-          children: node.children,
+          box_children: node.box_children,
         })
         .collect(),
     }
@@ -1088,12 +1147,12 @@ impl<'g> RenderNode<'g> {
 
   fn participates_in_inline_formatting_context(&self) -> bool {
     self.participates_in_inflow_inline_formatting_context()
-      || matches!(self.context.style.position, Position::Absolute)
+      || self.is_out_of_flow()
       || self.context.style.float != Float::None
   }
 
   fn is_out_of_flow(&self) -> bool {
-    matches!(self.context.style.position, Position::Absolute)
+    self.context.style.position.is_out_of_flow()
   }
 
   pub fn should_create_inline_layout(&self) -> bool {

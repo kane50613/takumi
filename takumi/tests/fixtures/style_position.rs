@@ -235,3 +235,304 @@ fn test_style_absolute_in_block_relative_with_sibling() {
 
   run_fixture_test(root, "style_absolute_in_block_relative_with_sibling");
 }
+
+// An absolute child resolves against the nearest *positioned* ancestor,
+// skipping a `position: static` ancestor in between. The green box should sit
+// at the bottom-right of the blue 300x300 relative container, not of the
+// yellow 120x120 static middle.
+#[test]
+fn test_style_absolute_skips_static_ancestor() {
+  let absolute = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::position(Position::Absolute))
+      .with(StyleDeclaration::width(Px(80.0)))
+      .with(StyleDeclaration::height(Px(80.0)))
+      .with(StyleDeclaration::bottom(Px(0.0)))
+      .with(StyleDeclaration::right(Px(0.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([0, 200, 0, 255]),
+      ))),
+  );
+  let middle = Node::container([absolute]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::position(Position::Static))
+      .with(StyleDeclaration::width(Px(120.0)))
+      .with(StyleDeclaration::height(Px(120.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([240, 220, 0, 255]),
+      ))),
+  );
+  let relative = Node::container([middle]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::position(Position::Relative))
+      .with(StyleDeclaration::width(Px(300.0)))
+      .with(StyleDeclaration::height(Px(300.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([0, 0, 200, 255]),
+      ))),
+  );
+  let root = Node::container([relative]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      ))),
+  );
+  run_fixture_test(root, "style_absolute_skips_static_ancestor");
+}
+
+// A fixed box resolves against the viewport (root), ignoring positioned
+// ancestors. The purple box should pin to the top-left of the canvas at
+// (10, 10) regardless of the offset relative ancestor it lives inside.
+#[test]
+fn test_style_fixed_anchors_to_viewport() {
+  let fixed = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::position(Position::Fixed))
+      .with(StyleDeclaration::width(Px(100.0)))
+      .with(StyleDeclaration::height(Px(100.0)))
+      .with(StyleDeclaration::top(Px(10.0)))
+      .with(StyleDeclaration::left(Px(10.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([160, 0, 200, 255]),
+      ))),
+  );
+  let inner = Node::container([fixed]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::position(Position::Relative))
+      .with(StyleDeclaration::width(Px(200.0)))
+      .with(StyleDeclaration::height(Px(200.0)))
+      .with(StyleDeclaration::margin_top(Px(160.0)))
+      .with(StyleDeclaration::margin_left(Px(160.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([220, 220, 220, 255]),
+      ))),
+  );
+  let root = Node::container([inner]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::position(Position::Relative))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      ))),
+  );
+  run_fixture_test(root, "style_fixed_anchors_to_viewport");
+}
+
+// A hoisted absolute participates correctly in its containing block's stacking
+// order. The red abspos (z-index 1, hoisted out of the static wrapper) must
+// paint *below* the green abspos (z-index 2) where they overlap.
+#[test]
+fn test_style_absolute_paint_order_under_z_sibling() {
+  let red = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::position(Position::Absolute))
+      .with(StyleDeclaration::z_index(ZIndex::Integer(1)))
+      .with(StyleDeclaration::width(Px(160.0)))
+      .with(StyleDeclaration::height(Px(160.0)))
+      .with(StyleDeclaration::top(Px(40.0)))
+      .with(StyleDeclaration::left(Px(40.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([220, 0, 0, 255]),
+      ))),
+  );
+  let static_wrap = Node::container([red]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::position(Position::Static)),
+  );
+  let green = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::position(Position::Absolute))
+      .with(StyleDeclaration::z_index(ZIndex::Integer(2)))
+      .with(StyleDeclaration::width(Px(160.0)))
+      .with(StyleDeclaration::height(Px(160.0)))
+      .with(StyleDeclaration::top(Px(100.0)))
+      .with(StyleDeclaration::left(Px(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([0, 180, 0, 255]),
+      ))),
+  );
+  let container = Node::container([static_wrap, green]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::position(Position::Relative))
+      .with(StyleDeclaration::width(Px(300.0)))
+      .with(StyleDeclaration::height(Px(300.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([230, 230, 230, 255]),
+      ))),
+  );
+  let root = Node::container([container]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      ))),
+  );
+  run_fixture_test(root, "style_absolute_paint_order_under_z_sibling");
+}
+
+// Percentage size and insets on an absolute child resolve against its
+// containing block. Inside a 200x200 relative (via a static wrapper), the teal
+// box should be 100x100 (50%) offset by 20px (10%) from the top-left.
+#[test]
+fn test_style_absolute_percentage_resolves_against_cb() {
+  let absolute = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::position(Position::Absolute))
+      .with(StyleDeclaration::width(Percentage(50.0)))
+      .with(StyleDeclaration::height(Percentage(50.0)))
+      .with(StyleDeclaration::top(Percentage(10.0)))
+      .with(StyleDeclaration::left(Percentage(10.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([0, 170, 170, 255]),
+      ))),
+  );
+  let static_wrap = Node::container([absolute]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::position(Position::Static))
+      .with(StyleDeclaration::width(Px(80.0)))
+      .with(StyleDeclaration::height(Px(80.0))),
+  );
+  let relative = Node::container([static_wrap]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::position(Position::Relative))
+      .with(StyleDeclaration::width(Px(200.0)))
+      .with(StyleDeclaration::height(Px(200.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([40, 40, 40, 255]),
+      ))),
+  );
+  let root = Node::container([relative]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      ))),
+  );
+  run_fixture_test(root, "style_absolute_percentage_resolves_against_cb");
+}
+
+// z-index applies only to positioned elements. A `static` element's z-index is
+// ignored, so the later in-flow positioned green box paints on top of the red
+// static box despite red's z-index: 99.
+#[test]
+fn test_style_static_z_index_ignored() {
+  let red_static = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::position(Position::Static))
+      .with(StyleDeclaration::z_index(ZIndex::Integer(99)))
+      .with(StyleDeclaration::width(Px(160.0)))
+      .with(StyleDeclaration::height(Px(160.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([220, 0, 0, 255]),
+      ))),
+  );
+  let green_relative = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::position(Position::Relative))
+      .with(StyleDeclaration::width(Px(160.0)))
+      .with(StyleDeclaration::height(Px(160.0)))
+      .with(StyleDeclaration::margin_top(Px(-80.0)))
+      .with(StyleDeclaration::margin_left(Px(80.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([0, 180, 0, 255]),
+      ))),
+  );
+  let container = Node::container([red_static, green_relative]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::position(Position::Relative))
+      .with(StyleDeclaration::width(Px(300.0)))
+      .with(StyleDeclaration::height(Px(300.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([230, 230, 230, 255]),
+      ))),
+  );
+  let root = Node::container([container]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      ))),
+  );
+  run_fixture_test(root, "style_static_z_index_ignored");
+}
+
+// An absolute whose containing block is itself a hoisted `fixed` node. The
+// purple fixed box pins to the viewport at (40, 40); the orange absolute,
+// hoisted past the static wrapper, sits at the bottom-right of the purple box.
+#[test]
+fn test_style_nested_hoisting_fixed_cb() {
+  let orange = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::position(Position::Absolute))
+      .with(StyleDeclaration::width(Px(60.0)))
+      .with(StyleDeclaration::height(Px(60.0)))
+      .with(StyleDeclaration::bottom(Px(0.0)))
+      .with(StyleDeclaration::right(Px(0.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([240, 140, 0, 255]),
+      ))),
+  );
+  let static_wrap = Node::container([orange]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::position(Position::Static)),
+  );
+  let fixed = Node::container([static_wrap]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::position(Position::Fixed))
+      .with(StyleDeclaration::width(Px(200.0)))
+      .with(StyleDeclaration::height(Px(200.0)))
+      .with(StyleDeclaration::top(Px(40.0)))
+      .with(StyleDeclaration::left(Px(40.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([160, 0, 200, 255]),
+      ))),
+  );
+  let root = Node::container([fixed]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::position(Position::Relative))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      ))),
+  );
+  run_fixture_test(root, "style_nested_hoisting_fixed_cb");
+}

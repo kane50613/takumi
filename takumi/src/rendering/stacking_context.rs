@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use parley::{InlineBoxKind, PositionedLayoutItem};
 use taffy::{AvailableSpace, Layout, NodeId, Point, TaffyError, geometry::Size};
 use tiny_skia::Pixmap;
@@ -15,7 +17,7 @@ use crate::{
       Affine, BackgroundImage, BlendMode, Color, ComputedStyle, Display, Filter, SpacePair,
       apply_backdrop_filter, apply_filters_to_pixmap,
     },
-    tree::{LayoutResults, RenderNode},
+    tree::{LayoutResults, OrderedChild, RenderNode},
   },
   rendering::{
     BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, NodeMaskAction, Placement,
@@ -156,33 +158,11 @@ fn get_node_by_path<'a, 'g>(
   Some(current)
 }
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct OrderedChild {
-  pub(crate) render_index: usize,
-  pub(crate) node_id: NodeId,
-}
-
 pub(crate) fn collect_layout_children(
   layout_results: &LayoutResults,
   node_id: NodeId,
-  render_children: &[RenderNode<'_>],
 ) -> Result<Vec<OrderedChild>> {
-  let layout_children = layout_results.children(node_id)?;
-  let child_count = render_children.len().min(layout_children.len());
-  let mut ordered_children = Vec::with_capacity(child_count);
-  for (render_index, node_id) in layout_children
-    .iter()
-    .copied()
-    .take(child_count)
-    .enumerate()
-  {
-    ordered_children.push(OrderedChild {
-      render_index,
-      node_id,
-    });
-  }
-
-  Ok(ordered_children)
+  Ok(layout_results.box_children(node_id)?.to_vec())
 }
 
 #[derive(Clone)]
@@ -244,7 +224,6 @@ struct PaintItem {
 #[derive(Clone, Copy)]
 enum PaintBucket {
   Negative,
-  InFlow,
   AutoZero,
   Positive,
 }
@@ -252,7 +231,6 @@ enum PaintBucket {
 #[derive(Default)]
 struct StackingBuckets {
   negative: Vec<PaintItem>,
-  inflow: Vec<PaintItem>,
   auto_zero: Vec<PaintItem>,
   positive: Vec<PaintItem>,
 }
@@ -261,7 +239,6 @@ impl StackingBuckets {
   fn push(&mut self, bucket: PaintBucket, item: PaintItem) {
     match bucket {
       PaintBucket::Negative => self.negative.push(item),
-      PaintBucket::InFlow => self.inflow.push(item),
       PaintBucket::AutoZero => self.auto_zero.push(item),
       PaintBucket::Positive => self.positive.push(item),
     }
@@ -274,7 +251,6 @@ impl StackingBuckets {
         .cmp(&right.z_index)
         .then_with(|| left.source_order.cmp(&right.source_order))
     });
-    self.inflow.sort_by_key(|item| item.source_order);
     self.auto_zero.sort_by_key(|item| item.source_order);
     self.positive.sort_by(|left, right| {
       left
@@ -284,13 +260,8 @@ impl StackingBuckets {
     });
   }
 
-  fn in_paint_order(&self) -> [&[PaintItem]; 4] {
-    [
-      &self.negative,
-      &self.inflow,
-      &self.auto_zero,
-      &self.positive,
-    ]
+  fn in_paint_order(&self) -> [&[PaintItem]; 3] {
+    [&self.negative, &self.auto_zero, &self.positive]
   }
 }
 
@@ -342,7 +313,10 @@ fn classify_bucket(style: &ComputedStyle, is_flex_or_grid_item: bool) -> (PaintB
   let participates = style.participates_in_positioned_paint_bucket(is_flex_or_grid_item);
 
   if !participates {
-    return (PaintBucket::InFlow, 0);
+    // Non-positioned (`static`) elements paint in tree order alongside
+    // positioned z-auto elements, so an ancestor still paints before its
+    // descendants. Their own `z-index` does not apply.
+    return (PaintBucket::AutoZero, 0);
   }
 
   if z_index < 0 {
@@ -363,6 +337,11 @@ pub(crate) fn build_stacking_contexts<'g>(
 ) -> Result<Vec<StackingContextNode>> {
   let mut contexts = vec![StackingContextNode::with_root(None)];
   let mut source_order = 0usize;
+  // Hoisted out-of-flow nodes resolve geometry against their containing block,
+  // not their box-tree parent. Memoize each node's transform and content box so
+  // a hoisted child can use its CB's values as its base.
+  let mut node_transforms: HashMap<NodeId, Affine> = HashMap::new();
+  let mut node_content_box: HashMap<NodeId, Size<Option<f32>>> = HashMap::new();
   let mut visits = vec![StackingContextBuildVisit {
     path: Vec::new(),
     node_id,
@@ -395,6 +374,7 @@ pub(crate) fn build_stacking_contexts<'g>(
     if !current_transform.is_invertible() {
       continue;
     }
+    node_transforms.insert(visit.node_id, current_transform);
 
     let node_paint = NodePaint {
       path: visit.path.clone(),
@@ -451,28 +431,36 @@ pub(crate) fn build_stacking_contexts<'g>(
       source_order += 1;
     }
 
-    let Some(children) = current.children.as_deref() else {
+    if current.children.is_none() {
       continue;
-    };
+    }
 
     if current.should_create_inline_layout() {
       continue;
     }
 
-    let layout_children = collect_layout_children(layout_results, visit.node_id, children)?;
+    let layout_children = collect_layout_children(layout_results, visit.node_id)?;
     let child_container_size = Size {
       width: Some(layout.content_box_width()),
       height: Some(layout.content_box_height()),
     };
+    node_content_box.insert(visit.node_id, child_container_size);
 
     for child in layout_children.into_iter().rev() {
       let mut child_path = visit.path.clone();
       child_path.push(child.render_index);
+      let (base_transform, base_container) = match child.hoisted_cb {
+        Some(cb) => (
+          *node_transforms.get(&cb).unwrap_or(&current_transform),
+          *node_content_box.get(&cb).unwrap_or(&child_container_size),
+        ),
+        None => (current_transform, child_container_size),
+      };
       visits.push(StackingContextBuildVisit {
         path: child_path,
         node_id: child.node_id,
-        transform: current_transform,
-        container_size: child_container_size,
+        transform: base_transform,
+        container_size: base_container,
         context_id: active_context_id,
         parent_display: Some(current.context.style.display),
         is_root: false,

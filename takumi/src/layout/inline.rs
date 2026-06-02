@@ -11,7 +11,7 @@ use crate::{
   layout::{
     node::Node,
     style::{
-      BoxSizing, Color, Float, FontSynthesis, Position, ResolvedVerticalAlign, SizedFontStyle,
+      BoxSizing, Color, Float, FontSynthesis, ResolvedVerticalAlign, SizedFontStyle,
       SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
       TextFitTarget, TextOverflow, TextWrapMode, TextWrapStyle, VerticalAlign,
     },
@@ -75,7 +75,7 @@ impl From<&InlineBoxItem<'_, '_>> for Layout {
 }
 
 fn inline_box_kind(render_node: &RenderNode<'_>) -> InlineBoxKind {
-  if matches!(render_node.context.style.position, Position::Absolute) {
+  if render_node.context.style.position.is_out_of_flow() {
     InlineBoxKind::OutOfFlow
   } else if render_node.context.style.float != Float::None {
     InlineBoxKind::CustomOutOfFlow

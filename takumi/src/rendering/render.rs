@@ -215,6 +215,10 @@ fn collect_measure_result<'g>(
     container_size,
   })];
   let mut measured_by_node_id: HashMap<usize, MeasuredNode> = HashMap::new();
+  // Hoisted out-of-flow nodes resolve geometry against their containing block.
+  // Memoize each node's transform and content box for hoisted children to base on.
+  let mut node_transforms: HashMap<NodeId, Affine> = HashMap::new();
+  let mut node_content_box: HashMap<NodeId, Size<Option<f32>>> = HashMap::new();
 
   while let Some(visit) = visits.pop() {
     match visit {
@@ -238,6 +242,7 @@ fn collect_measure_result<'g>(
           layout.size,
           &current.context.sizing,
         );
+        node_transforms.insert(node_id, local_transform);
 
         let mut children = Vec::new();
         let mut runs = Vec::new();
@@ -383,15 +388,15 @@ fn collect_measure_result<'g>(
           continue;
         }
 
-        let Some(render_children) = current.children.as_deref() else {
+        if current.children.is_none() {
           measured_by_node_id.insert(
             usize::from(node_id),
             create_measured_node(layout, local_transform, children, runs),
           );
           continue;
-        };
+        }
 
-        let layout_children = collect_layout_children(layout_results, node_id, render_children)?;
+        let layout_children = collect_layout_children(layout_results, node_id)?;
         if layout_children.is_empty() {
           measured_by_node_id.insert(
             usize::from(node_id),
@@ -404,6 +409,7 @@ fn collect_measure_result<'g>(
           width: Some(layout.content_box_width()),
           height: Some(layout.content_box_height()),
         };
+        node_content_box.insert(node_id, child_container_size);
 
         visits.push(TraversalVisit::Exit(MeasureExit {
           node_id,
@@ -417,11 +423,18 @@ fn collect_measure_result<'g>(
         for child in layout_children.iter().rev() {
           let mut child_path = path.clone();
           child_path.push(child.render_index);
+          let (base_transform, base_container) = match child.hoisted_cb {
+            Some(cb) => (
+              *node_transforms.get(&cb).unwrap_or(&local_transform),
+              *node_content_box.get(&cb).unwrap_or(&child_container_size),
+            ),
+            None => (local_transform, child_container_size),
+          };
           visits.push(TraversalVisit::Enter(TraversalEnter {
             path: child_path,
             node_id: child.node_id,
-            transform: local_transform,
-            container_size: child_container_size,
+            transform: base_transform,
+            container_size: base_container,
           }));
         }
       }
@@ -648,8 +661,8 @@ mod tests {
       Viewport,
       node::Node,
       style::{
-        AnimationFillMode, AnimationTime, AnimationTimingFunction, Color, ColorInput, KeyframeRule,
-        KeyframesRule, Length, Length::Px, Position, Style, StyleDeclaration,
+        AnimationFillMode, AnimationTime, AnimationTimingFunction, Color, ColorInput, Display,
+        KeyframeRule, KeyframesRule, Length, Length::Px, Position, Style, StyleDeclaration,
       },
     },
     rendering::measure_layout,
@@ -800,6 +813,57 @@ mod tests {
     };
 
     assert_eq!(layout.width, 150.0);
+  }
+
+  #[test]
+  fn measure_resolves_absolute_against_relative_skipping_static() {
+    // root(relative) > mid(static, offset by margin) > abs(absolute).
+    // The absolute's containing block is the relative root, not the static
+    // middle, so its transform must resolve against the root's origin (0, 0)
+    // plus its own insets — independent of the static middle's offset.
+    let global = GlobalContext::default();
+    let abs = Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::position(Position::Absolute))
+        .with(StyleDeclaration::left(Px(40.0)))
+        .with(StyleDeclaration::top(Px(30.0)))
+        .with(StyleDeclaration::width(Px(10.0)))
+        .with(StyleDeclaration::height(Px(10.0))),
+    );
+    let mid = Node::container([abs]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::position(Position::Static))
+        .with(StyleDeclaration::margin_left(Px(50.0)))
+        .with(StyleDeclaration::margin_top(Px(50.0)))
+        .with(StyleDeclaration::width(Px(100.0)))
+        .with(StyleDeclaration::height(Px(100.0))),
+    );
+    let root = Node::container([mid]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::position(Position::Relative))
+        .with(StyleDeclaration::width(Px(200.0)))
+        .with(StyleDeclaration::height(Px(200.0))),
+    );
+
+    let options = RenderOptions::builder()
+      .global(&global)
+      .viewport(Viewport::new((200, 200)))
+      .node(root)
+      .build();
+
+    let layout = match measure_layout(options) {
+      Ok(layout) => layout,
+      Err(_) => return,
+    };
+    let mid_node = &layout.children[0];
+    let abs_node = &mid_node.children[0];
+
+    // mid (static, in-flow) carries the margin offset; abs (absolute) resolves
+    // against the relative root, so it sits at its own insets, not mid's offset.
+    assert_eq!((mid_node.transform[4], mid_node.transform[5]), (50.0, 50.0));
+    assert_eq!((abs_node.transform[4], abs_node.transform[5]), (40.0, 30.0));
   }
 
   #[test]
