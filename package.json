@@ -23,8 +23,8 @@
     "@arethetypeswrong/core": "^0.18.3",
     "@changesets/cli": "^2.31.0",
     "lefthook": "^2.1.9",
-    "oxfmt": "^0.52.0",
-    "oxlint": "^1.67.0",
+    "oxfmt": "^0.53.0",
+    "oxlint": "^1.68.0",
     "publint": "^0.3.21",
     "takumi-js": "workspace:*",
     "typescript": "catalog:"
@@ -32,15 +32,15 @@
   "catalog": {
     "@types/bun": "^1.3.14",
     "@types/node": "^25.9.1",
-    "@types/react": "19.2.15",
+    "@types/react": "19.2.16",
     "@types/react-dom": "^19.2.3",
     "lucide-react": "^1.17.0",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "tsdown": "^0.22.1",
     "unrun": "^0.3.0",
     "typescript": "6.0.3",
-    "vite": "^8.0.14",
-    "vitest": "^4.1.7"
+    "vite": "^8.0.16",
+    "vitest": "^4.1.8"
   }
 }

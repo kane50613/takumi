@@ -31,7 +31,7 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-resizable-panels": "^4.11.2",
-    "react-server-dom-webpack": "^19.2.6",
+    "react-server-dom-webpack": "^19.2.7",
     "shiki": "^4.1.0",
     "sucrase": "^3.35.1",
     "tailwind-merge": "^3.6.0",

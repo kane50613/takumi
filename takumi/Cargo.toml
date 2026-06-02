@@ -52,7 +52,7 @@ version = "1.15"
 features = ["serde"]
 
 [dependencies.parley]
-version = "0.9"
+version = "0.10"
 default-features = false
 features = ["std"]
 
