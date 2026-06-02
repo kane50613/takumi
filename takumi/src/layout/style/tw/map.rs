@@ -129,6 +129,7 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
     PropertyParser::BgSize(TailwindProperty::BackgroundSize),
   ],
   "bg-clip" => &[PropertyParser::BackgroundClip(TailwindProperty::BackgroundClip)],
+  "mask" => &[PropertyParser::BgImage(TailwindProperty::MaskImage)],
   "bg-linear" => &[PropertyParser::Angle(TailwindProperty::BgLinearAngle)],
   "bg-conic" => &[PropertyParser::Angle(TailwindProperty::BgConicAngle)],
   "from" => &[

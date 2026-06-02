@@ -38,6 +38,7 @@ export function extractResourceUrls(node: Node): string[] {
 
     collectStyleUrls(current.style);
     collectStyleUrls(current.preset);
+    collectCssUrls(current.tw, urls);
 
     if (current.type === "image") {
       if (typeof current.src === "string" && isFetchableResourceUrl(current.src)) {

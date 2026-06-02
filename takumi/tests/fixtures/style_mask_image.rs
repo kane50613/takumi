@@ -103,6 +103,15 @@ fn test_style_mask_image_with_background_image() {
 }
 
 #[test]
+fn test_style_mask_image_url() {
+  let mask_image = BackgroundImages::from_str("url(assets/images/luma.svg)").unwrap();
+
+  let container = create_container_with_mask(mask_image, Color([255, 0, 0, 255]));
+
+  run_fixture_test(container, "style_mask_image_url");
+}
+
+#[test]
 fn test_style_mask_image_on_image_node() {
   let mask_image =
     BackgroundImages::from_str("radial-gradient(circle, black 60%, transparent 100%)").unwrap();

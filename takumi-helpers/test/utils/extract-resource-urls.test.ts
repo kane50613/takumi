@@ -31,6 +31,16 @@ describe("extractResourceUrls", () => {
     expect(extractResourceUrls(node)).toEqual([remoteImageUrl, backgroundUrl, maskUrl]);
   });
 
+  test("extracts urls from tailwind arbitrary values", () => {
+    const maskUrl = "https://example.com/logo.svg";
+    const backgroundUrl = "https://example.com/bg.png";
+    const node = container({
+      tw: `mask-[url('${maskUrl}')] bg-[url(${backgroundUrl})]`,
+    });
+
+    expect(extractResourceUrls(node)).toEqual([maskUrl, backgroundUrl]);
+  });
+
   test("ignores malformed css url values", () => {
     const node = container({
       style: {

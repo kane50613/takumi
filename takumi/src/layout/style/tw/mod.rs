@@ -643,6 +643,8 @@ pub enum TailwindProperty {
   BackgroundRepeat(BackgroundRepeat),
   /// `background-image` property.
   BackgroundImage(BackgroundImage),
+  /// `mask-image` property.
+  MaskImage(BackgroundImage),
   /// `gap` property.
   Gap(LengthDefaultsToZero),
   /// `column-gap` property.
@@ -965,10 +967,10 @@ macro_rules! push_decl {
 
 impl TailwindProperty {
   fn resource_url(&self) -> Option<&str> {
-    if let TailwindProperty::BackgroundImage(BackgroundImage::Url(url)) = self {
-      Some(url.as_ref())
-    } else {
-      None
+    match self {
+      TailwindProperty::BackgroundImage(BackgroundImage::Url(url))
+      | TailwindProperty::MaskImage(BackgroundImage::Url(url)) => Some(url.as_ref()),
+      _ => None,
     }
   }
 
@@ -1188,6 +1190,9 @@ impl TailwindProperty {
         important,
         background_image(Some([background_image].into()))
       ),
+      TailwindProperty::MaskImage(mask_image) => {
+        push_decl!(builder, important, mask_image(Some([mask_image].into())))
+      }
       TailwindProperty::BorderDefault => {
         push_decl!(
           builder,
@@ -1838,6 +1843,16 @@ mod tests {
       Some(TailwindProperty::Color(ColorInput::Value(Color([
         0, 191, 255, 255
       ]))))
+    );
+  }
+
+  #[test]
+  fn test_parse_arbitrary_mask_image_url() {
+    assert_eq!(
+      TailwindProperty::parse("mask-[url('https://example.com/logo.svg')]"),
+      Some(TailwindProperty::MaskImage(BackgroundImage::Url(
+        "https://example.com/logo.svg".into()
+      )))
     );
   }
 

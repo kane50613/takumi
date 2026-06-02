@@ -1001,4 +1001,18 @@ mod tests {
 
     assert_eq!(tasks, vec![tailwind_url, preset_url]);
   }
+
+  #[test]
+  fn collect_style_fetch_tasks_collects_tailwind_mask_image_url() {
+    let mask_url = "/logo.svg";
+    let Ok(tw) = TailwindValues::from_str("mask-[url(/logo.svg)]") else {
+      return;
+    };
+    let node = Node::container([]).with_tw(tw);
+
+    let mut urls = Xxh3HashSet::default();
+    node.style_resource_urls(&mut urls);
+
+    assert_eq!(urls.into_iter().collect::<Vec<_>>(), vec![mask_url]);
+  }
 }
