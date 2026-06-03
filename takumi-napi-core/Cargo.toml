@@ -13,7 +13,7 @@ serde = "1.0"
 rayon = "1.10"
 
 [dependencies.parley]
-version = "0.9"
+version = "0.10"
 default-features = false
 features = ["std"]
 
