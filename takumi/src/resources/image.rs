@@ -15,7 +15,7 @@ use image::RgbaImage;
 use tiny_skia::Pixmap;
 
 use crate::{
-  layout::style::{Color, ImageScalingAlgorithm},
+  layout::style::{Color, ImageScalingAlgorithm, IntrinsicSizing},
   rendering::{Sizing, premultiplied_pixmap_from_rgba},
   resources::image_decoder::{DecodedGif, DecodedImage, decode_image},
 };
@@ -47,7 +47,19 @@ pub struct SvgSource {
   uses_current_color: bool,
   /// Parsed SVG tree used for size and initial metadata.
   pub(crate) tree: Arc<resvg::usvg::Tree>,
+  /// Intrinsic dimensions (non-percentage `width`/`height`) and `viewBox`
+  /// aspect ratio, for CSS `background-size`/`mask-size` resolution.
+  intrinsic: SvgIntrinsic,
   raster_cache: Arc<SvgRasterCache>,
+}
+
+/// Intrinsic width/height (in SVG user units) and aspect ratio of an SVG root.
+#[cfg(feature = "svg")]
+#[derive(Debug, Clone, Copy, Default)]
+struct SvgIntrinsic {
+  width: Option<f32>,
+  height: Option<f32>,
+  ratio: Option<f32>,
 }
 
 /// A decoded GIF image with frame timing metadata.
@@ -290,16 +302,26 @@ impl FromStr for SvgSource {
   type Err = ImageResourceError;
 
   fn from_str(src: &str) -> Result<Self, Self::Err> {
-    use resvg::usvg::Tree;
+    use resvg::usvg::{Error, Options, Tree};
+    use roxmltree::{Document, ParsingOptions};
 
-    let sanitized_svg = strip_unsupported_svg_text_nodes(src);
-    let tree = Tree::from_str(&sanitized_svg, &Default::default())
-      .map_err(ImageResourceError::SvgParseError)?;
+    // One parse, shared with usvg via `from_xmltree` (what `from_str` does
+    // internally). No text stripping: usvg drops `<text>`/`<tspan>` with its
+    // `text` feature off.
+    let options = ParsingOptions {
+      allow_dtd: true,
+      ..Default::default()
+    };
+    let document = Document::parse_with_options(src, options).map_err(Error::ParsingFailed)?;
+
+    let tree = Tree::from_xmltree(&document, &Options::default())?;
+    let intrinsic = svg_intrinsic_sizing(document.root_element(), tree.size());
 
     Ok(SvgSource {
-      uses_current_color: sanitized_svg.contains("currentColor"),
-      source: Arc::from(sanitized_svg),
+      uses_current_color: src.contains("currentColor"),
+      source: Arc::from(src),
       tree: Arc::new(tree),
+      intrinsic,
       raster_cache: Arc::default(),
     })
   }
@@ -421,6 +443,27 @@ impl ImageSource {
     let dpr = sizing.viewport.device_pixel_ratio;
     (width * dpr, height * dpr)
   }
+
+  /// Intrinsic sizing for `background-size`/`mask-size` (§5.3). Bitmaps and GIFs
+  /// have both dimensions; an SVG may have only a `viewBox` ratio.
+  pub(crate) fn intrinsic_sizing(&self, sizing: &Sizing) -> IntrinsicSizing {
+    let dpr = sizing.viewport.device_pixel_ratio;
+    match self {
+      #[cfg(feature = "svg")]
+      ImageSource::Svg(svg) => IntrinsicSizing {
+        width: svg.intrinsic.width.map(|width| width * dpr),
+        height: svg.intrinsic.height.map(|height| height * dpr),
+        ratio: svg.intrinsic.ratio,
+      },
+      ImageSource::Bitmap(bitmap) => {
+        IntrinsicSizing::from_dimensions(bitmap.width() as f32 * dpr, bitmap.height() as f32 * dpr)
+      }
+      ImageSource::Gif(gif) => {
+        let frame = &gif.frames[0].pixmap;
+        IntrinsicSizing::from_dimensions(frame.width() as f32 * dpr, frame.height() as f32 * dpr)
+      }
+    }
+  }
 }
 
 /// Check if the string looks like an SVG image.
@@ -428,66 +471,44 @@ pub(crate) fn is_svg_like(src: &str) -> bool {
   src.contains("<svg") && src.contains("xmlns")
 }
 
+/// SVG root intrinsic sizing per <https://www.w3.org/TR/SVG/coords.html#IntrinsicSizing>:
+/// a non-percentage `width`/`height` is an intrinsic dimension, the `viewBox`
+/// gives the ratio. Absolute px come from `resolved_size` (usvg's parsed size)
+/// to avoid reimplementing SVG length units.
 #[cfg(feature = "svg")]
-fn strip_unsupported_svg_text_nodes(src: &str) -> String {
-  use std::ops::Range;
-
-  use roxmltree::{Document, Node};
-
-  fn merge_ranges(mut ranges: Vec<Range<usize>>) -> Vec<Range<usize>> {
-    ranges.sort_by_key(|range| (range.start, range.end));
-
-    let mut merged: Vec<Range<usize>> = Vec::with_capacity(ranges.len());
-    for range in ranges {
-      if let Some(last) = merged.last_mut()
-        && range.start <= last.end
-      {
-        last.end = last.end.max(range.end);
-      } else {
-        merged.push(range);
-      }
-    }
-
-    merged
-  }
-
-  let Ok(document) = Document::parse(src) else {
-    return src.to_owned();
+fn svg_intrinsic_sizing(root: roxmltree::Node, resolved_size: resvg::usvg::Size) -> SvgIntrinsic {
+  let is_absolute = |name| {
+    root
+      .attribute(name)
+      .map(str::trim)
+      .is_some_and(|value| !value.is_empty() && !value.ends_with('%'))
   };
 
-  let ranges = document
-    .descendants()
-    .filter(Node::is_element)
-    .filter_map(|node| {
-      let name = node.tag_name().name();
-      if name == "text" || name == "tspan" {
-        Some(node.range())
-      } else {
-        None
-      }
-    })
-    .collect::<Vec<_>>();
+  let width = is_absolute("width").then(|| resolved_size.width());
+  let height = is_absolute("height").then(|| resolved_size.height());
 
-  if ranges.is_empty() {
-    return src.to_owned();
+  let ratio = match (width, height) {
+    (Some(width), Some(height)) if width != 0.0 && height != 0.0 => Some(width / height),
+    _ => root.attribute("viewBox").and_then(parse_viewbox_ratio),
+  };
+
+  SvgIntrinsic {
+    width,
+    height,
+    ratio,
   }
+}
 
-  let merged_ranges = merge_ranges(ranges);
-  let mut stripped = String::with_capacity(src.len());
-  let mut cursor = 0;
-
-  for range in merged_ranges {
-    if range.start > cursor {
-      stripped.push_str(&src[cursor..range.start]);
-    }
-    cursor = cursor.max(range.end);
-  }
-
-  if cursor < src.len() {
-    stripped.push_str(&src[cursor..]);
-  }
-
-  stripped
+/// Parse the aspect ratio (`width / height`) from a `viewBox` (`min-x min-y
+/// width height`).
+#[cfg(feature = "svg")]
+fn parse_viewbox_ratio(view_box: &str) -> Option<f32> {
+  let mut numbers = view_box
+    .split([' ', ',', '\t', '\n', '\r'])
+    .filter(|part| !part.is_empty());
+  let width: f32 = numbers.nth(2)?.parse().ok()?;
+  let height: f32 = numbers.next()?.parse().ok()?;
+  (width > 0.0 && height > 0.0).then_some(width / height)
 }
 
 /// Represents the state of an image in the rendering system.
@@ -537,6 +558,44 @@ mod tests {
 
   use super::*;
   use crate::resources::image_decoder::DecodedGifFrame;
+
+  /// `width`/`height` attributes give intrinsic dimensions; a `viewBox` alone
+  /// gives only an aspect ratio (per the SVG/CSS intrinsic sizing rules).
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_intrinsic_distinguishes_viewbox_from_dimensions() {
+    fn intrinsic(svg: String) -> SvgIntrinsic {
+      let Ok(source) = svg.parse::<SvgSource>() else {
+        unreachable!("valid svg");
+      };
+      source.intrinsic
+    }
+    let ns = r#"xmlns="http://www.w3.org/2000/svg""#;
+
+    // viewBox only: aspect ratio, no intrinsic dimensions.
+    let only = intrinsic(format!(r#"<svg {ns} viewBox="0 0 128 128"/>"#));
+    assert_eq!(
+      (only.width, only.height, only.ratio),
+      (None, None, Some(1.0))
+    );
+
+    // Absolute width/height: intrinsic dimensions.
+    let sized = intrinsic(format!(r#"<svg {ns} width="102" height="38"/>"#));
+    let ratio = Some(102.0 / 38.0);
+    assert_eq!(
+      (sized.width, sized.height, sized.ratio),
+      (Some(102.0), Some(38.0), ratio)
+    );
+
+    // Percentage width/height are not intrinsic; the ratio comes from the viewBox.
+    let percentage = intrinsic(format!(
+      r#"<svg {ns} width="100%" height="100%" viewBox="0 0 16 8"/>"#
+    ));
+    assert_eq!(
+      (percentage.width, percentage.height, percentage.ratio),
+      (None, None, Some(2.0))
+    );
+  }
 
   fn premul_at(image: &RenderedImage<'_>, x: u32, y: u32) -> PremultipliedColorU8 {
     match image {
@@ -704,18 +763,37 @@ mod tests {
     Ok(())
   }
 
+  /// usvg drops `<text>`/`<tspan>` (text feature off), so we no longer strip
+  /// them: the SVG renders identically with and without the text nodes.
   #[cfg(feature = "svg")]
   #[test]
-  fn parse_svg_str_strips_text_and_tspan_nodes() -> Result<(), ImageResourceError> {
-    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect x="0" y="0" width="20" height="20" fill="#ff0000"/><text x="2" y="10">hello <tspan>world</tspan></text><g><tspan>orphan</tspan></g></svg>"##;
-    let image: ImageSource = SvgSource::from_str(svg)?.into();
-    let ImageSource::Svg(svg) = image else {
-      return Ok(());
-    };
+  fn svg_text_nodes_are_ignored_not_stripped() -> Result<(), ImageResourceError> {
+    fn rendered_data(svg: &str) -> Result<Vec<u8>, ImageResourceError> {
+      let image: ImageSource = SvgSource::from_str(svg)?.into();
+      let rendered =
+        image.render_for_layout(8, 8, ImageScalingAlgorithm::Auto, 0, Color::black())?;
+      let RenderedImage::Rasterized(pixmap) = rendered else {
+        unreachable!("svg renders to a rasterized pixmap");
+      };
+      Ok(pixmap.data().to_vec())
+    }
 
-    assert!(svg.source.contains("<rect"));
-    assert!(!svg.source.contains("<text"));
-    assert!(!svg.source.contains("<tspan"));
+    let with_text = r##"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="#ff0000"/><text x="1" y="5">hi <tspan>there</tspan></text></svg>"##;
+    let without_text = r##"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="#ff0000"/></svg>"##;
+
+    assert_eq!(rendered_data(with_text)?, rendered_data(without_text)?);
+    Ok(())
+  }
+
+  /// `<text>` inside `clipPath` and `foreignObject` must not break parsing.
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_with_unsupported_nodes_still_parses() -> Result<(), ImageResourceError> {
+    let clip_path_text = r##"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><clipPath id="c"><text>x</text></clipPath><rect width="8" height="8" fill="#ff0000" clip-path="url(#c)"/></svg>"##;
+    let foreign_object = r##"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><foreignObject width="8" height="8"><div xmlns="http://www.w3.org/1999/xhtml">x</div></foreignObject><rect width="8" height="8" fill="#ff0000"/></svg>"##;
+
+    SvgSource::from_str(clip_path_text)?;
+    SvgSource::from_str(foreign_object)?;
     Ok(())
   }
 

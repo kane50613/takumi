@@ -17,11 +17,61 @@ pub(crate) enum AutoBackgroundAxis {
   Height,
 }
 
+/// Intrinsic sizing of an image, per CSS Images Level 3 §5.3. `width`/`height`
+/// are set only where the image has an intrinsic dimension on that axis (a
+/// non-percentage SVG `width`/`height`); a `viewBox`-only SVG has `ratio` alone.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub(crate) struct IntrinsicSizing {
+  pub(crate) width: Option<f32>,
+  pub(crate) height: Option<f32>,
+  pub(crate) ratio: Option<f32>,
+}
+
+impl IntrinsicSizing {
+  pub(crate) fn from_dimensions(width: f32, height: f32) -> Self {
+    Self {
+      width: Some(width),
+      height: Some(height),
+      ratio: (height != 0.0).then_some(width / height),
+    }
+  }
+
+  /// §5.3 default sizing algorithm with `area` as the default object size
+  /// (Blink's `ConcreteObjectSize`).
+  fn concrete_size(self, area_width: f32, area_height: f32) -> (u32, u32) {
+    let round = |width: f32, height: f32| (width.round() as u32, height.round() as u32);
+
+    match (self.width, self.height) {
+      (Some(width), Some(height)) => round(width, height),
+      (Some(width), None) => match self.ratio {
+        Some(ratio) if ratio != 0.0 => round(width, width / ratio),
+        _ => round(width, area_height),
+      },
+      (None, Some(height)) => match self.ratio {
+        Some(ratio) => round(height * ratio, height),
+        None => round(area_width, height),
+      },
+      (None, None) => match self.ratio {
+        // Contain the intrinsic ratio within the default object size.
+        Some(ratio) if ratio != 0.0 => {
+          let solution_width = area_height * ratio;
+          if solution_width <= area_width {
+            round(solution_width, area_height)
+          } else {
+            round(area_width, area_width / ratio)
+          }
+        }
+        _ => round(area_width, area_height),
+      },
+    }
+  }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct ResolvedBackgroundSize {
   pub(crate) width: u32,
   pub(crate) height: u32,
-  pub(crate) intrinsic_size: Option<(f32, f32)>,
+  pub(crate) intrinsic_ratio: Option<f32>,
   pub(crate) auto_axis: Option<AutoBackgroundAxis>,
 }
 
@@ -146,7 +196,7 @@ impl BackgroundSize {
     self,
     area: Size<u32>,
     sizing: &Sizing,
-    intrinsic_size: Option<(f32, f32)>,
+    intrinsic: IntrinsicSizing,
   ) -> ResolvedBackgroundSize {
     match self {
       BackgroundSize::Explicit { width, height } => {
@@ -154,18 +204,18 @@ impl BackgroundSize {
           return ResolvedBackgroundSize {
             width: width.to_px(sizing, area.width as f32).max(0.0) as u32,
             height: height.to_px(sizing, area.height as f32).max(0.0) as u32,
-            intrinsic_size: None,
+            intrinsic_ratio: None,
             auto_axis: None,
           };
         }
 
         let (resolved_width, resolved_height) =
-          resolve_auto_background_size(width, height, area, sizing, intrinsic_size);
+          resolve_auto_background_size(width, height, area, sizing, intrinsic);
 
         ResolvedBackgroundSize {
           width: resolved_width,
           height: resolved_height,
-          intrinsic_size,
+          intrinsic_ratio: intrinsic.ratio,
           auto_axis: match (width == Length::Auto, height == Length::Auto) {
             (true, false) => Some(AutoBackgroundAxis::Width),
             (false, true) => Some(AutoBackgroundAxis::Height),
@@ -173,63 +223,24 @@ impl BackgroundSize {
           },
         }
       }
-      BackgroundSize::Cover => {
-        let Some((intrinsic_width, intrinsic_height)) = intrinsic_size else {
+      // cover/contain scale the intrinsic ratio to the area; with no ratio the
+      // area is filled (§5.3).
+      BackgroundSize::Cover | BackgroundSize::Contain => {
+        let Some(ratio) = intrinsic.ratio.filter(|ratio| *ratio > 0.0) else {
           return ResolvedBackgroundSize {
-            width: 0,
-            height: 0,
-            intrinsic_size: None,
+            width: area.width,
+            height: area.height,
+            intrinsic_ratio: intrinsic.ratio,
             auto_axis: None,
           };
         };
 
-        if intrinsic_width == 0.0 || intrinsic_height == 0.0 {
-          return ResolvedBackgroundSize {
-            width: 0,
-            height: 0,
-            intrinsic_size: Some((intrinsic_width, intrinsic_height)),
-            auto_axis: None,
-          };
-        }
-
-        let scale_x = area.width as f32 / intrinsic_width;
-        let scale_y = area.height as f32 / intrinsic_height;
-        let scale = scale_x.max(scale_y);
+        let (width, height) = fit_ratio_to_area(ratio, area, matches!(self, BackgroundSize::Cover));
 
         ResolvedBackgroundSize {
-          width: (intrinsic_width * scale).round() as u32,
-          height: (intrinsic_height * scale).round() as u32,
-          intrinsic_size: Some((intrinsic_width, intrinsic_height)),
-          auto_axis: None,
-        }
-      }
-      BackgroundSize::Contain => {
-        let Some((intrinsic_width, intrinsic_height)) = intrinsic_size else {
-          return ResolvedBackgroundSize {
-            width: 0,
-            height: 0,
-            intrinsic_size: None,
-            auto_axis: None,
-          };
-        };
-
-        if intrinsic_width == 0.0 || intrinsic_height == 0.0 {
-          return ResolvedBackgroundSize {
-            width: 0,
-            height: 0,
-            intrinsic_size: Some((intrinsic_width, intrinsic_height)),
-            auto_axis: None,
-          };
-        }
-
-        let scale_x = area.width as f32 / intrinsic_width;
-        let scale_y = area.height as f32 / intrinsic_height;
-        let scale = scale_x.min(scale_y);
-
-        ResolvedBackgroundSize {
-          width: (intrinsic_width * scale).round() as u32,
-          height: (intrinsic_height * scale).round() as u32,
-          intrinsic_size: Some((intrinsic_width, intrinsic_height)),
+          width,
+          height,
+          intrinsic_ratio: Some(ratio),
           auto_axis: None,
         }
       }
@@ -237,53 +248,52 @@ impl BackgroundSize {
   }
 }
 
+/// Scale a rectangle of the given aspect ratio (`width / height`) to cover or
+/// contain `area`, returning rounded device-pixel dimensions.
+fn fit_ratio_to_area(ratio: f32, area: Size<u32>, cover: bool) -> (u32, u32) {
+  let area_width = area.width as f32;
+  let area_height = area.height as f32;
+  let width_at_area_height = area_height * ratio;
+
+  let (width, height) = if (width_at_area_height >= area_width) == cover {
+    (width_at_area_height, area_height)
+  } else {
+    (area_width, area_width / ratio)
+  };
+
+  (width.round() as u32, height.round() as u32)
+}
+
 fn resolve_auto_background_size(
   width: Length,
   height: Length,
   area: Size<u32>,
   sizing: &Sizing,
-  intrinsic_size: Option<(f32, f32)>,
+  intrinsic: IntrinsicSizing,
 ) -> (u32, u32) {
+  let area_width = area.width as f32;
+  let area_height = area.height as f32;
+
   match (width == Length::Auto, height == Length::Auto) {
-    (true, true) => {
-      let Some((intrinsic_width, intrinsic_height)) = intrinsic_size else {
-        return (area.width, area.height);
-      };
-
-      (
-        intrinsic_width.round() as u32,
-        intrinsic_height.round() as u32,
-      )
-    }
+    (true, true) => intrinsic.concrete_size(area_width, area_height),
+    // One axis definite: the auto axis follows the ratio, else that axis'
+    // intrinsic dimension, else the area (§5.3).
     (true, false) => {
-      let fixed_height = height.to_px(sizing, area.height as f32).max(0.0);
-      let Some((intrinsic_width, intrinsic_height)) = intrinsic_size else {
-        return (area.width, fixed_height as u32);
+      let fixed_height = height.to_px(sizing, area_height).max(0.0);
+      let resolved_width = match intrinsic.ratio {
+        Some(ratio) => fixed_height * ratio,
+        None => intrinsic.width.unwrap_or(area_width),
       };
-      if intrinsic_width == 0.0 || intrinsic_height == 0.0 {
-        return (0, 0);
-      }
-
-      let scale_factor = fixed_height / intrinsic_height;
-      (
-        (intrinsic_width * scale_factor).round() as u32,
-        fixed_height as u32,
-      )
+      (resolved_width.round() as u32, fixed_height.round() as u32)
     }
     (false, true) => {
-      let fixed_width = width.to_px(sizing, area.width as f32).max(0.0);
-      let Some((intrinsic_width, intrinsic_height)) = intrinsic_size else {
-        return (fixed_width as u32, area.height);
+      let fixed_width = width.to_px(sizing, area_width).max(0.0);
+      let resolved_height = match intrinsic.ratio {
+        Some(ratio) if ratio != 0.0 => fixed_width / ratio,
+        Some(_) => 0.0,
+        None => intrinsic.height.unwrap_or(area_height),
       };
-      if intrinsic_width == 0.0 || intrinsic_height == 0.0 {
-        return (0, 0);
-      }
-
-      let scale_factor = fixed_width / intrinsic_width;
-      (
-        fixed_width as u32,
-        (intrinsic_height * scale_factor).round() as u32,
-      )
+      (fixed_width.round() as u32, resolved_height.round() as u32)
     }
     (false, false) => (0, 0),
   }
@@ -416,5 +426,48 @@ mod tests {
   #[test]
   fn errors_on_invalid_first_layer() {
     assert!(BackgroundSizes::from_str("nope").is_err());
+  }
+
+  // `auto auto` (the default `background-size`/`mask-size`) sizing, per the CSS
+  // Images Level 3 §5.3 default sizing algorithm.
+
+  #[test]
+  fn auto_size_uses_intrinsic_dimensions_when_present() {
+    let intrinsic = IntrinsicSizing::from_dimensions(102.0, 38.0);
+    assert_eq!(intrinsic.concrete_size(1200.0, 630.0), (102, 38));
+  }
+
+  #[test]
+  fn auto_size_contains_ratio_only_image_within_area() {
+    // viewBox-only: contained within the area, not sized to the viewBox (which
+    // would tile under the default `repeat`).
+    let intrinsic = IntrinsicSizing {
+      width: None,
+      height: None,
+      ratio: Some(1.0),
+    };
+    assert_eq!(intrinsic.concrete_size(400.0, 400.0), (400, 400));
+    assert_eq!(intrinsic.concrete_size(1200.0, 630.0), (630, 630));
+  }
+
+  #[test]
+  fn auto_size_fills_area_without_intrinsic_information() {
+    // No dimensions and no ratio (e.g. a gradient): fill the positioning area.
+    assert_eq!(
+      IntrinsicSizing::default().concrete_size(1200.0, 630.0),
+      (1200, 630)
+    );
+  }
+
+  #[test]
+  fn contain_and_cover_scale_ratio_to_area() {
+    let area = Size {
+      width: 800,
+      height: 400,
+    };
+    // A 1:1 ratio: `contain` is the largest square fitting the area, `cover`
+    // the smallest square covering it.
+    assert_eq!(fit_ratio_to_area(1.0, area, false), (400, 400));
+    assert_eq!(fit_ratio_to_area(1.0, area, true), (800, 800));
   }
 }
