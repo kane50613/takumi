@@ -451,6 +451,38 @@ pub struct TailwindValue {
   pub important: bool,
 }
 
+/// Splits a token at the first top-level variant `:`, mirroring Tailwind's
+/// `segment`: a `:` nested in brackets, quotes, or escaped by `\` is not a
+/// separator, so `url('https://…')` stays intact.
+fn split_variant(token: &str) -> Option<(&str, &str)> {
+  let bytes = token.as_bytes();
+  let mut stack: Vec<u8> = Vec::new();
+  let mut index = 0;
+  while index < bytes.len() {
+    match bytes[index] {
+      b'\\' => index += 1, // skip the escaped character
+      quote @ (b'\'' | b'"') => {
+        index += 1;
+        while index < bytes.len() && bytes[index] != quote {
+          index += if bytes[index] == b'\\' { 2 } else { 1 };
+        }
+      }
+      b'(' => stack.push(b')'),
+      b'[' => stack.push(b']'),
+      b'{' => stack.push(b'}'),
+      closing @ (b')' | b']' | b'}') => {
+        if stack.last() == Some(&closing) {
+          stack.pop();
+        }
+      }
+      b':' if stack.is_empty() => return Some((&token[..index], &token[index + 1..])),
+      _ => {}
+    }
+    index += 1;
+  }
+  None
+}
+
 impl TailwindValue {
   fn resource_url(&self, viewport: Viewport) -> Option<&str> {
     if let Some(breakpoint) = self.breakpoint
@@ -479,7 +511,7 @@ impl TailwindValue {
     let mut breakpoint = None;
 
     // Breakpoint. sm:mt-0
-    if let Some((breakpoint_token, rest)) = token.split_once(':') {
+    if let Some((breakpoint_token, rest)) = split_variant(token) {
       breakpoint = Some(Breakpoint::parse(breakpoint_token)?);
       token = rest;
     }
@@ -875,16 +907,82 @@ pub enum TailwindProperty {
 }
 
 fn extract_arbitrary_value(suffix: &str) -> Option<Cow<'_, str>> {
-  if suffix.starts_with('[') && suffix.ends_with(']') {
-    let value = &suffix[1..suffix.len() - 1];
-    if value.contains('_') {
-      Some(Cow::Owned(value.replace('_', " ")))
-    } else {
-      Some(Cow::Borrowed(value))
-    }
+  let value = suffix.strip_prefix('[')?.strip_suffix(']')?;
+  Some(decode_arbitrary_value(value))
+}
+
+enum FnKind {
+  Url,
+  VarTheme,
+  Other,
+}
+
+fn classify_fn(name: &str) -> FnKind {
+  if name == "url" || name.ends_with("_url") {
+    FnKind::Url
+  } else if matches!(name, "var" | "theme") || name.ends_with("_var") || name.ends_with("_theme") {
+    FnKind::VarTheme
   } else {
-    None
+    FnKind::Other
   }
+}
+
+fn is_ident_byte(byte: u8) -> bool {
+  byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_'
+}
+
+/// Mirrors Tailwind's `decodeArbitraryValue`: `_` becomes a space and `\_` a
+/// literal `_`, but underscores inside `url(...)` and the first argument of
+/// `var()`/`theme()` are preserved.
+fn decode_arbitrary_value(value: &str) -> Cow<'_, str> {
+  if !value.contains('_') {
+    return Cow::Borrowed(value);
+  }
+
+  let bytes = value.as_bytes();
+  let mut out = String::with_capacity(value.len());
+  let mut stack: Vec<(FnKind, bool)> = Vec::new();
+  let mut ident_start = 0;
+  let mut index = 0;
+  while index < bytes.len() {
+    let byte = bytes[index];
+    if byte == b'\\' && bytes.get(index + 1) == Some(&b'_') {
+      out.push('_');
+      index += 2;
+      ident_start = index;
+    } else if byte == b'_' {
+      let preserved = stack.iter().any(|(kind, _)| matches!(kind, FnKind::Url))
+        || matches!(stack.last(), Some((FnKind::VarTheme, true)));
+      out.push(if preserved { '_' } else { ' ' });
+      index += 1;
+    } else if byte == b'(' {
+      stack.push((classify_fn(&value[ident_start..index]), true));
+      out.push('(');
+      index += 1;
+      ident_start = index;
+    } else if byte == b')' {
+      stack.pop();
+      out.push(')');
+      index += 1;
+      ident_start = index;
+    } else if byte == b',' {
+      if let Some((_, first_arg)) = stack.last_mut() {
+        *first_arg = false;
+      }
+      out.push(',');
+      index += 1;
+      ident_start = index;
+    } else if is_ident_byte(byte) {
+      out.push(byte as char);
+      index += 1;
+    } else {
+      let char_len = value[index..].chars().next().map_or(1, char::len_utf8);
+      out.push_str(&value[index..index + char_len]);
+      index += char_len;
+      ident_start = index;
+    }
+  }
+  Cow::Owned(out)
 }
 
 /// A trait for parsing tailwind properties.
@@ -1853,6 +1951,78 @@ mod tests {
       Some(TailwindProperty::MaskImage(BackgroundImage::Url(
         "https://example.com/logo.svg".into()
       )))
+    );
+  }
+
+  #[test]
+  fn test_split_variant_ignores_colons_in_arbitrary_values() {
+    assert_eq!(split_variant("sm:mt-0"), Some(("sm", "mt-0")));
+    assert_eq!(split_variant("sm:hover:mt-0"), Some(("sm", "hover:mt-0")));
+    assert_eq!(split_variant("mt-0"), None);
+    assert_eq!(
+      split_variant("mask-[url('https://example.com/a.svg')]"),
+      None
+    );
+    assert_eq!(split_variant("grid-cols-[repeat(2,minmax(0,1fr))]"), None);
+    assert_eq!(split_variant("[mask:foo]"), None);
+    assert_eq!(
+      split_variant("md:mask-[url('https://example.com/a.svg')]"),
+      Some(("md", "mask-[url('https://example.com/a.svg')]"))
+    );
+    assert_eq!(split_variant(r#"content-['a:b]']"#), None);
+    assert_eq!(split_variant(r#"content-["a\":b"]"#), None);
+  }
+
+  #[test]
+  fn test_decode_arbitrary_value() {
+    assert_eq!(decode_arbitrary_value("3_1_auto"), "3 1 auto");
+    assert_eq!(decode_arbitrary_value("10px"), "10px");
+    assert_eq!(decode_arbitrary_value(r"foo\_bar"), "foo_bar");
+    assert_eq!(
+      decode_arbitrary_value("url('https://example.com/my_logo.svg')"),
+      "url('https://example.com/my_logo.svg')"
+    );
+    // var()/theme(): first argument keeps underscores, later args don't.
+    assert_eq!(decode_arbitrary_value("var(--my_color)"), "var(--my_color)");
+    assert_eq!(
+      decode_arbitrary_value("theme(--spacing_4)"),
+      "theme(--spacing_4)"
+    );
+    assert_eq!(decode_arbitrary_value("var(--x,_a_b)"), "var(--x, a b)");
+    assert_eq!(decode_arbitrary_value("calc(1_+_2)"), "calc(1 + 2)");
+  }
+
+  #[test]
+  fn test_extract_arbitrary_value_preserves_url_underscores() {
+    assert_eq!(
+      TailwindProperty::parse("mask-[url('https://example.com/my_logo.svg')]"),
+      Some(TailwindProperty::MaskImage(BackgroundImage::Url(
+        "https://example.com/my_logo.svg".into()
+      )))
+    );
+  }
+
+  #[test]
+  fn test_parse_value_arbitrary_url_with_scheme_colon() {
+    let url_image =
+      TailwindProperty::MaskImage(BackgroundImage::Url("https://example.com/a.svg".into()));
+
+    assert_eq!(
+      TailwindValue::parse("mask-[url('https://example.com/a.svg')]"),
+      Some(TailwindValue {
+        property: url_image.clone(),
+        breakpoint: None,
+        important: false,
+      })
+    );
+
+    assert_eq!(
+      TailwindValue::parse("md:mask-[url('https://example.com/a.svg')]"),
+      Some(TailwindValue {
+        property: url_image,
+        breakpoint: Some(Breakpoint(Length::Rem(48.0))),
+        important: false,
+      })
     );
   }
 
