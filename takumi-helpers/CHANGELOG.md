@@ -1,5 +1,17 @@
 # @takumi-rs/helpers
 
+## 1.7.0
+
+### Minor Changes
+
+- b908a4d: Add `googleFont()` to load Google Fonts (static or variable) as font descriptors
+- 80e29da: Type the `textFit` style property on React's `CSSProperties` so it no longer needs a cast
+
+### Patch Changes
+
+- 4748c22: Make `extractResourceUrls` collects `url(...)` from `tw` arbitrary values #742
+- 42d0d03: Use a per-request timeout in `fetchResources` so one slow URL no longer consumes the whole batch's timeout budget
+
 ## 1.6.0
 
 ## 1.5.1

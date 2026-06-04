@@ -1,5 +1,15 @@
 # @takumi-rs/image-response
 
+## 1.7.0
+
+### Patch Changes
+
+- 45a7f4a: Correct `onError` example in README
+- Updated dependencies [89a3088]
+- Updated dependencies [56579a2]
+- Updated dependencies [89a3088]
+  - takumi-js@1.7.0
+
 ## 1.6.0
 
 ### Patch Changes
