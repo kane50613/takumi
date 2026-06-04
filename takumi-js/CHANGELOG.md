@@ -1,5 +1,20 @@
 # takumi-js
 
+## 1.7.0
+
+### Patch Changes
+
+- 89a3088: Route Deno to the WASM bindings instead of the native addon
+- 56579a2: Re-export `FontLoader`, `FontLoaderSync`, `ImageSourceLoader`, and `ImageSourceLoaderSync` from the package root
+- 89a3088: Honor `AbortSignal` on the WASM render path
+- Updated dependencies [b908a4d]
+- Updated dependencies [4748c22]
+- Updated dependencies [42d0d03]
+- Updated dependencies [80e29da]
+  - @takumi-rs/helpers@1.7.0
+  - @takumi-rs/core@1.7.0
+  - @takumi-rs/wasm@1.7.0
+
 ## 1.6.0
 
 ### Patch Changes

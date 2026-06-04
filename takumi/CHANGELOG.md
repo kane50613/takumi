@@ -1,5 +1,19 @@
 # takumi
 
+## 1.7.0
+
+### Minor Changes
+
+- ece3e03: Add `position: static` and `position: fixed`
+- 4748c22: Support Tailwind `mask-` utility
+
+### Patch Changes
+
+- ef7e816: Fix absolutely positioned children being mispositioned inside a `display: block` `position: relative` container that has in-flow siblings
+- 9952b65: Accept inline image bytes (`Uint8Array`/`ArrayBuffer`) for image node `src`.
+- b41405d: Fix `background-image`/`mask-image` SVGs with only a `viewBox` to scale to the box
+- b9b4359: Fix `tw` arbitrary URLs (`mask-[url(...)]`, `bg-[url(...)]`) broken by `:` and `_` parsing
+
 ## 1.6.0
 
 ### Minor Changes
