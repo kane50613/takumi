@@ -86,16 +86,16 @@ fn rasterize_tile(tile: BackgroundTile, buffer_pool: &mut BufferPool) -> Result<
   Ok(BackgroundTile::Pixmap(Arc::new(pixmap)))
 }
 
-fn resolve_intrinsic_size(image: &BackgroundImage, context: &RenderContext) -> Option<(f32, f32)> {
+fn resolve_intrinsic_size(image: &BackgroundImage, context: &RenderContext) -> IntrinsicSizing {
   let BackgroundImage::Url(url) = image else {
-    return None;
+    return IntrinsicSizing::default();
   };
 
   let Ok(source) = resolve_image(url, context) else {
-    return None;
+    return IntrinsicSizing::default();
   };
 
-  Some(source.size(&context.sizing))
+  source.intrinsic_sizing(&context.sizing)
 }
 
 pub(crate) fn rasterize_layers(
@@ -411,17 +411,17 @@ fn resolve_axis_tiles(
 
 fn resolve_auto_axis_from_intrinsic(
   auto_axis: AutoBackgroundAxis,
-  intrinsic_size: Option<(f32, f32)>,
+  intrinsic_ratio: Option<f32>,
   fixed_size: u32,
 ) -> Option<u32> {
-  let (intrinsic_width, intrinsic_height) = intrinsic_size?;
-  if intrinsic_width == 0.0 || intrinsic_height == 0.0 {
+  let ratio = intrinsic_ratio?;
+  if ratio == 0.0 {
     return Some(0);
   }
 
   let resolved = match auto_axis {
-    AutoBackgroundAxis::Width => fixed_size as f32 * (intrinsic_width / intrinsic_height),
-    AutoBackgroundAxis::Height => fixed_size as f32 * (intrinsic_height / intrinsic_width),
+    AutoBackgroundAxis::Width => fixed_size as f32 * ratio,
+    AutoBackgroundAxis::Height => fixed_size as f32 / ratio,
   };
 
   Some(resolved.round() as u32)
@@ -561,7 +561,7 @@ pub(crate) fn resolve_layer_tiles(
       let tile_w = if style.repeat.1 == BackgroundRepeatStyle::Round {
         resolve_auto_axis_from_intrinsic(
           AutoBackgroundAxis::Width,
-          resolved_size.intrinsic_size,
+          resolved_size.intrinsic_ratio,
           tile_h,
         )
         .unwrap_or(resolved_size.width)
@@ -590,7 +590,7 @@ pub(crate) fn resolve_layer_tiles(
       let tile_h = if style.repeat.0 == BackgroundRepeatStyle::Round {
         resolve_auto_axis_from_intrinsic(
           AutoBackgroundAxis::Height,
-          resolved_size.intrinsic_size,
+          resolved_size.intrinsic_ratio,
           tile_w,
         )
         .unwrap_or(resolved_size.height)
