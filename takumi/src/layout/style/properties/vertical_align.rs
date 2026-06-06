@@ -4,8 +4,8 @@ use cssparser::{Parser, match_ignore_ascii_case};
 use parley::LineMetrics;
 
 use crate::{
+  layout::style::SizingContext,
   layout::style::{ToCss, tw::TailwindPropertyParser, *},
-  rendering::Sizing,
 };
 
 /// Keyword values for the CSS `vertical-align` property.
@@ -114,7 +114,7 @@ impl<'i> FromCss<'i> for VerticalAlign {
 impl VerticalAlign {
   pub(crate) fn resolve(
     self,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     font_size: f32,
     line_height: LineHeight,
   ) -> ResolvedVerticalAlign {
@@ -155,7 +155,7 @@ impl VerticalAlign {
 }
 
 impl MakeComputed for VerticalAlign {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     if let Self::Length(length) = self {
       length.make_computed(sizing);
     }
@@ -237,8 +237,8 @@ mod tests {
 
   use super::*;
 
-  fn sizing() -> Sizing {
-    Sizing {
+  fn sizing() -> SizingContext {
+    SizingContext {
       viewport: Viewport {
         size: (200, 100).into(),
         font_size: 16.0,

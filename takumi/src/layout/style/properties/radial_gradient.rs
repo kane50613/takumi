@@ -11,9 +11,9 @@ use crate::{
   layout::style::{
     ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop, GradientStops,
     Length, LengthDefaultsToZero, MakeComputed, ObjectPosition, ParseResult, ResolvedGradientStop,
-    ToCss, declare_enum_from_css_impl, unexpected_token,
+    SizingContext, ToCss, declare_enum_from_css_impl, unexpected_token,
   },
-  rendering::{RenderContext, Sizing},
+  rendering::RenderContext,
 };
 
 /// Represents a radial gradient.
@@ -41,7 +41,7 @@ pub struct RadialGradient {
 }
 
 impl MakeComputed for RadialGradient {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.center.make_computed(sizing);
     self.stops.make_computed(sizing);
   }

@@ -42,7 +42,7 @@ pub struct AttrRef {
 }
 
 impl MakeComputed for ContentValue {
-  fn make_computed(&mut self, sizing: &crate::rendering::Sizing) {
+  fn make_computed(&mut self, sizing: &crate::layout::style::SizingContext) {
     if let ContentValue::Items(items) = self {
       for item in items.iter_mut() {
         if let ContentItem::Image(image) = item {

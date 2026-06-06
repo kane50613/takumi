@@ -5,11 +5,11 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use taffy::{CompactLength, Dimension, LengthPercentage, LengthPercentageAuto};
 
 use crate::{
+  layout::style::SizingContext,
   layout::style::{
     AspectRatio, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult,
     tw::{TW_VAR_SPACING, TailwindPropertyParser},
   },
-  rendering::Sizing,
 };
 
 const ONE_CM_IN_PX: f32 = 96.0 / 2.54;
@@ -346,7 +346,7 @@ impl CalcFormula {
     }
   }
 
-  pub(crate) fn resolve(self, sizing: &Sizing) -> CalcLinear {
+  pub(crate) fn resolve(self, sizing: &SizingContext) -> CalcLinear {
     let viewport_width = sizing.viewport.size.width.unwrap_or_default() as f32;
     let viewport_height = sizing.viewport.size.height.unwrap_or_default() as f32;
     let viewport_min = viewport_width.min(viewport_height);
@@ -899,7 +899,7 @@ impl<'i, const DEFAULT_AUTO: bool> FromCss<'i> for Length<DEFAULT_AUTO> {
 }
 
 impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
-  fn to_px_pre_dpr(self, sizing: &Sizing, percentage_full_px: f32) -> f32 {
+  fn to_px_pre_dpr(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
     match self {
       Length::Auto => 0.0,
       Length::Px(value) => value,
@@ -947,7 +947,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
     }
   }
 
-  pub(crate) fn to_compact_length(self, sizing: &Sizing) -> CompactLength {
+  pub(crate) fn to_compact_length(self, sizing: &SizingContext) -> CompactLength {
     match self {
       Length::Auto => CompactLength::auto(),
       Length::Percentage(value) => CompactLength::percent(value / 100.0),
@@ -1007,7 +1007,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
     }
   }
 
-  pub(crate) fn resolve_to_length_percentage(self, sizing: &Sizing) -> LengthPercentage {
+  pub(crate) fn resolve_to_length_percentage(self, sizing: &SizingContext) -> LengthPercentage {
     let compact_length = self.to_compact_length(sizing);
 
     if compact_length.is_auto() {
@@ -1017,7 +1017,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
     unsafe { LengthPercentage::from_raw(compact_length) }
   }
 
-  pub(crate) fn to_px(self, sizing: &Sizing, percentage_full_px: f32) -> f32 {
+  pub(crate) fn to_px(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
     let value = self.to_px_pre_dpr(sizing, percentage_full_px);
 
     let value = if matches!(
@@ -1046,17 +1046,20 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
     clamp_px_for_integer_cast(value)
   }
 
-  pub(crate) fn resolve_to_length_percentage_auto(self, sizing: &Sizing) -> LengthPercentageAuto {
+  pub(crate) fn resolve_to_length_percentage_auto(
+    self,
+    sizing: &SizingContext,
+  ) -> LengthPercentageAuto {
     unsafe { LengthPercentageAuto::from_raw(self.to_compact_length(sizing)) }
   }
 
-  pub(crate) fn resolve_to_dimension(self, sizing: &Sizing) -> Dimension {
+  pub(crate) fn resolve_to_dimension(self, sizing: &SizingContext) -> Dimension {
     self.resolve_to_length_percentage_auto(sizing).into()
   }
 }
 
 impl<const DEFAULT_AUTO: bool> MakeComputed for Length<DEFAULT_AUTO> {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     if let Self::Em(em) = *self {
       let dpr = sizing.viewport.device_pixel_ratio;
       let font_size = if dpr > 0.0 {
@@ -1114,8 +1117,8 @@ mod tests {
   use super::*;
   use crate::layout::Viewport;
 
-  fn sizing() -> Sizing {
-    Sizing {
+  fn sizing() -> SizingContext {
+    SizingContext {
       viewport: Viewport {
         size: (200, 100).into(),
         font_size: 16.0,
@@ -1262,7 +1265,7 @@ mod tests {
     assert_near(px, 64.0);
   }
 
-  fn descendant_sizing() -> Sizing {
+  fn descendant_sizing() -> SizingContext {
     let mut sizing = sizing();
     sizing.root_font_size = Some(32.0);
     sizing

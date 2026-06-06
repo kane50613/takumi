@@ -6,11 +6,11 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use typed_builder::TypedBuilder;
 
 use crate::{
+  layout::style::SizingContext,
   layout::style::{
     Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
     declare_enum_from_css_impl, properties::ColorInput, tw::TailwindPropertyParser,
   },
-  rendering::Sizing,
 };
 
 bitflags! {
@@ -88,7 +88,7 @@ impl Default for TextDecorationThickness {
 }
 
 impl MakeComputed for TextDecorationThickness {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     if let Self::Length(length) = self {
       length.make_computed(sizing);
     }
@@ -101,7 +101,7 @@ impl Animatable for TextDecorationThickness {
     from: &Self,
     to: &Self,
     progress: f32,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     current_color: Color,
   ) {
     *self = match (*from, *to) {
@@ -221,7 +221,7 @@ pub struct TextDecoration {
 }
 
 impl MakeComputed for TextDecoration {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.color.make_computed(sizing);
     self.thickness.make_computed(sizing);
   }

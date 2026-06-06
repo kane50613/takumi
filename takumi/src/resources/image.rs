@@ -15,8 +15,8 @@ use image::RgbaImage;
 use tiny_skia::Pixmap;
 
 use crate::{
-  layout::style::{Color, ImageScalingAlgorithm, IntrinsicSizing},
-  rendering::{Sizing, premultiplied_pixmap_from_rgba},
+  layout::style::{Color, ImageScalingAlgorithm, IntrinsicSizing, SizingContext},
+  rendering::premultiplied_pixmap_from_rgba,
   resources::image_decoder::{DecodedGif, DecodedImage, decode_image},
 };
 use thiserror::Error;
@@ -429,7 +429,7 @@ impl ImageSource {
   }
 
   /// Get the image size in device pixels for the current sizing context.
-  pub(crate) fn size(&self, sizing: &Sizing) -> (f32, f32) {
+  pub(crate) fn size(&self, sizing: &SizingContext) -> (f32, f32) {
     let (width, height) = match self {
       #[cfg(feature = "svg")]
       ImageSource::Svg(svg) => (svg.tree.size().width(), svg.tree.size().height()),
@@ -446,7 +446,7 @@ impl ImageSource {
 
   /// Intrinsic sizing for `background-size`/`mask-size` (§5.3). Bitmaps and GIFs
   /// have both dimensions; an SVG may have only a `viewBox` ratio.
-  pub(crate) fn intrinsic_sizing(&self, sizing: &Sizing) -> IntrinsicSizing {
+  pub(crate) fn intrinsic_sizing(&self, sizing: &SizingContext) -> IntrinsicSizing {
     let dpr = sizing.viewport.device_pixel_ratio;
     match self {
       #[cfg(feature = "svg")]

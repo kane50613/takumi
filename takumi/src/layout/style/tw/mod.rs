@@ -2261,7 +2261,7 @@ mod tests {
       "hidden",
       "block",
       "inline",
-      // Sizing
+      // SizingContext
       "w-4",
       "h-8",
       "size-12",

@@ -3,11 +3,11 @@ use std::fmt;
 use taffy::{Point, Size};
 
 use crate::{
+  layout::style::SizingContext,
   layout::style::{
     CssExpectedMessage, CssToken, FromCss, LengthDefaultsToZero, MakeComputed, Overflow,
     ParseResult, ToCss,
   },
-  rendering::Sizing,
 };
 
 /// A pair of values for horizontal and vertical axes.
@@ -55,7 +55,7 @@ impl<T: Copy> SpacePair<T> {
 }
 
 impl<T: Copy + MakeComputed> MakeComputed for SpacePair<T> {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.x.make_computed(sizing);
     self.y.make_computed(sizing);
   }
@@ -80,7 +80,7 @@ impl SpacePair<Overflow> {
 pub type BorderRadiusPair = SpacePair<LengthDefaultsToZero>;
 
 impl BorderRadiusPair {
-  pub(crate) fn to_px(self, sizing: &Sizing, border_box: Size<f32>) -> SpacePair<f32> {
+  pub(crate) fn to_px(self, sizing: &SizingContext, border_box: Size<f32>) -> SpacePair<f32> {
     SpacePair::from_pair(
       self.x.to_px(sizing, border_box.width).max(0.0),
       self.y.to_px(sizing, border_box.height).max(0.0),

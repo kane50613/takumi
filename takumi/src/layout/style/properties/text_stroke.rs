@@ -1,10 +1,10 @@
 use cssparser::Parser;
 
 use crate::{
+  layout::style::SizingContext,
   layout::style::{
     ColorInput, CssSyntaxKind, CssToken, FromCss, LengthDefaultsToZero, MakeComputed, ParseResult,
   },
-  rendering::Sizing,
 };
 
 /// Parsed `text-stroke` value.
@@ -36,7 +36,7 @@ impl<'i> FromCss<'i> for TextStroke {
 }
 
 impl MakeComputed for TextStroke {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.width.make_computed(sizing);
   }
 }

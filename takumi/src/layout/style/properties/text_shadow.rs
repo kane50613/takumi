@@ -4,11 +4,11 @@ use cssparser::{BasicParseErrorKind, ParseError, Parser};
 use typed_builder::TypedBuilder;
 
 use crate::{
+  layout::style::SizingContext,
   layout::style::{
     Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length, LengthDefaultsToZero,
     ListInterpolationStrategy, MakeComputed, ParseResult, ToCss, next_is_comma,
   },
-  rendering::Sizing,
 };
 
 /// Represents a text shadow with all its properties.
@@ -107,7 +107,7 @@ impl crate::layout::style::tw::TailwindPropertyParser for TextShadow {
 }
 
 impl MakeComputed for TextShadow {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.offset_x.make_computed(sizing);
     self.offset_y.make_computed(sizing);
     self.blur_radius.make_computed(sizing);
@@ -133,7 +133,7 @@ impl Animatable for TextShadow {
     from: &Self,
     to: &Self,
     progress: f32,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     current_color: Color,
   ) {
     self.offset_x.interpolate(

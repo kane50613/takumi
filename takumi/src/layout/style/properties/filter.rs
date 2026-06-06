@@ -11,12 +11,12 @@ use crate::{
   Result,
   layout::style::{
     Affine, Angle, Animatable, Color, CssDescriptorKind, CssToken, FromCss, Length,
-    ListInterpolationStrategy, MakeComputed, ParseResult, PercentageNumber, TextShadow,
-    tw::TailwindPropertyParser,
+    ListInterpolationStrategy, MakeComputed, ParseResult, PercentageNumber, SizingContext,
+    TextShadow, tw::TailwindPropertyParser,
   },
   rendering::{
     BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Placement, RenderContext,
-    SizedShadow, Sizing, apply_blur, apply_blur_rgba_bytes, fast_div_255, render_mask,
+    SizedShadow, apply_blur, apply_blur_rgba_bytes, fast_div_255, render_mask,
   },
 };
 
@@ -90,7 +90,7 @@ pub enum Filter {
 pub type Filters = Vec<Filter>;
 
 impl MakeComputed for Filter {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     match self {
       Filter::Blur(length) => length.make_computed(sizing),
       Filter::DropShadow(shadow) => shadow.make_computed(sizing),
@@ -129,7 +129,7 @@ impl Animatable for Filter {
     from: &Self,
     to: &Self,
     progress: f32,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     current_color: Color,
   ) {
     *self = match (*from, *to) {
@@ -493,7 +493,7 @@ fn mask_bounds(mask: &[u8], width: u32, height: u32) -> Option<Placement> {
   find_nonzero_bounds(mask, width, height, |alpha| *alpha)
 }
 
-fn backdrop_filter_padding(filters: &[Filter], sizing: &Sizing) -> i32 {
+fn backdrop_filter_padding(filters: &[Filter], sizing: &SizingContext) -> i32 {
   filters
     .iter()
     .filter_map(|filter| match filter {
@@ -550,7 +550,7 @@ fn composite_backdrop_with_mask(
 
 pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
   pixmap: &mut PixmapMut<'_>,
-  sizing: &Sizing,
+  sizing: &SizingContext,
   current_color: Color,
   buffer_pool: &mut BufferPool,
   filters: F,
@@ -1024,7 +1024,7 @@ mod tests {
     ];
 
     let viewport = Viewport::new((100, 100));
-    let sizing = Sizing {
+    let sizing = SizingContext {
       viewport,
       container_size: Size::NONE,
       font_size: 16.0,

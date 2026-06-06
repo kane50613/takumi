@@ -12,9 +12,9 @@ use crate::{
   layout::style::{
     Angle, BackgroundPosition, ColorInput, ColorInterpolationMethod, CssDescriptorKind, CssToken,
     FromCss, GradientStop, Length, MakeComputed, ObjectPosition, ParseResult, ResolvedGradientStop,
-    StopPosition, ToCss, unexpected_token,
+    SizingContext, StopPosition, ToCss, unexpected_token,
   },
-  rendering::{RenderContext, Sizing},
+  rendering::RenderContext,
 };
 
 const LUT_INDEX_BOUNDARY_EPSILON: f32 = 0.001;
@@ -41,7 +41,7 @@ pub struct ConicGradient {
 }
 
 impl MakeComputed for ConicGradient {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.center.make_computed(sizing);
     self.stops.make_computed(sizing);
   }

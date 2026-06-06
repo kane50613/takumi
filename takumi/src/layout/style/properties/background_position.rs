@@ -4,11 +4,11 @@ use std::fmt;
 use taffy::{Point, Size};
 
 use crate::{
+  layout::style::SizingContext,
   layout::style::{
     Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
     MakeComputed, ParseResult, SpacePair, tw::TailwindPropertyParser,
   },
-  rendering::Sizing,
 };
 
 /// Horizontal keywords for `background-position`.
@@ -48,7 +48,7 @@ pub enum PositionComponent {
 }
 
 impl MakeComputed for PositionComponent {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     if let Self::Length(length) = self {
       length.make_computed(sizing);
     }
@@ -61,7 +61,7 @@ impl Animatable for PositionComponent {
     from: &Self,
     to: &Self,
     progress: f32,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     current_color: Color,
   ) {
     let mut length = Length::from(*from);
@@ -112,7 +112,7 @@ pub type ObjectPosition = BackgroundPosition<false>;
 pub type TransformOrigin = BackgroundPosition<false>;
 
 impl<const DEFAULT_TOP_LEFT: bool> MakeComputed for BackgroundPosition<DEFAULT_TOP_LEFT> {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.0.make_computed(sizing);
   }
 }
@@ -127,7 +127,7 @@ impl<const DEFAULT_TOP_LEFT: bool> Animatable for BackgroundPosition<DEFAULT_TOP
     from: &Self,
     to: &Self,
     progress: f32,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     current_color: Color,
   ) {
     let mut value = from.0;
@@ -137,7 +137,7 @@ impl<const DEFAULT_TOP_LEFT: bool> Animatable for BackgroundPosition<DEFAULT_TOP
 }
 
 impl<const DEFAULT_TOP_LEFT: bool> BackgroundPosition<DEFAULT_TOP_LEFT> {
-  pub(crate) fn to_point(self, sizing: &Sizing, border_box: Size<f32>) -> Point<f32> {
+  pub(crate) fn to_point(self, sizing: &SizingContext, border_box: Size<f32>) -> Point<f32> {
     Point {
       x: Length::from(self.0.x).to_px(sizing, border_box.width),
       y: Length::from(self.0.y).to_px(sizing, border_box.height),

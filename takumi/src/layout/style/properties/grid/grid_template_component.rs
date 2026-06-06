@@ -4,9 +4,8 @@ use cssparser::Parser;
 
 use crate::layout::style::{
   CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, GridRepeatTrack, GridRepetitionCount,
-  GridTrackSize, MakeComputed, ParseResult, ToCss,
+  GridTrackSize, MakeComputed, ParseResult, SizingContext, ToCss,
 };
-use crate::rendering::Sizing;
 
 /// A transparent wrapper around a list of `GridTemplateComponent`.
 ///
@@ -17,7 +16,7 @@ pub type GridTemplateComponents = Vec<GridTemplateComponent>;
 pub(crate) trait GridTemplateComponentsExt {
   fn collect_components_and_names(
     &self,
-    sizing: &Sizing,
+    sizing: &SizingContext,
   ) -> (Vec<taffy::GridTemplateComponent<String>>, Vec<Vec<String>>);
 }
 
@@ -35,7 +34,7 @@ pub enum GridTemplateComponent {
 }
 
 impl MakeComputed for GridTemplateComponent {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     match self {
       GridTemplateComponent::Single(size) => size.make_computed(sizing),
       GridTemplateComponent::Repeat(_, tracks) => {
@@ -150,7 +149,7 @@ impl<'i> FromCss<'i> for GridTemplateComponents {
 impl GridTemplateComponentsExt for [GridTemplateComponent] {
   fn collect_components_and_names(
     &self,
-    sizing: &Sizing,
+    sizing: &SizingContext,
   ) -> (Vec<taffy::GridTemplateComponent<String>>, Vec<Vec<String>>) {
     let mut track_components = Vec::new();
     let mut line_name_sets = Vec::new();

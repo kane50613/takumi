@@ -3,7 +3,6 @@ use cssparser::Parser;
 use typed_builder::TypedBuilder;
 
 use crate::layout::style::*;
-use crate::rendering::Sizing;
 
 /// Parsed `background` shorthand value.
 #[derive(Debug, Clone, Default, PartialEq, TypedBuilder)]
@@ -27,7 +26,7 @@ pub struct Background {
 }
 
 impl MakeComputed for Background {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.image.make_computed(sizing);
     self.position.make_computed(sizing);
     self.size.make_computed(sizing);

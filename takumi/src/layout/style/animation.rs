@@ -15,7 +15,7 @@ use crate::{
       *,
     },
   },
-  rendering::{RenderContext, Sizing},
+  rendering::RenderContext,
 };
 
 #[derive(Debug, Clone, Deserialize, PartialEq, TypedBuilder)]
@@ -586,7 +586,7 @@ impl<const DEFAULT_AUTO: bool> Animatable for Length<DEFAULT_AUTO> {
     from: &Self,
     to: &Self,
     progress: f32,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     _current_color: Color,
   ) {
     *self = interpolate_length(*from, *to, progress)
@@ -633,7 +633,7 @@ fn interpolate_length<const DEFAULT_AUTO: bool>(
 
 fn resolve_length_with_sizing<const DEFAULT_AUTO: bool>(
   value: Length<DEFAULT_AUTO>,
-  sizing: &Sizing,
+  sizing: &SizingContext,
 ) -> Option<f32> {
   if matches!(value, Length::Auto) {
     return None;
@@ -652,13 +652,13 @@ mod tests {
   use taffy::Size;
 
   use crate::{
+    layout::style::SizingContext,
     layout::style::animation::{sample_animation_progress, tailwind_animation_keyframes},
     layout::{Viewport, style::*},
-    rendering::Sizing,
   };
 
-  fn sizing() -> Sizing {
-    Sizing {
+  fn sizing() -> SizingContext {
+    SizingContext {
       viewport: Viewport::new((200, 100)),
       container_size: Size::NONE,
       font_size: 16.0,

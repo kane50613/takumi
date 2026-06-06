@@ -2,11 +2,11 @@ use crate::layout::style::unexpected_token;
 use cssparser::Parser;
 
 use crate::{
+  layout::style::SizingContext,
   layout::style::{
     BorderStyle, ColorInput, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult,
     properties::Length,
   },
-  rendering::Sizing,
 };
 
 /// Parsed `border` value.
@@ -68,7 +68,7 @@ impl<'i> FromCss<'i> for Border {
 }
 
 impl MakeComputed for Border {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.width.make_computed(sizing);
   }
 }

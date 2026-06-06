@@ -2,11 +2,11 @@ use cssparser::Parser;
 use std::fmt;
 
 use crate::{
+  layout::style::SizingContext,
   layout::style::{
     Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, lerp,
     tw::TailwindPropertyParser,
   },
-  rendering::Sizing,
 };
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
@@ -28,7 +28,7 @@ impl Animatable for AspectRatio {
     from: &Self,
     to: &Self,
     progress: f32,
-    _sizing: &Sizing,
+    _sizing: &SizingContext,
     _current_color: Color,
   ) {
     *self = match (*from, *to) {

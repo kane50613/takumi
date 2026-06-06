@@ -2,10 +2,9 @@ use cssparser::Parser;
 use std::fmt;
 
 use crate::layout::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, lerp,
-  tw::TailwindPropertyParser,
+  Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, SizingContext,
+  ToCss, lerp, tw::TailwindPropertyParser,
 };
-use crate::rendering::Sizing;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// Represents a flex grow value.
@@ -19,7 +18,7 @@ impl Animatable for FlexGrow {
     from: &Self,
     to: &Self,
     progress: f32,
-    _sizing: &Sizing,
+    _sizing: &SizingContext,
     _current_color: Color,
   ) {
     self.0 = lerp(from.0, to.0, progress);

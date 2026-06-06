@@ -5,10 +5,9 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use parley::style::FontWeight as ParleyFontWeight;
 
 use crate::layout::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, lerp,
-  tw::TailwindPropertyParser,
+  Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, SizingContext,
+  lerp, tw::TailwindPropertyParser,
 };
-use crate::rendering::Sizing;
 
 /// Represents font weight value.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
@@ -22,7 +21,7 @@ impl Animatable for FontWeight {
     from: &Self,
     to: &Self,
     progress: f32,
-    _sizing: &Sizing,
+    _sizing: &SizingContext,
     _current_color: Color,
   ) {
     *self = FontWeight::from(lerp(from.value(), to.value(), progress));

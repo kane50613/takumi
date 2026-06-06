@@ -4,10 +4,10 @@ use crate::layout::style::{ToCss, unexpected_token};
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::{
+  layout::style::SizingContext,
   layout::style::{
     Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
   },
-  rendering::Sizing,
 };
 
 /// Absolute `font-size` keywords.
@@ -93,7 +93,7 @@ pub enum FontSize {
 }
 
 impl FontSize {
-  pub(crate) fn to_px(self, sizing: &Sizing, inherited_font_size: f32) -> f32 {
+  pub(crate) fn to_px(self, sizing: &SizingContext, inherited_font_size: f32) -> f32 {
     match self {
       Self::Keyword(keyword) => keyword.to_length().to_px(sizing, inherited_font_size),
       Self::Length(length) => length.to_px(sizing, inherited_font_size),
@@ -141,7 +141,7 @@ impl<'i> FromCss<'i> for FontSize {
 }
 
 impl MakeComputed for FontSize {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     if let Self::Length(length) = self {
       length.make_computed(sizing);
     }
@@ -154,7 +154,7 @@ impl Animatable for FontSize {
     from: &Self,
     to: &Self,
     progress: f32,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     current_color: Color,
   ) {
     let from_length = match *from {
@@ -204,8 +204,8 @@ mod tests {
 
   use super::*;
   use crate::{
+    layout::style::SizingContext,
     layout::{style::CalcArena, viewport::Viewport},
-    rendering::Sizing,
   };
 
   #[test]
@@ -218,7 +218,7 @@ mod tests {
 
   #[test]
   fn resolves_medium_keyword_to_default_font_size() {
-    let sizing = Sizing {
+    let sizing = SizingContext {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
       font_size: 16.0,
@@ -237,7 +237,7 @@ mod tests {
 
     let viewport = Viewport::new((1200, 630)).with_device_pixel_ratio(2.0);
     let root_font_size_device_px = DEFAULT_FONT_SIZE * viewport.device_pixel_ratio;
-    let sizing = Sizing {
+    let sizing = SizingContext {
       viewport,
       container_size: Size::NONE,
       font_size: root_font_size_device_px,

@@ -9,11 +9,11 @@ use taffy::{Point, Size};
 use tiny_skia::Transform as TinyTransform;
 
 use crate::{
+  layout::style::SizingContext,
   layout::style::{
     Angle, Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
     MakeComputed, ParseResult, PercentageNumber, lerp,
   },
-  rendering::Sizing,
 };
 
 const DEFAULT_SCALE: f32 = 1.0;
@@ -35,7 +35,7 @@ pub enum Transform {
 }
 
 impl MakeComputed for Transform {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     if let Transform::Translate(x, y) = self {
       x.make_computed(sizing);
       y.make_computed(sizing);
@@ -63,7 +63,7 @@ impl Animatable for Transform {
     from: &Self,
     to: &Self,
     progress: f32,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     current_color: Color,
   ) {
     *self = match (*from, *to) {
@@ -324,7 +324,7 @@ impl Affine {
   /// When applied to point p: translate * rotate * p, rotate is applied first.
   pub(crate) fn from_transforms<'a, I: Iterator<Item = &'a Transform>>(
     transforms: I,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     border_box: Size<f32>,
   ) -> Affine {
     let mut instance = Affine::IDENTITY;
@@ -386,7 +386,7 @@ impl<'i> FromCss<'i> for Transforms {
 }
 
 impl MakeComputed for Transforms {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     for transform in self.0.iter_mut() {
       transform.make_computed(sizing);
     }
@@ -403,7 +403,7 @@ impl Animatable for Transforms {
     from: &Self,
     to: &Self,
     progress: f32,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     current_color: Color,
   ) {
     self

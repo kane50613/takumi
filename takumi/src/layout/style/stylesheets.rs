@@ -13,9 +13,9 @@ use crate::{
   error::StyleDeclarationBlockParseError,
   layout::{
     inline::InlineBrush,
-    style::{CssInput, CssValueSeed, properties::*},
+    style::{CssInput, CssValueSeed, SizingContext, properties::*},
   },
-  rendering::{RenderContext, SizedShadow, Sizing},
+  rendering::{RenderContext, SizedShadow},
 };
 use cssparser::RuleBodyParser;
 #[path = "stylesheets_helpers.rs"]
@@ -46,7 +46,7 @@ struct DeferredDeclaration {
 #[derive(Clone, Copy)]
 struct InterpolationContext<'a> {
   progress: f32,
-  sizing: &'a Sizing,
+  sizing: &'a SizingContext,
   current_color: Color,
 }
 
@@ -608,7 +608,7 @@ macro_rules! define_style {
           }
         }
 
-        pub(crate) fn make_computed_values(&mut self, sizing: &Sizing) {
+        pub(crate) fn make_computed_values(&mut self, sizing: &SizingContext) {
           $(self.$longhand.make_computed(sizing);)*
         }
 
@@ -618,7 +618,7 @@ macro_rules! define_style {
           to: &Self,
           animated_properties: &PropertyMask,
           progress: f32,
-          sizing: &Sizing,
+          sizing: &SizingContext,
           current_color: Color,
         ) {
           let interpolation_context = InterpolationContext {
@@ -1633,7 +1633,7 @@ pub(crate) struct SizedFontStyle<'s> {
   pub text_stroke_color: Color,
   pub text_decoration_color: Color,
   pub text_decoration_thickness: SizedTextDecorationThickness,
-  pub sizing: Sizing,
+  pub sizing: SizingContext,
 }
 
 impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
@@ -1697,7 +1697,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
 
 impl ComputedStyle {
   /// Normalize inheritable text-related values to computed values for this node.
-  pub(crate) fn make_computed(&mut self, sizing: &Sizing) {
+  pub(crate) fn make_computed(&mut self, sizing: &SizingContext) {
     // `font-size` computed value is already resolved in `sizing.font_size`.
     // Keep it as css-px in style to avoid re-resolving descendant inheritance.
     let dpr = sizing.viewport.device_pixel_ratio;
@@ -1731,7 +1731,7 @@ impl ComputedStyle {
   pub(crate) fn creates_stacking_context(
     &self,
     border_box: Size<f32>,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     is_flex_or_grid_item: bool,
   ) -> bool {
     self.isolation == Isolation::Isolate
@@ -1754,7 +1754,11 @@ impl ComputedStyle {
       })
   }
 
-  pub(crate) fn has_non_identity_transform(&self, border_box: Size<f32>, sizing: &Sizing) -> bool {
+  pub(crate) fn has_non_identity_transform(
+    &self,
+    border_box: Size<f32>,
+    sizing: &SizingContext,
+  ) -> bool {
     let transform_origin = self.transform_origin;
     let origin = transform_origin.to_point(sizing, border_box);
 
@@ -1836,7 +1840,7 @@ impl ComputedStyle {
   #[inline]
   fn grid_template(
     components: &Option<GridTemplateComponents>,
-    sizing: &Sizing,
+    sizing: &SizingContext,
   ) -> (Vec<taffy::GridTemplateComponent<String>>, Vec<Vec<String>>) {
     components.as_deref().map_or_else(
       || (Vec::new(), vec![Vec::new()]),
@@ -1865,7 +1869,10 @@ impl ComputedStyle {
   }
 
   #[inline]
-  fn resolved_text_decoration_thickness(&self, sizing: &Sizing) -> SizedTextDecorationThickness {
+  fn resolved_text_decoration_thickness(
+    &self,
+    sizing: &SizingContext,
+  ) -> SizedTextDecorationThickness {
     match self.text_decoration_thickness {
       TextDecorationThickness::Length(Length::Auto) | TextDecorationThickness::FromFont => {
         SizedTextDecorationThickness::FromFont
@@ -1912,7 +1919,7 @@ impl ComputedStyle {
     }
   }
 
-  pub(crate) fn to_taffy_style(&self, sizing: &Sizing) -> taffy::Style {
+  pub(crate) fn to_taffy_style(&self, sizing: &SizingContext) -> taffy::Style {
     // Convert grid templates and associated line names
     let (grid_template_columns, grid_template_column_names) =
       Self::grid_template(&self.grid_template_columns, sizing);
@@ -2086,11 +2093,11 @@ mod tests {
     CssWideKeyword, LonghandId, PropertyId, PropertyMask, ShorthandId, StyleDeclarationBlock,
   };
   use crate::{
+    layout::style::SizingContext,
     layout::{
       Viewport,
       style::{ComputedStyle, Style, StyleDeclaration, properties::*},
     },
-    rendering::Sizing,
   };
 
   fn style_with(declarations: impl IntoIterator<Item = StyleDeclaration>) -> Style {
@@ -2679,7 +2686,7 @@ mod tests {
   #[test]
   fn test_creates_stacking_context_from_z_index_scope() {
     let mut style = ComputedStyle::default();
-    let sizing = Sizing {
+    let sizing = SizingContext {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
       font_size: 16.0,
@@ -2712,7 +2719,7 @@ mod tests {
   #[test]
   fn test_non_identity_transform_detection() {
     let mut style = ComputedStyle::default();
-    let sizing = Sizing {
+    let sizing = SizingContext {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
       font_size: 16.0,
@@ -2738,7 +2745,7 @@ mod tests {
   #[test]
   fn test_transform_creates_stacking_context_without_offscreen_compositing() {
     let mut style = ComputedStyle::default();
-    let sizing = Sizing {
+    let sizing = SizingContext {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
       font_size: 16.0,
@@ -2786,7 +2793,7 @@ mod tests {
     ])
     .inherit(&ComputedStyle::default());
 
-    let sizing = Sizing {
+    let sizing = SizingContext {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
       font_size: 16.0,
@@ -2809,7 +2816,7 @@ mod tests {
       StyleDeclaration::line_height(LineHeight::Length(Length::Em(1.5))),
     ])
     .inherit(&ComputedStyle::default());
-    parent.make_computed(&Sizing {
+    parent.make_computed(&SizingContext {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
       font_size: 32.0,
@@ -2820,7 +2827,7 @@ mod tests {
     });
 
     let inherited_child = Style::default().inherit(&parent);
-    let inherited_child_sizing = Sizing {
+    let inherited_child_sizing = SizingContext {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
       font_size: 32.0,
@@ -2836,7 +2843,7 @@ mod tests {
 
     let child_with_own_font_size =
       style_with([StyleDeclaration::font_size(Length::Px(10.0).into())]).inherit(&parent);
-    let child_sizing = Sizing {
+    let child_sizing = SizingContext {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
       font_size: 10.0,
@@ -3063,7 +3070,7 @@ mod tests {
       [("border-radius", "calc(infinity * 1px)")],
       &ComputedStyle::default(),
     );
-    let sizing = Sizing {
+    let sizing = SizingContext {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
       font_size: 16.0,

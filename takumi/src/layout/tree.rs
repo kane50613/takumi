@@ -22,13 +22,13 @@ use crate::{
     style::{
       Affine, BackgroundImage, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem,
       ContentValue, Display, Filters, Float, Isolation, LineHeight, Overflow, PercentageNumber,
-      Position, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
+      Position, SizingContext, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
       apply_stylesheet_animations,
       matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
     },
   },
   rendering::{
-    Canvas, RenderContext, Sizing,
+    Canvas, RenderContext,
     inline_drawing::{InlineLayoutDrawData, draw_inline_box, draw_inline_layout},
   },
 };
@@ -260,7 +260,7 @@ fn registered_custom_property_parent_style(
 fn pseudo_computed_style<'g>(
   parent_context: &RenderContext<'g>,
   pseudo_matched: &MatchedDeclarationsView<'_>,
-) -> (ComputedStyle, Sizing, Color) {
+) -> (ComputedStyle, SizingContext, Color) {
   let style_layers = build_style_layers(
     NodeStyleLayers::default(),
     pseudo_matched,
@@ -280,7 +280,7 @@ fn pseudo_computed_style<'g>(
   let line_height = style
     .line_height
     .to_px(&parent_context.sizing, normal_basis);
-  let sizing = Sizing {
+  let sizing = SizingContext {
     font_size,
     root_font_size: Some(parent_context.sizing.root_font_size.unwrap_or(font_size)),
     line_height,
@@ -1217,7 +1217,7 @@ impl<'g> RenderNode<'g> {
       node: &mut Node,
       node_index: usize,
       matched_declarations: &[NodeMatchedDeclarations<'_>],
-    ) -> (ComputedStyle, Sizing, Color) {
+    ) -> (ComputedStyle, SizingContext, Color) {
       let default_matched = MatchedDeclarationsView::default();
       let matched = matched_declarations
         .get(node_index)
@@ -1238,7 +1238,7 @@ impl<'g> RenderNode<'g> {
       let parent_root_font_size = parent_context.sizing.root_font_size;
       let parent_root_line_height = parent_context.sizing.root_line_height;
 
-      let mut child_sizing_for_final: Option<Sizing> = None;
+      let mut child_sizing_for_final: Option<SizingContext> = None;
       if !style.animation_name.is_empty() {
         let font_size = style
           .font_size
@@ -1247,7 +1247,7 @@ impl<'g> RenderNode<'g> {
         let line_height = style
           .line_height
           .to_px(&parent_context.sizing, normal_basis);
-        let child_sizing = Sizing {
+        let child_sizing = SizingContext {
           font_size,
           root_font_size: parent_root_font_size,
           line_height,
@@ -1277,7 +1277,7 @@ impl<'g> RenderNode<'g> {
       let line_height = style
         .line_height
         .to_px(&parent_context.sizing, normal_basis);
-      let sizing = Sizing {
+      let sizing = SizingContext {
         font_size,
         root_font_size: Some(parent_root_font_size.unwrap_or(font_size)),
         line_height,

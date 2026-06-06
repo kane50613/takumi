@@ -2,11 +2,11 @@ use crate::layout::style::unexpected_token;
 use cssparser::{Parser, match_ignore_ascii_case};
 
 use crate::{
+  layout::style::SizingContext,
   layout::style::{
     AspectRatio, CssSyntaxKind, CssToken, FlexDirection, FlexWrap, FromCss, Length, MakeComputed,
     ParseResult, tw::TailwindPropertyParser,
   },
-  rendering::Sizing,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -185,7 +185,7 @@ impl<'i> FromCss<'i> for Flex {
 }
 
 impl MakeComputed for Flex {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.basis.make_computed(sizing);
   }
 }

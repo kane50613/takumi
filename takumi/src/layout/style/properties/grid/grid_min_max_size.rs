@@ -1,10 +1,10 @@
 use cssparser::Parser;
 
 use crate::{
+  layout::style::SizingContext,
   layout::style::{
     CssDescriptorKind, CssToken, FromCss, GridLength, MakeComputed, ParseResult, ToCss,
   },
-  rendering::Sizing,
 };
 
 /// Represents a grid minmax()
@@ -32,7 +32,7 @@ impl<'i> FromCss<'i> for GridMinMaxSize {
 }
 
 impl MakeComputed for GridMinMaxSize {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.min.make_computed(sizing);
     self.max.make_computed(sizing);
   }

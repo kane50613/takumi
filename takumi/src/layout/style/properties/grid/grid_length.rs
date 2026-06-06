@@ -2,8 +2,8 @@ use cssparser::{Parser, Token};
 use taffy::CompactLength;
 
 use crate::{
+  layout::style::SizingContext,
   layout::style::{CssToken, FromCss, Length, MakeComputed, ParseResult, ToCss, unexpected_token},
-  rendering::Sizing,
 };
 
 /// Represents a fraction of the available space
@@ -26,7 +26,7 @@ pub enum GridLength {
 
 impl GridLength {
   /// Converts the grid track size to a compact length representation.
-  pub(crate) fn to_compact_length(self, sizing: &Sizing) -> CompactLength {
+  pub(crate) fn to_compact_length(self, sizing: &SizingContext) -> CompactLength {
     match self {
       GridLength::Fr(fr) => CompactLength::fr(fr),
       GridLength::Unit(unit) => unit.to_compact_length(sizing),
@@ -59,7 +59,7 @@ impl<'i> FromCss<'i> for GridLength {
 }
 
 impl MakeComputed for GridLength {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     if let GridLength::Unit(unit) = self {
       unit.make_computed(sizing);
     }

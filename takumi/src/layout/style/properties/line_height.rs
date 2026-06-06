@@ -1,11 +1,11 @@
 use cssparser::{Parser, match_ignore_ascii_case};
 
 use crate::{
+  layout::style::SizingContext,
   layout::style::{
     CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult, ToCss,
     parse_calc_number_expression, tw::TailwindPropertyParser,
   },
-  rendering::Sizing,
 };
 
 /// Represents a line height value.
@@ -85,7 +85,7 @@ impl LineHeight {
     matches!(self, Self::Normal | Self::Unitless(_))
   }
 
-  pub(crate) fn into_parley(self, sizing: &Sizing) -> parley::LineHeight {
+  pub(crate) fn into_parley(self, sizing: &SizingContext) -> parley::LineHeight {
     match self {
       Self::Normal => parley::LineHeight::MetricsRelative(1.0),
       Self::Length(length) => parley::LineHeight::Absolute(length.to_px(sizing, sizing.font_size)),
@@ -93,7 +93,7 @@ impl LineHeight {
     }
   }
 
-  pub(crate) fn to_px(self, sizing: &Sizing, normal_basis: f32) -> f32 {
+  pub(crate) fn to_px(self, sizing: &SizingContext, normal_basis: f32) -> f32 {
     match self {
       Self::Normal => normal_basis,
       Self::Unitless(value) => value * sizing.font_size,
@@ -103,7 +103,7 @@ impl LineHeight {
 }
 
 impl MakeComputed for LineHeight {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     match self {
       Self::Length(Length::Percentage(value)) => {
         let dpr = sizing.viewport.device_pixel_ratio;

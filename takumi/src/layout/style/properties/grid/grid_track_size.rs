@@ -4,11 +4,11 @@ use cssparser::{Parser, match_ignore_ascii_case};
 use taffy::{MaxTrackSizingFunction, MinTrackSizingFunction, TrackSizingFunction};
 
 use crate::{
+  layout::style::SizingContext,
   layout::style::{
     CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, GridLength, GridMinMaxSize, Length,
     MakeComputed, ParseResult, ToCss, tw::TailwindPropertyParser,
   },
-  rendering::Sizing,
 };
 
 /// A list of `GridTrackSize`
@@ -45,7 +45,7 @@ impl From<GridLength> for GridTrackSize {
 
 impl GridTrackSize {
   /// Converts the grid track size to a non-repeated track sizing function.
-  pub(crate) fn to_min_max(self, sizing: &Sizing) -> TrackSizingFunction {
+  pub(crate) fn to_min_max(self, sizing: &SizingContext) -> TrackSizingFunction {
     match self {
       // SAFETY: The compact length is a valid track sizing function.
       Self::Fixed(size) => unsafe {
@@ -100,7 +100,7 @@ impl<'i> FromCss<'i> for GridTrackSize {
 }
 
 impl MakeComputed for GridTrackSize {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     match self {
       GridTrackSize::MinMax(min_max) => min_max.make_computed(sizing),
       GridTrackSize::Fixed(length) => length.make_computed(sizing),

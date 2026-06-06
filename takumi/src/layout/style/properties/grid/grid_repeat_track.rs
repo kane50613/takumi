@@ -1,9 +1,8 @@
 use cssparser::Parser;
 
 use crate::layout::style::{
-  CssSyntaxKind, CssToken, FromCss, GridTrackSize, MakeComputed, ParseResult, ToCss,
+  CssSyntaxKind, CssToken, FromCss, GridTrackSize, MakeComputed, ParseResult, SizingContext, ToCss,
 };
-use crate::rendering::Sizing;
 
 /// Represents a grid repeat track
 #[derive(Debug, Clone, PartialEq)]
@@ -19,7 +18,7 @@ pub struct GridRepeatTrack {
 }
 
 impl MakeComputed for GridRepeatTrack {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.size.make_computed(sizing);
   }
 }

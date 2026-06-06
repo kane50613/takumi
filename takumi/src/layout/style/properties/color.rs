@@ -13,10 +13,10 @@ use tiny_skia::{ColorU8, PremultipliedColorU8};
 use crate::{
   layout::style::{
     Animatable, Color as CurrentColor, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
-    MakeComputed, ParseResult, PercentageNumber,
+    MakeComputed, ParseResult, PercentageNumber, SizingContext,
     properties::gradient_utils::interpolate_with_color_space, tw::TailwindPropertyParser,
   },
-  rendering::{Sizing, fast_div_255},
+  rendering::fast_div_255,
 };
 
 fn is_cylindrical_color_space(color_space: ColorSpaceTag) -> bool {
@@ -189,7 +189,7 @@ impl<const DEFAULT_CURRENT_COLOR: bool> Animatable for ColorInput<DEFAULT_CURREN
     from: &Self,
     to: &Self,
     progress: f32,
-    _sizing: &Sizing,
+    _sizing: &SizingContext,
     current_color: CurrentColor,
   ) {
     *self = match (from, to) {

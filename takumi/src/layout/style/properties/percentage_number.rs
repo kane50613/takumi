@@ -7,11 +7,10 @@ use std::{
 use cssparser::{Parser, Token};
 
 use crate::layout::style::{
-  Animatable, Color, MakeComputed, lerp,
+  Animatable, Color, MakeComputed, SizingContext, lerp,
   properties::{FromCss, ParseResult},
   tw::TailwindPropertyParser,
 };
-use crate::rendering::Sizing;
 
 use crate::layout::style::{CssSyntaxKind, CssToken};
 
@@ -27,7 +26,7 @@ impl Animatable for PercentageNumber {
     from: &Self,
     to: &Self,
     progress: f32,
-    _sizing: &Sizing,
+    _sizing: &SizingContext,
     _current_color: Color,
   ) {
     *self = Self(lerp(from.0, to.0, progress));

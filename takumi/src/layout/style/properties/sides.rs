@@ -3,10 +3,10 @@ use std::fmt;
 use taffy::Rect;
 
 use crate::{
+  layout::style::SizingContext,
   layout::style::{
     CssExpectedMessage, CssToken, FromCss, Length, MakeComputed, ParseResult, ToCss,
   },
-  rendering::Sizing,
 };
 
 /// Represents the values for the four sides of a box (top, right, bottom, left).
@@ -95,7 +95,7 @@ impl<T: Copy> From<T> for Sides<T> {
 }
 
 impl<T: Copy + MakeComputed> MakeComputed for Sides<T> {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     for value in &mut self.0 {
       value.make_computed(sizing);
     }

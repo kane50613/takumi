@@ -4,11 +4,11 @@ use std::fmt;
 use taffy::Size;
 
 use crate::{
+  layout::style::SizingContext,
   layout::style::{
     Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
     MakeComputed, ParseResult, tw::TailwindPropertyParser,
   },
-  rendering::Sizing,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -142,7 +142,7 @@ impl<'i> FromCss<'i> for BackgroundSize {
 }
 
 impl MakeComputed for BackgroundSize {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     if let Self::Explicit { width, height } = self {
       width.make_computed(sizing);
       height.make_computed(sizing);
@@ -160,7 +160,7 @@ impl Animatable for BackgroundSize {
     from: &Self,
     to: &Self,
     progress: f32,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     current_color: Color,
   ) {
     *self = match (*from, *to) {
@@ -195,7 +195,7 @@ impl BackgroundSize {
   pub(crate) fn resolve(
     self,
     area: Size<u32>,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     intrinsic: IntrinsicSizing,
   ) -> ResolvedBackgroundSize {
     match self {
@@ -268,7 +268,7 @@ fn resolve_auto_background_size(
   width: Length,
   height: Length,
   area: Size<u32>,
-  sizing: &Sizing,
+  sizing: &SizingContext,
   intrinsic: IntrinsicSizing,
 ) -> (u32, u32) {
   let area_width = area.width as f32;

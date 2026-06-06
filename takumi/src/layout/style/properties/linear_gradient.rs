@@ -13,10 +13,10 @@ use super::gradient_utils::{
 };
 use crate::layout::style::{
   Animatable, Color, ColorInterpolationMethod, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
-  Length, MakeComputed, ParseResult, ToCss, declare_enum_from_css_impl, properties::ColorInput,
-  tw::TailwindPropertyParser, unexpected_token,
+  Length, MakeComputed, ParseResult, SizingContext, ToCss, declare_enum_from_css_impl,
+  properties::ColorInput, tw::TailwindPropertyParser, unexpected_token,
 };
-use crate::rendering::{RenderContext, Sizing};
+use crate::rendering::RenderContext;
 
 /// Represents a linear gradient.
 #[derive(Debug, Clone, PartialEq, TypedBuilder)]
@@ -37,7 +37,7 @@ pub struct LinearGradient {
 }
 
 impl MakeComputed for LinearGradient {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.stops.make_computed(sizing);
   }
 }
@@ -361,7 +361,7 @@ impl GradientOverlayTile for LinearGradientTile {
 pub struct StopPosition(pub Length);
 
 impl MakeComputed for StopPosition {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.0.make_computed(sizing);
   }
 }
@@ -382,7 +382,7 @@ pub enum GradientStop {
 }
 
 impl MakeComputed for GradientStop {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     match self {
       GradientStop::ColorHint { hint, .. } => hint.make_computed(sizing),
       GradientStop::Hint(hint) => hint.make_computed(sizing),
@@ -515,7 +515,7 @@ impl Animatable for Angle {
     from: &Self,
     to: &Self,
     progress: f32,
-    _sizing: &Sizing,
+    _sizing: &SizingContext,
     _current_color: Color,
   ) {
     let from_degrees = **from;
@@ -912,8 +912,8 @@ mod tests {
   };
 
   use super::*;
-  fn sizing() -> Sizing {
-    Sizing {
+  fn sizing() -> SizingContext {
+    SizingContext {
       viewport: Viewport::new((200, 100)),
       container_size: Size::NONE,
       font_size: 16.0,

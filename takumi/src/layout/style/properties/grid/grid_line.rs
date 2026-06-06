@@ -2,9 +2,8 @@ use cssparser::Parser;
 
 use crate::layout::style::{
   CssSyntaxKind, CssToken, FromCss, GridPlacementKeyword, GridPlacementSpan, MakeComputed,
-  ParseResult, tw::TailwindPropertyParser,
+  ParseResult, SizingContext, tw::TailwindPropertyParser,
 };
-use crate::rendering::Sizing;
 
 use crate::layout::style::GridPlacement;
 
@@ -19,7 +18,7 @@ pub struct GridLine {
 }
 
 impl MakeComputed for GridLine {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.start.make_computed(sizing);
     self.end.make_computed(sizing);
   }

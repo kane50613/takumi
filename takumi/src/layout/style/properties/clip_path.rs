@@ -7,10 +7,10 @@ use taffy::{AbsoluteAxis, Point, Rect, Size};
 use crate::{
   layout::style::{
     Axis, BorderStyle, Color, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
-    ImageScalingAlgorithm, Length, MakeComputed, ParseResult, Sides, SpacePair,
+    ImageScalingAlgorithm, Length, MakeComputed, ParseResult, Sides, SizingContext, SpacePair,
   },
   rendering::{
-    BorderProperties, BufferPool, Fill, PathBuilder, PathData, Placement, RenderContext, Sizing,
+    BorderProperties, BufferPool, Fill, PathBuilder, PathData, Placement, RenderContext,
     render_mask,
   },
 };
@@ -51,7 +51,7 @@ pub enum ShapeRadius {
 }
 
 impl MakeComputed for ShapeRadius {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     if let ShapeRadius::Length(length) = self {
       length.make_computed(sizing);
     }
@@ -64,7 +64,7 @@ impl MakeComputed for ShapeRadius {
 pub struct ShapePosition(pub SpacePair<Length>);
 
 impl MakeComputed for ShapePosition {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.0.make_computed(sizing);
   }
 }
@@ -89,7 +89,7 @@ pub struct InsetShape {
 }
 
 impl MakeComputed for InsetShape {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.inset.make_computed(sizing);
     self.border_radius.make_computed(sizing);
   }
@@ -108,7 +108,7 @@ pub struct EllipseShape {
 }
 
 impl MakeComputed for EllipseShape {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.radius_x.make_computed(sizing);
     self.radius_y.make_computed(sizing);
     self.position.make_computed(sizing);
@@ -129,7 +129,7 @@ pub struct PolygonShape {
 }
 
 impl MakeComputed for PolygonShape {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.coordinates.make_computed(sizing);
   }
 }
@@ -159,7 +159,7 @@ pub enum BasicShape {
 }
 
 impl MakeComputed for BasicShape {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     match self {
       BasicShape::Inset(shape) => shape.make_computed(sizing),
       BasicShape::Ellipse(shape) => shape.make_computed(sizing),
@@ -169,7 +169,12 @@ impl MakeComputed for BasicShape {
   }
 }
 
-fn resolve_radius(radius: ShapeRadius, distance: Size<f32>, sizing: &Sizing, full: f32) -> f32 {
+fn resolve_radius(
+  radius: ShapeRadius,
+  distance: Size<f32>,
+  sizing: &SizingContext,
+  full: f32,
+) -> f32 {
   match radius {
     ShapeRadius::ClosestSide => distance.width.min(distance.height),
     ShapeRadius::FarthestSide => distance.width.max(distance.height),

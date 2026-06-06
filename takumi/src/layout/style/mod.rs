@@ -2,6 +2,7 @@ mod animation;
 pub(crate) mod matching;
 mod properties;
 mod selector;
+mod sizing;
 mod stylesheets;
 pub(crate) mod tw;
 
@@ -16,6 +17,7 @@ use serde::{
   Deserialize,
   de::{self, DeserializeSeed, Deserializer, IgnoredAny, MapAccess, SeqAccess, Visitor},
 };
+pub(crate) use sizing::SizingContext;
 pub use stylesheets::*;
 
 #[derive(Clone, Copy)]

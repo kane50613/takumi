@@ -15,13 +15,13 @@ use taffy::Size;
 use crate::{
   error::StyleSheetParseError,
   keyframes::parse_keyframe_prelude,
+  layout::style::SizingContext,
   layout::{
     Viewport,
     style::{
       CalcArena, FromCss, KeyframeRule, KeyframesRule, LengthDefaultsToZero, StyleDeclarationBlock,
     },
   },
-  rendering::Sizing,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -576,7 +576,7 @@ pub(crate) struct MediaQueryList {
 }
 
 impl MediaFeature {
-  fn matches(&self, viewport: Viewport, sizing: &Sizing) -> bool {
+  fn matches(&self, viewport: Viewport, sizing: &SizingContext) -> bool {
     match self {
       Self::Width(comparison, value) => viewport.size.width.is_some_and(|width| {
         compare_media_feature(*comparison, width as f32, value.to_px(sizing, width as f32))
@@ -603,7 +603,7 @@ impl MediaFeature {
 }
 
 impl MediaQuery {
-  fn matches(&self, viewport: Viewport, sizing: &Sizing) -> bool {
+  fn matches(&self, viewport: Viewport, sizing: &SizingContext) -> bool {
     let media_type_matches = match &self.media_type {
       MediaType::All | MediaType::Screen => true,
       MediaType::Unsupported(_) => false,
@@ -629,7 +629,7 @@ impl MediaQueryList {
       return true;
     }
 
-    let sizing = Sizing {
+    let sizing = SizingContext {
       viewport,
       container_size: Size::NONE,
       font_size: viewport.font_size,

@@ -3,11 +3,11 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::{
+  layout::style::SizingContext,
   layout::style::{
     Animatable, Color, CssSyntaxKind, CssToken, FromCss, LengthDefaultsToZero, MakeComputed,
     ParseResult, ToCss, unexpected_token,
   },
-  rendering::Sizing,
 };
 
 /// Controls indentation of the first line, or hanging/each-line variants.
@@ -44,7 +44,7 @@ impl TextIndent {
     self
   }
 
-  pub(crate) fn resolve_px(self, sizing: &Sizing, line_width: f32) -> f32 {
+  pub(crate) fn resolve_px(self, sizing: &SizingContext, line_width: f32) -> f32 {
     self.amount.to_px(sizing, line_width)
   }
 }
@@ -57,7 +57,7 @@ impl Animatable for TextIndent {
     from: &Self,
     to: &Self,
     progress: f32,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     current_color: Color,
   ) {
     self

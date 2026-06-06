@@ -117,8 +117,8 @@ use std::borrow::Cow;
 use std::fmt;
 
 use crate::{
-  layout::style::tw::TailwindPropertyParser,
-  rendering::{Join, Sizing},
+  layout::style::{SizingContext, tw::TailwindPropertyParser},
+  rendering::Join,
 };
 
 /// Parser result type alias for CSS property parsers.
@@ -422,7 +422,7 @@ impl<'i> FromCss<'i> for String {
 /// Converts a parsed/inherited value into a computed value for the current node context.
 pub(crate) trait MakeComputed {
   /// Default no-op for types that do not need computed-value normalization.
-  fn make_computed(&mut self, _sizing: &Sizing) {}
+  fn make_computed(&mut self, _sizing: &SizingContext) {}
 }
 
 pub(crate) trait Animatable: Sized + Clone {
@@ -431,7 +431,7 @@ pub(crate) trait Animatable: Sized + Clone {
     from: &Self,
     to: &Self,
     progress: f32,
-    _sizing: &Sizing,
+    _sizing: &SizingContext,
     _current_color: Color,
   ) {
     *self = if progress >= 1.0 {
@@ -465,7 +465,7 @@ pub(crate) enum ListInterpolationStrategy {
 }
 
 impl<T: MakeComputed> MakeComputed for Option<T> {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     if let Some(value) = self.as_mut() {
       value.make_computed(sizing);
     }
@@ -473,7 +473,7 @@ impl<T: MakeComputed> MakeComputed for Option<T> {
 }
 
 impl<T: MakeComputed> MakeComputed for Box<[T]> {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     for value in self.iter_mut() {
       value.make_computed(sizing);
     }
@@ -481,7 +481,7 @@ impl<T: MakeComputed> MakeComputed for Box<[T]> {
 }
 
 impl<T: MakeComputed> MakeComputed for Vec<T> {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     for value in self.iter_mut() {
       value.make_computed(sizing);
     }
@@ -501,7 +501,7 @@ impl<T: Animatable + Clone> Animatable for Option<T> {
     from: &Self,
     to: &Self,
     progress: f32,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     current_color: Color,
   ) {
     *self = match (from, to) {
@@ -557,7 +557,7 @@ impl<T: Animatable + Clone> Animatable for Box<[T]> {
     from: &Self,
     to: &Self,
     progress: f32,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     current_color: Color,
   ) {
     *self = interpolate_list(
@@ -592,7 +592,7 @@ impl<T: Animatable + Clone> Animatable for Vec<T> {
     from: &Self,
     to: &Self,
     progress: f32,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     current_color: Color,
   ) {
     *self = interpolate_list(from, to, progress, sizing, current_color, |values| values)
@@ -610,7 +610,7 @@ fn interpolate_list<T: Animatable + Clone, C: AsRef<[T]>, O>(
   from: &C,
   to: &C,
   progress: f32,
-  sizing: &Sizing,
+  sizing: &SizingContext,
   current_color: Color,
   build: impl FnOnce(Vec<T>) -> O,
 ) -> Option<O> {
@@ -650,7 +650,7 @@ fn interpolate_pairwise_list<T: Animatable + Clone>(
   to: &[T],
   output_len: usize,
   progress: f32,
-  sizing: &Sizing,
+  sizing: &SizingContext,
   current_color: Color,
 ) -> Vec<T> {
   (0..output_len)
@@ -668,7 +668,7 @@ fn interpolate_neutral_padded_list<T: Animatable + Clone>(
   from: &[T],
   to: &[T],
   progress: f32,
-  sizing: &Sizing,
+  sizing: &SizingContext,
   current_color: Color,
 ) -> Option<Vec<T>> {
   let output_len = from.len().max(to.len());
@@ -714,7 +714,7 @@ impl<T: Animatable + Copy> Animatable for SpacePair<T> {
     from: &Self,
     to: &Self,
     progress: f32,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     current_color: Color,
   ) {
     self
@@ -732,7 +732,7 @@ impl<T: Animatable + Copy> Animatable for Sides<T> {
     from: &Self,
     to: &Self,
     progress: f32,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     current_color: Color,
   ) {
     for (index, value) in self.0.iter_mut().enumerate() {
@@ -1021,7 +1021,7 @@ impl From<f32> for BorderRadius {
 }
 
 impl MakeComputed for BorderRadius {
-  fn make_computed(&mut self, sizing: &Sizing) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     self.0.make_computed(sizing);
   }
 }
@@ -1032,7 +1032,7 @@ impl Animatable for BorderRadius {
     from: &Self,
     to: &Self,
     progress: f32,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     current_color: Color,
   ) {
     self
