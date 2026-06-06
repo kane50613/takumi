@@ -22,3 +22,6 @@ strip = "debuginfo"
 [profile.bench]
 debug = true
 strip = "debuginfo"
+
+[profile.release.package.takumi-css]
+opt-level = "s"
