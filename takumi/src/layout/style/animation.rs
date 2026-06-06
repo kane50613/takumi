@@ -6,16 +6,13 @@ use typed_builder::TypedBuilder;
 
 use serde::Deserialize;
 
-use crate::{
-  layout::{
-    Viewport,
-    style::{
-      StyleDeclarationBlock,
-      selector::{MediaQueryList, StyleSheet},
-      *,
-    },
+use crate::layout::{
+  Viewport,
+  style::{
+    StyleDeclarationBlock,
+    selector::{MediaQueryList, StyleSheet},
+    *,
   },
-  rendering::RenderContext,
 };
 
 #[derive(Debug, Clone, Deserialize, PartialEq, TypedBuilder)]
@@ -46,7 +43,10 @@ pub struct KeyframesRule {
 
 pub(crate) fn apply_stylesheet_animations(
   mut base_style: ComputedStyle,
-  context: &RenderContext<'_>,
+  stylesheet: &StyleSheet,
+  time: u64,
+  sizing: &SizingContext,
+  current_color: Color,
 ) -> ComputedStyle {
   if base_style.animation_name.is_empty() {
     return base_style;
@@ -59,9 +59,7 @@ pub(crate) fn apply_stylesheet_animations(
       continue;
     };
 
-    let Some(keyframes) =
-      find_keyframes(&context.stylesheet, animation_name, context.sizing.viewport)
-    else {
+    let Some(keyframes) = find_keyframes(stylesheet, animation_name, sizing.viewport) else {
       continue;
     };
 
@@ -83,7 +81,7 @@ pub(crate) fn apply_stylesheet_animations(
       timing_function_at(&base_snapshot.animation_timing_function, animation_index);
 
     let Some(progress) = sample_animation_progress(
-      context.time as f32,
+      time as f32,
       duration.milliseconds,
       delay.milliseconds,
       iteration_count,
@@ -104,8 +102,8 @@ pub(crate) fn apply_stylesheet_animations(
       segment.to_style,
       &segment.animated_properties,
       eased_progress,
-      &context.sizing,
-      context.current_color,
+      sizing,
+      current_color,
     );
   }
 

@@ -1261,7 +1261,13 @@ impl<'g> RenderNode<'g> {
           child_sizing.clone(),
           child_current_color,
         );
-        style = apply_stylesheet_animations(style, &child_context);
+        style = apply_stylesheet_animations(
+          style,
+          &child_context.stylesheet,
+          child_context.time,
+          &child_context.sizing,
+          child_context.current_color,
+        );
         child_sizing_for_final = Some(child_sizing);
       }
 
