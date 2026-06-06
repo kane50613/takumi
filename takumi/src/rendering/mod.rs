@@ -7,6 +7,8 @@ mod components;
 /// Debug drawing utilities
 mod debug_drawing;
 mod dithering;
+/// Filter rasterization (blur, drop-shadow, backdrop, pixel filters)
+mod filter;
 /// Image drawing functions
 mod image_drawing;
 pub(crate) mod inline_drawing;
@@ -34,6 +36,7 @@ pub(crate) use canvas::*;
 pub(crate) use components::*;
 pub(crate) use debug_drawing::*;
 pub use dithering::*;
+pub(crate) use filter::*;
 pub(crate) use image_drawing::*;
 pub(crate) use path::*;
 pub use render::*;

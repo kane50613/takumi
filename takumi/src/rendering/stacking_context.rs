@@ -15,14 +15,14 @@ use crate::{
     inline::{collect_inline_items, create_inline_layout, resolve_inline_max_height},
     style::{
       Affine, BackgroundImage, BlendMode, Color, ComputedStyle, Display, Filter, SizingContext,
-      SpacePair, apply_backdrop_filter, apply_filters_to_pixmap,
+      SpacePair,
     },
     tree::{LayoutResults, OrderedChild, RenderNode},
   },
   rendering::{
     BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, NodeMaskAction, Placement,
-    blend_pixel, draw_debug_border, get_node_mut_by_path, prepare_node_mask, scale_text_fit_x,
-    transformed_rect_extents,
+    apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel, draw_debug_border,
+    get_node_mut_by_path, prepare_node_mask, scale_text_fit_x, transformed_rect_extents,
   },
 };
 
