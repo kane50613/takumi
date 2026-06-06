@@ -1,5 +1,6 @@
 mod animation;
 pub(crate) mod matching;
+mod math;
 mod properties;
 mod selector;
 mod sizing;
@@ -10,6 +11,7 @@ use std::{borrow::Cow, fmt::Formatter};
 
 pub(crate) use animation::apply_stylesheet_animations;
 pub use animation::{KeyframeRule, KeyframesRule};
+pub(crate) use math::{fast_div_255, fast_div_255_u32};
 pub(crate) use properties::unexpected_token;
 pub use properties::*;
 pub use selector::*;

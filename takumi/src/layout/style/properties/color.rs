@@ -10,13 +10,10 @@ use cssparser::{
 use image::Rgba;
 use tiny_skia::{ColorU8, PremultipliedColorU8};
 
-use crate::{
-  layout::style::{
-    Animatable, Color as CurrentColor, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
-    MakeComputed, ParseResult, PercentageNumber, SizingContext,
-    properties::gradient_utils::interpolate_with_color_space, tw::TailwindPropertyParser,
-  },
-  rendering::fast_div_255,
+use crate::layout::style::{
+  Animatable, Color as CurrentColor, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
+  MakeComputed, ParseResult, PercentageNumber, SizingContext, fast_div_255,
+  properties::gradient_utils::interpolate_with_color_space, tw::TailwindPropertyParser,
 };
 
 fn is_cylindrical_color_space(color_space: ColorSpaceTag) -> bool {

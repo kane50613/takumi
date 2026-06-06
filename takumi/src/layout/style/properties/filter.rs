@@ -12,11 +12,11 @@ use crate::{
   layout::style::{
     Affine, Angle, Animatable, Color, CssDescriptorKind, CssToken, FromCss, Length,
     ListInterpolationStrategy, MakeComputed, ParseResult, PercentageNumber, SizingContext,
-    TextShadow, tw::TailwindPropertyParser,
+    TextShadow, fast_div_255, tw::TailwindPropertyParser,
   },
   rendering::{
     BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Placement, RenderContext,
-    SizedShadow, apply_blur, apply_blur_rgba_bytes, fast_div_255, render_mask,
+    SizedShadow, apply_blur, apply_blur_rgba_bytes, render_mask,
   },
 };
 
