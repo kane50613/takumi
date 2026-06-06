@@ -2,17 +2,10 @@ use std::fmt;
 
 use crate::layout::style::{ToCss, properties::write_css_string, unexpected_token};
 use cssparser::{Parser, Token, match_ignore_ascii_case};
-use taffy::{AbsoluteAxis, Point, Rect, Size};
 
-use crate::{
-  layout::style::{
-    Axis, BorderStyle, Color, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
-    ImageScalingAlgorithm, Length, MakeComputed, ParseResult, Sides, SizingContext, SpacePair,
-  },
-  rendering::{
-    BorderProperties, BufferPool, Fill, PathBuilder, PathData, Placement, RenderContext,
-    render_mask,
-  },
+use crate::layout::style::{
+  CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult, Sides,
+  SizingContext, SpacePair,
 };
 
 /// Represents the fill rule used for determining the interior of shapes.
@@ -26,15 +19,6 @@ pub enum FillRule {
   NonZero,
   /// Counts the total number of crossings - if even, the point is outside
   EvenOdd,
-}
-
-impl From<FillRule> for Fill {
-  fn from(value: FillRule) -> Self {
-    match value {
-      FillRule::EvenOdd => Fill::EvenOdd,
-      FillRule::NonZero => Fill::NonZero,
-    }
-  }
 }
 
 /// Represents radius values for circle() and ellipse() functions.
@@ -169,19 +153,6 @@ impl MakeComputed for BasicShape {
   }
 }
 
-fn resolve_radius(
-  radius: ShapeRadius,
-  distance: Size<f32>,
-  sizing: &SizingContext,
-  full: f32,
-) -> f32 {
-  match radius {
-    ShapeRadius::ClosestSide => distance.width.min(distance.height),
-    ShapeRadius::FarthestSide => distance.width.max(distance.height),
-    ShapeRadius::Length(length) => length.to_px(sizing, full),
-  }
-}
-
 impl BasicShape {
   pub(crate) fn fill_rule(&self) -> Option<FillRule> {
     match self {
@@ -189,113 +160,6 @@ impl BasicShape {
       BasicShape::Path(shape) => shape.fill_rule,
       _ => None,
     }
-  }
-
-  pub(crate) fn render_mask(
-    &self,
-    context: &RenderContext,
-    size: Size<f32>,
-    buffer_pool: &mut BufferPool,
-  ) -> (Vec<u8>, Placement) {
-    let mut paths = Vec::new();
-
-    match self {
-      BasicShape::Inset(shape) => {
-        let inset: Rect<f32> = shape
-          .inset
-          .map_axis(|value, axis| {
-            value.to_px(
-              &context.sizing,
-              match axis {
-                Axis::Horizontal => size.width,
-                Axis::Vertical => size.height,
-              },
-            )
-          })
-          .into();
-
-        let border = BorderProperties {
-          width: Rect::zero(),
-          color: Rect {
-            top: Color::transparent(),
-            right: Color::transparent(),
-            bottom: Color::transparent(),
-            left: Color::transparent(),
-          },
-          radius: shape
-            .border_radius
-            .map(|radius| {
-              Sides(
-                radius
-                  .0
-                  .map(|corner| SpacePair::from_single(corner.to_px(&context.sizing, size.width))),
-              )
-            })
-            .unwrap_or_default(),
-          image_rendering: ImageScalingAlgorithm::Auto,
-          style: Rect {
-            top: BorderStyle::Solid,
-            right: BorderStyle::Solid,
-            bottom: BorderStyle::Solid,
-            left: BorderStyle::Solid,
-          },
-        };
-
-        border.append_mask_commands(
-          &mut paths,
-          Size {
-            width: size.width - inset.grid_axis_sum(AbsoluteAxis::Horizontal),
-            height: size.height - inset.grid_axis_sum(AbsoluteAxis::Vertical),
-          },
-          Point {
-            x: inset.left,
-            y: inset.top,
-          },
-        );
-      }
-      BasicShape::Ellipse(shape) => {
-        let distance = Size {
-          width: shape.position.0.x.to_px(&context.sizing, size.width),
-          height: shape.position.0.y.to_px(&context.sizing, size.height),
-        };
-
-        paths.add_ellipse(
-          (distance.width, distance.height),
-          resolve_radius(shape.radius_x, distance, &context.sizing, size.width),
-          resolve_radius(shape.radius_y, distance, &context.sizing, size.height),
-        );
-      }
-      BasicShape::Polygon(shape) => {
-        if !shape.coordinates.is_empty() {
-          // Start the path at the first coordinate
-          let first = &shape.coordinates[0];
-          let first_x = first.x.to_px(&context.sizing, size.width);
-          let first_y = first.y.to_px(&context.sizing, size.height);
-
-          paths.move_to((first_x, first_y));
-
-          // Add lines to each subsequent coordinate
-          for coord in &shape.coordinates[1..] {
-            let x = coord.x.to_px(&context.sizing, size.width);
-            let y = coord.y.to_px(&context.sizing, size.height);
-            paths.line_to((x, y));
-          }
-
-          // Close the path to complete the polygon
-          paths.close();
-        }
-      }
-      BasicShape::Path(shape) => {
-        paths.extend(shape.path.as_ref().commands());
-      }
-    }
-
-    render_mask(
-      &paths,
-      Some(context.transform),
-      Some(Fill::from(self.fill_rule().unwrap_or(context.style.clip_rule)).into()),
-      buffer_pool,
-    )
   }
 }
 
