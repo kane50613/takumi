@@ -27,6 +27,19 @@ pub(crate) struct SizingContext {
 }
 
 impl SizingContext {
+  #[cfg(test)]
+  pub(crate) fn new_test(viewport: Viewport) -> Self {
+    Self {
+      viewport,
+      container_size: Size::NONE,
+      font_size: viewport.font_size,
+      root_font_size: None,
+      line_height: 0.0,
+      root_line_height: None,
+      calc_arena: Rc::new(CalcArena::default()),
+    }
+  }
+
   /// Device-pixel basis for the `rem` unit.
   pub(crate) fn rem_basis(&self) -> f32 {
     self

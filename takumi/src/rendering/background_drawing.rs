@@ -490,13 +490,25 @@ pub(crate) fn render_tile(
   Ok(match image {
     BackgroundImage::None => None,
     BackgroundImage::Linear(gradient) => Some(BackgroundTile::Linear(LinearGradientTile::new(
-      gradient, tile_w, tile_h, context,
+      gradient,
+      tile_w,
+      tile_h,
+      &context.sizing,
+      context.current_color,
     ))),
     BackgroundImage::Radial(gradient) => Some(BackgroundTile::Radial(RadialGradientTile::new(
-      gradient, tile_w, tile_h, context,
+      gradient,
+      tile_w,
+      tile_h,
+      &context.sizing,
+      context.current_color,
     ))),
     BackgroundImage::Conic(gradient) => Some(BackgroundTile::Conic(ConicGradientTile::new(
-      gradient, tile_w, tile_h, context,
+      gradient,
+      tile_w,
+      tile_h,
+      &context.sizing,
+      context.current_color,
     ))),
     BackgroundImage::Url(url) => {
       if let Ok(source) = resolve_image(url, context) {

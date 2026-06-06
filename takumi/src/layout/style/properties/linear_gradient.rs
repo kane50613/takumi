@@ -16,7 +16,6 @@ use crate::layout::style::{
   Length, MakeComputed, ParseResult, SizingContext, ToCss, declare_enum_from_css_impl,
   properties::ColorInput, tw::TailwindPropertyParser, unexpected_token,
 };
-use crate::rendering::RenderContext;
 
 /// Represents a linear gradient.
 #[derive(Debug, Clone, PartialEq, TypedBuilder)]
@@ -186,7 +185,13 @@ impl LinearGradientTile {
   }
 
   /// Builds a drawing context from a gradient and a target viewport.
-  pub fn new(gradient: &LinearGradient, width: u32, height: u32, context: &RenderContext) -> Self {
+  pub fn new(
+    gradient: &LinearGradient,
+    width: u32,
+    height: u32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) -> Self {
     let (dir_x, dir_y) = Self::direction_components(gradient, width, height);
     let axis_aligned_kind = Self::classify_axis_aligned(dir_x, dir_y);
 
@@ -196,7 +201,12 @@ impl LinearGradientTile {
     let axis_length = 2.0 * max_extent;
     let projection_bias = max_extent - cx * dir_x - cy * dir_y;
 
-    let resolved_stops = resolve_stops_along_axis(&gradient.stops, axis_length.max(1e-6), context);
+    let resolved_stops = resolve_stops_along_axis(
+      &gradient.stops,
+      axis_length.max(1e-6),
+      sizing,
+      current_color,
+    );
 
     let (repeating, repeat_start, repeat_period, lut_axis_length, lut_resolved_stops) = if gradient
       .repeating
@@ -906,10 +916,7 @@ mod tests {
   use taffy::Size;
   use tiny_skia::ColorU8;
 
-  use crate::{
-    GlobalContext,
-    layout::{Viewport, style::CalcArena},
-  };
+  use crate::layout::{Viewport, style::CalcArena};
 
   use super::*;
   fn sizing() -> SizingContext {
@@ -1415,9 +1422,8 @@ mod tests {
     };
 
     // Test at the top (should be red)
-    let context = GlobalContext::default();
-    let dummy_context = RenderContext::new_test(&context, Viewport::new((100, 100)));
-    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context);
+    let dummy_context = SizingContext::new_test(Viewport::new((100, 100)));
+    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context, Color::black());
 
     let color_top = tile.sample_pixel(50, 0).demultiply();
     assert_eq!(color_top, ColorU8::from_rgba(255, 0, 0, 255));
@@ -1451,10 +1457,9 @@ mod tests {
     };
 
     // Test at the left (should be red)
-    let context = GlobalContext::default();
-    let dummy_context = RenderContext::new_test(&context, Viewport::new((100, 100)));
+    let dummy_context = SizingContext::new_test(Viewport::new((100, 100)));
 
-    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context);
+    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context, Color::black());
     let color_left = tile.sample_pixel(0, 50).demultiply();
     assert_eq!(color_left, ColorU8::from_rgba(255, 0, 0, 255));
 
@@ -1485,9 +1490,8 @@ mod tests {
       .into(),
     };
 
-    let context = GlobalContext::default();
-    let dummy_context = RenderContext::new_test(&context, Viewport::new((200, 100)));
-    let tile = LinearGradientTile::new(&gradient, 200, 100, &dummy_context);
+    let dummy_context = SizingContext::new_test(Viewport::new((200, 100)));
+    let tile = LinearGradientTile::new(&gradient, 200, 100, &dummy_context, Color::black());
 
     assert!((tile.dir_x - 0.4472136).abs() < 0.001);
     assert!((tile.dir_y - 0.8944272).abs() < 0.001);
@@ -1507,9 +1511,8 @@ mod tests {
     };
 
     // Should always return the same color
-    let context = GlobalContext::default();
-    let dummy_context = RenderContext::new_test(&context, Viewport::new((100, 100)));
-    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context);
+    let dummy_context = SizingContext::new_test(Viewport::new((100, 100)));
+    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context, Color::black());
     let color = tile.sample_pixel(50, 50).demultiply();
     assert_eq!(color, ColorU8::from_rgba(255, 0, 0, 255));
   }
@@ -1524,9 +1527,8 @@ mod tests {
     };
 
     // Should return transparent
-    let context = GlobalContext::default();
-    let dummy_context = RenderContext::new_test(&context, Viewport::new((100, 100)));
-    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context);
+    let dummy_context = SizingContext::new_test(Viewport::new((100, 100)));
+    let tile = LinearGradientTile::new(&gradient, 100, 100, &dummy_context, Color::black());
     let color = tile.sample_pixel(50, 50).demultiply();
     assert_eq!(color, ColorU8::from_rgba(0, 0, 0, 0));
   }
@@ -1556,9 +1558,8 @@ mod tests {
       ])
       .build();
 
-    let context = GlobalContext::default();
-    let render_context = RenderContext::new_test(&context, Viewport::new((40, 1)));
-    let tile = LinearGradientTile::new(&gradient, 40, 1, &render_context);
+    let render_context = SizingContext::new_test(Viewport::new((40, 1)));
+    let tile = LinearGradientTile::new(&gradient, 40, 1, &render_context, Color::black());
 
     assert_eq!(
       [
@@ -1581,9 +1582,8 @@ mod tests {
     let gradient =
       LinearGradient::from_str("linear-gradient(to right, grey 1px, transparent 1px)")?;
 
-    let context = GlobalContext::default();
-    let dummy_context = RenderContext::new_test(&context, Viewport::new((40, 40)));
-    let tile = LinearGradientTile::new(&gradient, 40, 40, &dummy_context);
+    let dummy_context = SizingContext::new_test(Viewport::new((40, 40)));
+    let tile = LinearGradientTile::new(&gradient, 40, 40, &dummy_context, Color::black());
 
     // grey at 0,0
     let c0 = tile.sample_pixel(0, 0).demultiply();
@@ -1605,9 +1605,8 @@ mod tests {
     let gradient =
       LinearGradient::from_str("linear-gradient(to bottom, grey 1px, transparent 1px)")?;
 
-    let context = GlobalContext::default();
-    let dummy_context = RenderContext::new_test(&context, Viewport::new((40, 40)));
-    let tile = LinearGradientTile::new(&gradient, 40, 40, &dummy_context);
+    let dummy_context = SizingContext::new_test(Viewport::new((40, 40)));
+    let tile = LinearGradientTile::new(&gradient, 40, 40, &dummy_context, Color::black());
 
     // color at top-left (0, 0) should be grey (1px hard stop)
     assert_eq!(
@@ -1675,13 +1674,13 @@ mod tests {
       ])
       .build();
 
-    let context = GlobalContext::default();
-    let ctx = RenderContext::new_test(&context, Viewport::new((200, 100)));
+    let ctx = SizingContext::new_test(Viewport::new((200, 100)));
 
     let resolved = resolve_stops_along_axis(
       &gradient.stops,
-      ctx.sizing.viewport.size.width.unwrap_or_default() as f32,
+      ctx.viewport.size.width.unwrap_or_default() as f32,
       &ctx,
+      Color::black(),
     );
     assert_eq!(resolved.len(), 3);
     assert!((resolved[0].position - 0.0).abs() < 1e-3);
@@ -1704,13 +1703,13 @@ mod tests {
         },
       ])
       .build();
-    let context = GlobalContext::default();
-    let ctx = RenderContext::new_test(&context, Viewport::new((200, 100)));
+    let ctx = SizingContext::new_test(Viewport::new((200, 100)));
 
     let resolved = resolve_stops_along_axis(
       &gradient.stops,
-      ctx.sizing.viewport.size.width.unwrap_or_default() as f32,
+      ctx.viewport.size.width.unwrap_or_default() as f32,
       &ctx,
+      Color::black(),
     );
     assert_eq!(resolved.len(), 2);
     assert!((resolved[0].position - 0.0).abs() < 1e-3);

@@ -1782,7 +1782,13 @@ mod tests {
     };
     let global_context = GlobalContext::default();
     let render_context = RenderContext::new_test(&global_context, Viewport::new((32, 16)));
-    let tile = LinearGradientTile::new(&gradient, 32, 16, &render_context);
+    let tile = LinearGradientTile::new(
+      &gradient,
+      32,
+      16,
+      &render_context.sizing,
+      render_context.current_color,
+    );
     assert_gradient_overlay_matches_reference_with(
       &tile,
       Size {
@@ -1838,7 +1844,8 @@ mod tests {
         &gradient,
         tile_size.width,
         tile_size.height,
-        &render_context,
+        &render_context.sizing,
+        render_context.current_color,
       );
       assert_gradient_overlay_matches_reference_with(
         &tile,
@@ -1859,7 +1866,13 @@ mod tests {
 
     let global_context = GlobalContext::default();
     let render_context = RenderContext::new_test(&global_context, Viewport::new((32, 24)));
-    let tile = ConicGradientTile::new(&gradient, 32, 24, &render_context);
+    let tile = ConicGradientTile::new(
+      &gradient,
+      32,
+      24,
+      &render_context.sizing,
+      render_context.current_color,
+    );
     assert_gradient_overlay_matches_reference_with(
       &tile,
       Size {
@@ -1951,7 +1964,8 @@ mod tests {
         &gradient,
         tile_size.width,
         tile_size.height,
-        &render_context,
+        &render_context.sizing,
+        render_context.current_color,
       );
       assert_gradient_overlay_matches_reference_with(
         &tile,
@@ -2061,7 +2075,13 @@ mod tests {
 
     let global_context = GlobalContext::default();
     let render_context = RenderContext::new_test(&global_context, Viewport::new((48, 48)));
-    let tile = ConicGradientTile::new(&gradient, 48, 48, &render_context);
+    let tile = ConicGradientTile::new(
+      &gradient,
+      48,
+      48,
+      &render_context.sizing,
+      render_context.current_color,
+    );
     assert_gradient_overlay_matches_reference(
       &tile,
       Size {
@@ -2081,7 +2101,13 @@ mod tests {
     };
     let global_context = GlobalContext::default();
     let render_context = RenderContext::new_test(&global_context, Viewport::new((32, 24)));
-    let tile = RadialGradientTile::new(&gradient, 32, 24, &render_context);
+    let tile = RadialGradientTile::new(
+      &gradient,
+      32,
+      24,
+      &render_context.sizing,
+      render_context.current_color,
+    );
     assert_gradient_overlay_matches_reference(
       &tile,
       Size {

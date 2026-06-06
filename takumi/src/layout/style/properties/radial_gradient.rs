@@ -7,13 +7,10 @@ use super::gradient_utils::{
   GradientOverlayTile, adaptive_lut_size_with_visible_samples, build_color_lut_with_interpolation,
   resolve_stops_along_axis,
 };
-use crate::{
-  layout::style::{
-    ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop, GradientStops,
-    Length, LengthDefaultsToZero, MakeComputed, ObjectPosition, ParseResult, ResolvedGradientStop,
-    SizingContext, ToCss, declare_enum_from_css_impl, unexpected_token,
-  },
-  rendering::RenderContext,
+use crate::layout::style::{
+  Color, ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop,
+  GradientStops, Length, LengthDefaultsToZero, MakeComputed, ObjectPosition, ParseResult,
+  ResolvedGradientStop, SizingContext, ToCss, declare_enum_from_css_impl, unexpected_token,
 };
 
 /// Represents a radial gradient.
@@ -202,9 +199,15 @@ impl RadialGradientTile {
   }
 
   /// Builds a drawing context from a gradient and a target viewport.
-  pub fn new(gradient: &RadialGradient, width: u32, height: u32, context: &RenderContext) -> Self {
-    let cx = Length::from(gradient.center.0.x).to_px(&context.sizing, width as f32);
-    let cy = Length::from(gradient.center.0.y).to_px(&context.sizing, height as f32);
+  pub fn new(
+    gradient: &RadialGradient,
+    width: u32,
+    height: u32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) -> Self {
+    let cx = Length::from(gradient.center.0.x).to_px(sizing, width as f32);
+    let cy = Length::from(gradient.center.0.y).to_px(sizing, height as f32);
 
     // Distances to sides and corners
     let dx_left = cx;
@@ -214,8 +217,8 @@ impl RadialGradientTile {
 
     let (radius_x, radius_y) = match (gradient.shape, gradient.size) {
       (shape, RadialSize::Explicit { radius_x, radius_y }) => {
-        let resolved_radius_x = radius_x.to_px(&context.sizing, width as f32).max(0.0);
-        let resolved_radius_y = radius_y.to_px(&context.sizing, height as f32).max(0.0);
+        let resolved_radius_x = radius_x.to_px(sizing, width as f32).max(0.0);
+        let resolved_radius_y = radius_y.to_px(sizing, height as f32).max(0.0);
 
         match shape {
           RadialShape::Circle => {
@@ -289,7 +292,12 @@ impl RadialGradientTile {
     };
 
     let radius_scale = radius_x.max(radius_y);
-    let resolved_stops = resolve_stops_along_axis(&gradient.stops, radius_scale.max(1e-6), context);
+    let resolved_stops = resolve_stops_along_axis(
+      &gradient.stops,
+      radius_scale.max(1e-6),
+      sizing,
+      current_color,
+    );
 
     let (repeating, repeat_start, repeat_period, lut_axis_length, lut_resolved_stops) = if gradient
       .repeating
@@ -588,7 +596,6 @@ mod tests {
     BackgroundPosition, Color, Length, LengthDefaultsToZero, PositionComponent, PositionKeywordX,
     PositionKeywordY, SpacePair, StopPosition,
   };
-  use crate::{GlobalContext, rendering::RenderContext};
   #[test]
   fn test_parse_radial_gradient_basic() {
     let gradient = RadialGradient::from_str("radial-gradient(#ff0000, #0000ff)");
@@ -854,17 +861,12 @@ mod tests {
       ])
       .build();
 
-    let context = GlobalContext::default();
-    let render_context = RenderContext::new_test(&context, Viewport::new((200, 100)));
+    let render_context = SizingContext::new_test(Viewport::new((200, 100)));
     let resolved = resolve_stops_along_axis(
       &gradient.stops,
-      render_context
-        .sizing
-        .viewport
-        .size
-        .width
-        .unwrap_or_default() as f32,
+      render_context.viewport.size.width.unwrap_or_default() as f32,
       &render_context,
+      Color::black(),
     );
 
     assert_eq!(resolved.len(), 3);
@@ -891,17 +893,12 @@ mod tests {
       ])
       .build();
 
-    let context = GlobalContext::default();
-    let render_context = RenderContext::new_test(&context, Viewport::new((200, 100)));
+    let render_context = SizingContext::new_test(Viewport::new((200, 100)));
     let resolved = resolve_stops_along_axis(
       &gradient.stops,
-      render_context
-        .sizing
-        .viewport
-        .size
-        .width
-        .unwrap_or_default() as f32,
+      render_context.viewport.size.width.unwrap_or_default() as f32,
       &render_context,
+      Color::black(),
     );
 
     assert_eq!(resolved.len(), 3);
@@ -926,9 +923,8 @@ mod tests {
       ])
       .build();
 
-    let context = GlobalContext::default();
-    let dummy_context = RenderContext::new_test(&context, Viewport::new((100, 100)));
-    let tile = RadialGradientTile::new(&gradient, 100, 100, &dummy_context);
+    let dummy_context = SizingContext::new_test(Viewport::new((100, 100)));
+    let tile = RadialGradientTile::new(&gradient, 100, 100, &dummy_context, Color::black());
 
     // Center (50, 50) should be red
     let color_center = tile.sample_pixel(50, 50).demultiply();
@@ -968,9 +964,8 @@ mod tests {
       ])
       .build();
 
-    let context = GlobalContext::default();
-    let render_context = RenderContext::new_test(&context, Viewport::new((40, 40)));
-    let tile = RadialGradientTile::new(&gradient, 40, 40, &render_context);
+    let render_context = SizingContext::new_test(Viewport::new((40, 40)));
+    let tile = RadialGradientTile::new(&gradient, 40, 40, &render_context, Color::black());
 
     assert_eq!(
       [
@@ -1008,9 +1003,8 @@ mod tests {
       ])
       .build();
 
-    let context = GlobalContext::default();
-    let dummy_context = RenderContext::new_test(&context, Viewport::new((100, 100)));
-    let tile = RadialGradientTile::new(&gradient, 100, 100, &dummy_context);
+    let dummy_context = SizingContext::new_test(Viewport::new((100, 100)));
+    let tile = RadialGradientTile::new(&gradient, 100, 100, &dummy_context, Color::black());
 
     // dx_left=20, dx_right=80, dy_top=20, dy_bottom=80
     // f_rx = 80, f_ry = 80

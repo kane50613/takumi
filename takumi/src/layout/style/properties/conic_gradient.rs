@@ -8,13 +8,10 @@ use super::gradient_utils::{
   GradientOverlayTile, adaptive_lut_size_with_visible_samples, build_color_lut_with_interpolation,
   resolve_stops_along_axis,
 };
-use crate::{
-  layout::style::{
-    Angle, BackgroundPosition, ColorInput, ColorInterpolationMethod, CssDescriptorKind, CssToken,
-    FromCss, GradientStop, Length, MakeComputed, ObjectPosition, ParseResult, ResolvedGradientStop,
-    SizingContext, StopPosition, ToCss, unexpected_token,
-  },
-  rendering::RenderContext,
+use crate::layout::style::{
+  Angle, BackgroundPosition, Color, ColorInput, ColorInterpolationMethod, CssDescriptorKind,
+  CssToken, FromCss, GradientStop, Length, MakeComputed, ObjectPosition, ParseResult,
+  ResolvedGradientStop, SizingContext, StopPosition, ToCss, unexpected_token,
 };
 
 const LUT_INDEX_BOUNDARY_EPSILON: f32 = 0.001;
@@ -149,14 +146,20 @@ impl ConicGradientTile {
   }
 
   /// Builds a drawing context from a conic gradient and a target viewport.
-  pub fn new(gradient: &ConicGradient, width: u32, height: u32, context: &RenderContext) -> Self {
-    let cx = Length::from(gradient.center.0.x).to_px(&context.sizing, width as f32);
-    let cy = Length::from(gradient.center.0.y).to_px(&context.sizing, height as f32);
+  pub fn new(
+    gradient: &ConicGradient,
+    width: u32,
+    height: u32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) -> Self {
+    let cx = Length::from(gradient.center.0.x).to_px(sizing, width as f32);
+    let cy = Length::from(gradient.center.0.y).to_px(sizing, height as f32);
 
     let start_rad = gradient.from_angle.to_radians().rem_euclid(TAU);
 
     // Resolve stop percentages against one full turn (360deg).
-    let resolved_stops = resolve_stops_along_axis(&gradient.stops, 360.0, context);
+    let resolved_stops = resolve_stops_along_axis(&gradient.stops, 360.0, sizing, current_color);
 
     let (repeating, repeat_start_deg, repeat_period_deg, lut_axis_length_deg, lut_resolved_stops) =
       if gradient.repeating
@@ -487,7 +490,6 @@ mod tests {
   use super::*;
   use crate::layout::Viewport;
   use crate::layout::style::{Color, Length, SpacePair, StopPosition};
-  use crate::{GlobalContext, rendering::RenderContext};
   #[test]
   fn test_parse_conic_gradient_basic() {
     let gradient = ConicGradient::from_str("conic-gradient(#ff0000, #0000ff)");
@@ -697,9 +699,8 @@ mod tests {
       ])
       .build();
 
-    let context = GlobalContext::default();
-    let render_context = RenderContext::new_test(&context, Viewport::new((100, 100)));
-    let tile = ConicGradientTile::new(&gradient, 100, 100, &render_context);
+    let render_context = SizingContext::new_test(Viewport::new((100, 100)));
+    let tile = ConicGradientTile::new(&gradient, 100, 100, &render_context, Color::black());
 
     // Top center (50, 0) should be red (start of gradient)
     let color_top = tile.sample_pixel(50, 0).demultiply();
@@ -738,9 +739,8 @@ mod tests {
       ])
       .build();
 
-    let context = GlobalContext::default();
-    let render_context = RenderContext::new_test(&context, Viewport::new((100, 100)));
-    let tile = ConicGradientTile::new(&gradient, 100, 100, &render_context);
+    let render_context = SizingContext::new_test(Viewport::new((100, 100)));
+    let tile = ConicGradientTile::new(&gradient, 100, 100, &render_context, Color::black());
 
     // Top-center should be red
     let top = tile.sample_pixel(50, 0).demultiply();
@@ -775,9 +775,8 @@ mod tests {
       ])
       .build();
 
-    let context = GlobalContext::default();
-    let render_context = RenderContext::new_test(&context, Viewport::new((40, 40)));
-    let tile = ConicGradientTile::new(&gradient, 40, 40, &render_context);
+    let render_context = SizingContext::new_test(Viewport::new((40, 40)));
+    let tile = ConicGradientTile::new(&gradient, 40, 40, &render_context, Color::black());
 
     assert_eq!(
       [

@@ -5,8 +5,9 @@ use smallvec::SmallVec;
 use taffy::Point;
 use tiny_skia::{ColorU8, PremultipliedColorU8};
 
-use crate::layout::style::{Color, GradientStop, ResolvedGradientStop, fast_div_255};
-use crate::rendering::RenderContext;
+use crate::layout::style::{
+  Color, GradientStop, ResolvedGradientStop, SizingContext, fast_div_255,
+};
 
 const MIN_GRADIENT_LUT_SIZE: usize = 2;
 const MAX_GRADIENT_LUT_SIZE: usize = 8193;
@@ -465,7 +466,8 @@ const UNDEFINED_POSITION: f32 = -1.0;
 pub(crate) fn resolve_stops_along_axis(
   stops: &[GradientStop],
   axis_size_px: f32,
-  context: &RenderContext,
+  sizing: &SizingContext,
+  current_color: Color,
 ) -> SmallVec<[ResolvedGradientStop; 4]> {
   let mut resolved: SmallVec<[ResolvedGradientStop; 4]> = SmallVec::new();
   let mut last_position = 0.0;
@@ -476,21 +478,18 @@ pub(crate) fn resolve_stops_along_axis(
         color,
         hint: Some(hint),
       } => {
-        let position = hint
-          .0
-          .to_px(&context.sizing, axis_size_px)
-          .max(last_position);
+        let position = hint.0.to_px(sizing, axis_size_px).max(last_position);
 
         last_position = position;
 
         resolved.push(ResolvedGradientStop {
-          color: color.resolve(context.current_color),
+          color: color.resolve(current_color),
           position,
         });
       }
       GradientStop::ColorHint { color, hint: None } => {
         resolved.push(ResolvedGradientStop {
-          color: color.resolve(context.current_color),
+          color: color.resolve(current_color),
           position: UNDEFINED_POSITION,
         });
       }
@@ -500,7 +499,7 @@ pub(crate) fn resolve_stops_along_axis(
         };
 
         let Some(after_color) = stops.get(i + 1).and_then(|stop| match stop {
-          GradientStop::ColorHint { color, hint: _ } => Some(color.resolve(context.current_color)),
+          GradientStop::ColorHint { color, hint: _ } => Some(color.resolve(current_color)),
           GradientStop::Hint(_) => None,
         }) else {
           continue;
@@ -508,10 +507,7 @@ pub(crate) fn resolve_stops_along_axis(
 
         let interpolated_color = interpolate_rgba(before.color, after_color, 0.5);
 
-        let position = hint
-          .0
-          .to_px(&context.sizing, axis_size_px)
-          .max(last_position);
+        let position = hint.0.to_px(sizing, axis_size_px).max(last_position);
 
         resolved.push(ResolvedGradientStop {
           color: interpolated_color,
@@ -592,11 +588,8 @@ mod tests {
   use taffy::Point;
 
   use crate::layout::Viewport;
+  use crate::layout::style::{BlendMode, Color, Length, StopPosition};
   use crate::rendering::blend_pixel;
-  use crate::{
-    GlobalContext,
-    layout::style::{BlendMode, Color, Length, StopPosition},
-  };
 
   use super::*;
 
@@ -712,15 +705,18 @@ mod tests {
       },
     ];
 
-    let context = GlobalContext::default();
-    let render_context = RenderContext::new_test(&context, Viewport::new((40, 40)));
+    let render_context = SizingContext::new_test(Viewport::new((40, 40)));
 
-    let width = render_context.sizing.viewport.size.width;
+    let width = render_context.viewport.size.width;
 
     assert!(width.is_some());
 
-    let resolved =
-      resolve_stops_along_axis(&stops, width.unwrap_or_default() as f32, &render_context);
+    let resolved = resolve_stops_along_axis(
+      &stops,
+      width.unwrap_or_default() as f32,
+      &render_context,
+      Color::black(),
+    );
 
     assert_eq!(
       resolved[0],
@@ -764,18 +760,13 @@ mod tests {
       },
     ];
 
-    let context = GlobalContext::default();
-    let render_context = RenderContext::new_test(&context, Viewport::new((40, 40)));
+    let render_context = SizingContext::new_test(Viewport::new((40, 40)));
 
     let resolved = resolve_stops_along_axis(
       &stops,
-      render_context
-        .sizing
-        .viewport
-        .size
-        .width
-        .unwrap_or_default() as f32,
+      render_context.viewport.size.width.unwrap_or_default() as f32,
       &render_context,
+      Color::black(),
     );
 
     assert_eq!(
@@ -787,22 +778,11 @@ mod tests {
         },
         ResolvedGradientStop {
           color: Color([0, 255, 0, 255]),
-          position: render_context
-            .sizing
-            .viewport
-            .size
-            .width
-            .unwrap_or_default() as f32
-            / 2.0,
+          position: render_context.viewport.size.width.unwrap_or_default() as f32 / 2.0,
         },
         ResolvedGradientStop {
           color: Color([0, 0, 255, 255]),
-          position: render_context
-            .sizing
-            .viewport
-            .size
-            .width
-            .unwrap_or_default() as f32,
+          position: render_context.viewport.size.width.unwrap_or_default() as f32,
         },
       ]
     );
@@ -822,18 +802,13 @@ mod tests {
       },
     ];
 
-    let context = GlobalContext::default();
-    let render_context = RenderContext::new_test(&context, Viewport::new((40, 40)));
+    let render_context = SizingContext::new_test(Viewport::new((40, 40)));
 
     let resolved = resolve_stops_along_axis(
       &stops,
-      render_context
-        .sizing
-        .viewport
-        .size
-        .width
-        .unwrap_or_default() as f32,
+      render_context.viewport.size.width.unwrap_or_default() as f32,
       &render_context,
+      Color::black(),
     );
 
     assert_eq!(
@@ -849,13 +824,7 @@ mod tests {
       resolved[1],
       ResolvedGradientStop {
         color: interpolate_rgba(Color([255, 0, 0, 255]), Color([0, 0, 255, 255]), 0.5),
-        position: render_context
-          .sizing
-          .viewport
-          .size
-          .width
-          .unwrap_or_default() as f32
-          * 0.1,
+        position: render_context.viewport.size.width.unwrap_or_default() as f32 * 0.1,
       },
     );
 
@@ -863,12 +832,7 @@ mod tests {
       resolved[2],
       ResolvedGradientStop {
         color: Color([0, 0, 255, 255]),
-        position: render_context
-          .sizing
-          .viewport
-          .size
-          .width
-          .unwrap_or_default() as f32,
+        position: render_context.viewport.size.width.unwrap_or_default() as f32,
       },
     );
   }
