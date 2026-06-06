@@ -2154,7 +2154,6 @@ dependencies = [
 name = "takumi"
 version = "1.7.0"
 dependencies = [
- "bitflags",
  "bytemuck",
  "color",
  "criterion",
@@ -2166,10 +2165,7 @@ dependencies = [
  "image-webp",
  "libwebp-sys",
  "parley",
- "paste",
- "phf",
  "png",
- "precomputed-hash",
  "rayon",
  "resvg",
  "roxmltree",
@@ -2181,11 +2177,35 @@ dependencies = [
  "smallvec",
  "svgtypes",
  "taffy",
+ "takumi-css",
  "thiserror",
  "tiny-skia",
  "typed-builder",
  "wuff",
  "xxhash-rust",
+]
+
+[[package]]
+name = "takumi-css"
+version = "1.7.0"
+dependencies = [
+ "bitflags",
+ "bytemuck",
+ "color",
+ "cssparser",
+ "image",
+ "parley",
+ "paste",
+ "phf",
+ "precomputed-hash",
+ "selectors",
+ "serde",
+ "serde_json",
+ "smallvec",
+ "taffy",
+ "thiserror",
+ "tiny-skia",
+ "typed-builder",
 ]
 
 [[package]]

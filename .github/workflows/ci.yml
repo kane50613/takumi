@@ -109,10 +109,9 @@ jobs:
         run: cargo audit
 
       - name: Test Publish (--dry-run)
-        working-directory: takumi
         run: |
-          sed -i '/\[patch.crates-io\]/,$d' ../Cargo.toml
-          cargo publish --dry-run
+          sed -i '/\[patch.crates-io\]/,$d' Cargo.toml
+          cargo publish --dry-run -p takumi-css -p takumi
 
   build-helpers:
     name: Build @takumi-rs/helpers

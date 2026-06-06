@@ -298,6 +298,15 @@ impl SvgRasterCache {
 }
 
 #[cfg(feature = "svg")]
+fn usvg_image_rendering(algorithm: ImageScalingAlgorithm) -> resvg::usvg::ImageRendering {
+  match algorithm {
+    ImageScalingAlgorithm::Auto => resvg::usvg::ImageRendering::default(),
+    ImageScalingAlgorithm::Smooth => resvg::usvg::ImageRendering::Smooth,
+    ImageScalingAlgorithm::Pixelated => resvg::usvg::ImageRendering::Pixelated,
+  }
+}
+
+#[cfg(feature = "svg")]
 impl FromStr for SvgSource {
   type Err = ImageResourceError;
 
@@ -403,7 +412,7 @@ impl ImageSource {
         let tree = if svg.uses_current_color {
           let options = Options {
             style_sheet: Some(format!("svg {{ color: {current_color}; }}")),
-            image_rendering: image_rendering.into(),
+            image_rendering: usvg_image_rendering(image_rendering),
             ..Default::default()
           };
           Some(Tree::from_str(&svg.source, &options).map_err(ImageResourceError::SvgParseError)?)

@@ -1,0 +1,13 @@
+//! CSS parsing and computed-style layer for takumi.
+//!
+//! Holds the (cold) CSS parsing, cascade, and value types so they can be
+//! compiled independently from the hot rendering paths in `takumi`. Selector
+//! *matching* against the node tree lives in `takumi` (`layout::matching`),
+//! not here, keeping this crate free of any node/render dependency.
+
+pub mod error;
+pub mod keyframes;
+pub mod style;
+mod viewport;
+
+pub use viewport::*;

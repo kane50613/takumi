@@ -1,6 +1,13 @@
 [workspace]
 resolver = "3"
-members = ["takumi", "takumi-server", "takumi-napi-core", "takumi-wasm", "example/rust"]
+members = [
+  "takumi",
+  "takumi-css",
+  "takumi-server",
+  "takumi-napi-core",
+  "takumi-wasm",
+  "example/rust",
+]
 
 [profile.release]
 strip = true

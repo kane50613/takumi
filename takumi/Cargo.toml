@@ -11,9 +11,8 @@ readme = "README.md"
 rust-version = "1.91"
 
 [dependencies]
-bitflags = "2.11"
+takumi-css = { path = "../takumi-css", version = "1.7.0" }
 cssparser = "0.37"
-paste = "1.0"
 png = "0.18"
 gif = "0.14"
 data-url = "0.3"
@@ -43,10 +42,6 @@ features = ["aarch64_simd", "avx512_simd"]
 version = "0.8"
 features = ["xxh3"]
 
-[dependencies.phf]
-version = "0.13"
-features = ["macros"]
-
 [dependencies.smallvec]
 version = "1.15"
 features = ["serde"]
@@ -63,9 +58,6 @@ features = ["std"]
 
 [dependencies.selectors]
 version = "0.38"
-
-[dependencies.precomputed-hash]
-version = "0.1"
 
 [dependencies.rayon]
 version = "1.10"

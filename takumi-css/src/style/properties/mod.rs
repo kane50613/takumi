@@ -1,0 +1,1767 @@
+//! Style properties and related types for the takumi styling system.
+//!
+//! This module contains CSS-like properties including layout properties,
+//! typography settings, positioning, and visual effects.
+
+mod animation;
+mod aspect_ratio;
+mod background;
+mod background_image;
+mod background_position;
+mod background_repeat;
+mod background_size;
+mod blend_mode;
+mod border;
+mod box_alignment;
+mod box_shadow;
+mod clip_path;
+mod color;
+mod conic_gradient;
+mod content;
+mod filter;
+mod flex;
+mod flex_grow;
+mod font_family;
+mod font_feature_settings;
+mod font_size;
+mod font_stretch;
+mod font_style;
+mod font_synthesis;
+mod font_variation_settings;
+mod font_weight;
+mod gradient_utils;
+mod grid;
+mod length;
+mod line_clamp;
+mod line_height;
+mod linear_gradient;
+mod order;
+mod overflow;
+mod overflow_wrap;
+mod percentage_number;
+mod radial_gradient;
+mod sides;
+mod space_pair;
+mod text_decoration;
+mod text_fit;
+mod text_indent;
+mod text_overflow;
+mod text_shadow;
+mod text_stroke;
+mod text_wrap;
+mod transform;
+mod vertical_align;
+mod white_space;
+mod word_break;
+mod z_index;
+
+pub use animation::*;
+pub use aspect_ratio::*;
+pub use background::*;
+pub use background_image::*;
+pub use background_position::*;
+pub use background_repeat::*;
+pub use background_size::*;
+pub use blend_mode::*;
+pub use border::*;
+pub use box_alignment::*;
+pub use box_shadow::*;
+pub use clip_path::*;
+pub use color::*;
+pub use conic_gradient::*;
+pub use content::*;
+pub use filter::*;
+pub use flex::*;
+pub use flex_grow::*;
+pub use font_family::*;
+pub use font_feature_settings::*;
+pub use font_size::*;
+pub use font_stretch::*;
+pub use font_style::*;
+pub use font_synthesis::*;
+pub use font_variation_settings::*;
+pub use font_weight::*;
+pub use gradient_utils::{GradientOverlayTile, overlay_gradient_tile_fast_normal_unconstrained};
+pub use grid::*;
+pub use length::*;
+pub use line_clamp::*;
+pub use line_height::*;
+pub use linear_gradient::*;
+pub use order::*;
+pub use overflow::*;
+pub use overflow_wrap::*;
+pub use percentage_number::*;
+pub use radial_gradient::*;
+use serde::Deserialize;
+pub use sides::*;
+pub use space_pair::*;
+pub use text_decoration::*;
+pub use text_fit::*;
+pub use text_indent::*;
+pub use text_overflow::*;
+pub use text_shadow::*;
+pub use text_stroke::*;
+pub use text_wrap::*;
+pub use transform::*;
+pub use vertical_align::*;
+pub use white_space::*;
+pub use word_break::*;
+pub use z_index::*;
+
+use cssparser::{ParseError, Parser, ParserInput, match_ignore_ascii_case};
+use image::imageops::FilterType;
+use parley::Alignment;
+use std::borrow::Cow;
+use std::fmt;
+
+use crate::style::{SizingContext, tw::TailwindPropertyParser};
+
+/// Parser result type alias for CSS property parsers.
+pub type ParseResult<'i, T> = Result<T, ParseError<'i, Cow<'i, str>>>;
+
+/// Compact identifiers for frequently reused CSS syntax tokens.
+#[derive(Clone, Copy)]
+pub enum CssSyntaxKind {
+  /// `<angle>`
+  Angle,
+  /// `<border-style>`
+  BorderStyle,
+  /// `<clip>`
+  Clip,
+  /// `<color>`
+  Color,
+  /// `<custom-ident>`
+  CustomIdent,
+  /// `<easing-function>`
+  EasingFunction,
+  /// `<family-name>`
+  FamilyName,
+  /// `<generic-name>`
+  GenericName,
+  /// `<ident>`
+  Ident,
+  /// `<image>`
+  Image,
+  /// `<integer>`
+  Integer,
+  /// `<length>`
+  Length,
+  /// `<line-names>`
+  LineNames,
+  /// `<number>`
+  Number,
+  /// `<percentage>`
+  Percentage,
+  /// `<position>`
+  Position,
+  /// `<repeat>`
+  Repeat,
+  /// `<string>`
+  String,
+  /// `<time>`
+  Time,
+  /// `<track-size>`
+  TrackSize,
+  /// `<transform-function>`
+  TransformFunction,
+}
+
+impl CssSyntaxKind {
+  const fn as_str(self) -> &'static str {
+    match self {
+      Self::Angle => "angle",
+      Self::BorderStyle => "border-style",
+      Self::Clip => "clip",
+      Self::Color => "color",
+      Self::CustomIdent => "custom-ident",
+      Self::EasingFunction => "easing-function",
+      Self::FamilyName => "family-name",
+      Self::GenericName => "generic-name",
+      Self::Ident => "ident",
+      Self::Image => "image",
+      Self::Integer => "integer",
+      Self::Length => "length",
+      Self::LineNames => "line-names",
+      Self::Number => "number",
+      Self::Percentage => "percentage",
+      Self::Position => "position",
+      Self::Repeat => "repeat",
+      Self::String => "string",
+      Self::Time => "time",
+      Self::TrackSize => "track-size",
+      Self::TransformFunction => "transform-function",
+    }
+  }
+}
+
+/// Compact identifiers for reusable CSS descriptor and function labels.
+#[derive(Clone, Copy)]
+pub enum CssDescriptorKind {
+  /// `<blur()>`
+  BlurFn,
+  /// `<blend-mode>`
+  BlendMode,
+  /// `<brightness()>`
+  BrightnessFn,
+  /// `<circle()>`
+  CircleFn,
+  /// `<color and percentage>`
+  ColorAndPercentage,
+  /// `<color-mix()>`
+  ColorMixFn,
+  /// `<conic-gradient()>`
+  ConicGradientFn,
+  /// `<repeating-conic-gradient()>`
+  RepeatingConicGradientFn,
+  /// `<contrast()>`
+  ContrastFn,
+  /// `<cubic-bezier()>`
+  CubicBezierFn,
+  /// `<drop-shadow()>`
+  DropShadowFn,
+  /// `<ellipse()>`
+  EllipseFn,
+  /// `<grayscale()>`
+  GrayscaleFn,
+  /// `<hue-rotate()>`
+  HueRotateFn,
+  /// `<in <color-space>>`
+  InColorSpace,
+  /// `<inset()>`
+  InsetFn,
+  /// `<invert()>`
+  InvertFn,
+  /// `<linear-gradient()>`
+  LinearGradientFn,
+  /// `<repeating-linear-gradient()>`
+  RepeatingLinearGradientFn,
+  /// `<minmax()>`
+  MinmaxFn,
+  /// `<opacity()>`
+  OpacityFn,
+  /// `<path()>`
+  PathFn,
+  /// `<polygon()>`
+  PolygonFn,
+  /// `<radial-gradient()>`
+  RadialGradientFn,
+  /// `<repeating-radial-gradient()>`
+  RepeatingRadialGradientFn,
+  /// `<repeat()>`
+  RepeatFn,
+  /// `<saturate()>`
+  SaturateFn,
+  /// `<sepia()>`
+  SepiaFn,
+  /// `<steps()>`
+  StepsFn,
+  /// `<text-wrap-mode>`
+  TextWrapMode,
+  /// `<text-wrap-style>`
+  TextWrapStyle,
+  /// `<url()>`
+  UrlFn,
+  /// `<white-space-collapse>`
+  WhiteSpaceCollapse,
+}
+
+impl CssDescriptorKind {
+  const fn as_str(self) -> &'static str {
+    match self {
+      Self::BlurFn => "blur()",
+      Self::BlendMode => "blend-mode",
+      Self::BrightnessFn => "brightness()",
+      Self::CircleFn => "circle()",
+      Self::ColorAndPercentage => "color and percentage",
+      Self::ColorMixFn => "color-mix()",
+      Self::ConicGradientFn => "conic-gradient()",
+      Self::RepeatingConicGradientFn => "repeating-conic-gradient()",
+      Self::ContrastFn => "contrast()",
+      Self::CubicBezierFn => "cubic-bezier()",
+      Self::DropShadowFn => "drop-shadow()",
+      Self::EllipseFn => "ellipse()",
+      Self::GrayscaleFn => "grayscale()",
+      Self::HueRotateFn => "hue-rotate()",
+      Self::InColorSpace => "in <color-space>",
+      Self::InsetFn => "inset()",
+      Self::InvertFn => "invert()",
+      Self::LinearGradientFn => "linear-gradient()",
+      Self::RepeatingLinearGradientFn => "repeating-linear-gradient()",
+      Self::MinmaxFn => "minmax()",
+      Self::OpacityFn => "opacity()",
+      Self::PathFn => "path()",
+      Self::PolygonFn => "polygon()",
+      Self::RadialGradientFn => "radial-gradient()",
+      Self::RepeatingRadialGradientFn => "repeating-radial-gradient()",
+      Self::RepeatFn => "repeat()",
+      Self::SaturateFn => "saturate()",
+      Self::SepiaFn => "sepia()",
+      Self::StepsFn => "steps()",
+      Self::TextWrapMode => "text-wrap-mode",
+      Self::TextWrapStyle => "text-wrap-style",
+      Self::UrlFn => "url()",
+      Self::WhiteSpaceCollapse => "white-space-collapse",
+    }
+  }
+}
+
+/// Enum representing CSS tokens.
+pub enum CssToken {
+  /// A CSS keyword.
+  Keyword(&'static str),
+  /// A common CSS syntax token backed by a compact enum table.
+  Syntax(CssSyntaxKind),
+  /// A reusable CSS descriptor backed by a compact enum table.
+  Descriptor(CssDescriptorKind),
+}
+
+impl std::fmt::Display for CssToken {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      CssToken::Keyword(keyword) => write!(f, "'{}'", keyword),
+      CssToken::Syntax(token) => write!(f, "<{}>", token.as_str()),
+      CssToken::Descriptor(token) => write!(f, "<{}>", token.as_str()),
+    }
+  }
+}
+
+/// Defines reusable message templates for CSS parse errors.
+pub enum CssExpectedMessage {
+  /// Expects a value or the `none` keyword.
+  ValueOrNone,
+  /// Expects exactly one value.
+  OneValue,
+  /// Expects one or two values.
+  OneOrTwoValues,
+  /// Expects one to four values.
+  OneToFourValues,
+  /// Expects the border-radius shorthand grammar.
+  BorderRadius,
+}
+
+impl CssExpectedMessage {
+  pub fn build_message(&self, token: &str, valid_tokens: String) -> String {
+    match self {
+      Self::ValueOrNone => {
+        format!("Unexpected token: {token}, expected a value of {valid_tokens} or 'none'")
+      }
+      Self::OneValue => format!("Unexpected token: {token}, expected a value of {valid_tokens}"),
+      Self::OneOrTwoValues => {
+        format!("Unexpected token: {token}, expected 1 ~ 2 values of {valid_tokens}")
+      }
+      Self::OneToFourValues => {
+        format!("Unexpected token: {token}, expected 1 ~ 4 values of {valid_tokens}")
+      }
+      Self::BorderRadius => format!(
+        "Unexpected token: {token}, expected 1 to 4 length values for width, optionally followed by '/' and 1 to 4 length values for height"
+      ),
+    }
+  }
+}
+
+/// Trait for types that can be parsed from CSS.
+pub trait FromCss<'i> {
+  /// Parses the type from a [`Parser`] instance.
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self>
+  where
+    Self: Sized;
+
+  /// Helper function to parse the type from a string.
+  fn from_str(source: &'i str) -> ParseResult<'i, Self>
+  where
+    Self: Sized,
+  {
+    let mut input = ParserInput::new(source);
+    let mut parser = Parser::new(&mut input);
+
+    Self::from_css(&mut parser)
+  }
+
+  /// Returns the list of valid CSS tokens for this type.
+  const VALID_TOKENS: &'static [CssToken];
+
+  /// Message template used when building parse errors for this type.
+  const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::OneValue;
+}
+
+impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
+  // 'none' is intentionally omitted and applied in `expect_message`
+  const VALID_TOKENS: &'static [CssToken] = T::VALID_TOKENS;
+
+  const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::ValueOrNone;
+
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+      return Ok(None);
+    }
+
+    T::from_css(input).map(Some)
+  }
+}
+
+impl<'i> FromCss<'i> for String {
+  const VALID_TOKENS: &'static [CssToken] = &[
+    CssToken::Syntax(CssSyntaxKind::String),
+    CssToken::Syntax(CssSyntaxKind::CustomIdent),
+  ];
+
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    Ok(input.expect_ident_or_string()?.to_string())
+  }
+}
+
+/// Converts a parsed/inherited value into a computed value for the current node context.
+pub trait MakeComputed {
+  /// Default no-op for types that do not need computed-value normalization.
+  fn make_computed(&mut self, _sizing: &SizingContext) {}
+}
+
+pub trait Animatable: Sized + Clone {
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    _sizing: &SizingContext,
+    _current_color: Color,
+  ) {
+    *self = if progress >= 1.0 {
+      to.clone()
+    } else {
+      from.clone()
+    };
+  }
+
+  fn list_interpolation_strategy() -> ListInterpolationStrategy {
+    ListInterpolationStrategy::Discrete
+  }
+
+  fn neutral_value_like(_other: &Self) -> Option<Self> {
+    None
+  }
+
+  fn missing_value() -> Option<Self> {
+    None
+  }
+}
+
+pub fn lerp(lhs: f32, rhs: f32, progress: f32) -> f32 {
+  lhs + (rhs - lhs) * progress
+}
+
+pub enum ListInterpolationStrategy {
+  Discrete,
+  RepeatToLcm,
+  PadToLongestWithNeutral,
+}
+
+impl<T: MakeComputed> MakeComputed for Option<T> {
+  fn make_computed(&mut self, sizing: &SizingContext) {
+    if let Some(value) = self.as_mut() {
+      value.make_computed(sizing);
+    }
+  }
+}
+
+impl<T: MakeComputed> MakeComputed for Box<[T]> {
+  fn make_computed(&mut self, sizing: &SizingContext) {
+    for value in self.iter_mut() {
+      value.make_computed(sizing);
+    }
+  }
+}
+
+impl<T: MakeComputed> MakeComputed for Vec<T> {
+  fn make_computed(&mut self, sizing: &SizingContext) {
+    for value in self.iter_mut() {
+      value.make_computed(sizing);
+    }
+  }
+}
+
+pub fn next_is_comma<'i>(input: &mut Parser<'i, '_>) -> bool {
+  let state = input.state();
+  let is_comma = input.expect_comma().is_ok();
+  input.reset(&state);
+  is_comma
+}
+
+impl<T: Animatable + Clone> Animatable for Option<T> {
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) {
+    *self = match (from, to) {
+      (Some(from), Some(to)) => {
+        let mut value = from.clone();
+        value.interpolate(from, to, progress, sizing, current_color);
+        Some(value)
+      }
+      (Some(from), None) => T::missing_value().map_or_else(
+        || {
+          if progress >= 0.5 {
+            None
+          } else {
+            Some(from.clone())
+          }
+        },
+        |missing| {
+          let mut value = from.clone();
+          value.interpolate(from, &missing, progress, sizing, current_color);
+          Some(value)
+        },
+      ),
+      (None, Some(to)) => T::missing_value().map_or_else(
+        || {
+          if progress >= 0.5 {
+            Some(to.clone())
+          } else {
+            None
+          }
+        },
+        |missing| {
+          let mut value = missing.clone();
+          value.interpolate(&missing, to, progress, sizing, current_color);
+          Some(value)
+        },
+      ),
+      (None, None) => None,
+    };
+  }
+}
+
+impl<T: Animatable + Clone> Animatable for Box<[T]> {
+  fn missing_value() -> Option<Self> {
+    match T::list_interpolation_strategy() {
+      ListInterpolationStrategy::Discrete => None,
+      ListInterpolationStrategy::RepeatToLcm
+      | ListInterpolationStrategy::PadToLongestWithNeutral => Some(Box::default()),
+    }
+  }
+
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) {
+    *self = interpolate_list(
+      from,
+      to,
+      progress,
+      sizing,
+      current_color,
+      Vec::into_boxed_slice,
+    )
+    .unwrap_or_else(|| {
+      if progress >= 1.0 {
+        to.clone()
+      } else {
+        from.clone()
+      }
+    });
+  }
+}
+
+impl<T: Animatable + Clone> Animatable for Vec<T> {
+  fn missing_value() -> Option<Self> {
+    match T::list_interpolation_strategy() {
+      ListInterpolationStrategy::Discrete => None,
+      ListInterpolationStrategy::RepeatToLcm
+      | ListInterpolationStrategy::PadToLongestWithNeutral => Some(Vec::new()),
+    }
+  }
+
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) {
+    *self = interpolate_list(from, to, progress, sizing, current_color, |values| values)
+      .unwrap_or_else(|| {
+        if progress >= 1.0 {
+          to.clone()
+        } else {
+          from.clone()
+        }
+      });
+  }
+}
+
+fn interpolate_list<T: Animatable + Clone, C: AsRef<[T]>, O>(
+  from: &C,
+  to: &C,
+  progress: f32,
+  sizing: &SizingContext,
+  current_color: Color,
+  build: impl FnOnce(Vec<T>) -> O,
+) -> Option<O> {
+  let from = from.as_ref();
+  let to = to.as_ref();
+
+  let values = match T::list_interpolation_strategy() {
+    ListInterpolationStrategy::Discrete => {
+      if from.len() != to.len() {
+        return None;
+      }
+      interpolate_pairwise_list(from, to, from.len(), progress, sizing, current_color)
+    }
+    ListInterpolationStrategy::RepeatToLcm => {
+      if from.is_empty() || to.is_empty() {
+        return None;
+      }
+      interpolate_pairwise_list(
+        from,
+        to,
+        lcm(from.len(), to.len()),
+        progress,
+        sizing,
+        current_color,
+      )
+    }
+    ListInterpolationStrategy::PadToLongestWithNeutral => {
+      interpolate_neutral_padded_list(from, to, progress, sizing, current_color)?
+    }
+  };
+
+  Some(build(values))
+}
+
+fn interpolate_pairwise_list<T: Animatable + Clone>(
+  from: &[T],
+  to: &[T],
+  output_len: usize,
+  progress: f32,
+  sizing: &SizingContext,
+  current_color: Color,
+) -> Vec<T> {
+  (0..output_len)
+    .map(|index| {
+      let from_value = &from[index % from.len()];
+      let to_value = &to[index % to.len()];
+      let mut value = from_value.clone();
+      value.interpolate(from_value, to_value, progress, sizing, current_color);
+      value
+    })
+    .collect()
+}
+
+fn interpolate_neutral_padded_list<T: Animatable + Clone>(
+  from: &[T],
+  to: &[T],
+  progress: f32,
+  sizing: &SizingContext,
+  current_color: Color,
+) -> Option<Vec<T>> {
+  let output_len = from.len().max(to.len());
+
+  (0..output_len)
+    .map(|index| {
+      let from_value = if index < from.len() {
+        from.get(index).cloned()
+      } else {
+        to.get(index).and_then(T::neutral_value_like)
+      }?;
+      let to_value = if index < to.len() {
+        to.get(index).cloned()
+      } else {
+        from.get(index).and_then(T::neutral_value_like)
+      }?;
+
+      let mut value = from_value.clone();
+      value.interpolate(&from_value, &to_value, progress, sizing, current_color);
+      Some(value)
+    })
+    .collect()
+}
+
+fn gcd(lhs: usize, rhs: usize) -> usize {
+  let mut lhs = lhs;
+  let mut rhs = rhs;
+  while rhs != 0 {
+    let remainder = lhs % rhs;
+    lhs = rhs;
+    rhs = remainder;
+  }
+  lhs
+}
+
+fn lcm(lhs: usize, rhs: usize) -> usize {
+  lhs / gcd(lhs, rhs) * rhs
+}
+
+impl<T: Animatable + Copy> Animatable for SpacePair<T> {
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) {
+    self
+      .x
+      .interpolate(&from.x, &to.x, progress, sizing, current_color);
+    self
+      .y
+      .interpolate(&from.y, &to.y, progress, sizing, current_color);
+  }
+}
+
+impl<T: Animatable + Copy> Animatable for Sides<T> {
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) {
+    for (index, value) in self.0.iter_mut().enumerate() {
+      value.interpolate(
+        &from.0[index],
+        &to.0[index],
+        progress,
+        sizing,
+        current_color,
+      );
+    }
+  }
+}
+
+macro_rules! unexpected_token {
+  (@build $type:ty, $location:expr, $token:expr $(,)?) => {{
+    let location = $location;
+    let token = $token;
+    let token = cssparser::ToCss::to_css_string(token);
+    let message = <$type as $crate::style::FromCss>::EXPECT_MESSAGE
+      .build_message(&token, $crate::style::merge_enum_values(<$type as $crate::style::FromCss>::VALID_TOKENS));
+
+    cssparser::ParseError {
+      location,
+      kind: cssparser::ParseErrorKind::Custom(std::borrow::Cow::Owned(message)),
+    }
+  }};
+  ($type:ty, $location:expr, $token:expr $(,)?) => {
+    $crate::style::unexpected_token!(@build $type, $location, $token)
+  };
+  ($location:expr, $token:expr $(,)?) => {
+    $crate::style::unexpected_token!(@build Self, $location, $token)
+  };
+}
+
+pub(crate) use unexpected_token;
+
+/// Helper function to merge enum values into a human-readable format.
+/// - `["fill"]` → `"'fill'"`
+/// - `["fill", "contain"]` → `"'fill' or 'contain'"`
+/// - `["fill", "contain", "cover"]` → `"'fill', 'contain' or 'cover'"`
+pub fn merge_enum_values(values: &[CssToken]) -> String {
+  match values.len() {
+    0 => String::new(),
+    1 => values[0].to_string(),
+    2 => format!("{} or {}", values[0], values[1]),
+    _ => {
+      let all_but_last = values[..values.len() - 1]
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ");
+      format!("{} or {}", all_but_last, values[values.len() - 1])
+    }
+  }
+}
+
+/// Serialize a style value to its CSS string representation.
+pub trait ToCss {
+  /// Write the CSS representation of this value into `dest`.
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result;
+}
+
+impl<T: ToCss + ?Sized> ToCss for &T {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    (*self).to_css(dest)
+  }
+}
+
+impl<T: ToCss> ToCss for Option<T> {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Some(v) => v.to_css(dest),
+      None => dest.write_str("none"),
+    }
+  }
+}
+
+impl<T: ToCss> ToCss for Box<[T]> {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    for (i, item) in self.iter().enumerate() {
+      if i > 0 {
+        dest.write_str(", ")?;
+      }
+      item.to_css(dest)?;
+    }
+    Ok(())
+  }
+}
+
+impl<T: ToCss> ToCss for Vec<T> {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    for (i, item) in self.iter().enumerate() {
+      if i > 0 {
+        dest.write_str(", ")?;
+      }
+      item.to_css(dest)?;
+    }
+    Ok(())
+  }
+}
+
+impl ToCss for f32 {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    write!(dest, "{}", self)
+  }
+}
+
+impl ToCss for u32 {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    write!(dest, "{}", self)
+  }
+}
+
+impl ToCss for i32 {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    write!(dest, "{}", self)
+  }
+}
+
+impl ToCss for String {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    dest.write_str(self)
+  }
+}
+
+impl ToCss for std::sync::Arc<str> {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    dest.write_str(self)
+  }
+}
+
+/// Write a CSS quoted string, escaping backslashes and double quotes.
+pub fn write_css_string<W: fmt::Write>(dest: &mut W, s: &str) -> fmt::Result {
+  dest.write_char('"')?;
+  for ch in s.chars() {
+    match ch {
+      '\\' => dest.write_str("\\\\")?,
+      '"' => dest.write_str("\\\"")?,
+      c => dest.write_char(c)?,
+    }
+  }
+  dest.write_char('"')
+}
+
+/// Macro to implement From trait for Taffy enum conversions.
+macro_rules! impl_from_taffy_enum {
+  ($from_ty:ty, $to_ty:ty, $($variant:ident),*) => {
+    impl From<$from_ty> for $to_ty {
+      fn from(value: $from_ty) -> Self {
+        match value {
+          $(<$from_ty>::$variant => <$to_ty>::$variant,)*
+        }
+      }
+    }
+  };
+}
+
+/// Declares a CSS enum parser with automatic value list generation.
+macro_rules! declare_enum_from_css_impl {
+  (
+    $enum_type:ty,
+    $($css_value:expr => $variant:path),* $(,)?
+  ) => {
+    impl crate::style::MakeComputed for $enum_type {}
+
+    impl<'i> crate::style::FromCss<'i> for $enum_type {
+      const VALID_TOKENS: &'static [crate::style::CssToken] =
+        &[$(crate::style::CssToken::Keyword($css_value)),*];
+
+      fn from_css(input: &mut cssparser::Parser<'i, '_>) -> crate::style::ParseResult<'i, Self> {
+        let location = input.current_source_location();
+        let token = input.next()?;
+
+        let cssparser::Token::Ident(ident) = token else {
+          return Err($crate::style::unexpected_token!(location, token));
+        };
+
+        cssparser::match_ignore_ascii_case! {&ident,
+          $(
+            $css_value => Ok($variant),
+          )*
+          _ => Err($crate::style::unexpected_token!(location, token)),
+        }
+      }
+    }
+
+    impl crate::style::properties::ToCss for $enum_type {
+      fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+        match self {
+          $(
+            $variant => dest.write_str($css_value),
+          )*
+        }
+      }
+    }
+  };
+}
+
+pub(crate) use declare_enum_from_css_impl;
+
+/// Defines how an image should be resized to fit its container.
+///
+/// Similar to CSS object-fit property.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum ObjectFit {
+  /// The replaced content is sized to fill the element's content box exactly, without maintaining aspect ratio
+  #[default]
+  Fill,
+  /// The replaced content is scaled to maintain its aspect ratio while fitting within the element's content box
+  Contain,
+  /// The replaced content is sized to maintain its aspect ratio while filling the element's entire content box
+  Cover,
+  /// The content is sized as if none or contain were specified, whichever would result in a smaller concrete object size
+  ScaleDown,
+  /// The replaced content is not resized and maintains its intrinsic dimensions
+  None,
+}
+
+declare_enum_from_css_impl!(
+  ObjectFit,
+  "fill" => ObjectFit::Fill,
+  "contain" => ObjectFit::Contain,
+  "cover" => ObjectFit::Cover,
+  "scale-down" => ObjectFit::ScaleDown,
+  "none" => ObjectFit::None
+);
+
+impl TailwindPropertyParser for ObjectFit {
+  fn parse_tw(token: &str) -> Option<Self> {
+    Self::from_str(token).ok()
+  }
+}
+
+/// Defines how the background is clipped.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum BackgroundClip {
+  /// The background extends to the outside edge of the border
+  #[default]
+  BorderBox,
+  /// The background extends to the outside edge of the padding
+  PaddingBox,
+  /// The background extends to the inside edge of the content box
+  ContentBox,
+  /// The background extends to the outside edge of the text
+  Text,
+  /// The background extends to the outside edge of the border area
+  BorderArea,
+}
+
+declare_enum_from_css_impl!(
+  BackgroundClip,
+  "border-box" => BackgroundClip::BorderBox,
+  "padding-box" => BackgroundClip::PaddingBox,
+  "content-box" => BackgroundClip::ContentBox,
+  "text" => BackgroundClip::Text,
+  "border-area" => BackgroundClip::BorderArea
+);
+
+impl TailwindPropertyParser for BackgroundClip {
+  fn parse_tw(token: &str) -> Option<Self> {
+    match_ignore_ascii_case! {token,
+      "border" => Some(BackgroundClip::BorderBox),
+      "padding" => Some(BackgroundClip::PaddingBox),
+      "content" => Some(BackgroundClip::ContentBox),
+      "text" => Some(BackgroundClip::Text),
+      _ => None,
+    }
+  }
+}
+
+/// Represents the CSS `border-radius` property, supporting elliptical corners.
+///
+/// Each corner has independent horizontal and vertical radii, allowing for both circular and elliptical shapes.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct BorderRadius(pub Sides<SpacePair<LengthDefaultsToZero>>);
+
+impl From<f32> for BorderRadius {
+  fn from(value: f32) -> Self {
+    Self(Sides(
+      [SpacePair::from_pair(Length::Px(value), Length::Px(value)); 4],
+    ))
+  }
+}
+
+impl MakeComputed for BorderRadius {
+  fn make_computed(&mut self, sizing: &SizingContext) {
+    self.0.make_computed(sizing);
+  }
+}
+
+impl Animatable for BorderRadius {
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) {
+    self
+      .0
+      .interpolate(&from.0, &to.0, progress, sizing, current_color);
+  }
+}
+
+impl<'i> FromCss<'i> for BorderRadius {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let widths: Sides<LengthDefaultsToZero> = Sides::from_css(input)?;
+
+    let heights = if input.try_parse(|input| input.expect_delim('/')).is_ok() {
+      Sides::from_css(input)?
+    } else {
+      widths
+    };
+
+    Ok(BorderRadius(Sides([
+      SpacePair::from_pair(widths.0[0], heights.0[0]),
+      SpacePair::from_pair(widths.0[1], heights.0[1]),
+      SpacePair::from_pair(widths.0[2], heights.0[2]),
+      SpacePair::from_pair(widths.0[3], heights.0[3]),
+    ])))
+  }
+
+  const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::BorderRadius;
+
+  const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Length)];
+}
+
+/// Defines how the width and height of an element are calculated.
+///
+/// This enum determines whether the width and height properties include padding and border, or just the content area.
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+pub enum BoxSizing {
+  /// The width and height properties include padding and border, but not the content area
+  ContentBox,
+  /// The width and height properties include the content area, but not padding and border
+  #[default]
+  BorderBox,
+}
+
+declare_enum_from_css_impl!(
+  BoxSizing,
+  "content-box" => BoxSizing::ContentBox,
+  "border-box" => BoxSizing::BorderBox
+);
+
+impl_from_taffy_enum!(BoxSizing, taffy::BoxSizing, ContentBox, BorderBox);
+
+/// Text alignment options for text rendering.
+///
+/// Corresponds to CSS text-align property values.
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+pub enum TextAlign {
+  /// Aligns inline content to the left edge of the line box
+  Left,
+  /// Aligns inline content to the right edge of the line box
+  Right,
+  /// Centers inline content within the line box
+  Center,
+  /// Expands inline content to fill the entire line box
+  Justify,
+  /// Aligns inline content to the start edge of the line box (language-dependent)
+  #[default]
+  Start,
+  /// Aligns inline content to the end edge of the line box (language-dependent)
+  End,
+}
+
+declare_enum_from_css_impl!(
+  TextAlign,
+  "left" => TextAlign::Left,
+  "right" => TextAlign::Right,
+  "center" => TextAlign::Center,
+  "justify" => TextAlign::Justify,
+  "start" => TextAlign::Start,
+  "end" => TextAlign::End
+);
+
+impl TailwindPropertyParser for TextAlign {
+  fn parse_tw(token: &str) -> Option<Self> {
+    Self::from_str(token).ok()
+  }
+}
+
+impl_from_taffy_enum!(
+  TextAlign, Alignment, Left, Right, Center, Justify, Start, End
+);
+
+/// Defines whether an element creates a new stacking context.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum Isolation {
+  /// The element creates a new stacking context.
+  Isolate,
+  /// Determine by other properties.
+  #[default]
+  Auto,
+}
+
+declare_enum_from_css_impl!(
+  Isolation,
+  "isolate" => Isolation::Isolate,
+  "auto" => Isolation::Auto
+);
+
+/// Defines whether an element is visible.
+///
+/// This controls whether an element is rendered, but unlike `display: none`,
+/// it still takes up space in the layout.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum Visibility {
+  /// The element is visible.
+  #[default]
+  Visible,
+  /// The element is invisible (not rendered) but still takes up space.
+  Hidden,
+}
+
+declare_enum_from_css_impl!(
+  Visibility,
+  "visible" => Visibility::Visible,
+  "hidden" => Visibility::Hidden
+);
+
+/// Defines how the corners of text strokes are rendered.
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+pub enum LineJoin {
+  /// The corners are sharp and pointed.
+  #[default]
+  Miter,
+  /// The corners are rounded.
+  Round,
+  /// The corners are cut off at a 45-degree angle.
+  Bevel,
+}
+
+declare_enum_from_css_impl!(
+  LineJoin,
+  "miter" => LineJoin::Miter,
+  "round" => LineJoin::Round,
+  "bevel" => LineJoin::Bevel
+);
+
+impl TailwindPropertyParser for LineJoin {
+  fn parse_tw(token: &str) -> Option<Self> {
+    Self::from_str(token).ok()
+  }
+}
+
+/// Defines the positioning method for an element.
+///
+/// This enum determines how an element is positioned within its containing element.
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+pub enum Position {
+  /// The element is positioned according to the normal flow of the document.
+  /// Offsets (top, right, bottom, left) have no effect.
+  #[default]
+  Relative,
+  /// The element is removed from the normal document flow and positioned relative to its nearest positioned ancestor.
+  /// Offsets (top, right, bottom, left) specify the distance from the ancestor.
+  Absolute,
+  /// The element is laid out in the normal flow and is not a containing block.
+  /// Offsets (top, right, bottom, left) have no effect.
+  Static,
+  /// The element is removed from the normal document flow and positioned relative to the viewport (root).
+  Fixed,
+}
+
+declare_enum_from_css_impl!(
+  Position,
+  "relative" => Position::Relative,
+  "absolute" => Position::Absolute,
+  "static" => Position::Static,
+  "fixed" => Position::Fixed
+);
+
+impl From<Position> for taffy::Position {
+  fn from(value: Position) -> Self {
+    match value {
+      Position::Relative | Position::Static => Self::Relative,
+      Position::Absolute | Position::Fixed => Self::Absolute,
+    }
+  }
+}
+
+impl Position {
+  /// A positioned element (anything but `static`): establishes a containing
+  /// block for absolutely-positioned descendants and honors `z-index`.
+  pub const fn is_positioned(self) -> bool {
+    matches!(self, Self::Relative | Self::Absolute | Self::Fixed)
+  }
+
+  /// Removed from normal flow.
+  pub const fn is_out_of_flow(self) -> bool {
+    matches!(self, Self::Absolute | Self::Fixed)
+  }
+}
+
+/// Defines the direction of layout.
+#[derive(Default, Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Direction {
+  /// The layout direction is left-to-right.
+  #[default]
+  Ltr,
+  /// The layout direction is right-to-left.
+  Rtl,
+}
+
+declare_enum_from_css_impl!(
+  Direction,
+  "ltr" => Direction::Ltr,
+  "rtl" => Direction::Rtl
+);
+
+impl_from_taffy_enum!(Direction, taffy::Direction, Ltr, Rtl);
+
+/// Defines whether an element should be placed along the left or right side of its container.
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+pub enum Float {
+  /// The element is not floated.
+  #[default]
+  None,
+  /// The element floats to the left.
+  Left,
+  /// The element floats to the right.
+  Right,
+  /// The element floats to the logical start side.
+  InlineStart,
+  /// The element floats to the logical end side.
+  InlineEnd,
+}
+
+declare_enum_from_css_impl!(
+  Float,
+  "none" => Float::None,
+  "left" => Float::Left,
+  "right" => Float::Right,
+  "inline-start" => Float::InlineStart,
+  "inline-end" => Float::InlineEnd,
+);
+
+impl Float {
+  /// Resolves the floating direction based on the layout direction.
+  pub fn resolve(self, direction: Direction) -> taffy::Float {
+    match self {
+      Self::None => taffy::Float::None,
+      Self::Left => taffy::Float::Left,
+      Self::Right => taffy::Float::Right,
+      Self::InlineStart => {
+        if direction == Direction::Rtl {
+          taffy::Float::Right
+        } else {
+          taffy::Float::Left
+        }
+      }
+      Self::InlineEnd => {
+        if direction == Direction::Rtl {
+          taffy::Float::Left
+        } else {
+          taffy::Float::Right
+        }
+      }
+    }
+  }
+}
+
+/// Defines whether an element must be moved below preceding floated elements.
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+pub enum Clear {
+  /// The element is not moved down.
+  #[default]
+  None,
+  /// The element is moved below left-floated elements.
+  Left,
+  /// The element is moved below right-floated elements.
+  Right,
+  /// The element is moved below both left- and right-floated elements.
+  Both,
+  /// The element is moved below logical start-floated elements.
+  InlineStart,
+  /// The element is moved below logical end-floated elements.
+  InlineEnd,
+}
+
+declare_enum_from_css_impl!(
+  Clear,
+  "none" => Clear::None,
+  "left" => Clear::Left,
+  "right" => Clear::Right,
+  "both" => Clear::Both,
+  "inline-start" => Clear::InlineStart,
+  "inline-end" => Clear::InlineEnd,
+);
+
+impl Clear {
+  /// Resolves the clearing direction based on the layout direction.
+  pub fn resolve(self, direction: Direction) -> taffy::Clear {
+    match self {
+      Self::None => taffy::Clear::None,
+      Self::Left => taffy::Clear::Left,
+      Self::Right => taffy::Clear::Right,
+      Self::Both => taffy::Clear::Both,
+      Self::InlineStart => {
+        if direction == Direction::Rtl {
+          taffy::Clear::Right
+        } else {
+          taffy::Clear::Left
+        }
+      }
+      Self::InlineEnd => {
+        if direction == Direction::Rtl {
+          taffy::Clear::Left
+        } else {
+          taffy::Clear::Right
+        }
+      }
+    }
+  }
+}
+
+/// Defines the direction of flex items within a flex container.
+///
+/// This enum determines how flex items are laid out along the main axis.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum FlexDirection {
+  /// Items are laid out in the same direction as the text direction (left-to-right for English)
+  #[default]
+  Row,
+  /// Items are laid out perpendicular to the text direction (top-to-bottom)
+  Column,
+  /// Items are laid out in the opposite direction to the text direction (right-to-left for English)
+  RowReverse,
+  /// Items are laid out opposite to the column direction (bottom-to-top)
+  ColumnReverse,
+}
+
+declare_enum_from_css_impl!(
+  FlexDirection,
+  "row" => FlexDirection::Row,
+  "column" => FlexDirection::Column,
+  "row-reverse" => FlexDirection::RowReverse,
+  "column-reverse" => FlexDirection::ColumnReverse
+);
+
+impl_from_taffy_enum!(
+  FlexDirection,
+  taffy::FlexDirection,
+  Row,
+  Column,
+  RowReverse,
+  ColumnReverse
+);
+
+/// Defines how flex items are aligned along the main axis.
+///
+/// This enum determines how space is distributed between and around flex items
+/// along the main axis of the flex container.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum JustifyContent {
+  /// The items are distributed using the normal flow of the flex container.
+  #[default]
+  Normal,
+  /// Items are packed toward the start of the line.
+  Start,
+  /// Items are packed toward the end of the line.
+  End,
+  /// Items are packed toward the flex container's main-start side.
+  /// For flex containers with flex_direction RowReverse or ColumnReverse, this is equivalent
+  /// to End. In all other cases it is equivalent to Start.
+  FlexStart,
+  /// Items are packed toward the flex container's main-end side.
+  /// For flex containers with flex_direction RowReverse or ColumnReverse, this is equivalent
+  /// to Start. In all other cases it is equivalent to End.
+  FlexEnd,
+  /// Items are packed toward the center of the line.
+  Center,
+  /// Items are stretched to fill the container (only applies to flex containers)
+  Stretch,
+  /// Items are evenly distributed in the line; first item is on the start line,
+  /// last item on the end line.
+  SpaceBetween,
+  /// Items are evenly distributed in the line with equal space around them.
+  SpaceEvenly,
+  /// Items are evenly distributed in the line; first item is on the start line,
+  /// last item on the end line, and the space between items is twice the space
+  /// between the start/end items and the container edges.
+  SpaceAround,
+}
+
+declare_enum_from_css_impl!(
+  JustifyContent,
+  "normal" => JustifyContent::Normal,
+  "start" => JustifyContent::Start,
+  "end" => JustifyContent::End,
+  "flex-start" => JustifyContent::FlexStart,
+  "flex-end" => JustifyContent::FlexEnd,
+  "center" => JustifyContent::Center,
+  "stretch" => JustifyContent::Stretch,
+  "space-between" => JustifyContent::SpaceBetween,
+  "space-around" => JustifyContent::SpaceAround,
+  "space-evenly" => JustifyContent::SpaceEvenly
+);
+
+impl TailwindPropertyParser for JustifyContent {
+  fn parse_tw(token: &str) -> Option<Self> {
+    match token {
+      "between" => Some(JustifyContent::SpaceBetween),
+      "around" => Some(JustifyContent::SpaceAround),
+      "evenly" => Some(JustifyContent::SpaceEvenly),
+      _ => Self::from_str(token).ok(),
+    }
+  }
+}
+
+impl From<JustifyContent> for Option<taffy::JustifyContent> {
+  fn from(value: JustifyContent) -> Self {
+    match value {
+      JustifyContent::Normal => None,
+      JustifyContent::Start => Some(taffy::JustifyContent::Start),
+      JustifyContent::End => Some(taffy::JustifyContent::End),
+      JustifyContent::FlexStart => Some(taffy::JustifyContent::FlexStart),
+      JustifyContent::FlexEnd => Some(taffy::JustifyContent::FlexEnd),
+      JustifyContent::Center => Some(taffy::JustifyContent::Center),
+      JustifyContent::Stretch => Some(taffy::JustifyContent::Stretch),
+      JustifyContent::SpaceBetween => Some(taffy::JustifyContent::SpaceBetween),
+      JustifyContent::SpaceAround => Some(taffy::JustifyContent::SpaceAround),
+      JustifyContent::SpaceEvenly => Some(taffy::JustifyContent::SpaceEvenly),
+    }
+  }
+}
+
+/// This enum determines the layout algorithm used for the children of a node.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum Display {
+  /// The element is not displayed
+  None,
+  /// The element generates a flex container and its children follow the flexbox layout algorithm
+  Flex,
+  /// The element generates an inline-level flex container
+  InlineFlex,
+  /// The element generates a grid container and its children follow the CSS Grid layout algorithm
+  Grid,
+  /// The element generates an inline-level grid container
+  InlineGrid,
+  /// The element generates an inline container and its children follow the inline layout algorithm
+  #[default]
+  Inline,
+  /// The element creates a block container and its children follow the block layout algorithm
+  Block,
+  /// The element generates an inline-level block container
+  InlineBlock,
+}
+
+declare_enum_from_css_impl!(
+  Display,
+  "none" => Display::None,
+  "flex" => Display::Flex,
+  "inline-flex" => Display::InlineFlex,
+  "grid" => Display::Grid,
+  "inline-grid" => Display::InlineGrid,
+  "inline" => Display::Inline,
+  "block" => Display::Block,
+  "inline-block" => Display::InlineBlock
+);
+
+impl Display {
+  /// Returns true if the display creates an inline formatting context.
+  pub fn is_inline(&self) -> bool {
+    *self == Display::Inline
+  }
+
+  /// Returns true if the display participates in the inline flow as an atomic box.
+  pub fn is_inline_level(&self) -> bool {
+    matches!(
+      self,
+      Display::Inline | Display::InlineBlock | Display::InlineFlex | Display::InlineGrid
+    )
+  }
+
+  /// Returns true if the display makes the children blockified (e.g., flex or grid).
+  pub fn should_blockify_children(&self) -> bool {
+    matches!(
+      self,
+      Display::Flex | Display::InlineFlex | Display::Grid | Display::InlineGrid
+    )
+  }
+
+  /// Cast the display to block level.
+  pub fn as_blockified(self) -> Self {
+    match self {
+      Display::Inline => Display::Block,
+      Display::InlineBlock => Display::Block,
+      Display::InlineFlex => Display::Flex,
+      Display::InlineGrid => Display::Grid,
+      _ => self,
+    }
+  }
+
+  /// Mutate the display to be block level.
+  pub fn blockify(&mut self) {
+    *self = self.as_blockified();
+  }
+}
+
+impl From<Display> for taffy::Display {
+  fn from(value: Display) -> Self {
+    match value {
+      Display::Flex | Display::InlineFlex => taffy::Display::Flex,
+      Display::Grid | Display::InlineGrid => taffy::Display::Grid,
+      Display::Block | Display::InlineBlock | Display::Inline => taffy::Display::Block,
+      Display::None => taffy::Display::None,
+    }
+  }
+}
+
+/// Defines how flex items are aligned along the cross axis.
+///
+/// This enum determines how items are aligned within the flex container
+/// along the cross axis (perpendicular to the main axis).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum AlignItems {
+  /// The items are distributed using the normal flow of the flex container.
+  #[default]
+  Normal,
+  /// Items are aligned to the start of the line in the cross axis
+  Start,
+  /// Items are aligned to the end of the line in the cross axis
+  End,
+  /// Items are aligned to the flex container's cross-start side
+  FlexStart,
+  /// Items are aligned to the flex container's cross-end side
+  FlexEnd,
+  /// Items are centered in the cross axis
+  Center,
+  /// Items are aligned so that their baselines align
+  Baseline,
+  /// Items are stretched to fill the container in the cross axis
+  Stretch,
+}
+
+declare_enum_from_css_impl!(
+  AlignItems,
+  "normal" => AlignItems::Normal,
+  "start" => AlignItems::Start,
+  "end" => AlignItems::End,
+  "flex-start" => AlignItems::FlexStart,
+  "flex-end" => AlignItems::FlexEnd,
+  "center" => AlignItems::Center,
+  "baseline" => AlignItems::Baseline,
+  "stretch" => AlignItems::Stretch
+);
+
+impl TailwindPropertyParser for AlignItems {
+  fn parse_tw(token: &str) -> Option<Self> {
+    Self::from_str(token).ok()
+  }
+}
+
+impl From<AlignItems> for Option<taffy::AlignItems> {
+  fn from(value: AlignItems) -> Self {
+    match value {
+      AlignItems::Normal => None,
+      AlignItems::Start => Some(taffy::AlignItems::Start),
+      AlignItems::End => Some(taffy::AlignItems::End),
+      AlignItems::FlexStart => Some(taffy::AlignItems::FlexStart),
+      AlignItems::FlexEnd => Some(taffy::AlignItems::FlexEnd),
+      AlignItems::Center => Some(taffy::AlignItems::Center),
+      AlignItems::Baseline => Some(taffy::AlignItems::Baseline),
+      AlignItems::Stretch => Some(taffy::AlignItems::Stretch),
+    }
+  }
+}
+
+/// Defines how flex items should wrap.
+///
+/// This enum determines how flex items should wrap within the flex container.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum FlexWrap {
+  /// Flex items will all be displayed in a single line, shrinking as needed
+  #[default]
+  NoWrap,
+  /// Flex items will wrap onto multiple lines, with new lines stacking in the flex direction
+  Wrap,
+  /// Flex items will wrap onto multiple lines, with new lines stacking in the reverse flex direction
+  WrapReverse,
+}
+
+declare_enum_from_css_impl!(
+  FlexWrap,
+  "nowrap" => FlexWrap::NoWrap,
+  "wrap" => FlexWrap::Wrap,
+  "wrap-reverse" => FlexWrap::WrapReverse
+);
+
+impl_from_taffy_enum!(FlexWrap, taffy::FlexWrap, NoWrap, Wrap, WrapReverse);
+
+/// Controls text case transformation when rendering.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum TextTransform {
+  /// Do not transform text
+  #[default]
+  None,
+  /// Transform all characters to uppercase
+  Uppercase,
+  /// Transform all characters to lowercase
+  Lowercase,
+  /// Uppercase the first letter of each word
+  Capitalize,
+}
+
+declare_enum_from_css_impl!(
+  TextTransform,
+  "none" => TextTransform::None,
+  "uppercase" => TextTransform::Uppercase,
+  "lowercase" => TextTransform::Lowercase,
+  "capitalize" => TextTransform::Capitalize
+);
+
+/// Controls whether text decoration should skip descenders.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum TextDecorationSkipInk {
+  /// Skip descenders and glyph interiors when painting decorations.
+  #[default]
+  Auto,
+  /// Do not skip ink; paint decoration continuously.
+  None,
+}
+
+declare_enum_from_css_impl!(
+  TextDecorationSkipInk,
+  "auto" => TextDecorationSkipInk::Auto,
+  "none" => TextDecorationSkipInk::None
+);
+
+/// Controls how whitespace should be collapsed.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum WhiteSpaceCollapse {
+  /// Preserve whitespace as is—spaces and tabs are not collapsed.
+  Preserve,
+  /// Collapse whitespace—spaces and tabs are collapsed.
+  #[default]
+  Collapse,
+  /// Preserve spaces and remove breaks.
+  PreserveSpaces,
+  /// Preserve breaks and collapse spaces.
+  PreserveBreaks,
+}
+
+declare_enum_from_css_impl!(
+  WhiteSpaceCollapse,
+  "preserve" => WhiteSpaceCollapse::Preserve,
+  "collapse" => WhiteSpaceCollapse::Collapse,
+  "preserve-spaces" => WhiteSpaceCollapse::PreserveSpaces,
+  "preserve-breaks" => WhiteSpaceCollapse::PreserveBreaks,
+);
+
+/// Defines how images should be scaled when rendered.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum ImageScalingAlgorithm {
+  /// The image is scaled using Catmull-Rom interpolation.
+  /// This is balanced for speed and quality.
+  #[default]
+  Auto,
+  /// The image is scaled using Lanczos3 resampling.
+  /// This provides high-quality scaling but may be slower.
+  Smooth,
+  /// The image is scaled using nearest neighbor interpolation,
+  /// which is suitable for pixel art or images where sharp edges are desired.
+  Pixelated,
+}
+
+declare_enum_from_css_impl!(
+  ImageScalingAlgorithm,
+  "auto" => ImageScalingAlgorithm::Auto,
+  "smooth" => ImageScalingAlgorithm::Smooth,
+  "pixelated" => ImageScalingAlgorithm::Pixelated
+);
+
+/// Represents border style options.
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub enum BorderStyle {
+  /// No border will be rendered.
+  #[default]
+  None,
+  /// Forces the border to be hidden.
+  Hidden,
+  /// Dotted border style.
+  Dotted,
+  /// Dashed border style.
+  Dashed,
+  /// Solid border style.
+  Solid,
+  /// Double border style.
+  Double,
+  /// Groove border style.
+  Groove,
+  /// Ridge border style.
+  Ridge,
+  /// Inset border style.
+  Inset,
+  /// Outset border style.
+  Outset,
+}
+
+impl BorderStyle {
+  /// Returns whether this border style should paint and reserve border width.
+  pub const fn is_rendered(self) -> bool {
+    !matches!(self, Self::None | Self::Hidden)
+  }
+}
+
+declare_enum_from_css_impl!(
+  BorderStyle,
+  "none" => BorderStyle::None,
+  "hidden" => BorderStyle::Hidden,
+  "dotted" => BorderStyle::Dotted,
+  "dashed" => BorderStyle::Dashed,
+  "solid" => BorderStyle::Solid,
+  "double" => BorderStyle::Double,
+  "groove" => BorderStyle::Groove,
+  "ridge" => BorderStyle::Ridge,
+  "inset" => BorderStyle::Inset,
+  "outset" => BorderStyle::Outset,
+);
+
+impl TailwindPropertyParser for BorderStyle {
+  fn parse_tw(token: &str) -> Option<Self> {
+    Self::from_str(token).ok()
+  }
+}
+
+impl From<ImageScalingAlgorithm> for FilterType {
+  fn from(algorithm: ImageScalingAlgorithm) -> Self {
+    match algorithm {
+      ImageScalingAlgorithm::Auto => FilterType::CatmullRom,
+      ImageScalingAlgorithm::Smooth => FilterType::Lanczos3,
+      ImageScalingAlgorithm::Pixelated => FilterType::Nearest,
+    }
+  }
+}
