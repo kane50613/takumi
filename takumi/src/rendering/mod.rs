@@ -9,6 +9,8 @@ mod debug_drawing;
 mod dithering;
 /// Filter rasterization (blur, drop-shadow, backdrop, pixel filters)
 mod filter;
+/// Resolves a computed style into a sized font style for text layout
+mod font_style;
 /// Image drawing functions
 mod image_drawing;
 pub(crate) mod inline_drawing;
@@ -37,6 +39,7 @@ pub(crate) use components::*;
 pub(crate) use debug_drawing::*;
 pub use dithering::*;
 pub(crate) use filter::*;
+pub(crate) use font_style::*;
 pub(crate) use image_drawing::*;
 pub(crate) use path::*;
 pub use render::*;

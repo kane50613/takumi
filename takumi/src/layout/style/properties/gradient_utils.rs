@@ -588,8 +588,7 @@ mod tests {
   use taffy::Point;
 
   use crate::layout::Viewport;
-  use crate::layout::style::{BlendMode, Color, Length, StopPosition};
-  use crate::rendering::blend_pixel;
+  use crate::layout::style::{Color, Length, StopPosition};
 
   use super::*;
 
@@ -660,14 +659,11 @@ mod tests {
 
       for dest_x in dest_x_min..dest_x_max {
         let lut_idx = tile.next_lut_index(&mut row_state);
-        let pixel = tile.sample_at(lut_idx);
-        let pixel = pixel.demultiply();
-        let current = bottom.get_pixel_mut(dest_x as u32, dest_y as u32);
-        blend_pixel(
-          current,
-          Rgba([pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]),
-          BlendMode::Normal,
-        );
+        let pixel = tile.sample_at(lut_idx).demultiply();
+        // Independent reference: the mock tile only emits opaque samples, so a
+        // normal-blend reduces to a straight pixel write.
+        *bottom.get_pixel_mut(dest_x as u32, dest_y as u32) =
+          Rgba([pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]);
       }
     }
   }

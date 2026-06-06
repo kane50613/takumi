@@ -22,7 +22,8 @@ use crate::{
   rendering::{
     BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, NodeMaskAction, Placement,
     apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel, draw_debug_border,
-    get_node_mut_by_path, prepare_node_mask, scale_text_fit_x, transformed_rect_extents,
+    get_node_mut_by_path, prepare_node_mask, scale_text_fit_x, to_sized_font_style,
+    transformed_rect_extents,
   },
 };
 
@@ -502,7 +503,7 @@ fn compute_node_paint_bounds(
     return bounds;
   }
 
-  let font_style = node.context.style.to_sized_font_style(&node.context);
+  let font_style = to_sized_font_style(&node.context.style, &node.context);
   if font_style.sizing.font_size == 0.0 {
     return bounds;
   }

@@ -30,6 +30,7 @@ use crate::{
   rendering::{
     Canvas, RenderContext,
     inline_drawing::{InlineLayoutDrawData, draw_inline_box, draw_inline_layout},
+    to_sized_font_style,
   },
 };
 use parley::fontique::Attributes;
@@ -1077,7 +1078,7 @@ impl<'g> RenderNode<'g> {
       return Ok(());
     }
 
-    let font_style = self.context.style.to_sized_font_style(&self.context);
+    let font_style = to_sized_font_style(&self.context.style, &self.context);
 
     let max_height = resolve_inline_max_height(&font_style, layout.content_box_height());
 
@@ -1622,7 +1623,7 @@ impl<'g> RenderNode<'g> {
       return None;
     }
 
-    let font_style = self.context.style.to_sized_font_style(&self.context);
+    let font_style = to_sized_font_style(&self.context.style, &self.context);
     let max_width = size.width.max(0.0);
     let built = create_inline_layout(InlineLayoutRequest {
       items: collect_inline_items(self),
@@ -1883,7 +1884,7 @@ impl<'g> RenderNode<'g> {
       let (max_width, max_height) =
         create_inline_constraint(&self.context, available_space, known_dimensions);
 
-      let font_style = self.context.style.to_sized_font_style(&self.context);
+      let font_style = to_sized_font_style(&self.context.style, &self.context);
 
       let mut built = create_inline_layout(InlineLayoutRequest {
         items: collect_inline_items(self),

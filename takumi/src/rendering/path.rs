@@ -6,7 +6,7 @@ use tiny_skia::{
   Rect as TinyRect, Stroke as TinyStroke, StrokeDash as TinyStrokeDash,
 };
 
-use crate::layout::style::Affine;
+use crate::layout::style::{Affine, LineJoin};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub(crate) enum Fill {
@@ -21,6 +21,16 @@ pub(crate) enum Join {
   Miter,
   Round,
   Bevel,
+}
+
+impl From<LineJoin> for Join {
+  fn from(value: LineJoin) -> Self {
+    match value {
+      LineJoin::Miter => Join::Miter,
+      LineJoin::Round => Join::Round,
+      LineJoin::Bevel => Join::Bevel,
+    }
+  }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

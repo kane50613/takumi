@@ -10,13 +10,14 @@ use crate::{
   layout::{
     inline::{InlineBrush, InlineLayout, ProcessedInlineSpan, break_lines},
     style::{
-      Affine, BlendMode, Color, ImageScalingAlgorithm, SizedFontStyle, TextTransform, TextWrapMode,
+      Affine, BlendMode, Color, ImageScalingAlgorithm, TextTransform, TextWrapMode,
       WhiteSpaceCollapse,
     },
   },
   rendering::{
     BorderProperties, Canvas, ColorTile, Command, MaskSamplingOptions, MaskSourceToPixmapOptions,
-    PaintSource, Placement, SamplingOptions, Stroke, composite_mask_source_to_pixmap, render_mask,
+    PaintSource, Placement, SamplingOptions, SizedFontStyle, Stroke,
+    composite_mask_source_to_pixmap, render_mask,
   },
   resources::font::{ResolvedColorLayer, ResolvedGlyph},
 };

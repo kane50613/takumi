@@ -116,10 +116,7 @@ use parley::Alignment;
 use std::borrow::Cow;
 use std::fmt;
 
-use crate::{
-  layout::style::{SizingContext, tw::TailwindPropertyParser},
-  rendering::Join,
-};
+use crate::layout::style::{SizingContext, tw::TailwindPropertyParser};
 
 /// Parser result type alias for CSS property parsers.
 pub type ParseResult<'i, T> = Result<T, ParseError<'i, Cow<'i, str>>>;
@@ -1182,16 +1179,6 @@ declare_enum_from_css_impl!(
   "round" => LineJoin::Round,
   "bevel" => LineJoin::Bevel
 );
-
-impl From<LineJoin> for Join {
-  fn from(value: LineJoin) -> Self {
-    match value {
-      LineJoin::Miter => Join::Miter,
-      LineJoin::Round => Join::Round,
-      LineJoin::Bevel => Join::Bevel,
-    }
-  }
-}
 
 impl TailwindPropertyParser for LineJoin {
   fn parse_tw(token: &str) -> Option<Self> {
