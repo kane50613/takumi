@@ -5,116 +5,82 @@ use crate::style::{
   *,
 };
 
-/// Enum for data-driven property parsing
-#[derive(Clone, Copy)]
-pub enum PropertyParser {
-  ObjectFit(fn(ObjectFit) -> TailwindProperty),
-  ObjectPosition(fn(ObjectPosition) -> TailwindProperty),
-  BgPosition(fn(BackgroundPosition) -> TailwindProperty),
-  TransformOrigin(fn(TransformOrigin) -> TailwindProperty),
-  BgSize(fn(BackgroundSize) -> TailwindProperty),
-  BgImage(fn(BackgroundImage) -> TailwindProperty),
-  LengthAuto(fn(Length) -> TailwindProperty),
-  LengthZero(fn(LengthDefaultsToZero) -> TailwindProperty),
-  FontWeight(fn(FontWeight) -> TailwindProperty),
-  Justify(fn(JustifyContent) -> TailwindProperty),
-  Align(fn(AlignItems) -> TailwindProperty),
-  Overflow(fn(Overflow) -> TailwindProperty),
-  BorderWidth(fn(TwBorderWidth) -> TailwindProperty),
-  BorderStyle(fn(BorderStyle) -> TailwindProperty),
-  Rounded(fn(TwRounded) -> TailwindProperty),
-  GridTemplate(fn(TwGridTemplate) -> TailwindProperty),
-  GridAuto(fn(GridTrackSize) -> TailwindProperty),
-  GridLine(fn(GridLine) -> TailwindProperty),
-  GridPlacement(fn(GridPlacement) -> TailwindProperty),
-  GridSpan(fn(GridPlacementSpan) -> TailwindProperty),
-  LetterSpacing(fn(TwLetterSpacing) -> TailwindProperty),
-  FlexGrow(fn(FlexGrow) -> TailwindProperty),
-  Aspect(fn(AspectRatio) -> TailwindProperty),
-  TextAlign(fn(TextAlign) -> TailwindProperty),
-  TextWrap(fn(TextWrap) -> TailwindProperty),
-  ColorCurrent(fn(ColorInput) -> TailwindProperty),
-  ColorTransparent(fn(ColorInput<false>) -> TailwindProperty),
-  Percentage(fn(PercentageNumber) -> TailwindProperty),
-  FontFamily(fn(FontFamily) -> TailwindProperty),
-  LineClamp(fn(LineClamp) -> TailwindProperty),
-  WhiteSpace(fn(WhiteSpace) -> TailwindProperty),
-  OverflowWrap(fn(OverflowWrap) -> TailwindProperty),
-  FontSize(fn(TwFontSize) -> TailwindProperty),
-  LineHeight(fn(LineHeight) -> TailwindProperty),
-  Flex(fn(Flex) -> TailwindProperty),
-  Angle(fn(Angle) -> TailwindProperty),
-  BackgroundClip(fn(BackgroundClip) -> TailwindProperty),
-  Blur(fn(TwBlur) -> TailwindProperty),
-  Filter(fn(Filters) -> TailwindProperty),
-  BoxShadow(fn(BoxShadow) -> TailwindProperty),
-  DropShadow(fn(TextShadow) -> TailwindProperty),
-  TextShadow(fn(TextShadow) -> TailwindProperty),
-  BlendMode(fn(BlendMode) -> TailwindProperty),
-  FontStretch(fn(FontStretch) -> TailwindProperty),
-  VerticalAlign(fn(VerticalAlign) -> TailwindProperty),
-  DecorationThickness(fn(TextDecorationThickness) -> TailwindProperty),
-  Animation(fn(Animations) -> TailwindProperty),
-  GradientPosition(fn(Length) -> TailwindProperty),
-}
+/// Generates the [`PropertyParser`] enum and its `parse()` dispatch from
+/// `(Variant, ArgType, ParseType)` triples: each variant holds an
+/// `fn(ArgType) -> TailwindProperty` and parses via
+/// `<ParseType>::parse_tw_with_arbitrary`. The const-generic `Length`/`ColorInput`
+/// pairs share a base `ParseType` whose generic is inferred from the closure.
+/// The irregular `GradientPosition` arm is handled explicitly.
+macro_rules! property_parsers {
+  ($($variant:ident($arg:ty) => $parse:ty),+ $(,)?) => {
+    /// Enum for data-driven property parsing
+    #[derive(Clone, Copy)]
+    pub enum PropertyParser {
+      $($variant(fn($arg) -> TailwindProperty),)+
+      GradientPosition(fn(Length) -> TailwindProperty),
+    }
 
-impl PropertyParser {
-  pub fn parse(&self, suffix: &str) -> Option<TailwindProperty> {
-    match self {
-      Self::BackgroundClip(f) => BackgroundClip::parse_tw_with_arbitrary(suffix).map(f),
-      Self::ObjectFit(f) => ObjectFit::parse_tw_with_arbitrary(suffix).map(f),
-      Self::ObjectPosition(f) => ObjectPosition::parse_tw_with_arbitrary(suffix).map(f),
-      Self::BgPosition(f) => BackgroundPosition::parse_tw_with_arbitrary(suffix).map(f),
-      Self::TransformOrigin(f) => TransformOrigin::parse_tw_with_arbitrary(suffix).map(f),
-      Self::BgSize(f) => BackgroundSize::parse_tw_with_arbitrary(suffix).map(f),
-      Self::BgImage(f) => BackgroundImage::parse_tw_with_arbitrary(suffix).map(f),
-      Self::LengthAuto(f) => Length::parse_tw_with_arbitrary(suffix).map(f),
-      Self::LengthZero(f) => Length::parse_tw_with_arbitrary(suffix).map(f),
-      Self::FontWeight(f) => FontWeight::parse_tw_with_arbitrary(suffix).map(f),
-      Self::Justify(f) => JustifyContent::parse_tw_with_arbitrary(suffix).map(f),
-      Self::Align(f) => AlignItems::parse_tw_with_arbitrary(suffix).map(f),
-      Self::Overflow(f) => Overflow::parse_tw_with_arbitrary(suffix).map(f),
-      Self::BorderWidth(f) => TwBorderWidth::parse_tw_with_arbitrary(suffix).map(f),
-      Self::BorderStyle(f) => BorderStyle::parse_tw_with_arbitrary(suffix).map(f),
-      Self::Rounded(f) => TwRounded::parse_tw_with_arbitrary(suffix).map(f),
-      Self::GridTemplate(f) => TwGridTemplate::parse_tw_with_arbitrary(suffix).map(f),
-      Self::GridAuto(f) => GridTrackSize::parse_tw_with_arbitrary(suffix).map(f),
-      Self::GridPlacement(f) => GridPlacement::parse_tw_with_arbitrary(suffix).map(f),
-      Self::GridLine(f) => GridLine::parse_tw_with_arbitrary(suffix).map(f),
-      Self::GridSpan(f) => GridPlacementSpan::parse_tw_with_arbitrary(suffix).map(f),
-      Self::LetterSpacing(f) => TwLetterSpacing::parse_tw_with_arbitrary(suffix).map(f),
-      Self::FlexGrow(f) => FlexGrow::parse_tw_with_arbitrary(suffix).map(f),
-      Self::Aspect(f) => AspectRatio::parse_tw_with_arbitrary(suffix).map(f),
-      Self::TextAlign(f) => TextAlign::parse_tw_with_arbitrary(suffix).map(f),
-      Self::TextWrap(f) => TextWrap::parse_tw_with_arbitrary(suffix).map(f),
-      Self::ColorCurrent(f) => ColorInput::parse_tw_with_arbitrary(suffix).map(f),
-      Self::ColorTransparent(f) => ColorInput::parse_tw_with_arbitrary(suffix).map(f),
-      Self::Percentage(f) => PercentageNumber::parse_tw_with_arbitrary(suffix).map(f),
-      Self::FontFamily(f) => FontFamily::parse_tw_with_arbitrary(suffix).map(f),
-      Self::LineClamp(f) => LineClamp::parse_tw_with_arbitrary(suffix).map(f),
-      Self::WhiteSpace(f) => WhiteSpace::parse_tw_with_arbitrary(suffix).map(f),
-      Self::OverflowWrap(f) => OverflowWrap::parse_tw_with_arbitrary(suffix).map(f),
-      Self::FontSize(f) => TwFontSize::parse_tw_with_arbitrary(suffix).map(f),
-      Self::LineHeight(f) => LineHeight::parse_tw_with_arbitrary(suffix).map(f),
-      Self::Flex(f) => Flex::parse_tw_with_arbitrary(suffix).map(f),
-      Self::Angle(f) => Angle::parse_tw_with_arbitrary(suffix).map(f),
-      Self::Blur(f) => TwBlur::parse_tw_with_arbitrary(suffix).map(f),
-      Self::Filter(f) => Filters::parse_tw_with_arbitrary(suffix).map(f),
-      Self::BoxShadow(f) => BoxShadow::parse_tw_with_arbitrary(suffix).map(f),
-      Self::DropShadow(f) => TextShadow::parse_tw_with_arbitrary(suffix).map(f),
-      Self::TextShadow(f) => TextShadow::parse_tw_with_arbitrary(suffix).map(f),
-      Self::BlendMode(f) => BlendMode::parse_tw_with_arbitrary(suffix).map(f),
-      Self::FontStretch(f) => FontStretch::parse_tw_with_arbitrary(suffix).map(f),
-      Self::VerticalAlign(f) => VerticalAlign::parse_tw_with_arbitrary(suffix).map(f),
-      Self::DecorationThickness(f) => {
-        TextDecorationThickness::parse_tw_with_arbitrary(suffix).map(f)
-      }
-      Self::Animation(f) => Animations::parse_tw_with_arbitrary(suffix).map(f),
-      Self::GradientPosition(f) => {
-        TwGradientPosition::parse_tw_with_arbitrary(suffix).map(|p| f(p.0))
+    impl PropertyParser {
+      pub fn parse(&self, suffix: &str) -> Option<TailwindProperty> {
+        match self {
+          $(Self::$variant(f) => <$parse>::parse_tw_with_arbitrary(suffix).map(f),)+
+          Self::GradientPosition(f) => {
+            TwGradientPosition::parse_tw_with_arbitrary(suffix).map(|p| f(p.0))
+          }
+        }
       }
     }
-  }
+  };
+}
+
+property_parsers! {
+  ObjectFit(ObjectFit) => ObjectFit,
+  ObjectPosition(ObjectPosition) => ObjectPosition,
+  BgPosition(BackgroundPosition) => BackgroundPosition,
+  TransformOrigin(TransformOrigin) => TransformOrigin,
+  BgSize(BackgroundSize) => BackgroundSize,
+  BgImage(BackgroundImage) => BackgroundImage,
+  LengthAuto(Length) => Length,
+  LengthZero(LengthDefaultsToZero) => LengthDefaultsToZero,
+  FontWeight(FontWeight) => FontWeight,
+  Justify(JustifyContent) => JustifyContent,
+  Align(AlignItems) => AlignItems,
+  Overflow(Overflow) => Overflow,
+  BorderWidth(TwBorderWidth) => TwBorderWidth,
+  BorderStyle(BorderStyle) => BorderStyle,
+  Rounded(TwRounded) => TwRounded,
+  GridTemplate(TwGridTemplate) => TwGridTemplate,
+  GridAuto(GridTrackSize) => GridTrackSize,
+  GridLine(GridLine) => GridLine,
+  GridPlacement(GridPlacement) => GridPlacement,
+  GridSpan(GridPlacementSpan) => GridPlacementSpan,
+  LetterSpacing(TwLetterSpacing) => TwLetterSpacing,
+  FlexGrow(FlexGrow) => FlexGrow,
+  Aspect(AspectRatio) => AspectRatio,
+  TextAlign(TextAlign) => TextAlign,
+  TextWrap(TextWrap) => TextWrap,
+  ColorCurrent(ColorInput) => ColorInput,
+  ColorTransparent(ColorInput<false>) => ColorInput<false>,
+  Percentage(PercentageNumber) => PercentageNumber,
+  FontFamily(FontFamily) => FontFamily,
+  LineClamp(LineClamp) => LineClamp,
+  WhiteSpace(WhiteSpace) => WhiteSpace,
+  OverflowWrap(OverflowWrap) => OverflowWrap,
+  FontSize(TwFontSize) => TwFontSize,
+  LineHeight(LineHeight) => LineHeight,
+  Flex(Flex) => Flex,
+  Angle(Angle) => Angle,
+  BackgroundClip(BackgroundClip) => BackgroundClip,
+  Blur(TwBlur) => TwBlur,
+  Filter(Filters) => Filters,
+  BoxShadow(BoxShadow) => BoxShadow,
+  DropShadow(TextShadow) => TextShadow,
+  TextShadow(TextShadow) => TextShadow,
+  BlendMode(BlendMode) => BlendMode,
+  FontStretch(FontStretch) => FontStretch,
+  VerticalAlign(VerticalAlign) => VerticalAlign,
+  DecorationThickness(TextDecorationThickness) => TextDecorationThickness,
+  Animation(Animations) => Animations,
 }
 
 pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
@@ -297,9 +263,9 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
 };
 
 // v4 `theme.css` composites. Alpha: `/ .075` ≈ 19, `/ .1` ≈ 26, `/ .25` ≈ 64.
-const fn bs(oy: f32, blur: f32, spread: f32, alpha: u8) -> BoxShadow {
+const fn bs(inset: bool, oy: f32, blur: f32, spread: f32, alpha: u8) -> BoxShadow {
   BoxShadow {
-    inset: false,
+    inset,
     offset_x: Length::Px(0.0),
     offset_y: Length::Px(oy),
     blur_radius: Length::Px(blur),
@@ -316,10 +282,16 @@ const fn ts(oy: f32, blur: f32, alpha: u8) -> TextShadow {
   }
 }
 
-const SHADOW_SM: [BoxShadow; 2] = [bs(1.0, 3.0, 0.0, 26), bs(1.0, 2.0, -1.0, 26)];
-const SHADOW_MD: [BoxShadow; 2] = [bs(4.0, 6.0, -1.0, 26), bs(2.0, 4.0, -2.0, 26)];
-const SHADOW_LG: [BoxShadow; 2] = [bs(10.0, 15.0, -3.0, 26), bs(4.0, 6.0, -4.0, 26)];
-const SHADOW_XL: [BoxShadow; 2] = [bs(20.0, 25.0, -5.0, 26), bs(8.0, 10.0, -6.0, 26)];
+const SHADOW_SM: [BoxShadow; 2] = [bs(false, 1.0, 3.0, 0.0, 26), bs(false, 1.0, 2.0, -1.0, 26)];
+const SHADOW_MD: [BoxShadow; 2] = [bs(false, 4.0, 6.0, -1.0, 26), bs(false, 2.0, 4.0, -2.0, 26)];
+const SHADOW_LG: [BoxShadow; 2] = [
+  bs(false, 10.0, 15.0, -3.0, 26),
+  bs(false, 4.0, 6.0, -4.0, 26),
+];
+const SHADOW_XL: [BoxShadow; 2] = [
+  bs(false, 20.0, 25.0, -5.0, 26),
+  bs(false, 8.0, 10.0, -6.0, 26),
+];
 
 const TEXT_SHADOW_SM: [TextShadow; 3] = [ts(1.0, 0.0, 19), ts(1.0, 1.0, 19), ts(2.0, 2.0, 19)];
 const TEXT_SHADOW_MD: [TextShadow; 3] = [ts(1.0, 1.0, 26), ts(1.0, 2.0, 26), ts(2.0, 4.0, 26)];
@@ -404,34 +376,13 @@ pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
   "col-end-auto" => TailwindProperty::GridColumnEnd(GridPlacement::Keyword(GridPlacementKeyword::Auto)),
   "row-start-auto" => TailwindProperty::GridRowStart(GridPlacement::Keyword(GridPlacementKeyword::Auto)),
   "row-end-auto" => TailwindProperty::GridRowEnd(GridPlacement::Keyword(GridPlacementKeyword::Auto)),
-  "shadow-2xs" => TailwindProperty::Shadow(BoxShadow {
-    inset: false,
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(0.0),
-    spread_radius: Length::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 13])),
-  }),
-  "shadow-xs" => TailwindProperty::Shadow(BoxShadow {
-    inset: false,
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(2.0),
-    spread_radius: Length::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 13])),
-  }),
+  "shadow-2xs" => TailwindProperty::Shadow(bs(false, 1.0, 0.0, 0.0, 13)),
+  "shadow-xs" => TailwindProperty::Shadow(bs(false, 1.0, 2.0, 0.0, 13)),
   "shadow-sm" | "shadow" => TailwindProperty::ShadowList(&SHADOW_SM),
   "shadow-md" => TailwindProperty::ShadowList(&SHADOW_MD),
   "shadow-lg" => TailwindProperty::ShadowList(&SHADOW_LG),
   "shadow-xl" => TailwindProperty::ShadowList(&SHADOW_XL),
-  "shadow-2xl" => TailwindProperty::Shadow(BoxShadow {
-    inset: false,
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(25.0),
-    blur_radius: Length::Px(50.0),
-    spread_radius: Length::Px(-12.0),
-    color: ColorInput::Value(Color([0, 0, 0, 64])),
-  }),
+  "shadow-2xl" => TailwindProperty::Shadow(bs(false, 25.0, 50.0, -12.0, 64)),
   "shadow-none" => TailwindProperty::ShadowList(&[]),
   "grayscale" => TailwindProperty::Grayscale(PercentageNumber(1.0)),
   "invert" => TailwindProperty::Invert(PercentageNumber(1.0)),
@@ -439,93 +390,22 @@ pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
   "backdrop-grayscale" => TailwindProperty::BackdropGrayscale(PercentageNumber(1.0)),
   "backdrop-invert" => TailwindProperty::BackdropInvert(PercentageNumber(1.0)),
   "backdrop-sepia" => TailwindProperty::BackdropSepia(PercentageNumber(1.0)),
-  "drop-shadow-xs" => TailwindProperty::DropShadow(TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(1.0),
-    color: ColorInput::Value(Color([0, 0, 0, 13])),
-  }),
-  "drop-shadow-sm" => TailwindProperty::DropShadow(TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(2.0),
-    color: ColorInput::Value(Color([0, 0, 0, 38])),
-  }),
-  "drop-shadow" => TailwindProperty::DropShadow(TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(2.0),
-    color: ColorInput::Value(Color([0, 0, 0, 26])),
-  }),
-  "drop-shadow-md" => TailwindProperty::DropShadow(TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(3.0),
-    blur_radius: Length::Px(3.0),
-    color: ColorInput::Value(Color([0, 0, 0, 31])),
-  }),
-  "drop-shadow-lg" => TailwindProperty::DropShadow(TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(4.0),
-    blur_radius: Length::Px(4.0),
-    color: ColorInput::Value(Color([0, 0, 0, 38])),
-  }),
-  "drop-shadow-xl" => TailwindProperty::DropShadow(TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(9.0),
-    blur_radius: Length::Px(7.0),
-    color: ColorInput::Value(Color([0, 0, 0, 26])),
-  }),
-  "drop-shadow-2xl" => TailwindProperty::DropShadow(TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(25.0),
-    blur_radius: Length::Px(25.0),
-    color: ColorInput::Value(Color([0, 0, 0, 38])),
-  }),
-  "drop-shadow-none" => TailwindProperty::DropShadow(TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(0.0),
-    blur_radius: Length::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 0])),
-  }),
+  "drop-shadow-xs" => TailwindProperty::DropShadow(ts(1.0, 1.0, 13)),
+  "drop-shadow-sm" => TailwindProperty::DropShadow(ts(1.0, 2.0, 38)),
+  "drop-shadow" => TailwindProperty::DropShadow(ts(1.0, 2.0, 26)),
+  "drop-shadow-md" => TailwindProperty::DropShadow(ts(3.0, 3.0, 31)),
+  "drop-shadow-lg" => TailwindProperty::DropShadow(ts(4.0, 4.0, 38)),
+  "drop-shadow-xl" => TailwindProperty::DropShadow(ts(9.0, 7.0, 26)),
+  "drop-shadow-2xl" => TailwindProperty::DropShadow(ts(25.0, 25.0, 38)),
+  "drop-shadow-none" => TailwindProperty::DropShadow(ts(0.0, 0.0, 0)),
   // Inset shadows (--inset-shadow-*)
-  "inset-shadow-2xs" => TailwindProperty::Shadow(BoxShadow {
-    inset: true,
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(0.0),
-    spread_radius: Length::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 13])),
-  }),
-  "inset-shadow-xs" => TailwindProperty::Shadow(BoxShadow {
-    inset: true,
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(1.0),
-    spread_radius: Length::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 13])),
-  }),
-  "inset-shadow-sm" => TailwindProperty::Shadow(BoxShadow {
-    inset: true,
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(2.0),
-    blur_radius: Length::Px(4.0),
-    spread_radius: Length::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 13])),
-  }),
+  "inset-shadow-2xs" => TailwindProperty::Shadow(bs(true, 1.0, 0.0, 0.0, 13)),
+  "inset-shadow-xs" => TailwindProperty::Shadow(bs(true, 1.0, 1.0, 0.0, 13)),
+  "inset-shadow-sm" => TailwindProperty::Shadow(bs(true, 2.0, 4.0, 0.0, 13)),
   "inset-shadow-none" => TailwindProperty::ShadowList(&[]),
   // Text shadows (--text-shadow-*)
-  "text-shadow-2xs" => TailwindProperty::TextShadow(TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(0.0),
-    color: ColorInput::Value(Color([0, 0, 0, 38])),
-  }),
-  "text-shadow-xs" => TailwindProperty::TextShadow(TextShadow {
-    offset_x: Length::Px(0.0),
-    offset_y: Length::Px(1.0),
-    blur_radius: Length::Px(1.0),
-    color: ColorInput::Value(Color([0, 0, 0, 51])),
-  }),
+  "text-shadow-2xs" => TailwindProperty::TextShadow(ts(1.0, 0.0, 38)),
+  "text-shadow-xs" => TailwindProperty::TextShadow(ts(1.0, 1.0, 51)),
   "text-shadow-sm" => TailwindProperty::TextShadowList(&TEXT_SHADOW_SM),
   "text-shadow-md" => TailwindProperty::TextShadowList(&TEXT_SHADOW_MD),
   "text-shadow-lg" => TailwindProperty::TextShadowList(&TEXT_SHADOW_LG),

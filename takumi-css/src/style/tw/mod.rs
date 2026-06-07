@@ -219,6 +219,19 @@ impl TailwindDeclarationBuilder {
     self.backdrop_filter_important = important;
   }
 
+  fn set_filter_reset(&mut self, important: bool, use_backdrop: bool) {
+    let (filter, filter_important) = if use_backdrop {
+      (
+        &mut self.backdrop_filter,
+        &mut self.backdrop_filter_important,
+      )
+    } else {
+      (&mut self.filter, &mut self.filter_important)
+    };
+    *filter = Some(Filters::default());
+    *filter_important = important;
+  }
+
   fn set_grid_column(&mut self, grid_line: GridLine, important: bool) {
     self.grid_column.set_line(grid_line, important, important);
   }
@@ -1000,51 +1013,31 @@ pub trait TailwindPropertyParser: Sized + for<'i> FromCss<'i> {
   }
 }
 
-impl TailwindProperty {
-  fn try_neg(self) -> Option<Self> {
-    Some(match self {
-      TailwindProperty::Margin(length) => TailwindProperty::Margin(length.try_negative()?),
-      TailwindProperty::MarginX(length) => TailwindProperty::MarginX(length.try_negative()?),
-      TailwindProperty::MarginY(length) => TailwindProperty::MarginY(length.try_negative()?),
-      TailwindProperty::MarginTop(length) => TailwindProperty::MarginTop(length.try_negative()?),
-      TailwindProperty::MarginRight(length) => {
-        TailwindProperty::MarginRight(length.try_negative()?)
-      }
-      TailwindProperty::MarginBottom(length) => {
-        TailwindProperty::MarginBottom(length.try_negative()?)
-      }
-      TailwindProperty::MarginLeft(length) => TailwindProperty::MarginLeft(length.try_negative()?),
-      TailwindProperty::MarginInlineStart(length) => {
-        TailwindProperty::MarginInlineStart(length.try_negative()?)
-      }
-      TailwindProperty::MarginInlineEnd(length) => {
-        TailwindProperty::MarginInlineEnd(length.try_negative()?)
-      }
-      TailwindProperty::Inset(length) => TailwindProperty::Inset(length.try_negative()?),
-      TailwindProperty::InsetX(length) => TailwindProperty::InsetX(length.try_negative()?),
-      TailwindProperty::InsetY(length) => TailwindProperty::InsetY(length.try_negative()?),
-      TailwindProperty::Top(length) => TailwindProperty::Top(length.try_negative()?),
-      TailwindProperty::Right(length) => TailwindProperty::Right(length.try_negative()?),
-      TailwindProperty::Bottom(length) => TailwindProperty::Bottom(length.try_negative()?),
-      TailwindProperty::Left(length) => TailwindProperty::Left(length.try_negative()?),
-      TailwindProperty::Translate(length) => TailwindProperty::Translate(length.try_negative()?),
-      TailwindProperty::TranslateX(length) => TailwindProperty::TranslateX(length.try_negative()?),
-      TailwindProperty::TranslateY(length) => TailwindProperty::TranslateY(length.try_negative()?),
-      TailwindProperty::Scale(percentage_number) => TailwindProperty::Scale(-percentage_number),
-      TailwindProperty::ScaleX(percentage_number) => TailwindProperty::ScaleX(-percentage_number),
-      TailwindProperty::ScaleY(percentage_number) => TailwindProperty::ScaleY(-percentage_number),
-      TailwindProperty::Rotate(angle) => TailwindProperty::Rotate(-angle),
-      TailwindProperty::LetterSpacing(length) => TailwindProperty::LetterSpacing(-length),
-      TailwindProperty::HueRotate(angle) => TailwindProperty::HueRotate(-angle),
-      TailwindProperty::BackdropHueRotate(angle) => TailwindProperty::BackdropHueRotate(-angle),
-      TailwindProperty::GridColumnStart(p) => {
-        TailwindProperty::GridColumnStart(neg_grid_placement(p)?)
-      }
-      TailwindProperty::GridColumnEnd(p) => TailwindProperty::GridColumnEnd(neg_grid_placement(p)?),
-      TailwindProperty::GridRowStart(p) => TailwindProperty::GridRowStart(neg_grid_placement(p)?),
-      TailwindProperty::GridRowEnd(p) => TailwindProperty::GridRowEnd(neg_grid_placement(p)?),
+macro_rules! try_neg {
+  ($self:expr;
+    try_negative: $($neg:ident),+ $(,)?;
+    unary: $($un:ident),+ $(,)?;
+    grid: $($grid:ident),+ $(,)?
+  ) => {
+    Some(match $self {
+      $(TailwindProperty::$neg(v) => TailwindProperty::$neg(v.try_negative()?),)+
+      $(TailwindProperty::$un(v) => TailwindProperty::$un(-v),)+
+      $(TailwindProperty::$grid(p) => TailwindProperty::$grid(neg_grid_placement(p)?),)+
       _ => return None,
     })
+  };
+}
+
+impl TailwindProperty {
+  fn try_neg(self) -> Option<Self> {
+    try_neg!(self;
+      try_negative:
+        Margin, MarginX, MarginY, MarginTop, MarginRight, MarginBottom, MarginLeft,
+        MarginInlineStart, MarginInlineEnd, Inset, InsetX, InsetY, Top, Right, Bottom, Left,
+        Translate, TranslateX, TranslateY;
+      unary: Scale, ScaleX, ScaleY, Rotate, LetterSpacing, HueRotate, BackdropHueRotate;
+      grid: GridColumnStart, GridColumnEnd, GridRowStart, GridRowEnd
+    )
   }
 }
 
@@ -1060,6 +1053,13 @@ macro_rules! push_decl {
     $(
       $builder.push(StyleDeclaration::$property($value), $important);
     )*
+  }};
+}
+
+macro_rules! rounded_corners {
+  ($builder:expr, $important:expr, $rounded:expr $(, $corner:ident)+ $(,)?) => {{
+    let value = SpacePair::from_single($rounded.0);
+    push_decl!($builder, $important $(, $corner(value))+);
   }};
 }
 
@@ -1396,71 +1396,58 @@ impl TailwindProperty {
       TailwindProperty::OutlineOffset(outline_offset) => {
         push_decl!(builder, important, outline_offset(outline_offset.0))
       }
-      TailwindProperty::Rounded(rounded) => {
-        push_decl!(
-          builder,
-          important,
-          border_top_left_radius(SpacePair::from_single(rounded.0)),
-          border_top_right_radius(SpacePair::from_single(rounded.0)),
-          border_bottom_right_radius(SpacePair::from_single(rounded.0)),
-          border_bottom_left_radius(SpacePair::from_single(rounded.0))
-        );
-      }
+      TailwindProperty::Rounded(rounded) => rounded_corners!(
+        builder,
+        important,
+        rounded,
+        border_top_left_radius,
+        border_top_right_radius,
+        border_bottom_right_radius,
+        border_bottom_left_radius
+      ),
       TailwindProperty::VerticalAlign(vertical_align) => {
         push_decl!(builder, important, vertical_align(vertical_align))
       }
-      TailwindProperty::RoundedTopLeft(rounded) => push_decl!(
+      TailwindProperty::RoundedTopLeft(rounded) => {
+        rounded_corners!(builder, important, rounded, border_top_left_radius)
+      }
+      TailwindProperty::RoundedTopRight(rounded) => {
+        rounded_corners!(builder, important, rounded, border_top_right_radius)
+      }
+      TailwindProperty::RoundedBottomRight(rounded) => {
+        rounded_corners!(builder, important, rounded, border_bottom_right_radius)
+      }
+      TailwindProperty::RoundedBottomLeft(rounded) => {
+        rounded_corners!(builder, important, rounded, border_bottom_left_radius)
+      }
+      TailwindProperty::RoundedTop(rounded) => rounded_corners!(
         builder,
         important,
-        border_top_left_radius(SpacePair::from_single(rounded.0))
+        rounded,
+        border_top_left_radius,
+        border_top_right_radius
       ),
-      TailwindProperty::RoundedTopRight(rounded) => push_decl!(
+      TailwindProperty::RoundedRight(rounded) => rounded_corners!(
         builder,
         important,
-        border_top_right_radius(SpacePair::from_single(rounded.0))
+        rounded,
+        border_top_right_radius,
+        border_bottom_right_radius
       ),
-      TailwindProperty::RoundedBottomRight(rounded) => push_decl!(
+      TailwindProperty::RoundedBottom(rounded) => rounded_corners!(
         builder,
         important,
-        border_bottom_right_radius(SpacePair::from_single(rounded.0))
+        rounded,
+        border_bottom_left_radius,
+        border_bottom_right_radius
       ),
-      TailwindProperty::RoundedBottomLeft(rounded) => push_decl!(
+      TailwindProperty::RoundedLeft(rounded) => rounded_corners!(
         builder,
         important,
-        border_bottom_left_radius(SpacePair::from_single(rounded.0))
+        rounded,
+        border_top_left_radius,
+        border_bottom_left_radius
       ),
-      TailwindProperty::RoundedTop(rounded) => {
-        push_decl!(
-          builder,
-          important,
-          border_top_left_radius(SpacePair::from_single(rounded.0)),
-          border_top_right_radius(SpacePair::from_single(rounded.0))
-        );
-      }
-      TailwindProperty::RoundedRight(rounded) => {
-        push_decl!(
-          builder,
-          important,
-          border_top_right_radius(SpacePair::from_single(rounded.0)),
-          border_bottom_right_radius(SpacePair::from_single(rounded.0))
-        );
-      }
-      TailwindProperty::RoundedBottom(rounded) => {
-        push_decl!(
-          builder,
-          important,
-          border_bottom_left_radius(SpacePair::from_single(rounded.0)),
-          border_bottom_right_radius(SpacePair::from_single(rounded.0))
-        );
-      }
-      TailwindProperty::RoundedLeft(rounded) => {
-        push_decl!(
-          builder,
-          important,
-          border_top_left_radius(SpacePair::from_single(rounded.0)),
-          border_bottom_left_radius(SpacePair::from_single(rounded.0))
-        );
-      }
       TailwindProperty::TextOverflow(text_overflow) => {
         push_decl!(builder, important, text_overflow(text_overflow))
       }
@@ -1733,8 +1720,7 @@ impl TailwindProperty {
       }
       TailwindProperty::Filter(filters) => {
         if filters.is_empty() {
-          builder.filter = Some(Filters::default());
-          builder.filter_important = important;
+          builder.set_filter_reset(important, false);
         } else {
           for filter in filters {
             builder.push_filter(filter, important);
@@ -1770,8 +1756,7 @@ impl TailwindProperty {
       }
       TailwindProperty::BackdropFilter(filters) => {
         if filters.is_empty() {
-          builder.backdrop_filter = Some(Filters::default());
-          builder.backdrop_filter_important = important;
+          builder.set_filter_reset(important, true);
         } else {
           for filter in filters {
             builder.push_backdrop_filter(filter, important);
