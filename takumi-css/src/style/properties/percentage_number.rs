@@ -8,7 +8,7 @@ use cssparser::{Parser, Token};
 
 use crate::style::{
   Animatable, Color, MakeComputed, SizingContext, lerp,
-  properties::{FromCss, ParseResult},
+  properties::{FromCss, ParseResult, flex_grow::parse_numeric_tw},
   tw::TailwindPropertyParser,
 };
 
@@ -57,9 +57,7 @@ impl Neg for PercentageNumber {
 
 impl TailwindPropertyParser for PercentageNumber {
   fn parse_tw(token: &str) -> Option<Self> {
-    let value = token.parse::<f32>().ok()?;
-
-    Some(PercentageNumber(value / 100.0))
+    parse_numeric_tw(token, |v| PercentageNumber(v / 100.0))
   }
 }
 
