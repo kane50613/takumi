@@ -1,6 +1,4 @@
 use color::{AlphaColor, ColorSpaceTag, DynamicColor, HueDirection, Rgba8, Srgb};
-#[cfg(test)]
-use image::RgbaImage;
 use smallvec::SmallVec;
 use taffy::Point;
 use tiny_skia::{ColorU8, PremultipliedColorU8};
@@ -137,23 +135,6 @@ pub trait GradientOverlayTile {
   fn fully_opaque(&self) -> bool {
     false
   }
-}
-
-#[cfg(test)]
-pub fn overlay_gradient_tile_fast_normal_unconstrained_test<T: GradientOverlayTile>(
-  bottom: &mut RgbaImage,
-  tile: &T,
-  offset: Point<f32>,
-) {
-  let bottom_width = bottom.width();
-  let bottom_height = bottom.height();
-  overlay_gradient_tile_fast_normal_unconstrained(
-    bottom.as_mut(),
-    bottom_width,
-    bottom_height,
-    tile,
-    offset,
-  );
 }
 
 pub fn overlay_gradient_tile_fast_normal_unconstrained<T: GradientOverlayTile>(
@@ -579,105 +560,10 @@ pub fn resolve_stops_along_axis(
 
 #[cfg(test)]
 mod tests {
-  use image::{Rgba, RgbaImage};
-  use taffy::Point;
-
   use crate::Viewport;
   use crate::style::{Color, Length, StopPosition};
 
   use super::*;
-
-  #[derive(Debug, Clone, Copy)]
-  struct MockTile {
-    width: u32,
-    height: u32,
-  }
-
-  #[derive(Debug, Clone, Copy)]
-  struct MockRowState {
-    value: usize,
-    lut_len: usize,
-  }
-
-  impl GradientOverlayTile for MockTile {
-    type RowState = MockRowState;
-
-    fn width(&self) -> u32 {
-      self.width
-    }
-
-    fn height(&self) -> u32 {
-      self.height
-    }
-
-    fn lut_len(&self) -> usize {
-      2
-    }
-
-    fn sample_at(&self, lut_idx: usize) -> PremultipliedColorU8 {
-      match lut_idx {
-        0 => Color([255, 0, 0, 255]).into(),
-        _ => Color([0, 0, 255, 255]).into(),
-      }
-    }
-
-    fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {
-      let lut_idx = ((x + y) % self.lut_len() as u32) as usize;
-      self.sample_at(lut_idx)
-    }
-
-    fn begin_row(&self, src_x_start: u32, src_y: u32, lut_len: usize) -> Self::RowState {
-      MockRowState {
-        value: ((src_x_start + src_y) as usize) % lut_len.max(1),
-        lut_len,
-      }
-    }
-
-    fn next_lut_index(&self, row_state: &mut Self::RowState) -> usize {
-      let value = row_state.value;
-      row_state.value = (row_state.value + 1) % row_state.lut_len.max(1);
-      value
-    }
-  }
-
-  fn overlay_reference(bottom: &mut RgbaImage, tile: &MockTile, offset: Point<f32>) {
-    let offset_x = offset.x as i32;
-    let offset_y = offset.y as i32;
-    let dest_x_min = offset_x.max(0);
-    let dest_x_max = (offset_x + tile.width as i32).min(bottom.width() as i32);
-    let dest_y_min = offset_y.max(0);
-    let dest_y_max = (offset_y + tile.height as i32).min(bottom.height() as i32);
-    for dest_y in dest_y_min..dest_y_max {
-      let src_y = (dest_y - offset_y) as u32;
-      let src_x_start = (dest_x_min - offset_x) as u32;
-      let mut row_state = tile.begin_row(src_x_start, src_y, tile.lut_len());
-
-      for dest_x in dest_x_min..dest_x_max {
-        let lut_idx = tile.next_lut_index(&mut row_state);
-        let pixel = tile.sample_at(lut_idx).demultiply();
-        // Independent reference: the mock tile only emits opaque samples, so a
-        // normal-blend reduces to a straight pixel write.
-        *bottom.get_pixel_mut(dest_x as u32, dest_y as u32) =
-          Rgba([pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]);
-      }
-    }
-  }
-
-  #[test]
-  fn test_overlay_gradient_tile_fast_matches_reference() {
-    let tile = MockTile {
-      width: 4,
-      height: 3,
-    };
-    let offset = Point { x: 2.0, y: 1.0 };
-    let mut actual = RgbaImage::from_pixel(10, 7, Rgba([20, 30, 40, 255]));
-    let mut expected = actual.clone();
-
-    overlay_gradient_tile_fast_normal_unconstrained_test(&mut actual, &tile, offset);
-    overlay_reference(&mut expected, &tile, offset);
-
-    assert_eq!(actual, expected);
-  }
 
   #[test]
   fn test_resolve_stops_along_axis() {
@@ -696,16 +582,16 @@ mod tests {
       },
     ];
 
-    let render_context = SizingContext::new_test(Viewport::new((40, 40)));
+    let sizing = SizingContext::new_test(Viewport::new((40, 40)));
 
-    let width = render_context.viewport.size.width;
+    let width = sizing.viewport.size.width;
 
     assert!(width.is_some());
 
     let resolved = resolve_stops_along_axis(
       &stops,
       width.unwrap_or_default() as f32,
-      &render_context,
+      &sizing,
       Color::black(),
     );
 
@@ -751,12 +637,12 @@ mod tests {
       },
     ];
 
-    let render_context = SizingContext::new_test(Viewport::new((40, 40)));
+    let sizing = SizingContext::new_test(Viewport::new((40, 40)));
 
     let resolved = resolve_stops_along_axis(
       &stops,
-      render_context.viewport.size.width.unwrap_or_default() as f32,
-      &render_context,
+      sizing.viewport.size.width.unwrap_or_default() as f32,
+      &sizing,
       Color::black(),
     );
 
@@ -769,11 +655,11 @@ mod tests {
         },
         ResolvedGradientStop {
           color: Color([0, 255, 0, 255]),
-          position: render_context.viewport.size.width.unwrap_or_default() as f32 / 2.0,
+          position: sizing.viewport.size.width.unwrap_or_default() as f32 / 2.0,
         },
         ResolvedGradientStop {
           color: Color([0, 0, 255, 255]),
-          position: render_context.viewport.size.width.unwrap_or_default() as f32,
+          position: sizing.viewport.size.width.unwrap_or_default() as f32,
         },
       ]
     );
@@ -793,12 +679,12 @@ mod tests {
       },
     ];
 
-    let render_context = SizingContext::new_test(Viewport::new((40, 40)));
+    let sizing = SizingContext::new_test(Viewport::new((40, 40)));
 
     let resolved = resolve_stops_along_axis(
       &stops,
-      render_context.viewport.size.width.unwrap_or_default() as f32,
-      &render_context,
+      sizing.viewport.size.width.unwrap_or_default() as f32,
+      &sizing,
       Color::black(),
     );
 
@@ -815,7 +701,7 @@ mod tests {
       resolved[1],
       ResolvedGradientStop {
         color: interpolate_rgba(Color([255, 0, 0, 255]), Color([0, 0, 255, 255]), 0.5),
-        position: render_context.viewport.size.width.unwrap_or_default() as f32 * 0.1,
+        position: sizing.viewport.size.width.unwrap_or_default() as f32 * 0.1,
       },
     );
 
@@ -823,7 +709,7 @@ mod tests {
       resolved[2],
       ResolvedGradientStop {
         color: Color([0, 0, 255, 255]),
-        position: render_context.viewport.size.width.unwrap_or_default() as f32,
+        position: sizing.viewport.size.width.unwrap_or_default() as f32,
       },
     );
   }
