@@ -308,6 +308,7 @@ fn composite_backdrop_with_mask(
     dst[0] = fast_div_255(src[0] as u32 * src_alpha + dst[0] as u32 * inverse_alpha);
     dst[1] = fast_div_255(src[1] as u32 * src_alpha + dst[1] as u32 * inverse_alpha);
     dst[2] = fast_div_255(src[2] as u32 * src_alpha + dst[2] as u32 * inverse_alpha);
+    dst[3] = fast_div_255(src[3] as u32 * src_alpha + dst[3] as u32 * inverse_alpha);
   }
 }
 
@@ -520,7 +521,7 @@ fn apply_drop_shadow_filter(
   }
 
   let blur_radius = shadow.blur_radius;
-  let padding = blur_radius.ceil() as u32;
+  let padding = (blur_radius * BlurType::Shadow.extent_multiplier()).ceil() as u32;
 
   let offset_x = shadow.offset_x.round() as i32;
   let offset_y = shadow.offset_y.round() as i32;
