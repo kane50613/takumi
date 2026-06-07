@@ -1754,7 +1754,7 @@ impl ComputedStyle {
   ) -> (Vec<taffy::GridTemplateComponent<String>>, Vec<Vec<String>>) {
     components.as_deref().map_or_else(
       || (Vec::new(), vec![Vec::new()]),
-      |components| components.collect_components_and_names(sizing),
+      |components| collect_components_and_names(components, sizing),
     )
   }
 

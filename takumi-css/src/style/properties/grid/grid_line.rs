@@ -1,8 +1,8 @@
 use cssparser::Parser;
 
 use crate::style::{
-  CssSyntaxKind, CssToken, FromCss, GridPlacementKeyword, GridPlacementSpan, MakeComputed,
-  ParseResult, SizingContext, tw::TailwindPropertyParser,
+  CssSyntaxKind, CssToken, FromCss, GridPlacementSpan, MakeComputed, ParseResult, SizingContext,
+  tw::TailwindPropertyParser,
 };
 
 use crate::style::GridPlacement;
@@ -38,50 +38,6 @@ impl GridLine {
     Self {
       start: GridPlacement::Span(span),
       end: GridPlacement::Span(span),
-    }
-  }
-
-  /// Create a grid line with only a start placement
-  pub const fn start(start: GridPlacement) -> Self {
-    Self {
-      start,
-      end: GridPlacement::auto(),
-    }
-  }
-
-  /// Create a grid line with only an end placement
-  pub const fn end(end: GridPlacement) -> Self {
-    Self {
-      start: GridPlacement::auto(),
-      end,
-    }
-  }
-}
-
-impl From<GridLine> for taffy::Line<taffy::GridPlacement> {
-  fn from(line: GridLine) -> Self {
-    Self {
-      start: line.start.into(),
-      end: line.end.into(),
-    }
-  }
-}
-
-impl From<&GridLine> for taffy::Line<taffy::GridPlacement> {
-  fn from(line: &GridLine) -> Self {
-    Self {
-      start: match &line.start {
-        GridPlacement::Keyword(GridPlacementKeyword::Auto) => taffy::GridPlacement::Auto,
-        GridPlacement::Line(index) => taffy::GridPlacement::Line((*index).into()),
-        GridPlacement::Span(GridPlacementSpan::Span(span)) => taffy::GridPlacement::Span(*span),
-        GridPlacement::Named(_) => taffy::GridPlacement::Auto,
-      },
-      end: match &line.end {
-        GridPlacement::Keyword(GridPlacementKeyword::Auto) => taffy::GridPlacement::Auto,
-        GridPlacement::Line(index) => taffy::GridPlacement::Line((*index).into()),
-        GridPlacement::Span(GridPlacementSpan::Span(span)) => taffy::GridPlacement::Span(*span),
-        GridPlacement::Named(_) => taffy::GridPlacement::Auto,
-      },
     }
   }
 }

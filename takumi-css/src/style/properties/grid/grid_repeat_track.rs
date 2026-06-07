@@ -1,5 +1,6 @@
 use cssparser::Parser;
 
+use super::parse_line_names;
 use crate::style::{
   CssSyntaxKind, CssToken, FromCss, GridTrackSize, MakeComputed, ParseResult, SizingContext, ToCss,
 };
@@ -29,12 +30,7 @@ impl<'i> FromCss<'i> for GridRepeatTrack {
     let mut names: Vec<String> = Vec::new();
 
     while input.try_parse(Parser::expect_square_bracket_block).is_ok() {
-      input.parse_nested_block(|i| {
-        while let Ok(name) = i.try_parse(Parser::expect_ident_cloned) {
-          names.push(name.as_ref().to_owned());
-        }
-        Ok(())
-      })?;
+      names.extend(parse_line_names(input)?);
     }
 
     // Parse the track size
@@ -42,12 +38,7 @@ impl<'i> FromCss<'i> for GridRepeatTrack {
 
     // Collect any trailing line name blocks
     while input.try_parse(Parser::expect_square_bracket_block).is_ok() {
-      input.parse_nested_block(|i| {
-        while let Ok(name) = i.try_parse(Parser::expect_ident_cloned) {
-          names.push(name.as_ref().to_owned());
-        }
-        Ok(())
-      })?;
+      names.extend(parse_line_names(input)?);
     }
 
     Ok(GridRepeatTrack {

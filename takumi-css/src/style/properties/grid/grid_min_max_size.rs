@@ -1,8 +1,4 @@
-use cssparser::Parser;
-
-use crate::style::{
-  CssDescriptorKind, CssToken, FromCss, GridLength, MakeComputed, ParseResult, SizingContext, ToCss,
-};
+use crate::style::{GridLength, MakeComputed, SizingContext, ToCss};
 
 /// Represents a grid minmax()
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -12,20 +8,6 @@ pub struct GridMinMaxSize {
   pub min: GridLength,
   /// The maximum size of the grid item
   pub max: GridLength,
-}
-
-impl<'i> FromCss<'i> for GridMinMaxSize {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    input.expect_function_matching("minmax")?;
-    input.parse_nested_block(|input| {
-      let min = GridLength::from_css(input)?;
-      input.expect_comma()?;
-      let max = GridLength::from_css(input)?;
-      Ok(GridMinMaxSize { min, max })
-    })
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = &[CssToken::Descriptor(CssDescriptorKind::MinmaxFn)];
 }
 
 impl MakeComputed for GridMinMaxSize {
