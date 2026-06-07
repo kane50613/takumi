@@ -1,12 +1,185 @@
+use std::fmt;
+
 use color::{AlphaColor, ColorSpaceTag, DynamicColor, HueDirection, Rgba8, Srgb};
+use cssparser::Parser;
 use smallvec::SmallVec;
 use taffy::Point;
 use tiny_skia::{ColorU8, PremultipliedColorU8};
 
-use crate::style::{Color, GradientStop, ResolvedGradientStop, SizingContext, fast_div_255};
+use crate::style::{
+  Color, ColorInput, ColorInterpolationMethod, FromCss, GradientStop, ParseResult,
+  ResolvedGradientStop, SizingContext, StopPosition, ToCss, fast_div_255,
+};
 
 const MIN_GRADIENT_LUT_SIZE: usize = 2;
 const MAX_GRADIENT_LUT_SIZE: usize = 8193;
+
+/// Test fixture: a two-stop red -> blue `ColorHint` list with the given positions.
+#[cfg(test)]
+pub(crate) fn red_blue_stops(
+  red_hint: Option<StopPosition>,
+  blue_hint: Option<StopPosition>,
+) -> [GradientStop; 2] {
+  [
+    GradientStop::ColorHint {
+      color: Color([255, 0, 0, 255]).into(),
+      hint: red_hint,
+    },
+    GradientStop::ColorHint {
+      color: Color([0, 0, 255, 255]).into(),
+      hint: blue_hint,
+    },
+  ]
+}
+
+/// Emits the field-backed `GradientOverlayTile` accessors shared by every tile type.
+macro_rules! gradient_tile_accessors {
+  () => {
+    #[inline(always)]
+    fn width(&self) -> u32 {
+      self.width
+    }
+
+    #[inline(always)]
+    fn height(&self) -> u32 {
+      self.height
+    }
+
+    #[inline(always)]
+    fn lut_len(&self) -> usize {
+      self.color_lut.len()
+    }
+
+    #[inline(always)]
+    fn sample_at(&self, lut_idx: usize) -> PremultipliedColorU8 {
+      self.color_lut[lut_idx]
+    }
+
+    #[inline(always)]
+    fn fully_opaque(&self) -> bool {
+      self.fully_opaque
+    }
+  };
+}
+
+pub(crate) use gradient_tile_accessors;
+
+/// Computes the repeating origin/period and the stops/axis length used to build the LUT.
+///
+/// Returns `(repeating, repeat_start, repeat_period, lut_axis_length, lut_resolved_stops)`. When the
+/// gradient does not repeat or the period collapses, `repeating` is false and `fallback_axis` is
+/// used as the LUT axis length.
+pub(crate) fn compute_repeat_setup(
+  repeating: bool,
+  resolved_stops: SmallVec<[ResolvedGradientStop; 4]>,
+  fallback_axis: f32,
+) -> (bool, f32, f32, f32, SmallVec<[ResolvedGradientStop; 4]>) {
+  if repeating && let (Some(first), Some(last)) = (resolved_stops.first(), resolved_stops.last()) {
+    let repeat_start = first.position;
+    let repeat_period = (last.position - first.position).max(0.0);
+    if repeat_period > 1e-6 {
+      let shifted = resolved_stops
+        .iter()
+        .map(|stop| ResolvedGradientStop {
+          color: stop.color,
+          position: stop.position - repeat_start,
+        })
+        .collect();
+      return (true, repeat_start, repeat_period, repeat_period, shifted);
+    }
+  }
+
+  (false, 0.0, 0.0, fallback_axis, resolved_stops)
+}
+
+/// Parses a comma-separated gradient stop list, using `parse_position` for each stop position.
+///
+/// Handles the double-position color-stop shorthand (`color a b` expands to two stops).
+pub(crate) fn parse_gradient_stops<'i>(
+  input: &mut Parser<'i, '_>,
+  parse_position: fn(&mut Parser<'i, '_>) -> ParseResult<'i, StopPosition>,
+) -> ParseResult<'i, Vec<GradientStop>> {
+  let mut stops = Vec::new();
+  loop {
+    if let Ok(hint) = input.try_parse(parse_position) {
+      stops.push(GradientStop::Hint(hint));
+    } else {
+      let color = ColorInput::from_css(input)?;
+      let first_position = input.try_parse(parse_position).ok();
+      let second_position = if first_position.is_some() {
+        input.try_parse(parse_position).ok()
+      } else {
+        None
+      };
+
+      match (first_position, second_position) {
+        (Some(first_position), Some(second_position)) => {
+          stops.push(GradientStop::ColorHint {
+            color,
+            hint: Some(first_position),
+          });
+          stops.push(GradientStop::ColorHint {
+            color,
+            hint: Some(second_position),
+          });
+        }
+        (first_position, _) => {
+          stops.push(GradientStop::ColorHint {
+            color,
+            hint: first_position,
+          });
+        }
+      }
+    }
+
+    if input.try_parse(Parser::expect_comma).is_err() {
+      break;
+    }
+  }
+
+  Ok(stops)
+}
+
+/// Serializes a gradient as `name(<params>, <interpolation>, <stops>)`.
+///
+/// `params` is the already-serialized, gradient-specific prefix (direction, shape/size/center, ...).
+/// An empty `params` is omitted, as is a default interpolation; comma joining matches CSS output.
+pub(crate) fn write_gradient_css<W: fmt::Write>(
+  dest: &mut W,
+  name: &str,
+  params: &str,
+  interpolation: &ColorInterpolationMethod,
+  stops: &[GradientStop],
+) -> fmt::Result {
+  dest.write_str(name)?;
+  dest.write_char('(')?;
+  let mut first = true;
+
+  if !params.is_empty() {
+    dest.write_str(params)?;
+    first = false;
+  }
+
+  let mut interp_buf = String::new();
+  interpolation.to_css(&mut interp_buf)?;
+  if !interp_buf.is_empty() {
+    if !first {
+      dest.write_str(", ")?;
+    }
+    dest.write_str(&interp_buf)?;
+    first = false;
+  }
+
+  for stop in stops.iter() {
+    if !first {
+      dest.write_str(", ")?;
+    }
+    stop.to_css(dest)?;
+    first = false;
+  }
+
+  dest.write_char(')')
+}
 
 /// Interpolates between two colors in RGBA space, if t is 0.0 or 1.0, returns the first or second color.
 pub fn interpolate_rgba(c1: Color, c2: Color, t: f32) -> Color {
