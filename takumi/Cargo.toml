@@ -11,7 +11,6 @@ readme = "README.md"
 rust-version = "1.91"
 
 [dependencies]
-takumi-css = { path = "../takumi-css", version = "1.7.0" }
 cssparser = "0.37"
 png = "0.18"
 gif = "0.14"
@@ -37,6 +36,11 @@ features = ["wasm_simd"]
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.bytemuck]
 version = "1.25"
 features = ["aarch64_simd", "avx512_simd"]
+
+# Internal companion crate, versioned independently and pinned exactly.
+[dependencies.takumi-css]
+path = "../takumi-css"
+version = "=0.1.0"
 
 [dependencies.xxhash-rust]
 version = "0.8"
