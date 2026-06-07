@@ -114,33 +114,31 @@ impl<'i> FromCss<'i> for ColorInterpolationMethod {
 
 impl ToCss for ColorInterpolationMethod {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    if self.color_space == color::ColorSpaceTag::Oklab
-      && self.hue_direction == color::HueDirection::Shorter
-    {
+    if self.color_space == ColorSpaceTag::Oklab && self.hue_direction == HueDirection::Shorter {
       return Ok(());
     }
     let space = match self.color_space {
-      color::ColorSpaceTag::Srgb => "srgb",
-      color::ColorSpaceTag::LinearSrgb => "srgb-linear",
-      color::ColorSpaceTag::Lab => "lab",
-      color::ColorSpaceTag::Oklab => "oklab",
-      color::ColorSpaceTag::Lch => "lch",
-      color::ColorSpaceTag::Oklch => "oklch",
-      color::ColorSpaceTag::Hsl => "hsl",
-      color::ColorSpaceTag::Hwb => "hwb",
-      color::ColorSpaceTag::DisplayP3 => "display-p3",
-      color::ColorSpaceTag::A98Rgb => "a98-rgb",
-      color::ColorSpaceTag::ProphotoRgb => "prophoto-rgb",
-      color::ColorSpaceTag::Rec2020 => "rec2020",
-      color::ColorSpaceTag::XyzD65 => "xyz-d65",
-      color::ColorSpaceTag::XyzD50 => "xyz-d50",
+      ColorSpaceTag::Srgb => "srgb",
+      ColorSpaceTag::LinearSrgb => "srgb-linear",
+      ColorSpaceTag::Lab => "lab",
+      ColorSpaceTag::Oklab => "oklab",
+      ColorSpaceTag::Lch => "lch",
+      ColorSpaceTag::Oklch => "oklch",
+      ColorSpaceTag::Hsl => "hsl",
+      ColorSpaceTag::Hwb => "hwb",
+      ColorSpaceTag::DisplayP3 => "display-p3",
+      ColorSpaceTag::A98Rgb => "a98-rgb",
+      ColorSpaceTag::ProphotoRgb => "prophoto-rgb",
+      ColorSpaceTag::Rec2020 => "rec2020",
+      ColorSpaceTag::XyzD65 => "xyz-d65",
+      ColorSpaceTag::XyzD50 => "xyz-d50",
       _ => "oklab",
     };
     let hue = match self.hue_direction {
-      color::HueDirection::Shorter => "",
-      color::HueDirection::Longer => " longer hue",
-      color::HueDirection::Increasing => " increasing hue",
-      color::HueDirection::Decreasing => " decreasing hue",
+      HueDirection::Shorter => "",
+      HueDirection::Longer => " longer hue",
+      HueDirection::Increasing => " increasing hue",
+      HueDirection::Decreasing => " decreasing hue",
       _ => "",
     };
     write!(dest, "in {}{}", space, hue)
@@ -378,17 +376,11 @@ const ROSE: [u32; 11] = [
 /// Shade values in ascending order for binary search
 const SHADES: [u16; 11] = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
 
-/// Map shade number to array index using binary search
-#[inline]
-fn shade_to_index(shade: u16) -> Option<usize> {
-  SHADES.binary_search(&shade).ok()
-}
-
 /// Lookup Tailwind color by name and shade
 ///
 /// Returns the RGB value as a u32 (0xRRGGBB format)
 fn lookup_tailwind_color(color_name: &str, shade: u16) -> Option<u32> {
-  let index = shade_to_index(shade)?;
+  let index = SHADES.binary_search(&shade).ok()?;
 
   let colors = match_ignore_ascii_case! {color_name,
       "slate" => &SLATE,
