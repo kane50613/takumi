@@ -9,6 +9,7 @@ repository = "https://github.com/kane50613/takumi"
 homepage = "https://takumi.kane.tw"
 readme = "README.md"
 rust-version = "1.91"
+autobenches = false
 
 [dependencies]
 takumi-css = { path = "../takumi-css", version = "1.7.0" }
@@ -130,4 +131,8 @@ harness = false
 
 [[bench]]
 name = "text"
+harness = false
+
+[[bench]]
+name = "encode"
 harness = false
