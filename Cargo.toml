@@ -24,4 +24,45 @@ debug = true
 strip = "debuginfo"
 
 [profile.release.package.takumi-css]
+opt-level = "z"
+
+# Crates that run at most once per image (parse/decode/encode), never per pixel.
+# Size-optimizing them is perf-neutral (verified via the napi JS bench). Hot
+# raster/shaping and image-webp (wasm webp encode) stay at opt-level 3.
+[profile.release.package.usvg]
+opt-level = "z"
+[profile.release.package.resvg]
+opt-level = "z"
+[profile.release.package.roxmltree]
+opt-level = "z"
+[profile.release.package.svgtypes]
+opt-level = "z"
+[profile.release.package.zune-jpeg]
+opt-level = "z"
+[profile.release.package.brotli-decompressor]
+opt-level = "z"
+[profile.release.package.wuff]
+opt-level = "z"
+[profile.release.package.imagesize]
+opt-level = "z"
+[profile.release.package.cssparser]
+opt-level = "z"
+[profile.release.package.selectors]
+opt-level = "z"
+[profile.release.package.png]
+opt-level = "z"
+[profile.release.package.miniz_oxide]
+opt-level = "z"
+[profile.release.package.fdeflate]
+opt-level = "z"
+[profile.release.package.image]
+opt-level = "z"
+[profile.release.package.gif]
+opt-level = "z"
+
+# Font outlines: parsed per glyph, near the glyph hot path. opt-s (not z),
+# verified perf-neutral on a text-heavy bench.
+[profile.release.package.read-fonts]
+opt-level = "s"
+[profile.release.package.skrifa]
 opt-level = "s"
