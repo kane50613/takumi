@@ -60,7 +60,7 @@ property_parsers! {
   TextAlign(TextAlign) => TextAlign,
   TextWrap(TextWrap) => TextWrap,
   ColorCurrent(ColorInput) => ColorInput,
-  ColorTransparent(ColorInput<false>) => ColorInput<false>,
+  ColorTransparent(ColorDefaultsToTransparent) => ColorDefaultsToTransparent,
   Percentage(PercentageNumber) => PercentageNumber,
   FontFamily(FontFamily) => FontFamily,
   LineClamp(LineClamp) => LineClamp,

@@ -960,7 +960,7 @@ define_style! {
     background_size: BackgroundSizes,
     background_repeat: BackgroundRepeats,
     background_blend_mode: BlendModes,
-    background_color: ColorInput<false>,
+    background_color: ColorDefaultsToTransparent,
     background_clip: BackgroundClip,
     box_shadow: Option<BoxShadows>,
     grid_auto_columns: Option<GridTrackSizes>,

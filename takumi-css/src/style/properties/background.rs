@@ -7,7 +7,7 @@ use crate::style::*;
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Background {
   /// Background color.
-  pub color: Option<ColorInput<false>>,
+  pub color: Option<ColorDefaultsToTransparent>,
   /// Background image.
   pub image: BackgroundImage,
   /// Background position.
