@@ -1453,7 +1453,7 @@ impl Iterator for PropertyMaskIter<'_> {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DeclarationImportance {
-  pub longhands: PropertyMask,
+  pub(crate) longhands: PropertyMask,
   pub custom_properties: SmallVec<[Box<str>; 1]>,
 }
 

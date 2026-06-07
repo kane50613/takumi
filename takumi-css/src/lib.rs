@@ -10,4 +10,6 @@ pub mod keyframes;
 pub mod style;
 mod viewport;
 
+// Public surface re-exported at the crate root (e.g. `takumi_css::Display`).
+pub use style::*;
 pub use viewport::*;
