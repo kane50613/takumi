@@ -11,9 +11,8 @@ use crate::{
     node::TextData,
   },
   rendering::{
-    Canvas, RenderContext,
+    Canvas, RenderContext, SizedFontStyle,
     inline_drawing::{InlineLayoutDrawData, draw_inline_layout},
-    to_sized_font_style,
   },
 };
 
@@ -27,7 +26,7 @@ pub(crate) fn draw_text_node_content(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let font_style = to_sized_font_style(&context.style, context);
+  let font_style = SizedFontStyle::from_style(&context.style, context);
   let size = layout.content_box_size();
 
   if font_style.sizing.font_size == 0.0 {
@@ -83,7 +82,7 @@ pub(crate) fn measure_text_node(
 
   let (max_width, max_height) =
     create_inline_constraint(context, available_space, known_dimensions);
-  let font_style = to_sized_font_style(&context.style, context);
+  let font_style = SizedFontStyle::from_style(&context.style, context);
 
   let mut built = create_inline_layout(InlineLayoutRequest {
     items: vec![inline_content],
