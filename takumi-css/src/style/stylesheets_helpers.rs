@@ -93,7 +93,7 @@ impl CssInputParseError<'_> {
   }
 }
 
-pub fn parse_css_wide_keyword(css_input: &CssInput<'_>) -> Option<CssWideKeyword> {
+pub(crate) fn parse_css_wide_keyword(css_input: &CssInput<'_>) -> Option<CssWideKeyword> {
   match css_input {
     CssInput::Str(value) => {
       let mut parser_input = ParserInput::new(value.as_ref());
@@ -104,7 +104,9 @@ pub fn parse_css_wide_keyword(css_input: &CssInput<'_>) -> Option<CssWideKeyword
   }
 }
 
-pub fn parse_css_input_value<'de, T>(css_input: CssInput<'de>) -> Result<T, CssInputParseError<'de>>
+pub(crate) fn parse_css_input_value<'de, T>(
+  css_input: CssInput<'de>,
+) -> Result<T, CssInputParseError<'de>>
 where
   T: for<'i> FromCss<'i>,
 {
@@ -181,22 +183,24 @@ fn css_input_parse_failure(
   }
 }
 
-pub fn property_id_from_name(name: &str, normalize: fn(&str) -> Cow<'_, str>) -> PropertyId {
-  if name.starts_with("--") {
-    return PropertyId::Custom;
+impl PropertyId {
+  pub(crate) fn from_name(name: &str, normalize: fn(&str) -> Cow<'_, str>) -> PropertyId {
+    if name.starts_with("--") {
+      return PropertyId::Custom;
+    }
+
+    if let Some(property) = webkit_property_id_from_name(name) {
+      return property;
+    }
+
+    let normalized = normalize(name);
+
+    if let Some(property) = legacy_alias_property_id(normalized.as_ref()) {
+      return property;
+    }
+
+    PropertyId::from_normalized_name(normalized.as_ref())
   }
-
-  if let Some(property) = webkit_property_id_from_name(name) {
-    return property;
-  }
-
-  let normalized = normalize(name);
-
-  if let Some(property) = legacy_alias_property_id(normalized.as_ref()) {
-    return property;
-  }
-
-  PropertyId::from_normalized_name(normalized.as_ref())
 }
 
 // Ref: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/row-gap
@@ -228,7 +232,7 @@ fn webkit_property_id_from_name(name: &str) -> Option<PropertyId> {
   }
 }
 
-pub fn expand_shorthand<T>(
+pub(crate) fn expand_shorthand<T>(
   value: T,
   expand: impl FnOnce(T, &mut ParsedDeclarations),
 ) -> ParsedDeclarations {
@@ -237,7 +241,7 @@ pub fn expand_shorthand<T>(
   declarations
 }
 
-pub fn normalize_kebab_property_name(name: &str) -> Cow<'_, str> {
+pub(crate) fn normalize_kebab_property_name(name: &str) -> Cow<'_, str> {
   if !name
     .bytes()
     .any(|byte| byte == b'-' || byte.is_ascii_uppercase())
@@ -256,7 +260,7 @@ pub fn normalize_kebab_property_name(name: &str) -> Cow<'_, str> {
   )
 }
 
-pub fn normalize_camel_property_name(name: &str) -> Cow<'_, str> {
+pub(crate) fn normalize_camel_property_name(name: &str) -> Cow<'_, str> {
   if !name.starts_with('_') && !name.bytes().any(|byte| byte.is_ascii_uppercase()) {
     return Cow::Borrowed(name);
   }
@@ -274,7 +278,7 @@ pub fn normalize_camel_property_name(name: &str) -> Cow<'_, str> {
   Cow::Owned(normalized.trim_start_matches('_').to_owned())
 }
 
-pub fn contains_var_function(specified_value: &str) -> bool {
+pub(crate) fn contains_var_function(specified_value: &str) -> bool {
   fn contains_in_parser(input: &mut Parser<'_, '_>) -> bool {
     loop {
       let should_check_nested_block = match input.next_including_whitespace_and_comments() {

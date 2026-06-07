@@ -6,12 +6,13 @@ use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
   GradientOverlayTile, adaptive_lut_size_with_visible_samples, build_color_lut_with_interpolation,
-  resolve_stops_along_axis,
+  compute_repeat_setup, gradient_tile_accessors, parse_gradient_stops, resolve_stops_along_axis,
+  write_gradient_css,
 };
 use crate::style::{
-  Angle, BackgroundPosition, Color, ColorInput, ColorInterpolationMethod, CssDescriptorKind,
-  CssToken, FromCss, GradientStop, Length, MakeComputed, ObjectPosition, ParseResult,
-  ResolvedGradientStop, SizingContext, StopPosition, ToCss, unexpected_token,
+  Angle, BackgroundPosition, Color, ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss,
+  GradientStop, Length, MakeComputed, ObjectPosition, ParseResult, SizingContext, StopPosition,
+  ToCss, unexpected_token,
 };
 
 const LUT_INDEX_BOUNDARY_EPSILON: f32 = 0.001;
@@ -161,32 +162,7 @@ impl ConicGradientTile {
     let resolved_stops = resolve_stops_along_axis(&gradient.stops, 360.0, sizing, current_color);
 
     let (repeating, repeat_start_deg, repeat_period_deg, lut_axis_length_deg, lut_resolved_stops) =
-      if gradient.repeating
-        && let (Some(first), Some(last)) = (resolved_stops.first(), resolved_stops.last())
-      {
-        let repeat_start_deg = first.position;
-        let repeat_period_deg = (last.position - first.position).max(0.0);
-        if repeat_period_deg > 1e-6 {
-          let shifted = resolved_stops
-            .iter()
-            .map(|stop| ResolvedGradientStop {
-              color: stop.color,
-              position: stop.position - repeat_start_deg,
-            })
-            .collect();
-          (
-            true,
-            repeat_start_deg,
-            repeat_period_deg,
-            repeat_period_deg,
-            shifted,
-          )
-        } else {
-          (false, 0.0, 0.0, 360.0, resolved_stops)
-        }
-      } else {
-        (false, 0.0, 0.0, 360.0, resolved_stops)
-      };
+      compute_repeat_setup(gradient.repeating, resolved_stops, 360.0);
 
     let lut_size = adaptive_lut_size_with_visible_samples(
       Self::visible_angle_samples(width, height, cx, cy),
@@ -230,25 +206,7 @@ impl ConicGradientTile {
 impl GradientOverlayTile for ConicGradientTile {
   type RowState = ConicGradientRowState;
 
-  #[inline(always)]
-  fn width(&self) -> u32 {
-    self.width
-  }
-
-  #[inline(always)]
-  fn height(&self) -> u32 {
-    self.height
-  }
-
-  #[inline(always)]
-  fn lut_len(&self) -> usize {
-    self.color_lut.len()
-  }
-
-  #[inline(always)]
-  fn sample_at(&self, lut_idx: usize) -> PremultipliedColorU8 {
-    self.color_lut[lut_idx]
-  }
+  gradient_tile_accessors!();
 
   #[inline(always)]
   fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {
@@ -294,82 +252,35 @@ impl GradientOverlayTile for ConicGradientTile {
     row_state.dx += 1.0;
     lut_idx
   }
-
-  #[inline(always)]
-  fn fully_opaque(&self) -> bool {
-    self.fully_opaque
-  }
 }
 
-fn parse_conic_stop_position<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, StopPosition> {
-  let location = input.current_source_location();
-  let token = input.next()?;
+impl ConicGradient {
+  /// Parses a conic gradient stop position: a percentage/number (fraction of a turn) or an angle.
+  fn parse_stop_position<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, StopPosition> {
+    let location = input.current_source_location();
+    let token = input.next()?;
 
-  match token {
-    Token::Percentage { unit_value, .. } => {
-      Ok(StopPosition(Length::Percentage(*unit_value * 100.0)))
-    }
-    Token::Number { value, .. } if (0.0..=1.0).contains(value) => {
-      Ok(StopPosition(Length::Percentage(*value * 100.0)))
-    }
-    Token::Dimension { value, unit, .. } => {
-      let degrees = match_ignore_ascii_case! { unit,
-        "deg" => *value,
-        "grad" => *value * 0.9,
-        "rad" => value.to_degrees(),
-        "turn" => *value * 360.0,
-        _ => return Err(unexpected_token!(StopPosition, location, token)),
-      };
-
-      Ok(StopPosition(Length::Percentage(degrees / 360.0 * 100.0)))
-    }
-    _ => Err(unexpected_token!(StopPosition, location, token)),
-  }
-}
-
-fn parse_conic_gradient_stops<'i>(
-  input: &mut Parser<'i, '_>,
-) -> ParseResult<'i, Vec<GradientStop>> {
-  let mut stops = Vec::new();
-
-  loop {
-    if let Ok(hint) = input.try_parse(parse_conic_stop_position) {
-      stops.push(GradientStop::Hint(hint));
-    } else {
-      let color = ColorInput::from_css(input)?;
-      let first_position = input.try_parse(parse_conic_stop_position).ok();
-      let second_position = if first_position.is_some() {
-        input.try_parse(parse_conic_stop_position).ok()
-      } else {
-        None
-      };
-
-      match (first_position, second_position) {
-        (Some(first_position), Some(second_position)) => {
-          stops.push(GradientStop::ColorHint {
-            color,
-            hint: Some(first_position),
-          });
-          stops.push(GradientStop::ColorHint {
-            color,
-            hint: Some(second_position),
-          });
-        }
-        _ => {
-          stops.push(GradientStop::ColorHint {
-            color,
-            hint: first_position,
-          });
-        }
+    match token {
+      Token::Percentage { unit_value, .. } => {
+        Ok(StopPosition(Length::Percentage(*unit_value * 100.0)))
       }
-    }
+      Token::Number { value, .. } if (0.0..=1.0).contains(value) => {
+        Ok(StopPosition(Length::Percentage(*value * 100.0)))
+      }
+      Token::Dimension { value, unit, .. } => {
+        let degrees = match_ignore_ascii_case! { unit,
+          "deg" => *value,
+          "grad" => *value * 0.9,
+          "rad" => value.to_degrees(),
+          "turn" => *value * 360.0,
+          _ => return Err(unexpected_token!(StopPosition, location, token)),
+        };
 
-    if input.try_parse(Parser::expect_comma).is_err() {
-      break;
+        Ok(StopPosition(Length::Percentage(degrees / 360.0 * 100.0)))
+      }
+      _ => Err(unexpected_token!(StopPosition, location, token)),
     }
   }
-
-  Ok(stops)
 }
 
 impl<'i> FromCss<'i> for ConicGradient {
@@ -411,7 +322,7 @@ impl<'i> FromCss<'i> for ConicGradient {
         break;
       }
 
-      let stops = parse_conic_gradient_stops(input)?;
+      let stops = parse_gradient_stops(input, ConicGradient::parse_stop_position)?;
 
       Ok(ConicGradient {
         repeating,
@@ -434,9 +345,6 @@ impl ToCss for ConicGradient {
     } else {
       "conic-gradient"
     };
-    dest.write_str(name)?;
-    dest.write_char('(')?;
-    let mut first = true;
 
     // Build "from <angle> at <center>" as a temp buffer
     let mut params_buf = String::new();
@@ -454,30 +362,8 @@ impl ToCss for ConicGradient {
       params_buf.push_str("at ");
       params_buf.push_str(&center_buf);
     }
-    if !params_buf.is_empty() {
-      dest.write_str(&params_buf)?;
-      first = false;
-    }
 
-    let mut interp_buf = String::new();
-    self.interpolation.to_css(&mut interp_buf)?;
-    if !interp_buf.is_empty() {
-      if !first {
-        dest.write_str(", ")?;
-      }
-      dest.write_str(&interp_buf)?;
-      first = false;
-    }
-
-    for stop in self.stops.iter() {
-      if !first {
-        dest.write_str(", ")?;
-      }
-      stop.to_css(dest)?;
-      first = false;
-    }
-
-    dest.write_char(')')
+    write_gradient_css(dest, name, &params_buf, &self.interpolation, &self.stops)
   }
 }
 
@@ -488,31 +374,70 @@ mod tests {
 
   use super::*;
   use crate::Viewport;
+  use crate::style::properties::gradient_utils::red_blue_stops;
   use crate::style::{Color, Length, SpacePair, StopPosition};
   #[test]
-  fn test_parse_conic_gradient_basic() {
-    let gradient = ConicGradient::from_str("conic-gradient(#ff0000, #0000ff)");
+  fn test_parse_conic_gradient_basic_variants() {
+    fn stop(color: Color, pct: Option<f32>) -> GradientStop {
+      GradientStop::ColorHint {
+        color: color.into(),
+        hint: pct.map(|p| StopPosition(Length::Percentage(p))),
+      }
+    }
+    let red = Color::from_rgb(0xff0000);
+    let green = Color::from_rgb(0x00ff00);
+    let blue = Color::from_rgb(0x0000ff);
 
-    assert_eq!(
-      gradient,
-      Ok(ConicGradient {
-        repeating: false,
-        from_angle: Angle::zero(),
-        center: ObjectPosition::default(),
-        interpolation: ColorInterpolationMethod::default(),
-        stops: [
-          GradientStop::ColorHint {
-            color: Color([255, 0, 0, 255]).into(),
-            hint: None,
-          },
-          GradientStop::ColorHint {
-            color: Color([0, 0, 255, 255]).into(),
-            hint: None,
-          },
-        ]
-        .into(),
-      })
-    );
+    for (input, stops) in [
+      (
+        "conic-gradient(#ff0000, #0000ff)",
+        red_blue_stops(None, None).to_vec(),
+      ),
+      (
+        "conic-gradient(#ff0000 0%, #00ff00 50%, #0000ff 100%)",
+        vec![
+          stop(red, Some(0.0)),
+          stop(green, Some(50.0)),
+          stop(blue, Some(100.0)),
+        ],
+      ),
+      (
+        "conic-gradient(red 0deg, lime 180deg, blue 1turn)",
+        vec![
+          stop(red, Some(0.0)),
+          stop(green, Some(50.0)),
+          stop(blue, Some(100.0)),
+        ],
+      ),
+      (
+        "conic-gradient(red 10% 20%, blue)",
+        vec![
+          stop(red, Some(10.0)),
+          stop(red, Some(20.0)),
+          stop(blue, None),
+        ],
+      ),
+      (
+        "conic-gradient(red 0deg 90deg, blue)",
+        vec![
+          stop(red, Some(0.0)),
+          stop(red, Some(25.0)),
+          stop(blue, None),
+        ],
+      ),
+    ] {
+      assert_eq!(
+        ConicGradient::from_str(input),
+        Ok(ConicGradient {
+          repeating: false,
+          from_angle: Angle::zero(),
+          center: ObjectPosition::default(),
+          interpolation: ColorInterpolationMethod::default(),
+          stops: stops.into(),
+        }),
+        "input: {input}",
+      );
+    }
   }
 
   #[test]
@@ -543,118 +468,6 @@ mod tests {
   }
 
   #[test]
-  fn test_parse_conic_gradient_with_stops() {
-    assert_eq!(
-      ConicGradient::from_str("conic-gradient(#ff0000 0%, #00ff00 50%, #0000ff 100%)"),
-      Ok(ConicGradient {
-        repeating: false,
-        from_angle: Angle::zero(),
-        center: ObjectPosition::default(),
-        interpolation: ColorInterpolationMethod::default(),
-        stops: [
-          GradientStop::ColorHint {
-            color: Color([255, 0, 0, 255]).into(),
-            hint: Some(StopPosition(Length::Percentage(0.0))),
-          },
-          GradientStop::ColorHint {
-            color: Color([0, 255, 0, 255]).into(),
-            hint: Some(StopPosition(Length::Percentage(50.0))),
-          },
-          GradientStop::ColorHint {
-            color: Color([0, 0, 255, 255]).into(),
-            hint: Some(StopPosition(Length::Percentage(100.0))),
-          },
-        ]
-        .into(),
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_conic_gradient_with_double_position_color_stop() {
-    assert_eq!(
-      ConicGradient::from_str("conic-gradient(red 10% 20%, blue)"),
-      Ok(ConicGradient {
-        repeating: false,
-        from_angle: Angle::zero(),
-        center: ObjectPosition::default(),
-        interpolation: ColorInterpolationMethod::default(),
-        stops: [
-          GradientStop::ColorHint {
-            color: Color::from_rgb(0xff0000).into(),
-            hint: Some(StopPosition(Length::Percentage(10.0))),
-          },
-          GradientStop::ColorHint {
-            color: Color::from_rgb(0xff0000).into(),
-            hint: Some(StopPosition(Length::Percentage(20.0))),
-          },
-          GradientStop::ColorHint {
-            color: Color::from_rgb(0x0000ff).into(),
-            hint: None,
-          },
-        ]
-        .into(),
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_conic_gradient_with_angle_stops() {
-    assert_eq!(
-      ConicGradient::from_str("conic-gradient(red 0deg, lime 180deg, blue 1turn)"),
-      Ok(ConicGradient {
-        repeating: false,
-        from_angle: Angle::zero(),
-        center: ObjectPosition::default(),
-        interpolation: ColorInterpolationMethod::default(),
-        stops: [
-          GradientStop::ColorHint {
-            color: Color::from_rgb(0xff0000).into(),
-            hint: Some(StopPosition(Length::Percentage(0.0))),
-          },
-          GradientStop::ColorHint {
-            color: Color::from_rgb(0x00ff00).into(),
-            hint: Some(StopPosition(Length::Percentage(50.0))),
-          },
-          GradientStop::ColorHint {
-            color: Color::from_rgb(0x0000ff).into(),
-            hint: Some(StopPosition(Length::Percentage(100.0))),
-          },
-        ]
-        .into(),
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_conic_gradient_with_double_angle_stop() {
-    assert_eq!(
-      ConicGradient::from_str("conic-gradient(red 0deg 90deg, blue)"),
-      Ok(ConicGradient {
-        repeating: false,
-        from_angle: Angle::zero(),
-        center: ObjectPosition::default(),
-        interpolation: ColorInterpolationMethod::default(),
-        stops: [
-          GradientStop::ColorHint {
-            color: Color::from_rgb(0xff0000).into(),
-            hint: Some(StopPosition(Length::Percentage(0.0))),
-          },
-          GradientStop::ColorHint {
-            color: Color::from_rgb(0xff0000).into(),
-            hint: Some(StopPosition(Length::Percentage(25.0))),
-          },
-          GradientStop::ColorHint {
-            color: Color::from_rgb(0x0000ff).into(),
-            hint: None,
-          },
-        ]
-        .into(),
-      })
-    );
-  }
-
-  #[test]
   fn test_parse_conic_gradient_complex() {
     let gradient = ConicGradient::from_str("conic-gradient(from 90deg at 25% 75%, red, blue)");
 
@@ -668,17 +481,7 @@ mod tests {
           Length::Percentage(75.0).into()
         )),
         interpolation: ColorInterpolationMethod::default(),
-        stops: [
-          GradientStop::ColorHint {
-            color: Color([255, 0, 0, 255]).into(),
-            hint: None,
-          },
-          GradientStop::ColorHint {
-            color: Color([0, 0, 255, 255]).into(),
-            hint: None,
-          },
-        ]
-        .into(),
+        stops: red_blue_stops(None, None).into(),
       })
     );
   }
@@ -686,16 +489,10 @@ mod tests {
   #[test]
   fn test_conic_gradient_top_pixel_is_first_color() {
     let gradient = ConicGradient::builder()
-      .stops([
-        GradientStop::ColorHint {
-          color: Color([255, 0, 0, 255]).into(),
-          hint: Some(StopPosition(Length::Percentage(0.0))),
-        },
-        GradientStop::ColorHint {
-          color: Color([0, 0, 255, 255]).into(),
-          hint: Some(StopPosition(Length::Percentage(100.0))),
-        },
-      ])
+      .stops(red_blue_stops(
+        Some(StopPosition(Length::Percentage(0.0))),
+        Some(StopPosition(Length::Percentage(100.0))),
+      ))
       .build();
 
     let sizing = SizingContext::new_test(Viewport::new((100, 100)));

@@ -1,15 +1,18 @@
+mod builder;
 pub mod map;
 pub mod parser;
+
+use builder::TailwindDeclarationBuilder;
+pub use builder::{TwGradientState, TwGradientType};
 
 use std::{borrow::Cow, cmp::Ordering, str::FromStr};
 
 use cssparser::match_ignore_ascii_case;
-use serde::{Deserializer, de::Error as DeError};
+use serde::{Deserialize, Deserializer, de::Error as DeError};
 
 use crate::{
   Viewport,
   style::{
-    LinearGradientDirection,
     tw::{
       map::{FIXED_PROPERTIES, PREFIX_PARSERS},
       parser::*,
@@ -77,355 +80,6 @@ impl TailwindValues {
     }
 
     builder.finish()
-  }
-}
-
-#[derive(Debug, Default)]
-struct TailwindDeclarationBuilder {
-  declarations: StyleDeclarationBlock,
-  gradient_state: TwGradientState,
-  transform_state: TwTransformState,
-  shadow: Option<Vec<BoxShadow>>,
-  shadow_important: bool,
-  shadow_color: Option<ColorInput>,
-  text_shadow: Option<Vec<TextShadow>>,
-  text_shadow_important: bool,
-  text_shadow_color: Option<ColorInput>,
-  filter: Option<Filters>,
-  filter_important: bool,
-  backdrop_filter: Option<Filters>,
-  backdrop_filter_important: bool,
-  grid_column: TwGridLineState,
-  grid_row: TwGridLineState,
-}
-
-#[derive(Debug, Default)]
-struct TwGridLineState {
-  start: Option<GridPlacement>,
-  end: Option<GridPlacement>,
-  start_important: bool,
-  end_important: bool,
-}
-
-impl TwGridLineState {
-  fn set_line(&mut self, grid_line: GridLine, start_important: bool, end_important: bool) {
-    self.set_start(grid_line.start, start_important);
-    self.set_end(grid_line.end, end_important);
-  }
-
-  fn set_start(&mut self, grid_placement: GridPlacement, important: bool) {
-    self.start = Some(grid_placement);
-    self.start_important = important;
-  }
-
-  fn set_end(&mut self, grid_placement: GridPlacement, important: bool) {
-    self.end = Some(grid_placement);
-    self.end_important = important;
-  }
-
-  fn push_declarations(
-    self,
-    declarations: &mut StyleDeclarationBlock,
-    start_decl: fn(GridPlacement) -> StyleDeclaration,
-    end_decl: fn(GridPlacement) -> StyleDeclaration,
-  ) {
-    if let Some(start) = self.start {
-      declarations.push(start_decl(start), self.start_important);
-    }
-
-    if let Some(end) = self.end {
-      declarations.push(end_decl(end), self.end_important);
-    }
-  }
-}
-
-impl TailwindDeclarationBuilder {
-  fn push(&mut self, declaration: StyleDeclaration, important: bool) {
-    self.declarations.push(declaration, important);
-  }
-
-  fn set_shadow_layers<I: IntoIterator<Item = BoxShadow>>(&mut self, layers: I, important: bool) {
-    let mut shadows: Vec<BoxShadow> = layers.into_iter().collect();
-    if let Some(color) = self.shadow_color {
-      for shadow in &mut shadows {
-        shadow.color = color;
-      }
-    }
-
-    self.shadow = Some(shadows);
-    self.shadow_important = important;
-  }
-
-  fn reset_shadow(&mut self, important: bool) {
-    self.shadow = None;
-    self.shadow_color = None;
-    self.shadow_important = important;
-  }
-
-  fn reset_text_shadow(&mut self, important: bool) {
-    self.text_shadow = None;
-    self.text_shadow_color = None;
-    self.text_shadow_important = important;
-  }
-
-  fn set_shadow_color(&mut self, color: ColorInput, important: bool) {
-    self.shadow_color = Some(color);
-    self.shadow_important = important;
-
-    if let Some(shadows) = self.shadow.as_mut() {
-      for shadow in shadows {
-        shadow.color = color;
-      }
-    }
-  }
-
-  fn set_text_shadow_layers<I: IntoIterator<Item = TextShadow>>(
-    &mut self,
-    layers: I,
-    important: bool,
-  ) {
-    let mut shadows: Vec<TextShadow> = layers.into_iter().collect();
-    if let Some(color) = self.text_shadow_color {
-      for shadow in &mut shadows {
-        shadow.color = color;
-      }
-    }
-
-    self.text_shadow = Some(shadows);
-    self.text_shadow_important = important;
-  }
-
-  fn set_text_shadow_color(&mut self, color: ColorInput, important: bool) {
-    self.text_shadow_color = Some(color);
-    self.text_shadow_important = important;
-
-    if let Some(shadows) = self.text_shadow.as_mut() {
-      for shadow in shadows {
-        shadow.color = color;
-      }
-    }
-  }
-
-  fn push_filter(&mut self, filter: Filter, important: bool) {
-    self.filter.get_or_insert_with(Vec::new).push(filter);
-    self.filter_important = important;
-  }
-
-  fn push_backdrop_filter(&mut self, filter: Filter, important: bool) {
-    self
-      .backdrop_filter
-      .get_or_insert_with(Vec::new)
-      .push(filter);
-    self.backdrop_filter_important = important;
-  }
-
-  fn set_grid_column(&mut self, grid_line: GridLine, important: bool) {
-    self.grid_column.set_line(grid_line, important, important);
-  }
-
-  fn set_grid_row(&mut self, grid_line: GridLine, important: bool) {
-    self.grid_row.set_line(grid_line, important, important);
-  }
-
-  fn finish(mut self) -> StyleDeclarationBlock {
-    if let Some(shadows) = self.shadow.take() {
-      self.push(
-        StyleDeclaration::box_shadow(Some(shadows.into_boxed_slice())),
-        self.shadow_important,
-      );
-    }
-
-    if let Some(shadows) = self.text_shadow.take() {
-      self.push(
-        StyleDeclaration::text_shadow(Some(shadows.into_boxed_slice())),
-        self.text_shadow_important,
-      );
-    }
-
-    if let Some(filter) = self.filter.take() {
-      self.push(StyleDeclaration::filter(filter), self.filter_important);
-    }
-
-    if let Some(backdrop_filter) = self.backdrop_filter.take() {
-      self.push(
-        StyleDeclaration::backdrop_filter(backdrop_filter),
-        self.backdrop_filter_important,
-      );
-    }
-
-    self.transform_state.apply(&mut self.declarations);
-    self.gradient_state.apply(&mut self.declarations);
-
-    self.grid_column.push_declarations(
-      &mut self.declarations,
-      StyleDeclaration::grid_column_start,
-      StyleDeclaration::grid_column_end,
-    );
-    self.grid_row.push_declarations(
-      &mut self.declarations,
-      StyleDeclaration::grid_row_start,
-      StyleDeclaration::grid_row_end,
-    );
-
-    self.declarations
-  }
-}
-
-#[derive(Debug, Default)]
-struct TwTransformState {
-  translate: Option<SpacePair<Length>>,
-  translate_important: bool,
-  scale: Option<SpacePair<PercentageNumber>>,
-  scale_important: bool,
-}
-
-impl TwTransformState {
-  fn set_translate(&mut self, value: SpacePair<Length>, important: bool) {
-    self.translate = Some(value);
-    self.translate_important = important;
-  }
-
-  fn translate_mut(&mut self, important: bool) -> &mut SpacePair<Length> {
-    self.translate_important = important;
-    self
-      .translate
-      .get_or_insert_with(SpacePair::<Length>::default)
-  }
-
-  fn set_scale(&mut self, value: SpacePair<PercentageNumber>, important: bool) {
-    self.scale = Some(value);
-    self.scale_important = important;
-  }
-
-  fn scale_mut(&mut self, important: bool) -> &mut SpacePair<PercentageNumber> {
-    self.scale_important = important;
-    self
-      .scale
-      .get_or_insert_with(SpacePair::<PercentageNumber>::default)
-  }
-
-  fn apply(self, declarations: &mut StyleDeclarationBlock) {
-    if let Some(translate) = self.translate {
-      declarations.push(
-        StyleDeclaration::translate(translate),
-        self.translate_important,
-      );
-    }
-
-    if let Some(scale) = self.scale {
-      declarations.push(StyleDeclaration::scale(scale), self.scale_important);
-    }
-  }
-}
-
-#[derive(Debug, Default)]
-pub struct TwGradientState {
-  pub gradient_type: TwGradientType,
-  pub angle: Option<Angle>,
-  pub from: Option<ColorInput>,
-  pub to: Option<ColorInput>,
-  pub via: Option<ColorInput>,
-  pub from_position: Option<Length>,
-  pub via_position: Option<Length>,
-  pub to_position: Option<Length>,
-  pub important: bool,
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub enum TwGradientType {
-  #[default]
-  Linear,
-  Radial,
-  Conic,
-}
-
-impl TwGradientState {
-  pub fn apply(self, declarations: &mut StyleDeclarationBlock) {
-    // Stop positions alone (`from-50%` etc.) must not synthesise a gradient —
-    // a color or angle has to be present.
-    if self.from.is_none() && self.to.is_none() && self.via.is_none() && self.angle.is_none() {
-      return;
-    }
-
-    let angle = self.angle.unwrap_or_else(|| Angle::new(180.0));
-
-    let from_color = self.from.unwrap_or(ColorInput::Value(Color([0, 0, 0, 0])));
-    let to_color = self.to.unwrap_or_else(|| {
-      if let ColorInput::Value(from_c) = from_color {
-        ColorInput::Value(Color([from_c.0[0], from_c.0[1], from_c.0[2], 0]))
-      } else {
-        ColorInput::Value(Color([0, 0, 0, 0]))
-      }
-    });
-
-    let mut stops = Vec::new();
-    stops.push(GradientStop::ColorHint {
-      color: from_color,
-      hint: Some(StopPosition(
-        self.from_position.unwrap_or(Length::Percentage(0.0)),
-      )),
-    });
-
-    if let Some(via_color) = self.via {
-      stops.push(GradientStop::ColorHint {
-        color: via_color,
-        hint: Some(StopPosition(
-          self.via_position.unwrap_or(Length::Percentage(50.0)),
-        )),
-      });
-    }
-
-    stops.push(GradientStop::ColorHint {
-      color: to_color,
-      hint: Some(StopPosition(
-        self.to_position.unwrap_or(Length::Percentage(100.0)),
-      )),
-    });
-
-    match self.gradient_type {
-      TwGradientType::Linear => {
-        let gradient = LinearGradient {
-          repeating: false,
-          direction: LinearGradientDirection::Angle(angle),
-          interpolation: ColorInterpolationMethod::default(),
-          stops: stops.into_boxed_slice(),
-        };
-
-        declarations.push(
-          StyleDeclaration::background_image(Some([BackgroundImage::Linear(gradient)].into())),
-          self.important,
-        );
-      }
-      TwGradientType::Radial => {
-        let gradient = RadialGradient {
-          repeating: false,
-          shape: RadialShape::Ellipse,
-          size: RadialSize::FarthestCorner,
-          center: BackgroundPosition::default(),
-          interpolation: ColorInterpolationMethod::default(),
-          stops: stops.into_boxed_slice(),
-        };
-
-        declarations.push(
-          StyleDeclaration::background_image(Some([BackgroundImage::Radial(gradient)].into())),
-          self.important,
-        );
-      }
-      TwGradientType::Conic => {
-        let gradient = ConicGradient {
-          repeating: false,
-          from_angle: angle,
-          center: BackgroundPosition::default(),
-          interpolation: ColorInterpolationMethod::default(),
-          stops: stops.into_boxed_slice(),
-        };
-
-        declarations.push(
-          StyleDeclaration::background_image(Some([BackgroundImage::Conic(gradient)].into())),
-          self.important,
-        );
-      }
-    }
   }
 }
 
@@ -722,7 +376,7 @@ pub enum TailwindProperty {
   /// `opacity` property.
   Opacity(PercentageNumber),
   /// `background-color` property.
-  BackgroundColor(ColorInput<false>),
+  BackgroundColor(ColorDefaultsToTransparent),
   /// `border-color` property.
   BorderColor(ColorInput),
   /// `border-top-width` property.
@@ -917,13 +571,16 @@ enum FnKind {
   Other,
 }
 
-fn classify_fn(name: &str) -> FnKind {
-  if name == "url" || name.ends_with("_url") {
-    FnKind::Url
-  } else if matches!(name, "var" | "theme") || name.ends_with("_var") || name.ends_with("_theme") {
-    FnKind::VarTheme
-  } else {
-    FnKind::Other
+impl FnKind {
+  fn from_name(name: &str) -> FnKind {
+    if name == "url" || name.ends_with("_url") {
+      FnKind::Url
+    } else if matches!(name, "var" | "theme") || name.ends_with("_var") || name.ends_with("_theme")
+    {
+      FnKind::VarTheme
+    } else {
+      FnKind::Other
+    }
   }
 }
 
@@ -956,7 +613,7 @@ fn decode_arbitrary_value(value: &str) -> Cow<'_, str> {
       out.push(if preserved { '_' } else { ' ' });
       index += 1;
     } else if byte == b'(' {
-      stack.push((classify_fn(&value[ident_start..index]), true));
+      stack.push((FnKind::from_name(&value[ident_start..index]), true));
       out.push('(');
       index += 1;
       ident_start = index;
@@ -1000,58 +657,31 @@ pub trait TailwindPropertyParser: Sized + for<'i> FromCss<'i> {
   }
 }
 
-impl TailwindProperty {
-  fn try_neg(self) -> Option<Self> {
-    Some(match self {
-      TailwindProperty::Margin(length) => TailwindProperty::Margin(length.try_negative()?),
-      TailwindProperty::MarginX(length) => TailwindProperty::MarginX(length.try_negative()?),
-      TailwindProperty::MarginY(length) => TailwindProperty::MarginY(length.try_negative()?),
-      TailwindProperty::MarginTop(length) => TailwindProperty::MarginTop(length.try_negative()?),
-      TailwindProperty::MarginRight(length) => {
-        TailwindProperty::MarginRight(length.try_negative()?)
-      }
-      TailwindProperty::MarginBottom(length) => {
-        TailwindProperty::MarginBottom(length.try_negative()?)
-      }
-      TailwindProperty::MarginLeft(length) => TailwindProperty::MarginLeft(length.try_negative()?),
-      TailwindProperty::MarginInlineStart(length) => {
-        TailwindProperty::MarginInlineStart(length.try_negative()?)
-      }
-      TailwindProperty::MarginInlineEnd(length) => {
-        TailwindProperty::MarginInlineEnd(length.try_negative()?)
-      }
-      TailwindProperty::Inset(length) => TailwindProperty::Inset(length.try_negative()?),
-      TailwindProperty::InsetX(length) => TailwindProperty::InsetX(length.try_negative()?),
-      TailwindProperty::InsetY(length) => TailwindProperty::InsetY(length.try_negative()?),
-      TailwindProperty::Top(length) => TailwindProperty::Top(length.try_negative()?),
-      TailwindProperty::Right(length) => TailwindProperty::Right(length.try_negative()?),
-      TailwindProperty::Bottom(length) => TailwindProperty::Bottom(length.try_negative()?),
-      TailwindProperty::Left(length) => TailwindProperty::Left(length.try_negative()?),
-      TailwindProperty::Translate(length) => TailwindProperty::Translate(length.try_negative()?),
-      TailwindProperty::TranslateX(length) => TailwindProperty::TranslateX(length.try_negative()?),
-      TailwindProperty::TranslateY(length) => TailwindProperty::TranslateY(length.try_negative()?),
-      TailwindProperty::Scale(percentage_number) => TailwindProperty::Scale(-percentage_number),
-      TailwindProperty::ScaleX(percentage_number) => TailwindProperty::ScaleX(-percentage_number),
-      TailwindProperty::ScaleY(percentage_number) => TailwindProperty::ScaleY(-percentage_number),
-      TailwindProperty::Rotate(angle) => TailwindProperty::Rotate(-angle),
-      TailwindProperty::LetterSpacing(length) => TailwindProperty::LetterSpacing(-length),
-      TailwindProperty::HueRotate(angle) => TailwindProperty::HueRotate(-angle),
-      TailwindProperty::BackdropHueRotate(angle) => TailwindProperty::BackdropHueRotate(-angle),
-      TailwindProperty::GridColumnStart(p) => {
-        TailwindProperty::GridColumnStart(neg_grid_placement(p)?)
-      }
-      TailwindProperty::GridColumnEnd(p) => TailwindProperty::GridColumnEnd(neg_grid_placement(p)?),
-      TailwindProperty::GridRowStart(p) => TailwindProperty::GridRowStart(neg_grid_placement(p)?),
-      TailwindProperty::GridRowEnd(p) => TailwindProperty::GridRowEnd(neg_grid_placement(p)?),
+macro_rules! try_neg {
+  ($self:expr;
+    try_negative: $($neg:ident),+ $(,)?;
+    unary: $($un:ident),+ $(,)?;
+    grid: $($grid:ident),+ $(,)?
+  ) => {
+    Some(match $self {
+      $(TailwindProperty::$neg(v) => TailwindProperty::$neg(v.try_negative()?),)+
+      $(TailwindProperty::$un(v) => TailwindProperty::$un(-v),)+
+      $(TailwindProperty::$grid(p) => TailwindProperty::$grid(p.try_negative()?),)+
       _ => return None,
     })
-  }
+  };
 }
 
-fn neg_grid_placement(p: GridPlacement) -> Option<GridPlacement> {
-  match p {
-    GridPlacement::Line(n) => Some(GridPlacement::Line(-n)),
-    _ => None,
+impl TailwindProperty {
+  fn try_neg(self) -> Option<Self> {
+    try_neg!(self;
+      try_negative:
+        Margin, MarginX, MarginY, MarginTop, MarginRight, MarginBottom, MarginLeft,
+        MarginInlineStart, MarginInlineEnd, Inset, InsetX, InsetY, Top, Right, Bottom, Left,
+        Translate, TranslateX, TranslateY;
+      unary: Scale, ScaleX, ScaleY, Rotate, LetterSpacing, HueRotate, BackdropHueRotate;
+      grid: GridColumnStart, GridColumnEnd, GridRowStart, GridRowEnd
+    )
   }
 }
 
@@ -1060,6 +690,13 @@ macro_rules! push_decl {
     $(
       $builder.push(StyleDeclaration::$property($value), $important);
     )*
+  }};
+}
+
+macro_rules! rounded_corners {
+  ($builder:expr, $important:expr, $rounded:expr $(, $corner:ident)+ $(,)?) => {{
+    let value = SpacePair::from_single($rounded.0);
+    push_decl!($builder, $important $(, $corner(value))+);
   }};
 }
 
@@ -1396,71 +1033,58 @@ impl TailwindProperty {
       TailwindProperty::OutlineOffset(outline_offset) => {
         push_decl!(builder, important, outline_offset(outline_offset.0))
       }
-      TailwindProperty::Rounded(rounded) => {
-        push_decl!(
-          builder,
-          important,
-          border_top_left_radius(SpacePair::from_single(rounded.0)),
-          border_top_right_radius(SpacePair::from_single(rounded.0)),
-          border_bottom_right_radius(SpacePair::from_single(rounded.0)),
-          border_bottom_left_radius(SpacePair::from_single(rounded.0))
-        );
-      }
+      TailwindProperty::Rounded(rounded) => rounded_corners!(
+        builder,
+        important,
+        rounded,
+        border_top_left_radius,
+        border_top_right_radius,
+        border_bottom_right_radius,
+        border_bottom_left_radius
+      ),
       TailwindProperty::VerticalAlign(vertical_align) => {
         push_decl!(builder, important, vertical_align(vertical_align))
       }
-      TailwindProperty::RoundedTopLeft(rounded) => push_decl!(
+      TailwindProperty::RoundedTopLeft(rounded) => {
+        rounded_corners!(builder, important, rounded, border_top_left_radius)
+      }
+      TailwindProperty::RoundedTopRight(rounded) => {
+        rounded_corners!(builder, important, rounded, border_top_right_radius)
+      }
+      TailwindProperty::RoundedBottomRight(rounded) => {
+        rounded_corners!(builder, important, rounded, border_bottom_right_radius)
+      }
+      TailwindProperty::RoundedBottomLeft(rounded) => {
+        rounded_corners!(builder, important, rounded, border_bottom_left_radius)
+      }
+      TailwindProperty::RoundedTop(rounded) => rounded_corners!(
         builder,
         important,
-        border_top_left_radius(SpacePair::from_single(rounded.0))
+        rounded,
+        border_top_left_radius,
+        border_top_right_radius
       ),
-      TailwindProperty::RoundedTopRight(rounded) => push_decl!(
+      TailwindProperty::RoundedRight(rounded) => rounded_corners!(
         builder,
         important,
-        border_top_right_radius(SpacePair::from_single(rounded.0))
+        rounded,
+        border_top_right_radius,
+        border_bottom_right_radius
       ),
-      TailwindProperty::RoundedBottomRight(rounded) => push_decl!(
+      TailwindProperty::RoundedBottom(rounded) => rounded_corners!(
         builder,
         important,
-        border_bottom_right_radius(SpacePair::from_single(rounded.0))
+        rounded,
+        border_bottom_left_radius,
+        border_bottom_right_radius
       ),
-      TailwindProperty::RoundedBottomLeft(rounded) => push_decl!(
+      TailwindProperty::RoundedLeft(rounded) => rounded_corners!(
         builder,
         important,
-        border_bottom_left_radius(SpacePair::from_single(rounded.0))
+        rounded,
+        border_top_left_radius,
+        border_bottom_left_radius
       ),
-      TailwindProperty::RoundedTop(rounded) => {
-        push_decl!(
-          builder,
-          important,
-          border_top_left_radius(SpacePair::from_single(rounded.0)),
-          border_top_right_radius(SpacePair::from_single(rounded.0))
-        );
-      }
-      TailwindProperty::RoundedRight(rounded) => {
-        push_decl!(
-          builder,
-          important,
-          border_top_right_radius(SpacePair::from_single(rounded.0)),
-          border_bottom_right_radius(SpacePair::from_single(rounded.0))
-        );
-      }
-      TailwindProperty::RoundedBottom(rounded) => {
-        push_decl!(
-          builder,
-          important,
-          border_bottom_left_radius(SpacePair::from_single(rounded.0)),
-          border_bottom_right_radius(SpacePair::from_single(rounded.0))
-        );
-      }
-      TailwindProperty::RoundedLeft(rounded) => {
-        push_decl!(
-          builder,
-          important,
-          border_top_left_radius(SpacePair::from_single(rounded.0)),
-          border_bottom_left_radius(SpacePair::from_single(rounded.0))
-        );
-      }
       TailwindProperty::TextOverflow(text_overflow) => {
         push_decl!(builder, important, text_overflow(text_overflow))
       }
@@ -1733,8 +1357,7 @@ impl TailwindProperty {
       }
       TailwindProperty::Filter(filters) => {
         if filters.is_empty() {
-          builder.filter = Some(Filters::default());
-          builder.filter_important = important;
+          builder.set_filter_reset(important, false);
         } else {
           for filter in filters {
             builder.push_filter(filter, important);
@@ -1770,8 +1393,7 @@ impl TailwindProperty {
       }
       TailwindProperty::BackdropFilter(filters) => {
         if filters.is_empty() {
-          builder.backdrop_filter = Some(Filters::default());
-          builder.backdrop_filter_important = important;
+          builder.set_filter_reset(important, true);
         } else {
           for filter in filters {
             builder.push_backdrop_filter(filter, important);
@@ -1844,1074 +1466,4 @@ impl TailwindProperty {
 
 #[cfg(test)]
 #[allow(clippy::panic, clippy::unwrap_used)]
-mod tests {
-  use std::assert_matches;
-
-  use crate::style::{ComputedStyle, LonghandId, Style, properties::BackgroundImage};
-
-  use super::*;
-
-  #[test]
-  fn test_box_sizing() {
-    assert_eq!(
-      TailwindProperty::parse("box-border"),
-      Some(TailwindProperty::BoxSizing(BoxSizing::BorderBox))
-    );
-  }
-
-  #[test]
-  fn test_parse_width() {
-    assert_eq!(
-      TailwindProperty::parse("w-64"),
-      Some(TailwindProperty::Width(Length::from_spacing(64.0)))
-    );
-    assert_eq!(
-      TailwindProperty::parse("h-32"),
-      Some(TailwindProperty::Height(Length::from_spacing(32.0)))
-    );
-    assert_eq!(
-      TailwindProperty::parse("justify-self-center"),
-      Some(TailwindProperty::JustifySelf(AlignItems::Center))
-    );
-  }
-
-  #[test]
-  fn test_parse_color() {
-    assert_eq!(
-      TailwindProperty::parse("text-black/30"),
-      Some(TailwindProperty::Color(ColorInput::Value(Color([
-        0,
-        0,
-        0,
-        (0.3_f32 * 255.0).round() as u8
-      ]))))
-    );
-  }
-
-  #[test]
-  fn test_parse_shadow_color() {
-    assert_eq!(
-      TailwindProperty::parse("shadow-red-500"),
-      Some(TailwindProperty::ShadowColor(ColorInput::Value(Color([
-        251, 44, 54, 255
-      ]))))
-    );
-  }
-
-  #[test]
-  fn test_parse_text_shadow_color() {
-    assert_eq!(
-      TailwindProperty::parse("text-shadow-red-500"),
-      Some(TailwindProperty::TextShadowColor(ColorInput::Value(Color(
-        [251, 44, 54, 255]
-      ))))
-    );
-  }
-
-  #[test]
-  fn test_parse_decoration_color() {
-    assert_eq!(
-      TailwindProperty::parse("decoration-red-500"),
-      Some(TailwindProperty::TextDecorationColor(ColorInput::Value(
-        Color([251, 44, 54, 255])
-      )))
-    );
-  }
-
-  #[test]
-  fn test_parse_text_decoration_lines() {
-    assert_eq!(
-      TailwindProperty::parse("underline"),
-      Some(TailwindProperty::TextDecorationLine(
-        TextDecorationLines::UNDERLINE
-      ))
-    );
-    assert_eq!(
-      TailwindProperty::parse("no-underline"),
-      Some(TailwindProperty::TextDecorationLine(
-        TextDecorationLines::empty()
-      ))
-    );
-  }
-
-  #[test]
-  fn test_parse_arbitrary_color() {
-    assert_eq!(
-      TailwindProperty::parse("text-[rgb(0, 191, 255)]"),
-      Some(TailwindProperty::Color(ColorInput::Value(Color([
-        0, 191, 255, 255
-      ]))))
-    );
-  }
-
-  #[test]
-  fn test_parse_arbitrary_mask_image_url() {
-    assert_eq!(
-      TailwindProperty::parse("mask-[url('https://example.com/logo.svg')]"),
-      Some(TailwindProperty::MaskImage(BackgroundImage::Url(
-        "https://example.com/logo.svg".into()
-      )))
-    );
-  }
-
-  #[test]
-  fn test_split_variant_ignores_colons_in_arbitrary_values() {
-    assert_eq!(split_variant("sm:mt-0"), Some(("sm", "mt-0")));
-    assert_eq!(split_variant("sm:hover:mt-0"), Some(("sm", "hover:mt-0")));
-    assert_eq!(split_variant("mt-0"), None);
-    assert_eq!(
-      split_variant("mask-[url('https://example.com/a.svg')]"),
-      None
-    );
-    assert_eq!(split_variant("grid-cols-[repeat(2,minmax(0,1fr))]"), None);
-    assert_eq!(split_variant("[mask:foo]"), None);
-    assert_eq!(
-      split_variant("md:mask-[url('https://example.com/a.svg')]"),
-      Some(("md", "mask-[url('https://example.com/a.svg')]"))
-    );
-    assert_eq!(split_variant(r#"content-['a:b]']"#), None);
-    assert_eq!(split_variant(r#"content-["a\":b"]"#), None);
-  }
-
-  #[test]
-  fn test_decode_arbitrary_value() {
-    assert_eq!(decode_arbitrary_value("3_1_auto"), "3 1 auto");
-    assert_eq!(decode_arbitrary_value("10px"), "10px");
-    assert_eq!(decode_arbitrary_value(r"foo\_bar"), "foo_bar");
-    assert_eq!(
-      decode_arbitrary_value("url('https://example.com/my_logo.svg')"),
-      "url('https://example.com/my_logo.svg')"
-    );
-    // var()/theme(): first argument keeps underscores, later args don't.
-    assert_eq!(decode_arbitrary_value("var(--my_color)"), "var(--my_color)");
-    assert_eq!(
-      decode_arbitrary_value("theme(--spacing_4)"),
-      "theme(--spacing_4)"
-    );
-    assert_eq!(decode_arbitrary_value("var(--x,_a_b)"), "var(--x, a b)");
-    assert_eq!(decode_arbitrary_value("calc(1_+_2)"), "calc(1 + 2)");
-  }
-
-  #[test]
-  fn test_extract_arbitrary_value_preserves_url_underscores() {
-    assert_eq!(
-      TailwindProperty::parse("mask-[url('https://example.com/my_logo.svg')]"),
-      Some(TailwindProperty::MaskImage(BackgroundImage::Url(
-        "https://example.com/my_logo.svg".into()
-      )))
-    );
-  }
-
-  #[test]
-  fn test_parse_value_arbitrary_url_with_scheme_colon() {
-    let url_image =
-      TailwindProperty::MaskImage(BackgroundImage::Url("https://example.com/a.svg".into()));
-
-    assert_eq!(
-      TailwindValue::parse("mask-[url('https://example.com/a.svg')]"),
-      Some(TailwindValue {
-        property: url_image.clone(),
-        breakpoint: None,
-        important: false,
-      })
-    );
-
-    assert_eq!(
-      TailwindValue::parse("md:mask-[url('https://example.com/a.svg')]"),
-      Some(TailwindValue {
-        property: url_image,
-        breakpoint: Some(Breakpoint(Length::Rem(48.0))),
-        important: false,
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_arbitrary_flex_with_spaces() {
-    assert_eq!(
-      TailwindProperty::parse("flex-[3_1_auto]"),
-      Some(TailwindProperty::Flex(Flex {
-        grow: 3.0,
-        shrink: 1.0,
-        basis: Length::Auto,
-      }))
-    );
-  }
-
-  #[test]
-  fn test_parse_tailwind_animation_preset() {
-    assert_matches!(
-      TailwindProperty::parse("animate-spin"),
-      Some(TailwindProperty::Animation(animations))
-        if animations.as_ref() == [Animation {
-          duration: AnimationTime::from_milliseconds(1000.0),
-          timing_function: AnimationTimingFunction::Linear,
-          iteration_count: AnimationIterationCount::Infinite,
-          name: Some("spin".to_string()),
-          ..Animation::default()
-        }]
-    );
-  }
-
-  #[test]
-  fn test_parse_tailwind_animation_arbitrary_value() {
-    assert_matches!(
-      TailwindProperty::parse("animate-[wiggle_1s_ease-in-out_infinite]"),
-      Some(TailwindProperty::Animation(animations))
-        if animations.as_ref() == [Animation {
-          duration: AnimationTime::from_milliseconds(1000.0),
-          timing_function: AnimationTimingFunction::EaseInOut,
-          iteration_count: AnimationIterationCount::Infinite,
-          name: Some("wiggle".to_string()),
-          ..Animation::default()
-        }]
-    );
-  }
-
-  #[test]
-  fn test_parse_negative_margin() {
-    assert_eq!(
-      TailwindProperty::parse("-ml-4"),
-      Some(TailwindProperty::MarginLeft(Length::from_spacing(-4.0)))
-    );
-  }
-
-  #[test]
-  fn test_parse_border_radius() {
-    assert_eq!(
-      TailwindProperty::parse("rounded-xs"),
-      Some(TailwindProperty::Rounded(TwRounded(Length::Rem(0.125))))
-    );
-    assert_eq!(
-      TailwindProperty::parse("rounded-full"),
-      Some(TailwindProperty::Rounded(TwRounded(Length::Px(9999.0))))
-    );
-  }
-
-  #[test]
-  fn test_parse_font_size_with_arbitrary_line_height() {
-    assert_eq!(
-      TailwindProperty::parse("text-base/[12.34]"),
-      Some(TailwindProperty::FontSize(TwFontSize {
-        font_size: (Length::Rem(1.0).into()),
-        line_height: Some(LineHeight::Unitless(12.34)),
-      }))
-    );
-  }
-
-  #[test]
-  fn test_parse_border_width() {
-    assert_eq!(
-      TailwindProperty::parse("border"),
-      Some(TailwindProperty::BorderDefault)
-    );
-    assert_eq!(
-      TailwindProperty::parse("border-t-2"),
-      Some(TailwindProperty::BorderTopWidth(TwBorderWidth(Length::Px(
-        2.0
-      ))))
-    );
-    assert_eq!(
-      TailwindProperty::parse("border-x-4"),
-      Some(TailwindProperty::BorderXWidth(TwBorderWidth(Length::Px(
-        4.0
-      ))))
-    );
-    assert_eq!(
-      TailwindProperty::parse("border-solid"),
-      Some(TailwindProperty::BorderStyle(BorderStyle::Solid))
-    );
-    assert_eq!(
-      TailwindProperty::parse("border-dashed"),
-      Some(TailwindProperty::BorderStyle(BorderStyle::Dashed))
-    );
-    assert_eq!(
-      TailwindProperty::parse("border-dotted"),
-      Some(TailwindProperty::BorderStyle(BorderStyle::Dotted))
-    );
-    assert_eq!(
-      TailwindProperty::parse("border-none"),
-      Some(TailwindProperty::BorderStyle(BorderStyle::None))
-    );
-  }
-
-  #[test]
-  fn test_parse_outline() {
-    assert_eq!(
-      TailwindProperty::parse("outline"),
-      Some(TailwindProperty::OutlineDefault)
-    );
-    assert_eq!(
-      TailwindProperty::parse("outline-2"),
-      Some(TailwindProperty::OutlineWidth(TwBorderWidth(Length::Px(
-        2.0
-      ))))
-    );
-    assert_eq!(
-      TailwindProperty::parse("outline-red-500"),
-      Some(TailwindProperty::OutlineColor(ColorInput::Value(Color([
-        251, 44, 54, 255
-      ]))))
-    );
-    assert_eq!(
-      TailwindProperty::parse("outline-solid"),
-      Some(TailwindProperty::OutlineStyle(BorderStyle::Solid))
-    );
-    assert_eq!(
-      TailwindProperty::parse("outline-dashed"),
-      Some(TailwindProperty::OutlineStyle(BorderStyle::Dashed))
-    );
-    assert_eq!(
-      TailwindProperty::parse("outline-offset-4"),
-      Some(TailwindProperty::OutlineOffset(TwBorderWidth(Length::Px(
-        4.0
-      ))))
-    );
-    assert_eq!(
-      TailwindProperty::parse("outline-none"),
-      Some(TailwindProperty::OutlineStyle(BorderStyle::None))
-    );
-  }
-
-  #[test]
-  fn test_parse_col_end() {
-    assert_eq!(
-      TailwindProperty::parse("col-end-1"),
-      Some(TailwindProperty::GridColumnEnd(GridPlacement::Line(1)))
-    );
-  }
-
-  #[test]
-  fn test_grid_column_start_emits_only_start_longhand() {
-    let Ok(values) = TailwindValues::from_str("col-start-2") else {
-      return;
-    };
-    let declarations = values.into_declaration_block(Viewport::new((100, 100)));
-
-    assert_eq!(
-      declarations.iter().collect::<Vec<_>>(),
-      vec![&StyleDeclaration::grid_column_start(GridPlacement::Line(2))]
-    );
-  }
-
-  #[test]
-  fn test_grid_row_end_emits_only_end_longhand() {
-    let Ok(values) = TailwindValues::from_str("row-end-3") else {
-      return;
-    };
-    let declarations = values.into_declaration_block(Viewport::new((100, 100)));
-
-    assert_eq!(
-      declarations.iter().collect::<Vec<_>>(),
-      vec![&StyleDeclaration::grid_row_end(GridPlacement::Line(3))]
-    );
-  }
-
-  #[test]
-  fn test_grid_longhand_importance_is_tracked_per_side() {
-    let Ok(values) = TailwindValues::from_str("col-end-3 !col-start-2") else {
-      return;
-    };
-    let declarations = values.into_declaration_block(Viewport::new((100, 100)));
-
-    assert_eq!(
-      declarations.iter().collect::<Vec<_>>(),
-      vec![
-        &StyleDeclaration::grid_column_start(GridPlacement::Line(2)),
-        &StyleDeclaration::grid_column_end(GridPlacement::Line(3)),
-      ]
-    );
-    assert!(
-      declarations
-        .importance
-        .longhands
-        .contains(&LonghandId::GridColumnStart)
-    );
-    assert!(
-      !declarations
-        .importance
-        .longhands
-        .contains(&LonghandId::GridColumnEnd)
-    );
-  }
-
-  #[test]
-  fn test_parse_overflow_clip() {
-    assert_eq!(
-      TailwindProperty::parse("overflow-clip"),
-      Some(TailwindProperty::Overflow(Overflow::Clip))
-    );
-    assert_eq!(
-      TailwindProperty::parse("overflow-x-clip"),
-      Some(TailwindProperty::OverflowX(Overflow::Clip))
-    );
-    assert_eq!(
-      TailwindProperty::parse("overflow-y-clip"),
-      Some(TailwindProperty::OverflowY(Overflow::Clip))
-    );
-  }
-
-  #[test]
-  fn test_comprehensive_mappings() {
-    // Test various prefix mappings to ensure they're working
-    let should_parse = vec![
-      // Layout
-      "flex",
-      "grid",
-      "hidden",
-      "block",
-      "inline",
-      // SizingContext
-      "w-4",
-      "h-8",
-      "size-12",
-      "min-w-0",
-      "max-h-96",
-      // Spacing
-      "m-2",
-      "mx-4",
-      "my-auto",
-      "mt-8",
-      "mr-6",
-      "mb-4",
-      "ml-2",
-      "p-3",
-      "px-5",
-      "py-2",
-      "pt-1",
-      "pr-4",
-      "pb-3",
-      "pl-2",
-      // Colors
-      "text-red-500",
-      "bg-blue-200",
-      "border-gray-300",
-      // Typography
-      "text-sm",
-      "font-bold",
-      "font-stretch-condensed",
-      "font-stretch-ultra-expanded",
-      "font-stretch-75%",
-      "uppercase",
-      "tracking-wide",
-      "animate-spin",
-      "animate-[wiggle_1s_ease-in-out_infinite]",
-      // Flexbox
-      "justify-center",
-      "items-end",
-      "self-start",
-      "flex-grow",
-      "shrink",
-      // Borders
-      "border",
-      "border-t-2",
-      "border-solid",
-      "border-none",
-      "outline",
-      "outline-2",
-      "outline-red-500",
-      "outline-solid",
-      "outline-offset-2",
-      "rounded-lg",
-      // Transforms
-      "rotate-45",
-      "scale-75",
-      "translate-x-4",
-      // Grid
-      "grid-cols-3",
-      "col-span-2",
-      // Backdrop Filters
-      "backdrop-blur-md",
-      "backdrop-brightness-50",
-      "backdrop-contrast-125",
-      "backdrop-grayscale",
-      "backdrop-hue-rotate-90",
-      "backdrop-invert",
-      "backdrop-opacity-50",
-      "backdrop-saturate-200",
-      "backdrop-sepia",
-      "backdrop-filter-[blur(4px)_brightness(0.5)]",
-    ];
-
-    let should_not_parse = vec!["nonexistent-class", "invalid-prefix-1", "random-string"];
-
-    for class in should_parse {
-      assert!(
-        TailwindProperty::parse(class).is_some(),
-        "Expected '{}' to parse successfully",
-        class
-      );
-    }
-
-    for class in should_not_parse {
-      assert!(
-        TailwindProperty::parse(class).is_none(),
-        "Expected '{}' to fail parsing",
-        class
-      );
-    }
-  }
-
-  #[test]
-  fn test_breakpoint_matches() {
-    let viewport = Viewport::new((1000, 1000));
-
-    assert!(Breakpoint::parse("sm").is_some_and(|bp| bp.matches(viewport)));
-  }
-
-  #[test]
-  fn test_breakpoint_does_not_match() {
-    let viewport = Viewport::new((1000, 1000));
-
-    // 80 * 16 = 1280 > 1000
-    assert!(Breakpoint::parse("xl").is_some_and(|bp| !bp.matches(viewport)));
-  }
-
-  #[test]
-  fn test_value_parsing() {
-    assert_eq!(
-      TailwindValue::parse("md:!mt-4"),
-      Some(TailwindValue {
-        property: TailwindProperty::MarginTop(Length::Rem(1.0)),
-        breakpoint: Some(Breakpoint(Length::Rem(48.0))),
-        important: true,
-      })
-    );
-  }
-
-  #[test]
-  fn test_values_sorting() {
-    assert_eq!(
-      TailwindValues::from_str("md:!mt-4 sm:mt-8 !mt-12 mt-16"),
-      Ok(TailwindValues {
-        inner: vec![
-          // mt-16
-          TailwindValue {
-            property: TailwindProperty::MarginTop(Length::Rem(4.0)),
-            breakpoint: None,
-            important: false,
-          },
-          // sm:mt-8
-          TailwindValue {
-            property: TailwindProperty::MarginTop(Length::Rem(2.0)),
-            breakpoint: Some(Breakpoint(Length::Rem(40.0))),
-            important: false,
-          },
-          // !mt-12
-          TailwindValue {
-            property: TailwindProperty::MarginTop(Length::Rem(3.0)),
-            breakpoint: None,
-            important: true,
-          },
-          // md:!mt-4
-          TailwindValue {
-            property: TailwindProperty::MarginTop(Length::Rem(1.0)),
-            breakpoint: Some(Breakpoint(Length::Rem(48.0))),
-            important: true,
-          },
-        ]
-      })
-    )
-  }
-
-  #[test]
-  fn test_filters_append() {
-    use crate::style::properties::Filter;
-
-    let Ok(values) = TailwindValues::from_str("blur-sm brightness-150 contrast-125") else {
-      return;
-    };
-    let viewport = Viewport::new((100, 100));
-
-    let style =
-      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
-
-    assert_eq!(
-      style.filter,
-      vec![
-        Filter::Blur(Length::Px(8.0)),
-        Filter::Brightness(PercentageNumber(1.5)),
-        Filter::Contrast(PercentageNumber(1.25))
-      ]
-    )
-  }
-
-  #[test]
-  fn test_transform_utilities_resolve_to_standard_longhands() {
-    let Ok(values) = TailwindValues::from_str("translate-x-4 translate-y-8 scale-75 scale-x-50")
-    else {
-      return;
-    };
-    let viewport = Viewport::new((100, 100));
-
-    let style =
-      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
-
-    assert_eq!(
-      style.translate,
-      SpacePair::from_pair(Length::Rem(1.0), Length::Rem(2.0))
-    );
-    assert_eq!(
-      style.scale,
-      SpacePair::from_pair(PercentageNumber(0.5), PercentageNumber(0.75))
-    );
-  }
-
-  #[test]
-  fn test_parse_blend_mode() {
-    assert_eq!(
-      TailwindProperty::parse("mix-blend-multiply"),
-      Some(TailwindProperty::MixBlendMode(BlendMode::Multiply))
-    );
-    assert_eq!(
-      TailwindProperty::parse("bg-blend-screen"),
-      Some(TailwindProperty::BackgroundBlendMode(BlendMode::Screen))
-    );
-  }
-  #[test]
-  fn test_parse_vertical_align() {
-    assert_eq!(
-      TailwindProperty::parse("align-baseline"),
-      Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
-        VerticalAlignKeyword::Baseline
-      )))
-    );
-    assert_eq!(
-      TailwindProperty::parse("align-top"),
-      Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
-        VerticalAlignKeyword::Top
-      )))
-    );
-    assert_eq!(
-      TailwindProperty::parse("align-middle"),
-      Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
-        VerticalAlignKeyword::Middle
-      )))
-    );
-    assert_eq!(
-      TailwindProperty::parse("align-bottom"),
-      Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
-        VerticalAlignKeyword::Bottom
-      )))
-    );
-    assert_eq!(
-      TailwindProperty::parse("align-text-top"),
-      Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
-        VerticalAlignKeyword::TextTop
-      )))
-    );
-    assert_eq!(
-      TailwindProperty::parse("align-text-bottom"),
-      Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
-        VerticalAlignKeyword::TextBottom
-      )))
-    );
-    assert_eq!(
-      TailwindProperty::parse("align-sub"),
-      Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
-        VerticalAlignKeyword::Sub
-      )))
-    );
-    assert_eq!(
-      TailwindProperty::parse("align-super"),
-      Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
-        VerticalAlignKeyword::Super
-      )))
-    );
-    assert_eq!(
-      TailwindProperty::parse("align-[10px]"),
-      Some(TailwindProperty::VerticalAlign(VerticalAlign::Length(
-        Length::Px(10.0)
-      )))
-    );
-    assert_eq!(
-      TailwindProperty::parse("align-[25%]"),
-      Some(TailwindProperty::VerticalAlign(VerticalAlign::Length(
-        Length::Percentage(25.0)
-      )))
-    );
-    assert_eq!(
-      TailwindProperty::parse("align-[-0.5em]"),
-      Some(TailwindProperty::VerticalAlign(VerticalAlign::Length(
-        Length::Em(-0.5)
-      )))
-    );
-  }
-
-  #[test]
-  fn test_parse_decoration_thickness() {
-    assert_eq!(
-      TailwindProperty::parse("decoration-4"),
-      Some(TailwindProperty::TextDecorationThickness(
-        TextDecorationThickness::Length(Length::Px(4.0))
-      ))
-    );
-    assert_eq!(
-      TailwindProperty::parse("decoration-auto"),
-      Some(TailwindProperty::TextDecorationThickness(
-        TextDecorationThickness::Length(Length::Auto)
-      ))
-    );
-    assert_eq!(
-      TailwindProperty::parse("decoration-from-font"),
-      Some(TailwindProperty::TextDecorationThickness(
-        TextDecorationThickness::FromFont
-      ))
-    );
-    assert_eq!(
-      TailwindProperty::parse("decoration-[3px]"),
-      Some(TailwindProperty::TextDecorationThickness(
-        TextDecorationThickness::Length(Length::Px(3.0))
-      ))
-    );
-  }
-
-  #[test]
-  fn test_linear_gradient_apply() {
-    let viewport = Viewport::new((100, 100));
-    let Ok(values) =
-      TailwindValues::from_str("bg-linear-to-r from-red-500 via-green-500 to-blue-500")
-    else {
-      return;
-    };
-
-    let style =
-      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
-
-    assert_eq!(
-      style.background_image,
-      Some(
-        [BackgroundImage::Linear(LinearGradient {
-          repeating: false,
-          direction: crate::style::LinearGradientDirection::Angle(Angle::new(90.0)),
-          interpolation: ColorInterpolationMethod::default(),
-          stops: [
-            GradientStop::ColorHint {
-              color: ColorInput::Value(Color([251, 44, 54, 255])),
-              hint: Some(StopPosition(Length::Percentage(0.0))),
-            },
-            GradientStop::ColorHint {
-              color: ColorInput::Value(Color([0, 201, 80, 255])),
-              hint: Some(StopPosition(Length::Percentage(50.0))),
-            },
-            GradientStop::ColorHint {
-              color: ColorInput::Value(Color([43, 127, 255, 255])),
-              hint: Some(StopPosition(Length::Percentage(100.0))),
-            },
-          ]
-          .into(),
-        })]
-        .into()
-      )
-    );
-  }
-
-  #[test]
-  fn test_shadow_color_overrides_shadow_preset_in_any_order() {
-    let viewport = Viewport::new((100, 100));
-
-    for classes in ["shadow-md shadow-red-500", "shadow-red-500 shadow-md"] {
-      let Ok(values) = TailwindValues::from_str(classes) else {
-        continue;
-      };
-      let style =
-        Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
-
-      assert_eq!(
-        style.box_shadow,
-        Some(
-          [
-            BoxShadow {
-              inset: false,
-              offset_x: Length::Px(0.0),
-              offset_y: Length::Px(4.0),
-              blur_radius: Length::Px(6.0),
-              spread_radius: Length::Px(-1.0),
-              color: ColorInput::Value(Color([251, 44, 54, 255])),
-            },
-            BoxShadow {
-              inset: false,
-              offset_x: Length::Px(0.0),
-              offset_y: Length::Px(2.0),
-              blur_radius: Length::Px(4.0),
-              spread_radius: Length::Px(-2.0),
-              color: ColorInput::Value(Color([251, 44, 54, 255])),
-            },
-          ]
-          .into()
-        )
-      );
-    }
-  }
-
-  #[test]
-  fn test_text_shadow_color_overrides_preset_in_any_order() {
-    let viewport = Viewport::new((100, 100));
-
-    for classes in [
-      "text-shadow-sm text-shadow-red-500",
-      "text-shadow-red-500 text-shadow-sm",
-    ] {
-      let Ok(values) = TailwindValues::from_str(classes) else {
-        continue;
-      };
-      let style =
-        Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
-
-      assert_eq!(
-        style.text_shadow,
-        Some(
-          [
-            TextShadow {
-              offset_x: Length::Px(0.0),
-              offset_y: Length::Px(1.0),
-              blur_radius: Length::Px(0.0),
-              color: ColorInput::Value(Color([251, 44, 54, 255])),
-            },
-            TextShadow {
-              offset_x: Length::Px(0.0),
-              offset_y: Length::Px(1.0),
-              blur_radius: Length::Px(1.0),
-              color: ColorInput::Value(Color([251, 44, 54, 255])),
-            },
-            TextShadow {
-              offset_x: Length::Px(0.0),
-              offset_y: Length::Px(2.0),
-              blur_radius: Length::Px(2.0),
-              color: ColorInput::Value(Color([251, 44, 54, 255])),
-            },
-          ]
-          .into()
-        )
-      );
-    }
-  }
-
-  #[test]
-  fn test_v4_palette_red_500() {
-    assert_eq!(
-      TailwindProperty::parse("bg-red-500"),
-      Some(TailwindProperty::BackgroundColor(ColorInput::Value(Color(
-        [251, 44, 54, 255]
-      ))))
-    );
-  }
-
-  #[test]
-  fn test_bare_rounded_is_radius_sm() {
-    assert_eq!(
-      TailwindProperty::parse("rounded"),
-      Some(TailwindProperty::Rounded(TwRounded(Length::Rem(0.25))))
-    );
-  }
-
-  #[test]
-  fn test_negative_color_is_rejected() {
-    assert_eq!(TailwindProperty::parse("-bg-red-500"), None);
-    assert_eq!(TailwindProperty::parse("-text-blue-500"), None);
-  }
-
-  #[test]
-  fn test_negative_grid_line() {
-    assert_eq!(
-      TailwindProperty::parse("-col-start-1"),
-      Some(TailwindProperty::GridColumnStart(GridPlacement::Line(-1)))
-    );
-  }
-
-  #[test]
-  fn test_logical_resolves_to_physical_ltr() {
-    let viewport = Viewport::new((100, 100));
-    let values = TailwindValues::from_str("ms-4 me-2 ps-3 pe-1").unwrap();
-    let style =
-      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
-    assert_eq!(style.margin_left, Length::from_spacing(4.0));
-    assert_eq!(style.margin_right, Length::from_spacing(2.0));
-    assert_eq!(style.padding_left, Length::from_spacing(3.0));
-    assert_eq!(style.padding_right, Length::from_spacing(1.0));
-  }
-
-  #[test]
-  fn test_logical_physical_cascade_order_ltr() {
-    let viewport = Viewport::new((100, 100));
-    let values = TailwindValues::from_str("ms-2 ml-4").unwrap();
-    let style =
-      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
-    assert_eq!(style.margin_left, Length::from_spacing(4.0));
-
-    let values = TailwindValues::from_str("ml-4 ms-2").unwrap();
-    let style =
-      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
-    assert_eq!(style.margin_left, Length::from_spacing(2.0));
-  }
-
-  #[test]
-  fn test_logical_resolves_to_physical_rtl() {
-    let viewport = Viewport::new((100, 100));
-    let values = TailwindValues::from_str("ms-4 me-2 ps-3 pe-1").unwrap();
-    let mut block = values.into_declaration_block(viewport);
-    block.push(StyleDeclaration::direction(Direction::Rtl), false);
-    let style = Style::from(block).inherit(&ComputedStyle::default());
-    assert_eq!(style.margin_right, Length::from_spacing(4.0));
-    assert_eq!(style.margin_left, Length::from_spacing(2.0));
-    assert_eq!(style.padding_right, Length::from_spacing(3.0));
-    assert_eq!(style.padding_left, Length::from_spacing(1.0));
-  }
-
-  #[test]
-  fn test_logical_resolves_when_direction_declared_after() {
-    let viewport = Viewport::new((100, 100));
-    let values = TailwindValues::from_str("ms-4").unwrap();
-    let mut block = values.into_declaration_block(viewport);
-    block.push(StyleDeclaration::direction(Direction::Rtl), false);
-    let style = Style::from(block).inherit(&ComputedStyle::default());
-    assert_eq!(style.margin_right, Length::from_spacing(4.0));
-    assert_eq!(style.margin_left, Length::Px(0.0));
-  }
-
-  #[test]
-  fn test_filter_none_clears_previous_filters() {
-    let viewport = Viewport::new((100, 100));
-    let values = TailwindValues::from_str("blur-sm brightness-150 filter-none").unwrap();
-    let style =
-      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
-    assert_eq!(style.filter, Filters::default());
-
-    let values = TailwindValues::from_str("backdrop-blur-sm backdrop-filter-none").unwrap();
-    let style =
-      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
-    assert_eq!(style.backdrop_filter, Filters::default());
-  }
-
-  #[test]
-  fn test_font_numeric_weight() {
-    assert_eq!(
-      TailwindProperty::parse("font-700"),
-      Some(TailwindProperty::FontWeight(FontWeight::from(700.0)))
-    );
-  }
-
-  #[test]
-  fn test_line_clamp_none() {
-    assert_eq!(
-      TailwindProperty::parse("line-clamp-none"),
-      Some(TailwindProperty::LineClamp(LineClamp::from(0)))
-    );
-  }
-
-  #[test]
-  fn test_bg_auto() {
-    assert_eq!(
-      TailwindProperty::parse("bg-auto"),
-      Some(TailwindProperty::BackgroundSize(BackgroundSize::Explicit {
-        width: Length::Auto,
-        height: Length::Auto,
-      }))
-    );
-  }
-
-  #[test]
-  fn test_bg_repeat_v4_names() {
-    assert_eq!(
-      TailwindProperty::parse("bg-repeat-round"),
-      Some(TailwindProperty::BackgroundRepeat(BackgroundRepeat::round()))
-    );
-    assert_eq!(
-      TailwindProperty::parse("bg-repeat-space"),
-      Some(TailwindProperty::BackgroundRepeat(BackgroundRepeat::space()))
-    );
-  }
-
-  #[test]
-  fn test_grid_cols_none() {
-    assert_eq!(
-      TailwindProperty::parse("grid-cols-none"),
-      Some(TailwindProperty::GridTemplateColumns(TwGridTemplate(
-        Vec::new()
-      )))
-    );
-  }
-
-  #[test]
-  fn test_col_auto_row_auto() {
-    assert_eq!(
-      TailwindProperty::parse("col-auto"),
-      Some(TailwindProperty::GridColumn(GridLine {
-        start: GridPlacement::auto(),
-        end: GridPlacement::auto(),
-      }))
-    );
-    assert_eq!(
-      TailwindProperty::parse("row-auto"),
-      Some(TailwindProperty::GridRow(GridLine {
-        start: GridPlacement::auto(),
-        end: GridPlacement::auto(),
-      }))
-    );
-  }
-
-  #[test]
-  fn test_shadow_md_is_composite() {
-    let viewport = Viewport::new((100, 100));
-    let values = TailwindValues::from_str("shadow-md").unwrap();
-    let style =
-      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
-    assert_eq!(style.box_shadow.as_ref().map(|s| s.len()), Some(2));
-  }
-
-  #[test]
-  fn test_text_shadow_sm_is_composite() {
-    let viewport = Viewport::new((100, 100));
-    let values = TailwindValues::from_str("text-shadow-sm").unwrap();
-    let style =
-      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
-    assert_eq!(style.text_shadow.as_ref().map(|s| s.len()), Some(3));
-  }
-
-  #[test]
-  fn test_shadow_none_overrides_color_in_either_order() {
-    let viewport = Viewport::new((100, 100));
-    for classes in ["shadow-none shadow-red-500", "shadow-red-500 shadow-none"] {
-      let values = TailwindValues::from_str(classes).unwrap();
-      let style =
-        Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
-      assert_eq!(style.box_shadow, None, "case: {classes}");
-    }
-  }
-
-  #[test]
-  fn test_bg_conic_standalone() {
-    assert_eq!(
-      TailwindProperty::parse("bg-conic"),
-      Some(TailwindProperty::BgConicAngle(Angle::zero()))
-    );
-  }
-
-  #[test]
-  fn test_gradient_stop_position_is_used_in_apply() {
-    let viewport = Viewport::new((100, 100));
-    let values =
-      TailwindValues::from_str("bg-linear-to-r from-red-500 from-10% to-blue-500 to-80%").unwrap();
-    let style =
-      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
-    let images = style.background_image.as_deref().unwrap();
-    let [BackgroundImage::Linear(gradient)] = images else {
-      panic!("expected a single linear gradient");
-    };
-    let positions: Vec<Length> = gradient
-      .stops
-      .iter()
-      .filter_map(|s| match s {
-        GradientStop::ColorHint {
-          hint: Some(StopPosition(pos)),
-          ..
-        } => Some(*pos),
-        _ => None,
-      })
-      .collect();
-    assert_eq!(
-      positions,
-      vec![Length::Percentage(10.0), Length::Percentage(80.0)]
-    );
-  }
-}
+mod tests;

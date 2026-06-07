@@ -1,8 +1,10 @@
+use crate::style::ToCss;
 use crate::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult};
-use crate::style::{ToCss, unexpected_token};
-use cssparser::{Parser, Token};
-use parley::{FontVariation, setting::Tag};
+use cssparser::Parser;
+use parley::FontVariation;
 use std::fmt;
+
+use super::font_feature_settings::parse_opentype_tag;
 
 /// Controls variable font axis values via CSS font-variation-settings property.
 ///
@@ -22,18 +24,7 @@ impl<'i> FromCss<'i> for FontVariationSettings {
     }
 
     let list = input.parse_comma_separated(|input| {
-      let location = input.current_source_location();
-      let tag_name = input.expect_string()?;
-
-      if tag_name.len() != 4 || !tag_name.is_ascii() {
-        return Err(unexpected_token!(
-          location,
-          &Token::QuotedString(tag_name.clone()),
-        ));
-      }
-
-      let tag = Tag::parse(tag_name)
-        .ok_or_else(|| unexpected_token!(location, &Token::QuotedString(tag_name.clone())))?;
+      let tag = parse_opentype_tag::<FontVariationSettings>(input)?;
       let value = input.expect_number()?;
 
       Ok(FontVariation { tag, value })

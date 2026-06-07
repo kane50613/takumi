@@ -5,12 +5,10 @@ use crate::style::{
   tw::TailwindPropertyParser, unexpected_token,
 };
 
-/// Represents a grid placement with serde support
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum GridPlacement {
-  /// Keyword placement
-  Keyword(GridPlacementKeyword),
+  Auto,
   /// Span count
   Span(GridPlacementSpan),
   /// Line index (1-based)
@@ -30,14 +28,20 @@ impl Default for GridPlacement {
 }
 
 impl GridPlacement {
-  /// Auto placement
   pub const fn auto() -> Self {
-    Self::Keyword(GridPlacementKeyword::Auto)
+    Self::Auto
   }
 
   /// Span placement
   pub const fn span(span: u16) -> Self {
     Self::Span(GridPlacementSpan::Span(span))
+  }
+
+  pub(crate) fn try_negative(self) -> Option<GridPlacement> {
+    match self {
+      GridPlacement::Line(n) => Some(GridPlacement::Line(-n)),
+      _ => None,
+    }
   }
 }
 
@@ -45,15 +49,6 @@ impl TailwindPropertyParser for GridPlacement {
   fn parse_tw(token: &str) -> Option<Self> {
     token.parse::<i16>().map(Self::Line).ok()
   }
-}
-
-/// Represents a grid placement keyword
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-#[non_exhaustive]
-pub enum GridPlacementKeyword {
-  /// Auto placement
-  #[default]
-  Auto,
 }
 
 /// Represents a grid placement span
@@ -82,14 +77,12 @@ impl TailwindPropertyParser for GridPlacementSpan {
   }
 }
 
-// Note: GridPlacement has a custom conversion due to its complex nature
 impl From<GridPlacement> for taffy::GridPlacement {
   fn from(placement: GridPlacement) -> Self {
     match placement {
-      GridPlacement::Keyword(GridPlacementKeyword::Auto) => taffy::GridPlacement::Auto,
+      GridPlacement::Auto | GridPlacement::Named(_) => taffy::GridPlacement::Auto,
       GridPlacement::Line(line) => taffy::GridPlacement::Line(line.into()),
       GridPlacement::Span(GridPlacementSpan::Span(span)) => taffy::GridPlacement::Span(span),
-      GridPlacement::Named(_) => taffy::GridPlacement::Auto,
     }
   }
 }
@@ -146,14 +139,6 @@ impl<'i> FromCss<'i> for GridPlacement {
   ];
 }
 
-impl ToCss for GridPlacementKeyword {
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
-    match self {
-      Self::Auto => dest.write_str("auto"),
-    }
-  }
-}
-
 impl ToCss for GridPlacementSpan {
   fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
     match self {
@@ -165,7 +150,7 @@ impl ToCss for GridPlacementSpan {
 impl ToCss for GridPlacement {
   fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
     match self {
-      Self::Keyword(kw) => kw.to_css(dest),
+      Self::Auto => dest.write_str("auto"),
       Self::Span(span) => {
         dest.write_str("span ")?;
         span.to_css(dest)

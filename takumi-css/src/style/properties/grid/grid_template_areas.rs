@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use cssparser::{Parser, Token};
 
+use super::write_space_separated;
 use crate::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss};
 
 /// Represents `grid-template-areas` value
@@ -101,14 +102,7 @@ impl ToCss for GridTemplateAreas {
         }
         first = false;
         dest.write_str("\"")?;
-        let mut first_col = true;
-        for col in row {
-          if !first_col {
-            dest.write_str(" ")?;
-          }
-          first_col = false;
-          dest.write_str(col)?;
-        }
+        write_space_separated(dest, row)?;
         dest.write_str("\"")?;
       }
       Ok(())

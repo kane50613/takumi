@@ -9,7 +9,8 @@ use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
   GradientOverlayTile, adaptive_lut_size, adaptive_lut_size_with_visible_samples,
-  build_color_lut_with_interpolation, resolve_stops_along_axis,
+  build_color_lut_with_interpolation, compute_repeat_setup, gradient_tile_accessors,
+  parse_gradient_stops, resolve_stops_along_axis, write_gradient_css,
 };
 use crate::style::{
   Animatable, Color, ColorInterpolationMethod, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
@@ -208,27 +209,8 @@ impl LinearGradientTile {
       current_color,
     );
 
-    let (repeating, repeat_start, repeat_period, lut_axis_length, lut_resolved_stops) = if gradient
-      .repeating
-      && let (Some(first), Some(last)) = (resolved_stops.first(), resolved_stops.last())
-    {
-      let repeat_start = first.position;
-      let repeat_period = (last.position - first.position).max(0.0);
-      if repeat_period > 1e-6 {
-        let shifted = resolved_stops
-          .iter()
-          .map(|stop| ResolvedGradientStop {
-            color: stop.color,
-            position: stop.position - repeat_start,
-          })
-          .collect();
-        (true, repeat_start, repeat_period, repeat_period, shifted)
-      } else {
-        (false, 0.0, 0.0, axis_length, resolved_stops)
-      }
-    } else {
-      (false, 0.0, 0.0, axis_length, resolved_stops)
-    };
+    let (repeating, repeat_start, repeat_period, lut_axis_length, lut_resolved_stops) =
+      compute_repeat_setup(gradient.repeating, resolved_stops, axis_length);
 
     let visible_lut_samples = match axis_aligned_kind {
       Some(LinearGradientFastPathKind::Horizontal) => width as usize + 1,
@@ -293,25 +275,7 @@ impl LinearGradientTile {
 impl GradientOverlayTile for LinearGradientTile {
   type RowState = LinearGradientRowState;
 
-  #[inline(always)]
-  fn width(&self) -> u32 {
-    self.width
-  }
-
-  #[inline(always)]
-  fn height(&self) -> u32 {
-    self.height
-  }
-
-  #[inline(always)]
-  fn lut_len(&self) -> usize {
-    self.color_lut.len()
-  }
-
-  #[inline(always)]
-  fn sample_at(&self, lut_idx: usize) -> PremultipliedColorU8 {
-    self.color_lut[lut_idx]
-  }
+  gradient_tile_accessors!();
 
   #[inline(always)]
   fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {
@@ -357,11 +321,6 @@ impl GradientOverlayTile for LinearGradientTile {
     row_state.projection += row_state.projection_step;
     lut_idx
   }
-
-  #[inline(always)]
-  fn fully_opaque(&self) -> bool {
-    self.fully_opaque
-  }
 }
 
 /// Represents a gradient stop position.
@@ -406,45 +365,7 @@ impl<'i> FromCss<'i> for GradientStops {
   const VALID_TOKENS: &'static [CssToken] = GradientStop::VALID_TOKENS;
 
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut stops = Vec::new();
-    loop {
-      if let Ok(hint) = input.try_parse(StopPosition::from_css) {
-        stops.push(GradientStop::Hint(hint));
-      } else {
-        let color = ColorInput::from_css(input)?;
-        let first_position = input.try_parse(StopPosition::from_css).ok();
-        let second_position = if first_position.is_some() {
-          input.try_parse(StopPosition::from_css).ok()
-        } else {
-          None
-        };
-
-        match (first_position, second_position) {
-          (Some(first_position), Some(second_position)) => {
-            stops.push(GradientStop::ColorHint {
-              color,
-              hint: Some(first_position),
-            });
-            stops.push(GradientStop::ColorHint {
-              color,
-              hint: Some(second_position),
-            });
-          }
-          (first_position, None) | (first_position, Some(_)) => {
-            stops.push(GradientStop::ColorHint {
-              color,
-              hint: first_position,
-            });
-          }
-        }
-      }
-
-      if input.try_parse(Parser::expect_comma).is_err() {
-        break;
-      }
-    }
-
-    Ok(stops)
+    parse_gradient_stops(input, StopPosition::from_css)
   }
 }
 
@@ -875,36 +796,14 @@ impl ToCss for LinearGradient {
     } else {
       "linear-gradient"
     };
-    dest.write_str(name)?;
-    dest.write_char('(')?;
-    let mut first = true;
 
     let mut dir_buf = String::new();
     self.direction.to_css(&mut dir_buf)?;
-    if dir_buf != "180deg" && dir_buf != "to bottom" {
-      dest.write_str(&dir_buf)?;
-      first = false;
+    if dir_buf == "180deg" || dir_buf == "to bottom" {
+      dir_buf.clear();
     }
 
-    let mut interp_buf = String::new();
-    self.interpolation.to_css(&mut interp_buf)?;
-    if !interp_buf.is_empty() {
-      if !first {
-        dest.write_str(", ")?;
-      }
-      dest.write_str(&interp_buf)?;
-      first = false;
-    }
-
-    for stop in self.stops.iter() {
-      if !first {
-        dest.write_str(", ")?;
-      }
-      stop.to_css(dest)?;
-      first = false;
-    }
-
-    dest.write_char(')')
+    write_gradient_css(dest, name, &dir_buf, &self.interpolation, &self.stops)
   }
 }
 
@@ -915,6 +814,7 @@ mod tests {
   use taffy::Size;
   use tiny_skia::ColorU8;
 
+  use crate::style::properties::gradient_utils::red_blue_stops;
   use crate::{Viewport, style::CalcArena};
 
   use super::*;
@@ -941,136 +841,93 @@ mod tests {
           vertical: Some(VerticalKeyword::Top),
         }),
         interpolation: ColorInterpolationMethod::default(),
-        stops: [
-          GradientStop::ColorHint {
-            color: ColorInput::Value(Color([255, 0, 0, 255])),
-            hint: None,
-          },
-          GradientStop::ColorHint {
-            color: ColorInput::Value(Color([0, 0, 255, 255])),
-            hint: None,
-          },
-        ]
-        .into(),
+        stops: red_blue_stops(None, None).into(),
       })
     )
   }
 
   #[test]
   fn test_parse_angle() {
-    assert_eq!(Angle::from_str("45deg"), Ok(Angle::new(45.0)));
+    for (input, expected) in [
+      ("45deg", Angle::new(45.0)),
+      ("200grad", Angle::new(180.0)),
+      ("0.5turn", Angle::new(180.0)),
+      ("90", Angle::new(90.0)),
+    ] {
+      assert_eq!(Angle::from_str(input), Ok(expected), "input: {input}");
+    }
+    // rad requires approximate comparison
+    assert!(Angle::from_str("3.14159rad").is_ok_and(|a| (a.0 - 180.0).abs() < 0.001));
   }
 
   #[test]
-  fn test_parse_angle_grad() {
-    // 200 grad = 200 * (π/200) = π radians = 180 degrees
-    assert_eq!(Angle::from_str("200grad"), Ok(Angle::new(180.0)));
-  }
-
-  #[test]
-  fn test_parse_angle_turn() {
-    // 0.5 turn = 0.5 * 2π = π radians = 180 degrees
-    assert_eq!(Angle::from_str("0.5turn"), Ok(Angle::new(180.0)));
-  }
-
-  #[test]
-  fn test_parse_angle_rad() {
-    // π radians = 180 degrees
-    // Use approximate equality due to floating point precision
-    assert!(Angle::from_str("3.14159rad").is_ok_and(|angle| (angle.0 - 180.0).abs() < 0.001));
-  }
-
-  #[test]
-  fn test_parse_angle_number() {
-    assert_eq!(Angle::from_str("90"), Ok(Angle::new(90.0)));
-  }
-
-  #[test]
-  fn test_parse_direction_keywords_top() {
-    assert_eq!(
-      GradientKeywordDirection::from_str("to top"),
-      Ok(GradientKeywordDirection {
-        horizontal: None,
-        vertical: Some(VerticalKeyword::Top),
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_direction_keywords_right() {
-    assert_eq!(
-      GradientKeywordDirection::from_str("to right"),
-      Ok(GradientKeywordDirection {
-        horizontal: Some(HorizontalKeyword::Right),
-        vertical: None,
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_direction_keywords_bottom() {
-    assert_eq!(
-      GradientKeywordDirection::from_str("to bottom"),
-      Ok(GradientKeywordDirection {
-        horizontal: None,
-        vertical: Some(VerticalKeyword::Bottom),
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_direction_keywords_left() {
-    assert_eq!(
-      GradientKeywordDirection::from_str("to left"),
-      Ok(GradientKeywordDirection {
-        horizontal: Some(HorizontalKeyword::Left),
-        vertical: None,
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_direction_keywords_top_right() {
-    assert_eq!(
-      GradientKeywordDirection::from_str("to top right"),
-      Ok(GradientKeywordDirection {
-        horizontal: Some(HorizontalKeyword::Right),
-        vertical: Some(VerticalKeyword::Top),
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_direction_keywords_bottom_left() {
-    assert_eq!(
-      GradientKeywordDirection::from_str("to bottom left"),
-      Ok(GradientKeywordDirection {
-        horizontal: Some(HorizontalKeyword::Left),
-        vertical: Some(VerticalKeyword::Bottom),
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_direction_keywords_top_left() {
-    assert_eq!(
-      GradientKeywordDirection::from_str("to top left"),
-      Ok(GradientKeywordDirection {
-        horizontal: Some(HorizontalKeyword::Left),
-        vertical: Some(VerticalKeyword::Top),
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_direction_keywords_bottom_right() {
-    assert_eq!(
-      GradientKeywordDirection::from_str("to bottom right"),
-      Ok(GradientKeywordDirection {
-        horizontal: Some(HorizontalKeyword::Right),
-        vertical: Some(VerticalKeyword::Bottom),
-      })
-    );
+  fn test_parse_direction_keywords() {
+    use HorizontalKeyword::{Left, Right};
+    use VerticalKeyword::{Bottom, Top};
+    for (input, expected) in [
+      (
+        "to top",
+        GradientKeywordDirection {
+          horizontal: None,
+          vertical: Some(Top),
+        },
+      ),
+      (
+        "to right",
+        GradientKeywordDirection {
+          horizontal: Some(Right),
+          vertical: None,
+        },
+      ),
+      (
+        "to bottom",
+        GradientKeywordDirection {
+          horizontal: None,
+          vertical: Some(Bottom),
+        },
+      ),
+      (
+        "to left",
+        GradientKeywordDirection {
+          horizontal: Some(Left),
+          vertical: None,
+        },
+      ),
+      (
+        "to top right",
+        GradientKeywordDirection {
+          horizontal: Some(Right),
+          vertical: Some(Top),
+        },
+      ),
+      (
+        "to bottom left",
+        GradientKeywordDirection {
+          horizontal: Some(Left),
+          vertical: Some(Bottom),
+        },
+      ),
+      (
+        "to top left",
+        GradientKeywordDirection {
+          horizontal: Some(Left),
+          vertical: Some(Top),
+        },
+      ),
+      (
+        "to bottom right",
+        GradientKeywordDirection {
+          horizontal: Some(Right),
+          vertical: Some(Bottom),
+        },
+      ),
+    ] {
+      assert_eq!(
+        GradientKeywordDirection::from_str(input),
+        Ok(expected),
+        "input: {input}"
+      );
+    }
   }
 
   #[test]
@@ -1103,17 +960,7 @@ mod tests {
         repeating: false,
         direction: LinearGradientDirection::Angle(Angle::new(45.0)),
         interpolation: ColorInterpolationMethod::default(),
-        stops: [
-          GradientStop::ColorHint {
-            color: ColorInput::Value(Color([255, 0, 0, 255])),
-            hint: None,
-          },
-          GradientStop::ColorHint {
-            color: ColorInput::Value(Color([0, 0, 255, 255])),
-            hint: None,
-          },
-        ]
-        .into(),
+        stops: red_blue_stops(None, None).into(),
       })
     )
   }
@@ -1129,17 +976,7 @@ mod tests {
           color_space: ColorSpaceTag::Oklab,
           hue_direction: HueDirection::Shorter,
         },
-        stops: [
-          GradientStop::ColorHint {
-            color: ColorInput::Value(Color([255, 0, 0, 255])),
-            hint: None,
-          },
-          GradientStop::ColorHint {
-            color: ColorInput::Value(Color([0, 0, 255, 255])),
-            hint: None,
-          },
-        ]
-        .into(),
+        stops: red_blue_stops(None, None).into(),
       })
     );
   }
@@ -1190,16 +1027,10 @@ mod tests {
           vertical: None,
         }),
         interpolation: ColorInterpolationMethod::default(),
-        stops: [
-          GradientStop::ColorHint {
-            color: ColorInput::Value(Color([255, 0, 0, 255])),
-            hint: Some(StopPosition(Length::Percentage(0.0))),
-          },
-          GradientStop::ColorHint {
-            color: ColorInput::Value(Color([0, 0, 255, 255])),
-            hint: Some(StopPosition(Length::Percentage(100.0))),
-          },
-        ]
+        stops: red_blue_stops(
+          Some(StopPosition(Length::Percentage(0.0))),
+          Some(StopPosition(Length::Percentage(100.0))),
+        )
         .into(),
       })
     );
@@ -1407,16 +1238,10 @@ mod tests {
       repeating: false,
       direction: LinearGradientDirection::default(),
       interpolation: ColorInterpolationMethod::default(),
-      stops: [
-        GradientStop::ColorHint {
-          color: Color([255, 0, 0, 255]).into(), // Red
-          hint: Some(StopPosition(Length::Percentage(0.0))),
-        },
-        GradientStop::ColorHint {
-          color: Color([0, 0, 255, 255]).into(), // Blue
-          hint: Some(StopPosition(Length::Percentage(100.0))),
-        },
-      ]
+      stops: red_blue_stops(
+        Some(StopPosition(Length::Percentage(0.0))),
+        Some(StopPosition(Length::Percentage(100.0))),
+      )
       .into(),
     };
 
@@ -1442,16 +1267,10 @@ mod tests {
       repeating: false,
       direction: LinearGradientDirection::Angle(Angle::new(90.0)),
       interpolation: ColorInterpolationMethod::default(),
-      stops: [
-        GradientStop::ColorHint {
-          color: Color([255, 0, 0, 255]).into(), // Red
-          hint: Some(StopPosition(Length::Percentage(0.0))),
-        },
-        GradientStop::ColorHint {
-          color: Color([0, 0, 255, 255]).into(), // Blue
-          hint: Some(StopPosition(Length::Percentage(100.0))),
-        },
-      ]
+      stops: red_blue_stops(
+        Some(StopPosition(Length::Percentage(0.0))),
+        Some(StopPosition(Length::Percentage(100.0))),
+      )
       .into(),
     };
 
@@ -1476,16 +1295,10 @@ mod tests {
         vertical: Some(VerticalKeyword::Bottom),
       }),
       interpolation: ColorInterpolationMethod::default(),
-      stops: [
-        GradientStop::ColorHint {
-          color: Color([255, 0, 0, 255]).into(),
-          hint: Some(StopPosition(Length::Percentage(0.0))),
-        },
-        GradientStop::ColorHint {
-          color: Color([0, 0, 255, 255]).into(),
-          hint: Some(StopPosition(Length::Percentage(100.0))),
-        },
-      ]
+      stops: red_blue_stops(
+        Some(StopPosition(Length::Percentage(0.0))),
+        Some(StopPosition(Length::Percentage(100.0))),
+      )
       .into(),
     };
 
@@ -1617,40 +1430,20 @@ mod tests {
   }
 
   #[test]
-  fn test_stop_position_parsing_fraction_number() {
-    assert_eq!(
-      StopPosition::from_str("0.25"),
-      Ok(StopPosition(Length::Percentage(25.0)))
-    );
-  }
-
-  #[test]
-  fn test_stop_position_parsing_percentage() {
-    assert_eq!(
-      StopPosition::from_str("75%"),
-      Ok(StopPosition(Length::Percentage(75.0)))
-    );
-  }
-
-  #[test]
-  fn test_stop_position_parsing_length_px() {
-    assert_eq!(
-      StopPosition::from_str("12px"),
-      Ok(StopPosition(Length::Px(12.0)))
-    );
-  }
-
-  #[test]
-  fn test_stop_position_value_css_roundtrip() {
-    assert_eq!(
-      StopPosition::from_str("50%"),
-      Ok(StopPosition(Length::Percentage(50.0)))
-    );
-
-    assert_eq!(
-      StopPosition::from_str("8px"),
-      Ok(StopPosition(Length::Px(8.0)))
-    );
+  fn test_stop_position_parsing() {
+    for (input, expected) in [
+      ("0.25", StopPosition(Length::Percentage(25.0))),
+      ("75%", StopPosition(Length::Percentage(75.0))),
+      ("50%", StopPosition(Length::Percentage(50.0))),
+      ("12px", StopPosition(Length::Px(12.0))),
+      ("8px", StopPosition(Length::Px(8.0))),
+    ] {
+      assert_eq!(
+        StopPosition::from_str(input),
+        Ok(expected),
+        "input: {input}"
+      );
+    }
   }
 
   #[test]

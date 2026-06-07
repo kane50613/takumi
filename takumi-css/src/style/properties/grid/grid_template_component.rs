@@ -2,22 +2,23 @@ use std::mem::take;
 
 use cssparser::Parser;
 
+use super::write_space_separated;
 use crate::style::{
   CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, GridRepeatTrack, GridRepetitionCount,
   GridTrackSize, MakeComputed, ParseResult, SizingContext, ToCss,
 };
 
-/// A transparent wrapper around a list of `GridTemplateComponent`.
-///
-/// This exists to provide a distinct type for template component lists while
-/// preserving JSON compatibility (serialized as a plain array) and clean TS types.
 pub type GridTemplateComponents = Vec<GridTemplateComponent>;
 
-pub trait GridTemplateComponentsExt {
-  fn collect_components_and_names(
-    &self,
-    sizing: &SizingContext,
-  ) -> (Vec<taffy::GridTemplateComponent<String>>, Vec<Vec<String>>);
+/// Parses a `[name1 name2 ...]` line-name block's body; caller consumes the opening bracket.
+pub(crate) fn parse_line_names<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Vec<String>> {
+  input.parse_nested_block(|i| {
+    let mut names = Vec::new();
+    while let Ok(name) = i.try_parse(Parser::expect_ident_cloned) {
+      names.push(name.as_ref().to_owned());
+    }
+    Ok(names)
+  })
 }
 
 /// Represents a track sizing function or a list of line names between tracks
@@ -51,14 +52,7 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     // Line name block: [name1 name2 ...]
     if input.try_parse(Parser::expect_square_bracket_block).is_ok() {
-      let mut names: Vec<String> = Vec::new();
-      input.parse_nested_block(|i| {
-        while let Ok(name) = i.try_parse(Parser::expect_ident_cloned) {
-          names.push(name.as_ref().to_owned());
-        }
-        Ok(())
-      })?;
-      return Ok(GridTemplateComponent::LineNames(names));
+      return Ok(GridTemplateComponent::LineNames(parse_line_names(input)?));
     }
 
     if input
@@ -78,12 +72,7 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
 
           // Capture any additional leading square-bracketed names before the size
           while input.try_parse(Parser::expect_square_bracket_block).is_ok() {
-            input.parse_nested_block(|i| {
-              while let Ok(name) = i.try_parse(Parser::expect_ident_cloned) {
-                names.push(name.as_ref().to_owned());
-              }
-              Ok(())
-            })?;
+            names.extend(parse_line_names(input)?);
           }
 
           // If we cannot parse a size, stop the loop
@@ -95,12 +84,7 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
 
           // Collect trailing names, but assign them to the next track
           while input.try_parse(Parser::expect_square_bracket_block).is_ok() {
-            input.parse_nested_block(|i| {
-              while let Ok(name) = i.try_parse(Parser::expect_ident_cloned) {
-                pending_leading_names.push(name.as_ref().to_owned());
-              }
-              Ok(())
-            })?;
+            pending_leading_names.extend(parse_line_names(input)?);
           }
 
           tracks.push(GridRepeatTrack {
@@ -146,61 +130,59 @@ impl<'i> FromCss<'i> for GridTemplateComponents {
   const VALID_TOKENS: &'static [CssToken] = GridTemplateComponent::VALID_TOKENS;
 }
 
-impl GridTemplateComponentsExt for [GridTemplateComponent] {
-  fn collect_components_and_names(
-    &self,
-    sizing: &SizingContext,
-  ) -> (Vec<taffy::GridTemplateComponent<String>>, Vec<Vec<String>>) {
-    let mut track_components = Vec::new();
-    let mut line_name_sets = Vec::new();
-    let mut pending_line_names = Vec::new();
+pub(crate) fn collect_components_and_names(
+  components: &[GridTemplateComponent],
+  sizing: &SizingContext,
+) -> (Vec<taffy::GridTemplateComponent<String>>, Vec<Vec<String>>) {
+  let mut track_components = Vec::new();
+  let mut line_name_sets = Vec::new();
+  let mut pending_line_names = Vec::new();
 
-    for component in self {
-      match component {
-        GridTemplateComponent::LineNames(names) => {
-          if !names.is_empty() {
-            pending_line_names.extend_from_slice(names);
-          }
-        }
-        GridTemplateComponent::Single(track_size) => {
-          line_name_sets.push(take(&mut pending_line_names));
-          track_components.push(taffy::GridTemplateComponent::Single(
-            track_size.to_min_max(sizing),
-          ));
-        }
-        GridTemplateComponent::Repeat(repetition, tracks) => {
-          line_name_sets.push(take(&mut pending_line_names));
-
-          let track_sizes = tracks
-            .iter()
-            .map(|track| track.size.to_min_max(sizing))
-            .collect();
-          let mut inner_line_names = tracks
-            .iter()
-            .map(|track| track.names.to_owned())
-            .collect::<Vec<_>>();
-          inner_line_names.push(
-            tracks
-              .last()
-              .and_then(|track| track.end_names.clone())
-              .unwrap_or_default(),
-          );
-
-          track_components.push(taffy::GridTemplateComponent::Repeat(
-            taffy::GridTemplateRepetition {
-              count: (*repetition).into(),
-              tracks: track_sizes,
-              line_names: inner_line_names,
-            },
-          ));
+  for component in components {
+    match component {
+      GridTemplateComponent::LineNames(names) => {
+        if !names.is_empty() {
+          pending_line_names.extend_from_slice(names);
         }
       }
+      GridTemplateComponent::Single(track_size) => {
+        line_name_sets.push(take(&mut pending_line_names));
+        track_components.push(taffy::GridTemplateComponent::Single(
+          track_size.to_min_max(sizing),
+        ));
+      }
+      GridTemplateComponent::Repeat(repetition, tracks) => {
+        line_name_sets.push(take(&mut pending_line_names));
+
+        let track_sizes = tracks
+          .iter()
+          .map(|track| track.size.to_min_max(sizing))
+          .collect();
+        let mut inner_line_names = tracks
+          .iter()
+          .map(|track| track.names.to_owned())
+          .collect::<Vec<_>>();
+        inner_line_names.push(
+          tracks
+            .last()
+            .and_then(|track| track.end_names.clone())
+            .unwrap_or_default(),
+        );
+
+        track_components.push(taffy::GridTemplateComponent::Repeat(
+          taffy::GridTemplateRepetition {
+            count: (*repetition).into(),
+            tracks: track_sizes,
+            line_names: inner_line_names,
+          },
+        ));
+      }
     }
-
-    line_name_sets.push(pending_line_names);
-
-    (track_components, line_name_sets)
   }
+
+  line_name_sets.push(pending_line_names);
+
+  (track_components, line_name_sets)
 }
 
 impl ToCss for GridTemplateComponent {
@@ -208,14 +190,7 @@ impl ToCss for GridTemplateComponent {
     match self {
       Self::LineNames(names) => {
         dest.write_str("[")?;
-        let mut first = true;
-        for name in names {
-          if !first {
-            dest.write_str(" ")?;
-          }
-          first = false;
-          dest.write_str(name)?;
-        }
+        write_space_separated(dest, names)?;
         dest.write_str("]")
       }
       Self::Single(size) => size.to_css(dest),

@@ -23,8 +23,6 @@ pub enum StyleDeclarationBlockParseError {
 /// Errors raised while parsing a CSS stylesheet string.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StyleSheetParseError {
-  /// The original stylesheet input.
-  pub input: Option<String>,
   /// The stylesheet slice being parsed when the error was raised.
   pub context: Option<String>,
   /// The specific stylesheet parse failure.
@@ -144,29 +142,23 @@ impl StyleSheetParseError {
 
   fn new(kind: StyleSheetParseErrorKind) -> Self {
     Self {
-      input: None,
       context: None,
       kind,
     }
   }
 
-  fn with_context(self, input: &str, context: &str) -> Self {
+  fn with_context(self, context: &str) -> Self {
     Self {
-      input: Some(input.to_owned()),
       context: Some(context.to_owned()),
       kind: self.kind,
     }
   }
 
-  pub fn from_parse_error(
-    input: &str,
-    context: &str,
-    error: ParseError<'_, StyleSheetParseError>,
-  ) -> Self {
+  pub fn from_parse_error(context: &str, error: ParseError<'_, StyleSheetParseError>) -> Self {
     match error.kind {
       ParseErrorKind::Basic(error) => Self::invalid_reason(format!("{error:?}")),
       ParseErrorKind::Custom(error) => error,
     }
-    .with_context(input, context)
+    .with_context(context)
   }
 }

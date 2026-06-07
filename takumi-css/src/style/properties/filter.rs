@@ -9,42 +9,29 @@ use crate::style::{
   TextShadow, tw::TailwindPropertyParser,
 };
 
+macro_rules! interpolate_field {
+  ($variant:path, $from:ident, $to:ident, $progress:expr, $sizing:expr, $cc:expr) => {{
+    let mut value = $from;
+    value.interpolate(&$from, &$to, $progress, $sizing, $cc);
+    $variant(value)
+  }};
+  ($variant:path, $from_a:ident, $to_a:ident, $from_b:ident, $to_b:ident, $progress:expr, $sizing:expr, $cc:expr) => {{
+    let mut a = $from_a;
+    a.interpolate(&$from_a, &$to_a, $progress, $sizing, $cc);
+    let mut b = $from_b;
+    b.interpolate(&$from_b, &$to_b, $progress, $sizing, $cc);
+    $variant(a, b)
+  }};
+}
+pub(crate) use interpolate_field;
+
 /// Lookup table for a single 8-bit channel transition.
 pub type TransferTable = [u8; 256];
 
-/// Builds a LUT for the Brightness filter.
-pub fn build_brightness_table(value: f32) -> TransferTable {
+pub(crate) fn build_transfer_table<F: Fn(usize) -> f32>(f: F) -> TransferTable {
   let mut table = [0u8; 256];
   for (i, entry) in table.iter_mut().enumerate() {
-    *entry = (i as f32 * value).clamp(0.0, 255.0) as u8;
-  }
-  table
-}
-
-/// Builds a LUT for the Contrast filter.
-pub fn build_contrast_table(value: f32) -> TransferTable {
-  let mut table = [0u8; 256];
-  for (i, entry) in table.iter_mut().enumerate() {
-    *entry = ((i as f32 - 128.0) * value + 128.0).clamp(0.0, 255.0) as u8;
-  }
-  table
-}
-
-/// Builds a LUT for the Invert filter.
-pub fn build_invert_table(amount: f32) -> TransferTable {
-  let mut table = [0u8; 256];
-  for (i, entry) in table.iter_mut().enumerate() {
-    let inverted = 255 - i as u8;
-    *entry = ((i as f32 * (1.0 - amount)) + (inverted as f32 * amount)).clamp(0.0, 255.0) as u8;
-  }
-  table
-}
-
-/// Builds a LUT for the Opacity filter (applied to alpha channel).
-pub fn build_opacity_table(value: f32) -> TransferTable {
-  let mut table = [0u8; 256];
-  for (i, entry) in table.iter_mut().enumerate() {
-    *entry = (i as f32 * value).clamp(0.0, 255.0) as u8;
+    *entry = f(i).clamp(0.0, 255.0) as u8;
   }
   table
 }
@@ -121,56 +108,46 @@ impl Animatable for Filter {
     current_color: Color,
   ) {
     *self = match (*from, *to) {
-      (Filter::Brightness(from), Filter::Brightness(to)) => {
-        let mut value = from;
-        value.interpolate(&from, &to, progress, sizing, current_color);
-        Filter::Brightness(value)
-      }
+      (Filter::Brightness(from), Filter::Brightness(to)) => interpolate_field!(
+        Filter::Brightness,
+        from,
+        to,
+        progress,
+        sizing,
+        current_color
+      ),
       (Filter::Contrast(from), Filter::Contrast(to)) => {
-        let mut value = from;
-        value.interpolate(&from, &to, progress, sizing, current_color);
-        Filter::Contrast(value)
+        interpolate_field!(Filter::Contrast, from, to, progress, sizing, current_color)
       }
       (Filter::Grayscale(from), Filter::Grayscale(to)) => {
-        let mut value = from;
-        value.interpolate(&from, &to, progress, sizing, current_color);
-        Filter::Grayscale(value)
+        interpolate_field!(Filter::Grayscale, from, to, progress, sizing, current_color)
       }
       (Filter::Saturate(from), Filter::Saturate(to)) => {
-        let mut value = from;
-        value.interpolate(&from, &to, progress, sizing, current_color);
-        Filter::Saturate(value)
+        interpolate_field!(Filter::Saturate, from, to, progress, sizing, current_color)
       }
       (Filter::HueRotate(from), Filter::HueRotate(to)) => {
-        let mut value = from;
-        value.interpolate(&from, &to, progress, sizing, current_color);
-        Filter::HueRotate(value)
+        interpolate_field!(Filter::HueRotate, from, to, progress, sizing, current_color)
       }
       (Filter::Invert(from), Filter::Invert(to)) => {
-        let mut value = from;
-        value.interpolate(&from, &to, progress, sizing, current_color);
-        Filter::Invert(value)
+        interpolate_field!(Filter::Invert, from, to, progress, sizing, current_color)
       }
       (Filter::Sepia(from), Filter::Sepia(to)) => {
-        let mut value = from;
-        value.interpolate(&from, &to, progress, sizing, current_color);
-        Filter::Sepia(value)
+        interpolate_field!(Filter::Sepia, from, to, progress, sizing, current_color)
       }
       (Filter::Opacity(from), Filter::Opacity(to)) => {
-        let mut value = from;
-        value.interpolate(&from, &to, progress, sizing, current_color);
-        Filter::Opacity(value)
+        interpolate_field!(Filter::Opacity, from, to, progress, sizing, current_color)
       }
       (Filter::Blur(from), Filter::Blur(to)) => {
-        let mut value = from;
-        value.interpolate(&from, &to, progress, sizing, current_color);
-        Filter::Blur(value)
+        interpolate_field!(Filter::Blur, from, to, progress, sizing, current_color)
       }
-      (Filter::DropShadow(from), Filter::DropShadow(to)) => {
-        let mut value = from;
-        value.interpolate(&from, &to, progress, sizing, current_color);
-        Filter::DropShadow(value)
-      }
+      (Filter::DropShadow(from), Filter::DropShadow(to)) => interpolate_field!(
+        Filter::DropShadow,
+        from,
+        to,
+        progress,
+        sizing,
+        current_color
+      ),
       _ => {
         if progress >= 0.5 {
           *to
@@ -205,11 +182,24 @@ impl Filter {
   pub fn transfer_table(&self) -> Option<TransferChannel> {
     match *self {
       Filter::Brightness(PercentageNumber(v)) => {
-        Some(TransferChannel::Rgb(build_brightness_table(v)))
+        Some(TransferChannel::Rgb(build_transfer_table(|i| i as f32 * v)))
       }
-      Filter::Contrast(PercentageNumber(v)) => Some(TransferChannel::Rgb(build_contrast_table(v))),
-      Filter::Invert(PercentageNumber(v)) => Some(TransferChannel::Rgb(build_invert_table(v))),
-      Filter::Opacity(PercentageNumber(v)) => Some(TransferChannel::Alpha(build_opacity_table(v))),
+      Filter::Contrast(PercentageNumber(v)) => {
+        Some(TransferChannel::Rgb(build_transfer_table(|i| {
+          (i as f32 - 128.0) * v + 128.0
+        })))
+      }
+      Filter::Invert(PercentageNumber(v)) => {
+        Some(TransferChannel::Rgb(build_transfer_table(|i| {
+          let inverted = 255 - i as u8;
+          (i as f32 * (1.0 - v)) + (inverted as f32 * v)
+        })))
+      }
+      Filter::Opacity(PercentageNumber(v)) => {
+        Some(TransferChannel::Alpha(build_transfer_table(|i| {
+          i as f32 * v
+        })))
+      }
       _ => None,
     }
   }

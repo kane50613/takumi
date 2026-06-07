@@ -34,12 +34,6 @@ pub enum GridTrackSize {
   Fixed(GridLength),
 }
 
-impl From<GridLength> for GridTrackSize {
-  fn from(length: GridLength) -> Self {
-    Self::Fixed(length)
-  }
-}
-
 impl GridTrackSize {
   /// Converts the grid track size to a non-repeated track sizing function.
   pub fn to_min_max(self, sizing: &SizingContext) -> TrackSizingFunction {

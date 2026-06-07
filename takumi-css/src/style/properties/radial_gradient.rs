@@ -5,12 +5,12 @@ use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
   GradientOverlayTile, adaptive_lut_size_with_visible_samples, build_color_lut_with_interpolation,
-  resolve_stops_along_axis,
+  compute_repeat_setup, gradient_tile_accessors, resolve_stops_along_axis, write_gradient_css,
 };
 use crate::style::{
   Color, ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop,
   GradientStops, Length, LengthDefaultsToZero, MakeComputed, ObjectPosition, ParseResult,
-  ResolvedGradientStop, SizingContext, ToCss, declare_enum_from_css_impl, unexpected_token,
+  SizingContext, ToCss, declare_enum_from_css_impl, unexpected_token,
 };
 
 /// Represents a radial gradient.
@@ -295,27 +295,8 @@ impl RadialGradientTile {
       current_color,
     );
 
-    let (repeating, repeat_start, repeat_period, lut_axis_length, lut_resolved_stops) = if gradient
-      .repeating
-      && let (Some(first), Some(last)) = (resolved_stops.first(), resolved_stops.last())
-    {
-      let repeat_start = first.position;
-      let repeat_period = (last.position - first.position).max(0.0);
-      if repeat_period > 1e-6 {
-        let shifted = resolved_stops
-          .iter()
-          .map(|stop| ResolvedGradientStop {
-            color: stop.color,
-            position: stop.position - repeat_start,
-          })
-          .collect();
-        (true, repeat_start, repeat_period, repeat_period, shifted)
-      } else {
-        (false, 0.0, 0.0, radius_scale, resolved_stops)
-      }
-    } else {
-      (false, 0.0, 0.0, radius_scale, resolved_stops)
-    };
+    let (repeating, repeat_start, repeat_period, lut_axis_length, lut_resolved_stops) =
+      compute_repeat_setup(gradient.repeating, resolved_stops, radius_scale);
 
     // Pre-compute color lookup table with adaptive size.
     let lut_size = adaptive_lut_size_with_visible_samples(
@@ -361,25 +342,7 @@ impl RadialGradientTile {
 impl GradientOverlayTile for RadialGradientTile {
   type RowState = RadialGradientRowState;
 
-  #[inline(always)]
-  fn width(&self) -> u32 {
-    self.width
-  }
-
-  #[inline(always)]
-  fn height(&self) -> u32 {
-    self.height
-  }
-
-  #[inline(always)]
-  fn lut_len(&self) -> usize {
-    self.color_lut.len()
-  }
-
-  #[inline(always)]
-  fn sample_at(&self, lut_idx: usize) -> PremultipliedColorU8 {
-    self.color_lut[lut_idx]
-  }
+  gradient_tile_accessors!();
 
   #[inline(always)]
   fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {
@@ -426,11 +389,6 @@ impl GradientOverlayTile for RadialGradientTile {
     row_state.dx2 += row_state.dx2_step;
     row_state.dx2_step += row_state.dx2_step_delta;
     lut_idx
-  }
-
-  #[inline(always)]
-  fn fully_opaque(&self) -> bool {
-    self.fully_opaque
   }
 }
 
@@ -527,9 +485,6 @@ impl ToCss for RadialGradient {
     } else {
       "radial-gradient"
     };
-    dest.write_str(name)?;
-    dest.write_char('(')?;
-    let mut first = true;
 
     // Build shape/size/center as a temp buffer to check if anything is non-default
     let mut shape_size_buf = String::new();
@@ -547,37 +502,19 @@ impl ToCss for RadialGradient {
     self.center.to_css(&mut center_buf)?;
     let is_center_default = center_buf == "center center" || center_buf == "50% 50%";
 
+    let mut params = String::new();
     if !shape_size_buf.is_empty() || !is_center_default {
-      dest.write_str(&shape_size_buf)?;
+      params.push_str(&shape_size_buf);
       if !is_center_default {
         if !shape_size_buf.is_empty() {
-          dest.write_char(' ')?;
+          params.push(' ');
         }
-        dest.write_str("at ")?;
-        dest.write_str(&center_buf)?;
+        params.push_str("at ");
+        params.push_str(&center_buf);
       }
-      first = false;
     }
 
-    let mut interp_buf = String::new();
-    self.interpolation.to_css(&mut interp_buf)?;
-    if !interp_buf.is_empty() {
-      if !first {
-        dest.write_str(", ")?;
-      }
-      dest.write_str(&interp_buf)?;
-      first = false;
-    }
-
-    for stop in self.stops.iter() {
-      if !first {
-        dest.write_str(", ")?;
-      }
-      stop.to_css(dest)?;
-      first = false;
-    }
-
-    dest.write_char(')')
+    write_gradient_css(dest, name, &params, &self.interpolation, &self.stops)
   }
 }
 
@@ -588,6 +525,7 @@ mod tests {
 
   use super::*;
   use crate::Viewport;
+  use crate::style::properties::gradient_utils::red_blue_stops;
   use crate::style::{
     BackgroundPosition, Color, Length, LengthDefaultsToZero, PositionComponent, PositionKeywordX,
     PositionKeywordY, SpacePair, StopPosition,
@@ -600,16 +538,7 @@ mod tests {
       gradient,
       Ok(
         RadialGradient::builder()
-          .stops([
-            GradientStop::ColorHint {
-              color: Color([255, 0, 0, 255]).into(),
-              hint: None,
-            },
-            GradientStop::ColorHint {
-              color: Color([0, 0, 255, 255]).into(),
-              hint: None,
-            },
-          ])
+          .stops(red_blue_stops(None, None))
           .build()
       )
     );
@@ -651,16 +580,7 @@ mod tests {
         RadialGradient::builder()
           .shape(RadialShape::Circle)
           .size(RadialSize::FarthestSide)
-          .stops([
-            GradientStop::ColorHint {
-              color: Color([255, 0, 0, 255]).into(),
-              hint: None,
-            },
-            GradientStop::ColorHint {
-              color: Color([0, 0, 255, 255]).into(),
-              hint: None,
-            },
-          ])
+          .stops(red_blue_stops(None, None))
           .build()
       )
     );
@@ -679,16 +599,7 @@ mod tests {
             PositionComponent::KeywordX(PositionKeywordX::Left),
             PositionComponent::KeywordY(PositionKeywordY::Top),
           )))
-          .stops([
-            GradientStop::ColorHint {
-              color: Color([255, 0, 0, 255]).into(),
-              hint: None,
-            },
-            GradientStop::ColorHint {
-              color: Color([0, 0, 255, 255]).into(),
-              hint: None,
-            },
-          ])
+          .stops(red_blue_stops(None, None))
           .build()
       )
     );
@@ -752,58 +663,54 @@ mod tests {
   }
 
   #[test]
-  fn test_parse_radial_gradient_with_stop_positions() {
-    let gradient =
-      RadialGradient::from_str("radial-gradient(circle, #ff0000 0%, #00ff00 50%, #0000ff 100%)");
-
-    assert_eq!(
-      gradient,
-      Ok(
-        RadialGradient::builder()
-          .shape(RadialShape::Circle)
-          .stops([
-            GradientStop::ColorHint {
-              color: Color([255, 0, 0, 255]).into(),
-              hint: Some(StopPosition(Length::Percentage(0.0))),
-            },
-            GradientStop::ColorHint {
-              color: Color([0, 255, 0, 255]).into(),
-              hint: Some(StopPosition(Length::Percentage(50.0))),
-            },
-            GradientStop::ColorHint {
-              color: Color([0, 0, 255, 255]).into(),
-              hint: Some(StopPosition(Length::Percentage(100.0))),
-            },
-          ])
-          .build()
-      )
-    );
-  }
-
-  #[test]
-  fn test_parse_radial_gradient_with_double_position_color_stop() {
-    assert_eq!(
-      RadialGradient::from_str("radial-gradient(circle, red 10% 20%, blue)"),
-      Ok(
-        RadialGradient::builder()
-          .shape(RadialShape::Circle)
-          .stops([
-            GradientStop::ColorHint {
-              color: Color::from_rgb(0xff0000).into(),
-              hint: Some(StopPosition(Length::Percentage(10.0))),
-            },
-            GradientStop::ColorHint {
-              color: Color::from_rgb(0xff0000).into(),
-              hint: Some(StopPosition(Length::Percentage(20.0))),
-            },
-            GradientStop::ColorHint {
-              color: Color::from_rgb(0x0000ff).into(),
-              hint: None,
-            },
-          ])
-          .build()
-      )
-    );
+  fn test_parse_radial_gradient_circle_stops() {
+    for (input, stops) in [
+      (
+        "radial-gradient(circle, #ff0000 0%, #00ff00 50%, #0000ff 100%)",
+        vec![
+          GradientStop::ColorHint {
+            color: Color([255, 0, 0, 255]).into(),
+            hint: Some(StopPosition(Length::Percentage(0.0))),
+          },
+          GradientStop::ColorHint {
+            color: Color([0, 255, 0, 255]).into(),
+            hint: Some(StopPosition(Length::Percentage(50.0))),
+          },
+          GradientStop::ColorHint {
+            color: Color([0, 0, 255, 255]).into(),
+            hint: Some(StopPosition(Length::Percentage(100.0))),
+          },
+        ],
+      ),
+      (
+        "radial-gradient(circle, red 10% 20%, blue)",
+        vec![
+          GradientStop::ColorHint {
+            color: Color::from_rgb(0xff0000).into(),
+            hint: Some(StopPosition(Length::Percentage(10.0))),
+          },
+          GradientStop::ColorHint {
+            color: Color::from_rgb(0xff0000).into(),
+            hint: Some(StopPosition(Length::Percentage(20.0))),
+          },
+          GradientStop::ColorHint {
+            color: Color::from_rgb(0x0000ff).into(),
+            hint: None,
+          },
+        ],
+      ),
+    ] {
+      assert_eq!(
+        RadialGradient::from_str(input),
+        Ok(
+          RadialGradient::builder()
+            .shape(RadialShape::Circle)
+            .stops(stops)
+            .build()
+        ),
+        "input: {input}",
+      );
+    }
   }
 
   #[test]
@@ -907,16 +814,10 @@ mod tests {
   fn test_radial_gradient_at() {
     let gradient = RadialGradient::builder()
       .shape(RadialShape::Circle)
-      .stops([
-        GradientStop::ColorHint {
-          color: Color([255, 0, 0, 255]).into(), // Red at center
-          hint: Some(StopPosition(Length::Percentage(0.0))),
-        },
-        GradientStop::ColorHint {
-          color: Color([0, 0, 255, 255]).into(), // Blue at edge
-          hint: Some(StopPosition(Length::Percentage(100.0))),
-        },
-      ])
+      .stops(red_blue_stops(
+        Some(StopPosition(Length::Percentage(0.0))),
+        Some(StopPosition(Length::Percentage(100.0))),
+      ))
       .build();
 
     let sizing = SizingContext::new_test(Viewport::new((100, 100)));

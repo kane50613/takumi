@@ -153,7 +153,7 @@ fn parse_keyframe_offsets(selector: &str) -> Result<Vec<f32>, String> {
   })
 }
 
-pub fn parse_keyframe_prelude<'i, E>(
+pub(crate) fn parse_keyframe_prelude<'i, E>(
   input: &mut Parser<'i, '_>,
 ) -> Result<Vec<f32>, ParseError<'i, E>>
 where
@@ -163,7 +163,7 @@ where
 }
 
 #[derive(Clone, Copy)]
-pub enum KeyframePreludeParseError<'i> {
+pub(crate) enum KeyframePreludeParseError<'i> {
   InvalidSelector(&'i str),
   InvalidPercentage(&'i str),
 }

@@ -1,5 +1,6 @@
+use crate::style::calc::{CalcFormula, CalcValue, parse_calc_sum};
 use crate::style::{ToCss, unexpected_token};
-use std::{cell::RefCell, fmt, ops::Neg};
+use std::{fmt, ops::Neg};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use taffy::{CompactLength, Dimension, LengthPercentage, LengthPercentageAuto};
@@ -9,558 +10,53 @@ use crate::style::{
   tw::{TW_VAR_SPACING, TailwindPropertyParser},
 };
 
-const ONE_CM_IN_PX: f32 = 96.0 / 2.54;
-const ONE_MM_IN_PX: f32 = ONE_CM_IN_PX / 10.0;
-const ONE_Q_IN_PX: f32 = ONE_CM_IN_PX / 40.0;
-const ONE_IN_PX: f32 = 2.54 * ONE_CM_IN_PX;
-const ONE_PT_IN_PX: f32 = ONE_IN_PX / 72.0;
-const ONE_PC_IN_PX: f32 = ONE_IN_PX / 6.0;
+pub(crate) const ONE_CM_IN_PX: f32 = 96.0 / 2.54;
+pub(crate) const ONE_MM_IN_PX: f32 = ONE_CM_IN_PX / 10.0;
+pub(crate) const ONE_Q_IN_PX: f32 = ONE_CM_IN_PX / 40.0;
+pub(crate) const ONE_IN_PX: f32 = 2.54 * ONE_CM_IN_PX;
+pub(crate) const ONE_PT_IN_PX: f32 = ONE_IN_PX / 72.0;
+pub(crate) const ONE_PC_IN_PX: f32 = ONE_IN_PX / 6.0;
 const CALC_ZERO_EPSILON: f32 = 1e-6;
 const SAFE_INT_MIN_PX: f32 = i32::MIN as f32;
 const SAFE_INT_MAX_PX: f32 = i32::MAX as f32;
 
-#[derive(Default)]
-pub struct CalcArena {
-  linear_values: RefCell<Vec<CalcLinear>>,
-}
-
-impl CalcArena {
-  fn register_linear(&self, linear: CalcLinear) -> *const () {
-    let mut linear_values = self.linear_values.borrow_mut();
-
-    linear_values.push(linear);
-    encode_linear_id(linear_values.len())
-  }
-
-  pub fn resolve_calc_value(&self, val: *const (), basis: f32) -> f32 {
-    let Some(id) = decode_linear_id(val) else {
-      return 0.0;
-    };
-
-    let linear_values = self.linear_values.borrow();
-    linear_values
-      .get(id - 1)
-      .map(|linear| linear.resolve(basis))
-      .unwrap_or(0.0)
-  }
-}
-
-fn encode_linear_id(id: usize) -> *const () {
-  // The low 3 bits are reserved because aligned pointers keep them as zero.
-  ((id << 3) as *const ()).cast()
-}
-
-fn decode_linear_id(ptr: *const ()) -> Option<usize> {
-  let raw = ptr as usize;
-  // `raw != 0` filters out the null pointer case.
-  (raw != 0).then_some(raw >> 3)
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-/// Internal linear form of a `calc(...)` expression: `px + percent * basis`.
-pub struct CalcLinear {
-  px: f32,
-  percent: f32,
-}
-
-impl CalcLinear {
-  fn resolve(self, basis: f32) -> f32 {
-    self.px + self.percent * basis
-  }
-
-  pub fn components(self) -> (f32, f32) {
-    (self.px, self.percent)
-  }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-/// Internal symbolic form of a `calc(...)` expression before sizing is known.
-pub struct CalcFormula {
-  px: f32,
-  percent: f32,
-  rem: f32,
-  em: f32,
-  lh: f32,
-  rlh: f32,
-  vh: f32,
-  vw: f32,
-  cqh: f32,
-  cqw: f32,
-  cqmin: f32,
-  cqmax: f32,
-  vmin: f32,
-  vmax: f32,
-  cm: f32,
-  mm: f32,
-  inch: f32,
-  q: f32,
-  pt: f32,
-  pc: f32,
-}
-
-impl CalcFormula {
-  fn scale_component(value: f32, factor: f32) -> f32 {
-    if value == 0.0 { 0.0 } else { value * factor }
-  }
-
-  fn px(value: f32) -> Self {
-    Self {
-      px: value,
-      ..Default::default()
-    }
-  }
-
-  fn percentage(value: f32) -> Self {
-    Self {
-      percent: value,
-      ..Default::default()
-    }
-  }
-
-  fn rem(value: f32) -> Self {
-    Self {
-      rem: value,
-      ..Default::default()
-    }
-  }
-
-  fn em(value: f32) -> Self {
-    Self {
-      em: value,
-      ..Default::default()
-    }
-  }
-
-  fn lh(value: f32) -> Self {
-    Self {
-      lh: value,
-      ..Default::default()
-    }
-  }
-
-  fn rlh(value: f32) -> Self {
-    Self {
-      rlh: value,
-      ..Default::default()
-    }
-  }
-
-  fn vh(value: f32) -> Self {
-    Self {
-      vh: value,
-      ..Default::default()
-    }
-  }
-
-  fn vw(value: f32) -> Self {
-    Self {
-      vw: value,
-      ..Default::default()
-    }
-  }
-
-  fn vmin(value: f32) -> Self {
-    Self {
-      vmin: value,
-      ..Default::default()
-    }
-  }
-
-  fn vmax(value: f32) -> Self {
-    Self {
-      vmax: value,
-      ..Default::default()
-    }
-  }
-
-  fn cqh(value: f32) -> Self {
-    Self {
-      cqh: value,
-      ..Default::default()
-    }
-  }
-
-  fn cqw(value: f32) -> Self {
-    Self {
-      cqw: value,
-      ..Default::default()
-    }
-  }
-
-  fn cqmin(value: f32) -> Self {
-    Self {
-      cqmin: value,
-      ..Default::default()
-    }
-  }
-
-  fn cqmax(value: f32) -> Self {
-    Self {
-      cqmax: value,
-      ..Default::default()
-    }
-  }
-
-  fn cm(value: f32) -> Self {
-    Self {
-      cm: value,
-      ..Default::default()
-    }
-  }
-
-  fn mm(value: f32) -> Self {
-    Self {
-      mm: value,
-      ..Default::default()
-    }
-  }
-
-  fn inch(value: f32) -> Self {
-    Self {
-      inch: value,
-      ..Default::default()
-    }
-  }
-
-  fn q(value: f32) -> Self {
-    Self {
-      q: value,
-      ..Default::default()
-    }
-  }
-
-  fn pt(value: f32) -> Self {
-    Self {
-      pt: value,
-      ..Default::default()
-    }
-  }
-
-  fn pc(value: f32) -> Self {
-    Self {
-      pc: value,
-      ..Default::default()
-    }
-  }
-
-  fn neg(self) -> Self {
-    Self {
-      px: -self.px,
-      percent: -self.percent,
-      rem: -self.rem,
-      em: -self.em,
-      lh: -self.lh,
-      rlh: -self.rlh,
-      vh: -self.vh,
-      vw: -self.vw,
-      cqh: -self.cqh,
-      cqw: -self.cqw,
-      cqmin: -self.cqmin,
-      cqmax: -self.cqmax,
-      vmin: -self.vmin,
-      vmax: -self.vmax,
-      cm: -self.cm,
-      mm: -self.mm,
-      inch: -self.inch,
-      q: -self.q,
-      pt: -self.pt,
-      pc: -self.pc,
-    }
-  }
-
-  fn add(self, rhs: Self) -> Self {
-    Self {
-      px: self.px + rhs.px,
-      percent: self.percent + rhs.percent,
-      rem: self.rem + rhs.rem,
-      em: self.em + rhs.em,
-      lh: self.lh + rhs.lh,
-      rlh: self.rlh + rhs.rlh,
-      vh: self.vh + rhs.vh,
-      vw: self.vw + rhs.vw,
-      cqh: self.cqh + rhs.cqh,
-      cqw: self.cqw + rhs.cqw,
-      cqmin: self.cqmin + rhs.cqmin,
-      cqmax: self.cqmax + rhs.cqmax,
-      vmin: self.vmin + rhs.vmin,
-      vmax: self.vmax + rhs.vmax,
-      cm: self.cm + rhs.cm,
-      mm: self.mm + rhs.mm,
-      inch: self.inch + rhs.inch,
-      q: self.q + rhs.q,
-      pt: self.pt + rhs.pt,
-      pc: self.pc + rhs.pc,
-    }
-  }
-
-  fn sub(self, rhs: Self) -> Self {
-    Self {
-      px: self.px - rhs.px,
-      percent: self.percent - rhs.percent,
-      rem: self.rem - rhs.rem,
-      em: self.em - rhs.em,
-      lh: self.lh - rhs.lh,
-      rlh: self.rlh - rhs.rlh,
-      vh: self.vh - rhs.vh,
-      vw: self.vw - rhs.vw,
-      cqh: self.cqh - rhs.cqh,
-      cqw: self.cqw - rhs.cqw,
-      cqmin: self.cqmin - rhs.cqmin,
-      cqmax: self.cqmax - rhs.cqmax,
-      vmin: self.vmin - rhs.vmin,
-      vmax: self.vmax - rhs.vmax,
-      cm: self.cm - rhs.cm,
-      mm: self.mm - rhs.mm,
-      inch: self.inch - rhs.inch,
-      q: self.q - rhs.q,
-      pt: self.pt - rhs.pt,
-      pc: self.pc - rhs.pc,
-    }
-  }
-
-  fn scale(self, factor: f32) -> Self {
-    Self {
-      px: Self::scale_component(self.px, factor),
-      percent: Self::scale_component(self.percent, factor),
-      rem: Self::scale_component(self.rem, factor),
-      em: Self::scale_component(self.em, factor),
-      lh: Self::scale_component(self.lh, factor),
-      rlh: Self::scale_component(self.rlh, factor),
-      vh: Self::scale_component(self.vh, factor),
-      vw: Self::scale_component(self.vw, factor),
-      cqh: Self::scale_component(self.cqh, factor),
-      cqw: Self::scale_component(self.cqw, factor),
-      cqmin: Self::scale_component(self.cqmin, factor),
-      cqmax: Self::scale_component(self.cqmax, factor),
-      vmin: Self::scale_component(self.vmin, factor),
-      vmax: Self::scale_component(self.vmax, factor),
-      cm: Self::scale_component(self.cm, factor),
-      mm: Self::scale_component(self.mm, factor),
-      inch: Self::scale_component(self.inch, factor),
-      q: Self::scale_component(self.q, factor),
-      pt: Self::scale_component(self.pt, factor),
-      pc: Self::scale_component(self.pc, factor),
-    }
-  }
-
-  pub fn resolve(self, sizing: &SizingContext) -> CalcLinear {
-    let viewport_width = sizing.viewport.size.width.unwrap_or_default() as f32;
-    let viewport_height = sizing.viewport.size.height.unwrap_or_default() as f32;
-    let viewport_min = viewport_width.min(viewport_height);
-    let viewport_max = viewport_width.max(viewport_height);
-    let container_width = sizing.query_container_width();
-    let container_height = sizing.query_container_height();
-    let container_min = container_width.min(container_height);
-    let container_max = container_width.max(container_height);
-
-    CalcLinear {
-      px: self.px * sizing.viewport.device_pixel_ratio
-        + self.rem * sizing.rem_basis()
-        + self.em * sizing.font_size
-        + self.lh * sizing.line_height
-        + self.rlh * sizing.root_line_height_basis()
-        + self.vh * viewport_height / 100.0
-        + self.vw * viewport_width / 100.0
-        + self.cqh * container_height / 100.0
-        + self.cqw * container_width / 100.0
-        + self.cqmin * container_min / 100.0
-        + self.cqmax * container_max / 100.0
-        + self.vmin * viewport_min / 100.0
-        + self.vmax * viewport_max / 100.0
-        + self.cm * ONE_CM_IN_PX * sizing.viewport.device_pixel_ratio
-        + self.mm * ONE_MM_IN_PX * sizing.viewport.device_pixel_ratio
-        + self.inch * ONE_IN_PX * sizing.viewport.device_pixel_ratio
-        + self.q * ONE_Q_IN_PX * sizing.viewport.device_pixel_ratio
-        + self.pt * ONE_PT_IN_PX * sizing.viewport.device_pixel_ratio
-        + self.pc * ONE_PC_IN_PX * sizing.viewport.device_pixel_ratio,
-      percent: self.percent,
-    }
-  }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum CalcValue {
-  Number(f32),
-  Formula(CalcFormula),
-}
-
-fn parse_calc_sum<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcValue> {
-  let mut value = parse_calc_product(input)?;
-
-  loop {
-    if input.try_parse(|parser| parser.expect_delim('+')).is_ok() {
-      let rhs = parse_calc_product(input)?;
-      value = match (value, rhs) {
-        (CalcValue::Number(lhs), CalcValue::Number(rhs)) => CalcValue::Number(lhs + rhs),
-        (CalcValue::Formula(lhs), CalcValue::Formula(rhs)) => CalcValue::Formula(lhs.add(rhs)),
-        _ => {
-          return Err(unexpected_token!(
-            Length,
-            input.current_source_location(),
-            &Token::Delim('+'),
-          ));
-        }
-      };
-      continue;
-    }
-
-    if input.try_parse(|parser| parser.expect_delim('-')).is_ok() {
-      let rhs = parse_calc_product(input)?;
-      value = match (value, rhs) {
-        (CalcValue::Number(lhs), CalcValue::Number(rhs)) => CalcValue::Number(lhs - rhs),
-        (CalcValue::Formula(lhs), CalcValue::Formula(rhs)) => CalcValue::Formula(lhs.sub(rhs)),
-        _ => {
-          return Err(unexpected_token!(
-            Length,
-            input.current_source_location(),
-            &Token::Delim('-'),
-          ));
-        }
-      };
-      continue;
-    }
-
-    break;
-  }
-
-  Ok(value)
-}
-
-pub fn parse_calc_number_expression<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, f32> {
-  let location = input.current_source_location();
-  let token = input.next()?.clone();
-
-  match &token {
-    Token::Function(function) if function.eq_ignore_ascii_case("calc") => {
-      match input.parse_nested_block(parse_calc_sum)? {
-        CalcValue::Number(value) => Ok(value),
-        _ => Err(location.new_unexpected_token_error(token.clone())),
-      }
-    }
-    _ => Err(location.new_unexpected_token_error(token.clone())),
-  }
-}
-
-fn parse_calc_product<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcValue> {
-  let mut value = parse_calc_factor(input)?;
-
-  loop {
-    if input.try_parse(|parser| parser.expect_delim('*')).is_ok() {
-      let rhs = parse_calc_factor(input)?;
-      value = match (value, rhs) {
-        (CalcValue::Formula(lhs), CalcValue::Number(rhs)) => CalcValue::Formula(lhs.scale(rhs)),
-        (CalcValue::Number(lhs), CalcValue::Formula(rhs)) => CalcValue::Formula(rhs.scale(lhs)),
-        (CalcValue::Number(lhs), CalcValue::Number(rhs)) => CalcValue::Number(lhs * rhs),
-        _ => {
-          return Err(unexpected_token!(
-            Length,
-            input.current_source_location(),
-            &Token::Delim('*'),
-          ));
-        }
-      };
-      continue;
-    }
-
-    if input.try_parse(|parser| parser.expect_delim('/')).is_ok() {
-      let rhs = parse_calc_factor(input)?;
-      value = match (value, rhs) {
-        (_, CalcValue::Number(0.0)) => {
-          return Err(unexpected_token!(
-            Length,
-            input.current_source_location(),
-            &Token::Delim('/'),
-          ));
-        }
-        (CalcValue::Formula(lhs), CalcValue::Number(rhs)) => {
-          CalcValue::Formula(lhs.scale(1.0 / rhs))
-        }
-        (CalcValue::Number(lhs), CalcValue::Number(rhs)) => CalcValue::Number(lhs / rhs),
-        _ => {
-          return Err(unexpected_token!(
-            Length,
-            input.current_source_location(),
-            &Token::Delim('/'),
-          ));
-        }
-      };
-      continue;
-    }
-
-    break;
-  }
-
-  Ok(value)
-}
-
-fn parse_calc_factor<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcValue> {
-  if input.try_parse(|parser| parser.expect_delim('+')).is_ok() {
-    return parse_calc_factor(input);
-  }
-
-  if input.try_parse(|parser| parser.expect_delim('-')).is_ok() {
-    return Ok(match parse_calc_factor(input)? {
-      CalcValue::Number(value) => CalcValue::Number(-value),
-      CalcValue::Formula(formula) => CalcValue::Formula(formula.neg()),
-    });
-  }
-
-  let location = input.current_source_location();
-  let token = input.next()?;
-
-  match token {
-    Token::Number { value, .. } => Ok(CalcValue::Number(*value)),
-    Token::Percentage { unit_value, .. } => {
-      Ok(CalcValue::Formula(CalcFormula::percentage(*unit_value)))
-    }
-    Token::Dimension { value, unit, .. } => {
-      let unit = unit.as_ref();
-      match_ignore_ascii_case! {unit,
-        "px" => Ok(CalcValue::Formula(CalcFormula::px(*value))),
-        "em" => Ok(CalcValue::Formula(CalcFormula::em(*value))),
-        "rem" => Ok(CalcValue::Formula(CalcFormula::rem(*value))),
-        "lh" => Ok(CalcValue::Formula(CalcFormula::lh(*value))),
-        "rlh" => Ok(CalcValue::Formula(CalcFormula::rlh(*value))),
-        "vw" => Ok(CalcValue::Formula(CalcFormula::vw(*value))),
-        "dvw" => Ok(CalcValue::Formula(CalcFormula::vw(*value))),
-        "svw" => Ok(CalcValue::Formula(CalcFormula::vw(*value))),
-        "lvw" => Ok(CalcValue::Formula(CalcFormula::vw(*value))),
-        "cqw" => Ok(CalcValue::Formula(CalcFormula::cqw(*value))),
-        "cqi" => Ok(CalcValue::Formula(CalcFormula::cqw(*value))),
-        "vi" => Ok(CalcValue::Formula(CalcFormula::vw(*value))),
-        "vh" => Ok(CalcValue::Formula(CalcFormula::vh(*value))),
-        "dvh" => Ok(CalcValue::Formula(CalcFormula::vh(*value))),
-        "svh" => Ok(CalcValue::Formula(CalcFormula::vh(*value))),
-        "lvh" => Ok(CalcValue::Formula(CalcFormula::vh(*value))),
-        "cqh" => Ok(CalcValue::Formula(CalcFormula::cqh(*value))),
-        "cqb" => Ok(CalcValue::Formula(CalcFormula::cqh(*value))),
-        "vb" => Ok(CalcValue::Formula(CalcFormula::vh(*value))),
-        "vmin" => Ok(CalcValue::Formula(CalcFormula::vmin(*value))),
-        "cqmin" => Ok(CalcValue::Formula(CalcFormula::cqmin(*value))),
-        "vmax" => Ok(CalcValue::Formula(CalcFormula::vmax(*value))),
-        "cqmax" => Ok(CalcValue::Formula(CalcFormula::cqmax(*value))),
-        "cm" => Ok(CalcValue::Formula(CalcFormula::cm(*value))),
-        "mm" => Ok(CalcValue::Formula(CalcFormula::mm(*value))),
-        "in" => Ok(CalcValue::Formula(CalcFormula::inch(*value))),
-        "q" => Ok(CalcValue::Formula(CalcFormula::q(*value))),
-        "pt" => Ok(CalcValue::Formula(CalcFormula::pt(*value))),
-        "pc" => Ok(CalcValue::Formula(CalcFormula::pc(*value))),
-        _ => Err(unexpected_token!(Length, location, token)),
-      }
-    }
-    Token::Function(name) if name.eq_ignore_ascii_case("calc") => {
-      input.parse_nested_block(parse_calc_sum)
-    }
-    Token::Ident(ident) => match_ignore_ascii_case! {ident.as_ref(),
-      "e" => Ok(CalcValue::Number(std::f32::consts::E)),
-      "pi" => Ok(CalcValue::Number(std::f32::consts::PI)),
-      "infinity" => Ok(CalcValue::Number(f32::INFINITY)),
-      "-infinity" => Ok(CalcValue::Number(f32::NEG_INFINITY)),
-      "nan" => Ok(CalcValue::Number(f32::NAN)),
-      _ => Err(unexpected_token!(Length, location, token)),
-    },
-    _ => Err(unexpected_token!(Length, location, token)),
-  }
+/// Maps a CSS dimension unit (incl. aliases like `dvw`/`cqi`) to its canonical `Length` variant.
+pub(crate) fn length_from_dimension_unit<const DEFAULT_AUTO: bool>(
+  unit: &str,
+  value: f32,
+) -> Option<Length<DEFAULT_AUTO>> {
+  Some(match_ignore_ascii_case! {unit,
+    "px" => Length::Px(value),
+    "em" => Length::Em(value),
+    "rem" => Length::Rem(value),
+    "lh" => Length::Lh(value),
+    "rlh" => Length::Rlh(value),
+    "vw" => Length::Vw(value),
+    "dvw" => Length::Vw(value),
+    "svw" => Length::Vw(value),
+    "lvw" => Length::Vw(value),
+    "cqw" => Length::CqW(value),
+    "cqi" => Length::CqW(value),
+    "vi" => Length::Vw(value),
+    "vh" => Length::Vh(value),
+    "dvh" => Length::Vh(value),
+    "svh" => Length::Vh(value),
+    "lvh" => Length::Vh(value),
+    "cqh" => Length::CqH(value),
+    "cqb" => Length::CqH(value),
+    "vb" => Length::Vh(value),
+    "vmin" => Length::VMin(value),
+    "cqmin" => Length::CqMin(value),
+    "vmax" => Length::VMax(value),
+    "cqmax" => Length::CqMax(value),
+    "cm" => Length::Cm(value),
+    "mm" => Length::Mm(value),
+    "in" => Length::In(value),
+    "q" => Length::Q(value),
+    "pt" => Length::Pt(value),
+    "pc" => Length::Pc(value),
+    _ => return None,
+  })
 }
 
 fn is_near_zero(value: f32) -> bool {
@@ -852,40 +348,8 @@ impl<'i, const DEFAULT_AUTO: bool> FromCss<'i> for Length<DEFAULT_AUTO> {
           CalcValue::Formula(formula) => Ok(Self::Calc(formula)),
         }
       }
-      Token::Dimension { value, unit, .. } => {
-        match_ignore_ascii_case! {unit.as_ref(),
-          "px" => Ok(Self::Px(*value)),
-          "em" => Ok(Self::Em(*value)),
-          "rem" => Ok(Self::Rem(*value)),
-          "lh" => Ok(Self::Lh(*value)),
-          "rlh" => Ok(Self::Rlh(*value)),
-          "vw" => Ok(Self::Vw(*value)),
-          "dvw" => Ok(Self::Vw(*value)),
-          "svw" => Ok(Self::Vw(*value)),
-          "lvw" => Ok(Self::Vw(*value)),
-          "cqw" => Ok(Self::CqW(*value)),
-          "cqi" => Ok(Self::CqW(*value)),
-          "vi" => Ok(Self::Vw(*value)),
-          "vh" => Ok(Self::Vh(*value)),
-          "dvh" => Ok(Self::Vh(*value)),
-          "svh" => Ok(Self::Vh(*value)),
-          "lvh" => Ok(Self::Vh(*value)),
-          "cqh" => Ok(Self::CqH(*value)),
-          "cqb" => Ok(Self::CqH(*value)),
-          "vb" => Ok(Self::Vh(*value)),
-          "vmin" => Ok(Self::VMin(*value)),
-          "cqmin" => Ok(Self::CqMin(*value)),
-          "vmax" => Ok(Self::VMax(*value)),
-          "cqmax" => Ok(Self::CqMax(*value)),
-          "cm" => Ok(Self::Cm(*value)),
-          "mm" => Ok(Self::Mm(*value)),
-          "in" => Ok(Self::In(*value)),
-          "q" => Ok(Self::Q(*value)),
-          "pt" => Ok(Self::Pt(*value)),
-          "pc" => Ok(Self::Pc(*value)),
-          _ => Err(unexpected_token!(location, token)),
-        }
-      }
+      Token::Dimension { value, unit, .. } => length_from_dimension_unit(unit.as_ref(), *value)
+        .ok_or_else(|| unexpected_token!(location, token)),
       Token::Percentage { unit_value, .. } => Ok(Self::Percentage(*unit_value * 100.0)),
       Token::Number { value, .. } => Ok(Self::Px(*value)),
       _ => Err(unexpected_token!(location, token)),
@@ -948,42 +412,18 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
     match self {
       Length::Auto => CompactLength::auto(),
       Length::Percentage(value) => CompactLength::percent(value / 100.0),
-      Length::Rem(value) => CompactLength::length(value * sizing.rem_basis()),
-      Length::Em(value) => CompactLength::length(value * sizing.font_size),
-      Length::Lh(value) => CompactLength::length(value * sizing.line_height),
-      Length::Rlh(value) => CompactLength::length(value * sizing.root_line_height_basis()),
-      Length::Vh(value) => CompactLength::length(
-        sizing.viewport.size.height.unwrap_or_default() as f32 * value / 100.0,
-      ),
-      Length::Vw(value) => {
-        CompactLength::length(sizing.viewport.size.width.unwrap_or_default() as f32 * value / 100.0)
-      }
-      Length::CqH(value) => CompactLength::length(sizing.query_container_height() * value / 100.0),
-      Length::CqW(value) => CompactLength::length(sizing.query_container_width() * value / 100.0),
-      Length::CqMin(value) => CompactLength::length(
-        sizing
-          .query_container_width()
-          .min(sizing.query_container_height())
-          * value
-          / 100.0,
-      ),
-      Length::CqMax(value) => CompactLength::length(
-        sizing
-          .query_container_width()
-          .max(sizing.query_container_height())
-          * value
-          / 100.0,
-      ),
-      Length::VMin(value) => {
-        let viewport_width = sizing.viewport.size.width.unwrap_or_default() as f32;
-        let viewport_height = sizing.viewport.size.height.unwrap_or_default() as f32;
-        CompactLength::length(viewport_width.min(viewport_height) * value / 100.0)
-      }
-      Length::VMax(value) => {
-        let viewport_width = sizing.viewport.size.width.unwrap_or_default() as f32;
-        let viewport_height = sizing.viewport.size.height.unwrap_or_default() as f32;
-        CompactLength::length(viewport_width.max(viewport_height) * value / 100.0)
-      }
+      Length::Rem(_)
+      | Length::Em(_)
+      | Length::Lh(_)
+      | Length::Rlh(_)
+      | Length::Vh(_)
+      | Length::Vw(_)
+      | Length::CqH(_)
+      | Length::CqW(_)
+      | Length::CqMin(_)
+      | Length::CqMax(_)
+      | Length::VMin(_)
+      | Length::VMax(_) => CompactLength::length(self.to_px_pre_dpr(sizing, 0.0)),
       Length::Calc(formula) => {
         let linear = formula.resolve(sizing);
 
@@ -1017,27 +457,16 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
   pub fn to_px(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
     let value = self.to_px_pre_dpr(sizing, percentage_full_px);
 
-    let value = if matches!(
-      self,
-      Length::Auto
-        | Length::Percentage(_)
-        | Length::Vh(_)
-        | Length::Vw(_)
-        | Length::CqH(_)
-        | Length::CqW(_)
-        | Length::CqMin(_)
-        | Length::CqMax(_)
-        | Length::VMin(_)
-        | Length::VMax(_)
-        | Length::Em(_)
-        | Length::Rem(_)
-        | Length::Lh(_)
-        | Length::Rlh(_)
-        | Length::Calc(_)
-    ) {
-      value
-    } else {
-      value * sizing.viewport.device_pixel_ratio
+    // Only absolute units carry a device-pixel-ratio factor.
+    let value = match self {
+      Length::Px(_)
+      | Length::Cm(_)
+      | Length::Mm(_)
+      | Length::In(_)
+      | Length::Q(_)
+      | Length::Pt(_)
+      | Length::Pc(_) => value * sizing.viewport.device_pixel_ratio,
+      _ => value,
     };
 
     clamp_px_for_integer_cast(value)
@@ -1109,7 +538,7 @@ mod tests {
   use taffy::Size;
 
   use super::*;
-  use crate::Viewport;
+  use crate::{Viewport, style::calc::CalcArena};
 
   fn sizing() -> SizingContext {
     SizingContext {

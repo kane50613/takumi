@@ -114,33 +114,31 @@ impl<'i> FromCss<'i> for ColorInterpolationMethod {
 
 impl ToCss for ColorInterpolationMethod {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    if self.color_space == color::ColorSpaceTag::Oklab
-      && self.hue_direction == color::HueDirection::Shorter
-    {
+    if self.color_space == ColorSpaceTag::Oklab && self.hue_direction == HueDirection::Shorter {
       return Ok(());
     }
     let space = match self.color_space {
-      color::ColorSpaceTag::Srgb => "srgb",
-      color::ColorSpaceTag::LinearSrgb => "srgb-linear",
-      color::ColorSpaceTag::Lab => "lab",
-      color::ColorSpaceTag::Oklab => "oklab",
-      color::ColorSpaceTag::Lch => "lch",
-      color::ColorSpaceTag::Oklch => "oklch",
-      color::ColorSpaceTag::Hsl => "hsl",
-      color::ColorSpaceTag::Hwb => "hwb",
-      color::ColorSpaceTag::DisplayP3 => "display-p3",
-      color::ColorSpaceTag::A98Rgb => "a98-rgb",
-      color::ColorSpaceTag::ProphotoRgb => "prophoto-rgb",
-      color::ColorSpaceTag::Rec2020 => "rec2020",
-      color::ColorSpaceTag::XyzD65 => "xyz-d65",
-      color::ColorSpaceTag::XyzD50 => "xyz-d50",
+      ColorSpaceTag::Srgb => "srgb",
+      ColorSpaceTag::LinearSrgb => "srgb-linear",
+      ColorSpaceTag::Lab => "lab",
+      ColorSpaceTag::Oklab => "oklab",
+      ColorSpaceTag::Lch => "lch",
+      ColorSpaceTag::Oklch => "oklch",
+      ColorSpaceTag::Hsl => "hsl",
+      ColorSpaceTag::Hwb => "hwb",
+      ColorSpaceTag::DisplayP3 => "display-p3",
+      ColorSpaceTag::A98Rgb => "a98-rgb",
+      ColorSpaceTag::ProphotoRgb => "prophoto-rgb",
+      ColorSpaceTag::Rec2020 => "rec2020",
+      ColorSpaceTag::XyzD65 => "xyz-d65",
+      ColorSpaceTag::XyzD50 => "xyz-d50",
       _ => "oklab",
     };
     let hue = match self.hue_direction {
-      color::HueDirection::Shorter => "",
-      color::HueDirection::Longer => " longer hue",
-      color::HueDirection::Increasing => " increasing hue",
-      color::HueDirection::Decreasing => " decreasing hue",
+      HueDirection::Shorter => "",
+      HueDirection::Longer => " longer hue",
+      HueDirection::Increasing => " increasing hue",
+      HueDirection::Decreasing => " decreasing hue",
       _ => "",
     };
     write!(dest, "in {}{}", space, hue)
@@ -178,6 +176,9 @@ pub enum ColorInput<const DEFAULT_CURRENT_COLOR: bool = true> {
   Value(Color),
 }
 
+/// A color value that defaults to transparent instead of currentColor.
+pub type ColorDefaultsToTransparent = ColorInput<false>;
+
 impl<const DEFAULT_CURRENT_COLOR: bool> MakeComputed for ColorInput<DEFAULT_CURRENT_COLOR> {}
 
 impl<const DEFAULT_CURRENT_COLOR: bool> Animatable for ColorInput<DEFAULT_CURRENT_COLOR> {
@@ -190,15 +191,6 @@ impl<const DEFAULT_CURRENT_COLOR: bool> Animatable for ColorInput<DEFAULT_CURREN
     current_color: CurrentColor,
   ) {
     *self = match (from, to) {
-      (ColorInput::Value(lhs), ColorInput::Value(rhs)) => {
-        ColorInput::Value(interpolate_with_color_space(
-          *lhs,
-          *rhs,
-          progress,
-          ColorSpaceTag::Oklab,
-          HueDirection::Shorter,
-        ))
-      }
       (ColorInput::CurrentColor, ColorInput::CurrentColor) => ColorInput::CurrentColor,
       _ => ColorInput::Value(interpolate_with_color_space(
         from.resolve(current_color),
@@ -378,48 +370,42 @@ const ROSE: [u32; 11] = [
 /// Shade values in ascending order for binary search
 const SHADES: [u16; 11] = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
 
-/// Map shade number to array index using binary search
-#[inline]
-fn shade_to_index(shade: u16) -> Option<usize> {
-  SHADES.binary_search(&shade).ok()
-}
+const PALETTE: [(&str, &[u32; 11]); 26] = [
+  ("slate", &SLATE),
+  ("gray", &GRAY),
+  ("zinc", &ZINC),
+  ("neutral", &NEUTRAL),
+  ("stone", &STONE),
+  ("taupe", &TAUPE),
+  ("mauve", &MAUVE),
+  ("mist", &MIST),
+  ("olive", &OLIVE),
+  ("red", &RED),
+  ("orange", &ORANGE),
+  ("amber", &AMBER),
+  ("yellow", &YELLOW),
+  ("lime", &LIME),
+  ("green", &GREEN),
+  ("emerald", &EMERALD),
+  ("teal", &TEAL),
+  ("cyan", &CYAN),
+  ("sky", &SKY),
+  ("blue", &BLUE),
+  ("indigo", &INDIGO),
+  ("violet", &VIOLET),
+  ("purple", &PURPLE),
+  ("fuchsia", &FUCHSIA),
+  ("pink", &PINK),
+  ("rose", &ROSE),
+];
 
-/// Lookup Tailwind color by name and shade
-///
 /// Returns the RGB value as a u32 (0xRRGGBB format)
 fn lookup_tailwind_color(color_name: &str, shade: u16) -> Option<u32> {
-  let index = shade_to_index(shade)?;
-
-  let colors = match_ignore_ascii_case! {color_name,
-      "slate" => &SLATE,
-      "gray" => &GRAY,
-      "zinc" => &ZINC,
-      "neutral" => &NEUTRAL,
-      "stone" => &STONE,
-      "taupe" => &TAUPE,
-      "mauve" => &MAUVE,
-      "mist" => &MIST,
-      "olive" => &OLIVE,
-      "red" => &RED,
-      "orange" => &ORANGE,
-      "amber" => &AMBER,
-      "yellow" => &YELLOW,
-      "lime" => &LIME,
-      "green" => &GREEN,
-      "emerald" => &EMERALD,
-      "teal" => &TEAL,
-      "cyan" => &CYAN,
-      "sky" => &SKY,
-      "blue" => &BLUE,
-      "indigo" => &INDIGO,
-      "violet" => &VIOLET,
-      "purple" => &PURPLE,
-      "fuchsia" => &FUCHSIA,
-      "pink" => &PINK,
-      "rose" => &ROSE,
-      _ => return None,
-  };
-
+  let index = SHADES.binary_search(&shade).ok()?;
+  let colors = PALETTE
+    .iter()
+    .find(|(name, _)| name.eq_ignore_ascii_case(color_name))
+    .map(|(_, c)| *c)?;
   colors.get(index).copied()
 }
 
@@ -897,89 +883,41 @@ mod tests {
   }
 
   #[test]
-  fn test_parse_hex_color_3_digits() {
-    // Test 3-digit hex color
-    assert_eq!(
-      ColorInput::from_str("#f09"),
-      Ok(ColorInput::<true>::Value(Color([255, 0, 153, 255])))
-    );
+  fn test_parse_color_opaque() {
+    for (css, expected) in [
+      ("#f09", Color([255, 0, 153, 255])),
+      ("#ff0099", Color([255, 0, 153, 255])),
+      ("transparent", Color([0, 0, 0, 0])),
+      ("rgb(255, 0, 153)", Color([255, 0, 153, 255])),
+      ("rgb(255 0 153)", Color([255, 0, 153, 255])),
+      ("grey", Color([128, 128, 128, 255])),
+      ("deepskyblue", Color([0, 191, 255, 255])),
+    ] {
+      assert_eq!(
+        ColorInput::from_str(css),
+        Ok(ColorInput::<true>::Value(expected)),
+        "failed for {css}",
+      );
+    }
   }
 
   #[test]
-  fn test_parse_hex_color_6_digits() {
-    // Test 6-digit hex color
-    assert_eq!(
-      ColorInput::from_str("#ff0099"),
-      Ok(ColorInput::<true>::Value(Color([255, 0, 153, 255])))
-    );
-  }
-
-  #[test]
-  fn test_parse_color_transparent() {
-    // Test parsing transparent keyword
-    assert_eq!(
-      ColorInput::from_str("transparent"),
-      Ok(ColorInput::<true>::Value(Color([0, 0, 0, 0])))
-    );
-  }
-
-  #[test]
-  fn test_parse_color_rgb_function() {
-    // Test parsing rgb() function through main parse function
-    assert_eq!(
-      ColorInput::from_str("rgb(255, 0, 153)"),
-      Ok(ColorInput::<true>::Value(Color([255, 0, 153, 255])))
-    );
-  }
-
-  #[test]
-  fn test_parse_color_rgba_function() {
-    // Test parsing rgba() function through main parse function
-    assert_eq!(
-      ColorInput::from_str("rgba(255, 0, 153, 0.5)"),
-      Ok(ColorInput::<true>::Value(Color([255, 0, 153, 128])))
-    );
-  }
-
-  #[test]
-  fn test_parse_color_rgb_space_separated() {
-    // Test parsing rgb() function with space-separated values
-    assert_eq!(
-      ColorInput::from_str("rgb(255 0 153)"),
-      Ok(ColorInput::<true>::Value(Color([255, 0, 153, 255])))
-    );
-  }
-
-  #[test]
-  fn test_parse_color_rgb_with_alpha_slash() {
-    // Test parsing rgb() function with alpha value using slash
-    assert_eq!(
-      ColorInput::from_str("rgb(255 0 153 / 0.5)"),
-      Ok(ColorInput::<true>::Value(Color([255, 0, 153, 128])))
-    );
-  }
-
-  #[test]
-  fn test_parse_named_color_grey() {
-    assert_eq!(
-      ColorInput::from_str("grey"),
-      Ok(ColorInput::<true>::Value(Color([128, 128, 128, 255])))
-    );
+  fn test_parse_color_with_alpha() {
+    for (css, expected) in [
+      ("rgba(255, 0, 153, 0.5)", Color([255, 0, 153, 128])),
+      ("rgb(255 0 153 / 0.5)", Color([255, 0, 153, 128])),
+    ] {
+      assert_eq!(
+        ColorInput::from_str(css),
+        Ok(ColorInput::<true>::Value(expected)),
+        "failed for {css}",
+      );
+    }
   }
 
   #[test]
   fn test_parse_color_invalid_function() {
-    // Test parsing invalid function
     assert!(ColorInput::<true>::from_str("invalid(255, 0, 153)").is_err());
-  }
-
-  #[test]
-  fn test_parse_arbitrary_color_from_str() {
-    // Test that ColorInput::from_str can parse arbitrary color names like deepskyblue
-    assert_eq!(
-      ColorInput::from_str("deepskyblue"),
-      Ok(ColorInput::<true>::Value(Color([0, 191, 255, 255])))
-    );
   }
 
   #[test]

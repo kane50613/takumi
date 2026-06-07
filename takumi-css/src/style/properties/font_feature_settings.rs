@@ -5,6 +5,22 @@ use std::fmt;
 
 use crate::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult};
 
+pub(crate) fn parse_opentype_tag<'i, T: FromCss<'i>>(
+  input: &mut Parser<'i, '_>,
+) -> ParseResult<'i, Tag> {
+  let location = input.current_source_location();
+  let tag_name = input.expect_string()?;
+  if tag_name.len() != 4 || !tag_name.is_ascii() {
+    return Err(unexpected_token!(
+      T,
+      location,
+      &Token::QuotedString(tag_name.clone()),
+    ));
+  }
+  Tag::parse(tag_name)
+    .ok_or_else(|| unexpected_token!(T, location, &Token::QuotedString(tag_name.clone())))
+}
+
 /// Controls OpenType font features via CSS font-feature-settings property.
 ///
 /// This allows enabling/disabling specific typographic features in OpenType fonts
@@ -23,17 +39,7 @@ impl<'i> FromCss<'i> for FontFeatureSettings {
     }
 
     let list = input.parse_comma_separated(|input| {
-      let location = input.current_source_location();
-      let tag_name = input.expect_string()?;
-      if tag_name.len() != 4 || !tag_name.is_ascii() {
-        return Err(unexpected_token!(
-          location,
-          &Token::QuotedString(tag_name.clone()),
-        ));
-      }
-
-      let tag = Tag::parse(tag_name)
-        .ok_or_else(|| unexpected_token!(location, &Token::QuotedString(tag_name.clone())))?;
+      let tag = parse_opentype_tag::<FontFeatureSettings>(input)?;
       let value = if input.is_exhausted() {
         1
       } else {

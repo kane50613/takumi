@@ -21,3 +21,18 @@ pub use grid_repetition_count::*;
 pub use grid_template_areas::*;
 pub use grid_template_component::*;
 pub use grid_track_size::*;
+
+pub(crate) fn write_space_separated<W: std::fmt::Write>(
+  dest: &mut W,
+  items: &[String],
+) -> std::fmt::Result {
+  let mut first = true;
+  for item in items {
+    if !first {
+      dest.write_str(" ")?;
+    }
+    first = false;
+    dest.write_str(item)?;
+  }
+  Ok(())
+}

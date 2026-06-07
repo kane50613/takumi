@@ -1,3 +1,4 @@
+use crate::style::properties::filter::interpolate_field;
 use crate::style::{ToCss, unexpected_token};
 use std::{
   fmt,
@@ -65,26 +66,41 @@ impl Animatable for Transform {
   ) {
     *self = match (*from, *to) {
       (Transform::Translate(from_x, from_y), Transform::Translate(to_x, to_y)) => {
-        let mut x = from_x;
-        x.interpolate(&from_x, &to_x, progress, sizing, current_color);
-        let mut y = from_y;
-        y.interpolate(&from_y, &to_y, progress, sizing, current_color);
-        Transform::Translate(x, y)
+        interpolate_field!(
+          Transform::Translate,
+          from_x,
+          to_x,
+          from_y,
+          to_y,
+          progress,
+          sizing,
+          current_color
+        )
       }
       (Transform::Scale(from_x, from_y), Transform::Scale(to_x, to_y)) => {
         Transform::Scale(lerp(from_x, to_x, progress), lerp(from_y, to_y, progress))
       }
       (Transform::Rotate(from_angle), Transform::Rotate(to_angle)) => {
-        let mut angle = from_angle;
-        angle.interpolate(&from_angle, &to_angle, progress, sizing, current_color);
-        Transform::Rotate(angle)
+        interpolate_field!(
+          Transform::Rotate,
+          from_angle,
+          to_angle,
+          progress,
+          sizing,
+          current_color
+        )
       }
       (Transform::Skew(from_x, from_y), Transform::Skew(to_x, to_y)) => {
-        let mut x = from_x;
-        x.interpolate(&from_x, &to_x, progress, sizing, current_color);
-        let mut y = from_y;
-        y.interpolate(&from_y, &to_y, progress, sizing, current_color);
-        Transform::Skew(x, y)
+        interpolate_field!(
+          Transform::Skew,
+          from_x,
+          to_x,
+          from_y,
+          to_y,
+          progress,
+          sizing,
+          current_color
+        )
       }
       (Transform::Matrix(from_affine), Transform::Matrix(to_affine)) => Transform::Matrix(Affine {
         a: lerp(from_affine.a, to_affine.a, progress),

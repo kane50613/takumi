@@ -9,19 +9,15 @@ use std::{
   fmt::{self, Write},
   mem::take,
   ops::Deref,
-  rc::Rc,
 };
-use taffy::Size;
 
 use crate::{
-  Viewport,
   error::StyleSheetParseError,
   keyframes::parse_keyframe_prelude,
-  style::{
-    CalcArena, FromCss, KeyframeRule, KeyframesRule, LengthDefaultsToZero, SizingContext,
-    StyleDeclarationBlock,
-  },
+  style::{KeyframeRule, KeyframesRule, StyleDeclarationBlock, supports::parse_supports_condition},
 };
+
+pub use crate::style::media_query::MediaQueryList;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PropertyRule {
@@ -230,11 +226,6 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
   }
 }
 
-#[derive(Debug, Clone)]
-struct ParsedSelectors {
-  selectors: SelectorList<SelectorImpl>,
-}
-
 #[derive(Debug, Clone, Default)]
 struct StyleSheetFragment {
   rules: Vec<CssRule>,
@@ -256,6 +247,31 @@ impl StyleSheetFragment {
 enum StyleRuleBodyItem {
   Declarations(Box<StyleDeclarationBlock>),
   Rules(StyleSheetFragment),
+}
+
+macro_rules! impl_parser_traits {
+  ($parser:ty, $item:ty) => {
+    impl<'i> QualifiedRuleParser<'i> for $parser {
+      type Prelude = ();
+      type QualifiedRule = $item;
+      type Error = StyleSheetParseError;
+    }
+
+    impl<'i> AtRuleParser<'i> for $parser {
+      type Prelude = ();
+      type AtRule = $item;
+      type Error = StyleSheetParseError;
+    }
+
+    impl<'i> RuleBodyItemParser<'i, $item, StyleSheetParseError> for $parser {
+      fn parse_qualified(&self) -> bool {
+        false
+      }
+      fn parse_declarations(&self) -> bool {
+        true
+      }
+    }
+  };
 }
 
 pub(crate) struct StyleDeclarationParser;
@@ -281,28 +297,7 @@ impl<'i> DeclarationParser<'i> for StyleDeclarationParser {
   }
 }
 
-impl<'i> QualifiedRuleParser<'i> for StyleDeclarationParser {
-  type Prelude = ();
-  type QualifiedRule = StyleDeclarationBlock;
-  type Error = StyleSheetParseError;
-}
-
-impl<'i> AtRuleParser<'i> for StyleDeclarationParser {
-  type Prelude = ();
-  type AtRule = StyleDeclarationBlock;
-  type Error = StyleSheetParseError;
-}
-
-impl<'i> RuleBodyItemParser<'i, StyleDeclarationBlock, StyleSheetParseError>
-  for StyleDeclarationParser
-{
-  fn parse_qualified(&self) -> bool {
-    false
-  }
-  fn parse_declarations(&self) -> bool {
-    true
-  }
-}
+impl_parser_traits!(StyleDeclarationParser, StyleDeclarationBlock);
 
 struct PropertyRuleDeclarationParser;
 
@@ -322,29 +317,7 @@ impl<'i> DeclarationParser<'i> for PropertyRuleDeclarationParser {
   }
 }
 
-impl<'i> QualifiedRuleParser<'i> for PropertyRuleDeclarationParser {
-  type Prelude = ();
-  type QualifiedRule = (String, String);
-  type Error = StyleSheetParseError;
-}
-
-impl<'i> AtRuleParser<'i> for PropertyRuleDeclarationParser {
-  type Prelude = ();
-  type AtRule = (String, String);
-  type Error = StyleSheetParseError;
-}
-
-impl<'i> RuleBodyItemParser<'i, (String, String), StyleSheetParseError>
-  for PropertyRuleDeclarationParser
-{
-  fn parse_qualified(&self) -> bool {
-    false
-  }
-
-  fn parse_declarations(&self) -> bool {
-    true
-  }
-}
+impl_parser_traits!(PropertyRuleDeclarationParser, (String, String));
 
 struct NestedStyleRuleParser<'a> {
   parent_selectors: SelectorList<SelectorImpl>,
@@ -464,29 +437,7 @@ impl<'i> DeclarationParser<'i> for KeyframeDeclarationParser {
   }
 }
 
-impl<'i> QualifiedRuleParser<'i> for KeyframeDeclarationParser {
-  type Prelude = ();
-  type QualifiedRule = StyleDeclarationBlock;
-  type Error = StyleSheetParseError;
-}
-
-impl<'i> AtRuleParser<'i> for KeyframeDeclarationParser {
-  type Prelude = ();
-  type AtRule = StyleDeclarationBlock;
-  type Error = StyleSheetParseError;
-}
-
-impl<'i> RuleBodyItemParser<'i, StyleDeclarationBlock, StyleSheetParseError>
-  for KeyframeDeclarationParser
-{
-  fn parse_qualified(&self) -> bool {
-    false
-  }
-
-  fn parse_declarations(&self) -> bool {
-    true
-  }
-}
+impl_parser_traits!(KeyframeDeclarationParser, StyleDeclarationBlock);
 
 struct KeyframeRuleParser;
 
@@ -533,249 +484,6 @@ impl<'i> AtRuleParser<'i> for KeyframeRuleParser {
 struct RuleParser {
   current_layer: Option<LayerPath>,
   lossy: bool,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum MediaType {
-  All,
-  Screen,
-  Unsupported(String),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum MediaFeatureComparison {
-  Equal,
-  Min,
-  Max,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum MediaOrientation {
-  Portrait,
-  Landscape,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum MediaFeature {
-  Width(MediaFeatureComparison, LengthDefaultsToZero),
-  Height(MediaFeatureComparison, LengthDefaultsToZero),
-  Orientation(MediaOrientation),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-struct MediaQuery {
-  media_type: MediaType,
-  features: Vec<MediaFeature>,
-  negated: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct MediaQueryList {
-  queries: Vec<MediaQuery>,
-}
-
-impl MediaFeature {
-  fn matches(&self, viewport: Viewport, sizing: &SizingContext) -> bool {
-    match self {
-      Self::Width(comparison, value) => viewport.size.width.is_some_and(|width| {
-        compare_media_feature(*comparison, width as f32, value.to_px(sizing, width as f32))
-      }),
-      Self::Height(comparison, value) => viewport.size.height.is_some_and(|height| {
-        compare_media_feature(
-          *comparison,
-          height as f32,
-          value.to_px(sizing, height as f32),
-        )
-      }),
-      Self::Orientation(MediaOrientation::Portrait) => viewport
-        .size
-        .width
-        .zip(viewport.size.height)
-        .is_some_and(|(width, height)| height >= width),
-      Self::Orientation(MediaOrientation::Landscape) => viewport
-        .size
-        .width
-        .zip(viewport.size.height)
-        .is_some_and(|(width, height)| width > height),
-    }
-  }
-}
-
-impl MediaQuery {
-  fn matches(&self, viewport: Viewport, sizing: &SizingContext) -> bool {
-    let media_type_matches = match &self.media_type {
-      MediaType::All | MediaType::Screen => true,
-      MediaType::Unsupported(_) => false,
-    };
-
-    let mut is_match = media_type_matches
-      && self
-        .features
-        .iter()
-        .all(|feature| feature.matches(viewport, sizing));
-
-    if self.negated {
-      is_match = !is_match;
-    }
-
-    is_match
-  }
-}
-
-impl MediaQueryList {
-  pub fn matches(&self, viewport: Viewport) -> bool {
-    if self.queries.is_empty() {
-      return true;
-    }
-
-    let sizing = SizingContext {
-      viewport,
-      container_size: Size::NONE,
-      font_size: viewport.font_size,
-      root_font_size: None,
-      line_height: viewport.font_size,
-      root_line_height: Some(viewport.font_size),
-      calc_arena: Rc::new(CalcArena::default()),
-    };
-
-    self
-      .queries
-      .iter()
-      .any(|query| query.matches(viewport, &sizing))
-  }
-}
-
-fn compare_media_feature(comparison: MediaFeatureComparison, actual: f32, expected: f32) -> bool {
-  const MEDIA_FEATURE_EQUALITY_TOLERANCE: f32 = 0.5;
-
-  match comparison {
-    MediaFeatureComparison::Equal => (actual - expected).abs() <= MEDIA_FEATURE_EQUALITY_TOLERANCE,
-    MediaFeatureComparison::Min => actual >= expected,
-    MediaFeatureComparison::Max => actual <= expected,
-  }
-}
-
-fn parse_media_query<'i, 't>(
-  input: &mut Parser<'i, 't>,
-) -> Result<MediaQuery, ParseError<'i, StyleSheetParseError>> {
-  let mut negated = false;
-  let mut media_type = MediaType::All;
-  let mut features = Vec::new();
-  let mut has_explicit_media_type = false;
-
-  if let Ok(keyword) = input.try_parse(Parser::expect_ident_cloned) {
-    if keyword.eq_ignore_ascii_case("not") {
-      negated = true;
-      media_type = parse_media_type(input.expect_ident_cloned()?);
-      has_explicit_media_type = true;
-    } else if keyword.eq_ignore_ascii_case("only") {
-      media_type = parse_media_type(input.expect_ident_cloned()?);
-      has_explicit_media_type = true;
-    } else {
-      media_type = parse_media_type(keyword);
-      has_explicit_media_type = true;
-    }
-  }
-
-  if input
-    .try_parse(|input| parse_media_feature_block(input, &mut features))
-    .is_ok()
-  {
-    while input
-      .try_parse(|input| input.expect_ident_matching("and"))
-      .is_ok()
-    {
-      parse_media_feature_block(input, &mut features)?;
-    }
-  } else if has_explicit_media_type {
-    while input
-      .try_parse(|input| input.expect_ident_matching("and"))
-      .is_ok()
-    {
-      parse_media_feature_block(input, &mut features)?;
-    }
-  }
-
-  Ok(MediaQuery {
-    media_type,
-    features,
-    negated,
-  })
-}
-
-fn parse_media_type(name: CowRcStr<'_>) -> MediaType {
-  if name.eq_ignore_ascii_case("all") {
-    MediaType::All
-  } else if name.eq_ignore_ascii_case("screen") {
-    MediaType::Screen
-  } else {
-    MediaType::Unsupported(name.to_string())
-  }
-}
-
-fn parse_media_feature_block<'i, 't>(
-  input: &mut Parser<'i, 't>,
-  features: &mut Vec<MediaFeature>,
-) -> Result<(), ParseError<'i, StyleSheetParseError>> {
-  let location = input.current_source_location();
-  let token = input.next()?;
-  match token {
-    Token::ParenthesisBlock => input.parse_nested_block(|input| {
-      features.push(parse_media_feature(input)?);
-      Ok(())
-    }),
-    _ => Err(location.new_unexpected_token_error(token.clone())),
-  }
-}
-
-fn parse_media_feature<'i, 't>(
-  input: &mut Parser<'i, 't>,
-) -> Result<MediaFeature, ParseError<'i, StyleSheetParseError>> {
-  let feature_name = input.expect_ident_cloned()?;
-  input.expect_colon()?;
-
-  if feature_name.eq_ignore_ascii_case("orientation") {
-    let orientation = input.expect_ident_cloned()?;
-    return if orientation.eq_ignore_ascii_case("portrait") {
-      Ok(MediaFeature::Orientation(MediaOrientation::Portrait))
-    } else if orientation.eq_ignore_ascii_case("landscape") {
-      Ok(MediaFeature::Orientation(MediaOrientation::Landscape))
-    } else {
-      Err(
-        input.new_error(BasicParseErrorKind::UnexpectedToken(Token::Ident(
-          orientation,
-        ))),
-      )
-    };
-  }
-
-  let comparison = if feature_name.eq_ignore_ascii_case("min-width")
-    || feature_name.eq_ignore_ascii_case("min-height")
-  {
-    MediaFeatureComparison::Min
-  } else if feature_name.eq_ignore_ascii_case("max-width")
-    || feature_name.eq_ignore_ascii_case("max-height")
-  {
-    MediaFeatureComparison::Max
-  } else {
-    MediaFeatureComparison::Equal
-  };
-
-  let length = LengthDefaultsToZero::from_css(input).map_err(ParseError::into)?;
-
-  if feature_name.eq_ignore_ascii_case("width")
-    || feature_name.eq_ignore_ascii_case("min-width")
-    || feature_name.eq_ignore_ascii_case("max-width")
-  {
-    Ok(MediaFeature::Width(comparison, length))
-  } else if feature_name.eq_ignore_ascii_case("height")
-    || feature_name.eq_ignore_ascii_case("min-height")
-    || feature_name.eq_ignore_ascii_case("max-height")
-  {
-    Ok(MediaFeature::Height(comparison, length))
-  } else {
-    Err(input.new_custom_error(StyleSheetParseError::unsupported_media_feature()))
-  }
 }
 
 #[derive(Debug, Clone)]
@@ -879,89 +587,6 @@ fn parse_property_rule<'i, 't>(
   })
 }
 
-fn supports_declaration<'i, 't>(
-  input: &mut Parser<'i, 't>,
-) -> Result<bool, ParseError<'i, StyleSheetParseError>> {
-  let name = input.expect_ident_cloned()?;
-  input.expect_colon()?;
-  let declaration = StyleDeclarationBlock::parse(&name, input).map_err(ParseError::into)?;
-  Ok(!declaration.declarations.is_empty() && input.is_exhausted())
-}
-
-fn parse_supports_in_parens<'i, 't>(
-  input: &mut Parser<'i, 't>,
-) -> Result<bool, ParseError<'i, StyleSheetParseError>> {
-  let location = input.current_source_location();
-  match input.next()? {
-    Token::ParenthesisBlock => input.parse_nested_block(|input| {
-      let state = input.state();
-      if let Ok(result) = parse_supports_condition(input)
-        && input.is_exhausted()
-      {
-        return Ok(result);
-      }
-
-      input.reset(&state);
-      supports_declaration(input)
-    }),
-    token => Err(location.new_unexpected_token_error(token.clone())),
-  }
-}
-
-fn parse_supports_not<'i, 't>(
-  input: &mut Parser<'i, 't>,
-) -> Result<bool, ParseError<'i, StyleSheetParseError>> {
-  if input
-    .try_parse(|input| input.expect_ident_matching("not"))
-    .is_ok()
-  {
-    return Ok(!parse_supports_not(input)?);
-  }
-
-  parse_supports_in_parens(input)
-}
-
-fn parse_supports_condition<'i, 't>(
-  input: &mut Parser<'i, 't>,
-) -> Result<bool, ParseError<'i, StyleSheetParseError>> {
-  let mut result = parse_supports_not(input)?;
-  let mut operator = None;
-
-  loop {
-    if input
-      .try_parse(|input| input.expect_ident_matching("and"))
-      .is_ok()
-    {
-      if matches!(operator, Some(false)) {
-        return Err(
-          input.new_custom_error(StyleSheetParseError::supports_mixed_and_or_without_parentheses()),
-        );
-      }
-      operator = Some(true);
-      result &= parse_supports_not(input)?;
-      continue;
-    }
-
-    if input
-      .try_parse(|input| input.expect_ident_matching("or"))
-      .is_ok()
-    {
-      if matches!(operator, Some(true)) {
-        return Err(
-          input.new_custom_error(StyleSheetParseError::supports_mixed_and_or_without_parentheses()),
-        );
-      }
-      operator = Some(false);
-      result |= parse_supports_not(input)?;
-      continue;
-    }
-
-    break;
-  }
-
-  Ok(result)
-}
-
 fn parse_at_rule_prelude<'i, 't>(
   name: CowRcStr<'i>,
   input: &mut Parser<'i, 't>,
@@ -983,9 +608,7 @@ fn parse_at_rule_prelude<'i, 't>(
   }
 
   if name.eq_ignore_ascii_case("media") {
-    return Ok(AtRulePrelude::Media(MediaQueryList {
-      queries: input.parse_comma_separated(parse_media_query)?,
-    }));
+    return MediaQueryList::parse(input).map(AtRulePrelude::Media);
   }
 
   if name.eq_ignore_ascii_case("supports") {
@@ -1026,19 +649,16 @@ fn parse_layer_name<'i, 't>(
   Ok(segments)
 }
 
-fn extend_layer_name(
-  current_layer: Option<&LayerPath>,
-  layer_name: &[LayerName],
-) -> Option<LayerPath> {
+fn extend_layer_name(current_layer: Option<&LayerPath>, layer_name: &[LayerName]) -> LayerPath {
   if layer_name == [LayerName::Anonymous] {
     let mut nested_layer = current_layer.cloned().unwrap_or_default();
     nested_layer.push(LayerName::Anonymous);
-    return Some(nested_layer);
+    return nested_layer;
   }
 
   let mut combined = current_layer.cloned().unwrap_or_default();
   combined.extend(layer_name.iter().cloned());
-  Some(combined)
+  combined
 }
 
 fn ensure_single_layer_name<'i>(
@@ -1137,7 +757,7 @@ fn parse_nested_at_rule_block<'i, 't>(
       parse_style_rule_block(
         parent_selectors.clone(),
         media_queries,
-        nested_layer.as_ref(),
+        Some(&nested_layer),
         lossy,
         input,
       )
@@ -1177,7 +797,7 @@ fn parse_nested_at_rule_block<'i, 't>(
 }
 
 impl<'i> QualifiedRuleParser<'i> for RuleParser {
-  type Prelude = ParsedSelectors;
+  type Prelude = SelectorList<SelectorImpl>;
   type QualifiedRule = StyleSheetFragment;
   type Error = StyleSheetParseError;
 
@@ -1185,9 +805,7 @@ impl<'i> QualifiedRuleParser<'i> for RuleParser {
     &mut self,
     input: &mut Parser<'i, 't>,
   ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
-    Ok(ParsedSelectors {
-      selectors: SelectorList::parse(&TakumiSelectorParser, input, ParseRelative::No)?,
-    })
+    SelectorList::parse(&TakumiSelectorParser, input, ParseRelative::No)
   }
 
   fn parse_block<'t>(
@@ -1197,7 +815,7 @@ impl<'i> QualifiedRuleParser<'i> for RuleParser {
     input: &mut Parser<'i, 't>,
   ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
     parse_style_rule_block(
-      selectors.selectors,
+      selectors,
       &[],
       self.current_layer.as_ref(),
       self.lossy,
@@ -1230,7 +848,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
         ensure_single_layer_name(&layer_names, input)?;
         let declared_layers = layer_names
           .iter()
-          .filter_map(|layer_name| extend_layer_name(self.current_layer.as_ref(), layer_name))
+          .map(|layer_name| extend_layer_name(self.current_layer.as_ref(), layer_name))
           .collect::<Vec<_>>();
         let Some(layer_name) = layer_names.into_iter().next() else {
           return Ok(StyleSheetFragment {
@@ -1242,7 +860,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
         let mut fragment = parse_fragment_with_mode(
           input,
           &mut RuleParser {
-            current_layer: nested_layer.clone(),
+            current_layer: Some(nested_layer),
             lossy: self.lossy,
           },
         )?;
@@ -1329,7 +947,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
       AtRulePrelude::Layer(layer_names) => Ok(StyleSheetFragment {
         declared_layers: layer_names
           .into_iter()
-          .filter_map(|layer_name| extend_layer_name(self.current_layer.as_ref(), &layer_name))
+          .map(|layer_name| extend_layer_name(self.current_layer.as_ref(), &layer_name))
           .collect(),
         ..StyleSheetFragment::default()
       }),
@@ -1450,7 +1068,7 @@ impl StyleSheet {
           if lossy {
             continue;
           }
-          return Err(StyleSheetParseError::from_parse_error(css, context, error));
+          return Err(StyleSheetParseError::from_parse_error(context, error));
         }
       }
     }
@@ -1495,6 +1113,7 @@ mod tests {
   use super::*;
   use cssparser::ToCss;
 
+  use crate::Viewport;
   use crate::style::{Color, ColorInput, ComputedStyle, Length, Style, StyleDeclaration};
 
   fn computed_style_from_declarations(declarations: &StyleDeclarationBlock) -> ComputedStyle {
