@@ -1,15 +1,12 @@
 use crate::style::unexpected_token;
 use cssparser::Parser;
-use typed_builder::TypedBuilder;
 
 use crate::style::*;
 
 /// Parsed `background` shorthand value.
-#[derive(Debug, Clone, Default, PartialEq, TypedBuilder)]
-#[builder(field_defaults(default))]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Background {
   /// Background color.
-  #[builder(setter(strip_option))]
   pub color: Option<ColorInput<false>>,
   /// Background image.
   pub image: BackgroundImage,

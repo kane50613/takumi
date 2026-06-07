@@ -91,20 +91,26 @@ impl<'i> FromCss<'i> for BackgroundImage {
   ];
 }
 
+/// Parses a comma-separated list of items using `parse_item`, requiring at
+/// least one. Stops on the first token that is not a comma (lenient tail).
+pub(crate) fn parse_comma_list<'i, T>(
+  input: &mut Parser<'i, '_>,
+  mut parse_item: impl FnMut(&mut Parser<'i, '_>) -> ParseResult<'i, T>,
+) -> ParseResult<'i, Box<[T]>> {
+  let mut items = Vec::new();
+  items.push(parse_item(input)?);
+  while input.expect_comma().is_ok() {
+    items.push(parse_item(input)?);
+  }
+  Ok(items.into_boxed_slice())
+}
+
 /// A collection of background images.
 pub type BackgroundImages = Box<[BackgroundImage]>;
 
 impl<'i> FromCss<'i> for BackgroundImages {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut images = Vec::new();
-
-    images.push(BackgroundImage::from_css(input)?);
-
-    while input.expect_comma().is_ok() {
-      images.push(BackgroundImage::from_css(input)?);
-    }
-
-    Ok(images.into_boxed_slice())
+    parse_comma_list(input, BackgroundImage::from_css)
   }
 
   const VALID_TOKENS: &'static [CssToken] = BackgroundImage::VALID_TOKENS;

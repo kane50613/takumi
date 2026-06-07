@@ -1,5 +1,6 @@
 use cssparser::Parser;
 
+use super::background_image::parse_comma_list;
 use crate::style::tw::TailwindPropertyParser;
 use crate::style::{
   Animatable, CssToken, FromCss, ListInterpolationStrategy, ParseResult, declare_enum_from_css_impl,
@@ -10,14 +11,7 @@ pub type BlendModes = Box<[BlendMode]>;
 
 impl<'i> FromCss<'i> for BlendModes {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut values = Vec::new();
-    values.push(BlendMode::from_css(input)?);
-
-    while input.expect_comma().is_ok() {
-      values.push(BlendMode::from_css(input)?);
-    }
-
-    Ok(values.into_boxed_slice())
+    parse_comma_list(input, BlendMode::from_css)
   }
 
   const VALID_TOKENS: &'static [CssToken] = BlendMode::VALID_TOKENS;

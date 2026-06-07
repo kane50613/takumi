@@ -3,6 +3,7 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use std::fmt;
 use taffy::Size;
 
+use super::background_image::parse_comma_list;
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
   MakeComputed, ParseResult, SizingContext, tw::TailwindPropertyParser,
@@ -301,14 +302,7 @@ pub type BackgroundSizes = Box<[BackgroundSize]>;
 
 impl<'i> FromCss<'i> for BackgroundSizes {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut values = Vec::new();
-    values.push(BackgroundSize::from_css(input)?);
-
-    while input.expect_comma().is_ok() {
-      values.push(BackgroundSize::from_css(input)?);
-    }
-
-    Ok(values.into_boxed_slice())
+    parse_comma_list(input, BackgroundSize::from_css)
   }
 
   const VALID_TOKENS: &'static [CssToken] = BackgroundSize::VALID_TOKENS;

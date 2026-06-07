@@ -1,6 +1,7 @@
 use cssparser::{Parser, match_ignore_ascii_case};
 use std::fmt;
 
+use super::background_image::parse_comma_list;
 use crate::style::{
   Animatable, CssToken, FromCss, ListInterpolationStrategy, MakeComputed, ParseResult, ToCss,
   declare_enum_from_css_impl,
@@ -100,14 +101,7 @@ pub type BackgroundRepeats = Box<[BackgroundRepeat]>;
 
 impl<'i> FromCss<'i> for BackgroundRepeats {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut values = Vec::new();
-    values.push(BackgroundRepeat::from_css(input)?);
-
-    while input.expect_comma().is_ok() {
-      values.push(BackgroundRepeat::from_css(input)?);
-    }
-
-    Ok(values.into_boxed_slice())
+    parse_comma_list(input, BackgroundRepeat::from_css)
   }
 
   const VALID_TOKENS: &'static [CssToken] = BackgroundRepeat::VALID_TOKENS;
