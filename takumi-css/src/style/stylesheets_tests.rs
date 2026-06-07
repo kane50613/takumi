@@ -1,4 +1,3 @@
-
 use std::{collections::HashMap, rc::Rc, str::FromStr};
 
 use cssparser::{Parser, ParserInput};
@@ -11,7 +10,7 @@ use super::{
 };
 use crate::{
   Viewport,
-  style::{ComputedStyle, SizingContext, Style, StyleDeclaration, properties::*},
+  style::{CalcArena, ComputedStyle, SizingContext, Style, StyleDeclaration, properties::*},
 };
 
 fn style_with(declarations: impl IntoIterator<Item = StyleDeclaration>) -> Style {
