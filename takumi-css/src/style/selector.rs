@@ -258,7 +258,7 @@ enum StyleRuleBodyItem {
   Rules(StyleSheetFragment),
 }
 
-pub struct StyleDeclarationParser;
+pub(crate) struct StyleDeclarationParser;
 
 impl<'i> DeclarationParser<'i> for StyleDeclarationParser {
   type Declaration = StyleDeclarationBlock;

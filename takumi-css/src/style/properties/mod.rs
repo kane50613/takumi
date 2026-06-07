@@ -411,12 +411,12 @@ impl<'i> FromCss<'i> for String {
 }
 
 /// Converts a parsed/inherited value into a computed value for the current node context.
-pub trait MakeComputed {
+pub(crate) trait MakeComputed {
   /// Default no-op for types that do not need computed-value normalization.
   fn make_computed(&mut self, _sizing: &SizingContext) {}
 }
 
-pub trait Animatable: Sized + Clone {
+pub(crate) trait Animatable: Sized + Clone {
   fn interpolate(
     &mut self,
     from: &Self,
@@ -445,11 +445,11 @@ pub trait Animatable: Sized + Clone {
   }
 }
 
-pub fn lerp(lhs: f32, rhs: f32, progress: f32) -> f32 {
+pub(crate) fn lerp(lhs: f32, rhs: f32, progress: f32) -> f32 {
   lhs + (rhs - lhs) * progress
 }
 
-pub enum ListInterpolationStrategy {
+pub(crate) enum ListInterpolationStrategy {
   Discrete,
   RepeatToLcm,
   PadToLongestWithNeutral,
@@ -479,7 +479,7 @@ impl<T: MakeComputed> MakeComputed for Vec<T> {
   }
 }
 
-pub fn next_is_comma<'i>(input: &mut Parser<'i, '_>) -> bool {
+pub(crate) fn next_is_comma<'i>(input: &mut Parser<'i, '_>) -> bool {
   let state = input.state();
   let is_comma = input.expect_comma().is_ok();
   input.reset(&state);
@@ -765,7 +765,7 @@ pub(crate) use unexpected_token;
 /// - `["fill"]` → `"'fill'"`
 /// - `["fill", "contain"]` → `"'fill' or 'contain'"`
 /// - `["fill", "contain", "cover"]` → `"'fill', 'contain' or 'cover'"`
-pub fn merge_enum_values(values: &[CssToken]) -> String {
+pub(crate) fn merge_enum_values(values: &[CssToken]) -> String {
   match values.len() {
     0 => String::new(),
     1 => values[0].to_string(),
@@ -857,7 +857,7 @@ impl ToCss for std::sync::Arc<str> {
 }
 
 /// Write a CSS quoted string, escaping backslashes and double quotes.
-pub fn write_css_string<W: fmt::Write>(dest: &mut W, s: &str) -> fmt::Result {
+pub(crate) fn write_css_string<W: fmt::Write>(dest: &mut W, s: &str) -> fmt::Result {
   dest.write_char('"')?;
   for ch in s.chars() {
     match ch {
