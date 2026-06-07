@@ -861,11 +861,11 @@ mod tests {
       ])
       .build();
 
-    let render_context = SizingContext::new_test(Viewport::new((200, 100)));
+    let sizing = SizingContext::new_test(Viewport::new((200, 100)));
     let resolved = resolve_stops_along_axis(
       &gradient.stops,
-      render_context.viewport.size.width.unwrap_or_default() as f32,
-      &render_context,
+      sizing.viewport.size.width.unwrap_or_default() as f32,
+      &sizing,
       Color::black(),
     );
 
@@ -893,11 +893,11 @@ mod tests {
       ])
       .build();
 
-    let render_context = SizingContext::new_test(Viewport::new((200, 100)));
+    let sizing = SizingContext::new_test(Viewport::new((200, 100)));
     let resolved = resolve_stops_along_axis(
       &gradient.stops,
-      render_context.viewport.size.width.unwrap_or_default() as f32,
-      &render_context,
+      sizing.viewport.size.width.unwrap_or_default() as f32,
+      &sizing,
       Color::black(),
     );
 
@@ -923,8 +923,8 @@ mod tests {
       ])
       .build();
 
-    let dummy_context = SizingContext::new_test(Viewport::new((100, 100)));
-    let tile = RadialGradientTile::new(&gradient, 100, 100, &dummy_context, Color::black());
+    let sizing = SizingContext::new_test(Viewport::new((100, 100)));
+    let tile = RadialGradientTile::new(&gradient, 100, 100, &sizing, Color::black());
 
     // Center (50, 50) should be red
     let color_center = tile.sample_pixel(50, 50).demultiply();
@@ -964,8 +964,8 @@ mod tests {
       ])
       .build();
 
-    let render_context = SizingContext::new_test(Viewport::new((40, 40)));
-    let tile = RadialGradientTile::new(&gradient, 40, 40, &render_context, Color::black());
+    let sizing = SizingContext::new_test(Viewport::new((40, 40)));
+    let tile = RadialGradientTile::new(&gradient, 40, 40, &sizing, Color::black());
 
     assert_eq!(
       [
@@ -1003,8 +1003,8 @@ mod tests {
       ])
       .build();
 
-    let dummy_context = SizingContext::new_test(Viewport::new((100, 100)));
-    let tile = RadialGradientTile::new(&gradient, 100, 100, &dummy_context, Color::black());
+    let sizing = SizingContext::new_test(Viewport::new((100, 100)));
+    let tile = RadialGradientTile::new(&gradient, 100, 100, &sizing, Color::black());
 
     // dx_left=20, dx_right=80, dy_top=20, dy_bottom=80
     // f_rx = 80, f_ry = 80
