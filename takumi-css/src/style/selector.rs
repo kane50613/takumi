@@ -253,6 +253,31 @@ enum StyleRuleBodyItem {
   Rules(StyleSheetFragment),
 }
 
+macro_rules! impl_parser_traits {
+  ($parser:ty, $item:ty) => {
+    impl<'i> QualifiedRuleParser<'i> for $parser {
+      type Prelude = ();
+      type QualifiedRule = $item;
+      type Error = StyleSheetParseError;
+    }
+
+    impl<'i> AtRuleParser<'i> for $parser {
+      type Prelude = ();
+      type AtRule = $item;
+      type Error = StyleSheetParseError;
+    }
+
+    impl<'i> RuleBodyItemParser<'i, $item, StyleSheetParseError> for $parser {
+      fn parse_qualified(&self) -> bool {
+        false
+      }
+      fn parse_declarations(&self) -> bool {
+        true
+      }
+    }
+  };
+}
+
 pub(crate) struct StyleDeclarationParser;
 
 impl<'i> DeclarationParser<'i> for StyleDeclarationParser {
@@ -276,28 +301,7 @@ impl<'i> DeclarationParser<'i> for StyleDeclarationParser {
   }
 }
 
-impl<'i> QualifiedRuleParser<'i> for StyleDeclarationParser {
-  type Prelude = ();
-  type QualifiedRule = StyleDeclarationBlock;
-  type Error = StyleSheetParseError;
-}
-
-impl<'i> AtRuleParser<'i> for StyleDeclarationParser {
-  type Prelude = ();
-  type AtRule = StyleDeclarationBlock;
-  type Error = StyleSheetParseError;
-}
-
-impl<'i> RuleBodyItemParser<'i, StyleDeclarationBlock, StyleSheetParseError>
-  for StyleDeclarationParser
-{
-  fn parse_qualified(&self) -> bool {
-    false
-  }
-  fn parse_declarations(&self) -> bool {
-    true
-  }
-}
+impl_parser_traits!(StyleDeclarationParser, StyleDeclarationBlock);
 
 struct PropertyRuleDeclarationParser;
 
@@ -317,29 +321,7 @@ impl<'i> DeclarationParser<'i> for PropertyRuleDeclarationParser {
   }
 }
 
-impl<'i> QualifiedRuleParser<'i> for PropertyRuleDeclarationParser {
-  type Prelude = ();
-  type QualifiedRule = (String, String);
-  type Error = StyleSheetParseError;
-}
-
-impl<'i> AtRuleParser<'i> for PropertyRuleDeclarationParser {
-  type Prelude = ();
-  type AtRule = (String, String);
-  type Error = StyleSheetParseError;
-}
-
-impl<'i> RuleBodyItemParser<'i, (String, String), StyleSheetParseError>
-  for PropertyRuleDeclarationParser
-{
-  fn parse_qualified(&self) -> bool {
-    false
-  }
-
-  fn parse_declarations(&self) -> bool {
-    true
-  }
-}
+impl_parser_traits!(PropertyRuleDeclarationParser, (String, String));
 
 struct NestedStyleRuleParser<'a> {
   parent_selectors: SelectorList<SelectorImpl>,
@@ -459,29 +441,7 @@ impl<'i> DeclarationParser<'i> for KeyframeDeclarationParser {
   }
 }
 
-impl<'i> QualifiedRuleParser<'i> for KeyframeDeclarationParser {
-  type Prelude = ();
-  type QualifiedRule = StyleDeclarationBlock;
-  type Error = StyleSheetParseError;
-}
-
-impl<'i> AtRuleParser<'i> for KeyframeDeclarationParser {
-  type Prelude = ();
-  type AtRule = StyleDeclarationBlock;
-  type Error = StyleSheetParseError;
-}
-
-impl<'i> RuleBodyItemParser<'i, StyleDeclarationBlock, StyleSheetParseError>
-  for KeyframeDeclarationParser
-{
-  fn parse_qualified(&self) -> bool {
-    false
-  }
-
-  fn parse_declarations(&self) -> bool {
-    true
-  }
-}
+impl_parser_traits!(KeyframeDeclarationParser, StyleDeclarationBlock);
 
 struct KeyframeRuleParser;
 
@@ -675,14 +635,8 @@ fn parse_media_query<'i, 't>(
   if input
     .try_parse(|input| parse_media_feature_block(input, &mut features))
     .is_ok()
+    || has_explicit_media_type
   {
-    while input
-      .try_parse(|input| input.expect_ident_matching("and"))
-      .is_ok()
-    {
-      parse_media_feature_block(input, &mut features)?;
-    }
-  } else if has_explicit_media_type {
     while input
       .try_parse(|input| input.expect_ident_matching("and"))
       .is_ok()
@@ -874,7 +828,7 @@ fn parse_property_rule<'i, 't>(
   })
 }
 
-fn supports_declaration<'i, 't>(
+fn parse_supports_declaration<'i, 't>(
   input: &mut Parser<'i, 't>,
 ) -> Result<bool, ParseError<'i, StyleSheetParseError>> {
   let name = input.expect_ident_cloned()?;
@@ -897,7 +851,7 @@ fn parse_supports_in_parens<'i, 't>(
       }
 
       input.reset(&state);
-      supports_declaration(input)
+      parse_supports_declaration(input)
     }),
     token => Err(location.new_unexpected_token_error(token.clone())),
   }
@@ -1021,19 +975,16 @@ fn parse_layer_name<'i, 't>(
   Ok(segments)
 }
 
-fn extend_layer_name(
-  current_layer: Option<&LayerPath>,
-  layer_name: &[LayerName],
-) -> Option<LayerPath> {
+fn extend_layer_name(current_layer: Option<&LayerPath>, layer_name: &[LayerName]) -> LayerPath {
   if layer_name == [LayerName::Anonymous] {
     let mut nested_layer = current_layer.cloned().unwrap_or_default();
     nested_layer.push(LayerName::Anonymous);
-    return Some(nested_layer);
+    return nested_layer;
   }
 
   let mut combined = current_layer.cloned().unwrap_or_default();
   combined.extend(layer_name.iter().cloned());
-  Some(combined)
+  combined
 }
 
 fn ensure_single_layer_name<'i>(
@@ -1132,7 +1083,7 @@ fn parse_nested_at_rule_block<'i, 't>(
       parse_style_rule_block(
         parent_selectors.clone(),
         media_queries,
-        nested_layer.as_ref(),
+        Some(&nested_layer),
         lossy,
         input,
       )
@@ -1223,7 +1174,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
         ensure_single_layer_name(&layer_names, input)?;
         let declared_layers = layer_names
           .iter()
-          .filter_map(|layer_name| extend_layer_name(self.current_layer.as_ref(), layer_name))
+          .map(|layer_name| extend_layer_name(self.current_layer.as_ref(), layer_name))
           .collect::<Vec<_>>();
         let Some(layer_name) = layer_names.into_iter().next() else {
           return Ok(StyleSheetFragment {
@@ -1235,7 +1186,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
         let mut fragment = parse_fragment_with_mode(
           input,
           &mut RuleParser {
-            current_layer: nested_layer.clone(),
+            current_layer: Some(nested_layer),
             lossy: self.lossy,
           },
         )?;
@@ -1322,7 +1273,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
       AtRulePrelude::Layer(layer_names) => Ok(StyleSheetFragment {
         declared_layers: layer_names
           .into_iter()
-          .filter_map(|layer_name| extend_layer_name(self.current_layer.as_ref(), &layer_name))
+          .map(|layer_name| extend_layer_name(self.current_layer.as_ref(), &layer_name))
           .collect(),
         ..StyleSheetFragment::default()
       }),
