@@ -40,10 +40,6 @@ impl<'i> FromCss<'i> for FontSynthesis {
       };
     }
 
-    if !input.is_exhausted() {
-      return Err(input.new_error_for_next_token());
-    }
-
     Ok(Self { weight, style })
   }
 

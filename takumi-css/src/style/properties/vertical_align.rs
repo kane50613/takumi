@@ -1,6 +1,6 @@
 use std::fmt;
 
-use cssparser::{Parser, match_ignore_ascii_case};
+use cssparser::Parser;
 use parley::LineMetrics;
 
 use crate::style::{SizingContext, ToCss, tw::TailwindPropertyParser, *};
@@ -210,17 +210,9 @@ impl ResolvedVerticalAlign {
 
 impl TailwindPropertyParser for VerticalAlign {
   fn parse_tw(token: &str) -> Option<Self> {
-    match_ignore_ascii_case! {token,
-      "baseline" => Some(Self::Keyword(VerticalAlignKeyword::Baseline)),
-      "top" => Some(Self::Keyword(VerticalAlignKeyword::Top)),
-      "middle" => Some(Self::Keyword(VerticalAlignKeyword::Middle)),
-      "bottom" => Some(Self::Keyword(VerticalAlignKeyword::Bottom)),
-      "text-top" => Some(Self::Keyword(VerticalAlignKeyword::TextTop)),
-      "text-bottom" => Some(Self::Keyword(VerticalAlignKeyword::TextBottom)),
-      "sub" => Some(Self::Keyword(VerticalAlignKeyword::Sub)),
-      "super" => Some(Self::Keyword(VerticalAlignKeyword::Super)),
-      _ => None,
-    }
+    VerticalAlignKeyword::from_str(token)
+      .ok()
+      .map(Self::Keyword)
   }
 }
 

@@ -1,11 +1,10 @@
 use std::fmt;
 
-use crate::style::{ToCss, unexpected_token};
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::Parser;
 
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
-  SizingContext,
+  SizingContext, ToCss, declare_enum_from_css_impl,
 };
 
 /// Absolute `font-size` keywords.
@@ -47,38 +46,17 @@ impl FontSizeKeyword {
   }
 }
 
-impl<'i> FromCss<'i> for FontSizeKeyword {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
-    let token = input.next()?;
-
-    match token {
-      Token::Ident(ident) => match_ignore_ascii_case! { ident,
-        "xx-small" => Ok(Self::XXSmall),
-        "x-small" => Ok(Self::XSmall),
-        "small" => Ok(Self::Small),
-        "medium" => Ok(Self::Medium),
-        "large" => Ok(Self::Large),
-        "x-large" => Ok(Self::XLarge),
-        "xx-large" => Ok(Self::XXLarge),
-        "xxx-large" => Ok(Self::XXXLarge),
-        _ => Err(unexpected_token!(location, token)),
-      },
-      _ => Err(unexpected_token!(location, token)),
-    }
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("xx-small"),
-    CssToken::Keyword("x-small"),
-    CssToken::Keyword("small"),
-    CssToken::Keyword("medium"),
-    CssToken::Keyword("large"),
-    CssToken::Keyword("x-large"),
-    CssToken::Keyword("xx-large"),
-    CssToken::Keyword("xxx-large"),
-  ];
-}
+declare_enum_from_css_impl!(
+  FontSizeKeyword,
+  "xx-small" => FontSizeKeyword::XXSmall,
+  "x-small" => FontSizeKeyword::XSmall,
+  "small" => FontSizeKeyword::Small,
+  "medium" => FontSizeKeyword::Medium,
+  "large" => FontSizeKeyword::Large,
+  "x-large" => FontSizeKeyword::XLarge,
+  "xx-large" => FontSizeKeyword::XXLarge,
+  "xxx-large" => FontSizeKeyword::XXXLarge,
+);
 
 /// A `font-size` value, either a keyword or an explicit length.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -167,21 +145,6 @@ impl Animatable for FontSize {
     let mut value = from_length;
     value.interpolate(&from_length, &to_length, progress, sizing, current_color);
     *self = Self::Length(value);
-  }
-}
-
-impl ToCss for FontSizeKeyword {
-  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    match self {
-      Self::XXSmall => dest.write_str("xx-small"),
-      Self::XSmall => dest.write_str("x-small"),
-      Self::Small => dest.write_str("small"),
-      Self::Medium => dest.write_str("medium"),
-      Self::Large => dest.write_str("large"),
-      Self::XLarge => dest.write_str("x-large"),
-      Self::XXLarge => dest.write_str("xx-large"),
-      Self::XXXLarge => dest.write_str("xxx-large"),
-    }
   }
 }
 
