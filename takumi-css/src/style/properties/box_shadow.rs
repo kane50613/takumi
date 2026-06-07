@@ -12,6 +12,7 @@ use crate::style::{
 /// Construct with [`BoxShadow::builder`].
 #[derive(Debug, Clone, PartialEq, Copy, Default, TypedBuilder)]
 #[builder(field_defaults(default))]
+#[non_exhaustive]
 pub struct BoxShadow {
   /// Whether the shadow is inset (inside the element) or outset (outside the element).
   #[builder(default = false)]

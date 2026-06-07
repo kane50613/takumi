@@ -11,6 +11,7 @@ use crate::style::{
 /// Represents a text shadow with all its properties.
 #[derive(Debug, Clone, PartialEq, Copy, Default, TypedBuilder)]
 #[builder(field_defaults(default))]
+#[non_exhaustive]
 pub struct TextShadow {
   /// Horizontal offset of the shadow.
   pub offset_x: LengthDefaultsToZero,

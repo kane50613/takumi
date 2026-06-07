@@ -11,6 +11,7 @@ use crate::style::{
 /// Controls whether inline contents are scaled to fit their line box.
 #[derive(Debug, Clone, Copy, PartialEq, Default, TypedBuilder)]
 #[builder(field_defaults(default))]
+#[non_exhaustive]
 pub struct TextFit {
   /// Selects whether fitting grows, shrinks, or leaves text unchanged.
   pub mode: TextFitMode,

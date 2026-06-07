@@ -10,6 +10,7 @@ use crate::style::{
 /// Construct with [`TextWrap::builder`].
 #[derive(Debug, Clone, Copy, PartialEq, Default, TypedBuilder)]
 #[builder(field_defaults(default))]
+#[non_exhaustive]
 pub struct TextWrap {
   /// Controls whether text should be wrapped.
   pub mode: TextWrapMode,
