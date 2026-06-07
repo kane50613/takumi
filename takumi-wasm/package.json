@@ -73,6 +73,7 @@
     "build": "wasm-pack build --no-pack --release --out-dir pkg --target web && bun build:js && bun scripts/patch-generated-loader.ts",
     "build:js": "tsdown",
     "build:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target web && bun build:js && bun scripts/patch-generated-loader.ts",
+    "bench": "wasm-pack build --no-pack --release --out-dir pkg-node --target nodejs && bun wasm-bench.cjs",
     "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json"
   },
   "dependencies": {
