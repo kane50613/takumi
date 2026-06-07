@@ -563,11 +563,10 @@ mod tests {
   use std::collections::BTreeMap;
 
   use super::{MatchedDeclarationsView, match_stylesheets_view};
-  use crate::layout::style::StyleSheet;
   use crate::layout::{
     Viewport,
     node::Node,
-    style::{ComputedStyle, Length, Style},
+    style::{ComputedStyle, Length, Style, StyleSheet},
   };
 
   fn container_with_class(class_name: &str) -> Node {

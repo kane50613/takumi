@@ -874,14 +874,11 @@ mod tests {
   use taffy::Size;
 
   use super::{resolve_position_component_x, resolve_position_component_y};
-  use crate::{
-    layout::style::SizingContext,
-    layout::{
-      Viewport,
-      style::{
-        BackgroundPosition, CalcArena, Length, PositionComponent, PositionKeywordX,
-        PositionKeywordY, SpacePair,
-      },
+  use crate::layout::{
+    Viewport,
+    style::{
+      BackgroundPosition, CalcArena, Length, PositionComponent, PositionKeywordX, PositionKeywordY,
+      SizingContext, SpacePair,
     },
   };
 

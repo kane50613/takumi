@@ -4,12 +4,9 @@ use std::{cell::RefCell, fmt, ops::Neg};
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use taffy::{CompactLength, Dimension, LengthPercentage, LengthPercentageAuto};
 
-use crate::{
-  style::SizingContext,
-  style::{
-    AspectRatio, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult,
-    tw::{TW_VAR_SPACING, TailwindPropertyParser},
-  },
+use crate::style::{
+  AspectRatio, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, SizingContext,
+  tw::{TW_VAR_SPACING, TailwindPropertyParser},
 };
 
 const ONE_CM_IN_PX: f32 = 96.0 / 2.54;

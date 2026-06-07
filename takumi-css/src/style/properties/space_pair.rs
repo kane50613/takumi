@@ -2,12 +2,9 @@ use cssparser::Parser;
 use std::fmt;
 use taffy::{Point, Size};
 
-use crate::{
-  style::SizingContext,
-  style::{
-    CssExpectedMessage, CssToken, FromCss, LengthDefaultsToZero, MakeComputed, Overflow,
-    ParseResult, ToCss,
-  },
+use crate::style::{
+  CssExpectedMessage, CssToken, FromCss, LengthDefaultsToZero, MakeComputed, Overflow, ParseResult,
+  SizingContext, ToCss,
 };
 
 /// A pair of values for horizontal and vertical axes.

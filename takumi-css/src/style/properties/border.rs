@@ -1,12 +1,9 @@
 use crate::style::unexpected_token;
 use cssparser::Parser;
 
-use crate::{
-  style::SizingContext,
-  style::{
-    BorderStyle, ColorInput, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult,
-    properties::Length,
-  },
+use crate::style::{
+  BorderStyle, ColorInput, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult,
+  SizingContext, properties::Length,
 };
 
 /// Parsed `border` value.

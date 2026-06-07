@@ -3,10 +3,7 @@ use std::fmt;
 use cssparser::{Parser, match_ignore_ascii_case};
 use parley::LineMetrics;
 
-use crate::{
-  style::SizingContext,
-  style::{ToCss, tw::TailwindPropertyParser, *},
-};
+use crate::style::{SizingContext, ToCss, tw::TailwindPropertyParser, *};
 
 /// Keyword values for the CSS `vertical-align` property.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

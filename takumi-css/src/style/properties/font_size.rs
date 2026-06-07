@@ -3,9 +3,9 @@ use std::fmt;
 use crate::style::{ToCss, unexpected_token};
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
-use crate::{
-  style::SizingContext,
-  style::{Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult},
+use crate::style::{
+  Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
+  SizingContext,
 };
 
 /// Absolute `font-size` keywords.
@@ -201,7 +201,10 @@ mod tests {
   use taffy::Size;
 
   use super::*;
-  use crate::{style::CalcArena, style::SizingContext, viewport::Viewport};
+  use crate::{
+    style::{CalcArena, SizingContext},
+    viewport::Viewport,
+  };
 
   #[test]
   fn defaults_to_medium_keyword() {

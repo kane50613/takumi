@@ -3,12 +3,9 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use std::fmt;
 use taffy::Size;
 
-use crate::{
-  style::SizingContext,
-  style::{
-    Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
-    MakeComputed, ParseResult, tw::TailwindPropertyParser,
-  },
+use crate::style::{
+  Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
+  MakeComputed, ParseResult, SizingContext, tw::TailwindPropertyParser,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

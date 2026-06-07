@@ -1,12 +1,9 @@
 use cssparser::Parser;
 use std::fmt;
 
-use crate::{
-  style::SizingContext,
-  style::{
-    Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, lerp,
-    tw::TailwindPropertyParser,
-  },
+use crate::style::{
+  Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, SizingContext,
+  ToCss, lerp, tw::TailwindPropertyParser,
 };
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]

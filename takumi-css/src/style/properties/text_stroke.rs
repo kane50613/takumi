@@ -1,10 +1,8 @@
 use cssparser::Parser;
 
-use crate::{
-  style::SizingContext,
-  style::{
-    ColorInput, CssSyntaxKind, CssToken, FromCss, LengthDefaultsToZero, MakeComputed, ParseResult,
-  },
+use crate::style::{
+  ColorInput, CssSyntaxKind, CssToken, FromCss, LengthDefaultsToZero, MakeComputed, ParseResult,
+  SizingContext,
 };
 
 /// Parsed `text-stroke` value.
