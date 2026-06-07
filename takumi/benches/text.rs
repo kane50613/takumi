@@ -62,41 +62,6 @@ fn long_paragraph() -> Node {
   .with_tw("flex w-full h-full p-12 bg-white".parse().unwrap())
 }
 
-fn many_runs_styled() -> Node {
-  let palette = [
-    "text-gray-900",
-    "text-red-600",
-    "text-green-600",
-    "text-blue-600",
-    "text-purple-600",
-    "text-orange-600",
-  ];
-  let weights = [
-    "font-normal",
-    "font-medium",
-    "font-semibold",
-    "font-bold",
-    "font-extrabold",
-  ];
-  let mut spans: Vec<Node> = Vec::new();
-  for (i, word) in LONG_TEXT.split_whitespace().enumerate() {
-    let color = palette[i % palette.len()];
-    let weight = weights[i % weights.len()];
-    let tw = format!("flex text-[26px] {color} {weight}");
-    spans.push(Node::text(format!("{word} ")).with_tw(tw.parse().unwrap()));
-  }
-  Node::container(spans).with_tw("flex flex-row w-full h-full p-12 bg-white".parse().unwrap())
-}
-
-fn shadowed_decorated() -> Node {
-  Node::container([Node::text(LONG_TEXT.to_string()).with_tw(
-    "text-[36px] font-bold text-gray-900 underline line-through"
-      .parse()
-      .unwrap(),
-  )])
-  .with_tw("flex w-full h-full p-12 bg-white".parse().unwrap())
-}
-
 fn clipped_text_paragraph() -> Node {
   Node::container([
     Node::text(LONG_TEXT.to_string()).with_tw(
@@ -112,17 +77,17 @@ fn bench_text(c: &mut Criterion) {
   group.bench_function("long_paragraph", |b| {
     b.iter(|| render_node(&g, black_box(long_paragraph())))
   });
-  group.bench_function("many_runs_styled", |b| {
-    b.iter(|| render_node(&g, black_box(many_runs_styled())))
-  });
-  group.bench_function("shadowed_decorated", |b| {
-    b.iter(|| render_node(&g, black_box(shadowed_decorated())))
-  });
   group.bench_function("clipped_text_paragraph", |b| {
     b.iter(|| render_node(&g, black_box(clipped_text_paragraph())))
   });
   group.finish();
 }
 
-criterion_group!(benches, bench_text);
+mod common;
+
+criterion_group! {
+  name = benches;
+  config = common::criterion();
+  targets = bench_text
+}
 criterion_main!(benches);

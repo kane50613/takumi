@@ -7,9 +7,9 @@ use takumi::{
     node::Node,
     style::{
       AlignItems, BackgroundClip, BackgroundImages, BackgroundPositions, BackgroundRepeats,
-      BackgroundSizes, BorderRadius, BorderStyle, Color, ColorInput, Display, FlexDirection,
-      FontWeight, FromCss, JustifyContent,
-      Length::{Percentage, Px, Rem},
+      BackgroundSizes, BorderRadius, Color, ColorInput, Display, FlexDirection, FontWeight,
+      FromCss, JustifyContent,
+      Length::{Percentage, Px},
       ObjectFit, Overflow, Sides, SpacePair, Style, StyleDeclaration,
     },
   },
@@ -38,27 +38,6 @@ fn simple_image_blit_fixture() -> Node {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::Fill)),
-  )
-}
-
-fn rounded_cover_image_fixture() -> Node {
-  Node::container([Node::image(IMAGE_PATH).with_style(
-    Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0)))
-      .with(StyleDeclaration::height(Percentage(100.0)))
-      .with(StyleDeclaration::object_fit(ObjectFit::Cover)),
-  )])
-  .with_style(
-    Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(980.0)))
-      .with(StyleDeclaration::height(Px(540.0)))
-      .with_border_radius(BorderRadius::from_str("64px").unwrap())
-      .with_overflow(SpacePair::from_single(Overflow::Clip))
-      .with(StyleDeclaration::background_color(ColorInput::Value(
-        Color([245, 247, 250, 255]),
-      ))),
   )
 }
 
@@ -98,44 +77,6 @@ fn gradient_clip_text_fixture() -> Node {
       )))
       .with(StyleDeclaration::font_size(Px(72.0).into()))
       .with(StyleDeclaration::font_weight(FontWeight::from(800.0)))
-      .with(StyleDeclaration::align_items(AlignItems::Center))
-      .with(StyleDeclaration::justify_content(JustifyContent::Center)),
-  )
-}
-
-fn overflow_text_fixture() -> Node {
-  Node::container([Node::container([
-    Node::text(
-      "This is a very long text block that should overflow its box and exercise mask and clip handling in the text compositor."
-        .to_string(),
-    )
-    .with_style(
-      Style::default()
-        .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::font_size(Rem(3.5).into()))
-        .with(StyleDeclaration::color(ColorInput::Value(Color([
-          16, 18, 24, 255,
-        ])))),
-    ),
-  ])
-  .with_style(
-    Style::default()
-      .with(StyleDeclaration::display(Display::Block))
-      .with(StyleDeclaration::width(Px(540.0)))
-      .with(StyleDeclaration::height(Px(220.0)))
-      .with_border_width(Sides([Px(4.0); 4]))
-      .with_border_style(Sides([BorderStyle::Solid; 4]))
-      .with_border_color(Sides([Color([0, 0, 0, 255]).into(); 4]))
-      .with_overflow(SpacePair::from_single(Overflow::Hidden)),
-  )])
-  .with_style(
-    Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0)))
-      .with(StyleDeclaration::height(Percentage(100.0)))
-      .with(StyleDeclaration::background_color(ColorInput::Value(
-        Color::white(),
-      )))
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::justify_content(JustifyContent::Center)),
   )
@@ -204,14 +145,8 @@ fn bench_fixtures(c: &mut Criterion) {
   group.bench_function("simple_image_blit", |b| {
     b.iter(|| render_fixture(&global, black_box(simple_image_blit_fixture())))
   });
-  group.bench_function("rounded_cover_image", |b| {
-    b.iter(|| render_fixture(&global, black_box(rounded_cover_image_fixture())))
-  });
   group.bench_function("gradient_clip_text", |b| {
     b.iter(|| render_fixture(&global, black_box(gradient_clip_text_fixture())))
-  });
-  group.bench_function("overflow_text", |b| {
-    b.iter(|| render_fixture(&global, black_box(overflow_text_fixture())))
   });
   group.bench_function("emoji_social", |b| {
     b.iter(|| render_fixture(&global, black_box(emoji_social_fixture())))
@@ -220,5 +155,11 @@ fn bench_fixtures(c: &mut Criterion) {
   group.finish();
 }
 
-criterion_group!(benches, bench_fixtures);
+mod common;
+
+criterion_group! {
+  name = benches;
+  config = common::criterion();
+  targets = bench_fixtures
+}
 criterion_main!(benches);

@@ -41,78 +41,28 @@ fn run_gradient_render(global: &GlobalContext, background_image_str: &str) {
   render_gradient_node(global, node);
 }
 
-fn run_gradient_render_preparsed(global: &GlobalContext, background_images: &BackgroundImages) {
-  let node = build_gradient_node(Some(background_images.clone()));
-  render_gradient_node(global, node);
-}
-
-fn run_gradient_render_prebuilt_node(global: &GlobalContext, node: &Node) {
-  let viewport = Viewport::new((BENCH_WIDTH, BENCH_HEIGHT));
-
-  let options = RenderOptions::builder()
-    .viewport(viewport)
-    .node(node.clone())
-    .global(global)
-    .build();
-
-  let image = render(options).unwrap();
-  black_box(image);
-}
-
 fn bench_gradients(c: &mut Criterion) {
   let global = GlobalContext::default();
-  let simple_linear = "linear-gradient(to right, red, blue)";
-  let multi_stop_linear = "linear-gradient(90deg, #ff3b30, #ffcc00, #34c759, #007aff, #5856d6)";
-  let transparent_linear = "linear-gradient(180deg, rgba(0,128,255,0.9), rgba(0,128,255,0))";
-  let simple_radial = "radial-gradient(circle, red, blue)";
-  let simple_conic = "conic-gradient(red, blue)";
-
   let mut group = c.benchmark_group("gradient");
 
-  // Basic two-stop linear gradient
   group.bench_function("linear_2_stops_1200x630", |b| {
-    b.iter(|| run_gradient_render(&global, black_box(simple_linear)))
+    b.iter(|| run_gradient_render(&global, black_box("linear-gradient(to right, red, blue)")))
   });
-
-  // More complex multi-stop linear gradient
-  group.bench_function("linear_5_stops_1200x630", |b| {
-    b.iter(|| run_gradient_render(&global, black_box(multi_stop_linear)))
-  });
-
-  // Semi-transparent gradient
-  group.bench_function("linear_transparent_1200x630", |b| {
-    b.iter(|| run_gradient_render(&global, black_box(transparent_linear)))
-  });
-
   group.bench_function("radial_2_stops_1200x630", |b| {
-    b.iter(|| run_gradient_render(&global, black_box(simple_radial)))
+    b.iter(|| run_gradient_render(&global, black_box("radial-gradient(circle, red, blue)")))
   });
-
   group.bench_function("conic_2_stops_1200x630", |b| {
-    b.iter(|| run_gradient_render(&global, black_box(simple_conic)))
+    b.iter(|| run_gradient_render(&global, black_box("conic-gradient(red, blue)")))
   });
 
   group.finish();
-
-  let parsed_simple_linear = BackgroundImages::from_str(simple_linear).unwrap();
-  let preparsed_node = build_gradient_node(Some(parsed_simple_linear.clone()));
-
-  let mut component_group = c.benchmark_group("gradient_components");
-
-  component_group.bench_function("parse_linear_2_stops", |b| {
-    b.iter(|| BackgroundImages::from_str(black_box(simple_linear)).unwrap())
-  });
-
-  component_group.bench_function("render_preparsed_linear_2_stops", |b| {
-    b.iter(|| run_gradient_render_preparsed(&global, black_box(&parsed_simple_linear)))
-  });
-
-  component_group.bench_function("render_prebuilt_node_linear_2_stops", |b| {
-    b.iter(|| run_gradient_render_prebuilt_node(&global, black_box(&preparsed_node)))
-  });
-
-  component_group.finish();
 }
 
-criterion_group!(benches, bench_gradients);
+mod common;
+
+criterion_group! {
+  name = benches;
+  config = common::criterion();
+  targets = bench_gradients
+}
 criterion_main!(benches);

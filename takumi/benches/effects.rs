@@ -7,7 +7,6 @@ use takumi::{
 };
 
 fn run_effect_render(global: &GlobalContext, effect_tw: &str) {
-  // We set a reasonable size and background so the effect is actually computed
   let node = Node::container([]).with_tw(
     format!("w-[256px] h-[256px] bg-white {effect_tw}")
       .parse()
@@ -31,32 +30,24 @@ fn bench_effects(c: &mut Criterion) {
 
   let mut group = c.benchmark_group("effects");
 
-  // Basic blur
   group.bench_function("blur_md", |b| {
     b.iter(|| run_effect_render(&global, black_box("blur-md")))
   });
-  group.bench_function("blur_3xl", |b| {
-    b.iter(|| run_effect_render(&global, black_box("blur-3xl")))
-  });
-
-  // Box shadow
   group.bench_function("shadow_md", |b| {
     b.iter(|| run_effect_render(&global, black_box("shadow-md")))
   });
-  group.bench_function("shadow_2xl", |b| {
-    b.iter(|| run_effect_render(&global, black_box("shadow-2xl")))
-  });
-
-  // Drop shadow
   group.bench_function("drop_shadow_md", |b| {
     b.iter(|| run_effect_render(&global, black_box("drop-shadow-md")))
-  });
-  group.bench_function("drop_shadow_2xl", |b| {
-    b.iter(|| run_effect_render(&global, black_box("drop-shadow-2xl")))
   });
 
   group.finish();
 }
 
-criterion_group!(benches, bench_effects);
+mod common;
+
+criterion_group! {
+  name = benches;
+  config = common::criterion();
+  targets = bench_effects
+}
 criterion_main!(benches);

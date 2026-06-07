@@ -29,8 +29,6 @@ fn render_node(global: &GlobalContext, node: Node) {
   black_box(image);
 }
 
-/// Nested border-radius + overflow:clip exercises `intersect_alpha_masks`,
-/// `attenuate_alpha_by_mask`, `prepare_node_mask`, and `BufferPool` churn.
 fn nested_clip_masks_fixture() -> Node {
   let leaf = |radius: &str| {
     Node::container([]).with_style(
@@ -74,8 +72,6 @@ fn nested_clip_masks_fixture() -> Node {
   )
 }
 
-/// Scaled image (cover) inside a rounded clip — exercises bilinear `interpolate_with_footprint`
-/// plus mask compositing in the same path used by `rounded_cover_image`, but stresses minification.
 fn scaled_image_fixture() -> Node {
   Node::container([Node::image(IMAGE_PATH).with_style(
     Style::default()
@@ -97,8 +93,6 @@ fn scaled_image_fixture() -> Node {
   )
 }
 
-/// Background gradient + background-clip:text — exercises mask compositing
-/// over a stacking context produced by the gradient overlay path.
 fn gradient_clip_mask_fixture() -> Node {
   let gradient = BackgroundImages::from_str(
     "linear-gradient(135deg, #ff3b30, #ffcc00, #34c759, #007aff, #5856d6)",
@@ -153,5 +147,11 @@ fn bench_canvas(c: &mut Criterion) {
   group.finish();
 }
 
-criterion_group!(benches, bench_canvas);
+mod common;
+
+criterion_group! {
+  name = benches;
+  config = common::criterion();
+  targets = bench_canvas
+}
 criterion_main!(benches);
