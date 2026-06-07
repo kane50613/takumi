@@ -548,7 +548,7 @@ impl_passthrough_animatable!(
   FontFamily,
   LineHeight,
   FontSynthesis,
-  FontSynthesisValue,
+  FontSynthesic,
   LineClamp,
   TextAlign,
   TextStroke,

@@ -1188,22 +1188,19 @@ fn text_font_synthesis_weight_auto_none() {
     unreachable!()
   };
 
-  let nodes: Vec<Node> = [
-    ("auto", FontSynthesisValue::Auto),
-    ("none", FontSynthesisValue::None),
-  ]
-  .iter()
-  .map(|(label, synthesis_weight)| {
-    Node::text(format!("font-synthesis-weight: {} - السلام عليكم", label)).with_style(
-      Style::default()
-        .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::font_size(Px(72.0).into()))
-        .with(StyleDeclaration::font_family(family.clone()))
-        .with(StyleDeclaration::font_weight(FontWeight::from(900.0)))
-        .with(StyleDeclaration::font_synthesis_weight(*synthesis_weight)),
-    )
-  })
-  .collect::<Vec<_>>();
+  let nodes: Vec<Node> = [("auto", FontSynthesic::Auto), ("none", FontSynthesic::None)]
+    .iter()
+    .map(|(label, synthesis_weight)| {
+      Node::text(format!("font-synthesis-weight: {} - السلام عليكم", label)).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
+          .with(StyleDeclaration::font_size(Px(72.0).into()))
+          .with(StyleDeclaration::font_family(family.clone()))
+          .with(StyleDeclaration::font_weight(FontWeight::from(900.0)))
+          .with(StyleDeclaration::font_synthesis_weight(*synthesis_weight)),
+      )
+    })
+    .collect::<Vec<_>>();
 
   let container = Node::container(nodes.into_boxed_slice()).with_style(
     Style::default()
@@ -1226,22 +1223,19 @@ fn text_font_synthesis_style_auto_none() {
     unreachable!()
   };
 
-  let nodes: Vec<Node> = [
-    ("auto", FontSynthesisValue::Auto),
-    ("none", FontSynthesisValue::None),
-  ]
-  .iter()
-  .map(|(label, synthesis_style)| {
-    Node::text(format!("font-synthesis-style: {} - السلام عليكم", label)).with_style(
-      Style::default()
-        .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::font_size(Px(72.0).into()))
-        .with(StyleDeclaration::font_family(family.clone()))
-        .with(StyleDeclaration::font_style(FontStyle::italic()))
-        .with(StyleDeclaration::font_synthesis_style(*synthesis_style)),
-    )
-  })
-  .collect::<Vec<_>>();
+  let nodes: Vec<Node> = [("auto", FontSynthesic::Auto), ("none", FontSynthesic::None)]
+    .iter()
+    .map(|(label, synthesis_style)| {
+      Node::text(format!("font-synthesis-style: {} - السلام عليكم", label)).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
+          .with(StyleDeclaration::font_size(Px(72.0).into()))
+          .with(StyleDeclaration::font_family(family.clone()))
+          .with(StyleDeclaration::font_style(FontStyle::italic()))
+          .with(StyleDeclaration::font_synthesis_style(*synthesis_style)),
+      )
+    })
+    .collect::<Vec<_>>();
 
   let container = Node::container(nodes.into_boxed_slice()).with_style(
     Style::default()
@@ -1269,8 +1263,8 @@ fn text_font_synthesis_weight_emoji() {
     (
       "none",
       FontSynthesis::builder()
-        .weight(FontSynthesisValue::None)
-        .style(FontSynthesisValue::None)
+        .weight(FontSynthesic::None)
+        .style(FontSynthesic::None)
         .build(),
     ),
   ]

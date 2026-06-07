@@ -9,17 +9,17 @@ use crate::style::{CssToken, FromCss, MakeComputed, ParseResult, declare_enum_fr
 #[builder(field_defaults(default))]
 pub struct FontSynthesis {
   /// Controls synthetic bolding when a matching font weight is unavailable.
-  pub weight: FontSynthesisValue,
+  pub weight: FontSynthesic,
   /// Controls synthetic italics/obliques when a matching style is unavailable.
-  pub style: FontSynthesisValue,
+  pub style: FontSynthesic,
 }
 
 impl MakeComputed for FontSynthesis {}
 
 impl<'i> FromCss<'i> for FontSynthesis {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut weight = FontSynthesisValue::None;
-    let mut style = FontSynthesisValue::None;
+    let mut weight = FontSynthesic::None;
+    let mut style = FontSynthesic::None;
 
     while !input.is_exhausted() {
       let location = input.current_source_location();
@@ -27,14 +27,14 @@ impl<'i> FromCss<'i> for FontSynthesis {
 
       match_ignore_ascii_case! {ident,
         "none" => {
-          weight = FontSynthesisValue::None;
-          style = FontSynthesisValue::None;
+          weight = FontSynthesic::None;
+          style = FontSynthesic::None;
         },
         "weight" => {
-          weight = FontSynthesisValue::Auto;
+          weight = FontSynthesic::Auto;
         },
         "style" => {
-          style = FontSynthesisValue::Auto;
+          style = FontSynthesic::Auto;
         },
         _ => return Err(unexpected_token!(location, &Token::Ident(ident.to_owned()))),
       };
@@ -57,7 +57,7 @@ impl<'i> FromCss<'i> for FontSynthesis {
 /// Control mode for synthetic.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
-pub enum FontSynthesisValue {
+pub enum FontSynthesic {
   /// Synthetic is allowed.
   #[default]
   Auto,
@@ -65,14 +65,14 @@ pub enum FontSynthesisValue {
   None,
 }
 
-impl FontSynthesisValue {
+impl FontSynthesic {
   pub fn is_allowed(self) -> bool {
-    self == FontSynthesisValue::Auto
+    self == FontSynthesic::Auto
   }
 }
 
 declare_enum_from_css_impl!(
-  FontSynthesisValue,
-  "auto" => FontSynthesisValue::Auto,
-  "none" => FontSynthesisValue::None,
+  FontSynthesic,
+  "auto" => FontSynthesic::Auto,
+  "none" => FontSynthesic::None,
 );
