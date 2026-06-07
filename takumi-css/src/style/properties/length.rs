@@ -98,8 +98,7 @@ pub struct CalcFormula {
   pc: f32,
 }
 
-/// Invokes `$callback!` once with every `CalcFormula` coefficient field, so the
-/// constructors and element-wise operations stay in sync with the field set.
+/// Invokes `$callback!` with every `CalcFormula` field, keeping constructors and ops in sync.
 macro_rules! for_each_unit {
   ($callback:ident) => {
     $callback!(
@@ -314,10 +313,7 @@ fn parse_calc_product<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcVal
   Ok(value)
 }
 
-/// Maps a CSS dimension unit (incl. aliases like `dvw`/`cqi`) to its canonical
-/// `Length` variant. Returns `None` for unknown units so callers emit their own
-/// error. This is the single source of truth shared by `Length::from_css` and
-/// `parse_calc_factor`.
+/// Maps a CSS dimension unit (incl. aliases like `dvw`/`cqi`) to its canonical `Length` variant.
 fn length_from_dimension_unit<const DEFAULT_AUTO: bool>(
   unit: &str,
   value: f32,
@@ -358,8 +354,6 @@ fn length_from_dimension_unit<const DEFAULT_AUTO: bool>(
 
 impl CalcFormula {
   /// Bridges a single-unit `Length` to its symbolic `calc(...)` coefficient.
-  /// Only the unit-bearing variants produced by [`length_from_dimension_unit`]
-  /// are reachable here.
   fn from_length<const DEFAULT_AUTO: bool>(length: Length<DEFAULT_AUTO>) -> Self {
     match length {
       Length::Px(v) => Self::px(v),
@@ -780,7 +774,6 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
     match self {
       Length::Auto => CompactLength::auto(),
       Length::Percentage(value) => CompactLength::percent(value / 100.0),
-      // Relative units carry no DPR factor, so the pre-DPR px math is the result.
       Length::Rem(_)
       | Length::Em(_)
       | Length::Lh(_)

@@ -91,8 +91,7 @@ impl<'i> FromCss<'i> for BackgroundImage {
   ];
 }
 
-/// Parses a comma-separated list of items using `parse_item`, requiring at
-/// least one. Stops on the first token that is not a comma (lenient tail).
+/// Parses a comma-separated list of `parse_item`, requiring at least one.
 pub(crate) fn parse_comma_list<'i, T>(
   input: &mut Parser<'i, '_>,
   mut parse_item: impl FnMut(&mut Parser<'i, '_>) -> ParseResult<'i, T>,

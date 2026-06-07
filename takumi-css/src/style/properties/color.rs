@@ -176,8 +176,7 @@ pub enum ColorInput<const DEFAULT_CURRENT_COLOR: bool = true> {
   Value(Color),
 }
 
-/// A [`ColorInput`] that defaults to transparent instead of `currentColor`
-/// (e.g. `background-color`). Mirrors [`LengthDefaultsToZero`](crate::style::LengthDefaultsToZero).
+/// A color value that defaults to transparent instead of currentColor.
 pub type ColorDefaultsToTransparent = ColorInput<false>;
 
 impl<const DEFAULT_CURRENT_COLOR: bool> MakeComputed for ColorInput<DEFAULT_CURRENT_COLOR> {}

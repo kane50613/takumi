@@ -14,7 +14,6 @@ use crate::style::{
 const MIN_GRADIENT_LUT_SIZE: usize = 2;
 const MAX_GRADIENT_LUT_SIZE: usize = 8193;
 
-/// Test fixture: a two-stop red -> blue `ColorHint` list with the given positions.
 #[cfg(test)]
 pub(crate) fn red_blue_stops(
   red_hint: Option<StopPosition>,
@@ -65,10 +64,6 @@ macro_rules! gradient_tile_accessors {
 pub(crate) use gradient_tile_accessors;
 
 /// Computes the repeating origin/period and the stops/axis length used to build the LUT.
-///
-/// Returns `(repeating, repeat_start, repeat_period, lut_axis_length, lut_resolved_stops)`. When the
-/// gradient does not repeat or the period collapses, `repeating` is false and `fallback_axis` is
-/// used as the LUT axis length.
 pub(crate) fn compute_repeat_setup(
   repeating: bool,
   resolved_stops: SmallVec<[ResolvedGradientStop; 4]>,
@@ -92,9 +87,7 @@ pub(crate) fn compute_repeat_setup(
   (false, 0.0, 0.0, fallback_axis, resolved_stops)
 }
 
-/// Parses a comma-separated gradient stop list, using `parse_position` for each stop position.
-///
-/// Handles the double-position color-stop shorthand (`color a b` expands to two stops).
+/// Parses a comma-separated gradient stop list; `color a b` expands to two stops.
 pub(crate) fn parse_gradient_stops<'i>(
   input: &mut Parser<'i, '_>,
   parse_position: fn(&mut Parser<'i, '_>) -> ParseResult<'i, StopPosition>,
@@ -141,9 +134,6 @@ pub(crate) fn parse_gradient_stops<'i>(
 }
 
 /// Serializes a gradient as `name(<params>, <interpolation>, <stops>)`.
-///
-/// `params` is the already-serialized, gradient-specific prefix (direction, shape/size/center, ...).
-/// An empty `params` is omitted, as is a default interpolation; comma joining matches CSS output.
 pub(crate) fn write_gradient_css<W: fmt::Write>(
   dest: &mut W,
   name: &str,

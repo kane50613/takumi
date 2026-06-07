@@ -5,15 +5,9 @@ use crate::style::{
   *,
 };
 
-/// Generates the [`PropertyParser`] enum and its `parse()` dispatch from
-/// `(Variant, ArgType, ParseType)` triples: each variant holds an
-/// `fn(ArgType) -> TailwindProperty` and parses via
-/// `<ParseType>::parse_tw_with_arbitrary`. The const-generic `Length`/`ColorInput`
-/// pairs share a base `ParseType` whose generic is inferred from the closure.
-/// The irregular `GradientPosition` arm is handled explicitly.
+/// Generates the [`PropertyParser`] enum and its `parse()` dispatch from `(Variant, ArgType, ParseType)` triples.
 macro_rules! property_parsers {
   ($($variant:ident($arg:ty) => $parse:ty),+ $(,)?) => {
-    /// Enum for data-driven property parsing
     #[derive(Clone, Copy)]
     pub enum PropertyParser {
       $($variant(fn($arg) -> TailwindProperty),)+

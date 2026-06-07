@@ -232,7 +232,6 @@ fn webkit_property_id_from_name(name: &str) -> Option<PropertyId> {
   }
 }
 
-/// Internal helper for the `define_style!` macro's shorthand expansions.
 pub(crate) fn expand_shorthand<T>(
   value: T,
   expand: impl FnOnce(T, &mut ParsedDeclarations),

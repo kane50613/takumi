@@ -28,7 +28,6 @@ pub(crate) use interpolate_field;
 /// Lookup table for a single 8-bit channel transition.
 pub type TransferTable = [u8; 256];
 
-/// Builds a transfer LUT by mapping each channel value through `f`.
 pub(crate) fn build_transfer_table<F: Fn(usize) -> f32>(f: F) -> TransferTable {
   let mut table = [0u8; 256];
   for (i, entry) in table.iter_mut().enumerate() {

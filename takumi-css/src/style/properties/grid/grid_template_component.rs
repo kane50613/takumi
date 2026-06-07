@@ -8,13 +8,9 @@ use crate::style::{
   GridTrackSize, MakeComputed, ParseResult, SizingContext, ToCss,
 };
 
-/// Type alias for a list of `GridTemplateComponent`, serialized as a plain array.
 pub type GridTemplateComponents = Vec<GridTemplateComponent>;
 
-/// Parses the idents inside a `[name1 name2 ...]` line-name block's nested body.
-///
-/// The caller is responsible for consuming the opening square bracket (e.g. via
-/// `expect_square_bracket_block`); this only parses the block contents.
+/// Parses a `[name1 name2 ...]` line-name block's body; caller consumes the opening bracket.
 pub(crate) fn parse_line_names<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Vec<String>> {
   input.parse_nested_block(|i| {
     let mut names = Vec::new();
