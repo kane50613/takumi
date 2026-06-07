@@ -5,12 +5,9 @@ use bitflags::bitflags;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use typed_builder::TypedBuilder;
 
-use crate::{
-  style::SizingContext,
-  style::{
-    Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
-    declare_enum_from_css_impl, properties::ColorInput, tw::TailwindPropertyParser,
-  },
+use crate::style::{
+  Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
+  SizingContext, declare_enum_from_css_impl, properties::ColorInput, tw::TailwindPropertyParser,
 };
 
 bitflags! {

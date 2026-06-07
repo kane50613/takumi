@@ -8,12 +8,9 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use taffy::{Point, Size};
 use tiny_skia::Transform as TinyTransform;
 
-use crate::{
-  style::SizingContext,
-  style::{
-    Angle, Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
-    MakeComputed, ParseResult, PercentageNumber, lerp,
-  },
+use crate::style::{
+  Angle, Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
+  MakeComputed, ParseResult, PercentageNumber, SizingContext, lerp,
 };
 
 const DEFAULT_SCALE: f32 = 1.0;

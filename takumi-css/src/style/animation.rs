@@ -651,9 +651,11 @@ mod tests {
 
   use crate::{
     Viewport,
-    style::SizingContext,
-    style::animation::{sample_animation_progress, tailwind_animation_keyframes},
-    style::*,
+    style::{
+      SizingContext,
+      animation::{sample_animation_progress, tailwind_animation_keyframes},
+      *,
+    },
   };
 
   fn sizing() -> SizingContext {

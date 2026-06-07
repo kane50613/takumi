@@ -3,12 +3,9 @@ use std::{borrow::Cow, fmt, fmt::Debug};
 use cssparser::{BasicParseErrorKind, ParseError, Parser};
 use typed_builder::TypedBuilder;
 
-use crate::{
-  style::SizingContext,
-  style::{
-    Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length, LengthDefaultsToZero,
-    ListInterpolationStrategy, MakeComputed, ParseResult, ToCss, next_is_comma,
-  },
+use crate::style::{
+  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length, LengthDefaultsToZero,
+  ListInterpolationStrategy, MakeComputed, ParseResult, SizingContext, ToCss, next_is_comma,
 };
 
 /// Represents a text shadow with all its properties.

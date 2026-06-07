@@ -1,11 +1,8 @@
 use cssparser::{Parser, match_ignore_ascii_case};
 
-use crate::{
-  style::SizingContext,
-  style::{
-    CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult, ToCss,
-    parse_calc_number_expression, tw::TailwindPropertyParser,
-  },
+use crate::style::{
+  CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss,
+  parse_calc_number_expression, tw::TailwindPropertyParser,
 };
 
 /// Represents a line height value.

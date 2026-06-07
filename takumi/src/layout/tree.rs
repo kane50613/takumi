@@ -1972,11 +1972,12 @@ mod tests {
   use taffy::NodeId;
 
   use super::{registered_custom_property_parent_style, sort_children_by_order};
-  use crate::layout::style::selector::PropertyRule;
-  use crate::layout::style::{StyleDeclaration, StyleDeclarationBlock, StyleSheet};
   use crate::layout::{
     Viewport,
-    style::{ComputedStyle, Length, Style},
+    style::{
+      ComputedStyle, Length, Style, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
+      selector::PropertyRule,
+    },
   };
 
   fn parse_stylesheet(css: &str) -> StyleSheet {

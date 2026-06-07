@@ -1,8 +1,7 @@
 use cssparser::Parser;
 
-use crate::{
-  style::SizingContext,
-  style::{CssDescriptorKind, CssToken, FromCss, GridLength, MakeComputed, ParseResult, ToCss},
+use crate::style::{
+  CssDescriptorKind, CssToken, FromCss, GridLength, MakeComputed, ParseResult, SizingContext, ToCss,
 };
 
 /// Represents a grid minmax()

@@ -1,9 +1,8 @@
 use cssparser::{Parser, Token};
 use taffy::CompactLength;
 
-use crate::{
-  style::SizingContext,
-  style::{CssToken, FromCss, Length, MakeComputed, ParseResult, ToCss, unexpected_token},
+use crate::style::{
+  CssToken, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, unexpected_token,
 };
 
 /// Represents a fraction of the available space

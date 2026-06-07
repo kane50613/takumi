@@ -3,12 +3,9 @@ use std::fmt::Write;
 use cssparser::{Parser, match_ignore_ascii_case};
 use taffy::{MaxTrackSizingFunction, MinTrackSizingFunction, TrackSizingFunction};
 
-use crate::{
-  style::SizingContext,
-  style::{
-    CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, GridLength, GridMinMaxSize, Length,
-    MakeComputed, ParseResult, ToCss, tw::TailwindPropertyParser,
-  },
+use crate::style::{
+  CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, GridLength, GridMinMaxSize, Length,
+  MakeComputed, ParseResult, SizingContext, ToCss, tw::TailwindPropertyParser,
 };
 
 /// A list of `GridTrackSize`

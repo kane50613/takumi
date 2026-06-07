@@ -329,12 +329,9 @@ mod tests {
   use std::rc::Rc;
 
   use super::resolve_object_position_axis;
-  use crate::{
-    layout::style::SizingContext,
-    layout::{
-      Viewport,
-      style::{CalcArena, Length, PositionComponent, PositionKeywordX},
-    },
+  use crate::layout::{
+    Viewport,
+    style::{CalcArena, Length, PositionComponent, PositionKeywordX, SizingContext},
   };
   use taffy::Size;
 

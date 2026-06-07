@@ -3,12 +3,9 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use std::fmt;
 use taffy::{Point, Size};
 
-use crate::{
-  style::SizingContext,
-  style::{
-    Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
-    MakeComputed, ParseResult, SpacePair, tw::TailwindPropertyParser,
-  },
+use crate::style::{
+  Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
+  MakeComputed, ParseResult, SizingContext, SpacePair, tw::TailwindPropertyParser,
 };
 
 /// Horizontal keywords for `background-position`.

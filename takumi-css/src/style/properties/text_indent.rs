@@ -2,12 +2,9 @@ use std::fmt;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
-use crate::{
-  style::SizingContext,
-  style::{
-    Animatable, Color, CssSyntaxKind, CssToken, FromCss, LengthDefaultsToZero, MakeComputed,
-    ParseResult, ToCss, unexpected_token,
-  },
+use crate::style::{
+  Animatable, Color, CssSyntaxKind, CssToken, FromCss, LengthDefaultsToZero, MakeComputed,
+  ParseResult, SizingContext, ToCss, unexpected_token,
 };
 
 /// Controls indentation of the first line, or hanging/each-line variants.
