@@ -188,15 +188,6 @@ impl<const DEFAULT_CURRENT_COLOR: bool> Animatable for ColorInput<DEFAULT_CURREN
     current_color: CurrentColor,
   ) {
     *self = match (from, to) {
-      (ColorInput::Value(lhs), ColorInput::Value(rhs)) => {
-        ColorInput::Value(interpolate_with_color_space(
-          *lhs,
-          *rhs,
-          progress,
-          ColorSpaceTag::Oklab,
-          HueDirection::Shorter,
-        ))
-      }
       (ColorInput::CurrentColor, ColorInput::CurrentColor) => ColorInput::CurrentColor,
       _ => ColorInput::Value(interpolate_with_color_space(
         from.resolve(current_color),
@@ -376,42 +367,42 @@ const ROSE: [u32; 11] = [
 /// Shade values in ascending order for binary search
 const SHADES: [u16; 11] = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
 
-/// Lookup Tailwind color by name and shade
-///
+const PALETTE: [(&str, &[u32; 11]); 26] = [
+  ("slate", &SLATE),
+  ("gray", &GRAY),
+  ("zinc", &ZINC),
+  ("neutral", &NEUTRAL),
+  ("stone", &STONE),
+  ("taupe", &TAUPE),
+  ("mauve", &MAUVE),
+  ("mist", &MIST),
+  ("olive", &OLIVE),
+  ("red", &RED),
+  ("orange", &ORANGE),
+  ("amber", &AMBER),
+  ("yellow", &YELLOW),
+  ("lime", &LIME),
+  ("green", &GREEN),
+  ("emerald", &EMERALD),
+  ("teal", &TEAL),
+  ("cyan", &CYAN),
+  ("sky", &SKY),
+  ("blue", &BLUE),
+  ("indigo", &INDIGO),
+  ("violet", &VIOLET),
+  ("purple", &PURPLE),
+  ("fuchsia", &FUCHSIA),
+  ("pink", &PINK),
+  ("rose", &ROSE),
+];
+
 /// Returns the RGB value as a u32 (0xRRGGBB format)
 fn lookup_tailwind_color(color_name: &str, shade: u16) -> Option<u32> {
   let index = SHADES.binary_search(&shade).ok()?;
-
-  let colors = match_ignore_ascii_case! {color_name,
-      "slate" => &SLATE,
-      "gray" => &GRAY,
-      "zinc" => &ZINC,
-      "neutral" => &NEUTRAL,
-      "stone" => &STONE,
-      "taupe" => &TAUPE,
-      "mauve" => &MAUVE,
-      "mist" => &MIST,
-      "olive" => &OLIVE,
-      "red" => &RED,
-      "orange" => &ORANGE,
-      "amber" => &AMBER,
-      "yellow" => &YELLOW,
-      "lime" => &LIME,
-      "green" => &GREEN,
-      "emerald" => &EMERALD,
-      "teal" => &TEAL,
-      "cyan" => &CYAN,
-      "sky" => &SKY,
-      "blue" => &BLUE,
-      "indigo" => &INDIGO,
-      "violet" => &VIOLET,
-      "purple" => &PURPLE,
-      "fuchsia" => &FUCHSIA,
-      "pink" => &PINK,
-      "rose" => &ROSE,
-      _ => return None,
-  };
-
+  let colors = PALETTE
+    .iter()
+    .find(|(name, _)| name.eq_ignore_ascii_case(color_name))
+    .map(|(_, c)| *c)?;
   colors.get(index).copied()
 }
 
