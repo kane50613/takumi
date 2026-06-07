@@ -329,6 +329,7 @@ impl<'i> FromCss<'i> for AnimationPlayStates {
 /// Parsed value for one `animation` shorthand item.
 #[derive(Debug, Clone, PartialEq, Default, TypedBuilder)]
 #[builder(field_defaults(default))]
+#[non_exhaustive]
 pub struct Animation {
   /// Parsed `animation-duration`.
   pub duration: AnimationTime,

@@ -13,6 +13,7 @@ use crate::style::{
 bitflags! {
   /// Represents a collection of text decoration lines.
   #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+  #[non_exhaustive]
   pub struct TextDecorationLines: u8 {
     /// Underline text decoration.
     const UNDERLINE = 0b001;
@@ -204,6 +205,7 @@ declare_enum_from_css_impl!(
 /// Parsed `text-decoration` value.
 #[derive(Debug, Default, Clone, PartialEq, TypedBuilder)]
 #[builder(field_defaults(default))]
+#[non_exhaustive]
 pub struct TextDecoration {
   /// Text decoration line style.
   pub line: TextDecorationLines,
