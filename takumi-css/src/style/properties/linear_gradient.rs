@@ -848,119 +848,86 @@ mod tests {
 
   #[test]
   fn test_parse_angle() {
-    assert_eq!(Angle::from_str("45deg"), Ok(Angle::new(45.0)));
+    for (input, expected) in [
+      ("45deg", Angle::new(45.0)),
+      ("200grad", Angle::new(180.0)),
+      ("0.5turn", Angle::new(180.0)),
+      ("90", Angle::new(90.0)),
+    ] {
+      assert_eq!(Angle::from_str(input), Ok(expected), "input: {input}");
+    }
+    // rad requires approximate comparison
+    assert!(Angle::from_str("3.14159rad").is_ok_and(|a| (a.0 - 180.0).abs() < 0.001));
   }
 
   #[test]
-  fn test_parse_angle_grad() {
-    // 200 grad = 200 * (π/200) = π radians = 180 degrees
-    assert_eq!(Angle::from_str("200grad"), Ok(Angle::new(180.0)));
-  }
-
-  #[test]
-  fn test_parse_angle_turn() {
-    // 0.5 turn = 0.5 * 2π = π radians = 180 degrees
-    assert_eq!(Angle::from_str("0.5turn"), Ok(Angle::new(180.0)));
-  }
-
-  #[test]
-  fn test_parse_angle_rad() {
-    // π radians = 180 degrees
-    // Use approximate equality due to floating point precision
-    assert!(Angle::from_str("3.14159rad").is_ok_and(|angle| (angle.0 - 180.0).abs() < 0.001));
-  }
-
-  #[test]
-  fn test_parse_angle_number() {
-    assert_eq!(Angle::from_str("90"), Ok(Angle::new(90.0)));
-  }
-
-  #[test]
-  fn test_parse_direction_keywords_top() {
-    assert_eq!(
-      GradientKeywordDirection::from_str("to top"),
-      Ok(GradientKeywordDirection {
-        horizontal: None,
-        vertical: Some(VerticalKeyword::Top),
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_direction_keywords_right() {
-    assert_eq!(
-      GradientKeywordDirection::from_str("to right"),
-      Ok(GradientKeywordDirection {
-        horizontal: Some(HorizontalKeyword::Right),
-        vertical: None,
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_direction_keywords_bottom() {
-    assert_eq!(
-      GradientKeywordDirection::from_str("to bottom"),
-      Ok(GradientKeywordDirection {
-        horizontal: None,
-        vertical: Some(VerticalKeyword::Bottom),
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_direction_keywords_left() {
-    assert_eq!(
-      GradientKeywordDirection::from_str("to left"),
-      Ok(GradientKeywordDirection {
-        horizontal: Some(HorizontalKeyword::Left),
-        vertical: None,
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_direction_keywords_top_right() {
-    assert_eq!(
-      GradientKeywordDirection::from_str("to top right"),
-      Ok(GradientKeywordDirection {
-        horizontal: Some(HorizontalKeyword::Right),
-        vertical: Some(VerticalKeyword::Top),
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_direction_keywords_bottom_left() {
-    assert_eq!(
-      GradientKeywordDirection::from_str("to bottom left"),
-      Ok(GradientKeywordDirection {
-        horizontal: Some(HorizontalKeyword::Left),
-        vertical: Some(VerticalKeyword::Bottom),
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_direction_keywords_top_left() {
-    assert_eq!(
-      GradientKeywordDirection::from_str("to top left"),
-      Ok(GradientKeywordDirection {
-        horizontal: Some(HorizontalKeyword::Left),
-        vertical: Some(VerticalKeyword::Top),
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_direction_keywords_bottom_right() {
-    assert_eq!(
-      GradientKeywordDirection::from_str("to bottom right"),
-      Ok(GradientKeywordDirection {
-        horizontal: Some(HorizontalKeyword::Right),
-        vertical: Some(VerticalKeyword::Bottom),
-      })
-    );
+  fn test_parse_direction_keywords() {
+    use HorizontalKeyword::{Left, Right};
+    use VerticalKeyword::{Bottom, Top};
+    for (input, expected) in [
+      (
+        "to top",
+        GradientKeywordDirection {
+          horizontal: None,
+          vertical: Some(Top),
+        },
+      ),
+      (
+        "to right",
+        GradientKeywordDirection {
+          horizontal: Some(Right),
+          vertical: None,
+        },
+      ),
+      (
+        "to bottom",
+        GradientKeywordDirection {
+          horizontal: None,
+          vertical: Some(Bottom),
+        },
+      ),
+      (
+        "to left",
+        GradientKeywordDirection {
+          horizontal: Some(Left),
+          vertical: None,
+        },
+      ),
+      (
+        "to top right",
+        GradientKeywordDirection {
+          horizontal: Some(Right),
+          vertical: Some(Top),
+        },
+      ),
+      (
+        "to bottom left",
+        GradientKeywordDirection {
+          horizontal: Some(Left),
+          vertical: Some(Bottom),
+        },
+      ),
+      (
+        "to top left",
+        GradientKeywordDirection {
+          horizontal: Some(Left),
+          vertical: Some(Top),
+        },
+      ),
+      (
+        "to bottom right",
+        GradientKeywordDirection {
+          horizontal: Some(Right),
+          vertical: Some(Bottom),
+        },
+      ),
+    ] {
+      assert_eq!(
+        GradientKeywordDirection::from_str(input),
+        Ok(expected),
+        "input: {input}"
+      );
+    }
   }
 
   #[test]
@@ -1463,40 +1430,20 @@ mod tests {
   }
 
   #[test]
-  fn test_stop_position_parsing_fraction_number() {
-    assert_eq!(
-      StopPosition::from_str("0.25"),
-      Ok(StopPosition(Length::Percentage(25.0)))
-    );
-  }
-
-  #[test]
-  fn test_stop_position_parsing_percentage() {
-    assert_eq!(
-      StopPosition::from_str("75%"),
-      Ok(StopPosition(Length::Percentage(75.0)))
-    );
-  }
-
-  #[test]
-  fn test_stop_position_parsing_length_px() {
-    assert_eq!(
-      StopPosition::from_str("12px"),
-      Ok(StopPosition(Length::Px(12.0)))
-    );
-  }
-
-  #[test]
-  fn test_stop_position_value_css_roundtrip() {
-    assert_eq!(
-      StopPosition::from_str("50%"),
-      Ok(StopPosition(Length::Percentage(50.0)))
-    );
-
-    assert_eq!(
-      StopPosition::from_str("8px"),
-      Ok(StopPosition(Length::Px(8.0)))
-    );
+  fn test_stop_position_parsing() {
+    for (input, expected) in [
+      ("0.25", StopPosition(Length::Percentage(25.0))),
+      ("75%", StopPosition(Length::Percentage(75.0))),
+      ("50%", StopPosition(Length::Percentage(50.0))),
+      ("12px", StopPosition(Length::Px(12.0))),
+      ("8px", StopPosition(Length::Px(8.0))),
+    ] {
+      assert_eq!(
+        StopPosition::from_str(input),
+        Ok(expected),
+        "input: {input}"
+      );
+    }
   }
 
   #[test]

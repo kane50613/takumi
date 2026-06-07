@@ -377,19 +377,67 @@ mod tests {
   use crate::style::properties::gradient_utils::red_blue_stops;
   use crate::style::{Color, Length, SpacePair, StopPosition};
   #[test]
-  fn test_parse_conic_gradient_basic() {
-    let gradient = ConicGradient::from_str("conic-gradient(#ff0000, #0000ff)");
+  fn test_parse_conic_gradient_basic_variants() {
+    fn stop(color: Color, pct: Option<f32>) -> GradientStop {
+      GradientStop::ColorHint {
+        color: color.into(),
+        hint: pct.map(|p| StopPosition(Length::Percentage(p))),
+      }
+    }
+    let red = Color::from_rgb(0xff0000);
+    let green = Color::from_rgb(0x00ff00);
+    let blue = Color::from_rgb(0x0000ff);
 
-    assert_eq!(
-      gradient,
-      Ok(ConicGradient {
-        repeating: false,
-        from_angle: Angle::zero(),
-        center: ObjectPosition::default(),
-        interpolation: ColorInterpolationMethod::default(),
-        stops: red_blue_stops(None, None).into(),
-      })
-    );
+    for (input, stops) in [
+      (
+        "conic-gradient(#ff0000, #0000ff)",
+        red_blue_stops(None, None).to_vec(),
+      ),
+      (
+        "conic-gradient(#ff0000 0%, #00ff00 50%, #0000ff 100%)",
+        vec![
+          stop(red, Some(0.0)),
+          stop(green, Some(50.0)),
+          stop(blue, Some(100.0)),
+        ],
+      ),
+      (
+        "conic-gradient(red 0deg, lime 180deg, blue 1turn)",
+        vec![
+          stop(red, Some(0.0)),
+          stop(green, Some(50.0)),
+          stop(blue, Some(100.0)),
+        ],
+      ),
+      (
+        "conic-gradient(red 10% 20%, blue)",
+        vec![
+          stop(red, Some(10.0)),
+          stop(red, Some(20.0)),
+          stop(blue, None),
+        ],
+      ),
+      (
+        "conic-gradient(red 0deg 90deg, blue)",
+        vec![
+          stop(red, Some(0.0)),
+          stop(red, Some(25.0)),
+          stop(blue, None),
+        ],
+      ),
+    ] {
+      assert_eq!(
+        ConicGradient::from_str(input),
+        Ok(ConicGradient {
+          repeating: false,
+          from_angle: Angle::zero(),
+          center: ObjectPosition::default(),
+          interpolation: ColorInterpolationMethod::default(),
+          stops: stops.into(),
+        }),
+        "input: {input}",
+      );
+    }
   }
 
   #[test]
@@ -408,118 +456,6 @@ mod tests {
           GradientStop::ColorHint {
             color: Color::from_rgb(0xff0000).into(),
             hint: None,
-          },
-          GradientStop::ColorHint {
-            color: Color::from_rgb(0x0000ff).into(),
-            hint: None,
-          },
-        ]
-        .into(),
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_conic_gradient_with_stops() {
-    assert_eq!(
-      ConicGradient::from_str("conic-gradient(#ff0000 0%, #00ff00 50%, #0000ff 100%)"),
-      Ok(ConicGradient {
-        repeating: false,
-        from_angle: Angle::zero(),
-        center: ObjectPosition::default(),
-        interpolation: ColorInterpolationMethod::default(),
-        stops: [
-          GradientStop::ColorHint {
-            color: Color([255, 0, 0, 255]).into(),
-            hint: Some(StopPosition(Length::Percentage(0.0))),
-          },
-          GradientStop::ColorHint {
-            color: Color([0, 255, 0, 255]).into(),
-            hint: Some(StopPosition(Length::Percentage(50.0))),
-          },
-          GradientStop::ColorHint {
-            color: Color([0, 0, 255, 255]).into(),
-            hint: Some(StopPosition(Length::Percentage(100.0))),
-          },
-        ]
-        .into(),
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_conic_gradient_with_double_position_color_stop() {
-    assert_eq!(
-      ConicGradient::from_str("conic-gradient(red 10% 20%, blue)"),
-      Ok(ConicGradient {
-        repeating: false,
-        from_angle: Angle::zero(),
-        center: ObjectPosition::default(),
-        interpolation: ColorInterpolationMethod::default(),
-        stops: [
-          GradientStop::ColorHint {
-            color: Color::from_rgb(0xff0000).into(),
-            hint: Some(StopPosition(Length::Percentage(10.0))),
-          },
-          GradientStop::ColorHint {
-            color: Color::from_rgb(0xff0000).into(),
-            hint: Some(StopPosition(Length::Percentage(20.0))),
-          },
-          GradientStop::ColorHint {
-            color: Color::from_rgb(0x0000ff).into(),
-            hint: None,
-          },
-        ]
-        .into(),
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_conic_gradient_with_angle_stops() {
-    assert_eq!(
-      ConicGradient::from_str("conic-gradient(red 0deg, lime 180deg, blue 1turn)"),
-      Ok(ConicGradient {
-        repeating: false,
-        from_angle: Angle::zero(),
-        center: ObjectPosition::default(),
-        interpolation: ColorInterpolationMethod::default(),
-        stops: [
-          GradientStop::ColorHint {
-            color: Color::from_rgb(0xff0000).into(),
-            hint: Some(StopPosition(Length::Percentage(0.0))),
-          },
-          GradientStop::ColorHint {
-            color: Color::from_rgb(0x00ff00).into(),
-            hint: Some(StopPosition(Length::Percentage(50.0))),
-          },
-          GradientStop::ColorHint {
-            color: Color::from_rgb(0x0000ff).into(),
-            hint: Some(StopPosition(Length::Percentage(100.0))),
-          },
-        ]
-        .into(),
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_conic_gradient_with_double_angle_stop() {
-    assert_eq!(
-      ConicGradient::from_str("conic-gradient(red 0deg 90deg, blue)"),
-      Ok(ConicGradient {
-        repeating: false,
-        from_angle: Angle::zero(),
-        center: ObjectPosition::default(),
-        interpolation: ColorInterpolationMethod::default(),
-        stops: [
-          GradientStop::ColorHint {
-            color: Color::from_rgb(0xff0000).into(),
-            hint: Some(StopPosition(Length::Percentage(0.0))),
-          },
-          GradientStop::ColorHint {
-            color: Color::from_rgb(0xff0000).into(),
-            hint: Some(StopPosition(Length::Percentage(25.0))),
           },
           GradientStop::ColorHint {
             color: Color::from_rgb(0x0000ff).into(),

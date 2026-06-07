@@ -42,33 +42,32 @@ fn test_parse_color() {
 }
 
 #[test]
-fn test_parse_shadow_color() {
-  assert_eq!(
-    TailwindProperty::parse("shadow-red-500"),
-    Some(TailwindProperty::ShadowColor(ColorInput::Value(Color([
-      251, 44, 54, 255
-    ]))))
-  );
-}
-
-#[test]
-fn test_parse_text_shadow_color() {
-  assert_eq!(
-    TailwindProperty::parse("text-shadow-red-500"),
-    Some(TailwindProperty::TextShadowColor(ColorInput::Value(Color(
-      [251, 44, 54, 255]
-    ))))
-  );
-}
-
-#[test]
-fn test_parse_decoration_color() {
-  assert_eq!(
-    TailwindProperty::parse("decoration-red-500"),
-    Some(TailwindProperty::TextDecorationColor(ColorInput::Value(
-      Color([251, 44, 54, 255])
-    )))
-  );
+fn test_parse_red_500_color_utilities() {
+  let cases: &[(&str, TailwindProperty)] = &[
+    (
+      "shadow-red-500",
+      TailwindProperty::ShadowColor(ColorInput::Value(Color([251, 44, 54, 255]))),
+    ),
+    (
+      "text-shadow-red-500",
+      TailwindProperty::TextShadowColor(ColorInput::Value(Color([251, 44, 54, 255]))),
+    ),
+    (
+      "decoration-red-500",
+      TailwindProperty::TextDecorationColor(ColorInput::Value(Color([251, 44, 54, 255]))),
+    ),
+    (
+      "bg-red-500",
+      TailwindProperty::BackgroundColor(ColorInput::Value(Color([251, 44, 54, 255]))),
+    ),
+  ];
+  for (input, expected) in cases {
+    assert_eq!(
+      TailwindProperty::parse(input),
+      Some(expected.clone()),
+      "{input}"
+    );
+  }
 }
 
 #[test]
@@ -392,18 +391,24 @@ fn test_grid_longhand_importance_is_tracked_per_side() {
 
 #[test]
 fn test_parse_overflow_clip() {
-  assert_eq!(
-    TailwindProperty::parse("overflow-clip"),
-    Some(TailwindProperty::Overflow(Overflow::Clip))
-  );
-  assert_eq!(
-    TailwindProperty::parse("overflow-x-clip"),
-    Some(TailwindProperty::OverflowX(Overflow::Clip))
-  );
-  assert_eq!(
-    TailwindProperty::parse("overflow-y-clip"),
-    Some(TailwindProperty::OverflowY(Overflow::Clip))
-  );
+  let cases: &[(&str, TailwindProperty)] = &[
+    ("overflow-clip", TailwindProperty::Overflow(Overflow::Clip)),
+    (
+      "overflow-x-clip",
+      TailwindProperty::OverflowX(Overflow::Clip),
+    ),
+    (
+      "overflow-y-clip",
+      TailwindProperty::OverflowY(Overflow::Clip),
+    ),
+  ];
+  for (input, expected) in cases {
+    assert_eq!(
+      TailwindProperty::parse(input),
+      Some(expected.clone()),
+      "{input}"
+    );
+  }
 }
 
 #[test]
@@ -625,54 +630,24 @@ fn test_parse_blend_mode() {
 }
 #[test]
 fn test_parse_vertical_align() {
-  assert_eq!(
-    TailwindProperty::parse("align-baseline"),
-    Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
-      VerticalAlignKeyword::Baseline
-    )))
-  );
-  assert_eq!(
-    TailwindProperty::parse("align-top"),
-    Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
-      VerticalAlignKeyword::Top
-    )))
-  );
-  assert_eq!(
-    TailwindProperty::parse("align-middle"),
-    Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
-      VerticalAlignKeyword::Middle
-    )))
-  );
-  assert_eq!(
-    TailwindProperty::parse("align-bottom"),
-    Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
-      VerticalAlignKeyword::Bottom
-    )))
-  );
-  assert_eq!(
-    TailwindProperty::parse("align-text-top"),
-    Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
-      VerticalAlignKeyword::TextTop
-    )))
-  );
-  assert_eq!(
-    TailwindProperty::parse("align-text-bottom"),
-    Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
-      VerticalAlignKeyword::TextBottom
-    )))
-  );
-  assert_eq!(
-    TailwindProperty::parse("align-sub"),
-    Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
-      VerticalAlignKeyword::Sub
-    )))
-  );
-  assert_eq!(
-    TailwindProperty::parse("align-super"),
-    Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(
-      VerticalAlignKeyword::Super
-    )))
-  );
+  let keywords: &[(&str, VerticalAlignKeyword)] = &[
+    ("align-baseline", VerticalAlignKeyword::Baseline),
+    ("align-top", VerticalAlignKeyword::Top),
+    ("align-middle", VerticalAlignKeyword::Middle),
+    ("align-bottom", VerticalAlignKeyword::Bottom),
+    ("align-text-top", VerticalAlignKeyword::TextTop),
+    ("align-text-bottom", VerticalAlignKeyword::TextBottom),
+    ("align-sub", VerticalAlignKeyword::Sub),
+    ("align-super", VerticalAlignKeyword::Super),
+  ];
+  for (input, kw) in keywords {
+    assert_eq!(
+      TailwindProperty::parse(input),
+      Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(*kw))),
+      "{input}"
+    );
+  }
+  // Arbitrary-value lengths
   assert_eq!(
     TailwindProperty::parse("align-[10px]"),
     Some(TailwindProperty::VerticalAlign(VerticalAlign::Length(
@@ -840,16 +815,6 @@ fn test_text_shadow_color_overrides_preset_in_any_order() {
       )
     );
   }
-}
-
-#[test]
-fn test_v4_palette_red_500() {
-  assert_eq!(
-    TailwindProperty::parse("bg-red-500"),
-    Some(TailwindProperty::BackgroundColor(ColorInput::Value(Color(
-      [251, 44, 54, 255]
-    ))))
-  );
 }
 
 #[test]

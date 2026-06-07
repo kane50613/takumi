@@ -244,156 +244,113 @@ mod tests {
     Length::{self, Px},
   };
 
-  #[test]
-  fn test_parse_simple_box_shadow() {
-    // Test parsing a simple box-shadow with just offsets
-    assert_eq!(
-      BoxShadow::from_str("2px 4px"),
-      Ok(BoxShadow {
-        offset_x: Px(2.0),
-        offset_y: Px(4.0),
-        blur_radius: Length::zero(),
-        spread_radius: Length::zero(),
-        color: ColorInput::Value(Color::transparent()),
-        inset: false,
-      })
-    );
+  fn red() -> ColorInput {
+    ColorInput::Value(Color([255, 0, 0, 255]))
+  }
+
+  fn transparent() -> ColorInput {
+    ColorInput::Value(Color::transparent())
   }
 
   #[test]
-  fn test_parse_box_shadow_with_blur() {
-    // Test parsing box-shadow with blur radius
-    assert_eq!(
-      BoxShadow::from_str("2px 4px 6px"),
-      Ok(BoxShadow {
-        offset_x: Px(2.0),
-        offset_y: Px(4.0),
-        blur_radius: Px(6.0),
-        spread_radius: Length::zero(),
-        color: ColorInput::Value(Color::transparent()),
-        inset: false,
-      })
-    );
-  }
+  fn test_parse_box_shadow() {
+    let cases: &[(&str, BoxShadow)] = &[
+      (
+        "2px 4px",
+        BoxShadow {
+          offset_x: Px(2.0),
+          offset_y: Px(4.0),
+          color: transparent(),
+          ..Default::default()
+        },
+      ),
+      (
+        "2px 4px 6px",
+        BoxShadow {
+          offset_x: Px(2.0),
+          offset_y: Px(4.0),
+          blur_radius: Px(6.0),
+          color: transparent(),
+          ..Default::default()
+        },
+      ),
+      (
+        "2px 4px 6px 8px",
+        BoxShadow {
+          offset_x: Px(2.0),
+          offset_y: Px(4.0),
+          blur_radius: Px(6.0),
+          spread_radius: Px(8.0),
+          color: transparent(),
+          ..Default::default()
+        },
+      ),
+      (
+        "2px 4px red",
+        BoxShadow {
+          offset_x: Px(2.0),
+          offset_y: Px(4.0),
+          color: red(),
+          ..Default::default()
+        },
+      ),
+      (
+        "inset 2px 4px",
+        BoxShadow {
+          offset_x: Px(2.0),
+          offset_y: Px(4.0),
+          color: transparent(),
+          inset: true,
+          ..Default::default()
+        },
+      ),
+      (
+        "red 2px 4px",
+        BoxShadow {
+          offset_x: Px(2.0),
+          offset_y: Px(4.0),
+          color: red(),
+          ..Default::default()
+        },
+      ),
+      (
+        "2px 4px inset red",
+        BoxShadow {
+          offset_x: Px(2.0),
+          offset_y: Px(4.0),
+          color: red(),
+          inset: true,
+          ..Default::default()
+        },
+      ),
+      (
+        "2px 4px #ff0000",
+        BoxShadow {
+          offset_x: Px(2.0),
+          offset_y: Px(4.0),
+          color: red(),
+          ..Default::default()
+        },
+      ),
+      (
+        "2px 4px rgba(255, 0, 0, 0.5)",
+        BoxShadow {
+          offset_x: Px(2.0),
+          offset_y: Px(4.0),
+          color: ColorInput::Value(Color([255, 0, 0, 128])),
+          ..Default::default()
+        },
+      ),
+    ];
 
-  #[test]
-  fn test_parse_box_shadow_with_spread() {
-    // Test parsing box-shadow with blur and spread radius
-    assert_eq!(
-      BoxShadow::from_str("2px 4px 6px 8px"),
-      Ok(BoxShadow {
-        offset_x: Px(2.0),
-        offset_y: Px(4.0),
-        blur_radius: Px(6.0),
-        spread_radius: Px(8.0),
-        color: ColorInput::Value(Color::transparent()),
-        inset: false,
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_box_shadow_with_color() {
-    // Test parsing box-shadow with color
-    assert_eq!(
-      BoxShadow::from_str("2px 4px red"),
-      Ok(BoxShadow {
-        offset_x: Px(2.0),
-        offset_y: Px(4.0),
-        blur_radius: Length::zero(),
-        spread_radius: Length::zero(),
-        color: ColorInput::Value(Color([255, 0, 0, 255])),
-        inset: false,
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_inset_box_shadow() {
-    // Test parsing inset box-shadow
-    assert_eq!(
-      BoxShadow::from_str("inset 2px 4px"),
-      Ok(BoxShadow {
-        offset_x: Px(2.0),
-        offset_y: Px(4.0),
-        blur_radius: Length::zero(),
-        spread_radius: Length::zero(),
-        color: ColorInput::Value(Color::transparent()),
-        inset: true,
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_box_shadow_color_first() {
-    // Test parsing box-shadow with color before offsets
-    assert_eq!(
-      BoxShadow::from_str("red 2px 4px"),
-      Ok(BoxShadow {
-        offset_x: Px(2.0),
-        offset_y: Px(4.0),
-        blur_radius: Length::zero(),
-        spread_radius: Length::zero(),
-        color: ColorInput::Value(Color([255, 0, 0, 255])),
-        inset: false,
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_box_shadow_inset_after_offsets() {
-    // Test parsing box-shadow with inset keyword after offsets
-    assert_eq!(
-      BoxShadow::from_str("2px 4px inset red"),
-      Ok(BoxShadow {
-        offset_x: Px(2.0),
-        offset_y: Px(4.0),
-        blur_radius: Length::zero(),
-        spread_radius: Length::zero(),
-        color: ColorInput::Value(Color([255, 0, 0, 255])),
-        inset: true,
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_box_shadow_hex_color() {
-    // Test parsing box-shadow with hex color
-    assert_eq!(
-      BoxShadow::from_str("2px 4px #ff0000"),
-      Ok(BoxShadow {
-        offset_x: Px(2.0),
-        offset_y: Px(4.0),
-        blur_radius: Length::zero(),
-        spread_radius: Length::zero(),
-        color: ColorInput::Value(Color([255, 0, 0, 255])),
-        inset: false,
-      })
-    );
-  }
-
-  #[test]
-  fn test_parse_box_shadow_rgba_color() {
-    // Test parsing box-shadow with rgba color
-    assert_eq!(
-      BoxShadow::from_str("2px 4px rgba(255, 0, 0, 0.5)"),
-      Ok(BoxShadow {
-        offset_x: Px(2.0),
-        offset_y: Px(4.0),
-        blur_radius: Length::zero(),
-        spread_radius: Length::zero(),
-        color: ColorInput::Value(Color([255, 0, 0, 128])), // 0.5 * 255 = 128
-        inset: false,
-      })
-    );
+    for (css, expected) in cases {
+      assert_eq!(BoxShadow::from_str(css), Ok(*expected), "css: {css}");
+    }
   }
 
   #[test]
   fn test_parse_box_shadow_invalid() {
-    // Test parsing invalid box-shadow (missing required offsets)
     assert!(BoxShadow::from_str("2px").is_err());
-
-    // Test parsing invalid box-shadow (no values)
     assert!(BoxShadow::from_str("").is_err());
   }
 
