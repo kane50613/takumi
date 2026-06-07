@@ -230,11 +230,6 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
   }
 }
 
-#[derive(Debug, Clone)]
-struct ParsedSelectors {
-  selectors: SelectorList<SelectorImpl>,
-}
-
 #[derive(Debug, Clone, Default)]
 struct StyleSheetFragment {
   rules: Vec<CssRule>,
@@ -1177,7 +1172,7 @@ fn parse_nested_at_rule_block<'i, 't>(
 }
 
 impl<'i> QualifiedRuleParser<'i> for RuleParser {
-  type Prelude = ParsedSelectors;
+  type Prelude = SelectorList<SelectorImpl>;
   type QualifiedRule = StyleSheetFragment;
   type Error = StyleSheetParseError;
 
@@ -1185,9 +1180,7 @@ impl<'i> QualifiedRuleParser<'i> for RuleParser {
     &mut self,
     input: &mut Parser<'i, 't>,
   ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
-    Ok(ParsedSelectors {
-      selectors: SelectorList::parse(&TakumiSelectorParser, input, ParseRelative::No)?,
-    })
+    SelectorList::parse(&TakumiSelectorParser, input, ParseRelative::No)
   }
 
   fn parse_block<'t>(
@@ -1197,7 +1190,7 @@ impl<'i> QualifiedRuleParser<'i> for RuleParser {
     input: &mut Parser<'i, 't>,
   ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
     parse_style_rule_block(
-      selectors.selectors,
+      selectors,
       &[],
       self.current_layer.as_ref(),
       self.lossy,
@@ -1450,7 +1443,7 @@ impl StyleSheet {
           if lossy {
             continue;
           }
-          return Err(StyleSheetParseError::from_parse_error(css, context, error));
+          return Err(StyleSheetParseError::from_parse_error(context, error));
         }
       }
     }
