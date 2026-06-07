@@ -19,7 +19,7 @@ use crate::{
   },
   rendering::{
     MaxHeight, RebreakOptions, RenderContext, SizedFontStyle, apply_text_transform,
-    apply_white_space_collapse, make_balanced_text, make_pretty_text, to_sized_font_style,
+    apply_white_space_collapse, make_balanced_text, make_pretty_text,
   },
 };
 
@@ -1004,7 +1004,7 @@ fn build_inline_layout_tree<'c, 'g: 'c>(
     for item in items {
       match item {
         InlineItem::Text { text, context } => {
-          let span_style = to_sized_font_style(&context.style, context);
+          let span_style = SizedFontStyle::from_style(&context.style, context);
           let transformed = apply_text_transform(text, context.style.text_transform);
           let collapsed = apply_white_space_collapse(
             &transformed,
@@ -1644,7 +1644,7 @@ mod tests {
   fn glyph_run_segments(node: Node, global: &GlobalContext) -> Vec<(Option<u64>, String, Color)> {
     let context = RenderContext::new_test(global, Viewport::new((1200, 630)));
     let render_node = RenderNode::from_node(&context, node);
-    let font_style = to_sized_font_style(&render_node.context.style, &render_node.context);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
     let (max_width, max_height) = create_inline_constraint(
       &render_node.context,
       Size {

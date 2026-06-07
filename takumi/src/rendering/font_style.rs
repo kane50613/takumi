@@ -114,41 +114,40 @@ fn resolved_text_shadows(
     })
 }
 
-pub(crate) fn to_sized_font_style<'s>(
-  style: &'s ComputedStyle,
-  context: &RenderContext,
-) -> SizedFontStyle<'s> {
-  let line_height = style.line_height.into_parley(&context.sizing);
+impl<'s> SizedFontStyle<'s> {
+  pub(crate) fn from_style(style: &'s ComputedStyle, context: &RenderContext) -> Self {
+    let line_height = style.line_height.into_parley(&context.sizing);
 
-  SizedFontStyle {
-    sizing: context.sizing.to_owned(),
-    parent: style,
-    line_height,
-    line_height_scales_with_text_fit: style.line_height.scales_with_text_fit(),
-    stroke_width: style
-      .webkit_text_stroke_width
-      .unwrap_or_default()
-      .to_px(&context.sizing, context.sizing.font_size),
-    outline_width: style.outline_width.to_px(&context.sizing, 0.0).max(0.0),
-    outline_offset: style.outline_offset.to_px(&context.sizing, 0.0),
-    letter_spacing: style
-      .letter_spacing
-      .to_px(&context.sizing, context.sizing.font_size),
-    word_spacing: style
-      .word_spacing
-      .to_px(&context.sizing, context.sizing.font_size),
-    text_shadow: resolved_text_shadows(style, context),
-    color: style
-      .webkit_text_fill_color
-      .unwrap_or(style.color)
-      .resolve(context.current_color),
-    outline_color: style.outline_color.resolve(context.current_color),
-    outline_style: style.outline_style,
-    text_stroke_color: style
-      .webkit_text_stroke_color
-      .unwrap_or_default()
-      .resolve(context.current_color),
-    text_decoration_color: style.text_decoration_color.resolve(context.current_color),
-    text_decoration_thickness: style.resolved_text_decoration_thickness(&context.sizing),
+    Self {
+      sizing: context.sizing.to_owned(),
+      parent: style,
+      line_height,
+      line_height_scales_with_text_fit: style.line_height.scales_with_text_fit(),
+      stroke_width: style
+        .webkit_text_stroke_width
+        .unwrap_or_default()
+        .to_px(&context.sizing, context.sizing.font_size),
+      outline_width: style.outline_width.to_px(&context.sizing, 0.0).max(0.0),
+      outline_offset: style.outline_offset.to_px(&context.sizing, 0.0),
+      letter_spacing: style
+        .letter_spacing
+        .to_px(&context.sizing, context.sizing.font_size),
+      word_spacing: style
+        .word_spacing
+        .to_px(&context.sizing, context.sizing.font_size),
+      text_shadow: resolved_text_shadows(style, context),
+      color: style
+        .webkit_text_fill_color
+        .unwrap_or(style.color)
+        .resolve(context.current_color),
+      outline_color: style.outline_color.resolve(context.current_color),
+      outline_style: style.outline_style,
+      text_stroke_color: style
+        .webkit_text_stroke_color
+        .unwrap_or_default()
+        .resolve(context.current_color),
+      text_decoration_color: style.text_decoration_color.resolve(context.current_color),
+      text_decoration_thickness: style.resolved_text_decoration_thickness(&context.sizing),
+    }
   }
 }
