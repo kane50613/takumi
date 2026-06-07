@@ -12,39 +12,11 @@ use crate::style::{
 /// Lookup table for a single 8-bit channel transition.
 pub type TransferTable = [u8; 256];
 
-/// Builds a LUT for the Brightness filter.
-pub fn build_brightness_table(value: f32) -> TransferTable {
+/// Builds a transfer LUT by mapping each channel value through `f`.
+pub(crate) fn build_transfer_table<F: Fn(usize) -> f32>(f: F) -> TransferTable {
   let mut table = [0u8; 256];
   for (i, entry) in table.iter_mut().enumerate() {
-    *entry = (i as f32 * value).clamp(0.0, 255.0) as u8;
-  }
-  table
-}
-
-/// Builds a LUT for the Contrast filter.
-pub fn build_contrast_table(value: f32) -> TransferTable {
-  let mut table = [0u8; 256];
-  for (i, entry) in table.iter_mut().enumerate() {
-    *entry = ((i as f32 - 128.0) * value + 128.0).clamp(0.0, 255.0) as u8;
-  }
-  table
-}
-
-/// Builds a LUT for the Invert filter.
-pub fn build_invert_table(amount: f32) -> TransferTable {
-  let mut table = [0u8; 256];
-  for (i, entry) in table.iter_mut().enumerate() {
-    let inverted = 255 - i as u8;
-    *entry = ((i as f32 * (1.0 - amount)) + (inverted as f32 * amount)).clamp(0.0, 255.0) as u8;
-  }
-  table
-}
-
-/// Builds a LUT for the Opacity filter (applied to alpha channel).
-pub fn build_opacity_table(value: f32) -> TransferTable {
-  let mut table = [0u8; 256];
-  for (i, entry) in table.iter_mut().enumerate() {
-    *entry = (i as f32 * value).clamp(0.0, 255.0) as u8;
+    *entry = f(i).clamp(0.0, 255.0) as u8;
   }
   table
 }
@@ -205,11 +177,24 @@ impl Filter {
   pub fn transfer_table(&self) -> Option<TransferChannel> {
     match *self {
       Filter::Brightness(PercentageNumber(v)) => {
-        Some(TransferChannel::Rgb(build_brightness_table(v)))
+        Some(TransferChannel::Rgb(build_transfer_table(|i| i as f32 * v)))
       }
-      Filter::Contrast(PercentageNumber(v)) => Some(TransferChannel::Rgb(build_contrast_table(v))),
-      Filter::Invert(PercentageNumber(v)) => Some(TransferChannel::Rgb(build_invert_table(v))),
-      Filter::Opacity(PercentageNumber(v)) => Some(TransferChannel::Alpha(build_opacity_table(v))),
+      Filter::Contrast(PercentageNumber(v)) => {
+        Some(TransferChannel::Rgb(build_transfer_table(|i| {
+          (i as f32 - 128.0) * v + 128.0
+        })))
+      }
+      Filter::Invert(PercentageNumber(v)) => {
+        Some(TransferChannel::Rgb(build_transfer_table(|i| {
+          let inverted = 255 - i as u8;
+          (i as f32 * (1.0 - v)) + (inverted as f32 * v)
+        })))
+      }
+      Filter::Opacity(PercentageNumber(v)) => {
+        Some(TransferChannel::Alpha(build_transfer_table(|i| {
+          i as f32 * v
+        })))
+      }
       _ => None,
     }
   }

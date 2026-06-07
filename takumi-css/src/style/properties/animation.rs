@@ -552,7 +552,7 @@ fn expect_number<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, f32> {
   Ok(*value)
 }
 
-pub fn repeated_list_value<T: Clone>(values: &[T], index: usize, default: T) -> T {
+pub(crate) fn repeated_list_value<T: Clone>(values: &[T], index: usize, default: T) -> T {
   if values.is_empty() {
     return default;
   }
@@ -560,33 +560,37 @@ pub fn repeated_list_value<T: Clone>(values: &[T], index: usize, default: T) -> 
   values[index % values.len()].clone()
 }
 
-pub fn timing_function_at(
+pub(crate) fn timing_function_at(
   values: &AnimationTimingFunctions,
   index: usize,
 ) -> AnimationTimingFunction {
   repeated_list_value(values, index, AnimationTimingFunction::default())
 }
 
-pub fn time_at(values: &AnimationDurations, index: usize, default: AnimationTime) -> AnimationTime {
+pub(crate) fn time_at(
+  values: &AnimationDurations,
+  index: usize,
+  default: AnimationTime,
+) -> AnimationTime {
   repeated_list_value(values, index, default)
 }
 
-pub fn iteration_count_at(
+pub(crate) fn iteration_count_at(
   values: &AnimationIterationCounts,
   index: usize,
 ) -> AnimationIterationCount {
   repeated_list_value(values, index, AnimationIterationCount::default())
 }
 
-pub fn direction_at(values: &AnimationDirections, index: usize) -> AnimationDirection {
+pub(crate) fn direction_at(values: &AnimationDirections, index: usize) -> AnimationDirection {
   repeated_list_value(values, index, AnimationDirection::default())
 }
 
-pub fn fill_mode_at(values: &AnimationFillModes, index: usize) -> AnimationFillMode {
+pub(crate) fn fill_mode_at(values: &AnimationFillModes, index: usize) -> AnimationFillMode {
   repeated_list_value(values, index, AnimationFillMode::default())
 }
 
-pub fn cubic_bezier_sample(x1: f32, y1: f32, x2: f32, y2: f32, progress: f32) -> f32 {
+fn cubic_bezier_sample(x1: f32, y1: f32, x2: f32, y2: f32, progress: f32) -> f32 {
   fn sample_curve(a: f32, b: f32, c: f32, t: f32) -> f32 {
     ((a * t + b) * t + c) * t
   }
@@ -625,7 +629,7 @@ fn steps_sample(step_count: u32, position: StepPosition, progress: f32) -> f32 {
   }
 }
 
-pub fn apply_timing_function(function: &AnimationTimingFunction, progress: f32) -> f32 {
+pub(crate) fn apply_timing_function(function: &AnimationTimingFunction, progress: f32) -> f32 {
   match function {
     AnimationTimingFunction::Linear => progress,
     AnimationTimingFunction::Ease => cubic_bezier_sample(0.25, 0.1, 0.25, 1.0, progress),

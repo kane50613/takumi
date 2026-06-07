@@ -603,30 +603,22 @@ fn interpolate_length<const DEFAULT_AUTO: bool>(
   to: Length<DEFAULT_AUTO>,
   progress: f32,
 ) -> Option<Length<DEFAULT_AUTO>> {
-  match (from, to) {
-    (Length::Percentage(lhs), Length::Percentage(rhs)) => {
-      Some(Length::Percentage(lerp(lhs, rhs, progress)))
-    }
-    (Length::Rem(lhs), Length::Rem(rhs)) => Some(Length::Rem(lerp(lhs, rhs, progress))),
-    (Length::Em(lhs), Length::Em(rhs)) => Some(Length::Em(lerp(lhs, rhs, progress))),
-    (Length::Vh(lhs), Length::Vh(rhs)) => Some(Length::Vh(lerp(lhs, rhs, progress))),
-    (Length::Vw(lhs), Length::Vw(rhs)) => Some(Length::Vw(lerp(lhs, rhs, progress))),
-    (Length::CqH(lhs), Length::CqH(rhs)) => Some(Length::CqH(lerp(lhs, rhs, progress))),
-    (Length::CqW(lhs), Length::CqW(rhs)) => Some(Length::CqW(lerp(lhs, rhs, progress))),
-    (Length::CqMin(lhs), Length::CqMin(rhs)) => Some(Length::CqMin(lerp(lhs, rhs, progress))),
-    (Length::CqMax(lhs), Length::CqMax(rhs)) => Some(Length::CqMax(lerp(lhs, rhs, progress))),
-    (Length::VMin(lhs), Length::VMin(rhs)) => Some(Length::VMin(lerp(lhs, rhs, progress))),
-    (Length::VMax(lhs), Length::VMax(rhs)) => Some(Length::VMax(lerp(lhs, rhs, progress))),
-    (Length::Cm(lhs), Length::Cm(rhs)) => Some(Length::Cm(lerp(lhs, rhs, progress))),
-    (Length::Mm(lhs), Length::Mm(rhs)) => Some(Length::Mm(lerp(lhs, rhs, progress))),
-    (Length::In(lhs), Length::In(rhs)) => Some(Length::In(lerp(lhs, rhs, progress))),
-    (Length::Q(lhs), Length::Q(rhs)) => Some(Length::Q(lerp(lhs, rhs, progress))),
-    (Length::Pt(lhs), Length::Pt(rhs)) => Some(Length::Pt(lerp(lhs, rhs, progress))),
-    (Length::Pc(lhs), Length::Pc(rhs)) => Some(Length::Pc(lerp(lhs, rhs, progress))),
-    (Length::Px(lhs), Length::Px(rhs)) => Some(Length::Px(lerp(lhs, rhs, progress))),
-    (Length::Auto, Length::Auto) => Some(Length::Auto),
-    _ => None,
+  macro_rules! lerp_variants {
+    ($($variant:ident),+ $(,)?) => {
+      match (from, to) {
+        $(
+          (Length::$variant(lhs), Length::$variant(rhs)) => {
+            Some(Length::$variant(lerp(lhs, rhs, progress)))
+          }
+        )+
+        (Length::Auto, Length::Auto) => Some(Length::Auto),
+        _ => None,
+      }
+    };
   }
+  lerp_variants!(
+    Percentage, Rem, Em, Vh, Vw, CqH, CqW, CqMin, CqMax, VMin, VMax, Cm, Mm, In, Q, Pt, Pc, Px,
+  )
 }
 
 fn resolve_length_with_sizing<const DEFAULT_AUTO: bool>(
