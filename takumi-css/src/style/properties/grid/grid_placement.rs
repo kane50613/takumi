@@ -39,6 +39,13 @@ impl GridPlacement {
   pub const fn span(span: u16) -> Self {
     Self::Span(GridPlacementSpan::Span(span))
   }
+
+  pub(crate) fn try_negative(self) -> Option<GridPlacement> {
+    match self {
+      GridPlacement::Line(n) => Some(GridPlacement::Line(-n)),
+      _ => None,
+    }
+  }
 }
 
 impl TailwindPropertyParser for GridPlacement {

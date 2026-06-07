@@ -930,13 +930,16 @@ enum FnKind {
   Other,
 }
 
-fn classify_fn(name: &str) -> FnKind {
-  if name == "url" || name.ends_with("_url") {
-    FnKind::Url
-  } else if matches!(name, "var" | "theme") || name.ends_with("_var") || name.ends_with("_theme") {
-    FnKind::VarTheme
-  } else {
-    FnKind::Other
+impl FnKind {
+  fn from_name(name: &str) -> FnKind {
+    if name == "url" || name.ends_with("_url") {
+      FnKind::Url
+    } else if matches!(name, "var" | "theme") || name.ends_with("_var") || name.ends_with("_theme")
+    {
+      FnKind::VarTheme
+    } else {
+      FnKind::Other
+    }
   }
 }
 
@@ -969,7 +972,7 @@ fn decode_arbitrary_value(value: &str) -> Cow<'_, str> {
       out.push(if preserved { '_' } else { ' ' });
       index += 1;
     } else if byte == b'(' {
-      stack.push((classify_fn(&value[ident_start..index]), true));
+      stack.push((FnKind::from_name(&value[ident_start..index]), true));
       out.push('(');
       index += 1;
       ident_start = index;
@@ -1022,7 +1025,7 @@ macro_rules! try_neg {
     Some(match $self {
       $(TailwindProperty::$neg(v) => TailwindProperty::$neg(v.try_negative()?),)+
       $(TailwindProperty::$un(v) => TailwindProperty::$un(-v),)+
-      $(TailwindProperty::$grid(p) => TailwindProperty::$grid(neg_grid_placement(p)?),)+
+      $(TailwindProperty::$grid(p) => TailwindProperty::$grid(p.try_negative()?),)+
       _ => return None,
     })
   };
@@ -1038,13 +1041,6 @@ impl TailwindProperty {
       unary: Scale, ScaleX, ScaleY, Rotate, LetterSpacing, HueRotate, BackdropHueRotate;
       grid: GridColumnStart, GridColumnEnd, GridRowStart, GridRowEnd
     )
-  }
-}
-
-fn neg_grid_placement(p: GridPlacement) -> Option<GridPlacement> {
-  match p {
-    GridPlacement::Line(n) => Some(GridPlacement::Line(-n)),
-    _ => None,
   }
 }
 

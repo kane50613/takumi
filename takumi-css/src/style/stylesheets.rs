@@ -295,12 +295,12 @@ macro_rules! define_style {
         }
 
         fn from_kebab_case(name: &str) -> Self {
-          property_id_from_name(name, normalize_kebab_property_name)
+          PropertyId::from_name(name, normalize_kebab_property_name)
         }
 
         #[allow(dead_code)]
         pub fn from_camel_case(name: &str) -> Self {
-          property_id_from_name(name, normalize_camel_property_name)
+          PropertyId::from_name(name, normalize_camel_property_name)
         }
 
         fn parse_declarations<'i>(
@@ -356,7 +356,8 @@ macro_rules! define_style {
           }
         }
 
-        fn important_longhands(self) -> PropertyMask {
+        /// Longhands this property expands into (shorthand-expansion targets; unrelated to `!important`).
+        fn target_longhands(self) -> PropertyMask {
           match self {
             Self::Ignored | Self::Custom => PropertyMask::default(),
             Self::Longhand(property) => [property].into_iter().collect(),
@@ -725,7 +726,7 @@ macro_rules! define_style {
           match self {
             Self::CssWideKeyword(id, _) => [*id].into_iter().collect(),
             Self::CustomProperty(..) => PropertyMask::default(),
-            Self::Deferred(deferred) => deferred.property.important_longhands(),
+            Self::Deferred(deferred) => deferred.property.target_longhands(),
             _ => [self.longhand_id()].into_iter().collect(),
           }
         }

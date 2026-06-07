@@ -114,7 +114,7 @@ use parley::Alignment;
 use std::borrow::Cow;
 use std::fmt;
 
-use crate::style::{SizingContext, tw::TailwindPropertyParser};
+use crate::style::{SizingContext, math::lcm, tw::TailwindPropertyParser};
 
 /// Parser result type alias for CSS property parsers.
 pub type ParseResult<'i, T> = Result<T, ParseError<'i, Cow<'i, str>>>;
@@ -448,10 +448,6 @@ pub(crate) trait Animatable: Sized + Clone {
   }
 }
 
-pub(crate) fn lerp(lhs: f32, rhs: f32, progress: f32) -> f32 {
-  lhs + (rhs - lhs) * progress
-}
-
 pub(crate) enum ListInterpolationStrategy {
   Discrete,
   RepeatToLcm,
@@ -685,21 +681,6 @@ fn interpolate_neutral_padded_list<T: Animatable + Clone>(
       Some(value)
     })
     .collect()
-}
-
-fn gcd(lhs: usize, rhs: usize) -> usize {
-  let mut lhs = lhs;
-  let mut rhs = rhs;
-  while rhs != 0 {
-    let remainder = lhs % rhs;
-    lhs = rhs;
-    rhs = remainder;
-  }
-  lhs
-}
-
-fn lcm(lhs: usize, rhs: usize) -> usize {
-  lhs / gcd(lhs, rhs) * rhs
 }
 
 impl<T: Animatable + Copy> Animatable for SpacePair<T> {

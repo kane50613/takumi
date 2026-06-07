@@ -10,6 +10,7 @@ use std::{borrow::Cow, fmt::Formatter};
 
 pub use animation::apply_stylesheet_animations;
 pub use animation::{KeyframeRule, KeyframesRule};
+pub(crate) use math::lerp;
 pub use math::{fast_div_255, fast_div_255_u32};
 pub(crate) use properties::unexpected_token;
 pub use properties::*;

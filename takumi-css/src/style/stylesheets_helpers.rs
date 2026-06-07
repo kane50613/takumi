@@ -183,22 +183,24 @@ fn css_input_parse_failure(
   }
 }
 
-pub(crate) fn property_id_from_name(name: &str, normalize: fn(&str) -> Cow<'_, str>) -> PropertyId {
-  if name.starts_with("--") {
-    return PropertyId::Custom;
+impl PropertyId {
+  pub(crate) fn from_name(name: &str, normalize: fn(&str) -> Cow<'_, str>) -> PropertyId {
+    if name.starts_with("--") {
+      return PropertyId::Custom;
+    }
+
+    if let Some(property) = webkit_property_id_from_name(name) {
+      return property;
+    }
+
+    let normalized = normalize(name);
+
+    if let Some(property) = legacy_alias_property_id(normalized.as_ref()) {
+      return property;
+    }
+
+    PropertyId::from_normalized_name(normalized.as_ref())
   }
-
-  if let Some(property) = webkit_property_id_from_name(name) {
-    return property;
-  }
-
-  let normalized = normalize(name);
-
-  if let Some(property) = legacy_alias_property_id(normalized.as_ref()) {
-    return property;
-  }
-
-  PropertyId::from_normalized_name(normalized.as_ref())
 }
 
 // Ref: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/row-gap
@@ -230,6 +232,7 @@ fn webkit_property_id_from_name(name: &str) -> Option<PropertyId> {
   }
 }
 
+/// Internal helper for the `define_style!` macro's shorthand expansions.
 pub(crate) fn expand_shorthand<T>(
   value: T,
   expand: impl FnOnce(T, &mut ParsedDeclarations),
