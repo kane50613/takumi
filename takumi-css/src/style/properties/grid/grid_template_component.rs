@@ -2,6 +2,7 @@ use std::mem::take;
 
 use cssparser::Parser;
 
+use super::write_space_separated;
 use crate::style::{
   CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, GridRepeatTrack, GridRepetitionCount,
   GridTrackSize, MakeComputed, ParseResult, SizingContext, ToCss,
@@ -193,14 +194,7 @@ impl ToCss for GridTemplateComponent {
     match self {
       Self::LineNames(names) => {
         dest.write_str("[")?;
-        let mut first = true;
-        for name in names {
-          if !first {
-            dest.write_str(" ")?;
-          }
-          first = false;
-          dest.write_str(name)?;
-        }
+        write_space_separated(dest, names)?;
         dest.write_str("]")
       }
       Self::Single(size) => size.to_css(dest),
