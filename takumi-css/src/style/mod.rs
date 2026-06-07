@@ -13,7 +13,10 @@ pub use animation::{KeyframeRule, KeyframesRule};
 pub use math::{fast_div_255, fast_div_255_u32};
 pub(crate) use properties::unexpected_token;
 pub use properties::*;
-pub use selector::*;
+// Selector matching internals (CssRule, SelectorImpl, Ident, …) stay namespaced
+// under `selector::` for the renderer's `layout::matching`; only the stylesheet
+// entry point is part of the public surface.
+pub use selector::StyleSheet;
 use serde::{
   Deserialize,
   de::{self, DeserializeSeed, Deserializer, IgnoredAny, MapAccess, SeqAccess, Visitor},
@@ -22,7 +25,7 @@ pub use sizing::SizingContext;
 pub use stylesheets::*;
 
 #[derive(Clone, Copy)]
-pub enum CssNumber {
+pub(crate) enum CssNumber {
   Signed(i64),
   Unsigned(u64),
   Float(f64),
@@ -39,7 +42,7 @@ impl std::fmt::Display for CssNumber {
 }
 
 #[derive(Clone, Copy)]
-pub enum CssUnexpected {
+pub(crate) enum CssUnexpected {
   Bool(bool),
   Char(char),
   Bytes,
@@ -50,7 +53,7 @@ pub enum CssUnexpected {
 }
 
 #[derive(Clone)]
-pub enum CssInput<'a> {
+pub(crate) enum CssInput<'a> {
   Str(Cow<'a, str>),
   Number(CssNumber),
   Unexpected(CssUnexpected),
@@ -211,7 +214,7 @@ impl<'de> Visitor<'de> for CssInputVisitor {
   }
 }
 
-pub struct CssValueSeed;
+pub(crate) struct CssValueSeed;
 
 impl<'de> DeserializeSeed<'de> for CssValueSeed {
   type Value = CssInput<'de>;

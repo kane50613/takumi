@@ -121,6 +121,7 @@ pub type ParseResult<'i, T> = Result<T, ParseError<'i, Cow<'i, str>>>;
 
 /// Compact identifiers for frequently reused CSS syntax tokens.
 #[derive(Clone, Copy)]
+#[non_exhaustive]
 pub enum CssSyntaxKind {
   /// `<angle>`
   Angle,
@@ -306,6 +307,7 @@ impl CssDescriptorKind {
 }
 
 /// Enum representing CSS tokens.
+#[non_exhaustive]
 pub enum CssToken {
   /// A CSS keyword.
   Keyword(&'static str),
@@ -326,6 +328,7 @@ impl std::fmt::Display for CssToken {
 }
 
 /// Defines reusable message templates for CSS parse errors.
+#[non_exhaustive]
 pub enum CssExpectedMessage {
   /// Expects a value or the `none` keyword.
   ValueOrNone,
@@ -411,12 +414,12 @@ impl<'i> FromCss<'i> for String {
 }
 
 /// Converts a parsed/inherited value into a computed value for the current node context.
-pub trait MakeComputed {
+pub(crate) trait MakeComputed {
   /// Default no-op for types that do not need computed-value normalization.
   fn make_computed(&mut self, _sizing: &SizingContext) {}
 }
 
-pub trait Animatable: Sized + Clone {
+pub(crate) trait Animatable: Sized + Clone {
   fn interpolate(
     &mut self,
     from: &Self,
@@ -445,11 +448,11 @@ pub trait Animatable: Sized + Clone {
   }
 }
 
-pub fn lerp(lhs: f32, rhs: f32, progress: f32) -> f32 {
+pub(crate) fn lerp(lhs: f32, rhs: f32, progress: f32) -> f32 {
   lhs + (rhs - lhs) * progress
 }
 
-pub enum ListInterpolationStrategy {
+pub(crate) enum ListInterpolationStrategy {
   Discrete,
   RepeatToLcm,
   PadToLongestWithNeutral,
@@ -479,7 +482,7 @@ impl<T: MakeComputed> MakeComputed for Vec<T> {
   }
 }
 
-pub fn next_is_comma<'i>(input: &mut Parser<'i, '_>) -> bool {
+pub(crate) fn next_is_comma<'i>(input: &mut Parser<'i, '_>) -> bool {
   let state = input.state();
   let is_comma = input.expect_comma().is_ok();
   input.reset(&state);
@@ -765,7 +768,7 @@ pub(crate) use unexpected_token;
 /// - `["fill"]` → `"'fill'"`
 /// - `["fill", "contain"]` → `"'fill' or 'contain'"`
 /// - `["fill", "contain", "cover"]` → `"'fill', 'contain' or 'cover'"`
-pub fn merge_enum_values(values: &[CssToken]) -> String {
+pub(crate) fn merge_enum_values(values: &[CssToken]) -> String {
   match values.len() {
     0 => String::new(),
     1 => values[0].to_string(),
@@ -857,7 +860,7 @@ impl ToCss for std::sync::Arc<str> {
 }
 
 /// Write a CSS quoted string, escaping backslashes and double quotes.
-pub fn write_css_string<W: fmt::Write>(dest: &mut W, s: &str) -> fmt::Result {
+pub(crate) fn write_css_string<W: fmt::Write>(dest: &mut W, s: &str) -> fmt::Result {
   dest.write_char('"')?;
   for ch in s.chars() {
     match ch {
@@ -960,6 +963,7 @@ impl TailwindPropertyParser for ObjectFit {
 
 /// Defines how the background is clipped.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum BackgroundClip {
   /// The background extends to the outside edge of the border
   #[default]
@@ -1057,6 +1061,7 @@ impl<'i> FromCss<'i> for BorderRadius {
 ///
 /// This enum determines whether the width and height properties include padding and border, or just the content area.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum BoxSizing {
   /// The width and height properties include padding and border, but not the content area
   ContentBox,
@@ -1077,6 +1082,7 @@ impl_from_taffy_enum!(BoxSizing, taffy::BoxSizing, ContentBox, BorderBox);
 ///
 /// Corresponds to CSS text-align property values.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum TextAlign {
   /// Aligns inline content to the left edge of the line box
   Left,
@@ -1115,6 +1121,7 @@ impl_from_taffy_enum!(
 
 /// Defines whether an element creates a new stacking context.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum Isolation {
   /// The element creates a new stacking context.
   Isolate,
@@ -1134,6 +1141,7 @@ declare_enum_from_css_impl!(
 /// This controls whether an element is rendered, but unlike `display: none`,
 /// it still takes up space in the layout.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum Visibility {
   /// The element is visible.
   #[default]
@@ -1243,6 +1251,7 @@ impl_from_taffy_enum!(Direction, taffy::Direction, Ltr, Rtl);
 
 /// Defines whether an element should be placed along the left or right side of its container.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum Float {
   /// The element is not floated.
   #[default]
@@ -1293,6 +1302,7 @@ impl Float {
 
 /// Defines whether an element must be moved below preceding floated elements.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum Clear {
   /// The element is not moved down.
   #[default]
@@ -1349,6 +1359,7 @@ impl Clear {
 ///
 /// This enum determines how flex items are laid out along the main axis.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum FlexDirection {
   /// Items are laid out in the same direction as the text direction (left-to-right for English)
   #[default]
@@ -1383,6 +1394,7 @@ impl_from_taffy_enum!(
 /// This enum determines how space is distributed between and around flex items
 /// along the main axis of the flex container.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum JustifyContent {
   /// The items are distributed using the normal flow of the flex container.
   #[default]
@@ -1458,6 +1470,7 @@ impl From<JustifyContent> for Option<taffy::JustifyContent> {
 
 /// This enum determines the layout algorithm used for the children of a node.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum Display {
   /// The element is not displayed
   None,
@@ -1545,6 +1558,7 @@ impl From<Display> for taffy::Display {
 /// This enum determines how items are aligned within the flex container
 /// along the cross axis (perpendicular to the main axis).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum AlignItems {
   /// The items are distributed using the normal flow of the flex container.
   #[default]
@@ -1602,6 +1616,7 @@ impl From<AlignItems> for Option<taffy::AlignItems> {
 ///
 /// This enum determines how flex items should wrap within the flex container.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum FlexWrap {
   /// Flex items will all be displayed in a single line, shrinking as needed
   #[default]
@@ -1645,6 +1660,7 @@ declare_enum_from_css_impl!(
 
 /// Controls whether text decoration should skip descenders.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum TextDecorationSkipInk {
   /// Skip descenders and glyph interiors when painting decorations.
   #[default]

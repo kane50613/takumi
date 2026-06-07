@@ -12,6 +12,7 @@ use crate::{
 
 /// Controls indentation of the first line, or hanging/each-line variants.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub struct TextIndent {
   /// The indent amount.
   pub amount: LengthDefaultsToZero,

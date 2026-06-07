@@ -7,6 +7,7 @@ use crate::style::{
 
 /// Represents a grid placement with serde support
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum GridPlacement {
   /// Keyword placement
   Keyword(GridPlacementKeyword),
@@ -48,6 +49,7 @@ impl TailwindPropertyParser for GridPlacement {
 
 /// Represents a grid placement keyword
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[non_exhaustive]
 pub enum GridPlacementKeyword {
   /// Auto placement
   #[default]
@@ -56,6 +58,7 @@ pub enum GridPlacementKeyword {
 
 /// Represents a grid placement span
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum GridPlacementSpan {
   /// Span count
   Span(u16),

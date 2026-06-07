@@ -7,6 +7,7 @@ use crate::{
 
 /// Represents a grid minmax()
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct GridMinMaxSize {
   /// The minimum size of the grid item
   pub min: GridLength,

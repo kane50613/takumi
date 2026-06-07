@@ -10,6 +10,7 @@ use crate::style::{
 ///
 /// This enum determines how text should be handled when it exceeds the container width.
 #[derive(Debug, Clone, PartialEq, Default)]
+#[non_exhaustive]
 pub enum TextOverflow {
   /// Text is simply clipped at the overflow edge with no visual indication
   #[default]

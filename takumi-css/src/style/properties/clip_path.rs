@@ -42,6 +42,7 @@ impl MakeComputed for ShapeRadius {
 
 /// Represents a position for circle() and ellipse() functions.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct ShapePosition(pub SpacePair<Length>);
 
 impl MakeComputed for ShapePosition {
@@ -61,6 +62,7 @@ impl Default for ShapePosition {
 /// The inset() function creates an inset rectangle, with its size defined by the offset distance
 /// of each of the four sides of its container and, optionally, rounded corners.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct InsetShape {
   /// Sides of the inset.
   pub inset: Sides<Length>,
@@ -77,6 +79,7 @@ impl MakeComputed for InsetShape {
 
 /// Represents an ellipse() shape.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct EllipseShape {
   /// The horizontal radius
   pub radius_x: ShapeRadius,
@@ -99,6 +102,7 @@ pub type PolygonCoordinate = SpacePair<Length>;
 
 /// Represents a polygon() shape.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct PolygonShape {
   /// The fill rule to use
   pub fill_rule: Option<FillRule>,
@@ -114,6 +118,7 @@ impl MakeComputed for PolygonShape {
 
 /// Represents a path() shape using an SVG path string.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct PathShape {
   /// The fill rule to use
   pub fill_rule: Option<FillRule>,

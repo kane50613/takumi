@@ -9,6 +9,7 @@ use crate::style::GridPlacement;
 
 /// Represents a grid line placement with serde support
 #[derive(Debug, Clone, Default, PartialEq)]
+#[non_exhaustive]
 pub struct GridLine {
   /// The start line placement
   pub start: GridPlacement,

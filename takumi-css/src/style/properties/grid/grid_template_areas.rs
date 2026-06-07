@@ -10,6 +10,7 @@ use crate::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, 
 /// Supports either a 2D matrix of area names (use "." for empty) or a CSS string value
 /// like: "a a ." "b b c"
 #[derive(Default, Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct GridTemplateAreas(pub Vec<Vec<String>>);
 
 impl MakeComputed for GridTemplateAreas {}

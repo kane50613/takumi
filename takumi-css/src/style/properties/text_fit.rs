@@ -85,6 +85,7 @@ declare_enum_from_css_impl!(
 
 /// Text fitting scale target.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum TextFitTarget {
   /// Use one scale for all lines.
   #[default]

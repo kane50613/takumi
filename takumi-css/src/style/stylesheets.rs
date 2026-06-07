@@ -606,7 +606,7 @@ macro_rules! define_style {
           $(self.$longhand.make_computed(sizing);)*
         }
 
-        pub fn apply_interpolated_properties(
+        pub(crate) fn apply_interpolated_properties(
           &mut self,
           from: &Self,
           to: &Self,
@@ -721,7 +721,7 @@ macro_rules! define_style {
           }
         }
 
-        pub fn affected_longhands(&self) -> PropertyMask {
+        pub(crate) fn affected_longhands(&self) -> PropertyMask {
           match self {
             Self::CssWideKeyword(id, _) => [*id].into_iter().collect(),
             Self::CustomProperty(..) => PropertyMask::default(),
@@ -986,8 +986,8 @@ define_style! {
     font_weight: FontWeight where inherit = true,
     font_variation_settings: FontVariationSettings where inherit = true,
     font_feature_settings: FontFeatureSettings where inherit = true,
-    font_synthesis_weight: FontSynthesic where inherit = true,
-    font_synthesis_style: FontSynthesic where inherit = true,
+    font_synthesis_weight: FontSynthesisValue where inherit = true,
+    font_synthesis_style: FontSynthesisValue where inherit = true,
     line_clamp: Option<LineClamp> where inherit = true,
     text_align: TextAlign where inherit = true,
     webkit_text_stroke_width: Option<LengthDefaultsToZero> where inherit = true,
@@ -1320,7 +1320,7 @@ define_style! {
 
 /// CSS-wide keywords that can target any longhand declaration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CssWideKeyword {
+pub(crate) enum CssWideKeyword {
   /// Reset the targeted longhand to its initial value.
   Initial,
   /// Inherit the targeted longhand from the parent computed style.
@@ -1350,7 +1350,7 @@ impl<'i> FromCss<'i> for CssWideKeyword {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PropertyMask {
+pub(crate) struct PropertyMask {
   words: [usize; Self::WORD_COUNT],
 }
 
@@ -1422,7 +1422,7 @@ impl FromIterator<LonghandId> for PropertyMask {
   }
 }
 
-pub struct PropertyMaskIter<'a> {
+pub(crate) struct PropertyMaskIter<'a> {
   mask: &'a PropertyMask,
   word_index: usize,
   current_word: usize,
@@ -1453,7 +1453,7 @@ impl Iterator for PropertyMaskIter<'_> {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DeclarationImportance {
-  pub longhands: PropertyMask,
+  pub(crate) longhands: PropertyMask,
   pub custom_properties: SmallVec<[Box<str>; 1]>,
 }
 
@@ -1916,7 +1916,7 @@ impl ComputedStyle {
   }
 }
 
-pub fn to_kebab_case(s: &str) -> String {
+pub(crate) fn to_kebab_case(s: &str) -> String {
   let mut result = String::new();
   for (i, c) in s.chars().enumerate() {
     if c.is_uppercase() {

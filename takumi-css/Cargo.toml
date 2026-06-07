@@ -1,9 +1,9 @@
 [package]
 name = "takumi-css"
-version = "1.7.0"
+version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-description = "CSS parsing and computed-style layer for takumi."
+description = "Internal CSS layer for takumi. Not a public API; do not depend on it directly."
 repository = "https://github.com/kane50613/takumi"
 rust-version = "1.91"
 

@@ -20,6 +20,7 @@ const DEFAULT_SCALE: f32 = 1.0;
 
 /// Represents a single CSS transform operation
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum Transform {
   /// Translates an element along the X-axis and Y-axis by the specified lengths
   Translate(Length, Length),

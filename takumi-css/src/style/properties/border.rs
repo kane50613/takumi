@@ -11,6 +11,7 @@ use crate::{
 
 /// Parsed `border` value.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct Border {
   /// Border width.
   pub width: Length,

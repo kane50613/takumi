@@ -2,6 +2,7 @@
   "name": "takumi",
   "private": true,
   "workspaces": [
+    "takumi-css",
     "takumi",
     "takumi-js",
     "takumi-helpers",
