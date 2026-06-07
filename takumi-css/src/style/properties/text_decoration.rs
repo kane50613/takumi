@@ -72,6 +72,7 @@ impl MakeComputed for TextDecorationLines {}
 
 /// Represents text decoration thickness options.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum TextDecorationThickness {
   /// Use the font's default thickness, fallback to `auto` if not available.
   FromFont,
@@ -191,6 +192,7 @@ impl ToCss for TextDecorationThickness {
 
 /// Represents text decoration style options (currently only solid is supported).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum TextDecorationStyle {
   /// Solid text decoration style.
   #[default]

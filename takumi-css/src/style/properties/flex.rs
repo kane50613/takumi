@@ -11,6 +11,7 @@ use crate::{
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// Represents a flex shorthand property for flex-grow, flex-shrink, and flex-basis.
+#[non_exhaustive]
 pub struct Flex {
   /// The flex-grow value.
   pub grow: f32,

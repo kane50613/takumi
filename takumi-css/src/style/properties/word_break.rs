@@ -4,6 +4,7 @@ use crate::style::declare_enum_from_css_impl;
 ///
 /// Corresponds to CSS word-break property.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum WordBreak {
   /// Normal line breaking behavior—lines may break according to language rules.
   #[default]

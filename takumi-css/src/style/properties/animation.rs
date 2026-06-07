@@ -81,6 +81,7 @@ impl<'i> FromCss<'i> for AnimationDurations {
 
 /// Supported CSS timing functions for animations.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum AnimationTimingFunction {
   /// Uses linear interpolation.
   Linear,
@@ -107,6 +108,7 @@ impl MakeComputed for AnimationTimingFunction {}
 
 /// Supported step positions for CSS stepped easing functions.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum StepPosition {
   /// Jumps at the start of each step interval.
   Start,
@@ -170,6 +172,7 @@ impl<'i> FromCss<'i> for AnimationTimingFunctions {
 
 /// Supported values for `animation-iteration-count`.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum AnimationIterationCount {
   /// A finite iteration count.
   Number(f32),
@@ -223,6 +226,7 @@ impl<'i> FromCss<'i> for AnimationIterationCounts {
 
 /// Supported values for `animation-direction`.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum AnimationDirection {
   #[default]
   /// Plays from the first keyframe to the last keyframe.
@@ -258,6 +262,7 @@ impl<'i> FromCss<'i> for AnimationDirections {
 
 /// Supported values for `animation-fill-mode`.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum AnimationFillMode {
   #[default]
   /// Does not apply keyframe values outside the active interval.
@@ -293,6 +298,7 @@ impl<'i> FromCss<'i> for AnimationFillModes {
 
 /// Supported values for `animation-play-state`.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum AnimationPlayState {
   #[default]
   /// The animation is actively progressing with time.

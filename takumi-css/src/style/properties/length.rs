@@ -591,6 +591,7 @@ pub type LengthDefaultsToZero = Length<false>;
 
 /// Represents a value that can be a specific length, percentage, or automatic.
 #[derive(Debug, Clone, PartialEq, Copy)]
+#[non_exhaustive]
 pub enum Length<const DEFAULT_AUTO: bool = true> {
   /// Automatic sizing based on content
   Auto,

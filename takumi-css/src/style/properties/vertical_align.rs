@@ -10,6 +10,7 @@ use crate::{
 
 /// Keyword values for the CSS `vertical-align` property.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum VerticalAlignKeyword {
   /// Aligns the baseline of the box with the baseline of the parent box.
   #[default]
@@ -44,6 +45,7 @@ declare_enum_from_css_impl!(
 
 /// Defines the vertical alignment of an inline-level box.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum VerticalAlign {
   /// A keyword-based alignment mode.
   Keyword(VerticalAlignKeyword),
@@ -62,6 +64,7 @@ impl ToCss for VerticalAlign {
 
 /// Computed `vertical-align` data used for placement.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum ResolvedVerticalAlign {
   /// A keyword-based alignment mode.
   Keyword(VerticalAlignKeyword),

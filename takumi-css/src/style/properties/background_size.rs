@@ -77,6 +77,7 @@ pub struct ResolvedBackgroundSize {
 
 /// Parsed `background-size` for one layer.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum BackgroundSize {
   /// Scale the image to cover the container (may crop).
   Cover,

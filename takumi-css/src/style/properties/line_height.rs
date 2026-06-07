@@ -10,6 +10,7 @@ use crate::{
 
 /// Represents a line height value.
 #[derive(Debug, Clone, PartialEq, Copy, Default)]
+#[non_exhaustive]
 pub enum LineHeight {
   /// Normal line height.
   #[default]

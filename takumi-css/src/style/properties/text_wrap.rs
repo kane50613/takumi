@@ -76,6 +76,7 @@ impl<'i> FromCss<'i> for TextWrap {
 
 /// Controls whether text should be wrapped.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum TextWrapMode {
   /// Text is wrapped across lines at appropriate characters to minimize overflow.
   #[default]
@@ -101,6 +102,7 @@ declare_enum_from_css_impl!(
 
 /// Controls the style of text wrapping.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum TextWrapStyle {
   /// Text is wrapped in the default way.
   #[default]

@@ -19,6 +19,7 @@ use crate::style::{
 
 /// Represents a linear gradient.
 #[derive(Debug, Clone, PartialEq, TypedBuilder)]
+#[non_exhaustive]
 pub struct LinearGradient {
   /// Whether the gradient repeats beyond the last stop.
   #[builder(default)]
@@ -376,6 +377,7 @@ impl MakeComputed for StopPosition {
 
 /// Represents a gradient stop.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum GradientStop {
   /// A color gradient stop.
   ColorHint {
@@ -448,6 +450,7 @@ impl<'i> FromCss<'i> for GradientStops {
 
 /// Represents a resolved gradient stop with a position.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct ResolvedGradientStop {
   /// The color of the gradient stop.
   pub color: Color,
@@ -581,6 +584,7 @@ impl Angle {
 
 /// Represents a horizontal keyword.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum HorizontalKeyword {
   /// The left keyword.
   Left,
@@ -590,6 +594,7 @@ pub enum HorizontalKeyword {
 
 /// Represents a vertical keyword.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum VerticalKeyword {
   /// The top keyword.
   Top,

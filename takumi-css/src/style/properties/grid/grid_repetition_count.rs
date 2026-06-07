@@ -5,6 +5,7 @@ use crate::style::{CssSyntaxKind, CssToken, FromCss, ParseResult, ToCss};
 
 /// Represents grid track repetition keywords
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum GridRepetitionKeyword {
   /// Automatically fills the available space with as many tracks as possible
   AutoFill,
@@ -14,6 +15,7 @@ pub enum GridRepetitionKeyword {
 
 /// Represents a grid track repetition pattern
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum GridRepetitionCount {
   /// Keywords for auto-fill and auto-fit
   Keyword(GridRepetitionKeyword),

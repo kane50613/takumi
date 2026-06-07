@@ -56,6 +56,7 @@ impl<'i> FromCss<'i> for FontSynthesis {
 
 /// Control mode for synthetic.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum FontSynthesisValue {
   /// Synthetic is allowed.
   #[default]

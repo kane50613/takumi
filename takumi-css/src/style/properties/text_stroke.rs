@@ -11,6 +11,7 @@ use crate::{
 ///
 /// `color` is optional; when absent the element's `color` property should be used.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct TextStroke {
   /// Stroke width.
   pub width: LengthDefaultsToZero,
