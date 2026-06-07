@@ -2,10 +2,12 @@ mod animation;
 mod calc;
 mod css_input;
 mod math;
+mod media_query;
 mod properties;
 pub mod selector;
 mod sizing;
 mod stylesheets;
+mod supports;
 pub mod tw;
 
 pub use animation::apply_stylesheet_animations;

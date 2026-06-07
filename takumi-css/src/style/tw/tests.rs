@@ -1,4 +1,3 @@
-
 use std::assert_matches;
 
 use crate::style::{ComputedStyle, LonghandId, Style, properties::BackgroundImage};
