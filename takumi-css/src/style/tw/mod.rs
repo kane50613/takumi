@@ -2010,7 +2010,9 @@ mod tests {
     assert_eq!(
       TailwindValue::parse("mask-[url('https://example.com/a.svg')]"),
       Some(TailwindValue {
-        property: url_image.clone(),
+        property: TailwindProperty::MaskImage(BackgroundImage::Url(
+          "https://example.com/a.svg".into(),
+        )),
         breakpoint: None,
         important: false,
       })

@@ -5,7 +5,7 @@ use cssparser::{Parser, ParserInput, Token};
 use super::DeferredDeclaration;
 use crate::style::{ComputedStyle, CssInput};
 
-pub fn resolve_var_function(
+pub(crate) fn resolve_var_function(
   input: &mut Parser<'_, '_>,
   custom_properties: &HashMap<String, String>,
   stack: &mut Vec<String>,
@@ -112,7 +112,7 @@ fn resolve_var_tokens_into(
   Some(())
 }
 
-pub fn resolve_var_references(
+pub(crate) fn resolve_var_references(
   specified_value: &str,
   custom_properties: &HashMap<String, String>,
   stack: &mut Vec<String>,
@@ -124,7 +124,7 @@ pub fn resolve_var_references(
   Some(output)
 }
 
-pub fn apply_deferred_declaration(
+pub(crate) fn apply_deferred_declaration(
   style: &mut ComputedStyle,
   parent: Option<&ComputedStyle>,
   deferred: &DeferredDeclaration,
