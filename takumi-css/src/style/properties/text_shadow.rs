@@ -1,8 +1,9 @@
-use std::{borrow::Cow, fmt, fmt::Debug};
+use std::{fmt, fmt::Debug};
 
-use cssparser::{BasicParseErrorKind, ParseError, Parser};
+use cssparser::{BasicParseErrorKind, Parser};
 use typed_builder::TypedBuilder;
 
+use super::box_shadow::parse_offsets_blur;
 use crate::style::{
   Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length, LengthDefaultsToZero,
   ListInterpolationStrategy, MakeComputed, ParseResult, SizingContext, ToCss, next_is_comma,
@@ -56,14 +57,7 @@ impl<'i> FromCss<'i> for TextShadow {
 
     while !input.is_exhausted() && !next_is_comma(input) {
       if lengths.is_none() {
-        let value = input.try_parse::<_, _, ParseError<Cow<'i, str>>>(|input| {
-          let horizontal = Length::from_css(input)?;
-          let vertical = Length::from_css(input)?;
-
-          let blur = input.try_parse(Length::from_css).unwrap_or(Length::zero());
-
-          Ok((horizontal, vertical, blur))
-        });
+        let value = input.try_parse(parse_offsets_blur);
 
         if let Ok(value) = value {
           lengths = Some(value);

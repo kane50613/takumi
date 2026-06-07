@@ -44,6 +44,22 @@ impl<'i> FromCss<'i> for BoxShadows {
   const VALID_TOKENS: &'static [CssToken] = BoxShadow::VALID_TOKENS;
 }
 
+pub(super) fn parse_offsets_blur<'i>(
+  input: &mut Parser<'i, '_>,
+) -> ParseResult<
+  'i,
+  (
+    LengthDefaultsToZero,
+    LengthDefaultsToZero,
+    LengthDefaultsToZero,
+  ),
+> {
+  let horizontal = Length::from_css(input)?;
+  let vertical = Length::from_css(input)?;
+  let blur = input.try_parse(Length::from_css).unwrap_or(Length::zero());
+  Ok((horizontal, vertical, blur))
+}
+
 impl<'i> FromCss<'i> for BoxShadow {
   /// Parses a box-shadow value from CSS input.
   ///
@@ -76,13 +92,8 @@ impl<'i> FromCss<'i> for BoxShadow {
 
       if lengths.is_none() {
         let value = input.try_parse::<_, _, ParseError<Cow<'i, str>>>(|input| {
-          let horizontal = Length::from_css(input)?;
-          let vertical = Length::from_css(input)?;
-
-          let blur = input.try_parse(Length::from_css).unwrap_or(Length::zero());
-
+          let (horizontal, vertical, blur) = parse_offsets_blur(input)?;
           let spread = input.try_parse(Length::from_css).unwrap_or(Length::zero());
-
           Ok((horizontal, vertical, blur, spread))
         });
 
