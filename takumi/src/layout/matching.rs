@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fmt};
 
 use selectors::{
-  Element, OpaqueElement, SelectorImpl,
+  Element, OpaqueElement, SelectorImpl as SelectorImplTrait,
   attr::CaseSensitivity,
   bloom::BloomFilter,
   matching::{
@@ -17,7 +17,7 @@ use crate::layout::{
   node::Node,
   style::{
     StyleDeclarationBlock,
-    selector::{CssRule, StyleSheet, TakumiIdent, TakumiSelectorImpl},
+    selector::{CssRule, Ident, SelectorImpl, StyleSheet},
   },
 };
 
@@ -162,7 +162,7 @@ fn add_node_unique_hashes_to_filter(node: &Node, filter: &mut BloomFilter) -> bo
 }
 
 impl<'a> Element for ArenaElement<'a> {
-  type Impl = TakumiSelectorImpl;
+  type Impl = SelectorImpl;
 
   fn opaque(&self) -> OpaqueElement {
     OpaqueElement::new(self.tree.nodes[self.index].node)
@@ -220,7 +220,7 @@ impl<'a> Element for ArenaElement<'a> {
     true
   }
 
-  fn has_local_name(&self, local_name: &TakumiIdent) -> bool {
+  fn has_local_name(&self, local_name: &Ident) -> bool {
     let node = self.tree.nodes[self.index].node;
     if let Some(tag) = node.metadata.tag_name.as_deref() {
       tag.eq_ignore_ascii_case(local_name)
@@ -229,7 +229,7 @@ impl<'a> Element for ArenaElement<'a> {
     }
   }
 
-  fn has_namespace(&self, _ns: &TakumiIdent) -> bool {
+  fn has_namespace(&self, _ns: &Ident) -> bool {
     false
   }
 
@@ -247,12 +247,12 @@ impl<'a> Element for ArenaElement<'a> {
     my_tag == other_tag
   }
 
-  fn has_id(&self, id: &TakumiIdent, _case_sensitivity: CaseSensitivity) -> bool {
+  fn has_id(&self, id: &Ident, _case_sensitivity: CaseSensitivity) -> bool {
     let node = self.tree.nodes[self.index].node;
     node.metadata.id.as_deref() == Some(&**id)
   }
 
-  fn has_class(&self, name: &TakumiIdent, _case_sensitivity: CaseSensitivity) -> bool {
+  fn has_class(&self, name: &Ident, _case_sensitivity: CaseSensitivity) -> bool {
     let node = self.tree.nodes[self.index].node;
     if let Some(classes) = node.metadata.class_name.as_deref() {
       classes.split_whitespace().any(|c| c == *name)
@@ -261,11 +261,11 @@ impl<'a> Element for ArenaElement<'a> {
     }
   }
 
-  fn imported_part(&self, _name: &TakumiIdent) -> Option<TakumiIdent> {
+  fn imported_part(&self, _name: &Ident) -> Option<Ident> {
     None
   }
 
-  fn is_part(&self, _name: &TakumiIdent) -> bool {
+  fn is_part(&self, _name: &Ident) -> bool {
     false
   }
 
@@ -277,15 +277,15 @@ impl<'a> Element for ArenaElement<'a> {
     self.tree.nodes[self.index].parent.is_none()
   }
 
-  fn has_custom_state(&self, _name: &TakumiIdent) -> bool {
+  fn has_custom_state(&self, _name: &Ident) -> bool {
     false
   }
 
   fn attr_matches(
     &self,
-    ns: &selectors::attr::NamespaceConstraint<&TakumiIdent>,
-    local_name: &TakumiIdent,
-    operation: &selectors::attr::AttrSelectorOperation<&TakumiIdent>,
+    ns: &selectors::attr::NamespaceConstraint<&Ident>,
+    local_name: &Ident,
+    operation: &selectors::attr::AttrSelectorOperation<&Ident>,
   ) -> bool {
     let namespace_supported = match ns {
       selectors::attr::NamespaceConstraint::Any => true,
@@ -302,14 +302,14 @@ impl<'a> Element for ArenaElement<'a> {
   }
   fn match_non_ts_pseudo_class(
     &self,
-    _pc: &<Self::Impl as SelectorImpl>::NonTSPseudoClass,
+    _pc: &<Self::Impl as SelectorImplTrait>::NonTSPseudoClass,
     _context: &mut MatchingContext<'_, Self::Impl>,
   ) -> bool {
     false
   }
   fn match_pseudo_element(
     &self,
-    _pe: &<Self::Impl as SelectorImpl>::PseudoElement,
+    _pe: &<Self::Impl as SelectorImplTrait>::PseudoElement,
     _context: &mut MatchingContext<'_, Self::Impl>,
   ) -> bool {
     false
@@ -491,16 +491,12 @@ pub(crate) fn match_stylesheets_view<'a>(
   per_node
 }
 
-fn selector_target(
-  selector: &selectors::parser::Selector<TakumiSelectorImpl>,
-) -> Option<SelectorTarget> {
+fn selector_target(selector: &selectors::parser::Selector<SelectorImpl>) -> Option<SelectorTarget> {
   match selector.pseudo_element() {
     None => Some(SelectorTarget::Element),
-    Some(crate::layout::style::selector::ParsedPseudoElement::Before) => {
-      Some(SelectorTarget::Before)
-    }
-    Some(crate::layout::style::selector::ParsedPseudoElement::After) => Some(SelectorTarget::After),
-    Some(crate::layout::style::selector::ParsedPseudoElement::Other(_)) => None,
+    Some(crate::layout::style::selector::PseudoElement::Before) => Some(SelectorTarget::Before),
+    Some(crate::layout::style::selector::PseudoElement::After) => Some(SelectorTarget::After),
+    Some(crate::layout::style::selector::PseudoElement::Other(_)) => None,
   }
 }
 

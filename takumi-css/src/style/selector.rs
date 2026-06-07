@@ -1,7 +1,8 @@
 use cssparser::*;
 use precomputed_hash::PrecomputedHash;
 use selectors::parser::{
-  NonTSPseudoClass, ParseRelative, PseudoElement, SelectorImpl, SelectorList,
+  NonTSPseudoClass, ParseRelative, PseudoElement as PseudoElementTrait,
+  SelectorImpl as SelectorImplTrait, SelectorList,
 };
 use std::{
   collections::HashMap,
@@ -40,9 +41,9 @@ pub enum LayerName {
 type LayerPath = Vec<LayerName>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct TakumiIdent(String);
+pub struct Ident(String);
 
-impl Deref for TakumiIdent {
+impl Deref for Ident {
   type Target = str;
 
   fn deref(&self) -> &Self::Target {
@@ -50,30 +51,30 @@ impl Deref for TakumiIdent {
   }
 }
 
-impl AsRef<str> for TakumiIdent {
+impl AsRef<str> for Ident {
   fn as_ref(&self) -> &str {
     &self.0
   }
 }
 
-impl PartialEq<&str> for TakumiIdent {
+impl PartialEq<&str> for Ident {
   fn eq(&self, other: &&str) -> bool {
     self.0 == *other
   }
 }
 
-impl PartialEq<TakumiIdent> for &str {
-  fn eq(&self, other: &TakumiIdent) -> bool {
+impl PartialEq<Ident> for &str {
+  fn eq(&self, other: &Ident) -> bool {
     self == &other.0
   }
 }
-impl From<&str> for TakumiIdent {
+impl From<&str> for Ident {
   fn from(s: &str) -> Self {
     Self(s.to_owned())
   }
 }
 
-impl ToCss for TakumiIdent {
+impl ToCss for Ident {
   fn to_css<W>(&self, dest: &mut W) -> fmt::Result
   where
     W: Write,
@@ -82,7 +83,7 @@ impl ToCss for TakumiIdent {
   }
 }
 
-impl PrecomputedHash for TakumiIdent {
+impl PrecomputedHash for Ident {
   fn precomputed_hash(&self) -> u32 {
     let mut hash = 0x811c9dc5u32;
     for byte in self.0.as_bytes() {
@@ -94,14 +95,14 @@ impl PrecomputedHash for TakumiIdent {
 }
 
 #[derive(Debug, Clone)]
-pub struct TakumiSelectorImpl;
+pub struct SelectorImpl;
 
 // Parsed but never matched, so rules with `:hover`, `::before`, etc. survive
 // alongside their sibling selectors instead of getting dropped wholesale.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IgnoredPseudoClass(TakumiIdent);
+pub struct PseudoClass(Ident);
 
-impl ToCss for IgnoredPseudoClass {
+impl ToCss for PseudoClass {
   fn to_css<W>(&self, dest: &mut W) -> fmt::Result
   where
     W: Write,
@@ -111,8 +112,8 @@ impl ToCss for IgnoredPseudoClass {
   }
 }
 
-impl NonTSPseudoClass for IgnoredPseudoClass {
-  type Impl = TakumiSelectorImpl;
+impl NonTSPseudoClass for PseudoClass {
+  type Impl = SelectorImpl;
   fn is_active_or_hover(&self) -> bool {
     false
   }
@@ -122,20 +123,20 @@ impl NonTSPseudoClass for IgnoredPseudoClass {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ParsedPseudoElement {
+pub enum PseudoElement {
   Before,
   After,
-  Other(TakumiIdent),
+  Other(Ident),
 }
 
-impl ParsedPseudoElement {
+impl PseudoElement {
   fn from_name(name: &str) -> Self {
     if name.eq_ignore_ascii_case("before") {
       Self::Before
     } else if name.eq_ignore_ascii_case("after") {
       Self::After
     } else {
-      Self::Other(TakumiIdent::from(name))
+      Self::Other(Ident::from(name))
     }
   }
 
@@ -148,7 +149,7 @@ impl ParsedPseudoElement {
   }
 }
 
-impl ToCss for ParsedPseudoElement {
+impl ToCss for PseudoElement {
   fn to_css<W>(&self, dest: &mut W) -> fmt::Result
   where
     W: Write,
@@ -158,27 +159,27 @@ impl ToCss for ParsedPseudoElement {
   }
 }
 
-impl PseudoElement for ParsedPseudoElement {
-  type Impl = TakumiSelectorImpl;
+impl PseudoElementTrait for PseudoElement {
+  type Impl = SelectorImpl;
 }
 
-impl SelectorImpl for TakumiSelectorImpl {
+impl SelectorImplTrait for SelectorImpl {
   type ExtraMatchingData<'a> = ();
-  type AttrValue = TakumiIdent;
-  type Identifier = TakumiIdent;
-  type LocalName = TakumiIdent;
-  type NamespaceUrl = TakumiIdent;
-  type NamespacePrefix = TakumiIdent;
-  type BorrowedNamespaceUrl = TakumiIdent;
-  type BorrowedLocalName = TakumiIdent;
-  type NonTSPseudoClass = IgnoredPseudoClass;
-  type PseudoElement = ParsedPseudoElement;
+  type AttrValue = Ident;
+  type Identifier = Ident;
+  type LocalName = Ident;
+  type NamespaceUrl = Ident;
+  type NamespacePrefix = Ident;
+  type BorrowedNamespaceUrl = Ident;
+  type BorrowedLocalName = Ident;
+  type NonTSPseudoClass = PseudoClass;
+  type PseudoElement = PseudoElement;
 }
 
 struct TakumiSelectorParser;
 
 impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
-  type Impl = TakumiSelectorImpl;
+  type Impl = SelectorImpl;
   type Error = StyleSheetParseError;
 
   fn parse_parent_selector(&self) -> bool {
@@ -197,8 +198,8 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
     &self,
     _location: SourceLocation,
     name: CowRcStr<'i>,
-  ) -> Result<<Self::Impl as SelectorImpl>::NonTSPseudoClass, ParseError<'i, Self::Error>> {
-    Ok(IgnoredPseudoClass(TakumiIdent::from(&*name)))
+  ) -> Result<<Self::Impl as SelectorImplTrait>::NonTSPseudoClass, ParseError<'i, Self::Error>> {
+    Ok(PseudoClass(Ident::from(&*name)))
   }
 
   fn parse_non_ts_functional_pseudo_class<'t>(
@@ -206,32 +207,32 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
     name: CowRcStr<'i>,
     parser: &mut Parser<'i, 't>,
     _after_part: bool,
-  ) -> Result<<Self::Impl as SelectorImpl>::NonTSPseudoClass, ParseError<'i, Self::Error>> {
+  ) -> Result<<Self::Impl as SelectorImplTrait>::NonTSPseudoClass, ParseError<'i, Self::Error>> {
     while parser.next_including_whitespace_and_comments().is_ok() {}
-    Ok(IgnoredPseudoClass(TakumiIdent::from(&*name)))
+    Ok(PseudoClass(Ident::from(&*name)))
   }
 
   fn parse_pseudo_element(
     &self,
     _location: SourceLocation,
     name: CowRcStr<'i>,
-  ) -> Result<<Self::Impl as SelectorImpl>::PseudoElement, ParseError<'i, Self::Error>> {
-    Ok(ParsedPseudoElement::from_name(&name))
+  ) -> Result<<Self::Impl as SelectorImplTrait>::PseudoElement, ParseError<'i, Self::Error>> {
+    Ok(PseudoElement::from_name(&name))
   }
 
   fn parse_functional_pseudo_element<'t>(
     &self,
     name: CowRcStr<'i>,
     arguments: &mut Parser<'i, 't>,
-  ) -> Result<<Self::Impl as SelectorImpl>::PseudoElement, ParseError<'i, Self::Error>> {
+  ) -> Result<<Self::Impl as SelectorImplTrait>::PseudoElement, ParseError<'i, Self::Error>> {
     while arguments.next_including_whitespace_and_comments().is_ok() {}
-    Ok(ParsedPseudoElement::Other(TakumiIdent::from(&*name)))
+    Ok(PseudoElement::Other(Ident::from(&*name)))
   }
 }
 
 #[derive(Debug, Clone)]
 struct ParsedSelectors {
-  selectors: SelectorList<TakumiSelectorImpl>,
+  selectors: SelectorList<SelectorImpl>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -346,7 +347,7 @@ impl<'i> RuleBodyItemParser<'i, (String, String), StyleSheetParseError>
 }
 
 struct NestedStyleRuleParser<'a> {
-  parent_selectors: SelectorList<TakumiSelectorImpl>,
+  parent_selectors: SelectorList<SelectorImpl>,
   media_queries: &'a [MediaQueryList],
   layer: Option<LayerPath>,
   lossy: bool,
@@ -371,7 +372,7 @@ impl<'i> DeclarationParser<'i> for NestedStyleRuleParser<'_> {
 }
 
 impl<'i> QualifiedRuleParser<'i> for NestedStyleRuleParser<'_> {
-  type Prelude = SelectorList<TakumiSelectorImpl>;
+  type Prelude = SelectorList<SelectorImpl>;
   type QualifiedRule = StyleRuleBodyItem;
   type Error = StyleSheetParseError;
 
@@ -809,7 +810,7 @@ fn parse_fragment_with_mode<'i, 't>(
 
 #[derive(Debug, Clone)]
 pub struct CssRule {
-  pub selectors: SelectorList<TakumiSelectorImpl>,
+  pub selectors: SelectorList<SelectorImpl>,
   pub normal_declarations: StyleDeclarationBlock,
   pub important_declarations: StyleDeclarationBlock,
   pub media_queries: Vec<MediaQueryList>,
@@ -1052,7 +1053,7 @@ fn ensure_single_layer_name<'i>(
 }
 
 fn parse_style_rule_block<'i, 't>(
-  selectors: SelectorList<TakumiSelectorImpl>,
+  selectors: SelectorList<SelectorImpl>,
   media_queries: &[MediaQueryList],
   layer: Option<&LayerPath>,
   lossy: bool,
@@ -1119,7 +1120,7 @@ fn parse_style_rule_block<'i, 't>(
 }
 
 fn parse_nested_at_rule_block<'i, 't>(
-  parent_selectors: &SelectorList<TakumiSelectorImpl>,
+  parent_selectors: &SelectorList<SelectorImpl>,
   media_queries: &[MediaQueryList],
   current_layer: Option<&LayerPath>,
   lossy: bool,

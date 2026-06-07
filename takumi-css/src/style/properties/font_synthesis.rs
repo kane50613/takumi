@@ -9,17 +9,17 @@ use crate::style::{CssToken, FromCss, MakeComputed, ParseResult, declare_enum_fr
 #[builder(field_defaults(default))]
 pub struct FontSynthesis {
   /// Controls synthetic bolding when a matching font weight is unavailable.
-  pub weight: FontSynthesic,
+  pub weight: FontSynthesisValue,
   /// Controls synthetic italics/obliques when a matching style is unavailable.
-  pub style: FontSynthesic,
+  pub style: FontSynthesisValue,
 }
 
 impl MakeComputed for FontSynthesis {}
 
 impl<'i> FromCss<'i> for FontSynthesis {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut weight = FontSynthesic::None;
-    let mut style = FontSynthesic::None;
+    let mut weight = FontSynthesisValue::None;
+    let mut style = FontSynthesisValue::None;
 
     while !input.is_exhausted() {
       let location = input.current_source_location();
@@ -27,14 +27,14 @@ impl<'i> FromCss<'i> for FontSynthesis {
 
       match_ignore_ascii_case! {ident,
         "none" => {
-          weight = FontSynthesic::None;
-          style = FontSynthesic::None;
+          weight = FontSynthesisValue::None;
+          style = FontSynthesisValue::None;
         },
         "weight" => {
-          weight = FontSynthesic::Auto;
+          weight = FontSynthesisValue::Auto;
         },
         "style" => {
-          style = FontSynthesic::Auto;
+          style = FontSynthesisValue::Auto;
         },
         _ => return Err(unexpected_token!(location, &Token::Ident(ident.to_owned()))),
       };
@@ -56,7 +56,7 @@ impl<'i> FromCss<'i> for FontSynthesis {
 
 /// Control mode for synthetic.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub enum FontSynthesic {
+pub enum FontSynthesisValue {
   /// Synthetic is allowed.
   #[default]
   Auto,
@@ -64,14 +64,14 @@ pub enum FontSynthesic {
   None,
 }
 
-impl FontSynthesic {
+impl FontSynthesisValue {
   pub fn is_allowed(self) -> bool {
-    self == FontSynthesic::Auto
+    self == FontSynthesisValue::Auto
   }
 }
 
 declare_enum_from_css_impl!(
-  FontSynthesic,
-  "auto" => FontSynthesic::Auto,
-  "none" => FontSynthesic::None,
+  FontSynthesisValue,
+  "auto" => FontSynthesisValue::Auto,
+  "none" => FontSynthesisValue::None,
 );
