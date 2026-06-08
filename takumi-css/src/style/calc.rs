@@ -40,8 +40,13 @@ fn encode_linear_id(id: usize) -> *const () {
 
 fn decode_linear_id(ptr: *const ()) -> Option<usize> {
   let raw = ptr as usize;
-  // `raw != 0` filters out the null pointer case.
-  (raw != 0).then_some(raw >> 3)
+  // Reject pointers that `encode_linear_id` could not have produced: the low 3
+  // bits must be clear and the 1-based id must be non-zero.
+  if raw & 0b111 != 0 {
+    return None;
+  }
+  let id = raw >> 3;
+  (id != 0).then_some(id)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

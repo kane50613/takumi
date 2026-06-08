@@ -25,5 +25,8 @@ fn gcd(lhs: usize, rhs: usize) -> usize {
 }
 
 pub(crate) fn lcm(lhs: usize, rhs: usize) -> usize {
+  if lhs == 0 || rhs == 0 {
+    return 0;
+  }
   lhs / gcd(lhs, rhs) * rhs
 }

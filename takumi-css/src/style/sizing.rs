@@ -31,12 +31,15 @@ impl SizingContext {
   /// build a context in their own tests.
   #[doc(hidden)]
   pub fn new_test(viewport: Viewport) -> Self {
+    // Seed device-pixel metrics so `em`/`lh` conversions don't collapse to zero
+    // or drift at non-1.0 DPR.
+    let font_size = viewport.font_size * viewport.device_pixel_ratio;
     Self {
       viewport,
       container_size: Size::NONE,
-      font_size: viewport.font_size,
+      font_size,
       root_font_size: None,
-      line_height: 0.0,
+      line_height: font_size,
       root_line_height: None,
       calc_arena: Rc::new(CalcArena::default()),
     }
