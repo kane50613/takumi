@@ -536,6 +536,11 @@ macro_rules! define_style {
                   CssWideKeyword::Inherit | CssWideKeyword::Unset => parent.direction,
                 };
               }
+              StyleDeclaration::Deferred(deferred)
+                if matches!(deferred.property, PropertyId::Longhand(LonghandId::Direction)) =>
+              {
+                apply_deferred_declaration(&mut style, Some(parent), deferred);
+              }
               _ => {}
             }
           }

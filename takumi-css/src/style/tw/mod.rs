@@ -40,7 +40,8 @@ impl FromStr for TailwindValues {
       .collect::<Vec<_>>();
 
     // sort in reverse order by is important, then has breakpoint, then rest is last.
-    collected.sort_unstable_by(|a, b| {
+    // Stable sort so equal-priority utilities keep source order (later one wins).
+    collected.sort_by(|a, b| {
       // Not important comes before important
       if !a.important && b.important {
         return Ordering::Less;

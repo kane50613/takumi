@@ -287,10 +287,12 @@ impl<'i> FromCss<'i> for Filter {
         Ok(Filter::Sepia(PercentageNumber::from_css(input)?))
       }),
       "blur" => parser.parse_nested_block(|input| {
-        // blur() can have an optional radius, defaults to 0
-        let radius = input
-          .try_parse(Length::from_css)
-          .unwrap_or(Length::zero());
+        // blur() radius is optional and defaults to 0; a present argument must be a valid length.
+        let radius = if input.is_exhausted() {
+          Length::zero()
+        } else {
+          Length::from_css(input)?
+        };
         Ok(Filter::Blur(radius))
       }),
       "drop-shadow" => parser.parse_nested_block(|input| {
@@ -353,6 +355,12 @@ mod tests {
   #[test]
   fn test_parse_none_clears_filters() {
     assert_eq!(Filters::from_str("none"), Ok(Filters::default()));
+  }
+
+  #[test]
+  fn test_parse_blur_rejects_invalid_argument() {
+    assert_eq!(Filter::from_str("blur()"), Ok(Filter::Blur(Length::zero())));
+    assert!(Filter::from_str("blur(red)").is_err());
   }
 
   #[test]

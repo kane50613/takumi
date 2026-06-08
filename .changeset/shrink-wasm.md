@@ -2,4 +2,4 @@
 "takumi": patch
 ---
 
-Shrink the shipped wasm via size-optimized opt-levels and `wasm-opt -Oz`.
+Reduce shipped WebAssembly binary size (`opt-level` and `wasm-opt -Oz`)

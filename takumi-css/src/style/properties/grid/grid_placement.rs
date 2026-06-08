@@ -39,7 +39,7 @@ impl GridPlacement {
 
   pub(crate) fn try_negative(self) -> Option<GridPlacement> {
     match self {
-      GridPlacement::Line(n) => Some(GridPlacement::Line(-n)),
+      GridPlacement::Line(n) => n.checked_neg().map(GridPlacement::Line),
       _ => None,
     }
   }

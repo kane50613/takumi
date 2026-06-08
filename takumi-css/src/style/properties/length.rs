@@ -458,6 +458,8 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
     let value = self.to_px_pre_dpr(sizing, percentage_full_px);
 
     // Only absolute units carry a device-pixel-ratio factor.
+    let dpr = sizing.viewport.device_pixel_ratio;
+    let dpr = if dpr > 0.0 { dpr } else { 1.0 };
     let value = match self {
       Length::Px(_)
       | Length::Cm(_)
@@ -465,7 +467,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
       | Length::In(_)
       | Length::Q(_)
       | Length::Pt(_)
-      | Length::Pc(_) => value * sizing.viewport.device_pixel_ratio,
+      | Length::Pc(_) => value * dpr,
       _ => value,
     };
 
