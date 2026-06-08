@@ -337,9 +337,7 @@ fn test_parse_col_end() {
 
 #[test]
 fn test_grid_column_start_emits_only_start_longhand() {
-  let Ok(values) = TailwindValues::from_str("col-start-2") else {
-    return;
-  };
+  let values = TailwindValues::from_str("col-start-2").expect("tailwind values should parse");
   let declarations = values.into_declaration_block(Viewport::new((100, 100)));
 
   assert_eq!(
@@ -350,9 +348,7 @@ fn test_grid_column_start_emits_only_start_longhand() {
 
 #[test]
 fn test_grid_row_end_emits_only_end_longhand() {
-  let Ok(values) = TailwindValues::from_str("row-end-3") else {
-    return;
-  };
+  let values = TailwindValues::from_str("row-end-3").expect("tailwind values should parse");
   let declarations = values.into_declaration_block(Viewport::new((100, 100)));
 
   assert_eq!(
@@ -363,9 +359,8 @@ fn test_grid_row_end_emits_only_end_longhand() {
 
 #[test]
 fn test_grid_longhand_importance_is_tracked_per_side() {
-  let Ok(values) = TailwindValues::from_str("col-end-3 !col-start-2") else {
-    return;
-  };
+  let values =
+    TailwindValues::from_str("col-end-3 !col-start-2").expect("tailwind values should parse");
   let declarations = values.into_declaration_block(Viewport::new((100, 100)));
 
   assert_eq!(
@@ -578,9 +573,8 @@ fn test_values_sorting() {
 fn test_filters_append() {
   use crate::style::properties::Filter;
 
-  let Ok(values) = TailwindValues::from_str("blur-sm brightness-150 contrast-125") else {
-    return;
-  };
+  let values = TailwindValues::from_str("blur-sm brightness-150 contrast-125")
+    .expect("tailwind values should parse");
   let viewport = Viewport::new((100, 100));
 
   let style =
@@ -598,10 +592,8 @@ fn test_filters_append() {
 
 #[test]
 fn test_transform_utilities_resolve_to_standard_longhands() {
-  let Ok(values) = TailwindValues::from_str("translate-x-4 translate-y-8 scale-75 scale-x-50")
-  else {
-    return;
-  };
+  let values = TailwindValues::from_str("translate-x-4 translate-y-8 scale-75 scale-x-50")
+    .expect("tailwind values should parse");
   let viewport = Viewport::new((100, 100));
 
   let style =
@@ -699,11 +691,8 @@ fn test_parse_decoration_thickness() {
 #[test]
 fn test_linear_gradient_apply() {
   let viewport = Viewport::new((100, 100));
-  let Ok(values) =
-    TailwindValues::from_str("bg-linear-to-r from-red-500 via-green-500 to-blue-500")
-  else {
-    return;
-  };
+  let values = TailwindValues::from_str("bg-linear-to-r from-red-500 via-green-500 to-blue-500")
+    .expect("tailwind values should parse");
 
   let style =
     Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
@@ -741,9 +730,8 @@ fn test_shadow_color_overrides_shadow_preset_in_any_order() {
   let viewport = Viewport::new((100, 100));
 
   for classes in ["shadow-md shadow-red-500", "shadow-red-500 shadow-md"] {
-    let Ok(values) = TailwindValues::from_str(classes) else {
-      continue;
-    };
+    let values = TailwindValues::from_str(classes)
+      .unwrap_or_else(|_| panic!("tailwind values should parse: {classes}"));
     let style =
       Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
 
@@ -782,9 +770,8 @@ fn test_text_shadow_color_overrides_preset_in_any_order() {
     "text-shadow-sm text-shadow-red-500",
     "text-shadow-red-500 text-shadow-sm",
   ] {
-    let Ok(values) = TailwindValues::from_str(classes) else {
-      continue;
-    };
+    let values = TailwindValues::from_str(classes)
+      .unwrap_or_else(|_| panic!("tailwind values should parse: {classes}"));
     let style =
       Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
 

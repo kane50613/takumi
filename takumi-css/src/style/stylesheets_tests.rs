@@ -441,10 +441,8 @@ fn parse_style_declaration_ignores_unknown_properties() {
 
 #[test]
 fn style_declaration_block_from_str_parses_multiple_declarations() {
-  let Ok(declarations) = StyleDeclarationBlock::from_str("color: #ff0000; padding: 1px 2px;")
-  else {
-    return;
-  };
+  let declarations = StyleDeclarationBlock::from_str("color: #ff0000; padding: 1px 2px;")
+    .expect("declarations should parse");
 
   assert_eq!(
     declarations.iter().collect::<Vec<_>>(),
@@ -460,9 +458,8 @@ fn style_declaration_block_from_str_parses_multiple_declarations() {
 
 #[test]
 fn style_declaration_block_from_str_tracks_important_declarations() {
-  let Ok(declarations) = StyleDeclarationBlock::from_str("color: inherit !important;") else {
-    return;
-  };
+  let declarations = StyleDeclarationBlock::from_str("color: inherit !important;")
+    .expect("declarations should parse");
 
   assert_eq!(
     declarations.iter().collect::<Vec<_>>(),
