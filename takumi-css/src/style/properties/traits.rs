@@ -317,7 +317,7 @@ pub(crate) trait Animatable: Sized + Clone {
     _sizing: &SizingContext,
     _current_color: Color,
   ) {
-    *self = if progress >= 1.0 {
+    *self = if progress >= 0.5 {
       to.clone()
     } else {
       from.clone()
@@ -441,7 +441,7 @@ impl<T: Animatable + Clone> Animatable for Box<[T]> {
       Vec::into_boxed_slice,
     )
     .unwrap_or_else(|| {
-      if progress >= 1.0 {
+      if progress >= 0.5 {
         to.clone()
       } else {
         from.clone()
@@ -469,7 +469,7 @@ impl<T: Animatable + Clone> Animatable for Vec<T> {
   ) {
     *self = interpolate_list(from, to, progress, sizing, current_color, |values| values)
       .unwrap_or_else(|| {
-        if progress >= 1.0 {
+        if progress >= 0.5 {
           to.clone()
         } else {
           from.clone()

@@ -256,8 +256,7 @@ fn sample_animation_progress(
             let completed_iterations = count.floor() as usize;
             let fraction = count.fract();
             if fraction > f32::EPSILON {
-              let iteration_index = completed_iterations.saturating_sub(1);
-              apply_direction(fraction, direction, iteration_index)
+              apply_direction(fraction, direction, completed_iterations)
             } else {
               end_progress(direction, count.max(1.0) as usize - 1)
             }
@@ -672,12 +671,12 @@ mod tests {
   impl Animatable for Dummy {}
 
   #[test]
-  fn animatable_default_uses_from_value() {
+  fn animatable_default_flips_at_half_progress() {
     let mut target = Dummy(9);
-    target.interpolate(&Dummy(3), &Dummy(7), 0.5, &sizing(), current_color());
+    target.interpolate(&Dummy(3), &Dummy(7), 0.25, &sizing(), current_color());
     assert_eq!(target, Dummy(3));
 
-    target.interpolate(&Dummy(3), &Dummy(7), 1.0, &sizing(), current_color());
+    target.interpolate(&Dummy(3), &Dummy(7), 0.5, &sizing(), current_color());
     assert_eq!(target, Dummy(7));
   }
 
