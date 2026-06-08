@@ -94,6 +94,10 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
           });
         }
 
+        if tracks.is_empty() {
+          return Err(input.new_error_for_next_token());
+        }
+
         // Any remaining pending names after the final size are the trailing names of the repeat fragment
         if !pending_leading_names.is_empty()
           && let Some(last) = tracks.last_mut()
@@ -238,5 +242,10 @@ mod tests {
         ]
       ))
     );
+  }
+
+  #[test]
+  fn test_parse_repeat_without_track_size_is_error() {
+    assert!(GridTemplateComponent::from_str("repeat(2, [a])").is_err());
   }
 }

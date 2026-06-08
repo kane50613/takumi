@@ -82,5 +82,9 @@ pub(crate) fn parse_supports_condition<'i, 't>(
     break;
   }
 
+  if !input.is_exhausted() {
+    return Err(input.new_error_for_next_token());
+  }
+
   Ok(result)
 }

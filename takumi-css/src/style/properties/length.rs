@@ -520,7 +520,12 @@ impl<const DEFAULT_AUTO: bool> MakeComputed for Length<DEFAULT_AUTO> {
       let linear = formula.resolve(sizing);
 
       if is_near_zero(linear.percent) {
-        *self = Self::Px(linear.px / sizing.viewport.device_pixel_ratio);
+        let dpr = sizing.viewport.device_pixel_ratio;
+        *self = Self::Px(if dpr > 0.0 {
+          linear.px / dpr
+        } else {
+          linear.px
+        });
         return;
       }
 

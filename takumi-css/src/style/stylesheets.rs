@@ -430,10 +430,12 @@ macro_rules! define_style {
 
                 let css_input = map.next_value_seed(CssValueSeed)?;
                 if matches!(property, PropertyId::Custom) {
-                  style.declarations.push(
-                    StyleDeclaration::CustomProperty(key.into_owned(), css_input.into_string()),
-                    false,
-                  );
+                  if !matches!(css_input, CssInput::Unexpected(_)) {
+                    style.declarations.push(
+                      StyleDeclaration::CustomProperty(key.into_owned(), css_input.into_string()),
+                      false,
+                    );
+                  }
                 } else {
                   style
                     .declarations
@@ -526,8 +528,15 @@ macro_rules! define_style {
           // Pre-resolve `direction` so logical-axis applies below see the
           // final value even if `direction:` is declared later in the block.
           for declaration in &declarations {
-            if let StyleDeclaration::Direction(d) = declaration {
-              style.direction = *d;
+            match declaration {
+              StyleDeclaration::Direction(d) => style.direction = *d,
+              StyleDeclaration::CssWideKeyword(LonghandId::Direction, keyword) => {
+                style.direction = match keyword {
+                  CssWideKeyword::Initial => Direction::default(),
+                  CssWideKeyword::Inherit | CssWideKeyword::Unset => parent.direction,
+                };
+              }
+              _ => {}
             }
           }
 

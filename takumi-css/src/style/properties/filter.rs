@@ -4,7 +4,7 @@ use crate::style::{ToCss, unexpected_token};
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Angle, Animatable, Color, CssDescriptorKind, CssToken, FromCss, Length,
+  Angle, Animatable, Color, CssDescriptorKind, CssExpectedMessage, CssToken, FromCss, Length,
   ListInterpolationStrategy, MakeComputed, ParseResult, PercentageNumber, SizingContext,
   TextShadow, tw::TailwindPropertyParser,
 };
@@ -232,17 +232,20 @@ pub enum FilterCategory<'f> {
 
 impl<'i> FromCss<'i> for Filters {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut filters = Vec::new();
+    if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+      return Ok(Filters::default());
+    }
 
+    let mut filters = Vec::new();
     while !input.is_exhausted() {
-      let filter = Filter::from_css(input)?;
-      filters.push(filter);
+      filters.push(Filter::from_css(input)?);
     }
 
     Ok(filters)
   }
 
   const VALID_TOKENS: &'static [CssToken] = Filter::VALID_TOKENS;
+  const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::ValueOrNone;
 }
 
 impl<'i> FromCss<'i> for Filter {
@@ -345,6 +348,11 @@ mod tests {
   #[test]
   fn test_parse_blur_filter() {
     assert_eq!(Filter::from_str("blur(5px)"), Ok(Filter::Blur(Px(5.0))));
+  }
+
+  #[test]
+  fn test_parse_none_clears_filters() {
+    assert_eq!(Filters::from_str("none"), Ok(Filters::default()));
   }
 
   #[test]

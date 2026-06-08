@@ -147,13 +147,14 @@ fn parse_media_query<'i, 't>(
   if let Ok(keyword) = input.try_parse(Parser::expect_ident_cloned) {
     if keyword.eq_ignore_ascii_case("not") {
       negated = true;
-      media_type = parse_media_type(input.expect_ident_cloned()?);
-      has_explicit_media_type = true;
-    } else if keyword.eq_ignore_ascii_case("only") {
-      media_type = parse_media_type(input.expect_ident_cloned()?);
-      has_explicit_media_type = true;
-    } else {
+    } else if !keyword.eq_ignore_ascii_case("only") {
       media_type = parse_media_type(keyword);
+      has_explicit_media_type = true;
+    }
+
+    // A `not`/`only` modifier may be followed by an optional media type.
+    if !has_explicit_media_type && let Ok(name) = input.try_parse(Parser::expect_ident_cloned) {
+      media_type = parse_media_type(name);
       has_explicit_media_type = true;
     }
   }
