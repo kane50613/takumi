@@ -5,6 +5,10 @@ inputs:
   binstall:
     description: Install cargo-binstall
     required: false
+  toolchain:
+    description: Rust toolchain to install
+    required: false
+    default: stable
   targets:
     description: Targets to install
     required: false
@@ -26,7 +30,7 @@ runs:
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: stable
+        toolchain: ${{ inputs.toolchain }}
         components: ${{ inputs.components }}
         targets: ${{ inputs.targets }}
 
