@@ -5,56 +5,25 @@
 
 **A Rust rendering engine that turns JSX, HTML, and node trees into images. No headless browser required.**
 
-Render OpenGraph cards, animated GIFs, and video frames at the speed of compiled Rust.
-Runs on Node.js, Cloudflare Workers, browsers, or directly as a Rust crate.
+Render OpenGraph cards, animated GIFs, and video frames from Node.js, Cloudflare Workers, browsers, or any Rust application.
 Drop-in compatible with `next/og`.
 
-[Documentation](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground)
+[![npm version](https://img.shields.io/npm/v/takumi-js?label=takumi-js)](https://www.npmjs.com/package/takumi-js)
+[![crates.io](https://img.shields.io/crates/v/takumi?label=takumi)](https://crates.io/crates/takumi)
+[![npm downloads](https://img.shields.io/npm/dm/%40takumi-rs%2Fcore?label=downloads)](https://www.npmjs.com/package/@takumi-rs/core)
+[![license](https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-blue)](#license)
+
+[Documentation](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground) · [Showcase](https://takumi.kane.tw/showcase)
 
 </div>
 
 ## Why Takumi
 
-Most image-generation solutions are either a headless Chromium instance eating 300 MB of RAM, or a minimal SVG-to-PNG renderer that falls apart the moment you need real CSS. Takumi is neither of those.
+Takumi is a rendering pipeline built in Rust for one job: turning markup and CSS into pixels. It parses CSS, lays out the tree, shapes text, composites layers, and encodes the output inside a single binary. A headless-Chromium setup spends around 300 MB of RAM and a browser cold start on the same OG card; Takumi spends a function call.
 
-It's a purpose-built Rust rendering pipeline: CSS parsing, layout, compositing, image output. No browser, no V8, no puppeteer. The same binary runs in a serverless edge function and a long-running Node.js server, and the same `takumi` crate embeds directly in any Rust application.
+One engine covers every deployment target. Node.js servers load the native binding, Cloudflare Workers and browsers load the WASM build, and Rust applications embed the `takumi` crate. Prebuilt binaries ship for macOS, Linux (glibc and musl), and Windows, on both x64 and ARM64.
 
-## Core Architecture
-
-Takumi converts any template into a **node tree** with three node kinds: `container`, `image`, and `text`. That tree runs through:
-
-1. **Layout** via [taffy](https://github.com/DioxusLabs/taffy): Flexbox, Grid, block, float, `calc()`, absolute positioning, z-index
-2. **Text shaping** via [parley](https://github.com/linebender/parley) and [skrifa](https://github.com/googlefonts/fontations/tree/main/skrifa): WOFF/WOFF2 fonts, emoji, RTL, multi-span inline blocks
-3. **Compositing**: stacking contexts, blend modes, filters, transforms, SVG via [resvg](https://github.com/linebender/resvg)
-4. **Output**: PNG, JPEG, WebP, ICO for statics; GIF, APNG, WebP for animations; raw RGBA frames for video pipelines
-
-Because the input contract is just a node tree, any template system that can serialize to HTML or JSON plugs in without glue code. React, Svelte, Vue, plain strings, or your own serializer in any language.
-
-A **time axis** threads through the pipeline. Animations, GIFs, and video frames are not a separate API. They're the same renderer called at timestamp `t`. CSS `@keyframes`, the `animation` shorthand, and Tailwind animation utilities (`animate-spin`, `animate-bounce`, arbitrary values) all resolve at render time.
-
-```mermaid
-flowchart LR
-    A[Templates] --> N[Node Tree] --> P[Rendering Pipeline] --> F[(Raw Pixels)]
-    C[Stylesheets] --> P
-    R[Resources] --> P
-    D(Time Axis) -.-> P
-
-    F --> G[PNG / JPEG / WebP / ICO]
-    F --> H[GIF / APNG]
-    F --> I[Video frames]
-```
-
-## Comparison
-
-| Feature                 | `next/og` (Satori) |                              Takumi                               |
-| :---------------------- | :----------------: | :---------------------------------------------------------------: |
-| **Runtime**             |    Node / Edge     |          Node, Edge, CF Workers, Browser, **Rust crate**          |
-| **Template input**      |    JSX / React     | JSX, HTML strings, JSON node trees, **any language or framework** |
-| **CSS subset**          |   Tailwind / CSS   |                       **Tailwind v4 / CSS**                       |
-| **Selectors**           |      Limited       |                       **Complex selectors**                       |
-| **Animated output**     |         ✗          |               **WebP / APNG / GIF / Video frames**                |
-| **Headless browser**    |         ✗          |                                 ✗                                 |
-| **`ImageResponse` API** |     ✅ Native      |                         ✅ **Compatible**                         |
+The CSS support reaches past the usual OG-image subset: CSS Grid, `::before` and `::after`, `:is()` and `:where()` selectors, masks and `clip-path`, `backdrop-filter`, `background-clip: text`, conic gradients, RTL text, and Tailwind v4 utilities including arbitrary values.
 
 ## Quick Start
 
@@ -118,6 +87,63 @@ const animation = await renderer.renderAnimation({
 });
 
 await writeFile("./output.webp", animation);
+```
+
+### Rust
+
+```bash
+cargo add takumi
+```
+
+Start from the [Rust example](./example/rust).
+
+## Comparison
+
+| Feature                            | `next/og` (Satori) |                            Takumi                             |
+| :--------------------------------- | :----------------: | :-----------------------------------------------------------: |
+| **Runtime**                        |    Node / Edge     |        Node, Edge, CF Workers, Browser, **Rust crate**        |
+| **Template input**                 |    JSX / React     |     JSX, HTML strings, JSON node trees from any language      |
+| **Layout**                         |      Flexbox       |          Flexbox, **CSS Grid**, block, inline, float          |
+| **Selectors**                      |      Limited       | Complex selectors, `:is()`, `:where()`, `::before`, `::after` |
+| **`backdrop-filter`, blend modes** |         ✗          |                              ✅                               |
+| **Animated output**                |         ✗          |             **WebP / APNG / GIF / video frames**              |
+| **Headless browser**               |         ✗          |                               ✗                               |
+| **`ImageResponse` API**            |     ✅ Native      |                       ✅ **Compatible**                       |
+
+Compare rendering output across providers at [image-bench.kane.tw](https://image-bench.kane.tw).
+
+## Who's Using Takumi
+
+- [Dcard](https://dcard.tw) renders post share images
+- [Fumadocs](https://fumadocs.dev) generates its docs OG images
+- [Nuxt OG Image](https://nuxtseo.com/docs/og-image/renderers/takumi) ships Takumi as a built-in renderer
+- [shiki-image](https://github.com/pi0/shiki-image) turns syntax-highlighted code into images
+
+More projects in the [showcase](https://takumi.kane.tw/showcase). Takumi is part of the [Vercel OSS Program](https://vercel.com/oss).
+
+## Core Architecture
+
+Takumi converts any template into a **node tree** with three node kinds: `container`, `image`, and `text`. That tree runs through:
+
+1. **Layout** via [taffy](https://github.com/DioxusLabs/taffy): Flexbox, Grid, block, float, `calc()`, absolute positioning, z-index
+2. **Text shaping** via [parley](https://github.com/linebender/parley) and [skrifa](https://github.com/googlefonts/fontations/tree/main/skrifa): WOFF/WOFF2 fonts, emoji, RTL, multi-span inline blocks
+3. **Compositing**: stacking contexts, blend modes, filters, transforms, SVG via [resvg](https://github.com/linebender/resvg)
+4. **Output**: PNG, JPEG, WebP, ICO for statics; GIF, APNG, WebP for animations; raw RGBA frames for video pipelines
+
+The input contract is a node tree, so any template system that serializes to HTML or JSON can feed it: React, Svelte, Vue, plain strings, or your own serializer in any language.
+
+A **time axis** threads through the pipeline: the renderer takes a timestamp, so a PNG is the tree at `t=0` and a GIF is the same tree sampled across `t`. CSS `@keyframes`, the `animation` shorthand, and Tailwind animation utilities (`animate-spin`, `animate-bounce`, arbitrary values) all resolve at render time.
+
+```mermaid
+flowchart LR
+    A[Templates] --> N[Node Tree] --> P[Rendering Pipeline] --> F[(Raw Pixels)]
+    C[Stylesheets] --> P
+    R[Resources] --> P
+    D(Time Axis) -.-> P
+
+    F --> G[PNG / JPEG / WebP / ICO]
+    F --> H[GIF / APNG]
+    F --> I[Video frames]
 ```
 
 ## Showcase
