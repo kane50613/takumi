@@ -9,26 +9,19 @@ license = "MIT OR Apache-2.0"
 crate-type = ["cdylib"]
 
 [dependencies]
-serde = "1.0"
-rayon = "1.10"
-
-[dependencies.parley]
-version = "0.9"
-default-features = false
-features = ["std"]
+serde.workspace = true
+rayon.workspace = true
+parley.workspace = true
+napi.workspace = true
+napi-derive.workspace = true
 
 [dependencies.takumi]
 path = "../takumi"
 features = ["woff2", "woff", "svg", "rayon"]
 default-features = false
 
-[dependencies.napi]
-version = "3"
-default-features = false
-features = ["napi4", "serde-json"]
-
-[dependencies.napi-derive]
-version = "3"
-
 [build-dependencies]
-napi-build = "2"
+napi-build.workspace = true
+
+[lints]
+workspace = true

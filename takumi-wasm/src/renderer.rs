@@ -62,7 +62,7 @@ impl Renderer {
           .collect::<Result<_, js_sys::Error>>()
       })
       .transpose()
-      .map(|resources| resources.unwrap_or_default())
+      .map(Option::unwrap_or_default)
   }
 
   fn encode_animation(

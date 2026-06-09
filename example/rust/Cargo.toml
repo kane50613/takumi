@@ -5,3 +5,6 @@ edition = "2024"
 
 [dependencies.takumi]
 path = "../../takumi"
+
+[lints]
+workspace = true

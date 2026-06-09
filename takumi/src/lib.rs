@@ -2,14 +2,7 @@
   html_logo_url = "https://raw.githubusercontent.com/kane50613/takumi/master/assets/images/takumi.svg",
   html_favicon_url = "https://raw.githubusercontent.com/kane50613/takumi/master/assets/images/takumi.svg"
 )]
-#![deny(
-  missing_docs,
-  clippy::unwrap_used,
-  clippy::expect_used,
-  clippy::panic,
-  clippy::all,
-  clippy::redundant_closure_for_method_calls
-)]
+#![deny(missing_docs, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Takumi is a library with different parts to render UI component trees to images. This crate contains the core logic for layout and rendering.
 //!
 //! Checkout the [Quick Start](https://takumi.kane.tw/docs) if you are looking for napi-rs / WASM bindings.

@@ -9,20 +9,16 @@ license = "MIT OR Apache-2.0"
 crate-type = ["cdylib"]
 
 [dependencies]
-serde-wasm-bindgen = "0.6"
-wasm-bindgen = "0.2"
-base64 = "0.22"
-serde_bytes = "0.11"
-js-sys = "0.3"
-
-[dependencies.parley]
-version = "0.9"
-default-features = false
-features = ["std"]
+serde-wasm-bindgen.workspace = true
+wasm-bindgen.workspace = true
+base64.workspace = true
+serde_bytes.workspace = true
+js-sys.workspace = true
+parley.workspace = true
 
 [dependencies.serde]
-version = "1.0"
-features = ["derive", "rc"]
+workspace = true
+features = ["rc"]
 
 [dependencies.takumi]
 path = "../takumi"
@@ -41,3 +37,6 @@ wasm-opt = [
   '--strip-producers',
   '--strip-target-features',
 ]
+
+[lints]
+workspace = true
