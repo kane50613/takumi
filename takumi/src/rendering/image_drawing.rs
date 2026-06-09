@@ -3,8 +3,10 @@ use taffy::{Layout, Point, Size};
 use crate::layout::style::BlendMode;
 use crate::{
   Result,
-  layout::style::{Affine, ObjectFit, PositionComponent, PositionKeywordX, PositionKeywordY},
-  rendering::{BorderProperties, Canvas, RenderContext, SamplingOptions, Sizing},
+  layout::style::{
+    Affine, ObjectFit, PositionComponent, PositionKeywordX, PositionKeywordY, SizingContext,
+  },
+  rendering::{BorderProperties, Canvas, RenderContext, SamplingOptions},
   resources::image::{ImageSource, RenderedImage},
 };
 
@@ -15,7 +17,7 @@ pub(crate) struct PreparedImage<'a> {
 
 fn resolve_object_position_axis(
   component: PositionComponent,
-  sizing: &Sizing,
+  sizing: &SizingContext,
   available_space: f32,
 ) -> f32 {
   match component {
@@ -327,17 +329,14 @@ mod tests {
   use std::rc::Rc;
 
   use super::resolve_object_position_axis;
-  use crate::{
-    layout::{
-      Viewport,
-      style::{CalcArena, Length, PositionComponent, PositionKeywordX},
-    },
-    rendering::Sizing,
+  use crate::layout::{
+    Viewport,
+    style::{CalcArena, Length, PositionComponent, PositionKeywordX, SizingContext},
   };
   use taffy::Size;
 
-  fn sizing() -> Sizing {
-    Sizing {
+  fn sizing() -> SizingContext {
+    SizingContext {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
       font_size: 16.0,

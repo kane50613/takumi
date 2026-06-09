@@ -1,4 +1,4 @@
-use taffy::{Layout, Point, Size};
+use taffy::{AbsoluteAxis, Layout, Point, Rect, Size};
 use tiny_skia::{
   FillRule as TinyFillRule, IntSize, Mask as TinyMask, PathBuilder as TinyPathBuilder,
   Rect as TinyRect, Transform as TinyTransform,
@@ -6,9 +6,13 @@ use tiny_skia::{
 
 use crate::{
   Result,
-  layout::style::{Affine, ComputedStyle, Overflow},
+  layout::style::{
+    Affine, Axis, BasicShape, BorderStyle, Color, ComputedStyle, FillRule, ImageScalingAlgorithm,
+    Overflow, ShapeRadius, Sides, SizingContext, SpacePair,
+  },
   rendering::{
-    BorderProperties, Command, Placement, RenderContext, Style, build_path,
+    BorderProperties, Command, Fill, PathBuilder, PathData, Placement, RenderContext, Style,
+    build_path,
     canvas::{BufferPool, mask_index_from_coord},
     create_mask, fast_div_255, transformed_rect_extents,
   },
@@ -52,7 +56,7 @@ pub(crate) fn prepare_node_mask(
   buffer_pool: &mut BufferPool,
 ) -> Result<NodeMaskAction> {
   if let Some(clip_path) = &style.clip_path {
-    let (mask, placement) = clip_path.render_mask(context, layout.size, buffer_pool);
+    let (mask, placement) = render_clip_shape_mask(clip_path, context, layout.size, buffer_pool);
     let end_x = placement.left + placement.width as i32;
     let end_y = placement.top + placement.height as i32;
 
@@ -548,6 +552,132 @@ fn transformed_mask_point(
     && original_point.y >= from.y
     && original_point.y < to.y;
   is_contained.then_some(original_point)
+}
+
+impl From<FillRule> for Fill {
+  fn from(value: FillRule) -> Self {
+    match value {
+      FillRule::EvenOdd => Fill::EvenOdd,
+      FillRule::NonZero => Fill::NonZero,
+    }
+  }
+}
+
+fn resolve_radius(
+  radius: ShapeRadius,
+  distance: Size<f32>,
+  sizing: &SizingContext,
+  full: f32,
+) -> f32 {
+  match radius {
+    ShapeRadius::ClosestSide => distance.width.min(distance.height),
+    ShapeRadius::FarthestSide => distance.width.max(distance.height),
+    ShapeRadius::Length(length) => length.to_px(sizing, full),
+  }
+}
+
+pub(crate) fn render_clip_shape_mask(
+  shape: &BasicShape,
+  context: &RenderContext,
+  size: Size<f32>,
+  buffer_pool: &mut BufferPool,
+) -> (Vec<u8>, Placement) {
+  let mut paths = Vec::new();
+
+  match shape {
+    BasicShape::Inset(shape) => {
+      let inset: Rect<f32> = shape
+        .inset
+        .map_axis(|value, axis| {
+          value.to_px(
+            &context.sizing,
+            match axis {
+              Axis::Horizontal => size.width,
+              Axis::Vertical => size.height,
+            },
+          )
+        })
+        .into();
+
+      let border = BorderProperties {
+        width: Rect::zero(),
+        color: Rect {
+          top: Color::transparent(),
+          right: Color::transparent(),
+          bottom: Color::transparent(),
+          left: Color::transparent(),
+        },
+        radius: shape
+          .border_radius
+          .map(|radius| {
+            Sides(
+              radius
+                .0
+                .map(|corner| SpacePair::from_single(corner.to_px(&context.sizing, size.width))),
+            )
+          })
+          .unwrap_or_default(),
+        image_rendering: ImageScalingAlgorithm::Auto,
+        style: Rect {
+          top: BorderStyle::Solid,
+          right: BorderStyle::Solid,
+          bottom: BorderStyle::Solid,
+          left: BorderStyle::Solid,
+        },
+      };
+
+      border.append_mask_commands(
+        &mut paths,
+        Size {
+          width: size.width - inset.grid_axis_sum(AbsoluteAxis::Horizontal),
+          height: size.height - inset.grid_axis_sum(AbsoluteAxis::Vertical),
+        },
+        Point {
+          x: inset.left,
+          y: inset.top,
+        },
+      );
+    }
+    BasicShape::Ellipse(shape) => {
+      let distance = Size {
+        width: shape.position.0.x.to_px(&context.sizing, size.width),
+        height: shape.position.0.y.to_px(&context.sizing, size.height),
+      };
+
+      paths.add_ellipse(
+        (distance.width, distance.height),
+        resolve_radius(shape.radius_x, distance, &context.sizing, size.width),
+        resolve_radius(shape.radius_y, distance, &context.sizing, size.height),
+      );
+    }
+    BasicShape::Polygon(shape) => {
+      if !shape.coordinates.is_empty() {
+        let first = &shape.coordinates[0];
+        let first_x = first.x.to_px(&context.sizing, size.width);
+        let first_y = first.y.to_px(&context.sizing, size.height);
+
+        paths.move_to((first_x, first_y));
+
+        for coord in &shape.coordinates[1..] {
+          let x = coord.x.to_px(&context.sizing, size.width);
+          let y = coord.y.to_px(&context.sizing, size.height);
+          paths.line_to((x, y));
+        }
+
+        paths.close();
+      }
+    }
+    BasicShape::Path(shape) => {
+      paths.extend(shape.path.as_ref().commands());
+    }
+  }
+
+  render_mask(
+    &paths,
+    Some(context.transform),
+    Some(Fill::from(shape.fill_rule().unwrap_or(context.style.clip_rule)).into()),
+    buffer_pool,
+  )
 }
 
 pub(crate) fn render_mask(

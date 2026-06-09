@@ -14,15 +14,15 @@ use crate::{
   layout::{
     inline::{collect_inline_items, create_inline_layout, resolve_inline_max_height},
     style::{
-      Affine, BackgroundImage, BlendMode, Color, ComputedStyle, Display, Filter, SpacePair,
-      apply_backdrop_filter, apply_filters_to_pixmap,
+      Affine, BackgroundImage, BlendMode, Color, ComputedStyle, Display, Filter, SizingContext,
+      SpacePair,
     },
     tree::{LayoutResults, OrderedChild, RenderNode},
   },
   rendering::{
     BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, NodeMaskAction, Placement,
-    Sizing, blend_pixel, draw_debug_border, get_node_mut_by_path, prepare_node_mask,
-    scale_text_fit_x, transformed_rect_extents,
+    SizedFontStyle, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel, draw_debug_border,
+    get_node_mut_by_path, prepare_node_mask, scale_text_fit_x, transformed_rect_extents,
   },
 };
 
@@ -113,7 +113,7 @@ pub(crate) fn apply_transform(
   transform: &mut Affine,
   style: &ComputedStyle,
   border_box: Size<f32>,
-  sizing: &Sizing,
+  sizing: &SizingContext,
 ) {
   let origin = style.transform_origin.to_point(sizing, border_box);
 
@@ -502,7 +502,7 @@ fn compute_node_paint_bounds(
     return bounds;
   }
 
-  let font_style = node.context.style.to_sized_font_style(&node.context);
+  let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
   if font_style.sizing.font_size == 0.0 {
     return bounds;
   }
@@ -778,7 +778,7 @@ fn finish_node_render<'g>(
   Ok(())
 }
 
-fn filter_padding(filters: &[Filter], sizing: &Sizing, transform: Affine) -> i32 {
+fn filter_padding(filters: &[Filter], sizing: &SizingContext, transform: Affine) -> i32 {
   let transform_scale = affine_max_scale(transform);
   filters
     .iter()

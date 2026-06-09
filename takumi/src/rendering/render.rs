@@ -21,7 +21,7 @@ use crate::{
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
   rendering::{
-    AnimationFrame, Canvas, DitheringAlgorithm, RenderContext, apply_dithering,
+    AnimationFrame, Canvas, DitheringAlgorithm, RenderContext, SizedFontStyle, apply_dithering,
     get_node_mut_by_path, scale_text_fit_x,
     stacking_context::{
       apply_transform, build_stacking_contexts, collect_layout_children, paint_context,
@@ -248,7 +248,7 @@ fn collect_measure_result<'g>(
         let mut runs = Vec::new();
 
         if current.should_create_inline_layout() {
-          let font_style = current.context.style.to_sized_font_style(&current.context);
+          let font_style = SizedFontStyle::from_style(&current.context.style, &current.context);
           let (max_width, max_height) = create_inline_constraint(
             &current.context,
             Size {

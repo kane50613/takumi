@@ -9,11 +9,10 @@ repository = "https://github.com/kane50613/takumi"
 homepage = "https://takumi.kane.tw"
 readme = "README.md"
 rust-version = "1.91"
+autobenches = false
 
 [dependencies]
-bitflags = "2.11"
 cssparser = "0.37"
-paste = "1.0"
 png = "0.18"
 gif = "0.14"
 data-url = "0.3"
@@ -39,13 +38,14 @@ features = ["wasm_simd"]
 version = "1.25"
 features = ["aarch64_simd", "avx512_simd"]
 
+# Internal companion crate, versioned independently and pinned exactly.
+[dependencies.takumi-css]
+path = "../takumi-css"
+version = "=0.1.0"
+
 [dependencies.xxhash-rust]
 version = "0.8"
 features = ["xxh3"]
-
-[dependencies.phf]
-version = "0.13"
-features = ["macros"]
 
 [dependencies.smallvec]
 version = "1.15"
@@ -63,9 +63,6 @@ features = ["std"]
 
 [dependencies.selectors]
 version = "0.38"
-
-[dependencies.precomputed-hash]
-version = "0.1"
 
 [dependencies.rayon]
 version = "1.10"
@@ -138,4 +135,8 @@ harness = false
 
 [[bench]]
 name = "text"
+harness = false
+
+[[bench]]
+name = "encode"
 harness = false

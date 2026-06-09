@@ -1,0 +1,58 @@
+[package]
+name = "takumi-css"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Internal CSS layer for takumi. Not a public API; do not depend on it directly."
+repository = "https://github.com/kane50613/takumi"
+rust-version = "1.91"
+
+[dependencies]
+bitflags = "2.11"
+cssparser = "0.37"
+paste = "1.0"
+color = "0.3"
+thiserror = "2.0"
+typed-builder = "0.23"
+precomputed-hash = "0.1"
+tiny-skia = "0.12"
+bytemuck = "1.25"
+selectors = "0.38"
+
+[dependencies.smallvec]
+version = "1.15"
+features = ["serde"]
+
+[dependencies.phf]
+version = "0.13"
+features = ["macros"]
+
+[dependencies.parley]
+version = "0.9"
+default-features = false
+features = ["std"]
+
+[dependencies.taffy]
+version = "0.10"
+default-features = false
+features = [
+  "flexbox",
+  "grid",
+  "alloc",
+  "calc",
+  "taffy_tree",
+  "strict_provenance",
+  "block_layout",
+  "float_layout",
+]
+
+[dependencies.serde]
+version = "1"
+features = ["derive", "rc"]
+
+[dependencies.image]
+version = "0.25"
+default-features = false
+
+[dev-dependencies]
+serde_json = "1"

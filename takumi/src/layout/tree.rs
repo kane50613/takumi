@@ -18,17 +18,17 @@ use crate::{
       ProcessedInlineSpan, collect_inline_items, create_inline_constraint, create_inline_layout,
       get_parent_font_metrics, measure_inline_layout, resolve_inline_max_height,
     },
+    matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
     node::{Node, NodeStyleLayers},
     style::{
       Affine, BackgroundImage, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem,
       ContentValue, Display, Filters, Float, Isolation, LineHeight, Overflow, PercentageNumber,
-      Position, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
+      Position, SizingContext, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
       apply_stylesheet_animations,
-      matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
     },
   },
   rendering::{
-    Canvas, RenderContext, Sizing,
+    Canvas, RenderContext, SizedFontStyle,
     inline_drawing::{InlineLayoutDrawData, draw_inline_box, draw_inline_layout},
   },
 };
@@ -260,7 +260,7 @@ fn registered_custom_property_parent_style(
 fn pseudo_computed_style<'g>(
   parent_context: &RenderContext<'g>,
   pseudo_matched: &MatchedDeclarationsView<'_>,
-) -> (ComputedStyle, Sizing, Color) {
+) -> (ComputedStyle, SizingContext, Color) {
   let style_layers = build_style_layers(
     NodeStyleLayers::default(),
     pseudo_matched,
@@ -280,7 +280,7 @@ fn pseudo_computed_style<'g>(
   let line_height = style
     .line_height
     .to_px(&parent_context.sizing, normal_basis);
-  let sizing = Sizing {
+  let sizing = SizingContext {
     font_size,
     root_font_size: Some(parent_context.sizing.root_font_size.unwrap_or(font_size)),
     line_height,
@@ -1077,7 +1077,7 @@ impl<'g> RenderNode<'g> {
       return Ok(());
     }
 
-    let font_style = self.context.style.to_sized_font_style(&self.context);
+    let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
 
     let max_height = resolve_inline_max_height(&font_style, layout.content_box_height());
 
@@ -1217,7 +1217,7 @@ impl<'g> RenderNode<'g> {
       node: &mut Node,
       node_index: usize,
       matched_declarations: &[NodeMatchedDeclarations<'_>],
-    ) -> (ComputedStyle, Sizing, Color) {
+    ) -> (ComputedStyle, SizingContext, Color) {
       let default_matched = MatchedDeclarationsView::default();
       let matched = matched_declarations
         .get(node_index)
@@ -1238,7 +1238,7 @@ impl<'g> RenderNode<'g> {
       let parent_root_font_size = parent_context.sizing.root_font_size;
       let parent_root_line_height = parent_context.sizing.root_line_height;
 
-      let mut child_sizing_for_final: Option<Sizing> = None;
+      let mut child_sizing_for_final: Option<SizingContext> = None;
       if !style.animation_name.is_empty() {
         let font_size = style
           .font_size
@@ -1247,7 +1247,7 @@ impl<'g> RenderNode<'g> {
         let line_height = style
           .line_height
           .to_px(&parent_context.sizing, normal_basis);
-        let child_sizing = Sizing {
+        let child_sizing = SizingContext {
           font_size,
           root_font_size: parent_root_font_size,
           line_height,
@@ -1261,7 +1261,13 @@ impl<'g> RenderNode<'g> {
           child_sizing.clone(),
           child_current_color,
         );
-        style = apply_stylesheet_animations(style, &child_context);
+        style = apply_stylesheet_animations(
+          style,
+          &child_context.stylesheet,
+          child_context.time,
+          &child_context.sizing,
+          child_context.current_color,
+        );
         child_sizing_for_final = Some(child_sizing);
       }
 
@@ -1277,7 +1283,7 @@ impl<'g> RenderNode<'g> {
       let line_height = style
         .line_height
         .to_px(&parent_context.sizing, normal_basis);
-      let sizing = Sizing {
+      let sizing = SizingContext {
         font_size,
         root_font_size: Some(parent_root_font_size.unwrap_or(font_size)),
         line_height,
@@ -1616,7 +1622,7 @@ impl<'g> RenderNode<'g> {
       return None;
     }
 
-    let font_style = self.context.style.to_sized_font_style(&self.context);
+    let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
     let max_width = size.width.max(0.0);
     let built = create_inline_layout(InlineLayoutRequest {
       items: collect_inline_items(self),
@@ -1877,7 +1883,7 @@ impl<'g> RenderNode<'g> {
       let (max_width, max_height) =
         create_inline_constraint(&self.context, available_space, known_dimensions);
 
-      let font_style = self.context.style.to_sized_font_style(&self.context);
+      let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
 
       let mut built = create_inline_layout(InlineLayoutRequest {
         items: collect_inline_items(self),
@@ -1966,10 +1972,12 @@ mod tests {
   use taffy::NodeId;
 
   use super::{registered_custom_property_parent_style, sort_children_by_order};
-  use crate::layout::style::{PropertyRule, StyleDeclaration, StyleDeclarationBlock, StyleSheet};
   use crate::layout::{
     Viewport,
-    style::{ComputedStyle, Length, Style},
+    style::{
+      ComputedStyle, Length, Style, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
+      selector::PropertyRule,
+    },
   };
 
   fn parse_stylesheet(css: &str) -> StyleSheet {

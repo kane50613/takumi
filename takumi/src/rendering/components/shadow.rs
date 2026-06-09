@@ -3,10 +3,12 @@ use tiny_skia::{IntSize, Pixmap};
 
 use crate::{
   Error, Result,
-  layout::style::{Affine, BlendMode, BoxShadow, Color, ImageScalingAlgorithm, Sides, TextShadow},
+  layout::style::{
+    Affine, BlendMode, BoxShadow, Color, ImageScalingAlgorithm, Sides, SizingContext, TextShadow,
+  },
   rendering::{
     BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Command, Fill, Placement,
-    SamplingOptions, Sizing, Style, apply_blur, attenuate_alpha_by_mask, fast_div_255, render_mask,
+    SamplingOptions, Style, apply_blur, attenuate_alpha_by_mask, fast_div_255, render_mask,
   },
 };
 
@@ -29,7 +31,7 @@ impl SizedShadow {
   /// Creates a new [`SizedShadow`] from a [`BoxShadow`].
   pub fn from_box_shadow(
     shadow: BoxShadow,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     current_color: Color,
     size: Size<f32>,
   ) -> Self {
@@ -45,7 +47,7 @@ impl SizedShadow {
   /// Creates a new `SizedShadow` from a `TextShadow`.
   pub fn from_text_shadow(
     shadow: TextShadow,
-    sizing: &Sizing,
+    sizing: &SizingContext,
     current_color: Color,
     size: Size<f32>,
   ) -> Self {

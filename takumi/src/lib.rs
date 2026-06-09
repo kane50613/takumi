@@ -83,7 +83,7 @@ pub mod rendering;
 /// Error handling types and utilities.
 pub mod error;
 /// Shared deserializers for structured and shorthand keyframe inputs.
-pub mod keyframes;
+pub use takumi_css::keyframes;
 /// External resource management (fonts, images)
 pub mod resources;
 

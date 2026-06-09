@@ -15,8 +15,8 @@ use image::RgbaImage;
 use tiny_skia::Pixmap;
 
 use crate::{
-  layout::style::{Color, ImageScalingAlgorithm, IntrinsicSizing},
-  rendering::{Sizing, premultiplied_pixmap_from_rgba},
+  layout::style::{Color, ImageScalingAlgorithm, IntrinsicSizing, SizingContext},
+  rendering::premultiplied_pixmap_from_rgba,
   resources::image_decoder::{DecodedGif, DecodedImage, decode_image},
 };
 use thiserror::Error;
@@ -298,6 +298,15 @@ impl SvgRasterCache {
 }
 
 #[cfg(feature = "svg")]
+fn usvg_image_rendering(algorithm: ImageScalingAlgorithm) -> resvg::usvg::ImageRendering {
+  match algorithm {
+    ImageScalingAlgorithm::Auto => resvg::usvg::ImageRendering::default(),
+    ImageScalingAlgorithm::Smooth => resvg::usvg::ImageRendering::Smooth,
+    ImageScalingAlgorithm::Pixelated => resvg::usvg::ImageRendering::Pixelated,
+  }
+}
+
+#[cfg(feature = "svg")]
 impl FromStr for SvgSource {
   type Err = ImageResourceError;
 
@@ -403,7 +412,7 @@ impl ImageSource {
         let tree = if svg.uses_current_color {
           let options = Options {
             style_sheet: Some(format!("svg {{ color: {current_color}; }}")),
-            image_rendering: image_rendering.into(),
+            image_rendering: usvg_image_rendering(image_rendering),
             ..Default::default()
           };
           Some(Tree::from_str(&svg.source, &options).map_err(ImageResourceError::SvgParseError)?)
@@ -429,7 +438,7 @@ impl ImageSource {
   }
 
   /// Get the image size in device pixels for the current sizing context.
-  pub(crate) fn size(&self, sizing: &Sizing) -> (f32, f32) {
+  pub(crate) fn size(&self, sizing: &SizingContext) -> (f32, f32) {
     let (width, height) = match self {
       #[cfg(feature = "svg")]
       ImageSource::Svg(svg) => (svg.tree.size().width(), svg.tree.size().height()),
@@ -446,7 +455,7 @@ impl ImageSource {
 
   /// Intrinsic sizing for `background-size`/`mask-size` (§5.3). Bitmaps and GIFs
   /// have both dimensions; an SVG may have only a `viewBox` ratio.
-  pub(crate) fn intrinsic_sizing(&self, sizing: &Sizing) -> IntrinsicSizing {
+  pub(crate) fn intrinsic_sizing(&self, sizing: &SizingContext) -> IntrinsicSizing {
     let dpr = sizing.viewport.device_pixel_ratio;
     match self {
       #[cfg(feature = "svg")]

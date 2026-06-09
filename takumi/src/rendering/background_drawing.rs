@@ -12,7 +12,7 @@ use crate::{
   layout::{node::resolve_image, style::*},
   rendering::{
     BorderProperties, BufferPool, OverlayOptions, PaintSource, RenderContext, SamplingFootprint,
-    Sizing, fast_div_255, interpolate_with_footprint, overlay_gradient_tile, overlay_image,
+    fast_div_255, interpolate_with_footprint, overlay_gradient_tile, overlay_image,
     overlay_linear_gradient_tile, overlay_radial_gradient_tile,
   },
   resources::image::ImageSource,
@@ -378,7 +378,7 @@ fn resolve_axis_tiles(
   pos: BackgroundPosition,
   tile_size: u32,
   area_size: u32,
-  sizing: &Sizing,
+  sizing: &SizingContext,
   is_x: bool,
 ) -> (SmallVec<[i32; 1]>, u32) {
   match repeat {
@@ -430,7 +430,7 @@ fn resolve_auto_axis_from_intrinsic(
 pub(crate) fn resolve_length_to_position_component(
   length: Length,
   available: i32,
-  sizing: &Sizing,
+  sizing: &SizingContext,
 ) -> i32 {
   match length {
     Length::Auto => available / 2,
@@ -448,7 +448,7 @@ pub(crate) fn resolve_position_component_x(
   comp: BackgroundPosition,
   tile_w: u32,
   area_w: u32,
-  sizing: &Sizing,
+  sizing: &SizingContext,
 ) -> i32 {
   let available = calculate_available_space(area_w, tile_w);
   match comp.0.x {
@@ -466,7 +466,7 @@ pub(crate) fn resolve_position_component_y(
   comp: BackgroundPosition,
   tile_h: u32,
   area_h: u32,
-  sizing: &Sizing,
+  sizing: &SizingContext,
 ) -> i32 {
   let available = calculate_available_space(area_h, tile_h);
   match comp.0.y {
@@ -490,13 +490,25 @@ pub(crate) fn render_tile(
   Ok(match image {
     BackgroundImage::None => None,
     BackgroundImage::Linear(gradient) => Some(BackgroundTile::Linear(LinearGradientTile::new(
-      gradient, tile_w, tile_h, context,
+      gradient,
+      tile_w,
+      tile_h,
+      &context.sizing,
+      context.current_color,
     ))),
     BackgroundImage::Radial(gradient) => Some(BackgroundTile::Radial(RadialGradientTile::new(
-      gradient, tile_w, tile_h, context,
+      gradient,
+      tile_w,
+      tile_h,
+      &context.sizing,
+      context.current_color,
     ))),
     BackgroundImage::Conic(gradient) => Some(BackgroundTile::Conic(ConicGradientTile::new(
-      gradient, tile_w, tile_h, context,
+      gradient,
+      tile_w,
+      tile_h,
+      &context.sizing,
+      context.current_color,
     ))),
     BackgroundImage::Url(url) => {
       if let Ok(source) = resolve_image(url, context) {
@@ -862,20 +874,17 @@ mod tests {
   use taffy::Size;
 
   use super::{resolve_position_component_x, resolve_position_component_y};
-  use crate::{
-    layout::{
-      Viewport,
-      style::{
-        BackgroundPosition, CalcArena, Length, PositionComponent, PositionKeywordX,
-        PositionKeywordY, SpacePair,
-      },
+  use crate::layout::{
+    Viewport,
+    style::{
+      BackgroundPosition, CalcArena, Length, PositionComponent, PositionKeywordX, PositionKeywordY,
+      SizingContext, SpacePair,
     },
-    rendering::Sizing,
   };
 
-  fn test_sizing() -> Sizing {
+  fn test_sizing() -> SizingContext {
     let viewport = Viewport::new((100, 100));
-    Sizing {
+    SizingContext {
       viewport,
       container_size: Size::NONE,
       font_size: viewport.font_size,
