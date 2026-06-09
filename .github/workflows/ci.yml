@@ -227,8 +227,6 @@ jobs:
 
       - name: Build
         working-directory: takumi-napi-core
-        # build-std + panic=immediate-abort shrinks the binary (drops panic
-        # format machinery; Result-based errors are unaffected)
         env:
           CARGO_UNSTABLE_BUILD_STD: std,panic_abort
           RUSTFLAGS: ${{ env.RUSTFLAGS }} -Zunstable-options -Cpanic=immediate-abort
