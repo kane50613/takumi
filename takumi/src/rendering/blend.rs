@@ -30,7 +30,6 @@ fn blend_plus_lighter(bottom: &mut Rgba<u8>, top: Rgba<u8>) {
   bottom.0[3] = result_alpha;
 }
 
-#[inline(always)]
 pub(crate) fn blend_pixel(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode) {
   if top.0[3] == 0 {
     return;
@@ -498,6 +497,13 @@ pub(crate) fn blend_premultiplied_pixel(dst: &mut [u8; 4], src: [u8; 4], mode: B
     return;
   }
 
+  blend_premultiplied_pixel_slow(dst, src, mode);
+}
+
+// Outlined so per-pixel loops only inline the normal-mode fast path; keeps one
+// copy of the non-normal blend machinery in the binary (wasm size).
+#[inline(never)]
+fn blend_premultiplied_pixel_slow(dst: &mut [u8; 4], src: [u8; 4], mode: BlendMode) {
   if src[3] == u8::MAX && dst[3] == u8::MAX {
     let mut current = Rgba(*dst);
     let color = Rgba(src);
