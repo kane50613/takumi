@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "react": "catalog:",
-    "shiki": "^4.1.0",
+    "shiki": "^4.2.0",
     "takumi-js": "workspace:*"
   },
   "devDependencies": {

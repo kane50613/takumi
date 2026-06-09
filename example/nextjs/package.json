@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "lucide-react": "catalog:",
-    "next": "16.2.7",
+    "next": "16.3.0-preview.0",
     "react": "catalog:",
     "react-dom": "catalog:",
     "takumi-js": "workspace:*"
