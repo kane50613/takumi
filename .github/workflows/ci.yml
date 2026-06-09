@@ -207,7 +207,8 @@ jobs:
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
         with:
-          toolchain: nightly
+          # pinned: newer nightlies emit --fix-cortex-a53-843419 which zig rejects (cargo-zigbuild#451)
+          toolchain: nightly-2026-06-04
           targets: ${{ matrix.settings.target }}
           components: rust-src
           stage: build
@@ -545,7 +546,8 @@ jobs:
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
         with:
-          toolchain: nightly
+          # pinned to match build-napi (see comment there)
+          toolchain: nightly-2026-06-04
           targets: wasm32-unknown-unknown
           components: rust-src
           stage: build
