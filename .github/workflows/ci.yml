@@ -207,7 +207,9 @@ jobs:
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
         with:
+          toolchain: nightly
           targets: ${{ matrix.settings.target }}
+          components: rust-src
           stage: build
 
       - name: Install cargo-zigbuild
@@ -225,6 +227,11 @@ jobs:
 
       - name: Build
         working-directory: takumi-napi-core
+        # build-std + panic=immediate-abort shrinks the binary (drops panic
+        # format machinery; Result-based errors are unaffected)
+        env:
+          CARGO_UNSTABLE_BUILD_STD: std,panic_abort
+          RUSTFLAGS: ${{ env.RUSTFLAGS }} -Zunstable-options -Cpanic=immediate-abort
         run: ${{ matrix.settings.build }} && bun build:js
 
       - name: Upload artifact
