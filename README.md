@@ -99,16 +99,16 @@ Start from the [Rust example](./example/rust).
 
 ## Comparison
 
-| Feature                          | `next/og` (Satori) |                       Takumi                        |
-| :------------------------------- | :----------------: | :-------------------------------------------------: |
-| **Runtime**                      |    Node / Edge     |  Node, Edge, CF Workers, Browser, **Rust crate**    |
-| **Template input**               |    JSX / React     | JSX, HTML strings, JSON node trees from any language |
-| **Layout**                       |      Flexbox       |     Flexbox, **CSS Grid**, block, inline, float     |
-| **Selectors**                    |      Limited       | Complex selectors, `:is()`, `:where()`, `::before`, `::after` |
-| **`backdrop-filter`, blend modes** |         ✗          |                         ✅                          |
-| **Animated output**              |         ✗          |       **WebP / APNG / GIF / video frames**          |
-| **Headless browser**             |         ✗          |                          ✗                          |
-| **`ImageResponse` API**          |     ✅ Native      |                  ✅ **Compatible**                  |
+| Feature                            | `next/og` (Satori) |                            Takumi                             |
+| :--------------------------------- | :----------------: | :-----------------------------------------------------------: |
+| **Runtime**                        |    Node / Edge     |        Node, Edge, CF Workers, Browser, **Rust crate**        |
+| **Template input**                 |    JSX / React     |     JSX, HTML strings, JSON node trees from any language      |
+| **Layout**                         |      Flexbox       |          Flexbox, **CSS Grid**, block, inline, float          |
+| **Selectors**                      |      Limited       | Complex selectors, `:is()`, `:where()`, `::before`, `::after` |
+| **`backdrop-filter`, blend modes** |         ✗          |                              ✅                               |
+| **Animated output**                |         ✗          |             **WebP / APNG / GIF / video frames**              |
+| **Headless browser**               |         ✗          |                               ✗                               |
+| **`ImageResponse` API**            |     ✅ Native      |                       ✅ **Compatible**                       |
 
 Compare rendering output across providers at [image-bench.kane.tw](https://image-bench.kane.tw).
 
