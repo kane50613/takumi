@@ -1153,6 +1153,8 @@ fn compute_isolation_bounds(
 
 #[cfg(test)]
 mod tests {
+  use std::error::Error;
+
   use taffy::{Point, geometry::Size};
 
   use super::bounds_for_rect;
@@ -1162,15 +1164,17 @@ mod tests {
     rendering::{CanvasViewport, RenderOptions, render},
   };
 
-  fn render_json(json: &str) -> image::RgbaImage {
+  type TestResult = Result<(), Box<dyn Error>>;
+
+  fn render_json(json: &str) -> Result<image::RgbaImage, Box<dyn Error>> {
     let global = GlobalContext::default();
-    let node: Node = serde_json::from_str(json).unwrap();
+    let node: Node = serde_json::from_str(json)?;
     let options = RenderOptions::builder()
       .viewport(Viewport::new((100, 100)))
       .node(node)
       .global(&global)
       .build();
-    render(options).unwrap()
+    Ok(render(options)?)
   }
 
   #[test]
@@ -1181,8 +1185,7 @@ mod tests {
         height: 100.0,
       },
       Affine::translation(50.0, 50.0),
-    )
-    .expect("zero-sized rect should produce empty bounds, not unknown");
+    );
 
     let viewport = CanvasViewport {
       origin: Point { x: 0, y: 0 },
@@ -1191,11 +1194,15 @@ mod tests {
         height: 100,
       },
     };
-    assert!(!bounds.intersects_viewport(viewport));
+    assert!(
+      bounds.is_some_and(|bounds| !bounds.intersects_viewport(viewport)),
+      "zero-sized rect should produce empty bounds that intersect nothing, got {:?}",
+      bounds.map(|bounds| (bounds.left, bounds.top, bounds.right, bounds.bottom))
+    );
   }
 
   #[test]
-  fn zero_sized_opacity_node_does_not_change_output() {
+  fn zero_sized_opacity_node_does_not_change_output() -> TestResult {
     let bar = r##"{"type": "container", "style": {"width": "20px", "height": "50px", "backgroundColor": "#3b82f6", "opacity": 0.9}, "children": []}"##;
     let zero_bar = r##"{"type": "container", "style": {"width": "20px", "height": "0px", "backgroundColor": "#3b82f6", "opacity": 0.9}, "children": []}"##;
     let tree = |bars: &str| {
@@ -1204,14 +1211,15 @@ mod tests {
       )
     };
 
-    let with_zero = render_json(&tree(&format!("{bar}, {zero_bar}")));
-    let without_zero = render_json(&tree(bar));
+    let with_zero = render_json(&tree(&format!("{bar}, {zero_bar}")))?;
+    let without_zero = render_json(&tree(bar))?;
 
     assert_eq!(with_zero, without_zero);
+    Ok(())
   }
 
   #[test]
-  fn zero_sized_opacity_parent_still_paints_overflowing_child() {
+  fn zero_sized_opacity_parent_still_paints_overflowing_child() -> TestResult {
     let image = render_json(
       r##"{
         "type": "container",
@@ -1220,12 +1228,13 @@ mod tests {
           {"type": "container", "style": {"width": "50px", "height": "50px", "flexShrink": 0, "backgroundColor": "#ff0000"}, "children": []}
         ]
       }"##,
-    );
+    )?;
 
     let pixel = image.get_pixel(10, 10);
     assert!(
       pixel.0[0] > 0 && pixel.0[3] > 0,
       "overflowing child of zero-sized opacity parent must still paint, got {pixel:?}"
     );
+    Ok(())
   }
 }
