@@ -5,8 +5,8 @@ import type { RenderOptionsWithoutRenderer } from "./render";
 export type ManagedRendererOptions = {
   fonts?: napi.FontLoader[];
   /**
-   * Only supported by the native `@takumi-rs/core` renderer.
-   * This option is ignored when using the WASM renderer.
+   * Whether to load the embedded default fonts.
+   * Defaults to `false` when `fonts` are provided.
    */
   loadDefaultFonts?: boolean;
   persistentImages?: napi.ImageSourceLoader[];
@@ -15,6 +15,17 @@ export type ManagedRendererOptions = {
    */
   module?: wasm.InitInput | Promise<wasm.InitInput> | { default: wasm.InitInput };
 };
+
+/**
+ * Mirrors the renderer constructor behavior: when custom fonts are provided,
+ * default fonts are disabled so they can't shadow user fonts through generic
+ * family resolution (e.g. `sans-serif` resolving to the embedded font).
+ */
+export function shouldLoadDefaultFonts(
+  options: RenderOptionsWithoutRenderer | undefined,
+): boolean | undefined {
+  return options?.loadDefaultFonts ?? (options?.fonts?.length ? false : undefined);
+}
 
 export async function loadRendererResources(
   renderer: napi.Renderer | wasm.Renderer,
