@@ -184,6 +184,10 @@ struct SceneBounds {
 
 impl SceneBounds {
   fn intersects_viewport(self, viewport: CanvasViewport) -> bool {
+    if self.left >= self.right || self.top >= self.bottom {
+      return false;
+    }
+
     let viewport_left = viewport.origin.x as i32;
     let viewport_top = viewport.origin.y as i32;
     let viewport_right = viewport.right();
@@ -647,10 +651,9 @@ fn bounds_for_rect(size: Size<f32>, transform: Affine) -> Option<SceneBounds> {
   let right = (max_x.ceil() as i32).max(0) as usize;
   let bottom = (max_y.ceil() as i32).max(0) as usize;
 
-  if left >= right || top >= bottom {
-    return None;
-  }
-
+  // Degenerate rects yield empty bounds rather than None: None means
+  // "unknown" and forces full-viewport isolation, while empty bounds let
+  // zero-sized nodes be skipped entirely.
   Some(SceneBounds {
     left,
     top,
@@ -835,7 +838,9 @@ fn begin_node_render<'g>(
     return Ok(None);
   }
 
-  if let Some(bounds) = node_paint.paint_bounds
+  // For stacking context roots the hint holds the context's merged bounds;
+  // a zero-sized root may still have visible overflowing children.
+  if let Some(bounds) = isolation_bounds_hint.or(node_paint.paint_bounds)
     && !bounds.intersects_viewport(canvas.viewport())
   {
     return Ok(Some(DeferredNodeRender::SkipRendering));
@@ -1144,4 +1149,83 @@ fn compute_isolation_bounds(
   };
 
   placement.unwrap_or_else(|| full_viewport_placement(viewport))
+}
+
+#[cfg(test)]
+mod tests {
+  use taffy::{Point, geometry::Size};
+
+  use super::bounds_for_rect;
+  use crate::{
+    GlobalContext,
+    layout::{Viewport, node::Node, style::Affine},
+    rendering::{CanvasViewport, RenderOptions, render},
+  };
+
+  fn render_json(json: &str) -> image::RgbaImage {
+    let global = GlobalContext::default();
+    let node: Node = serde_json::from_str(json).unwrap();
+    let options = RenderOptions::builder()
+      .viewport(Viewport::new((100, 100)))
+      .node(node)
+      .global(&global)
+      .build();
+    render(options).unwrap()
+  }
+
+  #[test]
+  fn zero_sized_rect_bounds_are_empty_not_unknown() {
+    let bounds = bounds_for_rect(
+      Size {
+        width: 0.0,
+        height: 100.0,
+      },
+      Affine::translation(50.0, 50.0),
+    )
+    .expect("zero-sized rect should produce empty bounds, not unknown");
+
+    let viewport = CanvasViewport {
+      origin: Point { x: 0, y: 0 },
+      size: Size {
+        width: 100,
+        height: 100,
+      },
+    };
+    assert!(!bounds.intersects_viewport(viewport));
+  }
+
+  #[test]
+  fn zero_sized_opacity_node_does_not_change_output() {
+    let bar = r##"{"type": "container", "style": {"width": "20px", "height": "50px", "backgroundColor": "#3b82f6", "opacity": 0.9}, "children": []}"##;
+    let zero_bar = r##"{"type": "container", "style": {"width": "20px", "height": "0px", "backgroundColor": "#3b82f6", "opacity": 0.9}, "children": []}"##;
+    let tree = |bars: &str| {
+      format!(
+        r##"{{"type": "container", "style": {{"display": "flex", "alignItems": "flex-end", "width": "100%", "height": "100%", "backgroundColor": "#ffffff"}}, "children": [{bars}]}}"##
+      )
+    };
+
+    let with_zero = render_json(&tree(&format!("{bar}, {zero_bar}")));
+    let without_zero = render_json(&tree(bar));
+
+    assert_eq!(with_zero, without_zero);
+  }
+
+  #[test]
+  fn zero_sized_opacity_parent_still_paints_overflowing_child() {
+    let image = render_json(
+      r##"{
+        "type": "container",
+        "style": {"display": "flex", "width": "0px", "height": "0px", "opacity": 0.5},
+        "children": [
+          {"type": "container", "style": {"width": "50px", "height": "50px", "flexShrink": 0, "backgroundColor": "#ff0000"}, "children": []}
+        ]
+      }"##,
+    );
+
+    let pixel = image.get_pixel(10, 10);
+    assert!(
+      pixel.0[0] > 0 && pixel.0[3] > 0,
+      "overflowing child of zero-sized opacity parent must still paint, got {pixel:?}"
+    );
+  }
 }
