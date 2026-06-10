@@ -1,5 +1,18 @@
 # takumi
 
+## 1.8.0
+
+### Patch Changes
+
+- bcac11f: Fix discrete animations to switch at 50% progress and correct `alternate` iteration parity
+- bcac11f: Fix `filter: none`, `@media not (...)` / `only`, `blur()`, `repeat()`, and `@supports` parsing
+- bcac11f: Ignore non-string custom property values instead of storing an empty string
+- bcac11f: Resolve `direction` (keyword or `var()`) before logical properties in the same block
+- bcac11f: Allow constructing `Flex` directly
+- bcac11f: Guard `i16` grid-line negation and non-positive device-pixel-ratio
+- bcac11f: Reduce shipped WebAssembly binary size (`opt-level` and `wasm-opt -Oz`)
+- bcac11f: Keep equal-priority Tailwind utilities in source order
+
 ## 1.7.0
 
 ### Minor Changes
