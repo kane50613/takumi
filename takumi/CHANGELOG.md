@@ -1,5 +1,11 @@
 # takumi
 
+## 1.8.1
+
+### Patch Changes
+
+- d1ff41f: Skip painting zero-sized nodes instead of compositing them through a full-viewport offscreen canvas, fixing a severe slowdown for zero-sized nodes with `opacity`.
+
 ## 1.8.0
 
 ### Patch Changes
