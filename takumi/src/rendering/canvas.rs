@@ -325,12 +325,10 @@ impl Canvas {
   }
 
   pub(crate) fn into_inner(self) -> Result<RgbaImage> {
-    RgbaImage::from_raw(
-      self.image.width(),
-      self.image.height(),
-      self.image.take_demultiplied(),
-    )
-    .ok_or_else(|| {
+    let (width, height) = (self.image.width(), self.image.height());
+    let mut data = self.image.take();
+    demultiply_rgba_in_place(&mut data);
+    RgbaImage::from_raw(width, height, data).ok_or_else(|| {
       ImageError::Parameter(ParameterError::from_kind(
         ParameterErrorKind::DimensionMismatch,
       ))
@@ -1396,6 +1394,52 @@ pub(crate) fn mask_index_from_coord(x: u32, y: u32, width: u32) -> usize {
   (y * width + x) as usize
 }
 
+/// Splits large overlays into row bands across rayon threads; shifting
+/// `offset.y` per band keeps the output byte-identical to the serial call.
+fn overlay_gradient_tile_fast_normal_unconstrained_banded<T>(
+  data: &mut [u8],
+  bottom_width: u32,
+  bottom_height: u32,
+  gradient: &T,
+  offset: Point<f32>,
+) where
+  T: GradientOverlayTile + Sync,
+{
+  #[cfg(feature = "rayon")]
+  {
+    use rayon::prelude::*;
+    const MIN_BAND_PIXELS: usize = 1 << 16;
+    let stride = bottom_width as usize * 4;
+    if stride > 0 && data.len() >= MIN_BAND_PIXELS * 4 * 2 {
+      let band_rows = (MIN_BAND_PIXELS / bottom_width as usize).max(1);
+      let offset_y = offset.y.trunc();
+      data
+        .par_chunks_mut(band_rows * stride)
+        .enumerate()
+        .for_each(|(band, chunk)| {
+          overlay_gradient_tile_fast_normal_unconstrained(
+            chunk,
+            bottom_width,
+            (chunk.len() / stride) as u32,
+            gradient,
+            Point {
+              x: offset.x,
+              y: offset_y - (band * band_rows) as f32,
+            },
+          );
+        });
+      return;
+    }
+  }
+  overlay_gradient_tile_fast_normal_unconstrained(
+    data,
+    bottom_width,
+    bottom_height,
+    gradient,
+    offset,
+  );
+}
+
 pub(crate) fn overlay_gradient_tile<T>(
   pixmap: &mut PixmapMut<'_>,
   gradient: &T,
@@ -1403,7 +1447,7 @@ pub(crate) fn overlay_gradient_tile<T>(
   mode: BlendMode,
   combined_mask: Option<MaskView<'_>>,
 ) where
-  T: GradientOverlayTile,
+  T: GradientOverlayTile + Sync,
 {
   let bottom_width = pixmap.width();
   let bottom_height = pixmap.height();
@@ -1414,7 +1458,7 @@ pub(crate) fn overlay_gradient_tile<T>(
 
   if mode == BlendMode::Normal && combined_mask.is_none() {
     let bottom_data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-    overlay_gradient_tile_fast_normal_unconstrained(
+    overlay_gradient_tile_fast_normal_unconstrained_banded(
       bottom_data,
       bottom_width,
       bottom_height,
@@ -1559,7 +1603,7 @@ fn overlay_gradient_tile_with_fast_path<T>(
   combined_mask: Option<MaskView<'_>>,
   try_fast_path: impl FnOnce(&mut [u8], u32, u32, &T, Point<f32>) -> bool,
 ) where
-  T: GradientOverlayTile,
+  T: GradientOverlayTile + Sync,
 {
   let bottom_width = pixmap.width();
   let bottom_height = pixmap.height();
@@ -1570,7 +1614,7 @@ fn overlay_gradient_tile_with_fast_path<T>(
       return;
     }
 
-    overlay_gradient_tile_fast_normal_unconstrained(
+    overlay_gradient_tile_fast_normal_unconstrained_banded(
       bottom_data,
       bottom_width,
       bottom_height,
@@ -1747,10 +1791,11 @@ mod tests {
         height: tile.height(),
       },
       |x, y| {
-        let color = tile.sample_pixel(x, y).demultiply();
+        let color = tile.sample_pixel(x, y);
         Rgba([color.red(), color.green(), color.blue(), color.alpha()])
       },
     );
+    demultiply_rgba_in_place(reference.as_mut());
 
     let Ok(fast) = canvas.into_inner() else {
       return;
@@ -1763,7 +1808,7 @@ mod tests {
     canvas_size: Size<u32>,
     offset: Point<f32>,
   ) where
-    T: GradientOverlayTile,
+    T: GradientOverlayTile + Sync,
   {
     assert_gradient_overlay_matches_reference_with(
       tile,
@@ -1773,6 +1818,49 @@ mod tests {
         overlay_gradient_tile(pixmap, tile, offset, BlendMode::Normal, None);
       },
     );
+  }
+
+  #[test]
+  fn test_banded_gradient_overlay_matches_serial() {
+    let Ok(gradient) =
+      LinearGradient::from_str("linear-gradient(135deg, red, rgba(0, 0, 255, 0.5))")
+    else {
+      return;
+    };
+    let global_context = GlobalContext::default();
+    let render_context = RenderContext::new_test(&global_context, Viewport::new((640, 420)));
+    let tile = LinearGradientTile::new(
+      &gradient,
+      640,
+      420,
+      &render_context.sizing,
+      render_context.current_color,
+    );
+    let size = Size {
+      width: 640u32,
+      height: 420u32,
+    };
+    // Canvas exceeds the banding threshold; the negative fractional offset
+    // exercises the per-band offset truncation.
+    for offset in [
+      Point { x: 0.0, y: 0.0 },
+      Point { x: -3.5, y: -7.25 },
+      Point { x: 0.0, y: 7.25 },
+    ] {
+      let mut banded = Canvas::new(size);
+      {
+        let mut pixmap = banded.image.as_mut();
+        let data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+        overlay_gradient_tile_fast_normal_unconstrained_banded(data, 640, 420, &tile, offset);
+      }
+      let mut serial = Canvas::new(size);
+      {
+        let mut pixmap = serial.image.as_mut();
+        let data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+        overlay_gradient_tile_fast_normal_unconstrained(data, 640, 420, &tile, offset);
+      }
+      assert_eq!(banded.image.data(), serial.image.data());
+    }
   }
 
   #[test]

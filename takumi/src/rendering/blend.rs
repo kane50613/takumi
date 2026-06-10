@@ -421,6 +421,44 @@ fn set_sat(mut color: [f32; 3], saturation: f32) -> [f32; 3] {
   color
 }
 
+/// Converts premultiplied RGBA bytes to straight alpha in place.
+/// Round-half-up integer math; within ±1 of `Pixmap::take_demultiplied`,
+/// whose f64 division double-rounds.
+pub(crate) fn demultiply_rgba_in_place(data: &mut [u8]) {
+  const ALPHA_MASK_U128: u128 =
+    u128::from_ne_bytes([0, 0, 0, 0xFF, 0, 0, 0, 0xFF, 0, 0, 0, 0xFF, 0, 0, 0, 0xFF]);
+
+  let mut chunks = data.chunks_exact_mut(16);
+  for chunk in &mut chunks {
+    let bytes: [u8; 16] = match chunk.try_into() {
+      Ok(bytes) => bytes,
+      Err(_) => continue,
+    };
+    if u128::from_ne_bytes(bytes) & ALPHA_MASK_U128 == ALPHA_MASK_U128 {
+      continue;
+    }
+    for pixel in chunk.chunks_exact_mut(4) {
+      demultiply_pixel(pixel);
+    }
+  }
+  for pixel in chunks.into_remainder().chunks_exact_mut(4) {
+    demultiply_pixel(pixel);
+  }
+}
+
+#[inline(always)]
+fn demultiply_pixel(pixel: &mut [u8]) {
+  let alpha = pixel[3] as u32;
+  // Premultiplied channels are already 0 when alpha is 0.
+  if alpha == u8::MAX as u32 || alpha == 0 {
+    return;
+  }
+  let denominator = 2 * alpha;
+  pixel[0] = ((pixel[0] as u32 * 510 + alpha) / denominator).min(255) as u8;
+  pixel[1] = ((pixel[1] as u32 * 510 + alpha) / denominator).min(255) as u8;
+  pixel[2] = ((pixel[2] as u32 * 510 + alpha) / denominator).min(255) as u8;
+}
+
 const DEMUL: [f32; 256] = {
   let mut t = [0.0f32; 256];
   let mut i = 1usize;
@@ -624,7 +662,12 @@ pub(crate) fn composite_repeated_premultiplied_pixel_normal(
 mod tests {
   use image::Rgba;
 
-  use crate::{layout::style::BlendMode, rendering::blend::blend_pixel};
+  use tiny_skia::{IntSize, Pixmap};
+
+  use crate::{
+    layout::style::BlendMode,
+    rendering::blend::{blend_pixel, demultiply_rgba_in_place},
+  };
 
   // https://github.com/kane50613/takumi/issues/447
   #[test]
@@ -668,5 +711,68 @@ mod tests {
     blend_pixel(&mut bottom, top, BlendMode::PlusDarker);
 
     assert_eq!(bottom, Rgba([0x87, 0x6B, 0x00, 0xFF]));
+  }
+  #[test]
+  fn demultiply_rgba_in_place_handles_non_16_byte_tail() {
+    let mut data = vec![
+      0, 0, 0, 0, // transparent
+      64, 64, 64, 128, // translucent
+      10, 20, 30, 40, // translucent
+      255, 0, 0, 255, // opaque
+      5, 6, 7, 8, // tail pixel past the 16-byte chunks
+    ];
+    let Some(size) = IntSize::from_wh(5, 1) else {
+      return;
+    };
+    let Some(reference) = Pixmap::from_vec(data.clone(), size) else {
+      return;
+    };
+    let expected = reference.take_demultiplied();
+
+    demultiply_rgba_in_place(&mut data);
+
+    for (pixel, reference) in data.chunks_exact(4).zip(expected.chunks_exact(4)) {
+      assert_eq!(pixel[3], reference[3]);
+      for (&channel, &reference_channel) in pixel[..3].iter().zip(&reference[..3]) {
+        assert!(channel.abs_diff(reference_channel) <= 1);
+      }
+    }
+  }
+
+  #[test]
+  fn demultiply_rgba_in_place_matches_tiny_skia_exhaustively() {
+    let mut data = Vec::with_capacity(256 * 256 * 4);
+    for alpha in 0..=255u8 {
+      for channel in 0..=255u8 {
+        data.extend_from_slice(&[channel, channel, channel, alpha]);
+      }
+    }
+    let Some(size) = IntSize::from_wh(256, 256) else {
+      return;
+    };
+    let Some(reference) = Pixmap::from_vec(data.clone(), size) else {
+      return;
+    };
+    let expected = reference.take_demultiplied();
+
+    demultiply_rgba_in_place(&mut data);
+
+    for (index, (pixel, reference)) in data
+      .chunks_exact(4)
+      .zip(expected.chunks_exact(4))
+      .enumerate()
+    {
+      let alpha = pixel[3];
+      assert_eq!(alpha, reference[3]);
+      for (&channel, &reference_channel) in pixel[..3].iter().zip(&reference[..3]) {
+        if alpha == 0 {
+          // Zero-alpha pixels are skipped; channels keep their input value.
+          assert_eq!(channel as usize, index % 256);
+        } else {
+          // tiny-skia's f64 division double-rounds; integer math is within 1.
+          assert!(channel.abs_diff(reference_channel) <= 1);
+        }
+      }
+    }
   }
 }
