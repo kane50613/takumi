@@ -1,5 +1,15 @@
 # takumi-js
 
+## 1.8.1
+
+### Patch Changes
+
+- 55b058d: Disable default fonts in the managed renderer when custom fonts are provided, matching the renderer constructor behavior.
+- Updated dependencies [55b058d]
+  - @takumi-rs/wasm@1.8.1
+  - @takumi-rs/core@1.8.1
+  - @takumi-rs/helpers@1.8.1
+
 ## 1.8.0
 
 ### Patch Changes

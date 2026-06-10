@@ -1,5 +1,12 @@
 # @takumi-rs/wasm
 
+## 1.8.1
+
+### Patch Changes
+
+- 55b058d: Hold renderer state behind a lock so all methods take `&self`, preventing a panic from permanently breaking the wasm-bindgen borrow flag.
+  - @takumi-rs/helpers@1.8.1
+
 ## 1.8.0
 
 ### Minor Changes
