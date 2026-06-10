@@ -1,5 +1,15 @@
 # @takumi-rs/wasm
 
+## 1.8.0
+
+### Minor Changes
+
+- ae2c9aa: Built with nightly Rust toolchain with `panic=immediate-abort` to reduce binary size
+
+### Patch Changes
+
+- @takumi-rs/helpers@1.8.0
+
 ## 1.7.0
 
 ### Patch Changes
