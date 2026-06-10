@@ -183,8 +183,12 @@ struct SceneBounds {
 }
 
 impl SceneBounds {
+  fn is_empty(self) -> bool {
+    self.left >= self.right || self.top >= self.bottom
+  }
+
   fn intersects_viewport(self, viewport: CanvasViewport) -> bool {
-    if self.left >= self.right || self.top >= self.bottom {
+    if self.is_empty() {
       return false;
     }
 
@@ -651,9 +655,7 @@ fn bounds_for_rect(size: Size<f32>, transform: Affine) -> Option<SceneBounds> {
   let right = (max_x.ceil() as i32).max(0) as usize;
   let bottom = (max_y.ceil() as i32).max(0) as usize;
 
-  // Degenerate rects yield empty bounds rather than None: None means
-  // "unknown" and forces full-viewport isolation, while empty bounds let
-  // zero-sized nodes be skipped entirely.
+  // Empty bounds mean "paints nothing"; None means "unknown" and forces full-viewport isolation.
   Some(SceneBounds {
     left,
     top,
@@ -664,6 +666,9 @@ fn bounds_for_rect(size: Size<f32>, transform: Affine) -> Option<SceneBounds> {
 
 fn merge_bounds(left: Option<SceneBounds>, right: Option<SceneBounds>) -> Option<SceneBounds> {
   match (left, right) {
+    // Empty bounds paint nothing and sit at clamped positions; don't let them expand the union.
+    (Some(left), Some(right)) if left.is_empty() => Some(right),
+    (Some(left), Some(right)) if right.is_empty() => Some(left),
     (Some(left), Some(right)) => Some(SceneBounds {
       left: left.left.min(right.left),
       top: left.top.min(right.top),
@@ -838,8 +843,7 @@ fn begin_node_render<'g>(
     return Ok(None);
   }
 
-  // For stacking context roots the hint holds the context's merged bounds;
-  // a zero-sized root may still have visible overflowing children.
+  // Prefer the context's merged bounds: a zero-sized root can still have visible overflowing children.
   if let Some(bounds) = isolation_bounds_hint.or(node_paint.paint_bounds)
     && !bounds.intersects_viewport(canvas.viewport())
   {
@@ -1157,7 +1161,7 @@ mod tests {
 
   use taffy::{Point, geometry::Size};
 
-  use super::bounds_for_rect;
+  use super::{SceneBounds, bounds_for_rect, merge_bounds};
   use crate::{
     GlobalContext,
     layout::{Viewport, node::Node, style::Affine},
@@ -1199,6 +1203,33 @@ mod tests {
       "zero-sized rect should produce empty bounds that intersect nothing, got {:?}",
       bounds.map(|bounds| (bounds.left, bounds.top, bounds.right, bounds.bottom))
     );
+  }
+
+  #[test]
+  fn merge_bounds_ignores_empty_bounds() {
+    let empty = SceneBounds {
+      left: 0,
+      top: 5,
+      right: 0,
+      bottom: 10,
+    };
+    let real = SceneBounds {
+      left: 1000,
+      top: 0,
+      right: 1200,
+      bottom: 50,
+    };
+
+    for (left, right) in [(empty, real), (real, empty)] {
+      let merged = merge_bounds(Some(left), Some(right));
+      assert!(
+        merged.is_some_and(
+          |bounds| (bounds.left, bounds.top, bounds.right, bounds.bottom)
+            == (real.left, real.top, real.right, real.bottom)
+        ),
+        "empty bounds must not expand the union"
+      );
+    }
   }
 
   #[test]
