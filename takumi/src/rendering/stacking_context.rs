@@ -183,7 +183,15 @@ struct SceneBounds {
 }
 
 impl SceneBounds {
+  fn is_empty(self) -> bool {
+    self.left >= self.right || self.top >= self.bottom
+  }
+
   fn intersects_viewport(self, viewport: CanvasViewport) -> bool {
+    if self.is_empty() {
+      return false;
+    }
+
     let viewport_left = viewport.origin.x as i32;
     let viewport_top = viewport.origin.y as i32;
     let viewport_right = viewport.right();
@@ -647,10 +655,7 @@ fn bounds_for_rect(size: Size<f32>, transform: Affine) -> Option<SceneBounds> {
   let right = (max_x.ceil() as i32).max(0) as usize;
   let bottom = (max_y.ceil() as i32).max(0) as usize;
 
-  if left >= right || top >= bottom {
-    return None;
-  }
-
+  // Empty bounds mean "paints nothing"; None means "unknown" and forces full-viewport isolation.
   Some(SceneBounds {
     left,
     top,
@@ -661,6 +666,9 @@ fn bounds_for_rect(size: Size<f32>, transform: Affine) -> Option<SceneBounds> {
 
 fn merge_bounds(left: Option<SceneBounds>, right: Option<SceneBounds>) -> Option<SceneBounds> {
   match (left, right) {
+    // Empty bounds paint nothing and sit at clamped positions; don't let them expand the union.
+    (Some(left), Some(right)) if left.is_empty() => Some(right),
+    (Some(left), Some(right)) if right.is_empty() => Some(left),
     (Some(left), Some(right)) => Some(SceneBounds {
       left: left.left.min(right.left),
       top: left.top.min(right.top),
@@ -835,7 +843,8 @@ fn begin_node_render<'g>(
     return Ok(None);
   }
 
-  if let Some(bounds) = node_paint.paint_bounds
+  // Prefer the context's merged bounds: a zero-sized root can still have visible overflowing children.
+  if let Some(bounds) = isolation_bounds_hint.or(node_paint.paint_bounds)
     && !bounds.intersects_viewport(canvas.viewport())
   {
     return Ok(Some(DeferredNodeRender::SkipRendering));
@@ -1144,4 +1153,119 @@ fn compute_isolation_bounds(
   };
 
   placement.unwrap_or_else(|| full_viewport_placement(viewport))
+}
+
+#[cfg(test)]
+mod tests {
+  use std::error::Error;
+
+  use taffy::{Point, geometry::Size};
+
+  use super::{SceneBounds, bounds_for_rect, merge_bounds};
+  use crate::{
+    GlobalContext,
+    layout::{Viewport, node::Node, style::Affine},
+    rendering::{CanvasViewport, RenderOptions, render},
+  };
+
+  type TestResult = Result<(), Box<dyn Error>>;
+
+  fn render_json(json: &str) -> Result<image::RgbaImage, Box<dyn Error>> {
+    let global = GlobalContext::default();
+    let node: Node = serde_json::from_str(json)?;
+    let options = RenderOptions::builder()
+      .viewport(Viewport::new((100, 100)))
+      .node(node)
+      .global(&global)
+      .build();
+    Ok(render(options)?)
+  }
+
+  #[test]
+  fn zero_sized_rect_bounds_are_empty_not_unknown() {
+    let bounds = bounds_for_rect(
+      Size {
+        width: 0.0,
+        height: 100.0,
+      },
+      Affine::translation(50.0, 50.0),
+    );
+
+    let viewport = CanvasViewport {
+      origin: Point { x: 0, y: 0 },
+      size: Size {
+        width: 100,
+        height: 100,
+      },
+    };
+    assert!(
+      bounds.is_some_and(|bounds| !bounds.intersects_viewport(viewport)),
+      "zero-sized rect should produce empty bounds that intersect nothing, got {:?}",
+      bounds.map(|bounds| (bounds.left, bounds.top, bounds.right, bounds.bottom))
+    );
+  }
+
+  #[test]
+  fn merge_bounds_ignores_empty_bounds() {
+    let empty = SceneBounds {
+      left: 0,
+      top: 5,
+      right: 0,
+      bottom: 10,
+    };
+    let real = SceneBounds {
+      left: 1000,
+      top: 0,
+      right: 1200,
+      bottom: 50,
+    };
+
+    for (left, right) in [(empty, real), (real, empty)] {
+      let merged = merge_bounds(Some(left), Some(right));
+      assert!(
+        merged.is_some_and(
+          |bounds| (bounds.left, bounds.top, bounds.right, bounds.bottom)
+            == (real.left, real.top, real.right, real.bottom)
+        ),
+        "empty bounds must not expand the union"
+      );
+    }
+  }
+
+  #[test]
+  fn zero_sized_opacity_node_does_not_change_output() -> TestResult {
+    let bar = r##"{"type": "container", "style": {"width": "20px", "height": "50px", "backgroundColor": "#3b82f6", "opacity": 0.9}, "children": []}"##;
+    let zero_bar = r##"{"type": "container", "style": {"width": "20px", "height": "0px", "backgroundColor": "#3b82f6", "opacity": 0.9}, "children": []}"##;
+    let tree = |bars: &str| {
+      format!(
+        r##"{{"type": "container", "style": {{"display": "flex", "alignItems": "flex-end", "width": "100%", "height": "100%", "backgroundColor": "#ffffff"}}, "children": [{bars}]}}"##
+      )
+    };
+
+    let with_zero = render_json(&tree(&format!("{bar}, {zero_bar}")))?;
+    let without_zero = render_json(&tree(bar))?;
+
+    assert_eq!(with_zero, without_zero);
+    Ok(())
+  }
+
+  #[test]
+  fn zero_sized_opacity_parent_still_paints_overflowing_child() -> TestResult {
+    let image = render_json(
+      r##"{
+        "type": "container",
+        "style": {"display": "flex", "width": "0px", "height": "0px", "opacity": 0.5},
+        "children": [
+          {"type": "container", "style": {"width": "50px", "height": "50px", "flexShrink": 0, "backgroundColor": "#ff0000"}, "children": []}
+        ]
+      }"##,
+    )?;
+
+    let pixel = image.get_pixel(10, 10);
+    assert!(
+      pixel.0[0] > 0 && pixel.0[3] > 0,
+      "overflowing child of zero-sized opacity parent must still paint, got {pixel:?}"
+    );
+    Ok(())
+  }
 }
