@@ -211,6 +211,15 @@ pub(crate) fn prepare_node_mask(
     },
   };
 
+  if transform.is_identity()
+    && from.x <= viewport.origin.x
+    && from.y <= viewport.origin.y
+    && (to.x == u32::MAX || to.x as i32 >= viewport.right())
+    && (to.y == u32::MAX || to.y as i32 >= viewport.bottom())
+  {
+    return Ok(NodeMaskAction::None);
+  }
+
   if to.x != u32::MAX
     && to.y != u32::MAX
     && let Some(rect) = TinyRect::from_ltrb(from.x as f32, from.y as f32, to.x as f32, to.y as f32)
