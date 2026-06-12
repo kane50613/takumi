@@ -1,6 +1,6 @@
 [package]
 name = "takumi"
-version = "1.8.3"
+version = "1.8.4"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Render UI component trees to images."
@@ -47,7 +47,7 @@ features = ["aarch64_simd", "avx512_simd"]
 # Internal companion crate, versioned independently and pinned exactly.
 [dependencies.takumi-css]
 path = "../takumi-css"
-version = "=0.1.0"
+version = "=0.1.1"
 
 [dependencies.rayon]
 workspace = true
