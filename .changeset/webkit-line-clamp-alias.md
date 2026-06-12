@@ -1,5 +1,6 @@
 ---
+"takumi": patch
 "takumi-css": patch
 ---
 
-Fix vendor-prefixed property names not resolved properly
+Fix vendor-prefixed property names not being resolved
