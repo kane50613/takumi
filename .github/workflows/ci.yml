@@ -564,7 +564,9 @@ jobs:
         env:
           CARGO_UNSTABLE_BUILD_STD: std,panic_abort
           CARGO_UNSTABLE_BUILD_STD_FEATURES: optimize_for_size
-          RUSTFLAGS: ${{ env.RUSTFLAGS }} -Zunstable-options -Cpanic=immediate-abort
+          # setting RUSTFLAGS overrides .cargo/config.toml target rustflags, so
+          # +simd128 must be repeated here or the published wasm loses SIMD
+          RUSTFLAGS: ${{ env.RUSTFLAGS }} -Zunstable-options -Cpanic=immediate-abort -Ctarget-feature=+simd128
         run: bun run build
 
       - name: Upload artifact

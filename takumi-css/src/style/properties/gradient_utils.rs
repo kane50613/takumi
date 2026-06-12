@@ -345,22 +345,27 @@ pub fn overlay_gradient_tile_fast_normal_unconstrained<T: GradientOverlayTile>(
         *dst = [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()];
       }
     } else {
-      for dst in row.iter_mut() {
-        let lut_idx = tile.next_lut_index(&mut row_state);
-        debug_assert!(lut_idx < lut_len);
-        let pixel = tile.sample_at(lut_idx);
-        let src_a = pixel.alpha();
-        let inv_src_a = (u8::MAX - src_a) as u32;
-        dst[0] = pixel
-          .red()
-          .saturating_add(fast_div_255(dst[0] as u32 * inv_src_a));
-        dst[1] = pixel
-          .green()
-          .saturating_add(fast_div_255(dst[1] as u32 * inv_src_a));
-        dst[2] = pixel
-          .blue()
-          .saturating_add(fast_div_255(dst[2] as u32 * inv_src_a));
-        dst[3] = src_a.saturating_add(fast_div_255(dst[3] as u32 * inv_src_a));
+      const CHUNK: usize = 256;
+      let mut buf = [[0u8; 4]; CHUNK];
+      let mut remaining = row;
+      while !remaining.is_empty() {
+        let n = remaining.len().min(CHUNK);
+        let (chunk, rest) = remaining.split_at_mut(n);
+        remaining = rest;
+        for slot in buf.iter_mut().take(n) {
+          let lut_idx = tile.next_lut_index(&mut row_state);
+          debug_assert!(lut_idx < lut_len);
+          let pixel = tile.sample_at(lut_idx);
+          *slot = [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()];
+        }
+        for (dst, &src) in chunk.iter_mut().zip(buf[..n].iter()) {
+          let src_a = src[3];
+          let inv_src_a = (u8::MAX - src_a) as u32;
+          dst[0] = src[0].saturating_add(fast_div_255(dst[0] as u32 * inv_src_a));
+          dst[1] = src[1].saturating_add(fast_div_255(dst[1] as u32 * inv_src_a));
+          dst[2] = src[2].saturating_add(fast_div_255(dst[2] as u32 * inv_src_a));
+          dst[3] = src_a.saturating_add(fast_div_255(dst[3] as u32 * inv_src_a));
+        }
       }
     }
   }

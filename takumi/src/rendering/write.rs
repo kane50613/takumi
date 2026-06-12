@@ -134,7 +134,7 @@ fn duration_ms_to_gif_delay(duration_ms: u32) -> u16 {
 }
 
 fn configure_png_encoder<T: Write>(encoder: &mut png::Encoder<'_, T>) {
-  encoder.set_deflate_compression(DeflateCompression::Level(6));
+  encoder.set_deflate_compression(DeflateCompression::Level(7));
   encoder.set_filter(Filter::NoFilter);
 }
 
