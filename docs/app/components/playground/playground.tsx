@@ -1,10 +1,12 @@
 "use client";
 
 import {
+  CheckIcon,
   ChevronDownIcon,
   Code2Icon,
   DownloadIcon,
   ImageIcon,
+  LinkIcon,
   Loader2Icon,
   RotateCcwIcon,
   Wand2Icon,
@@ -32,15 +34,34 @@ import { ComponentEditor } from "./component-editor";
 
 const DEFAULT_TEMPLATE = templates[0];
 
+type RenderResult = z.infer<typeof renderResultSchema>["result"];
+type RenderSuccess = Extract<RenderResult, { status: "success" }> & { outputSize: number };
+type RenderError = Extract<RenderResult, { status: "error" }>;
+type Zoom = "fit" | "actual";
+
+const CHECKERBOARD = {
+  backgroundImage: "repeating-conic-gradient(rgba(128,128,128,0.16) 0% 25%, transparent 0% 50%)",
+  backgroundSize: "16px 16px",
+} as const;
+
 function isBlobUrl(url: string | undefined): url is string {
   return typeof url === "string" && url.startsWith("blob:");
 }
 
+function formatStats(result: RenderSuccess) {
+  const { width = 1200, height = 630 } = result.options;
+  const size = `${(result.outputSize / 1024).toFixed(1)} KB`;
+  return `${width} × ${height} · ${result.outputFormat.toUpperCase()} · ${size} · ${Math.round(result.duration)} ms`;
+}
+
 export default function Playground() {
   const [code, setCode] = useState<string>();
-  const [rendered, setRendered] = useState<z.infer<typeof renderResultSchema>["result"]>();
+  const [lastSuccess, setLastSuccess] = useState<RenderSuccess>();
+  const [renderError, setRenderError] = useState<RenderError>();
   const [isReady, setIsReady] = useState(false);
   const [isFormatting, setIsFormatting] = useState(false);
+  const [zoom, setZoom] = useState<Zoom>("fit");
+  const [copied, setCopied] = useState(false);
   const [searchParams, setSearchParams] = useState(() => {
     if (typeof window === "undefined") {
       return new URLSearchParams();
@@ -152,18 +173,21 @@ export default function Playground() {
           throw new Error("request is not possible for response");
         }
         case "render-result": {
-          if (message.result.status === "success") {
-            message.result.outputUrl = URL.createObjectURL(
-              new Blob([message.result.outputBuffer as BlobPart], {
-                type: `image/${message.result.outputFormat}`,
-              }),
-            );
-          }
+          const { result } = message;
+          if (result.id !== currentRequestIdRef.current) break;
 
-          if (message.result.id === currentRequestIdRef.current) {
-            setRendered(message.result);
-          } else if (message.result.status === "success" && message.result.outputUrl) {
-            URL.revokeObjectURL(message.result.outputUrl);
+          if (result.status === "success") {
+            const blob = new Blob([result.outputBuffer as BlobPart], {
+              type: `image/${result.outputFormat}`,
+            });
+            setLastSuccess({
+              ...result,
+              outputUrl: URL.createObjectURL(blob),
+              outputSize: blob.size,
+            });
+            setRenderError(undefined);
+          } else {
+            setRenderError(result);
           }
           break;
         }
@@ -199,16 +223,11 @@ export default function Playground() {
   }, [isReady, code]);
 
   useEffect(() => {
-    if (rendered?.status !== "success" || !isBlobUrl(rendered.outputUrl)) {
-      return;
-    }
+    if (!isBlobUrl(lastSuccess?.outputUrl)) return;
 
-    return () => {
-      if (rendered.outputUrl) {
-        URL.revokeObjectURL(rendered.outputUrl);
-      }
-    };
-  }, [rendered]);
+    const url = lastSuccess.outputUrl;
+    return () => URL.revokeObjectURL(url);
+  }, [lastSuccess]);
 
   const loadTemplate = (templateCode: string) => {
     setCode(templateCode);
@@ -241,58 +260,69 @@ export default function Playground() {
     }
   };
 
-  const mobileHeader = (
-    <div className="flex md:hidden shrink-0 items-center gap-2 border-b border-zinc-800/80 bg-background px-3 py-2">
-      <div className="flex min-w-0 bg-zinc-900/40 rounded-lg p-0.5 gap-0.5 border border-zinc-800/50">
-        <Button
-          variant={activeTab === "code" ? "secondary" : "ghost"}
-          size="sm"
-          className={cn(
-            "h-7 rounded-md text-[11px] font-bold transition-all",
-            activeTab === "code" ? "px-2.5" : "px-2",
-            activeTab === "code" && "bg-zinc-800 text-white shadow-sm ring-1 ring-zinc-700/50",
-          )}
-          onClick={() => setActiveTab("code")}
-        >
-          <Code2Icon className={cn("h-3 w-3", activeTab === "code" && "mr-1.5")} />
-          {activeTab === "code" && "Code"}
-        </Button>
-        <Button
-          variant={activeTab === "preview" ? "secondary" : "ghost"}
-          size="sm"
-          className={cn(
-            "h-7 rounded-md text-[11px] font-bold transition-all",
-            activeTab === "preview" ? "px-2.5" : "px-2",
-            activeTab === "preview" && "bg-zinc-800 text-white shadow-sm ring-1 ring-zinc-700/50",
-          )}
-          onClick={() => setActiveTab("preview")}
-        >
-          <ImageIcon className={cn("h-3 w-3", activeTab === "preview" && "mr-1.5")} />
-          {activeTab === "preview" && "Preview"}
-        </Button>
-      </div>
+  const copyShareLink = async () => {
+    await navigator.clipboard.writeText(window.location.href);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
 
-      <div className="ml-auto flex min-w-0 items-center gap-1">
+  const downloadImage = () => {
+    if (!lastSuccess?.outputUrl) return;
+
+    const { width = 1200, height = 630 } = lastSuccess.options;
+    const link = document.createElement("a");
+    link.href = lastSuccess.outputUrl;
+    link.download = `takumi-${width}x${height}.${lastSuccess.outputFormat}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const editor = (
+    <div className="relative h-full min-w-0 overflow-hidden">
+      {code && <ComponentEditor code={code} setCode={setCode} />}
+    </div>
+  );
+  const preview = <PreviewPanel lastSuccess={lastSuccess} error={renderError} zoom={zoom} />;
+
+  return (
+    <div className="flex h-[calc(100dvh-3.5rem)] flex-col bg-background">
+      <div className="flex h-10 shrink-0 items-center gap-1 border-b px-2 md:px-3">
+        <div className="flex items-center rounded-md border p-0.5 md:hidden">
+          {(["code", "preview"] as const).map((tab) => (
+            <Button
+              key={tab}
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-6 gap-1 rounded-sm px-2 font-mono text-xs",
+                activeTab === tab ? "bg-muted text-foreground" : "text-muted-foreground",
+              )}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab === "code" ? <Code2Icon className="size-3" /> : <ImageIcon className="size-3" />}
+              {tab === "code" ? "Code" : "Preview"}
+            </Button>
+          ))}
+        </div>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 min-w-0 max-w-40 px-2 text-[11px] font-bold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+              className="h-7 min-w-0 max-w-40 px-2 font-mono text-xs text-muted-foreground"
             >
               <span className="truncate">{selectedTemplateName}</span>
-              <ChevronDownIcon className="ml-1 h-3 w-3 text-zinc-500" />
+              <ChevronDownIcon className="size-3" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="w-45 bg-zinc-950 border-zinc-800 text-zinc-300"
-          >
+          <DropdownMenuContent align="start">
             {templates.map((t) => (
               <DropdownMenuItem
                 key={t.name}
                 onClick={() => loadTemplate(t.code)}
-                className="text-xs focus:bg-zinc-900 focus:text-zinc-100 cursor-pointer"
+                className="cursor-pointer font-mono text-xs"
               >
                 {t.name}
               </DropdownMenuItem>
@@ -300,262 +330,145 @@ export default function Playground() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {activeTab === "code" && (
-          <div className="flex shrink-0 items-center border-l border-zinc-800 ml-0.5 pl-1 gap-0.5">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="h-7 w-7 text-zinc-500 hover:text-zinc-200"
-              onClick={formatCode}
-              disabled={isFormatting}
-              title="Format Code"
-            >
-              {isFormatting ? (
-                <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Wand2Icon className="h-3.5 w-3.5" />
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="h-7 w-7 text-zinc-500 hover:text-red-400"
-              onClick={resetCode}
-              title="Reset Code"
-            >
-              <RotateCcwIcon className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="flex h-[calc(100dvh-3.5rem)] flex-col bg-[#09090b]">
-      {mobileHeader}
-
-      <div className="flex-1 min-h-0">
-        <div className="hidden md:block h-full">
-          <ResizablePanelGroup orientation="horizontal">
-            <ResizablePanel defaultSize={55} minSize={30}>
-              <CodePanel
-                code={code}
-                setCode={setCode}
-                formatCode={formatCode}
-                isFormatting={isFormatting}
-                loadTemplate={loadTemplate}
-                resetCode={resetCode}
-                selectedTemplateName={selectedTemplateName}
-              />
-            </ResizablePanel>
-            <ResizableHandle
-              withHandle
-              className="bg-zinc-800/50 hover:bg-zinc-700 transition-colors"
-            />
-            <ResizablePanel defaultSize={45} minSize={30}>
-              <PreviewPanel rendered={rendered} />
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        </div>
-
-        <div className="md:hidden h-full">
-          {activeTab === "code" ? (
-            <CodePanel
-              code={code}
-              setCode={setCode}
-              formatCode={formatCode}
-              isFormatting={isFormatting}
-              loadTemplate={loadTemplate}
-              resetCode={resetCode}
-              selectedTemplateName={selectedTemplateName}
-            />
-          ) : (
-            <PreviewPanel rendered={rendered} />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CodePanel({
-  code,
-  setCode,
-  formatCode,
-  isFormatting,
-  loadTemplate,
-  resetCode,
-  selectedTemplateName,
-}: {
-  code: string | undefined;
-  setCode: React.Dispatch<React.SetStateAction<string | undefined>>;
-  formatCode: () => void;
-  isFormatting: boolean;
-  loadTemplate: (templateCode: string) => void;
-  resetCode: () => void;
-  selectedTemplateName: string;
-}) {
-  return (
-    <div className="flex h-full min-w-0 flex-col overflow-hidden bg-zinc-950/50">
-      <div className="hidden md:flex h-10 shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-950/40 px-4">
-        <p className="flex items-center text-xs font-bold uppercase tracking-widest text-zinc-500">
-          <Code2Icon className="mr-1.5 h-4 w-4" />
-          Editor
-        </p>
-        <div className="flex gap-1.5 items-center">
-          <div className="hidden sm:flex items-center gap-2 mr-2 border-r border-zinc-800 pr-4">
-            <span className="text-[10px] uppercase font-bold text-zinc-600 tracking-wider">
-              Templates:
-            </span>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2.5 text-[11px] font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50 border border-zinc-800 bg-zinc-950/50 min-w-30 justify-between"
-                >
-                  {selectedTemplateName}
-                  <ChevronDownIcon className="ml-1 h-3 w-3 text-zinc-500" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="start"
-                className="w-45 bg-zinc-950 border-zinc-800 text-zinc-300"
-              >
-                {templates.map((t) => (
-                  <DropdownMenuItem
-                    key={t.name}
-                    onClick={() => loadTemplate(t.code)}
-                    className="text-xs focus:bg-zinc-900 focus:text-zinc-100 cursor-pointer"
-                  >
-                    {t.name}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+        <div
+          className={cn("flex items-center gap-0.5", activeTab === "preview" && "max-md:hidden")}
+        >
           <Button
             variant="ghost"
             size="icon-sm"
-            className="h-7 w-7 text-zinc-400 hover:text-zinc-200"
+            className="size-7 text-muted-foreground"
             onClick={formatCode}
             disabled={isFormatting}
-            title="Format"
+            title="Format code"
           >
             {isFormatting ? (
-              <Loader2Icon className="h-4 w-4 animate-spin" />
+              <Loader2Icon className="size-3.5 animate-spin" />
             ) : (
-              <Wand2Icon className="h-4 w-4" />
+              <Wand2Icon className="size-3.5" />
             )}
           </Button>
           <Button
             variant="ghost"
             size="icon-sm"
-            className="h-7 w-7 text-zinc-400 hover:text-red-400"
+            className="size-7 text-muted-foreground"
             onClick={resetCode}
-            title="Reset"
+            title="Reset code"
           >
-            <RotateCcwIcon className="h-4 w-4" />
+            <RotateCcwIcon className="size-3.5" />
+          </Button>
+        </div>
+
+        <div className="ml-auto flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 font-mono text-xs text-muted-foreground max-md:hidden"
+            onClick={() => setZoom(zoom === "fit" ? "actual" : "fit")}
+            title="Toggle zoom"
+          >
+            {zoom === "fit" ? "Fit" : "100%"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1.5 px-2 font-mono text-xs text-muted-foreground"
+            onClick={copyShareLink}
+            title="Copy share link"
+          >
+            {copied ? (
+              <CheckIcon className="size-3.5 text-primary" />
+            ) : (
+              <LinkIcon className="size-3.5" />
+            )}
+            <span className="max-md:hidden">{copied ? "Copied" : "Share"}</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="size-7 text-muted-foreground"
+            onClick={downloadImage}
+            disabled={!lastSuccess}
+            title="Download image"
+          >
+            <DownloadIcon className="size-3.5" />
           </Button>
         </div>
       </div>
-      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-        {code && <ComponentEditor code={code} setCode={setCode} />}
+
+      <div className="min-h-0 flex-1">
+        <div className="hidden h-full md:block">
+          <ResizablePanelGroup orientation="horizontal">
+            <ResizablePanel defaultSize={55} minSize={30}>
+              {editor}
+            </ResizablePanel>
+            <ResizableHandle className="hover:bg-primary/50 transition-colors" />
+            <ResizablePanel defaultSize={45} minSize={30}>
+              {preview}
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </div>
+
+        <div className="h-full md:hidden">{activeTab === "code" ? editor : preview}</div>
+      </div>
+
+      <div className="flex h-7 shrink-0 items-center gap-3 border-t px-3 font-mono text-[11px] text-muted-foreground">
+        {!isReady ? (
+          <span>loading wasm…</span>
+        ) : renderError ? (
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0 text-primary">error</span>
+            <span className="truncate">{renderError.message.split("\n")[0]}</span>
+          </span>
+        ) : lastSuccess ? (
+          <span className="truncate">{formatStats(lastSuccess)}</span>
+        ) : (
+          <span>rendering…</span>
+        )}
       </div>
     </div>
   );
 }
 
 function PreviewPanel({
-  rendered,
+  lastSuccess,
+  error,
+  zoom,
 }: {
-  rendered: z.infer<typeof renderResultSchema>["result"] | undefined;
+  lastSuccess: RenderSuccess | undefined;
+  error: RenderError | undefined;
+  zoom: Zoom;
 }) {
-  return (
-    <div className="flex h-full min-w-0 flex-col overflow-hidden bg-[#09090b]">
-      <div className="hidden md:flex h-10 shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-950/40 px-4">
-        <p className="flex items-center text-xs font-bold uppercase tracking-widest text-zinc-500">
-          <ImageIcon className="mr-1.5 h-4 w-4" />
-          Preview
-        </p>
-      </div>
-      <div className="flex-1 w-full overflow-y-auto">
-        {rendered && <RenderPreview result={rendered} />}
-      </div>
-    </div>
+  const image = lastSuccess && (
+    <img
+      src={lastSuccess.outputUrl}
+      alt="Rendered output"
+      className={cn(
+        "border",
+        zoom === "fit" ? "max-h-full max-w-full object-contain" : "max-w-none",
+        error && "opacity-40",
+      )}
+      style={CHECKERBOARD}
+    />
   );
-}
 
-function RenderPreview({ result }: { result: z.infer<typeof renderResultSchema>["result"] }) {
-  if (result.status === "error") {
-    return (
-      <div className="flex h-full w-full flex-col items-center justify-center p-8 bg-red-950/10">
-        <div className="bg-red-950/30 border border-red-900/50 p-6 rounded-xl flex flex-col items-center max-w-2xl w-full">
-          <p className="mb-4 text-xl font-bold text-red-400">Error Rendering</p>
-          <pre className="w-full whitespace-pre-wrap rounded-lg bg-black/60 p-5 text-xs text-red-300 shadow-inner overflow-x-auto leading-relaxed border border-red-900/20">
-            {result.message}
+  return (
+    <div className="relative h-full min-w-0 overflow-hidden bg-muted/20">
+      {zoom === "fit" ? (
+        <div className="absolute inset-0 flex items-center justify-center p-6">{image}</div>
+      ) : (
+        <div className="absolute inset-0 overflow-auto">
+          <div className="flex h-fit min-h-full w-fit min-w-full items-center justify-center p-6">
+            {image}
+          </div>
+        </div>
+      )}
+      {error && (
+        <div className="absolute inset-x-0 bottom-0 border-t bg-background/95 px-3 py-2 font-mono text-xs">
+          <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-muted-foreground">
+            {error.message}
           </pre>
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative flex h-full w-full flex-col items-center justify-center gap-8 p-4 sm:p-8">
-      <div
-        className="relative shadow-2xl overflow-hidden rounded-xl border border-zinc-800/60 transition-all hover:shadow-emerald-500/5 hover:border-zinc-700/80"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at 10px 10px, #18181b 2%, transparent 0%), radial-gradient(circle at 25px 25px, #18181b 2%, transparent 0%)",
-          backgroundSize: "30px 30px",
-          backgroundColor: "#09090b",
-        }}
-      >
-        <img
-          src={result.outputUrl}
-          alt="Rendered component"
-          className="object-contain"
-          style={{
-            maxWidth: "100%",
-            maxHeight: "calc(100vh - 14rem)",
-          }}
-        />
-      </div>
-      <div className="flex items-center gap-3 text-xs font-medium">
-        <div className="flex h-9 items-center rounded-full border border-zinc-800/80 bg-zinc-900/80 pl-4 pr-2 text-zinc-400 shadow-lg backdrop-blur-md">
-          <span>Format</span>
-          <span className="ml-2 rounded bg-zinc-950 px-1.5 py-0.5 text-zinc-100 font-mono">
-            {result.outputFormat.toUpperCase()}
-          </span>
-          <div className="mx-3 h-4 w-px bg-zinc-800" />
-          <div className="flex items-center">
-            <div className="mr-2 h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]" />
-            <span>Time</span>
-          </div>
-          <span className="ml-2 rounded bg-zinc-950 px-1.5 py-0.5 text-emerald-400 font-mono">
-            {Math.round(result.duration)}ms
-          </span>
-        </div>
-        <Button
-          variant="default"
-          size="sm"
-          className="h-9 rounded-full bg-zinc-100 px-4! font-semibold text-zinc-900 shadow-lg transition-transform hover:scale-105 hover:bg-white active:scale-95"
-          onClick={() => {
-            if (result.outputUrl) {
-              const link = document.createElement("a");
-              link.href = result.outputUrl;
-              link.download = `takumi-image.${result.outputFormat}`;
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-            }
-          }}
-        >
-          <DownloadIcon className="h-3.5 w-3.5" />
-          Download
-        </Button>
-      </div>
+      )}
     </div>
   );
 }

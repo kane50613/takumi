@@ -1,30 +1,21 @@
 export default function Welcome() {
   return (
-    <div
-      tw="flex w-full h-full flex-col justify-center bg-[#0a0a0a] items-center"
-      style={{
-        backgroundImage: "radial-gradient(circle at 50% 10%, #2a0a0a 0%, #0a0a0a 60%)",
-      }}
-    >
-      <div tw="justify-center items-center flex flex-col text-white">
-        <img src="https://takumi.kane.tw/logo.svg" tw="w-30 h-30 mb-8" />
-        <h1 tw="font-extrabold text-8xl leading-none tracking-tighter mb-0 mt-0 flex items-center">
-          Takumi <span tw="text-neutral-500 font-medium ml-6">Playground</span>
+    <div tw="flex h-full w-full flex-col justify-end bg-[#16130f] p-20">
+      <div tw="flex flex-col">
+        <h1 tw="m-0 text-8xl font-bold leading-none tracking-tighter text-white">Edit the code.</h1>
+        <h1 tw="m-0 mt-2 text-8xl font-bold leading-none tracking-tighter text-[#ff4d4d]">
+          The image re-renders.
         </h1>
-        <p tw="text-4xl text-white/75 font-semibold tracking-wide mt-10">
-          Turn JSX into production-ready images fast. 🚀🗣️
+        <p tw="mb-0 mt-10 text-3xl text-[#a8a29a]">
+          The exported options object controls the size and format of this image.
         </p>
       </div>
     </div>
   );
 }
 
-const devicePixelRatio = 1.0;
-
 export const options: PlaygroundOptions = {
-  width: 1200 * devicePixelRatio,
-  height: 630 * devicePixelRatio,
+  width: 1200,
+  height: 630,
   format: "png",
-  devicePixelRatio,
-  emoji: "twemoji",
 };
