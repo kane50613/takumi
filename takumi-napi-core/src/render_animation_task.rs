@@ -99,79 +99,81 @@ impl Task for RenderAnimationTask {
   type JsValue = Buffer;
 
   fn compute(&mut self) -> Result<Self::Output> {
-    let Some(scenes) = self.scenes.take() else {
-      unreachable!()
-    };
-    let initialized_images = self
-      .fetched_resources
-      .iter()
-      .map(|(key, value)| {
-        Ok((
-          key.clone(),
-          LoadedImageSource::from_bytes(value).map_err(map_error)?,
-        ))
-      })
-      .collect::<Result<HashMap<_, _>, _>>()?;
-    let state = self
-      .state
-      .read()
-      .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-    let stylesheet = parse_stylesheet(take(&mut self.stylesheets), Vec::new())?;
-    let scene_options = scenes
-      .into_iter()
-      .map(|(node, duration_ms)| {
-        SequentialScene::builder()
-          .duration_ms(duration_ms)
-          .options(
-            RenderOptions::builder()
-              .viewport(self.viewport)
-              .fetched_resources(initialized_images.clone())
-              .stylesheet(stylesheet.clone())
-              .node(node)
-              .global(&state.global)
-              .draw_debug_border(self.draw_debug_border)
-              .build(),
-          )
-          .build()
-      })
-      .collect::<Vec<_>>();
-    let frames = render_sequence_animation(&scene_options, self.fps).map_err(map_error)?;
+    crate::pool::install(move || {
+      let Some(scenes) = self.scenes.take() else {
+        unreachable!()
+      };
+      let initialized_images = self
+        .fetched_resources
+        .iter()
+        .map(|(key, value)| {
+          Ok((
+            key.clone(),
+            LoadedImageSource::from_bytes(value).map_err(map_error)?,
+          ))
+        })
+        .collect::<Result<HashMap<_, _>, _>>()?;
+      let state = self
+        .state
+        .read()
+        .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
+      let stylesheet = parse_stylesheet(take(&mut self.stylesheets), Vec::new())?;
+      let scene_options = scenes
+        .into_iter()
+        .map(|(node, duration_ms)| {
+          SequentialScene::builder()
+            .duration_ms(duration_ms)
+            .options(
+              RenderOptions::builder()
+                .viewport(self.viewport)
+                .fetched_resources(initialized_images.clone())
+                .stylesheet(stylesheet.clone())
+                .node(node)
+                .global(&state.global)
+                .draw_debug_border(self.draw_debug_border)
+                .build(),
+            )
+            .build()
+        })
+        .collect::<Vec<_>>();
+      let frames = render_sequence_animation(&scene_options, self.fps).map_err(map_error)?;
 
-    if let Some(quality) = self.quality
-      && quality > 100
-    {
-      return Err(Error::from_reason(format!(
-        "Invalid WebP quality {quality}; expected a value in 0..=100"
-      )));
-    }
+      if let Some(quality) = self.quality
+        && quality > 100
+      {
+        return Err(Error::from_reason(format!(
+          "Invalid WebP quality {quality}; expected a value in 0..=100"
+        )));
+      }
 
-    let mut buffer = Vec::new();
+      let mut buffer = Vec::new();
 
-    match self.format {
-      AnimationOutputFormat::WebP => {
-        let mut options = AnimatedWebpOptions::default();
-        if let Some(quality) = self.quality {
-          options.quality = quality;
+      match self.format {
+        AnimationOutputFormat::WebP => {
+          let mut options = AnimatedWebpOptions::default();
+          if let Some(quality) = self.quality {
+            options.quality = quality;
+          }
+
+          encode_animated_webp(Cow::Owned(frames), &mut buffer, options)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
         }
-
-        encode_animated_webp(Cow::Owned(frames), &mut buffer, options)
+        AnimationOutputFormat::Apng => {
+          encode_animated_png(&frames, &mut buffer, AnimatedPngOptions::default())
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        }
+        AnimationOutputFormat::Gif => {
+          encode_animated_gif(
+            Cow::Owned(frames),
+            &mut buffer,
+            AnimatedGifOptions::default(),
+          )
           .map_err(|e| Error::from_reason(e.to_string()))?;
+        }
       }
-      AnimationOutputFormat::Apng => {
-        encode_animated_png(&frames, &mut buffer, AnimatedPngOptions::default())
-          .map_err(|e| Error::from_reason(e.to_string()))?;
-      }
-      AnimationOutputFormat::Gif => {
-        encode_animated_gif(
-          Cow::Owned(frames),
-          &mut buffer,
-          AnimatedGifOptions::default(),
-        )
-        .map_err(|e| Error::from_reason(e.to_string()))?;
-      }
-    }
 
-    Ok(buffer)
+      Ok(buffer)
+    })
   }
 
   fn resolve(&mut self, mut env: Env, output: Self::Output) -> Result<Self::JsValue> {

@@ -21,12 +21,14 @@ impl Task for LoadFontTask {
 
     let mut loaded_count = 0;
 
-    let resources = self
-      .buffers
-      .par_iter()
-      .with_min_len(2)
-      .map(|(font, buffer): &(FontInput, Buffer)| resolve_font_resource(font, buffer.as_ref()))
-      .collect::<Result<Vec<_>>>()?;
+    let resources = crate::pool::install(|| {
+      self
+        .buffers
+        .par_iter()
+        .with_min_len(2)
+        .map(|(font, buffer): &(FontInput, Buffer)| resolve_font_resource(font, buffer.as_ref()))
+        .collect::<Result<Vec<_>>>()
+    })?;
 
     let mut state = self
       .state

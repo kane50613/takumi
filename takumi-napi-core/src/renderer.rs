@@ -296,6 +296,8 @@ impl Renderer {
   /// Creates a new Renderer instance.
   #[napi(constructor)]
   pub fn new(env: Env, options: Option<ConstructRendererOptions>) -> Result<Self> {
+    crate::pool::register_cleanup(&env);
+
     let options = options.unwrap_or_default();
 
     let load_default_fonts = options
@@ -305,19 +307,21 @@ impl Renderer {
     let mut global = GlobalContext::default();
 
     if load_default_fonts {
-      let default_fonts_resources = EMBEDDED_FONTS
-        .par_iter()
-        .map(|(font, name, generic)| {
-          FontResource::new(*font)
-            .override_info(FontInfoOverride {
-              family_name: Some(*name),
-              ..Default::default()
-            })
-            .generic_family(*generic)
-            .into_resolved()
-            .map_err(|e| Error::from_reason(format!("Failed to load default font: {e}")))
-        })
-        .collect::<Result<Vec<_>>>()?;
+      let default_fonts_resources = crate::pool::install(|| {
+        EMBEDDED_FONTS
+          .par_iter()
+          .map(|(font, name, generic)| {
+            FontResource::new(*font)
+              .override_info(FontInfoOverride {
+                family_name: Some(*name),
+                ..Default::default()
+              })
+              .generic_family(*generic)
+              .into_resolved()
+              .map_err(|e| Error::from_reason(format!("Failed to load default font: {e}")))
+          })
+          .collect::<Result<Vec<_>>>()
+      })?;
 
       for resource in default_fonts_resources {
         global
@@ -337,11 +341,13 @@ impl Renderer {
         .map(|font| parse_font_input(env, font))
         .collect::<Result<Vec<_>>>()?;
 
-      let custom_fonts_resources = buffers
-        .par_iter()
-        .with_min_len(2)
-        .map(|(font, buffer): &(FontInput, Buffer)| resolve_font_resource(font, buffer.as_ref()))
-        .collect::<Result<Vec<_>>>()?;
+      let custom_fonts_resources = crate::pool::install(|| {
+        buffers
+          .par_iter()
+          .with_min_len(2)
+          .map(|(font, buffer): &(FontInput, Buffer)| resolve_font_resource(font, buffer.as_ref()))
+          .collect::<Result<Vec<_>>>()
+      })?;
 
       let mut state = renderer
         .state
