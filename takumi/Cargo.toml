@@ -1,6 +1,6 @@
 [package]
 name = "takumi"
-version = "1.8.2"
+version = "1.8.3"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Render UI component trees to images."
