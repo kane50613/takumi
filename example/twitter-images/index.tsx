@@ -11,6 +11,8 @@ import * as PrismaOGImage from "./components/prisma-og-image";
 import * as XPostImage from "./components/x-post-image";
 import * as V1 from "./components/v1";
 import * as TextFit from "./components/text-fit";
+import * as HomeDemoCard from "./components/home-demo-card";
+import * as HomeFilmstrip from "./components/home-filmstrip";
 
 const components = [
   TextFit,
@@ -21,6 +23,8 @@ const components = [
   PrismaOGImage,
   PackageOgImage,
   GithubSocialPreview,
+  HomeDemoCard,
+  HomeFilmstrip,
 ];
 
 type Component = (typeof components)[number];
@@ -40,6 +44,8 @@ async function render(
   module: Component,
   ratio = 1,
   format: OutputFormat = "png",
+  timeMs?: number,
+  frameIndex?: number,
 ) {
   const jsxPrepareStart = performance.now();
   const { node, stylesheets } = await fromJsx(<module.default />);
@@ -49,9 +55,10 @@ async function render(
     width: module.width * ratio,
     height: module.height * ratio,
     devicePixelRatio: ratio,
-    stylesheets,
+    stylesheets: [...stylesheets, ...("stylesheets" in module ? module.stylesheets : [])],
     drawDebugBorder: process.argv.includes("--debug"),
     format,
+    timeMs,
   });
 
   const end = performance.now();
@@ -63,9 +70,10 @@ async function render(
     `Rendered ${module.name} ${ratio}x in ${totalMs}ms (jsx prepare: ${jsxPrepareMs}ms, render: ${renderMs}ms)`,
   );
 
-  const fileName = ratio === 1 ? `${module.name}.${format}` : `${module.name}@${ratio}x.${format}`;
+  const frameSuffix = frameIndex === undefined ? "" : `-${frameIndex}`;
+  const ratioSuffix = ratio === 1 ? "" : `@${ratio}x`;
 
-  await writeFile(join("output", fileName), buffer);
+  await writeFile(join("output", `${module.name}${frameSuffix}${ratioSuffix}.${format}`), buffer);
 }
 
 for (const component of components) {
@@ -74,6 +82,13 @@ for (const component of components) {
   const rendererPrepareMs = Math.round(performance.now() - rendererPrepareStart);
 
   console.log(`Prepared ${component.name} renderer in ${rendererPrepareMs}ms`);
+
+  if ("timestamps" in component) {
+    for (const [index, timeMs] of component.timestamps.entries()) {
+      await render(renderer, component, 1, "webp", timeMs, index);
+    }
+    continue;
+  }
 
   await render(renderer, component);
   await render(renderer, component, 2, "webp");

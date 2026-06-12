@@ -1,52 +1,47 @@
 import { Link } from "waku";
-import { Button } from "~/components/ui/button";
+import { ShikiHtml, type ThemedHtml } from "./shiki-html";
 
-export function CTA({ highlightedHtml }: { highlightedHtml: string }) {
+const linkClass = "underline underline-offset-4 decoration-border hover:decoration-primary";
+
+export function CTA({ highlightedHtml }: { highlightedHtml: ThemedHtml }) {
   return (
-    <section className="px-6 py-24 pb-32 max-sm:py-12 max-sm:pb-20">
-      <div className="relative max-w-225 mx-auto rounded-3xl border border-border overflow-hidden">
-        <div className="absolute -top-1/2 left-[-20%] w-[140%] h-[200%] bg-[radial-gradient(ellipse_at_50%_0%,rgba(var(--primary),0.08),transparent_60%)] pointer-events-none" />
-
-        <div className="relative px-12 py-16 max-sm:px-6 max-sm:py-10 text-center">
-          <h2 className="font-display text-[clamp(2rem,4vw,3rem)] font-[750] tracking-tighter leading-tight mb-4">
-            Start rendering
-            <br />
-            <span className="bg-linear-to-br from-primary to-[#ffa944] bg-clip-text text-transparent">
-              in minutes.
-            </span>
-          </h2>
-          <p className="text-[1.05rem] text-muted-foreground max-w-105 mx-auto mb-8 leading-relaxed">
-            Install the package, write your first component, and generate your image. It's that
-            simple.
+    <section className="px-6 pt-32 pb-24 max-sm:pt-20 max-sm:pb-16">
+      <div className="max-w-130 mx-auto text-center">
+        <span
+          lang="ja"
+          title="takumi — artisan"
+          className="inline-flex size-9 items-center justify-center bg-primary text-primary-foreground font-bold select-none mb-6"
+        >
+          匠
+        </span>
+        <h2 className="font-display font-[540] text-[clamp(2.25rem,3.5vw,3.25rem)] leading-[1.06] tracking-tight text-balance mb-6">
+          Render your first image.
+        </h2>
+        <ShikiHtml
+          html={highlightedHtml}
+          className="inline-block px-6 py-2.5 border border-dashed border-border font-mono text-sm select-all mb-6"
+        />
+        <div className="flex justify-center gap-6 text-sm mb-8">
+          <Link to="/docs" className={linkClass}>
+            Quick start
+          </Link>
+          <Link to="/playground" className={linkClass}>
+            Playground
+          </Link>
+          <a
+            href="https://github.com/kane50613/takumi"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={linkClass}
+          >
+            GitHub
+          </a>
+        </div>
+        <div className="font-mono text-xs text-muted-foreground leading-relaxed">
+          <p className="text-balance">
+            Layout by taffy · text by parley &amp; skrifa · SVG by resvg
           </p>
-          <div
-            suppressHydrationWarning
-            className="inline-block px-6 py-2.5 rounded-lg bg-muted border border-border font-mono text-sm text-foreground mb-8 select-all [&_pre]:bg-transparent! [&_pre]:m-0! [&_pre]:p-0! [&_code]:bg-transparent!"
-            dangerouslySetInnerHTML={{ __html: highlightedHtml }}
-          />
-          <div className="flex gap-3 justify-center flex-wrap">
-            <Button
-              asChild
-              size="lg"
-              className="rounded-full! bg-primary! text-white! border-none! px-8! font-semibold! transition-all duration-300 hover:-translate-y-0.5! hover:shadow-[0_8px_30px_rgba(255,53,53,0.3)]!"
-            >
-              <Link to="/docs">Quick Start</Link>
-            </Button>
-            <Button
-              asChild
-              size="lg"
-              variant="outline"
-              className="rounded-full! border-border! bg-muted/50! backdrop-blur-sm! transition-all duration-300 hover:border-primary/40! hover:bg-muted! hover:-translate-y-0.5!"
-            >
-              <a
-                href="https://github.com/kane50613/takumi"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Star on GitHub
-              </a>
-            </Button>
-          </div>
+          <p>MIT / Apache-2.0</p>
         </div>
       </div>
     </section>

@@ -1,47 +1,63 @@
-import { showcaseFeatures } from "~/data/showcase";
-import { FeatureCard } from "./feature-card";
+const INDEX: { label: string; mono: boolean; items: string[] }[] = [
+  {
+    label: "Layout",
+    mono: true,
+    items: ["display: grid", "float", "position: absolute", "calc()", "z-index"],
+  },
+  { label: "Selectors", mono: true, items: [":is()", ":where()", "::before", "::after"] },
+  {
+    label: "Paint",
+    mono: true,
+    items: [
+      "backdrop-filter",
+      "mix-blend-mode",
+      "conic-gradient()",
+      "clip-path",
+      "mask",
+      "background-clip: text",
+    ],
+  },
+  {
+    label: "Text",
+    mono: false,
+    items: ["WOFF2 fonts", "emoji", "RTL scripts", "multi-span inline"],
+  },
+  { label: "Motion", mono: true, items: ["@keyframes", "animation", "Tailwind animate-*"] },
+];
 
 export function Features() {
   return (
-    <section className="px-6 py-24 max-sm:py-12">
+    <section className="px-6 pt-20 pb-24 max-sm:py-14">
       <div className="max-w-275 mx-auto">
-        <div className="mb-14">
-          <h2 className="font-display text-[clamp(2rem,4vw,3.2rem)] font-[750] tracking-tighter leading-tight mt-3">
-            Still images are just the beginning. CSS animations, video pipelines, batch at native
-            speed.
-          </h2>
-        </div>
-        <div className="grid grid-cols-3 max-md:grid-cols-1 gap-px rounded-2xl overflow-hidden border border-border bg-border">
-          {showcaseFeatures.map((feature, i) => (
-            <FeatureCard key={feature.title} feature={feature} index={i} />
-          ))}
-          <div
-            className="col-span-3 max-md:col-span-1 p-8 bg-background backdrop-blur-sm transition-colors duration-400 hover:bg-muted/50 animate-reveal-up"
-            style={{ animationDelay: "560ms" }}
-          >
-            <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-primary/20 text-primary mb-5">
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                <line x1="8" y1="21" x2="16" y2="21" />
-                <line x1="12" y1="17" x2="12" y2="21" />
-              </svg>
+        <h2 className="font-display font-[540] text-[clamp(2.25rem,4vw,3.5rem)] leading-[1.06] tracking-tight mb-4">
+          The CSS you actually write.
+        </h2>
+        <p className="text-muted-foreground leading-relaxed max-w-150 mb-10">
+          Support reaches past the usual OG-image subset. If your generator made you remove a
+          property, put it back.
+        </p>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-x-8 gap-y-10 max-w-250">
+          {INDEX.map(({ label, mono, items }) => (
+            <div key={label} className="border-t border-border pt-4">
+              <h3 className="font-mono text-xs uppercase tracking-[0.18em] text-foreground mb-4">
+                {label}
+              </h3>
+              <ul className="space-y-2.5 text-sm text-muted-foreground">
+                {items.map((item) => (
+                  <li key={item} className={mono ? "font-mono text-[0.8125rem]" : ""}>
+                    {item}
+                  </li>
+                ))}
+              </ul>
             </div>
-            <h3 className="font-display text-lg font-bold mb-2 tracking-tight">Runs Everywhere</h3>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              Node.js native, WebAssembly for Edge, or embed the Rust crate.
-            </p>
-          </div>
+          ))}
         </div>
+
+        <p className="mt-12 text-muted-foreground leading-relaxed max-w-150">
+          Runs as a native Node.js binding, a WASM build for Cloudflare Workers and browsers, and a
+          Rust crate. Prebuilt for macOS, Linux, and Windows on x64 and ARM64.
+        </p>
       </div>
     </section>
   );

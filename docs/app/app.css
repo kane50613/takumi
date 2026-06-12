@@ -121,13 +121,14 @@
 
 /* ─── Home page theme extensions ─── */
 @theme inline {
-  --font-display: "Bricolage Grotesque", sans-serif;
+  --font-display: "Newsreader", serif;
 
   --animate-reveal-up: reveal-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
-  --animate-orb-float: orb-float 12s ease-in-out infinite;
-  --animate-orb-float-alt: orb-float-alt 16s ease-in-out infinite;
-  --animate-marquee: marquee-scroll 40s linear infinite;
-  --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
+}
+
+/* Newsreader display headings always use the large optical size */
+.font-display {
+  font-variation-settings: "opsz" 72;
 }
 
 @keyframes reveal-up {
@@ -138,50 +139,5 @@
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes orb-float {
-  0%,
-  100% {
-    transform: translate(-50%, -50%) scale(1);
-    border-radius: 40% 60% 55% 45% / 55% 40% 60% 45%;
-  }
-  33% {
-    transform: translate(-50%, -50%) scale(1.05);
-    border-radius: 55% 45% 40% 60% / 45% 55% 45% 55%;
-  }
-  66% {
-    transform: translate(-50%, -50%) scale(0.97);
-    border-radius: 45% 55% 60% 40% / 60% 45% 55% 45%;
-  }
-}
-
-@keyframes orb-float-alt {
-  0%,
-  100% {
-    transform: translate(-50%, -50%) scale(0.9) rotate(0deg);
-  }
-  50% {
-    transform: translate(-50%, -50%) scale(1.1) rotate(45deg);
-  }
-}
-
-@keyframes marquee-scroll {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-50%);
-  }
-}
-
-@keyframes pulse-dot {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
   }
 }

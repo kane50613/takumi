@@ -1,7 +1,6 @@
 "use client";
 
 import { HomeLayout } from "fumadocs-ui/layouts/home";
-import { useTheme } from "next-themes";
 import { createHighlighterCore } from "shiki/core";
 import { createOnigurumaEngine } from "shiki/engine-oniguruma.mjs";
 import sh from "shiki/langs/sh.mjs";
@@ -11,33 +10,38 @@ import githubLightDefault from "shiki/themes/github-light-default.mjs";
 import { CodeDemo } from "~/components/home/code-demo";
 import { CTA } from "~/components/home/cta";
 import { Features } from "~/components/home/features";
+import { Filmstrip } from "~/components/home/filmstrip";
 import { Hero } from "~/components/home/hero";
 import { Showcase } from "~/components/home/showcase";
 import { baseOptions } from "~/layout-config";
 
-const CODE_SNIPPET = `import { ImageResponse } from "takumi-js/response";
-
-export async function GET() {
-  return new ImageResponse(
-    <div
-      style={{
-        display: "flex",
-        background: "linear-gradient(135deg, #0a0a0a, #1a0a0a)",
-        color: "white",
-        padding: 48,
-        width: "100%",
-        height: "100%",
-        fontFamily: "Geist",
-      }}
-    >
-      <h1 style={{ fontSize: 64 }}>
-        Hello, Takumi ✌️
+// Source of example/twitter-images/components/home-demo-card.tsx; keep in sync.
+const CODE_SNIPPET = `export default function DemoCard() {
+  return (
+    <div tw="flex h-full w-full flex-col justify-between bg-[#16130f] p-14 text-white">
+      <div tw="flex items-center justify-between">
+        <span tw="text-2xl text-[#a8a29a]">takumi.kane.tw</span>
+        <span tw="h-10 w-10 bg-[#ff4d4d]" />
+      </div>
+      <h1
+        tw="text-7xl font-bold leading-tight"
+        style={{
+          backgroundClip: "text",
+          backgroundImage: "linear-gradient(110deg, #fff 60%, #ff4d4d)",
+          color: "transparent",
+        }}
+      >
+        This card is the code beside it.
       </h1>
-    </div>,
+      <div tw="flex items-center justify-between text-2xl text-[#a8a29a]">
+        <span>Rendered without a browser</span>
+        <span>1200 × 630</span>
+      </div>
+    </div>
   );
 }`;
 
-const CTA_COMMAND = "bun install takumi-js";
+const CTA_COMMAND = "bun i takumi-js";
 
 const highlighter = await createHighlighterCore({
   themes: [githubDarkDefault, githubLightDefault],
@@ -68,9 +72,6 @@ const highlightedCta = {
 };
 
 export default function Home() {
-  const { resolvedTheme } = useTheme();
-  const isLight = resolvedTheme === "light";
-
   return (
     <HomeLayout className="overflow-x-hidden" {...baseOptions}>
       <title>Takumi — Render your React components to images.</title>
@@ -93,29 +94,11 @@ export default function Home() {
       />
 
       <Hero />
-
-      <section className="px-6 py-24 max-sm:py-12">
-        <div className="max-w-275 mx-auto">
-          <div className="mb-14">
-            <span className="inline-block text-xs font-semibold uppercase tracking-[0.12em] text-primary mb-3 px-3 py-1 rounded-full bg-primary/20">
-              Bring Existing Code
-            </span>
-            <h2 className="font-display text-[clamp(2rem,4vw,3.2rem)] font-[750] tracking-tighter leading-tight mt-3">
-              JSX in. Pixels out.
-            </h2>
-            <p className="text-[1.05rem] leading-relaxed text-muted-foreground max-w-130 mt-4">
-              Images, animations, video frames all in one engine.
-            </p>
-          </div>
-          <CodeDemo
-            highlightedHtml={isLight ? highlightedCodeDemo.light : highlightedCodeDemo.dark}
-          />
-        </div>
-      </section>
-
+      <CodeDemo highlightedHtml={highlightedCodeDemo} />
+      <Filmstrip />
       <Features />
       <Showcase />
-      <CTA highlightedHtml={isLight ? highlightedCta.light : highlightedCta.dark} />
+      <CTA highlightedHtml={highlightedCta} />
     </HomeLayout>
   );
 }

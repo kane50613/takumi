@@ -1,33 +1,62 @@
-import { ArrowRight } from "lucide-react";
 import { Link } from "waku";
-import { Button } from "~/components/ui/button";
-import { ShowcaseMarquee } from "./showcase-marquee";
+import { showcaseProjects } from "~/data/showcase";
+
+function User({ href, children }: { href: string; children: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-foreground underline underline-offset-4 decoration-border hover:decoration-primary"
+    >
+      {children}
+    </a>
+  );
+}
 
 export function Showcase() {
   return (
-    <section className="px-6 py-24 max-sm:py-12">
-      <div className="max-w-275 mx-auto mb-10">
-        <span className="inline-block text-xs font-semibold uppercase tracking-[0.12em] text-primary mb-3 px-3 py-1 rounded-full bg-primary/20">
-          Showcase
-        </span>
-        <h2 className="font-display text-[clamp(2rem,4vw,3.2rem)] font-[750] tracking-tighter leading-tight mt-3">
-          Built with Takumi
+    <section className="px-6 py-24 max-sm:py-14">
+      <div className="max-w-275 mx-auto">
+        <h2 className="font-display font-[540] text-[clamp(2.25rem,4vw,3.5rem)] leading-[1.06] tracking-tight mb-4">
+          In production.
         </h2>
-        <p className="text-[1.05rem] leading-relaxed text-muted-foreground max-w-130 mt-4">
-          From OG images to dynamic cards, see what the community is building.
+        <p className="text-muted-foreground leading-relaxed max-w-150 mb-10">
+          <User href="https://dcard.tw">Dcard</User> renders post share images with it,{" "}
+          <User href="https://fumadocs.dev">Fumadocs</User> generates its docs OG images, and{" "}
+          <User href="https://nuxtseo.com/docs/og-image/renderers/takumi">Nuxt OG Image</User> ships
+          it as a built-in renderer.
         </p>
-      </div>
-      <ShowcaseMarquee />
-      <div className="max-w-275 mx-auto mt-8 text-center">
-        <Button
-          asChild
-          variant="outline"
-          className="rounded-full! border-border! bg-muted/50! backdrop-blur-sm! transition-all duration-300 hover:border-primary/40! hover:bg-muted! hover:-translate-y-0.5!"
-        >
-          <Link to="/showcase">
-            View all projects <ArrowRight />
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {showcaseProjects.slice(0, 8).map((project) => (
+            <a
+              key={project.url}
+              href={project.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="border border-border hover:border-primary"
+            >
+              <img
+                src={project.image}
+                alt={`OG image from ${new URL(project.url).hostname}`}
+                width={project.width}
+                height={project.height}
+                loading="lazy"
+                className="w-full h-auto aspect-40/21 object-cover"
+              />
+            </a>
+          ))}
+        </div>
+
+        <p className="mt-8">
+          <Link
+            to="/showcase"
+            className="text-sm underline underline-offset-4 decoration-border hover:decoration-primary"
+          >
+            View all projects →
           </Link>
-        </Button>
+        </p>
       </div>
     </section>
   );

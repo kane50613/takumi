@@ -1,6 +1,3 @@
-import type { LucideIcon } from "lucide-react";
-import { LayoutTemplate, Type, Zap } from "lucide-react";
-
 // Add your showcase projects here!
 // If no `title` provided, the hostname will be used as the title (or github owner/repo name).
 export const showcaseProjects: Project[] = [
@@ -94,24 +91,6 @@ export const showcaseTemplates: Template[] = [
   },
 ];
 
-export const showcaseFeatures: Feature[] = [
-  {
-    title: "Rich CSS Layout",
-    description: "Block, Inline, Flexbox, Grid complete display support.",
-    icon: Type,
-  },
-  {
-    title: "Animations & Video",
-    description: "Keyframes, GIF, WebP, or raw frames for FFmpeg.",
-    icon: LayoutTemplate,
-  },
-  {
-    title: "Native Performance",
-    description: "Rust-powered rendering. No browser, no timeouts.",
-    icon: Zap,
-  },
-];
-
 export interface Project {
   title?: string;
   image: string;
@@ -125,10 +104,4 @@ export interface Template {
   image: string;
   href: string;
   color: string;
-}
-
-export interface Feature {
-  title: string;
-  description: string;
-  icon: LucideIcon;
 }

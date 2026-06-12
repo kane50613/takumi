@@ -1,42 +1,80 @@
 import { Link } from "waku";
 import { Button } from "~/components/ui/button";
-import { AnimatedOrb } from "./animated-orb";
+
+const OUTPUT_BASE = "/images/twitter-images";
+
+const PRINTS = [
+  {
+    src: `${OUTPUT_BASE}/og-image@2x.webp`,
+    alt: "Takumi OG image rendered by Takumi",
+    className: "top-0 left-0 -rotate-2",
+  },
+  {
+    src: `${OUTPUT_BASE}/x-post-image@2x.webp`,
+    alt: "X post image rendered by Takumi",
+    className: "top-[29%] right-0 rotate-[1.5deg]",
+  },
+  {
+    src: `${OUTPUT_BASE}/prisma-og-image@2x.webp`,
+    alt: "Prisma-style OG image rendered by Takumi",
+    className: "top-[58%] left-[5%] -rotate-1",
+  },
+] as const;
+
+function PrintSpread() {
+  return (
+    <div className="max-md:hidden w-105 shrink-0 max-lg:mx-auto animate-reveal-up [animation-delay:300ms]">
+      <div className="relative aspect-10/11">
+        {PRINTS.map(({ src, alt, className }) => (
+          <img
+            key={src}
+            src={src}
+            alt={alt}
+            width={2400}
+            height={1260}
+            className={`absolute w-[86%] h-auto border border-border bg-background shadow-[0_2px_6px_rgba(0,0,0,0.12),0_18px_44px_-14px_rgba(0,0,0,0.4)] ${className}`}
+          />
+        ))}
+      </div>
+      <p className="mt-6 font-mono text-xs leading-relaxed text-muted-foreground">
+        Output from example/twitter-images — every image on this page was rendered by Takumi.
+      </p>
+    </div>
+  );
+}
 
 export function Hero() {
   return (
-    <section className="relative min-h-[70dvh] max-sm:min-h-auto flex flex-col items-center justify-center px-6 py-16 overflow-hidden">
-      <AnimatedOrb />
-
-      <div className="relative text-center max-w-200 z-10">
-        <h1 className="font-display text-[clamp(2.8rem,7vw,5.5rem)] font-[750] leading-[1.05] tracking-tighter mb-6 animate-reveal-up [animation-delay:100ms]">
-          <span className="block">Render React</span>
-          <span className="block">components into</span>
-          <span className="block bg-linear-to-br from-primary to-[#ffa944] bg-clip-text text-transparent pb-2">
-            images, animations.
-          </span>
-        </h1>
-        <p className="text-[clamp(1rem,2vw,1.2rem)] leading-relaxed text-muted-foreground max-w-160 mx-auto mb-10 animate-reveal-up [animation-delay:200ms]">
-          From JSX to images, animations, and video frames at native speed. Supports rich CSS
-          layout, WOFF2 fonts, and complex text scripts.
-        </p>
-
-        <div className="flex gap-3 justify-center flex-wrap animate-reveal-up [animation-delay:300ms]">
-          <Button
-            asChild
-            size="lg"
-            className="rounded-full! bg-primary! text-white! border-none! px-8! font-semibold! transition-all duration-300 hover:-translate-y-0.5! hover:shadow-[0_8px_30px_rgba(255,53,53,0.3)]!"
-          >
-            <Link to="/docs">Get Started</Link>
-          </Button>
-          <Button
-            asChild
-            size="lg"
-            variant="outline"
-            className="rounded-full! border-border! bg-muted/50! backdrop-blur-sm! transition-all duration-300 hover:border-primary/40! hover:bg-muted! hover:-translate-y-0.5!"
-          >
-            <Link to="/playground">Open Playground</Link>
-          </Button>
+    <section className="px-6 pt-20 pb-24 max-sm:pt-12 max-sm:pb-14">
+      <div className="max-w-275 mx-auto flex max-lg:flex-col lg:items-center justify-between gap-14">
+        <div className="max-w-160">
+          <h1 className="font-display font-[540] text-[clamp(3rem,5.2vw,4.75rem)] leading-[1.04] tracking-tight text-balance mb-8 animate-reveal-up">
+            Render JSX to images.
+            <br />
+            <em className="text-primary">Skip the browser.</em>
+          </h1>
+          <p className="text-[clamp(1rem,2vw,1.125rem)] leading-relaxed text-muted-foreground mb-10 animate-reveal-up [animation-delay:100ms]">
+            Takumi parses CSS, lays out the tree, shapes text, and encodes pixels in a single Rust
+            binary. Headless Chromium spends 300&nbsp;MB and a cold start on an OG card. Takumi
+            spends a function call.
+          </p>
+          <div className="flex items-center gap-6 flex-wrap animate-reveal-up [animation-delay:200ms]">
+            <Button asChild size="lg" className="px-7 font-semibold">
+              <Link to="/docs">Get started</Link>
+            </Button>
+            <Link
+              to="/playground"
+              className="text-sm underline underline-offset-4 decoration-border hover:decoration-primary"
+            >
+              Open the playground
+            </Link>
+            <code className="inline-flex h-10 items-center px-4 border border-dashed border-border font-mono text-sm text-muted-foreground select-all">
+              bun i takumi-js
+            </code>
+          </div>
         </div>
+
+        <PrintSpread />
       </div>
     </section>
   );
