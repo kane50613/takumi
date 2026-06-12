@@ -220,10 +220,12 @@ fn webkit_property_id_from_name(name: &str) -> Option<PropertyId> {
     .or_else(|| name.strip_prefix("WebKit"))?;
 
   match suffix {
+    "line-clamp" => Some(PropertyId::Longhand(LonghandId::LineClamp)),
     "text-stroke" => Some(PropertyId::Shorthand(ShorthandId::WebkitTextStroke)),
     "text-stroke-width" => Some(PropertyId::Longhand(LonghandId::WebkitTextStrokeWidth)),
     "text-stroke-color" => Some(PropertyId::Longhand(LonghandId::WebkitTextStrokeColor)),
     "text-fill-color" => Some(PropertyId::Longhand(LonghandId::WebkitTextFillColor)),
+    "LineClamp" => Some(PropertyId::Longhand(LonghandId::LineClamp)),
     "TextStroke" => Some(PropertyId::Shorthand(ShorthandId::WebkitTextStroke)),
     "TextStrokeWidth" => Some(PropertyId::Longhand(LonghandId::WebkitTextStrokeWidth)),
     "TextStrokeColor" => Some(PropertyId::Longhand(LonghandId::WebkitTextStrokeColor)),
