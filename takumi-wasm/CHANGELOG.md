@@ -1,5 +1,12 @@
 # @takumi-rs/wasm
 
+## 1.8.2
+
+### Patch Changes
+
+- 041e5fd: Fix `+simd128` flag being override by CI configuration
+  - @takumi-rs/helpers@1.8.2
+
 ## 1.8.1
 
 ### Patch Changes

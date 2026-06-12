@@ -1,5 +1,11 @@
 # takumi
 
+## 1.8.2
+
+### Patch Changes
+
+- 041e5fd: Encode PNG/APNG with the `zlib-rs` deflate backend at level 7 to speed up and smaller file size
+
 ## 1.8.1
 
 ### Patch Changes
