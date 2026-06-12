@@ -13,7 +13,7 @@ autobenches = false
 
 [dependencies]
 cssparser.workspace = true
-png = { workspace = true, features = ["zlib-rs"] }
+png.workspace = true
 gif.workspace = true
 data-url.workspace = true
 color.workspace = true
