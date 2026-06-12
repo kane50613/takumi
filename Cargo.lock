@@ -2152,7 +2152,7 @@ dependencies = [
 
 [[package]]
 name = "takumi"
-version = "1.8.3"
+version = "1.8.4"
 dependencies = [
  "bytemuck",
  "color",
@@ -2187,7 +2187,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-css"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bitflags",
  "bytemuck",
