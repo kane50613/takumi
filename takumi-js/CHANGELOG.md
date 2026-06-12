@@ -1,5 +1,14 @@
 # takumi-js
 
+## 1.8.2
+
+### Patch Changes
+
+- Updated dependencies [041e5fd]
+  - @takumi-rs/wasm@1.8.2
+  - @takumi-rs/core@1.8.2
+  - @takumi-rs/helpers@1.8.2
+
 ## 1.8.1
 
 ### Patch Changes
