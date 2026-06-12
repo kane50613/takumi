@@ -2,4 +2,4 @@
 "takumi-css": patch
 ---
 
-Map `-webkit-line-clamp`, `WebkitLineClamp`, and `WebKitLineClamp` to the existing `line-clamp` property.
+Fix vendor-prefixed property names not resolved properly

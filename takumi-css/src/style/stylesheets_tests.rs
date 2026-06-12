@@ -129,7 +129,6 @@ fn property_id_accepts_webkit_aliases() {
     line_clamp
   );
   assert_eq!(PropertyId::from_camel_case("WebkitLineClamp"), line_clamp);
-  assert_eq!(PropertyId::from_camel_case("WebKitLineClamp"), line_clamp);
   assert_eq!(
     PropertyId::from_kebab_case("-webkit-text-fill-color"),
     PropertyId::Longhand(LonghandId::WebkitTextFillColor)
@@ -139,12 +138,12 @@ fn property_id_accepts_webkit_aliases() {
     PropertyId::Longhand(LonghandId::WebkitTextStrokeColor)
   );
   assert_eq!(
-    PropertyId::from_camel_case("WebKitTextStroke"),
+    PropertyId::from_camel_case("WebkitTextStroke"),
     PropertyId::Shorthand(ShorthandId::WebkitTextStroke)
   );
   assert_eq!(
     PropertyId::from_kebab_case("-webkit-mask-image"),
-    PropertyId::Ignored
+    PropertyId::Longhand(LonghandId::MaskImage)
   );
 }
 

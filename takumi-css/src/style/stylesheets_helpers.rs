@@ -189,17 +189,22 @@ impl PropertyId {
       return PropertyId::Custom;
     }
 
-    if let Some(property) = webkit_property_id_from_name(name) {
-      return property;
-    }
-
     let normalized = normalize(name);
 
-    if let Some(property) = legacy_alias_property_id(normalized.as_ref()) {
-      return property;
+    Self::resolve(normalized.as_ref())
+      .or_else(|| strip_vendor_prefix(normalized.as_ref()).and_then(Self::resolve))
+      .unwrap_or(PropertyId::Ignored)
+  }
+
+  fn resolve(normalized: &str) -> Option<PropertyId> {
+    if let Some(property) = legacy_alias_property_id(normalized) {
+      return Some(property);
     }
 
-    PropertyId::from_normalized_name(normalized.as_ref())
+    match PropertyId::from_normalized_name(normalized) {
+      PropertyId::Ignored => None,
+      property => Some(property),
+    }
   }
 }
 
@@ -213,25 +218,10 @@ fn legacy_alias_property_id(name: &str) -> Option<PropertyId> {
   }
 }
 
-fn webkit_property_id_from_name(name: &str) -> Option<PropertyId> {
-  let suffix = name
-    .strip_prefix("-webkit-")
-    .or_else(|| name.strip_prefix("Webkit"))
-    .or_else(|| name.strip_prefix("WebKit"))?;
-
-  match suffix {
-    "line-clamp" => Some(PropertyId::Longhand(LonghandId::LineClamp)),
-    "text-stroke" => Some(PropertyId::Shorthand(ShorthandId::WebkitTextStroke)),
-    "text-stroke-width" => Some(PropertyId::Longhand(LonghandId::WebkitTextStrokeWidth)),
-    "text-stroke-color" => Some(PropertyId::Longhand(LonghandId::WebkitTextStrokeColor)),
-    "text-fill-color" => Some(PropertyId::Longhand(LonghandId::WebkitTextFillColor)),
-    "LineClamp" => Some(PropertyId::Longhand(LonghandId::LineClamp)),
-    "TextStroke" => Some(PropertyId::Shorthand(ShorthandId::WebkitTextStroke)),
-    "TextStrokeWidth" => Some(PropertyId::Longhand(LonghandId::WebkitTextStrokeWidth)),
-    "TextStrokeColor" => Some(PropertyId::Longhand(LonghandId::WebkitTextStrokeColor)),
-    "TextFillColor" => Some(PropertyId::Longhand(LonghandId::WebkitTextFillColor)),
-    _ => None,
-  }
+fn strip_vendor_prefix(normalized: &str) -> Option<&str> {
+  ["webkit_", "moz_", "ms_", "o_"]
+    .into_iter()
+    .find_map(|prefix| normalized.strip_prefix(prefix))
 }
 
 pub(crate) fn expand_shorthand<T>(
@@ -251,15 +241,15 @@ pub(crate) fn normalize_kebab_property_name(name: &str) -> Cow<'_, str> {
     return Cow::Borrowed(name);
   }
 
-  Cow::Owned(
-    name
-      .chars()
-      .map(|ch| match ch {
-        '-' => '_',
-        _ => ch.to_ascii_lowercase(),
-      })
-      .collect(),
-  )
+  let normalized: String = name
+    .chars()
+    .map(|ch| match ch {
+      '-' => '_',
+      _ => ch.to_ascii_lowercase(),
+    })
+    .collect();
+
+  Cow::Owned(normalized.trim_start_matches('_').to_owned())
 }
 
 pub(crate) fn normalize_camel_property_name(name: &str) -> Cow<'_, str> {
