@@ -1,5 +1,12 @@
 # @takumi-rs/core
 
+## 1.8.3
+
+### Patch Changes
+
+- bfc6e55: Join rayon's worker threads on N-API teardown to fix a Windows crash (`0xC0000005`) when Node exits after rendering (#763)
+  - @takumi-rs/helpers@1.8.3
+
 ## 1.8.2
 
 ### Patch Changes
