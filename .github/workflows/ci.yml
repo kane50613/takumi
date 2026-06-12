@@ -629,8 +629,34 @@ jobs:
         run: bun install --frozen-lockfile --filter ./takumi-wasm
 
       - name: Test WASM
+        if: runner.os != 'Windows'
         working-directory: takumi-wasm
         run: bun test
+
+      # bun does not exit after the wasm tests finish on Windows (x64): the
+      # process hangs at teardown. Run the tests, then kill the stuck process
+      # and read pass/fail from bun's printed summary.
+      - name: Test WASM (Windows)
+        if: runner.os == 'Windows'
+        working-directory: takumi-wasm
+        shell: pwsh
+        run: |
+          $p = Start-Process bun -ArgumentList 'test' -PassThru -NoNewWindow `
+            -WorkingDirectory (Get-Location).Path `
+            -RedirectStandardOutput out.log -RedirectStandardError err.log
+          $exited = $p.WaitForExit(120000)
+          $log = (Get-Content out.log, err.log -Raw -ErrorAction SilentlyContinue) -join "`n"
+          Write-Host $log
+          if ($exited) { exit $p.ExitCode }
+          $log = $log -replace "`e\[[0-9;]*m", ""
+          # Tests completed but the process never exits; force-terminate and
+          # derive the result from bun's summary so failures are not masked.
+          $p.Kill($true)
+          if ($log -notmatch 'Ran \d+ test') { Write-Error 'wasm tests did not complete'; exit 1 }
+          if ($log -match '(?m)^\s*(\d+)\s+fail' -and [int]$Matches[1] -gt 0) {
+            Write-Error 'wasm tests failed'; exit 1
+          }
+          Write-Host 'wasm tests passed (process force-terminated after bun exit hang)'
 
   preview-packages:
     name: Publish PR preview packages
