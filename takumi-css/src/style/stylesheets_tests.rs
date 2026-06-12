@@ -120,6 +120,15 @@ fn custom_properties_map_to_custom_property_id() {
 
 #[test]
 fn property_id_accepts_webkit_aliases() {
+  let line_clamp = PropertyId::Longhand(LonghandId::LineClamp);
+
+  assert_eq!(PropertyId::from_kebab_case("line-clamp"), line_clamp);
+  assert_eq!(PropertyId::from_camel_case("lineClamp"), line_clamp);
+  assert_eq!(
+    PropertyId::from_kebab_case("-webkit-line-clamp"),
+    line_clamp
+  );
+  assert_eq!(PropertyId::from_camel_case("WebkitLineClamp"), line_clamp);
   assert_eq!(
     PropertyId::from_kebab_case("-webkit-text-fill-color"),
     PropertyId::Longhand(LonghandId::WebkitTextFillColor)
@@ -129,8 +138,28 @@ fn property_id_accepts_webkit_aliases() {
     PropertyId::Longhand(LonghandId::WebkitTextStrokeColor)
   );
   assert_eq!(
-    PropertyId::from_camel_case("WebKitTextStroke"),
+    PropertyId::from_camel_case("WebkitTextStroke"),
     PropertyId::Shorthand(ShorthandId::WebkitTextStroke)
+  );
+  assert_eq!(
+    PropertyId::from_kebab_case("-webkit-mask-image"),
+    PropertyId::Longhand(LonghandId::MaskImage)
+  );
+}
+
+#[test]
+fn parse_webkit_line_clamp_matches_line_clamp() {
+  let mut line_clamp = Style::default();
+  line_clamp.append_block(parse_declarations("line-clamp", "2"));
+
+  let mut webkit_line_clamp = Style::default();
+  webkit_line_clamp.append_block(parse_declarations("-webkit-line-clamp", "2"));
+
+  assert_eq!(
+    webkit_line_clamp
+      .inherit(&ComputedStyle::default())
+      .line_clamp,
+    line_clamp.inherit(&ComputedStyle::default()).line_clamp
   );
 }
 
