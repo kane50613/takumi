@@ -6,7 +6,6 @@
 //! [`JoinHandle`]s and joins them from an env cleanup hook, so none are alive
 //! when the process exits. All parallel work runs through [`install`].
 
-use std::cell::Cell;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::{Builder, JoinHandle};
 
@@ -22,8 +21,10 @@ static SHARED: OnceLock<Mutex<Shared>> = OnceLock::new();
 
 /// Builds an owned pool whose worker `JoinHandle`s are retained for joining.
 fn build() -> Shared {
-  let handles = Mutex::new(Vec::new());
+  let mut handles = Vec::new();
 
+  // `spawn_handler` is `FnMut` and called synchronously during `build`, so the
+  // handles can be collected without interior mutability.
   let pool = ThreadPoolBuilder::new()
     .spawn_handler(|thread| {
       let mut builder = Builder::new();
@@ -33,20 +34,14 @@ fn build() -> Shared {
       if let Some(size) = thread.stack_size() {
         builder = builder.stack_size(size);
       }
-      let handle = builder.spawn(|| thread.run())?;
-      if let Ok(mut handles) = handles.lock() {
-        handles.push(handle);
-      }
+      handles.push(builder.spawn(|| thread.run())?);
       Ok(())
     })
     .build()
     .ok()
     .map(Arc::new);
 
-  Shared {
-    pool,
-    handles: handles.into_inner().unwrap_or_default(),
-  }
+  Shared { pool, handles }
 }
 
 /// Returns a clone of the current pool, rebuilding it if a previous N-API
@@ -87,15 +82,11 @@ fn shutdown() {
   }
 }
 
-thread_local! {
-  static CLEANUP_REGISTERED: Cell<bool> = const { Cell::new(false) };
-}
-
-/// Registers [`shutdown`] as an env cleanup hook once per N-API environment.
+/// Joins the pool when the calling N-API environment tears down.
+///
+/// Registered per `Renderer`, not deduplicated: [`shutdown`] is idempotent, and
+/// registering on every environment that builds a pool is what keeps a pool
+/// rebuilt by one environment from outliving another's teardown.
 pub(crate) fn register_cleanup(env: &Env) {
-  CLEANUP_REGISTERED.with(|registered| {
-    if !registered.replace(true) {
-      let _ = env.add_env_cleanup_hook((), |_| shutdown());
-    }
-  });
+  let _ = env.add_env_cleanup_hook((), |_| shutdown());
 }
