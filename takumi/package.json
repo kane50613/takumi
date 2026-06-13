@@ -5,5 +5,8 @@
   "scripts": {
     "version": "cargo set-version -p takumi $(jq -r '.version' package.json)",
     "release": "cargo publish || [ $? -eq 101 ] || exit $?"
+  },
+  "dependencies": {
+    "takumi-css": "workspace:*"
   }
 }
