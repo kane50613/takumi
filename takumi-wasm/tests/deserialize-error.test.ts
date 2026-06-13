@@ -54,7 +54,7 @@ test("report deserialize error for justifyContent with wrong type", () => {
       ),
     "justifyContent",
     "integer `123`",
-    "a value of 'normal', 'start', 'end', 'flex-start', 'flex-end', 'center', 'stretch', 'space-between', 'space-around' or 'space-evenly'; also accepts 'initial', 'unset' or 'inherit'.",
+    "a value of 'normal', 'stretch', 'space-between', 'space-around', 'space-evenly', 'start', 'end', 'flex-start', 'flex-end', 'center', 'safe' or 'unsafe'; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -76,7 +76,7 @@ test("report deserialize error for justifyContent with invalid string value", ()
     "justifyContent",
     "star",
     "star",
-    "a value of 'normal', 'start', 'end', 'flex-start', 'flex-end', 'center', 'stretch', 'space-between', 'space-around' or 'space-evenly'; also accepts 'initial', 'unset' or 'inherit'.",
+    "a value of 'normal', 'stretch', 'space-between', 'space-around', 'space-evenly', 'start', 'end', 'flex-start', 'flex-end', 'center', 'safe' or 'unsafe'; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -188,7 +188,7 @@ test("report deserialize error for alignItems property with invalid type", () =>
       ),
     "alignItems",
     "sequence",
-    "a value of 'normal', 'start', 'end', 'flex-start', 'flex-end', 'center', 'baseline' or 'stretch'; also accepts 'initial', 'unset' or 'inherit'.",
+    "a value of 'normal', 'baseline', 'stretch', 'start', 'end', 'flex-start', 'flex-end', 'center', 'safe' or 'unsafe'; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -210,7 +210,7 @@ test("report deserialize error for alignItems property with invalid string value
     "alignItems",
     "invalid",
     "invalid",
-    "a value of 'normal', 'start', 'end', 'flex-start', 'flex-end', 'center', 'baseline' or 'stretch'; also accepts 'initial', 'unset' or 'inherit'.",
+    "a value of 'normal', 'baseline', 'stretch', 'start', 'end', 'flex-start', 'flex-end', 'center', 'safe' or 'unsafe'; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
