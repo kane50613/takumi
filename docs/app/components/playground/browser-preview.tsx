@@ -56,12 +56,12 @@ export default function BrowserPreview({
   html,
   width = 1200,
   height = 630,
-  stylesheets,
+  cssContents,
 }: {
   html: string | undefined;
   width?: number;
   height?: number;
-  stylesheets?: string[];
+  cssContents?: string[];
 }) {
   const { ref, scale } = useFitScale(width, height);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -85,13 +85,13 @@ export default function BrowserPreview({
     void (async () => {
       const compiled = (await getCompiler()).build(extractClasses(html));
       if (cancelled || !shadowRef.current) return;
-      shadowRef.current.sheet.replaceSync([compiled, ...(stylesheets ?? [])].join("\n\n"));
+      shadowRef.current.sheet.replaceSync([compiled, ...(cssContents ?? [])].join("\n\n"));
       shadowRef.current.mount.innerHTML = html;
     })();
     return () => {
       cancelled = true;
     };
-  }, [html, stylesheets]);
+  }, [html, cssContents]);
 
   return (
     <div ref={ref} className="relative h-full min-w-0 overflow-hidden bg-muted/20">

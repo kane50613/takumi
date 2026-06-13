@@ -66,7 +66,9 @@ export default function Playground() {
   const [lastSuccess, setLastSuccess] = useState<RenderSuccess>();
   const [browserPreview, setBrowserPreview] = useState<{
     html: string;
-    options: RenderSuccess["options"];
+    width?: number;
+    height?: number;
+    cssContents?: string[];
   }>();
   const [renderError, setRenderError] = useState<RenderError>();
   const [isReady, setIsReady] = useState(false);
@@ -185,7 +187,12 @@ export default function Playground() {
         }
         case "preview-result": {
           if (message.id === currentRequestIdRef.current) {
-            setBrowserPreview({ html: message.html, options: message.options });
+            setBrowserPreview({
+              html: message.html,
+              width: message.width,
+              height: message.height,
+              cssContents: message.cssContents,
+            });
           }
           break;
         }
@@ -307,9 +314,9 @@ export default function Playground() {
     <Suspense fallback={<div className="h-full bg-muted/20" />}>
       <BrowserPreview
         html={browserPreview?.html}
-        width={browserPreview?.options.width}
-        height={browserPreview?.options.height}
-        stylesheets={browserPreview?.options.stylesheets}
+        width={browserPreview?.width}
+        height={browserPreview?.height}
+        cssContents={browserPreview?.cssContents}
       />
     </Suspense>
   );

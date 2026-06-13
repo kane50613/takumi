@@ -2,8 +2,9 @@ import { fetchResources, extractResourceUrls } from "takumi-js/helpers";
 import { extractEmojis } from "takumi-js/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
 import wasm, { init, Renderer } from "takumi-js/wasm";
-import * as React from "react";
-import { evaluateCodeExports, renderBrowserHtml } from "./evaluate";
+import type * as React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { evaluateCodeExports, renderReact } from "./evaluate";
 import { messageSchema, type RenderMessageInput } from "./schema";
 
 const fetchCache = new Map<string, ArrayBuffer>();
@@ -30,16 +31,21 @@ self.onmessage = async (event: MessageEvent) => {
       if (!renderer) throw new Error("WASM is not ready yet!");
 
       try {
-        const { default: component, options } = evaluateCodeExports(payload.code, React);
+        const { default: component, options } = evaluateCodeExports(payload.code, renderReact);
+        const element = renderReact.createElement(
+          component as React.JSXElementConstructor<unknown>,
+        );
+        let { node, stylesheets } = await fromJsx(element);
+        const effectiveStylesheets = options.stylesheets ?? stylesheets;
+
         postMessage({
           type: "preview-result",
           id: payload.id,
-          html: renderBrowserHtml(payload.code),
-          options,
+          html: renderToStaticMarkup(element),
+          width: options.width,
+          height: options.height,
+          cssContents: effectiveStylesheets,
         });
-        let { node, stylesheets } = await fromJsx(
-          React.createElement(component as React.JSXElementConstructor<unknown>),
-        );
 
         node = extractEmojis(node, options.emoji ?? "twemoji");
 
@@ -50,7 +56,6 @@ self.onmessage = async (event: MessageEvent) => {
         });
 
         const start = performance.now();
-        const effectiveStylesheets = options.stylesheets ?? stylesheets;
         const animationOptions = options.animation;
         const outputBuffer = animationOptions
           ? (() => {

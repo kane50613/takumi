@@ -1,5 +1,4 @@
 import * as React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { transform } from "sucrase";
 import * as z from "zod/mini";
 import { optionsSchema } from "./schema";
@@ -24,23 +23,19 @@ export function evaluateCodeExports(code: string, react: typeof React) {
   return exportsSchema.parse(exports);
 }
 
-// Remap Takumi's `tw` prop to `class` so the browser preview can style it.
-function remapTw<P>(props: P): P {
+// Mirror Takumi's `tw` into `className` (keeping `tw`) so one evaluated tree
+// serves both the Takumi render (reads `tw`) and the browser preview (reads `class`).
+function mirrorTw<P>(props: P): P {
   if (!props || typeof props !== "object" || !("tw" in props)) return props;
-  const { tw, className, class: klass, ...rest } = props as Record<string, unknown>;
-  return { ...rest, className: [className ?? klass, tw].filter(Boolean).join(" ") } as P;
+  const { tw, className, class: klass } = props as Record<string, unknown>;
+  return { ...props, className: [className ?? klass, tw].filter(Boolean).join(" ") };
 }
 
-const browserReact: typeof React = {
+export const renderReact: typeof React = {
   ...React,
   createElement: ((
     type: React.ElementType,
     props: Record<string, unknown> | null,
     ...children: React.ReactNode[]
-  ) => React.createElement(type, remapTw(props), ...children)) as typeof React.createElement,
+  ) => React.createElement(type, mirrorTw(props), ...children)) as typeof React.createElement,
 };
-
-export function renderBrowserHtml(code: string) {
-  const { default: Component } = evaluateCodeExports(code, browserReact);
-  return renderToStaticMarkup(browserReact.createElement(Component as React.FC));
-}
