@@ -5,7 +5,7 @@ import indexCss from "tailwindcss/index.css?raw";
 import preflightCss from "tailwindcss/preflight.css?raw";
 import themeCss from "tailwindcss/theme.css?raw";
 import utilitiesCss from "tailwindcss/utilities.css?raw";
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 const SOURCES: Record<string, string> = {
   tailwindcss: indexCss,
@@ -14,8 +14,11 @@ const SOURCES: Record<string, string> = {
   "tailwindcss/utilities.css": utilitiesCss,
 };
 
-let compilerPromise: Promise<{ build(candidates: string[]): string }> | undefined;
-function getCompiler() {
+// Cache the resolved compiler so a remount (e.g. mobile tab switch) can paint
+// the shadow synchronously instead of flashing through an async load.
+let compiler: { build(candidates: string[]): string } | undefined;
+let compilerPromise: Promise<void> | undefined;
+function loadCompiler() {
   compilerPromise ??= compile(`@import "tailwindcss";`, {
     base: "/",
     loadStylesheet: async (id, base) => ({
@@ -23,6 +26,8 @@ function getCompiler() {
       base,
       content: SOURCES[id] ?? SOURCES[`${id}.css`] ?? "",
     }),
+  }).then((c) => {
+    compiler = c;
   });
   return compilerPromise;
 }
@@ -39,12 +44,12 @@ function useFitScale(width: number, height: number) {
   const ref = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const observer = new ResizeObserver(() =>
-      setScale(Math.min(el.clientWidth / width, el.clientHeight / height, 1)),
-    );
+    const measure = () => setScale(Math.min(el.clientWidth / width, el.clientHeight / height, 1));
+    measure();
+    const observer = new ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
   }, [width, height]);
@@ -67,7 +72,7 @@ export default function BrowserPreview({
   const hostRef = useRef<HTMLDivElement>(null);
   const shadowRef = useRef<{ mount: HTMLElement; sheet: CSSStyleSheet }>(undefined);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host || !html) return;
 
@@ -81,13 +86,22 @@ export default function BrowserPreview({
       shadowRef.current = { mount, sheet };
     }
 
-    let cancelled = false;
-    void (async () => {
-      const compiled = (await getCompiler()).build(extractClasses(html));
-      if (cancelled || !shadowRef.current) return;
-      shadowRef.current.sheet.replaceSync([compiled, ...(cssContents ?? [])].join("\n\n"));
+    const paint = () => {
+      if (!compiler || !shadowRef.current) return;
+      shadowRef.current.sheet.replaceSync(
+        [compiler.build(extractClasses(html)), ...(cssContents ?? [])].join("\n\n"),
+      );
       shadowRef.current.mount.innerHTML = html;
-    })();
+    };
+
+    if (compiler) {
+      paint();
+      return;
+    }
+    let cancelled = false;
+    loadCompiler().then(() => {
+      if (!cancelled) paint();
+    });
     return () => {
       cancelled = true;
     };
