@@ -697,3 +697,64 @@ macro_rules! declare_enum_from_css_impl {
 }
 
 pub(crate) use declare_enum_from_css_impl;
+
+/// Declares a box-alignment enum parser that accepts the optional `safe`/`unsafe`
+/// overflow-position prefix on its positional keywords.
+macro_rules! declare_box_alignment_enum_impl {
+  (
+    $enum_type:ty,
+    safe { $($safe_css:literal => $base_variant:ident / $safe_variant:ident),+ $(,)? },
+    plain { $($plain_css:literal => $plain_variant:ident),* $(,)? }
+  ) => {
+    impl crate::style::MakeComputed for $enum_type {}
+
+    impl<'i> crate::style::FromCss<'i> for $enum_type {
+      const VALID_TOKENS: &'static [crate::style::CssToken] = &[
+        $(crate::style::CssToken::Keyword($plain_css),)*
+        $(crate::style::CssToken::Keyword($safe_css),)*
+        crate::style::CssToken::Keyword("safe"),
+        crate::style::CssToken::Keyword("unsafe"),
+      ];
+
+      fn from_css(input: &mut cssparser::Parser<'i, '_>) -> crate::style::ParseResult<'i, Self> {
+        let mut safe = false;
+
+        loop {
+          let location = input.current_source_location();
+          let token = input.next()?;
+
+          let cssparser::Token::Ident(ident) = token else {
+            return Err($crate::style::unexpected_token!(location, token));
+          };
+
+          cssparser::match_ignore_ascii_case! {&ident,
+            "safe" => safe = true,
+            "unsafe" => safe = false,
+            $($safe_css => return Ok(if safe { Self::$safe_variant } else { Self::$base_variant }),)*
+            $($plain_css => return if safe {
+              Err($crate::style::unexpected_token!(location, token))
+            } else {
+              Ok(Self::$plain_variant)
+            },)*
+            _ => return Err($crate::style::unexpected_token!(location, token)),
+          }
+        }
+      }
+    }
+
+    impl crate::style::properties::ToCss for $enum_type {
+      fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+        match self {
+          $(Self::$plain_variant => dest.write_str($plain_css),)*
+          $(Self::$base_variant => dest.write_str($safe_css),)*
+          $(Self::$safe_variant => {
+            dest.write_str("safe ")?;
+            dest.write_str($safe_css)
+          })*
+        }
+      }
+    }
+  };
+}
+
+pub(crate) use declare_box_alignment_enum_impl;

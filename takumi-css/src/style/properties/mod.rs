@@ -106,7 +106,9 @@ pub use text_shadow::*;
 pub use text_stroke::*;
 pub use text_wrap::*;
 pub use traits::*;
-pub(crate) use traits::{declare_enum_from_css_impl, impl_from_taffy_enum};
+pub(crate) use traits::{
+  declare_box_alignment_enum_impl, declare_enum_from_css_impl, impl_from_taffy_enum,
+};
 pub use transform::*;
 pub use vertical_align::*;
 pub use white_space::*;
@@ -718,20 +720,34 @@ pub enum JustifyContent {
   /// last item on the end line, and the space between items is twice the space
   /// between the start/end items and the container edges.
   SpaceAround,
+  /// `safe start`: like `Start`, falling back to start-edge alignment on overflow.
+  SafeStart,
+  /// `safe end`: like `End`, falling back to start-edge alignment on overflow.
+  SafeEnd,
+  /// `safe flex-start`: like `FlexStart`, falling back to start-edge alignment on overflow.
+  SafeFlexStart,
+  /// `safe flex-end`: like `FlexEnd`, falling back to start-edge alignment on overflow.
+  SafeFlexEnd,
+  /// `safe center`: like `Center`, falling back to start-edge alignment on overflow.
+  SafeCenter,
 }
 
-declare_enum_from_css_impl!(
+declare_box_alignment_enum_impl!(
   JustifyContent,
-  "normal" => JustifyContent::Normal,
-  "start" => JustifyContent::Start,
-  "end" => JustifyContent::End,
-  "flex-start" => JustifyContent::FlexStart,
-  "flex-end" => JustifyContent::FlexEnd,
-  "center" => JustifyContent::Center,
-  "stretch" => JustifyContent::Stretch,
-  "space-between" => JustifyContent::SpaceBetween,
-  "space-around" => JustifyContent::SpaceAround,
-  "space-evenly" => JustifyContent::SpaceEvenly
+  safe {
+    "start" => Start / SafeStart,
+    "end" => End / SafeEnd,
+    "flex-start" => FlexStart / SafeFlexStart,
+    "flex-end" => FlexEnd / SafeFlexEnd,
+    "center" => Center / SafeCenter,
+  },
+  plain {
+    "normal" => Normal,
+    "stretch" => Stretch,
+    "space-between" => SpaceBetween,
+    "space-around" => SpaceAround,
+    "space-evenly" => SpaceEvenly,
+  }
 );
 
 impl TailwindPropertyParser for JustifyContent {
@@ -749,15 +765,20 @@ impl From<JustifyContent> for Option<taffy::JustifyContent> {
   fn from(value: JustifyContent) -> Self {
     match value {
       JustifyContent::Normal => None,
-      JustifyContent::Start => Some(taffy::JustifyContent::Start),
-      JustifyContent::End => Some(taffy::JustifyContent::End),
-      JustifyContent::FlexStart => Some(taffy::JustifyContent::FlexStart),
-      JustifyContent::FlexEnd => Some(taffy::JustifyContent::FlexEnd),
-      JustifyContent::Center => Some(taffy::JustifyContent::Center),
-      JustifyContent::Stretch => Some(taffy::JustifyContent::Stretch),
-      JustifyContent::SpaceBetween => Some(taffy::JustifyContent::SpaceBetween),
-      JustifyContent::SpaceAround => Some(taffy::JustifyContent::SpaceAround),
-      JustifyContent::SpaceEvenly => Some(taffy::JustifyContent::SpaceEvenly),
+      JustifyContent::Start => Some(taffy::JustifyContent::START),
+      JustifyContent::End => Some(taffy::JustifyContent::END),
+      JustifyContent::FlexStart => Some(taffy::JustifyContent::FLEX_START),
+      JustifyContent::FlexEnd => Some(taffy::JustifyContent::FLEX_END),
+      JustifyContent::Center => Some(taffy::JustifyContent::CENTER),
+      JustifyContent::Stretch => Some(taffy::JustifyContent::STRETCH),
+      JustifyContent::SpaceBetween => Some(taffy::JustifyContent::SPACE_BETWEEN),
+      JustifyContent::SpaceAround => Some(taffy::JustifyContent::SPACE_AROUND),
+      JustifyContent::SpaceEvenly => Some(taffy::JustifyContent::SPACE_EVENLY),
+      JustifyContent::SafeStart => Some(taffy::JustifyContent::SAFE_START),
+      JustifyContent::SafeEnd => Some(taffy::JustifyContent::SAFE_END),
+      JustifyContent::SafeFlexStart => Some(taffy::JustifyContent::SAFE_FLEX_START),
+      JustifyContent::SafeFlexEnd => Some(taffy::JustifyContent::SAFE_FLEX_END),
+      JustifyContent::SafeCenter => Some(taffy::JustifyContent::SAFE_CENTER),
     }
   }
 }
@@ -871,18 +892,32 @@ pub enum AlignItems {
   Baseline,
   /// Items are stretched to fill the container in the cross axis
   Stretch,
+  /// `safe start`: like `Start`, falling back to start-edge alignment on overflow.
+  SafeStart,
+  /// `safe end`: like `End`, falling back to start-edge alignment on overflow.
+  SafeEnd,
+  /// `safe flex-start`: like `FlexStart`, falling back to start-edge alignment on overflow.
+  SafeFlexStart,
+  /// `safe flex-end`: like `FlexEnd`, falling back to start-edge alignment on overflow.
+  SafeFlexEnd,
+  /// `safe center`: like `Center`, falling back to start-edge alignment on overflow.
+  SafeCenter,
 }
 
-declare_enum_from_css_impl!(
+declare_box_alignment_enum_impl!(
   AlignItems,
-  "normal" => AlignItems::Normal,
-  "start" => AlignItems::Start,
-  "end" => AlignItems::End,
-  "flex-start" => AlignItems::FlexStart,
-  "flex-end" => AlignItems::FlexEnd,
-  "center" => AlignItems::Center,
-  "baseline" => AlignItems::Baseline,
-  "stretch" => AlignItems::Stretch
+  safe {
+    "start" => Start / SafeStart,
+    "end" => End / SafeEnd,
+    "flex-start" => FlexStart / SafeFlexStart,
+    "flex-end" => FlexEnd / SafeFlexEnd,
+    "center" => Center / SafeCenter,
+  },
+  plain {
+    "normal" => Normal,
+    "baseline" => Baseline,
+    "stretch" => Stretch,
+  }
 );
 
 impl TailwindPropertyParser for AlignItems {
@@ -895,13 +930,18 @@ impl From<AlignItems> for Option<taffy::AlignItems> {
   fn from(value: AlignItems) -> Self {
     match value {
       AlignItems::Normal => None,
-      AlignItems::Start => Some(taffy::AlignItems::Start),
-      AlignItems::End => Some(taffy::AlignItems::End),
-      AlignItems::FlexStart => Some(taffy::AlignItems::FlexStart),
-      AlignItems::FlexEnd => Some(taffy::AlignItems::FlexEnd),
-      AlignItems::Center => Some(taffy::AlignItems::Center),
-      AlignItems::Baseline => Some(taffy::AlignItems::Baseline),
-      AlignItems::Stretch => Some(taffy::AlignItems::Stretch),
+      AlignItems::Start => Some(taffy::AlignItems::START),
+      AlignItems::End => Some(taffy::AlignItems::END),
+      AlignItems::FlexStart => Some(taffy::AlignItems::FLEX_START),
+      AlignItems::FlexEnd => Some(taffy::AlignItems::FLEX_END),
+      AlignItems::Center => Some(taffy::AlignItems::CENTER),
+      AlignItems::Baseline => Some(taffy::AlignItems::BASELINE),
+      AlignItems::Stretch => Some(taffy::AlignItems::STRETCH),
+      AlignItems::SafeStart => Some(taffy::AlignItems::SAFE_START),
+      AlignItems::SafeEnd => Some(taffy::AlignItems::SAFE_END),
+      AlignItems::SafeFlexStart => Some(taffy::AlignItems::SAFE_FLEX_START),
+      AlignItems::SafeFlexEnd => Some(taffy::AlignItems::SAFE_FLEX_END),
+      AlignItems::SafeCenter => Some(taffy::AlignItems::SAFE_CENTER),
     }
   }
 }

@@ -362,6 +362,53 @@ fn parse_style_declaration_expands_place_self() {
 }
 
 #[test]
+fn parse_align_items_safe_keywords() {
+  assert_eq!(
+    parse_declarations("align-items", "safe center")
+      .iter()
+      .collect::<Vec<_>>(),
+    vec![&StyleDeclaration::align_items(AlignItems::SafeCenter)]
+  );
+  assert_eq!(
+    parse_declarations("align-items", "unsafe flex-end")
+      .iter()
+      .collect::<Vec<_>>(),
+    vec![&StyleDeclaration::align_items(AlignItems::FlexEnd)]
+  );
+  assert!(parse_declarations_is_err("align-items", "safe stretch"));
+  assert!(parse_declarations_is_err("align-items", "safe"));
+}
+
+#[test]
+fn parse_justify_content_safe_keywords() {
+  assert_eq!(
+    parse_declarations("justify-content", "safe flex-start")
+      .iter()
+      .collect::<Vec<_>>(),
+    vec![&StyleDeclaration::justify_content(
+      JustifyContent::SafeFlexStart
+    )]
+  );
+  assert!(parse_declarations_is_err(
+    "justify-content",
+    "safe space-between"
+  ));
+}
+
+#[test]
+fn parse_place_items_safe_keywords() {
+  assert_eq!(
+    parse_declarations("place-items", "safe start safe end")
+      .iter()
+      .collect::<Vec<_>>(),
+    vec![
+      &StyleDeclaration::align_items(AlignItems::SafeStart),
+      &StyleDeclaration::justify_items(AlignItems::SafeEnd),
+    ]
+  );
+}
+
+#[test]
 fn parse_style_declaration_expands_grid_row_shorthand() {
   let declarations = parse_declarations("grid-row", "span 2 / 5");
 

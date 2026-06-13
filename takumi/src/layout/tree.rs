@@ -1816,7 +1816,7 @@ impl<'g> RenderNode<'g> {
         {
           node.style.display = TaffyDisplay::Flex;
           node.style.flex_direction = taffy::FlexDirection::Row;
-          node.style.justify_content = Some(taffy::JustifyContent::Start);
+          node.style.justify_content = Some(taffy::JustifyContent::START);
         }
 
         tree.compute_layout(Size {
