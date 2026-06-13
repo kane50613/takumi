@@ -135,12 +135,30 @@ pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
     PropertyParser::BorderStyle(TailwindProperty::BorderStyle),
     PropertyParser::BorderWidth(TailwindProperty::BorderWidth),
   ],
-  "border-t" => &[PropertyParser::BorderWidth(TailwindProperty::BorderTopWidth)],
-  "border-r" => &[PropertyParser::BorderWidth(TailwindProperty::BorderRightWidth)],
-  "border-b" => &[PropertyParser::BorderWidth(TailwindProperty::BorderBottomWidth)],
-  "border-l" => &[PropertyParser::BorderWidth(TailwindProperty::BorderLeftWidth)],
-  "border-x" => &[PropertyParser::BorderWidth(TailwindProperty::BorderXWidth)],
-  "border-y" => &[PropertyParser::BorderWidth(TailwindProperty::BorderYWidth)],
+  "border-t" => &[
+    PropertyParser::ColorCurrent(TailwindProperty::BorderTopColor),
+    PropertyParser::BorderWidth(TailwindProperty::BorderTopWidth),
+  ],
+  "border-r" => &[
+    PropertyParser::ColorCurrent(TailwindProperty::BorderRightColor),
+    PropertyParser::BorderWidth(TailwindProperty::BorderRightWidth),
+  ],
+  "border-b" => &[
+    PropertyParser::ColorCurrent(TailwindProperty::BorderBottomColor),
+    PropertyParser::BorderWidth(TailwindProperty::BorderBottomWidth),
+  ],
+  "border-l" => &[
+    PropertyParser::ColorCurrent(TailwindProperty::BorderLeftColor),
+    PropertyParser::BorderWidth(TailwindProperty::BorderLeftWidth),
+  ],
+  "border-x" => &[
+    PropertyParser::ColorCurrent(TailwindProperty::BorderXColor),
+    PropertyParser::BorderWidth(TailwindProperty::BorderXWidth),
+  ],
+  "border-y" => &[
+    PropertyParser::ColorCurrent(TailwindProperty::BorderYColor),
+    PropertyParser::BorderWidth(TailwindProperty::BorderYWidth),
+  ],
   "outline" => &[
     PropertyParser::ColorCurrent(TailwindProperty::OutlineColor),
     PropertyParser::BorderStyle(TailwindProperty::OutlineStyle),
