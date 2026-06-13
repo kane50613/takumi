@@ -50,10 +50,22 @@ export const readySchema = z.object({
   type: z.literal("ready"),
 });
 
+// Posted before the (slower) fetches + WASM render so the browser pane never
+// waits on them. `cssContents` is raw CSS (Takumi's effective stylesheets), not URLs.
+export const previewResultSchema = z.object({
+  type: z.literal("preview-result"),
+  id: z.int().check(z.positive(), z.minimum(1)),
+  html: z.string(),
+  width: z.optional(z.int().check(z.positive(), z.minimum(1))),
+  height: z.optional(z.int().check(z.positive(), z.minimum(1))),
+  cssContents: z.optional(z.array(z.string())),
+});
+
 export const messageSchema = z.discriminatedUnion("type", [
   renderRequestSchema,
   renderResultSchema,
   readySchema,
+  previewResultSchema,
 ]);
 
 export type RenderMessageInput = z.input<typeof messageSchema>;

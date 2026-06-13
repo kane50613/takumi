@@ -1,5 +1,10 @@
 import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
 
+export const SITE_URL = "https://takumi.kane.tw";
+
+export const OG_IMAGE =
+  "https://raw.githubusercontent.com/kane50613/takumi/master/example/twitter-images/output/og-image.png";
+
 export const baseOptions: BaseLayoutProps = {
   githubUrl: "https://github.com/kane50613/takumi",
   nav: {

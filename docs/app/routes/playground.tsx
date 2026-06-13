@@ -3,19 +3,19 @@
 import { HomeLayout } from "fumadocs-ui/layouts/home";
 import { Loader2 } from "lucide-react";
 import { lazy, Suspense } from "react";
+import { Seo } from "~/components/seo";
 import { baseOptions } from "~/layout-config";
 
 const ImageEditor = lazy(() => import("~/components/playground/playground"));
 
+const TITLE = "Playground — Takumi";
 const DESCRIPTION =
   "Write JSX, watch Takumi render it to an image in your browser — WASM, no server.";
 
 export default function Playground() {
   return (
     <HomeLayout {...baseOptions}>
-      <title>Playground</title>
-      <meta name="description" content={DESCRIPTION} />
-      <meta name="og:description" content={DESCRIPTION} />
+      <Seo title={TITLE} description={DESCRIPTION} path="/playground" />
       <Suspense fallback={<LoadingScreen />}>
         <ImageEditor />
       </Suspense>

@@ -12,6 +12,11 @@ export function GET() {
       change: "monthly",
       priority: 0.8,
     }),
+    page({
+      path: "/showcase/",
+      change: "monthly",
+      priority: 0.8,
+    }),
   ];
 
   pages.push(

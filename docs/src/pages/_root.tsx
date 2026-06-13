@@ -15,6 +15,7 @@ export default function RootElement({ children }: { children: ReactNode }) {
         <meta name="twitter:creator" content="@kanewang_" />
         <meta name="twitter:site" content="@kanewang_" />
         <meta property="og:site_name" content="Takumi" />
+        <meta property="og:type" content="website" />
         <link rel="icon" type="image/svg+xml" href="/logo.svg" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

@@ -1,17 +1,19 @@
 "use client";
 
 import {
+  AxeIcon,
   CheckIcon,
   ChevronDownIcon,
   Code2Icon,
   DownloadIcon,
-  ImageIcon,
+  GlobeIcon,
   LinkIcon,
   Loader2Icon,
   RotateCcwIcon,
   Wand2Icon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import type { LucideIcon } from "lucide-react";
+import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from "react";
 import type { z } from "zod/mini";
 import { cn } from "~/lib/utils";
 import {
@@ -32,17 +34,22 @@ import {
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../ui/resizable";
 import { ComponentEditor } from "./component-editor";
 
+const BrowserPreview = lazy(() => import("./browser-preview"));
+
 const DEFAULT_TEMPLATE = templates[0];
+
+type TabId = "code" | "takumi" | "browser";
+
+const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
+  { id: "code", label: "Code", icon: Code2Icon },
+  { id: "takumi", label: "Takumi", icon: AxeIcon },
+  { id: "browser", label: "Browser", icon: GlobeIcon },
+];
 
 type RenderResult = z.infer<typeof renderResultSchema>["result"];
 type RenderSuccess = Extract<RenderResult, { status: "success" }> & { outputSize: number };
 type RenderError = Extract<RenderResult, { status: "error" }>;
 type Zoom = "fit" | "actual";
-
-const CHECKERBOARD = {
-  backgroundImage: "repeating-conic-gradient(rgba(128,128,128,0.16) 0% 25%, transparent 0% 50%)",
-  backgroundSize: "16px 16px",
-} as const;
 
 function isBlobUrl(url: string | undefined): url is string {
   return typeof url === "string" && url.startsWith("blob:");
@@ -57,6 +64,12 @@ function formatStats(result: RenderSuccess) {
 export default function Playground() {
   const [code, setCode] = useState<string>();
   const [lastSuccess, setLastSuccess] = useState<RenderSuccess>();
+  const [browserPreview, setBrowserPreview] = useState<{
+    html: string;
+    width?: number;
+    height?: number;
+    cssContents?: string[];
+  }>();
   const [renderError, setRenderError] = useState<RenderError>();
   const [isReady, setIsReady] = useState(false);
   const [isFormatting, setIsFormatting] = useState(false);
@@ -72,7 +85,7 @@ export default function Playground() {
   const currentRequestIdRef = useRef(0);
 
   const workerRef = useRef<Worker | undefined>(undefined);
-  const [activeTab, setActiveTab] = useState<"code" | "preview">("code");
+  const [activeTab, setActiveTab] = useState<TabId>("code");
 
   const codeQuery = searchParams.get("code");
   const templateQuery = searchParams.get("template");
@@ -171,6 +184,17 @@ export default function Playground() {
         }
         case "render-request": {
           throw new Error("request is not possible for response");
+        }
+        case "preview-result": {
+          if (message.id === currentRequestIdRef.current) {
+            setBrowserPreview({
+              html: message.html,
+              width: message.width,
+              height: message.height,
+              cssContents: message.cssContents,
+            });
+          }
+          break;
         }
         case "render-result": {
           const { result } = message;
@@ -283,25 +307,52 @@ export default function Playground() {
       {code && <ComponentEditor code={code} setCode={setCode} />}
     </div>
   );
-  const preview = <PreviewPanel lastSuccess={lastSuccess} error={renderError} zoom={zoom} />;
+  const takumiPane = (
+    <PreviewPanel lastSuccess={lastSuccess} error={renderError} zoom={zoom} isReady={isReady} />
+  );
+  const browserPane = (
+    <Suspense fallback={<div className="h-full bg-muted/20" />}>
+      <BrowserPreview
+        html={browserPreview?.html}
+        width={browserPreview?.width}
+        height={browserPreview?.height}
+        cssContents={browserPreview?.cssContents}
+      />
+    </Suspense>
+  );
+  const splitPreview = (
+    <ResizablePanelGroup orientation="vertical">
+      <ResizablePanel defaultSize={50} minSize={20}>
+        <LabeledPane label="Takumi" icon={AxeIcon}>
+          {takumiPane}
+        </LabeledPane>
+      </ResizablePanel>
+      <ResizableHandle withHandle className="hover:bg-primary/50 transition-colors" />
+      <ResizablePanel defaultSize={50} minSize={20}>
+        <LabeledPane label="Browser" icon={GlobeIcon}>
+          {browserPane}
+        </LabeledPane>
+      </ResizablePanel>
+    </ResizablePanelGroup>
+  );
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] flex-col bg-background">
       <div className="flex h-10 shrink-0 items-center gap-1 border-b px-2 md:px-3">
         <div className="flex items-center rounded-md border p-0.5 md:hidden">
-          {(["code", "preview"] as const).map((tab) => (
+          {TABS.map(({ id, label, icon: Icon }) => (
             <Button
-              key={tab}
+              key={id}
               variant="ghost"
               size="sm"
               className={cn(
                 "h-6 gap-1 rounded-sm px-2 font-mono text-xs",
-                activeTab === tab ? "bg-muted text-foreground" : "text-muted-foreground",
+                activeTab === id ? "bg-muted text-foreground" : "text-muted-foreground",
               )}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => setActiveTab(id)}
             >
-              {tab === "code" ? <Code2Icon className="size-3" /> : <ImageIcon className="size-3" />}
-              {tab === "code" ? "Code" : "Preview"}
+              <Icon className="size-3" />
+              {label}
             </Button>
           ))}
         </div>
@@ -330,9 +381,7 @@ export default function Playground() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <div
-          className={cn("flex items-center gap-0.5", activeTab === "preview" && "max-md:hidden")}
-        >
+        <div className={cn("flex items-center gap-0.5", activeTab !== "code" && "max-md:hidden")}>
           <Button
             variant="ghost"
             size="icon-sm"
@@ -403,12 +452,14 @@ export default function Playground() {
             </ResizablePanel>
             <ResizableHandle className="hover:bg-primary/50 transition-colors" />
             <ResizablePanel defaultSize={45} minSize={30}>
-              {preview}
+              {splitPreview}
             </ResizablePanel>
           </ResizablePanelGroup>
         </div>
 
-        <div className="h-full md:hidden">{activeTab === "code" ? editor : preview}</div>
+        <div className="h-full md:hidden">
+          {activeTab === "code" ? editor : activeTab === "takumi" ? takumiPane : browserPane}
+        </div>
       </div>
 
       <div className="flex h-7 shrink-0 items-center gap-3 border-t px-3 font-mono text-[11px] text-muted-foreground">
@@ -429,14 +480,36 @@ export default function Playground() {
   );
 }
 
+function LabeledPane({
+  label,
+  icon: Icon,
+  children,
+}: {
+  label: string;
+  icon: LucideIcon;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex h-6 shrink-0 items-center gap-1.5 border-b px-3 font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
+        <Icon className="size-3" />
+        {label}
+      </div>
+      <div className="min-h-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
 function PreviewPanel({
   lastSuccess,
   error,
   zoom,
+  isReady,
 }: {
   lastSuccess: RenderSuccess | undefined;
   error: RenderError | undefined;
   zoom: Zoom;
+  isReady: boolean;
 }) {
   const image = lastSuccess && (
     <img
@@ -447,17 +520,25 @@ function PreviewPanel({
         zoom === "fit" ? "max-h-full max-w-full object-contain" : "max-w-none",
         error && "opacity-40",
       )}
-      style={CHECKERBOARD}
     />
   );
+
+  if (!lastSuccess && !error) {
+    return (
+      <div className="flex h-full items-center justify-center gap-2 bg-muted/20 font-mono text-xs text-muted-foreground">
+        <Loader2Icon className="size-3.5 animate-spin" />
+        {isReady ? "rendering…" : "loading wasm…"}
+      </div>
+    );
+  }
 
   return (
     <div className="relative h-full min-w-0 overflow-hidden bg-muted/20">
       {zoom === "fit" ? (
-        <div className="absolute inset-0 flex items-center justify-center p-6">{image}</div>
+        <div className="absolute inset-0 flex items-center justify-center">{image}</div>
       ) : (
         <div className="absolute inset-0 overflow-auto">
-          <div className="flex h-fit min-h-full w-fit min-w-full items-center justify-center p-6">
+          <div className="flex h-fit min-h-full w-fit min-w-full items-center justify-center">
             {image}
           </div>
         </div>

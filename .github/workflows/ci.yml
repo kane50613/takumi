@@ -857,7 +857,8 @@ jobs:
         run: |
           REF_NAME="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
           SAFE_REF=$(echo "${REF_NAME}" | tr '[:upper:]' '[:lower:]' | sed -E 's#[^a-z0-9-]+#-#g; s/^-+//; s/-+$//; s/-{2,}/-/g')
-          SAFE_REF=${SAFE_REF:0:63}
+          # Keep the full alias under the 64-char TLS common-name limit (".preview.takumi.kane.tw" is 23 chars).
+          SAFE_REF=${SAFE_REF:0:40}
           SAFE_REF=$(echo "${SAFE_REF}" | sed -E 's/-+$//')
           if [ -z "${SAFE_REF}" ]; then
             SAFE_REF="preview"

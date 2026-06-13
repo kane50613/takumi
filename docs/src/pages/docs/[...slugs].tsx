@@ -10,6 +10,7 @@ import type { PageProps } from "waku/router";
 import { unstable_notFound } from "waku/router/server";
 import { Accordion, Accordions } from "~/components/accordion";
 import { Mermaid } from "~/components/mdx/mermaid";
+import { Seo } from "~/components/seo";
 import { TypeTable } from "~/components/type-table";
 import { Video } from "~/components/video";
 import { source } from "~/source";
@@ -46,7 +47,7 @@ export default function Page({ slugs = [] }: PageProps<"/docs/[...slugs]">) {
   }
 
   const MDX = page.data.body;
-  const title = `${page.data.title} - Takumi`;
+  const title = `${page.data.title} — Takumi`;
   const og = ["https://takumi.kane.tw/og", "docs", ...slugs, "image.webp"].join("/");
   const tree = source.getPageTree() as PageTreeRoot;
 
@@ -64,15 +65,7 @@ export default function Page({ slugs = [] }: PageProps<"/docs/[...slugs]">) {
         path: `/docs/content/docs/${page.path}?plain=1`,
       }}
     >
-      <title>{title}</title>
-      <meta name="description" content={page.data.description} />
-      <meta property="og:title" content={title} />
-      <meta property="og:description" content={page.data.description} />
-      <meta property="og:image" content={og} />
-      <meta name="twitter:image" content={og} />
-      <meta property="og:url" content={`https://takumi.kane.tw${page.url}`} />
-      <meta name="twitter:url" content={`https://takumi.kane.tw${page.url}`} />
-      <link rel="canonical" href={`https://takumi.kane.tw${page.url}`} />
+      <Seo title={title} description={page.data.description} path={page.url} image={og} />
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
       <DocsBody>
