@@ -1,5 +1,15 @@
 # takumi
 
+## 1.8.5
+
+### Patch Changes
+
+- b998cfd: Fix Tailwind per-side border colors and border-width rendering
+- 1389d75: Support `safe`/`unsafe` overflow keywords on `align-items` and `justify-content` (taffy 0.11)
+- Updated dependencies [b998cfd]
+- Updated dependencies [1389d75]
+  - takumi-css@0.1.2
+
 ## 1.8.4
 
 ### Patch Changes
