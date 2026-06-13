@@ -3,20 +3,14 @@ import { extractEmojis } from "takumi-js/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
 import wasm, { init, Renderer } from "takumi-js/wasm";
 import * as React from "react";
-import { transform } from "sucrase";
-import * as z from "zod/mini";
-import { messageSchema, optionsSchema, type RenderMessageInput } from "./schema";
+import { evaluateCodeExports, renderBrowserHtml } from "./evaluate";
+import { messageSchema, type RenderMessageInput } from "./schema";
 
 const fetchCache = new Map<string, ArrayBuffer>();
 
 function postMessage(message: RenderMessageInput, transfer?: Transferable[]) {
   return self.postMessage(message, { transfer });
 }
-
-const exportsSchema = z.object({
-  default: z.function(),
-  options: optionsSchema,
-});
 
 let renderer: Renderer | undefined;
 
@@ -28,21 +22,6 @@ let renderer: Renderer | undefined;
   postMessage({ type: "ready" });
 })();
 
-function transformCode(code: string) {
-  return transform(code, {
-    transforms: ["jsx", "typescript", "imports"],
-    production: true,
-  }).code;
-}
-
-function evaluateCodeExports(code: string) {
-  const exports = {};
-
-  new Function("exports", "React", transformCode(code))(exports, React);
-
-  return exportsSchema.parse(exports);
-}
-
 self.onmessage = async (event: MessageEvent) => {
   const payload = messageSchema.parse(event.data);
 
@@ -51,7 +30,13 @@ self.onmessage = async (event: MessageEvent) => {
       if (!renderer) throw new Error("WASM is not ready yet!");
 
       try {
-        const { default: component, options } = evaluateCodeExports(payload.code);
+        const { default: component, options } = evaluateCodeExports(payload.code, React);
+        postMessage({
+          type: "preview-result",
+          id: payload.id,
+          html: renderBrowserHtml(payload.code),
+          options,
+        });
         let { node, stylesheets } = await fromJsx(
           React.createElement(component as React.JSXElementConstructor<unknown>),
         );
@@ -124,7 +109,8 @@ self.onmessage = async (event: MessageEvent) => {
       break;
     }
     case "ready":
-    case "render-result": {
+    case "render-result":
+    case "preview-result": {
       throw new Error("Respond message should not be sent from main window.");
     }
     default: {

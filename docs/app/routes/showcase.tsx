@@ -7,8 +7,13 @@ import { useCallback, useRef } from "react";
 import { GithubIcon } from "~/components/showcase/github-icon";
 import { ShowcaseCard } from "~/components/showcase/showcase-card";
 import { TemplateCard } from "~/components/showcase/template-card";
+import { Seo } from "~/components/seo";
 import { baseOptions } from "~/layout-config";
 import { showcaseProjects, showcaseTemplates } from "~/data/showcase";
+
+const TITLE = "Showcase — Takumi";
+const DESCRIPTION =
+  "Discover how developers are using Takumi to power their dynamic image generation.";
 
 export default function Showcase() {
   const confettiRef = useRef<JSConfetti | null>(null);
@@ -32,11 +37,7 @@ export default function Showcase() {
 
   return (
     <HomeLayout className="overflow-x-hidden" {...baseOptions}>
-      <title>Showcase — Built with Takumi</title>
-      <meta
-        name="description"
-        content="Discover how developers are using Takumi to power their dynamic image generation."
-      />
+      <Seo title={TITLE} description={DESCRIPTION} path="/showcase" />
 
       <div className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden">
         <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] opacity-[0.03] bg-[radial-gradient(circle_at_center,var(--color-primary)_0%,transparent_70%)] blur-[100px]" />

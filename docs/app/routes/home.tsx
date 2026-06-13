@@ -13,6 +13,7 @@ import { Features } from "~/components/home/features";
 import { Filmstrip } from "~/components/home/filmstrip";
 import { Hero } from "~/components/home/hero";
 import { Showcase } from "~/components/home/showcase";
+import { Seo } from "~/components/seo";
 import { baseOptions } from "~/layout-config";
 
 // Source of example/twitter-images/components/home-demo-card.tsx; keep in sync.
@@ -42,6 +43,10 @@ const CODE_SNIPPET = `export default function DemoCard() {
 }`;
 
 const CTA_COMMAND = "bun i takumi-js";
+
+const TITLE = "Takumi — Render your React components to images.";
+const DESCRIPTION =
+  "Rust-powered image rendering engine. Write JSX, get pixels. Built for fast image generation across runtimes.";
 
 const highlighter = await createHighlighterCore({
   themes: [githubDarkDefault, githubLightDefault],
@@ -74,24 +79,7 @@ const highlightedCta = {
 export default function Home() {
   return (
     <HomeLayout className="overflow-x-hidden" {...baseOptions}>
-      <title>Takumi — Render your React components to images.</title>
-      <meta
-        name="description"
-        content="Rust-powered image rendering engine. Write JSX, get pixels. Built for fast image generation across runtimes."
-      />
-      <meta name="og:title" content="Takumi — Render your React components to images." />
-      <meta
-        name="og:description"
-        content="Rust-powered image rendering engine. Write JSX, get pixels. Built for fast image generation across runtimes."
-      />
-      <meta
-        name="og:image"
-        content="https://raw.githubusercontent.com/kane50613/takumi/master/example/twitter-images/output/og-image.png"
-      />
-      <meta
-        name="twitter:image"
-        content="https://raw.githubusercontent.com/kane50613/takumi/master/example/twitter-images/output/og-image.png"
-      />
+      <Seo title={TITLE} description={DESCRIPTION} path="" />
 
       <Hero />
       <CodeDemo highlightedHtml={highlightedCodeDemo} />

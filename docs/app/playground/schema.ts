@@ -50,10 +50,20 @@ export const readySchema = z.object({
   type: z.literal("ready"),
 });
 
+// Posted before the (slower) Takumi render so the browser pane never waits on
+// its network fetches or WASM render.
+export const previewResultSchema = z.object({
+  type: z.literal("preview-result"),
+  id: z.int().check(z.positive(), z.minimum(1)),
+  html: z.string(),
+  options: optionsSchema,
+});
+
 export const messageSchema = z.discriminatedUnion("type", [
   renderRequestSchema,
   renderResultSchema,
   readySchema,
+  previewResultSchema,
 ]);
 
 export type RenderMessageInput = z.input<typeof messageSchema>;
