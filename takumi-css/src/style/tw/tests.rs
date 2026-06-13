@@ -1021,3 +1021,45 @@ fn test_gradient_stop_position_is_used_in_apply() {
     vec![Length::Percentage(10.0), Length::Percentage(80.0)]
   );
 }
+
+#[test]
+fn test_border_width_implies_solid_and_per_side_color() {
+  let viewport = Viewport::new((100, 100));
+  let computed = |tw: &str| {
+    Style::from(
+      TailwindValues::from_str(tw)
+        .expect("tailwind values should parse")
+        .into_declaration_block(viewport),
+    )
+    .inherit(&ComputedStyle::default())
+  };
+
+  let top = computed("border-t-8");
+  assert_eq!(top.border_top_width, Length::Px(8.0));
+  assert_eq!(top.border_top_style, BorderStyle::Solid);
+  assert_eq!(top.border_bottom_style, BorderStyle::None);
+
+  let all = computed("border-4");
+  assert_eq!(all.border_top_style, BorderStyle::Solid);
+  assert_eq!(all.border_right_style, BorderStyle::Solid);
+  assert_eq!(all.border_bottom_style, BorderStyle::Solid);
+  assert_eq!(all.border_left_style, BorderStyle::Solid);
+
+  let dashed = computed("border-2 border-dashed");
+  assert_eq!(dashed.border_top_style, BorderStyle::Dashed);
+
+  assert_eq!(
+    TailwindProperty::parse("border-t-blue-500"),
+    Some(TailwindProperty::BorderTopColor(ColorInput::Value(Color(
+      [43, 127, 255, 255]
+    ))))
+  );
+
+  let bar = computed("border-t-8 border-t-blue-500");
+  assert_eq!(bar.border_top_width, Length::Px(8.0));
+  assert_eq!(bar.border_top_style, BorderStyle::Solid);
+  assert_eq!(
+    bar.border_top_color,
+    ColorInput::Value(Color([43, 127, 255, 255]))
+  );
+}

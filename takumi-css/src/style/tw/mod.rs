@@ -392,6 +392,18 @@ pub enum TailwindProperty {
   BorderXWidth(TwBorderWidth),
   /// `border-block-width` property.
   BorderYWidth(TwBorderWidth),
+  /// `border-top-color` property.
+  BorderTopColor(ColorInput),
+  /// `border-right-color` property.
+  BorderRightColor(ColorInput),
+  /// `border-bottom-color` property.
+  BorderBottomColor(ColorInput),
+  /// `border-left-color` property.
+  BorderLeftColor(ColorInput),
+  /// `border-inline-color` property.
+  BorderXColor(ColorInput),
+  /// `border-block-color` property.
+  BorderYColor(ColorInput),
   /// Tailwind `outline` utility (`outline-width: 1px; outline-style: solid`).
   OutlineDefault,
   /// `outline-width` property.
@@ -936,11 +948,7 @@ impl TailwindProperty {
           border_top_width(Length::Px(1.0)),
           border_right_width(Length::Px(1.0)),
           border_bottom_width(Length::Px(1.0)),
-          border_left_width(Length::Px(1.0)),
-          border_top_style(BorderStyle::Solid),
-          border_right_style(BorderStyle::Solid),
-          border_bottom_style(BorderStyle::Solid),
-          border_left_style(BorderStyle::Solid)
+          border_left_width(Length::Px(1.0))
         );
       }
       TailwindProperty::BorderWidth(tw_border_width) => {
@@ -1012,6 +1020,34 @@ impl TailwindProperty {
           important,
           border_top_width(tw_border_width.0),
           border_bottom_width(tw_border_width.0)
+        );
+      }
+      TailwindProperty::BorderTopColor(color_input) => {
+        push_decl!(builder, important, border_top_color(color_input))
+      }
+      TailwindProperty::BorderRightColor(color_input) => {
+        push_decl!(builder, important, border_right_color(color_input))
+      }
+      TailwindProperty::BorderBottomColor(color_input) => {
+        push_decl!(builder, important, border_bottom_color(color_input))
+      }
+      TailwindProperty::BorderLeftColor(color_input) => {
+        push_decl!(builder, important, border_left_color(color_input))
+      }
+      TailwindProperty::BorderXColor(color_input) => {
+        push_decl!(
+          builder,
+          important,
+          border_left_color(color_input),
+          border_right_color(color_input)
+        );
+      }
+      TailwindProperty::BorderYColor(color_input) => {
+        push_decl!(
+          builder,
+          important,
+          border_top_color(color_input),
+          border_bottom_color(color_input)
         );
       }
       TailwindProperty::OutlineDefault => {
