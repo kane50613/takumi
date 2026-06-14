@@ -4,6 +4,7 @@ import { Card, Cards } from "fumadocs-ui/components/card";
 import { Step, Steps } from "fumadocs-ui/components/steps";
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 import defaultMdxComponents, { createRelativeLink } from "fumadocs-ui/mdx";
+import { MarkdownCopyButton, ViewOptionsPopover } from "fumadocs-ui/layouts/docs/page";
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/page";
 import { ArrowBigRight, BookOpen, FileCode2, Hand, Shovel, ToyBrick, Wrench } from "lucide-react";
 import type { PageProps } from "waku/router";
@@ -49,6 +50,8 @@ export default function Page({ slugs = [] }: PageProps<"/docs/[...slugs]">) {
   const MDX = page.data.body;
   const title = `${page.data.title} — Takumi`;
   const og = ["https://takumi.kane.tw/og", "docs", ...slugs, "image.webp"].join("/");
+  const markdownUrl = `/llms.mdx${page.url}`;
+  const githubUrl = `https://github.com/kane50613/takumi/blob/master/docs/content/docs/${page.path}`;
   const tree = source.getPageTree() as PageTreeRoot;
 
   return (
@@ -68,6 +71,10 @@ export default function Page({ slugs = [] }: PageProps<"/docs/[...slugs]">) {
       <Seo title={title} description={page.data.description} path={page.url} image={og} />
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
+      <div className="flex flex-row items-center gap-2 border-b pb-6">
+        <MarkdownCopyButton markdownUrl={markdownUrl} />
+        <ViewOptionsPopover markdownUrl={markdownUrl} githubUrl={githubUrl} />
+      </div>
       <DocsBody>
         <MDX
           components={{
