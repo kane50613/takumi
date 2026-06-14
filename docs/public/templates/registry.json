@@ -32,6 +32,46 @@
           "type": "registry:ui"
         }
       ]
+    },
+    {
+      "name": "event-template",
+      "type": "registry:ui",
+      "files": [
+        {
+          "path": "templates/event-template.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "quote-template",
+      "type": "registry:ui",
+      "files": [
+        {
+          "path": "templates/quote-template.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "repository-template",
+      "type": "registry:ui",
+      "files": [
+        {
+          "path": "templates/repository-template.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "changelog-template",
+      "type": "registry:ui",
+      "files": [
+        {
+          "path": "templates/changelog-template.tsx",
+          "type": "registry:ui"
+        }
+      ]
     }
   ]
 }

@@ -89,6 +89,30 @@ export const showcaseTemplates: Template[] = [
     href: "/docs/templates#product-card-template",
     color: "from-green-500/20 to-emerald-500/20",
   },
+  {
+    title: "Event",
+    image: "/templates/previews/event-template.webp",
+    href: "/docs/templates#event-template",
+    color: "from-amber-500/20 to-red-500/20",
+  },
+  {
+    title: "Quote",
+    image: "/templates/previews/quote-template.webp",
+    href: "/docs/templates#quote-template",
+    color: "from-rose-500/20 to-orange-500/20",
+  },
+  {
+    title: "Repository",
+    image: "/templates/previews/repository-template.webp",
+    href: "/docs/templates#repository-template",
+    color: "from-slate-500/20 to-zinc-500/20",
+  },
+  {
+    title: "Changelog",
+    image: "/templates/previews/changelog-template.webp",
+    href: "/docs/templates#changelog-template",
+    color: "from-emerald-500/20 to-green-500/20",
+  },
 ];
 
 export interface Project {

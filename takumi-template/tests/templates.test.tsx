@@ -4,8 +4,12 @@ import { render } from "takumi-js";
 import { file, write } from "bun";
 import type { ReactNode } from "react";
 import BlogPostTemplate from "../src/templates/blog-post-template";
+import ChangelogTemplate from "../src/templates/changelog-template";
 import DocsTemplate from "../src/templates/docs-template";
+import EventTemplate from "../src/templates/event-template";
 import ProductCardTemplate from "../src/templates/product-card-template";
+import QuoteTemplate from "../src/templates/quote-template";
+import RepositoryTemplate from "../src/templates/repository-template";
 
 function testRender(name: string, template: ReactNode) {
   test(name, async () => {
@@ -78,5 +82,58 @@ testRender(
         style={{ width: "200px", height: "200px", objectFit: "contain" }}
       />
     }
+  />,
+);
+
+testRender(
+  "event-template",
+  <EventTemplate
+    name="Shipping Rust to the Browser: Wasm in Production"
+    track="Workshop"
+    datetime="Thu, Sep 18, 2026 · 10:00 AM PT"
+    location="Online"
+    online
+    hostName="Lin Clark"
+    hostTitle="Principal Engineer, Fastly"
+    hostInitials="LC"
+  />,
+);
+
+testRender(
+  "quote-template",
+  <QuoteTemplate
+    quote="We replaced our Puppeteer farm with Takumi and cut OG render time from 800ms to 12ms."
+    author="Sara Vieira"
+    role="Staff Engineer"
+    company="Vercel"
+    initials="SV"
+  />,
+);
+
+testRender(
+  "repository-template",
+  <RepositoryTemplate
+    owner="vercel"
+    name="satori"
+    description="Enlightened library to convert HTML and CSS to SVG. Powers OG image generation across the web."
+    stars="12.4k"
+    forks="298"
+    language="TypeScript"
+    langColor="#3178c6"
+  />,
+);
+
+testRender(
+  "changelog-template",
+  <ChangelogTemplate
+    product="Takumi"
+    version="v2.4.0"
+    date="June 15, 2026"
+    headline="Faster fonts, smaller Wasm"
+    bullets={[
+      { tag: "New", text: "Explicit FontContext API" },
+      { tag: "Perf", text: "30% smaller Wasm bundle" },
+      { tag: "Fixed", text: "Emoji baseline alignment" },
+    ]}
   />,
 );
