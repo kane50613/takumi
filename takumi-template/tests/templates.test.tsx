@@ -92,10 +92,8 @@ testRender(
     track="Workshop"
     datetime="Thu, Sep 18, 2026 · 10:00 AM PT"
     location="Online"
-    online
     hostName="Lin Clark"
     hostTitle="Principal Engineer, Fastly"
-    hostInitials="LC"
   />,
 );
 
@@ -106,7 +104,6 @@ testRender(
     author="Sara Vieira"
     role="Staff Engineer"
     company="Vercel"
-    initials="SV"
   />,
 );
 
@@ -126,7 +123,6 @@ testRender(
 testRender(
   "changelog-template",
   <ChangelogTemplate
-    product="Takumi"
     version="v2.4.0"
     date="June 15, 2026"
     headline="Faster fonts, leaner core"

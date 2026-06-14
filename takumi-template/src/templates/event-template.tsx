@@ -5,36 +5,20 @@ export default function EventTemplate({
   track,
   datetime,
   location,
-  online = false,
   hostName,
   hostTitle,
-  hostInitials,
-  brand = "TAKUMI",
   accent = "#E5341F",
 }: {
   name: ReactNode;
   track: ReactNode;
   datetime: ReactNode;
   location: ReactNode;
-  online?: boolean;
   hostName: ReactNode;
   hostTitle: ReactNode;
-  hostInitials: ReactNode;
-  brand?: ReactNode;
   accent?: string;
 }) {
   const ink = "#16140F";
   const muted = "#6E6A60";
-  const hair = "#D7D4CC";
-
-  const metaLabel = {
-    display: "flex",
-    fontSize: 16,
-    fontWeight: 700,
-    letterSpacing: "0.18em",
-    textTransform: "uppercase" as const,
-    color: muted,
-  };
 
   return (
     <div
@@ -45,69 +29,36 @@ export default function EventTemplate({
         height: "100%",
         backgroundColor: "#F5F3EC",
         color: ink,
-        padding: "72px 76px",
+        padding: "80px 76px",
         fontFamily: "Inter, sans-serif",
         justifyContent: "space-between",
       }}
     >
-      <div
+      <span
         style={{
           display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          paddingBottom: 24,
-          borderBottom: `2px solid ${ink}`,
+          fontSize: 20,
+          fontWeight: 700,
+          letterSpacing: "0.22em",
+          textTransform: "uppercase",
+          color: accent,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div
-            style={{
-              display: "flex",
-              width: 16,
-              height: 16,
-              backgroundColor: accent,
-            }}
-          />
-          <span
-            style={{
-              display: "flex",
-              fontSize: 20,
-              fontWeight: 700,
-              letterSpacing: "0.22em",
-              textTransform: "uppercase",
-              color: accent,
-            }}
-          >
-            {track}
-          </span>
-        </div>
-        <span
-          style={{
-            display: "flex",
-            fontSize: 20,
-            fontWeight: 800,
-            letterSpacing: "0.3em",
-            color: ink,
-          }}
-        >
-          {brand}
-        </span>
-      </div>
+        {track}
+      </span>
 
       <div
         style={{
           display: "flex",
-          flexDirection: "column",
           flex: 1,
+          flexDirection: "column",
           justifyContent: "center",
-          paddingTop: 20,
-          paddingBottom: 20,
         }}
       >
         <span
           style={{
             display: "flex",
-            fontSize: 84,
+            fontSize: 88,
             fontWeight: 800,
             lineHeight: 1.05,
             letterSpacing: "-0.035em",
@@ -123,103 +74,20 @@ export default function EventTemplate({
           display: "flex",
           alignItems: "flex-end",
           justifyContent: "space-between",
-          paddingTop: 32,
-          borderTop: `1px solid ${hair}`,
         }}
       >
-        <div style={{ display: "flex", gap: 64 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <span style={metaLabel}>When</span>
-            <span
-              style={{
-                display: "flex",
-                fontSize: 28,
-                fontWeight: 600,
-                color: ink,
-              }}
-            >
-              {datetime}
-            </span>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <span style={metaLabel}>Where</span>
-            {online ? (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  backgroundColor: accent,
-                  padding: "8px 16px",
-                  alignSelf: "flex-start",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    width: 12,
-                    height: 12,
-                    borderRadius: "50%",
-                    backgroundColor: "#FFFFFF",
-                  }}
-                />
-                <span
-                  style={{
-                    display: "flex",
-                    fontSize: 24,
-                    fontWeight: 700,
-                    letterSpacing: "0.04em",
-                    color: "#FFFFFF",
-                  }}
-                >
-                  {location}
-                </span>
-              </div>
-            ) : (
-              <span
-                style={{
-                  display: "flex",
-                  fontSize: 28,
-                  fontWeight: 600,
-                  color: ink,
-                }}
-              >
-                {location}
-              </span>
-            )}
-          </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <span style={{ display: "flex", fontSize: 28, fontWeight: 600, color: ink }}>
+            {datetime}
+          </span>
+          <span style={{ display: "flex", fontSize: 24, color: muted }}>{location}</span>
         </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 60,
-              height: 60,
-              borderRadius: "50%",
-              border: `2px solid ${ink}`,
-              fontSize: 24,
-              fontWeight: 700,
-              color: ink,
-            }}
-          >
-            {hostInitials}
-          </div>
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <span
-              style={{
-                display: "flex",
-                fontSize: 28,
-                fontWeight: 700,
-                color: ink,
-              }}
-            >
-              {hostName}
-            </span>
-            <span style={{ display: "flex", fontSize: 20, color: muted }}>{hostTitle}</span>
-          </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ display: "flex", fontSize: 24, fontWeight: 600, color: ink }}>
+            {hostName}
+          </span>
+          <span style={{ display: "flex", fontSize: 24, color: muted }}>·</span>
+          <span style={{ display: "flex", fontSize: 24, color: muted }}>{hostTitle}</span>
         </div>
       </div>
     </div>
