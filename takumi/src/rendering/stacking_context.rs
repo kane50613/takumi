@@ -6,8 +6,9 @@ use tiny_skia::Pixmap;
 use tiny_skia::PixmapMut;
 
 use crate::layout::inline::{
-  InlineLayoutMode, InlineLayoutRequest, get_parent_font_metrics, resolve_inline_line_metrics,
-  resolve_inline_line_states, resolve_visual_inline_box, text_fit_line_alignment_correction,
+  InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan, get_parent_font_metrics,
+  resolve_inline_line_metrics, resolve_inline_line_states, resolve_visual_inline_box,
+  text_fit_line_alignment_correction,
 };
 use crate::{
   Error, Result,
@@ -21,8 +22,11 @@ use crate::{
   },
   rendering::{
     BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, NodeMaskAction, Placement,
-    SizedFontStyle, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel, draw_debug_border,
-    get_node_mut_by_path, prepare_node_mask, scale_text_fit_x, transformed_rect_extents,
+    SizedFontStyle, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel, draw_background,
+    draw_border, draw_debug_border, draw_inset_box_shadow, draw_node_content, draw_outline,
+    draw_outset_box_shadow, get_node_mut_by_path,
+    inline_drawing::{InlineLayoutDrawData, draw_inline_box, draw_inline_layout},
+    prepare_node_mask, scale_text_fit_x, transformed_rect_extents,
   },
 };
 
@@ -896,27 +900,27 @@ fn begin_node_render<'g>(
 
   match mask_action {
     NodeMaskAction::None => {
-      current.draw_shell(canvas, layout)?;
+      draw_render_node_shell(current, canvas, layout)?;
     }
     NodeMaskAction::Shell(mask) => {
       canvas.push_mask(mask);
-      current.draw_shell(canvas, layout)?;
+      draw_render_node_shell(current, canvas, layout)?;
     }
     NodeMaskAction::Content(mask) => {
-      current.draw_shell(canvas, layout)?;
+      draw_render_node_shell(current, canvas, layout)?;
       canvas.push_mask(mask);
     }
     NodeMaskAction::SkipRendering => return Ok(Some(DeferredNodeRender::SkipRendering)),
   }
 
-  current.draw_content(canvas, layout)?;
+  draw_render_node_content(current, canvas, layout)?;
 
   if current.context.draw_debug_border {
     draw_debug_border(canvas, layout, node_paint.transform);
   }
 
   if current.should_create_inline_layout() {
-    current.draw_inline(canvas, layout)?;
+    draw_render_node_inline(current, canvas, layout)?;
     finish_node_render(
       current,
       canvas,
@@ -1268,4 +1272,84 @@ mod tests {
     );
     Ok(())
   }
+}
+
+fn draw_render_node_shell(node: &RenderNode, canvas: &mut Canvas, layout: Layout) -> Result<()> {
+  if node.node.is_none() {
+    return Ok(());
+  }
+
+  draw_outset_box_shadow(&node.context, canvas, layout)?;
+  draw_background(&node.context, canvas, layout)?;
+  draw_inset_box_shadow(&node.context, canvas, layout)?;
+  draw_border(&node.context, canvas, layout)?;
+  draw_outline(&node.context, canvas, layout)?;
+  Ok(())
+}
+
+fn draw_render_node_content(node: &RenderNode, canvas: &mut Canvas, layout: Layout) -> Result<()> {
+  if node.should_create_inline_layout() || node.has_anonymous_text_item_child() {
+    return Ok(());
+  }
+
+  if let Some(inner) = &node.node {
+    draw_node_content(inner, &node.context, canvas, layout)?;
+  }
+  Ok(())
+}
+
+fn draw_render_node_inline(
+  node: &mut RenderNode,
+  canvas: &mut Canvas,
+  layout: Layout,
+) -> Result<()> {
+  if node.context.style.opacity.0 == 0.0 {
+    return Ok(());
+  }
+
+  let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
+
+  let max_height = resolve_inline_max_height(&font_style, layout.content_box_height());
+
+  let built = create_inline_layout(InlineLayoutRequest {
+    items: collect_inline_items(node),
+    available_space: Size {
+      width: AvailableSpace::Definite(layout.content_box_width()),
+      height: AvailableSpace::Definite(layout.content_box_height()),
+    },
+    max_width: layout.content_box_width(),
+    max_height,
+    style: &font_style,
+    global: node.context.global,
+    mode: InlineLayoutMode::Draw,
+  });
+  let inline_layout_box = layout;
+
+  let boxes = built.spans.iter().filter_map(|span| match span {
+    ProcessedInlineSpan::Box(item) => Some(item),
+    _ => None,
+  });
+
+  let positioned_inline_boxes = draw_inline_layout(
+    &node.context,
+    canvas,
+    inline_layout_box,
+    built.layout,
+    &font_style,
+    InlineLayoutDrawData {
+      spans: &built.spans,
+      custom_inline_boxes: &built.custom_inline_boxes,
+      line_scales: &built.line_scales,
+    },
+  )?;
+
+  let inline_transform = Affine::translation(
+    inline_layout_box.border.left + inline_layout_box.padding.left,
+    inline_layout_box.border.top + inline_layout_box.padding.top,
+  ) * node.context.transform;
+
+  for (item, positioned) in boxes.zip(positioned_inline_boxes.iter()) {
+    draw_inline_box(positioned, item, canvas, inline_transform)?;
+  }
+  Ok(())
 }

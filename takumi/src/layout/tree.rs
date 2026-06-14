@@ -10,28 +10,24 @@ use taffy::{
 };
 
 use crate::{
-  GlobalContext, Result,
+  GlobalContext,
   layout::{
     Viewport,
     inline::{
       InlineContentKind, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
-      ProcessedInlineSpan, collect_inline_items, create_inline_constraint, create_inline_layout,
-      get_parent_font_metrics, measure_inline_layout, resolve_inline_max_height,
+      collect_inline_items, create_inline_constraint, create_inline_layout,
+      get_parent_font_metrics, measure_inline_layout,
     },
     matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
     node::{Node, NodeStyleLayers},
     style::{
-      Affine, BackgroundImage, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem,
-      ContentValue, Display, Filters, Float, Isolation, LineHeight, Overflow, PercentageNumber,
-      Position, SizingContext, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
+      BackgroundImage, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem, ContentValue,
+      Display, Filters, Float, Isolation, LineHeight, Overflow, PercentageNumber, Position,
+      SizingContext, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
       apply_stylesheet_animations,
     },
   },
-  rendering::{
-    Canvas, RenderContext, SizedFontStyle, draw_background, draw_border, draw_inset_box_shadow,
-    draw_node_content, draw_outline, draw_outset_box_shadow,
-    inline_drawing::{InlineLayoutDrawData, draw_inline_box, draw_inline_layout},
-  },
+  rendering::{RenderContext, SizedFontStyle},
 };
 use parley::fontique::Attributes;
 
@@ -1042,87 +1038,11 @@ impl<'g> RenderNode<'g> {
       .is_some_and(Node::is_whitespace_only_text)
   }
 
-  fn has_anonymous_text_item_child(&self) -> bool {
+  pub(crate) fn has_anonymous_text_item_child(&self) -> bool {
     self
       .children
       .as_ref()
       .is_some_and(|children| children.iter().any(RenderNode::is_anonymous_text_item))
-  }
-
-  pub(crate) fn draw_shell(&self, canvas: &mut Canvas, layout: Layout) -> Result<()> {
-    if self.node.is_none() {
-      return Ok(());
-    }
-
-    draw_outset_box_shadow(&self.context, canvas, layout)?;
-    draw_background(&self.context, canvas, layout)?;
-    draw_inset_box_shadow(&self.context, canvas, layout)?;
-    draw_border(&self.context, canvas, layout)?;
-    draw_outline(&self.context, canvas, layout)?;
-    Ok(())
-  }
-
-  pub(crate) fn draw_content(&self, canvas: &mut Canvas, layout: Layout) -> Result<()> {
-    if self.should_create_inline_layout() || self.has_anonymous_text_item_child() {
-      return Ok(());
-    }
-
-    if let Some(node) = &self.node {
-      draw_node_content(node, &self.context, canvas, layout)?;
-    }
-    Ok(())
-  }
-
-  pub fn draw_inline(&mut self, canvas: &mut Canvas, layout: Layout) -> Result<()> {
-    if self.context.style.opacity.0 == 0.0 {
-      return Ok(());
-    }
-
-    let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
-
-    let max_height = resolve_inline_max_height(&font_style, layout.content_box_height());
-
-    let built = create_inline_layout(InlineLayoutRequest {
-      items: collect_inline_items(self),
-      available_space: Size {
-        width: AvailableSpace::Definite(layout.content_box_width()),
-        height: AvailableSpace::Definite(layout.content_box_height()),
-      },
-      max_width: layout.content_box_width(),
-      max_height,
-      style: &font_style,
-      global: self.context.global,
-      mode: InlineLayoutMode::Draw,
-    });
-    let inline_layout_box = layout;
-
-    let boxes = built.spans.iter().filter_map(|span| match span {
-      ProcessedInlineSpan::Box(item) => Some(item),
-      _ => None,
-    });
-
-    let positioned_inline_boxes = draw_inline_layout(
-      &self.context,
-      canvas,
-      inline_layout_box,
-      built.layout,
-      &font_style,
-      InlineLayoutDrawData {
-        spans: &built.spans,
-        custom_inline_boxes: &built.custom_inline_boxes,
-        line_scales: &built.line_scales,
-      },
-    )?;
-
-    let inline_transform = Affine::translation(
-      inline_layout_box.border.left + inline_layout_box.padding.left,
-      inline_layout_box.border.top + inline_layout_box.padding.top,
-    ) * self.context.transform;
-
-    for (item, positioned) in boxes.zip(positioned_inline_boxes.iter()) {
-      draw_inline_box(positioned, item, canvas, inline_transform)?;
-    }
-    Ok(())
   }
 
   pub fn is_inline_level(&self) -> bool {
