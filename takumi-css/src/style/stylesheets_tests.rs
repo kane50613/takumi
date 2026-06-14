@@ -472,11 +472,13 @@ fn parse_style_declaration_expands_border_side_shorthands() {
     ]
   );
 
+  // A style-only side shorthand defaults its width to `medium` (~3px), matching
+  // the CSS initial value so the border is painted (#728).
   let border_left = parse_declarations("border-left", "solid #00ff00");
   assert_eq!(
     border_left.iter().collect::<Vec<_>>(),
     vec![
-      &StyleDeclaration::border_left_width(Length::default()),
+      &StyleDeclaration::border_left_width(Length::Px(3.0)),
       &StyleDeclaration::border_left_style(BorderStyle::Solid),
       &StyleDeclaration::border_left_color(ColorInput::Value(Color([0, 255, 0, 255]))),
     ]

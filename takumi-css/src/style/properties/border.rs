@@ -6,6 +6,13 @@ use crate::style::{
   SizingContext, properties::Length,
 };
 
+/// CSS initial value for `border-width` / `outline-width` keyword `medium`.
+///
+/// Per CSS, an omitted width on a visible border/outline resolves to `medium`,
+/// which user agents render as roughly `3px` (not `0`). See
+/// <https://drafts.csswg.org/css-backgrounds-3/#border-width>.
+const MEDIUM_BORDER_WIDTH_PX: f32 = 3.0;
+
 /// Parsed `border` value.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 #[non_exhaustive]
@@ -50,9 +57,23 @@ impl<'i> FromCss<'i> for Border {
       ));
     }
 
+    let style = style.unwrap_or_default();
+
+    // When the width token is omitted, CSS resolves it to `medium` (~3px) for a
+    // visible border/outline, so `border: solid red` and `outline: solid` paint
+    // a line. With no visible style (`border: none`, color-only, or empty) the
+    // width stays `0`, keeping `Border::default()` unchanged.
+    let width = width.unwrap_or_else(|| {
+      if style.is_rendered() {
+        Length::Px(MEDIUM_BORDER_WIDTH_PX)
+      } else {
+        Length::default()
+      }
+    });
+
     Ok(Border {
-      width: width.unwrap_or_default(),
-      style: style.unwrap_or_default(),
+      width,
+      style,
       color: color.unwrap_or_default(),
     })
   }
@@ -100,12 +121,28 @@ mod tests {
 
   #[test]
   fn test_parse_border_style_only() {
+    // `border: solid` with no width resolves to the CSS initial `medium` (~3px),
+    // not `0`, so a visible border is painted.
     assert_eq!(
       Border::from_str("solid"),
       Ok(Border {
-        width: Length::default(),
+        width: Length::Px(MEDIUM_BORDER_WIDTH_PX),
         style: BorderStyle::Solid,
         color: ColorInput::CurrentColor,
+      })
+    );
+  }
+
+  #[test]
+  fn test_parse_border_style_and_color_defaults_medium_width() {
+    // Regression for #728: `border: solid red` previously resolved width to `0`
+    // and rendered nothing. It must default to `medium` (~3px).
+    assert_eq!(
+      Border::from_str("solid red"),
+      Ok(Border {
+        width: Length::Px(MEDIUM_BORDER_WIDTH_PX),
+        style: BorderStyle::Solid,
+        color: ColorInput::Value(Color([255, 0, 0, 255])),
       })
     );
   }
