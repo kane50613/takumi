@@ -29,7 +29,7 @@ use crate::{
   },
   rendering::{
     Canvas, RenderContext, SizedFontStyle, draw_background, draw_border, draw_inset_box_shadow,
-    draw_outline, draw_outset_box_shadow,
+    draw_node_content, draw_outline, draw_outset_box_shadow,
     inline_drawing::{InlineLayoutDrawData, draw_inline_box, draw_inline_layout},
   },
 };
@@ -1068,7 +1068,7 @@ impl<'g> RenderNode<'g> {
     }
 
     if let Some(node) = &self.node {
-      node.draw_content(&self.context, canvas, layout)?;
+      draw_node_content(node, &self.context, canvas, layout)?;
     }
     Ok(())
   }

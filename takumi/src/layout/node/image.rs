@@ -1,14 +1,13 @@
 use data_url::DataUrl;
-use taffy::{AvailableSpace, CompactLength, Layout, MaybeResolve, Size};
+use taffy::{AvailableSpace, CompactLength, MaybeResolve, Size};
 
 use crate::{
-  Result,
   layout::{
     inline::InlineContentKind,
     node::{ImageData, ImageSourceInput, Node, NodeKind, NodeStyleLayers},
     style::{Length, Style, StyleDeclaration},
   },
-  rendering::{Canvas, RenderContext, draw_image},
+  rendering::RenderContext,
   resources::image::{ImageResourceError, ImageResult, ImageSource, is_svg_like},
 };
 
@@ -162,20 +161,6 @@ fn resolve_style_size_axis(
       context.sizing.calc_arena.resolve_calc_value(val, basis)
     }),
   }
-}
-
-pub(crate) fn draw_image_node_content(
-  image: &ImageData,
-  context: &RenderContext,
-  canvas: &mut Canvas,
-  layout: Layout,
-) -> Result<()> {
-  let Ok(image_source) = image.src.resolve(context) else {
-    return Ok(());
-  };
-
-  draw_image(&image_source, context, canvas, layout)?;
-  Ok(())
 }
 
 const DATA_URI_PREFIX: &str = "data:";

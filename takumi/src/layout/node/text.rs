@@ -1,72 +1,19 @@
-use taffy::{AvailableSpace, Layout, Size};
+use taffy::{AvailableSpace, Size};
 
 use crate::{
-  Result,
   layout::{
     inline::{
       InlineContentKind, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
       create_inline_constraint, create_inline_layout, get_parent_font_metrics,
-      measure_inline_layout, resolve_inline_max_height,
+      measure_inline_layout,
     },
     node::TextData,
   },
-  rendering::{
-    Canvas, RenderContext, SizedFontStyle,
-    inline_drawing::{InlineLayoutDrawData, draw_inline_layout},
-  },
+  rendering::{RenderContext, SizedFontStyle},
 };
 
 pub(crate) fn text_inline_content(text: &TextData) -> Option<InlineContentKind<'_>> {
   Some(InlineContentKind::Text(text.text.as_str().into()))
-}
-
-pub(crate) fn draw_text_node_content(
-  text: &TextData,
-  context: &RenderContext,
-  canvas: &mut Canvas,
-  layout: Layout,
-) -> Result<()> {
-  let font_style = SizedFontStyle::from_style(&context.style, context);
-  let size = layout.content_box_size();
-
-  if font_style.sizing.font_size == 0.0 {
-    return Ok(());
-  }
-
-  let max_height = resolve_inline_max_height(&font_style, size.height);
-
-  let inline_text: InlineItem<'_, '_> = InlineItem::Text {
-    text: text.text.as_str().into(),
-    context,
-  };
-
-  let built = create_inline_layout(InlineLayoutRequest {
-    items: vec![inline_text],
-    available_space: Size {
-      width: AvailableSpace::Definite(size.width),
-      height: AvailableSpace::Definite(size.height),
-    },
-    max_width: size.width,
-    max_height,
-    style: &font_style,
-    global: context.global,
-    mode: InlineLayoutMode::Draw,
-  });
-
-  draw_inline_layout(
-    context,
-    canvas,
-    layout,
-    built.layout,
-    &font_style,
-    InlineLayoutDrawData {
-      spans: &built.spans,
-      custom_inline_boxes: &built.custom_inline_boxes,
-      line_scales: &built.line_scales,
-    },
-  )?;
-
-  Ok(())
 }
 
 pub(crate) fn measure_text_node(

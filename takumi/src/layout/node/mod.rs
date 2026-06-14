@@ -6,18 +6,18 @@ use serde::Deserialize;
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use taffy::{AvailableSpace, Layout, Size};
+use taffy::{AvailableSpace, Size};
 use tiny_skia::Pixmap;
 
 use crate::{
-  Result, Xxh3HashSet,
+  Xxh3HashSet,
   layout::{
     Viewport,
     inline::InlineContentKind,
     node::image::image_resource_url,
     style::{Direction, Style, StyleDeclaration, ToCss, tw::TailwindValues},
   },
-  rendering::{Canvas, RenderContext},
+  rendering::RenderContext,
   resources::image::{ImageResult, ImageSource},
 };
 use ::image::RgbaImage;
@@ -26,10 +26,8 @@ use self::{
   container::{
     container_children_ref, deserialize_children, drop_container_children, take_container_children,
   },
-  image::{
-    draw_image_node_content, image_inline_content, measure_image_node, take_image_style_layers,
-  },
-  text::{draw_text_node_content, measure_text_node, text_inline_content},
+  image::{image_inline_content, measure_image_node, take_image_style_layers},
+  text::{measure_text_node, text_inline_content},
 };
 
 pub(crate) use self::image::resolve_image;
@@ -610,19 +608,6 @@ impl Node {
       .iter()
       .find(|(attr_name, _)| attr_name.eq_ignore_ascii_case(name))
       .map(|(_, value)| value.as_ref())
-  }
-
-  pub(crate) fn draw_content(
-    &self,
-    context: &RenderContext,
-    canvas: &mut Canvas,
-    layout: Layout,
-  ) -> Result<()> {
-    match &self.kind {
-      NodeKind::Container { .. } => Ok(()),
-      NodeKind::Image(image) => draw_image_node_content(image, context, canvas, layout),
-      NodeKind::Text(text) => draw_text_node_content(text, context, canvas, layout),
-    }
   }
 }
 

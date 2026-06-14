@@ -4,16 +4,25 @@
 //! [`Layout`], not on the node tree. They are candidates for promotion to a
 //! backend-agnostic scene layer when an alternative (e.g. SVG) backend lands.
 
-use taffy::{Layout, Point, Size};
+use taffy::{AvailableSpace, Layout, Point, Size};
 
 use crate::{
   Result,
-  layout::style::{Affine, BackgroundClip, BlendMode, Sides},
+  layout::{
+    inline::{
+      InlineItem, InlineLayoutMode, InlineLayoutRequest, create_inline_layout,
+      resolve_inline_max_height,
+    },
+    node::{ImageData, Node, NodeKind, TextData},
+    style::{Affine, BackgroundClip, BlendMode, Sides},
+  },
 };
 
 use super::{
-  BackgroundTile, BorderProperties, Canvas, Fill, PaintSource, RenderContext, SizedShadow,
-  TileLayer, collect_background_layers, rasterize_layers, release_rasterized_background_tile,
+  BackgroundTile, BorderProperties, Canvas, Fill, PaintSource, RenderContext, SizedFontStyle,
+  SizedShadow, TileLayer, collect_background_layers, draw_image,
+  inline_drawing::{InlineLayoutDrawData, draw_inline_layout},
+  rasterize_layers, release_rasterized_background_tile,
 };
 
 pub(crate) fn draw_outset_box_shadow(
@@ -317,4 +326,80 @@ fn single_solid_color_layer<'a>(
     y: layer.ys[0],
     blend_mode: layer.blend_mode,
   })
+}
+
+pub(crate) fn draw_node_content(
+  node: &Node,
+  context: &RenderContext,
+  canvas: &mut Canvas,
+  layout: Layout,
+) -> Result<()> {
+  match &node.kind {
+    NodeKind::Container { .. } => Ok(()),
+    NodeKind::Image(image) => draw_image_node_content(image, context, canvas, layout),
+    NodeKind::Text(text) => draw_text_node_content(text, context, canvas, layout),
+  }
+}
+
+fn draw_image_node_content(
+  image: &ImageData,
+  context: &RenderContext,
+  canvas: &mut Canvas,
+  layout: Layout,
+) -> Result<()> {
+  let Ok(image_source) = image.src.resolve(context) else {
+    return Ok(());
+  };
+
+  draw_image(&image_source, context, canvas, layout)?;
+  Ok(())
+}
+
+fn draw_text_node_content(
+  text: &TextData,
+  context: &RenderContext,
+  canvas: &mut Canvas,
+  layout: Layout,
+) -> Result<()> {
+  let font_style = SizedFontStyle::from_style(&context.style, context);
+  let size = layout.content_box_size();
+
+  if font_style.sizing.font_size == 0.0 {
+    return Ok(());
+  }
+
+  let max_height = resolve_inline_max_height(&font_style, size.height);
+
+  let inline_text: InlineItem<'_, '_> = InlineItem::Text {
+    text: text.text.as_str().into(),
+    context,
+  };
+
+  let built = create_inline_layout(InlineLayoutRequest {
+    items: vec![inline_text],
+    available_space: Size {
+      width: AvailableSpace::Definite(size.width),
+      height: AvailableSpace::Definite(size.height),
+    },
+    max_width: size.width,
+    max_height,
+    style: &font_style,
+    global: context.global,
+    mode: InlineLayoutMode::Draw,
+  });
+
+  draw_inline_layout(
+    context,
+    canvas,
+    layout,
+    built.layout,
+    &font_style,
+    InlineLayoutDrawData {
+      spans: &built.spans,
+      custom_inline_boxes: &built.custom_inline_boxes,
+      line_scales: &built.line_scales,
+    },
+  )?;
+
+  Ok(())
 }

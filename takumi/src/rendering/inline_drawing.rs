@@ -22,8 +22,8 @@ use crate::{
     BorderProperties, Canvas, Cap, Command, DashPattern, DecorationSegmentParams, PaintSource,
     PathBuilder, Placement, RenderContext, SizedFontStyle, Stroke, collect_background_layers,
     draw_background, draw_border, draw_decoration, draw_decoration_segment, draw_glyph,
-    draw_glyph_clip_image, draw_glyph_text_shadow, draw_inset_box_shadow, draw_outline,
-    draw_outset_box_shadow, mask_index_from_coord, rasterize_layers,
+    draw_glyph_clip_image, draw_glyph_text_shadow, draw_inset_box_shadow, draw_node_content,
+    draw_outline, draw_outset_box_shadow, mask_index_from_coord, rasterize_layers,
     release_rasterized_background_tile, render::render_node, render_mask, scale_text_fit_x,
     text_fit_x_correction,
   },
@@ -899,7 +899,7 @@ pub(crate) fn draw_inline_box(
   draw_background(&context, canvas, layout)?;
   draw_inset_box_shadow(&context, canvas, layout)?;
   draw_border(&context, canvas, layout)?;
-  node.draw_content(&context, canvas, layout)?;
+  draw_node_content(node, &context, canvas, layout)?;
   draw_outline(&context, canvas, layout)?;
 
   Ok(())
