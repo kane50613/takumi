@@ -1,5 +1,14 @@
 import type { ReactNode } from "react";
 
+const Stat = ({ value, label }: { value: ReactNode; label: ReactNode }) => (
+  <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+    <span style={{ display: "flex", fontSize: 28, fontWeight: 700, color: "#16140F" }}>
+      {value}
+    </span>
+    <span style={{ display: "flex", fontSize: 28, color: "#6E6A60" }}>{label}</span>
+  </div>
+);
+
 export default function RepositoryTemplate({
   owner,
   name,
@@ -21,13 +30,6 @@ export default function RepositoryTemplate({
   const muted = "#6E6A60";
   const mono = "'Geist Mono', monospace";
   const sans = "Geist, sans-serif";
-
-  const Stat = ({ value, label }: { value: ReactNode; label: ReactNode }) => (
-    <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-      <span style={{ display: "flex", fontSize: 28, fontWeight: 700, color: ink }}>{value}</span>
-      <span style={{ display: "flex", fontSize: 28, color: muted }}>{label}</span>
-    </div>
-  );
 
   return (
     <div
