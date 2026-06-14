@@ -6,6 +6,7 @@ import preflightCss from "tailwindcss/preflight.css?raw";
 import themeCss from "tailwindcss/theme.css?raw";
 import utilitiesCss from "tailwindcss/utilities.css?raw";
 import { useLayoutEffect, useRef, useState } from "react";
+import manropeUrl from "../../../../assets/fonts/manrope/manrope-latin-wght-normal.woff2?url";
 
 const SOURCES: Record<string, string> = {
   tailwindcss: indexCss,
@@ -30,6 +31,20 @@ function loadCompiler() {
     compiler = c;
   });
   return compilerPromise;
+}
+
+// WASM registers only Manrope, which Takumi falls back to for every family, so
+// override all font vars to keep the browser pane faithful to the render.
+const FONT_FAMILY = `"Manrope", ui-sans-serif, system-ui, sans-serif`;
+const HOST_CSS = `:host{--font-sans:${FONT_FAMILY};--font-serif:${FONT_FAMILY};--font-mono:${FONT_FAMILY};--default-font-family:${FONT_FAMILY};--default-mono-font-family:${FONT_FAMILY}}`;
+
+let fontLoaded = false;
+function loadFont() {
+  if (fontLoaded || typeof document === "undefined") return;
+  fontLoaded = true;
+  new FontFace("Manrope", `url(${manropeUrl}) format("woff2")`, { weight: "100 900" })
+    .load()
+    .then((face) => document.fonts.add(face));
 }
 
 function extractClasses(html: string) {
@@ -76,6 +91,8 @@ export default function BrowserPreview({
     const host = hostRef.current;
     if (!host || !html) return;
 
+    loadFont();
+
     if (!shadowRef.current) {
       const root = host.shadowRoot ?? host.attachShadow({ mode: "open" });
       const sheet = new CSSStyleSheet();
@@ -89,7 +106,7 @@ export default function BrowserPreview({
     const paint = () => {
       if (!compiler || !shadowRef.current) return;
       shadowRef.current.sheet.replaceSync(
-        [compiler.build(extractClasses(html)), ...(cssContents ?? [])].join("\n\n"),
+        [HOST_CSS, compiler.build(extractClasses(html)), ...(cssContents ?? [])].join("\n\n"),
       );
       shadowRef.current.mount.innerHTML = html;
     };

@@ -6,6 +6,7 @@ import {
   ChevronDownIcon,
   Code2Icon,
   DownloadIcon,
+  EyeIcon,
   GlobeIcon,
   LinkIcon,
   Loader2Icon,
@@ -38,12 +39,11 @@ const BrowserPreview = lazy(() => import("./browser-preview"));
 
 const DEFAULT_TEMPLATE = templates[0];
 
-type TabId = "code" | "takumi" | "browser";
+type TabId = "code" | "preview";
 
 const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: "code", label: "Code", icon: Code2Icon },
-  { id: "takumi", label: "Takumi", icon: AxeIcon },
-  { id: "browser", label: "Browser", icon: GlobeIcon },
+  { id: "preview", label: "Preview", icon: EyeIcon },
 ];
 
 type RenderResult = z.infer<typeof renderResultSchema>["result"];
@@ -457,9 +457,7 @@ export default function Playground() {
           </ResizablePanelGroup>
         </div>
 
-        <div className="h-full md:hidden">
-          {activeTab === "code" ? editor : activeTab === "takumi" ? takumiPane : browserPane}
-        </div>
+        <div className="h-full md:hidden">{activeTab === "code" ? editor : splitPreview}</div>
       </div>
 
       <div className="flex h-7 shrink-0 items-center gap-3 border-t px-3 font-mono text-[11px] text-muted-foreground">

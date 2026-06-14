@@ -15,7 +15,7 @@ export default function Article() {
         </div>
 
         <div tw="flex flex-col flex-1">
-          <h1 tw="text-6xl font-black leading-none tracking-tighter mb-0 text-white block whitespace-pre text-wrap">
+          <h1 tw="text-6xl font-black leading-none tracking-tighter mb-0 text-white block whitespace-pre-wrap">
             <span>Building High-Performance </span>
             <span tw="text-indigo-400">Image Generation </span>
             <span>with Rust</span>
