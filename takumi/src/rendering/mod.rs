@@ -14,6 +14,8 @@ mod font_style;
 /// Image drawing functions
 mod image_drawing;
 pub(crate) mod inline_drawing;
+/// Box-decoration painting (backgrounds, borders, outlines, box-shadows)
+mod node_paint;
 mod path;
 /// Main image renderer and viewport management
 mod render;
@@ -41,6 +43,7 @@ pub use dithering::*;
 pub(crate) use filter::*;
 pub(crate) use font_style::*;
 pub(crate) use image_drawing::*;
+pub(crate) use node_paint::*;
 pub(crate) use path::*;
 pub use render::*;
 pub(crate) use text_drawing::*;
