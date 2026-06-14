@@ -32,7 +32,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
         with:
-          bun-version: latest
+          bun-version: canary
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -69,7 +69,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
         with:
-          bun-version: latest
+          bun-version: canary
 
       - name: Format generated fixtures
         run: bunx oxfmt --write takumi/tests/fixtures-generated
@@ -122,7 +122,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
         with:
-          bun-version: latest
+          bun-version: canary
 
       - name: Install dependencies
         run: bun install --frozen-lockfile --filter ./takumi-helpers
@@ -152,7 +152,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
         with:
-          bun-version: latest
+          bun-version: canary
 
       - name: Install dependencies
         run: bun install --frozen-lockfile --filter ./takumi-helpers
@@ -202,7 +202,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
         with:
-          bun-version: latest
+          bun-version: canary
 
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
@@ -255,7 +255,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
         with:
-          bun-version: latest
+          bun-version: canary
 
       - name: Download helpers artifact
         uses: actions/download-artifact@v8
@@ -299,7 +299,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
         with:
-          bun-version: latest
+          bun-version: canary
 
       - name: Download helpers artifact
         uses: actions/download-artifact@v8
@@ -336,7 +336,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
         with:
-          bun-version: latest
+          bun-version: canary
 
       - name: Download helpers artifact
         uses: actions/download-artifact@v8
@@ -386,7 +386,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
         with:
-          bun-version: latest
+          bun-version: canary
 
       - name: Download helpers artifact
         uses: actions/download-artifact@v8
@@ -429,7 +429,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
         with:
-          bun-version: latest
+          bun-version: canary
 
       - name: Download helpers artifact
         uses: actions/download-artifact@v8
@@ -505,7 +505,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
         with:
-          bun-version: latest
+          bun-version: canary
 
       - name: Download helpers artifact
         uses: actions/download-artifact@v8
@@ -542,7 +542,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
         with:
-          bun-version: latest
+          bun-version: canary
 
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
@@ -611,7 +611,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
         with:
-          bun-version: latest
+          bun-version: canary
 
       - name: Download helpers artifact
         uses: actions/download-artifact@v8
@@ -643,7 +643,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
         with:
-          bun-version: latest
+          bun-version: canary
 
       - name: Download helpers artifact
         uses: actions/download-artifact@v8
@@ -725,7 +725,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
         with:
-          bun-version: latest
+          bun-version: canary
 
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
@@ -807,7 +807,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
         with:
-          bun-version: latest
+          bun-version: canary
 
       - name: Download helpers artifact
         uses: actions/download-artifact@v8
