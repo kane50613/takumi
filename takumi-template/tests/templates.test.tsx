@@ -129,7 +129,7 @@ testRender(
     product="Takumi"
     version="v2.4.0"
     date="June 15, 2026"
-    headline="Faster fonts, smaller Wasm"
+    headline="Faster fonts, leaner core"
     bullets={[
       { tag: "New", text: "Explicit FontContext API" },
       { tag: "Perf", text: "30% smaller Wasm bundle" },

@@ -42,14 +42,14 @@ export default function QuoteTemplate({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          paddingBottom: "26px",
+          paddingBottom: 24,
           borderBottom: `2px solid ${ink}`,
         }}
       >
         <span
           style={{
             display: "flex",
-            fontSize: 22,
+            fontSize: 20,
             fontWeight: 700,
             letterSpacing: "0.22em",
             textTransform: "uppercase",
@@ -61,7 +61,7 @@ export default function QuoteTemplate({
         <span
           style={{
             display: "flex",
-            fontSize: 22,
+            fontSize: 20,
             fontWeight: 600,
             letterSpacing: "0.04em",
             color: muted,
@@ -82,9 +82,9 @@ export default function QuoteTemplate({
         <span
           style={{
             display: "flex",
-            height: "92px",
-            marginBottom: "6px",
-            marginLeft: "-6px",
+            height: 88,
+            marginBottom: 8,
+            marginLeft: -8,
             fontSize: 200,
             lineHeight: 1,
             fontWeight: 700,
@@ -97,12 +97,12 @@ export default function QuoteTemplate({
         <h1
           style={{
             display: "flex",
-            fontSize: 66,
+            fontSize: 64,
             fontWeight: 700,
-            lineHeight: 1.13,
+            lineHeight: 1.12,
             letterSpacing: "-0.02em",
             margin: 0,
-            maxWidth: "1040px",
+            maxWidth: 1040,
             color: ink,
           }}
         >
@@ -114,8 +114,8 @@ export default function QuoteTemplate({
         style={{
           display: "flex",
           alignItems: "center",
-          gap: "24px",
-          paddingTop: "28px",
+          gap: 24,
+          paddingTop: 28,
           borderTop: `2px solid ${ink}`,
         }}
       >
@@ -129,15 +129,15 @@ export default function QuoteTemplate({
             color: paper,
             alignItems: "center",
             justifyContent: "center",
-            fontSize: 30,
+            fontSize: 32,
             fontWeight: 700,
             letterSpacing: "0.01em",
           }}
         >
           {initials}
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-          <span style={{ display: "flex", fontSize: 30, fontWeight: 700, color: ink }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ display: "flex", fontSize: 32, fontWeight: 700, color: ink }}>
             {author}
           </span>
           <span style={{ display: "flex", fontSize: 24, fontWeight: 500, color: muted }}>
@@ -149,19 +149,19 @@ export default function QuoteTemplate({
           style={{
             display: "flex",
             alignItems: "center",
-            gap: "14px",
+            gap: 16,
           }}
         >
           <div
             style={{
               display: "flex",
-              width: 14,
-              height: 14,
+              width: 16,
+              height: 16,
               borderRadius: "50%",
               backgroundColor: accent,
             }}
           />
-          <span style={{ display: "flex", fontSize: 26, fontWeight: 700, color: ink }}>
+          <span style={{ display: "flex", fontSize: 28, fontWeight: 700, color: ink }}>
             {company}
           </span>
         </div>

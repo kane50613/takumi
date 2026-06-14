@@ -39,16 +39,16 @@ export default function RepositoryTemplate({
       style={{
         display: "flex",
         flexDirection: "column",
-        gap: "12px",
-        paddingRight: "56px",
-        marginRight: "56px",
+        gap: 12,
+        paddingRight: 56,
+        marginRight: 56,
         borderRight: divider ? `1px solid ${hair}` : "none",
       }}
     >
       <span
         style={{
           display: "flex",
-          fontSize: 22,
+          fontSize: 20,
           fontWeight: 600,
           letterSpacing: "0.2em",
           textTransform: "uppercase",
@@ -62,8 +62,8 @@ export default function RepositoryTemplate({
         style={{
           display: "flex",
           alignItems: "center",
-          gap: "16px",
-          fontSize: 46,
+          gap: 16,
+          fontSize: 48,
           fontWeight: 700,
           color: ink,
           fontFamily: sans,
@@ -84,8 +84,8 @@ export default function RepositoryTemplate({
         height: "100%",
         backgroundColor: bg,
         color: ink,
-        borderTop: `10px solid ${accent}`,
-        padding: "58px 76px 64px",
+        borderTop: `8px solid ${accent}`,
+        padding: "56px 76px 64px",
         fontFamily: sans,
         justifyContent: "space-between",
       }}
@@ -97,18 +97,18 @@ export default function RepositoryTemplate({
           justifyContent: "space-between",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "18px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div
             style={{
               display: "flex",
-              width: 46,
-              height: 46,
-              borderRadius: "12px",
+              width: 48,
+              height: 48,
+              borderRadius: 12,
               backgroundColor: ink,
               color: bg,
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 30,
+              fontSize: 32,
               fontWeight: 700,
               fontFamily: mono,
             }}
@@ -118,7 +118,7 @@ export default function RepositoryTemplate({
           <span
             style={{
               display: "flex",
-              fontSize: 26,
+              fontSize: 28,
               fontWeight: 700,
               letterSpacing: "-0.01em",
               color: ink,
@@ -130,7 +130,7 @@ export default function RepositoryTemplate({
         <span
           style={{
             display: "flex",
-            fontSize: 21,
+            fontSize: 20,
             fontWeight: 600,
             letterSpacing: "0.22em",
             textTransform: "uppercase",
@@ -147,7 +147,7 @@ export default function RepositoryTemplate({
           flex: 1,
           flexDirection: "column",
           justifyContent: "center",
-          paddingTop: "28px",
+          paddingTop: 28,
         }}
       >
         <span
@@ -165,13 +165,13 @@ export default function RepositoryTemplate({
         <span
           style={{
             display: "flex",
-            fontSize: 134,
+            fontSize: 132,
             fontWeight: 700,
             fontFamily: mono,
             color: ink,
             lineHeight: 0.96,
             letterSpacing: "-0.045em",
-            marginTop: "4px",
+            marginTop: 4,
           }}
         >
           {name}
@@ -183,8 +183,8 @@ export default function RepositoryTemplate({
             fontWeight: 400,
             color: "#37352F",
             lineHeight: 1.36,
-            maxWidth: "900px",
-            marginTop: "32px",
+            maxWidth: 900,
+            marginTop: 32,
           }}
         >
           {description}
@@ -195,7 +195,7 @@ export default function RepositoryTemplate({
         style={{
           display: "flex",
           alignItems: "flex-start",
-          paddingTop: "30px",
+          paddingTop: 32,
           borderTop: `1px solid ${hair}`,
         }}
       >
@@ -209,8 +209,8 @@ export default function RepositoryTemplate({
           <div
             style={{
               display: "flex",
-              width: 22,
-              height: 22,
+              width: 24,
+              height: 24,
               borderRadius: "50%",
               backgroundColor: langColor,
             }}

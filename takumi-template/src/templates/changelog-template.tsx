@@ -31,9 +31,8 @@ export default function ChangelogTemplate({
         height: "100%",
         backgroundColor: paper,
         color: ink,
-        padding: "60px 76px 72px",
+        padding: "64px 76px",
         fontFamily: "Inter, sans-serif",
-        justifyContent: "space-between",
       }}
     >
       <div
@@ -41,22 +40,22 @@ export default function ChangelogTemplate({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          paddingBottom: "22px",
-          borderBottom: `1px solid ${hair}`,
+          paddingBottom: 24,
+          borderBottom: `2px solid ${ink}`,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "18px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div
             style={{
               display: "flex",
-              width: 40,
-              height: 40,
-              borderRadius: "10px",
+              width: 44,
+              height: 44,
+              borderRadius: 12,
               backgroundColor: ink,
               color: paper,
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 24,
+              fontSize: 28,
               fontWeight: 800,
             }}
           >
@@ -65,7 +64,7 @@ export default function ChangelogTemplate({
           <span
             style={{
               display: "flex",
-              fontSize: 26,
+              fontSize: 28,
               fontWeight: 700,
               letterSpacing: "-0.01em",
               color: ink,
@@ -77,8 +76,8 @@ export default function ChangelogTemplate({
         <span
           style={{
             display: "flex",
-            fontSize: 22,
-            fontWeight: 600,
+            fontSize: 20,
+            fontWeight: 700,
             letterSpacing: "0.24em",
             textTransform: "uppercase",
             color: muted,
@@ -88,97 +87,112 @@ export default function ChangelogTemplate({
         </span>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "26px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              backgroundColor: accent,
-              color: paper,
-              padding: "8px 18px",
-              borderRadius: "8px",
-              fontSize: 26,
-              fontWeight: 700,
-              letterSpacing: "-0.01em",
-            }}
-          >
-            {version}
-          </div>
-          <span
-            style={{
-              display: "flex",
-              fontSize: 25,
-              fontWeight: 500,
-              color: muted,
-            }}
-          >
-            {date}
-          </span>
-        </div>
-
-        <h1
-          style={{
-            display: "flex",
-            fontSize: 92,
-            fontWeight: 800,
-            lineHeight: 1.03,
-            letterSpacing: "-0.035em",
-            margin: 0,
-            maxWidth: "980px",
-            color: ink,
-          }}
-        >
-          {headline}
-        </h1>
-      </div>
-
       <div
         style={{
           display: "flex",
           flexDirection: "column",
-          gap: "0px",
-          borderTop: `1px solid ${hair}`,
+          flex: 1,
+          justifyContent: "space-between",
+          paddingTop: 40,
         }}
       >
-        {bullets.map((b, i) => (
+        <div style={{ display: "flex", flexDirection: "column" }}>
           <div
-            key={i}
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "22px",
-              paddingTop: "18px",
-              paddingBottom: "18px",
-              borderBottom: i < bullets.length - 1 ? `1px solid ${hair}` : "none",
+              gap: 20,
+              marginBottom: 24,
             }}
           >
             <div
               style={{
                 display: "flex",
-                width: 96,
-                fontSize: 18,
+                alignItems: "center",
+                backgroundColor: accent,
+                color: paper,
+                padding: "8px 16px",
+                borderRadius: 8,
+                fontSize: 28,
                 fontWeight: 700,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                color: accent,
+                letterSpacing: "-0.01em",
               }}
             >
-              {b.tag}
+              {version}
             </div>
             <span
               style={{
                 display: "flex",
-                fontSize: 30,
+                fontSize: 24,
                 fontWeight: 500,
-                color: ink,
+                color: muted,
               }}
             >
-              {b.text}
+              {date}
             </span>
           </div>
-        ))}
+
+          <h1
+            style={{
+              display: "flex",
+              fontSize: 64,
+              fontWeight: 800,
+              lineHeight: 1.06,
+              letterSpacing: "-0.03em",
+              margin: 0,
+              maxWidth: 980,
+              color: ink,
+            }}
+          >
+            {headline}
+          </h1>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            borderTop: `1px solid ${hair}`,
+          }}
+        >
+          {bullets.map((b, i) => (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 28,
+                paddingTop: 16,
+                paddingBottom: 16,
+                borderBottom: i < bullets.length - 1 ? `1px solid ${hair}` : "none",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  width: 100,
+                  fontSize: 20,
+                  fontWeight: 700,
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+                  color: accent,
+                }}
+              >
+                {b.tag}
+              </div>
+              <span
+                style={{
+                  display: "flex",
+                  fontSize: 32,
+                  fontWeight: 500,
+                  color: ink,
+                }}
+              >
+                {b.text}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

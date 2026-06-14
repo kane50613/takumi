@@ -29,7 +29,7 @@ export default function EventTemplate({
 
   const metaLabel = {
     display: "flex",
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: 700,
     letterSpacing: "0.18em",
     textTransform: "uppercase" as const,
@@ -55,23 +55,23 @@ export default function EventTemplate({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          paddingBottom: "26px",
+          paddingBottom: 24,
           borderBottom: `2px solid ${ink}`,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div
             style={{
               display: "flex",
-              width: 14,
-              height: 14,
+              width: 16,
+              height: 16,
               backgroundColor: accent,
             }}
           />
           <span
             style={{
               display: "flex",
-              fontSize: 22,
+              fontSize: 20,
               fontWeight: 700,
               letterSpacing: "0.22em",
               textTransform: "uppercase",
@@ -84,7 +84,7 @@ export default function EventTemplate({
         <span
           style={{
             display: "flex",
-            fontSize: 22,
+            fontSize: 20,
             fontWeight: 800,
             letterSpacing: "0.3em",
             color: ink,
@@ -100,8 +100,8 @@ export default function EventTemplate({
           flexDirection: "column",
           flex: 1,
           justifyContent: "center",
-          paddingTop: "20px",
-          paddingBottom: "20px",
+          paddingTop: 20,
+          paddingBottom: 20,
         }}
       >
         <span
@@ -123,17 +123,17 @@ export default function EventTemplate({
           display: "flex",
           alignItems: "flex-end",
           justifyContent: "space-between",
-          paddingTop: "30px",
+          paddingTop: 32,
           borderTop: `1px solid ${hair}`,
         }}
       >
-        <div style={{ display: "flex", gap: "64px" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div style={{ display: "flex", gap: 64 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <span style={metaLabel}>When</span>
             <span
               style={{
                 display: "flex",
-                fontSize: 27,
+                fontSize: 28,
                 fontWeight: 600,
                 color: ink,
               }}
@@ -141,24 +141,24 @@ export default function EventTemplate({
               {datetime}
             </span>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <span style={metaLabel}>Where</span>
             {online ? (
               <div
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: "10px",
+                  gap: 8,
                   backgroundColor: accent,
-                  padding: "5px 16px 7px",
+                  padding: "8px 16px",
                   alignSelf: "flex-start",
                 }}
               >
                 <div
                   style={{
                     display: "flex",
-                    width: 10,
-                    height: 10,
+                    width: 12,
+                    height: 12,
                     borderRadius: "50%",
                     backgroundColor: "#FFFFFF",
                   }}
@@ -166,7 +166,7 @@ export default function EventTemplate({
                 <span
                   style={{
                     display: "flex",
-                    fontSize: 25,
+                    fontSize: 24,
                     fontWeight: 700,
                     letterSpacing: "0.04em",
                     color: "#FFFFFF",
@@ -179,7 +179,7 @@ export default function EventTemplate({
               <span
                 style={{
                   display: "flex",
-                  fontSize: 27,
+                  fontSize: 28,
                   fontWeight: 600,
                   color: ink,
                 }}
@@ -190,7 +190,7 @@ export default function EventTemplate({
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "18px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div
             style={{
               display: "flex",
@@ -200,7 +200,7 @@ export default function EventTemplate({
               height: 60,
               borderRadius: "50%",
               border: `2px solid ${ink}`,
-              fontSize: 23,
+              fontSize: 24,
               fontWeight: 700,
               color: ink,
             }}
@@ -211,14 +211,14 @@ export default function EventTemplate({
             <span
               style={{
                 display: "flex",
-                fontSize: 26,
+                fontSize: 28,
                 fontWeight: 700,
                 color: ink,
               }}
             >
               {hostName}
             </span>
-            <span style={{ display: "flex", fontSize: 21, color: muted }}>{hostTitle}</span>
+            <span style={{ display: "flex", fontSize: 20, color: muted }}>{hostTitle}</span>
           </div>
         </div>
       </div>
