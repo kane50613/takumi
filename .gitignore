@@ -4,3 +4,4 @@ node_modules
 dist
 .vercel
 .claude
+takumi/tests/fixtures-generated/*.svg

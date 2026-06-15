@@ -66,6 +66,11 @@ impl<'g> RenderOptions<'g> {
   pub fn node(&self) -> &Node {
     &self.node
   }
+
+  /// Returns the global context.
+  pub fn global(&self) -> &'g GlobalContext {
+    self.global
+  }
 }
 
 #[derive(Clone, TypedBuilder)]
