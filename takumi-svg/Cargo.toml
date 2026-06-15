@@ -11,6 +11,7 @@ rust-version = "1.91"
 base64.workspace = true
 quick-xml.workspace = true
 taffy.workspace = true
+tiny-skia.workspace = true
 typed-builder.workspace = true
 
 [dependencies.takumi-core]

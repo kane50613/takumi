@@ -57,17 +57,6 @@ pub struct ResolvedBitmapGlyph {
 }
 
 impl ResolvedBitmapGlyph {
-  /// PNG bytes of the rasterized glyph, for embedding in a vector backend's
-  /// `<image>`. Returns `None` if encoding fails.
-  pub fn encode_png(&self) -> Option<Vec<u8>> {
-    self.pixmap.encode_png().ok()
-  }
-
-  /// Pixel dimensions of the glyph bitmap.
-  pub fn size(&self) -> (u32, u32) {
-    (self.pixmap.width(), self.pixmap.height())
-  }
-
   pub fn write_alpha_mask(&self, mask: &mut [u8]) {
     let width = self.placement.width as usize;
     let height = self.placement.height as usize;
@@ -175,47 +164,6 @@ impl ResolvedOutlineGlyph {
       Self::Color { layers, .. } => Some(layers),
     }
   }
-
-  /// Serializes this glyph's base outline as an SVG path `d` string, applying the
-  /// affine `transform` (`[a, b, c, d, e, f]`, SVG `matrix` order) to every point.
-  /// Coordinates are already in pixel space, y-down, suitable for SVG.
-  pub fn to_svg_path_data(&self, transform: [f32; 6]) -> String {
-    commands_to_svg_path_data(self.paths(), transform)
-  }
-}
-
-fn commands_to_svg_path_data(paths: &[Command], [a, b, c, d, e, f]: [f32; 6]) -> String {
-  use std::fmt::Write;
-
-  let mut out = String::new();
-  let map = |p: tiny_skia::Point| (a * p.x + c * p.y + e, b * p.x + d * p.y + f);
-
-  for command in paths {
-    match command {
-      Command::MoveTo(p) => {
-        let (x, y) = map(*p);
-        let _ = write!(out, "M{x} {y}");
-      }
-      Command::LineTo(p) => {
-        let (x, y) = map(*p);
-        let _ = write!(out, "L{x} {y}");
-      }
-      Command::QuadTo(c0, p) => {
-        let (x0, y0) = map(*c0);
-        let (x, y) = map(*p);
-        let _ = write!(out, "Q{x0} {y0} {x} {y}");
-      }
-      Command::CubicTo(c0, c1, p) => {
-        let (x0, y0) = map(*c0);
-        let (x1, y1) = map(*c1);
-        let (x, y) = map(*p);
-        let _ = write!(out, "C{x0} {y0} {x1} {y1} {x} {y}");
-      }
-      Command::Close => out.push('Z'),
-    }
-  }
-
-  out
 }
 
 /// Matches the typical faux-bold expansion used by text rasterizers.

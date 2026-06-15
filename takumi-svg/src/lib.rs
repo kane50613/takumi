@@ -21,6 +21,7 @@ mod render;
 mod text;
 pub use render::{SvgOptions, render};
 
+use std::borrow::Cow;
 use std::io;
 
 use quick_xml::Writer;
@@ -92,18 +93,18 @@ impl SvgDocument {
     id
   }
 
-  fn empty(&mut self, name: &str, attrs: &[(&str, String)]) -> io::Result<()> {
+  fn empty(&mut self, name: &str, attrs: &[(&str, Cow<'_, str>)]) -> io::Result<()> {
     let mut element = BytesStart::new(name);
     for (key, value) in attrs {
-      element.push_attribute((*key, value.as_str()));
+      element.push_attribute((*key, value.as_ref()));
     }
     self.writer.write_event(Event::Empty(element))
   }
 
-  fn open(&mut self, name: &str, attrs: &[(&str, String)]) -> io::Result<()> {
+  fn open(&mut self, name: &str, attrs: &[(&str, Cow<'_, str>)]) -> io::Result<()> {
     let mut element = BytesStart::new(name);
     for (key, value) in attrs {
-      element.push_attribute((*key, value.as_str()));
+      element.push_attribute((*key, value.as_ref()));
     }
     self.writer.write_event(Event::Start(element))
   }
@@ -124,12 +125,12 @@ impl SvgDocument {
     self.empty(
       "rect",
       &[
-        ("x", num(x)),
-        ("y", num(y)),
-        ("width", num(width)),
-        ("height", num(height)),
-        ("fill", fill.hex()),
-        ("fill-opacity", num(fill.opacity())),
+        ("x", num(x).into()),
+        ("y", num(y).into()),
+        ("width", num(width).into()),
+        ("height", num(height).into()),
+        ("fill", fill.hex().into()),
+        ("fill-opacity", num(fill.opacity()).into()),
       ],
     )
   }
@@ -146,11 +147,11 @@ impl SvgDocument {
     self.empty(
       "rect",
       &[
-        ("x", num(x)),
-        ("y", num(y)),
-        ("width", num(width)),
-        ("height", num(height)),
-        ("fill", paint.to_owned()),
+        ("x", num(x).into()),
+        ("y", num(y).into()),
+        ("width", num(width).into()),
+        ("height", num(height).into()),
+        ("fill", paint.into()),
       ],
     )
   }
@@ -160,9 +161,9 @@ impl SvgDocument {
     self.empty(
       "path",
       &[
-        ("d", data.to_owned()),
-        ("fill", fill.hex()),
-        ("fill-opacity", num(fill.opacity())),
+        ("d", data.into()),
+        ("fill", fill.hex().into()),
+        ("fill-opacity", num(fill.opacity()).into()),
       ],
     )
   }
@@ -177,23 +178,24 @@ impl SvgDocument {
     stops: &[GradientStop],
   ) -> io::Result<String> {
     let id = self.alloc_id("lg");
+    let reference = format!("url(#{id})");
     let mut attrs = vec![
-      ("id", id.clone()),
-      ("gradientUnits", "userSpaceOnUse".to_owned()),
+      ("id", id.into()),
+      ("gradientUnits", "userSpaceOnUse".into()),
     ];
     if repeating {
-      attrs.push(("spreadMethod", "repeat".to_owned()));
+      attrs.push(("spreadMethod", "repeat".into()));
     }
     attrs.extend([
-      ("x1", num(x1)),
-      ("y1", num(y1)),
-      ("x2", num(x2)),
-      ("y2", num(y2)),
+      ("x1", num(x1).into()),
+      ("y1", num(y1).into()),
+      ("x2", num(x2).into()),
+      ("y2", num(y2).into()),
     ]);
     self.open("linearGradient", &attrs)?;
     self.write_stops(stops)?;
     self.close("linearGradient")?;
-    Ok(format!("url(#{id})"))
+    Ok(reference)
   }
 
   /// Defines a radial gradient and returns its `url(#id)` reference. `scale`
@@ -208,27 +210,32 @@ impl SvgDocument {
     stops: &[GradientStop],
   ) -> io::Result<String> {
     let id = self.alloc_id("rg");
+    let reference = format!("url(#{id})");
     let mut attrs = vec![
-      ("id", id.clone()),
-      ("gradientUnits", "userSpaceOnUse".to_owned()),
+      ("id", id.into()),
+      ("gradientUnits", "userSpaceOnUse".into()),
     ];
     if repeating {
-      attrs.push(("spreadMethod", "repeat".to_owned()));
+      attrs.push(("spreadMethod", "repeat".into()));
     }
-    attrs.extend([("cx", num(cx)), ("cy", num(cy)), ("r", num(r))]);
+    attrs.extend([
+      ("cx", num(cx).into()),
+      ("cy", num(cy).into()),
+      ("r", num(r).into()),
+    ]);
     let (sx, sy) = scale;
     if (sx - 1.0).abs() > f32::EPSILON || (sy - 1.0).abs() > f32::EPSILON {
       let e = cx - sx * cx;
       let f = cy - sy * cy;
       attrs.push((
         "gradientTransform",
-        format!("matrix({} 0 0 {} {} {})", num(sx), num(sy), num(e), num(f)),
+        format!("matrix({} 0 0 {} {} {})", num(sx), num(sy), num(e), num(f)).into(),
       ));
     }
     self.open("radialGradient", &attrs)?;
     self.write_stops(stops)?;
     self.close("radialGradient")?;
-    Ok(format!("url(#{id})"))
+    Ok(reference)
   }
 
   fn write_stops(&mut self, stops: &[GradientStop]) -> io::Result<()> {
@@ -236,9 +243,9 @@ impl SvgDocument {
       self.empty(
         "stop",
         &[
-          ("offset", num(stop.offset)),
-          ("stop-color", stop.color.hex()),
-          ("stop-opacity", num(stop.color.opacity())),
+          ("offset", num(stop.offset).into()),
+          ("stop-color", stop.color.hex().into()),
+          ("stop-opacity", num(stop.color.opacity()).into()),
         ],
       )?;
     }
@@ -248,10 +255,11 @@ impl SvgDocument {
   /// Defines a clip path from SVG path data and returns its `url(#id)`.
   pub(crate) fn clip_path(&mut self, data: &str) -> io::Result<String> {
     let id = self.alloc_id("cp");
-    self.open("clipPath", &[("id", id.clone())])?;
-    self.empty("path", &[("d", data.to_owned())])?;
+    let reference = format!("url(#{id})");
+    self.open("clipPath", &[("id", id.into())])?;
+    self.empty("path", &[("d", data.into())])?;
     self.close("clipPath")?;
-    Ok(format!("url(#{id})"))
+    Ok(reference)
   }
 
   /// Appends a raster image referenced by a `data:` URL href. This is legitimate
@@ -267,14 +275,14 @@ impl SvgDocument {
     preserve_aspect_ratio: Option<&str>,
   ) -> io::Result<()> {
     let mut attrs = vec![
-      ("x", num(x)),
-      ("y", num(y)),
-      ("width", num(width)),
-      ("height", num(height)),
-      ("href", href.to_owned()),
+      ("x", num(x).into()),
+      ("y", num(y).into()),
+      ("width", num(width).into()),
+      ("height", num(height).into()),
+      ("href", href.into()),
     ];
     if let Some(par) = preserve_aspect_ratio {
-      attrs.push(("preserveAspectRatio", par.to_owned()));
+      attrs.push(("preserveAspectRatio", par.into()));
     }
     self.empty("image", &attrs)
   }
@@ -289,18 +297,18 @@ impl SvgDocument {
     clip: Option<&str>,
     filter: Option<&str>,
   ) -> io::Result<GroupToken> {
-    let mut attrs = Vec::new();
+    let mut attrs: Vec<(&str, Cow<'_, str>)> = Vec::new();
     if !transform.is_identity() {
-      attrs.push(("transform", matrix_attr(transform)));
+      attrs.push(("transform", matrix_attr(transform).into()));
     }
     if opacity < 1.0 {
-      attrs.push(("opacity", num(opacity)));
+      attrs.push(("opacity", num(opacity).into()));
     }
     if let Some(clip) = clip {
-      attrs.push(("clip-path", clip.to_owned()));
+      attrs.push(("clip-path", clip.into()));
     }
     if let Some(filter) = filter {
-      attrs.push(("filter", filter.to_owned()));
+      attrs.push(("filter", filter.into()));
     }
     self.open("g", &attrs)?;
     Ok(GroupToken(()))
@@ -313,15 +321,15 @@ impl SvgDocument {
     fill: Rgba,
     stroke: Option<(Rgba, f32)>,
   ) -> io::Result<()> {
-    let mut attrs = vec![
-      ("d", data.to_owned()),
-      ("fill", fill.hex()),
-      ("fill-opacity", num(fill.opacity())),
+    let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![
+      ("d", data.into()),
+      ("fill", fill.hex().into()),
+      ("fill-opacity", num(fill.opacity()).into()),
     ];
     if let Some((color, width)) = stroke {
-      attrs.push(("stroke", color.hex()));
-      attrs.push(("stroke-opacity", num(color.opacity())));
-      attrs.push(("stroke-width", num(width)));
+      attrs.push(("stroke", color.hex().into()));
+      attrs.push(("stroke-opacity", num(color.opacity()).into()));
+      attrs.push(("stroke-width", num(width).into()));
     }
     self.empty("path", &attrs)
   }
@@ -329,10 +337,14 @@ impl SvgDocument {
   /// Defines a gaussian-blur filter (for text-shadow) and returns its `url(#id)`.
   pub(crate) fn blur_filter(&mut self, std_deviation: f32) -> io::Result<String> {
     let id = self.alloc_id("bl");
-    self.open("filter", &[("id", id.clone())])?;
-    self.empty("feGaussianBlur", &[("stdDeviation", num(std_deviation))])?;
+    let reference = format!("url(#{id})");
+    self.open("filter", &[("id", id.into())])?;
+    self.empty(
+      "feGaussianBlur",
+      &[("stdDeviation", num(std_deviation).into())],
+    )?;
     self.close("filter")?;
-    Ok(format!("url(#{id})"))
+    Ok(reference)
   }
 
   /// Closes the most recently opened group.

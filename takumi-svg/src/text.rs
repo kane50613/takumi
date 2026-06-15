@@ -18,6 +18,7 @@ use takumi_core::layout::inline::{
 };
 use takumi_core::layout::node::TextData;
 use takumi_core::resources::font::ResolvedGlyph;
+use tiny_skia::{PathSegment, Point};
 
 use crate::image::encode;
 use crate::{Affine, IDENTITY, Rgba, SvgDocument};
@@ -112,7 +113,7 @@ fn emit_scene(
     let placed = offset(positioned.transform, origin_x, origin_y);
     match &positioned.glyph {
       ResolvedGlyph::Outline(outline) => {
-        let data = outline.to_svg_path_data(placed.to_cols_array());
+        let data = outline_to_path_data(outline.paths(), placed.to_cols_array());
         if !data.is_empty() {
           let fill = color_override.unwrap_or(Rgba(positioned.color.0));
           doc.glyph_path(&data, fill, stroke)?;
@@ -124,10 +125,10 @@ fn emit_scene(
         if color_override.is_some() {
           continue;
         }
-        let Some(png) = bitmap.encode_png() else {
+        let Ok(png) = bitmap.pixmap.encode_png() else {
           continue;
         };
-        let (width, height) = bitmap.size();
+        let (width, height) = (bitmap.pixmap.width(), bitmap.pixmap.height());
         let matrix = placed
           * Affine::translation(bitmap.placement.left as f32, -(bitmap.placement.top as f32))
           * Affine::scale(bitmap.scale_x, bitmap.scale_y);
@@ -171,6 +172,41 @@ fn offset(transform: [f32; 6], origin_x: f32, origin_y: f32) -> Affine {
     x: e + origin_x,
     y: f + origin_y,
   }
+}
+
+/// Serializes a glyph outline as SVG path `d` data, applying `transform`
+/// (`[a, b, c, d, e, f]`, SVG `matrix` order) to every point. Points are already
+/// in pixel space, y-down.
+fn outline_to_path_data(paths: &[PathSegment], [a, b, c, d, e, f]: [f32; 6]) -> String {
+  use std::fmt::Write as _;
+
+  let mut out = String::new();
+  let map = |p: Point| (a * p.x + c * p.y + e, b * p.x + d * p.y + f);
+  for command in paths {
+    match command {
+      PathSegment::MoveTo(p) => {
+        let (x, y) = map(*p);
+        let _ = write!(out, "M{x} {y}");
+      }
+      PathSegment::LineTo(p) => {
+        let (x, y) = map(*p);
+        let _ = write!(out, "L{x} {y}");
+      }
+      PathSegment::QuadTo(c0, p) => {
+        let (x0, y0) = map(*c0);
+        let (x, y) = map(*p);
+        let _ = write!(out, "Q{x0} {y0} {x} {y}");
+      }
+      PathSegment::CubicTo(c0, c1, p) => {
+        let (x0, y0) = map(*c0);
+        let (x1, y1) = map(*c1);
+        let (x, y) = map(*p);
+        let _ = write!(out, "C{x0} {y0} {x1} {y1} {x} {y}");
+      }
+      PathSegment::Close => out.push('Z'),
+    }
+  }
+  out
 }
 
 #[cfg(test)]
