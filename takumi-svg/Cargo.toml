@@ -7,5 +7,12 @@ description = "Vector SVG output backend for takumi. Emits real SVG (paths, grad
 repository = "https://github.com/kane50613/takumi"
 rust-version = "1.91"
 
+[dependencies]
+taffy.workspace = true
+
+[dependencies.takumi-core]
+path = "../takumi-core"
+version = "=1"
+
 [lints]
 workspace = true

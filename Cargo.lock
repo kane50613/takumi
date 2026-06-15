@@ -2113,6 +2113,10 @@ dependencies = [
 [[package]]
 name = "takumi-svg"
 version = "0.1.0"
+dependencies = [
+ "taffy",
+ "takumi-core",
+]
 
 [[package]]
 name = "takumi-wasm"

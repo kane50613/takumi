@@ -27,6 +27,9 @@
 //! | affine transform            | `transform="matrix(...)"`                  | full   |
 //! | **conic gradient**          | no SVG 1.1 construct                        | raster fallback |
 
+mod render;
+pub use render::render_svg;
+
 use std::fmt::Write;
 
 /// Straight-alpha RGBA color.
