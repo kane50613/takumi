@@ -7,21 +7,19 @@ use image::{
   codecs::{gif::GifDecoder, jpeg::JpegDecoder, png::PngDecoder},
   error::{DecodingError, ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
 };
-use tiny_skia::Pixmap;
-
 #[cfg(not(target_arch = "wasm32"))]
 use libwebp_sys::{WebPDecodeRGBA, WebPFree};
 
 #[cfg(target_arch = "wasm32")]
 use image_webp::WebPDecoder;
 
-use crate::rendering::premultiplied_pixmap_from_rgba;
+use crate::resources::image_buffer::ImageBuffer;
 
 const PNG_SIGNATURE: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
 const JPEG_SIGNATURE: [u8; 3] = [0xFF, 0xD8, 0xFF];
 
 pub(crate) struct DecodedGifFrame {
-  pub(crate) pixmap: Arc<Pixmap>,
+  pub(crate) buffer: Arc<ImageBuffer>,
   pub(crate) duration_ms: u32,
 }
 
@@ -30,16 +28,16 @@ pub(crate) struct DecodedGif {
 }
 
 pub(crate) enum DecodedImage {
-  Pixmap(Pixmap),
+  Buffer(ImageBuffer),
   Gif(DecodedGif),
 }
 
 pub(crate) fn decode_image(bytes: &[u8]) -> ImageResult<DecodedImage> {
   match detect_image_format(bytes) {
-    Some(DetectedImageFormat::Png) => decode_png(bytes).map(DecodedImage::Pixmap),
-    Some(DetectedImageFormat::Jpeg) => decode_jpeg(bytes).map(DecodedImage::Pixmap),
+    Some(DetectedImageFormat::Png) => decode_png(bytes).map(DecodedImage::Buffer),
+    Some(DetectedImageFormat::Jpeg) => decode_jpeg(bytes).map(DecodedImage::Buffer),
     Some(DetectedImageFormat::Gif) => decode_gif(bytes).map(DecodedImage::Gif),
-    Some(DetectedImageFormat::WebP) => decode_webp(bytes).map(DecodedImage::Pixmap),
+    Some(DetectedImageFormat::WebP) => decode_webp(bytes).map(DecodedImage::Buffer),
     None => Err(ImageError::Unsupported(
       UnsupportedError::from_format_and_kind(
         ImageFormatHint::Unknown,
@@ -77,15 +75,18 @@ enum DetectedImageFormat {
   WebP,
 }
 
-fn decode_with_image_crate(decoder: impl ImageDecoder, format: ImageFormat) -> ImageResult<Pixmap> {
-  rgba_to_pixmap(DynamicImage::from_decoder(decoder)?.to_rgba8(), format)
+fn decode_with_image_crate(
+  decoder: impl ImageDecoder,
+  format: ImageFormat,
+) -> ImageResult<ImageBuffer> {
+  rgba_to_buffer(DynamicImage::from_decoder(decoder)?.to_rgba8(), format)
 }
 
-pub(crate) fn decode_png(bytes: &[u8]) -> ImageResult<Pixmap> {
+pub(crate) fn decode_png(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   decode_with_image_crate(PngDecoder::new(Cursor::new(bytes))?, ImageFormat::Png)
 }
 
-fn decode_jpeg(bytes: &[u8]) -> ImageResult<Pixmap> {
+fn decode_jpeg(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   decode_with_image_crate(JpegDecoder::new(Cursor::new(bytes))?, ImageFormat::Jpeg)
 }
 
@@ -98,9 +99,9 @@ fn decode_gif(bytes: &[u8]) -> ImageResult<DecodedGif> {
     let (numerator, denominator) = frame.delay().numer_denom_ms();
     let frame_delay_ms = numerator.checked_div(denominator).unwrap_or(numerator);
     let duration_ms = frame_delay_ms.max(1);
-    let pixmap = Arc::new(rgba_to_pixmap(frame.into_buffer(), ImageFormat::Gif)?);
+    let buffer = Arc::new(rgba_to_buffer(frame.into_buffer(), ImageFormat::Gif)?);
     decoded_frames.push(DecodedGifFrame {
-      pixmap,
+      buffer,
       duration_ms,
     });
   }
@@ -111,7 +112,7 @@ fn decode_gif(bytes: &[u8]) -> ImageResult<DecodedGif> {
 }
 
 #[cfg(target_arch = "wasm32")]
-fn decode_webp(bytes: &[u8]) -> ImageResult<Pixmap> {
+fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   let mut decoder = WebPDecoder::new(Cursor::new(bytes)).map_err(webp_decode_error)?;
   let (width, height) = decoder.dimensions();
   let has_alpha = decoder.has_alpha();
@@ -124,7 +125,7 @@ fn decode_webp(bytes: &[u8]) -> ImageResult<Pixmap> {
   if has_alpha {
     return RgbaImage::from_raw(width, height, image_data)
       .ok_or_else(invalid_buffer_error)
-      .and_then(|image| rgba_to_pixmap(image, ImageFormat::WebP));
+      .and_then(|image| rgba_to_buffer(image, ImageFormat::WebP));
   }
 
   let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
@@ -134,11 +135,11 @@ fn decode_webp(bytes: &[u8]) -> ImageResult<Pixmap> {
 
   RgbaImage::from_raw(width, height, rgba)
     .ok_or_else(invalid_buffer_error)
-    .and_then(|image| rgba_to_pixmap(image, ImageFormat::WebP))
+    .and_then(|image| rgba_to_buffer(image, ImageFormat::WebP))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn decode_webp(bytes: &[u8]) -> ImageResult<Pixmap> {
+fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   use crate::error::WebPError;
 
   let mut width = 0;
@@ -175,16 +176,16 @@ fn decode_webp(bytes: &[u8]) -> ImageResult<Pixmap> {
 
   RgbaImage::from_raw(width as u32, height as u32, image_data)
     .ok_or_else(invalid_buffer_error)
-    .and_then(|image| rgba_to_pixmap(image, ImageFormat::WebP))
+    .and_then(|image| rgba_to_buffer(image, ImageFormat::WebP))
 }
 
-fn rgba_to_pixmap(image: RgbaImage, format: ImageFormat) -> ImageResult<Pixmap> {
-  premultiplied_pixmap_from_rgba(Cow::Owned(image)).ok_or_else(|| {
+fn rgba_to_buffer(image: RgbaImage, format: ImageFormat) -> ImageResult<ImageBuffer> {
+  ImageBuffer::from_rgba(Cow::Owned(image)).ok_or_else(|| {
     ImageError::Decoding(DecodingError::new(
       format.into(),
       IoError::new(
         ErrorKind::InvalidData,
-        "decoded RGBA buffer dimensions are not representable as a pixmap",
+        "decoded RGBA buffer dimensions are not representable as a buffer",
       ),
     ))
   })

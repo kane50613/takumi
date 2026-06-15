@@ -1,0 +1,242 @@
+//! Backend-agnostic decoded-image storage.
+//!
+//! [`ImageBuffer`] holds premultiplied, row-major RGBA bytes with the same memory
+//! layout as `tiny_skia::Pixmap`, so a paint backend can borrow it zero-copy via
+//! `PixmapRef::from_bytes(buffer.data(), w, h)` without a per-composite copy.
+
+use std::borrow::Cow;
+
+use image::RgbaImage;
+
+use crate::layout::style::fast_div_255;
+
+/// A decoded image as premultiplied, row-major RGBA bytes.
+#[derive(Debug, Clone)]
+pub struct ImageBuffer {
+  data: Vec<u8>,
+  width: u32,
+  height: u32,
+}
+
+impl ImageBuffer {
+  /// Wraps premultiplied RGBA bytes. Returns `None` if `data.len() != width * height * 4`.
+  pub fn from_premultiplied_rgba(data: Vec<u8>, width: u32, height: u32) -> Option<Self> {
+    let expected = (width as usize)
+      .checked_mul(height as usize)?
+      .checked_mul(4)?;
+    (data.len() == expected).then_some(Self {
+      data,
+      width,
+      height,
+    })
+  }
+
+  /// Allocates a transparent (all-zero) buffer of the given size.
+  pub fn new(width: u32, height: u32) -> Option<Self> {
+    let len = (width as usize)
+      .checked_mul(height as usize)?
+      .checked_mul(4)?;
+    Some(Self {
+      data: vec![0; len],
+      width,
+      height,
+    })
+  }
+
+  /// Builds a premultiplied buffer from a straight-alpha [`RgbaImage`].
+  pub fn from_rgba(source: Cow<'_, RgbaImage>) -> Option<Self> {
+    let (width, height, premultiplied) = match source {
+      Cow::Owned(image) => {
+        let width = image.width();
+        let height = image.height();
+        let mut raw = image.into_raw();
+        if !has_opaque_alpha(&raw) {
+          premultiply_rgba_in_place(&mut raw);
+        }
+        (width, height, raw)
+      }
+      Cow::Borrowed(image) => {
+        let width = image.width();
+        let height = image.height();
+        let raw = image.as_raw();
+        if has_opaque_alpha(raw) {
+          (width, height, raw.to_vec())
+        } else {
+          let mut premultiplied = vec![0u8; raw.len()];
+          write_premultiplied_rgba(&mut premultiplied, raw);
+          (width, height, premultiplied)
+        }
+      }
+    };
+
+    Self::from_premultiplied_rgba(premultiplied, width, height)
+  }
+
+  /// The image width in pixels.
+  pub fn width(&self) -> u32 {
+    self.width
+  }
+
+  /// The image height in pixels.
+  pub fn height(&self) -> u32 {
+    self.height
+  }
+
+  /// The premultiplied RGBA bytes, row-major.
+  pub fn data(&self) -> &[u8] {
+    &self.data
+  }
+
+  /// Mutable access to the premultiplied RGBA bytes.
+  pub fn data_mut(&mut self) -> &mut [u8] {
+    &mut self.data
+  }
+
+  /// Consumes the buffer, returning the premultiplied RGBA bytes.
+  pub fn into_data(self) -> Vec<u8> {
+    self.data
+  }
+
+  /// Reads the premultiplied RGBA value at `(x, y)`, or `[0; 4]` if out of bounds.
+  pub fn pixel(&self, x: u32, y: u32) -> [u8; 4] {
+    if x >= self.width || y >= self.height {
+      return [0; 4];
+    }
+    let index = ((y as usize * self.width as usize) + x as usize) * 4;
+    [
+      self.data[index],
+      self.data[index + 1],
+      self.data[index + 2],
+      self.data[index + 3],
+    ]
+  }
+}
+
+const ALPHA_MASK_U128: u128 =
+  u128::from_ne_bytes([0, 0, 0, 0xFF, 0, 0, 0, 0xFF, 0, 0, 0, 0xFF, 0, 0, 0, 0xFF]);
+
+#[inline(always)]
+fn has_opaque_alpha(raw: &[u8]) -> bool {
+  let mut chunks = raw.chunks_exact(16);
+  for chunk in chunks.by_ref() {
+    let bytes: [u8; 16] = chunk.try_into().unwrap_or([0; 16]);
+    if u128::from_ne_bytes(bytes) & ALPHA_MASK_U128 != ALPHA_MASK_U128 {
+      return false;
+    }
+  }
+  chunks
+    .remainder()
+    .chunks_exact(4)
+    .all(|pixel| pixel[3] == u8::MAX)
+}
+
+#[inline(always)]
+fn premultiply_rgba_in_place(raw: &mut [u8]) {
+  for pixel in raw.chunks_exact_mut(4) {
+    let alpha = pixel[3];
+    if alpha == u8::MAX {
+      continue;
+    }
+    if alpha == 0 {
+      pixel[0] = 0;
+      pixel[1] = 0;
+      pixel[2] = 0;
+      continue;
+    }
+    let alpha_u32 = alpha as u32;
+    pixel[0] = fast_div_255(pixel[0] as u32 * alpha_u32);
+    pixel[1] = fast_div_255(pixel[1] as u32 * alpha_u32);
+    pixel[2] = fast_div_255(pixel[2] as u32 * alpha_u32);
+  }
+}
+
+#[inline(always)]
+fn write_premultiplied_rgba(dst: &mut [u8], src: &[u8]) {
+  for (dst_px, src_px) in dst.chunks_exact_mut(4).zip(src.chunks_exact(4)) {
+    let alpha = src_px[3];
+    if alpha == u8::MAX {
+      dst_px.copy_from_slice(src_px);
+      continue;
+    }
+    if alpha == 0 {
+      dst_px.copy_from_slice(&[0, 0, 0, 0]);
+      continue;
+    }
+
+    let alpha_u32 = alpha as u32;
+    dst_px[0] = fast_div_255(src_px[0] as u32 * alpha_u32);
+    dst_px[1] = fast_div_255(src_px[1] as u32 * alpha_u32);
+    dst_px[2] = fast_div_255(src_px[2] as u32 * alpha_u32);
+    dst_px[3] = alpha;
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::has_opaque_alpha;
+
+  fn pixel(r: u8, g: u8, b: u8, a: u8) -> [u8; 4] {
+    [r, g, b, a]
+  }
+
+  fn flatten(pixels: &[[u8; 4]]) -> Vec<u8> {
+    pixels.iter().flatten().copied().collect()
+  }
+
+  #[test]
+  fn empty_slice_is_opaque() {
+    assert!(has_opaque_alpha(&[]));
+  }
+
+  #[test]
+  fn fully_opaque_short_under_16_bytes() {
+    let raw = flatten(&[
+      pixel(1, 2, 3, 255),
+      pixel(4, 5, 6, 255),
+      pixel(7, 8, 9, 255),
+    ]);
+    assert!(has_opaque_alpha(&raw));
+  }
+
+  #[test]
+  fn fully_opaque_exactly_one_chunk() {
+    let raw = flatten(&[pixel(1, 2, 3, 255); 4]);
+    assert!(has_opaque_alpha(&raw));
+  }
+
+  #[test]
+  fn fully_opaque_chunk_plus_tail() {
+    let mut raw = flatten(&[pixel(1, 2, 3, 255); 4]);
+    raw.extend_from_slice(&[pixel(9, 9, 9, 255), pixel(8, 8, 8, 255)].concat());
+    assert!(has_opaque_alpha(&raw));
+  }
+
+  #[test]
+  fn detects_non_opaque_inside_chunk() {
+    let mut pixels = [pixel(1, 2, 3, 255); 4];
+    pixels[2][3] = 254;
+    assert!(!has_opaque_alpha(&flatten(&pixels)));
+  }
+
+  #[test]
+  fn detects_non_opaque_in_tail() {
+    let mut raw = flatten(&[pixel(1, 2, 3, 255); 4]);
+    raw.extend_from_slice(&pixel(0, 0, 0, 0));
+    assert!(!has_opaque_alpha(&raw));
+  }
+
+  #[test]
+  fn detects_first_non_opaque() {
+    let mut pixels = [pixel(1, 2, 3, 255); 8];
+    pixels[0][3] = 0;
+    assert!(!has_opaque_alpha(&flatten(&pixels)));
+  }
+
+  #[test]
+  fn rgb_values_do_not_affect_result() {
+    let raw = flatten(&[pixel(255, 255, 255, 255); 8]);
+    assert!(has_opaque_alpha(&raw));
+    let raw = flatten(&[pixel(255, 255, 255, 0); 8]);
+    assert!(!has_opaque_alpha(&raw));
+  }
+}

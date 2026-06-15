@@ -19,7 +19,7 @@ use taffy::{Point, Size};
 use tiny_skia::{
   FillRule as TinyFillRule, FilterQuality as TinyFilterQuality, IntSize, Mask as TinyMask,
   Paint as TinyPaint, Path as TinyPath, Pattern as TinyPattern, Pixmap, PixmapMut, PixmapPaint,
-  SpreadMode as TinySpreadMode, Transform as TinyTransform,
+  PixmapRef, SpreadMode as TinySpreadMode, Transform as TinyTransform,
 };
 
 use self::composite::sampling_footprint;
@@ -451,7 +451,7 @@ impl Canvas {
   }
   pub(crate) fn overlay_sampled_pixmap(
     &mut self,
-    source: &Pixmap,
+    source: PixmapRef<'_>,
     size: Size<u32>,
     border: BorderProperties,
     transform: Affine,
@@ -1997,7 +1997,7 @@ mod tests {
       height: 6,
     });
     direct.overlay_sampled_pixmap(
-      &source_pixmap,
+      source_pixmap.as_ref(),
       Size {
         width: 4,
         height: 2,
@@ -2024,7 +2024,7 @@ mod tests {
       return;
     };
     isolated.overlay_sampled_pixmap(
-      &source_pixmap,
+      source_pixmap.as_ref(),
       Size {
         width: 4,
         height: 2,

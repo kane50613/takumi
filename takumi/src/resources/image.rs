@@ -12,11 +12,12 @@ use std::{cell::RefCell, collections::HashMap};
 #[cfg(not(target_arch = "wasm32"))]
 use dashmap::DashMap;
 use image::RgbaImage;
+#[cfg(feature = "svg")]
 use tiny_skia::Pixmap;
 
 use crate::{
   layout::style::{Color, ImageScalingAlgorithm, IntrinsicSizing, SizingContext},
-  rendering::premultiplied_pixmap_from_rgba,
+  resources::image_buffer::ImageBuffer,
   resources::image_decoder::{DecodedGif, DecodedImage, decode_image},
 };
 use thiserror::Error;
@@ -32,7 +33,7 @@ pub enum ImageSource {
   #[cfg(feature = "svg")]
   Svg(SvgSource),
   /// A bitmap image source
-  Bitmap(Arc<Pixmap>),
+  Bitmap(Arc<ImageBuffer>),
   /// An animated gif source.
   Gif(GifSource),
 }
@@ -72,7 +73,7 @@ pub struct GifSource {
 /// A single GIF frame.
 #[derive(Debug, Clone)]
 struct GifFrame {
-  pixmap: Arc<Pixmap>,
+  buffer: Arc<ImageBuffer>,
   duration_ms: u32,
 }
 
@@ -87,7 +88,7 @@ impl GifSource {
     for frame in decoded.frames {
       total_duration_ms = total_duration_ms.saturating_add(frame.duration_ms as u64);
       frames.push(GifFrame {
-        pixmap: frame.pixmap,
+        buffer: frame.buffer,
         duration_ms: frame.duration_ms,
       });
     }
@@ -98,9 +99,9 @@ impl GifSource {
     })
   }
 
-  pub(crate) fn frame_at_time(&self, time_ms: u64) -> &Pixmap {
+  pub(crate) fn frame_at_time(&self, time_ms: u64) -> &ImageBuffer {
     if self.total_duration_ms == 0 {
-      return &self.frames[0].pixmap;
+      return &self.frames[0].buffer;
     }
 
     let target_time = time_ms % self.total_duration_ms;
@@ -109,16 +110,16 @@ impl GifSource {
     for frame in self.frames.iter() {
       elapsed_ms = elapsed_ms.saturating_add(frame.duration_ms as u64);
       if target_time < elapsed_ms {
-        return &frame.pixmap;
+        return &frame.buffer;
       }
     }
 
-    &self.frames[0].pixmap
+    &self.frames[0].buffer
   }
 
-  pub(crate) fn frame_at_time_arc(&self, time_ms: u64) -> Arc<Pixmap> {
+  pub(crate) fn frame_at_time_arc(&self, time_ms: u64) -> Arc<ImageBuffer> {
     if self.total_duration_ms == 0 {
-      return self.frames[0].pixmap.clone();
+      return self.frames[0].buffer.clone();
     }
 
     let target_time = time_ms % self.total_duration_ms;
@@ -127,11 +128,11 @@ impl GifSource {
     for frame in self.frames.iter() {
       elapsed_ms = elapsed_ms.saturating_add(frame.duration_ms as u64);
       if target_time < elapsed_ms {
-        return frame.pixmap.clone();
+        return frame.buffer.clone();
       }
     }
 
-    self.frames[0].pixmap.clone()
+    self.frames[0].buffer.clone()
   }
 }
 
@@ -146,11 +147,11 @@ impl From<SvgSource> for ImageSource {
 #[derive(Debug, Clone)]
 pub(crate) enum RenderedImage<'a> {
   /// A fully rasterized image, used for SVGs.
-  Rasterized(Arc<Pixmap>),
+  Rasterized(Arc<ImageBuffer>),
   /// A borrowed bitmap that should be sampled directly.
   Borrowed {
     /// The original bitmap source.
-    source: &'a Pixmap,
+    source: &'a ImageBuffer,
     /// The logical width that will be rendered on the canvas.
     width: u32,
     /// The logical height that will be rendered on the canvas.
@@ -212,22 +213,22 @@ impl PersistentImageStore {
 
 impl From<RgbaImage> for ImageSource {
   fn from(bitmap: RgbaImage) -> Self {
-    let pixmap = premultiplied_pixmap_from_rgba(Cow::Owned(bitmap)).unwrap_or_else(|| {
+    let buffer = ImageBuffer::from_rgba(Cow::Owned(bitmap)).unwrap_or_else(|| {
       let mut edge = 1_u32;
       loop {
-        if let Some(pixmap) = Pixmap::new(edge, edge) {
-          break pixmap;
+        if let Some(buffer) = ImageBuffer::new(edge, edge) {
+          break buffer;
         }
         edge = edge.saturating_add(1);
       }
     });
-    ImageSource::Bitmap(Arc::new(pixmap))
+    ImageSource::Bitmap(Arc::new(buffer))
   }
 }
 
-impl From<Pixmap> for ImageSource {
-  fn from(pixmap: Pixmap) -> Self {
-    ImageSource::Bitmap(Arc::new(pixmap))
+impl From<ImageBuffer> for ImageSource {
+  fn from(buffer: ImageBuffer) -> Self {
+    ImageSource::Bitmap(Arc::new(buffer))
   }
 }
 
@@ -265,14 +266,14 @@ impl SvgRasterCacheKey {
 #[derive(Debug, Default)]
 struct SvgRasterCache {
   #[cfg(target_arch = "wasm32")]
-  map: RefCell<HashMap<SvgRasterCacheKey, Arc<Pixmap>>>,
+  map: RefCell<HashMap<SvgRasterCacheKey, Arc<ImageBuffer>>>,
   #[cfg(not(target_arch = "wasm32"))]
-  map: DashMap<SvgRasterCacheKey, Arc<Pixmap>>,
+  map: DashMap<SvgRasterCacheKey, Arc<ImageBuffer>>,
 }
 
 #[cfg(feature = "svg")]
 impl SvgRasterCache {
-  fn get(&self, key: SvgRasterCacheKey) -> Option<Arc<Pixmap>> {
+  fn get(&self, key: SvgRasterCacheKey) -> Option<Arc<ImageBuffer>> {
     #[cfg(target_arch = "wasm32")]
     {
       self.map.borrow().get(&key).cloned()
@@ -284,7 +285,7 @@ impl SvgRasterCache {
     }
   }
 
-  fn insert(&self, key: SvgRasterCacheKey, pixmap: Arc<Pixmap>) {
+  fn insert(&self, key: SvgRasterCacheKey, pixmap: Arc<ImageBuffer>) {
     #[cfg(target_arch = "wasm32")]
     {
       self.map.borrow_mut().insert(key, pixmap);
@@ -356,7 +357,7 @@ impl ImageSource {
 
     let image = decode_image(bytes).map_err(ImageResourceError::DecodeError)?;
     let source = match image {
-      DecodedImage::Pixmap(pixmap) => ImageSource::Bitmap(Arc::new(pixmap)),
+      DecodedImage::Buffer(buffer) => ImageSource::Bitmap(Arc::new(buffer)),
       DecodedImage::Gif(gif) => ImageSource::Gif(GifSource::from_decoded(gif)?),
     };
 
@@ -429,10 +430,12 @@ impl ImageSource {
 
         resvg::render(tree, Transform::from_scale(sx, sy), &mut pixmap.as_mut());
 
-        let pixmap = Arc::new(pixmap);
-        svg.raster_cache.insert(cache_key, pixmap.clone());
+        let buffer = ImageBuffer::from_premultiplied_rgba(pixmap.data().to_vec(), width, height)
+          .ok_or(ImageResourceError::InvalidPixmapSize)?;
+        let buffer = Arc::new(buffer);
+        svg.raster_cache.insert(cache_key, buffer.clone());
 
-        Ok(RenderedImage::Rasterized(pixmap))
+        Ok(RenderedImage::Rasterized(buffer))
       }
     }
   }
@@ -444,7 +447,7 @@ impl ImageSource {
       ImageSource::Svg(svg) => (svg.tree.size().width(), svg.tree.size().height()),
       ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
       ImageSource::Gif(gif) => {
-        let frame = &gif.frames[0].pixmap;
+        let frame = &gif.frames[0].buffer;
         (frame.width() as f32, frame.height() as f32)
       }
     };
@@ -468,7 +471,7 @@ impl ImageSource {
         IntrinsicSizing::from_dimensions(bitmap.width() as f32 * dpr, bitmap.height() as f32 * dpr)
       }
       ImageSource::Gif(gif) => {
-        let frame = &gif.frames[0].pixmap;
+        let frame = &gif.frames[0].buffer;
         IntrinsicSizing::from_dimensions(frame.width() as f32 * dpr, frame.height() as f32 * dpr)
       }
     }
@@ -563,7 +566,6 @@ mod tests {
   use std::{assert_matches, borrow::Cow};
 
   use image::Rgba;
-  use tiny_skia::PremultipliedColorU8;
 
   use super::*;
   use crate::resources::image_decoder::DecodedGifFrame;
@@ -606,29 +608,25 @@ mod tests {
     );
   }
 
-  fn premul_at(image: &RenderedImage<'_>, x: u32, y: u32) -> PremultipliedColorU8 {
+  fn premul_at(image: &RenderedImage<'_>, x: u32, y: u32) -> [u8; 4] {
     match image {
-      RenderedImage::Rasterized(pixmap) => pixmap
-        .pixel(x, y)
-        .unwrap_or(PremultipliedColorU8::TRANSPARENT),
-      RenderedImage::Borrowed { source, .. } => source
-        .pixel(x, y)
-        .unwrap_or(PremultipliedColorU8::TRANSPARENT),
+      RenderedImage::Rasterized(buffer) => buffer.pixel(x, y),
+      RenderedImage::Borrowed { source, .. } => source.pixel(x, y),
     }
   }
 
-  fn frame_pixmap(seed: u8) -> Arc<Pixmap> {
+  fn frame_buffer(seed: u8) -> Arc<ImageBuffer> {
     let bitmap = RgbaImage::from_pixel(1, 1, Rgba([seed, 0, 0, 255]));
-    let Some(pixmap) = premultiplied_pixmap_from_rgba(Cow::Owned(bitmap)) else {
+    let buffer = ImageBuffer::from_rgba(Cow::Owned(bitmap)).unwrap_or_else(|| {
       let mut edge = 1_u32;
       loop {
-        if let Some(pixmap) = Pixmap::new(edge, edge) {
-          return Arc::new(pixmap);
+        if let Some(buffer) = ImageBuffer::new(edge, edge) {
+          break buffer;
         }
         edge = edge.saturating_add(1);
       }
-    };
-    Arc::new(pixmap)
+    });
+    Arc::new(buffer)
   }
 
   fn gif_with_durations(durations: &[u32]) -> GifSource {
@@ -636,7 +634,7 @@ mod tests {
       .iter()
       .enumerate()
       .map(|(index, duration_ms)| DecodedGifFrame {
-        pixmap: frame_pixmap(index as u8 + 1),
+        buffer: frame_buffer(index as u8 + 1),
         duration_ms: *duration_ms,
       })
       .collect();
@@ -644,7 +642,7 @@ mod tests {
       Ok(gif) => gif,
       Err(_) => GifSource {
         frames: [GifFrame {
-          pixmap: frame_pixmap(0),
+          buffer: frame_buffer(0),
           duration_ms: 0,
         }]
         .into(),
@@ -703,7 +701,7 @@ mod tests {
     let color = Color([255, 0, 0, 128]);
 
     let rendered = image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, 0, color)?;
-    let alpha = premul_at(&rendered, 2, 2).alpha();
+    let alpha = premul_at(&rendered, 2, 2)[3];
 
     assert!((alpha as i16 - 128).abs() <= 1);
     Ok(())
@@ -893,10 +891,10 @@ mod tests {
       let expected_frame = &gif.frames[expected_index];
 
       let frame = gif.frame_at_time(time_ms);
-      assert_eq!(frame.data(), expected_frame.pixmap.data());
+      assert_eq!(frame.data(), expected_frame.buffer.data());
 
       let frame_arc = gif.frame_at_time_arc(time_ms);
-      assert!(Arc::ptr_eq(&frame_arc, &expected_frame.pixmap));
+      assert!(Arc::ptr_eq(&frame_arc, &expected_frame.buffer));
     }
   }
 
@@ -907,10 +905,10 @@ mod tests {
     assert_eq!(gif.total_duration_ms, 0);
     for time_ms in [0_u64, 1, 10, 1_000] {
       let frame = gif.frame_at_time(time_ms);
-      assert_eq!(frame.data(), gif.frames[0].pixmap.data());
+      assert_eq!(frame.data(), gif.frames[0].buffer.data());
 
       let frame_arc = gif.frame_at_time_arc(time_ms);
-      assert!(Arc::ptr_eq(&frame_arc, &gif.frames[0].pixmap));
+      assert!(Arc::ptr_eq(&frame_arc, &gif.frames[0].buffer));
     }
   }
 

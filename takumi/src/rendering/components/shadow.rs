@@ -118,7 +118,7 @@ pub(crate) fn draw_inset_shadow_to_canvas(
   let image = draw_inset_shadow(shadow, border_radius, layout.size, &mut canvas.buffer_pool)?;
 
   canvas.overlay_sampled_pixmap(
-    &image,
+    image.as_ref(),
     Size {
       width: image.width(),
       height: image.height(),

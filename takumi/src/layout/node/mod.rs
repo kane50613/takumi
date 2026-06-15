@@ -2,12 +2,12 @@ mod container;
 mod image;
 mod text;
 
+use crate::resources::image_buffer::ImageBuffer;
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use taffy::{AvailableSpace, Size};
-use tiny_skia::Pixmap;
 
 use crate::{
   Xxh3HashSet,
@@ -151,9 +151,9 @@ impl From<ImageSource> for ImageData {
   }
 }
 
-impl From<Pixmap> for ImageData {
-  fn from(pixmap: Pixmap) -> Self {
-    Self::from(ImageSource::from(pixmap))
+impl From<ImageBuffer> for ImageData {
+  fn from(buffer: ImageBuffer) -> Self {
+    Self::from(ImageSource::from(buffer))
   }
 }
 

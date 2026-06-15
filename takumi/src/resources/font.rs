@@ -34,7 +34,7 @@ use tiny_skia::Pixmap;
 
 use crate::{
   layout::inline::{InlineBrush, InlineLayout},
-  rendering::{Command, premultiplied_pixmap_from_rgba},
+  rendering::{Command, pixmap_from_buffer, premultiplied_pixmap_from_rgba},
   resources::image_decoder::decode_png,
 };
 
@@ -445,7 +445,7 @@ fn transform_commands(paths: &mut [Command], skew_degrees: f32) {
 
 fn decode_bitmap_image(bitmap: &BitmapGlyph<'_>) -> Option<(Pixmap, Origin)> {
   let pixmap = match &bitmap.data {
-    BitmapData::Png(bytes) => decode_png(bytes).ok()?,
+    BitmapData::Png(bytes) => pixmap_from_buffer(&decode_png(bytes).ok()?)?,
     BitmapData::Bgra(bytes) => {
       let image = RgbaImage::from_fn(bitmap.width, bitmap.height, |x, y| {
         let index = ((y * bitmap.width + x) * 4) as usize;

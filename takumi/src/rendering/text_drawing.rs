@@ -191,7 +191,7 @@ pub(crate) fn draw_glyph_clip_image(
       );
 
       canvas.overlay_sampled_pixmap(
-        &bottom,
+        bottom.as_ref(),
         Size {
           width: bottom.width(),
           height: bottom.height(),
@@ -294,7 +294,7 @@ pub(crate) fn draw_glyph(
       transform *= Affine::translation(bitmap.placement.left as f32, -bitmap.placement.top as f32);
       transform *= Affine::scale(bitmap.scale_x, bitmap.scale_y);
       canvas.overlay_sampled_pixmap(
-        &bitmap.pixmap,
+        bitmap.pixmap.as_ref(),
         Size {
           width: bitmap.pixmap.width(),
           height: bitmap.pixmap.height(),

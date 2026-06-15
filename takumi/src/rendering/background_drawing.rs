@@ -13,9 +13,10 @@ use crate::{
   rendering::{
     BorderProperties, BufferPool, OverlayOptions, PaintSource, RenderContext, SamplingFootprint,
     fast_div_255, interpolate_with_footprint, overlay_gradient_tile, overlay_image,
-    overlay_linear_gradient_tile, overlay_radial_gradient_tile,
+    overlay_linear_gradient_tile, overlay_radial_gradient_tile, pixmap_from_buffer,
+    pixmap_ref_from_buffer,
   },
-  resources::image::ImageSource,
+  resources::{image::ImageSource, image_buffer::ImageBuffer},
 };
 
 pub(crate) struct TileLayer {
@@ -244,7 +245,7 @@ pub(crate) enum BackgroundTile {
   Conic(ConicGradientTile),
   Pixmap(Arc<Pixmap>),
   SampledBitmap {
-    source: Arc<Pixmap>,
+    source: Arc<ImageBuffer>,
     width: u32,
     height: u32,
     algo: ImageScalingAlgorithm,
@@ -303,7 +304,10 @@ impl BackgroundTile {
           source_height as f32 / logical_height as f32,
         );
 
-        let source = PaintSource::from(source.as_ref());
+        let Some(pixmap_ref) = pixmap_ref_from_buffer(source.as_ref()) else {
+          return PremultipliedColorU8::TRANSPARENT;
+        };
+        let source = PaintSource::from(pixmap_ref);
         interpolate_with_footprint(source, *algo, mapped_x, mapped_y, footprint)
           .unwrap_or(PremultipliedColorU8::TRANSPARENT)
       }
@@ -533,7 +537,9 @@ pub(crate) fn render_tile(
             context.time,
             context.current_color,
           )? {
-            RenderedImage::Rasterized(pixmap) => Some(BackgroundTile::Pixmap(pixmap)),
+            RenderedImage::Rasterized(buffer) => {
+              pixmap_from_buffer(&buffer).map(|pixmap| BackgroundTile::Pixmap(Arc::new(pixmap)))
+            }
             RenderedImage::Borrowed { .. } => None,
           },
         }

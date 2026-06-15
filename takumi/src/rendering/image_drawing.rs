@@ -6,7 +6,7 @@ use crate::{
   layout::style::{
     Affine, ObjectFit, PositionComponent, PositionKeywordX, PositionKeywordY, SizingContext,
   },
-  rendering::{BorderProperties, Canvas, RenderContext, SamplingOptions},
+  rendering::{BorderProperties, Canvas, RenderContext, SamplingOptions, pixmap_ref_from_buffer},
   resources::image::{ImageSource, RenderedImage},
 };
 
@@ -294,31 +294,39 @@ pub fn draw_image(
   border.inset_by_border_width();
 
   match image.image {
-    RenderedImage::Rasterized(image) => canvas.overlay_image(
-      image.as_ref(),
-      border,
-      transform_with_content_offset,
-      context.style.image_rendering,
-      // blend mode will be applied in main render function,
-      // therefore we should not apply it here to avoid double application
-      BlendMode::Normal,
-    ),
+    RenderedImage::Rasterized(image) => {
+      if let Some(pixmap_ref) = pixmap_ref_from_buffer(image.as_ref()) {
+        canvas.overlay_image(
+          pixmap_ref,
+          border,
+          transform_with_content_offset,
+          context.style.image_rendering,
+          // blend mode will be applied in main render function,
+          // therefore we should not apply it here to avoid double application
+          BlendMode::Normal,
+        );
+      }
+    }
     RenderedImage::Borrowed {
       source,
       width,
       height,
       algorithm: algo,
-    } => canvas.overlay_sampled_pixmap(
-      source,
-      Size { width, height },
-      border,
-      transform_with_content_offset,
-      SamplingOptions {
-        logical_to_source: image.logical_to_source,
-        algorithm: algo,
-      },
-      BlendMode::Normal,
-    ),
+    } => {
+      if let Some(pixmap_ref) = pixmap_ref_from_buffer(source) {
+        canvas.overlay_sampled_pixmap(
+          pixmap_ref,
+          Size { width, height },
+          border,
+          transform_with_content_offset,
+          SamplingOptions {
+            logical_to_source: image.logical_to_source,
+            algorithm: algo,
+          },
+          BlendMode::Normal,
+        );
+      }
+    }
   }
 
   Ok(())
