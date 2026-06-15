@@ -9,7 +9,9 @@
       "@takumi-rs/image-response",
       "@takumi-rs/wasm",
       "@takumi-rs/helpers",
-      "takumi"
+      "takumi",
+      "takumi-core",
+      "takumi-paint"
     ]
   ],
   "linked": [],

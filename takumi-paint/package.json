@@ -1,13 +1,13 @@
 {
-  "name": "takumi",
+  "name": "takumi-paint",
   "version": "1.8.5",
   "private": true,
   "scripts": {
-    "version": "cargo set-version -p takumi $(jq -r '.version' package.json)",
+    "version": "cargo set-version -p takumi-paint $(jq -r '.version' package.json)",
     "release": "cargo publish || [ $? -eq 101 ] || exit $?"
   },
   "dependencies": {
     "takumi-core": "workspace:*",
-    "takumi-paint": "workspace:*"
+    "takumi-css": "workspace:*"
   }
 }

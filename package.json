@@ -4,6 +4,9 @@
   "workspaces": [
     "takumi-css",
     "takumi",
+    "takumi-core",
+    "takumi-paint",
+    "takumi-svg",
     "takumi-js",
     "takumi-helpers",
     "takumi-napi-core",

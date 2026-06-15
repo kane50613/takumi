@@ -225,18 +225,26 @@
     },
     "takumi": {
       "name": "takumi",
-      "version": "1.8.4",
+      "version": "1.8.5",
+      "dependencies": {
+        "takumi-core": "workspace:*",
+        "takumi-paint": "workspace:*",
+      },
+    },
+    "takumi-core": {
+      "name": "takumi-core",
+      "version": "1.8.5",
       "dependencies": {
         "takumi-css": "workspace:*",
       },
     },
     "takumi-css": {
       "name": "takumi-css",
-      "version": "0.1.1",
+      "version": "0.1.2",
     },
     "takumi-helpers": {
       "name": "@takumi-rs/helpers",
-      "version": "1.8.4",
+      "version": "1.8.5",
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/react": "catalog:",
@@ -260,7 +268,7 @@
     },
     "takumi-image-response": {
       "name": "@takumi-rs/image-response",
-      "version": "1.8.4",
+      "version": "1.8.5",
       "dependencies": {
         "takumi-js": "workspace:*",
       },
@@ -273,7 +281,7 @@
     },
     "takumi-js": {
       "name": "takumi-js",
-      "version": "1.8.4",
+      "version": "1.8.5",
       "dependencies": {
         "@takumi-rs/core": "workspace:*",
         "@takumi-rs/helpers": "workspace:*",
@@ -289,7 +297,7 @@
     },
     "takumi-napi-core": {
       "name": "@takumi-rs/core",
-      "version": "1.8.4",
+      "version": "1.8.5",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
       },
@@ -307,6 +315,18 @@
         "unrun": "catalog:",
       },
     },
+    "takumi-paint": {
+      "name": "takumi-paint",
+      "version": "1.8.5",
+      "dependencies": {
+        "takumi-core": "workspace:*",
+        "takumi-css": "workspace:*",
+      },
+    },
+    "takumi-svg": {
+      "name": "takumi-svg",
+      "version": "0.1.0",
+    },
     "takumi-template": {
       "name": "takumi-template",
       "dependencies": {
@@ -323,7 +343,7 @@
     },
     "takumi-wasm": {
       "name": "@takumi-rs/wasm",
-      "version": "1.8.4",
+      "version": "1.8.5",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
       },
@@ -2255,9 +2275,15 @@
 
     "takumi": ["takumi@workspace:takumi"],
 
+    "takumi-core": ["takumi-core@workspace:takumi-core"],
+
     "takumi-css": ["takumi-css@workspace:takumi-css"],
 
     "takumi-js": ["takumi-js@workspace:takumi-js"],
+
+    "takumi-paint": ["takumi-paint@workspace:takumi-paint"],
+
+    "takumi-svg": ["takumi-svg@workspace:takumi-svg"],
 
     "takumi-template": ["takumi-template@workspace:takumi-template"],
 
