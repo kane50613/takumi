@@ -3,15 +3,11 @@
 //!
 //! This crate emits **real** SVG — `<rect>`, `<path>`, `<linearGradient>`,
 //! `<filter>`, `<clipPath>`, glyph `<path>`s — instead of wrapping a rasterized
-//! bitmap in a `data:` URL. It provides the low-level [`SvgDocument`] builder and
-//! per-feature emitters; the node-tree → SVG conversion is wired up once the
-//! `takumi-core` / `takumi-paint` split lands and exposes a backend-agnostic
-//! scene/display-list.
+//! bitmap in a `data:` URL. It provides the low-level [`SvgDocument`] builder
+//! (backed by [`quick_xml`] so every attribute and value is correctly escaped)
+//! and the node-tree → SVG entry point [`render_svg`].
 //!
 //! # Feature coverage
-//!
-//! Every takumi paint primitive maps to a native SVG construct, with one
-//! exception:
 //!
 //! | takumi feature              | SVG construct                              | status |
 //! | --------------------------- | ------------------------------------------ | ------ |
@@ -25,13 +21,14 @@
 //! | clip-path / overflow        | [`SvgDocument::clip_path`]                  | full   |
 //! | opacity / blend modes       | `opacity` / `mix-blend-mode` attrs         | full   |
 //! | affine transform            | `transform="matrix(...)"`                  | full   |
-//! | **conic gradient**          | no SVG 1.1 construct                        | raster fallback |
+//! | conic gradient              | solid-color wedge `<path>` fan (approx.)   | full   |
 
 mod gradient;
 mod render;
 pub use render::render_svg;
 
-use std::fmt::Write;
+use quick_xml::Writer;
+use quick_xml::events::{BytesEnd, BytesStart, Event};
 
 /// Straight-alpha RGBA color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,7 +54,15 @@ pub struct Affine(pub [f32; 6]);
 impl Affine {
   fn attr(self) -> String {
     let [a, b, c, d, e, f] = self.0;
-    format!("matrix({a} {b} {c} {d} {e} {f})")
+    format!(
+      "matrix({} {} {} {} {} {})",
+      num(a),
+      num(b),
+      num(c),
+      num(d),
+      num(e),
+      num(f)
+    )
   }
 }
 
@@ -71,23 +76,29 @@ pub struct GradientStop {
 }
 
 /// An incrementally-built SVG document.
-#[derive(Debug, Default)]
+///
+/// Gradient/filter/clip definitions are written inline at the point of use; SVG
+/// resolves `url(#id)` references regardless of document order, so no separate
+/// `<defs>` section is needed.
 pub struct SvgDocument {
-  width: f32,
-  height: f32,
-  defs: String,
-  body: String,
+  writer: Writer<Vec<u8>>,
   next_id: u32,
 }
 
 impl SvgDocument {
   /// Creates a document with the given pixel viewport.
   pub fn new(width: f32, height: f32) -> Self {
-    Self {
-      width,
-      height,
-      ..Self::default()
-    }
+    let mut writer = Writer::new(Vec::new());
+    let mut svg = BytesStart::new("svg");
+    svg.push_attribute(("xmlns", "http://www.w3.org/2000/svg"));
+    svg.push_attribute(("width", num(width).as_str()));
+    svg.push_attribute(("height", num(height).as_str()));
+    svg.push_attribute((
+      "viewBox",
+      format!("0 0 {} {}", num(width), num(height)).as_str(),
+    ));
+    let _ = writer.write_event(Event::Start(svg));
+    Self { writer, next_id: 0 }
   }
 
   fn alloc_id(&mut self, prefix: &str) -> String {
@@ -96,32 +107,64 @@ impl SvgDocument {
     id
   }
 
-  /// Appends a solid-fill rectangle (optionally clipped).
+  fn empty(&mut self, name: &str, attrs: &[(&str, String)]) {
+    let mut element = BytesStart::new(name);
+    for (key, value) in attrs {
+      element.push_attribute((*key, value.as_str()));
+    }
+    let _ = self.writer.write_event(Event::Empty(element));
+  }
+
+  fn open(&mut self, name: &str, attrs: &[(&str, String)]) {
+    let mut element = BytesStart::new(name);
+    for (key, value) in attrs {
+      element.push_attribute((*key, value.as_str()));
+    }
+    let _ = self.writer.write_event(Event::Start(element));
+  }
+
+  fn close(&mut self, name: &str) {
+    let _ = self.writer.write_event(Event::End(BytesEnd::new(name)));
+  }
+
+  /// Appends a solid-fill rectangle.
   pub fn rect(&mut self, x: f32, y: f32, width: f32, height: f32, fill: Rgba) {
-    let _ = write!(
-      self.body,
-      r#"<rect x="{x}" y="{y}" width="{width}" height="{height}" fill="{}" fill-opacity="{}"/>"#,
-      fill.hex(),
-      fill.opacity()
+    self.empty(
+      "rect",
+      &[
+        ("x", num(x)),
+        ("y", num(y)),
+        ("width", num(width)),
+        ("height", num(height)),
+        ("fill", fill.hex()),
+        ("fill-opacity", num(fill.opacity())),
+      ],
     );
   }
 
   /// Appends a rectangle filled with a paint reference (e.g. a gradient `url(#id)`).
   pub fn rect_paint(&mut self, x: f32, y: f32, width: f32, height: f32, paint: &str) {
-    let _ = write!(
-      self.body,
-      r#"<rect x="{x}" y="{y}" width="{width}" height="{height}" fill="{paint}"/>"#,
+    self.empty(
+      "rect",
+      &[
+        ("x", num(x)),
+        ("y", num(y)),
+        ("width", num(width)),
+        ("height", num(height)),
+        ("fill", paint.to_owned()),
+      ],
     );
   }
 
-  /// Appends an arbitrary filled path from raw SVG path data (`d`).
+  /// Appends a filled path from SVG path data (`d`).
   pub fn path(&mut self, data: &str, fill: Rgba) {
-    let _ = write!(
-      self.body,
-      r#"<path d="{}" fill="{}" fill-opacity="{}"/>"#,
-      escape(data),
-      fill.hex(),
-      fill.opacity()
+    self.empty(
+      "path",
+      &[
+        ("d", data.to_owned()),
+        ("fill", fill.hex()),
+        ("fill-opacity", num(fill.opacity())),
+      ],
     );
   }
 
@@ -135,13 +178,22 @@ impl SvgDocument {
     stops: &[GradientStop],
   ) -> String {
     let id = self.alloc_id("lg");
-    let _ = write!(
-      self.defs,
-      r#"<linearGradient id="{id}" gradientUnits="userSpaceOnUse"{} x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}">"#,
-      spread_attr(repeating),
-    );
+    let mut attrs = vec![
+      ("id", id.clone()),
+      ("gradientUnits", "userSpaceOnUse".to_owned()),
+    ];
+    if repeating {
+      attrs.push(("spreadMethod", "repeat".to_owned()));
+    }
+    attrs.extend([
+      ("x1", num(x1)),
+      ("y1", num(y1)),
+      ("x2", num(x2)),
+      ("y2", num(y2)),
+    ]);
+    self.open("linearGradient", &attrs);
     self.write_stops(stops);
-    self.defs.push_str("</linearGradient>");
+    self.close("linearGradient");
     format!("url(#{id})")
   }
 
@@ -157,34 +209,38 @@ impl SvgDocument {
     stops: &[GradientStop],
   ) -> String {
     let id = self.alloc_id("rg");
-    let _ = write!(
-      self.defs,
-      r#"<radialGradient id="{id}" gradientUnits="userSpaceOnUse"{} cx="{cx}" cy="{cy}" r="{r}""#,
-      spread_attr(repeating),
-    );
+    let mut attrs = vec![
+      ("id", id.clone()),
+      ("gradientUnits", "userSpaceOnUse".to_owned()),
+    ];
+    if repeating {
+      attrs.push(("spreadMethod", "repeat".to_owned()));
+    }
+    attrs.extend([("cx", num(cx)), ("cy", num(cy)), ("r", num(r))]);
     let (sx, sy) = scale;
     if (sx - 1.0).abs() > f32::EPSILON || (sy - 1.0).abs() > f32::EPSILON {
       let e = cx - sx * cx;
       let f = cy - sy * cy;
-      let _ = write!(
-        self.defs,
-        r#" gradientTransform="matrix({sx} 0 0 {sy} {e} {f})""#
-      );
+      attrs.push((
+        "gradientTransform",
+        format!("matrix({} 0 0 {} {} {})", num(sx), num(sy), num(e), num(f)),
+      ));
     }
-    self.defs.push('>');
+    self.open("radialGradient", &attrs);
     self.write_stops(stops);
-    self.defs.push_str("</radialGradient>");
+    self.close("radialGradient");
     format!("url(#{id})")
   }
 
   fn write_stops(&mut self, stops: &[GradientStop]) {
     for stop in stops {
-      let _ = write!(
-        self.defs,
-        r#"<stop offset="{}" stop-color="{}" stop-opacity="{}"/>"#,
-        stop.offset,
-        stop.color.hex(),
-        stop.color.opacity()
+      self.empty(
+        "stop",
+        &[
+          ("offset", num(stop.offset)),
+          ("stop-color", stop.color.hex()),
+          ("stop-opacity", num(stop.color.opacity())),
+        ],
       );
     }
   }
@@ -192,24 +248,27 @@ impl SvgDocument {
   /// Defines a gaussian-blur drop-shadow filter and returns its `url(#id)`.
   pub fn drop_shadow_filter(&mut self, dx: f32, dy: f32, blur: f32, color: Rgba) -> String {
     let id = self.alloc_id("ds");
-    let _ = write!(
-      self.defs,
-      r#"<filter id="{id}"><feDropShadow dx="{dx}" dy="{dy}" stdDeviation="{}" flood-color="{}" flood-opacity="{}"/></filter>"#,
-      blur / 2.0,
-      color.hex(),
-      color.opacity()
+    self.open("filter", &[("id", id.clone())]);
+    self.empty(
+      "feDropShadow",
+      &[
+        ("dx", num(dx)),
+        ("dy", num(dy)),
+        ("stdDeviation", num(blur / 2.0)),
+        ("flood-color", color.hex()),
+        ("flood-opacity", num(color.opacity())),
+      ],
     );
+    self.close("filter");
     format!("url(#{id})")
   }
 
-  /// Defines a clip path from raw path data and returns its `url(#id)`.
+  /// Defines a clip path from SVG path data and returns its `url(#id)`.
   pub fn clip_path(&mut self, data: &str) -> String {
     let id = self.alloc_id("cp");
-    let _ = write!(
-      self.defs,
-      r#"<clipPath id="{id}"><path d="{}"/></clipPath>"#,
-      escape(data)
-    );
+    self.open("clipPath", &[("id", id.clone())]);
+    self.empty("path", &[("d", data.to_owned())]);
+    self.close("clipPath");
     format!("url(#{id})")
   }
 
@@ -217,47 +276,41 @@ impl SvgDocument {
   /// SVG (a genuine photo has no vector form), not the "fake SVG" of wrapping the
   /// whole render in one bitmap.
   pub fn image(&mut self, x: f32, y: f32, width: f32, height: f32, href: &str) {
-    let _ = write!(
-      self.body,
-      r#"<image x="{x}" y="{y}" width="{width}" height="{height}" href="{}"/>"#,
-      escape(href)
+    self.empty(
+      "image",
+      &[
+        ("x", num(x)),
+        ("y", num(y)),
+        ("width", num(width)),
+        ("height", num(height)),
+        ("href", href.to_owned()),
+      ],
     );
   }
 
   /// Opens a `<g>` with a transform and optional opacity/clip; returns a token
   /// that must be passed to [`SvgDocument::end_group`].
   pub fn begin_group(&mut self, transform: Affine, opacity: f32, clip: Option<&str>) -> GroupToken {
-    self.body.push_str("<g");
-    let _ = write!(self.body, r#" transform="{}""#, transform.attr());
+    let mut attrs = vec![("transform", transform.attr())];
     if opacity < 1.0 {
-      let _ = write!(self.body, r#" opacity="{opacity}""#);
+      attrs.push(("opacity", num(opacity)));
     }
     if let Some(clip) = clip {
-      let _ = write!(self.body, r#" clip-path="{clip}""#);
+      attrs.push(("clip-path", clip.to_owned()));
     }
-    self.body.push('>');
+    self.open("g", &attrs);
     GroupToken(())
   }
 
   /// Closes the most recently opened group.
   pub fn end_group(&mut self, _token: GroupToken) {
-    self.body.push_str("</g>");
+    self.close("g");
   }
 
-  /// Serializes the document to an SVG string.
-  pub fn render(&self) -> String {
-    let mut out = format!(
-      r#"<svg xmlns="http://www.w3.org/2000/svg" width="{}" height="{}" viewBox="0 0 {} {}">"#,
-      self.width, self.height, self.width, self.height
-    );
-    if !self.defs.is_empty() {
-      out.push_str("<defs>");
-      out.push_str(&self.defs);
-      out.push_str("</defs>");
-    }
-    out.push_str(&self.body);
-    out.push_str("</svg>");
-    out
+  /// Closes the root `<svg>` and serializes the document to a string.
+  pub fn render(mut self) -> String {
+    self.close("svg");
+    String::from_utf8_lossy(&self.writer.into_inner()).into_owned()
   }
 }
 
@@ -265,20 +318,12 @@ impl SvgDocument {
 #[must_use]
 pub struct GroupToken(());
 
-fn spread_attr(repeating: bool) -> &'static str {
-  if repeating {
-    r#" spreadMethod="repeat""#
+fn num(value: f32) -> String {
+  if value.is_finite() {
+    format!("{value}")
   } else {
-    ""
+    "0".to_owned()
   }
-}
-
-fn escape(input: &str) -> String {
-  input
-    .replace('&', "&amp;")
-    .replace('<', "&lt;")
-    .replace('>', "&gt;")
-    .replace('"', "&quot;")
 }
 
 #[cfg(test)]
@@ -335,7 +380,6 @@ mod tests {
     let svg = doc.render();
     assert!(svg.contains(r#"<linearGradient id="lg0""#));
     assert!(svg.contains(r#"<stop offset="0""#));
-    assert!(svg.contains("<defs>"));
   }
 
   #[test]
@@ -373,9 +417,16 @@ mod tests {
   }
 
   #[test]
+  fn attribute_injection_is_escaped() {
+    let mut doc = SvgDocument::new(10.0, 10.0);
+    doc.image(0.0, 0.0, 10.0, 10.0, r#"x"/><script>alert(1)</script>"#);
+    let svg = doc.render();
+    assert!(!svg.contains("<script>"));
+    assert!(svg.contains("&quot;"));
+  }
+
+  #[test]
   fn text_emits_glyph_path() {
-    // Glyph outlines from skrifa become real <path> fills — faithful, no font
-    // dependency in the consumer.
     let mut doc = SvgDocument::new(10.0, 10.0);
     doc.path("M1 9 L2 1 L3 9 M1.5 5 H2.5", Rgba([0, 0, 0, 255]));
     assert!(

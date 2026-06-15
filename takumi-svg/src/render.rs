@@ -16,6 +16,7 @@ use takumi_core::{
   },
 };
 
+use crate::gradient::emit_background_images;
 use crate::{Affine, Rgba, SvgDocument};
 
 const IDENTITY: Affine = Affine([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
@@ -76,7 +77,7 @@ fn emit_node(
   }
 
   if let Some(images) = node.context.style.background_image.as_deref() {
-    crate::gradient::emit_background_images(images, &node.context, x, y, width, height, doc);
+    emit_background_images(images, &node.context, x, y, width, height, doc);
   }
 
   emit_borders(node, layout, x, y, width, height, doc);
