@@ -16,7 +16,6 @@ use crate::{
     inline::{collect_inline_items, create_inline_layout, resolve_inline_max_height},
     style::{
       Affine, BackgroundImage, BlendMode, Color, ComputedStyle, Display, Filter, SizingContext,
-      SpacePair,
     },
     tree::{LayoutResults, OrderedChild, RenderNode},
   },
@@ -119,35 +118,7 @@ pub(crate) fn apply_transform(
   border_box: Size<f32>,
   sizing: &SizingContext,
 ) {
-  let origin = style.transform_origin.to_point(sizing, border_box);
-
-  // CSS Transforms Level 2 order: T(origin) * translate * rotate * scale * transform * T(-origin)
-  // Ref: https://www.w3.org/TR/css-transforms-2/#ctm
-
-  let mut local = Affine::translation(origin.x, origin.y);
-
-  if style.translate != SpacePair::default() {
-    local *= Affine::translation(
-      style.translate.x.to_px(sizing, border_box.width),
-      style.translate.y.to_px(sizing, border_box.height),
-    );
-  }
-
-  if let Some(rotate) = style.rotate {
-    local *= Affine::rotation(rotate);
-  }
-
-  if style.scale != SpacePair::default() {
-    local *= Affine::scale(style.scale.x.0, style.scale.y.0);
-  }
-
-  if let Some(node_transform) = &style.transform {
-    local *= Affine::from_transforms(node_transform.iter(), sizing, border_box);
-  }
-
-  local *= Affine::translation(-origin.x, -origin.y);
-
-  *transform *= local;
+  *transform *= style.local_transform(border_box, sizing);
 }
 
 fn get_node_by_path<'a, 'g>(

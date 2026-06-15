@@ -3,7 +3,9 @@
 
 use taffy::Size;
 use takumi_core::context::RenderContext;
-use takumi_core::layout::style::{Affine, ComputedStyle, Overflow, SizingContext, SpacePair};
+use takumi_core::layout::style::{
+  Affine, ComputedStyle, LengthDefaultsToZero, Overflow, SizingContext, SpacePair,
+};
 
 /// Per-corner `[rx, ry]` radii in `[top-left, top-right, bottom-right, bottom-left]`
 /// order.
@@ -17,9 +19,8 @@ pub(crate) fn resolved_radii(
   w: f32,
   h: f32,
 ) -> Radii {
-  let corner = |pair: SpacePair<takumi_core::layout::style::LengthDefaultsToZero>| {
-    [pair.x.to_px(sizing, w), pair.y.to_px(sizing, h)]
-  };
+  let corner =
+    |pair: SpacePair<LengthDefaultsToZero>| [pair.x.to_px(sizing, w), pair.y.to_px(sizing, h)];
   let mut radii = [
     corner(style.border_top_left_radius),
     corner(style.border_top_right_radius),
@@ -102,36 +103,10 @@ pub(crate) fn element_transform(
   x: f32,
   y: f32,
 ) -> Option<Affine> {
-  let style = &context.style;
-  let sizing = &context.sizing;
-  let has_transform = style.transform.is_some()
-    || style.rotate.is_some()
-    || style.translate != SpacePair::default()
-    || style.scale != SpacePair::default();
-  if !has_transform {
+  let local = context.style.local_transform(border_box, &context.sizing);
+  if local.is_identity() {
     return None;
   }
-
-  // CSS Transforms Level 2 order: T(origin) * translate * rotate * scale * transform * T(-origin).
-  let origin = style.transform_origin.to_point(sizing, border_box);
-  let mut local = Affine::translation(origin.x, origin.y);
-  if style.translate != SpacePair::default() {
-    local *= Affine::translation(
-      style.translate.x.to_px(sizing, border_box.width),
-      style.translate.y.to_px(sizing, border_box.height),
-    );
-  }
-  if let Some(rotate) = style.rotate {
-    local *= Affine::rotation(rotate);
-  }
-  if style.scale != SpacePair::default() {
-    local *= Affine::scale(style.scale.x.0, style.scale.y.0);
-  }
-  if let Some(transform) = &style.transform {
-    local *= Affine::from_transforms(transform.iter(), sizing, border_box);
-  }
-  local *= Affine::translation(-origin.x, -origin.y);
-
   // Children are emitted in absolute coordinates; move the local transform into
   // that space: M_abs = T(x, y) * local * T(-x, -y).
   Some(Affine::translation(x, y) * local * Affine::translation(-x, -y))
