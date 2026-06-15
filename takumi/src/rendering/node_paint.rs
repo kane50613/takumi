@@ -20,7 +20,8 @@ use crate::{
 
 use super::{
   BackgroundTile, BorderProperties, Canvas, Fill, PaintSource, RenderContext, SizedFontStyle,
-  SizedShadow, TileLayer, collect_background_layers, draw_image,
+  SizedShadow, TileLayer, collect_background_layers, draw_image, draw_inset_shadow_to_canvas,
+  draw_outset_shadow,
   inline_drawing::{InlineLayoutDrawData, draw_inline_layout},
   rasterize_layers, release_rasterized_background_tile,
 };
@@ -70,7 +71,8 @@ pub(crate) fn draw_outset_box_shadow(
 
     element_border_radius.append_mask_commands(&mut element_paths, layout.size, Point::ZERO);
 
-    shadow.draw_outset(
+    draw_outset_shadow(
+      &shadow,
       canvas,
       &paths,
       context.transform,
@@ -97,7 +99,7 @@ pub(crate) fn draw_inset_box_shadow(
 
       let shadow =
         SizedShadow::from_box_shadow(*shadow, &context.sizing, context.current_color, layout.size);
-      shadow.draw_inset(context.transform, border_radius, canvas, layout)?;
+      draw_inset_shadow_to_canvas(&shadow, context.transform, border_radius, canvas, layout)?;
     }
   }
   Ok(())

@@ -70,6 +70,10 @@
 /// Layout related modules, including the node tree, style parsing, and layout calculation.
 pub mod layout;
 
+mod context;
+mod font_style;
+mod shadow;
+
 /// Rendering related modules, including the image renderer, canvas operations.
 pub mod rendering;
 

@@ -9,8 +9,6 @@ mod debug_drawing;
 mod dithering;
 /// Filter rasterization (blur, drop-shadow, backdrop, pixel filters)
 mod filter;
-/// Resolves a computed style into a sized font style for text layout
-mod font_style;
 /// Image drawing functions
 mod image_drawing;
 pub(crate) mod inline_drawing;
@@ -26,14 +24,13 @@ mod webp;
 mod write;
 
 use std::borrow::Cow;
-use std::{collections::HashMap, rc::Rc, sync::Arc};
 
 use image::RgbaImage;
-use taffy::Size;
 use tiny_skia::{IntSize, Pixmap};
 
 use crate::layout::tree::RenderNode;
 
+pub(crate) use crate::font_style::*;
 pub(crate) use background_drawing::*;
 pub(crate) use blend::*;
 pub(crate) use canvas::*;
@@ -41,7 +38,6 @@ pub(crate) use components::*;
 pub(crate) use debug_drawing::*;
 pub use dithering::*;
 pub(crate) use filter::*;
-pub(crate) use font_style::*;
 pub(crate) use image_drawing::*;
 pub(crate) use node_paint::*;
 pub(crate) use path::*;
@@ -50,92 +46,8 @@ pub(crate) use text_drawing::*;
 pub use write::*;
 
 pub(crate) use crate::layout::style::{fast_div_255, fast_div_255_u32};
-use crate::{
-  GlobalContext,
-  layout::{
-    Viewport,
-    style::{Affine, CalcArena, Color, ComputedStyle, SizingContext, StyleSheet},
-  },
-  resources::image::ImageSource,
-};
 
-/// The context for the internal rendering. You should not construct this directly.
-#[derive(Clone)]
-pub(crate) struct RenderContext<'g> {
-  /// The global context.
-  pub(crate) global: &'g GlobalContext,
-  /// The scale factor for the image renderer.
-  pub(crate) transform: Affine,
-  /// The sizing context.
-  pub(crate) sizing: SizingContext,
-  /// What the `currentColor` value is resolved to.
-  pub(crate) current_color: Color,
-  /// The style after inheritance.
-  pub(crate) style: Box<ComputedStyle>,
-  /// The active time for animation sampling.
-  pub(crate) time: u64,
-  /// Whether to draw debug borders.
-  pub(crate) draw_debug_border: bool,
-  /// The resources fetched externally.
-  pub(crate) fetched_resources: HashMap<Arc<str>, ImageSource>,
-  /// The stylesheets to apply before layout/rendering.
-  pub(crate) stylesheet: Rc<StyleSheet>,
-}
-
-impl<'g> RenderContext<'g> {
-  pub(crate) fn new(
-    global: &'g GlobalContext,
-    viewport: Viewport,
-    fetched_resources: HashMap<Arc<str>, ImageSource>,
-    stylesheet: Rc<StyleSheet>,
-    time: u64,
-  ) -> Self {
-    Self {
-      global,
-      sizing: SizingContext {
-        viewport,
-        container_size: Size::NONE,
-        font_size: viewport.font_size,
-        root_font_size: None,
-        line_height: 0.0,
-        root_line_height: None,
-        calc_arena: Rc::new(CalcArena::default()),
-      },
-      transform: Affine::IDENTITY,
-      current_color: Color::black(),
-      style: Box::default(),
-      time,
-      draw_debug_border: false,
-      fetched_resources,
-      stylesheet,
-    }
-  }
-
-  /// Internal, only used in tests.
-  #[cfg(test)]
-  pub(crate) fn new_test(global: &'g GlobalContext, viewport: Viewport) -> Self {
-    Self::new(global, viewport, Default::default(), Default::default(), 0)
-  }
-
-  pub(crate) fn from_parent(
-    parent: &Self,
-    style: ComputedStyle,
-    sizing: SizingContext,
-    current_color: Color,
-  ) -> Self {
-    Self {
-      global: parent.global,
-      transform: parent.transform,
-      style: Box::new(style),
-      current_color,
-      time: parent.time,
-      draw_debug_border: parent.draw_debug_border,
-      fetched_resources: parent.fetched_resources.clone(),
-      sizing,
-      stylesheet: parent.stylesheet.clone(),
-    }
-  }
-}
+pub(crate) use crate::context::RenderContext;
 
 pub(crate) fn text_fit_x_correction(
   scale: f32,

@@ -17,7 +17,7 @@ use crate::{
   rendering::{
     BorderProperties, Canvas, ColorTile, Command, MaskSamplingOptions, MaskSourceToPixmapOptions,
     PaintSource, Placement, SamplingOptions, SizedFontStyle, Stroke,
-    composite_mask_source_to_pixmap, render_mask,
+    composite_mask_source_to_pixmap, draw_outset_shadow, render_mask,
   },
   resources::font::{ResolvedColorLayer, ResolvedGlyph},
 };
@@ -491,7 +491,7 @@ fn draw_text_shadow(
   }
 
   for shadow in style.text_shadow.iter() {
-    shadow.draw_outset(canvas, paths, transform, Default::default(), None)?;
+    draw_outset_shadow(shadow, canvas, paths, transform, Default::default(), None)?;
   }
 
   Ok(())

@@ -11,13 +11,13 @@ use tiny_skia::Pixmap;
 
 use crate::{
   Xxh3HashSet,
+  context::RenderContext,
   layout::{
     Viewport,
     inline::InlineContentKind,
     node::image::image_resource_url,
     style::{Direction, Style, StyleDeclaration, ToCss, tw::TailwindValues},
   },
-  rendering::RenderContext,
   resources::image::{ImageResult, ImageSource},
 };
 use ::image::RgbaImage;

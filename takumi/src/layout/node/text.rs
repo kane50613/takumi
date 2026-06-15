@@ -1,6 +1,8 @@
 use taffy::{AvailableSpace, Size};
 
 use crate::{
+  context::RenderContext,
+  font_style::SizedFontStyle,
   layout::{
     inline::{
       InlineContentKind, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
@@ -9,7 +11,6 @@ use crate::{
     },
     node::TextData,
   },
-  rendering::{RenderContext, SizedFontStyle},
 };
 
 pub(crate) fn text_inline_content(text: &TextData) -> Option<InlineContentKind<'_>> {

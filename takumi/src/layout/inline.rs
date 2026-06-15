@@ -8,6 +8,8 @@ use taffy::{AvailableSpace, Layout, Rect, Size};
 
 use crate::{
   GlobalContext,
+  context::RenderContext,
+  font_style::SizedFontStyle,
   layout::{
     node::Node,
     style::{
@@ -18,8 +20,8 @@ use crate::{
     tree::RenderNode,
   },
   rendering::{
-    MaxHeight, RebreakOptions, RenderContext, SizedFontStyle, apply_text_transform,
-    apply_white_space_collapse, make_balanced_text, make_pretty_text,
+    MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
+    make_balanced_text, make_pretty_text,
   },
 };
 
@@ -1606,13 +1608,13 @@ mod tests {
 
   use crate::{
     GlobalContext,
+    context::RenderContext,
     layout::{
       Viewport,
       node::Node,
       style::{Color, ColorInput, Display, Style, StyleDeclaration, WhiteSpace},
       tree::RenderNode,
     },
-    rendering::RenderContext,
     resources::font::FontResource,
   };
   use parley::{GenericFamily, fontique::FontInfoOverride};

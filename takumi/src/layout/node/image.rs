@@ -2,12 +2,12 @@ use data_url::DataUrl;
 use taffy::{AvailableSpace, CompactLength, MaybeResolve, Size};
 
 use crate::{
+  context::RenderContext,
   layout::{
     inline::InlineContentKind,
     node::{ImageData, ImageSourceInput, Node, NodeKind, NodeStyleLayers},
     style::{Length, Style, StyleDeclaration},
   },
-  rendering::RenderContext,
   resources::image::{ImageResourceError, ImageResult, ImageSource, is_svg_like},
 };
 
@@ -208,11 +208,11 @@ mod tests {
   use super::{image_resource_url, measure_image_node};
   use crate::{
     GlobalContext,
+    context::RenderContext,
     layout::{
       Viewport,
       node::{ImageData, ImageSourceInput},
     },
-    rendering::RenderContext,
     resources::image::ImageSource,
   };
 

@@ -11,6 +11,8 @@ use taffy::{
 
 use crate::{
   GlobalContext,
+  context::RenderContext,
+  font_style::SizedFontStyle,
   layout::{
     Viewport,
     inline::{
@@ -27,7 +29,6 @@ use crate::{
       apply_stylesheet_animations,
     },
   },
-  rendering::{RenderContext, SizedFontStyle},
 };
 use parley::fontique::Attributes;
 
