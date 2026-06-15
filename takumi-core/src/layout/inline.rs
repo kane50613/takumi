@@ -5,7 +5,7 @@ use parley::{
   PositionedLayoutItem, TextStyle, YieldData,
 };
 use skrifa::FontRef;
-use taffy::{AvailableSpace, Layout, Rect, Size};
+use taffy::{AvailableSpace, Layout, Point, Rect, Size};
 
 use crate::{
   GlobalContext,
@@ -14,9 +14,9 @@ use crate::{
   layout::{
     node::Node,
     style::{
-      BoxSizing, Color, Float, FontSynthesis, ResolvedVerticalAlign, SizedTextDecorationThickness,
-      TextDecorationLines, TextDecorationSkipInk, TextFitMode, TextFitTarget, TextOverflow,
-      TextWrapMode, TextWrapStyle, VerticalAlign,
+      Affine, BoxSizing, Color, Float, FontSynthesis, ResolvedVerticalAlign,
+      SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
+      TextFitTarget, TextOverflow, TextWrapMode, TextWrapStyle, VerticalAlign,
     },
     tree::RenderNode,
   },
@@ -1391,43 +1391,133 @@ pub fn resolve_inline_max_height(
     })
 }
 
-/// One resolved glyph positioned for vector emission. The `transform` is in
-/// content-box-relative pixel space (`[a, b, c, d, e, f]`, SVG `matrix` order),
-/// ready to feed [`ResolvedOutlineGlyph::to_svg_path_data`].
+/// Per-line text-fit scaling state: `scale` applied about `layout_origin`, plus
+/// the horizontal `alignment_correction` for a scaled-down line.
+#[derive(Clone, Copy)]
+pub struct LineScaleState {
+  /// Text-fit scale factor for the line.
+  pub scale: f32,
+  /// Horizontal correction keeping a scaled line aligned.
+  pub alignment_correction: f32,
+  /// The origin the scale is applied about (border/padding + baseline).
+  pub layout_origin: Point<f32>,
+}
+
+/// Horizontal correction for a text-fit-scaled line:
+/// `static_inline_prefix * (1 - scale) + alignment_correction`.
+pub fn text_fit_x_correction(
+  scale: f32,
+  static_inline_prefix: f32,
+  alignment_correction: f32,
+) -> f32 {
+  static_inline_prefix * (1.0 - scale) + alignment_correction
+}
+
+/// Composes the affine transform for a glyph run on a (possibly scaled) line:
+/// `base * T(x_correction) * scale-about-origin`. Shared by the raster walk and
+/// the vector producer so the positioning math has a single definition.
+pub fn line_scale_transform_with_static_prefix(
+  base: Affine,
+  state: LineScaleState,
+  static_inline_prefix: f32,
+) -> Affine {
+  let x_correction = text_fit_x_correction(
+    state.scale,
+    static_inline_prefix,
+    state.alignment_correction,
+  );
+  base
+    * Affine::translation(x_correction, 0.0)
+    * Affine::translation(state.layout_origin.x, state.layout_origin.y)
+    * Affine::scale(state.scale, state.scale)
+    * Affine::translation(-state.layout_origin.x, -state.layout_origin.y)
+}
+
+/// Per-line setup (scale state, baseline shift, resolved metrics) for the inline
+/// painting walk.
+pub struct LineSetup {
+  /// Text-fit scale state for the line.
+  pub state: LineScaleState,
+  /// Baseline shift applied to glyphs on the line.
+  pub baseline_shift: f32,
+  /// Pre-scale horizontal origin used for text-fit alignment.
+  pub line_scale_origin_x: f32,
+  /// Resolved vertical metrics for the line.
+  pub resolved_metrics: ResolvedLineMetrics,
+}
+
+/// Resolves a line's scale state, baseline, and metrics for the inline walk.
+pub fn line_setup(
+  line: &Line<'_, InlineBrush>,
+  layout: Layout,
+  line_vertical_metrics: &[ResolvedLineMetrics],
+  line_scales: &[f32],
+  line_index: usize,
+) -> LineSetup {
+  let resolved_metrics = line_vertical_metrics[line_index];
+  let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
+  let (line_scale_origin_x, alignment_correction) =
+    text_fit_line_alignment_correction(line, line_scale, layout.content_box_size().width);
+  LineSetup {
+    state: LineScaleState {
+      scale: line_scale,
+      alignment_correction,
+      layout_origin: Point {
+        x: layout.border.left + layout.padding.left + line_scale_origin_x,
+        y: layout.border.top + layout.padding.top + resolved_metrics.resolved_baseline,
+      },
+    },
+    baseline_shift: resolved_metrics.baseline_shift,
+    line_scale_origin_x,
+    resolved_metrics,
+  }
+}
+
+/// One resolved glyph positioned for vector emission. `transform` is in the
+/// element's border-box pixel space (`[a, b, c, d, e, f]`, SVG `matrix` order),
+/// ready for [`ResolvedOutlineGlyph::to_svg_path_data`] once offset to the
+/// element's absolute origin.
 pub struct PositionedGlyph {
   /// The resolved glyph (outline or bitmap).
   pub glyph: ResolvedGlyph,
-  /// Affine transform mapping the glyph's local outline into content-box space.
+  /// Affine transform mapping the glyph's local outline into border-box space.
   pub transform: [f32; 6],
   /// The run's fill color, already resolved against `current-color`.
   pub color: Color,
 }
 
 /// Resolves every glyph in `built` into [`PositionedGlyph`]s for a vector
-/// backend. Mirrors the raster glyph-positioning walk (line metrics, baseline
-/// shift, text-fit line scaling) but emits backend-agnostic transforms instead
-/// of rasterizing. Coordinates are relative to the content-box origin.
+/// backend, using the same positioning primitives ([`line_setup`],
+/// [`line_scale_transform_with_static_prefix`]) as the raster walk — only the
+/// painting differs. Transforms are relative to the element's border-box origin.
 pub fn resolve_positioned_glyphs(
   built: &BuiltInlineLayout<'_, '_>,
   context: &RenderContext,
-  content_width: f32,
+  layout: Layout,
 ) -> Result<Vec<PositionedGlyph>, FontError> {
   let BuiltInlineLayout {
-    layout,
+    layout: inline_layout,
     spans,
     line_scales,
     ..
   } = built;
-  let parent_font_metrics = get_parent_font_metrics(layout);
-  let line_metrics = resolve_inline_line_metrics(layout, spans, parent_font_metrics, line_scales);
+  let parent_font_metrics = get_parent_font_metrics(inline_layout);
+  let line_vertical_metrics =
+    resolve_inline_line_metrics(inline_layout, spans, parent_font_metrics, line_scales);
 
   let mut out = Vec::new();
-  for (line_index, line) in layout.lines().enumerate() {
-    let metrics = line_metrics[line_index];
-    let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
-    let (origin_x, alignment_correction) =
-      text_fit_line_alignment_correction(&line, line_scale, content_width);
-    let baseline_shift = metrics.baseline_shift;
+  for (line_index, line) in inline_layout.lines().enumerate() {
+    let setup = line_setup(
+      &line,
+      layout,
+      &line_vertical_metrics,
+      line_scales,
+      line_index,
+    );
+    let glyph_offset = Point {
+      x: layout.border.left + layout.padding.left,
+      y: layout.border.top + layout.padding.top + setup.baseline_shift,
+    };
     let mut static_inline_prefix = 0.0_f32;
 
     for item in line.items() {
@@ -1442,20 +1532,21 @@ pub fn resolve_positioned_glyphs(
             .font_context
             .resolve_glyphs(&glyph_run, font, glyph_ids);
           let color = glyph_run.style().brush.color;
-          let x_correction = static_inline_prefix * (1.0 - line_scale) + alignment_correction;
+          let transform = line_scale_transform_with_static_prefix(
+            Affine::IDENTITY,
+            setup.state,
+            static_inline_prefix,
+          );
 
           for glyph in glyph_run.positioned_glyphs() {
             let Some(resolved_glyph) = resolved.get(&glyph.id) else {
               continue;
             };
-            let gx = glyph.x;
-            let gy = glyph.y + baseline_shift;
-            // Line-scale about the baseline origin, then place the glyph.
-            let tx = x_correction + origin_x + (gx - origin_x) * line_scale;
-            let ty = metrics.resolved_baseline + (gy - metrics.resolved_baseline) * line_scale;
+            let matrix =
+              transform * Affine::translation(glyph_offset.x + glyph.x, glyph_offset.y + glyph.y);
             out.push(PositionedGlyph {
               glyph: resolved_glyph.clone(),
-              transform: [line_scale, 0.0, 0.0, line_scale, tx, ty],
+              transform: matrix.to_cols_array(),
               color,
             });
           }

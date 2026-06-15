@@ -8,7 +8,7 @@
 
 use std::io;
 
-use taffy::{AvailableSpace, Size};
+use taffy::{AvailableSpace, Layout, Size};
 use takumi_core::context::RenderContext;
 use takumi_core::font_style::SizedFontStyle;
 use takumi_core::layout::inline::{
@@ -20,48 +20,49 @@ use takumi_core::resources::font::ResolvedGlyph;
 
 use crate::{Rgba, SvgDocument};
 
-/// Emits a text node's glyphs into the given content-box rectangle.
+/// Emits a text node's glyphs. `origin_x`/`origin_y` are the element's absolute
+/// border-box top-left; `layout` provides border/padding and content size.
 pub(crate) fn emit_text(
   text: &TextData,
   context: &RenderContext,
-  content_x: f32,
-  content_y: f32,
-  content_w: f32,
-  content_h: f32,
+  layout: Layout,
+  origin_x: f32,
+  origin_y: f32,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
   let font_style = SizedFontStyle::from_style(&context.style, context);
-  if font_style.sizing.font_size == 0.0 || content_w <= 0.0 || content_h <= 0.0 {
+  let content = layout.content_box_size();
+  if font_style.sizing.font_size == 0.0 || content.width <= 0.0 || content.height <= 0.0 {
     return Ok(());
   }
 
-  let max_height = resolve_inline_max_height(&font_style, content_h);
+  let max_height = resolve_inline_max_height(&font_style, content.height);
   let built = create_inline_layout(InlineLayoutRequest {
     items: vec![InlineItem::Text {
       text: text.text.as_str().into(),
       context,
     }],
     available_space: Size {
-      width: AvailableSpace::Definite(content_w),
-      height: AvailableSpace::Definite(content_h),
+      width: AvailableSpace::Definite(content.width),
+      height: AvailableSpace::Definite(content.height),
     },
-    max_width: content_w,
+    max_width: content.width,
     max_height,
     style: &font_style,
     global: context.global,
     mode: InlineLayoutMode::Draw,
   });
 
-  let Ok(glyphs) = resolve_positioned_glyphs(&built, context, content_w) else {
+  let Ok(glyphs) = resolve_positioned_glyphs(&built, context, layout) else {
     return Ok(());
   };
 
   for positioned in glyphs {
     match &positioned.glyph {
       ResolvedGlyph::Outline(outline) => {
-        // Offset the content-box-relative transform to the absolute content origin.
+        // Offset the border-box-relative transform to the absolute element origin.
         let [a, b, c, d, e, f] = positioned.transform;
-        let data = outline.to_svg_path_data([a, b, c, d, e + content_x, f + content_y]);
+        let data = outline.to_svg_path_data([a, b, c, d, e + origin_x, f + origin_y]);
         if !data.is_empty() {
           doc.path(&data, Rgba(positioned.color.0))?;
         }

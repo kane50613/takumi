@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use parley::{GlyphRun, InlineBoxKind, Line, PositionedInlineBox, PositionedLayoutItem};
+use parley::{GlyphRun, InlineBoxKind, PositionedInlineBox, PositionedLayoutItem};
 use skrifa::{FontRef, MetadataProvider};
 use taffy::{Layout, Point};
 
@@ -8,9 +8,10 @@ use crate::{
   Result,
   layout::{
     inline::{
-      InlineBoxItem, InlineBrush, InlineLayout, ProcessedInlineSpan, ResolvedLineMetrics,
-      VisualInlineBox, get_parent_font_metrics, resolve_inline_line_metrics,
-      resolve_inline_line_states, resolve_visual_inline_box, text_fit_line_alignment_correction,
+      InlineBoxItem, InlineBrush, InlineLayout, LineScaleState, ProcessedInlineSpan,
+      ResolvedLineMetrics, VisualInlineBox, get_parent_font_metrics,
+      line_scale_transform_with_static_prefix, line_setup, resolve_inline_line_metrics,
+      resolve_inline_line_states, resolve_visual_inline_box, text_fit_x_correction,
     },
     style::{
       Affine, BackgroundClip, BlendMode, BorderStyle, Color, SizedTextDecorationThickness,
@@ -25,7 +26,6 @@ use crate::{
     draw_glyph_clip_image, draw_glyph_text_shadow, draw_inset_box_shadow, draw_node_content,
     draw_outline, draw_outset_box_shadow, mask_index_from_coord, rasterize_layers,
     release_rasterized_background_tile, render::render_node, render_mask, scale_text_fit_x,
-    text_fit_x_correction,
   },
   resources::font::{FontError, ResolvedGlyph},
 };
@@ -111,35 +111,10 @@ struct GlyphRunContentOptions<'a> {
   style: &'a SizedFontStyle<'a>,
 }
 
-#[derive(Clone, Copy)]
-struct LineScaleState {
-  scale: f32,
-  alignment_correction: f32,
-  layout_origin: Point<f32>,
-}
-
 pub(crate) struct InlineLayoutDrawData<'a, 'c, 'g> {
   pub(crate) spans: &'a [ProcessedInlineSpan<'c, 'g>],
   pub(crate) custom_inline_boxes: &'a [PositionedInlineBox],
   pub(crate) line_scales: &'a [f32],
-}
-
-fn line_scale_transform_with_static_prefix(
-  base: Affine,
-  state: LineScaleState,
-  static_inline_prefix: f32,
-) -> Affine {
-  let x_correction = text_fit_x_correction(
-    state.scale,
-    static_inline_prefix,
-    state.alignment_correction,
-  );
-
-  base
-    * Affine::translation(x_correction, 0.0)
-    * Affine::translation(state.layout_origin.x, state.layout_origin.y)
-    * Affine::scale(state.scale, state.scale)
-    * Affine::translation(-state.layout_origin.x, -state.layout_origin.y)
 }
 
 fn scale_outline_rect(
@@ -903,39 +878,6 @@ pub(crate) fn draw_inline_box(
   draw_outline(&context, canvas, layout)?;
 
   Ok(())
-}
-
-struct LineSetup {
-  state: LineScaleState,
-  baseline_shift: f32,
-  line_scale_origin_x: f32,
-  resolved_metrics: ResolvedLineMetrics,
-}
-
-fn line_setup(
-  line: &Line<'_, InlineBrush>,
-  layout: Layout,
-  line_vertical_metrics: &[ResolvedLineMetrics],
-  line_scales: &[f32],
-  line_index: usize,
-) -> LineSetup {
-  let resolved_metrics = line_vertical_metrics[line_index];
-  let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
-  let (line_scale_origin_x, line_alignment_correction) =
-    text_fit_line_alignment_correction(line, line_scale, layout.content_box_size().width);
-  LineSetup {
-    state: LineScaleState {
-      scale: line_scale,
-      alignment_correction: line_alignment_correction,
-      layout_origin: Point {
-        x: layout.border.left + layout.padding.left + line_scale_origin_x,
-        y: layout.border.top + layout.padding.top + resolved_metrics.resolved_baseline,
-      },
-    },
-    baseline_shift: resolved_metrics.baseline_shift,
-    line_scale_origin_x,
-    resolved_metrics,
-  }
 }
 
 struct LinePassContext<'a> {

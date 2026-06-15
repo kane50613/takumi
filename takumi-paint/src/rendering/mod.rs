@@ -46,14 +46,7 @@ pub use write::*;
 pub(crate) use crate::layout::style::{fast_div_255, fast_div_255_u32};
 
 pub(crate) use crate::context::RenderContext;
-
-pub(crate) fn text_fit_x_correction(
-  scale: f32,
-  static_inline_prefix: f32,
-  line_alignment_correction: f32,
-) -> f32 {
-  static_inline_prefix * (1.0 - scale) + line_alignment_correction
-}
+use crate::layout::inline::text_fit_x_correction;
 
 pub(crate) fn scale_text_fit_x(
   x: f32,

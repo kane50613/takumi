@@ -153,15 +153,7 @@ fn emit_node(
       layout.content_box_height(),
       doc,
     )?,
-    Some(NodeKind::Text(text)) => emit_text(
-      text,
-      &node.context,
-      parent_x + layout.content_box_x(),
-      parent_y + layout.content_box_y(),
-      layout.content_box_width(),
-      layout.content_box_height(),
-      doc,
-    )?,
+    Some(NodeKind::Text(text)) => emit_text(text, &node.context, *layout, x, y, doc)?,
     _ => {}
   }
 
