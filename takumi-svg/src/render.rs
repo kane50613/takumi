@@ -14,10 +14,10 @@ use takumi_core::{
     Viewport,
     border::{BorderProperties, BorderSide},
     inline::{InlineBoxItem, VisualInlineBox},
-    node::{Node, NodeKind},
+    node::{ImageData, Node, NodeKind},
     style::{
-      BackgroundClip, BackgroundImage, BasicShape, BlendMode, BorderStyle, Color, Display,
-      FillRule, ShapeRadius, Sides, SizingContext, SpacePair, StyleSheet,
+      BackgroundClip, BackgroundImage, BasicShape, BlendMode, BorderStyle, Color, ComputedStyle,
+      Display, FillRule, Overflow, ShapeRadius, Sides, SizingContext, SpacePair, StyleSheet,
     },
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
@@ -201,11 +201,18 @@ fn emit_box_chrome(
     .is_some_and(|images| !images.is_empty());
   let clip_text = style.background_clip == BackgroundClip::Text;
   if !clip_text && (background.0[3] != 0 || has_bg_image) {
-    let bg_clip = if rounded {
-      Some(doc.clip_path(&border_box_path_data(&border, layout.size, x, y))?)
-    } else {
-      None
-    };
+    // The painted area is clipped per `background-clip`: the full (rounded)
+    // border-box, the padding box, the content box, or the border-only ring
+    // (`border-area`). Mirrors the raster backend's `draw_background`.
+    let bg_clip = background_clip_path(style.background_clip, &border, layout, x, y)
+      .map(|(data, even_odd)| {
+        if even_odd {
+          doc.clip_path_evenodd(&data)
+        } else {
+          doc.clip_path(&data)
+        }
+      })
+      .transpose()?;
     let bg_group = bg_clip
       .as_deref()
       .map(|clip| doc.begin_group(IDENTITY, 1.0, Some(clip), None))
@@ -223,10 +230,20 @@ fn emit_box_chrome(
 
   emit_borders(&border, x, y, layout.size, doc)?;
 
+  emit_outline(node, layout.size, x, y, doc)?;
+
   // Children, clipped to the (rounded) padding box when overflow is not visible.
+  // With border-radius present the raster backend clips both axes to the rounded
+  // padding box regardless of the per-axis overflow values, so the rounded path is
+  // used as-is. Without radius a two-value overflow (e.g. `overflow-x: hidden;
+  // overflow-y: visible`) must leave the visible axis unbounded.
   let child_group = clips_overflow(style)
     .then(|| {
-      let path = padding_box_path_data(&border, layout.border, layout.size, x, y);
+      let path = if rounded {
+        padding_box_path_data(&border, layout.border, layout.size, x, y)
+      } else {
+        overflow_clip_rect_data(style, layout, x, y)
+      };
       doc
         .clip_path(&path)
         .and_then(|clip| doc.begin_group(IDENTITY, 1.0, Some(&clip), None))
@@ -417,6 +434,93 @@ fn padding_box_path_data(
   path_data(&commands, [1.0, 0.0, 0.0, 1.0, x, y])
 }
 
+/// Absolute SVG path `d` for the (non-rounded) overflow clip rectangle. Each
+/// clipped axis is bounded to the content box (mirroring the raster backend's
+/// rectangular overflow mask); a `visible` axis is left effectively unbounded so
+/// content overflows there while being clipped on the other axis.
+fn overflow_clip_rect_data(
+  style: &ComputedStyle,
+  layout: &taffy::Layout,
+  x: f32,
+  y: f32,
+) -> String {
+  const UNBOUNDED: f32 = 1.0e6;
+  let clip_x = style.overflow_x != Overflow::Visible;
+  let clip_y = style.overflow_y != Overflow::Visible;
+
+  let (left, right) = if clip_x {
+    let content_left = x + layout.border.left + layout.padding.left;
+    (content_left, content_left + layout.content_box_width())
+  } else {
+    (x - UNBOUNDED, x + layout.size.width + UNBOUNDED)
+  };
+  let (top, bottom) = if clip_y {
+    let content_top = y + layout.border.top + layout.padding.top;
+    (content_top, content_top + layout.content_box_height())
+  } else {
+    (y - UNBOUNDED, y + layout.size.height + UNBOUNDED)
+  };
+
+  format!("M{left} {top} H{right} V{bottom} H{left} Z")
+}
+
+/// Builds the clip path (and even-odd flag) for the background fill area per
+/// `background-clip`, or `None` when no clip is needed (an unrounded
+/// `border-box`, which the full border-box rect already covers). Mirrors the
+/// raster backend's `draw_background` clip regions.
+fn background_clip_path(
+  clip: BackgroundClip,
+  border: &BorderProperties,
+  layout: &taffy::Layout,
+  x: f32,
+  y: f32,
+) -> Option<(String, bool)> {
+  let rounded = !border.is_zero();
+  match clip {
+    BackgroundClip::BorderBox => {
+      rounded.then(|| (border_box_path_data(border, layout.size, x, y), false))
+    }
+    BackgroundClip::PaddingBox => Some((
+      padding_box_path_data(border, layout.border, layout.size, x, y),
+      false,
+    )),
+    BackgroundClip::ContentBox => Some((content_box_path_data(border, layout, x, y), false)),
+    BackgroundClip::BorderArea => {
+      // The border ring: the (rounded) border-box with the (rounded) padding box
+      // punched out, drawn even-odd so the background shows only under the border.
+      let outer = border_box_path_data(border, layout.size, x, y);
+      let inner = padding_box_path_data(border, layout.border, layout.size, x, y);
+      Some((format!("{outer}{inner}"), true))
+    }
+    // `text` is handled separately by the text path; treat anything else as the
+    // full border box.
+    _ => rounded.then(|| (border_box_path_data(border, layout.size, x, y), false)),
+  }
+}
+
+/// Absolute SVG path `d` for the content-box rounded rectangle (border-box inset
+/// by border widths and padding, with inner radii), reusing core geometry.
+fn content_box_path_data(
+  border: &BorderProperties,
+  layout: &taffy::Layout,
+  x: f32,
+  y: f32,
+) -> String {
+  let mut inner = *border;
+  inner.inset_by_border_width();
+  inner.expand_by(layout.padding.map(|size| -size));
+  let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
+  inner.append_mask_commands(
+    &mut commands,
+    layout.content_box_size(),
+    Point {
+      x: layout.border.left + layout.padding.left,
+      y: layout.border.top + layout.padding.top,
+    },
+  );
+  path_data(&commands, [1.0, 0.0, 0.0, 1.0, x, y])
+}
+
 /// Emits one node's box decorations and recurses into its children.
 fn emit_node(
   node: &RenderNode,
@@ -441,15 +545,7 @@ fn emit_node(
     emit_inline_content(node, *layout, x, y, doc)?;
   } else {
     match node.node.as_ref().map(|n| &n.kind) {
-      Some(NodeKind::Image(image)) => emit_image(
-        image,
-        &node.context,
-        parent_x + layout.content_box_x(),
-        parent_y + layout.content_box_y(),
-        layout.content_box_width(),
-        layout.content_box_height(),
-        doc,
-      )?,
+      Some(NodeKind::Image(image)) => emit_image_node(image, node, layout, x, y, doc)?,
       Some(NodeKind::Text(text)) => emit_text(text, &node.context, *layout, x, y, doc)?,
       _ => {}
     }
@@ -544,20 +640,44 @@ pub(crate) fn emit_inline_box(
   let chrome = emit_box_chrome(node, &box_layout, box_x, box_y, doc)?;
 
   match node.node.as_ref().map(|n| &n.kind) {
-    Some(NodeKind::Image(image)) => emit_image(
-      image,
-      &node.context,
-      box_x + box_layout.content_box_x(),
-      box_y + box_layout.content_box_y(),
-      box_layout.content_box_width(),
-      box_layout.content_box_height(),
-      doc,
-    )?,
+    Some(NodeKind::Image(image)) => emit_image_node(image, node, &box_layout, box_x, box_y, doc)?,
     Some(NodeKind::Text(text)) => emit_text(text, &node.context, box_layout, box_x, box_y, doc)?,
     _ => {}
   }
 
   chrome.close(doc)
+}
+
+/// Emits an image node's content into its content box. When the element has a
+/// border-radius, the replaced content is clipped to the rounded **padding box**
+/// (border-box inset by the border widths), mirroring the raster backend's
+/// `draw_image` which masks the image with `BorderProperties::inset_by_border_width`.
+/// `x`/`y` are the element's absolute border-box top-left.
+fn emit_image_node(
+  image: &ImageData,
+  node: &RenderNode,
+  layout: &taffy::Layout,
+  x: f32,
+  y: f32,
+  doc: &mut SvgDocument,
+) -> io::Result<()> {
+  // `x`/`y` are the element's absolute border-box top-left; the content box is
+  // inset by the border and padding (not `content_box_x`, which also folds in the
+  // element's own `location` relative to its parent).
+  let ix = x + layout.border.left + layout.padding.left;
+  let iy = y + layout.border.top + layout.padding.top;
+  let (iw, ih) = (layout.content_box_width(), layout.content_box_height());
+
+  let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
+  if border.is_zero() {
+    return emit_image(image, &node.context, ix, iy, iw, ih, doc);
+  }
+
+  let path = padding_box_path_data(&border, layout.border, layout.size, x, y);
+  let clip = doc.clip_path(&path)?;
+  let group = doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?;
+  emit_image(image, &node.context, ix, iy, iw, ih, doc)?;
+  doc.end_group(group)
 }
 
 /// Emits the element's borders, reusing takumi-core's `BorderProperties` geometry.
@@ -625,6 +745,55 @@ fn emit_borders(
     doc.path(&path_data(&polygon, matrix), Rgba(color.0))?;
   }
   doc.end_group(group)
+}
+
+/// Emits the CSS `outline` as a ring around the border-box, expanded outward by
+/// `outline-offset + outline-width`. `outline` does not affect layout; it follows
+/// the border-radius. Mirrors the raster backend's `draw_outline`: a uniform
+/// `BorderProperties` (outline width/color/style on all four sides, radii from the
+/// element) drawn on an expanded box, so all border styles (solid/dashed/dotted/
+/// double, and the 3D approximations) are reused from [`emit_borders`].
+fn emit_outline(
+  node: &RenderNode,
+  size: Size<f32>,
+  x: f32,
+  y: f32,
+  doc: &mut SvgDocument,
+) -> io::Result<()> {
+  let style = &node.context.style;
+  if !style.outline_style.is_rendered() {
+    return Ok(());
+  }
+  let sizing = &node.context.sizing;
+  let width = style.outline_width.to_px(sizing, size.width).max(0.0);
+  if width <= 0.0 {
+    return Ok(());
+  }
+  let color = style.outline_color.resolve(node.context.current_color);
+  if color.0[3] == 0 {
+    return Ok(());
+  }
+  let offset = style.outline_offset.to_px(sizing, size.width);
+
+  let mut outline = BorderProperties {
+    width: Sides([width; 4]).into(),
+    color: Sides([color; 4]).into(),
+    style: Sides([style.outline_style; 4]).into(),
+    image_rendering: style.image_rendering,
+    radius: BorderProperties::resolve_radius_part(&node.context, size),
+  };
+  let grow = offset + width;
+  outline.expand_by(Rect {
+    top: grow,
+    right: grow,
+    bottom: grow,
+    left: grow,
+  });
+  let outer_size = Size {
+    width: size.width + 2.0 * grow,
+    height: size.height + 2.0 * grow,
+  };
+  emit_borders(&outline, x - grow, y - grow, outer_size, doc)
 }
 
 /// Builds the centerline rounded-rect path (border box inset by `inset` on each
