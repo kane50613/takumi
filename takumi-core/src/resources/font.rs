@@ -57,6 +57,17 @@ pub struct ResolvedBitmapGlyph {
 }
 
 impl ResolvedBitmapGlyph {
+  /// PNG bytes of the rasterized glyph, for embedding in a vector backend's
+  /// `<image>`. Returns `None` if encoding fails.
+  pub fn to_png(&self) -> Option<Vec<u8>> {
+    self.pixmap.encode_png().ok()
+  }
+
+  /// Pixel dimensions of the glyph bitmap.
+  pub fn size(&self) -> (u32, u32) {
+    (self.pixmap.width(), self.pixmap.height())
+  }
+
   pub fn write_alpha_mask(&self, mask: &mut [u8]) {
     let width = self.placement.width as usize;
     let height = self.placement.height as usize;

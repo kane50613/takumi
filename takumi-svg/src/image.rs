@@ -61,7 +61,7 @@ fn loaded_data_url(source: &ImageSource) -> Option<String> {
   }
 }
 
-fn encode(mime: &str, bytes: &[u8]) -> String {
+pub(crate) fn encode(mime: &str, bytes: &[u8]) -> String {
   format!("data:{mime};base64,{}", STANDARD.encode(bytes))
 }
 

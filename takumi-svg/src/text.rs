@@ -18,7 +18,8 @@ use takumi_core::layout::inline::{
 use takumi_core::layout::node::TextData;
 use takumi_core::resources::font::ResolvedGlyph;
 
-use crate::{Rgba, SvgDocument};
+use crate::image::encode;
+use crate::{Affine, Rgba, SvgDocument};
 
 /// Emits a text node's glyphs. `origin_x`/`origin_y` are the element's absolute
 /// border-box top-left; `layout` provides border/padding and content size.
@@ -61,22 +62,41 @@ pub(crate) fn emit_text(
   })?;
 
   for positioned in glyphs {
+    let [a, b, c, d, e, f] = positioned.transform;
+    // Offset the border-box-relative transform to the absolute element origin.
+    let placed = Affine {
+      a,
+      b,
+      c,
+      d,
+      x: e + origin_x,
+      y: f + origin_y,
+    };
     match &positioned.glyph {
       ResolvedGlyph::Outline(outline) => {
-        // Offset the border-box-relative transform to the absolute element origin.
-        let [a, b, c, d, e, f] = positioned.transform;
-        let data = outline.to_svg_path_data([a, b, c, d, e + origin_x, f + origin_y]);
+        let data = outline.to_svg_path_data(placed.to_cols_array());
         if !data.is_empty() {
           doc.path(&data, Rgba(positioned.color.0))?;
         }
       }
-      // TODO: bitmap/emoji glyphs (embed the pixmap as a `data:image/png` <image>);
-      // requires a core PNG helper to avoid pulling tiny_skia into takumi-svg.
-      ResolvedGlyph::Bitmap(_) => {}
+      // Color/bitmap glyphs (emoji) have no vector form — embed the rasterized
+      // pixmap as a `data:image/png` `<image>` placed by the glyph transform.
+      ResolvedGlyph::Bitmap(bitmap) => {
+        let Some(png) = bitmap.to_png() else {
+          continue;
+        };
+        let (width, height) = bitmap.size();
+        let matrix = placed
+          * Affine::translation(bitmap.placement.left as f32, -(bitmap.placement.top as f32))
+          * Affine::scale(bitmap.scale_x, bitmap.scale_y);
+        let href = encode("image/png", &png);
+        let group = doc.begin_group(matrix, 1.0, None)?;
+        doc.image(0.0, 0.0, width as f32, height as f32, &href, None)?;
+        doc.end_group(group)?;
+      }
     }
   }
 
-  // TODO: decorations (underline/strikethrough), text-shadow, and text stroke.
   Ok(())
 }
 
