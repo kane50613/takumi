@@ -14,7 +14,7 @@ use takumi::layout::Viewport;
 use takumi::layout::node::Node;
 use takumi::layout::style::{Length::*, *};
 use takumi::resources::font::FontResource;
-use takumi_svg::render_svg;
+use takumi_svg::{SvgOptions, render};
 
 const W: u32 = 200;
 const H: u32 = 100;
@@ -32,7 +32,14 @@ fn context() -> GlobalContext {
 }
 
 fn rasterize(node: Node, global: &GlobalContext) -> Pixmap {
-  let svg = render_svg(node, Viewport::new((W, H)), global).expect("render svg");
+  let svg = render(
+    SvgOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((W, H)))
+      .global(global)
+      .build(),
+  )
+  .expect("render svg");
   let tree = Tree::from_str(&svg, &Options::default()).expect("resvg parses emitted svg");
   let mut pixmap = Pixmap::new(W, H).expect("alloc pixmap");
   resvg::render(&tree, Transform::identity(), &mut pixmap.as_mut());

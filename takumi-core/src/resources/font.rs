@@ -59,7 +59,7 @@ pub struct ResolvedBitmapGlyph {
 impl ResolvedBitmapGlyph {
   /// PNG bytes of the rasterized glyph, for embedding in a vector backend's
   /// `<image>`. Returns `None` if encoding fails.
-  pub fn to_png(&self) -> Option<Vec<u8>> {
+  pub fn encode_png(&self) -> Option<Vec<u8>> {
     self.pixmap.encode_png().ok()
   }
 

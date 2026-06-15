@@ -124,7 +124,7 @@ fn emit_scene(
         if color_override.is_some() {
           continue;
         }
-        let Some(png) = bitmap.to_png() else {
+        let Some(png) = bitmap.encode_png() else {
           continue;
         };
         let (width, height) = bitmap.size();
@@ -182,7 +182,7 @@ mod tests {
   use takumi_core::layout::node::Node;
   use takumi_core::resources::font::FontResource;
 
-  use crate::render::render_svg;
+  use crate::render::{SvgOptions, render};
 
   /// Registers the raw-TTF test font as a fallback for all scripts so the
   /// default font-family resolves to it (no `woff2` feature required).
@@ -202,7 +202,14 @@ mod tests {
   fn text_renders_glyph_paths_not_bitmap() {
     let global = global_with_font();
     let node = Node::text("Hi".to_string());
-    let svg = render_svg(node, Viewport::new((200, 80)), &global).unwrap();
+    let svg = render(
+      SvgOptions::builder()
+        .node(node)
+        .viewport(Viewport::new((200, 80)))
+        .global(&global)
+        .build(),
+    )
+    .unwrap();
     assert!(svg.contains("<path"), "expected glyph <path> elements");
     assert!(
       !svg.contains("base64"),

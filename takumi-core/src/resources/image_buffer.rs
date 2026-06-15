@@ -100,7 +100,7 @@ impl ImageBuffer {
 
   /// Encodes the image as straight-alpha PNG bytes, for embedding in an SVG
   /// `<image>` data URL. Returns `None` if encoding fails.
-  pub fn to_png(&self) -> Option<Vec<u8>> {
+  pub fn encode_png(&self) -> Option<Vec<u8>> {
     let mut straight = self.data.clone();
     for pixel in straight.chunks_exact_mut(4) {
       let alpha = pixel[3];

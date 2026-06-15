@@ -78,10 +78,10 @@ fn data_url(src: &ImageSourceInput, context: &RenderContext) -> Option<String> {
 
 fn loaded_data_url(source: &ImageSource) -> Option<String> {
   match source {
-    ImageSource::Bitmap(buffer) => buffer.to_png().map(|png| encode("image/png", &png)),
+    ImageSource::Bitmap(buffer) => buffer.encode_png().map(|png| encode("image/png", &png)),
     ImageSource::Gif(gif) => gif
       .frame_at_time(0)
-      .to_png()
+      .encode_png()
       .map(|png| encode("image/png", &png)),
     ImageSource::Svg(svg) => Some(encode("image/svg+xml", svg.source().as_bytes())),
   }

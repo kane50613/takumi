@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::io;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use taffy::NodeId;
 use takumi_core::{
@@ -15,7 +16,10 @@ use takumi_core::{
     style::StyleSheet,
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
+  resources::image::ImageSource,
+  shadow::SizedShadow,
 };
+use typed_builder::TypedBuilder;
 
 use crate::box_model::{
   clips_overflow, element_transform, has_radius, resolved_radii, rounded_rect_path,
@@ -25,18 +29,41 @@ use crate::image::emit_image;
 use crate::text::emit_text;
 use crate::{IDENTITY, Rgba, SvgDocument};
 
+/// Inputs for [`render`]. Built with [`SvgOptions::builder`]; only `node`,
+/// `viewport`, and `global` are required. Carrying inputs in a builder struct
+/// keeps new options from being breaking changes.
+#[derive(TypedBuilder)]
+pub struct SvgOptions<'g> {
+  /// The viewport to render in.
+  pub(crate) viewport: Viewport,
+  /// The global context (fonts, persistent images).
+  pub(crate) global: &'g GlobalContext,
+  /// The root node to render.
+  pub(crate) node: Node,
+  /// Resources fetched externally, keyed by URL.
+  #[builder(default)]
+  pub(crate) fetched_resources: HashMap<Arc<str>, ImageSource>,
+  /// CSS stylesheets to apply before layout.
+  #[builder(default)]
+  pub(crate) stylesheet: StyleSheet,
+  /// Global animation time in milliseconds.
+  #[builder(default = 0)]
+  pub(crate) time_ms: u64,
+}
+
 /// Renders a node tree to a vector SVG string.
-pub fn render_svg(node: Node, viewport: Viewport, global: &GlobalContext) -> Result<String> {
+pub fn render(options: SvgOptions<'_>) -> Result<String> {
+  let viewport = options.viewport;
   let canvas_w = viewport.size.width;
   let canvas_h = viewport.size.height;
   let context = RenderContext::new(
-    global,
+    options.global,
     viewport,
-    HashMap::default(),
-    Rc::new(StyleSheet::default()),
-    0,
+    options.fetched_resources,
+    Rc::new(options.stylesheet),
+    options.time_ms,
   );
-  let root = RenderNode::from_node(&context, node);
+  let root = RenderNode::from_node(&context, options.node);
   let mut tree = LayoutTree::from_render_node(&root);
   let root_id = tree.root_node_id();
   tree.compute_layout(context.sizing.viewport.into());
@@ -75,6 +102,8 @@ fn emit_node(
   let outer = (transform.is_some() || opacity < 1.0)
     .then(|| doc.begin_group(transform.unwrap_or(IDENTITY), opacity, None, None))
     .transpose()?;
+
+  emit_box_shadows(node, layout, x, y, width, height, doc)?;
 
   let radii = resolved_radii(style, &node.context.sizing, width, height);
   let rounded = has_radius(&radii);
@@ -245,6 +274,49 @@ fn emit_borders(
   Ok(())
 }
 
+/// Emits outset `box-shadow`s behind the element as offset, blurred rects.
+/// Inset shadows are not yet supported.
+fn emit_box_shadows(
+  node: &RenderNode,
+  layout: &taffy::Layout,
+  x: f32,
+  y: f32,
+  w: f32,
+  h: f32,
+  doc: &mut SvgDocument,
+) -> io::Result<()> {
+  let Some(shadows) = node.context.style.box_shadow.as_ref() else {
+    return Ok(());
+  };
+  let cc = node.context.current_color;
+  for shadow in shadows.iter() {
+    if shadow.inset {
+      continue;
+    }
+    let resolved = SizedShadow::from_box_shadow(*shadow, &node.context.sizing, cc, layout.size);
+    if resolved.color.0[3] == 0 {
+      continue;
+    }
+    let sx = x + resolved.offset_x - resolved.spread_radius;
+    let sy = y + resolved.offset_y - resolved.spread_radius;
+    let sw = w + 2.0 * resolved.spread_radius;
+    let sh = h + 2.0 * resolved.spread_radius;
+    if sw <= 0.0 || sh <= 0.0 {
+      continue;
+    }
+    let fill = Rgba(resolved.color.0);
+    if resolved.blur_radius > 0.0 {
+      let filter = doc.blur_filter(resolved.blur_radius / 2.0)?;
+      let group = doc.begin_group(IDENTITY, 1.0, None, Some(&filter))?;
+      doc.rect(sx, sy, sw, sh, fill)?;
+      doc.end_group(group)?;
+    } else {
+      doc.rect(sx, sy, sw, sh, fill)?;
+    }
+  }
+  Ok(())
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -252,7 +324,14 @@ mod tests {
   #[test]
   fn renders_svg_wrapper_at_viewport_size() {
     let global = GlobalContext::default();
-    let svg = render_svg(Node::container([]), Viewport::new((120, 80)), &global).unwrap();
+    let svg = render(
+      SvgOptions::builder()
+        .node(Node::container([]))
+        .viewport(Viewport::new((120, 80)))
+        .global(&global)
+        .build(),
+    )
+    .unwrap();
     assert!(svg.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\""));
     assert!(svg.contains("width=\"120\""));
     assert!(svg.contains("height=\"80\""));

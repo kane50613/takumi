@@ -3,35 +3,23 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 //! Vector SVG output for takumi.
 //!
-//! This crate emits **real** SVG — `<rect>`, `<path>`, `<linearGradient>`,
-//! `<filter>`, `<clipPath>`, glyph `<path>`s — instead of wrapping a rasterized
-//! bitmap in a `data:` URL. It provides the low-level [`SvgDocument`] builder
-//! (backed by [`quick_xml`] so every attribute and value is correctly escaped)
-//! and the node-tree → SVG entry point [`render_svg`].
+//! [`render`] turns a takumi node tree into **real** SVG — `<rect>`,
+//! `<path>`, `<linearGradient>`/`<radialGradient>`, `<filter>`, `<clipPath>`,
+//! glyph outline `<path>`s, and embedded `<image>` — rather than wrapping a
+//! rasterized bitmap in a `data:` URL. The document is built with [`quick_xml`]
+//! so every attribute and value is correctly escaped.
 //!
-//! # Feature coverage
-//!
-//! | takumi feature              | SVG construct                              | status |
-//! | --------------------------- | ------------------------------------------ | ------ |
-//! | solid background            | [`SvgDocument::rect`]                       | full   |
-//! | border                      | [`SvgDocument::path`]                       | full   |
-//! | border-radius (background)  | rounded [`SvgDocument::path`]              | full   |
-//! | linear / radial gradient    | [`SvgDocument::linear_gradient`] / radial  | full   |
-//! | box-shadow                  | [`SvgDocument::drop_shadow_filter`]        | full   |
-//! | text                        | glyph [`SvgDocument::path`]                | full   |
-//! | bitmap / gif image          | [`SvgDocument::image`] (`data:` href)      | full   |
-//! | svg-source image            | inline nested `<svg>`                       | full   |
-//! | clip-path / overflow        | [`SvgDocument::clip_path`]                  | full   |
-//! | opacity / blend modes       | `opacity` / `mix-blend-mode` attrs         | full   |
-//! | affine transform            | `transform="matrix(...)"`                  | full   |
-//! | conic gradient              | solid-color wedge `<path>` fan (approx.)   | full   |
+//! Coverage: backgrounds, borders, border-radius (backgrounds/clip), linear and
+//! radial gradients (conic via a wedge-path approximation), box-shadow, text
+//! (glyph outlines, decorations, text-shadow, `-webkit-text-stroke`), bitmap/
+//! emoji glyphs and images, clip-path/overflow, opacity, and affine transforms.
 
 mod box_model;
 mod gradient;
 mod image;
 mod render;
 mod text;
-pub use render::render_svg;
+pub use render::{SvgOptions, render};
 
 use std::io;
 
@@ -40,7 +28,7 @@ use quick_xml::events::{BytesEnd, BytesStart, Event};
 
 /// Straight-alpha RGBA color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Rgba(pub [u8; 4]);
+pub(crate) struct Rgba(pub [u8; 4]);
 
 impl Rgba {
   /// `#rrggbb` hex (alpha is emitted separately as `*-opacity`).
@@ -57,13 +45,13 @@ impl Rgba {
 
 /// The affine transform type, re-exported from `takumi-core`. Serialized as an
 /// SVG `matrix(a b c d e f)` via [`matrix_attr`].
-pub use takumi_core::layout::style::Affine;
+pub(crate) use takumi_core::layout::style::Affine;
 
 pub(crate) const IDENTITY: Affine = Affine::IDENTITY;
 
 /// A single stop in a gradient.
 #[derive(Debug, Clone, Copy)]
-pub struct GradientStop {
+pub(crate) struct GradientStop {
   /// Offset along the gradient, 0.0–1.0.
   pub offset: f32,
   /// Stop color.
@@ -76,7 +64,7 @@ pub struct GradientStop {
 /// resolves `url(#id)` references regardless of document order, so no separate
 /// `<defs>` section is needed. Each write is forwarded to the underlying
 /// [`quick_xml`] writer and surfaces its [`io::Result`].
-pub struct SvgDocument {
+pub(crate) struct SvgDocument {
   writer: Writer<Vec<u8>>,
   next_id: u32,
 }
@@ -84,7 +72,7 @@ pub struct SvgDocument {
 impl SvgDocument {
   /// Creates a document with the given pixel viewport and writes the root
   /// `<svg>` open tag.
-  pub fn new(width: f32, height: f32) -> io::Result<Self> {
+  pub(crate) fn new(width: f32, height: f32) -> io::Result<Self> {
     let mut writer = Writer::new(Vec::new());
     let mut svg = BytesStart::new("svg");
     svg.push_attribute(("xmlns", "http://www.w3.org/2000/svg"));
@@ -125,7 +113,14 @@ impl SvgDocument {
   }
 
   /// Appends a solid-fill rectangle.
-  pub fn rect(&mut self, x: f32, y: f32, width: f32, height: f32, fill: Rgba) -> io::Result<()> {
+  pub(crate) fn rect(
+    &mut self,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    fill: Rgba,
+  ) -> io::Result<()> {
     self.empty(
       "rect",
       &[
@@ -140,7 +135,7 @@ impl SvgDocument {
   }
 
   /// Appends a rectangle filled with a paint reference (e.g. a gradient `url(#id)`).
-  pub fn rect_paint(
+  pub(crate) fn rect_paint(
     &mut self,
     x: f32,
     y: f32,
@@ -161,7 +156,7 @@ impl SvgDocument {
   }
 
   /// Appends a solid-fill path from SVG path data (`d`).
-  pub fn path(&mut self, data: &str, fill: Rgba) -> io::Result<()> {
+  pub(crate) fn path(&mut self, data: &str, fill: Rgba) -> io::Result<()> {
     self.empty(
       "path",
       &[
@@ -172,17 +167,9 @@ impl SvgDocument {
     )
   }
 
-  /// Appends a path filled with a paint reference (e.g. a gradient `url(#id)`).
-  pub fn path_paint(&mut self, data: &str, paint: &str) -> io::Result<()> {
-    self.empty(
-      "path",
-      &[("d", data.to_owned()), ("fill", paint.to_owned())],
-    )
-  }
-
   /// Defines a linear gradient and returns its `url(#id)` reference. When
   /// `repeating` is set the stops tile beyond their range (`spreadMethod`).
-  pub fn linear_gradient(
+  pub(crate) fn linear_gradient(
     &mut self,
     (x1, y1): (f32, f32),
     (x2, y2): (f32, f32),
@@ -212,7 +199,7 @@ impl SvgDocument {
   /// Defines a radial gradient and returns its `url(#id)` reference. `scale`
   /// stretches the gradient into an ellipse around its center (SVG has no native
   /// `rx`/`ry`, so a non-uniform scale is applied via `gradientTransform`).
-  pub fn radial_gradient(
+  pub(crate) fn radial_gradient(
     &mut self,
     (cx, cy): (f32, f32),
     r: f32,
@@ -258,32 +245,8 @@ impl SvgDocument {
     Ok(())
   }
 
-  /// Defines a gaussian-blur drop-shadow filter and returns its `url(#id)`.
-  pub fn drop_shadow_filter(
-    &mut self,
-    dx: f32,
-    dy: f32,
-    blur: f32,
-    color: Rgba,
-  ) -> io::Result<String> {
-    let id = self.alloc_id("ds");
-    self.open("filter", &[("id", id.clone())])?;
-    self.empty(
-      "feDropShadow",
-      &[
-        ("dx", num(dx)),
-        ("dy", num(dy)),
-        ("stdDeviation", num(blur / 2.0)),
-        ("flood-color", color.hex()),
-        ("flood-opacity", num(color.opacity())),
-      ],
-    )?;
-    self.close("filter")?;
-    Ok(format!("url(#{id})"))
-  }
-
   /// Defines a clip path from SVG path data and returns its `url(#id)`.
-  pub fn clip_path(&mut self, data: &str) -> io::Result<String> {
+  pub(crate) fn clip_path(&mut self, data: &str) -> io::Result<String> {
     let id = self.alloc_id("cp");
     self.open("clipPath", &[("id", id.clone())])?;
     self.empty("path", &[("d", data.to_owned())])?;
@@ -294,7 +257,7 @@ impl SvgDocument {
   /// Appends a raster image referenced by a `data:` URL href. This is legitimate
   /// SVG (a genuine photo has no vector form), not the "fake SVG" of wrapping the
   /// whole render in one bitmap.
-  pub fn image(
+  pub(crate) fn image(
     &mut self,
     x: f32,
     y: f32,
@@ -319,7 +282,7 @@ impl SvgDocument {
   /// Opens a `<g>` with a transform and optional opacity/clip; returns a token
   /// that must be passed to [`SvgDocument::end_group`]. An identity transform is
   /// omitted from the output.
-  pub fn begin_group(
+  pub(crate) fn begin_group(
     &mut self,
     transform: Affine,
     opacity: f32,
@@ -344,7 +307,7 @@ impl SvgDocument {
   }
 
   /// Appends a filled path with an optional stroke (for `-webkit-text-stroke`).
-  pub fn glyph_path(
+  pub(crate) fn glyph_path(
     &mut self,
     data: &str,
     fill: Rgba,
@@ -364,7 +327,7 @@ impl SvgDocument {
   }
 
   /// Defines a gaussian-blur filter (for text-shadow) and returns its `url(#id)`.
-  pub fn blur_filter(&mut self, std_deviation: f32) -> io::Result<String> {
+  pub(crate) fn blur_filter(&mut self, std_deviation: f32) -> io::Result<String> {
     let id = self.alloc_id("bl");
     self.open("filter", &[("id", id.clone())])?;
     self.empty("feGaussianBlur", &[("stdDeviation", num(std_deviation))])?;
@@ -373,12 +336,12 @@ impl SvgDocument {
   }
 
   /// Closes the most recently opened group.
-  pub fn end_group(&mut self, _token: GroupToken) -> io::Result<()> {
+  pub(crate) fn end_group(&mut self, _token: GroupToken) -> io::Result<()> {
     self.close("g")
   }
 
   /// Closes the root `<svg>` and serializes the document to a string.
-  pub fn render(mut self) -> io::Result<String> {
+  pub(crate) fn render(mut self) -> io::Result<String> {
     self.close("svg")?;
     Ok(String::from_utf8_lossy(&self.writer.into_inner()).into_owned())
   }
@@ -386,7 +349,7 @@ impl SvgDocument {
 
 /// Opaque proof that a `<g>` is open; consumed by [`SvgDocument::end_group`].
 #[must_use]
-pub struct GroupToken(());
+pub(crate) struct GroupToken(());
 
 fn matrix_attr(transform: Affine) -> String {
   let [a, b, c, d, e, f] = transform.to_cols_array();
@@ -466,14 +429,6 @@ mod tests {
     let svg = doc.render().unwrap();
     assert!(svg.contains(r#"<linearGradient id="lg0""#));
     assert!(svg.contains(r#"<stop offset="0""#));
-  }
-
-  #[test]
-  fn drop_shadow_uses_filter() {
-    let mut doc = SvgDocument::new(10.0, 10.0).unwrap();
-    let filter = doc.drop_shadow_filter(2.0, 2.0, 4.0, RED).unwrap();
-    assert_eq!(filter, "url(#ds0)");
-    assert!(doc.render().unwrap().contains("<feDropShadow"));
   }
 
   #[test]

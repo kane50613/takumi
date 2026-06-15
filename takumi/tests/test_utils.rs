@@ -19,7 +19,7 @@ use takumi::{
   },
   resources::{font::FontResource, image::ImageSource},
 };
-use takumi_svg::render_svg;
+use takumi_svg::{SvgOptions, render as svg_render};
 
 fn repo_base_path(path: &str) -> PathBuf {
   Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -172,10 +172,12 @@ pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &
 
   // Emit the vector SVG alongside the raster golden (best-effort: the SVG backend
   // does not cover every paint feature yet, so failures are skipped not fatal).
-  if let Ok(svg) = render_svg(
-    options.node().clone(),
-    *options.viewport(),
-    options.global(),
+  if let Ok(svg) = svg_render(
+    SvgOptions::builder()
+      .node(options.node().clone())
+      .viewport(*options.viewport())
+      .global(options.global())
+      .build(),
   ) {
     write(format!("tests/fixtures-generated/{fixture_name}.svg"), svg).unwrap();
   }
