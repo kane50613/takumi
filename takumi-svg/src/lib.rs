@@ -324,6 +324,7 @@ impl SvgDocument {
     transform: Affine,
     opacity: f32,
     clip: Option<&str>,
+    filter: Option<&str>,
   ) -> io::Result<GroupToken> {
     let mut attrs = Vec::new();
     if !transform.is_identity() {
@@ -335,8 +336,40 @@ impl SvgDocument {
     if let Some(clip) = clip {
       attrs.push(("clip-path", clip.to_owned()));
     }
+    if let Some(filter) = filter {
+      attrs.push(("filter", filter.to_owned()));
+    }
     self.open("g", &attrs)?;
     Ok(GroupToken(()))
+  }
+
+  /// Appends a filled path with an optional stroke (for `-webkit-text-stroke`).
+  pub fn glyph_path(
+    &mut self,
+    data: &str,
+    fill: Rgba,
+    stroke: Option<(Rgba, f32)>,
+  ) -> io::Result<()> {
+    let mut attrs = vec![
+      ("d", data.to_owned()),
+      ("fill", fill.hex()),
+      ("fill-opacity", num(fill.opacity())),
+    ];
+    if let Some((color, width)) = stroke {
+      attrs.push(("stroke", color.hex()));
+      attrs.push(("stroke-opacity", num(color.opacity())));
+      attrs.push(("stroke-width", num(width)));
+    }
+    self.empty("path", &attrs)
+  }
+
+  /// Defines a gaussian-blur filter (for text-shadow) and returns its `url(#id)`.
+  pub fn blur_filter(&mut self, std_deviation: f32) -> io::Result<String> {
+    let id = self.alloc_id("bl");
+    self.open("filter", &[("id", id.clone())])?;
+    self.empty("feGaussianBlur", &[("stdDeviation", num(std_deviation))])?;
+    self.close("filter")?;
+    Ok(format!("url(#{id})"))
   }
 
   /// Closes the most recently opened group.
@@ -448,7 +481,7 @@ mod tests {
     let mut doc = SvgDocument::new(10.0, 10.0).unwrap();
     let clip = doc.clip_path("M0 0 H5 V5 H0 Z").unwrap();
     let token = doc
-      .begin_group(Affine::translation(3.0, 4.0), 0.5, Some(&clip))
+      .begin_group(Affine::translation(3.0, 4.0), 0.5, Some(&clip), None)
       .unwrap();
     doc.rect(0.0, 0.0, 10.0, 10.0, RED).unwrap();
     doc.end_group(token).unwrap();
@@ -463,7 +496,7 @@ mod tests {
   #[test]
   fn identity_transform_is_omitted() {
     let mut doc = SvgDocument::new(10.0, 10.0).unwrap();
-    let token = doc.begin_group(IDENTITY, 0.5, None).unwrap();
+    let token = doc.begin_group(IDENTITY, 0.5, None, None).unwrap();
     doc.end_group(token).unwrap();
     assert!(doc.render().unwrap().contains("<g opacity=\"0.5\">"));
   }

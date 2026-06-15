@@ -73,7 +73,7 @@ fn emit_node(
   let opacity = style.opacity.0;
   let transform = element_transform(&node.context, layout.size, x, y);
   let outer = (transform.is_some() || opacity < 1.0)
-    .then(|| doc.begin_group(transform.unwrap_or(IDENTITY), opacity, None))
+    .then(|| doc.begin_group(transform.unwrap_or(IDENTITY), opacity, None, None))
     .transpose()?;
 
   let radii = resolved_radii(style, &node.context.sizing, width, height);
@@ -93,7 +93,7 @@ fn emit_node(
     };
     let bg_group = bg_clip
       .as_deref()
-      .map(|clip| doc.begin_group(IDENTITY, 1.0, Some(clip)))
+      .map(|clip| doc.begin_group(IDENTITY, 1.0, Some(clip), None))
       .transpose()?;
     if background.0[3] != 0 {
       doc.rect(x, y, width, height, Rgba(background.0))?;
@@ -139,7 +139,7 @@ fn emit_node(
       );
       doc
         .clip_path(&path)
-        .and_then(|clip| doc.begin_group(IDENTITY, 1.0, Some(&clip)))
+        .and_then(|clip| doc.begin_group(IDENTITY, 1.0, Some(&clip), None))
     })
     .transpose()?;
 

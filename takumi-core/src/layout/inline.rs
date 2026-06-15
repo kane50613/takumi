@@ -1,8 +1,8 @@
 use std::{borrow::Cow, ops::Range};
 
 use parley::{
-  BreakReason, IndentOptions, InlineBox, InlineBoxKind, Line, LineMetrics, PositionedInlineBox,
-  PositionedLayoutItem, TextStyle, YieldData,
+  BreakReason, GlyphRun, IndentOptions, InlineBox, InlineBoxKind, Line, LineMetrics,
+  PositionedInlineBox, PositionedLayoutItem, TextStyle, YieldData,
 };
 use skrifa::FontRef;
 use taffy::{AvailableSpace, Layout, Point, Rect, Size};
@@ -1487,15 +1487,38 @@ pub struct PositionedGlyph {
   pub color: Color,
 }
 
-/// Resolves every glyph in `built` into [`PositionedGlyph`]s for a vector
-/// backend, using the same positioning primitives ([`line_setup`],
-/// [`line_scale_transform_with_static_prefix`]) as the raster walk — only the
-/// painting differs. Transforms are relative to the element's border-box origin.
-pub fn resolve_positioned_glyphs(
+/// A text decoration line (underline/overline/line-through) as a fillable rect.
+/// `transform` maps the `(0, 0, width, height)` rect into border-box space.
+pub struct DecorationRect {
+  /// Rect width in pixels (run advance, snapped like the raster path).
+  pub width: f32,
+  /// Rect height in pixels (decoration thickness).
+  pub height: f32,
+  /// Decoration color, already resolved against `current-color`.
+  pub color: Color,
+  /// Affine transform into border-box space (`[a, b, c, d, e, f]`).
+  pub transform: [f32; 6],
+  /// Whether the line paints above glyphs (line-through) vs below (under/overline).
+  pub over: bool,
+}
+
+/// Positioned, backend-agnostic text drawables (border-box space). Built once and
+/// consumed by either backend; only the painting (rasterize vs emit) differs.
+pub struct TextScene {
+  /// Positioned glyphs in paint order.
+  pub glyphs: Vec<PositionedGlyph>,
+  /// Decoration lines (drawn under glyphs).
+  pub decorations: Vec<DecorationRect>,
+}
+
+/// Resolves `built` into a [`TextScene`] for a vector backend, using the same
+/// positioning primitives ([`line_setup`], [`line_scale_transform_with_static_prefix`])
+/// as the raster walk — only the painting differs.
+pub fn resolve_text_scene(
   built: &BuiltInlineLayout<'_, '_>,
   context: &RenderContext,
   layout: Layout,
-) -> Result<Vec<PositionedGlyph>, FontError> {
+) -> Result<TextScene, FontError> {
   let BuiltInlineLayout {
     layout: inline_layout,
     spans,
@@ -1506,7 +1529,8 @@ pub fn resolve_positioned_glyphs(
   let line_vertical_metrics =
     resolve_inline_line_metrics(inline_layout, spans, parent_font_metrics, line_scales);
 
-  let mut out = Vec::new();
+  let mut glyphs = Vec::new();
+  let mut decorations = Vec::new();
   for (line_index, line) in inline_layout.lines().enumerate() {
     let Some(setup) = line_setup(
       &line,
@@ -1547,12 +1571,20 @@ pub fn resolve_positioned_glyphs(
             };
             let matrix =
               transform * Affine::translation(glyph_offset.x + glyph.x, glyph_offset.y + glyph.y);
-            out.push(PositionedGlyph {
+            glyphs.push(PositionedGlyph {
               glyph: resolved_glyph.clone(),
               transform: matrix.to_cols_array(),
               color,
             });
           }
+
+          push_decorations(
+            &glyph_run,
+            layout,
+            setup.baseline_shift,
+            transform,
+            &mut decorations,
+          );
         }
         PositionedLayoutItem::InlineBox(inline_box) if inline_box.kind == InlineBoxKind::InFlow => {
           static_inline_prefix += inline_box.width;
@@ -1562,7 +1594,73 @@ pub fn resolve_positioned_glyphs(
     }
   }
 
-  Ok(out)
+  Ok(TextScene {
+    glyphs,
+    decorations,
+  })
+}
+
+/// Appends the active decoration lines for a glyph run, mirroring the raster
+/// geometry in `draw_decoration` (skip-ink is raster-only and omitted here).
+fn push_decorations(
+  glyph_run: &GlyphRun<'_, InlineBrush>,
+  layout: Layout,
+  baseline_shift: f32,
+  transform: Affine,
+  out: &mut Vec<DecorationRect>,
+) {
+  let brush = &glyph_run.style().brush;
+  let lines = brush.decoration_line;
+  if lines.is_empty() {
+    return;
+  }
+  let metrics = glyph_run.run().metrics();
+  let start_x = layout.border.left + layout.padding.left + glyph_run.offset();
+  let snapped_start_x = start_x.floor();
+  let width = (start_x + glyph_run.advance()).ceil() - snapped_start_x;
+  if width <= 0.0 {
+    return;
+  }
+  let baseline = glyph_run.baseline() + baseline_shift;
+  let top = layout.border.top + layout.padding.top;
+  let thickness = |from_font: f32| match brush.decoration_thickness {
+    SizedTextDecorationThickness::Value(value) => value,
+    SizedTextDecorationThickness::FromFont => from_font,
+  };
+  let mut emit = |y_offset: f32, height: f32, over: bool| {
+    if height <= 0.0 {
+      return;
+    }
+    let matrix = transform * Affine::translation(snapped_start_x, top + y_offset);
+    out.push(DecorationRect {
+      width,
+      height,
+      color: brush.decoration_color,
+      transform: matrix.to_cols_array(),
+      over,
+    });
+  };
+  if lines.contains(TextDecorationLines::UNDERLINE) {
+    emit(
+      baseline - metrics.underline_offset,
+      thickness(metrics.underline_size),
+      false,
+    );
+  }
+  if lines.contains(TextDecorationLines::OVERLINE) {
+    emit(
+      baseline - metrics.ascent - metrics.underline_offset,
+      thickness(metrics.underline_size),
+      false,
+    );
+  }
+  if lines.contains(TextDecorationLines::LINE_THROUGH) {
+    emit(
+      baseline - metrics.strikethrough_offset,
+      thickness(metrics.strikethrough_size),
+      true,
+    );
+  }
 }
 
 pub fn create_inline_constraint(

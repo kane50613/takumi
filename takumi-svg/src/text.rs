@@ -1,10 +1,11 @@
-//! Text node → SVG glyph-outline `<path>` emission.
+//! Text node → SVG emission.
 //!
-//! Builds the inline layout with takumi-core's public API (the same call the
-//! raster backend uses) and walks the resolved, positioned glyphs, emitting each
-//! outline glyph as a real vector `<path>`. All `parley`/`skrifa`/`tiny_skia`
-//! usage stays inside takumi-core; this crate only consumes content-box-relative
-//! affine transforms and the helper that serializes an outline to path data.
+//! Builds the inline layout and the backend-agnostic [`TextScene`] with
+//! takumi-core's public API (the same layout/positioning the raster backend
+//! uses), then emits: text-shadows, under/overline decorations, glyph fills
+//! (outline `<path>` or bitmap `<image>` for emoji) with optional
+//! `-webkit-text-stroke`, and line-through. All `parley`/`skrifa`/`tiny_skia`
+//! usage stays inside takumi-core.
 
 use std::io;
 
@@ -12,17 +13,17 @@ use taffy::{AvailableSpace, Layout, Size};
 use takumi_core::context::RenderContext;
 use takumi_core::font_style::SizedFontStyle;
 use takumi_core::layout::inline::{
-  InlineItem, InlineLayoutMode, InlineLayoutRequest, create_inline_layout,
-  resolve_inline_max_height, resolve_positioned_glyphs,
+  DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, TextScene,
+  create_inline_layout, resolve_inline_max_height, resolve_text_scene,
 };
 use takumi_core::layout::node::TextData;
 use takumi_core::resources::font::ResolvedGlyph;
 
 use crate::image::encode;
-use crate::{Affine, Rgba, SvgDocument};
+use crate::{Affine, IDENTITY, Rgba, SvgDocument};
 
-/// Emits a text node's glyphs. `origin_x`/`origin_y` are the element's absolute
-/// border-box top-left; `layout` provides border/padding and content size.
+/// Emits a text node. `origin_x`/`origin_y` are the element's absolute border-box
+/// top-left; `layout` provides border/padding and content size.
 pub(crate) fn emit_text(
   text: &TextData,
   context: &RenderContext,
@@ -54,34 +55,75 @@ pub(crate) fn emit_text(
     mode: InlineLayoutMode::Draw,
   });
 
-  let glyphs = resolve_positioned_glyphs(&built, context, layout).map_err(|error| {
+  let scene = resolve_text_scene(&built, context, layout).map_err(|error| {
     io::Error::new(
       io::ErrorKind::InvalidData,
       format!("glyph resolution failed: {error}"),
     )
   })?;
 
-  for positioned in glyphs {
-    let [a, b, c, d, e, f] = positioned.transform;
-    // Offset the border-box-relative transform to the absolute element origin.
-    let placed = Affine {
-      a,
-      b,
-      c,
-      d,
-      x: e + origin_x,
-      y: f + origin_y,
+  let stroke =
+    (font_style.stroke_width > 0.0 && font_style.text_stroke_color.0[3] != 0).then_some((
+      Rgba(font_style.text_stroke_color.0),
+      font_style.stroke_width,
+    ));
+
+  // text-shadow paints below the text; later-listed shadows paint lowest.
+  for shadow in font_style.text_shadow.iter().rev() {
+    let color = Rgba(shadow.color.0);
+    if color.0[3] == 0 {
+      continue;
+    }
+    let filter = if shadow.blur_radius > 0.0 {
+      Some(doc.blur_filter(shadow.blur_radius / 2.0)?)
+    } else {
+      None
     };
+    let group = doc.begin_group(IDENTITY, 1.0, None, filter.as_deref())?;
+    emit_scene(
+      doc,
+      &scene,
+      origin_x + shadow.offset_x,
+      origin_y + shadow.offset_y,
+      Some(color),
+      None,
+    )?;
+    doc.end_group(group)?;
+  }
+
+  emit_scene(doc, &scene, origin_x, origin_y, None, stroke)
+}
+
+/// Emits the scene at the given origin. `color_override` (for shadows) recolors
+/// everything; `stroke` adds `-webkit-text-stroke` to glyph outlines.
+fn emit_scene(
+  doc: &mut SvgDocument,
+  scene: &TextScene,
+  origin_x: f32,
+  origin_y: f32,
+  color_override: Option<Rgba>,
+  stroke: Option<(Rgba, f32)>,
+) -> io::Result<()> {
+  for decoration in scene.decorations.iter().filter(|d| !d.over) {
+    emit_decoration(doc, decoration, origin_x, origin_y, color_override)?;
+  }
+
+  for positioned in &scene.glyphs {
+    let placed = offset(positioned.transform, origin_x, origin_y);
     match &positioned.glyph {
       ResolvedGlyph::Outline(outline) => {
         let data = outline.to_svg_path_data(placed.to_cols_array());
         if !data.is_empty() {
-          doc.path(&data, Rgba(positioned.color.0))?;
+          let fill = color_override.unwrap_or(Rgba(positioned.color.0));
+          doc.glyph_path(&data, fill, stroke)?;
         }
       }
       // Color/bitmap glyphs (emoji) have no vector form — embed the rasterized
-      // pixmap as a `data:image/png` `<image>` placed by the glyph transform.
+      // pixmap as a `data:image/png` `<image>`. Skipped in the shadow pass.
       ResolvedGlyph::Bitmap(bitmap) => {
+        if color_override.is_some() {
+          continue;
+        }
         let Some(png) = bitmap.to_png() else {
           continue;
         };
@@ -90,14 +132,45 @@ pub(crate) fn emit_text(
           * Affine::translation(bitmap.placement.left as f32, -(bitmap.placement.top as f32))
           * Affine::scale(bitmap.scale_x, bitmap.scale_y);
         let href = encode("image/png", &png);
-        let group = doc.begin_group(matrix, 1.0, None)?;
+        let group = doc.begin_group(matrix, 1.0, None, None)?;
         doc.image(0.0, 0.0, width as f32, height as f32, &href, None)?;
         doc.end_group(group)?;
       }
     }
   }
 
+  for decoration in scene.decorations.iter().filter(|d| d.over) {
+    emit_decoration(doc, decoration, origin_x, origin_y, color_override)?;
+  }
+
   Ok(())
+}
+
+fn emit_decoration(
+  doc: &mut SvgDocument,
+  decoration: &DecorationRect,
+  origin_x: f32,
+  origin_y: f32,
+  color_override: Option<Rgba>,
+) -> io::Result<()> {
+  let matrix = offset(decoration.transform, origin_x, origin_y);
+  let color = color_override.unwrap_or(Rgba(decoration.color.0));
+  let group = doc.begin_group(matrix, 1.0, None, None)?;
+  doc.rect(0.0, 0.0, decoration.width, decoration.height, color)?;
+  doc.end_group(group)
+}
+
+/// Offsets a border-box-relative `[a,b,c,d,e,f]` transform to absolute space.
+fn offset(transform: [f32; 6], origin_x: f32, origin_y: f32) -> Affine {
+  let [a, b, c, d, e, f] = transform;
+  Affine {
+    a,
+    b,
+    c,
+    d,
+    x: e + origin_x,
+    y: f + origin_y,
+  }
 }
 
 #[cfg(test)]

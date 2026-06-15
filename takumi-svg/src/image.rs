@@ -31,13 +31,39 @@ pub(crate) fn emit_image(
   let Some(href) = data_url(&image.src, context) else {
     return Ok(());
   };
-  let preserve_aspect_ratio = match context.style.object_fit {
-    ObjectFit::Fill => "none",
-    ObjectFit::Cover => "xMidYMid slice",
-    // contain / scale-down / none all fit within the box without cropping.
-    _ => "xMidYMid meet",
-  };
-  doc.image(x, y, w, h, &href, Some(preserve_aspect_ratio))
+  // `none`/`scale-down` need the intrinsic size; the others are expressible with
+  // `preserveAspectRatio` over the content box.
+  match context.style.object_fit {
+    ObjectFit::Fill => doc.image(x, y, w, h, &href, Some("none")),
+    ObjectFit::Cover => doc.image(x, y, w, h, &href, Some("xMidYMid slice")),
+    ObjectFit::Contain => doc.image(x, y, w, h, &href, Some("xMidYMid meet")),
+    fit @ (ObjectFit::None | ObjectFit::ScaleDown) => {
+      let Some((iw, ih)) = intrinsic_size(&image.src, context) else {
+        return doc.image(x, y, w, h, &href, Some("xMidYMid meet"));
+      };
+      // `scale-down` = the smaller of the intrinsic size and a contain fit.
+      let scale = if matches!(fit, ObjectFit::ScaleDown) {
+        (w / iw).min(h / ih).min(1.0)
+      } else {
+        1.0
+      };
+      let (dw, dh) = (iw * scale, ih * scale);
+      // Centered (object-position defaults to 50% 50%).
+      doc.image(
+        x + (w - dw) / 2.0,
+        y + (h - dh) / 2.0,
+        dw,
+        dh,
+        &href,
+        Some("none"),
+      )
+    }
+  }
+}
+
+fn intrinsic_size(src: &ImageSourceInput, context: &RenderContext) -> Option<(f32, f32)> {
+  let (width, height) = src.resolve(context).ok()?.size(&context.sizing);
+  (width > 0.0 && height > 0.0).then_some((width, height))
 }
 
 fn data_url(src: &ImageSourceInput, context: &RenderContext) -> Option<String> {

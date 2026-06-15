@@ -123,3 +123,39 @@ fn text_renders_visible_glyphs() {
     .count();
   assert!(dark > 0, "expected dark glyph pixels, found none");
 }
+
+#[test]
+fn underline_decoration_renders() {
+  let text = Node::text("Hello".to_string()).with_style(
+    Style::default()
+      .with(StyleDeclaration::color(ColorInput::Value(Color([
+        0, 0, 0, 255,
+      ]))))
+      .with(StyleDeclaration::font_size(FontSize::Length(Px(48.0))))
+      .with_text_decoration(
+        TextDecoration::builder()
+          .line(TextDecorationLines::UNDERLINE)
+          .color(ColorInput::Value(Color([255, 0, 0, 255])))
+          .build(),
+      ),
+  );
+  let node = Node::container([text]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([255, 255, 255, 255]),
+      ))),
+  );
+  let pixmap = rasterize(node, &context());
+  let red = pixmap
+    .pixels()
+    .iter()
+    .filter(|p| {
+      let c = p.demultiply();
+      c.red() > 150 && c.green() < 90 && c.blue() < 90
+    })
+    .count();
+  assert!(red > 0, "expected red underline pixels, found none");
+}

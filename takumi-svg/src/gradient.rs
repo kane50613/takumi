@@ -183,7 +183,7 @@ fn emit_conic(
     .fold(0.0_f32, f32::max);
 
   let clip = doc.clip_path(&format!("M{x} {y} H{} V{} H{x} Z", x + w, y + h))?;
-  let group = doc.begin_group(IDENTITY, 1.0, Some(&clip))?;
+  let group = doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?;
   for i in 0..CONIC_WEDGES {
     let a0 = i as f32 / CONIC_WEDGES as f32 * TAU;
     let a1 = (i + 1) as f32 / CONIC_WEDGES as f32 * TAU;
