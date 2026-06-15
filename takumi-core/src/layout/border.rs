@@ -809,6 +809,97 @@ pub fn subtract_rect(lhs: Rect<f32>, rhs: Rect<f32>) -> Rect<f32> {
   }
 }
 
+const DASHED_THICK_WIDTH_THRESHOLD: f32 = 3.0;
+const DASHED_LENGTH_RATIO_THICK: f32 = 2.0;
+const DASHED_LENGTH_RATIO_THIN: f32 = 3.0;
+const DASHED_GAP_RATIO_THICK: f32 = 1.0;
+const DASHED_GAP_RATIO_THIN: f32 = 2.0;
+const DOTTED_ENDPOINT_EPSILON: f32 = 1.0e-2;
+
+/// The dash pattern for a stroked `dashed`/`dotted` border or outline side,
+/// shared by both backends: `([dash, gap], round_cap)`, or `None` for a solid
+/// stroke (non-dash style, or a segment too short to dash). `length` is the side
+/// length (or the ring perimeter when `closed`). Dash/gap adjust by width and
+/// length so the pattern fits the side evenly.
+pub fn border_dash_pattern(
+  width: f32,
+  style: BorderStyle,
+  length: f32,
+  closed: bool,
+) -> Option<([f32; 2], bool)> {
+  if !matches!(style, BorderStyle::Dashed | BorderStyle::Dotted) || width <= 0.0 || length <= 0.0 {
+    return None;
+  }
+
+  if style == BorderStyle::Dashed {
+    let (dash, gap) = compute_dashed_intervals(width, length, closed)?;
+    return Some(([dash, gap], false));
+  }
+
+  let per_dot_length = width * 2.0;
+  let gap = if length < per_dot_length {
+    per_dot_length
+  } else {
+    select_best_dash_gap(length, width, width, closed) + width - DOTTED_ENDPOINT_EPSILON
+  };
+  Some(([0.0, gap], true))
+}
+
+fn compute_dashed_intervals(width: f32, length: f32, closed: bool) -> Option<(f32, f32)> {
+  let thick = width >= DASHED_THICK_WIDTH_THRESHOLD;
+  let dash = width
+    * if thick {
+      DASHED_LENGTH_RATIO_THICK
+    } else {
+      DASHED_LENGTH_RATIO_THIN
+    };
+  let gap = width
+    * if thick {
+      DASHED_GAP_RATIO_THICK
+    } else {
+      DASHED_GAP_RATIO_THIN
+    };
+
+  if length <= dash * 2.0 {
+    return None;
+  }
+
+  let mut applied_dash = dash;
+  let mut applied_gap = gap;
+  let mut two_dashes_with_gap = 2.0 * dash + gap;
+  if closed {
+    two_dashes_with_gap += gap;
+  }
+  if length <= two_dashes_with_gap {
+    let multiplier = length / two_dashes_with_gap;
+    applied_dash *= multiplier;
+    applied_gap *= multiplier;
+  } else {
+    applied_gap = select_best_dash_gap(length, dash, gap, closed);
+  }
+  Some((applied_dash, applied_gap))
+}
+
+fn select_best_dash_gap(length: f32, dash: f32, gap: f32, closed: bool) -> f32 {
+  let available = if closed { length } else { length + gap };
+  let min_dashes = (available / (dash + gap)).floor();
+  let max_dashes = min_dashes + 1.0;
+  let min_gaps = if closed { min_dashes } else { min_dashes - 1.0 };
+  let max_gaps = if closed { max_dashes } else { max_dashes - 1.0 };
+
+  if min_gaps <= 0.0 || max_gaps <= 0.0 {
+    return gap.max(0.0);
+  }
+
+  let min_gap = (length - min_dashes * dash) / min_gaps;
+  let max_gap = (length - max_dashes * dash) / max_gaps;
+  if max_gap <= 0.0 || (min_gap - gap).abs() < (max_gap - gap).abs() {
+    min_gap.max(0.0)
+  } else {
+    max_gap.max(0.0)
+  }
+}
+
 pub fn shade_3d_border_color(color: Color, side: BorderSide, style: BorderStyle) -> Color {
   let lighten = match style {
     BorderStyle::Outset => matches!(side, BorderSide::Top | BorderSide::Left),

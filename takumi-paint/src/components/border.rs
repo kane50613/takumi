@@ -1,7 +1,8 @@
 use taffy::{Point, Rect, Size};
 
 use takumi_core::layout::border::{
-  BorderProperties, BorderSide, inset_size, rect_offset, shade_3d_border_color, subtract_rect,
+  BorderProperties, BorderSide, border_dash_pattern, inset_size, rect_offset,
+  shade_3d_border_color, subtract_rect,
 };
 
 use crate::{
@@ -529,103 +530,18 @@ impl BorderRasterization for BorderProperties {
   }
 }
 
-const DASHED_THICK_WIDTH_THRESHOLD: f32 = 3.0;
-const DASHED_LENGTH_RATIO_THICK: f32 = 2.0;
-const DASHED_LENGTH_RATIO_THIN: f32 = 3.0;
-const DASHED_GAP_RATIO_THICK: f32 = 1.0;
-const DASHED_GAP_RATIO_THIN: f32 = 2.0;
-const DOTTED_ENDPOINT_EPSILON: f32 = 1.0e-2;
-
 fn compute_side_stroke(width: f32, style: BorderStyle, length: f32, closed: bool) -> Stroke {
   let mut stroke = Stroke::new(width);
-  if !matches!(style, BorderStyle::Dashed | BorderStyle::Dotted) || width <= 0.0 || length <= 0.0 {
-    return stroke;
-  }
-
-  if style == BorderStyle::Dashed {
-    let Some((dash, gap)) = compute_dashed_intervals(width, style, length, closed) else {
-      return stroke;
-    };
+  if let Some((intervals, round_cap)) = border_dash_pattern(width, style, length, closed) {
+    if round_cap {
+      stroke.cap = Cap::Round;
+    }
     stroke.dash = Some(DashPattern {
-      intervals: [dash, gap],
+      intervals,
       offset: 0.0,
     });
-    return stroke;
   }
-
-  stroke.cap = Cap::Round;
-  let per_dot_length = width * 2.0;
-  let gap = if length < per_dot_length {
-    per_dot_length
-  } else {
-    select_best_dash_gap(length, width, width, closed) + width - DOTTED_ENDPOINT_EPSILON
-  };
-  stroke.dash = Some(DashPattern {
-    intervals: [0.0, gap],
-    offset: 0.0,
-  });
   stroke
-}
-
-fn compute_dashed_intervals(
-  width: f32,
-  style: BorderStyle,
-  length: f32,
-  closed: bool,
-) -> Option<(f32, f32)> {
-  let mut dash = width;
-  let mut gap = width;
-  if style == BorderStyle::Dashed {
-    dash *= if width >= DASHED_THICK_WIDTH_THRESHOLD {
-      DASHED_LENGTH_RATIO_THICK
-    } else {
-      DASHED_LENGTH_RATIO_THIN
-    };
-    gap *= if width >= DASHED_THICK_WIDTH_THRESHOLD {
-      DASHED_GAP_RATIO_THICK
-    } else {
-      DASHED_GAP_RATIO_THIN
-    };
-  }
-
-  if length <= dash * 2.0 {
-    return None;
-  }
-
-  let mut applied_dash = dash;
-  let mut applied_gap = gap;
-  let mut two_dashes_with_gap = 2.0 * dash + gap;
-  if closed {
-    two_dashes_with_gap += gap;
-  }
-  if length <= two_dashes_with_gap {
-    let multiplier = length / two_dashes_with_gap;
-    applied_dash *= multiplier;
-    applied_gap *= multiplier;
-  } else if style == BorderStyle::Dashed {
-    applied_gap = select_best_dash_gap(length, dash, gap, closed);
-  }
-  Some((applied_dash, applied_gap))
-}
-
-fn select_best_dash_gap(length: f32, dash: f32, gap: f32, closed: bool) -> f32 {
-  let available = if closed { length } else { length + gap };
-  let min_dashes = (available / (dash + gap)).floor();
-  let max_dashes = min_dashes + 1.0;
-  let min_gaps = if closed { min_dashes } else { min_dashes - 1.0 };
-  let max_gaps = if closed { max_dashes } else { max_dashes - 1.0 };
-
-  if min_gaps <= 0.0 || max_gaps <= 0.0 {
-    return gap.max(0.0);
-  }
-
-  let min_gap = (length - min_dashes * dash) / min_gaps;
-  let max_gap = (length - max_dashes * dash) / max_gaps;
-  if max_gap <= 0.0 || (min_gap - gap).abs() < (max_gap - gap).abs() {
-    min_gap.max(0.0)
-  } else {
-    max_gap.max(0.0)
-  }
 }
 
 #[derive(Clone, Copy)]

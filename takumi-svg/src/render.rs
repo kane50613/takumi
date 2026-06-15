@@ -12,7 +12,7 @@ use takumi_core::{
   error::Result,
   layout::{
     Viewport,
-    border::{BorderProperties, BorderSide},
+    border::{BorderProperties, BorderSide, border_dash_pattern},
     inline::{InlineBoxItem, VisualInlineBox},
     node::{ImageData, Node, NodeKind},
     style::{
@@ -417,14 +417,16 @@ fn overflow_clip_rect_data(
   let clip_y = style.overflow_y != Overflow::Visible;
 
   let (left, right) = if clip_x {
-    let content_left = x + layout.border.left + layout.padding.left;
-    (content_left, content_left + layout.content_box_width())
+    let padding_left = x + layout.border.left;
+    let padding_right = (x + layout.size.width - layout.border.right).max(padding_left);
+    (padding_left, padding_right)
   } else {
     (x - UNBOUNDED, x + layout.size.width + UNBOUNDED)
   };
   let (top, bottom) = if clip_y {
-    let content_top = y + layout.border.top + layout.padding.top;
-    (content_top, content_top + layout.content_box_height())
+    let padding_top = y + layout.border.top;
+    let padding_bottom = (y + layout.size.height - layout.border.bottom).max(padding_top);
+    (padding_top, padding_bottom)
   } else {
     (y - UNBOUNDED, y + layout.size.height + UNBOUNDED)
   };
@@ -792,12 +794,9 @@ fn emit_side_pattern(
   let (mx0, my0) = map(x0, y0);
   let (mx1, my1) = map(x1, y1);
   let data = format!("M{mx0} {my0}L{mx1} {my1}");
-  let (dash, gap) = (3.0 * width, 2.0 * width);
-  let (dasharray, linecap) = match style {
-    BorderStyle::Dotted => (format!("0 {gap}"), Some("round")),
-    _ => (format!("{dash} {gap}"), None),
-  };
-  doc.stroke_path(&data, Rgba(color.0), width, Some(&dasharray), linecap)
+  let length = ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt();
+  let (dasharray, linecap) = dash_attrs(width, style, length, false);
+  doc.stroke_path(&data, Rgba(color.0), width, dasharray.as_deref(), linecap)
 }
 
 /// Emits the CSS `outline` as a ring around the border-box, expanded outward by
@@ -887,12 +886,36 @@ fn emit_stroked_border(
     return Ok(());
   }
   let data = centerline_path(border, width / 2.0, matrix, size);
-  let (dash, gap) = (3.0 * width, 2.0 * width);
-  let (dasharray, linecap) = match style {
-    BorderStyle::Dotted => (format!("0 {gap}"), Some("round")),
-    _ => (format!("{dash} {gap}"), None),
+  let half = width / 2.0;
+  let mut center = *border;
+  center.expand_by(Rect {
+    top: -half,
+    right: -half,
+    bottom: -half,
+    left: -half,
+  });
+  let center_size = Size {
+    width: (size.width - width).max(0.0),
+    height: (size.height - width).max(0.0),
   };
-  doc.stroke_path(&data, Rgba(color.0), width, Some(&dasharray), linecap)
+  let perimeter = center.approximate_rounded_rect_perimeter(center_size);
+  let (dasharray, linecap) = dash_attrs(width, style, perimeter, true);
+  doc.stroke_path(&data, Rgba(color.0), width, dasharray.as_deref(), linecap)
+}
+
+/// SVG `stroke-dasharray`/`stroke-linecap` for a `dashed`/`dotted` border or
+/// outline, computed from the shared [`border_dash_pattern`] so the intervals
+/// match the raster backend.
+fn dash_attrs(
+  width: f32,
+  style: BorderStyle,
+  length: f32,
+  closed: bool,
+) -> (Option<String>, Option<&'static str>) {
+  match border_dash_pattern(width, style, length, closed) {
+    Some(([dash, gap], round_cap)) => (Some(format!("{dash} {gap}")), round_cap.then_some("round")),
+    None => (None, None),
+  }
 }
 
 /// Approximates a uniform `double` border as two thin rings (outer third + inner
