@@ -4,6 +4,7 @@ use parley::{
   BreakReason, IndentOptions, InlineBox, InlineBoxKind, Line, LineMetrics, PositionedInlineBox,
   PositionedLayoutItem, TextStyle, YieldData,
 };
+use skrifa::FontRef;
 use taffy::{AvailableSpace, Layout, Rect, Size};
 
 use crate::{
@@ -19,6 +20,7 @@ use crate::{
     },
     tree::RenderNode,
   },
+  resources::font::{FontError, ResolvedGlyph},
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
     make_balanced_text, make_pretty_text,
@@ -1387,6 +1389,86 @@ pub fn resolve_inline_max_height(
       (font_style.parent.text_overflow == TextOverflow::Ellipsis)
         .then_some(MaxHeight::Absolute(content_box_height))
     })
+}
+
+/// One resolved glyph positioned for vector emission. The `transform` is in
+/// content-box-relative pixel space (`[a, b, c, d, e, f]`, SVG `matrix` order),
+/// ready to feed [`ResolvedOutlineGlyph::to_svg_path_data`].
+pub struct PositionedGlyph {
+  /// The resolved glyph (outline or bitmap).
+  pub glyph: ResolvedGlyph,
+  /// Affine transform mapping the glyph's local outline into content-box space.
+  pub transform: [f32; 6],
+  /// The run's fill color, already resolved against `current-color`.
+  pub color: Color,
+}
+
+/// Resolves every glyph in `built` into [`PositionedGlyph`]s for a vector
+/// backend. Mirrors the raster glyph-positioning walk (line metrics, baseline
+/// shift, text-fit line scaling) but emits backend-agnostic transforms instead
+/// of rasterizing. Coordinates are relative to the content-box origin.
+pub fn resolve_positioned_glyphs(
+  built: &BuiltInlineLayout<'_, '_>,
+  context: &RenderContext,
+  content_width: f32,
+) -> Result<Vec<PositionedGlyph>, FontError> {
+  let BuiltInlineLayout {
+    layout,
+    spans,
+    line_scales,
+    ..
+  } = built;
+  let parent_font_metrics = get_parent_font_metrics(layout);
+  let line_metrics = resolve_inline_line_metrics(layout, spans, parent_font_metrics, line_scales);
+
+  let mut out = Vec::new();
+  for (line_index, line) in layout.lines().enumerate() {
+    let metrics = line_metrics[line_index];
+    let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
+    let (origin_x, alignment_correction) =
+      text_fit_line_alignment_correction(&line, line_scale, content_width);
+    let baseline_shift = metrics.baseline_shift;
+    let mut static_inline_prefix = 0.0_f32;
+
+    for item in line.items() {
+      match item {
+        PositionedLayoutItem::GlyphRun(glyph_run) => {
+          let run = glyph_run.run();
+          let font = FontRef::from_index(run.font().data.as_ref(), run.font().index)
+            .map_err(|_| FontError::InvalidFontIndex)?;
+          let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
+          let resolved = context
+            .global
+            .font_context
+            .resolve_glyphs(&glyph_run, font, glyph_ids);
+          let color = glyph_run.style().brush.color;
+          let x_correction = static_inline_prefix * (1.0 - line_scale) + alignment_correction;
+
+          for glyph in glyph_run.positioned_glyphs() {
+            let Some(resolved_glyph) = resolved.get(&glyph.id) else {
+              continue;
+            };
+            let gx = glyph.x;
+            let gy = glyph.y + baseline_shift;
+            // Line-scale about the baseline origin, then place the glyph.
+            let tx = x_correction + origin_x + (gx - origin_x) * line_scale;
+            let ty = metrics.resolved_baseline + (gy - metrics.resolved_baseline) * line_scale;
+            out.push(PositionedGlyph {
+              glyph: resolved_glyph.clone(),
+              transform: [line_scale, 0.0, 0.0, line_scale, tx, ty],
+              color,
+            });
+          }
+        }
+        PositionedLayoutItem::InlineBox(inline_box) if inline_box.kind == InlineBoxKind::InFlow => {
+          static_inline_prefix += inline_box.width;
+        }
+        PositionedLayoutItem::InlineBox(_) => {}
+      }
+    }
+  }
+
+  Ok(out)
 }
 
 pub fn create_inline_constraint(

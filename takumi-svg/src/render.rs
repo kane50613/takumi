@@ -22,6 +22,7 @@ use crate::box_model::{
 };
 use crate::gradient::emit_background_images;
 use crate::image::emit_image;
+use crate::text::emit_text;
 use crate::{IDENTITY, Rgba, SvgDocument};
 
 /// Renders a node tree to a vector SVG string.
@@ -142,8 +143,8 @@ fn emit_node(
     })
     .transpose()?;
 
-  if let Some(NodeKind::Image(image)) = node.node.as_ref().map(|n| &n.kind) {
-    emit_image(
+  match node.node.as_ref().map(|n| &n.kind) {
+    Some(NodeKind::Image(image)) => emit_image(
       image,
       &node.context,
       parent_x + layout.content_box_x(),
@@ -151,7 +152,17 @@ fn emit_node(
       layout.content_box_width(),
       layout.content_box_height(),
       doc,
-    )?;
+    )?,
+    Some(NodeKind::Text(text)) => emit_text(
+      text,
+      &node.context,
+      parent_x + layout.content_box_x(),
+      parent_y + layout.content_box_y(),
+      layout.content_box_width(),
+      layout.content_box_height(),
+      doc,
+    )?,
+    _ => {}
   }
 
   if let Ok(children) = results.box_children(node_id)

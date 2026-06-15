@@ -30,6 +30,7 @@ mod box_model;
 mod gradient;
 mod image;
 mod render;
+mod text;
 pub use render::render_svg;
 
 use std::io;
