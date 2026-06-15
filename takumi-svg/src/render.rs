@@ -75,6 +75,8 @@ fn emit_node(
     doc.rect(x, y, width, height, Rgba(background.0));
   }
 
+  emit_borders(node, layout, x, y, width, height, doc);
+
   if let Ok(children) = results.box_children(node_id)
     && let Some(child_nodes) = node.children.as_deref()
   {
@@ -87,6 +89,74 @@ fn emit_node(
 
   if let Some(group) = group {
     doc.end_group(group);
+  }
+}
+
+/// Emits each visible border side as a filled trapezoid path (straight edges;
+/// border-radius is approximated as square corners for now).
+fn emit_borders(
+  node: &RenderNode,
+  layout: &taffy::Layout,
+  x: f32,
+  y: f32,
+  w: f32,
+  h: f32,
+  doc: &mut SvgDocument,
+) {
+  let b = layout.border;
+  let cc = node.context.current_color;
+  let style = &node.context.style;
+  let (r, t, l, bo) = (x + w, y, x, y + h);
+  let sides = [
+    (
+      b.top,
+      style.border_top_color.resolve(cc),
+      format!(
+        "M{x} {y} L{r} {y} L{} {} L{} {} Z",
+        r - b.right,
+        y + b.top,
+        l + b.left,
+        y + b.top
+      ),
+    ),
+    (
+      b.right,
+      style.border_right_color.resolve(cc),
+      format!(
+        "M{r} {t} L{r} {bo} L{} {} L{} {} Z",
+        r - b.right,
+        bo - b.bottom,
+        r - b.right,
+        t + b.top
+      ),
+    ),
+    (
+      b.bottom,
+      style.border_bottom_color.resolve(cc),
+      format!(
+        "M{r} {bo} L{l} {bo} L{} {} L{} {} Z",
+        l + b.left,
+        bo - b.bottom,
+        r - b.right,
+        bo - b.bottom
+      ),
+    ),
+    (
+      b.left,
+      style.border_left_color.resolve(cc),
+      format!(
+        "M{l} {bo} L{l} {t} L{} {} L{} {} Z",
+        l + b.left,
+        t + b.top,
+        l + b.left,
+        bo - b.bottom
+      ),
+    ),
+  ];
+  for (width, color, d) in sides {
+    if width > 0.0 && color.0[3] != 0 {
+      doc.path(&d, Rgba(color.0));
+    }
   }
 }
 
