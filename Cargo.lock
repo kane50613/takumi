@@ -2020,7 +2020,6 @@ dependencies = [
  "serde_json",
  "skrifa",
  "smallvec",
- "svgtypes",
  "taffy",
  "takumi-css",
  "thiserror",
@@ -2086,11 +2085,8 @@ dependencies = [
  "svgtypes",
  "taffy",
  "takumi-core",
- "takumi-css",
- "thiserror",
  "tiny-skia",
  "typed-builder",
- "xxhash-rust",
 ]
 
 [[package]]
