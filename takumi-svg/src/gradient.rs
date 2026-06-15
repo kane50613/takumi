@@ -1,28 +1,80 @@
-//! CSS gradient → SVG paint emission.
+//! CSS gradient / background-image → SVG paint emission.
 //!
 //! Linear and radial gradients map onto native `<linearGradient>` /
 //! `<radialGradient>` (stops resolved with the same logic the raster backend
 //! uses, so geometry and stop placement match). Conic gradients have no SVG 1.1
 //! construct, so they are approximated by a fan of solid-color wedge `<path>`s
-//! sampled from the gradient's color LUT and clipped to the box.
+//! sampled from the gradient's color LUT and clipped to the tile.
+//!
+//! `background-size`/`background-position`/`background-repeat` are resolved with
+//! the same logic the raster backend uses ([`BackgroundSize::resolve`] and the
+//! tile-position collectors), producing a tile rectangle and a list of tile
+//! origins. A single tile is painted directly; tiling repeats are emitted as an
+//! SVG `<pattern>` filling the box.
 
 use std::f32::consts::TAU;
 use std::io;
 
+use taffy::Size;
 use takumi_core::context::RenderContext;
+use takumi_core::layout::node::resolve_image;
 use takumi_core::layout::style::{
-  BackgroundImage, ConicGradient, ConicGradientTile, LinearGradient, LinearGradientTile,
-  RadialGradient, RadialGradientTile, ResolvedGradientStop, resolve_stops_along_axis,
+  BackgroundImage, BackgroundPosition, BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize,
+  ColorInterpolationMethod, ConicGradient, ConicGradientTile, IntrinsicSizing, Length,
+  LinearGradient, LinearGradientTile, PositionComponent, RadialGradient, RadialGradientTile,
+  ResolvedGradientStop, SizingContext, build_color_lut_with_interpolation,
+  resolve_stops_along_axis,
 };
 
+use crate::image::{data_url_for_url, preserve_aspect_none};
 use crate::{GradientStop, IDENTITY, Rgba, SvgDocument};
 
 const CONIC_WEDGES: usize = 180;
 
-/// Emits every background gradient for a node, painted bottom-up (CSS lists the
-/// topmost layer first, so the slice is walked in reverse).
+/// A resolved background/mask layer: the per-tile rect and the tile origins on
+/// each axis (the cartesian product gives every tile placement).
+struct LayerPlacement {
+  tile_w: f32,
+  tile_h: f32,
+  xs: Vec<f32>,
+  ys: Vec<f32>,
+}
+
+/// Emits every background gradient/image for a node, painted bottom-up (CSS lists
+/// the topmost layer first, so the slice is walked in reverse). `background-size`,
+/// `-position`, and `-repeat` are honored per layer (cycling the last value when
+/// shorter than the image list, matching the raster backend).
 pub(crate) fn emit_background_images(
   images: &[BackgroundImage],
+  context: &RenderContext,
+  x: f32,
+  y: f32,
+  w: f32,
+  h: f32,
+  doc: &mut SvgDocument,
+) -> io::Result<()> {
+  emit_image_layers(
+    images,
+    &context.style.background_size,
+    &context.style.background_position,
+    &context.style.background_repeat,
+    context,
+    x,
+    y,
+    w,
+    h,
+    doc,
+  )
+}
+
+/// Emits a list of background/mask image layers honoring per-layer size/position/
+/// repeat. Shared by `background-image` and `mask-image`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn emit_image_layers(
+  images: &[BackgroundImage],
+  sizes: &[BackgroundSize],
+  positions: &[BackgroundPosition],
+  repeats: &[BackgroundRepeat],
   context: &RenderContext,
   x: f32,
   y: f32,
@@ -33,15 +85,296 @@ pub(crate) fn emit_background_images(
   if w <= 0.0 || h <= 0.0 {
     return Ok(());
   }
-  for image in images.iter().rev() {
-    match image {
-      BackgroundImage::Linear(gradient) => emit_linear(gradient, context, x, y, w, h, doc)?,
-      BackgroundImage::Radial(gradient) => emit_radial(gradient, context, x, y, w, h, doc)?,
-      BackgroundImage::Conic(gradient) => emit_conic(gradient, context, x, y, w, h, doc)?,
-      BackgroundImage::Url(_) | BackgroundImage::None => {}
+  let last_size = sizes.last().copied().unwrap_or_default();
+  let last_position = positions.last().copied().unwrap_or_default();
+  let last_repeat = repeats.last().copied().unwrap_or_default();
+
+  for (index, image) in images.iter().enumerate().rev() {
+    if matches!(image, BackgroundImage::None) {
+      continue;
+    }
+    let size = sizes.get(index).copied().unwrap_or(last_size);
+    let position = positions.get(index).copied().unwrap_or(last_position);
+    let repeat = repeats.get(index).copied().unwrap_or(last_repeat);
+    emit_layer(image, size, position, repeat, context, x, y, w, h, doc)?;
+  }
+  Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_layer(
+  image: &BackgroundImage,
+  size: BackgroundSize,
+  position: BackgroundPosition,
+  repeat: BackgroundRepeat,
+  context: &RenderContext,
+  x: f32,
+  y: f32,
+  w: f32,
+  h: f32,
+  doc: &mut SvgDocument,
+) -> io::Result<()> {
+  let placement = resolve_placement(image, size, position, repeat, context, w, h);
+  let Some(placement) = placement else {
+    return Ok(());
+  };
+  if placement.tile_w <= 0.0 || placement.tile_h <= 0.0 {
+    return Ok(());
+  }
+
+  // A single tile filling the box at the origin is the common case (no-repeat or
+  // an exact fit); paint it directly. Otherwise tile via a <pattern>.
+  if placement.xs.len() == 1 && placement.ys.len() == 1 {
+    let tx = x + placement.xs[0];
+    let ty = y + placement.ys[0];
+    return emit_tile(
+      image,
+      context,
+      tx,
+      ty,
+      placement.tile_w,
+      placement.tile_h,
+      doc,
+    );
+  }
+
+  emit_tiled_pattern(image, context, x, y, w, h, &placement, doc)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_tiled_pattern(
+  image: &BackgroundImage,
+  context: &RenderContext,
+  x: f32,
+  y: f32,
+  w: f32,
+  h: f32,
+  placement: &LayerPlacement,
+  doc: &mut SvgDocument,
+) -> io::Result<()> {
+  // When tiles are evenly spaced on both axes, one <pattern> cell tiles them.
+  // Otherwise (space/no-repeat on one axis) emit the explicit tile grid.
+  let even_x = is_even_step(&placement.xs, placement.tile_w);
+  let even_y = is_even_step(&placement.ys, placement.tile_h);
+  if let (Some(step_x), Some(step_y)) = (even_x, even_y) {
+    let origin_x = x + placement.xs[0];
+    let origin_y = y + placement.ys[0];
+    let (token, paint) = doc.begin_pattern(origin_x, origin_y, step_x, step_y)?;
+    emit_tile(
+      image,
+      context,
+      0.0,
+      0.0,
+      placement.tile_w,
+      placement.tile_h,
+      doc,
+    )?;
+    doc.end_pattern(token)?;
+    return doc.rect_paint(x, y, w, h, &paint);
+  }
+
+  for &ty in &placement.ys {
+    for &tx in &placement.xs {
+      emit_tile(
+        image,
+        context,
+        x + tx,
+        y + ty,
+        placement.tile_w,
+        placement.tile_h,
+        doc,
+      )?;
     }
   }
   Ok(())
+}
+
+/// Returns the uniform step between positions (tile size when there is a single
+/// tile) if the positions are equally spaced, else `None`.
+fn is_even_step(positions: &[f32], tile_size: f32) -> Option<f32> {
+  match positions {
+    [] => None,
+    [_] => Some(tile_size),
+    [first, second, ..] => {
+      let step = second - first;
+      positions
+        .windows(2)
+        .all(|w| (w[1] - w[0] - step).abs() < 0.5)
+        .then_some(step)
+    }
+  }
+}
+
+/// Resolves a layer's tile size and per-axis tile origins (box-relative).
+fn resolve_placement(
+  image: &BackgroundImage,
+  size: BackgroundSize,
+  position: BackgroundPosition,
+  repeat: BackgroundRepeat,
+  context: &RenderContext,
+  w: f32,
+  h: f32,
+) -> Option<LayerPlacement> {
+  let area = Size {
+    width: w.round().max(0.0) as u32,
+    height: h.round().max(0.0) as u32,
+  };
+  let intrinsic = intrinsic_sizing(image, context);
+  let resolved = size.resolve(area, &context.sizing, intrinsic);
+  let tile_w = resolved.width as f32;
+  let tile_h = resolved.height as f32;
+  if tile_w <= 0.0 || tile_h <= 0.0 {
+    return None;
+  }
+
+  let (xs, tile_w) = resolve_axis(repeat.0, position.0.x, tile_w, area.width, &context.sizing);
+  let (ys, tile_h) = resolve_axis(repeat.1, position.0.y, tile_h, area.height, &context.sizing);
+
+  Some(LayerPlacement {
+    tile_w,
+    tile_h,
+    xs,
+    ys,
+  })
+}
+
+/// Resolves one axis' tile positions and (for `round`) adjusted tile size,
+/// mirroring the raster backend's `resolve_axis_tiles`.
+fn resolve_axis(
+  repeat: BackgroundRepeatStyle,
+  component: PositionComponent,
+  tile_size: f32,
+  area_size: u32,
+  sizing: &SizingContext,
+) -> (Vec<f32>, f32) {
+  let tile = tile_size.round().max(0.0) as u32;
+  match repeat {
+    BackgroundRepeatStyle::NoRepeat => {
+      let origin = resolve_position(component, tile, area_size, sizing);
+      (vec![origin as f32], tile_size)
+    }
+    BackgroundRepeatStyle::Repeat => {
+      let origin = resolve_position(component, tile, area_size, sizing);
+      let positions = collect_repeat(area_size, tile, origin);
+      (positions, tile_size)
+    }
+    BackgroundRepeatStyle::Space => {
+      let positions = collect_spaced(area_size, tile);
+      (positions, tile_size)
+    }
+    BackgroundRepeatStyle::Round => {
+      let (positions, new_tile) = collect_round(area_size, tile);
+      (positions, new_tile as f32)
+    }
+  }
+}
+
+/// `position% → (area − tile) × %`; lengths/keywords resolve against the
+/// available space. Mirrors the raster backend's position resolution.
+fn resolve_position(
+  component: PositionComponent,
+  tile_size: u32,
+  area_size: u32,
+  sizing: &SizingContext,
+) -> i32 {
+  let available = (area_size as i32).saturating_sub_unsigned(tile_size);
+  let length = Length::from(component);
+  match length {
+    Length::Auto => available / 2,
+    _ => length.to_px(sizing, available as f32) as i32,
+  }
+}
+
+fn collect_repeat(area_size: u32, tile_size: u32, origin: i32) -> Vec<f32> {
+  if tile_size == 0 {
+    return Vec::new();
+  }
+  let mut start = origin;
+  if start > 0 {
+    let n = ((start as f32) / tile_size as f32).ceil() as i32;
+    start -= n * tile_size as i32;
+  }
+  let mut positions = Vec::new();
+  let mut x = start;
+  while x < area_size as i32 {
+    positions.push(x as f32);
+    x += tile_size as i32;
+  }
+  positions
+}
+
+fn collect_spaced(area_size: u32, tile_size: u32) -> Vec<f32> {
+  if tile_size == 0 {
+    return Vec::new();
+  }
+  let count = area_size / tile_size;
+  if count <= 1 {
+    return vec![((area_size as i32 - tile_size as i32) / 2) as f32];
+  }
+  let gap = (area_size - count * tile_size) / (count - 1);
+  let step = (tile_size + gap) as i32;
+  (0..count as i32).map(|i| (i * step) as f32).collect()
+}
+
+fn collect_round(area_size: u32, tile_size: u32) -> (Vec<f32>, u32) {
+  if tile_size == 0 || area_size == 0 {
+    return (Vec::new(), tile_size);
+  }
+  let count = (area_size as f32 / tile_size as f32).max(1.0) as u32;
+  let new_tile = (area_size as f32 / count as f32) as u32;
+  let positions = (0..count as i32)
+    .map(|i| (i * new_tile as i32) as f32)
+    .collect();
+  (positions, new_tile)
+}
+
+fn intrinsic_sizing(image: &BackgroundImage, context: &RenderContext) -> IntrinsicSizing {
+  let BackgroundImage::Url(url) = image else {
+    return IntrinsicSizing::default();
+  };
+  match resolve_image(url, context) {
+    Ok(source) => source.intrinsic_sizing(&context.sizing),
+    Err(_) => IntrinsicSizing::default(),
+  }
+}
+
+/// Paints one tile of a layer into the rect `(tx, ty, tile_w, tile_h)`.
+fn emit_tile(
+  image: &BackgroundImage,
+  context: &RenderContext,
+  tx: f32,
+  ty: f32,
+  tile_w: f32,
+  tile_h: f32,
+  doc: &mut SvgDocument,
+) -> io::Result<()> {
+  match image {
+    BackgroundImage::Linear(gradient) => {
+      emit_linear(gradient, context, tx, ty, tile_w, tile_h, doc)
+    }
+    BackgroundImage::Radial(gradient) => {
+      emit_radial(gradient, context, tx, ty, tile_w, tile_h, doc)
+    }
+    BackgroundImage::Conic(gradient) => emit_conic(gradient, context, tx, ty, tile_w, tile_h, doc),
+    BackgroundImage::Url(url) => emit_url(url, context, tx, ty, tile_w, tile_h, doc),
+    BackgroundImage::None => Ok(()),
+  }
+}
+
+fn emit_url(
+  url: &str,
+  context: &RenderContext,
+  tx: f32,
+  ty: f32,
+  tile_w: f32,
+  tile_h: f32,
+  doc: &mut SvgDocument,
+) -> io::Result<()> {
+  let Some(href) = data_url_for_url(url, context) else {
+    return Ok(());
+  };
+  // The tile rect is already sized for the layer, so stretch the image to fill it.
+  doc.image(tx, ty, tile_w, tile_h, &href, Some(preserve_aspect_none()))
 }
 
 fn svg_stops(stops: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<GradientStop> {
@@ -51,6 +384,42 @@ fn svg_stops(stops: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<Gradie
     .map(|stop| GradientStop {
       offset: ((stop.position - base) / span).clamp(0.0, 1.0),
       color: Rgba(stop.color.0),
+    })
+    .collect()
+}
+
+/// Number of stops sampled from the gradient color LUT for vector emission.
+const GRADIENT_LUT_STOPS: usize = 64;
+
+/// Builds dense SVG gradient stops by sampling takumi's interpolated color LUT,
+/// baking the gradient's interpolation color space (e.g. OKLCH) into evenly-spaced
+/// sRGB stops. SVG only interpolates between stops in sRGB, so sampling the LUT is
+/// how the vector output matches the raster backend for non-sRGB interpolation.
+fn lut_svg_stops(
+  resolved: &[ResolvedGradientStop],
+  axis_length: f32,
+  interpolation: ColorInterpolationMethod,
+) -> Vec<GradientStop> {
+  let lut = build_color_lut_with_interpolation(
+    resolved,
+    axis_length.max(1e-6),
+    GRADIENT_LUT_STOPS,
+    interpolation.color_space,
+    interpolation.hue_direction,
+  );
+  if lut.len() <= 1 {
+    return svg_stops(resolved, 0.0, axis_length);
+  }
+  let denominator = (lut.len() - 1) as f32;
+  lut
+    .iter()
+    .enumerate()
+    .map(|(index, premultiplied)| {
+      let color = premultiplied.demultiply();
+      GradientStop {
+        offset: index as f32 / denominator,
+        color: Rgba([color.red(), color.green(), color.blue(), color.alpha()]),
+      }
     })
     .collect()
 }
@@ -99,7 +468,11 @@ fn emit_linear(
     (0.0, tile.axis_length, 0.0, tile.axis_length)
   };
 
-  let stops = svg_stops(&resolved, base, span);
+  let stops = if gradient.repeating {
+    svg_stops(&resolved, base, span)
+  } else {
+    lut_svg_stops(&resolved, tile.axis_length, gradient.interpolation)
+  };
   let paint = doc.linear_gradient(point_at(t0), point_at(t1), gradient.repeating, &stops)?;
   doc.rect_paint(x, y, w, h, &paint)
 }
@@ -144,7 +517,11 @@ fn emit_radial(
     (radius_y / tile.radius_scale.max(1e-6)).max(1e-6),
   );
 
-  let stops = svg_stops(&resolved, base, span);
+  let stops = if gradient.repeating {
+    svg_stops(&resolved, base, span)
+  } else {
+    lut_svg_stops(&resolved, tile.radius_scale, gradient.interpolation)
+  };
   let paint = doc.radial_gradient(
     (x + tile.cx, y + tile.cy),
     r,

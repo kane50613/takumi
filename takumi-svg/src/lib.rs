@@ -48,6 +48,10 @@ impl Rgba {
 /// SVG `matrix(a b c d e f)` via [`matrix_attr`].
 pub(crate) use takumi_core::layout::style::Affine;
 
+use taffy::Size;
+use takumi_core::layout::style::{Color, Filter, SizingContext};
+use takumi_core::shadow::SizedShadow;
+
 pub(crate) const IDENTITY: Affine = Affine::IDENTITY;
 
 /// A single stop in a gradient.
@@ -168,6 +172,20 @@ impl SvgDocument {
     )
   }
 
+  /// Appends a filled path using the even-odd fill rule (for ring shapes such as
+  /// rounded borders: an outer subpath with an inner subpath punched out).
+  pub(crate) fn path_evenodd(&mut self, data: &str, fill: Rgba) -> io::Result<()> {
+    self.empty(
+      "path",
+      &[
+        ("d", data.into()),
+        ("fill", fill.hex().into()),
+        ("fill-opacity", num(fill.opacity()).into()),
+        ("fill-rule", "evenodd".into()),
+      ],
+    )
+  }
+
   /// Defines a linear gradient and returns its `url(#id)` reference. When
   /// `repeating` is set the stops tile beyond their range (`spreadMethod`).
   pub(crate) fn linear_gradient(
@@ -254,12 +272,88 @@ impl SvgDocument {
 
   /// Defines a clip path from SVG path data and returns its `url(#id)`.
   pub(crate) fn clip_path(&mut self, data: &str) -> io::Result<String> {
+    self.clip_path_impl(data, false)
+  }
+
+  /// Like [`SvgDocument::clip_path`] but with the even-odd clip rule, for ring
+  /// shapes (an outer subpath with an inner subpath punched out).
+  pub(crate) fn clip_path_evenodd(&mut self, data: &str) -> io::Result<String> {
+    self.clip_path_impl(data, true)
+  }
+
+  fn clip_path_impl(&mut self, data: &str, even_odd: bool) -> io::Result<String> {
     let id = self.alloc_id("cp");
     let reference = format!("url(#{id})");
     self.open("clipPath", &[("id", id.into())])?;
-    self.empty("path", &[("d", data.into())])?;
+    let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![("d", data.into())];
+    if even_odd {
+      attrs.push(("clip-rule", "evenodd".into()));
+    }
+    self.empty("path", &attrs)?;
     self.close("clipPath")?;
     Ok(reference)
+  }
+
+  /// Opens a `<mask>` in user space (`maskUnits="userSpaceOnUse"`) and returns the
+  /// open token plus its `url(#id)` reference. Content emitted before
+  /// [`SvgDocument::end_mask`] is the mask source; CSS `mask-image` defaults to
+  /// alpha masking, so `mask-type="alpha"` is set (the mask's alpha attenuates the
+  /// masked element rather than its luminance).
+  pub(crate) fn begin_mask(&mut self) -> io::Result<(GroupToken, String)> {
+    let id = self.alloc_id("mk");
+    let reference = format!("url(#{id})");
+    self.open(
+      "mask",
+      &[
+        ("id", id.into()),
+        ("maskUnits", "userSpaceOnUse".into()),
+        ("style", "mask-type:alpha".into()),
+      ],
+    )?;
+    Ok((GroupToken(()), reference))
+  }
+
+  /// Closes the most recently opened mask.
+  pub(crate) fn end_mask(&mut self, _token: GroupToken) -> io::Result<()> {
+    self.close("mask")
+  }
+
+  /// Opens a `<g mask="url(#id)">` and returns its token.
+  pub(crate) fn begin_masked_group(&mut self, mask: &str) -> io::Result<GroupToken> {
+    self.open("g", &[("mask", mask.into())])?;
+    Ok(GroupToken(()))
+  }
+
+  /// Opens a `<pattern>` tile in user space at `(x, y)` with the given tile size
+  /// and returns the open token plus its `url(#id)` reference. Content emitted
+  /// before [`SvgDocument::end_pattern`] becomes one tile; fill a rect with the
+  /// returned reference to tile it across the box.
+  pub(crate) fn begin_pattern(
+    &mut self,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+  ) -> io::Result<(GroupToken, String)> {
+    let id = self.alloc_id("pat");
+    let reference = format!("url(#{id})");
+    self.open(
+      "pattern",
+      &[
+        ("id", id.into()),
+        ("patternUnits", "userSpaceOnUse".into()),
+        ("x", num(x).into()),
+        ("y", num(y).into()),
+        ("width", num(width).into()),
+        ("height", num(height).into()),
+      ],
+    )?;
+    Ok((GroupToken(()), reference))
+  }
+
+  /// Closes the most recently opened pattern.
+  pub(crate) fn end_pattern(&mut self, _token: GroupToken) -> io::Result<()> {
+    self.close("pattern")
   }
 
   /// Appends a raster image referenced by a `data:` URL href. This is legitimate
@@ -314,22 +408,35 @@ impl SvgDocument {
     Ok(GroupToken(()))
   }
 
+  /// Opens a `<g>` carrying a `mix-blend-mode` so the wrapped subtree composites
+  /// against its backdrop. Returns a token for [`SvgDocument::end_group`].
+  pub(crate) fn begin_blend_group(&mut self, mix_blend_mode: &str) -> io::Result<GroupToken> {
+    self.open(
+      "g",
+      &[("style", format!("mix-blend-mode:{mix_blend_mode}").into())],
+    )?;
+    Ok(GroupToken(()))
+  }
+
   /// Appends a filled path with an optional stroke (for `-webkit-text-stroke`).
+  /// The stroke is `(color, width, line-join)`; raster joins miter/round/bevel,
+  /// so emitting `stroke-linejoin` avoids miter spikes on glyph corners.
   pub(crate) fn glyph_path(
     &mut self,
     data: &str,
     fill: Rgba,
-    stroke: Option<(Rgba, f32)>,
+    stroke: Option<(Rgba, f32, &str)>,
   ) -> io::Result<()> {
     let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![
       ("d", data.into()),
       ("fill", fill.hex().into()),
       ("fill-opacity", num(fill.opacity()).into()),
     ];
-    if let Some((color, width)) = stroke {
+    if let Some((color, width, line_join)) = stroke {
       attrs.push(("stroke", color.hex().into()));
       attrs.push(("stroke-opacity", num(color.opacity()).into()));
       attrs.push(("stroke-width", num(width).into()));
+      attrs.push(("stroke-linejoin", line_join.into()));
     }
     self.empty("path", &attrs)
   }
@@ -345,6 +452,276 @@ impl SvgDocument {
     )?;
     self.close("filter")?;
     Ok(reference)
+  }
+
+  /// Defines a CSS `filter` chain as an SVG `<filter>` and returns its
+  /// `url(#id)` (or `None` if the list is empty). Primitives are chained with
+  /// `result="fN"`/`in="f(N-1)"`; the region is widened so blur/shadow are not
+  /// clipped. `size` is the element's border-box size, the resolution basis for
+  /// `drop-shadow` lengths (mirroring the raster backend).
+  pub(crate) fn filter(
+    &mut self,
+    filters: &[Filter],
+    sizing: &SizingContext,
+    current_color: Color,
+    size: Size<f32>,
+  ) -> io::Result<Option<String>> {
+    if filters.is_empty() {
+      return Ok(None);
+    }
+    let id = self.alloc_id("ft");
+    let reference = format!("url(#{id})");
+    self.open(
+      "filter",
+      &[
+        ("id", id.into()),
+        ("x", "-50%".into()),
+        ("y", "-50%".into()),
+        ("width", "200%".into()),
+        ("height", "200%".into()),
+        ("color-interpolation-filters", "sRGB".into()),
+      ],
+    )?;
+
+    let mut prev: Cow<'_, str> = "SourceGraphic".into();
+    for (index, filter) in filters.iter().enumerate() {
+      let result = format!("f{index}");
+      self.filter_primitive(filter, &prev, &result, sizing, current_color, size)?;
+      prev = result.into();
+    }
+    self.close("filter")?;
+    Ok(Some(reference))
+  }
+
+  fn filter_primitive(
+    &mut self,
+    filter: &Filter,
+    input: &str,
+    result: &str,
+    sizing: &SizingContext,
+    current_color: Color,
+    size: Size<f32>,
+  ) -> io::Result<()> {
+    match filter {
+      Filter::Blur(length) => self.empty(
+        "feGaussianBlur",
+        &[
+          ("in", input.into()),
+          ("stdDeviation", num(length.to_px(sizing, 1.0)).into()),
+          ("result", result.into()),
+        ],
+      ),
+      Filter::Brightness(v) => self.component_transfer_rgb(
+        input,
+        result,
+        &[("type", "linear".into()), ("slope", num(v.0).into())],
+      ),
+      Filter::Contrast(v) => self.component_transfer_rgb(
+        input,
+        result,
+        &[
+          ("type", "linear".into()),
+          ("slope", num(v.0).into()),
+          ("intercept", num(0.5 * (1.0 - v.0)).into()),
+        ],
+      ),
+      Filter::Grayscale(amount) => {
+        let a = amount.0.clamp(0.0, 1.0);
+        let m = grayscale_matrix(a);
+        self.color_matrix(input, result, &m)
+      }
+      Filter::Saturate(v) => self.empty(
+        "feColorMatrix",
+        &[
+          ("in", input.into()),
+          ("type", "saturate".into()),
+          ("values", num(v.0).into()),
+          ("result", result.into()),
+        ],
+      ),
+      Filter::HueRotate(angle) => self.empty(
+        "feColorMatrix",
+        &[
+          ("in", input.into()),
+          ("type", "hueRotate".into()),
+          ("values", num((**angle as i32) as f32).into()),
+          ("result", result.into()),
+        ],
+      ),
+      Filter::Invert(amount) => {
+        let a = amount.0.clamp(0.0, 1.0);
+        self.component_transfer_rgb(
+          input,
+          result,
+          &[
+            ("type", "table".into()),
+            ("tableValues", format!("{} {}", num(a), num(1.0 - a)).into()),
+          ],
+        )
+      }
+      Filter::Sepia(amount) => {
+        let a = amount.0.clamp(0.0, 1.0);
+        let m = sepia_matrix(a);
+        self.color_matrix(input, result, &m)
+      }
+      Filter::Opacity(v) => {
+        self.open(
+          "feComponentTransfer",
+          &[("in", input.into()), ("result", result.into())],
+        )?;
+        self.empty(
+          "feFuncA",
+          &[("type", "linear".into()), ("slope", num(v.0).into())],
+        )?;
+        self.close("feComponentTransfer")
+      }
+      Filter::DropShadow(shadow) => {
+        let resolved = SizedShadow::from_text_shadow(*shadow, sizing, current_color, size);
+        let color = Rgba(resolved.color.0);
+        self.empty(
+          "feGaussianBlur",
+          &[
+            ("in", "SourceAlpha".into()),
+            ("stdDeviation", num(resolved.blur_radius).into()),
+            ("result", "dsb".into()),
+          ],
+        )?;
+        self.empty(
+          "feOffset",
+          &[
+            ("in", "dsb".into()),
+            ("dx", num(resolved.offset_x).into()),
+            ("dy", num(resolved.offset_y).into()),
+            ("result", "dso".into()),
+          ],
+        )?;
+        self.empty(
+          "feFlood",
+          &[
+            ("flood-color", color.hex().into()),
+            ("flood-opacity", num(color.opacity()).into()),
+            ("result", "dsc".into()),
+          ],
+        )?;
+        self.empty(
+          "feComposite",
+          &[
+            ("in", "dsc".into()),
+            ("in2", "dso".into()),
+            ("operator", "in".into()),
+            ("result", "dss".into()),
+          ],
+        )?;
+        self.open("feMerge", &[("result", result.into())])?;
+        self.empty("feMergeNode", &[("in", "dss".into())])?;
+        self.empty("feMergeNode", &[("in", input.into())])?;
+        self.close("feMerge")
+      }
+    }
+  }
+
+  fn component_transfer_rgb(
+    &mut self,
+    input: &str,
+    result: &str,
+    func_attrs: &[(&str, Cow<'_, str>)],
+  ) -> io::Result<()> {
+    self.open(
+      "feComponentTransfer",
+      &[("in", input.into()), ("result", result.into())],
+    )?;
+    for func in ["feFuncR", "feFuncG", "feFuncB"] {
+      self.empty(func, func_attrs)?;
+    }
+    self.close("feComponentTransfer")
+  }
+
+  fn color_matrix(&mut self, input: &str, result: &str, matrix: &[f32; 20]) -> io::Result<()> {
+    let mut values = String::new();
+    for (i, value) in matrix.iter().enumerate() {
+      if i > 0 {
+        values.push(' ');
+      }
+      values.push_str(&num(*value));
+    }
+    self.empty(
+      "feColorMatrix",
+      &[
+        ("in", input.into()),
+        ("type", "matrix".into()),
+        ("values", values.into()),
+        ("result", result.into()),
+      ],
+    )
+  }
+
+  /// Defines a `<clipPath>` from raw SVG path data with an optional transform,
+  /// and returns its `url(#id)`. Used for `clip-path: path(...)` whose data is in
+  /// box-local coordinates.
+  pub(crate) fn clip_path_transformed(
+    &mut self,
+    data: &str,
+    even_odd: bool,
+    transform: Option<&str>,
+  ) -> io::Result<String> {
+    let id = self.alloc_id("cp");
+    let reference = format!("url(#{id})");
+    self.open("clipPath", &[("id", id.into())])?;
+    let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![("d", data.into())];
+    if even_odd {
+      attrs.push(("clip-rule", "evenodd".into()));
+    }
+    if let Some(transform) = transform {
+      attrs.push(("transform", transform.into()));
+    }
+    self.empty("path", &attrs)?;
+    self.close("clipPath")?;
+    Ok(reference)
+  }
+
+  /// Defines an elliptical `<clipPath>` and returns its `url(#id)`.
+  pub(crate) fn clip_ellipse(&mut self, cx: f32, cy: f32, rx: f32, ry: f32) -> io::Result<String> {
+    let id = self.alloc_id("cp");
+    let reference = format!("url(#{id})");
+    self.open("clipPath", &[("id", id.into())])?;
+    self.empty(
+      "ellipse",
+      &[
+        ("cx", num(cx).into()),
+        ("cy", num(cy).into()),
+        ("rx", num(rx).into()),
+        ("ry", num(ry).into()),
+      ],
+    )?;
+    self.close("clipPath")?;
+    Ok(reference)
+  }
+
+  /// Strokes an open/closed path (for dashed/dotted borders). `dasharray` and
+  /// `linecap` are optional.
+  #[allow(clippy::too_many_arguments)]
+  pub(crate) fn stroke_path(
+    &mut self,
+    data: &str,
+    stroke: Rgba,
+    width: f32,
+    dasharray: Option<&str>,
+    linecap: Option<&str>,
+  ) -> io::Result<()> {
+    let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![
+      ("d", data.into()),
+      ("fill", "none".into()),
+      ("stroke", stroke.hex().into()),
+      ("stroke-opacity", num(stroke.opacity()).into()),
+      ("stroke-width", num(width).into()),
+    ];
+    if let Some(dasharray) = dasharray {
+      attrs.push(("stroke-dasharray", dasharray.into()));
+    }
+    if let Some(linecap) = linecap {
+      attrs.push(("stroke-linecap", linecap.into()));
+    }
+    self.empty("path", &attrs)
   }
 
   /// Closes the most recently opened group.
@@ -374,6 +751,57 @@ fn matrix_attr(transform: Affine) -> String {
     num(e),
     num(f)
   )
+}
+
+/// CSS `grayscale(a)` color matrix (spec form: identity lerped toward the luma
+/// projection by `a`). Matches the raster backend's luma-lerp.
+fn grayscale_matrix(a: f32) -> [f32; 20] {
+  let (lr, lg, lb) = (0.2126, 0.7152, 0.0722);
+  let r0 = 1.0 - a + a * lr;
+  let g_to_r = a * lg;
+  let b_to_r = a * lb;
+  let r_to_g = a * lr;
+  let g0 = 1.0 - a + a * lg;
+  let b_to_g = a * lb;
+  let r_to_b = a * lr;
+  let g_to_b = a * lg;
+  let b0 = 1.0 - a + a * lb;
+  [
+    r0, g_to_r, b_to_r, 0.0, 0.0, //
+    r_to_g, g0, b_to_g, 0.0, 0.0, //
+    r_to_b, g_to_b, b0, 0.0, 0.0, //
+    0.0, 0.0, 0.0, 1.0, 0.0,
+  ]
+}
+
+/// CSS `sepia(a)` color matrix (spec form: identity lerped toward the sepia
+/// projection by `a`). Matches the raster backend's per-channel sepia lerp.
+fn sepia_matrix(a: f32) -> [f32; 20] {
+  let lerp = |to: f32, idx_diag: bool| {
+    if idx_diag { 1.0 - a + a * to } else { a * to }
+  };
+  [
+    lerp(0.393, true),
+    lerp(0.769, false),
+    lerp(0.189, false),
+    0.0,
+    0.0, //
+    lerp(0.349, false),
+    lerp(0.686, true),
+    lerp(0.168, false),
+    0.0,
+    0.0, //
+    lerp(0.272, false),
+    lerp(0.534, false),
+    lerp(0.131, true),
+    0.0,
+    0.0, //
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+  ]
 }
 
 fn num(value: f32) -> String {

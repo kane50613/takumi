@@ -1,97 +1,53 @@
-//! Box-model geometry shared by the node walk: border-radius resolution,
-//! rounded-rect path data, the element's affine transform, and overflow clipping.
+//! Box-model geometry helpers for the node walk: the element's affine transform,
+//! overflow clipping predicate, and serialization of takumi-core path commands to
+//! SVG path `d` data. The rounded-rect / border-radius geometry itself is reused
+//! from takumi-core's [`BorderProperties`] (the same geometry the raster backend
+//! rasterizes), not reimplemented here.
 
 use taffy::Size;
 use takumi_core::context::RenderContext;
-use takumi_core::layout::style::{
-  Affine, ComputedStyle, LengthDefaultsToZero, Overflow, SizingContext, SpacePair,
-};
-
-/// Per-corner `[rx, ry]` radii in `[top-left, top-right, bottom-right, bottom-left]`
-/// order.
-pub(crate) type Radii = [[f32; 2]; 4];
-
-/// Resolves the four border-radius corners against the box, then clamps them so
-/// adjacent radii never overlap (CSS Backgrounds §5.5).
-pub(crate) fn resolved_radii(
-  style: &ComputedStyle,
-  sizing: &SizingContext,
-  w: f32,
-  h: f32,
-) -> Radii {
-  let corner =
-    |pair: SpacePair<LengthDefaultsToZero>| [pair.x.to_px(sizing, w), pair.y.to_px(sizing, h)];
-  let mut radii = [
-    corner(style.border_top_left_radius),
-    corner(style.border_top_right_radius),
-    corner(style.border_bottom_right_radius),
-    corner(style.border_bottom_left_radius),
-  ];
-
-  let [tl, tr, br, bl] = radii;
-  let factor = [
-    (w, tl[0] + tr[0]),
-    (w, bl[0] + br[0]),
-    (h, tl[1] + bl[1]),
-    (h, tr[1] + br[1]),
-  ]
-  .into_iter()
-  .map(|(extent, sum)| {
-    if sum > 0.0 {
-      extent / sum
-    } else {
-      f32::INFINITY
-    }
-  })
-  .fold(1.0_f32, f32::min);
-
-  if factor < 1.0 {
-    for corner in &mut radii {
-      corner[0] *= factor;
-      corner[1] *= factor;
-    }
-  }
-  radii
-}
-
-pub(crate) fn has_radius(radii: &Radii) -> bool {
-  radii.iter().any(|c| c[0] > 0.0 || c[1] > 0.0)
-}
-
-/// Builds SVG path data for a rounded rectangle. Zero-radius corners degrade to
-/// straight lines (an `A` with `rx`/`ry` of 0 is a line per the SVG spec).
-pub(crate) fn rounded_rect_path(x: f32, y: f32, w: f32, h: f32, r: Radii) -> String {
-  let [tl, tr, br, bl] = r;
-  format!(
-    "M{} {} H{} A{} {} 0 0 1 {} {} V{} A{} {} 0 0 1 {} {} H{} A{} {} 0 0 1 {} {} V{} A{} {} 0 0 1 {} {} Z",
-    x + tl[0],
-    y,
-    x + w - tr[0],
-    tr[0],
-    tr[1],
-    x + w,
-    y + tr[1],
-    y + h - br[1],
-    br[0],
-    br[1],
-    x + w - br[0],
-    y + h,
-    x + bl[0],
-    bl[0],
-    bl[1],
-    x,
-    y + h - bl[1],
-    y + tl[1],
-    tl[0],
-    tl[1],
-    x + tl[0],
-    y,
-  )
-}
+use takumi_core::layout::style::{Affine, ComputedStyle, Overflow};
+use tiny_skia::{PathSegment, Point};
 
 /// Whether the element clips overflowing content on either axis.
 pub(crate) fn clips_overflow(style: &ComputedStyle) -> bool {
   style.overflow_x != Overflow::Visible || style.overflow_y != Overflow::Visible
+}
+
+/// Serializes takumi-core path commands ([`tiny_skia::PathSegment`], the shared
+/// `Command` type) to SVG path `d` data, applying `transform` (`[a, b, c, d, e, f]`,
+/// SVG `matrix` order) to every point. Shared by glyph, border, background, and
+/// clip emission.
+pub(crate) fn path_data(commands: &[PathSegment], [a, b, c, d, e, f]: [f32; 6]) -> String {
+  use std::fmt::Write as _;
+
+  let mut out = String::new();
+  let map = |p: Point| (a * p.x + c * p.y + e, b * p.x + d * p.y + f);
+  for command in commands {
+    match command {
+      PathSegment::MoveTo(p) => {
+        let (x, y) = map(*p);
+        let _ = write!(out, "M{x} {y}");
+      }
+      PathSegment::LineTo(p) => {
+        let (x, y) = map(*p);
+        let _ = write!(out, "L{x} {y}");
+      }
+      PathSegment::QuadTo(c0, p) => {
+        let (x0, y0) = map(*c0);
+        let (x, y) = map(*p);
+        let _ = write!(out, "Q{x0} {y0} {x} {y}");
+      }
+      PathSegment::CubicTo(c0, c1, p) => {
+        let (x0, y0) = map(*c0);
+        let (x1, y1) = map(*c1);
+        let (x, y) = map(*p);
+        let _ = write!(out, "C{x0} {y0} {x1} {y1} {x} {y}");
+      }
+      PathSegment::Close => out.push('Z'),
+    }
+  }
+  out
 }
 
 /// Computes the element's paint transform as an absolute-space matrix (the walk

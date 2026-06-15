@@ -9,11 +9,34 @@ use std::io;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use takumi_core::context::RenderContext;
-use takumi_core::layout::node::{ImageData, ImageSourceInput};
-use takumi_core::layout::style::ObjectFit;
+use takumi_core::layout::node::{ImageData, ImageSourceInput, resolve_image};
+use takumi_core::layout::style::{Length, ObjectFit, PositionComponent};
 use takumi_core::resources::image::ImageSource;
 
 use crate::SvgDocument;
+
+/// `preserveAspectRatio="none"` (stretch to fit), used when the destination rect
+/// already carries the desired size.
+pub(crate) fn preserve_aspect_none() -> &'static str {
+  "none"
+}
+
+/// Resolves a `background-image: url(...)` reference to a `data:` URL, or `None`
+/// if it cannot be resolved (usually no resource map was supplied).
+pub(crate) fn data_url_for_url(url: &str, context: &RenderContext) -> Option<String> {
+  resolve_image(url, context)
+    .ok()
+    .and_then(|s| loaded_data_url(&s))
+}
+
+/// Resolves one `object-position` axis to a destination offset within
+/// `available` space, mirroring the raster backend's `resolve_object_position_axis`.
+fn position_axis(component: PositionComponent, context: &RenderContext, available: f32) -> f32 {
+  match Length::from(component) {
+    Length::Auto => available * 0.5,
+    length => length.to_px(&context.sizing, available),
+  }
+}
 
 /// Emits an image node's content into the given content-box rectangle.
 pub(crate) fn emit_image(
@@ -31,34 +54,42 @@ pub(crate) fn emit_image(
   let Some(href) = data_url(&image.src, context) else {
     return Ok(());
   };
-  // `none`/`scale-down` need the intrinsic size; the others are expressible with
-  // `preserveAspectRatio` over the content box.
-  match context.style.object_fit {
-    ObjectFit::Fill => doc.image(x, y, w, h, &href, Some("none")),
-    ObjectFit::Cover => doc.image(x, y, w, h, &href, Some("xMidYMid slice")),
-    ObjectFit::Contain => doc.image(x, y, w, h, &href, Some("xMidYMid meet")),
-    fit @ (ObjectFit::None | ObjectFit::ScaleDown) => {
-      let Some((iw, ih)) = intrinsic_size(&image.src, context) else {
-        return doc.image(x, y, w, h, &href, Some("xMidYMid meet"));
-      };
-      // `scale-down` = the smaller of the intrinsic size and a contain fit.
-      let scale = if matches!(fit, ObjectFit::ScaleDown) {
-        (w / iw).min(h / ih).min(1.0)
-      } else {
-        1.0
-      };
-      let (dw, dh) = (iw * scale, ih * scale);
-      // Centered (object-position defaults to 50% 50%).
-      doc.image(
-        x + (w - dw) / 2.0,
-        y + (h - dh) / 2.0,
-        dw,
-        dh,
-        &href,
-        Some("none"),
-      )
-    }
+  let position = context.style.object_position;
+
+  // `fill` stretches; all others position a scaled image by `object-position`.
+  if matches!(context.style.object_fit, ObjectFit::Fill) {
+    return doc.image(x, y, w, h, &href, Some("none"));
   }
+
+  let Some((iw, ih)) = intrinsic_size(&image.src, context) else {
+    return doc.image(x, y, w, h, &href, Some("xMidYMid meet"));
+  };
+
+  // The scaled image size for each fit. `cover` may exceed the content box (and is
+  // cropped); the others fit within it.
+  let scale = match context.style.object_fit {
+    ObjectFit::Fill => 1.0,
+    ObjectFit::Contain => (w / iw).min(h / ih),
+    ObjectFit::Cover => (w / iw).max(h / ih),
+    ObjectFit::None => 1.0,
+    ObjectFit::ScaleDown => (w / iw).min(h / ih).min(1.0),
+  };
+  let (dw, dh) = (iw * scale, ih * scale);
+
+  // `object-position` resolves against the leftover/overflow space on each axis.
+  let off_x = position_axis(position.0.x, context, w - dw);
+  let off_y = position_axis(position.0.y, context, h - dh);
+  let (ix, iy) = (x + off_x, y + off_y);
+
+  // When the image overflows the content box (cover, or none with a large image),
+  // clip it to the box; otherwise draw it directly at the computed rect.
+  if dw > w + 0.5 || dh > h + 0.5 {
+    let clip = doc.clip_path(&format!("M{x} {y} H{} V{} H{x} Z", x + w, y + h))?;
+    let group = doc.begin_group(crate::IDENTITY, 1.0, Some(&clip), None)?;
+    doc.image(ix, iy, dw, dh, &href, Some(preserve_aspect_none()))?;
+    return doc.end_group(group);
+  }
+  doc.image(ix, iy, dw, dh, &href, Some(preserve_aspect_none()))
 }
 
 fn intrinsic_size(src: &ImageSourceInput, context: &RenderContext) -> Option<(f32, f32)> {
