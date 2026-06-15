@@ -11,7 +11,7 @@ use crate::{
   resources::image::{ImageResourceError, ImageResult, ImageSource, is_svg_like},
 };
 
-pub(crate) fn image_resource_url(image: &ImageData) -> Option<&str> {
+pub fn image_resource_url(image: &ImageData) -> Option<&str> {
   match &image.src {
     ImageSourceInput::Url(src) if src.starts_with("https://") || src.starts_with("http://") => {
       Some(src.as_ref())
@@ -20,7 +20,7 @@ pub(crate) fn image_resource_url(image: &ImageData) -> Option<&str> {
   }
 }
 
-pub(crate) fn take_image_style_layers(
+pub fn take_image_style_layers(
   node: &mut Node,
   width: Option<f32>,
   height: Option<f32>,
@@ -44,11 +44,11 @@ pub(crate) fn take_image_style_layers(
   }
 }
 
-pub(crate) fn image_inline_content(kind: &NodeKind) -> Option<InlineContentKind<'_>> {
+pub fn image_inline_content(kind: &NodeKind) -> Option<InlineContentKind<'_>> {
   matches!(kind, NodeKind::Image(_)).then_some(InlineContentKind::Box)
 }
 
-pub(crate) fn measure_image_node(
+pub fn measure_image_node(
   image: &ImageData,
   context: &RenderContext,
   available_space: Size<AvailableSpace>,
@@ -174,7 +174,7 @@ fn parse_data_uri_image(src: &str) -> ImageResult {
   ImageSource::from_bytes(&data)
 }
 
-pub(crate) fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
+pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
   if src.starts_with(DATA_URI_PREFIX) {
     return parse_data_uri_image(src);
   }

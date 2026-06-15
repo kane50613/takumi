@@ -21,10 +21,10 @@ use crate::layout::{
   },
 };
 
-pub(crate) struct StyleArena<'a> {
+pub struct StyleArena<'a> {
   pub nodes: Vec<StyleNode<'a>>,
 }
-pub(crate) struct StyleNode<'a> {
+pub struct StyleNode<'a> {
   pub node: &'a Node,
   pub parent: Option<usize>,
   pub prev_sibling: Option<usize>,
@@ -32,7 +32,7 @@ pub(crate) struct StyleNode<'a> {
   pub first_child: Option<usize>,
 }
 #[derive(Clone, Copy)]
-pub(crate) struct ArenaElement<'a> {
+pub struct ArenaElement<'a> {
   pub tree: &'a StyleArena<'a>,
   pub index: usize,
 }
@@ -328,18 +328,18 @@ impl<'a> Element for ArenaElement<'a> {
 }
 
 #[derive(Debug, Default, Clone)]
-pub(crate) struct MatchedDeclarationsView<'a> {
-  pub(crate) normal: SmallVec<[&'a StyleDeclarationBlock; 4]>,
-  pub(crate) important: SmallVec<[&'a StyleDeclarationBlock; 4]>,
+pub struct MatchedDeclarationsView<'a> {
+  pub normal: SmallVec<[&'a StyleDeclarationBlock; 4]>,
+  pub important: SmallVec<[&'a StyleDeclarationBlock; 4]>,
 }
 
 /// Per-node matching result: the element's own declarations plus declarations
 /// for any matched `::before` / `::after` pseudo-elements.
 #[derive(Debug, Default, Clone)]
-pub(crate) struct NodeMatchedDeclarations<'a> {
-  pub(crate) element: MatchedDeclarationsView<'a>,
-  pub(crate) before: Option<MatchedDeclarationsView<'a>>,
-  pub(crate) after: Option<MatchedDeclarationsView<'a>>,
+pub struct NodeMatchedDeclarations<'a> {
+  pub element: MatchedDeclarationsView<'a>,
+  pub before: Option<MatchedDeclarationsView<'a>>,
+  pub after: Option<MatchedDeclarationsView<'a>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -358,7 +358,7 @@ enum SelectorTarget {
   After,
 }
 
-pub(crate) fn match_stylesheets_view<'a>(
+pub fn match_stylesheets_view<'a>(
   root: &Node,
   stylesheet: &'a StyleSheet,
   viewport: Viewport,

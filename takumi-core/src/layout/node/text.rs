@@ -13,11 +13,11 @@ use crate::{
   },
 };
 
-pub(crate) fn text_inline_content(text: &TextData) -> Option<InlineContentKind<'_>> {
+pub fn text_inline_content(text: &TextData) -> Option<InlineContentKind<'_>> {
   Some(InlineContentKind::Text(text.text.as_str().into()))
 }
 
-pub(crate) fn measure_text_node(
+pub fn measure_text_node(
   text: &TextData,
   context: &RenderContext,
   available_space: Size<AvailableSpace>,

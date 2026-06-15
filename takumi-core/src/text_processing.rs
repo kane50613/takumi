@@ -11,14 +11,14 @@ use crate::layout::{
 };
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum MaxHeight {
+pub enum MaxHeight {
   Absolute(f32),
   Lines(u32),
   HeightAndLines(f32, u32),
 }
 
 /// Applies text transform to the input text.
-pub(crate) fn apply_text_transform<'a>(input: &'a str, transform: TextTransform) -> Cow<'a, str> {
+pub fn apply_text_transform<'a>(input: &'a str, transform: TextTransform) -> Cow<'a, str> {
   match transform {
     TextTransform::None => Cow::Borrowed(input),
     TextTransform::Uppercase => Cow::Owned(input.to_uppercase()),
@@ -45,7 +45,7 @@ pub(crate) fn apply_text_transform<'a>(input: &'a str, transform: TextTransform)
 }
 
 /// Applies whitespace collapse rules to the input text according to `WhiteSpaceCollapse`.
-pub(crate) fn apply_white_space_collapse<'a>(
+pub fn apply_white_space_collapse<'a>(
   input: &'a str,
   collapse: WhiteSpaceCollapse,
   previous_collapsible_space: &mut bool,
@@ -149,16 +149,16 @@ fn count_emergency_line_breaks(layout: &InlineLayout) -> usize {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct RebreakOptions {
-  pub(crate) max_width: f32,
-  pub(crate) max_height: Option<MaxHeight>,
-  pub(crate) line_height_hint: f32,
-  pub(crate) text_wrap_mode: TextWrapMode,
+pub struct RebreakOptions {
+  pub max_width: f32,
+  pub max_height: Option<MaxHeight>,
+  pub line_height_hint: f32,
+  pub text_wrap_mode: TextWrapMode,
 }
 
 /// Use binary search to find the minimum width that maintains the same number of lines.
 /// Returns `true` if a meaningful adjustment was made.
-pub(crate) fn make_balanced_text(
+pub fn make_balanced_text(
   inline_layout: &mut InlineLayout,
   options: RebreakOptions,
   target_lines: usize,
@@ -246,7 +246,7 @@ pub(crate) fn make_balanced_text(
 
 /// Attempts to avoid orphans (single short words on the last line) by adjusting line breaks.
 /// Returns `true` if a meaningful adjustment was made.
-pub(crate) fn make_pretty_text(
+pub fn make_pretty_text(
   inline_layout: &mut InlineLayout,
   options: RebreakOptions,
   spans: &[ProcessedInlineSpan<'_, '_>],

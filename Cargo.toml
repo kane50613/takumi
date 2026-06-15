@@ -2,6 +2,8 @@
 resolver = "3"
 members = [
   "takumi",
+  "takumi-core",
+  "takumi-paint",
   "takumi-css",
   "takumi-svg",
   "takumi-server",

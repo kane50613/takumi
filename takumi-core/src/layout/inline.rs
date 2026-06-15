@@ -25,40 +25,40 @@ use crate::{
   },
 };
 
-pub(crate) struct InlineLayoutRequest<'c, 'g> {
-  pub(crate) items: Vec<InlineItem<'c, 'g>>,
-  pub(crate) available_space: Size<AvailableSpace>,
-  pub(crate) max_width: f32,
-  pub(crate) max_height: Option<MaxHeight>,
-  pub(crate) style: &'c SizedFontStyle<'c>,
-  pub(crate) global: &'g GlobalContext,
-  pub(crate) mode: InlineLayoutMode,
+pub struct InlineLayoutRequest<'c, 'g> {
+  pub items: Vec<InlineItem<'c, 'g>>,
+  pub available_space: Size<AvailableSpace>,
+  pub max_width: f32,
+  pub max_height: Option<MaxHeight>,
+  pub style: &'c SizedFontStyle<'c>,
+  pub global: &'g GlobalContext,
+  pub mode: InlineLayoutMode,
 }
 
-pub(crate) struct BuiltInlineLayout<'c, 'g> {
-  pub(crate) layout: InlineLayout,
-  pub(crate) text: String,
-  pub(crate) spans: Vec<ProcessedInlineSpan<'c, 'g>>,
-  pub(crate) custom_inline_boxes: Vec<PositionedInlineBox>,
-  pub(crate) line_scales: Vec<f32>,
+pub struct BuiltInlineLayout<'c, 'g> {
+  pub layout: InlineLayout,
+  pub text: String,
+  pub spans: Vec<ProcessedInlineSpan<'c, 'g>>,
+  pub custom_inline_boxes: Vec<PositionedInlineBox>,
+  pub line_scales: Vec<f32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum InlineLayoutMode {
+pub enum InlineLayoutMode {
   Measure,
   Draw,
 }
 
-pub(crate) struct InlineBoxItem<'c, 'g> {
-  pub(crate) render_node: &'c RenderNode<'g>,
-  pub(crate) inline_box: InlineBox,
-  pub(crate) paint_width: f32,
-  pub(crate) paint_height: f32,
-  pub(crate) margin: Rect<f32>,
-  pub(crate) padding: Rect<f32>,
-  pub(crate) border: Rect<f32>,
-  pub(crate) baseline_offset: Option<f32>,
-  pub(crate) vertical_align: ResolvedVerticalAlign,
+pub struct InlineBoxItem<'c, 'g> {
+  pub render_node: &'c RenderNode<'g>,
+  pub inline_box: InlineBox,
+  pub paint_width: f32,
+  pub paint_height: f32,
+  pub margin: Rect<f32>,
+  pub padding: Rect<f32>,
+  pub border: Rect<f32>,
+  pub baseline_offset: Option<f32>,
+  pub vertical_align: ResolvedVerticalAlign,
 }
 
 impl From<&InlineBoxItem<'_, '_>> for Layout {
@@ -86,7 +86,7 @@ fn inline_box_kind(render_node: &RenderNode<'_>) -> InlineBoxKind {
   }
 }
 
-pub(crate) enum ProcessedInlineSpan<'c, 'g> {
+pub enum ProcessedInlineSpan<'c, 'g> {
   Text {
     span_id: u64,
     byte_range: Range<usize>,
@@ -96,7 +96,7 @@ pub(crate) enum ProcessedInlineSpan<'c, 'g> {
   Box(InlineBoxItem<'c, 'g>),
 }
 
-pub(crate) enum InlineItem<'c, 'g> {
+pub enum InlineItem<'c, 'g> {
   RenderNode {
     render_node: &'c RenderNode<'g>,
   },
@@ -106,7 +106,7 @@ pub(crate) enum InlineItem<'c, 'g> {
   },
 }
 
-pub(crate) fn collect_inline_items<'n, 'g>(root: &'n RenderNode<'g>) -> Vec<InlineItem<'n, 'g>> {
+pub fn collect_inline_items<'n, 'g>(root: &'n RenderNode<'g>) -> Vec<InlineItem<'n, 'g>> {
   let mut items = Vec::new();
   collect_inline_items_impl(root, 0, &mut items);
   items
@@ -146,7 +146,7 @@ fn collect_inline_items_impl<'n, 'g>(
   }
 }
 
-pub(crate) enum InlineContentKind<'c> {
+pub enum InlineContentKind<'c> {
   Text(Cow<'c, str>),
   Box,
 }
@@ -154,20 +154,20 @@ pub(crate) enum InlineContentKind<'c> {
 pub type InlineLayout = parley::Layout<InlineBrush>;
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct ParentFontMetrics {
-  pub(crate) x_height: Option<f32>,
-  pub(crate) text_metrics: (f32, f32),
+pub struct ParentFontMetrics {
+  pub x_height: Option<f32>,
+  pub text_metrics: (f32, f32),
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct InlineMeasureOptions {
-  pub(crate) max_width: f32,
-  pub(crate) ceil_width: bool,
-  pub(crate) parent_font_metrics: Option<ParentFontMetrics>,
+pub struct InlineMeasureOptions {
+  pub max_width: f32,
+  pub ceil_width: bool,
+  pub parent_font_metrics: Option<ParentFontMetrics>,
 }
 
 #[derive(Clone, PartialEq, Copy, Debug)]
-pub(crate) struct InlineBrush {
+pub struct InlineBrush {
   pub source_span_id: Option<u64>,
   pub opacity: f32,
   pub color: Color,
@@ -280,7 +280,7 @@ fn measure_ellipsis_width(
     .unwrap_or(0.0)
 }
 
-pub(crate) fn get_parent_font_metrics(layout: &InlineLayout) -> Option<ParentFontMetrics> {
+pub fn get_parent_font_metrics(layout: &InlineLayout) -> Option<ParentFontMetrics> {
   let run = layout.lines().find_map(|line| line.runs().next())?;
   let metrics = run.metrics();
   Some((metrics.x_height, metrics.ascent, metrics.descent)).map(|(x_height, ascent, descent)| {
@@ -292,15 +292,15 @@ pub(crate) fn get_parent_font_metrics(layout: &InlineLayout) -> Option<ParentFon
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct ResolvedLineMetrics {
-  pub(crate) resolved_ascent: f32,
-  pub(crate) resolved_descent: f32,
-  pub(crate) resolved_leading: f32,
-  pub(crate) resolved_line_height: f32,
-  pub(crate) resolved_baseline: f32,
-  pub(crate) resolved_line_top: f32,
-  pub(crate) resolved_line_bottom: f32,
-  pub(crate) baseline_shift: f32,
+pub struct ResolvedLineMetrics {
+  pub resolved_ascent: f32,
+  pub resolved_descent: f32,
+  pub resolved_leading: f32,
+  pub resolved_line_height: f32,
+  pub resolved_baseline: f32,
+  pub resolved_line_top: f32,
+  pub resolved_line_bottom: f32,
+  pub baseline_shift: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -545,7 +545,7 @@ fn parent_baseline_offset_for_box(
   top - (line.metrics().baseline - baseline_in_item)
 }
 
-pub(crate) fn effective_parent_x_height_for_line(
+pub fn effective_parent_x_height_for_line(
   line: &Line<'_, InlineBrush>,
   parent_font_metrics: Option<ParentFontMetrics>,
 ) -> Option<f32> {
@@ -564,7 +564,7 @@ pub(crate) fn effective_parent_x_height_for_line(
   (text_ascent_max > 0.0).then_some(text_ascent_max * 0.5)
 }
 
-pub(crate) fn effective_parent_text_metrics_for_line(
+pub fn effective_parent_text_metrics_for_line(
   line: &Line<'_, InlineBrush>,
   parent_font_metrics: Option<ParentFontMetrics>,
 ) -> Option<(f32, f32)> {
@@ -584,7 +584,7 @@ pub(crate) fn effective_parent_text_metrics_for_line(
   has_glyph.then_some((line.metrics().ascent, line.metrics().descent))
 }
 
-pub(crate) fn resolve_inline_line_metrics(
+pub fn resolve_inline_line_metrics(
   inline_layout: &InlineLayout,
   spans: &[ProcessedInlineSpan<'_, '_>],
   parent_font_metrics: Option<ParentFontMetrics>,
@@ -710,7 +710,7 @@ pub(crate) fn resolve_inline_line_metrics(
   result
 }
 
-pub(crate) fn resolved_line_metrics_for_apply(
+pub fn resolved_line_metrics_for_apply(
   line_metrics: &LineMetrics,
   resolved: ResolvedLineMetrics,
 ) -> LineMetrics {
@@ -726,14 +726,14 @@ pub(crate) fn resolved_line_metrics_for_apply(
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct ResolvedInlineLineState {
-  pub(crate) adjusted_metrics: LineMetrics,
-  pub(crate) baseline_shift: f32,
-  pub(crate) parent_x_height: Option<f32>,
-  pub(crate) parent_text_metrics: Option<(f32, f32)>,
+pub struct ResolvedInlineLineState {
+  pub adjusted_metrics: LineMetrics,
+  pub baseline_shift: f32,
+  pub parent_x_height: Option<f32>,
+  pub parent_text_metrics: Option<(f32, f32)>,
 }
 
-pub(crate) fn resolve_inline_line_states(
+pub fn resolve_inline_line_states(
   inline_layout: &InlineLayout,
   spans: &[ProcessedInlineSpan<'_, '_>],
   parent_font_metrics: Option<ParentFontMetrics>,
@@ -756,7 +756,7 @@ pub(crate) fn resolve_inline_line_states(
     .collect()
 }
 
-pub(crate) fn normalize_inline_box(
+pub fn normalize_inline_box(
   mut inline_box: PositionedInlineBox,
   line_state: ResolvedInlineLineState,
   spans: &[ProcessedInlineSpan<'_, '_>],
@@ -784,17 +784,17 @@ pub(crate) fn normalize_inline_box(
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct VisualInlineBox {
-  pub(crate) id: u64,
-  pub(crate) x: f32,
-  pub(crate) y: f32,
-  pub(crate) width: f32,
-  pub(crate) height: f32,
-  pub(crate) layout_x: f32,
-  pub(crate) layout_advance: f32,
+pub struct VisualInlineBox {
+  pub id: u64,
+  pub x: f32,
+  pub y: f32,
+  pub width: f32,
+  pub height: f32,
+  pub layout_x: f32,
+  pub layout_advance: f32,
 }
 
-pub(crate) fn resolve_visual_inline_box(
+pub fn resolve_visual_inline_box(
   inline_box: PositionedInlineBox,
   line_state: Option<ResolvedInlineLineState>,
   spans: &[ProcessedInlineSpan<'_, '_>],
@@ -949,7 +949,7 @@ fn apply_truncation_plan<'c, 'g>(
   }
 }
 
-pub(crate) fn measure_inline_layout(
+pub fn measure_inline_layout(
   layout: &mut InlineLayout,
   spans: &[ProcessedInlineSpan<'_, '_>],
   custom_inline_boxes: &[PositionedInlineBox],
@@ -1254,7 +1254,7 @@ fn text_fit_line_scales(layout: &InlineLayout, max_width: f32, style: &SizedFont
   result
 }
 
-pub(crate) fn text_fit_line_alignment_correction(
+pub fn text_fit_line_alignment_correction(
   line: &Line<'_, InlineBrush>,
   line_scale: f32,
   container_width: f32,
@@ -1286,7 +1286,7 @@ pub(crate) fn text_fit_line_alignment_correction(
   (line_start, aligned_line_start - line_start)
 }
 
-pub(crate) fn create_inline_layout<'c, 'g: 'c>(
+pub fn create_inline_layout<'c, 'g: 'c>(
   request: InlineLayoutRequest<'c, 'g>,
 ) -> BuiltInlineLayout<'c, 'g> {
   let InlineLayoutRequest {
@@ -1375,7 +1375,7 @@ pub(crate) fn create_inline_layout<'c, 'g: 'c>(
   built
 }
 
-pub(crate) fn resolve_inline_max_height(
+pub fn resolve_inline_max_height(
   font_style: &SizedFontStyle,
   content_box_height: f32,
 ) -> Option<MaxHeight> {
@@ -1389,7 +1389,7 @@ pub(crate) fn resolve_inline_max_height(
     })
 }
 
-pub(crate) fn create_inline_constraint(
+pub fn create_inline_constraint(
   context: &RenderContext,
   available_space: Size<AvailableSpace>,
   known_dimensions: Size<Option<f32>>,
@@ -1438,7 +1438,7 @@ pub(crate) fn create_inline_constraint(
   (width_constraint, max_height)
 }
 
-pub(crate) fn break_lines(
+pub fn break_lines(
   layout: &mut InlineLayout,
   max_width: f32,
   max_height: Option<MaxHeight>,

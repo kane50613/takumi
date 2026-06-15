@@ -2,10 +2,10 @@
   html_logo_url = "https://raw.githubusercontent.com/kane50613/takumi/master/assets/images/takumi.svg",
   html_favicon_url = "https://raw.githubusercontent.com/kane50613/takumi/master/assets/images/takumi.svg"
 )]
-#![deny(missing_docs, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-//! Takumi is a library with different parts to render UI component trees to images. This crate contains the core logic for layout and rendering.
-//!
-//! Checkout the [Quick Start](https://takumi.kane.tw/docs) if you are looking for napi-rs / WASM bindings.
+#![allow(missing_docs)]
+//! Takumi renders UI component trees to images. This crate is a thin facade that
+//! re-exports the backend-agnostic core ([`takumi-core`]) and the raster painting
+//! backend ([`takumi-paint`]) so existing `takumi::…` paths keep working.
 //!
 //! # Example
 //!
@@ -21,31 +21,24 @@
 //!   GlobalContext,
 //! };
 //!
-//! // Create a node tree with `Node::container` and `Node::text`
 //! let node = Node::container([Node::text("Hello, world!").with_style(
 //!   Style::default().with(StyleDeclaration::font_size(Px(32.0).into())),
 //! )]);
 //!
-//! // Create a context for storing resources, font caches.
-//! // You should reuse the context to speed up the rendering.
 //! let mut global = GlobalContext::default();
 //!
-//! // Load fonts
 //! global.font_context.load_and_store(
 //!   FontResource::new(include_bytes!("../../assets/fonts/geist/Geist[wght].woff2"))
 //! );
 //!
-//! // Create a viewport
 //! let viewport = Viewport::new((1200, 630));
 //!
-//! // Create render options
 //! let options = RenderOptions::builder()
 //!   .viewport(viewport)
 //!   .node(node)
 //!   .global(&global)
 //!   .build();
 //!
-//! // Render the layout to an `RgbaImage`
 //! let image = render(options).unwrap();
 //! ```
 //!
@@ -55,57 +48,11 @@
 //! - `woff`: Enable WOFF font support.
 //! - `svg`: Enable SVG support.
 //! - `rayon`: Enable rayon support.
-//!
-//! # Credits
-//!
-//! Takumi wouldn't be possible without the following works:
-//!
-//! - [taffy](https://github.com/DioxusLabs/taffy) for the flex & grid layout.
-//! - [image](https://github.com/image-rs/image) for the image processing.
-//! - [parley](https://github.com/linebender/parley) for text layout.
-//! - [skrifa](https://github.com/googlefonts/fontations/tree/main/skrifa) for glyph loading.
-//! - [wuff](https://github.com/nicoburns/wuff) for woff/woff2 decompression.
-//! - [resvg](https://github.com/linebender/resvg) for SVG parsing & rasterization.
 
-/// Layout related modules, including the node tree, style parsing, and layout calculation.
-pub mod layout;
+pub use takumi_core::{
+  Error, GlobalContext, Result, StyleSheetParseError, Xxh3HashSet, context, error, font_style,
+  keyframes, layout, resources, shadow, text_processing,
+};
 
-mod context;
-mod font_style;
-mod shadow;
-mod text_processing;
-
-/// Rendering related modules, including the image renderer, canvas operations.
-pub mod rendering;
-
-/// Error handling types and utilities.
-pub mod error;
-/// Shared deserializers for structured and shorthand keyframe inputs.
-pub use takumi_css::keyframes;
-/// External resource management (fonts, images)
-pub mod resources;
-
-use std::collections::HashSet;
-
-pub use error::{Error, Result, StyleSheetParseError};
-
-use typed_builder::TypedBuilder;
-use xxhash_rust::xxh3::Xxh3DefaultBuilder;
-
-use crate::resources::{font::FontContext, image::PersistentImageStore};
-
-/// The main context for image rendering.
-///
-/// This struct holds all the necessary state for rendering images, including
-/// font management, image storage, and debug options.
-#[derive(Default, TypedBuilder)]
-#[builder(field_defaults(default))]
-pub struct GlobalContext {
-  /// The font context for text rendering
-  pub font_context: FontContext,
-  /// The image store for persisting contents
-  pub persistent_image_store: PersistentImageStore,
-}
-
-/// Type alias for HashSet using XXH3 hasher
-pub(crate) type Xxh3HashSet<T> = HashSet<T, Xxh3DefaultBuilder>;
+/// Rendering: the image renderer, canvas operations, and output encoding.
+pub use takumi_paint::rendering;

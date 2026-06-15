@@ -27,7 +27,6 @@ pub type ImageResult = Result<ImageSource, ImageResourceError>;
 
 #[derive(Debug, Clone)]
 /// Represents the source of an image.
-#[non_exhaustive]
 pub enum ImageSource {
   /// An svg image source
   #[cfg(feature = "svg")]
@@ -47,7 +46,7 @@ pub struct SvgSource {
   /// Whether the SVG depends on currentColor and must be reparsed per render.
   uses_current_color: bool,
   /// Parsed SVG tree used for size and initial metadata.
-  pub(crate) tree: Arc<resvg::usvg::Tree>,
+  pub tree: Arc<resvg::usvg::Tree>,
   /// Intrinsic dimensions (non-percentage `width`/`height`) and `viewBox`
   /// aspect ratio, for CSS `background-size`/`mask-size` resolution.
   intrinsic: SvgIntrinsic,
@@ -99,7 +98,7 @@ impl GifSource {
     })
   }
 
-  pub(crate) fn frame_at_time(&self, time_ms: u64) -> &ImageBuffer {
+  pub fn frame_at_time(&self, time_ms: u64) -> &ImageBuffer {
     if self.total_duration_ms == 0 {
       return &self.frames[0].buffer;
     }
@@ -117,7 +116,7 @@ impl GifSource {
     &self.frames[0].buffer
   }
 
-  pub(crate) fn frame_at_time_arc(&self, time_ms: u64) -> Arc<ImageBuffer> {
+  pub fn frame_at_time_arc(&self, time_ms: u64) -> Arc<ImageBuffer> {
     if self.total_duration_ms == 0 {
       return self.frames[0].buffer.clone();
     }
@@ -145,7 +144,7 @@ impl From<SvgSource> for ImageSource {
 
 /// Image data prepared for layout rendering.
 #[derive(Debug, Clone)]
-pub(crate) enum RenderedImage<'a> {
+pub enum RenderedImage<'a> {
   /// A fully rasterized image, used for SVGs.
   Rasterized(Arc<ImageBuffer>),
   /// A borrowed bitmap that should be sampled directly.
@@ -368,7 +367,7 @@ impl ImageSource {
   ///
   /// Bitmap images are kept borrowed so the renderer can sample them directly.
   /// SVG images are rasterized to a bitmap first.
-  pub(crate) fn render_for_layout<'i>(
+  pub fn render_for_layout<'i>(
     &'i self,
     width: u32,
     height: u32,
@@ -441,7 +440,7 @@ impl ImageSource {
   }
 
   /// Get the image size in device pixels for the current sizing context.
-  pub(crate) fn size(&self, sizing: &SizingContext) -> (f32, f32) {
+  pub fn size(&self, sizing: &SizingContext) -> (f32, f32) {
     let (width, height) = match self {
       #[cfg(feature = "svg")]
       ImageSource::Svg(svg) => (svg.tree.size().width(), svg.tree.size().height()),
@@ -458,7 +457,7 @@ impl ImageSource {
 
   /// Intrinsic sizing for `background-size`/`mask-size` (§5.3). Bitmaps and GIFs
   /// have both dimensions; an SVG may have only a `viewBox` ratio.
-  pub(crate) fn intrinsic_sizing(&self, sizing: &SizingContext) -> IntrinsicSizing {
+  pub fn intrinsic_sizing(&self, sizing: &SizingContext) -> IntrinsicSizing {
     let dpr = sizing.viewport.device_pixel_ratio;
     match self {
       #[cfg(feature = "svg")]
@@ -479,7 +478,7 @@ impl ImageSource {
 }
 
 /// Check if the string looks like an SVG image.
-pub(crate) fn is_svg_like(src: &str) -> bool {
+pub fn is_svg_like(src: &str) -> bool {
   src.contains("<svg") && src.contains("xmlns")
 }
 

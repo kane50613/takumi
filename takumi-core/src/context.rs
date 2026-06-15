@@ -15,29 +15,29 @@ use crate::{
 
 /// The context for the internal rendering. You should not construct this directly.
 #[derive(Clone)]
-pub(crate) struct RenderContext<'g> {
+pub struct RenderContext<'g> {
   /// The global context.
-  pub(crate) global: &'g GlobalContext,
+  pub global: &'g GlobalContext,
   /// The scale factor for the image renderer.
-  pub(crate) transform: Affine,
+  pub transform: Affine,
   /// The sizing context.
-  pub(crate) sizing: SizingContext,
+  pub sizing: SizingContext,
   /// What the `currentColor` value is resolved to.
-  pub(crate) current_color: Color,
+  pub current_color: Color,
   /// The style after inheritance.
-  pub(crate) style: Box<ComputedStyle>,
+  pub style: Box<ComputedStyle>,
   /// The active time for animation sampling.
-  pub(crate) time: u64,
+  pub time: u64,
   /// Whether to draw debug borders.
-  pub(crate) draw_debug_border: bool,
+  pub draw_debug_border: bool,
   /// The resources fetched externally.
-  pub(crate) fetched_resources: HashMap<Arc<str>, ImageSource>,
+  pub fetched_resources: HashMap<Arc<str>, ImageSource>,
   /// The stylesheets to apply before layout/rendering.
-  pub(crate) stylesheet: Rc<StyleSheet>,
+  pub stylesheet: Rc<StyleSheet>,
 }
 
 impl<'g> RenderContext<'g> {
-  pub(crate) fn new(
+  pub fn new(
     global: &'g GlobalContext,
     viewport: Viewport,
     fetched_resources: HashMap<Arc<str>, ImageSource>,
@@ -66,12 +66,11 @@ impl<'g> RenderContext<'g> {
   }
 
   /// Internal, only used in tests.
-  #[cfg(test)]
-  pub(crate) fn new_test(global: &'g GlobalContext, viewport: Viewport) -> Self {
+  pub fn new_test(global: &'g GlobalContext, viewport: Viewport) -> Self {
     Self::new(global, viewport, Default::default(), Default::default(), 0)
   }
 
-  pub(crate) fn from_parent(
+  pub fn from_parent(
     parent: &Self,
     style: ComputedStyle,
     sizing: SizingContext,

@@ -1,9 +1,9 @@
 /// Node Tree
 pub mod node;
 
-pub(crate) mod inline;
-pub(crate) mod matching;
-pub(crate) mod tree;
+pub mod inline;
+pub mod matching;
+pub mod tree;
 
 /// CSS-like styling system with colors, units, and properties.
 ///

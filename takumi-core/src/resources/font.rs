@@ -43,21 +43,21 @@ fn pixmap_from_image_buffer(buffer: ImageBuffer) -> Option<Pixmap> {
 }
 
 #[derive(Clone)]
-pub(crate) enum ResolvedGlyph {
+pub enum ResolvedGlyph {
   Bitmap(ResolvedBitmapGlyph),
   Outline(ResolvedOutlineGlyph),
 }
 
 #[derive(Clone)]
-pub(crate) struct ResolvedBitmapGlyph {
-  pub(crate) pixmap: Pixmap,
-  pub(crate) scale_x: f32,
-  pub(crate) scale_y: f32,
-  pub(crate) placement: ResolvedGlyphPlacement,
+pub struct ResolvedBitmapGlyph {
+  pub pixmap: Pixmap,
+  pub scale_x: f32,
+  pub scale_y: f32,
+  pub placement: ResolvedGlyphPlacement,
 }
 
 impl ResolvedBitmapGlyph {
-  pub(crate) fn write_alpha_mask(&self, mask: &mut [u8]) {
+  pub fn write_alpha_mask(&self, mask: &mut [u8]) {
     let width = self.placement.width as usize;
     let height = self.placement.height as usize;
     if width == 0 || height == 0 {
@@ -105,7 +105,7 @@ impl ResolvedBitmapGlyph {
 }
 
 #[derive(Clone)]
-pub(crate) enum ResolvedOutlineGlyph {
+pub enum ResolvedOutlineGlyph {
   Plain {
     paths: Vec<Command>,
     embolden: Option<f32>,
@@ -119,28 +119,28 @@ pub(crate) enum ResolvedOutlineGlyph {
 }
 
 #[derive(Clone)]
-pub(crate) struct ResolvedColorLayer {
-  pub(crate) paths: Vec<Command>,
-  pub(crate) palette_index: u16,
-  pub(crate) alpha: f32,
+pub struct ResolvedColorLayer {
+  pub paths: Vec<Command>,
+  pub palette_index: u16,
+  pub alpha: f32,
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct ResolvedGlyphPlacement {
-  pub(crate) left: i32,
-  pub(crate) top: i32,
-  pub(crate) width: u32,
-  pub(crate) height: u32,
+pub struct ResolvedGlyphPlacement {
+  pub left: i32,
+  pub top: i32,
+  pub width: u32,
+  pub height: u32,
 }
 
 impl ResolvedOutlineGlyph {
-  pub(crate) fn paths(&self) -> &[Command] {
+  pub fn paths(&self) -> &[Command] {
     match self {
       Self::Plain { paths, .. } | Self::Color { paths, .. } => paths,
     }
   }
 
-  pub(crate) fn cache_signature(&self) -> u64 {
+  pub fn cache_signature(&self) -> u64 {
     match self {
       Self::Plain {
         cache_signature, ..
@@ -151,14 +151,14 @@ impl ResolvedOutlineGlyph {
     }
   }
 
-  pub(crate) fn embolden(&self) -> Option<f32> {
+  pub fn embolden(&self) -> Option<f32> {
     match self {
       Self::Plain { embolden, .. } => *embolden,
       Self::Color { .. } => None,
     }
   }
 
-  pub(crate) fn color_layers(&self) -> Option<&[ResolvedColorLayer]> {
+  pub fn color_layers(&self) -> Option<&[ResolvedColorLayer]> {
     match self {
       Self::Plain { .. } => None,
       Self::Color { layers, .. } => Some(layers),
@@ -169,7 +169,7 @@ impl ResolvedOutlineGlyph {
 /// Matches the typical faux-bold expansion used by text rasterizers.
 const SYNTHESIS_EMBOLDEN_FACTOR: f32 = 1.0 / 24.0;
 
-pub(crate) fn synthesis_embolden_strength(font_size: f32) -> f32 {
+pub fn synthesis_embolden_strength(font_size: f32) -> f32 {
   font_size * SYNTHESIS_EMBOLDEN_FACTOR
 }
 
@@ -703,7 +703,7 @@ impl FontContext {
     }
   }
 
-  pub(crate) fn resolve_glyphs(
+  pub fn resolve_glyphs(
     &self,
     run: &GlyphRun<'_, InlineBrush>,
     font_ref: FontRef,
@@ -786,7 +786,7 @@ impl FontContext {
   /// Line spacing (ascent + descent + leading) of the first available font
   /// matching the given families and attributes, scaled to `font_size`.
   /// Used as the `lh`/`rlh` basis when `line-height: normal`.
-  pub(crate) fn first_font_line_spacing<'a>(
+  pub fn first_font_line_spacing<'a>(
     &self,
     families: impl IntoIterator<Item = QueryFamily<'a>>,
     attributes: Attributes,
@@ -814,7 +814,7 @@ impl FontContext {
   }
 
   /// Create an inline layout with the given root style and function
-  pub(crate) fn tree_builder(
+  pub fn tree_builder(
     &self,
     root_style: TextStyle<'_, '_, InlineBrush>,
     func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),

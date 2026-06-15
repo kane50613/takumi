@@ -36,13 +36,13 @@ use parley::fontique::Attributes;
 /// when the child is out-of-flow and was re-parented to a containing block in
 /// the taffy tree; its geometry then resolves against that block.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct OrderedChild {
-  pub(crate) render_index: usize,
-  pub(crate) node_id: NodeId,
-  pub(crate) hoisted_cb: Option<NodeId>,
+pub struct OrderedChild {
+  pub render_index: usize,
+  pub node_id: NodeId,
+  pub hoisted_cb: Option<NodeId>,
 }
 
-pub(crate) struct LayoutResults {
+pub struct LayoutResults {
   nodes: Vec<LayoutResultNode>,
 }
 
@@ -53,11 +53,11 @@ struct LayoutResultNode {
 }
 
 impl LayoutResults {
-  pub(crate) const fn root_node_id(&self) -> NodeId {
+  pub const fn root_node_id(&self) -> NodeId {
     NodeId::new(0)
   }
 
-  pub(crate) fn layout(&self, node_id: NodeId) -> std::result::Result<&Layout, TaffyError> {
+  pub fn layout(&self, node_id: NodeId) -> std::result::Result<&Layout, TaffyError> {
     let idx: usize = node_id.into();
     self
       .nodes
@@ -66,10 +66,7 @@ impl LayoutResults {
       .ok_or(TaffyError::InvalidInputNode(node_id))
   }
 
-  pub(crate) fn box_children(
-    &self,
-    node_id: NodeId,
-  ) -> std::result::Result<&[OrderedChild], TaffyError> {
+  pub fn box_children(&self, node_id: NodeId) -> std::result::Result<&[OrderedChild], TaffyError> {
     let idx: usize = node_id.into();
     self
       .nodes
@@ -78,10 +75,7 @@ impl LayoutResults {
       .ok_or(TaffyError::InvalidInputNode(node_id))
   }
 
-  pub(crate) fn first_baseline_y(
-    &self,
-    node_id: NodeId,
-  ) -> std::result::Result<Option<f32>, TaffyError> {
+  pub fn first_baseline_y(&self, node_id: NodeId) -> std::result::Result<Option<f32>, TaffyError> {
     let idx: usize = node_id.into();
     self
       .nodes
@@ -91,7 +85,7 @@ impl LayoutResults {
   }
 }
 
-pub(crate) struct LayoutTree<'r, 'g> {
+pub struct LayoutTree<'r, 'g> {
   nodes: Vec<LayoutNodeState>,
   render_nodes: Vec<&'r RenderNode<'g>>,
 }
@@ -108,19 +102,19 @@ struct LayoutNodeState {
 }
 
 #[derive(Clone)]
-pub(crate) struct RenderNode<'g> {
-  pub(crate) context: RenderContext<'g>,
-  pub(crate) node: Option<Node>,
-  pub(crate) children: Option<Box<[RenderNode<'g>]>>,
-  pub(crate) layout_style_override: Option<Style>,
-  pub(crate) anonymous_text_content: Option<String>,
-  pub(crate) force_inline_layout: bool,
+pub struct RenderNode<'g> {
+  pub context: RenderContext<'g>,
+  pub node: Option<Node>,
+  pub children: Option<Box<[RenderNode<'g>]>>,
+  pub layout_style_override: Option<Style>,
+  pub anonymous_text_content: Option<String>,
+  pub force_inline_layout: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct AtomicInlineMetrics {
-  pub(crate) size: Size<f32>,
-  pub(crate) baseline_offset: Option<f32>,
+pub struct AtomicInlineMetrics {
+  pub size: Size<f32>,
+  pub baseline_offset: Option<f32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -430,7 +424,7 @@ fn push_layout_node<'r, 'g>(
 }
 
 impl<'r, 'g> LayoutTree<'r, 'g> {
-  pub(crate) fn from_render_node(render_root: &'r RenderNode<'g>) -> Self {
+  pub fn from_render_node(render_root: &'r RenderNode<'g>) -> Self {
     let mut nodes = Vec::with_capacity(1);
     let mut render_nodes = Vec::with_capacity(1);
     let root_id = push_layout_node(&mut nodes, &mut render_nodes, render_root);
@@ -443,17 +437,17 @@ impl<'r, 'g> LayoutTree<'r, 'g> {
     }
   }
 
-  pub(crate) fn root_node_id(&self) -> NodeId {
+  pub fn root_node_id(&self) -> NodeId {
     NodeId::from(0usize)
   }
 
-  pub(crate) fn compute_layout(&mut self, available_space: Size<AvailableSpace>) {
+  pub fn compute_layout(&mut self, available_space: Size<AvailableSpace>) {
     let root_node_id = self.root_node_id();
     compute_root_layout(self, root_node_id, available_space);
     round_layout(self, root_node_id);
   }
 
-  pub(crate) fn into_results(self) -> LayoutResults {
+  pub fn into_results(self) -> LayoutResults {
     LayoutResults {
       nodes: self
         .nodes
@@ -1039,7 +1033,7 @@ impl<'g> RenderNode<'g> {
       .is_some_and(Node::is_whitespace_only_text)
   }
 
-  pub(crate) fn has_anonymous_text_item_child(&self) -> bool {
+  pub fn has_anonymous_text_item_child(&self) -> bool {
     self
       .children
       .as_ref()
@@ -1678,10 +1672,7 @@ impl<'g> RenderNode<'g> {
     }
   }
 
-  pub(crate) fn measure_inline_box(
-    &self,
-    available_space: Size<AvailableSpace>,
-  ) -> AtomicInlineMetrics {
+  pub fn measure_inline_box(&self, available_space: Size<AvailableSpace>) -> AtomicInlineMetrics {
     if self.participates_as_inline_box() {
       return self.measure_atomic_subtree(available_space);
     }
@@ -1707,7 +1698,7 @@ impl<'g> RenderNode<'g> {
     }
   }
 
-  pub(crate) fn measure_atomic_subtree(
+  pub fn measure_atomic_subtree(
     &self,
     available_space: Size<AvailableSpace>,
   ) -> AtomicInlineMetrics {
@@ -1794,7 +1785,7 @@ impl<'g> RenderNode<'g> {
     }
   }
 
-  pub(crate) fn measure(
+  pub fn measure(
     &self,
     available_space: Size<AvailableSpace>,
     known_dimensions: Size<Option<f32>>,

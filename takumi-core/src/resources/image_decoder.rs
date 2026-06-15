@@ -18,21 +18,21 @@ use crate::resources::image_buffer::ImageBuffer;
 const PNG_SIGNATURE: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
 const JPEG_SIGNATURE: [u8; 3] = [0xFF, 0xD8, 0xFF];
 
-pub(crate) struct DecodedGifFrame {
-  pub(crate) buffer: Arc<ImageBuffer>,
-  pub(crate) duration_ms: u32,
+pub struct DecodedGifFrame {
+  pub buffer: Arc<ImageBuffer>,
+  pub duration_ms: u32,
 }
 
-pub(crate) struct DecodedGif {
-  pub(crate) frames: Vec<DecodedGifFrame>,
+pub struct DecodedGif {
+  pub frames: Vec<DecodedGifFrame>,
 }
 
-pub(crate) enum DecodedImage {
+pub enum DecodedImage {
   Buffer(ImageBuffer),
   Gif(DecodedGif),
 }
 
-pub(crate) fn decode_image(bytes: &[u8]) -> ImageResult<DecodedImage> {
+pub fn decode_image(bytes: &[u8]) -> ImageResult<DecodedImage> {
   match detect_image_format(bytes) {
     Some(DetectedImageFormat::Png) => decode_png(bytes).map(DecodedImage::Buffer),
     Some(DetectedImageFormat::Jpeg) => decode_jpeg(bytes).map(DecodedImage::Buffer),
@@ -82,7 +82,7 @@ fn decode_with_image_crate(
   rgba_to_buffer(DynamicImage::from_decoder(decoder)?.to_rgba8(), format)
 }
 
-pub(crate) fn decode_png(bytes: &[u8]) -> ImageResult<ImageBuffer> {
+pub fn decode_png(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   decode_with_image_crate(PngDecoder::new(Cursor::new(bytes))?, ImageFormat::Png)
 }
 

@@ -4,7 +4,7 @@ use crate::layout::style::{BoxShadow, Color, SizingContext, TextShadow};
 
 /// Represents a resolved box shadow with all its properties.
 #[derive(Clone, Copy)]
-pub(crate) struct SizedShadow {
+pub struct SizedShadow {
   /// Horizontal offset of the shadow.
   pub offset_x: f32,
   /// Vertical offset of the shadow.

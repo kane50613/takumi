@@ -30,40 +30,40 @@ use self::{
   text::{measure_text_node, text_inline_content},
 };
 
-pub(crate) use self::image::resolve_image;
+pub use self::image::resolve_image;
 
 /// Shared metadata stored by every renderable node.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct NodeMetadata {
+pub struct NodeMetadata {
   /// The element's tag name.
-  pub(crate) tag_name: Option<Box<str>>,
+  pub tag_name: Option<Box<str>>,
   /// The element's class name.
-  pub(crate) class_name: Option<Box<str>>,
+  pub class_name: Option<Box<str>>,
   /// The element's id.
-  pub(crate) id: Option<Box<str>>,
+  pub id: Option<Box<str>>,
   /// Additional element attributes for selector matching and serialization.
-  pub(crate) attributes: Option<BTreeMap<Box<str>, Box<str>>>,
+  pub attributes: Option<BTreeMap<Box<str>, Box<str>>>,
   /// Default style presets from HTML element type (lowest priority).
-  pub(crate) preset: Option<Style>,
+  pub preset: Option<Style>,
   /// The styling properties for this node.
-  pub(crate) style: Option<Style>,
+  pub style: Option<Style>,
   /// The tailwind properties for this node.
-  pub(crate) tw: Option<TailwindValues>,
+  pub tw: Option<TailwindValues>,
   /// The text direction for this node.
-  pub(crate) dir: Option<Direction>,
+  pub dir: Option<Direction>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// Variant-specific text node data.
-pub(crate) struct TextData {
-  pub(crate) text: String,
+pub struct TextData {
+  pub text: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
-pub(crate) enum ImageSourceInput {
+pub enum ImageSourceInput {
   Url(Arc<str>),
   // `ByteBuf` (not `Vec<u8>`) so an FFI `Uint8Array`/`ArrayBuffer`, surfaced as a
   // bytes value rather than a number array, deserializes here.
@@ -73,7 +73,7 @@ pub(crate) enum ImageSourceInput {
 }
 
 impl ImageSourceInput {
-  pub(crate) fn resolve(&self, context: &RenderContext) -> ImageResult {
+  pub fn resolve(&self, context: &RenderContext) -> ImageResult {
     match self {
       Self::Url(src) => resolve_image(src, context),
       Self::Buffer(data) => ImageSource::from_bytes(data),
@@ -86,9 +86,9 @@ impl ImageSourceInput {
 #[serde(rename_all = "camelCase")]
 /// Variant-specific image node data.
 pub struct ImageData {
-  pub(crate) src: ImageSourceInput,
-  pub(crate) width: Option<f32>,
-  pub(crate) height: Option<f32>,
+  pub src: ImageSourceInput,
+  pub width: Option<f32>,
+  pub height: Option<f32>,
 }
 
 impl From<&str> for ImageData {
@@ -258,15 +258,15 @@ impl From<(Arc<str>, Option<f32>, Option<f32>)> for ImageData {
 /// A renderable node with shared metadata and variant-specific content.
 pub struct Node {
   #[serde(flatten)]
-  pub(crate) metadata: NodeMetadata,
+  pub metadata: NodeMetadata,
   #[serde(flatten)]
-  pub(crate) kind: NodeKind,
+  pub kind: NodeKind,
 }
 
 /// Represents the nodes enum.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
-pub(crate) enum NodeKind {
+pub enum NodeKind {
   /// A node that contains other nodes.
   Container {
     /// The container child nodes.
@@ -318,15 +318,15 @@ impl Node {
     }
   }
 
-  pub(crate) fn children_ref(&self) -> Option<&[Node]> {
+  pub fn children_ref(&self) -> Option<&[Node]> {
     container_children_ref(&self.kind)
   }
 
-  pub(crate) fn take_children(&mut self) -> Option<Box<[Node]>> {
+  pub fn take_children(&mut self) -> Option<Box<[Node]>> {
     take_container_children(&mut self.kind)
   }
 
-  pub(crate) fn is_whitespace_only_text(&self) -> bool {
+  pub fn is_whitespace_only_text(&self) -> bool {
     let NodeKind::Text(data) = &self.kind else {
       return false;
     };
@@ -498,7 +498,7 @@ impl Node {
     }
   }
 
-  pub(crate) fn take_style_layers(&mut self) -> NodeStyleLayers {
+  pub fn take_style_layers(&mut self) -> NodeStyleLayers {
     if let NodeKind::Image(image) = &self.kind {
       return take_image_style_layers(self, image.width, image.height);
     }
@@ -511,7 +511,7 @@ impl Node {
     }
   }
 
-  pub(crate) fn inline_content(&self) -> Option<InlineContentKind<'_>> {
+  pub fn inline_content(&self) -> Option<InlineContentKind<'_>> {
     match &self.kind {
       NodeKind::Container { .. } => None,
       NodeKind::Image(_) => image_inline_content(&self.kind),
@@ -519,7 +519,7 @@ impl Node {
     }
   }
 
-  pub(crate) fn measure(
+  pub fn measure(
     &self,
     context: &RenderContext,
     available_space: Size<AvailableSpace>,
@@ -536,7 +536,7 @@ impl Node {
   }
 
   /// Collects resource URLs referenced by this node tree.
-  pub(crate) fn metadata_resource_urls<'a>(&'a self, urls: &mut Xxh3HashSet<&'a str>) {
+  pub fn metadata_resource_urls<'a>(&'a self, urls: &mut Xxh3HashSet<&'a str>) {
     match &self.kind {
       NodeKind::Container { .. } => {
         let Some(children) = self.children_ref() else {
@@ -557,7 +557,7 @@ impl Node {
   }
 
   /// Collects resource URLs referenced by this node tree's styles.
-  pub(crate) fn style_resource_urls<'a>(&'a self, urls: &mut Xxh3HashSet<&'a str>) {
+  pub fn style_resource_urls<'a>(&'a self, urls: &mut Xxh3HashSet<&'a str>) {
     if let Some(preset) = self.metadata.preset.as_ref() {
       urls.extend(preset.resource_urls());
     }
@@ -588,13 +588,13 @@ impl Node {
     urls.into_iter()
   }
 
-  pub(crate) fn is_replaced_element(&self) -> bool {
+  pub fn is_replaced_element(&self) -> bool {
     matches!(self.kind, NodeKind::Image(_))
   }
 
   /// `id` and `class` resolve to the structured metadata fields rather than
   /// the `attributes` map.
-  pub(crate) fn attribute(&self, name: &str) -> Option<&str> {
+  pub fn attribute(&self, name: &str) -> Option<&str> {
     if name.eq_ignore_ascii_case("id") {
       return self.metadata.id.as_deref();
     }
@@ -613,7 +613,7 @@ impl Node {
 
 /// Style layers contributed by a node before cascade/inheritance assembly.
 #[derive(Debug, Default, Clone)]
-pub(crate) struct NodeStyleLayers {
+pub struct NodeStyleLayers {
   /// UA/default style preset for the element.
   pub preset: Option<Style>,
   /// Tailwind-derived author style for the element.

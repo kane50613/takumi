@@ -1,0 +1,77 @@
+[package]
+name = "takumi-core"
+version = "1.8.5"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Backend-agnostic layout, style, and resource core for takumi. Internal crate; depend on `takumi` instead."
+repository = "https://github.com/kane50613/takumi"
+rust-version = "1.91"
+
+[dependencies]
+cssparser.workspace = true
+png.workspace = true
+gif.workspace = true
+data-url.workspace = true
+color.workspace = true
+serde_bytes.workspace = true
+thiserror.workspace = true
+typed-builder.workspace = true
+tiny-skia.workspace = true
+svgtypes.workspace = true
+selectors.workspace = true
+skrifa.workspace = true
+xxhash-rust.workspace = true
+smallvec.workspace = true
+parley.workspace = true
+taffy.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+image-webp.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+libwebp-sys.workspace = true
+dashmap.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies.bytemuck]
+workspace = true
+features = ["wasm_simd"]
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies.bytemuck]
+workspace = true
+features = ["aarch64_simd", "avx512_simd"]
+
+[dependencies.takumi-css]
+path = "../takumi-css"
+version = "=0"
+
+[dependencies.serde]
+workspace = true
+features = ["rc"]
+
+[dependencies.image]
+workspace = true
+features = ["jpeg", "png", "webp", "gif", "ico"]
+
+[dependencies.resvg]
+workspace = true
+optional = true
+
+[dependencies.roxmltree]
+workspace = true
+optional = true
+
+[dependencies.wuff]
+workspace = true
+optional = true
+
+[features]
+default = ["woff2", "woff", "svg"]
+svg = ["dep:resvg", "dep:roxmltree"]
+woff2 = ["dep:wuff", "wuff/brotli"]
+woff = ["dep:wuff", "wuff/z"]
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

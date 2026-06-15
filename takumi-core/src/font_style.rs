@@ -14,7 +14,7 @@ use crate::shadow::SizedShadow;
 
 /// Sized font style with computed font size and line height.
 #[derive(Clone)]
-pub(crate) struct SizedFontStyle<'s> {
+pub struct SizedFontStyle<'s> {
   pub parent: &'s ComputedStyle,
   pub line_height: parley::LineHeight,
   pub line_height_scales_with_text_fit: bool,
@@ -116,7 +116,7 @@ fn resolved_text_shadows(
 }
 
 impl<'s> SizedFontStyle<'s> {
-  pub(crate) fn from_style(style: &'s ComputedStyle, context: &RenderContext) -> Self {
+  pub fn from_style(style: &'s ComputedStyle, context: &RenderContext) -> Self {
     let line_height = style.line_height.into_parley(&context.sizing);
 
     Self {
