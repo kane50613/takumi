@@ -10,7 +10,7 @@ use takumi::core::{
     },
   },
 };
-use takumi::paint::rendering::{RenderOptions, render};
+use takumi::paint::{RenderOptions, render};
 
 const ITERS: usize = 100;
 

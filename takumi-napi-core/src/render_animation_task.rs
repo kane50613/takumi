@@ -10,7 +10,7 @@ use takumi_core::{
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node},
   resources::image::ImageSource as LoadedImageSource,
 };
-use takumi_paint::rendering::{
+use takumi_paint::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, RenderOptions, SequentialScene,
   encode_animated_gif, encode_animated_png, encode_animated_webp, render_sequence_animation,
 };

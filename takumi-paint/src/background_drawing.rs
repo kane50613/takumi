@@ -8,14 +8,11 @@ use tiny_skia::{IntSize, Pixmap, PixmapMut, PremultipliedColorU8};
 #[cfg(feature = "svg")]
 use crate::resources::image::RenderedImage;
 use crate::{
-  Result,
+  BorderProperties, BufferPool, OverlayOptions, PaintSource, RenderContext, Result,
+  SamplingFootprint, fast_div_255, interpolate_with_footprint,
   layout::{node::resolve_image, style::*},
-  rendering::{
-    BorderProperties, BufferPool, OverlayOptions, PaintSource, RenderContext, SamplingFootprint,
-    fast_div_255, interpolate_with_footprint, overlay_gradient_tile, overlay_image,
-    overlay_linear_gradient_tile, overlay_radial_gradient_tile, pixmap_from_buffer,
-    pixmap_ref_from_buffer,
-  },
+  overlay_gradient_tile, overlay_image, overlay_linear_gradient_tile, overlay_radial_gradient_tile,
+  pixmap_from_buffer, pixmap_ref_from_buffer,
   resources::{image::ImageSource, image_buffer::ImageBuffer},
 };
 

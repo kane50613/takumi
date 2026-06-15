@@ -5,11 +5,10 @@ use takumi_core::layout::border::{
 };
 
 use crate::{
+  Canvas, Cap, DashPattern, Fill, MaskSamplingOptions, PaintSource, PathBuilder, Placement, Stroke,
+  Style, intersect_alpha_masks,
   layout::style::{Affine, BlendMode, BorderStyle, Color, ImageScalingAlgorithm},
-  rendering::{
-    Canvas, Cap, DashPattern, Fill, MaskSamplingOptions, PaintSource, PathBuilder, Placement,
-    Stroke, Style, intersect_alpha_masks, render_mask,
-  },
+  render_mask,
 };
 
 /// Canvas-backed rasterization of [`BorderProperties`].
@@ -740,7 +739,7 @@ mod tests {
   };
 
   use super::{BorderPainting, Cap, compute_side_stroke};
-  use crate::rendering::Canvas;
+  use crate::Canvas;
 
   fn test_border(style: BorderStyle, width: f32) -> BorderProperties {
     BorderProperties {

@@ -4,15 +4,13 @@ use taffy::{Point, Size};
 use tiny_skia::PixmapMut;
 
 use crate::{
-  Result,
+  BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Placement, RenderContext, Result,
+  SizedShadow, apply_blur, apply_blur_rgba_bytes,
   layout::style::{
     Affine, Color, Filter, FilterCategory, PercentageNumber, SizingContext, TransferChannel,
     TransferTable, compose_transfer_table, fast_div_255,
   },
-  rendering::{
-    BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Placement, RenderContext,
-    SizedShadow, apply_blur, apply_blur_rgba_bytes, render_mask,
-  },
+  render_mask,
 };
 
 /// Calculates the luma of an RGB pixel.

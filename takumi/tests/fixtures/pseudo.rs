@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use takumi::core::layout::{node::Node, style::*};
-use takumi::paint::rendering::RenderOptions;
+use takumi::paint::RenderOptions;
 
 use crate::test_utils::{CONTEXT, create_test_viewport, run_fixture_test_with_options};
 

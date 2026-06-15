@@ -6,10 +6,8 @@ use image_webp::{ColorType, EncoderParams, WebPEncoder};
 use crate::{
   Result,
   error::WebPError,
-  rendering::{
-    webp::{U24_MAX, has_any_alpha_pixel, strip_alpha_channel},
-    write::{AnimatedWebpOptions, AnimationFrame},
-  },
+  webp::{U24_MAX, has_any_alpha_pixel, strip_alpha_channel},
+  write::{AnimatedWebpOptions, AnimationFrame},
 };
 
 const RIFF_HEADER_SIZE: usize = 12;

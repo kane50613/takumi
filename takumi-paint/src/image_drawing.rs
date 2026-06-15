@@ -2,11 +2,11 @@ use taffy::{Layout, Point, Size};
 
 use crate::layout::style::BlendMode;
 use crate::{
-  Result,
+  BorderProperties, Canvas, RenderContext, Result, SamplingOptions,
   layout::style::{
     Affine, ObjectFit, PositionComponent, PositionKeywordX, PositionKeywordY, SizingContext,
   },
-  rendering::{BorderProperties, Canvas, RenderContext, SamplingOptions, pixmap_ref_from_buffer},
+  pixmap_ref_from_buffer,
   resources::image::{ImageSource, RenderedImage},
 };
 

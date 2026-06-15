@@ -5,7 +5,7 @@ use takumi::core::{
   layout::{Viewport, node::Node},
   resources::font::FontResource,
 };
-use takumi::paint::rendering::{RenderOptions, render};
+use takumi::paint::{RenderOptions, render};
 
 const ITERS: usize = 80;
 

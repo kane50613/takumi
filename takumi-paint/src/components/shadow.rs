@@ -2,12 +2,10 @@ use taffy::{Layout, Point, Size};
 use tiny_skia::{IntSize, Pixmap};
 
 use crate::{
-  Error, Result,
+  BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Command, Error, Fill, Placement,
+  Result, SamplingOptions, Style, apply_blur, attenuate_alpha_by_mask, fast_div_255,
   layout::style::{Affine, BlendMode, ImageScalingAlgorithm, Sides},
-  rendering::{
-    BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Command, Fill, Placement,
-    SamplingOptions, Style, apply_blur, attenuate_alpha_by_mask, fast_div_255, render_mask,
-  },
+  render_mask,
 };
 
 pub(crate) use crate::shadow::SizedShadow;

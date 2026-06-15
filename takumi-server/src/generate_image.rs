@@ -7,9 +7,7 @@ use serde::Deserialize;
 use serde_json::from_str;
 use std::borrow::Cow;
 use takumi::core::layout::{Viewport, node::Node};
-use takumi::paint::rendering::{
-  DitheringAlgorithm, ImageOutputFormat, RenderOptions, render, write_image,
-};
+use takumi::paint::{DitheringAlgorithm, ImageOutputFormat, RenderOptions, render, write_image};
 use tokio::task::spawn_blocking;
 
 use crate::{AxumResult, AxumState};

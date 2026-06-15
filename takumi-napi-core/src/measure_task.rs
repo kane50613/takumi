@@ -8,7 +8,7 @@ use takumi_core::{
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node},
   resources::image::ImageSource as LoadedImageSource,
 };
-use takumi_paint::rendering::measure_layout;
+use takumi_paint::measure_layout;
 
 use crate::{
   buffer_from_object, map_error, parse_stylesheet,
@@ -56,7 +56,7 @@ impl MeasureTask {
 }
 
 impl Task for MeasureTask {
-  type Output = takumi_paint::rendering::MeasuredNode;
+  type Output = takumi_paint::MeasuredNode;
   type JsValue = MeasuredNode;
 
   fn compute(&mut self) -> Result<Self::Output> {
@@ -80,7 +80,7 @@ impl Task for MeasureTask {
       .read()
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
-    let options = takumi_paint::rendering::RenderOptions::builder()
+    let options = takumi_paint::RenderOptions::builder()
       .viewport(self.viewport)
       .fetched_resources(initialized_images)
       .stylesheet(take(&mut self.stylesheet))

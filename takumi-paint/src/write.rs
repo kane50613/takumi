@@ -10,8 +10,8 @@ use serde::Deserialize;
 use typed_builder::TypedBuilder;
 
 /// Encode a sequence of RGBA frames into an animated WebP and write to `destination`.
-pub use crate::rendering::webp::encode_animated_webp;
-use crate::rendering::webp::{has_any_alpha_pixel, strip_alpha_channel, write_webp};
+pub use crate::webp::encode_animated_webp;
+use crate::webp::{has_any_alpha_pixel, strip_alpha_channel, write_webp};
 
 use crate::{Result, error::Error};
 
@@ -288,7 +288,7 @@ mod tests {
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
     encode_animated_gif, encode_animated_png, encode_animated_webp, write_image,
   };
-  use crate::rendering::{DitheringAlgorithm, apply_dithering};
+  use crate::{DitheringAlgorithm, apply_dithering};
 
   #[test]
   fn encode_animated_gif_writes_valid_animation_and_delays() {

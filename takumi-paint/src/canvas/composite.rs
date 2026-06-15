@@ -6,7 +6,7 @@ use super::{
   MaskSamplingOptions, MaskView, PaintSource, SamplingFootprint, compute_overlay_bounds_for_canvas,
 };
 use crate::layout::style::{Affine, BlendMode};
-use crate::rendering::{
+use crate::{
   Placement,
   blend::{blend_premultiplied_pixel, composite_premultiplied_over, scale_premultiplied_pixel},
 };
@@ -282,7 +282,7 @@ fn try_translation_blit(
           } else if mask_alpha == u8::MAX {
             extra
           } else {
-            crate::rendering::fast_div_255(mask_alpha as u32 * extra as u32)
+            crate::fast_div_255(mask_alpha as u32 * extra as u32)
           }
         }
         None => mask_alpha,

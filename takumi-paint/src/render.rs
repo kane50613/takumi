@@ -7,7 +7,8 @@ use taffy::{AvailableSpace, Layout, NodeId, TaffyError, geometry::Size};
 use typed_builder::TypedBuilder;
 
 use crate::{
-  Error, GlobalContext, Result,
+  AnimationFrame, Canvas, DitheringAlgorithm, Error, GlobalContext, RenderContext, Result,
+  SizedFontStyle, apply_dithering, get_node_mut_by_path,
   layout::{
     Viewport,
     inline::{
@@ -20,14 +21,11 @@ use crate::{
     style::{Affine, StyleSheet},
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
-  rendering::{
-    AnimationFrame, Canvas, DitheringAlgorithm, RenderContext, SizedFontStyle, apply_dithering,
-    get_node_mut_by_path, scale_text_fit_x,
-    stacking_context::{
-      apply_transform, build_stacking_contexts, collect_layout_children, paint_context,
-    },
-  },
   resources::image::ImageSource,
+  scale_text_fit_x,
+  stacking_context::{
+    apply_transform, build_stacking_contexts, collect_layout_children, paint_context,
+  },
 };
 
 #[derive(Clone, TypedBuilder)]
@@ -680,7 +678,7 @@ mod tests {
         KeyframeRule, KeyframesRule, Length, Length::Px, Position, Style, StyleDeclaration,
       },
     },
-    rendering::measure_layout,
+    measure_layout,
   };
 
   fn make_scene<'g>(global: &'g GlobalContext, duration_ms: u32) -> SequentialScene<'g> {

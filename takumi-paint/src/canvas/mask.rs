@@ -5,17 +5,15 @@ use tiny_skia::{
 };
 
 use crate::{
-  Result,
+  BorderProperties, Command, Fill, PathBuilder, PathData, Placement, RenderContext, Result, Style,
+  build_path,
+  canvas::{BufferPool, mask_index_from_coord},
+  create_mask, fast_div_255,
   layout::style::{
     Affine, Axis, BasicShape, BorderStyle, Color, ComputedStyle, FillRule, ImageScalingAlgorithm,
     Overflow, ShapeRadius, Sides, SizingContext, SpacePair,
   },
-  rendering::{
-    BorderProperties, Command, Fill, PathBuilder, PathData, Placement, RenderContext, Style,
-    build_path,
-    canvas::{BufferPool, mask_index_from_coord},
-    create_mask, fast_div_255, transformed_rect_extents,
-  },
+  transformed_rect_extents,
 };
 
 pub(crate) enum NodeMaskAction {

@@ -24,15 +24,14 @@ use tiny_skia::{
 
 use self::composite::sampling_footprint;
 use self::paint_source::{MaskCompositeColor, sample_paint_source};
-use crate::rendering::blend::*;
-use crate::rendering::stacking_context::blend_pixmap_software;
+use crate::blend::*;
+use crate::stacking_context::blend_pixmap_software;
 use crate::{
-  Result,
+  BackgroundTile, BorderProperties, ColorTile, Placement, Result, build_path,
   layout::style::{
     Affine, BlendMode, GradientOverlayTile, ImageScalingAlgorithm, LinearGradientFastPathKind,
     LinearGradientTile, RadialGradientTile, overlay_gradient_tile_fast_normal_unconstrained,
   },
-  rendering::{BackgroundTile, BorderProperties, ColorTile, Placement, build_path},
 };
 
 pub(crate) use buffer_pool::BufferPool;
@@ -1681,7 +1680,7 @@ mod tests {
   use tiny_skia::PixmapMut;
 
   use crate::{
-    GlobalContext,
+    GlobalContext, RenderContext, blend_pixel,
     layout::{
       Viewport,
       style::{
@@ -1690,7 +1689,7 @@ mod tests {
         RadialGradient, RadialGradientTile, StopPosition,
       },
     },
-    rendering::{RenderContext, blend_pixel, pixmap_from_buffer},
+    pixmap_from_buffer,
     resources::image_buffer::ImageBuffer,
   };
 

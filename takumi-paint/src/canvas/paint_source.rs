@@ -1,12 +1,10 @@
 use tiny_skia::{PixmapRef, PremultipliedColorU8};
 
 use crate::{
+  BackgroundTile, ColorTile,
+  blend::premultiplied_from_pixel,
+  canvas::{BufferPool, composite_premultiplied_over},
   layout::style::ImageScalingAlgorithm,
-  rendering::{
-    BackgroundTile, ColorTile,
-    blend::premultiplied_from_pixel,
-    canvas::{BufferPool, composite_premultiplied_over},
-  },
 };
 
 #[derive(Clone, Copy)]

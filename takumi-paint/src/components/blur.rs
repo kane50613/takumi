@@ -1,4 +1,4 @@
-use crate::rendering::BufferPool;
+use crate::BufferPool;
 use crate::{Error, Result};
 
 const BLUR_DOWNSAMPLE_TARGET_SIGMA: f32 = 6.0;
@@ -635,7 +635,7 @@ mod tests {
   use std::assert_matches;
 
   use super::{BlurType, apply_blur_rgba_bytes, blur_downsample_scale, upsample_rgba_bilinear};
-  use crate::{Error, rendering::BufferPool};
+  use crate::{BufferPool, Error};
 
   #[test]
   fn apply_blur_rgba_bytes_returns_error_for_invalid_buffer_length() {

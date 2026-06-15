@@ -6,16 +6,14 @@ use taffy::{Layout, Point, Size};
 use tiny_skia::Pixmap;
 
 use crate::{
-  Result,
+  BorderProperties, Canvas, ColorTile, Command, MaskSamplingOptions, MaskSourceToPixmapOptions,
+  PaintSource, Placement, Result, SamplingOptions, SizedFontStyle, Stroke,
+  composite_mask_source_to_pixmap, draw_outset_shadow,
   layout::{
     inline::InlineBrush,
     style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
   },
-  rendering::{
-    BorderProperties, Canvas, ColorTile, Command, MaskSamplingOptions, MaskSourceToPixmapOptions,
-    PaintSource, Placement, SamplingOptions, SizedFontStyle, Stroke,
-    composite_mask_source_to_pixmap, draw_outset_shadow, render_mask,
-  },
+  render_mask,
   resources::font::{ResolvedColorLayer, ResolvedGlyph},
 };
 

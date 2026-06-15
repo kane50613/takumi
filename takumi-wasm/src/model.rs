@@ -7,7 +7,7 @@ use std::sync::Arc;
 use takumi_core::{
   keyframes::deserialize_optional_keyframes, layout::node::Node, layout::style::KeyframesRule,
 };
-use takumi_paint::rendering::DitheringAlgorithm;
+use takumi_paint::DitheringAlgorithm;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -198,13 +198,13 @@ pub enum OutputFormat {
   Raw,
 }
 
-impl From<OutputFormat> for takumi_paint::rendering::ImageOutputFormat {
+impl From<OutputFormat> for takumi_paint::ImageOutputFormat {
   fn from(format: OutputFormat) -> Self {
     match format {
-      OutputFormat::Png => takumi_paint::rendering::ImageOutputFormat::Png,
-      OutputFormat::Jpeg => takumi_paint::rendering::ImageOutputFormat::Jpeg,
-      OutputFormat::WebP => takumi_paint::rendering::ImageOutputFormat::WebP,
-      OutputFormat::Ico => takumi_paint::rendering::ImageOutputFormat::Ico,
+      OutputFormat::Png => takumi_paint::ImageOutputFormat::Png,
+      OutputFormat::Jpeg => takumi_paint::ImageOutputFormat::Jpeg,
+      OutputFormat::WebP => takumi_paint::ImageOutputFormat::WebP,
+      OutputFormat::Ico => takumi_paint::ImageOutputFormat::Ico,
       OutputFormat::Raw => unreachable!("Raw format should be handled separately"),
     }
   }

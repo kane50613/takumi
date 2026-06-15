@@ -9,7 +9,7 @@ use takumi_core::{
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
   resources::image::ImageSource as LoadedImageSource,
 };
-use takumi_paint::rendering::{DitheringAlgorithm, render, write_image};
+use takumi_paint::{DitheringAlgorithm, render, write_image};
 
 use crate::{
   ExternalMemoryAccountable, buffer_from_object, map_error, parse_stylesheet,
@@ -90,7 +90,7 @@ impl Task for RenderTask {
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
     let image = render(
-      takumi_paint::rendering::RenderOptions::builder()
+      takumi_paint::RenderOptions::builder()
         .viewport(self.viewport)
         .fetched_resources(initialized_images)
         .stylesheet(take(&mut self.stylesheet))

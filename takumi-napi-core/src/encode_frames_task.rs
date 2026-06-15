@@ -10,7 +10,7 @@ use takumi_core::{
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node},
   resources::image::ImageSource as LoadedImageSource,
 };
-use takumi_paint::rendering::{
+use takumi_paint::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, encode_animated_gif,
   encode_animated_png, encode_animated_webp, render,
 };
@@ -99,7 +99,7 @@ impl Task for EncodeFramesTask {
         .map(|(node, duration_ms)| {
           Ok(AnimationFrame::new(
             render(
-              takumi_paint::rendering::RenderOptions::builder()
+              takumi_paint::RenderOptions::builder()
                 .viewport(viewport)
                 .fetched_resources(initialized_images.clone())
                 .stylesheet(stylesheet.clone())

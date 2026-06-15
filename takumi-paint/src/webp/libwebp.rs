@@ -8,10 +8,8 @@ use rayon::prelude::*;
 use crate::{
   Result,
   error::{Error, WebPError},
-  rendering::{
-    webp::U24_MAX,
-    write::{AnimatedWebpOptions, AnimationFrame},
-  },
+  webp::U24_MAX,
+  write::{AnimatedWebpOptions, AnimationFrame},
 };
 
 fn webp_config(quality: u8, speed: u8) -> Result<WebPConfig> {

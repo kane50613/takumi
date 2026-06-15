@@ -11,7 +11,11 @@ use crate::layout::inline::{
   text_fit_line_alignment_correction,
 };
 use crate::{
-  Error, Result,
+  BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, Error, NodeMaskAction,
+  Placement, Result, SizedFontStyle, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel,
+  draw_background, draw_border, draw_debug_border, draw_inset_box_shadow, draw_node_content,
+  draw_outline, draw_outset_box_shadow, get_node_mut_by_path,
+  inline_drawing::{draw_inline_box, draw_inline_layout},
   layout::{
     inline::{collect_inline_items, create_inline_layout, resolve_inline_max_height},
     style::{
@@ -19,14 +23,7 @@ use crate::{
     },
     tree::{LayoutResults, OrderedChild, RenderNode},
   },
-  rendering::{
-    BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, NodeMaskAction, Placement,
-    SizedFontStyle, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel, draw_background,
-    draw_border, draw_debug_border, draw_inset_box_shadow, draw_node_content, draw_outline,
-    draw_outset_box_shadow, get_node_mut_by_path,
-    inline_drawing::{draw_inline_box, draw_inline_layout},
-    prepare_node_mask, scale_text_fit_x, transformed_rect_extents,
-  },
+  prepare_node_mask, scale_text_fit_x, transformed_rect_extents,
 };
 
 pub(crate) fn blend_pixmap_software(
@@ -1213,9 +1210,9 @@ mod tests {
 
   use super::{SceneBounds, bounds_for_rect, merge_bounds};
   use crate::{
-    GlobalContext,
+    CanvasViewport, GlobalContext, RenderOptions,
     layout::{Viewport, node::Node, style::Affine},
-    rendering::{CanvasViewport, RenderOptions, render},
+    render,
   };
 
   type TestResult = Result<(), Box<dyn Error>>;
