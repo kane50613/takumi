@@ -19,7 +19,7 @@ use crate::{
     },
     tree::RenderNode,
   },
-  rendering::{
+  text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
     make_balanced_text, make_pretty_text,
   },

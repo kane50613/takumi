@@ -73,6 +73,7 @@ pub mod layout;
 mod context;
 mod font_style;
 mod shadow;
+mod text_processing;
 
 /// Rendering related modules, including the image renderer, canvas operations.
 pub mod rendering;
