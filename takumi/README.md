@@ -2,9 +2,9 @@
 
 <!-- cargo-rdme start -->
 
-Takumi is a library with different parts to render UI component trees to images. This crate contains the core logic for layout and rendering.
-
-Checkout the [Quick Start](https://takumi.kane.tw/docs) if you are looking for napi-rs / WASM bindings.
+Takumi renders UI component trees to images. This crate is a thin facade that
+re-exports the backend-agnostic core ([`takumi-core`]) and the raster painting
+backend ([`takumi-paint`]) so existing `takumi::…` paths keep working.
 
 ## Example
 
@@ -20,31 +20,24 @@ use takumi::{
   GlobalContext,
 };
 
-// Create a node tree with `Node::container` and `Node::text`
 let node = Node::container([Node::text("Hello, world!").with_style(
   Style::default().with(StyleDeclaration::font_size(Px(32.0).into())),
 )]);
 
-// Create a context for storing resources, font caches.
-// You should reuse the context to speed up the rendering.
 let mut global = GlobalContext::default();
 
-// Load fonts
 global.font_context.load_and_store(
   FontResource::new(include_bytes!("../../assets/fonts/geist/Geist[wght].woff2"))
 );
 
-// Create a viewport
 let viewport = Viewport::new((1200, 630));
 
-// Create render options
 let options = RenderOptions::builder()
   .viewport(viewport)
   .node(node)
   .global(&global)
   .build();
 
-// Render the layout to an `RgbaImage`
 let image = render(options).unwrap();
 ```
 
@@ -54,16 +47,5 @@ let image = render(options).unwrap();
 - `woff`: Enable WOFF font support.
 - `svg`: Enable SVG support.
 - `rayon`: Enable rayon support.
-
-## Credits
-
-Takumi wouldn't be possible without the following works:
-
-- [taffy](https://github.com/DioxusLabs/taffy) for the flex & grid layout.
-- [image](https://github.com/image-rs/image) for the image processing.
-- [parley](https://github.com/linebender/parley) for text layout.
-- [skrifa](https://github.com/googlefonts/fontations/tree/main/skrifa) for glyph loading.
-- [wuff](https://github.com/nicoburns/wuff) for woff/woff2 decompression.
-- [resvg](https://github.com/linebender/resvg) for SVG parsing & rasterization.
 
 <!-- cargo-rdme end -->
