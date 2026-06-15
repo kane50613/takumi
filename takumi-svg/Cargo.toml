@@ -1,0 +1,11 @@
+[package]
+name = "takumi-svg"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Vector SVG output backend for takumi. Emits real SVG (paths, gradients, filters) rather than embedding a rasterized bitmap."
+repository = "https://github.com/kane50613/takumi"
+rust-version = "1.91"
+
+[lints]
+workspace = true
