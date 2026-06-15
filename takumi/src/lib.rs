@@ -4,22 +4,20 @@
 )]
 #![allow(missing_docs)]
 //! Takumi renders UI component trees to images. This crate is a thin facade that
-//! re-exports the backend-agnostic core ([`takumi-core`]) and the raster painting
-//! backend ([`takumi-paint`]) so existing `takumi::…` paths keep working.
+//! re-exports the backend-agnostic core ([`takumi_core`], as [`core`]) and the
+//! rendering backends under namespaced modules: the raster backend
+//! ([`takumi_paint`], as [`paint`]) and the vector/SVG backend ([`takumi_svg`],
+//! as [`svg`]).
 //!
 //! # Example
 //!
 //! ```rust
-//! use takumi::{
-//!   layout::{
-//!     node::Node,
-//!     Viewport,
-//!     style::{Length::Px, Style, StyleDeclaration},
-//!   },
-//!   resources::font::FontResource,
-//!   rendering::{render, RenderOptions},
+//! use takumi::core::{
 //!   GlobalContext,
+//!   layout::{Viewport, node::Node, style::{Length::Px, Style, StyleDeclaration}},
+//!   resources::font::FontResource,
 //! };
+//! use takumi::paint::{RenderOptions, render};
 //!
 //! let node = Node::container([Node::text("Hello, world!").with_style(
 //!   Style::default().with(StyleDeclaration::font_size(Px(32.0).into())),
@@ -44,15 +42,21 @@
 //!
 //! # Feature Flags
 //!
+//! - `paint` (default): Enable the raster rendering backend, available as
+//!   [`takumi::paint`](paint).
+//! - `svg` (default): Enable SVG image-source support in the core and paint
+//!   backend.
+//! - `svg-backend`: Enable the vector/SVG output backend, available as
+//!   [`takumi::svg`](svg). Opt-in.
 //! - `woff2`: Enable WOFF2 font support.
 //! - `woff`: Enable WOFF font support.
-//! - `svg`: Enable SVG support.
-//! - `rayon`: Enable rayon support.
+//! - `rayon`: Enable rayon-based parallelism in the raster backend (implies
+//!   `paint`).
 
-pub use takumi_core::{
-  Error, GlobalContext, Result, StyleSheetParseError, Xxh3HashSet, context, error, font_style,
-  keyframes, layout, resources, shadow, text_processing,
-};
+pub use takumi_core as core;
 
-/// Rendering: the image renderer, canvas operations, and output encoding.
-pub use takumi_paint::rendering;
+#[cfg(feature = "paint")]
+pub use takumi_paint as paint;
+
+#[cfg(feature = "svg-backend")]
+pub use takumi_svg as svg;

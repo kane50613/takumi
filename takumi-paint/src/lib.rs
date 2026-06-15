@@ -10,3 +10,7 @@
 pub use takumi_core::*;
 
 pub mod rendering;
+
+/// The raster render entry point and its options, re-exported at the crate root
+/// to mirror `takumi_svg::render` (so both backends share a top-level `render`).
+pub use rendering::{RenderOptions, render};

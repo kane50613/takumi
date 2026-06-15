@@ -1,14 +1,12 @@
 use std::f32::consts::PI;
 
 use parley::GenericFamily;
-use takumi::{
-  layout::{
-    Viewport,
-    node::Node,
-    style::{Length::*, *},
-  },
-  rendering::{AnimationFrame, RenderOptions, render_sequence_animation},
+use takumi::core::layout::{
+  Viewport,
+  node::Node,
+  style::{Length::*, *},
 };
+use takumi::paint::rendering::{AnimationFrame, RenderOptions, render_sequence_animation};
 
 use crate::test_utils::{CONTEXT, run_animation_fixture_test};
 
@@ -110,7 +108,7 @@ fn keyframe_interpolation_node() -> Node {
 }
 
 fn keyframe_interpolation_frames() -> Vec<AnimationFrame> {
-  let scene = takumi::rendering::SequentialScene::builder()
+  let scene = takumi::paint::rendering::SequentialScene::builder()
     .options(keyframe_interpolation_options())
     .duration_ms(KEYFRAME_INTERPOLATION_DURATION_MS)
     .build();

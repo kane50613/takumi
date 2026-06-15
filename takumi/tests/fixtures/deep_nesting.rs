@@ -1,15 +1,13 @@
-use takumi::rendering::measure_layout;
-use takumi::{
-  layout::{
-    node::Node,
-    style::{
-      Color, ColorInput, Display, FlexDirection, FontWeight,
-      Length::{Percentage, Px},
-      Sides, Style, StyleDeclaration,
-    },
+use takumi::core::layout::{
+  node::Node,
+  style::{
+    Color, ColorInput, Display, FlexDirection, FontWeight,
+    Length::{Percentage, Px},
+    Sides, Style, StyleDeclaration,
   },
-  rendering::RenderOptions,
 };
+use takumi::paint::rendering::RenderOptions;
+use takumi::paint::rendering::measure_layout;
 
 use crate::test_utils::{CONTEXT, create_test_viewport, run_fixture_test};
 

@@ -1,10 +1,8 @@
-use takumi::{
-  layout::{
-    node::Node,
-    style::{Length::*, *},
-  },
-  rendering::RenderOptions,
+use takumi::core::layout::{
+  node::Node,
+  style::{Length::*, *},
 };
+use takumi::paint::rendering::RenderOptions;
 
 use crate::test_utils::{CONTEXT, create_test_viewport, run_fixture_test_with_options};
 

@@ -1,18 +1,16 @@
 mod test_utils;
 
-use takumi::{
-  layout::{
-    Viewport,
-    node::Node,
-    style::{
-      Affine, AlignItems, BorderStyle, BoxSizing, Clear, Color, ColorInput, Display, FlexDirection,
-      Float, FontWeight, JustifyContent, Length::*, LineHeight, Position, Sides, SpacePair, Style,
-      StyleDeclaration, TextAlign, TextFit, TextFitMode, TextFitTarget, TextIndent, TextWrapMode,
-      WhiteSpace, WhiteSpaceCollapse,
-    },
+use takumi::core::layout::{
+  Viewport,
+  node::Node,
+  style::{
+    Affine, AlignItems, BorderStyle, BoxSizing, Clear, Color, ColorInput, Display, FlexDirection,
+    Float, FontWeight, JustifyContent, Length::*, LineHeight, Position, Sides, SpacePair, Style,
+    StyleDeclaration, TextAlign, TextFit, TextFitMode, TextFitTarget, TextIndent, TextWrapMode,
+    WhiteSpace, WhiteSpaceCollapse,
   },
-  rendering::{MeasuredNode, MeasuredTextRun, RenderOptions, measure_layout},
 };
+use takumi::paint::rendering::{MeasuredNode, MeasuredTextRun, RenderOptions, measure_layout};
 use test_utils::CONTEXT;
 
 fn create_measure_viewport() -> Viewport {

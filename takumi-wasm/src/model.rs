@@ -4,10 +4,10 @@ use parley::FontStyle as ParleyFontStyle;
 use serde::{Deserialize, Deserializer};
 use serde_bytes::ByteBuf;
 use std::sync::Arc;
-use takumi::{
+use takumi_core::{
   keyframes::deserialize_optional_keyframes, layout::node::Node, layout::style::KeyframesRule,
-  rendering::DitheringAlgorithm,
 };
+use takumi_paint::rendering::DitheringAlgorithm;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -198,13 +198,13 @@ pub enum OutputFormat {
   Raw,
 }
 
-impl From<OutputFormat> for takumi::rendering::ImageOutputFormat {
+impl From<OutputFormat> for takumi_paint::rendering::ImageOutputFormat {
   fn from(format: OutputFormat) -> Self {
     match format {
-      OutputFormat::Png => takumi::rendering::ImageOutputFormat::Png,
-      OutputFormat::Jpeg => takumi::rendering::ImageOutputFormat::Jpeg,
-      OutputFormat::WebP => takumi::rendering::ImageOutputFormat::WebP,
-      OutputFormat::Ico => takumi::rendering::ImageOutputFormat::Ico,
+      OutputFormat::Png => takumi_paint::rendering::ImageOutputFormat::Png,
+      OutputFormat::Jpeg => takumi_paint::rendering::ImageOutputFormat::Jpeg,
+      OutputFormat::WebP => takumi_paint::rendering::ImageOutputFormat::WebP,
+      OutputFormat::Ico => takumi_paint::rendering::ImageOutputFormat::Ico,
       OutputFormat::Raw => unreachable!("Raw format should be handled separately"),
     }
   }

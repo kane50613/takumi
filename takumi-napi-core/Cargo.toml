@@ -15,10 +15,15 @@ parley.workspace = true
 napi.workspace = true
 napi-derive.workspace = true
 
-[dependencies.takumi]
-path = "../takumi"
-features = ["woff2", "woff", "svg", "rayon"]
+[dependencies.takumi-core]
+path = "../takumi-core"
 default-features = false
+features = ["woff2", "woff", "svg"]
+
+[dependencies.takumi-paint]
+path = "../takumi-paint"
+default-features = false
+features = ["svg", "rayon"]
 
 [build-dependencies]
 napi-build.workspace = true

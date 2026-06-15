@@ -9,19 +9,19 @@ use std::{
   collections::HashMap,
   sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
-use takumi::{
+use takumi_core::{
   GlobalContext,
   layout::{
     DEFAULT_DEVICE_PIXEL_RATIO, Viewport,
     node::Node,
     style::{KeyframesRule, StyleSheet},
   },
-  rendering::{
-    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
-    SequentialScene, encode_animated_gif, encode_animated_png, encode_animated_webp,
-    measure_layout, render, render_sequence_animation, write_image,
-  },
   resources::{font::FontResource, image::ImageSource as LoadedImageSource},
+};
+use takumi_paint::rendering::{
+  AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
+  SequentialScene, encode_animated_gif, encode_animated_png, encode_animated_webp, measure_layout,
+  render, render_sequence_animation, write_image,
 };
 use wasm_bindgen::prelude::*;
 
@@ -275,7 +275,7 @@ impl Renderer {
     let stylesheet =
       self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
 
-    let render_options = takumi::rendering::RenderOptions::builder()
+    let render_options = takumi_paint::rendering::RenderOptions::builder()
       .viewport(
         Viewport::new((options.width, options.height)).with_device_pixel_ratio(
           options
@@ -331,7 +331,7 @@ impl Renderer {
       self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
 
     let state = self.read_state()?;
-    let render_options = takumi::rendering::RenderOptions::builder()
+    let render_options = takumi_paint::rendering::RenderOptions::builder()
       .viewport(
         Viewport::new((options.width, options.height)).with_device_pixel_ratio(
           options
@@ -421,7 +421,7 @@ impl Renderer {
         SequentialScene::builder()
           .duration_ms(scene.duration_ms)
           .options(
-            takumi::rendering::RenderOptions::builder()
+            takumi_paint::rendering::RenderOptions::builder()
               .viewport(viewport)
               .fetched_resources(fetched_resources.clone())
               .stylesheet(stylesheet.clone())
@@ -458,7 +458,7 @@ impl Renderer {
     let rendered_frames = frames
       .into_iter()
       .map(|frame| -> Result<AnimationFrame, JsValue> {
-        let render_options = takumi::rendering::RenderOptions::builder()
+        let render_options = takumi_paint::rendering::RenderOptions::builder()
           .viewport(viewport)
           .fetched_resources(fetched_resources.clone())
           .node(frame.node)

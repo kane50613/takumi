@@ -20,10 +20,15 @@ parley.workspace = true
 workspace = true
 features = ["rc"]
 
-[dependencies.takumi]
-path = "../takumi"
-features = ["woff2", "svg"]
+[dependencies.takumi-core]
+path = "../takumi-core"
 default-features = false
+features = ["woff2", "svg"]
+
+[dependencies.takumi-paint]
+path = "../takumi-paint"
+default-features = false
+features = ["svg"]
 
 # https://github.com/rust-lang/rust/issues/93294
 [package.metadata.wasm-pack.profile.release]

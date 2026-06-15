@@ -9,15 +9,15 @@ use std::{
 use image::RgbaImage;
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use takumi::{
+use takumi::core::{
   GlobalContext,
   layout::{Viewport, node::Node},
-  rendering::{
-    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
-    RenderOptions, encode_animated_gif, encode_animated_png, encode_animated_webp, render,
-    write_image,
-  },
   resources::{font::FontResource, image::ImageSource},
+};
+use takumi::paint::rendering::{
+  AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
+  RenderOptions, encode_animated_gif, encode_animated_png, encode_animated_webp, render,
+  write_image,
 };
 use takumi_svg::{SvgOptions, render as svg_render};
 

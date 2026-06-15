@@ -4,12 +4,12 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use rayon::prelude::*;
-use takumi::{
+use takumi_core::{
   GlobalContext,
   layout::{node::Node, style::KeyframesRule as CoreKeyframesRule},
-  rendering::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat},
   resources::{font::FontResource, image::ImageSource as LoadedImageSource},
 };
+use takumi_paint::rendering::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat};
 
 use crate::{
   De, FontInput, buffer_from_object, buffer_slice_from_object, deserialize_with_tracing,
@@ -33,8 +33,8 @@ pub struct MeasuredTextRun {
   pub height: f64,
 }
 
-impl From<takumi::rendering::MeasuredTextRun> for MeasuredTextRun {
-  fn from(run: takumi::rendering::MeasuredTextRun) -> Self {
+impl From<takumi_paint::rendering::MeasuredTextRun> for MeasuredTextRun {
+  fn from(run: takumi_paint::rendering::MeasuredTextRun) -> Self {
     Self {
       text: run.text,
       x: run.x as f64,
@@ -61,8 +61,8 @@ pub struct MeasuredNode {
   pub runs: Vec<MeasuredTextRun>,
 }
 
-impl From<takumi::rendering::MeasuredNode> for MeasuredNode {
-  fn from(node: takumi::rendering::MeasuredNode) -> Self {
+impl From<takumi_paint::rendering::MeasuredNode> for MeasuredNode {
+  fn from(node: takumi_paint::rendering::MeasuredNode) -> Self {
     Self {
       width: node.width as f64,
       height: node.height as f64,
@@ -87,7 +87,7 @@ pub(crate) fn deserialize_keyframes(keyframes: Option<Object>) -> Result<Vec<Cor
   match keyframes {
     Some(keyframes) => {
       let mut deserializer = De::new(&keyframes);
-      takumi::keyframes::deserialize_keyframes(&mut deserializer)
+      takumi_core::keyframes::deserialize_keyframes(&mut deserializer)
         .map_err(|error: napi::Error| Error::from_reason(error.to_string()))
     }
     None => Ok(Vec::new()),

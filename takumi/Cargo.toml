@@ -20,13 +20,22 @@ default-features = false
 path = "../takumi-paint"
 version = "=1"
 default-features = false
+optional = true
+
+[dependencies.takumi-svg]
+path = "../takumi-svg"
+version = "=0.1"
+default-features = false
+optional = true
 
 [features]
-default = ["woff2", "woff", "svg", "rayon"]
-svg = ["takumi-core/svg", "takumi-paint/svg"]
+default = ["paint", "woff2", "woff", "svg", "rayon"]
+paint = ["dep:takumi-paint"]
+svg = ["takumi-core/svg", "takumi-paint?/svg"]
+svg-backend = ["dep:takumi-svg"]
 woff2 = ["takumi-core/woff2"]
 woff = ["takumi-core/woff"]
-rayon = ["takumi-paint/rayon"]
+rayon = ["paint", "takumi-paint?/rayon"]
 
 [dev-dependencies]
 parley.workspace = true

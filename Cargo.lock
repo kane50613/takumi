@@ -2123,7 +2123,8 @@ dependencies = [
  "parley",
  "rayon",
  "serde",
- "takumi",
+ "takumi-core",
+ "takumi-paint",
 ]
 
 [[package]]
@@ -2193,7 +2194,8 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen",
  "serde_bytes",
- "takumi",
+ "takumi-core",
+ "takumi-paint",
  "wasm-bindgen",
 ]
 
