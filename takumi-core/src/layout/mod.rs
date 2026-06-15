@@ -1,6 +1,8 @@
 /// Node Tree
 pub mod node;
 
+/// Backend-agnostic border geometry shared across rasterization backends.
+pub mod border;
 pub mod inline;
 pub mod matching;
 pub mod tree;

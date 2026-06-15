@@ -247,7 +247,6 @@ pub(crate) type Command = TinyPathSegment;
 pub(crate) trait PathBuilder {
   fn move_to(&mut self, point: (f32, f32));
   fn line_to(&mut self, point: (f32, f32));
-  fn curve_to(&mut self, p1: (f32, f32), p2: (f32, f32), p3: (f32, f32));
   fn close(&mut self);
   fn add_ellipse(&mut self, center: (f32, f32), radius_x: f32, radius_y: f32);
 }
@@ -259,14 +258,6 @@ impl PathBuilder for Vec<Command> {
 
   fn line_to(&mut self, point: (f32, f32)) {
     self.push(Command::LineTo(TinyPoint::from_xy(point.0, point.1)));
-  }
-
-  fn curve_to(&mut self, p1: (f32, f32), p2: (f32, f32), p3: (f32, f32)) {
-    self.push(Command::CubicTo(
-      TinyPoint::from_xy(p1.0, p1.1),
-      TinyPoint::from_xy(p2.0, p2.1),
-      TinyPoint::from_xy(p3.0, p3.1),
-    ));
   }
 
   fn close(&mut self) {

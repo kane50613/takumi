@@ -71,6 +71,16 @@ impl<'g> RenderOptions<'g> {
   pub fn global(&self) -> &'g GlobalContext {
     self.global
   }
+
+  /// Returns the CSS stylesheet applied before layout.
+  pub fn stylesheet(&self) -> &StyleSheet {
+    &self.stylesheet
+  }
+
+  /// Returns the externally-fetched resources keyed by URL.
+  pub fn fetched_resources(&self) -> &HashMap<Arc<str>, ImageSource> {
+    &self.fetched_resources
+  }
 }
 
 #[derive(Clone, TypedBuilder)]

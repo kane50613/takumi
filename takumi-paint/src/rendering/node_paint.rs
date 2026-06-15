@@ -19,10 +19,9 @@ use crate::{
 };
 
 use super::{
-  BackgroundTile, BorderProperties, Canvas, Fill, PaintSource, RenderContext, SizedFontStyle,
-  SizedShadow, TileLayer, collect_background_layers, draw_image, draw_inset_shadow_to_canvas,
-  draw_outset_shadow,
-  inline_drawing::{InlineLayoutDrawData, draw_inline_layout},
+  BackgroundTile, BorderPainting, BorderProperties, Canvas, Fill, PaintSource, RenderContext,
+  SizedFontStyle, SizedShadow, TileLayer, collect_background_layers, draw_image,
+  draw_inset_shadow_to_canvas, draw_outset_shadow, inline_drawing::draw_inline_layout,
   rasterize_layers, release_rasterized_background_tile,
 };
 
@@ -390,18 +389,7 @@ fn draw_text_node_content(
     mode: InlineLayoutMode::Draw,
   });
 
-  draw_inline_layout(
-    context,
-    canvas,
-    layout,
-    built.layout,
-    &font_style,
-    InlineLayoutDrawData {
-      spans: &built.spans,
-      custom_inline_boxes: &built.custom_inline_boxes,
-      line_scales: &built.line_scales,
-    },
-  )?;
+  draw_inline_layout(context, canvas, layout, &built, &font_style)?;
 
   Ok(())
 }

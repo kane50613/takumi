@@ -24,7 +24,7 @@ use crate::{
     SizedFontStyle, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel, draw_background,
     draw_border, draw_debug_border, draw_inset_box_shadow, draw_node_content, draw_outline,
     draw_outset_box_shadow, get_node_mut_by_path,
-    inline_drawing::{InlineLayoutDrawData, draw_inline_box, draw_inline_layout},
+    inline_drawing::{draw_inline_box, draw_inline_layout},
     prepare_node_mask, scale_text_fit_x, transformed_rect_extents,
   },
 };
@@ -1190,13 +1190,8 @@ fn draw_render_node_inline(
     &node.context,
     canvas,
     inline_layout_box,
-    built.layout,
+    &built,
     &font_style,
-    InlineLayoutDrawData {
-      spans: &built.spans,
-      custom_inline_boxes: &built.custom_inline_boxes,
-      line_scales: &built.line_scales,
-    },
   )?;
 
   let inline_transform = Affine::translation(

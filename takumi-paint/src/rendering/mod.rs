@@ -46,23 +46,7 @@ pub use write::*;
 pub(crate) use crate::layout::style::{fast_div_255, fast_div_255_u32};
 
 pub(crate) use crate::context::RenderContext;
-use crate::layout::inline::text_fit_x_correction;
-
-pub(crate) fn scale_text_fit_x(
-  x: f32,
-  origin_x: f32,
-  scale: f32,
-  static_inline_prefix: f32,
-  line_alignment_correction: f32,
-) -> f32 {
-  if (scale - 1.0).abs() <= f32::EPSILON {
-    return x;
-  }
-
-  text_fit_x_correction(scale, static_inline_prefix, line_alignment_correction)
-    + origin_x
-    + (x - origin_x) * scale
-}
+pub(crate) use crate::layout::inline::scale_text_fit_x;
 
 /// Borrows an [`ImageBuffer`] as a zero-copy `tiny_skia` pixmap view.
 pub(crate) fn pixmap_ref_from_buffer(buffer: &ImageBuffer) -> Option<PixmapRef<'_>> {
