@@ -177,6 +177,8 @@ pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &
       .node(options.node().clone())
       .viewport(*options.viewport())
       .global(options.global())
+      .stylesheet(options.stylesheet().clone())
+      .fetched_resources(options.fetched_resources().clone())
       .build(),
   ) {
     write(format!("tests/fixtures-generated/{fixture_name}.svg"), svg).unwrap();
