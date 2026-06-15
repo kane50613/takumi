@@ -900,13 +900,15 @@ fn for_each_glyph_run_pass(
   ) -> Result<()>,
 ) -> Result<()> {
   for (line_index, line) in ctx.inline_layout.lines().enumerate() {
-    let setup = line_setup(
+    let Some(setup) = line_setup(
       &line,
       ctx.layout,
       ctx.line_vertical_metrics,
       ctx.line_scales,
       line_index,
-    );
+    ) else {
+      continue;
+    };
     let mut resolved_iter = ctx.per_line_resolved[line_index].iter();
     let mut static_inline_prefix = 0.0_f32;
     for item in line.items() {
@@ -1040,13 +1042,15 @@ pub(crate) fn draw_inline_layout(
   }
 
   for (line_index, line) in inline_layout.lines().enumerate() {
-    let setup = line_setup(
+    let Some(setup) = line_setup(
       &line,
       layout,
       &line_vertical_metrics,
       line_scales,
       line_index,
-    );
+    ) else {
+      continue;
+    };
     let mut resolved_iter = per_line_resolved[line_index].iter();
     let mut static_inline_prefix = 0.0_f32;
 

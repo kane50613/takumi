@@ -1447,18 +1447,19 @@ pub struct LineSetup {
 }
 
 /// Resolves a line's scale state, baseline, and metrics for the inline walk.
+/// Returns `None` when `line_index` is out of range for `line_vertical_metrics`.
 pub fn line_setup(
   line: &Line<'_, InlineBrush>,
   layout: Layout,
   line_vertical_metrics: &[ResolvedLineMetrics],
   line_scales: &[f32],
   line_index: usize,
-) -> LineSetup {
-  let resolved_metrics = line_vertical_metrics[line_index];
+) -> Option<LineSetup> {
+  let resolved_metrics = *line_vertical_metrics.get(line_index)?;
   let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
   let (line_scale_origin_x, alignment_correction) =
     text_fit_line_alignment_correction(line, line_scale, layout.content_box_size().width);
-  LineSetup {
+  Some(LineSetup {
     state: LineScaleState {
       scale: line_scale,
       alignment_correction,
@@ -1470,7 +1471,7 @@ pub fn line_setup(
     baseline_shift: resolved_metrics.baseline_shift,
     line_scale_origin_x,
     resolved_metrics,
-  }
+  })
 }
 
 /// One resolved glyph positioned for vector emission. `transform` is in the
@@ -1507,13 +1508,15 @@ pub fn resolve_positioned_glyphs(
 
   let mut out = Vec::new();
   for (line_index, line) in inline_layout.lines().enumerate() {
-    let setup = line_setup(
+    let Some(setup) = line_setup(
       &line,
       layout,
       &line_vertical_metrics,
       line_scales,
       line_index,
-    );
+    ) else {
+      continue;
+    };
     let glyph_offset = Point {
       x: layout.border.left + layout.padding.left,
       y: layout.border.top + layout.padding.top + setup.baseline_shift,

@@ -53,9 +53,12 @@ pub(crate) fn emit_text(
     mode: InlineLayoutMode::Draw,
   });
 
-  let Ok(glyphs) = resolve_positioned_glyphs(&built, context, layout) else {
-    return Ok(());
-  };
+  let glyphs = resolve_positioned_glyphs(&built, context, layout).map_err(|error| {
+    io::Error::new(
+      io::ErrorKind::InvalidData,
+      format!("glyph resolution failed: {error}"),
+    )
+  })?;
 
   for positioned in glyphs {
     match &positioned.glyph {

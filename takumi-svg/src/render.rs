@@ -133,8 +133,8 @@ fn emit_node(
       let path = rounded_rect_path(
         x + b.left,
         y + b.top,
-        width - b.left - b.right,
-        height - b.top - b.bottom,
+        (width - b.left - b.right).max(0.0),
+        (height - b.top - b.bottom).max(0.0),
         inner,
       );
       doc
