@@ -435,6 +435,11 @@ const GRADIENT_LUT_STOPS: usize = 64;
 /// baking the gradient's interpolation color space (e.g. OKLCH) into evenly-spaced
 /// sRGB stops. SVG only interpolates between stops in sRGB, so sampling the LUT is
 /// how the vector output matches the raster backend for non-sRGB interpolation.
+///
+/// CSS hard stops (two stops at the same position) are a discontinuity the uniform
+/// LUT would smear into a ~1-cell ramp, so a coincident stop pair carrying the
+/// exact before/after colors is injected at each hard-stop offset and the LUT
+/// samples bridging it are dropped to keep the transition sharp.
 fn lut_svg_stops(
   resolved: &[ResolvedGradientStop],
   axis_length: f32,
@@ -450,18 +455,54 @@ fn lut_svg_stops(
   if lut.len() <= 1 {
     return svg_stops(resolved, 0.0, axis_length);
   }
-  let denominator = (lut.len() - 1) as f32;
-  lut
+  let span = axis_length.max(1e-6);
+  let cell = 1.0 / (lut.len() - 1) as f32;
+  let demul = |premultiplied: &tiny_skia::PremultipliedColorU8| {
+    let color = premultiplied.demultiply();
+    Rgba([color.red(), color.green(), color.blue(), color.alpha()])
+  };
+
+  // Hard stops: adjacent resolved stops with (near-)equal positions.
+  let mut hard_stops = Vec::new();
+  for pair in resolved.windows(2) {
+    let (a, b) = (&pair[0], &pair[1]);
+    if (b.position - a.position).abs() <= 1e-3 {
+      hard_stops.push((
+        (a.position / span).clamp(0.0, 1.0),
+        Rgba(a.color.0),
+        Rgba(b.color.0),
+      ));
+    }
+  }
+
+  let mut stops: Vec<GradientStop> = lut
     .iter()
     .enumerate()
-    .map(|(index, premultiplied)| {
-      let color = premultiplied.demultiply();
-      GradientStop {
-        offset: index as f32 / denominator,
-        color: Rgba([color.red(), color.green(), color.blue(), color.alpha()]),
-      }
+    .filter(|(index, _)| {
+      let offset = *index as f32 / (lut.len() - 1) as f32;
+      // Drop LUT samples that straddle a hard stop; the injected pair covers it.
+      !hard_stops
+        .iter()
+        .any(|(boundary, ..)| (offset - boundary).abs() < cell)
     })
-    .collect()
+    .map(|(index, premultiplied)| GradientStop {
+      offset: index as f32 / (lut.len() - 1) as f32,
+      color: demul(premultiplied),
+    })
+    .collect();
+
+  for (boundary, before, after) in hard_stops {
+    stops.push(GradientStop {
+      offset: boundary,
+      color: before,
+    });
+    stops.push(GradientStop {
+      offset: boundary,
+      color: after,
+    });
+  }
+  stops.sort_by(|a, b| a.offset.total_cmp(&b.offset));
+  stops
 }
 
 fn emit_linear(

@@ -714,37 +714,124 @@ fn emit_borders(
     }
   }
 
+  // A visible dashed/dotted side can't be filled solid; route to the per-side
+  // path that strokes each such side individually (the uniform all-sides-dashed/
+  // dotted fast path above already handled the uniform case).
+  let has_pattern_side = [
+    (border.width.top, border.style.top),
+    (border.width.right, border.style.right),
+    (border.width.bottom, border.style.bottom),
+    (border.width.left, border.style.left),
+  ]
+  .into_iter()
+  .any(|(width, style)| width > 0.0 && matches!(style, BorderStyle::Dashed | BorderStyle::Dotted));
+
   let mut ring = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
   border.append_border_ring_commands(&mut ring, size);
   let ring_data = path_data(&ring, matrix);
 
-  // Single color across every drawn side → one ring fill.
-  if let Some(color) = border.has_uniform_visible_color() {
+  // Single color across every drawn side, all solid-fillable → one ring fill.
+  if !has_pattern_side && let Some(color) = border.has_uniform_visible_color() {
     if color.0[3] != 0 {
       return doc.path_evenodd(&ring_data, Rgba(color.0));
     }
     return Ok(());
   }
 
-  // Mixed per-side colors: clip to the ring and fill each side's polygon. The
-  // polygons partition the border box corner-to-corner (diagonal corner split),
-  // so the clip rounds the corners and each side keeps its own color.
+  // Mixed per-side styles/colors: clip to the ring; fill solid sides as their
+  // diagonal-split polygon and stroke dashed/dotted sides along their centerline.
   let clip = doc.clip_path_evenodd(&ring_data)?;
   let group = doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?;
-  for (side, width, color) in [
-    (BorderSide::Top, border.width.top, border.color.top),
-    (BorderSide::Right, border.width.right, border.color.right),
-    (BorderSide::Bottom, border.width.bottom, border.color.bottom),
-    (BorderSide::Left, border.width.left, border.color.left),
+  for (side, width, color, style) in [
+    (
+      BorderSide::Top,
+      border.width.top,
+      border.color.top,
+      border.style.top,
+    ),
+    (
+      BorderSide::Right,
+      border.width.right,
+      border.color.right,
+      border.style.right,
+    ),
+    (
+      BorderSide::Bottom,
+      border.width.bottom,
+      border.color.bottom,
+      border.style.bottom,
+    ),
+    (
+      BorderSide::Left,
+      border.width.left,
+      border.color.left,
+      border.style.left,
+    ),
   ] {
-    if width <= 0.0 || color.0[3] == 0 {
+    if width <= 0.0 || color.0[3] == 0 || !style.is_rendered() {
       continue;
     }
-    let mut polygon = Vec::new();
-    border.append_side_polygon_commands_at(side, &mut polygon, size, Point::ZERO);
-    doc.path(&path_data(&polygon, matrix), Rgba(color.0))?;
+    match style {
+      BorderStyle::Dashed | BorderStyle::Dotted => {
+        emit_side_pattern(border, side, width, color, style, matrix, size, doc)?;
+      }
+      _ => {
+        let mut polygon = Vec::new();
+        border.append_side_polygon_commands_at(side, &mut polygon, size, Point::ZERO);
+        doc.path(&path_data(&polygon, matrix), Rgba(color.0))?;
+      }
+    }
   }
   doc.end_group(group)
+}
+
+/// Strokes one dashed/dotted border side along its centerline. The centerline is
+/// inset by half the side's width and shortened at each end by half the adjacent
+/// side's width (matching the raster backend's per-side stroke). Dash intervals
+/// mirror the uniform stroked path (dashed `3w 2w`, dotted `0 2w` + round caps).
+#[allow(clippy::too_many_arguments)]
+fn emit_side_pattern(
+  border: &BorderProperties,
+  side: BorderSide,
+  width: f32,
+  color: Color,
+  style: BorderStyle,
+  matrix: [f32; 6],
+  size: Size<f32>,
+  doc: &mut SvgDocument,
+) -> io::Result<()> {
+  let (half_top, half_right, half_bottom, half_left) = (
+    border.width.top / 2.0,
+    border.width.right / 2.0,
+    border.width.bottom / 2.0,
+    border.width.left / 2.0,
+  );
+  let ((x0, y0), (x1, y1)) = match side {
+    BorderSide::Top => ((half_left, half_top), (size.width - half_right, half_top)),
+    BorderSide::Right => (
+      (size.width - half_right, half_top),
+      (size.width - half_right, size.height - half_bottom),
+    ),
+    BorderSide::Bottom => (
+      (half_left, size.height - half_bottom),
+      (size.width - half_right, size.height - half_bottom),
+    ),
+    BorderSide::Left => (
+      (half_left, half_top),
+      (half_left, size.height - half_bottom),
+    ),
+  };
+  let [a, b, c, d, e, f] = matrix;
+  let map = |px: f32, py: f32| (a * px + c * py + e, b * px + d * py + f);
+  let (mx0, my0) = map(x0, y0);
+  let (mx1, my1) = map(x1, y1);
+  let data = format!("M{mx0} {my0}L{mx1} {my1}");
+  let (dash, gap) = (3.0 * width, 2.0 * width);
+  let (dasharray, linecap) = match style {
+    BorderStyle::Dotted => (format!("0 {gap}"), Some("round")),
+    _ => (format!("{dash} {gap}"), None),
+  };
+  doc.stroke_path(&data, Rgba(color.0), width, Some(&dasharray), linecap)
 }
 
 /// Emits the CSS `outline` as a ring around the border-box, expanded outward by

@@ -179,6 +179,12 @@ fn emit_runs(
 /// the glyph coverage, widened by any `-webkit-text-stroke` (so a transparent
 /// stroke reveals a background-colored outline ring); the `color` (brush) then
 /// fills the un-widened glyph interiors on top, followed by the real text stroke.
+///
+/// The coverage is expressed as an SVG `<mask>` (white glyph fill ∪ stroke)
+/// rather than a `<clipPath>`, because a clip path ignores stroke width and so
+/// can't reach the stroke-widened ring — the background would only fill the thin
+/// glyph interior. A mask honors the stroke, so the background fills the full
+/// fill+stroke coverage.
 #[allow(clippy::too_many_arguments)]
 fn emit_clip_text_glyphs(
   doc: &mut SvgDocument,
@@ -190,21 +196,26 @@ fn emit_clip_text_glyphs(
   origin_y: f32,
   stroke: Option<(Rgba, f32, &str)>,
 ) -> io::Result<()> {
-  let mut clip_data = String::new();
+  let white = Rgba([255, 255, 255, 255]);
+  let join = line_join_str(font_style.parent.stroke_linejoin);
+  let stroke_width = font_style.stroke_width;
+
+  let (mask_token, mask_ref) = doc.begin_mask()?;
+  let mut any = false;
   for run in &runs.runs {
-    emit_run_glyphs(
+    any |= emit_clip_text_mask_glyphs(
       doc,
       run,
-      font_style,
       layout,
       origin_x,
       origin_y,
-      None,
-      None,
-      Some(&mut clip_data),
+      white,
+      stroke_width,
+      join,
     )?;
   }
-  if clip_data.is_empty() {
+  doc.end_mask(mask_token)?;
+  if !any {
     return Ok(());
   }
 
@@ -213,29 +224,7 @@ fn emit_clip_text_glyphs(
   let (bx, by) = (origin_x, origin_y);
   let (bw, bh) = (layout.size.width, layout.size.height);
 
-  // The background is painted clipped to the glyph coverage. A non-zero text
-  // stroke widens that coverage outward, so stroke each glyph with the same
-  // background paint before the clipped fill (the stroke region is also part of
-  // the painted background, matching raster's stroke-over-clip-image).
-  let stroke_width = font_style.stroke_width;
-  if stroke_width > 0.0 && background.0[3] != 0 {
-    let join = line_join_str(font_style.parent.stroke_linejoin);
-    for run in &runs.runs {
-      emit_clip_text_glyph_strokes(
-        doc,
-        run,
-        layout,
-        origin_x,
-        origin_y,
-        background,
-        stroke_width,
-        join,
-      )?;
-    }
-  }
-
-  let clip = doc.clip_path(&clip_data)?;
-  let group = doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?;
+  let group = doc.begin_masked_group(&mask_ref)?;
   if background.0[3] != 0 {
     doc.rect(bx, by, bw, bh, background)?;
   }
@@ -254,21 +243,23 @@ fn emit_clip_text_glyphs(
   Ok(())
 }
 
-/// Strokes each outline glyph in a run with a solid color (background paint for
-/// `background-clip: text`), widening the painted glyph coverage.
+/// Paints a run's outline glyphs white into the active mask with both fill and
+/// stroke (and any faux-bold embolden), so the mask covers the full fill+stroke
+/// glyph coverage. Returns whether any glyph was emitted.
 #[allow(clippy::too_many_arguments)]
-fn emit_clip_text_glyph_strokes(
+fn emit_clip_text_mask_glyphs(
   doc: &mut SvgDocument,
   run: &PositionedInlineRun<'_>,
   layout: Layout,
   origin_x: f32,
   origin_y: f32,
   color: Rgba,
-  width: f32,
+  stroke_width: f32,
   join: &str,
-) -> io::Result<()> {
+) -> io::Result<bool> {
   let run_transform = run.transform(IDENTITY);
   let glyph_offset = run.glyph_offset(layout);
+  let mut any = false;
   for glyph in run.glyph_run.positioned_glyphs() {
     let Some(ResolvedGlyph::Outline(outline)) = run.resolved_glyphs.get(&glyph.id) else {
       continue;
@@ -277,11 +268,20 @@ fn emit_clip_text_glyph_strokes(
       run_transform * Affine::translation(glyph_offset.x + glyph.x, glyph_offset.y + glyph.y);
     let cols = offset(matrix.to_cols_array(), origin_x, origin_y).to_cols_array();
     let data = path_data(outline.paths(), cols);
-    if !data.is_empty() {
-      doc.glyph_path(&data, color, Some((color, width, join)))?;
+    if data.is_empty() {
+      continue;
+    }
+    any = true;
+    if let Some(embolden) = outline.embolden().filter(|embolden| *embolden > 0.0) {
+      doc.glyph_path(&data, color, Some((color, embolden * 2.0, join)))?;
+    }
+    if stroke_width > 0.0 {
+      doc.glyph_path(&data, color, Some((color, stroke_width, join)))?;
+    } else {
+      doc.glyph_path(&data, color, None)?;
     }
   }
-  Ok(())
+  Ok(any)
 }
 
 /// Emits a run's under/overline (`over == false`) or line-through (`over == true`)
