@@ -29,11 +29,15 @@ rayon = ["takumi-paint/rayon"]
 [dev-dependencies]
 parley.workspace = true
 rayon.workspace = true
+resvg = "0.47"
 serde_json.workspace = true
 
 [dev-dependencies.image]
 workspace = true
 features = ["png", "webp"]
+
+[dev-dependencies.takumi-svg]
+path = "../takumi-svg"
 
 [lints]
 workspace = true
