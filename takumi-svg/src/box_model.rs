@@ -6,13 +6,8 @@
 
 use taffy::Size;
 use takumi_core::context::RenderContext;
-use takumi_core::layout::style::{Affine, ComputedStyle, Overflow};
+use takumi_core::layout::style::Affine;
 use tiny_skia::{PathSegment, Point};
-
-/// Whether the element clips overflowing content on either axis.
-pub(crate) fn clips_overflow(style: &ComputedStyle) -> bool {
-  style.overflow_x != Overflow::Visible || style.overflow_y != Overflow::Visible
-}
 
 /// Serializes takumi-core path commands ([`tiny_skia::PathSegment`], the shared
 /// `Command` type) to SVG path `d` data, applying `transform` (`[a, b, c, d, e, f]`,

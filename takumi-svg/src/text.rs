@@ -12,12 +12,13 @@ use taffy::{AvailableSpace, Layout, Size};
 use takumi_core::context::RenderContext;
 use takumi_core::font_style::SizedFontStyle;
 use takumi_core::layout::inline::{
-  DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineRunLayout,
-  PositionedInlineRun, ProcessedInlineSpan, collect_inline_items, create_inline_layout,
-  resolve_inline_max_height, resolve_inline_runs, run_decorations,
+  DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineOutlineRect,
+  InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, collect_inline_items,
+  create_inline_layout, outline_island_contour, outline_islands, resolve_inline_max_height,
+  resolve_inline_runs, run_decorations,
 };
 use takumi_core::layout::node::TextData;
-use takumi_core::layout::style::{BackgroundClip, LineJoin};
+use takumi_core::layout::style::{BackgroundClip, BorderStyle, LineJoin};
 use takumi_core::layout::tree::RenderNode;
 use takumi_core::resources::font::ResolvedGlyph;
 
@@ -60,7 +61,16 @@ pub(crate) fn emit_text(
   });
 
   let runs = resolve_inline_runs(&built, context, layout).map_err(font_error)?;
-  emit_runs(doc, &runs, &font_style, context, layout, origin_x, origin_y)
+  emit_runs(
+    doc,
+    &runs,
+    &built.spans,
+    &font_style,
+    context,
+    layout,
+    origin_x,
+    origin_y,
+  )
 }
 
 /// Emits a container's inline formatting context (anonymous text + inline
@@ -95,7 +105,16 @@ pub(crate) fn emit_inline_content(
   });
 
   let runs = resolve_inline_runs(&built, context, layout).map_err(font_error)?;
-  emit_runs(doc, &runs, &font_style, context, layout, origin_x, origin_y)?;
+  emit_runs(
+    doc,
+    &runs,
+    &built.spans,
+    &font_style,
+    context,
+    layout,
+    origin_x,
+    origin_y,
+  )?;
 
   for inline_box in &runs.inline_boxes {
     if let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(inline_box.id as usize) {
@@ -107,9 +126,11 @@ pub(crate) fn emit_inline_content(
 
 /// Paints a resolved run layout in CSS text-decoration order: shadows, under/over
 /// decorations, glyphs, then line-through.
+#[allow(clippy::too_many_arguments)]
 fn emit_runs(
   doc: &mut SvgDocument,
   runs: &InlineRunLayout<'_>,
+  spans: &[ProcessedInlineSpan<'_, '_>],
   font_style: &SizedFontStyle,
   context: &RenderContext,
   layout: Layout,
@@ -167,8 +188,85 @@ fn emit_runs(
     }
   }
 
+  // Text outlines stroke between the glyphs and the line-through, matching the
+  // raster backend's painting order.
+  emit_inline_outlines(doc, runs, spans, origin_x, origin_y)?;
+
   for run in &runs.runs {
     emit_run_decorations(doc, run, layout, origin_x, origin_y, true)?;
+  }
+  Ok(())
+}
+
+/// Strokes the shared inline outline contours ([`outline_islands`]) for each
+/// styled span, mirroring the raster backend's merged-island outlines.
+fn emit_inline_outlines(
+  doc: &mut SvgDocument,
+  runs: &InlineRunLayout<'_>,
+  spans: &[ProcessedInlineSpan<'_, '_>],
+  origin_x: f32,
+  origin_y: f32,
+) -> io::Result<()> {
+  if runs.outline_rects.is_empty() {
+    return Ok(());
+  }
+  for island in outline_islands(runs.outline_rects.clone()) {
+    emit_outline_island(doc, &island, spans, origin_x, origin_y)?;
+  }
+  Ok(())
+}
+
+fn emit_outline_island(
+  doc: &mut SvgDocument,
+  island: &[InlineOutlineRect],
+  spans: &[ProcessedInlineSpan<'_, '_>],
+  origin_x: f32,
+  origin_y: f32,
+) -> io::Result<()> {
+  let Some(first_rect) = island.first() else {
+    return Ok(());
+  };
+  let Some(ProcessedInlineSpan::Text { style, .. }) = spans.get(first_rect.span_id as usize) else {
+    return Ok(());
+  };
+  let width = style.outline_width;
+  if width <= 0.0 || !style.outline_style.is_rendered() || style.outline_color.0[3] == 0 {
+    return Ok(());
+  }
+
+  // Dash geometry mirrors the raster stroke; non-stroked styles (double, the
+  // 3D bevels) paint nothing here, as in the raster backend.
+  let (dasharray, linecap) = match style.outline_style {
+    BorderStyle::Dotted => (Some(format!("0 {}", width * 2.0)), Some("round")),
+    BorderStyle::Dashed => (Some(format!("{} {}", width * 3.0, width * 2.0)), None),
+    BorderStyle::Hidden
+    | BorderStyle::Double
+    | BorderStyle::Groove
+    | BorderStyle::Ridge
+    | BorderStyle::Inset
+    | BorderStyle::Outset => return Ok(()),
+    _ => (None, None),
+  };
+
+  let contour = outline_island_contour(island, style.outline_offset + width / 2.0);
+  let data = path_data(&contour, [1.0, 0.0, 0.0, 1.0, origin_x, origin_y]);
+  if data.is_empty() {
+    return Ok(());
+  }
+
+  let opacity = style.parent.opacity.0;
+  let group = (opacity < 1.0)
+    .then(|| doc.begin_group(IDENTITY, opacity, None, None))
+    .transpose()?;
+  doc.stroke_path(
+    &data,
+    Rgba(style.outline_color.0),
+    width,
+    dasharray.as_deref(),
+    linecap,
+  )?;
+  if let Some(group) = group {
+    doc.end_group(group)?;
   }
   Ok(())
 }
@@ -182,7 +280,7 @@ fn emit_runs(
 ///
 /// The coverage is expressed as an SVG `<mask>` (white glyph fill ∪ stroke)
 /// rather than a `<clipPath>`, because a clip path ignores stroke width and so
-/// can't reach the stroke-widened ring — the background would only fill the thin
+/// can't reach the stroke-widened ring, so the background would only fill the thin
 /// glyph interior. A mask honors the stroke, so the background fills the full
 /// fill+stroke coverage.
 #[allow(clippy::too_many_arguments)]
@@ -375,7 +473,6 @@ fn emit_run_glyphs(
             }
           }
         } else {
-          // COLR glyph: emit each color layer with its resolved palette color.
           for (color, paths) in color_layers {
             if color.0[3] == 0 {
               continue;
@@ -387,7 +484,7 @@ fn emit_run_glyphs(
           }
         }
       }
-      // Color/bitmap glyphs (emoji) have no vector form — embed the rasterized
+      // Color/bitmap glyphs (emoji) have no vector form, so embed the rasterized
       // pixmap as a `data:image/png` `<image>`. Skipped in the shadow pass.
       ResolvedGlyph::Bitmap(bitmap) => {
         if color_override.is_some() || clip_data.is_some() {

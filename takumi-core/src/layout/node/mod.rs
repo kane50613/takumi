@@ -511,7 +511,7 @@ impl Node {
     }
   }
 
-  pub fn inline_content(&self) -> Option<InlineContentKind<'_>> {
+  pub(crate) fn inline_content(&self) -> Option<InlineContentKind<'_>> {
     match &self.kind {
       NodeKind::Container { .. } => None,
       NodeKind::Image(_) => image_inline_content(&self.kind),

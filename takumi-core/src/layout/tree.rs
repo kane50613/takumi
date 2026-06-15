@@ -24,9 +24,8 @@ use crate::{
     node::{Node, NodeStyleLayers},
     style::{
       BackgroundImage, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem, ContentValue,
-      Display, Filters, Float, Isolation, LineHeight, Overflow, PercentageNumber, Position,
-      SizingContext, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
-      apply_stylesheet_animations,
+      Display, Filters, Float, Isolation, LineHeight, PercentageNumber, Position, SizingContext,
+      Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode, apply_stylesheet_animations,
     },
   },
 };
@@ -1589,9 +1588,8 @@ impl<'g> RenderNode<'g> {
     match self.inline_baseline_box_kind()? {
       InlineBaselineBoxKind::AtomicContainer => {
         let display = self.context.style.display;
-        let overflow_hidden_inline_block = display == Display::InlineBlock
-          && (self.context.style.overflow_x != Overflow::Visible
-            || self.context.style.overflow_y != Overflow::Visible);
+        let overflow_hidden_inline_block =
+          display == Display::InlineBlock && self.context.style.clips_overflow();
 
         Some(match display {
           Display::InlineBlock if overflow_hidden_inline_block => InlineBaselineStrategy {

@@ -17,7 +17,7 @@ use takumi_core::{
     node::{ImageData, Node, NodeKind},
     style::{
       BackgroundClip, BackgroundImage, BasicShape, BlendMode, BorderStyle, Color, ComputedStyle,
-      Display, FillRule, Overflow, ShapeRadius, Sides, SizingContext, SpacePair, StyleSheet,
+      Display, FillRule, Overflow, ShapeRadius, Sides, SizingContext, SpacePair, StyleSheet, ToCss,
     },
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
@@ -26,7 +26,7 @@ use takumi_core::{
 };
 use typed_builder::TypedBuilder;
 
-use crate::box_model::{clips_overflow, element_transform, path_data};
+use crate::box_model::{element_transform, path_data};
 use crate::gradient::{emit_background_images, emit_image_layers};
 use crate::image::emit_image;
 use crate::text::{emit_inline_content, emit_text};
@@ -112,35 +112,10 @@ impl BoxChrome {
   }
 }
 
-/// Maps a [`BlendMode`] to its CSS `mix-blend-mode` keyword, or `None` for the
-/// default (`normal`) which needs no group.
-fn blend_mode_css(mode: BlendMode) -> Option<&'static str> {
-  Some(match mode {
-    BlendMode::Normal => return None,
-    BlendMode::Multiply => "multiply",
-    BlendMode::Screen => "screen",
-    BlendMode::Overlay => "overlay",
-    BlendMode::Darken => "darken",
-    BlendMode::Lighten => "lighten",
-    BlendMode::ColorDodge => "color-dodge",
-    BlendMode::ColorBurn => "color-burn",
-    BlendMode::HardLight => "hard-light",
-    BlendMode::SoftLight => "soft-light",
-    BlendMode::Difference => "difference",
-    BlendMode::Exclusion => "exclusion",
-    BlendMode::Hue => "hue",
-    BlendMode::Saturation => "saturation",
-    BlendMode::Color => "color",
-    BlendMode::Luminosity => "luminosity",
-    BlendMode::PlusLighter => "plus-lighter",
-    BlendMode::PlusDarker => "plus-darker",
-  })
-}
-
-/// Emits a box's shared chrome — the CSS transform/opacity group, box-shadows,
-/// background (rounded-clipped), and borders — then opens the overflow-clip child
-/// group. `x`/`y` are the box's absolute border-box top-left. The returned group
-/// tokens must be closed by the caller after emitting the box's content.
+/// Emits a box's shared chrome (the CSS transform/opacity group, box-shadows,
+/// rounded-clipped background, borders), then opens the overflow-clip child group.
+/// `x`/`y` are the box's absolute border-box top-left. The returned group tokens
+/// must be closed by the caller after emitting the box's content.
 fn emit_box_chrome(
   node: &RenderNode,
   layout: &taffy::Layout,
@@ -153,16 +128,12 @@ fn emit_box_chrome(
   let style = &node.context.style;
   let cc = node.context.current_color;
 
-  // mix-blend-mode composites the whole element subtree against its backdrop.
-  let blend = blend_mode_css(style.mix_blend_mode)
-    .map(|mode| doc.begin_blend_group(mode))
+  let blend = (style.mix_blend_mode != BlendMode::Normal)
+    .then(|| doc.begin_blend_group(&style.mix_blend_mode.to_css_string()))
     .transpose()?;
 
-  // mask-image attenuates the whole element subtree (alpha mask by default).
   let mask = emit_mask_group(node, x, y, width, height, doc)?;
 
-  // CSS opacity + transform + filter apply to the element's whole subtree → one
-  // group.
   let opacity = style.opacity.0;
   let transform = element_transform(&node.context, layout.size, x, y);
   let filter_ref = if !style.filter.is_empty() {
@@ -181,7 +152,6 @@ fn emit_box_chrome(
     })
     .transpose()?;
 
-  // clip-path wraps the whole element (background + border + content + children).
   let clip_group = emit_clip_path_group(node, layout.size, x, y, doc)?;
 
   emit_box_shadows(node, layout, x, y, width, height, doc)?;
@@ -191,9 +161,8 @@ fn emit_box_chrome(
   let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
   let rounded = !border.is_zero();
 
-  // Background (clipped to the rounded border-box when radii are present).
-  // `background-clip: text` paints the background into the text glyphs instead of
-  // the box, so the box background is suppressed here (emitted by the text path).
+  // `background-clip: text` paints into the glyphs, so the box background is
+  // suppressed here and emitted by the text path instead.
   let background = style.background_color.resolve(cc);
   let has_bg_image = style
     .background_image
@@ -201,9 +170,7 @@ fn emit_box_chrome(
     .is_some_and(|images| !images.is_empty());
   let clip_text = style.background_clip == BackgroundClip::Text;
   if !clip_text && (background.0[3] != 0 || has_bg_image) {
-    // The painted area is clipped per `background-clip`: the full (rounded)
-    // border-box, the padding box, the content box, or the border-only ring
-    // (`border-area`). Mirrors the raster backend's `draw_background`.
+    // Mirrors the raster backend's `draw_background` clip regions.
     let bg_clip = background_clip_path(style.background_clip, &border, layout, x, y)
       .map(|(data, even_odd)| {
         if even_odd {
@@ -237,7 +204,8 @@ fn emit_box_chrome(
   // padding box regardless of the per-axis overflow values, so the rounded path is
   // used as-is. Without radius a two-value overflow (e.g. `overflow-x: hidden;
   // overflow-y: visible`) must leave the visible axis unbounded.
-  let child_group = clips_overflow(style)
+  let child_group = style
+    .clips_overflow()
     .then(|| {
       let path = if rounded {
         padding_box_path_data(&border, layout.border, layout.size, x, y)
@@ -538,9 +506,9 @@ fn emit_node(
 
   let chrome = emit_box_chrome(node, layout, x, y, doc)?;
 
-  // A node either establishes an inline formatting context (its anonymous text +
-  // inline children are laid out as one inline run set, with inline boxes recursed
-  // in flow) or paints its own content and recurses block children — never both.
+  // A node either establishes an inline formatting context (its anonymous text and
+  // inline children laid out as one inline run set, with inline boxes recursed in
+  // flow) or paints its own content and recurses block children, never both.
   if node.should_create_inline_layout() {
     emit_inline_content(node, *layout, x, y, doc)?;
   } else {
@@ -603,15 +571,14 @@ pub(crate) fn emit_inline_box(
     return Ok(());
   }
 
-  // Inline boxes are positioned relative to the container's padding box.
   let box_x =
     container_x + container_layout.border.left + container_layout.padding.left + inline_box.x;
   let box_y =
     container_y + container_layout.border.top + container_layout.padding.top + inline_box.y;
 
   if node.participates_as_inline_box() {
-    // Atomic inline box (inline-block / float): lay the subtree out fresh at the
-    // box's content size and recurse, mirroring the raster backend.
+    // Atomic inline box (inline-block/float): recompute the subtree at the box
+    // size, mirroring the raster backend.
     let subtree = node.clone();
     let mut tree = LayoutTree::from_render_node(&subtree);
     let inline_width =
@@ -634,8 +601,7 @@ pub(crate) fn emit_inline_box(
     );
   }
 
-  // Replaced / non-atomic inline box (e.g. an inline image): paint its chrome and
-  // own content at the item's size — it has no in-flow layout to recompute.
+  // Replaced inline box (e.g. an image): no in-flow layout to recompute.
   let box_layout: taffy::Layout = item.into();
   let chrome = emit_box_chrome(node, &box_layout, box_x, box_y, doc)?;
 

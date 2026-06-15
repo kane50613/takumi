@@ -56,7 +56,6 @@ pub(crate) fn emit_image(
   };
   let position = context.style.object_position;
 
-  // `fill` stretches; all others position a scaled image by `object-position`.
   if matches!(context.style.object_fit, ObjectFit::Fill) {
     return doc.image(x, y, w, h, &href, Some("none"));
   }
@@ -65,8 +64,6 @@ pub(crate) fn emit_image(
     return doc.image(x, y, w, h, &href, Some("xMidYMid meet"));
   };
 
-  // The scaled image size for each fit. `cover` may exceed the content box (and is
-  // cropped); the others fit within it.
   let scale = match context.style.object_fit {
     ObjectFit::Fill => 1.0,
     ObjectFit::Contain => (w / iw).min(h / ih),
@@ -76,13 +73,10 @@ pub(crate) fn emit_image(
   };
   let (dw, dh) = (iw * scale, ih * scale);
 
-  // `object-position` resolves against the leftover/overflow space on each axis.
   let off_x = position_axis(position.0.x, context, w - dw);
   let off_y = position_axis(position.0.y, context, h - dh);
   let (ix, iy) = (x + off_x, y + off_y);
 
-  // When the image overflows the content box (cover, or none with a large image),
-  // clip it to the box; otherwise draw it directly at the computed rect.
   if dw > w + 0.5 || dh > h + 0.5 {
     let clip = doc.clip_path(&format!("M{x} {y} H{} V{} H{x} Z", x + w, y + h))?;
     let group = doc.begin_group(crate::IDENTITY, 1.0, Some(&clip), None)?;

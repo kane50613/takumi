@@ -100,6 +100,10 @@ impl ComputedStyle {
     SpacePair::from_pair(self.overflow_x, self.overflow_y)
   }
 
+  pub fn clips_overflow(&self) -> bool {
+    self.resolve_overflows().should_clip_content()
+  }
+
   pub fn ellipsis_char(&self) -> &str {
     const ELLIPSIS_CHAR: &str = "…";
 

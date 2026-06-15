@@ -1,9 +1,9 @@
 use taffy::{Layout, Point, Size};
-use tiny_skia::{IntSize, Pixmap};
+use tiny_skia::PixmapRef;
 
 use crate::{
-  BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Command, Error, Fill, Placement,
-  Result, SamplingOptions, Style, apply_blur, attenuate_alpha_by_mask, fast_div_255,
+  BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Command, Fill, Placement, Result,
+  SamplingOptions, Style, apply_blur, attenuate_alpha_by_mask, fast_div_255,
   layout::style::{Affine, BlendMode, ImageScalingAlgorithm, Sides},
   render_mask,
 };
@@ -113,22 +113,23 @@ pub(crate) fn draw_inset_shadow_to_canvas(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let image = draw_inset_shadow(shadow, border_radius, layout.size, &mut canvas.buffer_pool)?;
+  let (data, width, height) =
+    draw_inset_shadow(shadow, border_radius, layout.size, &mut canvas.buffer_pool)?;
 
-  canvas.overlay_sampled_pixmap(
-    image.as_ref(),
-    Size {
-      width: image.width(),
-      height: image.height(),
-    },
-    border_radius,
-    transform,
-    SamplingOptions {
-      logical_to_source: Affine::IDENTITY,
-      algorithm: ImageScalingAlgorithm::Auto,
-    },
-    BlendMode::Normal,
-  );
+  if let Some(source) = PixmapRef::from_bytes(&data, width, height) {
+    canvas.overlay_sampled_pixmap(
+      source,
+      Size { width, height },
+      border_radius,
+      transform,
+      SamplingOptions {
+        logical_to_source: Affine::IDENTITY,
+        algorithm: ImageScalingAlgorithm::Auto,
+      },
+      BlendMode::Normal,
+    );
+  }
+  canvas.buffer_pool.release(data);
 
   Ok(())
 }
@@ -138,7 +139,7 @@ pub(crate) fn draw_inset_shadow(
   mut border: BorderProperties,
   border_box: Size<f32>,
   buffer_pool: &mut BufferPool,
-) -> Result<Pixmap> {
+) -> Result<(Vec<u8>, u32, u32)> {
   let width = border_box.width as u32;
   let height = border_box.height as u32;
   let [red, green, blue, alpha] = shadow.color.0;
@@ -191,7 +192,7 @@ pub(crate) fn draw_inset_shadow(
     buffer_pool,
   )?;
 
-  let mut data = vec![0u8; (width * height * 4) as usize];
+  let mut data = buffer_pool.acquire_dirty((width * height * 4) as usize);
   for (pixel, &alpha) in bytemuck::cast_slice_mut::<u8, [u8; 4]>(&mut data)
     .iter_mut()
     .zip(&shadow_alpha)
@@ -215,11 +216,5 @@ pub(crate) fn draw_inset_shadow(
   }
   buffer_pool.release(shadow_alpha);
 
-  let Some(size) = IntSize::from_wh(width, height) else {
-    return Err(Error::InvalidViewport);
-  };
-  let Some(pixmap) = Pixmap::from_vec(data, size) else {
-    return Err(Error::InvalidViewport);
-  };
-  Ok(pixmap)
+  Ok((data, width, height))
 }

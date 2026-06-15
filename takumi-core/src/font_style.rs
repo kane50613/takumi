@@ -14,6 +14,7 @@ use crate::shadow::SizedShadow;
 
 /// Sized font style with computed font size and line height.
 #[derive(Clone)]
+#[non_exhaustive]
 pub struct SizedFontStyle<'s> {
   pub parent: &'s ComputedStyle,
   pub line_height: parley::LineHeight,

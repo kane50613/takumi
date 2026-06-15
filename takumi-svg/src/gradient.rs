@@ -413,7 +413,6 @@ fn emit_url(
   let Some(href) = data_url_for_url(url, context) else {
     return Ok(());
   };
-  // The tile rect is already sized for the layer, so stretch the image to fill it.
   doc.image(tx, ty, tile_w, tile_h, &href, Some(preserve_aspect_none()))
 }
 

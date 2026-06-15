@@ -5,15 +5,16 @@ use skrifa::{FontRef, MetadataProvider};
 use taffy::{Layout, Point};
 
 use crate::{
-  BorderProperties, Canvas, Cap, Command, DashPattern, DecorationSegmentParams, PaintSource,
-  PathBuilder, Placement, RenderContext, Result, SizedFontStyle, Stroke, collect_background_layers,
-  draw_background, draw_border, draw_decoration, draw_decoration_segment, draw_glyph,
-  draw_glyph_clip_image, draw_glyph_text_shadow, draw_inset_box_shadow, draw_node_content,
-  draw_outline, draw_outset_box_shadow,
+  BorderProperties, Canvas, Cap, DashPattern, DecorationSegmentParams, PaintSource, Placement,
+  RenderContext, Result, SizedFontStyle, Stroke, collect_background_layers, draw_background,
+  draw_border, draw_decoration, draw_decoration_segment, draw_glyph, draw_glyph_clip_image,
+  draw_glyph_text_shadow, draw_inset_box_shadow, draw_node_content, draw_outline,
+  draw_outset_box_shadow,
   layout::{
     inline::{
       BuiltInlineLayout, InlineBoxItem, InlineBrush, InlineOutlineRect, InlineRunLayout,
-      PositionedInlineRun, ProcessedInlineSpan, VisualInlineBox, resolve_inline_runs,
+      PositionedInlineRun, ProcessedInlineSpan, VisualInlineBox, outline_island_contour,
+      outline_islands, resolve_inline_runs,
     },
     style::{
       Affine, BackgroundClip, BlendMode, BorderStyle, Color, SizedTextDecorationThickness,
@@ -400,77 +401,6 @@ fn draw_glyph_run_line_through(
   Ok(())
 }
 
-const OUTLINE_COORD_TOLERANCE: f32 = 1e-3;
-
-fn x_ranges_touch(left: InlineOutlineRect, right: InlineOutlineRect) -> bool {
-  left.x <= right.x + right.width + OUTLINE_COORD_TOLERANCE
-    && right.x <= left.x + left.width + OUTLINE_COORD_TOLERANCE
-}
-
-fn append_outline_contour(
-  path: &mut Vec<Command>,
-  outline_rects: &[InlineOutlineRect],
-  amount: f32,
-) {
-  let mut expanded_rects = outline_rects
-    .iter()
-    .filter_map(|r| expand_outline_rect(*r, amount));
-
-  let Some(first_rect) = expanded_rects.next() else {
-    return;
-  };
-
-  path.move_to((first_rect.x, first_rect.y));
-  path.line_to((first_rect.x + first_rect.width, first_rect.y));
-
-  let mut current_rect = first_rect;
-
-  for next_rect in expanded_rects {
-    path.line_to((current_rect.x + current_rect.width, next_rect.y));
-    path.line_to((next_rect.x + next_rect.width, next_rect.y));
-    current_rect = next_rect;
-  }
-  let last_rect = current_rect;
-
-  path.line_to((
-    last_rect.x + last_rect.width,
-    last_rect.y + last_rect.height,
-  ));
-  path.line_to((last_rect.x, last_rect.y + last_rect.height));
-
-  let mut expanded_rev = outline_rects
-    .iter()
-    .rev()
-    .filter_map(|r| expand_outline_rect(*r, amount));
-  let Some(mut lower_rect) = expanded_rev.next() else {
-    return;
-  };
-
-  for upper_rect in expanded_rev {
-    path.line_to((lower_rect.x, upper_rect.y + upper_rect.height));
-    path.line_to((upper_rect.x, upper_rect.y + upper_rect.height));
-    lower_rect = upper_rect;
-  }
-
-  path.close();
-}
-
-fn expand_outline_rect(outline_rect: InlineOutlineRect, amount: f32) -> Option<InlineOutlineRect> {
-  let width = outline_rect.width + amount * 2.0;
-  let height = outline_rect.height + amount * 2.0;
-  if width <= 0.0 || height <= 0.0 {
-    return None;
-  }
-
-  Some(InlineOutlineRect {
-    x: outline_rect.x - amount,
-    y: outline_rect.y - amount,
-    width,
-    height,
-    ..outline_rect
-  })
-}
-
 fn draw_outline_island(
   outline_rects: &[InlineOutlineRect],
   canvas: &mut Canvas,
@@ -504,9 +434,7 @@ fn draw_outline_island_content(
 ) {
   let width = style.outline_width;
 
-  let expansion = style.outline_offset + width / 2.0;
-  let mut path = Vec::with_capacity(outline_rects.len() * 6);
-  append_outline_contour(&mut path, outline_rects, expansion);
+  let path = outline_island_contour(outline_rects, style.outline_offset + width / 2.0);
   if path.is_empty() {
     return;
   }
@@ -546,85 +474,12 @@ fn draw_outline_island_content(
 }
 
 fn draw_merged_outline_rects(
-  mut outline_rects: Vec<InlineOutlineRect>,
+  outline_rects: Vec<InlineOutlineRect>,
   canvas: &mut Canvas,
   spans: &[ProcessedInlineSpan<'_, '_>],
   transform: Affine,
 ) -> Result<()> {
-  outline_rects.sort_by(|left, right| {
-    left
-      .span_id
-      .cmp(&right.span_id)
-      .then(left.line_index.cmp(&right.line_index))
-      .then(left.x.total_cmp(&right.x))
-  });
-
-  let mut merged_rects = Vec::with_capacity(outline_rects.len());
-  for outline_rect in outline_rects {
-    let Some(previous_rect) = merged_rects.last_mut() else {
-      merged_rects.push(outline_rect);
-      continue;
-    };
-
-    let same_group = previous_rect.span_id == outline_rect.span_id
-      && previous_rect.line_index == outline_rect.line_index;
-    let touching =
-      outline_rect.x <= previous_rect.x + previous_rect.width + OUTLINE_COORD_TOLERANCE;
-    let same_band = (outline_rect.y - previous_rect.y).abs() <= OUTLINE_COORD_TOLERANCE
-      && (outline_rect.height - previous_rect.height).abs() <= OUTLINE_COORD_TOLERANCE;
-
-    if same_group && same_band && touching {
-      let right_edge =
-        (previous_rect.x + previous_rect.width).max(outline_rect.x + outline_rect.width);
-      previous_rect.x = previous_rect.x.min(outline_rect.x);
-      previous_rect.y = previous_rect.y.min(outline_rect.y);
-      previous_rect.width = right_edge - previous_rect.x;
-      previous_rect.height = previous_rect.height.max(outline_rect.height);
-    } else {
-      merged_rects.push(outline_rect);
-    }
-  }
-
-  let mut line_rect_counts = HashMap::new();
-  for outline_rect in &merged_rects {
-    *line_rect_counts
-      .entry((outline_rect.span_id, outline_rect.line_index))
-      .or_insert(0usize) += 1;
-  }
-
-  let mut islands: Vec<Vec<InlineOutlineRect>> = Vec::new();
-  for outline_rect in merged_rects {
-    let mut matched_island = None;
-
-    for (index, island) in islands.iter().enumerate() {
-      let Some(previous_rect) = island.last().copied() else {
-        continue;
-      };
-      if previous_rect.span_id != outline_rect.span_id {
-        continue;
-      }
-      if outline_rect.line_index != previous_rect.line_index + 1 {
-        continue;
-      }
-
-      let previous_is_unique =
-        line_rect_counts.get(&(previous_rect.span_id, previous_rect.line_index)) == Some(&1);
-      let current_is_unique =
-        line_rect_counts.get(&(outline_rect.span_id, outline_rect.line_index)) == Some(&1);
-      if (previous_is_unique && current_is_unique) || x_ranges_touch(previous_rect, outline_rect) {
-        matched_island = Some(index);
-        break;
-      }
-    }
-
-    if let Some(index) = matched_island {
-      islands[index].push(outline_rect);
-    } else {
-      islands.push(vec![outline_rect]);
-    }
-  }
-
-  for island in islands {
+  for island in outline_islands(outline_rects) {
     draw_outline_island(&island, canvas, spans, transform)?;
   }
 
@@ -787,6 +642,7 @@ pub(crate) fn draw_inline_layout(
     runs,
     inline_boxes,
     outline_rects,
+    ..
   } = resolve_inline_runs(built, context, layout)?;
 
   let decoration_mask = runs.iter().fold(TextDecorationLines::empty(), |acc, run| {

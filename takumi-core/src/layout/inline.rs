@@ -13,6 +13,7 @@ use crate::{
   context::RenderContext,
   font_style::SizedFontStyle,
   layout::{
+    border::BorderPath,
     node::Node,
     style::{
       Affine, BoxSizing, Color, Float, FontSynthesis, ResolvedVerticalAlign,
@@ -149,7 +150,7 @@ fn collect_inline_items_impl<'n, 'g>(
   }
 }
 
-pub enum InlineContentKind<'c> {
+pub(crate) enum InlineContentKind<'c> {
   Text(Cow<'c, str>),
   Box,
 }
@@ -163,7 +164,7 @@ pub struct ParentFontMetrics {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct InlineMeasureOptions {
+pub(crate) struct InlineMeasureOptions {
   pub max_width: f32,
   pub ceil_width: bool,
   pub parent_font_metrics: Option<ParentFontMetrics>,
@@ -548,7 +549,7 @@ fn parent_baseline_offset_for_box(
   top - (line.metrics().baseline - baseline_in_item)
 }
 
-pub fn effective_parent_x_height_for_line(
+pub(crate) fn effective_parent_x_height_for_line(
   line: &Line<'_, InlineBrush>,
   parent_font_metrics: Option<ParentFontMetrics>,
 ) -> Option<f32> {
@@ -567,7 +568,7 @@ pub fn effective_parent_x_height_for_line(
   (text_ascent_max > 0.0).then_some(text_ascent_max * 0.5)
 }
 
-pub fn effective_parent_text_metrics_for_line(
+pub(crate) fn effective_parent_text_metrics_for_line(
   line: &Line<'_, InlineBrush>,
   parent_font_metrics: Option<ParentFontMetrics>,
 ) -> Option<(f32, f32)> {
@@ -713,7 +714,7 @@ pub fn resolve_inline_line_metrics(
   result
 }
 
-pub fn resolved_line_metrics_for_apply(
+pub(crate) fn resolved_line_metrics_for_apply(
   line_metrics: &LineMetrics,
   resolved: ResolvedLineMetrics,
 ) -> LineMetrics {
@@ -759,7 +760,7 @@ pub fn resolve_inline_line_states(
     .collect()
 }
 
-pub fn normalize_inline_box(
+pub(crate) fn normalize_inline_box(
   mut inline_box: PositionedInlineBox,
   line_state: ResolvedInlineLineState,
   spans: &[ProcessedInlineSpan<'_, '_>],
@@ -952,7 +953,7 @@ fn apply_truncation_plan<'c, 'g>(
   }
 }
 
-pub fn measure_inline_layout(
+pub(crate) fn measure_inline_layout(
   layout: &mut InlineLayout,
   spans: &[ProcessedInlineSpan<'_, '_>],
   custom_inline_boxes: &[PositionedInlineBox],
@@ -1406,7 +1407,7 @@ pub struct LineScaleState {
 
 /// Horizontal correction for a text-fit-scaled line:
 /// `static_inline_prefix * (1 - scale) + alignment_correction`.
-pub fn text_fit_x_correction(
+pub(crate) fn text_fit_x_correction(
   scale: f32,
   static_inline_prefix: f32,
   alignment_correction: f32,
@@ -1431,7 +1432,7 @@ impl LineScaleState {
 
 /// Per-line setup (scale state, baseline shift, resolved metrics) for the inline
 /// painting walk.
-pub struct LineSetup {
+pub(crate) struct LineSetup {
   /// Text-fit scale state for the line.
   pub state: LineScaleState,
   /// Baseline shift applied to glyphs on the line.
@@ -1474,8 +1475,9 @@ impl LineSetup {
 
 /// A glyph run's text-outline rectangle on a line, in border-box space. The
 /// raster backend merges these into stroked islands; the vector backend emits
-/// them as outline contours. Pure geometry — no backend types.
+/// them as outline contours. Pure geometry, no backend types.
 #[derive(Clone, Copy)]
+#[non_exhaustive]
 pub struct InlineOutlineRect {
   /// Source inline span id (identifies the styled run the rect belongs to).
   pub span_id: u64,
@@ -1537,6 +1539,155 @@ fn collect_glyph_run_outline_rect(
   ))
 }
 
+const OUTLINE_COORD_TOLERANCE: f32 = 1e-3;
+
+fn x_ranges_touch(left: InlineOutlineRect, right: InlineOutlineRect) -> bool {
+  left.x <= right.x + right.width + OUTLINE_COORD_TOLERANCE
+    && right.x <= left.x + left.width + OUTLINE_COORD_TOLERANCE
+}
+
+fn expand_outline_rect(rect: InlineOutlineRect, amount: f32) -> Option<InlineOutlineRect> {
+  let width = rect.width + amount * 2.0;
+  let height = rect.height + amount * 2.0;
+  if width <= 0.0 || height <= 0.0 {
+    return None;
+  }
+  Some(InlineOutlineRect {
+    x: rect.x - amount,
+    y: rect.y - amount,
+    width,
+    height,
+    ..rect
+  })
+}
+
+/// Merges adjacent per-line outline rects, then groups them into
+/// vertically-continuous islands; each island becomes one stroked contour.
+/// Backend-agnostic; both the raster and vector backends consume the islands.
+pub fn outline_islands(mut outline_rects: Vec<InlineOutlineRect>) -> Vec<Vec<InlineOutlineRect>> {
+  outline_rects.sort_by(|left, right| {
+    left
+      .span_id
+      .cmp(&right.span_id)
+      .then(left.line_index.cmp(&right.line_index))
+      .then(left.x.total_cmp(&right.x))
+  });
+
+  let mut merged_rects: Vec<InlineOutlineRect> = Vec::with_capacity(outline_rects.len());
+  for outline_rect in outline_rects {
+    let Some(previous_rect) = merged_rects.last_mut() else {
+      merged_rects.push(outline_rect);
+      continue;
+    };
+
+    let same_group = previous_rect.span_id == outline_rect.span_id
+      && previous_rect.line_index == outline_rect.line_index;
+    let touching =
+      outline_rect.x <= previous_rect.x + previous_rect.width + OUTLINE_COORD_TOLERANCE;
+    let same_band = (outline_rect.y - previous_rect.y).abs() <= OUTLINE_COORD_TOLERANCE
+      && (outline_rect.height - previous_rect.height).abs() <= OUTLINE_COORD_TOLERANCE;
+
+    if same_group && same_band && touching {
+      let right_edge =
+        (previous_rect.x + previous_rect.width).max(outline_rect.x + outline_rect.width);
+      previous_rect.x = previous_rect.x.min(outline_rect.x);
+      previous_rect.y = previous_rect.y.min(outline_rect.y);
+      previous_rect.width = right_edge - previous_rect.x;
+      previous_rect.height = previous_rect.height.max(outline_rect.height);
+    } else {
+      merged_rects.push(outline_rect);
+    }
+  }
+
+  let mut line_rect_counts = HashMap::new();
+  for outline_rect in &merged_rects {
+    *line_rect_counts
+      .entry((outline_rect.span_id, outline_rect.line_index))
+      .or_insert(0usize) += 1;
+  }
+
+  let mut islands: Vec<Vec<InlineOutlineRect>> = Vec::new();
+  for outline_rect in merged_rects {
+    let mut matched_island = None;
+
+    for (index, island) in islands.iter().enumerate() {
+      let Some(previous_rect) = island.last().copied() else {
+        continue;
+      };
+      if previous_rect.span_id != outline_rect.span_id {
+        continue;
+      }
+      if outline_rect.line_index != previous_rect.line_index + 1 {
+        continue;
+      }
+
+      let previous_is_unique =
+        line_rect_counts.get(&(previous_rect.span_id, previous_rect.line_index)) == Some(&1);
+      let current_is_unique =
+        line_rect_counts.get(&(outline_rect.span_id, outline_rect.line_index)) == Some(&1);
+      if (previous_is_unique && current_is_unique) || x_ranges_touch(previous_rect, outline_rect) {
+        matched_island = Some(index);
+        break;
+      }
+    }
+
+    if let Some(index) = matched_island {
+      islands[index].push(outline_rect);
+    } else {
+      islands.push(vec![outline_rect]);
+    }
+  }
+
+  islands
+}
+
+/// Builds the rectilinear contour around one island of outline rects, expanded
+/// by `expansion` (outline-offset plus half the outline width). Pure path
+/// geometry; callers stroke it with their own backend.
+pub fn outline_island_contour(island: &[InlineOutlineRect], expansion: f32) -> Vec<PathSegment> {
+  let mut path = Vec::with_capacity(island.len() * 6);
+  let mut expanded_rects = island
+    .iter()
+    .filter_map(|r| expand_outline_rect(*r, expansion));
+  let Some(first_rect) = expanded_rects.next() else {
+    return path;
+  };
+
+  path.move_to((first_rect.x, first_rect.y));
+  path.line_to((first_rect.x + first_rect.width, first_rect.y));
+
+  let mut current_rect = first_rect;
+  for next_rect in expanded_rects {
+    path.line_to((current_rect.x + current_rect.width, next_rect.y));
+    path.line_to((next_rect.x + next_rect.width, next_rect.y));
+    current_rect = next_rect;
+  }
+  let last_rect = current_rect;
+
+  path.line_to((
+    last_rect.x + last_rect.width,
+    last_rect.y + last_rect.height,
+  ));
+  path.line_to((last_rect.x, last_rect.y + last_rect.height));
+
+  let mut expanded_rev = island
+    .iter()
+    .rev()
+    .filter_map(|r| expand_outline_rect(*r, expansion));
+  let Some(mut lower_rect) = expanded_rev.next() else {
+    return path;
+  };
+
+  for upper_rect in expanded_rev {
+    path.line_to((lower_rect.x, upper_rect.y + upper_rect.height));
+    path.line_to((upper_rect.x, upper_rect.y + upper_rect.height));
+    lower_rect = upper_rect;
+  }
+
+  path.close();
+  path
+}
+
 /// Scales an inline box's `x` for a text-fit-scaled line, mirroring the
 /// horizontal correction in [`LineScaleState::transform`].
 pub fn scale_text_fit_x(
@@ -1556,6 +1707,7 @@ pub fn scale_text_fit_x(
 
 /// One glyph run positioned on its line, carrying everything both backends need
 /// to paint it. Borrows the parley layout owned by the source [`BuiltInlineLayout`].
+#[non_exhaustive]
 pub struct PositionedInlineRun<'l> {
   /// The parley glyph run (metrics, brush, positioned glyphs, font).
   pub glyph_run: GlyphRun<'l, InlineBrush>,
@@ -1628,7 +1780,8 @@ impl PositionedInlineRun<'_> {
 /// The single inline enumeration shared by both backends: positioned glyph runs
 /// in paint order, positioned inline boxes, and text-outline rects. Built once by
 /// [`resolve_inline_runs`]; the raster backend rasterizes it and the vector
-/// backend emits it — only the painting differs.
+/// backend emits it; only the painting differs.
+#[non_exhaustive]
 pub struct InlineRunLayout<'l> {
   /// Glyph runs in line/visual order.
   pub runs: Vec<PositionedInlineRun<'l>>,
@@ -1890,7 +2043,7 @@ pub fn create_inline_constraint(
   (width_constraint, max_height)
 }
 
-pub fn break_lines(
+pub(crate) fn break_lines(
   layout: &mut InlineLayout,
   max_width: f32,
   max_height: Option<MaxHeight>,

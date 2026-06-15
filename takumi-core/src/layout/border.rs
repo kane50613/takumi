@@ -17,7 +17,7 @@ pub enum BorderSide {
   Left,
 }
 
-trait BorderPath {
+pub(crate) trait BorderPath {
   fn move_to(&mut self, point: (f32, f32));
   fn line_to(&mut self, point: (f32, f32));
   fn curve_to(&mut self, p1: (f32, f32), p2: (f32, f32), p3: (f32, f32));
@@ -760,7 +760,7 @@ pub fn rect_offset(rect: Rect<f32>) -> Point<f32> {
   }
 }
 
-pub fn line_intersection(
+pub(crate) fn line_intersection(
   a0: Point<f32>,
   a1: Point<f32>,
   b0: Point<f32>,
@@ -780,7 +780,7 @@ pub fn line_intersection(
   })
 }
 
-pub fn approximate_quarter_ellipse_arc_length(radius_x: f32, radius_y: f32) -> f32 {
+pub(crate) fn approximate_quarter_ellipse_arc_length(radius_x: f32, radius_y: f32) -> f32 {
   if radius_x <= 0.0 || radius_y <= 0.0 {
     return 0.0;
   }
@@ -827,7 +827,7 @@ pub fn shade_3d_border_color(color: Color, side: BorderSide, style: BorderStyle)
   )
 }
 
-pub fn mix_color(color: Color, target: Color, amount: f32) -> Color {
+pub(crate) fn mix_color(color: Color, target: Color, amount: f32) -> Color {
   let amount = amount.clamp(0.0, 1.0);
   let inverse = 1.0 - amount;
 
