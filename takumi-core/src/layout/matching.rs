@@ -33,8 +33,8 @@ pub struct StyleNode<'a> {
 }
 #[derive(Clone, Copy)]
 pub struct ArenaElement<'a> {
-  pub tree: &'a StyleArena<'a>,
-  pub index: usize,
+  pub(crate) tree: &'a StyleArena<'a>,
+  pub(crate) index: usize,
 }
 
 impl fmt::Debug for ArenaElement<'_> {

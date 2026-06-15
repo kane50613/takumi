@@ -1988,12 +1988,10 @@ mod tests {
         Rgba([0, 0, 255, 255])
       }
     });
-    let Some(source_pixmap) = ImageBuffer::from_rgba(std::borrow::Cow::Borrowed(&source))
+    let source_pixmap = ImageBuffer::from_rgba(std::borrow::Cow::Borrowed(&source))
       .as_ref()
       .and_then(pixmap_from_buffer)
-    else {
-      return;
-    };
+      .expect("fixture pixmap conversion");
 
     let mut direct = Canvas::new(Size {
       width: 8,

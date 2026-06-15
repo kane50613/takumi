@@ -14,10 +14,12 @@ autobenches = false
 [dependencies.takumi-core]
 path = "../takumi-core"
 version = "=1"
+default-features = false
 
 [dependencies.takumi-paint]
 path = "../takumi-paint"
 version = "=1"
+default-features = false
 
 [features]
 default = ["woff2", "woff", "svg", "rayon"]
