@@ -295,10 +295,17 @@ fn emit_run_decorations(
   over: bool,
 ) -> io::Result<()> {
   let transform = run.transform(IDENTITY);
+  let opacity = run.glyph_run.style().brush.opacity;
+  let opacity_group = (opacity < 1.0)
+    .then(|| doc.begin_group(IDENTITY, opacity, None, None))
+    .transpose()?;
   for decoration in run_decorations(&run.glyph_run, layout, run.baseline_shift, transform) {
     if decoration.over == over {
       emit_decoration(doc, &decoration, origin_x, origin_y)?;
     }
+  }
+  if let Some(group) = opacity_group {
+    doc.end_group(group)?;
   }
   Ok(())
 }
@@ -323,6 +330,13 @@ fn emit_run_glyphs(
   let glyph_offset = run.glyph_offset(layout);
   let fill_color = run.glyph_run.style().brush.color;
   let bold_join = line_join_str(font_style.parent.stroke_linejoin);
+
+  // Per-run (inline span) opacity, matching the raster backend's
+  // `draw_with_inline_opacity`. Skipped while building a clip path (geometry only).
+  let opacity = run.glyph_run.style().brush.opacity;
+  let opacity_group = (clip_data.is_none() && opacity < 1.0)
+    .then(|| doc.begin_group(IDENTITY, opacity, None, None))
+    .transpose()?;
 
   for glyph in run.glyph_run.positioned_glyphs() {
     let Some(resolved) = run.resolved_glyphs.get(&glyph.id) else {
@@ -392,6 +406,9 @@ fn emit_run_glyphs(
         doc.end_group(group)?;
       }
     }
+  }
+  if let Some(group) = opacity_group {
+    doc.end_group(group)?;
   }
   Ok(())
 }

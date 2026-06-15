@@ -301,12 +301,22 @@ fn emit_clip_path_group(
     BasicShape::Ellipse(ellipse) => {
       let cx = x + ellipse.position.0.x.to_px(sizing, size.width);
       let cy = y + ellipse.position.0.y.to_px(sizing, size.height);
-      let distance = Size {
-        width: cx - x,
-        height: cy - y,
-      };
-      let rx = resolve_shape_radius(ellipse.radius_x, distance, sizing, size.width);
-      let ry = resolve_shape_radius(ellipse.radius_y, distance, sizing, size.height);
+      // closest/farthest-side measure each axis from the center to BOTH of its
+      // sides, not just the top-left corner.
+      let rx = resolve_shape_radius(
+        ellipse.radius_x,
+        cx - x,
+        x + size.width - cx,
+        sizing,
+        size.width,
+      );
+      let ry = resolve_shape_radius(
+        ellipse.radius_y,
+        cy - y,
+        y + size.height - cy,
+        sizing,
+        size.height,
+      );
       doc.clip_ellipse(cx, cy, rx, ry)?
     }
     BasicShape::Inset(inset) => {
@@ -360,13 +370,14 @@ fn emit_clip_path_group(
 /// `resolve_radius` (closest/farthest measured from the resolved center).
 fn resolve_shape_radius(
   radius: ShapeRadius,
-  distance: Size<f32>,
+  near: f32,
+  far: f32,
   sizing: &SizingContext,
   full: f32,
 ) -> f32 {
   match radius {
-    ShapeRadius::ClosestSide => distance.width.min(distance.height),
-    ShapeRadius::FarthestSide => distance.width.max(distance.height),
+    ShapeRadius::ClosestSide => near.min(far),
+    ShapeRadius::FarthestSide => near.max(far),
     ShapeRadius::Length(length) => length.to_px(sizing, full),
   }
 }

@@ -127,6 +127,25 @@ fn emit_layer(
   if placement.xs.len() == 1 && placement.ys.len() == 1 {
     let tx = x + placement.xs[0];
     let ty = y + placement.ys[0];
+    // A `cover`/positioned tile can extend past the box; clip it so it does not
+    // bleed outside the element (the raster backend clips background to the box).
+    let overflows = tx < x - 1e-3
+      || ty < y - 1e-3
+      || tx + placement.tile_w > x + w + 1e-3
+      || ty + placement.tile_h > y + h + 1e-3;
+    if overflows {
+      let token = begin_box_clip(doc, x, y, w, h)?;
+      emit_tile(
+        image,
+        context,
+        tx,
+        ty,
+        placement.tile_w,
+        placement.tile_h,
+        doc,
+      )?;
+      return doc.end_group(token);
+    }
     return emit_tile(
       image,
       context,
@@ -139,6 +158,19 @@ fn emit_layer(
   }
 
   emit_tiled_pattern(image, context, x, y, w, h, &placement, doc)
+}
+
+/// Opens a group clipped to the layer box `(x, y, w, h)` so tiles that extend
+/// past the edges (cover/positioned/repeated) don't bleed outside it.
+fn begin_box_clip(
+  doc: &mut SvgDocument,
+  x: f32,
+  y: f32,
+  w: f32,
+  h: f32,
+) -> io::Result<crate::GroupToken> {
+  let clip = doc.clip_path(&format!("M{x} {y}H{}V{}H{x}Z", x + w, y + h))?;
+  doc.begin_group(IDENTITY, 1.0, Some(&clip), None)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -154,9 +186,15 @@ fn emit_tiled_pattern(
 ) -> io::Result<()> {
   // When tiles are evenly spaced on both axes, one <pattern> cell tiles them.
   // Otherwise (space/no-repeat on one axis) emit the explicit tile grid.
+  // A `<pattern>` repeats in BOTH axes, so only use it when both axes actually
+  // have multiple evenly-spaced tiles; otherwise emit the explicit grid (a single
+  // row/column would wrongly repeat on the other axis).
   let even_x = is_even_step(&placement.xs, placement.tile_w);
   let even_y = is_even_step(&placement.ys, placement.tile_h);
-  if let (Some(step_x), Some(step_y)) = (even_x, even_y) {
+  if let (Some(step_x), Some(step_y)) = (even_x, even_y)
+    && placement.xs.len() > 1
+    && placement.ys.len() > 1
+  {
     let origin_x = x + placement.xs[0];
     let origin_y = y + placement.ys[0];
     let (token, paint) = doc.begin_pattern(origin_x, origin_y, step_x, step_y)?;
@@ -173,6 +211,8 @@ fn emit_tiled_pattern(
     return doc.rect_paint(x, y, w, h, &paint);
   }
 
+  // Explicit tile grid, clipped to the box so edge tiles don't bleed outside.
+  let token = begin_box_clip(doc, x, y, w, h)?;
   for &ty in &placement.ys {
     for &tx in &placement.xs {
       emit_tile(
@@ -186,7 +226,7 @@ fn emit_tiled_pattern(
       )?;
     }
   }
-  Ok(())
+  doc.end_group(token)
 }
 
 /// Returns the uniform step between positions (tile size when there is a single
