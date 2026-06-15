@@ -7,6 +7,7 @@
 //! sampled from the gradient's color LUT and clipped to the box.
 
 use std::f32::consts::TAU;
+use std::io;
 
 use takumi_core::context::RenderContext;
 use takumi_core::layout::style::{
@@ -14,9 +15,8 @@ use takumi_core::layout::style::{
   RadialGradient, RadialGradientTile, ResolvedGradientStop, resolve_stops_along_axis,
 };
 
-use crate::{Affine, GradientStop, Rgba, SvgDocument};
+use crate::{GradientStop, IDENTITY, Rgba, SvgDocument};
 
-const IDENTITY: Affine = Affine([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
 const CONIC_WEDGES: usize = 180;
 
 /// Emits every background gradient for a node, painted bottom-up (CSS lists the
@@ -29,18 +29,19 @@ pub(crate) fn emit_background_images(
   w: f32,
   h: f32,
   doc: &mut SvgDocument,
-) {
+) -> io::Result<()> {
   if w <= 0.0 || h <= 0.0 {
-    return;
+    return Ok(());
   }
   for image in images.iter().rev() {
     match image {
-      BackgroundImage::Linear(gradient) => emit_linear(gradient, context, x, y, w, h, doc),
-      BackgroundImage::Radial(gradient) => emit_radial(gradient, context, x, y, w, h, doc),
-      BackgroundImage::Conic(gradient) => emit_conic(gradient, context, x, y, w, h, doc),
+      BackgroundImage::Linear(gradient) => emit_linear(gradient, context, x, y, w, h, doc)?,
+      BackgroundImage::Radial(gradient) => emit_radial(gradient, context, x, y, w, h, doc)?,
+      BackgroundImage::Conic(gradient) => emit_conic(gradient, context, x, y, w, h, doc)?,
       BackgroundImage::Url(_) | BackgroundImage::None => {}
     }
   }
+  Ok(())
 }
 
 fn svg_stops(stops: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<GradientStop> {
@@ -62,7 +63,7 @@ fn emit_linear(
   w: f32,
   h: f32,
   doc: &mut SvgDocument,
-) {
+) -> io::Result<()> {
   let tile = LinearGradientTile::new(
     gradient,
     w as u32,
@@ -77,7 +78,7 @@ fn emit_linear(
     context.current_color,
   );
   if resolved.is_empty() {
-    return;
+    return Ok(());
   }
 
   // Map an axis position (px from one edge of the gradient line) to a point.
@@ -99,8 +100,8 @@ fn emit_linear(
   };
 
   let stops = svg_stops(&resolved, base, span);
-  let paint = doc.linear_gradient(point_at(t0), point_at(t1), gradient.repeating, &stops);
-  doc.rect_paint(x, y, w, h, &paint);
+  let paint = doc.linear_gradient(point_at(t0), point_at(t1), gradient.repeating, &stops)?;
+  doc.rect_paint(x, y, w, h, &paint)
 }
 
 fn emit_radial(
@@ -111,7 +112,7 @@ fn emit_radial(
   w: f32,
   h: f32,
   doc: &mut SvgDocument,
-) {
+) -> io::Result<()> {
   let tile = RadialGradientTile::new(
     gradient,
     w as u32,
@@ -126,7 +127,7 @@ fn emit_radial(
     context.current_color,
   );
   if resolved.is_empty() {
-    return;
+    return Ok(());
   }
 
   let radius_x = tile.inv_radius_x.recip();
@@ -150,8 +151,8 @@ fn emit_radial(
     scale,
     gradient.repeating,
     &stops,
-  );
-  doc.rect_paint(x, y, w, h, &paint);
+  )?;
+  doc.rect_paint(x, y, w, h, &paint)
 }
 
 fn emit_conic(
@@ -162,7 +163,7 @@ fn emit_conic(
   w: f32,
   h: f32,
   doc: &mut SvgDocument,
-) {
+) -> io::Result<()> {
   let tile = ConicGradientTile::new(
     gradient,
     w as u32,
@@ -172,7 +173,7 @@ fn emit_conic(
   );
   let lut_len = tile.color_lut.len();
   if lut_len == 0 {
-    return;
+    return Ok(());
   }
 
   let (ccx, ccy) = (x + tile.cx, y + tile.cy);
@@ -181,8 +182,8 @@ fn emit_conic(
     .map(|(px, py)| (px - ccx).hypot(py - ccy))
     .fold(0.0_f32, f32::max);
 
-  let clip = doc.clip_path(&format!("M{x} {y} H{} V{} H{x} Z", x + w, y + h));
-  let group = doc.begin_group(IDENTITY, 1.0, Some(&clip));
+  let clip = doc.clip_path(&format!("M{x} {y} H{} V{} H{x} Z", x + w, y + h))?;
+  let group = doc.begin_group(IDENTITY, 1.0, Some(&clip))?;
   for i in 0..CONIC_WEDGES {
     let a0 = i as f32 / CONIC_WEDGES as f32 * TAU;
     let a1 = (i + 1) as f32 / CONIC_WEDGES as f32 * TAU;
@@ -196,7 +197,7 @@ fn emit_conic(
     }
     let (x0, y0) = (ccx + radius * a0.sin(), ccy - radius * a0.cos());
     let (x1, y1) = (ccx + radius * a1.sin(), ccy - radius * a1.cos());
-    doc.path(&format!("M{ccx} {ccy} L{x0} {y0} L{x1} {y1} Z"), fill);
+    doc.path(&format!("M{ccx} {ccy} L{x0} {y0} L{x1} {y1} Z"), fill)?;
   }
-  doc.end_group(group);
+  doc.end_group(group)
 }
