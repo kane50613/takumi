@@ -1413,24 +1413,19 @@ pub fn text_fit_x_correction(
   static_inline_prefix * (1.0 - scale) + alignment_correction
 }
 
-/// Composes the affine transform for a glyph run on a (possibly scaled) line:
-/// `base * T(x_correction) * scale-about-origin`. Shared by the raster walk and
-/// the vector producer so the positioning math has a single definition.
-pub fn line_scale_transform_with_static_prefix(
-  base: Affine,
-  state: LineScaleState,
-  static_inline_prefix: f32,
-) -> Affine {
-  let x_correction = text_fit_x_correction(
-    state.scale,
-    static_inline_prefix,
-    state.alignment_correction,
-  );
-  base
-    * Affine::translation(x_correction, 0.0)
-    * Affine::translation(state.layout_origin.x, state.layout_origin.y)
-    * Affine::scale(state.scale, state.scale)
-    * Affine::translation(-state.layout_origin.x, -state.layout_origin.y)
+impl LineScaleState {
+  /// Composes the affine transform for a glyph run on this (possibly scaled)
+  /// line: `base * T(x_correction) * scale-about-origin`. Shared by the raster
+  /// walk and the vector producer so the positioning math has a single home.
+  pub fn transform(self, base: Affine, static_inline_prefix: f32) -> Affine {
+    let x_correction =
+      text_fit_x_correction(self.scale, static_inline_prefix, self.alignment_correction);
+    base
+      * Affine::translation(x_correction, 0.0)
+      * Affine::translation(self.layout_origin.x, self.layout_origin.y)
+      * Affine::scale(self.scale, self.scale)
+      * Affine::translation(-self.layout_origin.x, -self.layout_origin.y)
+  }
 }
 
 /// Per-line setup (scale state, baseline shift, resolved metrics) for the inline
@@ -1446,32 +1441,34 @@ pub struct LineSetup {
   pub resolved_metrics: ResolvedLineMetrics,
 }
 
-/// Resolves a line's scale state, baseline, and metrics for the inline walk.
-/// Returns `None` when `line_index` is out of range for `line_vertical_metrics`.
-pub fn line_setup(
-  line: &Line<'_, InlineBrush>,
-  layout: Layout,
-  line_vertical_metrics: &[ResolvedLineMetrics],
-  line_scales: &[f32],
-  line_index: usize,
-) -> Option<LineSetup> {
-  let resolved_metrics = *line_vertical_metrics.get(line_index)?;
-  let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
-  let (line_scale_origin_x, alignment_correction) =
-    text_fit_line_alignment_correction(line, line_scale, layout.content_box_size().width);
-  Some(LineSetup {
-    state: LineScaleState {
-      scale: line_scale,
-      alignment_correction,
-      layout_origin: Point {
-        x: layout.border.left + layout.padding.left + line_scale_origin_x,
-        y: layout.border.top + layout.padding.top + resolved_metrics.resolved_baseline,
+impl LineSetup {
+  /// Resolves a line's scale state, baseline, and metrics for the inline walk.
+  /// Returns `None` when `line_index` is out of range for `line_vertical_metrics`.
+  pub fn new(
+    line: &Line<'_, InlineBrush>,
+    layout: Layout,
+    line_vertical_metrics: &[ResolvedLineMetrics],
+    line_scales: &[f32],
+    line_index: usize,
+  ) -> Option<Self> {
+    let resolved_metrics = *line_vertical_metrics.get(line_index)?;
+    let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
+    let (line_scale_origin_x, alignment_correction) =
+      text_fit_line_alignment_correction(line, line_scale, layout.content_box_size().width);
+    Some(Self {
+      state: LineScaleState {
+        scale: line_scale,
+        alignment_correction,
+        layout_origin: Point {
+          x: layout.border.left + layout.padding.left + line_scale_origin_x,
+          y: layout.border.top + layout.padding.top + resolved_metrics.resolved_baseline,
+        },
       },
-    },
-    baseline_shift: resolved_metrics.baseline_shift,
-    line_scale_origin_x,
-    resolved_metrics,
-  })
+      baseline_shift: resolved_metrics.baseline_shift,
+      line_scale_origin_x,
+      resolved_metrics,
+    })
+  }
 }
 
 /// One resolved glyph positioned for vector emission. `transform` is in the
@@ -1511,93 +1508,95 @@ pub struct TextScene {
   pub decorations: Vec<DecorationRect>,
 }
 
-/// Resolves `built` into a [`TextScene`] for a vector backend, using the same
-/// positioning primitives ([`line_setup`], [`line_scale_transform_with_static_prefix`])
-/// as the raster walk — only the painting differs.
-pub fn resolve_text_scene(
-  built: &BuiltInlineLayout<'_, '_>,
-  context: &RenderContext,
-  layout: Layout,
-) -> Result<TextScene, FontError> {
-  let BuiltInlineLayout {
-    layout: inline_layout,
-    spans,
-    line_scales,
-    ..
-  } = built;
-  let parent_font_metrics = get_parent_font_metrics(inline_layout);
-  let line_vertical_metrics =
-    resolve_inline_line_metrics(inline_layout, spans, parent_font_metrics, line_scales);
-
-  let mut glyphs = Vec::new();
-  let mut decorations = Vec::new();
-  for (line_index, line) in inline_layout.lines().enumerate() {
-    let Some(setup) = line_setup(
-      &line,
-      layout,
-      &line_vertical_metrics,
+impl TextScene {
+  /// Resolves `built` into positioned drawables for a vector backend, using the
+  /// same positioning primitives ([`LineSetup`], [`LineScaleState::transform`]) as
+  /// the raster walk — only the painting differs.
+  pub fn resolve(
+    built: &BuiltInlineLayout<'_, '_>,
+    context: &RenderContext,
+    layout: Layout,
+  ) -> Result<Self, FontError> {
+    let BuiltInlineLayout {
+      layout: inline_layout,
+      spans,
       line_scales,
-      line_index,
-    ) else {
-      continue;
-    };
-    let glyph_offset = Point {
-      x: layout.border.left + layout.padding.left,
-      y: layout.border.top + layout.padding.top + setup.baseline_shift,
-    };
-    let mut static_inline_prefix = 0.0_f32;
+      ..
+    } = built;
+    let parent_font_metrics = get_parent_font_metrics(inline_layout);
+    let line_vertical_metrics =
+      resolve_inline_line_metrics(inline_layout, spans, parent_font_metrics, line_scales);
 
-    for item in line.items() {
-      match item {
-        PositionedLayoutItem::GlyphRun(glyph_run) => {
-          let run = glyph_run.run();
-          let font = FontRef::from_index(run.font().data.as_ref(), run.font().index)
-            .map_err(|_| FontError::InvalidFontIndex)?;
-          let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
-          let resolved = context
-            .global
-            .font_context
-            .resolve_glyphs(&glyph_run, font, glyph_ids);
-          let color = glyph_run.style().brush.color;
-          let transform = line_scale_transform_with_static_prefix(
-            Affine::IDENTITY,
-            setup.state,
-            static_inline_prefix,
-          );
+    let mut glyphs = Vec::new();
+    let mut decorations = Vec::new();
+    for (line_index, line) in inline_layout.lines().enumerate() {
+      let Some(setup) = LineSetup::new(
+        &line,
+        layout,
+        &line_vertical_metrics,
+        line_scales,
+        line_index,
+      ) else {
+        continue;
+      };
+      let glyph_offset = Point {
+        x: layout.border.left + layout.padding.left,
+        y: layout.border.top + layout.padding.top + setup.baseline_shift,
+      };
+      let mut static_inline_prefix = 0.0_f32;
 
-          for glyph in glyph_run.positioned_glyphs() {
-            let Some(resolved_glyph) = resolved.get(&glyph.id) else {
-              continue;
-            };
-            let matrix =
-              transform * Affine::translation(glyph_offset.x + glyph.x, glyph_offset.y + glyph.y);
-            glyphs.push(PositionedGlyph {
-              glyph: resolved_glyph.clone(),
-              transform: matrix.to_cols_array(),
-              color,
-            });
+      for item in line.items() {
+        match item {
+          PositionedLayoutItem::GlyphRun(glyph_run) => {
+            let run = glyph_run.run();
+            let font = FontRef::from_index(run.font().data.as_ref(), run.font().index)
+              .map_err(|_| FontError::InvalidFontIndex)?;
+            let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
+            let resolved = context
+              .global
+              .font_context
+              .resolve_glyphs(&glyph_run, font, glyph_ids);
+            let color = glyph_run.style().brush.color;
+            let transform = setup
+              .state
+              .transform(Affine::IDENTITY, static_inline_prefix);
+
+            for glyph in glyph_run.positioned_glyphs() {
+              let Some(resolved_glyph) = resolved.get(&glyph.id) else {
+                continue;
+              };
+              let matrix =
+                transform * Affine::translation(glyph_offset.x + glyph.x, glyph_offset.y + glyph.y);
+              glyphs.push(PositionedGlyph {
+                glyph: resolved_glyph.clone(),
+                transform: matrix.to_cols_array(),
+                color,
+              });
+            }
+
+            push_decorations(
+              &glyph_run,
+              layout,
+              setup.baseline_shift,
+              transform,
+              &mut decorations,
+            );
           }
-
-          push_decorations(
-            &glyph_run,
-            layout,
-            setup.baseline_shift,
-            transform,
-            &mut decorations,
-          );
+          PositionedLayoutItem::InlineBox(inline_box)
+            if inline_box.kind == InlineBoxKind::InFlow =>
+          {
+            static_inline_prefix += inline_box.width;
+          }
+          PositionedLayoutItem::InlineBox(_) => {}
         }
-        PositionedLayoutItem::InlineBox(inline_box) if inline_box.kind == InlineBoxKind::InFlow => {
-          static_inline_prefix += inline_box.width;
-        }
-        PositionedLayoutItem::InlineBox(_) => {}
       }
     }
-  }
 
-  Ok(TextScene {
-    glyphs,
-    decorations,
-  })
+    Ok(Self {
+      glyphs,
+      decorations,
+    })
+  }
 }
 
 /// Appends the active decoration lines for a glyph run, mirroring the raster

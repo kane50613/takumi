@@ -8,9 +8,8 @@ use crate::{
   Result,
   layout::{
     inline::{
-      InlineBoxItem, InlineBrush, InlineLayout, LineScaleState, ProcessedInlineSpan,
-      ResolvedLineMetrics, VisualInlineBox, get_parent_font_metrics,
-      line_scale_transform_with_static_prefix, line_setup, resolve_inline_line_metrics,
+      InlineBoxItem, InlineBrush, InlineLayout, LineScaleState, LineSetup, ProcessedInlineSpan,
+      ResolvedLineMetrics, VisualInlineBox, get_parent_font_metrics, resolve_inline_line_metrics,
       resolve_inline_line_states, resolve_visual_inline_box, text_fit_x_correction,
     },
     style::{
@@ -900,7 +899,7 @@ fn for_each_glyph_run_pass(
   ) -> Result<()>,
 ) -> Result<()> {
   for (line_index, line) in ctx.inline_layout.lines().enumerate() {
-    let Some(setup) = line_setup(
+    let Some(setup) = LineSetup::new(
       &line,
       ctx.layout,
       ctx.line_vertical_metrics,
@@ -920,11 +919,9 @@ fn for_each_glyph_run_pass(
           let opts = GlyphRunLineOptions {
             layout: ctx.layout,
             baseline_shift: setup.baseline_shift,
-            transform: line_scale_transform_with_static_prefix(
-              ctx.base_transform,
-              setup.state,
-              static_inline_prefix,
-            ),
+            transform: setup
+              .state
+              .transform(ctx.base_transform, static_inline_prefix),
           };
           draw_with_inline_opacity(canvas, glyph_run.style().brush.opacity, |canvas| {
             visit(canvas, &glyph_run, resolved_glyphs, opts)
@@ -1042,7 +1039,7 @@ pub(crate) fn draw_inline_layout(
   }
 
   for (line_index, line) in inline_layout.lines().enumerate() {
-    let Some(setup) = line_setup(
+    let Some(setup) = LineSetup::new(
       &line,
       layout,
       &line_vertical_metrics,
@@ -1071,11 +1068,9 @@ pub(crate) fn draw_inline_layout(
                   y: layout.border.top + layout.padding.top + setup.baseline_shift,
                 },
                 clip_image: clip_image_source,
-                transform: line_scale_transform_with_static_prefix(
-                  context.transform,
-                  setup.state,
-                  static_inline_prefix,
-                ),
+                transform: setup
+                  .state
+                  .transform(context.transform, static_inline_prefix),
                 style: font_style,
               },
             )

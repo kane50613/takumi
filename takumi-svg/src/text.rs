@@ -14,7 +14,7 @@ use takumi_core::context::RenderContext;
 use takumi_core::font_style::SizedFontStyle;
 use takumi_core::layout::inline::{
   DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, TextScene,
-  create_inline_layout, resolve_inline_max_height, resolve_text_scene,
+  create_inline_layout, resolve_inline_max_height,
 };
 use takumi_core::layout::node::TextData;
 use takumi_core::resources::font::ResolvedGlyph;
@@ -56,7 +56,7 @@ pub(crate) fn emit_text(
     mode: InlineLayoutMode::Draw,
   });
 
-  let scene = resolve_text_scene(&built, context, layout).map_err(|error| {
+  let scene = TextScene::resolve(&built, context, layout).map_err(|error| {
     io::Error::new(
       io::ErrorKind::InvalidData,
       format!("glyph resolution failed: {error}"),
