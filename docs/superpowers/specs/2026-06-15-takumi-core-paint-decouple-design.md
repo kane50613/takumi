@@ -29,7 +29,7 @@ recorded in the appendix.
 
 ## Crate topology
 
-```
+```text
 takumi-css                       (exists; CSS parse/cascade — unchanged)
    ▲
 takumi-core                      (NEW)

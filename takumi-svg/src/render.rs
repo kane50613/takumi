@@ -16,7 +16,9 @@ use takumi_core::{
   },
 };
 
-use crate::{Rgba, SvgDocument};
+use crate::{Affine, Rgba, SvgDocument};
+
+const IDENTITY: Affine = Affine([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
 
 /// Renders a node tree to a vector SVG string.
 pub fn render_svg(node: Node, viewport: Viewport, global: &GlobalContext) -> Result<String> {
@@ -60,6 +62,10 @@ fn emit_node(
   let width = layout.size.width;
   let height = layout.size.height;
 
+  // CSS opacity applies to the element's whole subtree → wrap in a group.
+  let opacity = node.context.style.opacity.0;
+  let group = (opacity < 1.0).then(|| doc.begin_group(IDENTITY, opacity, None));
+
   let background = node
     .context
     .style
@@ -69,16 +75,18 @@ fn emit_node(
     doc.rect(x, y, width, height, Rgba(background.0));
   }
 
-  let Ok(children) = results.box_children(node_id) else {
-    return;
-  };
-  let Some(child_nodes) = node.children.as_deref() else {
-    return;
-  };
-  for child in children {
-    if let Some(child_node) = child_nodes.get(child.render_index) {
-      emit_node(child_node, child.node_id, results, x, y, doc);
+  if let Ok(children) = results.box_children(node_id)
+    && let Some(child_nodes) = node.children.as_deref()
+  {
+    for child in children {
+      if let Some(child_node) = child_nodes.get(child.render_index) {
+        emit_node(child_node, child.node_id, results, x, y, doc);
+      }
     }
+  }
+
+  if let Some(group) = group {
+    doc.end_group(group);
   }
 }
 
