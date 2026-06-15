@@ -27,6 +27,7 @@
 //! | affine transform            | `transform="matrix(...)"`                  | full   |
 //! | **conic gradient**          | no SVG 1.1 construct                        | raster fallback |
 
+mod gradient;
 mod render;
 pub use render::render_svg;
 
@@ -105,6 +106,14 @@ impl SvgDocument {
     );
   }
 
+  /// Appends a rectangle filled with a paint reference (e.g. a gradient `url(#id)`).
+  pub fn rect_paint(&mut self, x: f32, y: f32, width: f32, height: f32, paint: &str) {
+    let _ = write!(
+      self.body,
+      r#"<rect x="{x}" y="{y}" width="{width}" height="{height}" fill="{paint}"/>"#,
+    );
+  }
+
   /// Appends an arbitrary filled path from raw SVG path data (`d`).
   pub fn path(&mut self, data: &str, fill: Rgba) {
     let _ = write!(
@@ -116,35 +125,53 @@ impl SvgDocument {
     );
   }
 
-  /// Defines a linear gradient and returns its `url(#id)` reference.
+  /// Defines a linear gradient and returns its `url(#id)` reference. When
+  /// `repeating` is set the stops tile beyond their range (`spreadMethod`).
   pub fn linear_gradient(
     &mut self,
     (x1, y1): (f32, f32),
     (x2, y2): (f32, f32),
+    repeating: bool,
     stops: &[GradientStop],
   ) -> String {
     let id = self.alloc_id("lg");
     let _ = write!(
       self.defs,
-      r#"<linearGradient id="{id}" gradientUnits="userSpaceOnUse" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}">"#
+      r#"<linearGradient id="{id}" gradientUnits="userSpaceOnUse"{} x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}">"#,
+      spread_attr(repeating),
     );
     self.write_stops(stops);
     self.defs.push_str("</linearGradient>");
     format!("url(#{id})")
   }
 
-  /// Defines a radial gradient and returns its `url(#id)` reference.
+  /// Defines a radial gradient and returns its `url(#id)` reference. `scale`
+  /// stretches the gradient into an ellipse around its center (SVG has no native
+  /// `rx`/`ry`, so a non-uniform scale is applied via `gradientTransform`).
   pub fn radial_gradient(
     &mut self,
     (cx, cy): (f32, f32),
     r: f32,
+    scale: (f32, f32),
+    repeating: bool,
     stops: &[GradientStop],
   ) -> String {
     let id = self.alloc_id("rg");
     let _ = write!(
       self.defs,
-      r#"<radialGradient id="{id}" gradientUnits="userSpaceOnUse" cx="{cx}" cy="{cy}" r="{r}">"#
+      r#"<radialGradient id="{id}" gradientUnits="userSpaceOnUse"{} cx="{cx}" cy="{cy}" r="{r}""#,
+      spread_attr(repeating),
     );
+    let (sx, sy) = scale;
+    if (sx - 1.0).abs() > f32::EPSILON || (sy - 1.0).abs() > f32::EPSILON {
+      let e = cx - sx * cx;
+      let f = cy - sy * cy;
+      let _ = write!(
+        self.defs,
+        r#" gradientTransform="matrix({sx} 0 0 {sy} {e} {f})""#
+      );
+    }
+    self.defs.push('>');
     self.write_stops(stops);
     self.defs.push_str("</radialGradient>");
     format!("url(#{id})")
@@ -238,6 +265,14 @@ impl SvgDocument {
 #[must_use]
 pub struct GroupToken(());
 
+fn spread_attr(repeating: bool) -> &'static str {
+  if repeating {
+    r#" spreadMethod="repeat""#
+  } else {
+    ""
+  }
+}
+
 fn escape(input: &str) -> String {
   input
     .replace('&', "&amp;")
@@ -283,6 +318,7 @@ mod tests {
     let fill = doc.linear_gradient(
       (0.0, 0.0),
       (10.0, 0.0),
+      false,
       &[
         GradientStop {
           offset: 0.0,

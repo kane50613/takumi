@@ -75,6 +75,10 @@ fn emit_node(
     doc.rect(x, y, width, height, Rgba(background.0));
   }
 
+  if let Some(images) = node.context.style.background_image.as_deref() {
+    crate::gradient::emit_background_images(images, &node.context, x, y, width, height, doc);
+  }
+
   emit_borders(node, layout, x, y, width, height, doc);
 
   if let Ok(children) = results.box_children(node_id)
