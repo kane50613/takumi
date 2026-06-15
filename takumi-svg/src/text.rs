@@ -139,6 +139,7 @@ fn emit_runs(
       emit_run_glyphs(
         doc,
         run,
+        font_style,
         layout,
         origin_x + shadow.offset_x,
         origin_y + shadow.offset_y,
@@ -160,7 +161,9 @@ fn emit_runs(
     )?;
   } else {
     for run in &runs.runs {
-      emit_run_glyphs(doc, run, layout, origin_x, origin_y, None, stroke, None)?;
+      emit_run_glyphs(
+        doc, run, font_style, layout, origin_x, origin_y, None, stroke, None,
+      )?;
     }
   }
 
@@ -192,6 +195,7 @@ fn emit_clip_text_glyphs(
     emit_run_glyphs(
       doc,
       run,
+      font_style,
       layout,
       origin_x,
       origin_y,
@@ -243,7 +247,9 @@ fn emit_clip_text_glyphs(
   // The `color` (brush) fills the glyph interiors on top of the background, with
   // the real text stroke (a transparent stroke adds nothing visible).
   for run in &runs.runs {
-    emit_run_glyphs(doc, run, layout, origin_x, origin_y, None, stroke, None)?;
+    emit_run_glyphs(
+      doc, run, font_style, layout, origin_x, origin_y, None, stroke, None,
+    )?;
   }
   Ok(())
 }
@@ -305,6 +311,7 @@ fn emit_run_decorations(
 fn emit_run_glyphs(
   doc: &mut SvgDocument,
   run: &PositionedInlineRun<'_>,
+  font_style: &SizedFontStyle,
   layout: Layout,
   origin_x: f32,
   origin_y: f32,
@@ -315,6 +322,7 @@ fn emit_run_glyphs(
   let run_transform = run.transform(IDENTITY);
   let glyph_offset = run.glyph_offset(layout);
   let fill_color = run.glyph_run.style().brush.color;
+  let bold_join = line_join_str(font_style.parent.stroke_linejoin);
 
   for glyph in run.glyph_run.positioned_glyphs() {
     let Some(resolved) = run.resolved_glyphs.get(&glyph.id) else {
@@ -340,7 +348,17 @@ fn emit_run_glyphs(
           let data = path_data(outline.paths(), cols);
           if !data.is_empty() {
             let fill = color_override.unwrap_or(Rgba(fill_color.0));
-            doc.glyph_path(&data, fill, stroke)?;
+            // Synthesized (faux) bold: the raster backend strokes the glyph with
+            // its own fill color (`outline.embolden()`); mirror that here.
+            match outline.embolden().filter(|embolden| *embolden > 0.0) {
+              Some(embolden) => {
+                doc.glyph_path(&data, fill, Some((fill, embolden * 2.0, bold_join)))?;
+                if let Some(text_stroke) = stroke {
+                  doc.glyph_path(&data, Rgba([0, 0, 0, 0]), Some(text_stroke))?;
+                }
+              }
+              None => doc.glyph_path(&data, fill, stroke)?,
+            }
           }
         } else {
           // COLR glyph: emit each color layer with its resolved palette color.
