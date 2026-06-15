@@ -97,7 +97,7 @@ impl SvgDocument {
       "viewBox",
       format!("0 0 {} {}", num(width), num(height)).as_str(),
     ));
-    let _ = writer.write_event(Event::Start(svg));
+    write(&mut writer, Event::Start(svg));
     Self { writer, next_id: 0 }
   }
 
@@ -112,7 +112,7 @@ impl SvgDocument {
     for (key, value) in attrs {
       element.push_attribute((*key, value.as_str()));
     }
-    let _ = self.writer.write_event(Event::Empty(element));
+    write(&mut self.writer, Event::Empty(element));
   }
 
   fn open(&mut self, name: &str, attrs: &[(&str, String)]) {
@@ -120,11 +120,11 @@ impl SvgDocument {
     for (key, value) in attrs {
       element.push_attribute((*key, value.as_str()));
     }
-    let _ = self.writer.write_event(Event::Start(element));
+    write(&mut self.writer, Event::Start(element));
   }
 
   fn close(&mut self, name: &str) {
-    let _ = self.writer.write_event(Event::End(BytesEnd::new(name)));
+    write(&mut self.writer, Event::End(BytesEnd::new(name)));
   }
 
   /// Appends a solid-fill rectangle.
@@ -317,6 +317,14 @@ impl SvgDocument {
 /// Opaque proof that a `<g>` is open; consumed by [`SvgDocument::end_group`].
 #[must_use]
 pub struct GroupToken(());
+
+/// Writes an event to the in-memory buffer. `Vec<u8>` as an [`std::io::Write`]
+/// sink never errors, so a failure here is a logic bug, not an I/O condition.
+fn write(writer: &mut Writer<Vec<u8>>, event: Event<'_>) {
+  writer
+    .write_event(event)
+    .expect("writing SVG to an in-memory buffer is infallible");
+}
 
 fn num(value: f32) -> String {
   if value.is_finite() {
