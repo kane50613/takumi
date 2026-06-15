@@ -23,9 +23,6 @@ mod text_drawing;
 mod webp;
 mod write;
 
-use std::borrow::Cow;
-
-use image::RgbaImage;
 use tiny_skia::{IntSize, Pixmap, PixmapRef};
 
 use crate::layout::tree::RenderNode;
@@ -72,12 +69,6 @@ pub(crate) fn scale_text_fit_x(
   text_fit_x_correction(scale, static_inline_prefix, line_alignment_correction)
     + origin_x
     + (x - origin_x) * scale
-}
-
-pub(crate) fn premultiplied_pixmap_from_rgba(source: Cow<'_, RgbaImage>) -> Option<Pixmap> {
-  let buffer = ImageBuffer::from_rgba(source)?;
-  let size = IntSize::from_wh(buffer.width(), buffer.height())?;
-  Pixmap::from_vec(buffer.into_data(), size)
 }
 
 /// Borrows an [`ImageBuffer`] as a zero-copy `tiny_skia` pixmap view.

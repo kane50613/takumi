@@ -30,13 +30,17 @@ use skrifa::{
   raw::types::{BoundingBox, F2Dot14},
 };
 use thiserror::Error;
-use tiny_skia::Pixmap;
+use tiny_skia::{IntSize, PathSegment as Command, Pixmap};
 
 use crate::{
   layout::inline::{InlineBrush, InlineLayout},
-  rendering::{Command, pixmap_from_buffer, premultiplied_pixmap_from_rgba},
-  resources::image_decoder::decode_png,
+  resources::{image_buffer::ImageBuffer, image_decoder::decode_png},
 };
+
+fn pixmap_from_image_buffer(buffer: ImageBuffer) -> Option<Pixmap> {
+  let size = IntSize::from_wh(buffer.width(), buffer.height())?;
+  Pixmap::from_vec(buffer.into_data(), size)
+}
 
 #[derive(Clone)]
 pub(crate) enum ResolvedGlyph {
@@ -445,7 +449,7 @@ fn transform_commands(paths: &mut [Command], skew_degrees: f32) {
 
 fn decode_bitmap_image(bitmap: &BitmapGlyph<'_>) -> Option<(Pixmap, Origin)> {
   let pixmap = match &bitmap.data {
-    BitmapData::Png(bytes) => pixmap_from_buffer(&decode_png(bytes).ok()?)?,
+    BitmapData::Png(bytes) => pixmap_from_image_buffer(decode_png(bytes).ok()?)?,
     BitmapData::Bgra(bytes) => {
       let image = RgbaImage::from_fn(bitmap.width, bitmap.height, |x, y| {
         let index = ((y * bitmap.width + x) * 4) as usize;
@@ -456,7 +460,7 @@ fn decode_bitmap_image(bitmap: &BitmapGlyph<'_>) -> Option<(Pixmap, Origin)> {
           bytes[index + 3],
         ])
       });
-      premultiplied_pixmap_from_rgba(Cow::Owned(image))?
+      pixmap_from_image_buffer(ImageBuffer::from_rgba(Cow::Owned(image))?)?
     }
     BitmapData::Mask(_) => return None,
   };

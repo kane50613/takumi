@@ -1690,7 +1690,8 @@ mod tests {
         RadialGradient, RadialGradientTile, StopPosition,
       },
     },
-    rendering::{RenderContext, blend_pixel, premultiplied_pixmap_from_rgba},
+    rendering::{RenderContext, blend_pixel, pixmap_from_buffer},
+    resources::image_buffer::ImageBuffer,
   };
 
   use super::*;
@@ -1987,7 +1988,9 @@ mod tests {
         Rgba([0, 0, 255, 255])
       }
     });
-    let Some(source_pixmap) = premultiplied_pixmap_from_rgba(std::borrow::Cow::Borrowed(&source))
+    let Some(source_pixmap) = ImageBuffer::from_rgba(std::borrow::Cow::Borrowed(&source))
+      .as_ref()
+      .and_then(pixmap_from_buffer)
     else {
       return;
     };
