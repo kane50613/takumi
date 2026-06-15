@@ -11,7 +11,7 @@ use takumi_core::{
   error::Result,
   layout::{
     Viewport,
-    node::Node,
+    node::{Node, NodeKind},
     style::StyleSheet,
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
@@ -21,6 +21,7 @@ use crate::box_model::{
   clips_overflow, element_transform, has_radius, resolved_radii, rounded_rect_path,
 };
 use crate::gradient::emit_background_images;
+use crate::image::emit_image;
 use crate::{IDENTITY, Rgba, SvgDocument};
 
 /// Renders a node tree to a vector SVG string.
@@ -140,6 +141,18 @@ fn emit_node(
         .and_then(|clip| doc.begin_group(IDENTITY, 1.0, Some(&clip)))
     })
     .transpose()?;
+
+  if let Some(NodeKind::Image(image)) = node.node.as_ref().map(|n| &n.kind) {
+    emit_image(
+      image,
+      &node.context,
+      parent_x + layout.content_box_x(),
+      parent_y + layout.content_box_y(),
+      layout.content_box_width(),
+      layout.content_box_height(),
+      doc,
+    )?;
+  }
 
   if let Ok(children) = results.box_children(node_id)
     && let Some(child_nodes) = node.children.as_deref()

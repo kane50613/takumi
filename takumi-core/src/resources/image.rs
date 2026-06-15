@@ -53,6 +53,14 @@ pub struct SvgSource {
   raster_cache: Arc<SvgRasterCache>,
 }
 
+#[cfg(feature = "svg")]
+impl SvgSource {
+  /// The original SVG markup, for embedding directly in a vector backend.
+  pub fn source(&self) -> &str {
+    &self.source
+  }
+}
+
 /// Intrinsic width/height (in SVG user units) and aspect ratio of an SVG root.
 #[cfg(feature = "svg")]
 #[derive(Debug, Clone, Copy, Default)]

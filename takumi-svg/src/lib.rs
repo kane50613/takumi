@@ -28,6 +28,7 @@
 
 mod box_model;
 mod gradient;
+mod image;
 mod render;
 pub use render::render_svg;
 
@@ -292,17 +293,26 @@ impl SvgDocument {
   /// Appends a raster image referenced by a `data:` URL href. This is legitimate
   /// SVG (a genuine photo has no vector form), not the "fake SVG" of wrapping the
   /// whole render in one bitmap.
-  pub fn image(&mut self, x: f32, y: f32, width: f32, height: f32, href: &str) -> io::Result<()> {
-    self.empty(
-      "image",
-      &[
-        ("x", num(x)),
-        ("y", num(y)),
-        ("width", num(width)),
-        ("height", num(height)),
-        ("href", href.to_owned()),
-      ],
-    )
+  pub fn image(
+    &mut self,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    href: &str,
+    preserve_aspect_ratio: Option<&str>,
+  ) -> io::Result<()> {
+    let mut attrs = vec![
+      ("x", num(x)),
+      ("y", num(y)),
+      ("width", num(width)),
+      ("height", num(height)),
+      ("href", href.to_owned()),
+    ];
+    if let Some(par) = preserve_aspect_ratio {
+      attrs.push(("preserveAspectRatio", par.to_owned()));
+    }
+    self.empty("image", &attrs)
   }
 
   /// Opens a `<g>` with a transform and optional opacity/clip; returns a token
@@ -461,7 +471,7 @@ mod tests {
   fn image_href_is_escaped_not_faked() {
     let mut doc = SvgDocument::new(10.0, 10.0).unwrap();
     doc
-      .image(0.0, 0.0, 10.0, 10.0, "data:image/png;base64,AAAA")
+      .image(0.0, 0.0, 10.0, 10.0, "data:image/png;base64,AAAA", None)
       .unwrap();
     let svg = doc.render().unwrap();
     assert!(
@@ -474,7 +484,14 @@ mod tests {
   fn attribute_injection_is_escaped() {
     let mut doc = SvgDocument::new(10.0, 10.0).unwrap();
     doc
-      .image(0.0, 0.0, 10.0, 10.0, r#"x"/><script>alert(1)</script>"#)
+      .image(
+        0.0,
+        0.0,
+        10.0,
+        10.0,
+        r#"x"/><script>alert(1)</script>"#,
+        None,
+      )
       .unwrap();
     let svg = doc.render().unwrap();
     assert!(!svg.contains("<script>"));

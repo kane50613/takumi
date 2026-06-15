@@ -8,6 +8,7 @@ repository = "https://github.com/kane50613/takumi"
 rust-version = "1.91"
 
 [dependencies]
+base64.workspace = true
 quick-xml.workspace = true
 taffy.workspace = true
 

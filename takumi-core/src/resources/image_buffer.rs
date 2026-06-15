@@ -6,7 +6,8 @@
 
 use std::borrow::Cow;
 
-use image::RgbaImage;
+use image::codecs::png::PngEncoder;
+use image::{ExtendedColorType, ImageEncoder, RgbaImage};
 
 use crate::layout::style::fast_div_255;
 
@@ -95,6 +96,26 @@ impl ImageBuffer {
   /// Consumes the buffer, returning the premultiplied RGBA bytes.
   pub fn into_data(self) -> Vec<u8> {
     self.data
+  }
+
+  /// Encodes the image as straight-alpha PNG bytes, for embedding in an SVG
+  /// `<image>` data URL. Returns `None` if encoding fails.
+  pub fn to_png(&self) -> Option<Vec<u8>> {
+    let mut straight = self.data.clone();
+    for pixel in straight.chunks_exact_mut(4) {
+      let alpha = pixel[3];
+      if alpha != 0 && alpha != 255 {
+        let alpha = alpha as u16;
+        pixel[0] = (pixel[0] as u16 * 255 / alpha).min(255) as u8;
+        pixel[1] = (pixel[1] as u16 * 255 / alpha).min(255) as u8;
+        pixel[2] = (pixel[2] as u16 * 255 / alpha).min(255) as u8;
+      }
+    }
+    let mut out = Vec::new();
+    PngEncoder::new(&mut out)
+      .write_image(&straight, self.width, self.height, ExtendedColorType::Rgba8)
+      .ok()?;
+    Some(out)
   }
 
   /// Reads the premultiplied RGBA value at `(x, y)`, or `[0; 4]` if out of bounds.
