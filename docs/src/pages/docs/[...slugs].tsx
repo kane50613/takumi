@@ -50,7 +50,7 @@ export default function Page({ slugs = [] }: PageProps<"/docs/[...slugs]">) {
   const MDX = page.data.body;
   const title = `${page.data.title} — Takumi`;
   const og = ["https://takumi.kane.tw/og", "docs", ...slugs, "image.webp"].join("/");
-  const markdownUrl = `/llms.mdx${page.url}`;
+  const markdownUrl = `/llms.mdx/docs/${page.path}`;
   const githubUrl = `https://github.com/kane50613/takumi/blob/master/docs/content/docs/${page.path}`;
   const tree = source.getPageTree() as PageTreeRoot;
 
