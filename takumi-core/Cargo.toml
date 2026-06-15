@@ -17,7 +17,6 @@ serde_bytes.workspace = true
 thiserror.workspace = true
 typed-builder.workspace = true
 tiny-skia.workspace = true
-svgtypes.workspace = true
 selectors.workspace = true
 skrifa.workspace = true
 xxhash-rust.workspace = true

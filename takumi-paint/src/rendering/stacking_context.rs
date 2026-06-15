@@ -1159,6 +1159,86 @@ fn compute_isolation_bounds(
   placement.unwrap_or_else(|| full_viewport_placement(viewport))
 }
 
+fn draw_render_node_shell(node: &RenderNode, canvas: &mut Canvas, layout: Layout) -> Result<()> {
+  if node.node.is_none() {
+    return Ok(());
+  }
+
+  draw_outset_box_shadow(&node.context, canvas, layout)?;
+  draw_background(&node.context, canvas, layout)?;
+  draw_inset_box_shadow(&node.context, canvas, layout)?;
+  draw_border(&node.context, canvas, layout)?;
+  draw_outline(&node.context, canvas, layout)?;
+  Ok(())
+}
+
+fn draw_render_node_content(node: &RenderNode, canvas: &mut Canvas, layout: Layout) -> Result<()> {
+  if node.should_create_inline_layout() || node.has_anonymous_text_item_child() {
+    return Ok(());
+  }
+
+  if let Some(inner) = &node.node {
+    draw_node_content(inner, &node.context, canvas, layout)?;
+  }
+  Ok(())
+}
+
+fn draw_render_node_inline(
+  node: &mut RenderNode,
+  canvas: &mut Canvas,
+  layout: Layout,
+) -> Result<()> {
+  if node.context.style.opacity.0 == 0.0 {
+    return Ok(());
+  }
+
+  let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
+
+  let max_height = resolve_inline_max_height(&font_style, layout.content_box_height());
+
+  let built = create_inline_layout(InlineLayoutRequest {
+    items: collect_inline_items(node),
+    available_space: Size {
+      width: AvailableSpace::Definite(layout.content_box_width()),
+      height: AvailableSpace::Definite(layout.content_box_height()),
+    },
+    max_width: layout.content_box_width(),
+    max_height,
+    style: &font_style,
+    global: node.context.global,
+    mode: InlineLayoutMode::Draw,
+  });
+  let inline_layout_box = layout;
+
+  let boxes = built.spans.iter().filter_map(|span| match span {
+    ProcessedInlineSpan::Box(item) => Some(item),
+    _ => None,
+  });
+
+  let positioned_inline_boxes = draw_inline_layout(
+    &node.context,
+    canvas,
+    inline_layout_box,
+    built.layout,
+    &font_style,
+    InlineLayoutDrawData {
+      spans: &built.spans,
+      custom_inline_boxes: &built.custom_inline_boxes,
+      line_scales: &built.line_scales,
+    },
+  )?;
+
+  let inline_transform = Affine::translation(
+    inline_layout_box.border.left + inline_layout_box.padding.left,
+    inline_layout_box.border.top + inline_layout_box.padding.top,
+  ) * node.context.transform;
+
+  for (item, positioned) in boxes.zip(positioned_inline_boxes.iter()) {
+    draw_inline_box(positioned, item, canvas, inline_transform)?;
+  }
+  Ok(())
+}
+
 #[cfg(test)]
 mod tests {
   use std::error::Error;
@@ -1272,84 +1352,4 @@ mod tests {
     );
     Ok(())
   }
-}
-
-fn draw_render_node_shell(node: &RenderNode, canvas: &mut Canvas, layout: Layout) -> Result<()> {
-  if node.node.is_none() {
-    return Ok(());
-  }
-
-  draw_outset_box_shadow(&node.context, canvas, layout)?;
-  draw_background(&node.context, canvas, layout)?;
-  draw_inset_box_shadow(&node.context, canvas, layout)?;
-  draw_border(&node.context, canvas, layout)?;
-  draw_outline(&node.context, canvas, layout)?;
-  Ok(())
-}
-
-fn draw_render_node_content(node: &RenderNode, canvas: &mut Canvas, layout: Layout) -> Result<()> {
-  if node.should_create_inline_layout() || node.has_anonymous_text_item_child() {
-    return Ok(());
-  }
-
-  if let Some(inner) = &node.node {
-    draw_node_content(inner, &node.context, canvas, layout)?;
-  }
-  Ok(())
-}
-
-fn draw_render_node_inline(
-  node: &mut RenderNode,
-  canvas: &mut Canvas,
-  layout: Layout,
-) -> Result<()> {
-  if node.context.style.opacity.0 == 0.0 {
-    return Ok(());
-  }
-
-  let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
-
-  let max_height = resolve_inline_max_height(&font_style, layout.content_box_height());
-
-  let built = create_inline_layout(InlineLayoutRequest {
-    items: collect_inline_items(node),
-    available_space: Size {
-      width: AvailableSpace::Definite(layout.content_box_width()),
-      height: AvailableSpace::Definite(layout.content_box_height()),
-    },
-    max_width: layout.content_box_width(),
-    max_height,
-    style: &font_style,
-    global: node.context.global,
-    mode: InlineLayoutMode::Draw,
-  });
-  let inline_layout_box = layout;
-
-  let boxes = built.spans.iter().filter_map(|span| match span {
-    ProcessedInlineSpan::Box(item) => Some(item),
-    _ => None,
-  });
-
-  let positioned_inline_boxes = draw_inline_layout(
-    &node.context,
-    canvas,
-    inline_layout_box,
-    built.layout,
-    &font_style,
-    InlineLayoutDrawData {
-      spans: &built.spans,
-      custom_inline_boxes: &built.custom_inline_boxes,
-      line_scales: &built.line_scales,
-    },
-  )?;
-
-  let inline_transform = Affine::translation(
-    inline_layout_box.border.left + inline_layout_box.padding.left,
-    inline_layout_box.border.top + inline_layout_box.padding.top,
-  ) * node.context.transform;
-
-  for (item, positioned) in boxes.zip(positioned_inline_boxes.iter()) {
-    draw_inline_box(positioned, item, canvas, inline_transform)?;
-  }
-  Ok(())
 }

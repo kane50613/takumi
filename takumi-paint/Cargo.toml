@@ -11,7 +11,6 @@ rust-version = "1.91"
 png.workspace = true
 gif.workspace = true
 color.workspace = true
-thiserror.workspace = true
 tiny-skia.workspace = true
 svgtypes.workspace = true
 typed-builder.workspace = true
@@ -19,7 +18,6 @@ smallvec.workspace = true
 parley.workspace = true
 skrifa.workspace = true
 taffy.workspace = true
-xxhash-rust.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 image-webp.workspace = true
@@ -38,10 +36,6 @@ features = ["aarch64_simd", "avx512_simd"]
 [dependencies.takumi-core]
 path = "../takumi-core"
 version = "=1"
-
-[dependencies.takumi-css]
-path = "../takumi-css"
-version = "=0"
 
 [dependencies.serde]
 workspace = true
