@@ -1,4 +1,5 @@
 {
   "defaultOpen": true,
-  "icon": "CircleFadingArrowUp"
+  "icon": "CircleFadingArrowUp",
+  "pages": ["v2", "v1"]
 }

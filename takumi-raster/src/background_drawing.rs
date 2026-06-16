@@ -532,7 +532,6 @@ pub(crate) fn render_tile(
             tile_h,
             context.style.image_rendering,
             context.time,
-            context.current_color,
           )? {
             RenderedImage::Rasterized(buffer) => {
               pixmap_from_buffer(&buffer).map(|pixmap| BackgroundTile::Pixmap(Arc::new(pixmap)))

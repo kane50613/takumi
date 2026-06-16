@@ -70,7 +70,6 @@ pub fn process_image_for_object_fit<'i>(
           content_box.height as u32,
           context.style.image_rendering,
           context.time,
-          context.current_color,
         )?,
         logical_to_source: if content_box.width == 0.0 || content_box.height == 0.0 {
           Affine::IDENTITY
@@ -104,7 +103,6 @@ pub fn process_image_for_object_fit<'i>(
             new_height as u32,
             context.style.image_rendering,
             context.time,
-            context.current_color,
           )?,
           logical_to_source: if new_width == 0.0 || new_height == 0.0 {
             Affine::IDENTITY
@@ -141,7 +139,6 @@ pub fn process_image_for_object_fit<'i>(
             content_box.height as u32,
             context.style.image_rendering,
             context.time,
-            context.current_color,
           )?,
           logical_to_source: if new_width == 0.0 || new_height == 0.0 {
             Affine::IDENTITY
@@ -167,7 +164,6 @@ pub fn process_image_for_object_fit<'i>(
           new_height as u32,
           context.style.image_rendering,
           context.time,
-          context.current_color,
         )?
       } else {
         image.render_for_layout(
@@ -175,7 +171,6 @@ pub fn process_image_for_object_fit<'i>(
           image_height as u32,
           context.style.image_rendering,
           context.time,
-          context.current_color,
         )?
       };
 
@@ -218,7 +213,6 @@ pub fn process_image_for_object_fit<'i>(
               image_height as u32,
               context.style.image_rendering,
               context.time,
-              context.current_color,
             )?,
             logical_to_source: source_to_intrinsic,
           },
@@ -258,7 +252,6 @@ pub fn process_image_for_object_fit<'i>(
             crop_height as u32,
             context.style.image_rendering,
             context.time,
-            context.current_color,
           )?,
           logical_to_source: source_to_intrinsic * Affine::translation(crop_x, crop_y),
         },

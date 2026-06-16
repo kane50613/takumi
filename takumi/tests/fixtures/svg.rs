@@ -61,57 +61,6 @@ fn test_svg_attr_size_in_absolute_flex_container() {
 }
 
 #[test]
-fn test_svg_current_color_fixture() {
-  let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect x="0" y="0" width="120" height="120" fill="currentColor"/></svg>"#;
-
-  let swatch = |color: Color| {
-    let children: Vec<Node> = vec![
-      Node::image(svg).with_tag_name("svg").with_style(
-        Style::default()
-          .with(StyleDeclaration::width(Px(120.0)))
-          .with(StyleDeclaration::height(Px(120.0))),
-      ),
-      Node::text("Hello"),
-    ];
-
-    let container: Node = Node::container(children).with_style(
-      Style::default()
-        .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Px(160.0)))
-        .with(StyleDeclaration::height(Px(160.0)))
-        .with_padding(Sides([Px(20.0); 4]))
-        .with(StyleDeclaration::background_color(ColorInput::Value(
-          Color([240, 240, 240, 255]),
-        )))
-        .with(StyleDeclaration::color(ColorInput::Value(color)))
-        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
-        .with(StyleDeclaration::align_items(AlignItems::Center)),
-    );
-
-    container
-  };
-
-  let node: Node = Node::container([
-    swatch(Color([230, 40, 70, 255])),
-    swatch(Color([60, 140, 255, 255])),
-  ])
-  .with_style(
-    Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0)))
-      .with(StyleDeclaration::height(Percentage(100.0)))
-      .with(StyleDeclaration::display(Display::Flex))
-      .with_gap(SpacePair::from_single(Px(24.0)))
-      .with_padding(Sides([Px(40.0); 4]))
-      .with(StyleDeclaration::background_color(ColorInput::Value(
-        Color([30, 30, 30, 255]),
-      ))),
-  );
-
-  run_fixture_test(node, "svg_current_color_fixture");
-}
-
-#[test]
 fn test_twemoji_svg() {
   // https://github.com/nuxt-modules/og-image/blob/0209474b99e1ffa8a9010df359f170563024056f/src/runtime/server/og-image/core/transforms/emojis/fetch.ts#L54
   fn create_svg_node(svg: &str) -> Node {
