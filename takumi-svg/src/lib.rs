@@ -22,6 +22,8 @@ mod text;
 pub use render::{SvgOptions, render};
 
 use std::borrow::Cow;
+use std::fmt;
+use std::fmt::Write as _;
 use std::io;
 
 use quick_xml::Writer;
@@ -32,10 +34,17 @@ use quick_xml::events::{BytesEnd, BytesStart, Event};
 pub(crate) struct Rgba(pub [u8; 4]);
 
 impl Rgba {
-  /// `#rrggbb` hex (alpha is emitted separately as `*-opacity`).
+  /// `#rgb` or `#rrggbb` hex (alpha is emitted separately as `*-opacity`). The
+  /// short form is used when each channel's nibbles match, which SVG expands back
+  /// to the same color.
   fn hex(self) -> String {
     let [r, g, b, _] = self.0;
-    format!("#{r:02x}{g:02x}{b:02x}")
+    let collapsible = |c: u8| c >> 4 == c & 0x0f;
+    if collapsible(r) && collapsible(g) && collapsible(b) {
+      format!("#{:x}{:x}{:x}", r & 0x0f, g & 0x0f, b & 0x0f)
+    } else {
+      format!("#{r:02x}{g:02x}{b:02x}")
+    }
   }
 
   /// Alpha as a 0.0–1.0 opacity value.
@@ -126,17 +135,15 @@ impl SvgDocument {
     height: f32,
     fill: Rgba,
   ) -> io::Result<()> {
-    self.empty(
-      "rect",
-      &[
-        ("x", num(x).into()),
-        ("y", num(y).into()),
-        ("width", num(width).into()),
-        ("height", num(height).into()),
-        ("fill", fill.hex().into()),
-        ("fill-opacity", num(fill.opacity()).into()),
-      ],
-    )
+    let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![
+      ("x", num(x).into()),
+      ("y", num(y).into()),
+      ("width", num(width).into()),
+      ("height", num(height).into()),
+      ("fill", fill.hex().into()),
+    ];
+    push_opacity(&mut attrs, "fill-opacity", fill.opacity());
+    self.empty("rect", &attrs)
   }
 
   /// Appends a rectangle filled with a paint reference (e.g. a gradient `url(#id)`).
@@ -162,28 +169,20 @@ impl SvgDocument {
 
   /// Appends a solid-fill path from SVG path data (`d`).
   pub(crate) fn path(&mut self, data: &str, fill: Rgba) -> io::Result<()> {
-    self.empty(
-      "path",
-      &[
-        ("d", data.into()),
-        ("fill", fill.hex().into()),
-        ("fill-opacity", num(fill.opacity()).into()),
-      ],
-    )
+    let mut attrs: Vec<(&str, Cow<'_, str>)> =
+      vec![("d", data.into()), ("fill", fill.hex().into())];
+    push_opacity(&mut attrs, "fill-opacity", fill.opacity());
+    self.empty("path", &attrs)
   }
 
   /// Appends a filled path using the even-odd fill rule (for ring shapes such as
   /// rounded borders: an outer subpath with an inner subpath punched out).
   pub(crate) fn path_evenodd(&mut self, data: &str, fill: Rgba) -> io::Result<()> {
-    self.empty(
-      "path",
-      &[
-        ("d", data.into()),
-        ("fill", fill.hex().into()),
-        ("fill-opacity", num(fill.opacity()).into()),
-        ("fill-rule", "evenodd".into()),
-      ],
-    )
+    let mut attrs: Vec<(&str, Cow<'_, str>)> =
+      vec![("d", data.into()), ("fill", fill.hex().into())];
+    push_opacity(&mut attrs, "fill-opacity", fill.opacity());
+    attrs.push(("fill-rule", "evenodd".into()));
+    self.empty("path", &attrs)
   }
 
   /// Defines a linear gradient and returns its `url(#id)` reference. When
@@ -258,14 +257,12 @@ impl SvgDocument {
 
   fn write_stops(&mut self, stops: &[GradientStop]) -> io::Result<()> {
     for stop in stops {
-      self.empty(
-        "stop",
-        &[
-          ("offset", num(stop.offset).into()),
-          ("stop-color", stop.color.hex().into()),
-          ("stop-opacity", num(stop.color.opacity()).into()),
-        ],
-      )?;
+      let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![
+        ("offset", num(stop.offset).into()),
+        ("stop-color", stop.color.hex().into()),
+      ];
+      push_opacity(&mut attrs, "stop-opacity", stop.color.opacity());
+      self.empty("stop", &attrs)?;
     }
     Ok(())
   }
@@ -391,7 +388,7 @@ impl SvgDocument {
     clip: Option<&str>,
     filter: Option<&str>,
   ) -> io::Result<GroupToken> {
-    let mut attrs: Vec<(&str, Cow<'_, str>)> = Vec::new();
+    let mut attrs: Vec<(&str, Cow<'_, str>)> = Vec::with_capacity(4);
     if !transform.is_identity() {
       attrs.push(("transform", matrix_attr(transform).into()));
     }
@@ -427,16 +424,16 @@ impl SvgDocument {
     fill: Rgba,
     stroke: Option<(Rgba, f32, &str)>,
   ) -> io::Result<()> {
-    let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![
-      ("d", data.into()),
-      ("fill", fill.hex().into()),
-      ("fill-opacity", num(fill.opacity()).into()),
-    ];
+    let mut attrs: Vec<(&str, Cow<'_, str>)> =
+      vec![("d", data.into()), ("fill", fill.hex().into())];
+    push_opacity(&mut attrs, "fill-opacity", fill.opacity());
     if let Some((color, width, line_join)) = stroke {
       attrs.push(("stroke", color.hex().into()));
-      attrs.push(("stroke-opacity", num(color.opacity()).into()));
+      push_opacity(&mut attrs, "stroke-opacity", color.opacity());
       attrs.push(("stroke-width", num(width).into()));
-      attrs.push(("stroke-linejoin", line_join.into()));
+      if line_join != "miter" {
+        attrs.push(("stroke-linejoin", line_join.into()));
+      }
     }
     self.empty("path", &attrs)
   }
@@ -637,12 +634,12 @@ impl SvgDocument {
   }
 
   fn color_matrix(&mut self, input: &str, result: &str, matrix: &[f32; 20]) -> io::Result<()> {
-    let mut values = String::new();
+    let mut values = String::with_capacity(matrix.len() * APPROX_CHARS_PER_NUMBER);
     for (i, value) in matrix.iter().enumerate() {
       if i > 0 {
         values.push(' ');
       }
-      values.push_str(&num(*value));
+      let _ = write!(values, "{}", Num(*value));
     }
     self.empty(
       "feColorMatrix",
@@ -712,9 +709,9 @@ impl SvgDocument {
       ("d", data.into()),
       ("fill", "none".into()),
       ("stroke", stroke.hex().into()),
-      ("stroke-opacity", num(stroke.opacity()).into()),
-      ("stroke-width", num(width).into()),
     ];
+    push_opacity(&mut attrs, "stroke-opacity", stroke.opacity());
+    attrs.push(("stroke-width", num(width).into()));
     if let Some(dasharray) = dasharray {
       attrs.push(("stroke-dasharray", dasharray.into()));
     }
@@ -804,11 +801,52 @@ fn sepia_matrix(a: f32) -> [f32; 20] {
   ]
 }
 
+/// Decimal places retained when serializing coordinates, dimensions, and
+/// opacities. SVG rendering is insensitive below this at the raster sizes takumi
+/// targets, so dropping the float tail keeps documents compact without visible
+/// drift.
+pub(crate) const COORD_DECIMALS: i32 = 3;
+
+/// Rough characters one quantized number serializes to, used to presize buffers.
+pub(crate) const APPROX_CHARS_PER_NUMBER: usize = 8;
+
+/// Finite-guarded, quantized float formatter shared by every SVG numeric
+/// emission site. Non-finite values serialize as `0`; finite values are rounded
+/// to [`COORD_DECIMALS`] and printed with the shortest representation, so
+/// trailing zeros are dropped.
+pub(crate) struct Num(pub f32);
+
+impl fmt::Display for Num {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    if !self.0.is_finite() {
+      return f.write_str("0");
+    }
+    let factor = 10f32.powi(COORD_DECIMALS);
+    let value = (self.0 * factor).round() / factor;
+    if value == 0.0 {
+      return f.write_str("0");
+    }
+    // Drop the redundant integer-part zero: `0.5` -> `.5`, `-0.5` -> `-.5`.
+    let text = value.to_string();
+    if let Some(rest) = text.strip_prefix("0.") {
+      write!(f, ".{rest}")
+    } else if let Some(rest) = text.strip_prefix("-0.") {
+      write!(f, "-.{rest}")
+    } else {
+      f.write_str(&text)
+    }
+  }
+}
+
 fn num(value: f32) -> String {
-  if value.is_finite() {
-    format!("{value}")
-  } else {
-    "0".to_owned()
+  Num(value).to_string()
+}
+
+/// Pushes an `*-opacity` attribute only when it differs from the SVG default of
+/// `1` (fully opaque), so opaque fills stay attribute-free.
+fn push_opacity<'a>(attrs: &mut Vec<(&'a str, Cow<'a, str>)>, name: &'a str, opacity: f32) {
+  if opacity < 1.0 {
+    attrs.push((name, num(opacity).into()));
   }
 }
 
@@ -825,10 +863,8 @@ mod tests {
     doc.rect(0.0, 0.0, 100.0, 50.0, RED).unwrap();
     let svg = doc.render().unwrap();
     assert!(svg.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\""));
-    assert!(
-      svg
-        .contains(r##"<rect x="0" y="0" width="100" height="50" fill="#ff0000" fill-opacity="1""##)
-    );
+    assert!(svg.contains(r##"<rect x="0" y="0" width="100" height="50" fill="#f00""##));
+    assert!(!svg.contains("fill-opacity"));
     assert!(!svg.contains("base64"));
   }
 
@@ -840,7 +876,7 @@ mod tests {
       doc
         .render()
         .unwrap()
-        .contains(r##"fill="#0000ff" fill-opacity="0.5019608""##)
+        .contains(r##"fill="#00f" fill-opacity=".502""##)
     );
   }
 
@@ -883,7 +919,7 @@ mod tests {
     let svg = doc.render().unwrap();
     assert!(svg.contains("<clipPath id=\"cp0\">"));
     assert!(
-      svg.contains(r#"<g transform="matrix(1 0 0 1 3 4)" opacity="0.5" clip-path="url(#cp0)">"#)
+      svg.contains(r#"<g transform="matrix(1 0 0 1 3 4)" opacity=".5" clip-path="url(#cp0)">"#)
     );
     assert!(svg.contains("</g>"));
   }
@@ -893,7 +929,7 @@ mod tests {
     let mut doc = SvgDocument::new(10.0, 10.0).unwrap();
     let token = doc.begin_group(IDENTITY, 0.5, None, None).unwrap();
     doc.end_group(token).unwrap();
-    assert!(doc.render().unwrap().contains("<g opacity=\"0.5\">"));
+    assert!(doc.render().unwrap().contains("<g opacity=\".5\">"));
   }
 
   #[test]

@@ -14,6 +14,7 @@ use takumi_core::layout::style::{Length, ObjectFit, PositionComponent};
 use takumi_core::resources::image::ImageSource;
 
 use crate::SvgDocument;
+use crate::box_model::rect_path_data;
 
 /// `preserveAspectRatio="none"` (stretch to fit), used when the destination rect
 /// already carries the desired size.
@@ -78,7 +79,7 @@ pub(crate) fn emit_image(
   let (ix, iy) = (x + off_x, y + off_y);
 
   if dw > w + 0.5 || dh > h + 0.5 {
-    let clip = doc.clip_path(&format!("M{x} {y} H{} V{} H{x} Z", x + w, y + h))?;
+    let clip = doc.clip_path(&rect_path_data(x, y, w, h))?;
     let group = doc.begin_group(crate::IDENTITY, 1.0, Some(&clip), None)?;
     doc.image(ix, iy, dw, dh, &href, Some(preserve_aspect_none()))?;
     return doc.end_group(group);

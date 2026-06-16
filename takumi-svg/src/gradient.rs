@@ -26,8 +26,9 @@ use takumi_core::layout::style::{
   resolve_stops_along_axis,
 };
 
+use crate::box_model::{PathData, rect_path_data};
 use crate::image::{data_url_for_url, preserve_aspect_none};
-use crate::{GradientStop, IDENTITY, Rgba, SvgDocument};
+use crate::{APPROX_CHARS_PER_NUMBER, GradientStop, IDENTITY, Rgba, SvgDocument};
 
 const CONIC_WEDGES: usize = 180;
 
@@ -169,7 +170,7 @@ fn begin_box_clip(
   w: f32,
   h: f32,
 ) -> io::Result<crate::GroupToken> {
-  let clip = doc.clip_path(&format!("M{x} {y}H{}V{}H{x}Z", x + w, y + h))?;
+  let clip = doc.clip_path(&rect_path_data(x, y, w, h))?;
   doc.begin_group(IDENTITY, 1.0, Some(&clip), None)
 }
 
@@ -184,11 +185,9 @@ fn emit_tiled_pattern(
   placement: &LayerPlacement,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  // When tiles are evenly spaced on both axes, one <pattern> cell tiles them.
-  // Otherwise (space/no-repeat on one axis) emit the explicit tile grid.
-  // A `<pattern>` repeats in BOTH axes, so only use it when both axes actually
-  // have multiple evenly-spaced tiles; otherwise emit the explicit grid (a single
-  // row/column would wrongly repeat on the other axis).
+  // A `<pattern>` repeats on both axes, so only use it when both axes have
+  // multiple evenly-spaced tiles; otherwise a single row/column would wrongly
+  // repeat on the other axis, so emit the explicit grid.
   let even_x = is_even_step(&placement.xs, placement.tile_w);
   let even_y = is_even_step(&placement.ys, placement.tile_h);
   if let (Some(step_x), Some(step_y)) = (even_x, even_y)
@@ -639,7 +638,7 @@ fn emit_conic(
     .map(|(px, py)| (px - ccx).hypot(py - ccy))
     .fold(0.0_f32, f32::max);
 
-  let clip = doc.clip_path(&format!("M{x} {y} H{} V{} H{x} Z", x + w, y + h))?;
+  let clip = doc.clip_path(&rect_path_data(x, y, w, h))?;
   let group = doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?;
   for i in 0..CONIC_WEDGES {
     let a0 = i as f32 / CONIC_WEDGES as f32 * TAU;
@@ -654,7 +653,14 @@ fn emit_conic(
     }
     let (x0, y0) = (ccx + radius * a0.sin(), ccy - radius * a0.cos());
     let (x1, y1) = (ccx + radius * a1.sin(), ccy - radius * a1.cos());
-    doc.path(&format!("M{ccx} {ccy} L{x0} {y0} L{x1} {y1} Z"), fill)?;
+    let mut wedge = PathData::with_capacity(6 * APPROX_CHARS_PER_NUMBER);
+    wedge.command(b'M');
+    wedge.pair(ccx, ccy);
+    wedge.command(b'L');
+    wedge.pair(x0, y0);
+    wedge.pair(x1, y1);
+    wedge.close();
+    doc.path(&wedge.into_string(), fill)?;
   }
   doc.end_group(group)
 }

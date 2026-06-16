@@ -26,11 +26,11 @@ use takumi_core::{
 };
 use typed_builder::TypedBuilder;
 
-use crate::box_model::{element_transform, path_data};
+use crate::box_model::{PathData, element_transform, path_data};
 use crate::gradient::{emit_background_images, emit_image_layers};
 use crate::image::emit_image;
 use crate::text::{emit_inline_content, emit_text};
-use crate::{IDENTITY, Rgba, SvgDocument};
+use crate::{APPROX_CHARS_PER_NUMBER, IDENTITY, Num, Rgba, SvgDocument};
 
 /// Inputs for [`render`]. Built with [`SvgOptions::builder`]; only `node`,
 /// `viewport`, and `global` are required. Carrying inputs in a builder struct
@@ -331,20 +331,22 @@ fn emit_clip_path_group(
       if polygon.coordinates.is_empty() {
         return Ok(None);
       }
-      let mut data = String::new();
+      let mut data =
+        PathData::with_capacity(polygon.coordinates.len() * (2 * APPROX_CHARS_PER_NUMBER + 1));
       for (index, coord) in polygon.coordinates.iter().enumerate() {
         let px = x + coord.x.to_px(sizing, size.width);
         let py = y + coord.y.to_px(sizing, size.height);
-        let cmd = if index == 0 { 'M' } else { 'L' };
-        data.push_str(&format!("{cmd}{px} {py}"));
+        data.command(if index == 0 { b'M' } else { b'L' });
+        data.pair(px, py);
       }
-      data.push('Z');
+      data.close();
+      let data = data.into_string();
       let even_odd = polygon.fill_rule.unwrap_or(node.context.style.clip_rule) == FillRule::EvenOdd;
       doc.clip_path_transformed(&data, even_odd, None)?
     }
     BasicShape::Path(path) => {
       let even_odd = path.fill_rule.unwrap_or(node.context.style.clip_rule) == FillRule::EvenOdd;
-      let transform = format!("translate({x} {y})");
+      let transform = format!("translate({} {})", Num(x), Num(y));
       doc.clip_path_transformed(&path.path, even_odd, Some(&transform))?
     }
   };
@@ -431,7 +433,17 @@ fn overflow_clip_rect_data(
     (y - UNBOUNDED, y + layout.size.height + UNBOUNDED)
   };
 
-  format!("M{left} {top} H{right} V{bottom} H{left} Z")
+  let mut path = PathData::with_capacity(5 * APPROX_CHARS_PER_NUMBER);
+  path.command(b'M');
+  path.pair(left, top);
+  path.command(b'H');
+  path.number(right);
+  path.command(b'V');
+  path.number(bottom);
+  path.command(b'H');
+  path.number(left);
+  path.close();
+  path.into_string()
 }
 
 /// Builds the clip path (and even-odd flag) for the background fill area per
@@ -793,7 +805,12 @@ fn emit_side_pattern(
   let map = |px: f32, py: f32| (a * px + c * py + e, b * px + d * py + f);
   let (mx0, my0) = map(x0, y0);
   let (mx1, my1) = map(x1, y1);
-  let data = format!("M{mx0} {my0}L{mx1} {my1}");
+  let mut path = PathData::with_capacity(4 * APPROX_CHARS_PER_NUMBER);
+  path.command(b'M');
+  path.pair(mx0, my0);
+  path.command(b'L');
+  path.pair(mx1, my1);
+  let data = path.into_string();
   let length = ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt();
   let (dasharray, linecap) = dash_attrs(width, style, length, false);
   doc.stroke_path(&data, Rgba(color.0), width, dasharray.as_deref(), linecap)
@@ -913,7 +930,10 @@ fn dash_attrs(
   closed: bool,
 ) -> (Option<String>, Option<&'static str>) {
   match border_dash_pattern(width, style, length, closed) {
-    Some(([dash, gap], round_cap)) => (Some(format!("{dash} {gap}")), round_cap.then_some("round")),
+    Some(([dash, gap], round_cap)) => (
+      Some(format!("{} {}", Num(dash), Num(gap))),
+      round_cap.then_some("round"),
+    ),
     None => (None, None),
   }
 }

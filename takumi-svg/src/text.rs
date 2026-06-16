@@ -26,7 +26,7 @@ use crate::box_model::path_data;
 use crate::gradient::emit_background_images;
 use crate::image::encode;
 use crate::render::emit_inline_box;
-use crate::{Affine, IDENTITY, Rgba, SvgDocument};
+use crate::{Affine, IDENTITY, Num, Rgba, SvgDocument};
 
 /// Emits a leaf [`TextData`] node. `origin_x`/`origin_y` are the element's
 /// absolute border-box top-left; `layout` carries border/padding and content size.
@@ -237,8 +237,11 @@ fn emit_outline_island(
   // Dash geometry mirrors the raster stroke; non-stroked styles (double, the
   // 3D bevels) paint nothing here, as in the raster backend.
   let (dasharray, linecap) = match style.outline_style {
-    BorderStyle::Dotted => (Some(format!("0 {}", width * 2.0)), Some("round")),
-    BorderStyle::Dashed => (Some(format!("{} {}", width * 3.0, width * 2.0)), None),
+    BorderStyle::Dotted => (Some(format!("0 {}", Num(width * 2.0))), Some("round")),
+    BorderStyle::Dashed => (
+      Some(format!("{} {}", Num(width * 3.0), Num(width * 2.0))),
+      None,
+    ),
     BorderStyle::Hidden
     | BorderStyle::Double
     | BorderStyle::Groove
