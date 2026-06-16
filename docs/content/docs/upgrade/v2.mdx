@@ -1,0 +1,37 @@
+---
+title: Upgrade to v2
+description: Walks through the breaking changes in v2 and how to upgrade from v1.
+---
+
+v2 tightens Takumi's rendering to match the web platform more closely. This page covers the breaking changes; for everything else see the [releases](https://github.com/kane50613/takumi/releases).
+
+## What has changed?
+
+### `currentColor` in SVG images is no longer tinted by the host color
+
+Through v1, an SVG supplied as an image (`Node::image`, `background-image: url(...)`, or `mask-image`) had its `currentColor` rewritten to the host element's `color` before rendering. v2 removes this.
+
+An SVG referenced as an image is an isolated document, so it does not inherit `color` from the host — the same rule browsers, [satori](https://github.com/vercel/satori), and `@vercel/og` follow. Its `currentColor` now resolves to the SVG's own default (black) instead of the surrounding text color. This also makes the raster and vector (SVG) backends agree, and lets the raster backend reuse its cached parse instead of reparsing the SVG on every render.
+
+`currentColor` for Takumi's own properties (text `color`, `border-color`, `box-shadow`, `outline`, `text-decoration-color`) is unchanged. Only the contents of SVG images are affected.
+
+If you relied on the old behavior to tint an icon, set the color in the SVG markup before passing it in:
+
+```ts
+const tinted = icon.replace(/currentColor/g, "#3b82f6"); // [!code ++]
+```
+
+## Rust
+
+### `ImageSource::render_for_layout` Drops the `current_color` Argument
+
+With SVG `currentColor` no longer resolved against the host, `render_for_layout` no longer needs the color.
+
+```rust
+image.render_for_layout(width, height, image_rendering, time_ms, current_color)?; // [!code --]
+image.render_for_layout(width, height, image_rendering, time_ms)?; // [!code ++]
+```
+
+## More in Changelog!
+
+For a more comprehensive list of changes, please refer to the changelog in [releases](https://github.com/kane50613/takumi/releases).

@@ -1,0 +1,548 @@
+use std::{cell::RefCell, collections::HashMap, convert::Into};
+
+use parley::GlyphRun;
+use skrifa::color::ColorPalette;
+use taffy::{Layout, Point, Size};
+use tiny_skia::Pixmap;
+
+use crate::{
+  BorderProperties, Canvas, ColorTile, Command, MaskSamplingOptions, MaskSourceToPixmapOptions,
+  PaintSource, Placement, Result, SamplingOptions, SizedFontStyle, Stroke,
+  composite_mask_source_to_pixmap, draw_outset_shadow,
+  layout::{
+    inline::InlineBrush,
+    style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
+  },
+  render_mask,
+  resources::font::{ResolvedColorLayer, ResolvedGlyph},
+};
+
+pub(crate) type GlyphMaskCache = HashMap<u64, (Vec<u8>, Placement)>;
+
+const GLYPH_MASK_CACHE_MAX_ENTRIES: usize = 4096;
+
+thread_local! {
+  static SHARED_GLYPH_MASK_CACHE: RefCell<GlyphMaskCache> = RefCell::new(HashMap::new());
+}
+
+pub(crate) fn with_shared_glyph_cache<R>(f: impl FnOnce(&mut GlyphMaskCache) -> R) -> R {
+  SHARED_GLYPH_MASK_CACHE.with(|c| match c.try_borrow_mut() {
+    Ok(mut cache) => {
+      if cache.len() > GLYPH_MASK_CACHE_MAX_ENTRIES {
+        cache.clear();
+      }
+      f(&mut cache)
+    }
+    Err(_) => {
+      let mut local = HashMap::new();
+      f(&mut local)
+    }
+  })
+}
+
+fn glyph_cache_key_and_offset(transform: Affine, glyph_signature: u64) -> Option<(u64, i32, i32)> {
+  if !transform.only_translation() {
+    return None;
+  }
+  let scaled_x = (transform.x * 4.0).round() as i64;
+  let int_x = scaled_x.div_euclid(4) as i32;
+  let bucket_x = scaled_x.rem_euclid(4) as u64;
+  let int_y = transform.y.round() as i32;
+  let key = (glyph_signature << 2) | bucket_x;
+  Some((key, int_x, int_y))
+}
+
+fn draw_outline_with_cache(
+  paths: &[Command],
+  glyph_signature: u64,
+  transform: Affine,
+  color: Color,
+  canvas: &mut Canvas,
+) {
+  let Some((key, int_x, int_y)) = glyph_cache_key_and_offset(transform, glyph_signature) else {
+    let (mask, placement) = render_mask(paths, Some(transform), None, &mut canvas.buffer_pool);
+    canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
+    canvas.buffer_pool.release(mask);
+    return;
+  };
+  with_shared_glyph_cache(|cache| {
+    let (cached_mask, cached_placement) = cache.entry(key).or_insert_with(|| {
+      let bucket_x = (key & 3) as f32 * 0.25;
+      let cache_transform = Affine::translation(bucket_x, 0.0);
+      render_mask(paths, Some(cache_transform), None, &mut canvas.buffer_pool)
+    });
+    let placement = cached_placement.translate(int_x, int_y);
+    canvas.draw_mask(cached_mask, placement, color, BlendMode::Normal);
+  });
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DecorationSegmentParams {
+  pub(crate) offset: f32,
+  pub(crate) size: f32,
+  pub(crate) start_x: f32,
+  pub(crate) end_x: f32,
+  pub(crate) layout: Layout,
+  pub(crate) transform: Affine,
+}
+
+pub(crate) fn draw_decoration(
+  canvas: &mut Canvas,
+  glyph_run: &GlyphRun<'_, InlineBrush>,
+  color: Color,
+  offset: f32,
+  size: f32,
+  layout: Layout,
+  transform: Affine,
+) {
+  let start_x = layout.border.left + layout.padding.left + glyph_run.offset();
+  let end_x = start_x + glyph_run.advance();
+  draw_decoration_segment(
+    canvas,
+    color,
+    DecorationSegmentParams {
+      offset,
+      size,
+      start_x,
+      end_x,
+      layout,
+      transform,
+    },
+  );
+}
+
+pub(crate) fn draw_decoration_segment(
+  canvas: &mut Canvas,
+  color: Color,
+  params: DecorationSegmentParams,
+) {
+  if params.end_x <= params.start_x {
+    return;
+  }
+
+  let snapped_start_x = params.start_x.floor();
+  let width = (params.end_x.ceil() - snapped_start_x) as u32;
+
+  let tile = ColorTile::new(color.into(), width, params.size as u32);
+
+  canvas.overlay_image(
+    &tile,
+    BorderProperties::default(),
+    params.transform
+      * Affine::translation(
+        snapped_start_x,
+        params.layout.border.top + params.layout.padding.top + params.offset,
+      ),
+    ImageScalingAlgorithm::Auto,
+    BlendMode::Normal,
+  );
+}
+
+pub(crate) fn draw_glyph_clip_image(
+  glyph: &ResolvedGlyph,
+  canvas: &mut Canvas,
+  style: &SizedFontStyle,
+  mut transform: Affine,
+  inline_offset: Point<f32>,
+  clip_image: PaintSource<'_>,
+) -> Result<()> {
+  transform *= Affine::translation(inline_offset.x, inline_offset.y);
+
+  match glyph {
+    ResolvedGlyph::Bitmap(bitmap) => {
+      transform *= Affine::translation(bitmap.placement.left as f32, -bitmap.placement.top as f32);
+
+      let mask_capacity = (bitmap.placement.width * bitmap.placement.height) as usize;
+      let mut mask = canvas.buffer_pool.acquire_dirty(mask_capacity);
+      if mask_capacity > 0 {
+        let mask_len = mask.len();
+        let write_len = mask_capacity.min(mask_len);
+        bitmap.write_alpha_mask(&mut mask[..write_len]);
+      }
+
+      let Some(mut bottom) = Pixmap::new(bitmap.placement.width, bitmap.placement.height) else {
+        return Ok(());
+      };
+      let mut bottom_pixmap = bottom.as_mut();
+      composite_mask_source_to_pixmap(
+        &mut bottom_pixmap,
+        &mask,
+        clip_image,
+        MaskSourceToPixmapOptions {
+          placement: Placement {
+            left: 0,
+            top: 0,
+            width: bitmap.placement.width,
+            height: bitmap.placement.height,
+          },
+          sampling: MaskSamplingOptions {
+            canvas_to_source: Affine::translation(
+              inline_offset.x + bitmap.placement.left as f32,
+              inline_offset.y - bitmap.placement.top as f32,
+            ),
+            sample_bias: Point::ZERO,
+            algorithm: ImageScalingAlgorithm::Pixelated,
+          },
+          mode: BlendMode::Normal,
+          combined_mask: None,
+        },
+      );
+
+      canvas.overlay_sampled_pixmap(
+        bottom.as_ref(),
+        Size {
+          width: bottom.width(),
+          height: bottom.height(),
+        },
+        BorderProperties::default(),
+        transform,
+        SamplingOptions {
+          logical_to_source: Affine::IDENTITY,
+          algorithm: ImageScalingAlgorithm::Auto,
+        },
+        BlendMode::Normal,
+      );
+
+      canvas.buffer_pool.release(mask);
+    }
+    ResolvedGlyph::Outline(outline) => {
+      // If the transform is not invertible, we can't draw the glyph
+      let Some(inverse) = transform.invert() else {
+        return Ok(());
+      };
+
+      let sampling = MaskSamplingOptions {
+        canvas_to_source: Affine::translation(inline_offset.x, inline_offset.y) * inverse,
+        sample_bias: Point::ZERO,
+        algorithm: style.parent.image_rendering,
+      };
+
+      if let Some((key, int_x, int_y)) =
+        glyph_cache_key_and_offset(transform, outline.cache_signature())
+      {
+        with_shared_glyph_cache(|cache| {
+          let (cached_mask, cached_placement) = cache.entry(key).or_insert_with(|| {
+            let bucket_x = (key & 3) as f32 * 0.25;
+            let cache_transform = Affine::translation(bucket_x, 0.0);
+            render_mask(
+              outline.paths(),
+              Some(cache_transform),
+              None,
+              &mut canvas.buffer_pool,
+            )
+          });
+          let placement = cached_placement.translate(int_x, int_y);
+          canvas.composite_mask_source(
+            cached_mask,
+            placement,
+            clip_image,
+            sampling,
+            BlendMode::Normal,
+          );
+        });
+      } else {
+        let (mask, placement) = render_mask(
+          outline.paths(),
+          Some(transform),
+          None,
+          &mut canvas.buffer_pool,
+        );
+        canvas.composite_mask_source(&mask, placement, clip_image, sampling, BlendMode::Normal);
+        canvas.buffer_pool.release(mask);
+      }
+
+      if let Some(embolden) = outline.embolden() {
+        draw_text_embolden_clip_image(
+          canvas,
+          style,
+          transform,
+          outline.paths(),
+          embolden,
+          clip_image,
+          inline_offset,
+        );
+      }
+
+      draw_text_stroke_clip_image(
+        canvas,
+        style,
+        transform,
+        outline.paths(),
+        clip_image,
+        inline_offset,
+      );
+    }
+  }
+
+  Ok(())
+}
+pub(crate) fn draw_glyph(
+  glyph: &ResolvedGlyph,
+  canvas: &mut Canvas,
+  style: &SizedFontStyle,
+  mut transform: Affine,
+  inline_offset: Point<f32>,
+  color: Color,
+  palette: Option<&ColorPalette>,
+) -> Result<()> {
+  transform *= Affine::translation(inline_offset.x, inline_offset.y);
+
+  match glyph {
+    ResolvedGlyph::Bitmap(bitmap) => {
+      transform *= Affine::translation(bitmap.placement.left as f32, -bitmap.placement.top as f32);
+      transform *= Affine::scale(bitmap.scale_x, bitmap.scale_y);
+      canvas.overlay_sampled_pixmap(
+        bitmap.pixmap.as_ref(),
+        Size {
+          width: bitmap.pixmap.width(),
+          height: bitmap.pixmap.height(),
+        },
+        Default::default(),
+        transform,
+        SamplingOptions {
+          logical_to_source: Affine::IDENTITY,
+          algorithm: Default::default(),
+        },
+        BlendMode::Normal,
+      );
+    }
+    ResolvedGlyph::Outline(outline) => {
+      if let Some(color_layers) = outline.color_layers()
+        && let Some(palette) = palette
+      {
+        draw_color_outline_image(canvas, color_layers, palette, color, transform);
+      } else {
+        draw_outline_with_cache(
+          outline.paths(),
+          outline.cache_signature(),
+          transform,
+          color,
+          canvas,
+        );
+      }
+
+      if let Some(embolden) = outline.embolden() {
+        draw_text_embolden(canvas, style, transform, outline.paths(), color, embolden);
+      }
+
+      draw_text_stroke(canvas, style, transform, outline.paths());
+    }
+  }
+
+  Ok(())
+}
+
+fn draw_text_stroke_clip_image(
+  canvas: &mut Canvas,
+  style: &SizedFontStyle,
+  transform: Affine,
+  paths: &[Command],
+  clip_image: PaintSource<'_>,
+  inline_offset: Point<f32>,
+) {
+  if style.stroke_width <= 0.0 {
+    return;
+  }
+
+  let Some(inverse) = transform.invert() else {
+    return;
+  };
+
+  let scale = transform.uniform_scale().max(f32::EPSILON);
+  let mut stroke = Stroke::new(style.stroke_width / scale);
+  stroke.join = style.parent.stroke_linejoin.into();
+
+  let (stroke_mask, stroke_placement) = render_mask(
+    paths,
+    Some(transform),
+    Some(stroke.into()),
+    &mut canvas.buffer_pool,
+  );
+
+  canvas.composite_mask_color_over_source(
+    &stroke_mask,
+    stroke_placement,
+    clip_image,
+    style.text_stroke_color,
+    MaskSamplingOptions {
+      canvas_to_source: Affine::translation(inline_offset.x, inline_offset.y) * inverse,
+      sample_bias: Point::ZERO,
+      algorithm: style.parent.image_rendering,
+    },
+    BlendMode::Normal,
+  );
+
+  canvas.buffer_pool.release(stroke_mask);
+}
+
+fn draw_text_embolden_clip_image(
+  canvas: &mut Canvas,
+  style: &SizedFontStyle,
+  transform: Affine,
+  paths: &[Command],
+  embolden: f32,
+  clip_image: PaintSource<'_>,
+  inline_offset: Point<f32>,
+) {
+  if embolden <= 0.0 {
+    return;
+  }
+
+  let Some(inverse) = transform.invert() else {
+    return;
+  };
+
+  let mut stroke = Stroke::new(embolden * 2.0);
+  stroke.join = style.parent.stroke_linejoin.into();
+
+  let (stroke_mask, stroke_placement) = render_mask(
+    paths,
+    Some(transform),
+    Some(stroke.into()),
+    &mut canvas.buffer_pool,
+  );
+
+  canvas.composite_mask_source(
+    &stroke_mask,
+    stroke_placement,
+    clip_image,
+    MaskSamplingOptions {
+      canvas_to_source: Affine::translation(inline_offset.x, inline_offset.y) * inverse,
+      sample_bias: Point::ZERO,
+      algorithm: style.parent.image_rendering,
+    },
+    BlendMode::Normal,
+  );
+
+  canvas.buffer_pool.release(stroke_mask);
+}
+
+fn draw_text_stroke(
+  canvas: &mut Canvas,
+  style: &SizedFontStyle,
+  transform: Affine,
+  paths: &[Command],
+) {
+  if style.stroke_width <= 0.0 {
+    return;
+  }
+
+  let scale = transform.uniform_scale().max(f32::EPSILON);
+  let mut stroke = Stroke::new(style.stroke_width / scale);
+  stroke.join = style.parent.stroke_linejoin.into();
+
+  let (stroke_mask, stroke_placement) = render_mask(
+    paths,
+    Some(transform),
+    Some(stroke.into()),
+    &mut canvas.buffer_pool,
+  );
+
+  canvas.draw_mask(
+    &stroke_mask,
+    stroke_placement,
+    style.text_stroke_color,
+    BlendMode::Normal,
+  );
+
+  canvas.buffer_pool.release(stroke_mask);
+}
+
+fn draw_text_embolden(
+  canvas: &mut Canvas,
+  style: &SizedFontStyle,
+  transform: Affine,
+  paths: &[Command],
+  color: Color,
+  embolden: f32,
+) {
+  if embolden <= 0.0 {
+    return;
+  }
+
+  let mut stroke = Stroke::new(embolden * 2.0);
+  stroke.join = style.parent.stroke_linejoin.into();
+
+  let (stroke_mask, stroke_placement) = render_mask(
+    paths,
+    Some(transform),
+    Some(stroke.into()),
+    &mut canvas.buffer_pool,
+  );
+
+  canvas.draw_mask(&stroke_mask, stroke_placement, color, BlendMode::Normal);
+
+  canvas.buffer_pool.release(stroke_mask);
+}
+
+fn draw_text_shadow(
+  canvas: &mut Canvas,
+  style: &SizedFontStyle,
+  transform: Affine,
+  paths: &[Command],
+) -> Result<()> {
+  if style.text_shadow.is_empty() {
+    return Ok(());
+  }
+
+  for shadow in style.text_shadow.iter() {
+    draw_outset_shadow(shadow, canvas, paths, transform, Default::default(), None)?;
+  }
+
+  Ok(())
+}
+
+pub(crate) fn draw_glyph_text_shadow(
+  glyph: &ResolvedGlyph,
+  canvas: &mut Canvas,
+  style: &SizedFontStyle,
+  mut transform: Affine,
+  inline_offset: Point<f32>,
+) -> Result<()> {
+  transform *= Affine::translation(inline_offset.x, inline_offset.y);
+
+  if let ResolvedGlyph::Outline(outline) = glyph {
+    draw_text_shadow(canvas, style, transform, outline.paths())?;
+  }
+
+  Ok(())
+}
+fn draw_color_outline_image(
+  canvas: &mut Canvas,
+  color_layers: &[ResolvedColorLayer],
+  palette: &ColorPalette,
+  foreground_color: Color,
+  transform: Affine,
+) {
+  let foreground_opacity = foreground_color.0[3] as f32 / 255.0;
+  if foreground_opacity <= 0.0 {
+    return;
+  }
+
+  for layer in color_layers {
+    let color = if layer.palette_index == u16::MAX {
+      let alpha = (foreground_opacity * layer.alpha * 255.0)
+        .round()
+        .clamp(0.0, 255.0) as u8;
+      Color([
+        foreground_color.0[0],
+        foreground_color.0[1],
+        foreground_color.0[2],
+        alpha,
+      ])
+    } else {
+      let Some(record) = palette.colors().get(usize::from(layer.palette_index)) else {
+        continue;
+      };
+      let alpha = ((record.alpha() as f32 / 255.0) * layer.alpha * foreground_opacity * 255.0)
+        .round()
+        .clamp(0.0, 255.0) as u8;
+      Color([record.red(), record.green(), record.blue(), alpha])
+    };
+
+    let (mask, placement) =
+      render_mask(&layer.paths, Some(transform), None, &mut canvas.buffer_pool);
+    canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
+    canvas.buffer_pool.release(mask);
+  }
+}

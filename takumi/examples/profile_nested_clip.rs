@@ -1,5 +1,5 @@
 use std::hint::black_box;
-use takumi::{
+use takumi::core::{
   GlobalContext,
   layout::{
     Viewport,
@@ -9,8 +9,8 @@ use takumi::{
       Length::Percentage, Overflow, SpacePair, Style, StyleDeclaration,
     },
   },
-  rendering::{RenderOptions, render},
 };
+use takumi::raster::{RenderOptions, render};
 
 const ITERS: usize = 100;
 

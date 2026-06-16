@@ -1,4 +1,4 @@
-use takumi::layout::{
+use takumi::core::layout::{
   node::Node,
   style::{Display, Length::Percentage, ObjectFit, Style, StyleDeclaration},
 };

@@ -111,7 +111,7 @@ jobs:
       - name: Test Publish (--dry-run)
         run: |
           sed -i '/\[patch.crates-io\]/,$d' Cargo.toml
-          cargo publish --dry-run -p takumi-css -p takumi
+          cargo publish --dry-run -p takumi-css -p takumi-core -p takumi-raster -p takumi-svg -p takumi
 
   build-helpers:
     name: Build @takumi-rs/helpers

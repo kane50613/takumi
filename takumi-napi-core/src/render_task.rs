@@ -3,13 +3,13 @@ use std::{borrow::Cow, mem::take};
 use std::{collections::HashMap, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi::layout::node::Node;
-use takumi::{
+use takumi_core::layout::node::Node;
+use takumi_core::{
   layout::style::StyleSheet,
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
-  rendering::{DitheringAlgorithm, render, write_image},
   resources::image::ImageSource as LoadedImageSource,
 };
+use takumi_raster::{DitheringAlgorithm, render, write_image};
 
 use crate::{
   ExternalMemoryAccountable, buffer_from_object, map_error, parse_stylesheet,
@@ -90,7 +90,7 @@ impl Task for RenderTask {
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
     let image = render(
-      takumi::rendering::RenderOptions::builder()
+      takumi_raster::RenderOptions::builder()
         .viewport(self.viewport)
         .fetched_resources(initialized_images)
         .stylesheet(take(&mut self.stylesheet))
