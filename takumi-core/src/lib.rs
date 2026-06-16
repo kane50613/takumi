@@ -2,8 +2,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 #![allow(missing_docs)]
 //! Backend-agnostic core for takumi: the node tree, style/layout, and resource
-//! management. This is an internal crate exposing a wide surface for the paint
-//! backends (`takumi-raster`, `takumi-svg`); depend on `takumi` instead.
+//! management.
 
 pub mod layout;
 

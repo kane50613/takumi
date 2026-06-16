@@ -1,9 +1,9 @@
 [package]
 name = "takumi-core"
-version = "1.8.5"
+version = "0.0.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-description = "Backend-agnostic layout, style, and resource core for takumi. Internal crate; depend on `takumi` instead."
+description = "Backend-agnostic layout, style, and resource core for takumi."
 repository = "https://github.com/kane50613/takumi"
 rust-version = "1.91"
 

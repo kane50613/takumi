@@ -2060,7 +2060,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-core"
-version = "1.8.5"
+version = "0.0.0"
 dependencies = [
  "bytemuck",
  "color",
@@ -2129,7 +2129,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-raster"
-version = "1.8.5"
+version = "0.0.0"
 dependencies = [
  "bytemuck",
  "color",
@@ -2174,7 +2174,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-svg"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "base64",
  "quick-xml",
