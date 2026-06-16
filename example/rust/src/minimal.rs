@@ -1,15 +1,15 @@
 // Import necessary modules for file operations and takumi library components
 use std::{borrow::Cow, fs::File};
 
-use takumi::{
+use takumi::core::{
   GlobalContext,
   layout::{
     Viewport,
     node::Node,
     style::{Length::Px, Style, StyleDeclaration},
   },
-  rendering::{ImageOutputFormat, RenderOptions, render, write_image},
 };
+use takumi::raster::{ImageOutputFormat, RenderOptions, render, write_image};
 
 /// Generates a "Hello, {name}!" image with specified dimensions and styling
 ///

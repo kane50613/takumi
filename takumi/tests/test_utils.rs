@@ -9,16 +9,17 @@ use std::{
 use image::RgbaImage;
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use takumi::{
+use takumi::core::{
   GlobalContext,
   layout::{Viewport, node::Node},
-  rendering::{
-    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
-    RenderOptions, encode_animated_gif, encode_animated_png, encode_animated_webp, render,
-    write_image,
-  },
   resources::{font::FontResource, image::ImageSource},
 };
+use takumi::raster::{
+  AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
+  RenderOptions, encode_animated_gif, encode_animated_png, encode_animated_webp, render,
+  write_image,
+};
+use takumi_svg::{SvgOptions, render as svg_render};
 
 fn repo_base_path(path: &str) -> PathBuf {
   Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -168,6 +169,20 @@ pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &
     html_content,
   )
   .unwrap();
+
+  // Emit the vector SVG alongside the raster golden (best-effort: the SVG backend
+  // does not cover every paint feature yet, so failures are skipped not fatal).
+  if let Ok(svg) = svg_render(
+    SvgOptions::builder()
+      .node(options.node().clone())
+      .viewport(*options.viewport())
+      .global(options.global())
+      .stylesheet(options.stylesheet().clone())
+      .fetched_resources(options.fetched_resources().clone())
+      .build(),
+  ) {
+    write(format!("tests/fixtures-generated/{fixture_name}.svg"), svg).unwrap();
+  }
 
   let image = render(options).unwrap();
   let golden_path = format!("tests/fixtures-generated/{fixture_name}.webp");

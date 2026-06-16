@@ -84,7 +84,10 @@ pub use font_style::*;
 pub use font_synthesis::*;
 pub use font_variation_settings::*;
 pub use font_weight::*;
-pub use gradient_utils::{GradientOverlayTile, overlay_gradient_tile_fast_normal_unconstrained};
+pub use gradient_utils::{
+  GradientOverlayTile, build_color_lut_with_interpolation,
+  overlay_gradient_tile_fast_normal_unconstrained, resolve_stops_along_axis,
+};
 pub use grid::*;
 pub use length::*;
 pub use line_clamp::*;
