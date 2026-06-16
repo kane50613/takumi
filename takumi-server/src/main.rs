@@ -1,6 +1,6 @@
 use clap::Parser;
 use mimalloc::MiMalloc;
-use takumi::GlobalContext;
+use takumi::core::GlobalContext;
 use tracing::Level;
 use tracing_subscriber::fmt;
 
