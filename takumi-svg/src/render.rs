@@ -17,7 +17,8 @@ use takumi_core::{
     node::{ImageData, Node, NodeKind},
     style::{
       BackgroundClip, BackgroundImage, BasicShape, BlendMode, BorderStyle, Color, ComputedStyle,
-      Display, FillRule, Overflow, ShapeRadius, Sides, SizingContext, SpacePair, StyleSheet, ToCss,
+      Display, FillRule, Isolation, Overflow, ShapeRadius, Sides, SizingContext, SpacePair,
+      StyleSheet, ToCss,
     },
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
@@ -76,7 +77,8 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
   let width = canvas_w.map_or(root_layout.size.width, |w| w as f32);
   let height = canvas_h.map_or(root_layout.size.height, |h| h as f32);
   let mut doc = SvgDocument::new(width, height)?;
-  emit_node(&root, root_id, &results, 0.0, 0.0, &mut doc)?;
+  let mut origins = HashMap::new();
+  emit_node(&root, root_id, &results, 0.0, 0.0, &mut origins, &mut doc)?;
   Ok(doc.render()?)
 }
 
@@ -84,6 +86,7 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
 /// `child_group`, `outer`, then `blend`) after the box content.
 struct BoxChrome {
   blend: Option<crate::GroupToken>,
+  isolate: Option<crate::GroupToken>,
   mask: Option<crate::GroupToken>,
   outer: Option<crate::GroupToken>,
   clip_group: Option<crate::GroupToken>,
@@ -91,21 +94,17 @@ struct BoxChrome {
 }
 
 impl BoxChrome {
-  /// Closes the box's groups in the correct nesting order.
+  /// Closes the box's groups innermost first.
   fn close(self, doc: &mut SvgDocument) -> io::Result<()> {
-    if let Some(group) = self.child_group {
-      doc.end_group(group)?;
-    }
-    if let Some(group) = self.clip_group {
-      doc.end_group(group)?;
-    }
-    if let Some(group) = self.outer {
-      doc.end_group(group)?;
-    }
-    if let Some(group) = self.mask {
-      doc.end_group(group)?;
-    }
-    if let Some(group) = self.blend {
+    let groups = [
+      self.child_group,
+      self.clip_group,
+      self.outer,
+      self.mask,
+      self.isolate,
+      self.blend,
+    ];
+    for group in groups.into_iter().flatten() {
       doc.end_group(group)?;
     }
     Ok(())
@@ -130,6 +129,10 @@ fn emit_box_chrome(
 
   let blend = (style.mix_blend_mode != BlendMode::Normal)
     .then(|| doc.begin_blend_group(&style.mix_blend_mode.to_css_string()))
+    .transpose()?;
+
+  let isolate = (style.isolation == Isolation::Isolate)
+    .then(|| doc.begin_isolate_group())
     .transpose()?;
 
   let mask = emit_mask_group(node, x, y, width, height, doc)?;
@@ -161,41 +164,22 @@ fn emit_box_chrome(
   let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
   let rounded = !border.is_zero();
 
-  // `background-clip: text` paints into the glyphs, so the box background is
-  // suppressed here and emitted by the text path instead.
-  let background = style.background_color.resolve(cc);
-  let has_bg_image = style
-    .background_image
-    .as_deref()
-    .is_some_and(|images| !images.is_empty());
-  let clip_text = style.background_clip == BackgroundClip::Text;
-  if !clip_text && (background.0[3] != 0 || has_bg_image) {
-    // Mirrors the raster backend's `draw_background` clip regions.
-    let bg_clip = background_clip_path(style.background_clip, &border, layout, x, y)
-      .map(|(data, even_odd)| {
-        if even_odd {
-          doc.clip_path_evenodd(&data)
-        } else {
-          doc.clip_path(&data)
-        }
-      })
-      .transpose()?;
-    let bg_group = bg_clip
-      .as_deref()
-      .map(|clip| doc.begin_group(IDENTITY, 1.0, Some(clip), None))
-      .transpose()?;
-    if background.0[3] != 0 {
-      doc.rect(x, y, width, height, Rgba(background.0))?;
-    }
-    if let Some(images) = style.background_image.as_deref() {
-      emit_background_images(images, &node.context, x, y, width, height, doc)?;
-    }
-    if let Some(group) = bg_group {
-      doc.end_group(group)?;
-    }
+  // `background-clip: border-area` fills the border ring by compositing the
+  // background OVER the border color (matching the raster backend, which paints
+  // the border with the background as its paint source), so the background is
+  // emitted after the border rather than before it.
+  let fills = |doc: &mut SvgDocument| {
+    emit_background(node, &border, layout, x, y, doc)?;
+    emit_inset_box_shadows(node, &border, layout, x, y, doc)
+  };
+  let border_area = style.background_clip == BackgroundClip::BorderArea;
+  if !border_area {
+    fills(doc)?;
   }
-
   emit_borders(&border, x, y, layout.size, doc)?;
+  if border_area {
+    fills(doc)?;
+  }
 
   emit_outline(node, layout.size, x, y, doc)?;
 
@@ -220,11 +204,62 @@ fn emit_box_chrome(
 
   Ok(BoxChrome {
     blend,
+    isolate,
     mask,
     outer,
     clip_group,
     child_group,
   })
+}
+
+/// Emits the element's background (color then image layers) clipped to the region
+/// selected by `background-clip`. Mirrors the raster backend's `draw_background`.
+/// `background-clip: text` is suppressed here and painted by the text path.
+fn emit_background(
+  node: &RenderNode,
+  border: &BorderProperties,
+  layout: &taffy::Layout,
+  x: f32,
+  y: f32,
+  doc: &mut SvgDocument,
+) -> io::Result<()> {
+  let style = &node.context.style;
+  if style.background_clip == BackgroundClip::Text {
+    return Ok(());
+  }
+  let (width, height) = (layout.size.width, layout.size.height);
+  let background = style.background_color.resolve(node.context.current_color);
+  let has_bg_image = style
+    .background_image
+    .as_deref()
+    .is_some_and(|images| !images.is_empty());
+  if background.0[3] == 0 && !has_bg_image {
+    return Ok(());
+  }
+
+  let bg_clip = background_clip_path(style.background_clip, border, layout, x, y)
+    .map(|(data, even_odd)| {
+      if even_odd {
+        doc.clip_path_evenodd(&data)
+      } else {
+        doc.clip_path(&data)
+      }
+    })
+    .transpose()?;
+  let bg_group = bg_clip
+    .as_deref()
+    .map(|clip| doc.begin_group(IDENTITY, 1.0, Some(clip), None))
+    .transpose()?;
+  if background.0[3] != 0 {
+    doc.rect(x, y, width, height, Rgba(background.0))?;
+  }
+  if let Some(images) = style.background_image.as_deref() {
+    emit_background_images(images, &node.context, x, y, width, height, doc)?;
+  }
+  if let Some(group) = bg_group {
+    doc.end_group(group)?;
+  }
+  Ok(())
 }
 
 /// Emits the element's `mask-image` as an SVG `<mask>` (the mask layers painted
@@ -503,13 +538,17 @@ fn content_box_path_data(
   path_data(&commands, [1.0, 0.0, 0.0, 1.0, x, y])
 }
 
-/// Emits one node's box decorations and recurses into its children.
+/// Emits one node's box decorations and recurses into its children. `origins` maps
+/// each painted node to its absolute border-box origin so out-of-flow children
+/// hoisted to another containing block (`position: absolute`/`fixed`) paint from
+/// that block's origin rather than their structural parent's.
 fn emit_node(
   node: &RenderNode,
   node_id: NodeId,
   results: &LayoutResults,
   parent_x: f32,
   parent_y: f32,
+  origins: &mut HashMap<NodeId, (f32, f32)>,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
   let Ok(layout) = results.layout(node_id) else {
@@ -517,6 +556,7 @@ fn emit_node(
   };
   let x = parent_x + layout.location.x;
   let y = parent_y + layout.location.y;
+  origins.insert(node_id, (x, y));
 
   let chrome = emit_box_chrome(node, layout, x, y, doc)?;
 
@@ -526,10 +566,14 @@ fn emit_node(
   if node.should_create_inline_layout() {
     emit_inline_content(node, *layout, x, y, doc)?;
   } else {
-    match node.node.as_ref().map(|n| &n.kind) {
-      Some(NodeKind::Image(image)) => emit_image_node(image, node, layout, x, y, doc)?,
-      Some(NodeKind::Text(text)) => emit_text(text, &node.context, *layout, x, y, doc)?,
-      _ => {}
+    // A node whose anonymous text became a child item paints that text through the
+    // child, not as its own content (mirroring the raster backend's guard).
+    if !node.has_anonymous_text_item_child() {
+      match node.node.as_ref().map(|n| &n.kind) {
+        Some(NodeKind::Image(image)) => emit_image_node(image, node, layout, x, y, doc)?,
+        Some(NodeKind::Text(text)) => emit_text(text, &node.context, *layout, x, y, doc)?,
+        _ => {}
+      }
     }
 
     if let Ok(children) = results.box_children(node_id)
@@ -558,7 +602,11 @@ fn emit_node(
         .collect();
       ordered.sort_by_key(|(z, _, _)| *z);
       for (_, child, child_node) in ordered {
-        emit_node(child_node, child.node_id, results, x, y, doc)?;
+        let (ox, oy) = match child.hoisted_cb {
+          Some(cb) => origins.get(&cb).copied().unwrap_or((x, y)),
+          None => (x, y),
+        };
+        emit_node(child_node, child.node_id, results, ox, oy, origins, doc)?;
       }
     }
   }
@@ -611,6 +659,7 @@ pub(crate) fn emit_inline_box(
       &results,
       box_x + item.margin.left,
       box_y + item.margin.top,
+      &mut HashMap::new(),
       doc,
     );
   }
@@ -961,7 +1010,7 @@ fn emit_double_border(
 }
 
 /// Emits outset `box-shadow`s behind the element as offset, blurred rects.
-/// Inset shadows are not yet supported.
+/// Inset shadows are handled by [`emit_inset_box_shadows`].
 fn emit_box_shadows(
   node: &RenderNode,
   layout: &taffy::Layout,
@@ -1016,6 +1065,85 @@ fn emit_box_shadows(
     } else {
       doc.path(&data, fill)?;
     }
+  }
+  Ok(())
+}
+
+/// Emits inset `box-shadow`s as a blurred ring inside the element's rounded border
+/// box. Mirrors the raster backend's `draw_inset_shadow`: the shadow color fills
+/// the border box minus an inner rounded-rect (shrunk by the spread, shifted by
+/// the offset), blurred and clipped to the rounded border box.
+fn emit_inset_box_shadows(
+  node: &RenderNode,
+  border: &BorderProperties,
+  layout: &taffy::Layout,
+  x: f32,
+  y: f32,
+  doc: &mut SvgDocument,
+) -> io::Result<()> {
+  let Some(shadows) = node.context.style.box_shadow.as_ref() else {
+    return Ok(());
+  };
+  let size = layout.size;
+  if size.width <= 0.0 || size.height <= 0.0 {
+    return Ok(());
+  }
+  let cc = node.context.current_color;
+  let outer = border_box_path_data(border, size, x, y);
+  for shadow in shadows.iter() {
+    if !shadow.inset {
+      continue;
+    }
+    let resolved = SizedShadow::from_box_shadow(*shadow, &node.context.sizing, cc, size);
+    if resolved.color.0[3] == 0 {
+      continue;
+    }
+    let fill = Rgba(resolved.color.0);
+    let spread = resolved.spread_radius;
+
+    // The region the shadow leaves uncovered: the rounded border box shrunk by the
+    // spread on every side and shifted by the shadow offset (core geometry, the
+    // same the raster backend uses).
+    let mut hole = *border;
+    hole.expand_by(Rect {
+      top: -spread,
+      right: -spread,
+      bottom: -spread,
+      left: -spread,
+    });
+    let hole_size = Size {
+      width: (size.width - 2.0 * spread).max(0.0),
+      height: (size.height - 2.0 * spread).max(0.0),
+    };
+    let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
+    hole.append_mask_commands(
+      &mut commands,
+      hole_size,
+      Point {
+        x: resolved.offset_x + spread,
+        y: resolved.offset_y + spread,
+      },
+    );
+    let ring = format!(
+      "{outer}{}",
+      path_data(&commands, [1.0, 0.0, 0.0, 1.0, x, y])
+    );
+
+    // Border box minus the hole, drawn even-odd, blurred, and clipped to the
+    // rounded border box so the blur stays inside the element.
+    let clip = doc.clip_path(&outer)?;
+    let clip_group = doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?;
+    let filter = (resolved.blur_radius > 0.0)
+      .then(|| doc.blur_filter(resolved.blur_radius / 2.0))
+      .transpose()?;
+    if let Some(filter) = filter {
+      let group = doc.begin_group(IDENTITY, 1.0, None, Some(&filter))?;
+      doc.path_evenodd(&ring, fill)?;
+      doc.end_group(group)?;
+    } else {
+      doc.path_evenodd(&ring, fill)?;
+    }
+    doc.end_group(clip_group)?;
   }
   Ok(())
 }

@@ -415,6 +415,14 @@ impl SvgDocument {
     Ok(GroupToken(()))
   }
 
+  /// Opens a `<g style="isolation:isolate">` establishing an isolated group, so a
+  /// descendant's `mix-blend-mode` composites within the subtree rather than
+  /// against the page backdrop. Returns a token for [`SvgDocument::end_group`].
+  pub(crate) fn begin_isolate_group(&mut self) -> io::Result<GroupToken> {
+    self.open("g", &[("style", "isolation:isolate".into())])?;
+    Ok(GroupToken(()))
+  }
+
   /// Appends a filled path with an optional stroke (for `-webkit-text-stroke`).
   /// The stroke is `(color, width, line-join)`; raster joins miter/round/bevel,
   /// so emitting `stroke-linejoin` avoids miter spikes on glyph corners.

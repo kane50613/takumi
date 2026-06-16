@@ -42,8 +42,9 @@ impl PathData {
   }
 
   pub(crate) fn command(&mut self, letter: u8) {
-    let elide =
-      matches!(self.last_command, Some(prev) if prev == letter || (prev == b'M' && letter == b'L'));
+    let elide = matches!(self.last_command, Some(prev) if prev == letter
+      || (prev == b'M' && letter == b'L')
+      || (prev == b'm' && letter == b'l'));
     if !elide {
       self.out.push(letter as char);
       self.prev_was_number = false;
@@ -79,46 +80,196 @@ impl PathData {
   }
 }
 
+/// Quantization grid for path coordinates: two decimals. Path `d` data is the
+/// bulk of the document and is sub-pixel-insensitive at the sizes takumi renders,
+/// so it is quantized harder than the 3-decimal [`Num`] kept for transform
+/// matrices (whose error multiplies into every coordinate).
+const PATH_COORD_FACTOR: f32 = 100.0;
+/// Tolerance (one grid step) for treating a curve's control point as the exact
+/// reflection of the previous one, enabling the `s`/`t` shorthands.
+const REFLECT_TOLERANCE: f32 = 1.0 / PATH_COORD_FACTOR;
+
+fn quantize_path(value: f32) -> f32 {
+  (value * PATH_COORD_FACTOR).round() / PATH_COORD_FACTOR
+}
+
 /// Serializes takumi-core path commands ([`tiny_skia::PathSegment`], the shared
-/// `Command` type) to SVG path `d` data, applying `transform` (`[a, b, c, d, e, f]`,
-/// SVG `matrix` order) to every point. Shared by glyph, border, background, and
-/// clip emission.
+/// `Command` type) to compact SVG path `d` data, applying `transform`
+/// (`[a, b, c, d, e, f]`, SVG `matrix` order) to every point. Shared by glyph,
+/// border, background, and clip emission.
+///
+/// Coordinates are emitted relative to the previous point (the first move stays
+/// absolute), axis-aligned lines collapse to `h`/`v`, and smooth cubics/quadratics
+/// use the `s`/`t` shorthands. Each delta is quantized with its rounding error
+/// folded into the next, so multi-contour fills stay closed — the core of SVGO's
+/// `convertPathData`.
 pub(crate) fn path_data(commands: &[PathSegment], [a, b, c, d, e, f]: [f32; 6]) -> String {
-  let mut path =
+  let path =
     PathData::with_capacity(commands.len() * NUMBERS_PER_COMMAND * APPROX_CHARS_PER_NUMBER);
   let map = |p: Point| (a * p.x + c * p.y + e, b * p.x + d * p.y + f);
+  let mut emit = RelEmit::new(path);
   for command in commands {
     match command {
       PathSegment::MoveTo(p) => {
         let (x, y) = map(*p);
-        path.command(b'M');
-        path.pair(x, y);
+        emit.move_to(x, y);
       }
       PathSegment::LineTo(p) => {
         let (x, y) = map(*p);
-        path.command(b'L');
-        path.pair(x, y);
+        emit.line_to(x, y);
       }
       PathSegment::QuadTo(c0, p) => {
-        let (x0, y0) = map(*c0);
+        let (cx, cy) = map(*c0);
         let (x, y) = map(*p);
-        path.command(b'Q');
-        path.pair(x0, y0);
-        path.pair(x, y);
+        emit.quad_to(cx, cy, x, y);
       }
       PathSegment::CubicTo(c0, c1, p) => {
-        let (x0, y0) = map(*c0);
-        let (x1, y1) = map(*c1);
+        let (c1x, c1y) = map(*c0);
+        let (c2x, c2y) = map(*c1);
         let (x, y) = map(*p);
-        path.command(b'C');
-        path.pair(x0, y0);
-        path.pair(x1, y1);
-        path.pair(x, y);
+        emit.cubic_to(c1x, c1y, c2x, c2y, x, y);
       }
-      PathSegment::Close => path.close(),
+      PathSegment::Close => emit.close(),
     }
   }
-  path.into_string()
+  emit.finish()
+}
+
+/// The control point of the previous curve (reconstructed in absolute space),
+/// used to detect smooth joins for the `s`/`t` shorthands.
+#[derive(Clone, Copy)]
+enum PrevControl {
+  None,
+  Cubic(f32, f32),
+  Quad(f32, f32),
+}
+
+/// Emits path segments as compact relative commands into a [`PathData`], tracking
+/// the reconstructed (quantized) pen position so each relative delta is computed
+/// against where a consumer actually lands, folding rounding error forward.
+struct RelEmit {
+  path: PathData,
+  x: f32,
+  y: f32,
+  start_x: f32,
+  start_y: f32,
+  started: bool,
+  prev: PrevControl,
+}
+
+impl RelEmit {
+  fn new(path: PathData) -> Self {
+    Self {
+      path,
+      x: 0.0,
+      y: 0.0,
+      start_x: 0.0,
+      start_y: 0.0,
+      started: false,
+      prev: PrevControl::None,
+    }
+  }
+
+  /// Advances the reconstructed pen by an already-quantized delta.
+  fn advance(&mut self, dx: f32, dy: f32) {
+    self.x = quantize_path(self.x + dx);
+    self.y = quantize_path(self.y + dy);
+  }
+
+  fn move_to(&mut self, x: f32, y: f32) {
+    if self.started {
+      let (dx, dy) = (quantize_path(x - self.x), quantize_path(y - self.y));
+      self.path.command(b'm');
+      self.path.pair(dx, dy);
+      self.advance(dx, dy);
+    } else {
+      let (qx, qy) = (quantize_path(x), quantize_path(y));
+      self.path.command(b'M');
+      self.path.pair(qx, qy);
+      self.x = qx;
+      self.y = qy;
+      self.started = true;
+    }
+    self.start_x = self.x;
+    self.start_y = self.y;
+    self.prev = PrevControl::None;
+  }
+
+  fn line_to(&mut self, x: f32, y: f32) {
+    let (dx, dy) = (quantize_path(x - self.x), quantize_path(y - self.y));
+    if dx == 0.0 && dy == 0.0 {
+      return;
+    }
+    if dy == 0.0 {
+      self.path.command(b'h');
+      self.path.number(dx);
+    } else if dx == 0.0 {
+      self.path.command(b'v');
+      self.path.number(dy);
+    } else {
+      self.path.command(b'l');
+      self.path.pair(dx, dy);
+    }
+    self.advance(dx, dy);
+    self.prev = PrevControl::None;
+  }
+
+  fn quad_to(&mut self, cx: f32, cy: f32, x: f32, y: f32) {
+    let (ox, oy) = (self.x, self.y);
+    let (dx, dy) = (quantize_path(x - ox), quantize_path(y - oy));
+    let control = match self.prev {
+      PrevControl::Quad(px, py) if near(cx, 2.0 * ox - px) && near(cy, 2.0 * oy - py) => {
+        self.path.command(b't');
+        self.path.pair(dx, dy);
+        (2.0 * ox - px, 2.0 * oy - py)
+      }
+      _ => {
+        let (dcx, dcy) = (quantize_path(cx - ox), quantize_path(cy - oy));
+        self.path.command(b'q');
+        self.path.pair(dcx, dcy);
+        self.path.pair(dx, dy);
+        (ox + dcx, oy + dcy)
+      }
+    };
+    self.advance(dx, dy);
+    self.prev = PrevControl::Quad(control.0, control.1);
+  }
+
+  fn cubic_to(&mut self, c1x: f32, c1y: f32, c2x: f32, c2y: f32, x: f32, y: f32) {
+    let (ox, oy) = (self.x, self.y);
+    let (dx, dy) = (quantize_path(x - ox), quantize_path(y - oy));
+    let (dc2x, dc2y) = (quantize_path(c2x - ox), quantize_path(c2y - oy));
+    match self.prev {
+      PrevControl::Cubic(px, py) if near(c1x, 2.0 * ox - px) && near(c1y, 2.0 * oy - py) => {
+        self.path.command(b's');
+      }
+      _ => {
+        self.path.command(b'c');
+        self
+          .path
+          .pair(quantize_path(c1x - ox), quantize_path(c1y - oy));
+      }
+    }
+    self.path.pair(dc2x, dc2y);
+    self.path.pair(dx, dy);
+    self.advance(dx, dy);
+    self.prev = PrevControl::Cubic(ox + dc2x, oy + dc2y);
+  }
+
+  fn close(&mut self) {
+    self.path.close();
+    self.x = self.start_x;
+    self.y = self.start_y;
+    self.prev = PrevControl::None;
+  }
+
+  fn finish(self) -> String {
+    self.path.into_string()
+  }
+}
+
+fn near(a: f32, b: f32) -> bool {
+  (a - b).abs() < REFLECT_TOLERANCE
 }
 
 /// Builds the `d` data for an axis-aligned rectangle (`M x y H V H Z`), shared by
@@ -217,6 +368,44 @@ mod tests {
       p.pair(2.0, 2.0);
     });
     assert_eq!(path, "M0 0 1 1 2 2");
+  }
+
+  fn pt(x: f32, y: f32) -> Point {
+    Point::from_xy(x, y)
+  }
+
+  const IDENTITY: [f32; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+
+  #[test]
+  fn path_data_is_relative_with_hv_shorthands() {
+    let commands = [
+      PathSegment::MoveTo(pt(10.0, 10.0)),
+      PathSegment::LineTo(pt(20.0, 10.0)),
+      PathSegment::LineTo(pt(20.0, 20.0)),
+      PathSegment::Close,
+    ];
+    assert_eq!(path_data(&commands, IDENTITY), "M10 10h10v10Z");
+  }
+
+  #[test]
+  fn path_data_uses_smooth_cubic_shorthand() {
+    // The second cubic's first control is the reflection of the first cubic's
+    // second control about the join, so it collapses to `s`.
+    let commands = [
+      PathSegment::MoveTo(pt(0.0, 0.0)),
+      PathSegment::CubicTo(pt(0.0, 5.0), pt(5.0, 5.0), pt(5.0, 0.0)),
+      PathSegment::CubicTo(pt(5.0, -5.0), pt(10.0, -5.0), pt(10.0, 0.0)),
+    ];
+    assert_eq!(path_data(&commands, IDENTITY), "M0 0c0 5 5 5 5 0s5-5 5 0");
+  }
+
+  #[test]
+  fn path_data_quantizes_to_two_decimals() {
+    let commands = [
+      PathSegment::MoveTo(pt(0.0, 0.0)),
+      PathSegment::LineTo(pt(1.2345, 6.789)),
+    ];
+    assert_eq!(path_data(&commands, IDENTITY), "M0 0l1.23 6.79");
   }
 
   #[test]
