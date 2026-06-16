@@ -8,6 +8,6 @@
   },
   "dependencies": {
     "takumi-core": "workspace:*",
-    "takumi-paint": "workspace:*"
+    "takumi-raster": "workspace:*"
   }
 }

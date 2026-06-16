@@ -18,7 +18,7 @@ use takumi_core::{
   },
   resources::{font::FontResource, image::ImageSource as LoadedImageSource},
 };
-use takumi_paint::{
+use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
   SequentialScene, encode_animated_gif, encode_animated_png, encode_animated_webp, measure_layout,
   render, render_sequence_animation, write_image,
@@ -275,7 +275,7 @@ impl Renderer {
     let stylesheet =
       self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
 
-    let render_options = takumi_paint::RenderOptions::builder()
+    let render_options = takumi_raster::RenderOptions::builder()
       .viewport(
         Viewport::new((options.width, options.height)).with_device_pixel_ratio(
           options
@@ -331,7 +331,7 @@ impl Renderer {
       self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
 
     let state = self.read_state()?;
-    let render_options = takumi_paint::RenderOptions::builder()
+    let render_options = takumi_raster::RenderOptions::builder()
       .viewport(
         Viewport::new((options.width, options.height)).with_device_pixel_ratio(
           options
@@ -421,7 +421,7 @@ impl Renderer {
         SequentialScene::builder()
           .duration_ms(scene.duration_ms)
           .options(
-            takumi_paint::RenderOptions::builder()
+            takumi_raster::RenderOptions::builder()
               .viewport(viewport)
               .fetched_resources(fetched_resources.clone())
               .stylesheet(stylesheet.clone())
@@ -458,7 +458,7 @@ impl Renderer {
     let rendered_frames = frames
       .into_iter()
       .map(|frame| -> Result<AnimationFrame, JsValue> {
-        let render_options = takumi_paint::RenderOptions::builder()
+        let render_options = takumi_raster::RenderOptions::builder()
           .viewport(viewport)
           .fetched_resources(fetched_resources.clone())
           .node(frame.node)

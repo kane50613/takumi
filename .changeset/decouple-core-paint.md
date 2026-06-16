@@ -1,7 +1,7 @@
 ---
 "takumi": major
 "takumi-core": minor
-"takumi-paint": minor
+"takumi-raster": minor
 ---
 
-Split `takumi` into `takumi-core` + `takumi-paint` crates behind a re-export facade
+Split `takumi` into `takumi-core` + `takumi-raster` crates behind a re-export facade

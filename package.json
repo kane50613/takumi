@@ -5,7 +5,7 @@
     "takumi-css",
     "takumi",
     "takumi-core",
-    "takumi-paint",
+    "takumi-raster",
     "takumi-svg",
     "takumi-js",
     "takumi-helpers",

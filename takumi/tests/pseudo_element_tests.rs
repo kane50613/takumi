@@ -7,7 +7,7 @@ use takumi::core::layout::{
   node::Node,
   style::{Display, Length::*, Style, StyleDeclaration, StyleSheet},
 };
-use takumi::paint::{MeasuredNode, RenderOptions, measure_layout};
+use takumi::raster::{MeasuredNode, RenderOptions, measure_layout};
 use test_utils::CONTEXT;
 
 fn viewport() -> Viewport {

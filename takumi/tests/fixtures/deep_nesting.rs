@@ -6,8 +6,8 @@ use takumi::core::layout::{
     Sides, Style, StyleDeclaration,
   },
 };
-use takumi::paint::RenderOptions;
-use takumi::paint::measure_layout;
+use takumi::raster::RenderOptions;
+use takumi::raster::measure_layout;
 
 use crate::test_utils::{CONTEXT, create_test_viewport, run_fixture_test};
 

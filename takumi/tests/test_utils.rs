@@ -14,7 +14,7 @@ use takumi::core::{
   layout::{Viewport, node::Node},
   resources::{font::FontResource, image::ImageSource},
 };
-use takumi::paint::{
+use takumi::raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
   RenderOptions, encode_animated_gif, encode_animated_png, encode_animated_webp, render,
   write_image,

@@ -1,6 +1,6 @@
 use axum::extract::Query;
 use takumi::core::GlobalContext;
-use takumi::paint::ImageOutputFormat;
+use takumi::raster::ImageOutputFormat;
 
 use takumi_server::{GenerateImageQuery, args::Args, create_state, generate_image_handler};
 

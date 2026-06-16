@@ -3,7 +3,7 @@
 #![allow(missing_docs)]
 //! Backend-agnostic core for takumi: the node tree, style/layout, and resource
 //! management. This is an internal crate exposing a wide surface for the paint
-//! backends (`takumi-paint`, `takumi-svg`); depend on `takumi` instead.
+//! backends (`takumi-raster`, `takumi-svg`); depend on `takumi` instead.
 
 pub mod layout;
 

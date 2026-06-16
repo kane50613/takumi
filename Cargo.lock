@@ -2054,7 +2054,7 @@ dependencies = [
  "resvg",
  "serde_json",
  "takumi-core",
- "takumi-paint",
+ "takumi-raster",
  "takumi-svg",
 ]
 
@@ -2124,11 +2124,11 @@ dependencies = [
  "rayon",
  "serde",
  "takumi-core",
- "takumi-paint",
+ "takumi-raster",
 ]
 
 [[package]]
-name = "takumi-paint"
+name = "takumi-raster"
 version = "1.8.5"
 dependencies = [
  "bytemuck",
@@ -2195,7 +2195,7 @@ dependencies = [
  "serde-wasm-bindgen",
  "serde_bytes",
  "takumi-core",
- "takumi-paint",
+ "takumi-raster",
  "wasm-bindgen",
 ]
 

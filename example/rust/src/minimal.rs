@@ -9,7 +9,7 @@ use takumi::core::{
     style::{Length::Px, Style, StyleDeclaration},
   },
 };
-use takumi::paint::{ImageOutputFormat, RenderOptions, render, write_image};
+use takumi::raster::{ImageOutputFormat, RenderOptions, render, write_image};
 
 /// Generates a "Hello, {name}!" image with specified dimensions and styling
 ///

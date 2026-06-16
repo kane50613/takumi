@@ -1,5 +1,5 @@
 [package]
-name = "takumi-paint"
+name = "takumi-raster"
 version = "1.8.5"
 edition = "2024"
 license = "MIT OR Apache-2.0"

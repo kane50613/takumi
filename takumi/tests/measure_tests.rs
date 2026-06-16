@@ -10,7 +10,7 @@ use takumi::core::layout::{
     WhiteSpace, WhiteSpaceCollapse,
   },
 };
-use takumi::paint::{MeasuredNode, MeasuredTextRun, RenderOptions, measure_layout};
+use takumi::raster::{MeasuredNode, MeasuredTextRun, RenderOptions, measure_layout};
 use test_utils::CONTEXT;
 
 fn create_measure_viewport() -> Viewport {

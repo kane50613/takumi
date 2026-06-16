@@ -16,8 +16,8 @@ path = "../takumi-core"
 version = "=1"
 default-features = false
 
-[dependencies.takumi-paint]
-path = "../takumi-paint"
+[dependencies.takumi-raster]
+path = "../takumi-raster"
 version = "=1"
 default-features = false
 optional = true
@@ -29,13 +29,13 @@ default-features = false
 optional = true
 
 [features]
-default = ["paint", "woff2", "woff", "svg", "rayon"]
-paint = ["dep:takumi-paint"]
-svg = ["takumi-core/svg", "takumi-paint?/svg"]
+default = ["raster", "woff2", "woff", "svg", "rayon"]
+raster = ["dep:takumi-raster"]
+svg = ["takumi-core/svg", "takumi-raster?/svg"]
 svg-backend = ["dep:takumi-svg"]
 woff2 = ["takumi-core/woff2"]
 woff = ["takumi-core/woff"]
-rayon = ["paint", "takumi-paint?/rayon"]
+rayon = ["raster", "takumi-raster?/rayon"]
 
 [dev-dependencies]
 parley.workspace = true

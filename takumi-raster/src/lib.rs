@@ -2,7 +2,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 #![allow(missing_docs)]
 //! Raster (tiny-skia) painting backend for takumi: canvas, drawing, filters, and
-//! the [`render`] entry point. Used via the `takumi` umbrella (`takumi::paint`) or
+//! the [`render`] entry point. Used via the `takumi` umbrella (`takumi::raster`) or
 //! directly.
 //!
 //! Re-exports the `takumi-core` root so painting code resolves `crate::layout`,

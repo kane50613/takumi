@@ -3,7 +3,7 @@ use takumi::core::layout::{
   node::Node,
   style::{PercentageNumber, *},
 };
-use takumi::paint::{RenderOptions, render};
+use takumi::raster::{RenderOptions, render};
 
 use crate::test_utils::{CONTEXT, run_fixture_test};
 

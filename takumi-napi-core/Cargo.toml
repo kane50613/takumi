@@ -20,8 +20,8 @@ path = "../takumi-core"
 default-features = false
 features = ["woff2", "woff", "svg"]
 
-[dependencies.takumi-paint]
-path = "../takumi-paint"
+[dependencies.takumi-raster]
+path = "../takumi-raster"
 default-features = false
 features = ["svg", "rayon"]
 
