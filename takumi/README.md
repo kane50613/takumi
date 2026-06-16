@@ -2,68 +2,54 @@
 
 <!-- cargo-rdme start -->
 
-Takumi is a library with different parts to render UI component trees to images. This crate contains the core logic for layout and rendering.
-
-Checkout the [Quick Start](https://takumi.kane.tw/docs) if you are looking for napi-rs / WASM bindings.
+Takumi renders UI component trees to images. This crate is a thin facade that
+re-exports the backend-agnostic core ([`takumi_core`], as [`core`]) and the
+rendering backends under namespaced modules: the raster backend
+([`takumi_raster`], as [`raster`]) and the vector/SVG backend ([`takumi_svg`],
+as [`svg`]).
 
 ## Example
 
 ```rust
-use takumi::{
-  layout::{
-    node::Node,
-    Viewport,
-    style::{Length::Px, Style, StyleDeclaration},
-  },
-  resources::font::FontResource,
-  rendering::{render, RenderOptions},
+use takumi::core::{
   GlobalContext,
+  layout::{Viewport, node::Node, style::{Length::Px, Style, StyleDeclaration}},
+  resources::font::FontResource,
 };
+use takumi::raster::{RenderOptions, render};
 
-// Create a node tree with `Node::container` and `Node::text`
 let node = Node::container([Node::text("Hello, world!").with_style(
   Style::default().with(StyleDeclaration::font_size(Px(32.0).into())),
 )]);
 
-// Create a context for storing resources, font caches.
-// You should reuse the context to speed up the rendering.
 let mut global = GlobalContext::default();
 
-// Load fonts
 global.font_context.load_and_store(
   FontResource::new(include_bytes!("../../assets/fonts/geist/Geist[wght].woff2"))
 );
 
-// Create a viewport
 let viewport = Viewport::new((1200, 630));
 
-// Create render options
 let options = RenderOptions::builder()
   .viewport(viewport)
   .node(node)
   .global(&global)
   .build();
 
-// Render the layout to an `RgbaImage`
 let image = render(options).unwrap();
 ```
 
 ## Feature Flags
 
+- `raster` (default): Enable the raster rendering backend, available as
+  [`takumi::raster`](raster).
+- `svg` (default): Enable SVG image-source support in the core and raster
+  backend.
+- `svg-backend`: Enable the vector/SVG output backend, available as
+  [`takumi::svg`](svg). Opt-in.
 - `woff2`: Enable WOFF2 font support.
 - `woff`: Enable WOFF font support.
-- `svg`: Enable SVG support.
-- `rayon`: Enable rayon support.
-
-## Credits
-
-Takumi wouldn't be possible without the following works:
-
-- [taffy](https://github.com/DioxusLabs/taffy) for the flex & grid layout.
-- [image](https://github.com/image-rs/image) for the image processing.
-- [parley](https://github.com/linebender/parley) for text layout.
-- [skrifa](https://github.com/googlefonts/fontations/tree/main/skrifa) for glyph loading.
-- [wuff](https://github.com/nicoburns/wuff) for woff/woff2 decompression.
-- [resvg](https://github.com/linebender/resvg) for SVG parsing & rasterization.
+- `rayon`: Enable rayon-based parallelism in the raster backend (implies
+  `raster`).
 
 <!-- cargo-rdme end -->

@@ -569,6 +569,13 @@ fn interpolate_neutral_padded_list<T: Animatable + Clone>(
 pub trait ToCss {
   /// Write the CSS representation of this value into `dest`.
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result;
+
+  /// The CSS representation of this value as an owned `String`.
+  fn to_css_string(&self) -> String {
+    let mut css = String::new();
+    let _ = self.to_css(&mut css);
+    css
+  }
 }
 
 impl<T: ToCss + ?Sized> ToCss for &T {

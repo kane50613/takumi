@@ -5,7 +5,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use takumi::{
+use takumi::core::{
   GlobalContext,
   resources::font::{FontError, FontResource},
 };

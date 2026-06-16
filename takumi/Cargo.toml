@@ -11,102 +11,44 @@ readme = "README.md"
 rust-version = "1.91"
 autobenches = false
 
-[dependencies]
-cssparser.workspace = true
-png.workspace = true
-gif.workspace = true
-data-url.workspace = true
-color.workspace = true
-serde_bytes.workspace = true
-thiserror.workspace = true
-typed-builder.workspace = true
-tiny-skia.workspace = true
-svgtypes.workspace = true
-selectors.workspace = true
-skrifa.workspace = true
-xxhash-rust.workspace = true
-smallvec.workspace = true
-parley.workspace = true
-taffy.workspace = true
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-image-webp.workspace = true
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-libwebp-sys.workspace = true
-dashmap.workspace = true
-
-[target.'cfg(target_arch = "wasm32")'.dependencies.bytemuck]
-workspace = true
-features = ["wasm_simd"]
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.bytemuck]
-workspace = true
-features = ["aarch64_simd", "avx512_simd"]
-
-# Internal companion crate, versioned independently and pinned exactly.
-[dependencies.takumi-css]
-path = "../takumi-css"
+[dependencies.takumi-core]
+path = "../takumi-core"
 version = "=0"
+default-features = false
 
-[dependencies.rayon]
-workspace = true
+[dependencies.takumi-raster]
+path = "../takumi-raster"
+version = "=0"
+default-features = false
 optional = true
 
-[dependencies.wuff]
-workspace = true
-optional = true
-
-[dependencies.serde]
-workspace = true
-features = ["rc"]
-
-[dependencies.image]
-workspace = true
-features = ["jpeg", "png", "webp", "gif", "ico"]
-
-[dependencies.resvg]
-workspace = true
-optional = true
-
-[dependencies.roxmltree]
-workspace = true
+[dependencies.takumi-svg]
+path = "../takumi-svg"
+version = "=0"
+default-features = false
 optional = true
 
 [features]
-default = ["woff2", "woff", "svg", "rayon"]
-svg = ["dep:resvg", "dep:roxmltree"]
-woff2 = ["dep:wuff", "wuff/brotli"]
-woff = ["dep:wuff", "wuff/z"]
-rayon = ["dep:rayon"]
+default = ["raster", "woff2", "woff", "svg", "rayon"]
+raster = ["dep:takumi-raster"]
+svg = ["takumi-core/svg", "takumi-raster?/svg"]
+svg-backend = ["dep:takumi-svg"]
+woff2 = ["takumi-core/woff2"]
+woff = ["takumi-core/woff"]
+rayon = ["raster", "takumi-raster?/rayon"]
 
 [dev-dependencies]
-criterion.workspace = true
+parley.workspace = true
+rayon.workspace = true
+resvg = "0.47"
 serde_json.workspace = true
+
+[dev-dependencies.image]
+workspace = true
+features = ["png", "webp"]
+
+[dev-dependencies.takumi-svg]
+path = "../takumi-svg"
 
 [lints]
 workspace = true
-
-[[bench]]
-name = "effects"
-harness = false
-
-[[bench]]
-name = "gradient"
-harness = false
-
-[[bench]]
-name = "fixtures"
-harness = false
-
-[[bench]]
-name = "canvas"
-harness = false
-
-[[bench]]
-name = "text"
-harness = false
-
-[[bench]]
-name = "encode"
-harness = false
