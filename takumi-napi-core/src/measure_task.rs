@@ -3,12 +3,12 @@ use std::sync::RwLock;
 use std::{collections::HashMap, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi::{
+use takumi_core::{
   layout::style::StyleSheet,
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node},
-  rendering::measure_layout,
   resources::image::ImageSource as LoadedImageSource,
 };
+use takumi_raster::measure_layout;
 
 use crate::{
   buffer_from_object, map_error, parse_stylesheet,
@@ -56,7 +56,7 @@ impl MeasureTask {
 }
 
 impl Task for MeasureTask {
-  type Output = takumi::rendering::MeasuredNode;
+  type Output = takumi_raster::MeasuredNode;
   type JsValue = MeasuredNode;
 
   fn compute(&mut self) -> Result<Self::Output> {
@@ -80,7 +80,7 @@ impl Task for MeasureTask {
       .read()
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
-    let options = takumi::rendering::RenderOptions::builder()
+    let options = takumi_raster::RenderOptions::builder()
       .viewport(self.viewport)
       .fetched_resources(initialized_images)
       .stylesheet(take(&mut self.stylesheet))

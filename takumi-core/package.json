@@ -1,0 +1,12 @@
+{
+  "name": "takumi-core",
+  "version": "1.8.5",
+  "private": true,
+  "scripts": {
+    "version": "cargo set-version -p takumi-core $(jq -r '.version' package.json)",
+    "release": "cargo publish || [ $? -eq 101 ] || exit $?"
+  },
+  "dependencies": {
+    "takumi-css": "workspace:*"
+  }
+}

@@ -66,40 +66,42 @@ impl ComputedStyle {
       })
   }
 
-  pub fn has_non_identity_transform(&self, border_box: Size<f32>, sizing: &SizingContext) -> bool {
-    let transform_origin = self.transform_origin;
-    let origin = transform_origin.to_point(sizing, border_box);
-
+  /// Builds the element's local affine transform around its transform-origin
+  /// (CSS Transforms Level 2 order: `T(origin) * translate * rotate * scale *
+  /// transform * T(-origin)`).
+  pub fn local_transform(&self, border_box: Size<f32>, sizing: &SizingContext) -> Affine {
+    let origin = self.transform_origin.to_point(sizing, border_box);
     let mut local = Affine::translation(origin.x, origin.y);
 
-    let translate = self.translate;
-    if translate != SpacePair::default() {
+    if self.translate != SpacePair::default() {
       local *= Affine::translation(
-        translate.x.to_px(sizing, border_box.width),
-        translate.y.to_px(sizing, border_box.height),
+        self.translate.x.to_px(sizing, border_box.width),
+        self.translate.y.to_px(sizing, border_box.height),
       );
     }
-
     if let Some(rotate) = self.rotate {
       local *= Affine::rotation(rotate);
     }
-
-    let scale = self.scale;
-    if scale != SpacePair::default() {
-      local *= Affine::scale(scale.x.0, scale.y.0);
+    if self.scale != SpacePair::default() {
+      local *= Affine::scale(self.scale.x.0, self.scale.y.0);
     }
-
     if let Some(node_transform) = &self.transform {
       local *= Affine::from_transforms(node_transform.iter(), sizing, border_box);
     }
-
     local *= Affine::translation(-origin.x, -origin.y);
+    local
+  }
 
-    !local.is_identity()
+  pub fn has_non_identity_transform(&self, border_box: Size<f32>, sizing: &SizingContext) -> bool {
+    !self.local_transform(border_box, sizing).is_identity()
   }
 
   pub fn resolve_overflows(&self) -> SpacePair<Overflow> {
     SpacePair::from_pair(self.overflow_x, self.overflow_y)
+  }
+
+  pub fn clips_overflow(&self) -> bool {
+    self.resolve_overflows().should_clip_content()
   }
 
   pub fn ellipsis_char(&self) -> &str {
