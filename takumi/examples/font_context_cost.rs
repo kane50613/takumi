@@ -17,7 +17,7 @@ use std::{
 };
 
 use parley::fontique::{Blob, FontInfoOverride};
-use takumi::core::resources::font::{FontContext, FontResource, FontSource};
+use takumi::base::resources::font::{FontContext, FontResource, FontSource};
 
 fn repo_path(rel: &str) -> PathBuf {
   Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join(rel)
@@ -126,7 +126,7 @@ fn main() {
   cache.insert(0xABCD, build(6));
   let reuse = time(50_000, || {
     let key = std::hint::black_box(0xABCDu64);
-    std::hint::black_box(cache.get(&key).is_some());
+    std::hint::black_box(cache.contains_key(&key));
   });
 
   println!("\n--- marginal costs ---");

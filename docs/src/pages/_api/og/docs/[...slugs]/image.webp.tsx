@@ -5,7 +5,7 @@ import DocsTemplate from "../../../../../../../takumi-template/src/templates/doc
 import { source } from "~/source";
 import logo from "../../../../../../public/logo.svg?raw";
 
-const persistentImages: ImageSource[] = [
+const fetchedResources: ImageSource[] = [
   {
     src: "takumi.svg",
     data: Buffer.from(logo),
@@ -29,7 +29,7 @@ export function GET(_: Request, { params }: ApiContext<"/og/docs/[...slugs]/imag
       site="Takumi"
     />,
     {
-      persistentImages,
+      fetchedResources,
       width: 1200,
       height: 630,
       format: "webp",

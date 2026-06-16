@@ -2085,7 +2085,6 @@ dependencies = [
  "takumi-css",
  "thiserror",
  "tiny-skia",
- "typed-builder",
  "wuff",
  "xxhash-rust",
 ]

@@ -20,13 +20,12 @@ function testRender(name: string, template: ReactNode) {
       height: 630,
       format: "webp",
       dithering: "floyd-steinberg",
-      persistentImages: [
+      fetchedResources: [
         {
           src: "takumi.svg",
-          data: () =>
-            file(
-              join(import.meta.dirname, "..", "..", "assets", "images", "takumi.svg"),
-            ).arrayBuffer(),
+          data: await file(
+            join(import.meta.dirname, "..", "..", "assets", "images", "takumi.svg"),
+          ).arrayBuffer(),
         },
       ],
     });
