@@ -412,6 +412,46 @@ fn test_style_outline() {
   run_fixture_test(container, "style_outline");
 }
 
+#[test]
+fn test_style_outline_with_text() {
+  // Regression for #475: outline is not inherited, so a non-inline element
+  // strokes only its own border-box, never its text content.
+  let badge = Node::container([Node::text("Inner Outline".to_string()).with_style(
+    Style::default()
+      .with(StyleDeclaration::font_size(Px(28.0).into()))
+      .with(StyleDeclaration::color(ColorInput::Value(Color::white()))),
+  )])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::InlineBlock))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([139, 92, 246, 255]),
+      )))
+      .with_padding(Sides([Px(12.0), Px(32.0), Px(12.0), Px(32.0)]))
+      .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(9999.0)); 4])))
+      .with(StyleDeclaration::outline_width(Px(6.0)))
+      .with(StyleDeclaration::outline_color(ColorInput::Value(Color([
+        196, 181, 253, 255,
+      ]))))
+      .with(StyleDeclaration::outline_offset(Px(-12.0)))
+      .with(StyleDeclaration::outline_style(BorderStyle::Solid)),
+  );
+
+  let container = Node::container([badge]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([15, 23, 42, 255]),
+      )))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::align_items(AlignItems::Center)),
+  );
+
+  run_fixture_test(container, "style_outline_with_text");
+}
+
 fn label_text(label: &str) -> Node {
   Node::text(label.to_string()).with_style(
     Style::default()
