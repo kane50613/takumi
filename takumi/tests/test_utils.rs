@@ -11,7 +11,7 @@ use image::RgbaImage;
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use takumi::base::{
-  FontContext,
+  Fonts,
   layout::{Viewport, node::Node},
   resources::{font::FontResource, image::ImageSource},
 };
@@ -83,8 +83,8 @@ const IMAGES: &[&str] = &[
   "assets/images/luma-cover-0dfbf65d-0f58-4941-947c-d84a5b131dc0.jpeg",
 ];
 
-fn create_test_context() -> FontContext {
-  let mut context = FontContext::default();
+fn create_test_context() -> Fonts {
+  let mut context = Fonts::default();
 
   for (font, name, generic) in TEST_FONTS {
     let mut font_data = Vec::new();
@@ -112,7 +112,7 @@ pub fn create_test_viewport() -> Viewport {
   Viewport::new((1200, 630))
 }
 
-pub static CONTEXT: LazyLock<FontContext> = LazyLock::new(create_test_context);
+pub static CONTEXT: LazyLock<Fonts> = LazyLock::new(create_test_context);
 
 /// Test images, provided to renders as pre-fetched resources.
 pub static TEST_IMAGES: LazyLock<HashMap<Arc<str>, ImageSource>> = LazyLock::new(|| {
@@ -135,7 +135,7 @@ pub fn run_fixture_test(node: Node, fixture_name: &str) {
   let options = RenderOptions::builder()
     .viewport(viewport)
     .node(node)
-    .font_context(&CONTEXT)
+    .fonts(&CONTEXT)
     .fetched_resources(TEST_IMAGES.clone())
     .build();
 
@@ -179,7 +179,7 @@ pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &
     SvgOptions::builder()
       .node(options.node().clone())
       .viewport(*options.viewport())
-      .font_context(options.font_context())
+      .fonts(options.fonts())
       .stylesheet(options.stylesheet().clone())
       .fetched_resources(options.fetched_resources().clone())
       .build(),
@@ -290,7 +290,7 @@ impl IntoAnimationFixtureFrames<'_> for Vec<Node> {
               .viewport(viewport)
               .node(node)
               .time_ms(time_ms)
-              .font_context(&CONTEXT)
+              .fonts(&CONTEXT)
               .build(),
             frame_duration_ms,
           )

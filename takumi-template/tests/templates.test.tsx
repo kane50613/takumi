@@ -126,7 +126,7 @@ testRender(
     date="June 15, 2026"
     headline="Faster fonts, leaner core"
     bullets={[
-      { tag: "New", text: "Explicit FontContext API" },
+      { tag: "New", text: "Explicit Fonts API" },
       { tag: "Perf", text: "30% smaller Wasm bundle" },
       { tag: "Fixed", text: "Emoji baseline alignment" },
     ]}

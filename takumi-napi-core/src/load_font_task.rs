@@ -26,7 +26,7 @@ impl Task for LoadFontTask {
         .state
         .read()
         .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-      state.font_context.decode_cache_arc()
+      state.fonts.decode_cache_arc()
     };
 
     let resources = crate::pool::install(|| {
@@ -46,7 +46,7 @@ impl Task for LoadFontTask {
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
     for resource in resources.into_iter() {
-      if state.font_context.load_and_store(resource).is_ok() {
+      if state.fonts.load_and_store(resource).is_ok() {
         loaded_count += 1;
       }
     }

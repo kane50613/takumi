@@ -129,7 +129,7 @@ impl Task for RenderAnimationTask {
                 .fetched_resources(initialized_images.clone())
                 .stylesheet(stylesheet.clone())
                 .node(node)
-                .font_context(&state.font_context)
+                .fonts(&state.fonts)
                 .draw_debug_border(self.draw_debug_border)
                 .build(),
             )

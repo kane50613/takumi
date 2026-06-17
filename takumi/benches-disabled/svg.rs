@@ -2,7 +2,7 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 use std::path::Path;
 use takumi::base::{
-  FontContext,
+  Fonts,
   layout::{
     Viewport,
     node::Node,
@@ -27,23 +27,23 @@ const PARAGRAPH: &str = "The quick brown fox jumps over the lazy dog. Pack my bo
 
 const CJK: &str = "日本利用壓電磁磚將腳步轉化為電能。這些瓷磚捕捉來自你腳步的動能。當你行走時，你的重量和動作會對瓷磚產生壓力。磁磚會輕微彎曲，從而產生機械應力。磁磚內部的壓電材料將這種應力轉化為電能。每一步都會產生少量電荷，而數百萬步結合在一起就能產生足夠的電力來驅動 LED燈、數位顯示器和感測器。";
 
-fn font_context_with_font() -> FontContext {
-  let mut font_context = FontContext::default();
+fn font_context_with_font() -> Fonts {
+  let mut fonts = Fonts::default();
   let path = Path::new(env!("CARGO_MANIFEST_DIR"))
     .join("../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf");
   let data = std::fs::read(&path).expect("read test font");
-  font_context
+  fonts
     .load_and_store(FontResource::new(data))
     .expect("load test font");
-  font_context
+  fonts
 }
 
-fn render_fixture(font_context: &FontContext, node: Node) {
+fn render_fixture(fonts: &Fonts, node: Node) {
   let svg = render(
     SvgOptions::builder()
       .viewport(Viewport::new((BENCH_WIDTH, BENCH_HEIGHT)))
       .node(node)
-      .font_context(font_context)
+      .fonts(fonts)
       .build(),
   )
   .unwrap();
@@ -160,20 +160,20 @@ fn shape_border_fixture() -> Node {
 }
 
 fn bench_svg(c: &mut Criterion) {
-  let font_context = font_context_with_font();
+  let fonts = font_context_with_font();
   let mut group = c.benchmark_group("svg");
 
   group.bench_function("paragraph", |b| {
-    b.iter(|| render_fixture(&font_context, black_box(paragraph_fixture())))
+    b.iter(|| render_fixture(&fonts, black_box(paragraph_fixture())))
   });
   group.bench_function("cjk", |b| {
-    b.iter(|| render_fixture(&font_context, black_box(cjk_fixture())))
+    b.iter(|| render_fixture(&fonts, black_box(cjk_fixture())))
   });
   group.bench_function("gradient_clip_text", |b| {
-    b.iter(|| render_fixture(&font_context, black_box(gradient_clip_text_fixture())))
+    b.iter(|| render_fixture(&fonts, black_box(gradient_clip_text_fixture())))
   });
   group.bench_function("shape_border", |b| {
-    b.iter(|| render_fixture(&font_context, black_box(shape_border_fixture())))
+    b.iter(|| render_fixture(&fonts, black_box(shape_border_fixture())))
   });
 
   group.finish();

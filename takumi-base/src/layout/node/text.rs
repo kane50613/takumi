@@ -38,7 +38,7 @@ pub fn measure_text_node(
     max_width,
     max_height,
     style: &font_style,
-    font_context: context.font_context,
+    fonts: context.fonts,
     mode: InlineLayoutMode::Measure,
   });
 

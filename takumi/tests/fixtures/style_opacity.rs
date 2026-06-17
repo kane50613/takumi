@@ -68,7 +68,7 @@ fn test_inline_text_span_opacity() {
     RenderOptions::builder()
       .viewport(Viewport::new((320, 120)))
       .node(root)
-      .font_context(&CONTEXT)
+      .fonts(&CONTEXT)
       .build(),
   )
   .unwrap();

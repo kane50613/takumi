@@ -10,7 +10,7 @@ use std::{
   sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 use takumi_base::{
-  FontContext,
+  Fonts,
   layout::{
     DEFAULT_DEVICE_PIXEL_RATIO, Viewport,
     node::Node,
@@ -39,10 +39,10 @@ const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[(
 #[wasm_bindgen]
 #[derive(Default)]
 pub struct Renderer {
-  state: RwLock<FontContext>,
+  state: RwLock<Fonts>,
 }
 
-fn load_default_fonts(context: &mut FontContext) -> Result<(), js_sys::Error> {
+fn load_default_fonts(context: &mut Fonts) -> Result<(), js_sys::Error> {
   for (font, family_name, generic_family) in EMBEDDED_FONTS {
     let resource = FontResource::new((*font).to_vec())
       .override_info(FontInfoOverride {
@@ -57,7 +57,7 @@ fn load_default_fonts(context: &mut FontContext) -> Result<(), js_sys::Error> {
   Ok(())
 }
 
-fn load_font_internal(context: &mut FontContext, font: Font) -> Result<(), js_sys::Error> {
+fn load_font_internal(context: &mut Fonts, font: Font) -> Result<(), js_sys::Error> {
   match font {
     Font::Buffer(buffer) => {
       context
@@ -82,14 +82,14 @@ fn load_font_internal(context: &mut FontContext, font: Font) -> Result<(), js_sy
 }
 
 impl Renderer {
-  fn read_state(&self) -> Result<RwLockReadGuard<'_, FontContext>, js_sys::Error> {
+  fn read_state(&self) -> Result<RwLockReadGuard<'_, Fonts>, js_sys::Error> {
     self
       .state
       .try_read()
       .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))
   }
 
-  fn write_state(&self) -> Result<RwLockWriteGuard<'_, FontContext>, js_sys::Error> {
+  fn write_state(&self) -> Result<RwLockWriteGuard<'_, Fonts>, js_sys::Error> {
     self
       .state
       .try_write()
@@ -191,7 +191,7 @@ impl Renderer {
       .transpose()?
       .unwrap_or_default();
 
-    let mut context = FontContext::default();
+    let mut context = Fonts::default();
 
     let should_load_default_fonts = options
       .load_default_fonts
@@ -239,7 +239,7 @@ impl Renderer {
 
   fn render_internal(
     &self,
-    context: &FontContext,
+    context: &Fonts,
     node: Node,
     options: RenderOptions,
   ) -> Result<Vec<u8>, JsValue> {
@@ -262,7 +262,7 @@ impl Renderer {
       .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
       .dithering(dithering)
       .node(node)
-      .font_context(context)
+      .fonts(context)
       .build();
 
     let image = render(render_options).map_err(map_error)?;
@@ -317,7 +317,7 @@ impl Renderer {
       .stylesheet(stylesheet)
       .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
       .node(node)
-      .font_context(&state)
+      .fonts(&state)
       .build();
 
     let layout = measure_layout(render_options).map_err(map_error)?;
@@ -399,7 +399,7 @@ impl Renderer {
               .fetched_resources(fetched_resources.clone())
               .stylesheet(stylesheet.clone())
               .node(scene.node)
-              .font_context(&state)
+              .fonts(&state)
               .draw_debug_border(draw_debug_border)
               .build(),
           )
@@ -435,7 +435,7 @@ impl Renderer {
           .viewport(viewport)
           .fetched_resources(fetched_resources.clone())
           .node(frame.node)
-          .font_context(&state)
+          .fonts(&state)
           .draw_debug_border(options.draw_debug_border.unwrap_or_default())
           .stylesheet(stylesheet.clone())
           .build();

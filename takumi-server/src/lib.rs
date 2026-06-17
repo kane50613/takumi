@@ -2,7 +2,7 @@ use std::{fs::read, net::SocketAddr, sync::Arc};
 
 use axum::{Router, extract::State, http::StatusCode, response::Response, routing::get};
 use globwalk::glob;
-use takumi::base::{FontContext, resources::font::FontResource};
+use takumi::base::{Fonts, resources::font::FontResource};
 use tokio::net::TcpListener;
 use tracing::{error, info};
 
@@ -17,12 +17,12 @@ pub type AxumState = State<Arc<AxumStateInner>>;
 pub type AxumResult<T = Response> = Result<T, (StatusCode, String)>;
 
 pub struct AxumStateInner {
-  pub context: FontContext,
+  pub context: Fonts,
   #[cfg(feature = "hmac_verify")]
   pub hmac_key: Option<Vec<u8>>,
 }
 
-pub fn create_state(args: Args, context: FontContext) -> AxumState {
+pub fn create_state(args: Args, context: Fonts) -> AxumState {
   let state = Arc::new(AxumStateInner {
     context,
     #[cfg(feature = "hmac_verify")]
@@ -54,7 +54,7 @@ pub fn create_app(state: AxumState) -> Router {
   app
 }
 
-pub async fn run_server(args: Args, mut context: FontContext) {
+pub async fn run_server(args: Args, mut context: Fonts) {
   if let Some(font_glob) = args.font_glob.as_ref() {
     for font in glob(font_glob).unwrap() {
       match font {

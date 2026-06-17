@@ -1,5 +1,5 @@
 use axum::extract::Query;
-use takumi::base::FontContext;
+use takumi::base::Fonts;
 use takumi::raster::ImageOutputFormat;
 
 use takumi_server::{GenerateImageQuery, args::Args, create_state, generate_image_handler};
@@ -11,7 +11,7 @@ async fn test_generate_image_handler() {
     "tw": "w-100 h-100"
   }"#;
 
-  let state = create_state(Args::default(), FontContext::default());
+  let state = create_state(Args::default(), Fonts::default());
   let response = generate_image_handler(
     Query(GenerateImageQuery {
       format: None,
@@ -36,7 +36,7 @@ async fn test_generate_image_handler_ico_content_type() {
     "tw": "w-100 h-100"
   }"#;
 
-  let state = create_state(Args::default(), FontContext::default());
+  let state = create_state(Args::default(), Fonts::default());
   let response = generate_image_handler(
     Query(GenerateImageQuery {
       format: Some(ImageOutputFormat::Ico),

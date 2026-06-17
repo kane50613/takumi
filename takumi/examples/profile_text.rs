@@ -1,7 +1,7 @@
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use std::hint::black_box;
 use takumi::base::{
-  FontContext,
+  Fonts,
   layout::{Viewport, node::Node},
   resources::font::FontResource,
 };
@@ -17,8 +17,8 @@ const LONG_TEXT: &str = "Typography is the art and technique of arranging type t
    closely related craft, sometimes considered part of typography; most typographers do not \
    design typefaces, and some type designers do not consider themselves typographers.";
 
-fn load_global() -> FontContext {
-  let mut g = FontContext::default();
+fn load_global() -> Fonts {
+  let mut g = Fonts::default();
   let regular: &[u8] = include_bytes!("../../assets/fonts/geist/Geist[wght].woff2");
   g.load_and_store(
     FontResource::new(regular.to_vec())
@@ -64,7 +64,7 @@ fn main() {
     let opts = RenderOptions::builder()
       .viewport(Viewport::new((1200, 630)))
       .node(many_runs())
-      .font_context(&g)
+      .fonts(&g)
       .build();
     black_box(render(opts).unwrap());
   }

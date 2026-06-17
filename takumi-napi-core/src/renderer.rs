@@ -5,7 +5,7 @@ use napi_derive::napi;
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use rayon::prelude::*;
 use takumi_base::{
-  FontContext,
+  Fonts,
   layout::{node::Node, style::KeyframesRule as CoreKeyframesRule},
   resources::font::FontResource,
 };
@@ -80,7 +80,7 @@ pub struct Renderer {
 }
 
 pub(crate) struct RendererState {
-  pub(crate) font_context: FontContext,
+  pub(crate) fonts: Fonts,
 }
 
 pub(crate) fn deserialize_keyframes(keyframes: Option<Object>) -> Result<Vec<CoreKeyframesRule>> {
@@ -302,10 +302,10 @@ impl Renderer {
       .load_default_fonts
       .unwrap_or_else(|| options.fonts.is_none());
 
-    let mut font_context = FontContext::default();
+    let mut fonts = Fonts::default();
 
     if load_default_fonts {
-      let cache = font_context.decode_cache_arc();
+      let cache = fonts.decode_cache_arc();
       let default_fonts_resources = crate::pool::install(|| {
         EMBEDDED_FONTS
           .par_iter()
@@ -323,12 +323,12 @@ impl Renderer {
       })?;
 
       for resource in default_fonts_resources {
-        font_context.load_and_store(resource).map_err(map_error)?;
+        fonts.load_and_store(resource).map_err(map_error)?;
       }
     }
 
     let renderer = Self {
-      state: Arc::new(RwLock::new(RendererState { font_context })),
+      state: Arc::new(RwLock::new(RendererState { fonts })),
     };
 
     if let Some(fonts) = options.fonts {
@@ -342,7 +342,7 @@ impl Renderer {
           .state
           .read()
           .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-        state.font_context.decode_cache_arc()
+        state.fonts.decode_cache_arc()
       };
 
       let custom_fonts_resources = crate::pool::install(|| {
@@ -361,10 +361,7 @@ impl Renderer {
         .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
       for resource in custom_fonts_resources {
-        state
-          .font_context
-          .load_and_store(resource)
-          .map_err(map_error)?;
+        state.fonts.load_and_store(resource).map_err(map_error)?;
       }
     }
 
@@ -382,7 +379,7 @@ impl Renderer {
 
       // `load_and_store` decodes through this context's cache.
       state
-        .font_context
+        .fonts
         .load_and_store(FontResource::new(buffer.as_ref()))
         .map_err(map_error)?;
 
@@ -399,12 +396,9 @@ impl Renderer {
       .write()
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
-    let cache = state.font_context.decode_cache_arc();
+    let cache = state.fonts.decode_cache_arc();
     let resource = resolve_font_resource(&font_input, buffer.as_ref(), &cache)?;
-    state
-      .font_context
-      .load_and_store(resource)
-      .map_err(map_error)?;
+    state.fonts.load_and_store(resource).map_err(map_error)?;
 
     Ok(())
   }
@@ -418,7 +412,7 @@ impl Renderer {
         .read()
         .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
       state
-        .font_context
+        .fonts
         .decode_cache()
         .set_max_bytes(max_bytes.max(0.0) as usize);
     }

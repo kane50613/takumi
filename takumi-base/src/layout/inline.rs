@@ -9,7 +9,7 @@ use taffy::{AvailableSpace, Layout, Point, Rect, Size};
 use tiny_skia::PathSegment;
 
 use crate::{
-  FontContext,
+  Fonts,
   context::RenderContext,
   font_style::SizedFontStyle,
   layout::{
@@ -36,7 +36,7 @@ pub struct InlineLayoutRequest<'c, 'g> {
   pub max_width: f32,
   pub max_height: Option<MaxHeight>,
   pub style: &'c SizedFontStyle<'c>,
-  pub font_context: &'g FontContext,
+  pub fonts: &'g Fonts,
   pub mode: InlineLayoutMode,
 }
 
@@ -267,11 +267,11 @@ fn tail_text_span<'a, 'c, 'g>(
 }
 
 fn measure_ellipsis_width(
-  font_context: &FontContext,
+  fonts: &Fonts,
   ellipsis_style: &SizedFontStyle,
   ellipsis_char: &str,
 ) -> f32 {
-  let (mut ellipsis_layout, _) = font_context.tree_builder(ellipsis_style.into(), |builder| {
+  let (mut ellipsis_layout, _) = fonts.tree_builder(ellipsis_style.into(), |builder| {
     builder.push_text(ellipsis_char);
   });
   ellipsis_layout.break_all_lines(None);
@@ -1029,10 +1029,10 @@ fn build_inline_layout_tree<'c, 'g: 'c>(
   items: &[InlineItem<'c, 'g>],
   available_space: Size<AvailableSpace>,
   style: &'c SizedFontStyle,
-  font_context: &'g FontContext,
+  fonts: &'g Fonts,
 ) -> BuiltInlineLayout<'c, 'g> {
   let mut spans: Vec<ProcessedInlineSpan<'c, 'g>> = Vec::new();
-  let (layout, text) = font_context.tree_builder(style.into(), |builder| {
+  let (layout, text) = fonts.tree_builder(style.into(), |builder| {
     let mut index_pos = 0;
     let mut previous_collapsible_space = false;
     let mut previous_was_line_break = false;
@@ -1347,10 +1347,10 @@ pub fn create_inline_layout<'c, 'g: 'c>(
     max_width,
     max_height,
     style,
-    font_context,
+    fonts,
     mode,
   } = request;
-  let mut built = build_inline_layout_tree(&items, available_space, style, font_context);
+  let mut built = build_inline_layout_tree(&items, available_space, style, fonts);
   let (text_wrap_mode, line_height_hint) =
     prepare_inline_layout(&mut built, max_width, max_height, style);
 
@@ -1376,7 +1376,7 @@ pub fn create_inline_layout<'c, 'g: 'c>(
           max_width,
           max_height,
           style,
-          font_context,
+          fonts,
           custom_inline_boxes,
         );
       }
@@ -1890,9 +1890,7 @@ pub fn resolve_inline_runs<'l>(
           let font = FontRef::from_index(run.font().data.as_ref(), run.font().index)
             .map_err(|_| FontError::InvalidFontIndex)?;
           let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
-          let resolved_glyphs = context
-            .font_context
-            .resolve_glyphs(&glyph_run, font, glyph_ids);
+          let resolved_glyphs = context.fonts.resolve_glyphs(&glyph_run, font, glyph_ids);
 
           if need_outline
             && let Some(outline_rect) = collect_glyph_run_outline_rect(
@@ -2181,7 +2179,7 @@ fn make_ellipsis_layout<'c, 'g: 'c>(
   max_width: f32,
   max_height: Option<MaxHeight>,
   root_style: &'c SizedFontStyle,
-  font_context: &FontContext,
+  fonts: &Fonts,
   custom_inline_boxes: &mut Vec<PositionedInlineBox>,
 ) {
   let ellipsis_char = root_style.parent.ellipsis_char();
@@ -2194,7 +2192,7 @@ fn make_ellipsis_layout<'c, 'g: 'c>(
     let ellipsis_style = ellipsis_span_id
       .and_then(|span_id| text_span_style_by_id(spans, span_id))
       .unwrap_or(root_style);
-    let ellipsis_w = measure_ellipsis_width(font_context, ellipsis_style, ellipsis_char);
+    let ellipsis_w = measure_ellipsis_width(fonts, ellipsis_style, ellipsis_char);
 
     let plan = truncation_plan(&checkpoints, spans, (max_width - ellipsis_w).max(0.0));
     let next_ellipsis_span_id = truncated_tail_text_span_id(spans, plan.0);
@@ -2210,7 +2208,7 @@ fn make_ellipsis_layout<'c, 'g: 'c>(
 
   let ellipsis_style = tail_text_span(spans).map_or(root_style, |(style, _)| style);
 
-  let (mut final_layout, _) = font_context.tree_builder(root_style.into(), |builder| {
+  let (mut final_layout, _) = fonts.tree_builder(root_style.into(), |builder| {
     for span in spans.iter() {
       match span {
         ProcessedInlineSpan::Text {
@@ -2255,7 +2253,7 @@ mod tests {
   use std::{fs::File, io::Read, path::Path};
 
   use crate::{
-    FontContext,
+    Fonts,
     context::RenderContext,
     layout::{
       Viewport,
@@ -2267,8 +2265,8 @@ mod tests {
   };
   use parley::{GenericFamily, fontique::FontInfoOverride};
 
-  fn create_test_context() -> FontContext {
-    let mut context = FontContext::default();
+  fn create_test_context() -> Fonts {
+    let mut context = Fonts::default();
     let path =
       Path::new(env!("CARGO_MANIFEST_DIR")).join("../assets/fonts/geist/Geist[wght].woff2");
     let mut font_data = Vec::new();
@@ -2290,11 +2288,8 @@ mod tests {
     context
   }
 
-  fn glyph_run_segments(
-    node: Node,
-    font_context: &FontContext,
-  ) -> Vec<(Option<u64>, String, Color)> {
-    let context = RenderContext::new_test(font_context, Viewport::new((1200, 630)));
+  fn glyph_run_segments(node: Node, fonts: &Fonts) -> Vec<(Option<u64>, String, Color)> {
+    let context = RenderContext::new_test(fonts, Viewport::new((1200, 630)));
     let render_node = RenderNode::from_node(&context, node);
     let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
     let (max_width, max_height) = create_inline_constraint(
@@ -2314,7 +2309,7 @@ mod tests {
       max_width,
       max_height,
       style: &font_style,
-      font_context,
+      fonts,
       mode: InlineLayoutMode::Measure,
     });
 
@@ -2338,7 +2333,7 @@ mod tests {
 
   #[test]
   fn pre_wrap_keeps_style_boundary_for_same_edge_character() {
-    let font_context = create_test_context();
+    let fonts = create_test_context();
     let orange = Color([238, 102, 51, 255]);
     let blue = Color([26, 110, 245, 255]);
 
@@ -2365,7 +2360,7 @@ mod tests {
         .with_white_space(WhiteSpace::pre_wrap()),
     );
 
-    let segments = glyph_run_segments(node, &font_context);
+    let segments = glyph_run_segments(node, &fonts);
 
     assert!(
       segments

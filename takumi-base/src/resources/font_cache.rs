@@ -8,7 +8,7 @@
 //! The cache is pure memoization: keyed by content, values are immutable `Blob`s. A cold
 //! and a warm cache produce identical output, so sharing it process-wide (native) or
 //! module-wide (wasm) is safe and never causes the family mixing a mutable shared font
-//! context would. On wasm/edge this is exactly the sanctioned "immutable cache in font_context
+//! context would. On wasm/edge this is exactly the sanctioned "immutable cache in fonts
 //! scope, loss is acceptable" pattern.
 
 use std::{
@@ -29,13 +29,13 @@ const DEFAULT_MAX_BYTES: usize = 256 << 20; // 256 MiB
 /// Reads (cache hits) take a shared lock; the rare writes (a font's first decode) take the
 /// exclusive lock. All byte-counter updates happen under the write lock, so it stays
 /// consistent with the map; `get`/`len_bytes` stay lock-light.
-pub struct FontDecodeCache {
+pub struct FontCache {
   entries: RwLock<HashMap<u64, Blob<u8>>>,
   bytes: AtomicUsize,
   max_bytes: AtomicUsize,
 }
 
-impl Default for FontDecodeCache {
+impl Default for FontCache {
   fn default() -> Self {
     Self {
       entries: RwLock::new(HashMap::new()),
@@ -45,7 +45,7 @@ impl Default for FontDecodeCache {
   }
 }
 
-impl FontDecodeCache {
+impl FontCache {
   /// Returns the decoded blob for `key`, if present.
   pub fn get(&self, key: u64) -> Option<Blob<u8>> {
     self.entries.read().ok()?.get(&key).cloned()
@@ -111,7 +111,7 @@ mod tests {
 
   use parley::fontique::Blob;
 
-  use super::FontDecodeCache;
+  use super::FontCache;
 
   fn blob(len: usize) -> Blob<u8> {
     Blob::new(Arc::new(vec![0u8; len]))
@@ -119,7 +119,7 @@ mod tests {
 
   #[test]
   fn hit_miss_and_byte_accounting() {
-    let cache = FontDecodeCache::default();
+    let cache = FontCache::default();
     assert!(cache.get(1).is_none());
     cache.insert(1, blob(100));
     assert!(cache.get(1).is_some());
@@ -131,7 +131,7 @@ mod tests {
 
   #[test]
   fn disabling_clears_and_refuses() {
-    let cache = FontDecodeCache::default();
+    let cache = FontCache::default();
     cache.insert(1, blob(100));
     cache.set_max_bytes(0);
     assert!(cache.get(1).is_none());
@@ -142,7 +142,7 @@ mod tests {
 
   #[test]
   fn evicts_to_stay_within_budget() {
-    let cache = FontDecodeCache::default();
+    let cache = FontCache::default();
     cache.set_max_bytes(150);
     cache.insert(1, blob(100));
     cache.insert(2, blob(100)); // can't fit both → one is evicted

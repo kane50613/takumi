@@ -103,7 +103,7 @@ fn test_pseudo_text_attr() {
   let options = RenderOptions::builder()
     .viewport(create_test_viewport())
     .node(root)
-    .font_context(&CONTEXT)
+    .fonts(&CONTEXT)
     .stylesheet(StyleSheet::parse(&format!("{SHARED_CSS}{pseudo_css}")).unwrap())
     .build();
 
@@ -159,7 +159,7 @@ fn test_pseudo_display_image() {
   let options = RenderOptions::builder()
     .viewport(create_test_viewport())
     .node(root)
-    .font_context(&CONTEXT)
+    .fonts(&CONTEXT)
     .fetched_resources(TEST_IMAGES.clone())
     .stylesheet(StyleSheet::parse(&format!("{SHARED_CSS}{pseudo_css}")).unwrap())
     .build();

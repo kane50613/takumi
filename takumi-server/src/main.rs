@@ -1,6 +1,6 @@
 use clap::Parser;
 use mimalloc::MiMalloc;
-use takumi::base::FontContext;
+use takumi::base::Fonts;
 use tracing::Level;
 use tracing_subscriber::fmt;
 
@@ -15,7 +15,7 @@ async fn main() {
 
   let args = Args::parse();
 
-  let context = FontContext::default();
+  let context = Fonts::default();
 
   run_server(args, context).await;
 }

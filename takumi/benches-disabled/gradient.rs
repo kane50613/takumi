@@ -1,7 +1,7 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 use takumi::{
-  FontContext,
+  Fonts,
   layout::{
     Viewport,
     node::Node,
@@ -22,37 +22,37 @@ fn build_gradient_node(background_images: Option<BackgroundImages>) -> Node {
   Node::container([]).with_style(style)
 }
 
-fn render_gradient_node(font_context: &FontContext, node: Node) {
+fn render_gradient_node(fonts: &Fonts, node: Node) {
   let viewport = Viewport::new((BENCH_WIDTH, BENCH_HEIGHT));
 
   let options = RenderOptions::builder()
     .viewport(viewport)
     .node(node)
-    .font_context(font_context)
+    .fonts(fonts)
     .build();
 
   let image = render(options).unwrap();
   black_box(image);
 }
 
-fn run_gradient_render(font_context: &FontContext, background_image_str: &str) {
+fn run_gradient_render(fonts: &Fonts, background_image_str: &str) {
   let background_images = BackgroundImages::from_str(background_image_str).ok();
   let node = build_gradient_node(background_images);
-  render_gradient_node(font_context, node);
+  render_gradient_node(fonts, node);
 }
 
 fn bench_gradients(c: &mut Criterion) {
-  let font_context = FontContext::default();
+  let fonts = Fonts::default();
   let mut group = c.benchmark_group("gradient");
 
   group.bench_function("linear_2_stops_1200x630", |b| {
-    b.iter(|| run_gradient_render(&font_context, black_box("linear-gradient(to right, red, blue)")))
+    b.iter(|| run_gradient_render(&fonts, black_box("linear-gradient(to right, red, blue)")))
   });
   group.bench_function("radial_2_stops_1200x630", |b| {
-    b.iter(|| run_gradient_render(&font_context, black_box("radial-gradient(circle, red, blue)")))
+    b.iter(|| run_gradient_render(&fonts, black_box("radial-gradient(circle, red, blue)")))
   });
   group.bench_function("conic_2_stops_1200x630", |b| {
-    b.iter(|| run_gradient_render(&font_context, black_box("conic-gradient(red, blue)")))
+    b.iter(|| run_gradient_render(&fonts, black_box("conic-gradient(red, blue)")))
   });
 
   group.finish();

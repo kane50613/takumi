@@ -45,7 +45,7 @@ fn test_stylesheets() {
   let options = RenderOptions::builder()
     .viewport(create_test_viewport())
     .node(root)
-    .font_context(&CONTEXT)
+    .fonts(&CONTEXT)
     .stylesheet(
       StyleSheet::parse(
         r#"
@@ -113,7 +113,7 @@ fn test_stylesheets_background_multiple_gradients() {
     RenderOptions::builder()
       .viewport(create_test_viewport())
       .node(root.clone())
-      .font_context(&CONTEXT)
+      .fonts(&CONTEXT)
       .stylesheet(StyleSheet::parse(
         r#"
           .multi-gradient-card {

@@ -21,7 +21,7 @@ pub use error::{Error, Result, StyleSheetParseError};
 
 use xxhash_rust::xxh3::Xxh3DefaultBuilder;
 
-pub use crate::resources::font::FontContext;
+pub use crate::resources::font::Fonts;
 
 /// Type alias for HashSet using XXH3 hasher
 pub type Xxh3HashSet<T> = HashSet<T, Xxh3DefaultBuilder>;

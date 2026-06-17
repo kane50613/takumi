@@ -1,4 +1,4 @@
-//! Find the minimum marginal cost of producing a per-render `FontContext`.
+//! Find the minimum marginal cost of producing a per-render `Fonts`.
 //!
 //! Run: `cargo run --release --example font_context_cost`
 //!
@@ -17,7 +17,7 @@ use std::{
 };
 
 use parley::fontique::{Blob, FontInfoOverride};
-use takumi::base::resources::font::{FontContext, FontResource, FontSource};
+use takumi::base::resources::font::{FontResource, FontSource, Fonts};
 
 fn repo_path(rel: &str) -> PathBuf {
   Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join(rel)
@@ -42,7 +42,7 @@ fn main() {
   // Distinct family names so each register adds a real family (no dedup collapse).
   let names: Vec<String> = (0..64).map(|i| format!("Fam {i}")).collect();
 
-  let register = |ctx: &mut FontContext, i: usize| {
+  let register = |ctx: &mut Fonts, i: usize| {
     ctx
       .load_and_store(
         FontResource::new(FontSource::Blob(blob.clone())).override_info(FontInfoOverride {
@@ -54,7 +54,7 @@ fn main() {
   };
 
   let build = |n: usize| {
-    let mut ctx = FontContext::default();
+    let mut ctx = Fonts::default();
     for i in 0..n {
       register(&mut ctx, i);
     }
@@ -89,7 +89,7 @@ fn main() {
   ))
   .expect("read woff2");
   // The decode cache lives on the context; clones/forks share it (Arc).
-  let cache_base = FontContext::default();
+  let cache_base = Fonts::default();
   let rebuild_woff2 = || {
     let mut ctx = cache_base.clone(); // shares cache_base's decode cache
     ctx
@@ -122,7 +122,7 @@ fn main() {
   });
 
   // REUSE floor: hash the requested set + HashMap lookup of a prebuilt context.
-  let mut cache: HashMap<u64, FontContext> = HashMap::new();
+  let mut cache: HashMap<u64, Fonts> = HashMap::new();
   cache.insert(0xABCD, build(6));
   let reuse = time(50_000, || {
     let key = std::hint::black_box(0xABCDu64);

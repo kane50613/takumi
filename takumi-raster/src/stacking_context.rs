@@ -499,7 +499,7 @@ fn compute_node_paint_bounds(
     max_width: layout.content_box_width(),
     max_height,
     style: &font_style,
-    font_context: node.context.font_context,
+    fonts: node.context.fonts,
     mode: InlineLayoutMode::Measure,
   });
   let inline_transform = Affine::translation(
@@ -1173,7 +1173,7 @@ fn draw_render_node_inline(
     max_width: layout.content_box_width(),
     max_height,
     style: &font_style,
-    font_context: node.context.font_context,
+    fonts: node.context.fonts,
     mode: InlineLayoutMode::Draw,
   });
   let inline_layout_box = layout;
@@ -1210,7 +1210,7 @@ mod tests {
 
   use super::{SceneBounds, bounds_for_rect, merge_bounds};
   use crate::{
-    CanvasViewport, FontContext, RenderOptions,
+    CanvasViewport, Fonts, RenderOptions,
     layout::{Viewport, node::Node, style::Affine},
     render,
   };
@@ -1218,12 +1218,12 @@ mod tests {
   type TestResult = Result<(), Box<dyn Error>>;
 
   fn render_json(json: &str) -> Result<image::RgbaImage, Box<dyn Error>> {
-    let font_context = FontContext::default();
+    let fonts = Fonts::default();
     let node: Node = serde_json::from_str(json)?;
     let options = RenderOptions::builder()
       .viewport(Viewport::new((100, 100)))
       .node(node)
-      .font_context(&font_context)
+      .fonts(&fonts)
       .build();
     Ok(render(options)?)
   }

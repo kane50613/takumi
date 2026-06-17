@@ -56,7 +56,7 @@ pub(crate) fn emit_text(
     max_width: content.width,
     max_height: resolve_inline_max_height(&font_style, content.height),
     style: &font_style,
-    font_context: context.font_context,
+    fonts: context.fonts,
     mode: InlineLayoutMode::Draw,
   });
 
@@ -100,7 +100,7 @@ pub(crate) fn emit_inline_content(
     max_width: content.width,
     max_height: resolve_inline_max_height(&font_style, content.height),
     style: &font_style,
-    font_context: context.font_context,
+    fonts: context.fonts,
     mode: InlineLayoutMode::Draw,
   });
 
@@ -590,7 +590,7 @@ fn offset(transform: [f32; 6], origin_x: f32, origin_y: f32) -> Affine {
 mod tests {
   use std::path::Path;
 
-  use takumi_base::FontContext;
+  use takumi_base::Fonts;
   use takumi_base::layout::Viewport;
   use takumi_base::layout::node::Node;
   use takumi_base::resources::font::FontResource;
@@ -599,26 +599,26 @@ mod tests {
 
   /// Registers the raw-TTF test font as a fallback for all scripts so the
   /// default font-family resolves to it (no `woff2` feature required).
-  fn font_context_with_font() -> FontContext {
-    let mut font_context = FontContext::default();
+  fn font_context_with_font() -> Fonts {
+    let mut fonts = Fonts::default();
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
       .join("../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf");
     let data = std::fs::read(&path).expect("read test font");
-    font_context
+    fonts
       .load_and_store(FontResource::new(data))
       .expect("load test font");
-    font_context
+    fonts
   }
 
   #[test]
   fn text_renders_glyph_paths_not_bitmap() {
-    let font_context = font_context_with_font();
+    let fonts = font_context_with_font();
     let node = Node::text("Hi".to_string());
     let svg = render(
       SvgOptions::builder()
         .node(node)
         .viewport(Viewport::new((200, 80)))
-        .font_context(&font_context)
+        .fonts(&fonts)
         .build(),
     )
     .unwrap();

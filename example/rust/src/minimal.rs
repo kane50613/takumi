@@ -2,7 +2,7 @@
 use std::{borrow::Cow, fs::File};
 
 use takumi::base::{
-  FontContext,
+  Fonts,
   layout::{
     Viewport,
     node::Node,
@@ -19,7 +19,7 @@ pub fn say_hello_to(name: &str) {
   // Create a new context for rendering with default settings,
   // Only one instance should be created for the entire application,
   // you can wrap it in a Arc<Context> to share it across threads if needed.
-  let context = FontContext::default();
+  let context = Fonts::default();
 
   // Font loading can be done here if you have custom fonts to use,
   // by default, takumi WON'T load any system fonts.
@@ -40,7 +40,7 @@ pub fn say_hello_to(name: &str) {
   let options = RenderOptions::builder()
     .viewport(Viewport::new((1200, 630)))
     .node(root)
-    .font_context(&context)
+    .fonts(&context)
     .build();
 
   // Create an image from the render options

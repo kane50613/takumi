@@ -203,7 +203,7 @@ mod tests {
 
   use super::{image_resource_url, measure_image_node};
   use crate::{
-    FontContext,
+    Fonts,
     context::RenderContext,
     layout::{
       Viewport,
@@ -307,8 +307,8 @@ mod tests {
 
   #[test]
   fn fixed_style_size_uses_declared_lengths_instead_of_available_space() {
-    let font_context = FontContext::default();
-    let context = RenderContext::new_test(&font_context, Viewport::new((1200, 630)));
+    let fonts = Fonts::default();
+    let context = RenderContext::new_test(&fonts, Viewport::new((1200, 630)));
     let image = ImageData::from(ImageSource::from(RgbaImage::new(10, 10)));
     let style = Style {
       size: Size {

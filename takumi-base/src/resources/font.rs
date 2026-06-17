@@ -36,7 +36,7 @@ use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
 use crate::{
   layout::inline::{InlineBrush, InlineLayout},
-  resources::{font_cache::FontDecodeCache, image_buffer::ImageBuffer, image_decoder::decode_png},
+  resources::{font_cache::FontCache, image_buffer::ImageBuffer, image_decoder::decode_png},
 };
 
 fn pixmap_from_image_buffer(buffer: ImageBuffer) -> Option<Pixmap> {
@@ -630,18 +630,18 @@ fn with_layout_context<R>(f: impl FnOnce(&mut LayoutContext<InlineBrush>) -> R) 
 static FONT_CONTEXT_NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
 /// A context for managing fonts in the rendering system.
-pub struct FontContext {
+pub struct Fonts {
   id: u64,
   version: AtomicU64,
   inner: parley::FontContext,
   /// Content-addressed decoded-font cache, shared across clones/forks of this context.
-  decode_cache: Arc<FontDecodeCache>,
+  decode_cache: Arc<FontCache>,
   /// Keys of fonts already registered, so re-registering the same font is a no-op
   /// (keyed by content + family-name override).
   registered: HashSet<u64>,
 }
 
-impl Clone for FontContext {
+impl Clone for Fonts {
   fn clone(&self) -> Self {
     Self {
       id: FONT_CONTEXT_NEXT_ID.fetch_add(1, Ordering::Relaxed),
@@ -653,7 +653,7 @@ impl Clone for FontContext {
   }
 }
 
-impl Default for FontContext {
+impl Default for Fonts {
   fn default() -> Self {
     Self {
       id: FONT_CONTEXT_NEXT_ID.fetch_add(1, Ordering::Relaxed),
@@ -665,13 +665,13 @@ impl Default for FontContext {
         }),
         source_cache: Default::default(),
       },
-      decode_cache: Arc::new(FontDecodeCache::default()),
+      decode_cache: Arc::new(FontCache::default()),
       registered: HashSet::new(),
     }
   }
 }
 
-impl Deref for FontContext {
+impl Deref for Fonts {
   type Target = parley::FontContext;
 
   fn deref(&self) -> &Self::Target {
@@ -679,13 +679,13 @@ impl Deref for FontContext {
   }
 }
 
-impl DerefMut for FontContext {
+impl DerefMut for Fonts {
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.inner
   }
 }
 
-impl FontContext {
+impl Fonts {
   #[inline]
   fn with_inner_mut<R>(&self, f: impl FnOnce(&mut parley::FontContext) -> R) -> R {
     let current_version = self.version.load(Ordering::Relaxed);
@@ -830,9 +830,9 @@ impl FontContext {
     root_style: TextStyle<'_, '_, InlineBrush>,
     func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),
   ) -> (InlineLayout, String) {
-    self.with_inner_mut(|font_context| {
+    self.with_inner_mut(|fonts| {
       with_layout_context(|layout_context| {
-        let mut builder = layout_context.tree_builder(font_context, 1.0, true, &root_style);
+        let mut builder = layout_context.tree_builder(fonts, 1.0, true, &root_style);
         func(&mut builder);
         builder.build()
       })
@@ -840,13 +840,13 @@ impl FontContext {
   }
 
   /// The decoded-font cache owned by this context (shared across its clones/forks).
-  pub fn decode_cache(&self) -> &FontDecodeCache {
+  pub fn decode_cache(&self) -> &FontCache {
     &self.decode_cache
   }
 
   /// A shared handle to this context's decoded-font cache, for use off the context borrow
   /// (e.g. a parallel decode phase before `load_and_store`).
-  pub fn decode_cache_arc(&self) -> Arc<FontDecodeCache> {
+  pub fn decode_cache_arc(&self) -> Arc<FontCache> {
     Arc::clone(&self.decode_cache)
   }
 
@@ -915,7 +915,7 @@ mod dedup_tests {
     ))
     .unwrap();
 
-    let mut ctx = FontContext::default();
+    let mut ctx = Fonts::default();
     ctx
       .load_and_store(FontResource::new(font.as_slice()))
       .unwrap();
@@ -959,14 +959,14 @@ where
 }
 
 impl<'a> FontSource<'a> {
-  fn into_blob_variant(self, cache: &FontDecodeCache) -> Result<Self, FontError> {
+  fn into_blob_variant(self, cache: &FontCache) -> Result<Self, FontError> {
     match self {
       Self::Raw(raw) => Ok(Self::Blob(decode_cached(raw, cache)?)),
       Self::Blob(_) => Ok(self),
     }
   }
 
-  fn into_blob(self, cache: &FontDecodeCache) -> Result<Blob<u8>, FontError> {
+  fn into_blob(self, cache: &FontCache) -> Result<Blob<u8>, FontError> {
     match self {
       Self::Raw(raw) => decode_cached(raw, cache),
       Self::Blob(blob) => Ok(blob),
@@ -975,7 +975,7 @@ impl<'a> FontSource<'a> {
 }
 
 /// Decodes raw font bytes to a blob, memoizing the (expensive) woff2/woff decode by content.
-fn decode_cached(raw: Cow<'_, [u8]>, cache: &FontDecodeCache) -> Result<Blob<u8>, FontError> {
+fn decode_cached(raw: Cow<'_, [u8]>, cache: &FontCache) -> Result<Blob<u8>, FontError> {
   let key = xxh3_64(raw.as_ref());
   if let Some(blob) = cache.get(key) {
     return Ok(blob);
@@ -1033,7 +1033,7 @@ impl<'a> FontResource<'a> {
 
   /// Convert to resolved font resource, decoding (and caching) via the given context cache.
   /// Woff2 and Woff are decompressed into a raw buffer.
-  pub fn into_resolved(self, cache: &FontDecodeCache) -> Result<Self, FontError> {
+  pub fn into_resolved(self, cache: &FontCache) -> Result<Self, FontError> {
     let source = self.source.into_blob_variant(cache)?;
     Ok(Self {
       source,

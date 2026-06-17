@@ -19,7 +19,7 @@ use parley::{FontStyle, FontWeight, fontique::FontInfoOverride};
 use serde::{Deserialize, Deserializer, de::DeserializeOwned};
 use takumi_base::{
   layout::style::{KeyframesRule, StyleSheet},
-  resources::{font::FontResource, font_cache::FontDecodeCache},
+  resources::{font::FontResource, font_cache::FontCache},
 };
 
 pub use renderer::Renderer;
@@ -77,7 +77,7 @@ pub(crate) fn parse_font_input(env: Env, font: Object) -> Result<(FontInput, Buf
 pub(crate) fn resolve_font_resource<'a>(
   font: &'a FontInput,
   buffer: &'a [u8],
-  cache: &FontDecodeCache,
+  cache: &FontCache,
 ) -> Result<FontResource<'a>> {
   FontResource::new(buffer)
     .override_info(FontInfoOverride {
