@@ -44,6 +44,17 @@ impl<'i> FromCss<'i> for BoxShadows {
   const VALID_TOKENS: &'static [CssToken] = BoxShadow::VALID_TOKENS;
 }
 
+/// Parses a `<length>` rejecting percentages, which are invalid for shadow blur/spread radii.
+fn parse_non_percentage_length<'i>(
+  input: &mut Parser<'i, '_>,
+) -> ParseResult<'i, LengthDefaultsToZero> {
+  let length = Length::from_css(input)?;
+  if matches!(length, Length::Percentage(_)) {
+    return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
+  }
+  Ok(length)
+}
+
 pub(super) fn parse_offsets_blur<'i>(
   input: &mut Parser<'i, '_>,
 ) -> ParseResult<
@@ -56,7 +67,9 @@ pub(super) fn parse_offsets_blur<'i>(
 > {
   let horizontal = Length::from_css(input)?;
   let vertical = Length::from_css(input)?;
-  let blur = input.try_parse(Length::from_css).unwrap_or(Length::zero());
+  let blur = input
+    .try_parse(parse_non_percentage_length)
+    .unwrap_or(Length::zero());
   Ok((horizontal, vertical, blur))
 }
 
@@ -93,7 +106,9 @@ impl<'i> FromCss<'i> for BoxShadow {
       if lengths.is_none() {
         let value = input.try_parse::<_, _, ParseError<Cow<'i, str>>>(|input| {
           let (horizontal, vertical, blur) = parse_offsets_blur(input)?;
-          let spread = input.try_parse(Length::from_css).unwrap_or(Length::zero());
+          let spread = input
+            .try_parse(parse_non_percentage_length)
+            .unwrap_or(Length::zero());
           Ok((horizontal, vertical, blur, spread))
         });
 
@@ -352,6 +367,31 @@ mod tests {
   fn test_parse_box_shadow_invalid() {
     assert!(BoxShadow::from_str("2px").is_err());
     assert!(BoxShadow::from_str("").is_err());
+  }
+
+  #[test]
+  fn test_box_shadow_rejects_percentage_radii() {
+    // Percentages are not valid <length> for blur/spread; loose parsing ignores
+    // the trailing token rather than capturing it as a Percentage length.
+    assert_eq!(
+      BoxShadow::from_str("2px 4px 50%"),
+      Ok(BoxShadow {
+        offset_x: Px(2.0),
+        offset_y: Px(4.0),
+        color: transparent(),
+        ..Default::default()
+      })
+    );
+    assert_eq!(
+      BoxShadow::from_str("2px 4px 6px 50%"),
+      Ok(BoxShadow {
+        offset_x: Px(2.0),
+        offset_y: Px(4.0),
+        blur_radius: Px(6.0),
+        color: transparent(),
+        ..Default::default()
+      })
+    );
   }
 
   #[test]
