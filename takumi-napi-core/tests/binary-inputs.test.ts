@@ -35,12 +35,15 @@ describe("binary inputs", () => {
     ).not.toThrow();
   });
 
-  test("loadFonts accepts Buffer, Uint8Array, and ArrayBuffer", async () => {
+  test("registerFonts accepts Buffer, Uint8Array, and ArrayBuffer", async () => {
     const renderer = new Renderer();
 
-    const count = await renderer.loadFonts([fontBuffer, fontUint8Array, fontArrayBuffer]);
+    const registered = await renderer.registerFonts([fontBuffer, fontUint8Array, fontArrayBuffer]);
 
-    expect(count).toBe(3);
+    expect(registered).toHaveLength(3);
+    expect(registered.every((families) => families.length > 0 && Boolean(families[0].name))).toBe(
+      true,
+    );
   });
 
   test("render accepts inline image bytes as src", async () => {

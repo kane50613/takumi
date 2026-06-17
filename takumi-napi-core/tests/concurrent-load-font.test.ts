@@ -5,14 +5,14 @@ const fontData = await Bun.file(
   new URL("../../assets/fonts/geist/Geist[wght].woff2", import.meta.url),
 ).arrayBuffer();
 
-test("concurrent loadFonts calls on one renderer", async () => {
+test("concurrent registerFonts calls on one renderer", async () => {
   const renderer = new Renderer({
     loadDefaultFonts: false,
   });
 
   const results = await Promise.all(
     Array.from({ length: 32 }, (_, i) =>
-      renderer.loadFonts([
+      renderer.registerFonts([
         {
           name: `Geist Concurrent ${i}`,
           data: fontData,
@@ -23,7 +23,9 @@ test("concurrent loadFonts calls on one renderer", async () => {
     ),
   );
 
-  expect(results.every((count) => count === 1)).toBe(true);
+  expect(results.every((registered) => registered.length === 1 && registered[0].length > 0)).toBe(
+    true,
+  );
 
   const output = await renderer.render({
     type: "text",
@@ -37,7 +39,7 @@ test("concurrent loadFonts calls on one renderer", async () => {
   expect(output).toBeInstanceOf(Buffer);
 });
 
-test("loadFonts retries loaders that failed before loading", async () => {
+test("registerFonts retries loaders that failed before loading", async () => {
   const renderer = new Renderer({
     loadDefaultFonts: false,
   });
@@ -45,7 +47,7 @@ test("loadFonts retries loaders that failed before loading", async () => {
   let attempts = 0;
 
   await expect(
-    renderer.loadFonts([
+    renderer.registerFonts([
       {
         name: "Geist Retry",
         weight: 400,
@@ -63,7 +65,7 @@ test("loadFonts retries loaders that failed before loading", async () => {
     ]),
   ).rejects.toThrow("transient font loader failure");
 
-  const loadedCount = await renderer.loadFonts([
+  const registered = await renderer.registerFonts([
     {
       name: "Geist Retry",
       weight: 400,
@@ -75,6 +77,7 @@ test("loadFonts retries loaders that failed before loading", async () => {
     },
   ]);
 
-  expect(loadedCount).toBe(1);
+  expect(registered).toHaveLength(1);
+  expect(registered[0].length).toBeGreaterThan(0);
   expect(attempts).toBe(2);
 });

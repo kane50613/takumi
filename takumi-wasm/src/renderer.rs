@@ -17,7 +17,9 @@ use takumi_base::{
     style::{KeyframesRule, StyleSheet},
   },
   resources::{
-    font::FontResource, image::ImageSource as LoadedImageSource, image_cache::ImageCache,
+    font::{FontResource, RegisteredFamily},
+    image::ImageSource as LoadedImageSource,
+    image_cache::ImageCache,
   },
 };
 use takumi_raster::{
@@ -60,28 +62,26 @@ fn load_default_fonts(fonts: &mut Fonts) -> Result<(), js_sys::Error> {
   Ok(())
 }
 
-fn load_font_internal(fonts: &mut Fonts, font: Font) -> Result<(), js_sys::Error> {
+fn load_font_internal(
+  fonts: &mut Fonts,
+  font: Font,
+) -> Result<Vec<RegisteredFamily>, js_sys::Error> {
   match font {
-    Font::Buffer(buffer) => {
-      fonts
-        .register(FontResource::new(buffer.into_vec()))
-        .map_err(map_error)?;
-    }
-    Font::Object(details) => {
-      fonts
-        .register(
-          FontResource::new(details.data.into_vec()).override_info(FontInfoOverride {
-            family_name: details.name.as_deref(),
-            style: details.style.map(Into::into),
-            weight: details.weight.map(|weight| FontWeight::new(weight as f32)),
-            axes: None,
-            width: None,
-          }),
-        )
-        .map_err(map_error)?;
-    }
+    Font::Buffer(buffer) => fonts
+      .register(FontResource::new(buffer.into_vec()))
+      .map_err(map_error),
+    Font::Object(details) => fonts
+      .register(
+        FontResource::new(details.data.into_vec()).override_info(FontInfoOverride {
+          family_name: details.name.as_deref(),
+          style: details.style.map(Into::into),
+          weight: details.weight.map(|weight| FontWeight::new(weight as f32)),
+          axes: None,
+          width: None,
+        }),
+      )
+      .map_err(map_error),
   }
-  Ok(())
 }
 
 impl Renderer {
@@ -216,15 +216,16 @@ impl Renderer {
     })
   }
 
-  /// Loads fonts into the renderer.
-  #[wasm_bindgen(js_name = loadFonts)]
-  pub fn load_fonts(&self, fonts: FontsType) -> Result<(), js_sys::Error> {
+  /// Registers fonts into the renderer, returning the families each font produced.
+  #[wasm_bindgen(js_name = registerFonts)]
+  pub fn register_fonts(&self, fonts: FontsType) -> Result<JsValue, js_sys::Error> {
     let fonts: Vec<Font> = from_value(fonts.into()).map_err(map_error)?;
     let mut state = self.write_state()?;
-    for font in fonts {
-      load_font_internal(&mut state, font)?;
-    }
-    Ok(())
+    let registered = fonts
+      .into_iter()
+      .map(|font| load_font_internal(&mut state, font))
+      .collect::<Result<Vec<_>, _>>()?;
+    to_value(&registered).map_err(map_error)
   }
 
   /// Renders a node tree into an image buffer.

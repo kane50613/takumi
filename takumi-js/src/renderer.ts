@@ -31,6 +31,6 @@ export async function loadRendererResources(
   options: RenderOptionsWithoutRenderer | undefined,
 ) {
   if (options?.fonts && options.fonts.length > 0) {
-    await renderer.loadFonts(options.fonts);
+    await renderer.registerFonts(options.fonts);
   }
 }

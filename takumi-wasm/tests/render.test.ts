@@ -54,12 +54,12 @@ const node = container({
 });
 
 describe("setup", () => {
-  test(`loadFonts (${fonts.length})`, async () => {
-    expect(await renderer.loadFonts(fonts)).toBe(fonts.length);
+  test(`registerFonts (${fonts.length})`, async () => {
+    expect(await renderer.registerFonts(fonts)).toHaveLength(fonts.length);
   });
 
-  test("loadFonts without default fonts", async () => {
-    await rendererWithoutDefaultFonts.loadFonts([
+  test("registerFonts without default fonts", async () => {
+    await rendererWithoutDefaultFonts.registerFonts([
       {
         name: "Manrope",
         data: manropeFont,

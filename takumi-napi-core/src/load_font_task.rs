@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 use napi::bindgen_prelude::*;
 use rayon::prelude::*;
 
-use crate::{FontInput, renderer::RendererState, resolve_font_resource};
+use crate::{FontInput, RegisteredFamily, renderer::RendererState, resolve_font_resource};
 
 pub struct LoadFontTask {
   pub(crate) state: Arc<RwLock<RendererState>>,
@@ -11,15 +11,13 @@ pub struct LoadFontTask {
 }
 
 impl Task for LoadFontTask {
-  type Output = usize;
-  type JsValue = u32;
+  type Output = Vec<Vec<RegisteredFamily>>;
+  type JsValue = Vec<Vec<RegisteredFamily>>;
 
   fn compute(&mut self) -> Result<Self::Output> {
     if self.buffers.is_empty() {
-      return Ok(0);
+      return Ok(Vec::new());
     }
-
-    let mut loaded_count = 0;
 
     let resources = crate::pool::install(|| {
       self
@@ -35,16 +33,21 @@ impl Task for LoadFontTask {
       .write()
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
-    for resource in resources.into_iter() {
-      if state.fonts.register(resource).is_ok() {
-        loaded_count += 1;
-      }
-    }
+    let registered = resources
+      .into_iter()
+      .map(|resource| {
+        state
+          .fonts
+          .register(resource)
+          .map(|families| families.into_iter().map(Into::into).collect())
+          .unwrap_or_default()
+      })
+      .collect();
 
-    Ok(loaded_count)
+    Ok(registered)
   }
 
   fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
-    Ok(output as u32)
+    Ok(output)
   }
 }

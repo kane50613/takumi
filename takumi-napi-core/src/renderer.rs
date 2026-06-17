@@ -373,12 +373,14 @@ impl Renderer {
     Ok(())
   }
 
-  /// Loads multiple fonts into the renderer asynchronously.
+  /// Registers multiple fonts into the renderer asynchronously, returning the
+  /// families each font produced.
   #[napi(
+    js_name = "registerFonts",
     ts_args_type = "fonts: Font[], signal?: AbortSignal",
-    ts_return_type = "Promise<number>"
+    ts_return_type = "Promise<RegisteredFamily[][]>"
   )]
-  pub fn load_fonts(
+  pub fn register_fonts(
     &self,
     env: Env,
     fonts: Vec<Object>,

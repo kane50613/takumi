@@ -21,7 +21,7 @@ export class Renderer extends RendererInternal {
   private fontsMark = new Set<string>();
   private fontBuffersMark = new WeakSet<ByteBuf>();
 
-  override async loadFonts(fonts: FontLoader[], signal?: AbortSignal): Promise<number> {
+  override async registerFonts(fonts: FontLoader[], signal?: AbortSignal) {
     const batchFontsMark = new Set<string>();
     const batchFontBuffersMark = new WeakSet<ByteBuf>();
     const targetFonts = fonts.filter((font) => {
@@ -47,13 +47,13 @@ export class Renderer extends RendererInternal {
     const resolvedFonts = await Promise.all(targetFonts.map(resolveFontLoader));
 
     if (signal?.aborted) {
-      return 0;
+      return [];
     }
 
-    super.loadFonts(resolvedFonts);
+    const registered = super.registerFonts(resolvedFonts);
     targetFonts.forEach((font) => this.checkAndMarkFont(font));
 
-    return resolvedFonts.length;
+    return registered;
   }
 
   private checkAndMarkFont(font: FontLoader): void {

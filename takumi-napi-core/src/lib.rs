@@ -31,6 +31,48 @@ pub struct ImageCacheOptions {
   pub max_bytes: Option<f64>,
 }
 
+/// A font family produced by `registerFonts`, with the faces it contains.
+#[napi(object)]
+pub struct RegisteredFamily {
+  /// Family name as stored by the font system (normalized; reflects any override).
+  pub name: String,
+  /// Faces registered under this family.
+  pub faces: Vec<RegisteredFace>,
+}
+
+/// A single face within a `RegisteredFamily`.
+#[napi(object)]
+pub struct RegisteredFace {
+  /// Weight class, typically `1`–`1000`.
+  pub weight: f64,
+  /// CSS `font-style` value (`normal`, `italic`, or `oblique [<angle>deg]`).
+  pub style: String,
+  /// Width as a percentage of normal (e.g. `100`).
+  pub width: f64,
+  /// Index of the face within its source collection.
+  pub index: u32,
+}
+
+impl From<takumi_base::resources::font::RegisteredFamily> for RegisteredFamily {
+  fn from(family: takumi_base::resources::font::RegisteredFamily) -> Self {
+    Self {
+      name: family.name,
+      faces: family.faces.into_iter().map(Into::into).collect(),
+    }
+  }
+}
+
+impl From<takumi_base::resources::font::RegisteredFace> for RegisteredFace {
+  fn from(face: takumi_base::resources::font::RegisteredFace) -> Self {
+    Self {
+      weight: face.weight as f64,
+      style: face.style,
+      width: face.width as f64,
+      index: face.index,
+    }
+  }
+}
+
 #[derive(Deserialize, Default)]
 pub(crate) struct FontInput {
   pub name: Option<String>,

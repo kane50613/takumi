@@ -1,7 +1,7 @@
 use std::{
   borrow::Cow,
   cell::RefCell,
-  collections::{HashMap, HashSet, hash_map::Entry},
+  collections::{HashMap, hash_map::Entry},
   iter::once,
   ops::{Deref, DerefMut},
   sync::{
@@ -15,7 +15,7 @@ use parley::{
   GenericFamily, GlyphRun, LayoutContext, TextStyle, TreeBuilder,
   fontique::{
     Attributes, Blob, Collection, CollectionOptions, FallbackKey, FamilyId, FontInfoOverride,
-    QueryFamily, QueryStatus, Script, ScriptExt,
+    FontStyle, QueryFamily, QueryStatus, Script, ScriptExt,
   },
 };
 use skrifa::{
@@ -629,6 +629,37 @@ fn with_layout_context<R>(f: impl FnOnce(&mut LayoutContext<InlineBrush>) -> R) 
 
 static FONT_CONTEXT_NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
+/// A font family produced by [`Fonts::register`], with the faces it contains.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct RegisteredFamily {
+  /// Family name as stored by the font system (normalized; reflects any override).
+  pub name: String,
+  /// Faces registered under this family.
+  pub faces: Vec<RegisteredFace>,
+}
+
+/// A single face within a [`RegisteredFamily`].
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct RegisteredFace {
+  /// Weight class, typically `1.0..=1000.0`.
+  pub weight: f32,
+  /// CSS `font-style` value (`normal`, `italic`, or `oblique [<angle>deg]`).
+  pub style: String,
+  /// Width as a percentage of normal (e.g. `100.0`).
+  pub width: f32,
+  /// Index of the face within its source collection.
+  pub index: u32,
+}
+
+fn font_style_css(style: FontStyle) -> String {
+  match style {
+    FontStyle::Normal => "normal".to_string(),
+    FontStyle::Italic => "italic".to_string(),
+    FontStyle::Oblique(None) => "oblique".to_string(),
+    FontStyle::Oblique(Some(angle)) => format!("oblique {angle}deg"),
+  }
+}
+
 /// A context for managing fonts in the rendering system.
 pub struct Fonts {
   /// Identity of this `Fonts`, used to key the per-thread query-context cache.
@@ -643,9 +674,9 @@ pub struct Fonts {
   /// Registered families in registration order, re-applied to every script's fallback
   /// bucket via `set_fallbacks` so coverage fallback follows registration order.
   fallback_families: Vec<FamilyId>,
-  /// Keys of fonts already registered, so re-registering the same font is a no-op
-  /// (keyed by content + family-name override).
-  registered: HashSet<u64>,
+  /// Fonts already registered (keyed by content + family-name override), mapped to the
+  /// families they produced so re-registering is a no-op that still returns them.
+  registered: HashMap<u64, Box<[RegisteredFamily]>>,
 }
 
 impl Clone for Fonts {
@@ -673,7 +704,7 @@ impl Default for Fonts {
         source_cache: Default::default(),
       },
       fallback_families: Vec::new(),
-      registered: HashSet::new(),
+      registered: HashMap::new(),
     }
   }
 }
@@ -853,9 +884,9 @@ impl Fonts {
     })
   }
 
-  /// Loads font into internal font db, decoding and skipping fonts already
-  /// registered in this context (deduped by content + family name).
-  pub fn register(&mut self, font: FontResource) -> Result<(), FontError> {
+  /// Registers a font, decoding it and skipping fonts already registered in this
+  /// context (deduped by content + family name). Returns the families it produced.
+  pub fn register(&mut self, font: FontResource) -> Result<Vec<RegisteredFamily>, FontError> {
     let FontResource {
       source,
       info_override,
@@ -863,17 +894,35 @@ impl Fonts {
     } = font;
 
     let key = registration_key(source.as_ref(), info_override.as_ref());
-    if self.registered.contains(&key) {
-      return Ok(());
+    if let Some(cached) = self.registered.get(&key) {
+      return Ok(cached.to_vec());
     }
 
     let blob = source.into_blob()?;
-    let registered_families = self
+    let registered_fonts = self
       .parley_context
       .collection
       .register_fonts(blob, info_override);
 
-    for (family, _) in registered_families {
+    let mut families = Vec::with_capacity(registered_fonts.len());
+    for (family, faces) in registered_fonts {
+      let faces = faces
+        .iter()
+        .map(|face| RegisteredFace {
+          weight: face.weight().value(),
+          style: font_style_css(face.style()),
+          width: face.width().percentage(),
+          index: face.index(),
+        })
+        .collect();
+      let name = self
+        .parley_context
+        .collection
+        .family_name(family)
+        .unwrap_or_default()
+        .to_string();
+      families.push(RegisteredFamily { name, faces });
+
       if let Some(generic_family) = generic_family {
         self
           .parley_context
@@ -894,10 +943,12 @@ impl Fonts {
       );
     }
 
-    self.registered.insert(key);
+    self
+      .registered
+      .insert(key, families.clone().into_boxed_slice());
     self.version.fetch_add(1, Ordering::Relaxed);
 
-    Ok(())
+    Ok(families)
   }
 }
 

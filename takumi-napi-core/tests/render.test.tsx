@@ -84,9 +84,9 @@ test("no crash without fonts and images", () => {
 });
 
 describe("setup", () => {
-  test("loadFonts", async () => {
-    const count = await renderer.loadFonts(fontBuffers);
-    expect(count).toBe(files.length);
+  test("registerFonts", async () => {
+    const registered = await renderer.registerFonts(fontBuffers);
+    expect(registered).toHaveLength(files.length);
   });
 });
 
