@@ -92,22 +92,39 @@ impl ToCss for BlockEllipsis {
   }
 }
 
-/// `continue`: `auto | discard`. Not inherited.
+/// `continue`: `normal | collapse | -webkit-legacy`. Not inherited.
+///
+/// Mirrors Blink's value set. `collapse` (and the legacy `-webkit-legacy`) turns
+/// the box into a fragmentation context that discards content past `max-lines`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum Continue {
-  /// Default fragmentation behavior; content is not discarded.
+  /// Default fragmentation behavior; content is not clamped.
   #[default]
-  Auto,
-  /// Discard boxes that overflow the `max-lines` limit.
-  Discard,
+  Normal,
+  /// Discard content past the `max-lines` limit.
+  Collapse,
+  /// Legacy `-webkit-line-clamp` behavior; treated like `collapse`.
+  WebkitLegacy,
 }
 
 declare_enum_from_css_impl!(
   Continue,
-  "auto" => Continue::Auto,
-  "discard" => Continue::Discard,
+  "normal" => Continue::Normal,
+  "collapse" => Continue::Collapse,
+  "-webkit-legacy" => Continue::WebkitLegacy,
 );
+
+impl Continue {
+  /// Whether this value clamps content past `max-lines`.
+  ///
+  /// Blink only honors `-webkit-legacy` for `display: -webkit-box`; takumi has no
+  /// such display, so it treats the legacy value as `collapse` to keep
+  /// `-webkit-line-clamp` working.
+  pub const fn collapses(self) -> bool {
+    matches!(self, Self::Collapse | Self::WebkitLegacy)
+  }
+}
 
 impl Animatable for Continue {}
 
@@ -131,7 +148,7 @@ impl LineClampShorthand {
     Self {
       max_lines,
       block_ellipsis,
-      line_continue: Continue::Discard,
+      line_continue: Continue::Collapse,
     }
   }
 }

@@ -139,7 +139,14 @@ impl ComputedStyle {
   }
 
   /// Resolves the `max-lines`/`block-ellipsis` longhands into a clamp for layout.
+  ///
+  /// Per CSS Overflow 4, `max-lines` only clamps inside a fragmentation context,
+  /// i.e. when `continue` collapses (`line-clamp`/`-webkit-line-clamp` set this).
   fn resolved_line_clamp(&self) -> Option<LineClamp> {
+    if !self.r#continue.collapses() {
+      return None;
+    }
+
     match self.max_lines {
       MaxLines::Lines(count) if count >= 1 => Some(LineClamp {
         count,

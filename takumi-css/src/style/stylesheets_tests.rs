@@ -173,12 +173,12 @@ fn line_clamp_shorthand_expands_to_longhands() {
     parent.block_ellipsis,
     BlockEllipsis::String("...".to_owned())
   );
-  assert_eq!(parent.r#continue, Continue::Discard);
+  assert_eq!(parent.r#continue, Continue::Collapse);
 
   // Only `block-ellipsis` inherits; `max-lines` and `continue` do not.
   let child = Style::default().inherit(&parent);
   assert_eq!(child.max_lines, MaxLines::None);
-  assert_eq!(child.r#continue, Continue::Auto);
+  assert_eq!(child.r#continue, Continue::Normal);
   assert_eq!(
     child.block_ellipsis,
     BlockEllipsis::String("...".to_owned())
@@ -190,6 +190,23 @@ fn continue_property_resolves_by_name() {
   let continue_id = PropertyId::Longhand(LonghandId::Continue);
   assert_eq!(PropertyId::from_kebab_case("continue"), continue_id);
   assert_eq!(PropertyId::from_camel_case("continue"), continue_id);
+}
+
+#[test]
+fn max_lines_clamps_only_inside_fragmentation_context() {
+  // Bare `max-lines` (continue: normal) does not clamp.
+  let bare = inherited_style_from_pairs([("max-lines", "3")], &ComputedStyle::default());
+  assert!(bare.text_wrap_mode_and_line_clamp().1.is_none());
+
+  // `continue: collapse` turns it into a fragmentation context that clamps.
+  let clamped = inherited_style_from_pairs(
+    [("max-lines", "3"), ("continue", "collapse")],
+    &ComputedStyle::default(),
+  );
+  assert_eq!(
+    clamped.text_wrap_mode_and_line_clamp().1.map(|c| c.count),
+    Some(3)
+  );
 }
 
 #[test]
