@@ -286,7 +286,7 @@ pub fn make_pretty_text(
   break_lines(
     inline_layout,
     adjusted_width,
-    None,
+    max_height,
     line_height_hint,
     text_wrap_mode,
     spans,
