@@ -13,18 +13,18 @@ autobenches = false
 
 [dependencies.takumi-base]
 path = "../takumi-base"
-version = "=0"
+version = "0.1"
 default-features = false
 
 [dependencies.takumi-raster]
 path = "../takumi-raster"
-version = "=0"
+version = "0.1"
 default-features = false
 optional = true
 
 [dependencies.takumi-svg]
 path = "../takumi-svg"
-version = "=0"
+version = "0.1"
 default-features = false
 optional = true
 
