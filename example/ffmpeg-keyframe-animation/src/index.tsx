@@ -42,7 +42,7 @@ const ffmpeg = spawn(
   { stdin: "pipe", stdout: "ignore", stderr: "ignore" },
 );
 
-const fetchedResources = await Promise.all(
+const images = await Promise.all(
   [
     { src: "logo.svg", path: "takumi.svg" },
     { src: "background.jpg", path: "martin-martz-W0NRebXbsjM-unsplash.jpg" },
@@ -82,7 +82,7 @@ const framePromises = Array.from({ length: totalFrames }, (_, i) => {
     devicePixelRatio,
     format: "raw",
     keyframes,
-    fetchedResources,
+    images,
     timeMs,
   });
 });

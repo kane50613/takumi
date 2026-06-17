@@ -34,7 +34,7 @@ import { ImageResponse } from "takumi-js/response";
 export async function GET() {
   return new ImageResponse(<OgImage />, {
     // [!code ++]
-    fetchedResources: [
+    images: [
       {
         src: "my-logo",
         data: await fetch("/logo.png").then((res) => res.arrayBuffer()),

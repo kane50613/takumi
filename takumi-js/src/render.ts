@@ -15,11 +15,28 @@ import { fromHtml } from "@takumi-rs/helpers/html";
 
 type InnerRenderOptions = napi.RenderOptions | wasm.RenderOptions;
 
+type ImageLoaderData = Uint8Array | ArrayBuffer;
+
+/**
+ * A per-render image, provided by `src` key (usable in any `src` field or in the
+ * `background-image` / `mask-image` CSS properties). `data` may be the bytes, or a
+ * sync/async loader function that is only invoked when the image is resolved.
+ */
+export type ImageLoader = {
+  src: string;
+  data: ImageLoaderData | (() => ImageLoaderData | Promise<ImageLoaderData>);
+};
+
 type RenderOptionsWithRenderer = InnerRenderOptions & {
   renderer: napi.Renderer | wasm.Renderer;
   signal?: AbortSignal;
   jsx?: FromJsxOptions;
   resourcesOptions?: FetchResourcesOptions;
+  /**
+   * Images provided up front by `src` key, each carrying bytes or a sync/async
+   * loader. Takes precedence over automatically fetching external `src` URLs.
+   */
+  images?: ImageLoader[];
   /**
    * @description The emoji provider to use when rendering emojis. If set to `"from-font"`, the renderer will attempt to source emoji glyphs from the loaded fonts.
    * @default "twemoji"
@@ -42,6 +59,26 @@ function isTakumiNode(element: unknown): element is Node {
   }
 
   return element.type === "container" || element.type === "text" || element.type === "image";
+}
+
+/**
+ * Resolves per-render image loaders to concrete `{ src, data }` entries,
+ * deduplicating by `src` and invoking each loader function (sync or async) once.
+ */
+async function resolveImageLoaders(
+  images: ImageLoader[],
+): Promise<Array<{ src: string; data: ImageLoaderData }>> {
+  const bySrc = new Map<string, ImageLoader>();
+  for (const image of images) {
+    if (!bySrc.has(image.src)) bySrc.set(image.src, image);
+  }
+
+  return Promise.all(
+    [...bySrc.values()].map(async (image) => ({
+      src: image.src,
+      data: typeof image.data === "function" ? await image.data() : image.data,
+    })),
+  );
 }
 
 async function transformElement(element: RenderInput, options?: RenderOptions) {
@@ -98,12 +135,14 @@ export async function render(element: RenderInput, options?: RenderOptions) {
   const emojiType = options?.emoji ?? "twemoji";
 
   const node = emojiType !== "from-font" ? extractEmojis(originalNode, emojiType) : originalNode;
-  const fetchedResources =
-    options?.fetchedResources ??
-    (await fetchResources(extractResourceUrls(node), options?.resourcesOptions));
+  const fetchedResources = options?.images
+    ? await resolveImageLoaders(options.images)
+    : (options?.fetchedResources ??
+      (await fetchResources(extractResourceUrls(node), options?.resourcesOptions)));
 
   const renderOptions = {
     ...options,
+    images: undefined,
     fetchedResources,
     stylesheets: [...(options?.stylesheets ?? []), ...stylesheets],
   };
