@@ -1,4 +1,4 @@
-//! End-to-end SVG rendering: run takumi-core layout, walk the tree, emit SVG.
+//! End-to-end SVG rendering: run takumi-base layout, walk the tree, emit SVG.
 
 use std::collections::HashMap;
 use std::io;
@@ -6,7 +6,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use taffy::{AbsoluteAxis, AvailableSpace, NodeId, Point, Rect, Size};
-use takumi_core::{
+use takumi_base::{
   GlobalContext,
   context::RenderContext,
   error::Result,
@@ -159,7 +159,7 @@ fn emit_box_chrome(
 
   emit_box_shadows(node, layout, x, y, width, height, doc)?;
 
-  // Border/radius geometry is reused from takumi-core (the same `BorderProperties`
+  // Border/radius geometry is reused from takumi-base (the same `BorderProperties`
   // the raster backend rasterizes) instead of being reimplemented here.
   let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
   let rounded = !border.is_zero();
@@ -709,7 +709,7 @@ fn emit_image_node(
   doc.end_group(group)
 }
 
-/// Emits the element's borders, reusing takumi-core's `BorderProperties` geometry.
+/// Emits the element's borders, reusing takumi-base's `BorderProperties` geometry.
 /// A uniform-color solid border becomes one even-odd "ring" (outer rounded
 /// border-box minus inner rounded padding-box). Mixed per-side colors clip that
 /// ring and fill each side's polygon in its own color (diagonal corner split).

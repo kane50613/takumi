@@ -2,7 +2,7 @@ use std::{fs::read, net::SocketAddr, sync::Arc};
 
 use axum::{Router, extract::State, http::StatusCode, response::Response, routing::get};
 use globwalk::glob;
-use takumi::core::{GlobalContext, resources::font::FontResource};
+use takumi::base::{GlobalContext, resources::font::FontResource};
 use tokio::net::TcpListener;
 use tracing::{error, info};
 

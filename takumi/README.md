@@ -3,7 +3,7 @@
 <!-- cargo-rdme start -->
 
 Takumi renders UI component trees to images. This crate is a thin facade that
-re-exports the backend-agnostic core ([`takumi_core`], as [`core`]) and the
+re-exports the backend-agnostic core ([`takumi_base`], as [`base`]) and the
 rendering backends under namespaced modules: the raster backend
 ([`takumi_raster`], as [`raster`]) and the vector/SVG backend ([`takumi_svg`],
 as [`svg`]).
@@ -11,7 +11,7 @@ as [`svg`]).
 ## Example
 
 ```rust
-use takumi::core::{
+use takumi::base::{
   GlobalContext,
   layout::{Viewport, node::Node, style::{Length::Px, Style, StyleDeclaration}},
   resources::font::FontResource,

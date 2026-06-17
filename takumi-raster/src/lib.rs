@@ -5,10 +5,10 @@
 //! the [`render`] entry point. Used via the `takumi` umbrella (`takumi::raster`) or
 //! directly.
 //!
-//! Re-exports the `takumi-core` root so painting code resolves `crate::layout`,
+//! Re-exports the `takumi-base` root so painting code resolves `crate::layout`,
 //! `crate::resources`, `crate::Result`, etc. against the shared core.
 
-pub use takumi_core::*;
+pub use takumi_base::*;
 
 /// Background and color drawing functions
 mod background_drawing;

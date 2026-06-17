@@ -17,7 +17,7 @@ use std::{fmt::Display, ops::Deref};
 use napi::{De, Env, Error, bindgen_prelude::*};
 use parley::{FontStyle, FontWeight, fontique::FontInfoOverride};
 use serde::{Deserialize, Deserializer, de::DeserializeOwned};
-use takumi_core::{
+use takumi_base::{
   layout::style::{KeyframesRule, StyleSheet},
   resources::font::FontResource,
 };

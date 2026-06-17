@@ -6,7 +6,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::from_str;
 use std::borrow::Cow;
-use takumi::core::layout::{Viewport, node::Node};
+use takumi::base::layout::{Viewport, node::Node};
 use takumi::raster::{DitheringAlgorithm, ImageOutputFormat, RenderOptions, render, write_image};
 use tokio::task::spawn_blocking;
 
