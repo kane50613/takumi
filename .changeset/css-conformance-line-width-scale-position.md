@@ -1,5 +1,5 @@
 ---
-"takumi-css": major
+"takumi-css": minor
 "takumi": major
 ---
 
