@@ -120,9 +120,11 @@ impl<'i> FromCss<'i> for LineClamp {
       return Ok(Self::default());
     }
 
-    let block_ellipsis = input
-      .try_parse(BlockEllipsis::from_css)
-      .unwrap_or(BlockEllipsis::Auto);
+    let block_ellipsis = if input.is_exhausted() {
+      BlockEllipsis::Auto
+    } else {
+      BlockEllipsis::from_css(input)?
+    };
 
     Ok(Self::clamp(Some(count as u32), block_ellipsis))
   }
