@@ -14,8 +14,8 @@ use image::{Rgba, RgbaImage};
 use parley::{
   GenericFamily, GlyphRun, LayoutContext, TextStyle, TreeBuilder,
   fontique::{
-    Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, QueryFamily,
-    QueryStatus, Script, ScriptExt,
+    Attributes, Blob, Collection, CollectionOptions, FallbackKey, FamilyId, FontInfoOverride,
+    QueryFamily, QueryStatus, Script, ScriptExt,
   },
 };
 use skrifa::{
@@ -32,11 +32,11 @@ use skrifa::{
 use thiserror::Error;
 use tiny_skia::{IntSize, PathSegment as Command, Pixmap};
 
-use xxhash_rust::xxh3::{Xxh3, xxh3_64};
+use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   layout::inline::{InlineBrush, InlineLayout},
-  resources::{font_cache::FontCache, image_buffer::ImageBuffer, image_decoder::decode_png},
+  resources::{image_buffer::ImageBuffer, image_decoder::decode_png},
 };
 
 fn pixmap_from_image_buffer(buffer: ImageBuffer) -> Option<Pixmap> {
@@ -640,8 +640,9 @@ pub struct Fonts {
   /// rebuilt (registering a face costs ~60 µs; cloning the assembled context ~1 µs).
   /// See [`Fonts::with_parley_context_mut`].
   parley_context: parley::FontContext,
-  /// Content-addressed decoded-font cache, shared across clones/forks of this context.
-  decode_cache: Arc<FontCache>,
+  /// Registered families in registration order, re-applied to every script's fallback
+  /// bucket via `set_fallbacks` so coverage fallback follows registration order.
+  fallback_families: Vec<FamilyId>,
   /// Keys of fonts already registered, so re-registering the same font is a no-op
   /// (keyed by content + family-name override).
   registered: HashSet<u64>,
@@ -653,7 +654,7 @@ impl Clone for Fonts {
       id: FONT_CONTEXT_NEXT_ID.fetch_add(1, Ordering::Relaxed),
       version: AtomicU64::new(self.version.load(Ordering::Relaxed)),
       parley_context: self.parley_context.clone(),
-      decode_cache: Arc::clone(&self.decode_cache),
+      fallback_families: self.fallback_families.clone(),
       registered: self.registered.clone(),
     }
   }
@@ -671,7 +672,7 @@ impl Default for Fonts {
         }),
         source_cache: Default::default(),
       },
-      decode_cache: Arc::new(FontCache::default()),
+      fallback_families: Vec::new(),
       registered: HashSet::new(),
     }
   }
@@ -852,19 +853,8 @@ impl Fonts {
     })
   }
 
-  /// The decoded-font cache owned by this context (shared across its clones/forks).
-  pub fn decode_cache(&self) -> &FontCache {
-    &self.decode_cache
-  }
-
-  /// A shared handle to this context's decoded-font cache, for use off the context borrow
-  /// (e.g. a parallel decode phase before `register`).
-  pub fn decode_cache_arc(&self) -> Arc<FontCache> {
-    Arc::clone(&self.decode_cache)
-  }
-
-  /// Loads font into internal font db, decoding through the cache and skipping
-  /// fonts already registered in this context (deduped by content + family name).
+  /// Loads font into internal font db, decoding and skipping fonts already
+  /// registered in this context (deduped by content + family name).
   pub fn register(&mut self, font: FontResource) -> Result<(), FontError> {
     let FontResource {
       source,
@@ -877,27 +867,31 @@ impl Fonts {
       return Ok(());
     }
 
-    let cache = Arc::clone(&self.decode_cache);
-    let blob = source.into_blob(&cache)?;
-    let fonts = self
+    let blob = source.into_blob()?;
+    let registered_families = self
       .parley_context
       .collection
       .register_fonts(blob, info_override);
 
-    for (family, _) in fonts {
+    for (family, _) in registered_families {
       if let Some(generic_family) = generic_family {
         self
           .parley_context
           .collection
           .append_generic_families(generic_family, once(family));
       }
-
-      for (script, _) in Script::all_samples() {
-        self
-          .parley_context
-          .collection
-          .append_fallbacks(FallbackKey::new(*script, None), once(family));
+      if !self.fallback_families.contains(&family) {
+        self.fallback_families.push(family);
       }
+    }
+
+    // `set_fallbacks` replaces a script's bucket, so re-apply the whole accumulated list
+    // to every script; parley's shaper reads these buckets for per-cluster coverage.
+    for (script, _) in Script::all_samples() {
+      self.parley_context.collection.set_fallbacks(
+        FallbackKey::new(*script, None),
+        self.fallback_families.iter().copied(),
+      );
     }
 
     self.registered.insert(key);
@@ -971,30 +965,24 @@ where
 }
 
 impl<'a> FontSource<'a> {
-  fn into_blob_variant(self, cache: &FontCache) -> Result<Self, FontError> {
+  fn into_blob_variant(self) -> Result<Self, FontError> {
     match self {
-      Self::Raw(raw) => Ok(Self::Blob(decode_cached(raw, cache)?)),
+      Self::Raw(raw) => Ok(Self::Blob(decode_font(raw)?)),
       Self::Blob(_) => Ok(self),
     }
   }
 
-  fn into_blob(self, cache: &FontCache) -> Result<Blob<u8>, FontError> {
+  fn into_blob(self) -> Result<Blob<u8>, FontError> {
     match self {
-      Self::Raw(raw) => decode_cached(raw, cache),
+      Self::Raw(raw) => decode_font(raw),
       Self::Blob(blob) => Ok(blob),
     }
   }
 }
 
-/// Decodes raw font bytes to a blob, memoizing the (expensive) woff2/woff decode by content.
-fn decode_cached(raw: Cow<'_, [u8]>, cache: &FontCache) -> Result<Blob<u8>, FontError> {
-  let key = xxh3_64(raw.as_ref());
-  if let Some(blob) = cache.get(key) {
-    return Ok(blob);
-  }
-  let blob = Blob::new(Arc::new(load_font(raw, None)?));
-  cache.insert(key, blob.clone());
-  Ok(blob)
+/// Decodes raw font bytes (decompressing woff2/woff) into a blob.
+fn decode_font(raw: Cow<'_, [u8]>) -> Result<Blob<u8>, FontError> {
+  Ok(Blob::new(Arc::new(load_font(raw, None)?)))
 }
 
 impl<'a> AsRef<[u8]> for FontSource<'a> {
@@ -1043,10 +1031,9 @@ impl<'a> FontResource<'a> {
     }
   }
 
-  /// Convert to resolved font resource, decoding (and caching) via the given context cache.
-  /// Woff2 and Woff are decompressed into a raw buffer.
-  pub fn into_resolved(self, cache: &FontCache) -> Result<Self, FontError> {
-    let source = self.source.into_blob_variant(cache)?;
+  /// Convert to resolved font resource, decompressing woff2/woff into a raw buffer.
+  pub fn into_resolved(self) -> Result<Self, FontError> {
+    let source = self.source.into_blob_variant()?;
     Ok(Self {
       source,
       info_override: self.info_override,

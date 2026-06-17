@@ -305,7 +305,6 @@ impl Renderer {
     let mut fonts = Fonts::default();
 
     if load_default_fonts {
-      let cache = fonts.decode_cache_arc();
       let default_fonts_resources = crate::pool::install(|| {
         EMBEDDED_FONTS
           .par_iter()
@@ -316,7 +315,7 @@ impl Renderer {
                 ..Default::default()
               })
               .generic_family(*generic)
-              .into_resolved(&cache)
+              .into_resolved()
               .map_err(|e| Error::from_reason(format!("Failed to load default font: {e}")))
           })
           .collect::<Result<Vec<_>>>()
@@ -340,21 +339,11 @@ impl Renderer {
         .map(|font| parse_font_input(env, font))
         .collect::<Result<Vec<_>>>()?;
 
-      let cache = {
-        let state = renderer
-          .state
-          .read()
-          .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-        state.fonts.decode_cache_arc()
-      };
-
       let custom_fonts_resources = crate::pool::install(|| {
         buffers
           .par_iter()
           .with_min_len(2)
-          .map(|(font, buffer): &(FontInput, Buffer)| {
-            resolve_font_resource(font, buffer.as_ref(), &cache)
-          })
+          .map(|(font, buffer): &(FontInput, Buffer)| resolve_font_resource(font, buffer.as_ref()))
           .collect::<Result<Vec<_>>>()
       })?;
 
@@ -369,22 +358,6 @@ impl Renderer {
     }
 
     Ok(renderer)
-  }
-
-  /// Configures this renderer's decoded-font cache (on by default, 256 MiB).
-  #[napi(js_name = "configureFontCache")]
-  pub fn configure_font_cache(&self, options: crate::FontCacheOptions) -> Result<()> {
-    if let Some(max_bytes) = options.max_bytes {
-      let state = self
-        .state
-        .read()
-        .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-      state
-        .fonts
-        .decode_cache()
-        .set_max_bytes(max_bytes.max(0.0) as usize);
-    }
-    Ok(())
   }
 
   /// Configures this renderer's decoded-image cache (on by default, 256 MiB).

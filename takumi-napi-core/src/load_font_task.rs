@@ -21,22 +21,12 @@ impl Task for LoadFontTask {
 
     let mut loaded_count = 0;
 
-    let cache = {
-      let state = self
-        .state
-        .read()
-        .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-      state.fonts.decode_cache_arc()
-    };
-
     let resources = crate::pool::install(|| {
       self
         .buffers
         .par_iter()
         .with_min_len(2)
-        .map(|(font, buffer): &(FontInput, Buffer)| {
-          resolve_font_resource(font, buffer.as_ref(), &cache)
-        })
+        .map(|(font, buffer): &(FontInput, Buffer)| resolve_font_resource(font, buffer.as_ref()))
         .collect::<Result<Vec<_>>>()
     })?;
 

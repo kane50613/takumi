@@ -19,17 +19,10 @@ use parley::{FontStyle, FontWeight, fontique::FontInfoOverride};
 use serde::{Deserialize, Deserializer, de::DeserializeOwned};
 use takumi_base::{
   layout::style::{KeyframesRule, StyleSheet},
-  resources::{font::FontResource, font_cache::FontCache},
+  resources::font::FontResource,
 };
 
 pub use renderer::Renderer;
-
-/// Options for `Renderer.configureFontCache`.
-#[napi(object)]
-pub struct FontCacheOptions {
-  /// Maximum bytes of decoded fonts to keep in this renderer's cache. `0` disables (and clears) it.
-  pub max_bytes: Option<f64>,
-}
 
 /// Options for `Renderer.configureImageCache`.
 #[napi(object)]
@@ -84,7 +77,6 @@ pub(crate) fn parse_font_input(env: Env, font: Object) -> Result<(FontInput, Buf
 pub(crate) fn resolve_font_resource<'a>(
   font: &'a FontInput,
   buffer: &'a [u8],
-  cache: &FontCache,
 ) -> Result<FontResource<'a>> {
   FontResource::new(buffer)
     .override_info(FontInfoOverride {
@@ -94,7 +86,7 @@ pub(crate) fn resolve_font_resource<'a>(
       weight: font.weight.map(|weight| FontWeight::new(weight as f32)),
       axes: None,
     })
-    .into_resolved(cache)
+    .into_resolved()
     .map_err(|e| Error::from_reason(format!("Failed to load font: {e}")))
 }
 

@@ -176,19 +176,6 @@ impl Renderer {
     Ok(buffer)
   }
 
-  /// Configures this renderer's decoded-font cache (on by default, 256 MiB).
-  #[wasm_bindgen(js_name = configureFontCache)]
-  pub fn configure_font_cache(&self, options: wasm_bindgen::JsValue) -> Result<(), js_sys::Error> {
-    let options: crate::FontCacheOptions = from_value(options).map_err(map_error)?;
-    if let Some(max_bytes) = options.max_bytes {
-      self
-        .read_state()?
-        .decode_cache()
-        .set_max_bytes(max_bytes.max(0.0) as usize);
-    }
-    Ok(())
-  }
-
   /// Configures this renderer's decoded-image cache (on by default, 256 MiB).
   #[wasm_bindgen(js_name = configureImageCache)]
   pub fn configure_image_cache(&self, options: wasm_bindgen::JsValue) -> Result<(), js_sys::Error> {
