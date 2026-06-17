@@ -54,7 +54,7 @@ fn load_default_fonts(fonts: &mut Fonts) -> Result<(), js_sys::Error> {
       })
       .generic_family(*generic_family);
 
-    fonts.load_and_store(resource).map_err(map_error)?;
+    fonts.register(resource).map_err(map_error)?;
   }
 
   Ok(())
@@ -64,20 +64,20 @@ fn load_font_internal(fonts: &mut Fonts, font: Font) -> Result<(), js_sys::Error
   match font {
     Font::Buffer(buffer) => {
       fonts
-        .load_and_store(FontResource::new(buffer.into_vec()))
+        .register(FontResource::new(buffer.into_vec()))
         .map_err(map_error)?;
     }
     Font::Object(details) => {
       fonts
-        .load_and_store(FontResource::new(details.data.into_vec()).override_info(
-          FontInfoOverride {
+        .register(
+          FontResource::new(details.data.into_vec()).override_info(FontInfoOverride {
             family_name: details.name.as_deref(),
             style: details.style.map(Into::into),
             weight: details.weight.map(|weight| FontWeight::new(weight as f32)),
             axes: None,
             width: None,
-          },
-        ))
+          }),
+        )
         .map_err(map_error)?;
     }
   }

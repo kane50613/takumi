@@ -33,7 +33,7 @@ fn font_context_with_font() -> Fonts {
     .join("../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf");
   let data = std::fs::read(&path).expect("read test font");
   fonts
-    .load_and_store(FontResource::new(data))
+    .register(FontResource::new(data))
     .expect("load test font");
   fonts
 }

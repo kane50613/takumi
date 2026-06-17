@@ -22,7 +22,7 @@ const LONG_TEXT: &str = "Typography is the art and technique of arranging type t
 fn load_global() -> Fonts {
   let mut g = Fonts::default();
   let regular: &[u8] = include_bytes!("../../assets/fonts/geist/Geist[wght].woff2");
-  g.load_and_store(
+  g.register(
     FontResource::new(regular.to_vec())
       .override_info(FontInfoOverride {
         family_name: Some("Geist"),
@@ -32,7 +32,7 @@ fn load_global() -> Fonts {
   )
   .unwrap();
   let emoji: &[u8] = include_bytes!("../../assets/fonts/twemoji/TwemojiMozilla-colr.woff2");
-  g.load_and_store(
+  g.register(
     FontResource::new(emoji.to_vec())
       .override_info(FontInfoOverride {
         family_name: Some("Twemoji Mozilla"),

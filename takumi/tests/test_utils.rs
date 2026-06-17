@@ -94,7 +94,7 @@ fn create_test_context() -> Fonts {
       .unwrap();
 
     context
-      .load_and_store(
+      .register(
         FontResource::new(font_data)
           .override_info(FontInfoOverride {
             family_name: Some(name),

@@ -46,7 +46,7 @@ impl Task for LoadFontTask {
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
     for resource in resources.into_iter() {
-      if state.fonts.load_and_store(resource).is_ok() {
+      if state.fonts.register(resource).is_ok() {
         loaded_count += 1;
       }
     }

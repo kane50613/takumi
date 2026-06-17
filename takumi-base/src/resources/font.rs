@@ -631,9 +631,15 @@ static FONT_CONTEXT_NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
 /// A context for managing fonts in the rendering system.
 pub struct Fonts {
+  /// Identity of this `Fonts`, used to key the per-thread query-context cache.
   id: u64,
+  /// Bumped on every `register`; invalidates the per-thread cached clone.
   version: AtomicU64,
-  inner: parley::FontContext,
+  /// The assembled parley context: registered faces, fallback order, and source
+  /// cache. Querying needs `&mut`, so it is cloned per thread on demand rather than
+  /// rebuilt (registering a face costs ~60 µs; cloning the assembled context ~1 µs).
+  /// See [`Fonts::with_parley_context_mut`].
+  parley_context: parley::FontContext,
   /// Content-addressed decoded-font cache, shared across clones/forks of this context.
   decode_cache: Arc<FontCache>,
   /// Keys of fonts already registered, so re-registering the same font is a no-op
@@ -646,7 +652,7 @@ impl Clone for Fonts {
     Self {
       id: FONT_CONTEXT_NEXT_ID.fetch_add(1, Ordering::Relaxed),
       version: AtomicU64::new(self.version.load(Ordering::Relaxed)),
-      inner: self.inner.clone(),
+      parley_context: self.parley_context.clone(),
       decode_cache: Arc::clone(&self.decode_cache),
       registered: self.registered.clone(),
     }
@@ -658,7 +664,7 @@ impl Default for Fonts {
     Self {
       id: FONT_CONTEXT_NEXT_ID.fetch_add(1, Ordering::Relaxed),
       version: AtomicU64::new(0),
-      inner: parley::FontContext {
+      parley_context: parley::FontContext {
         collection: Collection::new(CollectionOptions {
           system_fonts: false,
           shared: false,
@@ -675,19 +681,26 @@ impl Deref for Fonts {
   type Target = parley::FontContext;
 
   fn deref(&self) -> &Self::Target {
-    &self.inner
+    &self.parley_context
   }
 }
 
 impl DerefMut for Fonts {
   fn deref_mut(&mut self) -> &mut Self::Target {
-    &mut self.inner
+    &mut self.parley_context
   }
 }
 
 impl Fonts {
+  /// Runs `f` against a `&mut parley::FontContext` for this `Fonts`.
+  ///
+  /// parley queries need `&mut`, but `Fonts` is shared as `&self` across concurrent
+  /// renders. Each thread keeps one cached clone keyed by `(id, version)`: a render
+  /// whose font set is unchanged reuses it; a `register` bumps `version` and the next
+  /// call re-clones. This pays the ~1 µs clone at most once per thread per font-set
+  /// change, instead of per query.
   #[inline]
-  fn with_inner_mut<R>(&self, f: impl FnOnce(&mut parley::FontContext) -> R) -> R {
+  fn with_parley_context_mut<R>(&self, f: impl FnOnce(&mut parley::FontContext) -> R) -> R {
     let current_version = self.version.load(Ordering::Relaxed);
     let id = self.id;
     let outcome = FONT_CONTEXT_CACHE.with(|cell| {
@@ -701,16 +714,16 @@ impl Fonts {
         None => true,
       };
       if needs_clone {
-        *borrow = Some((id, current_version, self.inner.clone()));
+        *borrow = Some((id, current_version, self.parley_context.clone()));
       }
-      let Some((_, _, inner)) = borrow.as_mut() else {
+      let Some((_, _, context)) = borrow.as_mut() else {
         return Err(f);
       };
-      Ok(f(inner))
+      Ok(f(context))
     });
     match outcome {
       Ok(r) => r,
-      Err(f) => f(&mut self.inner.clone()),
+      Err(f) => f(&mut self.parley_context.clone()),
     }
   }
 
@@ -803,7 +816,7 @@ impl Fonts {
     attributes: Attributes,
     font_size: f32,
   ) -> Option<f32> {
-    self.with_inner_mut(|ctx| {
+    self.with_parley_context_mut(|ctx| {
       let parley::FontContext {
         collection,
         source_cache,
@@ -830,7 +843,7 @@ impl Fonts {
     root_style: TextStyle<'_, '_, InlineBrush>,
     func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),
   ) -> (InlineLayout, String) {
-    self.with_inner_mut(|fonts| {
+    self.with_parley_context_mut(|fonts| {
       with_layout_context(|layout_context| {
         let mut builder = layout_context.tree_builder(fonts, 1.0, true, &root_style);
         func(&mut builder);
@@ -845,14 +858,14 @@ impl Fonts {
   }
 
   /// A shared handle to this context's decoded-font cache, for use off the context borrow
-  /// (e.g. a parallel decode phase before `load_and_store`).
+  /// (e.g. a parallel decode phase before `register`).
   pub fn decode_cache_arc(&self) -> Arc<FontCache> {
     Arc::clone(&self.decode_cache)
   }
 
   /// Loads font into internal font db, decoding through the cache and skipping
   /// fonts already registered in this context (deduped by content + family name).
-  pub fn load_and_store(&mut self, font: FontResource) -> Result<(), FontError> {
+  pub fn register(&mut self, font: FontResource) -> Result<(), FontError> {
     let FontResource {
       source,
       info_override,
@@ -866,19 +879,22 @@ impl Fonts {
 
     let cache = Arc::clone(&self.decode_cache);
     let blob = source.into_blob(&cache)?;
-    let fonts = self.inner.collection.register_fonts(blob, info_override);
+    let fonts = self
+      .parley_context
+      .collection
+      .register_fonts(blob, info_override);
 
     for (family, _) in fonts {
       if let Some(generic_family) = generic_family {
         self
-          .inner
+          .parley_context
           .collection
           .append_generic_families(generic_family, once(family));
       }
 
       for (script, _) in Script::all_samples() {
         self
-          .inner
+          .parley_context
           .collection
           .append_fallbacks(FallbackKey::new(*script, None), once(family));
       }
@@ -916,19 +932,15 @@ mod dedup_tests {
     .unwrap();
 
     let mut ctx = Fonts::default();
-    ctx
-      .load_and_store(FontResource::new(font.as_slice()))
-      .unwrap();
-    ctx
-      .load_and_store(FontResource::new(font.as_slice()))
-      .unwrap();
+    ctx.register(FontResource::new(font.as_slice())).unwrap();
+    ctx.register(FontResource::new(font.as_slice())).unwrap();
 
     // The same font registered twice counts once.
     assert_eq!(ctx.registered.len(), 1);
 
     // The same bytes under a different family name is a distinct registration.
     ctx
-      .load_and_store(
+      .register(
         FontResource::new(font.as_slice()).override_info(FontInfoOverride {
           family_name: Some("Renamed"),
           ..Default::default()

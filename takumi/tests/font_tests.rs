@@ -27,7 +27,7 @@ fn test_ttf_font_loading() {
     .read_to_end(&mut font_data)
     .unwrap();
 
-  assert!(context.load_and_store(FontResource::new(font_data)).is_ok());
+  assert!(context.register(FontResource::new(font_data)).is_ok());
 }
 
 #[test]
@@ -40,7 +40,7 @@ fn test_ttc_font_loading() {
     .read_to_end(&mut font_data)
     .unwrap();
 
-  assert!(context.load_and_store(FontResource::new(font_data)).is_ok());
+  assert!(context.register(FontResource::new(font_data)).is_ok());
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn test_woff2_font_loading() {
     .read_to_end(&mut font_data)
     .unwrap();
 
-  assert!(context.load_and_store(FontResource::new(font_data)).is_ok());
+  assert!(context.register(FontResource::new(font_data)).is_ok());
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn test_invalid_format_detection() {
   let invalid_data = vec![0x00, 0x01, 0x02, 0x03];
   let mut context = Fonts::default();
 
-  let result = context.load_and_store(FontResource::new(invalid_data));
+  let result = context.register(FontResource::new(invalid_data));
   assert_matches!(result, Err(FontError::UnsupportedFormat));
 }
 
@@ -72,7 +72,7 @@ fn test_empty_data() {
   let empty_data = Vec::<u8>::new();
   let mut context = Fonts::default();
 
-  let result = context.load_and_store(FontResource::new(empty_data));
+  let result = context.register(FontResource::new(empty_data));
   assert_matches!(result, Err(FontError::UnsupportedFormat));
 }
 
@@ -82,6 +82,6 @@ fn test_too_short_data() {
   let short_data = vec![0x00, 0x01, 0x00];
   let mut context = Fonts::default();
 
-  let result = context.load_and_store(FontResource::new(short_data));
+  let result = context.register(FontResource::new(short_data));
   assert_matches!(result, Err(FontError::UnsupportedFormat));
 }

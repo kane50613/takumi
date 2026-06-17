@@ -2276,7 +2276,7 @@ mod tests {
       .read_to_end(&mut font_data)
       .unwrap_or_else(|error| panic!("failed to read test font {}: {error}", path.display()));
     context
-      .load_and_store(
+      .register(
         FontResource::new(font_data)
           .override_info(FontInfoOverride {
             family_name: Some("Geist"),

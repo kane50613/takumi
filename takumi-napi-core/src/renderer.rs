@@ -323,7 +323,7 @@ impl Renderer {
       })?;
 
       for resource in default_fonts_resources {
-        fonts.load_and_store(resource).map_err(map_error)?;
+        fonts.register(resource).map_err(map_error)?;
       }
     }
 
@@ -364,7 +364,7 @@ impl Renderer {
         .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
       for resource in custom_fonts_resources {
-        state.fonts.load_and_store(resource).map_err(map_error)?;
+        state.fonts.register(resource).map_err(map_error)?;
       }
     }
 

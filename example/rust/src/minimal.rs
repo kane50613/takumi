@@ -14,7 +14,7 @@ use takumi::raster::{ImageOutputFormat, RenderOptions, render, write_image};
 pub fn say_hello_to(name: &str) {
   // A `Fonts` holds the registered fonts; create one per application and share it
   // across renders (e.g. behind an `Arc`). takumi loads no system fonts by default,
-  // so register custom fonts with `load_and_store` before rendering text.
+  // so register custom fonts with `register` before rendering text.
   let fonts = Fonts::default();
 
   let text = Node::text(format!("Hello, {name}!"))
