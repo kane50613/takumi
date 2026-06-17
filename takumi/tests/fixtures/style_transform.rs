@@ -128,7 +128,7 @@ fn create_rotated_container(angle: f32, transform_origin: TransformOrigin) -> No
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([255, 0, 0, 30]),
       )))
-      .with_border_width(Sides([Px(1.0); 4]))
+      .with_border_width(Sides([Px(1.0).into(); 4]))
       .with_border_style(Sides([BorderStyle::Solid; 4]))
       .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(12.0)); 4]))),
   )
@@ -157,7 +157,7 @@ fn test_style_transform_translate_and_scale() {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(300.0)))
       .with(StyleDeclaration::height(Px(300.0)))
-      .with_border_width(Sides([Px(1.0); 4]))
+      .with_border_width(Sides([Px(1.0).into(); 4]))
       .with_border_style(Sides([BorderStyle::Solid; 4]))
       .with(StyleDeclaration::translate(SpacePair::from_single(Px(
         300.0,
@@ -179,7 +179,7 @@ fn test_style_transform_translate_and_scale() {
         )))
         .with(StyleDeclaration::width(Px(100.0)))
         .with(StyleDeclaration::height(Px(100.0)))
-        .with_border_width(Sides([Px(1.0); 4]))
+        .with_border_width(Sides([Px(1.0).into(); 4]))
         .with_border_style(Sides([BorderStyle::Solid; 4]))
         .with(StyleDeclaration::font_size(Px(12.0).into())),
     );
@@ -194,7 +194,7 @@ fn test_style_transform_translate_and_scale() {
         )))
         .with(StyleDeclaration::width(Px(200.0)))
         .with(StyleDeclaration::height(Px(200.0)))
-        .with_border_width(Sides([Px(1.0); 4]))
+        .with_border_width(Sides([Px(1.0).into(); 4]))
         .with_border_style(Sides([BorderStyle::Solid; 4]))
         .with(StyleDeclaration::color(ColorInput::Value(Color::white())))
         .with_border_color(Sides([ColorInput::Value(Color::black()); 4])),

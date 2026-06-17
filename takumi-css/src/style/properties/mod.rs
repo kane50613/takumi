@@ -485,16 +485,16 @@ impl TailwindPropertyParser for LineJoin {
 /// This enum determines how an element is positioned within its containing element.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub enum Position {
-  /// The element is positioned according to the normal flow of the document.
+  /// The element is laid out in the normal flow and is not a containing block.
   /// Offsets (top, right, bottom, left) have no effect.
   #[default]
+  Static,
+  /// The element is laid out in the normal flow, then offset relative to itself.
+  /// Offsets (top, right, bottom, left) shift it without affecting other boxes.
   Relative,
   /// The element is removed from the normal document flow and positioned relative to its nearest positioned ancestor.
   /// Offsets (top, right, bottom, left) specify the distance from the ancestor.
   Absolute,
-  /// The element is laid out in the normal flow and is not a containing block.
-  /// Offsets (top, right, bottom, left) have no effect.
-  Static,
   /// The element is removed from the normal document flow and positioned relative to the viewport (root).
   Fixed,
 }

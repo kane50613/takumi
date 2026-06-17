@@ -152,7 +152,7 @@ fn text_typography_line_height_variants() {
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(panel)))
         .with_padding(Sides([Px(18.0); 4]))
-        .with_border_width(Sides([Px(1.0); 4]))
+        .with_border_width(Sides([Px(1.0).into(); 4]))
         .with_border_style(Sides([BorderStyle::Solid; 4]))
         .with_border_color(Sides([ColorInput::Value(Color([205, 214, 228, 255])); 4])),
     )
@@ -636,7 +636,7 @@ fn text_ellipsis_line_clamp_2() {
       )))
       .with(StyleDeclaration::font_size(Px(48.0).into()))
       .with(StyleDeclaration::text_overflow(TextOverflow::Ellipsis))
-      .with(StyleDeclaration::line_clamp(Some(2.into()))),
+      .with_line_clamp(2u32.into()),
   );
 
   run_fixture_test(text, "text_ellipsis_line_clamp_2");
@@ -935,7 +935,7 @@ fn text_ellipsis_text_nowrap() {
   .with_style(Style::default().with(StyleDeclaration::display(Display::Flex))
             .with(StyleDeclaration::text_overflow(TextOverflow::Ellipsis))
             .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
-            .with_border_width(Sides([Px(1.0); 4]))
+            .with_border_width(Sides([Px(1.0).into(); 4]))
             .with_border_style(Sides([BorderStyle::Solid; 4]))
             .with_border_color(Sides([ColorInput::Value(Color([255, 0, 0, 255])); 4]))
             .with(StyleDeclaration::word_break(WordBreak::BreakAll))

@@ -73,7 +73,7 @@ fn test_style_border_width() {
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color::white(),
       )))
-      .with_border_width(Sides([Px(10.0); 4]))
+      .with_border_width(Sides([Px(10.0).into(); 4]))
       .with_border_style(Sides([BorderStyle::Solid; 4]))
       .with_border_color(Sides([ColorInput::Value(Color([255, 0, 0, 255])); 4])),
   );
@@ -91,7 +91,12 @@ fn test_style_border_per_side_color_and_width() {
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color::white(),
       )))
-      .with_border_width(Sides([Px(12.0), Px(24.0), Px(36.0), Px(48.0)]))
+      .with_border_width(Sides([
+        Px(12.0).into(),
+        Px(24.0).into(),
+        Px(36.0).into(),
+        Px(48.0).into(),
+      ]))
       .with_border_style(Sides([
         BorderStyle::Solid,
         BorderStyle::Solid,
@@ -129,7 +134,7 @@ fn test_style_border_width_with_radius() {
       .with(StyleDeclaration::height(Rem(8.0)))
       .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(10.0)); 4])))
       .with_border_color(Sides([ColorInput::Value(Color([255, 0, 0, 255])); 4]))
-      .with_border_width(Sides([Px(4.0); 4]))
+      .with_border_width(Sides([Px(4.0).into(); 4]))
       .with_border_style(Sides([BorderStyle::Solid; 4])),
   )])
   .with_style(
@@ -289,7 +294,7 @@ fn test_style_border_radius_width_offset() {
           .with(StyleDeclaration::background_color(ColorInput::Value(
             Color::white(),
           )))
-          .with_border_width(Sides([Px(1.0); 4]))
+          .with_border_width(Sides([Px(1.0).into(); 4]))
           .with_border_style(Sides([BorderStyle::Solid; 4]))
           .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(24.0)); 4])))
           .with_border_color(Sides([ColorInput::Value(Color([0, 0, 0, 255])); 4])),
@@ -330,7 +335,7 @@ fn test_style_border_radius_circle_avatar() {
         [SpacePair::from_single(Percentage(50.0)); 4],
       )))
       .with_border_color(Sides([ColorInput::Value(Color([128, 128, 128, 128])); 4]))
-      .with_border_width(Sides([Px(4.0); 4]))
+      .with_border_width(Sides([Px(4.0).into(); 4]))
       .with_border_style(Sides([BorderStyle::Solid; 4])),
   )])
   .with_style(
@@ -356,7 +361,7 @@ fn test_style_border_width_on_image_node() {
       .with_border_radius(BorderRadius(Sides(
         [SpacePair::from_single(Percentage(100.0)); 4],
       )))
-      .with_border_width(Sides([Px(2.0); 4]))
+      .with_border_width(Sides([Px(2.0).into(); 4]))
       .with_border_style(Sides([BorderStyle::Solid; 4]))
       .with_border_color(Sides([ColorInput::Value(Color([202, 202, 202, 255])); 4]))
       .with(StyleDeclaration::width(Px(128.0)))
@@ -389,7 +394,7 @@ fn test_style_outline() {
         Color([14, 165, 233, 255]),
       )))
       .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(16.0)); 4])))
-      .with(StyleDeclaration::outline_width(Px(10.0)))
+      .with(StyleDeclaration::outline_width(Px(10.0).into()))
       .with(StyleDeclaration::outline_color(ColorInput::Value(Color([
         17, 24, 39, 255,
       ]))))
@@ -498,7 +503,7 @@ fn non_uniform_border_demo(label: &str, style: Sides<BorderStyle>, width: Sides<
         Color([56, 189, 248, 255]),
       )))
       .with_border_style(style)
-      .with_border_width(width)
+      .with_border_width(width.map_axis(|w, _| w.into()))
       .with_border_color(Sides([ColorInput::Value(Color([17, 24, 39, 255])); 4])),
   );
 
@@ -528,7 +533,7 @@ fn border_style_demo(label: &str, style: BorderStyle) -> Node {
         Color([14, 165, 233, 255]),
       )))
       .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(18.0)); 4])))
-      .with_border_width(Sides([Px(8.0); 4]))
+      .with_border_width(Sides([Px(8.0).into(); 4]))
       .with_border_style(Sides([style; 4]))
       .with_border_color(Sides([ColorInput::Value(Color([17, 24, 39, 255])); 4])),
   );
@@ -546,10 +551,10 @@ fn outline_style_demo(label: &str, style: BorderStyle) -> Node {
         Color([251, 191, 36, 255]),
       )))
       .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(18.0)); 4])))
-      .with_border_width(Sides([Px(2.0); 4]))
+      .with_border_width(Sides([Px(2.0).into(); 4]))
       .with_border_style(Sides([BorderStyle::Solid; 4]))
       .with_border_color(Sides([ColorInput::Value(Color([255, 255, 255, 255])); 4]))
-      .with(StyleDeclaration::outline_width(Px(8.0)))
+      .with(StyleDeclaration::outline_width(Px(8.0).into()))
       .with(StyleDeclaration::outline_offset(Px(8.0)))
       .with(StyleDeclaration::outline_style(style))
       .with(StyleDeclaration::outline_color(ColorInput::Value(Color([

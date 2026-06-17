@@ -145,7 +145,6 @@ macro_rules! define_style {
     shorthands {
       $(
         $shorthand:ident: $shorthand_ty:ty
-          $(where inherit = $shorthand_inherit:expr)?
           => [$($target:ident),+ $(,)?]
           |$value:ident, $target_var:ident|
           $expand:block,
@@ -837,7 +836,7 @@ macro_rules! define_style {
           match self {
             $(
               Self::[<$longhand:camel>](value) => {
-                let name = stringify!($longhand).replace("_", "-");
+                let name = stringify!($longhand).replace("r#", "").replace("_", "-");
                 if name.starts_with("webkit-") {
                   dest.write_str("-")?;
                 }
@@ -945,10 +944,10 @@ define_style! {
     border_top_right_radius: SpacePair<LengthDefaultsToZero>,
     border_bottom_right_radius: SpacePair<LengthDefaultsToZero>,
     border_bottom_left_radius: SpacePair<LengthDefaultsToZero>,
-    border_top_width: Length,
-    border_right_width: Length,
-    border_bottom_width: Length,
-    border_left_width: Length,
+    border_top_width: LineWidth,
+    border_right_width: LineWidth,
+    border_bottom_width: LineWidth,
+    border_left_width: LineWidth,
     border_top_style: BorderStyle,
     border_right_style: BorderStyle,
     border_bottom_style: BorderStyle,
@@ -957,7 +956,7 @@ define_style! {
     border_right_color: ColorInput,
     border_bottom_color: ColorInput,
     border_left_color: ColorInput,
-    outline_width: Length,
+    outline_width: LineWidth,
     outline_style: BorderStyle,
     outline_color: ColorInput,
     outline_offset: Length,
@@ -999,7 +998,9 @@ define_style! {
     font_feature_settings: FontFeatureSettings where inherit = true,
     font_synthesis_weight: FontSynthesic where inherit = true,
     font_synthesis_style: FontSynthesic where inherit = true,
-    line_clamp: Option<LineClamp> where inherit = true,
+    max_lines: Option<u32>,
+    block_ellipsis: BlockEllipsis where inherit = true,
+    r#continue: Continue,
     text_align: TextAlign where inherit = true,
     webkit_text_stroke_width: Option<LengthDefaultsToZero> where inherit = true,
     webkit_text_stroke_color: Option<ColorInput> where inherit = true,
@@ -1174,7 +1175,7 @@ define_style! {
         border_bottom_left_radius
       );
     },
-    border_width: Sides<Length> => [BorderTopWidth, BorderRightWidth, BorderBottomWidth, BorderLeftWidth] |value, target| {
+    border_width: Sides<LineWidth> => [BorderTopWidth, BorderRightWidth, BorderBottomWidth, BorderLeftWidth] |value, target| {
       push_four_side_declarations!(
         target,
         value.0,
@@ -1184,7 +1185,7 @@ define_style! {
         border_left_width
       );
     },
-    border_inline_width: SpacePair<Length> => [BorderLeftWidth, BorderRightWidth] |value, target| {
+    border_inline_width: SpacePair<LineWidth> => [BorderLeftWidth, BorderRightWidth] |value, target| {
       push_axis_declarations!(
         target,
         value,
@@ -1192,7 +1193,7 @@ define_style! {
         border_right_width
       );
     },
-    border_block_width: SpacePair<Length> => [BorderTopWidth, BorderBottomWidth] |value, target| {
+    border_block_width: SpacePair<LineWidth> => [BorderTopWidth, BorderBottomWidth] |value, target| {
       push_axis_declarations!(
         target,
         value,
@@ -1298,11 +1299,11 @@ define_style! {
           .collect(),
       )));
     },
-    font_synthesis: FontSynthesis where inherit = true => [FontSynthesisWeight, FontSynthesisStyle] |value, target| {
+    font_synthesis: FontSynthesis => [FontSynthesisWeight, FontSynthesisStyle] |value, target| {
       target.push(StyleDeclaration::font_synthesis_weight(value.weight));
       target.push(StyleDeclaration::font_synthesis_style(value.style));
     },
-    webkit_text_stroke: Option<TextStroke> where inherit = true => [WebkitTextStrokeWidth, WebkitTextStrokeColor] |value, target| {
+    webkit_text_stroke: Option<TextStroke> => [WebkitTextStrokeWidth, WebkitTextStrokeColor] |value, target| {
       target.push(StyleDeclaration::webkit_text_stroke_width(
         value.map(|value| value.width),
       ));
@@ -1316,15 +1317,20 @@ define_style! {
       target.push(StyleDeclaration::text_decoration_color(value.color));
       target.push(StyleDeclaration::text_decoration_thickness(value.thickness));
     },
-    white_space: WhiteSpace where inherit = true => [TextWrapMode, WhiteSpaceCollapse] |value, target| {
+    white_space: WhiteSpace => [TextWrapMode, WhiteSpaceCollapse] |value, target| {
       target.push(StyleDeclaration::text_wrap_mode(value.text_wrap_mode));
       target.push(StyleDeclaration::white_space_collapse(
         value.white_space_collapse,
       ));
     },
-    text_wrap: TextWrap where inherit = true => [TextWrapMode, TextWrapStyle] |value, target| {
+    text_wrap: TextWrap => [TextWrapMode, TextWrapStyle] |value, target| {
       target.push(StyleDeclaration::text_wrap_mode(value.mode));
       target.push(StyleDeclaration::text_wrap_style(value.style));
+    },
+    line_clamp: LineClamp => [MaxLines, BlockEllipsis, Continue] |value, target| {
+      target.push(StyleDeclaration::max_lines(value.max_lines));
+      target.push(StyleDeclaration::block_ellipsis(value.block_ellipsis));
+      target.push(StyleDeclaration::r#continue(value.line_continue));
     },
   }
 }
