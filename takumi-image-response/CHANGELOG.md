@@ -1,5 +1,11 @@
 # @takumi-rs/image-response
 
+## 1.8.6
+
+### Patch Changes
+
+- takumi-js@1.8.6
+
 ## 1.8.5
 
 ### Patch Changes
