@@ -1,6 +1,6 @@
 mod test_utils;
 
-use takumi::core::layout::{
+use takumi::base::layout::{
   Viewport,
   node::Node,
   style::{

@@ -1,6 +1,6 @@
 use parley::{FontVariation, setting::Tag};
 use serde_json::{from_value, json};
-use takumi::core::layout::{
+use takumi::base::layout::{
   node::Node,
   style::{Length::*, *},
 };

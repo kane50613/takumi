@@ -9,7 +9,7 @@ use std::{
   collections::HashMap,
   sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
-use takumi_core::{
+use takumi_base::{
   GlobalContext,
   layout::{
     DEFAULT_DEVICE_PIXEL_RATIO, Viewport,
