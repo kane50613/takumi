@@ -75,7 +75,7 @@ fn inline_image() {
     Node::image(("assets/images/yeecord.png", 64.0, 64.0)).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Inline))
-        .with_border_width(Sides([Px(12.0); 4]))
+        .with_border_width(Sides([Px(12.0).into(); 4]))
         .with_border_style(Sides([BorderStyle::Solid; 4]))
         .with_border_color(Sides([ColorInput::Value(Color::transparent()); 4]))
         .with(StyleDeclaration::background_image(
@@ -92,7 +92,7 @@ fn inline_image() {
   let container = Node::container([Node::container(children).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with_border_width(Sides([Px(2.0); 4]))
+      .with_border_width(Sides([Px(2.0).into(); 4]))
       .with_border_style(Sides([BorderStyle::Solid; 4]))
       .with(StyleDeclaration::display(Display::Block))
       .with(StyleDeclaration::font_size(Px(48.0).into())),
@@ -321,7 +321,7 @@ fn inline_outline_span_boundaries() {
       .with_style(
         Style::default()
           .with(StyleDeclaration::display(Display::Inline))
-          .with(StyleDeclaration::outline_width(Px(3.0)))
+          .with(StyleDeclaration::outline_width(Px(3.0).into()))
           .with(StyleDeclaration::outline_style(BorderStyle::Solid))
           .with(StyleDeclaration::outline_color(ColorInput::Value(Color([
             255, 0, 0, 255,
@@ -339,7 +339,7 @@ fn inline_outline_span_boundaries() {
       .with(StyleDeclaration::display(Display::Block))
       .with(StyleDeclaration::width(Px(320.0)))
       .with_padding(Sides([Px(24.0); 4]))
-      .with_border_width(Sides([Px(2.0); 4]))
+      .with_border_width(Sides([Px(2.0).into(); 4]))
       .with_border_style(Sides([BorderStyle::Solid; 4]))
       .with(StyleDeclaration::font_size(Px(28.0).into()))
       .with(StyleDeclaration::line_height(Px(34.0).into()))
@@ -373,7 +373,7 @@ fn inline_atomic_containers() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           bg_color,
         )))
-        .with_border_width(Sides([Px(5.0); 4]))
+        .with_border_width(Sides([Px(5.0).into(); 4]))
         .with_border_style(Sides([BorderStyle::Solid; 4]))
         .with_border_color(Sides([ColorInput::Value(border_color); 4])),
     )
@@ -419,7 +419,7 @@ fn inline_atomic_containers() {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::display(Display::Block))
       .with(StyleDeclaration::font_size(Px(24.0).into()))
-      .with_border_width(Sides([Px(6.0); 4]))
+      .with_border_width(Sides([Px(6.0).into(); 4]))
       .with_border_style(Sides([BorderStyle::Solid; 4]))
       .with_border_color(Sides([ColorInput::Value(Color([40, 40, 40, 255])); 4])),
   )])
@@ -551,7 +551,7 @@ fn inline_complex_nested_fixture() {
           .with(StyleDeclaration::background_color(ColorInput::Value(Color([
             231, 241, 250, 255,
           ]))))
-          .with_border_width(Sides([Px(2.0); 4]))
+          .with_border_width(Sides([Px(2.0).into(); 4]))
           .with_border_style(Sides([BorderStyle::Solid; 4]))
           .with_border_color(Sides([ColorInput::Value(Color([
             156, 189, 217, 255,
@@ -584,7 +584,7 @@ fn inline_complex_nested_fixture() {
           .with(StyleDeclaration::background_color(ColorInput::Value(Color([
             255, 236, 208, 255,
           ]))))
-          .with_border_width(Sides([Px(2.0); 4]))
+          .with_border_width(Sides([Px(2.0).into(); 4]))
           .with_border_style(Sides([BorderStyle::Solid; 4]))
           .with_border_color(Sides([ColorInput::Value(Color([
             212, 118, 22, 255,
@@ -803,7 +803,7 @@ fn inline_social_post_regression() {
         )))
         .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(16.0)); 4])))
         .with_padding(Sides([Px(24.0); 4]))
-        .with_border_width(Sides([Px(1.0); 4]))
+        .with_border_width(Sides([Px(1.0).into(); 4]))
         .with_border_style(Sides([BorderStyle::Solid; 4]))
         .with_border_color(Sides([ColorInput::Value(Color([56, 68, 77, 255])); 4])),
     )

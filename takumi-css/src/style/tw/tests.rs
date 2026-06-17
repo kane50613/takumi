@@ -261,15 +261,15 @@ fn test_parse_border_width() {
   );
   assert_eq!(
     TailwindProperty::parse("border-t-2"),
-    Some(TailwindProperty::BorderTopWidth(TwBorderWidth(Length::Px(
-      2.0
-    ))))
+    Some(TailwindProperty::BorderTopWidth(LineWidth::Length(
+      Length::Px(2.0)
+    )))
   );
   assert_eq!(
     TailwindProperty::parse("border-x-4"),
-    Some(TailwindProperty::BorderXWidth(TwBorderWidth(Length::Px(
-      4.0
-    ))))
+    Some(TailwindProperty::BorderXWidth(LineWidth::Length(
+      Length::Px(4.0)
+    )))
   );
   assert_eq!(
     TailwindProperty::parse("border-solid"),
@@ -297,9 +297,9 @@ fn test_parse_outline() {
   );
   assert_eq!(
     TailwindProperty::parse("outline-2"),
-    Some(TailwindProperty::OutlineWidth(TwBorderWidth(Length::Px(
-      2.0
-    ))))
+    Some(TailwindProperty::OutlineWidth(LineWidth::Length(
+      Length::Px(2.0)
+    )))
   );
   assert_eq!(
     TailwindProperty::parse("outline-red-500"),
@@ -317,9 +317,9 @@ fn test_parse_outline() {
   );
   assert_eq!(
     TailwindProperty::parse("outline-offset-4"),
-    Some(TailwindProperty::OutlineOffset(TwBorderWidth(Length::Px(
-      4.0
-    ))))
+    Some(TailwindProperty::OutlineOffset(LineWidth::Length(
+      Length::Px(4.0)
+    )))
   );
   assert_eq!(
     TailwindProperty::parse("outline-none"),
@@ -1035,7 +1035,7 @@ fn test_border_width_implies_solid_and_per_side_color() {
   };
 
   let top = computed("border-t-8");
-  assert_eq!(top.border_top_width, Length::Px(8.0));
+  assert_eq!(top.border_top_width, LineWidth::Length(Length::Px(8.0)));
   assert_eq!(top.border_top_style, BorderStyle::Solid);
   assert_eq!(top.border_bottom_style, BorderStyle::None);
 
@@ -1056,7 +1056,7 @@ fn test_border_width_implies_solid_and_per_side_color() {
   );
 
   let bar = computed("border-t-8 border-t-blue-500");
-  assert_eq!(bar.border_top_width, Length::Px(8.0));
+  assert_eq!(bar.border_top_width, LineWidth::Length(Length::Px(8.0)));
   assert_eq!(bar.border_top_style, BorderStyle::Solid);
   assert_eq!(
     bar.border_top_color,

@@ -369,7 +369,7 @@ pub enum TailwindProperty {
   /// Tailwind `border` utility (`border-width: 1px; border-style: solid`).
   BorderDefault,
   /// `border-width` property.
-  BorderWidth(TwBorderWidth),
+  BorderWidth(LineWidth),
   /// `border-style` property.
   BorderStyle(BorderStyle),
   /// `color` property.
@@ -381,17 +381,17 @@ pub enum TailwindProperty {
   /// `border-color` property.
   BorderColor(ColorInput),
   /// `border-top-width` property.
-  BorderTopWidth(TwBorderWidth),
+  BorderTopWidth(LineWidth),
   /// `border-right-width` property.
-  BorderRightWidth(TwBorderWidth),
+  BorderRightWidth(LineWidth),
   /// `border-bottom-width` property.
-  BorderBottomWidth(TwBorderWidth),
+  BorderBottomWidth(LineWidth),
   /// `border-left-width` property.
-  BorderLeftWidth(TwBorderWidth),
+  BorderLeftWidth(LineWidth),
   /// `border-inline-width` property.
-  BorderXWidth(TwBorderWidth),
+  BorderXWidth(LineWidth),
   /// `border-block-width` property.
-  BorderYWidth(TwBorderWidth),
+  BorderYWidth(LineWidth),
   /// `border-top-color` property.
   BorderTopColor(ColorInput),
   /// `border-right-color` property.
@@ -407,13 +407,13 @@ pub enum TailwindProperty {
   /// Tailwind `outline` utility (`outline-width: 1px; outline-style: solid`).
   OutlineDefault,
   /// `outline-width` property.
-  OutlineWidth(TwBorderWidth),
+  OutlineWidth(LineWidth),
   /// `outline-color` property.
   OutlineColor(ColorInput),
   /// `outline-style` property.
   OutlineStyle(BorderStyle),
   /// `outline-offset` property.
-  OutlineOffset(TwBorderWidth),
+  OutlineOffset(LineWidth),
   /// `border-radius` property.
   Rounded(TwRounded),
   /// `border-top-left-radius` property.
@@ -945,20 +945,20 @@ impl TailwindProperty {
         push_decl!(
           builder,
           important,
-          border_top_width(Length::Px(1.0)),
-          border_right_width(Length::Px(1.0)),
-          border_bottom_width(Length::Px(1.0)),
-          border_left_width(Length::Px(1.0))
+          border_top_width(LineWidth::Length(Length::Px(1.0))),
+          border_right_width(LineWidth::Length(Length::Px(1.0))),
+          border_bottom_width(LineWidth::Length(Length::Px(1.0))),
+          border_left_width(LineWidth::Length(Length::Px(1.0)))
         );
       }
       TailwindProperty::BorderWidth(tw_border_width) => {
         push_decl!(
           builder,
           important,
-          border_top_width(tw_border_width.0),
-          border_right_width(tw_border_width.0),
-          border_bottom_width(tw_border_width.0),
-          border_left_width(tw_border_width.0)
+          border_top_width(tw_border_width),
+          border_right_width(tw_border_width),
+          border_bottom_width(tw_border_width),
+          border_left_width(tw_border_width)
         );
       }
       TailwindProperty::BorderStyle(border_style) => {
@@ -995,31 +995,31 @@ impl TailwindProperty {
         )
       }
       TailwindProperty::BorderTopWidth(tw_border_width) => {
-        push_decl!(builder, important, border_top_width(tw_border_width.0))
+        push_decl!(builder, important, border_top_width(tw_border_width))
       }
       TailwindProperty::BorderRightWidth(tw_border_width) => {
-        push_decl!(builder, important, border_right_width(tw_border_width.0))
+        push_decl!(builder, important, border_right_width(tw_border_width))
       }
       TailwindProperty::BorderBottomWidth(tw_border_width) => {
-        push_decl!(builder, important, border_bottom_width(tw_border_width.0))
+        push_decl!(builder, important, border_bottom_width(tw_border_width))
       }
       TailwindProperty::BorderLeftWidth(tw_border_width) => {
-        push_decl!(builder, important, border_left_width(tw_border_width.0))
+        push_decl!(builder, important, border_left_width(tw_border_width))
       }
       TailwindProperty::BorderXWidth(tw_border_width) => {
         push_decl!(
           builder,
           important,
-          border_left_width(tw_border_width.0),
-          border_right_width(tw_border_width.0)
+          border_left_width(tw_border_width),
+          border_right_width(tw_border_width)
         );
       }
       TailwindProperty::BorderYWidth(tw_border_width) => {
         push_decl!(
           builder,
           important,
-          border_top_width(tw_border_width.0),
-          border_bottom_width(tw_border_width.0)
+          border_top_width(tw_border_width),
+          border_bottom_width(tw_border_width)
         );
       }
       TailwindProperty::BorderTopColor(color_input) => {
@@ -1054,12 +1054,12 @@ impl TailwindProperty {
         push_decl!(
           builder,
           important,
-          outline_width(Length::Px(1.0)),
+          outline_width(LineWidth::Length(Length::Px(1.0))),
           outline_style(BorderStyle::Solid)
         );
       }
       TailwindProperty::OutlineWidth(tw_border_width) => {
-        push_decl!(builder, important, outline_width(tw_border_width.0))
+        push_decl!(builder, important, outline_width(tw_border_width))
       }
       TailwindProperty::OutlineColor(color_input) => {
         push_decl!(builder, important, outline_color(color_input))
@@ -1068,7 +1068,11 @@ impl TailwindProperty {
         push_decl!(builder, important, outline_style(outline_style))
       }
       TailwindProperty::OutlineOffset(outline_offset) => {
-        push_decl!(builder, important, outline_offset(outline_offset.0))
+        push_decl!(
+          builder,
+          important,
+          outline_offset(outline_offset.to_length())
+        )
       }
       TailwindProperty::Rounded(rounded) => rounded_corners!(
         builder,

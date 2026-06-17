@@ -21,6 +21,24 @@ impl ComputedStyle {
 
     self.make_computed_values(sizing);
 
+    // The used value of `border-width`/`outline-width` is zero when the line's
+    // style is `none` or `hidden`, even though the computed value is `medium`.
+    if !self.border_top_style.is_rendered() {
+      self.border_top_width = LineWidth::ZERO;
+    }
+    if !self.border_right_style.is_rendered() {
+      self.border_right_width = LineWidth::ZERO;
+    }
+    if !self.border_bottom_style.is_rendered() {
+      self.border_bottom_width = LineWidth::ZERO;
+    }
+    if !self.border_left_style.is_rendered() {
+      self.border_left_width = LineWidth::ZERO;
+    }
+    if !self.outline_style.is_rendered() {
+      self.outline_width = LineWidth::ZERO;
+    }
+
     // https://www.w3.org/TR/css-display-3/#transformations
     // Elements with position: absolute or fixed are blockified
     if self.position.is_out_of_flow() || self.float != Float::None {
@@ -190,27 +208,12 @@ impl ComputedStyle {
         height: self.height,
       }
       .map(|length| length.resolve_to_dimension(sizing)),
+      // Used widths are already zeroed for non-rendered styles in `make_computed`.
       border: Rect {
-        top: if !self.border_top_style.is_rendered() {
-          Length::default()
-        } else {
-          self.border_top_width
-        },
-        right: if !self.border_right_style.is_rendered() {
-          Length::default()
-        } else {
-          self.border_right_width
-        },
-        bottom: if !self.border_bottom_style.is_rendered() {
-          Length::default()
-        } else {
-          self.border_bottom_width
-        },
-        left: if !self.border_left_style.is_rendered() {
-          Length::default()
-        } else {
-          self.border_left_width
-        },
+        top: self.border_top_width,
+        right: self.border_right_width,
+        bottom: self.border_bottom_width,
+        left: self.border_left_width,
       }
       .map(|border| border.resolve_to_length_percentage(sizing)),
       padding: Rect {

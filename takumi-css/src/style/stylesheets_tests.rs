@@ -466,7 +466,7 @@ fn parse_style_declaration_expands_border_side_shorthands() {
   assert_eq!(
     border_top.iter().collect::<Vec<_>>(),
     vec![
-      &StyleDeclaration::border_top_width(Length::Px(2.0)),
+      &StyleDeclaration::border_top_width(LineWidth::Length(Length::Px(2.0))),
       &StyleDeclaration::border_top_style(BorderStyle::Solid),
       &StyleDeclaration::border_top_color(ColorInput::Value(Color([255, 0, 0, 255]))),
     ]
@@ -476,7 +476,7 @@ fn parse_style_declaration_expands_border_side_shorthands() {
   assert_eq!(
     border_left.iter().collect::<Vec<_>>(),
     vec![
-      &StyleDeclaration::border_left_width(Length::default()),
+      &StyleDeclaration::border_left_width(LineWidth::default()),
       &StyleDeclaration::border_left_style(BorderStyle::Solid),
       &StyleDeclaration::border_left_color(ColorInput::Value(Color([0, 255, 0, 255]))),
     ]
@@ -655,6 +655,7 @@ fn test_needs_offscreen_compositing_for_clip_path_and_mask_image() {
 fn test_is_z_index_applicable_matches_supported_scope() {
   let mut style = ComputedStyle {
     z_index: ZIndex::Integer(2),
+    position: Position::Relative,
     ..Default::default()
   };
   assert!(style.is_z_index_applicable(false));
@@ -662,9 +663,11 @@ fn test_is_z_index_applicable_matches_supported_scope() {
   style.position = Position::Absolute;
   assert!(style.is_z_index_applicable(false));
 
-  style.position = Position::Relative;
-  assert!(style.is_z_index_applicable(false));
+  // `z-index` does not apply to a static element.
+  style.position = Position::Static;
+  assert!(!style.is_z_index_applicable(false));
 
+  style.position = Position::Relative;
   style.z_index = ZIndex::Auto;
   assert!(!style.is_z_index_applicable(false));
 }
@@ -686,6 +689,7 @@ fn test_creates_stacking_context_from_z_index_scope() {
     height: 100.0,
   };
 
+  style.position = Position::Relative;
   style.z_index = ZIndex::Integer(1);
   assert!(style.creates_stacking_context(border_box, &sizing, false));
 

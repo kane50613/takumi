@@ -10,7 +10,7 @@ fn create_test_nodes() -> Vec<Node> {
     .map(|i| {
       Node::text(format!("Node {i}")).with_style(
         Style::default()
-          .with_border_width(Sides([Px(1.0); 4]))
+          .with_border_width(Sides([Px(1.0).into(); 4]))
           .with_padding(Sides([Px(16.0); 4]))
           .with_border_style(Sides([BorderStyle::Solid; 4]))
           .with(StyleDeclaration::flex_grow(Some(FlexGrow(1.0))))

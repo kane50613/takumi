@@ -32,7 +32,7 @@ fn inline_vertical_align_types() {
           .with(StyleDeclaration::height(Px(44.0)))
           .with(StyleDeclaration::background_color(ColorInput::Value(color)))
           .with(StyleDeclaration::vertical_align(align))
-          .with_border_width(Sides([Px(2.0); 4]))
+          .with_border_width(Sides([Px(2.0).into(); 4]))
           .with_border_style(Sides([BorderStyle::Solid; 4]))
           .with_border_color(Sides([ColorInput::Value(Color([30, 30, 30, 255])); 4])),
       ),
@@ -64,7 +64,7 @@ fn inline_vertical_align_types() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([248, 248, 248, 255]),
         )))
-        .with_border_width(Sides([Px(1.0); 4]))
+        .with_border_width(Sides([Px(1.0).into(); 4]))
         .with_border_style(Sides([BorderStyle::Solid; 4]))
         .with_border_color(Sides([ColorInput::Value(Color([180, 180, 180, 255])); 4])),
     )
