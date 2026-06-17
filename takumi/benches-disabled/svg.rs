@@ -1,7 +1,7 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 use std::path::Path;
-use takumi::core::{
+use takumi::base::{
   GlobalContext,
   layout::{
     Viewport,

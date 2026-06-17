@@ -1,7 +1,7 @@
 use std::f32::consts::PI;
 
 use parley::GenericFamily;
-use takumi::core::layout::{
+use takumi::base::layout::{
   Viewport,
   node::Node,
   style::{Length::*, *},

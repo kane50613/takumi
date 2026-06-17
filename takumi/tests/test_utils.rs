@@ -9,7 +9,7 @@ use std::{
 use image::RgbaImage;
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use takumi::core::{
+use takumi::base::{
   GlobalContext,
   layout::{Viewport, node::Node},
   resources::{font::FontResource, image::ImageSource},

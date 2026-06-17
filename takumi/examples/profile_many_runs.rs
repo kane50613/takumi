@@ -1,6 +1,6 @@
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use std::hint::black_box;
-use takumi::core::{
+use takumi::base::{
   GlobalContext,
   layout::{Viewport, node::Node},
   resources::font::FontResource,

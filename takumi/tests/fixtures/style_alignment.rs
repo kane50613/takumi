@@ -1,4 +1,4 @@
-use takumi::core::layout::{
+use takumi::base::layout::{
   node::Node,
   style::{
     AlignItems, Color, ColorInput, Display, JustifyContent,

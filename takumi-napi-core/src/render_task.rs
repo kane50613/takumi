@@ -3,8 +3,8 @@ use std::{borrow::Cow, mem::take};
 use std::{collections::HashMap, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi_core::layout::node::Node;
-use takumi_core::{
+use takumi_base::layout::node::Node;
+use takumi_base::{
   layout::style::StyleSheet,
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
   resources::image::ImageSource as LoadedImageSource,

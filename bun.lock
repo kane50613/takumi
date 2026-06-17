@@ -228,12 +228,12 @@
       "name": "takumi",
       "version": "1.8.7",
       "dependencies": {
-        "takumi-core": "workspace:*",
+        "takumi-base": "workspace:*",
         "takumi-raster": "workspace:*",
       },
     },
-    "takumi-core": {
-      "name": "takumi-core",
+    "takumi-base": {
+      "name": "takumi-base",
       "version": "1.8.5",
       "dependencies": {
         "takumi-css": "workspace:*",
@@ -320,14 +320,14 @@
       "name": "takumi-raster",
       "version": "1.8.5",
       "dependencies": {
-        "takumi-core": "workspace:*",
+        "takumi-base": "workspace:*",
       },
     },
     "takumi-svg": {
       "name": "takumi-svg",
       "version": "0.1.0",
       "dependencies": {
-        "takumi-core": "workspace:*",
+        "takumi-base": "workspace:*",
       },
     },
     "takumi-template": {
@@ -2322,7 +2322,7 @@
 
     "takumi": ["takumi@workspace:takumi"],
 
-    "takumi-core": ["takumi-core@workspace:takumi-core"],
+    "takumi-base": ["takumi-base@workspace:takumi-base"],
 
     "takumi-css": ["takumi-css@workspace:takumi-css"],
 

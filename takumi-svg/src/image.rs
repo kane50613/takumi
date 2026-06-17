@@ -8,10 +8,10 @@ use std::io;
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use takumi_core::context::RenderContext;
-use takumi_core::layout::node::{ImageData, ImageSourceInput, resolve_image};
-use takumi_core::layout::style::{Length, ObjectFit, PositionComponent};
-use takumi_core::resources::image::ImageSource;
+use takumi_base::context::RenderContext;
+use takumi_base::layout::node::{ImageData, ImageSourceInput, resolve_image};
+use takumi_base::layout::style::{Length, ObjectFit, PositionComponent};
+use takumi_base::resources::image::ImageSource;
 
 use crate::SvgDocument;
 use crate::box_model::rect_path_data;
