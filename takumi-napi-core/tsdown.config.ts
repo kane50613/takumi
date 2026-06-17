@@ -5,7 +5,7 @@ export default defineConfig({
     export: "src/export.ts",
   },
   format: ["esm", "cjs"],
-  dts: false, // https://github.com/rolldown/rolldown/pull/9197, https://github.com/rolldown/tsdown/issues/936
+  dts: true,
   clean: true,
   outDir: "dist",
   platform: "node",
