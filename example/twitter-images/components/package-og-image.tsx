@@ -163,7 +163,7 @@ export const height = 630;
 
 export const fonts = ["geist/Geist[wght].woff2", "geist/GeistMono[wght].woff2"];
 
-// TODO: provide image (logo.svg) via fetchedResources
+export const images = [{ src: "logo.svg", path: "takumi.svg" }];
 
 function smoothPath(points: { x: number; y: number }[]) {
   if (points.length < 2) {

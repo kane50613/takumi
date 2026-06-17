@@ -42,7 +42,15 @@ const ffmpeg = spawn(
   { stdin: "pipe", stdout: "ignore", stderr: "ignore" },
 );
 
-// TODO: provide images (logo.svg, background.jpg) via fetchedResources
+const fetchedResources = await Promise.all(
+  [
+    { src: "logo.svg", path: "takumi.svg" },
+    { src: "background.jpg", path: "martin-martz-W0NRebXbsjM-unsplash.jpg" },
+  ].map(async ({ src, path }) => ({
+    src,
+    data: await Bun.file(resolve(import.meta.dir, "../../../assets/images", path)).arrayBuffer(),
+  })),
+);
 
 const thumbnailPath = resolve(import.meta.dir, "../output/thumbnail.webp");
 console.log(`Rendering thumbnail to ${thumbnailPath}...`);
@@ -54,6 +62,7 @@ const thumbnailFrame = await render(<Scene tokens={tokens} showPlayButton={true}
   devicePixelRatio,
   format: "webp",
   keyframes,
+  fetchedResources,
   timeMs: 2500,
 });
 
@@ -73,6 +82,7 @@ const framePromises = Array.from({ length: totalFrames }, (_, i) => {
     devicePixelRatio,
     format: "raw",
     keyframes,
+    fetchedResources,
     timeMs,
   });
 });

@@ -7,6 +7,8 @@ export const height = 640;
 
 export const fonts = ["geist/Geist[wght].woff2"];
 
+export const images = [{ src: "takumi.svg", path: "takumi.svg" }];
+
 export default function OgImage() {
   return (
     <div
@@ -25,7 +27,6 @@ export default function OgImage() {
         padding: "4rem",
       }}
     >
-      {/* TODO: provide image via fetchedResources */}
       <img
         src="takumi.svg"
         alt=""
@@ -56,7 +57,6 @@ export default function OgImage() {
         <div
           style={{ display: "flex", alignItems: "center", gap: "1.5rem", marginBottom: "2.5rem" }}
         >
-          {/* TODO: provide image via fetchedResources */}
           <img
             src="takumi.svg"
             alt="Takumi"

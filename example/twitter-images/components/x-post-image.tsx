@@ -5,7 +5,11 @@ export const height = 630;
 
 export const fonts = [];
 
-// TODO: provide images (takumi.svg, fuma.jpg, large.jpg) via fetchedResources
+export const images = [
+  { src: "takumi.svg", path: "takumi.svg" },
+  { src: "fuma.jpg", path: "fuma.jpg" },
+  { src: "large.jpg", path: "fumadocs-core-v16.jpg" },
+];
 
 // https://x.com/kanewang_/status/1976314376102740338
 export default function XPostImage() {

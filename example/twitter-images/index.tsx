@@ -48,6 +48,12 @@ async function render(
 ) {
   const jsxPrepareStart = performance.now();
   const { node, stylesheets } = await fromJsx(<module.default />);
+  const fetchedResources = await Promise.all(
+    ("images" in module ? module.images : []).map(async ({ src, path }) => ({
+      src,
+      data: await readFile(join("../../assets/images", path)),
+    })),
+  );
   const renderStart = performance.now();
 
   const buffer = await renderer.render(node, {
@@ -56,6 +62,7 @@ async function render(
     devicePixelRatio: ratio,
     stylesheets: [...stylesheets, ...("stylesheets" in module ? module.stylesheets : [])],
     drawDebugBorder: process.argv.includes("--debug"),
+    fetchedResources,
     format,
     timeMs,
   });

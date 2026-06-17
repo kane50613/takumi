@@ -5,6 +5,8 @@ export const height = 675;
 
 export const fonts = ["geist/Geist[wght].woff2"];
 
+export const images = [{ src: "takumi.svg", path: "takumi.svg" }];
+
 const StarIcon = ({
   size,
   opacity,
@@ -74,7 +76,6 @@ export default function FiveHundredStars() {
       >
         {/* Logo */}
         <div style={{ marginBottom: "3rem" }}>
-          {/* TODO: provide image via fetchedResources */}
           <img
             src="takumi.svg"
             alt="Takumi Logo"
