@@ -4,7 +4,7 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use rayon::prelude::*;
-use takumi_core::{
+use takumi_base::{
   GlobalContext,
   layout::{node::Node, style::KeyframesRule as CoreKeyframesRule},
   resources::{font::FontResource, image::ImageSource as LoadedImageSource},
@@ -87,7 +87,7 @@ pub(crate) fn deserialize_keyframes(keyframes: Option<Object>) -> Result<Vec<Cor
   match keyframes {
     Some(keyframes) => {
       let mut deserializer = De::new(&keyframes);
-      takumi_core::keyframes::deserialize_keyframes(&mut deserializer)
+      takumi_base::keyframes::deserialize_keyframes(&mut deserializer)
         .map_err(|error: napi::Error| Error::from_reason(error.to_string()))
     }
     None => Ok(Vec::new()),

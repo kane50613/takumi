@@ -14,8 +14,8 @@ taffy.workspace = true
 tiny-skia.workspace = true
 typed-builder.workspace = true
 
-[dependencies.takumi-core]
-path = "../takumi-core"
+[dependencies.takumi-base]
+path = "../takumi-base"
 version = "=0"
 
 [lints]

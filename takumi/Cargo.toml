@@ -11,8 +11,8 @@ readme = "README.md"
 rust-version = "1.91"
 autobenches = false
 
-[dependencies.takumi-core]
-path = "../takumi-core"
+[dependencies.takumi-base]
+path = "../takumi-base"
 version = "=0"
 default-features = false
 
@@ -31,10 +31,10 @@ optional = true
 [features]
 default = ["raster", "woff2", "woff", "svg", "rayon"]
 raster = ["dep:takumi-raster"]
-svg = ["takumi-core/svg", "takumi-raster?/svg"]
+svg = ["takumi-base/svg", "takumi-raster?/svg"]
 svg-backend = ["dep:takumi-svg"]
-woff2 = ["takumi-core/woff2"]
-woff = ["takumi-core/woff"]
+woff2 = ["takumi-base/woff2"]
+woff = ["takumi-base/woff"]
 rayon = ["raster", "takumi-raster?/rayon"]
 
 [dev-dependencies]

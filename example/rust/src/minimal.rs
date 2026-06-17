@@ -1,7 +1,7 @@
 // Import necessary modules for file operations and takumi library components
 use std::{borrow::Cow, fs::File};
 
-use takumi::core::{
+use takumi::base::{
   GlobalContext,
   layout::{
     Viewport,

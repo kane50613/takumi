@@ -16,9 +16,9 @@ use std::f32::consts::TAU;
 use std::io;
 
 use taffy::Size;
-use takumi_core::context::RenderContext;
-use takumi_core::layout::node::resolve_image;
-use takumi_core::layout::style::{
+use takumi_base::context::RenderContext;
+use takumi_base::layout::node::resolve_image;
+use takumi_base::layout::style::{
   BackgroundImage, BackgroundPosition, BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize,
   ColorInterpolationMethod, ConicGradient, ConicGradientTile, IntrinsicSizing, Length,
   LinearGradient, LinearGradientTile, PositionComponent, RadialGradient, RadialGradientTile,

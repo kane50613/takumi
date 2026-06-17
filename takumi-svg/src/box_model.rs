@@ -1,14 +1,14 @@
 //! Box-model geometry helpers for the node walk: the element's affine transform,
-//! overflow clipping predicate, and serialization of takumi-core path commands to
+//! overflow clipping predicate, and serialization of takumi-base path commands to
 //! SVG path `d` data. The rounded-rect / border-radius geometry itself is reused
-//! from takumi-core's [`BorderProperties`] (the same geometry the raster backend
+//! from takumi-base's [`BorderProperties`] (the same geometry the raster backend
 //! rasterizes), not reimplemented here.
 
 use std::fmt::Write as _;
 
 use taffy::Size;
-use takumi_core::context::RenderContext;
-use takumi_core::layout::style::Affine;
+use takumi_base::context::RenderContext;
+use takumi_base::layout::style::Affine;
 use tiny_skia::{PathSegment, Point};
 
 use crate::{APPROX_CHARS_PER_NUMBER, Num};
@@ -93,7 +93,7 @@ fn quantize_path(value: f32) -> f32 {
   (value * PATH_COORD_FACTOR).round() / PATH_COORD_FACTOR
 }
 
-/// Serializes takumi-core path commands ([`tiny_skia::PathSegment`], the shared
+/// Serializes takumi-base path commands ([`tiny_skia::PathSegment`], the shared
 /// `Command` type) to compact SVG path `d` data, applying `transform`
 /// (`[a, b, c, d, e, f]`, SVG `matrix` order) to every point. Shared by glyph,
 /// border, background, and clip emission.

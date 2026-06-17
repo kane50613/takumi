@@ -6,7 +6,7 @@ use std::{
 
 use napi::bindgen_prelude::*;
 use rayon::prelude::*;
-use takumi_core::{
+use takumi_base::{
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node},
   resources::image::ImageSource as LoadedImageSource,
 };
