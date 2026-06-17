@@ -902,7 +902,7 @@ fn test_font_numeric_weight() {
 fn test_line_clamp_none() {
   assert_eq!(
     TailwindProperty::parse("line-clamp-none"),
-    Some(TailwindProperty::LineClamp(LineClampShorthand::default()))
+    Some(TailwindProperty::LineClamp(LineClamp::default()))
   );
 }
 

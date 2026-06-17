@@ -275,7 +275,7 @@ pub enum TailwindProperty {
   /// `font-family` property.
   FontFamily(FontFamily),
   /// `line-clamp` property.
-  LineClamp(LineClampShorthand),
+  LineClamp(LineClamp),
   /// `text-overflow` property.
   TextOverflow(TextOverflow),
   /// `text-wrap` property.

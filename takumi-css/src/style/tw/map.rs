@@ -57,7 +57,7 @@ property_parsers! {
   ColorTransparent(ColorDefaultsToTransparent) => ColorDefaultsToTransparent,
   Percentage(PercentageNumber) => PercentageNumber,
   FontFamily(FontFamily) => FontFamily,
-  LineClamp(LineClampShorthand) => LineClampShorthand,
+  LineClamp(LineClamp) => LineClamp,
   WhiteSpace(WhiteSpace) => WhiteSpace,
   OverflowWrap(OverflowWrap) => OverflowWrap,
   FontSize(TwFontSize) => TwFontSize,

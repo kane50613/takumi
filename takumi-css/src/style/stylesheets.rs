@@ -998,7 +998,7 @@ define_style! {
     font_feature_settings: FontFeatureSettings where inherit = true,
     font_synthesis_weight: FontSynthesic where inherit = true,
     font_synthesis_style: FontSynthesic where inherit = true,
-    max_lines: MaxLines,
+    max_lines: Option<u32>,
     block_ellipsis: BlockEllipsis where inherit = true,
     r#continue: Continue,
     text_align: TextAlign where inherit = true,
@@ -1327,7 +1327,7 @@ define_style! {
       target.push(StyleDeclaration::text_wrap_mode(value.mode));
       target.push(StyleDeclaration::text_wrap_style(value.style));
     },
-    line_clamp: LineClampShorthand => [MaxLines, BlockEllipsis, Continue] |value, target| {
+    line_clamp: LineClamp => [MaxLines, BlockEllipsis, Continue] |value, target| {
       target.push(StyleDeclaration::max_lines(value.max_lines));
       target.push(StyleDeclaration::block_ellipsis(value.block_ellipsis));
       target.push(StyleDeclaration::r#continue(value.line_continue));

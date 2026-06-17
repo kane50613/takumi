@@ -1807,7 +1807,7 @@ impl<'g> RenderNode<'g> {
         mode: InlineLayoutMode::Measure,
       });
 
-      let ceil_width = font_style.parent.text_wrap_mode_and_line_clamp().0 == TextWrapMode::Wrap;
+      let ceil_width = font_style.parent.resolved_text_wrap_mode() == TextWrapMode::Wrap;
       let parent_font_metrics = get_parent_font_metrics(&built.layout);
       return measure_inline_layout(
         &mut built.layout,

@@ -77,7 +77,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
         line_height_scales_with_text_fit: style.line_height_scales_with_text_fit,
         vertical_align: style.parent.vertical_align,
       },
-      text_wrap_mode: style.parent.text_wrap_mode_and_line_clamp().0.into(),
+      text_wrap_mode: style.parent.resolved_text_wrap_mode().into(),
       font_width: style.parent.font_stretch.into(),
 
       locale: None,

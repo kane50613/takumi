@@ -157,7 +157,7 @@ fn parse_webkit_line_clamp_matches_line_clamp() {
 
   let webkit = webkit_line_clamp.inherit(&ComputedStyle::default());
   let plain = line_clamp.inherit(&ComputedStyle::default());
-  assert_eq!(webkit.max_lines, MaxLines::Lines(2));
+  assert_eq!(webkit.max_lines, Some(2));
   assert_eq!(webkit.max_lines, plain.max_lines);
   assert_eq!(webkit.block_ellipsis, plain.block_ellipsis);
 }
@@ -168,7 +168,7 @@ fn line_clamp_shorthand_expands_to_longhands() {
   parent.append_block(parse_declarations("line-clamp", "3 \"...\""));
   let parent = parent.inherit(&ComputedStyle::default());
 
-  assert_eq!(parent.max_lines, MaxLines::Lines(3));
+  assert_eq!(parent.max_lines, Some(3));
   assert_eq!(
     parent.block_ellipsis,
     BlockEllipsis::String("...".to_owned())
@@ -177,7 +177,7 @@ fn line_clamp_shorthand_expands_to_longhands() {
 
   // Only `block-ellipsis` inherits; `max-lines` and `continue` do not.
   let child = Style::default().inherit(&parent);
-  assert_eq!(child.max_lines, MaxLines::None);
+  assert_eq!(child.max_lines, None);
   assert_eq!(child.r#continue, Continue::Normal);
   assert_eq!(
     child.block_ellipsis,
@@ -196,17 +196,14 @@ fn continue_property_resolves_by_name() {
 fn max_lines_clamps_only_inside_fragmentation_context() {
   // Bare `max-lines` (continue: normal) does not clamp.
   let bare = inherited_style_from_pairs([("max-lines", "3")], &ComputedStyle::default());
-  assert!(bare.text_wrap_mode_and_line_clamp().1.is_none());
+  assert!(bare.resolved_line_clamp().is_none());
 
   // `continue: collapse` turns it into a fragmentation context that clamps.
   let clamped = inherited_style_from_pairs(
     [("max-lines", "3"), ("continue", "collapse")],
     &ComputedStyle::default(),
   );
-  assert_eq!(
-    clamped.text_wrap_mode_and_line_clamp().1.map(|c| c.count),
-    Some(3)
-  );
+  assert_eq!(clamped.resolved_line_clamp().map(|c| c.count), Some(3));
 }
 
 #[test]
@@ -809,15 +806,13 @@ fn test_text_overflow_ellipsis_forces_single_line_clamp_on_nowrap() {
     ..Default::default()
   };
 
-  let (text_wrap_mode, line_clamp) = style.text_wrap_mode_and_line_clamp();
-
-  assert_eq!(text_wrap_mode, TextWrapMode::Wrap);
+  assert_eq!(style.resolved_text_wrap_mode(), TextWrapMode::Wrap);
   assert_eq!(
-    line_clamp,
-    Some(std::borrow::Cow::Owned(LineClamp {
+    style.resolved_line_clamp(),
+    Some(ResolvedLineClamp {
       count: 1,
       ellipsis: Some("…".to_string()),
-    }))
+    })
   );
 }
 

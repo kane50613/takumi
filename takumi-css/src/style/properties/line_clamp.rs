@@ -6,48 +6,6 @@ use crate::style::{
   declare_enum_from_css_impl, properties::write_css_string, tw::TailwindPropertyParser,
 };
 
-/// `max-lines`: `none | <integer>`. Not inherited.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[non_exhaustive]
-pub enum MaxLines {
-  /// No limit on the number of lines.
-  #[default]
-  None,
-  /// Clamp to at most this many lines.
-  Lines(u32),
-}
-
-impl MakeComputed for MaxLines {}
-impl Animatable for MaxLines {}
-
-impl<'i> FromCss<'i> for MaxLines {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
-      return Ok(Self::None);
-    }
-    let count = input.expect_integer()?;
-    Ok(if count >= 1 {
-      Self::Lines(count as u32)
-    } else {
-      Self::None
-    })
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("none"),
-    CssToken::Syntax(CssSyntaxKind::Integer),
-  ];
-}
-
-impl ToCss for MaxLines {
-  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    match self {
-      Self::None => dest.write_str("none"),
-      Self::Lines(count) => write!(dest, "{count}"),
-    }
-  }
-}
-
 /// `block-ellipsis`: `none | auto | <string>`. Inherited.
 #[derive(Debug, Clone, PartialEq, Default)]
 #[non_exhaustive]
@@ -92,10 +50,10 @@ impl ToCss for BlockEllipsis {
   }
 }
 
-/// `continue`: `normal | collapse | -webkit-legacy`. Not inherited.
+/// `continue`: `normal | collapse`. Not inherited.
 ///
-/// Mirrors Blink's value set. `collapse` (and the legacy `-webkit-legacy`) turns
-/// the box into a fragmentation context that discards content past `max-lines`.
+/// `collapse` turns the box into a fragmentation context that discards content
+/// past `max-lines`; `line-clamp`/`-webkit-line-clamp` set it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum Continue {
@@ -104,27 +62,13 @@ pub enum Continue {
   Normal,
   /// Discard content past the `max-lines` limit.
   Collapse,
-  /// Legacy `-webkit-line-clamp` behavior; treated like `collapse`.
-  WebkitLegacy,
 }
 
 declare_enum_from_css_impl!(
   Continue,
   "normal" => Continue::Normal,
   "collapse" => Continue::Collapse,
-  "-webkit-legacy" => Continue::WebkitLegacy,
 );
-
-impl Continue {
-  /// Whether this value clamps content past `max-lines`.
-  ///
-  /// Blink only honors `-webkit-legacy` for `display: -webkit-box`; takumi has no
-  /// such display, so it treats the legacy value as `collapse` to keep
-  /// `-webkit-line-clamp` working.
-  pub const fn collapses(self) -> bool {
-    matches!(self, Self::Collapse | Self::WebkitLegacy)
-  }
-}
 
 impl Animatable for Continue {}
 
@@ -134,17 +78,17 @@ impl Animatable for Continue {}
 /// shares this parser via vendor-prefix stripping.
 #[derive(Debug, Clone, PartialEq, Default)]
 #[non_exhaustive]
-pub struct LineClampShorthand {
+pub struct LineClamp {
   /// `max-lines` longhand.
-  pub max_lines: MaxLines,
+  pub max_lines: Option<u32>,
   /// `block-ellipsis` longhand.
   pub block_ellipsis: BlockEllipsis,
   /// `continue` longhand.
   pub line_continue: Continue,
 }
 
-impl LineClampShorthand {
-  fn clamp(max_lines: MaxLines, block_ellipsis: BlockEllipsis) -> Self {
+impl LineClamp {
+  fn clamp(max_lines: Option<u32>, block_ellipsis: BlockEllipsis) -> Self {
     Self {
       max_lines,
       block_ellipsis,
@@ -153,19 +97,19 @@ impl LineClampShorthand {
   }
 }
 
-impl From<u32> for LineClampShorthand {
+impl From<u32> for LineClamp {
   fn from(count: u32) -> Self {
     if count >= 1 {
-      Self::clamp(MaxLines::Lines(count), BlockEllipsis::Auto)
+      Self::clamp(Some(count), BlockEllipsis::Auto)
     } else {
       Self::default()
     }
   }
 }
 
-impl MakeComputed for LineClampShorthand {}
+impl MakeComputed for LineClamp {}
 
-impl<'i> FromCss<'i> for LineClampShorthand {
+impl<'i> FromCss<'i> for LineClamp {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
       return Ok(Self::default());
@@ -180,7 +124,7 @@ impl<'i> FromCss<'i> for LineClampShorthand {
       .try_parse(BlockEllipsis::from_css)
       .unwrap_or(BlockEllipsis::Auto);
 
-    Ok(Self::clamp(MaxLines::Lines(count as u32), block_ellipsis))
+    Ok(Self::clamp(Some(count as u32), block_ellipsis))
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[
@@ -190,7 +134,7 @@ impl<'i> FromCss<'i> for LineClampShorthand {
   ];
 }
 
-impl TailwindPropertyParser for LineClampShorthand {
+impl TailwindPropertyParser for LineClamp {
   fn parse_tw(token: &str) -> Option<Self> {
     if token.eq_ignore_ascii_case("none") {
       return Some(Self::default());
@@ -199,13 +143,13 @@ impl TailwindPropertyParser for LineClampShorthand {
     if count == 0 {
       return None;
     }
-    Some(Self::clamp(MaxLines::Lines(count), BlockEllipsis::Auto))
+    Some(Self::clamp(Some(count), BlockEllipsis::Auto))
   }
 }
 
 /// Resolved line-clamp used during inline layout.
 #[derive(Debug, Clone, PartialEq)]
-pub struct LineClamp {
+pub struct ResolvedLineClamp {
   /// The number of lines to clamp to.
   pub count: u32,
   /// The ellipsis to use when the text is clamped, if overridden.

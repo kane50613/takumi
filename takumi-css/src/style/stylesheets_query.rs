@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::marker::PhantomData;
 
 use taffy::{Line, Point, Rect, Size};
@@ -138,17 +137,37 @@ impl ComputedStyle {
     }
   }
 
-  /// Resolves the `max-lines`/`block-ellipsis` longhands into a clamp for layout.
-  ///
-  /// Per CSS Overflow 4, `max-lines` only clamps inside a fragmentation context,
-  /// i.e. when `continue` collapses (`line-clamp`/`-webkit-line-clamp` set this).
-  fn resolved_line_clamp(&self) -> Option<LineClamp> {
-    if !self.r#continue.collapses() {
+  /// `nowrap` + `ellipsis`: parley lays out all the text even when it overflows,
+  /// so this case is rendered by switching to wrapping with a one-line clamp.
+  fn forces_single_line_ellipsis(&self) -> bool {
+    self.text_wrap_mode == TextWrapMode::NoWrap && self.text_overflow == TextOverflow::Ellipsis
+  }
+
+  pub fn resolved_text_wrap_mode(&self) -> TextWrapMode {
+    if self.forces_single_line_ellipsis() {
+      TextWrapMode::Wrap
+    } else {
+      self.text_wrap_mode
+    }
+  }
+
+  /// Resolves the effective line clamp for layout. Per CSS Overflow 4, `max-lines`
+  /// only clamps inside a fragmentation context, i.e. when `continue` collapses
+  /// (`line-clamp`/`-webkit-line-clamp` set this).
+  pub fn resolved_line_clamp(&self) -> Option<ResolvedLineClamp> {
+    if self.forces_single_line_ellipsis() {
+      return Some(ResolvedLineClamp {
+        count: 1,
+        ellipsis: Some(self.ellipsis_char().to_string()),
+      });
+    }
+
+    if self.r#continue != Continue::Collapse {
       return None;
     }
 
     match self.max_lines {
-      MaxLines::Lines(count) if count >= 1 => Some(LineClamp {
+      Some(count) if count >= 1 => Some(ResolvedLineClamp {
         count,
         ellipsis: match &self.block_ellipsis {
           BlockEllipsis::String(custom) => Some(custom.clone()),
@@ -157,29 +176,6 @@ impl ComputedStyle {
         },
       }),
       _ => None,
-    }
-  }
-
-  pub fn text_wrap_mode_and_line_clamp(&self) -> (TextWrapMode, Option<Cow<'_, LineClamp>>) {
-    let mut text_wrap_mode = self.text_wrap_mode;
-    let mut line_clamp = self.resolved_line_clamp().map(Cow::Owned);
-
-    // Special case: when nowrap + ellipsis, parley will layout all the text even when it overflows.
-    // So we need to use a fixed line clamp of 1 instead.
-    if text_wrap_mode == TextWrapMode::NoWrap && self.text_overflow == TextOverflow::Ellipsis {
-      line_clamp = Some(Cow::Owned(self.single_line_ellipsis_clamp()));
-
-      text_wrap_mode = TextWrapMode::Wrap;
-    }
-
-    (text_wrap_mode, line_clamp)
-  }
-
-  #[inline]
-  fn single_line_ellipsis_clamp(&self) -> LineClamp {
-    LineClamp {
-      count: 1,
-      ellipsis: Some(self.ellipsis_char().to_string()),
     }
   }
 

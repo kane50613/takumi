@@ -1131,7 +1131,7 @@ fn prepare_inline_layout(
   max_height: Option<MaxHeight>,
   style: &SizedFontStyle,
 ) -> (TextWrapMode, f32) {
-  let text_wrap_mode = style.parent.text_wrap_mode_and_line_clamp().0;
+  let text_wrap_mode = style.parent.resolved_text_wrap_mode();
   let line_height_hint = inline_line_height_hint(style);
   apply_text_indent(&mut built.layout, style, max_width);
   break_lines(
@@ -1383,7 +1383,7 @@ pub fn resolve_inline_max_height(
   font_style: &SizedFontStyle,
   content_box_height: f32,
 ) -> Option<MaxHeight> {
-  let resolved_line_clamp = font_style.parent.text_wrap_mode_and_line_clamp().1;
+  let resolved_line_clamp = font_style.parent.resolved_line_clamp();
   resolved_line_clamp
     .as_ref()
     .map(|clamp| MaxHeight::HeightAndLines(content_box_height, clamp.count))
@@ -2030,7 +2030,7 @@ pub fn create_inline_constraint(
   // applies a maximum height to reduce unnecessary calculation.
   let max_height = match (
     context.sizing.viewport.size.height,
-    context.style.text_wrap_mode_and_line_clamp().1,
+    context.style.resolved_line_clamp(),
   ) {
     (Some(height), Some(line_clamp)) => {
       Some(MaxHeight::HeightAndLines(height as f32, line_clamp.count))
@@ -2191,7 +2191,7 @@ fn make_ellipsis_layout<'c, 'g: 'c>(
     });
 
   apply_text_indent(&mut final_layout, root_style, max_width);
-  let text_wrap_mode = root_style.parent.text_wrap_mode_and_line_clamp().0;
+  let text_wrap_mode = root_style.parent.resolved_text_wrap_mode();
   custom_inline_boxes.clear();
   break_lines(
     &mut final_layout,
