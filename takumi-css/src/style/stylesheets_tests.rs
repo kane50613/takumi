@@ -120,7 +120,7 @@ fn custom_properties_map_to_custom_property_id() {
 
 #[test]
 fn property_id_accepts_webkit_aliases() {
-  let line_clamp = PropertyId::Longhand(LonghandId::LineClamp);
+  let line_clamp = PropertyId::Shorthand(ShorthandId::LineClamp);
 
   assert_eq!(PropertyId::from_kebab_case("line-clamp"), line_clamp);
   assert_eq!(PropertyId::from_camel_case("lineClamp"), line_clamp);
@@ -155,12 +155,55 @@ fn parse_webkit_line_clamp_matches_line_clamp() {
   let mut webkit_line_clamp = Style::default();
   webkit_line_clamp.append_block(parse_declarations("-webkit-line-clamp", "2"));
 
+  let webkit = webkit_line_clamp.inherit(&ComputedStyle::default());
+  let plain = line_clamp.inherit(&ComputedStyle::default());
+  assert_eq!(webkit.max_lines, Some(2));
+  assert_eq!(webkit.max_lines, plain.max_lines);
+  assert_eq!(webkit.block_ellipsis, plain.block_ellipsis);
+}
+
+#[test]
+fn line_clamp_shorthand_expands_to_longhands() {
+  let mut parent = Style::default();
+  parent.append_block(parse_declarations("line-clamp", "3 \"...\""));
+  let parent = parent.inherit(&ComputedStyle::default());
+
+  assert_eq!(parent.max_lines, Some(3));
   assert_eq!(
-    webkit_line_clamp
-      .inherit(&ComputedStyle::default())
-      .line_clamp,
-    line_clamp.inherit(&ComputedStyle::default()).line_clamp
+    parent.block_ellipsis,
+    BlockEllipsis::String("...".to_owned())
   );
+  assert_eq!(parent.r#continue, Continue::Collapse);
+
+  // Only `block-ellipsis` inherits; `max-lines` and `continue` do not.
+  let child = Style::default().inherit(&parent);
+  assert_eq!(child.max_lines, None);
+  assert_eq!(child.r#continue, Continue::Normal);
+  assert_eq!(
+    child.block_ellipsis,
+    BlockEllipsis::String("...".to_owned())
+  );
+}
+
+#[test]
+fn continue_property_resolves_by_name() {
+  let continue_id = PropertyId::Longhand(LonghandId::Continue);
+  assert_eq!(PropertyId::from_kebab_case("continue"), continue_id);
+  assert_eq!(PropertyId::from_camel_case("continue"), continue_id);
+}
+
+#[test]
+fn max_lines_clamps_only_inside_fragmentation_context() {
+  // Bare `max-lines` (continue: normal) does not clamp.
+  let bare = inherited_style_from_pairs([("max-lines", "3")], &ComputedStyle::default());
+  assert!(bare.clamp_lines().is_none());
+
+  // `continue: collapse` turns it into a fragmentation context that clamps.
+  let clamped = inherited_style_from_pairs(
+    [("max-lines", "3"), ("continue", "collapse")],
+    &ComputedStyle::default(),
+  );
+  assert_eq!(clamped.clamp_lines(), Some(3));
 }
 
 #[test]
@@ -466,7 +509,7 @@ fn parse_style_declaration_expands_border_side_shorthands() {
   assert_eq!(
     border_top.iter().collect::<Vec<_>>(),
     vec![
-      &StyleDeclaration::border_top_width(Length::Px(2.0)),
+      &StyleDeclaration::border_top_width(LineWidth::Length(Length::Px(2.0))),
       &StyleDeclaration::border_top_style(BorderStyle::Solid),
       &StyleDeclaration::border_top_color(ColorInput::Value(Color([255, 0, 0, 255]))),
     ]
@@ -476,7 +519,7 @@ fn parse_style_declaration_expands_border_side_shorthands() {
   assert_eq!(
     border_left.iter().collect::<Vec<_>>(),
     vec![
-      &StyleDeclaration::border_left_width(Length::default()),
+      &StyleDeclaration::border_left_width(LineWidth::default()),
       &StyleDeclaration::border_left_style(BorderStyle::Solid),
       &StyleDeclaration::border_left_color(ColorInput::Value(Color([0, 255, 0, 255]))),
     ]
@@ -655,6 +698,7 @@ fn test_needs_offscreen_compositing_for_clip_path_and_mask_image() {
 fn test_is_z_index_applicable_matches_supported_scope() {
   let mut style = ComputedStyle {
     z_index: ZIndex::Integer(2),
+    position: Position::Relative,
     ..Default::default()
   };
   assert!(style.is_z_index_applicable(false));
@@ -662,9 +706,11 @@ fn test_is_z_index_applicable_matches_supported_scope() {
   style.position = Position::Absolute;
   assert!(style.is_z_index_applicable(false));
 
-  style.position = Position::Relative;
-  assert!(style.is_z_index_applicable(false));
+  // `z-index` does not apply to a static element.
+  style.position = Position::Static;
+  assert!(!style.is_z_index_applicable(false));
 
+  style.position = Position::Relative;
   style.z_index = ZIndex::Auto;
   assert!(!style.is_z_index_applicable(false));
 }
@@ -686,6 +732,7 @@ fn test_creates_stacking_context_from_z_index_scope() {
     height: 100.0,
   };
 
+  style.position = Position::Relative;
   style.z_index = ZIndex::Integer(1);
   assert!(style.creates_stacking_context(border_box, &sizing, false));
 
@@ -759,16 +806,8 @@ fn test_text_overflow_ellipsis_forces_single_line_clamp_on_nowrap() {
     ..Default::default()
   };
 
-  let (text_wrap_mode, line_clamp) = style.text_wrap_mode_and_line_clamp();
-
-  assert_eq!(text_wrap_mode, TextWrapMode::Wrap);
-  assert_eq!(
-    line_clamp,
-    Some(std::borrow::Cow::Owned(LineClamp {
-      count: 1,
-      ellipsis: Some("…".to_string()),
-    }))
-  );
+  assert_eq!(style.resolved_text_wrap_mode(), TextWrapMode::Wrap);
+  assert_eq!(style.clamp_lines(), Some(1));
 }
 
 #[test]
