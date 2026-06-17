@@ -229,12 +229,15 @@ impl Renderer {
     })
   }
 
-  /// Loads a font into the renderer.
-  #[wasm_bindgen(js_name = loadFont)]
-  pub fn load_font(&self, font: FontType) -> Result<(), js_sys::Error> {
-    let input: Font = from_value(font.into()).map_err(map_error)?;
+  /// Loads fonts into the renderer.
+  #[wasm_bindgen(js_name = loadFonts)]
+  pub fn load_fonts(&self, fonts: FontsType) -> Result<(), js_sys::Error> {
+    let fonts: Vec<Font> = from_value(fonts.into()).map_err(map_error)?;
     let mut state = self.write_state()?;
-    load_font_internal(&mut state, input)
+    for font in fonts {
+      load_font_internal(&mut state, font)?;
+    }
+    Ok(())
   }
 
   /// Renders a node tree into an image buffer.

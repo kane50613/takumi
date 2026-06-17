@@ -35,14 +35,6 @@ describe("binary inputs", () => {
     ).not.toThrow();
   });
 
-  test("loadFontSync accepts Buffer, Uint8Array, and ArrayBuffer", () => {
-    const renderer = new Renderer();
-
-    expect(() => renderer.loadFontSync(fontBuffer)).not.toThrow();
-    expect(() => renderer.loadFontSync(fontUint8Array)).not.toThrow();
-    expect(() => renderer.loadFontSync(fontArrayBuffer)).not.toThrow();
-  });
-
   test("loadFonts accepts Buffer, Uint8Array, and ArrayBuffer", async () => {
     const renderer = new Renderer();
 

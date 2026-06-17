@@ -58,13 +58,15 @@ describe("setup", () => {
     expect(await renderer.loadFonts(fonts)).toBe(fonts.length);
   });
 
-  test("loadFont without default fonts", () => {
-    rendererWithoutDefaultFonts.loadFont({
-      name: "Manrope",
-      data: manropeFont,
-      weight: 400,
-      style: "normal",
-    });
+  test("loadFonts without default fonts", async () => {
+    await rendererWithoutDefaultFonts.loadFonts([
+      {
+        name: "Manrope",
+        data: manropeFont,
+        weight: 400,
+        style: "normal",
+      },
+    ]);
   });
 });
 

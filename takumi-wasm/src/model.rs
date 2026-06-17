@@ -37,6 +37,10 @@ extern "C" {
   #[wasm_bindgen(typescript_type = "Font")]
   pub type FontType;
 
+  /// JavaScript type for a list of font inputs.
+  #[wasm_bindgen(typescript_type = "Font[]")]
+  pub type FontsType;
+
   /// JavaScript object representing renderer construction options.
   #[wasm_bindgen(typescript_type = "ConstructRendererOptions")]
   pub type ConstructRendererOptionsType;

@@ -12,10 +12,9 @@ use takumi_base::{
 use takumi_raster::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat};
 
 use crate::{
-  De, FontInput, buffer_slice_from_object, deserialize_with_tracing,
-  encode_frames_task::EncodeFramesTask, load_font_task::LoadFontTask, map_error,
-  measure_task::MeasureTask, parse_font_input, render_animation_task::RenderAnimationTask,
-  render_task::RenderTask, resolve_font_resource,
+  De, FontInput, deserialize_with_tracing, encode_frames_task::EncodeFramesTask,
+  load_font_task::LoadFontTask, map_error, measure_task::MeasureTask, parse_font_input,
+  render_animation_task::RenderAnimationTask, render_task::RenderTask, resolve_font_resource,
 };
 
 /// Represents a single run of text in a measured node.
@@ -109,7 +108,7 @@ pub struct RenderOptions<'env> {
   pub quality: Option<u8>,
   /// Whether to draw debug borders.
   pub draw_debug_border: Option<bool>,
-  /// The fetched resources to use.
+  /// Images keyed by `src`, each carrying raw bytes.
   pub images: Option<Vec<ImageSource<'env>>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
@@ -183,7 +182,7 @@ pub struct RenderAnimationOptions<'env> {
   pub quality: Option<u8>,
   /// Frames per second for timeline sampling.
   pub fps: u32,
-  /// The fetched resources to use.
+  /// Images keyed by `src`, each carrying raw bytes.
   pub images: Option<Vec<ImageSource<'env>>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
@@ -205,7 +204,7 @@ pub struct EncodeFramesOptions<'env> {
   pub format: Option<AnimationOutputFormat>,
   /// The quality of WebP format (0-100). Ignored for APNG and GIF.
   pub quality: Option<u8>,
-  /// The fetched resources to use.
+  /// Images keyed by `src`, each carrying raw bytes.
   pub images: Option<Vec<ImageSource<'env>>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
@@ -372,41 +371,6 @@ impl Renderer {
     Ok(renderer)
   }
 
-  /// Loads a font synchronously.
-  #[napi(ts_args_type = "font: Font")]
-  pub fn load_font_sync(&self, env: Env, font: Object) -> Result<()> {
-    if let Ok(buffer) = buffer_slice_from_object(env, font) {
-      let mut state = self
-        .state
-        .write()
-        .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-
-      // `load_and_store` decodes through this context's cache.
-      state
-        .fonts
-        .load_and_store(FontResource::new(buffer.as_ref()))
-        .map_err(map_error)?;
-
-      return Ok(());
-    }
-
-    let buffer = font
-      .get_named_property("data")
-      .and_then(|buffer| buffer_slice_from_object(env, buffer))?;
-    let font_input: FontInput = deserialize_with_tracing(font)?;
-
-    let mut state = self
-      .state
-      .write()
-      .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-
-    let cache = state.fonts.decode_cache_arc();
-    let resource = resolve_font_resource(&font_input, buffer.as_ref(), &cache)?;
-    state.fonts.load_and_store(resource).map_err(map_error)?;
-
-    Ok(())
-  }
-
   /// Configures this renderer's decoded-font cache (on by default, 256 MiB).
   #[napi(js_name = "configureFontCache")]
   pub fn configure_font_cache(&self, options: crate::FontCacheOptions) -> Result<()> {
@@ -434,20 +398,6 @@ impl Renderer {
       state.image_cache.set_max_bytes(max_bytes.max(0.0) as usize);
     }
     Ok(())
-  }
-
-  /// Loads a font into the renderer asynchronously.
-  #[napi(
-    ts_args_type = "data: Font, signal?: AbortSignal",
-    ts_return_type = "Promise<number>"
-  )]
-  pub fn load_font(
-    &self,
-    env: Env,
-    data: Object,
-    signal: Option<AbortSignal>,
-  ) -> Result<AsyncTask<LoadFontTask>> {
-    self.load_fonts(env, vec![data], signal)
   }
 
   /// Loads multiple fonts into the renderer asynchronously.

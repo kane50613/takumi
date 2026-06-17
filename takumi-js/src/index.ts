@@ -18,7 +18,6 @@ export type {
   Font,
   FontDetails,
   FontLoader,
-  FontLoaderSync,
   ImageSource,
   Keyframes,
   KeyframesMap,

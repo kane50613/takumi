@@ -11,13 +11,6 @@ export type FontLoader =
       data: FontDetails["data"] | (() => Promise<FontDetails["data"]> | FontDetails["data"]);
     });
 
-export type FontLoaderSync =
-  | Font
-  | (Omit<FontDetails, "data"> & {
-      key?: string;
-      data: FontDetails["data"] | (() => FontDetails["data"]);
-    });
-
 export class Renderer extends NativeRenderer {
   private fontsMark = new Set<string>();
   private fontBuffersMark = new WeakSet<FontDetails["data"]>();
@@ -53,30 +46,7 @@ export class Renderer extends NativeRenderer {
     return loadedCount;
   }
 
-  override async loadFont(data: FontLoader, signal?: AbortSignal) {
-    if (!this.isNewFont(data)) {
-      return 0;
-    }
-
-    const resolved = await resolveFontLoader(data);
-    const loadedCount = await super.loadFont(resolved, signal);
-
-    this.checkAndMarkFont(data);
-
-    return loadedCount;
-  }
-
-  override loadFontSync(font: FontLoaderSync): void {
-    if (!this.isNewFont(font)) {
-      return;
-    }
-
-    const resolved = resolveSyncFontLoader(font);
-    super.loadFontSync(resolved);
-    this.checkAndMarkFont(font);
-  }
-
-  private checkAndMarkFont(font: FontLoader | FontLoaderSync) {
+  private checkAndMarkFont(font: FontLoader) {
     const key = createFontKey(font);
 
     if (isBuffer(key)) {
@@ -92,15 +62,9 @@ export class Renderer extends NativeRenderer {
 
     return isNew;
   }
-
-  private isNewFont(font: FontLoader | FontLoaderSync) {
-    const key = createFontKey(font);
-
-    return isBuffer(key) ? !this.fontBuffersMark.has(key) : !this.fontsMark.has(key);
-  }
 }
 
-function createFontKey(font: FontLoader | FontLoaderSync) {
+function createFontKey(font: FontLoader) {
   if ("key" in font && font.key) {
     return font.key;
   }
@@ -117,17 +81,6 @@ async function resolveFontLoader(font: FontLoader) {
     return {
       ...font,
       data: await font.data(),
-    };
-  }
-
-  return font as Font;
-}
-
-function resolveSyncFontLoader(font: FontLoaderSync) {
-  if ("data" in font && typeof font.data === "function") {
-    return {
-      ...font,
-      data: font.data(),
     };
   }
 

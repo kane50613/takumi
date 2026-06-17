@@ -17,108 +17,58 @@ export type FontLoader =
       data: FontDetails["data"] | (() => Promise<FontDetails["data"]> | FontDetails["data"]);
     });
 
-export type FontLoaderSync =
-  | Font
-  | (Omit<FontDetails, "data"> & {
-      key?: string;
-      data: FontDetails["data"] | (() => FontDetails["data"]);
-    });
-
 export class Renderer extends RendererInternal {
   private fontsMark = new Set<string>();
   private fontBuffersMark = new WeakSet<ByteBuf>();
 
-  async loadFonts(fonts: FontLoader[], signal?: AbortSignal): Promise<number> {
-    let loaded = 0;
+  override async loadFonts(fonts: FontLoader[], signal?: AbortSignal): Promise<number> {
+    const batchFontsMark = new Set<string>();
+    const batchFontBuffersMark = new WeakSet<ByteBuf>();
+    const targetFonts = fonts.filter((font) => {
+      const key = createFontKey(font);
 
-    for (const font of fonts) {
-      if (await this.loadFontInternal(font, signal)) {
-        loaded += 1;
-      }
-    }
-
-    return loaded;
-  }
-
-  override loadFont(data: FontLoaderSync, signal?: AbortSignal): void;
-  override loadFont(data: FontLoader, signal?: AbortSignal): Promise<void>;
-  override loadFont(data: FontLoaderSync | FontLoader, signal?: AbortSignal): void | Promise<void> {
-    const loaded = this.loadFontInternal(data, signal);
-
-    if (isPromise(loaded)) {
-      return loaded.then(() => undefined);
-    }
-  }
-
-  private loadFontInternal(
-    font: FontLoaderSync | FontLoader,
-    signal?: AbortSignal,
-  ): boolean | Promise<boolean> {
-    if (signal?.aborted) {
-      return false;
-    }
-
-    const resolved = resolveFontLoader(font);
-
-    if (isPromise(resolved)) {
-      return resolved.then((value) => {
-        if (signal?.aborted || !this.checkAndMarkFont(value)) {
+      if (isBuffer(key)) {
+        if (this.fontBuffersMark.has(key) || batchFontBuffersMark.has(key)) {
           return false;
         }
 
-        try {
-          super.loadFont(value);
-          return true;
-        } catch (error) {
-          this.unmarkFont(value);
-          throw error;
-        }
-      });
-    }
+        batchFontBuffersMark.add(key);
+        return true;
+      }
 
-    if (!this.checkAndMarkFont(resolved)) {
-      return false;
-    }
+      if (this.fontsMark.has(key) || batchFontsMark.has(key)) {
+        return false;
+      }
 
-    try {
-      super.loadFont(resolved);
+      batchFontsMark.add(key);
       return true;
-    } catch (error) {
-      this.unmarkFont(resolved);
-      throw error;
+    });
+
+    const resolvedFonts = await Promise.all(targetFonts.map(resolveFontLoader));
+
+    if (signal?.aborted) {
+      return 0;
     }
+
+    super.loadFonts(resolvedFonts);
+    targetFonts.forEach((font) => this.checkAndMarkFont(font));
+
+    return resolvedFonts.length;
   }
 
-  private checkAndMarkFont(font: FontLoaderSync | FontLoader): boolean {
+  private checkAndMarkFont(font: FontLoader): void {
     const key = createFontKey(font);
 
     if (isBuffer(key)) {
-      const isNew = !this.fontBuffersMark.has(key);
-
       this.fontBuffersMark.add(key);
-      return isNew;
-    }
-
-    const isNew = !this.fontsMark.has(key);
-
-    this.fontsMark.add(key);
-
-    return isNew;
-  }
-
-  private unmarkFont(font: FontLoaderSync | FontLoader): void {
-    const key = createFontKey(font);
-
-    if (isBuffer(key)) {
-      this.fontBuffersMark.delete(key);
       return;
     }
 
-    this.fontsMark.delete(key);
+    this.fontsMark.add(key);
   }
 }
 
-function createFontKey(font: FontLoaderSync | FontLoader) {
+function createFontKey(font: FontLoader) {
   if ("key" in font && font.key) {
     return font.key;
   }
@@ -130,7 +80,7 @@ function createFontKey(font: FontLoaderSync | FontLoader) {
   return `${font.name ?? ""}-${font.style ?? ""}-${font.weight ?? ""}`;
 }
 
-function resolveFontLoader(font: FontLoaderSync | FontLoader): Font | Promise<Font> {
+function resolveFontLoader(font: FontLoader): Font | Promise<Font> {
   if ("data" in font && typeof font.data === "function") {
     const resolved = font.data();
 
