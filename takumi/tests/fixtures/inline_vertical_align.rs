@@ -6,6 +6,64 @@ use takumi::layout::{
 use crate::test_utils::run_fixture_test;
 
 #[test]
+fn inline_top_bottom_box_line_box_height() {
+  // A `top`/`bottom` box taller than line-height grows the line box to the box
+  // height, attaching to the line edge without adding text leading on the far
+  // side. https://www.w3.org/TR/CSS22/visudet.html#line-height
+  let tall = |align: VerticalAlign, color: Color| {
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::InlineBlock))
+        .with(StyleDeclaration::vertical_align(align))
+        .with(StyleDeclaration::width(Px(24.0)))
+        .with(StyleDeclaration::height(Px(80.0)))
+        .with(StyleDeclaration::background_color(ColorInput::Value(color))),
+    )
+  };
+  let line = |align: VerticalAlign, color: Color| {
+    Node::container([
+      Node::text("Hxgp ".to_string()),
+      tall(align, color),
+      Node::text(" Hxgp".to_string()),
+    ])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::font_size(Px(28.0).into()))
+        .with(StyleDeclaration::line_height(LineHeight::Length(Px(32.0))))
+        .with_margin(Sides([Px(0.0), Px(0.0), Px(10.0), Px(0.0)]))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color([241, 245, 249, 255]),
+        ))),
+    )
+  };
+
+  let container = Node::container([
+    line(
+      VerticalAlign::Keyword(VerticalAlignKeyword::Top),
+      Color([253, 186, 116, 255]),
+    ),
+    line(
+      VerticalAlign::Keyword(VerticalAlignKeyword::Bottom),
+      Color([147, 197, 253, 255]),
+    ),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with_padding(Sides([Px(20.0); 4]))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      ))),
+  );
+
+  run_fixture_test(container, "inline_top_bottom_box_line_box_height");
+}
+
+#[test]
 fn inline_empty_atomic_baseline() {
   // An empty atomic inline box (no in-flow content) aligns its bottom margin
   // edge to the baseline instead of hanging below it; a box WITH content keeps
