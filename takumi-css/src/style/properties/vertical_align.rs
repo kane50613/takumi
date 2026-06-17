@@ -116,6 +116,15 @@ impl VerticalAlign {
     line_height: LineHeight,
   ) -> ResolvedVerticalAlign {
     match self {
+      // Font-size fraction, independent of line-height (CSS sub/super, per Chromium).
+      Self::Keyword(VerticalAlignKeyword::Super) => ResolvedVerticalAlign::BaselineShift {
+        px: font_size / 3.0 + 1.0,
+        line_height_relative: 0.0,
+      },
+      Self::Keyword(VerticalAlignKeyword::Sub) => ResolvedVerticalAlign::BaselineShift {
+        px: -(font_size / 5.0 + 1.0),
+        line_height_relative: 0.0,
+      },
       Self::Keyword(keyword) => ResolvedVerticalAlign::Keyword(keyword),
       Self::Length(length) => {
         if line_height == LineHeight::Normal {
@@ -193,8 +202,8 @@ impl ResolvedVerticalAlign {
         VerticalAlignKeyword::TextBottom => {
           *y = metrics.baseline + parent_text_descent - box_height
         }
-        VerticalAlignKeyword::Sub => *y = baseline_top + (metrics.descent * 0.2),
-        VerticalAlignKeyword::Super => *y = baseline_top - metrics.ascent + (metrics.ascent * 0.4),
+        // `resolve` maps sub/super to a `BaselineShift`; this arm is for exhaustiveness.
+        VerticalAlignKeyword::Sub | VerticalAlignKeyword::Super => *y = baseline_top,
       },
       ResolvedVerticalAlign::BaselineShift {
         px,
@@ -449,31 +458,45 @@ mod tests {
   }
 
   #[test]
-  fn sub_and_super_use_inline_box_baseline_when_available() {
+  fn sub_and_super_shift_by_font_size_fraction() {
     let metrics = line_metrics();
-    let mut sub_y = 0.0;
-    ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Sub).apply(
-      &mut sub_y,
-      &metrics,
-      20.0,
-      Some(12.0),
-      None,
-      None,
-    );
-    assert_eq!(sub_y, (metrics.baseline - 12.0) + (metrics.descent * 0.2));
+    let font_size = 40.0;
 
-    let mut super_y = 0.0;
-    ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Super).apply(
-      &mut super_y,
-      &metrics,
-      20.0,
-      Some(12.0),
-      None,
-      None,
+    let sub = VerticalAlign::Keyword(VerticalAlignKeyword::Sub).resolve(
+      &sizing(),
+      font_size,
+      LineHeight::Normal,
     );
     assert_eq!(
-      super_y,
-      (metrics.baseline - 12.0) - metrics.ascent + (metrics.ascent * 0.4)
+      sub,
+      ResolvedVerticalAlign::BaselineShift {
+        px: -(font_size / 5.0 + 1.0),
+        line_height_relative: 0.0,
+      }
     );
+    let mut sub_y = 0.0;
+    sub.apply(&mut sub_y, &metrics, 20.0, Some(12.0), None, None);
+    assert_eq!(sub_y, (metrics.baseline - 12.0) + (font_size / 5.0 + 1.0));
+
+    let sup = VerticalAlign::Keyword(VerticalAlignKeyword::Super).resolve(
+      &sizing(),
+      font_size,
+      LineHeight::Normal,
+    );
+    let mut super_y = 0.0;
+    sup.apply(&mut super_y, &metrics, 20.0, Some(12.0), None, None);
+    assert_eq!(super_y, (metrics.baseline - 12.0) - (font_size / 3.0 + 1.0));
+  }
+
+  #[test]
+  fn sub_and_super_shift_is_line_height_independent() {
+    let font_size = 40.0;
+    for keyword in [VerticalAlignKeyword::Sub, VerticalAlignKeyword::Super] {
+      let normal =
+        VerticalAlign::Keyword(keyword).resolve(&sizing(), font_size, LineHeight::Normal);
+      let unitless =
+        VerticalAlign::Keyword(keyword).resolve(&sizing(), font_size, LineHeight::Unitless(2.0));
+      assert_eq!(normal, unitless);
+    }
   }
 }
