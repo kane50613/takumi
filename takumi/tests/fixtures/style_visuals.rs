@@ -434,7 +434,7 @@ fn test_style_outline_with_text() {
       )))
       .with_padding(Sides([Px(12.0), Px(32.0), Px(12.0), Px(32.0)]))
       .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(9999.0)); 4])))
-      .with(StyleDeclaration::outline_width(Px(6.0)))
+      .with(StyleDeclaration::outline_width(Px(6.0).into()))
       .with(StyleDeclaration::outline_color(ColorInput::Value(Color([
         196, 181, 253, 255,
       ]))))

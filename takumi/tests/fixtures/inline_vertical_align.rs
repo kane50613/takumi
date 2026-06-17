@@ -75,7 +75,7 @@ fn inline_empty_atomic_baseline() {
         .with(StyleDeclaration::width(Px(40.0)))
         .with(StyleDeclaration::height(Px(56.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(color)))
-        .with_border_width(Sides([Px(2.0); 4]))
+        .with_border_width(Sides([Px(2.0).into(); 4]))
         .with_border_style(Sides([BorderStyle::Solid; 4]))
         .with_border_color(Sides([ColorInput::Value(Color([30, 41, 59, 255])); 4])),
     )
