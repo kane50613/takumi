@@ -636,7 +636,11 @@ impl<'i> FromCss<'i> for u32 {
   const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Integer)];
 
   fn from_css(input: &mut cssparser::Parser<'i, '_>) -> ParseResult<'i, Self> {
-    Ok(input.expect_integer()?.max(0) as u32)
+    let value = input.expect_integer()?;
+    if value < 0 {
+      return Err(input.new_error(cssparser::BasicParseErrorKind::QualifiedRuleInvalid));
+    }
+    Ok(value as u32)
   }
 }
 

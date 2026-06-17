@@ -18,7 +18,8 @@ use crate::{
     style::{
       Affine, BoxSizing, Color, Float, FontSynthesis, Length, ResolvedVerticalAlign,
       SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
-      TextFitTarget, TextOverflow, TextWrapMode, TextWrapStyle, VerticalAlign, VerticalAlignKeyword,
+      TextFitTarget, TextOverflow, TextWrapMode, TextWrapStyle, VerticalAlign,
+      VerticalAlignKeyword,
     },
     tree::RenderNode,
   },
@@ -1089,12 +1090,30 @@ fn build_inline_layout_tree<'c, 'g: 'c>(
           }
           .map(|length| length.to_px(&context.sizing, 0.0));
           let border = Rect {
-            top: context.style.border_top_width,
-            right: context.style.border_right_width,
-            bottom: context.style.border_bottom_width,
-            left: context.style.border_left_width,
+            top: (
+              context.style.border_top_style,
+              context.style.border_top_width,
+            ),
+            right: (
+              context.style.border_right_style,
+              context.style.border_right_width,
+            ),
+            bottom: (
+              context.style.border_bottom_style,
+              context.style.border_bottom_width,
+            ),
+            left: (
+              context.style.border_left_style,
+              context.style.border_left_width,
+            ),
           }
-          .map(|width| Length::from(width).to_px(&context.sizing, 0.0));
+          .map(|(border_style, width)| {
+            if border_style.is_rendered() {
+              Length::from(width).to_px(&context.sizing, 0.0)
+            } else {
+              0.0
+            }
+          });
 
           let atomic_metrics = render_node
             .node
