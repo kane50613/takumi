@@ -6,6 +6,69 @@ use takumi::layout::{
 use crate::test_utils::run_fixture_test;
 
 #[test]
+fn inline_empty_atomic_baseline() {
+  // An empty atomic inline box (no in-flow content) aligns its bottom margin
+  // edge to the baseline instead of hanging below it; a box WITH content keeps
+  // its own content baseline. https://www.w3.org/TR/CSS22/visudet.html#leading
+  let empty = |display: Display, color: Color| {
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(display))
+        .with(StyleDeclaration::width(Px(40.0)))
+        .with(StyleDeclaration::height(Px(56.0)))
+        .with(StyleDeclaration::background_color(ColorInput::Value(color)))
+        .with_border_width(Sides([Px(2.0); 4]))
+        .with_border_style(Sides([BorderStyle::Solid; 4]))
+        .with_border_color(Sides([ColorInput::Value(Color([30, 41, 59, 255])); 4])),
+    )
+  };
+
+  // Guard against over-correction: a content-bearing pill must align by its
+  // content baseline, not be pulled down to its bottom edge.
+  let filled = Node::container([Node::text("Hi".to_string())]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::InlineBlock))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([253, 224, 71, 255]),
+      )))
+      .with_padding(Sides([Px(6.0), Px(14.0), Px(6.0), Px(14.0)]))
+      .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(9999.0)); 4]))),
+  );
+
+  let space = || Node::text(" ".to_string());
+  let line = Node::container([
+    Node::text("Ag ".to_string()),
+    empty(Display::InlineBlock, Color([252, 165, 165, 255])),
+    space(),
+    empty(Display::InlineFlex, Color([134, 239, 172, 255])),
+    space(),
+    empty(Display::InlineGrid, Color([147, 197, 253, 255])),
+    space(),
+    filled,
+    Node::text(" Ag".to_string()),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::font_size(Px(40.0).into()))
+      .with(StyleDeclaration::line_height(LineHeight::Length(Px(84.0)))),
+  );
+
+  let container = Node::container([line]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with_padding(Sides([Px(24.0); 4]))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      ))),
+  );
+
+  run_fixture_test(container, "inline_empty_atomic_baseline");
+}
+
+#[test]
 fn inline_vertical_align_types() {
   let row = |label: &str, align: VerticalAlign, color: Color| {
     Node::container([

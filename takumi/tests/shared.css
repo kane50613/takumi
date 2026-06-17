@@ -36,6 +36,14 @@
   src: url("../../assets/fonts/poppins/poppins-v24-devanagari_latin-700.woff2") format("woff2");
 }
 
+/* takumi defaults box-sizing to border-box; match it so browser comparisons
+   of these fixtures are faithful. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   padding: 0;

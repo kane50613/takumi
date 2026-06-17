@@ -1622,10 +1622,18 @@ impl<'g> RenderNode<'g> {
       return None;
     }
 
+    // An atomic box with no in-flow inline content has no line boxes, so it has
+    // no content baseline; the caller must fall back to the bottom margin edge.
+    // https://www.w3.org/TR/CSS22/visudet.html#leading
+    let items = collect_inline_items(self);
+    if items.is_empty() {
+      return None;
+    }
+
     let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
     let max_width = size.width.max(0.0);
     let built = create_inline_layout(InlineLayoutRequest {
-      items: collect_inline_items(self),
+      items,
       available_space: Size {
         width: AvailableSpace::Definite(max_width),
         height: available_space.height,
