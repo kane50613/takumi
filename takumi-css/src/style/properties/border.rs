@@ -1,8 +1,7 @@
 use std::fmt;
 
-use crate::style::{ToCss, unexpected_token};
-use cssparser::{Parser, Token, match_ignore_ascii_case};
-use taffy::LengthPercentage;
+use crate::style::{ToCss, declare_enum_from_css_impl, unexpected_token};
+use cssparser::Parser;
 
 use crate::style::{
   Animatable, BorderStyle, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, MakeComputed,
@@ -21,14 +20,20 @@ pub enum LineWidthKeyword {
   Thick,
 }
 
-impl LineWidthKeyword {
-  /// Resolved width in pixels.
-  pub const fn to_px(self) -> f32 {
-    match self {
-      Self::Thin => 1.0,
-      Self::Medium => 3.0,
-      Self::Thick => 5.0,
-    }
+declare_enum_from_css_impl!(
+  LineWidthKeyword,
+  "thin" => LineWidthKeyword::Thin,
+  "medium" => LineWidthKeyword::Medium,
+  "thick" => LineWidthKeyword::Thick,
+);
+
+impl From<LineWidthKeyword> for Length {
+  fn from(keyword: LineWidthKeyword) -> Self {
+    Length::Px(match keyword {
+      LineWidthKeyword::Thin => 1.0,
+      LineWidthKeyword::Medium => 3.0,
+      LineWidthKeyword::Thick => 5.0,
+    })
   }
 }
 
@@ -44,29 +49,6 @@ pub enum LineWidth {
   Length(Length),
 }
 
-impl LineWidth {
-  /// Zero width, the used value when the line's style is `none` or `hidden`.
-  pub const ZERO: Self = Self::Length(Length::Px(0.0));
-
-  /// Resolves the value to a [`Length`], mapping keywords to their pixel widths.
-  pub fn to_length(self) -> Length {
-    match self {
-      Self::Keyword(keyword) => Length::Px(keyword.to_px()),
-      Self::Length(length) => length,
-    }
-  }
-
-  /// Resolves the value to absolute pixels.
-  pub fn to_px(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
-    self.to_length().to_px(sizing, percentage_full_px)
-  }
-
-  /// Resolves the value to a taffy [`LengthPercentage`].
-  pub fn resolve_to_length_percentage(self, sizing: &SizingContext) -> LengthPercentage {
-    self.to_length().resolve_to_length_percentage(sizing)
-  }
-}
-
 impl Default for LineWidth {
   fn default() -> Self {
     Self::Keyword(LineWidthKeyword::Medium)
@@ -79,18 +61,18 @@ impl From<Length> for LineWidth {
   }
 }
 
+impl From<LineWidth> for Length {
+  fn from(width: LineWidth) -> Self {
+    match width {
+      LineWidth::Keyword(keyword) => keyword.into(),
+      LineWidth::Length(length) => length,
+    }
+  }
+}
+
 impl<'i> FromCss<'i> for LineWidth {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    if let Ok(keyword) = input.try_parse(|input| -> ParseResult<'i, LineWidthKeyword> {
-      let location = input.current_source_location();
-      let ident = input.expect_ident_cloned()?;
-      match_ignore_ascii_case! { ident.as_ref(),
-        "thin" => Ok(LineWidthKeyword::Thin),
-        "medium" => Ok(LineWidthKeyword::Medium),
-        "thick" => Ok(LineWidthKeyword::Thick),
-        _ => Err(unexpected_token!(location, &Token::Ident(ident))),
-      }
-    }) {
+    if let Ok(keyword) = input.try_parse(LineWidthKeyword::from_css) {
       return Ok(Self::Keyword(keyword));
     }
 
@@ -122,8 +104,8 @@ impl Animatable for LineWidth {
     sizing: &SizingContext,
     current_color: Color,
   ) {
-    let from_length = from.to_length();
-    let to_length = to.to_length();
+    let from_length = Length::from(*from);
+    let to_length = Length::from(*to);
     let mut value = from_length;
     value.interpolate(&from_length, &to_length, progress, sizing, current_color);
     *self = Self::Length(value);
@@ -395,9 +377,9 @@ mod tests {
       LineWidth::default(),
       LineWidth::Keyword(LineWidthKeyword::Medium)
     );
-    assert_eq!(LineWidth::default().to_length(), Length::Px(3.0));
-    assert_eq!(LineWidthKeyword::Thin.to_px(), 1.0);
-    assert_eq!(LineWidthKeyword::Thick.to_px(), 5.0);
+    assert_eq!(Length::from(LineWidth::default()), Length::Px(3.0));
+    assert_eq!(Length::from(LineWidthKeyword::Thin), Length::Px(1.0));
+    assert_eq!(Length::from(LineWidthKeyword::Thick), Length::Px(5.0));
   }
 
   #[test]

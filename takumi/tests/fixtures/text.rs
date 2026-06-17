@@ -636,7 +636,7 @@ fn text_ellipsis_line_clamp_2() {
       )))
       .with(StyleDeclaration::font_size(Px(48.0).into()))
       .with(StyleDeclaration::text_overflow(TextOverflow::Ellipsis))
-      .with(StyleDeclaration::line_clamp(Some(2.into()))),
+      .with_line_clamp(2u32.into()),
   );
 
   run_fixture_test(text, "text_ellipsis_line_clamp_2");

@@ -2,65 +2,168 @@ use cssparser::Parser;
 use std::fmt;
 
 use crate::style::{
-  CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, properties::write_css_string,
-  tw::TailwindPropertyParser,
+  Animatable, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss,
+  declare_enum_from_css_impl, properties::write_css_string, tw::TailwindPropertyParser,
 };
 
-#[derive(Debug, Clone, PartialEq)]
-/// Represents a line clamp value.
+/// `max-lines`: `none | <integer>`. Not inherited.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
-pub struct LineClamp {
-  /// The number of lines to clamp.
-  pub count: u32,
-  /// The ellipsis character to use when the text is clamped.
-  pub ellipsis: Option<String>,
+pub enum MaxLines {
+  /// No limit on the number of lines.
+  #[default]
+  None,
+  /// Clamp to at most this many lines.
+  Lines(u32),
 }
 
-impl MakeComputed for LineClamp {}
+impl MakeComputed for MaxLines {}
+impl Animatable for MaxLines {}
 
-impl TailwindPropertyParser for LineClamp {
-  fn parse_tw(token: &str) -> Option<Self> {
-    if token.eq_ignore_ascii_case("none") {
-      return Some(LineClamp {
-        count: 0,
-        ellipsis: None,
-      });
-    }
-    let count = token.parse::<u32>().ok()?;
-    if count == 0 {
-      return None;
-    }
-    Some(LineClamp {
-      count,
-      ellipsis: None,
-    })
-  }
-}
-
-impl From<u32> for LineClamp {
-  fn from(count: u32) -> Self {
-    Self {
-      count,
-      ellipsis: None,
-    }
-  }
-}
-
-impl<'i> FromCss<'i> for LineClamp {
+impl<'i> FromCss<'i> for MaxLines {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
-      return Ok(LineClamp {
-        count: 0,
-        ellipsis: None,
-      });
+      return Ok(Self::None);
     }
-    let count = input.try_parse(Parser::expect_integer)?;
-    let ellipsis = input.try_parse(Parser::expect_string_cloned).ok();
-
-    Ok(LineClamp {
-      count: count as u32,
-      ellipsis: ellipsis.map(|s| s.to_string()),
+    let count = input.expect_integer()?;
+    Ok(if count >= 1 {
+      Self::Lines(count as u32)
+    } else {
+      Self::None
     })
+  }
+
+  const VALID_TOKENS: &'static [CssToken] = &[
+    CssToken::Keyword("none"),
+    CssToken::Syntax(CssSyntaxKind::Integer),
+  ];
+}
+
+impl ToCss for MaxLines {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::None => dest.write_str("none"),
+      Self::Lines(count) => write!(dest, "{count}"),
+    }
+  }
+}
+
+/// `block-ellipsis`: `none | auto | <string>`. Inherited.
+#[derive(Debug, Clone, PartialEq, Default)]
+#[non_exhaustive]
+pub enum BlockEllipsis {
+  /// No ellipsis is shown when content is clamped.
+  #[default]
+  None,
+  /// Use the user-agent default ellipsis (`…`).
+  Auto,
+  /// Use a specific string as the ellipsis.
+  String(String),
+}
+
+impl MakeComputed for BlockEllipsis {}
+impl Animatable for BlockEllipsis {}
+
+impl<'i> FromCss<'i> for BlockEllipsis {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+      return Ok(Self::None);
+    }
+    if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+      return Ok(Self::Auto);
+    }
+    Ok(Self::String(input.expect_string_cloned()?.to_string()))
+  }
+
+  const VALID_TOKENS: &'static [CssToken] = &[
+    CssToken::Keyword("none"),
+    CssToken::Keyword("auto"),
+    CssToken::Syntax(CssSyntaxKind::String),
+  ];
+}
+
+impl ToCss for BlockEllipsis {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::None => dest.write_str("none"),
+      Self::Auto => dest.write_str("auto"),
+      Self::String(value) => write_css_string(dest, value),
+    }
+  }
+}
+
+/// `continue`: `auto | discard`. Not inherited.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum Continue {
+  /// Default fragmentation behavior; content is not discarded.
+  #[default]
+  Auto,
+  /// Discard boxes that overflow the `max-lines` limit.
+  Discard,
+}
+
+declare_enum_from_css_impl!(
+  Continue,
+  "auto" => Continue::Auto,
+  "discard" => Continue::Discard,
+);
+
+impl Animatable for Continue {}
+
+/// Parsed `line-clamp` shorthand: `none | <integer> || <'block-ellipsis'>`.
+///
+/// Expands to `max-lines`, `block-ellipsis`, and `continue`. `-webkit-line-clamp`
+/// shares this parser via vendor-prefix stripping.
+#[derive(Debug, Clone, PartialEq, Default)]
+#[non_exhaustive]
+pub struct LineClampShorthand {
+  /// `max-lines` longhand.
+  pub max_lines: MaxLines,
+  /// `block-ellipsis` longhand.
+  pub block_ellipsis: BlockEllipsis,
+  /// `continue` longhand.
+  pub line_continue: Continue,
+}
+
+impl LineClampShorthand {
+  fn clamp(max_lines: MaxLines, block_ellipsis: BlockEllipsis) -> Self {
+    Self {
+      max_lines,
+      block_ellipsis,
+      line_continue: Continue::Discard,
+    }
+  }
+}
+
+impl From<u32> for LineClampShorthand {
+  fn from(count: u32) -> Self {
+    if count >= 1 {
+      Self::clamp(MaxLines::Lines(count), BlockEllipsis::Auto)
+    } else {
+      Self::default()
+    }
+  }
+}
+
+impl MakeComputed for LineClampShorthand {}
+
+impl<'i> FromCss<'i> for LineClampShorthand {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+      return Ok(Self::default());
+    }
+
+    let count = input.expect_integer()?;
+    if count < 1 {
+      return Ok(Self::default());
+    }
+
+    let block_ellipsis = input
+      .try_parse(BlockEllipsis::from_css)
+      .unwrap_or(BlockEllipsis::Auto);
+
+    Ok(Self::clamp(MaxLines::Lines(count as u32), block_ellipsis))
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[
@@ -70,17 +173,24 @@ impl<'i> FromCss<'i> for LineClamp {
   ];
 }
 
-impl ToCss for LineClamp {
-  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    if self.count == 0 && self.ellipsis.is_none() {
-      return dest.write_str("none");
+impl TailwindPropertyParser for LineClampShorthand {
+  fn parse_tw(token: &str) -> Option<Self> {
+    if token.eq_ignore_ascii_case("none") {
+      return Some(Self::default());
     }
-    match &self.ellipsis {
-      Some(e) => {
-        write!(dest, "{} ", self.count)?;
-        write_css_string(dest, e)
-      }
-      None => write!(dest, "{}", self.count),
+    let count = token.parse::<u32>().ok()?;
+    if count == 0 {
+      return None;
     }
+    Some(Self::clamp(MaxLines::Lines(count), BlockEllipsis::Auto))
   }
+}
+
+/// Resolved line-clamp used during inline layout.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LineClamp {
+  /// The number of lines to clamp to.
+  pub count: u32,
+  /// The ellipsis to use when the text is clamped, if overridden.
+  pub ellipsis: Option<String>,
 }

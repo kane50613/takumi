@@ -275,7 +275,7 @@ pub enum TailwindProperty {
   /// `font-family` property.
   FontFamily(FontFamily),
   /// `line-clamp` property.
-  LineClamp(LineClamp),
+  LineClamp(LineClampShorthand),
   /// `text-overflow` property.
   TextOverflow(TextOverflow),
   /// `text-wrap` property.
@@ -868,8 +868,14 @@ impl TailwindProperty {
       TailwindProperty::FontFamily(font_family) => {
         push_decl!(builder, important, font_family(font_family))
       }
-      TailwindProperty::LineClamp(line_clamp) => {
-        push_decl!(builder, important, line_clamp(Some(line_clamp)))
+      TailwindProperty::LineClamp(value) => {
+        push_decl!(
+          builder,
+          important,
+          max_lines(value.max_lines),
+          block_ellipsis(value.block_ellipsis),
+          r#continue(value.line_continue)
+        )
       }
       TailwindProperty::TextAlign(text_align) => {
         push_decl!(builder, important, text_align(text_align))
@@ -1071,7 +1077,7 @@ impl TailwindProperty {
         push_decl!(
           builder,
           important,
-          outline_offset(outline_offset.to_length())
+          outline_offset(Length::from(outline_offset))
         )
       }
       TailwindProperty::Rounded(rounded) => rounded_corners!(

@@ -16,7 +16,7 @@ use crate::{
     border::BorderPath,
     node::Node,
     style::{
-      Affine, BoxSizing, Color, Float, FontSynthesis, ResolvedVerticalAlign,
+      Affine, BoxSizing, Color, Float, FontSynthesis, Length, ResolvedVerticalAlign,
       SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
       TextFitTarget, TextOverflow, TextWrapMode, TextWrapStyle, VerticalAlign,
     },
@@ -1062,7 +1062,7 @@ fn build_inline_layout_tree<'c, 'g: 'c>(
             bottom: context.style.border_bottom_width,
             left: context.style.border_left_width,
           }
-          .map(|length| length.to_px(&context.sizing, 0.0));
+          .map(|width| Length::from(width).to_px(&context.sizing, 0.0));
 
           let atomic_metrics = render_node
             .node
@@ -2017,12 +2017,12 @@ pub fn create_inline_constraint(
       + if !context.style.border_left_style.is_rendered() {
         0.0
       } else {
-        context.style.border_left_width.to_px(sizing, 0.0)
+        Length::from(context.style.border_left_width).to_px(sizing, 0.0)
       }
       + if !context.style.border_right_style.is_rendered() {
         0.0
       } else {
-        context.style.border_right_width.to_px(sizing, 0.0)
+        Length::from(context.style.border_right_width).to_px(sizing, 0.0)
       };
     width_constraint = (width_constraint - horizontal_insets).max(0.0);
   }

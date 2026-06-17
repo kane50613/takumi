@@ -836,7 +836,7 @@ macro_rules! define_style {
           match self {
             $(
               Self::[<$longhand:camel>](value) => {
-                let name = stringify!($longhand).replace("_", "-");
+                let name = stringify!($longhand).replace("r#", "").replace("_", "-");
                 if name.starts_with("webkit-") {
                   dest.write_str("-")?;
                 }
@@ -998,7 +998,9 @@ define_style! {
     font_feature_settings: FontFeatureSettings where inherit = true,
     font_synthesis_weight: FontSynthesic where inherit = true,
     font_synthesis_style: FontSynthesic where inherit = true,
-    line_clamp: Option<LineClamp>,
+    max_lines: MaxLines,
+    block_ellipsis: BlockEllipsis where inherit = true,
+    r#continue: Continue,
     text_align: TextAlign where inherit = true,
     webkit_text_stroke_width: Option<LengthDefaultsToZero> where inherit = true,
     webkit_text_stroke_color: Option<ColorInput> where inherit = true,
@@ -1324,6 +1326,11 @@ define_style! {
     text_wrap: TextWrap => [TextWrapMode, TextWrapStyle] |value, target| {
       target.push(StyleDeclaration::text_wrap_mode(value.mode));
       target.push(StyleDeclaration::text_wrap_style(value.style));
+    },
+    line_clamp: LineClampShorthand => [MaxLines, BlockEllipsis, Continue] |value, target| {
+      target.push(StyleDeclaration::max_lines(value.max_lines));
+      target.push(StyleDeclaration::block_ellipsis(value.block_ellipsis));
+      target.push(StyleDeclaration::r#continue(value.line_continue));
     },
   }
 }

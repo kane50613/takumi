@@ -24,19 +24,19 @@ impl ComputedStyle {
     // The used value of `border-width`/`outline-width` is zero when the line's
     // style is `none` or `hidden`, even though the computed value is `medium`.
     if !self.border_top_style.is_rendered() {
-      self.border_top_width = LineWidth::ZERO;
+      self.border_top_width = LineWidth::Length(Length::zero());
     }
     if !self.border_right_style.is_rendered() {
-      self.border_right_width = LineWidth::ZERO;
+      self.border_right_width = LineWidth::Length(Length::zero());
     }
     if !self.border_bottom_style.is_rendered() {
-      self.border_bottom_width = LineWidth::ZERO;
+      self.border_bottom_width = LineWidth::Length(Length::zero());
     }
     if !self.border_left_style.is_rendered() {
-      self.border_left_width = LineWidth::ZERO;
+      self.border_left_width = LineWidth::Length(Length::zero());
     }
     if !self.outline_style.is_rendered() {
-      self.outline_width = LineWidth::ZERO;
+      self.outline_width = LineWidth::Length(Length::zero());
     }
 
     // https://www.w3.org/TR/css-display-3/#transformations
@@ -131,20 +131,31 @@ impl ComputedStyle {
       _ => {}
     }
 
-    if let Some(clamp) = &self
-      .line_clamp
-      .as_ref()
-      .and_then(|clamp| clamp.ellipsis.as_deref())
-    {
-      return clamp;
+    match &self.block_ellipsis {
+      BlockEllipsis::String(custom) => custom.as_str(),
+      BlockEllipsis::None => "",
+      BlockEllipsis::Auto => ELLIPSIS_CHAR,
     }
+  }
 
-    ELLIPSIS_CHAR
+  /// Resolves the `max-lines`/`block-ellipsis` longhands into a clamp for layout.
+  fn resolved_line_clamp(&self) -> Option<LineClamp> {
+    match self.max_lines {
+      MaxLines::Lines(count) if count >= 1 => Some(LineClamp {
+        count,
+        ellipsis: match &self.block_ellipsis {
+          BlockEllipsis::String(custom) => Some(custom.clone()),
+          BlockEllipsis::None => Some(String::new()),
+          BlockEllipsis::Auto => None,
+        },
+      }),
+      _ => None,
+    }
   }
 
   pub fn text_wrap_mode_and_line_clamp(&self) -> (TextWrapMode, Option<Cow<'_, LineClamp>>) {
     let mut text_wrap_mode = self.text_wrap_mode;
-    let mut line_clamp = self.line_clamp.as_ref().map(Cow::Borrowed);
+    let mut line_clamp = self.resolved_line_clamp().map(Cow::Owned);
 
     // Special case: when nowrap + ellipsis, parley will layout all the text even when it overflows.
     // So we need to use a fixed line clamp of 1 instead.
@@ -215,7 +226,7 @@ impl ComputedStyle {
         bottom: self.border_bottom_width,
         left: self.border_left_width,
       }
-      .map(|border| border.resolve_to_length_percentage(sizing)),
+      .map(|border| Length::from(border).resolve_to_length_percentage(sizing)),
       padding: Rect {
         top: self.padding_top,
         right: self.padding_right,

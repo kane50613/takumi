@@ -57,7 +57,7 @@ fn text_inline() {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Block))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
-      .with(StyleDeclaration::line_clamp(Some(3.into())))
+      .with_line_clamp(3u32.into())
       .with(StyleDeclaration::text_overflow(TextOverflow::Ellipsis))
       .with(StyleDeclaration::font_size(Px(48.0).into()))
       .with_white_space(WhiteSpace::pre_wrap()),

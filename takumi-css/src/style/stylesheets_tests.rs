@@ -120,7 +120,7 @@ fn custom_properties_map_to_custom_property_id() {
 
 #[test]
 fn property_id_accepts_webkit_aliases() {
-  let line_clamp = PropertyId::Longhand(LonghandId::LineClamp);
+  let line_clamp = PropertyId::Shorthand(ShorthandId::LineClamp);
 
   assert_eq!(PropertyId::from_kebab_case("line-clamp"), line_clamp);
   assert_eq!(PropertyId::from_camel_case("lineClamp"), line_clamp);
@@ -155,12 +155,41 @@ fn parse_webkit_line_clamp_matches_line_clamp() {
   let mut webkit_line_clamp = Style::default();
   webkit_line_clamp.append_block(parse_declarations("-webkit-line-clamp", "2"));
 
+  let webkit = webkit_line_clamp.inherit(&ComputedStyle::default());
+  let plain = line_clamp.inherit(&ComputedStyle::default());
+  assert_eq!(webkit.max_lines, MaxLines::Lines(2));
+  assert_eq!(webkit.max_lines, plain.max_lines);
+  assert_eq!(webkit.block_ellipsis, plain.block_ellipsis);
+}
+
+#[test]
+fn line_clamp_shorthand_expands_to_longhands() {
+  let mut parent = Style::default();
+  parent.append_block(parse_declarations("line-clamp", "3 \"...\""));
+  let parent = parent.inherit(&ComputedStyle::default());
+
+  assert_eq!(parent.max_lines, MaxLines::Lines(3));
   assert_eq!(
-    webkit_line_clamp
-      .inherit(&ComputedStyle::default())
-      .line_clamp,
-    line_clamp.inherit(&ComputedStyle::default()).line_clamp
+    parent.block_ellipsis,
+    BlockEllipsis::String("...".to_owned())
   );
+  assert_eq!(parent.r#continue, Continue::Discard);
+
+  // Only `block-ellipsis` inherits; `max-lines` and `continue` do not.
+  let child = Style::default().inherit(&parent);
+  assert_eq!(child.max_lines, MaxLines::None);
+  assert_eq!(child.r#continue, Continue::Auto);
+  assert_eq!(
+    child.block_ellipsis,
+    BlockEllipsis::String("...".to_owned())
+  );
+}
+
+#[test]
+fn continue_property_resolves_by_name() {
+  let continue_id = PropertyId::Longhand(LonghandId::Continue);
+  assert_eq!(PropertyId::from_kebab_case("continue"), continue_id);
+  assert_eq!(PropertyId::from_camel_case("continue"), continue_id);
 }
 
 #[test]
