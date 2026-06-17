@@ -42,15 +42,13 @@ const ffmpeg = spawn(
   { stdin: "pipe", stdout: "ignore", stderr: "ignore" },
 );
 
-const images = await Promise.all(
-  [
-    { src: "logo.svg", path: "takumi.svg" },
-    { src: "background.jpg", path: "martin-martz-W0NRebXbsjM-unsplash.jpg" },
-  ].map(async ({ src, path }) => ({
-    src,
-    data: await Bun.file(resolve(import.meta.dir, "../../../assets/images", path)).arrayBuffer(),
-  })),
-);
+const images = [
+  { src: "logo.svg", path: "takumi.svg" },
+  { src: "background.jpg", path: "martin-martz-W0NRebXbsjM-unsplash.jpg" },
+].map(({ src, path }) => ({
+  src,
+  data: () => Bun.file(resolve(import.meta.dir, "../../../assets/images", path)).arrayBuffer(),
+}));
 
 const thumbnailPath = resolve(import.meta.dir, "../output/thumbnail.webp");
 console.log(`Rendering thumbnail to ${thumbnailPath}...`);

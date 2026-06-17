@@ -45,7 +45,7 @@ pub struct Renderer {
   image_cache: ImageCache,
 }
 
-fn load_default_fonts(context: &mut Fonts) -> Result<(), js_sys::Error> {
+fn load_default_fonts(fonts: &mut Fonts) -> Result<(), js_sys::Error> {
   for (font, family_name, generic_family) in EMBEDDED_FONTS {
     let resource = FontResource::new((*font).to_vec())
       .override_info(FontInfoOverride {
@@ -54,21 +54,21 @@ fn load_default_fonts(context: &mut Fonts) -> Result<(), js_sys::Error> {
       })
       .generic_family(*generic_family);
 
-    context.load_and_store(resource).map_err(map_error)?;
+    fonts.load_and_store(resource).map_err(map_error)?;
   }
 
   Ok(())
 }
 
-fn load_font_internal(context: &mut Fonts, font: Font) -> Result<(), js_sys::Error> {
+fn load_font_internal(fonts: &mut Fonts, font: Font) -> Result<(), js_sys::Error> {
   match font {
     Font::Buffer(buffer) => {
-      context
+      fonts
         .load_and_store(FontResource::new(buffer.into_vec()))
         .map_err(map_error)?;
     }
     Font::Object(details) => {
-      context
+      fonts
         .load_and_store(FontResource::new(details.data.into_vec()).override_info(
           FontInfoOverride {
             family_name: details.name.as_deref(),
@@ -207,24 +207,24 @@ impl Renderer {
       .transpose()?
       .unwrap_or_default();
 
-    let mut context = Fonts::default();
+    let mut fonts = Fonts::default();
 
     let should_load_default_fonts = options
       .load_default_fonts
       .unwrap_or_else(|| options.fonts.is_none());
 
     if should_load_default_fonts {
-      load_default_fonts(&mut context)?;
+      load_default_fonts(&mut fonts)?;
     }
 
-    if let Some(fonts) = options.fonts {
-      for font in fonts {
-        load_font_internal(&mut context, font)?;
+    if let Some(custom_fonts) = options.fonts {
+      for font in custom_fonts {
+        load_font_internal(&mut fonts, font)?;
       }
     }
 
     Ok(Renderer {
-      state: RwLock::new(context),
+      state: RwLock::new(fonts),
       image_cache: ImageCache::default(),
     })
   }
@@ -259,7 +259,7 @@ impl Renderer {
 
   fn render_internal(
     &self,
-    context: &Fonts,
+    fonts: &Fonts,
     node: Node,
     options: RenderOptions,
   ) -> Result<Vec<u8>, JsValue> {
@@ -282,7 +282,7 @@ impl Renderer {
       .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
       .dithering(dithering)
       .node(node)
-      .fonts(context)
+      .fonts(fonts)
       .build();
 
     let image = render(render_options).map_err(map_error)?;

@@ -15,7 +15,7 @@ async fn main() {
 
   let args = Args::parse();
 
-  let context = Fonts::default();
+  let fonts = Fonts::default();
 
-  run_server(args, context).await;
+  run_server(args, fonts).await;
 }

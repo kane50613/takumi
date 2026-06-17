@@ -31,17 +31,17 @@ Provide images by key so the renderer doesn't have to fetch them itself. Each ke
 ```tsx twoslash
 import { ImageResponse } from "takumi-js/response";
 
-export async function GET() {
+export function GET() {
   return new ImageResponse(<OgImage />, {
     // [!code ++]
     images: [
       {
         src: "my-logo",
-        data: await fetch("/logo.png").then((res) => res.arrayBuffer()),
+        data: () => fetch("/logo.png").then((res) => res.arrayBuffer()),
       },
       {
         src: "background",
-        data: await fetch("/background.png").then((res) => res.arrayBuffer()),
+        data: () => fetch("/background.png").then((res) => res.arrayBuffer()),
       },
     ],
   });
