@@ -6,11 +6,9 @@
 "takumi": major
 ---
 
-Remove the persistent image store and make font state explicit.
+Remove the persistent image store and make fonts and images explicit per-render resources.
 
-- Removed `putPersistentImage`, `clearImageStore`, and the `persistentImages` constructor option. Provide images up front via `images` (keyed by `src`, each with bytes or a sync/async loader) instead. The render option formerly named `fetchedResources` is now `images`.
-- Removed the imperative `loadFont` / `loadFontSync`. Pass fonts (bytes or sync/async loaders) through `loadFonts`, or the `fonts` option on `render`.
-- Renderer font state is now a content-addressed decode cache that memoizes the expensive woff2/woff decode and deduplicates re-registered fonts, so reusing a font never re-decodes or piles up duplicate faces.
-- Images are now decoded through a per-renderer content-addressed cache, so an image reused across renders (e.g. animation frames) only decodes once. Added `Renderer.configureImageCache({ maxBytes })` to tune (or disable) it.
-- Added `Renderer.configureFontCache({ maxBytes })` to tune (or disable) the per-renderer decode cache.
-- **Rust:** `GlobalContext` and `PersistentImageStore` are gone; `render`/`measure` take an explicit `&Fonts` (via `RenderOptions::builder().fonts(..)`). `RenderOptions::fetched_resources` is now `images`.
+- Remove `putPersistentImage`, `clearImageStore`, and the `persistentImages` constructor option. Provide images via the per-render `images` option (bytes or a sync/async loader, keyed by `src`). Rename the `fetchedResources` option to `images`.
+- Remove the imperative `loadFont`/`loadFontSync`. Load fonts via `loadFonts` or the per-render `fonts` option.
+- Cache decoded fonts and images per renderer, keyed by content hash. Add `configureFontCache({ maxBytes })` and `configureImageCache({ maxBytes })` to tune or disable them.
+- Rust: `render`/`measure` take an explicit `&Fonts` (`RenderOptions::builder().fonts(..)`). Rename `RenderOptions::fetched_resources` to `images`. Remove `GlobalContext` and `PersistentImageStore`.
