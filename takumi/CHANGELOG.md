@@ -1,5 +1,14 @@
 # takumi
 
+## 1.8.6
+
+### Patch Changes
+
+- cfac305: Align empty `inline-block`, `inline-flex`, and `inline-grid` boxes to the baseline by their bottom margin edge
+- 653f23c: Stop painting `outline` around the text of non-inline elements
+- c1dd195: Scale `vertical-align: sub`/`super` by font size instead of line height
+- 6f55980: Fix line-box height for `vertical-align: top`/`bottom` boxes taller than the line height
+
 ## 1.8.5
 
 ### Patch Changes
