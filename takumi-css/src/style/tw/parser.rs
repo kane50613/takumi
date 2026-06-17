@@ -161,25 +161,6 @@ impl TailwindPropertyParser for TwLetterSpacing {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TwBorderWidth(pub Length);
-
-impl<'i> FromCss<'i> for TwBorderWidth {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    Ok(Self(Length::from_css(input)?))
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = Length::<true>::VALID_TOKENS;
-}
-
-impl TailwindPropertyParser for TwBorderWidth {
-  fn parse_tw(token: &str) -> Option<Self> {
-    let value = token.parse::<f32>().ok()?;
-
-    Some(TwBorderWidth(Length::Px(value)))
-  }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TwRounded(pub LengthDefaultsToZero);
 
 impl<'i> FromCss<'i> for TwRounded {

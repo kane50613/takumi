@@ -214,6 +214,9 @@ fn legacy_alias_property_id(name: &str) -> Option<PropertyId> {
     "grid_gap" => Some(PropertyId::Shorthand(ShorthandId::Gap)),
     "grid_row_gap" => Some(PropertyId::Longhand(LonghandId::RowGap)),
     "grid_column_gap" => Some(PropertyId::Longhand(LonghandId::ColumnGap)),
+    // `continue` is a Rust keyword; its longhand field is `r#continue`, so the
+    // name-derived lookup can't reach it.
+    "continue" => Some(PropertyId::Longhand(LonghandId::Continue)),
     _ => None,
   }
 }

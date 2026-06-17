@@ -601,6 +601,22 @@ mod tests {
   }
 
   #[test]
+  fn test_transform_negative_scale_reflects() {
+    assert_eq!(
+      Transform::from_str("scale(-1)"),
+      Ok(Transform::Scale(-1.0, -1.0))
+    );
+    assert_eq!(
+      Transform::from_str("scaleX(-1)"),
+      Ok(Transform::Scale(-1.0, DEFAULT_SCALE))
+    );
+    assert_eq!(
+      Transform::from_str("scaleY(-2)"),
+      Ok(Transform::Scale(DEFAULT_SCALE, -2.0))
+    );
+  }
+
+  #[test]
   fn test_transform_invert() {
     let transform = Affine::rotation(Angle::new(45.0));
 
