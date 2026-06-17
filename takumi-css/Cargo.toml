@@ -3,7 +3,7 @@ name = "takumi-css"
 version = "0.1.2"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-description = "Internal CSS layer for takumi. Not a public API; do not depend on it directly."
+description = "CSS parsing and style resolution layer for takumi."
 repository = "https://github.com/kane50613/takumi"
 rust-version = "1.91"
 
