@@ -949,7 +949,7 @@ fn test_measure_inline_layout_preserves_text_span_boundaries() {
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::display(Display::Inline))
-        .with(StyleDeclaration::outline_width(Px(2.0)))
+        .with(StyleDeclaration::outline_width(Px(2.0).into()))
         .with(StyleDeclaration::outline_style(BorderStyle::Solid))
         .with(StyleDeclaration::outline_color(ColorInput::Value(Color([
           255, 0, 0, 255,
@@ -1033,7 +1033,7 @@ fn test_measure_inline_atomic_containers_fixture() {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           bg_color,
         )))
-        .with_border_width(Sides([Px(5.0); 4]))
+        .with_border_width(Sides([Px(5.0).into(); 4]))
         .with_border_style(Sides([BorderStyle::Solid; 4]))
         .with_border_color(Sides([ColorInput::Value(border_color); 4])),
     )
@@ -1070,7 +1070,7 @@ fn test_measure_inline_atomic_containers_fixture() {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::display(Display::Block))
       .with(StyleDeclaration::font_size(Px(24.0).into()))
-      .with_border_width(Sides([Px(6.0); 4]))
+      .with_border_width(Sides([Px(6.0).into(); 4]))
       .with_border_style(Sides([BorderStyle::Solid; 4]))
       .with_border_color(Sides([ColorInput::Value(Color([40, 40, 40, 255])); 4])),
   )])
@@ -1199,7 +1199,7 @@ fn test_measure_inline_image_uses_replaced_baseline_fallback() {
         .with(StyleDeclaration::width(Px(20.0)))
         .with(StyleDeclaration::height(Px(20.0)))
         .with_padding(Sides([Px(4.0); 4]))
-        .with_border_width(Sides([Px(2.0); 4]))
+        .with_border_width(Sides([Px(2.0).into(); 4]))
         .with_border_style(Sides([BorderStyle::Solid; 4])),
     ),
     Node::text("world".to_string())
@@ -1233,7 +1233,7 @@ fn test_measure_inline_image_respects_box_sizing_with_border() {
       .with(StyleDeclaration::box_sizing(box_sizing))
       .with(StyleDeclaration::width(Px(20.0)))
       .with(StyleDeclaration::height(Px(20.0)))
-      .with_border_width(Sides([Px(2.0); 4]))
+      .with_border_width(Sides([Px(2.0).into(); 4]))
       .with_border_style(Sides([BorderStyle::Solid; 4]))
   };
 

@@ -14,7 +14,7 @@ use crate::{
       resolve_inline_max_height,
     },
     node::{ImageData, Node, NodeKind, TextData},
-    style::{Affine, BackgroundClip, BlendMode, Sides},
+    style::{Affine, BackgroundClip, BlendMode, Length, Sides},
   },
 };
 
@@ -269,9 +269,7 @@ pub(crate) fn draw_outline(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let width = context
-    .style
-    .outline_width
+  let width = Length::from(context.style.outline_width)
     .to_px(&context.sizing, layout.size.width)
     .max(0.0);
 

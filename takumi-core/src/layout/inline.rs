@@ -16,7 +16,7 @@ use crate::{
     border::BorderPath,
     node::Node,
     style::{
-      Affine, BoxSizing, Color, Float, FontSynthesis, ResolvedVerticalAlign,
+      Affine, BoxSizing, Color, Float, FontSynthesis, Length, ResolvedVerticalAlign,
       SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
       TextFitTarget, TextOverflow, TextWrapMode, TextWrapStyle, VerticalAlign, VerticalAlignKeyword,
     },
@@ -1094,7 +1094,7 @@ fn build_inline_layout_tree<'c, 'g: 'c>(
             bottom: context.style.border_bottom_width,
             left: context.style.border_left_width,
           }
-          .map(|length| length.to_px(&context.sizing, 0.0));
+          .map(|width| Length::from(width).to_px(&context.sizing, 0.0));
 
           let atomic_metrics = render_node
             .node
@@ -1163,7 +1163,7 @@ fn prepare_inline_layout(
   max_height: Option<MaxHeight>,
   style: &SizedFontStyle,
 ) -> (TextWrapMode, f32) {
-  let text_wrap_mode = style.parent.text_wrap_mode_and_line_clamp().0;
+  let text_wrap_mode = style.parent.resolved_text_wrap_mode();
   let line_height_hint = inline_line_height_hint(style);
   apply_text_indent(&mut built.layout, style, max_width);
   break_lines(
@@ -1415,10 +1415,10 @@ pub fn resolve_inline_max_height(
   font_style: &SizedFontStyle,
   content_box_height: f32,
 ) -> Option<MaxHeight> {
-  let resolved_line_clamp = font_style.parent.text_wrap_mode_and_line_clamp().1;
-  resolved_line_clamp
-    .as_ref()
-    .map(|clamp| MaxHeight::HeightAndLines(content_box_height, clamp.count))
+  font_style
+    .parent
+    .clamp_lines()
+    .map(|lines| MaxHeight::HeightAndLines(content_box_height, lines))
     .or_else(|| {
       (font_style.parent.text_overflow == TextOverflow::Ellipsis)
         .then_some(MaxHeight::Absolute(content_box_height))
@@ -2049,12 +2049,12 @@ pub fn create_inline_constraint(
       + if !context.style.border_left_style.is_rendered() {
         0.0
       } else {
-        context.style.border_left_width.to_px(sizing, 0.0)
+        Length::from(context.style.border_left_width).to_px(sizing, 0.0)
       }
       + if !context.style.border_right_style.is_rendered() {
         0.0
       } else {
-        context.style.border_right_width.to_px(sizing, 0.0)
+        Length::from(context.style.border_right_width).to_px(sizing, 0.0)
       };
     width_constraint = (width_constraint - horizontal_insets).max(0.0);
   }
@@ -2062,13 +2062,11 @@ pub fn create_inline_constraint(
   // applies a maximum height to reduce unnecessary calculation.
   let max_height = match (
     context.sizing.viewport.size.height,
-    context.style.text_wrap_mode_and_line_clamp().1,
+    context.style.clamp_lines(),
   ) {
-    (Some(height), Some(line_clamp)) => {
-      Some(MaxHeight::HeightAndLines(height as f32, line_clamp.count))
-    }
+    (Some(height), Some(lines)) => Some(MaxHeight::HeightAndLines(height as f32, lines)),
     (Some(height), None) => Some(MaxHeight::Absolute(height as f32)),
-    (None, Some(line_clamp)) => Some(MaxHeight::Lines(line_clamp.count)),
+    (None, Some(lines)) => Some(MaxHeight::Lines(lines)),
     (None, None) => None,
   };
 
@@ -2223,7 +2221,7 @@ fn make_ellipsis_layout<'c, 'g: 'c>(
     });
 
   apply_text_indent(&mut final_layout, root_style, max_width);
-  let text_wrap_mode = root_style.parent.text_wrap_mode_and_line_clamp().0;
+  let text_wrap_mode = root_style.parent.resolved_text_wrap_mode();
   custom_inline_boxes.clear();
   break_lines(
     &mut final_layout,

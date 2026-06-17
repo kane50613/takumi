@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::marker::PhantomData;
 
 use taffy::{Line, Point, Rect, Size};
@@ -20,6 +19,24 @@ impl ComputedStyle {
     };
 
     self.make_computed_values(sizing);
+
+    // The used value of `border-width`/`outline-width` is zero when the line's
+    // style is `none` or `hidden`, even though the computed value is `medium`.
+    if !self.border_top_style.is_rendered() {
+      self.border_top_width = LineWidth::Length(Length::zero());
+    }
+    if !self.border_right_style.is_rendered() {
+      self.border_right_width = LineWidth::Length(Length::zero());
+    }
+    if !self.border_bottom_style.is_rendered() {
+      self.border_bottom_width = LineWidth::Length(Length::zero());
+    }
+    if !self.border_left_style.is_rendered() {
+      self.border_left_width = LineWidth::Length(Length::zero());
+    }
+    if !self.outline_style.is_rendered() {
+      self.outline_width = LineWidth::Length(Length::zero());
+    }
 
     // https://www.w3.org/TR/css-display-3/#transformations
     // Elements with position: absolute or fixed are blockified
@@ -113,38 +130,42 @@ impl ComputedStyle {
       _ => {}
     }
 
-    if let Some(clamp) = &self
-      .line_clamp
-      .as_ref()
-      .and_then(|clamp| clamp.ellipsis.as_deref())
-    {
-      return clamp;
+    match &self.block_ellipsis {
+      BlockEllipsis::String(custom) => custom.as_str(),
+      BlockEllipsis::None => "",
+      BlockEllipsis::Auto => ELLIPSIS_CHAR,
     }
-
-    ELLIPSIS_CHAR
   }
 
-  pub fn text_wrap_mode_and_line_clamp(&self) -> (TextWrapMode, Option<Cow<'_, LineClamp>>) {
-    let mut text_wrap_mode = self.text_wrap_mode;
-    let mut line_clamp = self.line_clamp.as_ref().map(Cow::Borrowed);
-
-    // Special case: when nowrap + ellipsis, parley will layout all the text even when it overflows.
-    // So we need to use a fixed line clamp of 1 instead.
-    if text_wrap_mode == TextWrapMode::NoWrap && self.text_overflow == TextOverflow::Ellipsis {
-      line_clamp = Some(Cow::Owned(self.single_line_ellipsis_clamp()));
-
-      text_wrap_mode = TextWrapMode::Wrap;
-    }
-
-    (text_wrap_mode, line_clamp)
+  /// `nowrap` + `ellipsis`: parley lays out all the text even when it overflows,
+  /// so this case is rendered by switching to wrapping with a one-line clamp.
+  fn forces_single_line_ellipsis(&self) -> bool {
+    self.text_wrap_mode == TextWrapMode::NoWrap && self.text_overflow == TextOverflow::Ellipsis
   }
 
-  #[inline]
-  fn single_line_ellipsis_clamp(&self) -> LineClamp {
-    LineClamp {
-      count: 1,
-      ellipsis: Some(self.ellipsis_char().to_string()),
+  pub fn resolved_text_wrap_mode(&self) -> TextWrapMode {
+    if self.forces_single_line_ellipsis() {
+      TextWrapMode::Wrap
+    } else {
+      self.text_wrap_mode
     }
+  }
+
+  /// The number of lines to clamp to for layout, or `None` when not clamped.
+  ///
+  /// `nowrap` + `ellipsis` clamps to a single line; otherwise `max-lines` applies
+  /// only inside a fragmentation context (`continue: collapse`), per CSS Overflow 4.
+  /// The ellipsis itself comes from [`Self::ellipsis_char`].
+  pub fn clamp_lines(&self) -> Option<u32> {
+    if self.forces_single_line_ellipsis() {
+      return Some(1);
+    }
+
+    if self.r#continue != Continue::Collapse {
+      return None;
+    }
+
+    self.max_lines.filter(|&count| count >= 1)
   }
 
   #[inline]
@@ -190,29 +211,14 @@ impl ComputedStyle {
         height: self.height,
       }
       .map(|length| length.resolve_to_dimension(sizing)),
+      // Used widths are already zeroed for non-rendered styles in `make_computed`.
       border: Rect {
-        top: if !self.border_top_style.is_rendered() {
-          Length::default()
-        } else {
-          self.border_top_width
-        },
-        right: if !self.border_right_style.is_rendered() {
-          Length::default()
-        } else {
-          self.border_right_width
-        },
-        bottom: if !self.border_bottom_style.is_rendered() {
-          Length::default()
-        } else {
-          self.border_bottom_width
-        },
-        left: if !self.border_left_style.is_rendered() {
-          Length::default()
-        } else {
-          self.border_left_width
-        },
+        top: self.border_top_width,
+        right: self.border_right_width,
+        bottom: self.border_bottom_width,
+        left: self.border_left_width,
       }
-      .map(|border| border.resolve_to_length_percentage(sizing)),
+      .map(|border| Length::from(border).resolve_to_length_percentage(sizing)),
       padding: Rect {
         top: self.padding_top,
         right: self.padding_right,

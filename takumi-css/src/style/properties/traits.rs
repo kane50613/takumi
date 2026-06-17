@@ -629,6 +629,17 @@ impl ToCss for u32 {
   }
 }
 
+impl MakeComputed for u32 {}
+impl Animatable for u32 {}
+
+impl<'i> FromCss<'i> for u32 {
+  const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Integer)];
+
+  fn from_css(input: &mut cssparser::Parser<'i, '_>) -> ParseResult<'i, Self> {
+    Ok(input.expect_integer()?.max(0) as u32)
+  }
+}
+
 impl ToCss for i32 {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     write!(dest, "{}", self)
