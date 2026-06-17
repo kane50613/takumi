@@ -127,7 +127,14 @@ impl<'s> SizedFontStyle<'s> {
         .webkit_text_stroke_width
         .unwrap_or_default()
         .to_px(&context.sizing, context.sizing.font_size),
-      outline_width: style.outline_width.to_px(&context.sizing, 0.0).max(0.0),
+      // Outline is not inherited; a non-inline element paints its outline on its
+      // own border-box (see `draw_outline`), so only a real inline box strokes its
+      // text fragments. https://www.w3.org/TR/css-ui-4/#outline
+      outline_width: if style.display == Display::Inline {
+        style.outline_width.to_px(&context.sizing, 0.0).max(0.0)
+      } else {
+        0.0
+      },
       outline_offset: style.outline_offset.to_px(&context.sizing, 0.0),
       letter_spacing: style
         .letter_spacing
