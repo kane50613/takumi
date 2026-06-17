@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { container, image, text } from "@takumi-rs/helpers";
@@ -18,6 +18,11 @@ const fonts = await Promise.all(
 );
 const renderer = new Renderer();
 const rendererWithoutDefaultFonts = new Renderer({ loadDefaultFonts: false });
+
+afterAll(() => {
+  renderer.free();
+  rendererWithoutDefaultFonts.free();
+});
 
 const localImagePath = join(imagesRoot, "yeecord.png");
 const [manropeFont] = fonts;
@@ -70,7 +75,7 @@ describe("setup", () => {
   });
 
   test("putPersistentImage caches by src", async () => {
-    const cacheRenderer = new Renderer();
+    using cacheRenderer = new Renderer();
     let loadCount = 0;
     const source = {
       src: `${localImagePath}?cached`,
@@ -90,7 +95,7 @@ describe("setup", () => {
   });
 
   test("clearImageStore resets persistent image cache", () => {
-    const cacheRenderer = new Renderer();
+    using cacheRenderer = new Renderer();
     let loadCount = 0;
     const source = {
       src: `${localImagePath}?clear-cache`,

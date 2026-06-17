@@ -1,8 +1,10 @@
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
 import { container } from "@takumi-rs/helpers";
 import { Renderer } from "../bundlers/node";
 
 const renderer = new Renderer();
+
+afterAll(() => renderer.free());
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

@@ -1,9 +1,11 @@
-import { describe, expect, it } from "bun:test";
+import { afterAll, describe, expect, it } from "bun:test";
 import { container, text } from "@takumi-rs/helpers";
 import { Renderer } from "../bundlers/node";
 
 describe("Renderer.measure", () => {
   const renderer = new Renderer();
+
+  afterAll(() => renderer.free());
 
   it("should measure a simple container", () => {
     const node = container({
