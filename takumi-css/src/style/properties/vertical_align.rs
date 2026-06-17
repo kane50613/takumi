@@ -202,8 +202,8 @@ impl ResolvedVerticalAlign {
         VerticalAlignKeyword::TextBottom => {
           *y = metrics.baseline + parent_text_descent - box_height
         }
-        // `resolve` maps sub/super to a `BaselineShift`; this arm is for exhaustiveness.
-        VerticalAlignKeyword::Sub | VerticalAlignKeyword::Super => *y = baseline_top,
+        // resolved to a `BaselineShift` in `VerticalAlign::resolve`
+        VerticalAlignKeyword::Sub | VerticalAlignKeyword::Super => unreachable!(),
       },
       ResolvedVerticalAlign::BaselineShift {
         px,
