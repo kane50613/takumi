@@ -67,8 +67,8 @@ impl<'i> FromCss<'i> for PercentageNumber {
     let token = input.next()?;
 
     match token {
-      Token::Number { value, .. } => Ok(PercentageNumber(value.max(0.0))),
-      Token::Percentage { unit_value, .. } => Ok(PercentageNumber(unit_value.max(0.0))),
+      Token::Number { value, .. } => Ok(PercentageNumber(*value)),
+      Token::Percentage { unit_value, .. } => Ok(PercentageNumber(*unit_value)),
       _ => Err(unexpected_token!(location, token)),
     }
   }

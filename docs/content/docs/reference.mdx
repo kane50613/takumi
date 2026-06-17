@@ -247,7 +247,7 @@ An image node displays rasterized or svg images.
     <tr>
       <td rowSpan={3}>`border`</td>
       <td>`borderWidth` (`borderTopWidth`, `borderRightWidth`, `borderBottomWidth`, `borderLeftWidth`, `borderInlineWidth`, `borderBlockWidth`)</td>
-      <td>Supported</td>
+      <td>`thin`, `medium`, `thick`, `<length>`</td>
     </tr>
     <tr>
       <td>`borderStyle`</td>
@@ -265,7 +265,7 @@ An image node displays rasterized or svg images.
     <tr>
       <td rowSpan={4}>`outline`</td>
       <td>`outlineWidth`</td>
-      <td>Supported</td>
+      <td>`thin`, `medium`, `thick`, `<length>`</td>
     </tr>
     <tr>
       <td>`outlineStyle`</td>
@@ -474,7 +474,7 @@ An image node displays rasterized or svg images.
       <td>Supported</td>
     </tr>
     <tr>
-      <td rowSpan={26}>Typography</td>
+      <td rowSpan={29}>Typography</td>
       <td>`textOverflow`</td>
       <td>`ellipsis`, `clip`, custom character</td>
     </tr>
@@ -540,7 +540,19 @@ An image node displays rasterized or svg images.
     </tr>
     <tr>
       <td>`lineClamp`</td>
-      <td>number, `1 "ellipsis character"`</td>
+      <td>`none`, `<integer>`, `<integer> <block-ellipsis>`</td>
+    </tr>
+    <tr>
+      <td>`maxLines`</td>
+      <td>`none`, `<integer>`</td>
+    </tr>
+    <tr>
+      <td>`blockEllipsis`</td>
+      <td>`none`, `auto`, `<string>`</td>
+    </tr>
+    <tr>
+      <td>`continue`</td>
+      <td>`normal`, `collapse`</td>
     </tr>
     <tr>
       <td>`textAlign`</td>

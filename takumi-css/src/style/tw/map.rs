@@ -40,7 +40,7 @@ property_parsers! {
   Justify(JustifyContent) => JustifyContent,
   Align(AlignItems) => AlignItems,
   Overflow(Overflow) => Overflow,
-  BorderWidth(TwBorderWidth) => TwBorderWidth,
+  BorderWidth(LineWidth) => LineWidth,
   BorderStyle(BorderStyle) => BorderStyle,
   Rounded(TwRounded) => TwRounded,
   GridTemplate(TwGridTemplate) => TwGridTemplate,

@@ -17,7 +17,7 @@ use takumi_core::{
     node::{ImageData, Node, NodeKind},
     style::{
       BackgroundClip, BackgroundImage, BasicShape, BlendMode, BorderStyle, Color, ComputedStyle,
-      Display, FillRule, Isolation, Overflow, ShapeRadius, Sides, SizingContext, SpacePair,
+      Display, FillRule, Isolation, Length, Overflow, ShapeRadius, Sides, SizingContext, SpacePair,
       StyleSheet, ToCss,
     },
     tree::{LayoutResults, LayoutTree, RenderNode},
@@ -883,7 +883,9 @@ fn emit_outline(
     return Ok(());
   }
   let sizing = &node.context.sizing;
-  let width = style.outline_width.to_px(sizing, size.width).max(0.0);
+  let width = Length::from(style.outline_width)
+    .to_px(sizing, size.width)
+    .max(0.0);
   if width <= 0.0 {
     return Ok(());
   }

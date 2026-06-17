@@ -24,8 +24,9 @@ use crate::{
     node::{Node, NodeStyleLayers},
     style::{
       BackgroundImage, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem, ContentValue,
-      Display, Filters, Float, Isolation, LineHeight, PercentageNumber, Position, SizingContext,
-      Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode, apply_stylesheet_animations,
+      Display, Filters, Float, Isolation, Length, LineHeight, PercentageNumber, Position,
+      SizingContext, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
+      apply_stylesheet_animations,
     },
   },
 };
@@ -1437,8 +1438,8 @@ impl<'g> RenderNode<'g> {
       + self.context.style.margin_bottom.to_px(sizing, 0.0);
 
     if include_padding_border {
-      height += self.context.style.border_top_width.to_px(sizing, 0.0)
-        + self.context.style.border_bottom_width.to_px(sizing, 0.0)
+      height += Length::from(self.context.style.border_top_width).to_px(sizing, 0.0)
+        + Length::from(self.context.style.border_bottom_width).to_px(sizing, 0.0)
         + self.context.style.padding_top.to_px(sizing, 0.0)
         + self.context.style.padding_bottom.to_px(sizing, 0.0);
     }
@@ -1461,24 +1462,24 @@ impl<'g> RenderNode<'g> {
       + if !self.context.style.border_left_style.is_rendered() {
         0.0
       } else {
-        self.context.style.border_left_width.to_px(sizing, 0.0)
+        Length::from(self.context.style.border_left_width).to_px(sizing, 0.0)
       }
       + if !self.context.style.border_right_style.is_rendered() {
         0.0
       } else {
-        self.context.style.border_right_width.to_px(sizing, 0.0)
+        Length::from(self.context.style.border_right_width).to_px(sizing, 0.0)
       };
     let vertical_insets = self.context.style.padding_top.to_px(sizing, 0.0)
       + self.context.style.padding_bottom.to_px(sizing, 0.0)
       + if !self.context.style.border_top_style.is_rendered() {
         0.0
       } else {
-        self.context.style.border_top_width.to_px(sizing, 0.0)
+        Length::from(self.context.style.border_top_width).to_px(sizing, 0.0)
       }
       + if !self.context.style.border_bottom_style.is_rendered() {
         0.0
       } else {
-        self.context.style.border_bottom_width.to_px(sizing, 0.0)
+        Length::from(self.context.style.border_bottom_width).to_px(sizing, 0.0)
       };
 
     let width_auto = layout_style.size.width.is_auto();
@@ -1559,7 +1560,7 @@ impl<'g> RenderNode<'g> {
     let metrics = line.metrics();
     let sizing = &self.context.sizing;
     let margin_top = self.context.style.margin_top.to_px(sizing, 0.0);
-    let border_top = self.context.style.border_top_width.to_px(sizing, 0.0);
+    let border_top = Length::from(self.context.style.border_top_width).to_px(sizing, 0.0);
     let padding_top = self.context.style.padding_top.to_px(sizing, 0.0);
     Some(margin_top + border_top + padding_top + metrics.baseline)
   }
@@ -1806,7 +1807,7 @@ impl<'g> RenderNode<'g> {
         mode: InlineLayoutMode::Measure,
       });
 
-      let ceil_width = font_style.parent.text_wrap_mode_and_line_clamp().0 == TextWrapMode::Wrap;
+      let ceil_width = font_style.parent.resolved_text_wrap_mode() == TextWrapMode::Wrap;
       let parent_font_metrics = get_parent_font_metrics(&built.layout);
       return measure_inline_layout(
         &mut built.layout,

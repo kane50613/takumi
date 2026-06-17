@@ -7,7 +7,7 @@ use taffy::{Size, prelude::FromLength};
 use crate::context::RenderContext;
 use crate::layout::inline::InlineBrush;
 use crate::layout::style::{
-  BorderStyle, Color, ComputedStyle, Display, FontSynthesis, SizedTextDecorationThickness,
+  BorderStyle, Color, ComputedStyle, Display, FontSynthesis, Length, SizedTextDecorationThickness,
   SizingContext, WordBreak,
 };
 use crate::shadow::SizedShadow;
@@ -77,7 +77,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
         line_height_scales_with_text_fit: style.line_height_scales_with_text_fit,
         vertical_align: style.parent.vertical_align,
       },
-      text_wrap_mode: style.parent.text_wrap_mode_and_line_clamp().0.into(),
+      text_wrap_mode: style.parent.resolved_text_wrap_mode().into(),
       font_width: style.parent.font_stretch.into(),
 
       locale: None,
@@ -129,7 +129,9 @@ impl<'s> SizedFontStyle<'s> {
         .webkit_text_stroke_width
         .unwrap_or_default()
         .to_px(&context.sizing, context.sizing.font_size),
-      outline_width: style.outline_width.to_px(&context.sizing, 0.0).max(0.0),
+      outline_width: Length::from(style.outline_width)
+        .to_px(&context.sizing, 0.0)
+        .max(0.0),
       outline_offset: style.outline_offset.to_px(&context.sizing, 0.0),
       letter_spacing: style
         .letter_spacing

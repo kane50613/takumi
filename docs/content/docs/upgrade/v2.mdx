@@ -21,6 +21,39 @@ If you relied on the old behavior to tint an icon, set the color in the SVG mark
 const tinted = icon.replace(/currentColor/g, "#3b82f6"); // [!code ++]
 ```
 
+### `position` defaults to `static`
+
+Through v1, `position` defaulted to `relative`, so every element established a containing block for absolutely-positioned descendants and honored `top`/`right`/`bottom`/`left` insets. v2 defaults to `static` to match the CSS specification, so an element only becomes a positioned containing block when you opt in.
+
+If you relied on the default to anchor an absolutely-positioned child or to apply insets, set `position: relative` explicitly.
+
+```tsx
+<div
+  style={{
+    display: "flex",
+    position: "relative", // [!code ++]
+  }}
+>
+  <div style={{ position: "absolute", top: 0, left: 0 }}>Badge</div>
+</div>
+```
+
+### `border-width` and `outline-width` default to `medium`
+
+Omitting the width in `border` / `outline` now resolves to the CSS initial value `medium` (3px) instead of `0`, and the `thin`, `medium`, and `thick` keywords are accepted. `border: solid red` and `outline: solid` render a 3px line where they previously rendered nothing. The used width is still `0` when the line's style is `none` or `hidden`.
+
+```tsx
+<div style={{ border: "solid red" }}>3px border in v2, invisible in v1</div>
+```
+
+### Negative `scale` factors reflect
+
+`scale: -1` and `transform: scaleX(-1)` / `scaleY(-1)` / `scale(-1)` now reflect the element instead of collapsing it to zero size.
+
+### `line-clamp` is now a shorthand
+
+`line-clamp` is now a shorthand for the `max-lines`, `block-ellipsis`, and `continue` longhands (CSS Overflow 4), rather than a single collapsed property. Inheritance follows the spec: `block-ellipsis` inherits, while `max-lines` and `continue` do not — so a clamped ancestor no longer forces its line limit onto descendants. `-webkit-line-clamp` still works and expands to the same longhands.
+
 ## Rust
 
 ### `ImageSource::render_for_layout` Drops the `current_color` Argument
