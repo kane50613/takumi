@@ -286,7 +286,7 @@ impl ImageSource {
         .map(|frame| frame.buffer.data().len())
         .sum(),
       #[cfg(feature = "svg")]
-      Self::Svg(svg) => svg.source.len(),
+      Self::Svg(svg) => svg.source.as_bytes().len(),
     }
   }
 
