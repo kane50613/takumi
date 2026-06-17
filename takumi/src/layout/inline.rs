@@ -13,7 +13,7 @@ use crate::{
     style::{
       BoxSizing, Color, Float, FontSynthesis, ResolvedVerticalAlign, SizedTextDecorationThickness,
       TextDecorationLines, TextDecorationSkipInk, TextFitMode, TextFitTarget, TextOverflow,
-      TextWrapMode, TextWrapStyle, VerticalAlign,
+      TextWrapMode, TextWrapStyle, VerticalAlign, VerticalAlignKeyword,
     },
     tree::RenderNode,
   },
@@ -610,6 +610,8 @@ pub(crate) fn resolve_inline_line_metrics(
     let line_metrics = line.metrics();
     let mut resolved_above = 0.0_f32;
     let mut resolved_below = f32::NEG_INFINITY;
+    let mut top_box_heights: Vec<f32> = Vec::new();
+    let mut bottom_box_heights: Vec<f32> = Vec::new();
     let mut has_contribution = false;
 
     for item in line.items() {
@@ -637,6 +639,20 @@ pub(crate) fn resolve_inline_line_metrics(
           let Some(ProcessedInlineSpan::Box(item)) = spans.get(inline_box.id as usize) else {
             continue;
           };
+          has_contribution = true;
+          // `top`/`bottom` boxes attach to the line-box edges, not the baseline, so
+          // they grow only the opposite edge after baseline content is measured.
+          match item.vertical_align {
+            ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Top) => {
+              top_box_heights.push(inline_box.height);
+              continue;
+            }
+            ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Bottom) => {
+              bottom_box_heights.push(inline_box.height);
+              continue;
+            }
+            _ => {}
+          }
           let baseline_in_item = item
             .baseline_offset
             .unwrap_or(inline_box.height)
@@ -653,9 +669,25 @@ pub(crate) fn resolve_inline_line_metrics(
             (inline_box.height - baseline_in_item + parent_baseline_offset).max(0.0);
           resolved_above = resolved_above.max(ascent_contrib);
           resolved_below = resolved_below.max(descent_contrib);
-          has_contribution = true;
         }
       }
+    }
+
+    if !top_box_heights.is_empty() || !bottom_box_heights.is_empty() {
+      let mut above = resolved_above.max(0.0);
+      let mut below = if resolved_below.is_finite() {
+        resolved_below.max(0.0)
+      } else {
+        0.0
+      };
+      for height in top_box_heights {
+        below = below.max(height - above);
+      }
+      for height in bottom_box_heights {
+        above = above.max(height - below);
+      }
+      resolved_above = above;
+      resolved_below = below;
     }
 
     if !has_contribution {
