@@ -934,21 +934,33 @@ impl Fonts {
       }
     }
 
-    // `set_fallbacks` replaces a script's bucket, so re-apply the whole accumulated list
-    // to every script; parley's shaper reads these buckets for per-cluster coverage.
-    for (script, _) in Script::all_samples() {
-      self.parley_context.collection.set_fallbacks(
-        FallbackKey::new(*script, None),
-        self.fallback_families.iter().copied(),
-      );
-    }
-
     self
       .registered
       .insert(key, families.clone().into_boxed_slice());
     self.version.fetch_add(1, Ordering::Relaxed);
 
     Ok(families)
+  }
+
+  /// Applies the per-render fallback chain to this thread's query context: the given
+  /// family names in order, or all registered families when `None`. Re-applied each
+  /// render so fallback order is per-call and never leaks between renders. `set_fallbacks`
+  /// replaces each script bucket; parley's shaper reads them for per-cluster coverage.
+  pub fn apply_fallbacks(&self, names: Option<&[String]>) {
+    self.with_parley_context_mut(|ctx| {
+      let ids: Vec<FamilyId> = match names {
+        Some(names) => names
+          .iter()
+          .filter_map(|name| ctx.collection.family_id(name))
+          .collect(),
+        None => self.fallback_families.clone(),
+      };
+      for (script, _) in Script::all_samples() {
+        ctx
+          .collection
+          .set_fallbacks(FallbackKey::new(*script, None), ids.iter().copied());
+      }
+    });
   }
 }
 

@@ -89,6 +89,9 @@ pub struct RenderOptions {
   pub time_ms: Option<i64>,
   /// The output dithering algorithm.
   pub dithering: Option<DitheringAlgorithm>,
+  /// Per-render font fallback chain (family names in order, e.g. from `registerFonts`).
+  /// Defaults to all registered families in registration order.
+  pub fonts: Option<Vec<String>>,
 }
 
 /// Options for rendering an animated image.

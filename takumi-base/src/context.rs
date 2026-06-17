@@ -43,7 +43,9 @@ impl<'g> RenderContext<'g> {
     images: HashMap<Arc<str>, ImageSource>,
     stylesheet: Rc<StyleSheet>,
     time: u64,
+    font_families: Option<&[String]>,
   ) -> Self {
+    fonts.apply_fallbacks(font_families);
     Self {
       fonts,
       sizing: SizingContext {
@@ -67,7 +69,14 @@ impl<'g> RenderContext<'g> {
 
   /// Internal, only used in tests.
   pub fn new_test(fonts: &'g Fonts, viewport: Viewport) -> Self {
-    Self::new(fonts, viewport, Default::default(), Default::default(), 0)
+    Self::new(
+      fonts,
+      viewport,
+      Default::default(),
+      Default::default(),
+      0,
+      None,
+    )
   }
 
   pub fn from_parent(

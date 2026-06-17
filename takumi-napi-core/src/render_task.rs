@@ -26,6 +26,7 @@ pub struct RenderTask {
   pub time_ms: u64,
   pub stylesheet: StyleSheet,
   pub images: HashMap<Arc<str>, Buffer>,
+  pub font_families: Option<Vec<String>>,
 }
 
 impl RenderTask {
@@ -59,6 +60,7 @@ impl RenderTask {
         .into_iter()
         .map(|image| Ok((Arc::from(image.src), buffer_from_object(env, image.data)?)))
         .collect::<Result<_>>()?,
+      font_families: options.fonts,
     })
   }
 }
@@ -97,6 +99,7 @@ impl Task for RenderTask {
         .dithering(self.dithering)
         .node(node)
         .fonts(&state.fonts)
+        .font_families(take(&mut self.font_families))
         .draw_debug_border(self.draw_debug_border)
         .build(),
     )

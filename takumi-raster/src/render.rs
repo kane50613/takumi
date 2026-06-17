@@ -52,6 +52,10 @@ pub struct RenderOptions<'g> {
   /// Output dithering algorithm. Only used by encoding frontends.
   #[builder(default)]
   pub(crate) dithering: DitheringAlgorithm,
+  /// Per-render font fallback chain (family names in order). `None` uses all
+  /// registered families in registration order.
+  #[builder(default)]
+  pub(crate) font_families: Option<Vec<String>>,
 }
 
 impl<'g> RenderOptions<'g> {
@@ -188,8 +192,16 @@ pub fn measure_layout<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
     stylesheet,
     time_ms,
     dithering: _,
+    font_families,
   } = options;
-  let mut render_context = RenderContext::new(fonts, viewport, images, stylesheet.into(), time_ms);
+  let mut render_context = RenderContext::new(
+    fonts,
+    viewport,
+    images,
+    stylesheet.into(),
+    time_ms,
+    font_families.as_deref(),
+  );
   render_context.draw_debug_border = draw_debug_border;
   let mut root = RenderNode::from_node(&render_context, node);
   let mut tree = LayoutTree::from_render_node(&root);
@@ -506,9 +518,17 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<RgbaImage> {
     stylesheet,
     time_ms,
     dithering,
+    font_families,
   } = options;
 
-  let mut render_context = RenderContext::new(fonts, viewport, images, stylesheet.into(), time_ms);
+  let mut render_context = RenderContext::new(
+    fonts,
+    viewport,
+    images,
+    stylesheet.into(),
+    time_ms,
+    font_families.as_deref(),
+  );
   render_context.draw_debug_border = draw_debug_border;
 
   let mut root = RenderNode::from_node(&render_context, node);

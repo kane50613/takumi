@@ -127,8 +127,9 @@ export async function render(element: RenderInput, options?: RenderOptions) {
         loadDefaultFonts: shouldLoadDefaultFonts(options),
       }));
 
+  let fontFamilies: string[] | undefined;
   if (!isExternalRenderer) {
-    await loadRendererResources(renderer, options);
+    fontFamilies = await loadRendererResources(renderer, options);
   }
 
   const { node: originalNode, stylesheets } = await transformElement(element, options);
@@ -143,6 +144,7 @@ export async function render(element: RenderInput, options?: RenderOptions) {
     ...options,
     images,
     stylesheets: [...(options?.stylesheets ?? []), ...stylesheets],
+    ...(fontFamilies !== undefined ? { fonts: fontFamilies } : {}),
   };
 
   // The WASM renderer is synchronous and ignores the signal argument, so honor an

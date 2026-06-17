@@ -53,6 +53,10 @@ pub struct SvgOptions<'g> {
   /// Global animation time in milliseconds.
   #[builder(default = 0)]
   pub(crate) time_ms: u64,
+  /// Per-render font fallback chain (family names in order). `None` uses all
+  /// registered families in registration order.
+  #[builder(default)]
+  pub(crate) font_families: Option<Vec<String>>,
 }
 
 /// Renders a node tree to a vector SVG string.
@@ -66,6 +70,7 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
     options.images,
     Rc::new(options.stylesheet),
     options.time_ms,
+    options.font_families.as_deref(),
   );
   let root = RenderNode::from_node(&context, options.node);
   let mut tree = LayoutTree::from_render_node(&root);

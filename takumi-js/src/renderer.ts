@@ -29,8 +29,10 @@ export function shouldLoadDefaultFonts(
 export async function loadRendererResources(
   renderer: napi.Renderer | wasm.Renderer,
   options: RenderOptionsWithoutRenderer | undefined,
-) {
+): Promise<string[] | undefined> {
   if (options?.fonts && options.fonts.length > 0) {
-    await renderer.registerFonts(options.fonts);
+    const registered = await renderer.registerFonts(options.fonts);
+    return [...new Set(registered.flat().map((family) => family.name))];
   }
+  return undefined;
 }
