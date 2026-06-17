@@ -6,10 +6,7 @@ use std::{
 };
 
 use napi::bindgen_prelude::*;
-use takumi_base::{
-  layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node},
-  resources::image::ImageSource as LoadedImageSource,
-};
+use takumi_base::layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node};
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, RenderOptions, SequentialScene,
   encode_animated_gif, encode_animated_png, encode_animated_webp, render_sequence_animation,
@@ -29,7 +26,7 @@ pub struct RenderAnimationTask {
   pub quality: Option<u8>,
   pub draw_debug_border: bool,
   pub stylesheets: Option<Vec<String>>,
-  pub fetched_resources: HashMap<Arc<str>, Buffer>,
+  pub images: HashMap<Arc<str>, Buffer>,
   pub fps: u32,
 }
 
@@ -47,7 +44,7 @@ impl RenderAnimationTask {
       format,
       quality,
       fps,
-      fetched_resources,
+      images,
       stylesheets,
       device_pixel_ratio,
     } = options;
@@ -82,7 +79,7 @@ impl RenderAnimationTask {
       quality,
       draw_debug_border: draw_debug_border.unwrap_or_default(),
       stylesheets,
-      fetched_resources: fetched_resources
+      images: images
         .unwrap_or_default()
         .into_iter()
         .map(|image: ImageSource<'_>| {
@@ -103,20 +100,20 @@ impl Task for RenderAnimationTask {
       let Some(scenes) = self.scenes.take() else {
         unreachable!()
       };
-      let initialized_images = self
-        .fetched_resources
-        .iter()
-        .map(|(key, value)| {
-          Ok((
-            key.clone(),
-            LoadedImageSource::from_bytes(value).map_err(map_error)?,
-          ))
-        })
-        .collect::<Result<HashMap<_, _>, _>>()?;
       let state = self
         .state
         .read()
         .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
+      let initialized_images = self
+        .images
+        .iter()
+        .map(|(key, value)| {
+          Ok((
+            key.clone(),
+            state.image_cache.get_or_decode(value).map_err(map_error)?,
+          ))
+        })
+        .collect::<Result<HashMap<_, _>, _>>()?;
       let stylesheet = parse_stylesheet(take(&mut self.stylesheets), Vec::new())?;
       let scene_options = scenes
         .into_iter()
@@ -126,7 +123,7 @@ impl Task for RenderAnimationTask {
             .options(
               RenderOptions::builder()
                 .viewport(self.viewport)
-                .fetched_resources(initialized_images.clone())
+                .images(initialized_images.clone())
                 .stylesheet(stylesheet.clone())
                 .node(node)
                 .fonts(&state.fonts)

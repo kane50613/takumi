@@ -16,7 +16,9 @@ use takumi_base::{
     node::Node,
     style::{KeyframesRule, StyleSheet},
   },
-  resources::{font::FontResource, image::ImageSource as LoadedImageSource},
+  resources::{
+    font::FontResource, image::ImageSource as LoadedImageSource, image_cache::ImageCache,
+  },
 };
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
@@ -40,6 +42,7 @@ const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[(
 #[derive(Default)]
 pub struct Renderer {
   state: RwLock<Fonts>,
+  image_cache: ImageCache,
 }
 
 fn load_default_fonts(context: &mut Fonts) -> Result<(), js_sys::Error> {
@@ -119,7 +122,10 @@ impl Renderer {
         resources
           .iter()
           .map(|source| {
-            let image = LoadedImageSource::from_bytes(&source.data).map_err(map_error)?;
+            let image = self
+              .image_cache
+              .get_or_decode(&source.data)
+              .map_err(map_error)?;
             Ok((source.src.clone(), image))
           })
           .collect::<Result<_, js_sys::Error>>()
@@ -183,6 +189,16 @@ impl Renderer {
     Ok(())
   }
 
+  /// Configures this renderer's decoded-image cache (on by default, 256 MiB).
+  #[wasm_bindgen(js_name = configureImageCache)]
+  pub fn configure_image_cache(&self, options: wasm_bindgen::JsValue) -> Result<(), js_sys::Error> {
+    let options: crate::ImageCacheOptions = from_value(options).map_err(map_error)?;
+    if let Some(max_bytes) = options.max_bytes {
+      self.image_cache.set_max_bytes(max_bytes.max(0.0) as usize);
+    }
+    Ok(())
+  }
+
   /// Creates a new Renderer instance.
   #[wasm_bindgen(constructor)]
   pub fn new(options: Option<ConstructRendererOptionsType>) -> Result<Renderer, js_sys::Error> {
@@ -209,6 +225,7 @@ impl Renderer {
 
     Ok(Renderer {
       state: RwLock::new(context),
+      image_cache: ImageCache::default(),
     })
   }
 
@@ -243,7 +260,7 @@ impl Renderer {
     node: Node,
     options: RenderOptions,
   ) -> Result<Vec<u8>, JsValue> {
-    let fetched_resources = self.fetch_resources_map(options.fetched_resources.as_deref())?;
+    let images = self.fetch_resources_map(options.images.as_deref())?;
     let dithering = options.dithering.unwrap_or_default();
     let stylesheet =
       self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
@@ -257,7 +274,7 @@ impl Renderer {
         ),
       )
       .draw_debug_border(options.draw_debug_border.unwrap_or_default())
-      .fetched_resources(fetched_resources)
+      .images(images)
       .stylesheet(stylesheet)
       .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
       .dithering(dithering)
@@ -299,7 +316,7 @@ impl Renderer {
       .transpose()?
       .unwrap_or_default();
 
-    let fetched_resources = self.fetch_resources_map(options.fetched_resources.as_deref())?;
+    let images = self.fetch_resources_map(options.images.as_deref())?;
     let stylesheet =
       self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
 
@@ -313,7 +330,7 @@ impl Renderer {
         ),
       )
       .draw_debug_border(options.draw_debug_border.unwrap_or_default())
-      .fetched_resources(fetched_resources)
+      .images(images)
       .stylesheet(stylesheet)
       .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
       .node(node)
@@ -367,13 +384,13 @@ impl Renderer {
       height,
       format,
       quality,
-      fetched_resources,
+      images,
       draw_debug_border,
       stylesheets,
       device_pixel_ratio,
       fps,
     } = from_value(options.into()).map_err(map_error)?;
-    let fetched_resources = self.fetch_resources_map(fetched_resources.as_deref())?;
+    let images = self.fetch_resources_map(images.as_deref())?;
 
     if scenes.is_empty() {
       return Err(JsValue::from_str("Expected at least one animation scene"));
@@ -396,7 +413,7 @@ impl Renderer {
           .options(
             takumi_raster::RenderOptions::builder()
               .viewport(viewport)
-              .fetched_resources(fetched_resources.clone())
+              .images(images.clone())
               .stylesheet(stylesheet.clone())
               .node(scene.node)
               .fonts(&state)
@@ -420,7 +437,7 @@ impl Renderer {
   ) -> Result<Vec<u8>, JsValue> {
     let frames: Vec<AnimationFrameSource> = from_value(frames.into()).map_err(map_error)?;
     let options: EncodeFramesOptions = from_value(options.into()).map_err(map_error)?;
-    let fetched_resources = self.fetch_resources_map(options.fetched_resources.as_deref())?;
+    let images = self.fetch_resources_map(options.images.as_deref())?;
     let viewport = Viewport::new((options.width, options.height)).with_device_pixel_ratio(
       options
         .device_pixel_ratio
@@ -433,7 +450,7 @@ impl Renderer {
       .map(|frame| -> Result<AnimationFrame, JsValue> {
         let render_options = takumi_raster::RenderOptions::builder()
           .viewport(viewport)
-          .fetched_resources(fetched_resources.clone())
+          .images(images.clone())
           .node(frame.node)
           .fonts(&state)
           .draw_debug_border(options.draw_debug_border.unwrap_or_default())

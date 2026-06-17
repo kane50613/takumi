@@ -7,7 +7,7 @@ use rayon::prelude::*;
 use takumi_base::{
   Fonts,
   layout::{node::Node, style::KeyframesRule as CoreKeyframesRule},
-  resources::font::FontResource,
+  resources::{font::FontResource, image_cache::ImageCache},
 };
 use takumi_raster::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat};
 
@@ -81,6 +81,7 @@ pub struct Renderer {
 
 pub(crate) struct RendererState {
   pub(crate) fonts: Fonts,
+  pub(crate) image_cache: ImageCache,
 }
 
 pub(crate) fn deserialize_keyframes(keyframes: Option<Object>) -> Result<Vec<CoreKeyframesRule>> {
@@ -109,7 +110,7 @@ pub struct RenderOptions<'env> {
   /// Whether to draw debug borders.
   pub draw_debug_border: Option<bool>,
   /// The fetched resources to use.
-  pub fetched_resources: Option<Vec<ImageSource<'env>>>,
+  pub images: Option<Vec<ImageSource<'env>>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
   /// Structured keyframes to register alongside stylesheets.
@@ -183,7 +184,7 @@ pub struct RenderAnimationOptions<'env> {
   /// Frames per second for timeline sampling.
   pub fps: u32,
   /// The fetched resources to use.
-  pub fetched_resources: Option<Vec<ImageSource<'env>>>,
+  pub images: Option<Vec<ImageSource<'env>>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
   /// The device pixel ratio.
@@ -205,7 +206,7 @@ pub struct EncodeFramesOptions<'env> {
   /// The quality of WebP format (0-100). Ignored for APNG and GIF.
   pub quality: Option<u8>,
   /// The fetched resources to use.
-  pub fetched_resources: Option<Vec<ImageSource<'env>>>,
+  pub images: Option<Vec<ImageSource<'env>>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
   /// The device pixel ratio.
@@ -328,7 +329,10 @@ impl Renderer {
     }
 
     let renderer = Self {
-      state: Arc::new(RwLock::new(RendererState { fonts })),
+      state: Arc::new(RwLock::new(RendererState {
+        fonts,
+        image_cache: ImageCache::default(),
+      })),
     };
 
     if let Some(fonts) = options.fonts {
@@ -415,6 +419,19 @@ impl Renderer {
         .fonts
         .decode_cache()
         .set_max_bytes(max_bytes.max(0.0) as usize);
+    }
+    Ok(())
+  }
+
+  /// Configures this renderer's decoded-image cache (on by default, 256 MiB).
+  #[napi(js_name = "configureImageCache")]
+  pub fn configure_image_cache(&self, options: crate::ImageCacheOptions) -> Result<()> {
+    if let Some(max_bytes) = options.max_bytes {
+      let state = self
+        .state
+        .read()
+        .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
+      state.image_cache.set_max_bytes(max_bytes.max(0.0) as usize);
     }
     Ok(())
   }

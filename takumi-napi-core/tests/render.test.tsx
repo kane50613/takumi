@@ -94,7 +94,7 @@ describe("render", () => {
   const options: RenderOptions = {
     width: 1200,
     height: 630,
-    fetchedResources: [
+    images: [
       {
         src: remoteUrl,
         data: imageBuffer,

@@ -31,7 +31,7 @@ pub struct RenderContext<'g> {
   /// Whether to draw debug borders.
   pub draw_debug_border: bool,
   /// The resources fetched externally.
-  pub fetched_resources: HashMap<Arc<str>, ImageSource>,
+  pub images: HashMap<Arc<str>, ImageSource>,
   /// The stylesheets to apply before layout/rendering.
   pub stylesheet: Rc<StyleSheet>,
 }
@@ -40,7 +40,7 @@ impl<'g> RenderContext<'g> {
   pub fn new(
     fonts: &'g Fonts,
     viewport: Viewport,
-    fetched_resources: HashMap<Arc<str>, ImageSource>,
+    images: HashMap<Arc<str>, ImageSource>,
     stylesheet: Rc<StyleSheet>,
     time: u64,
   ) -> Self {
@@ -60,7 +60,7 @@ impl<'g> RenderContext<'g> {
       style: Box::default(),
       time,
       draw_debug_border: false,
-      fetched_resources,
+      images,
       stylesheet,
     }
   }
@@ -83,7 +83,7 @@ impl<'g> RenderContext<'g> {
       current_color,
       time: parent.time,
       draw_debug_border: parent.draw_debug_border,
-      fetched_resources: parent.fetched_resources.clone(),
+      images: parent.images.clone(),
       sizing,
       stylesheet: parent.stylesheet.clone(),
     }

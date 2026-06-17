@@ -31,6 +31,13 @@ pub struct FontCacheOptions {
   pub max_bytes: Option<f64>,
 }
 
+/// Options for `Renderer.configureImageCache`.
+#[napi(object)]
+pub struct ImageCacheOptions {
+  /// Maximum bytes of decoded images to keep in this renderer's cache. `0` disables (and clears) it.
+  pub max_bytes: Option<f64>,
+}
+
 #[derive(Deserialize, Default)]
 pub(crate) struct FontInput {
   pub name: Option<String>,

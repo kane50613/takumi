@@ -157,7 +157,7 @@ describe("render", () => {
       width: 1200,
       height: 630,
       format: "png",
-      fetchedResources: [
+      images: [
         {
           src: "../assets/images/yeecord.png",
           data: new Uint8Array(localImage),
@@ -308,7 +308,7 @@ describe("renderAsDataUrl", () => {
       width: 1200,
       height: 630,
       format: "png",
-      fetchedResources: [
+      images: [
         {
           src: "../assets/images/yeecord.png",
           data: new Uint8Array(localImage),

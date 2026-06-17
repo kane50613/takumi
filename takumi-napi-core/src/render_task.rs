@@ -7,7 +7,6 @@ use takumi_base::layout::node::Node;
 use takumi_base::{
   layout::style::StyleSheet,
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
-  resources::image::ImageSource as LoadedImageSource,
 };
 use takumi_raster::{DitheringAlgorithm, render, write_image};
 
@@ -26,7 +25,7 @@ pub struct RenderTask {
   pub dithering: DitheringAlgorithm,
   pub time_ms: u64,
   pub stylesheet: StyleSheet,
-  pub fetched_resources: HashMap<Arc<str>, Buffer>,
+  pub images: HashMap<Arc<str>, Buffer>,
 }
 
 impl RenderTask {
@@ -54,8 +53,8 @@ impl RenderTask {
         options.stylesheets,
         deserialize_keyframes(options.keyframes)?,
       )?,
-      fetched_resources: options
-        .fetched_resources
+      images: options
+        .images
         .unwrap_or_default()
         .into_iter()
         .map(|image| Ok((Arc::from(image.src), buffer_from_object(env, image.data)?)))
@@ -73,26 +72,26 @@ impl Task for RenderTask {
       unreachable!()
     };
 
-    let initialized_images = self
-      .fetched_resources
-      .iter()
-      .map(|(k, v)| {
-        Ok((
-          k.clone(),
-          LoadedImageSource::from_bytes(v).map_err(map_error)?,
-        ))
-      })
-      .collect::<Result<HashMap<_, _>, _>>()?;
-
     let state = self
       .state
       .read()
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
+    let initialized_images = self
+      .images
+      .iter()
+      .map(|(k, v)| {
+        Ok((
+          k.clone(),
+          state.image_cache.get_or_decode(v).map_err(map_error)?,
+        ))
+      })
+      .collect::<Result<HashMap<_, _>, _>>()?;
+
     let image = render(
       takumi_raster::RenderOptions::builder()
         .viewport(self.viewport)
-        .fetched_resources(initialized_images)
+        .images(initialized_images)
         .stylesheet(take(&mut self.stylesheet))
         .time_ms(self.time_ms)
         .dithering(self.dithering)

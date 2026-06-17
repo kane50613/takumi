@@ -160,7 +160,7 @@ fn test_pseudo_display_image() {
     .viewport(create_test_viewport())
     .node(root)
     .fonts(&CONTEXT)
-    .fetched_resources(TEST_IMAGES.clone())
+    .images(TEST_IMAGES.clone())
     .stylesheet(StyleSheet::parse(&format!("{SHARED_CSS}{pseudo_css}")).unwrap())
     .build();
 

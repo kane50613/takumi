@@ -20,7 +20,7 @@ function testRender(name: string, template: ReactNode) {
       height: 630,
       format: "webp",
       dithering: "floyd-steinberg",
-      fetchedResources: [
+      images: [
         {
           src: "takumi.svg",
           data: await file(

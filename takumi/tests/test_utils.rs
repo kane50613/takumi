@@ -136,7 +136,7 @@ pub fn run_fixture_test(node: Node, fixture_name: &str) {
     .viewport(viewport)
     .node(node)
     .fonts(&CONTEXT)
-    .fetched_resources(TEST_IMAGES.clone())
+    .images(TEST_IMAGES.clone())
     .build();
 
   run_fixture_test_with_options(options, fixture_name);
@@ -181,7 +181,7 @@ pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &
       .viewport(*options.viewport())
       .fonts(options.fonts())
       .stylesheet(options.stylesheet().clone())
-      .fetched_resources(options.fetched_resources().clone())
+      .images(options.images().clone())
       .build(),
   ) {
     write(format!("tests/fixtures-generated/{fixture_name}.svg"), svg).unwrap();

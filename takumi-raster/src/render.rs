@@ -40,9 +40,9 @@ pub struct RenderOptions<'g> {
   /// Whether to draw debug borders.
   #[builder(default = false)]
   pub(crate) draw_debug_border: bool,
-  /// The resources fetched externally.
+  /// Pre-decoded images keyed by `src`, resolved when a node references that URL.
   #[builder(default)]
-  pub(crate) fetched_resources: HashMap<Arc<str>, ImageSource>,
+  pub(crate) images: HashMap<Arc<str>, ImageSource>,
   /// CSS stylesheets to apply before layout/rendering.
   #[builder(default)]
   pub(crate) stylesheet: StyleSheet,
@@ -75,9 +75,9 @@ impl<'g> RenderOptions<'g> {
     &self.stylesheet
   }
 
-  /// Returns the externally-fetched resources keyed by URL.
-  pub fn fetched_resources(&self) -> &HashMap<Arc<str>, ImageSource> {
-    &self.fetched_resources
+  /// Returns the pre-decoded images keyed by `src`.
+  pub fn images(&self) -> &HashMap<Arc<str>, ImageSource> {
+    &self.images
   }
 }
 
@@ -184,18 +184,12 @@ pub fn measure_layout<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
     fonts,
     node,
     draw_debug_border,
-    fetched_resources,
+    images,
     stylesheet,
     time_ms,
     dithering: _,
   } = options;
-  let mut render_context = RenderContext::new(
-    fonts,
-    viewport,
-    fetched_resources,
-    stylesheet.into(),
-    time_ms,
-  );
+  let mut render_context = RenderContext::new(fonts, viewport, images, stylesheet.into(), time_ms);
   render_context.draw_debug_border = draw_debug_border;
   let mut root = RenderNode::from_node(&render_context, node);
   let mut tree = LayoutTree::from_render_node(&root);
@@ -508,19 +502,13 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<RgbaImage> {
     fonts,
     node,
     draw_debug_border,
-    fetched_resources,
+    images,
     stylesheet,
     time_ms,
     dithering,
   } = options;
 
-  let mut render_context = RenderContext::new(
-    fonts,
-    viewport,
-    fetched_resources,
-    stylesheet.into(),
-    time_ms,
-  );
+  let mut render_context = RenderContext::new(fonts, viewport, images, stylesheet.into(), time_ms);
   render_context.draw_debug_border = draw_debug_border;
 
   let mut root = RenderNode::from_node(&render_context, node);

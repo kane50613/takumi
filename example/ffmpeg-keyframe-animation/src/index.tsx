@@ -62,7 +62,7 @@ const thumbnailFrame = await render(<Scene tokens={tokens} showPlayButton={true}
   devicePixelRatio,
   format: "webp",
   keyframes,
-  fetchedResources,
+  images,
   timeMs: 2500,
 });
 

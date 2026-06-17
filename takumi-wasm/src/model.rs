@@ -71,7 +71,7 @@ pub struct RenderOptions {
   /// The JPEG quality (0-100), if applicable.
   pub quality: Option<u8>,
   /// Pre-fetched image resources to use during rendering.
-  pub fetched_resources: Option<Vec<ImageSource>>,
+  pub images: Option<Vec<ImageSource>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
   /// Structured keyframes to register alongside stylesheets.
@@ -102,7 +102,7 @@ pub struct RenderAnimationOptions {
   /// The WebP quality (0-100). Ignored for APNG and GIF.
   pub quality: Option<u8>,
   /// Pre-fetched image resources to use during rendering.
-  pub fetched_resources: Option<Vec<ImageSource>>,
+  pub images: Option<Vec<ImageSource>>,
   /// Whether to draw debug borders around layout elements.
   pub draw_debug_border: Option<bool>,
   /// CSS stylesheets to apply before rendering.
@@ -126,7 +126,7 @@ pub struct EncodeFramesOptions {
   /// The WebP quality (0-100). Ignored for APNG and GIF.
   pub quality: Option<u8>,
   /// Pre-fetched image resources to use during rendering.
-  pub fetched_resources: Option<Vec<ImageSource>>,
+  pub images: Option<Vec<ImageSource>>,
   /// Whether to draw debug borders around layout elements.
   pub draw_debug_border: Option<bool>,
   /// CSS stylesheets to apply before rendering.

@@ -31,7 +31,7 @@ fn measure(node: Node, viewport: Viewport) -> MeasuredNode {
       .viewport(viewport)
       .node(node)
       .fonts(&CONTEXT)
-      .fetched_resources(TEST_IMAGES.clone())
+      .images(TEST_IMAGES.clone())
       .build(),
   )
   .unwrap()
@@ -108,7 +108,7 @@ fn test_measure_simple_container() {
       .viewport(create_measure_viewport())
       .node(node)
       .fonts(&CONTEXT)
-      .fetched_resources(TEST_IMAGES.clone())
+      .images(TEST_IMAGES.clone())
       .build(),
   )
   .unwrap();
@@ -139,7 +139,7 @@ fn test_measure_text_node() {
       .viewport(create_measure_viewport())
       .node(node)
       .fonts(&CONTEXT)
-      .fetched_resources(TEST_IMAGES.clone())
+      .images(TEST_IMAGES.clone())
       .build(),
   )
   .unwrap();
@@ -186,7 +186,7 @@ fn test_measure_flex_text_node_centers_inner_text() {
       .viewport(create_measure_viewport())
       .node(node)
       .fonts(&CONTEXT)
-      .fetched_resources(TEST_IMAGES.clone())
+      .images(TEST_IMAGES.clone())
       .build(),
   )
   .unwrap();
@@ -233,7 +233,7 @@ fn test_measure_flex_text_node_anonymous_item_uses_intrinsic_size() {
       .viewport(create_measure_viewport())
       .node(node)
       .fonts(&CONTEXT)
-      .fetched_resources(TEST_IMAGES.clone())
+      .images(TEST_IMAGES.clone())
       .build(),
   )
   .unwrap();
@@ -285,7 +285,7 @@ fn test_measure_inline_layout() {
       .viewport(create_measure_viewport())
       .node(node)
       .fonts(&CONTEXT)
-      .fetched_resources(TEST_IMAGES.clone())
+      .images(TEST_IMAGES.clone())
       .build(),
   )
   .unwrap();
@@ -1487,7 +1487,7 @@ fn test_measure_svg_attr_size_in_absolute_flex_container() {
       .viewport(create_measure_viewport())
       .node(node)
       .fonts(&CONTEXT)
-      .fetched_resources(TEST_IMAGES.clone())
+      .images(TEST_IMAGES.clone())
       .build(),
   )
   .unwrap();
@@ -1540,7 +1540,7 @@ fn test_measure_svg_attr_size_in_absolute_flex_container_with_parent_padding() {
       .viewport(create_measure_viewport())
       .node(node)
       .fonts(&CONTEXT)
-      .fetched_resources(TEST_IMAGES.clone())
+      .images(TEST_IMAGES.clone())
       .build(),
   )
   .unwrap();
@@ -1585,7 +1585,7 @@ fn test_measure_svg_with_width_only_preserves_intrinsic_ratio() {
       .viewport(create_measure_viewport())
       .node(node)
       .fonts(&CONTEXT)
-      .fetched_resources(TEST_IMAGES.clone())
+      .images(TEST_IMAGES.clone())
       .build(),
   )
   .unwrap();
@@ -1654,7 +1654,7 @@ fn test_measure_img_svg_attribute_sizing_cases() {
         .viewport(create_measure_viewport())
         .node(node)
         .fonts(&CONTEXT)
-        .fetched_resources(TEST_IMAGES.clone())
+        .images(TEST_IMAGES.clone())
         .build(),
     )
     .unwrap();

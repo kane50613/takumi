@@ -36,7 +36,7 @@ export type RenderOptions = {
   /**
    * The resources fetched externally. You should collect the fetch tasks first using `extractResourceUrls` and then pass the resources here.
    */
-  fetchedResources?: ImageSource[];
+  images?: ImageSource[];
   /**
    * CSS stylesheets to apply before rendering.
    */
@@ -77,7 +77,7 @@ export type RenderAnimationOptions = {
   /**
    * The resources fetched externally. You should collect the fetch tasks first using `extractResourceUrls` and then pass the resources here.
    */
-  fetchedResources?: ImageSource[];
+  images?: ImageSource[];
   drawDebugBorder?: boolean;
   /**
    * CSS stylesheets to apply before rendering.
@@ -105,7 +105,7 @@ export type EncodeFramesOptions = {
   /**
    * The resources fetched externally. You should collect the fetch tasks first using `extractResourceUrls` and then pass the resources here.
    */
-  fetchedResources?: ImageSource[];
+  images?: ImageSource[];
   drawDebugBorder?: boolean;
   /**
    * CSS stylesheets to apply before rendering.

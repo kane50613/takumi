@@ -276,6 +276,20 @@ impl FromStr for SvgSource {
 }
 
 impl ImageSource {
+  /// Approximate decoded size in bytes, used for cache budgeting.
+  pub fn estimated_bytes(&self) -> usize {
+    match self {
+      Self::Bitmap(buffer) => buffer.data().len(),
+      Self::Gif(gif) => gif
+        .frames
+        .iter()
+        .map(|frame| frame.buffer.data().len())
+        .sum(),
+      #[cfg(feature = "svg")]
+      Self::Svg(svg) => svg.source.len(),
+    }
+  }
+
   /// Load an image source from raw bytes.
   ///
   /// - When the `svg` feature is enabled and the bytes look like SVG XML, they

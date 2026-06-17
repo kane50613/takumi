@@ -46,7 +46,7 @@ pub struct SvgOptions<'g> {
   pub(crate) node: Node,
   /// Resources fetched externally, keyed by URL.
   #[builder(default)]
-  pub(crate) fetched_resources: HashMap<Arc<str>, ImageSource>,
+  pub(crate) images: HashMap<Arc<str>, ImageSource>,
   /// CSS stylesheets to apply before layout.
   #[builder(default)]
   pub(crate) stylesheet: StyleSheet,
@@ -63,7 +63,7 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
   let context = RenderContext::new(
     options.fonts,
     viewport,
-    options.fetched_resources,
+    options.images,
     Rc::new(options.stylesheet),
     options.time_ms,
   );

@@ -21,3 +21,10 @@ const TS_APPEND_CONTENT: &'static str = include_str!("./dts-header.d.ts");
 pub(crate) struct FontCacheOptions {
   pub(crate) max_bytes: Option<f64>,
 }
+
+/// Options for `Renderer.configureImageCache`.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ImageCacheOptions {
+  pub(crate) max_bytes: Option<f64>,
+}

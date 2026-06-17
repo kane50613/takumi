@@ -186,7 +186,7 @@ pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
     return Err(ImageResourceError::SvgParseNotSupported);
   }
 
-  if let Some(img) = context.fetched_resources.get(src) {
+  if let Some(img) = context.images.get(src) {
     return Ok(img.clone());
   }
 

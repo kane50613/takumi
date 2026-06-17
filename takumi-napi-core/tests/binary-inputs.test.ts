@@ -57,7 +57,7 @@ describe("binary inputs", () => {
     const reference = await renderer.render(imageNode, {
       width: 64,
       height: 64,
-      fetchedResources: [{ src: "test://binary-input-image", data: imageUint8Array }],
+      images: [{ src: "test://binary-input-image", data: imageUint8Array }],
     });
 
     const inline = (src: Uint8Array | ArrayBuffer) =>
@@ -101,13 +101,13 @@ describe("binary inputs", () => {
     expect(Buffer.compare(fromBytes, fromString)).toBe(0);
   });
 
-  test("render fetchedResources accepts Buffer, Uint8Array, and ArrayBuffer", async () => {
+  test("render images accepts Buffer, Uint8Array, and ArrayBuffer", async () => {
     const renderer = new Renderer();
 
     const fromBuffer = await renderer.render(imageNode, {
       width: 64,
       height: 64,
-      fetchedResources: [
+      images: [
         {
           src: "test://binary-input-image",
           data: imageBuffer,
@@ -119,7 +119,7 @@ describe("binary inputs", () => {
     const fromUint8Array = await renderer.render(imageNode, {
       width: 64,
       height: 64,
-      fetchedResources: [
+      images: [
         {
           src: "test://binary-input-image",
           data: imageUint8Array,
@@ -131,7 +131,7 @@ describe("binary inputs", () => {
     const fromArrayBuffer = await renderer.render(imageNode, {
       width: 64,
       height: 64,
-      fetchedResources: [
+      images: [
         {
           src: "test://binary-input-image",
           data: imageArrayBuffer,

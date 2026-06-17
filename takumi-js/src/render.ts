@@ -27,7 +27,7 @@ export type ImageLoader = {
   data: ImageLoaderData | (() => ImageLoaderData | Promise<ImageLoaderData>);
 };
 
-type RenderOptionsWithRenderer = InnerRenderOptions & {
+type RenderOptionsWithRenderer = Omit<InnerRenderOptions, "images"> & {
   renderer: napi.Renderer | wasm.Renderer;
   signal?: AbortSignal;
   jsx?: FromJsxOptions;
@@ -135,15 +135,13 @@ export async function render(element: RenderInput, options?: RenderOptions) {
   const emojiType = options?.emoji ?? "twemoji";
 
   const node = emojiType !== "from-font" ? extractEmojis(originalNode, emojiType) : originalNode;
-  const fetchedResources = options?.images
+  const images = options?.images
     ? await resolveImageLoaders(options.images)
-    : (options?.fetchedResources ??
-      (await fetchResources(extractResourceUrls(node), options?.resourcesOptions)));
+    : await fetchResources(extractResourceUrls(node), options?.resourcesOptions);
 
   const renderOptions = {
     ...options,
-    images: undefined,
-    fetchedResources,
+    images,
     stylesheets: [...(options?.stylesheets ?? []), ...stylesheets],
   };
 
