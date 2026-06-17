@@ -46,21 +46,15 @@ export class Renderer extends NativeRenderer {
     return loadedCount;
   }
 
-  private checkAndMarkFont(font: FontLoader) {
+  private checkAndMarkFont(font: FontLoader): void {
     const key = createFontKey(font);
 
     if (isBuffer(key)) {
-      const isNew = !this.fontBuffersMark.has(key);
-
       this.fontBuffersMark.add(key);
-      return isNew;
+      return;
     }
 
-    const isNew = !this.fontsMark.has(key);
-
     this.fontsMark.add(key);
-
-    return isNew;
   }
 }
 
