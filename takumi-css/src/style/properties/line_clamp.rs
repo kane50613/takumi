@@ -146,12 +146,3 @@ impl TailwindPropertyParser for LineClamp {
     Some(Self::clamp(Some(count), BlockEllipsis::Auto))
   }
 }
-
-/// Resolved line-clamp used during inline layout.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ResolvedLineClamp {
-  /// The number of lines to clamp to.
-  pub count: u32,
-  /// The ellipsis to use when the text is clamped, if overridden.
-  pub ellipsis: Option<String>,
-}

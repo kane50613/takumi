@@ -151,32 +151,21 @@ impl ComputedStyle {
     }
   }
 
-  /// Resolves the effective line clamp for layout. Per CSS Overflow 4, `max-lines`
-  /// only clamps inside a fragmentation context, i.e. when `continue` collapses
-  /// (`line-clamp`/`-webkit-line-clamp` set this).
-  pub fn resolved_line_clamp(&self) -> Option<ResolvedLineClamp> {
+  /// The number of lines to clamp to for layout, or `None` when not clamped.
+  ///
+  /// `nowrap` + `ellipsis` clamps to a single line; otherwise `max-lines` applies
+  /// only inside a fragmentation context (`continue: collapse`), per CSS Overflow 4.
+  /// The ellipsis itself comes from [`Self::ellipsis_char`].
+  pub fn clamp_lines(&self) -> Option<u32> {
     if self.forces_single_line_ellipsis() {
-      return Some(ResolvedLineClamp {
-        count: 1,
-        ellipsis: Some(self.ellipsis_char().to_string()),
-      });
+      return Some(1);
     }
 
     if self.r#continue != Continue::Collapse {
       return None;
     }
 
-    match self.max_lines {
-      Some(count) if count >= 1 => Some(ResolvedLineClamp {
-        count,
-        ellipsis: match &self.block_ellipsis {
-          BlockEllipsis::String(custom) => Some(custom.clone()),
-          BlockEllipsis::None => Some(String::new()),
-          BlockEllipsis::Auto => None,
-        },
-      }),
-      _ => None,
-    }
+    self.max_lines.filter(|&count| count >= 1)
   }
 
   #[inline]

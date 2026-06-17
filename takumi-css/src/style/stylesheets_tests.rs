@@ -196,14 +196,14 @@ fn continue_property_resolves_by_name() {
 fn max_lines_clamps_only_inside_fragmentation_context() {
   // Bare `max-lines` (continue: normal) does not clamp.
   let bare = inherited_style_from_pairs([("max-lines", "3")], &ComputedStyle::default());
-  assert!(bare.resolved_line_clamp().is_none());
+  assert!(bare.clamp_lines().is_none());
 
   // `continue: collapse` turns it into a fragmentation context that clamps.
   let clamped = inherited_style_from_pairs(
     [("max-lines", "3"), ("continue", "collapse")],
     &ComputedStyle::default(),
   );
-  assert_eq!(clamped.resolved_line_clamp().map(|c| c.count), Some(3));
+  assert_eq!(clamped.clamp_lines(), Some(3));
 }
 
 #[test]
@@ -807,13 +807,7 @@ fn test_text_overflow_ellipsis_forces_single_line_clamp_on_nowrap() {
   };
 
   assert_eq!(style.resolved_text_wrap_mode(), TextWrapMode::Wrap);
-  assert_eq!(
-    style.resolved_line_clamp(),
-    Some(ResolvedLineClamp {
-      count: 1,
-      ellipsis: Some("…".to_string()),
-    })
-  );
+  assert_eq!(style.clamp_lines(), Some(1));
 }
 
 #[test]

@@ -1383,10 +1383,10 @@ pub fn resolve_inline_max_height(
   font_style: &SizedFontStyle,
   content_box_height: f32,
 ) -> Option<MaxHeight> {
-  let resolved_line_clamp = font_style.parent.resolved_line_clamp();
-  resolved_line_clamp
-    .as_ref()
-    .map(|clamp| MaxHeight::HeightAndLines(content_box_height, clamp.count))
+  font_style
+    .parent
+    .clamp_lines()
+    .map(|lines| MaxHeight::HeightAndLines(content_box_height, lines))
     .or_else(|| {
       (font_style.parent.text_overflow == TextOverflow::Ellipsis)
         .then_some(MaxHeight::Absolute(content_box_height))
@@ -2030,13 +2030,11 @@ pub fn create_inline_constraint(
   // applies a maximum height to reduce unnecessary calculation.
   let max_height = match (
     context.sizing.viewport.size.height,
-    context.style.resolved_line_clamp(),
+    context.style.clamp_lines(),
   ) {
-    (Some(height), Some(line_clamp)) => {
-      Some(MaxHeight::HeightAndLines(height as f32, line_clamp.count))
-    }
+    (Some(height), Some(lines)) => Some(MaxHeight::HeightAndLines(height as f32, lines)),
     (Some(height), None) => Some(MaxHeight::Absolute(height as f32)),
-    (None, Some(line_clamp)) => Some(MaxHeight::Lines(line_clamp.count)),
+    (None, Some(lines)) => Some(MaxHeight::Lines(lines)),
     (None, None) => None,
   };
 
