@@ -28,8 +28,8 @@ impl SizedShadow {
     Self {
       offset_x: shadow.offset_x.to_px(sizing, size.width),
       offset_y: shadow.offset_y.to_px(sizing, size.height),
-      blur_radius: shadow.blur_radius.to_px(sizing, size.width),
-      spread_radius: shadow.spread_radius.to_px(sizing, size.width),
+      blur_radius: shadow.blur_radius.to_px(sizing, 1.0),
+      spread_radius: shadow.spread_radius.to_px(sizing, 1.0),
       color: shadow.color.resolve(current_color),
     }
   }
@@ -44,7 +44,7 @@ impl SizedShadow {
     Self {
       offset_x: shadow.offset_x.to_px(sizing, size.width),
       offset_y: shadow.offset_y.to_px(sizing, size.height),
-      blur_radius: shadow.blur_radius.to_px(sizing, size.width),
+      blur_radius: shadow.blur_radius.to_px(sizing, 1.0),
       // Text shadows do not support spread radius; set to 0.
       spread_radius: 0.0,
       color: shadow.color.resolve(current_color),
