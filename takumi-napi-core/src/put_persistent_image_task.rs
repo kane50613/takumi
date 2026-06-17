@@ -1,7 +1,7 @@
 use std::sync::{Arc, RwLock};
 
 use napi::bindgen_prelude::*;
-use takumi_core::resources::image::ImageSource as LoadedImageSource;
+use takumi_base::resources::image::ImageSource as LoadedImageSource;
 
 use crate::{map_error, renderer::RendererState};
 

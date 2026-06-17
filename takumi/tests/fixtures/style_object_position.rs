@@ -1,4 +1,4 @@
-use takumi::core::layout::{
+use takumi::base::layout::{
   node::Node,
   style::{
     BackgroundPosition, Display, Length::Percentage, ObjectFit, PositionComponent,

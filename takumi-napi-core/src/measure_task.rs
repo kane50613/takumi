@@ -3,7 +3,7 @@ use std::sync::RwLock;
 use std::{collections::HashMap, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi_core::{
+use takumi_base::{
   layout::style::StyleSheet,
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node},
   resources::image::ImageSource as LoadedImageSource,

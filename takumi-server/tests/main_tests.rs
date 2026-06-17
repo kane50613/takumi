@@ -2,7 +2,7 @@ use axum::http::Request;
 use hmac::KeyInit;
 use tower::ServiceExt;
 
-use takumi::core::GlobalContext;
+use takumi::base::GlobalContext;
 use takumi_server::{Args, create_app, create_state};
 
 #[test]

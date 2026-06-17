@@ -2053,13 +2053,13 @@ dependencies = [
  "rayon",
  "resvg",
  "serde_json",
- "takumi-core",
+ "takumi-base",
  "takumi-raster",
  "takumi-svg",
 ]
 
 [[package]]
-name = "takumi-core"
+name = "takumi-base"
 version = "0.0.0"
 dependencies = [
  "bytemuck",
@@ -2123,7 +2123,7 @@ dependencies = [
  "parley",
  "rayon",
  "serde",
- "takumi-core",
+ "takumi-base",
  "takumi-raster",
 ]
 
@@ -2146,7 +2146,7 @@ dependencies = [
  "smallvec",
  "svgtypes",
  "taffy",
- "takumi-core",
+ "takumi-base",
  "tiny-skia",
  "typed-builder",
 ]
@@ -2179,7 +2179,7 @@ dependencies = [
  "base64",
  "quick-xml",
  "taffy",
- "takumi-core",
+ "takumi-base",
  "tiny-skia",
  "typed-builder",
 ]
@@ -2194,7 +2194,7 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen",
  "serde_bytes",
- "takumi-core",
+ "takumi-base",
  "takumi-raster",
  "wasm-bindgen",
 ]

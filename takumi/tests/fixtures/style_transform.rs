@@ -1,4 +1,4 @@
-use takumi::core::layout::{
+use takumi::base::layout::{
   node::Node,
   style::{
     Length::{Percentage, Px, Rem},

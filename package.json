@@ -4,7 +4,7 @@
   "workspaces": [
     "takumi-css",
     "takumi",
-    "takumi-core",
+    "takumi-base",
     "takumi-raster",
     "takumi-svg",
     "takumi-js",
