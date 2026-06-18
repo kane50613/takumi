@@ -30,7 +30,7 @@ jobs:
     name: Lint and Format
     runs-on: ubuntu-slim
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
@@ -48,7 +48,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
@@ -120,7 +120,7 @@ jobs:
     name: Build @takumi-rs/helpers
     runs-on: ubuntu-slim
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
@@ -150,7 +150,7 @@ jobs:
     runs-on: ubuntu-slim
     needs: build-helpers
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
@@ -200,7 +200,7 @@ jobs:
     runs-on: ${{ matrix.settings.host }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
@@ -253,7 +253,7 @@ jobs:
     runs-on: ubuntu-slim
     needs: [build-helpers, build-napi, build-wasm]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
@@ -297,7 +297,7 @@ jobs:
     runs-on: ubuntu-slim
     needs: [build-helpers, build-napi, build-wasm]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
@@ -334,7 +334,7 @@ jobs:
     runs-on: ubuntu-slim
     needs: [build-helpers, build-js, build-napi, build-wasm]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
@@ -384,7 +384,7 @@ jobs:
     runs-on: ubuntu-slim
     needs: [build-helpers, build-js, build-napi, build-wasm]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
@@ -427,7 +427,7 @@ jobs:
     runs-on: ubuntu-slim
     needs: [build-helpers, build-js, build-napi, build-wasm]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
@@ -503,7 +503,7 @@ jobs:
             target: aarch64-unknown-linux-musl
     runs-on: ${{ matrix.settings.host }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
@@ -540,7 +540,7 @@ jobs:
     name: Build @takumi-rs/wasm
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
@@ -610,7 +610,7 @@ jobs:
     runs-on: ${{ matrix.settings.host }}
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
@@ -642,7 +642,7 @@ jobs:
     needs: pass-test
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
@@ -724,7 +724,7 @@ jobs:
       id-token: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
@@ -806,7 +806,7 @@ jobs:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
