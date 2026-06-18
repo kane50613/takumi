@@ -221,14 +221,14 @@ impl Renderer {
 
   /// Registers fonts into the renderer, returning the families each font produced.
   #[wasm_bindgen(js_name = registerFonts)]
-  pub fn register_fonts(&self, fonts: FontsType) -> Result<JsValue, js_sys::Error> {
+  pub fn register_fonts(&self, fonts: FontsType) -> Result<RegisteredFamiliesType, js_sys::Error> {
     let fonts: Vec<Font> = from_value(fonts.into()).map_err(map_error)?;
     let mut state = self.write_state()?;
     let registered = fonts
       .into_iter()
       .map(|font| load_font_internal(&mut state, font))
       .collect::<Result<Vec<_>, _>>()?;
-    to_value(&registered).map_err(map_error)
+    Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
   }
 
   /// Renders a node tree into an image buffer.

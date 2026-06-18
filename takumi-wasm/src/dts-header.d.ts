@@ -63,6 +63,11 @@ export type RenderOptions = {
    * @default "none"
    */
   dithering?: "none" | "ordered-bayer" | "floyd-steinberg";
+  /**
+   * Per-render font fallback chain (family names in order, e.g. from `registerFonts`).
+   * Defaults to all registered families in registration order.
+   */
+  fonts?: string[];
 };
 
 export type RenderAnimationOptions = {
@@ -152,6 +157,18 @@ export type ConstructRendererOptions = {
    * If `fonts` are provided, this will be `false` by default.
    */
   loadDefaultFonts?: boolean;
+};
+
+export type RegisteredFace = {
+  weight: number;
+  style: string;
+  width: number;
+  index: number;
+};
+
+export type RegisteredFamily = {
+  name: string;
+  faces: RegisteredFace[];
 };
 
 export type MeasuredTextRun = {

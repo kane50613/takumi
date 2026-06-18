@@ -27,7 +27,7 @@ export type ImageLoader = {
   data: ImageLoaderData | (() => ImageLoaderData | Promise<ImageLoaderData>);
 };
 
-type RenderOptionsWithRenderer = Omit<InnerRenderOptions, "images"> & {
+type RenderOptionsWithRenderer = Omit<InnerRenderOptions, "images" | "fonts"> & {
   renderer: napi.Renderer | wasm.Renderer;
   signal?: AbortSignal;
   jsx?: FromJsxOptions;
@@ -144,7 +144,7 @@ export async function render(element: RenderInput, options?: RenderOptions) {
     ...options,
     images,
     stylesheets: [...(options?.stylesheets ?? []), ...stylesheets],
-    ...(fontFamilies !== undefined ? { fonts: fontFamilies } : {}),
+    fonts: fontFamilies,
   };
 
   // The WASM renderer is synchronous and ignores the signal argument, so honor an
