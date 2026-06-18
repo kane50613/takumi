@@ -3,19 +3,15 @@ use std::{
   cell::RefCell,
   collections::{HashMap, hash_map::Entry},
   iter::once,
-  ops::{Deref, DerefMut},
-  sync::{
-    Arc,
-    atomic::{AtomicU64, Ordering},
-  },
+  sync::Arc,
 };
 
 use image::{Rgba, RgbaImage};
 use parley::{
   GenericFamily, GlyphRun, LayoutContext, TextStyle, TreeBuilder,
   fontique::{
-    Attributes, Blob, Collection, CollectionOptions, FallbackKey, FamilyId, FontInfoOverride,
-    FontStyle, QueryFamily, QueryStatus, Script, ScriptExt,
+    Attributes, Blob, Collection, CollectionOptions, FamilyId, FontInfoOverride, FontStyle,
+    QueryFamily, QueryStatus,
   },
 };
 use skrifa::{
@@ -35,6 +31,7 @@ use tiny_skia::{IntSize, PathSegment as Command, Pixmap};
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
+  context::RenderContext,
   layout::inline::{InlineBrush, InlineLayout},
   resources::{image_buffer::ImageBuffer, image_decoder::decode_png},
 };
@@ -577,8 +574,6 @@ fn guess_font_format(source: &[u8]) -> Result<FontFormat, FontError> {
 
 thread_local! {
   static LAYOUT_CONTEXT: RefCell<LayoutContext<InlineBrush>> = RefCell::new(LayoutContext::new());
-  static FONT_CONTEXT_CACHE: RefCell<Option<(u64, u64, parley::FontContext)>> =
-    const { RefCell::new(None) };
   static SHARED_RESOLVED_GLYPH_CACHE: RefCell<HashMap<u64, ResolvedGlyph>> =
     RefCell::new(HashMap::new());
 }
@@ -627,8 +622,6 @@ fn with_layout_context<R>(f: impl FnOnce(&mut LayoutContext<InlineBrush>) -> R) 
   })
 }
 
-static FONT_CONTEXT_NEXT_ID: AtomicU64 = AtomicU64::new(1);
-
 /// A font family produced by [`Fonts::register`], with the faces it contains.
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct RegisteredFamily {
@@ -660,42 +653,25 @@ fn font_style_css(style: FontStyle) -> String {
   }
 }
 
-/// A context for managing fonts in the rendering system.
+/// The registry of fonts available to a renderer.
+///
+/// Registration is the only mutation; afterwards the assembled parley context is immutable
+/// and shared as `&self` across concurrent renders. Each render takes a cheap working clone
+/// (see [`RenderContext`]) for parley's `&mut` query API, so no per-thread or global state
+/// is needed.
 pub struct Fonts {
-  /// Identity of this `Fonts`, used to key the per-thread query-context cache.
-  id: u64,
-  /// Bumped on every `register`; invalidates the per-thread cached clone.
-  version: AtomicU64,
-  /// The assembled parley context: registered faces, fallback order, and source
-  /// cache. Querying needs `&mut`, so it is cloned per thread on demand rather than
-  /// rebuilt (registering a face costs ~60 µs; cloning the assembled context ~1 µs).
-  /// See [`Fonts::with_parley_context_mut`].
+  /// The assembled parley context: registered faces and source cache.
   parley_context: parley::FontContext,
-  /// Registered families in registration order, re-applied to every script's fallback
-  /// bucket via `set_fallbacks` so coverage fallback follows registration order.
+  /// Registered families in registration order; the default fallback chain.
   fallback_families: Vec<FamilyId>,
   /// Fonts already registered (keyed by content + family-name override), mapped to the
   /// families they produced so re-registering is a no-op that still returns them.
   registered: HashMap<u64, Box<[RegisteredFamily]>>,
 }
 
-impl Clone for Fonts {
-  fn clone(&self) -> Self {
-    Self {
-      id: FONT_CONTEXT_NEXT_ID.fetch_add(1, Ordering::Relaxed),
-      version: AtomicU64::new(self.version.load(Ordering::Relaxed)),
-      parley_context: self.parley_context.clone(),
-      fallback_families: self.fallback_families.clone(),
-      registered: self.registered.clone(),
-    }
-  }
-}
-
 impl Default for Fonts {
   fn default() -> Self {
     Self {
-      id: FONT_CONTEXT_NEXT_ID.fetch_add(1, Ordering::Relaxed),
-      version: AtomicU64::new(0),
       parley_context: parley::FontContext {
         collection: Collection::new(CollectionOptions {
           system_fonts: false,
@@ -709,53 +685,35 @@ impl Default for Fonts {
   }
 }
 
-impl Deref for Fonts {
-  type Target = parley::FontContext;
-
-  fn deref(&self) -> &Self::Target {
-    &self.parley_context
-  }
-}
-
-impl DerefMut for Fonts {
-  fn deref_mut(&mut self) -> &mut Self::Target {
-    &mut self.parley_context
-  }
-}
-
 impl Fonts {
-  /// Runs `f` against a `&mut parley::FontContext` for this `Fonts`.
-  ///
-  /// parley queries need `&mut`, but `Fonts` is shared as `&self` across concurrent
-  /// renders. Each thread keeps one cached clone keyed by `(id, version)`: a render
-  /// whose font set is unchanged reuses it; a `register` bumps `version` and the next
-  /// call re-clones. This pays the ~1 µs clone at most once per thread per font-set
-  /// change, instead of per query.
-  #[inline]
-  fn with_parley_context_mut<R>(&self, f: impl FnOnce(&mut parley::FontContext) -> R) -> R {
-    let current_version = self.version.load(Ordering::Relaxed);
-    let id = self.id;
-    let outcome = FONT_CONTEXT_CACHE.with(|cell| {
-      let Ok(mut borrow) = cell.try_borrow_mut() else {
-        return Err(f);
-      };
-      let needs_clone = match &*borrow {
-        Some((cached_id, cached_version, _)) => {
-          *cached_id != id || *cached_version != current_version
-        }
-        None => true,
-      };
-      if needs_clone {
-        *borrow = Some((id, current_version, self.parley_context.clone()));
-      }
-      let Some((_, _, context)) = borrow.as_mut() else {
-        return Err(f);
-      };
-      Ok(f(context))
-    });
-    match outcome {
-      Ok(r) => r,
-      Err(f) => f(&mut self.parley_context.clone()),
+  /// A fresh working copy of the assembled context for one render. parley queries need
+  /// `&mut`, but `Fonts` is shared as `&self`; cloning the assembled context is cheap
+  /// (registering a face costs ~60 µs, cloning the context ~1 µs) and keeps the registry
+  /// immutable, so concurrent renders never contend.
+  pub(crate) fn query_context(&self) -> parley::FontContext {
+    self.parley_context.clone()
+  }
+
+  /// Resolves the per-render fallback chain to family names: the given names in order
+  /// (keeping those that resolve to a registered family), or all registered families in
+  /// registration order when `None`. `cx` is this render's working context, used for the
+  /// name/id lookups parley exposes as `&mut`.
+  pub(crate) fn resolve_fallbacks(
+    &self,
+    cx: &mut parley::FontContext,
+    names: Option<&[String]>,
+  ) -> Vec<String> {
+    match names {
+      Some(names) => names
+        .iter()
+        .filter(|name| cx.collection.family_id(name).is_some())
+        .cloned()
+        .collect(),
+      None => self
+        .fallback_families
+        .iter()
+        .filter_map(|id| cx.collection.family_name(*id).map(str::to_string))
+        .collect(),
     }
   }
 
@@ -839,51 +797,6 @@ impl Fonts {
     result
   }
 
-  /// Line spacing (ascent + descent + leading) of the first available font
-  /// matching the given families and attributes, scaled to `font_size`.
-  /// Used as the `lh`/`rlh` basis when `line-height: normal`.
-  pub fn first_font_line_spacing<'a>(
-    &self,
-    families: impl IntoIterator<Item = QueryFamily<'a>>,
-    attributes: Attributes,
-    font_size: f32,
-  ) -> Option<f32> {
-    self.with_parley_context_mut(|ctx| {
-      let parley::FontContext {
-        collection,
-        source_cache,
-      } = ctx;
-      let mut query = collection.query(source_cache);
-      query.set_families(families);
-      query.set_attributes(attributes);
-      let mut result = None;
-      query.matches_with(|font| {
-        let Ok(font_ref) = FontRef::from_index(font.blob.data(), font.index) else {
-          return QueryStatus::Continue;
-        };
-        let metrics = font_ref.metrics(Size::new(font_size), LocationRef::default());
-        result = Some(metrics.ascent + metrics.descent + metrics.leading);
-        QueryStatus::Stop
-      });
-      result
-    })
-  }
-
-  /// Create an inline layout with the given root style and function
-  pub fn tree_builder(
-    &self,
-    root_style: TextStyle<'_, '_, InlineBrush>,
-    func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),
-  ) -> (InlineLayout, String) {
-    self.with_parley_context_mut(|fonts| {
-      with_layout_context(|layout_context| {
-        let mut builder = layout_context.tree_builder(fonts, 1.0, true, &root_style);
-        func(&mut builder);
-        builder.build()
-      })
-    })
-  }
-
   /// Registers a font, decoding it and skipping fonts already registered in this
   /// context (deduped by content + family name). Returns the families it produced.
   pub fn register(&mut self, font: FontResource) -> Result<Vec<RegisteredFamily>, FontError> {
@@ -937,30 +850,80 @@ impl Fonts {
     self
       .registered
       .insert(key, families.clone().into_boxed_slice());
-    self.version.fetch_add(1, Ordering::Relaxed);
 
     Ok(families)
   }
+}
 
-  /// Applies the per-render fallback chain to this thread's query context: the given
-  /// family names in order, or all registered families when `None`. Re-applied each
-  /// render so fallback order is per-call and never leaks between renders. `set_fallbacks`
-  /// replaces each script bucket; parley's shaper reads them for per-cluster coverage.
-  pub fn apply_fallbacks(&self, names: Option<&[String]>) {
-    self.with_parley_context_mut(|ctx| {
-      let ids: Vec<FamilyId> = match names {
-        Some(names) => names
-          .iter()
-          .filter_map(|name| ctx.collection.family_id(name))
-          .collect(),
-        None => self.fallback_families.clone(),
-      };
-      for (script, _) in Script::all_samples() {
-        ctx
-          .collection
-          .set_fallbacks(FallbackKey::new(*script, None), ids.iter().copied());
-      }
-    });
+/// First available font's line spacing (ascent + descent + leading) for `families` and
+/// `attributes`, scaled to `font_size`. The `lh`/`rlh` basis for `line-height: normal`.
+fn query_first_font_line_spacing<'a>(
+  cx: &mut parley::FontContext,
+  families: impl IntoIterator<Item = QueryFamily<'a>>,
+  attributes: Attributes,
+  font_size: f32,
+) -> Option<f32> {
+  let parley::FontContext {
+    collection,
+    source_cache,
+  } = cx;
+  let mut query = collection.query(source_cache);
+  query.set_families(families);
+  query.set_attributes(attributes);
+  let mut result = None;
+  query.matches_with(|font| {
+    let Ok(font_ref) = FontRef::from_index(font.blob.data(), font.index) else {
+      return QueryStatus::Continue;
+    };
+    let metrics = font_ref.metrics(Size::new(font_size), LocationRef::default());
+    result = Some(metrics.ascent + metrics.descent + metrics.leading);
+    QueryStatus::Stop
+  });
+  result
+}
+
+/// Builds an inline layout from `root_style`, using `cx` for shaping and the thread-local
+/// parley `LayoutContext` scratch.
+fn build_tree_layout(
+  cx: &mut parley::FontContext,
+  root_style: TextStyle<'_, '_, InlineBrush>,
+  func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),
+) -> (InlineLayout, String) {
+  with_layout_context(|layout_context| {
+    let mut builder = layout_context.tree_builder(cx, 1.0, true, &root_style);
+    func(&mut builder);
+    builder.build()
+  })
+}
+
+impl RenderContext<'_> {
+  /// Runs `f` against this render's working `parley::FontContext`. The common path borrows
+  /// the render's single working copy; a reentrant call (a nested inline-box measure running
+  /// inside an open `tree_builder`) falls back to a throwaway clone of the registry.
+  fn with_query_context<R>(&self, f: impl FnOnce(&mut parley::FontContext) -> R) -> R {
+    match self.font_cx.try_borrow_mut() {
+      Ok(mut cx) => f(&mut cx),
+      Err(_) => f(&mut self.fonts.query_context()),
+    }
+  }
+
+  /// First available font's line spacing for `families`/`attributes`, scaled to `font_size`.
+  pub fn first_font_line_spacing<'a>(
+    &self,
+    families: impl IntoIterator<Item = QueryFamily<'a>>,
+    attributes: Attributes,
+    font_size: f32,
+  ) -> Option<f32> {
+    self.with_query_context(|cx| query_first_font_line_spacing(cx, families, attributes, font_size))
+  }
+
+  /// Builds an inline layout with the given root style.
+  pub fn tree_builder(
+    &self,
+    root_style: TextStyle<'_, '_, InlineBrush>,
+    func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),
+  ) -> (InlineLayout, String) {
+    self.with_query_context(|cx| build_tree_layout(cx, root_style, func))
   }
 }
 

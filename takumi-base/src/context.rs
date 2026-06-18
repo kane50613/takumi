@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -16,8 +17,13 @@ use crate::{
 /// The context for the internal rendering. You should not construct this directly.
 #[derive(Clone)]
 pub struct RenderContext<'g> {
-  /// The font context.
+  /// The font registry shared across renders.
   pub fonts: &'g Fonts,
+  /// This render's working copy of the parley context (parley queries need `&mut`), shared
+  /// down the node tree. The registry itself stays immutable.
+  pub font_cx: Rc<RefCell<parley::FontContext>>,
+  /// The fallback family chain for this render, appended to every run's font stack.
+  pub fallback_families: Rc<[String]>,
   /// The scale factor for the image renderer.
   pub transform: Affine,
   /// The sizing context.
@@ -45,9 +51,12 @@ impl<'g> RenderContext<'g> {
     time: u64,
     font_families: Option<&[String]>,
   ) -> Self {
-    fonts.apply_fallbacks(font_families);
+    let mut font_cx = fonts.query_context();
+    let fallback_families = fonts.resolve_fallbacks(&mut font_cx, font_families).into();
     Self {
       fonts,
+      font_cx: Rc::new(RefCell::new(font_cx)),
+      fallback_families,
       sizing: SizingContext {
         viewport,
         container_size: Size::NONE,
@@ -87,6 +96,8 @@ impl<'g> RenderContext<'g> {
   ) -> Self {
     Self {
       fonts: parent.fonts,
+      font_cx: parent.font_cx.clone(),
+      fallback_families: parent.fallback_families.clone(),
       transform: parent.transform,
       style: Box::new(style),
       current_color,

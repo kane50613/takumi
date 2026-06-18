@@ -56,7 +56,7 @@ pub(crate) fn emit_text(
     max_width: content.width,
     max_height: resolve_inline_max_height(&font_style, content.height),
     style: &font_style,
-    fonts: context.fonts,
+    context,
     mode: InlineLayoutMode::Draw,
   });
 
@@ -100,7 +100,7 @@ pub(crate) fn emit_inline_content(
     max_width: content.width,
     max_height: resolve_inline_max_height(&font_style, content.height),
     style: &font_style,
-    fonts: context.fonts,
+    context,
     mode: InlineLayoutMode::Draw,
   });
 

@@ -286,7 +286,7 @@ fn collect_measure_result<'g>(
             max_width,
             max_height,
             style: &font_style,
-            fonts: current.context.fonts,
+            context: &current.context,
             mode: InlineLayoutMode::Measure,
           });
           let parent_font_metrics = get_parent_font_metrics(&built.layout);

@@ -9,7 +9,6 @@ use taffy::{AvailableSpace, Layout, Point, Rect, Size};
 use tiny_skia::PathSegment;
 
 use crate::{
-  Fonts,
   context::RenderContext,
   font_style::SizedFontStyle,
   layout::{
@@ -36,7 +35,7 @@ pub struct InlineLayoutRequest<'c, 'g> {
   pub max_width: f32,
   pub max_height: Option<MaxHeight>,
   pub style: &'c SizedFontStyle<'c>,
-  pub fonts: &'g Fonts,
+  pub context: &'c RenderContext<'g>,
   pub mode: InlineLayoutMode,
 }
 
@@ -267,11 +266,11 @@ fn tail_text_span<'a, 'c, 'g>(
 }
 
 fn measure_ellipsis_width(
-  fonts: &Fonts,
+  context: &RenderContext,
   ellipsis_style: &SizedFontStyle,
   ellipsis_char: &str,
 ) -> f32 {
-  let (mut ellipsis_layout, _) = fonts.tree_builder(ellipsis_style.into(), |builder| {
+  let (mut ellipsis_layout, _) = context.tree_builder(ellipsis_style.into(), |builder| {
     builder.push_text(ellipsis_char);
   });
   ellipsis_layout.break_all_lines(None);
@@ -1029,10 +1028,10 @@ fn build_inline_layout_tree<'c, 'g: 'c>(
   items: &[InlineItem<'c, 'g>],
   available_space: Size<AvailableSpace>,
   style: &'c SizedFontStyle,
-  fonts: &'g Fonts,
+  context: &'c RenderContext<'g>,
 ) -> BuiltInlineLayout<'c, 'g> {
   let mut spans: Vec<ProcessedInlineSpan<'c, 'g>> = Vec::new();
-  let (layout, text) = fonts.tree_builder(style.into(), |builder| {
+  let (layout, text) = context.tree_builder(style.into(), |builder| {
     let mut index_pos = 0;
     let mut previous_collapsible_space = false;
     let mut previous_was_line_break = false;
@@ -1347,10 +1346,10 @@ pub fn create_inline_layout<'c, 'g: 'c>(
     max_width,
     max_height,
     style,
-    fonts,
+    context,
     mode,
   } = request;
-  let mut built = build_inline_layout_tree(&items, available_space, style, fonts);
+  let mut built = build_inline_layout_tree(&items, available_space, style, context);
   let (text_wrap_mode, line_height_hint) =
     prepare_inline_layout(&mut built, max_width, max_height, style);
 
@@ -1376,7 +1375,7 @@ pub fn create_inline_layout<'c, 'g: 'c>(
           max_width,
           max_height,
           style,
-          fonts,
+          context,
           custom_inline_boxes,
         );
       }
@@ -2179,7 +2178,7 @@ fn make_ellipsis_layout<'c, 'g: 'c>(
   max_width: f32,
   max_height: Option<MaxHeight>,
   root_style: &'c SizedFontStyle,
-  fonts: &Fonts,
+  context: &RenderContext,
   custom_inline_boxes: &mut Vec<PositionedInlineBox>,
 ) {
   let ellipsis_char = root_style.parent.ellipsis_char();
@@ -2192,7 +2191,7 @@ fn make_ellipsis_layout<'c, 'g: 'c>(
     let ellipsis_style = ellipsis_span_id
       .and_then(|span_id| text_span_style_by_id(spans, span_id))
       .unwrap_or(root_style);
-    let ellipsis_w = measure_ellipsis_width(fonts, ellipsis_style, ellipsis_char);
+    let ellipsis_w = measure_ellipsis_width(context, ellipsis_style, ellipsis_char);
 
     let plan = truncation_plan(&checkpoints, spans, (max_width - ellipsis_w).max(0.0));
     let next_ellipsis_span_id = truncated_tail_text_span_id(spans, plan.0);
@@ -2208,7 +2207,7 @@ fn make_ellipsis_layout<'c, 'g: 'c>(
 
   let ellipsis_style = tail_text_span(spans).map_or(root_style, |(style, _)| style);
 
-  let (mut final_layout, _) = fonts.tree_builder(root_style.into(), |builder| {
+  let (mut final_layout, _) = context.tree_builder(root_style.into(), |builder| {
     for span in spans.iter() {
       match span {
         ProcessedInlineSpan::Text {
@@ -2309,7 +2308,7 @@ mod tests {
       max_width,
       max_height,
       style: &font_style,
-      fonts,
+      context: &render_node.context,
       mode: InlineLayoutMode::Measure,
     });
 

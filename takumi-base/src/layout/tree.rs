@@ -10,7 +10,6 @@ use taffy::{
 };
 
 use crate::{
-  Fonts,
   context::RenderContext,
   font_style::SizedFontStyle,
   layout::{
@@ -141,7 +140,11 @@ struct InlineBaselineStrategy {
   fallback: InlineBaselineFallback,
 }
 
-fn resolve_normal_line_height(fonts: &Fonts, style: &ComputedStyle, font_size: f32) -> f32 {
+fn resolve_normal_line_height(
+  context: &RenderContext,
+  style: &ComputedStyle,
+  font_size: f32,
+) -> f32 {
   if !matches!(style.line_height, LineHeight::Normal) {
     return 0.0;
   }
@@ -150,7 +153,7 @@ fn resolve_normal_line_height(fonts: &Fonts, style: &ComputedStyle, font_size: f
     style: style.font_style.into(),
     weight: style.font_weight.into(),
   };
-  fonts
+  context
     .first_font_line_spacing(style.font_family.query_families(), attributes, font_size)
     .unwrap_or(font_size)
 }
@@ -263,7 +266,7 @@ fn pseudo_computed_style<'g>(
   let font_size = style
     .font_size
     .to_px(&parent_context.sizing, parent_context.sizing.font_size);
-  let normal_basis = resolve_normal_line_height(parent_context.fonts, &style, font_size);
+  let normal_basis = resolve_normal_line_height(parent_context, &style, font_size);
   let line_height = style
     .line_height
     .to_px(&parent_context.sizing, normal_basis);
@@ -1154,7 +1157,7 @@ impl<'g> RenderNode<'g> {
         let font_size = style
           .font_size
           .to_px(&parent_context.sizing, parent_context.sizing.font_size);
-        let normal_basis = resolve_normal_line_height(parent_context.fonts, &style, font_size);
+        let normal_basis = resolve_normal_line_height(parent_context, &style, font_size);
         let line_height = style
           .line_height
           .to_px(&parent_context.sizing, normal_basis);
@@ -1190,7 +1193,7 @@ impl<'g> RenderNode<'g> {
 
       let sizing_basis = child_sizing_for_final.unwrap_or_else(|| parent_context.sizing.clone());
       let font_size = style.font_size.to_px(&sizing_basis, sizing_basis.font_size);
-      let normal_basis = resolve_normal_line_height(parent_context.fonts, &style, font_size);
+      let normal_basis = resolve_normal_line_height(parent_context, &style, font_size);
       let line_height = style
         .line_height
         .to_px(&parent_context.sizing, normal_basis);
@@ -1552,7 +1555,7 @@ impl<'g> RenderNode<'g> {
       max_width,
       max_height: None,
       style: &font_style,
-      fonts: self.context.fonts,
+      context: &self.context,
       mode: InlineLayoutMode::Measure,
     });
     let line = if use_last_line {
@@ -1806,7 +1809,7 @@ impl<'g> RenderNode<'g> {
         max_width,
         max_height,
         style: &font_style,
-        fonts: self.context.fonts,
+        context: &self.context,
         mode: InlineLayoutMode::Measure,
       });
 

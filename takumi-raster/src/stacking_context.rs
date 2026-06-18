@@ -499,7 +499,7 @@ fn compute_node_paint_bounds(
     max_width: layout.content_box_width(),
     max_height,
     style: &font_style,
-    fonts: node.context.fonts,
+    context: &node.context,
     mode: InlineLayoutMode::Measure,
   });
   let inline_transform = Affine::translation(
@@ -1173,7 +1173,7 @@ fn draw_render_node_inline(
     max_width: layout.content_box_width(),
     max_height,
     style: &font_style,
-    fonts: node.context.fonts,
+    context: &node.context,
     mode: InlineLayoutMode::Draw,
   });
   let inline_layout_box = layout;
