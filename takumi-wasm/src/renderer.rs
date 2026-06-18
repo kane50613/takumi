@@ -183,6 +183,9 @@ impl Renderer {
     if let Some(max_bytes) = options.max_bytes {
       self.image_cache.set_max_bytes(max_bytes.max(0.0) as usize);
     }
+    if let Some(max_size) = options.max_size {
+      self.image_cache.set_max_size(max_size.max(0.0) as usize);
+    }
     Ok(())
   }
 

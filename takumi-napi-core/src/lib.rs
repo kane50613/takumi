@@ -29,6 +29,8 @@ pub use renderer::Renderer;
 pub struct ImageCacheOptions {
   /// Maximum bytes of decoded images to keep in this renderer's cache. `0` disables (and clears) it.
   pub max_bytes: Option<f64>,
+  /// Maximum number of decoded images to keep in this renderer's cache. `0` disables (and clears) it.
+  pub max_size: Option<f64>,
 }
 
 /// A font family produced by `registerFonts`, with the faces it contains.

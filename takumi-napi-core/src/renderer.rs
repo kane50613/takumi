@@ -366,12 +366,17 @@ impl Renderer {
   /// Configures this renderer's decoded-image cache (on by default, 256 MiB).
   #[napi(js_name = "configureImageCache")]
   pub fn configure_image_cache(&self, options: crate::ImageCacheOptions) -> Result<()> {
-    if let Some(max_bytes) = options.max_bytes {
+    if options.max_bytes.is_some() || options.max_size.is_some() {
       let state = self
         .state
         .read()
         .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-      state.image_cache.set_max_bytes(max_bytes.max(0.0) as usize);
+      if let Some(max_bytes) = options.max_bytes {
+        state.image_cache.set_max_bytes(max_bytes.max(0.0) as usize);
+      }
+      if let Some(max_size) = options.max_size {
+        state.image_cache.set_max_size(max_size.max(0.0) as usize);
+      }
     }
     Ok(())
   }

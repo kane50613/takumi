@@ -20,4 +20,5 @@ const TS_APPEND_CONTENT: &'static str = include_str!("./dts-header.d.ts");
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ImageCacheOptions {
   pub(crate) max_bytes: Option<f64>,
+  pub(crate) max_size: Option<f64>,
 }

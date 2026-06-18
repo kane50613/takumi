@@ -18,7 +18,10 @@ use xxhash_rust::xxh3::xxh3_64;
 use crate::resources::image::{ImageResult, ImageSource};
 
 /// Decoded-image budget before entries start getting evicted.
-const DEFAULT_MAX_BYTES: usize = 256 << 20; // 256 MiB
+const DEFAULT_MAX_BYTES: usize = 64 << 20; // 64 MiB
+
+/// Entry-count budget; unlimited by default (the byte budget is the real cap).
+const DEFAULT_MAX_SIZE: usize = usize::MAX;
 
 /// Content-addressed store of decoded images.
 ///
@@ -29,6 +32,7 @@ pub struct ImageCache {
   entries: RwLock<HashMap<u64, ImageSource>>,
   bytes: AtomicUsize,
   max_bytes: AtomicUsize,
+  max_size: AtomicUsize,
 }
 
 impl Default for ImageCache {
@@ -37,6 +41,7 @@ impl Default for ImageCache {
       entries: RwLock::new(HashMap::new()),
       bytes: AtomicUsize::new(0),
       max_bytes: AtomicUsize::new(DEFAULT_MAX_BYTES),
+      max_size: AtomicUsize::new(DEFAULT_MAX_SIZE),
     }
   }
 }
@@ -58,18 +63,19 @@ impl ImageCache {
     self.entries.read().ok()?.get(&key).cloned()
   }
 
-  /// Inserts a decoded image, evicting other entries to stay within the byte budget.
+  /// Inserts a decoded image, evicting other entries to stay within both budgets.
   pub fn insert(&self, key: u64, source: ImageSource) {
-    let max = self.max_bytes.load(Ordering::Relaxed);
+    let max_bytes = self.max_bytes.load(Ordering::Relaxed);
+    let max_size = self.max_size.load(Ordering::Relaxed);
     let len = source.estimated_bytes();
     // disabled, or a single image larger than the whole budget: don't cache.
-    if max == 0 || len > max {
+    if max_bytes == 0 || max_size == 0 || len > max_bytes {
       return;
     }
     let Ok(mut map) = self.entries.write() else {
       return;
     };
-    evict_until(&mut map, &self.bytes, max - len);
+    evict_until(&mut map, &self.bytes, max_bytes - len, max_size - 1);
     if map.insert(key, source).is_none() {
       self.bytes.fetch_add(len, Ordering::Relaxed);
     }
@@ -81,7 +87,27 @@ impl ImageCache {
     if max == 0 {
       self.clear();
     } else if let Ok(mut map) = self.entries.write() {
-      evict_until(&mut map, &self.bytes, max);
+      evict_until(
+        &mut map,
+        &self.bytes,
+        max,
+        self.max_size.load(Ordering::Relaxed),
+      );
+    }
+  }
+
+  /// Sets the entry-count budget. `0` disables the cache and clears it.
+  pub fn set_max_size(&self, max: usize) {
+    self.max_size.store(max, Ordering::Relaxed);
+    if max == 0 {
+      self.clear();
+    } else if let Ok(mut map) = self.entries.write() {
+      evict_until(
+        &mut map,
+        &self.bytes,
+        self.max_bytes.load(Ordering::Relaxed),
+        max,
+      );
     }
   }
 
@@ -99,10 +125,16 @@ impl ImageCache {
   }
 }
 
-/// Evicts arbitrary entries until held bytes are `<= target`. Caller holds the write lock.
+/// Evicts arbitrary entries until held bytes are `<= max_bytes` and count is `<= max_size`.
+/// Caller holds the write lock.
 // Coarse (not strict LRU) — a miss just re-decodes.
-fn evict_until(map: &mut HashMap<u64, ImageSource>, bytes: &AtomicUsize, target: usize) {
-  while bytes.load(Ordering::Relaxed) > target {
+fn evict_until(
+  map: &mut HashMap<u64, ImageSource>,
+  bytes: &AtomicUsize,
+  max_bytes: usize,
+  max_size: usize,
+) {
+  while bytes.load(Ordering::Relaxed) > max_bytes || map.len() > max_size {
     let Some(&victim) = map.keys().next() else {
       break;
     };
@@ -157,5 +189,30 @@ mod tests {
     // a single image larger than the whole budget is never cached.
     cache.insert(3, image(1000));
     assert!(cache.get(3).is_none());
+  }
+
+  #[test]
+  fn evicts_to_stay_within_entry_count() {
+    let cache = ImageCache::default();
+    cache.set_max_size(2);
+    cache.insert(1, image(10));
+    cache.insert(2, image(10));
+    cache.insert(3, image(10)); // third entry evicts one of the first two
+    assert!(cache.get(3).is_some()); // newest stays
+    let held = [1, 2, 3]
+      .iter()
+      .filter(|&&k| cache.get(k).is_some())
+      .count();
+    assert_eq!(held, 2);
+    // shrinking the budget evicts down to it.
+    cache.set_max_size(1);
+    let held = [1, 2, 3]
+      .iter()
+      .filter(|&&k| cache.get(k).is_some())
+      .count();
+    assert_eq!(held, 1);
+    // disabling clears.
+    cache.set_max_size(0);
+    assert_eq!(cache.len_bytes(), 0);
   }
 }
