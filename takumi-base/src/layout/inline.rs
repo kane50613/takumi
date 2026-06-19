@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::HashMap, ops::Range};
 
 use parley::{
   BreakReason, GlyphRun, IndentOptions, InlineBox, InlineBoxKind, Line, LineMetrics,
-  PositionedInlineBox, PositionedLayoutItem, TextStyle, YieldData,
+  PositionedInlineBox, PositionedLayoutItem, TextStyle, TreeBuilder, YieldData,
 };
 use skrifa::{FontRef, MetadataProvider};
 use taffy::{AvailableSpace, Layout, Point, Rect, Size};
@@ -1024,143 +1024,164 @@ pub(crate) fn measure_inline_layout(
   }
 }
 
+fn push_spans_into_builder(
+  builder: &mut TreeBuilder<'_, InlineBrush>,
+  spans: &[ProcessedInlineSpan<'_>],
+) {
+  for span in spans {
+    match span {
+      ProcessedInlineSpan::Text {
+        span_id,
+        text,
+        style,
+        ..
+      } => {
+        builder.push_style_span(text_style_with_span_id(style, Some(*span_id)));
+        builder.push_text(text);
+        builder.pop_style_span();
+      }
+      ProcessedInlineSpan::Box(item) => {
+        builder.push_inline_box(item.inline_box.clone());
+      }
+    }
+  }
+}
+
 fn build_inline_layout_tree<'c: 'c>(
   items: &[InlineItem<'c>],
   available_space: Size<AvailableSpace>,
   style: &'c SizedFontStyle,
   context: &'c RenderContext,
 ) -> BuiltInlineLayout<'c> {
+  // Build spans first: measuring an inline box re-enters layout, so it must run
+  // before `tree_builder` holds the shared font borrow.
   let mut spans: Vec<ProcessedInlineSpan<'c>> = Vec::new();
-  let (layout, text) = context.tree_builder(style.into(), |builder| {
-    let mut index_pos = 0;
-    let mut previous_collapsible_space = false;
-    let mut previous_was_line_break = false;
+  let mut index_pos = 0;
+  let mut previous_collapsible_space = false;
+  let mut previous_was_line_break = false;
 
-    for item in items {
-      match item {
-        InlineItem::Text { text, context } => {
-          let span_style = SizedFontStyle::from_style(&context.style, context);
-          let transformed = apply_text_transform(text, context.style.text_transform);
-          let collapsed = apply_white_space_collapse(
-            &transformed,
-            style.parent.white_space_collapse,
-            &mut previous_collapsible_space,
-            &mut previous_was_line_break,
-          );
-          let span_id = spans.len() as u64;
-          let start = index_pos;
-          let end = start + collapsed.len();
+  for item in items {
+    match item {
+      InlineItem::Text { text, context } => {
+        let span_style = SizedFontStyle::from_style(&context.style, context);
+        let transformed = apply_text_transform(text, context.style.text_transform);
+        let collapsed = apply_white_space_collapse(
+          &transformed,
+          style.parent.white_space_collapse,
+          &mut previous_collapsible_space,
+          &mut previous_was_line_break,
+        );
+        let span_id = spans.len() as u64;
+        let start = index_pos;
+        let end = start + collapsed.len();
+        index_pos = end;
 
-          builder.push_style_span(text_style_with_span_id(&span_style, Some(span_id)));
-          builder.push_text(&collapsed);
-          builder.pop_style_span();
-
-          index_pos = end;
-
-          spans.push(ProcessedInlineSpan::Text {
-            span_id,
-            byte_range: start..end,
-            text: collapsed.into_owned(),
-            style: span_style,
-          });
+        spans.push(ProcessedInlineSpan::Text {
+          span_id,
+          byte_range: start..end,
+          text: collapsed.into_owned(),
+          style: span_style,
+        });
+      }
+      InlineItem::RenderNode { render_node } => {
+        let context = &render_node.context;
+        let vertical_align = context.style.vertical_align.resolve(
+          &context.sizing,
+          context.sizing.font_size,
+          context.style.line_height,
+        );
+        let margin = Rect {
+          top: context.style.margin_top,
+          right: context.style.margin_right,
+          bottom: context.style.margin_bottom,
+          left: context.style.margin_left,
         }
-        InlineItem::RenderNode { render_node } => {
-          let context = &render_node.context;
-          let vertical_align = context.style.vertical_align.resolve(
-            &context.sizing,
-            context.sizing.font_size,
-            context.style.line_height,
-          );
-          let margin = Rect {
-            top: context.style.margin_top,
-            right: context.style.margin_right,
-            bottom: context.style.margin_bottom,
-            left: context.style.margin_left,
-          }
-          .map(|length| length.to_px(&context.sizing, 0.0));
-          let padding = Rect {
-            top: context.style.padding_top,
-            right: context.style.padding_right,
-            bottom: context.style.padding_bottom,
-            left: context.style.padding_left,
-          }
-          .map(|length| length.to_px(&context.sizing, 0.0));
-          let border = Rect {
-            top: (
-              context.style.border_top_style,
-              context.style.border_top_width,
-            ),
-            right: (
-              context.style.border_right_style,
-              context.style.border_right_width,
-            ),
-            bottom: (
-              context.style.border_bottom_style,
-              context.style.border_bottom_width,
-            ),
-            left: (
-              context.style.border_left_style,
-              context.style.border_left_width,
-            ),
-          }
-          .map(|(border_style, width)| {
-            if border_style.is_rendered() {
-              Length::from(width).to_px(&context.sizing, 0.0)
-            } else {
-              0.0
-            }
-          });
-
-          let atomic_metrics = render_node
-            .node
-            .as_ref()
-            .map(|_| render_node.measure_inline_box(available_space));
-          let content_size = atomic_metrics.map_or(Size::zero(), |metrics| metrics.size);
-          let raw_baseline_offset = atomic_metrics.and_then(|metrics| metrics.baseline_offset);
-
-          let paint_width = if render_node.participates_as_inline_box() {
-            content_size.width + margin.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
-          } else {
-            content_size.width
-              + margin.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
-              + padding.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
-              + border.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
-          };
-          let paint_height = if render_node.participates_as_inline_box() {
-            content_size.height + margin.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
-          } else {
-            content_size.height
-              + margin.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
-              + padding.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
-              + border.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
-          };
-          let inline_box = InlineBox {
-            index: index_pos,
-            id: spans.len() as u64,
-            kind: inline_box_kind(render_node),
-            width: paint_width,
-            height: paint_height,
-          };
-          let baseline_offset =
-            raw_baseline_offset.map(|baseline| baseline.clamp(0.0, inline_box.height));
-
-          spans.push(ProcessedInlineSpan::Box(InlineBoxItem {
-            render_node,
-            inline_box: inline_box.clone(),
-            paint_width,
-            paint_height,
-            margin,
-            padding,
-            border,
-            baseline_offset,
-            vertical_align,
-          }));
-          builder.push_inline_box(inline_box);
-          previous_collapsible_space = false;
-          previous_was_line_break = false;
+        .map(|length| length.to_px(&context.sizing, 0.0));
+        let padding = Rect {
+          top: context.style.padding_top,
+          right: context.style.padding_right,
+          bottom: context.style.padding_bottom,
+          left: context.style.padding_left,
         }
+        .map(|length| length.to_px(&context.sizing, 0.0));
+        let border = Rect {
+          top: (
+            context.style.border_top_style,
+            context.style.border_top_width,
+          ),
+          right: (
+            context.style.border_right_style,
+            context.style.border_right_width,
+          ),
+          bottom: (
+            context.style.border_bottom_style,
+            context.style.border_bottom_width,
+          ),
+          left: (
+            context.style.border_left_style,
+            context.style.border_left_width,
+          ),
+        }
+        .map(|(border_style, width)| {
+          if border_style.is_rendered() {
+            Length::from(width).to_px(&context.sizing, 0.0)
+          } else {
+            0.0
+          }
+        });
+
+        let atomic_metrics = render_node
+          .node
+          .as_ref()
+          .map(|_| render_node.measure_inline_box(available_space));
+        let content_size = atomic_metrics.map_or(Size::zero(), |metrics| metrics.size);
+        let raw_baseline_offset = atomic_metrics.and_then(|metrics| metrics.baseline_offset);
+
+        let paint_width = if render_node.participates_as_inline_box() {
+          content_size.width + margin.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
+        } else {
+          content_size.width
+            + margin.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
+            + padding.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
+            + border.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
+        };
+        let paint_height = if render_node.participates_as_inline_box() {
+          content_size.height + margin.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
+        } else {
+          content_size.height
+            + margin.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
+            + padding.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
+            + border.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
+        };
+        let inline_box = InlineBox {
+          index: index_pos,
+          id: spans.len() as u64,
+          kind: inline_box_kind(render_node),
+          width: paint_width,
+          height: paint_height,
+        };
+        let baseline_offset =
+          raw_baseline_offset.map(|baseline| baseline.clamp(0.0, inline_box.height));
+
+        spans.push(ProcessedInlineSpan::Box(InlineBoxItem {
+          render_node,
+          inline_box,
+          paint_width,
+          paint_height,
+          margin,
+          padding,
+          border,
+          baseline_offset,
+          vertical_align,
+        }));
+        previous_collapsible_space = false;
+        previous_was_line_break = false;
       }
     }
+  }
+
+  let (layout, text) = context.tree_builder(style.into(), |builder| {
+    push_spans_into_builder(builder, &spans)
   });
 
   BuiltInlineLayout {
@@ -2207,23 +2228,7 @@ fn make_ellipsis_layout<'c: 'c>(
   let ellipsis_style = tail_text_span(spans).map_or(root_style, |(style, _)| style);
 
   let (mut final_layout, _) = context.tree_builder(root_style.into(), |builder| {
-    for span in spans.iter() {
-      match span {
-        ProcessedInlineSpan::Text {
-          span_id,
-          text,
-          style,
-          ..
-        } => {
-          builder.push_style_span(text_style_with_span_id(style, Some(*span_id)));
-          builder.push_text(text);
-          builder.pop_style_span();
-        }
-        ProcessedInlineSpan::Box(item) => {
-          builder.push_inline_box(item.inline_box.clone());
-        }
-      }
-    }
+    push_spans_into_builder(builder, spans);
     builder.push_style_span(text_style_with_span_id(ellipsis_style, None));
     builder.push_text(ellipsis_char);
     builder.pop_style_span();
@@ -2379,6 +2384,29 @@ mod tests {
       segments
         .iter()
         .any(|(span_id, _, color)| *span_id == Some(2) && *color == blue),
+      "{segments:#?}"
+    );
+  }
+
+  #[test]
+  fn inline_block_with_text_does_not_reenter_font_borrow() {
+    let fonts = create_test_context();
+
+    let node = Node::container([
+      Node::text("before ".to_string())
+        .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+      Node::container([Node::text("inside".to_string())
+        .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))])
+      .with_style(Style::default().with(StyleDeclaration::display(Display::InlineBlock))),
+      Node::text(" after".to_string())
+        .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+    ])
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
+
+    let segments = glyph_run_segments(node, &fonts);
+
+    assert!(
+      segments.iter().any(|(_, text, _)| text.contains("before")),
       "{segments:#?}"
     );
   }

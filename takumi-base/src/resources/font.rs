@@ -846,14 +846,10 @@ impl Fonts {
 }
 
 impl RenderContext {
+  /// Mutable access to the render-local fonts. Callers must not re-enter while the
+  /// borrow is held (layout measures inline boxes before building the parley tree).
   pub(crate) fn with_fonts<R>(&self, f: impl FnOnce(&mut Fonts) -> R) -> R {
-    match self.fonts.try_borrow_mut() {
-      Ok(mut fonts) => f(&mut fonts),
-      Err(_) => {
-        let mut fonts = self.fonts.borrow().clone();
-        f(&mut fonts)
-      }
-    }
+    f(&mut self.fonts.borrow_mut())
   }
 
   /// First available font's line spacing for `families`/`attributes`, scaled to `font_size`.
