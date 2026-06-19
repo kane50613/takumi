@@ -1,86 +1,113 @@
-import type { Font, FontDetails } from "../index";
+import type {
+  ByteBuf,
+  Font,
+  FontDetails,
+  Node,
+  RegisteredFamily,
+  RenderOptions as RenderOptionsInternal,
+} from "../index";
 export type * from "../index";
-import { Renderer as NativeRenderer } from "../index";
+import { Renderer as RendererInternal } from "../index";
 
 export { extractResourceUrls } from "@takumi-rs/helpers";
 
 export type FontLoader =
   | Font
   | (Omit<FontDetails, "data"> & {
-      key?: string;
-      data: FontDetails["data"] | (() => Promise<FontDetails["data"]> | FontDetails["data"]);
+      key: string;
+      data: () => Promise<FontDetails["data"]> | FontDetails["data"];
     });
 
-export class Renderer extends NativeRenderer {
-  private fontsMark = new Set<string>();
-  private fontBuffersMark = new WeakSet<FontDetails["data"]>();
+export type RenderOptions = Omit<RenderOptionsInternal, "fonts"> & {
+  fonts?: FontLoader[];
+};
 
-  override async registerFonts(fonts: FontLoader[], signal?: AbortSignal) {
-    const batchFontsMark = new Set<string>();
-    const batchFontBuffersMark = new WeakSet<FontDetails["data"]>();
-    const targetFonts = fonts.filter((font) => {
-      const key = createFontKey(font);
+export class Renderer {
+  private fontMapping = new Map<string | ByteBuf, Promise<RegisteredFamily[]>>();
+  private inner = new RendererInternal();
 
-      if (isBuffer(key)) {
-        if (this.fontBuffersMark.has(key) || batchFontBuffersMark.has(key)) {
-          return false;
-        }
-
-        batchFontBuffersMark.add(key);
-        return true;
-      }
-
-      if (this.fontsMark.has(key) || batchFontsMark.has(key)) {
-        return false;
-      }
-
-      batchFontsMark.add(key);
-      return true;
-    });
-
-    const resolvedFonts = await Promise.all(targetFonts.map(resolveFontLoader));
-    const registered = await super.registerFonts(resolvedFonts, signal);
-
-    targetFonts.forEach((font) => this.checkAndMarkFont(font));
-
-    return registered;
-  }
-
-  private checkAndMarkFont(font: FontLoader): void {
-    const key = createFontKey(font);
-
-    if (isBuffer(key)) {
-      this.fontBuffersMark.add(key);
+  private async prepareFonts(fonts: FontLoader[] | undefined) {
+    if (!fonts) {
       return;
     }
 
-    this.fontsMark.add(key);
+    const families = await Promise.all(fonts.map(this.registerFont.bind(this)));
+
+    return [...new Set(families.flat().map((f) => f.name))];
+  }
+
+  async render(node: Node, options?: RenderOptions) {
+    const fonts = await this.prepareFonts(options?.fonts);
+
+    return this.inner.render(node, {
+      ...options,
+      fonts,
+    });
+  }
+
+  async measure(node: Node, options?: RenderOptions) {
+    const fonts = await this.prepareFonts(options?.fonts);
+
+    return this.inner.measure(node, {
+      ...options,
+      fonts,
+    });
+  }
+
+  async registerFont(font: FontLoader) {
+    const key = createFontKey(font);
+
+    const cached = this.fontMapping.get(key);
+    if (cached) {
+      return cached;
+    }
+
+    const extracted = extractFontBuffer(font);
+
+    if (isBuffer(extracted)) {
+      const binded = this.inner.registerFont(extracted);
+
+      this.fontMapping.set(key, Promise.resolve(binded));
+
+      return binded;
+    }
+
+    const promise = extracted.then(this.inner.registerFont.bind(this.inner));
+
+    this.fontMapping.set(key, promise);
+
+    return promise;
   }
 }
 
-function createFontKey(font: FontLoader) {
-  if ("key" in font && font.key) {
-    return font.key;
-  }
-
+function extractFontBuffer(font: FontLoader) {
   if (isBuffer(font)) {
     return font;
   }
 
-  return `${font.name ?? ""}-${font.style ?? ""}-${font.weight ?? ""}`;
-}
-
-async function resolveFontLoader(font: FontLoader) {
-  if ("data" in font && typeof font.data === "function") {
-    return {
-      ...font,
-      data: await font.data(),
-    };
+  if (typeof font.data !== "function") {
+    return font.data;
   }
 
-  return font as Font;
+  return font.data();
 }
 
-function isBuffer(data: unknown): data is Uint8Array | ArrayBuffer {
-  return data instanceof Uint8Array || data instanceof ArrayBuffer;
+function createFontKey(font: FontLoader) {
+  if (isBuffer(font)) {
+    return font;
+  }
+
+  if ("key" in font) {
+    return font.key;
+  }
+
+  return font.data;
+}
+
+function isBuffer(data: unknown): data is ByteBuf {
+  return (
+    data instanceof Uint8Array ||
+    data instanceof ArrayBuffer ||
+    (typeof Buffer !== "undefined" && Buffer.isBuffer(data))
+  );
 }

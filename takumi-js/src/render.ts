@@ -3,7 +3,7 @@ import type * as wasm from "@takumi-rs/wasm";
 import { extractEmojis, type EmojiType } from "@takumi-rs/helpers/emoji";
 import { extractResourceUrls, fetchResources } from "@takumi-rs/helpers";
 import { fromJsx, type FromJsxOptions } from "@takumi-rs/helpers/jsx";
-import { type ManagedRendererOptions, shouldLoadDefaultFonts } from "./renderer";
+import { type ManagedRendererOptions } from "./renderer";
 import { getImports } from "./import";
 import type { ReactNode } from "react";
 import type { FetchResourcesOptions, Node, ReactElementLike } from "@takumi-rs/helpers";
@@ -120,9 +120,7 @@ export async function render(element: RenderInput, options?: RenderOptions) {
   const isExternalRenderer = options && "renderer" in options;
   const renderer = isExternalRenderer
     ? options.renderer
-    : (globalRenderer ??= new imports.Renderer({
-        loadDefaultFonts: shouldLoadDefaultFonts(options),
-      }));
+    : (globalRenderer ??= new imports.Renderer());
 
   const { node: originalNode, stylesheets } = await transformElement(element, options);
   const emojiType = options?.emoji ?? "twemoji";
@@ -132,15 +130,13 @@ export async function render(element: RenderInput, options?: RenderOptions) {
     ? await resolveImageLoaders(options.images)
     : await fetchResources(extractResourceUrls(node), options?.resourcesOptions);
 
-  const renderOptions = {
-    ...options,
-    images,
-    stylesheets: [...(options?.stylesheets ?? []), ...stylesheets],
-  };
-
   // The WASM renderer is synchronous and ignores the signal argument, so honor an
   // abort that happened during the async font/resource loading before the blocking call.
   options?.signal?.throwIfAborted();
 
-  return renderer.render(node, renderOptions, options?.signal);
+  return renderer.render(node, {
+    ...options,
+    images,
+    stylesheets: [...(options?.stylesheets ?? []), ...stylesheets],
+  });
 }
