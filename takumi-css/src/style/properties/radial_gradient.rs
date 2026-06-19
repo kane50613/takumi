@@ -764,7 +764,9 @@ mod tests {
       ])
       .build();
 
-    let sizing = SizingContext::new_test(Viewport::new((200, 100)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((200, 100)))
+      .build();
     let resolved = resolve_stops_along_axis(
       &gradient.stops,
       sizing.viewport.size.width.unwrap_or_default() as f32,
@@ -796,7 +798,9 @@ mod tests {
       ])
       .build();
 
-    let sizing = SizingContext::new_test(Viewport::new((200, 100)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((200, 100)))
+      .build();
     let resolved = resolve_stops_along_axis(
       &gradient.stops,
       sizing.viewport.size.width.unwrap_or_default() as f32,
@@ -820,7 +824,9 @@ mod tests {
       ))
       .build();
 
-    let sizing = SizingContext::new_test(Viewport::new((100, 100)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((100, 100)))
+      .build();
     let tile = RadialGradientTile::new(&gradient, 100, 100, &sizing, Color::black());
 
     // Center (50, 50) should be red
@@ -861,7 +867,9 @@ mod tests {
       ])
       .build();
 
-    let sizing = SizingContext::new_test(Viewport::new((40, 40)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((40, 40)))
+      .build();
     let tile = RadialGradientTile::new(&gradient, 40, 40, &sizing, Color::black());
 
     assert_eq!(
@@ -900,7 +908,9 @@ mod tests {
       ])
       .build();
 
-    let sizing = SizingContext::new_test(Viewport::new((100, 100)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((100, 100)))
+      .build();
     let tile = RadialGradientTile::new(&gradient, 100, 100, &sizing, Color::black());
 
     // dx_left=20, dx_right=80, dy_top=20, dy_bottom=80

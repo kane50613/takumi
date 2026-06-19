@@ -1246,7 +1246,9 @@ mod tests {
     };
 
     // Test at the top (should be red)
-    let sizing = SizingContext::new_test(Viewport::new((100, 100)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((100, 100)))
+      .build();
     let tile = LinearGradientTile::new(&gradient, 100, 100, &sizing, Color::black());
 
     let color_top = tile.sample_pixel(50, 0).demultiply();
@@ -1275,7 +1277,9 @@ mod tests {
     };
 
     // Test at the left (should be red)
-    let sizing = SizingContext::new_test(Viewport::new((100, 100)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((100, 100)))
+      .build();
 
     let tile = LinearGradientTile::new(&gradient, 100, 100, &sizing, Color::black());
     let color_left = tile.sample_pixel(0, 50).demultiply();
@@ -1302,7 +1306,9 @@ mod tests {
       .into(),
     };
 
-    let sizing = SizingContext::new_test(Viewport::new((200, 100)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((200, 100)))
+      .build();
     let tile = LinearGradientTile::new(&gradient, 200, 100, &sizing, Color::black());
 
     assert!((tile.dir_x - 0.4472136).abs() < 0.001);
@@ -1323,7 +1329,9 @@ mod tests {
     };
 
     // Should always return the same color
-    let sizing = SizingContext::new_test(Viewport::new((100, 100)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((100, 100)))
+      .build();
     let tile = LinearGradientTile::new(&gradient, 100, 100, &sizing, Color::black());
     let color = tile.sample_pixel(50, 50).demultiply();
     assert_eq!(color, ColorU8::from_rgba(255, 0, 0, 255));
@@ -1339,7 +1347,9 @@ mod tests {
     };
 
     // Should return transparent
-    let sizing = SizingContext::new_test(Viewport::new((100, 100)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((100, 100)))
+      .build();
     let tile = LinearGradientTile::new(&gradient, 100, 100, &sizing, Color::black());
     let color = tile.sample_pixel(50, 50).demultiply();
     assert_eq!(color, ColorU8::from_rgba(0, 0, 0, 0));
@@ -1370,7 +1380,9 @@ mod tests {
       ])
       .build();
 
-    let sizing = SizingContext::new_test(Viewport::new((40, 1)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((40, 1)))
+      .build();
     let tile = LinearGradientTile::new(&gradient, 40, 1, &sizing, Color::black());
 
     assert_eq!(
@@ -1394,7 +1406,9 @@ mod tests {
     let gradient =
       LinearGradient::from_str("linear-gradient(to right, grey 1px, transparent 1px)")?;
 
-    let sizing = SizingContext::new_test(Viewport::new((40, 40)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((40, 40)))
+      .build();
     let tile = LinearGradientTile::new(&gradient, 40, 40, &sizing, Color::black());
 
     // grey at 0,0
@@ -1417,7 +1431,9 @@ mod tests {
     let gradient =
       LinearGradient::from_str("linear-gradient(to bottom, grey 1px, transparent 1px)")?;
 
-    let sizing = SizingContext::new_test(Viewport::new((40, 40)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((40, 40)))
+      .build();
     let tile = LinearGradientTile::new(&gradient, 40, 40, &sizing, Color::black());
 
     // color at top-left (0, 0) should be grey (1px hard stop)
@@ -1466,7 +1482,9 @@ mod tests {
       ])
       .build();
 
-    let sizing = SizingContext::new_test(Viewport::new((200, 100)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((200, 100)))
+      .build();
 
     let resolved = resolve_stops_along_axis(
       &gradient.stops,
@@ -1495,7 +1513,9 @@ mod tests {
         },
       ])
       .build();
-    let sizing = SizingContext::new_test(Viewport::new((200, 100)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((200, 100)))
+      .build();
 
     let resolved = resolve_stops_along_axis(
       &gradient.stops,

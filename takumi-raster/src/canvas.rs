@@ -1686,7 +1686,7 @@ mod tests {
       style::{
         Angle, BlendMode, Color, ColorInterpolationMethod, ConicGradient, ConicGradientTile,
         FromCss, GradientStop, Length, LinearGradient, LinearGradientTile, ObjectPosition,
-        RadialGradient, RadialGradientTile, StopPosition,
+        RadialGradient, RadialGradientTile, SizingContext, StopPosition,
       },
     },
     pixmap_from_buffer,
@@ -1781,7 +1781,14 @@ mod tests {
       return;
     };
     let global_context = Fonts::default();
-    let render_context = RenderContext::new_test(&global_context, Viewport::new((32, 16)));
+    let render_context = RenderContext::builder()
+      .fonts(global_context.snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((32, 16)))
+          .build(),
+      )
+      .build();
     let tile = LinearGradientTile::new(
       &gradient,
       32,
@@ -1836,10 +1843,14 @@ mod tests {
       let Ok(gradient) = RadialGradient::from_str(gradient_css) else {
         continue;
       };
-      let render_context = RenderContext::new_test(
-        &global_context,
-        Viewport::new((tile_size.width, tile_size.height)),
-      );
+      let render_context = RenderContext::builder()
+        .fonts(global_context.snapshot())
+        .sizing(
+          SizingContext::builder()
+            .viewport(Viewport::new((tile_size.width, tile_size.height)))
+            .build(),
+        )
+        .build();
       let tile = RadialGradientTile::new(
         &gradient,
         tile_size.width,
@@ -1865,7 +1876,14 @@ mod tests {
     };
 
     let global_context = Fonts::default();
-    let render_context = RenderContext::new_test(&global_context, Viewport::new((32, 24)));
+    let render_context = RenderContext::builder()
+      .fonts(global_context.snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((32, 24)))
+          .build(),
+      )
+      .build();
     let tile = ConicGradientTile::new(
       &gradient,
       32,
@@ -1956,10 +1974,14 @@ mod tests {
       let Ok(gradient) = LinearGradient::from_str(gradient_css) else {
         continue;
       };
-      let render_context = RenderContext::new_test(
-        &global_context,
-        Viewport::new((tile_size.width, tile_size.height)),
-      );
+      let render_context = RenderContext::builder()
+        .fonts(global_context.snapshot())
+        .sizing(
+          SizingContext::builder()
+            .viewport(Viewport::new((tile_size.width, tile_size.height)))
+            .build(),
+        )
+        .build();
       let tile = LinearGradientTile::new(
         &gradient,
         tile_size.width,
@@ -2074,7 +2096,14 @@ mod tests {
     };
 
     let global_context = Fonts::default();
-    let render_context = RenderContext::new_test(&global_context, Viewport::new((48, 48)));
+    let render_context = RenderContext::builder()
+      .fonts(global_context.snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((48, 48)))
+          .build(),
+      )
+      .build();
     let tile = ConicGradientTile::new(
       &gradient,
       48,
@@ -2100,7 +2129,14 @@ mod tests {
       return;
     };
     let global_context = Fonts::default();
-    let render_context = RenderContext::new_test(&global_context, Viewport::new((32, 24)));
+    let render_context = RenderContext::builder()
+      .fonts(global_context.snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((32, 24)))
+          .build(),
+      )
+      .build();
     let tile = RadialGradientTile::new(
       &gradient,
       32,

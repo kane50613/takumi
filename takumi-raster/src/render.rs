@@ -224,7 +224,7 @@ pub fn measure_layout<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
   )
 }
 
-fn collect_measure_result<'g>(
+fn collect_measure_result(
   node: &mut RenderNode,
   layout_results: &LayoutResults,
   node_id: NodeId,
