@@ -130,7 +130,7 @@ pub(crate) fn emit_inline_content(
 fn emit_runs(
   doc: &mut SvgDocument,
   runs: &InlineRunLayout<'_>,
-  spans: &[ProcessedInlineSpan<'_, '_>],
+  spans: &[ProcessedInlineSpan<'_>],
   font_style: &SizedFontStyle,
   context: &RenderContext,
   layout: Layout,
@@ -203,7 +203,7 @@ fn emit_runs(
 fn emit_inline_outlines(
   doc: &mut SvgDocument,
   runs: &InlineRunLayout<'_>,
-  spans: &[ProcessedInlineSpan<'_, '_>],
+  spans: &[ProcessedInlineSpan<'_>],
   origin_x: f32,
   origin_y: f32,
 ) -> io::Result<()> {
@@ -219,7 +219,7 @@ fn emit_inline_outlines(
 fn emit_outline_island(
   doc: &mut SvgDocument,
   island: &[InlineOutlineRect],
-  spans: &[ProcessedInlineSpan<'_, '_>],
+  spans: &[ProcessedInlineSpan<'_>],
   origin_x: f32,
   origin_y: f32,
 ) -> io::Result<()> {

@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 use std::io;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use taffy::{AbsoluteAxis, AvailableSpace, NodeId, Point, Rect, Size};
@@ -62,28 +61,41 @@ pub struct SvgOptions<'g> {
 /// Renders a node tree to a vector SVG string.
 pub fn render(options: SvgOptions<'_>) -> Result<String> {
   let viewport = options.viewport;
-  let canvas_w = viewport.size.width;
-  let canvas_h = viewport.size.height;
-  let context = RenderContext::new(
-    options.fonts,
-    viewport,
-    options.images,
-    Rc::new(options.stylesheet),
-    options.time_ms,
-    options.font_families.as_deref(),
-  );
+
+  let context = RenderContext::builder()
+    .fonts(
+      options
+        .fonts
+        .snapshot_with_fallbacks(options.font_families.as_deref()),
+    )
+    .sizing(SizingContext::builder().viewport(viewport).build())
+    .images(options.images)
+    .stylesheet(options.stylesheet.into())
+    .time_ms(options.time_ms)
+    .build();
+
   let root = RenderNode::from_node(&context, options.node);
   let mut tree = LayoutTree::from_render_node(&root);
   let root_id = tree.root_node_id();
-  tree.compute_layout(context.sizing.viewport.into());
+
+  tree.compute_layout(viewport.into());
+
   let results = tree.into_results();
 
   let root_layout = results.layout(root_id)?;
-  let width = canvas_w.map_or(root_layout.size.width, |w| w as f32);
-  let height = canvas_h.map_or(root_layout.size.height, |h| h as f32);
+  let width = viewport
+    .size
+    .width
+    .map_or(root_layout.size.width, |w| w as f32);
+  let height = viewport
+    .size
+    .height
+    .map_or(root_layout.size.height, |h| h as f32);
   let mut doc = SvgDocument::new(width, height)?;
   let mut origins = HashMap::new();
+
   emit_node(&root, root_id, &results, 0.0, 0.0, &mut origins, &mut doc)?;
+
   Ok(doc.render()?)
 }
 
@@ -627,7 +639,7 @@ fn emit_node(
 /// border/padding plus the inline-resolved position.
 pub(crate) fn emit_inline_box(
   inline_box: &VisualInlineBox,
-  item: &InlineBoxItem<'_, '_>,
+  item: &InlineBoxItem<'_>,
   container_layout: taffy::Layout,
   container_x: f32,
   container_y: f32,

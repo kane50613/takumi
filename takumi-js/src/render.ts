@@ -3,11 +3,7 @@ import type * as wasm from "@takumi-rs/wasm";
 import { extractEmojis, type EmojiType } from "@takumi-rs/helpers/emoji";
 import { extractResourceUrls, fetchResources } from "@takumi-rs/helpers";
 import { fromJsx, type FromJsxOptions } from "@takumi-rs/helpers/jsx";
-import {
-  loadRendererResources,
-  type ManagedRendererOptions,
-  shouldLoadDefaultFonts,
-} from "./renderer";
+import { type ManagedRendererOptions, shouldLoadDefaultFonts } from "./renderer";
 import { getImports } from "./import";
 import type { ReactNode } from "react";
 import type { FetchResourcesOptions, Node, ReactElementLike } from "@takumi-rs/helpers";
@@ -42,6 +38,7 @@ type RenderOptionsWithRenderer = Omit<InnerRenderOptions, "images" | "fonts"> & 
    * @default "twemoji"
    */
   emoji?: EmojiType | "from-font";
+  fonts?: napi.FontLoader[];
 };
 
 export type RenderOptionsWithoutRenderer = Omit<RenderOptionsWithRenderer, "renderer"> &
@@ -127,11 +124,6 @@ export async function render(element: RenderInput, options?: RenderOptions) {
         loadDefaultFonts: shouldLoadDefaultFonts(options),
       }));
 
-  let fontFamilies: string[] | undefined;
-  if (!isExternalRenderer) {
-    fontFamilies = await loadRendererResources(renderer, options);
-  }
-
   const { node: originalNode, stylesheets } = await transformElement(element, options);
   const emojiType = options?.emoji ?? "twemoji";
 
@@ -144,7 +136,6 @@ export async function render(element: RenderInput, options?: RenderOptions) {
     ...options,
     images,
     stylesheets: [...(options?.stylesheets ?? []), ...stylesheets],
-    fonts: fontFamilies,
   };
 
   // The WASM renderer is synchronous and ignores the signal argument, so honor an

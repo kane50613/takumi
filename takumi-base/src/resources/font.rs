@@ -3,6 +3,7 @@ use std::{
   cell::RefCell,
   collections::{HashMap, hash_map::Entry},
   iter::once,
+  rc::Rc,
   sync::Arc,
 };
 
@@ -10,8 +11,8 @@ use image::{Rgba, RgbaImage};
 use parley::{
   GenericFamily, GlyphRun, LayoutContext, TextStyle, TreeBuilder,
   fontique::{
-    Attributes, Blob, Collection, CollectionOptions, FamilyId, FontInfoOverride, FontStyle,
-    QueryFamily, QueryStatus,
+    Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, FontStyle,
+    QueryFamily, QueryStatus, Script, ScriptExt,
   },
 };
 use skrifa::{
@@ -27,8 +28,6 @@ use skrifa::{
 };
 use thiserror::Error;
 use tiny_skia::{IntSize, PathSegment as Command, Pixmap};
-
-use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   context::RenderContext,
@@ -659,65 +658,71 @@ fn font_style_css(style: FontStyle) -> String {
 /// and shared as `&self` across concurrent renders. Each render takes a cheap working clone
 /// (see [`RenderContext`]) for parley's `&mut` query API, so no per-thread or global state
 /// is needed.
+#[derive(Clone)]
 pub struct Fonts {
-  /// The assembled parley context: registered faces and source cache.
-  parley_context: parley::FontContext,
-  /// Registered families in registration order; the default fallback chain.
-  fallback_families: Vec<FamilyId>,
-  /// Fonts already registered (keyed by content + family-name override), mapped to the
-  /// families they produced so re-registering is a no-op that still returns them.
-  registered: HashMap<u64, Box<[RegisteredFamily]>>,
+  inner: parley::FontContext,
 }
 
 impl Default for Fonts {
   fn default() -> Self {
     Self {
-      parley_context: parley::FontContext {
+      inner: parley::FontContext {
         collection: Collection::new(CollectionOptions {
           system_fonts: false,
           shared: false,
         }),
         source_cache: Default::default(),
       },
-      fallback_families: Vec::new(),
-      registered: HashMap::new(),
     }
   }
 }
 
+pub type FontsSnapshot = Rc<RefCell<Fonts>>;
+
 impl Fonts {
-  /// A fresh working copy of the assembled context for one render. parley queries need
-  /// `&mut`, but `Fonts` is shared as `&self`; cloning the assembled context is cheap
-  /// (registering a face costs ~60 µs, cloning the context ~1 µs) and keeps the registry
-  /// immutable, so concurrent renders never contend.
-  pub(crate) fn query_context(&self) -> parley::FontContext {
-    self.parley_context.clone()
+  pub fn snapshot(&self) -> FontsSnapshot {
+    self.snapshot_with_fallbacks(None)
   }
 
-  /// Resolves the per-render fallback chain to family names: the given names in order
-  /// (keeping those that resolve to a registered family), or all registered families in
-  /// registration order when `None`. `cx` is this render's working context, used for the
-  /// name/id lookups parley exposes as `&mut`.
-  pub(crate) fn resolve_fallbacks(
-    &self,
-    cx: &mut parley::FontContext,
-    names: Option<&[String]>,
-  ) -> Vec<String> {
-    match names {
-      Some(names) => names
+  pub fn snapshot_with_fallbacks(&self, fallbacks: Option<&[String]>) -> FontsSnapshot {
+    let mut cloned = self.inner.clone();
+
+    if let Some(names) = fallbacks {
+      let family_ids = names
         .iter()
-        .filter(|name| cx.collection.family_id(name).is_some())
-        .cloned()
-        .collect(),
-      None => self
-        .fallback_families
+        .filter_map(|name| cloned.collection.family_id(name))
+        .collect::<Vec<_>>();
+
+      for (script, _) in Script::all_samples() {
+        cloned.collection.set_fallbacks(
+          FallbackKey::new(*script, None),
+          family_ids.clone().into_iter(),
+        );
+      }
+    } else {
+      let registered_families = cloned
+        .collection
+        .family_names()
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+
+      let family_ids = registered_families
         .iter()
-        .filter_map(|id| cx.collection.family_name(*id).map(str::to_string))
-        .collect(),
+        .filter_map(|name| cloned.collection.family_id(name))
+        .collect::<Vec<_>>();
+
+      for (script, _) in Script::all_samples() {
+        cloned.collection.set_fallbacks(
+          FallbackKey::new(*script, None),
+          family_ids.clone().into_iter(),
+        );
+      }
     }
+
+    Rc::new(RefCell::new(Self { inner: cloned }))
   }
 
-  pub fn resolve_glyphs(
+  pub(crate) fn resolve_glyphs(
     &self,
     run: &GlyphRun<'_, InlineBrush>,
     font_ref: FontRef,
@@ -806,16 +811,8 @@ impl Fonts {
       generic_family,
     } = font;
 
-    let key = registration_key(source.as_ref(), info_override.as_ref());
-    if let Some(cached) = self.registered.get(&key) {
-      return Ok(cached.to_vec());
-    }
-
     let blob = source.into_blob()?;
-    let registered_fonts = self
-      .parley_context
-      .collection
-      .register_fonts(blob, info_override);
+    let registered_fonts = self.inner.collection.register_fonts(blob, info_override);
 
     let mut families = Vec::with_capacity(registered_fonts.len());
     for (family, faces) in registered_fonts {
@@ -829,7 +826,7 @@ impl Fonts {
         })
         .collect();
       let name = self
-        .parley_context
+        .inner
         .collection
         .family_name(family)
         .unwrap_or_default()
@@ -838,72 +835,24 @@ impl Fonts {
 
       if let Some(generic_family) = generic_family {
         self
-          .parley_context
+          .inner
           .collection
           .append_generic_families(generic_family, once(family));
       }
-      if !self.fallback_families.contains(&family) {
-        self.fallback_families.push(family);
-      }
     }
-
-    self
-      .registered
-      .insert(key, families.clone().into_boxed_slice());
 
     Ok(families)
   }
 }
 
-/// First available font's line spacing (ascent + descent + leading) for `families` and
-/// `attributes`, scaled to `font_size`. The `lh`/`rlh` basis for `line-height: normal`.
-fn query_first_font_line_spacing<'a>(
-  cx: &mut parley::FontContext,
-  families: impl IntoIterator<Item = QueryFamily<'a>>,
-  attributes: Attributes,
-  font_size: f32,
-) -> Option<f32> {
-  let parley::FontContext {
-    collection,
-    source_cache,
-  } = cx;
-  let mut query = collection.query(source_cache);
-  query.set_families(families);
-  query.set_attributes(attributes);
-  let mut result = None;
-  query.matches_with(|font| {
-    let Ok(font_ref) = FontRef::from_index(font.blob.data(), font.index) else {
-      return QueryStatus::Continue;
-    };
-    let metrics = font_ref.metrics(Size::new(font_size), LocationRef::default());
-    result = Some(metrics.ascent + metrics.descent + metrics.leading);
-    QueryStatus::Stop
-  });
-  result
-}
-
-/// Builds an inline layout from `root_style`, using `cx` for shaping and the thread-local
-/// parley `LayoutContext` scratch.
-fn build_tree_layout(
-  cx: &mut parley::FontContext,
-  root_style: TextStyle<'_, '_, InlineBrush>,
-  func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),
-) -> (InlineLayout, String) {
-  with_layout_context(|layout_context| {
-    let mut builder = layout_context.tree_builder(cx, 1.0, true, &root_style);
-    func(&mut builder);
-    builder.build()
-  })
-}
-
-impl RenderContext<'_> {
-  /// Runs `f` against this render's working `parley::FontContext`. The common path borrows
-  /// the render's single working copy; a reentrant call (a nested inline-box measure running
-  /// inside an open `tree_builder`) falls back to a throwaway clone of the registry.
-  fn with_query_context<R>(&self, f: impl FnOnce(&mut parley::FontContext) -> R) -> R {
-    match self.font_cx.try_borrow_mut() {
-      Ok(mut cx) => f(&mut cx),
-      Err(_) => f(&mut self.fonts.query_context()),
+impl RenderContext {
+  pub(crate) fn with_fonts<R>(&self, f: impl FnOnce(&mut Fonts) -> R) -> R {
+    match self.fonts.try_borrow_mut() {
+      Ok(mut fonts) => f(&mut fonts),
+      Err(_) => {
+        let mut fonts = self.fonts.borrow().clone();
+        f(&mut fonts)
+      }
     }
   }
 
@@ -914,7 +863,24 @@ impl RenderContext<'_> {
     attributes: Attributes,
     font_size: f32,
   ) -> Option<f32> {
-    self.with_query_context(|cx| query_first_font_line_spacing(cx, families, attributes, font_size))
+    self.with_fonts(|fonts| {
+      let mut query = fonts.inner.collection.query(&mut fonts.inner.source_cache);
+      let mut result = None;
+
+      query.set_families(families);
+      query.set_attributes(attributes);
+
+      query.matches_with(|font| {
+        let Ok(font_ref) = FontRef::from_index(font.blob.data(), font.index) else {
+          return QueryStatus::Continue;
+        };
+        let metrics = font_ref.metrics(Size::new(font_size), LocationRef::default());
+        result = Some(metrics.ascent + metrics.descent + metrics.leading);
+        QueryStatus::Stop
+      });
+
+      result
+    })
   }
 
   /// Builds an inline layout with the given root style.
@@ -923,51 +889,13 @@ impl RenderContext<'_> {
     root_style: TextStyle<'_, '_, InlineBrush>,
     func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),
   ) -> (InlineLayout, String) {
-    self.with_query_context(|cx| build_tree_layout(cx, root_style, func))
-  }
-}
-
-/// Dedup key for a registered font: its content plus any family-name override
-/// (the same bytes under a different name is a distinct family, so both count).
-fn registration_key(bytes: &[u8], info: Option<&FontInfoOverride>) -> u64 {
-  let mut h = Xxh3::new();
-  h.update(bytes);
-  if let Some(name) = info.and_then(|info| info.family_name) {
-    h.update(&[0]);
-    h.update(name.as_bytes());
-  }
-  h.digest()
-}
-
-#[cfg(test)]
-mod dedup_tests {
-  use super::*;
-
-  #[test]
-  fn skips_duplicate_registration() {
-    let font = std::fs::read(concat!(
-      env!("CARGO_MANIFEST_DIR"),
-      "/../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf"
-    ))
-    .unwrap();
-
-    let mut ctx = Fonts::default();
-    ctx.register(FontResource::new(font.as_slice())).unwrap();
-    ctx.register(FontResource::new(font.as_slice())).unwrap();
-
-    // The same font registered twice counts once.
-    assert_eq!(ctx.registered.len(), 1);
-
-    // The same bytes under a different family name is a distinct registration.
-    ctx
-      .register(
-        FontResource::new(font.as_slice()).override_info(FontInfoOverride {
-          family_name: Some("Renamed"),
-          ..Default::default()
-        }),
-      )
-      .unwrap();
-    assert_eq!(ctx.registered.len(), 2);
+    self.with_fonts(|fonts| {
+      with_layout_context(|layout| {
+        let mut builder = layout.tree_builder(&mut fonts.inner, 1.0, true, &root_style);
+        func(&mut builder);
+        builder.build()
+      })
+    })
   }
 }
 

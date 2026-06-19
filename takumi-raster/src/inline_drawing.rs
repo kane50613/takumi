@@ -404,7 +404,7 @@ fn draw_glyph_run_line_through(
 fn draw_outline_island(
   outline_rects: &[InlineOutlineRect],
   canvas: &mut Canvas,
-  spans: &[ProcessedInlineSpan<'_, '_>],
+  spans: &[ProcessedInlineSpan<'_>],
   transform: Affine,
 ) -> Result<()> {
   let Some(first_rect) = outline_rects.first().copied() else {
@@ -476,7 +476,7 @@ fn draw_outline_island_content(
 fn draw_merged_outline_rects(
   outline_rects: Vec<InlineOutlineRect>,
   canvas: &mut Canvas,
-  spans: &[ProcessedInlineSpan<'_, '_>],
+  spans: &[ProcessedInlineSpan<'_>],
   transform: Affine,
 ) -> Result<()> {
   for island in outline_islands(outline_rects) {
@@ -570,7 +570,7 @@ fn draw_glyph_run_text_shadow(
 
 pub(crate) fn draw_inline_box(
   inline_box: &VisualInlineBox,
-  item: &InlineBoxItem<'_, '_>,
+  item: &InlineBoxItem<'_>,
   canvas: &mut Canvas,
   transform: Affine,
 ) -> Result<()> {
@@ -614,10 +614,9 @@ pub(crate) fn draw_inline_box(
     return Ok(());
   };
 
-  let context = RenderContext {
-    transform: Affine::translation(inline_box.x, inline_box.y) * transform,
-    ..item.render_node.context.clone()
-  };
+  let mut context = item.render_node.context.clone();
+  context.transform = Affine::translation(inline_box.x, inline_box.y) * transform;
+
   let layout = item.into();
 
   draw_outset_box_shadow(&context, canvas, layout)?;
@@ -634,7 +633,7 @@ pub(crate) fn draw_inline_layout(
   context: &RenderContext,
   canvas: &mut Canvas,
   layout: Layout,
-  built: &BuiltInlineLayout<'_, '_>,
+  built: &BuiltInlineLayout<'_>,
   font_style: &SizedFontStyle,
 ) -> Result<Vec<VisualInlineBox>> {
   let spans = &built.spans;

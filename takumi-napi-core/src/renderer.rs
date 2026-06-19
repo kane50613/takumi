@@ -325,7 +325,7 @@ impl Renderer {
       })?;
 
       for resource in default_fonts_resources {
-        fonts.register(resource).map_err(map_error)?;
+        drop(fonts.register(resource).map_err(map_error)?);
       }
     }
 
@@ -356,53 +356,32 @@ impl Renderer {
         .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
       for resource in custom_fonts_resources {
-        state.fonts.register(resource).map_err(map_error)?;
+        drop(state.fonts.register(resource).map_err(map_error)?);
       }
     }
 
     Ok(renderer)
   }
 
-  /// Configures this renderer's decoded-image cache (on by default, 256 MiB).
-  #[napi(js_name = "configureImageCache")]
-  pub fn configure_image_cache(&self, options: crate::ImageCacheOptions) -> Result<()> {
-    if options.max_bytes.is_some() || options.max_size.is_some() {
-      let state = self
-        .state
-        .read()
-        .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-      if let Some(max_bytes) = options.max_bytes {
-        state.image_cache.set_max_bytes(max_bytes.max(0.0) as usize);
-      }
-      if let Some(max_size) = options.max_size {
-        state.image_cache.set_max_size(max_size.max(0.0) as usize);
-      }
-    }
-    Ok(())
-  }
-
-  /// Registers multiple fonts into the renderer asynchronously, returning the
-  /// families each font produced.
+  /// Register font into the renderer, returning the families produced.
   #[napi(
-    js_name = "registerFonts",
-    ts_args_type = "fonts: Font[], signal?: AbortSignal",
-    ts_return_type = "Promise<RegisteredFamily[][]>"
+    js_name = "registerFont",
+    ts_args_type = "fonts: Font, signal?: AbortSignal",
+    ts_return_type = "Promise<RegisteredFamily[]>"
   )]
-  pub fn register_fonts(
+  pub fn register_font(
     &self,
     env: Env,
-    fonts: Vec<Object>,
+    font: Object,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<LoadFontTask>> {
-    let buffers = fonts
-      .into_iter()
-      .map(|font| parse_font_input(env, font))
-      .collect::<Result<Vec<_>>>()?;
+    let (info, buffer) = parse_font_input(env, font)?;
 
     Ok(AsyncTask::with_optional_signal(
       LoadFontTask {
         state: Arc::clone(&self.state),
-        buffers,
+        buffer,
+        info,
       },
       signal,
     ))

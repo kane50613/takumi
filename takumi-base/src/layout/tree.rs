@@ -84,9 +84,9 @@ impl LayoutResults {
   }
 }
 
-pub struct LayoutTree<'r, 'g> {
+pub struct LayoutTree<'r> {
   nodes: Vec<LayoutNodeState>,
-  render_nodes: Vec<&'r RenderNode<'g>>,
+  render_nodes: Vec<&'r RenderNode>,
 }
 
 struct LayoutNodeState {
@@ -101,10 +101,10 @@ struct LayoutNodeState {
 }
 
 #[derive(Clone)]
-pub struct RenderNode<'g> {
-  pub context: RenderContext<'g>,
+pub struct RenderNode {
+  pub context: RenderContext,
   pub node: Option<Node>,
-  pub children: Option<Box<[RenderNode<'g>]>>,
+  pub children: Option<Box<[RenderNode]>>,
   pub layout_style_override: Option<Style>,
   pub anonymous_text_content: Option<String>,
   pub force_inline_layout: bool,
@@ -247,8 +247,8 @@ fn registered_custom_property_parent_style(
   adjusted_parent
 }
 
-fn pseudo_computed_style<'g>(
-  parent_context: &RenderContext<'g>,
+fn pseudo_computed_style(
+  parent_context: &RenderContext,
   pseudo_matched: &MatchedDeclarationsView<'_>,
 ) -> (ComputedStyle, SizingContext, Color) {
   let style_layers = build_style_layers(
@@ -287,25 +287,25 @@ fn pseudo_computed_style<'g>(
   (style, sizing, current_color)
 }
 
-fn push_layout_node<'r, 'g>(
+fn push_layout_node<'r>(
   nodes: &mut Vec<LayoutNodeState>,
-  render_nodes: &mut Vec<&'r RenderNode<'g>>,
-  render_root: &'r RenderNode<'g>,
+  render_nodes: &mut Vec<&'r RenderNode>,
+  render_root: &'r RenderNode,
 ) -> NodeId {
-  struct PendingNode<'r, 'g> {
+  struct PendingNode<'r> {
     node_id: NodeId,
     position: Position,
     next_child_index: usize,
-    children: Option<&'r [RenderNode<'g>]>,
+    children: Option<&'r [RenderNode]>,
     taffy_child_ids: Vec<NodeId>,
     box_children: Vec<OrderedChild>,
   }
 
-  fn push_node_state<'r, 'g>(
+  fn push_node_state<'r>(
     nodes: &mut Vec<LayoutNodeState>,
-    render_nodes: &mut Vec<&'r RenderNode<'g>>,
-    render_node: &'r RenderNode<'g>,
-  ) -> PendingNode<'r, 'g> {
+    render_nodes: &mut Vec<&'r RenderNode>,
+    render_node: &'r RenderNode,
+  ) -> PendingNode<'r> {
     let node_index = nodes.len();
     let node_id = NodeId::from(node_index);
     let is_inline_children = render_node.should_create_inline_layout();
@@ -337,7 +337,7 @@ fn push_layout_node<'r, 'g>(
       box_children: Box::new([]),
     });
 
-    let capacity = children.map_or(0, <[RenderNode<'g>]>::len);
+    let capacity = children.map_or(0, <[RenderNode]>::len);
     PendingNode {
       node_id,
       position,
@@ -421,8 +421,8 @@ fn push_layout_node<'r, 'g>(
   root_id
 }
 
-impl<'r, 'g> LayoutTree<'r, 'g> {
-  pub fn from_render_node(render_root: &'r RenderNode<'g>) -> Self {
+impl<'r> LayoutTree<'r> {
+  pub fn from_render_node(render_root: &'r RenderNode) -> Self {
     let mut nodes = Vec::with_capacity(1);
     let mut render_nodes = Vec::with_capacity(1);
     let root_id = push_layout_node(&mut nodes, &mut render_nodes, render_root);
@@ -517,7 +517,7 @@ impl<'r, 'g> LayoutTree<'r, 'g> {
 // elements, letting that value participate in aspect-ratio transfer can
 // incorrectly inflate the measured main-size. Strip that hint at the leaf boundary.
 fn should_strip_flex_intrinsic_stretch_known_dimension(
-  render_node: &RenderNode<'_>,
+  render_node: &RenderNode,
   inputs: LayoutInput,
   known_dimensions: Size<Option<f32>>,
 ) -> bool {
@@ -573,7 +573,7 @@ fn sort_children_by_order(
     .collect()
 }
 
-impl TraversePartialTree for LayoutTree<'_, '_> {
+impl TraversePartialTree for LayoutTree<'_> {
   type ChildIter<'a>
     = IntoIter<NodeId>
   where
@@ -623,9 +623,9 @@ impl TraversePartialTree for LayoutTree<'_, '_> {
   }
 }
 
-impl TraverseTree for LayoutTree<'_, '_> {}
+impl TraverseTree for LayoutTree<'_> {}
 
-impl LayoutPartialTree for LayoutTree<'_, '_> {
+impl LayoutPartialTree for LayoutTree<'_> {
   type CoreContainerStyle<'a>
     = &'a Style
   where
@@ -664,7 +664,7 @@ impl LayoutPartialTree for LayoutTree<'_, '_> {
   }
 }
 
-impl<'r, 'g> LayoutTree<'r, 'g> {
+impl<'r> LayoutTree<'r> {
   fn compute_child_layout_inner(
     &mut self,
     node: NodeId,
@@ -747,7 +747,7 @@ impl<'r, 'g> LayoutTree<'r, 'g> {
   }
 }
 
-impl CacheTree for LayoutTree<'_, '_> {
+impl CacheTree for LayoutTree<'_> {
   fn cache_get(&self, node_id: NodeId, input: &LayoutInput) -> Option<LayoutOutput> {
     let node = self.get_layout_node_ref(node_id)?;
     node.cache.get(input)
@@ -770,7 +770,7 @@ impl CacheTree for LayoutTree<'_, '_> {
   }
 }
 
-impl LayoutBlockContainer for LayoutTree<'_, '_> {
+impl LayoutBlockContainer for LayoutTree<'_> {
   type BlockContainerStyle<'a>
     = &'a Style
   where
@@ -798,7 +798,7 @@ impl LayoutBlockContainer for LayoutTree<'_, '_> {
   }
 }
 
-impl LayoutFlexboxContainer for LayoutTree<'_, '_> {
+impl LayoutFlexboxContainer for LayoutTree<'_> {
   type FlexboxContainerStyle<'a>
     = &'a Style
   where
@@ -817,7 +817,7 @@ impl LayoutFlexboxContainer for LayoutTree<'_, '_> {
   }
 }
 
-impl LayoutGridContainer for LayoutTree<'_, '_> {
+impl LayoutGridContainer for LayoutTree<'_> {
   type GridContainerStyle<'a>
     = &'a Style
   where
@@ -836,7 +836,7 @@ impl LayoutGridContainer for LayoutTree<'_, '_> {
   }
 }
 
-impl RoundTree for LayoutTree<'_, '_> {
+impl RoundTree for LayoutTree<'_> {
   fn get_unrounded_layout(&self, node_id: NodeId) -> Layout {
     let Some(node) = self.get_layout_node_ref(node_id) else {
       return Layout::new();
@@ -858,8 +858,8 @@ impl RoundTree for LayoutTree<'_, '_> {
   }
 }
 
-impl<'g> RenderNode<'g> {
-  fn anonymous_box_context(parent_context: &RenderContext<'g>) -> RenderContext<'g> {
+impl RenderNode {
+  fn anonymous_box_context(parent_context: &RenderContext) -> RenderContext {
     let mut context = parent_context.clone();
     context.style.display = Display::Block;
     context.style.opacity = PercentageNumber(1.0);
@@ -879,7 +879,7 @@ impl<'g> RenderNode<'g> {
     context
   }
 
-  fn anonymous_text_item(parent_context: &RenderContext<'g>, text: String) -> Self {
+  fn anonymous_text_item(parent_context: &RenderContext, text: String) -> Self {
     let context = Self::anonymous_box_context(parent_context);
 
     Self {
@@ -895,10 +895,7 @@ impl<'g> RenderNode<'g> {
     }
   }
 
-  fn anonymous_block_container(
-    parent_context: &RenderContext<'g>,
-    children: Vec<RenderNode<'g>>,
-  ) -> Self {
+  fn anonymous_block_container(parent_context: &RenderContext, children: Vec<RenderNode>) -> Self {
     Self {
       context: Self::anonymous_box_context(parent_context),
       node: None,
@@ -912,7 +909,7 @@ impl<'g> RenderNode<'g> {
     }
   }
 
-  fn anonymous_image_item(parent_context: &RenderContext<'g>, image: BackgroundImage) -> Self {
+  fn anonymous_image_item(parent_context: &RenderContext, image: BackgroundImage) -> Self {
     // Cap image content to the parent pseudo's box so explicit `width` / `height`
     // on the pseudo wins over intrinsic / default sizing.
     let max_size = Size {
@@ -957,7 +954,7 @@ impl<'g> RenderNode<'g> {
 
   fn pseudo_content_child(
     originating_node: &Node,
-    pseudo_context: &RenderContext<'g>,
+    pseudo_context: &RenderContext,
     item: ContentItem,
   ) -> Option<Self> {
     let text = match item {
@@ -975,7 +972,7 @@ impl<'g> RenderNode<'g> {
   }
 
   fn from_pseudo_match(
-    parent_context: &RenderContext<'g>,
+    parent_context: &RenderContext,
     originating_node: &Node,
     pseudo_matched: &MatchedDeclarationsView<'_>,
   ) -> Option<Self> {
@@ -1084,7 +1081,7 @@ impl<'g> RenderNode<'g> {
       }))
   }
 
-  pub fn from_node(parent_context: &RenderContext<'g>, node: Node) -> Self {
+  pub fn from_node(parent_context: &RenderContext, node: Node) -> Self {
     let matched_styles = match_stylesheets_view(
       &node,
       &parent_context.stylesheet,
@@ -1100,17 +1097,17 @@ impl<'g> RenderNode<'g> {
   }
 
   fn from_node_iterative(
-    parent_context: &RenderContext<'g>,
+    parent_context: &RenderContext,
     root: Node,
     matched_declarations: &[NodeMatchedDeclarations<'_>],
   ) -> Self {
-    struct PendingRenderNode<'g> {
-      context: RenderContext<'g>,
+    struct PendingRenderNode {
+      context: RenderContext,
       node: Node,
       children_is_some: bool,
       pending_children: IntoIter<Node>,
-      rendered_children: Vec<RenderNode<'g>>,
-      pseudo_after: Option<RenderNode<'g>>,
+      rendered_children: Vec<RenderNode>,
+      pseudo_after: Option<RenderNode>,
     }
 
     fn next_preorder_index(preorder_cursor: &mut usize) -> usize {
@@ -1126,8 +1123,8 @@ impl<'g> RenderNode<'g> {
       (children_is_some, children)
     }
 
-    fn resolve_computed_style<'g>(
-      parent_context: &RenderContext<'g>,
+    fn resolve_computed_style(
+      parent_context: &RenderContext,
       node: &mut Node,
       node_index: usize,
       matched_declarations: &[NodeMatchedDeclarations<'_>],
@@ -1178,7 +1175,7 @@ impl<'g> RenderNode<'g> {
         style = apply_stylesheet_animations(
           style,
           &child_context.stylesheet,
-          child_context.time,
+          child_context.time_ms,
           &child_context.sizing,
           child_context.current_color,
         );
@@ -1209,12 +1206,12 @@ impl<'g> RenderNode<'g> {
       (style, sizing, current_color)
     }
 
-    fn build_pending_node<'g>(
-      parent_context: &RenderContext<'g>,
+    fn build_pending_node(
+      parent_context: &RenderContext,
       mut node: Node,
       matched_declarations: &[NodeMatchedDeclarations<'_>],
       preorder_cursor: &mut usize,
-    ) -> PendingRenderNode<'g> {
+    ) -> PendingRenderNode {
       let node_index = next_preorder_index(preorder_cursor);
       let (style, sizing, current_color) =
         resolve_computed_style(parent_context, &mut node, node_index, matched_declarations);
@@ -1842,10 +1839,10 @@ impl<'g> RenderNode<'g> {
   }
 }
 
-fn flush_inline_group<'g>(
-  inline_group: &mut Vec<RenderNode<'g>>,
-  final_children: &mut Vec<RenderNode<'g>>,
-  parent_render_context: &RenderContext<'g>,
+fn flush_inline_group(
+  inline_group: &mut Vec<RenderNode>,
+  final_children: &mut Vec<RenderNode>,
+  parent_render_context: &RenderContext,
 ) {
   if inline_group.is_empty() {
     return;
@@ -1857,11 +1854,11 @@ fn flush_inline_group<'g>(
   ));
 }
 
-fn drop_block_boundary_whitespace<'g>(input: Vec<RenderNode<'g>>) -> Vec<RenderNode<'g>> {
+fn drop_block_boundary_whitespace(input: Vec<RenderNode>) -> Vec<RenderNode> {
   let mut result = Vec::with_capacity(input.len());
-  let mut run: Vec<RenderNode<'g>> = Vec::new();
+  let mut run: Vec<RenderNode> = Vec::new();
 
-  fn flush<'g>(run: &mut Vec<RenderNode<'g>>, out: &mut Vec<RenderNode<'g>>) {
+  fn flush(run: &mut Vec<RenderNode>, out: &mut Vec<RenderNode>) {
     let has_meaningful_inline = run.iter().any(|c| {
       c.participates_in_inflow_inline_formatting_context() && !c.is_whitespace_only_text_node()
     });

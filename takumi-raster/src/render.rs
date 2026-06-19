@@ -4,6 +4,7 @@ use image::RgbaImage;
 use parley::{GlyphRun, InlineBoxKind, PositionedLayoutItem};
 use serde::Serialize;
 use taffy::{AvailableSpace, Layout, NodeId, TaffyError, geometry::Size};
+use takumi_base::layout::style::SizingContext;
 use typed_builder::TypedBuilder;
 
 use crate::{
@@ -128,7 +129,7 @@ pub struct MeasuredNode {
 
 fn measured_run_text<'a>(
   text: &'a str,
-  spans: &[ProcessedInlineSpan<'_, '_>],
+  spans: &[ProcessedInlineSpan<'_>],
   glyph_run: &GlyphRun<'_, InlineBrush>,
 ) -> &'a str {
   let text_range = glyph_run.run().text_range();
@@ -194,18 +195,21 @@ pub fn measure_layout<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
     dithering: _,
     font_families,
   } = options;
-  let mut render_context = RenderContext::new(
-    fonts,
-    viewport,
-    images,
-    stylesheet.into(),
-    time_ms,
-    font_families.as_deref(),
-  );
-  render_context.draw_debug_border = draw_debug_border;
+
+  let render_context = RenderContext::builder()
+    .fonts(fonts.snapshot_with_fallbacks(font_families.as_deref()))
+    .sizing(SizingContext::builder().viewport(viewport).build())
+    .images(images)
+    .stylesheet(stylesheet.into())
+    .time_ms(time_ms)
+    .draw_debug_border(draw_debug_border)
+    .build();
+
   let mut root = RenderNode::from_node(&render_context, node);
   let mut tree = LayoutTree::from_render_node(&root);
+
   tree.compute_layout(render_context.sizing.viewport.into());
+
   let layout_results = tree.into_results();
 
   collect_measure_result(
@@ -221,7 +225,7 @@ pub fn measure_layout<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
 }
 
 fn collect_measure_result<'g>(
-  node: &mut RenderNode<'g>,
+  node: &mut RenderNode,
   layout_results: &LayoutResults,
   node_id: NodeId,
   transform: Affine,
@@ -521,19 +525,20 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<RgbaImage> {
     font_families,
   } = options;
 
-  let mut render_context = RenderContext::new(
-    fonts,
-    viewport,
-    images,
-    stylesheet.into(),
-    time_ms,
-    font_families.as_deref(),
-  );
-  render_context.draw_debug_border = draw_debug_border;
+  let render_context = RenderContext::builder()
+    .fonts(fonts.snapshot_with_fallbacks(font_families.as_deref()))
+    .sizing(SizingContext::builder().viewport(viewport).build())
+    .images(images)
+    .stylesheet(stylesheet.into())
+    .time_ms(time_ms)
+    .draw_debug_border(draw_debug_border)
+    .build();
 
   let mut root = RenderNode::from_node(&render_context, node);
   let mut tree = LayoutTree::from_render_node(&root);
+
   tree.compute_layout(render_context.sizing.viewport.into());
+
   let layout_results = tree.into_results();
   let root_node_id = layout_results.root_node_id();
   let root_size = layout_results
@@ -656,8 +661,8 @@ fn resolve_scene_at_time<'a, 'g>(
     .map(|scene| (scene, u64::from(scene.duration_ms.saturating_sub(1))))
 }
 
-pub(crate) fn render_node<'g>(
-  node: &mut RenderNode<'g>,
+pub(crate) fn render_node(
+  node: &mut RenderNode,
   layout_results: &LayoutResults,
   node_id: NodeId,
   canvas: &mut Canvas,

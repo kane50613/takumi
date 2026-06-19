@@ -29,20 +29,12 @@ extern "C" {
   #[wasm_bindgen(typescript_type = "EncodeFramesOptions")]
   pub type EncodeFramesOptionsType;
 
-  /// JavaScript object representing font details.
-  #[wasm_bindgen(typescript_type = "FontDetails")]
-  pub type FontDetailsType;
-
   /// JavaScript type for font input (FontDetails or ByteBuf).
   #[wasm_bindgen(typescript_type = "Font")]
   pub type FontType;
 
-  /// JavaScript type for a list of font inputs.
-  #[wasm_bindgen(typescript_type = "Font[]")]
-  pub type FontsType;
-
   /// JavaScript type for the families produced by `registerFonts`.
-  #[wasm_bindgen(typescript_type = "RegisteredFamily[][]")]
+  #[wasm_bindgen(typescript_type = "RegisteredFamily[]")]
   pub type RegisteredFamiliesType;
 
   /// JavaScript object representing renderer construction options.

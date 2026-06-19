@@ -25,14 +25,3 @@ export function shouldLoadDefaultFonts(
 ): boolean | undefined {
   return options?.loadDefaultFonts ?? (options?.fonts?.length ? false : undefined);
 }
-
-export async function loadRendererResources(
-  renderer: napi.Renderer | wasm.Renderer,
-  options: RenderOptionsWithoutRenderer | undefined,
-): Promise<string[] | undefined> {
-  if (!options?.fonts?.length) {
-    return undefined;
-  }
-  const registered = await renderer.registerFonts(options.fonts);
-  return [...new Set(registered.flat().map((family) => family.name))];
-}

@@ -23,7 +23,7 @@ pub fn measure_text_node(
   available_space: Size<AvailableSpace>,
   known_dimensions: Size<Option<f32>>,
 ) -> Size<f32> {
-  let inline_content: InlineItem<'_, '_> = InlineItem::Text {
+  let inline_content: InlineItem<'_> = InlineItem::Text {
     text: text.text.as_str().into(),
     context,
   };

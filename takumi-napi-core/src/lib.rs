@@ -24,7 +24,7 @@ use takumi_base::{
 
 pub use renderer::Renderer;
 
-/// Options for `Renderer.configureImageCache`.
+/// Options for `Renderer`'s `image`.
 #[napi(object)]
 pub struct ImageCacheOptions {
   /// Maximum bytes of decoded images to keep in this renderer's cache. `0` disables (and clears) it.

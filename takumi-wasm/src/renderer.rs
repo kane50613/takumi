@@ -56,7 +56,7 @@ fn load_default_fonts(fonts: &mut Fonts) -> Result<(), js_sys::Error> {
       })
       .generic_family(*generic_family);
 
-    fonts.register(resource).map_err(map_error)?;
+    drop(fonts.register(resource).map_err(map_error)?);
   }
 
   Ok(())
@@ -176,19 +176,6 @@ impl Renderer {
     Ok(buffer)
   }
 
-  /// Configures this renderer's decoded-image cache (on by default, 256 MiB).
-  #[wasm_bindgen(js_name = configureImageCache)]
-  pub fn configure_image_cache(&self, options: wasm_bindgen::JsValue) -> Result<(), js_sys::Error> {
-    let options: crate::ImageCacheOptions = from_value(options).map_err(map_error)?;
-    if let Some(max_bytes) = options.max_bytes {
-      self.image_cache.set_max_bytes(max_bytes.max(0.0) as usize);
-    }
-    if let Some(max_size) = options.max_size {
-      self.image_cache.set_max_size(max_size.max(0.0) as usize);
-    }
-    Ok(())
-  }
-
   /// Creates a new Renderer instance.
   #[wasm_bindgen(constructor)]
   pub fn new(options: Option<ConstructRendererOptionsType>) -> Result<Renderer, js_sys::Error> {
@@ -220,14 +207,13 @@ impl Renderer {
   }
 
   /// Registers fonts into the renderer, returning the families each font produced.
-  #[wasm_bindgen(js_name = registerFonts)]
-  pub fn register_fonts(&self, fonts: FontsType) -> Result<RegisteredFamiliesType, js_sys::Error> {
-    let fonts: Vec<Font> = from_value(fonts.into()).map_err(map_error)?;
+  #[wasm_bindgen(js_name = registerFont)]
+  pub fn register_font(&self, font: FontType) -> Result<RegisteredFamiliesType, js_sys::Error> {
+    let font: Font = from_value(font.into()).map_err(map_error)?;
+
     let mut state = self.write_state()?;
-    let registered = fonts
-      .into_iter()
-      .map(|font| load_font_internal(&mut state, font))
-      .collect::<Result<Vec<_>, _>>()?;
+    let registered = load_font_internal(&mut state, font)?;
+
     Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
   }
 

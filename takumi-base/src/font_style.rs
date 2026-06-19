@@ -1,9 +1,6 @@
 use std::borrow::Cow;
-use std::rc::Rc;
 
-use parley::{
-  FontFamily as ParleyFontFamily, FontFamilyName, FontFeatures, FontVariations, TextStyle,
-};
+use parley::{FontFeatures, FontVariations, TextStyle};
 use smallvec::SmallVec;
 use taffy::{Size, prelude::FromLength};
 
@@ -35,28 +32,6 @@ pub struct SizedFontStyle<'s> {
   pub text_decoration_color: Color,
   pub text_decoration_thickness: SizedTextDecorationThickness,
   pub sizing: SizingContext,
-  /// The render's fallback family chain, appended after this style's `font-family`.
-  pub fallback_families: Rc<[String]>,
-}
-
-/// Builds the parley font stack for `style`: its `font-family` followed by the render's
-/// fallback chain, so parley's per-cluster coverage fallback follows registration order.
-fn font_family_with_fallback<'s>(style: &'s SizedFontStyle<'s>) -> ParleyFontFamily<'s> {
-  if style.fallback_families.is_empty() {
-    return (&style.parent.font_family).into();
-  }
-  let names = style
-    .parent
-    .font_family
-    .names()
-    .chain(
-      style
-        .fallback_families
-        .iter()
-        .map(|name| FontFamilyName::Named(Cow::Borrowed(name.as_str()))),
-    )
-    .collect::<Vec<_>>();
-  ParleyFontFamily::List(names.into())
 }
 
 impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
@@ -70,7 +45,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
         style.parent.font_variation_settings.as_ref(),
       )),
       font_features: FontFeatures::List(Cow::Borrowed(style.parent.font_feature_settings.as_ref())),
-      font_family: font_family_with_fallback(style),
+      font_family: (&style.parent.font_family).into(),
       letter_spacing: style.letter_spacing,
       word_spacing: style.word_spacing,
       word_break: style.parent.word_break.into(),
@@ -184,7 +159,6 @@ impl<'s> SizedFontStyle<'s> {
         .resolve(context.current_color),
       text_decoration_color: style.text_decoration_color.resolve(context.current_color),
       text_decoration_thickness: style.resolved_text_decoration_thickness(&context.sizing),
-      fallback_families: context.fallback_families.clone(),
     }
   }
 }
