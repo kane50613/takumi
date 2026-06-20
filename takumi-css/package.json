@@ -1,9 +1,0 @@
-{
-  "name": "takumi-css",
-  "version": "0.1.2",
-  "private": true,
-  "scripts": {
-    "version": "cargo set-version -p takumi-css $(jq -r '.version' package.json)",
-    "release": "cargo publish || [ $? -eq 101 ] || exit $?"
-  }
-}

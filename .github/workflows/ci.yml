@@ -785,7 +785,6 @@ jobs:
         with:
           stage: release
           components: clippy,rustfmt
-          binstall: cargo-edit
 
       - name: Download helpers artifact
         uses: actions/download-artifact@v8
@@ -833,11 +832,8 @@ jobs:
       - uses: rust-lang/crates-io-auth-action@v1
         id: crates-io-auth
 
-      - name: Create Release Pull Request or Publish
-        uses: changesets/action@v1
-        with:
-          version: bun version
-          publish: bun release
+      - name: Version or publish packages
+        run: bun tegami ci
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
