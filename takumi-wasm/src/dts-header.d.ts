@@ -34,7 +34,8 @@ export type RenderOptions = {
    */
   quality?: number;
   /**
-   * The resources fetched externally. You should collect the fetch tasks first using `extractResourceUrls` and then pass the resources here.
+   * Images keyed by `src`, each carrying raw bytes. Provided up front and used
+   * in place of fetching external `src` URLs during rendering.
    */
   images?: ImageSource[];
   /**
@@ -80,7 +81,8 @@ export type RenderAnimationOptions = {
    */
   quality?: number;
   /**
-   * The resources fetched externally. You should collect the fetch tasks first using `extractResourceUrls` and then pass the resources here.
+   * Images keyed by `src`, each carrying raw bytes. Provided up front and used
+   * in place of fetching external `src` URLs during rendering.
    */
   images?: ImageSource[];
   drawDebugBorder?: boolean;
@@ -108,7 +110,8 @@ export type EncodeFramesOptions = {
    */
   quality?: number;
   /**
-   * The resources fetched externally. You should collect the fetch tasks first using `extractResourceUrls` and then pass the resources here.
+   * Images keyed by `src`, each carrying raw bytes. Provided up front and used
+   * in place of fetching external `src` URLs during rendering.
    */
   images?: ImageSource[];
   drawDebugBorder?: boolean;

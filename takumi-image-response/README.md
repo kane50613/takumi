@@ -37,7 +37,6 @@ export function GET() {
     fonts: [
       {
         data: () => fetch("/fonts/Inter-Regular.ttf").then((res) => res.arrayBuffer()),
-        key: "inter-regular",
         name: "Inter",
       },
     ],
@@ -84,8 +83,6 @@ export function GET(request: Request) {
 ```
 
 Images can likewise be provided up front via `images`, keyed by `src`, each with bytes or a sync/async loader.
-
-`loadDefaultFonts` is only supported by the native `@takumi-rs/core` renderer. It has no effect when using the WASM renderer.
 
 ### Bring-Your-Own-Renderer (BYOR)
 
