@@ -26,9 +26,11 @@ let node = Node::container([Node::text("Hello, world!").with_style(
 let mut fonts = Fonts::default();
 
 // Load fonts
-fonts.register(
-  FontResource::new(include_bytes!("../../assets/fonts/geist/Geist[wght].woff2"))
-);
+fonts
+  .register(FontResource::new(include_bytes!(
+    "../../assets/fonts/geist/Geist[wght].woff2"
+  )))
+  .unwrap();
 
 let viewport = Viewport::new((1200, 630));
 
