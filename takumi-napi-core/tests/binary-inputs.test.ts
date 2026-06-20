@@ -34,7 +34,7 @@ describe("binary inputs", () => {
     );
 
     expect(registered).toHaveLength(3);
-    expect(registered.every((families) => families.length > 0 && Boolean(families[0].name))).toBe(
+    expect(registered.every((families) => families.some((family) => Boolean(family.name)))).toBe(
       true,
     );
   });

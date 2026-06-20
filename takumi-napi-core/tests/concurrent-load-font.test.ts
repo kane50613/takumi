@@ -19,9 +19,7 @@ test("concurrent registerFont calls on one renderer", async () => {
     ),
   );
 
-  expect(results.every((families) => families.length > 0 && families[0].faces.length > 0)).toBe(
-    true,
-  );
+  expect(results.every((families) => families[0] && families[0].faces.length > 0)).toBe(true);
 
   const output = await renderer.render({
     type: "text",
@@ -68,6 +66,6 @@ test("registerFont retries loaders that failed before loading", async () => {
   });
 
   expect(registered).toHaveLength(1);
-  expect(registered[0].faces.length).toBeGreaterThan(0);
+  expect(registered.every((family) => family.faces.length > 0)).toBe(true);
   expect(attempts).toBe(2);
 });
