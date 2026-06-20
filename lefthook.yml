@@ -8,5 +8,4 @@ pre-commit:
       stage_fixed: true
 
     - root: takumi/
-      run: cargo rdme --force
-      stage_fixed: true
+      run: cargo rdme --force && git add README.md
