@@ -814,8 +814,10 @@ mod tests {
   use taffy::Size;
   use tiny_skia::ColorU8;
 
-  use crate::style::properties::gradient_utils::red_blue_stops;
-  use crate::{Viewport, style::CalcArena};
+  use crate::{
+    Viewport,
+    style::{CalcArena, properties::gradient_utils::red_blue_stops},
+  };
 
   use super::*;
   fn sizing() -> SizingContext {

@@ -1,13 +1,12 @@
-use std::sync::RwLock;
-use std::{borrow::Cow, mem::take};
-use std::{collections::HashMap, sync::Arc};
+use std::{
+  borrow::Cow,
+  collections::HashMap,
+  mem::take,
+  sync::{Arc, RwLock},
+};
 
 use napi::bindgen_prelude::*;
-use takumi_base::layout::node::Node;
-use takumi_base::{
-  layout::style::StyleSheet,
-  layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
-};
+use takumi_base::layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node, style::StyleSheet};
 use takumi_raster::{DitheringAlgorithm, render, write_image};
 
 use crate::{
@@ -22,6 +21,7 @@ pub struct RenderTask {
   pub viewport: Viewport,
   pub format: OutputFormat,
   pub quality: Option<u8>,
+  pub lossless: Option<bool>,
   pub dithering: DitheringAlgorithm,
   pub time_ms: u64,
   pub stylesheet: StyleSheet,
@@ -47,6 +47,7 @@ impl RenderTask {
       ),
       format: options.format.unwrap_or(OutputFormat::Png),
       quality: options.quality,
+      lossless: options.lossless,
       dithering: options.dithering.map(Into::into).unwrap_or_default(),
       time_ms: options.time_ms.unwrap_or_default().max(0) as u64,
       draw_debug_border: options.draw_debug_border.unwrap_or_default(),
@@ -113,8 +114,9 @@ impl Task for RenderTask {
     write_image(
       Cow::Owned(image),
       &mut buffer,
-      self.format.into(),
-      self.quality,
+      self
+        .format
+        .into_image_output_format(self.quality, self.lossless),
     )
     .map_err(map_error)?;
 

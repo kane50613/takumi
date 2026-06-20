@@ -6,7 +6,7 @@ use crate::{
 };
 
 /// Draws debug borders around the node's layout areas.
-pub fn draw_debug_border(canvas: &mut Canvas, layout: Layout, transform: Affine) {
+pub(crate) fn draw_debug_border(canvas: &mut Canvas, layout: Layout, transform: Affine) {
   // border-box
   BorderProperties {
     width: Sides([1.0; 4]).into(),

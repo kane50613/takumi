@@ -1,11 +1,9 @@
-use std::rc::Rc;
-use std::sync::Arc;
-use std::{cell::RefCell, collections::HashMap};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 use typed_builder::TypedBuilder;
 
-use crate::Fonts;
 use crate::{
+  Fonts,
   layout::style::{Affine, Color, ComputedStyle, SizingContext, StyleSheet},
   resources::image::ImageSource,
 };
@@ -15,12 +13,12 @@ use crate::{
 #[non_exhaustive]
 pub struct RenderContext {
   /// The font registry shared across renders.
-  pub fonts: Rc<RefCell<Fonts>>,
+  pub(crate) fonts: Rc<RefCell<Fonts>>,
   /// The sizing context.
   pub sizing: SizingContext,
   /// The fallback family chain for this render, appended to every run's font stack.
   #[builder(default)]
-  pub fallback_families: Option<Rc<[String]>>,
+  pub(crate) fallback_families: Option<Rc<[String]>>,
   /// The scale factor for the image renderer.
   #[builder(default = Affine::IDENTITY)]
   pub transform: Affine,
@@ -38,14 +36,14 @@ pub struct RenderContext {
   pub draw_debug_border: bool,
   /// The resources fetched externally.
   #[builder(default)]
-  pub images: Rc<HashMap<Arc<str>, ImageSource>>,
+  pub(crate) images: Rc<HashMap<Arc<str>, ImageSource>>,
   /// The stylesheets to apply before layout/rendering.
   #[builder(default)]
-  pub stylesheet: Rc<StyleSheet>,
+  pub(crate) stylesheet: Rc<StyleSheet>,
 }
 
 impl RenderContext {
-  pub fn from_parent(
+  pub(crate) fn from_parent(
     parent: &Self,
     style: ComputedStyle,
     sizing: SizingContext,

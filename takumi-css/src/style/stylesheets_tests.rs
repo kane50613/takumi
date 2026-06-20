@@ -4,9 +4,9 @@ use cssparser::{Parser, ParserInput};
 use serde_json::{from_value, json};
 use taffy::Size;
 
-use super::stylesheets_vars::resolve_var_references;
 use super::{
   CssWideKeyword, LonghandId, PropertyId, PropertyMask, ShorthandId, StyleDeclarationBlock,
+  stylesheets_vars::resolve_var_references,
 };
 use crate::{
   Viewport,

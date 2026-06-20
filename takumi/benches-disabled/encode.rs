@@ -1,5 +1,4 @@
-use std::borrow::Cow;
-use std::hint::black_box;
+use std::{borrow::Cow, hint::black_box};
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use takumi::{

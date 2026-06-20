@@ -1,16 +1,8 @@
 use std::hint::black_box;
-use takumi::base::{
-  Fonts,
-  layout::{
-    Viewport,
-    node::Node,
-    style::{
-      AlignItems, BorderRadius, Color, ColorInput, Display, FromCss, JustifyContent,
-      Length::Percentage, Overflow, SpacePair, Style, StyleDeclaration,
-    },
-  },
+use takumi::{
+  prelude::{Length::*, *},
+  render,
 };
-use takumi::raster::{RenderOptions, render};
 
 const ITERS: usize = 100;
 

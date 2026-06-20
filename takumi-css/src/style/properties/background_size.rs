@@ -3,8 +3,7 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use std::fmt;
 use taffy::Size;
 
-use super::background_image::parse_comma_list;
-use super::background_size_resolve::*;
+use super::{background_image::parse_comma_list, background_size_resolve::*};
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
   MakeComputed, ParseResult, SizingContext, tw::TailwindPropertyParser,

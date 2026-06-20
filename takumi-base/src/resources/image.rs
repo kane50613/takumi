@@ -3,8 +3,7 @@
 //! This module provides types and utilities for managing image resources,
 //! including loading states, error handling, and image processing operations.
 
-use std::borrow::Cow;
-use std::{str::FromStr, sync::Arc};
+use std::{borrow::Cow, str::FromStr, sync::Arc};
 
 #[cfg(target_arch = "wasm32")]
 use std::{cell::RefCell, collections::HashMap};
@@ -20,8 +19,10 @@ use xxhash_rust::xxh3::xxh3_64;
 
 use crate::{
   layout::style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext},
-  resources::image_buffer::ImageBuffer,
-  resources::image_decoder::{DecodedGif, DecodedImage, decode_image},
+  resources::{
+    image_buffer::ImageBuffer,
+    image_decoder::{DecodedGif, DecodedImage, decode_image},
+  },
 };
 use thiserror::Error;
 
@@ -280,7 +281,7 @@ impl FromStr for SvgSource {
 
 impl ImageSource {
   /// Approximate decoded size in bytes, used for cache budgeting.
-  pub fn estimated_bytes(&self) -> usize {
+  pub(crate) fn estimated_bytes(&self) -> usize {
     match self {
       Self::Bitmap(buffer) => buffer.data().len(),
       Self::Gif(gif) => gif
@@ -299,7 +300,7 @@ impl ImageSource {
   /// rendered at new sizes and isn't counted by
   /// [`estimated_bytes`](Self::estimated_bytes), so caching them across renders
   /// would let memory exceed the configured budget.
-  pub fn is_cacheable(&self) -> bool {
+  pub(crate) fn is_cacheable(&self) -> bool {
     match self {
       Self::Bitmap(_) | Self::Gif(_) => true,
       #[cfg(feature = "svg")]
@@ -424,7 +425,7 @@ impl ImageSource {
 }
 
 /// Check if the string looks like an SVG image.
-pub fn is_svg_like(src: &str) -> bool {
+pub(crate) fn is_svg_like(src: &str) -> bool {
   src.contains("<svg") && src.contains("xmlns")
 }
 

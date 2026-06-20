@@ -53,15 +53,13 @@ fn vp8_chunk_tag(buf: &[u8], payload_start: usize) -> Option<[u8; 4]> {
   buf[tag_start..tag_start + 4].try_into().ok()
 }
 
-pub(crate) fn write_webp(
+pub(crate) fn write_webp_lossless(
   image: Cow<'_, RgbaImage>,
   destination: &mut impl Write,
-  quality: Option<u8>,
 ) -> Result<()> {
-  let quality = quality.unwrap_or(100);
   let mut encoder = WebPEncoder::new(destination);
   let mut params = EncoderParams::default();
-  params.use_predictor_transform = quality >= 75;
+  params.use_predictor_transform = true;
   encoder.set_params(params);
   let width = image.width();
   let height = image.height();
@@ -188,7 +186,7 @@ pub fn encode_animated_webp<W: Write>(
       let mut buf = Vec::new();
       let mut encoder = WebPEncoder::new(&mut buf);
       let mut params = EncoderParams::default();
-      params.use_predictor_transform = options.quality >= 75;
+      params.use_predictor_transform = true;
       encoder.set_params(params);
       encoder
         .encode(

@@ -4,16 +4,13 @@
 //! positioning/color regressions without requiring pixel-exact parity with the
 //! raster backend (a different rasterizer).
 
-use std::fs;
-use std::path::Path;
+use std::{fs, path::Path};
 
-use resvg::tiny_skia::{Pixmap, Transform};
-use resvg::usvg::{Options, Tree};
-use takumi::base::Fonts;
-use takumi::base::layout::Viewport;
-use takumi::base::layout::node::Node;
-use takumi::base::layout::style::{Length::*, *};
-use takumi::base::resources::font::FontResource;
+use resvg::{
+  tiny_skia::{Pixmap, Transform},
+  usvg::{Options, Tree},
+};
+use takumi::prelude::{Length::*, *};
 use takumi_svg::{SvgOptions, render};
 
 const W: u32 = 200;

@@ -4,7 +4,7 @@ pub mod node;
 /// Backend-agnostic border geometry shared across rasterization backends.
 pub mod border;
 pub mod inline;
-pub mod matching;
+pub(crate) mod matching;
 pub mod tree;
 
 /// CSS-like styling system with colors, units, and properties.
@@ -14,4 +14,4 @@ pub mod tree;
 pub mod style {
   pub use takumi_css::style::*;
 }
-pub use takumi_css::{DEFAULT_DEVICE_PIXEL_RATIO, DEFAULT_FONT_SIZE, Viewport, ViewportSize};
+pub use takumi_css::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport};

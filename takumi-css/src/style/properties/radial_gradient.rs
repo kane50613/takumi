@@ -524,11 +524,12 @@ mod tests {
   use tiny_skia::ColorU8;
 
   use super::*;
-  use crate::Viewport;
-  use crate::style::properties::gradient_utils::red_blue_stops;
-  use crate::style::{
-    BackgroundPosition, Color, Length, LengthDefaultsToZero, PositionComponent, PositionKeywordX,
-    PositionKeywordY, SpacePair, StopPosition,
+  use crate::{
+    Viewport,
+    style::{
+      BackgroundPosition, Color, Length, LengthDefaultsToZero, PositionComponent, PositionKeywordX,
+      PositionKeywordY, SpacePair, StopPosition, properties::gradient_utils::red_blue_stops,
+    },
   };
   #[test]
   fn test_parse_radial_gradient_basic() {

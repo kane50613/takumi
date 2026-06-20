@@ -1,9 +1,9 @@
 use cssparser::Parser;
 
 use super::background_image::parse_comma_list;
-use crate::style::tw::TailwindPropertyParser;
 use crate::style::{
-  Animatable, CssToken, FromCss, ListInterpolationStrategy, ParseResult, declare_enum_from_css_impl,
+  Animatable, CssToken, FromCss, ListInterpolationStrategy, ParseResult,
+  declare_enum_from_css_impl, tw::TailwindPropertyParser,
 };
 
 /// A list of blend modes.

@@ -74,7 +74,10 @@ impl LayoutResults {
       .ok_or(TaffyError::InvalidInputNode(node_id))
   }
 
-  pub fn first_baseline_y(&self, node_id: NodeId) -> std::result::Result<Option<f32>, TaffyError> {
+  pub(crate) fn first_baseline_y(
+    &self,
+    node_id: NodeId,
+  ) -> std::result::Result<Option<f32>, TaffyError> {
     let idx: usize = node_id.into();
     self
       .nodes
@@ -105,15 +108,15 @@ pub struct RenderNode {
   pub context: RenderContext,
   pub node: Option<Node>,
   pub children: Option<Box<[RenderNode]>>,
-  pub layout_style_override: Option<Style>,
+  pub(crate) layout_style_override: Option<Style>,
   pub anonymous_text_content: Option<String>,
-  pub force_inline_layout: bool,
+  pub(crate) force_inline_layout: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct AtomicInlineMetrics {
-  pub size: Size<f32>,
-  pub baseline_offset: Option<f32>,
+pub(crate) struct AtomicInlineMetrics {
+  pub(crate) size: Size<f32>,
+  pub(crate) baseline_offset: Option<f32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1035,11 +1038,11 @@ impl RenderNode {
       .is_some_and(|children| children.iter().any(RenderNode::is_anonymous_text_item))
   }
 
-  pub fn is_inline_level(&self) -> bool {
+  pub(crate) fn is_inline_level(&self) -> bool {
     self.context.style.display.is_inline_level()
   }
 
-  pub fn is_inline_atomic_container(&self) -> bool {
+  pub(crate) fn is_inline_atomic_container(&self) -> bool {
     matches!(
       self.context.style.display,
       Display::InlineBlock | Display::InlineFlex | Display::InlineGrid
@@ -1674,7 +1677,10 @@ impl RenderNode {
     }
   }
 
-  pub fn measure_inline_box(&self, available_space: Size<AvailableSpace>) -> AtomicInlineMetrics {
+  pub(crate) fn measure_inline_box(
+    &self,
+    available_space: Size<AvailableSpace>,
+  ) -> AtomicInlineMetrics {
     if self.participates_as_inline_box() {
       return self.measure_atomic_subtree(available_space);
     }
@@ -1700,7 +1706,7 @@ impl RenderNode {
     }
   }
 
-  pub fn measure_atomic_subtree(
+  pub(crate) fn measure_atomic_subtree(
     &self,
     available_space: Size<AvailableSpace>,
   ) -> AtomicInlineMetrics {
@@ -1787,7 +1793,7 @@ impl RenderNode {
     }
   }
 
-  pub fn measure(
+  pub(crate) fn measure(
     &self,
     available_space: Size<AvailableSpace>,
     known_dimensions: Size<Option<f32>>,

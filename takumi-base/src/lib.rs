@@ -17,11 +17,11 @@ pub mod resources;
 
 use std::collections::HashSet;
 
-pub use error::{Error, Result, StyleSheetParseError};
+pub use error::{Error, Result};
 
 use xxhash_rust::xxh3::Xxh3DefaultBuilder;
 
 pub use crate::resources::font::Fonts;
 
 /// Type alias for HashSet using XXH3 hasher
-pub type Xxh3HashSet<T> = HashSet<T, Xxh3DefaultBuilder>;
+pub(crate) type Xxh3HashSet<T> = HashSet<T, Xxh3DefaultBuilder>;

@@ -1,5 +1,7 @@
-use std::collections::HashMap;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::{
+  collections::HashMap,
+  sync::{Arc, OnceLock, RwLock},
+};
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -13,7 +15,7 @@ use takumi_base::{
     image::{ImageCache, ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource},
   },
 };
-use takumi_raster::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat};
+use takumi_raster::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat, Quality};
 
 use crate::{
   De, deserialize_with_tracing, encode_frames_task::EncodeFramesTask, load_font_task::LoadFontTask,
@@ -129,8 +131,12 @@ pub struct RenderOptions<'env> {
   pub height: Option<u32>,
   /// The format of the image.
   pub format: Option<OutputFormat>,
-  /// The quality of JPEG format (0-100).
+  /// The quality of lossy formats (0-100). For JPEG; for WebP it selects lossy
+  /// encoding unless `lossless` is set.
   pub quality: Option<u8>,
+  /// Encode WebP losslessly. Defaults to lossless when neither `quality` nor
+  /// `lossless` is given.
+  pub lossless: Option<bool>,
   /// Whether to draw debug borders.
   pub draw_debug_border: Option<bool>,
   /// Images keyed by `src`, each carrying raw bytes.
@@ -206,8 +212,12 @@ pub struct RenderAnimationOptions<'env> {
   pub height: u32,
   /// The output animation format (WebP, APNG, or GIF).
   pub format: Option<AnimationOutputFormat>,
-  /// The quality of WebP format (0-100). Ignored for APNG and GIF.
+  /// The quality of lossy WebP (0-100). Ignored for APNG and GIF, and when
+  /// `lossless` is set.
   pub quality: Option<u8>,
+  /// Encode WebP losslessly. Defaults to lossless when neither `quality` nor
+  /// `lossless` is given. Ignored for APNG and GIF.
+  pub lossless: Option<bool>,
   /// Frames per second for timeline sampling.
   pub fps: u32,
   /// Images keyed by `src`, each carrying raw bytes.
@@ -233,8 +243,12 @@ pub struct EncodeFramesOptions<'env> {
   pub height: u32,
   /// The output animation format (WebP, APNG, or GIF).
   pub format: Option<AnimationOutputFormat>,
-  /// The quality of WebP format (0-100). Ignored for APNG and GIF.
+  /// The quality of lossy WebP (0-100). Ignored for APNG and GIF, and when
+  /// `lossless` is set.
   pub quality: Option<u8>,
+  /// Encode WebP losslessly. Defaults to lossless when neither `quality` nor
+  /// `lossless` is given. Ignored for APNG and GIF.
+  pub lossless: Option<bool>,
   /// Images keyed by `src`, each carrying raw bytes.
   pub images: Option<Vec<ImageSource<'env>>>,
   /// CSS stylesheets to apply before rendering.
@@ -275,17 +289,33 @@ pub enum OutputFormat {
   Raw,
 }
 
-impl From<OutputFormat> for ImageOutputFormat {
-  fn from(format: OutputFormat) -> Self {
-    match format {
-      OutputFormat::WebP => ImageOutputFormat::WebP,
-      OutputFormat::Jpeg => ImageOutputFormat::Jpeg,
+impl OutputFormat {
+  /// Maps to a raster [`ImageOutputFormat`]. WebP is lossless unless a `quality`
+  /// is supplied with `lossless` unset; JPEG folds `quality` (default 75).
+  pub(crate) fn into_image_output_format(
+    self,
+    quality: Option<u8>,
+    lossless: Option<bool>,
+  ) -> ImageOutputFormat {
+    match self {
+      OutputFormat::WebP if webp_lossless(quality, lossless) => ImageOutputFormat::WebPLossless,
+      OutputFormat::WebP => ImageOutputFormat::WebP {
+        quality: quality.map_or_else(Quality::default, Quality::new),
+      },
+      OutputFormat::Jpeg => ImageOutputFormat::Jpeg {
+        quality: quality.map_or_else(Quality::default, Quality::new),
+      },
       OutputFormat::Png => ImageOutputFormat::Png,
       OutputFormat::Ico => ImageOutputFormat::Ico,
       // SAFETY: It's handled in the render task
       OutputFormat::Raw => unreachable!(),
     }
   }
+}
+
+/// WebP is lossless when explicitly requested or when no `quality` is given.
+pub(crate) fn webp_lossless(quality: Option<u8>, lossless: Option<bool>) -> bool {
+  lossless.unwrap_or(quality.is_none())
 }
 
 /// Cache policy for a decoded image. Defaults to `"auto"`.

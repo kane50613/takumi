@@ -6,8 +6,7 @@
 
 use std::borrow::Cow;
 
-use image::codecs::png::PngEncoder;
-use image::{ExtendedColorType, ImageEncoder, RgbaImage};
+use image::{ExtendedColorType, ImageEncoder, RgbaImage, codecs::png::PngEncoder};
 
 use crate::layout::style::fast_div_255;
 
@@ -21,7 +20,7 @@ pub struct ImageBuffer {
 
 impl ImageBuffer {
   /// Wraps premultiplied RGBA bytes. Returns `None` if `data.len() != width * height * 4`.
-  pub fn from_premultiplied_rgba(data: Vec<u8>, width: u32, height: u32) -> Option<Self> {
+  pub(crate) fn from_premultiplied_rgba(data: Vec<u8>, width: u32, height: u32) -> Option<Self> {
     let expected = (width as usize)
       .checked_mul(height as usize)?
       .checked_mul(4)?;
@@ -33,7 +32,7 @@ impl ImageBuffer {
   }
 
   /// Allocates a transparent (all-zero) buffer of the given size.
-  pub fn new(width: u32, height: u32) -> Option<Self> {
+  pub(crate) fn new(width: u32, height: u32) -> Option<Self> {
     let len = (width as usize)
       .checked_mul(height as usize)?
       .checked_mul(4)?;
@@ -94,7 +93,7 @@ impl ImageBuffer {
   }
 
   /// Consumes the buffer, returning the premultiplied RGBA bytes.
-  pub fn into_data(self) -> Vec<u8> {
+  pub(crate) fn into_data(self) -> Vec<u8> {
     self.data
   }
 

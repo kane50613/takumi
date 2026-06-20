@@ -167,7 +167,7 @@ impl ResolvedOutlineGlyph {
 /// Matches the typical faux-bold expansion used by text rasterizers.
 const SYNTHESIS_EMBOLDEN_FACTOR: f32 = 1.0 / 24.0;
 
-pub fn synthesis_embolden_strength(font_size: f32) -> f32 {
+pub(crate) fn synthesis_embolden_strength(font_size: f32) -> f32 {
   font_size * SYNTHESIS_EMBOLDEN_FACTOR
 }
 
@@ -517,7 +517,7 @@ pub enum FontError {
 /// Supported font formats for loading and processing
 #[derive(Copy, Clone)]
 #[non_exhaustive]
-pub enum FontFormat {
+pub(crate) enum FontFormat {
   #[cfg(feature = "woff")]
   /// Web Open Font Format (WOFF) - compressed web font format
   Woff,
@@ -853,7 +853,7 @@ impl RenderContext {
   }
 
   /// First available font's line spacing for `families`/`attributes`, scaled to `font_size`.
-  pub fn first_font_line_spacing<'a>(
+  pub(crate) fn first_font_line_spacing<'a>(
     &self,
     families: impl IntoIterator<Item = QueryFamily<'a>>,
     attributes: Attributes,
@@ -880,7 +880,7 @@ impl RenderContext {
   }
 
   /// Builds an inline layout with the given root style.
-  pub fn tree_builder(
+  pub(crate) fn tree_builder(
     &self,
     root_style: TextStyle<'_, '_, InlineBrush>,
     func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),

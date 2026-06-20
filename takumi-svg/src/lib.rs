@@ -21,13 +21,12 @@ mod render;
 mod text;
 pub use render::{SvgOptions, render};
 
-use std::borrow::Cow;
-use std::fmt;
-use std::fmt::Write as _;
-use std::io;
+use std::{borrow::Cow, fmt, fmt::Write as _, io};
 
-use quick_xml::Writer;
-use quick_xml::events::{BytesEnd, BytesStart, Event};
+use quick_xml::{
+  Writer,
+  events::{BytesEnd, BytesStart, Event},
+};
 
 /// Straight-alpha RGBA color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,8 +57,10 @@ impl Rgba {
 pub(crate) use takumi_base::layout::style::Affine;
 
 use taffy::Size;
-use takumi_base::layout::style::{Color, Filter, SizingContext};
-use takumi_base::shadow::SizedShadow;
+use takumi_base::{
+  layout::style::{Color, Filter, SizingContext},
+  shadow::SizedShadow,
+};
 
 pub(crate) const IDENTITY: Affine = Affine::IDENTITY;
 

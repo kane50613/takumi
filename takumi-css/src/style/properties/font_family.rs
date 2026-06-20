@@ -1,5 +1,4 @@
-use std::fmt;
-use std::string::ToString;
+use std::{fmt, string::ToString};
 
 use cssparser::{Parser, match_ignore_ascii_case};
 use parley::{

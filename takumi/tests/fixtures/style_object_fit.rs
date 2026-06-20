@@ -1,7 +1,4 @@
-use takumi::base::layout::{
-  node::Node,
-  style::{Display, Length::Percentage, ObjectFit, Style, StyleDeclaration},
-};
+use takumi::prelude::{Length::*, *};
 
 use crate::test_utils::run_fixture_test;
 

@@ -4,33 +4,37 @@ use parley::{FontFeatures, FontVariations, TextStyle};
 use smallvec::SmallVec;
 use taffy::{Size, prelude::FromLength};
 
-use crate::context::RenderContext;
-use crate::layout::inline::InlineBrush;
-use crate::layout::style::{
-  BorderStyle, Color, ComputedStyle, Display, FontSynthesis, Length, SizedTextDecorationThickness,
-  SizingContext, WordBreak,
+use crate::{
+  context::RenderContext,
+  layout::{
+    inline::InlineBrush,
+    style::{
+      BorderStyle, Color, ComputedStyle, Display, FontSynthesis, Length,
+      SizedTextDecorationThickness, SizingContext, WordBreak,
+    },
+  },
+  shadow::SizedShadow,
 };
-use crate::shadow::SizedShadow;
 
 /// Sized font style with computed font size and line height.
 #[derive(Clone)]
 #[non_exhaustive]
 pub struct SizedFontStyle<'s> {
   pub parent: &'s ComputedStyle,
-  pub line_height: parley::LineHeight,
-  pub line_height_scales_with_text_fit: bool,
+  pub(crate) line_height: parley::LineHeight,
+  pub(crate) line_height_scales_with_text_fit: bool,
   pub stroke_width: f32,
   pub outline_width: f32,
   pub outline_offset: f32,
-  pub letter_spacing: f32,
-  pub word_spacing: f32,
+  pub(crate) letter_spacing: f32,
+  pub(crate) word_spacing: f32,
   pub text_shadow: SmallVec<[SizedShadow; 4]>,
-  pub color: Color,
+  pub(crate) color: Color,
   pub outline_color: Color,
   pub outline_style: BorderStyle,
   pub text_stroke_color: Color,
-  pub text_decoration_color: Color,
-  pub text_decoration_thickness: SizedTextDecorationThickness,
+  pub(crate) text_decoration_color: Color,
+  pub(crate) text_decoration_thickness: SizedTextDecorationThickness,
   pub sizing: SizingContext,
 }
 

@@ -8,8 +8,7 @@ mod composite;
 mod mask;
 mod paint_source;
 
-use std::mem::replace;
-use std::sync::Arc;
+use std::{mem::replace, sync::Arc};
 
 use image::{
   ImageError, Rgba, RgbaImage,
@@ -22,16 +21,19 @@ use tiny_skia::{
   PixmapRef, SpreadMode as TinySpreadMode, Transform as TinyTransform,
 };
 
-use self::composite::sampling_footprint;
-use self::paint_source::{MaskCompositeColor, sample_paint_source};
-use crate::blend::*;
-use crate::stacking_context::blend_pixmap_software;
+use self::{
+  composite::sampling_footprint,
+  paint_source::{MaskCompositeColor, sample_paint_source},
+};
 use crate::{
-  BackgroundTile, BorderProperties, ColorTile, Placement, Result, build_path,
+  BackgroundTile, BorderProperties, ColorTile, Placement, Result,
+  blend::*,
+  build_path,
   layout::style::{
     Affine, BlendMode, GradientOverlayTile, ImageScalingAlgorithm, LinearGradientFastPathKind,
     LinearGradientTile, RadialGradientTile, overlay_gradient_tile_fast_normal_unconstrained,
   },
+  stacking_context::blend_pixmap_software,
 };
 
 pub(crate) use buffer_pool::BufferPool;

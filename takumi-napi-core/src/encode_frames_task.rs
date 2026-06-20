@@ -17,6 +17,7 @@ use crate::{
   buffer_from_object, map_error, parse_stylesheet,
   renderer::{
     AnimationOutputFormat, EncodeFramesOptions, ImageCacheMode, ImageSource, RendererState,
+    webp_lossless,
   },
 };
 
@@ -26,6 +27,7 @@ pub struct EncodeFramesTask {
   pub viewport: Viewport,
   pub format: AnimationOutputFormat,
   pub quality: Option<u8>,
+  pub lossless: Option<bool>,
   pub draw_debug_border: bool,
   pub stylesheets: Option<Vec<String>>,
   pub images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
@@ -50,6 +52,7 @@ impl EncodeFramesTask {
       ),
       format: options.format.unwrap_or(AnimationOutputFormat::WebP),
       quality: options.quality,
+      lossless: options.lossless,
       draw_debug_border: options.draw_debug_border.unwrap_or_default(),
       stylesheets: options.stylesheets,
       images: options
@@ -142,6 +145,7 @@ impl Task for EncodeFramesTask {
       match self.format {
         AnimationOutputFormat::WebP => {
           let mut options = AnimatedWebpOptions::default();
+          options.lossless = webp_lossless(self.quality, self.lossless);
           if let Some(quality) = self.quality {
             options.quality = quality;
           }

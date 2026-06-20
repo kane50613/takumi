@@ -3,8 +3,7 @@ use std::rc::Rc;
 use taffy::Size;
 use typed_builder::TypedBuilder;
 
-use crate::Viewport;
-use crate::style::CalcArena;
+use crate::{Viewport, style::CalcArena};
 
 /// The sizing context used for length value resolving.
 #[derive(Clone, TypedBuilder)]
