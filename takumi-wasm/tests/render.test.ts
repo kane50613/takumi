@@ -25,7 +25,7 @@ afterAll(() => {
 });
 
 const localImagePath = join(imagesRoot, "yeecord.png");
-const [manropeFont] = fonts;
+const manropeFont = await readFile(join(fontsRoot, fontFiles[0]));
 
 const localImage = await readFile(localImagePath);
 const dataUri = `data:image/png;base64,${Buffer.from(localImage).toString("base64")}`;
