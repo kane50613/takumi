@@ -192,8 +192,8 @@ pub enum OutputFormat {
 }
 
 impl OutputFormat {
-  /// Maps to a raster [`ImageOutputFormat`], folding `quality` into the lossy
-  /// formats (JPEG defaults to 75, WebP to 100 / lossless).
+  /// Maps to a raster [`ImageOutputFormat`]. JPEG folds `quality` (default 75);
+  /// WebP is lossless-only on wasm, so `quality` is ignored for it.
   pub(crate) fn into_image_output_format(
     self,
     quality: Option<u8>,
@@ -204,9 +204,7 @@ impl OutputFormat {
       OutputFormat::Jpeg => ImageOutputFormat::Jpeg {
         quality: quality.map_or_else(Quality::default, Quality::new),
       },
-      OutputFormat::WebP => ImageOutputFormat::WebP {
-        quality: quality.map_or(Quality::new(100), Quality::new),
-      },
+      OutputFormat::WebP => ImageOutputFormat::WebPLossless,
       OutputFormat::Ico => ImageOutputFormat::Ico,
       OutputFormat::Raw => unreachable!("Raw format should be handled separately"),
     }

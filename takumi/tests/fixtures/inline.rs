@@ -1,7 +1,5 @@
-use takumi::base::layout::{
-  node::Node,
-  style::{Length::*, *},
-};
+use takumi::prelude::Length::*;
+use takumi::prelude::*;
 
 use crate::test_utils::run_fixture_test;
 

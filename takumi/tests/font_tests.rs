@@ -5,10 +5,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use takumi::base::{
-  Fonts,
-  resources::font::{FontError, FontResource},
-};
+use takumi::prelude::*;
 
 fn font_path(path: &str) -> PathBuf {
   Path::new(env!("CARGO_MANIFEST_DIR"))

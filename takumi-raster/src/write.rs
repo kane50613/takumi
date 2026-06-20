@@ -10,7 +10,9 @@ use typed_builder::TypedBuilder;
 
 /// Encode a sequence of RGBA frames into an animated WebP and write to `destination`.
 pub use crate::webp::encode_animated_webp;
-use crate::webp::{has_any_alpha_pixel, strip_alpha_channel, write_webp};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::webp::write_webp_lossy;
+use crate::webp::{has_any_alpha_pixel, strip_alpha_channel, write_webp_lossless};
 
 use crate::{Result, error::Error};
 
@@ -53,12 +55,16 @@ pub enum ImageOutputFormat {
     quality: Quality,
   },
 
-  /// WebP: good compression and supports animation; useful for web content.
-  /// `Quality::new(100)` encodes losslessly on the native backend.
+  /// Lossy WebP (VP8). Native-only — the wasm `image-webp` backend cannot encode
+  /// lossy WebP; use [`WebPLossless`](ImageOutputFormat::WebPLossless) there.
+  #[cfg(not(target_arch = "wasm32"))]
   WebP {
     /// Encoding quality.
     quality: Quality,
   },
+
+  /// Lossless WebP (VP8L). Available on every target.
+  WebPLossless,
 
   /// ICO: favicons and application icons.
   Ico,
@@ -68,7 +74,9 @@ impl ImageOutputFormat {
   /// Returns the MIME type for the image output format.
   pub fn content_type(&self) -> &'static str {
     match self {
+      #[cfg(not(target_arch = "wasm32"))]
       ImageOutputFormat::WebP { .. } => "image/webp",
+      ImageOutputFormat::WebPLossless => "image/webp",
       ImageOutputFormat::Png => "image/png",
       ImageOutputFormat::Jpeg { .. } => "image/jpeg",
       ImageOutputFormat::Ico => "image/x-icon",
@@ -79,7 +87,9 @@ impl ImageOutputFormat {
 impl From<ImageOutputFormat> for ImageFormat {
   fn from(format: ImageOutputFormat) -> Self {
     match format {
+      #[cfg(not(target_arch = "wasm32"))]
       ImageOutputFormat::WebP { .. } => Self::WebP,
+      ImageOutputFormat::WebPLossless => Self::WebP,
       ImageOutputFormat::Png => Self::Png,
       ImageOutputFormat::Jpeg { .. } => Self::Jpeg,
       ImageOutputFormat::Ico => Self::Ico,
@@ -116,7 +126,9 @@ pub struct AnimatedWebpOptions {
   pub dispose: bool,
   /// Number of times to loop; `None` means infinite loop.
   pub loop_count: Option<u16>,
-  /// Quality in range `0..=100`; `100` is treated as lossless by native backend.
+  /// Encode losslessly. When `true`, `quality` is ignored.
+  pub lossless: bool,
+  /// Quality in range `0..=100` for lossy encoding; ignored when `lossless`.
   pub quality: u8,
   /// Encoding speed in range `0..=6`; `0` is fastest (lowest compression), `6` is
   /// slowest (best compression). `None` uses the default speed of `1`.
@@ -131,7 +143,8 @@ impl Default for AnimatedWebpOptions {
       blend: true,
       dispose: false,
       loop_count: None,
-      quality: 100,
+      lossless: true,
+      quality: 75,
       speed: None,
     }
   }
@@ -205,8 +218,12 @@ pub fn write_image<'a, T: Write>(
       writer.write_image_data(&image_data)?;
       writer.finish()?;
     }
+    #[cfg(not(target_arch = "wasm32"))]
     ImageOutputFormat::WebP { quality } => {
-      write_webp(image, destination, quality)?;
+      write_webp_lossy(image, destination, quality)?;
+    }
+    ImageOutputFormat::WebPLossless => {
+      write_webp_lossless(image, destination)?;
     }
     ImageOutputFormat::Ico => {
       let width = image.width();
@@ -586,7 +603,8 @@ mod tests {
         blend: true,
         dispose: true,
         loop_count: Some(7),
-        quality: 100,
+        lossless: true,
+        quality: 75,
         speed: None,
       },
     );
@@ -636,6 +654,7 @@ mod tests {
       Cow::Owned(vec![frame]),
       &mut bytes,
       AnimatedWebpOptions {
+        lossless: false,
         quality: 70,
         ..Default::default()
       },
@@ -676,10 +695,7 @@ mod tests {
     let encode_result = encode_animated_webp(
       Cow::Owned(vec![frame_a, frame_b, frame_c]),
       &mut bytes,
-      AnimatedWebpOptions {
-        quality: 100,
-        ..Default::default()
-      },
+      AnimatedWebpOptions::default(),
     );
     assert!(
       encode_result.is_ok(),
@@ -764,10 +780,7 @@ mod tests {
     let encode_result = encode_animated_webp(
       Cow::Owned(frames),
       &mut bytes,
-      AnimatedWebpOptions {
-        quality: 100,
-        ..Default::default()
-      },
+      AnimatedWebpOptions::default(),
     );
     assert!(
       encode_result.is_ok(),

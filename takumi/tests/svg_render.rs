@@ -9,11 +9,8 @@ use std::path::Path;
 
 use resvg::tiny_skia::{Pixmap, Transform};
 use resvg::usvg::{Options, Tree};
-use takumi::base::Fonts;
-use takumi::base::layout::Viewport;
-use takumi::base::layout::node::Node;
-use takumi::base::layout::style::{Length::*, *};
-use takumi::base::resources::font::FontResource;
+use takumi::prelude::Length::*;
+use takumi::prelude::*;
 use takumi_svg::{SvgOptions, render};
 
 const W: u32 = 200;

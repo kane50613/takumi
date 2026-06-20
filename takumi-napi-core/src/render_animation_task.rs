@@ -16,6 +16,7 @@ use crate::{
   buffer_from_object, deserialize_with_tracing, map_error, parse_stylesheet,
   renderer::{
     AnimationOutputFormat, ImageCacheMode, ImageSource, RenderAnimationOptions, RendererState,
+    webp_lossless,
   },
 };
 
@@ -25,6 +26,7 @@ pub struct RenderAnimationTask {
   pub viewport: Viewport,
   pub format: AnimationOutputFormat,
   pub quality: Option<u8>,
+  pub lossless: Option<bool>,
   pub draw_debug_border: bool,
   pub stylesheets: Option<Vec<String>>,
   pub images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
@@ -45,6 +47,7 @@ impl RenderAnimationTask {
       height,
       format,
       quality,
+      lossless,
       fps,
       images,
       stylesheets,
@@ -80,6 +83,7 @@ impl RenderAnimationTask {
       ),
       format: format.unwrap_or(AnimationOutputFormat::WebP),
       quality,
+      lossless,
       draw_debug_border: draw_debug_border.unwrap_or_default(),
       stylesheets,
       images: images
@@ -150,6 +154,7 @@ impl Task for RenderAnimationTask {
       match self.format {
         AnimationOutputFormat::WebP => {
           let mut options = AnimatedWebpOptions::default();
+          options.lossless = webp_lossless(self.quality, self.lossless);
           if let Some(quality) = self.quality {
             options.quality = quality;
           }

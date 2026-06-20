@@ -163,12 +163,13 @@ impl Renderer {
 
     match format.unwrap_or(AnimationOutputFormat::WebP) {
       AnimationOutputFormat::WebP => {
-        let mut webp_options = AnimatedWebpOptions::default();
-        if let Some(quality) = quality {
-          webp_options.quality = quality;
-        }
-
-        encode_animated_webp(Cow::Owned(frames), &mut buffer, webp_options).map_err(map_error)?;
+        // wasm `image-webp` is lossless-only; `quality` is ignored for WebP.
+        encode_animated_webp(
+          Cow::Owned(frames),
+          &mut buffer,
+          AnimatedWebpOptions::default(),
+        )
+        .map_err(map_error)?;
       }
       AnimationOutputFormat::APng => {
         encode_animated_png(&frames, &mut buffer, AnimatedPngOptions::default())

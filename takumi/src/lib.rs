@@ -4,8 +4,9 @@
 )]
 #![deny(missing_docs)]
 //! Takumi renders UI component trees to images. This crate is the facade users
-//! depend on: it re-exports a *curated, stable* subset of the backend-agnostic
-//! core ([`base`]) and the rendering backends ([`raster`], [`svg`]).
+//! depend on: entry-point **functions** live at the crate root and the *curated,
+//! stable* data structures live in [`prelude`]. Glob the prelude for the types
+//! and call the functions from the crate root.
 //!
 //! The backend crates expose a much larger surface than is meant for general use
 //! — layout-engine glue, paint internals, and other cross-crate plumbing are
@@ -17,15 +18,11 @@
 //! # Example
 //!
 //! ```rust
-//! use takumi::base::{
-//!   Fonts,
-//!   layout::{Viewport, node::Node, style::{Length::Px, Style, StyleDeclaration}},
-//!   resources::font::FontResource,
-//! };
-//! use takumi::raster::{RenderOptions, render};
+//! use takumi::prelude::*;
+//! use takumi::render;
 //!
 //! let node = Node::container([Node::text("Hello, world!").with_style(
-//!   Style::default().with(StyleDeclaration::font_size(Px(32.0).into())),
+//!   Style::default().with(StyleDeclaration::font_size(Length::Px(32.0).into())),
 //! )]);
 //!
 //! // Create a font context. Reuse it across renders to share the decode cache.
@@ -51,12 +48,10 @@
 //!
 //! # Feature Flags
 //!
-//! - `raster` (default): Enable the raster rendering backend, available as
-//!   [`takumi::raster`](raster).
+//! - `raster` (default): Enable the raster rendering backend.
 //! - `svg` (default): Enable SVG image-source support in the core and raster
 //!   backend.
-//! - `svg-backend`: Enable the vector/SVG output backend, available as
-//!   [`takumi::svg`](svg). Opt-in.
+//! - `svg-backend`: Enable the vector/SVG output backend ([`render_svg`]). Opt-in.
 //! - `woff2`: Enable WOFF2 font support.
 //! - `woff`: Enable WOFF font support.
 //! - `rayon`: Enable rayon-based parallelism in the raster backend (implies
@@ -64,70 +59,45 @@
 //! - `unstable`: Re-export the backend crates wholesale under [`unstable`]. No
 //!   semver guarantee. Opt-in.
 
-pub mod base {
-  //! Backend-agnostic core: the node tree, styling, fonts, and viewport.
-  //!
-  //! Curated stable surface of [`takumi_base`]. The full crate (layout-engine
-  //! internals, render context, inline machinery, …) is available under
-  //! [`crate::unstable::base`] with the `unstable` feature.
+/// The curated, stable data structures for building a node tree and configuring a
+/// render.
+///
+/// A glob import (`use takumi::prelude::*;`) brings the types into scope; call the
+/// entry-point functions (e.g. [`render`], [`write_image`]) from the crate root.
+/// The glob pulls in common names like `Error`, `Result`, `Style`, and `Color`;
+/// that breadth is intentional for a prelude.
+pub mod prelude {
+  pub use takumi_base::layout::Viewport;
+  pub use takumi_base::layout::node::{ImageData, ImageSourceInput, Node, NodeKind, TextData};
+  pub use takumi_base::layout::style::*;
+  pub use takumi_base::resources::font::{FontError, FontResource, RegisteredFamily};
+  pub use takumi_base::resources::image::{ImageCacheMode, ImageSource};
   pub use takumi_base::{Error, Fonts, Result};
 
-  /// Styling, geometry, and the node tree.
-  pub mod layout {
-    pub use takumi_base::layout::Viewport;
-
-    /// The renderable node tree.
-    pub mod node {
-      pub use takumi_base::layout::node::{ImageData, ImageSourceInput, Node, NodeKind, TextData};
-    }
-
-    /// CSS-like styling: colors, lengths, and declarations.
-    pub mod style {
-      pub use takumi_base::layout::style::*;
-    }
-  }
-
-  /// Render-time resources: fonts and images.
-  pub mod resources {
-    /// Font registration.
-    pub mod font {
-      pub use takumi_base::resources::font::{FontError, FontResource, RegisteredFamily};
-    }
-
-    /// Pre-loaded image sources.
-    pub mod image {
-      pub use takumi_base::resources::image::{ImageCacheMode, ImageSource};
-    }
-  }
-}
-
-#[cfg(feature = "raster")]
-pub mod raster {
-  //! Raster (bitmap) rendering backend.
-  //!
-  //! Curated stable surface of [`takumi_raster`]. The full crate is available
-  //! under [`crate::unstable::raster`] with the `unstable` feature.
+  #[cfg(feature = "raster")]
   pub use takumi_raster::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame,
     DitheringAlgorithm, ImageOutputFormat, MeasuredNode, MeasuredTextRun, Quality, RenderOptions,
-    SequentialScene, encode_animated_gif, encode_animated_png, encode_animated_webp,
-    measure_layout, render, render_sequence_animation, write_image,
+    SequentialScene,
   };
+
+  #[cfg(feature = "svg-backend")]
+  pub use takumi_svg::SvgOptions;
 }
 
+#[cfg(feature = "raster")]
+pub use takumi_raster::{
+  encode_animated_gif, encode_animated_png, encode_animated_webp, measure_layout, render,
+  render_sequence_animation, write_image,
+};
+
 #[cfg(feature = "svg-backend")]
-pub mod svg {
-  //! Vector (SVG) rendering backend.
-  //!
-  //! Curated stable surface of [`takumi_svg`]. The full crate is available under
-  //! [`crate::unstable::svg`] with the `unstable` feature.
-  pub use takumi_svg::{SvgOptions, render};
-}
+pub use takumi_svg::render as render_svg;
 
 /// Unstable, semver-exempt access to the backend crates in full.
 ///
 /// Everything here is implementation surface that may change or disappear in any
-/// release. Prefer the curated [`base`]/[`raster`]/[`svg`] modules.
+/// release. Prefer the curated [`prelude`] and crate-root functions.
 #[cfg(feature = "unstable")]
 pub mod unstable {
   pub use takumi_base as base;

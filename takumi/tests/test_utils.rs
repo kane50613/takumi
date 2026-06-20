@@ -10,16 +10,8 @@ use std::{
 use image::RgbaImage;
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use takumi::base::{
-  Fonts,
-  layout::{Viewport, node::Node},
-  resources::{font::FontResource, image::ImageSource},
-};
-use takumi::raster::{
-  AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
-  Quality, RenderOptions, encode_animated_gif, encode_animated_png, encode_animated_webp, render,
-  write_image,
-};
+use takumi::prelude::*;
+use takumi::{encode_animated_gif, encode_animated_png, encode_animated_webp, render, write_image};
 use takumi_svg::{SvgOptions, render as svg_render};
 
 fn repo_base_path(path: &str) -> PathBuf {
@@ -190,13 +182,7 @@ pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &
   let image = render(options).unwrap();
   let golden_path = format!("tests/fixtures-generated/{fixture_name}.webp");
 
-  save_image(
-    image,
-    &golden_path,
-    ImageOutputFormat::WebP {
-      quality: Quality::new(100),
-    },
-  );
+  save_image(image, &golden_path, ImageOutputFormat::WebPLossless);
 }
 
 fn save_image<P: AsRef<Path>>(image: RgbaImage, path: P, format: ImageOutputFormat) {

@@ -1,15 +1,8 @@
 use std::{borrow::Cow, fs::File};
 
-use takumi::base::{
-  Fonts,
-  layout::{
-    Viewport,
-    node::Node,
-    style::{Length::Px, Style, StyleDeclaration},
-  },
-  resources::font::FontResource,
-};
-use takumi::raster::{ImageOutputFormat, Quality, RenderOptions, render, write_image};
+use takumi::prelude::Length::Px;
+use takumi::prelude::*;
+use takumi::{render, write_image};
 
 /// Renders a "Hello, {name}!" image and saves it to `output.webp`.
 pub fn say_hello_to(name: &str) {
@@ -40,9 +33,7 @@ pub fn say_hello_to(name: &str) {
   write_image(
     Cow::Owned(image),
     &mut file,
-    ImageOutputFormat::WebP {
-      quality: Quality::new(100),
-    },
+    ImageOutputFormat::WebPLossless,
   )
   .unwrap();
 }

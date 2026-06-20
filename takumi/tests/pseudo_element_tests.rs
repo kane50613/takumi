@@ -2,12 +2,9 @@ mod test_utils;
 
 use std::collections::BTreeMap;
 
-use takumi::base::layout::{
-  Viewport,
-  node::Node,
-  style::{Display, Length::*, Style, StyleDeclaration, StyleSheet},
-};
-use takumi::raster::{MeasuredNode, RenderOptions, measure_layout};
+use takumi::measure_layout;
+use takumi::prelude::Length::*;
+use takumi::prelude::*;
 use test_utils::CONTEXT;
 
 fn viewport() -> Viewport {

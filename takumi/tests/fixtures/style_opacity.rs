@@ -1,9 +1,5 @@
-use takumi::base::layout::{
-  Viewport,
-  node::Node,
-  style::{PercentageNumber, *},
-};
-use takumi::raster::{RenderOptions, render};
+use takumi::prelude::*;
+use takumi::render;
 
 use crate::test_utils::{CONTEXT, run_fixture_test};
 

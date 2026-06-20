@@ -1,11 +1,5 @@
-use takumi::base::layout::{
-  node::Node,
-  style::{
-    AlignItems, Color, ColorInput, Display, JustifyContent,
-    Length::{Percentage, Px},
-    Position, Sides, Style, StyleDeclaration, ZIndex,
-  },
-};
+use takumi::prelude::Length::*;
+use takumi::prelude::*;
 
 use crate::test_utils::run_fixture_test;
 
