@@ -18,7 +18,7 @@ use takumi_base::{
   },
   resources::{
     font::{FontResource, RegisteredFamily},
-    image::{ImageCache, ImageSource as LoadedImageSource, PinStore},
+    image::{ImageCache, ImageSource as LoadedImageSource},
   },
 };
 use takumi_raster::{
@@ -43,7 +43,6 @@ const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[(
 pub struct Renderer {
   state: RwLock<Fonts>,
   image_cache: ImageCache,
-  pin_store: PinStore,
 }
 
 static DEFAULT_FONTS: OnceLock<Fonts> = OnceLock::new();
@@ -132,7 +131,6 @@ impl Renderer {
     resources: Option<&[ImageSource]>,
   ) -> Result<HashMap<Arc<str>, LoadedImageSource>, js_sys::Error> {
     let mut map = HashMap::new();
-    self.pin_store.snapshot_into(&mut map);
 
     for source in resources.unwrap_or_default() {
       let mode = source.cache.unwrap_or_default();
@@ -140,10 +138,6 @@ impl Renderer {
         .image_cache
         .get_or_decode(&source.data, mode.stores())
         .map_err(map_error)?;
-
-      if matches!(mode, ImageCacheMode::Immutable) {
-        self.pin_store.insert(source.src.clone(), image.clone());
-      }
 
       map.insert(source.src.clone(), image);
     }
@@ -199,7 +193,6 @@ impl Renderer {
     Ok(Renderer {
       state: RwLock::new(default_fonts()?),
       image_cache: ImageCache::default(),
-      pin_store: PinStore::default(),
     })
   }
 

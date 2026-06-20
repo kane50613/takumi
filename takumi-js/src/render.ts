@@ -25,7 +25,7 @@ export type ImageLoader = {
 };
 
 /** Cache policy for a decoded image. */
-export type ImageCacheMode = "auto" | "none" | "immutable";
+export type ImageCacheMode = "auto" | "none";
 
 type RenderOptionsWithRenderer = Omit<InnerRenderOptions, "images" | "fonts"> & {
   renderer: napi.Renderer | wasm.Renderer;

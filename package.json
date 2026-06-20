@@ -19,7 +19,6 @@
   "scripts": {
     "lint": "oxlint --format=github && oxfmt --check",
     "lint:fix": "oxlint --fix && oxfmt --write",
-    "typecheck": "tsc -p takumi-helpers/tsconfig.json --noEmit && tsc -p takumi-napi-core/tsconfig.json --noEmit && tsc -p takumi-wasm/tsconfig.json --noEmit && tsc -p takumi-js/tsconfig.json --noEmit && tsc -p takumi-image-response/tsconfig.json --noEmit && tsc -p takumi-template/tsconfig.json --noEmit && tsc -p example/twitter-images/tsconfig.json --noEmit",
     "version": "changeset version && bun --filter '*' version",
     "release": "changeset publish && bun --filter '*' release",
     "postinstall": "lefthook install"

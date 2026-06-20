@@ -171,8 +171,6 @@ pub enum ImageCacheMode {
   Auto,
   /// Skip the decoded-image cache.
   None,
-  /// Treat the source as immutable and keep it cached.
-  Immutable,
 }
 
 impl ImageCacheMode {

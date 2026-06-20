@@ -4,7 +4,6 @@ import type {
   EncodeFramesOptions as EncodeFramesOptionsInternal,
   Font,
   FontDetails,
-  ImageSource,
   Node,
   RegisteredFamily,
   RenderAnimationOptions as RenderAnimationOptionsInternal,
@@ -35,47 +34,7 @@ export type EncodeFramesOptions = EncodeFramesOptionsInternal & {
 
 export class Renderer {
   private fontMapping = new Map<string | ByteBuf, Promise<RegisteredFamily[]>>();
-  private sentImmutableSrcs = new Set<string>();
   private inner = new RendererInternal();
-
-  private filterImages(images: ImageSource[] | undefined): {
-    images: ImageSource[] | undefined;
-    commit: () => void;
-  } {
-    if (!images) {
-      return { images, commit: () => {} };
-    }
-
-    const bySrc = new Map<string, ImageSource>();
-
-    for (const image of images) {
-      bySrc.set(image.src, image);
-    }
-
-    const filtered: ImageSource[] = [];
-    const newlySent: string[] = [];
-
-    for (const image of bySrc.values()) {
-      if (image.cache === "immutable") {
-        if (this.sentImmutableSrcs.has(image.src)) {
-          continue;
-        }
-
-        newlySent.push(image.src);
-      }
-
-      filtered.push(image);
-    }
-
-    return {
-      images: filtered,
-      commit: () => {
-        for (const src of newlySent) {
-          this.sentImmutableSrcs.add(src);
-        }
-      },
-    };
-  }
 
   private async prepareFonts(fonts: FontLoader[] | undefined) {
     if (!fonts) {
@@ -90,65 +49,41 @@ export class Renderer {
   async render(node: Node, options?: RenderOptions) {
     const { fonts, fontFamilies, ...rest } = options ?? {};
     const registeredFamilies = await this.prepareFonts(fonts);
-    const { images, commit } = this.filterImages(rest.images);
 
-    const result = await this.inner.render(node, {
+    return this.inner.render(node, {
       ...rest,
-      images,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
-
-    commit();
-
-    return result;
   }
 
   async measure(node: Node, options?: RenderOptions) {
     const { fonts, fontFamilies, ...rest } = options ?? {};
     const registeredFamilies = await this.prepareFonts(fonts);
-    const { images, commit } = this.filterImages(rest.images);
 
-    const result = await this.inner.measure(node, {
+    return this.inner.measure(node, {
       ...rest,
-      images,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
-
-    commit();
-
-    return result;
   }
 
   async renderAnimation(options: RenderAnimationOptions) {
     const { fonts, fontFamilies, ...rest } = options;
     const registeredFamilies = await this.prepareFonts(fonts);
-    const { images, commit } = this.filterImages(rest.images);
 
-    const result = await this.inner.renderAnimation({
+    return this.inner.renderAnimation({
       ...rest,
-      images,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
-
-    commit();
-
-    return result;
   }
 
   async encodeFrames(frames: AnimationFrameSource[], options: EncodeFramesOptions) {
     const { fonts, fontFamilies, ...rest } = options;
     const registeredFamilies = await this.prepareFonts(fonts);
-    const { images, commit } = this.filterImages(rest.images);
 
-    const result = await this.inner.encodeFrames(frames, {
+    return this.inner.encodeFrames(frames, {
       ...rest,
-      images,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
-
-    commit();
-
-    return result;
   }
 
   async registerFont(font: FontLoader) {

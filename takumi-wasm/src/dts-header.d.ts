@@ -147,7 +147,7 @@ export type ImageSource = {
   src: string;
   data: ByteBuf;
   /** Cache policy for the decoded image. Defaults to `"auto"`. */
-  cache?: "auto" | "none" | "immutable";
+  cache?: "auto" | "none";
 };
 
 export type KeyframeRule = {

@@ -5,4 +5,4 @@
 "takumi": minor
 ---
 
-Add a per-image `cache` mode (`auto` | `none` | `immutable`) to control decode caching, pinning immutable images so their bytes transfer across the boundary only once.
+Add a per-image `cache` mode (`auto` | `none`) to control decode caching.

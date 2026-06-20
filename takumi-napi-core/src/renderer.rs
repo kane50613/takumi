@@ -10,7 +10,7 @@ use takumi_base::{
   layout::{node::Node, style::KeyframesRule as CoreKeyframesRule},
   resources::{
     font::FontResource,
-    image::{ImageCache, ImageSource as LoadedImageSource, PinStore},
+    image::{ImageCache, ImageSource as LoadedImageSource},
   },
 };
 use takumi_raster::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat};
@@ -85,28 +85,21 @@ pub struct Renderer {
 pub(crate) struct RendererState {
   pub(crate) fonts: Fonts,
   pub(crate) image_cache: ImageCache,
-  pub(crate) pin_store: PinStore,
 }
 
 impl RendererState {
-  /// Decodes the per-call image buffers into a `src`-keyed map, layering them over a
-  /// snapshot of this renderer's pinned images and re-pinning any `immutable` entries.
+  /// Decodes the per-call image buffers into a `src`-keyed map.
   pub(crate) fn decode_images(
     &self,
     images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
   ) -> Result<HashMap<Arc<str>, LoadedImageSource>> {
     let mut map = HashMap::new();
-    self.pin_store.snapshot_into(&mut map);
 
     for (src, (buffer, mode)) in images {
       let decoded = self
         .image_cache
         .get_or_decode(&buffer, mode.stores())
         .map_err(map_error)?;
-
-      if matches!(mode, ImageCacheMode::Immutable) {
-        self.pin_store.insert(src.clone(), decoded.clone());
-      }
 
       map.insert(src, decoded);
     }
@@ -304,8 +297,6 @@ pub enum ImageCacheMode {
   Auto,
   /// Skip the decoded-image cache.
   None,
-  /// Treat the source as immutable and keep it cached.
-  Immutable,
 }
 
 impl ImageCacheMode {
@@ -389,7 +380,6 @@ impl Renderer {
       state: Arc::new(RwLock::new(RendererState {
         fonts: default_fonts()?,
         image_cache: ImageCache::default(),
-        pin_store: PinStore::default(),
       })),
     })
   }

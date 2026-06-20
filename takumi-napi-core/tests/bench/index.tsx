@@ -1,10 +1,9 @@
 import { writeFile } from "node:fs/promises";
-import { container, image } from "@takumi-rs/helpers";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import { Globe2 } from "lucide-react";
 import { bench, run, summary } from "mitata";
 import DocsTemplate from "../../../takumi-template/src/templates/docs-template";
-import { Renderer, type RenderOptions } from "../../src/export";
+import { Renderer } from "../../src/export";
 
 function createNode(progress = 0) {
   const orbitOffsetX = Math.sin(progress * Math.PI * 2) * 18;
@@ -222,60 +221,6 @@ summary(() => {
       quality: 75,
     });
   });
-});
-
-const imageAssets = [
-  { src: "asset://fuma.jpg", path: "../assets/images/fuma.jpg" },
-  { src: "asset://martin.jpg", path: "../assets/images/martin-martz-W0NRebXbsjM-unsplash.jpg" },
-  {
-    src: "asset://luma.jpg",
-    path: "../assets/images/luma-cover-0dfbf65d-0f58-4941-947c-d84a5b131dc0.jpeg",
-  },
-];
-
-const imageData = await Promise.all(
-  imageAssets.map(async ({ src, path }) => ({
-    src,
-    data: new Uint8Array(await Bun.file(path).arrayBuffer()),
-  })),
-);
-
-const imageNode = container({
-  children: imageData.map(({ src }) => image({ src, width: 320, height: 320 })),
-  style: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "white",
-    gap: "1rem",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-});
-
-const imageBenchOptions: RenderOptions = { width: 1200, height: 630 };
-
-function imagesWith(cache: "auto" | "immutable") {
-  return imageData.map(({ src, data }) => ({ src, data, cache }));
-}
-
-// `measure` isolates the per-call image plumbing from rasterization, so the FFI
-// byte transfer dominates: the immutable group sends each image's bytes across
-// the boundary only on the first iteration, the auto group re-sends every time.
-summary(() => {
-  const immutableRenderer = new Renderer();
-  const autoRenderer = new Renderer();
-
-  bench("measure with 3 images (cache: immutable)", () =>
-    immutableRenderer.measure(imageNode, {
-      ...imageBenchOptions,
-      images: imagesWith("immutable"),
-    }));
-
-  bench("measure with 3 images (cache: auto)", () =>
-    autoRenderer.measure(imageNode, {
-      ...imageBenchOptions,
-      images: imagesWith("auto"),
-    }));
 });
 
 const { node, stylesheets } = await createNode();
