@@ -1,11 +1,11 @@
 pre-commit:
-  parallel: true
+  piped: true
   jobs:
-    - run: bun run lint:fix
-      stage_fixed: true
-
     - run: cargo fmt --all
       stage_fixed: true
 
     - root: takumi/
       run: cargo rdme --force && git add README.md
+
+    - run: bun run lint:fix
+      stage_fixed: true
