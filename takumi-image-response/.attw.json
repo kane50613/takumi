@@ -1,3 +1,4 @@
 {
-  "ignoreRules": ["no-resolution", "false-export-default"]
+  "profile": "node16",
+  "ignoreRules": ["false-export-default"]
 }
