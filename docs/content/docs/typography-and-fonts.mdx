@@ -12,11 +12,12 @@ For `@takumi-rs/wasm`, a single variable Latin font, Manrope, is embedded by def
 
 If you need a monospace family in WASM, provide your own font.
 
-## Font
+## Adding fonts
+
+Pass the fonts a render needs through the `fonts` option. Each entry is raw bytes or a `{ name, data, weight, style }` descriptor, and `data` may be a loader that returns the bytes. The renderer registers and deduplicates them, so a reused renderer pays the decode cost once.
 
 ```tsx twoslash
 import { ImageResponse } from "takumi-js/response";
-import type { Font } from "takumi-js";
 
 export function GET() {
   return new ImageResponse(<div />, {
@@ -28,6 +29,29 @@ export function GET() {
     ],
   });
 }
+```
+
+The same `fonts` option works on `render`, `renderAnimation`, and `encodeFrames`.
+
+### Preloading with `registerFont`
+
+`registerFont` is the escape hatch for preloading: register a font on a renderer up front, outside the request path, then reuse that renderer. It accepts the same entry shape as `fonts` and resolves to the families it produced.
+
+```tsx
+const renderer = new Renderer();
+await renderer.registerFont({ name: "Inter", data: inter });
+
+return new ImageResponse(<OgImage />, { renderer });
+```
+
+### Font fallback chain
+
+`fontFamilies` is the ordered list of families tried in turn when a glyph is missing. It defaults to the families you passed, in order, so the chain follows the order you listed your fonts. Set it to pin which family wins and what backs it up.
+
+```tsx
+const image = await renderer.render(node, {
+  fontFamilies: ["Inter", "Noto Sans JP"],
+});
 ```
 
 ### Variations & Features
