@@ -66,7 +66,8 @@
     "build:js": "tsdown && bun scripts/patch-dist-loader.ts",
     "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json && bun artifacts && napi prepublish -t npm --no-gh-release",
     "artifacts": "napi create-npm-dirs && napi artifacts && napi version",
-    "bench": "bun tests/bench/index.tsx"
+    "bench": "bun tests/bench/index.tsx",
+    "publish-lint": "attw --pack . && publint --strict ."
   },
   "dependencies": {
     "@takumi-rs/helpers": "workspace:*"

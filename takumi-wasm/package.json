@@ -86,7 +86,8 @@
     "build": "wasm-pack build --no-pack --release --out-dir pkg --target web && bun build:js && bun scripts/patch-generated-loader.ts",
     "build:js": "tsdown",
     "build:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target web && bun build:js && bun scripts/patch-generated-loader.ts",
-    "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json"
+    "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json",
+    "publish-lint": "attw --pack . && publint --strict ."
   },
   "dependencies": {
     "@takumi-rs/helpers": "workspace:*"

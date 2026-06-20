@@ -81,7 +81,8 @@
     "provenance": true
   },
   "scripts": {
-    "build": "tsdown"
+    "build": "tsdown",
+    "publish-lint": "attw --pack . && publint --strict ."
   },
   "devDependencies": {
     "@types/bun": "catalog:",

@@ -425,12 +425,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Check exports with attw and publint
-        run: |
-          for pkg in takumi-helpers takumi-napi-core takumi-wasm takumi-js takumi-image-response; do
-            echo "::group::$pkg"
-            (cd "$pkg" && bun attw --pack . && bun publint --strict .)
-            echo "::endgroup::"
-          done
+        run: bun publish-lint
 
   test-template:
     name: Test Templates

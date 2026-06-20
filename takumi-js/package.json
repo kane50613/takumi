@@ -125,7 +125,8 @@
     "prepublishOnly": "jq '.dependencies[\"@takumi-rs/core\"] = .version | .dependencies[\"@takumi-rs/helpers\"] = .version | .dependencies[\"@takumi-rs/wasm\"] = .version' package.json > tmp.json && mv tmp.json package.json",
     "build": "tsdown",
     "test": "bun test",
-    "test:bundlers": "bun test tests/bundlers.test.ts"
+    "test:bundlers": "bun test tests/bundlers.test.ts",
+    "publish-lint": "attw --pack . && publint --strict ."
   },
   "dependencies": {
     "@takumi-rs/core": "workspace:*",
