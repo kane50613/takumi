@@ -46,12 +46,18 @@ export class Renderer {
       return { images, commit: () => {} };
     }
 
+    const bySrc = new Map<string, ImageSource>();
+
+    for (const image of images) {
+      bySrc.set(image.src, image);
+    }
+
     const filtered: ImageSource[] = [];
     const newlySent: string[] = [];
 
-    for (const image of images) {
+    for (const image of bySrc.values()) {
       if (image.cache === "immutable") {
-        if (this.sentImmutableSrcs.has(image.src) || newlySent.includes(image.src)) {
+        if (this.sentImmutableSrcs.has(image.src)) {
           continue;
         }
 

@@ -80,7 +80,7 @@ async function resolveImageLoaders(
   const bySrc = new Map<string, ImageLoader>();
 
   for (const image of images) {
-    if (!bySrc.has(image.src)) bySrc.set(image.src, image);
+    bySrc.set(image.src, image);
   }
 
   return Promise.all(
