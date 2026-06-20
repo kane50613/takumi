@@ -1047,7 +1047,7 @@ fn push_spans_into_builder(
   }
 }
 
-fn build_inline_layout_tree<'c: 'c>(
+fn build_inline_layout_tree<'c>(
   items: &[InlineItem<'c>],
   available_space: Size<AvailableSpace>,
   style: &'c SizedFontStyle,
@@ -1358,7 +1358,7 @@ pub fn text_fit_line_alignment_correction(
   (line_start, aligned_line_start - line_start)
 }
 
-pub fn create_inline_layout<'c: 'c>(request: InlineLayoutRequest<'c>) -> BuiltInlineLayout<'c> {
+pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInlineLayout<'c> {
   let InlineLayoutRequest {
     items,
     available_space,
@@ -2192,7 +2192,7 @@ fn can_commit_line_candidate(
 }
 
 /// Truncates text in the layout to fit within `max_width` and appends an ellipsis.
-fn make_ellipsis_layout<'c: 'c>(
+fn make_ellipsis_layout<'c>(
   layout: &mut InlineLayout,
   spans: &mut Vec<ProcessedInlineSpan<'c>>,
   max_width: f32,
