@@ -10,22 +10,7 @@ import { fromHtml } from "@takumi-rs/helpers/html";
 
 type InnerRenderOptions = napi.RenderOptions | wasm.RenderOptions;
 
-type ImageLoaderData = Uint8Array | ArrayBuffer;
-
-/**
- * A per-render image, provided by `src` key (usable in any `src` field or in the
- * `background-image` / `mask-image` CSS properties). `data` may be the bytes, or a
- * sync/async loader function that is only invoked when the image is resolved.
- */
-export type ImageLoader = {
-  src: string;
-  data: ImageLoaderData | (() => ImageLoaderData | Promise<ImageLoaderData>);
-  /** Cache policy for the decoded image. Defaults to `"auto"`. */
-  cache?: ImageCacheMode;
-};
-
-/** Cache policy for a decoded image. */
-export type ImageCacheMode = "auto" | "none";
+export type { ImageCacheMode, ImageLoader } from "@takumi-rs/core";
 
 type RenderOptionsWithRenderer = Omit<InnerRenderOptions, "images" | "fonts"> & {
   renderer: napi.Renderer | wasm.Renderer;
@@ -36,7 +21,7 @@ type RenderOptionsWithRenderer = Omit<InnerRenderOptions, "images" | "fonts"> & 
    * Images provided up front by `src` key, each carrying bytes or a sync/async
    * loader. Takes precedence over automatically fetching external `src` URLs.
    */
-  images?: ImageLoader[];
+  images?: napi.ImageLoader[];
   /**
    * @description The emoji provider to use when rendering emojis. If set to `"from-font"`, the renderer will attempt to source emoji glyphs from the loaded fonts.
    * @default "twemoji"
