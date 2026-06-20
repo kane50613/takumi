@@ -22,14 +22,17 @@ export type FontLoader =
 
 export type RenderOptions = RenderOptionsInternal & {
   fonts?: FontLoader[];
+  signal?: AbortSignal;
 };
 
 export type RenderAnimationOptions = RenderAnimationOptionsInternal & {
   fonts?: FontLoader[];
+  signal?: AbortSignal;
 };
 
 export type EncodeFramesOptions = EncodeFramesOptionsInternal & {
   fonts?: FontLoader[];
+  signal?: AbortSignal;
 };
 
 export class Renderer {
@@ -47,43 +50,58 @@ export class Renderer {
   }
 
   async render(node: Node, options?: RenderOptions) {
-    const { fonts, fontFamilies, ...rest } = options ?? {};
+    const { fonts, fontFamilies, signal, ...rest } = options ?? {};
     const registeredFamilies = await this.prepareFonts(fonts);
 
-    return this.inner.render(node, {
-      ...rest,
-      fontFamilies: fontFamilies ?? registeredFamilies,
-    });
+    return this.inner.render(
+      node,
+      {
+        ...rest,
+        fontFamilies: fontFamilies ?? registeredFamilies,
+      },
+      signal,
+    );
   }
 
   async measure(node: Node, options?: RenderOptions) {
-    const { fonts, fontFamilies, ...rest } = options ?? {};
+    const { fonts, fontFamilies, signal, ...rest } = options ?? {};
     const registeredFamilies = await this.prepareFonts(fonts);
 
-    return this.inner.measure(node, {
-      ...rest,
-      fontFamilies: fontFamilies ?? registeredFamilies,
-    });
+    return this.inner.measure(
+      node,
+      {
+        ...rest,
+        fontFamilies: fontFamilies ?? registeredFamilies,
+      },
+      signal,
+    );
   }
 
   async renderAnimation(options: RenderAnimationOptions) {
-    const { fonts, fontFamilies, ...rest } = options;
+    const { fonts, fontFamilies, signal, ...rest } = options;
     const registeredFamilies = await this.prepareFonts(fonts);
 
-    return this.inner.renderAnimation({
-      ...rest,
-      fontFamilies: fontFamilies ?? registeredFamilies,
-    });
+    return this.inner.renderAnimation(
+      {
+        ...rest,
+        fontFamilies: fontFamilies ?? registeredFamilies,
+      },
+      signal,
+    );
   }
 
   async encodeFrames(frames: AnimationFrameSource[], options: EncodeFramesOptions) {
-    const { fonts, fontFamilies, ...rest } = options;
+    const { fonts, fontFamilies, signal, ...rest } = options;
     const registeredFamilies = await this.prepareFonts(fonts);
 
-    return this.inner.encodeFrames(frames, {
-      ...rest,
-      fontFamilies: fontFamilies ?? registeredFamilies,
-    });
+    return this.inner.encodeFrames(
+      frames,
+      {
+        ...rest,
+        fontFamilies: fontFamilies ?? registeredFamilies,
+      },
+      signal,
+    );
   }
 
   async registerFont(font: FontLoader) {
