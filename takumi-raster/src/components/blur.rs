@@ -7,7 +7,7 @@ const BLUR_DOWNSAMPLE_MAX_SCALE: u32 = 8;
 
 /// Specifies the type of blur operation, which affects how the CSS radius is interpreted.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum BlurType {
+pub(crate) enum BlurType {
   /// CSS `filter: blur()` - radius equals σ (standard deviation).
   Filter,
   /// CSS `box-shadow` / `text-shadow` blur - radius equals 2σ.
@@ -16,7 +16,7 @@ pub enum BlurType {
 
 impl BlurType {
   #[inline]
-  pub fn to_sigma(self, css_radius: f32) -> f32 {
+  pub(crate) fn to_sigma(self, css_radius: f32) -> f32 {
     match self {
       BlurType::Filter => css_radius,
       BlurType::Shadow => css_radius * 0.5,
@@ -24,7 +24,7 @@ impl BlurType {
   }
 
   #[inline]
-  pub fn extent_multiplier(self) -> f32 {
+  pub(crate) fn extent_multiplier(self) -> f32 {
     match self {
       BlurType::Filter => 3.0,
       BlurType::Shadow => 1.5,
@@ -51,13 +51,13 @@ pub(crate) enum BlurFormat<'a> {
 }
 
 impl<'a> BlurFormat<'a> {
-  pub fn width(&self) -> u32 {
+  pub(crate) fn width(&self) -> u32 {
     match self {
       Self::Alpha { width, .. } => *width,
     }
   }
 
-  pub fn height(&self) -> u32 {
+  pub(crate) fn height(&self) -> u32 {
     match self {
       Self::Alpha { height, .. } => *height,
     }

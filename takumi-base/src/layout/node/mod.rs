@@ -35,7 +35,7 @@ pub use self::image::resolve_image;
 /// Shared metadata stored by every renderable node.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct NodeMetadata {
+pub(crate) struct NodeMetadata {
   /// The element's tag name.
   pub tag_name: Option<Box<str>>,
   /// The element's class name.
@@ -258,7 +258,7 @@ impl From<(Arc<str>, Option<f32>, Option<f32>)> for ImageData {
 /// A renderable node with shared metadata and variant-specific content.
 pub struct Node {
   #[serde(flatten)]
-  pub metadata: NodeMetadata,
+  pub(crate) metadata: NodeMetadata,
   #[serde(flatten)]
   pub kind: NodeKind,
 }
@@ -318,15 +318,15 @@ impl Node {
     }
   }
 
-  pub fn children_ref(&self) -> Option<&[Node]> {
+  pub(crate) fn children_ref(&self) -> Option<&[Node]> {
     container_children_ref(&self.kind)
   }
 
-  pub fn take_children(&mut self) -> Option<Box<[Node]>> {
+  pub(crate) fn take_children(&mut self) -> Option<Box<[Node]>> {
     take_container_children(&mut self.kind)
   }
 
-  pub fn is_whitespace_only_text(&self) -> bool {
+  pub(crate) fn is_whitespace_only_text(&self) -> bool {
     let NodeKind::Text(data) = &self.kind else {
       return false;
     };
@@ -498,7 +498,7 @@ impl Node {
     }
   }
 
-  pub fn take_style_layers(&mut self) -> NodeStyleLayers {
+  pub(crate) fn take_style_layers(&mut self) -> NodeStyleLayers {
     if let NodeKind::Image(image) = &self.kind {
       return take_image_style_layers(self, image.width, image.height);
     }
@@ -519,7 +519,7 @@ impl Node {
     }
   }
 
-  pub fn measure(
+  pub(crate) fn measure(
     &self,
     context: &RenderContext,
     available_space: Size<AvailableSpace>,
@@ -536,7 +536,7 @@ impl Node {
   }
 
   /// Collects resource URLs referenced by this node tree.
-  pub fn metadata_resource_urls<'a>(&'a self, urls: &mut Xxh3HashSet<&'a str>) {
+  pub(crate) fn metadata_resource_urls<'a>(&'a self, urls: &mut Xxh3HashSet<&'a str>) {
     match &self.kind {
       NodeKind::Container { .. } => {
         let Some(children) = self.children_ref() else {
@@ -557,7 +557,7 @@ impl Node {
   }
 
   /// Collects resource URLs referenced by this node tree's styles.
-  pub fn style_resource_urls<'a>(&'a self, urls: &mut Xxh3HashSet<&'a str>) {
+  pub(crate) fn style_resource_urls<'a>(&'a self, urls: &mut Xxh3HashSet<&'a str>) {
     if let Some(preset) = self.metadata.preset.as_ref() {
       urls.extend(preset.resource_urls());
     }
@@ -588,13 +588,13 @@ impl Node {
     urls.into_iter()
   }
 
-  pub fn is_replaced_element(&self) -> bool {
+  pub(crate) fn is_replaced_element(&self) -> bool {
     matches!(self.kind, NodeKind::Image(_))
   }
 
   /// `id` and `class` resolve to the structured metadata fields rather than
   /// the `attributes` map.
-  pub fn attribute(&self, name: &str) -> Option<&str> {
+  pub(crate) fn attribute(&self, name: &str) -> Option<&str> {
     if name.eq_ignore_ascii_case("id") {
       return self.metadata.id.as_deref();
     }
@@ -613,14 +613,14 @@ impl Node {
 
 /// Style layers contributed by a node before cascade/inheritance assembly.
 #[derive(Debug, Default, Clone)]
-pub struct NodeStyleLayers {
+pub(crate) struct NodeStyleLayers {
   /// UA/default style preset for the element.
-  pub preset: Option<Style>,
+  pub(crate) preset: Option<Style>,
   /// Tailwind-derived author style for the element.
-  pub author_tw: Option<TailwindValues>,
+  pub(crate) author_tw: Option<TailwindValues>,
   /// Inline style attached directly to the element.
-  pub inline: Option<Style>,
-  pub dir: Option<Direction>,
+  pub(crate) inline: Option<Style>,
+  pub(crate) dir: Option<Direction>,
 }
 
 #[cfg(test)]

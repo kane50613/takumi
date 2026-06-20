@@ -39,7 +39,7 @@ fn resolve_object_position_axis(
 ///
 /// This function handles resizing, cropping, and positioning of images
 /// based on the ObjectFit property, returning the processed image and offset.
-pub fn process_image_for_object_fit<'i>(
+pub(crate) fn process_image_for_object_fit<'i>(
   image: &'i ImageSource,
   context: &RenderContext,
   content_box: Size<f32>,
@@ -268,7 +268,7 @@ pub fn process_image_for_object_fit<'i>(
 ///
 /// The image will be resized and positioned according to the object_fit style property.
 /// Border radius will be applied if specified in the style.
-pub fn draw_image(
+pub(crate) fn draw_image(
   image: &ImageSource,
   context: &RenderContext,
   canvas: &mut Canvas,

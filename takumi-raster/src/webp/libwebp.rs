@@ -9,7 +9,7 @@ use crate::{
   Result,
   error::{Error, WebPError},
   webp::U24_MAX,
-  write::{AnimatedWebpOptions, AnimationFrame},
+  write::{AnimatedWebpOptions, AnimationFrame, Quality},
 };
 
 fn webp_config(quality: u8, speed: u8) -> Result<WebPConfig> {
@@ -270,9 +270,9 @@ fn write_riff_container<W: Write>(
 pub(crate) fn write_webp(
   image: Cow<'_, RgbaImage>,
   destination: &mut impl Write,
-  quality: Option<u8>,
+  quality: Quality,
 ) -> Result<()> {
-  let config = webp_config(quality.unwrap_or(100), 1)?;
+  let config = webp_config(quality.get(), 1)?;
 
   let mut picture = import_rgba_picture(&image)?;
   let mut writer = MaybeUninit::<WebPMemoryWriter>::uninit();

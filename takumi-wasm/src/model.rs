@@ -191,13 +191,23 @@ pub enum OutputFormat {
   Raw,
 }
 
-impl From<OutputFormat> for takumi_raster::ImageOutputFormat {
-  fn from(format: OutputFormat) -> Self {
-    match format {
-      OutputFormat::Png => takumi_raster::ImageOutputFormat::Png,
-      OutputFormat::Jpeg => takumi_raster::ImageOutputFormat::Jpeg,
-      OutputFormat::WebP => takumi_raster::ImageOutputFormat::WebP,
-      OutputFormat::Ico => takumi_raster::ImageOutputFormat::Ico,
+impl OutputFormat {
+  /// Maps to a raster [`ImageOutputFormat`], folding `quality` into the lossy
+  /// formats (JPEG defaults to 75, WebP to 100 / lossless).
+  pub(crate) fn into_image_output_format(
+    self,
+    quality: Option<u8>,
+  ) -> takumi_raster::ImageOutputFormat {
+    use takumi_raster::{ImageOutputFormat, Quality};
+    match self {
+      OutputFormat::Png => ImageOutputFormat::Png,
+      OutputFormat::Jpeg => ImageOutputFormat::Jpeg {
+        quality: quality.map_or_else(Quality::default, Quality::new),
+      },
+      OutputFormat::WebP => ImageOutputFormat::WebP {
+        quality: quality.map_or(Quality::new(100), Quality::new),
+      },
+      OutputFormat::Ico => ImageOutputFormat::Ico,
       OutputFormat::Raw => unreachable!("Raw format should be handled separately"),
     }
   }

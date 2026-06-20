@@ -18,7 +18,7 @@ pub enum MaxHeight {
 }
 
 /// Applies text transform to the input text.
-pub fn apply_text_transform<'a>(input: &'a str, transform: TextTransform) -> Cow<'a, str> {
+pub(crate) fn apply_text_transform<'a>(input: &'a str, transform: TextTransform) -> Cow<'a, str> {
   match transform {
     TextTransform::None => Cow::Borrowed(input),
     TextTransform::Uppercase => Cow::Owned(input.to_uppercase()),
@@ -45,7 +45,7 @@ pub fn apply_text_transform<'a>(input: &'a str, transform: TextTransform) -> Cow
 }
 
 /// Applies whitespace collapse rules to the input text according to `WhiteSpaceCollapse`.
-pub fn apply_white_space_collapse<'a>(
+pub(crate) fn apply_white_space_collapse<'a>(
   input: &'a str,
   collapse: WhiteSpaceCollapse,
   previous_collapsible_space: &mut bool,
@@ -149,16 +149,16 @@ fn count_emergency_line_breaks(layout: &InlineLayout) -> usize {
 }
 
 #[derive(Clone, Copy)]
-pub struct RebreakOptions {
-  pub max_width: f32,
-  pub max_height: Option<MaxHeight>,
-  pub line_height_hint: f32,
-  pub text_wrap_mode: TextWrapMode,
+pub(crate) struct RebreakOptions {
+  pub(crate) max_width: f32,
+  pub(crate) max_height: Option<MaxHeight>,
+  pub(crate) line_height_hint: f32,
+  pub(crate) text_wrap_mode: TextWrapMode,
 }
 
 /// Use binary search to find the minimum width that maintains the same number of lines.
 /// Returns `true` if a meaningful adjustment was made.
-pub fn make_balanced_text(
+pub(crate) fn make_balanced_text(
   inline_layout: &mut InlineLayout,
   options: RebreakOptions,
   target_lines: usize,
@@ -246,7 +246,7 @@ pub fn make_balanced_text(
 
 /// Attempts to avoid orphans (single short words on the last line) by adjusting line breaks.
 /// Returns `true` if a meaningful adjustment was made.
-pub fn make_pretty_text(
+pub(crate) fn make_pretty_text(
   inline_layout: &mut InlineLayout,
   options: RebreakOptions,
   spans: &[ProcessedInlineSpan<'_>],

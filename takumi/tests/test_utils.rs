@@ -17,7 +17,7 @@ use takumi::base::{
 };
 use takumi::raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
-  RenderOptions, encode_animated_gif, encode_animated_png, encode_animated_webp, render,
+  Quality, RenderOptions, encode_animated_gif, encode_animated_png, encode_animated_webp, render,
   write_image,
 };
 use takumi_svg::{SvgOptions, render as svg_render};
@@ -190,7 +190,13 @@ pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &
   let image = render(options).unwrap();
   let golden_path = format!("tests/fixtures-generated/{fixture_name}.webp");
 
-  save_image(image, &golden_path, ImageOutputFormat::WebP);
+  save_image(
+    image,
+    &golden_path,
+    ImageOutputFormat::WebP {
+      quality: Quality::new(100),
+    },
+  );
 }
 
 fn save_image<P: AsRef<Path>>(image: RgbaImage, path: P, format: ImageOutputFormat) {
@@ -198,7 +204,7 @@ fn save_image<P: AsRef<Path>>(image: RgbaImage, path: P, format: ImageOutputForm
 
   let mut file = File::create(path).unwrap();
 
-  write_image(Cow::Owned(image), &mut file, format, None).unwrap();
+  write_image(Cow::Owned(image), &mut file, format).unwrap();
 }
 
 #[allow(dead_code)]

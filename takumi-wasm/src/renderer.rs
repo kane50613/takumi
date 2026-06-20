@@ -22,9 +22,9 @@ use takumi_base::{
   },
 };
 use takumi_raster::{
-  AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
-  SequentialScene, encode_animated_gif, encode_animated_png, encode_animated_webp, measure_layout,
-  render, render_sequence_animation, write_image,
+  AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, SequentialScene,
+  encode_animated_gif, encode_animated_png, encode_animated_webp, measure_layout, render,
+  render_sequence_animation, write_image,
 };
 use wasm_bindgen::prelude::*;
 
@@ -267,8 +267,7 @@ impl Renderer {
     write_image(
       Cow::Owned(image),
       &mut buffer,
-      format.into(),
-      options.quality,
+      format.into_image_output_format(options.quality),
     )
     .map_err(map_error)?;
 
@@ -342,7 +341,7 @@ impl Renderer {
     let mut data_uri = String::new();
 
     data_uri.push_str("data:");
-    data_uri.push_str(ImageOutputFormat::from(format).content_type());
+    data_uri.push_str(format.into_image_output_format(None).content_type());
     data_uri.push_str(";base64,");
     data_uri.push_str(&BASE64_STANDARD.encode(buffer));
 

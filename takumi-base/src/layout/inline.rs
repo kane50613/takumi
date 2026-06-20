@@ -55,14 +55,14 @@ pub enum InlineLayoutMode {
 
 pub struct InlineBoxItem<'c> {
   pub render_node: &'c RenderNode,
-  pub inline_box: InlineBox,
-  pub paint_width: f32,
-  pub paint_height: f32,
+  pub(crate) inline_box: InlineBox,
+  pub(crate) paint_width: f32,
+  pub(crate) paint_height: f32,
   pub margin: Rect<f32>,
-  pub padding: Rect<f32>,
-  pub border: Rect<f32>,
-  pub baseline_offset: Option<f32>,
-  pub vertical_align: ResolvedVerticalAlign,
+  pub(crate) padding: Rect<f32>,
+  pub(crate) border: Rect<f32>,
+  pub(crate) baseline_offset: Option<f32>,
+  pub(crate) vertical_align: ResolvedVerticalAlign,
 }
 
 impl From<&InlineBoxItem<'_>> for Layout {
@@ -159,15 +159,15 @@ pub type InlineLayout = parley::Layout<InlineBrush>;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ParentFontMetrics {
-  pub x_height: Option<f32>,
-  pub text_metrics: (f32, f32),
+  pub(crate) x_height: Option<f32>,
+  pub(crate) text_metrics: (f32, f32),
 }
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct InlineMeasureOptions {
-  pub max_width: f32,
-  pub ceil_width: bool,
-  pub parent_font_metrics: Option<ParentFontMetrics>,
+  pub(crate) max_width: f32,
+  pub(crate) ceil_width: bool,
+  pub(crate) parent_font_metrics: Option<ParentFontMetrics>,
 }
 
 #[derive(Clone, PartialEq, Copy, Debug)]
@@ -179,10 +179,10 @@ pub struct InlineBrush {
   pub decoration_thickness: SizedTextDecorationThickness,
   pub decoration_line: TextDecorationLines,
   pub decoration_skip_ink: TextDecorationSkipInk,
-  pub stroke_color: Color,
-  pub font_synthesis: FontSynthesis,
-  pub line_height_scales_with_text_fit: bool,
-  pub vertical_align: VerticalAlign,
+  pub(crate) stroke_color: Color,
+  pub(crate) font_synthesis: FontSynthesis,
+  pub(crate) line_height_scales_with_text_fit: bool,
+  pub(crate) vertical_align: VerticalAlign,
 }
 
 impl Default for InlineBrush {
@@ -294,14 +294,14 @@ pub fn get_parent_font_metrics(layout: &InlineLayout) -> Option<ParentFontMetric
 
 #[derive(Clone, Copy, Debug)]
 pub struct ResolvedLineMetrics {
-  pub resolved_ascent: f32,
-  pub resolved_descent: f32,
-  pub resolved_leading: f32,
-  pub resolved_line_height: f32,
+  pub(crate) resolved_ascent: f32,
+  pub(crate) resolved_descent: f32,
+  pub(crate) resolved_leading: f32,
+  pub(crate) resolved_line_height: f32,
   pub resolved_baseline: f32,
-  pub resolved_line_top: f32,
-  pub resolved_line_bottom: f32,
-  pub baseline_shift: f32,
+  pub(crate) resolved_line_top: f32,
+  pub(crate) resolved_line_bottom: f32,
+  pub(crate) baseline_shift: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -760,10 +760,10 @@ pub(crate) fn resolved_line_metrics_for_apply(
 
 #[derive(Clone, Copy, Debug)]
 pub struct ResolvedInlineLineState {
-  pub adjusted_metrics: LineMetrics,
+  pub(crate) adjusted_metrics: LineMetrics,
   pub baseline_shift: f32,
-  pub parent_x_height: Option<f32>,
-  pub parent_text_metrics: Option<(f32, f32)>,
+  pub(crate) parent_x_height: Option<f32>,
+  pub(crate) parent_text_metrics: Option<(f32, f32)>,
 }
 
 pub fn resolve_inline_line_states(
@@ -823,8 +823,8 @@ pub struct VisualInlineBox {
   pub y: f32,
   pub width: f32,
   pub height: f32,
-  pub layout_x: f32,
-  pub layout_advance: f32,
+  pub(crate) layout_x: f32,
+  pub(crate) layout_advance: f32,
 }
 
 pub fn resolve_visual_inline_box(
@@ -1462,13 +1462,13 @@ pub fn resolve_inline_max_height(
 /// Per-line text-fit scaling state: `scale` applied about `layout_origin`, plus
 /// the horizontal `alignment_correction` for a scaled-down line.
 #[derive(Clone, Copy)]
-pub struct LineScaleState {
+pub(crate) struct LineScaleState {
   /// Text-fit scale factor for the line.
-  pub scale: f32,
+  pub(crate) scale: f32,
   /// Horizontal correction keeping a scaled line aligned.
-  pub alignment_correction: f32,
+  pub(crate) alignment_correction: f32,
   /// The origin the scale is applied about (border/padding + baseline).
-  pub layout_origin: Point<f32>,
+  pub(crate) layout_origin: Point<f32>,
 }
 
 /// Horizontal correction for a text-fit-scaled line:
@@ -1485,7 +1485,7 @@ impl LineScaleState {
   /// Composes the affine transform for a glyph run on this (possibly scaled)
   /// line: `base * T(x_correction) * scale-about-origin`. Shared by the raster
   /// walk and the vector producer so the positioning math has a single home.
-  pub fn transform(self, base: Affine, static_inline_prefix: f32) -> Affine {
+  pub(crate) fn transform(self, base: Affine, static_inline_prefix: f32) -> Affine {
     let x_correction =
       text_fit_x_correction(self.scale, static_inline_prefix, self.alignment_correction);
     base
@@ -1500,19 +1500,19 @@ impl LineScaleState {
 /// painting walk.
 pub(crate) struct LineSetup {
   /// Text-fit scale state for the line.
-  pub state: LineScaleState,
+  pub(crate) state: LineScaleState,
   /// Baseline shift applied to glyphs on the line.
-  pub baseline_shift: f32,
+  pub(crate) baseline_shift: f32,
   /// Pre-scale horizontal origin used for text-fit alignment.
-  pub line_scale_origin_x: f32,
+  pub(crate) line_scale_origin_x: f32,
   /// Resolved vertical metrics for the line.
-  pub resolved_metrics: ResolvedLineMetrics,
+  pub(crate) resolved_metrics: ResolvedLineMetrics,
 }
 
 impl LineSetup {
   /// Resolves a line's scale state, baseline, and metrics for the inline walk.
   /// Returns `None` when `line_index` is out of range for `line_vertical_metrics`.
-  pub fn new(
+  pub(crate) fn new(
     line: &Line<'_, InlineBrush>,
     layout: Layout,
     line_vertical_metrics: &[ResolvedLineMetrics],
@@ -1548,15 +1548,15 @@ pub struct InlineOutlineRect {
   /// Source inline span id (identifies the styled run the rect belongs to).
   pub span_id: u64,
   /// Line index the rect sits on.
-  pub line_index: usize,
+  pub(crate) line_index: usize,
   /// Left edge in border-box space.
-  pub x: f32,
+  pub(crate) x: f32,
   /// Top edge in border-box space.
-  pub y: f32,
+  pub(crate) y: f32,
   /// Rect width (run advance).
-  pub width: f32,
+  pub(crate) width: f32,
   /// Rect height (resolved line height).
-  pub height: f32,
+  pub(crate) height: f32,
 }
 
 fn scale_outline_rect(
@@ -1780,9 +1780,9 @@ pub struct PositionedInlineRun<'l> {
   /// Glyphs resolved to outlines/bitmaps, keyed by glyph id.
   pub resolved_glyphs: HashMap<u32, ResolvedGlyph>,
   /// Text-fit scale state for the line.
-  pub line_scale: LineScaleState,
+  pub(crate) line_scale: LineScaleState,
   /// Cumulative in-flow inline-box width before this run on the line.
-  pub static_inline_prefix: f32,
+  pub(crate) static_inline_prefix: f32,
   /// Baseline shift applied to glyphs on the line.
   pub baseline_shift: f32,
 }

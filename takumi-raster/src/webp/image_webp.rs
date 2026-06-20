@@ -7,7 +7,7 @@ use crate::{
   Result,
   error::WebPError,
   webp::{U24_MAX, has_any_alpha_pixel, strip_alpha_channel},
-  write::{AnimatedWebpOptions, AnimationFrame},
+  write::{AnimatedWebpOptions, AnimationFrame, Quality},
 };
 
 const RIFF_HEADER_SIZE: usize = 12;
@@ -56,9 +56,9 @@ fn vp8_chunk_tag(buf: &[u8], payload_start: usize) -> Option<[u8; 4]> {
 pub(crate) fn write_webp(
   image: Cow<'_, RgbaImage>,
   destination: &mut impl Write,
-  quality: Option<u8>,
+  quality: Quality,
 ) -> Result<()> {
-  let quality = quality.unwrap_or(100);
+  let quality = quality.get();
   let mut encoder = WebPEncoder::new(destination);
   let mut params = EncoderParams::default();
   params.use_predictor_transform = quality >= 75;

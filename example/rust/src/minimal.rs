@@ -9,7 +9,7 @@ use takumi::base::{
   },
   resources::font::FontResource,
 };
-use takumi::raster::{ImageOutputFormat, RenderOptions, render, write_image};
+use takumi::raster::{ImageOutputFormat, Quality, RenderOptions, render, write_image};
 
 /// Renders a "Hello, {name}!" image and saves it to `output.webp`.
 pub fn say_hello_to(name: &str) {
@@ -37,5 +37,12 @@ pub fn say_hello_to(name: &str) {
   let image = render(options).unwrap();
 
   let mut file = File::create("output.webp").unwrap();
-  write_image(Cow::Owned(image), &mut file, ImageOutputFormat::WebP, None).unwrap();
+  write_image(
+    Cow::Owned(image),
+    &mut file,
+    ImageOutputFormat::WebP {
+      quality: Quality::new(100),
+    },
+  )
+  .unwrap();
 }

@@ -711,7 +711,7 @@ impl BorderProperties {
       + approximate_quarter_ellipse_arc_length(bottom_left.x, bottom_left.y)
   }
 
-  pub fn scaled_corner_radii(&self, border_box: Size<f32>) -> Sides<SpacePair<f32>> {
+  pub(crate) fn scaled_corner_radii(&self, border_box: Size<f32>) -> Sides<SpacePair<f32>> {
     // Match `append_mask_commands` overlapping-curves scaling so dash adjustment aligns with the
     // actual rendered contour.
     let scale = 1.0f32

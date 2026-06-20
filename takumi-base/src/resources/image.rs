@@ -280,7 +280,7 @@ impl FromStr for SvgSource {
 
 impl ImageSource {
   /// Approximate decoded size in bytes, used for cache budgeting.
-  pub fn estimated_bytes(&self) -> usize {
+  pub(crate) fn estimated_bytes(&self) -> usize {
     match self {
       Self::Bitmap(buffer) => buffer.data().len(),
       Self::Gif(gif) => gif
@@ -299,7 +299,7 @@ impl ImageSource {
   /// rendered at new sizes and isn't counted by
   /// [`estimated_bytes`](Self::estimated_bytes), so caching them across renders
   /// would let memory exceed the configured budget.
-  pub fn is_cacheable(&self) -> bool {
+  pub(crate) fn is_cacheable(&self) -> bool {
     match self {
       Self::Bitmap(_) | Self::Gif(_) => true,
       #[cfg(feature = "svg")]
@@ -424,7 +424,7 @@ impl ImageSource {
 }
 
 /// Check if the string looks like an SVG image.
-pub fn is_svg_like(src: &str) -> bool {
+pub(crate) fn is_svg_like(src: &str) -> bool {
   src.contains("<svg") && src.contains("xmlns")
 }
 

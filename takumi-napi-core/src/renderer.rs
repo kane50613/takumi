@@ -13,7 +13,7 @@ use takumi_base::{
     image::{ImageCache, ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource},
   },
 };
-use takumi_raster::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat};
+use takumi_raster::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat, Quality};
 
 use crate::{
   De, deserialize_with_tracing, encode_frames_task::EncodeFramesTask, load_font_task::LoadFontTask,
@@ -275,11 +275,17 @@ pub enum OutputFormat {
   Raw,
 }
 
-impl From<OutputFormat> for ImageOutputFormat {
-  fn from(format: OutputFormat) -> Self {
-    match format {
-      OutputFormat::WebP => ImageOutputFormat::WebP,
-      OutputFormat::Jpeg => ImageOutputFormat::Jpeg,
+impl OutputFormat {
+  /// Maps to a raster [`ImageOutputFormat`], folding `quality` into the lossy
+  /// formats (JPEG defaults to 75, WebP to 100 / lossless).
+  pub(crate) fn into_image_output_format(self, quality: Option<u8>) -> ImageOutputFormat {
+    match self {
+      OutputFormat::WebP => ImageOutputFormat::WebP {
+        quality: quality.map_or(Quality::new(100), Quality::new),
+      },
+      OutputFormat::Jpeg => ImageOutputFormat::Jpeg {
+        quality: quality.map_or_else(Quality::default, Quality::new),
+      },
       OutputFormat::Png => ImageOutputFormat::Png,
       OutputFormat::Ico => ImageOutputFormat::Ico,
       // SAFETY: It's handled in the render task

@@ -113,8 +113,7 @@ impl Task for RenderTask {
     write_image(
       Cow::Owned(image),
       &mut buffer,
-      self.format.into(),
-      self.quality,
+      self.format.into_image_output_format(self.quality),
     )
     .map_err(map_error)?;
 

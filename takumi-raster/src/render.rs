@@ -579,13 +579,16 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<RgbaImage> {
 }
 
 /// Renders a node at a specific time on the global animation timeline.
-pub fn render_at_time<'g>(mut options: RenderOptions<'g>, time_ms: u64) -> Result<RgbaImage> {
+pub(crate) fn render_at_time<'g>(
+  mut options: RenderOptions<'g>,
+  time_ms: u64,
+) -> Result<RgbaImage> {
   options.time_ms = time_ms;
   render(options)
 }
 
 /// Renders the active scene for a sequential animation timeline at `time_ms`.
-pub fn render_sequence_at_time<'g>(
+pub(crate) fn render_sequence_at_time<'g>(
   scenes: &[SequentialScene<'g>],
   time_ms: u64,
 ) -> Result<RgbaImage> {

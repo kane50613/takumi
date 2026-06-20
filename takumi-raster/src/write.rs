@@ -6,7 +6,6 @@ use image::{
   codecs::{ico::IcoEncoder, jpeg::JpegEncoder},
 };
 use png::{ColorType, DeflateCompression, Filter};
-use serde::Deserialize;
 use typed_builder::TypedBuilder;
 
 /// Encode a sequence of RGBA frames into an animated WebP and write to `destination`.
@@ -15,22 +14,53 @@ use crate::webp::{has_any_alpha_pixel, strip_alpha_channel, write_webp};
 
 use crate::{Result, error::Error};
 
-/// Output format for rendered images.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
+/// Lossy-encoding quality, clamped to the `0..=100` range (higher means better
+/// quality and larger output).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Quality(u8);
+
+impl Quality {
+  /// Creates a quality value, clamping out-of-range input into `0..=100`.
+  pub const fn new(value: u8) -> Self {
+    Self(if value > 100 { 100 } else { value })
+  }
+
+  /// The raw quality value in `0..=100`.
+  pub const fn get(self) -> u8 {
+    self.0
+  }
+}
+
+impl Default for Quality {
+  /// `75`, a balanced default for lossy formats.
+  fn default() -> Self {
+    Self(75)
+  }
+}
+
+/// Output format for rendered images. Format-specific encoding parameters live on
+/// the variant that supports them, so e.g. a quality value cannot be supplied for
+/// the lossless [`Png`](ImageOutputFormat::Png) format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ImageOutputFormat {
-  /// WebP image format, provides good compression and supports animation.
-  /// It is useful for images in web contents.
-  WebP,
-
-  /// PNG image format, lossless and widely supported, and its the fastest format to encode.
+  /// PNG: lossless, widely supported, and the fastest format to encode.
   Png,
 
-  /// JPEG image format, lossy and does not support transparency.
-  Jpeg,
+  /// JPEG: lossy, does not support transparency.
+  Jpeg {
+    /// Encoding quality.
+    quality: Quality,
+  },
 
-  /// ICO image format for favicons and application icons.
+  /// WebP: good compression and supports animation; useful for web content.
+  /// `Quality::new(100)` encodes losslessly on the native backend.
+  WebP {
+    /// Encoding quality.
+    quality: Quality,
+  },
+
+  /// ICO: favicons and application icons.
   Ico,
 }
 
@@ -38,9 +68,9 @@ impl ImageOutputFormat {
   /// Returns the MIME type for the image output format.
   pub fn content_type(&self) -> &'static str {
     match self {
-      ImageOutputFormat::WebP => "image/webp",
+      ImageOutputFormat::WebP { .. } => "image/webp",
       ImageOutputFormat::Png => "image/png",
-      ImageOutputFormat::Jpeg => "image/jpeg",
+      ImageOutputFormat::Jpeg { .. } => "image/jpeg",
       ImageOutputFormat::Ico => "image/x-icon",
     }
   }
@@ -49,9 +79,9 @@ impl ImageOutputFormat {
 impl From<ImageOutputFormat> for ImageFormat {
   fn from(format: ImageOutputFormat) -> Self {
     match format {
-      ImageOutputFormat::WebP => Self::WebP,
+      ImageOutputFormat::WebP { .. } => Self::WebP,
       ImageOutputFormat::Png => Self::Png,
-      ImageOutputFormat::Jpeg => Self::Jpeg,
+      ImageOutputFormat::Jpeg { .. } => Self::Jpeg,
       ImageOutputFormat::Ico => Self::Ico,
     }
   }
@@ -143,15 +173,14 @@ pub fn write_image<'a, T: Write>(
   image: Cow<'a, RgbaImage>,
   destination: &mut T,
   format: ImageOutputFormat,
-  quality: Option<u8>,
 ) -> Result<()> {
   match format {
-    ImageOutputFormat::Jpeg => {
+    ImageOutputFormat::Jpeg { quality } => {
       let width = image.width();
       let height = image.height();
       let rgb = strip_alpha_channel(image);
 
-      let encoder = JpegEncoder::new_with_quality(destination, quality.unwrap_or(75));
+      let encoder = JpegEncoder::new_with_quality(destination, quality.get());
       encoder.write_image(&rgb, width, height, ExtendedColorType::Rgb8)?;
     }
     ImageOutputFormat::Png => {
@@ -176,7 +205,7 @@ pub fn write_image<'a, T: Write>(
       writer.write_image_data(&image_data)?;
       writer.finish()?;
     }
-    ImageOutputFormat::WebP => {
+    ImageOutputFormat::WebP { quality } => {
       write_webp(image, destination, quality)?;
     }
     ImageOutputFormat::Ico => {
@@ -483,7 +512,6 @@ mod tests {
       Cow::Owned(image.clone()),
       &mut encoded_none,
       ImageOutputFormat::Png,
-      None,
     );
     assert!(encode_none.is_ok(), "failed to encode non-dithered image");
 
@@ -491,7 +519,6 @@ mod tests {
       Cow::Owned(dithered_image),
       &mut encoded_dithered,
       ImageOutputFormat::Png,
-      None,
     );
     assert!(encode_dithered.is_ok(), "failed to encode image");
 
@@ -502,12 +529,7 @@ mod tests {
   fn write_image_ico_produces_ico_header() {
     let image = RgbaImage::from_pixel(16, 16, image::Rgba([255, 0, 0, 255]));
     let mut encoded = Vec::new();
-    let result = write_image(
-      Cow::Owned(image),
-      &mut encoded,
-      ImageOutputFormat::Ico,
-      None,
-    );
+    let result = write_image(Cow::Owned(image), &mut encoded, ImageOutputFormat::Ico);
     assert!(result.is_ok(), "failed to encode ico image");
     assert!(
       encoded.starts_with(&[0, 0, 1, 0]),
@@ -519,12 +541,7 @@ mod tests {
   fn write_image_ico_rejects_dimensions_over_256() {
     let image = RgbaImage::from_pixel(257, 16, image::Rgba([255, 0, 0, 255]));
     let mut encoded = Vec::new();
-    let result = write_image(
-      Cow::Owned(image),
-      &mut encoded,
-      ImageOutputFormat::Ico,
-      None,
-    );
+    let result = write_image(Cow::Owned(image), &mut encoded, ImageOutputFormat::Ico);
 
     let err = result.err();
     assert!(err.is_some(), "expected oversized ico image to fail");
