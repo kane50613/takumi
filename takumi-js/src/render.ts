@@ -12,22 +12,16 @@ type InnerRenderOptions = napi.RenderOptions | wasm.RenderOptions;
 
 export type { ImageCacheMode, ImageLoader } from "@takumi-rs/core";
 
-type RenderOptionsWithRenderer = Omit<InnerRenderOptions, "images" | "fonts"> & {
+type RenderOptionsWithRenderer = InnerRenderOptions & {
   renderer: napi.Renderer | wasm.Renderer;
   signal?: AbortSignal;
   jsx?: FromJsxOptions;
   resourcesOptions?: FetchResourcesOptions;
   /**
-   * Images provided up front by `src` key, each carrying bytes or a sync/async
-   * loader. Takes precedence over automatically fetching external `src` URLs.
-   */
-  images?: napi.ImageLoader[];
-  /**
    * @description The emoji provider to use when rendering emojis. If set to `"from-font"`, the renderer will attempt to source emoji glyphs from the loaded fonts.
    * @default "twemoji"
    */
   emoji?: EmojiType | "from-font";
-  fonts?: napi.FontLoader[];
 };
 
 export type ManagedRendererOptions = {
