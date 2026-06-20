@@ -3,15 +3,78 @@ title: Upgrade to v2
 description: Walks through the breaking changes in v2 and how to upgrade from v1.
 ---
 
-v2 tightens Takumi's rendering to match the web platform more closely. This page covers the breaking changes; for everything else see the [releases](https://github.com/kane50613/takumi/releases).
+v2 makes fonts and images explicit per-render resources, tightens rendering to match the web platform, and splits the Rust crate into focused backends. This page covers the breaking changes; for everything else see the [releases](https://github.com/kane50613/takumi/releases).
 
-## What has changed?
+## JavaScript
+
+### The `Renderer` constructor takes no arguments
+
+`new Renderer(...)` no longer accepts fonts or a context. Construct it bare and register fonts afterwards. The embedded default fonts are decoded once and shared across every renderer.
+
+```ts
+const renderer = new Renderer({ fonts: [archivo] }); // [!code --]
+const renderer = new Renderer(); // [!code ++]
+await renderer.registerFont(archivo); // [!code ++]
+```
+
+### `loadFont`, `loadFonts`, and `loadFontSync` become `registerFont`
+
+A single `registerFont` replaces the three loaders. It accepts either raw bytes or a `{ name, data, weight, style }` descriptor, and resolves to the families it produced.
+
+```ts
+renderer.loadFonts([archivo, geist]); // [!code --]
+await renderer.registerFont(archivo); // [!code ++]
+await renderer.registerFont(geist); // [!code ++]
+```
+
+### Pick the fallback chain with `fontFamilies`
+
+Each render now takes an ordered `fontFamilies` list: the family names tried in turn when a glyph is missing. It defaults to every registered family in registration order.
+
+```tsx
+const image = await renderer.render(node, {
+  fontFamilies: ["Inter", "Noto Sans JP"], // [!code ++]
+});
+```
+
+### `fetchedResources` is now `images`
+
+The pre-fetched image option was renamed.
+
+```tsx
+const image = await renderer.render(node, {
+  fetchedResources: resources, // [!code --]
+  images: resources, // [!code ++]
+});
+```
+
+### The persistent image store and `GlobalContext` are gone
+
+v1 kept a mutable image store and a `GlobalContext` on the renderer, so an image registered once stayed available for later renders. v2 removes both. Pass every image the render needs through `images`, keyed by `src`. See [Load Images](/docs/load-images).
+
+### `createImageResponse` is removed
+
+Construct `ImageResponse` directly and pass options inline. For shared defaults, wrap your own helper.
+
+```tsx
+const ogImage = createImageResponse({ fonts: [inter] }); // [!code --]
+export function GET() {
+  return ogImage(<OgImage />); // [!code --]
+  return new ImageResponse(<OgImage />, { fonts: [inter] }); // [!code ++]
+}
+```
+
+### Animations accept fonts
+
+`renderAnimation` and `encodeFrames` now take `fonts` and `fontFamilies`, matching `render`.
+
+## CSS & rendering
 
 ### `currentColor` in SVG images is no longer tinted by the host color
 
 Through v1, an SVG supplied as an image (`Node::image`, `background-image: url(...)`, or `mask-image`) had its `currentColor` rewritten to the host element's `color` before rendering. v2 removes this.
 
-An SVG referenced as an image is an isolated document, so it does not inherit `color` from the host — the same rule browsers, [satori](https://github.com/vercel/satori), and `@vercel/og` follow. Its `currentColor` now resolves to the SVG's own default (black) instead of the surrounding text color. This also makes the raster and vector (SVG) backends agree, and lets the raster backend reuse its cached parse instead of reparsing the SVG on every render.
+An SVG referenced as an image is an isolated document, so it does not inherit `color` from the host, the same rule browsers, [satori](https://github.com/vercel/satori), and `@vercel/og` follow. Its `currentColor` now resolves to the SVG's own default (black) instead of the surrounding text color. This also makes the raster and vector (SVG) backends agree, and lets the raster backend reuse its cached parse instead of reparsing the SVG on every render.
 
 `currentColor` for Takumi's own properties (text `color`, `border-color`, `box-shadow`, `outline`, `text-decoration-color`) is unchanged. Only the contents of SVG images are affected.
 
@@ -52,11 +115,68 @@ Omitting the width in `border` / `outline` now resolves to the CSS initial value
 
 ### `line-clamp` is now a shorthand
 
-`line-clamp` is now a shorthand for the `max-lines`, `block-ellipsis`, and `continue` longhands (CSS Overflow 4), rather than a single collapsed property. Inheritance follows the spec: `block-ellipsis` inherits, while `max-lines` and `continue` do not — so a clamped ancestor no longer forces its line limit onto descendants. `-webkit-line-clamp` still works and expands to the same longhands.
+`line-clamp` is now a shorthand for the `max-lines`, `block-ellipsis`, and `continue` longhands (CSS Overflow 4), rather than a single collapsed property. Inheritance follows the spec: `block-ellipsis` inherits, while `max-lines` and `continue` do not, so a clamped ancestor no longer forces its line limit onto descendants. `-webkit-line-clamp` still works and expands to the same longhands.
 
 ## Rust
 
-### `ImageSource::render_for_layout` Drops the `current_color` Argument
+### `takumi` is split into focused crates
+
+`takumi` is now a facade over `takumi-core` (layout, styling, resources), `takumi-raster` (the raster backend), and `takumi-svg` (the vector backend). The facade re-exports a curated stable surface, so most code keeps compiling, but the deep module paths it used to expose are gone.
+
+Import the data structures from `takumi::prelude` and call the entry-point functions from the crate root:
+
+```rust
+use takumi::{ // [!code --]
+  layout::{node::Node, Viewport, style::{Length::Px, Style, StyleDeclaration}}, // [!code --]
+  resources::font::FontResource, // [!code --]
+  rendering::{render, RenderOptions}, // [!code --]
+  GlobalContext, // [!code --]
+}; // [!code --]
+use takumi::prelude::*; // [!code ++]
+use takumi::render; // [!code ++]
+```
+
+Backend internals are no longer re-exported. If you genuinely need them, enable the `unstable` feature and reach them through `takumi::unstable`; nothing under it is covered by semver.
+
+### `GlobalContext` becomes a `Fonts` context
+
+With the image store gone, the render context holds only fonts. Build a `Fonts`, register resources on it, and pass it through `RenderOptions::builder().fonts(&fonts)`.
+
+```rust
+let mut global = GlobalContext::default(); // [!code --]
+global.font_context.load_and_store(FontResource::new(font_bytes)); // [!code --]
+let mut fonts = Fonts::default(); // [!code ++]
+fonts.register(FontResource::new(font_bytes)).unwrap(); // [!code ++]
+
+let options = RenderOptions::builder()
+  .viewport(viewport)
+  .node(node)
+  .global(&global) // [!code --]
+  .fonts(&fonts) // [!code ++]
+  .build();
+```
+
+### The `raster` feature is now `raster-backend`
+
+The default raster backend feature was renamed to mirror `svg-backend`, and `rayon` no longer turns it on implicitly. Enable `raster-backend` (or keep the default features) to render rasters with `rayon` parallelism.
+
+```toml
+takumi = { version = "*", default-features = false, features = ["raster", "rayon"] } # [!code --]
+takumi = { version = "*", default-features = false, features = ["raster-backend", "rayon"] } # [!code ++]
+```
+
+### Image output quality is modeled per format
+
+`ImageOutputFormat::Jpeg` and `WebP` now carry a `Quality`, lossless WebP moved to its own `ImageOutputFormat::WebPLossless` variant, and `write_image` no longer takes a separate quality argument.
+
+```rust
+write_image(&image, ImageOutputFormat::WebP, 80)?; // [!code --]
+write_image(&image, ImageOutputFormat::WebP(Quality::new(80)))?; // [!code ++]
+```
+
+In the napi and wasm bindings, request lossless WebP with the `lossless` flag.
+
+### `ImageSource::render_for_layout` drops the `current_color` argument
 
 With SVG `currentColor` no longer resolved against the host, `render_for_layout` no longer needs the color.
 
