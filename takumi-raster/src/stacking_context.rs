@@ -118,10 +118,7 @@ pub(crate) fn apply_transform(
   *transform *= style.local_transform(border_box, sizing);
 }
 
-fn get_node_by_path<'a, 'g>(
-  root: &'a RenderNode<'g>,
-  path: &[usize],
-) -> Option<&'a RenderNode<'g>> {
+fn get_node_by_path<'a>(root: &'a RenderNode, path: &[usize]) -> Option<&'a RenderNode> {
   let mut current = root;
   for &index in path {
     let children = current.children.as_deref()?;
@@ -308,8 +305,8 @@ fn classify_bucket(style: &ComputedStyle, is_flex_or_grid_item: bool) -> (PaintB
   (PaintBucket::AutoZero, 0)
 }
 
-pub(crate) fn build_stacking_contexts<'g>(
-  root: &RenderNode<'g>,
+pub(crate) fn build_stacking_contexts(
+  root: &RenderNode,
   layout_results: &LayoutResults,
   node_id: NodeId,
   transform: Affine,
@@ -473,7 +470,7 @@ pub(crate) fn build_stacking_contexts<'g>(
 }
 
 fn compute_node_paint_bounds(
-  node: &RenderNode<'_>,
+  node: &RenderNode,
   layout: Layout,
   transform: Affine,
 ) -> Option<SceneBounds> {
@@ -499,7 +496,7 @@ fn compute_node_paint_bounds(
     max_width: layout.content_box_width(),
     max_height,
     style: &font_style,
-    global: node.context.global,
+    context: &node.context,
     mode: InlineLayoutMode::Measure,
   });
   let inline_transform = Affine::translation(
@@ -610,7 +607,7 @@ fn compute_node_paint_bounds(
   bounds
 }
 
-fn has_inline_paint_content(node: &RenderNode<'_>) -> bool {
+fn has_inline_paint_content(node: &RenderNode) -> bool {
   node.should_create_inline_layout()
     || node.anonymous_text_content.is_some()
     || node.children.as_ref().is_some_and(|children| {
@@ -652,8 +649,8 @@ fn merge_bounds(left: Option<SceneBounds>, right: Option<SceneBounds>) -> Option
   }
 }
 
-fn finish_node_render<'g>(
-  node: &mut RenderNode<'g>,
+fn finish_node_render(
+  node: &mut RenderNode,
   canvas: &mut Canvas,
   has_constraint: bool,
   isolated_canvas: Option<CanvasSubcanvas>,
@@ -796,8 +793,8 @@ fn affine_max_scale(transform: Affine) -> f32 {
   }
 }
 
-fn begin_node_render<'g>(
-  root: &mut RenderNode<'g>,
+fn begin_node_render(
+  root: &mut RenderNode,
   layout_results: &LayoutResults,
   canvas: &mut Canvas,
   node_paint: &NodePaint,
@@ -916,8 +913,8 @@ fn begin_node_render<'g>(
   Ok(None)
 }
 
-fn paint_single_node<'g>(
-  root: &mut RenderNode<'g>,
+fn paint_single_node(
+  root: &mut RenderNode,
   layout_results: &LayoutResults,
   canvas: &mut Canvas,
   node_paint: &NodePaint,
@@ -947,8 +944,8 @@ fn paint_single_node<'g>(
   Ok(())
 }
 
-fn paint_bucket<'g>(
-  root: &mut RenderNode<'g>,
+fn paint_bucket(
+  root: &mut RenderNode,
   contexts: &[StackingContextNode],
   layout_results: &LayoutResults,
   canvas: &mut Canvas,
@@ -967,8 +964,8 @@ fn paint_bucket<'g>(
   Ok(())
 }
 
-pub(crate) fn paint_context<'g>(
-  root: &mut RenderNode<'g>,
+pub(crate) fn paint_context(
+  root: &mut RenderNode,
   contexts: &[StackingContextNode],
   layout_results: &LayoutResults,
   canvas: &mut Canvas,
@@ -1034,7 +1031,7 @@ pub(crate) fn paint_context<'g>(
   Ok(())
 }
 
-fn supports_bounds_hint(node: &RenderNode<'_>, require_child_clipping: bool) -> bool {
+fn supports_bounds_hint(node: &RenderNode, require_child_clipping: bool) -> bool {
   let style = &node.context.style;
   let has_children = node
     .children
@@ -1101,7 +1098,7 @@ fn full_viewport_placement(viewport: CanvasViewport) -> Placement {
 }
 
 fn compute_isolation_bounds(
-  node: &RenderNode<'_>,
+  node: &RenderNode,
   size: Size<f32>,
   transform: Affine,
   viewport: CanvasViewport,
@@ -1173,7 +1170,7 @@ fn draw_render_node_inline(
     max_width: layout.content_box_width(),
     max_height,
     style: &font_style,
-    global: node.context.global,
+    context: &node.context,
     mode: InlineLayoutMode::Draw,
   });
   let inline_layout_box = layout;
@@ -1210,7 +1207,7 @@ mod tests {
 
   use super::{SceneBounds, bounds_for_rect, merge_bounds};
   use crate::{
-    CanvasViewport, GlobalContext, RenderOptions,
+    CanvasViewport, Fonts, RenderOptions,
     layout::{Viewport, node::Node, style::Affine},
     render,
   };
@@ -1218,12 +1215,12 @@ mod tests {
   type TestResult = Result<(), Box<dyn Error>>;
 
   fn render_json(json: &str) -> Result<image::RgbaImage, Box<dyn Error>> {
-    let global = GlobalContext::default();
+    let fonts = Fonts::default();
     let node: Node = serde_json::from_str(json)?;
     let options = RenderOptions::builder()
       .viewport(Viewport::new((100, 100)))
       .node(node)
-      .global(&global)
+      .fonts(&fonts)
       .build();
     Ok(render(options)?)
   }

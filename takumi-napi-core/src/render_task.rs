@@ -7,13 +7,12 @@ use takumi_base::layout::node::Node;
 use takumi_base::{
   layout::style::StyleSheet,
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
-  resources::image::ImageSource as LoadedImageSource,
 };
 use takumi_raster::{DitheringAlgorithm, render, write_image};
 
 use crate::{
-  ExternalMemoryAccountable, buffer_from_object, map_error, parse_stylesheet,
-  renderer::{OutputFormat, RenderOptions, RendererState, deserialize_keyframes},
+  buffer_from_object, map_error, parse_stylesheet,
+  renderer::{ImageCacheMode, OutputFormat, RenderOptions, RendererState, deserialize_keyframes},
 };
 
 pub struct RenderTask {
@@ -26,7 +25,8 @@ pub struct RenderTask {
   pub dithering: DitheringAlgorithm,
   pub time_ms: u64,
   pub stylesheet: StyleSheet,
-  pub fetched_resources: HashMap<Arc<str>, Buffer>,
+  pub images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
+  pub font_families: Option<Vec<String>>,
 }
 
 impl RenderTask {
@@ -54,12 +54,21 @@ impl RenderTask {
         options.stylesheets,
         deserialize_keyframes(options.keyframes)?,
       )?,
-      fetched_resources: options
-        .fetched_resources
+      images: options
+        .images
         .unwrap_or_default()
         .into_iter()
-        .map(|image| Ok((Arc::from(image.src), buffer_from_object(env, image.data)?)))
+        .map(|image| {
+          Ok((
+            Arc::from(image.src),
+            (
+              buffer_from_object(env, image.data)?,
+              image.cache.unwrap_or_default(),
+            ),
+          ))
+        })
         .collect::<Result<_>>()?,
+      font_families: options.font_families,
     })
   }
 }
@@ -73,31 +82,23 @@ impl Task for RenderTask {
       unreachable!()
     };
 
-    let initialized_images = self
-      .fetched_resources
-      .iter()
-      .map(|(k, v)| {
-        Ok((
-          k.clone(),
-          LoadedImageSource::from_bytes(v).map_err(map_error)?,
-        ))
-      })
-      .collect::<Result<HashMap<_, _>, _>>()?;
-
     let state = self
       .state
       .read()
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
+    let initialized_images = state.decode_images(take(&mut self.images))?;
+
     let image = render(
       takumi_raster::RenderOptions::builder()
         .viewport(self.viewport)
-        .fetched_resources(initialized_images)
+        .images(initialized_images)
         .stylesheet(take(&mut self.stylesheet))
         .time_ms(self.time_ms)
         .dithering(self.dithering)
         .node(node)
-        .global(&state.global)
+        .fonts(&state.fonts)
+        .font_families(take(&mut self.font_families))
         .draw_debug_border(self.draw_debug_border)
         .build(),
     )
@@ -120,10 +121,7 @@ impl Task for RenderTask {
     Ok(buffer)
   }
 
-  fn resolve(&mut self, mut env: Env, output: Self::Output) -> Result<Self::JsValue> {
-    // Account external memory to V8's garbage collector
-    // This enables V8 to collect memory based on actual memory pressure
-    output.account_external_memory(&mut env)?;
+  fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
     Ok(output.into())
   }
 }

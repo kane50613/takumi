@@ -7,7 +7,6 @@ mod encode_frames_task;
 mod load_font_task;
 mod measure_task;
 mod pool;
-mod put_persistent_image_task;
 mod render_animation_task;
 mod render_task;
 pub(crate) mod renderer;
@@ -15,6 +14,7 @@ pub(crate) mod renderer;
 use std::{fmt::Display, ops::Deref};
 
 use napi::{De, Env, Error, bindgen_prelude::*};
+use napi_derive::napi;
 use parley::{FontStyle, FontWeight, fontique::FontInfoOverride};
 use serde::{Deserialize, Deserializer, de::DeserializeOwned};
 use takumi_base::{
@@ -23,6 +23,48 @@ use takumi_base::{
 };
 
 pub use renderer::Renderer;
+
+/// A font family produced by `registerFont`, with the faces it contains.
+#[napi(object)]
+pub struct RegisteredFamily {
+  /// Family name as stored by the font system (normalized; reflects any override).
+  pub name: String,
+  /// Faces registered under this family.
+  pub faces: Vec<RegisteredFace>,
+}
+
+/// A single face within a `RegisteredFamily`.
+#[napi(object)]
+pub struct RegisteredFace {
+  /// Weight class, typically `1`–`1000`.
+  pub weight: f64,
+  /// CSS `font-style` value (`normal`, `italic`, or `oblique [<angle>deg]`).
+  pub style: String,
+  /// Width as a percentage of normal (e.g. `100`).
+  pub width: f64,
+  /// Index of the face within its source collection.
+  pub index: u32,
+}
+
+impl From<takumi_base::resources::font::RegisteredFamily> for RegisteredFamily {
+  fn from(family: takumi_base::resources::font::RegisteredFamily) -> Self {
+    Self {
+      name: family.name,
+      faces: family.faces.into_iter().map(Into::into).collect(),
+    }
+  }
+}
+
+impl From<takumi_base::resources::font::RegisteredFace> for RegisteredFace {
+  fn from(face: takumi_base::resources::font::RegisteredFace) -> Self {
+    Self {
+      weight: face.weight as f64,
+      style: face.style,
+      width: face.width as f64,
+      index: face.index,
+    }
+  }
+}
 
 #[derive(Deserialize, Default)]
 pub(crate) struct FontInput {
@@ -147,28 +189,4 @@ pub(crate) fn parse_stylesheet(
   let mut stylesheet = StyleSheet::parse_owned_list_loosy(stylesheets.unwrap_or_default());
   stylesheet.extend_keyframes(keyframes);
   Ok(stylesheet)
-}
-
-/// Trait for accounting external memory to V8's garbage collector.
-///
-/// Similar to the optimization in resvg-js PR #393:
-/// https://github.com/thx/resvg-js/pull/393
-///
-/// This allows V8 to be aware of memory allocated in Rust, enabling
-/// the garbage collector to trigger based on actual memory pressure.
-pub(crate) trait ExternalMemoryAccountable {
-  /// Account external memory to V8 by calling adjust_external_memory.
-  fn account_external_memory(&self, env: &mut Env) -> Result<()>;
-}
-
-impl ExternalMemoryAccountable for Vec<u8> {
-  fn account_external_memory(&self, env: &mut Env) -> Result<()> {
-    let bytes = self.len() as i64;
-
-    if bytes != 0 {
-      env.adjust_external_memory(bytes)?;
-    }
-
-    Ok(())
-  }
 }

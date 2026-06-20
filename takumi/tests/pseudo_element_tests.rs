@@ -21,7 +21,7 @@ fn measure_with_css(node: Node, css: &str) -> MeasuredNode {
       .viewport(viewport())
       .node(node)
       .stylesheet(stylesheet)
-      .global(&CONTEXT)
+      .fonts(&CONTEXT)
       .build(),
   )
   .unwrap()

@@ -1,9 +1,15 @@
 import {
   Renderer as RendererInternal,
+  type AnimationFrameSource,
   type ByteBuf,
+  type EncodeFramesOptions as EncodeFramesOptionsInternal,
   type Font,
   type FontDetails,
   type ImageSource,
+  type Node,
+  type RegisteredFamily,
+  type RenderAnimationOptions as RenderAnimationOptionsInternal,
+  type RenderOptions as RenderOptionsInternal,
 } from "../pkg/takumi_wasm";
 
 export * from "../pkg/takumi_wasm";
@@ -11,224 +17,182 @@ export { default } from "../pkg/takumi_wasm";
 
 export { extractResourceUrls } from "@takumi-rs/helpers";
 
-export type ImageSourceLoader = Omit<ImageSource, "data"> & {
-  data: ImageSource["data"] | (() => Promise<ImageSource["data"]> | ImageSource["data"]);
-};
-
 export type FontLoader =
   | Font
   | (Omit<FontDetails, "data"> & {
-      key?: string;
-      data: FontDetails["data"] | (() => Promise<FontDetails["data"]> | FontDetails["data"]);
-    });
+      data: () => Promise<FontDetails["data"]> | FontDetails["data"];
+    } & ({ key: string } | { name: string }));
 
-export type ImageSourceLoaderSync = Omit<ImageSource, "data"> & {
-  data: ImageSource["data"] | (() => ImageSource["data"]);
+type ImageLoaderData = ImageSource["data"];
+
+export type ImageLoader = Omit<ImageSource, "data"> & {
+  data: ImageLoaderData | (() => ImageLoaderData | Promise<ImageLoaderData>);
 };
 
-export type FontLoaderSync =
-  | Font
-  | (Omit<FontDetails, "data"> & {
-      key?: string;
-      data: FontDetails["data"] | (() => FontDetails["data"]);
+export type RenderOptions = Omit<RenderOptionsInternal, "images"> & {
+  fonts?: FontLoader[];
+  images?: ImageLoader[];
+};
+
+export type RenderAnimationOptions = Omit<RenderAnimationOptionsInternal, "images"> & {
+  fonts?: FontLoader[];
+  images?: ImageLoader[];
+};
+
+export type EncodeFramesOptions = Omit<EncodeFramesOptionsInternal, "images"> & {
+  fonts?: FontLoader[];
+  images?: ImageLoader[];
+};
+
+async function resolveImageLoaders(images: ImageLoader[]): Promise<ImageSource[]> {
+  const bySrc = new Map<string, ImageLoader>();
+
+  for (const image of images) {
+    bySrc.set(image.src, image);
+  }
+
+  return Promise.all(
+    [...bySrc.values()].map(async ({ src, data, cache }) => ({
+      src,
+      data: typeof data === "function" ? await data() : data,
+      cache,
+    })),
+  );
+}
+
+export class Renderer {
+  private fontMapping = new Map<string | ByteBuf, Promise<RegisteredFamily[]>>();
+  private inner = new RendererInternal();
+
+  private async prepareFonts(fonts: FontLoader[] | undefined) {
+    if (!fonts) {
+      return;
+    }
+
+    const families = await Promise.all(fonts.map(this.registerFont.bind(this)));
+
+    return [...new Set(families.flat().map((f) => f.name))];
+  }
+
+  async render(node: Node, options?: RenderOptions) {
+    const { fonts, fontFamilies, images, ...rest } = options ?? {};
+    const registeredFamilies = await this.prepareFonts(fonts);
+    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
+
+    return this.inner.render(node, {
+      ...rest,
+      images: resolvedImages,
+      fontFamilies: fontFamilies ?? registeredFamilies,
+    });
+  }
+
+  async renderAsDataUrl(node: Node, options?: RenderOptions) {
+    const { fonts, fontFamilies, images, ...rest } = options ?? {};
+    const registeredFamilies = await this.prepareFonts(fonts);
+    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
+
+    return this.inner.renderAsDataUrl(node, {
+      ...rest,
+      images: resolvedImages,
+      fontFamilies: fontFamilies ?? registeredFamilies,
+    });
+  }
+
+  async measure(node: Node, options?: RenderOptions) {
+    const { fonts, fontFamilies, images, ...rest } = options ?? {};
+    const registeredFamilies = await this.prepareFonts(fonts);
+    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
+
+    return this.inner.measure(node, {
+      ...rest,
+      images: resolvedImages,
+      fontFamilies: fontFamilies ?? registeredFamilies,
+    });
+  }
+
+  async renderAnimation(options: RenderAnimationOptions) {
+    const { fonts, fontFamilies, images, ...rest } = options;
+    const registeredFamilies = await this.prepareFonts(fonts);
+    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
+
+    return this.inner.renderAnimation({
+      ...rest,
+      images: resolvedImages,
+      fontFamilies: fontFamilies ?? registeredFamilies,
+    });
+  }
+
+  async encodeFrames(frames: AnimationFrameSource[], options: EncodeFramesOptions) {
+    const { fonts, fontFamilies, images, ...rest } = options;
+    const registeredFamilies = await this.prepareFonts(fonts);
+    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
+
+    return this.inner.encodeFrames(frames, {
+      ...rest,
+      images: resolvedImages,
+      fontFamilies: fontFamilies ?? registeredFamilies,
+    });
+  }
+
+  free() {
+    this.inner.free();
+  }
+
+  async registerFont(font: FontLoader) {
+    const key = createFontKey(font);
+
+    const cached = this.fontMapping.get(key);
+    if (cached) {
+      return cached;
+    }
+
+    const extracted = extractFontBuffer(font);
+
+    if (isBuffer(extracted)) {
+      const binded = this.inner.registerFont(extracted);
+
+      this.fontMapping.set(key, Promise.resolve(binded));
+
+      return binded;
+    }
+
+    const promise = extracted.then(this.inner.registerFont.bind(this.inner)).catch((error) => {
+      this.fontMapping.delete(key);
+      throw error;
     });
 
-export class Renderer extends RendererInternal {
-  private fontsMark = new Set<string>();
-  private fontBuffersMark = new WeakSet<ByteBuf>();
-  private persistentImageSrcMark = new Set<string>();
-  private pendingPersistentImages = new Map<string, Promise<void>>();
+    this.fontMapping.set(key, promise);
 
-  override putPersistentImage(data: ImageSourceLoaderSync, signal?: AbortSignal): void;
-  override putPersistentImage(data: ImageSourceLoader, signal?: AbortSignal): Promise<void>;
-  override putPersistentImage(
-    data: ImageSourceLoaderSync | ImageSourceLoader,
-    signal?: AbortSignal,
-  ): void | Promise<void> {
-    if (signal?.aborted) {
-      return;
-    }
-
-    if (!this.isNewPersistentImage(data.src)) {
-      return this.pendingPersistentImages.get(data.src);
-    }
-
-    const resolved = resolveImageLoader(data);
-
-    if (isPromise(resolved)) {
-      const pending = resolved
-        .then((value) => {
-          if (signal?.aborted) {
-            return;
-          }
-
-          super.putPersistentImage(value);
-          this.persistentImageSrcMark.add(data.src);
-        })
-        .finally(() => {
-          this.pendingPersistentImages.delete(data.src);
-        });
-
-      this.pendingPersistentImages.set(data.src, pending);
-
-      return pending;
-    }
-
-    if (signal?.aborted) {
-      return;
-    }
-
-    super.putPersistentImage(resolved);
-    this.persistentImageSrcMark.add(data.src);
-  }
-
-  override clearImageStore(): void {
-    super.clearImageStore();
-    this.persistentImageSrcMark.clear();
-    this.pendingPersistentImages.clear();
-  }
-
-  async loadFonts(fonts: FontLoader[], signal?: AbortSignal): Promise<number> {
-    let loaded = 0;
-
-    for (const font of fonts) {
-      if (await this.loadFontInternal(font, signal)) {
-        loaded += 1;
-      }
-    }
-
-    return loaded;
-  }
-
-  override loadFont(data: FontLoaderSync, signal?: AbortSignal): void;
-  override loadFont(data: FontLoader, signal?: AbortSignal): Promise<void>;
-  override loadFont(data: FontLoaderSync | FontLoader, signal?: AbortSignal): void | Promise<void> {
-    const loaded = this.loadFontInternal(data, signal);
-
-    if (isPromise(loaded)) {
-      return loaded.then(() => undefined);
-    }
-  }
-
-  private loadFontInternal(
-    font: FontLoaderSync | FontLoader,
-    signal?: AbortSignal,
-  ): boolean | Promise<boolean> {
-    if (signal?.aborted) {
-      return false;
-    }
-
-    const resolved = resolveFontLoader(font);
-
-    if (isPromise(resolved)) {
-      return resolved.then((value) => {
-        if (signal?.aborted || !this.checkAndMarkFont(value)) {
-          return false;
-        }
-
-        try {
-          super.loadFont(value);
-          return true;
-        } catch (error) {
-          this.unmarkFont(value);
-          throw error;
-        }
-      });
-    }
-
-    if (!this.checkAndMarkFont(resolved)) {
-      return false;
-    }
-
-    try {
-      super.loadFont(resolved);
-      return true;
-    } catch (error) {
-      this.unmarkFont(resolved);
-      throw error;
-    }
-  }
-
-  private checkAndMarkFont(font: FontLoaderSync | FontLoader): boolean {
-    const key = createFontKey(font);
-
-    if (isBuffer(key)) {
-      const isNew = !this.fontBuffersMark.has(key);
-
-      this.fontBuffersMark.add(key);
-      return isNew;
-    }
-
-    const isNew = !this.fontsMark.has(key);
-
-    this.fontsMark.add(key);
-
-    return isNew;
-  }
-
-  private unmarkFont(font: FontLoaderSync | FontLoader): void {
-    const key = createFontKey(font);
-
-    if (isBuffer(key)) {
-      this.fontBuffersMark.delete(key);
-      return;
-    }
-
-    this.fontsMark.delete(key);
-  }
-
-  private isNewPersistentImage(src: string): boolean {
-    return !this.persistentImageSrcMark.has(src) && !this.pendingPersistentImages.has(src);
+    return promise;
   }
 }
 
-function createFontKey(font: FontLoaderSync | FontLoader) {
-  if ("key" in font && font.key) {
-    return font.key;
-  }
-
+function extractFontBuffer(font: FontLoader) {
   if (isBuffer(font)) {
     return font;
   }
 
-  return `${font.name ?? ""}-${font.style ?? ""}-${font.weight ?? ""}`;
-}
-
-function resolveFontLoader(font: FontLoaderSync | FontLoader): Font | Promise<Font> {
-  if ("data" in font && typeof font.data === "function") {
-    const resolved = font.data();
-
-    if (isPromise(resolved)) {
-      return resolved.then((data) => ({ ...font, data }));
-    }
-
-    return { ...font, data: resolved };
+  if (typeof font.data !== "function") {
+    return font.data;
   }
 
-  return font as Font;
+  return font.data();
 }
 
-function resolveImageLoader(
-  source: ImageSourceLoaderSync | ImageSourceLoader,
-): ImageSource | Promise<ImageSource> {
-  if (typeof source.data === "function") {
-    const resolved = source.data();
-
-    if (isPromise(resolved)) {
-      return resolved.then((data) => ({ ...source, data }));
-    }
-
-    return {
-      ...source,
-      data: resolved,
-    };
+function createFontKey(font: FontLoader) {
+  if (isBuffer(font)) {
+    return font;
   }
 
-  return source as ImageSource;
-}
+  if ("key" in font && font.key) {
+    return font.key;
+  }
 
-function isPromise<T>(value: T | Promise<T>): value is Promise<T> {
-  return typeof value === "object" && value !== null && "then" in value;
+  if (typeof font.data === "function") {
+    return `${font.name ?? ""}:${font.weight ?? ""}:${font.style ?? ""}`;
+  }
+
+  return font.data;
 }
 
 function isBuffer(data: unknown): data is ByteBuf {

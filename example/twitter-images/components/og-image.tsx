@@ -1,12 +1,4 @@
-import { readFile } from "node:fs/promises";
 import { Zap, Globe, Sparkles } from "lucide-react";
-
-export const persistentImages = [
-  {
-    src: "takumi.svg",
-    data: await readFile("../../assets/images/takumi.svg"),
-  },
-];
 
 export const name = "og-image";
 
@@ -14,6 +6,8 @@ export const width = 1280;
 export const height = 640;
 
 export const fonts = ["geist/Geist[wght].woff2"];
+
+export const images = [{ src: "takumi.svg", path: "takumi.svg" }];
 
 export default function OgImage() {
   return (
@@ -34,7 +28,7 @@ export default function OgImage() {
       }}
     >
       <img
-        src={persistentImages[0]?.src}
+        src="takumi.svg"
         alt=""
         style={{
           position: "absolute",
@@ -64,7 +58,7 @@ export default function OgImage() {
           style={{ display: "flex", alignItems: "center", gap: "1.5rem", marginBottom: "2.5rem" }}
         >
           <img
-            src={persistentImages[0]?.src}
+            src="takumi.svg"
             alt="Takumi"
             style={{
               width: "5.5rem",

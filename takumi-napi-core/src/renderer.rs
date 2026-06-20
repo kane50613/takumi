@@ -1,21 +1,24 @@
-use std::sync::{Arc, RwLock};
+use std::collections::HashMap;
+use std::sync::{Arc, OnceLock, RwLock};
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use rayon::prelude::*;
 use takumi_base::{
-  GlobalContext,
+  Fonts,
   layout::{node::Node, style::KeyframesRule as CoreKeyframesRule},
-  resources::{font::FontResource, image::ImageSource as LoadedImageSource},
+  resources::{
+    font::FontResource,
+    image::{ImageCache, ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource},
+  },
 };
 use takumi_raster::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat};
 
 use crate::{
-  De, FontInput, buffer_from_object, buffer_slice_from_object, deserialize_with_tracing,
-  encode_frames_task::EncodeFramesTask, load_font_task::LoadFontTask, map_error,
-  measure_task::MeasureTask, parse_font_input, put_persistent_image_task::PutPersistentImageTask,
-  render_animation_task::RenderAnimationTask, render_task::RenderTask, resolve_font_resource,
+  De, deserialize_with_tracing, encode_frames_task::EncodeFramesTask, load_font_task::LoadFontTask,
+  map_error, measure_task::MeasureTask, parse_font_input,
+  render_animation_task::RenderAnimationTask, render_task::RenderTask,
 };
 
 /// Represents a single run of text in a measured node.
@@ -80,7 +83,29 @@ pub struct Renderer {
 }
 
 pub(crate) struct RendererState {
-  pub(crate) global: GlobalContext,
+  pub(crate) fonts: Fonts,
+  pub(crate) image_cache: ImageCache,
+}
+
+impl RendererState {
+  /// Decodes the per-call image buffers into a `src`-keyed map.
+  pub(crate) fn decode_images(
+    &self,
+    images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
+  ) -> Result<HashMap<Arc<str>, LoadedImageSource>> {
+    let mut map = HashMap::new();
+
+    for (src, (buffer, mode)) in images {
+      let decoded = self
+        .image_cache
+        .get_or_decode(&buffer, mode.into())
+        .map_err(map_error)?;
+
+      map.insert(src, decoded);
+    }
+
+    Ok(map)
+  }
 }
 
 pub(crate) fn deserialize_keyframes(keyframes: Option<Object>) -> Result<Vec<CoreKeyframesRule>> {
@@ -108,8 +133,8 @@ pub struct RenderOptions<'env> {
   pub quality: Option<u8>,
   /// Whether to draw debug borders.
   pub draw_debug_border: Option<bool>,
-  /// The fetched resources to use.
-  pub fetched_resources: Option<Vec<ImageSource<'env>>>,
+  /// Images keyed by `src`, each carrying raw bytes.
+  pub images: Option<Vec<ImageSource<'env>>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
   /// Structured keyframes to register alongside stylesheets.
@@ -122,6 +147,9 @@ pub struct RenderOptions<'env> {
   pub time_ms: Option<i64>,
   /// The output dithering algorithm.
   pub dithering: Option<DitheringAlgorithm>,
+  /// Per-render font stack: ordered family names used as the fallback chain.
+  /// Defaults to all registered families in registration order.
+  pub font_families: Option<Vec<String>>,
 }
 
 #[napi(string_enum)]
@@ -182,13 +210,16 @@ pub struct RenderAnimationOptions<'env> {
   pub quality: Option<u8>,
   /// Frames per second for timeline sampling.
   pub fps: u32,
-  /// The fetched resources to use.
-  pub fetched_resources: Option<Vec<ImageSource<'env>>>,
+  /// Images keyed by `src`, each carrying raw bytes.
+  pub images: Option<Vec<ImageSource<'env>>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
   /// The device pixel ratio.
   /// @default 1.0
   pub device_pixel_ratio: Option<f64>,
+  /// Per-render font stack: ordered family names used as the fallback chain.
+  /// Defaults to all registered families in registration order.
+  pub font_families: Option<Vec<String>>,
 }
 
 /// Options for encoding a precomputed frame sequence.
@@ -204,13 +235,16 @@ pub struct EncodeFramesOptions<'env> {
   pub format: Option<AnimationOutputFormat>,
   /// The quality of WebP format (0-100). Ignored for APNG and GIF.
   pub quality: Option<u8>,
-  /// The fetched resources to use.
-  pub fetched_resources: Option<Vec<ImageSource<'env>>>,
+  /// Images keyed by `src`, each carrying raw bytes.
+  pub images: Option<Vec<ImageSource<'env>>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
   /// The device pixel ratio.
   /// @default 1.0
   pub device_pixel_ratio: Option<f64>,
+  /// Per-render font stack: ordered family names used as the fallback chain.
+  /// Defaults to all registered families in registration order.
+  pub font_families: Option<Vec<String>>,
 }
 
 /// Output format for animated images.
@@ -254,6 +288,26 @@ impl From<OutputFormat> for ImageOutputFormat {
   }
 }
 
+/// Cache policy for a decoded image. Defaults to `"auto"`.
+#[napi(string_enum = "lowercase")]
+#[derive(Clone, Copy, Default)]
+pub enum ImageCacheMode {
+  /// Cache the decoded image for reuse (evictable).
+  #[default]
+  Auto,
+  /// Skip the decoded-image cache.
+  None,
+}
+
+impl From<ImageCacheMode> for CoreImageCacheMode {
+  fn from(mode: ImageCacheMode) -> Self {
+    match mode {
+      ImageCacheMode::Auto => Self::Auto,
+      ImageCacheMode::None => Self::None,
+    }
+  }
+}
+
 /// An image source with its URL and raw data.
 #[napi(object)]
 pub struct ImageSource<'ctx> {
@@ -262,20 +316,8 @@ pub struct ImageSource<'ctx> {
   /// The raw image data (Uint8Array or ArrayBuffer).
   #[napi(ts_type = "Uint8Array | ArrayBuffer")]
   pub data: Object<'ctx>,
-}
-
-/// Options for constructing a Renderer instance.
-#[napi(object)]
-#[derive(Default)]
-pub struct ConstructRendererOptions<'ctx> {
-  /// The images that needs to be preloaded into the renderer.
-  pub persistent_images: Option<Vec<ImageSource<'ctx>>>,
-  /// The fonts being used.
-  #[napi(ts_type = "Font[] | undefined")]
-  pub fonts: Option<Vec<Object<'ctx>>>,
-  /// Whether to load the default fonts.
-  /// If `fonts` are provided, this will be `false` by default.
-  pub load_default_fonts: Option<bool>,
+  /// Cache policy for the decoded image. Defaults to `"auto"`.
+  pub cache: Option<ImageCacheMode>,
 }
 
 const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[
@@ -291,208 +333,82 @@ const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[
   ),
 ];
 
+static DEFAULT_FONTS: OnceLock<Fonts> = OnceLock::new();
+
+/// Returns a clone of the process-wide default font set, decoding the embedded
+/// fonts once and sharing the decoded blobs across every renderer.
+fn default_fonts() -> Result<Fonts> {
+  if let Some(fonts) = DEFAULT_FONTS.get() {
+    return Ok(fonts.clone());
+  }
+
+  let mut fonts = Fonts::default();
+  let resources = crate::pool::install(|| {
+    EMBEDDED_FONTS
+      .par_iter()
+      .map(|(font, name, generic)| {
+        FontResource::new(*font)
+          .override_info(FontInfoOverride {
+            family_name: Some(*name),
+            ..Default::default()
+          })
+          .generic_family(*generic)
+          .into_resolved()
+          .map_err(|e| Error::from_reason(format!("Failed to load default font: {e}")))
+      })
+      .collect::<Result<Vec<_>>>()
+  })?;
+
+  for resource in resources {
+    drop(fonts.register(resource).map_err(map_error)?);
+  }
+
+  if DEFAULT_FONTS.set(fonts.clone()).is_err()
+    && let Some(stored) = DEFAULT_FONTS.get()
+  {
+    return Ok(stored.clone());
+  }
+
+  Ok(fonts)
+}
+
 #[napi]
 impl Renderer {
   /// Creates a new Renderer instance.
   #[napi(constructor)]
-  pub fn new(env: Env, options: Option<ConstructRendererOptions>) -> Result<Self> {
+  pub fn new(env: Env) -> Result<Self> {
     crate::pool::register_cleanup(&env);
 
-    let options = options.unwrap_or_default();
-
-    let load_default_fonts = options
-      .load_default_fonts
-      .unwrap_or_else(|| options.fonts.is_none());
-
-    let mut global = GlobalContext::default();
-
-    if load_default_fonts {
-      let default_fonts_resources = crate::pool::install(|| {
-        EMBEDDED_FONTS
-          .par_iter()
-          .map(|(font, name, generic)| {
-            FontResource::new(*font)
-              .override_info(FontInfoOverride {
-                family_name: Some(*name),
-                ..Default::default()
-              })
-              .generic_family(*generic)
-              .into_resolved()
-              .map_err(|e| Error::from_reason(format!("Failed to load default font: {e}")))
-          })
-          .collect::<Result<Vec<_>>>()
-      })?;
-
-      for resource in default_fonts_resources {
-        global
-          .font_context
-          .load_and_store(resource)
-          .map_err(map_error)?;
-      }
-    }
-
-    let renderer = Self {
-      state: Arc::new(RwLock::new(RendererState { global })),
-    };
-
-    if let Some(fonts) = options.fonts {
-      let buffers = fonts
-        .into_iter()
-        .map(|font| parse_font_input(env, font))
-        .collect::<Result<Vec<_>>>()?;
-
-      let custom_fonts_resources = crate::pool::install(|| {
-        buffers
-          .par_iter()
-          .with_min_len(2)
-          .map(|(font, buffer): &(FontInput, Buffer)| resolve_font_resource(font, buffer.as_ref()))
-          .collect::<Result<Vec<_>>>()
-      })?;
-
-      let mut state = renderer
-        .state
-        .write()
-        .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-
-      for resource in custom_fonts_resources {
-        state
-          .global
-          .font_context
-          .load_and_store(resource)
-          .map_err(map_error)?;
-      }
-    }
-
-    if let Some(images) = options.persistent_images {
-      let state = renderer
-        .state
-        .write()
-        .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-      for image in images {
-        let buffer = buffer_slice_from_object(env, image.data)?;
-        let image_source = LoadedImageSource::from_bytes(&buffer).map_err(map_error)?;
-
-        state
-          .global
-          .persistent_image_store
-          .insert(image.src, image_source);
-      }
-    }
-
-    Ok(renderer)
+    Ok(Self {
+      state: Arc::new(RwLock::new(RendererState {
+        fonts: default_fonts()?,
+        image_cache: ImageCache::default(),
+      })),
+    })
   }
 
-  /// Puts a persistent image into the renderer's internal store asynchronously.
+  /// Register font into the renderer, returning the families produced.
   #[napi(
-    ts_args_type = "source: ImageSource, signal?: AbortSignal",
-    ts_return_type = "Promise<void>"
+    js_name = "registerFont",
+    ts_args_type = "fonts: Font, signal?: AbortSignal",
+    ts_return_type = "Promise<RegisteredFamily[]>"
   )]
-  pub fn put_persistent_image(
+  pub fn register_font(
     &self,
     env: Env,
-    source: ImageSource,
-    signal: Option<AbortSignal>,
-  ) -> Result<AsyncTask<PutPersistentImageTask>> {
-    let buffer = buffer_from_object(env, source.data)?;
-
-    Ok(AsyncTask::with_optional_signal(
-      PutPersistentImageTask {
-        src: Some(source.src),
-        state: Arc::clone(&self.state),
-        buffer,
-      },
-      signal,
-    ))
-  }
-
-  /// Loads a font synchronously.
-  #[napi(ts_args_type = "font: Font")]
-  pub fn load_font_sync(&self, env: Env, font: Object) -> Result<()> {
-    if let Ok(buffer) = buffer_slice_from_object(env, font) {
-      let resource = FontResource::new(buffer.as_ref())
-        .into_resolved()
-        .map_err(map_error)?;
-
-      let mut state = self
-        .state
-        .write()
-        .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-
-      state
-        .global
-        .font_context
-        .load_and_store(resource)
-        .map_err(map_error)?;
-
-      return Ok(());
-    }
-
-    let buffer = font
-      .get_named_property("data")
-      .and_then(|buffer| buffer_slice_from_object(env, buffer))?;
-    let font_input: FontInput = deserialize_with_tracing(font)?;
-
-    let resource = resolve_font_resource(&font_input, buffer.as_ref())?;
-
-    let mut state = self
-      .state
-      .write()
-      .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-
-    state
-      .global
-      .font_context
-      .load_and_store(resource)
-      .map_err(map_error)?;
-
-    Ok(())
-  }
-
-  /// Loads a font into the renderer asynchronously.
-  #[napi(
-    ts_args_type = "data: Font, signal?: AbortSignal",
-    ts_return_type = "Promise<number>"
-  )]
-  pub fn load_font(
-    &self,
-    env: Env,
-    data: Object,
+    font: Object,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<LoadFontTask>> {
-    self.load_fonts(env, vec![data], signal)
-  }
-
-  /// Loads multiple fonts into the renderer asynchronously.
-  #[napi(
-    ts_args_type = "fonts: Font[], signal?: AbortSignal",
-    ts_return_type = "Promise<number>"
-  )]
-  pub fn load_fonts(
-    &self,
-    env: Env,
-    fonts: Vec<Object>,
-    signal: Option<AbortSignal>,
-  ) -> Result<AsyncTask<LoadFontTask>> {
-    let buffers = fonts
-      .into_iter()
-      .map(|font| parse_font_input(env, font))
-      .collect::<Result<Vec<_>>>()?;
+    let (info, buffer) = parse_font_input(env, font)?;
 
     Ok(AsyncTask::with_optional_signal(
       LoadFontTask {
         state: Arc::clone(&self.state),
-        buffers,
+        buffer,
+        info,
       },
       signal,
     ))
-  }
-
-  /// Clears the renderer's internal image store.
-  #[napi]
-  pub fn clear_image_store(&self) {
-    if let Ok(state) = self.state.write() {
-      state.global.persistent_image_store.clear();
-    }
   }
 
   /// Renders a node tree into an image buffer asynchronously.

@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use taffy::{AbsoluteAxis, AvailableSpace, NodeId, Point, Rect, Size};
 use takumi_base::{
-  GlobalContext,
+  Fonts,
   context::RenderContext,
   error::Result,
   layout::{
@@ -34,51 +34,69 @@ use crate::text::{emit_inline_content, emit_text};
 use crate::{APPROX_CHARS_PER_NUMBER, IDENTITY, Num, Rgba, SvgDocument};
 
 /// Inputs for [`render`]. Built with [`SvgOptions::builder`]; only `node`,
-/// `viewport`, and `global` are required. Carrying inputs in a builder struct
+/// `viewport`, and `fonts` are required. Carrying inputs in a builder struct
 /// keeps new options from being breaking changes.
 #[derive(TypedBuilder)]
 pub struct SvgOptions<'g> {
   /// The viewport to render in.
   pub(crate) viewport: Viewport,
-  /// The global context (fonts, persistent images).
-  pub(crate) global: &'g GlobalContext,
+  /// The font context.
+  pub(crate) fonts: &'g Fonts,
   /// The root node to render.
   pub(crate) node: Node,
   /// Resources fetched externally, keyed by URL.
   #[builder(default)]
-  pub(crate) fetched_resources: HashMap<Arc<str>, ImageSource>,
+  pub(crate) images: HashMap<Arc<str>, ImageSource>,
   /// CSS stylesheets to apply before layout.
   #[builder(default)]
   pub(crate) stylesheet: StyleSheet,
   /// Global animation time in milliseconds.
   #[builder(default = 0)]
   pub(crate) time_ms: u64,
+  /// Per-render font fallback chain (family names in order). `None` uses all
+  /// registered families in registration order.
+  #[builder(default)]
+  pub(crate) font_families: Option<Vec<String>>,
 }
 
 /// Renders a node tree to a vector SVG string.
 pub fn render(options: SvgOptions<'_>) -> Result<String> {
   let viewport = options.viewport;
-  let canvas_w = viewport.size.width;
-  let canvas_h = viewport.size.height;
-  let context = RenderContext::new(
-    options.global,
-    viewport,
-    options.fetched_resources,
-    Rc::new(options.stylesheet),
-    options.time_ms,
-  );
+
+  let context = RenderContext::builder()
+    .fonts(
+      options
+        .fonts
+        .snapshot_with_fallbacks(options.font_families.as_deref()),
+    )
+    .sizing(SizingContext::builder().viewport(viewport).build())
+    .images(Rc::new(options.images))
+    .stylesheet(options.stylesheet.into())
+    .time_ms(options.time_ms)
+    .build();
+
   let root = RenderNode::from_node(&context, options.node);
   let mut tree = LayoutTree::from_render_node(&root);
   let root_id = tree.root_node_id();
-  tree.compute_layout(context.sizing.viewport.into());
+
+  tree.compute_layout(viewport.into());
+
   let results = tree.into_results();
 
   let root_layout = results.layout(root_id)?;
-  let width = canvas_w.map_or(root_layout.size.width, |w| w as f32);
-  let height = canvas_h.map_or(root_layout.size.height, |h| h as f32);
+  let width = viewport
+    .size
+    .width
+    .map_or(root_layout.size.width, |w| w as f32);
+  let height = viewport
+    .size
+    .height
+    .map_or(root_layout.size.height, |h| h as f32);
   let mut doc = SvgDocument::new(width, height)?;
   let mut origins = HashMap::new();
+
   emit_node(&root, root_id, &results, 0.0, 0.0, &mut origins, &mut doc)?;
+
   Ok(doc.render()?)
 }
 
@@ -622,7 +640,7 @@ fn emit_node(
 /// border/padding plus the inline-resolved position.
 pub(crate) fn emit_inline_box(
   inline_box: &VisualInlineBox,
-  item: &InlineBoxItem<'_, '_>,
+  item: &InlineBoxItem<'_>,
   container_layout: taffy::Layout,
   container_x: f32,
   container_y: f32,
@@ -1156,12 +1174,12 @@ mod tests {
 
   #[test]
   fn renders_svg_wrapper_at_viewport_size() {
-    let global = GlobalContext::default();
+    let fonts = Fonts::default();
     let svg = render(
       SvgOptions::builder()
         .node(Node::container([]))
         .viewport(Viewport::new((120, 80)))
-        .global(&global)
+        .fonts(&fonts)
         .build(),
     )
     .unwrap();

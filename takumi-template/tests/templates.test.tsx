@@ -20,13 +20,12 @@ function testRender(name: string, template: ReactNode) {
       height: 630,
       format: "webp",
       dithering: "floyd-steinberg",
-      persistentImages: [
+      images: [
         {
           src: "takumi.svg",
-          data: () =>
-            file(
-              join(import.meta.dirname, "..", "..", "assets", "images", "takumi.svg"),
-            ).arrayBuffer(),
+          data: await file(
+            join(import.meta.dirname, "..", "..", "assets", "images", "takumi.svg"),
+          ).arrayBuffer(),
         },
       ],
     });
@@ -127,7 +126,7 @@ testRender(
     date="June 15, 2026"
     headline="Faster fonts, leaner core"
     bullets={[
-      { tag: "New", text: "Explicit FontContext API" },
+      { tag: "New", text: "Explicit Fonts API" },
       { tag: "Perf", text: "30% smaller Wasm bundle" },
       { tag: "Fixed", text: "Emoji baseline alignment" },
     ]}

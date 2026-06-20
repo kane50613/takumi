@@ -33,10 +33,9 @@ const logoUrl = "https://yeecord.com/img/logo.png";
 
 initSync(module); // [!code highlight]
 
-// [!code highlight:3]
-const renderer = new Renderer({
-  fonts: [archivo],
-});
+// [!code highlight:2]
+const renderer = new Renderer();
+await renderer.registerFont(archivo);
 
 export default {
   fetch(request) {

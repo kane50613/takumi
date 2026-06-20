@@ -71,10 +71,10 @@ pub(crate) fn pixmap_from_buffer(buffer: &ImageBuffer) -> Option<Pixmap> {
   Pixmap::from_vec(buffer.data().to_vec(), size)
 }
 
-pub(crate) fn get_node_mut_by_path<'a, 'g>(
-  root: &'a mut RenderNode<'g>,
+pub(crate) fn get_node_mut_by_path<'a>(
+  root: &'a mut RenderNode,
   path: &[usize],
-) -> Option<&'a mut RenderNode<'g>> {
+) -> Option<&'a mut RenderNode> {
   let mut current = root;
   for &index in path {
     let children = current.children.as_deref_mut()?;

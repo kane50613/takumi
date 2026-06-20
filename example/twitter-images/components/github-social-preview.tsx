@@ -1,6 +1,6 @@
-import OgImage, { persistentImages, fonts } from "./og-image";
+import OgImage, { fonts } from "./og-image";
 
-export { persistentImages, fonts };
+export { fonts };
 
 export const name = "github-social-preview";
 

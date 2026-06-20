@@ -1,23 +1,23 @@
 use std::{
   borrow::Cow,
   collections::HashMap,
+  mem::take,
   sync::{Arc, RwLock},
 };
 
 use napi::bindgen_prelude::*;
 use rayon::prelude::*;
-use takumi_base::{
-  layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node},
-  resources::image::ImageSource as LoadedImageSource,
-};
+use takumi_base::layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node};
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, encode_animated_gif,
   encode_animated_png, encode_animated_webp, render,
 };
 
 use crate::{
-  ExternalMemoryAccountable, buffer_from_object, map_error, parse_stylesheet,
-  renderer::{AnimationOutputFormat, EncodeFramesOptions, ImageSource, RendererState},
+  buffer_from_object, map_error, parse_stylesheet,
+  renderer::{
+    AnimationOutputFormat, EncodeFramesOptions, ImageCacheMode, ImageSource, RendererState,
+  },
 };
 
 pub struct EncodeFramesTask {
@@ -28,7 +28,8 @@ pub struct EncodeFramesTask {
   pub quality: Option<u8>,
   pub draw_debug_border: bool,
   pub stylesheets: Option<Vec<String>>,
-  pub fetched_resources: HashMap<Arc<str>, Buffer>,
+  pub images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
+  pub font_families: Option<Vec<String>>,
 }
 
 impl EncodeFramesTask {
@@ -51,14 +52,21 @@ impl EncodeFramesTask {
       quality: options.quality,
       draw_debug_border: options.draw_debug_border.unwrap_or_default(),
       stylesheets: options.stylesheets,
-      fetched_resources: options
-        .fetched_resources
+      images: options
+        .images
         .unwrap_or_default()
         .into_iter()
         .map(|image: ImageSource<'_>| {
-          Ok((Arc::from(image.src), buffer_from_object(env, image.data)?))
+          Ok((
+            Arc::from(image.src),
+            (
+              buffer_from_object(env, image.data)?,
+              image.cache.unwrap_or_default(),
+            ),
+          ))
         })
         .collect::<Result<_>>()?,
+      font_families: options.font_families,
     })
   }
 }
@@ -76,23 +84,15 @@ impl Task for EncodeFramesTask {
       let Some(frames) = self.frames.take() else {
         unreachable!()
       };
-      let initialized_images = self
-        .fetched_resources
-        .iter()
-        .map(|(key, value)| {
-          Ok((
-            key.clone(),
-            LoadedImageSource::from_bytes(value).map_err(map_error)?,
-          ))
-        })
-        .collect::<Result<HashMap<_, _>, _>>()?;
       let state = self
         .state
         .read()
         .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
+      let initialized_images = state.decode_images(take(&mut self.images))?;
 
       let viewport = self.viewport;
       let draw_debug_border = self.draw_debug_border;
+      let font_families = take(&mut self.font_families);
       let stylesheet = parse_stylesheet(self.stylesheets.clone(), Vec::new())?;
       let frames = frames
         .into_par_iter()
@@ -101,10 +101,11 @@ impl Task for EncodeFramesTask {
             render(
               takumi_raster::RenderOptions::builder()
                 .viewport(viewport)
-                .fetched_resources(initialized_images.clone())
+                .images(initialized_images.clone())
                 .stylesheet(stylesheet.clone())
                 .node(node)
-                .global(&state.global)
+                .fonts(&state.fonts)
+                .font_families(font_families.clone())
                 .draw_debug_border(draw_debug_border)
                 .build(),
             )
@@ -166,8 +167,7 @@ impl Task for EncodeFramesTask {
     })
   }
 
-  fn resolve(&mut self, mut env: Env, output: Self::Output) -> Result<Self::JsValue> {
-    output.account_external_memory(&mut env)?;
+  fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
     Ok(output.into())
   }
 }

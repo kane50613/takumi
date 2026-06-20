@@ -750,7 +750,9 @@ mod tests {
       },
     ];
 
-    let sizing = SizingContext::new_test(Viewport::new((40, 40)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((40, 40)))
+      .build();
 
     let width = sizing.viewport.size.width;
 
@@ -805,7 +807,9 @@ mod tests {
       },
     ];
 
-    let sizing = SizingContext::new_test(Viewport::new((40, 40)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((40, 40)))
+      .build();
 
     let resolved = resolve_stops_along_axis(
       &stops,
@@ -847,7 +851,9 @@ mod tests {
       },
     ];
 
-    let sizing = SizingContext::new_test(Viewport::new((40, 40)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((40, 40)))
+      .build();
 
     let resolved = resolve_stops_along_axis(
       &stops,

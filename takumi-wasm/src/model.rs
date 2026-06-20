@@ -6,6 +6,7 @@ use serde_bytes::ByteBuf;
 use std::sync::Arc;
 use takumi_base::{
   keyframes::deserialize_optional_keyframes, layout::node::Node, layout::style::KeyframesRule,
+  resources::image::ImageCacheMode,
 };
 use takumi_raster::DitheringAlgorithm;
 use wasm_bindgen::prelude::*;
@@ -29,17 +30,13 @@ extern "C" {
   #[wasm_bindgen(typescript_type = "EncodeFramesOptions")]
   pub type EncodeFramesOptionsType;
 
-  /// JavaScript object representing font details.
-  #[wasm_bindgen(typescript_type = "FontDetails")]
-  pub type FontDetailsType;
-
   /// JavaScript type for font input (FontDetails or ByteBuf).
   #[wasm_bindgen(typescript_type = "Font")]
   pub type FontType;
 
-  /// JavaScript object representing renderer construction options.
-  #[wasm_bindgen(typescript_type = "ConstructRendererOptions")]
-  pub type ConstructRendererOptionsType;
+  /// JavaScript type for the families produced by `registerFont`.
+  #[wasm_bindgen(typescript_type = "RegisteredFamily[]")]
+  pub type RegisteredFamiliesType;
 
   /// JavaScript object representing an image source.
   #[wasm_bindgen(typescript_type = "ImageSource")]
@@ -71,7 +68,7 @@ pub struct RenderOptions {
   /// The JPEG quality (0-100), if applicable.
   pub quality: Option<u8>,
   /// Pre-fetched image resources to use during rendering.
-  pub fetched_resources: Option<Vec<ImageSource>>,
+  pub images: Option<Vec<ImageSource>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
   /// Structured keyframes to register alongside stylesheets.
@@ -85,6 +82,9 @@ pub struct RenderOptions {
   pub time_ms: Option<i64>,
   /// The output dithering algorithm.
   pub dithering: Option<DitheringAlgorithm>,
+  /// Per-render font stack: ordered family names used as the fallback chain.
+  /// Defaults to all registered families in registration order.
+  pub font_families: Option<Vec<String>>,
 }
 
 /// Options for rendering an animated image.
@@ -102,7 +102,7 @@ pub struct RenderAnimationOptions {
   /// The WebP quality (0-100). Ignored for APNG and GIF.
   pub quality: Option<u8>,
   /// Pre-fetched image resources to use during rendering.
-  pub fetched_resources: Option<Vec<ImageSource>>,
+  pub images: Option<Vec<ImageSource>>,
   /// Whether to draw debug borders around layout elements.
   pub draw_debug_border: Option<bool>,
   /// CSS stylesheets to apply before rendering.
@@ -111,6 +111,8 @@ pub struct RenderAnimationOptions {
   pub device_pixel_ratio: Option<f32>,
   /// Frames per second for timeline sampling.
   pub fps: u32,
+  /// Per-render font stack: ordered family names used as the fallback chain.
+  pub font_families: Option<Vec<String>>,
 }
 
 /// Options for encoding a precomputed frame sequence.
@@ -126,13 +128,15 @@ pub struct EncodeFramesOptions {
   /// The WebP quality (0-100). Ignored for APNG and GIF.
   pub quality: Option<u8>,
   /// Pre-fetched image resources to use during rendering.
-  pub fetched_resources: Option<Vec<ImageSource>>,
+  pub images: Option<Vec<ImageSource>>,
   /// Whether to draw debug borders around layout elements.
   pub draw_debug_border: Option<bool>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
   /// The device pixel ratio for scaling.
   pub device_pixel_ratio: Option<f32>,
+  /// Per-render font stack: ordered family names used as the fallback chain.
+  pub font_families: Option<Vec<String>>,
 }
 
 /// Details for loading a custom font.
@@ -159,19 +163,6 @@ pub enum Font {
   Buffer(ByteBuf),
 }
 
-/// Options for constructing a Renderer instance.
-#[derive(Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct ConstructRendererOptions {
-  /// The images that needs to be preloaded into the renderer.
-  pub persistent_images: Option<Vec<ImageSource>>,
-  /// The fonts being used.
-  pub fonts: Option<Vec<Font>>,
-  /// Whether to load the default fonts.
-  /// If `fonts` are provided, this will be `false` by default.
-  pub load_default_fonts: Option<bool>,
-}
-
 /// An image source with its URL and raw data.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -180,6 +171,8 @@ pub struct ImageSource {
   pub src: Arc<str>,
   /// The raw image data bytes.
   pub data: ByteBuf,
+  /// Cache policy for the decoded image. Defaults to `"auto"`.
+  pub cache: Option<ImageCacheMode>,
 }
 
 /// Output format for static images.
