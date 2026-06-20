@@ -3,7 +3,6 @@ resolver = "3"
 members = [
   "takumi",
   "takumi-css",
-  "takumi-server",
   "takumi-napi-core",
   "takumi-wasm",
   "example/rust",
