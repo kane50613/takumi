@@ -10,8 +10,6 @@ import { fromHtml } from "@takumi-rs/helpers/html";
 
 type InnerRenderOptions = napi.RenderOptions | wasm.RenderOptions;
 
-export type { ImageCacheMode, ImageLoader } from "@takumi-rs/core";
-
 type RenderOptionsWithRenderer = InnerRenderOptions & {
   renderer: napi.Renderer | wasm.Renderer;
   signal?: AbortSignal;
@@ -96,8 +94,15 @@ export async function render(element: RenderInput, options?: RenderOptions) {
   const emojiType = options?.emoji ?? "twemoji";
 
   const node = emojiType !== "from-font" ? extractEmojis(originalNode, emojiType) : originalNode;
-  const images =
-    options?.images ?? (await fetchResources(extractResourceUrls(node), options?.resourcesOptions));
+
+  const providedImages = options?.images ?? [];
+  const providedSrcs = new Set(providedImages.map((image) => image.src));
+  const fetched = await fetchResources(
+    extractResourceUrls(node).filter((url) => !providedSrcs.has(url)),
+    options?.resourcesOptions,
+  );
+
+  const images = [...providedImages, ...fetched];
 
   // The WASM renderer is synchronous and ignores the signal argument, so honor an
   // abort that happened during the async font/resource loading before the blocking call.
