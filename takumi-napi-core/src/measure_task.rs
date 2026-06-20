@@ -6,13 +6,12 @@ use napi::bindgen_prelude::*;
 use takumi_base::{
   layout::style::StyleSheet,
   layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node},
-  resources::image::ImageSource as LoadedImageSource,
 };
 use takumi_raster::measure_layout;
 
 use crate::{
   buffer_from_object, map_error, parse_stylesheet,
-  renderer::{MeasuredNode, RenderOptions, RendererState, deserialize_keyframes},
+  renderer::{ImageCacheMode, MeasuredNode, RenderOptions, RendererState, deserialize_keyframes},
 };
 
 pub struct MeasureTask {
@@ -21,7 +20,8 @@ pub struct MeasureTask {
   pub viewport: Viewport,
   pub time_ms: u64,
   pub stylesheet: StyleSheet,
-  pub fetched_resources: HashMap<Arc<str>, Buffer>,
+  pub images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
+  pub font_families: Option<Vec<String>>,
 }
 
 impl MeasureTask {
@@ -45,12 +45,21 @@ impl MeasureTask {
         options.stylesheets,
         deserialize_keyframes(options.keyframes)?,
       )?,
-      fetched_resources: options
-        .fetched_resources
+      images: options
+        .images
         .unwrap_or_default()
         .into_iter()
-        .map(|image| Ok((Arc::from(image.src), buffer_from_object(env, image.data)?)))
+        .map(|image| {
+          Ok((
+            Arc::from(image.src),
+            (
+              buffer_from_object(env, image.data)?,
+              image.cache.unwrap_or_default(),
+            ),
+          ))
+        })
         .collect::<Result<_>>()?,
+      font_families: options.font_families,
     })
   }
 }
@@ -64,29 +73,21 @@ impl Task for MeasureTask {
       unreachable!()
     };
 
-    let initialized_images = self
-      .fetched_resources
-      .iter()
-      .map(|(k, v)| {
-        Ok((
-          k.clone(),
-          LoadedImageSource::from_bytes(v).map_err(map_error)?,
-        ))
-      })
-      .collect::<Result<HashMap<_, _>, _>>()?;
-
     let state = self
       .state
       .read()
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
+    let initialized_images = state.decode_images(take(&mut self.images))?;
+
     let options = takumi_raster::RenderOptions::builder()
       .viewport(self.viewport)
-      .fetched_resources(initialized_images)
+      .images(initialized_images)
       .stylesheet(take(&mut self.stylesheet))
       .time_ms(self.time_ms)
       .node(node)
-      .global(&state.global)
+      .fonts(&state.fonts)
+      .font_families(take(&mut self.font_families))
       .build();
 
     measure_layout(options).map_err(map_error)

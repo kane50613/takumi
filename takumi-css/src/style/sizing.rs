@@ -1,50 +1,39 @@
 use std::rc::Rc;
 
 use taffy::Size;
+use typed_builder::TypedBuilder;
 
 use crate::Viewport;
 use crate::style::CalcArena;
 
 /// The sizing context used for length value resolving.
-#[derive(Clone)]
+#[derive(Clone, TypedBuilder)]
 pub struct SizingContext {
   /// The viewport for the image renderer.
   pub viewport: Viewport,
   /// The nearest query container size (content box) in device pixels.
+  #[builder(default)]
   pub container_size: Size<Option<f32>>,
   /// The font size in pixels.
+  #[builder(default = viewport.font_size * viewport.device_pixel_ratio)]
   pub font_size: f32,
   /// Computed `font-size` of the root element in device pixels. `None` before
   /// the root has been resolved; readers should fall back to `viewport.font_size`.
   /// https://www.w3.org/TR/css-values-4/#rem
+  #[builder(default)]
   pub root_font_size: Option<f32>,
   /// Pixel basis for the `lh` unit.
+  #[builder(default = viewport.font_size * viewport.device_pixel_ratio)]
   pub line_height: f32,
   /// Pixel basis for the `rlh` unit; `None` before root is resolved.
+  #[builder(default)]
   pub root_line_height: Option<f32>,
   /// The calc arena shared by the current layout tree.
+  #[builder(default)]
   pub calc_arena: Rc<CalcArena>,
 }
 
 impl SizingContext {
-  /// Test/bench helper. Exposed (not `#[cfg(test)]`) so dependent crates can
-  /// build a context in their own tests.
-  #[doc(hidden)]
-  pub fn new_test(viewport: Viewport) -> Self {
-    // Seed device-pixel metrics so `em`/`lh` conversions don't collapse to zero
-    // or drift at non-1.0 DPR.
-    let font_size = viewport.font_size * viewport.device_pixel_ratio;
-    Self {
-      viewport,
-      container_size: Size::NONE,
-      font_size,
-      root_font_size: None,
-      line_height: font_size,
-      root_line_height: None,
-      calc_arena: Rc::new(CalcArena::default()),
-    }
-  }
-
   /// Device-pixel basis for the `rem` unit.
   pub fn rem_basis(&self) -> f32 {
     self

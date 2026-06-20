@@ -1,6 +1,5 @@
 export const name = "home-filmstrip";
 
-export const persistentImages = [];
 export const fonts = [];
 
 export const width = 480;

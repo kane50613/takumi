@@ -24,20 +24,17 @@ const image = await render(element, {
 });
 ```
 
-## Persistent Images
+## Pre-fetched Images
 
-Preload frequently used images like logo, background, etc. to avoid redundant image decoding and improve performance.
-
-The image key can be used in any `src` field or `background-image`, `mask-image` CSS property.
+Provide images by key so the renderer doesn't have to fetch them itself. Each key can be used in any `src` field or in the `background-image` / `mask-image` CSS properties.
 
 ```tsx twoslash
 import { ImageResponse } from "takumi-js/response";
-import type { ImageSource } from "takumi-js";
 
 export function GET() {
   return new ImageResponse(<OgImage />, {
     // [!code ++]
-    persistentImages: [
+    images: [
       {
         src: "my-logo",
         data: () => fetch("/logo.png").then((res) => res.arrayBuffer()),

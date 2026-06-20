@@ -35,7 +35,7 @@ pub(crate) struct LayerTileStyle {
 
 pub(crate) struct ResolveLayerTilesInput<'a> {
   pub area: Size<u32>,
-  pub context: &'a RenderContext<'a>,
+  pub context: &'a RenderContext,
   pub buffer_pool: &'a mut BufferPool,
 }
 
@@ -45,7 +45,7 @@ pub(crate) struct ResolveTileLayersInput<'a> {
   pub sizes: &'a [BackgroundSize],
   pub repeats: &'a [BackgroundRepeat],
   pub blend_modes: &'a [BlendMode],
-  pub context: &'a RenderContext<'a>,
+  pub context: &'a RenderContext,
   pub border_box: Size<u32>,
   pub buffer_pool: &'a mut BufferPool,
 }
@@ -521,7 +521,7 @@ pub(crate) fn render_tile(
             algo: context.style.image_rendering,
           }),
           ImageSource::Gif(gif) => Some(BackgroundTile::SampledBitmap {
-            source: gif.frame_at_time_arc(context.time),
+            source: gif.frame_at_time_arc(context.time_ms),
             width: tile_w,
             height: tile_h,
             algo: context.style.image_rendering,
@@ -531,7 +531,7 @@ pub(crate) fn render_tile(
             tile_w,
             tile_h,
             context.style.image_rendering,
-            context.time,
+            context.time_ms,
           )? {
             RenderedImage::Rasterized(buffer) => {
               pixmap_from_buffer(&buffer).map(|pixmap| BackgroundTile::Pixmap(Arc::new(pixmap)))

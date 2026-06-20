@@ -1,6 +1,5 @@
 export const name = "home-demo-card";
 
-export const persistentImages = [];
 export const fonts = [];
 
 export const width = 1200;

@@ -163,7 +163,7 @@ pub fn make_balanced_text(
   options: RebreakOptions,
   target_lines: usize,
   device_pixel_ratio: f32,
-  spans: &[ProcessedInlineSpan<'_, '_>],
+  spans: &[ProcessedInlineSpan<'_>],
   custom_inline_boxes: &mut Vec<parley::PositionedInlineBox>,
 ) -> bool {
   let RebreakOptions {
@@ -249,7 +249,7 @@ pub fn make_balanced_text(
 pub fn make_pretty_text(
   inline_layout: &mut InlineLayout,
   options: RebreakOptions,
-  spans: &[ProcessedInlineSpan<'_, '_>],
+  spans: &[ProcessedInlineSpan<'_>],
   custom_inline_boxes: &mut Vec<parley::PositionedInlineBox>,
 ) -> bool {
   let RebreakOptions {

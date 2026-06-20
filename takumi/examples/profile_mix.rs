@@ -1,7 +1,7 @@
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use std::{env, hint::black_box};
 use takumi::base::{
-  GlobalContext,
+  Fonts,
   layout::{Viewport, node::Node},
   resources::font::FontResource,
 };
@@ -12,19 +12,18 @@ const LONG_TEXT: &str = "Typography is the art and technique of arranging type t
    point sizes, line lengths, line-spacing and letter-spacing, and adjusting the space between \
    pairs of letters.";
 
-fn load_global() -> GlobalContext {
-  let mut g = GlobalContext::default();
+fn load_global() -> Fonts {
+  let mut g = Fonts::default();
   let regular: &[u8] = include_bytes!("../../assets/fonts/geist/Geist[wght].woff2");
-  g.font_context
-    .load_and_store(
-      FontResource::new(regular.to_vec())
-        .override_info(FontInfoOverride {
-          family_name: Some("Geist"),
-          ..Default::default()
-        })
-        .generic_family(GenericFamily::SansSerif),
-    )
-    .unwrap();
+  g.register(
+    FontResource::new(regular.to_vec())
+      .override_info(FontInfoOverride {
+        family_name: Some("Geist"),
+        ..Default::default()
+      })
+      .generic_family(GenericFamily::SansSerif),
+  )
+  .unwrap();
   g
 }
 
@@ -69,11 +68,11 @@ fn long_paragraph() -> Node {
   .with_tw("flex w-full h-full p-12 bg-white".parse().unwrap())
 }
 
-fn render_node(g: &GlobalContext, node: Node, width: u32, height: u32) {
+fn render_node(g: &Fonts, node: Node, width: u32, height: u32) {
   let opts = RenderOptions::builder()
     .viewport(Viewport::new((width, height)))
     .node(node)
-    .global(g)
+    .fonts(g)
     .build();
   black_box(render(opts).unwrap());
 }

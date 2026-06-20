@@ -7,16 +7,19 @@ use serde_wasm_bindgen::{from_value, to_value};
 use std::{
   borrow::Cow,
   collections::HashMap,
-  sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
+  sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 use takumi_base::{
-  GlobalContext,
+  Fonts,
   layout::{
     DEFAULT_DEVICE_PIXEL_RATIO, Viewport,
     node::Node,
     style::{KeyframesRule, StyleSheet},
   },
-  resources::{font::FontResource, image::ImageSource as LoadedImageSource},
+  resources::{
+    font::{FontResource, RegisteredFamily},
+    image::{ImageCache, ImageSource as LoadedImageSource},
+  },
 };
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
@@ -37,78 +40,72 @@ const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[(
 /// napi bindings: a panic mid-call can't leave the wasm-bindgen borrow flag
 /// permanently set, which would otherwise fail all subsequent calls.
 #[wasm_bindgen]
-#[derive(Default)]
 pub struct Renderer {
-  state: RwLock<GlobalContext>,
+  state: RwLock<Fonts>,
+  image_cache: ImageCache,
 }
 
-fn load_default_fonts(context: &mut GlobalContext) -> Result<(), js_sys::Error> {
+static DEFAULT_FONTS: OnceLock<Fonts> = OnceLock::new();
+
+/// Returns a clone of the process-wide default font set, decoding the embedded
+/// fonts once and sharing the decoded blobs across every renderer.
+fn default_fonts() -> Result<Fonts, js_sys::Error> {
+  if let Some(fonts) = DEFAULT_FONTS.get() {
+    return Ok(fonts.clone());
+  }
+
+  let mut fonts = Fonts::default();
   for (font, family_name, generic_family) in EMBEDDED_FONTS {
-    let resource = FontResource::new((*font).to_vec())
+    let resource = FontResource::new(*font)
       .override_info(FontInfoOverride {
         family_name: Some(*family_name),
         ..Default::default()
       })
-      .generic_family(*generic_family)
-      .into_resolved()
-      .map_err(|error| js_sys::Error::new(&format!("Failed to load default font: {error}")))?;
+      .generic_family(*generic_family);
 
-    context
-      .font_context
-      .load_and_store(resource)
-      .map_err(map_error)?;
+    drop(fonts.register(resource).map_err(map_error)?);
   }
 
-  Ok(())
+  if DEFAULT_FONTS.set(fonts.clone()).is_err()
+    && let Some(stored) = DEFAULT_FONTS.get()
+  {
+    return Ok(stored.clone());
+  }
+
+  Ok(fonts)
 }
 
-fn load_font_internal(context: &mut GlobalContext, font: Font) -> Result<(), js_sys::Error> {
+fn load_font_internal(
+  fonts: &mut Fonts,
+  font: Font,
+) -> Result<Vec<RegisteredFamily>, js_sys::Error> {
   match font {
-    Font::Buffer(buffer) => {
-      context
-        .font_context
-        .load_and_store(FontResource::new(buffer.into_vec()))
-        .map_err(map_error)?;
-    }
-    Font::Object(details) => {
-      context
-        .font_context
-        .load_and_store(FontResource::new(details.data.into_vec()).override_info(
-          FontInfoOverride {
-            family_name: details.name.as_deref(),
-            style: details.style.map(Into::into),
-            weight: details.weight.map(|weight| FontWeight::new(weight as f32)),
-            axes: None,
-            width: None,
-          },
-        ))
-        .map_err(map_error)?;
-    }
+    Font::Buffer(buffer) => fonts
+      .register(FontResource::new(buffer.into_vec()))
+      .map_err(map_error),
+    Font::Object(details) => fonts
+      .register(
+        FontResource::new(details.data.into_vec()).override_info(FontInfoOverride {
+          family_name: details.name.as_deref(),
+          style: details.style.map(Into::into),
+          weight: details.weight.map(|weight| FontWeight::new(weight as f32)),
+          axes: None,
+          width: None,
+        }),
+      )
+      .map_err(map_error),
   }
-  Ok(())
-}
-
-fn put_persistent_image_internal(
-  context: &mut GlobalContext,
-  data: &ImageSource,
-) -> Result<(), js_sys::Error> {
-  let image = LoadedImageSource::from_bytes(&data.data).map_err(map_error)?;
-  context
-    .persistent_image_store
-    .insert(data.src.to_string(), image);
-
-  Ok(())
 }
 
 impl Renderer {
-  fn read_state(&self) -> Result<RwLockReadGuard<'_, GlobalContext>, js_sys::Error> {
+  fn read_state(&self) -> Result<RwLockReadGuard<'_, Fonts>, js_sys::Error> {
     self
       .state
       .try_read()
       .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))
   }
 
-  fn write_state(&self) -> Result<RwLockWriteGuard<'_, GlobalContext>, js_sys::Error> {
+  fn write_state(&self) -> Result<RwLockWriteGuard<'_, Fonts>, js_sys::Error> {
     self
       .state
       .try_write()
@@ -133,18 +130,19 @@ impl Renderer {
     &self,
     resources: Option<&[ImageSource]>,
   ) -> Result<HashMap<Arc<str>, LoadedImageSource>, js_sys::Error> {
-    resources
-      .map(|resources| {
-        resources
-          .iter()
-          .map(|source| {
-            let image = LoadedImageSource::from_bytes(&source.data).map_err(map_error)?;
-            Ok((source.src.clone(), image))
-          })
-          .collect::<Result<_, js_sys::Error>>()
-      })
-      .transpose()
-      .map(Option::unwrap_or_default)
+    let mut map = HashMap::new();
+
+    for source in resources.unwrap_or_default() {
+      let mode = source.cache.unwrap_or_default();
+      let image = self
+        .image_cache
+        .get_or_decode(&source.data, mode)
+        .map_err(map_error)?;
+
+      map.insert(source.src.clone(), image);
+    }
+
+    Ok(map)
   }
 
   fn encode_animation(
@@ -191,60 +189,22 @@ impl Renderer {
 
   /// Creates a new Renderer instance.
   #[wasm_bindgen(constructor)]
-  pub fn new(options: Option<ConstructRendererOptionsType>) -> Result<Renderer, js_sys::Error> {
-    let options: ConstructRendererOptions = options
-      .map(|options| from_value(options.into()).map_err(map_error))
-      .transpose()?
-      .unwrap_or_default();
-
-    let mut context = GlobalContext::default();
-
-    let should_load_default_fonts = options
-      .load_default_fonts
-      .unwrap_or_else(|| options.fonts.is_none());
-
-    if should_load_default_fonts {
-      load_default_fonts(&mut context)?;
-    }
-
-    if let Some(fonts) = options.fonts {
-      for font in fonts {
-        load_font_internal(&mut context, font)?;
-      }
-    }
-
-    if let Some(images) = options.persistent_images {
-      for image in images {
-        put_persistent_image_internal(&mut context, &image)?;
-      }
-    }
-
+  pub fn new() -> Result<Renderer, js_sys::Error> {
     Ok(Renderer {
-      state: RwLock::new(context),
+      state: RwLock::new(default_fonts()?),
+      image_cache: ImageCache::default(),
     })
   }
 
-  /// Loads a font into the renderer.
-  #[wasm_bindgen(js_name = loadFont)]
-  pub fn load_font(&self, font: FontType) -> Result<(), js_sys::Error> {
-    let input: Font = from_value(font.into()).map_err(map_error)?;
-    let mut state = self.write_state()?;
-    load_font_internal(&mut state, input)
-  }
+  /// Registers fonts into the renderer, returning the families each font produced.
+  #[wasm_bindgen(js_name = registerFont)]
+  pub fn register_font(&self, font: FontType) -> Result<RegisteredFamiliesType, js_sys::Error> {
+    let font: Font = from_value(font.into()).map_err(map_error)?;
 
-  /// Puts a persistent image into the renderer's internal store.
-  #[wasm_bindgen(js_name = putPersistentImage)]
-  pub fn put_persistent_image(&self, data: ImageSourceType) -> Result<(), js_sys::Error> {
-    let data: ImageSource = from_value(data.into()).map_err(map_error)?;
     let mut state = self.write_state()?;
-    put_persistent_image_internal(&mut state, &data)
-  }
+    let registered = load_font_internal(&mut state, font)?;
 
-  /// Clears the renderer's internal image store.
-  #[wasm_bindgen(js_name = clearImageStore)]
-  pub fn clear_image_store(&self) -> Result<(), js_sys::Error> {
-    self.write_state()?.persistent_image_store.clear();
-    Ok(())
+    Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
   }
 
   /// Renders a node tree into an image buffer.
@@ -260,17 +220,18 @@ impl Renderer {
       .transpose()?
       .unwrap_or_default();
 
+    let images = self.fetch_resources_map(options.images.as_deref())?;
     let state = self.read_state()?;
-    self.render_internal(&state, node, options)
+    self.render_internal(&state, node, options, images)
   }
 
   fn render_internal(
     &self,
-    context: &GlobalContext,
+    fonts: &Fonts,
     node: Node,
     options: RenderOptions,
+    images: HashMap<Arc<str>, LoadedImageSource>,
   ) -> Result<Vec<u8>, JsValue> {
-    let fetched_resources = self.fetch_resources_map(options.fetched_resources.as_deref())?;
     let dithering = options.dithering.unwrap_or_default();
     let stylesheet =
       self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
@@ -284,12 +245,13 @@ impl Renderer {
         ),
       )
       .draw_debug_border(options.draw_debug_border.unwrap_or_default())
-      .fetched_resources(fetched_resources)
+      .images(images)
       .stylesheet(stylesheet)
       .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
       .dithering(dithering)
       .node(node)
-      .global(context)
+      .fonts(fonts)
+      .font_families(options.font_families)
       .build();
 
     let image = render(render_options).map_err(map_error)?;
@@ -326,7 +288,7 @@ impl Renderer {
       .transpose()?
       .unwrap_or_default();
 
-    let fetched_resources = self.fetch_resources_map(options.fetched_resources.as_deref())?;
+    let images = self.fetch_resources_map(options.images.as_deref())?;
     let stylesheet =
       self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
 
@@ -340,11 +302,12 @@ impl Renderer {
         ),
       )
       .draw_debug_border(options.draw_debug_border.unwrap_or_default())
-      .fetched_resources(fetched_resources)
+      .images(images)
       .stylesheet(stylesheet)
       .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
       .node(node)
-      .global(&state)
+      .fonts(&state)
+      .font_families(options.font_families)
       .build();
 
     let layout = measure_layout(render_options).map_err(map_error)?;
@@ -372,8 +335,9 @@ impl Renderer {
       ));
     }
 
+    let images = self.fetch_resources_map(options.images.as_deref())?;
     let state = self.read_state()?;
-    let buffer = self.render_internal(&state, node, options)?;
+    let buffer = self.render_internal(&state, node, options, images)?;
 
     let mut data_uri = String::new();
 
@@ -394,13 +358,14 @@ impl Renderer {
       height,
       format,
       quality,
-      fetched_resources,
+      images,
       draw_debug_border,
       stylesheets,
       device_pixel_ratio,
       fps,
+      font_families,
     } = from_value(options.into()).map_err(map_error)?;
-    let fetched_resources = self.fetch_resources_map(fetched_resources.as_deref())?;
+    let images = self.fetch_resources_map(images.as_deref())?;
 
     if scenes.is_empty() {
       return Err(JsValue::from_str("Expected at least one animation scene"));
@@ -423,10 +388,11 @@ impl Renderer {
           .options(
             takumi_raster::RenderOptions::builder()
               .viewport(viewport)
-              .fetched_resources(fetched_resources.clone())
+              .images(images.clone())
               .stylesheet(stylesheet.clone())
               .node(scene.node)
-              .global(&state)
+              .fonts(&state)
+              .font_families(font_families.clone())
               .draw_debug_border(draw_debug_border)
               .build(),
           )
@@ -447,7 +413,7 @@ impl Renderer {
   ) -> Result<Vec<u8>, JsValue> {
     let frames: Vec<AnimationFrameSource> = from_value(frames.into()).map_err(map_error)?;
     let options: EncodeFramesOptions = from_value(options.into()).map_err(map_error)?;
-    let fetched_resources = self.fetch_resources_map(options.fetched_resources.as_deref())?;
+    let images = self.fetch_resources_map(options.images.as_deref())?;
     let viewport = Viewport::new((options.width, options.height)).with_device_pixel_ratio(
       options
         .device_pixel_ratio
@@ -460,9 +426,10 @@ impl Renderer {
       .map(|frame| -> Result<AnimationFrame, JsValue> {
         let render_options = takumi_raster::RenderOptions::builder()
           .viewport(viewport)
-          .fetched_resources(fetched_resources.clone())
+          .images(images.clone())
           .node(frame.node)
-          .global(&state)
+          .fonts(&state)
+          .font_families(options.font_families.clone())
           .draw_debug_border(options.draw_debug_border.unwrap_or_default())
           .stylesheet(stylesheet.clone())
           .build();

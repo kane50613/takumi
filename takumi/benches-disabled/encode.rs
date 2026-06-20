@@ -3,7 +3,7 @@ use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use takumi::{
-  GlobalContext,
+  Fonts,
   layout::{Viewport, node::Node},
   rendering::{ImageOutputFormat, RenderOptions, render, write_image},
 };
@@ -15,7 +15,7 @@ const H: u32 = 630;
 const IMAGE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../assets/images/yeecord.png");
 
 fn bench_encode(c: &mut Criterion) {
-  let global = GlobalContext::default();
+  let fonts = Fonts::default();
   let node =
     Node::container([Node::image(IMAGE_PATH).with_tw("flex w-full h-full".parse().unwrap())])
       .with_tw("flex w-full h-full bg-white".parse().unwrap());
@@ -23,7 +23,7 @@ fn bench_encode(c: &mut Criterion) {
     RenderOptions::builder()
       .viewport(Viewport::new((W, H)))
       .node(node)
-      .global(&global)
+      .fonts(&fonts)
       .build(),
   )
   .unwrap();

@@ -9,8 +9,6 @@ export const fonts = [
   "geist/GeistMono[wght].woff2",
 ];
 
-export const persistentImages = [];
-
 const PrismaLogo = () => (
   <svg width="150" height="46" viewBox="0 0 90 28" fill="none">
     <title>Prisma</title>

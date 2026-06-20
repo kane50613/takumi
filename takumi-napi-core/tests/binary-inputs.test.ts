@@ -26,53 +26,17 @@ const imageNode = container({
 });
 
 describe("binary inputs", () => {
-  test("constructor accepts ArrayBuffer and Uint8Array", () => {
-    expect(
-      () =>
-        new Renderer({
-          fonts: [fontArrayBuffer],
-          persistentImages: [
-            {
-              src: "test://ctor-arraybuffer",
-              data: imageArrayBuffer,
-            },
-            {
-              src: "test://ctor-uint8array",
-              data: imageUint8Array,
-            },
-          ],
-        }),
-    ).not.toThrow();
-  });
-
-  test("loadFontSync accepts Buffer, Uint8Array, and ArrayBuffer", () => {
+  test("registerFont accepts Buffer, Uint8Array, and ArrayBuffer", async () => {
     const renderer = new Renderer();
 
-    expect(() => renderer.loadFontSync(fontBuffer)).not.toThrow();
-    expect(() => renderer.loadFontSync(fontUint8Array)).not.toThrow();
-    expect(() => renderer.loadFontSync(fontArrayBuffer)).not.toThrow();
-  });
+    const registered = await Promise.all(
+      [fontBuffer, fontUint8Array, fontArrayBuffer].map((font) => renderer.registerFont(font)),
+    );
 
-  test("loadFonts accepts Buffer, Uint8Array, and ArrayBuffer", async () => {
-    const renderer = new Renderer();
-
-    const count = await renderer.loadFonts([fontBuffer, fontUint8Array, fontArrayBuffer]);
-
-    expect(count).toBe(3);
-  });
-
-  test("putPersistentImage accepts Buffer, Uint8Array, and ArrayBuffer", async () => {
-    const renderer = new Renderer();
-
-    expect(
-      renderer.putPersistentImage({ src: "test://img-buffer", data: imageBuffer }),
-    ).resolves.toBeUndefined();
-    expect(
-      renderer.putPersistentImage({ src: "test://img-uint8array", data: imageUint8Array }),
-    ).resolves.toBeUndefined();
-    expect(
-      renderer.putPersistentImage({ src: "test://img-arraybuffer", data: imageArrayBuffer }),
-    ).resolves.toBeUndefined();
+    expect(registered).toHaveLength(3);
+    expect(registered.every((families) => families.some((family) => Boolean(family.name)))).toBe(
+      true,
+    );
   });
 
   test("render accepts inline image bytes as src", async () => {
@@ -81,7 +45,7 @@ describe("binary inputs", () => {
     const reference = await renderer.render(imageNode, {
       width: 64,
       height: 64,
-      fetchedResources: [{ src: "test://binary-input-image", data: imageUint8Array }],
+      images: [{ src: "test://binary-input-image", data: imageUint8Array }],
     });
 
     const inline = (src: Uint8Array | ArrayBuffer) =>
@@ -125,13 +89,13 @@ describe("binary inputs", () => {
     expect(Buffer.compare(fromBytes, fromString)).toBe(0);
   });
 
-  test("render fetchedResources accepts Buffer, Uint8Array, and ArrayBuffer", async () => {
+  test("render images accepts Buffer, Uint8Array, and ArrayBuffer", async () => {
     const renderer = new Renderer();
 
     const fromBuffer = await renderer.render(imageNode, {
       width: 64,
       height: 64,
-      fetchedResources: [
+      images: [
         {
           src: "test://binary-input-image",
           data: imageBuffer,
@@ -143,7 +107,7 @@ describe("binary inputs", () => {
     const fromUint8Array = await renderer.render(imageNode, {
       width: 64,
       height: 64,
-      fetchedResources: [
+      images: [
         {
           src: "test://binary-input-image",
           data: imageUint8Array,
@@ -155,7 +119,7 @@ describe("binary inputs", () => {
     const fromArrayBuffer = await renderer.render(imageNode, {
       width: 64,
       height: 64,
-      fetchedResources: [
+      images: [
         {
           src: "test://binary-input-image",
           data: imageArrayBuffer,

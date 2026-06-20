@@ -12,17 +12,7 @@ const fontBuffers = await Promise.all(
   files.map(async (file) => await Bun.file(file).arrayBuffer()),
 );
 
-const renderer = new Renderer({
-  fonts: [
-    {
-      data: await Bun.file(
-        "../assets/fonts/plus-jakarta-sans/PlusJakartaSans-VariableFont_wght.woff2",
-      ).arrayBuffer(),
-      name: "Plus Jakarta Sans",
-      style: "normal",
-    },
-  ],
-});
+const renderer = new Renderer();
 
 const remoteUrl = "https://yeecord.com/img/logo.png";
 const localImagePath = "../assets/images/yeecord.png";
@@ -74,15 +64,8 @@ const node = container({
 test("Renderer initialization with fonts and images", async () => {
   const font = await readFile("../assets/fonts/geist/Geist[wght].woff2");
 
-  new Renderer({
-    fonts: [font],
-    persistentImages: [
-      {
-        src: localImagePath,
-        data: imageBuffer,
-      },
-    ],
-  });
+  const renderer = new Renderer();
+  await renderer.registerFont(font);
 });
 
 test("no crash without fonts and images", () => {
@@ -90,68 +73,9 @@ test("no crash without fonts and images", () => {
 });
 
 describe("setup", () => {
-  test("loadFonts", async () => {
-    const count = await renderer.loadFonts(fontBuffers);
-    expect(count).toBe(files.length);
-  });
-
-  test("putPersistentImage", async () => {
-    await renderer.putPersistentImage({
-      src: localImagePath,
-      data: imageBuffer,
-    });
-  });
-
-  test("putPersistentImage with sync data loader", async () => {
-    await renderer.putPersistentImage({
-      src: `${localImagePath}?sync-loader`,
-      data: () => imageBuffer,
-    });
-  });
-
-  test("putPersistentImage with async data loader", async () => {
-    await renderer.putPersistentImage({
-      src: `${localImagePath}?async-loader`,
-      data: async () => imageBuffer,
-    });
-  });
-
-  test("putPersistentImage caches by src", async () => {
-    const cacheRenderer = new Renderer();
-    let loadCount = 0;
-    const source = {
-      src: `${localImagePath}?cached`,
-      data: async () => {
-        loadCount += 1;
-        return imageBuffer;
-      },
-    };
-
-    await Promise.all([
-      cacheRenderer.putPersistentImage(source),
-      cacheRenderer.putPersistentImage(source),
-      cacheRenderer.putPersistentImage(source),
-    ]);
-
-    expect(loadCount).toBe(1);
-  });
-
-  test("clearImageStore resets persistent image cache", async () => {
-    const cacheRenderer = new Renderer();
-    let loadCount = 0;
-    const source = {
-      src: `${localImagePath}?clear-cache`,
-      data: async () => {
-        loadCount += 1;
-        return imageBuffer;
-      },
-    };
-
-    await cacheRenderer.putPersistentImage(source);
-    cacheRenderer.clearImageStore();
-    await cacheRenderer.putPersistentImage(source);
-
-    expect(loadCount).toBe(2);
+  test("registerFont", async () => {
+    const registered = await Promise.all(fontBuffers.map((font) => renderer.registerFont(font)));
+    expect(registered).toHaveLength(files.length);
   });
 });
 
@@ -159,7 +83,7 @@ describe("render", () => {
   const options: RenderOptions = {
     width: 1200,
     height: 630,
-    fetchedResources: [
+    images: [
       {
         src: remoteUrl,
         data: imageBuffer,
@@ -425,8 +349,4 @@ describe("encodeFrames", () => {
     expect(result).toBeInstanceOf(Buffer);
     expect(result.subarray(0, 6).toString("ascii")).toMatch(/^GIF8[79]a$/);
   });
-});
-
-describe("clean up", () => {
-  test("clearImageStore", () => renderer.clearImageStore());
 });

@@ -3,7 +3,9 @@ use std::collections::BTreeMap;
 use takumi::base::layout::{node::Node, style::*};
 use takumi::raster::RenderOptions;
 
-use crate::test_utils::{CONTEXT, create_test_viewport, run_fixture_test_with_options};
+use crate::test_utils::{
+  CONTEXT, TEST_IMAGES, create_test_viewport, run_fixture_test_with_options,
+};
 
 fn attrs(pairs: &[(&str, &str)]) -> BTreeMap<Box<str>, Box<str>> {
   pairs
@@ -101,7 +103,7 @@ fn test_pseudo_text_attr() {
   let options = RenderOptions::builder()
     .viewport(create_test_viewport())
     .node(root)
-    .global(&CONTEXT)
+    .fonts(&CONTEXT)
     .stylesheet(StyleSheet::parse(&format!("{SHARED_CSS}{pseudo_css}")).unwrap())
     .build();
 
@@ -157,7 +159,8 @@ fn test_pseudo_display_image() {
   let options = RenderOptions::builder()
     .viewport(create_test_viewport())
     .node(root)
-    .global(&CONTEXT)
+    .fonts(&CONTEXT)
+    .images(TEST_IMAGES.clone())
     .stylesheet(StyleSheet::parse(&format!("{SHARED_CSS}{pseudo_css}")).unwrap())
     .build();
 

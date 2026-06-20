@@ -12,8 +12,11 @@ use std::{cell::RefCell, collections::HashMap};
 #[cfg(not(target_arch = "wasm32"))]
 use dashmap::DashMap;
 use image::RgbaImage;
+use quick_cache::{Weighter, sync::Cache};
+use serde::Deserialize;
 #[cfg(feature = "svg")]
 use tiny_skia::Pixmap;
+use xxhash_rust::xxh3::xxh3_64;
 
 use crate::{
   layout::style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext},
@@ -166,56 +169,6 @@ pub enum RenderedImage<'a> {
   },
 }
 
-/// Represents a persistent image store.
-#[derive(Debug, Default)]
-pub struct PersistentImageStore {
-  #[cfg(target_arch = "wasm32")]
-  map: RefCell<HashMap<String, ImageSource>>,
-  #[cfg(not(target_arch = "wasm32"))]
-  map: DashMap<String, ImageSource>,
-}
-
-impl PersistentImageStore {
-  /// Returns the stored image for the provided source, if present.
-  pub fn get(&self, src: &str) -> Option<ImageSource> {
-    #[cfg(target_arch = "wasm32")]
-    {
-      self.map.borrow().get(src).cloned()
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-      self.map.get(src).map(|image| image.clone())
-    }
-  }
-
-  /// Stores or replaces a persistent image for the provided source.
-  pub fn insert(&self, src: String, image: ImageSource) {
-    #[cfg(target_arch = "wasm32")]
-    {
-      self.map.borrow_mut().insert(src, image);
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-      self.map.insert(src, image);
-    }
-  }
-
-  /// Removes all stored persistent images.
-  pub fn clear(&self) {
-    #[cfg(target_arch = "wasm32")]
-    {
-      self.map.borrow_mut().clear();
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-      self.map.clear();
-    }
-  }
-}
-
 impl From<RgbaImage> for ImageSource {
   fn from(bitmap: RgbaImage) -> Self {
     let buffer = ImageBuffer::from_rgba(Cow::Owned(bitmap)).unwrap_or_else(|| {
@@ -326,6 +279,34 @@ impl FromStr for SvgSource {
 }
 
 impl ImageSource {
+  /// Approximate decoded size in bytes, used for cache budgeting.
+  pub fn estimated_bytes(&self) -> usize {
+    match self {
+      Self::Bitmap(buffer) => buffer.data().len(),
+      Self::Gif(gif) => gif
+        .frames
+        .iter()
+        .map(|frame| frame.buffer.data().len())
+        .sum(),
+      #[cfg(feature = "svg")]
+      Self::Svg(svg) => svg.source.len(),
+    }
+  }
+
+  /// Whether this decoded source is safe to retain in the byte-budgeted cache.
+  ///
+  /// SVGs are excluded: their lazily-populated raster cache grows as they are
+  /// rendered at new sizes and isn't counted by
+  /// [`estimated_bytes`](Self::estimated_bytes), so caching them across renders
+  /// would let memory exceed the configured budget.
+  pub fn is_cacheable(&self) -> bool {
+    match self {
+      Self::Bitmap(_) | Self::Gif(_) => true,
+      #[cfg(feature = "svg")]
+      Self::Svg(_) => false,
+    }
+  }
+
   /// Load an image source from raw bytes.
   ///
   /// - When the `svg` feature is enabled and the bytes look like SVG XML, they
@@ -523,6 +504,165 @@ pub enum ImageResourceError {
   /// GIF decoding produced no frames.
   #[error("The GIF image does not contain any decodable frames")]
   InvalidGif,
+}
+
+/// Decoded-image budget before entries start getting evicted.
+const DEFAULT_MAX_BYTES: u64 = 64 << 20; // 64 MiB
+
+/// Cache policy for a decoded image, applied per [`ImageCache::get_or_decode`] call.
+#[derive(Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ImageCacheMode {
+  /// Cache the decoded image for reuse (evictable).
+  #[default]
+  Auto,
+  /// Skip the decoded-image cache.
+  None,
+}
+
+#[derive(Clone)]
+struct ImageWeighter;
+
+impl Weighter<u64, ImageSource> for ImageWeighter {
+  fn weight(&self, _key: &u64, source: &ImageSource) -> u64 {
+    (source.estimated_bytes() as u64).max(1)
+  }
+}
+
+/// Content-addressed store of decoded images, keyed by `xxh3_64` of the input bytes.
+///
+/// Decoding is the expensive step; the decoded [`ImageSource`] is `Arc`-backed, so a hit clones
+/// for a refcount bump. A cold and a warm cache render identically, so sharing it process-wide
+/// (native) or module-wide (wasm) is safe. Eviction is byte-budgeted and coarse — a miss just
+/// re-decodes — and SVGs are excluded ([`ImageSource::is_cacheable`]) since their lazily-populated
+/// raster cache isn't counted by the byte budget.
+pub struct ImageCache {
+  cache: Cache<u64, ImageSource, ImageWeighter>,
+}
+
+impl Default for ImageCache {
+  fn default() -> Self {
+    Self::with_capacity(DEFAULT_MAX_BYTES)
+  }
+}
+
+impl ImageCache {
+  fn with_capacity(max_bytes: u64) -> Self {
+    // ~64 KiB average decoded image ⇒ a reasonable item-count hint for the budget.
+    let estimated_items = (max_bytes / (64 << 10)).max(1) as usize;
+
+    Self {
+      cache: Cache::with_weighter(estimated_items, max_bytes, ImageWeighter),
+    }
+  }
+
+  /// Returns the decoded image for `bytes`, decoding on a miss and caching it unless `mode`
+  /// is [`ImageCacheMode::None`].
+  ///
+  /// When caching, concurrent misses for the same bytes are single-flighted: one thread
+  /// decodes while the others wait, so each unique image is decoded once.
+  pub fn get_or_decode(&self, bytes: &[u8], mode: ImageCacheMode) -> ImageResult {
+    let key = xxh3_64(bytes);
+
+    if matches!(mode, ImageCacheMode::None) {
+      return match self.cache.get(&key) {
+        Some(source) => Ok(source),
+        None => ImageSource::from_bytes(bytes),
+      };
+    }
+
+    use quick_cache::sync::GuardResult;
+
+    match self.cache.get_value_or_guard(&key, None) {
+      GuardResult::Value(source) => Ok(source),
+      GuardResult::Guard(guard) => {
+        let source = ImageSource::from_bytes(bytes)?;
+        if source.is_cacheable() {
+          let _ = guard.insert(source.clone());
+        }
+        Ok(source)
+      }
+      // `None` timeout never times out.
+      GuardResult::Timeout => ImageSource::from_bytes(bytes),
+    }
+  }
+}
+
+#[cfg(test)]
+mod image_cache_tests {
+  use quick_cache::sync::Cache;
+
+  use super::{ImageCache, ImageCacheMode, ImageWeighter};
+  use crate::resources::{image::ImageSource, image_buffer::ImageBuffer};
+
+  /// PNG bytes that decode to a tiny bitmap (cacheable).
+  fn png_bytes() -> Vec<u8> {
+    ImageBuffer::new(2, 2).unwrap().encode_png().unwrap()
+  }
+
+  #[test]
+  fn decodes_and_reuses_on_hit() {
+    let cache = ImageCache::default();
+    let bytes = png_bytes();
+
+    let first = cache.get_or_decode(&bytes, ImageCacheMode::Auto).unwrap();
+    let second = cache.get_or_decode(&bytes, ImageCacheMode::Auto).unwrap();
+
+    match (&first, &second) {
+      (ImageSource::Bitmap(a), ImageSource::Bitmap(b)) => assert!(std::sync::Arc::ptr_eq(a, b)),
+      _ => panic!("expected bitmaps"),
+    }
+  }
+
+  #[test]
+  fn store_false_does_not_populate_cache() {
+    let cache = ImageCache::default();
+    let bytes = png_bytes();
+
+    let a = cache.get_or_decode(&bytes, ImageCacheMode::None).unwrap();
+    let b = cache.get_or_decode(&bytes, ImageCacheMode::None).unwrap();
+
+    match (&a, &b) {
+      (ImageSource::Bitmap(x), ImageSource::Bitmap(y)) => assert!(!std::sync::Arc::ptr_eq(x, y)),
+      _ => panic!("expected bitmaps"),
+    }
+  }
+
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_is_not_cached() {
+    let cache = ImageCache::default();
+    let svg = br#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>"#;
+
+    let a = cache.get_or_decode(svg, ImageCacheMode::Auto).unwrap();
+    let b = cache.get_or_decode(svg, ImageCacheMode::Auto).unwrap();
+
+    assert!(matches!(a, ImageSource::Svg(_)));
+    match (&a, &b) {
+      (ImageSource::Svg(x), ImageSource::Svg(y)) => {
+        assert!(!std::sync::Arc::ptr_eq(&x.tree, &y.tree))
+      }
+      _ => panic!("expected svgs"),
+    }
+  }
+
+  /// Builds a bitmap source of approximately `bytes` decoded size (premultiplied RGBA, 1px tall).
+  fn image(bytes: u32) -> ImageSource {
+    let width = (bytes / 4).max(1);
+    ImageSource::from(ImageBuffer::new(width, 1).unwrap())
+  }
+
+  #[test]
+  fn eviction_stays_within_byte_budget() {
+    let max_bytes = 4096u64;
+    let cache = Cache::with_weighter(8, max_bytes, ImageWeighter);
+
+    for key in 0..64u64 {
+      cache.insert(key, image(1024));
+    }
+
+    assert!(cache.weight() <= max_bytes);
+  }
 }
 
 #[cfg(test)]

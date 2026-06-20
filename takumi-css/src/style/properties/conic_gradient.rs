@@ -495,7 +495,9 @@ mod tests {
       ))
       .build();
 
-    let sizing = SizingContext::new_test(Viewport::new((100, 100)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((100, 100)))
+      .build();
     let tile = ConicGradientTile::new(&gradient, 100, 100, &sizing, Color::black());
 
     // Top center (50, 0) should be red (start of gradient)
@@ -535,7 +537,9 @@ mod tests {
       ])
       .build();
 
-    let sizing = SizingContext::new_test(Viewport::new((100, 100)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((100, 100)))
+      .build();
     let tile = ConicGradientTile::new(&gradient, 100, 100, &sizing, Color::black());
 
     // Top-center should be red
@@ -571,7 +575,9 @@ mod tests {
       ])
       .build();
 
-    let sizing = SizingContext::new_test(Viewport::new((40, 40)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((40, 40)))
+      .build();
     let tile = ConicGradientTile::new(&gradient, 40, 40, &sizing, Color::black());
 
     assert_eq!(
