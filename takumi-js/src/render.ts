@@ -25,7 +25,6 @@ type RenderOptionsWithRenderer = InnerRenderOptions & {
 };
 
 export type ManagedRendererOptions = {
-  fonts?: napi.FontLoader[];
   /**
    * @description The WebAssembly module to use for the renderer. If not provided, the default resolving strategy will be used.
    */
