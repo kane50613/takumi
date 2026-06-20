@@ -6,15 +6,17 @@
 
 use std::io;
 
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD;
-use takumi_base::context::RenderContext;
-use takumi_base::layout::node::{ImageData, ImageSourceInput, resolve_image};
-use takumi_base::layout::style::{Length, ObjectFit, PositionComponent};
-use takumi_base::resources::image::ImageSource;
+use base64::{Engine, engine::general_purpose::STANDARD};
+use takumi_base::{
+  context::RenderContext,
+  layout::{
+    node::{ImageData, ImageSourceInput, resolve_image},
+    style::{Length, ObjectFit, PositionComponent},
+  },
+  resources::image::ImageSource,
+};
 
-use crate::SvgDocument;
-use crate::box_model::rect_path_data;
+use crate::{SvgDocument, box_model::rect_path_data};
 
 /// `preserveAspectRatio="none"` (stretch to fit), used when the destination rect
 /// already carries the desired size.

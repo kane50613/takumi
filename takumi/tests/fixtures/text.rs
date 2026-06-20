@@ -1,9 +1,6 @@
 use parley::{FontVariation, setting::Tag};
 use serde_json::{from_value, json};
-use takumi::base::layout::{
-  node::Node,
-  style::{Length::*, *},
-};
+use takumi::prelude::{Length::*, *};
 
 use crate::test_utils::run_fixture_test;
 

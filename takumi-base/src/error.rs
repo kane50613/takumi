@@ -2,10 +2,6 @@ use thiserror::Error;
 
 use crate::resources::{font::FontError, image::ImageResourceError};
 
-pub use takumi_css::error::{
-  StyleDeclarationBlockParseError, StyleSheetParseError, StyleSheetParseErrorKind,
-};
-
 /// Structured errors raised by the WebP encoding and container assembly paths.
 #[derive(Error, Debug)]
 #[non_exhaustive]

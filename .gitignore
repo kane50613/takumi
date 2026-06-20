@@ -4,3 +4,5 @@ node_modules
 dist
 .vercel
 .claude
+.agents
+skills-lock.json

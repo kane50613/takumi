@@ -9,24 +9,22 @@ use crate::{
   Result,
   error::{Error, WebPError},
   webp::U24_MAX,
-  write::{AnimatedWebpOptions, AnimationFrame},
+  write::{AnimatedWebpOptions, AnimationFrame, Quality},
 };
 
-fn webp_config(quality: u8, speed: u8) -> Result<WebPConfig> {
-  let requested_quality = quality.clamp(0, 100);
-  let is_lossless = requested_quality == 100;
+fn webp_config(lossless: bool, quality: u8, speed: u8) -> Result<WebPConfig> {
   let mut config = WebPConfig::new_with_preset(
     WebPPreset::WEBP_PRESET_TEXT,
-    if is_lossless {
+    if lossless {
       20.0
     } else {
-      requested_quality as f32
+      quality.clamp(0, 100) as f32
     },
   )
   .map_err(|_| WebPError::EncoderSetupFailed)?;
 
-  config.lossless = if is_lossless { 1 } else { 0 };
-  config.alpha_compression = if is_lossless { 0 } else { 1 };
+  config.lossless = if lossless { 1 } else { 0 };
+  config.alpha_compression = if lossless { 0 } else { 1 };
   config.method = speed.clamp(0, 6) as i32;
   if unsafe { WebPValidateConfig(&config) } == 0 {
     return Err(WebPError::EncoderSetupFailed.into());
@@ -267,13 +265,26 @@ fn write_riff_container<W: Write>(
   Ok(())
 }
 
-pub(crate) fn write_webp(
+pub(crate) fn write_webp_lossy(
   image: Cow<'_, RgbaImage>,
   destination: &mut impl Write,
-  quality: Option<u8>,
+  quality: Quality,
 ) -> Result<()> {
-  let config = webp_config(quality.unwrap_or(100), 1)?;
+  write_webp(image, destination, webp_config(false, quality.get(), 1)?)
+}
 
+pub(crate) fn write_webp_lossless(
+  image: Cow<'_, RgbaImage>,
+  destination: &mut impl Write,
+) -> Result<()> {
+  write_webp(image, destination, webp_config(true, 0, 1)?)
+}
+
+fn write_webp(
+  image: Cow<'_, RgbaImage>,
+  destination: &mut impl Write,
+  config: WebPConfig,
+) -> Result<()> {
   let mut picture = import_rgba_picture(&image)?;
   let mut writer = MaybeUninit::<WebPMemoryWriter>::uninit();
   unsafe { WebPMemoryWriterInit(writer.as_mut_ptr()) };
@@ -380,7 +391,7 @@ pub fn encode_animated_webp<W: Write>(
   }
 
   let speed = options.speed.unwrap_or(1).clamp(0, 6);
-  let config = webp_config(options.quality, speed)?;
+  let config = webp_config(options.lossless, options.quality, speed)?;
   let unique_frames = collect_unique_frames(&frames, frame_width, frame_height)?;
   let frame_data = encode_frames(&unique_frames, &config)?;
 

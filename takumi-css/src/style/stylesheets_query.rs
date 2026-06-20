@@ -3,8 +3,7 @@ use std::marker::PhantomData;
 use taffy::{Line, Point, Rect, Size};
 
 use super::ComputedStyle;
-use crate::style::SizingContext;
-use crate::style::properties::*;
+use crate::style::{SizingContext, properties::*};
 
 impl ComputedStyle {
   /// Normalize inheritable text-related values to computed values for this node.

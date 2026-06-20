@@ -1,5 +1,4 @@
-use crate::style::ToCss;
-use crate::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult};
+use crate::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss};
 use cssparser::Parser;
 use parley::FontVariation;
 use std::fmt;

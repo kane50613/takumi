@@ -45,7 +45,7 @@ const BAYER_MATRIX_8X8: [[f32; 8]; 8] = [
 const FLOYD_STEINBERG_LEVELS: f32 = 128.0;
 
 /// Applies output dithering in-place to an RGBA image buffer.
-pub fn apply_dithering(image: &mut RgbaImage, algorithm: DitheringAlgorithm) {
+pub(crate) fn apply_dithering(image: &mut RgbaImage, algorithm: DitheringAlgorithm) {
   match algorithm {
     DitheringAlgorithm::None => {}
     DitheringAlgorithm::OrderedBayer => apply_ordered_bayer(image),

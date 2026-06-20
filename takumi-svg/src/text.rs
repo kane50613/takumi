@@ -9,24 +9,27 @@
 use std::io;
 
 use taffy::{AvailableSpace, Layout, Size};
-use takumi_base::context::RenderContext;
-use takumi_base::font_style::SizedFontStyle;
-use takumi_base::layout::inline::{
-  DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineOutlineRect,
-  InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, collect_inline_items,
-  create_inline_layout, outline_island_contour, outline_islands, resolve_inline_max_height,
-  resolve_inline_runs, run_decorations,
+use takumi_base::{
+  context::RenderContext,
+  font_style::SizedFontStyle,
+  layout::{
+    inline::{
+      DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineOutlineRect,
+      InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, collect_inline_items,
+      create_inline_layout, outline_island_contour, outline_islands, resolve_inline_max_height,
+      resolve_inline_runs, run_decorations,
+    },
+    node::TextData,
+    style::{BackgroundClip, BorderStyle, LineJoin},
+    tree::RenderNode,
+  },
+  resources::font::ResolvedGlyph,
 };
-use takumi_base::layout::node::TextData;
-use takumi_base::layout::style::{BackgroundClip, BorderStyle, LineJoin};
-use takumi_base::layout::tree::RenderNode;
-use takumi_base::resources::font::ResolvedGlyph;
 
-use crate::box_model::path_data;
-use crate::gradient::emit_background_images;
-use crate::image::encode;
-use crate::render::emit_inline_box;
-use crate::{Affine, IDENTITY, Num, Rgba, SvgDocument};
+use crate::{
+  Affine, IDENTITY, Num, Rgba, SvgDocument, box_model::path_data, gradient::emit_background_images,
+  image::encode, render::emit_inline_box,
+};
 
 /// Emits a leaf [`TextData`] node. `origin_x`/`origin_y` are the element's
 /// absolute border-box top-left; `layout` carries border/padding and content size.
@@ -590,10 +593,11 @@ fn offset(transform: [f32; 6], origin_x: f32, origin_y: f32) -> Affine {
 mod tests {
   use std::path::Path;
 
-  use takumi_base::Fonts;
-  use takumi_base::layout::Viewport;
-  use takumi_base::layout::node::Node;
-  use takumi_base::resources::font::FontResource;
+  use takumi_base::{
+    Fonts,
+    layout::{Viewport, node::Node},
+    resources::font::FontResource,
+  };
 
   use crate::render::{SvgOptions, render};
 

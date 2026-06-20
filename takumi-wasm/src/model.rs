@@ -5,7 +5,8 @@ use serde::{Deserialize, Deserializer};
 use serde_bytes::ByteBuf;
 use std::sync::Arc;
 use takumi_base::{
-  keyframes::deserialize_optional_keyframes, layout::node::Node, layout::style::KeyframesRule,
+  keyframes::deserialize_optional_keyframes,
+  layout::{node::Node, style::KeyframesRule},
   resources::image::ImageCacheMode,
 };
 use takumi_raster::DitheringAlgorithm;
@@ -99,8 +100,6 @@ pub struct RenderAnimationOptions {
   pub height: u32,
   /// The output animation format (WebP, APNG, or GIF).
   pub format: Option<AnimationOutputFormat>,
-  /// The WebP quality (0-100). Ignored for APNG and GIF.
-  pub quality: Option<u8>,
   /// Pre-fetched image resources to use during rendering.
   pub images: Option<Vec<ImageSource>>,
   /// Whether to draw debug borders around layout elements.
@@ -125,8 +124,6 @@ pub struct EncodeFramesOptions {
   pub height: u32,
   /// The output animation format (WebP, APNG, or GIF).
   pub format: Option<AnimationOutputFormat>,
-  /// The WebP quality (0-100). Ignored for APNG and GIF.
-  pub quality: Option<u8>,
   /// Pre-fetched image resources to use during rendering.
   pub images: Option<Vec<ImageSource>>,
   /// Whether to draw debug borders around layout elements.
@@ -191,13 +188,21 @@ pub enum OutputFormat {
   Raw,
 }
 
-impl From<OutputFormat> for takumi_raster::ImageOutputFormat {
-  fn from(format: OutputFormat) -> Self {
-    match format {
-      OutputFormat::Png => takumi_raster::ImageOutputFormat::Png,
-      OutputFormat::Jpeg => takumi_raster::ImageOutputFormat::Jpeg,
-      OutputFormat::WebP => takumi_raster::ImageOutputFormat::WebP,
-      OutputFormat::Ico => takumi_raster::ImageOutputFormat::Ico,
+impl OutputFormat {
+  /// Maps to a raster [`ImageOutputFormat`]. JPEG folds `quality` (default 75);
+  /// WebP is lossless-only on wasm, so `quality` is ignored for it.
+  pub(crate) fn into_image_output_format(
+    self,
+    quality: Option<u8>,
+  ) -> takumi_raster::ImageOutputFormat {
+    use takumi_raster::{ImageOutputFormat, Quality};
+    match self {
+      OutputFormat::Png => ImageOutputFormat::Png,
+      OutputFormat::Jpeg => ImageOutputFormat::Jpeg {
+        quality: quality.map_or_else(Quality::default, Quality::new),
+      },
+      OutputFormat::WebP => ImageOutputFormat::WebPLossless,
+      OutputFormat::Ico => ImageOutputFormat::Ico,
       OutputFormat::Raw => unreachable!("Raw format should be handled separately"),
     }
   }

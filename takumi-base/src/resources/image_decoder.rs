@@ -1,6 +1,8 @@
-use std::borrow::Cow;
-use std::io::{Cursor, Error as IoError, ErrorKind};
-use std::sync::Arc;
+use std::{
+  borrow::Cow,
+  io::{Cursor, Error as IoError, ErrorKind},
+  sync::Arc,
+};
 
 use image::{
   AnimationDecoder, DynamicImage, ImageDecoder, ImageError, ImageFormat, ImageResult, RgbaImage,
@@ -18,21 +20,21 @@ use crate::resources::image_buffer::ImageBuffer;
 const PNG_SIGNATURE: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
 const JPEG_SIGNATURE: [u8; 3] = [0xFF, 0xD8, 0xFF];
 
-pub struct DecodedGifFrame {
-  pub buffer: Arc<ImageBuffer>,
-  pub duration_ms: u32,
+pub(crate) struct DecodedGifFrame {
+  pub(crate) buffer: Arc<ImageBuffer>,
+  pub(crate) duration_ms: u32,
 }
 
-pub struct DecodedGif {
-  pub frames: Vec<DecodedGifFrame>,
+pub(crate) struct DecodedGif {
+  pub(crate) frames: Vec<DecodedGifFrame>,
 }
 
-pub enum DecodedImage {
+pub(crate) enum DecodedImage {
   Buffer(ImageBuffer),
   Gif(DecodedGif),
 }
 
-pub fn decode_image(bytes: &[u8]) -> ImageResult<DecodedImage> {
+pub(crate) fn decode_image(bytes: &[u8]) -> ImageResult<DecodedImage> {
   match detect_image_format(bytes) {
     Some(DetectedImageFormat::Png) => decode_png(bytes).map(DecodedImage::Buffer),
     Some(DetectedImageFormat::Jpeg) => decode_jpeg(bytes).map(DecodedImage::Buffer),
@@ -82,7 +84,7 @@ fn decode_with_image_crate(
   rgba_to_buffer(DynamicImage::from_decoder(decoder)?.to_rgba8(), format)
 }
 
-pub fn decode_png(bytes: &[u8]) -> ImageResult<ImageBuffer> {
+pub(crate) fn decode_png(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   decode_with_image_crate(PngDecoder::new(Cursor::new(bytes))?, ImageFormat::Png)
 }
 

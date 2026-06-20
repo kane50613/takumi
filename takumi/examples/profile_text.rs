@@ -1,11 +1,6 @@
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use std::hint::black_box;
-use takumi::base::{
-  Fonts,
-  layout::{Viewport, node::Node},
-  resources::font::FontResource,
-};
-use takumi::raster::{RenderOptions, render};
+use takumi::{prelude::*, render};
 
 const ITERS: usize = 80;
 

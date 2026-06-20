@@ -11,7 +11,7 @@ use crate::{
   resources::image::{ImageResourceError, ImageResult, ImageSource, is_svg_like},
 };
 
-pub fn image_resource_url(image: &ImageData) -> Option<&str> {
+pub(crate) fn image_resource_url(image: &ImageData) -> Option<&str> {
   match &image.src {
     ImageSourceInput::Url(src) if src.starts_with("https://") || src.starts_with("http://") => {
       Some(src.as_ref())
@@ -20,7 +20,7 @@ pub fn image_resource_url(image: &ImageData) -> Option<&str> {
   }
 }
 
-pub fn take_image_style_layers(
+pub(crate) fn take_image_style_layers(
   node: &mut Node,
   width: Option<f32>,
   height: Option<f32>,
@@ -44,11 +44,11 @@ pub fn take_image_style_layers(
   }
 }
 
-pub fn image_inline_content(kind: &NodeKind) -> Option<InlineContentKind<'_>> {
+pub(crate) fn image_inline_content(kind: &NodeKind) -> Option<InlineContentKind<'_>> {
   matches!(kind, NodeKind::Image(_)).then_some(InlineContentKind::Box)
 }
 
-pub fn measure_image_node(
+pub(crate) fn measure_image_node(
   image: &ImageData,
   context: &RenderContext,
   available_space: Size<AvailableSpace>,
@@ -265,8 +265,11 @@ mod tests {
 
   #[test]
   fn deserialize_image_src_from_bytes_value() -> std::result::Result<(), serde::de::value::Error> {
-    use serde::de::{Deserializer, Visitor, value::Error};
-    use serde::{Deserialize, forward_to_deserialize_any};
+    use serde::{
+      Deserialize,
+      de::{Deserializer, Visitor, value::Error},
+      forward_to_deserialize_any,
+    };
 
     // Mirror how napi / wasm surface a `Uint8Array`/`ArrayBuffer`: a bytes value
     // via `deserialize_any`, not a JSON-style number array.

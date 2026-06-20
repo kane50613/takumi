@@ -22,9 +22,9 @@ use takumi_base::{
   },
 };
 use takumi_raster::{
-  AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
-  SequentialScene, encode_animated_gif, encode_animated_png, encode_animated_webp, measure_layout,
-  render, render_sequence_animation, write_image,
+  AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, SequentialScene,
+  encode_animated_gif, encode_animated_png, encode_animated_webp, measure_layout, render,
+  render_sequence_animation, write_image,
 };
 use wasm_bindgen::prelude::*;
 
@@ -149,26 +149,18 @@ impl Renderer {
     &self,
     frames: Vec<AnimationFrame>,
     format: Option<AnimationOutputFormat>,
-    quality: Option<u8>,
   ) -> Result<Vec<u8>, JsValue> {
-    if let Some(quality) = quality
-      && quality > 100
-    {
-      return Err(JsValue::from_str(&format!(
-        "Invalid WebP quality {quality}; expected a value in 0..=100"
-      )));
-    }
-
     let mut buffer = Vec::new();
 
     match format.unwrap_or(AnimationOutputFormat::WebP) {
       AnimationOutputFormat::WebP => {
-        let mut webp_options = AnimatedWebpOptions::default();
-        if let Some(quality) = quality {
-          webp_options.quality = quality;
-        }
-
-        encode_animated_webp(Cow::Owned(frames), &mut buffer, webp_options).map_err(map_error)?;
+        // wasm `image-webp` is lossless-only.
+        encode_animated_webp(
+          Cow::Owned(frames),
+          &mut buffer,
+          AnimatedWebpOptions::default(),
+        )
+        .map_err(map_error)?;
       }
       AnimationOutputFormat::APng => {
         encode_animated_png(&frames, &mut buffer, AnimatedPngOptions::default())
@@ -267,8 +259,7 @@ impl Renderer {
     write_image(
       Cow::Owned(image),
       &mut buffer,
-      format.into(),
-      options.quality,
+      format.into_image_output_format(options.quality),
     )
     .map_err(map_error)?;
 
@@ -342,7 +333,7 @@ impl Renderer {
     let mut data_uri = String::new();
 
     data_uri.push_str("data:");
-    data_uri.push_str(ImageOutputFormat::from(format).content_type());
+    data_uri.push_str(format.into_image_output_format(None).content_type());
     data_uri.push_str(";base64,");
     data_uri.push_str(&BASE64_STANDARD.encode(buffer));
 
@@ -357,7 +348,6 @@ impl Renderer {
       width,
       height,
       format,
-      quality,
       images,
       draw_debug_border,
       stylesheets,
@@ -401,7 +391,7 @@ impl Renderer {
       .collect::<Vec<_>>();
     let rendered_frames = render_sequence_animation(&scene_options, fps).map_err(map_error)?;
 
-    self.encode_animation(rendered_frames, format, quality)
+    self.encode_animation(rendered_frames, format)
   }
 
   /// Encodes a precomputed frame sequence into an animated image buffer.
@@ -439,6 +429,6 @@ impl Renderer {
       })
       .collect::<Result<Vec<_>, JsValue>>()?;
 
-    self.encode_animation(rendered_frames, options.format, options.quality)
+    self.encode_animation(rendered_frames, options.format)
   }
 }

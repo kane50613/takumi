@@ -1,5 +1,4 @@
-use crate::style::properties::filter::interpolate_field;
-use crate::style::{ToCss, unexpected_token};
+use crate::style::{ToCss, properties::filter::interpolate_field, unexpected_token};
 use std::{
   fmt,
   ops::{Mul, MulAssign},
