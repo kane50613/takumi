@@ -9,8 +9,7 @@ use std::path::Path;
 
 use resvg::tiny_skia::{Pixmap, Transform};
 use resvg::usvg::{Options, Tree};
-use takumi::prelude::Length::*;
-use takumi::prelude::*;
+use takumi::prelude::{Length::*, *};
 use takumi_svg::{SvgOptions, render};
 
 const W: u32 = 200;

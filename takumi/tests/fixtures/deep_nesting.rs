@@ -1,6 +1,5 @@
 use takumi::measure_layout;
-use takumi::prelude::Length::*;
-use takumi::prelude::*;
+use takumi::prelude::{Length::*, *};
 
 use crate::test_utils::{CONTEXT, create_test_viewport, run_fixture_test};
 

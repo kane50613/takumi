@@ -1,7 +1,6 @@
 use std::{borrow::Cow, fs::File};
 
-use takumi::prelude::Length::Px;
-use takumi::prelude::*;
+use takumi::prelude::{Length::Px, *};
 use takumi::{render, write_image};
 
 /// Renders a "Hello, {name}!" image and saves it to `output.webp`.

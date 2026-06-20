@@ -1,8 +1,7 @@
 mod test_utils;
 
 use takumi::measure_layout;
-use takumi::prelude::Length::*;
-use takumi::prelude::*;
+use takumi::prelude::{Length::*, *};
 use test_utils::{CONTEXT, TEST_IMAGES};
 
 fn create_measure_viewport() -> Viewport {

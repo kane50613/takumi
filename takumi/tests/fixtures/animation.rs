@@ -1,8 +1,7 @@
 use std::f32::consts::PI;
 
 use parley::GenericFamily;
-use takumi::prelude::Length::*;
-use takumi::prelude::*;
+use takumi::prelude::{Length::*, *};
 use takumi::render_sequence_animation;
 
 use crate::test_utils::{CONTEXT, run_animation_fixture_test};

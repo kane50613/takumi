@@ -48,14 +48,14 @@
 //!
 //! # Feature Flags
 //!
-//! - `raster` (default): Enable the raster rendering backend.
+//! - `raster-backend` (default): Enable the raster rendering backend.
 //! - `svg` (default): Enable SVG image-source support in the core and raster
 //!   backend.
 //! - `svg-backend`: Enable the vector/SVG output backend ([`render_svg`]). Opt-in.
 //! - `woff2`: Enable WOFF2 font support.
 //! - `woff`: Enable WOFF font support.
-//! - `rayon`: Enable rayon-based parallelism in the raster backend (implies
-//!   `raster`).
+//! - `rayon`: Enable rayon-based parallelism in the raster backend, when
+//!   `raster-backend` is also enabled.
 //! - `unstable`: Re-export the backend crates wholesale under [`unstable`]. No
 //!   semver guarantee. Opt-in.
 
@@ -74,7 +74,7 @@ pub mod prelude {
   pub use takumi_base::resources::image::{ImageCacheMode, ImageSource};
   pub use takumi_base::{Error, Fonts, Result};
 
-  #[cfg(feature = "raster")]
+  #[cfg(feature = "raster-backend")]
   pub use takumi_raster::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame,
     DitheringAlgorithm, ImageOutputFormat, MeasuredNode, MeasuredTextRun, Quality, RenderOptions,
@@ -85,7 +85,7 @@ pub mod prelude {
   pub use takumi_svg::SvgOptions;
 }
 
-#[cfg(feature = "raster")]
+#[cfg(feature = "raster-backend")]
 pub use takumi_raster::{
   encode_animated_gif, encode_animated_png, encode_animated_webp, measure_layout, render,
   render_sequence_animation, write_image,
@@ -102,7 +102,7 @@ pub use takumi_svg::render as render_svg;
 pub mod unstable {
   pub use takumi_base as base;
 
-  #[cfg(feature = "raster")]
+  #[cfg(feature = "raster-backend")]
   pub use takumi_raster as raster;
 
   #[cfg(feature = "svg-backend")]

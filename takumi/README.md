@@ -47,14 +47,14 @@ let image = render(options).unwrap();
 
 ## Feature Flags
 
-- `raster` (default): Enable the raster rendering backend.
+- `raster-backend` (default): Enable the raster rendering backend.
 - `svg` (default): Enable SVG image-source support in the core and raster
   backend.
 - `svg-backend`: Enable the vector/SVG output backend ([`render_svg`]). Opt-in.
 - `woff2`: Enable WOFF2 font support.
 - `woff`: Enable WOFF font support.
-- `rayon`: Enable rayon-based parallelism in the raster backend (implies
-  `raster`).
+- `rayon`: Enable rayon-based parallelism in the raster backend, when
+  `raster-backend` is also enabled.
 - `unstable`: Re-export the backend crates wholesale under [`unstable`]. No
   semver guarantee. Opt-in.
 

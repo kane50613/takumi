@@ -3,8 +3,7 @@ mod test_utils;
 use std::collections::BTreeMap;
 
 use takumi::measure_layout;
-use takumi::prelude::Length::*;
-use takumi::prelude::*;
+use takumi::prelude::{Length::*, *};
 use test_utils::CONTEXT;
 
 fn viewport() -> Viewport {
