@@ -33,8 +33,8 @@ features = ["wasm_simd"]
 workspace = true
 features = ["aarch64_simd", "avx512_simd"]
 
-[dependencies.takumi-base]
-path = "../takumi-base"
+[dependencies.takumi-core]
+path = "../takumi-core"
 version = "0.1"
 default-features = false
 
@@ -52,7 +52,7 @@ optional = true
 
 [features]
 default = ["svg", "rayon"]
-svg = ["takumi-base/svg"]
+svg = ["takumi-core/svg"]
 rayon = ["dep:rayon"]
 
 [dev-dependencies]

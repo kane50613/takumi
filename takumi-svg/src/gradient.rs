@@ -15,7 +15,7 @@
 use std::{f32::consts::TAU, io};
 
 use taffy::Size;
-use takumi_base::{
+use takumi_core::{
   context::RenderContext,
   layout::{
     node::resolve_image,

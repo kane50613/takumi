@@ -52,12 +52,12 @@ impl Rgba {
   }
 }
 
-/// The affine transform type, re-exported from `takumi-base`. Serialized as an
+/// The affine transform type, re-exported from `takumi-core`. Serialized as an
 /// SVG `matrix(a b c d e f)` via [`matrix_attr`].
-pub(crate) use takumi_base::layout::style::Affine;
+pub(crate) use takumi_core::layout::style::Affine;
 
 use taffy::Size;
-use takumi_base::{
+use takumi_core::{
   layout::style::{Color, Filter, SizingContext},
   shadow::SizedShadow,
 };

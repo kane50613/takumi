@@ -9,7 +9,7 @@
 use std::io;
 
 use taffy::{AvailableSpace, Layout, Size};
-use takumi_base::{
+use takumi_core::{
   context::RenderContext,
   font_style::SizedFontStyle,
   layout::{
@@ -569,7 +569,7 @@ fn line_join_str(join: LineJoin) -> &'static str {
   }
 }
 
-fn font_error(error: takumi_base::resources::font::FontError) -> io::Error {
+fn font_error(error: takumi_core::resources::font::FontError) -> io::Error {
   io::Error::new(
     io::ErrorKind::InvalidData,
     format!("glyph resolution failed: {error}"),
@@ -593,7 +593,7 @@ fn offset(transform: [f32; 6], origin_x: f32, origin_y: f32) -> Affine {
 mod tests {
   use std::path::Path;
 
-  use takumi_base::{
+  use takumi_core::{
     Fonts,
     layout::{Viewport, node::Node},
     resources::font::FontResource,

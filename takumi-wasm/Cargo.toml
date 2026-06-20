@@ -20,8 +20,8 @@ parley.workspace = true
 workspace = true
 features = ["rc"]
 
-[dependencies.takumi-base]
-path = "../takumi-base"
+[dependencies.takumi-core]
+path = "../takumi-core"
 default-features = false
 features = ["woff2", "svg"]
 

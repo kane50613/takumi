@@ -4,7 +4,7 @@ use image::RgbaImage;
 use parley::{GlyphRun, InlineBoxKind, PositionedLayoutItem};
 use serde::Serialize;
 use taffy::{AvailableSpace, Layout, NodeId, TaffyError, geometry::Size};
-use takumi_base::layout::style::SizingContext;
+use takumi_core::layout::style::SizingContext;
 use typed_builder::TypedBuilder;
 
 use crate::{

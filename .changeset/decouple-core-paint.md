@@ -2,4 +2,4 @@
 "takumi": major
 ---
 
-Split `takumi` into `takumi-base` + `takumi-raster` crates behind a re-export facade
+Split `takumi` into `takumi-core` + `takumi-raster` crates behind a re-export facade

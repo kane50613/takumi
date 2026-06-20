@@ -67,7 +67,7 @@
 /// The glob pulls in common names like `Error`, `Result`, `Style`, and `Color`;
 /// that breadth is intentional for a prelude.
 pub mod prelude {
-  pub use takumi_base::{
+  pub use takumi_core::{
     Error, Fonts, Result,
     layout::{
       Viewport,
@@ -106,7 +106,7 @@ pub use takumi_svg::render as render_svg;
 /// release. Prefer the curated [`prelude`] and crate-root functions.
 #[cfg(feature = "unstable")]
 pub mod unstable {
-  pub use takumi_base as base;
+  pub use takumi_core as base;
 
   #[cfg(feature = "raster-backend")]
   pub use takumi_raster as raster;

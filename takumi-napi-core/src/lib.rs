@@ -17,7 +17,7 @@ use napi::{De, Env, Error, bindgen_prelude::*};
 use napi_derive::napi;
 use parley::{FontStyle, FontWeight, fontique::FontInfoOverride};
 use serde::{Deserialize, Deserializer, de::DeserializeOwned};
-use takumi_base::{
+use takumi_core::{
   layout::style::{KeyframesRule, StyleSheet},
   resources::font::FontResource,
 };
@@ -46,8 +46,8 @@ pub struct RegisteredFace {
   pub index: u32,
 }
 
-impl From<takumi_base::resources::font::RegisteredFamily> for RegisteredFamily {
-  fn from(family: takumi_base::resources::font::RegisteredFamily) -> Self {
+impl From<takumi_core::resources::font::RegisteredFamily> for RegisteredFamily {
+  fn from(family: takumi_core::resources::font::RegisteredFamily) -> Self {
     Self {
       name: family.name,
       faces: family.faces.into_iter().map(Into::into).collect(),
@@ -55,8 +55,8 @@ impl From<takumi_base::resources::font::RegisteredFamily> for RegisteredFamily {
   }
 }
 
-impl From<takumi_base::resources::font::RegisteredFace> for RegisteredFace {
-  fn from(face: takumi_base::resources::font::RegisteredFace) -> Self {
+impl From<takumi_core::resources::font::RegisteredFace> for RegisteredFace {
+  fn from(face: takumi_core::resources::font::RegisteredFace) -> Self {
     Self {
       weight: face.weight as f64,
       style: face.style,
