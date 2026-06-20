@@ -21,6 +21,7 @@
     "postinstall": "lefthook install"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.3",
     "@arethetypeswrong/core": "^0.18.3",
     "@changesets/cli": "^2.31.0",
     "lefthook": "^2.1.9",
