@@ -4,14 +4,14 @@
 )]
 #![deny(missing_docs)]
 //! Takumi renders UI component trees to images. This crate is the facade users
-//! depend on: entry-point **functions** live at the crate root and the *curated,
-//! stable* data structures live in [`prelude`]. Glob the prelude for the types
+//! depend on: entry-point **functions** live at the crate root and the _curated,
+//! stable_ data structures live in [`prelude`]. Glob the prelude for the types
 //! and call the functions from the crate root.
 //!
 //! The backend crates expose a much larger surface than is meant for general use
 //! — layout-engine glue, paint internals, and other cross-crate plumbing are
 //! `pub` only because sibling crates need them. Those internals are deliberately
-//! *not* re-exported here. If you need them, enable the `unstable` feature and
+//! _not_ re-exported here. If you need them, enable the `unstable` feature and
 //! reach them through [`unstable`]; nothing under that module is covered by
 //! semver.
 //!
