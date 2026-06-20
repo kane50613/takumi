@@ -41,7 +41,6 @@ const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[(
 /// napi bindings: a panic mid-call can't leave the wasm-bindgen borrow flag
 /// permanently set, which would otherwise fail all subsequent calls.
 #[wasm_bindgen]
-#[derive(Default)]
 pub struct Renderer {
   state: RwLock<Fonts>,
   image_cache: ImageCache,
@@ -224,8 +223,9 @@ impl Renderer {
       .transpose()?
       .unwrap_or_default();
 
+    let images = self.fetch_resources_map(options.images.as_deref())?;
     let state = self.read_state()?;
-    self.render_internal(&state, node, options)
+    self.render_internal(&state, node, options, images)
   }
 
   fn render_internal(
@@ -233,8 +233,8 @@ impl Renderer {
     fonts: &Fonts,
     node: Node,
     options: RenderOptions,
+    images: HashMap<Arc<str>, LoadedImageSource>,
   ) -> Result<Vec<u8>, JsValue> {
-    let images = self.fetch_resources_map(options.images.as_deref())?;
     let dithering = options.dithering.unwrap_or_default();
     let stylesheet =
       self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
@@ -338,8 +338,9 @@ impl Renderer {
       ));
     }
 
+    let images = self.fetch_resources_map(options.images.as_deref())?;
     let state = self.read_state()?;
-    let buffer = self.render_internal(&state, node, options)?;
+    let buffer = self.render_internal(&state, node, options, images)?;
 
     let mut data_uri = String::new();
 
