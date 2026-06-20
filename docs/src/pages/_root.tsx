@@ -1,4 +1,6 @@
 import { Analytics } from "@vercel/analytics/react";
+import { Banner } from "fumadocs-ui/components/banner";
+import { Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { Provider } from "../components/provider";
 import "../../app/app.css";
@@ -25,7 +27,20 @@ export default function RootElement({ children }: { children: ReactNode }) {
         />
       </head>
       <body className="flex flex-col min-h-screen">
-        <Provider>{children}</Provider>
+        <Provider>
+          <Banner id="takumi-v2-beta" variant="rainbow">
+            <a
+              href="https://v2.preview.takumi.kane.tw/docs"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2"
+            >
+              <Sparkles className="size-4" />
+              Takumi v2 Beta is live. SVG output, web-accurate rendering, a leaner API. Try it →
+            </a>
+          </Banner>
+          {children}
+        </Provider>
         <Analytics />
       </body>
     </html>
