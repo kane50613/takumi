@@ -84,8 +84,8 @@ test("no crash without fonts and images", () => {
 });
 
 describe("setup", () => {
-  test("registerFonts", async () => {
-    const registered = await renderer.registerFonts(fontBuffers);
+  test("registerFont", async () => {
+    const registered = await Promise.all(fontBuffers.map((font) => renderer.registerFont(font)));
     expect(registered).toHaveLength(files.length);
   });
 });

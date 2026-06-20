@@ -7,7 +7,7 @@ describe("Renderer.measure", () => {
 
   afterAll(() => renderer.free());
 
-  it("should measure a simple container", () => {
+  it("should measure a simple container", async () => {
     const node = container({
       style: {
         width: 100,
@@ -17,7 +17,7 @@ describe("Renderer.measure", () => {
       children: [],
     });
 
-    const result = renderer.measure(node);
+    const result = await renderer.measure(node);
 
     expect(result).toEqual({
       width: 100,
@@ -28,7 +28,7 @@ describe("Renderer.measure", () => {
     });
   });
 
-  it("should measure nested children with layout", () => {
+  it("should measure nested children with layout", async () => {
     const node = container({
       style: {
         display: "flex",
@@ -54,7 +54,7 @@ describe("Renderer.measure", () => {
       ],
     });
 
-    const result = renderer.measure(node);
+    const result = await renderer.measure(node);
 
     expect(result).toMatchObject({
       width: 200,

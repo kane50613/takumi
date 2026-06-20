@@ -13,8 +13,7 @@ use takumi_raster::{
 };
 
 use crate::{
-  ExternalMemoryAccountable, buffer_from_object, deserialize_with_tracing, map_error,
-  parse_stylesheet,
+  buffer_from_object, deserialize_with_tracing, map_error, parse_stylesheet,
   renderer::{AnimationOutputFormat, ImageSource, RenderAnimationOptions, RendererState},
 };
 
@@ -173,8 +172,7 @@ impl Task for RenderAnimationTask {
     })
   }
 
-  fn resolve(&mut self, mut env: Env, output: Self::Output) -> Result<Self::JsValue> {
-    output.account_external_memory(&mut env)?;
+  fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
     Ok(output.into())
   }
 }

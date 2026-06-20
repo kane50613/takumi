@@ -35,10 +35,12 @@ describe("binary inputs", () => {
     ).not.toThrow();
   });
 
-  test("registerFonts accepts Buffer, Uint8Array, and ArrayBuffer", async () => {
+  test("registerFont accepts Buffer, Uint8Array, and ArrayBuffer", async () => {
     const renderer = new Renderer();
 
-    const registered = await renderer.registerFonts([fontBuffer, fontUint8Array, fontArrayBuffer]);
+    const registered = await Promise.all(
+      [fontBuffer, fontUint8Array, fontArrayBuffer].map((font) => renderer.registerFont(font)),
+    );
 
     expect(registered).toHaveLength(3);
     expect(registered.every((families) => families.length > 0 && Boolean(families[0].name))).toBe(

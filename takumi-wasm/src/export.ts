@@ -1,10 +1,13 @@
 import {
   Renderer as RendererInternal,
+  type AnimationFrameSource,
   type ByteBuf,
+  type EncodeFramesOptions,
   type Font,
   type FontDetails,
   type Node,
   type RegisteredFamily,
+  type RenderAnimationOptions,
   type RenderOptions as RenderOptionsInternal,
 } from "../pkg/takumi_wasm";
 
@@ -39,30 +42,41 @@ export class Renderer {
   }
 
   async render(node: Node, options?: RenderOptions) {
-    const fonts = await this.prepareFonts(options?.fonts);
+    const { fonts, fontFamilies, ...rest } = options ?? {};
+    const registeredFamilies = await this.prepareFonts(fonts);
 
     return this.inner.render(node, {
-      ...options,
-      fonts,
+      ...rest,
+      fontFamilies: fontFamilies ?? registeredFamilies,
     });
   }
 
   async renderAsDataUrl(node: Node, options?: RenderOptions) {
-    const fonts = await this.prepareFonts(options?.fonts);
+    const { fonts, fontFamilies, ...rest } = options ?? {};
+    const registeredFamilies = await this.prepareFonts(fonts);
 
     return this.inner.renderAsDataUrl(node, {
-      ...options,
-      fonts,
+      ...rest,
+      fontFamilies: fontFamilies ?? registeredFamilies,
     });
   }
 
   async measure(node: Node, options?: RenderOptions) {
-    const fonts = await this.prepareFonts(options?.fonts);
+    const { fonts, fontFamilies, ...rest } = options ?? {};
+    const registeredFamilies = await this.prepareFonts(fonts);
 
     return this.inner.measure(node, {
-      ...options,
-      fonts,
+      ...rest,
+      fontFamilies: fontFamilies ?? registeredFamilies,
     });
+  }
+
+  renderAnimation(options: RenderAnimationOptions) {
+    return this.inner.renderAnimation(options);
+  }
+
+  encodeFrames(frames: AnimationFrameSource[], options: EncodeFramesOptions) {
+    return this.inner.encodeFrames(frames, options);
   }
 
   free() {

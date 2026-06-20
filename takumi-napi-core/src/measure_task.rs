@@ -51,7 +51,7 @@ impl MeasureTask {
         .into_iter()
         .map(|image| Ok((Arc::from(image.src), buffer_from_object(env, image.data)?)))
         .collect::<Result<_>>()?,
-      font_families: options.fonts,
+      font_families: options.font_families,
     })
   }
 }

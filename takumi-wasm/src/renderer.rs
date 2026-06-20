@@ -260,7 +260,7 @@ impl Renderer {
       .dithering(dithering)
       .node(node)
       .fonts(fonts)
-      .font_families(options.fonts)
+      .font_families(options.font_families)
       .build();
 
     let image = render(render_options).map_err(map_error)?;
@@ -316,7 +316,7 @@ impl Renderer {
       .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
       .node(node)
       .fonts(&state)
-      .font_families(options.fonts)
+      .font_families(options.font_families)
       .build();
 
     let layout = measure_layout(render_options).map_err(map_error)?;

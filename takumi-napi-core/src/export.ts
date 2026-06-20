@@ -1,9 +1,12 @@
 import type {
+  AnimationFrameSource,
   ByteBuf,
+  EncodeFramesOptions,
   Font,
   FontDetails,
   Node,
   RegisteredFamily,
+  RenderAnimationOptions,
   RenderOptions as RenderOptionsInternal,
 } from "../index";
 export type * from "../index";
@@ -37,21 +40,31 @@ export class Renderer {
   }
 
   async render(node: Node, options?: RenderOptions) {
-    const fonts = await this.prepareFonts(options?.fonts);
+    const { fonts, fontFamilies, ...rest } = options ?? {};
+    const registeredFamilies = await this.prepareFonts(fonts);
 
     return this.inner.render(node, {
-      ...options,
-      fonts,
+      ...rest,
+      fontFamilies: fontFamilies ?? registeredFamilies,
     });
   }
 
   async measure(node: Node, options?: RenderOptions) {
-    const fonts = await this.prepareFonts(options?.fonts);
+    const { fonts, fontFamilies, ...rest } = options ?? {};
+    const registeredFamilies = await this.prepareFonts(fonts);
 
     return this.inner.measure(node, {
-      ...options,
-      fonts,
+      ...rest,
+      fontFamilies: fontFamilies ?? registeredFamilies,
     });
+  }
+
+  renderAnimation(options: RenderAnimationOptions) {
+    return this.inner.renderAnimation(options);
+  }
+
+  encodeFrames(frames: AnimationFrameSource[], options: EncodeFramesOptions) {
+    return this.inner.encodeFrames(frames, options);
   }
 
   async registerFont(font: FontLoader) {

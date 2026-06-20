@@ -13,7 +13,7 @@ use takumi_raster::{
 };
 
 use crate::{
-  ExternalMemoryAccountable, buffer_from_object, map_error, parse_stylesheet,
+  buffer_from_object, map_error, parse_stylesheet,
   renderer::{AnimationOutputFormat, EncodeFramesOptions, ImageSource, RendererState},
 };
 
@@ -163,8 +163,7 @@ impl Task for EncodeFramesTask {
     })
   }
 
-  fn resolve(&mut self, mut env: Env, output: Self::Output) -> Result<Self::JsValue> {
-    output.account_external_memory(&mut env)?;
+  fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
     Ok(output.into())
   }
 }

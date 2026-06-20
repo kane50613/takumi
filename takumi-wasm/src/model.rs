@@ -33,7 +33,7 @@ extern "C" {
   #[wasm_bindgen(typescript_type = "Font")]
   pub type FontType;
 
-  /// JavaScript type for the families produced by `registerFonts`.
+  /// JavaScript type for the families produced by `registerFont`.
   #[wasm_bindgen(typescript_type = "RegisteredFamily[]")]
   pub type RegisteredFamiliesType;
 
@@ -85,9 +85,9 @@ pub struct RenderOptions {
   pub time_ms: Option<i64>,
   /// The output dithering algorithm.
   pub dithering: Option<DitheringAlgorithm>,
-  /// Per-render font fallback chain (family names in order, e.g. from `registerFonts`).
+  /// Per-render font stack: ordered family names used as the fallback chain.
   /// Defaults to all registered families in registration order.
-  pub fonts: Option<Vec<String>>,
+  pub font_families: Option<Vec<String>>,
 }
 
 /// Options for rendering an animated image.

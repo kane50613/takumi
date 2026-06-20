@@ -24,16 +24,7 @@ use takumi_base::{
 
 pub use renderer::Renderer;
 
-/// Options for `Renderer`'s `image`.
-#[napi(object)]
-pub struct ImageCacheOptions {
-  /// Maximum bytes of decoded images to keep in this renderer's cache. `0` disables (and clears) it.
-  pub max_bytes: Option<f64>,
-  /// Maximum number of decoded images to keep in this renderer's cache. `0` disables (and clears) it.
-  pub max_size: Option<f64>,
-}
-
-/// A font family produced by `registerFonts`, with the faces it contains.
+/// A font family produced by `registerFont`, with the faces it contains.
 #[napi(object)]
 pub struct RegisteredFamily {
   /// Family name as stored by the font system (normalized; reflects any override).
@@ -198,28 +189,4 @@ pub(crate) fn parse_stylesheet(
   let mut stylesheet = StyleSheet::parse_owned_list_loosy(stylesheets.unwrap_or_default());
   stylesheet.extend_keyframes(keyframes);
   Ok(stylesheet)
-}
-
-/// Trait for accounting external memory to V8's garbage collector.
-///
-/// Similar to the optimization in resvg-js PR #393:
-/// https://github.com/thx/resvg-js/pull/393
-///
-/// This allows V8 to be aware of memory allocated in Rust, enabling
-/// the garbage collector to trigger based on actual memory pressure.
-pub(crate) trait ExternalMemoryAccountable {
-  /// Account external memory to V8 by calling adjust_external_memory.
-  fn account_external_memory(&self, env: &mut Env) -> Result<()>;
-}
-
-impl ExternalMemoryAccountable for Vec<u8> {
-  fn account_external_memory(&self, env: &mut Env) -> Result<()> {
-    let bytes = self.len() as i64;
-
-    if bytes != 0 {
-      env.adjust_external_memory(bytes)?;
-    }
-
-    Ok(())
-  }
 }

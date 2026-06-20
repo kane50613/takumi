@@ -11,7 +11,7 @@ use takumi_base::{
 use takumi_raster::{DitheringAlgorithm, render, write_image};
 
 use crate::{
-  ExternalMemoryAccountable, buffer_from_object, map_error, parse_stylesheet,
+  buffer_from_object, map_error, parse_stylesheet,
   renderer::{OutputFormat, RenderOptions, RendererState, deserialize_keyframes},
 };
 
@@ -60,7 +60,7 @@ impl RenderTask {
         .into_iter()
         .map(|image| Ok((Arc::from(image.src), buffer_from_object(env, image.data)?)))
         .collect::<Result<_>>()?,
-      font_families: options.fonts,
+      font_families: options.font_families,
     })
   }
 }
@@ -122,10 +122,7 @@ impl Task for RenderTask {
     Ok(buffer)
   }
 
-  fn resolve(&mut self, mut env: Env, output: Self::Output) -> Result<Self::JsValue> {
-    // Account external memory to V8's garbage collector
-    // This enables V8 to collect memory based on actual memory pressure
-    output.account_external_memory(&mut env)?;
+  fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
     Ok(output.into())
   }
 }

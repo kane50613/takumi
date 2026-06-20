@@ -122,9 +122,9 @@ pub struct RenderOptions<'env> {
   pub time_ms: Option<i64>,
   /// The output dithering algorithm.
   pub dithering: Option<DitheringAlgorithm>,
-  /// Per-render font fallback chain (family names in order, e.g. from `registerFonts`).
+  /// Per-render font stack: ordered family names used as the fallback chain.
   /// Defaults to all registered families in registration order.
-  pub fonts: Option<Vec<String>>,
+  pub font_families: Option<Vec<String>>,
 }
 
 #[napi(string_enum)]

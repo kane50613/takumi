@@ -54,25 +54,25 @@ const node = container({
 });
 
 describe("setup", () => {
-  test(`registerFonts (${fonts.length})`, async () => {
-    expect(await renderer.registerFonts(fonts)).toHaveLength(fonts.length);
+  test(`registerFont (${fonts.length})`, async () => {
+    expect(await Promise.all(fonts.map((font) => renderer.registerFont(font)))).toHaveLength(
+      fonts.length,
+    );
   });
 
-  test("registerFonts without default fonts", async () => {
-    await rendererWithoutDefaultFonts.registerFonts([
-      {
-        name: "Manrope",
-        data: manropeFont,
-        weight: 400,
-        style: "normal",
-      },
-    ]);
+  test("registerFont without default fonts", async () => {
+    await rendererWithoutDefaultFonts.registerFont({
+      name: "Manrope",
+      data: manropeFont,
+      weight: 400,
+      style: "normal",
+    });
   });
 });
 
 describe("render", () => {
-  test("webp", () => {
-    const result = renderer.render(node, {
+  test("webp", async () => {
+    const result = await renderer.render(node, {
       width: 1200,
       height: 630,
       format: "webp",
@@ -81,8 +81,8 @@ describe("render", () => {
     expect(result).toBeInstanceOf(Uint8Array);
   });
 
-  test("png", () => {
-    const result = renderer.render(node, {
+  test("png", async () => {
+    const result = await renderer.render(node, {
       width: 1200,
       height: 630,
       format: "png",
@@ -91,8 +91,8 @@ describe("render", () => {
     expect(result).toBeInstanceOf(Uint8Array);
   });
 
-  test("jpeg 75%", () => {
-    const result = renderer.render(node, {
+  test("jpeg 75%", async () => {
+    const result = await renderer.render(node, {
       width: 1200,
       height: 630,
       format: "jpeg",
@@ -102,8 +102,8 @@ describe("render", () => {
     expect(result).toBeInstanceOf(Uint8Array);
   });
 
-  test("jpeg 100%", () => {
-    const result = renderer.render(node, {
+  test("jpeg 100%", async () => {
+    const result = await renderer.render(node, {
       width: 1200,
       height: 630,
       format: "jpeg",
@@ -113,8 +113,8 @@ describe("render", () => {
     expect(result).toBeInstanceOf(Uint8Array);
   });
 
-  test("ico", () => {
-    const result = renderer.render(node, {
+  test("ico", async () => {
+    const result = await renderer.render(node, {
       width: 256,
       height: 256,
       format: "ico",
@@ -124,16 +124,16 @@ describe("render", () => {
     expect(Buffer.from(result.subarray(0, 4))).toEqual(Buffer.from([0, 0, 1, 0]));
   });
 
-  test("auto-calculated dimensions", () => {
-    const result = renderer.render(node, {
+  test("auto-calculated dimensions", async () => {
+    const result = await renderer.render(node, {
       format: "png",
     });
 
     expect(result).toBeInstanceOf(Uint8Array);
   });
 
-  test("with debug borders", () => {
-    const result = renderer.render(node, {
+  test("with debug borders", async () => {
+    const result = await renderer.render(node, {
       width: 1200,
       height: 630,
       format: "png",
@@ -143,8 +143,8 @@ describe("render", () => {
     expect(result).toBeInstanceOf(Uint8Array);
   });
 
-  test("with device pixel ratio 2.0", () => {
-    const result = renderer.render(node, {
+  test("with device pixel ratio 2.0", async () => {
+    const result = await renderer.render(node, {
       width: 1200,
       height: 630,
       format: "png",
@@ -154,8 +154,8 @@ describe("render", () => {
     expect(result).toBeInstanceOf(Uint8Array);
   });
 
-  test("with fetched resources", () => {
-    const result = renderer.render(node, {
+  test("with fetched resources", async () => {
+    const result = await renderer.render(node, {
       width: 1200,
       height: 630,
       format: "png",
@@ -170,14 +170,14 @@ describe("render", () => {
     expect(result).toBeInstanceOf(Uint8Array);
   });
 
-  test("with no options provided", () => {
-    const result = renderer.render(node);
+  test("with no options provided", async () => {
+    const result = await renderer.render(node);
 
     expect(result).toBeInstanceOf(Uint8Array);
   });
 
-  test("with default fonts disabled", () => {
-    const result = rendererWithoutDefaultFonts.render(
+  test("with default fonts disabled", async () => {
+    const result = await rendererWithoutDefaultFonts.render(
       text({
         text: "Manrope",
         style: {
@@ -197,8 +197,8 @@ describe("render", () => {
 });
 
 describe("renderAsDataUrl", () => {
-  test("with timeMs applied to stylesheet animation", () => {
-    const animated = renderer.measure(
+  test("with timeMs applied to stylesheet animation", async () => {
+    const animated = await renderer.measure(
       {
         type: "container",
         tagName: "div",
@@ -229,15 +229,15 @@ describe("renderAsDataUrl", () => {
     expect(animated.width).toBe(150);
   });
 
-  test("default format (png)", () => {
-    const result = renderer.renderAsDataUrl(node, { width: 1200, height: 630 });
+  test("default format (png)", async () => {
+    const result = await renderer.renderAsDataUrl(node, { width: 1200, height: 630 });
 
     expect(result).toMatch(/^data:image\/png;base64,/);
     expect(result.length).toBeGreaterThan(100);
   });
 
-  test("webp format", () => {
-    const result = renderer.renderAsDataUrl(node, {
+  test("webp format", async () => {
+    const result = await renderer.renderAsDataUrl(node, {
       width: 1200,
       height: 630,
       format: "webp",
@@ -247,8 +247,8 @@ describe("renderAsDataUrl", () => {
     expect(result.length).toBeGreaterThan(100);
   });
 
-  test("jpeg format with quality", () => {
-    const result = renderer.renderAsDataUrl(node, {
+  test("jpeg format with quality", async () => {
+    const result = await renderer.renderAsDataUrl(node, {
       width: 1200,
       height: 630,
       format: "jpeg",
@@ -259,8 +259,8 @@ describe("renderAsDataUrl", () => {
     expect(result.length).toBeGreaterThan(100);
   });
 
-  test("png format explicit", () => {
-    const result = renderer.renderAsDataUrl(node, {
+  test("png format explicit", async () => {
+    const result = await renderer.renderAsDataUrl(node, {
       width: 1200,
       height: 630,
       format: "png",
@@ -270,8 +270,8 @@ describe("renderAsDataUrl", () => {
     expect(result.length).toBeGreaterThan(100);
   });
 
-  test("ico format", () => {
-    const result = renderer.renderAsDataUrl(node, {
+  test("ico format", async () => {
+    const result = await renderer.renderAsDataUrl(node, {
       width: 256,
       height: 256,
       format: "ico",
@@ -281,8 +281,8 @@ describe("renderAsDataUrl", () => {
     expect(result.length).toBeGreaterThan(100);
   });
 
-  test("renderAsDataUrl with debug borders", () => {
-    const result = renderer.renderAsDataUrl(node, {
+  test("renderAsDataUrl with debug borders", async () => {
+    const result = await renderer.renderAsDataUrl(node, {
       width: 1200,
       height: 630,
       format: "png",
@@ -293,8 +293,8 @@ describe("renderAsDataUrl", () => {
     expect(result.length).toBeGreaterThan(100);
   });
 
-  test("renderAsDataUrl with device pixel ratio", () => {
-    const result = renderer.renderAsDataUrl(node, {
+  test("renderAsDataUrl with device pixel ratio", async () => {
+    const result = await renderer.renderAsDataUrl(node, {
       width: 1200,
       height: 630,
       format: "png",
@@ -305,8 +305,8 @@ describe("renderAsDataUrl", () => {
     expect(result.length).toBeGreaterThan(100);
   });
 
-  test("renderAsDataUrl with fetched resources", () => {
-    const result = renderer.renderAsDataUrl(node, {
+  test("renderAsDataUrl with fetched resources", async () => {
+    const result = await renderer.renderAsDataUrl(node, {
       width: 1200,
       height: 630,
       format: "png",
@@ -328,8 +328,8 @@ describe("renderAsDataUrl", () => {
       durationMs: 1000,
     };
 
-    test("webp", () => {
-      const result = renderer.renderAnimation({
+    test("webp", async () => {
+      const result = await renderer.renderAnimation({
         scenes: [scene],
         width: 1200,
         height: 630,
@@ -340,8 +340,8 @@ describe("renderAsDataUrl", () => {
       expect(result).toBeInstanceOf(Uint8Array);
     });
 
-    test("apng", () => {
-      const result = renderer.renderAnimation({
+    test("apng", async () => {
+      const result = await renderer.renderAnimation({
         scenes: [scene],
         width: 1200,
         height: 630,
@@ -352,8 +352,8 @@ describe("renderAsDataUrl", () => {
       expect(result).toBeInstanceOf(Uint8Array);
     });
 
-    test("gif", () => {
-      const result = renderer.renderAnimation({
+    test("gif", async () => {
+      const result = await renderer.renderAnimation({
         scenes: [scene],
         width: 1200,
         height: 630,
@@ -367,8 +367,8 @@ describe("renderAsDataUrl", () => {
   });
 
   describe("encodeFrames", () => {
-    test("with stylesheet keyframes", () => {
-      const result = renderer.encodeFrames(
+    test("with stylesheet keyframes", async () => {
+      const result = await renderer.encodeFrames(
         [
           {
             node: {
@@ -408,8 +408,8 @@ describe("renderAsDataUrl", () => {
     });
   });
 
-  test("with structured keyframes in render options", () => {
-    const animated = renderer.measure(
+  test("with structured keyframes in render options", async () => {
+    const animated = await renderer.measure(
       {
         type: "container",
         tagName: "div",

@@ -64,10 +64,10 @@ export type RenderOptions = {
    */
   dithering?: "none" | "ordered-bayer" | "floyd-steinberg";
   /**
-   * Per-render font fallback chain (family names in order, e.g. from `registerFonts`).
+   * Per-render font stack: ordered family names used as the fallback chain.
    * Defaults to all registered families in registration order.
    */
-  fonts?: string[];
+  fontFamilies?: string[];
 };
 
 export type RenderAnimationOptions = {
@@ -146,11 +146,6 @@ export type KeyframesRule = {
 };
 
 export type Font = FontDetails | ByteBuf;
-
-export type ImageCacheOptions = {
-  maxBytes?: number;
-  maxSize?: number;
-};
 
 export type RegisteredFace = {
   weight: number;
