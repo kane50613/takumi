@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::io;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use taffy::{AbsoluteAxis, AvailableSpace, NodeId, Point, Rect, Size};
@@ -69,7 +70,7 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
         .snapshot_with_fallbacks(options.font_families.as_deref()),
     )
     .sizing(SizingContext::builder().viewport(viewport).build())
-    .images(options.images)
+    .images(Rc::new(options.images))
     .stylesheet(options.stylesheet.into())
     .time_ms(options.time_ms)
     .build();

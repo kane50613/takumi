@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Range, sync::Arc};
+use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
 use image::RgbaImage;
 use parley::{GlyphRun, InlineBoxKind, PositionedLayoutItem};
@@ -199,7 +199,7 @@ pub fn measure_layout<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
   let render_context = RenderContext::builder()
     .fonts(fonts.snapshot_with_fallbacks(font_families.as_deref()))
     .sizing(SizingContext::builder().viewport(viewport).build())
-    .images(images)
+    .images(Rc::new(images))
     .stylesheet(stylesheet.into())
     .time_ms(time_ms)
     .draw_debug_border(draw_debug_border)
@@ -528,7 +528,7 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<RgbaImage> {
   let render_context = RenderContext::builder()
     .fonts(fonts.snapshot_with_fallbacks(font_families.as_deref()))
     .sizing(SizingContext::builder().viewport(viewport).build())
-    .images(images)
+    .images(Rc::new(images))
     .stylesheet(stylesheet.into())
     .time_ms(time_ms)
     .draw_debug_border(draw_debug_border)

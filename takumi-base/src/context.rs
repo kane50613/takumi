@@ -38,7 +38,7 @@ pub struct RenderContext {
   pub draw_debug_border: bool,
   /// The resources fetched externally.
   #[builder(default)]
-  pub images: HashMap<Arc<str>, ImageSource>,
+  pub images: Rc<HashMap<Arc<str>, ImageSource>>,
   /// The stylesheets to apply before layout/rendering.
   #[builder(default)]
   pub stylesheet: Rc<StyleSheet>,
