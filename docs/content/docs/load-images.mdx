@@ -59,3 +59,26 @@ function OgImage() {
   );
 }
 ```
+
+## Decode caching
+
+Takumi caches each decoded image so a repeated `src` is decoded once. The `cache` mode on an image controls that cache and is independent of the byte cache above: `resourcesOptions.cache` stores fetched bytes, while `cache` stores the decoded pixels.
+
+- `auto` (default): cache the decoded image; the entry is evictable.
+- `none`: skip the cache. Use it for a one-off image you won't render again, to avoid holding its pixels in memory.
+
+```tsx twoslash
+import { ImageResponse } from "takumi-js/response";
+
+export function GET() {
+  return new ImageResponse(<div />, {
+    images: [
+      {
+        src: "banner",
+        data: () => fetch("/banner.png").then((res) => res.arrayBuffer()),
+        cache: "none", // [!code ++]
+      },
+    ],
+  });
+}
+```
