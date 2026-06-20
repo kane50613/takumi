@@ -1,5 +1,14 @@
 # @takumi-rs/core
 
+## 1.8.7
+
+### Patch Changes
+
+- 81c3678: Removed the seperate .d.ts file and updated tsdown to v0.22.3
+- 9604fd7: Split package export types per import/require condition so CJS consumers resolve `.d.cts`
+- Updated dependencies [9604fd7]
+  - @takumi-rs/helpers@1.8.7
+
 ## 1.8.6
 
 ### Patch Changes

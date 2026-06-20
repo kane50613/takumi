@@ -1,5 +1,11 @@
 # @takumi-rs/helpers
 
+## 1.8.7
+
+### Patch Changes
+
+- 9604fd7: Split package export types per import/require condition so CJS consumers resolve `.d.cts`
+
 ## 1.8.6
 
 ## 1.8.5

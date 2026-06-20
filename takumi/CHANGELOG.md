@@ -1,5 +1,7 @@
 # takumi
 
+## 1.8.7
+
 ## 1.8.6
 
 ### Patch Changes

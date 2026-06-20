@@ -1,5 +1,13 @@
 # @takumi-rs/wasm
 
+## 1.8.7
+
+### Patch Changes
+
+- 9604fd7: Split package export types per import/require condition so CJS consumers resolve `.d.cts`
+- Updated dependencies [9604fd7]
+  - @takumi-rs/helpers@1.8.7
+
 ## 1.8.6
 
 ### Patch Changes
