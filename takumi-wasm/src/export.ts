@@ -19,9 +19,8 @@ export { extractResourceUrls } from "@takumi-rs/helpers";
 export type FontLoader =
   | Font
   | (Omit<FontDetails, "data"> & {
-      key: string;
       data: () => Promise<FontDetails["data"]> | FontDetails["data"];
-    });
+    } & ({ key: string } | { name: string }));
 
 export type RenderOptions = Omit<RenderOptionsInternal, "fonts"> & {
   fonts?: FontLoader[];
@@ -101,7 +100,10 @@ export class Renderer {
       return binded;
     }
 
-    const promise = extracted.then(this.inner.registerFont.bind(this.inner));
+    const promise = extracted.then(this.inner.registerFont.bind(this.inner)).catch((error) => {
+      this.fontMapping.delete(key);
+      throw error;
+    });
 
     this.fontMapping.set(key, promise);
 
@@ -126,8 +128,12 @@ function createFontKey(font: FontLoader) {
     return font;
   }
 
-  if ("key" in font) {
+  if ("key" in font && font.key) {
     return font.key;
+  }
+
+  if (typeof font.data === "function") {
+    return `${font.name ?? ""}:${font.weight ?? ""}:${font.style ?? ""}`;
   }
 
   return font.data;
