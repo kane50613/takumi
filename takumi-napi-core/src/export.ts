@@ -20,7 +20,7 @@ export type FontLoader =
       data: () => Promise<FontDetails["data"]> | FontDetails["data"];
     } & ({ key: string } | { name: string }));
 
-export type RenderOptions = Omit<RenderOptionsInternal, "fonts"> & {
+export type RenderOptions = RenderOptionsInternal & {
   fonts?: FontLoader[];
 };
 

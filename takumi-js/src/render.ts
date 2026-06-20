@@ -3,7 +3,6 @@ import type * as wasm from "@takumi-rs/wasm";
 import { extractEmojis, type EmojiType } from "@takumi-rs/helpers/emoji";
 import { extractResourceUrls, fetchResources } from "@takumi-rs/helpers";
 import { fromJsx, type FromJsxOptions } from "@takumi-rs/helpers/jsx";
-import { type ManagedRendererOptions } from "./renderer";
 import { getImports } from "./import";
 import type { ReactNode } from "react";
 import type { FetchResourcesOptions, Node, ReactElementLike } from "@takumi-rs/helpers";
@@ -21,6 +20,8 @@ type ImageLoaderData = Uint8Array | ArrayBuffer;
 export type ImageLoader = {
   src: string;
   data: ImageLoaderData | (() => ImageLoaderData | Promise<ImageLoaderData>);
+  /** Whether to cache the decoded image. Defaults to `true`. */
+  cache?: boolean;
 };
 
 type RenderOptionsWithRenderer = Omit<InnerRenderOptions, "images" | "fonts"> & {
@@ -39,6 +40,14 @@ type RenderOptionsWithRenderer = Omit<InnerRenderOptions, "images" | "fonts"> & 
    */
   emoji?: EmojiType | "from-font";
   fonts?: napi.FontLoader[];
+};
+
+export type ManagedRendererOptions = {
+  fonts?: napi.FontLoader[];
+  /**
+   * @description The WebAssembly module to use for the renderer. If not provided, the default resolving strategy will be used.
+   */
+  module?: wasm.InitInput | Promise<wasm.InitInput> | { default: wasm.InitInput };
 };
 
 export type RenderOptionsWithoutRenderer = Omit<RenderOptionsWithRenderer, "renderer"> &
@@ -64,8 +73,9 @@ function isTakumiNode(element: unknown): element is Node {
  */
 async function resolveImageLoaders(
   images: ImageLoader[],
-): Promise<Array<{ src: string; data: ImageLoaderData }>> {
+): Promise<Array<{ src: string; data: ImageLoaderData; cache?: boolean }>> {
   const bySrc = new Map<string, ImageLoader>();
+
   for (const image of images) {
     if (!bySrc.has(image.src)) bySrc.set(image.src, image);
   }
@@ -74,6 +84,7 @@ async function resolveImageLoaders(
     [...bySrc.values()].map(async (image) => ({
       src: image.src,
       data: typeof image.data === "function" ? await image.data() : image.data,
+      cache: image.cache,
     })),
   );
 }
