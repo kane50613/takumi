@@ -12,17 +12,7 @@ const fontBuffers = await Promise.all(
   files.map(async (file) => await Bun.file(file).arrayBuffer()),
 );
 
-const renderer = new Renderer({
-  fonts: [
-    {
-      data: await Bun.file(
-        "../assets/fonts/plus-jakarta-sans/PlusJakartaSans-VariableFont_wght.woff2",
-      ).arrayBuffer(),
-      name: "Plus Jakarta Sans",
-      style: "normal",
-    },
-  ],
-});
+const renderer = new Renderer();
 
 const remoteUrl = "https://yeecord.com/img/logo.png";
 const localImagePath = "../assets/images/yeecord.png";
@@ -74,9 +64,8 @@ const node = container({
 test("Renderer initialization with fonts and images", async () => {
   const font = await readFile("../assets/fonts/geist/Geist[wght].woff2");
 
-  new Renderer({
-    fonts: [font],
-  });
+  const renderer = new Renderer();
+  await renderer.registerFont(font);
 });
 
 test("no crash without fonts and images", () => {

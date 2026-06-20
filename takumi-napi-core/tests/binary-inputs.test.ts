@@ -26,15 +26,6 @@ const imageNode = container({
 });
 
 describe("binary inputs", () => {
-  test("constructor accepts ArrayBuffer and Uint8Array", () => {
-    expect(
-      () =>
-        new Renderer({
-          fonts: [fontArrayBuffer],
-        }),
-    ).not.toThrow();
-  });
-
   test("registerFont accepts Buffer, Uint8Array, and ArrayBuffer", async () => {
     const renderer = new Renderer();
 

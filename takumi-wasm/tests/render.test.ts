@@ -17,7 +17,7 @@ const fonts = await Promise.all(
   fontFiles.map(async (file) => await readFile(join(fontsRoot, file))),
 );
 const renderer = new Renderer();
-const rendererWithoutDefaultFonts = new Renderer({ loadDefaultFonts: false });
+const rendererWithoutDefaultFonts = new Renderer();
 
 afterAll(() => {
   renderer.free();

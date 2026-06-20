@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, OnceLock, RwLock};
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -12,9 +12,9 @@ use takumi_base::{
 use takumi_raster::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat};
 
 use crate::{
-  De, FontInput, deserialize_with_tracing, encode_frames_task::EncodeFramesTask,
-  load_font_task::LoadFontTask, map_error, measure_task::MeasureTask, parse_font_input,
-  render_animation_task::RenderAnimationTask, render_task::RenderTask, resolve_font_resource,
+  De, deserialize_with_tracing, encode_frames_task::EncodeFramesTask, load_font_task::LoadFontTask,
+  map_error, measure_task::MeasureTask, parse_font_input,
+  render_animation_task::RenderAnimationTask, render_task::RenderTask,
 };
 
 /// Represents a single run of text in a measured node.
@@ -269,18 +269,6 @@ pub struct ImageSource<'ctx> {
   pub cache: Option<bool>,
 }
 
-/// Options for constructing a Renderer instance.
-#[napi(object)]
-#[derive(Default)]
-pub struct ConstructRendererOptions<'ctx> {
-  /// The fonts being used.
-  #[napi(ts_type = "Font[] | undefined")]
-  pub fonts: Option<Vec<Object<'ctx>>>,
-  /// Whether to load the default fonts.
-  /// If `fonts` are provided, this will be `false` by default.
-  pub load_default_fonts: Option<bool>,
-}
-
 const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[
   (
     include_bytes!("../../assets/fonts/geist/Geist[wght].woff2"),
@@ -294,75 +282,58 @@ const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[
   ),
 ];
 
+static DEFAULT_FONTS: OnceLock<Fonts> = OnceLock::new();
+
+/// Returns a clone of the process-wide default font set, decoding the embedded
+/// fonts once and sharing the decoded blobs across every renderer.
+fn default_fonts() -> Result<Fonts> {
+  if let Some(fonts) = DEFAULT_FONTS.get() {
+    return Ok(fonts.clone());
+  }
+
+  let mut fonts = Fonts::default();
+  let resources = crate::pool::install(|| {
+    EMBEDDED_FONTS
+      .par_iter()
+      .map(|(font, name, generic)| {
+        FontResource::new(*font)
+          .override_info(FontInfoOverride {
+            family_name: Some(*name),
+            ..Default::default()
+          })
+          .generic_family(*generic)
+          .into_resolved()
+          .map_err(|e| Error::from_reason(format!("Failed to load default font: {e}")))
+      })
+      .collect::<Result<Vec<_>>>()
+  })?;
+
+  for resource in resources {
+    drop(fonts.register(resource).map_err(map_error)?);
+  }
+
+  if DEFAULT_FONTS.set(fonts.clone()).is_err()
+    && let Some(stored) = DEFAULT_FONTS.get()
+  {
+    return Ok(stored.clone());
+  }
+
+  Ok(fonts)
+}
+
 #[napi]
 impl Renderer {
   /// Creates a new Renderer instance.
   #[napi(constructor)]
-  pub fn new(env: Env, options: Option<ConstructRendererOptions>) -> Result<Self> {
+  pub fn new(env: Env) -> Result<Self> {
     crate::pool::register_cleanup(&env);
 
-    let options = options.unwrap_or_default();
-
-    let load_default_fonts = options
-      .load_default_fonts
-      .unwrap_or_else(|| options.fonts.is_none());
-
-    let mut fonts = Fonts::default();
-
-    if load_default_fonts {
-      let default_fonts_resources = crate::pool::install(|| {
-        EMBEDDED_FONTS
-          .par_iter()
-          .map(|(font, name, generic)| {
-            FontResource::new(*font)
-              .override_info(FontInfoOverride {
-                family_name: Some(*name),
-                ..Default::default()
-              })
-              .generic_family(*generic)
-              .into_resolved()
-              .map_err(|e| Error::from_reason(format!("Failed to load default font: {e}")))
-          })
-          .collect::<Result<Vec<_>>>()
-      })?;
-
-      for resource in default_fonts_resources {
-        drop(fonts.register(resource).map_err(map_error)?);
-      }
-    }
-
-    let renderer = Self {
+    Ok(Self {
       state: Arc::new(RwLock::new(RendererState {
-        fonts,
+        fonts: default_fonts()?,
         image_cache: ImageCache::default(),
       })),
-    };
-
-    if let Some(fonts) = options.fonts {
-      let buffers = fonts
-        .into_iter()
-        .map(|font| parse_font_input(env, font))
-        .collect::<Result<Vec<_>>>()?;
-
-      let custom_fonts_resources = crate::pool::install(|| {
-        buffers
-          .par_iter()
-          .with_min_len(2)
-          .map(|(font, buffer): &(FontInput, Buffer)| resolve_font_resource(font, buffer.as_ref()))
-          .collect::<Result<Vec<_>>>()
-      })?;
-
-      let mut state = renderer
-        .state
-        .write()
-        .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-
-      for resource in custom_fonts_resources {
-        drop(state.fonts.register(resource).map_err(map_error)?);
-      }
-    }
-
-    Ok(renderer)
+    })
   }
 
   /// Register font into the renderer, returning the families produced.

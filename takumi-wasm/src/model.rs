@@ -37,10 +37,6 @@ extern "C" {
   #[wasm_bindgen(typescript_type = "RegisteredFamily[]")]
   pub type RegisteredFamiliesType;
 
-  /// JavaScript object representing renderer construction options.
-  #[wasm_bindgen(typescript_type = "ConstructRendererOptions")]
-  pub type ConstructRendererOptionsType;
-
   /// JavaScript object representing an image source.
   #[wasm_bindgen(typescript_type = "ImageSource")]
   pub type ImageSourceType;
@@ -160,18 +156,6 @@ pub enum Font {
   Object(FontDetails),
   /// Raw font buffer.
   Buffer(ByteBuf),
-}
-
-/// Options for constructing a Renderer instance.
-#[derive(Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct ConstructRendererOptions {
-  /// The images that needs to be preloaded into the renderer.
-  /// The fonts being used.
-  pub fonts: Option<Vec<Font>>,
-  /// Whether to load the default fonts.
-  /// If `fonts` are provided, this will be `false` by default.
-  pub load_default_fonts: Option<bool>,
 }
 
 /// An image source with its URL and raw data.

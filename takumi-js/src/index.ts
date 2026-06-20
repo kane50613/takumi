@@ -12,7 +12,6 @@ export type {
   AnimationFrameSource,
   AnimationOutputFormat,
   AnimationSceneSource,
-  ConstructRendererOptions,
   DitheringAlgorithm,
   EncodeFramesOptions,
   Font,

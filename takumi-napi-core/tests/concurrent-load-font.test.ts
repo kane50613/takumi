@@ -6,9 +6,7 @@ const fontData = await Bun.file(
 ).arrayBuffer();
 
 test("concurrent registerFont calls on one renderer", async () => {
-  const renderer = new Renderer({
-    loadDefaultFonts: false,
-  });
+  const renderer = new Renderer();
 
   const results = await Promise.all(
     Array.from({ length: 32 }, (_, i) =>
@@ -38,9 +36,7 @@ test("concurrent registerFont calls on one renderer", async () => {
 });
 
 test("registerFont retries loaders that failed before loading", async () => {
-  const renderer = new Renderer({
-    loadDefaultFonts: false,
-  });
+  const renderer = new Renderer();
 
   let attempts = 0;
 

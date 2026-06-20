@@ -7,7 +7,7 @@ use serde_wasm_bindgen::{from_value, to_value};
 use std::{
   borrow::Cow,
   collections::HashMap,
-  sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
+  sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 use takumi_base::{
   Fonts,
@@ -47,9 +47,18 @@ pub struct Renderer {
   image_cache: ImageCache,
 }
 
-fn load_default_fonts(fonts: &mut Fonts) -> Result<(), js_sys::Error> {
+static DEFAULT_FONTS: OnceLock<Fonts> = OnceLock::new();
+
+/// Returns a clone of the process-wide default font set, decoding the embedded
+/// fonts once and sharing the decoded blobs across every renderer.
+fn default_fonts() -> Result<Fonts, js_sys::Error> {
+  if let Some(fonts) = DEFAULT_FONTS.get() {
+    return Ok(fonts.clone());
+  }
+
+  let mut fonts = Fonts::default();
   for (font, family_name, generic_family) in EMBEDDED_FONTS {
-    let resource = FontResource::new((*font).to_vec())
+    let resource = FontResource::new(*font)
       .override_info(FontInfoOverride {
         family_name: Some(*family_name),
         ..Default::default()
@@ -59,7 +68,13 @@ fn load_default_fonts(fonts: &mut Fonts) -> Result<(), js_sys::Error> {
     drop(fonts.register(resource).map_err(map_error)?);
   }
 
-  Ok(())
+  if DEFAULT_FONTS.set(fonts.clone()).is_err()
+    && let Some(stored) = DEFAULT_FONTS.get()
+  {
+    return Ok(stored.clone());
+  }
+
+  Ok(fonts)
 }
 
 fn load_font_internal(
@@ -178,30 +193,9 @@ impl Renderer {
 
   /// Creates a new Renderer instance.
   #[wasm_bindgen(constructor)]
-  pub fn new(options: Option<ConstructRendererOptionsType>) -> Result<Renderer, js_sys::Error> {
-    let options: ConstructRendererOptions = options
-      .map(|options| from_value(options.into()).map_err(map_error))
-      .transpose()?
-      .unwrap_or_default();
-
-    let mut fonts = Fonts::default();
-
-    let should_load_default_fonts = options
-      .load_default_fonts
-      .unwrap_or_else(|| options.fonts.is_none());
-
-    if should_load_default_fonts {
-      load_default_fonts(&mut fonts)?;
-    }
-
-    if let Some(custom_fonts) = options.fonts {
-      for font in custom_fonts {
-        load_font_internal(&mut fonts, font)?;
-      }
-    }
-
+  pub fn new() -> Result<Renderer, js_sys::Error> {
     Ok(Renderer {
-      state: RwLock::new(fonts),
+      state: RwLock::new(default_fonts()?),
       image_cache: ImageCache::default(),
     })
   }
