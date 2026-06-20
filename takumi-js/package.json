@@ -37,52 +37,84 @@
   "types": "./dist/index.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs",
-      "default": "./dist/index.mjs"
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./response": {
-      "types": "./dist/response.d.mts",
-      "import": "./dist/response.mjs",
-      "require": "./dist/response.cjs",
-      "default": "./dist/response.mjs"
+      "import": {
+        "types": "./dist/response.d.mts",
+        "default": "./dist/response.mjs"
+      },
+      "require": {
+        "types": "./dist/response.d.cts",
+        "default": "./dist/response.cjs"
+      }
     },
     "./node": {
-      "types": "./dist/node.d.mts",
-      "import": "./dist/node.mjs",
-      "require": "./dist/node.cjs",
-      "default": "./dist/node.mjs"
+      "import": {
+        "types": "./dist/node.d.mts",
+        "default": "./dist/node.mjs"
+      },
+      "require": {
+        "types": "./dist/node.d.cts",
+        "default": "./dist/node.cjs"
+      }
     },
     "./wasm": {
-      "types": "./dist/wasm.d.mts",
-      "import": "./dist/wasm.mjs",
-      "require": "./dist/wasm.cjs",
-      "default": "./dist/wasm.mjs"
+      "import": {
+        "types": "./dist/wasm.d.mts",
+        "default": "./dist/wasm.mjs"
+      },
+      "require": {
+        "types": "./dist/wasm.d.cts",
+        "default": "./dist/wasm.cjs"
+      }
     },
     "./helpers": {
-      "types": "./dist/helpers/index.d.mts",
-      "import": "./dist/helpers/index.mjs",
-      "require": "./dist/helpers/index.cjs",
-      "default": "./dist/helpers/index.mjs"
+      "import": {
+        "types": "./dist/helpers/index.d.mts",
+        "default": "./dist/helpers/index.mjs"
+      },
+      "require": {
+        "types": "./dist/helpers/index.d.cts",
+        "default": "./dist/helpers/index.cjs"
+      }
     },
     "./helpers/emoji": {
-      "types": "./dist/helpers/emoji.d.mts",
-      "import": "./dist/helpers/emoji.mjs",
-      "require": "./dist/helpers/emoji.cjs",
-      "default": "./dist/helpers/emoji.mjs"
+      "import": {
+        "types": "./dist/helpers/emoji.d.mts",
+        "default": "./dist/helpers/emoji.mjs"
+      },
+      "require": {
+        "types": "./dist/helpers/emoji.d.cts",
+        "default": "./dist/helpers/emoji.cjs"
+      }
     },
     "./helpers/jsx": {
-      "types": "./dist/helpers/jsx.d.mts",
-      "import": "./dist/helpers/jsx.mjs",
-      "require": "./dist/helpers/jsx.cjs",
-      "default": "./dist/helpers/jsx.mjs"
+      "import": {
+        "types": "./dist/helpers/jsx.d.mts",
+        "default": "./dist/helpers/jsx.mjs"
+      },
+      "require": {
+        "types": "./dist/helpers/jsx.d.cts",
+        "default": "./dist/helpers/jsx.cjs"
+      }
     },
     "./helpers/html": {
-      "types": "./dist/helpers/html.d.mts",
-      "import": "./dist/helpers/html.mjs",
-      "require": "./dist/helpers/html.cjs",
-      "default": "./dist/helpers/html.mjs"
+      "import": {
+        "types": "./dist/helpers/html.d.mts",
+        "default": "./dist/helpers/html.mjs"
+      },
+      "require": {
+        "types": "./dist/helpers/html.d.cts",
+        "default": "./dist/helpers/html.cjs"
+      }
     }
   },
   "publishConfig": {
