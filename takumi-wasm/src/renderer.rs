@@ -149,21 +149,12 @@ impl Renderer {
     &self,
     frames: Vec<AnimationFrame>,
     format: Option<AnimationOutputFormat>,
-    quality: Option<u8>,
   ) -> Result<Vec<u8>, JsValue> {
-    if let Some(quality) = quality
-      && quality > 100
-    {
-      return Err(JsValue::from_str(&format!(
-        "Invalid WebP quality {quality}; expected a value in 0..=100"
-      )));
-    }
-
     let mut buffer = Vec::new();
 
     match format.unwrap_or(AnimationOutputFormat::WebP) {
       AnimationOutputFormat::WebP => {
-        // wasm `image-webp` is lossless-only; `quality` is ignored for WebP.
+        // wasm `image-webp` is lossless-only.
         encode_animated_webp(
           Cow::Owned(frames),
           &mut buffer,
@@ -357,7 +348,6 @@ impl Renderer {
       width,
       height,
       format,
-      quality,
       images,
       draw_debug_border,
       stylesheets,
@@ -401,7 +391,7 @@ impl Renderer {
       .collect::<Vec<_>>();
     let rendered_frames = render_sequence_animation(&scene_options, fps).map_err(map_error)?;
 
-    self.encode_animation(rendered_frames, format, quality)
+    self.encode_animation(rendered_frames, format)
   }
 
   /// Encodes a precomputed frame sequence into an animated image buffer.
@@ -439,6 +429,6 @@ impl Renderer {
       })
       .collect::<Result<Vec<_>, JsValue>>()?;
 
-    self.encode_animation(rendered_frames, options.format, options.quality)
+    self.encode_animation(rendered_frames, options.format)
   }
 }

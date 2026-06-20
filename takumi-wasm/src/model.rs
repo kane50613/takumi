@@ -99,8 +99,6 @@ pub struct RenderAnimationOptions {
   pub height: u32,
   /// The output animation format (WebP, APNG, or GIF).
   pub format: Option<AnimationOutputFormat>,
-  /// The WebP quality (0-100). Ignored for APNG and GIF.
-  pub quality: Option<u8>,
   /// Pre-fetched image resources to use during rendering.
   pub images: Option<Vec<ImageSource>>,
   /// Whether to draw debug borders around layout elements.
@@ -125,8 +123,6 @@ pub struct EncodeFramesOptions {
   pub height: u32,
   /// The output animation format (WebP, APNG, or GIF).
   pub format: Option<AnimationOutputFormat>,
-  /// The WebP quality (0-100). Ignored for APNG and GIF.
-  pub quality: Option<u8>,
   /// Pre-fetched image resources to use during rendering.
   pub images: Option<Vec<ImageSource>>,
   /// Whether to draw debug borders around layout elements.
