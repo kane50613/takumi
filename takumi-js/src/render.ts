@@ -95,14 +95,18 @@ export async function render(element: RenderInput, options?: RenderOptions) {
 
   const node = emojiType !== "from-font" ? extractEmojis(originalNode, emojiType) : originalNode;
 
-  const providedImages = options?.images ?? [];
-  const providedSrcs = new Set(providedImages.map((image) => image.src));
+  const providedImages = new Map<string, napi.ImageLoader | wasm.ImageLoader>();
+
+  for (const image of options?.images ?? []) {
+    providedImages.set(image.src, image);
+  }
+
   const fetched = await fetchResources(
-    extractResourceUrls(node).filter((url) => !providedSrcs.has(url)),
+    extractResourceUrls(node).filter((url) => !providedImages.has(url)),
     options?.resourcesOptions,
   );
 
-  const images = [...providedImages, ...fetched];
+  const images = [...providedImages.values(), ...fetched];
 
   // The WASM renderer is synchronous and ignores the signal argument, so honor an
   // abort that happened during the async font/resource loading before the blocking call.
