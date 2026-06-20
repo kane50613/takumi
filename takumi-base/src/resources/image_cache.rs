@@ -54,7 +54,7 @@ impl ImageCache {
       return Ok(source);
     }
     let source = ImageSource::from_bytes(bytes)?;
-    if store {
+    if store && source.is_cacheable() {
       self.insert(key, source.clone());
     }
     Ok(source)
@@ -77,10 +77,14 @@ impl ImageCache {
     let Ok(mut map) = self.entries.write() else {
       return;
     };
-    evict_until(&mut map, &self.bytes, max_bytes - len, max_size - 1);
-    if map.insert(key, source).is_none() {
-      self.bytes.fetch_add(len, Ordering::Relaxed);
+    if let Some(previous) = map.remove(&key) {
+      self
+        .bytes
+        .fetch_sub(previous.estimated_bytes(), Ordering::Relaxed);
     }
+    evict_until(&mut map, &self.bytes, max_bytes - len, max_size - 1);
+    map.insert(key, source);
+    self.bytes.fetch_add(len, Ordering::Relaxed);
   }
 
   /// Sets the decoded-byte budget. `0` disables the cache and clears it.
@@ -167,6 +171,16 @@ mod tests {
     // re-inserting the same key doesn't double-count.
     cache.insert(1, image(100));
     assert_eq!(cache.len_bytes(), 100);
+  }
+
+  #[test]
+  fn replacing_key_rebalances_bytes() {
+    let cache = ImageCache::default();
+    cache.insert(1, image(100));
+    assert_eq!(cache.len_bytes(), 100);
+    // replacing a key with a different-sized source rebalances the byte counter.
+    cache.insert(1, image(40));
+    assert_eq!(cache.len_bytes(), 40);
   }
 
   #[test]

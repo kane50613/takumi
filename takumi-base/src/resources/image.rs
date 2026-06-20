@@ -290,6 +290,20 @@ impl ImageSource {
     }
   }
 
+  /// Whether this decoded source is safe to retain in the byte-budgeted cache.
+  ///
+  /// SVGs are excluded: their lazily-populated raster cache grows as they are
+  /// rendered at new sizes and isn't counted by
+  /// [`estimated_bytes`](Self::estimated_bytes), so caching them across renders
+  /// would let memory exceed the configured budget.
+  pub fn is_cacheable(&self) -> bool {
+    match self {
+      Self::Bitmap(_) | Self::Gif(_) => true,
+      #[cfg(feature = "svg")]
+      Self::Svg(_) => false,
+    }
+  }
+
   /// Load an image source from raw bytes.
   ///
   /// - When the `svg` feature is enabled and the bytes look like SVG XML, they
