@@ -4,7 +4,7 @@ use parley::FontStyle as ParleyFontStyle;
 use serde::{Deserialize, Deserializer};
 use serde_bytes::ByteBuf;
 use std::sync::Arc;
-use takumi_base::{
+use takumi_core::{
   keyframes::deserialize_optional_keyframes,
   layout::{node::Node, style::KeyframesRule},
   resources::image::ImageCacheMode,

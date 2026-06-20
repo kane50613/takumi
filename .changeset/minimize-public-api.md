@@ -1,6 +1,6 @@
 ---
 "takumi": major
-"takumi-base": minor
+"takumi-core": minor
 "takumi-raster": minor
 ---
 

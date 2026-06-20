@@ -7,7 +7,7 @@
 use std::io;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
-use takumi_base::{
+use takumi_core::{
   context::RenderContext,
   layout::{
     node::{ImageData, ImageSourceInput, resolve_image},

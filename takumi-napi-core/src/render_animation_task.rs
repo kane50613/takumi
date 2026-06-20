@@ -6,7 +6,7 @@ use std::{
 };
 
 use napi::bindgen_prelude::*;
-use takumi_base::layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node};
+use takumi_core::layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node};
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, RenderOptions, SequentialScene,
   encode_animated_gif, encode_animated_png, encode_animated_webp, render_sequence_animation,

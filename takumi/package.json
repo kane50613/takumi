@@ -7,7 +7,7 @@
     "release": "cargo publish || [ $? -eq 101 ] || exit $?"
   },
   "dependencies": {
-    "takumi-base": "workspace:*",
+    "takumi-core": "workspace:*",
     "takumi-raster": "workspace:*"
   }
 }

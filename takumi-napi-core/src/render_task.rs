@@ -6,7 +6,7 @@ use std::{
 };
 
 use napi::bindgen_prelude::*;
-use takumi_base::layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node, style::StyleSheet};
+use takumi_core::layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node, style::StyleSheet};
 use takumi_raster::{DitheringAlgorithm, render, write_image};
 
 use crate::{
