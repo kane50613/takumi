@@ -4,7 +4,10 @@
 //! including loading states, error handling, and image processing operations.
 
 use std::borrow::Cow;
-use std::{str::FromStr, sync::Arc};
+use std::{
+  str::FromStr,
+  sync::{Arc, RwLock},
+};
 
 #[cfg(target_arch = "wasm32")]
 use std::{cell::RefCell, collections::HashMap};
@@ -12,8 +15,10 @@ use std::{cell::RefCell, collections::HashMap};
 #[cfg(not(target_arch = "wasm32"))]
 use dashmap::DashMap;
 use image::RgbaImage;
+use quick_cache::{Weighter, sync::Cache};
 #[cfg(feature = "svg")]
 use tiny_skia::Pixmap;
+use xxhash_rust::xxh3::xxh3_64;
 
 use crate::{
   layout::style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext},
@@ -501,6 +506,226 @@ pub enum ImageResourceError {
   /// GIF decoding produced no frames.
   #[error("The GIF image does not contain any decodable frames")]
   InvalidGif,
+}
+
+/// Decoded-image budget before entries start getting evicted.
+const DEFAULT_MAX_BYTES: u64 = 64 << 20; // 64 MiB
+
+#[derive(Clone)]
+struct ImageWeighter;
+
+impl Weighter<u64, ImageSource> for ImageWeighter {
+  fn weight(&self, _key: &u64, source: &ImageSource) -> u64 {
+    (source.estimated_bytes() as u64).max(1)
+  }
+}
+
+/// Content-addressed store of decoded images, keyed by `xxh3_64` of the input bytes.
+///
+/// Decoding is the expensive step; the decoded [`ImageSource`] is `Arc`-backed, so a hit clones
+/// for a refcount bump. A cold and a warm cache render identically, so sharing it process-wide
+/// (native) or module-wide (wasm) is safe. Eviction is byte-budgeted and coarse — a miss just
+/// re-decodes — and SVGs are excluded ([`ImageSource::is_cacheable`]) since their lazily-populated
+/// raster cache isn't counted by the byte budget.
+pub struct ImageCache {
+  cache: Cache<u64, ImageSource, ImageWeighter>,
+}
+
+impl Default for ImageCache {
+  fn default() -> Self {
+    Self::with_capacity(DEFAULT_MAX_BYTES)
+  }
+}
+
+impl ImageCache {
+  fn with_capacity(max_bytes: u64) -> Self {
+    // ~64 KiB average decoded image ⇒ a reasonable item-count hint for the budget.
+    let estimated_items = (max_bytes / (64 << 10)).max(1) as usize;
+
+    Self {
+      cache: Cache::with_weighter(estimated_items, max_bytes, ImageWeighter),
+    }
+  }
+
+  /// Returns the decoded image for `bytes`, decoding on a miss and caching it when `store`.
+  ///
+  /// With `store`, concurrent misses for the same bytes are single-flighted: one thread
+  /// decodes while the others wait, so each unique image is decoded once.
+  pub fn get_or_decode(&self, bytes: &[u8], store: bool) -> ImageResult {
+    let key = xxh3_64(bytes);
+
+    if !store {
+      return match self.cache.get(&key) {
+        Some(source) => Ok(source),
+        None => ImageSource::from_bytes(bytes),
+      };
+    }
+
+    use quick_cache::sync::GuardResult;
+
+    match self.cache.get_value_or_guard(&key, None) {
+      GuardResult::Value(source) => Ok(source),
+      GuardResult::Guard(guard) => {
+        let source = ImageSource::from_bytes(bytes)?;
+        if source.is_cacheable() {
+          let _ = guard.insert(source.clone());
+        }
+        Ok(source)
+      }
+      // `None` timeout never times out.
+      GuardResult::Timeout => ImageSource::from_bytes(bytes),
+    }
+  }
+}
+
+/// Per-renderer store of pinned decoded images, keyed by `src`.
+///
+/// Unlike [`ImageCache`] — content-addressed and evictable — entries here are pinned for the
+/// renderer's lifetime so an image's bytes need cross the FFI boundary only once. The interior
+/// `RwLock` mirrors [`ImageCache`]: it works under a shared `&self` guard, compiles to wasm, and on
+/// the single-threaded wasm target never contends.
+#[derive(Default)]
+pub struct PinStore {
+  entries: RwLock<std::collections::HashMap<Arc<str>, ImageSource>>,
+}
+
+impl PinStore {
+  /// Pins a decoded image under `src`, replacing any previous entry.
+  pub fn insert(&self, src: Arc<str>, image: ImageSource) {
+    if let Ok(mut map) = self.entries.write() {
+      map.insert(src, image);
+    }
+  }
+
+  /// Clones each pinned entry into `out`, but only where the key is absent so
+  /// caller-provided entries win.
+  pub fn snapshot_into(&self, out: &mut std::collections::HashMap<Arc<str>, ImageSource>) {
+    let Ok(map) = self.entries.read() else {
+      return;
+    };
+
+    for (src, image) in map.iter() {
+      out.entry(src.clone()).or_insert_with(|| image.clone());
+    }
+  }
+}
+
+#[cfg(test)]
+mod image_cache_tests {
+  use quick_cache::sync::Cache;
+
+  use super::{ImageCache, ImageWeighter};
+  use crate::resources::{image::ImageSource, image_buffer::ImageBuffer};
+
+  /// PNG bytes that decode to a tiny bitmap (cacheable).
+  fn png_bytes() -> Vec<u8> {
+    ImageBuffer::new(2, 2).unwrap().encode_png().unwrap()
+  }
+
+  #[test]
+  fn decodes_and_reuses_on_hit() {
+    let cache = ImageCache::default();
+    let bytes = png_bytes();
+
+    let first = cache.get_or_decode(&bytes, true).unwrap();
+    let second = cache.get_or_decode(&bytes, true).unwrap();
+
+    match (&first, &second) {
+      (ImageSource::Bitmap(a), ImageSource::Bitmap(b)) => assert!(std::sync::Arc::ptr_eq(a, b)),
+      _ => panic!("expected bitmaps"),
+    }
+  }
+
+  #[test]
+  fn store_false_does_not_populate_cache() {
+    let cache = ImageCache::default();
+    let bytes = png_bytes();
+
+    let a = cache.get_or_decode(&bytes, false).unwrap();
+    let b = cache.get_or_decode(&bytes, false).unwrap();
+
+    match (&a, &b) {
+      (ImageSource::Bitmap(x), ImageSource::Bitmap(y)) => assert!(!std::sync::Arc::ptr_eq(x, y)),
+      _ => panic!("expected bitmaps"),
+    }
+  }
+
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_is_not_cached() {
+    let cache = ImageCache::default();
+    let svg = br#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>"#;
+
+    let a = cache.get_or_decode(svg, true).unwrap();
+    let b = cache.get_or_decode(svg, true).unwrap();
+
+    assert!(matches!(a, ImageSource::Svg(_)));
+    match (&a, &b) {
+      (ImageSource::Svg(x), ImageSource::Svg(y)) => {
+        assert!(!std::sync::Arc::ptr_eq(&x.tree, &y.tree))
+      }
+      _ => panic!("expected svgs"),
+    }
+  }
+
+  /// Builds a bitmap source of approximately `bytes` decoded size (premultiplied RGBA, 1px tall).
+  fn image(bytes: u32) -> ImageSource {
+    let width = (bytes / 4).max(1);
+    ImageSource::from(ImageBuffer::new(width, 1).unwrap())
+  }
+
+  #[test]
+  fn eviction_stays_within_byte_budget() {
+    let max_bytes = 4096u64;
+    let cache = Cache::with_weighter(8, max_bytes, ImageWeighter);
+
+    for key in 0..64u64 {
+      cache.insert(key, image(1024));
+    }
+
+    assert!(cache.weight() <= max_bytes);
+  }
+}
+
+#[cfg(test)]
+mod pin_store_tests {
+  use std::{collections::HashMap, sync::Arc};
+
+  use super::PinStore;
+  use crate::resources::{image::ImageSource, image_buffer::ImageBuffer};
+
+  fn image(width: u32) -> ImageSource {
+    ImageSource::from(ImageBuffer::new(width, 1).unwrap())
+  }
+
+  #[test]
+  fn snapshot_fills_absent_keys_only() {
+    let store = PinStore::default();
+    store.insert(Arc::from("a"), image(10));
+    store.insert(Arc::from("b"), image(20));
+
+    let mut out: HashMap<Arc<str>, ImageSource> = HashMap::new();
+    let caller_a = image(99);
+    out.insert(Arc::from("a"), caller_a.clone());
+    store.snapshot_into(&mut out);
+
+    assert_eq!(out.len(), 2);
+    assert_eq!(out["a"].estimated_bytes(), caller_a.estimated_bytes());
+    assert_eq!(out["b"].estimated_bytes(), image(20).estimated_bytes());
+  }
+
+  #[test]
+  fn insert_replaces_existing() {
+    let store = PinStore::default();
+    store.insert(Arc::from("a"), image(10));
+    store.insert(Arc::from("a"), image(40));
+
+    let mut out: HashMap<Arc<str>, ImageSource> = HashMap::new();
+    store.snapshot_into(&mut out);
+
+    assert_eq!(out.len(), 1);
+    assert_eq!(out["a"].estimated_bytes(), image(40).estimated_bytes());
+  }
 }
 
 #[cfg(test)]

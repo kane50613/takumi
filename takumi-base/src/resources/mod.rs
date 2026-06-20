@@ -4,8 +4,4 @@ pub mod font;
 pub mod image;
 /// Backend-agnostic decoded-image buffer
 pub mod image_buffer;
-/// Global content-addressed cache of decoded images
-pub mod image_cache;
 mod image_decoder;
-/// Per-renderer store of pinned decoded images keyed by `src`
-pub mod pin_store;

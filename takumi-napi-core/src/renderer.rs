@@ -9,8 +9,8 @@ use takumi_base::{
   Fonts,
   layout::{node::Node, style::KeyframesRule as CoreKeyframesRule},
   resources::{
-    font::FontResource, image::ImageSource as LoadedImageSource, image_cache::ImageCache,
-    pin_store::PinStore,
+    font::FontResource,
+    image::{ImageCache, ImageSource as LoadedImageSource, PinStore},
   },
 };
 use takumi_raster::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat};

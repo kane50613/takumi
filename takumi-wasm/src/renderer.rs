@@ -18,9 +18,7 @@ use takumi_base::{
   },
   resources::{
     font::{FontResource, RegisteredFamily},
-    image::ImageSource as LoadedImageSource,
-    image_cache::ImageCache,
-    pin_store::PinStore,
+    image::{ImageCache, ImageSource as LoadedImageSource, PinStore},
   },
 };
 use takumi_raster::{
