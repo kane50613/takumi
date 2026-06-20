@@ -7,6 +7,7 @@ use takumi::base::{
     node::Node,
     style::{Length::Px, Style, StyleDeclaration},
   },
+  resources::font::FontResource,
 };
 use takumi::raster::{ImageOutputFormat, RenderOptions, render, write_image};
 
@@ -15,7 +16,13 @@ pub fn say_hello_to(name: &str) {
   // A `Fonts` holds the registered fonts; create one per application and share it
   // across renders (e.g. behind an `Arc`). takumi loads no system fonts by default,
   // so register custom fonts with `register` before rendering text.
-  let fonts = Fonts::default();
+  let mut fonts = Fonts::default();
+
+  fonts
+    .register(FontResource::new(include_bytes!(
+      "../../../assets/fonts/geist/Geist[wght].woff2"
+    )))
+    .unwrap();
 
   let text = Node::text(format!("Hello, {name}!"))
     .with_style(Style::default().with(StyleDeclaration::font_size(Px(48.0).into())));
