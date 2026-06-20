@@ -5,6 +5,7 @@ import {
   type EncodeFramesOptions as EncodeFramesOptionsInternal,
   type Font,
   type FontDetails,
+  type ImageSource,
   type Node,
   type RegisteredFamily,
   type RenderAnimationOptions as RenderAnimationOptionsInternal,
@@ -22,17 +23,42 @@ export type FontLoader =
       data: () => Promise<FontDetails["data"]> | FontDetails["data"];
     } & ({ key: string } | { name: string }));
 
-export type RenderOptions = RenderOptionsInternal & {
-  fonts?: FontLoader[];
+type ImageLoaderData = ImageSource["data"];
+
+export type ImageLoader = Omit<ImageSource, "data"> & {
+  data: ImageLoaderData | (() => ImageLoaderData | Promise<ImageLoaderData>);
 };
 
-export type RenderAnimationOptions = RenderAnimationOptionsInternal & {
+export type RenderOptions = Omit<RenderOptionsInternal, "images"> & {
   fonts?: FontLoader[];
+  images?: ImageLoader[];
 };
 
-export type EncodeFramesOptions = EncodeFramesOptionsInternal & {
+export type RenderAnimationOptions = Omit<RenderAnimationOptionsInternal, "images"> & {
   fonts?: FontLoader[];
+  images?: ImageLoader[];
 };
+
+export type EncodeFramesOptions = Omit<EncodeFramesOptionsInternal, "images"> & {
+  fonts?: FontLoader[];
+  images?: ImageLoader[];
+};
+
+async function resolveImageLoaders(images: ImageLoader[]): Promise<ImageSource[]> {
+  const bySrc = new Map<string, ImageLoader>();
+
+  for (const image of images) {
+    bySrc.set(image.src, image);
+  }
+
+  return Promise.all(
+    [...bySrc.values()].map(async ({ src, data, cache }) => ({
+      src,
+      data: typeof data === "function" ? await data() : data,
+      cache,
+    })),
+  );
+}
 
 export class Renderer {
   private fontMapping = new Map<string | ByteBuf, Promise<RegisteredFamily[]>>();
@@ -49,51 +75,61 @@ export class Renderer {
   }
 
   async render(node: Node, options?: RenderOptions) {
-    const { fonts, fontFamilies, ...rest } = options ?? {};
+    const { fonts, fontFamilies, images, ...rest } = options ?? {};
     const registeredFamilies = await this.prepareFonts(fonts);
+    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.render(node, {
       ...rest,
+      images: resolvedImages,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
   }
 
   async renderAsDataUrl(node: Node, options?: RenderOptions) {
-    const { fonts, fontFamilies, ...rest } = options ?? {};
+    const { fonts, fontFamilies, images, ...rest } = options ?? {};
     const registeredFamilies = await this.prepareFonts(fonts);
+    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.renderAsDataUrl(node, {
       ...rest,
+      images: resolvedImages,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
   }
 
   async measure(node: Node, options?: RenderOptions) {
-    const { fonts, fontFamilies, ...rest } = options ?? {};
+    const { fonts, fontFamilies, images, ...rest } = options ?? {};
     const registeredFamilies = await this.prepareFonts(fonts);
+    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.measure(node, {
       ...rest,
+      images: resolvedImages,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
   }
 
   async renderAnimation(options: RenderAnimationOptions) {
-    const { fonts, fontFamilies, ...rest } = options;
+    const { fonts, fontFamilies, images, ...rest } = options;
     const registeredFamilies = await this.prepareFonts(fonts);
+    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.renderAnimation({
       ...rest,
+      images: resolvedImages,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
   }
 
   async encodeFrames(frames: AnimationFrameSource[], options: EncodeFramesOptions) {
-    const { fonts, fontFamilies, ...rest } = options;
+    const { fonts, fontFamilies, images, ...rest } = options;
     const registeredFamilies = await this.prepareFonts(fonts);
+    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.encodeFrames(frames, {
       ...rest,
+      images: resolvedImages,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
   }

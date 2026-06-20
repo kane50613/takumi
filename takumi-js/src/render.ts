@@ -70,28 +70,6 @@ function isTakumiNode(element: unknown): element is Node {
   return element.type === "container" || element.type === "text" || element.type === "image";
 }
 
-/**
- * Resolves per-render image loaders to concrete `{ src, data }` entries,
- * deduplicating by `src` and invoking each loader function (sync or async) once.
- */
-async function resolveImageLoaders(
-  images: ImageLoader[],
-): Promise<Array<{ src: string; data: ImageLoaderData; cache?: ImageCacheMode }>> {
-  const bySrc = new Map<string, ImageLoader>();
-
-  for (const image of images) {
-    bySrc.set(image.src, image);
-  }
-
-  return Promise.all(
-    [...bySrc.values()].map(async (image) => ({
-      src: image.src,
-      data: typeof image.data === "function" ? await image.data() : image.data,
-      cache: image.cache,
-    })),
-  );
-}
-
 async function transformElement(element: RenderInput, options?: RenderOptions) {
   if (isTakumiNode(element)) {
     return {
@@ -140,9 +118,8 @@ export async function render(element: RenderInput, options?: RenderOptions) {
   const emojiType = options?.emoji ?? "twemoji";
 
   const node = emojiType !== "from-font" ? extractEmojis(originalNode, emojiType) : originalNode;
-  const images = options?.images
-    ? await resolveImageLoaders(options.images)
-    : await fetchResources(extractResourceUrls(node), options?.resourcesOptions);
+  const images =
+    options?.images ?? (await fetchResources(extractResourceUrls(node), options?.resourcesOptions));
 
   // The WASM renderer is synchronous and ignores the signal argument, so honor an
   // abort that happened during the async font/resource loading before the blocking call.
