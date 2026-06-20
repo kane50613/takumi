@@ -23,5 +23,9 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  // Tests import the built bundler entry (`bundlers/node`, which inits wasm) and
+  // are run by the `test-wasm` job; type-check everything else (the source we
+  // author plus the generated `pkg`/`dist` declarations it resolves against).
+  "exclude": ["tests"]
 }
