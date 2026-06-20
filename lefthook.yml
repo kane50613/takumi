@@ -6,3 +6,7 @@ pre-commit:
 
     - run: cargo fmt --all
       stage_fixed: true
+
+    - root: takumi/
+      run: cargo rdme --force
+      stage_fixed: true
