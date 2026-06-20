@@ -12,23 +12,28 @@
 //! origins. A single tile is painted directly; tiling repeats are emitted as an
 //! SVG `<pattern>` filling the box.
 
-use std::f32::consts::TAU;
-use std::io;
+use std::{f32::consts::TAU, io};
 
 use taffy::Size;
-use takumi_base::context::RenderContext;
-use takumi_base::layout::node::resolve_image;
-use takumi_base::layout::style::{
-  BackgroundImage, BackgroundPosition, BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize,
-  ColorInterpolationMethod, ConicGradient, ConicGradientTile, IntrinsicSizing, Length,
-  LinearGradient, LinearGradientTile, PositionComponent, RadialGradient, RadialGradientTile,
-  ResolvedGradientStop, SizingContext, build_color_lut_with_interpolation,
-  resolve_stops_along_axis,
+use takumi_base::{
+  context::RenderContext,
+  layout::{
+    node::resolve_image,
+    style::{
+      BackgroundImage, BackgroundPosition, BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize,
+      ColorInterpolationMethod, ConicGradient, ConicGradientTile, IntrinsicSizing, Length,
+      LinearGradient, LinearGradientTile, PositionComponent, RadialGradient, RadialGradientTile,
+      ResolvedGradientStop, SizingContext, build_color_lut_with_interpolation,
+      resolve_stops_along_axis,
+    },
+  },
 };
 
-use crate::box_model::{PathData, rect_path_data};
-use crate::image::{data_url_for_url, preserve_aspect_none};
-use crate::{APPROX_CHARS_PER_NUMBER, GradientStop, IDENTITY, Rgba, SvgDocument};
+use crate::{
+  APPROX_CHARS_PER_NUMBER, GradientStop, IDENTITY, Rgba, SvgDocument,
+  box_model::{PathData, rect_path_data},
+  image::{data_url_for_url, preserve_aspect_none},
+};
 
 const CONIC_WEDGES: usize = 180;
 

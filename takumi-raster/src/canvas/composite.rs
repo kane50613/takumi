@@ -1,14 +1,14 @@
 use taffy::Point;
 use tiny_skia::PixmapMut;
 
-use super::paint_source::{MaskCompositeColor, apply_mask_color_mode, sample_paint_source};
 use super::{
   MaskSamplingOptions, MaskView, PaintSource, SamplingFootprint, compute_overlay_bounds_for_canvas,
+  paint_source::{MaskCompositeColor, apply_mask_color_mode, sample_paint_source},
 };
-use crate::layout::style::{Affine, BlendMode};
 use crate::{
   Placement,
   blend::{blend_premultiplied_pixel, composite_premultiplied_over, scale_premultiplied_pixel},
+  layout::style::{Affine, BlendMode},
 };
 
 #[derive(Clone, Copy)]

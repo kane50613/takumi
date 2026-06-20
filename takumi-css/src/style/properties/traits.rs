@@ -1,7 +1,5 @@
 use cssparser::{ParseError, Parser, ParserInput};
-use std::borrow::Cow;
-use std::fmt;
-use std::sync::Arc;
+use std::{borrow::Cow, fmt, sync::Arc};
 
 use crate::style::{Color, SizingContext, math::lcm};
 

@@ -5,7 +5,8 @@ use serde::{Deserialize, Deserializer};
 use serde_bytes::ByteBuf;
 use std::sync::Arc;
 use takumi_base::{
-  keyframes::deserialize_optional_keyframes, layout::node::Node, layout::style::KeyframesRule,
+  keyframes::deserialize_optional_keyframes,
+  layout::{node::Node, style::KeyframesRule},
   resources::image::ImageCacheMode,
 };
 use takumi_raster::DitheringAlgorithm;

@@ -1,7 +1,6 @@
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use std::{env, hint::black_box};
-use takumi::prelude::*;
-use takumi::render;
+use takumi::{prelude::*, render};
 
 const LONG_TEXT: &str = "Typography is the art and technique of arranging type to make written language legible, \
    readable and appealing when displayed. The arrangement of type involves selecting typefaces, \

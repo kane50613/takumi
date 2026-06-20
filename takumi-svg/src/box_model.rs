@@ -7,8 +7,7 @@
 use std::fmt::Write as _;
 
 use taffy::Size;
-use takumi_base::context::RenderContext;
-use takumi_base::layout::style::Affine;
+use takumi_base::{context::RenderContext, layout::style::Affine};
 use tiny_skia::{PathSegment, Point};
 
 use crate::{APPROX_CHARS_PER_NUMBER, Num};

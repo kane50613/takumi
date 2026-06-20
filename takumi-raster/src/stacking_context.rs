@@ -2,14 +2,8 @@ use std::collections::HashMap;
 
 use parley::{InlineBoxKind, PositionedLayoutItem};
 use taffy::{AvailableSpace, Layout, NodeId, Point, TaffyError, geometry::Size};
-use tiny_skia::Pixmap;
-use tiny_skia::PixmapMut;
+use tiny_skia::{Pixmap, PixmapMut};
 
-use crate::layout::inline::{
-  InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan, get_parent_font_metrics,
-  resolve_inline_line_metrics, resolve_inline_line_states, resolve_visual_inline_box,
-  text_fit_line_alignment_correction,
-};
 use crate::{
   BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, Error, NodeMaskAction,
   Placement, Result, SizedFontStyle, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel,
@@ -17,7 +11,12 @@ use crate::{
   draw_outline, draw_outset_box_shadow, get_node_mut_by_path,
   inline_drawing::{draw_inline_box, draw_inline_layout},
   layout::{
-    inline::{collect_inline_items, create_inline_layout, resolve_inline_max_height},
+    inline::{
+      InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan, collect_inline_items,
+      create_inline_layout, get_parent_font_metrics, resolve_inline_line_metrics,
+      resolve_inline_line_states, resolve_inline_max_height, resolve_visual_inline_box,
+      text_fit_line_alignment_correction,
+    },
     style::{
       Affine, BackgroundImage, BlendMode, Color, ComputedStyle, Display, Filter, SizingContext,
     },

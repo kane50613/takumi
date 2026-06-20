@@ -1,11 +1,9 @@
-use std::rc::Rc;
-use std::sync::Arc;
-use std::{cell::RefCell, collections::HashMap};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 use typed_builder::TypedBuilder;
 
-use crate::Fonts;
 use crate::{
+  Fonts,
   layout::style::{Affine, Color, ComputedStyle, SizingContext, StyleSheet},
   resources::image::ImageSource,
 };

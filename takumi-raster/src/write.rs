@@ -327,8 +327,7 @@ mod tests {
 
   use gif::{ColorOutput, DecodeOptions};
   use image::RgbaImage;
-  use libwebp_sys::WEBP_CSP_MODE::MODE_RGBA;
-  use libwebp_sys::*;
+  use libwebp_sys::{WEBP_CSP_MODE::MODE_RGBA, *};
 
   use super::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,

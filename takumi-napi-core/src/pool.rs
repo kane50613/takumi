@@ -6,8 +6,10 @@
 //! [`JoinHandle`]s and joins them from an env cleanup hook, so none are alive
 //! when the process exits. All parallel work runs through [`install`].
 
-use std::sync::{Arc, Mutex, OnceLock};
-use std::thread::{Builder, JoinHandle};
+use std::{
+  sync::{Arc, Mutex, OnceLock},
+  thread::{Builder, JoinHandle},
+};
 
 use napi::Env;
 use rayon::{ThreadPool, ThreadPoolBuilder};

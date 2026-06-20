@@ -1,6 +1,8 @@
-use std::borrow::Cow;
-use std::io::{Cursor, Error as IoError, ErrorKind};
-use std::sync::Arc;
+use std::{
+  borrow::Cow,
+  io::{Cursor, Error as IoError, ErrorKind},
+  sync::Arc,
+};
 
 use image::{
   AnimationDecoder, DynamicImage, ImageDecoder, ImageError, ImageFormat, ImageResult, RgbaImage,

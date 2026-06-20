@@ -1,5 +1,4 @@
-use crate::BufferPool;
-use crate::{Error, Result};
+use crate::{BufferPool, Error, Result};
 
 const BLUR_DOWNSAMPLE_TARGET_SIGMA: f32 = 6.0;
 const BLUR_DOWNSAMPLE_MIN_DIMENSION: u32 = 128;

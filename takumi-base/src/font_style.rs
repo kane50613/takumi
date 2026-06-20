@@ -4,13 +4,17 @@ use parley::{FontFeatures, FontVariations, TextStyle};
 use smallvec::SmallVec;
 use taffy::{Size, prelude::FromLength};
 
-use crate::context::RenderContext;
-use crate::layout::inline::InlineBrush;
-use crate::layout::style::{
-  BorderStyle, Color, ComputedStyle, Display, FontSynthesis, Length, SizedTextDecorationThickness,
-  SizingContext, WordBreak,
+use crate::{
+  context::RenderContext,
+  layout::{
+    inline::InlineBrush,
+    style::{
+      BorderStyle, Color, ComputedStyle, Display, FontSynthesis, Length,
+      SizedTextDecorationThickness, SizingContext, WordBreak,
+    },
+  },
+  shadow::SizedShadow,
 };
-use crate::shadow::SizedShadow;
 
 /// Sized font style with computed font size and line height.
 #[derive(Clone)]

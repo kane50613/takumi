@@ -1,9 +1,6 @@
 //! End-to-end SVG rendering: run takumi-base layout, walk the tree, emit SVG.
 
-use std::collections::HashMap;
-use std::io;
-use std::rc::Rc;
-use std::sync::Arc;
+use std::{collections::HashMap, io, rc::Rc, sync::Arc};
 
 use taffy::{AbsoluteAxis, AvailableSpace, NodeId, Point, Rect, Size};
 use takumi_base::{
@@ -27,11 +24,13 @@ use takumi_base::{
 };
 use typed_builder::TypedBuilder;
 
-use crate::box_model::{PathData, element_transform, path_data};
-use crate::gradient::{emit_background_images, emit_image_layers};
-use crate::image::emit_image;
-use crate::text::{emit_inline_content, emit_text};
-use crate::{APPROX_CHARS_PER_NUMBER, IDENTITY, Num, Rgba, SvgDocument};
+use crate::{
+  APPROX_CHARS_PER_NUMBER, IDENTITY, Num, Rgba, SvgDocument,
+  box_model::{PathData, element_transform, path_data},
+  gradient::{emit_background_images, emit_image_layers},
+  image::emit_image,
+  text::{emit_inline_content, emit_text},
+};
 
 /// Inputs for [`render`]. Built with [`SvgOptions::builder`]; only `node`,
 /// `viewport`, and `fonts` are required. Carrying inputs in a builder struct

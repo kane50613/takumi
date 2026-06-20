@@ -1,13 +1,12 @@
-use std::sync::RwLock;
-use std::{borrow::Cow, mem::take};
-use std::{collections::HashMap, sync::Arc};
+use std::{
+  borrow::Cow,
+  collections::HashMap,
+  mem::take,
+  sync::{Arc, RwLock},
+};
 
 use napi::bindgen_prelude::*;
-use takumi_base::layout::node::Node;
-use takumi_base::{
-  layout::style::StyleSheet,
-  layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
-};
+use takumi_base::layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node, style::StyleSheet};
 use takumi_raster::{DitheringAlgorithm, render, write_image};
 
 use crate::{

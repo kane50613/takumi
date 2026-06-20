@@ -5,8 +5,7 @@ mod text;
 use crate::resources::image_buffer::ImageBuffer;
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 use taffy::{AvailableSpace, Size};
 
 use crate::{

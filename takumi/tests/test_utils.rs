@@ -10,8 +10,9 @@ use std::{
 use image::RgbaImage;
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use takumi::prelude::*;
-use takumi::{encode_animated_gif, encode_animated_png, encode_animated_webp, render, write_image};
+use takumi::{
+  encode_animated_gif, encode_animated_png, encode_animated_webp, prelude::*, render, write_image,
+};
 use takumi_svg::{SvgOptions, render as svg_render};
 
 fn repo_base_path(path: &str) -> PathBuf {

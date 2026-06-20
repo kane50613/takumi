@@ -1,5 +1,4 @@
-use takumi::prelude::*;
-use takumi::render;
+use takumi::{prelude::*, render};
 
 use crate::test_utils::{CONTEXT, run_fixture_test};
 

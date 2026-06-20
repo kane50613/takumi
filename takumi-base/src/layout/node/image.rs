@@ -265,8 +265,11 @@ mod tests {
 
   #[test]
   fn deserialize_image_src_from_bytes_value() -> std::result::Result<(), serde::de::value::Error> {
-    use serde::de::{Deserializer, Visitor, value::Error};
-    use serde::{Deserialize, forward_to_deserialize_any};
+    use serde::{
+      Deserialize,
+      de::{Deserializer, Visitor, value::Error},
+      forward_to_deserialize_any,
+    };
 
     // Mirror how napi / wasm surface a `Uint8Array`/`ArrayBuffer`: a bytes value
     // via `deserialize_any`, not a JSON-style number array.

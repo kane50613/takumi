@@ -39,8 +39,7 @@ mod write;
 
 use tiny_skia::{IntSize, Pixmap, PixmapRef};
 
-use crate::layout::tree::RenderNode;
-use crate::resources::image_buffer::ImageBuffer;
+use crate::{layout::tree::RenderNode, resources::image_buffer::ImageBuffer};
 
 pub(crate) use crate::font_style::*;
 pub(crate) use background_drawing::*;
@@ -59,8 +58,7 @@ pub use write::*;
 
 pub(crate) use crate::layout::style::{fast_div_255, fast_div_255_u32};
 
-pub(crate) use crate::context::RenderContext;
-pub(crate) use crate::layout::inline::scale_text_fit_x;
+pub(crate) use crate::{context::RenderContext, layout::inline::scale_text_fit_x};
 
 /// Borrows an [`ImageBuffer`] as a zero-copy `tiny_skia` pixmap view.
 pub(crate) fn pixmap_ref_from_buffer(buffer: &ImageBuffer) -> Option<PixmapRef<'_>> {

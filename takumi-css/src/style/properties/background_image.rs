@@ -1,6 +1,5 @@
 use crate::style::{ToCss, properties::write_css_string, unexpected_token};
-use std::fmt;
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 

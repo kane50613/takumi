@@ -1,6 +1,5 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use std::hint::black_box;
-use std::path::Path;
+use std::{hint::black_box, path::Path};
 use takumi::base::{
   Fonts,
   layout::{
@@ -85,33 +84,33 @@ fn gradient_clip_text_fixture() -> Node {
   )
   .unwrap();
 
-  Node::container([Node::text("Gradient Text Benchmark".to_string()).with_style(
-    Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::background_image(Some(gradient)))
-      .with(StyleDeclaration::background_size(
-        BackgroundSizes::from_str("100% 100%").unwrap(),
-      ))
-      .with(StyleDeclaration::background_position(
-        BackgroundPositions::from_str("0 0").unwrap(),
-      ))
-      .with(StyleDeclaration::background_repeat(
-        BackgroundRepeats::from_str("no-repeat").unwrap(),
-      ))
-      .with(StyleDeclaration::background_clip(BackgroundClip::Text))
-      .with(StyleDeclaration::color(ColorInput::Value(
-        Color::transparent(),
-      ))),
-  )])
-  .with_style(
-    full([
-      StyleDeclaration::background_color(ColorInput::Value(Color([242, 242, 242, 255]))),
-      StyleDeclaration::font_size(Px(72.0).into()),
-      StyleDeclaration::font_weight(FontWeight::from(800.0)),
-      StyleDeclaration::align_items(AlignItems::Center),
-      StyleDeclaration::justify_content(JustifyContent::Center),
-    ]),
-  )
+  Node::container([
+    Node::text("Gradient Text Benchmark".to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::background_image(Some(gradient)))
+        .with(StyleDeclaration::background_size(
+          BackgroundSizes::from_str("100% 100%").unwrap(),
+        ))
+        .with(StyleDeclaration::background_position(
+          BackgroundPositions::from_str("0 0").unwrap(),
+        ))
+        .with(StyleDeclaration::background_repeat(
+          BackgroundRepeats::from_str("no-repeat").unwrap(),
+        ))
+        .with(StyleDeclaration::background_clip(BackgroundClip::Text))
+        .with(StyleDeclaration::color(ColorInput::Value(
+          Color::transparent(),
+        ))),
+    ),
+  ])
+  .with_style(full([
+    StyleDeclaration::background_color(ColorInput::Value(Color([242, 242, 242, 255]))),
+    StyleDeclaration::font_size(Px(72.0).into()),
+    StyleDeclaration::font_weight(FontWeight::from(800.0)),
+    StyleDeclaration::align_items(AlignItems::Center),
+    StyleDeclaration::justify_content(JustifyContent::Center),
+  ]))
 }
 
 fn shape_border_fixture() -> Node {
@@ -121,12 +120,9 @@ fn shape_border_fixture() -> Node {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(160.0)))
         .with(StyleDeclaration::height(Px(120.0)))
-        .with(StyleDeclaration::background_color(ColorInput::Value(Color([
-          (i * 9) as u8,
-          (255 - i * 9) as u8,
-          128,
-          255,
-        ]))))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color([(i * 9) as u8, (255 - i * 9) as u8, 128, 255]),
+        )))
         .with_border_radius(BorderRadius::from_str("24px").unwrap())
         .with(StyleDeclaration::border_top_width(Px(6.0)))
         .with(StyleDeclaration::border_right_width(Px(6.0)))
@@ -136,18 +132,18 @@ fn shape_border_fixture() -> Node {
         .with(StyleDeclaration::border_right_style(BorderStyle::Solid))
         .with(StyleDeclaration::border_bottom_style(BorderStyle::Solid))
         .with(StyleDeclaration::border_left_style(BorderStyle::Solid))
-        .with(StyleDeclaration::border_top_color(ColorInput::Value(Color([
-          30, 30, 30, 255,
-        ]))))
-        .with(StyleDeclaration::border_right_color(ColorInput::Value(Color([
-          30, 30, 30, 255,
-        ]))))
+        .with(StyleDeclaration::border_top_color(ColorInput::Value(
+          Color([30, 30, 30, 255]),
+        )))
+        .with(StyleDeclaration::border_right_color(ColorInput::Value(
+          Color([30, 30, 30, 255]),
+        )))
         .with(StyleDeclaration::border_bottom_color(ColorInput::Value(
           Color([30, 30, 30, 255]),
         )))
-        .with(StyleDeclaration::border_left_color(ColorInput::Value(Color([
-          30, 30, 30, 255,
-        ])))),
+        .with(StyleDeclaration::border_left_color(ColorInput::Value(
+          Color([30, 30, 30, 255]),
+        ))),
     )
   });
 

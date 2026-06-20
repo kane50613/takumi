@@ -1,6 +1,8 @@
 use std::hint::black_box;
-use takumi::prelude::{Length::*, *};
-use takumi::render;
+use takumi::{
+  prelude::{Length::*, *},
+  render,
+};
 
 const ITERS: usize = 100;
 

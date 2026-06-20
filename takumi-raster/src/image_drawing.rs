@@ -1,10 +1,10 @@
 use taffy::{Layout, Point, Size};
 
-use crate::layout::style::BlendMode;
 use crate::{
   BorderProperties, Canvas, RenderContext, Result, SamplingOptions,
   layout::style::{
-    Affine, ObjectFit, PositionComponent, PositionKeywordX, PositionKeywordY, SizingContext,
+    Affine, BlendMode, ObjectFit, PositionComponent, PositionKeywordX, PositionKeywordY,
+    SizingContext,
   },
   pixmap_ref_from_buffer,
   resources::image::{ImageSource, RenderedImage},

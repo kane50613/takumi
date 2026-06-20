@@ -67,12 +67,18 @@
 /// The glob pulls in common names like `Error`, `Result`, `Style`, and `Color`;
 /// that breadth is intentional for a prelude.
 pub mod prelude {
-  pub use takumi_base::layout::Viewport;
-  pub use takumi_base::layout::node::{ImageData, ImageSourceInput, Node, NodeKind, TextData};
-  pub use takumi_base::layout::style::*;
-  pub use takumi_base::resources::font::{FontError, FontResource, RegisteredFamily};
-  pub use takumi_base::resources::image::{ImageCacheMode, ImageSource};
-  pub use takumi_base::{Error, Fonts, Result};
+  pub use takumi_base::{
+    Error, Fonts, Result,
+    layout::{
+      Viewport,
+      node::{ImageData, ImageSourceInput, Node, NodeKind, TextData},
+      style::*,
+    },
+    resources::{
+      font::{FontError, FontResource, RegisteredFamily},
+      image::{ImageCacheMode, ImageSource},
+    },
+  };
 
   #[cfg(feature = "raster-backend")]
   pub use takumi_raster::{

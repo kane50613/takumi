@@ -1,5 +1,8 @@
-use crate::style::calc::{CalcFormula, CalcValue, parse_calc_sum};
-use crate::style::{ToCss, unexpected_token};
+use crate::style::{
+  ToCss,
+  calc::{CalcFormula, CalcValue, parse_calc_sum},
+  unexpected_token,
+};
 use std::{fmt, ops::Neg};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};

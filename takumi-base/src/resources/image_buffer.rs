@@ -6,8 +6,7 @@
 
 use std::borrow::Cow;
 
-use image::codecs::png::PngEncoder;
-use image::{ExtendedColorType, ImageEncoder, RgbaImage};
+use image::{ExtendedColorType, ImageEncoder, RgbaImage, codecs::png::PngEncoder};
 
 use crate::layout::style::fast_div_255;
 

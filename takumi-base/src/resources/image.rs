@@ -3,8 +3,7 @@
 //! This module provides types and utilities for managing image resources,
 //! including loading states, error handling, and image processing operations.
 
-use std::borrow::Cow;
-use std::{str::FromStr, sync::Arc};
+use std::{borrow::Cow, str::FromStr, sync::Arc};
 
 #[cfg(target_arch = "wasm32")]
 use std::{cell::RefCell, collections::HashMap};
@@ -20,8 +19,10 @@ use xxhash_rust::xxh3::xxh3_64;
 
 use crate::{
   layout::style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext},
-  resources::image_buffer::ImageBuffer,
-  resources::image_decoder::{DecodedGif, DecodedImage, decode_image},
+  resources::{
+    image_buffer::ImageBuffer,
+    image_decoder::{DecodedGif, DecodedImage, decode_image},
+  },
 };
 use thiserror::Error;
 

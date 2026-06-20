@@ -1,7 +1,9 @@
 use std::{borrow::Cow, fs::File};
 
-use takumi::prelude::{Length::Px, *};
-use takumi::{render, write_image};
+use takumi::{
+  prelude::{Length::Px, *},
+  render, write_image,
+};
 
 /// Renders a "Hello, {name}!" image and saves it to `output.webp`.
 pub fn say_hello_to(name: &str) {

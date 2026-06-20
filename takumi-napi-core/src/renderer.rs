@@ -1,5 +1,7 @@
-use std::collections::HashMap;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::{
+  collections::HashMap,
+  sync::{Arc, OnceLock, RwLock},
+};
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;

@@ -1,7 +1,6 @@
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use std::hint::black_box;
-use takumi::prelude::*;
-use takumi::render;
+use takumi::{prelude::*, render};
 
 const ITERS: usize = 80;
 

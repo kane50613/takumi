@@ -6,10 +6,13 @@ use paste::paste;
 use serde::de::IgnoredAny;
 use smallvec::{SmallVec, smallvec};
 
-use crate::style::selector::{PropertyRule, StyleDeclarationParser};
 use crate::{
   error::StyleDeclarationBlockParseError,
-  style::{CssInput, CssValueSeed, SizingContext, properties::*},
+  style::{
+    CssInput, CssValueSeed, SizingContext,
+    properties::*,
+    selector::{PropertyRule, StyleDeclarationParser},
+  },
 };
 use cssparser::RuleBodyParser;
 #[path = "stylesheets_helpers.rs"]
@@ -21,9 +24,8 @@ mod stylesheets_query;
 #[path = "stylesheets_vars.rs"]
 mod stylesheets_vars;
 
-use self::stylesheets_helpers::*;
 pub(crate) use self::stylesheets_mask::PropertyMask;
-use self::stylesheets_vars::apply_deferred_declaration;
+use self::{stylesheets_helpers::*, stylesheets_vars::apply_deferred_declaration};
 
 macro_rules! define_inherited_default {
   ($parent:expr, $inherit:tt) => {
