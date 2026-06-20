@@ -36,16 +36,25 @@
   "sideEffects": false,
   "main": "./dist/export.cjs",
   "module": "./dist/export.mjs",
-  "types": "./dist/export.d.ts",
+  "types": "./dist/export.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/export.d.ts",
-      "workerd": "./not-available.js",
-      "browser": "./not-available.js",
-      "node": "./dist/export.mjs",
-      "import": "./dist/export.mjs",
-      "require": "./dist/export.cjs",
-      "default": "./dist/export.mjs"
+      "workerd": {
+        "types": "./dist/export.d.mts",
+        "default": "./not-available.js"
+      },
+      "browser": {
+        "types": "./dist/export.d.mts",
+        "default": "./not-available.js"
+      },
+      "import": {
+        "types": "./dist/export.d.mts",
+        "default": "./dist/export.mjs"
+      },
+      "require": {
+        "types": "./dist/export.d.cts",
+        "default": "./dist/export.cjs"
+      }
     }
   },
   "publishConfig": {
@@ -57,7 +66,8 @@
     "build:js": "tsdown && bun scripts/patch-dist-loader.ts",
     "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json && bun artifacts && napi prepublish -t npm --no-gh-release",
     "artifacts": "napi create-npm-dirs && napi artifacts && napi version",
-    "bench": "bun tests/bench/index.tsx"
+    "bench": "bun tests/bench/index.tsx",
+    "publish-lint": "attw --pack . && publint --strict ."
   },
   "dependencies": {
     "@takumi-rs/helpers": "workspace:*"

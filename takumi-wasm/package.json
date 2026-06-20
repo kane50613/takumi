@@ -30,22 +30,35 @@
   "types": "./dist/export.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/export.d.mts",
-      "import": "./dist/export.mjs",
-      "require": "./dist/export.cjs",
-      "default": "./dist/export.mjs"
+      "import": {
+        "types": "./dist/export.d.mts",
+        "default": "./dist/export.mjs"
+      },
+      "require": {
+        "types": "./dist/export.d.cts",
+        "default": "./dist/export.cjs"
+      }
     },
     "./no-bundler": {
-      "types": "./dist/export.d.mts",
-      "import": "./dist/export.mjs",
-      "require": "./dist/export.cjs",
-      "default": "./dist/export.mjs"
+      "import": {
+        "types": "./dist/export.d.mts",
+        "default": "./dist/export.mjs"
+      },
+      "require": {
+        "types": "./dist/export.d.cts",
+        "default": "./dist/export.cjs"
+      }
     },
     "./node": {
-      "types": "./bundlers/node.d.ts",
       "bun": "./bundlers/bun.mjs",
-      "import": "./bundlers/node.mjs",
-      "require": "./bundlers/node.cjs"
+      "import": {
+        "types": "./bundlers/node.d.ts",
+        "default": "./bundlers/node.mjs"
+      },
+      "require": {
+        "types": "./bundlers/node.d.cts",
+        "default": "./bundlers/node.cjs"
+      }
     },
     "./auto": {
       "types": "./bundlers/type.d.ts",
@@ -73,7 +86,8 @@
     "build": "wasm-pack build --no-pack --release --out-dir pkg --target web && bun build:js && bun scripts/patch-generated-loader.ts",
     "build:js": "tsdown",
     "build:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target web && bun build:js && bun scripts/patch-generated-loader.ts",
-    "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json"
+    "prepublishOnly": "jq '.dependencies[\"@takumi-rs/helpers\"] = .version' package.json > tmp.json && mv tmp.json package.json",
+    "publish-lint": "attw --pack . && publint --strict ."
   },
   "dependencies": {
     "@takumi-rs/helpers": "workspace:*"

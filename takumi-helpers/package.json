@@ -36,28 +36,44 @@
   "types": "./dist/index.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs",
-      "default": "./dist/index.mjs"
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./html": {
-      "types": "./dist/html.d.mts",
-      "import": "./dist/html.mjs",
-      "require": "./dist/html.cjs",
-      "default": "./dist/html.mjs"
+      "import": {
+        "types": "./dist/html.d.mts",
+        "default": "./dist/html.mjs"
+      },
+      "require": {
+        "types": "./dist/html.d.cts",
+        "default": "./dist/html.cjs"
+      }
     },
     "./jsx": {
-      "types": "./dist/jsx.d.mts",
-      "import": "./dist/jsx.mjs",
-      "require": "./dist/jsx.cjs",
-      "default": "./dist/jsx.mjs"
+      "import": {
+        "types": "./dist/jsx.d.mts",
+        "default": "./dist/jsx.mjs"
+      },
+      "require": {
+        "types": "./dist/jsx.d.cts",
+        "default": "./dist/jsx.cjs"
+      }
     },
     "./emoji": {
-      "types": "./dist/emoji.d.mts",
-      "import": "./dist/emoji.mjs",
-      "require": "./dist/emoji.cjs",
-      "default": "./dist/emoji.mjs"
+      "import": {
+        "types": "./dist/emoji.d.mts",
+        "default": "./dist/emoji.mjs"
+      },
+      "require": {
+        "types": "./dist/emoji.d.cts",
+        "default": "./dist/emoji.cjs"
+      }
     }
   },
   "publishConfig": {
@@ -65,7 +81,8 @@
     "provenance": true
   },
   "scripts": {
-    "build": "tsdown"
+    "build": "tsdown",
+    "publish-lint": "attw --pack . && publint --strict ."
   },
   "devDependencies": {
     "@types/bun": "catalog:",

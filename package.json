@@ -18,9 +18,11 @@
     "lint:fix": "oxlint --fix && oxfmt --write",
     "version": "changeset version && bun --filter '*' version",
     "release": "changeset publish && bun --filter '*' release",
-    "postinstall": "lefthook install"
+    "postinstall": "lefthook install",
+    "publish-lint": "bun --filter '*' publish-lint"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.3",
     "@arethetypeswrong/core": "^0.18.3",
     "@changesets/cli": "^2.31.0",
     "lefthook": "^2.1.9",
