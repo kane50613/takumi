@@ -6,6 +6,7 @@ use serde_bytes::ByteBuf;
 use std::sync::Arc;
 use takumi_base::{
   keyframes::deserialize_optional_keyframes, layout::node::Node, layout::style::KeyframesRule,
+  resources::image::ImageCacheMode,
 };
 use takumi_raster::DitheringAlgorithm;
 use wasm_bindgen::prelude::*;
@@ -160,23 +161,6 @@ pub enum Font {
   Object(FontDetails),
   /// Raw font buffer.
   Buffer(ByteBuf),
-}
-
-/// Cache policy for a decoded image. Defaults to `"auto"`.
-#[derive(Deserialize, Clone, Copy, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum ImageCacheMode {
-  /// Cache the decoded image for reuse (evictable).
-  #[default]
-  Auto,
-  /// Skip the decoded-image cache.
-  None,
-}
-
-impl ImageCacheMode {
-  pub(crate) fn stores(self) -> bool {
-    !matches!(self, Self::None)
-  }
 }
 
 /// An image source with its URL and raw data.

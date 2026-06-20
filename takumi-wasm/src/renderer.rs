@@ -136,7 +136,7 @@ impl Renderer {
       let mode = source.cache.unwrap_or_default();
       let image = self
         .image_cache
-        .get_or_decode(&source.data, mode.stores())
+        .get_or_decode(&source.data, mode)
         .map_err(map_error)?;
 
       map.insert(source.src.clone(), image);

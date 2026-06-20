@@ -10,7 +10,7 @@ use takumi_base::{
   layout::{node::Node, style::KeyframesRule as CoreKeyframesRule},
   resources::{
     font::FontResource,
-    image::{ImageCache, ImageSource as LoadedImageSource},
+    image::{ImageCache, ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource},
   },
 };
 use takumi_raster::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat};
@@ -98,7 +98,7 @@ impl RendererState {
     for (src, (buffer, mode)) in images {
       let decoded = self
         .image_cache
-        .get_or_decode(&buffer, mode.stores())
+        .get_or_decode(&buffer, mode.into())
         .map_err(map_error)?;
 
       map.insert(src, decoded);
@@ -299,9 +299,12 @@ pub enum ImageCacheMode {
   None,
 }
 
-impl ImageCacheMode {
-  pub(crate) fn stores(self) -> bool {
-    !matches!(self, Self::None)
+impl From<ImageCacheMode> for CoreImageCacheMode {
+  fn from(mode: ImageCacheMode) -> Self {
+    match mode {
+      ImageCacheMode::Auto => Self::Auto,
+      ImageCacheMode::None => Self::None,
+    }
   }
 }
 

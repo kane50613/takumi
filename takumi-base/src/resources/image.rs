@@ -13,6 +13,7 @@ use std::{cell::RefCell, collections::HashMap};
 use dashmap::DashMap;
 use image::RgbaImage;
 use quick_cache::{Weighter, sync::Cache};
+use serde::Deserialize;
 #[cfg(feature = "svg")]
 use tiny_skia::Pixmap;
 use xxhash_rust::xxh3::xxh3_64;
@@ -508,6 +509,17 @@ pub enum ImageResourceError {
 /// Decoded-image budget before entries start getting evicted.
 const DEFAULT_MAX_BYTES: u64 = 64 << 20; // 64 MiB
 
+/// Cache policy for a decoded image, applied per [`ImageCache::get_or_decode`] call.
+#[derive(Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ImageCacheMode {
+  /// Cache the decoded image for reuse (evictable).
+  #[default]
+  Auto,
+  /// Skip the decoded-image cache.
+  None,
+}
+
 #[derive(Clone)]
 struct ImageWeighter;
 
@@ -544,14 +556,15 @@ impl ImageCache {
     }
   }
 
-  /// Returns the decoded image for `bytes`, decoding on a miss and caching it when `store`.
+  /// Returns the decoded image for `bytes`, decoding on a miss and caching it unless `mode`
+  /// is [`ImageCacheMode::None`].
   ///
-  /// With `store`, concurrent misses for the same bytes are single-flighted: one thread
+  /// When caching, concurrent misses for the same bytes are single-flighted: one thread
   /// decodes while the others wait, so each unique image is decoded once.
-  pub fn get_or_decode(&self, bytes: &[u8], store: bool) -> ImageResult {
+  pub fn get_or_decode(&self, bytes: &[u8], mode: ImageCacheMode) -> ImageResult {
     let key = xxh3_64(bytes);
 
-    if !store {
+    if matches!(mode, ImageCacheMode::None) {
       return match self.cache.get(&key) {
         Some(source) => Ok(source),
         None => ImageSource::from_bytes(bytes),
@@ -579,7 +592,7 @@ impl ImageCache {
 mod image_cache_tests {
   use quick_cache::sync::Cache;
 
-  use super::{ImageCache, ImageWeighter};
+  use super::{ImageCache, ImageCacheMode, ImageWeighter};
   use crate::resources::{image::ImageSource, image_buffer::ImageBuffer};
 
   /// PNG bytes that decode to a tiny bitmap (cacheable).
@@ -592,8 +605,8 @@ mod image_cache_tests {
     let cache = ImageCache::default();
     let bytes = png_bytes();
 
-    let first = cache.get_or_decode(&bytes, true).unwrap();
-    let second = cache.get_or_decode(&bytes, true).unwrap();
+    let first = cache.get_or_decode(&bytes, ImageCacheMode::Auto).unwrap();
+    let second = cache.get_or_decode(&bytes, ImageCacheMode::Auto).unwrap();
 
     match (&first, &second) {
       (ImageSource::Bitmap(a), ImageSource::Bitmap(b)) => assert!(std::sync::Arc::ptr_eq(a, b)),
@@ -606,8 +619,8 @@ mod image_cache_tests {
     let cache = ImageCache::default();
     let bytes = png_bytes();
 
-    let a = cache.get_or_decode(&bytes, false).unwrap();
-    let b = cache.get_or_decode(&bytes, false).unwrap();
+    let a = cache.get_or_decode(&bytes, ImageCacheMode::None).unwrap();
+    let b = cache.get_or_decode(&bytes, ImageCacheMode::None).unwrap();
 
     match (&a, &b) {
       (ImageSource::Bitmap(x), ImageSource::Bitmap(y)) => assert!(!std::sync::Arc::ptr_eq(x, y)),
@@ -621,8 +634,8 @@ mod image_cache_tests {
     let cache = ImageCache::default();
     let svg = br#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>"#;
 
-    let a = cache.get_or_decode(svg, true).unwrap();
-    let b = cache.get_or_decode(svg, true).unwrap();
+    let a = cache.get_or_decode(svg, ImageCacheMode::Auto).unwrap();
+    let b = cache.get_or_decode(svg, ImageCacheMode::Auto).unwrap();
 
     assert!(matches!(a, ImageSource::Svg(_)));
     match (&a, &b) {
