@@ -27,23 +27,21 @@ export function GET(request: Request) {
 }
 ```
 
-For shared configuration and cache isolation, create your own image response factory.
+Pass custom fonts per response; identical fonts are registered once and reused automatically.
 
 ```tsx
-import { createImageResponse } from "@takumi-rs/image-response";
-
-const ogImage = createImageResponse({
-  fonts: [
-    {
-      data: () => fetch("/fonts/Inter-Regular.ttf").then((res) => res.arrayBuffer()),
-      key: "inter-regular",
-      name: "Inter",
-    },
-  ],
-});
+import { ImageResponse } from "@takumi-rs/image-response";
 
 export function GET() {
-  return ogImage(<OgImage />);
+  return new ImageResponse(<OgImage />, {
+    fonts: [
+      {
+        data: () => fetch("/fonts/Inter-Regular.ttf").then((res) => res.arrayBuffer()),
+        key: "inter-regular",
+        name: "Inter",
+      },
+    ],
+  });
 }
 ```
 

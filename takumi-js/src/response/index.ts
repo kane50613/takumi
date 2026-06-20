@@ -9,41 +9,6 @@ export type ImageResponseOptions = RenderOptions &
     onError?: (error: unknown) => void | Promise<void>;
   };
 
-export type ImageResponseFactory = (
-  component: RenderInput,
-  options?: ImageResponseOptions,
-) => ImageResponseResult;
-
-function mergeOptions(
-  defaultOptions: ImageResponseOptions | undefined,
-  options: ImageResponseOptions | undefined,
-) {
-  if (!defaultOptions) {
-    return options;
-  }
-
-  if (!options) {
-    return defaultOptions;
-  }
-
-  const headers = new Headers(defaultOptions?.headers);
-
-  if (options?.headers) {
-    const optionHeaders = new Headers(options.headers);
-
-    optionHeaders.forEach((value, key) => {
-      headers.set(key, value);
-    });
-  }
-
-  return {
-    ...defaultOptions,
-    ...options,
-    headers,
-    stylesheets: [...(defaultOptions?.stylesheets ?? []), ...(options?.stylesheets ?? [])],
-  };
-}
-
 const contentTypeMap: Record<NonNullable<RenderOptions["format"]>, string> = {
   png: "image/png",
   jpeg: "image/jpeg",
@@ -57,75 +22,52 @@ function defaultErrorHandler(error: unknown) {
   console.error(error);
 }
 
-/**
- * Creates a reusable ImageResponse factory with shared configuration.
- *
- * Use this to avoid repeating configuration like fonts, stylesheets, or cache headers
- * across multiple API routes.
- *
- * @example
- * ```tsx
- * const myImageResponse = createImageResponse({
- *   fonts: [{ name: "Inter", data: fontBuffer }],
- *   headers: { "Cache-Control": "public, max-age=31536000" }
- * });
- *
- * export function GET() {
- *   return myImageResponse(<div>Custom Og Image</div>);
- * }
- * ```
- *
- * @param defaultOptions - Options that will be applied to every response created by this factory.
- */
-export function createImageResponse(defaultOptions?: ImageResponseOptions): ImageResponseFactory {
-  return function imageResponse(element: RenderInput, options?: ImageResponseOptions) {
-    const mergedOptions = mergeOptions(defaultOptions, options);
+function buildImageResponse(
+  element: RenderInput,
+  options?: ImageResponseOptions,
+): ImageResponseResult {
+  let resolveReady: (value: void | PromiseLike<void>) => void;
+  let rejectReady: (reason?: unknown) => void;
+  const ready = new Promise<void>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
 
-    let resolveReady: (value: void | PromiseLike<void>) => void;
-    let rejectReady: (reason?: unknown) => void;
-    const ready = new Promise<void>((resolve, reject) => {
-      resolveReady = resolve;
-      rejectReady = reject;
-    });
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        const image = await render(element, options);
+        controller.enqueue(image as ArrayBufferView<ArrayBuffer>);
+        controller.close();
+        resolveReady();
+      } catch (error) {
+        controller.error(error);
 
-    const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          const image = await render(element, mergedOptions);
-          controller.enqueue(image as ArrayBufferView<ArrayBuffer>);
-          controller.close();
-          resolveReady();
-        } catch (error) {
-          controller.error(error);
+        rejectReady(error);
+        const errorHandler = options?.onError ?? defaultErrorHandler;
 
-          rejectReady(error);
-          const errorHandler = mergedOptions?.onError ?? defaultErrorHandler;
+        await errorHandler(error);
+      }
+    },
+  });
+  const headers = new Headers(options?.headers);
 
-          await errorHandler(error);
-        }
-      },
-    });
-    const headers = new Headers(mergedOptions?.headers);
+  if (!headers.get("content-type")) {
+    headers.set("content-type", contentTypeMap[options?.format ?? "png"]);
+  }
 
-    if (!headers.get("content-type")) {
-      headers.set("content-type", contentTypeMap[mergedOptions?.format ?? "png"]);
-    }
+  const response = new Response(stream, {
+    headers,
+    status: options?.status,
+    statusText: options?.statusText,
+  });
 
-    const response = new Response(stream, {
-      headers,
-      status: mergedOptions?.status,
-      statusText: mergedOptions?.statusText,
-    });
-
-    return Object.defineProperty(response, "ready", {
-      enumerable: false,
-      value: ready,
-      writable: false,
-    }) as ImageResponseResult;
-  };
+  return Object.defineProperty(response, "ready", {
+    enumerable: false,
+    value: ready,
+    writable: false,
+  }) as ImageResponseResult;
 }
-
-let defaultImageResponse: ImageResponseFactory | undefined;
 
 /**
  * A universal ImageResponse class for generating images in API routes.
@@ -154,9 +96,7 @@ export class ImageResponse extends Response {
   readonly ready: Promise<void>;
 
   constructor(component: RenderInput, options?: ImageResponseOptions) {
-    defaultImageResponse ??= createImageResponse();
-
-    const response = defaultImageResponse(component, options);
+    const response = buildImageResponse(component, options);
 
     super(response.body, response);
     this.ready = response.ready;
