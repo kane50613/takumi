@@ -315,7 +315,7 @@ impl OutputFormat {
 
 /// WebP is lossless when explicitly requested or when no `quality` is given.
 pub(crate) fn webp_lossless(quality: Option<u8>, lossless: Option<bool>) -> bool {
-  lossless.unwrap_or(false) || quality.is_none()
+  lossless.unwrap_or(quality.is_none())
 }
 
 /// Cache policy for a decoded image. Defaults to `"auto"`.
