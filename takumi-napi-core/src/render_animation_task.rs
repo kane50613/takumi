@@ -25,7 +25,7 @@ pub struct RenderAnimationTask {
   pub quality: Option<u8>,
   pub draw_debug_border: bool,
   pub stylesheets: Option<Vec<String>>,
-  pub images: HashMap<Arc<str>, Buffer>,
+  pub images: HashMap<Arc<str>, (Buffer, bool)>,
   pub fps: u32,
 }
 
@@ -82,7 +82,13 @@ impl RenderAnimationTask {
         .unwrap_or_default()
         .into_iter()
         .map(|image: ImageSource<'_>| {
-          Ok((Arc::from(image.src), buffer_from_object(env, image.data)?))
+          Ok((
+            Arc::from(image.src),
+            (
+              buffer_from_object(env, image.data)?,
+              image.cache.unwrap_or(true),
+            ),
+          ))
         })
         .collect::<Result<_>>()?,
       fps,
@@ -109,7 +115,10 @@ impl Task for RenderAnimationTask {
         .map(|(key, value)| {
           Ok((
             key.clone(),
-            state.image_cache.get_or_decode(value).map_err(map_error)?,
+            state
+              .image_cache
+              .get_or_decode(&value.0, value.1)
+              .map_err(map_error)?,
           ))
         })
         .collect::<Result<HashMap<_, _>, _>>()?;

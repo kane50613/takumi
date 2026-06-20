@@ -20,7 +20,7 @@ pub struct MeasureTask {
   pub viewport: Viewport,
   pub time_ms: u64,
   pub stylesheet: StyleSheet,
-  pub images: HashMap<Arc<str>, Buffer>,
+  pub images: HashMap<Arc<str>, (Buffer, bool)>,
   pub font_families: Option<Vec<String>>,
 }
 
@@ -49,7 +49,15 @@ impl MeasureTask {
         .images
         .unwrap_or_default()
         .into_iter()
-        .map(|image| Ok((Arc::from(image.src), buffer_from_object(env, image.data)?)))
+        .map(|image| {
+          Ok((
+            Arc::from(image.src),
+            (
+              buffer_from_object(env, image.data)?,
+              image.cache.unwrap_or(true),
+            ),
+          ))
+        })
         .collect::<Result<_>>()?,
       font_families: options.font_families,
     })
@@ -76,7 +84,10 @@ impl Task for MeasureTask {
       .map(|(k, v)| {
         Ok((
           k.clone(),
-          state.image_cache.get_or_decode(v).map_err(map_error)?,
+          state
+            .image_cache
+            .get_or_decode(&v.0, v.1)
+            .map_err(map_error)?,
         ))
       })
       .collect::<Result<HashMap<_, _>, _>>()?;

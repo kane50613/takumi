@@ -182,6 +182,8 @@ pub struct ImageSource {
   pub src: Arc<str>,
   /// The raw image data bytes.
   pub data: ByteBuf,
+  /// Whether to keep the decoded image in the renderer's cache. Defaults to `true`.
+  pub cache: Option<bool>,
 }
 
 /// Output format for static images.

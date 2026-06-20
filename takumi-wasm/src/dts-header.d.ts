@@ -133,6 +133,8 @@ export type FontDetails = {
 export type ImageSource = {
   src: string;
   data: ByteBuf;
+  /** Whether to keep the decoded image in the renderer's cache. Defaults to `true`. */
+  cache?: boolean;
 };
 
 export type KeyframeRule = {

@@ -124,7 +124,7 @@ impl Renderer {
           .map(|source| {
             let image = self
               .image_cache
-              .get_or_decode(&source.data)
+              .get_or_decode(&source.data, source.cache.unwrap_or(true))
               .map_err(map_error)?;
             Ok((source.src.clone(), image))
           })

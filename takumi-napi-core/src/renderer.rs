@@ -265,6 +265,8 @@ pub struct ImageSource<'ctx> {
   /// The raw image data (Uint8Array or ArrayBuffer).
   #[napi(ts_type = "Uint8Array | ArrayBuffer")]
   pub data: Object<'ctx>,
+  /// Whether to keep the decoded image in the renderer's cache. Defaults to `true`.
+  pub cache: Option<bool>,
 }
 
 /// Options for constructing a Renderer instance.

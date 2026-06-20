@@ -47,14 +47,16 @@ impl Default for ImageCache {
 }
 
 impl ImageCache {
-  /// Returns the decoded image for `bytes`, decoding and caching it on a miss.
-  pub fn get_or_decode(&self, bytes: &[u8]) -> ImageResult {
+  /// Returns the decoded image for `bytes`, decoding on a miss and caching it when `store`.
+  pub fn get_or_decode(&self, bytes: &[u8], store: bool) -> ImageResult {
     let key = xxh3_64(bytes);
     if let Some(source) = self.get(key) {
       return Ok(source);
     }
     let source = ImageSource::from_bytes(bytes)?;
-    self.insert(key, source.clone());
+    if store {
+      self.insert(key, source.clone());
+    }
     Ok(source)
   }
 
