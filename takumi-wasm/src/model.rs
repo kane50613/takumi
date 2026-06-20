@@ -110,6 +110,8 @@ pub struct RenderAnimationOptions {
   pub device_pixel_ratio: Option<f32>,
   /// Frames per second for timeline sampling.
   pub fps: u32,
+  /// Per-render font stack: ordered family names used as the fallback chain.
+  pub font_families: Option<Vec<String>>,
 }
 
 /// Options for encoding a precomputed frame sequence.
@@ -132,6 +134,8 @@ pub struct EncodeFramesOptions {
   pub stylesheets: Option<Vec<String>>,
   /// The device pixel ratio for scaling.
   pub device_pixel_ratio: Option<f32>,
+  /// Per-render font stack: ordered family names used as the fallback chain.
+  pub font_families: Option<Vec<String>>,
 }
 
 /// Details for loading a custom font.
@@ -158,6 +162,25 @@ pub enum Font {
   Buffer(ByteBuf),
 }
 
+/// Cache policy for a decoded image. Defaults to `"auto"`.
+#[derive(Deserialize, Clone, Copy, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ImageCacheMode {
+  /// Cache the decoded image for reuse (evictable).
+  #[default]
+  Auto,
+  /// Skip the decoded-image cache.
+  None,
+  /// Treat the source as immutable and keep it cached.
+  Immutable,
+}
+
+impl ImageCacheMode {
+  pub(crate) fn stores(self) -> bool {
+    !matches!(self, Self::None)
+  }
+}
+
 /// An image source with its URL and raw data.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -166,8 +189,8 @@ pub struct ImageSource {
   pub src: Arc<str>,
   /// The raw image data bytes.
   pub data: ByteBuf,
-  /// Whether to keep the decoded image in the renderer's cache. Defaults to `true`.
-  pub cache: Option<bool>,
+  /// Cache policy for the decoded image. Defaults to `"auto"`.
+  pub cache: Option<ImageCacheMode>,
 }
 
 /// Output format for static images.

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::{Arc, OnceLock, RwLock};
 
 use napi::bindgen_prelude::*;
@@ -7,7 +8,10 @@ use rayon::prelude::*;
 use takumi_base::{
   Fonts,
   layout::{node::Node, style::KeyframesRule as CoreKeyframesRule},
-  resources::{font::FontResource, image_cache::ImageCache},
+  resources::{
+    font::FontResource, image::ImageSource as LoadedImageSource, image_cache::ImageCache,
+    pin_store::PinStore,
+  },
 };
 use takumi_raster::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat};
 
@@ -81,6 +85,34 @@ pub struct Renderer {
 pub(crate) struct RendererState {
   pub(crate) fonts: Fonts,
   pub(crate) image_cache: ImageCache,
+  pub(crate) pin_store: PinStore,
+}
+
+impl RendererState {
+  /// Decodes the per-call image buffers into a `src`-keyed map, layering them over a
+  /// snapshot of this renderer's pinned images and re-pinning any `immutable` entries.
+  pub(crate) fn decode_images(
+    &self,
+    images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
+  ) -> Result<HashMap<Arc<str>, LoadedImageSource>> {
+    let mut map = HashMap::new();
+    self.pin_store.snapshot_into(&mut map);
+
+    for (src, (buffer, mode)) in images {
+      let decoded = self
+        .image_cache
+        .get_or_decode(&buffer, mode.stores())
+        .map_err(map_error)?;
+
+      if matches!(mode, ImageCacheMode::Immutable) {
+        self.pin_store.insert(src.clone(), decoded.clone());
+      }
+
+      map.insert(src, decoded);
+    }
+
+    Ok(map)
+  }
 }
 
 pub(crate) fn deserialize_keyframes(keyframes: Option<Object>) -> Result<Vec<CoreKeyframesRule>> {
@@ -192,6 +224,9 @@ pub struct RenderAnimationOptions<'env> {
   /// The device pixel ratio.
   /// @default 1.0
   pub device_pixel_ratio: Option<f64>,
+  /// Per-render font stack: ordered family names used as the fallback chain.
+  /// Defaults to all registered families in registration order.
+  pub font_families: Option<Vec<String>>,
 }
 
 /// Options for encoding a precomputed frame sequence.
@@ -214,6 +249,9 @@ pub struct EncodeFramesOptions<'env> {
   /// The device pixel ratio.
   /// @default 1.0
   pub device_pixel_ratio: Option<f64>,
+  /// Per-render font stack: ordered family names used as the fallback chain.
+  /// Defaults to all registered families in registration order.
+  pub font_families: Option<Vec<String>>,
 }
 
 /// Output format for animated images.
@@ -257,6 +295,25 @@ impl From<OutputFormat> for ImageOutputFormat {
   }
 }
 
+/// Cache policy for a decoded image. Defaults to `"auto"`.
+#[napi(string_enum = "lowercase")]
+#[derive(Clone, Copy, Default)]
+pub enum ImageCacheMode {
+  /// Cache the decoded image for reuse (evictable).
+  #[default]
+  Auto,
+  /// Skip the decoded-image cache.
+  None,
+  /// Treat the source as immutable and keep it cached.
+  Immutable,
+}
+
+impl ImageCacheMode {
+  pub(crate) fn stores(self) -> bool {
+    !matches!(self, Self::None)
+  }
+}
+
 /// An image source with its URL and raw data.
 #[napi(object)]
 pub struct ImageSource<'ctx> {
@@ -265,8 +322,8 @@ pub struct ImageSource<'ctx> {
   /// The raw image data (Uint8Array or ArrayBuffer).
   #[napi(ts_type = "Uint8Array | ArrayBuffer")]
   pub data: Object<'ctx>,
-  /// Whether to keep the decoded image in the renderer's cache. Defaults to `true`.
-  pub cache: Option<bool>,
+  /// Cache policy for the decoded image. Defaults to `"auto"`.
+  pub cache: Option<ImageCacheMode>,
 }
 
 const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[
@@ -332,6 +389,7 @@ impl Renderer {
       state: Arc::new(RwLock::new(RendererState {
         fonts: default_fonts()?,
         image_cache: ImageCache::default(),
+        pin_store: PinStore::default(),
       })),
     })
   }

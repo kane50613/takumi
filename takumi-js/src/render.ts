@@ -20,9 +20,12 @@ type ImageLoaderData = Uint8Array | ArrayBuffer;
 export type ImageLoader = {
   src: string;
   data: ImageLoaderData | (() => ImageLoaderData | Promise<ImageLoaderData>);
-  /** Whether to cache the decoded image. Defaults to `true`. */
-  cache?: boolean;
+  /** Cache policy for the decoded image. Defaults to `"auto"`. */
+  cache?: ImageCacheMode;
 };
+
+/** Cache policy for a decoded image. */
+export type ImageCacheMode = "auto" | "none" | "immutable";
 
 type RenderOptionsWithRenderer = Omit<InnerRenderOptions, "images" | "fonts"> & {
   renderer: napi.Renderer | wasm.Renderer;
@@ -73,7 +76,7 @@ function isTakumiNode(element: unknown): element is Node {
  */
 async function resolveImageLoaders(
   images: ImageLoader[],
-): Promise<Array<{ src: string; data: ImageLoaderData; cache?: boolean }>> {
+): Promise<Array<{ src: string; data: ImageLoaderData; cache?: ImageCacheMode }>> {
   const bySrc = new Map<string, ImageLoader>();
 
   for (const image of images) {

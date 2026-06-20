@@ -2,12 +2,13 @@ import {
   Renderer as RendererInternal,
   type AnimationFrameSource,
   type ByteBuf,
-  type EncodeFramesOptions,
+  type EncodeFramesOptions as EncodeFramesOptionsInternal,
   type Font,
   type FontDetails,
+  type ImageSource,
   type Node,
   type RegisteredFamily,
-  type RenderAnimationOptions,
+  type RenderAnimationOptions as RenderAnimationOptionsInternal,
   type RenderOptions as RenderOptionsInternal,
 } from "../pkg/takumi_wasm";
 
@@ -26,9 +27,51 @@ export type RenderOptions = RenderOptionsInternal & {
   fonts?: FontLoader[];
 };
 
+export type RenderAnimationOptions = RenderAnimationOptionsInternal & {
+  fonts?: FontLoader[];
+};
+
+export type EncodeFramesOptions = EncodeFramesOptionsInternal & {
+  fonts?: FontLoader[];
+};
+
 export class Renderer {
   private fontMapping = new Map<string | ByteBuf, Promise<RegisteredFamily[]>>();
+  private sentImmutableSrcs = new Set<string>();
   private inner = new RendererInternal();
+
+  private filterImages(images: ImageSource[] | undefined): {
+    images: ImageSource[] | undefined;
+    commit: () => void;
+  } {
+    if (!images) {
+      return { images, commit: () => {} };
+    }
+
+    const filtered: ImageSource[] = [];
+    const newlySent: string[] = [];
+
+    for (const image of images) {
+      if (image.cache === "immutable") {
+        if (this.sentImmutableSrcs.has(image.src) || newlySent.includes(image.src)) {
+          continue;
+        }
+
+        newlySent.push(image.src);
+      }
+
+      filtered.push(image);
+    }
+
+    return {
+      images: filtered,
+      commit: () => {
+        for (const src of newlySent) {
+          this.sentImmutableSrcs.add(src);
+        }
+      },
+    };
+  }
 
   private async prepareFonts(fonts: FontLoader[] | undefined) {
     if (!fonts) {
@@ -43,39 +86,81 @@ export class Renderer {
   async render(node: Node, options?: RenderOptions) {
     const { fonts, fontFamilies, ...rest } = options ?? {};
     const registeredFamilies = await this.prepareFonts(fonts);
+    const { images, commit } = this.filterImages(rest.images);
 
-    return this.inner.render(node, {
+    const result = await this.inner.render(node, {
       ...rest,
+      images,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
+
+    commit();
+
+    return result;
   }
 
   async renderAsDataUrl(node: Node, options?: RenderOptions) {
     const { fonts, fontFamilies, ...rest } = options ?? {};
     const registeredFamilies = await this.prepareFonts(fonts);
+    const { images, commit } = this.filterImages(rest.images);
 
-    return this.inner.renderAsDataUrl(node, {
+    const result = await this.inner.renderAsDataUrl(node, {
       ...rest,
+      images,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
+
+    commit();
+
+    return result;
   }
 
   async measure(node: Node, options?: RenderOptions) {
     const { fonts, fontFamilies, ...rest } = options ?? {};
     const registeredFamilies = await this.prepareFonts(fonts);
+    const { images, commit } = this.filterImages(rest.images);
 
-    return this.inner.measure(node, {
+    const result = await this.inner.measure(node, {
       ...rest,
+      images,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
+
+    commit();
+
+    return result;
   }
 
-  renderAnimation(options: RenderAnimationOptions) {
-    return this.inner.renderAnimation(options);
+  async renderAnimation(options: RenderAnimationOptions) {
+    const { fonts, fontFamilies, ...rest } = options;
+    const registeredFamilies = await this.prepareFonts(fonts);
+    const { images, commit } = this.filterImages(rest.images);
+
+    const result = await this.inner.renderAnimation({
+      ...rest,
+      images,
+      fontFamilies: fontFamilies ?? registeredFamilies,
+    });
+
+    commit();
+
+    return result;
   }
 
-  encodeFrames(frames: AnimationFrameSource[], options: EncodeFramesOptions) {
-    return this.inner.encodeFrames(frames, options);
+  async encodeFrames(frames: AnimationFrameSource[], options: EncodeFramesOptions) {
+    const { fonts, fontFamilies, ...rest } = options;
+    const registeredFamilies = await this.prepareFonts(fonts);
+    const { images, commit } = this.filterImages(rest.images);
+
+    const result = await this.inner.encodeFrames(frames, {
+      ...rest,
+      images,
+      fontFamilies: fontFamilies ?? registeredFamilies,
+    });
+
+    commit();
+
+    return result;
   }
 
   free() {

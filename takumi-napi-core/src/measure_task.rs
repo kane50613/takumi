@@ -11,7 +11,7 @@ use takumi_raster::measure_layout;
 
 use crate::{
   buffer_from_object, map_error, parse_stylesheet,
-  renderer::{MeasuredNode, RenderOptions, RendererState, deserialize_keyframes},
+  renderer::{ImageCacheMode, MeasuredNode, RenderOptions, RendererState, deserialize_keyframes},
 };
 
 pub struct MeasureTask {
@@ -20,7 +20,7 @@ pub struct MeasureTask {
   pub viewport: Viewport,
   pub time_ms: u64,
   pub stylesheet: StyleSheet,
-  pub images: HashMap<Arc<str>, (Buffer, bool)>,
+  pub images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
   pub font_families: Option<Vec<String>>,
 }
 
@@ -54,7 +54,7 @@ impl MeasureTask {
             Arc::from(image.src),
             (
               buffer_from_object(env, image.data)?,
-              image.cache.unwrap_or(true),
+              image.cache.unwrap_or_default(),
             ),
           ))
         })
@@ -78,19 +78,7 @@ impl Task for MeasureTask {
       .read()
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
-    let initialized_images = self
-      .images
-      .iter()
-      .map(|(k, v)| {
-        Ok((
-          k.clone(),
-          state
-            .image_cache
-            .get_or_decode(&v.0, v.1)
-            .map_err(map_error)?,
-        ))
-      })
-      .collect::<Result<HashMap<_, _>, _>>()?;
+    let initialized_images = state.decode_images(take(&mut self.images))?;
 
     let options = takumi_raster::RenderOptions::builder()
       .viewport(self.viewport)

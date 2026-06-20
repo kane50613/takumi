@@ -20,6 +20,7 @@ use takumi_base::{
     font::{FontResource, RegisteredFamily},
     image::ImageSource as LoadedImageSource,
     image_cache::ImageCache,
+    pin_store::PinStore,
   },
 };
 use takumi_raster::{
@@ -44,6 +45,7 @@ const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[(
 pub struct Renderer {
   state: RwLock<Fonts>,
   image_cache: ImageCache,
+  pin_store: PinStore,
 }
 
 static DEFAULT_FONTS: OnceLock<Fonts> = OnceLock::new();
@@ -131,21 +133,24 @@ impl Renderer {
     &self,
     resources: Option<&[ImageSource]>,
   ) -> Result<HashMap<Arc<str>, LoadedImageSource>, js_sys::Error> {
-    resources
-      .map(|resources| {
-        resources
-          .iter()
-          .map(|source| {
-            let image = self
-              .image_cache
-              .get_or_decode(&source.data, source.cache.unwrap_or(true))
-              .map_err(map_error)?;
-            Ok((source.src.clone(), image))
-          })
-          .collect::<Result<_, js_sys::Error>>()
-      })
-      .transpose()
-      .map(Option::unwrap_or_default)
+    let mut map = HashMap::new();
+    self.pin_store.snapshot_into(&mut map);
+
+    for source in resources.unwrap_or_default() {
+      let mode = source.cache.unwrap_or_default();
+      let image = self
+        .image_cache
+        .get_or_decode(&source.data, mode.stores())
+        .map_err(map_error)?;
+
+      if matches!(mode, ImageCacheMode::Immutable) {
+        self.pin_store.insert(source.src.clone(), image.clone());
+      }
+
+      map.insert(source.src.clone(), image);
+    }
+
+    Ok(map)
   }
 
   fn encode_animation(
@@ -196,6 +201,7 @@ impl Renderer {
     Ok(Renderer {
       state: RwLock::new(default_fonts()?),
       image_cache: ImageCache::default(),
+      pin_store: PinStore::default(),
     })
   }
 
@@ -366,6 +372,7 @@ impl Renderer {
       stylesheets,
       device_pixel_ratio,
       fps,
+      font_families,
     } = from_value(options.into()).map_err(map_error)?;
     let images = self.fetch_resources_map(images.as_deref())?;
 
@@ -394,6 +401,7 @@ impl Renderer {
               .stylesheet(stylesheet.clone())
               .node(scene.node)
               .fonts(&state)
+              .font_families(font_families.clone())
               .draw_debug_border(draw_debug_border)
               .build(),
           )
@@ -430,6 +438,7 @@ impl Renderer {
           .images(images.clone())
           .node(frame.node)
           .fonts(&state)
+          .font_families(options.font_families.clone())
           .draw_debug_border(options.draw_debug_border.unwrap_or_default())
           .stylesheet(stylesheet.clone())
           .build();

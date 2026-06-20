@@ -14,7 +14,9 @@ use takumi_raster::{
 
 use crate::{
   buffer_from_object, deserialize_with_tracing, map_error, parse_stylesheet,
-  renderer::{AnimationOutputFormat, ImageSource, RenderAnimationOptions, RendererState},
+  renderer::{
+    AnimationOutputFormat, ImageCacheMode, ImageSource, RenderAnimationOptions, RendererState,
+  },
 };
 
 pub struct RenderAnimationTask {
@@ -25,7 +27,8 @@ pub struct RenderAnimationTask {
   pub quality: Option<u8>,
   pub draw_debug_border: bool,
   pub stylesheets: Option<Vec<String>>,
-  pub images: HashMap<Arc<str>, (Buffer, bool)>,
+  pub images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
+  pub font_families: Option<Vec<String>>,
   pub fps: u32,
 }
 
@@ -46,6 +49,7 @@ impl RenderAnimationTask {
       images,
       stylesheets,
       device_pixel_ratio,
+      font_families,
     } = options;
     let scenes = scenes
       .into_iter()
@@ -86,11 +90,12 @@ impl RenderAnimationTask {
             Arc::from(image.src),
             (
               buffer_from_object(env, image.data)?,
-              image.cache.unwrap_or(true),
+              image.cache.unwrap_or_default(),
             ),
           ))
         })
         .collect::<Result<_>>()?,
+      font_families,
       fps,
     })
   }
@@ -109,19 +114,7 @@ impl Task for RenderAnimationTask {
         .state
         .read()
         .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-      let initialized_images = self
-        .images
-        .iter()
-        .map(|(key, value)| {
-          Ok((
-            key.clone(),
-            state
-              .image_cache
-              .get_or_decode(&value.0, value.1)
-              .map_err(map_error)?,
-          ))
-        })
-        .collect::<Result<HashMap<_, _>, _>>()?;
+      let initialized_images = state.decode_images(take(&mut self.images))?;
       let stylesheet = parse_stylesheet(take(&mut self.stylesheets), Vec::new())?;
       let scene_options = scenes
         .into_iter()
@@ -135,6 +128,7 @@ impl Task for RenderAnimationTask {
                 .stylesheet(stylesheet.clone())
                 .node(node)
                 .fonts(&state.fonts)
+                .font_families(self.font_families.clone())
                 .draw_debug_border(self.draw_debug_border)
                 .build(),
             )

@@ -99,6 +99,11 @@ export type RenderAnimationOptions = {
    * Frames per second for timeline sampling.
    */
   fps: number;
+  /**
+   * Per-render font stack: ordered family names used as the fallback chain.
+   * Defaults to all registered families in registration order.
+   */
+  fontFamilies?: string[];
 };
 
 export type EncodeFramesOptions = {
@@ -124,6 +129,11 @@ export type EncodeFramesOptions = {
    * @default 1.0
    */
   devicePixelRatio?: number;
+  /**
+   * Per-render font stack: ordered family names used as the fallback chain.
+   * Defaults to all registered families in registration order.
+   */
+  fontFamilies?: string[];
 };
 
 export type FontDetails = {
@@ -136,8 +146,8 @@ export type FontDetails = {
 export type ImageSource = {
   src: string;
   data: ByteBuf;
-  /** Whether to keep the decoded image in the renderer's cache. Defaults to `true`. */
-  cache?: boolean;
+  /** Cache policy for the decoded image. Defaults to `"auto"`. */
+  cache?: "auto" | "none" | "immutable";
 };
 
 export type KeyframeRule = {

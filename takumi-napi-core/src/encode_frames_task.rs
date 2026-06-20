@@ -1,6 +1,7 @@
 use std::{
   borrow::Cow,
   collections::HashMap,
+  mem::take,
   sync::{Arc, RwLock},
 };
 
@@ -14,7 +15,9 @@ use takumi_raster::{
 
 use crate::{
   buffer_from_object, map_error, parse_stylesheet,
-  renderer::{AnimationOutputFormat, EncodeFramesOptions, ImageSource, RendererState},
+  renderer::{
+    AnimationOutputFormat, EncodeFramesOptions, ImageCacheMode, ImageSource, RendererState,
+  },
 };
 
 pub struct EncodeFramesTask {
@@ -25,7 +28,8 @@ pub struct EncodeFramesTask {
   pub quality: Option<u8>,
   pub draw_debug_border: bool,
   pub stylesheets: Option<Vec<String>>,
-  pub images: HashMap<Arc<str>, (Buffer, bool)>,
+  pub images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
+  pub font_families: Option<Vec<String>>,
 }
 
 impl EncodeFramesTask {
@@ -57,11 +61,12 @@ impl EncodeFramesTask {
             Arc::from(image.src),
             (
               buffer_from_object(env, image.data)?,
-              image.cache.unwrap_or(true),
+              image.cache.unwrap_or_default(),
             ),
           ))
         })
         .collect::<Result<_>>()?,
+      font_families: options.font_families,
     })
   }
 }
@@ -83,22 +88,11 @@ impl Task for EncodeFramesTask {
         .state
         .read()
         .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-      let initialized_images = self
-        .images
-        .iter()
-        .map(|(key, value)| {
-          Ok((
-            key.clone(),
-            state
-              .image_cache
-              .get_or_decode(&value.0, value.1)
-              .map_err(map_error)?,
-          ))
-        })
-        .collect::<Result<HashMap<_, _>, _>>()?;
+      let initialized_images = state.decode_images(take(&mut self.images))?;
 
       let viewport = self.viewport;
       let draw_debug_border = self.draw_debug_border;
+      let font_families = take(&mut self.font_families);
       let stylesheet = parse_stylesheet(self.stylesheets.clone(), Vec::new())?;
       let frames = frames
         .into_par_iter()
@@ -111,6 +105,7 @@ impl Task for EncodeFramesTask {
                 .stylesheet(stylesheet.clone())
                 .node(node)
                 .fonts(&state.fonts)
+                .font_families(font_families.clone())
                 .draw_debug_border(draw_debug_border)
                 .build(),
             )
