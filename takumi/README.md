@@ -2,24 +2,26 @@
 
 <!-- cargo-rdme start -->
 
-Takumi renders UI component trees to images. This crate is a thin facade that
-re-exports the backend-agnostic core ([`takumi_base`], as [`base`]) and the
-rendering backends under namespaced modules: the raster backend
-([`takumi_raster`], as [`raster`]) and the vector/SVG backend ([`takumi_svg`],
-as [`svg`]).
+Takumi renders UI component trees to images. This crate is the facade users
+depend on: entry-point **functions** live at the crate root and the _curated,
+stable_ data structures live in [`prelude`]. Glob the prelude for the types
+and call the functions from the crate root.
+
+The backend crates expose a much larger surface than is meant for general use
+— layout-engine glue, paint internals, and other cross-crate plumbing are
+`pub` only because sibling crates need them. Those internals are deliberately
+_not_ re-exported here. If you need them, enable the `unstable` feature and
+reach them through [`unstable`]; nothing under that module is covered by
+semver.
 
 ## Example
 
 ```rust
-use takumi::base::{
-  Fonts,
-  layout::{Viewport, node::Node, style::{Length::Px, Style, StyleDeclaration}},
-  resources::font::FontResource,
-};
-use takumi::raster::{RenderOptions, render};
+use takumi::prelude::*;
+use takumi::render;
 
 let node = Node::container([Node::text("Hello, world!").with_style(
-  Style::default().with(StyleDeclaration::font_size(Px(32.0).into())),
+  Style::default().with(StyleDeclaration::font_size(Length::Px(32.0).into())),
 )]);
 
 // Create a font context. Reuse it across renders to share the decode cache.
@@ -45,15 +47,15 @@ let image = render(options).unwrap();
 
 ## Feature Flags
 
-- `raster` (default): Enable the raster rendering backend, available as
-  [`takumi::raster`](raster).
+- `raster` (default): Enable the raster rendering backend.
 - `svg` (default): Enable SVG image-source support in the core and raster
   backend.
-- `svg-backend`: Enable the vector/SVG output backend, available as
-  [`takumi::svg`](svg). Opt-in.
+- `svg-backend`: Enable the vector/SVG output backend ([`render_svg`]). Opt-in.
 - `woff2`: Enable WOFF2 font support.
 - `woff`: Enable WOFF font support.
 - `rayon`: Enable rayon-based parallelism in the raster backend (implies
   `raster`).
+- `unstable`: Re-export the backend crates wholesale under [`unstable`]. No
+  semver guarantee. Opt-in.
 
 <!-- cargo-rdme end -->
