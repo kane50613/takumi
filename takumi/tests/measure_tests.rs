@@ -11,7 +11,7 @@ use takumi::base::layout::{
   },
 };
 use takumi::raster::{MeasuredNode, MeasuredTextRun, RenderOptions, measure_layout};
-use test_utils::CONTEXT;
+use test_utils::{CONTEXT, TEST_IMAGES};
 
 fn create_measure_viewport() -> Viewport {
   Viewport::new((1200, 630))
@@ -30,7 +30,8 @@ fn measure(node: Node, viewport: Viewport) -> MeasuredNode {
     RenderOptions::builder()
       .viewport(viewport)
       .node(node)
-      .global(&CONTEXT)
+      .fonts(&CONTEXT)
+      .images(TEST_IMAGES.clone())
       .build(),
   )
   .unwrap()
@@ -106,7 +107,8 @@ fn test_measure_simple_container() {
     RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
-      .global(&CONTEXT)
+      .fonts(&CONTEXT)
+      .images(TEST_IMAGES.clone())
       .build(),
   )
   .unwrap();
@@ -136,7 +138,8 @@ fn test_measure_text_node() {
     RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
-      .global(&CONTEXT)
+      .fonts(&CONTEXT)
+      .images(TEST_IMAGES.clone())
       .build(),
   )
   .unwrap();
@@ -182,7 +185,8 @@ fn test_measure_flex_text_node_centers_inner_text() {
     RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
-      .global(&CONTEXT)
+      .fonts(&CONTEXT)
+      .images(TEST_IMAGES.clone())
       .build(),
   )
   .unwrap();
@@ -228,7 +232,8 @@ fn test_measure_flex_text_node_anonymous_item_uses_intrinsic_size() {
     RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
-      .global(&CONTEXT)
+      .fonts(&CONTEXT)
+      .images(TEST_IMAGES.clone())
       .build(),
   )
   .unwrap();
@@ -279,7 +284,8 @@ fn test_measure_inline_layout() {
     RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
-      .global(&CONTEXT)
+      .fonts(&CONTEXT)
+      .images(TEST_IMAGES.clone())
       .build(),
   )
   .unwrap();
@@ -1480,7 +1486,8 @@ fn test_measure_svg_attr_size_in_absolute_flex_container() {
     RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
-      .global(&CONTEXT)
+      .fonts(&CONTEXT)
+      .images(TEST_IMAGES.clone())
       .build(),
   )
   .unwrap();
@@ -1532,7 +1539,8 @@ fn test_measure_svg_attr_size_in_absolute_flex_container_with_parent_padding() {
     RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
-      .global(&CONTEXT)
+      .fonts(&CONTEXT)
+      .images(TEST_IMAGES.clone())
       .build(),
   )
   .unwrap();
@@ -1576,7 +1584,8 @@ fn test_measure_svg_with_width_only_preserves_intrinsic_ratio() {
     RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
-      .global(&CONTEXT)
+      .fonts(&CONTEXT)
+      .images(TEST_IMAGES.clone())
       .build(),
   )
   .unwrap();
@@ -1644,7 +1653,8 @@ fn test_measure_img_svg_attribute_sizing_cases() {
       RenderOptions::builder()
         .viewport(create_measure_viewport())
         .node(node)
-        .global(&CONTEXT)
+        .fonts(&CONTEXT)
+        .images(TEST_IMAGES.clone())
         .build(),
     )
     .unwrap();

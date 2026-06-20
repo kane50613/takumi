@@ -1,16 +1,17 @@
 use std::{
   borrow::Cow,
+  collections::HashMap,
   fs::{File, create_dir_all, write},
   io::Read,
   path::{Path, PathBuf},
-  sync::LazyLock,
+  sync::{Arc, LazyLock},
 };
 
 use image::RgbaImage;
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use takumi::base::{
-  GlobalContext,
+  Fonts,
   layout::{Viewport, node::Node},
   resources::{font::FontResource, image::ImageSource},
 };
@@ -82,21 +83,8 @@ const IMAGES: &[&str] = &[
   "assets/images/luma-cover-0dfbf65d-0f58-4941-947c-d84a5b131dc0.jpeg",
 ];
 
-fn create_test_context() -> GlobalContext {
-  let mut context = GlobalContext::default();
-
-  for image_path in IMAGES {
-    let mut image_data = Vec::new();
-    File::open(repo_base_path(image_path))
-      .unwrap()
-      .read_to_end(&mut image_data)
-      .unwrap();
-
-    let image = ImageSource::from_bytes(&image_data).unwrap();
-    context
-      .persistent_image_store
-      .insert(image_path.to_string(), image);
-  }
+fn create_test_context() -> Fonts {
+  let mut context = Fonts::default();
 
   for (font, name, generic) in TEST_FONTS {
     let mut font_data = Vec::new();
@@ -106,8 +94,7 @@ fn create_test_context() -> GlobalContext {
       .unwrap();
 
     context
-      .font_context
-      .load_and_store(
+      .register(
         FontResource::new(font_data)
           .override_info(FontInfoOverride {
             family_name: Some(name),
@@ -125,7 +112,22 @@ pub fn create_test_viewport() -> Viewport {
   Viewport::new((1200, 630))
 }
 
-pub static CONTEXT: LazyLock<GlobalContext> = LazyLock::new(create_test_context);
+pub static CONTEXT: LazyLock<Fonts> = LazyLock::new(create_test_context);
+
+/// Test images, provided to renders as pre-fetched resources.
+pub static TEST_IMAGES: LazyLock<HashMap<Arc<str>, ImageSource>> = LazyLock::new(|| {
+  IMAGES
+    .iter()
+    .map(|path| {
+      let mut data = Vec::new();
+      File::open(repo_base_path(path))
+        .unwrap()
+        .read_to_end(&mut data)
+        .unwrap();
+      (Arc::from(*path), ImageSource::from_bytes(&data).unwrap())
+    })
+    .collect()
+});
 
 #[allow(dead_code)]
 pub fn run_fixture_test(node: Node, fixture_name: &str) {
@@ -133,7 +135,8 @@ pub fn run_fixture_test(node: Node, fixture_name: &str) {
   let options = RenderOptions::builder()
     .viewport(viewport)
     .node(node)
-    .global(&CONTEXT)
+    .fonts(&CONTEXT)
+    .images(TEST_IMAGES.clone())
     .build();
 
   run_fixture_test_with_options(options, fixture_name);
@@ -176,9 +179,9 @@ pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &
     SvgOptions::builder()
       .node(options.node().clone())
       .viewport(*options.viewport())
-      .global(options.global())
+      .fonts(options.fonts())
       .stylesheet(options.stylesheet().clone())
-      .fetched_resources(options.fetched_resources().clone())
+      .images(options.images().clone())
       .build(),
   ) {
     write(format!("tests/fixtures-generated/{fixture_name}.svg"), svg).unwrap();
@@ -287,7 +290,7 @@ impl IntoAnimationFixtureFrames<'_> for Vec<Node> {
               .viewport(viewport)
               .node(node)
               .time_ms(time_ms)
-              .global(&CONTEXT)
+              .fonts(&CONTEXT)
               .build(),
             frame_duration_ms,
           )

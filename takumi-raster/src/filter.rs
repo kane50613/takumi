@@ -621,7 +621,9 @@ mod tests {
       Filter::Opacity(PercentageNumber(0.5)),
     ];
 
-    let sizing = SizingContext::new_test(Viewport::new((100, 100)));
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((100, 100)))
+      .build();
     let mut buffer_pool = BufferPool::default();
     let width = image.width();
     let height = image.height();

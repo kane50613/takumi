@@ -29,18 +29,16 @@ const components = [
 
 type Component = (typeof components)[number];
 
-async function createRenderer(module: Component) {
-  return new Renderer({
-    persistentImages: module.persistentImages,
-    fonts:
-      module.fonts.length > 0
-        ? await Promise.all(module.fonts.map((font) => readFile(join("../../assets/fonts", font))))
-        : undefined,
-  });
+const renderer = new Renderer();
+
+function fontLoaders(module: Component) {
+  return module.fonts.map((font) => ({
+    key: font,
+    data: () => readFile(join("../../assets/fonts", font)),
+  }));
 }
 
 async function render(
-  renderer: Renderer,
   module: Component,
   ratio = 1,
   format: OutputFormat = "png",
@@ -49,6 +47,13 @@ async function render(
 ) {
   const jsxPrepareStart = performance.now();
   const { node, stylesheets } = await fromJsx(<module.default />);
+  const images = await Promise.all(
+    ("images" in module ? module.images : []).map(async ({ src, path }) => ({
+      src,
+      data: await readFile(join("../../assets/images", path)),
+    })),
+  );
+  const loaders = fontLoaders(module);
   const renderStart = performance.now();
 
   const buffer = await renderer.render(node, {
@@ -57,6 +62,8 @@ async function render(
     devicePixelRatio: ratio,
     stylesheets: [...stylesheets, ...("stylesheets" in module ? module.stylesheets : [])],
     drawDebugBorder: process.argv.includes("--debug"),
+    images,
+    fonts: loaders.length > 0 ? loaders : undefined,
     format,
     timeMs,
   });
@@ -77,19 +84,13 @@ async function render(
 }
 
 for (const component of components) {
-  const rendererPrepareStart = performance.now();
-  const renderer = await createRenderer(component);
-  const rendererPrepareMs = Math.round(performance.now() - rendererPrepareStart);
-
-  console.log(`Prepared ${component.name} renderer in ${rendererPrepareMs}ms`);
-
   if ("timestamps" in component) {
     for (const [index, timeMs] of component.timestamps.entries()) {
-      await render(renderer, component, 1, "webp", timeMs, index);
+      await render(component, 1, "webp", timeMs, index);
     }
     continue;
   }
 
-  await render(renderer, component);
-  await render(renderer, component, 2, "webp");
+  await render(component);
+  await render(component, 2, "webp");
 }

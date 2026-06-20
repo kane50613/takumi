@@ -3,19 +3,16 @@ use std::{
   cell::RefCell,
   collections::{HashMap, hash_map::Entry},
   iter::once,
-  ops::{Deref, DerefMut},
-  sync::{
-    Arc,
-    atomic::{AtomicU64, Ordering},
-  },
+  rc::Rc,
+  sync::Arc,
 };
 
 use image::{Rgba, RgbaImage};
 use parley::{
   GenericFamily, GlyphRun, LayoutContext, TextStyle, TreeBuilder,
   fontique::{
-    Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, QueryFamily,
-    QueryStatus, Script, ScriptExt,
+    Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, FontStyle,
+    QueryFamily, QueryStatus, Script, ScriptExt,
   },
 };
 use skrifa::{
@@ -33,6 +30,7 @@ use thiserror::Error;
 use tiny_skia::{IntSize, PathSegment as Command, Pixmap};
 
 use crate::{
+  context::RenderContext,
   layout::inline::{InlineBrush, InlineLayout},
   resources::{image_buffer::ImageBuffer, image_decoder::decode_png},
 };
@@ -575,8 +573,6 @@ fn guess_font_format(source: &[u8]) -> Result<FontFormat, FontError> {
 
 thread_local! {
   static LAYOUT_CONTEXT: RefCell<LayoutContext<InlineBrush>> = RefCell::new(LayoutContext::new());
-  static FONT_CONTEXT_CACHE: RefCell<Option<(u64, u64, parley::FontContext)>> =
-    const { RefCell::new(None) };
   static SHARED_RESOLVED_GLYPH_CACHE: RefCell<HashMap<u64, ResolvedGlyph>> =
     RefCell::new(HashMap::new());
 }
@@ -625,30 +621,51 @@ fn with_layout_context<R>(f: impl FnOnce(&mut LayoutContext<InlineBrush>) -> R) 
   })
 }
 
-static FONT_CONTEXT_NEXT_ID: AtomicU64 = AtomicU64::new(1);
-
-/// A context for managing fonts in the rendering system.
-pub struct FontContext {
-  id: u64,
-  version: AtomicU64,
-  inner: parley::FontContext,
+/// A font family produced by [`Fonts::register`], with the faces it contains.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct RegisteredFamily {
+  /// Family name as stored by the font system (normalized; reflects any override).
+  pub name: String,
+  /// Faces registered under this family.
+  pub faces: Vec<RegisteredFace>,
 }
 
-impl Clone for FontContext {
-  fn clone(&self) -> Self {
-    Self {
-      id: FONT_CONTEXT_NEXT_ID.fetch_add(1, Ordering::Relaxed),
-      version: AtomicU64::new(self.version.load(Ordering::Relaxed)),
-      inner: self.inner.clone(),
-    }
+/// A single face within a [`RegisteredFamily`].
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct RegisteredFace {
+  /// Weight class, typically `1.0..=1000.0`.
+  pub weight: f32,
+  /// CSS `font-style` value (`normal`, `italic`, or `oblique [<angle>deg]`).
+  pub style: String,
+  /// Width as a percentage of normal (e.g. `100.0`).
+  pub width: f32,
+  /// Index of the face within its source collection.
+  pub index: u32,
+}
+
+fn font_style_css(style: FontStyle) -> String {
+  match style {
+    FontStyle::Normal => "normal".to_string(),
+    FontStyle::Italic => "italic".to_string(),
+    FontStyle::Oblique(None) => "oblique".to_string(),
+    FontStyle::Oblique(Some(angle)) => format!("oblique {angle}deg"),
   }
 }
 
-impl Default for FontContext {
+/// The registry of fonts available to a renderer.
+///
+/// Registration is the only mutation; afterwards the assembled parley context is immutable
+/// and shared as `&self` across concurrent renders. Each render takes a cheap working clone
+/// (see [`RenderContext`]) for parley's `&mut` query API, so no per-thread or global state
+/// is needed.
+#[derive(Clone)]
+pub struct Fonts {
+  inner: parley::FontContext,
+}
+
+impl Default for Fonts {
   fn default() -> Self {
     Self {
-      id: FONT_CONTEXT_NEXT_ID.fetch_add(1, Ordering::Relaxed),
-      version: AtomicU64::new(0),
       inner: parley::FontContext {
         collection: Collection::new(CollectionOptions {
           system_fonts: false,
@@ -660,50 +677,52 @@ impl Default for FontContext {
   }
 }
 
-impl Deref for FontContext {
-  type Target = parley::FontContext;
+pub type FontsSnapshot = Rc<RefCell<Fonts>>;
 
-  fn deref(&self) -> &Self::Target {
-    &self.inner
+impl Fonts {
+  pub fn snapshot(&self) -> FontsSnapshot {
+    self.snapshot_with_fallbacks(None)
   }
-}
 
-impl DerefMut for FontContext {
-  fn deref_mut(&mut self) -> &mut Self::Target {
-    &mut self.inner
-  }
-}
+  pub fn snapshot_with_fallbacks(&self, fallbacks: Option<&[String]>) -> FontsSnapshot {
+    let mut cloned = self.inner.clone();
 
-impl FontContext {
-  #[inline]
-  fn with_inner_mut<R>(&self, f: impl FnOnce(&mut parley::FontContext) -> R) -> R {
-    let current_version = self.version.load(Ordering::Relaxed);
-    let id = self.id;
-    let outcome = FONT_CONTEXT_CACHE.with(|cell| {
-      let Ok(mut borrow) = cell.try_borrow_mut() else {
-        return Err(f);
-      };
-      let needs_clone = match &*borrow {
-        Some((cached_id, cached_version, _)) => {
-          *cached_id != id || *cached_version != current_version
-        }
-        None => true,
-      };
-      if needs_clone {
-        *borrow = Some((id, current_version, self.inner.clone()));
+    if let Some(names) = fallbacks {
+      let family_ids = names
+        .iter()
+        .filter_map(|name| cloned.collection.family_id(name))
+        .collect::<Vec<_>>();
+
+      for (script, _) in Script::all_samples() {
+        cloned.collection.set_fallbacks(
+          FallbackKey::new(*script, None),
+          family_ids.clone().into_iter(),
+        );
       }
-      let Some((_, _, inner)) = borrow.as_mut() else {
-        return Err(f);
-      };
-      Ok(f(inner))
-    });
-    match outcome {
-      Ok(r) => r,
-      Err(f) => f(&mut self.inner.clone()),
+    } else {
+      let registered_families = cloned
+        .collection
+        .family_names()
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+
+      let family_ids = registered_families
+        .iter()
+        .filter_map(|name| cloned.collection.family_id(name))
+        .collect::<Vec<_>>();
+
+      for (script, _) in Script::all_samples() {
+        cloned.collection.set_fallbacks(
+          FallbackKey::new(*script, None),
+          family_ids.clone().into_iter(),
+        );
+      }
     }
+
+    Rc::new(RefCell::new(Self { inner: cloned }))
   }
 
-  pub fn resolve_glyphs(
+  pub(crate) fn resolve_glyphs(
     &self,
     run: &GlyphRun<'_, InlineBrush>,
     font_ref: FontRef,
@@ -783,24 +802,70 @@ impl FontContext {
     result
   }
 
-  /// Line spacing (ascent + descent + leading) of the first available font
-  /// matching the given families and attributes, scaled to `font_size`.
-  /// Used as the `lh`/`rlh` basis when `line-height: normal`.
+  /// Registers a font, decoding it and skipping fonts already registered in this
+  /// context (deduped by content + family name). Returns the families it produced.
+  pub fn register(&mut self, font: FontResource) -> Result<Vec<RegisteredFamily>, FontError> {
+    let FontResource {
+      source,
+      info_override,
+      generic_family,
+    } = font;
+
+    let blob = source.into_blob()?;
+    let registered_fonts = self.inner.collection.register_fonts(blob, info_override);
+
+    let mut families = Vec::with_capacity(registered_fonts.len());
+    for (family, faces) in registered_fonts {
+      let faces = faces
+        .iter()
+        .map(|face| RegisteredFace {
+          weight: face.weight().value(),
+          style: font_style_css(face.style()),
+          width: face.width().percentage(),
+          index: face.index(),
+        })
+        .collect();
+      let name = self
+        .inner
+        .collection
+        .family_name(family)
+        .unwrap_or_default()
+        .to_string();
+      families.push(RegisteredFamily { name, faces });
+
+      if let Some(generic_family) = generic_family {
+        self
+          .inner
+          .collection
+          .append_generic_families(generic_family, once(family));
+      }
+    }
+
+    Ok(families)
+  }
+}
+
+impl RenderContext {
+  /// Mutable access to the render-local fonts. Callers must not re-enter while the
+  /// borrow is held (layout measures inline boxes before building the parley tree).
+  pub(crate) fn with_fonts<R>(&self, f: impl FnOnce(&mut Fonts) -> R) -> R {
+    f(&mut self.fonts.borrow_mut())
+  }
+
+  /// First available font's line spacing for `families`/`attributes`, scaled to `font_size`.
   pub fn first_font_line_spacing<'a>(
     &self,
     families: impl IntoIterator<Item = QueryFamily<'a>>,
     attributes: Attributes,
     font_size: f32,
   ) -> Option<f32> {
-    self.with_inner_mut(|ctx| {
-      let parley::FontContext {
-        collection,
-        source_cache,
-      } = ctx;
-      let mut query = collection.query(source_cache);
+    self.with_fonts(|fonts| {
+      let mut query = fonts.inner.collection.query(&mut fonts.inner.source_cache);
+      let mut result = None;
+
       query.set_families(families);
       query.set_attributes(attributes);
-      let mut result = None;
+
       query.matches_with(|font| {
         let Ok(font_ref) = FontRef::from_index(font.blob.data(), font.index) else {
           return QueryStatus::Continue;
@@ -809,57 +874,24 @@ impl FontContext {
         result = Some(metrics.ascent + metrics.descent + metrics.leading);
         QueryStatus::Stop
       });
+
       result
     })
   }
 
-  /// Create an inline layout with the given root style and function
+  /// Builds an inline layout with the given root style.
   pub fn tree_builder(
     &self,
     root_style: TextStyle<'_, '_, InlineBrush>,
     func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),
   ) -> (InlineLayout, String) {
-    self.with_inner_mut(|font_context| {
-      with_layout_context(|layout_context| {
-        let mut builder = layout_context.tree_builder(font_context, 1.0, true, &root_style);
+    self.with_fonts(|fonts| {
+      with_layout_context(|layout| {
+        let mut builder = layout.tree_builder(&mut fonts.inner, 1.0, true, &root_style);
         func(&mut builder);
         builder.build()
       })
     })
-  }
-
-  /// Loads font into internal font db with caching
-  pub fn load_and_store(&mut self, font: FontResource) -> Result<(), FontError> {
-    let FontResource {
-      source,
-      info_override,
-      generic_family,
-    } = font;
-
-    let fonts = self
-      .inner
-      .collection
-      .register_fonts(source.into_blob()?, info_override);
-
-    for (family, _) in fonts {
-      if let Some(generic_family) = generic_family {
-        self
-          .inner
-          .collection
-          .append_generic_families(generic_family, once(family));
-      }
-
-      for (script, _) in Script::all_samples() {
-        self
-          .inner
-          .collection
-          .append_fallbacks(FallbackKey::new(*script, None), once(family));
-      }
-    }
-
-    self.version.fetch_add(1, Ordering::Relaxed);
-
-    Ok(())
   }
 }
 
@@ -885,23 +917,22 @@ where
 impl<'a> FontSource<'a> {
   fn into_blob_variant(self) -> Result<Self, FontError> {
     match self {
-      Self::Raw(raw) => {
-        let font = load_font(raw, None)?;
-        Ok(Self::Blob(Blob::new(Arc::new(font))))
-      }
+      Self::Raw(raw) => Ok(Self::Blob(decode_font(raw)?)),
       Self::Blob(_) => Ok(self),
     }
   }
 
   fn into_blob(self) -> Result<Blob<u8>, FontError> {
     match self {
-      Self::Raw(raw) => {
-        let font = load_font(raw, None)?;
-        Ok(Blob::new(Arc::new(font)))
-      }
+      Self::Raw(raw) => decode_font(raw),
       Self::Blob(blob) => Ok(blob),
     }
   }
+}
+
+/// Decodes raw font bytes (decompressing woff2/woff) into a blob.
+fn decode_font(raw: Cow<'_, [u8]>) -> Result<Blob<u8>, FontError> {
+  Ok(Blob::new(Arc::new(load_font(raw, None)?)))
 }
 
 impl<'a> AsRef<[u8]> for FontSource<'a> {
@@ -950,8 +981,7 @@ impl<'a> FontResource<'a> {
     }
   }
 
-  /// Convert to resolved font resource
-  /// Woff2 and Woff should be decompressed into raw buffer.
+  /// Convert to resolved font resource, decompressing woff2/woff into a raw buffer.
   pub fn into_resolved(self) -> Result<Self, FontError> {
     let source = self.source.into_blob_variant()?;
     Ok(Self {

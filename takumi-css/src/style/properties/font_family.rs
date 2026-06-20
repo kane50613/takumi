@@ -31,6 +31,14 @@ impl FontFamily {
       FontFamilyToken::Generic(generic) => QueryFamily::Generic(*generic),
     })
   }
+
+  /// The families as parley `FontFamilyName`s, in declaration order.
+  pub fn names(&self) -> impl Iterator<Item = FontFamilyName<'_>> + Clone {
+    self.0.iter().map(|token| match token {
+      FontFamilyToken::Owned(name) => FontFamilyName::Named(name.as_str().into()),
+      FontFamilyToken::Generic(generic) => FontFamilyName::Generic(*generic),
+    })
+  }
 }
 
 impl<'i> FromCss<'i> for FontFamilyToken {
@@ -103,16 +111,7 @@ impl<'a> From<FontFamily> for ParleyFontFamily<'a> {
 
 impl<'a> From<&'a FontFamily> for ParleyFontFamily<'a> {
   fn from(family: &'a FontFamily) -> Self {
-    ParleyFontFamily::List(
-      family
-        .0
-        .iter()
-        .map(|token| match token {
-          FontFamilyToken::Owned(name) => FontFamilyName::Named(name.as_str().into()),
-          FontFamilyToken::Generic(generic) => FontFamilyName::Generic(*generic),
-        })
-        .collect(),
-    )
+    ParleyFontFamily::List(family.names().collect())
   }
 }
 

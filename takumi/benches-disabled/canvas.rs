@@ -1,7 +1,7 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 use takumi::{
-  GlobalContext,
+  Fonts,
   layout::{
     Viewport,
     node::Node,
@@ -19,11 +19,11 @@ const BENCH_WIDTH: u32 = 800;
 const BENCH_HEIGHT: u32 = 800;
 const IMAGE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../assets/images/yeecord.png");
 
-fn render_node(global: &GlobalContext, node: Node) {
+fn render_node(fonts: &Fonts, node: Node) {
   let options = RenderOptions::builder()
     .viewport(Viewport::new((BENCH_WIDTH, BENCH_HEIGHT)))
     .node(node)
-    .global(global)
+    .fonts(fonts)
     .build();
   let image = render(options).unwrap();
   black_box(image);
@@ -131,17 +131,17 @@ fn gradient_clip_mask_fixture() -> Node {
 }
 
 fn bench_canvas(c: &mut Criterion) {
-  let global = GlobalContext::default();
+  let fonts = Fonts::default();
   let mut group = c.benchmark_group("canvas");
 
   group.bench_function("nested_clip_masks", |b| {
-    b.iter(|| render_node(&global, black_box(nested_clip_masks_fixture())))
+    b.iter(|| render_node(&fonts, black_box(nested_clip_masks_fixture())))
   });
   group.bench_function("scaled_image_clip", |b| {
-    b.iter(|| render_node(&global, black_box(scaled_image_fixture())))
+    b.iter(|| render_node(&fonts, black_box(scaled_image_fixture())))
   });
   group.bench_function("gradient_clip_mask", |b| {
-    b.iter(|| render_node(&global, black_box(gradient_clip_mask_fixture())))
+    b.iter(|| render_node(&fonts, black_box(gradient_clip_mask_fixture())))
   });
 
   group.finish();

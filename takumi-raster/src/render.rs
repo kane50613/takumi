@@ -1,14 +1,15 @@
-use std::{collections::HashMap, ops::Range, sync::Arc};
+use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
 use image::RgbaImage;
 use parley::{GlyphRun, InlineBoxKind, PositionedLayoutItem};
 use serde::Serialize;
 use taffy::{AvailableSpace, Layout, NodeId, TaffyError, geometry::Size};
+use takumi_base::layout::style::SizingContext;
 use typed_builder::TypedBuilder;
 
 use crate::{
-  AnimationFrame, Canvas, DitheringAlgorithm, Error, GlobalContext, RenderContext, Result,
-  SizedFontStyle, apply_dithering, get_node_mut_by_path,
+  AnimationFrame, Canvas, DitheringAlgorithm, Error, Fonts, RenderContext, Result, SizedFontStyle,
+  apply_dithering, get_node_mut_by_path,
   layout::{
     Viewport,
     inline::{
@@ -33,16 +34,16 @@ use crate::{
 pub struct RenderOptions<'g> {
   /// The viewport to render the node in.
   pub(crate) viewport: Viewport,
-  /// The global context.
-  pub(crate) global: &'g GlobalContext,
+  /// The font context.
+  pub(crate) fonts: &'g Fonts,
   /// The node to render.
   pub(crate) node: Node,
   /// Whether to draw debug borders.
   #[builder(default = false)]
   pub(crate) draw_debug_border: bool,
-  /// The resources fetched externally.
+  /// Pre-decoded images keyed by `src`, resolved when a node references that URL.
   #[builder(default)]
-  pub(crate) fetched_resources: HashMap<Arc<str>, ImageSource>,
+  pub(crate) images: HashMap<Arc<str>, ImageSource>,
   /// CSS stylesheets to apply before layout/rendering.
   #[builder(default)]
   pub(crate) stylesheet: StyleSheet,
@@ -52,6 +53,10 @@ pub struct RenderOptions<'g> {
   /// Output dithering algorithm. Only used by encoding frontends.
   #[builder(default)]
   pub(crate) dithering: DitheringAlgorithm,
+  /// Per-render font fallback chain (family names in order). `None` uses all
+  /// registered families in registration order.
+  #[builder(default)]
+  pub(crate) font_families: Option<Vec<String>>,
 }
 
 impl<'g> RenderOptions<'g> {
@@ -65,9 +70,9 @@ impl<'g> RenderOptions<'g> {
     &self.node
   }
 
-  /// Returns the global context.
-  pub fn global(&self) -> &'g GlobalContext {
-    self.global
+  /// Returns the font context.
+  pub fn fonts(&self) -> &'g Fonts {
+    self.fonts
   }
 
   /// Returns the CSS stylesheet applied before layout.
@@ -75,9 +80,9 @@ impl<'g> RenderOptions<'g> {
     &self.stylesheet
   }
 
-  /// Returns the externally-fetched resources keyed by URL.
-  pub fn fetched_resources(&self) -> &HashMap<Arc<str>, ImageSource> {
-    &self.fetched_resources
+  /// Returns the pre-decoded images keyed by `src`.
+  pub fn images(&self) -> &HashMap<Arc<str>, ImageSource> {
+    &self.images
   }
 }
 
@@ -124,7 +129,7 @@ pub struct MeasuredNode {
 
 fn measured_run_text<'a>(
   text: &'a str,
-  spans: &[ProcessedInlineSpan<'_, '_>],
+  spans: &[ProcessedInlineSpan<'_>],
   glyph_run: &GlyphRun<'_, InlineBrush>,
 ) -> &'a str {
   let text_range = glyph_run.run().text_range();
@@ -181,25 +186,30 @@ struct MeasureExit {
 pub fn measure_layout<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
   let RenderOptions {
     viewport,
-    global,
+    fonts,
     node,
     draw_debug_border,
-    fetched_resources,
+    images,
     stylesheet,
     time_ms,
     dithering: _,
+    font_families,
   } = options;
-  let mut render_context = RenderContext::new(
-    global,
-    viewport,
-    fetched_resources,
-    stylesheet.into(),
-    time_ms,
-  );
-  render_context.draw_debug_border = draw_debug_border;
+
+  let render_context = RenderContext::builder()
+    .fonts(fonts.snapshot_with_fallbacks(font_families.as_deref()))
+    .sizing(SizingContext::builder().viewport(viewport).build())
+    .images(Rc::new(images))
+    .stylesheet(stylesheet.into())
+    .time_ms(time_ms)
+    .draw_debug_border(draw_debug_border)
+    .build();
+
   let mut root = RenderNode::from_node(&render_context, node);
   let mut tree = LayoutTree::from_render_node(&root);
+
   tree.compute_layout(render_context.sizing.viewport.into());
+
   let layout_results = tree.into_results();
 
   collect_measure_result(
@@ -214,8 +224,8 @@ pub fn measure_layout<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
   )
 }
 
-fn collect_measure_result<'g>(
-  node: &mut RenderNode<'g>,
+fn collect_measure_result(
+  node: &mut RenderNode,
   layout_results: &LayoutResults,
   node_id: NodeId,
   transform: Affine,
@@ -280,7 +290,7 @@ fn collect_measure_result<'g>(
             max_width,
             max_height,
             style: &font_style,
-            global: current.context.global,
+            context: &current.context,
             mode: InlineLayoutMode::Measure,
           });
           let parent_font_metrics = get_parent_font_metrics(&built.layout);
@@ -505,27 +515,30 @@ fn create_measured_node(
 pub fn render<'g>(options: RenderOptions<'g>) -> Result<RgbaImage> {
   let RenderOptions {
     viewport,
-    global,
+    fonts,
     node,
     draw_debug_border,
-    fetched_resources,
+    images,
     stylesheet,
     time_ms,
     dithering,
+    font_families,
   } = options;
 
-  let mut render_context = RenderContext::new(
-    global,
-    viewport,
-    fetched_resources,
-    stylesheet.into(),
-    time_ms,
-  );
-  render_context.draw_debug_border = draw_debug_border;
+  let render_context = RenderContext::builder()
+    .fonts(fonts.snapshot_with_fallbacks(font_families.as_deref()))
+    .sizing(SizingContext::builder().viewport(viewport).build())
+    .images(Rc::new(images))
+    .stylesheet(stylesheet.into())
+    .time_ms(time_ms)
+    .draw_debug_border(draw_debug_border)
+    .build();
 
   let mut root = RenderNode::from_node(&render_context, node);
   let mut tree = LayoutTree::from_render_node(&root);
+
   tree.compute_layout(render_context.sizing.viewport.into());
+
   let layout_results = tree.into_results();
   let root_node_id = layout_results.root_node_id();
   let root_size = layout_results
@@ -648,8 +661,8 @@ fn resolve_scene_at_time<'a, 'g>(
     .map(|scene| (scene, u64::from(scene.duration_ms.saturating_sub(1))))
 }
 
-pub(crate) fn render_node<'g>(
-  node: &mut RenderNode<'g>,
+pub(crate) fn render_node(
+  node: &mut RenderNode,
   layout_results: &LayoutResults,
   node_id: NodeId,
   canvas: &mut Canvas,
@@ -669,7 +682,7 @@ mod tests {
     slice_text_at_char_boundaries,
   };
   use crate::{
-    GlobalContext,
+    Fonts,
     layout::{
       Viewport,
       node::Node,
@@ -681,9 +694,9 @@ mod tests {
     measure_layout,
   };
 
-  fn make_scene<'g>(global: &'g GlobalContext, duration_ms: u32) -> SequentialScene<'g> {
+  fn make_scene<'g>(fonts: &'g Fonts, duration_ms: u32) -> SequentialScene<'g> {
     let options = RenderOptions::builder()
-      .global(global)
+      .fonts(fonts)
       .viewport(Viewport::new((10, 10)))
       .node(Node::container([]))
       .build();
@@ -696,8 +709,8 @@ mod tests {
 
   #[test]
   fn resolve_scene_at_time_uses_cumulative_durations() {
-    let global = GlobalContext::default();
-    let scenes = vec![make_scene(&global, 100), make_scene(&global, 200)];
+    let fonts = Fonts::default();
+    let scenes = vec![make_scene(&fonts, 100), make_scene(&fonts, 200)];
 
     let scene = resolve_scene_at_time(&scenes, 50);
     assert!(scene.is_some());
@@ -712,8 +725,8 @@ mod tests {
 
   #[test]
   fn resolve_scene_at_time_clamps_to_last_scene() {
-    let global = GlobalContext::default();
-    let scenes = vec![make_scene(&global, 100), make_scene(&global, 200)];
+    let fonts = Fonts::default();
+    let scenes = vec![make_scene(&fonts, 100), make_scene(&fonts, 200)];
 
     let scene = resolve_scene_at_time(&scenes, 500);
     assert!(scene.is_some());
@@ -723,8 +736,8 @@ mod tests {
 
   #[test]
   fn render_sequence_animation_returns_no_frames_for_zero_duration_timelines() {
-    let global = GlobalContext::default();
-    let scenes = vec![make_scene(&global, 0)];
+    let fonts = Fonts::default();
+    let scenes = vec![make_scene(&fonts, 0)];
 
     let frames_result = render_sequence_animation(&scenes, 30);
     assert!(frames_result.is_ok());
@@ -735,8 +748,8 @@ mod tests {
 
   #[test]
   fn render_sequence_animation_uses_per_frame_integer_durations() {
-    let global = GlobalContext::default();
-    let scenes = vec![make_scene(&global, 150)];
+    let fonts = Fonts::default();
+    let scenes = vec![make_scene(&fonts, 150)];
 
     let frames_result = render_sequence_animation(&scenes, 30);
     assert!(frames_result.is_ok());
@@ -768,7 +781,7 @@ mod tests {
 
   #[test]
   fn measure_layout_supports_structured_keyframes() {
-    let global = GlobalContext::default();
+    let fonts = Fonts::default();
     let node = Node::container([]).with_tag_name("div").with_style(
       Style::default()
         .with(StyleDeclaration::width(Px(100.0)))
@@ -787,7 +800,7 @@ mod tests {
     );
 
     let options = RenderOptions::builder()
-      .global(&global)
+      .fonts(&fonts)
       .viewport(Viewport::new((200, 100)))
       .node(node)
       .stylesheet(
@@ -834,7 +847,7 @@ mod tests {
     // The absolute's containing block is the relative root, not the static
     // middle, so its transform must resolve against the root's origin (0, 0)
     // plus its own insets — independent of the static middle's offset.
-    let global = GlobalContext::default();
+    let fonts = Fonts::default();
     let abs = Node::container([]).with_style(
       Style::default()
         .with(StyleDeclaration::position(Position::Absolute))
@@ -861,7 +874,7 @@ mod tests {
     );
 
     let options = RenderOptions::builder()
-      .global(&global)
+      .fonts(&fonts)
       .viewport(Viewport::new((200, 200)))
       .node(root)
       .build();
@@ -904,9 +917,9 @@ mod tests {
           Color::from_rgb(0x0b1020),
         ))),
     );
-    let global = GlobalContext::default();
+    let fonts = Fonts::default();
     let options = RenderOptions::builder()
-      .global(&global)
+      .fonts(&fonts)
       .viewport(Viewport::new((256, 256)))
       .node(node.clone())
       .build();

@@ -27,23 +27,20 @@ export function GET(request: Request) {
 }
 ```
 
-For shared configuration and cache isolation, create your own image response factory.
+Pass custom fonts per response; identical fonts are registered once and reused automatically.
 
 ```tsx
-import { createImageResponse } from "@takumi-rs/image-response";
-
-const ogImage = createImageResponse({
-  fonts: [
-    {
-      data: () => fetch("/fonts/Inter-Regular.ttf").then((res) => res.arrayBuffer()),
-      key: "inter-regular",
-      name: "Inter",
-    },
-  ],
-});
+import { ImageResponse } from "@takumi-rs/image-response";
 
 export function GET() {
-  return ogImage(<OgImage />);
+  return new ImageResponse(<OgImage />, {
+    fonts: [
+      {
+        data: () => fetch("/fonts/Inter-Regular.ttf").then((res) => res.arrayBuffer()),
+        name: "Inter",
+      },
+    ],
+  });
 }
 ```
 
@@ -85,9 +82,7 @@ export function GET(request: Request) {
 }
 ```
 
-The same pattern also works for `persistentImages`. Caches are scoped to each `createImageResponse()` instance.
-
-`loadDefaultFonts` is only supported by the native `@takumi-rs/core` renderer. It has no effect when using the WASM renderer.
+Images can likewise be provided up front via `images`, keyed by `src`, each with bytes or a sync/async loader.
 
 ### Bring-Your-Own-Renderer (BYOR)
 

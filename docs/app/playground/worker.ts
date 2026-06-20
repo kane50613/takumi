@@ -51,7 +51,7 @@ self.onmessage = async (event: MessageEvent) => {
 
         const resourceUrls = extractResourceUrls(node);
 
-        const fetchedResources = await fetchResources(resourceUrls, {
+        const images = await fetchResources(resourceUrls, {
           cache: fetchCache,
         });
 
@@ -73,7 +73,7 @@ self.onmessage = async (event: MessageEvent) => {
                 format,
                 quality: options.quality,
                 devicePixelRatio: options.devicePixelRatio,
-                fetchedResources,
+                images,
                 stylesheets: effectiveStylesheets,
                 fps,
               });
@@ -81,7 +81,7 @@ self.onmessage = async (event: MessageEvent) => {
           : renderer.render(node, {
               ...options,
               stylesheets: effectiveStylesheets,
-              fetchedResources,
+              images,
             });
         const duration = performance.now() - start;
 

@@ -34,9 +34,10 @@ export type RenderOptions = {
    */
   quality?: number;
   /**
-   * The resources fetched externally. You should collect the fetch tasks first using `extractResourceUrls` and then pass the resources here.
+   * Images keyed by `src`, each carrying raw bytes. Provided up front and used
+   * in place of fetching external `src` URLs during rendering.
    */
-  fetchedResources?: ImageSource[];
+  images?: ImageSource[];
   /**
    * CSS stylesheets to apply before rendering.
    */
@@ -63,6 +64,11 @@ export type RenderOptions = {
    * @default "none"
    */
   dithering?: "none" | "ordered-bayer" | "floyd-steinberg";
+  /**
+   * Per-render font stack: ordered family names used as the fallback chain.
+   * Defaults to all registered families in registration order.
+   */
+  fontFamilies?: string[];
 };
 
 export type RenderAnimationOptions = {
@@ -75,9 +81,10 @@ export type RenderAnimationOptions = {
    */
   quality?: number;
   /**
-   * The resources fetched externally. You should collect the fetch tasks first using `extractResourceUrls` and then pass the resources here.
+   * Images keyed by `src`, each carrying raw bytes. Provided up front and used
+   * in place of fetching external `src` URLs during rendering.
    */
-  fetchedResources?: ImageSource[];
+  images?: ImageSource[];
   drawDebugBorder?: boolean;
   /**
    * CSS stylesheets to apply before rendering.
@@ -92,6 +99,11 @@ export type RenderAnimationOptions = {
    * Frames per second for timeline sampling.
    */
   fps: number;
+  /**
+   * Per-render font stack: ordered family names used as the fallback chain.
+   * Defaults to all registered families in registration order.
+   */
+  fontFamilies?: string[];
 };
 
 export type EncodeFramesOptions = {
@@ -103,9 +115,10 @@ export type EncodeFramesOptions = {
    */
   quality?: number;
   /**
-   * The resources fetched externally. You should collect the fetch tasks first using `extractResourceUrls` and then pass the resources here.
+   * Images keyed by `src`, each carrying raw bytes. Provided up front and used
+   * in place of fetching external `src` URLs during rendering.
    */
-  fetchedResources?: ImageSource[];
+  images?: ImageSource[];
   drawDebugBorder?: boolean;
   /**
    * CSS stylesheets to apply before rendering.
@@ -116,6 +129,11 @@ export type EncodeFramesOptions = {
    * @default 1.0
    */
   devicePixelRatio?: number;
+  /**
+   * Per-render font stack: ordered family names used as the fallback chain.
+   * Defaults to all registered families in registration order.
+   */
+  fontFamilies?: string[];
 };
 
 export type FontDetails = {
@@ -128,6 +146,8 @@ export type FontDetails = {
 export type ImageSource = {
   src: string;
   data: ByteBuf;
+  /** Cache policy for the decoded image. Defaults to `"auto"`. */
+  cache?: "auto" | "none";
 };
 
 export type KeyframeRule = {
@@ -142,20 +162,16 @@ export type KeyframesRule = {
 
 export type Font = FontDetails | ByteBuf;
 
-export type ConstructRendererOptions = {
-  /**
-   * The images that needs to be preloaded into the renderer.
-   */
-  persistentImages?: ImageSource[];
-  /**
-   * The fonts being used.
-   */
-  fonts?: Font[];
-  /**
-   * Whether to load the default fonts.
-   * If `fonts` are provided, this will be `false` by default.
-   */
-  loadDefaultFonts?: boolean;
+export type RegisteredFace = {
+  weight: number;
+  style: string;
+  width: number;
+  index: number;
+};
+
+export type RegisteredFamily = {
+  name: string;
+  faces: RegisteredFace[];
 };
 
 export type MeasuredTextRun = {

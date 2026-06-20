@@ -66,7 +66,7 @@ pub fn measure_image_node(
       height: svg.tree.size().height(),
     },
     ImageSource::Gif(gif) => {
-      let frame = gif.frame_at_time(context.time);
+      let frame = gif.frame_at_time(context.time_ms);
       Size {
         width: frame.width() as f32,
         height: frame.height() as f32,
@@ -186,12 +186,8 @@ pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
     return Err(ImageResourceError::SvgParseNotSupported);
   }
 
-  if let Some(img) = context.fetched_resources.get(src) {
+  if let Some(img) = context.images.get(src) {
     return Ok(img.clone());
-  }
-
-  if let Some(img) = context.global.persistent_image_store.get(src) {
-    return Ok(img);
   }
 
   Err(ImageResourceError::Unknown)
@@ -204,10 +200,11 @@ mod tests {
   use image::RgbaImage;
   use serde_json::from_value;
   use taffy::{AvailableSpace, Dimension, Size, Style};
+  use takumi_css::SizingContext;
 
   use super::{image_resource_url, measure_image_node};
   use crate::{
-    GlobalContext,
+    Fonts,
     context::RenderContext,
     layout::{
       Viewport,
@@ -311,8 +308,15 @@ mod tests {
 
   #[test]
   fn fixed_style_size_uses_declared_lengths_instead_of_available_space() {
-    let global = GlobalContext::default();
-    let context = RenderContext::new_test(&global, Viewport::new((1200, 630)));
+    let fonts = Fonts::default();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
     let image = ImageData::from(ImageSource::from(RgbaImage::new(10, 10)));
     let style = Style {
       size: Size {

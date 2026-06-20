@@ -2,7 +2,6 @@ export const width = 1200;
 export const height = 675;
 
 export const name = "v1";
-export const persistentImages = [];
 export const fonts = [];
 
 const Logo = () => (

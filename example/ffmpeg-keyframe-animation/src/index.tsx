@@ -1,9 +1,7 @@
-import { readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { spawn } from "bun";
 import { getHighlighterTokens, keyframes, Scene } from "./Scene";
 import { render } from "takumi-js";
-import type { ImageSourceLoader } from "@takumi-rs/core";
 
 const fps = 30;
 const durationSeconds = 4;
@@ -44,19 +42,13 @@ const ffmpeg = spawn(
   { stdin: "pipe", stdout: "ignore", stderr: "ignore" },
 );
 
-const persistentImages: ImageSourceLoader[] = [
-  {
-    src: "logo.svg",
-    data: () => readFile(join(import.meta.dir, "../../../docs/public/logo.svg")),
-  },
-  {
-    src: "background.jpg",
-    data: () =>
-      readFile(
-        join(import.meta.dir, "../../../assets/images/martin-martz-W0NRebXbsjM-unsplash.jpg"),
-      ),
-  },
-];
+const images = [
+  { src: "logo.svg", path: "takumi.svg" },
+  { src: "background.jpg", path: "martin-martz-W0NRebXbsjM-unsplash.jpg" },
+].map(({ src, path }) => ({
+  src,
+  data: () => Bun.file(resolve(import.meta.dir, "../../../assets/images", path)).arrayBuffer(),
+}));
 
 const thumbnailPath = resolve(import.meta.dir, "../output/thumbnail.webp");
 console.log(`Rendering thumbnail to ${thumbnailPath}...`);
@@ -68,8 +60,8 @@ const thumbnailFrame = await render(<Scene tokens={tokens} showPlayButton={true}
   devicePixelRatio,
   format: "webp",
   keyframes,
+  images,
   timeMs: 2500,
-  persistentImages,
 });
 
 if (!thumbnailFrame) throw new Error("Thumbnail frame is undefined");
@@ -88,8 +80,8 @@ const framePromises = Array.from({ length: totalFrames }, (_, i) => {
     devicePixelRatio,
     format: "raw",
     keyframes,
+    images,
     timeMs,
-    persistentImages,
   });
 });
 

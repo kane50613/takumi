@@ -76,12 +76,12 @@ let { node } = await fromJsx(<div tw="flex justify-center items-center text-3xl"
 node = extractEmojis(node, "twemoji");
 
 const resourceUrls = extractResourceUrls(node);
-const fetchedResources = await fetchResources(resourceUrls);
+const images = await fetchResources(resourceUrls);
 
 const renderer = new Renderer();
 
 const image = await renderer.render(node, {
-  fetchedResources,
+  images,
 });
 ```
 

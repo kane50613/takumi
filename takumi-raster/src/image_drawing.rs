@@ -48,7 +48,7 @@ pub fn process_image_for_object_fit<'i>(
   let (source_width, source_height) = match image {
     ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
     ImageSource::Gif(gif) => {
-      let rendered = gif.frame_at_time(context.time);
+      let rendered = gif.frame_at_time(context.time_ms);
       (rendered.width() as f32, rendered.height() as f32)
     }
     #[cfg(feature = "svg")]
@@ -69,7 +69,7 @@ pub fn process_image_for_object_fit<'i>(
           content_box.width as u32,
           content_box.height as u32,
           context.style.image_rendering,
-          context.time,
+          context.time_ms,
         )?,
         logical_to_source: if content_box.width == 0.0 || content_box.height == 0.0 {
           Affine::IDENTITY
@@ -102,7 +102,7 @@ pub fn process_image_for_object_fit<'i>(
             new_width as u32,
             new_height as u32,
             context.style.image_rendering,
-            context.time,
+            context.time_ms,
           )?,
           logical_to_source: if new_width == 0.0 || new_height == 0.0 {
             Affine::IDENTITY
@@ -138,7 +138,7 @@ pub fn process_image_for_object_fit<'i>(
             content_box.width as u32,
             content_box.height as u32,
             context.style.image_rendering,
-            context.time,
+            context.time_ms,
           )?,
           logical_to_source: if new_width == 0.0 || new_height == 0.0 {
             Affine::IDENTITY
@@ -163,14 +163,14 @@ pub fn process_image_for_object_fit<'i>(
           new_width as u32,
           new_height as u32,
           context.style.image_rendering,
-          context.time,
+          context.time_ms,
         )?
       } else {
         image.render_for_layout(
           image_width as u32,
           image_height as u32,
           context.style.image_rendering,
-          context.time,
+          context.time_ms,
         )?
       };
 
@@ -212,7 +212,7 @@ pub fn process_image_for_object_fit<'i>(
               image_width as u32,
               image_height as u32,
               context.style.image_rendering,
-              context.time,
+              context.time_ms,
             )?,
             logical_to_source: source_to_intrinsic,
           },
@@ -251,7 +251,7 @@ pub fn process_image_for_object_fit<'i>(
             crop_width as u32,
             crop_height as u32,
             context.style.image_rendering,
-            context.time,
+            context.time_ms,
           )?,
           logical_to_source: source_to_intrinsic * Affine::translation(crop_x, crop_y),
         },

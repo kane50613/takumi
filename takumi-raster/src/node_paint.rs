@@ -369,7 +369,7 @@ fn draw_text_node_content(
 
   let max_height = resolve_inline_max_height(&font_style, size.height);
 
-  let inline_text: InlineItem<'_, '_> = InlineItem::Text {
+  let inline_text: InlineItem<'_> = InlineItem::Text {
     text: text.text.as_str().into(),
     context,
   };
@@ -383,7 +383,7 @@ fn draw_text_node_content(
     max_width: size.width,
     max_height,
     style: &font_style,
-    global: context.global,
+    context,
     mode: InlineLayoutMode::Draw,
   });
 

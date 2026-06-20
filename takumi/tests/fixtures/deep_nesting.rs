@@ -105,7 +105,7 @@ fn deep_nesting_stack_overflow() {
   let options = RenderOptions::builder()
     .viewport(viewport)
     .node(current_node)
-    .global(&CONTEXT)
+    .fonts(&CONTEXT)
     .build();
 
   let measured = measure_layout(options).unwrap();
