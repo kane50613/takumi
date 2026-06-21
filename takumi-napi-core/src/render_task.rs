@@ -1,5 +1,4 @@
 use std::{
-  borrow::Cow,
   collections::HashMap,
   mem::take,
   sync::{Arc, RwLock},
@@ -112,7 +111,7 @@ impl Task for RenderTask {
     let mut buffer = Vec::new();
 
     write_image(
-      Cow::Owned(image),
+      &image,
       &mut buffer,
       self
         .format

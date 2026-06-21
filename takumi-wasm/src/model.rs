@@ -189,20 +189,18 @@ pub enum OutputFormat {
 }
 
 impl OutputFormat {
-  /// Maps to a raster [`ImageOutputFormat`]. JPEG folds `quality` (default 75);
-  /// WebP is lossless-only on wasm, so `quality` is ignored for it.
-  pub(crate) fn into_image_output_format(
-    self,
-    quality: Option<u8>,
-  ) -> takumi_raster::ImageOutputFormat {
-    use takumi_raster::{ImageOutputFormat, Quality};
+  /// Maps to a raster [`OutputFormat`](takumi_raster::OutputFormat). JPEG folds
+  /// `quality` (default 75); WebP is lossless-only on wasm, so `quality` is
+  /// ignored for it.
+  pub(crate) fn into_image_output_format(self, quality: Option<u8>) -> takumi_raster::OutputFormat {
+    use takumi_raster::{OutputFormat as RasterOutputFormat, Quality};
     match self {
-      OutputFormat::Png => ImageOutputFormat::Png,
-      OutputFormat::Jpeg => ImageOutputFormat::Jpeg {
+      OutputFormat::Png => RasterOutputFormat::Png,
+      OutputFormat::Jpeg => RasterOutputFormat::Jpeg {
         quality: quality.map_or_else(Quality::default, Quality::new),
       },
-      OutputFormat::WebP => ImageOutputFormat::WebPLossless,
-      OutputFormat::Ico => ImageOutputFormat::Ico,
+      OutputFormat::WebP => RasterOutputFormat::WebPLossless,
+      OutputFormat::Ico => RasterOutputFormat::Ico,
       OutputFormat::Raw => unreachable!("Raw format should be handled separately"),
     }
   }

@@ -7,7 +7,6 @@ use std::{
   sync::{Arc, LazyLock},
 };
 
-use image::RgbaImage;
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use takumi::{
@@ -183,15 +182,15 @@ pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &
   let image = render(options).unwrap();
   let golden_path = format!("tests/fixtures-generated/{fixture_name}.webp");
 
-  save_image(image, &golden_path, ImageOutputFormat::WebPLossless);
+  save_image(image, &golden_path, OutputFormat::WebPLossless);
 }
 
-fn save_image<P: AsRef<Path>>(image: RgbaImage, path: P, format: ImageOutputFormat) {
+fn save_image<P: AsRef<Path>>(image: Bitmap, path: P, format: OutputFormat) {
   let path = path.as_ref();
 
   let mut file = File::create(path).unwrap();
 
-  write_image(Cow::Owned(image), &mut file, format).unwrap();
+  write_image(&image, &mut file, format).unwrap();
 }
 
 #[allow(dead_code)]

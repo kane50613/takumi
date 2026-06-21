@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 use parley::GenericFamily;
 use takumi::{
   prelude::{Length::*, *},
-  render_sequence_animation,
+  render_animation,
 };
 
 use crate::test_utils::{CONTEXT, run_animation_fixture_test};
@@ -111,7 +111,7 @@ fn keyframe_interpolation_frames() -> Vec<AnimationFrame> {
     .duration_ms(KEYFRAME_INTERPOLATION_DURATION_MS)
     .build();
 
-  render_sequence_animation(&[scene], KEYFRAME_INTERPOLATION_FPS).unwrap()
+  render_animation(&[scene], KEYFRAME_INTERPOLATION_FPS).unwrap()
 }
 
 fn keyframe_interpolation_options() -> RenderOptions<'static> {

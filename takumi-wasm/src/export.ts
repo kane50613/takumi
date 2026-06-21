@@ -29,20 +29,44 @@ export type ImageLoader = Omit<ImageSource, "data"> & {
   data: ImageLoaderData | (() => ImageLoaderData | Promise<ImageLoaderData>);
 };
 
-export type RenderOptions = Omit<RenderOptionsInternal, "images"> & {
-  fonts?: FontLoader[];
-  images?: ImageLoader[];
-};
+/**
+ * Output format. Format-specific options live on the variant that supports them,
+ * so `quality` cannot be paired with a lossless format. On wasm, WebP is always
+ * lossless (lossy WebP is native-only).
+ */
+export type OutputFormatOptions =
+  | { format?: "png" }
+  | { format: "jpeg"; quality?: number }
+  | { format: "webp" }
+  | { format: "ico" }
+  | { format: "raw" };
 
-export type RenderAnimationOptions = Omit<RenderAnimationOptionsInternal, "images"> & {
-  fonts?: FontLoader[];
-  images?: ImageLoader[];
-};
+export type RenderOptions = Omit<RenderOptionsInternal, "images" | "format" | "quality"> &
+  OutputFormatOptions & {
+    fonts?: FontLoader[];
+    images?: ImageLoader[];
+  };
 
-export type EncodeFramesOptions = Omit<EncodeFramesOptionsInternal, "images"> & {
-  fonts?: FontLoader[];
-  images?: ImageLoader[];
-};
+/**
+ * Animation output format. On wasm, WebP animation is always lossless (lossy
+ * WebP is native-only).
+ */
+export type AnimationOutputFormatOptions =
+  | { format?: "webp" }
+  | { format: "apng" }
+  | { format: "gif" };
+
+export type RenderAnimationOptions = Omit<RenderAnimationOptionsInternal, "images" | "format"> &
+  AnimationOutputFormatOptions & {
+    fonts?: FontLoader[];
+    images?: ImageLoader[];
+  };
+
+export type EncodeFramesOptions = Omit<EncodeFramesOptionsInternal, "images" | "format"> &
+  AnimationOutputFormatOptions & {
+    fonts?: FontLoader[];
+    images?: ImageLoader[];
+  };
 
 async function resolveImageLoaders(images: ImageLoader[]): Promise<ImageSource[]> {
   const bySrc = new Map<string, ImageLoader>();

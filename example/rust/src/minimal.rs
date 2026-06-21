@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fs::File};
+use std::fs::File;
 
 use takumi::{
   prelude::{Length::Px, *},
@@ -31,10 +31,5 @@ pub fn say_hello_to(name: &str) {
   let image = render(options).unwrap();
 
   let mut file = File::create("output.webp").unwrap();
-  write_image(
-    Cow::Owned(image),
-    &mut file,
-    ImageOutputFormat::WebPLossless,
-  )
-  .unwrap();
+  write_image(&image, &mut file, OutputFormat::WebPLossless).unwrap();
 }

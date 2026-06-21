@@ -1,5 +1,5 @@
 use takumi::{
-  measure_layout,
+  measure,
   prelude::{Length::*, *},
 };
 
@@ -102,7 +102,7 @@ fn deep_nesting_stack_overflow() {
     .fonts(&CONTEXT)
     .build();
 
-  let measured = measure_layout(options).unwrap();
+  let measured = measure(options).unwrap();
   assert!(measured.width > 0.0);
 
   run_fixture_test(
