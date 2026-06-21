@@ -28,12 +28,7 @@ export default function RootElement({ children }: { children: ReactNode }) {
       <body className="flex flex-col min-h-screen">
         <Provider>
           <Banner id="takumi-v2-beta">
-            <a
-              href="https://v1.takumi.kane.tw"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2"
-            >
+            <a href="https://v1.takumi.kane.tw" target="_blank" rel="noreferrer">
               You're reading the v2 beta docs. For the stable release, switch to v1 →
             </a>
           </Banner>
