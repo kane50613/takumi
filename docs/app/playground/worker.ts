@@ -57,7 +57,7 @@ self.onmessage = async (event: MessageEvent) => {
 
         const start = performance.now();
         const animationOptions = options.animation;
-        const outputBuffer = animationOptions
+        const outputBuffer = await (animationOptions
           ? (() => {
               const format = animationOptions.format ?? "webp";
               const fps = animationOptions.fps ?? 30;
@@ -82,7 +82,7 @@ self.onmessage = async (event: MessageEvent) => {
               ...options,
               stylesheets: effectiveStylesheets,
               images,
-            });
+            }));
         const duration = performance.now() - start;
 
         postMessage(
