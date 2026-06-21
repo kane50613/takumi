@@ -16,8 +16,8 @@
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "tailwindcss": "^4.3.0",
+    "tailwindcss": "^4.3.1",
     "typescript": "catalog:",
-    "unocss": "^66.7.0"
+    "unocss": "^66.7.2"
   }
 }

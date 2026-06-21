@@ -23,8 +23,8 @@
     "@arethetypeswrong/core": "^0.18.3",
     "@types/node": "catalog:",
     "lefthook": "^2.1.9",
-    "oxfmt": "^0.54.0",
-    "oxlint": "^1.69.0",
+    "oxfmt": "^0.55.0",
+    "oxlint": "^1.70.0",
     "publint": "^0.3.21",
     "takumi-js": "workspace:*",
     "tegami": "0.1.0-beta.4",
@@ -32,16 +32,16 @@
   },
   "catalog": {
     "@types/bun": "^1.3.14",
-    "@types/node": "^25.9.2",
+    "@types/node": "^25.9.4",
     "@types/react": "19.2.17",
     "@types/react-dom": "^19.2.3",
-    "lucide-react": "^1.17.0",
+    "lucide-react": "^1.21.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "tsdown": "^0.22.3",
     "unrun": "^0.3.1",
     "typescript": "6.0.3",
     "vite": "^8.0.16",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.9"
   }
 }
