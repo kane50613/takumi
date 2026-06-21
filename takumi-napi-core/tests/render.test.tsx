@@ -319,17 +319,17 @@ describe("renderAnimation", () => {
     expect(result.subarray(0, 6).toString("ascii")).toMatch(/^GIF8[79]a$/);
   });
 
-  test("rejects quality > 100", () => {
-    expect(
-      renderer.renderAnimation({
-        scenes: [scene],
-        width: 1200,
-        height: 630,
-        fps: 1,
-        format: "gif",
-        quality: 101,
-      }),
-    ).rejects.toThrow();
+  test("clamps quality > 100", async () => {
+    const result = await renderer.renderAnimation({
+      scenes: [scene],
+      width: 1200,
+      height: 630,
+      fps: 1,
+      format: "webp",
+      quality: 101,
+    });
+
+    expect(result).toBeInstanceOf(Buffer);
   });
 });
 

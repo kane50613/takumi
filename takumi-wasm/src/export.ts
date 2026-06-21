@@ -67,15 +67,41 @@ export type RenderOptions = Omit<RenderOptionsInternal, "images" | "format" | "q
     images?: ImageLoader[];
   };
 
-export type RenderAnimationOptions = Omit<RenderAnimationOptionsInternal, "images"> & {
-  fonts?: FontLoader[];
-  images?: ImageLoader[];
+/**
+ * Animation output format. On wasm, WebP animation is always lossless (lossy
+ * WebP is native-only).
+ */
+export type AnimationOutputFormatOptions =
+  | { format?: "webp" }
+  | { format: "apng" }
+  | { format: "gif" };
+
+type InnerAnimationFormat = {
+  format: NonNullable<RenderAnimationOptionsInternal["format"]>;
 };
 
-export type EncodeFramesOptions = Omit<EncodeFramesOptionsInternal, "images"> & {
-  fonts?: FontLoader[];
-  images?: ImageLoader[];
-};
+function toInnerAnimationFormat(options: AnimationOutputFormatOptions): InnerAnimationFormat {
+  switch (options.format) {
+    case "apng":
+      return { format: "apng" };
+    case "gif":
+      return { format: "gif" };
+    default:
+      return { format: "webp" };
+  }
+}
+
+export type RenderAnimationOptions = Omit<RenderAnimationOptionsInternal, "images" | "format"> &
+  AnimationOutputFormatOptions & {
+    fonts?: FontLoader[];
+    images?: ImageLoader[];
+  };
+
+export type EncodeFramesOptions = Omit<EncodeFramesOptionsInternal, "images" | "format"> &
+  AnimationOutputFormatOptions & {
+    fonts?: FontLoader[];
+    images?: ImageLoader[];
+  };
 
 async function resolveImageLoaders(images: ImageLoader[]): Promise<ImageSource[]> {
   const bySrc = new Map<string, ImageLoader>();
@@ -153,6 +179,7 @@ export class Renderer {
 
     return this.inner.renderAnimation({
       ...rest,
+      ...toInnerAnimationFormat(options),
       images: resolvedImages,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
@@ -165,6 +192,7 @@ export class Renderer {
 
     return this.inner.encodeFrames(frames, {
       ...rest,
+      ...toInnerAnimationFormat(options),
       images: resolvedImages,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });

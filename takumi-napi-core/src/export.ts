@@ -71,17 +71,52 @@ export type RenderOptions = Omit<
     images?: ImageLoader[];
   };
 
-export type RenderAnimationOptions = Omit<RenderAnimationOptionsInternal, "images"> & {
-  fonts?: FontLoader[];
-  signal?: AbortSignal;
-  images?: ImageLoader[];
+/**
+ * Animation output format. `quality` and `lossless` are WebP-only; for WebP,
+ * `lossless` takes precedence over `quality`, and omitting both encodes
+ * losslessly.
+ */
+export type AnimationOutputFormatOptions =
+  | { format?: "webp"; quality?: number; lossless?: boolean }
+  | { format: "apng" }
+  | { format: "gif" };
+
+type InnerAnimationFormat = {
+  format: NonNullable<RenderAnimationOptionsInternal["format"]>;
+  quality?: number;
+  lossless?: boolean;
 };
 
-export type EncodeFramesOptions = Omit<EncodeFramesOptionsInternal, "images"> & {
-  fonts?: FontLoader[];
-  signal?: AbortSignal;
-  images?: ImageLoader[];
-};
+function toInnerAnimationFormat(options: AnimationOutputFormatOptions): InnerAnimationFormat {
+  switch (options.format) {
+    case "apng":
+      return { format: "apng" };
+    case "gif":
+      return { format: "gif" };
+    default:
+      return { format: "webp", quality: options.quality, lossless: options.lossless };
+  }
+}
+
+export type RenderAnimationOptions = Omit<
+  RenderAnimationOptionsInternal,
+  "images" | "format" | "quality" | "lossless"
+> &
+  AnimationOutputFormatOptions & {
+    fonts?: FontLoader[];
+    signal?: AbortSignal;
+    images?: ImageLoader[];
+  };
+
+export type EncodeFramesOptions = Omit<
+  EncodeFramesOptionsInternal,
+  "images" | "format" | "quality" | "lossless"
+> &
+  AnimationOutputFormatOptions & {
+    fonts?: FontLoader[];
+    signal?: AbortSignal;
+    images?: ImageLoader[];
+  };
 
 async function resolveImageLoaders(images: ImageLoader[]): Promise<ImageSource[]> {
   const bySrc = new Map<string, ImageLoader>();
@@ -155,6 +190,7 @@ export class Renderer {
     return this.inner.renderAnimation(
       {
         ...rest,
+        ...toInnerAnimationFormat(options),
         images: resolvedImages,
         fontFamilies: fontFamilies ?? registeredFamilies,
       },
@@ -171,6 +207,7 @@ export class Renderer {
       frames,
       {
         ...rest,
+        ...toInnerAnimationFormat(options),
         images: resolvedImages,
         fontFamilies: fontFamilies ?? registeredFamilies,
       },
