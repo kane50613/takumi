@@ -11,7 +11,7 @@ packages:
 
 ### Load only the Google Font subsets the content needs
 
-`loadGoogleFonts(content, families)` scans the codepoints a render uses and fetches just the matching `unicode-range` subsets, so a multilingual image pulls a handful of CJK blocks instead of a whole font.
+`googleFontSubsets(content, families)` scans the codepoints a render uses, fetches every family's metadata in one css2 request, and keeps just the matching `unicode-range` subsets, so a multilingual image pulls a handful of CJK blocks instead of a whole font. Pass a `cache` Map to reuse the CSS across renders.
 
 ### Group coverage subsets under one logical family
 
