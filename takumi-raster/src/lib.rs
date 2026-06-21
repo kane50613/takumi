@@ -39,7 +39,7 @@ mod write;
 
 use tiny_skia::{IntSize, Pixmap, PixmapRef};
 
-use crate::{layout::tree::RenderNode, resources::image_buffer::ImageBuffer};
+use crate::resources::image_buffer::ImageBuffer;
 
 pub(crate) use crate::font_style::*;
 pub(crate) use background_drawing::*;
@@ -69,16 +69,4 @@ pub(crate) fn pixmap_ref_from_buffer(buffer: &ImageBuffer) -> Option<PixmapRef<'
 pub(crate) fn pixmap_from_buffer(buffer: &ImageBuffer) -> Option<Pixmap> {
   let size = IntSize::from_wh(buffer.width(), buffer.height())?;
   Pixmap::from_vec(buffer.data().to_vec(), size)
-}
-
-pub(crate) fn get_node_mut_by_path<'a>(
-  root: &'a mut RenderNode,
-  path: &[usize],
-) -> Option<&'a mut RenderNode> {
-  let mut current = root;
-  for &index in path {
-    let children = current.children.as_deref_mut()?;
-    current = children.get_mut(index)?;
-  }
-  Some(current)
 }

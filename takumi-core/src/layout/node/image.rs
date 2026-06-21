@@ -4,8 +4,7 @@ use taffy::{AvailableSpace, CompactLength, MaybeResolve, Size};
 use crate::{
   context::RenderContext,
   layout::{
-    inline::InlineContentKind,
-    node::{ImageData, ImageSourceInput, Node, NodeKind, NodeStyleLayers},
+    node::{ImageData, ImageSourceInput, Node, NodeStyleLayers},
     style::{Length, Style, StyleDeclaration},
   },
   resources::image::{ImageResourceError, ImageResult, ImageSource, is_svg_like},
@@ -42,10 +41,6 @@ pub(crate) fn take_image_style_layers(
     inline: node.metadata.style.take(),
     dir: node.metadata.dir.take(),
   }
-}
-
-pub(crate) fn image_inline_content(kind: &NodeKind) -> Option<InlineContentKind<'_>> {
-  matches!(kind, NodeKind::Image(_)).then_some(InlineContentKind::Box)
 }
 
 pub(crate) fn measure_image_node(

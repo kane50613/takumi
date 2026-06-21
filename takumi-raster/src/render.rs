@@ -8,7 +8,7 @@ use typed_builder::TypedBuilder;
 
 use crate::{
   AnimationFrame, Bitmap, Canvas, DitheringAlgorithm, Error, Fonts, RenderContext, Result,
-  SizedFontStyle, apply_dithering, get_node_mut_by_path,
+  SizedFontStyle, apply_dithering,
   layout::{
     Viewport,
     inline::{
@@ -23,9 +23,10 @@ use crate::{
   },
   resources::image::ImageSource,
   scale_text_fit_x,
-  stacking_context::{
-    apply_transform, build_stacking_contexts, collect_layout_children, paint_context,
-  },
+  stacking_context::paint_context,
+};
+use takumi_core::scene::{
+  apply_transform, build_stacking_contexts, collect_layout_children, get_node_mut_by_path,
 };
 
 #[derive(Clone, TypedBuilder)]

@@ -14,18 +14,18 @@ use crate::{
 };
 
 pub struct RenderTask {
-  pub draw_debug_border: bool,
-  pub node: Option<Node>,
+  pub(crate) draw_debug_border: bool,
+  pub(crate) node: Option<Node>,
   pub(crate) state: Arc<RwLock<RendererState>>,
-  pub viewport: Viewport,
-  pub format: OutputFormat,
-  pub quality: Option<u8>,
-  pub lossless: Option<bool>,
-  pub dithering: DitheringAlgorithm,
-  pub time_ms: u64,
-  pub stylesheet: StyleSheet,
-  pub images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
-  pub font_families: Option<Vec<String>>,
+  pub(crate) viewport: Viewport,
+  pub(crate) format: OutputFormat,
+  pub(crate) quality: Option<u8>,
+  pub(crate) lossless: Option<bool>,
+  pub(crate) dithering: DitheringAlgorithm,
+  pub(crate) time_ms: u64,
+  pub(crate) stylesheet: StyleSheet,
+  pub(crate) images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
+  pub(crate) font_families: Option<Vec<String>>,
 }
 
 impl RenderTask {

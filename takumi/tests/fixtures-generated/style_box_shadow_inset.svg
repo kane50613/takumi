@@ -1,1 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><rect x="0" y="0" width="1200" height="630" fill="#00f"/><clipPath id="cp0"><path d="M16 0h88c8.84 0 16 7.16 16 16v48c0 8.84-7.16 16-16 16h-88c-8.84 0-16-7.16-16-16v-48c0-8.84 7.16-16 16-16Z"/></clipPath><g clip-path="url(#cp0)"><rect x="0" y="0" width="120" height="80" fill="#fff"/></g><clipPath id="cp1"><path d="M16 0h88c8.84 0 16 7.16 16 16v48c0 8.84-7.16 16-16 16h-88c-8.84 0-16-7.16-16-16v-48c0-8.84 7.16-16 16-16Z"/></clipPath><g clip-path="url(#cp1)"><filter id="bl2"><feGaussianBlur stdDeviation="9"/></filter><g filter="url(#bl2)"><path d="M16 0h88c8.84 0 16 7.16 16 16v48c0 8.84-7.16 16-16 16h-88c-8.84 0-16-7.16-16-16v-48c0-8.84 7.16-16 16-16ZM20 14h88c4.42 0 8 3.58 8 8v48c0 4.42-3.58 8-8 8h-88c-4.42 0-8-3.58-8-8v-48c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".6" fill-rule="evenodd"/></g></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect x="0" y="0" width="1200" height="630" fill="#00f"/>
+  <clipPath id="cp0">
+    <path d="M16 0h88c8.84 0 16 7.16 16 16v48c0 8.84-7.16 16-16 16h-88c-8.84 0-16-7.16-16-16v-48c0-8.84 7.16-16 16-16Z"/>
+  </clipPath>
+  <g clip-path="url(#cp0)">
+    <rect x="0" y="0" width="120" height="80" fill="#fff"/>
+  </g>
+  <clipPath id="cp1">
+    <path d="M16 0h88c8.84 0 16 7.16 16 16v48c0 8.84-7.16 16-16 16h-88c-8.84 0-16-7.16-16-16v-48c0-8.84 7.16-16 16-16Z"/>
+  </clipPath>
+  <g clip-path="url(#cp1)">
+    <filter id="bl2">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+    <g filter="url(#bl2)">
+      <path d="M16 0h88c8.84 0 16 7.16 16 16v48c0 8.84-7.16 16-16 16h-88c-8.84 0-16-7.16-16-16v-48c0-8.84 7.16-16 16-16ZM20 14h88c4.42 0 8 3.58 8 8v48c0 4.42-3.58 8-8 8h-88c-4.42 0-8-3.58-8-8v-48c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".6" fill-rule="evenodd"/>
+    </g>
+  </g>
+</svg>

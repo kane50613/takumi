@@ -1,11 +1,74 @@
 use cssparser::{Parser, match_ignore_ascii_case};
-use std::fmt;
+use smallvec::{SmallVec, smallvec};
+use std::{fmt, iter::successors};
 
 use super::background_image::parse_comma_list;
 use crate::style::{
   Animatable, CssToken, FromCss, ListInterpolationStrategy, MakeComputed, ParseResult, ToCss,
   declare_enum_from_css_impl,
 };
+
+/// Tile origins along one axis for `background-repeat: repeat`: the first origin
+/// at or before 0, then one per `tile_size` up to `area_size`.
+pub fn collect_repeat_tile_positions(
+  area_size: u32,
+  tile_size: u32,
+  origin: i32,
+) -> SmallVec<[i32; 1]> {
+  if tile_size == 0 {
+    return SmallVec::default();
+  }
+
+  let mut start = origin;
+  if start > 0 {
+    let n = ((start as f32) / tile_size as f32).ceil() as i32;
+    start -= n * tile_size as i32;
+  }
+
+  successors(Some(start), |&x| Some(x + tile_size as i32))
+    .take_while(|&x| x < area_size as i32)
+    .collect()
+}
+
+/// Tile origins for `background-repeat: space`: whole tiles spread to the edges
+/// with equal gaps between them, or a single centered tile when only one fits.
+pub fn collect_spaced_tile_positions(area_size: u32, tile_size: u32) -> SmallVec<[i32; 1]> {
+  if tile_size == 0 {
+    return SmallVec::default();
+  }
+
+  let count = area_size / tile_size;
+  if count <= 1 {
+    return smallvec![(area_size as i32 - tile_size as i32) / 2];
+  }
+
+  let gap = (area_size - count * tile_size) / (count - 1);
+  let step = tile_size as i32 + gap as i32;
+
+  successors(Some(0i32), move |&x| Some(x + step))
+    .take(count as usize)
+    .collect()
+}
+
+/// Tile origins for `background-repeat: round`, with the tile rescaled so a whole
+/// number fit the area. Returns the origins and the rounded tile size.
+pub fn collect_stretched_tile_positions(
+  area_size: u32,
+  tile_size: u32,
+) -> (SmallVec<[i32; 1]>, u32) {
+  if tile_size == 0 || area_size == 0 {
+    return (SmallVec::default(), tile_size);
+  }
+
+  let count = (area_size as f32 / tile_size as f32).max(1.0) as u32;
+  let new_tile_size = (area_size as f32 / count as f32) as u32;
+
+  let positions = successors(Some(0i32), move |&x| Some(x + new_tile_size as i32))
+    .take(count as usize)
+    .collect();
+
+  (positions, new_tile_size)
+}
 
 /// Per-axis repeat style.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

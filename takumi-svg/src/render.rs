@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, io, rc::Rc, sync::Arc};
 
-use taffy::{AbsoluteAxis, AvailableSpace, NodeId, Point, Rect, Size};
+use taffy::{AbsoluteAxis, AvailableSpace, Point, Rect, Size};
 use takumi_core::{
   Fonts,
   context::RenderContext,
@@ -13,13 +13,14 @@ use takumi_core::{
     inline::{InlineBoxItem, VisualInlineBox},
     node::{ImageData, Node, NodeKind},
     style::{
-      BackgroundClip, BackgroundImage, BasicShape, BlendMode, BorderStyle, Color, ComputedStyle,
-      Display, FillRule, Isolation, Length, Overflow, ShapeRadius, Sides, SizingContext, SpacePair,
-      StyleSheet, ToCss,
+      Affine, BackgroundClip, BackgroundImage, BasicShape, BlendMode, BorderStyle, Color,
+      ComputedStyle, FillRule, Isolation, Length, Overflow, ShapeRadius, Sides, SizingContext,
+      SpacePair, StyleSheet, ToCss,
     },
-    tree::{LayoutResults, LayoutTree, RenderNode},
+    tree::{LayoutTree, RenderNode},
   },
   resources::image::ImageSource,
+  scene::build_stacking_contexts,
   shadow::SizedShadow,
 };
 use typed_builder::TypedBuilder;
@@ -29,6 +30,7 @@ use crate::{
   box_model::{PathData, element_transform, path_data},
   gradient::{emit_background_images, emit_image_layers},
   image::emit_image,
+  scene_emit::emit_scene,
   text::{emit_inline_content, emit_text},
 };
 
@@ -92,16 +94,25 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
     .height
     .map_or(root_layout.size.height, |h| h as f32);
   let mut doc = SvgDocument::new(width, height)?;
-  let mut origins = HashMap::new();
 
-  emit_node(&root, root_id, &results, 0.0, 0.0, &mut origins, &mut doc)?;
+  let contexts = build_stacking_contexts(
+    &root,
+    &results,
+    root_id,
+    IDENTITY,
+    Size {
+      width: Some(width),
+      height: Some(height),
+    },
+  )?;
+  emit_scene(&root, &contexts, &results, &mut doc)?;
 
   Ok(doc.render()?)
 }
 
 /// Open group tokens from [`emit_box_chrome`], to be closed (innermost first:
 /// `child_group`, `outer`, then `blend`) after the box content.
-struct BoxChrome {
+pub(crate) struct BoxChrome {
   blend: Option<crate::GroupToken>,
   isolate: Option<crate::GroupToken>,
   mask: Option<crate::GroupToken>,
@@ -112,7 +123,7 @@ struct BoxChrome {
 
 impl BoxChrome {
   /// Closes the box's groups innermost first.
-  fn close(self, doc: &mut SvgDocument) -> io::Result<()> {
+  pub(crate) fn close(self, doc: &mut SvgDocument) -> io::Result<()> {
     let groups = [
       self.child_group,
       self.clip_group,
@@ -128,15 +139,18 @@ impl BoxChrome {
   }
 }
 
-/// Emits a box's shared chrome (the CSS transform/opacity group, box-shadows,
+/// Emits a box's shared chrome (the positioning/opacity group, box-shadows,
 /// rounded-clipped background, borders), then opens the overflow-clip child group.
-/// `x`/`y` are the box's absolute border-box top-left. The returned group tokens
-/// must be closed by the caller after emitting the box's content.
-fn emit_box_chrome(
+/// Decorations are drawn at `(x, y)`; `group_transform` is the group the box (and
+/// its children) are emitted under — the node's transform relative to its parent
+/// frame, so nesting composes it. The returned group tokens must be closed by the
+/// caller after emitting the box's content.
+pub(crate) fn emit_box_chrome(
   node: &RenderNode,
   layout: &taffy::Layout,
   x: f32,
   y: f32,
+  group_transform: Affine,
   doc: &mut SvgDocument,
 ) -> io::Result<BoxChrome> {
   let width = layout.size.width;
@@ -155,21 +169,13 @@ fn emit_box_chrome(
   let mask = emit_mask_group(node, x, y, width, height, doc)?;
 
   let opacity = style.opacity.0;
-  let transform = element_transform(&node.context, layout.size, x, y);
   let filter_ref = if !style.filter.is_empty() {
     doc.filter(&style.filter, &node.context.sizing, cc, layout.size)?
   } else {
     None
   };
-  let outer = (transform.is_some() || opacity < 1.0 || filter_ref.is_some())
-    .then(|| {
-      doc.begin_group(
-        transform.unwrap_or(IDENTITY),
-        opacity,
-        None,
-        filter_ref.as_deref(),
-      )
-    })
+  let outer = (!group_transform.is_identity() || opacity < 1.0 || filter_ref.is_some())
+    .then(|| doc.begin_group(group_transform, opacity, None, filter_ref.as_deref()))
     .transpose()?;
 
   let clip_group = emit_clip_path_group(node, layout.size, x, y, doc)?;
@@ -232,7 +238,7 @@ fn emit_box_chrome(
 /// Emits the element's background (color then image layers) clipped to the region
 /// selected by `background-clip`. Mirrors the raster backend's `draw_background`.
 /// `background-clip: text` is suppressed here and painted by the text path.
-fn emit_background(
+pub(crate) fn emit_background(
   node: &RenderNode,
   border: &BorderProperties,
   layout: &taffy::Layout,
@@ -283,7 +289,7 @@ fn emit_background(
 /// into the border box) and opens the masked group wrapping the element. CSS
 /// `mask-image` defaults to alpha masking. `x`/`y` are the absolute border-box
 /// top-left. Returns the open group token (closed by [`BoxChrome::close`]).
-fn emit_mask_group(
+pub(crate) fn emit_mask_group(
   node: &RenderNode,
   x: f32,
   y: f32,
@@ -323,7 +329,7 @@ fn emit_mask_group(
 /// opens a clip group wrapping the element. Mirrors the raster backend's
 /// `render_clip_shape_mask` geometry. `x`/`y` are the absolute border-box
 /// top-left. Returns the open group token (closed by [`BoxChrome::close`]).
-fn emit_clip_path_group(
+pub(crate) fn emit_clip_path_group(
   node: &RenderNode,
   size: Size<f32>,
   x: f32,
@@ -431,7 +437,7 @@ fn border_box_path_data(border: &BorderProperties, size: Size<f32>, x: f32, y: f
 
 /// Absolute SVG path `d` for the padding-box rounded rectangle (border-box inset
 /// by the border widths, with inner radii), reusing core geometry.
-fn padding_box_path_data(
+pub(crate) fn padding_box_path_data(
   border: &BorderProperties,
   border_width: Rect<f32>,
   size: Size<f32>,
@@ -460,7 +466,7 @@ fn padding_box_path_data(
 /// clipped axis is bounded to the content box (mirroring the raster backend's
 /// rectangular overflow mask); a `visible` axis is left effectively unbounded so
 /// content overflows there while being clipped on the other axis.
-fn overflow_clip_rect_data(
+pub(crate) fn overflow_clip_rect_data(
   style: &ComputedStyle,
   layout: &taffy::Layout,
   x: f32,
@@ -555,80 +561,28 @@ fn content_box_path_data(
   path_data(&commands, [1.0, 0.0, 0.0, 1.0, x, y])
 }
 
-/// Emits one node's box decorations and recurses into its children. `origins` maps
-/// each painted node to its absolute border-box origin so out-of-flow children
-/// hoisted to another containing block (`position: absolute`/`fixed`) paint from
-/// that block's origin rather than their structural parent's.
-fn emit_node(
+/// Emits a node's own content — its inline run set, or its replaced image/text —
+/// at the border-box top-left `(x, y)`. Block children are painted separately.
+pub(crate) fn emit_own_content(
   node: &RenderNode,
-  node_id: NodeId,
-  results: &LayoutResults,
-  parent_x: f32,
-  parent_y: f32,
-  origins: &mut HashMap<NodeId, (f32, f32)>,
+  layout: &taffy::Layout,
+  x: f32,
+  y: f32,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let Ok(layout) = results.layout(node_id) else {
-    return Ok(());
-  };
-  let x = parent_x + layout.location.x;
-  let y = parent_y + layout.location.y;
-  origins.insert(node_id, (x, y));
-
-  let chrome = emit_box_chrome(node, layout, x, y, doc)?;
-
-  // A node either establishes an inline formatting context (its anonymous text and
-  // inline children laid out as one inline run set, with inline boxes recursed in
-  // flow) or paints its own content and recurses block children, never both.
   if node.should_create_inline_layout() {
-    emit_inline_content(node, *layout, x, y, doc)?;
-  } else {
-    // A node whose anonymous text became a child item paints that text through the
-    // child, not as its own content (mirroring the raster backend's guard).
-    if !node.has_anonymous_text_item_child() {
-      match node.node.as_ref().map(|n| &n.kind) {
-        Some(NodeKind::Image(image)) => emit_image_node(image, node, layout, x, y, doc)?,
-        Some(NodeKind::Text(text)) => emit_text(text, &node.context, *layout, x, y, doc)?,
-        _ => {}
-      }
-    }
-
-    if let Ok(children) = results.box_children(node_id)
-      && let Some(child_nodes) = node.children.as_deref()
-    {
-      // Paint children in CSS stacking order: negative `z-index` first, then
-      // `z-auto`/0 (and non-positioned) in tree order, then positive `z-index`.
-      // A stable sort by the effective z keeps tree order within each bucket,
-      // mirroring the raster backend's stacking-context buckets.
-      let is_flex_or_grid_item = matches!(
-        node.context.style.display,
-        Display::Flex | Display::InlineFlex | Display::Grid | Display::InlineGrid
-      );
-      let mut ordered: Vec<_> = children
-        .iter()
-        .filter_map(|child| {
-          let child_node = child_nodes.get(child.render_index)?;
-          let style = &child_node.context.style;
-          let z = if style.participates_in_positioned_paint_bucket(is_flex_or_grid_item) {
-            style.z_index.painting_order_value()
-          } else {
-            0
-          };
-          Some((z, child, child_node))
-        })
-        .collect();
-      ordered.sort_by_key(|(z, _, _)| *z);
-      for (_, child, child_node) in ordered {
-        let (ox, oy) = match child.hoisted_cb {
-          Some(cb) => origins.get(&cb).copied().unwrap_or((x, y)),
-          None => (x, y),
-        };
-        emit_node(child_node, child.node_id, results, ox, oy, origins, doc)?;
-      }
-    }
+    return emit_inline_content(node, *layout, x, y, doc);
   }
-
-  chrome.close(doc)
+  // A node whose anonymous text became a child item paints that text through the
+  // child, not as its own content (mirroring the raster backend's guard).
+  if node.has_anonymous_text_item_child() {
+    return Ok(());
+  }
+  match node.node.as_ref().map(|n| &n.kind) {
+    Some(NodeKind::Image(image)) => emit_image_node(image, node, layout, x, y, doc),
+    Some(NodeKind::Text(text)) => emit_text(text, &node.context, *layout, x, y, doc),
+    _ => Ok(()),
+  }
 }
 
 /// Recurses into an in-flow inline box (an atomic inline element such as an
@@ -670,20 +624,27 @@ pub(crate) fn emit_inline_box(
     });
     let results = tree.into_results();
     let root_id = results.root_node_id();
-    return emit_node(
+    // Emit the recomputed subtree through the scene, offset to the box origin.
+    let origin = Affine::translation(box_x + item.margin.left, box_y + item.margin.top);
+    let contexts = build_stacking_contexts(
       &subtree,
-      root_id,
       &results,
-      box_x + item.margin.left,
-      box_y + item.margin.top,
-      &mut HashMap::new(),
-      doc,
-    );
+      root_id,
+      origin,
+      Size {
+        width: Some(inline_width),
+        height: Some(inline_height),
+      },
+    )
+    .map_err(io::Error::other)?;
+    return emit_scene(&subtree, &contexts, &results, doc);
   }
 
   // Replaced inline box (e.g. an image): no in-flow layout to recompute.
   let box_layout: taffy::Layout = item.into();
-  let chrome = emit_box_chrome(node, &box_layout, box_x, box_y, doc)?;
+  let group_transform =
+    element_transform(&node.context, box_layout.size, box_x, box_y).unwrap_or(IDENTITY);
+  let chrome = emit_box_chrome(node, &box_layout, box_x, box_y, group_transform, doc)?;
 
   match node.node.as_ref().map(|n| &n.kind) {
     Some(NodeKind::Image(image)) => emit_image_node(image, node, &box_layout, box_x, box_y, doc)?,
@@ -733,7 +694,7 @@ fn emit_image_node(
 /// Uniform `dashed`/`dotted`/`double` borders stroke a centerline rounded-rect.
 /// 3D styles (groove/ridge/inset/outset) approximate as a solid fill. `x`/`y` are
 /// the absolute border-box top-left; `size` is the border-box size.
-fn emit_borders(
+pub(crate) fn emit_borders(
   border: &BorderProperties,
   x: f32,
   y: f32,
@@ -888,7 +849,7 @@ fn emit_side_pattern(
 /// `BorderProperties` (outline width/color/style on all four sides, radii from the
 /// element) drawn on an expanded box, so all border styles (solid/dashed/dotted/
 /// double, and the 3D approximations) are reused from [`emit_borders`].
-fn emit_outline(
+pub(crate) fn emit_outline(
   node: &RenderNode,
   size: Size<f32>,
   x: f32,
@@ -1028,9 +989,26 @@ fn emit_double_border(
   doc.stroke_path(&inner, Rgba(color.0), third, None, None)
 }
 
+/// Runs `emit` inside a Gaussian-blur group when `blur_radius` is positive (the
+/// CSS shadow blur is `2σ`), or directly otherwise.
+fn emit_with_blur(
+  doc: &mut SvgDocument,
+  blur_radius: f32,
+  emit: impl FnOnce(&mut SvgDocument) -> io::Result<()>,
+) -> io::Result<()> {
+  if blur_radius > 0.0 {
+    let filter = doc.blur_filter(blur_radius / 2.0)?;
+    let group = doc.begin_group(IDENTITY, 1.0, None, Some(&filter))?;
+    emit(doc)?;
+    doc.end_group(group)
+  } else {
+    emit(doc)
+  }
+}
+
 /// Emits outset `box-shadow`s behind the element as offset, blurred rects.
 /// Inset shadows are handled by [`emit_inset_box_shadows`].
-fn emit_box_shadows(
+pub(crate) fn emit_box_shadows(
   node: &RenderNode,
   layout: &taffy::Layout,
   x: f32,
@@ -1074,16 +1052,7 @@ fn emit_box_shadows(
     });
     let data = border_box_path_data(&shadow, spread_size, sx, sy);
 
-    let filter = (resolved.blur_radius > 0.0)
-      .then(|| doc.blur_filter(resolved.blur_radius / 2.0))
-      .transpose()?;
-    if let Some(filter) = filter {
-      let group = doc.begin_group(IDENTITY, 1.0, None, Some(&filter))?;
-      doc.path(&data, fill)?;
-      doc.end_group(group)?;
-    } else {
-      doc.path(&data, fill)?;
-    }
+    emit_with_blur(doc, resolved.blur_radius, |doc| doc.path(&data, fill))?;
   }
   Ok(())
 }
@@ -1092,7 +1061,7 @@ fn emit_box_shadows(
 /// box. Mirrors the raster backend's `draw_inset_shadow`: the shadow color fills
 /// the border box minus an inner rounded-rect (shrunk by the spread, shifted by
 /// the offset), blurred and clipped to the rounded border box.
-fn emit_inset_box_shadows(
+pub(crate) fn emit_inset_box_shadows(
   node: &RenderNode,
   border: &BorderProperties,
   layout: &taffy::Layout,
@@ -1152,16 +1121,9 @@ fn emit_inset_box_shadows(
     // rounded border box so the blur stays inside the element.
     let clip = doc.clip_path(&outer)?;
     let clip_group = doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?;
-    let filter = (resolved.blur_radius > 0.0)
-      .then(|| doc.blur_filter(resolved.blur_radius / 2.0))
-      .transpose()?;
-    if let Some(filter) = filter {
-      let group = doc.begin_group(IDENTITY, 1.0, None, Some(&filter))?;
-      doc.path_evenodd(&ring, fill)?;
-      doc.end_group(group)?;
-    } else {
-      doc.path_evenodd(&ring, fill)?;
-    }
+    emit_with_blur(doc, resolved.blur_radius, |doc| {
+      doc.path_evenodd(&ring, fill)
+    })?;
     doc.end_group(clip_group)?;
   }
   Ok(())

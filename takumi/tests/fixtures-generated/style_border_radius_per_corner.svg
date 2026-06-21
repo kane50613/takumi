@@ -1,1 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><clipPath id="cp0"><path d="M40 0h1150c5.52 0 10 4.48 10 10v540c0 44.18-35.82 80-80 80h-1120v-590c0-22.09 17.91-40 40-40Z"/></clipPath><g clip-path="url(#cp0)"><rect x="0" y="0" width="1200" height="630" fill="#f00"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <clipPath id="cp0">
+    <path d="M40 0h1150c5.52 0 10 4.48 10 10v540c0 44.18-35.82 80-80 80h-1120v-590c0-22.09 17.91-40 40-40Z"/>
+  </clipPath>
+  <g clip-path="url(#cp0)">
+    <rect x="0" y="0" width="1200" height="630" fill="#f00"/>
+  </g>
+</svg>
