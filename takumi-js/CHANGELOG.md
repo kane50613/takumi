@@ -1,5 +1,13 @@
 ## takumi-js@2.0.0-beta.0 (beta)
 
+### Add top-level `renderSvg` and `renderAnimation`
+
+Both mirror `render`: same JSX/HTML/node input and resource pipeline, returning a vector SVG string and an encoded animation.
+
+### Model the output format as a discriminated union
+
+`quality` and `lossless` appear only on formats that accept them, and out-of-range WebP quality clamps instead of throwing.
+
 ### Make fonts and images explicit per-render resources
 
 Drop the persistent image store and `GlobalContext`, and pass fonts and images per render. `registerFont` replaces `loadFont`/`loadFontSync`/`loadFonts`, each render takes a `fontFamilies` fallback chain, and `images` replaces `fetchedResources`.

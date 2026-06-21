@@ -1,5 +1,13 @@
 ## @takumi-rs/wasm@2.0.0-beta.0 (beta)
 
+### Add a `renderSvg` method
+
+Render a node tree to an SVG document string, alongside the raster `render`.
+
+### Model the output format as a discriminated union
+
+`quality` and `lossless` appear only on formats that accept them, and out-of-range WebP quality clamps instead of throwing.
+
 ### Make fonts and images explicit per-render resources
 
 Drop the persistent image store and `GlobalContext`, and pass fonts and images per render. `registerFont` replaces `loadFont`/`loadFontSync`/`loadFonts`, each render takes a `fontFamilies` fallback chain, and `images` replaces `fetchedResources`.

@@ -1,5 +1,9 @@
 ## takumi-raster@0.1.0-beta.0
 
+### Rename render entry points and return a `Bitmap`
+
+`measure_layout` becomes `measure`, `render_sequence_animation` becomes `render_animation`, and `ImageOutputFormat` becomes `OutputFormat`. `render` returns a `Bitmap` newtype instead of `image::RgbaImage`, and `write_image` takes `&Bitmap`.
+
 ### Split `takumi` into `takumi-core`, `takumi-raster`, and `takumi-svg` behind a re-export facade
 
 ### Minimize the public API
