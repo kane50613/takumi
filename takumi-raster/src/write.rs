@@ -126,6 +126,12 @@ impl Bitmap {
     self.0.into_raw()
   }
 
+  /// Builds a bitmap from raw RGBA bytes, row-major, 4 bytes per pixel. Returns
+  /// `None` when `data.len()` is not `width * height * 4`.
+  pub fn from_raw(width: u32, height: u32, data: Vec<u8>) -> Option<Self> {
+    RgbaImage::from_raw(width, height, data).map(Self)
+  }
+
   pub(crate) fn from_rgba(image: RgbaImage) -> Self {
     Self(image)
   }

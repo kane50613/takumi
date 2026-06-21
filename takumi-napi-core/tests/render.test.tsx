@@ -330,6 +330,8 @@ describe("renderAnimation", () => {
     });
 
     expect(result).toBeInstanceOf(Buffer);
+    expect(result.subarray(0, 4).toString("ascii")).toBe("RIFF");
+    expect(result.subarray(8, 12).toString("ascii")).toBe("WEBP");
   });
 });
 
