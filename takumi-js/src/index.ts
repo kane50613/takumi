@@ -24,11 +24,16 @@ export type {
   MeasuredNode,
   MeasuredTextRun,
   OutputFormat,
-  RenderAnimationOptions,
 } from "@takumi-rs/core";
-export { render } from "./render";
+export { render, renderAnimation, renderSvg } from "./render";
 
-export type { RenderOptions } from "./render";
+export type {
+  RenderAnimationOptions,
+  RenderAnimationScene,
+  RenderInput,
+  RenderOptions,
+  RenderSvgOptions,
+} from "./render";
 
 declare module "react" {
   interface DOMAttributes<T> {
