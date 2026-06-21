@@ -4,8 +4,13 @@ pre-commit:
     - run: cargo fmt --all
       stage_fixed: true
 
-    - root: takumi/
-      run: cargo rdme --force && git add README.md
+    - run: |
+        set -eu
+        cargo metadata --format-version 1 --no-deps \
+          | jq -r '.packages[] | select(.publish != []) | select(any(.targets[]; .kind | index("lib"))) | .manifest_path | rtrimstr("/Cargo.toml")' \
+          | while read -r dir; do
+              (cd "$dir" && cargo rdme --force && git add README.md) || exit 1
+            done
 
     - run: bun run lint:fix
       stage_fixed: true
