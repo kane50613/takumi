@@ -33,7 +33,7 @@ use takumi_core::{
 use crate::{
   APPROX_CHARS_PER_NUMBER, GradientStop, IDENTITY, Rgba, SvgDocument,
   box_model::{PathData, rect_path_data},
-  image::{data_url_for_url, preserve_aspect_none},
+  image::{PRESERVE_ASPECT_NONE, data_url_for_url},
 };
 
 const CONIC_WEDGES: usize = 180;
@@ -382,7 +382,7 @@ fn emit_url(
   let Some(href) = data_url_for_url(url, context) else {
     return Ok(());
   };
-  doc.image(tx, ty, tile_w, tile_h, &href, Some(preserve_aspect_none()))
+  doc.image(tx, ty, tile_w, tile_h, &href, Some(PRESERVE_ASPECT_NONE))
 }
 
 fn svg_stops(stops: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<GradientStop> {

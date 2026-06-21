@@ -634,7 +634,7 @@ mod tests {
     );
 
     assert!(
-      bounds.is_some_and(|bounds| bounds.is_empty()),
+      bounds.is_some_and(SceneBounds::is_empty),
       "zero-sized rect should produce empty bounds, got {:?}",
       bounds.map(|bounds| (bounds.left, bounds.top, bounds.right, bounds.bottom))
     );

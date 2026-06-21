@@ -18,11 +18,7 @@ use takumi_core::{
 
 use crate::{SvgDocument, box_model::rect_path_data};
 
-/// `preserveAspectRatio="none"` (stretch to fit), used when the destination rect
-/// already carries the desired size.
-pub(crate) fn preserve_aspect_none() -> &'static str {
-  "none"
-}
+pub(crate) const PRESERVE_ASPECT_NONE: &str = "none";
 
 /// Resolves a `background-image: url(...)` reference to a `data:` URL, or `None`
 /// if it cannot be resolved (usually no resource map was supplied).
@@ -83,10 +79,10 @@ pub(crate) fn emit_image(
   if dw > w + 0.5 || dh > h + 0.5 {
     let clip = doc.clip_path(&rect_path_data(x, y, w, h))?;
     let group = doc.begin_group(crate::IDENTITY, 1.0, Some(&clip), None)?;
-    doc.image(ix, iy, dw, dh, &href, Some(preserve_aspect_none()))?;
+    doc.image(ix, iy, dw, dh, &href, Some(PRESERVE_ASPECT_NONE))?;
     return doc.end_group(group);
   }
-  doc.image(ix, iy, dw, dh, &href, Some(preserve_aspect_none()))
+  doc.image(ix, iy, dw, dh, &href, Some(PRESERVE_ASPECT_NONE))
 }
 
 fn intrinsic_size(src: &ImageSourceInput, context: &RenderContext) -> Option<(f32, f32)> {
