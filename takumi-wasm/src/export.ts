@@ -41,26 +41,6 @@ export type OutputFormatOptions =
   | { format: "ico" }
   | { format: "raw" };
 
-type InnerOutputFormat = {
-  format: NonNullable<RenderOptionsInternal["format"]>;
-  quality?: number;
-};
-
-function toInnerOutputFormat(options: OutputFormatOptions): InnerOutputFormat {
-  switch (options.format) {
-    case "jpeg":
-      return { format: "jpeg", quality: options.quality };
-    case "webp":
-      return { format: "webp" };
-    case "ico":
-      return { format: "ico" };
-    case "raw":
-      return { format: "raw" };
-    default:
-      return { format: "png" };
-  }
-}
-
 export type RenderOptions = Omit<RenderOptionsInternal, "images" | "format" | "quality"> &
   OutputFormatOptions & {
     fonts?: FontLoader[];
@@ -75,21 +55,6 @@ export type AnimationOutputFormatOptions =
   | { format?: "webp" }
   | { format: "apng" }
   | { format: "gif" };
-
-type InnerAnimationFormat = {
-  format: NonNullable<RenderAnimationOptionsInternal["format"]>;
-};
-
-function toInnerAnimationFormat(options: AnimationOutputFormatOptions): InnerAnimationFormat {
-  switch (options.format) {
-    case "apng":
-      return { format: "apng" };
-    case "gif":
-      return { format: "gif" };
-    default:
-      return { format: "webp" };
-  }
-}
 
 export type RenderAnimationOptions = Omit<RenderAnimationOptionsInternal, "images" | "format"> &
   AnimationOutputFormatOptions & {
@@ -140,7 +105,6 @@ export class Renderer {
 
     return this.inner.render(node, {
       ...rest,
-      ...toInnerOutputFormat(options ?? {}),
       images: resolvedImages,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
@@ -153,7 +117,6 @@ export class Renderer {
 
     return this.inner.renderAsDataUrl(node, {
       ...rest,
-      ...toInnerOutputFormat(options ?? {}),
       images: resolvedImages,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
@@ -166,7 +129,6 @@ export class Renderer {
 
     return this.inner.measure(node, {
       ...rest,
-      ...toInnerOutputFormat(options ?? {}),
       images: resolvedImages,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
@@ -179,7 +141,6 @@ export class Renderer {
 
     return this.inner.renderAnimation({
       ...rest,
-      ...toInnerAnimationFormat(options),
       images: resolvedImages,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
@@ -192,7 +153,6 @@ export class Renderer {
 
     return this.inner.encodeFrames(frames, {
       ...rest,
-      ...toInnerAnimationFormat(options),
       images: resolvedImages,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
