@@ -6,8 +6,7 @@ use crate::{
   layout::{
     inline::{
       InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
-      create_inline_constraint, create_inline_layout, get_parent_font_metrics,
-      measure_inline_layout,
+      create_inline_constraint, create_inline_layout, measure_inline_layout,
     },
     node::TextData,
   },
@@ -38,7 +37,7 @@ pub(crate) fn measure_text_node(
     mode: InlineLayoutMode::Measure,
   });
 
-  let parent_font_metrics = get_parent_font_metrics(&built.layout);
+  let parent_font_metrics = built.parent_font_metrics();
 
   measure_inline_layout(
     &mut built.layout,
