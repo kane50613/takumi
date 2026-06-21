@@ -27,7 +27,7 @@ use takumi_core::{
 };
 
 use crate::{
-  Affine, IDENTITY, Num, Rgba, SvgDocument, box_model::path_data, gradient::emit_background_images,
+  Affine, Frame, IDENTITY, Num, Rgba, SvgDocument, box_model::path_data, gradient::LayerEmitter,
   image::encode, render::emit_inline_box,
 };
 
@@ -333,7 +333,7 @@ fn emit_clip_text_glyphs(
     doc.rect(bx, by, bw, bh, background)?;
   }
   if let Some(images) = context.style.background_image.as_deref() {
-    emit_background_images(images, context, bx, by, bw, bh, doc)?;
+    LayerEmitter::new(context, doc).background_images(images, Frame::new(bx, by, bw, bh))?;
   }
   doc.end_group(group)?;
 

@@ -16,7 +16,7 @@ use takumi_core::{
   resources::image::ImageSource,
 };
 
-use crate::{SvgDocument, box_model::rect_path_data};
+use crate::{Frame, SvgDocument, box_model::rect_path_data};
 
 pub(crate) const PRESERVE_ASPECT_NONE: &str = "none";
 
@@ -41,12 +41,10 @@ fn position_axis(component: PositionComponent, context: &RenderContext, availabl
 pub(crate) fn emit_image(
   image: &ImageData,
   context: &RenderContext,
-  x: f32,
-  y: f32,
-  w: f32,
-  h: f32,
+  content: Frame,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
+  let Frame { x, y, w, h } = content;
   if w <= 0.0 || h <= 0.0 {
     return Ok(());
   }

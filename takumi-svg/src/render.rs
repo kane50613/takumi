@@ -26,9 +26,9 @@ use takumi_core::{
 use typed_builder::TypedBuilder;
 
 use crate::{
-  APPROX_CHARS_PER_NUMBER, IDENTITY, Num, Rgba, SvgDocument,
+  APPROX_CHARS_PER_NUMBER, Frame, IDENTITY, Num, Rgba, SvgDocument,
   box_model::{PathData, element_transform, path_data},
-  gradient::{emit_background_images, emit_image_layers},
+  gradient::LayerEmitter,
   image::emit_image,
   scene_emit::emit_scene,
   text::{emit_inline_content, emit_text},
@@ -277,7 +277,8 @@ pub(crate) fn emit_background(
     doc.rect(x, y, width, height, Rgba(background.0))?;
   }
   if let Some(images) = style.background_image.as_deref() {
-    emit_background_images(images, &node.context, x, y, width, height, doc)?;
+    LayerEmitter::new(&node.context, doc)
+      .background_images(images, Frame::new(x, y, width, height))?;
   }
   if let Some(group) = bg_group {
     doc.end_group(group)?;
@@ -309,17 +310,12 @@ pub(crate) fn emit_mask_group(
   }
 
   let (token, reference) = doc.begin_mask()?;
-  emit_image_layers(
+  LayerEmitter::new(&node.context, doc).image_layers(
     images,
     &style.mask_size,
     &style.mask_position,
     &style.mask_repeat,
-    &node.context,
-    x,
-    y,
-    width,
-    height,
-    doc,
+    Frame::new(x, y, width, height),
   )?;
   doc.end_mask(token)?;
   Ok(Some(doc.begin_masked_group(&reference)?))
@@ -675,15 +671,16 @@ fn emit_image_node(
   let iy = y + layout.border.top + layout.padding.top;
   let (iw, ih) = (layout.content_box_width(), layout.content_box_height());
 
+  let content = Frame::new(ix, iy, iw, ih);
   let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
   if border.is_zero() {
-    return emit_image(image, &node.context, ix, iy, iw, ih, doc);
+    return emit_image(image, &node.context, content, doc);
   }
 
   let path = padding_box_path_data(&border, layout.border, layout.size, x, y);
   let clip = doc.clip_path(&path)?;
   let group = doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?;
-  emit_image(image, &node.context, ix, iy, iw, ih, doc)?;
+  emit_image(image, &node.context, content, doc)?;
   doc.end_group(group)
 }
 
