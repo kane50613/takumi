@@ -663,15 +663,6 @@ pub(crate) fn resolve_layer_tiles(
   }))
 }
 
-/// Collects a list of tile positions to place along an axis.
-/// Starts from the "origin" and collects tile positions until the "area_size" is reached.
-
-/// Collects evenly spaced tile positions along an axis for `background-repeat: space`.
-/// Distributes gaps between tiles so the first and last touch the edges.
-
-/// Collects stretched tile positions along an axis for `background-repeat: round`.
-/// Rounds the size of the tile to fill the area.
-/// Returns the positions and the new tile size.
 pub(crate) fn resolve_tile_layers(input: ResolveTileLayersInput<'_>) -> Result<TileLayers> {
   let last_position = input.positions.last().copied().unwrap_or_default();
   let last_size = input.sizes.last().copied().unwrap_or_default();
