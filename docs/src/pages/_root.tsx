@@ -30,13 +30,13 @@ export default function RootElement({ children }: { children: ReactNode }) {
         <Provider>
           <Banner id="takumi-v2-beta" variant="rainbow">
             <a
-              href="https://v2.preview.takumi.kane.tw/docs"
+              href="https://v1.takumi.kane.tw"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-2"
             >
               <Sparkles className="size-4" />
-              Takumi v2 Beta is live, with SVG output and a leaner API. Try it →
+              You're reading the Takumi v2 Beta docs. For the stable release, switch to v1 →
             </a>
           </Banner>
           {children}
