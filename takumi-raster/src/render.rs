@@ -23,10 +23,9 @@ use crate::{
   },
   resources::image::ImageSource,
   scale_text_fit_x,
-  stacking_context::{
-    apply_transform, build_stacking_contexts, collect_layout_children, paint_context,
-  },
+  stacking_context::paint_context,
 };
+use takumi_core::scene::{apply_transform, build_stacking_contexts, collect_layout_children};
 
 #[derive(Clone, TypedBuilder)]
 /// Options for rendering a node. Construct using [`RenderOptions::builder`] to avoid breaking changes.

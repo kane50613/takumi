@@ -13,8 +13,8 @@ use crate::{
     Affine, Axis, BasicShape, BorderStyle, Color, ComputedStyle, FillRule, ImageScalingAlgorithm,
     Overflow, ShapeRadius, Sides, SizingContext, SpacePair,
   },
-  transformed_rect_extents,
 };
+use takumi_core::scene::transformed_rect_extents;
 
 pub(crate) enum NodeMaskAction {
   Shell(TinyMask),
