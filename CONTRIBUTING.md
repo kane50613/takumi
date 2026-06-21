@@ -2,7 +2,7 @@
 
 First of all, thanks for contributing to Takumi.
 
-This guide covers local setup, development flow, testing/build commands, fixtures, and changesets.
+This guide covers local setup, development flow, testing/build commands, fixtures, and changelogs.
 
 ## Ways to Contribute
 
@@ -30,7 +30,7 @@ This installs all workspace dependencies and sets up `lefthook`.
 2. Make your changes.
 3. Run formatting and tests for affected packages.
 4. Update generated fixtures if rendering output changed.
-5. Add a changeset for user-facing package/crate changes.
+5. Add a changelog file for user-facing package/crate changes.
 6. Open a PR.
 
 ## Formatting and Lint
@@ -106,17 +106,17 @@ CARGO_PROFILE_TEST_STRIP=debuginfo cargo test -q
 
 CI will fail if generated files change unexpectedly.
 
-## Changesets
+## Changelogs
 
-For any user-facing change in published packages/crates, add a changeset:
+For any user-facing change in published packages/crates, add a changelog file:
 
 ```bash
-bunx changeset
+bun run tegami
 ```
 
 Select affected packages and choose `patch` / `minor` / `major`.
 
-Changesets are stored in `.changeset/*.md`.
+Changelog files are stored in `.tegami/*.md`. See the [changelog format docs](https://tegami.fuma-nama.dev/changelog) for the frontmatter and headings.
 
 ## README Sync for Rust Crate
 
@@ -133,10 +133,9 @@ Then commit the updated `takumi/README.md`.
 
 ## Release Notes
 
-Release/version commands are handled by maintainers/CI via Changesets:
+Release/version commands are handled by maintainers/CI via Tegami:
 
-- `bun run version`
-- `bun run release`
+- `bun tegami ci`
 
 You usually do not need to run these in feature PRs.
 
@@ -146,7 +145,7 @@ You usually do not need to run these in feature PRs.
 - Relevant tests pass locally
 - Scope is focused (one logical change per PR when possible)
 - Fixture updates are intentional and reviewed
-- Changeset added (if user-facing)
+- Changelog file added (if user-facing)
 - Generated files that CI checks are committed
 - Docs updated where needed
 
