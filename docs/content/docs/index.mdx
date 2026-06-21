@@ -70,6 +70,8 @@ Parse CSS `@keyframes` and the `animation` shorthand property. Render frame-by-f
 
 Full SVG parsing and rasterization via [resvg](https://github.com/linebender/resvg). Use inline SVG or reference external files.
 
+Takumi also emits **vector SVG** output: call `renderSvg()` to get a real `<svg>` document (`<rect>`, `<path>`, gradients, glyph outlines, embedded images) instead of a raster bitmap — the same layout, as a scalable vector.
+
 ### Flexible Runtime
 
 Takumi runs everywhere without changing your code:
