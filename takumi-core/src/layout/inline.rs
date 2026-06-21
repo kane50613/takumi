@@ -47,6 +47,30 @@ pub struct BuiltInlineLayout<'c> {
   pub line_scales: Vec<f32>,
 }
 
+impl BuiltInlineLayout<'_> {
+  pub fn parent_font_metrics(&self) -> Option<ParentFontMetrics> {
+    get_parent_font_metrics(&self.layout)
+  }
+
+  pub fn line_metrics(&self) -> Vec<ResolvedLineMetrics> {
+    resolve_inline_line_metrics(
+      &self.layout,
+      &self.spans,
+      self.parent_font_metrics(),
+      &self.line_scales,
+    )
+  }
+
+  pub fn line_states(&self) -> Vec<ResolvedInlineLineState> {
+    resolve_inline_line_states(
+      &self.layout,
+      &self.spans,
+      self.parent_font_metrics(),
+      &self.line_scales,
+    )
+  }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InlineLayoutMode {
   Measure,
@@ -1872,11 +1896,8 @@ pub fn resolve_inline_runs<'l>(
     line_scales,
     ..
   } = built;
-  let parent_font_metrics = get_parent_font_metrics(inline_layout);
-  let line_vertical_metrics =
-    resolve_inline_line_metrics(inline_layout, spans, parent_font_metrics, line_scales);
-  let line_states =
-    resolve_inline_line_states(inline_layout, spans, parent_font_metrics, line_scales);
+  let line_vertical_metrics = built.line_metrics();
+  let line_states = built.line_states();
 
   let need_outline = spans.iter().any(|span| match span {
     ProcessedInlineSpan::Text { style, .. } => {

@@ -14,7 +14,6 @@ use crate::{
   layout::{
     inline::{
       InlineLayoutMode, InlineLayoutRequest, collect_inline_items, create_inline_layout,
-      get_parent_font_metrics, resolve_inline_line_metrics, resolve_inline_line_states,
       resolve_inline_max_height, resolve_visual_inline_box, scale_text_fit_x,
       text_fit_line_alignment_correction,
     },
@@ -389,20 +388,8 @@ fn compute_node_paint_bounds(
     layout.border.left + layout.padding.left,
     layout.border.top + layout.padding.top,
   ) * transform;
-  let parent_font_metrics = get_parent_font_metrics(&built.layout);
-
-  let line_vertical_metrics = resolve_inline_line_metrics(
-    &built.layout,
-    &built.spans,
-    parent_font_metrics,
-    &built.line_scales,
-  );
-  let line_states = resolve_inline_line_states(
-    &built.layout,
-    &built.spans,
-    parent_font_metrics,
-    &built.line_scales,
-  );
+  let line_vertical_metrics = built.line_metrics();
+  let line_states = built.line_states();
   for (line_index, line) in built.layout.lines().enumerate() {
     let baseline_shift = line_states[line_index].baseline_shift;
     let resolved_metrics = line_vertical_metrics[line_index];

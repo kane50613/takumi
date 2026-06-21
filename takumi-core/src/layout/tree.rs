@@ -16,8 +16,7 @@ use crate::{
     Viewport,
     inline::{
       InlineContentKind, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
-      collect_inline_items, create_inline_constraint, create_inline_layout,
-      get_parent_font_metrics, measure_inline_layout,
+      collect_inline_items, create_inline_constraint, create_inline_layout, measure_inline_layout,
     },
     matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
     node::{Node, NodeStyleLayers},
@@ -1836,7 +1835,7 @@ impl RenderNode {
       });
 
       let ceil_width = font_style.parent.resolved_text_wrap_mode() == TextWrapMode::Wrap;
-      let parent_font_metrics = get_parent_font_metrics(&built.layout);
+      let parent_font_metrics = built.parent_font_metrics();
       return measure_inline_layout(
         &mut built.layout,
         &built.spans,
