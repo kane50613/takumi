@@ -21,17 +21,17 @@ use crate::{
 };
 
 pub struct RenderAnimationTask {
-  pub scenes: Option<Vec<(Node, u32)>>,
+  pub(crate) scenes: Option<Vec<(Node, u32)>>,
   pub(crate) state: Arc<RwLock<RendererState>>,
-  pub viewport: Viewport,
-  pub format: AnimationOutputFormat,
-  pub quality: Option<u8>,
-  pub lossless: Option<bool>,
-  pub draw_debug_border: bool,
-  pub stylesheets: Option<Vec<String>>,
-  pub images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
-  pub font_families: Option<Vec<String>>,
-  pub fps: u32,
+  pub(crate) viewport: Viewport,
+  pub(crate) format: AnimationOutputFormat,
+  pub(crate) quality: Option<u8>,
+  pub(crate) lossless: Option<bool>,
+  pub(crate) draw_debug_border: bool,
+  pub(crate) stylesheets: Option<Vec<String>>,
+  pub(crate) images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
+  pub(crate) font_families: Option<Vec<String>>,
+  pub(crate) fps: u32,
 }
 
 impl RenderAnimationTask {

@@ -251,8 +251,8 @@ struct StackingContextBuildVisit {
 /// The effective paint-order z for a child: its `z-index` when it participates in
 /// the positioned paint bucket, otherwise 0 (non-positioned elements paint in tree
 /// order alongside positioned `z-auto` elements). A stable sort by this key
-/// reproduces CSS stacking order; both backends share it so they cannot drift.
-pub fn paint_order_z(style: &ComputedStyle, is_flex_or_grid_item: bool) -> i32 {
+/// reproduces CSS stacking order.
+pub(crate) fn paint_order_z(style: &ComputedStyle, is_flex_or_grid_item: bool) -> i32 {
   if style.participates_in_positioned_paint_bucket(is_flex_or_grid_item) {
     style.z_index.painting_order_value()
   } else {
