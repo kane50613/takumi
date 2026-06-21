@@ -53,13 +53,9 @@ impl Rgba {
   }
 }
 
-/// The affine transform type, re-exported from `takumi-core`. Serialized as an
-/// SVG `matrix(a b c d e f)` via [`matrix_attr`].
-pub(crate) use takumi_core::layout::style::Affine;
-
 use taffy::Size;
 use takumi_core::{
-  layout::style::{Color, Filter, LUMA_WEIGHTS, SEPIA_WEIGHTS, SizingContext},
+  layout::style::{Affine, Color, Filter, LUMA_WEIGHTS, SEPIA_WEIGHTS, SizingContext},
   shadow::SizedShadow,
 };
 
