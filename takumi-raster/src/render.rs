@@ -25,9 +25,7 @@ use crate::{
   scale_text_fit_x,
   stacking_context::paint_context,
 };
-use takumi_core::scene::{
-  apply_transform, build_stacking_contexts, collect_layout_children, get_node_mut_by_path,
-};
+use takumi_core::scene::build_stacking_contexts;
 
 #[derive(Clone, TypedBuilder)]
 /// Options for rendering a node. Construct using [`RenderOptions::builder`] to avoid breaking changes.
@@ -251,7 +249,7 @@ fn collect_measure_result(
         mut transform,
         container_size,
       }) => {
-        let Some(current) = get_node_mut_by_path(node, &path) else {
+        let Some(current) = node.node_at_path_mut(&path) else {
           return Err(Error::LayoutError(TaffyError::InvalidInputNode(node_id)));
         };
         let layout = *layout_results.layout(node_id)?;
@@ -259,12 +257,10 @@ fn collect_measure_result(
 
         transform *= Affine::translation(layout.location.x, layout.location.y);
         let mut local_transform = transform;
-        apply_transform(
-          &mut local_transform,
-          &current.context.style,
-          layout.size,
-          &current.context.sizing,
-        );
+        local_transform *= current
+          .context
+          .style
+          .local_transform(layout.size, &current.context.sizing);
         node_transforms.insert(node_id, local_transform);
 
         let mut children = Vec::new();
@@ -419,7 +415,7 @@ fn collect_measure_result(
           continue;
         }
 
-        let layout_children = collect_layout_children(layout_results, node_id)?;
+        let layout_children = layout_results.box_children(node_id)?;
         if layout_children.is_empty() {
           measured_by_node_id.insert(
             usize::from(node_id),

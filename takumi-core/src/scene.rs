@@ -10,6 +10,7 @@ use taffy::{AvailableSpace, Layout, NodeId, Point, TaffyError, geometry::Size};
 use crate::{
   error::{Error, Result},
   font_style::SizedFontStyle,
+  geometry::transformed_rect_extents,
   layout::{
     inline::{
       InlineLayoutMode, InlineLayoutRequest, collect_inline_items, create_inline_layout,
@@ -17,90 +18,10 @@ use crate::{
       resolve_inline_max_height, resolve_visual_inline_box, scale_text_fit_x,
       text_fit_line_alignment_correction,
     },
-    style::{Affine, ComputedStyle, Display, SizingContext},
-    tree::{LayoutResults, OrderedChild, RenderNode},
+    style::{Affine, ComputedStyle, Display},
+    tree::{LayoutResults, RenderNode},
   },
 };
-
-/// Transforms a rect's four corners and returns the axis-aligned `(min_x, min_y,
-/// max_x, max_y)` extents, or `None` if any corner is non-finite.
-pub fn transformed_rect_extents(
-  origin: Point<f32>,
-  size: Size<f32>,
-  transform: Affine,
-) -> Option<(f32, f32, f32, f32)> {
-  let corners = [
-    transform.transform_point(origin),
-    transform.transform_point(Point {
-      x: origin.x + size.width,
-      y: origin.y,
-    }),
-    transform.transform_point(Point {
-      x: origin.x,
-      y: origin.y + size.height,
-    }),
-    transform.transform_point(Point {
-      x: origin.x + size.width,
-      y: origin.y + size.height,
-    }),
-  ];
-
-  let mut min_x = f32::INFINITY;
-  let mut min_y = f32::INFINITY;
-  let mut max_x = f32::NEG_INFINITY;
-  let mut max_y = f32::NEG_INFINITY;
-  for point in corners {
-    min_x = min_x.min(point.x);
-    min_y = min_y.min(point.y);
-    max_x = max_x.max(point.x);
-    max_y = max_y.max(point.y);
-  }
-
-  if !min_x.is_finite() || !min_y.is_finite() || !max_x.is_finite() || !max_y.is_finite() {
-    return None;
-  }
-
-  Some((min_x, min_y, max_x, max_y))
-}
-
-pub fn apply_transform(
-  transform: &mut Affine,
-  style: &ComputedStyle,
-  border_box: Size<f32>,
-  sizing: &SizingContext,
-) {
-  *transform *= style.local_transform(border_box, sizing);
-}
-
-/// Resolves a node by its [`NodePaint::path`] (child indices from the root).
-pub fn get_node_by_path<'a>(root: &'a RenderNode, path: &[usize]) -> Option<&'a RenderNode> {
-  let mut current = root;
-  for &index in path {
-    let children = current.children.as_deref()?;
-    current = children.get(index)?;
-  }
-  Some(current)
-}
-
-/// Mutable [`get_node_by_path`].
-pub fn get_node_mut_by_path<'a>(
-  root: &'a mut RenderNode,
-  path: &[usize],
-) -> Option<&'a mut RenderNode> {
-  let mut current = root;
-  for &index in path {
-    let children = current.children.as_deref_mut()?;
-    current = children.get_mut(index)?;
-  }
-  Some(current)
-}
-
-pub fn collect_layout_children(
-  layout_results: &LayoutResults,
-  node_id: NodeId,
-) -> Result<Vec<OrderedChild>> {
-  Ok(layout_results.box_children(node_id)?.to_vec())
-}
 
 /// A node's resolved paint inputs: where it sits in the tree, its accumulated
 /// transform, the container it resolves against, and its device-space bounds.
@@ -297,7 +218,7 @@ pub fn build_stacking_contexts(
   }];
 
   while let Some(visit) = visits.pop() {
-    let Some(current) = get_node_by_path(root, &visit.path) else {
+    let Some(current) = root.node_at_path(&visit.path) else {
       return Err(Error::LayoutError(TaffyError::InvalidInputNode(
         visit.node_id,
       )));
@@ -309,12 +230,10 @@ pub fn build_stacking_contexts(
 
     let mut current_transform = visit.transform;
     current_transform *= Affine::translation(layout.location.x, layout.location.y);
-    apply_transform(
-      &mut current_transform,
-      &current.context.style,
-      layout.size,
-      &current.context.sizing,
-    );
+    current_transform *= current
+      .context
+      .style
+      .local_transform(layout.size, &current.context.sizing);
     if !current_transform.is_invertible() {
       continue;
     }
@@ -383,14 +302,14 @@ pub fn build_stacking_contexts(
       continue;
     }
 
-    let layout_children = collect_layout_children(layout_results, visit.node_id)?;
+    let layout_children = layout_results.box_children(visit.node_id)?;
     let child_container_size = Size {
       width: Some(layout.content_box_width()),
       height: Some(layout.content_box_height()),
     };
     node_content_box.insert(visit.node_id, child_container_size);
 
-    for child in layout_children.into_iter().rev() {
+    for child in layout_children.iter().rev() {
       let mut child_path = visit.path.clone();
       child_path.push(child.render_index);
       let (base_transform, base_container) = match child.hoisted_cb {

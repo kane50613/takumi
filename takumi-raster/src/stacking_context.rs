@@ -17,9 +17,9 @@ use crate::{
   },
   prepare_node_mask,
 };
-use takumi_core::scene::{
-  NodePaint, PaintItem, PaintItemKind, SceneBounds, StackingContextNode, get_node_mut_by_path,
-  transformed_rect_extents,
+use takumi_core::{
+  geometry::transformed_rect_extents,
+  scene::{NodePaint, PaintItem, PaintItemKind, SceneBounds, StackingContextNode},
 };
 
 fn bounds_intersects_viewport(bounds: SceneBounds, viewport: CanvasViewport) -> bool {
@@ -281,7 +281,7 @@ fn begin_node_render(
   defer_finish: bool,
   isolation_bounds_hint: Option<SceneBounds>,
 ) -> Result<Option<DeferredNodeRender>> {
-  let Some(current) = get_node_mut_by_path(root, &node_paint.path) else {
+  let Some(current) = root.node_at_path_mut(&node_paint.path) else {
     return Err(Error::LayoutError(TaffyError::InvalidInputNode(
       node_paint.node_id,
     )));
@@ -407,7 +407,7 @@ fn paint_single_node(
       isolated_canvas,
       filter_bounds,
     }) => {
-      let Some(current) = get_node_mut_by_path(root, &path) else {
+      let Some(current) = root.node_at_path_mut(&path) else {
         return Err(Error::LayoutError(TaffyError::InvalidInputNode(
           node_paint.node_id,
         )));
@@ -492,7 +492,7 @@ pub(crate) fn paint_context(
     filter_bounds,
   }) = deferred_root
   {
-    let Some(current) = get_node_mut_by_path(root, &path) else {
+    let Some(current) = root.node_at_path_mut(&path) else {
       let node_id = context
         .root()
         .map_or(layout_results.root_node_id(), |node| node.node_id);
