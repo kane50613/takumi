@@ -61,6 +61,22 @@ use takumi_core::{
 
 pub(crate) const IDENTITY: Affine = Affine::IDENTITY;
 
+/// An axis-aligned rectangle in absolute SVG user space: top-left `(x, y)` and
+/// size `(w, h)`. Bundles the box geometry threaded through the emission chain.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Frame {
+  pub x: f32,
+  pub y: f32,
+  pub w: f32,
+  pub h: f32,
+}
+
+impl Frame {
+  pub(crate) fn new(x: f32, y: f32, w: f32, h: f32) -> Self {
+    Self { x, y, w, h }
+  }
+}
+
 /// A single stop in a gradient.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct GradientStop {
@@ -703,7 +719,6 @@ impl SvgDocument {
 
   /// Strokes an open/closed path (for dashed/dotted borders). `dasharray` and
   /// `linecap` are optional.
-  #[allow(clippy::too_many_arguments)]
   pub(crate) fn stroke_path(
     &mut self,
     data: &str,

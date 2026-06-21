@@ -26,9 +26,9 @@ use takumi_core::{
 use typed_builder::TypedBuilder;
 
 use crate::{
-  APPROX_CHARS_PER_NUMBER, IDENTITY, Num, Rgba, SvgDocument,
+  APPROX_CHARS_PER_NUMBER, Frame, IDENTITY, Num, Rgba, SvgDocument,
   box_model::{PathData, element_transform, path_data},
-  gradient::{emit_background_images, emit_image_layers},
+  gradient::LayerEmitter,
   image::emit_image,
   scene_emit::emit_scene,
   text::{emit_inline_content, emit_text},
@@ -277,7 +277,8 @@ pub(crate) fn emit_background(
     doc.rect(x, y, width, height, Rgba(background.0))?;
   }
   if let Some(images) = style.background_image.as_deref() {
-    emit_background_images(images, &node.context, x, y, width, height, doc)?;
+    LayerEmitter::new(&node.context, doc)
+      .background_images(images, Frame::new(x, y, width, height))?;
   }
   if let Some(group) = bg_group {
     doc.end_group(group)?;
@@ -309,17 +310,12 @@ pub(crate) fn emit_mask_group(
   }
 
   let (token, reference) = doc.begin_mask()?;
-  emit_image_layers(
+  LayerEmitter::new(&node.context, doc).image_layers(
     images,
     &style.mask_size,
     &style.mask_position,
     &style.mask_repeat,
-    &node.context,
-    x,
-    y,
-    width,
-    height,
-    doc,
+    Frame::new(x, y, width, height),
   )?;
   doc.end_mask(token)?;
   Ok(Some(doc.begin_masked_group(&reference)?))
@@ -675,15 +671,16 @@ fn emit_image_node(
   let iy = y + layout.border.top + layout.padding.top;
   let (iw, ih) = (layout.content_box_width(), layout.content_box_height());
 
+  let content = Frame::new(ix, iy, iw, ih);
   let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
   if border.is_zero() {
-    return emit_image(image, &node.context, ix, iy, iw, ih, doc);
+    return emit_image(image, &node.context, content, doc);
   }
 
   let path = padding_box_path_data(&border, layout.border, layout.size, x, y);
   let clip = doc.clip_path(&path)?;
   let group = doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?;
-  emit_image(image, &node.context, ix, iy, iw, ih, doc)?;
+  emit_image(image, &node.context, content, doc)?;
   doc.end_group(group)
 }
 
@@ -694,6 +691,15 @@ fn emit_image_node(
 /// Uniform `dashed`/`dotted`/`double` borders stroke a centerline rounded-rect.
 /// 3D styles (groove/ridge/inset/outset) approximate as a solid fill. `x`/`y` are
 /// the absolute border-box top-left; `size` is the border-box size.
+/// The absolute placement of a border box: the `[1,0,0,1,x,y]` device-space
+/// transform and the border-box size, threaded together through the stroke
+/// emitters.
+#[derive(Clone, Copy)]
+struct BorderGeom {
+  matrix: [f32; 6],
+  size: Size<f32>,
+}
+
 pub(crate) fn emit_borders(
   border: &BorderProperties,
   x: f32,
@@ -706,18 +712,19 @@ pub(crate) fn emit_borders(
   }
 
   let matrix = [1.0, 0.0, 0.0, 1.0, x, y];
+  let geom = BorderGeom { matrix, size };
 
   // Uniform dashed/dotted/double borders need stroke-based rendering, not fills.
   if let Some(color) = border.has_uniform_visible_color() {
     let width = border.width.top;
     if border.is_uniform_all_sides_style(BorderStyle::Dashed) {
-      return emit_stroked_border(border, color, width, matrix, size, BorderStyle::Dashed, doc);
+      return emit_stroked_border(border, color, width, geom, BorderStyle::Dashed, doc);
     }
     if border.is_uniform_all_sides_style(BorderStyle::Dotted) {
-      return emit_stroked_border(border, color, width, matrix, size, BorderStyle::Dotted, doc);
+      return emit_stroked_border(border, color, width, geom, BorderStyle::Dotted, doc);
     }
     if border.is_uniform_all_sides_style(BorderStyle::Double) {
-      return emit_double_border(border, color, width, matrix, size, doc);
+      return emit_double_border(border, color, width, geom, doc);
     }
   }
 
@@ -780,7 +787,7 @@ pub(crate) fn emit_borders(
     }
     match style {
       BorderStyle::Dashed | BorderStyle::Dotted => {
-        emit_side_pattern(border, side, width, color, style, matrix, size, doc)?;
+        emit_side_pattern(border, side, width, color, style, geom, doc)?;
       }
       _ => {
         let mut polygon = Vec::new();
@@ -796,17 +803,16 @@ pub(crate) fn emit_borders(
 /// inset by half the side's width and shortened at each end by half the adjacent
 /// side's width (matching the raster backend's per-side stroke). Dash intervals
 /// mirror the uniform stroked path (dashed `3w 2w`, dotted `0 2w` + round caps).
-#[allow(clippy::too_many_arguments)]
 fn emit_side_pattern(
   border: &BorderProperties,
   side: BorderSide,
   width: f32,
   color: Color,
   style: BorderStyle,
-  matrix: [f32; 6],
-  size: Size<f32>,
+  geom: BorderGeom,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
+  let BorderGeom { matrix, size } = geom;
   let (half_top, half_right, half_bottom, half_left) = (
     border.width.top / 2.0,
     border.width.right / 2.0,
@@ -896,12 +902,8 @@ pub(crate) fn emit_outline(
 
 /// Builds the centerline rounded-rect path (border box inset by `inset` on each
 /// side, radii shrunk by `inset`) for stroking dashed/dotted/ring borders.
-fn centerline_path(
-  border: &BorderProperties,
-  inset: f32,
-  matrix: [f32; 6],
-  size: Size<f32>,
-) -> String {
+fn centerline_path(border: &BorderProperties, inset: f32, geom: BorderGeom) -> String {
+  let BorderGeom { matrix, size } = geom;
   let mut shrunk = *border;
   shrunk.expand_by(Rect {
     top: -inset,
@@ -923,15 +925,15 @@ fn emit_stroked_border(
   border: &BorderProperties,
   color: Color,
   width: f32,
-  matrix: [f32; 6],
-  size: Size<f32>,
+  geom: BorderGeom,
   style: BorderStyle,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
   if color.0[3] == 0 || width <= 0.0 {
     return Ok(());
   }
-  let data = centerline_path(border, width / 2.0, matrix, size);
+  let size = geom.size;
+  let data = centerline_path(border, width / 2.0, geom);
   let half = width / 2.0;
   let mut center = *border;
   center.expand_by(Rect {
@@ -973,8 +975,7 @@ fn emit_double_border(
   border: &BorderProperties,
   color: Color,
   width: f32,
-  matrix: [f32; 6],
-  size: Size<f32>,
+  geom: BorderGeom,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
   if color.0[3] == 0 || width <= 0.0 {
@@ -982,10 +983,10 @@ fn emit_double_border(
   }
   let third = width / 3.0;
   // Outer ring centered at third/2 from the outer edge.
-  let outer = centerline_path(border, third / 2.0, matrix, size);
+  let outer = centerline_path(border, third / 2.0, geom);
   doc.stroke_path(&outer, Rgba(color.0), third, None, None)?;
   // Inner ring centered at width - third/2 from the outer edge.
-  let inner = centerline_path(border, width - third / 2.0, matrix, size);
+  let inner = centerline_path(border, width - third / 2.0, geom);
   doc.stroke_path(&inner, Rgba(color.0), third, None, None)
 }
 
