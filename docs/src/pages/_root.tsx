@@ -36,7 +36,7 @@ export default function RootElement({ children }: { children: ReactNode }) {
               className="inline-flex items-center gap-2"
             >
               <Sparkles className="size-4" />
-              Takumi v2 Beta is live. SVG output, web-accurate rendering, a leaner API. Try it →
+              Takumi v2 Beta is live, with SVG output and a leaner API. Try it →
             </a>
           </Banner>
           {children}
