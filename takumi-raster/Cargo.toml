@@ -5,6 +5,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Raster (tiny-skia) painting backend for takumi."
 repository = "https://github.com/kane50613/takumi"
+readme = "README.md"
 rust-version = "1.91"
 
 [dependencies]

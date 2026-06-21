@@ -105,8 +105,13 @@ jobs:
           exit 1
 
       - name: Test README.md is up to date
-        working-directory: takumi
-        run: cargo rdme --check
+        run: |
+          fail=0
+          while read -r dir; do
+            (cd "$dir" && cargo rdme --check) || fail=1
+          done < <(cargo metadata --format-version 1 --no-deps \
+            | jq -r '.packages[] | select(.publish != []) | select(any(.targets[]; .kind | index("lib"))) | .manifest_path | rtrimstr("/Cargo.toml")')
+          exit $fail
 
       - name: Run security audit
         run: cargo audit
