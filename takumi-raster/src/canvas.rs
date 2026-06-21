@@ -768,6 +768,27 @@ fn compute_overlay_bounds_for_canvas(
   ))
 }
 
+#[inline(always)]
+fn apply_combined_mask(
+  src: [u8; 4],
+  combined_mask: Option<MaskView<'_>>,
+  dest_x: u32,
+  dest_y: u32,
+) -> Option<[u8; 4]> {
+  let Some(mask) = combined_mask else {
+    return Some(src);
+  };
+  let alpha = mask.alpha_at(dest_x, dest_y);
+  if alpha == 0 {
+    return None;
+  }
+  let src = scale_premultiplied_pixel(src, alpha);
+  if src[3] == 0 {
+    return None;
+  }
+  Some(src)
+}
+
 fn blit_sampled_paint_source_translation(
   pixmap: &mut PixmapMut<'_>,
   source: PaintSource<'_>,
@@ -802,7 +823,7 @@ fn blit_sampled_paint_source_translation(
       y: src_y + 0.5,
     });
     for dest_x in dest_x_min..dest_x_max {
-      let mut src = sample_paint_source(
+      let src = sample_paint_source(
         source,
         sampling.algorithm,
         sample_point.x,
@@ -818,16 +839,9 @@ fn blit_sampled_paint_source_translation(
 
       let dest_x = dest_x as u32;
       let dest_y = dest_y as u32;
-      if let Some(mask) = combined_mask {
-        let alpha = mask.alpha_at(dest_x, dest_y);
-        if alpha == 0 {
-          continue;
-        }
-        src = scale_premultiplied_pixel(src, alpha);
-        if src[3] == 0 {
-          continue;
-        }
-      }
+      let Some(src) = apply_combined_mask(src, combined_mask, dest_x, dest_y) else {
+        continue;
+      };
 
       let index = (dest_y * canvas_width + dest_x) as usize;
       blend_premultiplied_pixel(&mut pixels[index], src, mode);
@@ -895,22 +909,15 @@ fn blit_paint_source_translation(
         let src_row = src_y as usize * source_width as usize;
         for dest_x in dest_x_min..dest_x_max {
           let src_x = (dest_x - offset_x) as u32;
-          let mut src = premultiplied_from_pixel(source_pixels[src_row + src_x as usize]);
+          let src = premultiplied_from_pixel(source_pixels[src_row + src_x as usize]);
           if src[3] == 0 {
             continue;
           }
 
           let dest_x = dest_x as u32;
-          if let Some(mask) = combined_mask {
-            let alpha = mask.alpha_at(dest_x, dest_y as u32);
-            if alpha == 0 {
-              continue;
-            }
-            src = scale_premultiplied_pixel(src, alpha);
-            if src[3] == 0 {
-              continue;
-            }
-          }
+          let Some(src) = apply_combined_mask(src, combined_mask, dest_x, dest_y as u32) else {
+            continue;
+          };
 
           blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
         }
@@ -922,7 +929,7 @@ fn blit_paint_source_translation(
         let dst_row = dest_y as usize * canvas_width as usize;
         for dest_x in dest_x_min..dest_x_max {
           let src_x = (dest_x - offset_x) as f32;
-          let mut src = sample_paint_source(
+          let src = sample_paint_source(
             source,
             ImageScalingAlgorithm::Pixelated,
             src_x,
@@ -935,16 +942,9 @@ fn blit_paint_source_translation(
           }
 
           let dest_x = dest_x as u32;
-          if let Some(mask) = combined_mask {
-            let alpha = mask.alpha_at(dest_x, dest_y as u32);
-            if alpha == 0 {
-              continue;
-            }
-            src = scale_premultiplied_pixel(src, alpha);
-            if src[3] == 0 {
-              continue;
-            }
-          }
+          let Some(src) = apply_combined_mask(src, combined_mask, dest_x, dest_y as u32) else {
+            continue;
+          };
 
           blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
         }
@@ -1006,18 +1006,10 @@ fn blit_solid_translation(
   for dest_y in dest_y_min..dest_y_max {
     let dst_row = dest_y as usize * canvas_width as usize;
     for dest_x in dest_x_min..dest_x_max {
-      let mut src = color;
       let dest_x = dest_x as u32;
-      if let Some(mask) = combined_mask {
-        let alpha = mask.alpha_at(dest_x, dest_y as u32);
-        if alpha == 0 {
-          continue;
-        }
-        src = scale_premultiplied_pixel(src, alpha);
-        if src[3] == 0 {
-          continue;
-        }
-      }
+      let Some(src) = apply_combined_mask(color, combined_mask, dest_x, dest_y as u32) else {
+        continue;
+      };
 
       blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
     }
@@ -1443,22 +1435,15 @@ pub(crate) fn overlay_gradient_tile<T>(
     let dst_row = dest_y as usize * bottom_width as usize;
     for dest_x in dest_x_min..dest_x_max {
       let src_x = (dest_x - offset_x) as u32;
-      let mut src = premultiplied_from_pixel(gradient.sample_pixel(src_x, src_y));
+      let src = premultiplied_from_pixel(gradient.sample_pixel(src_x, src_y));
       if src[3] == 0 {
         continue;
       }
 
       let dest_x = dest_x as u32;
-      if let Some(mask) = combined_mask {
-        let alpha = mask.alpha_at(dest_x, dest_y as u32);
-        if alpha == 0 {
-          continue;
-        }
-        src = scale_premultiplied_pixel(src, alpha);
-        if src[3] == 0 {
-          continue;
-        }
-      }
+      let Some(src) = apply_combined_mask(src, combined_mask, dest_x, dest_y as u32) else {
+        continue;
+      };
 
       blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
     }

@@ -12,6 +12,14 @@ use crate::{
 };
 
 #[derive(Clone, Copy)]
+struct DestRegion {
+  bounds: (i32, i32, i32, i32),
+  offset: (i32, i32),
+  canvas_width: usize,
+  mask_stride: usize,
+}
+
+#[derive(Clone, Copy)]
 pub(super) struct Options<'a> {
   pub placement: Placement,
   pub sampling: MaskSamplingOptions,
@@ -49,31 +57,19 @@ pub(super) fn constant(
     return;
   };
 
+  let region = DestRegion {
+    bounds: (dest_x_min, dest_x_max, dest_y_min, dest_y_max),
+    offset: (offset_x, offset_y),
+    canvas_width: canvas_width as usize,
+    mask_stride: placement.width as usize,
+  };
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
   if mode == BlendMode::Normal && combined_mask.is_none() {
-    constant_normal(
-      pixels,
-      canvas_width as usize,
-      mask,
-      placement.width as usize,
-      color,
-      (dest_x_min, dest_x_max, dest_y_min, dest_y_max),
-      (offset_x, offset_y),
-    );
+    constant_normal(pixels, mask, color, region);
     return;
   }
 
-  constant_general(
-    pixels,
-    canvas_width as usize,
-    mask,
-    placement.width as usize,
-    color,
-    mode,
-    combined_mask,
-    (dest_x_min, dest_x_max, dest_y_min, dest_y_max),
-    (offset_x, offset_y),
-  );
+  constant_general(pixels, mask, color, mode, combined_mask, region);
 }
 
 pub(super) fn source(
@@ -113,44 +109,31 @@ pub(super) fn source(
     return;
   };
   let (offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max) = bounds;
+  let region = DestRegion {
+    bounds: (dest_x_min, dest_x_max, dest_y_min, dest_y_max),
+    offset: (offset_x, offset_y),
+    canvas_width: canvas_width as usize,
+    mask_stride: options.placement.width as usize,
+  };
 
   if options.color_mode == MaskCompositeColor::SourceOnly
     && options.mode == BlendMode::Normal
-    && try_translation_blit(
-      pixmap,
-      mask,
-      source,
-      &options,
-      (dest_x_min, dest_x_max, dest_y_min, dest_y_max),
-      (offset_x, offset_y),
-    )
+    && try_translation_blit(pixmap, mask, source, &options, region)
   {
     return;
   }
 
-  source_general(
-    pixmap,
-    mask,
-    source,
-    &options,
-    (dest_x_min, dest_x_max, dest_y_min, dest_y_max),
-    (offset_x, offset_y),
-    canvas_width as usize,
-  );
+  source_general(pixmap, mask, source, &options, region);
 }
 
 #[inline]
-fn constant_normal(
-  pixels: &mut [[u8; 4]],
-  canvas_width: usize,
-  mask: &[u8],
-  mask_stride: usize,
-  color: [u8; 4],
-  bounds: (i32, i32, i32, i32),
-  offset: (i32, i32),
-) {
-  let (dest_x_min, dest_x_max, dest_y_min, dest_y_max) = bounds;
-  let (offset_x, offset_y) = offset;
+fn constant_normal(pixels: &mut [[u8; 4]], mask: &[u8], color: [u8; 4], region: DestRegion) {
+  let DestRegion {
+    bounds: (dest_x_min, dest_x_max, dest_y_min, dest_y_max),
+    offset: (offset_x, offset_y),
+    canvas_width,
+    mask_stride,
+  } = region;
   let span = (dest_x_max - dest_x_min) as usize;
 
   for dest_y in dest_y_min..dest_y_max {
@@ -174,21 +157,21 @@ fn constant_normal(
   }
 }
 
-#[allow(clippy::too_many_arguments)]
 #[inline]
 fn constant_general(
   pixels: &mut [[u8; 4]],
-  canvas_width: usize,
   mask: &[u8],
-  mask_stride: usize,
   color: [u8; 4],
   mode: BlendMode,
   combined_mask: Option<MaskView<'_>>,
-  bounds: (i32, i32, i32, i32),
-  offset: (i32, i32),
+  region: DestRegion,
 ) {
-  let (dest_x_min, dest_x_max, dest_y_min, dest_y_max) = bounds;
-  let (offset_x, offset_y) = offset;
+  let DestRegion {
+    bounds: (dest_x_min, dest_x_max, dest_y_min, dest_y_max),
+    offset: (offset_x, offset_y),
+    canvas_width,
+    mask_stride,
+  } = region;
 
   for dest_y in dest_y_min..dest_y_max {
     let mask_y = (dest_y - offset_y) as usize;
@@ -223,8 +206,7 @@ fn try_translation_blit(
   mask: &[u8],
   source: PaintSource<'_>,
   options: &Options<'_>,
-  bounds: (i32, i32, i32, i32),
-  offset: (i32, i32),
+  region: DestRegion,
 ) -> bool {
   let transform = options.sampling.canvas_to_source;
   if !transform.only_translation() || transform.x.fract() != 0.0 || transform.y.fract() != 0.0 {
@@ -234,10 +216,12 @@ fn try_translation_blit(
     return false;
   };
 
-  let (dest_x_min, dest_x_max, dest_y_min, dest_y_max) = bounds;
-  let (offset_x, offset_y) = offset;
-  let canvas_width = pixmap.width() as usize;
-  let mask_stride = options.placement.width as usize;
+  let DestRegion {
+    bounds: (dest_x_min, dest_x_max, dest_y_min, dest_y_max),
+    offset: (offset_x, offset_y),
+    canvas_width,
+    mask_stride,
+  } = region;
   let source_width = source_pixmap.width() as i32;
   let source_height = source_pixmap.height() as i32;
   let source_pixels = source_pixmap.pixels();
@@ -318,19 +302,19 @@ fn try_translation_blit(
   true
 }
 
-#[allow(clippy::too_many_arguments)]
 fn source_general(
   pixmap: &mut PixmapMut<'_>,
   mask: &[u8],
   source: PaintSource<'_>,
   options: &Options<'_>,
-  bounds: (i32, i32, i32, i32),
-  offset: (i32, i32),
-  canvas_width: usize,
+  region: DestRegion,
 ) {
-  let (dest_x_min, dest_x_max, dest_y_min, dest_y_max) = bounds;
-  let (offset_x, offset_y) = offset;
-  let mask_stride = options.placement.width as usize;
+  let DestRegion {
+    bounds: (dest_x_min, dest_x_max, dest_y_min, dest_y_max),
+    offset: (offset_x, offset_y),
+    canvas_width,
+    mask_stride,
+  } = region;
   let footprint = sampling_footprint(options.sampling.canvas_to_source);
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
 
