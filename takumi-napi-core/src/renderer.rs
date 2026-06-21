@@ -23,6 +23,7 @@ use crate::{
   De, deserialize_with_tracing, encode_frames_task::EncodeFramesTask, load_font_task::LoadFontTask,
   map_error, measure_task::MeasureTask, parse_font_input,
   render_animation_task::RenderAnimationTask, render_task::RenderTask,
+  svg_render_task::SvgRenderTask,
 };
 
 /// Represents a single run of text in a measured node.
@@ -155,6 +156,30 @@ pub struct RenderOptions<'env> {
   pub time_ms: Option<i64>,
   /// The output dithering algorithm.
   pub dithering: Option<DitheringAlgorithm>,
+  /// Per-render font stack: ordered family names used as the fallback chain.
+  /// Defaults to all registered families in registration order.
+  pub font_families: Option<Vec<String>>,
+}
+
+/// Options for rendering a node tree to an SVG document. SVG is a vector
+/// format, so the raster-only knobs (`format`, `quality`, `lossless`,
+/// `dithering`, `drawDebugBorder`, `devicePixelRatio`) do not apply.
+#[napi(object)]
+#[derive(Default)]
+pub struct SvgRenderOptions<'env> {
+  /// The width of the viewport. If not provided, it is derived from content.
+  pub width: Option<u32>,
+  /// The height of the viewport. If not provided, it is derived from content.
+  pub height: Option<u32>,
+  /// Images keyed by `src`, each carrying raw bytes.
+  pub images: Option<Vec<ImageSource<'env>>>,
+  /// CSS stylesheets to apply before rendering.
+  pub stylesheets: Option<Vec<String>>,
+  /// Structured keyframes to register alongside stylesheets.
+  #[napi(ts_type = "Keyframes")]
+  pub keyframes: Option<Object<'env>>,
+  /// The animation timeline time in milliseconds.
+  pub time_ms: Option<i64>,
   /// Per-render font stack: ordered family names used as the fallback chain.
   /// Defaults to all registered families in registration order.
   pub font_families: Option<Vec<String>>,
@@ -459,6 +484,31 @@ impl Renderer {
 
     Ok(AsyncTask::with_optional_signal(
       RenderTask::from_options(
+        env,
+        node,
+        options.unwrap_or_default(),
+        Arc::clone(&self.state),
+      )?,
+      signal,
+    ))
+  }
+
+  /// Renders a node tree into an SVG document string asynchronously.
+  #[napi(
+    ts_args_type = "source: Node, options?: SvgRenderOptions, signal?: AbortSignal",
+    ts_return_type = "Promise<string>"
+  )]
+  pub fn render_svg(
+    &self,
+    env: Env,
+    source: Object,
+    options: Option<SvgRenderOptions>,
+    signal: Option<AbortSignal>,
+  ) -> Result<AsyncTask<SvgRenderTask>> {
+    let node: Node = deserialize_with_tracing(source)?;
+
+    Ok(AsyncTask::with_optional_signal(
+      SvgRenderTask::from_options(
         env,
         node,
         options.unwrap_or_default(),

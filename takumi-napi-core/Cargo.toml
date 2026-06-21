@@ -25,6 +25,10 @@ path = "../takumi-raster"
 default-features = false
 features = ["svg", "rayon"]
 
+[dependencies.takumi-svg]
+path = "../takumi-svg"
+version = "0.1"
+
 [build-dependencies]
 napi-build.workspace = true
 
