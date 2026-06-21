@@ -31,6 +31,36 @@ use crate::{
   image::encode, render::emit_inline_box,
 };
 
+/// Where a run of inline text sits: its container `layout` (border/padding and
+/// content size) and the container's absolute border-box top-left
+/// `(origin_x, origin_y)`. Bundles the geometry threaded through the run/glyph
+/// emitters; the shadow pass shifts `origin_*` per shadow.
+#[derive(Clone, Copy)]
+struct TextFrame {
+  layout: Layout,
+  origin_x: f32,
+  origin_y: f32,
+}
+
+impl TextFrame {
+  fn new(layout: Layout, origin_x: f32, origin_y: f32) -> Self {
+    Self {
+      layout,
+      origin_x,
+      origin_y,
+    }
+  }
+
+  /// Shifts the origin by `(dx, dy)` (for the text-shadow pass).
+  fn shifted(self, dx: f32, dy: f32) -> Self {
+    Self {
+      origin_x: self.origin_x + dx,
+      origin_y: self.origin_y + dy,
+      ..self
+    }
+  }
+}
+
 /// Emits a leaf [`TextData`] node. `origin_x`/`origin_y` are the element's
 /// absolute border-box top-left; `layout` carries border/padding and content size.
 pub(crate) fn emit_text(
@@ -70,9 +100,7 @@ pub(crate) fn emit_text(
     &built.spans,
     &font_style,
     context,
-    layout,
-    origin_x,
-    origin_y,
+    TextFrame::new(layout, origin_x, origin_y),
   )
 }
 
@@ -114,9 +142,7 @@ pub(crate) fn emit_inline_content(
     &built.spans,
     &font_style,
     context,
-    layout,
-    origin_x,
-    origin_y,
+    TextFrame::new(layout, origin_x, origin_y),
   )?;
 
   for inline_box in &runs.inline_boxes {
@@ -129,16 +155,13 @@ pub(crate) fn emit_inline_content(
 
 /// Paints a resolved run layout in CSS text-decoration order: shadows, under/over
 /// decorations, glyphs, then line-through.
-#[allow(clippy::too_many_arguments)]
 fn emit_runs(
   doc: &mut SvgDocument,
   runs: &InlineRunLayout<'_>,
   spans: &[ProcessedInlineSpan<'_>],
   font_style: &SizedFontStyle,
   context: &RenderContext,
-  layout: Layout,
-  origin_x: f32,
-  origin_y: f32,
+  frame: TextFrame,
 ) -> io::Result<()> {
   let stroke =
     (font_style.stroke_width > 0.0 && font_style.text_stroke_color.0[3] != 0).then_some((
@@ -159,44 +182,31 @@ fn emit_runs(
       None
     };
     let group = doc.begin_group(IDENTITY, 1.0, None, filter.as_deref())?;
+    let shadow_frame = frame.shifted(shadow.offset_x, shadow.offset_y);
     for run in &runs.runs {
-      emit_run_glyphs(
-        doc,
-        run,
-        font_style,
-        layout,
-        origin_x + shadow.offset_x,
-        origin_y + shadow.offset_y,
-        Some(color),
-        None,
-        None,
-      )?;
+      emit_run_glyphs(doc, run, font_style, shadow_frame, Some(color), None, None)?;
     }
     doc.end_group(group)?;
   }
 
   for run in &runs.runs {
-    emit_run_decorations(doc, run, layout, origin_x, origin_y, false)?;
+    emit_run_decorations(doc, run, frame, false)?;
   }
 
   if context.style.background_clip == BackgroundClip::Text {
-    emit_clip_text_glyphs(
-      doc, runs, font_style, context, layout, origin_x, origin_y, stroke,
-    )?;
+    emit_clip_text_glyphs(doc, runs, font_style, context, frame, stroke)?;
   } else {
     for run in &runs.runs {
-      emit_run_glyphs(
-        doc, run, font_style, layout, origin_x, origin_y, None, stroke, None,
-      )?;
+      emit_run_glyphs(doc, run, font_style, frame, None, stroke, None)?;
     }
   }
 
   // Text outlines stroke between the glyphs and the line-through, matching the
   // raster backend's painting order.
-  emit_inline_outlines(doc, runs, spans, origin_x, origin_y)?;
+  emit_inline_outlines(doc, runs, spans, frame.origin_x, frame.origin_y)?;
 
   for run in &runs.runs {
-    emit_run_decorations(doc, run, layout, origin_x, origin_y, true)?;
+    emit_run_decorations(doc, run, frame, true)?;
   }
   Ok(())
 }
@@ -289,15 +299,12 @@ fn emit_outline_island(
 /// can't reach the stroke-widened ring, so the background would only fill the thin
 /// glyph interior. A mask honors the stroke, so the background fills the full
 /// fill+stroke coverage.
-#[allow(clippy::too_many_arguments)]
 fn emit_clip_text_glyphs(
   doc: &mut SvgDocument,
   runs: &InlineRunLayout<'_>,
   font_style: &SizedFontStyle,
   context: &RenderContext,
-  layout: Layout,
-  origin_x: f32,
-  origin_y: f32,
+  frame: TextFrame,
   stroke: Option<(Rgba, f32, &str)>,
 ) -> io::Result<()> {
   let white = Rgba([255, 255, 255, 255]);
@@ -307,16 +314,7 @@ fn emit_clip_text_glyphs(
   let (mask_token, mask_ref) = doc.begin_mask()?;
   let mut any = false;
   for run in &runs.runs {
-    any |= emit_clip_text_mask_glyphs(
-      doc,
-      run,
-      layout,
-      origin_x,
-      origin_y,
-      white,
-      stroke_width,
-      join,
-    )?;
+    any |= emit_clip_text_mask_glyphs(doc, run, frame, white, stroke_width, join)?;
   }
   doc.end_mask(mask_token)?;
   if !any {
@@ -325,8 +323,8 @@ fn emit_clip_text_glyphs(
 
   let cc = context.current_color;
   let background = Rgba(context.style.background_color.resolve(cc).0);
-  let (bx, by) = (origin_x, origin_y);
-  let (bw, bh) = (layout.size.width, layout.size.height);
+  let (bx, by) = (frame.origin_x, frame.origin_y);
+  let (bw, bh) = (frame.layout.size.width, frame.layout.size.height);
 
   let group = doc.begin_masked_group(&mask_ref)?;
   if background.0[3] != 0 {
@@ -340,9 +338,7 @@ fn emit_clip_text_glyphs(
   // The `color` (brush) fills the glyph interiors on top of the background, with
   // the real text stroke (a transparent stroke adds nothing visible).
   for run in &runs.runs {
-    emit_run_glyphs(
-      doc, run, font_style, layout, origin_x, origin_y, None, stroke, None,
-    )?;
+    emit_run_glyphs(doc, run, font_style, frame, None, stroke, None)?;
   }
   Ok(())
 }
@@ -350,19 +346,16 @@ fn emit_clip_text_glyphs(
 /// Paints a run's outline glyphs white into the active mask with both fill and
 /// stroke (and any faux-bold embolden), so the mask covers the full fill+stroke
 /// glyph coverage. Returns whether any glyph was emitted.
-#[allow(clippy::too_many_arguments)]
 fn emit_clip_text_mask_glyphs(
   doc: &mut SvgDocument,
   run: &PositionedInlineRun<'_>,
-  layout: Layout,
-  origin_x: f32,
-  origin_y: f32,
+  frame: TextFrame,
   color: Rgba,
   stroke_width: f32,
   join: &str,
 ) -> io::Result<bool> {
   let run_transform = run.transform(IDENTITY);
-  let glyph_offset = run.glyph_offset(layout);
+  let glyph_offset = run.glyph_offset(frame.layout);
   let mut any = false;
   for glyph in run.glyph_run.positioned_glyphs() {
     let Some(ResolvedGlyph::Outline(outline)) = run.resolved_glyphs.get(&glyph.id) else {
@@ -370,7 +363,7 @@ fn emit_clip_text_mask_glyphs(
     };
     let matrix =
       run_transform * Affine::translation(glyph_offset.x + glyph.x, glyph_offset.y + glyph.y);
-    let cols = offset(matrix.to_cols_array(), origin_x, origin_y).to_cols_array();
+    let cols = offset(matrix.to_cols_array(), frame.origin_x, frame.origin_y).to_cols_array();
     let data = path_data(outline.paths(), cols);
     if data.is_empty() {
       continue;
@@ -393,9 +386,7 @@ fn emit_clip_text_mask_glyphs(
 fn emit_run_decorations(
   doc: &mut SvgDocument,
   run: &PositionedInlineRun<'_>,
-  layout: Layout,
-  origin_x: f32,
-  origin_y: f32,
+  frame: TextFrame,
   over: bool,
 ) -> io::Result<()> {
   let transform = run.transform(IDENTITY);
@@ -403,9 +394,9 @@ fn emit_run_decorations(
   let opacity_group = (opacity < 1.0)
     .then(|| doc.begin_group(IDENTITY, opacity, None, None))
     .transpose()?;
-  for decoration in run_decorations(&run.glyph_run, layout, run.baseline_shift, transform) {
+  for decoration in run_decorations(&run.glyph_run, frame.layout, run.baseline_shift, transform) {
     if decoration.over == over {
-      emit_decoration(doc, &decoration, origin_x, origin_y)?;
+      emit_decoration(doc, &decoration, frame.origin_x, frame.origin_y)?;
     }
   }
   if let Some(group) = opacity_group {
@@ -418,20 +409,17 @@ fn emit_run_decorations(
 /// suppresses bitmaps/COLR; `stroke` adds `-webkit-text-stroke` to outlines. When
 /// `clip_data` is `Some`, outline glyph paths are appended to it (for a
 /// `background-clip: text` `<clipPath>`) instead of being painted.
-#[allow(clippy::too_many_arguments)]
 fn emit_run_glyphs(
   doc: &mut SvgDocument,
   run: &PositionedInlineRun<'_>,
   font_style: &SizedFontStyle,
-  layout: Layout,
-  origin_x: f32,
-  origin_y: f32,
+  frame: TextFrame,
   color_override: Option<Rgba>,
   stroke: Option<(Rgba, f32, &str)>,
   mut clip_data: Option<&mut String>,
 ) -> io::Result<()> {
   let run_transform = run.transform(IDENTITY);
-  let glyph_offset = run.glyph_offset(layout);
+  let glyph_offset = run.glyph_offset(frame.layout);
   let fill_color = run.glyph_run.style().brush.color;
   let bold_join = line_join_str(font_style.parent.stroke_linejoin);
 
@@ -455,7 +443,7 @@ fn emit_run_glyphs(
     };
     let matrix =
       run_transform * Affine::translation(glyph_offset.x + glyph.x, glyph_offset.y + glyph.y);
-    let placed = offset(matrix.to_cols_array(), origin_x, origin_y);
+    let placed = offset(matrix.to_cols_array(), frame.origin_x, frame.origin_y);
     let cols = placed.to_cols_array();
 
     match resolved {
