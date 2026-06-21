@@ -38,6 +38,12 @@ impl<'a> BlurFormat<'a> {
   }
 }
 
+#[derive(Clone, Copy)]
+struct Dims {
+  width: u32,
+  height: u32,
+}
+
 fn blur_pass_params(
   width: u32,
   height: u32,
@@ -108,18 +114,18 @@ pub(crate) fn apply_blur_rgba_bytes(
   blur_type: BlurType,
   pool: &mut BufferPool,
 ) -> Result<()> {
-  apply_blur_rgba_bytes_internal(data, width, height, radius, blur_type, pool, true)
+  apply_blur_rgba_bytes_internal(data, Dims { width, height }, radius, blur_type, pool, true)
 }
 
 fn apply_blur_rgba_bytes_internal(
   data: &mut [u8],
-  width: u32,
-  height: u32,
+  dims: Dims,
   radius: f32,
   blur_type: BlurType,
   pool: &mut BufferPool,
   allow_downsample: bool,
 ) -> Result<()> {
+  let Dims { width, height } = dims;
   if width == 0 || height == 0 {
     return Ok(());
   }
@@ -137,7 +143,7 @@ fn apply_blur_rgba_bytes_internal(
   if allow_downsample {
     let scale = blur_downsample_scale(width, height, radius, blur_type);
     if scale > 1 {
-      return apply_blur_rgba_downsampled(data, width, height, radius, blur_type, pool, scale);
+      return apply_blur_rgba_downsampled(data, dims, radius, blur_type, pool, scale);
     }
   }
 
@@ -188,63 +194,47 @@ fn blur_downsample_scale(width: u32, height: u32, radius: f32, blur_type: BlurTy
 
 fn apply_blur_rgba_downsampled(
   data: &mut [u8],
-  width: u32,
-  height: u32,
+  dims: Dims,
   radius: f32,
   blur_type: BlurType,
   pool: &mut BufferPool,
   scale: u32,
 ) -> Result<()> {
-  let ds_width = width.div_ceil(scale);
-  let ds_height = height.div_ceil(scale);
-  let ds_len = (ds_width as usize)
-    .saturating_mul(ds_height as usize)
+  let ds_dims = Dims {
+    width: dims.width.div_ceil(scale),
+    height: dims.height.div_ceil(scale),
+  };
+  let ds_len = (ds_dims.width as usize)
+    .saturating_mul(ds_dims.height as usize)
     .saturating_mul(4);
 
   let mut downsampled = pool.acquire_dirty(ds_len);
-  downsample_rgba_box(
-    data,
-    width,
-    height,
-    &mut downsampled,
-    ds_width,
-    ds_height,
-    scale,
-  );
+  downsample_rgba_box(data, dims, &mut downsampled, ds_dims, scale);
 
   let scaled_radius = radius / scale as f32;
   apply_blur_rgba_bytes_internal(
     &mut downsampled,
-    ds_width,
-    ds_height,
+    ds_dims,
     scaled_radius,
     blur_type,
     pool,
     false,
   )?;
 
-  upsample_rgba_bilinear(
-    &downsampled,
-    ds_width,
-    ds_height,
-    data,
-    width,
-    height,
-    scale,
-  );
+  upsample_rgba_bilinear(&downsampled, ds_dims, data, dims, scale);
   pool.release(downsampled);
   Ok(())
 }
 
-fn downsample_rgba_box(
-  src: &[u8],
-  src_width: u32,
-  src_height: u32,
-  dst: &mut [u8],
-  dst_width: u32,
-  dst_height: u32,
-  scale: u32,
-) {
+fn downsample_rgba_box(src: &[u8], src_dims: Dims, dst: &mut [u8], dst_dims: Dims, scale: u32) {
+  let Dims {
+    width: src_width,
+    height: src_height,
+  } = src_dims;
+  let Dims {
+    width: dst_width,
+    height: dst_height,
+  } = dst_dims;
   for dy in 0..dst_height {
     let src_y0 = dy * scale;
     let src_y1 = (src_y0 + scale).min(src_height);
@@ -283,15 +273,15 @@ fn downsample_rgba_box(
   }
 }
 
-fn upsample_rgba_bilinear(
-  src: &[u8],
-  src_width: u32,
-  src_height: u32,
-  dst: &mut [u8],
-  dst_width: u32,
-  dst_height: u32,
-  scale: u32,
-) {
+fn upsample_rgba_bilinear(src: &[u8], src_dims: Dims, dst: &mut [u8], dst_dims: Dims, scale: u32) {
+  let Dims {
+    width: src_width,
+    height: src_height,
+  } = src_dims;
+  let Dims {
+    width: dst_width,
+    height: dst_height,
+  } = dst_dims;
   if src_width == 0 || src_height == 0 {
     dst.fill(0);
     return;
@@ -608,7 +598,9 @@ fn compute_mul_shg(d: u32) -> (u32, i32) {
 mod tests {
   use std::assert_matches;
 
-  use super::{BlurType, apply_blur_rgba_bytes, blur_downsample_scale, upsample_rgba_bilinear};
+  use super::{
+    BlurType, Dims, apply_blur_rgba_bytes, blur_downsample_scale, upsample_rgba_bilinear,
+  };
   use crate::{BufferPool, Error};
 
   #[test]
@@ -648,11 +640,15 @@ mod tests {
 
     upsample_rgba_bilinear(
       &src,
-      src_width,
-      src_height,
+      Dims {
+        width: src_width,
+        height: src_height,
+      },
       &mut actual,
-      dst_width,
-      dst_height,
+      Dims {
+        width: dst_width,
+        height: dst_height,
+      },
       scale,
     );
     upsample_rgba_bilinear_reference(
