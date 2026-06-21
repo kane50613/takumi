@@ -25,8 +25,8 @@ use self::{
   container::{
     container_children_ref, deserialize_children, drop_container_children, take_container_children,
   },
-  image::{image_inline_content, measure_image_node, take_image_style_layers},
-  text::{measure_text_node, text_inline_content},
+  image::{measure_image_node, take_image_style_layers},
+  text::measure_text_node,
 };
 
 pub use self::image::resolve_image;
@@ -513,8 +513,8 @@ impl Node {
   pub(crate) fn inline_content(&self) -> Option<InlineContentKind<'_>> {
     match &self.kind {
       NodeKind::Container { .. } => None,
-      NodeKind::Image(_) => image_inline_content(&self.kind),
-      NodeKind::Text(text) => text_inline_content(text),
+      NodeKind::Image(_) => Some(InlineContentKind::Box),
+      NodeKind::Text(text) => Some(InlineContentKind::Text(text.text.as_str().into())),
     }
   }
 

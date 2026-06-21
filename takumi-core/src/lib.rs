@@ -14,6 +14,7 @@ pub mod text_processing;
 pub mod error;
 pub use takumi_css::keyframes;
 pub mod resources;
+pub mod scene;
 
 use std::collections::HashSet;
 

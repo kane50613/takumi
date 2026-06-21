@@ -5,17 +5,13 @@ use crate::{
   font_style::SizedFontStyle,
   layout::{
     inline::{
-      InlineContentKind, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
+      InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
       create_inline_constraint, create_inline_layout, get_parent_font_metrics,
       measure_inline_layout,
     },
     node::TextData,
   },
 };
-
-pub(crate) fn text_inline_content(text: &TextData) -> Option<InlineContentKind<'_>> {
-  Some(InlineContentKind::Text(text.text.as_str().into()))
-}
 
 pub(crate) fn measure_text_node(
   text: &TextData,

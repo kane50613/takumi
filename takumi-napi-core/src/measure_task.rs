@@ -14,13 +14,13 @@ use crate::{
 };
 
 pub struct MeasureTask {
-  pub node: Option<Node>,
+  pub(crate) node: Option<Node>,
   pub(crate) state: Arc<RwLock<RendererState>>,
-  pub viewport: Viewport,
-  pub time_ms: u64,
-  pub stylesheet: StyleSheet,
-  pub images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
-  pub font_families: Option<Vec<String>>,
+  pub(crate) viewport: Viewport,
+  pub(crate) time_ms: u64,
+  pub(crate) stylesheet: StyleSheet,
+  pub(crate) images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
+  pub(crate) font_families: Option<Vec<String>>,
 }
 
 impl MeasureTask {

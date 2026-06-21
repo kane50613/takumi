@@ -61,6 +61,48 @@ pub enum Filter {
   DropShadow(TextShadow),
 }
 
+/// Rec. 709 luma weights for the red, green, and blue channels. The CSS
+/// `grayscale()` and `saturate()` filters project color onto this luma.
+pub const LUMA_WEIGHTS: [f32; 3] = [0.2126, 0.7152, 0.0722];
+
+/// Per-output-channel weights for the CSS `sepia()` filter, row-major: each row
+/// is the `[r, g, b]` contribution to one output channel (R, G, B).
+pub const SEPIA_WEIGHTS: [[f32; 3]; 3] = [
+  [0.393, 0.769, 0.189],
+  [0.349, 0.686, 0.168],
+  [0.272, 0.534, 0.131],
+];
+
+/// How a CSS blur radius maps to a Gaussian σ, which sets how far the blur
+/// spreads past its box.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BlurType {
+  /// CSS `filter: blur()` — radius equals σ (standard deviation).
+  Filter,
+  /// CSS `box-shadow` / `text-shadow` blur — radius equals 2σ.
+  Shadow,
+}
+
+impl BlurType {
+  /// Maps a CSS blur radius to its Gaussian σ.
+  #[inline]
+  pub fn to_sigma(self, css_radius: f32) -> f32 {
+    match self {
+      BlurType::Filter => css_radius,
+      BlurType::Shadow => css_radius * 0.5,
+    }
+  }
+
+  /// Multiplier from radius to the extent the blur visibly reaches.
+  #[inline]
+  pub fn extent_multiplier(self) -> f32 {
+    match self {
+      BlurType::Filter => 3.0,
+      BlurType::Shadow => 1.5,
+    }
+  }
+}
+
 /// A list of filter operations
 pub type Filters = Vec<Filter>;
 

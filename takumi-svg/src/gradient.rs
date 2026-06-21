@@ -24,7 +24,8 @@ use takumi_core::{
       ColorInterpolationMethod, ConicGradient, ConicGradientTile, IntrinsicSizing, Length,
       LinearGradient, LinearGradientTile, PositionComponent, RadialGradient, RadialGradientTile,
       ResolvedGradientStop, SizingContext, build_color_lut_with_interpolation,
-      resolve_stops_along_axis,
+      collect_repeat_tile_positions, collect_spaced_tile_positions,
+      collect_stretched_tile_positions, resolve_stops_along_axis,
     },
   },
 };
@@ -32,7 +33,7 @@ use takumi_core::{
 use crate::{
   APPROX_CHARS_PER_NUMBER, GradientStop, IDENTITY, Rgba, SvgDocument,
   box_model::{PathData, rect_path_data},
-  image::{data_url_for_url, preserve_aspect_none},
+  image::{PRESERVE_ASPECT_NONE, data_url_for_url},
 };
 
 const CONIC_WEDGES: usize = 180;
@@ -299,15 +300,22 @@ fn resolve_axis(
     }
     BackgroundRepeatStyle::Repeat => {
       let origin = resolve_position(component, tile, area_size, sizing);
-      let positions = collect_repeat(area_size, tile, origin);
+      let positions = collect_repeat_tile_positions(area_size, tile, origin)
+        .into_iter()
+        .map(|x| x as f32)
+        .collect();
       (positions, tile_size)
     }
     BackgroundRepeatStyle::Space => {
-      let positions = collect_spaced(area_size, tile);
+      let positions = collect_spaced_tile_positions(area_size, tile)
+        .into_iter()
+        .map(|x| x as f32)
+        .collect();
       (positions, tile_size)
     }
     BackgroundRepeatStyle::Round => {
-      let (positions, new_tile) = collect_round(area_size, tile);
+      let (positions, new_tile) = collect_stretched_tile_positions(area_size, tile);
+      let positions = positions.into_iter().map(|x| x as f32).collect();
       (positions, new_tile as f32)
     }
   }
@@ -327,49 +335,6 @@ fn resolve_position(
     Length::Auto => available / 2,
     _ => length.to_px(sizing, available as f32) as i32,
   }
-}
-
-fn collect_repeat(area_size: u32, tile_size: u32, origin: i32) -> Vec<f32> {
-  if tile_size == 0 {
-    return Vec::new();
-  }
-  let mut start = origin;
-  if start > 0 {
-    let n = ((start as f32) / tile_size as f32).ceil() as i32;
-    start -= n * tile_size as i32;
-  }
-  let mut positions = Vec::new();
-  let mut x = start;
-  while x < area_size as i32 {
-    positions.push(x as f32);
-    x += tile_size as i32;
-  }
-  positions
-}
-
-fn collect_spaced(area_size: u32, tile_size: u32) -> Vec<f32> {
-  if tile_size == 0 {
-    return Vec::new();
-  }
-  let count = area_size / tile_size;
-  if count <= 1 {
-    return vec![((area_size as i32 - tile_size as i32) / 2) as f32];
-  }
-  let gap = (area_size - count * tile_size) / (count - 1);
-  let step = (tile_size + gap) as i32;
-  (0..count as i32).map(|i| (i * step) as f32).collect()
-}
-
-fn collect_round(area_size: u32, tile_size: u32) -> (Vec<f32>, u32) {
-  if tile_size == 0 || area_size == 0 {
-    return (Vec::new(), tile_size);
-  }
-  let count = (area_size as f32 / tile_size as f32).max(1.0) as u32;
-  let new_tile = (area_size as f32 / count as f32) as u32;
-  let positions = (0..count as i32)
-    .map(|i| (i * new_tile as i32) as f32)
-    .collect();
-  (positions, new_tile)
 }
 
 fn intrinsic_sizing(image: &BackgroundImage, context: &RenderContext) -> IntrinsicSizing {
@@ -417,7 +382,7 @@ fn emit_url(
   let Some(href) = data_url_for_url(url, context) else {
     return Ok(());
   };
-  doc.image(tx, ty, tile_w, tile_h, &href, Some(preserve_aspect_none()))
+  doc.image(tx, ty, tile_w, tile_h, &href, Some(PRESERVE_ASPECT_NONE))
 }
 
 fn svg_stops(stops: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<GradientStop> {

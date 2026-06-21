@@ -7,8 +7,8 @@ use crate::{
   BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Placement, RenderContext, Result,
   SizedShadow, apply_blur, apply_blur_rgba_bytes,
   layout::style::{
-    Affine, Color, Filter, FilterCategory, PercentageNumber, SizingContext, TransferChannel,
-    TransferTable, compose_transfer_table, fast_div_255,
+    Affine, Color, Filter, FilterCategory, LUMA_WEIGHTS, PercentageNumber, SEPIA_WEIGHTS,
+    SizingContext, TransferChannel, TransferTable, compose_transfer_table, fast_div_255,
   },
   render_mask,
 };
@@ -16,7 +16,9 @@ use crate::{
 /// Calculates the luma of an RGB pixel.
 #[inline(always)]
 fn get_luma(pixel: &[u8]) -> f32 {
-  pixel[0] as f32 * 0.2126 + pixel[1] as f32 * 0.7152 + pixel[2] as f32 * 0.0722
+  pixel[0] as f32 * LUMA_WEIGHTS[0]
+    + pixel[1] as f32 * LUMA_WEIGHTS[1]
+    + pixel[2] as f32 * LUMA_WEIGHTS[2]
 }
 
 /// Applies a single pixel filter inline - used for single filter optimization
@@ -58,9 +60,12 @@ fn apply_single_pixel_filter(pixel: &mut [u8], filter: &Filter) {
       let g = pixel[1] as f32;
       let b = pixel[2] as f32;
 
-      let sepia_r = (r * 0.393 + g * 0.769 + b * 0.189).clamp(0.0, 255.0);
-      let sepia_g = (r * 0.349 + g * 0.686 + b * 0.168).clamp(0.0, 255.0);
-      let sepia_b = (r * 0.272 + g * 0.534 + b * 0.131).clamp(0.0, 255.0);
+      let sepia_r = (r * SEPIA_WEIGHTS[0][0] + g * SEPIA_WEIGHTS[0][1] + b * SEPIA_WEIGHTS[0][2])
+        .clamp(0.0, 255.0);
+      let sepia_g = (r * SEPIA_WEIGHTS[1][0] + g * SEPIA_WEIGHTS[1][1] + b * SEPIA_WEIGHTS[1][2])
+        .clamp(0.0, 255.0);
+      let sepia_b = (r * SEPIA_WEIGHTS[2][0] + g * SEPIA_WEIGHTS[2][1] + b * SEPIA_WEIGHTS[2][2])
+        .clamp(0.0, 255.0);
 
       pixel[0] = (r * (1.0 - amount) + sepia_r * amount).clamp(0.0, 255.0) as u8;
       pixel[1] = (g * (1.0 - amount) + sepia_g * amount).clamp(0.0, 255.0) as u8;
