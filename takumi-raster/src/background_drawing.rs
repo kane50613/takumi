@@ -1,4 +1,4 @@
-use std::{iter::successors, sync::Arc};
+use std::sync::Arc;
 
 use image::Rgba;
 use smallvec::{SmallVec, smallvec};
@@ -665,73 +665,13 @@ pub(crate) fn resolve_layer_tiles(
 
 /// Collects a list of tile positions to place along an axis.
 /// Starts from the "origin" and collects tile positions until the "area_size" is reached.
-pub(crate) fn collect_repeat_tile_positions(
-  area_size: u32,
-  tile_size: u32,
-  origin: i32,
-) -> SmallVec<[i32; 1]> {
-  if tile_size == 0 {
-    return SmallVec::default();
-  }
-
-  // Find first position, should be <= 0
-  let mut start = origin;
-  if start > 0 {
-    let n = ((start as f32) / tile_size as f32).ceil() as i32;
-    start -= n * tile_size as i32;
-  }
-
-  successors(Some(start), |&x| Some(x + tile_size as i32))
-    .take_while(|&x| x < area_size as i32)
-    .collect()
-}
 
 /// Collects evenly spaced tile positions along an axis for `background-repeat: space`.
 /// Distributes gaps between tiles so the first and last touch the edges.
-pub(crate) fn collect_spaced_tile_positions(area_size: u32, tile_size: u32) -> SmallVec<[i32; 1]> {
-  if tile_size == 0 {
-    return SmallVec::default();
-  }
-
-  // Calculate number of tiles that fit in the area
-  let count = area_size / tile_size;
-
-  // Fast path: if there's only one tile, center it
-  if count <= 1 {
-    return smallvec![(area_size as i32 - tile_size as i32) / 2];
-  }
-
-  // Calculate gap between tiles
-  let gap = (area_size - count * tile_size) / (count - 1);
-  let step = tile_size as i32 + gap as i32;
-
-  successors(Some(0i32), move |&x| Some(x + step))
-    .take(count as usize)
-    .collect()
-}
 
 /// Collects stretched tile positions along an axis for `background-repeat: round`.
 /// Rounds the size of the tile to fill the area.
 /// Returns the positions and the new tile size.
-pub(crate) fn collect_stretched_tile_positions(
-  area_size: u32,
-  tile_size: u32,
-) -> (SmallVec<[i32; 1]>, u32) {
-  if tile_size == 0 || area_size == 0 {
-    return (SmallVec::default(), tile_size);
-  }
-
-  // Calculate number of tiles that fit in the area, at least 1
-  let count = (area_size as f32 / tile_size as f32).max(1.0) as u32;
-
-  let new_tile_size = (area_size as f32 / count as f32) as u32;
-
-  let positions = successors(Some(0i32), move |&x| Some(x + new_tile_size as i32))
-    .take(count as usize)
-    .collect();
-
-  (positions, new_tile_size)
-}
 pub(crate) fn resolve_tile_layers(input: ResolveTileLayersInput<'_>) -> Result<TileLayers> {
   let last_position = input.positions.last().copied().unwrap_or_default();
   let last_size = input.sizes.last().copied().unwrap_or_default();

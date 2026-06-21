@@ -61,6 +61,18 @@ pub enum Filter {
   DropShadow(TextShadow),
 }
 
+/// Rec. 709 luma weights for the red, green, and blue channels. The CSS
+/// `grayscale()` and `saturate()` filters project color onto this luma.
+pub const LUMA_WEIGHTS: [f32; 3] = [0.2126, 0.7152, 0.0722];
+
+/// Per-output-channel weights for the CSS `sepia()` filter, row-major: each row
+/// is the `[r, g, b]` contribution to one output channel (R, G, B).
+pub const SEPIA_WEIGHTS: [[f32; 3]; 3] = [
+  [0.393, 0.769, 0.189],
+  [0.349, 0.686, 0.168],
+  [0.272, 0.534, 0.131],
+];
+
 /// How a CSS blur radius maps to a Gaussian σ, which sets how far the blur
 /// spreads past its box.
 #[derive(Debug, Clone, Copy, PartialEq)]

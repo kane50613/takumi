@@ -58,7 +58,7 @@ pub(crate) use takumi_core::layout::style::Affine;
 
 use taffy::Size;
 use takumi_core::{
-  layout::style::{Color, Filter, SizingContext},
+  layout::style::{Color, Filter, LUMA_WEIGHTS, SEPIA_WEIGHTS, SizingContext},
   shadow::SizedShadow,
 };
 
@@ -762,7 +762,7 @@ fn matrix_attr(transform: Affine) -> String {
 /// CSS `grayscale(a)` color matrix (spec form: identity lerped toward the luma
 /// projection by `a`). Matches the raster backend's luma-lerp.
 fn grayscale_matrix(a: f32) -> [f32; 20] {
-  let (lr, lg, lb) = (0.2126, 0.7152, 0.0722);
+  let [lr, lg, lb] = LUMA_WEIGHTS;
   let r0 = 1.0 - a + a * lr;
   let g_to_r = a * lg;
   let b_to_r = a * lb;
@@ -786,20 +786,21 @@ fn sepia_matrix(a: f32) -> [f32; 20] {
   let lerp = |to: f32, idx_diag: bool| {
     if idx_diag { 1.0 - a + a * to } else { a * to }
   };
+  let [[rr, rg, rb], [gr, gg, gb], [br, bg, bb]] = SEPIA_WEIGHTS;
   [
-    lerp(0.393, true),
-    lerp(0.769, false),
-    lerp(0.189, false),
+    lerp(rr, true),
+    lerp(rg, false),
+    lerp(rb, false),
     0.0,
     0.0, //
-    lerp(0.349, false),
-    lerp(0.686, true),
-    lerp(0.168, false),
+    lerp(gr, false),
+    lerp(gg, true),
+    lerp(gb, false),
     0.0,
     0.0, //
-    lerp(0.272, false),
-    lerp(0.534, false),
-    lerp(0.131, true),
+    lerp(br, false),
+    lerp(bg, false),
+    lerp(bb, true),
     0.0,
     0.0, //
     0.0,
