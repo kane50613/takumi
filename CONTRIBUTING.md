@@ -58,7 +58,7 @@ Run workspace package tests (pick what you changed):
 
 ```bash
 (cd takumi-helpers && bun test --silent)
-(cd takumi-napi-core && bun test --silent)
+(cd takumi-napi && bun test --silent)
 (cd takumi-wasm && bun test --silent)
 (cd takumi-image-response && bun test --silent)
 (cd takumi-template && bun test --silent)
@@ -77,14 +77,14 @@ Run build only for packages you touched:
 
 ```bash
 bun --filter ./takumi-helpers run build
-bun --filter ./takumi-napi-core run build:debug
+bun --filter ./takumi-napi run build:debug
 bun --filter ./takumi-wasm run build:debug
 bun --filter ./takumi-image-response run build
 ```
 
 Notes:
 
-- `takumi-napi-core` release build needs target-specific setup; for local validation, `build:debug` is usually enough.
+- `takumi-napi` release build needs target-specific setup; for local validation, `build:debug` is usually enough.
 - `takumi-wasm` build requires `wasm-pack`.
 
 ## Fixture Workflow (Rust Rendering)

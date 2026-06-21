@@ -7,7 +7,7 @@ Before running the example, you need to build the native binary.
 Make sure you have [Rust installed](https://www.rust-lang.org/tools/install).
 
 ```bash
-cd takumi-napi-core
+cd takumi-napi
 bun run build
 ```
 

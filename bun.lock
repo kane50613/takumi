@@ -278,7 +278,7 @@
         "unrun": "catalog:",
       },
     },
-    "takumi-napi-core": {
+    "takumi-napi": {
       "name": "@takumi-rs/core",
       "version": "1.8.7",
       "dependencies": {
@@ -1140,7 +1140,7 @@
 
     "@tailwindcss/vite": ["@tailwindcss/vite@4.3.0", "", { "dependencies": { "@tailwindcss/node": "4.3.0", "@tailwindcss/oxide": "4.3.0", "tailwindcss": "4.3.0" }, "peerDependencies": { "vite": "^5.2.0 || ^6 || ^7 || ^8" } }, "sha512-t6J3OrB5Fc0ExuhohouH0fWUGMYL6PTLhW+E7zIk/pdbnJARZDCwjBznFnkh5ynRnIRSI4YjtTH0t6USjJISrw=="],
 
-    "@takumi-rs/core": ["@takumi-rs/core@workspace:takumi-napi-core"],
+    "@takumi-rs/core": ["@takumi-rs/core@workspace:takumi-napi"],
 
     "@takumi-rs/helpers": ["@takumi-rs/helpers@workspace:takumi-helpers"],
 

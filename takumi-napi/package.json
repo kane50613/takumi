@@ -25,7 +25,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kane50613/takumi.git",
-    "directory": "takumi-napi-core"
+    "directory": "takumi-napi"
   },
   "files": [
     "dist",

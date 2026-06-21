@@ -6,7 +6,7 @@ members = [
   "takumi-raster",
   "takumi-css",
   "takumi-svg",
-  "takumi-napi-core",
+  "takumi-napi",
   "takumi-wasm",
   "example/rust",
 ]

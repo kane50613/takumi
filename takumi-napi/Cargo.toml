@@ -1,5 +1,5 @@
 [package]
-name = "takumi-napi-core"
+name = "takumi-napi"
 version = "0.0.0"
 publish = false
 edition = "2024"

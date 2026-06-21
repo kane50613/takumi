@@ -1565,7 +1565,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "takumi-napi-core"
+name = "takumi-napi"
 version = "0.0.0"
 dependencies = [
  "napi",

@@ -227,10 +227,10 @@ jobs:
           path: takumi-helpers/dist
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile --filter ./takumi-napi-core
+        run: bun install --frozen-lockfile --filter ./takumi-napi
 
       - name: Build
-        working-directory: takumi-napi-core
+        working-directory: takumi-napi
         env:
           CARGO_UNSTABLE_BUILD_STD: std,panic_abort
           CARGO_UNSTABLE_BUILD_STD_FEATURES: optimize_for_size
@@ -242,10 +242,10 @@ jobs:
         with:
           name: bindings-${{ matrix.settings.target }}
           path: |
-            takumi-napi-core/dist
-            takumi-napi-core/core.*.node
-            takumi-napi-core/index.js
-            takumi-napi-core/index.d.ts
+            takumi-napi/dist
+            takumi-napi/core.*.node
+            takumi-napi/index.js
+            takumi-napi/index.d.ts
           if-no-files-found: error
 
   build-js:
@@ -270,7 +270,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: bindings-x86_64-unknown-linux-gnu
-          path: takumi-napi-core
+          path: takumi-napi
 
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
@@ -314,7 +314,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: bindings-x86_64-unknown-linux-gnu
-          path: takumi-napi-core
+          path: takumi-napi
 
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
@@ -351,7 +351,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: bindings-x86_64-unknown-linux-gnu
-          path: takumi-napi-core
+          path: takumi-napi
 
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
@@ -401,7 +401,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: bindings-x86_64-unknown-linux-gnu
-          path: takumi-napi-core
+          path: takumi-napi
 
       - name: Download takumi-js artifact
         uses: actions/download-artifact@v8
@@ -449,7 +449,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: bindings-x86_64-unknown-linux-gnu
-          path: takumi-napi-core
+          path: takumi-napi
 
       - name: Download takumi-js artifact
         uses: actions/download-artifact@v8
@@ -492,7 +492,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: bindings-x86_64-unknown-linux-gnu
-          path: takumi-napi-core
+          path: takumi-napi
 
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
@@ -565,23 +565,23 @@ jobs:
           path: takumi-helpers/dist
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile --filter ./takumi-napi-core
+        run: bun install --frozen-lockfile --filter ./takumi-napi
 
       - name: Download N-API bindings artifact
         uses: actions/download-artifact@v8
         with:
           name: bindings-${{ matrix.settings.target }}
-          path: takumi-napi-core
+          path: takumi-napi
 
       - name: Test bindings
         if: ${{ !contains(matrix.settings.target, 'musl') }}
-        working-directory: takumi-napi-core
+        working-directory: takumi-napi
         run: bun test
 
       - name: Test bindings in Alpine (musl)
         if: contains(matrix.settings.target, 'musl')
         run: |
-          docker run --rm -v $PWD:/workspace -w /workspace/takumi-napi-core \
+          docker run --rm -v $PWD:/workspace -w /workspace/takumi-napi \
             oven/bun:alpine bun test
 
   build-wasm:
@@ -707,13 +707,13 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           pattern: bindings-*
-          path: takumi-napi-core/artifacts
+          path: takumi-napi/artifacts
 
       - name: Download N-API bindings artifact
         uses: actions/download-artifact@v8
         with:
           name: bindings-x86_64-unknown-linux-gnu
-          path: takumi-napi-core
+          path: takumi-napi
 
       - name: Download takumi-js artifact
         uses: actions/download-artifact@v8
@@ -738,7 +738,7 @@ jobs:
           bunx pkg-pr-new@latest publish
           --packageManager=bun
           ./takumi-helpers
-          ./takumi-napi-core
+          ./takumi-napi
           ./takumi-wasm
           ./takumi-js
           ./takumi-image-response
@@ -796,13 +796,13 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           pattern: bindings-*
-          path: takumi-napi-core/artifacts
+          path: takumi-napi/artifacts
 
       - name: Download N-API bindings artifact
         uses: actions/download-artifact@v8
         with:
           name: bindings-x86_64-unknown-linux-gnu
-          path: takumi-napi-core
+          path: takumi-napi
 
       - name: Download takumi-js artifact
         uses: actions/download-artifact@v8
@@ -868,7 +868,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: bindings-x86_64-unknown-linux-gnu
-          path: takumi-napi-core
+          path: takumi-napi
 
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
