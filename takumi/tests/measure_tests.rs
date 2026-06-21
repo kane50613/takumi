@@ -1,9 +1,6 @@
 mod test_utils;
 
-use takumi::{
-  measure_layout,
-  prelude::{Length::*, *},
-};
+use takumi::prelude::{Length::*, *};
 use test_utils::{CONTEXT, TEST_IMAGES};
 
 fn create_measure_viewport() -> Viewport {
@@ -19,7 +16,7 @@ fn create_measure_viewport_with_dpr(device_pixel_ratio: f32) -> Viewport {
 }
 
 fn measure(node: Node, viewport: Viewport) -> MeasuredNode {
-  measure_layout(
+  takumi::measure(
     RenderOptions::builder()
       .viewport(viewport)
       .node(node)
@@ -96,7 +93,7 @@ fn test_measure_simple_container() {
       ))),
   );
 
-  let result = measure_layout(
+  let result = takumi::measure(
     RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
@@ -127,7 +124,7 @@ fn test_measure_text_node() {
       .with(StyleDeclaration::font_size(Px(20.0).into())),
   );
 
-  let result = measure_layout(
+  let result = takumi::measure(
     RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
@@ -174,7 +171,7 @@ fn test_measure_flex_text_node_centers_inner_text() {
       .with(StyleDeclaration::font_size(Px(20.0).into())),
   );
 
-  let result = measure_layout(
+  let result = takumi::measure(
     RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
@@ -221,7 +218,7 @@ fn test_measure_flex_text_node_anonymous_item_uses_intrinsic_size() {
       .with(StyleDeclaration::font_size(Px(20.0).into())),
   );
 
-  let result = measure_layout(
+  let result = takumi::measure(
     RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
@@ -273,7 +270,7 @@ fn test_measure_inline_layout() {
       .with(StyleDeclaration::display(Display::Block)),
   );
 
-  let result = measure_layout(
+  let result = takumi::measure(
     RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
@@ -1475,7 +1472,7 @@ fn test_measure_svg_attr_size_in_absolute_flex_container() {
       .with(StyleDeclaration::height(Percentage(100.0))),
   );
 
-  let result = measure_layout(
+  let result = takumi::measure(
     RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
@@ -1528,7 +1525,7 @@ fn test_measure_svg_attr_size_in_absolute_flex_container_with_parent_padding() {
       .with_padding(Sides([Px(60.0); 4])),
   );
 
-  let result = measure_layout(
+  let result = takumi::measure(
     RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
@@ -1573,7 +1570,7 @@ fn test_measure_svg_with_width_only_preserves_intrinsic_ratio() {
       .with(StyleDeclaration::flex_direction(FlexDirection::Column)),
   );
 
-  let result = measure_layout(
+  let result = takumi::measure(
     RenderOptions::builder()
       .viewport(create_measure_viewport())
       .node(node)
@@ -1642,7 +1639,7 @@ fn test_measure_img_svg_attribute_sizing_cases() {
         .with(StyleDeclaration::flex_direction(FlexDirection::Column)),
     );
 
-    let result = measure_layout(
+    let result = takumi::measure(
       RenderOptions::builder()
         .viewport(create_measure_viewport())
         .node(node)

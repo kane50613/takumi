@@ -134,14 +134,6 @@ impl Task for EncodeFramesTask {
       };
       let mut buffer = Vec::with_capacity(estimated_capacity);
 
-      if let Some(quality) = self.quality
-        && quality > 100
-      {
-        return Err(Error::from_reason(format!(
-          "Invalid WebP quality {quality}; expected a value in 0..=100"
-        )));
-      }
-
       match self.format {
         AnimationOutputFormat::WebP => {
           let mut options = AnimatedWebpOptions::default();

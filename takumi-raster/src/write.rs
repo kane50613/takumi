@@ -42,10 +42,10 @@ impl Default for Quality {
 
 /// Output format for rendered images. Format-specific encoding parameters live on
 /// the variant that supports them, so e.g. a quality value cannot be supplied for
-/// the lossless [`Png`](ImageOutputFormat::Png) format.
+/// the lossless [`Png`](OutputFormat::Png) format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum ImageOutputFormat {
+pub enum OutputFormat {
   /// PNG: lossless, widely supported, and the fastest format to encode.
   Png,
 
@@ -56,7 +56,7 @@ pub enum ImageOutputFormat {
   },
 
   /// Lossy WebP (VP8). Native-only — the wasm `image-webp` backend cannot encode
-  /// lossy WebP; use [`WebPLossless`](ImageOutputFormat::WebPLossless) there.
+  /// lossy WebP; use [`WebPLossless`](OutputFormat::WebPLossless) there.
   #[cfg(not(target_arch = "wasm32"))]
   WebP {
     /// Encoding quality.
@@ -70,30 +70,79 @@ pub enum ImageOutputFormat {
   Ico,
 }
 
-impl ImageOutputFormat {
+impl OutputFormat {
   /// Returns the MIME type for the image output format.
   pub fn content_type(&self) -> &'static str {
     match self {
       #[cfg(not(target_arch = "wasm32"))]
-      ImageOutputFormat::WebP { .. } => "image/webp",
-      ImageOutputFormat::WebPLossless => "image/webp",
-      ImageOutputFormat::Png => "image/png",
-      ImageOutputFormat::Jpeg { .. } => "image/jpeg",
-      ImageOutputFormat::Ico => "image/x-icon",
+      OutputFormat::WebP { .. } => "image/webp",
+      OutputFormat::WebPLossless => "image/webp",
+      OutputFormat::Png => "image/png",
+      OutputFormat::Jpeg { .. } => "image/jpeg",
+      OutputFormat::Ico => "image/x-icon",
     }
   }
 }
 
-impl From<ImageOutputFormat> for ImageFormat {
-  fn from(format: ImageOutputFormat) -> Self {
+impl From<OutputFormat> for ImageFormat {
+  fn from(format: OutputFormat) -> Self {
     match format {
       #[cfg(not(target_arch = "wasm32"))]
-      ImageOutputFormat::WebP { .. } => Self::WebP,
-      ImageOutputFormat::WebPLossless => Self::WebP,
-      ImageOutputFormat::Png => Self::Png,
-      ImageOutputFormat::Jpeg { .. } => Self::Jpeg,
-      ImageOutputFormat::Ico => Self::Ico,
+      OutputFormat::WebP { .. } => Self::WebP,
+      OutputFormat::WebPLossless => Self::WebP,
+      OutputFormat::Png => Self::Png,
+      OutputFormat::Jpeg { .. } => Self::Jpeg,
+      OutputFormat::Ico => Self::Ico,
     }
+  }
+}
+
+/// A rendered RGBA raster image: the output of [`render`](crate::render).
+///
+/// Wraps the pixel buffer so the public API does not commit to a specific
+/// `image` crate version. Encode it with [`write_image`], or reach the raw bytes
+/// via [`as_raw`](Bitmap::as_raw) / [`into_raw`](Bitmap::into_raw).
+#[derive(Debug, Clone)]
+pub struct Bitmap(RgbaImage);
+
+impl Bitmap {
+  /// Width in pixels.
+  pub fn width(&self) -> u32 {
+    self.0.width()
+  }
+
+  /// Height in pixels.
+  pub fn height(&self) -> u32 {
+    self.0.height()
+  }
+
+  /// Borrows the raw RGBA bytes, row-major, 4 bytes per pixel.
+  pub fn as_raw(&self) -> &[u8] {
+    self.0.as_raw()
+  }
+
+  /// Consumes the bitmap into its raw RGBA byte buffer.
+  pub fn into_raw(self) -> Vec<u8> {
+    self.0.into_raw()
+  }
+
+  /// Builds a bitmap from raw RGBA bytes, row-major, 4 bytes per pixel. Returns
+  /// `None` when `data.len()` is not `width * height * 4`.
+  pub fn from_raw(width: u32, height: u32, data: Vec<u8>) -> Option<Self> {
+    RgbaImage::from_raw(width, height, data).map(Self)
+  }
+
+  pub(crate) fn from_rgba(image: RgbaImage) -> Self {
+    Self(image)
+  }
+
+  pub(crate) fn as_rgba(&self) -> &RgbaImage {
+    &self.0
+  }
+
+  #[cfg(test)]
+  pub(crate) fn into_rgba(self) -> RgbaImage {
+    self.0
   }
 }
 
@@ -102,7 +151,7 @@ impl From<ImageOutputFormat> for ImageFormat {
 #[non_exhaustive]
 pub struct AnimationFrame {
   /// The image data for the frame.
-  pub image: RgbaImage,
+  pub image: Bitmap,
   /// The duration of the frame in milliseconds.
   /// Maximum value is 0xffffff (24-bit), overflow will be clamped.
   pub duration_ms: u32,
@@ -110,7 +159,7 @@ pub struct AnimationFrame {
 
 impl AnimationFrame {
   /// Creates a new animation frame.
-  pub fn new(image: RgbaImage, duration_ms: u32) -> Self {
+  pub fn new(image: Bitmap, duration_ms: u32) -> Self {
     Self { image, duration_ms }
   }
 }
@@ -182,30 +231,32 @@ fn configure_png_encoder<T: Write>(encoder: &mut png::Encoder<'_, T>) {
 }
 
 /// Writes a single rendered image to `destination` using `format`.
-pub fn write_image<'a, T: Write>(
-  image: Cow<'a, RgbaImage>,
+pub fn write_image<T: Write>(
+  image: &Bitmap,
   destination: &mut T,
-  format: ImageOutputFormat,
+  format: OutputFormat,
 ) -> Result<()> {
+  let rgba = image.as_rgba();
+
   match format {
-    ImageOutputFormat::Jpeg { quality } => {
+    OutputFormat::Jpeg { quality } => {
       let width = image.width();
       let height = image.height();
-      let rgb = strip_alpha_channel(image);
+      let rgb = strip_alpha_channel(Cow::Borrowed(rgba));
 
       let encoder = JpegEncoder::new_with_quality(destination, quality.get());
       encoder.write_image(&rgb, width, height, ExtendedColorType::Rgb8)?;
     }
-    ImageOutputFormat::Png => {
+    OutputFormat::Png => {
       let mut encoder = png::Encoder::new(destination, image.width(), image.height());
       configure_png_encoder(&mut encoder);
 
-      let has_alpha = has_any_alpha_pixel(&image);
+      let has_alpha = has_any_alpha_pixel(rgba);
 
       let image_data = if has_alpha {
         Cow::Borrowed(image.as_raw())
       } else {
-        Cow::Owned(strip_alpha_channel(image))
+        Cow::Owned(strip_alpha_channel(Cow::Borrowed(rgba)))
       };
 
       encoder.set_color(if has_alpha {
@@ -219,13 +270,13 @@ pub fn write_image<'a, T: Write>(
       writer.finish()?;
     }
     #[cfg(not(target_arch = "wasm32"))]
-    ImageOutputFormat::WebP { quality } => {
-      write_webp_lossy(image, destination, quality)?;
+    OutputFormat::WebP { quality } => {
+      write_webp_lossy(Cow::Borrowed(rgba), destination, quality)?;
     }
-    ImageOutputFormat::WebPLossless => {
-      write_webp_lossless(image, destination)?;
+    OutputFormat::WebPLossless => {
+      write_webp_lossless(Cow::Borrowed(rgba), destination)?;
     }
-    ImageOutputFormat::Ico => {
+    OutputFormat::Ico => {
       let width = image.width();
       let height = image.height();
       let encoder = IcoEncoder::new(destination);
@@ -330,14 +381,21 @@ mod tests {
   use libwebp_sys::{WEBP_CSP_MODE::MODE_RGBA, *};
 
   use super::{
-    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, ImageOutputFormat,
-    encode_animated_gif, encode_animated_png, encode_animated_webp, write_image,
+    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, Bitmap,
+    OutputFormat, encode_animated_gif, encode_animated_png, encode_animated_webp, write_image,
   };
   use crate::{DitheringAlgorithm, apply_dithering};
 
+  fn mk_frame(image: RgbaImage, duration_ms: u32) -> AnimationFrame {
+    AnimationFrame {
+      image: Bitmap::from_rgba(image),
+      duration_ms,
+    }
+  }
+
   #[test]
   fn encode_animated_gif_writes_valid_animation_and_delays() {
-    let frame_a = AnimationFrame::new(
+    let frame_a = mk_frame(
       RgbaImage::from_fn(2, 2, |x, y| {
         if x == 0 && y == 0 {
           image::Rgba([255, 0, 0, 255])
@@ -347,7 +405,7 @@ mod tests {
       }),
       45,
     );
-    let frame_b = AnimationFrame::new(
+    let frame_b = mk_frame(
       RgbaImage::from_fn(2, 2, |x, y| {
         if x == 1 && y == 1 {
           image::Rgba([0, 255, 0, 255])
@@ -424,11 +482,11 @@ mod tests {
 
   #[test]
   fn encode_animated_gif_rejects_mismatched_frame_dimensions() {
-    let frame_a = AnimationFrame::new(
+    let frame_a = mk_frame(
       RgbaImage::from_fn(2, 2, |_, _| image::Rgba([255, 0, 0, 255])),
       10,
     );
-    let frame_b = AnimationFrame::new(
+    let frame_b = mk_frame(
       RgbaImage::from_fn(3, 2, |_, _| image::Rgba([0, 255, 0, 255])),
       10,
     );
@@ -485,11 +543,11 @@ mod tests {
   #[test]
   fn encode_animated_png_rejects_mismatched_frame_dimensions() {
     let frames = vec![
-      AnimationFrame::new(
+      mk_frame(
         RgbaImage::from_pixel(2, 2, image::Rgba([255, 0, 0, 255])),
         100,
       ),
-      AnimationFrame::new(
+      mk_frame(
         RgbaImage::from_pixel(3, 2, image::Rgba([0, 255, 0, 255])),
         100,
       ),
@@ -525,16 +583,16 @@ mod tests {
     let mut encoded_dithered = Vec::new();
 
     let encode_none = write_image(
-      Cow::Owned(image.clone()),
+      &Bitmap::from_rgba(image.clone()),
       &mut encoded_none,
-      ImageOutputFormat::Png,
+      OutputFormat::Png,
     );
     assert!(encode_none.is_ok(), "failed to encode non-dithered image");
 
     let encode_dithered = write_image(
-      Cow::Owned(dithered_image),
+      &Bitmap::from_rgba(dithered_image),
       &mut encoded_dithered,
-      ImageOutputFormat::Png,
+      OutputFormat::Png,
     );
     assert!(encode_dithered.is_ok(), "failed to encode image");
 
@@ -545,7 +603,7 @@ mod tests {
   fn write_image_ico_produces_ico_header() {
     let image = RgbaImage::from_pixel(16, 16, image::Rgba([255, 0, 0, 255]));
     let mut encoded = Vec::new();
-    let result = write_image(Cow::Owned(image), &mut encoded, ImageOutputFormat::Ico);
+    let result = write_image(&Bitmap::from_rgba(image), &mut encoded, OutputFormat::Ico);
     assert!(result.is_ok(), "failed to encode ico image");
     assert!(
       encoded.starts_with(&[0, 0, 1, 0]),
@@ -557,7 +615,7 @@ mod tests {
   fn write_image_ico_rejects_dimensions_over_256() {
     let image = RgbaImage::from_pixel(257, 16, image::Rgba([255, 0, 0, 255]));
     let mut encoded = Vec::new();
-    let result = write_image(Cow::Owned(image), &mut encoded, ImageOutputFormat::Ico);
+    let result = write_image(&Bitmap::from_rgba(image), &mut encoded, OutputFormat::Ico);
 
     let err = result.err();
     assert!(err.is_some(), "expected oversized ico image to fail");
@@ -573,7 +631,7 @@ mod tests {
 
   #[test]
   fn encode_animated_webp_respects_blend_dispose_and_loop_count() {
-    let frame_a = AnimationFrame::new(
+    let frame_a = mk_frame(
       RgbaImage::from_fn(2, 2, |x, y| {
         if x == 0 && y == 0 {
           image::Rgba([255, 0, 0, 255])
@@ -583,7 +641,7 @@ mod tests {
       }),
       120,
     );
-    let frame_b = AnimationFrame::new(
+    let frame_b = mk_frame(
       RgbaImage::from_fn(2, 2, |x, y| {
         if x == 1 && y == 1 {
           image::Rgba([0, 255, 0, 255])
@@ -643,7 +701,7 @@ mod tests {
     // With allow_mixed=1 libwebp may choose VP8L even at quality<100 when it
     // produces a smaller file (trivial 2×2 solid-colour images always compress
     // better losslessly). We verify the output is a parseable animated WebP.
-    let frame = AnimationFrame::new(
+    let frame = mk_frame(
       RgbaImage::from_fn(2, 2, |_, _| image::Rgba([20, 80, 220, 255])),
       100,
     );
@@ -686,9 +744,9 @@ mod tests {
   fn encode_animated_webp_merges_consecutive_identical_frames() {
     let image_a = RgbaImage::from_fn(2, 2, |_, _| image::Rgba([120, 30, 10, 255]));
     let image_b = RgbaImage::from_fn(2, 2, |_, _| image::Rgba([5, 200, 20, 255]));
-    let frame_a = AnimationFrame::new(image_a.clone(), 50);
-    let frame_b = AnimationFrame::new(image_a, 70);
-    let frame_c = AnimationFrame::new(image_b, 30);
+    let frame_a = mk_frame(image_a.clone(), 50);
+    let frame_b = mk_frame(image_a, 70);
+    let frame_c = mk_frame(image_b, 30);
 
     let mut bytes = Vec::new();
     let encode_result = encode_animated_webp(
@@ -733,7 +791,7 @@ mod tests {
 
   #[test]
   fn encode_animated_webp_rejects_zero_sized_frames() {
-    let invalid = AnimationFrame::new(RgbaImage::new(0, 1), 10);
+    let invalid = mk_frame(RgbaImage::new(0, 1), 10);
 
     let mut bytes = Vec::new();
     let result = encode_animated_webp(
@@ -757,19 +815,19 @@ mod tests {
   #[test]
   fn encode_animated_webp_preserves_parallel_frame_order() {
     let frames = vec![
-      AnimationFrame::new(
+      mk_frame(
         RgbaImage::from_pixel(2, 2, image::Rgba([255, 0, 0, 255])),
         10,
       ),
-      AnimationFrame::new(
+      mk_frame(
         RgbaImage::from_pixel(2, 2, image::Rgba([0, 255, 0, 255])),
         20,
       ),
-      AnimationFrame::new(
+      mk_frame(
         RgbaImage::from_pixel(2, 2, image::Rgba([0, 0, 255, 255])),
         30,
       ),
-      AnimationFrame::new(
+      mk_frame(
         RgbaImage::from_pixel(2, 2, image::Rgba([255, 255, 0, 255])),
         40,
       ),

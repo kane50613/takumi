@@ -9,7 +9,7 @@ use napi::bindgen_prelude::*;
 use takumi_core::layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node};
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, RenderOptions, SequentialScene,
-  encode_animated_gif, encode_animated_png, encode_animated_webp, render_sequence_animation,
+  encode_animated_gif, encode_animated_png, encode_animated_webp, render_animation,
 };
 
 use crate::{
@@ -139,15 +139,7 @@ impl Task for RenderAnimationTask {
             .build()
         })
         .collect::<Vec<_>>();
-      let frames = render_sequence_animation(&scene_options, self.fps).map_err(map_error)?;
-
-      if let Some(quality) = self.quality
-        && quality > 100
-      {
-        return Err(Error::from_reason(format!(
-          "Invalid WebP quality {quality}; expected a value in 0..=100"
-        )));
-      }
+      let frames = render_animation(&scene_options, self.fps).map_err(map_error)?;
 
       let mut buffer = Vec::new();
 

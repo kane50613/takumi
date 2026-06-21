@@ -20,11 +20,17 @@ fn create_test_container(opacity: f32) -> Node {
   )
 }
 
-fn darkest_pixel_in_range(image: &image::RgbaImage, x_range: std::ops::Range<u32>) -> u8 {
+fn darkest_pixel_in_range(image: &Bitmap, x_range: std::ops::Range<u32>) -> u8 {
+  let width = image.width();
+
   image
-    .enumerate_pixels()
-    .filter(|(x, _, pixel)| x_range.contains(x) && pixel[3] > 0)
-    .map(|(_, _, pixel)| pixel[0].min(pixel[1]).min(pixel[2]))
+    .as_raw()
+    .chunks_exact(4)
+    .enumerate()
+    .filter_map(|(index, pixel)| {
+      let x = index as u32 % width;
+      (x_range.contains(&x) && pixel[3] > 0).then(|| pixel[0].min(pixel[1]).min(pixel[2]))
+    })
     .min()
     .unwrap_or(255)
 }

@@ -82,8 +82,8 @@ pub mod prelude {
 
   #[cfg(feature = "raster-backend")]
   pub use takumi_raster::{
-    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame,
-    DitheringAlgorithm, ImageOutputFormat, MeasuredNode, MeasuredTextRun, Quality, RenderOptions,
+    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, Bitmap,
+    DitheringAlgorithm, MeasuredNode, MeasuredTextRun, OutputFormat, Quality, RenderOptions,
     SequentialScene,
   };
 
@@ -93,8 +93,8 @@ pub mod prelude {
 
 #[cfg(feature = "raster-backend")]
 pub use takumi_raster::{
-  encode_animated_gif, encode_animated_png, encode_animated_webp, measure_layout, render,
-  render_sequence_animation, write_image,
+  encode_animated_gif, encode_animated_png, encode_animated_webp, measure, render,
+  render_animation, write_image,
 };
 
 #[cfg(feature = "svg-backend")]

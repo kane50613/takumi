@@ -27,23 +27,58 @@ export type ImageLoader = Omit<ImageSource, "data"> & {
   data: ImageLoaderData | (() => ImageLoaderData | Promise<ImageLoaderData>);
 };
 
-export type RenderOptions = Omit<RenderOptionsInternal, "images"> & {
-  fonts?: FontLoader[];
-  signal?: AbortSignal;
-  images?: ImageLoader[];
-};
+/**
+ * Output format. Format-specific options live on the variant that supports them,
+ * so `quality` cannot be paired with PNG/ICO/raw, and `lossless` is WebP-only.
+ * For WebP, `lossless` takes precedence over `quality`; omitting both encodes
+ * losslessly.
+ */
+export type OutputFormatOptions =
+  | { format?: "png" }
+  | { format: "jpeg"; quality?: number }
+  | { format: "webp"; quality?: number; lossless?: boolean }
+  | { format: "ico" }
+  | { format: "raw" };
 
-export type RenderAnimationOptions = Omit<RenderAnimationOptionsInternal, "images"> & {
-  fonts?: FontLoader[];
-  signal?: AbortSignal;
-  images?: ImageLoader[];
-};
+export type RenderOptions = Omit<
+  RenderOptionsInternal,
+  "images" | "format" | "quality" | "lossless"
+> &
+  OutputFormatOptions & {
+    fonts?: FontLoader[];
+    signal?: AbortSignal;
+    images?: ImageLoader[];
+  };
 
-export type EncodeFramesOptions = Omit<EncodeFramesOptionsInternal, "images"> & {
-  fonts?: FontLoader[];
-  signal?: AbortSignal;
-  images?: ImageLoader[];
-};
+/**
+ * Animation output format. `quality` and `lossless` are WebP-only; for WebP,
+ * `lossless` takes precedence over `quality`, and omitting both encodes
+ * losslessly.
+ */
+export type AnimationOutputFormatOptions =
+  | { format?: "webp"; quality?: number; lossless?: boolean }
+  | { format: "apng" }
+  | { format: "gif" };
+
+export type RenderAnimationOptions = Omit<
+  RenderAnimationOptionsInternal,
+  "images" | "format" | "quality" | "lossless"
+> &
+  AnimationOutputFormatOptions & {
+    fonts?: FontLoader[];
+    signal?: AbortSignal;
+    images?: ImageLoader[];
+  };
+
+export type EncodeFramesOptions = Omit<
+  EncodeFramesOptionsInternal,
+  "images" | "format" | "quality" | "lossless"
+> &
+  AnimationOutputFormatOptions & {
+    fonts?: FontLoader[];
+    signal?: AbortSignal;
+    images?: ImageLoader[];
+  };
 
 async function resolveImageLoaders(images: ImageLoader[]): Promise<ImageSource[]> {
   const bySrc = new Map<string, ImageLoader>();

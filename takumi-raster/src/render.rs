@@ -1,6 +1,5 @@
 use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
-use image::RgbaImage;
 use parley::{GlyphRun, InlineBoxKind, PositionedLayoutItem};
 use serde::Serialize;
 use taffy::{AvailableSpace, Layout, NodeId, TaffyError, geometry::Size};
@@ -8,8 +7,8 @@ use takumi_core::layout::style::SizingContext;
 use typed_builder::TypedBuilder;
 
 use crate::{
-  AnimationFrame, Canvas, DitheringAlgorithm, Error, Fonts, RenderContext, Result, SizedFontStyle,
-  apply_dithering, get_node_mut_by_path,
+  AnimationFrame, Bitmap, Canvas, DitheringAlgorithm, Error, Fonts, RenderContext, Result,
+  SizedFontStyle, apply_dithering, get_node_mut_by_path,
   layout::{
     Viewport,
     inline::{
@@ -183,7 +182,7 @@ struct MeasureExit {
 }
 
 /// Measures the layout of a node.
-pub fn measure_layout<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
+pub fn measure<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
   let RenderOptions {
     viewport,
     fonts,
@@ -512,7 +511,7 @@ fn create_measured_node(
 }
 
 /// Renders a node to an image.
-pub fn render<'g>(options: RenderOptions<'g>) -> Result<RgbaImage> {
+pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
   let RenderOptions {
     viewport,
     fonts,
@@ -575,14 +574,11 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<RgbaImage> {
   let mut image = canvas.into_inner()?;
   apply_dithering(&mut image, dithering);
 
-  Ok(image)
+  Ok(Bitmap::from_rgba(image))
 }
 
 /// Renders a node at a specific time on the global animation timeline.
-pub(crate) fn render_at_time<'g>(
-  mut options: RenderOptions<'g>,
-  time_ms: u64,
-) -> Result<RgbaImage> {
+pub(crate) fn render_at_time<'g>(mut options: RenderOptions<'g>, time_ms: u64) -> Result<Bitmap> {
   options.time_ms = time_ms;
   render(options)
 }
@@ -591,7 +587,7 @@ pub(crate) fn render_at_time<'g>(
 pub(crate) fn render_sequence_at_time<'g>(
   scenes: &[SequentialScene<'g>],
   time_ms: u64,
-) -> Result<RgbaImage> {
+) -> Result<Bitmap> {
   let Some((scene, local_time_ms)) = resolve_scene_at_time(scenes, time_ms) else {
     return Err(Error::InvalidViewport);
   };
@@ -600,7 +596,7 @@ pub(crate) fn render_sequence_at_time<'g>(
 }
 
 /// Renders all frames for a sequential animation timeline at a fixed frame rate.
-pub fn render_sequence_animation<'g>(
+pub fn render_animation<'g>(
   scenes: &[SequentialScene<'g>],
   fps: u32,
 ) -> Result<Vec<AnimationFrame>> {
@@ -681,7 +677,7 @@ mod tests {
   use image::Rgba;
 
   use super::{
-    RenderOptions, SequentialScene, render, render_sequence_animation, resolve_scene_at_time,
+    RenderOptions, SequentialScene, render, render_animation, resolve_scene_at_time,
     slice_text_at_char_boundaries,
   };
   use crate::{
@@ -694,7 +690,7 @@ mod tests {
         KeyframeRule, KeyframesRule, Length, Length::Px, Position, Style, StyleDeclaration,
       },
     },
-    measure_layout,
+    measure,
   };
 
   fn make_scene<'g>(fonts: &'g Fonts, duration_ms: u32) -> SequentialScene<'g> {
@@ -742,7 +738,7 @@ mod tests {
     let fonts = Fonts::default();
     let scenes = vec![make_scene(&fonts, 0)];
 
-    let frames_result = render_sequence_animation(&scenes, 30);
+    let frames_result = render_animation(&scenes, 30);
     assert!(frames_result.is_ok());
     let frames = frames_result.unwrap_or_default();
 
@@ -754,7 +750,7 @@ mod tests {
     let fonts = Fonts::default();
     let scenes = vec![make_scene(&fonts, 150)];
 
-    let frames_result = render_sequence_animation(&scenes, 30);
+    let frames_result = render_animation(&scenes, 30);
     assert!(frames_result.is_ok());
     let frames = frames_result.unwrap_or_default();
     let durations = frames
@@ -834,7 +830,7 @@ mod tests {
       .time_ms(500)
       .build();
 
-    let layout_result = measure_layout(options);
+    let layout_result = measure(options);
     assert!(layout_result.is_ok());
     let layout = match layout_result {
       Ok(layout) => layout,
@@ -882,7 +878,7 @@ mod tests {
       .node(root)
       .build();
 
-    let layout = match measure_layout(options) {
+    let layout = match measure(options) {
       Ok(layout) => layout,
       Err(_) => return,
     };
@@ -926,7 +922,7 @@ mod tests {
       .viewport(Viewport::new((256, 256)))
       .node(node.clone())
       .build();
-    let measured = match measure_layout(options.clone()) {
+    let measured = match measure(options.clone()) {
       Ok(measured) => measured,
       Err(_) => return,
     };
@@ -935,7 +931,7 @@ mod tests {
     assert_eq!(measured.children[0].height, 128.0);
 
     let rendered = match render(options) {
-      Ok(rendered) => rendered,
+      Ok(rendered) => rendered.into_rgba(),
       Err(_) => return,
     };
 

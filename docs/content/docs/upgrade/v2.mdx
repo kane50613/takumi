@@ -167,14 +167,29 @@ takumi = { version = "*", default-features = false, features = ["raster-backend"
 
 ### Image output quality is modeled per format
 
-`ImageOutputFormat::Jpeg` and `WebP` now carry a `Quality`, lossless WebP moved to its own `ImageOutputFormat::WebPLossless` variant, and `write_image` no longer takes a separate quality argument.
+`OutputFormat::Jpeg` and `WebP` now carry a `Quality`, lossless WebP moved to its own `OutputFormat::WebPLossless` variant, and `write_image` no longer takes a separate quality argument.
 
 ```rust
 write_image(&image, ImageOutputFormat::WebP, 80)?; // [!code --]
-write_image(&image, ImageOutputFormat::WebP(Quality::new(80)))?; // [!code ++]
+write_image(&image, &mut output, OutputFormat::WebP { quality: Quality::new(80) })?; // [!code ++]
 ```
 
-In the napi and wasm bindings, request lossless WebP with the `lossless` flag.
+In the napi and wasm bindings, the output `format` is a discriminated union, so `quality` and `lossless` only appear on the formats that accept them:
+
+```ts
+renderer.render(node, { format: "png", quality: 80 }); // [!code --]
+renderer.render(node, { format: "jpeg", quality: 80 }); // [!code ++]
+renderer.render(node, { format: "webp", lossless: true }); // [!code ++]
+```
+
+### Render entry points renamed
+
+`measure_layout` is now `measure` and `render_sequence_animation` is now `render_animation`, matching the JS bindings. `render` returns a `Bitmap` wrapper instead of an `image::RgbaImage`; reach the pixels with `bitmap.as_raw()` / `into_raw()` or pass it straight to `write_image`.
+
+```rust
+let image = measure_layout(options)?; // [!code --]
+let image = measure(options)?; // [!code ++]
+```
 
 ### `ImageSource::render_for_layout` drops the `current_color` argument
 
