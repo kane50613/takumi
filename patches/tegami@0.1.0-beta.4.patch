@@ -1,0 +1,62 @@
+diff --git a/dist/providers/cargo.js b/dist/providers/cargo.js
+index f8558045389b15a0f8cab6b8cb09daf5dc2d93db..1cd23a362627517f77a718330a22ed97c4673f98 100644
+--- a/dist/providers/cargo.js
++++ b/dist/providers/cargo.js
+@@ -35,7 +35,16 @@ var CargoPackage = class extends WorkspacePackage {
+ 		return defaults;
+ 	}
+ 	async write() {
+-		await writeFile(join(this.path, "Cargo.toml"), stringify(this.manifest));
++		const file = join(this.path, "Cargo.toml");
++		let src;
++		try {
++			src = await readFile(file, "utf8");
++		} catch {
++			return writeFile(file, stringify(this.manifest));
++		}
++		const diffs = collectVersionDiffs(parse$1(src), this.manifest);
++		if (diffs.size === 0) return;
++		await writeFile(file, surgicalApply(src, diffs));
+ 	}
+ 	get packageInfo() {
+ 		this.manifest.package ??= {};
+@@ -240,5 +249,39 @@ function tableValue(value) {
+ function stringValue(value) {
+ 	return typeof value === "string" ? value : void 0;
+ }
++function collectVersionDiffs(orig, manifest) {
++	const diffs = new Map();
++	const pv = manifest.package?.version;
++	if (pv != null && pv !== orig.package?.version) diffs.set("package version", String(pv));
++	for (const field of DEP_FIELDS) {
++		const t = manifest[field], ot = orig[field];
++		if (!t || typeof t !== "object") continue;
++		for (const [name, spec] of Object.entries(t)) {
++			const o = ot?.[name];
++			if (typeof spec === "string") {
++				if (spec !== o) diffs.set(field + " " + name, spec);
++			} else if (spec?.version != null && spec.version !== o?.version) diffs.set(field + "." + name + " version", String(spec.version));
++		}
++	}
++	return diffs;
++}
++function surgicalApply(src, diffs) {
++	const lines = src.split("\n");
++	let cur = "";
++	const hdr = /^\s*\[([^\]]+)\]\s*$/;
++	const kv = /^(\s*)([A-Za-z0-9_.\-"]+)(\s*=\s*)"([^"]*)"(.*)$/;
++	for (let i = 0; i < lines.length; i++) {
++		const h = lines[i].match(hdr);
++		if (h) {
++			cur = h[1].trim();
++			continue;
++		}
++		const m = lines[i].match(kv);
++		if (!m) continue;
++		const dkey = cur + " " + m[2].replace(/"/g, "");
++		if (diffs.has(dkey)) lines[i] = m[1] + m[2] + m[3] + "\"" + diffs.get(dkey) + "\"" + m[5];
++	}
++	return lines.join("\n");
++}
+ //#endregion
+ export { CargoPackage, CargoRegistryClient, cargo };
