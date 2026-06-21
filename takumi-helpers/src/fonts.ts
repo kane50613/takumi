@@ -58,37 +58,15 @@ function fetchCss(url: string, options: FetchOptions) {
   }).then((r) => r.text());
 }
 
-const fontFacePattern = /@font-face\s*\{([^}]*)\}/g;
+const fontFaceBlockPattern = /(?:\/\*\s*([^*]+?)\s*\*\/\s*)?@font-face\s*\{([^}]*)\}/g;
 
-function parseFontFaces(css: string) {
-  const faces: { url: string; weight?: number; style?: string }[] = [];
-  const seen = new Set<string>();
-
-  for (const match of css.matchAll(fontFacePattern)) {
-    const body = match[1];
-    if (!body) {
-      continue;
-    }
-
-    const url = body
-      .match(/src:\s*url\(([^)]+)\)/)?.[1]
-      ?.replace(/['"]/g, "")
-      .trim();
-    if (!url || seen.has(url)) {
-      continue;
-    }
-    seen.add(url);
-
-    const weight = body.match(/font-weight:\s*(\d+)(?:\s+(\d+))?/);
-    faces.push({
-      url,
-      weight: weight && !weight[2] ? Number(weight[1]) : undefined,
-      style: body.match(/font-style:\s*([a-z]+)/i)?.[1],
-    });
-  }
-
-  return faces;
-}
+type SubsetFace = {
+  subset: string;
+  url: string;
+  weight?: number;
+  style?: string;
+  ranges: [number, number][];
+};
 
 /**
  * Load a Google Font as descriptors you can pass to a renderer's `fonts`. Fetches the
@@ -105,7 +83,7 @@ function parseFontFaces(css: string) {
 export async function googleFont(family: string, options: GoogleFontOptions = {}) {
   const css = await fetchCss(buildCssUrl(family, options), options);
 
-  return parseFontFaces(css).map((face) => ({
+  return parseSubsetFaces(css).map((face) => ({
     name: family,
     key: face.url,
     weight: face.weight,
@@ -130,16 +108,6 @@ export type GoogleFontSubset = {
 
 /** A Google family to load, plus how — same options as {@link googleFont} minus `text`. */
 export type GoogleFontFamily = string | ({ family: string } & Omit<GoogleFontOptions, "text">);
-
-const fontFaceBlockPattern = /(?:\/\*\s*([^*]+?)\s*\*\/\s*)?@font-face\s*\{([^}]*)\}/g;
-
-type SubsetFace = {
-  subset: string;
-  url: string;
-  weight?: number;
-  style?: string;
-  ranges: [number, number][];
-};
 
 /** Parse `U+0460-052F, U+20B4, U+30??` into inclusive `[lo, hi]` codepoint ranges. */
 function parseUnicodeRange(value: string): [number, number][] {
@@ -170,7 +138,7 @@ function parseUnicodeRange(value: string): [number, number][] {
   return ranges;
 }
 
-/** Like {@link parseFontFaces}, but keeps each face's subset label and `unicode-range`. */
+/** Parse each `@font-face` block, keeping its subset label and `unicode-range`. */
 function parseSubsetFaces(css: string): SubsetFace[] {
   const faces: SubsetFace[] = [];
 
@@ -206,26 +174,25 @@ function parseSubsetFaces(css: string): SubsetFace[] {
   return faces;
 }
 
-function addCodepoints(text: string, into: Set<number>) {
-  for (const ch of text) {
-    into.add(ch.codePointAt(0) as number);
-  }
-}
-
-/** Collect every codepoint that the content will render. */
+/** Collect every codepoint the content will render. */
 function collectCodepoints(source: string | Node | Node[]): Set<number> {
   const codepoints = new Set<number>();
 
+  const add = (text: string) => {
+    for (const ch of text) {
+      codepoints.add(ch.codePointAt(0) as number);
+    }
+  };
   const walk = (node: Node) => {
     if (node.type === "text") {
-      addCodepoints(node.text, codepoints);
+      add(node.text);
     } else if (node.type === "container") {
       node.children?.forEach(walk);
     }
   };
 
   if (typeof source === "string") {
-    addCodepoints(source, codepoints);
+    add(source);
   } else if (Array.isArray(source)) {
     source.forEach(walk);
   } else {
@@ -271,13 +238,9 @@ async function loadFamilySubsets(
 }
 
 /**
- * Load only the Google Font subsets that `source` actually renders.
- *
- * Scans the content's codepoints, fetches each family's Google Fonts CSS, and keeps just
- * the `unicode-range` subsets that intersect — so a Japanese line pulls a handful of CJK
- * blocks instead of a multi-megabyte font. Each subset registers under a unique name and
- * shares a `subsetOf` logical family, which the renderer expands so `font-family: {family}`
- * routes every script to the subset that covers it. No per-family wiring, no font anxiety.
+ * Load only the Google Font subsets that `source` actually renders: scan its codepoints,
+ * keep each family's intersecting `unicode-range` subsets, and register them under one
+ * `subsetOf` family that `font-family: {family}` expands across. No font anxiety.
  *
  * @example
  * const fonts = await loadGoogleFonts(element, ["Inter", "Noto Sans JP"]);

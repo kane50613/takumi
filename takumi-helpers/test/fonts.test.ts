@@ -162,25 +162,13 @@ describe("loadGoogleFonts", () => {
     }
   `;
 
-  test("loads only the subsets the content's codepoints intersect", async () => {
-    const fetchMock = mock((url: string) =>
+  const mockFetch = () =>
+    mock((url: string) =>
       Promise.resolve(url.includes("/css2") ? new Response(interCss) : new Response(bytes(url))),
     );
 
-    const fonts = await loadGoogleFonts("Привет", ["Inter"], { fetch: fetchMock });
-
-    expect(fonts).toHaveLength(1);
-    expect(fonts[0]!.subsetOf).toBe("Inter");
-    expect(fonts[0]!.name).toBe("Inter cyrillic");
-    expect(fonts[0]!.key).toBe("https://fonts.gstatic.com/inter-cyrillic.woff2");
-  });
-
-  test("multi-script content pulls every matching subset, each uniquely named", async () => {
-    const fetchMock = mock((url: string) =>
-      Promise.resolve(url.includes("/css2") ? new Response(interCss) : new Response(bytes(url))),
-    );
-
-    const fonts = await loadGoogleFonts("Hi Привет Γειά", ["Inter"], { fetch: fetchMock });
+  test("keeps only the intersecting subsets, each uniquely named under one subsetOf", async () => {
+    const fonts = await loadGoogleFonts("Hi Привет Γειά", ["Inter"], { fetch: mockFetch() });
 
     expect(fonts.map((f) => f.name).sort()).toEqual([
       "Inter cyrillic",
@@ -191,10 +179,6 @@ describe("loadGoogleFonts", () => {
   });
 
   test("scans a node tree for codepoints", async () => {
-    const fetchMock = mock((url: string) =>
-      Promise.resolve(url.includes("/css2") ? new Response(interCss) : new Response(bytes(url))),
-    );
-
     const node: Node = {
       type: "container",
       children: [
@@ -203,16 +187,13 @@ describe("loadGoogleFonts", () => {
       ],
     };
 
-    const fonts = await loadGoogleFonts(node, ["Inter"], { fetch: fetchMock });
+    const fonts = await loadGoogleFonts(node, ["Inter"], { fetch: mockFetch() });
 
     expect(fonts.map((f) => f.name).sort()).toEqual(["Inter greek", "Inter latin"]);
   });
 
   test("downloads subset bytes lazily — only CSS up front", async () => {
-    const fetchMock = mock((url: string) =>
-      Promise.resolve(url.includes("/css2") ? new Response(interCss) : new Response(bytes(url))),
-    );
-
+    const fetchMock = mockFetch();
     const fonts = await loadGoogleFonts("Hello", ["Inter"], { fetch: fetchMock });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
