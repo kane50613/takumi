@@ -20,6 +20,7 @@ use takumi_core::{
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
   resources::image::ImageSource,
+  scene::paint_order_z,
   shadow::SizedShadow,
 };
 use typed_builder::TypedBuilder;
@@ -598,8 +599,9 @@ fn emit_node(
     {
       // Paint children in CSS stacking order: negative `z-index` first, then
       // `z-auto`/0 (and non-positioned) in tree order, then positive `z-index`.
-      // A stable sort by the effective z keeps tree order within each bucket,
-      // mirroring the raster backend's stacking-context buckets.
+      // A stable sort by the effective z keeps tree order within each bucket. The
+      // z key comes from takumi-core's `paint_order_z`, the same one the raster
+      // backend's stacking-context buckets use, so the two cannot drift.
       let is_flex_or_grid_item = matches!(
         node.context.style.display,
         Display::Flex | Display::InlineFlex | Display::Grid | Display::InlineGrid
@@ -608,12 +610,7 @@ fn emit_node(
         .iter()
         .filter_map(|child| {
           let child_node = child_nodes.get(child.render_index)?;
-          let style = &child_node.context.style;
-          let z = if style.participates_in_positioned_paint_bucket(is_flex_or_grid_item) {
-            style.z_index.painting_order_value()
-          } else {
-            0
-          };
+          let z = paint_order_z(&child_node.context.style, is_flex_or_grid_item);
           Some((z, child, child_node))
         })
         .collect();

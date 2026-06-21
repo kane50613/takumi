@@ -682,13 +682,7 @@ fn draw_render_node_inline(
 mod tests {
   use std::error::Error;
 
-  use taffy::{Point, geometry::Size};
-
-  use crate::{
-    CanvasViewport, Fonts, RenderOptions,
-    layout::{Viewport, node::Node, style::Affine},
-    render,
-  };
+  use crate::{Fonts, RenderOptions, layout::Viewport, layout::node::Node, render};
 
   type TestResult = Result<(), Box<dyn Error>>;
 

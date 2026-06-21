@@ -214,24 +214,28 @@ struct StackingContextBuildVisit {
   is_root: bool,
 }
 
+/// The effective paint-order z for a child: its `z-index` when it participates in
+/// the positioned paint bucket, otherwise 0 (non-positioned elements paint in tree
+/// order alongside positioned `z-auto` elements). A stable sort by this key
+/// reproduces CSS stacking order; both backends share it so they cannot drift.
+pub fn paint_order_z(style: &ComputedStyle, is_flex_or_grid_item: bool) -> i32 {
+  if style.participates_in_positioned_paint_bucket(is_flex_or_grid_item) {
+    style.z_index.painting_order_value()
+  } else {
+    0
+  }
+}
+
 fn classify_bucket(style: &ComputedStyle, is_flex_or_grid_item: bool) -> (PaintBucket, i32) {
-  let z_index = style.z_index.painting_order_value();
-  let participates = style.participates_in_positioned_paint_bucket(is_flex_or_grid_item);
+  let z = paint_order_z(style, is_flex_or_grid_item);
 
-  if !participates {
-    // Non-positioned (`static`) elements paint in tree order alongside
-    // positioned z-auto elements, so an ancestor still paints before its
-    // descendants. Their own `z-index` does not apply.
-    return (PaintBucket::AutoZero, 0);
+  if z < 0 {
+    (PaintBucket::Negative, z)
+  } else if z > 0 {
+    (PaintBucket::Positive, z)
+  } else {
+    (PaintBucket::AutoZero, 0)
   }
-
-  if z_index < 0 {
-    return (PaintBucket::Negative, z_index);
-  }
-  if z_index > 0 {
-    return (PaintBucket::Positive, z_index);
-  }
-  (PaintBucket::AutoZero, 0)
 }
 
 pub fn build_stacking_contexts(
