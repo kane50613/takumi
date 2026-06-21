@@ -1,1 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><rect x="0" y="0" width="1200" height="630" fill="#fff"/><clipPath id="cp0"><path d="M520 265h160c11.05 0 20 8.95 20 20v60c0 11.05-8.95 20-20 20h-160c-11.05 0-20-8.95-20-20v-60c0-11.05 8.95-20 20-20Z"/></clipPath><g clip-path="url(#cp0)"><rect x="500" y="215" width="200" height="200" fill="#64c8ff"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
+  <clipPath id="cp0">
+    <path d="M520 265h160c11.05 0 20 8.95 20 20v60c0 11.05-8.95 20-20 20h-160c-11.05 0-20-8.95-20-20v-60c0-11.05 8.95-20 20-20Z"/>
+  </clipPath>
+  <g clip-path="url(#cp0)">
+    <rect x="500" y="215" width="200" height="200" fill="#64c8ff"/>
+  </g>
+</svg>

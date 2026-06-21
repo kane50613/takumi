@@ -20,7 +20,7 @@ use takumi_core::{
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
   resources::image::ImageSource,
-  scene::paint_order_z,
+  scene::{build_stacking_contexts, paint_order_z},
   shadow::SizedShadow,
 };
 use typed_builder::TypedBuilder;
@@ -30,6 +30,7 @@ use crate::{
   box_model::{PathData, element_transform, path_data},
   gradient::{emit_background_images, emit_image_layers},
   image::emit_image,
+  scene_emit::{emit_scene, scene_has_no_css_transform},
   text::{emit_inline_content, emit_text},
 };
 
@@ -93,16 +94,31 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
     .height
     .map_or(root_layout.size.height, |h| h as f32);
   let mut doc = SvgDocument::new(width, height)?;
-  let mut origins = HashMap::new();
 
-  emit_node(&root, root_id, &results, 0.0, 0.0, &mut origins, &mut doc)?;
+  let contexts = build_stacking_contexts(
+    &root,
+    &results,
+    root_id,
+    IDENTITY,
+    Size {
+      width: Some(width),
+      height: Some(height),
+    },
+  )?;
+
+  if scene_has_no_css_transform(&root, &contexts, &results) {
+    emit_scene(&root, &contexts, &results, &mut doc)?;
+  } else {
+    let mut origins = HashMap::new();
+    emit_node(&root, root_id, &results, 0.0, 0.0, &mut origins, &mut doc)?;
+  }
 
   Ok(doc.render()?)
 }
 
 /// Open group tokens from [`emit_box_chrome`], to be closed (innermost first:
 /// `child_group`, `outer`, then `blend`) after the box content.
-struct BoxChrome {
+pub(crate) struct BoxChrome {
   blend: Option<crate::GroupToken>,
   isolate: Option<crate::GroupToken>,
   mask: Option<crate::GroupToken>,
@@ -113,7 +129,7 @@ struct BoxChrome {
 
 impl BoxChrome {
   /// Closes the box's groups innermost first.
-  fn close(self, doc: &mut SvgDocument) -> io::Result<()> {
+  pub(crate) fn close(self, doc: &mut SvgDocument) -> io::Result<()> {
     let groups = [
       self.child_group,
       self.clip_group,
@@ -133,7 +149,7 @@ impl BoxChrome {
 /// rounded-clipped background, borders), then opens the overflow-clip child group.
 /// `x`/`y` are the box's absolute border-box top-left. The returned group tokens
 /// must be closed by the caller after emitting the box's content.
-fn emit_box_chrome(
+pub(crate) fn emit_box_chrome(
   node: &RenderNode,
   layout: &taffy::Layout,
   x: f32,
@@ -556,6 +572,30 @@ fn content_box_path_data(
   path_data(&commands, [1.0, 0.0, 0.0, 1.0, x, y])
 }
 
+/// Emits a node's own content — its inline run set, or its replaced image/text —
+/// at the border-box top-left `(x, y)`. Block children are painted separately.
+pub(crate) fn emit_own_content(
+  node: &RenderNode,
+  layout: &taffy::Layout,
+  x: f32,
+  y: f32,
+  doc: &mut SvgDocument,
+) -> io::Result<()> {
+  if node.should_create_inline_layout() {
+    return emit_inline_content(node, *layout, x, y, doc);
+  }
+  // A node whose anonymous text became a child item paints that text through the
+  // child, not as its own content (mirroring the raster backend's guard).
+  if node.has_anonymous_text_item_child() {
+    return Ok(());
+  }
+  match node.node.as_ref().map(|n| &n.kind) {
+    Some(NodeKind::Image(image)) => emit_image_node(image, node, layout, x, y, doc),
+    Some(NodeKind::Text(text)) => emit_text(text, &node.context, *layout, x, y, doc),
+    _ => Ok(()),
+  }
+}
+
 /// Emits one node's box decorations and recurses into its children. `origins` maps
 /// each painted node to its absolute border-box origin so out-of-flow children
 /// hoisted to another containing block (`position: absolute`/`fixed`) paint from
@@ -581,47 +621,35 @@ fn emit_node(
   // A node either establishes an inline formatting context (its anonymous text and
   // inline children laid out as one inline run set, with inline boxes recursed in
   // flow) or paints its own content and recurses block children, never both.
-  if node.should_create_inline_layout() {
-    emit_inline_content(node, *layout, x, y, doc)?;
-  } else {
-    // A node whose anonymous text became a child item paints that text through the
-    // child, not as its own content (mirroring the raster backend's guard).
-    if !node.has_anonymous_text_item_child() {
-      match node.node.as_ref().map(|n| &n.kind) {
-        Some(NodeKind::Image(image)) => emit_image_node(image, node, layout, x, y, doc)?,
-        Some(NodeKind::Text(text)) => emit_text(text, &node.context, *layout, x, y, doc)?,
-        _ => {}
-      }
-    }
-
-    if let Ok(children) = results.box_children(node_id)
-      && let Some(child_nodes) = node.children.as_deref()
-    {
-      // Paint children in CSS stacking order: negative `z-index` first, then
-      // `z-auto`/0 (and non-positioned) in tree order, then positive `z-index`.
-      // A stable sort by the effective z keeps tree order within each bucket. The
-      // z key comes from takumi-core's `paint_order_z`, the same one the raster
-      // backend's stacking-context buckets use, so the two cannot drift.
-      let is_flex_or_grid_item = matches!(
-        node.context.style.display,
-        Display::Flex | Display::InlineFlex | Display::Grid | Display::InlineGrid
-      );
-      let mut ordered: Vec<_> = children
-        .iter()
-        .filter_map(|child| {
-          let child_node = child_nodes.get(child.render_index)?;
-          let z = paint_order_z(&child_node.context.style, is_flex_or_grid_item);
-          Some((z, child, child_node))
-        })
-        .collect();
-      ordered.sort_by_key(|(z, _, _)| *z);
-      for (_, child, child_node) in ordered {
-        let (ox, oy) = match child.hoisted_cb {
-          Some(cb) => origins.get(&cb).copied().unwrap_or((x, y)),
-          None => (x, y),
-        };
-        emit_node(child_node, child.node_id, results, ox, oy, origins, doc)?;
-      }
+  emit_own_content(node, layout, x, y, doc)?;
+  if !node.should_create_inline_layout()
+    && let Ok(children) = results.box_children(node_id)
+    && let Some(child_nodes) = node.children.as_deref()
+  {
+    // Paint children in CSS stacking order: negative `z-index` first, then
+    // `z-auto`/0 (and non-positioned) in tree order, then positive `z-index`.
+    // A stable sort by the effective z keeps tree order within each bucket. The
+    // z key comes from takumi-core's `paint_order_z`, the same one the raster
+    // backend's stacking-context buckets use, so the two cannot drift.
+    let is_flex_or_grid_item = matches!(
+      node.context.style.display,
+      Display::Flex | Display::InlineFlex | Display::Grid | Display::InlineGrid
+    );
+    let mut ordered: Vec<_> = children
+      .iter()
+      .filter_map(|child| {
+        let child_node = child_nodes.get(child.render_index)?;
+        let z = paint_order_z(&child_node.context.style, is_flex_or_grid_item);
+        Some((z, child, child_node))
+      })
+      .collect();
+    ordered.sort_by_key(|(z, _, _)| *z);
+    for (_, child, child_node) in ordered {
+      let (ox, oy) = match child.hoisted_cb {
+        Some(cb) => origins.get(&cb).copied().unwrap_or((x, y)),
+        None => (x, y),
+      };
+      emit_node(child_node, child.node_id, results, ox, oy, origins, doc)?;
     }
   }
 

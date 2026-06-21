@@ -18,6 +18,7 @@ mod box_model;
 mod gradient;
 mod image;
 mod render;
+mod scene_emit;
 mod text;
 pub use render::{SvgOptions, render};
 
@@ -88,7 +89,8 @@ impl SvgDocument {
   /// Creates a document with the given pixel viewport and writes the root
   /// `<svg>` open tag.
   pub(crate) fn new(width: f32, height: f32) -> io::Result<Self> {
-    let mut writer = Writer::new(Vec::new());
+    // Indent so the emitted SVG is one element per line and reviewable in a diff.
+    let mut writer = Writer::new_with_indent(Vec::new(), b' ', 2);
     let mut svg = BytesStart::new("svg");
     svg.push_attribute(("xmlns", "http://www.w3.org/2000/svg"));
     svg.push_attribute(("width", num(width).as_str()));
