@@ -10,6 +10,7 @@ mod pool;
 mod render_animation_task;
 mod render_task;
 pub(crate) mod renderer;
+mod svg_render_task;
 
 use std::{fmt::Display, ops::Deref};
 

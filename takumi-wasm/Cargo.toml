@@ -30,6 +30,10 @@ path = "../takumi-raster"
 default-features = false
 features = ["svg"]
 
+[dependencies.takumi-svg]
+path = "../takumi-svg"
+version = "0.1"
+
 # https://github.com/rust-lang/rust/issues/93294
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = [
