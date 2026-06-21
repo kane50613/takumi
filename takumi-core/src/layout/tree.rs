@@ -1038,6 +1038,25 @@ impl RenderNode {
       .is_some_and(|children| children.iter().any(RenderNode::is_anonymous_text_item))
   }
 
+  /// Resolves the descendant at `path` (child indices from this node). An empty
+  /// path returns `self`.
+  pub fn node_at_path(&self, path: &[usize]) -> Option<&RenderNode> {
+    let mut current = self;
+    for &index in path {
+      current = current.children.as_deref()?.get(index)?;
+    }
+    Some(current)
+  }
+
+  /// Mutable [`node_at_path`](Self::node_at_path).
+  pub fn node_at_path_mut(&mut self, path: &[usize]) -> Option<&mut RenderNode> {
+    let mut current = self;
+    for &index in path {
+      current = current.children.as_deref_mut()?.get_mut(index)?;
+    }
+    Some(current)
+  }
+
   pub(crate) fn is_inline_level(&self) -> bool {
     self.context.style.display.is_inline_level()
   }

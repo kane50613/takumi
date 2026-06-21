@@ -14,7 +14,7 @@ use crate::{
     Overflow, ShapeRadius, Sides, SizingContext, SpacePair,
   },
 };
-use takumi_core::scene::transformed_rect_extents;
+use takumi_core::geometry::transformed_rect_extents;
 
 pub(crate) enum NodeMaskAction {
   Shell(TinyMask),
