@@ -1,3 +1,9 @@
+## takumi-css@0.2.0-beta.0
+
+### Align CSS handling with the spec
+
+Fix the `border-*-width`/`outline-width` defaults, negative `scale`, the `position: static` default, and `line-clamp` longhand splitting.
+
 # takumi-css
 
 ## 0.1.2

@@ -1,9 +1,4 @@
----
-packages:
-  "cargo:takumi": major
-  "cargo:takumi-core": minor
-  "cargo:takumi-raster": minor
----
+## takumi-raster@0.1.0-beta.0
 
 ### Split `takumi` into `takumi-core`, `takumi-raster`, and `takumi-svg` behind a re-export facade
 
@@ -14,3 +9,7 @@ packages:
 ### Rename the `raster` feature to `raster-backend`
 
 This mirrors `svg-backend`, and `rayon` no longer enables it implicitly.
+
+### Model image output quality per format
+
+`ImageOutputFormat::Jpeg`/`WebP` carry a `Quality`, a new `WebPLossless` variant replaces lossless WebP (a `lossless` flag in the napi/wasm bindings), and `write_image` drops its quality argument.
