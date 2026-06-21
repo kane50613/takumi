@@ -72,11 +72,25 @@ pub fn apply_transform(
   *transform *= style.local_transform(border_box, sizing);
 }
 
-fn get_node_by_path<'a>(root: &'a RenderNode, path: &[usize]) -> Option<&'a RenderNode> {
+/// Resolves a node by its [`NodePaint::path`] (child indices from the root).
+pub fn get_node_by_path<'a>(root: &'a RenderNode, path: &[usize]) -> Option<&'a RenderNode> {
   let mut current = root;
   for &index in path {
     let children = current.children.as_deref()?;
     current = children.get(index)?;
+  }
+  Some(current)
+}
+
+/// Mutable [`get_node_by_path`].
+pub fn get_node_mut_by_path<'a>(
+  root: &'a mut RenderNode,
+  path: &[usize],
+) -> Option<&'a mut RenderNode> {
+  let mut current = root;
+  for &index in path {
+    let children = current.children.as_deref_mut()?;
+    current = children.get_mut(index)?;
   }
   Some(current)
 }

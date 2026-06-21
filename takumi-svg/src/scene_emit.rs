@@ -16,7 +16,7 @@ use takumi_core::{
     style::Affine,
     tree::{LayoutResults, RenderNode},
   },
-  scene::{NodePaint, PaintItemKind, StackingContextNode},
+  scene::{NodePaint, PaintItemKind, StackingContextNode, get_node_by_path},
 };
 
 use crate::{
@@ -33,14 +33,6 @@ pub(crate) fn emit_scene(
   emit_context(root, contexts, 0, IDENTITY, results, doc)
 }
 
-fn node_at<'a>(root: &'a RenderNode, path: &[usize]) -> Option<&'a RenderNode> {
-  let mut current = root;
-  for &index in path {
-    current = current.children.as_deref()?.get(index)?;
-  }
-  Some(current)
-}
-
 /// Emits a node's decorations and own content positioned by its transform
 /// relative to `parent`, leaving its chrome groups open for the caller to close
 /// after the node's children. Returns the chrome and the frame the node's
@@ -54,7 +46,7 @@ fn emit_box(
   results: &LayoutResults,
   doc: &mut SvgDocument,
 ) -> io::Result<Option<(BoxChrome, Affine)>> {
-  let Some(node) = node_at(root, &np.path) else {
+  let Some(node) = get_node_by_path(root, &np.path) else {
     return Ok(None);
   };
   let Ok(layout) = results.layout(np.node_id) else {

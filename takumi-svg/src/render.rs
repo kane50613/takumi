@@ -989,6 +989,23 @@ fn emit_double_border(
   doc.stroke_path(&inner, Rgba(color.0), third, None, None)
 }
 
+/// Runs `emit` inside a Gaussian-blur group when `blur_radius` is positive (the
+/// CSS shadow blur is `2σ`), or directly otherwise.
+fn emit_with_blur(
+  doc: &mut SvgDocument,
+  blur_radius: f32,
+  emit: impl FnOnce(&mut SvgDocument) -> io::Result<()>,
+) -> io::Result<()> {
+  if blur_radius > 0.0 {
+    let filter = doc.blur_filter(blur_radius / 2.0)?;
+    let group = doc.begin_group(IDENTITY, 1.0, None, Some(&filter))?;
+    emit(doc)?;
+    doc.end_group(group)
+  } else {
+    emit(doc)
+  }
+}
+
 /// Emits outset `box-shadow`s behind the element as offset, blurred rects.
 /// Inset shadows are handled by [`emit_inset_box_shadows`].
 pub(crate) fn emit_box_shadows(
@@ -1035,16 +1052,7 @@ pub(crate) fn emit_box_shadows(
     });
     let data = border_box_path_data(&shadow, spread_size, sx, sy);
 
-    let filter = (resolved.blur_radius > 0.0)
-      .then(|| doc.blur_filter(resolved.blur_radius / 2.0))
-      .transpose()?;
-    if let Some(filter) = filter {
-      let group = doc.begin_group(IDENTITY, 1.0, None, Some(&filter))?;
-      doc.path(&data, fill)?;
-      doc.end_group(group)?;
-    } else {
-      doc.path(&data, fill)?;
-    }
+    emit_with_blur(doc, resolved.blur_radius, |doc| doc.path(&data, fill))?;
   }
   Ok(())
 }
@@ -1113,16 +1121,9 @@ pub(crate) fn emit_inset_box_shadows(
     // rounded border box so the blur stays inside the element.
     let clip = doc.clip_path(&outer)?;
     let clip_group = doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?;
-    let filter = (resolved.blur_radius > 0.0)
-      .then(|| doc.blur_filter(resolved.blur_radius / 2.0))
-      .transpose()?;
-    if let Some(filter) = filter {
-      let group = doc.begin_group(IDENTITY, 1.0, None, Some(&filter))?;
-      doc.path_evenodd(&ring, fill)?;
-      doc.end_group(group)?;
-    } else {
-      doc.path_evenodd(&ring, fill)?;
-    }
+    emit_with_blur(doc, resolved.blur_radius, |doc| {
+      doc.path_evenodd(&ring, fill)
+    })?;
     doc.end_group(clip_group)?;
   }
   Ok(())
