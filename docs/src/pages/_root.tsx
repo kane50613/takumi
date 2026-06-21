@@ -1,4 +1,5 @@
 import { Analytics } from "@vercel/analytics/react";
+import { Banner } from "fumadocs-ui/components/banner";
 import type { ReactNode } from "react";
 import { Provider } from "../components/provider";
 import "../../app/app.css";
@@ -25,7 +26,14 @@ export default function RootElement({ children }: { children: ReactNode }) {
         />
       </head>
       <body className="flex flex-col min-h-screen">
-        <Provider>{children}</Provider>
+        <Provider>
+          <Banner>
+            <a href="https://takumi.kane.tw" className="inline-flex items-center gap-2">
+              You're reading the v1 docs. View the latest →
+            </a>
+          </Banner>
+          {children}
+        </Provider>
         <Analytics />
       </body>
     </html>
