@@ -34,14 +34,17 @@ It converts any template into a **node tree** with three node kinds: `container`
 3. **Compositing**: stacking contexts, blend modes, filters, transforms, SVG via [resvg](https://github.com/linebender/resvg)
 4. **Output**: PNG, JPEG, WebP, ICO for statics; GIF, APNG, WebP for animations; raw RGBA frames for video pipelines
 
-A **time axis** threads through the pipeline. Animations, GIFs, and video frames are not a separate API. They're the same renderer called at timestamp `t`.
+A **time axis** threads through the pipeline. Animations, GIFs, and video frames are not a separate API. They're the same renderer called at timestamp `t`. The same layout also feeds a vector backend: `renderSvg()` emits a real `<svg>` document instead of pixels.
 
 ```mermaid
 flowchart LR
-    A[Templates] --> N[Node Tree] --> P[Rendering Pipeline] --> F[(Raw Pixels)]
+    A[Templates] --> N[Node Tree] --> P[Rendering Pipeline]
     C[Stylesheets] --> P
     R[Resources] --> P
     D(Time Axis) -.-> P
+
+    P --> F[(Raw Pixels)]
+    P --> S[Vector SVG]
 
     F --> G[PNG / JPEG / WebP / ICO]
     F --> H[GIF / APNG]

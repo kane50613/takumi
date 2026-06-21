@@ -5,7 +5,7 @@
 
 **A Rust rendering engine that turns JSX, HTML, and node trees into images. No headless browser required.**
 
-Render OpenGraph cards, animated GIFs, and video frames from Node.js, Cloudflare Workers, browsers, or any Rust application.
+Render OpenGraph cards, animated GIFs, video frames, and vector SVG from Node.js, Cloudflare Workers, browsers, or any Rust application.
 Drop-in compatible with `next/og`.
 
 [![npm version](https://img.shields.io/npm/v/takumi-js?label=takumi-js)](https://www.npmjs.com/package/takumi-js)
@@ -107,6 +107,7 @@ Start from the [Rust example](./example/rust).
 | **Selectors**                      |      Limited       | Complex selectors, `:is()`, `:where()`, `::before`, `::after` |
 | **`backdrop-filter`, blend modes** |         ✗          |                              ✅                               |
 | **Animated output**                |         ✗          |             **WebP / APNG / GIF / video frames**              |
+| **Vector SVG output**              |     ✅ Native      |            ✅ **Plus raster and animated output**             |
 | **Headless browser**               |         ✗          |                               ✗                               |
 | **`ImageResponse` API**            |     ✅ Native      |                       ✅ **Compatible**                       |
 
@@ -134,12 +135,17 @@ The input contract is a node tree, so any template system that serializes to HTM
 
 A **time axis** threads through the pipeline: the renderer takes a timestamp, so a PNG is the tree at `t=0` and a GIF is the same tree sampled across `t`. CSS `@keyframes`, the `animation` shorthand, and Tailwind animation utilities (`animate-spin`, `animate-bounce`, arbitrary values) all resolve at render time.
 
+The same layout drives a second backend: `renderSvg()` (Rust `render_svg`, behind the `svg-backend` feature) emits a real `<svg>` document built from `<rect>`, `<path>`, gradients, and glyph outlines, so you can ship scalable vector output instead of pixels. If you reached for [satori](https://github.com/vercel/satori) to get SVG, this is the drop-in path.
+
 ```mermaid
 flowchart LR
-    A[Templates] --> N[Node Tree] --> P[Rendering Pipeline] --> F[(Raw Pixels)]
+    A[Templates] --> N[Node Tree] --> P[Rendering Pipeline]
     C[Stylesheets] --> P
     R[Resources] --> P
     D(Time Axis) -.-> P
+
+    P --> F[(Raw Pixels)]
+    P --> S[Vector SVG]
 
     F --> G[PNG / JPEG / WebP / ICO]
     F --> H[GIF / APNG]
