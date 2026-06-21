@@ -748,7 +748,7 @@ impl SvgDocument {
 #[must_use]
 pub(crate) struct GroupToken(());
 
-fn matrix_attr(transform: Affine) -> String {
+pub(crate) fn matrix_attr(transform: Affine) -> String {
   let [a, b, c, d, e, f] = transform.to_cols_array();
   format!(
     "matrix({} {} {} {} {} {})",
