@@ -117,83 +117,54 @@ export class Renderer {
     return [...new Set(families.flat().map((f) => f.name))];
   }
 
+  /** Registers `fonts` and resolves lazy `images`, yielding the `images`/`fontFamilies`
+   * the napi binding expects. Explicit `fontFamilies` wins over the registered set. */
+  private async resolveResources(
+    fonts: FontLoader[] | undefined,
+    images: ImageLoader[] | undefined,
+    fontFamilies: string[] | undefined,
+  ) {
+    const registeredFamilies = await this.prepareFonts(fonts);
+
+    return {
+      images: images ? await resolveImageLoaders(images) : undefined,
+      fontFamilies: fontFamilies ?? registeredFamilies,
+    };
+  }
+
   async render(node: Node, options?: RenderOptions) {
     const { fonts, fontFamilies, signal, images, ...rest } = options ?? {};
-    const registeredFamilies = await this.prepareFonts(fonts);
-    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
+    const resolved = await this.resolveResources(fonts, images, fontFamilies);
 
-    return this.inner.render(
-      node,
-      {
-        ...rest,
-        images: resolvedImages,
-        fontFamilies: fontFamilies ?? registeredFamilies,
-      },
-      signal,
-    );
+    return this.inner.render(node, { ...rest, ...resolved }, signal);
   }
 
   async renderSvg(node: Node, options?: SvgRenderOptions) {
     const { fonts, fontFamilies, signal, images, ...rest } = options ?? {};
-    const registeredFamilies = await this.prepareFonts(fonts);
-    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
+    const resolved = await this.resolveResources(fonts, images, fontFamilies);
 
-    return this.inner.renderSvg(
-      node,
-      {
-        ...rest,
-        images: resolvedImages,
-        fontFamilies: fontFamilies ?? registeredFamilies,
-      },
-      signal,
-    );
+    return this.inner.renderSvg(node, { ...rest, ...resolved }, signal);
   }
 
   async measure(node: Node, options?: RenderOptions) {
     const { fonts, fontFamilies, signal, images, ...rest } = options ?? {};
-    const registeredFamilies = await this.prepareFonts(fonts);
-    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
+    const resolved = await this.resolveResources(fonts, images, fontFamilies);
 
-    return this.inner.measure(
-      node,
-      {
-        ...rest,
-        images: resolvedImages,
-        fontFamilies: fontFamilies ?? registeredFamilies,
-      },
-      signal,
-    );
+    return this.inner.measure(node, { ...rest, ...resolved }, signal);
   }
 
   async renderAnimation(options: RenderAnimationOptions) {
     const { fonts, fontFamilies, signal, images, ...rest } = options;
-    const registeredFamilies = await this.prepareFonts(fonts);
-    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
+    const resolved = await this.resolveResources(fonts, images, fontFamilies);
 
-    return this.inner.renderAnimation(
-      {
-        ...rest,
-        images: resolvedImages,
-        fontFamilies: fontFamilies ?? registeredFamilies,
-      },
-      signal,
-    );
+    return this.inner.renderAnimation({ ...rest, ...resolved }, signal);
   }
 
   async encodeFrames(frames: AnimationFrameSource[], options: EncodeFramesOptions) {
     const { fonts, fontFamilies, signal, images, ...rest } = options;
-    const registeredFamilies = await this.prepareFonts(fonts);
-    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
+    const resolved = await this.resolveResources(fonts, images, fontFamilies);
 
-    return this.inner.encodeFrames(
-      frames,
-      {
-        ...rest,
-        images: resolvedImages,
-        fontFamilies: fontFamilies ?? registeredFamilies,
-      },
-      signal,
-    );
+    return this.inner.encodeFrames(frames, { ...rest, ...resolved }, signal);
   }
 
   async registerFont(font: FontLoader) {

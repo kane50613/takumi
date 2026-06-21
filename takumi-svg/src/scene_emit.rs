@@ -16,7 +16,7 @@ use takumi_core::{
     style::Affine,
     tree::{LayoutResults, RenderNode},
   },
-  scene::{NodePaint, PaintItemKind, StackingContextNode, get_node_by_path},
+  scene::{NodePaint, PaintItemKind, StackingContextNode},
 };
 
 use crate::{
@@ -46,7 +46,7 @@ fn emit_box(
   results: &LayoutResults,
   doc: &mut SvgDocument,
 ) -> io::Result<Option<(BoxChrome, Affine)>> {
-  let Some(node) = get_node_by_path(root, &np.path) else {
+  let Some(node) = root.node_at_path(&np.path) else {
     return Ok(None);
   };
   let Ok(layout) = results.layout(np.node_id) else {
