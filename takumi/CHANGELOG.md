@@ -1,3 +1,29 @@
+## takumi@2.0.0-beta.0
+
+### Make fonts and images explicit per-render resources
+
+Drop the persistent image store and `GlobalContext`, and pass fonts and images per render. `registerFont` replaces `loadFont`/`loadFontSync`/`loadFonts`, each render takes a `fontFamilies` fallback chain, and `images` replaces `fetchedResources`.
+
+### Align CSS handling with the spec
+
+Fix the `border-*-width`/`outline-width` defaults, negative `scale`, the `position: static` default, and `line-clamp` longhand splitting.
+
+### Split `takumi` into `takumi-core`, `takumi-raster`, and `takumi-svg` behind a re-export facade
+
+### Minimize the public API
+
+`takumi::prelude` exposes the stable data structures, entry-point functions sit at the crate root, the full backend crates move behind an `unstable` feature, and backend internals drop to `pub(crate)`.
+
+### Rename the `raster` feature to `raster-backend`
+
+This mirrors `svg-backend`, and `rayon` no longer enables it implicitly.
+
+### Stop resolving `currentColor` in SVG images against the host color
+
+### Model image output quality per format
+
+`ImageOutputFormat::Jpeg`/`WebP` carry a `Quality`, a new `WebPLossless` variant replaces lossless WebP (a `lossless` flag in the napi/wasm bindings), and `write_image` drops its quality argument.
+
 # takumi
 
 ## 1.8.7

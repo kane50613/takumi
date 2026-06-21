@@ -1,3 +1,29 @@
+## @takumi-rs/image-response@2.0.0-beta.0 (beta)
+
+### Make fonts and images explicit per-render resources
+
+Drop the persistent image store and `GlobalContext`, and pass fonts and images per render. `registerFont` replaces `loadFont`/`loadFontSync`/`loadFonts`, each render takes a `fontFamilies` fallback chain, and `images` replaces `fetchedResources`.
+
+### Make the `Renderer` constructor parameterless and register fonts with `registerFont`
+
+The embedded default fonts decode once and stay shared across renderers.
+
+### Remove the `createImageResponse` factory
+
+Pass options straight to `ImageResponse`.
+
+### Resolve lazy image loaders inside the managed `Renderer`
+
+The render signal now comes from options.
+
+### Accept `fonts` and `fontFamilies` in `renderAnimation` and `encodeFrames`
+
+These match the `render` signature.
+
+### Add a per-image `cache` mode (`auto` | `none`)
+
+Controls decode caching one image at a time.
+
 # @takumi-rs/image-response
 
 ## 1.8.7
