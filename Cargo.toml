@@ -190,3 +190,18 @@ opt-level = "z"
 opt-level = "s"
 [profile.release.package.skrifa]
 opt-level = "s"
+
+# Shaping (per text run) and layout/geometry (per render) — never per pixel.
+# opt-s/z, perf-neutral on the napi bench.
+[profile.release.package.harfrust]
+opt-level = "s"
+[profile.release.package.taffy]
+opt-level = "z"
+[profile.release.package.parley]
+opt-level = "z"
+[profile.release.package.fontique]
+opt-level = "z"
+[profile.release.package.kurbo]
+opt-level = "z"
+[profile.release.package.tiny-skia-path]
+opt-level = "z"
