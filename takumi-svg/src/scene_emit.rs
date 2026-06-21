@@ -80,7 +80,7 @@ fn emit_context(
 
   // Children sit in the root node's child frame; a synthetic root context keeps
   // the caller's frame.
-  let (chrome, child_frame) = match &ctx.root {
+  let (chrome, child_frame) = match ctx.root() {
     Some(np) => match emit_box(root, np, parent, results, doc)? {
       Some((chrome, frame)) => (Some(chrome), frame),
       None => (None, parent),
@@ -88,7 +88,7 @@ fn emit_context(
     None => (None, parent),
   };
 
-  for bucket in ctx.buckets.in_paint_order() {
+  for bucket in ctx.in_paint_order() {
     for item in bucket {
       match &item.kind {
         PaintItemKind::Node(np) => {

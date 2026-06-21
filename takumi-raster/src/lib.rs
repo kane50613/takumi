@@ -70,5 +70,3 @@ pub(crate) fn pixmap_from_buffer(buffer: &ImageBuffer) -> Option<Pixmap> {
   let size = IntSize::from_wh(buffer.width(), buffer.height())?;
   Pixmap::from_vec(buffer.data().to_vec(), size)
 }
-
-pub(crate) use takumi_core::scene::get_node_mut_by_path;

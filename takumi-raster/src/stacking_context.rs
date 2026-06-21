@@ -5,7 +5,7 @@ use crate::{
   BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, Error, NodeMaskAction,
   Placement, Result, SizedFontStyle, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel,
   draw_background, draw_border, draw_debug_border, draw_inset_box_shadow, draw_node_content,
-  draw_outline, draw_outset_box_shadow, get_node_mut_by_path,
+  draw_outline, draw_outset_box_shadow,
   inline_drawing::{draw_inline_box, draw_inline_layout},
   layout::{
     inline::{
@@ -18,7 +18,8 @@ use crate::{
   prepare_node_mask,
 };
 use takumi_core::scene::{
-  NodePaint, PaintItem, PaintItemKind, SceneBounds, StackingContextNode, transformed_rect_extents,
+  NodePaint, PaintItem, PaintItemKind, SceneBounds, StackingContextNode, get_node_mut_by_path,
+  transformed_rect_extents,
 };
 
 fn bounds_intersects_viewport(bounds: SceneBounds, viewport: CanvasViewport) -> bool {
@@ -456,21 +457,21 @@ pub(crate) fn paint_context(
     )));
   };
 
-  if let Some(bounds) = context.paint_bounds
+  if let Some(bounds) = context.paint_bounds()
     && !bounds_intersects_viewport(bounds, canvas.viewport())
   {
     return Ok(());
   }
 
   let mut deferred_root = None;
-  if let Some(root_paint) = &context.root {
+  if let Some(root_paint) = context.root() {
     match begin_node_render(
       root,
       layout_results,
       canvas,
       root_paint,
       true,
-      context.paint_bounds,
+      context.paint_bounds(),
     )? {
       Some(DeferredNodeRender::SkipRendering) => return Ok(()),
       Some(deferred_root_render @ DeferredNodeRender::Deferred { .. }) => {
@@ -480,7 +481,7 @@ pub(crate) fn paint_context(
     }
   }
 
-  for bucket in context.buckets.in_paint_order() {
+  for bucket in context.in_paint_order() {
     paint_bucket(root, contexts, layout_results, canvas, bucket)?;
   }
 
@@ -493,8 +494,7 @@ pub(crate) fn paint_context(
   {
     let Some(current) = get_node_mut_by_path(root, &path) else {
       let node_id = context
-        .root
-        .as_ref()
+        .root()
         .map_or(layout_results.root_node_id(), |node| node.node_id);
       return Err(Error::LayoutError(TaffyError::InvalidInputNode(node_id)));
     };
@@ -503,7 +503,7 @@ pub(crate) fn paint_context(
       canvas,
       has_constraint,
       isolated_canvas,
-      context.paint_bounds.or(filter_bounds),
+      context.paint_bounds().or(filter_bounds),
     )?;
   }
 

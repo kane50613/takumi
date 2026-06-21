@@ -149,7 +149,7 @@ enum PaintBucket {
 }
 
 #[derive(Default)]
-pub struct StackingBuckets {
+struct StackingBuckets {
   negative: Vec<PaintItem>,
   auto_zero: Vec<PaintItem>,
   positive: Vec<PaintItem>,
@@ -180,18 +180,38 @@ impl StackingBuckets {
     });
   }
 
-  pub fn in_paint_order(&self) -> [&[PaintItem]; 3] {
+  fn in_paint_order(&self) -> [&[PaintItem]; 3] {
     [&self.negative, &self.auto_zero, &self.positive]
   }
 }
 
+/// One stacking context: an optional root node and its descendants bucketed into
+/// CSS paint order. The bucket representation is private; backends read it through
+/// [`root`](Self::root), [`paint_bounds`](Self::paint_bounds), and
+/// [`in_paint_order`](Self::in_paint_order).
 pub struct StackingContextNode {
-  pub root: Option<NodePaint>,
-  pub buckets: StackingBuckets,
-  pub paint_bounds: Option<SceneBounds>,
+  root: Option<NodePaint>,
+  buckets: StackingBuckets,
+  paint_bounds: Option<SceneBounds>,
 }
 
 impl StackingContextNode {
+  /// The node that owns this context, if any (the synthetic root has none).
+  pub fn root(&self) -> Option<&NodePaint> {
+    self.root.as_ref()
+  }
+
+  /// The context's device-space paint bounds, once computed.
+  pub fn paint_bounds(&self) -> Option<SceneBounds> {
+    self.paint_bounds
+  }
+
+  /// The context's paint items grouped by stacking layer in paint order:
+  /// negative `z-index`, then in-flow/`z-auto`, then positive `z-index`.
+  pub fn in_paint_order(&self) -> [&[PaintItem]; 3] {
+    self.buckets.in_paint_order()
+  }
+
   fn with_root(root: Option<NodePaint>) -> Self {
     Self {
       root,
