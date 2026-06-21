@@ -27,7 +27,7 @@ features = ["svg", "rayon"]
 
 [dependencies.takumi-svg]
 path = "../takumi-svg"
-version = "0.1"
+version = "0.0.0"
 
 [build-dependencies]
 napi-build.workspace = true

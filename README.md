@@ -162,7 +162,7 @@ flowchart LR
 
 ## Contributing
 
-Read [CONTRIBUTING.md](./CONTRIBUTING.md). Covers local setup, test commands, fixture workflow, and changeset process.
+Read [CONTRIBUTING.md](./CONTRIBUTING.md). Covers local setup, test commands, fixture workflow, and changelog process.
 
 We welcome bug reports, feature requests, doc improvements, and new example integrations.
 
