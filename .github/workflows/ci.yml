@@ -774,6 +774,8 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@main
@@ -784,6 +786,7 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           stage: release
+          binstall: cargo-rdme
           components: clippy,rustfmt
 
       - name: Download helpers artifact
