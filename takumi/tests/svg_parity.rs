@@ -26,48 +26,23 @@ const FLOOR: f32 = 90.0;
 
 /// Fixtures the SVG backend does not yet reproduce, with the divergence cause.
 /// Shrink this as the backend improves; entries are `(name, why)`.
-const KNOWN_DIVERGENT: &[(&str, &str)] = &[
-  (
-    "style_object_position_none_top_left",
-    "object-position wrong placement",
-  ),
-  ("text_shadow", "text-shadow offset/blur differs from raster"),
-  ("style_backdrop_filter", "backdrop-filter unsupported"),
-  ("inline_complex_nested_fixture", "inline layout divergence"),
-  ("inline_float_wrap", "inline float wrap divergence"),
-  (
-    "style_object_position_contain_top_left",
-    "object-position + contain scaling",
-  ),
-  (
-    "text_font_synthesis_weight_emoji",
-    "synthesized weight / emoji raster differs",
-  ),
-  (
-    "style_object_position_percentage_25_75",
-    "object-position percentage placement",
-  ),
-  (
-    "style_object_fit_contain",
-    "object-fit contain scaling differs",
-  ),
-  (
-    "style_object_position_contain_center",
-    "object-position + contain scaling",
-  ),
-  (
-    "style_background_size_contain",
-    "background-size contain scaling differs",
-  ),
-  (
-    "style_mask_image_with_background",
-    "mask + background compositing differs",
-  ),
-];
+const KNOWN_DIVERGENT: &[(&str, &str)] = &[(
+  "style_backdrop_filter",
+  "backdrop-filter not implemented by the svg backend",
+)];
+
+/// Straight-alpha composite over white. Transparent pixels become white, so two
+/// pixels that look identical on a white page compare equal regardless of the RGB
+/// left under a zero alpha (webp keeps dirty RGB there, resvg zeroes it).
+fn over_white(p: [u8; 4]) -> [u8; 3] {
+  let a = p[3] as f32 / 255.0;
+  [0, 1, 2].map(|i| (p[i] as f32 * a + 255.0 * (1.0 - a)).round() as u8)
+}
 
 fn within(a: [u8; 4], b: [u8; 4]) -> bool {
-  a.iter()
-    .zip(b.iter())
+  over_white(a)
+    .iter()
+    .zip(over_white(b).iter())
     .all(|(x, y)| (*x as i32 - *y as i32).abs() <= TOL)
 }
 
