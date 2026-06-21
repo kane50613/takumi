@@ -719,7 +719,6 @@ impl SvgDocument {
 
   /// Strokes an open/closed path (for dashed/dotted borders). `dasharray` and
   /// `linecap` are optional.
-  #[allow(clippy::too_many_arguments)]
   pub(crate) fn stroke_path(
     &mut self,
     data: &str,
