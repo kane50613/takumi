@@ -26,13 +26,13 @@ const groupedNpmPackages = [
 
 const independentCrates = ["takumi-core", "takumi-css", "takumi-raster", "takumi-svg"];
 
-const packages: Record<string, PackageOptions<"core">> = {
-  "cargo:takumi": { group: "core" },
+const packages: Record<string, PackageOptions<"takumi">> = {
+  "cargo:takumi": { group: "takumi" },
 };
 
 for (const name of groupedNpmPackages) {
   packages[`npm:${name}`] = {
-    group: "core",
+    group: "takumi",
     npm: prerelease ? { distTag: prerelease } : undefined,
   };
 }
@@ -47,7 +47,7 @@ const paper = tegami({
     github({ repo: "kane50613/takumi", cli: { versionPr: { base: "master" } } }),
   ],
   groups: {
-    core: { syncBump: true, syncGitTag: true, prerelease },
+    takumi: { syncBump: true, syncGitTag: true, prerelease },
   },
   packages,
   ignore: [
