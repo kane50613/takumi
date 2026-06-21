@@ -138,6 +138,14 @@ pub(crate) fn draw_decoration_segment(
   );
 }
 
+struct GlyphPaintCtx<'a, 'b> {
+  canvas: &'a mut Canvas,
+  style: &'a SizedFontStyle<'a>,
+  transform: Affine,
+  inline_offset: Point<f32>,
+  paths: &'b [Command],
+}
+
 pub(crate) fn draw_glyph_clip_image(
   glyph: &ResolvedGlyph,
   canvas: &mut Canvas,
@@ -251,26 +259,19 @@ pub(crate) fn draw_glyph_clip_image(
         canvas.buffer_pool.release(mask);
       }
 
-      if let Some(embolden) = outline.embolden() {
-        draw_text_embolden_clip_image(
-          canvas,
-          style,
-          transform,
-          outline.paths(),
-          embolden,
-          clip_image,
-          inline_offset,
-        );
-      }
-
-      draw_text_stroke_clip_image(
+      let mut ctx = GlyphPaintCtx {
         canvas,
         style,
         transform,
-        outline.paths(),
-        clip_image,
         inline_offset,
-      );
+        paths: outline.paths(),
+      };
+
+      if let Some(embolden) = outline.embolden() {
+        draw_text_embolden_clip_image(&mut ctx, embolden, clip_image);
+      }
+
+      draw_text_stroke_clip_image(&mut ctx, clip_image);
     }
   }
 
@@ -321,158 +322,145 @@ pub(crate) fn draw_glyph(
         );
       }
 
+      let mut ctx = GlyphPaintCtx {
+        canvas,
+        style,
+        transform,
+        inline_offset,
+        paths: outline.paths(),
+      };
+
       if let Some(embolden) = outline.embolden() {
-        draw_text_embolden(canvas, style, transform, outline.paths(), color, embolden);
+        draw_text_embolden(&mut ctx, color, embolden);
       }
 
-      draw_text_stroke(canvas, style, transform, outline.paths());
+      draw_text_stroke(&mut ctx);
     }
   }
 
   Ok(())
 }
 
-fn draw_text_stroke_clip_image(
-  canvas: &mut Canvas,
-  style: &SizedFontStyle,
-  transform: Affine,
-  paths: &[Command],
-  clip_image: PaintSource<'_>,
-  inline_offset: Point<f32>,
-) {
-  if style.stroke_width <= 0.0 {
+fn draw_text_stroke_clip_image(ctx: &mut GlyphPaintCtx<'_, '_>, clip_image: PaintSource<'_>) {
+  if ctx.style.stroke_width <= 0.0 {
     return;
   }
 
-  let Some(inverse) = transform.invert() else {
+  let Some(inverse) = ctx.transform.invert() else {
     return;
   };
 
-  let scale = transform.uniform_scale().max(f32::EPSILON);
-  let mut stroke = Stroke::new(style.stroke_width / scale);
-  stroke.join = style.parent.stroke_linejoin.into();
+  let scale = ctx.transform.uniform_scale().max(f32::EPSILON);
+  let mut stroke = Stroke::new(ctx.style.stroke_width / scale);
+  stroke.join = ctx.style.parent.stroke_linejoin.into();
 
   let (stroke_mask, stroke_placement) = render_mask(
-    paths,
-    Some(transform),
+    ctx.paths,
+    Some(ctx.transform),
     Some(stroke.into()),
-    &mut canvas.buffer_pool,
+    &mut ctx.canvas.buffer_pool,
   );
 
-  canvas.composite_mask_color_over_source(
+  ctx.canvas.composite_mask_color_over_source(
     &stroke_mask,
     stroke_placement,
     clip_image,
-    style.text_stroke_color,
+    ctx.style.text_stroke_color,
     MaskSamplingOptions {
-      canvas_to_source: Affine::translation(inline_offset.x, inline_offset.y) * inverse,
+      canvas_to_source: Affine::translation(ctx.inline_offset.x, ctx.inline_offset.y) * inverse,
       sample_bias: Point::ZERO,
-      algorithm: style.parent.image_rendering,
+      algorithm: ctx.style.parent.image_rendering,
     },
     BlendMode::Normal,
   );
 
-  canvas.buffer_pool.release(stroke_mask);
+  ctx.canvas.buffer_pool.release(stroke_mask);
 }
 
 fn draw_text_embolden_clip_image(
-  canvas: &mut Canvas,
-  style: &SizedFontStyle,
-  transform: Affine,
-  paths: &[Command],
+  ctx: &mut GlyphPaintCtx<'_, '_>,
   embolden: f32,
   clip_image: PaintSource<'_>,
-  inline_offset: Point<f32>,
 ) {
   if embolden <= 0.0 {
     return;
   }
 
-  let Some(inverse) = transform.invert() else {
+  let Some(inverse) = ctx.transform.invert() else {
     return;
   };
 
   let mut stroke = Stroke::new(embolden * 2.0);
-  stroke.join = style.parent.stroke_linejoin.into();
+  stroke.join = ctx.style.parent.stroke_linejoin.into();
 
   let (stroke_mask, stroke_placement) = render_mask(
-    paths,
-    Some(transform),
+    ctx.paths,
+    Some(ctx.transform),
     Some(stroke.into()),
-    &mut canvas.buffer_pool,
+    &mut ctx.canvas.buffer_pool,
   );
 
-  canvas.composite_mask_source(
+  ctx.canvas.composite_mask_source(
     &stroke_mask,
     stroke_placement,
     clip_image,
     MaskSamplingOptions {
-      canvas_to_source: Affine::translation(inline_offset.x, inline_offset.y) * inverse,
+      canvas_to_source: Affine::translation(ctx.inline_offset.x, ctx.inline_offset.y) * inverse,
       sample_bias: Point::ZERO,
-      algorithm: style.parent.image_rendering,
+      algorithm: ctx.style.parent.image_rendering,
     },
     BlendMode::Normal,
   );
 
-  canvas.buffer_pool.release(stroke_mask);
+  ctx.canvas.buffer_pool.release(stroke_mask);
 }
 
-fn draw_text_stroke(
-  canvas: &mut Canvas,
-  style: &SizedFontStyle,
-  transform: Affine,
-  paths: &[Command],
-) {
-  if style.stroke_width <= 0.0 {
+fn draw_text_stroke(ctx: &mut GlyphPaintCtx<'_, '_>) {
+  if ctx.style.stroke_width <= 0.0 {
     return;
   }
 
-  let scale = transform.uniform_scale().max(f32::EPSILON);
-  let mut stroke = Stroke::new(style.stroke_width / scale);
-  stroke.join = style.parent.stroke_linejoin.into();
+  let scale = ctx.transform.uniform_scale().max(f32::EPSILON);
+  let mut stroke = Stroke::new(ctx.style.stroke_width / scale);
+  stroke.join = ctx.style.parent.stroke_linejoin.into();
 
   let (stroke_mask, stroke_placement) = render_mask(
-    paths,
-    Some(transform),
+    ctx.paths,
+    Some(ctx.transform),
     Some(stroke.into()),
-    &mut canvas.buffer_pool,
+    &mut ctx.canvas.buffer_pool,
   );
 
-  canvas.draw_mask(
+  ctx.canvas.draw_mask(
     &stroke_mask,
     stroke_placement,
-    style.text_stroke_color,
+    ctx.style.text_stroke_color,
     BlendMode::Normal,
   );
 
-  canvas.buffer_pool.release(stroke_mask);
+  ctx.canvas.buffer_pool.release(stroke_mask);
 }
 
-fn draw_text_embolden(
-  canvas: &mut Canvas,
-  style: &SizedFontStyle,
-  transform: Affine,
-  paths: &[Command],
-  color: Color,
-  embolden: f32,
-) {
+fn draw_text_embolden(ctx: &mut GlyphPaintCtx<'_, '_>, color: Color, embolden: f32) {
   if embolden <= 0.0 {
     return;
   }
 
   let mut stroke = Stroke::new(embolden * 2.0);
-  stroke.join = style.parent.stroke_linejoin.into();
+  stroke.join = ctx.style.parent.stroke_linejoin.into();
 
   let (stroke_mask, stroke_placement) = render_mask(
-    paths,
-    Some(transform),
+    ctx.paths,
+    Some(ctx.transform),
     Some(stroke.into()),
-    &mut canvas.buffer_pool,
+    &mut ctx.canvas.buffer_pool,
   );
 
-  canvas.draw_mask(&stroke_mask, stroke_placement, color, BlendMode::Normal);
+  ctx
+    .canvas
+    .draw_mask(&stroke_mask, stroke_placement, color, BlendMode::Normal);
 
-  canvas.buffer_pool.release(stroke_mask);
+  ctx.canvas.buffer_pool.release(stroke_mask);
 }
 
 fn draw_text_shadow(

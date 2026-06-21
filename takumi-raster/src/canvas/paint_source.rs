@@ -102,14 +102,10 @@ impl<'a> PaintSource<'a> {
 
     let width = self.width();
     let height = self.height();
+    let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(dst);
     for y in 0..height {
       for x in 0..width {
-        let pixel = self.get_pixel(x, y);
-        let offset = ((y * width + x) * 4) as usize;
-        dst[offset] = pixel.red();
-        dst[offset + 1] = pixel.green();
-        dst[offset + 2] = pixel.blue();
-        dst[offset + 3] = pixel.alpha();
+        pixels[(y * width + x) as usize] = premultiplied_from_pixel(self.get_pixel(x, y));
       }
     }
   }
