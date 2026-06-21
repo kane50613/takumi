@@ -1,6 +1,5 @@
 import { Analytics } from "@vercel/analytics/react";
 import { Banner } from "fumadocs-ui/components/banner";
-import { Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { Provider } from "../components/provider";
 import "../../app/app.css";
@@ -28,15 +27,14 @@ export default function RootElement({ children }: { children: ReactNode }) {
       </head>
       <body className="flex flex-col min-h-screen">
         <Provider>
-          <Banner id="takumi-v2-beta" variant="rainbow">
+          <Banner id="takumi-v2-beta">
             <a
               href="https://v1.takumi.kane.tw"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-2"
             >
-              <Sparkles className="size-4" />
-              You're reading the Takumi v2 Beta docs. For the stable release, switch to v1 →
+              You're reading the v2 beta docs. For the stable release, switch to v1 →
             </a>
           </Banner>
           {children}
