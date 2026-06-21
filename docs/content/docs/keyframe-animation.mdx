@@ -53,40 +53,36 @@ const output = await render(<div tw="animate-[move_1s_ease-in-out_infinite_alter
 
 Use stylesheet `@keyframes` when you want the animation to travel with the JSX tree and then render it with either `renderAnimation()` or `render()` + `stylesheets`.
 
+`renderAnimation()` takes the scenes directly: each scene's JSX (or HTML string, or node tree) is transformed and its `<style>` is extracted automatically, and image resources are fetched once across every scene.
+
 ```tsx twoslash title="render.tsx"
 // @noErrors
-import { Renderer } from "takumi-js/node";
-import { fromJsx } from "takumi-js/helpers/jsx";
+import { renderAnimation } from "takumi-js";
 
-const renderer = new Renderer();
-
-const { node, stylesheets } = await fromJsx(
-  <div tw="w-full h-full items-center justify-center">
-    <style>{`
-      @keyframes move {
-        from {
-          transform: translateX(0);
-        }
-
-        to {
-          transform: translateX(60px);
-        }
-      }
-    `}</style>
-    <div tw="w-10 h-10 bg-red-500 animate-[move_1s_ease-in-out_infinite_alternate]" />
-  </div>,
-);
-
-const output = await renderer.renderAnimation({
+const output = await renderAnimation({
   width: 100,
   height: 100,
   fps: 30,
   format: "webp",
-  stylesheets,
   scenes: [
     {
       durationMs: 1000,
-      node,
+      node: (
+        <div tw="w-full h-full items-center justify-center">
+          <style>{`
+            @keyframes move {
+              from {
+                transform: translateX(0);
+              }
+
+              to {
+                transform: translateX(60px);
+              }
+            }
+          `}</style>
+          <div tw="w-10 h-10 bg-red-500 animate-[move_1s_ease-in-out_infinite_alternate]" />
+        </div>
+      ),
     },
   ],
 });

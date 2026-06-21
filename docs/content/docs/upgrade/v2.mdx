@@ -68,6 +68,19 @@ export function GET() {
 
 `renderAnimation` and `encodeFrames` now take `fonts` and `fontFamilies`, matching `render`.
 
+### Render to vector SVG
+
+`takumi-js` now exports `renderSvg()` alongside `render()`. It takes the same input (JSX, an HTML string, or a node tree) and the same resource pipeline, but returns a real `<svg>` document — `<rect>`, `<path>`, gradients, glyph outlines, embedded images — instead of a raster bitmap. If you came from [satori](https://github.com/vercel/satori) for its SVG output, this is the direct equivalent; keep using `render()` for a PNG/WebP.
+
+```tsx
+import { render, renderSvg } from "takumi-js";
+
+const png = await render(<OgImage />, { width: 1200, height: 630 });
+const svg = await renderSvg(<OgImage />, { width: 1200, height: 630 }); // [!code ++]
+```
+
+The top-level `renderAnimation()` is exported the same way, so the full sequence — image, animation, and vector — is available without constructing a `Renderer`.
+
 ## CSS & rendering
 
 ### `currentColor` in SVG images is no longer tinted by the host color
