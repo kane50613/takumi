@@ -83,17 +83,22 @@ fn load_font_internal(
     Font::Buffer(buffer) => fonts
       .register(FontResource::new(buffer.into_vec()))
       .map_err(map_error),
-    Font::Object(details) => fonts
-      .register(
-        FontResource::new(details.data.into_vec()).override_info(FontInfoOverride {
-          family_name: details.name.as_deref(),
-          style: details.style.map(Into::into),
-          weight: details.weight.map(|weight| FontWeight::new(weight as f32)),
-          axes: None,
-          width: None,
-        }),
-      )
-      .map_err(map_error),
+    Font::Object(details) => {
+      let resource = FontResource::new(details.data.into_vec()).override_info(FontInfoOverride {
+        family_name: details.name.as_deref(),
+        style: details.style.map(Into::into),
+        weight: details.weight.map(|weight| FontWeight::new(weight as f32)),
+        axes: None,
+        width: None,
+      });
+
+      let resource = match &details.subset_of {
+        Some(logical) => resource.subset_of(logical.clone()),
+        None => resource,
+      };
+
+      fonts.register(resource).map_err(map_error)
+    }
   }
 }
 

@@ -16,9 +16,6 @@ pub struct RenderContext {
   pub(crate) fonts: Rc<RefCell<Fonts>>,
   /// The sizing context.
   pub sizing: SizingContext,
-  /// The fallback family chain for this render, appended to every run's font stack.
-  #[builder(default)]
-  pub(crate) fallback_families: Option<Rc<[String]>>,
   /// The scale factor for the image renderer.
   #[builder(default = Affine::IDENTITY)]
   pub transform: Affine,
@@ -51,7 +48,6 @@ impl RenderContext {
   ) -> Self {
     Self {
       fonts: parent.fonts.clone(),
-      fallback_families: parent.fallback_families.clone(),
       transform: parent.transform,
       style: Box::new(style),
       current_color,

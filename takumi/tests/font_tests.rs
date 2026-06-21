@@ -5,13 +5,119 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use takumi::prelude::*;
+use parley::{GenericFamily, fontique::FontInfoOverride};
+use takumi::{prelude::*, render};
 
 fn font_path(path: &str) -> PathBuf {
   Path::new(env!("CARGO_MANIFEST_DIR"))
     .join("../assets/fonts/")
     .join(path)
     .to_path_buf()
+}
+
+fn read_font(path: &str) -> Vec<u8> {
+  let mut data = Vec::new();
+  File::open(font_path(path))
+    .unwrap()
+    .read_to_end(&mut data)
+    .unwrap();
+  data
+}
+
+/// Registers `path` as a uniquely-named coverage subset of the logical family `logical`.
+fn register_subset(fonts: &mut Fonts, path: &str, unique_name: &str, logical: &str) {
+  fonts
+    .register(
+      FontResource::new(read_font(path))
+        .override_info(FontInfoOverride {
+          family_name: Some(unique_name),
+          ..Default::default()
+        })
+        .generic_family(GenericFamily::SansSerif)
+        .subset_of(logical),
+    )
+    .unwrap();
+}
+
+fn render_devanagari(fonts: &Fonts, family: &str) -> Bitmap {
+  let node = Node::text("नमस्ते".to_string()).with_style(
+    Style::default()
+      .with(StyleDeclaration::font_size(FontSize::Length(Length::Px(
+        72.0,
+      ))))
+      .with(StyleDeclaration::font_family(
+        FontFamily::from_str(family).unwrap(),
+      )),
+  );
+
+  render(
+    RenderOptions::builder()
+      .viewport(Viewport::new((400, 140)))
+      .node(node)
+      .fonts(fonts)
+      .build(),
+  )
+  .unwrap()
+}
+
+fn inked_pixels(bitmap: &Bitmap) -> u32 {
+  bitmap.as_raw().chunks_exact(4).filter(|p| p[3] > 0).count() as u32
+}
+
+fn pixel_diff(a: &Bitmap, b: &Bitmap) -> u32 {
+  a.as_raw()
+    .chunks_exact(4)
+    .zip(b.as_raw().chunks_exact(4))
+    .filter(|(x, y)| x != y)
+    .count() as u32
+}
+
+/// Two logical families, each with its OWN Devanagari subset, must route per family:
+/// `font-family: Alpha` shapes with Alpha's Devanagari (Noto), `Beta` with Beta's
+/// (Poppins). The pre-fix global fallback bucket was family-blind and gave both the same.
+#[test]
+fn subset_groups_route_per_family() {
+  let mut fonts = Fonts::default();
+  register_subset(
+    &mut fonts,
+    "geist/Geist[wght].woff2",
+    "Alpha-latin",
+    "Alpha",
+  );
+  register_subset(
+    &mut fonts,
+    "noto-sans/noto-sans-devanagari-v30-devanagari-regular.woff2",
+    "Alpha-deva",
+    "Alpha",
+  );
+  register_subset(
+    &mut fonts,
+    "archivo/Archivo-VariableFont_wdth,wght.ttf",
+    "Beta-latin",
+    "Beta",
+  );
+  register_subset(
+    &mut fonts,
+    "poppins/poppins-v24-devanagari_latin-regular.woff2",
+    "Beta-deva",
+    "Beta",
+  );
+
+  let alpha = render_devanagari(&fonts, "Alpha");
+  let beta = render_devanagari(&fonts, "Beta");
+  let beta_explicit = render_devanagari(&fonts, "\"Beta-latin\", \"Beta-deva\"");
+
+  assert!(inked_pixels(&alpha) > 500, "Alpha must render real glyphs");
+  assert!(inked_pixels(&beta) > 500, "Beta must render real glyphs");
+  assert!(
+    pixel_diff(&alpha, &beta) > 1000,
+    "per-family routing: Alpha (Noto) and Beta (Poppins) Devanagari must differ"
+  );
+  assert_eq!(
+    pixel_diff(&beta, &beta_explicit),
+    0,
+    "expanding `font-family: Beta` must match the explicit subset stack"
+  );
 }
 
 #[test]

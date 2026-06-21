@@ -149,6 +149,12 @@ export type FontDetails = {
   data: ByteBuf;
   weight?: number;
   style?: "normal" | "italic" | "oblique" | `oblique ${number}deg` | (string & {});
+  /**
+   * Logical family this font is a coverage subset of. Subsets sharing a `subsetOf` are
+   * kept as distinct families and `font-family: {subsetOf}` expands to all of them, so each
+   * script routes to the subset that covers it. Set by {@link loadGoogleFonts}.
+   */
+  subsetOf?: string;
 };
 
 export type ImageSource = {

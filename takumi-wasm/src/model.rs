@@ -176,6 +176,8 @@ pub struct FontDetails {
   pub weight: Option<f64>,
   /// The font style (normal, italic, or oblique).
   pub style: Option<FontStyle>,
+  /// Logical family this font is a coverage subset of; expands at render time.
+  pub subset_of: Option<String>,
 }
 
 /// Font input, either as detailed object or raw buffer.

@@ -661,6 +661,11 @@ fn font_style_css(style: FontStyle) -> String {
 #[derive(Clone)]
 pub struct Fonts {
   inner: parley::FontContext,
+  /// Maps a logical family name (the name authors write in `font-family`) to the
+  /// unique internal names of the subset families registered under it, in registration
+  /// order. Populated by [`FontResource::subset_of`]; consulted when a render expands a
+  /// `font-family` into its per-coverage subset stack.
+  groups: HashMap<String, Vec<String>>,
 }
 
 impl Default for Fonts {
@@ -673,6 +678,7 @@ impl Default for Fonts {
         }),
         source_cache: Default::default(),
       },
+      groups: HashMap::new(),
     }
   }
 }
@@ -719,7 +725,16 @@ impl Fonts {
       }
     }
 
-    Rc::new(RefCell::new(Self { inner: cloned }))
+    Rc::new(RefCell::new(Self {
+      inner: cloned,
+      groups: self.groups.clone(),
+    }))
+  }
+
+  /// The subset family names registered under `logical` via [`FontResource::subset_of`],
+  /// in registration order, or `None` if `logical` names no subset group.
+  pub(crate) fn subset_group(&self, logical: &str) -> Option<&[String]> {
+    self.groups.get(logical).map(Vec::as_slice)
   }
 
   pub(crate) fn resolve_glyphs(
@@ -809,6 +824,7 @@ impl Fonts {
       source,
       info_override,
       generic_family,
+      subset_of,
     } = font;
 
     let blob = source.into_blob()?;
@@ -831,6 +847,14 @@ impl Fonts {
         .family_name(family)
         .unwrap_or_default()
         .to_string();
+
+      if let Some(logical) = &subset_of {
+        let names = self.groups.entry(logical.clone()).or_default();
+        if !names.contains(&name) {
+          names.push(name.clone());
+        }
+      }
+
       families.push(RegisteredFamily { name, faces });
 
       if let Some(generic_family) = generic_family {
@@ -953,6 +977,8 @@ pub struct FontResource<'a> {
   info_override: Option<FontInfoOverride<'a>>,
   /// Generic font family
   generic_family: Option<GenericFamily>,
+  /// Logical family this font is a coverage subset of (see [`FontResource::subset_of`]).
+  subset_of: Option<String>,
 }
 
 impl<'a> FontResource<'a> {
@@ -962,6 +988,7 @@ impl<'a> FontResource<'a> {
       source: source.into(),
       info_override: None,
       generic_family: None,
+      subset_of: None,
     }
   }
 
@@ -981,6 +1008,20 @@ impl<'a> FontResource<'a> {
     }
   }
 
+  /// Marks this font as a coverage subset of the logical family `logical`.
+  ///
+  /// Subsets sharing a logical family must each register under a UNIQUE family name
+  /// (via [`FontResource::override_info`]) so the font system keeps them as distinct
+  /// families — same-named faces collapse into one and never fall through on coverage.
+  /// A render then expands `font-family: {logical}` into all its subsets, in
+  /// registration order, letting the shaper pick the subset that covers each cluster.
+  pub fn subset_of(self, logical: impl Into<String>) -> Self {
+    Self {
+      subset_of: Some(logical.into()),
+      ..self
+    }
+  }
+
   /// Convert to resolved font resource, decompressing woff2/woff into a raw buffer.
   pub fn into_resolved(self) -> Result<Self, FontError> {
     let source = self.source.into_blob_variant()?;
@@ -988,6 +1029,7 @@ impl<'a> FontResource<'a> {
       source,
       info_override: self.info_override,
       generic_family: self.generic_family,
+      subset_of: self.subset_of,
     })
   }
 }

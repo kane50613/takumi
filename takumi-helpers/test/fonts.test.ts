@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
-import { googleFont } from "../src/fonts";
+import { googleFont, loadGoogleFonts } from "../src/fonts";
+import type { Node } from "../src/types";
 
 const bytes = (s: string) => new TextEncoder().encode(s).buffer;
 
@@ -130,5 +131,93 @@ describe("googleFont", () => {
     expect(fonts).toHaveLength(1);
     expect(fonts[0]!.weight).toBeUndefined();
     expect(fonts[0]!.key).toBe("https://fonts.gstatic.com/inter-variable.woff2");
+  });
+});
+
+describe("loadGoogleFonts", () => {
+  const interCss = `
+    /* cyrillic */
+    @font-face {
+      font-family: 'Inter';
+      font-style: normal;
+      font-weight: 400;
+      src: url(https://fonts.gstatic.com/inter-cyrillic.woff2) format('woff2');
+      unicode-range: U+0400-045F;
+    }
+    /* greek */
+    @font-face {
+      font-family: 'Inter';
+      font-style: normal;
+      font-weight: 400;
+      src: url(https://fonts.gstatic.com/inter-greek.woff2) format('woff2');
+      unicode-range: U+0370-03FF;
+    }
+    /* latin */
+    @font-face {
+      font-family: 'Inter';
+      font-style: normal;
+      font-weight: 400;
+      src: url(https://fonts.gstatic.com/inter-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF;
+    }
+  `;
+
+  test("loads only the subsets the content's codepoints intersect", async () => {
+    const fetchMock = mock((url: string) =>
+      Promise.resolve(url.includes("/css2") ? new Response(interCss) : new Response(bytes(url))),
+    );
+
+    const fonts = await loadGoogleFonts("Привет", ["Inter"], { fetch: fetchMock });
+
+    expect(fonts).toHaveLength(1);
+    expect(fonts[0]!.subsetOf).toBe("Inter");
+    expect(fonts[0]!.name).toBe("Inter cyrillic");
+    expect(fonts[0]!.key).toBe("https://fonts.gstatic.com/inter-cyrillic.woff2");
+  });
+
+  test("multi-script content pulls every matching subset, each uniquely named", async () => {
+    const fetchMock = mock((url: string) =>
+      Promise.resolve(url.includes("/css2") ? new Response(interCss) : new Response(bytes(url))),
+    );
+
+    const fonts = await loadGoogleFonts("Hi Привет Γειά", ["Inter"], { fetch: fetchMock });
+
+    expect(fonts.map((f) => f.name).sort()).toEqual([
+      "Inter cyrillic",
+      "Inter greek",
+      "Inter latin",
+    ]);
+    expect(fonts.every((f) => f.subsetOf === "Inter")).toBe(true);
+  });
+
+  test("scans a node tree for codepoints", async () => {
+    const fetchMock = mock((url: string) =>
+      Promise.resolve(url.includes("/css2") ? new Response(interCss) : new Response(bytes(url))),
+    );
+
+    const node: Node = {
+      type: "container",
+      children: [
+        { type: "text", text: "Hello" },
+        { type: "container", children: [{ type: "text", text: "Γειά" }] },
+      ],
+    };
+
+    const fonts = await loadGoogleFonts(node, ["Inter"], { fetch: fetchMock });
+
+    expect(fonts.map((f) => f.name).sort()).toEqual(["Inter greek", "Inter latin"]);
+  });
+
+  test("downloads subset bytes lazily — only CSS up front", async () => {
+    const fetchMock = mock((url: string) =>
+      Promise.resolve(url.includes("/css2") ? new Response(interCss) : new Response(bytes(url))),
+    );
+
+    const fonts = await loadGoogleFonts("Hello", ["Inter"], { fetch: fetchMock });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const data = await fonts[0]!.data();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(new TextDecoder().decode(data)).toBe("https://fonts.gstatic.com/inter-latin.woff2");
   });
 });
