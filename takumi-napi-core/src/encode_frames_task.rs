@@ -139,7 +139,7 @@ impl Task for EncodeFramesTask {
           let mut options = AnimatedWebpOptions::default();
           options.lossless = webp_lossless(self.quality, self.lossless);
           if let Some(quality) = self.quality {
-            options.quality = quality.min(100);
+            options.quality = quality;
           }
 
           encode_animated_webp(Cow::Owned(frames), &mut buffer, options)
