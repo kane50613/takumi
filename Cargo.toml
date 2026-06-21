@@ -33,8 +33,7 @@ napi-build = "2"
 napi-derive = "3"
 paste = "1.0"
 precomputed-hash = "0.1"
-query-string-builder = "0.6"
-quick-xml = "0.39"
+quick-xml = "0.40"
 rayon = "1.10"
 roxmltree = "0.21.1"
 selectors = "0.38"
@@ -78,7 +77,7 @@ default-features = false
 features = ["std"]
 
 [workspace.dependencies.phf]
-version = "0.13"
+version = "0.14"
 features = ["macros"]
 
 [workspace.dependencies.resvg]
