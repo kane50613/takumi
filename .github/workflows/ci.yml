@@ -961,14 +961,23 @@ jobs:
               core.info(`Created preview comment on PR #${prNumber}`);
             }
 
-      - name: Pull Vercel project settings (production)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        run: bunx vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      # v1 is frozen; serve its docs at v1.takumi.kane.tw without claiming the
+      # production apex (master/v2 owns that via its own --prod deploy).
+      - name: Pull Vercel project settings (v1)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/v1'
+        run: bunx vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: Build Vercel output (production)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        run: bunx vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} && rm -rf .vercel/output/functions
+      - name: Build Vercel output (v1)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/v1'
+        run: bunx vercel build --token=${{ secrets.VERCEL_TOKEN }} && rm -rf .vercel/output/functions
 
-      - name: Deploy to Vercel (production)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        run: bunx vercel deploy --archive=tgz --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Deploy to Vercel (v1)
+        id: deploy_v1
+        if: github.event_name == 'push' && github.ref == 'refs/heads/v1'
+        run: |
+          DEPLOYMENT_URL=$(bunx vercel deploy --archive=tgz --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
+
+      - name: Assign alias (v1)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/v1'
+        run: bunx vercel alias set ${{ steps.deploy_v1.outputs.url }} v1.takumi.kane.tw --token=${{ secrets.VERCEL_TOKEN }}
