@@ -190,7 +190,7 @@ pub fn encode_animated_webp<W: Write>(
       encoder.set_params(params);
       encoder
         .encode(
-          &frame.image,
+          frame.image.as_raw(),
           frame.image.width(),
           frame.image.height(),
           ColorType::Rgba8,

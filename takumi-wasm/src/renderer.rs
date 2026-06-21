@@ -23,8 +23,8 @@ use takumi_core::{
 };
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, SequentialScene,
-  encode_animated_gif, encode_animated_png, encode_animated_webp, measure_layout, render,
-  render_sequence_animation, write_image,
+  encode_animated_gif, encode_animated_png, encode_animated_webp, measure, render,
+  render_animation, write_image,
 };
 use wasm_bindgen::prelude::*;
 
@@ -257,7 +257,7 @@ impl Renderer {
     let mut buffer = Vec::new();
 
     write_image(
-      Cow::Owned(image),
+      &image,
       &mut buffer,
       format.into_image_output_format(options.quality),
     )
@@ -301,7 +301,7 @@ impl Renderer {
       .font_families(options.font_families)
       .build();
 
-    let layout = measure_layout(render_options).map_err(map_error)?;
+    let layout = measure(render_options).map_err(map_error)?;
 
     Ok(to_value(&layout).map_err(map_error)?.into())
   }
@@ -389,7 +389,7 @@ impl Renderer {
           .build()
       })
       .collect::<Vec<_>>();
-    let rendered_frames = render_sequence_animation(&scene_options, fps).map_err(map_error)?;
+    let rendered_frames = render_animation(&scene_options, fps).map_err(map_error)?;
 
     self.encode_animation(rendered_frames, format)
   }

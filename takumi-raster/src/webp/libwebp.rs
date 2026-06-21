@@ -324,7 +324,7 @@ fn collect_unique_frames(
   frame_height: u32,
 ) -> Result<Vec<(&RgbaImage, u32)>> {
   let mut unique_frames = Vec::with_capacity(frames.len());
-  let mut pending_image = &frames[0].image;
+  let mut pending_image = frames[0].image.as_rgba();
   let mut pending_duration_ms = frames[0].duration_ms.clamp(0, U24_MAX);
 
   for frame in frames.iter().skip(1) {
@@ -336,7 +336,7 @@ fn collect_unique_frames(
       continue;
     }
     unique_frames.push((pending_image, pending_duration_ms));
-    pending_image = &frame.image;
+    pending_image = frame.image.as_rgba();
     pending_duration_ms = frame.duration_ms.clamp(0, U24_MAX);
   }
 

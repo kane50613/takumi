@@ -29,10 +29,43 @@ export type ImageLoader = Omit<ImageSource, "data"> & {
   data: ImageLoaderData | (() => ImageLoaderData | Promise<ImageLoaderData>);
 };
 
-export type RenderOptions = Omit<RenderOptionsInternal, "images"> & {
-  fonts?: FontLoader[];
-  images?: ImageLoader[];
+/**
+ * Output format. Format-specific options live on the variant that supports them,
+ * so `quality` cannot be paired with a lossless format. On wasm, WebP is always
+ * lossless (lossy WebP is native-only).
+ */
+export type OutputFormatOptions =
+  | { format?: "png" }
+  | { format: "jpeg"; quality?: number }
+  | { format: "webp" }
+  | { format: "ico" }
+  | { format: "raw" };
+
+type InnerOutputFormat = {
+  format: NonNullable<RenderOptionsInternal["format"]>;
+  quality?: number;
 };
+
+function toInnerOutputFormat(options: OutputFormatOptions): InnerOutputFormat {
+  switch (options.format) {
+    case "jpeg":
+      return { format: "jpeg", quality: options.quality };
+    case "webp":
+      return { format: "webp" };
+    case "ico":
+      return { format: "ico" };
+    case "raw":
+      return { format: "raw" };
+    default:
+      return { format: "png" };
+  }
+}
+
+export type RenderOptions = Omit<RenderOptionsInternal, "images" | "format" | "quality"> &
+  OutputFormatOptions & {
+    fonts?: FontLoader[];
+    images?: ImageLoader[];
+  };
 
 export type RenderAnimationOptions = Omit<RenderAnimationOptionsInternal, "images"> & {
   fonts?: FontLoader[];
@@ -81,6 +114,7 @@ export class Renderer {
 
     return this.inner.render(node, {
       ...rest,
+      ...toInnerOutputFormat(options ?? {}),
       images: resolvedImages,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
@@ -93,6 +127,7 @@ export class Renderer {
 
     return this.inner.renderAsDataUrl(node, {
       ...rest,
+      ...toInnerOutputFormat(options ?? {}),
       images: resolvedImages,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });
@@ -105,6 +140,7 @@ export class Renderer {
 
     return this.inner.measure(node, {
       ...rest,
+      ...toInnerOutputFormat(options ?? {}),
       images: resolvedImages,
       fontFamilies: fontFamilies ?? registeredFamilies,
     });

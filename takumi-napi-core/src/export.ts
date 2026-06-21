@@ -27,11 +27,49 @@ export type ImageLoader = Omit<ImageSource, "data"> & {
   data: ImageLoaderData | (() => ImageLoaderData | Promise<ImageLoaderData>);
 };
 
-export type RenderOptions = Omit<RenderOptionsInternal, "images"> & {
-  fonts?: FontLoader[];
-  signal?: AbortSignal;
-  images?: ImageLoader[];
+/**
+ * Output format. Format-specific options live on the variant that supports them,
+ * so `quality` cannot be paired with PNG/ICO/raw, and `lossless` is WebP-only.
+ * For WebP, `lossless` takes precedence over `quality`; omitting both encodes
+ * losslessly.
+ */
+export type OutputFormatOptions =
+  | { format?: "png" }
+  | { format: "jpeg"; quality?: number }
+  | { format: "webp"; quality?: number; lossless?: boolean }
+  | { format: "ico" }
+  | { format: "raw" };
+
+type InnerOutputFormat = {
+  format: NonNullable<RenderOptionsInternal["format"]>;
+  quality?: number;
+  lossless?: boolean;
 };
+
+function toInnerOutputFormat(options: OutputFormatOptions): InnerOutputFormat {
+  switch (options.format) {
+    case "jpeg":
+      return { format: "jpeg", quality: options.quality };
+    case "webp":
+      return { format: "webp", quality: options.quality, lossless: options.lossless };
+    case "ico":
+      return { format: "ico" };
+    case "raw":
+      return { format: "raw" };
+    default:
+      return { format: "png" };
+  }
+}
+
+export type RenderOptions = Omit<
+  RenderOptionsInternal,
+  "images" | "format" | "quality" | "lossless"
+> &
+  OutputFormatOptions & {
+    fonts?: FontLoader[];
+    signal?: AbortSignal;
+    images?: ImageLoader[];
+  };
 
 export type RenderAnimationOptions = Omit<RenderAnimationOptionsInternal, "images"> & {
   fonts?: FontLoader[];
@@ -84,6 +122,7 @@ export class Renderer {
       node,
       {
         ...rest,
+        ...toInnerOutputFormat(options ?? {}),
         images: resolvedImages,
         fontFamilies: fontFamilies ?? registeredFamilies,
       },
@@ -100,6 +139,7 @@ export class Renderer {
       node,
       {
         ...rest,
+        ...toInnerOutputFormat(options ?? {}),
         images: resolvedImages,
         fontFamilies: fontFamilies ?? registeredFamilies,
       },

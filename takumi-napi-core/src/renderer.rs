@@ -15,7 +15,9 @@ use takumi_core::{
     image::{ImageCache, ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource},
   },
 };
-use takumi_raster::{DitheringAlgorithm as CoreDitheringAlgorithm, ImageOutputFormat, Quality};
+use takumi_raster::{
+  DitheringAlgorithm as CoreDitheringAlgorithm, OutputFormat as RasterOutputFormat, Quality,
+};
 
 use crate::{
   De, deserialize_with_tracing, encode_frames_task::EncodeFramesTask, load_font_task::LoadFontTask,
@@ -290,23 +292,23 @@ pub enum OutputFormat {
 }
 
 impl OutputFormat {
-  /// Maps to a raster [`ImageOutputFormat`]. WebP is lossless unless a `quality`
+  /// Maps to a raster [`RasterOutputFormat`]. WebP is lossless unless a `quality`
   /// is supplied with `lossless` unset; JPEG folds `quality` (default 75).
   pub(crate) fn into_image_output_format(
     self,
     quality: Option<u8>,
     lossless: Option<bool>,
-  ) -> ImageOutputFormat {
+  ) -> RasterOutputFormat {
     match self {
-      OutputFormat::WebP if webp_lossless(quality, lossless) => ImageOutputFormat::WebPLossless,
-      OutputFormat::WebP => ImageOutputFormat::WebP {
+      OutputFormat::WebP if webp_lossless(quality, lossless) => RasterOutputFormat::WebPLossless,
+      OutputFormat::WebP => RasterOutputFormat::WebP {
         quality: quality.map_or_else(Quality::default, Quality::new),
       },
-      OutputFormat::Jpeg => ImageOutputFormat::Jpeg {
+      OutputFormat::Jpeg => RasterOutputFormat::Jpeg {
         quality: quality.map_or_else(Quality::default, Quality::new),
       },
-      OutputFormat::Png => ImageOutputFormat::Png,
-      OutputFormat::Ico => ImageOutputFormat::Ico,
+      OutputFormat::Png => RasterOutputFormat::Png,
+      OutputFormat::Ico => RasterOutputFormat::Ico,
       // SAFETY: It's handled in the render task
       OutputFormat::Raw => unreachable!(),
     }

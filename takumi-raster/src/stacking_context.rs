@@ -1221,7 +1221,7 @@ mod tests {
       .node(node)
       .fonts(&fonts)
       .build();
-    Ok(render(options)?)
+    Ok(render(options)?.into_rgba())
   }
 
   #[test]

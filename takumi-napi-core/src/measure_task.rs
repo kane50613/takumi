@@ -6,7 +6,7 @@ use std::{
 
 use napi::bindgen_prelude::*;
 use takumi_core::layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node, style::StyleSheet};
-use takumi_raster::measure_layout;
+use takumi_raster::measure;
 
 use crate::{
   buffer_from_object, map_error, parse_stylesheet,
@@ -89,7 +89,7 @@ impl Task for MeasureTask {
       .font_families(take(&mut self.font_families))
       .build();
 
-    measure_layout(options).map_err(map_error)
+    measure(options).map_err(map_error)
   }
 
   fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {

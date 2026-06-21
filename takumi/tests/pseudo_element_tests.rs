@@ -3,7 +3,7 @@ mod test_utils;
 use std::collections::BTreeMap;
 
 use takumi::{
-  measure_layout,
+  measure,
   prelude::{Length::*, *},
 };
 use test_utils::CONTEXT;
@@ -14,7 +14,7 @@ fn viewport() -> Viewport {
 
 fn measure_with_css(node: Node, css: &str) -> MeasuredNode {
   let stylesheet = StyleSheet::parse_loosy(css);
-  measure_layout(
+  measure(
     RenderOptions::builder()
       .viewport(viewport())
       .node(node)
