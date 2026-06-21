@@ -8,11 +8,11 @@ icon: ToyBrick
 
 ### Format
 
-Takumi uses JSON format as its the most universal format that can be easily serialized and deserialized.
+Takumi uses JSON as it's the most universal format to serialize and deserialize.
 
 ### Node
 
-HTML is complex, it defines [a lot of elements](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements) that are used to build the web. But since we are building static images, only three types of nodes are required: **an image, a text, or a container**.
+HTML is complex, it defines [a lot of elements](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements) that are used to build the web. But since we are building static images, only three types of nodes are required: **a container, an image, or text**.
 
 The details are described in the [Reference](/docs/reference#node-types) section.
 
@@ -65,4 +65,4 @@ The package is published as [`@takumi-rs/core`](https://www.npmjs.com/package/@t
 
 This is relatively rare, but if you are using a Edge runtime or browser, you can use the `@takumi-rs/wasm` entrypoint.
 
-And to keep the wasm file small, woff font loading is not supported and theres no bundled fonts (so font needs to be loaded to render text).
+And to keep the wasm file small, woff font loading is not supported and there's no bundled fonts (so font needs to be loaded to render text).

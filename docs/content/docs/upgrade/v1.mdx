@@ -37,7 +37,7 @@ Verify your templates and explicitly add `display: flex` (or the `flex` Tailwind
 
 ## JavaScript / TypeScript
 
-### Unified Runtime Dectection & Fallback
+### Unified Runtime Detection & Fallback
 
 For better DX, `takumi-js` now automatically detects the best bindings for your environment Node.js, Workers, etc.
 That means you no longer need to worry about importing NAPI or WASM bindings.
@@ -49,7 +49,7 @@ import { ImageResponse } from "takumi-js/response"; // [!code ++]
 
 ### `emoji` Option for Dynamic Emojis Loading
 
-To improve the compability with Next.js's `ImageResponse` API, `takumi-js` now supports an `emoji` option that allows you to specify a custom emoji provider.
+To improve the compatibility with Next.js's `ImageResponse` API, `takumi-js` now supports an `emoji` option that allows you to specify a custom emoji provider.
 
 By default it's set to `twemoji`, if you want to source emoji glyphs from a custom font, simply set it to `from-font` and make sure an emoji font is included in the `fonts` option.
 
