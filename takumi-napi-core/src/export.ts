@@ -9,6 +9,7 @@ import type {
   RegisteredFamily,
   RenderAnimationOptions as RenderAnimationOptionsInternal,
   RenderOptions as RenderOptionsInternal,
+  SvgRenderOptions as SvgRenderOptionsInternal,
 } from "../index";
 export type * from "../index";
 import { Renderer as RendererInternal } from "../index";
@@ -80,6 +81,12 @@ export type EncodeFramesOptions = Omit<
     images?: ImageLoader[];
   };
 
+export type SvgRenderOptions = Omit<SvgRenderOptionsInternal, "images"> & {
+  fonts?: FontLoader[];
+  signal?: AbortSignal;
+  images?: ImageLoader[];
+};
+
 async function resolveImageLoaders(images: ImageLoader[]): Promise<ImageSource[]> {
   const bySrc = new Map<string, ImageLoader>();
 
@@ -116,6 +123,22 @@ export class Renderer {
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.render(
+      node,
+      {
+        ...rest,
+        images: resolvedImages,
+        fontFamilies: fontFamilies ?? registeredFamilies,
+      },
+      signal,
+    );
+  }
+
+  async renderSvg(node: Node, options?: SvgRenderOptions) {
+    const { fonts, fontFamilies, signal, images, ...rest } = options ?? {};
+    const registeredFamilies = await this.prepareFonts(fonts);
+    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
+
+    return this.inner.renderSvg(
       node,
       {
         ...rest,

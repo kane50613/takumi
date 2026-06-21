@@ -23,6 +23,10 @@ extern "C" {
   #[wasm_bindgen(typescript_type = "RenderOptions")]
   pub type RenderOptionsType;
 
+  /// JavaScript object representing SVG render options.
+  #[wasm_bindgen(typescript_type = "SvgRenderOptions")]
+  pub type SvgRenderOptionsType;
+
   /// JavaScript object representing animation render options.
   #[wasm_bindgen(typescript_type = "RenderAnimationOptions")]
   pub type RenderAnimationOptionsType;
@@ -83,6 +87,30 @@ pub struct RenderOptions {
   pub time_ms: Option<i64>,
   /// The output dithering algorithm.
   pub dithering: Option<DitheringAlgorithm>,
+  /// Per-render font stack: ordered family names used as the fallback chain.
+  /// Defaults to all registered families in registration order.
+  pub font_families: Option<Vec<String>>,
+}
+
+/// Options for rendering a node tree to an SVG document. SVG is a vector
+/// format, so the raster-only knobs (`format`, `quality`, `dithering`,
+/// `drawDebugBorder`, `devicePixelRatio`) do not apply.
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SvgRenderOptions {
+  /// The width of the viewport in pixels.
+  pub width: Option<u32>,
+  /// The height of the viewport in pixels.
+  pub height: Option<u32>,
+  /// Pre-fetched image resources to use during rendering.
+  pub images: Option<Vec<ImageSource>>,
+  /// CSS stylesheets to apply before rendering.
+  pub stylesheets: Option<Vec<String>>,
+  /// Structured keyframes to register alongside stylesheets.
+  #[serde(default, deserialize_with = "deserialize_optional_keyframes")]
+  pub(crate) keyframes: Option<Vec<KeyframesRule>>,
+  /// The animation timeline time in milliseconds.
+  pub time_ms: Option<i64>,
   /// Per-render font stack: ordered family names used as the fallback chain.
   /// Defaults to all registered families in registration order.
   pub font_families: Option<Vec<String>>,

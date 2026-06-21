@@ -10,6 +10,7 @@ import {
   type RegisteredFamily,
   type RenderAnimationOptions as RenderAnimationOptionsInternal,
   type RenderOptions as RenderOptionsInternal,
+  type SvgRenderOptions as SvgRenderOptionsInternal,
 } from "../pkg/takumi_wasm";
 
 export * from "../pkg/takumi_wasm";
@@ -68,6 +69,11 @@ export type EncodeFramesOptions = Omit<EncodeFramesOptionsInternal, "images" | "
     images?: ImageLoader[];
   };
 
+export type SvgRenderOptions = Omit<SvgRenderOptionsInternal, "images"> & {
+  fonts?: FontLoader[];
+  images?: ImageLoader[];
+};
+
 async function resolveImageLoaders(images: ImageLoader[]): Promise<ImageSource[]> {
   const bySrc = new Map<string, ImageLoader>();
 
@@ -116,6 +122,18 @@ export class Renderer {
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.renderAsDataUrl(node, {
+      ...rest,
+      images: resolvedImages,
+      fontFamilies: fontFamilies ?? registeredFamilies,
+    });
+  }
+
+  async renderSvg(node: Node, options?: SvgRenderOptions) {
+    const { fonts, fontFamilies, images, ...rest } = options ?? {};
+    const registeredFamilies = await this.prepareFonts(fonts);
+    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
+
+    return this.inner.renderSvg(node, {
       ...rest,
       images: resolvedImages,
       fontFamilies: fontFamilies ?? registeredFamilies,

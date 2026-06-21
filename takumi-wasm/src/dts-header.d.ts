@@ -71,6 +71,14 @@ export type RenderOptions = {
   fontFamilies?: string[];
 };
 
+/**
+ * SVG is a vector format, so the raster-only knobs do not apply.
+ */
+export type SvgRenderOptions = Omit<
+  RenderOptions,
+  "format" | "quality" | "drawDebugBorder" | "devicePixelRatio" | "dithering"
+>;
+
 export type RenderAnimationOptions = {
   scenes: AnimationSceneSource[];
   width: number;

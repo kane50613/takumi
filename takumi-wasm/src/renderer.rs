@@ -266,6 +266,40 @@ impl Renderer {
     Ok(buffer)
   }
 
+  /// Renders a node tree into an SVG document string.
+  #[wasm_bindgen(js_name = renderSvg)]
+  pub fn render_svg(
+    &self,
+    node: NodeType,
+    options: Option<SvgRenderOptionsType>,
+  ) -> Result<String, JsValue> {
+    let node: Node = from_value(node.into()).map_err(map_error)?;
+    let options: SvgRenderOptions = options
+      .map(|options| from_value(options.into()).map_err(map_error))
+      .transpose()?
+      .unwrap_or_default();
+
+    let images = self.fetch_resources_map(options.images.as_deref())?;
+    let stylesheet =
+      self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
+    let state = self.read_state()?;
+
+    let svg = takumi_svg::render(
+      takumi_svg::SvgOptions::builder()
+        .viewport(Viewport::new((options.width, options.height)))
+        .images(images)
+        .stylesheet(stylesheet)
+        .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
+        .node(node)
+        .fonts(&state)
+        .font_families(options.font_families)
+        .build(),
+    )
+    .map_err(map_error)?;
+
+    Ok(svg)
+  }
+
   /// Measures a node tree and returns layout information.
   #[wasm_bindgen(js_name = measure)]
   pub fn measure(
