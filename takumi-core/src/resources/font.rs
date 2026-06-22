@@ -714,6 +714,8 @@ pub struct FontsSnapshot {
 }
 
 impl FontsSnapshot {
+  /// Mutable access to the render-local parley context. Callers must not re-enter while the
+  /// borrow is held (layout measures inline boxes before building the parley tree).
   pub(crate) fn with_context<R>(&self, f: impl FnOnce(&mut Fonts) -> R) -> R {
     f(&mut self.context.borrow_mut())
   }
@@ -915,12 +917,6 @@ impl Fonts {
 }
 
 impl RenderContext {
-  /// Mutable access to the render-local fonts. Callers must not re-enter while the
-  /// borrow is held (layout measures inline boxes before building the parley tree).
-  pub(crate) fn with_fonts<R>(&self, f: impl FnOnce(&mut Fonts) -> R) -> R {
-    self.fonts.with_context(f)
-  }
-
   /// First available font's line spacing for `families`/`attributes`, scaled to `font_size`.
   pub(crate) fn first_font_line_spacing<'a>(
     &self,
@@ -928,7 +924,7 @@ impl RenderContext {
     attributes: Attributes,
     font_size: f32,
   ) -> Option<f32> {
-    self.with_fonts(|fonts| {
+    self.fonts.with_context(|fonts| {
       let mut query = fonts.inner.collection.query(&mut fonts.inner.source_cache);
       let mut result = None;
 
@@ -954,7 +950,7 @@ impl RenderContext {
     root_style: TextStyle<'_, '_, InlineBrush>,
     func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),
   ) -> (InlineLayout, String) {
-    self.with_fonts(|fonts| {
+    self.fonts.with_context(|fonts| {
       with_layout_context(|layout| {
         let mut builder = layout.tree_builder(&mut fonts.inner, 1.0, true, &root_style);
         func(&mut builder);
