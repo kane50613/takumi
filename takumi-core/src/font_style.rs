@@ -1,6 +1,9 @@
 use std::borrow::Cow;
 
-use parley::{FontFeatures, FontVariations, TextStyle};
+use parley::{
+  FontFamily as ParleyFontFamily, FontFamilyName, FontFeatures, FontVariations, GenericFamily,
+  TextStyle, fontique::QueryFamily,
+};
 use smallvec::SmallVec;
 use taffy::{Size, prelude::FromLength};
 
@@ -9,18 +12,84 @@ use crate::{
   layout::{
     inline::InlineBrush,
     style::{
-      BorderStyle, Color, ComputedStyle, Display, FontSynthesis, Length,
+      BorderStyle, Color, ComputedStyle, Display, FontFamily, FontSynthesis, Length,
       SizedTextDecorationThickness, SizingContext, WordBreak,
     },
   },
+  resources::font::Fonts,
   shadow::SizedShadow,
 };
+
+/// A `font-family` after subset-group expansion: each authored family name that names a
+/// subset group (see [`crate::resources::font::FontResource::subset_of`]) is replaced by
+/// its registered subset families, in order, so the shaper's primary chain carries every
+/// coverage variant. Names that are not subset groups pass through unchanged.
+#[derive(Clone, Default)]
+pub(crate) struct ExpandedFontFamily(Vec<ExpandedFamilyToken>);
+
+#[derive(Clone)]
+enum ExpandedFamilyToken {
+  Named(String),
+  Generic(GenericFamily),
+}
+
+impl ExpandedFontFamily {
+  fn iter(&self) -> impl Iterator<Item = FontFamilyName<'_>> + Clone {
+    self.0.iter().map(|token| match token {
+      ExpandedFamilyToken::Named(name) => FontFamilyName::Named(name.as_str().into()),
+      ExpandedFamilyToken::Generic(generic) => FontFamilyName::Generic(*generic),
+    })
+  }
+
+  pub(crate) fn query_families(&self) -> impl Iterator<Item = QueryFamily<'_>> + Clone {
+    self.0.iter().map(|token| match token {
+      ExpandedFamilyToken::Named(name) => QueryFamily::Named(name.as_str()),
+      ExpandedFamilyToken::Generic(generic) => QueryFamily::Generic(*generic),
+    })
+  }
+
+  fn to_parley(&self) -> ParleyFontFamily<'_> {
+    ParleyFontFamily::List(self.iter().collect())
+  }
+
+  /// Expands `family` against `fonts`' subset groups. With `fonts: None` (a reentrant
+  /// borrow), every name passes through unexpanded — the last-resort fallback still
+  /// catches uncovered clusters.
+  fn expand(family: &FontFamily, fonts: Option<&Fonts>) -> Self {
+    let mut tokens = Vec::new();
+    for name in family.names() {
+      match name {
+        FontFamilyName::Named(name) => {
+          match fonts.and_then(|fonts| fonts.subset_group(name.as_ref())) {
+            Some(subsets) => {
+              tokens.extend(
+                subsets
+                  .iter()
+                  .map(|s| ExpandedFamilyToken::Named(s.clone())),
+              );
+            }
+            None => tokens.push(ExpandedFamilyToken::Named(name.into_owned())),
+          }
+        }
+        FontFamilyName::Generic(generic) => tokens.push(ExpandedFamilyToken::Generic(generic)),
+      }
+    }
+    Self(tokens)
+  }
+}
+
+impl RenderContext {
+  pub(crate) fn expand_font_family(&self, family: &FontFamily) -> ExpandedFontFamily {
+    ExpandedFontFamily::expand(family, self.fonts.try_borrow().ok().as_deref())
+  }
+}
 
 /// Sized font style with computed font size and line height.
 #[derive(Clone)]
 #[non_exhaustive]
 pub struct SizedFontStyle<'s> {
   pub parent: &'s ComputedStyle,
+  pub(crate) font_family: ExpandedFontFamily,
   pub(crate) line_height: parley::LineHeight,
   pub(crate) line_height_scales_with_text_fit: bool,
   pub stroke_width: f32,
@@ -49,7 +118,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
         style.parent.font_variation_settings.as_ref(),
       )),
       font_features: FontFeatures::List(Cow::Borrowed(style.parent.font_feature_settings.as_ref())),
-      font_family: (&style.parent.font_family).into(),
+      font_family: style.font_family.to_parley(),
       letter_spacing: style.letter_spacing,
       word_spacing: style.word_spacing,
       word_break: style.parent.word_break.into(),
@@ -127,6 +196,7 @@ impl<'s> SizedFontStyle<'s> {
     Self {
       sizing: context.sizing.to_owned(),
       parent: style,
+      font_family: context.expand_font_family(&style.font_family),
       line_height,
       line_height_scales_with_text_fit: style.line_height.scales_with_text_fit(),
       stroke_width: style

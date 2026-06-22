@@ -155,8 +155,10 @@ fn resolve_normal_line_height(
     style: style.font_style.into(),
     weight: style.font_weight.into(),
   };
+  let font_family = context.expand_font_family(&style.font_family);
+
   context
-    .first_font_line_spacing(style.font_family.query_families(), attributes, font_size)
+    .first_font_line_spacing(font_family.query_families(), attributes, font_size)
     .unwrap_or(font_size)
 }
 

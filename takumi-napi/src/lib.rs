@@ -68,10 +68,13 @@ impl From<takumi_core::resources::font::RegisteredFace> for RegisteredFace {
 }
 
 #[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct FontInput {
   pub name: Option<String>,
   pub weight: Option<f64>,
   pub style: Option<FontStyleInput>,
+  /// Logical family this font is a coverage subset of; expands at render time.
+  pub subset_of: Option<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -114,14 +117,20 @@ pub(crate) fn resolve_font_resource<'a>(
   font: &'a FontInput,
   buffer: &'a [u8],
 ) -> Result<FontResource<'a>> {
-  FontResource::new(buffer)
-    .override_info(FontInfoOverride {
-      family_name: font.name.as_deref(),
-      width: None,
-      style: font.style.map(|style| style.0),
-      weight: font.weight.map(|weight| FontWeight::new(weight as f32)),
-      axes: None,
-    })
+  let resource = FontResource::new(buffer).override_info(FontInfoOverride {
+    family_name: font.name.as_deref(),
+    width: None,
+    style: font.style.map(|style| style.0),
+    weight: font.weight.map(|weight| FontWeight::new(weight as f32)),
+    axes: None,
+  });
+
+  let resource = match &font.subset_of {
+    Some(logical) => resource.subset_of(logical.clone()),
+    None => resource,
+  };
+
+  resource
     .into_resolved()
     .map_err(|e| Error::from_reason(format!("Failed to load font: {e}")))
 }

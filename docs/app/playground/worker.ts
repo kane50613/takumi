@@ -1,4 +1,4 @@
-import { fetchResources, extractResourceUrls } from "takumi-js/helpers";
+import { fetchResources, extractResourceUrls, googleFontSubsets } from "takumi-js/helpers";
 import { extractEmojis } from "takumi-js/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
 import wasm, { init, Renderer } from "takumi-js/wasm";
@@ -8,10 +8,25 @@ import { evaluateCodeExports, renderReact } from "./evaluate";
 import { messageSchema, type RenderMessageInput } from "./schema";
 
 const fetchCache = new Map<string, ArrayBuffer>();
+const fontCssCache = new Map<string, string>();
 
 function postMessage(message: RenderMessageInput, transfer?: Transferable[]) {
   return self.postMessage(message, { transfer });
 }
+
+// Dogfood: load Google Font subsets by content. Each subset registers uniquely-named under
+// its `subsetOf` family, so `font-family` routes per script and any leftover falls back. The
+// variable weight axis lets any `font-weight` render with a real face instead of faux bold.
+const GOOGLE_FONTS = [
+  "Inter",
+  "Noto Sans JP",
+  "Noto Sans KR",
+  "Noto Sans SC",
+  "Noto Sans Arabic",
+  "Noto Sans Hebrew",
+  "Noto Sans Devanagari",
+  "Noto Sans Thai",
+].map((family) => ({ family, weight: "100..900" as const }));
 
 let renderer: Renderer | undefined;
 
@@ -51,9 +66,10 @@ self.onmessage = async (event: MessageEvent) => {
 
         const resourceUrls = extractResourceUrls(node);
 
-        const images = await fetchResources(resourceUrls, {
-          cache: fetchCache,
-        });
+        const [images, fonts] = await Promise.all([
+          fetchResources(resourceUrls, { cache: fetchCache }),
+          googleFontSubsets(node, GOOGLE_FONTS, { cache: fontCssCache }),
+        ]);
 
         const start = performance.now();
         const animationOptions = options.animation;
@@ -75,6 +91,7 @@ self.onmessage = async (event: MessageEvent) => {
                 devicePixelRatio: options.devicePixelRatio,
                 images,
                 stylesheets: effectiveStylesheets,
+                fonts,
                 fps,
               });
             })()
@@ -82,6 +99,7 @@ self.onmessage = async (event: MessageEvent) => {
               ...options,
               stylesheets: effectiveStylesheets,
               images,
+              fonts,
             }));
         const duration = performance.now() - start;
 

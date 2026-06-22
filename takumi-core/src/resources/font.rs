@@ -164,11 +164,27 @@ impl ResolvedOutlineGlyph {
   }
 }
 
-/// Matches the typical faux-bold expansion used by text rasterizers.
-const SYNTHESIS_EMBOLDEN_FACTOR: f32 = 1.0 / 24.0;
+/// CSS `kBoldThreshold` — weights at or above this synthesize bold when no bolder face
+/// exists; lighter weights do not. https://drafts.csswg.org/css-fonts-4/#font-weight-prop
+const BOLD_THRESHOLD: f32 = 600.0;
 
+/// Skia's fake-bold stroke width as a fraction of text size: `1/24` at 9px and below,
+/// easing to `1/32` at 36px and above, linearly interpolated in between. A constant factor
+/// over-emboldens large text. See Skia's `SkTextFormatParams.h`.
+fn skia_fake_bold_factor(font_size: f32) -> f32 {
+  const SMALL_SIZE: f32 = 9.0;
+  const LARGE_SIZE: f32 = 36.0;
+  const SMALL_FACTOR: f32 = 1.0 / 24.0;
+  const LARGE_FACTOR: f32 = 1.0 / 32.0;
+
+  let t = ((font_size - SMALL_SIZE) / (LARGE_SIZE - SMALL_SIZE)).clamp(0.0, 1.0);
+  SMALL_FACTOR + t * (LARGE_FACTOR - SMALL_FACTOR)
+}
+
+/// Stroke width for synthesized (faux) bold — the emboldened glyph is the filled outline
+/// plus a centered stroke of this width, matching Skia's fake bold.
 pub(crate) fn synthesis_embolden_strength(font_size: f32) -> f32 {
-  font_size * SYNTHESIS_EMBOLDEN_FACTOR
+  font_size * skia_fake_bold_factor(font_size)
 }
 
 fn hash_path_commands(paths: &[Command]) -> u64 {
@@ -580,7 +596,7 @@ thread_local! {
 const RESOLVED_GLYPH_CACHE_MAX_ENTRIES: usize = 4096;
 
 fn resolved_glyph_cache_key(
-  font_data_ptr: usize,
+  font_id: u64,
   font_index: u32,
   font_size: f32,
   coords: &[F2Dot14],
@@ -590,7 +606,7 @@ fn resolved_glyph_cache_key(
 ) -> u64 {
   use xxhash_rust::xxh3::Xxh3;
   let mut h = Xxh3::new();
-  h.update(&font_data_ptr.to_le_bytes());
+  h.update(&font_id.to_le_bytes());
   h.update(&font_index.to_le_bytes());
   h.update(&font_size.to_le_bytes());
   for c in coords {
@@ -661,6 +677,11 @@ fn font_style_css(style: FontStyle) -> String {
 #[derive(Clone)]
 pub struct Fonts {
   inner: parley::FontContext,
+  /// Maps a logical family name (the name authors write in `font-family`) to the
+  /// unique internal names of the subset families registered under it, in registration
+  /// order. Populated by [`FontResource::subset_of`]; consulted when a render expands a
+  /// `font-family` into its per-coverage subset stack.
+  groups: HashMap<String, Vec<String>>,
 }
 
 impl Default for Fonts {
@@ -673,6 +694,7 @@ impl Default for Fonts {
         }),
         source_cache: Default::default(),
       },
+      groups: HashMap::new(),
     }
   }
 }
@@ -688,8 +710,16 @@ impl Fonts {
     let mut cloned = self.inner.clone();
 
     if let Some(names) = fallbacks {
+      // A name may be a logical subset family; expand it to its registered subset names so
+      // the fallback bucket carries the whole stack, matching `font-family` expansion.
       let family_ids = names
         .iter()
+        .flat_map(|name| {
+          self
+            .groups
+            .get(name)
+            .map_or_else(|| std::slice::from_ref(name), Vec::as_slice)
+        })
         .filter_map(|name| cloned.collection.family_id(name))
         .collect::<Vec<_>>();
 
@@ -719,7 +749,16 @@ impl Fonts {
       }
     }
 
-    Rc::new(RefCell::new(Self { inner: cloned }))
+    Rc::new(RefCell::new(Self {
+      inner: cloned,
+      groups: self.groups.clone(),
+    }))
+  }
+
+  /// The subset family names registered under `logical` via [`FontResource::subset_of`],
+  /// in registration order, or `None` if `logical` names no subset group.
+  pub(crate) fn subset_group(&self, logical: &str) -> Option<&[String]> {
+    self.groups.get(logical).map(Vec::as_slice)
   }
 
   pub(crate) fn resolve_glyphs(
@@ -740,8 +779,11 @@ impl Fonts {
       .copied()
       .map(F2Dot14::from_bits)
       .collect::<Vec<_>>();
+    // Only synthesize bold at the CSS bold threshold (>= 600), matching browsers; a lighter
+    // requested weight keeps the regular face rather than faux-bolding it.
     let embolden = (!has_emoji_cluster
       && run.run().synthesis().embolden()
+      && run.run().font_attrs().weight.value() >= BOLD_THRESHOLD
       && run.style().brush.font_synthesis.weight.is_allowed())
     .then_some(synthesis_embolden_strength(font_size));
     let skew = run
@@ -752,7 +794,7 @@ impl Fonts {
       .filter(|_| run.style().brush.font_synthesis.style.is_allowed())
       .map(|degrees| -degrees);
 
-    let font_data_ptr = run.run().font().data.as_ref().as_ptr() as usize;
+    let font_id = run.run().font().data.id();
     let font_index = run.run().font().index;
     let resolver = GlyphResolveContext {
       outline_glyphs: font_ref.outline_glyphs(),
@@ -769,7 +811,7 @@ impl Fonts {
     for glyph_id in glyph_ids {
       if let Entry::Vacant(slot) = result.entry(glyph_id) {
         let key = resolved_glyph_cache_key(
-          font_data_ptr,
+          font_id,
           font_index,
           font_size,
           &normalized_coords,
@@ -809,6 +851,7 @@ impl Fonts {
       source,
       info_override,
       generic_family,
+      subset_of,
     } = font;
 
     let blob = source.into_blob()?;
@@ -831,6 +874,14 @@ impl Fonts {
         .family_name(family)
         .unwrap_or_default()
         .to_string();
+
+      if let Some(logical) = &subset_of {
+        let names = self.groups.entry(logical.clone()).or_default();
+        if !names.contains(&name) {
+          names.push(name.clone());
+        }
+      }
+
       families.push(RegisteredFamily { name, faces });
 
       if let Some(generic_family) = generic_family {
@@ -953,6 +1004,8 @@ pub struct FontResource<'a> {
   info_override: Option<FontInfoOverride<'a>>,
   /// Generic font family
   generic_family: Option<GenericFamily>,
+  /// Logical family this font is a coverage subset of (see [`FontResource::subset_of`]).
+  subset_of: Option<String>,
 }
 
 impl<'a> FontResource<'a> {
@@ -962,6 +1015,7 @@ impl<'a> FontResource<'a> {
       source: source.into(),
       info_override: None,
       generic_family: None,
+      subset_of: None,
     }
   }
 
@@ -981,6 +1035,20 @@ impl<'a> FontResource<'a> {
     }
   }
 
+  /// Marks this font as a coverage subset of the logical family `logical`.
+  ///
+  /// Subsets sharing a logical family must each register under a UNIQUE family name
+  /// (via [`FontResource::override_info`]) so the font system keeps them as distinct
+  /// families — same-named faces collapse into one and never fall through on coverage.
+  /// A render then expands `font-family: {logical}` into all its subsets, in
+  /// registration order, letting the shaper pick the subset that covers each cluster.
+  pub fn subset_of(self, logical: impl Into<String>) -> Self {
+    Self {
+      subset_of: Some(logical.into()),
+      ..self
+    }
+  }
+
   /// Convert to resolved font resource, decompressing woff2/woff into a raw buffer.
   pub fn into_resolved(self) -> Result<Self, FontError> {
     let source = self.source.into_blob_variant()?;
@@ -988,6 +1056,7 @@ impl<'a> FontResource<'a> {
       source,
       info_override: self.info_override,
       generic_family: self.generic_family,
+      subset_of: self.subset_of,
     })
   }
 }
