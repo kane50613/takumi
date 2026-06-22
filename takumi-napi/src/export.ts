@@ -176,16 +176,19 @@ export class Renderer {
     }
 
     const extracted = extractFontBuffer(font);
+    // Keep the descriptor's name/subsetOf/weight/style; only the data is resolved.
+    const register = (data: ByteBuf) =>
+      this.inner.registerFont(isBuffer(font) ? data : { ...font, data });
 
     if (isBuffer(extracted)) {
-      const binded = this.inner.registerFont(extracted);
+      const binded = register(extracted);
 
       this.fontMapping.set(key, Promise.resolve(binded));
 
       return binded;
     }
 
-    const promise = extracted.then(this.inner.registerFont.bind(this.inner)).catch((error) => {
+    const promise = extracted.then(register).catch((error) => {
       this.fontMapping.delete(key);
       throw error;
     });

@@ -596,7 +596,7 @@ thread_local! {
 const RESOLVED_GLYPH_CACHE_MAX_ENTRIES: usize = 4096;
 
 fn resolved_glyph_cache_key(
-  font_data_ptr: usize,
+  font_id: u64,
   font_index: u32,
   font_size: f32,
   coords: &[F2Dot14],
@@ -606,7 +606,7 @@ fn resolved_glyph_cache_key(
 ) -> u64 {
   use xxhash_rust::xxh3::Xxh3;
   let mut h = Xxh3::new();
-  h.update(&font_data_ptr.to_le_bytes());
+  h.update(&font_id.to_le_bytes());
   h.update(&font_index.to_le_bytes());
   h.update(&font_size.to_le_bytes());
   for c in coords {
@@ -794,7 +794,7 @@ impl Fonts {
       .filter(|_| run.style().brush.font_synthesis.style.is_allowed())
       .map(|degrees| -degrees);
 
-    let font_data_ptr = run.run().font().data.as_ref().as_ptr() as usize;
+    let font_id = run.run().font().data.id();
     let font_index = run.run().font().index;
     let resolver = GlyphResolveContext {
       outline_glyphs: font_ref.outline_glyphs(),
@@ -811,7 +811,7 @@ impl Fonts {
     for glyph_id in glyph_ids {
       if let Entry::Vacant(slot) = result.entry(glyph_id) {
         let key = resolved_glyph_cache_key(
-          font_data_ptr,
+          font_id,
           font_index,
           font_size,
           &normalized_coords,
