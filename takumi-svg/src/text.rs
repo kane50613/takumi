@@ -370,7 +370,7 @@ fn emit_clip_text_mask_glyphs(
     }
     any = true;
     if let Some(embolden) = outline.embolden().filter(|embolden| *embolden > 0.0) {
-      doc.glyph_path(&data, color, Some((color, embolden * 2.0, join)))?;
+      doc.glyph_path(&data, color, Some((color, embolden, join)))?;
     }
     if stroke_width > 0.0 {
       doc.glyph_path(&data, color, Some((color, stroke_width, join)))?;
@@ -467,7 +467,7 @@ fn emit_run_glyphs(
           match outline.embolden().filter(|embolden| *embolden > 0.0) {
             Some(embolden) => {
               flush_glyph_run(doc, &mut merged, fill, stroke)?;
-              doc.glyph_path(&data, fill, Some((fill, embolden * 2.0, bold_join)))?;
+              doc.glyph_path(&data, fill, Some((fill, embolden, bold_join)))?;
               if let Some(text_stroke) = stroke {
                 doc.glyph_path(&data, Rgba([0, 0, 0, 0]), Some(text_stroke))?;
               }

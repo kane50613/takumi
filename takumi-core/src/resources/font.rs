@@ -710,8 +710,16 @@ impl Fonts {
     let mut cloned = self.inner.clone();
 
     if let Some(names) = fallbacks {
+      // A name may be a logical subset family; expand it to its registered subset names so
+      // the fallback bucket carries the whole stack, matching `font-family` expansion.
       let family_ids = names
         .iter()
+        .flat_map(|name| {
+          self
+            .groups
+            .get(name)
+            .map_or_else(|| std::slice::from_ref(name), Vec::as_slice)
+        })
         .filter_map(|name| cloned.collection.family_id(name))
         .collect::<Vec<_>>();
 

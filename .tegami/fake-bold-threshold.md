@@ -3,6 +3,7 @@ packages:
   "cargo:takumi": patch
   "cargo:takumi-core": patch
   "cargo:takumi-raster": patch
+  "cargo:takumi-svg": patch
   "npm:takumi-js": patch
   "npm:@takumi-rs/core": patch
   "npm:@takumi-rs/wasm": patch
