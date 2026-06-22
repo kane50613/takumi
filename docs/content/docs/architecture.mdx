@@ -20,7 +20,7 @@ The details are described in the [Reference](/docs/reference#node-types) section
 
 To bridge the gap between JSX and nodes, we provide a `fromJsx` helper function that helps mapping elements to nodes, and handle React specific features like Server Components and Fragments.
 
-The rules for this function are simple, you can just [look at the implementation](https://github.com/kane50613/takumi/blob/master/takumi-helpers/src/jsx/jsx.ts) to understand it.
+The rules for this function are simple, you can just [look at the implementation](https://github.com/kane50613/takumi/blob/master/takumi-helpers/src/jsx/index.ts) to understand it.
 
 - React (Server) Components are resolved to their final values before processing.
 - `<img>` and `<svg>` elements become an Image node with style applied.
