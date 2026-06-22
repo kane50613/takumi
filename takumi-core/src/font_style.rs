@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::HashMap};
 
 use parley::{
   FontFamily as ParleyFontFamily, FontFamilyName, FontFeatures, FontVariations, GenericFamily,
@@ -16,7 +16,6 @@ use crate::{
       SizedTextDecorationThickness, SizingContext, WordBreak,
     },
   },
-  resources::font::Fonts,
   shadow::SizedShadow,
 };
 
@@ -52,25 +51,22 @@ impl ExpandedFontFamily {
     ParleyFontFamily::List(self.iter().collect())
   }
 
-  /// Expands `family` against `fonts`' subset groups. With `fonts: None` (a reentrant
-  /// borrow), every name passes through unexpanded — the last-resort fallback still
-  /// catches uncovered clusters.
-  fn expand(family: &FontFamily, fonts: Option<&Fonts>) -> Self {
+  /// Expands `family` against the registered subset `groups`: a name that's a subset group
+  /// becomes its registered subset families (in order); other names pass through unchanged.
+  fn expand(family: &FontFamily, groups: &HashMap<String, Vec<String>>) -> Self {
     let mut tokens = Vec::new();
     for name in family.names() {
       match name {
-        FontFamilyName::Named(name) => {
-          match fonts.and_then(|fonts| fonts.subset_group(name.as_ref())) {
-            Some(subsets) => {
-              tokens.extend(
-                subsets
-                  .iter()
-                  .map(|s| ExpandedFamilyToken::Named(s.clone())),
-              );
-            }
-            None => tokens.push(ExpandedFamilyToken::Named(name.into_owned())),
+        FontFamilyName::Named(name) => match groups.get(name.as_ref()) {
+          Some(subsets) => {
+            tokens.extend(
+              subsets
+                .iter()
+                .map(|s| ExpandedFamilyToken::Named(s.clone())),
+            );
           }
-        }
+          None => tokens.push(ExpandedFamilyToken::Named(name.into_owned())),
+        },
         FontFamilyName::Generic(generic) => tokens.push(ExpandedFamilyToken::Generic(generic)),
       }
     }
@@ -80,7 +76,7 @@ impl ExpandedFontFamily {
 
 impl RenderContext {
   pub(crate) fn expand_font_family(&self, family: &FontFamily) -> ExpandedFontFamily {
-    ExpandedFontFamily::expand(family, self.fonts.try_borrow().ok().as_deref())
+    ExpandedFontFamily::expand(family, &self.fonts.groups)
   }
 }
 
