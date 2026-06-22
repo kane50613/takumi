@@ -24,6 +24,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "arc-swap"
+version = "1.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a3a1fd6f75306b68087b831f025c712524bcb19aad54e557b1129cfa0a2b207"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1611,6 +1620,7 @@ dependencies = [
 name = "takumi-napi"
 version = "0.0.1"
 dependencies = [
+ "arc-swap",
  "napi",
  "napi-build",
  "napi-derive",

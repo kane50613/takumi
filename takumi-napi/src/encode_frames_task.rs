@@ -1,9 +1,4 @@
-use std::{
-  borrow::Cow,
-  collections::HashMap,
-  mem::take,
-  sync::{Arc, RwLock},
-};
+use std::{borrow::Cow, collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
 use rayon::prelude::*;
@@ -17,13 +12,13 @@ use crate::{
   buffer_from_object, map_error, parse_stylesheet,
   renderer::{
     AnimationOutputFormat, EncodeFramesOptions, ImageCacheMode, ImageSource, RendererState,
-    webp_lossless,
+    decode_images, webp_lossless,
   },
 };
 
 pub struct EncodeFramesTask {
   pub(crate) frames: Option<Vec<(Node, u32)>>,
-  pub(crate) state: Arc<RwLock<RendererState>>,
+  pub(crate) state: Arc<RendererState>,
   pub(crate) viewport: Viewport,
   pub(crate) format: AnimationOutputFormat,
   pub(crate) quality: Option<u8>,
@@ -39,7 +34,7 @@ impl EncodeFramesTask {
     env: Env,
     frames: Vec<(Node, u32)>,
     options: EncodeFramesOptions,
-    state: Arc<RwLock<RendererState>>,
+    state: Arc<RendererState>,
   ) -> Result<Self> {
     Ok(Self {
       frames: Some(frames),
@@ -87,11 +82,8 @@ impl Task for EncodeFramesTask {
       let Some(frames) = self.frames.take() else {
         unreachable!()
       };
-      let state = self
-        .state
-        .read()
-        .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-      let initialized_images = state.decode_images(take(&mut self.images))?;
+      let fonts = self.state.fonts.load();
+      let initialized_images = decode_images(&self.state.image_cache, take(&mut self.images))?;
 
       let viewport = self.viewport;
       let draw_debug_border = self.draw_debug_border;
@@ -107,7 +99,7 @@ impl Task for EncodeFramesTask {
                 .images(initialized_images.clone())
                 .stylesheet(stylesheet.clone())
                 .node(node)
-                .fonts(&state.fonts)
+                .fonts(&fonts)
                 .font_families(font_families.clone())
                 .draw_debug_border(draw_debug_border)
                 .build(),

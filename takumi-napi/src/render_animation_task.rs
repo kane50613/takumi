@@ -1,9 +1,4 @@
-use std::{
-  borrow::Cow,
-  collections::HashMap,
-  mem::take,
-  sync::{Arc, RwLock},
-};
+use std::{borrow::Cow, collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
 use takumi_core::layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node};
@@ -16,13 +11,13 @@ use crate::{
   buffer_from_object, deserialize_with_tracing, map_error, parse_stylesheet,
   renderer::{
     AnimationOutputFormat, ImageCacheMode, ImageSource, RenderAnimationOptions, RendererState,
-    webp_lossless,
+    decode_images, webp_lossless,
   },
 };
 
 pub struct RenderAnimationTask {
   pub(crate) scenes: Option<Vec<(Node, u32)>>,
-  pub(crate) state: Arc<RwLock<RendererState>>,
+  pub(crate) state: Arc<RendererState>,
   pub(crate) viewport: Viewport,
   pub(crate) format: AnimationOutputFormat,
   pub(crate) quality: Option<u8>,
@@ -38,7 +33,7 @@ impl RenderAnimationTask {
   pub(crate) fn from_options(
     env: Env,
     options: RenderAnimationOptions,
-    state: Arc<RwLock<RendererState>>,
+    state: Arc<RendererState>,
   ) -> Result<Self> {
     let RenderAnimationOptions {
       scenes,
@@ -114,11 +109,8 @@ impl Task for RenderAnimationTask {
       let Some(scenes) = self.scenes.take() else {
         unreachable!()
       };
-      let state = self
-        .state
-        .read()
-        .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-      let initialized_images = state.decode_images(take(&mut self.images))?;
+      let fonts = self.state.fonts.load();
+      let initialized_images = decode_images(&self.state.image_cache, take(&mut self.images))?;
       let stylesheet = parse_stylesheet(take(&mut self.stylesheets), Vec::new())?;
       let scene_options = scenes
         .into_iter()
@@ -131,7 +123,7 @@ impl Task for RenderAnimationTask {
                 .images(initialized_images.clone())
                 .stylesheet(stylesheet.clone())
                 .node(node)
-                .fonts(&state.fonts)
+                .fonts(&fonts)
                 .font_families(self.font_families.clone())
                 .draw_debug_border(self.draw_debug_border)
                 .build(),

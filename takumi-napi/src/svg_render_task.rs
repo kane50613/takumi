@@ -1,20 +1,18 @@
-use std::{
-  collections::HashMap,
-  mem::take,
-  sync::{Arc, RwLock},
-};
+use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
 use takumi_core::layout::{Viewport, node::Node, style::StyleSheet};
 
 use crate::{
   buffer_from_object, map_error, parse_stylesheet,
-  renderer::{ImageCacheMode, RendererState, SvgRenderOptions, deserialize_keyframes},
+  renderer::{
+    ImageCacheMode, RendererState, SvgRenderOptions, decode_images, deserialize_keyframes,
+  },
 };
 
 pub struct SvgRenderTask {
   pub(crate) node: Option<Node>,
-  pub(crate) state: Arc<RwLock<RendererState>>,
+  pub(crate) state: Arc<RendererState>,
   pub(crate) viewport: Viewport,
   pub(crate) time_ms: u64,
   pub(crate) stylesheet: StyleSheet,
@@ -27,7 +25,7 @@ impl SvgRenderTask {
     env: Env,
     node: Node,
     options: SvgRenderOptions,
-    state: Arc<RwLock<RendererState>>,
+    state: Arc<RendererState>,
   ) -> Result<Self> {
     Ok(SvgRenderTask {
       node: Some(node),
@@ -66,12 +64,9 @@ impl Task for SvgRenderTask {
       unreachable!()
     };
 
-    let state = self
-      .state
-      .read()
-      .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
+    let fonts = self.state.fonts.load();
 
-    let images = state.decode_images(take(&mut self.images))?;
+    let images = decode_images(&self.state.image_cache, take(&mut self.images))?;
 
     takumi_svg::render(
       takumi_svg::SvgOptions::builder()
@@ -80,7 +75,7 @@ impl Task for SvgRenderTask {
         .stylesheet(take(&mut self.stylesheet))
         .time_ms(self.time_ms)
         .node(node)
-        .fonts(&state.fonts)
+        .fonts(&fonts)
         .font_families(take(&mut self.font_families))
         .build(),
     )

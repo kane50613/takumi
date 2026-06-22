@@ -1,11 +1,11 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use napi::bindgen_prelude::*;
 
 use crate::{FontInput, RegisteredFamily, renderer::RendererState, resolve_font_resource};
 
 pub struct LoadFontTask {
-  pub(crate) state: Arc<RwLock<RendererState>>,
+  pub(crate) state: Arc<RendererState>,
   pub(crate) buffer: Buffer,
   pub(crate) info: FontInput,
 }
@@ -17,15 +17,20 @@ impl Task for LoadFontTask {
   fn compute(&mut self) -> Result<Self::Output> {
     let resource = resolve_font_resource(&self.info, &self.buffer)?;
 
-    let mut state = self
+    // Serialize registrations; readers stay wait-free on the old snapshot meanwhile.
+    let _write = self
       .state
-      .write()
+      .font_write
+      .lock()
       .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
 
-    let registered = state
-      .fonts
+    let mut fonts = self.state.fonts.load_full().as_ref().clone();
+
+    let registered = fonts
       .register(resource)
       .map_err(|e| Error::from_reason(format!("Failed to register font: {e}")))?;
+
+    self.state.fonts.store(Arc::new(fonts));
 
     Ok(registered.into_iter().map(Into::into).collect())
   }
