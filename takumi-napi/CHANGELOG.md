@@ -1,3 +1,12 @@
+## @takumi-rs/core@2.0.0-beta.3 (beta)
+
+### Make font reads wait-free under concurrent renders
+
+One lock guarded all renderer state, so every `registerFont` blocked in-flight
+renders. Fonts now sit behind an `ArcSwap`, and the image cache moves out of the
+outer lock. Concurrent render-and-register throughput rises 30–50% with lower
+tail latency; single-threaded rendering is unchanged.
+
 ## @takumi-rs/core@2.0.0-beta.2 (beta)
 
 ### Expand subset font-family without borrowing the font context
