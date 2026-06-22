@@ -92,7 +92,6 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:",
     "ultrahtml": "^1.6.0",
     "unrun": "catalog:"
   },

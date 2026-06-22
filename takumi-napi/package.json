@@ -82,7 +82,6 @@
     "mitata": "^1.0.34",
     "react": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:",
     "unrun": "catalog:"
   },
   "napi": {

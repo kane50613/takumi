@@ -14,9 +14,6 @@
   "devDependencies": {
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
-    "react-dom": "catalog:",
-    "takumi-js": "workspace:*",
-    "typescript": "catalog:"
+    "takumi-js": "workspace:*"
   }
 }
