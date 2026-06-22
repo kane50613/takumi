@@ -2,7 +2,7 @@ import type * as WasmBindings from "@takumi-rs/wasm";
 import type * as WasmAutoBindings from "@takumi-rs/wasm/auto";
 import type * as WasmNextBindings from "@takumi-rs/wasm/next";
 
-export type Imports = Awaited<ReturnType<typeof getImportsImpl>>;
+type Imports = Awaited<ReturnType<typeof getImportsImpl>>;
 
 let importPromise: Promise<Imports> | null = null;
 

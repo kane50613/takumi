@@ -1,0 +1,35 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreWorkspaces": ["example/*"],
+  "ignoreBinaries": ["jq", "wasm-pack"],
+  "rules": {
+    "duplicates": "warn"
+  },
+  "workspaces": {
+    "docs": {
+      "entry": [
+        "src/pages/**/*.{ts,tsx}",
+        "src/pages.gen.ts",
+        "waku.config.ts",
+        "source.config.ts",
+        "app/playground/worker.ts"
+      ],
+      "ignore": ["public/**", "app/playground/templates/**"],
+      "ignoreDependencies": ["@takumi-rs/core", "@takumi-rs/wasm", "twoslash"]
+    },
+    "takumi-helpers": {
+      "entry": ["test/**/*.test.{ts,tsx}"]
+    },
+    "takumi-napi": {
+      "entry": ["tests/**/*.test.{ts,tsx}"],
+      "ignoreUnresolved": ["../index"]
+    },
+    "takumi-template": {
+      "entry": ["tests/**/*.test.{ts,tsx}"]
+    },
+    "takumi-wasm": {
+      "entry": ["tests/**/*.test.{ts,tsx}"],
+      "ignore": ["pkg*/**"]
+    }
+  }
+}

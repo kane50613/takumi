@@ -15,18 +15,18 @@
     "lint": "oxlint --format=github && oxfmt --check",
     "lint:fix": "oxlint --fix && oxfmt --write",
     "tegami": "bun scripts/tegami.mts",
+    "knip": "knip-bun --no-config-hints",
     "postinstall": "lefthook install",
     "publish-lint": "bun --filter '*' publish-lint"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.3",
-    "@arethetypeswrong/core": "^0.18.3",
     "@types/bun": "catalog:",
+    "knip": "^6.17.2",
     "lefthook": "^2.1.9",
     "oxfmt": "^0.56.0",
     "oxlint": "^1.71.0",
     "publint": "^0.3.21",
-    "takumi-js": "workspace:*",
     "tegami": "0.1.1",
     "typescript": "catalog:"
   },
@@ -41,7 +41,6 @@
     "tsdown": "^0.22.3",
     "unrun": "^0.3.1",
     "typescript": "6.0.3",
-    "vite": "^8.0.16",
-    "vitest": "^4.1.9"
+    "vite": "^8.0.16"
   }
 }

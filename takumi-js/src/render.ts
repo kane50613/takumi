@@ -24,7 +24,7 @@ type SharedRenderExtras = {
   emoji?: EmojiType | "from-font";
 };
 
-export type ManagedRendererOptions = {
+type ManagedRendererOptions = {
   /**
    * @description The WebAssembly module to use for the renderer. If not provided, the default resolving strategy will be used.
    */

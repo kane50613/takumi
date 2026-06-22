@@ -27,9 +27,9 @@ export function isFunctionComponent(value: unknown): value is (props: unknown) =
   return typeof value === "function";
 }
 
-export const REACT_FORWARD_REF_TYPE = Symbol.for("react.forward_ref");
-export const REACT_MEMO_TYPE = Symbol.for("react.memo");
-export const REACT_FRAGMENT_TYPE = Symbol.for("react.fragment");
+const REACT_FORWARD_REF_TYPE = Symbol.for("react.forward_ref");
+const REACT_MEMO_TYPE = Symbol.for("react.memo");
+const REACT_FRAGMENT_TYPE = Symbol.for("react.fragment");
 
 export function isReactForwardRef(element: ReactElementLike): boolean {
   return element.$$typeof === REACT_FORWARD_REF_TYPE;
