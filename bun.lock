@@ -72,7 +72,7 @@
       "devDependencies": {
         "@types/react": "catalog:",
         "typescript": "catalog:",
-        "vitest": "catalog:",
+        "vitest": "^4.1.9",
         "wrangler": "^4.103.0",
       },
     },
@@ -180,7 +180,7 @@
         "@types/react-dom": "catalog:",
         "typescript": "catalog:",
         "vite": "catalog:",
-        "vitest": "catalog:",
+        "vitest": "^4.1.9",
       },
     },
     "example/twitter-images": {
@@ -211,7 +211,7 @@
         "@types/react-dom": "^19.2.3",
         "tailwindcss": "^4.3.1",
         "typescript": "catalog:",
-        "vitest": "catalog:",
+        "vitest": "^4.1.9",
       },
     },
     "takumi-helpers": {
@@ -321,7 +321,6 @@
     "typescript": "6.0.3",
     "unrun": "^0.3.1",
     "vite": "^8.0.16",
-    "vitest": "^4.1.9",
   },
   "packages": {
     "@andrewbranch/untar.js": ["@andrewbranch/untar.js@1.0.3", "", {}, "sha512-Jh15/qVmrLGhkKJBdXlK1+9tY4lZruYjsgkDFj08ZmDiWVBLJcqkok7Z0/R0In+i1rScBpJlSvrTS2Lm41Pbnw=="],

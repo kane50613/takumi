@@ -25,6 +25,6 @@
     "@types/react-dom": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "^4.1.9"
   }
 }

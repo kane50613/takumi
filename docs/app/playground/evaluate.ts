@@ -8,7 +8,7 @@ const exportsSchema = z.object({
   options: optionsSchema,
 });
 
-export function transformCode(code: string) {
+function transformCode(code: string) {
   return transform(code, {
     transforms: ["jsx", "typescript", "imports"],
     production: true,

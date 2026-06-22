@@ -15,7 +15,7 @@
     "lint": "oxlint --format=github && oxfmt --check",
     "lint:fix": "oxlint --fix && oxfmt --write",
     "tegami": "bun scripts/tegami.mts",
-    "knip": "knip",
+    "knip": "knip-bun --no-config-hints",
     "postinstall": "lefthook install",
     "publish-lint": "bun --filter '*' publish-lint"
   },
@@ -41,7 +41,6 @@
     "tsdown": "^0.22.3",
     "unrun": "^0.3.1",
     "typescript": "6.0.3",
-    "vite": "^8.0.16",
-    "vitest": "^4.1.9"
+    "vite": "^8.0.16"
   }
 }

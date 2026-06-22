@@ -35,7 +35,7 @@ const renderErrorSchema = z.object({
   transformedCode: z.optional(z.string()),
 });
 
-export const renderRequestSchema = z.object({
+const renderRequestSchema = z.object({
   type: z.literal("render-request"),
   id: z.int().check(z.positive(), z.minimum(1)),
   code: z.string(),
@@ -46,13 +46,13 @@ export const renderResultSchema = z.object({
   result: z.discriminatedUnion("status", [renderSuccessSchema, renderErrorSchema]),
 });
 
-export const readySchema = z.object({
+const readySchema = z.object({
   type: z.literal("ready"),
 });
 
 // Posted before the (slower) fetches + WASM render so the browser pane never
 // waits on them. `cssContents` is raw CSS (Takumi's effective stylesheets), not URLs.
-export const previewResultSchema = z.object({
+const previewResultSchema = z.object({
   type: z.literal("preview-result"),
   id: z.int().check(z.positive(), z.minimum(1)),
   html: z.string(),
