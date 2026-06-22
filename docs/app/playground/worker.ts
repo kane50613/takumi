@@ -15,7 +15,8 @@ function postMessage(message: RenderMessageInput, transfer?: Transferable[]) {
 }
 
 // Dogfood: load Google Font subsets by content. Each subset registers uniquely-named under
-// its `subsetOf` family, so `font-family` routes per script and any leftover falls back.
+// its `subsetOf` family, so `font-family` routes per script and any leftover falls back. The
+// variable weight axis lets any `font-weight` render with a real face instead of faux bold.
 const GOOGLE_FONTS = [
   "Inter",
   "Noto Sans JP",
@@ -25,7 +26,7 @@ const GOOGLE_FONTS = [
   "Noto Sans Hebrew",
   "Noto Sans Devanagari",
   "Noto Sans Thai",
-];
+].map((family) => ({ family, weight: "100..900" as const }));
 
 let renderer: Renderer | undefined;
 

@@ -164,11 +164,27 @@ impl ResolvedOutlineGlyph {
   }
 }
 
-/// Matches the typical faux-bold expansion used by text rasterizers.
-const SYNTHESIS_EMBOLDEN_FACTOR: f32 = 1.0 / 24.0;
+/// CSS `kBoldThreshold` — weights at or above this synthesize bold when no bolder face
+/// exists; lighter weights do not. https://drafts.csswg.org/css-fonts-4/#font-weight-prop
+const BOLD_THRESHOLD: f32 = 600.0;
 
+/// Skia's fake-bold stroke width as a fraction of text size: `1/24` at 9px and below,
+/// easing to `1/32` at 36px and above, linearly interpolated in between. A constant factor
+/// over-emboldens large text. See Skia's `SkTextFormatParams.h`.
+fn skia_fake_bold_factor(font_size: f32) -> f32 {
+  const SMALL_SIZE: f32 = 9.0;
+  const LARGE_SIZE: f32 = 36.0;
+  const SMALL_FACTOR: f32 = 1.0 / 24.0;
+  const LARGE_FACTOR: f32 = 1.0 / 32.0;
+
+  let t = ((font_size - SMALL_SIZE) / (LARGE_SIZE - SMALL_SIZE)).clamp(0.0, 1.0);
+  SMALL_FACTOR + t * (LARGE_FACTOR - SMALL_FACTOR)
+}
+
+/// Stroke width for synthesized (faux) bold — the emboldened glyph is the filled outline
+/// plus a centered stroke of this width, matching Skia's fake bold.
 pub(crate) fn synthesis_embolden_strength(font_size: f32) -> f32 {
-  font_size * SYNTHESIS_EMBOLDEN_FACTOR
+  font_size * skia_fake_bold_factor(font_size)
 }
 
 fn hash_path_commands(paths: &[Command]) -> u64 {
@@ -755,8 +771,11 @@ impl Fonts {
       .copied()
       .map(F2Dot14::from_bits)
       .collect::<Vec<_>>();
+    // Only synthesize bold at the CSS bold threshold (>= 600), matching browsers; a lighter
+    // requested weight keeps the regular face rather than faux-bolding it.
     let embolden = (!has_emoji_cluster
       && run.run().synthesis().embolden()
+      && run.run().font_attrs().weight.value() >= BOLD_THRESHOLD
       && run.style().brush.font_synthesis.weight.is_allowed())
     .then_some(synthesis_embolden_strength(font_size));
     let skew = run

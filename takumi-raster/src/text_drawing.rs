@@ -390,7 +390,7 @@ fn draw_text_embolden_clip_image(
     return;
   };
 
-  let mut stroke = Stroke::new(embolden * 2.0);
+  let mut stroke = Stroke::new(embolden);
   stroke.join = ctx.style.parent.stroke_linejoin.into();
 
   let (stroke_mask, stroke_placement) = render_mask(
@@ -446,7 +446,7 @@ fn draw_text_embolden(ctx: &mut GlyphPaintCtx<'_, '_>, color: Color, embolden: f
     return;
   }
 
-  let mut stroke = Stroke::new(embolden * 2.0);
+  let mut stroke = Stroke::new(embolden);
   stroke.join = ctx.style.parent.stroke_linejoin.into();
 
   let (stroke_mask, stroke_placement) = render_mask(
