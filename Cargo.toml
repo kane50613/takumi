@@ -12,6 +12,7 @@ members = [
 ]
 
 [workspace.dependencies]
+arc-swap = "1"
 axum = "0.8"
 base64 = "0.22"
 bitflags = "2.11"

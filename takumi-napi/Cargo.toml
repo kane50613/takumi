@@ -14,6 +14,7 @@ rayon.workspace = true
 parley.workspace = true
 napi.workspace = true
 napi-derive.workspace = true
+arc-swap.workspace = true
 
 [dependencies.takumi-core]
 path = "../takumi-core"

@@ -1,7 +1,9 @@
 use std::{
   collections::HashMap,
-  sync::{Arc, OnceLock, RwLock},
+  sync::{Arc, Mutex, OnceLock},
 };
+
+use arc_swap::ArcSwap;
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -84,33 +86,34 @@ impl From<takumi_raster::MeasuredNode> for MeasuredNode {
 /// The main renderer for Takumi image rendering engine (Node.js version).
 #[napi]
 pub struct Renderer {
-  pub(crate) state: Arc<RwLock<RendererState>>,
+  pub(crate) state: Arc<RendererState>,
 }
 
 pub(crate) struct RendererState {
-  pub(crate) fonts: Fonts,
+  /// Wait-free reads via `fonts.load()`; registrations serialize on `font_write` and publish
+  /// a fresh `Arc<Fonts>` via `store`. Renders in flight keep their old snapshot alive.
+  pub(crate) fonts: ArcSwap<Fonts>,
+  pub(crate) font_write: Mutex<()>,
   pub(crate) image_cache: ImageCache,
 }
 
-impl RendererState {
-  /// Decodes the per-call image buffers into a `src`-keyed map.
-  pub(crate) fn decode_images(
-    &self,
-    images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
-  ) -> Result<HashMap<Arc<str>, LoadedImageSource>> {
-    let mut map = HashMap::new();
+/// Decodes the per-call image buffers into a `src`-keyed map. The image cache is
+/// `quick_cache::sync` (internally locked, single-flight), so it needs no outer lock.
+pub(crate) fn decode_images(
+  image_cache: &ImageCache,
+  images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
+) -> Result<HashMap<Arc<str>, LoadedImageSource>> {
+  let mut map = HashMap::new();
 
-    for (src, (buffer, mode)) in images {
-      let decoded = self
-        .image_cache
-        .get_or_decode(&buffer, mode.into())
-        .map_err(map_error)?;
+  for (src, (buffer, mode)) in images {
+    let decoded = image_cache
+      .get_or_decode(&buffer, mode.into())
+      .map_err(map_error)?;
 
-      map.insert(src, decoded);
-    }
-
-    Ok(map)
+    map.insert(src, decoded);
   }
+
+  Ok(map)
 }
 
 pub(crate) fn deserialize_keyframes(keyframes: Option<Object>) -> Result<Vec<CoreKeyframesRule>> {
@@ -437,10 +440,11 @@ impl Renderer {
     crate::pool::register_cleanup(&env);
 
     Ok(Self {
-      state: Arc::new(RwLock::new(RendererState {
-        fonts: default_fonts()?,
+      state: Arc::new(RendererState {
+        fonts: ArcSwap::from_pointee(default_fonts()?),
+        font_write: Mutex::new(()),
         image_cache: ImageCache::default(),
-      })),
+      }),
     })
   }
 
