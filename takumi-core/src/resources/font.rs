@@ -680,8 +680,13 @@ pub struct Fonts {
   /// Maps a logical family name (the name authors write in `font-family`) to the
   /// unique internal names of the subset families registered under it, in registration
   /// order. Populated by [`FontResource::subset_of`]; consulted when a render expands a
-  /// `font-family` into its per-coverage subset stack.
-  groups: HashMap<String, Vec<String>>,
+  /// `font-family` into its per-coverage subset stack. Shared (immutable after
+  /// registration) so a render can read it without borrowing the parley context.
+  groups: Arc<HashMap<String, Vec<String>>>,
+  /// Every registered family name in registration order. The fallback bucket is built from
+  /// this so its per-script priority is deterministic; `fontique`'s `family_names()` iterates
+  /// a `HashMap` (hash order), which would otherwise make font selection vary per render.
+  order: Vec<String>,
 }
 
 impl Default for Fonts {
@@ -694,12 +699,27 @@ impl Default for Fonts {
         }),
         source_cache: Default::default(),
       },
-      groups: HashMap::new(),
+      groups: Arc::new(HashMap::new()),
+      order: Vec::new(),
     }
   }
 }
 
-pub type FontsSnapshot = Rc<RefCell<Fonts>>;
+/// A render-local font handle. `groups` sits outside the `RefCell` so a render can expand
+/// `font-family` without taking the parley-context borrow that building the tree holds.
+#[derive(Clone)]
+pub struct FontsSnapshot {
+  context: Rc<RefCell<Fonts>>,
+  pub(crate) groups: Arc<HashMap<String, Vec<String>>>,
+}
+
+impl FontsSnapshot {
+  /// Mutable access to the render-local parley context. Callers must not re-enter while the
+  /// borrow is held (layout measures inline boxes before building the parley tree).
+  pub(crate) fn with_context<R>(&self, f: impl FnOnce(&mut Fonts) -> R) -> R {
+    f(&mut self.context.borrow_mut())
+  }
+}
 
 impl Fonts {
   pub fn snapshot(&self) -> FontsSnapshot {
@@ -730,13 +750,9 @@ impl Fonts {
         );
       }
     } else {
-      let registered_families = cloned
-        .collection
-        .family_names()
-        .map(ToOwned::to_owned)
-        .collect::<Vec<_>>();
-
-      let family_ids = registered_families
+      // Registration order, not `family_names()` (hash order), so font selection is stable.
+      let family_ids = self
+        .order
         .iter()
         .filter_map(|name| cloned.collection.family_id(name))
         .collect::<Vec<_>>();
@@ -749,16 +765,14 @@ impl Fonts {
       }
     }
 
-    Rc::new(RefCell::new(Self {
-      inner: cloned,
+    FontsSnapshot {
+      context: Rc::new(RefCell::new(Self {
+        inner: cloned,
+        groups: self.groups.clone(),
+        order: self.order.clone(),
+      })),
       groups: self.groups.clone(),
-    }))
-  }
-
-  /// The subset family names registered under `logical` via [`FontResource::subset_of`],
-  /// in registration order, or `None` if `logical` names no subset group.
-  pub(crate) fn subset_group(&self, logical: &str) -> Option<&[String]> {
-    self.groups.get(logical).map(Vec::as_slice)
+    }
   }
 
   pub(crate) fn resolve_glyphs(
@@ -875,8 +889,14 @@ impl Fonts {
         .unwrap_or_default()
         .to_string();
 
+      if !self.order.contains(&name) {
+        self.order.push(name.clone());
+      }
+
       if let Some(logical) = &subset_of {
-        let names = self.groups.entry(logical.clone()).or_default();
+        let names = Arc::make_mut(&mut self.groups)
+          .entry(logical.clone())
+          .or_default();
         if !names.contains(&name) {
           names.push(name.clone());
         }
@@ -897,12 +917,6 @@ impl Fonts {
 }
 
 impl RenderContext {
-  /// Mutable access to the render-local fonts. Callers must not re-enter while the
-  /// borrow is held (layout measures inline boxes before building the parley tree).
-  pub(crate) fn with_fonts<R>(&self, f: impl FnOnce(&mut Fonts) -> R) -> R {
-    f(&mut self.fonts.borrow_mut())
-  }
-
   /// First available font's line spacing for `families`/`attributes`, scaled to `font_size`.
   pub(crate) fn first_font_line_spacing<'a>(
     &self,
@@ -910,7 +924,7 @@ impl RenderContext {
     attributes: Attributes,
     font_size: f32,
   ) -> Option<f32> {
-    self.with_fonts(|fonts| {
+    self.fonts.with_context(|fonts| {
       let mut query = fonts.inner.collection.query(&mut fonts.inner.source_cache);
       let mut result = None;
 
@@ -936,7 +950,7 @@ impl RenderContext {
     root_style: TextStyle<'_, '_, InlineBrush>,
     func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),
   ) -> (InlineLayout, String) {
-    self.with_fonts(|fonts| {
+    self.fonts.with_context(|fonts| {
       with_layout_context(|layout| {
         let mut builder = layout.tree_builder(&mut fonts.inner, 1.0, true, &root_style);
         func(&mut builder);

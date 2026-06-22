@@ -1929,8 +1929,9 @@ pub fn resolve_inline_runs<'l>(
           let font = FontRef::from_index(run.font().data.as_ref(), run.font().index)
             .map_err(|_| FontError::InvalidFontIndex)?;
           let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
-          let resolved_glyphs =
-            context.with_fonts(|fonts| fonts.resolve_glyphs(&glyph_run, font, glyph_ids));
+          let resolved_glyphs = context
+            .fonts
+            .with_context(|fonts| fonts.resolve_glyphs(&glyph_run, font, glyph_ids));
 
           if need_outline
             && let Some(outline_rect) = collect_glyph_run_outline_rect(

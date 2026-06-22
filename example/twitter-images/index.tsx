@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { type OutputFormat } from "takumi-js";
 import { Renderer } from "takumi-js/node";
 import { fromJsx } from "takumi-js/helpers/jsx";
+import { googleFontSubsets } from "takumi-js/helpers";
 import * as FiveHundredStars from "./components/500-stars";
 import * as GithubSocialPreview from "./components/github-social-preview";
 import * as OgImage from "./components/og-image";
@@ -13,6 +14,7 @@ import * as V1 from "./components/v1";
 import * as TextFit from "./components/text-fit";
 import * as HomeDemoCard from "./components/home-demo-card";
 import * as HomeFilmstrip from "./components/home-filmstrip";
+import * as GoogleFontsShowcase from "./components/google-fonts-showcase";
 
 const components = [
   TextFit,
@@ -25,6 +27,7 @@ const components = [
   GithubSocialPreview,
   HomeDemoCard,
   HomeFilmstrip,
+  GoogleFontsShowcase,
 ];
 
 type Component = (typeof components)[number];
@@ -54,6 +57,8 @@ async function render(
     })),
   );
   const loaders = fontLoaders(module);
+  const subsets = "googleFonts" in module ? await googleFontSubsets(node, module.googleFonts) : [];
+  const fonts = [...loaders, ...subsets];
   const renderStart = performance.now();
 
   const buffer = await renderer.render(node, {
@@ -63,7 +68,7 @@ async function render(
     stylesheets: [...stylesheets, ...("stylesheets" in module ? module.stylesheets : [])],
     drawDebugBorder: process.argv.includes("--debug"),
     images,
-    fonts: loaders.length > 0 ? loaders : undefined,
+    fonts: fonts.length > 0 ? fonts : undefined,
     format,
     timeMs,
   });

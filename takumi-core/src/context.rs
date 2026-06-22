@@ -1,19 +1,17 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
+use std::{collections::HashMap, rc::Rc, sync::Arc};
 
 use typed_builder::TypedBuilder;
 
 use crate::{
-  Fonts,
   layout::style::{Affine, Color, ComputedStyle, SizingContext, StyleSheet},
-  resources::image::ImageSource,
+  resources::{font::FontsSnapshot, image::ImageSource},
 };
 
 /// The context for the internal rendering. You should not construct this directly.
 #[derive(Clone, TypedBuilder)]
 #[non_exhaustive]
 pub struct RenderContext {
-  /// The font registry shared across renders.
-  pub(crate) fonts: Rc<RefCell<Fonts>>,
+  pub(crate) fonts: FontsSnapshot,
   /// The sizing context.
   pub sizing: SizingContext,
   /// The scale factor for the image renderer.
