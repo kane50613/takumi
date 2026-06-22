@@ -1539,7 +1539,7 @@ dependencies = [
 
 [[package]]
 name = "takumi"
-version = "2.0.0-beta.1"
+version = "2.0.0-beta.2"
 dependencies = [
  "image",
  "parley",
@@ -1553,7 +1553,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-core"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "bytemuck",
  "color",
