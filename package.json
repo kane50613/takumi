@@ -27,12 +27,12 @@
     "oxlint": "^1.70.0",
     "publint": "^0.3.21",
     "takumi-js": "workspace:*",
-    "tegami": "0.1.0-beta.4",
+    "tegami": "0.1.0",
     "typescript": "catalog:"
   },
   "catalog": {
     "@types/bun": "^1.3.14",
-    "@types/node": "^25.9.4",
+    "@types/node": "^26.0.0",
     "@types/react": "19.2.17",
     "@types/react-dom": "^19.2.3",
     "lucide-react": "^1.21.0",
@@ -43,8 +43,5 @@
     "typescript": "6.0.3",
     "vite": "^8.0.16",
     "vitest": "^4.1.9"
-  },
-  "patchedDependencies": {
-    "tegami@0.1.0-beta.4": "patches/tegami@0.1.0-beta.4.patch"
   }
 }
