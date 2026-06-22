@@ -23,7 +23,7 @@
     "fumadocs-mdx": "^15.0.12",
     "fumadocs-twoslash": "^3.2.0",
     "fumadocs-ui": "^16.10.5",
-    "isbot": "^5.1.43",
+    "isbot": "^5.1.44",
     "js-confetti": "^0.13.1",
     "lucide-react": "catalog:",
     "next-themes": "^0.4.6",

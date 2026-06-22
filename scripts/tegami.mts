@@ -1,17 +1,6 @@
-import { $ } from "bun";
-import { tegami, type PackageOptions, type TegamiPlugin } from "tegami";
+import { tegami, type PackageOptions } from "tegami";
 import { createCli } from "tegami/cli";
 import { github } from "tegami/plugins/github";
-
-const refreshCargoLock: TegamiPlugin = {
-  name: "refresh-cargo-lock",
-  enforce: "pre",
-  cli: {
-    async publishPlanApplied() {
-      await $`cargo update --workspace`;
-    },
-  },
-};
 
 // v2 beta line; clear this for the stable 2.0.0 release.
 const prerelease = "beta";
@@ -42,10 +31,7 @@ for (const name of independentCrates) {
 }
 
 const paper = tegami({
-  plugins: [
-    refreshCargoLock,
-    github({ repo: "kane50613/takumi", cli: { versionPr: { base: "master" } } }),
-  ],
+  plugins: [github({ repo: "kane50613/takumi", cli: { versionPr: { base: "master" } } })],
   groups: {
     takumi: { syncBump: true, syncGitTag: true, prerelease },
   },
@@ -59,6 +45,7 @@ const paper = tegami({
     bumpDep: ({ kind }) => (kind === "dependencies" ? "patch" : false),
   },
   cargo: {
+    updateLockFile: true,
     bumpDep: ({ kind }) => (kind === "dependencies" ? "patch" : false),
   },
 });
