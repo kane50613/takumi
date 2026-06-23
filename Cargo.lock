@@ -1548,7 +1548,7 @@ dependencies = [
 
 [[package]]
 name = "takumi"
-version = "2.0.0-beta.3"
+version = "2.0.0-beta.4"
 dependencies = [
  "image",
  "parley",
@@ -1562,7 +1562,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-core"
-version = "0.1.0-beta.2"
+version = "0.1.0-beta.3"
 dependencies = [
  "bytemuck",
  "color",
@@ -1595,7 +1595,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-css"
-version = "0.2.0-beta.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "bitflags",
  "bytemuck",
@@ -1618,7 +1618,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-napi"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "arc-swap",
  "napi",
@@ -1634,7 +1634,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-raster"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "bytemuck",
  "color",
@@ -1658,7 +1658,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-svg"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "base64",
  "quick-xml",
@@ -1670,7 +1670,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-wasm"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "base64",
  "js-sys",

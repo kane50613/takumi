@@ -1,6 +1,6 @@
 [package]
 name = "takumi-css"
-version = "0.2.0-beta.0"
+version = "0.2.0-beta.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "CSS parsing and style resolution layer for takumi."
