@@ -39,6 +39,7 @@ export function GET(_: Request, { params }: ApiContext<"/og/docs/[...slugs]/imag
 
 export async function getConfig() {
   return {
-    render: "dynamic" as const,
+    render: "static" as const,
+    staticPaths: source.getPages().map((page) => page.slugs ?? []),
   };
 }
