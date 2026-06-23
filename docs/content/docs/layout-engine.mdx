@@ -1,22 +1,12 @@
 ---
 title: Layout Engine
-description: What Takumi's layout does differently from satori, and how to drive the canvas.
+description: Sizing the render canvas, and how Takumi's layout differs from satori.
 icon: Layers
 ---
 
-Takumi runs [Taffy](https://github.com/DioxusLabs/taffy) for real CSS layout: Flexbox, Grid, and block, with browser defaults. You write the CSS you already know.
+Takumi runs [Taffy](https://github.com/DioxusLabs/taffy) for real CSS layout: Flexbox, Grid, and block, with browser defaults. You write the CSS you already know. Two things behave differently from a normal page.
 
-## Coming from satori
-
-|                          | satori                 | Takumi                                |
-| :----------------------- | :--------------------- | :------------------------------------ |
-| Layout modes             | Flexbox only           | Flex, Grid, block                     |
-| Element default          | Forces `display: flex` | Browser defaults (`<div>` is `block`) |
-| `flex-direction` default | `column`               | `row`                                 |
-
-A satori template that leaned on forced flex needs `display: flex` written out, and a row layout no longer needs `flex-direction: row` undone. Everything else ports over.
-
-## Driving the canvas
+## Sizing the canvas
 
 The `width` and `height` you pass to the render set the pixel canvas. The root node won't fill it on its own, so give the root `width: 100%` and `height: 100%` for a full-bleed image.
 
@@ -27,11 +17,20 @@ await render(<div style={{ width: "100%", height: "100%" }}>Full bleed</div>, {
 });
 ```
 
-Omit `width` or `height` and the node sizes to its content. This works on the render too: drop `height` and the image grows to fit.
+Omit `width` or `height` and the node sizes to its content. Drop `height` on the render and the image grows to fit, which suits receipts, tables, and feeds of unknown length.
 
 ```tsx
-// no height: the image grows to fit the rows
-await render(<div style={{ width: "100%", padding: 48 }}>{rows}</div>, { width: 1200 });
+await render(<Receipt rows={rows} />, { width: 1200 });
 ```
 
 An `<img>` measures to its intrinsic size unless you set `width` and `height`. `position: fixed` resolves against the canvas, not a scroll viewport.
+
+## Coming from satori
+
+|                          | satori                 | Takumi                                |
+| :----------------------- | :--------------------- | :------------------------------------ |
+| Layout modes             | Flexbox only           | Flex, Grid, block                     |
+| Element default          | Forces `display: flex` | Browser defaults (`<div>` is `block`) |
+| `flex-direction` default | `column`               | `row`                                 |
+
+A satori template that leaned on forced flex needs `display: flex` written out, and a row layout no longer needs `flex-direction: row` undone. Everything else ports over.
