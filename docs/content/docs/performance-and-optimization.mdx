@@ -4,13 +4,13 @@ description: Best practices for building high-performance rendering pipelines wi
 icon: Zap
 ---
 
-Takumi is designed from the ground up for speed. However, as your node trees grow in complexity, following these best practices will ensure you get the most out of the engine.
+Takumi is fast by default. These practices keep it fast as your node trees grow.
 
 ## The Renderer
 
 ### Reuse the Renderer Instance
 
-For both `@takumi-rs/core` and `@takumi-rs/wasm`, the `Renderer` is the heart of Takumi's resource management. Try to reuse the renderer instance across multiple renderings.
+The `Renderer` holds Takumi's caches. Reuse one instance across renders instead of constructing a new one each time.
 
 #### For ImageResponse
 
@@ -20,7 +20,7 @@ Refer to both [Typography & Fonts](/docs/typography-and-fonts) and [Load Images]
 
 #### For Cloudflare Workers
 
-Initialize the WASM module and renderer instance out side of the `fetch()` handler so it won't be re-run everytime a request comes in.
+Initialize the WASM module and renderer outside the `fetch()` handler so it doesn't re-run on every request.
 
 ```tsx title="index.tsx"
 import { ImageResponse } from "takumi-js/response";
@@ -54,7 +54,7 @@ Loading images from URLs or bytes during the rendering pass can be a bottleneck.
 
 ### Parallel Rendering
 
-Always prefer `@takumi-rs/core` over `@takumi-rs/wasm` for utilizing multiple threads.
+On the server, prefer `@takumi-rs/core`: it renders across multiple threads, where `@takumi-rs/wasm` is single-threaded.
 
 ## Component Design
 
@@ -68,4 +68,4 @@ Filters and blurs each spawn a composition layer the size of the viewport, which
 
 WOFF2 is a compressed format, which requires decompression before use. TTF is a raw format, which can be used directly.
 
-You should only use WOFF2 if the concern of file size is more important than the concern of performance.
+Reach for WOFF2 only when file size matters more than decode speed.

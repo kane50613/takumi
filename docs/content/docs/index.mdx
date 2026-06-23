@@ -4,7 +4,14 @@ description: A Rust engine that renders JSX, HTML, and node trees into images. N
 icon: Axe
 ---
 
-Takumi turns JSX, HTML, and node trees into PNG, JPEG, WebP, SVG, and animated images. It runs a real CSS layout and compositing pipeline in Rust, so you get browser-grade output without a headless Chromium eating 300 MB of RAM.
+Takumi renders JSX, HTML, and node trees into images — PNG, JPEG, WebP, SVG, and animations — through a real CSS layout pipeline written in Rust.
+
+Generate OG images and social cards without a headless browser:
+
+- **No Chromium.** No 300 MB browser process per render. Native Rust on the server, WebAssembly on the edge.
+- **Drop-in for `next/og`.** `ImageResponse` matches the API you already ship.
+- **Real CSS, not a subset.** Flexbox, Grid, and block layout, where satori is flex-only.
+- **One engine, every output.** Raster, vector SVG, and animated GIF or WebP from the same render.
 
 ## Install
 
@@ -70,7 +77,7 @@ export function GET() {
 
 ## Coming from satori
 
-`ImageResponse` is a drop-in for `next/og`, and Takumi rasterizes directly instead of handing you an SVG to convert. Two layout defaults differ: Takumi runs Flexbox, Grid, and block with real browser defaults, where satori is flex-only and forces `display: flex` with a `column` default. A bare `<div>` is a block, and `flex-direction` defaults to `row`.
+`ImageResponse` is a drop-in for `next/og`. The layout defaults differ: a bare `<div>` is `block` where satori forces `display: flex`, and `flex-direction` defaults to `row` instead of satori's `column`. Takumi also rasterizes directly instead of returning an SVG to convert.
 
 ## Next steps
 

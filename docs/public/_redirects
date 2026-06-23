@@ -9,3 +9,4 @@
 /docs/quickstart /docs 301
 /docs/runtimes /docs 301
 /docs/layout-engine /docs 301
+/docs/integration/rust https://docs.rs/takumi 301
