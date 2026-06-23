@@ -1,3 +1,12 @@
+## @takumi-rs/wasm@2.0.0-beta.5 (beta)
+
+### Fix `workspace:*` leaking into the published `package.json`
+
+Published packages shipped their inter-package dependencies as the literal
+`workspace:*` range, so installing them failed with `Workspace dependency
+"@takumi-rs/core" not found`. The publish step now resolves `workspace:` ranges
+to concrete versions, matching what `bun` and `pnpm publish` already do.
+
 ## @takumi-rs/wasm@2.0.0-beta.4 (beta)
 
 ### Re-release all packages in sync
