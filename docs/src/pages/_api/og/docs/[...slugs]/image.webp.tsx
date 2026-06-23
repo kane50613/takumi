@@ -1,5 +1,6 @@
 import type { ImageSource } from "takumi-js";
 import { ImageResponse } from "takumi-js/response";
+import wasmModule from "takumi-js/wasm";
 import type { ApiContext } from "waku/router";
 import DocsTemplate from "../../../../../../../takumi-template/src/templates/docs-template";
 import { source } from "~/source";
@@ -33,6 +34,9 @@ export function GET(_: Request, { params }: ApiContext<"/og/docs/[...slugs]/imag
       width: 1200,
       height: 630,
       format: "webp",
+      // Static build-time generation: use WASM so prerendering doesn't depend on the
+      // native napi binding resolving inside the Vercel build sandbox.
+      module: wasmModule,
     },
   );
 }
