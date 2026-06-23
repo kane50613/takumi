@@ -7,6 +7,7 @@ export type HtmlProps = {
   id?: string;
   style?: string | CSSProperties;
   dir?: string;
+  lang?: string;
   [key: string]: unknown;
 };
 

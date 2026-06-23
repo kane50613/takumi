@@ -90,6 +90,8 @@ pub struct RenderOptions {
   /// Per-render font stack: ordered family names used as the fallback chain.
   /// Defaults to all registered families in registration order.
   pub font_families: Option<Vec<String>>,
+  /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
+  pub lang: Option<String>,
 }
 
 /// Options for rendering a node tree to an SVG document. SVG is a vector
@@ -114,6 +116,8 @@ pub struct SvgRenderOptions {
   /// Per-render font stack: ordered family names used as the fallback chain.
   /// Defaults to all registered families in registration order.
   pub font_families: Option<Vec<String>>,
+  /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
+  pub lang: Option<String>,
 }
 
 /// Options for rendering an animated image.
@@ -140,6 +144,8 @@ pub struct RenderAnimationOptions {
   pub fps: u32,
   /// Per-render font stack: ordered family names used as the fallback chain.
   pub font_families: Option<Vec<String>>,
+  /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
+  pub lang: Option<String>,
 }
 
 /// Options for encoding a precomputed frame sequence.
@@ -162,6 +168,8 @@ pub struct EncodeFramesOptions {
   pub device_pixel_ratio: Option<f32>,
   /// Per-render font stack: ordered family names used as the fallback chain.
   pub font_families: Option<Vec<String>>,
+  /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
+  pub lang: Option<String>,
 }
 
 /// Details for loading a custom font.

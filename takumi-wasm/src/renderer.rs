@@ -249,6 +249,11 @@ impl Renderer {
       .node(node)
       .fonts(fonts)
       .font_families(options.font_families)
+      .lang(
+        options
+          .lang
+          .and_then(|s| takumi_core::Language::parse(&s).ok()),
+      )
       .build();
 
     let image = render(render_options).map_err(map_error)?;
@@ -298,6 +303,11 @@ impl Renderer {
         .node(node)
         .fonts(&state)
         .font_families(options.font_families)
+        .lang(
+          options
+            .lang
+            .and_then(|s| takumi_core::Language::parse(&s).ok()),
+        )
         .build(),
     )
     .map_err(map_error)?;
@@ -338,6 +348,11 @@ impl Renderer {
       .node(node)
       .fonts(&state)
       .font_families(options.font_families)
+      .lang(
+        options
+          .lang
+          .and_then(|s| takumi_core::Language::parse(&s).ok()),
+      )
       .build();
 
     let layout = measure(render_options).map_err(map_error)?;
@@ -393,6 +408,7 @@ impl Renderer {
       device_pixel_ratio,
       fps,
       font_families,
+      lang,
     } = from_value(options.into()).map_err(map_error)?;
     let images = self.fetch_resources_map(images.as_deref())?;
 
@@ -422,6 +438,11 @@ impl Renderer {
               .node(scene.node)
               .fonts(&state)
               .font_families(font_families.clone())
+              .lang(
+                lang
+                  .clone()
+                  .and_then(|s| takumi_core::Language::parse(&s).ok()),
+              )
               .draw_debug_border(draw_debug_border)
               .build(),
           )
@@ -459,6 +480,12 @@ impl Renderer {
           .node(frame.node)
           .fonts(&state)
           .font_families(options.font_families.clone())
+          .lang(
+            options
+              .lang
+              .clone()
+              .and_then(|s| takumi_core::Language::parse(&s).ok()),
+          )
           .draw_debug_border(options.draw_debug_border.unwrap_or_default())
           .stylesheet(stylesheet.clone())
           .build();

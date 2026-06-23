@@ -2,6 +2,7 @@ use std::{borrow::Cow, collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
 use rayon::prelude::*;
+use takumi_core::Language;
 use takumi_core::layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node};
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, encode_animated_gif,
@@ -27,6 +28,7 @@ pub struct EncodeFramesTask {
   pub(crate) stylesheets: Option<Vec<String>>,
   pub(crate) images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
   pub(crate) font_families: Option<Vec<String>>,
+  pub(crate) lang: Option<String>,
 }
 
 impl EncodeFramesTask {
@@ -65,6 +67,7 @@ impl EncodeFramesTask {
         })
         .collect::<Result<_>>()?,
       font_families: options.font_families,
+      lang: options.lang,
     })
   }
 }
@@ -88,6 +91,7 @@ impl Task for EncodeFramesTask {
       let viewport = self.viewport;
       let draw_debug_border = self.draw_debug_border;
       let font_families = take(&mut self.font_families);
+      let lang = take(&mut self.lang).and_then(|s| Language::parse(&s).ok());
       let stylesheet = parse_stylesheet(self.stylesheets.clone(), Vec::new())?;
       let frames = frames
         .into_par_iter()
@@ -101,6 +105,7 @@ impl Task for EncodeFramesTask {
                 .node(node)
                 .fonts(&fonts)
                 .font_families(font_families.clone())
+                .lang(lang)
                 .draw_debug_border(draw_debug_border)
                 .build(),
             )

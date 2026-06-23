@@ -158,7 +158,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
       text_wrap_mode: style.parent.resolved_text_wrap_mode().into(),
       font_width: style.parent.font_stretch.into(),
 
-      locale: None,
+      locale: style.parent.lang,
       has_underline: false,
       underline_offset: None,
       underline_size: None,

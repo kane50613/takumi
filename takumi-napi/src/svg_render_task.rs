@@ -1,6 +1,7 @@
 use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
+use takumi_core::Language;
 use takumi_core::layout::{Viewport, node::Node, style::StyleSheet};
 
 use crate::{
@@ -18,6 +19,7 @@ pub struct SvgRenderTask {
   pub(crate) stylesheet: StyleSheet,
   pub(crate) images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
   pub(crate) font_families: Option<Vec<String>>,
+  pub(crate) lang: Option<String>,
 }
 
 impl SvgRenderTask {
@@ -51,6 +53,7 @@ impl SvgRenderTask {
         })
         .collect::<Result<_>>()?,
       font_families: options.font_families,
+      lang: options.lang,
     })
   }
 }
@@ -77,6 +80,7 @@ impl Task for SvgRenderTask {
         .node(node)
         .fonts(&fonts)
         .font_families(take(&mut self.font_families))
+        .lang(take(&mut self.lang).and_then(|s| Language::parse(&s).ok()))
         .build(),
     )
     .map_err(map_error)

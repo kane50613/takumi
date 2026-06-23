@@ -53,6 +53,11 @@ const TEST_FONTS: &[(&str, &str, GenericFamily)] = &[
     GenericFamily::SansSerif,
   ),
   (
+    "assets/fonts/cjk-locl-test/CJKLoclTest.woff2",
+    "CJK Locl Test",
+    GenericFamily::SansSerif,
+  ),
+  (
     "assets/fonts/noto-sans/noto-sans-devanagari-v30-devanagari-regular.woff2",
     "Noto Sans Devanagari",
     GenericFamily::Serif,

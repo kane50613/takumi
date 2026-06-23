@@ -1,6 +1,7 @@
 use std::{borrow::Cow, collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
+use takumi_core::Language;
 use takumi_core::layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node};
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, RenderOptions, SequentialScene,
@@ -26,6 +27,7 @@ pub struct RenderAnimationTask {
   pub(crate) stylesheets: Option<Vec<String>>,
   pub(crate) images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
   pub(crate) font_families: Option<Vec<String>>,
+  pub(crate) lang: Option<String>,
   pub(crate) fps: u32,
 }
 
@@ -48,6 +50,7 @@ impl RenderAnimationTask {
       stylesheets,
       device_pixel_ratio,
       font_families,
+      lang,
     } = options;
     let scenes = scenes
       .into_iter()
@@ -95,6 +98,7 @@ impl RenderAnimationTask {
         })
         .collect::<Result<_>>()?,
       font_families,
+      lang,
       fps,
     })
   }
@@ -125,6 +129,7 @@ impl Task for RenderAnimationTask {
                 .node(node)
                 .fonts(&fonts)
                 .font_families(self.font_families.clone())
+                .lang(self.lang.clone().and_then(|s| Language::parse(&s).ok()))
                 .draw_debug_border(self.draw_debug_border)
                 .build(),
             )

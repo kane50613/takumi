@@ -2,6 +2,7 @@ use crate::style::unexpected_token;
 use std::{borrow::Cow, collections::HashMap, fmt, str::FromStr};
 
 use cssparser::{Parser, ParserInput, Token, match_ignore_ascii_case};
+use parley::Language;
 use paste::paste;
 use serde::de::IgnoredAny;
 use smallvec::{SmallVec, smallvec};
@@ -598,6 +599,9 @@ macro_rules! define_style {
         pub custom_properties: HashMap<String, String>,
         /// Registered `@property` rules by name.
         pub registered_custom_properties: HashMap<String, PropertyRule>,
+        /// Resolved BCP-47 language, inherited from the `lang` attribute. Drives
+        /// locale-aware shaping (Han unification, line-breaking). Has no CSS property.
+        pub lang: Option<Language>,
         $(
           #[doc = concat!("Computed `", stringify!($longhand), "` value.")]
           pub $longhand: $longhand_ty,
@@ -638,6 +642,7 @@ macro_rules! define_style {
             } else {
               parent.registered_custom_properties.clone()
             },
+            lang: parent.lang,
             $($longhand: define_inherited_default!(parent.$longhand $(, $longhand_inherit)?),)*
           }
         }

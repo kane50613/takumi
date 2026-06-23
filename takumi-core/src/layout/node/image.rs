@@ -1,4 +1,5 @@
 use data_url::DataUrl;
+use parley::Language;
 use taffy::{AvailableSpace, CompactLength, MaybeResolve, Size};
 
 use crate::{
@@ -40,6 +41,11 @@ pub(crate) fn take_image_style_layers(
     author_tw: node.metadata.tw.take(),
     inline: node.metadata.style.take(),
     dir: node.metadata.dir.take(),
+    lang: node
+      .metadata
+      .lang
+      .take()
+      .map(|tag| Language::parse(&tag).ok()),
   }
 }
 

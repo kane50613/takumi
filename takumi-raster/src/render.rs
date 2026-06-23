@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
-use parley::{GlyphRun, InlineBoxKind, PositionedLayoutItem};
+use parley::{GlyphRun, InlineBoxKind, Language, PositionedLayoutItem};
 use serde::Serialize;
 use taffy::{AvailableSpace, Layout, NodeId, TaffyError, geometry::Size};
 use takumi_core::layout::style::SizingContext;
@@ -18,7 +18,7 @@ use crate::{
       resolve_visual_inline_box, text_fit_line_alignment_correction,
     },
     node::Node,
-    style::{Affine, StyleSheet},
+    style::{Affine, ComputedStyle, StyleSheet},
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
   resources::image::ImageSource,
@@ -26,6 +26,15 @@ use crate::{
   stacking_context::paint_context,
 };
 use takumi_core::scene::build_stacking_contexts;
+
+/// Root computed style carrying the render-level default `lang`, inherited by
+/// every node that does not set its own.
+fn root_style(lang: Option<Language>) -> Box<ComputedStyle> {
+  Box::new(ComputedStyle {
+    lang,
+    ..Default::default()
+  })
+}
 
 #[derive(Clone, TypedBuilder)]
 /// Options for rendering a node. Construct using [`RenderOptions::builder`] to avoid breaking changes.
@@ -55,6 +64,10 @@ pub struct RenderOptions<'g> {
   /// registered families in registration order.
   #[builder(default)]
   pub(crate) font_families: Option<Vec<String>>,
+  /// Default BCP-47 language applied to the root, inherited by nodes without
+  /// their own `lang`. Drives locale-aware shaping and line-breaking.
+  #[builder(default)]
+  pub(crate) lang: Option<Language>,
 }
 
 impl<'g> RenderOptions<'g> {
@@ -192,6 +205,7 @@ pub fn measure<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
     time_ms,
     dithering: _,
     font_families,
+    lang,
   } = options;
 
   let render_context = RenderContext::builder()
@@ -201,6 +215,7 @@ pub fn measure<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
     .stylesheet(stylesheet.into())
     .time_ms(time_ms)
     .draw_debug_border(draw_debug_border)
+    .style(root_style(lang))
     .build();
 
   let mut root = RenderNode::from_node(&render_context, node);
@@ -519,6 +534,7 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
     time_ms,
     dithering,
     font_families,
+    lang,
   } = options;
 
   let render_context = RenderContext::builder()
@@ -528,6 +544,7 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
     .stylesheet(stylesheet.into())
     .time_ms(time_ms)
     .draw_debug_border(draw_debug_border)
+    .style(root_style(lang))
     .build();
 
   let mut root = RenderNode::from_node(&render_context, node);

@@ -600,6 +600,7 @@ function extractNodeMetadata(
     className: htmlProps.className ?? htmlProps.class,
     id: htmlProps.id,
     dir: htmlProps.dir as NodeMetadata["dir"],
+    lang: htmlProps.lang,
     attributes,
     tw,
     style,
