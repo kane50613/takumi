@@ -1,53 +1,37 @@
 ---
 title: Layout Engine
-description: What Takumi's layout supports, and where it differs from a browser or satori.
+description: What Takumi's layout does differently from satori, and how to drive the canvas.
 icon: Layers
 ---
 
-Takumi runs [Taffy](https://github.com/DioxusLabs/taffy) for Flexbox, Grid, and block layout. Tags keep their browser defaults: `<div>` is `block`, `<p>` has margins, `<h1>` is bold.
+Takumi runs [Taffy](https://github.com/DioxusLabs/taffy) for real CSS layout: Flexbox, Grid, and block, with browser defaults. You write the CSS you already know.
 
-<Callout type="warning">
-  Coming from [satori](https://github.com/vercel/satori)? Takumi follows the browser, not satori. It
-  never forces `display: flex`, and `flex-direction` defaults to `row`. A bare `<div>` is a block
-  until you set `display: flex`.
-</Callout>
+## Coming from satori
 
-## Display
+|                          | satori                 | Takumi                                |
+| :----------------------- | :--------------------- | :------------------------------------ |
+| Layout modes             | Flexbox only           | Flex, Grid, block                     |
+| Element default          | Forces `display: flex` | Browser defaults (`<div>` is `block`) |
+| `flex-direction` default | `column`               | `row`                                 |
 
-Supported values: `block`, `flex`, `inline-flex`, `grid`, `inline-grid`, `inline`, `inline-block`, `none`. They behave as they do in a browser.
+A satori template that leaned on forced flex needs `display: flex` written out, and a row layout no longer needs `flex-direction: row` undone. Everything else ports over.
 
-## Sizing
+## Driving the canvas
 
-Omit `width` or `height` and the node sizes to its content.
+The `width` and `height` you pass to the render set the pixel canvas. The root node won't fill it on its own, so give the root `width: 100%` and `height: 100%` for a full-bleed image.
 
-```tsx twoslash
-import { ImageResponse } from "takumi-js/response";
-
-export function GET() {
-  return new ImageResponse(<List />, {
-    width: 1200,
-  });
-}
-
-function List() {
-  const items = Array.from({ length: 5 }, (_, i) => i);
-
-  return (
-    <div style={{ width: "100%" }}>
-      {items.map((item) => (
-        <div key={item}>Item {item}.</div>
-      ))}
-    </div>
-  );
-}
+```tsx
+await render(<div style={{ width: "100%", height: "100%" }}>Full bleed</div>, {
+  width: 1200,
+  height: 630,
+});
 ```
 
-Lengths take pixels, `%`, `auto`, `fr`, `vw` / `vh`, `em` / `rem`, and `calc()`, clamped by the `min-` and `max-` variants.
+Omit `width` or `height` and the node sizes to its content. This works on the render too: drop `height` and the image grows to fit.
 
-The `width` and `height` you pass to the render set the pixel canvas, but the root node won't fill it on its own. Give the root `width: 100%` and `height: 100%` for a full-bleed image.
+```tsx
+// no height: the image grows to fit the rows
+await render(<div style={{ width: "100%", padding: 48 }}>{rows}</div>, { width: 1200 });
+```
 
-An `<img>` measures to its intrinsic size unless you set `width` and `height`.
-
-## Positioning
-
-`relative`, `absolute`, `fixed`, and `z-index` work as in a browser. `fixed` resolves against the canvas.
+An `<img>` measures to its intrinsic size unless you set `width` and `height`. `position: fixed` resolves against the canvas, not a scroll viewport.
