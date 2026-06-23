@@ -10,6 +10,7 @@ import { __iconNode as imageMarkedIconNode } from "lucide-react/dist/esm/icons/i
 import { __iconNode as layersIconNode } from "lucide-react/dist/esm/icons/layers";
 import { __iconNode as layoutTemplateIconNode } from "lucide-react/dist/esm/icons/layout-template";
 import { __iconNode as leafIconNode } from "lucide-react/dist/esm/icons/leaf";
+import { __iconNode as paletteIconNode } from "lucide-react/dist/esm/icons/palette";
 import { __iconNode as playIconNode } from "lucide-react/dist/esm/icons/play";
 import { __iconNode as rulerIconNode } from "lucide-react/dist/esm/icons/ruler";
 import { __iconNode as toyBrickIconNode } from "lucide-react/dist/esm/icons/toy-brick";
@@ -40,6 +41,7 @@ const icons = {
   BookMarked: bookMarkedIconNode,
   Image: imageMarkedIconNode,
   Type: typeIconNode,
+  Palette: paletteIconNode,
   Layers: layersIconNode,
   Zap: zapIconNode,
   CircleFadingArrowUp: circleFadingArrowUpIconNode,
