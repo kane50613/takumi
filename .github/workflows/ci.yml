@@ -754,12 +754,6 @@ jobs:
           name: helpers-dist
           path: takumi-helpers/dist
 
-      - name: Download N-API bindings artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: bindings-x86_64-unknown-linux-gnu
-          path: takumi-napi
-
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
         with:

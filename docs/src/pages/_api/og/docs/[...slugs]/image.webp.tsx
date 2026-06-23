@@ -1,5 +1,7 @@
 import type { ImageSource } from "takumi-js";
+import { googleFontSubsets } from "takumi-js/helpers";
 import { ImageResponse } from "takumi-js/response";
+import wasmModule from "takumi-js/wasm";
 import type { ApiContext } from "waku/router";
 import DocsTemplate from "../../../../../../../takumi-template/src/templates/docs-template";
 import { source } from "~/source";
@@ -12,12 +14,17 @@ const images: ImageSource[] = [
   },
 ];
 
-export function GET(_: Request, { params }: ApiContext<"/og/docs/[...slugs]/image.webp">) {
+export async function GET(_: Request, { params }: ApiContext<"/og/docs/[...slugs]/image.webp">) {
   const page = source.getPage(params.slugs ?? []);
 
   if (!page) {
     return new Response(undefined, { status: 404 });
   }
+
+  const fonts = await googleFontSubsets(
+    `${page.data.title} ${page.data.description ?? ""} Takumi`,
+    ["Geist"],
+  );
 
   return new ImageResponse(
     <DocsTemplate
@@ -30,9 +37,12 @@ export function GET(_: Request, { params }: ApiContext<"/og/docs/[...slugs]/imag
     />,
     {
       images,
+      fonts,
       width: 1200,
       height: 630,
       format: "webp",
+      // WASM: static prerender shouldn't depend on the native binding resolving in the build sandbox.
+      module: wasmModule,
     },
   );
 }
