@@ -4,10 +4,12 @@ mod css_input;
 mod math;
 mod media_query;
 mod properties;
+/// Selectors and stylesheet rule types.
 pub mod selector;
 mod sizing;
 mod stylesheets;
 mod supports;
+/// Tailwind utility-class parsing.
 pub mod tw;
 
 pub use animation::apply_stylesheet_animations;

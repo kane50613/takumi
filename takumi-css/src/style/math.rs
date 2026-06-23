@@ -1,3 +1,4 @@
+/// Fast division by 255, returning a `u8`.
 #[inline(always)]
 pub fn fast_div_255(v: u32) -> u8 {
   fast_div_255_u32(v) as u8

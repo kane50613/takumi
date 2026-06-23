@@ -211,6 +211,7 @@ impl TailwindPropertyParser for Filters {
 }
 
 impl Filter {
+  /// Classifies the filter as a pixel or complex operation.
   pub fn categorize(&self) -> FilterCategory<'_> {
     match self {
       Filter::Blur(_) | Filter::DropShadow(_) | Filter::HueRotate(_) => {

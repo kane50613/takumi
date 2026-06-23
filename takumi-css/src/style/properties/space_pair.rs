@@ -68,6 +68,7 @@ impl<T: Copy> From<SpacePair<T>> for Point<T> {
 }
 
 impl SpacePair<Overflow> {
+  /// Whether either axis clips content (not `visible`).
   pub fn should_clip_content(&self) -> bool {
     self.x != Overflow::Visible || self.y != Overflow::Visible
   }
@@ -77,6 +78,7 @@ impl SpacePair<Overflow> {
 pub type BorderRadiusPair = SpacePair<LengthDefaultsToZero>;
 
 impl BorderRadiusPair {
+  /// Resolves both radii to non-negative pixels against the border box.
   pub fn to_px(self, sizing: &SizingContext, border_box: Size<f32>) -> SpacePair<f32> {
     SpacePair::from_pair(
       self.x.to_px(sizing, border_box.width).max(0.0),

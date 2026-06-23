@@ -19,23 +19,33 @@ use crate::{
 
 pub use crate::style::media_query::MediaQueryList;
 
+/// A registered custom property from an `@property` rule.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PropertyRule {
+  /// Custom property name, including the leading `--`.
   pub name: String,
+  /// Declared `syntax` descriptor.
   pub syntax: String,
+  /// Whether the property inherits.
   pub inherits: bool,
+  /// Declared `initial-value`, if any.
   pub initial_value: Option<String>,
+  /// Media queries this rule is gated behind.
   pub media_queries: Vec<MediaQueryList>,
 }
 
+/// A name in a cascade layer path.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LayerName {
+  /// An explicitly named layer.
   Named(String),
+  /// An anonymous layer.
   Anonymous,
 }
 
 type LayerPath = Vec<LayerName>;
 
+/// An ASCII-case-insensitive CSS identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Ident(String);
 
@@ -90,11 +100,13 @@ impl PrecomputedHash for Ident {
   }
 }
 
+/// Selector type bindings for the `selectors` crate.
 #[derive(Debug, Clone)]
 pub struct SelectorImpl;
 
 // Parsed but never matched, so rules with `:hover`, `::before`, etc. survive
 // alongside their sibling selectors instead of getting dropped wholesale.
+/// A pseudo-class, parsed but never matched.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PseudoClass(Ident);
 
@@ -118,10 +130,14 @@ impl NonTSPseudoClass for PseudoClass {
   }
 }
 
+/// A pseudo-element.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PseudoElement {
+  /// `::before`.
   Before,
+  /// `::after`.
   After,
+  /// Any other pseudo-element, kept but never matched.
   Other(Ident),
 }
 
@@ -516,13 +532,20 @@ fn parse_fragment_with_mode<'i, 't>(
   Ok(fragment)
 }
 
+/// A style rule with its selectors and declaration blocks.
 #[derive(Debug, Clone)]
 pub struct CssRule {
+  /// Selectors this rule applies to.
   pub selectors: SelectorList<SelectorImpl>,
+  /// Declarations without `!important`.
   pub normal_declarations: StyleDeclarationBlock,
+  /// Declarations marked `!important`.
   pub important_declarations: StyleDeclarationBlock,
+  /// Media queries gating this rule.
   pub media_queries: Vec<MediaQueryList>,
+  /// Cascade layer this rule belongs to.
   pub layer: Option<LayerPath>,
+  /// Resolved ordinal of the rule's layer.
   pub layer_order: Option<usize>,
 }
 
@@ -959,9 +982,13 @@ impl<'i> AtRuleParser<'i> for RuleParser {
 /// Defines a stylesheet with rules, keyframes, and property rules.
 #[derive(Debug, Clone, Default)]
 pub struct StyleSheet {
+  /// Style rules in source order.
   pub rules: Vec<CssRule>,
+  /// `@keyframes` rules.
   pub keyframes: Vec<KeyframesRule>,
+  /// `@property` rules.
   pub property_rules: Vec<PropertyRule>,
+  /// Number of distinct cascade layers.
   pub layer_count: usize,
 }
 

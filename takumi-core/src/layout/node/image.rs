@@ -169,6 +169,7 @@ fn parse_data_uri_image(src: &str) -> ImageResult {
   ImageSource::from_bytes(&data)
 }
 
+/// Resolve an image source string (data URI, SVG, or registered URL) to its bytes.
 pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
   if src.starts_with(DATA_URI_PREFIX) {
     return parse_data_uri_image(src);

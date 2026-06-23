@@ -9,9 +9,12 @@ use crate::style::{
   *,
 };
 
+/// Tailwind `text-*` font size with optional paired line height.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TwFontSize {
+  /// Font size.
   pub font_size: FontSize,
+  /// Paired line height, if any.
   pub line_height: Option<LineHeight>,
 }
 
@@ -79,6 +82,7 @@ impl TailwindPropertyParser for TwFontSize {
 }
 
 impl TwFontSize {
+  /// Builds a font size with an optional line height.
   pub const fn new(font_size: FontSize, line_height: Option<LineHeight>) -> Self {
     Self {
       font_size,
@@ -87,8 +91,12 @@ impl TwFontSize {
   }
 }
 
+/// Tailwind `grid-cols-*` / `grid-rows-*` track template.
 #[derive(Debug, Clone, PartialEq)]
-pub struct TwGridTemplate(pub GridTemplateComponents);
+pub struct TwGridTemplate(
+  /// Resolved track components.
+  pub GridTemplateComponents,
+);
 
 impl<'i> FromCss<'i> for TwGridTemplate {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
@@ -127,8 +135,12 @@ impl TailwindPropertyParser for TwGridTemplate {
   }
 }
 
+/// Tailwind `tracking-*` letter spacing.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TwLetterSpacing(pub Length);
+pub struct TwLetterSpacing(
+  /// Letter spacing length.
+  pub Length,
+);
 
 impl<'i> FromCss<'i> for TwLetterSpacing {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
@@ -160,8 +172,12 @@ impl TailwindPropertyParser for TwLetterSpacing {
   }
 }
 
+/// Tailwind `rounded-*` corner radius.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TwRounded(pub LengthDefaultsToZero);
+pub struct TwRounded(
+  /// Corner radius.
+  pub LengthDefaultsToZero,
+);
 
 impl<'i> FromCss<'i> for TwRounded {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
@@ -191,7 +207,10 @@ impl TailwindPropertyParser for TwRounded {
 
 /// `<length-percentage>` for `from-N%` / `via-N%` / `to-N%` stop positions.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TwGradientPosition(pub Length);
+pub struct TwGradientPosition(
+  /// Stop position length-percentage.
+  pub Length,
+);
 
 impl<'i> FromCss<'i> for TwGradientPosition {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
@@ -218,8 +237,12 @@ impl TailwindPropertyParser for TwGradientPosition {
   }
 }
 
+/// Tailwind `blur-*` radius.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TwBlur(pub Length);
+pub struct TwBlur(
+  /// Blur radius.
+  pub Length,
+);
 
 impl<'i> FromCss<'i> for TwBlur {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {

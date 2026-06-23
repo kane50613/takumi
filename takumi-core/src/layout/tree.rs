@@ -35,11 +35,15 @@ use parley::fontique::Attributes;
 /// the taffy tree; its geometry then resolves against that block.
 #[derive(Debug, Clone, Copy)]
 pub struct OrderedChild {
+  /// Index of the child in its parent's render order.
   pub render_index: usize,
+  /// Layout node id in the taffy tree.
   pub node_id: NodeId,
+  /// Containing block the child was hoisted to, if out-of-flow.
   pub hoisted_cb: Option<NodeId>,
 }
 
+/// Immutable per-node layout output after computing a tree.
 pub struct LayoutResults {
   nodes: Vec<LayoutResultNode>,
 }
@@ -51,10 +55,12 @@ struct LayoutResultNode {
 }
 
 impl LayoutResults {
+  /// The root node id.
   pub const fn root_node_id(&self) -> NodeId {
     NodeId::new(0)
   }
 
+  /// Computed layout of a node.
   pub fn layout(&self, node_id: NodeId) -> std::result::Result<&Layout, TaffyError> {
     let idx: usize = node_id.into();
     self
@@ -64,6 +70,7 @@ impl LayoutResults {
       .ok_or(TaffyError::InvalidInputNode(node_id))
   }
 
+  /// Paint-ordered children of a node.
   pub fn box_children(&self, node_id: NodeId) -> std::result::Result<&[OrderedChild], TaffyError> {
     let idx: usize = node_id.into();
     self
@@ -86,6 +93,7 @@ impl LayoutResults {
   }
 }
 
+/// Mutable taffy tree wrapping render nodes during layout.
 pub struct LayoutTree<'r> {
   nodes: Vec<LayoutNodeState>,
   render_nodes: Vec<&'r RenderNode>,
@@ -102,12 +110,17 @@ struct LayoutNodeState {
   box_children: Box<[OrderedChild]>,
 }
 
+/// A styled node plus its children, ready for layout.
 #[derive(Clone)]
 pub struct RenderNode {
+  /// Resolved style and rendering context.
   pub context: RenderContext,
+  /// Source node, absent for anonymous wrappers.
   pub node: Option<Node>,
+  /// Child render nodes.
   pub children: Option<Box<[RenderNode]>>,
   pub(crate) layout_style_override: Option<Style>,
+  /// Text for an anonymous inline-text wrapper.
   pub anonymous_text_content: Option<String>,
   pub(crate) force_inline_layout: bool,
 }
@@ -426,6 +439,7 @@ fn push_layout_node<'r>(
 }
 
 impl<'r> LayoutTree<'r> {
+  /// Builds a layout tree from a render-node root.
   pub fn from_render_node(render_root: &'r RenderNode) -> Self {
     let mut nodes = Vec::with_capacity(1);
     let mut render_nodes = Vec::with_capacity(1);
@@ -439,16 +453,19 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
+  /// The root node id.
   pub fn root_node_id(&self) -> NodeId {
     NodeId::from(0usize)
   }
 
+  /// Computes and rounds the layout for the whole tree.
   pub fn compute_layout(&mut self, available_space: Size<AvailableSpace>) {
     let root_node_id = self.root_node_id();
     compute_root_layout(self, root_node_id, available_space);
     round_layout(self, root_node_id);
   }
 
+  /// Consumes the tree into immutable per-node layout results.
   pub fn into_results(self) -> LayoutResults {
     LayoutResults {
       nodes: self
@@ -1032,6 +1049,7 @@ impl RenderNode {
       .is_some_and(Node::is_whitespace_only_text)
   }
 
+  /// True if any direct child is an anonymous text item.
   pub fn has_anonymous_text_item_child(&self) -> bool {
     self
       .children
@@ -1069,6 +1087,7 @@ impl RenderNode {
     )
   }
 
+  /// True if this node is laid out as an inline-level box (atomic inline or float).
   pub fn participates_as_inline_box(&self) -> bool {
     self.is_inline_atomic_container() || self.context.style.float != Float::None
   }
@@ -1089,6 +1108,7 @@ impl RenderNode {
     self.context.style.position.is_out_of_flow()
   }
 
+  /// True if this node's children form an inline formatting context.
   pub fn should_create_inline_layout(&self) -> bool {
     self.force_inline_layout
       || (matches!(
@@ -1104,6 +1124,7 @@ impl RenderNode {
       }))
   }
 
+  /// Builds a render tree from a node under the given parent context.
   pub fn from_node(parent_context: &RenderContext, node: Node) -> Self {
     let matched_styles = match_stylesheets_view(
       &node,

@@ -5,9 +5,11 @@ use crate::style::{
   tw::TailwindPropertyParser, unexpected_token,
 };
 
+/// Placement of a grid item along one axis.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum GridPlacement {
+  /// Auto-placed.
   Auto,
   /// Span count
   Span(GridPlacementSpan),
@@ -28,6 +30,7 @@ impl Default for GridPlacement {
 }
 
 impl GridPlacement {
+  /// Auto placement.
   pub const fn auto() -> Self {
     Self::Auto
   }

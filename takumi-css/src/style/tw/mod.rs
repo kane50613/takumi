@@ -1,5 +1,7 @@
 mod builder;
+/// Utility-prefix to property-parser mapping.
 pub mod map;
+/// Parsers for Tailwind utility-class suffixes.
 pub mod parser;
 
 use builder::TailwindDeclarationBuilder;
@@ -72,6 +74,7 @@ impl TailwindValues {
       .filter_map(move |value| value.resource_url(viewport))
   }
 
+  /// Resolves all utilities for the viewport into a declaration block.
   #[inline(never)]
   pub fn into_declaration_block(self, viewport: Viewport) -> StyleDeclarationBlock {
     let mut builder = TailwindDeclarationBuilder::default();
@@ -466,7 +469,9 @@ pub enum TailwindProperty {
   MarginBottom(LengthDefaultsToZero),
   /// `margin-left` property.
   MarginLeft(LengthDefaultsToZero),
+  /// `margin-inline-start` property.
   MarginInlineStart(LengthDefaultsToZero),
+  /// `margin-inline-end` property.
   MarginInlineEnd(LengthDefaultsToZero),
   /// `padding` property.
   Padding(LengthDefaultsToZero),
@@ -482,7 +487,9 @@ pub enum TailwindProperty {
   PaddingBottom(LengthDefaultsToZero),
   /// `padding-left` property.
   PaddingLeft(LengthDefaultsToZero),
+  /// `padding-inline-start` property.
   PaddingInlineStart(LengthDefaultsToZero),
+  /// `padding-inline-end` property.
   PaddingInlineEnd(LengthDefaultsToZero),
   /// `inset` property.
   Inset(Length),
@@ -542,7 +549,9 @@ pub enum TailwindProperty {
   TextShadow(TextShadow),
   /// `text-shadow` color override.
   TextShadowColor(ColorInput),
+  /// `box-shadow` layer set.
   ShadowList(&'static [BoxShadow]),
+  /// `text-shadow` layer set.
   TextShadowList(&'static [TextShadow]),
   /// `isolation` property.
   Isolation(Isolation),
@@ -568,8 +577,11 @@ pub enum TailwindProperty {
   GradientTo(ColorInput),
   /// `via` property.
   GradientVia(ColorInput),
+  /// Gradient `from` stop position.
   GradientFromPosition(Length),
+  /// Gradient `via` stop position.
   GradientViaPosition(Length),
+  /// Gradient `to` stop position.
   GradientToPosition(Length),
 }
 

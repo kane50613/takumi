@@ -26,36 +26,51 @@ use crate::{
 /// transform, the container it resolves against, and its device-space bounds.
 #[derive(Clone)]
 pub struct NodePaint {
+  /// Child-index path from the root to this node.
   pub path: Vec<usize>,
+  /// Layout id of the node.
   pub node_id: NodeId,
+  /// Accumulated transform applied when painting.
   pub transform: Affine,
+  /// Size of the containing block, per axis.
   pub container_size: Size<Option<f32>>,
+  /// Device-space bounds of the paint output, if any.
   pub paint_bounds: Option<SceneBounds>,
 }
 
 /// Device-space integer bounds of a node or stacking context's paint output.
 #[derive(Clone, Copy)]
 pub struct SceneBounds {
+  /// Left edge, inclusive.
   pub left: usize,
+  /// Top edge, inclusive.
   pub top: usize,
+  /// Right edge, exclusive.
   pub right: usize,
+  /// Bottom edge, exclusive.
   pub bottom: usize,
 }
 
 impl SceneBounds {
+  /// Whether the bounds enclose zero area.
   pub fn is_empty(self) -> bool {
     self.left >= self.right || self.top >= self.bottom
   }
 }
 
+/// What a [`PaintItem`] paints.
 #[derive(Clone)]
 pub enum PaintItemKind {
+  /// A single node's paint inputs.
   Node(NodePaint),
+  /// Index of a nested stacking context.
   Context(usize),
 }
 
+/// A paint entry plus its z-index and source order for stable sorting.
 #[derive(Clone)]
 pub struct PaintItem {
+  /// The node or nested stacking context to paint.
   pub kind: PaintItemKind,
   z_index: i32,
   source_order: usize,
@@ -192,6 +207,7 @@ fn classify_bucket(style: &ComputedStyle, is_flex_or_grid_item: bool) -> (PaintB
   }
 }
 
+/// Flattens the node tree into CSS-ordered stacking contexts for painting.
 pub fn build_stacking_contexts(
   root: &RenderNode,
   layout_results: &LayoutResults,

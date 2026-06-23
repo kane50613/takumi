@@ -2,9 +2,12 @@ use taffy::Size;
 
 use crate::style::{Length, SizingContext};
 
+/// Which axis was left `auto` after resolving `background-size`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AutoBackgroundAxis {
+  /// The width axis is `auto`.
   Width,
+  /// The height axis is `auto`.
   Height,
 }
 
@@ -13,12 +16,16 @@ pub enum AutoBackgroundAxis {
 /// non-percentage SVG `width`/`height`); a `viewBox`-only SVG has `ratio` alone.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct IntrinsicSizing {
+  /// Intrinsic width in pixels, if any.
   pub width: Option<f32>,
+  /// Intrinsic height in pixels, if any.
   pub height: Option<f32>,
+  /// Intrinsic aspect ratio (width / height), if any.
   pub ratio: Option<f32>,
 }
 
 impl IntrinsicSizing {
+  /// Intrinsic sizing from concrete width and height in pixels.
   pub fn from_dimensions(width: f32, height: f32) -> Self {
     Self {
       width: Some(width),
@@ -58,11 +65,16 @@ impl IntrinsicSizing {
   }
 }
 
+/// Device-pixel dimensions of a background layer after sizing.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ResolvedBackgroundSize {
+  /// Resolved width in device pixels.
   pub width: u32,
+  /// Resolved height in device pixels.
   pub height: u32,
+  /// Intrinsic aspect ratio carried through for downstream use.
   pub intrinsic_ratio: Option<f32>,
+  /// Which axis remained `auto`, if any.
   pub auto_axis: Option<AutoBackgroundAxis>,
 }
 
@@ -82,6 +94,7 @@ pub(super) fn fit_ratio_to_area(ratio: f32, area: Size<u32>, cover: bool) -> (u3
   (width.round() as u32, height.round() as u32)
 }
 
+/// Resolves a `background-size` with at least one `auto` axis to pixels (§5.3).
 pub(super) fn resolve_auto_background_size(
   width: Length,
   height: Length,

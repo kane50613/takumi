@@ -10,10 +10,14 @@ use crate::layout::{
   style::{TextTransform, TextWrapMode, WhiteSpaceCollapse},
 };
 
+/// Constraint capping a text block's height.
 #[derive(Clone, Copy, Debug)]
 pub enum MaxHeight {
+  /// Fixed pixel height.
   Absolute(f32),
+  /// Maximum line count.
   Lines(u32),
+  /// Pixel height and line count, whichever is smaller.
   HeightAndLines(f32, u32),
 }
 

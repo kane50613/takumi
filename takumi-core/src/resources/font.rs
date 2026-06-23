@@ -40,21 +40,30 @@ fn pixmap_from_image_buffer(buffer: ImageBuffer) -> Option<Pixmap> {
   Pixmap::from_vec(buffer.into_data(), size)
 }
 
+/// A resolved glyph, either an embedded bitmap or a vector outline.
 #[derive(Clone)]
 pub enum ResolvedGlyph {
+  /// Embedded bitmap glyph.
   Bitmap(ResolvedBitmapGlyph),
+  /// Vector outline glyph.
   Outline(ResolvedOutlineGlyph),
 }
 
+/// A glyph backed by an embedded bitmap.
 #[derive(Clone)]
 pub struct ResolvedBitmapGlyph {
+  /// Source bitmap.
   pub pixmap: Pixmap,
+  /// Horizontal scale from source to placement.
   pub scale_x: f32,
+  /// Vertical scale from source to placement.
   pub scale_y: f32,
+  /// Pixel placement of the glyph.
   pub placement: ResolvedGlyphPlacement,
 }
 
 impl ResolvedBitmapGlyph {
+  /// Write the glyph's alpha channel into `mask`, scaling to the placement size.
   pub fn write_alpha_mask(&self, mask: &mut [u8]) {
     let width = self.placement.width as usize;
     let height = self.placement.height as usize;
@@ -102,42 +111,62 @@ impl ResolvedBitmapGlyph {
   }
 }
 
+/// An outline glyph, either single-color or multi-layer color.
 #[derive(Clone)]
 pub enum ResolvedOutlineGlyph {
+  /// Single-color outline.
   Plain {
+    /// Outline path commands.
     paths: Vec<Command>,
+    /// Synthetic bold amount, if any.
     embolden: Option<f32>,
+    /// Hash identifying this outline for caching.
     cache_signature: u64,
   },
+  /// Multi-layer color outline (COLR).
   Color {
+    /// Combined outline path commands.
     paths: Vec<Command>,
+    /// Per-layer colored outlines.
     layers: Vec<ResolvedColorLayer>,
+    /// Hash identifying this outline for caching.
     cache_signature: u64,
   },
 }
 
+/// One palette-colored layer of a color glyph.
 #[derive(Clone)]
 pub struct ResolvedColorLayer {
+  /// Outline path commands for this layer.
   pub paths: Vec<Command>,
+  /// Index into the font's color palette.
   pub palette_index: u16,
+  /// Layer opacity, 0..=1.
   pub alpha: f32,
 }
 
+/// Pixel placement of a rendered glyph.
 #[derive(Clone, Copy)]
 pub struct ResolvedGlyphPlacement {
+  /// Left offset in pixels.
   pub left: i32,
+  /// Top offset in pixels.
   pub top: i32,
+  /// Width in pixels.
   pub width: u32,
+  /// Height in pixels.
   pub height: u32,
 }
 
 impl ResolvedOutlineGlyph {
+  /// Outline path commands for the glyph.
   pub fn paths(&self) -> &[Command] {
     match self {
       Self::Plain { paths, .. } | Self::Color { paths, .. } => paths,
     }
   }
 
+  /// Hash identifying this resolved outline for caching.
   pub fn cache_signature(&self) -> u64 {
     match self {
       Self::Plain {
@@ -149,6 +178,7 @@ impl ResolvedOutlineGlyph {
     }
   }
 
+  /// Synthetic bold amount, if any.
   pub fn embolden(&self) -> Option<f32> {
     match self {
       Self::Plain { embolden, .. } => *embolden,
@@ -156,6 +186,7 @@ impl ResolvedOutlineGlyph {
     }
   }
 
+  /// Color layers for a color glyph, else `None`.
   pub fn color_layers(&self) -> Option<&[ResolvedColorLayer]> {
     match self {
       Self::Plain { .. } => None,
@@ -722,10 +753,12 @@ impl FontsSnapshot {
 }
 
 impl Fonts {
+  /// Render-local snapshot with no extra fallbacks.
   pub fn snapshot(&self) -> FontsSnapshot {
     self.snapshot_with_fallbacks(None)
   }
 
+  /// Render-local snapshot whose fallback bucket carries the given families.
   pub fn snapshot_with_fallbacks(&self, fallbacks: Option<&[String]>) -> FontsSnapshot {
     let mut cloned = self.inner.clone();
 

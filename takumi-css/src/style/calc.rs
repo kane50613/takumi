@@ -7,6 +7,7 @@ use crate::style::{
   ParseResult, SizingContext, length_from_dimension_unit, unexpected_token,
 };
 
+/// Interns `calc(...)` linear values so `CompactLength` can reference them by id.
 #[derive(Default)]
 pub struct CalcArena {
   linear_values: RefCell<Vec<CalcLinear>>,
@@ -20,6 +21,7 @@ impl CalcArena {
     encode_linear_id(linear_values.len())
   }
 
+  /// Resolves an interned `calc(...)` value against a percentage basis.
   pub fn resolve_calc_value(&self, val: *const (), basis: f32) -> f32 {
     let Some(id) = decode_linear_id(val) else {
       return 0.0;
@@ -61,6 +63,7 @@ impl CalcLinear {
     self.px + self.percent * basis
   }
 
+  /// The `(px, percent)` coefficients.
   pub fn components(self) -> (f32, f32) {
     (self.px, self.percent)
   }
@@ -156,6 +159,7 @@ impl CalcFormula {
 }
 
 impl CalcFormula {
+  /// Collapses the symbolic formula into a `px + percent * basis` linear form.
   pub fn resolve(self, sizing: &SizingContext) -> CalcLinear {
     let viewport_width = sizing.viewport.size.width.unwrap_or_default() as f32;
     let viewport_height = sizing.viewport.size.height.unwrap_or_default() as f32;
@@ -239,6 +243,7 @@ pub(crate) fn parse_calc_sum<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, 
   Ok(value)
 }
 
+/// Parses a `calc(...)` that must reduce to a unitless number.
 pub fn parse_calc_number_expression<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, f32> {
   let location = input.current_source_location();
   let token = input.next()?.clone();

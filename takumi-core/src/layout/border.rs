@@ -11,9 +11,13 @@ use crate::{
 /// Border side identifier used by per-side geometry and rasterization.
 #[derive(Clone, Copy)]
 pub enum BorderSide {
+  /// Top side.
   Top,
+  /// Right side.
   Right,
+  /// Bottom side.
   Bottom,
+  /// Left side.
   Left,
 }
 
@@ -128,10 +132,12 @@ impl BorderProperties {
     }
   }
 
+  /// True if a side with this style and width is rendered.
   pub fn is_side_visible(style: BorderStyle, width: f32) -> bool {
     style.is_rendered() && width > 0.0
   }
 
+  /// True if any side is rendered with nonzero width.
   pub fn has_visible_sides(&self) -> bool {
     Self::is_side_visible(self.style.top, self.width.top)
       || Self::is_side_visible(self.style.right, self.width.right)
@@ -139,6 +145,7 @@ impl BorderProperties {
       || Self::is_side_visible(self.style.left, self.width.left)
   }
 
+  /// Per-side widths with invisible sides zeroed.
   pub fn visible_side_widths(&self) -> Rect<f32> {
     Rect {
       top: if Self::is_side_visible(self.style.top, self.width.top) {
@@ -164,6 +171,7 @@ impl BorderProperties {
     }
   }
 
+  /// The shared color if all visible sides match, else `None`.
   pub fn has_uniform_visible_color(&self) -> Option<Color> {
     let mut color = None;
 
@@ -201,6 +209,7 @@ impl BorderProperties {
     color
   }
 
+  /// True if all visible sides use the given style.
   pub fn visible_sides_match(&self, style: BorderStyle) -> bool {
     (!Self::is_side_visible(self.style.top, self.width.top) || self.style.top == style)
       && (!Self::is_side_visible(self.style.right, self.width.right) || self.style.right == style)
@@ -209,6 +218,7 @@ impl BorderProperties {
       && (!Self::is_side_visible(self.style.left, self.width.left) || self.style.left == style)
   }
 
+  /// True if every side has equal nonzero width and the given style.
   pub fn is_uniform_all_sides_style(&self, style: BorderStyle) -> bool {
     let has_uniform_width = self.width.top > 0.0
       && (self.width.top - self.width.right).abs() <= f32::EPSILON
@@ -222,10 +232,12 @@ impl BorderProperties {
       && self.style.left == style
   }
 
+  /// Appends the outer and inner ring contours for the border at the origin.
   pub fn append_border_ring_commands(&self, paths: &mut Vec<Command>, border_box: Size<f32>) {
     self.append_border_ring_commands_at(paths, border_box, Point::ZERO);
   }
 
+  /// Appends the outer and inner ring contours for the border at the given offset.
   pub fn append_border_ring_commands_at(
     &self,
     paths: &mut Vec<Command>,
@@ -249,6 +261,7 @@ impl BorderProperties {
     border.append_mask_commands(paths, inner_size, inner_offset);
   }
 
+  /// Appends a trapezoid polygon covering one border side at the given offset.
   pub fn append_side_polygon_commands_at(
     &self,
     side: BorderSide,
@@ -295,6 +308,7 @@ impl BorderProperties {
     path.close();
   }
 
+  /// Appends a clip polygon for one side that follows the rounded inner contour.
   pub fn append_side_clip_polygon_commands_at(
     &self,
     side: BorderSide,
@@ -688,6 +702,7 @@ impl BorderProperties {
     path.close();
   }
 
+  /// Perimeter of the border-box outline, including rounded corner arcs.
   pub fn approximate_rounded_rect_perimeter(&self, border_box: Size<f32>) -> f32 {
     if border_box.width <= 0.0 || border_box.height <= 0.0 {
       return 0.0;
@@ -753,6 +768,7 @@ impl BorderProperties {
   }
 }
 
+/// Top-left corner of a rect as a point.
 pub fn rect_offset(rect: Rect<f32>) -> Point<f32> {
   Point {
     x: rect.left,
@@ -793,6 +809,7 @@ pub(crate) fn approximate_quarter_ellipse_arc_length(radius_x: f32, radius_y: f3
   circumference / 4.0
 }
 
+/// Shrinks a size by the given inset on each edge, clamped to zero.
 pub fn inset_size(size: Size<f32>, inset: Rect<f32>) -> Size<f32> {
   Size {
     width: (size.width - inset.left - inset.right).max(0.0),
@@ -800,6 +817,7 @@ pub fn inset_size(size: Size<f32>, inset: Rect<f32>) -> Size<f32> {
   }
 }
 
+/// Per-side `lhs - rhs`, clamped to zero.
 pub fn subtract_rect(lhs: Rect<f32>, rhs: Rect<f32>) -> Rect<f32> {
   Rect {
     top: (lhs.top - rhs.top).max(0.0),
@@ -900,6 +918,7 @@ fn select_best_dash_gap(length: f32, dash: f32, gap: f32, closed: bool) -> f32 {
   }
 }
 
+/// Lightens or darkens a side color for `inset`/`outset` 3D border shading.
 pub fn shade_3d_border_color(color: Color, side: BorderSide, style: BorderStyle) -> Color {
   let lighten = match style {
     BorderStyle::Outset => matches!(side, BorderSide::Top | BorderSide::Left),

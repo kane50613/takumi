@@ -15,15 +15,19 @@ use crate::style::{
 #[derive(Debug, Clone, PartialEq)]
 pub struct FontFamily(Box<[FontFamilyToken]>);
 
+/// One entry in a font-family fallback list.
 #[derive(Debug, Clone, PartialEq)]
 pub enum FontFamilyToken {
+  /// A named family.
   Owned(String),
+  /// A generic family such as `serif`.
   Generic(GenericFamily),
 }
 
 impl MakeComputed for FontFamily {}
 
 impl FontFamily {
+  /// The families as fontique query families, in declaration order.
   pub fn query_families(&self) -> impl Iterator<Item = QueryFamily<'_>> + Clone {
     self.0.iter().map(|token| match token {
       FontFamilyToken::Owned(name) => QueryFamily::Named(name.as_str()),

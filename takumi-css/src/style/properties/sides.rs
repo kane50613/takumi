@@ -10,12 +10,16 @@ use crate::style::{
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Sides<T: Copy>(pub [T; 4]);
 
+/// One of the two box axes.
 pub enum Axis {
+  /// The horizontal (left/right) axis.
   Horizontal,
+  /// The vertical (top/bottom) axis.
   Vertical,
 }
 
 impl<T: Copy> Sides<T> {
+  /// Maps each side to a new value, passing its axis.
   pub fn map_axis<R: Copy, F: Fn(T, Axis) -> R>(&self, func: F) -> Sides<R> {
     let [top, right, bottom, left] = self.0;
 

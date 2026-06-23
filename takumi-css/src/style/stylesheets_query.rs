@@ -44,18 +44,22 @@ impl ComputedStyle {
     }
   }
 
+  /// Whether the element paints nothing (zero opacity, `display:none`, hidden).
   pub fn is_invisible(&self) -> bool {
     self.opacity.0 == 0.0 || self.display == Display::None || self.visibility == Visibility::Hidden
   }
 
+  /// Whether `z-index` takes effect on this element.
   pub fn is_z_index_applicable(&self, is_flex_or_grid_item: bool) -> bool {
     !matches!(self.z_index, ZIndex::Auto) && (self.position.is_positioned() || is_flex_or_grid_item)
   }
 
+  /// Whether the element paints in the positioned/z-index bucket.
   pub fn participates_in_positioned_paint_bucket(&self, is_flex_or_grid_item: bool) -> bool {
     self.position.is_positioned() || self.is_z_index_applicable(is_flex_or_grid_item)
   }
 
+  /// Whether the element establishes a new stacking context.
   pub fn creates_stacking_context(
     &self,
     border_box: Size<f32>,
@@ -68,6 +72,7 @@ impl ComputedStyle {
       || self.needs_offscreen_compositing()
   }
 
+  /// Whether the element must render to an offscreen layer before compositing.
   pub fn needs_offscreen_compositing(&self) -> bool {
     self.isolation == Isolation::Isolate
       || *self.opacity < 1.0
@@ -108,18 +113,22 @@ impl ComputedStyle {
     local
   }
 
+  /// Whether the resolved local transform differs from identity.
   pub fn has_non_identity_transform(&self, border_box: Size<f32>, sizing: &SizingContext) -> bool {
     !self.local_transform(border_box, sizing).is_identity()
   }
 
+  /// The `(overflow-x, overflow-y)` pair.
   pub fn resolve_overflows(&self) -> SpacePair<Overflow> {
     SpacePair::from_pair(self.overflow_x, self.overflow_y)
   }
 
+  /// Whether overflowing content is clipped.
   pub fn clips_overflow(&self) -> bool {
     self.resolve_overflows().should_clip_content()
   }
 
+  /// The string used to mark truncated text.
   pub fn ellipsis_char(&self) -> &str {
     const ELLIPSIS_CHAR: &str = "…";
 
@@ -142,6 +151,7 @@ impl ComputedStyle {
     self.text_wrap_mode == TextWrapMode::NoWrap && self.text_overflow == TextOverflow::Ellipsis
   }
 
+  /// The wrap mode used for layout, forcing wrap for single-line ellipsis.
   pub fn resolved_text_wrap_mode(&self) -> TextWrapMode {
     if self.forces_single_line_ellipsis() {
       TextWrapMode::Wrap
@@ -179,6 +189,7 @@ impl ComputedStyle {
   }
 
   #[inline]
+  /// The decoration thickness resolved to pixels or `from-font`.
   pub fn resolved_text_decoration_thickness(
     &self,
     sizing: &SizingContext,
@@ -193,6 +204,7 @@ impl ComputedStyle {
     }
   }
 
+  /// Converts the computed style into a `taffy::Style` for layout.
   pub fn to_taffy_style(&self, sizing: &SizingContext) -> taffy::Style {
     // Convert grid templates and associated line names
     let (grid_template_columns, grid_template_column_names) =

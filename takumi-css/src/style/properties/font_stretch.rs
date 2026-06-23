@@ -72,10 +72,12 @@ impl TailwindPropertyParser for FontStretch {
 }
 
 impl FontStretch {
+  /// The stretch as a fraction where `1.0` is normal.
   pub fn percentage(self) -> f32 {
     self.0.percentage() / 100.0
   }
 
+  /// Builds from a fraction where `1.0` is normal.
   pub fn from_percentage(value: f32) -> Self {
     Self(FontWidth::from_percentage(value.max(0.0) * 100.0))
   }

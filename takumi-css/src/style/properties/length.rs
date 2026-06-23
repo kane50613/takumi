@@ -411,6 +411,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
     }
   }
 
+  /// Resolves to a taffy `CompactLength`, keeping percent and calc unresolved.
   pub fn to_compact_length(self, sizing: &SizingContext) -> CompactLength {
     match self {
       Length::Auto => CompactLength::auto(),
@@ -447,6 +448,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
     }
   }
 
+  /// Resolves to a taffy `LengthPercentage`, treating auto as zero.
   pub fn resolve_to_length_percentage(self, sizing: &SizingContext) -> LengthPercentage {
     let compact_length = self.to_compact_length(sizing);
 
@@ -457,6 +459,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
     unsafe { LengthPercentage::from_raw(compact_length) }
   }
 
+  /// Resolves to device pixels, applying the device-pixel ratio to absolute units.
   pub fn to_px(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
     let value = self.to_px_pre_dpr(sizing, percentage_full_px);
 
@@ -477,10 +480,12 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
     clamp_px_for_integer_cast(value)
   }
 
+  /// Resolves to a taffy `LengthPercentageAuto`.
   pub fn resolve_to_length_percentage_auto(self, sizing: &SizingContext) -> LengthPercentageAuto {
     unsafe { LengthPercentageAuto::from_raw(self.to_compact_length(sizing)) }
   }
 
+  /// Resolves to a taffy `Dimension`.
   pub fn resolve_to_dimension(self, sizing: &SizingContext) -> Dimension {
     self.resolve_to_length_percentage_auto(sizing).into()
   }

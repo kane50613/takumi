@@ -57,21 +57,27 @@ pub(crate) struct NodeMetadata {
 #[serde(rename_all = "camelCase")]
 /// Variant-specific text node data.
 pub struct TextData {
+  /// The text content.
   pub text: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
+/// An image source as received from input: URL, raw bytes, or already loaded.
 pub enum ImageSourceInput {
+  /// Source URL or path.
   Url(Arc<str>),
   // `ByteBuf` (not `Vec<u8>`) so an FFI `Uint8Array`/`ArrayBuffer`, surfaced as a
   // bytes value rather than a number array, deserializes here.
+  /// Raw image bytes.
   Buffer(ByteBuf),
+  /// Pre-resolved image source.
   #[serde(skip_deserializing)]
   Loaded(ImageSource),
 }
 
 impl ImageSourceInput {
+  /// Resolve this input to image bytes using the render context.
   pub fn resolve(&self, context: &RenderContext) -> ImageResult {
     match self {
       Self::Url(src) => resolve_image(src, context),
@@ -85,8 +91,11 @@ impl ImageSourceInput {
 #[serde(rename_all = "camelCase")]
 /// Variant-specific image node data.
 pub struct ImageData {
+  /// The image source.
   pub src: ImageSourceInput,
+  /// Override width in pixels.
   pub width: Option<f32>,
+  /// Override height in pixels.
   pub height: Option<f32>,
 }
 
@@ -258,6 +267,7 @@ impl From<(Arc<str>, Option<f32>, Option<f32>)> for ImageData {
 pub struct Node {
   #[serde(flatten)]
   pub(crate) metadata: NodeMetadata,
+  /// The variant-specific content of this node.
   #[serde(flatten)]
   pub kind: NodeKind,
 }

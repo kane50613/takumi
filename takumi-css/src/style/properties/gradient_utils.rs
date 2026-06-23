@@ -214,6 +214,7 @@ pub fn interpolate_rgba(c1: Color, c2: Color, t: f32) -> Color {
   Color([demul.red(), demul.green(), demul.blue(), demul.alpha()])
 }
 
+/// Interpolates two colors in the given color space and hue direction.
 pub fn interpolate_with_color_space(
   c1: Color,
   c2: Color,
@@ -283,14 +284,22 @@ pub fn interpolate_rgba_premultiplied(
   .unwrap_or(PremultipliedColorU8::TRANSPARENT)
 }
 
+/// A precomputed gradient that overlays its samples onto a destination buffer.
 pub trait GradientOverlayTile {
+  /// Per-row state carried across a horizontal scan.
   type RowState;
 
+  /// Tile width in pixels.
   fn width(&self) -> u32;
+  /// Tile height in pixels.
   fn height(&self) -> u32;
+  /// Number of LUT entries.
   fn lut_len(&self) -> usize;
+  /// LUT entry at `lut_idx`.
   fn sample_at(&self, lut_idx: usize) -> PremultipliedColorU8;
+  /// Color at pixel `(x, y)`.
   fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8;
+  /// Initializes row state at the given row start.
   fn begin_row(&self, src_x_start: u32, src_y: u32, lut_len: usize) -> Self::RowState;
   /// Returns an index in `0..lut_len` where `lut_len` is the value passed to `begin_row`.
   fn next_lut_index(&self, row_state: &mut Self::RowState) -> usize;
@@ -300,6 +309,7 @@ pub trait GradientOverlayTile {
   }
 }
 
+/// Overlays a gradient tile onto `data` with source-over blending, no clip.
 pub fn overlay_gradient_tile_fast_normal_unconstrained<T: GradientOverlayTile>(
   data: &mut [u8],
   bottom_width: u32,
@@ -573,6 +583,7 @@ pub fn adaptive_lut_size(axis_length: f32, resolved_stops: &[ResolvedGradientSto
   )
 }
 
+/// LUT size that covers `visible_samples` and the tightest stop interval.
 pub fn adaptive_lut_size_with_visible_samples(
   visible_samples: usize,
   axis_length: f32,
@@ -607,6 +618,7 @@ pub fn adaptive_lut_size_with_visible_samples(
 
 const UNDEFINED_POSITION: f32 = -1.0;
 
+/// Resolves stop positions to pixels along the axis, filling unspecified ones.
 pub fn resolve_stops_along_axis(
   stops: &[GradientStop],
   axis_size_px: f32,

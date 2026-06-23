@@ -126,6 +126,7 @@ impl Animatable for BackgroundSize {
 }
 
 impl BackgroundSize {
+  /// Resolves this value against the positioning area and intrinsic sizing.
   pub fn resolve(
     self,
     area: Size<u32>,

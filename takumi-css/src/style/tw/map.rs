@@ -8,13 +8,19 @@ use crate::style::{
 /// Generates the [`PropertyParser`] enum and its `parse()` dispatch from `(Variant, ArgType, ParseType)` triples.
 macro_rules! property_parsers {
   ($($variant:ident($arg:ty) => $parse:ty),+ $(,)?) => {
+    /// Maps a parsed argument type to a [`TailwindProperty`] constructor.
     #[derive(Clone, Copy)]
     pub enum PropertyParser {
-      $($variant(fn($arg) -> TailwindProperty),)+
+      $(
+        #[doc = concat!("Parser producing `", stringify!($variant), "` properties.")]
+        $variant(fn($arg) -> TailwindProperty),
+      )+
+      /// Parser for gradient stop positions.
       GradientPosition(fn(Length) -> TailwindProperty),
     }
 
     impl PropertyParser {
+      /// Parses a utility suffix into a property via the wrapped constructor.
       pub fn parse(&self, suffix: &str) -> Option<TailwindProperty> {
         match self {
           $(Self::$variant(f) => <$parse>::parse_tw_with_arbitrary(suffix).map(f),)+
@@ -77,6 +83,7 @@ property_parsers! {
   Animation(Animations) => Animations,
 }
 
+/// Maps a utility prefix to the parsers tried against its suffix.
 pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
   "object" => &[
     PropertyParser::ObjectFit(TailwindProperty::ObjectFit),
@@ -309,6 +316,7 @@ const TEXT_SHADOW_SM: [TextShadow; 3] = [ts(1.0, 0.0, 19), ts(1.0, 1.0, 19), ts(
 const TEXT_SHADOW_MD: [TextShadow; 3] = [ts(1.0, 1.0, 26), ts(1.0, 2.0, 26), ts(2.0, 4.0, 26)];
 const TEXT_SHADOW_LG: [TextShadow; 3] = [ts(1.0, 2.0, 26), ts(3.0, 2.0, 26), ts(4.0, 8.0, 26)];
 
+/// Maps a complete utility token to its fixed property.
 pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
   "border" => TailwindProperty::BorderDefault,
   "outline" => TailwindProperty::OutlineDefault,
