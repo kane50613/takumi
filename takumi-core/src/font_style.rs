@@ -84,22 +84,31 @@ impl RenderContext {
 #[derive(Clone)]
 #[non_exhaustive]
 pub struct SizedFontStyle<'s> {
+  /// Computed style this is derived from.
   pub parent: &'s ComputedStyle,
   pub(crate) font_family: ExpandedFontFamily,
   pub(crate) line_height: parley::LineHeight,
   pub(crate) line_height_scales_with_text_fit: bool,
+  /// Text stroke width in pixels.
   pub stroke_width: f32,
+  /// Outline width in pixels.
   pub outline_width: f32,
+  /// Gap between outline and border edge, in pixels.
   pub outline_offset: f32,
   pub(crate) letter_spacing: f32,
   pub(crate) word_spacing: f32,
+  /// Resolved text shadows.
   pub text_shadow: SmallVec<[SizedShadow; 4]>,
   pub(crate) color: Color,
+  /// Outline color.
   pub outline_color: Color,
+  /// Outline line style.
   pub outline_style: BorderStyle,
+  /// Text stroke color.
   pub text_stroke_color: Color,
   pub(crate) text_decoration_color: Color,
   pub(crate) text_decoration_thickness: SizedTextDecorationThickness,
+  /// Resolved sizing context (font size, etc.).
   pub sizing: SizingContext,
 }
 
@@ -186,6 +195,7 @@ fn resolved_text_shadows(
 }
 
 impl<'s> SizedFontStyle<'s> {
+  /// Resolves a sized font style from a computed style and render context.
   pub fn from_style(style: &'s ComputedStyle, context: &RenderContext) -> Self {
     let line_height = style.line_height.into_parley(&context.sizing);
 

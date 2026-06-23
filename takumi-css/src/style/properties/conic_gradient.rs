@@ -72,6 +72,7 @@ pub struct ConicGradientTile {
   pub color_lut: Vec<PremultipliedColorU8>,
 }
 
+/// Per-row sampling state for incremental angle stepping.
 #[derive(Debug, Clone, Copy)]
 pub struct ConicGradientRowState {
   dx: f32,
@@ -125,6 +126,7 @@ impl ConicGradientTile {
     (sample as usize).min(max_index)
   }
 
+  /// Maps an adjusted angle in radians to a LUT index for a LUT of `lut_len`.
   #[inline(always)]
   pub fn lut_index_for_adjusted_angle_with_len(
     &self,

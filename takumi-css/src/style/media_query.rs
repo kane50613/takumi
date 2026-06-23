@@ -42,6 +42,7 @@ struct MediaQuery {
   negated: bool,
 }
 
+/// A comma-separated list of media queries, matching if any query matches.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct MediaQueryList {
   queries: Vec<MediaQuery>,
@@ -104,6 +105,7 @@ impl MediaQueryList {
     })
   }
 
+  /// Whether any query matches the viewport; empty lists always match.
   pub fn matches(&self, viewport: Viewport) -> bool {
     if self.queries.is_empty() {
       return true;

@@ -109,6 +109,7 @@ impl<'i> FromCss<'i> for VerticalAlign {
 }
 
 impl VerticalAlign {
+  /// Resolves the keyword or length into a `ResolvedVerticalAlign`.
   pub fn resolve(
     self,
     sizing: &SizingContext,
@@ -169,6 +170,7 @@ impl MakeComputed for VerticalAlign {
 }
 
 impl ResolvedVerticalAlign {
+  /// Writes the aligned `y` for a box on a line given its metrics.
   pub fn apply(
     self,
     y: &mut f32,

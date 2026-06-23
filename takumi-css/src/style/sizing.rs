@@ -40,10 +40,12 @@ impl SizingContext {
       .unwrap_or(self.viewport.font_size * self.viewport.device_pixel_ratio)
   }
 
+  /// Device-pixel basis for the `rlh` unit.
   pub fn root_line_height_basis(&self) -> f32 {
     self.root_line_height.unwrap_or(self.line_height)
   }
 
+  /// Query container width in device pixels, falling back to the viewport.
   pub fn query_container_width(&self) -> f32 {
     self
       .container_size
@@ -51,6 +53,7 @@ impl SizingContext {
       .unwrap_or(self.viewport.size.width.unwrap_or_default() as f32)
   }
 
+  /// Query container height in device pixels, falling back to the viewport.
   pub fn query_container_height(&self) -> f32 {
     self
       .container_size

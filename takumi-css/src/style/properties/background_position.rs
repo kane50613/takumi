@@ -132,6 +132,7 @@ impl<const DEFAULT_TOP_LEFT: bool> Animatable for BackgroundPosition<DEFAULT_TOP
 }
 
 impl<const DEFAULT_TOP_LEFT: bool> BackgroundPosition<DEFAULT_TOP_LEFT> {
+  /// Resolves the position to a pixel point within the border box.
   pub fn to_point(self, sizing: &SizingContext, border_box: Size<f32>) -> Point<f32> {
     Point {
       x: Length::from(self.0.x).to_px(sizing, border_box.width),

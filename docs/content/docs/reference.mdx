@@ -6,9 +6,9 @@ icon: BookMarked
 
 ## Node Types
 
-### Container
+Every node is a `container`, `text`, or `image`. They share a common set of fields and add a few of their own.
 
-A container node is used to group other nodes and arrange them in a layout.
+All nodes accept these fields:
 
 <TypeTable
   type={{
@@ -24,10 +24,6 @@ A container node is used to group other nodes and arrange them in a layout.
       type: "string",
       description: "Element id used for selector matching",
     },
-    children: {
-      type: "Node[]",
-      description: "Children nodes",
-    },
     preset: {
       type: "Style",
       description: "Default HTML element styles (lowest priority)",
@@ -41,68 +37,43 @@ A container node is used to group other nodes and arrange them in a layout.
     tw: {
       type: "string",
       description: "Tailwind classes (medium priority, overrides preset)",
+    },
+  }}
+/>
+
+### Container
+
+Groups other nodes and arranges them in a layout. Adds:
+
+<TypeTable
+  type={{
+    children: {
+      type: "Node[]",
+      description: "Children nodes",
     },
   }}
 />
 
 ### Text
 
-A text node displays text.
+Displays text. Adds:
 
 <TypeTable
   type={{
-    tagName: {
-      type: "string",
-      description: "Element tag name used for HTML preset and selector matching",
-    },
-    className: {
-      type: "string",
-      description: "Element class name used for selector matching",
-    },
-    id: {
-      type: "string",
-      description: "Element id used for selector matching",
-    },
     text: {
       type: "string",
       required: true,
       description: "Text content to be displayed",
-    },
-    preset: {
-      type: "Style",
-      description: "Default HTML element styles (lowest priority)",
-      typeDescriptionLink: "#style-properties",
-    },
-    style: {
-      type: "Style",
-      description: "Inline styling properties (highest priority)",
-      typeDescriptionLink: "#style-properties",
-    },
-    tw: {
-      type: "string",
-      description: "Tailwind classes (medium priority, overrides preset)",
     },
   }}
 />
 
 ### Image
 
-An image node displays rasterized or svg images.
+Displays a rasterized image or SVG. Adds:
 
 <TypeTable
   type={{
-    tagName: {
-      type: "string",
-      description: "Element tag name used for HTML preset and selector matching",
-    },
-    className: {
-      type: "string",
-      description: "Element class name used for selector matching",
-    },
-    id: {
-      type: "string",
-      description: "Element id used for selector matching",
-    },
     src: {
       type: "string",
       required: true,
@@ -116,554 +87,158 @@ An image node displays rasterized or svg images.
       type: "number",
       description: "Overwrite the intrinsic height of the image",
     },
-    preset: {
-      type: "Style",
-      description: "Default HTML element styles (lowest priority)",
-      typeDescriptionLink: "#style-properties",
-    },
-    style: {
-      type: "Style",
-      description: "Inline styling properties (highest priority)",
-      typeDescriptionLink: "#style-properties",
-    },
-    tw: {
-      type: "string",
-      description: "Tailwind classes (medium priority, overrides preset)",
-    },
   }}
 />
 
 ## Style Properties
 
-<table>
-  <thead>
-    <tr>
-      <th>Property</th>
-      <th>Property Expanded</th>
-      <th>Supported Values</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td colSpan={2}>`display`</td>
-      <td>`none`, `flex`, `inline-flex`, `grid`, `inline-grid`, `block`, `inline-block`, `inline`</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`position`</td>
-      <td>`relative`, `absolute`, `static`, `fixed`</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`direction`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`float`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`clear`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`zIndex`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`width`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`height`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`maxWidth`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`maxHeight`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`minWidth`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`minHeight`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`aspectRatio`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td rowSpan={8}>`animation`</td>
-      <td>`animationName`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`animationDuration`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`animationDelay`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`animationTimingFunction`</td>
-      <td>`linear`, `ease`, `ease-in`, `ease-out`, `ease-in-out`, `step-start`, `step-end`, `steps()`, `cubic-bezier()`</td>
-    </tr>
-    <tr>
-      <td>`animationIterationCount`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`animationDirection`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`animationFillMode`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`animationPlayState`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`padding`</td>
-      <td>`paddingTop`, `paddingRight`, `paddingBottom`, `paddingLeft`, `paddingInline`, `paddingBlock`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`margin`</td>
-      <td>`marginTop`, `marginRight`, `marginBottom`, `marginLeft`, `marginInline`, `marginBlock`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`inset`</td>
-      <td>`top`, `right`, `bottom`, `left`, `insetInline`, `insetBlock`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td rowSpan={3}>`border`</td>
-      <td>`borderWidth` (`borderTopWidth`, `borderRightWidth`, `borderBottomWidth`, `borderLeftWidth`, `borderInlineWidth`, `borderBlockWidth`)</td>
-      <td>`thin`, `medium`, `thick`, `<length>`</td>
-    </tr>
-    <tr>
-      <td>`borderStyle`</td>
-      <td>`solid`, `none`</td>
-    </tr>
-    <tr>
-      <td>`borderColor`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`borderRadius`</td>
-      <td>`borderTopLeftRadius`, `borderTopRightRadius`, `borderBottomRightRadius`, `borderBottomLeftRadius`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td rowSpan={4}>`outline`</td>
-      <td>`outlineWidth`</td>
-      <td>`thin`, `medium`, `thick`, `<length>`</td>
-    </tr>
-    <tr>
-      <td>`outlineStyle`</td>
-      <td>`solid`, `none`</td>
-    </tr>
-    <tr>
-      <td>`outlineColor`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`outlineOffset`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td rowSpan={3}>`flex`</td>
-      <td>`flexBasis`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`flexGrow`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`flexShrink`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`order`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td rowSpan={13}>Flexbox</td>
-      <td>`flexDirection`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`flexFlow`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`justifyContent`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`justifySelf`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`alignContent`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`placeContent`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`justifyItems`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`alignItems`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`placeItems`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`alignSelf`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`placeSelf`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`flexWrap`</td>
-      <td>`nowrap`, `wrap`, `wrap-reverse`</td>
-    </tr>
-    <tr>
-      <td>`gap` (`columnGap`, `rowGap`)</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`objectFit`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`objectPosition`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`overflow`</td>
-      <td>`overflowX`, `overflowY`</td>
-      <td>`visible`, `clip`, `hidden`</td>
-    </tr>
-    <tr>
-      <td rowSpan={7}>`background`</td>
-      <td>`backgroundImage`</td>
-      <td>`linear-gradient()`, `radial-gradient()`, `conic-gradient()`, `repeating-linear-gradient()`, `repeating-radial-gradient()`, `repeating-conic-gradient()`, `url()`</td>
-    </tr>
-    <tr>
-      <td>`backgroundPosition`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`backgroundSize`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`backgroundRepeat`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`backgroundColor`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`backgroundClip`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`backgroundBlendMode`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`boxShadow`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td rowSpan={2}>Clip</td>
-      <td>`clipPath`</td>
-      <td>`<basic-shape>`</td>
-    </tr>
-    <tr>
-      <td>`clipRule`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td rowSpan={4}>`mask`</td>
-      <td>`maskImage`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`maskSize`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`maskPosition`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`maskRepeat`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td rowSpan={3}>`transform`</td>
-      <td>`translate` (`translateX`, `translateY`)</td>
-      <td rowSpan={3}>Only 2D is supported</td>
-    </tr>
-    <tr>
-      <td>`rotate`</td>
-    </tr>
-    <tr>
-      <td>`scale` (`scaleX`, `scaleY`)</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`transformOrigin`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td rowSpan={9}>Grid</td>
-      <td>`gridAutoColumns`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`gridAutoRows`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`gridAutoFlow`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`gridColumn` (`gridColumnStart`, `gridColumnEnd`)</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`gridRow` (`gridRowStart`, `gridRowEnd`)</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`gridArea` (`gridRowStart`, `gridColumnStart`, `gridRowEnd`, `gridColumnEnd`)</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`gridTemplateColumns`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`gridTemplateRows`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`gridTemplateAreas`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td rowSpan={29}>Typography</td>
-      <td>`textOverflow`</td>
-      <td>`ellipsis`, `clip`, custom character</td>
-    </tr>
-    <tr>
-      <td>`textTransform`</td>
-      <td>`none`, `uppercase`, `lowercase`, `capitalize`</td>
-    </tr>
-    <tr>
-      <td>`fontStyle`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`color`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`textShadow`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`fontSize`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`fontFamily`</td>
-      <td>Font fallback supported</td>
-    </tr>
-    <tr>
-      <td>`lineHeight`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`verticalAlign`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`fontWeight`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`fontStretch`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`fontVariationSettings`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`fontFeatureSettings`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`fontSynthesis`</td>
-      <td>`none`, `weight`, `style`</td>
-    </tr>
-    <tr>
-      <td>`fontSynthesisWeight`</td>
-      <td>`auto`, `none`</td>
-    </tr>
-    <tr>
-      <td>`fontSynthesisStyle`</td>
-      <td>`auto`, `none`</td>
-    </tr>
-    <tr>
-      <td>`lineClamp`</td>
-      <td>`none`, `<integer>`, `<integer> <block-ellipsis>`</td>
-    </tr>
-    <tr>
-      <td>`maxLines`</td>
-      <td>`none`, `<integer>`</td>
-    </tr>
-    <tr>
-      <td>`blockEllipsis`</td>
-      <td>`none`, `auto`, `<string>`</td>
-    </tr>
-    <tr>
-      <td>`continue`</td>
-      <td>`normal`, `collapse`</td>
-    </tr>
-    <tr>
-      <td>`textAlign`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`letterSpacing`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`wordSpacing`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`textIndent`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`overflowWrap`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`wordBreak`</td>
-      <td>`normal`, `break-all`, `keep-all`, `break-word`</td>
-    </tr>
-    <tr>
-      <td>`whiteSpace`</td>
-      <td>`normal`, `pre`, `pre-wrap`, `pre-line`, `<text-wrap-mode> <white-space-collapse>`</td>
-    </tr>
-    <tr>
-      <td>`whiteSpaceCollapse`</td>
-      <td>`preserve`, `collapse`, `preserve-spaces`, `preserve-breaks`</td>
-    </tr>
-    <tr>
-      <td>`textFit`</td>
-      <td>[Supported](https://drafts.csswg.org/css-text-4/#text-fit-property)</td>
-    </tr>
-    <tr>
-      <td rowSpan={2}>`textWrap`</td>
-      <td>`textWrapMode`</td>
-      <td>`wrap`, `nowrap`</td>
-    </tr>
-    <tr>
-      <td>`textWrapStyle`</td>
-      <td>`auto`, `balance`, `pretty`</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`boxSizing`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`opacity`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`imageRendering`</td>
-      <td>`auto`, `smooth`, `pixelated`</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`filter`</td>
-      <td>`<filter-function>`</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`backdropFilter`</td>
-      <td>`<filter-function>`</td>
-    </tr>
-    <tr>
-      <td>`WebkitTextStroke`</td>
-      <td>`WebkitTextStrokeWidth`, `WebkitTextStrokeColor`, `WebkitTextFillColor`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`strokeLinejoin`</td>
-      <td>`miter`, `round`, `bevel`</td>
-    </tr>
-    <tr>
-      <td rowSpan={4}>`textDecoration`</td>
-      <td>`textDecorationLine`</td>
-      <td>`underline`, `line-through`, `overline`</td>
-    </tr>
-    <tr>
-      <td>`textDecorationStyle`</td>
-      <td>`solid`</td>
-    </tr>
-    <tr>
-      <td>`textDecorationColor`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td>`textDecorationThickness`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`textDecorationSkipInk`</td>
-      <td>`auto`, `none`</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`isolation`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`mixBlendMode`</td>
-      <td>Supported</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`visibility`</td>
-      <td>`visible`, `hidden`</td>
-    </tr>
-    <tr>
-      <td colSpan={2}>`content`</td>
-      <td>Supported</td>
-    </tr>
-  </tbody>
-</table>
+Properties use their camelCase names. Longhands are listed in parentheses. `Supported` means the property follows its CSS spec.
+
+### Layout & display
+
+| Property                              | Values                                                                                  |
+| :------------------------------------ | :-------------------------------------------------------------------------------------- |
+| `display`                             | `none`, `flex`, `inline-flex`, `grid`, `inline-grid`, `block`, `inline-block`, `inline` |
+| `position`                            | `relative`, `absolute`, `static`, `fixed`                                               |
+| `direction`                           | Supported                                                                               |
+| `float`                               | Supported                                                                               |
+| `clear`                               | Supported                                                                               |
+| `zIndex`                              | Supported                                                                               |
+| `order`                               | Supported                                                                               |
+| `overflow` (`overflowX`, `overflowY`) | `visible`, `clip`, `hidden`                                                             |
+| `objectFit`                           | Supported                                                                               |
+| `objectPosition`                      | Supported                                                                               |
+| `boxSizing`                           | Supported                                                                               |
+| `visibility`                          | `visible`, `hidden`                                                                     |
+| `content`                             | Supported                                                                               |
+
+### Sizing
+
+| Property                 | Values    |
+| :----------------------- | :-------- |
+| `width`, `height`        | Supported |
+| `minWidth`, `maxWidth`   | Supported |
+| `minHeight`, `maxHeight` | Supported |
+| `aspectRatio`            | Supported |
+
+### Spacing
+
+| Property                                                                                                  | Values    |
+| :-------------------------------------------------------------------------------------------------------- | :-------- |
+| `padding` (`paddingTop`, `paddingRight`, `paddingBottom`, `paddingLeft`, `paddingInline`, `paddingBlock`) | Supported |
+| `margin` (`marginTop`, `marginRight`, `marginBottom`, `marginLeft`, `marginInline`, `marginBlock`)        | Supported |
+| `inset` (`top`, `right`, `bottom`, `left`, `insetInline`, `insetBlock`)                                   | Supported |
+| `gap` (`columnGap`, `rowGap`)                                                                             | Supported |
+
+### Border & outline
+
+| Property                                                                                                                              | Values                                |
+| :------------------------------------------------------------------------------------------------------------------------------------ | :------------------------------------ |
+| `borderWidth` (`borderTopWidth`, `borderRightWidth`, `borderBottomWidth`, `borderLeftWidth`, `borderInlineWidth`, `borderBlockWidth`) | `thin`, `medium`, `thick`, `<length>` |
+| `borderStyle`                                                                                                                         | `solid`, `none`                       |
+| `borderColor`                                                                                                                         | Supported                             |
+| `borderRadius` (`borderTopLeftRadius`, `borderTopRightRadius`, `borderBottomRightRadius`, `borderBottomLeftRadius`)                   | Supported                             |
+| `outlineWidth`                                                                                                                        | `thin`, `medium`, `thick`, `<length>` |
+| `outlineStyle`                                                                                                                        | `solid`, `none`                       |
+| `outlineColor`                                                                                                                        | Supported                             |
+| `outlineOffset`                                                                                                                       | Supported                             |
+
+### Flexbox
+
+| Property                                        | Values                           |
+| :---------------------------------------------- | :------------------------------- |
+| `flex` (`flexBasis`, `flexGrow`, `flexShrink`)  | Supported                        |
+| `flexDirection`                                 | Supported                        |
+| `flexFlow`                                      | Supported                        |
+| `flexWrap`                                      | `nowrap`, `wrap`, `wrap-reverse` |
+| `justifyContent`, `justifyItems`, `justifySelf` | Supported                        |
+| `alignContent`, `alignItems`, `alignSelf`       | Supported                        |
+| `placeContent`, `placeItems`, `placeSelf`       | Supported                        |
+
+### Grid
+
+| Property                                                                      | Values    |
+| :---------------------------------------------------------------------------- | :-------- |
+| `gridTemplateColumns`, `gridTemplateRows`, `gridTemplateAreas`                | Supported |
+| `gridAutoColumns`, `gridAutoRows`, `gridAutoFlow`                             | Supported |
+| `gridColumn` (`gridColumnStart`, `gridColumnEnd`)                             | Supported |
+| `gridRow` (`gridRowStart`, `gridRowEnd`)                                      | Supported |
+| `gridArea` (`gridRowStart`, `gridColumnStart`, `gridRowEnd`, `gridColumnEnd`) | Supported |
+
+### Background & mask
+
+| Property                                                   | Values                                                                                                                                                            |
+| :--------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `backgroundImage`                                          | `linear-gradient()`, `radial-gradient()`, `conic-gradient()`, `repeating-linear-gradient()`, `repeating-radial-gradient()`, `repeating-conic-gradient()`, `url()` |
+| `backgroundColor`                                          | Supported                                                                                                                                                         |
+| `backgroundPosition`, `backgroundSize`, `backgroundRepeat` | Supported                                                                                                                                                         |
+| `backgroundClip`, `backgroundBlendMode`                    | Supported                                                                                                                                                         |
+| `maskImage`, `maskSize`, `maskPosition`, `maskRepeat`      | Supported                                                                                                                                                         |
+
+### Effects & transform
+
+| Property                                                               | Values                        |
+| :--------------------------------------------------------------------- | :---------------------------- |
+| `boxShadow`                                                            | Supported                     |
+| `opacity`                                                              | Supported                     |
+| `filter`                                                               | `<filter-function>`           |
+| `backdropFilter`                                                       | `<filter-function>`           |
+| `mixBlendMode`                                                         | Supported                     |
+| `isolation`                                                            | Supported                     |
+| `transform` (`translateX`, `translateY`, `rotate`, `scaleX`, `scaleY`) | 2D only                       |
+| `transformOrigin`                                                      | Supported                     |
+| `clipPath`                                                             | `<basic-shape>`               |
+| `clipRule`                                                             | Supported                     |
+| `imageRendering`                                                       | `auto`, `smooth`, `pixelated` |
+| `strokeLinejoin`                                                       | `miter`, `round`, `bevel`     |
+
+### Animation
+
+| Property                  | Values                                                                                                        |
+| :------------------------ | :------------------------------------------------------------------------------------------------------------ |
+| `animationName`           | Supported                                                                                                     |
+| `animationDuration`       | Supported                                                                                                     |
+| `animationDelay`          | Supported                                                                                                     |
+| `animationTimingFunction` | `linear`, `ease`, `ease-in`, `ease-out`, `ease-in-out`, `step-start`, `step-end`, `steps()`, `cubic-bezier()` |
+| `animationIterationCount` | Supported                                                                                                     |
+| `animationDirection`      | Supported                                                                                                     |
+| `animationFillMode`       | Supported                                                                                                     |
+| `animationPlayState`      | Supported                                                                                                     |
+
+### Typography
+
+| Property                                                                                                         | Values                                                                             |
+| :--------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------- |
+| `color`                                                                                                          | Supported                                                                          |
+| `fontFamily`                                                                                                     | Font fallback supported                                                            |
+| `fontSize`                                                                                                       | Supported                                                                          |
+| `fontWeight`                                                                                                     | Supported                                                                          |
+| `fontStyle`                                                                                                      | Supported                                                                          |
+| `fontStretch`                                                                                                    | Supported                                                                          |
+| `fontVariationSettings`                                                                                          | Supported                                                                          |
+| `fontFeatureSettings`                                                                                            | Supported                                                                          |
+| `fontSynthesis`                                                                                                  | `none`, `weight`, `style`                                                          |
+| `fontSynthesisWeight`                                                                                            | `auto`, `none`                                                                     |
+| `fontSynthesisStyle`                                                                                             | `auto`, `none`                                                                     |
+| `lineHeight`                                                                                                     | Supported                                                                          |
+| `letterSpacing`                                                                                                  | Supported                                                                          |
+| `wordSpacing`                                                                                                    | Supported                                                                          |
+| `textIndent`                                                                                                     | Supported                                                                          |
+| `textAlign`                                                                                                      | Supported                                                                          |
+| `verticalAlign`                                                                                                  | Supported                                                                          |
+| `textTransform`                                                                                                  | `none`, `uppercase`, `lowercase`, `capitalize`                                     |
+| `textShadow`                                                                                                     | Supported                                                                          |
+| `textOverflow`                                                                                                   | `ellipsis`, `clip`, custom character                                               |
+| `lineClamp`                                                                                                      | `none`, `<integer>`, `<integer> <block-ellipsis>`                                  |
+| `maxLines`                                                                                                       | `none`, `<integer>`                                                                |
+| `blockEllipsis`                                                                                                  | `none`, `auto`, `<string>`                                                         |
+| `continue`                                                                                                       | `normal`, `collapse`                                                               |
+| `overflowWrap`                                                                                                   | Supported                                                                          |
+| `wordBreak`                                                                                                      | `normal`, `break-all`, `keep-all`, `break-word`                                    |
+| `whiteSpace`                                                                                                     | `normal`, `pre`, `pre-wrap`, `pre-line`, `<text-wrap-mode> <white-space-collapse>` |
+| `whiteSpaceCollapse`                                                                                             | `preserve`, `collapse`, `preserve-spaces`, `preserve-breaks`                       |
+| `textWrap` (`textWrapMode`, `textWrapStyle`)                                                                     | `wrap`, `nowrap`; `auto`, `balance`, `pretty`                                      |
+| `textFit`                                                                                                        | [Supported](https://drafts.csswg.org/css-text-4/#text-fit-property)                |
+| `textDecoration` (`textDecorationLine`, `textDecorationStyle`, `textDecorationColor`, `textDecorationThickness`) | `underline`, `line-through`, `overline`; `solid`                                   |
+| `textDecorationSkipInk`                                                                                          | `auto`, `none`                                                                     |
+| `WebkitTextStroke` (`WebkitTextStrokeWidth`, `WebkitTextStrokeColor`, `WebkitTextFillColor`)                     | Supported                                                                          |

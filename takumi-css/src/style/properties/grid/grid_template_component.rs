@@ -8,6 +8,7 @@ use crate::style::{
   GridTrackSize, MakeComputed, ParseResult, SizingContext, ToCss,
 };
 
+/// An ordered list of grid-template track components and line names.
 pub type GridTemplateComponents = Vec<GridTemplateComponent>;
 
 /// Parses a `[name1 name2 ...]` line-name block's body; caller consumes the opening bracket.

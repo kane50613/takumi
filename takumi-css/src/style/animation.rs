@@ -36,11 +36,13 @@ pub struct KeyframesRule {
   /// Individual keyframe rules for this animation.
   #[builder(setter(into))]
   pub keyframes: Vec<KeyframeRule>,
+  /// Media queries gating this `@keyframes` rule.
   #[serde(skip, default)]
   #[builder(default, setter(skip))]
   pub media_queries: Vec<MediaQueryList>,
 }
 
+/// Applies a stylesheet's matching animations to a style at the given time.
 pub fn apply_stylesheet_animations(
   mut base_style: ComputedStyle,
   stylesheet: &StyleSheet,

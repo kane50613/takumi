@@ -3,8 +3,10 @@ pub mod node;
 
 /// Backend-agnostic border geometry shared across rasterization backends.
 pub mod border;
+/// Inline-level layout: text shaping, line breaking, and text fitting.
 pub mod inline;
 pub(crate) mod matching;
+/// Layout tree: render nodes and their computed layout results.
 pub mod tree;
 
 /// CSS-like styling system with colors, units, and properties.

@@ -151,6 +151,7 @@ impl MakeComputed for BasicShape {
 }
 
 impl BasicShape {
+  /// The shape's fill rule, if it has one.
   pub fn fill_rule(&self) -> Option<FillRule> {
     match self {
       BasicShape::Polygon(shape) => shape.fill_rule,

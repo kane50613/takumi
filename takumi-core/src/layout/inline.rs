@@ -29,29 +29,45 @@ use crate::{
   },
 };
 
+/// Inputs for building an inline layout.
 pub struct InlineLayoutRequest<'c> {
+  /// Inline items to lay out.
   pub items: Vec<InlineItem<'c>>,
+  /// Available space for layout.
   pub available_space: Size<AvailableSpace>,
+  /// Maximum line width.
   pub max_width: f32,
+  /// Optional height/line-count clamp.
   pub max_height: Option<MaxHeight>,
+  /// Resolved font style.
   pub style: &'c SizedFontStyle<'c>,
+  /// Render context.
   pub context: &'c RenderContext,
+  /// Measure or draw.
   pub mode: InlineLayoutMode,
 }
 
+/// A completed inline layout with its source text, spans, and per-line scales.
 pub struct BuiltInlineLayout<'c> {
+  /// The parley layout.
   pub layout: InlineLayout,
+  /// Concatenated laid-out text.
   pub text: String,
+  /// Processed spans backing the layout.
   pub spans: Vec<ProcessedInlineSpan<'c>>,
+  /// Out-of-flow inline boxes positioned separately.
   pub custom_inline_boxes: Vec<PositionedInlineBox>,
+  /// Per-line text-fit scale factors.
   pub line_scales: Vec<f32>,
 }
 
 impl BuiltInlineLayout<'_> {
+  /// Parent font metrics from the first run.
   pub fn parent_font_metrics(&self) -> Option<ParentFontMetrics> {
     get_parent_font_metrics(&self.layout)
   }
 
+  /// Resolved metrics for each line.
   pub fn line_metrics(&self) -> Vec<ResolvedLineMetrics> {
     resolve_inline_line_metrics(
       &self.layout,
@@ -61,6 +77,7 @@ impl BuiltInlineLayout<'_> {
     )
   }
 
+  /// Resolved state for each line.
   pub fn line_states(&self) -> Vec<ResolvedInlineLineState> {
     resolve_inline_line_states(
       &self.layout,
@@ -72,16 +89,22 @@ impl BuiltInlineLayout<'_> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Whether the inline layout is built for measurement or drawing.
 pub enum InlineLayoutMode {
+  /// Size only; skip wrapping refinements.
   Measure,
+  /// Full layout for painting.
   Draw,
 }
 
+/// An inline box and its resolved box-model dimensions.
 pub struct InlineBoxItem<'c> {
+  /// The render node this box wraps.
   pub render_node: &'c RenderNode,
   pub(crate) inline_box: InlineBox,
   pub(crate) paint_width: f32,
   pub(crate) paint_height: f32,
+  /// Margin around the box.
   pub margin: Rect<f32>,
   pub(crate) padding: Rect<f32>,
   pub(crate) border: Rect<f32>,
@@ -114,26 +137,40 @@ fn inline_box_kind(render_node: &RenderNode) -> InlineBoxKind {
   }
 }
 
+/// An inline item after text processing, ready for layout.
 pub enum ProcessedInlineSpan<'c> {
+  /// A styled text span.
   Text {
+    /// Identifier of the source span.
     span_id: u64,
+    /// Byte range within the laid-out text.
     byte_range: Range<usize>,
+    /// Processed text content.
     text: String,
+    /// Resolved font style.
     style: SizedFontStyle<'c>,
   },
+  /// An inline box.
   Box(InlineBoxItem<'c>),
 }
 
+/// A piece of inline content collected from the tree.
 pub enum InlineItem<'c> {
+  /// An inline-level render node.
   RenderNode {
+    /// The node.
     render_node: &'c RenderNode,
   },
+  /// A run of text.
   Text {
+    /// The text content.
     text: Cow<'c, str>,
+    /// Render context for the text.
     context: &'c RenderContext,
   },
 }
 
+/// Flatten a render node subtree into its inline items.
 pub fn collect_inline_items<'n>(root: &'n RenderNode) -> Vec<InlineItem<'n>> {
   let mut items = Vec::new();
   collect_inline_items_impl(root, 0, &mut items);
@@ -179,9 +216,11 @@ pub(crate) enum InlineContentKind<'c> {
   Box,
 }
 
+/// Parley layout specialized to [`InlineBrush`].
 pub type InlineLayout = parley::Layout<InlineBrush>;
 
 #[derive(Clone, Copy, Debug)]
+/// x-height and ascent/descent of the parent font.
 pub struct ParentFontMetrics {
   pub(crate) x_height: Option<f32>,
   pub(crate) text_metrics: (f32, f32),
@@ -195,13 +234,21 @@ pub(crate) struct InlineMeasureOptions {
 }
 
 #[derive(Clone, PartialEq, Copy, Debug)]
+/// Paint attributes carried per glyph run through the inline layout.
 pub struct InlineBrush {
+  /// Span this run originated from, if any.
   pub source_span_id: Option<u64>,
+  /// Run opacity.
   pub opacity: f32,
+  /// Text fill color.
   pub color: Color,
+  /// Text decoration color.
   pub decoration_color: Color,
+  /// Decoration line thickness.
   pub decoration_thickness: SizedTextDecorationThickness,
+  /// Which decoration lines to draw.
   pub decoration_line: TextDecorationLines,
+  /// Whether decorations skip over glyph ink.
   pub decoration_skip_ink: TextDecorationSkipInk,
   pub(crate) stroke_color: Color,
   pub(crate) font_synthesis: FontSynthesis,
@@ -305,6 +352,7 @@ fn measure_ellipsis_width(
     .unwrap_or(0.0)
 }
 
+/// Font metrics of the first run, used as the parent reference.
 pub fn get_parent_font_metrics(layout: &InlineLayout) -> Option<ParentFontMetrics> {
   let run = layout.lines().find_map(|line| line.runs().next())?;
   let metrics = run.metrics();
@@ -317,11 +365,13 @@ pub fn get_parent_font_metrics(layout: &InlineLayout) -> Option<ParentFontMetric
 }
 
 #[derive(Clone, Copy, Debug)]
+/// Final vertical metrics computed for one inline line.
 pub struct ResolvedLineMetrics {
   pub(crate) resolved_ascent: f32,
   pub(crate) resolved_descent: f32,
   pub(crate) resolved_leading: f32,
   pub(crate) resolved_line_height: f32,
+  /// Baseline position within the line.
   pub resolved_baseline: f32,
   pub(crate) resolved_line_top: f32,
   pub(crate) resolved_line_bottom: f32,
@@ -609,6 +659,7 @@ pub(crate) fn effective_parent_text_metrics_for_line(
   has_glyph.then_some((line.metrics().ascent, line.metrics().descent))
 }
 
+/// Resolve per-line metrics from the laid-out lines and spans.
 pub fn resolve_inline_line_metrics(
   inline_layout: &InlineLayout,
   spans: &[ProcessedInlineSpan<'_>],
@@ -783,13 +834,16 @@ pub(crate) fn resolved_line_metrics_for_apply(
 }
 
 #[derive(Clone, Copy, Debug)]
+/// Resolved metrics and parent context for a single inline line.
 pub struct ResolvedInlineLineState {
   pub(crate) adjusted_metrics: LineMetrics,
+  /// Vertical shift applied to the baseline.
   pub baseline_shift: f32,
   pub(crate) parent_x_height: Option<f32>,
   pub(crate) parent_text_metrics: Option<(f32, f32)>,
 }
 
+/// Resolve per-line state used when placing inline boxes and glyphs.
 pub fn resolve_inline_line_states(
   inline_layout: &InlineLayout,
   spans: &[ProcessedInlineSpan<'_>],
@@ -841,16 +895,23 @@ pub(crate) fn normalize_inline_box(
 }
 
 #[derive(Clone, Copy, Debug)]
+/// An inline box resolved to its painted position and size.
 pub struct VisualInlineBox {
+  /// Index into the span list.
   pub id: u64,
+  /// Left edge.
   pub x: f32,
+  /// Top edge.
   pub y: f32,
+  /// Box width.
   pub width: f32,
+  /// Box height.
   pub height: f32,
   pub(crate) layout_x: f32,
   pub(crate) layout_advance: f32,
 }
 
+/// Resolve a positioned inline box into its painted geometry.
 pub fn resolve_visual_inline_box(
   inline_box: PositionedInlineBox,
   line_state: Option<ResolvedInlineLineState>,
@@ -1350,6 +1411,7 @@ fn text_fit_line_scales(layout: &InlineLayout, max_width: f32, style: &SizedFont
   result
 }
 
+/// Line start and offset correction for a scaled text-fit line.
 pub fn text_fit_line_alignment_correction(
   line: &Line<'_, InlineBrush>,
   line_scale: f32,
@@ -1382,6 +1444,7 @@ pub fn text_fit_line_alignment_correction(
   (line_start, aligned_line_start - line_start)
 }
 
+/// Build, wrap, and align the inline layout for a request.
 pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInlineLayout<'c> {
   let InlineLayoutRequest {
     items,
@@ -1469,6 +1532,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
   built
 }
 
+/// Resolve the max height constraint from line clamping and content box height.
 pub fn resolve_inline_max_height(
   font_style: &SizedFontStyle,
   content_box_height: f32,
@@ -2080,6 +2144,7 @@ pub fn run_decorations(
   out
 }
 
+/// Resolve the inline layout's max width and optional max height from available space and known dimensions.
 pub fn create_inline_constraint(
   context: &RenderContext,
   available_space: Size<AvailableSpace>,

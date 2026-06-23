@@ -104,38 +104,47 @@ impl<'i> From<KeyframePreludeParseError<'i>> for StyleSheetParseError {
 }
 
 impl StyleSheetParseError {
+  /// Builds an invalid-stylesheet error from a reason string.
   pub fn invalid_reason(reason: impl Into<String>) -> Self {
     Self::new(StyleSheetParseErrorKind::InvalidStyleSheet(reason.into()))
   }
 
+  /// Error for an unsupported media feature.
   pub fn unsupported_media_feature() -> Self {
     Self::new(StyleSheetParseErrorKind::UnsupportedMediaFeature)
   }
 
+  /// Error for a non-boolean `@property` `inherits` descriptor.
   pub fn property_inherits_must_be_boolean() -> Self {
     Self::new(StyleSheetParseErrorKind::PropertyInheritsMustBeBoolean)
   }
 
+  /// Error for a `@property` missing its `syntax` descriptor.
   pub fn missing_property_syntax() -> Self {
     Self::new(StyleSheetParseErrorKind::MissingPropertySyntax)
   }
 
+  /// Error for a `@property` missing its `inherits` descriptor.
   pub fn missing_property_inherits() -> Self {
     Self::new(StyleSheetParseErrorKind::MissingPropertyInherits)
   }
 
+  /// Error for `@supports` mixing `and`/`or` without parentheses.
   pub fn supports_mixed_and_or_without_parentheses() -> Self {
     Self::new(StyleSheetParseErrorKind::SupportsMixedAndOrWithoutParentheses)
   }
 
+  /// Error for a `@property` name that is not a custom property.
   pub fn property_name_must_be_custom_property() -> Self {
     Self::new(StyleSheetParseErrorKind::PropertyNameMustBeCustomProperty)
   }
 
+  /// Error for an `@layer` block naming more than one layer.
   pub fn layer_block_multiple_names() -> Self {
     Self::new(StyleSheetParseErrorKind::LayerBlockMultipleNames)
   }
 
+  /// Error for an unsupported nested at-rule.
   pub fn unsupported_nested_at_rule() -> Self {
     Self::new(StyleSheetParseErrorKind::UnsupportedNestedAtRule)
   }
@@ -154,6 +163,7 @@ impl StyleSheetParseError {
     }
   }
 
+  /// Converts a `cssparser` parse error into a stylesheet error with context.
   pub fn from_parse_error(context: &str, error: ParseError<'_, StyleSheetParseError>) -> Self {
     match error.kind {
       ParseErrorKind::Basic(error) => Self::invalid_reason(format!("{error:?}")),

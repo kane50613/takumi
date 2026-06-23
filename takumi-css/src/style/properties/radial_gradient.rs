@@ -139,6 +139,7 @@ pub struct RadialGradientTile {
   pub color_lut: Vec<PremultipliedColorU8>,
 }
 
+/// Per-row sampling state for incremental distance stepping.
 #[derive(Debug, Clone, Copy)]
 pub struct RadialGradientRowState {
   dx2: f32,
@@ -149,11 +150,13 @@ pub struct RadialGradientRowState {
 }
 
 impl RadialGradientTile {
+  /// Color of the outermost LUT entry, used outside the gradient ellipse.
   #[inline(always)]
   pub fn outer_sample(&self) -> Option<PremultipliedColorU8> {
     self.color_lut.last().copied()
   }
 
+  /// Span of `x` within a row that falls inside the gradient ellipse.
   #[inline(always)]
   pub fn non_repeating_active_span(
     &self,
@@ -179,6 +182,7 @@ impl RadialGradientTile {
     Some((clamped_start, clamped_end))
   }
 
+  /// Maps an axis-space distance to a LUT index for a LUT of `lut_len`.
   #[inline(always)]
   pub fn lut_index_for_distance_px_with_len(&self, distance_px: f32, lut_len: usize) -> usize {
     if lut_len <= 1 {

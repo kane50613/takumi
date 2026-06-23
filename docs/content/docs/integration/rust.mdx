@@ -1,0 +1,13 @@
+---
+title: Rust
+description: Embed the Takumi engine directly in a Rust application.
+---
+
+The JavaScript bindings wrap a Rust engine. To use that engine in a Rust app, or to port it to another language, add the `takumi` crate.
+
+```toml title="Cargo.toml"
+[dependencies]
+takumi = "2.0.0-beta.2" # check docs.rs for the latest beta
+```
+
+The full API lives on [docs.rs](https://docs.rs/takumi/latest/takumi/). Start there for the `Renderer`, node tree, and output formats.

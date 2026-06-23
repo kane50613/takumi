@@ -69,6 +69,7 @@ pub enum FontSize {
 }
 
 impl FontSize {
+  /// Resolves to pixels against the inherited font size.
   pub fn to_px(self, sizing: &SizingContext, inherited_font_size: f32) -> f32 {
     match self {
       Self::Keyword(keyword) => keyword.to_length().to_px(sizing, inherited_font_size),

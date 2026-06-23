@@ -6,7 +6,16 @@ import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 import defaultMdxComponents, { createRelativeLink } from "fumadocs-ui/mdx";
 import { MarkdownCopyButton, ViewOptionsPopover } from "fumadocs-ui/layouts/docs/page";
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/page";
-import { ArrowBigRight, BookOpen, FileCode2, Hand, Shovel, ToyBrick, Wrench } from "lucide-react";
+import {
+  ArrowBigRight,
+  BookOpen,
+  FileCode2,
+  Hand,
+  Shovel,
+  ToyBrick,
+  Wrench,
+  Zap,
+} from "lucide-react";
 import type { PageProps } from "waku/router";
 import { unstable_notFound } from "waku/router/server";
 import { Accordion, Accordions } from "~/components/accordion";
@@ -26,6 +35,7 @@ const components = {
   Shovel,
   ToyBrick,
   ArrowBigRight,
+  Zap,
   Mermaid,
   Step,
   Steps,

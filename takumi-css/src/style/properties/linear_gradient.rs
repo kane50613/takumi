@@ -74,6 +74,7 @@ pub struct LinearGradientTile {
   pub axis_aligned_fast_path: Option<LinearGradientFastPathData>,
 }
 
+/// Per-row sampling state for incremental projection stepping.
 #[derive(Debug, Clone, Copy)]
 pub struct LinearGradientRowState {
   projection: f32,
@@ -81,22 +82,32 @@ pub struct LinearGradientRowState {
   max_lut_index: usize,
 }
 
+/// Axis-aligned fast-path orientation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LinearGradientFastPathKind {
+  /// Left-to-right gradient.
   Horizontal,
+  /// Top-to-bottom gradient.
   Vertical,
 }
 
+/// Owned axis samples for an axis-aligned gradient.
 #[derive(Debug, Clone)]
 pub struct LinearGradientFastPathData {
+  /// Fast-path orientation.
   pub kind: LinearGradientFastPathKind,
+  /// One sample per pixel along the axis.
   pub axis_samples: Box<[PremultipliedColorU8]>,
 }
 
+/// Borrowed view of axis samples for an axis-aligned gradient.
 #[derive(Debug, Clone, Copy)]
 pub struct LinearGradientFastPath<'a> {
+  /// Fast-path orientation.
   pub kind: LinearGradientFastPathKind,
+  /// One sample per pixel along the axis.
   pub axis_samples: &'a [PremultipliedColorU8],
+  /// Whether every sample is fully opaque.
   pub fully_opaque: bool,
 }
 
@@ -134,11 +145,13 @@ impl LinearGradientTile {
     }
   }
 
+  /// Projects a pixel onto the gradient axis, in pixels.
   #[inline(always)]
   pub fn projection_at(&self, x: f32, y: f32) -> f32 {
     x * self.dir_x + y * self.dir_y + self.projection_bias
   }
 
+  /// Maps an axis projection to a LUT index for a LUT of `lut_len`.
   #[inline(always)]
   pub fn lut_index_for_projection_with_len(&self, projection: f32, lut_len: usize) -> usize {
     if lut_len <= 1 {
@@ -176,6 +189,7 @@ impl LinearGradientTile {
     }
   }
 
+  /// Borrowed axis-aligned fast path, if this gradient has one.
   pub fn fast_path(&self) -> Option<LinearGradientFastPath<'_>> {
     let fast_path = self.axis_aligned_fast_path.as_ref()?;
     Some(LinearGradientFastPath {

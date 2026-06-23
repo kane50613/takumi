@@ -73,6 +73,7 @@ impl TailwindPropertyParser for FontWeight {
 }
 
 impl FontWeight {
+  /// The numeric weight (100-900).
   pub fn value(self) -> f32 {
     self.0.value()
   }

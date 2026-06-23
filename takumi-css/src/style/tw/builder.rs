@@ -294,28 +294,43 @@ impl TwTransformState {
   }
 }
 
+/// Accumulated Tailwind gradient utilities pending synthesis into a `background-image`.
 #[derive(Debug, Default)]
 pub struct TwGradientState {
+  /// Gradient kind (linear, radial, conic).
   pub gradient_type: TwGradientType,
+  /// Linear/conic angle, if set.
   pub angle: Option<Angle>,
+  /// Starting color stop.
   pub from: Option<ColorInput>,
+  /// Ending color stop.
   pub to: Option<ColorInput>,
+  /// Middle color stop.
   pub via: Option<ColorInput>,
+  /// Position of the `from` stop.
   pub from_position: Option<Length>,
+  /// Position of the `via` stop.
   pub via_position: Option<Length>,
+  /// Position of the `to` stop.
   pub to_position: Option<Length>,
+  /// Whether the gradient is `!important`.
   pub important: bool,
 }
 
+/// Gradient kind.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum TwGradientType {
+  /// Linear gradient.
   #[default]
   Linear,
+  /// Radial gradient.
   Radial,
+  /// Conic gradient.
   Conic,
 }
 
 impl TwGradientState {
+  /// Synthesizes the accumulated gradient into a `background-image` declaration.
   pub fn apply(self, declarations: &mut StyleDeclarationBlock) {
     // Stop positions alone (`from-50%` etc.) must not synthesise a gradient —
     // a color or angle has to be present.

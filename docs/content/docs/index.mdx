@@ -6,9 +6,15 @@ icon: Axe
 
 Takumi renders JSX, raw HTML, and structured node trees through a full CSS layout and compositing pipeline, then outputs PNG, JPEG, WebP, ICO, GIF, APNG, or raw video frames.
 
-This documentation covers the JavaScript bindings (`takumi-js`). For the low-level Rust API, see the [crate docs on docs.rs](https://docs.rs/takumi).
+This documentation covers the JavaScript bindings (`takumi-js`).
 
 <Cards>
+  <Card
+    title="Quickstart"
+    href="/docs/quickstart"
+    description="Render your first image in a couple of minutes"
+    icon={<Zap />}
+  />
   <Card
     title="Playground"
     href="https://takumi.kane.tw/playground"
@@ -79,8 +85,7 @@ Takumi also emits **vector SVG** output: call `renderSvg()` to get a real `<svg>
 
 Takumi runs everywhere without changing your code:
 
-| Target                           | Details                                            |
-| :------------------------------- | :------------------------------------------------- |
-| **Node.js**                      | Native N-API binary with Rayon multithreading      |
-| **Cloudflare Workers / Browser** | WebAssembly with SIMD optimization                 |
-| **Rust crate**                   | Embed `takumi` directly. Zero JS runtime required. |
+| Target                           | Details                                       |
+| :------------------------------- | :-------------------------------------------- |
+| **Node.js**                      | Native N-API binary with Rayon multithreading |
+| **Cloudflare Workers / Browser** | WebAssembly with SIMD optimization            |

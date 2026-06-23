@@ -62,6 +62,7 @@ pub enum FontSynthesic {
 }
 
 impl FontSynthesic {
+  /// Whether synthesis is permitted.
   pub fn is_allowed(self) -> bool {
     self == FontSynthesic::Auto
   }

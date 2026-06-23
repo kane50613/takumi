@@ -118,9 +118,12 @@ impl Animatable for TextDecorationThickness {
   }
 }
 
+/// Decoration thickness resolved for rendering.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SizedTextDecorationThickness {
+  /// Use the font's own thickness.
   FromFont,
+  /// A thickness in pixels.
   Value(f32),
 }
 

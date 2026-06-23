@@ -108,6 +108,7 @@ impl GifSource {
     })
   }
 
+  /// Frame shown at the given playback time, looping over total duration.
   pub fn frame_at_time(&self, time_ms: u64) -> &ImageBuffer {
     if self.total_duration_ms == 0 {
       return &self.frames[0].buffer;
@@ -126,6 +127,7 @@ impl GifSource {
     &self.frames[0].buffer
   }
 
+  /// Shared frame shown at the given playback time, looping over total duration.
   pub fn frame_at_time_arc(&self, time_ms: u64) -> Arc<ImageBuffer> {
     if self.total_duration_ms == 0 {
       return self.frames[0].buffer.clone();

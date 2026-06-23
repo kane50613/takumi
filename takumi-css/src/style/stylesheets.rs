@@ -154,11 +154,18 @@ macro_rules! define_style {
     }
   ) => {
     paste! {
+      /// Identifies a single longhand property.
       #[repr(u8)]
       #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
       pub enum LonghandId {
-        $([<$longhand:camel>],)*
-        $([<$transient:camel>],)*
+        $(
+          #[doc = concat!("The `", stringify!($longhand), "` longhand.")]
+          [<$longhand:camel>],
+        )*
+        $(
+          #[doc = concat!("The `", stringify!($transient), "` logical-axis longhand.")]
+          [<$transient:camel>],
+        )*
       }
 
       impl LonghandId {
@@ -173,10 +180,14 @@ macro_rules! define_style {
         }
       }
 
+      /// Identifies a shorthand property that expands into longhands.
       #[repr(u8)]
       #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
       pub enum ShorthandId {
-        $([<$shorthand:camel>],)*
+        $(
+          #[doc = concat!("The `", stringify!($shorthand), "` shorthand.")]
+          [<$shorthand:camel>],
+        )*
       }
 
       impl LonghandId {
@@ -273,11 +284,16 @@ macro_rules! define_style {
         }
       }
 
+      /// Identifies any property: longhand, shorthand, custom, or ignored.
       #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
       pub enum PropertyId {
+        /// An unrecognized property that is dropped.
         Ignored,
+        /// A custom property (`--name`).
         Custom,
+        /// A longhand property.
         Longhand(LonghandId),
+        /// A shorthand property.
         Shorthand(ShorthandId),
       }
 
@@ -295,6 +311,7 @@ macro_rules! define_style {
           PropertyId::from_name(name, normalize_kebab_property_name)
         }
 
+        /// Resolves a property from a camelCase name.
         #[allow(dead_code)]
         pub fn from_camel_case(name: &str) -> Self {
           PropertyId::from_name(name, normalize_camel_property_name)
@@ -399,6 +416,7 @@ macro_rules! define_style {
       /// Defines the style of an element.
       #[derive(Debug, Default, Clone, PartialEq)]
       pub struct Style {
+        /// The declaration block for this style.
         pub declarations: StyleDeclarationBlock,
       }
 
@@ -500,10 +518,12 @@ macro_rules! define_style {
           self.with_declarations([declaration], true)
         }
 
+        /// Appends another declaration block in source order.
         pub fn append_block(&mut self, declarations: StyleDeclarationBlock) {
           self.declarations.append(declarations);
         }
 
+        /// Appends one declaration, recording its importance.
         pub fn push(&mut self, declaration: StyleDeclaration, important: bool) {
           self.declarations.push(declaration, important);
         }
@@ -513,6 +533,7 @@ macro_rules! define_style {
           self.declarations.resource_urls()
         }
 
+        /// Resolves this style against a parent into a computed style.
         pub fn inherit(self, parent: &ComputedStyle) -> ComputedStyle {
           let mut style = ComputedStyle::from_parent(parent);
           let mut declarations = ParsedDeclarations::new();
@@ -552,6 +573,7 @@ macro_rules! define_style {
           style
         }
 
+        /// Merges another style's declarations into this one.
         pub fn merge_from(&mut self, other: Self) {
           self.append_block(other.declarations);
         }
@@ -572,9 +594,14 @@ macro_rules! define_style {
       /// The computed style snapshot used during layout and rendering.
       #[derive(Clone, Debug, Default)]
       pub struct ComputedStyle {
+        /// Resolved custom property values by name.
         pub custom_properties: HashMap<String, String>,
+        /// Registered `@property` rules by name.
         pub registered_custom_properties: HashMap<String, PropertyRule>,
-        $(pub $longhand: $longhand_ty,)*
+        $(
+          #[doc = concat!("Computed `", stringify!($longhand), "` value.")]
+          pub $longhand: $longhand_ty,
+        )*
       }
 
       /// A single specified declaration stored in a declaration block.
@@ -598,6 +625,7 @@ macro_rules! define_style {
       }
 
       impl ComputedStyle {
+        /// Builds a child computed style inheriting from a parent.
         pub fn from_parent(parent: &Self) -> Self {
           Self {
             custom_properties: if parent.custom_properties.is_empty() {
@@ -614,6 +642,7 @@ macro_rules! define_style {
           }
         }
 
+        /// Resolves relative units against the sizing context.
         pub fn make_computed_values(&mut self, sizing: &SizingContext) {
           $(self.$longhand.make_computed(sizing);)*
         }
@@ -722,6 +751,7 @@ macro_rules! define_style {
           }
         )*
 
+        /// The longhand this declaration targets.
         pub fn longhand_id(&self) -> LonghandId {
           match self {
             $(Self::[<$longhand:camel>](..) => LonghandId::[<$longhand:camel>],)*
@@ -742,6 +772,7 @@ macro_rules! define_style {
           }
         }
 
+        /// Applies this declaration to a computed style, resolving against the parent.
         pub fn apply_with_parent(
           self,
           style: &mut ComputedStyle,
@@ -792,6 +823,7 @@ macro_rules! define_style {
           }
         }
 
+        /// Applies this declaration to a computed style without a parent.
         pub fn apply_to_computed(&self, style: &mut ComputedStyle) {
           let is_rtl = style.direction == Direction::Rtl;
           match self {
@@ -827,6 +859,7 @@ macro_rules! define_style {
           }
         }
 
+        /// Pushes a clone of this declaration onto a style.
         pub fn merge_into_ref(&self, style: &mut Style) {
           style.declarations.push(self.to_owned(), false);
         }
@@ -1368,17 +1401,21 @@ impl<'i> FromCss<'i> for CssWideKeyword {
   ];
 }
 
+/// The set of properties marked `!important`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DeclarationImportance {
   pub(crate) longhands: PropertyMask,
+  /// Custom property names marked important.
   pub custom_properties: SmallVec<[Box<str>; 1]>,
 }
 
 impl DeclarationImportance {
+  /// Whether no property is marked important.
   pub fn is_empty(&self) -> bool {
     self.custom_properties.is_empty() && self.longhands.iter().next().is_none()
   }
 
+  /// Records the longhands a declaration marks important.
   pub fn insert_declaration(&mut self, declaration: &StyleDeclaration) {
     self
       .longhands
@@ -1389,6 +1426,7 @@ impl DeclarationImportance {
     }
   }
 
+  /// Merges another importance set, deduping custom properties.
   pub fn append(&mut self, other: &mut Self) {
     self.longhands.append(&mut other.longhands);
 
@@ -1456,6 +1494,7 @@ impl StyleDeclarationBlock {
     }
   }
 
+  /// Appends another block's declarations and importance.
   pub fn append(&mut self, mut other: Self) {
     self.importance.append(&mut other.importance);
     self.declarations.extend(other.declarations);
@@ -1495,6 +1534,7 @@ impl StyleDeclarationBlock {
       })
   }
 
+  /// Parses one declaration block for the given property name.
   pub fn parse<'i>(name: &str, input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     parse_style_declaration(name, input)
   }
