@@ -15,12 +15,11 @@ description: Use Takumi to render your Svelte components on the server.
   <Step>
     ### Make a Svelte component
 
-    If you want to write component styles in the same file, you must set the `css` option to `injected` in the component options.
+    Set `css="injected"` so the `<style>` block is inlined into the SSR HTML.
 
     ```svelte title="src/lib/components/OgImage.svelte"
     <script lang="ts">
-      let { title, description } = $props();
-
+      let { name = "Goo goo gaga" } = $props();
     </script>
 
     <!-- [!code highlight] -->
@@ -28,14 +27,12 @@ description: Use Takumi to render your Svelte components on the server.
 
     <div
       id="og-image"
-      class="w-full h-full flex items-center justify-center p-12 flex-col whitespace-pre-wrap leading-normal"
+      class="w-full h-full flex items-center justify-center p-12 flex-col gap-4"
     >
-      <p class="text-7xl font-semibold text-black">
-        {title}
-      </p>
-      <p class="text-5xl font-medium text-black/75">
-        {description}
-      </p>
+      <div class="text-center whitespace-pre-wrap leading-normal text-7xl font-semibold text-black">
+        Welcome {name} to
+        <span class="font-bold">Svelte</span> world
+      </div>
     </div>
 
     <style>
@@ -49,9 +46,11 @@ description: Use Takumi to render your Svelte components on the server.
   <Step>
     ### Render the component on a server route
 
-    Import the component and CSS file if Tailwind is used. Then, use `render` from `svelte/server` to render the component to HTML. Finally, return an `ImageResponse`.
+    - Import the component, and `app.css` if you use Tailwind.
+    - Render to HTML with `render` from `svelte/server`.
+    - Return an `ImageResponse`.
 
-    ```ts title="src/routes/og-image/+server.ts"
+    ```ts title="src/routes/+server.ts"
     import { render } from "svelte/server";
     import style from "../app.css?inline";
     import ImageResponse from "takumi-js/response";
@@ -61,8 +60,7 @@ description: Use Takumi to render your Svelte components on the server.
     export async function GET({ url }: RequestEvent) {
       const { body, head } = await render(OgImage, {
         props: {
-          title: url.searchParams.get("title"),
-          description: url.searchParams.get("description"),
+          name: url.searchParams.get("name") ?? "Goo goo gaga",
         },
       });
 
@@ -82,5 +80,4 @@ description: Use Takumi to render your Svelte components on the server.
     ```
 
   </Step>
-
 </Steps>

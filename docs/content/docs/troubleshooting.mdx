@@ -8,7 +8,7 @@ icon: Bug
 
 <Accordions type="single">
   <Accordion title="Layout is not correct">
-You can try to use the `drawDebugBorder` option to draw a border around the nodes.
+Set the `drawDebugBorder` option to outline every node.
 
 ```tsx
 import { ImageResponse } from "takumi-js/response";
@@ -23,15 +23,15 @@ export function GET() {
 }
 ```
 
-If the issue still exists, please file an issue on [our GitHub repository](https://github.com/kane50613/takumi/issues).
+If the issue persists, file an issue on [our GitHub repository](https://github.com/kane50613/takumi/issues).
 
   </Accordion>
 </Accordions>
 
-## Node.js Related issues
+## Node.js Issues
 
 <Accordions type="single">
-  <Accordion title="Cannot find native binding.">
+  <Accordion title="Cannot find native binding">
 This happens when the `@takumi-rs/core` package failed to find the native binding.
 
 If you are using package manager with virtual store such as `pnpm` or `yarn`, add the following to your `.npmrc` file and re-run `pnpm i` to allow hoisting of the native binary.
@@ -42,6 +42,6 @@ public-hoist-pattern[]=@takumi-rs/core-*
 
   </Accordion>
   <Accordion title="TypeError: fetch failed">
-Node.js fetch implementation with [undici](https://github.com/nodejs/undici) is not really stable in my experience and [#349](https://github.com/kane50613/takumi/issues/349). Try using [bun](https://bun.sh) runtime instead.
+Node.js fetch (via [undici](https://github.com/nodejs/undici)) can drop the socket while loading a remote `img` URL ([#349](https://github.com/kane50613/takumi/issues/349)). Pass the image as a base64 data URL so Takumi skips the fetch.
   </Accordion>
 </Accordions>

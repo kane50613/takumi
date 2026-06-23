@@ -3,7 +3,7 @@ title: Upgrade to v2
 description: Walks through the breaking changes in v2 and how to upgrade from v1.
 ---
 
-v2 makes fonts and images explicit per-render resources, tightens rendering to match the web platform, and splits the Rust crate into focused backends. This page covers the breaking changes; for everything else see the [releases](https://github.com/kane50613/takumi/releases).
+v2 makes fonts and images explicit per-render resources and tightens rendering to match the web platform. This page covers the breaking changes; for everything else see the [releases](https://github.com/kane50613/takumi/releases).
 
 ## Upgrade with an AI agent
 
@@ -19,11 +19,11 @@ Then paste the prompt below. Apply only the lines for packages you import, then 
 Upgrade this project from Takumi v1 to v2. Apply `old -> new` for the packages it imports.
 
 JS (takumi-js, @takumi-rs/*):
-- await every render/renderAnimation/renderSvg/measure/encodeFrames (all async now)
+- await the top-level render/renderAnimation/renderSvg and the napi Renderer methods (they await resource loading)
 - new Renderer({fonts}) -> new Renderer(); pass fonts per call: render(node, {fonts:[inter]})
 - loadFont/loadFonts/loadFontSync -> registerFont (only to reuse a font across renders)
 - render option fetchedResources -> images (keyed by src; no global image store)
-- format is a union: {format:"jpeg",quality} or {format:"webp",lossless:true}
+- format is a string ("png"|"jpeg"|"webp"|...) with optional quality (jpeg/lossy webp) and lossless (webp)
 - createImageResponse(opts)(jsx) -> new ImageResponse(jsx, opts)
 
 Rust (takumi crate):
@@ -39,22 +39,24 @@ CSS defaults changed, verify visually: position relative -> static; border/outli
 images is no longer tinted.
 ```
 
-The sections below carry the rationale and full samples behind each line.
+The sections below explain each line.
 
 ## JavaScript
 
-### Rendering is now always async
+### Top-level functions are async
 
-The WASM `Renderer` returned bytes synchronously in v1, while the Node binding was already async. v2 aligns the two: the WASM `Renderer` is async too, so `render`, `renderAnimation`, `renderSvg`, `measure`, and `encodeFrames` now share one signature across both bindings. That async surface is also what lets fonts and images arrive through loaders, resolved per call. Await every call; using the result directly now hands you a `Promise`.
+The top-level `takumi-js` functions `render`, `renderSvg`, and `renderAnimation` await font and image loading before they render, so callers must `await` them. The [napi](https://www.npmjs.com/package/@takumi-rs/core) `Renderer` methods are async too. The [WebAssembly](https://www.npmjs.com/package/@takumi-rs/wasm) `Renderer` methods stay synchronous and return bytes directly.
 
 ```ts
-const image = renderer.render(node, options); // [!code --]
-const image = await renderer.render(node, options); // [!code ++]
+const image = render(node, options); // [!code --]
+const image = await render(node, options); // [!code ++]
 ```
+
+`measure` and `encodeFrames` are `Renderer` methods, not top-level exports.
 
 ### The `Renderer` constructor takes no arguments
 
-`new Renderer(...)` no longer accepts fonts or a context. Construct it bare and pass the fonts a render needs through that render's `fonts` option. Most code needs nothing more; the embedded default fonts are decoded once and shared across every renderer.
+`new Renderer(...)` no longer accepts fonts or a context. Construct it bare and pass the fonts a render needs through that render's `fonts` option. The embedded default fonts are decoded once and shared across every renderer.
 
 ```ts
 const renderer = new Renderer({ fonts: [archivo] }); // [!code --]
@@ -82,9 +84,12 @@ const image = await renderer.render(node, {
 });
 ```
 
-### `fetchedResources` is now `images`
+### Renamed and changed options
 
-The pre-fetched image option was renamed.
+| v1                 | v2                                            | Note                                                                      |
+| ------------------ | --------------------------------------------- | ------------------------------------------------------------------------- |
+| `fetchedResources` | `images`                                      | Pre-fetched images, keyed by `src`.                                       |
+| —                  | `fonts` on `renderAnimation` / `encodeFrames` | Animation calls now accept `fonts` and `fontFamilies`, matching `render`. |
 
 ```tsx
 const image = await renderer.render(node, {
@@ -109,13 +114,9 @@ export function GET() {
 }
 ```
 
-### Animations accept fonts
-
-`renderAnimation` and `encodeFrames` now take `fonts` and `fontFamilies`, matching `render`.
-
 ### Render to vector SVG
 
-`takumi-js` now exports `renderSvg()` alongside `render()`. It takes the same input (JSX, an HTML string, or a node tree) and the same resource pipeline, but returns a real `<svg>` document — `<rect>`, `<path>`, gradients, glyph outlines, embedded images — instead of a raster bitmap. If you came from [satori](https://github.com/vercel/satori) for its SVG output, this is the direct equivalent; keep using `render()` for a PNG/WebP.
+`takumi-js` now exports `renderSvg()` alongside `render()`. It takes the same input (JSX, an HTML string, or a node tree) and the same resource pipeline, but returns an `<svg>` document instead of a raster bitmap. It is the replacement for [satori](https://github.com/vercel/satori)'s SVG output; use `render()` for PNG or WebP.
 
 ```tsx
 import { render, renderSvg } from "takumi-js";
@@ -124,13 +125,26 @@ const png = await render(<OgImage />, { width: 1200, height: 630 });
 const svg = await renderSvg(<OgImage />, { width: 1200, height: 630 }); // [!code ++]
 ```
 
-The top-level `renderAnimation()` is exported the same way, so the full sequence — image, animation, and vector — is available without constructing a `Renderer`.
+`render`, `renderSvg`, and `renderAnimation` are all top-level exports, so you can produce a raster image, vector SVG, or animation without constructing a `Renderer`.
 
 ## CSS & rendering
 
+### Property defaults
+
+These properties changed their default or behavior to match the CSS spec. Verify affected pages visually.
+
+| Property                         | v1              | v2             | Action                                                                                |
+| -------------------------------- | --------------- | -------------- | ------------------------------------------------------------------------------------- |
+| `position`                       | `relative`      | `static`       | Set `position: relative` where you relied on the default containing block or insets.  |
+| `border-width` / `outline-width` | `0`             | `medium` (3px) | `border: solid red` now draws a 3px line; was invisible.                              |
+| `scale` (negative)               | collapses to 0  | reflects       | `scale: -1`, `scaleX(-1)` etc. now mirror the element.                                |
+| `line-clamp`                     | single property | shorthand      | Expands to `max-lines`, `block-ellipsis`, `continue`; only `block-ellipsis` inherits. |
+
+The sections below cover the subtler cases.
+
 ### `currentColor` in SVG images is no longer tinted by the host color
 
-Through v1, an SVG supplied as an image (`Node::image`, `background-image: url(...)`, or `mask-image`) had its `currentColor` rewritten to the host element's `color` before rendering. v2 removes this.
+In v1, an SVG supplied as an image (`Node::image`, `background-image: url(...)`, or `mask-image`) had its `currentColor` rewritten to the host element's `color` before rendering. v2 removes this.
 
 An SVG referenced as an image is an isolated document, so it does not inherit `color` from the host, the same rule browsers, [satori](https://github.com/vercel/satori), and `@vercel/og` follow. Its `currentColor` now resolves to the SVG's own default (black) instead of the surrounding text color. This also makes the raster and vector (SVG) backends agree, and lets the raster backend reuse its cached parse instead of reparsing the SVG on every render.
 
@@ -142,11 +156,9 @@ If you relied on the old behavior to tint an icon, set the color in the SVG mark
 const tinted = icon.replace(/currentColor/g, "#3b82f6"); // [!code ++]
 ```
 
-### `position` defaults to `static`
+### `position`
 
-Through v1, `position` defaulted to `relative`, so every element established a containing block for absolutely-positioned descendants and honored `top`/`right`/`bottom`/`left` insets. v2 defaults to `static` to match the CSS specification, so an element only becomes a positioned containing block when you opt in.
-
-If you relied on the default to anchor an absolutely-positioned child or to apply insets, set `position: relative` explicitly.
+`position` now defaults to `static`, not `relative`. An element only establishes a containing block for absolutely-positioned descendants, and honors `top`/`right`/`bottom`/`left` insets, when you opt in. Set `position: relative` where you relied on the old default.
 
 ```tsx
 <div
@@ -159,27 +171,23 @@ If you relied on the default to anchor an absolutely-positioned child or to appl
 </div>
 ```
 
-### `border-width` and `outline-width` default to `medium`
+### `border-width` and `outline-width`
 
-Omitting the width in `border` / `outline` now resolves to the CSS initial value `medium` (3px) instead of `0`, and the `thin`, `medium`, and `thick` keywords are accepted. `border: solid red` and `outline: solid` render a 3px line where they previously rendered nothing. The used width is still `0` when the line's style is `none` or `hidden`.
+An omitted width in `border` / `outline` now resolves to `medium` (3px), the CSS initial value, instead of `0`. The `thin`, `medium`, and `thick` keywords are accepted. The used width stays `0` when the line's style is `none` or `hidden`.
 
 ```tsx
 <div style={{ border: "solid red" }}>3px border in v2, invisible in v1</div>
 ```
 
-### Negative `scale` factors reflect
+### `line-clamp`
 
-`scale: -1` and `transform: scaleX(-1)` / `scaleY(-1)` / `scale(-1)` now reflect the element instead of collapsing it to zero size.
-
-### `line-clamp` is now a shorthand
-
-`line-clamp` is now a shorthand for the `max-lines`, `block-ellipsis`, and `continue` longhands (CSS Overflow 4), rather than a single collapsed property. Inheritance follows the spec: `block-ellipsis` inherits, while `max-lines` and `continue` do not, so a clamped ancestor no longer forces its line limit onto descendants. `-webkit-line-clamp` still works and expands to the same longhands.
+`line-clamp` is now a shorthand for the `max-lines`, `block-ellipsis`, and `continue` longhands (CSS Overflow 4). `block-ellipsis` inherits; `max-lines` and `continue` do not, so a clamped ancestor no longer forces its line limit onto descendants. `-webkit-line-clamp` still works and expands to the same longhands.
 
 ## Rust
 
 ### `takumi` is split into focused crates
 
-`takumi` is now a facade over `takumi-core` (layout, styling, resources), `takumi-raster` (the raster backend), and `takumi-svg` (the vector backend). The facade re-exports a curated stable surface, so most code keeps compiling, but the deep module paths it used to expose are gone.
+`takumi` is now a facade over `takumi-core` (layout, styling, resources), `takumi-raster` (the raster backend), and `takumi-svg` (the vector backend). The facade re-exports a curated stable surface, but the deep module paths it used to expose are gone.
 
 Import the data structures from `takumi::prelude` and call the entry-point functions from the crate root:
 
@@ -194,7 +202,7 @@ use takumi::prelude::*; // [!code ++]
 use takumi::render; // [!code ++]
 ```
 
-Backend internals are no longer re-exported. If you genuinely need them, enable the `unstable` feature and reach them through `takumi::unstable`; nothing under it is covered by semver.
+Backend internals are no longer re-exported. If you need them, enable the `unstable` feature and reach them through `takumi::unstable`; nothing under it is covered by semver.
 
 ### `GlobalContext` becomes a `Fonts` context
 
@@ -232,26 +240,28 @@ write_image(&image, ImageOutputFormat::WebP, 80)?; // [!code --]
 write_image(&image, &mut output, OutputFormat::WebP { quality: Quality::new(80) })?; // [!code ++]
 ```
 
-In the napi and wasm bindings, the output `format` is a discriminated union, so `quality` and `lossless` only appear on the formats that accept them:
+In the napi and wasm bindings, `format` is a string (`"png"` | `"jpeg"` | `"webp"` | ...) with separate optional `quality` and `lossless` fields. `quality` applies to JPEG and lossy WebP; `lossless` applies to WebP.
 
 ```ts
-renderer.render(node, { format: "png", quality: 80 }); // [!code --]
-renderer.render(node, { format: "jpeg", quality: 80 }); // [!code ++]
-renderer.render(node, { format: "webp", lossless: true }); // [!code ++]
+renderer.render(node, { format: "jpeg", quality: 80 });
+renderer.render(node, { format: "webp", lossless: true });
 ```
 
-### Render entry points renamed
+### Renamed entry points
 
-`measure_layout` is now `measure` and `render_sequence_animation` is now `render_animation`, matching the JS bindings. `render` returns a `Bitmap` wrapper instead of an `image::RgbaImage`; reach the pixels with `bitmap.as_raw()` / `into_raw()` or pass it straight to `write_image`.
+| v1                                      | v2                       | Note                                                                             |
+| --------------------------------------- | ------------------------ | -------------------------------------------------------------------------------- |
+| `measure_layout`                        | `measure`                | Returns a `MeasuredNode`.                                                        |
+| `render_sequence_animation`             | `render_animation`       | Matches the JS binding.                                                          |
+| `render` -> `image::RgbaImage`          | `render` -> `Bitmap`     | Reach pixels with `bitmap.as_raw()` / `into_raw()`, or pass it to `write_image`. |
+| `render_for_layout(..., current_color)` | `render_for_layout(...)` | The `current_color` argument is dropped.                                         |
 
 ```rust
-let image = measure_layout(options)?; // [!code --]
-let image = measure(options)?; // [!code ++]
+let measured = measure_layout(options)?; // [!code --]
+let measured = measure(options)?; // [!code ++]
 ```
 
-### `ImageSource::render_for_layout` drops the `current_color` argument
-
-With SVG `currentColor` no longer resolved against the host, `render_for_layout` no longer needs the color.
+`render_for_layout` drops `current_color` because SVG `currentColor` is no longer resolved against the host:
 
 ```rust
 image.render_for_layout(width, height, image_rendering, time_ms, current_color)?; // [!code --]
@@ -260,4 +270,4 @@ image.render_for_layout(width, height, image_rendering, time_ms)?; // [!code ++]
 
 ## More in Changelog!
 
-For a more comprehensive list of changes, please refer to the changelog in [releases](https://github.com/kane50613/takumi/releases).
+For the full list of changes, see the [releases](https://github.com/kane50613/takumi/releases).

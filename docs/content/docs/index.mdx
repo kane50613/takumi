@@ -1,20 +1,84 @@
 ---
 title: Introduction
-description: A Rust rendering engine that converts JSX, HTML, and node trees into images. No headless browser required.
+description: A Rust engine that renders JSX, HTML, and node trees into images. No headless browser.
 icon: Axe
 ---
 
-Takumi renders JSX, raw HTML, and structured node trees through a full CSS layout and compositing pipeline, then outputs PNG, JPEG, WebP, ICO, GIF, APNG, or raw video frames.
+Takumi renders JSX, HTML, and node trees into PNG, JPEG, WebP, SVG, and animations. Native Rust on the server, WebAssembly on the edge.
 
-This documentation covers the JavaScript bindings (`takumi-js`).
+Generate OG images and social cards without a headless browser:
+
+- **No Chromium.** Native Rust on the server, WebAssembly on the edge.
+- **Drop-in for `next/og`.** `ImageResponse` matches the API you already ship.
+- **Every output from one render.** Raster, vector SVG, and animated GIF or WebP.
+
+## Install
+
+```npm
+npm i takumi-js@beta
+```
+
+`takumi-js` bundles both bindings: the native renderer (`@takumi-rs/core`) and the WebAssembly one (`@takumi-rs/wasm`). It picks the right one at runtime — native on Node.js, WebAssembly on Cloudflare Workers, Vercel Edge, Deno, and the browser. No extra install.
+
+## Render an image
+
+`render` takes JSX and returns image bytes. A default sans-serif font is built in, so text works without loading a font.
+
+```tsx
+import { render } from "takumi-js";
+import { writeFile } from "node:fs/promises";
+
+const png = await render(
+  <div
+    style={{
+      width: "100%",
+      height: "100%",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 72,
+      background: "linear-gradient(to bottom right, #fff7ed, #fecaca)",
+    }}
+  >
+    Hello Takumi
+  </div>,
+  { width: 1200, height: 630 },
+);
+
+await writeFile("hello.png", png);
+```
+
+- `width` and `height` set the canvas.
+- The root doesn't fill the canvas on its own, so it carries `width: 100%` and `height: 100%`.
+
+## Serve it over HTTP
+
+`ImageResponse` extends the web `Response`, so any runtime with `Request` and `Response` can return it. The API matches `next/og`.
+
+```tsx twoslash
+import { ImageResponse } from "takumi-js/response";
+
+export function GET() {
+  return new ImageResponse(<div style={{ width: "100%", height: "100%" }}>Hello Takumi</div>, {
+    width: 1200,
+    height: 630,
+  });
+}
+```
+
+<Callout type="warning">
+  Takumi never reads system fonts. One sans-serif font ships built in (Geist on the native renderer,
+  Manrope on WebAssembly); load every other font through `fonts` or its glyphs render as tofu. See
+  [Fonts](/docs/typography-and-fonts).
+</Callout>
+
+## Coming from satori
+
+The layout defaults differ. A bare `<div>` is `block` where satori forces `display: flex`, and `flex-direction` defaults to `row` instead of satori's `column`. Takumi supports Flexbox, Grid, and block layout where satori is flex-only, and rasterizes directly instead of returning an SVG to convert.
+
+## Next steps
 
 <Cards>
-  <Card
-    title="Quickstart"
-    href="/docs/quickstart"
-    description="Render your first image in a couple of minutes"
-    icon={<Zap />}
-  />
   <Card
     title="Playground"
     href="https://takumi.kane.tw/playground"
@@ -27,65 +91,16 @@ This documentation covers the JavaScript bindings (`takumi-js`).
     description="Add Takumi to Next.js, Cloudflare Workers, or any JS runtime"
     icon={<ToyBrick />}
   />
+  <Card
+    title="Styling"
+    href="/docs/styling"
+    description="Inline styles, Tailwind, and full stylesheets"
+    icon={<Palette />}
+  />
+  <Card
+    title="Fonts & text"
+    href="/docs/typography-and-fonts"
+    description="Load fonts, route scripts, and style text"
+    icon={<Type />}
+  />
 </Cards>
-
-## How It Works
-
-Most image-generation solutions are either a headless Chromium instance eating 300 MB of RAM, or a minimal SVG-to-PNG renderer that falls apart the moment you need real CSS. Takumi is neither of those.
-
-It converts any template into a **node tree** with three node kinds: `container`, `image`, and `text`. That tree runs through:
-
-1. **Layout** via [taffy](https://github.com/DioxusLabs/taffy): Flexbox, Grid, block, float, `calc()`, absolute positioning, z-index
-2. **Text shaping** via [parley](https://github.com/linebender/parley) and [skrifa](https://github.com/googlefonts/fontations/tree/main/skrifa): WOFF/WOFF2 fonts, emoji, RTL, multi-span inline blocks
-3. **Compositing**: stacking contexts, blend modes, filters, transforms, SVG via [resvg](https://github.com/linebender/resvg)
-4. **Output**: PNG, JPEG, WebP, ICO for statics; GIF, APNG, WebP for animations; raw RGBA frames for video pipelines
-
-A **time axis** threads through the pipeline. Animations, GIFs, and video frames are not a separate API. They're the same renderer called at timestamp `t`. The same layout also feeds a vector backend: `renderSvg()` emits a real `<svg>` document instead of pixels.
-
-```mermaid
-flowchart LR
-    A[Templates] --> N[Node Tree] --> P[Rendering Pipeline]
-    C[Stylesheets] --> P
-    R[Resources] --> P
-    D(Time Axis) -.-> P
-
-    P --> F[(Raw Pixels)]
-    P --> S[Vector SVG]
-
-    F --> G[PNG / JPEG / WebP / ICO]
-    F --> H[GIF / APNG]
-    F --> I[Video frames]
-```
-
-## Features
-
-### Advanced Layout
-
-Full **Flexbox, CSS Grid, block, and float** layout engine via [taffy](https://github.com/DioxusLabs/taffy). Supports `calc()`, absolute positioning, z-index stacking, inline text spans, and nested inline blocks.
-
-### Typography
-
-Browser-grade text shaping and rendering via [parley](https://github.com/linebender/parley), with glyph loading from [skrifa](https://github.com/googlefonts/fontations/tree/main/skrifa). Native support for WOFF and WOFF2 fonts, emoji, RTL languages, and multi-span inline blocks.
-
-### CSS & Tailwind
-
-A full-featured stylesheet engine: complex selectors, CSS variables, shorthand properties, arbitrary values, `@keyframes`, linear/radial gradients, `box-shadow`, `filter`, `backdrop-filter`, `mix-blend-mode`, and `transform`. Tailwind v4 is supported out of the box.
-
-### Animations
-
-Parse CSS `@keyframes` and the `animation` shorthand property. Render frame-by-frame with support for percentage, `from`, and `to` offsets; `linear`, `ease`, `steps()`, and `cubic-bezier()` timing functions; fill modes, delays, and iteration counts. Built-in Tailwind presets like `spin`, `ping`, `pulse`, and `bounce` work automatically.
-
-### SVG
-
-Full SVG parsing and rasterization via [resvg](https://github.com/linebender/resvg). Use inline SVG or reference external files.
-
-Takumi also emits **vector SVG** output: call `renderSvg()` to get a real `<svg>` document (`<rect>`, `<path>`, gradients, glyph outlines, embedded images) instead of a raster bitmap — the same layout, as a scalable vector.
-
-### Flexible Runtime
-
-Takumi runs everywhere without changing your code:
-
-| Target                           | Details                                       |
-| :------------------------------- | :-------------------------------------------- |
-| **Node.js**                      | Native N-API binary with Rayon multithreading |
-| **Cloudflare Workers / Browser** | WebAssembly with SIMD optimization            |

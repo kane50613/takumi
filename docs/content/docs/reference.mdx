@@ -6,7 +6,7 @@ icon: BookMarked
 
 ## Node Types
 
-Every node is a `container`, `text`, or `image`. They share a common set of fields and add a few of their own.
+Every node is a `container`, `text`, or `image`.
 
 All nodes accept these fields:
 
@@ -24,23 +24,31 @@ All nodes accept these fields:
       type: "string",
       description: "Element id used for selector matching",
     },
+    attributes: {
+      type: "NodeAttributes",
+      description: "Extra element attributes used for selector matching",
+    },
     preset: {
       type: "Style",
       description: "Default HTML element styles (lowest priority)",
-      typeDescriptionLink: "#style-properties",
-    },
-    style: {
-      type: "Style",
-      description: "Inline styling properties (highest priority)",
       typeDescriptionLink: "#style-properties",
     },
     tw: {
       type: "string",
       description: "Tailwind classes (medium priority, overrides preset)",
     },
+    style: {
+      type: "Style",
+      description: "Inline styling properties (highest priority)",
+      typeDescriptionLink: "#style-properties",
+    },
     lang: {
       type: "string",
       description: "BCP-47 language tag; inherited by descendants, drives locale-aware shaping",
+    },
+    dir: {
+      type: '"ltr" | "rtl"',
+      description: "Text direction; inherited by descendants",
     },
   }}
 />
@@ -79,9 +87,9 @@ Displays a rasterized image or SVG. Adds:
 <TypeTable
   type={{
     src: {
-      type: "string",
+      type: "string | Uint8Array | ArrayBuffer",
       required: true,
-      description: "The source URL / persistent image key to the image",
+      description: "Source URL, persistent image key, or raw image bytes",
     },
     width: {
       type: "number",
@@ -96,7 +104,7 @@ Displays a rasterized image or SVG. Adds:
 
 ## Style Properties
 
-Properties use their camelCase names. Longhands are listed in parentheses. `Supported` means the property follows its CSS spec.
+Properties use their camelCase names. Longhands are listed in parentheses. `Supported` means the property follows its CSS spec; a value cell instead lists the accepted keywords.
 
 ### Layout & display
 
@@ -136,16 +144,16 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 
 ### Border & outline
 
-| Property                                                                                                                              | Values                                |
-| :------------------------------------------------------------------------------------------------------------------------------------ | :------------------------------------ |
-| `borderWidth` (`borderTopWidth`, `borderRightWidth`, `borderBottomWidth`, `borderLeftWidth`, `borderInlineWidth`, `borderBlockWidth`) | `thin`, `medium`, `thick`, `<length>` |
-| `borderStyle`                                                                                                                         | `solid`, `none`                       |
-| `borderColor`                                                                                                                         | Supported                             |
-| `borderRadius` (`borderTopLeftRadius`, `borderTopRightRadius`, `borderBottomRightRadius`, `borderBottomLeftRadius`)                   | Supported                             |
-| `outlineWidth`                                                                                                                        | `thin`, `medium`, `thick`, `<length>` |
-| `outlineStyle`                                                                                                                        | `solid`, `none`                       |
-| `outlineColor`                                                                                                                        | Supported                             |
-| `outlineOffset`                                                                                                                       | Supported                             |
+| Property                                                                                                                              | Values                                                                                        |
+| :------------------------------------------------------------------------------------------------------------------------------------ | :-------------------------------------------------------------------------------------------- |
+| `borderWidth` (`borderTopWidth`, `borderRightWidth`, `borderBottomWidth`, `borderLeftWidth`, `borderInlineWidth`, `borderBlockWidth`) | `thin`, `medium`, `thick`, `<length>`                                                         |
+| `borderStyle`                                                                                                                         | `none`, `hidden`, `solid`, `dashed`, `dotted`, `double`, `groove`, `ridge`, `inset`, `outset` |
+| `borderColor`                                                                                                                         | Supported                                                                                     |
+| `borderRadius` (`borderTopLeftRadius`, `borderTopRightRadius`, `borderBottomRightRadius`, `borderBottomLeftRadius`)                   | Supported                                                                                     |
+| `outlineWidth`                                                                                                                        | `thin`, `medium`, `thick`, `<length>`                                                         |
+| `outlineStyle`                                                                                                                        | `none`, `hidden`, `solid`, `dashed`, `dotted`, `double`, `groove`, `ridge`, `inset`, `outset` |
+| `outlineColor`                                                                                                                        | Supported                                                                                     |
+| `outlineOffset`                                                                                                                       | Supported                                                                                     |
 
 ### Flexbox
 
@@ -181,20 +189,20 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 
 ### Effects & transform
 
-| Property                                                               | Values                        |
-| :--------------------------------------------------------------------- | :---------------------------- |
-| `boxShadow`                                                            | Supported                     |
-| `opacity`                                                              | Supported                     |
-| `filter`                                                               | `<filter-function>`           |
-| `backdropFilter`                                                       | `<filter-function>`           |
-| `mixBlendMode`                                                         | Supported                     |
-| `isolation`                                                            | Supported                     |
-| `transform` (`translateX`, `translateY`, `rotate`, `scaleX`, `scaleY`) | 2D only                       |
-| `transformOrigin`                                                      | Supported                     |
-| `clipPath`                                                             | `<basic-shape>`               |
-| `clipRule`                                                             | Supported                     |
-| `imageRendering`                                                       | `auto`, `smooth`, `pixelated` |
-| `strokeLinejoin`                                                       | `miter`, `round`, `bevel`     |
+| Property                                    | Values                                                                 |
+| :------------------------------------------ | :--------------------------------------------------------------------- |
+| `boxShadow`                                 | Supported                                                              |
+| `opacity`                                   | Supported                                                              |
+| `filter`                                    | `<filter-function>`                                                    |
+| `backdropFilter`                            | `<filter-function>`                                                    |
+| `mixBlendMode`                              | Supported                                                              |
+| `isolation`                                 | Supported                                                              |
+| `transform`, `rotate`, `scale`, `translate` | 2D only; `transform` accepts functions like `translateX()`, `scaleX()` |
+| `transformOrigin`                           | Supported                                                              |
+| `clipPath`                                  | `<basic-shape>`                                                        |
+| `clipRule`                                  | Supported                                                              |
+| `imageRendering`                            | `auto`, `smooth`, `pixelated`                                          |
+| `strokeLinejoin`                            | `miter`, `round`, `bevel`                                              |
 
 ### Animation
 
@@ -211,38 +219,38 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 
 ### Typography
 
-| Property                                                                                                         | Values                                                                             |
-| :--------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------- |
-| `color`                                                                                                          | Supported                                                                          |
-| `fontFamily`                                                                                                     | Font fallback supported                                                            |
-| `fontSize`                                                                                                       | Supported                                                                          |
-| `fontWeight`                                                                                                     | Supported                                                                          |
-| `fontStyle`                                                                                                      | Supported                                                                          |
-| `fontStretch`                                                                                                    | Supported                                                                          |
-| `fontVariationSettings`                                                                                          | Supported                                                                          |
-| `fontFeatureSettings`                                                                                            | Supported                                                                          |
-| `fontSynthesis`                                                                                                  | `none`, `weight`, `style`                                                          |
-| `fontSynthesisWeight`                                                                                            | `auto`, `none`                                                                     |
-| `fontSynthesisStyle`                                                                                             | `auto`, `none`                                                                     |
-| `lineHeight`                                                                                                     | Supported                                                                          |
-| `letterSpacing`                                                                                                  | Supported                                                                          |
-| `wordSpacing`                                                                                                    | Supported                                                                          |
-| `textIndent`                                                                                                     | Supported                                                                          |
-| `textAlign`                                                                                                      | Supported                                                                          |
-| `verticalAlign`                                                                                                  | Supported                                                                          |
-| `textTransform`                                                                                                  | `none`, `uppercase`, `lowercase`, `capitalize`                                     |
-| `textShadow`                                                                                                     | Supported                                                                          |
-| `textOverflow`                                                                                                   | `ellipsis`, `clip`, custom character                                               |
-| `lineClamp`                                                                                                      | `none`, `<integer>`, `<integer> <block-ellipsis>`                                  |
-| `maxLines`                                                                                                       | `none`, `<integer>`                                                                |
-| `blockEllipsis`                                                                                                  | `none`, `auto`, `<string>`                                                         |
-| `continue`                                                                                                       | `normal`, `collapse`                                                               |
-| `overflowWrap`                                                                                                   | Supported                                                                          |
-| `wordBreak`                                                                                                      | `normal`, `break-all`, `keep-all`, `break-word`                                    |
-| `whiteSpace`                                                                                                     | `normal`, `pre`, `pre-wrap`, `pre-line`, `<text-wrap-mode> <white-space-collapse>` |
-| `whiteSpaceCollapse`                                                                                             | `preserve`, `collapse`, `preserve-spaces`, `preserve-breaks`                       |
-| `textWrap` (`textWrapMode`, `textWrapStyle`)                                                                     | `wrap`, `nowrap`; `auto`, `balance`, `pretty`                                      |
-| `textFit`                                                                                                        | [Supported](https://drafts.csswg.org/css-text-4/#text-fit-property)                |
-| `textDecoration` (`textDecorationLine`, `textDecorationStyle`, `textDecorationColor`, `textDecorationThickness`) | `underline`, `line-through`, `overline`; `solid`                                   |
-| `textDecorationSkipInk`                                                                                          | `auto`, `none`                                                                     |
-| `WebkitTextStroke` (`WebkitTextStrokeWidth`, `WebkitTextStrokeColor`, `WebkitTextFillColor`)                     | Supported                                                                          |
+| Property                                                                                                         | Values                                                                                       |
+| :--------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------- |
+| `color`                                                                                                          | Supported                                                                                    |
+| `fontFamily`                                                                                                     | Font fallback supported                                                                      |
+| `fontSize`                                                                                                       | Supported                                                                                    |
+| `fontWeight`                                                                                                     | Supported                                                                                    |
+| `fontStyle`                                                                                                      | Supported                                                                                    |
+| `fontStretch`                                                                                                    | Supported                                                                                    |
+| `fontVariationSettings`                                                                                          | Supported                                                                                    |
+| `fontFeatureSettings`                                                                                            | Supported                                                                                    |
+| `fontSynthesis`                                                                                                  | `none`, `weight`, `style`                                                                    |
+| `fontSynthesisWeight`                                                                                            | `auto`, `none`                                                                               |
+| `fontSynthesisStyle`                                                                                             | `auto`, `none`                                                                               |
+| `lineHeight`                                                                                                     | Supported                                                                                    |
+| `letterSpacing`                                                                                                  | Supported                                                                                    |
+| `wordSpacing`                                                                                                    | Supported                                                                                    |
+| `textIndent`                                                                                                     | Supported                                                                                    |
+| `textAlign`                                                                                                      | Supported                                                                                    |
+| `verticalAlign`                                                                                                  | Supported                                                                                    |
+| `textTransform`                                                                                                  | `none`, `uppercase`, `lowercase`, `capitalize`                                               |
+| `textShadow`                                                                                                     | Supported                                                                                    |
+| `textOverflow`                                                                                                   | `ellipsis`, `clip`, custom character                                                         |
+| `lineClamp`                                                                                                      | `none`, `<integer>`, `<integer> <block-ellipsis>`                                            |
+| `maxLines`                                                                                                       | `none`, `<integer>`                                                                          |
+| `blockEllipsis`                                                                                                  | `none`, `auto`, `<string>`                                                                   |
+| `continue`                                                                                                       | `normal`, `collapse`                                                                         |
+| `overflowWrap`                                                                                                   | Supported                                                                                    |
+| `wordBreak`                                                                                                      | `normal`, `break-all`, `keep-all`, `break-word`                                              |
+| `whiteSpace`                                                                                                     | `normal`, `nowrap`, `pre`, `pre-wrap`, `pre-line`, `<text-wrap-mode> <white-space-collapse>` |
+| `whiteSpaceCollapse`                                                                                             | `preserve`, `collapse`, `preserve-spaces`, `preserve-breaks`                                 |
+| `textWrap` (`textWrapMode`, `textWrapStyle`)                                                                     | `wrap`, `nowrap`; `auto`, `balance`, `pretty`                                                |
+| `textFit`                                                                                                        | [Supported](https://drafts.csswg.org/css-text-4/#text-fit-property)                          |
+| `textDecoration` (`textDecorationLine`, `textDecorationStyle`, `textDecorationColor`, `textDecorationThickness`) | `underline`, `line-through`, `overline`; `solid`                                             |
+| `textDecorationSkipInk`                                                                                          | `auto`, `none`                                                                               |
+| `WebkitTextStroke` (`WebkitTextStrokeWidth`, `WebkitTextStrokeColor`, `WebkitTextFillColor`)                     | Supported                                                                                    |

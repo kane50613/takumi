@@ -1,14 +1,14 @@
 ---
 title: Output Formats
 description: Choose a raster format, set the pixel density, or emit vector SVG.
-icon: Image
+icon: FileOutput
 ---
 
-`render()` returns encoded image bytes. The `format` option picks the encoder; the rest of this page covers the knobs each one exposes, the pixel-density control, and the separate vector-SVG path.
+`render()` returns encoded image bytes. The `format` option picks the encoder.
 
 ## Picking a format
 
-`format` is part of a discriminated union, so the format-specific options only appear on the formats that accept them. `quality` cannot pair with PNG, and `lossless` is WebP-only.
+`format` defaults to `png`. `quality` and `lossless` apply only where the table marks a Yes, and are ignored elsewhere. `quality` runs `0`–`100` (default `75`).
 
 ```tsx
 import { render } from "takumi-js";
@@ -18,19 +18,17 @@ await render(<OgImage />, { width: 1200, height: 630, format: "jpeg", quality: 8
 await render(<OgImage />, { width: 1200, height: 630, format: "webp", lossless: true });
 ```
 
-| Format          | Alpha | Notes                                                                                   |
-| :-------------- | :---- | :-------------------------------------------------------------------------------------- |
-| `png` (default) | Yes   | Lossless. Use when you need transparency or exact pixels.                               |
-| `jpeg`          | No    | Lossy; `quality` 0–100. Alpha is flattened. Smallest files for photographic content.    |
-| `webp`          | Yes   | Lossy with `quality`, or `lossless: true`. Omitting both encodes losslessly.            |
-| `ico`           | Yes   | Favicon container, PNG-encoded inside.                                                  |
-| `raw`           | Yes   | Uncompressed RGBA bytes, `width × height × 4`. For video pipelines and custom encoders. |
-
-`quality` only applies to `jpeg` and lossy `webp`. For WebP, `lossless` wins over `quality`.
+| Format          | Alpha | Honors `quality` | Honors `lossless` | Notes                                           |
+| :-------------- | :---- | :--------------- | :---------------- | :---------------------------------------------- |
+| `png` (default) | Yes   | No               | No                | Lossless. Use for transparency or exact pixels. |
+| `jpeg`          | No    | Yes              | No                | Lossy. Alpha is flattened. Best for photos.     |
+| `webp`          | Yes   | Yes              | Yes               | Lossy with `quality`; `lossless: true` wins.    |
+| `ico`           | Yes   | No               | No                | Favicon container, PNG-encoded inside.          |
+| `raw`           | Yes   | No               | No                | Uncompressed RGBA bytes, `width × height × 4`.  |
 
 <Callout type="info">
-  On `@takumi-rs/wasm`, WebP is always lossless — lossy WebP encoding is native-only. The `quality`
-  and `lossless` knobs are absent from the WASM types.
+  On `@takumi-rs/wasm`, WebP is always lossless and the `lossless` knob is absent from the types.
+  `quality` still exists there and applies to JPEG.
 </Callout>
 
 ### Raw frames
@@ -39,7 +37,7 @@ await render(<OgImage />, { width: 1200, height: 630, format: "webp", lossless: 
 
 ## Device pixel ratio
 
-`devicePixelRatio` scales the output resolution without touching the layout. A `1200 × 630` render at `devicePixelRatio: 2` produces a `2400 × 1260` image whose elements keep their CSS sizes — the same trick a retina screen uses.
+`devicePixelRatio` scales the output resolution without touching the layout. A `1200 × 630` render at `devicePixelRatio: 2` produces a `2400 × 1260` image whose elements keep their CSS sizes.
 
 ```tsx
 await render(<OgImage />, { width: 1200, height: 630, devicePixelRatio: 2 });
@@ -47,7 +45,7 @@ await render(<OgImage />, { width: 1200, height: 630, devicePixelRatio: 2 });
 
 ## Dithering
 
-`dithering` trades a little noise for smoother gradients when colors are quantized during encoding, removing visible banding.
+`dithering` smooths gradients when colors are quantized during encoding, removing visible banding. It applies to static image exports and `raw` buffers.
 
 - `none` (default)
 - `ordered-bayer`
@@ -63,7 +61,7 @@ await render(<Gradient />, { width: 1200, height: 630, dithering: "floyd-steinbe
 
 ## Vector SVG
 
-`renderSvg()` is the second output backend. It takes the same input and resource pipeline as `render()`, but returns an `<svg>` document string instead of a raster bitmap — real `<rect>`, `<path>`, gradients, glyph outlines, and embedded images, drawn from the same layout. If you came from [satori](https://github.com/vercel/satori) for its SVG output, this is the direct equivalent.
+`renderSvg()` is the second output backend. It returns an `<svg>` document string instead of a raster bitmap. The output is real `<rect>`, `<path>`, gradients, glyph outlines, and embedded images, drawn from the same layout.
 
 ```tsx
 import { render, renderSvg } from "takumi-js";
@@ -72,7 +70,7 @@ const png = await render(<OgImage />, { width: 1200, height: 630 });
 const svg = await renderSvg(<OgImage />, { width: 1200, height: 630 });
 ```
 
-Because SVG is a vector format, the raster-only knobs — `format`, `quality`, `lossless`, `dithering`, `drawDebugBorder`, `devicePixelRatio` — do not apply.
+SVG is a vector format, so the raster-only knobs do not apply: `format`, `quality`, `lossless`, `dithering`, `drawDebugBorder`, `devicePixelRatio`.
 
 ## Cancellation
 

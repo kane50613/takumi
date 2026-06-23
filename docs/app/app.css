@@ -1,6 +1,5 @@
 @import "tailwindcss";
-@import "fumadocs-ui/css/shadcn.css";
-@import "fumadocs-ui/css/solar.css";
+@import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
 @import "fumadocs-twoslash/twoslash.css";
 
@@ -32,9 +31,6 @@
   --muted-foreground: #71717a;
 
   --color-fd-primary: var(--primary);
-  --color-fd-background: var(--background);
-  --color-fd-foreground: var(--foreground);
-  --color-fd-popover: var(--background);
 
   --font-sans:
     "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell,
@@ -61,14 +57,18 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
 
-  --background: #0d0d0d;
-  --foreground: #ffffff;
+  --background: #161616;
+  --foreground: #ededed;
   --primary: #ff4d4d;
   --primary-foreground: white;
   --border: rgba(255, 255, 255, 0.08);
   --ring: rgba(255, 77, 77, 0.3);
-  --muted: #18181b;
+  --muted: #202020;
   --muted-foreground: #a1a1aa;
+
+  --color-fd-background: var(--background);
+  --color-fd-foreground: var(--foreground);
+  --color-fd-popover: var(--background);
 }
 
 @theme inline {

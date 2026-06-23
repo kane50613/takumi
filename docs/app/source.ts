@@ -6,10 +6,12 @@ import { __iconNode as bookMarkedIconNode } from "lucide-react/dist/esm/icons/bo
 import { __iconNode as brainIconNode } from "lucide-react/dist/esm/icons/brain";
 import { __iconNode as bugIconNode } from "lucide-react/dist/esm/icons/bug";
 import { __iconNode as circleFadingArrowUpIconNode } from "lucide-react/dist/esm/icons/circle-fading-arrow-up";
+import { __iconNode as fileOutputIconNode } from "lucide-react/dist/esm/icons/file-output";
 import { __iconNode as imageMarkedIconNode } from "lucide-react/dist/esm/icons/image";
 import { __iconNode as layersIconNode } from "lucide-react/dist/esm/icons/layers";
 import { __iconNode as layoutTemplateIconNode } from "lucide-react/dist/esm/icons/layout-template";
 import { __iconNode as leafIconNode } from "lucide-react/dist/esm/icons/leaf";
+import { __iconNode as paletteIconNode } from "lucide-react/dist/esm/icons/palette";
 import { __iconNode as playIconNode } from "lucide-react/dist/esm/icons/play";
 import { __iconNode as rulerIconNode } from "lucide-react/dist/esm/icons/ruler";
 import { __iconNode as toyBrickIconNode } from "lucide-react/dist/esm/icons/toy-brick";
@@ -40,9 +42,11 @@ const icons = {
   BookMarked: bookMarkedIconNode,
   Image: imageMarkedIconNode,
   Type: typeIconNode,
+  Palette: paletteIconNode,
   Layers: layersIconNode,
   Zap: zapIconNode,
   CircleFadingArrowUp: circleFadingArrowUpIconNode,
+  FileOutput: fileOutputIconNode,
   LayoutTemplate: layoutTemplateIconNode,
   Wind: windIconNode,
   Wrench: wrenchIconNode,

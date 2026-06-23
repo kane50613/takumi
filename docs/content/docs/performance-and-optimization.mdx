@@ -4,68 +4,35 @@ description: Best practices for building high-performance rendering pipelines wi
 icon: Zap
 ---
 
-Takumi is designed from the ground up for speed. However, as your node trees grow in complexity, following these best practices will ensure you get the most out of the engine.
+These practices keep Takumi fast as your node trees grow.
 
 ## The Renderer
 
 ### Reuse the Renderer Instance
 
-For both `@takumi-rs/core` and `@takumi-rs/wasm`, the `Renderer` is the heart of Takumi's resource management. Try to reuse the renderer instance across multiple renderings.
+The `Renderer` holds Takumi's caches. Reuse one instance across renders instead of constructing a new one each time.
 
-#### For ImageResponse
-
-An internal renderer instance is managed automatically, or you can pass your own renderer instance via `renderer` option.
-
-Refer to both [Typography & Fonts](/docs/typography-and-fonts) and [Load Images](/docs/load-images) for more details.
-
-#### For Cloudflare Workers
-
-Initialize the WASM module and renderer instance out side of the `fetch()` handler so it won't be re-run everytime a request comes in.
-
-```tsx title="index.tsx"
-import { ImageResponse } from "takumi-js/response";
-import { initSync, Renderer } from "takumi-js/wasm";
-import module from "takumi-js/wasm/takumi_wasm_bg.wasm";
-import archivo from "path-to-font.ttf";
-
-const fetchCache = new Map();
-const logoUrl = "https://yeecord.com/img/logo.png";
-
-initSync(module); // [!code highlight]
-
-// [!code highlight:2]
-const renderer = new Renderer();
-await renderer.registerFont(archivo);
-
-export default {
-  fetch(request) {
-    return new ImageResponse(<div />, {
-      width: 1200,
-      height: 630,
-      renderer, // [!code highlight]
-    });
-  },
-};
-```
+`ImageResponse` manages an internal renderer, or pass your own through the `renderer` option. See [Typography & Fonts](/docs/typography-and-fonts) and [Load Images](/docs/load-images).
 
 ### Preload Frequently Used Images
 
-Loading images from URLs or bytes during the rendering pass can be a bottleneck. Register [Load Images](/docs/load-images) to avoid re-decoding.
+Loading images from URLs or bytes during the rendering pass is a bottleneck. Register [Load Images](/docs/load-images) to avoid re-decoding.
 
 ### Parallel Rendering
 
-Always prefer `@takumi-rs/core` over `@takumi-rs/wasm` for utilizing multiple threads.
+On the server, prefer `@takumi-rs/core`: it renders across multiple threads, where `@takumi-rs/wasm` is single-threaded.
 
 ## Component Design
 
 ### Stack Filters in a Single Node
 
-A composition layer with the same size as viewport has to be created in order to apply filters and blurs, which incurs additional memory usage.
+Each filtered node allocates its own offscreen composition layer, sized to the element (viewport-sized only as a worst case). Stacking filters on one node reuses a single layer.
 
 ## Fonts
 
 ### Prefer TTF over WOFF2
 
-WOFF2 is a compressed format, which requires decompression before use. TTF is a raw format, which can be used directly.
-
-You should only use WOFF2 if the concern of file size is more important than the concern of performance.
+| Format | Decode cost             | When to use                              |
+| ------ | ----------------------- | ---------------------------------------- |
+| TTF    | Used directly           | Default                                  |
+| WOFF2  | Decompressed before use | File size matters more than decode speed |
