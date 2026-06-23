@@ -41,7 +41,6 @@
   },
   "scripts": {
     "build": "tsdown",
-    "prepublishOnly": "jq '.dependencies[\"takumi-js\"] = .version' package.json > tmp.json && mv tmp.json package.json",
     "publish-lint": "attw --pack . && publint --strict ."
   },
   "dependencies": {
