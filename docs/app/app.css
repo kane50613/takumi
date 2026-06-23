@@ -57,13 +57,13 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
 
-  --background: #1a1a1a;
+  --background: #161616;
   --foreground: #ededed;
   --primary: #ff4d4d;
   --primary-foreground: white;
   --border: rgba(255, 255, 255, 0.08);
   --ring: rgba(255, 77, 77, 0.3);
-  --muted: #242424;
+  --muted: #202020;
   --muted-foreground: #a1a1aa;
 
   --color-fd-background: var(--background);
