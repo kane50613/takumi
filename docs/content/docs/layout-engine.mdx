@@ -1,18 +1,42 @@
 ---
 title: Layout Engine
-description: How Takumi implements layout.
+description: Display modes, the box model, sizing, and positioning — the CSS layout Takumi runs.
 icon: Layers
 ---
 
-Takumi uses [Taffy](https://github.com/DioxusLabs/taffy), a Rust implementation of the CSS Flexbox and CSS Grid specifications.
+Takumi lays out every node with [Taffy](https://github.com/DioxusLabs/taffy), a Rust implementation of CSS Flexbox, Grid, and block layout. Tags carry their browser defaults: a `<div>` is `block`, a `<p>` has margins, an `<h1>` is bold and larger.
 
-## Box Model
+<Callout type="warning">
+  Coming from [satori](https://github.com/vercel/satori)? Takumi does **not** force `display: flex` on
+  every element, and `flex-direction` defaults to `row`, not `column`. A bare `<div>` is a block. Set
+  `display: flex` yourself when you want flex, the same as in a browser.
+</Callout>
 
-Every node in Takumi follows the standard CSS box model. The total size of an element is calculated based on its content, padding, border, and margin.
+## Display modes
 
-## Auto Sizing
+`display` picks the layout algorithm for a node's children.
 
-The `width` and `height` parameters are optional, which means Takumi can calculate the size based on the content.
+| Value                     | Children laid out as                                                         |
+| :------------------------ | :--------------------------------------------------------------------------- |
+| `block`                   | Block flow, stacked top to bottom. The default for `<div>`, `<p>`, headings. |
+| `flex` / `inline-flex`    | Flexbox. `flex-direction` defaults to `row`.                                 |
+| `grid` / `inline-grid`    | CSS Grid.                                                                    |
+| `inline` / `inline-block` | Inline flow within a line.                                                   |
+| `none`                    | Not rendered, and neither are its children.                                  |
+
+To center content the usual way, opt into flex:
+
+```tsx
+<div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>Centered</div>
+```
+
+## Box model
+
+Every node follows the standard CSS box model: `content`, `padding`, `border`, `margin`. An element's rendered size is the sum of those boxes, adjusted by `box-sizing`. `calc()` works wherever a length does.
+
+## Sizing
+
+`width` and `height` are optional. Leave them off and the node sizes to its content.
 
 ```tsx twoslash
 import { ImageResponse } from "takumi-js/response";
@@ -27,7 +51,7 @@ function List() {
   const items = Array.from({ length: 5 }, (_, i) => i);
 
   return (
-    <div style={{ width: "100%", height: "100%" }}>
+    <div style={{ width: "100%" }}>
       {items.map((item) => (
         <div key={item}>Item {item}.</div>
       ))}
@@ -36,9 +60,22 @@ function List() {
 }
 ```
 
-## Intrinsic Size for Images
+Lengths take pixels, `%`, `auto`, `fr` (grid tracks), `vw` / `vh`, `em` / `rem`, and `calc()`. `min-width`, `max-width`, `min-height`, and `max-height` clamp the result.
 
-By default, the image would be measured based on its intrinsic size, you can override it by setting `width` and `height` properties.
+### Filling the canvas
+
+`width` and `height` on the render set the pixel canvas. The root node does not fill it on its own, so give the root `width: 100%` and `height: 100%` when you want it edge to edge.
+
+```tsx
+await render(<div style={{ width: "100%", height: "100%" }}>Full bleed</div>, {
+  width: 1200,
+  height: 630,
+});
+```
+
+### Intrinsic image size
+
+An image measures to its intrinsic size. Set `width` and `height` to override it.
 
 ```tsx twoslash
 import { ImageResponse } from "takumi-js/response";
@@ -46,4 +83,14 @@ import { ImageResponse } from "takumi-js/response";
 export function GET() {
   return new ImageResponse(<img src="https://placehold.co/1200x600" width={1200} height={600} />);
 }
+```
+
+## Positioning
+
+`position: relative` shifts a node by `top` / `right` / `bottom` / `left` without affecting its siblings. `position: absolute` takes it out of flow and places it against the nearest positioned ancestor; `fixed` places it against the canvas. `z-index` orders overlapping nodes within a stacking context.
+
+```tsx
+<div style={{ position: "relative" }}>
+  <span style={{ position: "absolute", top: 16, right: 16, zIndex: 1 }}>Badge</span>
+</div>
 ```

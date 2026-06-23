@@ -12,9 +12,8 @@
     "integration",
     "--- Essentials ---",
     "layout-engine",
+    "styling",
     "typography-and-fonts",
-    "tailwind-css",
-    "templates",
     "--- Going further ---",
     "load-images",
     "output-formats",
@@ -25,6 +24,8 @@
     "helpers",
     "measure-api",
     "upgrade",
-    "troubleshooting"
+    "troubleshooting",
+    "--- Showcase ---",
+    "templates"
   ]
 }

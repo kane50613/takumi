@@ -164,40 +164,16 @@ This is the minimal API for animated image output. In most cases, you should kee
 
 ```tsx twoslash title="render.tsx"
 // @noErrors
-import { Renderer } from "takumi-js/node";
-import { fromJsx } from "takumi-js/helpers/jsx";
+import { renderAnimation } from "takumi-js";
+import { Scene, keyframes } from "./scene";
 
-const renderer = new Renderer();
-
-const { node, stylesheets } = await fromJsx(
-  <div tw="w-full h-full items-center justify-center">
-    <style>{`
-      @keyframes move {
-        from {
-          transform: translateX(0);
-        }
-
-        to {
-          transform: translateX(60px);
-        }
-      }
-    `}</style>
-    <div tw="w-10 h-10 bg-red-500 animate-[move_1s_ease-in-out_infinite_alternate]" />
-  </div>,
-);
-
-const output = await renderer.renderAnimation({
+const output = await renderAnimation({
   width: 100,
   height: 100,
   fps: 30,
   format: "webp",
-  stylesheets,
-  scenes: [
-    {
-      durationMs: 1000,
-      node,
-    },
-  ],
+  keyframes,
+  scenes: [{ durationMs: 1000, node: <Scene /> }],
 });
 ```
 

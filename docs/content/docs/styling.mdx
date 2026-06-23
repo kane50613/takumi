@@ -1,0 +1,116 @@
+---
+title: Styling
+description: The four ways CSS reaches a node — inline style, the tw prop, style tags, and stylesheets.
+icon: Palette
+---
+
+Takumi reads CSS from four places:
+
+- The `style` prop — an inline `CSSProperties` object on one node.
+- The `tw` prop — Tailwind classes on one node.
+- `<style>` tags — CSS that travels inside the JSX.
+- The `stylesheets` option — full stylesheets matched against `className` and `id`.
+
+The `style` and `tw` props target a single node. `<style>` tags and `stylesheets` carry rules that match across the whole tree by selector.
+
+## The `style` prop
+
+Pass a camelCase `CSSProperties` object. It styles that node directly and overrides the tag's default.
+
+```tsx
+<div style={{ display: "flex", padding: 32, background: "#0f172a", color: "white" }}>Card</div>
+```
+
+## Stylesheets
+
+Hand the engine real CSS through the `stylesheets` option and match it with `className` or `id`. This is how you reuse a design across nodes or bring a precompiled stylesheet.
+
+```tsx twoslash
+import { render } from "takumi-js";
+
+const image = await render(<div className="card">Hello</div>, {
+  width: 1200,
+  height: 630,
+  stylesheets: [`.card { display: flex; padding: 48px; background: #0f172a; color: white; }`],
+});
+```
+
+The stylesheet engine handles class, id, and descendant selectors, CSS custom properties with `var()`, shorthand properties, `@keyframes`, `@media`, `@supports`, gradients, `box-shadow`, `filter`, `backdrop-filter`, `mix-blend-mode`, and `transform`.
+
+<Callout type="info">
+  A render is a single static frame, so interactive pseudo-classes like `:hover` and `:focus` parse
+  but never match. They sit harmlessly in the stylesheet without affecting the output.
+</Callout>
+
+A `<style>` tag inside the JSX feeds the same engine, and its CSS is extracted automatically. Use it when you want the rules to travel with the component.
+
+```tsx
+<div className="card">
+  <style>{`.card { display: flex; padding: 48px; }`}</style>
+  Hello
+</div>
+```
+
+## Tailwind CSS
+
+There are two ways to use Tailwind: bring a stylesheet your bundler compiled, or use the built-in `tw` parser.
+
+### Bring your stylesheet
+
+Set Tailwind up with your bundler, then pass the compiled CSS through `stylesheets`. On Vite-powered frameworks, import it with the `?inline` query.
+
+```tsx title="og.tsx"
+// [!code ++]
+import stylesheet from "~/styles/global.css?inline";
+
+export function GET() {
+  return new ImageResponse(
+    <div className="bg-background text-foreground flex justify-center items-center w-full h-full text-4xl">
+      Hello Tailwind!
+    </div>,
+    {
+      width: 1200,
+      height: 630,
+      // [!code ++]
+      stylesheets: [stylesheet],
+    },
+  );
+}
+```
+
+```tsx title="vite.config.ts"
+import { defineConfig } from "vite";
+import tailwindcss from "@tailwindcss/vite";
+
+export default defineConfig({
+  // [!code ++]
+  plugins: [tailwindcss()],
+});
+```
+
+### Native parser
+
+Takumi ships a built-in Tailwind parser behind the `tw` prop. It predates full stylesheet support and won't cover every Tailwind feature, but it's a quick path for simple cases with no build step.
+
+- No theme config, but arbitrary values work.
+- See the [parser mapping](https://github.com/kane50613/takumi/blob/master/takumi-css/src/style/tw/map.rs) for every supported class.
+
+Use `tw` on any element:
+
+```tsx
+<div tw="bg-blue-500 p-4 rounded-lg">
+  <h1 tw="text-white text-2xl font-bold">Hello Tailwind!</h1>
+</div>
+```
+
+`tw` is just a prop, so build it dynamically:
+
+```tsx
+import clsx from "clsx";
+
+const isError = true;
+
+<div tw={clsx("p-4 rounded", isError ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700")}>
+  {isError ? "Something went wrong" : "Success!"}
+</div>;
+```
