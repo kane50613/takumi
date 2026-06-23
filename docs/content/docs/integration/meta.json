@@ -1,4 +1,5 @@
 {
   "defaultOpen": true,
-  "icon": "ToyBrick"
+  "icon": "ToyBrick",
+  "pages": ["index", "nextjs", "nuxt", "sveltekit", "tanstack-start", "rust"]
 }

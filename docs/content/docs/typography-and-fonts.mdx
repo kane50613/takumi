@@ -1,20 +1,18 @@
 ---
 title: Typography & Fonts
-description: font management and advanced text rendering.
+description: Load fonts, route scripts across them, and style text.
 icon: Type
 ---
 
-Takumi does not use system fonts. All fonts must be explicitly loaded to be available for rendering.
+Takumi never reads system fonts. Load every font a render needs, or its glyphs fall back to tofu.
 
-For `@takumi-rs/core` (napi-rs version), full axis Geist and Geist Mono are embedded by default.
+`@takumi-rs/core` (napi) embeds full-axis Geist and Geist Mono. `@takumi-rs/wasm` embeds one Latin font, Manrope. Add your own family if you need monospace there.
 
-For `@takumi-rs/wasm`, a single variable Latin font, Manrope, is embedded by default.
+## Loading fonts
 
-If you need a monospace family in WASM, provide your own font.
+### The `fonts` option
 
-## Adding fonts
-
-Pass the fonts a render needs through the `fonts` option. Each entry is raw bytes or a `{ name, data, weight, style }` descriptor, and `data` may be a loader that returns the bytes. The renderer registers and deduplicates them, so a reused renderer pays the decode cost once.
+Pass the fonts a render needs through `fonts`. Each entry is raw bytes, or a `{ name, data, weight, style }` descriptor. `data` can be a loader that returns the bytes. The renderer deduplicates them, so a reused renderer decodes each file once.
 
 ```tsx twoslash
 import { ImageResponse } from "takumi-js/response";
@@ -31,11 +29,11 @@ export function GET() {
 }
 ```
 
-The same `fonts` option works on `render`, `renderAnimation`, and `encodeFrames`.
+`render`, `renderAnimation`, and `encodeFrames` take the same `fonts` option.
 
 ### From Google Fonts
 
-`googleFont` fetches a family's CSS from Google Fonts and returns ready-to-use `fonts` entries — one lazy loader per `woff2` file, downloaded only when the renderer first needs it. Reference the family by its name in `font-family`.
+`googleFont` fetches a family from Google Fonts and returns `fonts` entries. You get one lazy loader per `woff2` file. Each file downloads only when the renderer first needs it. Use the family by its name in `font-family`.
 
 ```tsx
 import { render } from "takumi-js";
@@ -48,15 +46,15 @@ const image = await render(<div style={{ fontFamily: "Inter" }}>Hello</div>, {
 });
 ```
 
-`weight` takes one weight, an array, or a range like `"100..900"` that loads the variable font and leaves CSS `font-weight` in control. `style` is `"normal"`, `"italic"`, or both. `text` limits the download to the glyphs that string uses — worth it for OG images, where you know the text up front.
+`weight` takes one weight, an array, or a range like `"100..900"`. A range loads the variable font and lets CSS `font-weight` drive it. `style` is `"normal"`, `"italic"`, or both. `text` downloads only the glyphs that string uses, which helps OG images where you know the text up front. `display` maps to CSS `font-display`.
 
 ```tsx
 fonts: await googleFont("Inter", { weight: 700, style: "italic", text: title }),
 ```
 
-#### Content-driven subsets
+### Multilingual content
 
-For multilingual content where you can't predict which scripts appear, `googleFontSubsets` loads only the subsets the content actually renders. Give it your content and the families to draw from; it scans the codepoints, fetches every family's metadata in one request, and keeps just the subsets whose `unicode-range` intersects.
+Sometimes you can't predict which scripts appear. `googleFontSubsets` loads only the subsets the content needs. Give it your content and the families to draw from. It scans the text, fetches each family's metadata in one request, and keeps the subsets that match.
 
 ```tsx
 import { render } from "takumi-js";
@@ -71,11 +69,15 @@ const fonts = await googleFontSubsets(node, ["Inter", "Noto Sans JP", "Noto Sans
 const image = await render(node, { width: 1200, height: 630, fonts });
 ```
 
-Each subset registers under a unique internal name, while `font-family: Inter` expands across every subset, so each script routes to the file that covers it. Pass a `Map` as `cache` to reuse the parsed metadata across renders — useful when a playground re-renders on every edit.
+Each subset registers under its own internal name. `font-family: Inter` still expands across all of them, so each script finds the file that covers it. Pass a `Map` as `cache` to reuse the metadata across renders. This helps a playground that re-renders on every edit.
+
+```tsx
+const fonts = await googleFontSubsets(node, ["Inter"], { cache });
+```
 
 ### Preloading with `registerFont`
 
-`registerFont` is the escape hatch for preloading: register a font on a renderer up front, outside the request path, then reuse that renderer. It accepts the same entry shape as `fonts` and resolves to the families it produced.
+`registerFont` is the escape hatch for preloading. Register a font on a renderer up front, outside the request path. Then reuse that renderer. It takes the same entries as `fonts` and returns the families it made.
 
 ```tsx
 const renderer = new Renderer();
@@ -84,9 +86,11 @@ await renderer.registerFont({ name: "Inter", data: inter });
 return new ImageResponse(<OgImage />, { renderer });
 ```
 
-### Font fallback chain
+## Choosing a font
 
-`fontFamilies` is the ordered list of families tried in turn when a glyph is missing. It defaults to the families you passed, in order, so the chain follows the order you listed your fonts. Set it to pin which family wins and what backs it up.
+### Fallback chain
+
+`fontFamilies` is the ordered list of families to try when a glyph is missing. It defaults to the families you passed, in order. Set it to pin which family wins and what backs it up.
 
 ```tsx
 const image = await renderer.render(node, {
@@ -94,11 +98,11 @@ const image = await renderer.render(node, {
 });
 ```
 
-### Variations & Features
+A missing glyph walks the chain until a family covers it. `googleFontSubsets` builds on this. Every subset shares one name, so a single `font-family` reaches all of them.
 
-Thanks to underlying engine support, you can control font axes using the `font-variation-settings` CSS property, or `font-feature-settings` for OpenType features.
+### Variable axes & OpenType features
 
-For variable fonts, `font-weight` has the same effect as `font-variation-settings: "wght" <weight>`.
+Control font axes with `font-variation-settings`. Control OpenType features with `font-feature-settings`. For variable fonts, `font-weight` is shorthand for the `wght` axis, and `font-stretch` drives `wdth`.
 
 ```tsx
 <div
@@ -112,56 +116,92 @@ For variable fonts, `font-weight` has the same effect as `font-variation-setting
 </div>
 ```
 
-### Render Emojis
+### Synthetic bold & italic
 
-#### Dynamic fetching
+When a family lacks the weight or style you asked for, Takumi fakes a bold or oblique. `font-synthesis` turns that off. Missing weights then stay regular.
 
-If you are using `ImageResponse` API, there's a satori compatible `emoji` option.
-
-```tsx twoslash
-import { ImageResponse } from "takumi-js/response";
-
-export function GET() {
-  return new ImageResponse(<div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>, {
-    emoji: "twemoji", // [!code ++]
-  });
-}
+```tsx
+<div style={{ fontFamily: "Inter", fontSynthesis: "none" }}>No faux bold</div>
 ```
 
-Under the hood it calls `extractEmojis` helper function, which separates the emoji segments from the text and modifies the text node.
+Pass `weight`, `style`, or both to allow each one. `none` disables them. Emoji never get a fake bold.
 
-```tsx twoslash
-import { extractEmojis } from "takumi-js/helpers/emoji";
-import { fromJsx } from "takumi-js/helpers/jsx";
-import { extractResourceUrls, fetchResources } from "takumi-js/helpers";
-import { Renderer } from "takumi-js/node";
+## Styling text
 
-let { node } = await fromJsx(<div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>);
-node = extractEmojis(node, "twemoji");
+### Color, stroke, and fill
 
-const resourceUrls = extractResourceUrls(node);
-const images = await fetchResources(resourceUrls);
+`color` accepts modern CSS color spaces: `rgb`, `hsl`, `oklch`, `lab`, `display-p3`, and more. Outline glyphs with `-webkit-text-stroke`. Set a separate fill with `-webkit-text-fill-color`.
 
-const renderer = new Renderer();
-
-const image = await renderer.render(node, {
-  images,
-});
+```tsx
+<div
+  style={{
+    color: "oklch(0.7 0.15 200)",
+    WebkitTextStroke: "2px black",
+    WebkitTextFillColor: "white",
+  }}
+>
+  Outlined
+</div>
 ```
 
-#### COLR/Bitmap Font File
+The stroke color defaults to `color` when you omit it.
 
-Takumi supports the COLR font format, which is commonly used for emojis like `Twemoji-COLR`.
+### Decoration & transform
 
-The file size is much smaller than rasterized emoji fonts like `Noto Color Emoji`.
+`text-decoration` draws `underline`, `line-through`, and `overline`. Combine them, and set color and thickness. `text-transform` changes the case.
 
-## Typography
+```tsx
+<div
+  style={{
+    textDecoration: "underline overline",
+    textDecorationColor: "red",
+    textTransform: "uppercase",
+  }}
+>
+  Marked up
+</div>
+```
 
-### Overflow Ellipsis
+### Shadow
 
-When `text-overflow` is set to `ellipsis`, Takumi tries to match the expected `line-clamp` constraint or maximum container height.
+`text-shadow` takes offset, blur, and color. Stack layers with commas.
 
-Setting `white-space: nowrap` is not required, which enables multiline ellipsis handling.
+```tsx
+<div style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.5), 0 0 8px blue" }}>Glow</div>
+```
+
+### Spacing & alignment
+
+`letter-spacing`, `word-spacing`, `line-height`, `text-indent`, and `text-align` (including `justify`) work as in the browser.
+
+```tsx
+<div
+  style={{
+    letterSpacing: "0.05em",
+    lineHeight: 1.4,
+    textAlign: "justify",
+    textIndent: "2em",
+  }}
+>
+  Body copy
+</div>
+```
+
+## Flowing text
+
+### Wrapping
+
+Takumi supports `balance` and `pretty` wrapping, adapted from [satori](https://github.com/vercel/satori/blob/2a0878a7f329bdba3a17ad68f71186a47add0dde/src/text/index.ts#L365). `balance` evens out line lengths. `pretty` stops the last line from stranding one word.
+
+```tsx
+<div style={{ textWrap: "balance" }}>Super Long Text</div>
+```
+
+`word-break` and `overflow-wrap` decide where a long token splits. `break-all`, `keep-all`, and `anywhere` cover CJK and long URLs.
+
+### Truncation
+
+When `text-overflow` is `ellipsis`, Takumi truncates at the `line-clamp` count or the container's max height, whichever comes first. You don't need `white-space: nowrap`, so multiline ellipsis works.
 
 ```tsx
 <div
@@ -174,16 +214,19 @@ Setting `white-space: nowrap` is not required, which enables multiline ellipsis 
 </div>
 ```
 
-### RTL & Bidirectional Text
+### Fit to container
 
-Support for Right-to-Left (RTL) languages like Arabic or Hebrew is handled automatically by the underlying Parley engine.
-
-But currently there's no manual control over the direction of the text (see [issue #330](https://github.com/kane50613/takumi/issues/330)).
-
-### Wrapping
-
-Takumi supports both `balance` and `pretty` text wrapping. The algorithm is modified from [satori's implementation](https://github.com/vercel/satori/blob/2a0878a7f329bdba3a17ad68f71186a47add0dde/src/text/index.ts#L365).
+`text-fit` scales text to fit its line box instead of wrapping or overflowing. The mode comes first: `grow`, `shrink`, or `none`. An optional target and percentage cap follow.
 
 ```tsx
-<div style={{ textWrap: "balance" }}>Super Long Text</div>
+<div style={{ textFit: "shrink" }}>Headline that always fits</div>
+<div style={{ textFit: "grow per-line 150%" }}>Per-line scaled, capped at 150%</div>
 ```
+
+`consistent` (default) uses one scale for the block. `per-line` scales each line except the last. `per-line-all` scales every line. The percentage caps how far the scale can move.
+
+### RTL & bidirectional text
+
+Takumi handles Right-to-Left scripts like Arabic and Hebrew on its own, including mixed runs. There's no manual override for text direction yet (see [issue #330](https://github.com/kane50613/takumi/issues/330)). The `direction` property controls layout, not the text run.
+
+Emoji rendering lives on its own page: [Images & emoji](/docs/load-images).
