@@ -1,14 +1,14 @@
 ---
 title: Output Formats
 description: Choose a raster format, set the pixel density, or emit vector SVG.
-icon: Image
+icon: FileOutput
 ---
 
 `render()` returns encoded image bytes. The `format` option picks the encoder.
 
 ## Picking a format
 
-`format` is a string. The other encoder options are independently optional and ignored when they do not apply: `quality` affects only `jpeg` and lossy `webp`, and `lossless` affects only `webp`.
+`format` defaults to `png`. `quality` and `lossless` apply only where the table marks a Yes, and are ignored elsewhere. `quality` runs `0`–`100` (default `75`).
 
 ```tsx
 import { render } from "takumi-js";
@@ -25,11 +25,6 @@ await render(<OgImage />, { width: 1200, height: 630, format: "webp", lossless: 
 | `webp`          | Yes   | Yes              | Yes               | Lossy with `quality`; `lossless: true` wins.    |
 | `ico`           | Yes   | No               | No                | Favicon container, PNG-encoded inside.          |
 | `raw`           | Yes   | No               | No                | Uncompressed RGBA bytes, `width × height × 4`.  |
-
-Per-format specs:
-
-- `jpeg` — `quality` is `0`–`100`, default `75`.
-- `webp` — `quality` is `0`–`100` for lossy; `lossless: true` overrides it.
 
 <Callout type="info">
   On `@takumi-rs/wasm`, WebP is always lossless and the `lossless` knob is absent from the types.
