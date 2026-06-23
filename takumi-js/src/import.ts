@@ -21,22 +21,24 @@ async function getImportsImpl(module?: WasmBindings.InitInput) {
     return initializeWasm(importWasmBindings());
   }
 
-  try {
-    return await import("@takumi-rs/core");
-  } catch (error) {
-    if (isNodeEnvironment()) {
-      throw new Error(
-        "Failed to load @takumi-rs/core in Node.js runtime. Takumi requires the native napi-rs module in Node environments.",
-        { cause: error },
+  if (process.env.NEXT_RUNTIME !== "edge") {
+    try {
+      return await import("@takumi-rs/core");
+    } catch (error) {
+      if (isNodeEnvironment()) {
+        throw new Error(
+          "Failed to load @takumi-rs/core in Node.js runtime. Takumi requires the native napi-rs module in Node environments.",
+          { cause: error },
+        );
+      }
+
+      console.warn(
+        "Unable to import @takumi-rs/core. Falling back to auto-detection of WASM bindings.",
+        {
+          cause: error,
+        },
       );
     }
-
-    console.warn(
-      "Unable to import @takumi-rs/core. Falling back to auto-detection of WASM bindings.",
-      {
-        cause: error,
-      },
-    );
   }
 
   return initializeWasm(importWasmBindings());
