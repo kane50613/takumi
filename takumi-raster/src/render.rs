@@ -18,7 +18,7 @@ use crate::{
       resolve_visual_inline_box, text_fit_line_alignment_correction,
     },
     node::Node,
-    style::{Affine, ComputedStyle, StyleSheet},
+    style::{Affine, ComputedStyle, FontFamily, StyleSheet},
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
   resources::image::ImageSource,
@@ -27,11 +27,14 @@ use crate::{
 };
 use takumi_core::scene::build_stacking_contexts;
 
-/// Root computed style carrying the render-level default `lang`, inherited by
-/// every node that does not set its own.
-fn root_style(lang: Option<Language>) -> Box<ComputedStyle> {
+/// Root computed style carrying the render-level `lang` and `fontFamilies` defaults,
+/// inherited by every node that does not set its own.
+fn root_style(lang: Option<Language>, font_families: Option<&[String]>) -> Box<ComputedStyle> {
   Box::new(ComputedStyle {
     lang,
+    font_family: font_families.map_or_else(FontFamily::default, |names| {
+      FontFamily::from_names(names.iter().cloned())
+    }),
     ..Default::default()
   })
 }
@@ -215,7 +218,7 @@ pub fn measure<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
     .stylesheet(stylesheet.into())
     .time_ms(time_ms)
     .draw_debug_border(draw_debug_border)
-    .style(root_style(lang))
+    .style(root_style(lang, font_families.as_deref()))
     .build();
 
   let mut root = RenderNode::from_node(&render_context, node);
@@ -544,7 +547,7 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
     .stylesheet(stylesheet.into())
     .time_ms(time_ms)
     .draw_debug_border(draw_debug_border)
-    .style(root_style(lang))
+    .style(root_style(lang, font_families.as_deref()))
     .build();
 
   let mut root = RenderNode::from_node(&render_context, node);
