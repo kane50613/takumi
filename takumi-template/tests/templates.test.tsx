@@ -63,13 +63,7 @@ testRender(
     author="Kane Wang"
     date="Nov 24, 2025"
     category="Engineering"
-    avatar={
-      <img
-        alt="Avatar"
-        src="https://avatars.githubusercontent.com/u/33802653?s=400&u=265f123fc40f34df69466e0a4368f64cc8837e2f&v=4"
-        tw="w-full h-full object-cover rounded-full"
-      />
-    }
+    avatar={<img alt="Avatar" src="takumi.svg" tw="w-full h-full object-cover rounded-full" />}
   />,
 );
 
