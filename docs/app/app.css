@@ -67,6 +67,7 @@
   --muted-foreground: #a1a1aa;
 
   --color-fd-background: var(--background);
+  --color-fd-foreground: var(--foreground);
   --color-fd-popover: var(--background);
 }
 
