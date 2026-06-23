@@ -124,4 +124,4 @@ const image = await renderer.render(node, {
 
 ### COLR / bitmap fonts
 
-Takumi renders COLR fonts, the format behind packs like `Twemoji-COLR`. A COLR file is much smaller than a bitmap emoji font like `Noto Color Emoji`. Register one through `fonts`. The matching emoji then draw from its glyphs, with no network fetch.
+Takumi renders COLR fonts, the format behind packs like `Twemoji-COLR`. A COLR file is much smaller than a bitmap emoji font like `Noto Color Emoji`. Register one through `fonts` and set `emoji: "from-font"`. The renderer then draws emoji from the loaded glyphs instead of fetching images, with no network request.

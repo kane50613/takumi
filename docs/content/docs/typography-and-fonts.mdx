@@ -90,7 +90,7 @@ return new ImageResponse(<OgImage />, { renderer });
 
 ### Fallback chain
 
-`fontFamilies` is the ordered list of families to try when a glyph is missing. It defaults to the families you passed, in order. Set it to pin which family wins and what backs it up.
+`fontFamilies` is the ordered list of families to try when a glyph is missing. It defaults to all registered families, in registration order. Set it to pin which family wins and what backs it up.
 
 ```tsx
 const image = await renderer.render(node, {
@@ -98,7 +98,7 @@ const image = await renderer.render(node, {
 });
 ```
 
-A missing glyph walks the chain until a family covers it. `googleFontSubsets` builds on this. Every subset shares one name, so a single `font-family` reaches all of them.
+A missing glyph walks the chain until a family covers it. `googleFontSubsets` builds on this: each subset registers under its own internal name, while one logical family name in `font-family` expands across them.
 
 ### Variable axes & OpenType features
 
