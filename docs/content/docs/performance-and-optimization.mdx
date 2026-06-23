@@ -14,33 +14,6 @@ The `Renderer` holds Takumi's caches. Reuse one instance across renders instead 
 
 `ImageResponse` manages an internal renderer, or pass your own through the `renderer` option. See [Typography & Fonts](/docs/typography-and-fonts) and [Load Images](/docs/load-images).
 
-#### For Cloudflare Workers
-
-Initialize the WebAssembly module and renderer outside the `fetch()` handler so it doesn't re-run on every request.
-
-```tsx title="index.tsx"
-import { ImageResponse } from "takumi-js/response";
-import { initSync, Renderer } from "takumi-js/wasm";
-import module from "@takumi-rs/wasm/takumi_wasm_bg.wasm";
-import font from "path-to-font.ttf";
-
-initSync(module); // [!code highlight]
-
-// [!code highlight:2]
-const renderer = new Renderer();
-await renderer.registerFont(font);
-
-export default {
-  fetch(request) {
-    return new ImageResponse(<div />, {
-      width: 1200,
-      height: 630,
-      renderer, // [!code highlight]
-    });
-  },
-};
-```
-
 ### Preload Frequently Used Images
 
 Loading images from URLs or bytes during the rendering pass is a bottleneck. Register [Load Images](/docs/load-images) to avoid re-decoding.
