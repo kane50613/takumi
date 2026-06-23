@@ -198,6 +198,7 @@ function extractStaticNodeMetadata(
     className: props.class,
     id: props.id,
     dir: props.dir as NodeMetadata["dir"],
+    lang: props.lang,
     attributes,
     tw,
     style,

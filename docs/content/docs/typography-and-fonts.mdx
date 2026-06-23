@@ -229,4 +229,23 @@ When `text-overflow` is `ellipsis`, Takumi truncates at the `line-clamp` count o
 
 Takumi handles Right-to-Left scripts like Arabic and Hebrew on its own, including mixed runs. There's no manual override for text direction yet (see [issue #330](https://github.com/kane50613/takumi/issues/330)). The `direction` property controls layout, not the text run.
 
+### Language-aware text
+
+The `lang` attribute sets the BCP-47 language for a node. Descendants inherit it, and a nested `lang` overrides. It drives locale-aware shaping: Han unification (one code point draws a different glyph for `zh-Hans`, `zh-Hant`, `ja`, or `ko`) and language-correct line breaking.
+
+```tsx
+<div>
+  <p lang="ja">日本語</p>
+  <p lang="zh-Hant">繁體中文</p>
+</div>
+```
+
+To set a default for the whole render, pass `lang`. Per-node `lang` still overrides it.
+
+```tsx
+const image = await render(node, { width: 1200, height: 630, fonts, lang: "ja" });
+```
+
+The glyphs only change when the font carries per-language variants, such as a pan-CJK font. With a single-region font every language draws the same glyph.
+
 Emoji rendering lives on its own page: [Images & emoji](/docs/load-images).

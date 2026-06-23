@@ -30,6 +30,10 @@ function applyMetadata(node: Node, props: Partial<NodeMetadata>) {
     node.dir = props.dir;
   }
 
+  if (props.lang !== undefined) {
+    node.lang = props.lang;
+  }
+
   if (props.attributes !== undefined) {
     node.attributes = props.attributes;
   }
