@@ -1,0 +1,20 @@
+diff --git a/dist/index.js b/dist/index.js
+index bf06d32c0523ad9684da152614473487feb53eb0..63eea21bfae437a4dbc11856090232de2184d57e 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -268,13 +268,13 @@ var DraftPlan = class {
+ 			plan = this.initPackagePlan(pkg);
+ 			this.packages.set(pkg.id, plan);
+ 		}
+-		const prevVersion = plan.bumpVersion(pkg);
++		const prevType = plan.type;
+ 		plan.type = plan.type ? maxBump(plan.type, type) : type;
+ 		if (reason) {
+ 			plan.bumpReasons ??= /* @__PURE__ */ new Set();
+ 			plan.bumpReasons.add(reason);
+ 		}
+-		if (prevVersion !== plan.bumpVersion(pkg)) for (const policy of this.policies) policy.onUpdate?.call(this, {
++		if (plan.type !== prevType) for (const policy of this.policies) policy.onUpdate?.call(this, {
+ 			plan,
+ 			pkg
+ 		});
