@@ -15,13 +15,10 @@ import RepositoryTemplate from "../src/templates/repository-template";
 
 function testRender(name: string, template: ReactNode) {
   test(name, async () => {
+    const assets = join(import.meta.dirname, "..", "..", "assets", "images");
     const images = [
-      {
-        src: "takumi.svg",
-        data: await file(
-          join(import.meta.dirname, "..", "..", "assets", "images", "takumi.svg"),
-        ).arrayBuffer(),
-      },
+      { src: "takumi.svg", data: await file(join(assets, "takumi.svg")).arrayBuffer() },
+      { src: "avatar.svg", data: await file(join(assets, "avatar.svg")).arrayBuffer() },
     ];
     const options = { width: 1200, height: 630, images };
 
@@ -63,7 +60,7 @@ testRender(
     author="Kane Wang"
     date="Nov 24, 2025"
     category="Engineering"
-    avatar={<img alt="Avatar" src="takumi.svg" tw="w-full h-full object-cover rounded-full" />}
+    avatar={<img alt="Avatar" src="avatar.svg" tw="w-full h-full object-cover rounded-full" />}
   />,
 );
 
