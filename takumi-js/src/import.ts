@@ -21,8 +21,6 @@ async function getImportsImpl(module?: WasmBindings.InitInput) {
     return initializeWasm(importWasmBindings());
   }
 
-  // Inline literal, not a helper: lets the Next edge bundler DCE this import so
-  // the native `.node` isn't pulled into edge bundles.
   if (process.env.NEXT_RUNTIME !== "edge") {
     try {
       return await import("@takumi-rs/core");
