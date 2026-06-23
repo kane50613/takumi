@@ -1,3 +1,14 @@
+## takumi-svg@0.1.0-beta.2
+
+### Render text language-aware with the `lang` attribute
+
+The `lang` attribute sets a node's language and inherits to its descendants; a
+nested `lang` overrides, and an empty or invalid value clears it. The language
+reaches the shaper as the locale, so the same code point draws its
+language-specific glyph (Han unification across `ja` / `zh` / `ko`) and lines
+break per language. Pass `lang` in the render options to set a default for the
+whole tree.
+
 ## takumi-svg@0.1.0-beta.1
 
 ### Match browser fake-bold for synthesized weights
