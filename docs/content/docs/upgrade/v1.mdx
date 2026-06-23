@@ -51,7 +51,7 @@ import { ImageResponse } from "takumi-js/response"; // [!code ++]
 
 To improve the compatibility with Next.js's `ImageResponse` API, `takumi-js` now supports an `emoji` option that allows you to specify a custom emoji provider.
 
-By default it's set to `twemoji`, if you want to source emoji glyphs from a custom font, simply set it to `from-font` and make sure an emoji font is included in the `fonts` option.
+It defaults to `twemoji`. To source emoji glyphs from a custom font, set it to `from-font` and include an emoji font in the `fonts` option.
 
 Read more in [Render Emojis](/docs/typography-and-fonts#dynamic-fetching) section.
 
@@ -153,4 +153,4 @@ The `detailed_css_error` Cargo feature has been removed. Detailed CSS error repo
 
 ## More in Changelog!
 
-For a more comprehensive list of changes, please refer to the changelog in [releases](https://github.com/kane50613/takumi/releases).
+For the full list of changes, see the [releases](https://github.com/kane50613/takumi/releases).

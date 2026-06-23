@@ -14,7 +14,7 @@ For both `@takumi-rs/core` and `@takumi-rs/wasm`, the `Renderer` is the heart of
 
 #### For ImageResponse
 
-An internal renderer instance is managed automatically, or you can pass your own renderer instance via `renderer` option.
+Takumi manages an internal renderer for you, or pass your own through the `renderer` option.
 
 Refer to both [Typography & Fonts](/docs/typography-and-fonts) and [Load Images](/docs/load-images) for more details.
 
@@ -60,7 +60,7 @@ Always prefer `@takumi-rs/core` over `@takumi-rs/wasm` for utilizing multiple th
 
 ### Stack Filters in a Single Node
 
-A composition layer with the same size as viewport has to be created in order to apply filters and blurs, which incurs additional memory usage.
+Filters and blurs each spawn a composition layer the size of the viewport, which costs extra memory. Stacking them on one node reuses a single layer.
 
 ## Fonts
 

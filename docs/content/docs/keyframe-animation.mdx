@@ -160,7 +160,7 @@ const output = await render(<Scene />, {
 
 ### `renderAnimation()`
 
-This is the minimal API for animated image output. In most cases, you should keep a single scene and animate it with stylesheet keyframes or Tailwind's built-in animation presets. The `scenes` field is still an array because you may want to compose multiple scenes into a single animated image, but Takumi does not generate transitions between them.
+The minimal API for animated output. Usually keep one scene and animate it with stylesheet keyframes or Tailwind's animation presets. `scenes` is an array so you can stitch several into one animation, but Takumi does not tween between them.
 
 ```tsx twoslash title="render.tsx"
 // @noErrors
