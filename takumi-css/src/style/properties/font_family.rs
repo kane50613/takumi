@@ -27,6 +27,19 @@ pub enum FontFamilyToken {
 impl MakeComputed for FontFamily {}
 
 impl FontFamily {
+  /// Named families ending in `sans-serif`. The trailing generic is the last resort: the
+  /// fallback bucket only holds resolved `fontFamilies`, so an unresolved name would otherwise
+  /// leave text unrendered.
+  pub fn from_names(names: impl IntoIterator<Item = String>) -> Self {
+    let mut tokens = names
+      .into_iter()
+      .map(FontFamilyToken::Owned)
+      .collect::<Vec<_>>();
+    tokens.push(FontFamilyToken::Generic(GenericFamily::SansSerif));
+
+    Self(tokens.into_boxed_slice())
+  }
+
   /// The families as fontique query families, in declaration order.
   pub fn query_families(&self) -> impl Iterator<Item = QueryFamily<'_>> + Clone {
     self.0.iter().map(|token| match token {
@@ -202,6 +215,18 @@ mod tests {
       Ok(FontFamily(Box::new([FontFamilyToken::Owned(
         "Noto Sans TC".to_string()
       )])))
+    );
+  }
+
+  #[test]
+  fn from_names_appends_sans_serif_last_resort() {
+    assert_eq!(
+      FontFamily::from_names(["Geist".to_string(), "Inter".to_string()]),
+      FontFamily(Box::new([
+        FontFamilyToken::Owned(String::from("Geist")),
+        FontFamilyToken::Owned(String::from("Inter")),
+        FontFamilyToken::Generic(GenericFamily::SansSerif),
+      ]))
     );
   }
 
