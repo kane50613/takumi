@@ -15,6 +15,7 @@ import { __iconNode as rulerIconNode } from "lucide-react/dist/esm/icons/ruler";
 import { __iconNode as toyBrickIconNode } from "lucide-react/dist/esm/icons/toy-brick";
 import { __iconNode as typeIconNode } from "lucide-react/dist/esm/icons/type";
 import { __iconNode as windIconNode } from "lucide-react/dist/esm/icons/wind";
+import { __iconNode as wrenchIconNode } from "lucide-react/dist/esm/icons/wrench";
 import { __iconNode as zapIconNode } from "lucide-react/dist/esm/icons/zap";
 import { createElement } from "react";
 import { docs } from "../.source/server";
@@ -44,6 +45,7 @@ const icons = {
   CircleFadingArrowUp: circleFadingArrowUpIconNode,
   LayoutTemplate: layoutTemplateIconNode,
   Wind: windIconNode,
+  Wrench: wrenchIconNode,
 };
 
 export const source = loader({

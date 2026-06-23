@@ -1,0 +1,50 @@
+---
+title: Helpers
+description: Build inputs and load resources without the renderer.
+icon: Wrench
+---
+
+`takumi-js/helpers` re-exports `@takumi-rs/helpers`: functions for building the node tree and loading fonts, images, and emoji. `render` and `ImageResponse` call them for you, so you only reach for these when you build inputs by hand.
+
+## Fonts
+
+| Helper                                          | Use                                                                                                                    |
+| :---------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------- |
+| `googleFont(family, options?)`                  | Load one Google Fonts family as `fonts` entries. See [Fonts & text](/docs/typography-and-fonts#from-google-fonts).     |
+| `googleFontSubsets(source, families, options?)` | Load only the subsets your content needs. See [Multilingual content](/docs/typography-and-fonts#multilingual-content). |
+
+## Building nodes
+
+Build the node tree by hand when you skip JSX and HTML.
+
+| Helper                               | Returns                       |
+| :----------------------------------- | :---------------------------- |
+| `container(props)`                   | A container node.             |
+| `text(text, style?)` / `text(props)` | A text node.                  |
+| `image(props)`                       | An image node.                |
+| `style(css)`                         | The same style object, typed. |
+
+Length and color shorthands return CSS strings:
+
+| Helper                 | Output             |
+| :--------------------- | :----------------- |
+| `percentage(50)`       | `50%`              |
+| `vw(100)` / `vh(100)`  | `100vw` / `100vh`  |
+| `em(1.5)` / `rem(1.5)` | `1.5em` / `1.5rem` |
+| `fr(1)`                | `1fr`              |
+| `rgba(0, 0, 0, 0.5)`   | `rgb(0 0 0 / 0.5)` |
+
+## Parsing templates
+
+| Helper                       | Import                   | Use                                                |
+| :--------------------------- | :----------------------- | :------------------------------------------------- |
+| `fromJsx(element, options?)` | `takumi-js/helpers/jsx`  | JSX or a React element to `{ node, stylesheets }`. |
+| `fromHtml(html)`             | `takumi-js/helpers/html` | An HTML string to `{ node, stylesheets }`.         |
+
+## Resources & emoji
+
+| Helper                           | Import                    | Use                                                                         |
+| :------------------------------- | :------------------------ | :-------------------------------------------------------------------------- |
+| `extractResourceUrls(node)`      | `takumi-js/helpers`       | Collect every image URL in a node tree.                                     |
+| `fetchResources(urls, options?)` | `takumi-js/helpers`       | Fetch URLs into `images` entries. See [Images & emoji](/docs/load-images).  |
+| `extractEmojis(node, type)`      | `takumi-js/helpers/emoji` | Replace emoji with CDN `<img>` nodes. See [Emoji](/docs/load-images#emoji). |
