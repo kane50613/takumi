@@ -6,13 +6,18 @@ icon: Type
 
 Takumi never reads system fonts. Load every font a render needs, or its glyphs fall back to tofu.
 
-On Node.js (`@takumi-rs/core`), Geist and Geist Mono ship built in. On the browser and edge (`@takumi-rs/wasm`), Manrope ships instead. Add your own family if you need monospace there.
+Each package ships its own built-in families. Add your own for anything else.
+
+| Environment   | Package           | Bundled families  |
+| ------------- | ----------------- | ----------------- |
+| Node.js       | `@takumi-rs/core` | Geist, Geist Mono |
+| Browser, edge | `@takumi-rs/wasm` | Manrope           |
 
 ## Loading fonts
 
 ### The `fonts` option
 
-Pass the fonts a render needs through `fonts`. Each entry is raw bytes, or a `{ name, data, weight, style }` descriptor. `data` can be a loader that returns the bytes. The renderer deduplicates them, so a reused renderer decodes each file once.
+Pass the fonts a render needs through `fonts`. Each entry is raw bytes, or a `{ name, data, weight, style }` descriptor. `data` can be a loader that returns the bytes. A reused renderer decodes each file once.
 
 ```tsx twoslash
 import { ImageResponse } from "takumi-js/response";
@@ -29,7 +34,7 @@ export function GET() {
 }
 ```
 
-`render`, `renderAnimation`, and `encodeFrames` take the same `fonts` option.
+The takumi-js functions `render`, `renderAnimation`, and `renderSvg` take the same `fonts` option.
 
 ### From Google Fonts
 
@@ -46,7 +51,12 @@ const image = await render(<div style={{ fontFamily: "Inter" }}>Hello</div>, {
 });
 ```
 
-`weight` takes one weight, an array, or a range like `"100..900"`. A range loads the variable font and lets CSS `font-weight` drive it. `style` is `"normal"`, `"italic"`, or both. `text` downloads only the glyphs that string uses, which helps OG images where you know the text up front. `display` maps to CSS `font-display`.
+| Option    | Accepts                                            | Effect                                                        |
+| --------- | -------------------------------------------------- | ------------------------------------------------------------- |
+| `weight`  | one weight, an array, or a range like `"100..900"` | A range loads the variable font; CSS `font-weight` drives it. |
+| `style`   | `"normal"`, `"italic"`, or both                    | Which styles to fetch.                                        |
+| `text`    | a string                                           | Downloads only the glyphs that string uses.                   |
+| `display` | a `font-display` value                             | Maps to CSS `font-display`.                                   |
 
 ```tsx
 fonts: await googleFont("Inter", { weight: 700, style: "italic", text: title }),
@@ -54,7 +64,7 @@ fonts: await googleFont("Inter", { weight: 700, style: "italic", text: title }),
 
 ### Multilingual content
 
-Sometimes you can't predict which scripts appear. `googleFontSubsets` loads only the subsets the content needs. Give it your content and the families to draw from. It scans the text, fetches each family's metadata in one request, and keeps the subsets that match.
+`googleFontSubsets` loads only the subsets the content needs, for when you can't predict which scripts appear. Give it your content and the families to draw from. It scans the text, fetches each family's metadata in one request, and keeps the subsets that match.
 
 ```tsx
 import { render } from "takumi-js";
@@ -69,7 +79,7 @@ const fonts = await googleFontSubsets(node, ["Inter", "Noto Sans JP", "Noto Sans
 const image = await render(node, { width: 1200, height: 630, fonts });
 ```
 
-Each subset registers under its own internal name. `font-family: Inter` still expands across all of them, so each script finds the file that covers it. Pass a `Map` as `cache` to reuse the metadata across renders. This helps a playground that re-renders on every edit.
+Each subset registers under its own internal name. `font-family: Inter` still expands across all of them, so each script finds the file that covers it. Pass a `Map` as `cache` to reuse the metadata across renders, skipping the metadata fetch on each re-render.
 
 ```tsx
 const fonts = await googleFontSubsets(node, ["Inter"], { cache });
@@ -80,6 +90,8 @@ const fonts = await googleFontSubsets(node, ["Inter"], { cache });
 `registerFont` is the escape hatch for preloading. Register a font on a renderer up front, outside the request path. Then reuse that renderer. It takes the same entries as `fonts` and returns the families it made.
 
 ```tsx
+import { Renderer } from "@takumi-rs/core";
+
 const renderer = new Renderer();
 await renderer.registerFont({ name: "Inter", data: inter });
 
@@ -124,13 +136,22 @@ When a family lacks the weight or style you asked for, Takumi fakes a bold or ob
 <div style={{ fontFamily: "Inter", fontSynthesis: "none" }}>No faux bold</div>
 ```
 
-Pass `weight`, `style`, or both to allow each one. `none` disables them. Emoji never get a fake bold.
+Values are `weight`, `style`, or `none`. Pass `weight`, `style`, or both to allow each one; `none` disables them. Emoji never get a fake bold.
 
 ## Styling text
 
 ### Color, stroke, and fill
 
-`color` accepts modern CSS color spaces: `rgb`, `hsl`, `oklch`, `lab`, `display-p3`, and more. Outline glyphs with `-webkit-text-stroke`. Set a separate fill with `-webkit-text-fill-color`.
+`color` accepts modern CSS color spaces:
+
+- `rgb`
+- `hsl`
+- `oklch`
+- `lab`
+- `display-p3`
+- and more
+
+Outline glyphs with `-webkit-text-stroke`. Set a separate fill with `-webkit-text-fill-color`.
 
 ```tsx
 <div
@@ -201,7 +222,7 @@ Takumi supports `balance` and `pretty` wrapping, adapted from [satori](https://g
 
 ### Truncation
 
-When `text-overflow` is `ellipsis`, Takumi truncates at the `line-clamp` count or the container's max height, whichever comes first. You don't need `white-space: nowrap`, so multiline ellipsis works.
+When `text-overflow` is `ellipsis`, Takumi truncates at the `line-clamp` count or the container's max height, whichever comes first. Multiline ellipsis works; no `white-space: nowrap` needed.
 
 ```tsx
 <div
@@ -223,11 +244,19 @@ When `text-overflow` is `ellipsis`, Takumi truncates at the `line-clamp` count o
 <div style={{ textFit: "grow per-line 150%" }}>Per-line scaled, capped at 150%</div>
 ```
 
-`consistent` (default) uses one scale for the block. `per-line` scales each line except the last. `per-line-all` scales every line. The percentage caps how far the scale can move.
+The optional target controls which lines share a scale:
+
+| Target                 | Effect                            |
+| ---------------------- | --------------------------------- |
+| `consistent` (default) | One scale for the whole block.    |
+| `per-line`             | Scales each line except the last. |
+| `per-line-all`         | Scales every line.                |
+
+The percentage caps how far the scale can move.
 
 ### RTL & bidirectional text
 
-Takumi handles Right-to-Left scripts like Arabic and Hebrew on its own, including mixed runs. There's no manual override for text direction yet (see [issue #330](https://github.com/kane50613/takumi/issues/330)). The `direction` property controls layout, not the text run.
+Takumi handles Right-to-Left scripts like Arabic and Hebrew, including mixed runs. There's no manual override for text direction yet (see [issue #330](https://github.com/kane50613/takumi/issues/330)). The `direction` property controls layout, not the text run.
 
 ### Language-aware text
 

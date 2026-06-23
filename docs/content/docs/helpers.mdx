@@ -4,7 +4,7 @@ description: Build inputs and load resources without the renderer.
 icon: Wrench
 ---
 
-`takumi-js/helpers` re-exports `@takumi-rs/helpers`: functions for building the node tree and loading fonts, images, and emoji. `render` and `ImageResponse` call them for you, so you only reach for these when you build inputs by hand.
+`takumi-js/helpers` re-exports `@takumi-rs/helpers`: functions for building the node tree and loading fonts, images, and emoji. `render` and `ImageResponse` call them for you. Reach for these only when you build inputs by hand.
 
 ## Fonts
 
@@ -15,8 +15,6 @@ icon: Wrench
 
 ## Building nodes
 
-Build the node tree by hand when you skip JSX and HTML.
-
 | Helper                               | Returns                       |
 | :----------------------------------- | :---------------------------- |
 | `container(props)`                   | A container node.             |
@@ -24,7 +22,7 @@ Build the node tree by hand when you skip JSX and HTML.
 | `image(props)`                       | An image node.                |
 | `style(css)`                         | The same style object, typed. |
 
-Length and color shorthands return CSS strings:
+Length and color shorthands return CSS strings. `vw`/`vh` are viewport width/height, `em`/`rem` are font-relative sizes, `fr` is a grid fraction. See the [MDN CSS values reference](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Values_and_Units).
 
 | Helper                 | Output             |
 | :--------------------- | :----------------- |
@@ -36,10 +34,10 @@ Length and color shorthands return CSS strings:
 
 ## Parsing templates
 
-| Helper                       | Import                   | Use                                                |
-| :--------------------------- | :----------------------- | :------------------------------------------------- |
-| `fromJsx(element, options?)` | `takumi-js/helpers/jsx`  | JSX or a React element to `{ node, stylesheets }`. |
-| `fromHtml(html)`             | `takumi-js/helpers/html` | An HTML string to `{ node, stylesheets }`.         |
+| Helper                       | Import                   | Use                                                        |
+| :--------------------------- | :----------------------- | :--------------------------------------------------------- |
+| `fromJsx(element, options?)` | `takumi-js/helpers/jsx`  | Convert JSX or a React element to `{ node, stylesheets }`. |
+| `fromHtml(html)`             | `takumi-js/helpers/html` | Convert an HTML string to `{ node, stylesheets }`.         |
 
 ## Resources & emoji
 
@@ -47,4 +45,6 @@ Length and color shorthands return CSS strings:
 | :------------------------------- | :------------------------ | :-------------------------------------------------------------------------- |
 | `extractResourceUrls(node)`      | `takumi-js/helpers`       | Collect every image URL in a node tree.                                     |
 | `fetchResources(urls, options?)` | `takumi-js/helpers`       | Fetch URLs into `images` entries. See [Images & emoji](/docs/load-images).  |
-| `extractEmojis(node, type)`      | `takumi-js/helpers/emoji` | Replace emoji with CDN `<img>` nodes. See [Emoji](/docs/load-images#emoji). |
+| `extractEmojis(node, emojiType)` | `takumi-js/helpers/emoji` | Replace emoji with CDN `<img>` nodes. See [Emoji](/docs/load-images#emoji). |
+
+`emojiType` selects the CDN provider: `twemoji`, `blobmoji`, `noto`, `openmoji`, `fluent`, or `fluentFlat`.

@@ -4,14 +4,13 @@ description: A Rust engine that renders JSX, HTML, and node trees into images. N
 icon: Axe
 ---
 
-Takumi renders JSX, HTML, and node trees into images — PNG, JPEG, WebP, SVG, and animations — through a real CSS layout pipeline written in Rust.
+Takumi renders JSX, HTML, and node trees into PNG, JPEG, WebP, SVG, and animations. Native Rust on the server, WebAssembly on the edge.
 
 Generate OG images and social cards without a headless browser:
 
-- **No Chromium.** No 300 MB browser process per render. Native Rust on the server, WebAssembly on the edge.
+- **No Chromium.** Native Rust on the server, WebAssembly on the edge.
 - **Drop-in for `next/og`.** `ImageResponse` matches the API you already ship.
-- **Real CSS, not a subset.** Flexbox, Grid, and block layout, where satori is flex-only.
-- **One engine, every output.** Raster, vector SVG, and animated GIF or WebP from the same render.
+- **Every output from one render.** Raster, vector SVG, and animated GIF or WebP.
 
 ## Install
 
@@ -19,15 +18,11 @@ Generate OG images and social cards without a headless browser:
 npm i takumi-js@beta
 ```
 
-On Node.js this pulls the native renderer (`@takumi-rs/core`). For Cloudflare Workers, Vercel Edge, Deno, or the browser, add the WebAssembly binding and `takumi-js` loads it for you:
-
-```npm
-npm i @takumi-rs/wasm@beta
-```
+`takumi-js` bundles both bindings: the native renderer (`@takumi-rs/core`) and the WebAssembly one (`@takumi-rs/wasm`). It picks the right one at runtime — native on Node.js, WebAssembly on Cloudflare Workers, Vercel Edge, Deno, and the browser. No extra install.
 
 ## Render an image
 
-`render` takes JSX and returns image bytes. Geist is built in, so text works without loading a font.
+`render` takes JSX and returns image bytes. A default sans-serif font is built in, so text works without loading a font.
 
 ```tsx
 import { render } from "takumi-js";
@@ -53,11 +48,12 @@ const png = await render(
 await writeFile("hello.png", png);
 ```
 
-The `width` and `height` set the canvas. The root doesn't fill it on its own, so it carries `width: 100%` and `height: 100%`.
+- `width` and `height` set the canvas.
+- The root doesn't fill the canvas on its own, so it carries `width: 100%` and `height: 100%`.
 
 ## Serve it over HTTP
 
-For an OG image endpoint, return an `ImageResponse`. It extends the web `Response`, so any runtime with `Request` and `Response` can return it. The API matches `next/og`.
+`ImageResponse` extends the web `Response`, so any runtime with `Request` and `Response` can return it. The API matches `next/og`.
 
 ```tsx twoslash
 import { ImageResponse } from "takumi-js/response";
@@ -71,13 +67,14 @@ export function GET() {
 ```
 
 <Callout type="warning">
-  Takumi never reads system fonts. Geist ships built in; load every other font through `fonts` or
-  its glyphs render as tofu. See [Fonts](/docs/typography-and-fonts).
+  Takumi never reads system fonts. One sans-serif font ships built in (Geist on the native renderer,
+  Manrope on WebAssembly); load every other font through `fonts` or its glyphs render as tofu. See
+  [Fonts](/docs/typography-and-fonts).
 </Callout>
 
 ## Coming from satori
 
-`ImageResponse` is a drop-in for `next/og`. The layout defaults differ: a bare `<div>` is `block` where satori forces `display: flex`, and `flex-direction` defaults to `row` instead of satori's `column`. Takumi also rasterizes directly instead of returning an SVG to convert.
+The layout defaults differ. A bare `<div>` is `block` where satori forces `display: flex`, and `flex-direction` defaults to `row` instead of satori's `column`. Takumi supports Flexbox, Grid, and block layout where satori is flex-only, and rasterizes directly instead of returning an SVG to convert.
 
 ## Next steps
 

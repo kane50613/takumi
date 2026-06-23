@@ -4,7 +4,7 @@ description: Measure the node layout without rendering it.
 icon: Ruler
 ---
 
-`measure()` returns a node's laid-out size without rendering it. Use it to fit a headline into a fixed width, or to position something against the measured box before the real render.
+`measure()` returns a node's laid-out size without rendering it. Use it to fit a headline into a fixed width, or to place a badge against the measured box.
 
 ```tsx twoslash tab="takumi-js/node"
 import { Renderer } from "takumi-js/node";
@@ -27,3 +27,15 @@ const { node, stylesheets } = await fromJsx(<span tw="text-xl">I'm a text node</
 // [!code ++]
 const { width, height } = await renderer.measure(node, { stylesheets });
 ```
+
+## Returned fields
+
+`measure()` resolves to a `MeasuredNode`:
+
+| Field       | Type                                               | Description                                                   |
+| ----------- | -------------------------------------------------- | ------------------------------------------------------------- |
+| `width`     | `number`                                           | Laid-out width.                                               |
+| `height`    | `number`                                           | Laid-out height.                                              |
+| `transform` | `[number, number, number, number, number, number]` | Transformation matrix.                                        |
+| `children`  | `MeasuredNode[]`                                   | Measured child nodes.                                         |
+| `runs`      | `MeasuredTextRun[]`                                | Text runs in the node, each with `x`, `y`, `width`, `height`. |

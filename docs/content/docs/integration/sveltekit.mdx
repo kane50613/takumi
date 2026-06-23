@@ -3,84 +3,72 @@ title: SvelteKit
 description: Use Takumi to render your Svelte components on the server.
 ---
 
-<Steps>
-  <Step>
-    ### Install Takumi
+## Install Takumi
 
-    ```npm
-    npm i takumi-js@beta
-    ```
+```npm
+npm i takumi-js@beta
+```
 
-  </Step>
-  <Step>
-    ### Make a Svelte component
+## Make a Svelte component
 
-    If you want to write component styles in the same file, you must set the `css` option to `injected` in the component options.
+Set `css="injected"` so the `<style>` block is inlined into the SSR HTML.
 
-    ```svelte title="src/lib/components/OgImage.svelte"
-    <script lang="ts">
-      let { title, description } = $props();
+```svelte title="src/lib/components/OgImage.svelte"
+<script lang="ts">
+  let { name = "Goo goo gaga" } = $props();
+</script>
 
-    </script>
+<!-- [!code highlight] -->
+<svelte:options css="injected" />
 
-    <!-- [!code highlight] -->
-    <svelte:options css="injected" />
+<div
+  id="og-image"
+  class="w-full h-full flex items-center justify-center p-12 flex-col gap-4"
+>
+  <div class="text-center whitespace-pre-wrap leading-normal text-7xl font-semibold text-black">
+    Welcome {name} to
+    <span class="font-bold">Svelte</span> world
+  </div>
+</div>
 
-    <div
-      id="og-image"
-      class="w-full h-full flex items-center justify-center p-12 flex-col whitespace-pre-wrap leading-normal"
-    >
-      <p class="text-7xl font-semibold text-black">
-        {title}
-      </p>
-      <p class="text-5xl font-medium text-black/75">
-        {description}
-      </p>
-    </div>
+<style>
+  #og-image {
+    background-image: linear-gradient(to bottom right, var(--color-orange-50), var(--color-red-200));
+  }
+</style>
+```
 
-    <style>
-      #og-image {
-        background-image: linear-gradient(to bottom right, var(--color-orange-50), var(--color-red-200));
-      }
-    </style>
-    ```
+## Render the component on a server route
 
-  </Step>
-  <Step>
-    ### Render the component on a server route
+- Import the component, and `app.css` if you use Tailwind.
+- Render to HTML with `render` from `svelte/server`.
+- Return an `ImageResponse`.
 
-    Import the component, and the CSS file if you use Tailwind. Render the component to HTML with `render` from `svelte/server`, then return an `ImageResponse`.
+```ts title="src/routes/+server.ts"
+import { render } from "svelte/server";
+import style from "../app.css?inline";
+import ImageResponse from "takumi-js/response";
+import OgImage from "$lib/components/OgImage.svelte";
+import type { RequestEvent } from "./$types";
 
-    ```ts title="src/routes/og-image/+server.ts"
-    import { render } from "svelte/server";
-    import style from "../app.css?inline";
-    import ImageResponse from "takumi-js/response";
-    import OgImage from "$lib/components/OgImage.svelte";
-    import type { RequestEvent } from "./$types";
+export async function GET({ url }: RequestEvent) {
+  const { body, head } = await render(OgImage, {
+    props: {
+      name: url.searchParams.get("name") ?? "Goo goo gaga",
+    },
+  });
 
-    export async function GET({ url }: RequestEvent) {
-      const { body, head } = await render(OgImage, {
-        props: {
-          title: url.searchParams.get("title"),
-          description: url.searchParams.get("description"),
-        },
-      });
-
-      return new ImageResponse(`${head}${body}`, {
-        width: 1200,
-        height: 630,
-        stylesheets: [style],
-        fonts: [
-          {
-            name: "Geist",
-            data: () =>
-              fetch("https://takumi.kane.tw/fonts/Geist.woff2").then((res) => res.arrayBuffer()),
-          },
-        ],
-      });
-    }
-    ```
-
-  </Step>
-
-</Steps>
+  return new ImageResponse(`${head}${body}`, {
+    width: 1200,
+    height: 630,
+    stylesheets: [style],
+    fonts: [
+      {
+        name: "Geist",
+        data: () =>
+          fetch("https://takumi.kane.tw/fonts/Geist.woff2").then((res) => res.arrayBuffer()),
+      },
+    ],
+  });
+}
+```

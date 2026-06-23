@@ -6,7 +6,7 @@ icon: Image
 
 ## External Images
 
-By default, Takumi will fetch external images in `src` attributes and CSS properties like `background-image` and `mask-image`.
+Takumi fetches external images in `src` attributes and CSS `background-image` / `mask-image`.
 
 Add a caching layer by passing `resourcesOptions.cache` to `render`.
 
@@ -62,7 +62,14 @@ function OgImage() {
 
 ## Decode caching
 
-Takumi caches each decoded image so a repeated `src` is decoded once. The `cache` mode on an image controls that cache and is independent of the byte cache above: `resourcesOptions.cache` stores fetched bytes, while `cache` stores the decoded pixels.
+Takumi caches each decoded image so a repeated `src` is decoded once. Two independent layers exist:
+
+| Layer        | Stores         | Set with                 |
+| ------------ | -------------- | ------------------------ |
+| Byte cache   | Fetched bytes  | `resourcesOptions.cache` |
+| Decode cache | Decoded pixels | per-image `cache`        |
+
+The per-image `cache` mode takes two values:
 
 - `auto` (default): cache the decoded image; the entry is evictable.
 - `none`: skip the cache. Use it for a one-off image you won't render again, to avoid holding its pixels in memory.
@@ -87,7 +94,7 @@ export function GET() {
 
 ### Dynamic fetching
 
-`ImageResponse` accepts a satori-compatible `emoji` option.
+`ImageResponse` accepts a satori-compatible `emoji` option. The providers are `twemoji`, `blobmoji`, `noto`, `openmoji`, `fluent`, and `fluentFlat`.
 
 ```tsx twoslash
 import { ImageResponse } from "takumi-js/response";
@@ -99,7 +106,9 @@ export function GET() {
 }
 ```
 
-It calls the `extractEmojis` helper. The helper splits emoji from text and turns them into `<img>` nodes on a CDN. Run the steps yourself when you need the resources separately.
+#### Manual extraction
+
+`ImageResponse` calls the `extractEmojis` helper for you. The helper splits emoji from text into image nodes pointing at a CDN. Run the steps yourself to fetch emoji bytes alongside other resources.
 
 ```tsx twoslash
 import { extractEmojis } from "takumi-js/helpers/emoji";
@@ -120,8 +129,11 @@ const image = await renderer.render(node, {
 });
 ```
 
-`extractEmojis` also takes `blobmoji`, `noto`, `openmoji`, `fluent`, and `fluentFlat`.
-
 ### COLR / bitmap fonts
 
-Takumi renders COLR fonts, the format behind packs like `Twemoji-COLR`. A COLR file is much smaller than a bitmap emoji font like `Noto Color Emoji`. Register one through `fonts` and set `emoji: "from-font"`. The renderer then draws emoji from the loaded glyphs instead of fetching images, with no network request.
+Takumi renders [COLR](/docs/typography-and-fonts) (Color Layer) fonts, the format behind packs like `Twemoji-COLR`. A COLR file is much smaller than a bitmap emoji font like `Noto Color Emoji`. The renderer draws emoji from the loaded glyphs, with no network request.
+
+Two steps:
+
+- Register the font through [`fonts`](/docs/typography-and-fonts).
+- Set `emoji: "from-font"`.

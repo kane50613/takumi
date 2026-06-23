@@ -3,7 +3,7 @@ title: Nuxt
 description: Use Takumi through Nuxt OG Image in Nuxt apps.
 ---
 
-If you're using Nuxt, the recommended integration is [Nuxt OG Image](https://nuxtseo.com/docs/og-image/getting-started/introduction). It already knows how to render Vue components as OG images, and its [Takumi renderer](https://nuxtseo.com/docs/og-image/renderers/takumi) is the easiest way to use Takumi in a Nuxt app.
+[Nuxt OG Image](https://nuxtseo.com/docs/og-image/getting-started/introduction) renders Vue components as OG images. Its [Takumi renderer](https://nuxtseo.com/docs/og-image/renderers/takumi) drives Takumi from a Vue template.
 
 <Steps>
   <Step>
@@ -15,33 +15,22 @@ If you're using Nuxt, the recommended integration is [Nuxt OG Image](https://nux
     npx nuxt module add og-image
     ```
 
+    | Runtime | Package |
+    | --- | --- |
+    | Node | `@takumi-rs/core@beta` |
+    | Edge (Cloudflare Workers, Vercel Edge) | `@takumi-rs/wasm@beta` |
+
     ```npm
     npm install @takumi-rs/core@beta
-    ```
-
-    For edge runtimes such as Cloudflare Workers or Vercel Edge, install `@takumi-rs/wasm` instead of `@takumi-rs/core`.
-
-  </Step>
-  <Step>
-    ### Set Takumi as the renderer
-
-    Configure Nuxt OG Image to use Takumi by default.
-
-    ```ts title="nuxt.config.ts"
-    export default defineNuxtConfig({
-      ogImage: {
-        defaults: {
-          renderer: "takumi",
-        },
-      },
-    });
     ```
 
   </Step>
   <Step>
     ### Create a `.takumi.vue` template
 
-    Nuxt OG Image detects the Takumi renderer from the `.takumi.vue` suffix.
+    Nuxt OG Image picks the Takumi renderer from the `.takumi.vue` suffix. No config is needed.
+
+    <Callout>Disable Takumi with `ogImage.compatibility.runtime.takumi = false` in `nuxt.config.ts`.</Callout>
 
     ```vue title="components/OgImage/BlogPost.takumi.vue"
     <script setup lang="ts">

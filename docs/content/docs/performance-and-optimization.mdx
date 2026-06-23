@@ -4,7 +4,7 @@ description: Best practices for building high-performance rendering pipelines wi
 icon: Zap
 ---
 
-Takumi is fast by default. These practices keep it fast as your node trees grow.
+These practices keep Takumi fast as your node trees grow.
 
 ## The Renderer
 
@@ -12,30 +12,23 @@ Takumi is fast by default. These practices keep it fast as your node trees grow.
 
 The `Renderer` holds Takumi's caches. Reuse one instance across renders instead of constructing a new one each time.
 
-#### For ImageResponse
-
-Takumi manages an internal renderer for you, or pass your own through the `renderer` option.
-
-Refer to both [Typography & Fonts](/docs/typography-and-fonts) and [Load Images](/docs/load-images) for more details.
+`ImageResponse` manages an internal renderer, or pass your own through the `renderer` option. See [Typography & Fonts](/docs/typography-and-fonts) and [Load Images](/docs/load-images).
 
 #### For Cloudflare Workers
 
-Initialize the WASM module and renderer outside the `fetch()` handler so it doesn't re-run on every request.
+Initialize the WebAssembly module and renderer outside the `fetch()` handler so it doesn't re-run on every request.
 
 ```tsx title="index.tsx"
 import { ImageResponse } from "takumi-js/response";
 import { initSync, Renderer } from "takumi-js/wasm";
-import module from "takumi-js/wasm/takumi_wasm_bg.wasm";
-import archivo from "path-to-font.ttf";
-
-const fetchCache = new Map();
-const logoUrl = "https://yeecord.com/img/logo.png";
+import module from "@takumi-rs/wasm/takumi_wasm_bg.wasm";
+import font from "path-to-font.ttf";
 
 initSync(module); // [!code highlight]
 
 // [!code highlight:2]
 const renderer = new Renderer();
-await renderer.registerFont(archivo);
+await renderer.registerFont(font);
 
 export default {
   fetch(request) {
@@ -50,7 +43,7 @@ export default {
 
 ### Preload Frequently Used Images
 
-Loading images from URLs or bytes during the rendering pass can be a bottleneck. Register [Load Images](/docs/load-images) to avoid re-decoding.
+Loading images from URLs or bytes during the rendering pass is a bottleneck. Register [Load Images](/docs/load-images) to avoid re-decoding.
 
 ### Parallel Rendering
 
@@ -60,12 +53,13 @@ On the server, prefer `@takumi-rs/core`: it renders across multiple threads, whe
 
 ### Stack Filters in a Single Node
 
-Filters and blurs each spawn a composition layer the size of the viewport, which costs extra memory. Stacking them on one node reuses a single layer.
+Each filtered node allocates its own offscreen composition layer, sized to the element (viewport-sized only as a worst case). Stacking filters on one node reuses a single layer.
 
 ## Fonts
 
 ### Prefer TTF over WOFF2
 
-WOFF2 is a compressed format, which requires decompression before use. TTF is a raw format, which can be used directly.
-
-Reach for WOFF2 only when file size matters more than decode speed.
+| Format | Decode cost             | When to use                              |
+| ------ | ----------------------- | ---------------------------------------- |
+| TTF    | Used directly           | Default                                  |
+| WOFF2  | Decompressed before use | File size matters more than decode speed |

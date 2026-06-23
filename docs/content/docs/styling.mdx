@@ -11,8 +11,6 @@ Four ways to put CSS on a node:
 - `<style>` tags: CSS that travels inside the JSX.
 - `stylesheets` option: full stylesheets matched against `className` and `id`.
 
-`style` and `tw` hit one node. `<style>` and `stylesheets` match across the tree by selector.
-
 ## Stylesheets
 
 Pass real CSS through `stylesheets` and match it by `className` or `id`.
@@ -27,14 +25,18 @@ const image = await render(<div className="card">Hello</div>, {
 });
 ```
 
-The engine handles class, id, and descendant selectors, custom properties with `var()`, shorthands, `@keyframes`, `@media`, `@supports`, gradients, `box-shadow`, `filter`, `backdrop-filter`, `mix-blend-mode`, and `transform`.
+The engine handles:
+
+| Selectors             | At-rules                            | Properties                                                                                                                      |
+| --------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| class, id, descendant | `@keyframes`, `@media`, `@supports` | custom properties with `var()`, shorthands, gradients, `box-shadow`, `filter`, `backdrop-filter`, `mix-blend-mode`, `transform` |
 
 <Callout type="info">
   A render is one static frame, so interactive pseudo-classes like `:hover` and `:focus` parse but
   never match.
 </Callout>
 
-A `<style>` tag feeds the same engine and gets extracted from the JSX automatically. Reach for it when the rules should travel with the component.
+A `<style>` tag feeds the same engine and gets extracted from the JSX automatically.
 
 ```tsx
 <div className="card">
@@ -45,13 +47,12 @@ A `<style>` tag feeds the same engine and gets extracted from the JSX automatica
 
 ## Tailwind
 
-Two paths: bring a stylesheet your bundler compiled, or use the built-in `tw` parser.
-
 ### Bring your stylesheet
 
 Compile Tailwind with your bundler, then pass the CSS through `stylesheets`. On Vite, import it with the `?inline` query.
 
 ```tsx title="og.tsx"
+import { ImageResponse } from "takumi-js/response";
 // [!code ++]
 import stylesheet from "~/styles/global.css?inline";
 
@@ -82,7 +83,7 @@ export default defineConfig({
 
 ### Native parser
 
-The `tw` prop runs a built-in parser with no build step. It won't cover every Tailwind feature, so prefer a compiled stylesheet for anything beyond simple cases.
+The `tw` prop runs a built-in parser with no build step. It won't cover every Tailwind feature.
 
 - No theme config, but arbitrary values work.
 - See the [parser mapping](https://github.com/kane50613/takumi/blob/master/takumi-css/src/style/tw/map.rs) for every supported class.
