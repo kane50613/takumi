@@ -41,8 +41,7 @@ export async function GET(_: Request, { params }: ApiContext<"/og/docs/[...slugs
       width: 1200,
       height: 630,
       format: "webp",
-      // Static build-time generation: use WASM so prerendering doesn't depend on the
-      // native napi binding resolving inside the Vercel build sandbox.
+      // WASM: static prerender shouldn't depend on the native binding resolving in the build sandbox.
       module: wasmModule,
     },
   );
