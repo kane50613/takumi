@@ -1,0 +1,31 @@
+[package]
+name = "takumi-cli"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Command-line renderer for Takumi image scenes."
+repository = "https://github.com/kane50613/takumi"
+rust-version = "1.91"
+publish = false
+
+[[bin]]
+name = "takumi"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+arboard = "3.6"
+base64.workspace = true
+clap.workspace = true
+ego-tree = "0.10"
+parley.workspace = true
+scraper = "0.24"
+serde_json.workspace = true
+ureq = "2"
+url = "2"
+
+[dependencies.takumi]
+path = "../takumi"
+
+[lints]
+workspace = true
