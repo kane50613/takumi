@@ -91,8 +91,29 @@ async function resolveImageLoaders(images: ImageLoader[]): Promise<ImageSource[]
 }
 
 export class Renderer {
-  private fontMapping = new Map<string | ByteBuf, Promise<RegisteredFamily[]>>();
+  private fontsByKey = new Map<string, Promise<RegisteredFamily[]>>();
+  private fontsByData = new WeakMap<ByteBuf, Promise<RegisteredFamily[]>>();
   private inner = new RendererInternal();
+
+  private getFont(key: string | ByteBuf) {
+    return typeof key === "string" ? this.fontsByKey.get(key) : this.fontsByData.get(key);
+  }
+
+  private setFont(key: string | ByteBuf, family: Promise<RegisteredFamily[]>) {
+    if (typeof key === "string") {
+      this.fontsByKey.set(key, family);
+    } else {
+      this.fontsByData.set(key, family);
+    }
+  }
+
+  private deleteFont(key: string | ByteBuf) {
+    if (typeof key === "string") {
+      this.fontsByKey.delete(key);
+    } else {
+      this.fontsByData.delete(key);
+    }
+  }
 
   private async prepareFonts(fonts: FontLoader[] | undefined) {
     if (!fonts) {
@@ -183,7 +204,7 @@ export class Renderer {
   async registerFont(font: FontLoader) {
     const key = createFontKey(font);
 
-    const cached = this.fontMapping.get(key);
+    const cached = this.getFont(key);
     if (cached) {
       return cached;
     }
@@ -196,17 +217,17 @@ export class Renderer {
     if (isBuffer(extracted)) {
       const binded = register(extracted);
 
-      this.fontMapping.set(key, Promise.resolve(binded));
+      this.setFont(key, Promise.resolve(binded));
 
       return binded;
     }
 
     const promise = extracted.then(register).catch((error) => {
-      this.fontMapping.delete(key);
+      this.deleteFont(key);
       throw error;
     });
 
-    this.fontMapping.set(key, promise);
+    this.setFont(key, promise);
 
     return promise;
   }
