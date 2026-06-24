@@ -61,20 +61,43 @@
       }
     },
     "./auto": {
-      "types": "./bundlers/type.d.ts",
-      "bun": "./bundlers/bun.mjs",
-      "workerd": "./bundlers/workerd.js",
-      "unwasm": "./bundlers/next.mjs",
-      "module": "./bundlers/vite.mjs",
-      "node": "./bundlers/node.mjs",
-      "default": "./bundlers/vite.mjs"
+      "bun": {
+        "types": "./bundlers/bun.d.ts",
+        "default": "./bundlers/bun.mjs"
+      },
+      "workerd": {
+        "types": "./bundlers/wasm-module.d.ts",
+        "default": "./bundlers/workerd.js"
+      },
+      "unwasm": {
+        "types": "./bundlers/wasm-module.d.ts",
+        "default": "./bundlers/next.mjs"
+      },
+      "module": {
+        "types": "./bundlers/vite.d.ts",
+        "default": "./bundlers/vite.mjs"
+      },
+      "node": {
+        "require": {
+          "types": "./bundlers/node.d.cts",
+          "default": "./bundlers/node.cjs"
+        },
+        "default": {
+          "types": "./bundlers/node.d.ts",
+          "default": "./bundlers/node.mjs"
+        }
+      },
+      "default": {
+        "types": "./bundlers/wasm-module.d.ts",
+        "default": "./bundlers/vite.mjs"
+      }
     },
     "./takumi_wasm_bg.wasm": {
       "types": "./pkg/takumi_wasm_bg.wasm.d.ts",
       "default": "./pkg/takumi_wasm_bg.wasm"
     },
     "./next": {
-      "types": "./bundlers/next.d.ts",
+      "types": "./bundlers/wasm-module.d.ts",
       "default": "./bundlers/next.mjs"
     },
     "./vite": {

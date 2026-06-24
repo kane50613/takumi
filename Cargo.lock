@@ -1618,7 +1618,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-napi"
-version = "0.0.3"
+version = "0.0.0"
 dependencies = [
  "arc-swap",
  "napi",
@@ -1670,7 +1670,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-wasm"
-version = "0.0.3"
+version = "0.0.0"
 dependencies = [
  "base64",
  "js-sys",
