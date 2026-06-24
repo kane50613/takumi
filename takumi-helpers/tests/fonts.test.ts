@@ -85,6 +85,49 @@ describe("googleFonts", () => {
     expect(fonts.every((f) => !f.key.includes("gstatic"))).toBe(true);
   });
 
+  test("collapses a variable font's shared woff2 into one weightless face", async () => {
+    // A variable font: both weight blocks share one woff2 url.
+    const variableCss = `
+      @font-face {
+        font-family: 'Public Sans';
+        font-style: normal;
+        font-weight: 400;
+        src: url(https://fonts.gstatic.com/public-sans-variable.woff2) format('woff2');
+        unicode-range: U+0000-00FF;
+      }
+      @font-face {
+        font-family: 'Public Sans';
+        font-style: normal;
+        font-weight: 700;
+        src: url(https://fonts.gstatic.com/public-sans-variable.woff2) format('woff2');
+        unicode-range: U+0000-00FF;
+      }
+    `;
+    const fetchMock = mock((url: string) =>
+      Promise.resolve(url.includes("/css2") ? new Response(variableCss) : new Response(bytes(url))),
+    );
+
+    const fonts = await googleFonts({
+      families: [{ family: "Public Sans", weight: [400, 700] }],
+      fetch: fetchMock,
+    });
+
+    expect(fonts).toHaveLength(1);
+    expect(fonts[0]?.weight).toBeUndefined();
+
+    // A static font keeps a distinct url per weight, so faces stay split.
+    const staticMock = mock((url: string) =>
+      Promise.resolve(
+        url.includes("/css2") ? new Response(twoWeightCss) : new Response(bytes(url)),
+      ),
+    );
+    const staticFonts = await googleFonts({
+      families: [{ family: "Inter", weight: [400, 700] }],
+      fetch: staticMock,
+    });
+    expect(staticFonts.map((f) => f.weight).sort()).toEqual([400, 700]);
+  });
+
   test("builds the family/axis and sends a woff2 UA", async () => {
     let requestedUrl = "";
     let ua = "";
@@ -188,7 +231,7 @@ describe("googleFonts", () => {
 
     expect(new URL(requestedUrl).searchParams.get("family")).toBe("Inter:wght@100..900");
     expect(fonts).toHaveLength(1);
-    expect(fonts[0]!.weight).toBeUndefined();
+    expect(fonts[0]?.weight).toBeUndefined();
   });
 
   test("requests every family in a single css2 call", async () => {
