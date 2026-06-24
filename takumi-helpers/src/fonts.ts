@@ -1,3 +1,4 @@
+import type { GoogleFontCatalog } from "./google-fonts-catalog";
 import type { Node } from "./types";
 import { fetchOk, type FetchOptions } from "./utils";
 
@@ -5,17 +6,43 @@ const chromeUserAgent =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 type FontStyle = "normal" | "italic";
+type WeightRange = `${number}..${number}`;
+type AxisValue = number | WeightRange;
 
-/** One family to load. A bare string loads weight 400, normal style. */
-export type GoogleFontFamily =
-  | string
+/** A {@link GoogleFontCatalog} family with its weight, style, and variable axes typed per family. */
+type KnownGoogleFontFamily = {
+  [K in keyof GoogleFontCatalog]: {
+    family: K;
+    /** `400`, `[400, 700]`, or a range like `"100..900"` for the variable font. @default 400 */
+    weight?: GoogleFontCatalog[K]["weight"] | GoogleFontCatalog[K]["weight"][] | WeightRange;
+    /** `"normal"`, `"italic"`, or both. @default "normal" */
+    style?: GoogleFontCatalog[K]["style"] | GoogleFontCatalog[K]["style"][];
+    /** Variable axes to vary, each at a value or `"min..max"` range, e.g. `{ opsz: "14..32" }`. */
+    axes?: [GoogleFontCatalog[K]["axis"]] extends [never]
+      ? never
+      : Partial<Record<GoogleFontCatalog[K]["axis"], AxisValue>>;
+  };
+}[keyof GoogleFontCatalog];
+
+/** Object form: a known family with its typed axes, or any other family loosely. */
+type GoogleFontFamilyObject =
+  | KnownGoogleFontFamily
   | {
       family: string;
-      /** `400`, `[400, 700]`, or a range like `"100..900"` for the variable font. @default 400 */
-      weight?: number | number[] | `${number}..${number}`;
-      /** `"normal"`, `"italic"`, or both. @default "normal" */
+      weight?: number | number[] | WeightRange;
       style?: FontStyle | FontStyle[];
+      axes?: Record<string, AxisValue>;
     };
+
+/**
+ * One family to load. A bare string loads weight 400, normal style.
+ *
+ * Known {@link GoogleFontCatalog} families autocomplete their valid weight, style, and variable
+ * axes; any other string is still accepted. Families it does not recognise fall back to the loose
+ * `{ family: string }` form, so an invalid weight on a known family is not rejected — the
+ * suggestions are a guide, not a constraint.
+ */
+export type GoogleFontFamily = (keyof GoogleFontCatalog | (string & {})) | GoogleFontFamilyObject;
 
 export type GoogleFontsOptions = FetchOptions & {
   /** The families to load, each as a name or a name plus its weight/style axis. */
@@ -33,38 +60,64 @@ export type GoogleFontsOptions = FetchOptions & {
 
 const GOOGLE_FONTS_CSS = "https://fonts.googleapis.com/css2";
 
-/** The `family=` value for one family plus its weight/style axis, e.g. `Inter:wght@400`. */
-function familyValue({
-  family,
-  weight = 400,
-  style = "normal",
-}: Exclude<GoogleFontFamily, string>) {
-  const weights = (Array.isArray(weight) ? [...weight].sort((a, b) => a - b) : [weight]).map(
-    String,
-  );
-  const styles = Array.isArray(style) ? style : [style];
+/**
+ * The `family=` value for one family plus its weight/style/axis tuple, e.g. `Inter:wght@400` or
+ * `Inter:ital,opsz,wght@0,14..32,400`. Tags are sorted as css2 requires (uppercase before
+ * lowercase, alphabetical), and each `;`-joined tuple carries one value per tag in that order.
+ *
+ * Takes pre-extracted plain values so it never relates the per-family {@link GoogleFontFamily}
+ * union to a parameter — at ~2000 members that overflows the type checker (TS2590).
+ */
+function familyValue(
+  family: string,
+  weights: string[],
+  styles: string[],
+  customAxes: [string, string][],
+) {
+  const axisValues = new Map(customAxes);
+  const hasItalic = styles.includes("italic");
+  const italics = hasItalic ? (styles.includes("normal") ? [0, 1] : [1]) : [undefined];
 
-  let axis: string;
-  if (styles.includes("italic")) {
-    const italics = styles.includes("normal") ? [0, 1] : [1];
-    axis = `ital,wght@${italics
-      .flatMap((ital) => weights.map((w) => `${ital},${w}`))
-      .sort()
-      .join(";")}`;
-  } else {
-    axis = `wght@${weights.join(";")}`;
-  }
+  const tags = [...(hasItalic ? ["ital"] : []), ...axisValues.keys(), "wght"].sort();
 
-  return `${family}:${axis}`;
+  const tuples = italics
+    .flatMap((ital) =>
+      weights.map((w) =>
+        tags
+          .map((tag) => {
+            if (tag === "ital") {
+              return String(ital);
+            }
+            return tag === "wght" ? w : (axisValues.get(tag) ?? "");
+          })
+          .join(","),
+      ),
+    )
+    .sort();
+
+  return `${family}:${tags.join(",")}@${tuples.join(";")}`;
 }
 
 function buildUrl(options: GoogleFontsOptions) {
   const url = new URL(GOOGLE_FONTS_CSS);
   for (const family of options.families) {
-    url.searchParams.append(
-      "family",
-      familyValue(typeof family === "string" ? { family } : family),
+    if (typeof family === "string") {
+      url.searchParams.append("family", familyValue(family, ["400"], ["normal"], []));
+      continue;
+    }
+
+    const weight = family.weight ?? 400;
+    const weights = (Array.isArray(weight) ? [...weight].sort((a, b) => a - b) : [weight]).map(
+      String,
     );
+    const style = family.style ?? "normal";
+    const styles = (Array.isArray(style) ? style : [style]).map(String);
+    const customAxes = Object.entries(family.axes ?? {}).map(([tag, value]): [string, string] => [
+      tag,
+      String(value),
+    ]);
+
+    url.searchParams.append("family", familyValue(family.family, weights, styles, customAxes));
   }
   if (options.display) {
     url.searchParams.set("display", options.display);
