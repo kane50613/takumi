@@ -46,9 +46,10 @@ async function generateCatalog() {
       .sort()
       .map((s) => `"${s}"`)
       .join(" | ");
+    // ital and wght are driven by style/weight, and buildUrl drops them from custom axes.
     const extraAxes = (axes ?? [])
       .map((a) => a.tag)
-      .filter((tag) => tag !== "wght")
+      .filter((tag) => tag !== "wght" && tag !== "ital")
       .sort();
     const axis = extraAxes.length ? extraAxes.map((tag) => `"${tag}"`).join(" | ") : "never";
 
