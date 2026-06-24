@@ -250,7 +250,7 @@ describe("googleFonts", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  test("passes text and display through to the CSS request", async () => {
+  test("passes display through to the CSS request", async () => {
     let requestedUrl = "";
     const fetchMock = mock((url: string) => {
       if (url.includes("/css2")) requestedUrl = url;
@@ -259,10 +259,9 @@ describe("googleFonts", () => {
       );
     });
 
-    await googleFonts({ families: ["Inter"], text: "Hello", display: "swap", fetch: fetchMock });
+    await googleFonts({ families: ["Inter"], display: "swap", fetch: fetchMock });
 
     const params = new URL(requestedUrl).searchParams;
-    expect(params.get("text")).toBe("Hello");
     expect(params.get("display")).toBe("swap");
   });
 

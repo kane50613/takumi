@@ -43,8 +43,6 @@ export type GoogleFontFamily = (keyof GoogleFontCatalog | (string & {})) | Googl
 export type GoogleFontsOptions = FetchOptions & {
   /** The families to load, each as a name or a name plus its weight/style axis. */
   families: GoogleFontFamily[];
-  /** Download only the glyphs this text uses. Drops each subset's `unicode-range`. */
-  text?: string;
   /** `font-display` strategy passed through to the CSS request. */
   display?: "auto" | "block" | "swap" | "fallback" | "optional";
   /**
@@ -111,9 +109,6 @@ function buildUrl(options: GoogleFontsOptions) {
   }
   if (options.display) {
     url.searchParams.set("display", options.display);
-  }
-  if (options.text) {
-    url.searchParams.set("text", options.text);
   }
   return url.toString();
 }
@@ -239,7 +234,7 @@ function parseSubsetFaces(css: string): SubsetFace[] {
       url,
       weight: weight && !weight[2] ? Number(weight[1]) : undefined,
       style: body.match(/font-style:\s*([a-z]+)/i)?.[1],
-      // No `unicode-range` (e.g. a `text=` request) means the face covers everything.
+      // No `unicode-range` (e.g. a full static font) means the face covers everything.
       ranges: range ? parseUnicodeRange(range) : [],
     });
     index += 1;
