@@ -4,7 +4,7 @@
 
 Takumi renders UI component trees to images. This crate is the facade users
 depend on: entry-point **functions** live at the crate root and the _curated,
-stable_ data structures live in [`crate::prelude`](https://docs.rs/takumi/latest/takumi/prelude/). Glob the prelude for the types
+stable_ data structures live in [`crate::prelude`]. Glob the prelude for the types
 and call the functions from the crate root.
 
 The backend crates expose a much larger surface than is meant for general use
