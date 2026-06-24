@@ -248,6 +248,36 @@ function parseSubsetFaces(css: string): SubsetFace[] {
   return faces;
 }
 
+/**
+ * A variable font reuses one woff2 across weights: the same `src` url repeats per subset, one
+ * `@font-face` per weight. Collapse each shared url to a single weightless face so the renderer
+ * drives the `wght` axis. Registering the file once per weight pins every weight to the file's
+ * default, so `font-weight: 700` renders regular. Static fonts give a distinct url per weight and
+ * pass through untouched.
+ */
+function mergeVariableFaces(faces: SubsetFace[]): SubsetFace[] {
+  const weightsByUrl = new Map<string, Set<number | undefined>>();
+  for (const face of faces) {
+    const weights = weightsByUrl.get(face.url) ?? new Set();
+    weights.add(face.weight);
+    weightsByUrl.set(face.url, weights);
+  }
+
+  const seen = new Set<string>();
+  const merged: SubsetFace[] = [];
+  for (const face of faces) {
+    if (seen.has(face.url)) {
+      continue;
+    }
+
+    seen.add(face.url);
+    const sharedAcrossWeights = (weightsByUrl.get(face.url)?.size ?? 0) > 1;
+    merged.push(sharedAcrossWeights ? { ...face, weight: undefined } : face);
+  }
+
+  return merged;
+}
+
 /** Collect every codepoint the content will render. */
 export function collectCodepoints(source: string | Node | Node[]): Set<number> {
   const codepoints = new Set<number>();
@@ -342,5 +372,5 @@ export async function googleFonts(options: GoogleFontsOptions): Promise<FontSubs
 
   const css = await fetchCssCached(buildUrl(options), options);
 
-  return parseSubsetFaces(css).map((face) => toSubset(face, options));
+  return mergeVariableFaces(parseSubsetFaces(css)).map((face) => toSubset(face, options));
 }
