@@ -14,7 +14,7 @@ import type {
 export type * from "../index";
 import { Renderer as RendererInternal } from "../index";
 
-import { subsetFonts } from "@takumi-rs/helpers";
+import { pickFonts } from "@takumi-rs/helpers";
 
 export { extractResourceUrls } from "@takumi-rs/helpers";
 
@@ -25,15 +25,6 @@ export type FontLoader =
       /** Inclusive codepoint ranges this face covers; lets `render` skip it when unused. */
       ranges?: [number, number][];
     } & ({ key: string } | { name: string }));
-
-/** Keeps only the `fonts` whose `ranges` cover `source`, unless `subset` is `false`. */
-function pickFonts(
-  fonts: FontLoader[] | undefined,
-  source: Node | Node[],
-  subset: boolean | undefined,
-) {
-  return fonts && subset !== false ? subsetFonts(fonts, source) : fonts;
-}
 
 type ImageLoaderData = ImageSource["data"];
 

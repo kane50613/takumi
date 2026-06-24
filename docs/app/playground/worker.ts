@@ -68,7 +68,7 @@ self.onmessage = async (event: MessageEvent) => {
 
         const [images, fonts] = await Promise.all([
           fetchResources(resourceUrls, { cache: fetchCache }),
-          googleFonts(GOOGLE_FONTS, { cache: fontCssCache }),
+          googleFonts({ families: GOOGLE_FONTS, cache: fontCssCache }),
         ]);
 
         const start = performance.now();

@@ -57,7 +57,8 @@ async function render(
     })),
   );
   const loaders = fontLoaders(module);
-  const subsets = "googleFonts" in module ? await googleFonts(module.googleFonts) : [];
+  const subsets =
+    "googleFonts" in module ? await googleFonts({ families: module.googleFonts }) : [];
   const fonts = [...loaders, ...subsets];
   const renderStart = performance.now();
 

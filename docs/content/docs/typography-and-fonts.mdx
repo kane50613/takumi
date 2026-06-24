@@ -38,33 +38,7 @@ The takumi-js functions `render`, `renderAnimation`, and `renderSvg` take the sa
 
 ### From Google Fonts
 
-`googleFont` fetches a family from Google Fonts and returns `fonts` entries. You get one lazy loader per `woff2` file. Each file downloads only when the renderer first needs it. Use the family by its name in `font-family`.
-
-```tsx
-import { render } from "takumi-js";
-import { googleFont } from "takumi-js/helpers";
-
-const image = await render(<div style={{ fontFamily: "Inter" }}>Hello</div>, {
-  width: 1200,
-  height: 630,
-  fonts: await googleFont("Inter", { weight: [400, 700] }),
-});
-```
-
-| Option    | Accepts                                            | Effect                                                        |
-| --------- | -------------------------------------------------- | ------------------------------------------------------------- |
-| `weight`  | one weight, an array, or a range like `"100..900"` | A range loads the variable font; CSS `font-weight` drives it. |
-| `style`   | `"normal"`, `"italic"`, or both                    | Which styles to fetch.                                        |
-| `text`    | a string                                           | Downloads only the glyphs that string uses.                   |
-| `display` | a `font-display` value                             | Maps to CSS `font-display`.                                   |
-
-```tsx
-fonts: await googleFont("Inter", { weight: 700, style: "italic", text: title }),
-```
-
-### Multilingual content
-
-When you can't predict which scripts appear, load several families with `googleFonts` and let `render` trim them. It fetches every family's metadata in one request and returns all their coverage subsets; `render` scans the node tree and registers only the subsets the content draws, so unused scripts download nothing.
+`googleFonts` fetches families from Google Fonts in one request and returns `fonts` entries: one lazy loader per coverage subset, downloaded when the renderer first needs it. `render` registers only the subsets the content draws, so unused weights and scripts download nothing. Reference each family by name in `font-family`.
 
 ```tsx
 import { render } from "takumi-js";
@@ -73,17 +47,26 @@ import { googleFonts } from "takumi-js/helpers";
 const image = await render(<div style={{ fontFamily: "Inter" }}>Hello 你好 こんにちは</div>, {
   width: 1200,
   height: 630,
-  fonts: await googleFonts(["Inter", "Noto Sans JP", "Noto Sans TC"]),
+  fonts: await googleFonts({ families: ["Inter", "Noto Sans JP", "Noto Sans TC"] }),
 });
 ```
 
-Each subset registers under its own internal name; `font-family: Inter` still expands across all of them, so each script finds the file that covers it. Pass a `Map` as `cache` to reuse the metadata across renders.
+Pass an object instead of a name to set a family's weight or style:
 
 ```tsx
-const fonts = await googleFonts(["Inter"], { cache });
+fonts: await googleFonts({ families: [{ family: "Inter", weight: [400, 700], style: "italic" }] }),
 ```
 
-`render` trims the subsets itself, so the same `fonts` array works for any content. To trim ahead of time, or with `subset: false` to opt out of the automatic pass, call `subsetFonts(fonts, node)`.
+| Option     | Accepts                                       | Effect                                                        |
+| ---------- | --------------------------------------------- | ------------------------------------------------------------- |
+| `families` | names, or `{ family, weight, style }` objects | The families to load.                                         |
+| `weight`   | a weight, an array, or a range `"100..900"`   | A range loads the variable font; CSS `font-weight` drives it. |
+| `style`    | `"normal"`, `"italic"`, or both               | Which styles to fetch.                                        |
+| `text`     | a string                                      | Downloads only the glyphs that string uses.                   |
+| `display`  | a `font-display` value                        | Maps to CSS `font-display`.                                   |
+| `cache`    | a `Map`                                       | Reuses the metadata CSS across renders.                       |
+
+Each subset registers under its own internal name; `font-family: Inter` expands across all of them, so each script finds the file that covers it. `render` trims the set to the content, so the same `fonts` work for any text. To trim ahead of time, or when `subset: false` opts out of the automatic pass, call `subsetFonts({ fonts, source })`, where `source` is the string, node, or node array you render.
 
 ### Preloading with `registerFont`
 

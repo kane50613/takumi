@@ -6,25 +6,39 @@ const chromeUserAgent =
 
 type FontStyle = "normal" | "italic";
 
-export type GoogleFontOptions = FetchOptions & {
-  /**
-   * `400` for one weight, `[400, 700]` for several, or a range like `"100..900"` to load
-   * the variable font. A range leaves the weight unset so CSS `font-weight` controls it.
-   * @default 400
-   */
-  weight?: number | number[] | `${number}..${number}`;
-  /** `"normal"`, `"italic"`, or both. @default "normal" */
-  style?: FontStyle | FontStyle[];
-  /** Limit the download to the glyphs used in this text. Recommended for OG images. */
+/** One family to load. A bare string loads weight 400, normal style. */
+export type GoogleFontFamily =
+  | string
+  | {
+      family: string;
+      /** `400`, `[400, 700]`, or a range like `"100..900"` for the variable font. @default 400 */
+      weight?: number | number[] | `${number}..${number}`;
+      /** `"normal"`, `"italic"`, or both. @default "normal" */
+      style?: FontStyle | FontStyle[];
+    };
+
+export type GoogleFontsOptions = FetchOptions & {
+  /** The families to load, each as a name or a name plus its weight/style axis. */
+  families: GoogleFontFamily[];
+  /** Download only the glyphs this text uses. Drops each subset's `unicode-range`. */
   text?: string;
   /** `font-display` strategy passed through to the CSS request. */
   display?: "auto" | "block" | "swap" | "fallback" | "optional";
+  /**
+   * Cache for the Google Fonts CSS, keyed by request URL. Reuse one across renders (e.g. a
+   * playground re-rendering on each edit) so the metadata is fetched and parsed once.
+   */
+  cache?: Pick<Map<string, string>, "has" | "get" | "set">;
 };
 
 const GOOGLE_FONTS_CSS = "https://fonts.googleapis.com/css2";
 
-/** The `family=` value for one family + its weight/style axis, e.g. `Inter:wght@400`. */
-function familyValue(family: string, { weight = 400, style = "normal" }: GoogleFontOptions) {
+/** The `family=` value for one family plus its weight/style axis, e.g. `Inter:wght@400`. */
+function familyValue({
+  family,
+  weight = 400,
+  style = "normal",
+}: Exclude<GoogleFontFamily, string>) {
   const weights = (Array.isArray(weight) ? [...weight].sort((a, b) => a - b) : [weight]).map(
     String,
   );
@@ -44,9 +58,14 @@ function familyValue(family: string, { weight = 400, style = "normal" }: GoogleF
   return `${family}:${axis}`;
 }
 
-function buildCssUrl(family: string, options: GoogleFontOptions) {
+function buildUrl(options: GoogleFontsOptions) {
   const url = new URL(GOOGLE_FONTS_CSS);
-  url.searchParams.append("family", familyValue(family, options));
+  for (const family of options.families) {
+    url.searchParams.append(
+      "family",
+      familyValue(typeof family === "string" ? { family } : family),
+    );
+  }
   if (options.display) {
     url.searchParams.set("display", options.display);
   }
@@ -63,10 +82,21 @@ function fetchCss(url: string, options: FetchOptions) {
   }).then((r) => r.text());
 }
 
+async function fetchCssCached(url: string, options: GoogleFontsOptions) {
+  const cached = options.cache?.get(url);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const css = await fetchCss(url, options);
+  options.cache?.set(url, css);
+  return css;
+}
+
 const fontFaceBlockPattern = /(?:\/\*\s*([^*]+?)\s*\*\/\s*)?@font-face\s*\{([^}]*)\}/g;
 
 type SubsetFace = {
-  /** Logical family from the block's `font-family` (groups subsets across one request). */
+  /** Logical family from the block's `font-family`; groups subsets across one request. */
   family: string;
   subset: string;
   url: string;
@@ -81,54 +111,32 @@ export type FontSubset = {
   name: string;
   /** Logical family authors reference in `font-family`; expands to every loaded subset. */
   subsetOf: string;
-  /** Subset woff2 URL, also the dedup key. */
+  /** Stable dedup key (`"{name}:{weight}:{style}:{range}"`), independent of the rotating woff2 URL. */
   key: string;
   weight?: number;
   style?: string;
-  /** Inclusive codepoint ranges this subset covers; empty means it covers everything. */
+  /** Inclusive codepoint ranges this subset covers; empty covers everything. */
   ranges: [number, number][];
-  /** Fetches the subset bytes; the renderer skips files it has already loaded. */
+  /** Fetches the subset bytes. The renderer skips files it has already loaded. */
   data: () => Promise<ArrayBuffer>;
 };
 
 function toSubset(face: SubsetFace, options: FetchOptions): FontSubset {
+  const name = `${face.family} ${face.subset}`;
+  const range = face.ranges.map(([lo, hi]) => `${lo}-${hi}`).join(",");
+
   return {
-    name: `${face.family} ${face.subset}`,
+    name,
     subsetOf: face.family,
-    key: face.url,
+    // Stable coverage identity, not the woff2 URL Google may rotate, so the renderer dedups
+    // across calls yet never merges two subsets that cover different ranges.
+    key: `${name}:${face.weight ?? ""}:${face.style ?? ""}:${range}`,
     weight: face.weight,
     style: face.style,
     ranges: face.ranges,
     data: () => fetchOk(face.url, options).then((r) => r.arrayBuffer()),
   };
 }
-
-/**
- * Load one Google Font family as subset descriptors you can pass to a renderer's `fonts`.
- * Each subset keeps its `unicode-range`, registers uniquely-named under its `subsetOf`
- * family (which `font-family: {family}` expands across), and downloads only when the
- * renderer first needs it — so glyphs route to the subset that covers them, never to a
- * same-named sibling that lacks them. Pass the result straight to `render`, which drops
- * the subsets the content doesn't use; or trim them yourself with {@link subsetFonts}.
- *
- * @example
- * fonts: await googleFont("Inter", { weight: [400, 700] })
- * @example
- * fonts: await googleFont("Inter", { weight: "100..900" }) // variable
- * @example
- * fonts: await googleFont("Inter", { weight: 700, style: "italic", text: "Hello" })
- */
-export async function googleFont(
-  family: string,
-  options: GoogleFontOptions = {},
-): Promise<FontSubset[]> {
-  const css = await fetchCss(buildCssUrl(family, options), options);
-
-  return parseSubsetFaces(css).map((face) => toSubset(face, options));
-}
-
-/** A Google family to load, plus how — same options as {@link googleFont} minus `text`. */
-export type GoogleFontFamily = string | ({ family: string } & Omit<GoogleFontOptions, "text">);
 
 /** Parse `U+0460-052F, U+20B4, U+30??` into inclusive `[lo, hi]` codepoint ranges. */
 function parseUnicodeRange(value: string): [number, number][] {
@@ -241,11 +249,18 @@ function rangesCover(ranges: [number, number][], codepoints: Set<number>): boole
   return false;
 }
 
-/** Drop the subsets `source` never renders, keeping each covering one and any range-less
- * fallback (a full font, or a `text=` Google subset). Pure — no network — so a renderer can
- * run it on the final node tree without re-fetching. Works on any descriptor carrying
- * `ranges`; entries without it are always kept. */
-export function subsetFonts<T>(fonts: T[], source: string | Node | Node[]): T[] {
+/**
+ * Keep the subsets `source` renders, dropping the rest. Range-less fallbacks (a full font or a
+ * `text=` subset) always stay. Runs without network, so a renderer can apply it to the final
+ * node tree. Works on any descriptor carrying `ranges`; entries without it are kept.
+ */
+export function subsetFonts<T>({
+  fonts,
+  source,
+}: {
+  fonts: T[];
+  source: string | Node | Node[];
+}): T[] {
   const codepoints = collectCodepoints(source);
 
   return fonts.filter((font) =>
@@ -253,50 +268,32 @@ export function subsetFonts<T>(fonts: T[], source: string | Node | Node[]): T[] 
   );
 }
 
-export type GoogleFontsOptions = FetchOptions & {
-  /**
-   * Cache for the Google Fonts CSS, keyed by request URL. Reuse one across renders (e.g. a
-   * playground re-rendering on every edit) so the metadata is fetched and parsed only once.
-   */
-  cache?: Pick<Map<string, string>, "has" | "get" | "set">;
-};
-
-/** One css2 request for every family — Google returns all their subsets in a single CSS. */
-function buildSubsetsUrl(specs: Exclude<GoogleFontFamily, string>[]) {
-  const url = new URL(GOOGLE_FONTS_CSS);
-  for (const spec of specs) {
-    url.searchParams.append("family", familyValue(spec.family, spec));
-  }
-  return url.toString();
-}
-
-async function fetchSubsetsCss(url: string, options: GoogleFontsOptions) {
-  const cached = options.cache?.get(url);
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  const css = await fetchCss(url, options);
-  options.cache?.set(url, css);
-  return css;
+/** Apply {@link subsetFonts} unless `subset` is `false`. Passes `undefined` fonts through. */
+export function pickFonts<T>(
+  fonts: T[] | undefined,
+  source: string | Node | Node[],
+  subset: boolean | undefined,
+): T[] | undefined {
+  return fonts && subset !== false ? subsetFonts({ fonts, source }) : fonts;
 }
 
 /**
- * Load several Google Font families in ONE css2 request, returning every subset descriptor
- * (see {@link googleFont}). Hand the result to `render`, which keeps only the subsets the
- * content uses; or pre-trim with {@link subsetFonts}. Subsets download lazily, so the unused
- * ones cost nothing.
+ * Load Google Font families in one css2 request, returning every coverage subset. Each keeps
+ * its `unicode-range` and registers uniquely-named under its `subsetOf` family, which
+ * `font-family: {family}` expands across, so a glyph routes to the subset that covers it.
+ * Subsets download lazily. Hand the result to `render`, which registers only the subsets the
+ * content uses; or trim them first with {@link subsetFonts}.
  *
  * @example
- * const fonts = await googleFonts(["Inter", "Noto Sans JP"]);
+ * const fonts = await googleFonts({ families: ["Inter", "Noto Sans JP"] });
  * await render(element, { width, height, fonts });
  */
-export async function googleFonts(
-  families: GoogleFontFamily[],
-  options: GoogleFontsOptions = {},
-): Promise<FontSubset[]> {
-  const specs = families.map((family) => (typeof family === "string" ? { family } : family));
-  const css = await fetchSubsetsCss(buildSubsetsUrl(specs), options);
+export async function googleFonts(options: GoogleFontsOptions): Promise<FontSubset[]> {
+  if (options.families.length === 0) {
+    return [];
+  }
+
+  const css = await fetchCssCached(buildUrl(options), options);
 
   return parseSubsetFaces(css).map((face) => toSubset(face, options));
 }

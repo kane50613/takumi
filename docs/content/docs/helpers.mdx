@@ -8,11 +8,10 @@ icon: Wrench
 
 ## Fonts
 
-| Helper                            | Use                                                                                                                                                 |
-| :-------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `googleFont(family, options?)`    | Load one Google Fonts family as `fonts` entries. See [Fonts & text](/docs/typography-and-fonts#from-google-fonts).                                  |
-| `googleFonts(families, options?)` | Load several families in one request; `render` keeps the subsets used. See [Multilingual content](/docs/typography-and-fonts#multilingual-content). |
-| `subsetFonts(fonts, source)`      | Trim font subsets to the codepoints `source` renders (what `render` does internally).                                                               |
+| Helper                           | Use                                                                                                                                           |
+| :------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------- |
+| `googleFonts(options)`           | Load Google Fonts families in one request; `render` keeps the subsets used. See [Fonts & text](/docs/typography-and-fonts#from-google-fonts). |
+| `subsetFonts({ fonts, source })` | Trim font subsets to the codepoints `source` renders (what `render` does internally).                                                         |
 
 ## Building nodes
 

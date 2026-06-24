@@ -21,7 +21,7 @@ export async function GET(_: Request, { params }: ApiContext<"/og/docs/[...slugs
     return new Response(undefined, { status: 404 });
   }
 
-  const fonts = await googleFonts(["Geist"]);
+  const fonts = await googleFonts({ families: ["Geist"] });
 
   return new ImageResponse(
     <DocsTemplate
