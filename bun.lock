@@ -7,12 +7,12 @@
       "devDependencies": {
         "@arethetypeswrong/cli": "0.18.4",
         "@types/bun": "catalog:",
-        "knip": "^6.18.0",
+        "knip": "^6.20.0",
         "lefthook": "^2.1.9",
         "oxfmt": "^0.56.0",
         "oxlint": "^1.71.0",
         "publint": "^0.3.21",
-        "tegami": "0.1.5",
+        "tegami": "0.1.6",
         "typescript": "catalog:",
       },
     },
@@ -155,7 +155,7 @@
         "@sveltejs/kit": "^2.67.0",
         "@tailwindcss/vite": "^4.3.1",
         "svelte": "^5.56.4",
-        "svelte-check": "^4.7.0",
+        "svelte-check": "^4.7.1",
         "tailwindcss": "^4.3.1",
         "typescript": "catalog:",
         "vite": "catalog:",
@@ -216,7 +216,7 @@
     },
     "takumi-helpers": {
       "name": "@takumi-rs/helpers",
-      "version": "2.0.0-beta.7",
+      "version": "2.0.0-beta.8",
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/react": "catalog:",
@@ -229,7 +229,7 @@
         "unrun": "catalog:",
       },
       "peerDependencies": {
-        "react": "^19.2.5",
+        "react": "^18.0.0 || ^19.0.0",
         "react-dom": "^18.0.0 || ^19.0.0",
       },
       "optionalPeers": [
@@ -239,7 +239,7 @@
     },
     "takumi-image-response": {
       "name": "@takumi-rs/image-response",
-      "version": "2.0.0-beta.7",
+      "version": "2.0.0-beta.8",
       "dependencies": {
         "takumi-js": "workspace:*",
       },
@@ -251,7 +251,7 @@
     },
     "takumi-js": {
       "name": "takumi-js",
-      "version": "2.0.0-beta.7",
+      "version": "2.0.0-beta.8",
       "dependencies": {
         "@takumi-rs/core": "workspace:*",
         "@takumi-rs/helpers": "workspace:*",
@@ -267,7 +267,7 @@
     },
     "takumi-napi": {
       "name": "@takumi-rs/core",
-      "version": "2.0.0-beta.7",
+      "version": "2.0.0-beta.8",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
       },
@@ -297,7 +297,7 @@
     },
     "takumi-wasm": {
       "name": "@takumi-rs/wasm",
-      "version": "2.0.0-beta.7",
+      "version": "2.0.0-beta.8",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
       },
@@ -1751,7 +1751,7 @@
 
     "kleur": ["kleur@4.1.5", "", {}, "sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ=="],
 
-    "knip": ["knip@6.18.0", "", { "dependencies": { "fdir": "^6.5.0", "formatly": "^0.3.0", "get-tsconfig": "4.14.0", "jiti": "^2.7.0", "oxc-parser": "^0.137.0", "oxc-resolver": "11.21.3", "picomatch": "^4.0.4", "smol-toml": "^1.6.1", "strip-json-comments": "5.0.3", "tinyglobby": "^0.2.17", "unbash": "^4.0.1", "yaml": "^2.9.0", "zod": "^4.1.11" }, "bin": { "knip": "bin/knip.js", "knip-bun": "bin/knip-bun.js" } }, "sha512-RlT6fK3epETsEUCVdlz96CiJN3DQJwuxOuQhEeAVWjNRuAUJHWwe+XolTL8vIiwLPZ38tTdPWJUgZyTdskOEog=="],
+    "knip": ["knip@6.20.0", "", { "dependencies": { "fdir": "^6.5.0", "formatly": "^0.3.0", "get-tsconfig": "4.14.0", "jiti": "^2.7.0", "oxc-parser": "^0.137.0", "oxc-resolver": "11.21.3", "picomatch": "^4.0.4", "smol-toml": "^1.6.1", "strip-json-comments": "5.0.3", "tinyglobby": "^0.2.17", "unbash": "^4.0.1", "yaml": "^2.9.0", "zod": "^4.1.11" }, "bin": { "knip": "bin/knip.js", "knip-bun": "bin/knip-bun.js" } }, "sha512-q+HYrS7FOERk32GM7g43IdTG7TurN7+YMLZrNpCxubZPYZyQwliBgd18yH4oYQL7YgGtOxP2fCqess3K2XaK2Q=="],
 
     "lefthook": ["lefthook@2.1.9", "", { "optionalDependencies": { "lefthook-darwin-arm64": "2.1.9", "lefthook-darwin-x64": "2.1.9", "lefthook-freebsd-arm64": "2.1.9", "lefthook-freebsd-x64": "2.1.9", "lefthook-linux-arm64": "2.1.9", "lefthook-linux-x64": "2.1.9", "lefthook-openbsd-arm64": "2.1.9", "lefthook-openbsd-x64": "2.1.9", "lefthook-windows-arm64": "2.1.9", "lefthook-windows-x64": "2.1.9" }, "bin": { "lefthook": "bin/index.js" } }, "sha512-bwDaIOViTktE8kJLf9jP0p+H2/RDTlFFlc43Am2YgUsX22hI6Sq4RbzsrecwzY5y+MHTipOH7WsmWSEniePHWQ=="],
 
@@ -2181,7 +2181,7 @@
 
     "svelte": ["svelte@workspace:example/svelte"],
 
-    "svelte-check": ["svelte-check@4.7.0", "", { "dependencies": { "@jridgewell/trace-mapping": "^0.3.25", "@sveltejs/load-config": "^0.2.0", "chokidar": "^4.0.1", "fdir": "^6.2.0", "picocolors": "^1.0.0", "sade": "^1.7.4" }, "peerDependencies": { "svelte": "^4.0.0 || ^5.0.0-next.0", "typescript": ">=5.0.0" }, "bin": { "svelte-check": "bin/svelte-check" } }, "sha512-XChCqdDg29UWOWai2I1s2Ss003piZ9mae2y2KXwoOX01W75mg7/fwLLnx9Yruk9asHkxHPDdSfEfsJh5tr9JvQ=="],
+    "svelte-check": ["svelte-check@4.7.1", "", { "dependencies": { "@jridgewell/trace-mapping": "^0.3.25", "@sveltejs/load-config": "^0.2.0", "chokidar": "^4.0.1", "fdir": "^6.2.0", "picocolors": "^1.0.0", "sade": "^1.7.4" }, "peerDependencies": { "svelte": "^4.0.0 || ^5.0.0-next.0", "typescript": ">=5.0.0" }, "bin": { "svelte-check": "bin/svelte-check" } }, "sha512-FGUOmAqxXdN/H9Zm8slrqO7SLtFisXRB7rfOsHNJ3MLTD2po/+Stg8XyErkpumPHbuUiYTcqrEIzxpVWKTLqtg=="],
 
     "tailwind-merge": ["tailwind-merge@3.6.0", "", {}, "sha512-uxL7qAVQriqRQPAyK3pj66VqskWqoZ37PW94jwOTwNfq/z9oyu1V+eqrZqtR2+fCiXdYOZe/Modt8GtvqNzu+w=="],
 
@@ -2195,7 +2195,7 @@
 
     "tar": ["tar@7.5.13", "", { "dependencies": { "@isaacs/fs-minipass": "^4.0.0", "chownr": "^3.0.0", "minipass": "^7.1.2", "minizlib": "^3.1.0", "yallist": "^5.0.0" } }, "sha512-tOG/7GyXpFevhXVh8jOPJrmtRpOTsYqUIkVdVooZYJS/z8WhfQUX8RJILmeuJNinGAMSu1veBr4asSHFt5/hng=="],
 
-    "tegami": ["tegami@0.1.5", "", { "dependencies": { "@clack/prompts": "^1.5.1", "@rainbowatcher/toml-edit-js": "^0.6.5", "commander": "^15.0.0", "js-yaml": "^4.2.0", "mdast-util-from-markdown": "^2.0.3", "mdast-util-to-markdown": "^2.1.2", "package-manager-detector": "^1.6.0", "semver": "^7.8.4", "tinyexec": "^1.2.4", "tinyglobby": "^0.2.17", "zod": "^4.4.3" } }, "sha512-cDxrxoEwyc1eMwqW7PI+DvNn8EsdSKPPna1wTg7YHXvVg8HNRIuFJTt5HkDZy9XA0Fw7uL91AleYogPh4X8tyQ=="],
+    "tegami": ["tegami@0.1.6", "", { "dependencies": { "@clack/prompts": "^1.5.1", "@rainbowatcher/toml-edit-js": "^0.6.5", "commander": "^15.0.0", "js-yaml": "^4.2.0", "mdast-util-from-markdown": "^2.0.3", "mdast-util-to-markdown": "^2.1.2", "package-manager-detector": "^1.6.0", "semver": "^7.8.4", "tinyexec": "^1.2.4", "tinyglobby": "^0.2.17", "zod": "^4.4.3" } }, "sha512-OLDNzvKF1N1IdZLBc6CGeAaZJ1MKd8dbN0XW+3OyULu1q/MRDhsBS2RgA0mlzjjNCZmwI+b2IKJVS2pFAa0Wew=="],
 
     "terser": ["terser@5.44.0", "", { "dependencies": { "@jridgewell/source-map": "^0.3.3", "acorn": "^8.15.0", "commander": "^2.20.0", "source-map-support": "~0.5.20" }, "bin": { "terser": "bin/terser" } }, "sha512-nIVck8DK+GM/0Frwd+nIhZ84pR/BX7rmXMfYwyg+Sri5oGVE99/E3KvXqpC2xHFxyqXyGHTKBSioxxplrO4I4w=="],
 

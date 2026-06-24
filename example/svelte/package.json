@@ -18,7 +18,7 @@
     "@sveltejs/kit": "^2.67.0",
     "@tailwindcss/vite": "^4.3.1",
     "svelte": "^5.56.4",
-    "svelte-check": "^4.7.0",
+    "svelte-check": "^4.7.1",
     "tailwindcss": "^4.3.1",
     "typescript": "catalog:",
     "vite": "catalog:"
