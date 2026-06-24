@@ -1,3 +1,27 @@
+## @takumi-rs/helpers@2.0.0-beta.7 (beta)
+
+### Type `googleFonts` families against the Google Fonts catalog
+
+`GoogleFontFamily` now knows every Google Font, so known families autocomplete
+their available `weight`, `style`, and variable `axes`. Any other string still
+passes, keeping private or brand-new families working.
+
+Set a variable axis per family, e.g. `{ family: "Inter", axes: { opsz: "14..32" } }`.
+The catalog is generated at build time and is types-only, so the runtime bundle is
+unchanged.
+
+### Subset Google Fonts inside `render`
+
+`googleFonts({ families })` returns every coverage subset of each family, with its
+`unicode-range`, a distinct name under one `subsetOf`, and a stable key. `render`
+registers only the subsets the content draws, so a multilingual image pulls a
+handful of blocks instead of whole fonts. Set `subset: false` to register
+everything; call `subsetFonts({ fonts, source })` to trim a set yourself.
+
+This replaces `googleFont` and `googleFontSubsets` with one object-shaped
+`googleFonts`. Distinct subset names mean a glyph routes to the file that covers it
+rather than a same-named sibling that lacks it.
+
 ## @takumi-rs/helpers@2.0.0-beta.4 (beta)
 
 ### Re-release all packages in sync
