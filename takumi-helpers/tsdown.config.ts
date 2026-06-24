@@ -12,12 +12,20 @@ interface FamilyMetadata {
 
 /** Build the gitignored `src/google-fonts-catalog.ts` from the public Google Fonts metadata (no API key). */
 async function generateCatalog() {
-  const data: { familyMetadataList: FamilyMetadata[] } = await fetch(CATALOG_SOURCE).then((r) => {
-    if (!r.ok) {
-      throw new Error(`${CATALOG_SOURCE} → ${r.status}`);
-    }
-    return r.json();
-  });
+  const data: { familyMetadataList: FamilyMetadata[] } = await fetch(CATALOG_SOURCE, {
+    signal: AbortSignal.timeout(30_000),
+  })
+    .then((r) => {
+      if (!r.ok) {
+        throw new Error(`${CATALOG_SOURCE} → ${r.status}`);
+      }
+      return r.json();
+    })
+    .catch((error) => {
+      throw error.name === "TimeoutError"
+        ? new Error(`${CATALOG_SOURCE} timed out after 30s`)
+        : error;
+    });
 
   const families = [...data.familyMetadataList].sort((a, b) => (a.family < b.family ? -1 : 1));
 
@@ -26,8 +34,12 @@ async function generateCatalog() {
     const styles = new Set<string>();
     for (const variant of Object.keys(fonts)) {
       const italic = variant.endsWith("i");
+      const value = italic ? variant.slice(0, -1) : variant;
+      if (!/^\d+$/.test(value)) {
+        continue;
+      }
       styles.add(italic ? "italic" : "normal");
-      weights.add(Number(italic ? variant.slice(0, -1) : variant));
+      weights.add(Number(value));
     }
 
     const weight = [...weights].sort((a, b) => a - b).join(" | ");

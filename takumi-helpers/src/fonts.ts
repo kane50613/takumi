@@ -112,10 +112,9 @@ function buildUrl(options: GoogleFontsOptions) {
     );
     const style = family.style ?? "normal";
     const styles = (Array.isArray(style) ? style : [style]).map(String);
-    const customAxes = Object.entries(family.axes ?? {}).map(([tag, value]): [string, string] => [
-      tag,
-      String(value),
-    ]);
+    const customAxes = Object.entries(family.axes ?? {})
+      .filter(([tag]) => tag !== "ital" && tag !== "wght")
+      .map(([tag, value]): [string, string] => [tag, String(value)]);
 
     url.searchParams.append("family", familyValue(family.family, weights, styles, customAxes));
   }

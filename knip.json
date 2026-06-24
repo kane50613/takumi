@@ -18,7 +18,8 @@
       "ignoreDependencies": ["@takumi-rs/core", "@takumi-rs/wasm", "twoslash"]
     },
     "takumi-helpers": {
-      "entry": ["test/**/*.test.{ts,tsx}"]
+      "entry": ["test/**/*.test.{ts,tsx}"],
+      "ignoreUnresolved": ["./google-fonts-catalog"]
     },
     "takumi-napi": {
       "entry": ["tests/**/*.test.{ts,tsx}"],
