@@ -1,3 +1,19 @@
+## @takumi-rs/helpers@2.0.0-beta.8 (beta)
+
+### Render every weight of a variable Google Font
+
+A variable font is served as one woff2 reused across weights. `googleFonts` now
+collapses those faces into a single weightless face so the renderer drives the
+`wght` axis, instead of pinning every weight to the file's default and leaving
+`font-weight: 700` looking regular.
+
+### Drop the `text` option from `googleFonts`
+
+A `text=` request strips each face's `unicode-range`, so every subset claims full
+coverage and overlaps the others, making glyph routing ambiguous and defeating the
+render-time codepoint subsetting and the CSS/woff2 caches. Render already downloads
+only the glyphs the content uses, so the option was redundant.
+
 ## @takumi-rs/helpers@2.0.0-beta.7 (beta)
 
 ### Type `googleFonts` families against the Google Fonts catalog
