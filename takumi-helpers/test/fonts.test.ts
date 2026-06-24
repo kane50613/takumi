@@ -108,6 +108,62 @@ describe("googleFonts", () => {
     expect(ua).toContain("Chrome");
   });
 
+  const captureFamily = () => {
+    let requestedUrl = "";
+    const fetchMock = mock((url: string) => {
+      if (url.includes("/css2")) requestedUrl = url;
+      return Promise.resolve(new Response(twoWeightCss));
+    });
+    return { fetchMock, family: () => new URL(requestedUrl).searchParams.get("family") };
+  };
+
+  test("emits a custom variable axis in the css2 tuple", async () => {
+    const { fetchMock, family } = captureFamily();
+
+    await googleFonts({
+      families: [{ family: "Inter", weight: "100..900", axes: { opsz: "14..32" } }],
+      fetch: fetchMock,
+    });
+
+    expect(family()).toBe("Inter:opsz,wght@14..32,100..900");
+  });
+
+  test("orders ital, custom axis, and wght as css2 requires", async () => {
+    const { fetchMock, family } = captureFamily();
+
+    await googleFonts({
+      families: [
+        { family: "Inter", weight: 400, style: ["normal", "italic"], axes: { opsz: "14..32" } },
+      ],
+      fetch: fetchMock,
+    });
+
+    expect(family()).toBe("Inter:ital,opsz,wght@0,14..32,400;1,14..32,400");
+  });
+
+  test("sorts uppercase custom axes before lowercase ones", async () => {
+    const { fetchMock, family } = captureFamily();
+
+    // An unknown family takes the loose form, whose axes accept any tag.
+    await googleFonts({
+      families: [{ family: "Made Up Sans", weight: 400, axes: { opsz: 14, CASL: 0.5 } }],
+      fetch: fetchMock,
+    });
+
+    expect(family()).toBe("Made Up Sans:CASL,opsz,wght@0.5,14,400");
+  });
+
+  test("drops reserved ital and wght keys a loose family put in axes", async () => {
+    const { fetchMock, family } = captureFamily();
+
+    await googleFonts({
+      families: [{ family: "Made Up Sans", weight: 400, axes: { wght: 999, ital: 1, opsz: 18 } }],
+      fetch: fetchMock,
+    });
+
+    expect(family()).toBe("Made Up Sans:opsz,wght@18,400");
+  });
+
   test("a weight range requests the variable font and leaves weight unset", async () => {
     const variableCss = `
       @font-face {
