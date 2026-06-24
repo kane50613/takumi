@@ -64,26 +64,26 @@ fonts: await googleFont("Inter", { weight: 700, style: "italic", text: title }),
 
 ### Multilingual content
 
-`googleFontSubsets` loads only the subsets the content needs, for when you can't predict which scripts appear. Give it your content and the families to draw from. It scans the text, fetches each family's metadata in one request, and keeps the subsets that match.
+When you can't predict which scripts appear, load several families with `googleFonts` and let `render` trim them. It fetches every family's metadata in one request and returns all their coverage subsets; `render` scans the node tree and registers only the subsets the content draws, so unused scripts download nothing.
 
 ```tsx
 import { render } from "takumi-js";
-import { fromJsx } from "takumi-js/helpers/jsx";
-import { googleFontSubsets } from "takumi-js/helpers";
+import { googleFonts } from "takumi-js/helpers";
 
-const element = <div style={{ fontFamily: "Inter" }}>Hello 你好 こんにちは</div>;
-
-const { node } = await fromJsx(element);
-const fonts = await googleFontSubsets(node, ["Inter", "Noto Sans JP", "Noto Sans TC"]);
-
-const image = await render(node, { width: 1200, height: 630, fonts });
+const image = await render(<div style={{ fontFamily: "Inter" }}>Hello 你好 こんにちは</div>, {
+  width: 1200,
+  height: 630,
+  fonts: await googleFonts(["Inter", "Noto Sans JP", "Noto Sans TC"]),
+});
 ```
 
-Each subset registers under its own internal name. `font-family: Inter` still expands across all of them, so each script finds the file that covers it. Pass a `Map` as `cache` to reuse the metadata across renders, skipping the metadata fetch on each re-render.
+Each subset registers under its own internal name; `font-family: Inter` still expands across all of them, so each script finds the file that covers it. Pass a `Map` as `cache` to reuse the metadata across renders.
 
 ```tsx
-const fonts = await googleFontSubsets(node, ["Inter"], { cache });
+const fonts = await googleFonts(["Inter"], { cache });
 ```
+
+`render` trims the subsets itself, so the same `fonts` array works for any content. To trim ahead of time, or with `subset: false` to opt out of the automatic pass, call `subsetFonts(fonts, node)`.
 
 ### Preloading with `registerFont`
 
@@ -110,7 +110,7 @@ const image = await renderer.render(node, {
 });
 ```
 
-A missing glyph walks the chain until a family covers it. `googleFontSubsets` builds on this: each subset registers under its own internal name, while one logical family name in `font-family` expands across them.
+A missing glyph walks the chain until a family covers it. `googleFonts` builds on this: each subset registers under its own internal name, while one logical family name in `font-family` expands across them.
 
 ### Variable axes & OpenType features
 

@@ -1,5 +1,5 @@
 import type { ImageSource } from "takumi-js";
-import { googleFontSubsets } from "takumi-js/helpers";
+import { googleFonts } from "takumi-js/helpers";
 import { ImageResponse } from "takumi-js/response";
 import wasmModule from "takumi-js/wasm";
 import type { ApiContext } from "waku/router";
@@ -21,10 +21,7 @@ export async function GET(_: Request, { params }: ApiContext<"/og/docs/[...slugs
     return new Response(undefined, { status: 404 });
   }
 
-  const fonts = await googleFontSubsets(
-    `${page.data.title} ${page.data.description ?? ""} Takumi`,
-    ["Geist"],
-  );
+  const fonts = await googleFonts(["Geist"]);
 
   return new ImageResponse(
     <DocsTemplate

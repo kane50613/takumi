@@ -16,13 +16,26 @@ import {
 export * from "../pkg/takumi_wasm";
 export { default } from "../pkg/takumi_wasm";
 
+import { subsetFonts } from "@takumi-rs/helpers";
+
 export { extractResourceUrls } from "@takumi-rs/helpers";
 
 export type FontLoader =
   | Font
   | (Omit<FontDetails, "data"> & {
       data: () => Promise<FontDetails["data"]> | FontDetails["data"];
+      /** Inclusive codepoint ranges this face covers; lets `render` skip it when unused. */
+      ranges?: [number, number][];
     } & ({ key: string } | { name: string }));
+
+/** Keeps only the `fonts` whose `ranges` cover `source`, unless `subset` is `false`. */
+function pickFonts(
+  fonts: FontLoader[] | undefined,
+  source: Node | Node[],
+  subset: boolean | undefined,
+) {
+  return fonts && subset !== false ? subsetFonts(fonts, source) : fonts;
+}
 
 type ImageLoaderData = ImageSource["data"];
 
@@ -46,6 +59,8 @@ export type RenderOptions = Omit<RenderOptionsInternal, "images" | "format" | "q
   OutputFormatOptions & {
     fonts?: FontLoader[];
     images?: ImageLoader[];
+    /** Register only the `fonts` subsets the content renders. @default true */
+    subset?: boolean;
   };
 
 /**
@@ -61,17 +76,23 @@ export type RenderAnimationOptions = Omit<RenderAnimationOptionsInternal, "image
   AnimationOutputFormatOptions & {
     fonts?: FontLoader[];
     images?: ImageLoader[];
+    /** Register only the `fonts` subsets the content renders. @default true */
+    subset?: boolean;
   };
 
 export type EncodeFramesOptions = Omit<EncodeFramesOptionsInternal, "images" | "format"> &
   AnimationOutputFormatOptions & {
     fonts?: FontLoader[];
     images?: ImageLoader[];
+    /** Register only the `fonts` subsets the content renders. @default true */
+    subset?: boolean;
   };
 
 export type SvgRenderOptions = Omit<SvgRenderOptionsInternal, "images"> & {
   fonts?: FontLoader[];
   images?: ImageLoader[];
+  /** Register only the `fonts` subsets the content renders. @default true */
+  subset?: boolean;
 };
 
 async function resolveImageLoaders(images: ImageLoader[]): Promise<ImageSource[]> {
@@ -126,8 +147,8 @@ export class Renderer {
   }
 
   async render(node: Node, options?: RenderOptions) {
-    const { fonts, fontFamilies, images, ...rest } = options ?? {};
-    const registeredFamilies = await this.prepareFonts(fonts);
+    const { fonts, fontFamilies, images, subset, ...rest } = options ?? {};
+    const registeredFamilies = await this.prepareFonts(pickFonts(fonts, node, subset));
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.render(node, {
@@ -138,8 +159,8 @@ export class Renderer {
   }
 
   async renderAsDataUrl(node: Node, options?: RenderOptions) {
-    const { fonts, fontFamilies, images, ...rest } = options ?? {};
-    const registeredFamilies = await this.prepareFonts(fonts);
+    const { fonts, fontFamilies, images, subset, ...rest } = options ?? {};
+    const registeredFamilies = await this.prepareFonts(pickFonts(fonts, node, subset));
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.renderAsDataUrl(node, {
@@ -150,8 +171,8 @@ export class Renderer {
   }
 
   async renderSvg(node: Node, options?: SvgRenderOptions) {
-    const { fonts, fontFamilies, images, ...rest } = options ?? {};
-    const registeredFamilies = await this.prepareFonts(fonts);
+    const { fonts, fontFamilies, images, subset, ...rest } = options ?? {};
+    const registeredFamilies = await this.prepareFonts(pickFonts(fonts, node, subset));
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.renderSvg(node, {
@@ -162,8 +183,8 @@ export class Renderer {
   }
 
   async measure(node: Node, options?: RenderOptions) {
-    const { fonts, fontFamilies, images, ...rest } = options ?? {};
-    const registeredFamilies = await this.prepareFonts(fonts);
+    const { fonts, fontFamilies, images, subset, ...rest } = options ?? {};
+    const registeredFamilies = await this.prepareFonts(pickFonts(fonts, node, subset));
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.measure(node, {
@@ -174,8 +195,9 @@ export class Renderer {
   }
 
   async renderAnimation(options: RenderAnimationOptions) {
-    const { fonts, fontFamilies, images, ...rest } = options;
-    const registeredFamilies = await this.prepareFonts(fonts);
+    const { fonts, fontFamilies, images, subset, ...rest } = options;
+    const nodes = options.scenes.map((scene) => scene.node);
+    const registeredFamilies = await this.prepareFonts(pickFonts(fonts, nodes, subset));
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.renderAnimation({
@@ -186,8 +208,9 @@ export class Renderer {
   }
 
   async encodeFrames(frames: AnimationFrameSource[], options: EncodeFramesOptions) {
-    const { fonts, fontFamilies, images, ...rest } = options;
-    const registeredFamilies = await this.prepareFonts(fonts);
+    const { fonts, fontFamilies, images, subset, ...rest } = options;
+    const nodes = frames.map((frame) => frame.node);
+    const registeredFamilies = await this.prepareFonts(pickFonts(fonts, nodes, subset));
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.encodeFrames(frames, {
