@@ -15,10 +15,10 @@
   },
   "devDependencies": {
     "@sveltejs/adapter-vercel": "^6.3.4",
-    "@sveltejs/kit": "^2.66.0",
+    "@sveltejs/kit": "^2.67.0",
     "@tailwindcss/vite": "^4.3.1",
-    "svelte": "^5.56.3",
-    "svelte-check": "^4.6.0",
+    "svelte": "^5.56.4",
+    "svelte-check": "^4.7.0",
     "tailwindcss": "^4.3.1",
     "typescript": "catalog:",
     "vite": "catalog:"
