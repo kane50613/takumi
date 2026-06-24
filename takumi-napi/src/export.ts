@@ -14,12 +14,16 @@ import type {
 export type * from "../index";
 import { Renderer as RendererInternal } from "../index";
 
-export { extractResourceUrls } from "@takumi-rs/helpers";
+import { extractResourceUrls, pickFonts } from "@takumi-rs/helpers";
+
+export { extractResourceUrls };
 
 export type FontLoader =
   | Font
   | (Omit<FontDetails, "data"> & {
       data: () => Promise<FontDetails["data"]> | FontDetails["data"];
+      /** Inclusive codepoint ranges this face covers; lets `render` skip it when unused. */
+      ranges?: [number, number][];
     } & ({ key: string } | { name: string }));
 
 type ImageLoaderData = ImageSource["data"];
@@ -49,6 +53,8 @@ export type RenderOptions = Omit<
     fonts?: FontLoader[];
     signal?: AbortSignal;
     images?: ImageLoader[];
+    /** Register only the `fonts` subsets the content renders. @default true */
+    subset?: boolean;
   };
 
 /**
@@ -69,6 +75,8 @@ export type RenderAnimationOptions = Omit<
     fonts?: FontLoader[];
     signal?: AbortSignal;
     images?: ImageLoader[];
+    /** Register only the `fonts` subsets the content renders. @default true */
+    subset?: boolean;
   };
 
 export type EncodeFramesOptions = Omit<
@@ -79,12 +87,16 @@ export type EncodeFramesOptions = Omit<
     fonts?: FontLoader[];
     signal?: AbortSignal;
     images?: ImageLoader[];
+    /** Register only the `fonts` subsets the content renders. @default true */
+    subset?: boolean;
   };
 
 export type SvgRenderOptions = Omit<SvgRenderOptionsInternal, "images"> & {
   fonts?: FontLoader[];
   signal?: AbortSignal;
   images?: ImageLoader[];
+  /** Register only the `fonts` subsets the content renders. @default true */
+  subset?: boolean;
 };
 
 async function resolveImageLoaders(images: ImageLoader[]): Promise<ImageSource[]> {
@@ -154,36 +166,58 @@ export class Renderer {
   }
 
   async render(node: Node, options?: RenderOptions) {
-    const { fonts, fontFamilies, signal, images, ...rest } = options ?? {};
-    const resolved = await this.resolveResources(fonts, images, fontFamilies);
+    const { fonts, fontFamilies, signal, images, subset, ...rest } = options ?? {};
+    const resolved = await this.resolveResources(
+      pickFonts({ fonts, source: node, subset }),
+      images,
+      fontFamilies,
+    );
 
     return this.inner.render(node, { ...rest, ...resolved }, signal);
   }
 
   async renderSvg(node: Node, options?: SvgRenderOptions) {
-    const { fonts, fontFamilies, signal, images, ...rest } = options ?? {};
-    const resolved = await this.resolveResources(fonts, images, fontFamilies);
+    const { fonts, fontFamilies, signal, images, subset, ...rest } = options ?? {};
+    const resolved = await this.resolveResources(
+      pickFonts({ fonts, source: node, subset }),
+      images,
+      fontFamilies,
+    );
 
     return this.inner.renderSvg(node, { ...rest, ...resolved }, signal);
   }
 
   async measure(node: Node, options?: RenderOptions) {
-    const { fonts, fontFamilies, signal, images, ...rest } = options ?? {};
-    const resolved = await this.resolveResources(fonts, images, fontFamilies);
+    const { fonts, fontFamilies, signal, images, subset, ...rest } = options ?? {};
+    const resolved = await this.resolveResources(
+      pickFonts({ fonts, source: node, subset }),
+      images,
+      fontFamilies,
+    );
 
     return this.inner.measure(node, { ...rest, ...resolved }, signal);
   }
 
   async renderAnimation(options: RenderAnimationOptions) {
-    const { fonts, fontFamilies, signal, images, ...rest } = options;
-    const resolved = await this.resolveResources(fonts, images, fontFamilies);
+    const { fonts, fontFamilies, signal, images, subset, ...rest } = options;
+    const nodes = options.scenes.map((scene) => scene.node);
+    const resolved = await this.resolveResources(
+      pickFonts({ fonts, source: nodes, subset }),
+      images,
+      fontFamilies,
+    );
 
     return this.inner.renderAnimation({ ...rest, ...resolved }, signal);
   }
 
   async encodeFrames(frames: AnimationFrameSource[], options: EncodeFramesOptions) {
-    const { fonts, fontFamilies, signal, images, ...rest } = options;
-    const resolved = await this.resolveResources(fonts, images, fontFamilies);
+    const { fonts, fontFamilies, signal, images, subset, ...rest } = options;
+    const nodes = frames.map((frame) => frame.node);
+    const resolved = await this.resolveResources(
+      pickFonts({ fonts, source: nodes, subset }),
+      images,
+      fontFamilies,
+    );
 
     return this.inner.encodeFrames(frames, { ...rest, ...resolved }, signal);
   }

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { type OutputFormat } from "takumi-js";
 import { Renderer } from "takumi-js/node";
 import { fromJsx } from "takumi-js/helpers/jsx";
-import { googleFontSubsets } from "takumi-js/helpers";
+import { googleFonts } from "takumi-js/helpers";
 import * as FiveHundredStars from "./components/500-stars";
 import * as GithubSocialPreview from "./components/github-social-preview";
 import * as OgImage from "./components/og-image";
@@ -57,7 +57,8 @@ async function render(
     })),
   );
   const loaders = fontLoaders(module);
-  const subsets = "googleFonts" in module ? await googleFontSubsets(node, module.googleFonts) : [];
+  const subsets =
+    "googleFonts" in module ? await googleFonts({ families: module.googleFonts }) : [];
   const fonts = [...loaders, ...subsets];
   const renderStart = performance.now();
 

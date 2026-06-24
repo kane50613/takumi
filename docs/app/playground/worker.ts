@@ -1,4 +1,4 @@
-import { fetchResources, extractResourceUrls, googleFontSubsets } from "takumi-js/helpers";
+import { fetchResources, extractResourceUrls, googleFonts } from "takumi-js/helpers";
 import { extractEmojis } from "takumi-js/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
 import wasm, { init, Renderer } from "takumi-js/wasm";
@@ -68,7 +68,7 @@ self.onmessage = async (event: MessageEvent) => {
 
         const [images, fonts] = await Promise.all([
           fetchResources(resourceUrls, { cache: fetchCache }),
-          googleFontSubsets(node, GOOGLE_FONTS, { cache: fontCssCache }),
+          googleFonts({ families: GOOGLE_FONTS, cache: fontCssCache }),
         ]);
 
         const start = performance.now();

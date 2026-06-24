@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Renderer } from "takumi-js/node";
 import { fromJsx } from "takumi-js/helpers/jsx";
-import { googleFontSubsets } from "takumi-js/helpers";
+import { googleFonts } from "takumi-js/helpers";
 
 // Logical width; rendered straight to 1080p (devicePixelRatio keeps it crisp, no supersample).
 const W = 1600;
@@ -146,10 +146,12 @@ const framesPerSeg = Math.round((FPS * SEG_MS) / 1000);
 
 for (const seg of segments) {
   const { node } = await fromJsx(still(seg));
-  const fonts = await googleFontSubsets(node, [
-    { family: seg.family, weight: seg.weight },
-    { family: UI, weight: 600 },
-  ]);
+  const fonts = await googleFonts({
+    families: [
+      { family: seg.family, weight: seg.weight },
+      { family: UI, weight: 600 },
+    ],
+  });
   const renderer = new Renderer();
   for (let f = 0; f < framesPerSeg; f++) {
     const buf = await renderer.render(node, {

@@ -12,8 +12,8 @@ export const images = [{ src: "takumi.svg", path: "takumi.svg" }];
 type Greeting = { text: string; family: string; weight: number; size: number; accent?: boolean };
 
 // Greetings across scripts, each in a different Google Font. Latin chrome (brand, tagline)
-// runs in Inter. `googleFontSubsets` (see index.tsx) loads only the subsets this content
-// renders, one css2 request, and expands each family into its coverage subsets.
+// runs in Inter. `googleFonts` (see index.tsx) loads every family in one css2 request, and
+// `render` keeps only the coverage subsets this content actually draws.
 const greetings: Greeting[] = [
   { text: "Hello", family: "Poppins", weight: 700, size: 92, accent: true },
   { text: "你好", family: "Noto Sans SC", weight: 700, size: 100 },

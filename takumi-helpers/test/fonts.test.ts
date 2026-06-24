@@ -1,11 +1,44 @@
 import { describe, expect, mock, test } from "bun:test";
-import { googleFont, googleFontSubsets } from "../src/fonts";
+import { googleFonts, subsetFonts } from "../src/fonts";
 import type { Node } from "../src/types";
 
 const bytes = (s: string) => new TextEncoder().encode(s).buffer;
 
-describe("googleFont", () => {
-  const css = `
+/** Realistic multi-subset CSS: three same-named faces split by `unicode-range`. */
+const interCss = `
+  /* cyrillic */
+  @font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400;
+    src: url(https://fonts.gstatic.com/inter-cyrillic.woff2) format('woff2');
+    unicode-range: U+0400-045F;
+  }
+  /* greek */
+  @font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400;
+    src: url(https://fonts.gstatic.com/inter-greek.woff2) format('woff2');
+    unicode-range: U+0370-03FF;
+  }
+  /* latin */
+  @font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400;
+    src: url(https://fonts.gstatic.com/inter-latin.woff2) format('woff2');
+    unicode-range: U+0000-00FF;
+  }
+`;
+
+const mockInter = () =>
+  mock((url: string) =>
+    Promise.resolve(url.includes("/css2") ? new Response(interCss) : new Response(bytes(url))),
+  );
+
+describe("googleFonts", () => {
+  const twoWeightCss = `
     @font-face {
       font-family: 'Inter';
       font-style: normal;
@@ -20,75 +53,52 @@ describe("googleFont", () => {
     }
   `;
 
-  test("resolves every weight in the CSS to a keyed loader", async () => {
-    const fetchMock = mock((url: string) =>
-      Promise.resolve(url.includes("/css2") ? new Response(css) : new Response(bytes(url))),
-    );
+  test("gives each coverage subset a distinct name so glyphs can't collide", async () => {
+    const fonts = await googleFonts({ families: ["Inter"], fetch: mockInter() });
 
-    const fonts = await googleFont("Inter", { weight: [400, 700], fetch: fetchMock });
-
-    expect(fonts).toHaveLength(2);
-    expect(fonts.map((f) => f.weight).sort()).toEqual([400, 700]);
-    expect(fonts.every((f) => f.name === "Inter")).toBe(true);
-    expect(fonts.map((f) => f.key).sort()).toEqual([
-      "https://fonts.gstatic.com/inter-400.woff2",
-      "https://fonts.gstatic.com/inter-700.woff2",
+    // Same family, three faces — distinct names, each carrying its own range.
+    expect(fonts.map((f) => f.name).sort()).toEqual([
+      "Inter cyrillic",
+      "Inter greek",
+      "Inter latin",
     ]);
+    expect(fonts.every((f) => f.subsetOf === "Inter")).toBe(true);
+    expect(fonts.find((f) => f.name === "Inter latin")!.ranges).toEqual([[0x0, 0xff]]);
   });
 
-  test("downloads bytes lazily — only the CSS is fetched up front", async () => {
-    const robotoCss = `
-      @font-face {
-        font-family: 'Roboto';
-        font-style: normal;
-        font-weight: 400;
-        src: url(https://fonts.gstatic.com/roboto-400.woff2) format('woff2');
-      }
-    `;
+  test("resolves every weight to a keyed loader under one subsetOf", async () => {
     const fetchMock = mock((url: string) =>
-      Promise.resolve(url.includes("/css2") ? new Response(robotoCss) : new Response(bytes(url))),
+      Promise.resolve(
+        url.includes("/css2") ? new Response(twoWeightCss) : new Response(bytes(url)),
+      ),
     );
 
-    const fonts = await googleFont("Roboto", { weight: 400, fetch: fetchMock });
-
-    // Only the CSS request so far — no font bytes fetched until data() is called.
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-
-    const [loader] = fonts;
-    const data = await loader!.data();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(new TextDecoder().decode(data)).toBe("https://fonts.gstatic.com/roboto-400.woff2");
-  });
-
-  test("attaches an abort signal to every request when timeout is set", async () => {
-    const inits: (RequestInit | undefined)[] = [];
-    const fetchMock = mock((url: string, init?: RequestInit) => {
-      inits.push(init);
-      return Promise.resolve(url.includes("/css2") ? new Response(css) : new Response(bytes(url)));
+    const fonts = await googleFonts({
+      families: [{ family: "Inter", weight: [400, 700] }],
+      fetch: fetchMock,
     });
 
-    const fonts = await googleFont("Inter", { weight: 400, timeout: 5000, fetch: fetchMock });
-    await fonts[0]!.data();
-
-    expect(inits).toHaveLength(2);
-    expect(inits.every((init) => init?.signal instanceof AbortSignal)).toBe(true);
+    expect(fonts.map((f) => f.weight).sort()).toEqual([400, 700]);
+    expect(fonts.every((f) => f.subsetOf === "Inter")).toBe(true);
+    // Keys are stable composites of identity, not the woff2 URL, and unique per face.
+    expect(new Set(fonts.map((f) => f.key)).size).toBe(2);
+    expect(fonts.every((f) => !f.key.includes("gstatic"))).toBe(true);
   });
 
-  test("requests the right family/axis and a woff2 UA", async () => {
+  test("builds the family/axis and sends a woff2 UA", async () => {
     let requestedUrl = "";
     let ua = "";
     const fetchMock = mock((url: string, init?: RequestInit) => {
       if (url.includes("/css2")) {
         requestedUrl = url;
         ua = new Headers(init?.headers).get("User-Agent") ?? "";
-        return Promise.resolve(new Response(css));
+        return Promise.resolve(new Response(twoWeightCss));
       }
       return Promise.resolve(new Response(bytes(url)));
     });
 
-    await googleFont("Open Sans", {
-      weight: [700, 400],
-      style: ["normal", "italic"],
+    await googleFonts({
+      families: [{ family: "Open Sans", weight: [700, 400], style: ["normal", "italic"] }],
       fetch: fetchMock,
     });
 
@@ -96,18 +106,6 @@ describe("googleFont", () => {
       "Open Sans:ital,wght@0,400;0,700;1,400;1,700",
     );
     expect(ua).toContain("Chrome");
-  });
-
-  test("a single weight builds a `wght@<n>` axis", async () => {
-    let requestedUrl = "";
-    const fetchMock = mock((url: string) => {
-      if (url.includes("/css2")) requestedUrl = url;
-      return Promise.resolve(url.includes("/css2") ? new Response(css) : new Response(bytes(url)));
-    });
-
-    await googleFont("Inter", { weight: 700, fetch: fetchMock });
-
-    expect(new URL(requestedUrl).searchParams.get("family")).toBe("Inter:wght@700");
   });
 
   test("a weight range requests the variable font and leaves weight unset", async () => {
@@ -127,57 +125,14 @@ describe("googleFont", () => {
       );
     });
 
-    const fonts = await googleFont("Inter", { weight: "100..900", fetch: fetchMock });
+    const fonts = await googleFonts({
+      families: [{ family: "Inter", weight: "100..900" }],
+      fetch: fetchMock,
+    });
 
     expect(new URL(requestedUrl).searchParams.get("family")).toBe("Inter:wght@100..900");
     expect(fonts).toHaveLength(1);
     expect(fonts[0]!.weight).toBeUndefined();
-    expect(fonts[0]!.key).toBe("https://fonts.gstatic.com/inter-variable.woff2");
-  });
-});
-
-describe("googleFontSubsets", () => {
-  const interCss = `
-    /* cyrillic */
-    @font-face {
-      font-family: 'Inter';
-      font-style: normal;
-      font-weight: 400;
-      src: url(https://fonts.gstatic.com/inter-cyrillic.woff2) format('woff2');
-      unicode-range: U+0400-045F;
-    }
-    /* greek */
-    @font-face {
-      font-family: 'Inter';
-      font-style: normal;
-      font-weight: 400;
-      src: url(https://fonts.gstatic.com/inter-greek.woff2) format('woff2');
-      unicode-range: U+0370-03FF;
-    }
-    /* latin */
-    @font-face {
-      font-family: 'Inter';
-      font-style: normal;
-      font-weight: 400;
-      src: url(https://fonts.gstatic.com/inter-latin.woff2) format('woff2');
-      unicode-range: U+0000-00FF;
-    }
-  `;
-
-  const mockFetch = () =>
-    mock((url: string) =>
-      Promise.resolve(url.includes("/css2") ? new Response(interCss) : new Response(bytes(url))),
-    );
-
-  test("keeps only the intersecting subsets, each uniquely named under one subsetOf", async () => {
-    const fonts = await googleFontSubsets("Hi Привет Γειά", ["Inter"], { fetch: mockFetch() });
-
-    expect(fonts.map((f) => f.name).sort()).toEqual([
-      "Inter cyrillic",
-      "Inter greek",
-      "Inter latin",
-    ]);
-    expect(fonts.every((f) => f.subsetOf === "Inter")).toBe(true);
   });
 
   test("requests every family in a single css2 call", async () => {
@@ -189,14 +144,72 @@ describe("googleFontSubsets", () => {
       );
     });
 
-    await googleFontSubsets("Hi", ["Inter", "Noto Sans JP"], { fetch: fetchMock });
+    await googleFonts({ families: ["Inter", "Noto Sans JP"], fetch: fetchMock });
 
     const families = new URL(requestedUrl).searchParams.getAll("family");
     expect(families).toEqual(["Inter:wght@400", "Noto Sans JP:wght@400"]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  test("passes text and display through to the CSS request", async () => {
+    let requestedUrl = "";
+    const fetchMock = mock((url: string) => {
+      if (url.includes("/css2")) requestedUrl = url;
+      return Promise.resolve(
+        url.includes("/css2") ? new Response(interCss) : new Response(bytes(url)),
+      );
+    });
+
+    await googleFonts({ families: ["Inter"], text: "Hello", display: "swap", fetch: fetchMock });
+
+    const params = new URL(requestedUrl).searchParams;
+    expect(params.get("text")).toBe("Hello");
+    expect(params.get("display")).toBe("swap");
+  });
+
+  test("reuses the CSS cache across calls, fetching metadata once", async () => {
+    const fetchMock = mockInter();
+    const cache = new Map<string, string>();
+
+    await googleFonts({ families: ["Inter"], fetch: fetchMock, cache });
+    await googleFonts({ families: ["Inter"], fetch: fetchMock, cache });
+
+    const cssCalls = fetchMock.mock.calls.filter(([url]) => (url as string).includes("/css2"));
+    expect(cssCalls).toHaveLength(1);
+  });
+
+  test("downloads subset bytes lazily — only CSS up front", async () => {
+    const fetchMock = mockInter();
+    const fonts = await googleFonts({ families: ["Inter"], fetch: fetchMock });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await fonts[0]!.data();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("returns nothing for an empty families list without a request", async () => {
+    const fetchMock = mockInter();
+
+    expect(await googleFonts({ families: [], fetch: fetchMock })).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("subsetFonts", () => {
+  test("keeps only the subsets the text renders", async () => {
+    const fonts = await googleFonts({ families: ["Inter"], fetch: mockInter() });
+
+    expect(subsetFonts({ fonts, source: "Hi" }).map((f) => f.name)).toEqual(["Inter latin"]);
+    expect(subsetFonts({ fonts, source: "Привет" }).map((f) => f.name)).toEqual(["Inter cyrillic"]);
+    expect(
+      subsetFonts({ fonts, source: "Hi Привет Γειά" })
+        .map((f) => f.name)
+        .sort(),
+    ).toEqual(["Inter cyrillic", "Inter greek", "Inter latin"]);
+  });
+
   test("scans a node tree for codepoints", async () => {
+    const fonts = await googleFonts({ families: ["Inter"], fetch: mockInter() });
     const node: Node = {
       type: "container",
       children: [
@@ -205,30 +218,35 @@ describe("googleFontSubsets", () => {
       ],
     };
 
-    const fonts = await googleFontSubsets(node, ["Inter"], { fetch: mockFetch() });
-
-    expect(fonts.map((f) => f.name).sort()).toEqual(["Inter greek", "Inter latin"]);
+    expect(
+      subsetFonts({ fonts, source: node })
+        .map((f) => f.name)
+        .sort(),
+    ).toEqual(["Inter greek", "Inter latin"]);
   });
 
-  test("reuses the CSS cache across renders, fetching metadata once", async () => {
-    const fetchMock = mockFetch();
-    const cache = new Map<string, string>();
+  test("keeps range-less fallbacks (full fonts, text= subsets) regardless of content", () => {
+    const fallback = { name: "Local", weight: 400, data: () => Promise.resolve(bytes("x")) };
+    const greek = {
+      name: "Inter greek",
+      ranges: [[0x370, 0x3ff]] as [number, number][],
+      data: () => Promise.resolve(bytes("g")),
+    };
 
-    await googleFontSubsets("Hello", ["Inter"], { fetch: fetchMock, cache });
-    await googleFontSubsets("Привет", ["Inter"], { fetch: fetchMock, cache });
-
-    // One CSS fetch total — the second render hits the cache.
-    const cssCalls = fetchMock.mock.calls.filter(([url]) => (url as string).includes("/css2"));
-    expect(cssCalls).toHaveLength(1);
+    // "Hi" is Latin only: the ranged Greek subset drops, the range-less fallback stays.
+    expect(subsetFonts({ fonts: [fallback, greek], source: "Hi" })).toEqual([fallback]);
   });
 
-  test("downloads subset bytes lazily — only CSS up front", async () => {
-    const fetchMock = mockFetch();
-    const fonts = await googleFontSubsets("Hello", ["Inter"], { fetch: fetchMock });
+  test("regression: a multi-subset family can't tofu — covering subset survives, sibling drops", async () => {
+    // The bug: same-named subsets collide so a glyph routes to a file lacking it.
+    // The fix: googleFonts names subsets distinctly + subsetFonts keeps the covering one by range.
+    const fonts = subsetFonts({
+      fonts: await googleFonts({ families: ["Inter"], fetch: mockInter() }),
+      source: "Hello",
+    });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const data = await fonts[0]!.data();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(new TextDecoder().decode(data)).toBe("https://fonts.gstatic.com/inter-latin.woff2");
+    expect(fonts).toHaveLength(1);
+    expect(fonts[0]!.name).toBe("Inter latin");
+    expect(fonts[0]!.subsetOf).toBe("Inter");
   });
 });
