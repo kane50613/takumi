@@ -27,19 +27,25 @@ function patchGeneratedLoader(
     nodePrefix: string;
   },
 ) {
-  return content
-    .replaceAll("process.env.NAPI_RS_NATIVE_LIBRARY_PATH", "process.env.TAKUMI_CORE_TARGET")
-    .replaceAll(/(["'])\.\/core(\.[^"']+\.node["'])/g, `$1${options.nodePrefix}$2`)
-    .replaceAll(
-      /(require(?:\$1)?)\((['"])@takumi-rs\/core-([^/"']+)\2\)/g,
-      "$1($2@takumi-rs/core-$3/core.$3.node$2)",
-    )
-    .replaceAll(
-      /(require(?:\$1)?)\((?!\/\* turbopackOptional: true \*\/ )/g,
-      "$1(/* turbopackOptional: true */ ",
-    )
-    .replaceAll(
-      "Native module @takumi-rs/core-${target} is not being bunlded.",
-      "Native module @takumi-rs/core-${target} is not being bundled.",
-    );
+  return (
+    content
+      // Drop NAPI-RS's unused ESM `__dirname` shim. The bare `new URL(<str>, import.meta.url)`
+      // makes webpack/Turbopack treat it as an asset reference and fail the build when the
+      // native addon is pulled into a Node bundler (e.g. a Next.js node-runtime route).
+      .replaceAll(/^[^\n]*new URL\((["'])\.\1,\s*import\.meta\.url\)\.pathname;?[^\n]*\n?/gm, "")
+      .replaceAll("process.env.NAPI_RS_NATIVE_LIBRARY_PATH", "process.env.TAKUMI_CORE_TARGET")
+      .replaceAll(/(["'])\.\/core(\.[^"']+\.node["'])/g, `$1${options.nodePrefix}$2`)
+      .replaceAll(
+        /(require(?:\$1)?)\((['"])@takumi-rs\/core-([^/"']+)\2\)/g,
+        "$1($2@takumi-rs/core-$3/core.$3.node$2)",
+      )
+      .replaceAll(
+        /(require(?:\$1)?)\((?!\/\* turbopackOptional: true \*\/ )/g,
+        "$1(/* turbopackOptional: true */ ",
+      )
+      .replaceAll(
+        "Native module @takumi-rs/core-${target} is not being bunlded.",
+        "Native module @takumi-rs/core-${target} is not being bundled.",
+      )
+  );
 }
