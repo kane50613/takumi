@@ -674,6 +674,7 @@ jobs:
         with:
           stage: release
           components: clippy,rustfmt
+          binstall: cargo-rdme@1.5.1
 
       - name: Download helpers artifact
         uses: actions/download-artifact@v8
