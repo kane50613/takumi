@@ -1,3 +1,11 @@
+## @takumi-rs/core@2.0.0-beta.6 (beta)
+
+### Let cached font buffers be garbage-collected
+
+The renderer cached each registered font by its buffer in a `Map`, pinning the
+data for the renderer's lifetime even after the caller dropped its reference.
+Buffers now live in a `WeakMap`, so they are freed once nothing else holds them.
+
 ## @takumi-rs/core@2.0.0-beta.5 (beta)
 
 ### Fix `workspace:*` leaking into the published `package.json`

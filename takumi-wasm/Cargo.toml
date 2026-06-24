@@ -1,6 +1,6 @@
 [package]
 name = "takumi-wasm"
-version = "0.0.2"
+version = "0.0.3"
 publish = false
 edition = "2024"
 license = "MIT OR Apache-2.0"
@@ -32,7 +32,7 @@ features = ["svg"]
 
 [dependencies.takumi-svg]
 path = "../takumi-svg"
-version = "0.1.0-beta.2"
+version = "0.1.0-beta.3"
 
 # https://github.com/rust-lang/rust/issues/93294
 [package.metadata.wasm-pack.profile.release]
