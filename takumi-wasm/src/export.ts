@@ -139,7 +139,7 @@ export class Renderer {
 
   async render(node: Node, options?: RenderOptions) {
     const { fonts, fontFamilies, images, subset, ...rest } = options ?? {};
-    const registeredFamilies = await this.prepareFonts(pickFonts(fonts, node, subset));
+    const registeredFamilies = await this.prepareFonts(pickFonts({ fonts, source: node, subset }));
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.render(node, {
@@ -151,7 +151,7 @@ export class Renderer {
 
   async renderAsDataUrl(node: Node, options?: RenderOptions) {
     const { fonts, fontFamilies, images, subset, ...rest } = options ?? {};
-    const registeredFamilies = await this.prepareFonts(pickFonts(fonts, node, subset));
+    const registeredFamilies = await this.prepareFonts(pickFonts({ fonts, source: node, subset }));
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.renderAsDataUrl(node, {
@@ -163,7 +163,7 @@ export class Renderer {
 
   async renderSvg(node: Node, options?: SvgRenderOptions) {
     const { fonts, fontFamilies, images, subset, ...rest } = options ?? {};
-    const registeredFamilies = await this.prepareFonts(pickFonts(fonts, node, subset));
+    const registeredFamilies = await this.prepareFonts(pickFonts({ fonts, source: node, subset }));
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.renderSvg(node, {
@@ -175,7 +175,7 @@ export class Renderer {
 
   async measure(node: Node, options?: RenderOptions) {
     const { fonts, fontFamilies, images, subset, ...rest } = options ?? {};
-    const registeredFamilies = await this.prepareFonts(pickFonts(fonts, node, subset));
+    const registeredFamilies = await this.prepareFonts(pickFonts({ fonts, source: node, subset }));
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.measure(node, {
@@ -188,7 +188,7 @@ export class Renderer {
   async renderAnimation(options: RenderAnimationOptions) {
     const { fonts, fontFamilies, images, subset, ...rest } = options;
     const nodes = options.scenes.map((scene) => scene.node);
-    const registeredFamilies = await this.prepareFonts(pickFonts(fonts, nodes, subset));
+    const registeredFamilies = await this.prepareFonts(pickFonts({ fonts, source: nodes, subset }));
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.renderAnimation({
@@ -201,7 +201,7 @@ export class Renderer {
   async encodeFrames(frames: AnimationFrameSource[], options: EncodeFramesOptions) {
     const { fonts, fontFamilies, images, subset, ...rest } = options;
     const nodes = frames.map((frame) => frame.node);
-    const registeredFamilies = await this.prepareFonts(pickFonts(fonts, nodes, subset));
+    const registeredFamilies = await this.prepareFonts(pickFonts({ fonts, source: nodes, subset }));
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.encodeFrames(frames, {

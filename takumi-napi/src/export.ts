@@ -168,7 +168,7 @@ export class Renderer {
   async render(node: Node, options?: RenderOptions) {
     const { fonts, fontFamilies, signal, images, subset, ...rest } = options ?? {};
     const resolved = await this.resolveResources(
-      pickFonts(fonts, node, subset),
+      pickFonts({ fonts, source: node, subset }),
       images,
       fontFamilies,
     );
@@ -179,7 +179,7 @@ export class Renderer {
   async renderSvg(node: Node, options?: SvgRenderOptions) {
     const { fonts, fontFamilies, signal, images, subset, ...rest } = options ?? {};
     const resolved = await this.resolveResources(
-      pickFonts(fonts, node, subset),
+      pickFonts({ fonts, source: node, subset }),
       images,
       fontFamilies,
     );
@@ -190,7 +190,7 @@ export class Renderer {
   async measure(node: Node, options?: RenderOptions) {
     const { fonts, fontFamilies, signal, images, subset, ...rest } = options ?? {};
     const resolved = await this.resolveResources(
-      pickFonts(fonts, node, subset),
+      pickFonts({ fonts, source: node, subset }),
       images,
       fontFamilies,
     );
@@ -202,7 +202,7 @@ export class Renderer {
     const { fonts, fontFamilies, signal, images, subset, ...rest } = options;
     const nodes = options.scenes.map((scene) => scene.node);
     const resolved = await this.resolveResources(
-      pickFonts(fonts, nodes, subset),
+      pickFonts({ fonts, source: nodes, subset }),
       images,
       fontFamilies,
     );
@@ -214,7 +214,7 @@ export class Renderer {
     const { fonts, fontFamilies, signal, images, subset, ...rest } = options;
     const nodes = frames.map((frame) => frame.node);
     const resolved = await this.resolveResources(
-      pickFonts(fonts, nodes, subset),
+      pickFonts({ fonts, source: nodes, subset }),
       images,
       fontFamilies,
     );

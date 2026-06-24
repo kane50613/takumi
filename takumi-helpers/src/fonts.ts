@@ -269,11 +269,15 @@ export function subsetFonts<T>({
 }
 
 /** Apply {@link subsetFonts} unless `subset` is `false`. Passes `undefined` fonts through. */
-export function pickFonts<T>(
-  fonts: T[] | undefined,
-  source: string | Node | Node[],
-  subset: boolean | undefined,
-): T[] | undefined {
+export function pickFonts<T>({
+  fonts,
+  source,
+  subset,
+}: {
+  fonts: T[] | undefined;
+  source: string | Node | Node[];
+  subset?: boolean;
+}): T[] | undefined {
   return fonts && subset !== false ? subsetFonts({ fonts, source }) : fonts;
 }
 
