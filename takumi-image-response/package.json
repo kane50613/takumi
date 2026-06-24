@@ -50,5 +50,8 @@
     "@types/bun": "catalog:",
     "tsdown": "catalog:",
     "unrun": "catalog:"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

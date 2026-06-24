@@ -138,5 +138,8 @@
     "react": "^19.2.7",
     "tsdown": "catalog:",
     "unrun": "catalog:"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
