@@ -106,6 +106,9 @@ jobs:
           cat changed_files.txt
           exit 1
 
+      - name: Install nightly toolchain for cargo-rdme
+        run: rustup toolchain install nightly --profile minimal # for cargo-rdme v2
+
       - name: Test README.md is up to date
         run: |
           fail=0
