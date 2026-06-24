@@ -12,7 +12,7 @@
         "oxfmt": "^0.56.0",
         "oxlint": "^1.71.0",
         "publint": "^0.3.21",
-        "tegami": "0.1.3",
+        "tegami": "0.1.4",
         "typescript": "catalog:",
       },
     },
@@ -2195,7 +2195,7 @@
 
     "tar": ["tar@7.5.13", "", { "dependencies": { "@isaacs/fs-minipass": "^4.0.0", "chownr": "^3.0.0", "minipass": "^7.1.2", "minizlib": "^3.1.0", "yallist": "^5.0.0" } }, "sha512-tOG/7GyXpFevhXVh8jOPJrmtRpOTsYqUIkVdVooZYJS/z8WhfQUX8RJILmeuJNinGAMSu1veBr4asSHFt5/hng=="],
 
-    "tegami": ["tegami@0.1.3", "", { "dependencies": { "@clack/prompts": "^1.5.1", "@rainbowatcher/toml-edit-js": "^0.6.5", "commander": "^15.0.0", "js-yaml": "^4.2.0", "mdast-util-from-markdown": "^2.0.3", "mdast-util-to-markdown": "^2.1.2", "package-manager-detector": "^1.6.0", "semver": "^7.8.4", "tinyexec": "^1.2.4", "tinyglobby": "^0.2.17", "zod": "^4.4.3" } }, "sha512-iVUr1r/ilmqtcPlu/FJWMCRuQ/FEH4YCLuldGQi6PRzirnRoQbZp5X3Wx62povtgkbXnai9A4iAUwJqqVIKZ0g=="],
+    "tegami": ["tegami@0.1.4", "", { "dependencies": { "@clack/prompts": "^1.5.1", "@rainbowatcher/toml-edit-js": "^0.6.5", "commander": "^15.0.0", "js-yaml": "^4.2.0", "mdast-util-from-markdown": "^2.0.3", "mdast-util-to-markdown": "^2.1.2", "package-manager-detector": "^1.6.0", "semver": "^7.8.4", "tinyexec": "^1.2.4", "tinyglobby": "^0.2.17", "zod": "^4.4.3" } }, "sha512-OQ/VG/qTiNmd0eQ5Qz2E2rHZrccttZ+ttpOdh5o6Dj3XJARjXVBeJ7BiNeehVgNXkYx/tXKaUFqK1hdnfteETA=="],
 
     "terser": ["terser@5.44.0", "", { "dependencies": { "@jridgewell/source-map": "^0.3.3", "acorn": "^8.15.0", "commander": "^2.20.0", "source-map-support": "~0.5.20" }, "bin": { "terser": "bin/terser" } }, "sha512-nIVck8DK+GM/0Frwd+nIhZ84pR/BX7rmXMfYwyg+Sri5oGVE99/E3KvXqpC2xHFxyqXyGHTKBSioxxplrO4I4w=="],
 
