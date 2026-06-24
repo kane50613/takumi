@@ -186,9 +186,9 @@ fn main() -> Result<()> {
       .with_context(|| format!("failed to register font {}", font_path.display()))?;
   }
 
-  let stylesheet = load_stylesheets(&cli, source.stylesheets)?;
   let mut images = source.images;
   images.extend(load_images(&cli.images)?);
+  let stylesheet = load_stylesheets(&cli, source.stylesheets, &mut images)?;
   let lang = parse_lang(cli.lang.as_deref())?;
   let font_families = (!cli.font_families.is_empty()).then_some(cli.font_families.clone());
 
@@ -266,13 +266,19 @@ impl From<Dither> for DitheringAlgorithm {
 
 struct RenderSource {
   node: Node,
-  stylesheets: Vec<String>,
+  stylesheets: Vec<StylesheetSource>,
   images: HashMap<Arc<str>, ImageSource>,
 }
 
 #[derive(Clone, Debug)]
+struct StylesheetSource {
+  css: String,
+  base: AssetBase,
+}
+
+#[derive(Clone, Debug)]
 enum AssetBase {
-  File(PathBuf),
+  File { base: PathBuf, root: PathBuf },
   Url(Url),
   None,
 }
@@ -290,7 +296,7 @@ fn read_render_source(input: Option<&str>) -> Result<RenderSource> {
       let contents =
         fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
       if is_html_path(&path) || looks_like_html(&contents) {
-        parse_html_source(&contents, AssetBase::File(html_base))
+        parse_html_source(&contents, file_asset_base(html_base))
       } else {
         parse_json_source(&contents)
       }
@@ -342,6 +348,21 @@ fn resolve_input_path(path: &Path) -> Result<(PathBuf, PathBuf)> {
   Ok((file, base))
 }
 
+fn parent_dir(path: &Path) -> PathBuf {
+  path
+    .parent()
+    .filter(|parent| !parent.as_os_str().is_empty())
+    .unwrap_or_else(|| Path::new("."))
+    .to_path_buf()
+}
+
+fn file_asset_base(root: PathBuf) -> AssetBase {
+  AssetBase::File {
+    base: root.clone(),
+    root,
+  }
+}
+
 fn is_html_path(path: &Path) -> bool {
   matches!(
     path
@@ -361,16 +382,32 @@ fn is_http_url(input: &str) -> bool {
   input.starts_with("https://") || input.starts_with("http://")
 }
 
-fn load_stylesheets(cli: &Cli, mut sources: Vec<String>) -> Result<StyleSheet> {
+fn load_stylesheets(
+  cli: &Cli,
+  mut sources: Vec<StylesheetSource>,
+  images: &mut HashMap<Arc<str>, ImageSource>,
+) -> Result<StyleSheet> {
   sources.reserve(cli.stylesheets.len() + cli.css.len());
   for path in &cli.stylesheets {
-    sources.push(
-      fs::read_to_string(path)
-        .with_context(|| format!("failed to read stylesheet {}", path.display()))?,
-    );
+    let css = fs::read_to_string(path)
+      .with_context(|| format!("failed to read stylesheet {}", path.display()))?;
+    sources.push(StylesheetSource {
+      css,
+      base: file_asset_base(parent_dir(path)),
+    });
   }
-  sources.extend(cli.css.iter().cloned());
-  Ok(StyleSheet::parse_owned_list_loosy(sources))
+  sources.extend(cli.css.iter().cloned().map(|css| StylesheetSource {
+    css,
+    base: AssetBase::None,
+  }));
+
+  for source in &sources {
+    preload_stylesheet_images(source, images)?;
+  }
+
+  Ok(StyleSheet::parse_owned_list_loosy(
+    sources.into_iter().map(|source| source.css).collect(),
+  ))
 }
 
 fn parse_html_source(html: &str, base: AssetBase) -> Result<RenderSource> {
@@ -418,7 +455,7 @@ fn parse_html_source(html: &str, base: AssetBase) -> Result<RenderSource> {
 
 struct HtmlContext {
   base: AssetBase,
-  stylesheets: Vec<String>,
+  stylesheets: Vec<StylesheetSource>,
   images: HashMap<Arc<str>, ImageSource>,
 }
 
@@ -446,7 +483,10 @@ fn collect_styles(node: HtmlNodeRef<'_>, context: &mut HtmlContext) -> Result<()
         })
         .collect::<String>();
       if !css.is_empty() {
-        context.stylesheets.push(css);
+        context.stylesheets.push(StylesheetSource {
+          css,
+          base: context.base.clone(),
+        });
       }
       return Ok(());
     }
@@ -454,7 +494,7 @@ fn collect_styles(node: HtmlNodeRef<'_>, context: &mut HtmlContext) -> Result<()
       if let Some(href) = element.attr("href") {
         context
           .stylesheets
-          .push(load_text_asset(href, &context.base)?);
+          .push(load_linked_stylesheet(href, &context.base)?);
       }
       return Ok(());
     }
@@ -742,12 +782,82 @@ fn preload_image(src: &str, context: &mut HtmlContext) -> Result<()> {
   Ok(())
 }
 
-fn load_text_asset(src: &str, base: &AssetBase) -> Result<String> {
+fn preload_stylesheet_images(
+  source: &StylesheetSource,
+  images: &mut HashMap<Arc<str>, ImageSource>,
+) -> Result<()> {
+  let stylesheet = StyleSheet::parse_loosy(&source.css);
+  let urls = stylesheet_resource_urls(&stylesheet);
+
+  for url in urls {
+    preload_css_image(&url, &source.base, images)?;
+  }
+
+  Ok(())
+}
+
+fn stylesheet_resource_urls(stylesheet: &StyleSheet) -> Vec<String> {
+  let mut urls = Vec::new();
+
+  for rule in &stylesheet.rules {
+    urls.extend(rule.normal_declarations.resource_urls().map(str::to_owned));
+    urls.extend(
+      rule
+        .important_declarations
+        .resource_urls()
+        .map(str::to_owned),
+    );
+  }
+
+  for keyframes in &stylesheet.keyframes {
+    for keyframe in &keyframes.keyframes {
+      urls.extend(keyframe.declarations.resource_urls().map(str::to_owned));
+    }
+  }
+
+  urls
+}
+
+fn preload_css_image(
+  src: &str,
+  base: &AssetBase,
+  images: &mut HashMap<Arc<str>, ImageSource>,
+) -> Result<()> {
+  if src.starts_with("data:") || src.starts_with('#') || images.contains_key(src) {
+    return Ok(());
+  }
+
+  let bytes = load_binary_asset(src, base)?;
+  let image = ImageSource::from_bytes(&bytes)
+    .with_context(|| format!("failed to decode CSS image asset `{src}`"))?;
+  images.insert(Arc::from(src), image);
+  Ok(())
+}
+
+fn load_linked_stylesheet(src: &str, base: &AssetBase) -> Result<StylesheetSource> {
   match resolve_asset(src, base)? {
     ResolvedAsset::File(path) => {
-      fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))
+      let css = fs::read_to_string(&path)
+        .with_context(|| format!("failed to read stylesheet {}", path.display()))?;
+      let root = match base {
+        AssetBase::File { root, .. } => root.clone(),
+        _ => parent_dir(&path),
+      };
+      Ok(StylesheetSource {
+        css,
+        base: AssetBase::File {
+          base: parent_dir(&path),
+          root,
+        },
+      })
     }
-    ResolvedAsset::Url(url) => fetch_text(url.as_str()),
+    ResolvedAsset::Url(url) => {
+      let css = fetch_text(url.as_str())?;
+      Ok(StylesheetSource {
+        css,
+        base: AssetBase::Url(url),
+      })
+    }
   }
 }
 
@@ -773,9 +883,12 @@ fn resolve_asset(src: &str, base: &AssetBase) -> Result<ResolvedAsset> {
   }
 
   match base {
-    AssetBase::File(root) => {
-      let relative = local_asset_path(src).trim_start_matches('/');
-      Ok(ResolvedAsset::File(root.join(relative)))
+    AssetBase::File { base, root } => {
+      let local = local_asset_path(src);
+      let asset_root = if local.starts_with('/') { root } else { base };
+      Ok(ResolvedAsset::File(
+        asset_root.join(local.trim_start_matches('/')),
+      ))
     }
     AssetBase::Url(base) => {
       Ok(ResolvedAsset::Url(base.join(src).with_context(|| {
