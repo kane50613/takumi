@@ -55,7 +55,7 @@ jobs:
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
         with:
-          binstall: cargo-audit,cargo-llvm-cov,cargo-rdme,cargo-machete
+          binstall: cargo-audit,cargo-llvm-cov,cargo-rdme@2.0.1,cargo-machete
           components: rustfmt,clippy
           stage: test
 
@@ -676,7 +676,6 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           stage: release
-          binstall: cargo-rdme
           components: clippy,rustfmt
 
       - name: Download helpers artifact
