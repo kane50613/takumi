@@ -9,7 +9,6 @@ type FontStyle = "normal" | "italic";
 type WeightRange = `${number}..${number}`;
 type AxisValue = number | WeightRange;
 
-/** A {@link GoogleFontCatalog} family with its weight, style, and variable axes typed per family. */
 type KnownGoogleFontFamily = {
   [K in keyof GoogleFontCatalog]: {
     family: K;
@@ -24,7 +23,6 @@ type KnownGoogleFontFamily = {
   };
 }[keyof GoogleFontCatalog];
 
-/** Object form: a known family with its typed axes, or any other family loosely. */
 type GoogleFontFamilyObject =
   | KnownGoogleFontFamily
   | {
@@ -37,10 +35,8 @@ type GoogleFontFamilyObject =
 /**
  * One family to load. A bare string loads weight 400, normal style.
  *
- * Known {@link GoogleFontCatalog} families autocomplete their valid weight, style, and variable
- * axes; any other string is still accepted. Families it does not recognise fall back to the loose
- * `{ family: string }` form, so an invalid weight on a known family is not rejected — the
- * suggestions are a guide, not a constraint.
+ * Known {@link GoogleFontCatalog} families autocomplete their weight, style, and variable axes.
+ * Any other string still works through a loose fallback that does not check the weight.
  */
 export type GoogleFontFamily = (keyof GoogleFontCatalog | (string & {})) | GoogleFontFamilyObject;
 
@@ -60,14 +56,9 @@ export type GoogleFontsOptions = FetchOptions & {
 
 const GOOGLE_FONTS_CSS = "https://fonts.googleapis.com/css2";
 
-/**
- * The `family=` value for one family plus its weight/style/axis tuple, e.g. `Inter:wght@400` or
- * `Inter:ital,opsz,wght@0,14..32,400`. Tags are sorted as css2 requires (uppercase before
- * lowercase, alphabetical), and each `;`-joined tuple carries one value per tag in that order.
- *
- * Takes pre-extracted plain values so it never relates the per-family {@link GoogleFontFamily}
- * union to a parameter — at ~2000 members that overflows the type checker (TS2590).
- */
+// Builds a css2 `family=` value, e.g. `Inter:ital,opsz,wght@0,14..32,400`. Takes plain values
+// rather than a GoogleFontFamily so it never relates that ~2000-member union to a parameter, which
+// overflows the type checker (TS2590).
 function familyValue(
   family: string,
   weights: string[],
