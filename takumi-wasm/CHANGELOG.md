@@ -1,3 +1,18 @@
+## @takumi-rs/wasm@2.0.0-beta.6 (beta)
+
+### Resolve the SSR WASM asset without guessing the output dir
+
+The Vite bundler entry mapped the `?url` asset to disk by guessing a `client/`
+directory, which broke dev (`/@fs/` URLs) and frameworks with a different layout
+(e.g. Waku's `public/`). It now reads the asset colocated with the server chunk
+via `import.meta.url`, with the `client/` paths kept as fallbacks.
+
+### Let cached font buffers be garbage-collected
+
+The renderer cached each registered font by its buffer in a `Map`, pinning the
+data for the renderer's lifetime even after the caller dropped its reference.
+Buffers now live in a `WeakMap`, so they are freed once nothing else holds them.
+
 ## @takumi-rs/wasm@2.0.0-beta.5 (beta)
 
 ### Fix `workspace:*` leaking into the published `package.json`
