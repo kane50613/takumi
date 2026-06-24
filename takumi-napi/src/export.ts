@@ -14,9 +14,9 @@ import type {
 export type * from "../index";
 import { Renderer as RendererInternal } from "../index";
 
-import { pickFonts } from "@takumi-rs/helpers";
+import { extractResourceUrls, pickFonts } from "@takumi-rs/helpers";
 
-export { extractResourceUrls } from "@takumi-rs/helpers";
+export { extractResourceUrls };
 
 export type FontLoader =
   | Font

@@ -16,9 +16,9 @@ import {
 export * from "../pkg/takumi_wasm";
 export { default } from "../pkg/takumi_wasm";
 
-import { pickFonts } from "@takumi-rs/helpers";
+import { extractResourceUrls, pickFonts } from "@takumi-rs/helpers";
 
-export { extractResourceUrls } from "@takumi-rs/helpers";
+export { extractResourceUrls };
 
 export type FontLoader =
   | Font
