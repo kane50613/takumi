@@ -257,6 +257,7 @@ impl<'i> FromCss<'i> for TextUnderlineOffset {
   const VALID_TOKENS: &'static [CssToken] = &[
     CssToken::Keyword("auto"),
     CssToken::Syntax(CssSyntaxKind::Length),
+    CssToken::Syntax(CssSyntaxKind::Percentage),
   ];
 }
 
