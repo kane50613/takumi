@@ -1,3 +1,14 @@
+## takumi@2.0.0-beta.11
+
+### Add CSS `offset-path` support
+
+The path accepts `ray()`, the basic shapes `path()`/`circle()`/`ellipse()`/`polygon()`/`inset()`,
+and a bare `<coord-box>`
+
+`offset-distance`, `offset-rotate`, `offset-anchor`, `offset-position`, and the `offset` shorthand control placement.
+
+`url()` references are not supported.
+
 ## takumi@2.0.0-beta.4
 
 ### Render text language-aware with the `lang` attribute
