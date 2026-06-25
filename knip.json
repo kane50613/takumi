@@ -21,6 +21,10 @@
       "entry": ["tests/**/*.test.{ts,tsx}"],
       "ignoreUnresolved": ["./google-fonts-catalog"]
     },
+    "takumi-js": {
+      "entry": ["tests/**/*.test.{ts,tsx}"],
+      "ignoreUnresolved": ["#backend"]
+    },
     "takumi-napi": {
       "entry": ["tests/**/*.test.{ts,tsx}"],
       "ignoreUnresolved": ["../index"]

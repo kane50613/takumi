@@ -4,9 +4,6 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const DIST_SERVER_DIR = join(process.cwd(), "dist", "server");
-const NODE_CORE_FAILURE_MESSAGE =
-  "Failed to load @takumi-rs/core in Node.js runtime. Takumi requires the native napi-rs module in Node environments.";
-const STATIC_WASM_IMPORT_PATTERNS = ['from "@takumi-rs/wasm"', 'require("@takumi-rs/wasm")'];
 
 function runBunBuild() {
   execFileSync("bun", ["run", "build"], {
@@ -28,7 +25,7 @@ function listFiles(dir: string): string[] {
 }
 
 describe("waku-ssr integration", () => {
-  test("build emits wasm-backed assets with node guard and no static wasm import", () => {
+  test("build resolves the napi backend for the node target", () => {
     runBunBuild();
 
     expect(existsSync(DIST_SERVER_DIR)).toBe(true);
@@ -38,13 +35,8 @@ describe("waku-ssr integration", () => {
     );
     const allContent = files.map((file) => readFileSync(file, "utf8")).join("\n");
 
-    expect(allContent).toContain(".wasm");
-    expect(allContent).toContain(NODE_CORE_FAILURE_MESSAGE);
-
-    for (const content of files.map((file) => readFileSync(file, "utf8"))) {
-      for (const pattern of STATIC_WASM_IMPORT_PATTERNS) {
-        expect(content.includes(pattern)).toBe(false);
-      }
-    }
+    // `#backend` resolves the node target to napi, dynamically imported so the
+    // native addon stays external and its `.node` binary loads from node_modules.
+    expect(allContent).toContain("@takumi-rs/core");
   }, 60_000);
 });

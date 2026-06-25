@@ -35,6 +35,80 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
+  "imports": {
+    "#backend": {
+      "workerd": {
+        "import": {
+          "types": "./dist/backend/wasm.d.mts",
+          "default": "./dist/backend/wasm.mjs"
+        },
+        "require": {
+          "types": "./dist/backend/wasm.d.cts",
+          "default": "./dist/backend/wasm.cjs"
+        }
+      },
+      "worker": {
+        "import": {
+          "types": "./dist/backend/wasm.d.mts",
+          "default": "./dist/backend/wasm.mjs"
+        },
+        "require": {
+          "types": "./dist/backend/wasm.d.cts",
+          "default": "./dist/backend/wasm.cjs"
+        }
+      },
+      "deno": {
+        "import": {
+          "types": "./dist/backend/wasm.d.mts",
+          "default": "./dist/backend/wasm.mjs"
+        },
+        "require": {
+          "types": "./dist/backend/wasm.d.cts",
+          "default": "./dist/backend/wasm.cjs"
+        }
+      },
+      "browser": {
+        "import": {
+          "types": "./dist/backend/wasm.d.mts",
+          "default": "./dist/backend/wasm.mjs"
+        },
+        "require": {
+          "types": "./dist/backend/wasm.d.cts",
+          "default": "./dist/backend/wasm.cjs"
+        }
+      },
+      "bun": {
+        "import": {
+          "types": "./dist/backend/node.d.mts",
+          "default": "./dist/backend/node.mjs"
+        },
+        "require": {
+          "types": "./dist/backend/node.d.cts",
+          "default": "./dist/backend/node.cjs"
+        }
+      },
+      "node": {
+        "import": {
+          "types": "./dist/backend/node.d.mts",
+          "default": "./dist/backend/node.mjs"
+        },
+        "require": {
+          "types": "./dist/backend/node.d.cts",
+          "default": "./dist/backend/node.cjs"
+        }
+      },
+      "default": {
+        "import": {
+          "types": "./dist/backend/wasm.d.mts",
+          "default": "./dist/backend/wasm.mjs"
+        },
+        "require": {
+          "types": "./dist/backend/wasm.d.cts",
+          "default": "./dist/backend/wasm.cjs"
+        }
+      }
+    }
+  },
   "exports": {
     ".": {
       "import": {

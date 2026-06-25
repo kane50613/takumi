@@ -4,8 +4,6 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const DIST_SERVER_DIR = join(process.cwd(), "dist", "server");
-const NODE_CORE_FAILURE_MESSAGE =
-  "Failed to load @takumi-rs/core in Node.js runtime. Takumi requires the native napi-rs module in Node environments.";
 const STATIC_WASM_IMPORT_PATTERNS = ['from "@takumi-rs/wasm"', 'require("@takumi-rs/wasm")'];
 
 function runBunBuild() {
@@ -28,7 +26,7 @@ function listFiles(dir: string): string[] {
 }
 
 describe("tanstack-start integration", () => {
-  test("build emits workerd+wasm artifacts and keeps no static wasm import", () => {
+  test("build emits workerd+wasm artifacts and keeps napi + static wasm imports out", () => {
     runBunBuild();
 
     expect(existsSync(DIST_SERVER_DIR)).toBe(true);
@@ -40,7 +38,9 @@ describe("tanstack-start integration", () => {
 
     expect(allContent).toContain("workerd");
     expect(allContent).toContain(".wasm");
-    expect(allContent).toContain(NODE_CORE_FAILURE_MESSAGE);
+    // The `#backend` conditions resolve the worker build to WASM, so the native
+    // napi addon must never reach this bundle.
+    expect(allContent).not.toContain("@takumi-rs/core");
 
     for (const content of files.map((file) => readFileSync(file, "utf8"))) {
       for (const pattern of STATIC_WASM_IMPORT_PATTERNS) {
