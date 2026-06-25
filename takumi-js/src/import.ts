@@ -1,5 +1,5 @@
 import { loadBackend } from "#backend";
-import type { BackendModule, LoadBackend } from "./backend/types";
+import type { BackendModule } from "./backend/types";
 
 type Imports = Awaited<ReturnType<typeof loadBackend>>;
 
@@ -15,9 +15,7 @@ export function getImports(module?: BackendModule): Promise<Imports> {
   importPromise ??= (
     module === undefined
       ? loadBackend()
-      : import("./backend/wasm").then((wasm: { loadBackend: LoadBackend }) =>
-          wasm.loadBackend(module),
-        )
+      : import("./backend/wasm-init").then(({ initWasm }) => initWasm(module))
   ).catch((error) => {
     importPromise = null;
 
