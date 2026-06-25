@@ -319,6 +319,7 @@ pub(crate) fn emit_background(
     LayerEmitter::new(&node.context, doc).background_images(
       images,
       background_origin_frame(style.background_origin, layout, x, y),
+      Frame::new(x, y, width, height),
     )?;
   }
   if let Some(group) = bg_group {
@@ -356,6 +357,7 @@ pub(crate) fn emit_mask_group(
     &style.mask_size,
     &style.mask_position,
     &style.mask_repeat,
+    Frame::new(x, y, width, height),
     Frame::new(x, y, width, height),
   )?;
   doc.end_mask(token)?;

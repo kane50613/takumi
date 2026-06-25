@@ -331,7 +331,11 @@ fn emit_clip_text_glyphs(
     doc.rect(bx, by, bw, bh, background)?;
   }
   if let Some(images) = context.style.background_image.as_deref() {
-    LayerEmitter::new(context, doc).background_images(images, Frame::new(bx, by, bw, bh))?;
+    LayerEmitter::new(context, doc).background_images(
+      images,
+      Frame::new(bx, by, bw, bh),
+      Frame::new(bx, by, bw, bh),
+    )?;
   }
   doc.end_group(group)?;
 
