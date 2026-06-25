@@ -34,7 +34,12 @@ pub(crate) struct LayerTileStyle {
 }
 
 pub(crate) struct ResolveLayerTilesInput<'a> {
+  /// `background-origin` positioning area: position and `space`/`round` basis.
   pub area: Size<u32>,
+  /// Painting area (border box) that `repeat` tiles across.
+  pub paint: Size<u32>,
+  /// Offset of the positioning area within the border box.
+  pub origin_offset: Point<i32>,
   pub context: &'a RenderContext,
   pub buffer_pool: &'a mut BufferPool,
 }
@@ -46,7 +51,12 @@ pub(crate) struct ResolveTileLayersInput<'a> {
   pub repeats: &'a [BackgroundRepeat],
   pub blend_modes: &'a [BlendMode],
   pub context: &'a RenderContext,
-  pub border_box: Size<u32>,
+  /// `background-origin` positioning area.
+  pub area: Size<u32>,
+  /// Painting area (border box) that `repeat` tiles across.
+  pub paint: Size<u32>,
+  /// Offset of the positioning area within the border box.
+  pub origin_offset: Point<i32>,
   pub buffer_pool: &'a mut BufferPool,
 }
 
@@ -374,39 +384,55 @@ impl BackgroundTile {
   }
 }
 
+/// One axis of the `background-origin` positioning area within the border box.
+/// `position` and `space`/`round` distribution resolve against `area`; `repeat`
+/// tiles across `paint` (the painting/border box) so a repeating layer still
+/// covers the clip region when origin and clip differ.
+#[derive(Clone, Copy)]
+struct AxisArea {
+  area: u32,
+  paint: u32,
+  offset: i32,
+}
+
+/// Resolves tile origins on one axis, in border-box coordinates.
 fn resolve_axis_tiles(
   repeat: BackgroundRepeatStyle,
   pos: BackgroundPosition,
   tile_size: u32,
-  area_size: u32,
+  axis: AxisArea,
   sizing: &SizingContext,
   is_x: bool,
 ) -> (SmallVec<[i32; 1]>, u32) {
+  let anchor = |tile: u32| {
+    axis.offset
+      + if is_x {
+        resolve_position_component_x(pos, tile, axis.area, sizing)
+      } else {
+        resolve_position_component_y(pos, tile, axis.area, sizing)
+      }
+  };
+  let shift = |mut positions: SmallVec<[i32; 1]>| {
+    if axis.offset != 0 {
+      positions.iter_mut().for_each(|x| *x += axis.offset);
+    }
+    positions
+  };
+
   match repeat {
-    BackgroundRepeatStyle::Repeat => {
-      let origin = if is_x {
-        resolve_position_component_x(pos, tile_size, area_size, sizing)
-      } else {
-        resolve_position_component_y(pos, tile_size, area_size, sizing)
-      };
-      (
-        collect_repeat_tile_positions(area_size, tile_size, origin),
-        tile_size,
-      )
-    }
-    BackgroundRepeatStyle::NoRepeat => {
-      let origin = if is_x {
-        resolve_position_component_x(pos, tile_size, area_size, sizing)
-      } else {
-        resolve_position_component_y(pos, tile_size, area_size, sizing)
-      };
-      (smallvec![origin], tile_size)
-    }
-    BackgroundRepeatStyle::Space => (
-      collect_spaced_tile_positions(area_size, tile_size),
+    BackgroundRepeatStyle::Repeat => (
+      collect_repeat_tile_positions(axis.paint, tile_size, anchor(tile_size)),
       tile_size,
     ),
-    BackgroundRepeatStyle::Round => collect_stretched_tile_positions(area_size, tile_size),
+    BackgroundRepeatStyle::NoRepeat => (smallvec![anchor(tile_size)], tile_size),
+    BackgroundRepeatStyle::Space => (
+      shift(collect_spaced_tile_positions(axis.area, tile_size)),
+      tile_size,
+    ),
+    BackgroundRepeatStyle::Round => {
+      let (positions, rounded) = collect_stretched_tile_positions(axis.area, tile_size);
+      (shift(positions), rounded)
+    }
   }
 }
 
@@ -562,13 +588,24 @@ pub(crate) fn resolve_layer_tiles(
     return Ok(None);
   }
 
+  let axis_x = AxisArea {
+    area: input.area.width,
+    paint: input.paint.width,
+    offset: input.origin_offset.x,
+  };
+  let axis_y = AxisArea {
+    area: input.area.height,
+    paint: input.paint.height,
+    offset: input.origin_offset.y,
+  };
+
   let (xs, ys, tile_w, tile_h) = match resolved_size.auto_axis {
     Some(AutoBackgroundAxis::Width) => {
       let (ys, tile_h) = resolve_axis_tiles(
         style.repeat.1,
         style.pos,
         resolved_size.height,
-        input.area.height,
+        axis_y,
         &input.context.sizing,
         false,
       );
@@ -586,7 +623,7 @@ pub(crate) fn resolve_layer_tiles(
         style.repeat.0,
         style.pos,
         tile_w,
-        input.area.width,
+        axis_x,
         &input.context.sizing,
         true,
       );
@@ -597,7 +634,7 @@ pub(crate) fn resolve_layer_tiles(
         style.repeat.0,
         style.pos,
         resolved_size.width,
-        input.area.width,
+        axis_x,
         &input.context.sizing,
         true,
       );
@@ -615,7 +652,7 @@ pub(crate) fn resolve_layer_tiles(
         style.repeat.1,
         style.pos,
         tile_h,
-        input.area.height,
+        axis_y,
         &input.context.sizing,
         false,
       );
@@ -626,7 +663,7 @@ pub(crate) fn resolve_layer_tiles(
         style.repeat.0,
         style.pos,
         resolved_size.width,
-        input.area.width,
+        axis_x,
         &input.context.sizing,
         true,
       );
@@ -634,7 +671,7 @@ pub(crate) fn resolve_layer_tiles(
         style.repeat.1,
         style.pos,
         resolved_size.height,
-        input.area.height,
+        axis_y,
         &input.context.sizing,
         false,
       );
@@ -682,7 +719,9 @@ pub(crate) fn resolve_tile_layers(input: ResolveTileLayersInput<'_>) -> Result<T
       image,
       style,
       ResolveLayerTilesInput {
-        area: input.border_box,
+        area: input.area,
+        paint: input.paint,
+        origin_offset: input.origin_offset,
         context: input.context,
         buffer_pool: input.buffer_pool,
       },
@@ -709,7 +748,9 @@ pub(crate) fn create_mask(
     repeats: mask_repeat,
     blend_modes: &[], // no blending mode for mask
     context,
-    border_box: border_box.map(|x| x as u32),
+    area: border_box.map(|x| x as u32),
+    paint: border_box.map(|x| x as u32),
+    origin_offset: Point { x: 0, y: 0 },
     buffer_pool,
   })?;
 
@@ -801,10 +842,9 @@ pub(crate) fn collect_background_layers(
   buffer_pool: &mut BufferPool,
 ) -> Result<TileLayers> {
   let border_box = layout.size;
-  // `background-origin` sets the positioning area; tiles resolve against it and
-  // are then shifted to its offset within the border box.
-  // ponytail: repeats fill the origin box, not the clip box — a divergence only
-  // when origin and clip differ on a repeating layer.
+  // `background-origin` sets the positioning area that `background-position`/`-size`
+  // resolve against; `repeat` still tiles across the painting (border) box so a
+  // repeating layer covers the clip region when origin and clip differ.
   let origin = background_origin_box(context.style.background_origin, layout);
 
   let mut layers = resolve_tile_layers(ResolveTileLayersInput {
@@ -814,18 +854,14 @@ pub(crate) fn collect_background_layers(
     repeats: &context.style.background_repeat,
     blend_modes: &context.style.background_blend_mode,
     context,
-    border_box: origin.size.map(|x| x.max(0.0) as u32),
+    area: origin.size.map(|x| x.max(0.0) as u32),
+    paint: border_box.map(|x| x as u32),
+    origin_offset: Point {
+      x: origin.offset.x as i32,
+      y: origin.offset.y as i32,
+    },
     buffer_pool,
   })?;
-
-  let dx = origin.offset.x as i32;
-  let dy = origin.offset.y as i32;
-  if dx != 0 || dy != 0 {
-    for layer in &mut layers {
-      layer.xs.iter_mut().for_each(|x| *x += dx);
-      layer.ys.iter_mut().for_each(|y| *y += dy);
-    }
-  }
 
   let background_color = context
     .style
