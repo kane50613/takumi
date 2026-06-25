@@ -246,6 +246,8 @@ pub struct InlineBrush {
   pub decoration_color: Color,
   /// Decoration line thickness.
   pub decoration_thickness: SizedTextDecorationThickness,
+  /// Extra offset of the underline away from the text, in pixels.
+  pub underline_offset: f32,
   /// Which decoration lines to draw.
   pub decoration_line: TextDecorationLines,
   /// Whether decorations skip over glyph ink.
@@ -264,6 +266,7 @@ impl Default for InlineBrush {
       color: Color::black(),
       decoration_color: Color::black(),
       decoration_thickness: SizedTextDecorationThickness::Value(0.0),
+      underline_offset: 0.0,
       decoration_line: TextDecorationLines::empty(),
       decoration_skip_ink: TextDecorationSkipInk::default(),
       stroke_color: Color::black(),
@@ -2122,7 +2125,7 @@ pub fn run_decorations(
   };
   if lines.contains(TextDecorationLines::UNDERLINE) {
     emit(
-      baseline - metrics.underline_offset,
+      baseline - metrics.underline_offset + brush.underline_offset,
       thickness(metrics.underline_size),
       false,
     );

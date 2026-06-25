@@ -108,6 +108,7 @@ pub struct SizedFontStyle<'s> {
   pub text_stroke_color: Color,
   pub(crate) text_decoration_color: Color,
   pub(crate) text_decoration_thickness: SizedTextDecorationThickness,
+  pub(crate) text_underline_offset: f32,
   /// Resolved sizing context (font size, etc.).
   pub sizing: SizingContext,
 }
@@ -145,6 +146,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
         color: style.color,
         decoration_color: style.text_decoration_color,
         decoration_thickness: style.text_decoration_thickness,
+        underline_offset: style.text_underline_offset,
         decoration_line: style.parent.text_decoration_line.unwrap_or_default(),
         decoration_skip_ink: style.parent.text_decoration_skip_ink,
         stroke_color: style.text_stroke_color,
@@ -239,6 +241,7 @@ impl<'s> SizedFontStyle<'s> {
         .resolve(context.current_color),
       text_decoration_color: style.text_decoration_color.resolve(context.current_color),
       text_decoration_thickness: style.resolved_text_decoration_thickness(&context.sizing),
+      text_underline_offset: style.text_underline_offset.resolve_px(&context.sizing),
     }
   }
 }
