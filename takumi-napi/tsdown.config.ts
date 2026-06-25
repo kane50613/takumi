@@ -1,8 +1,10 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { defineConfig } from "tsdown";
 
-// build:done fires per format; flag spans both fires, throws if nothing matched.
-let patchedLoader = false;
+const loaderOutputs = ["export.mjs", "export.cjs"];
+// build:done fires per format; track each output across both fires so every
+// shipped file is verified patched, not just one of them.
+const patchedOutputs = new Set<string>();
 
 export default defineConfig({
   entry: {
@@ -19,19 +21,21 @@ export default defineConfig({
   hooks: {
     // Make NAPI-RS's generated loader bundler-safe. Only `dist/export.*` ships.
     "build:done": () => {
-      for (const name of ["export.mjs", "export.cjs"]) {
+      for (const name of loaderOutputs) {
         const file = new URL(`dist/${name}`, import.meta.url);
         const original = readFileSync(file, "utf8");
         const patched = patchGeneratedLoader(original);
 
         if (patched !== original) {
           writeFileSync(file, patched);
-          patchedLoader = true;
+          patchedOutputs.add(name);
         }
       }
 
-      if (!patchedLoader) {
-        throw new Error("No generated loader changes were applied");
+      const unpatched = loaderOutputs.filter((name) => !patchedOutputs.has(name));
+
+      if (unpatched.length > 0) {
+        throw new Error(`Generated loader patch matched nothing in: ${unpatched.join(", ")}`);
       }
     },
   },

@@ -1,8 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { defineConfig } from "tsdown";
 
-// build:done fires per format; flag spans both fires, throws if nothing matched.
-let patchedExport = false;
+const exportOutputs = ["export.mjs", "export.cjs"];
 
 export default defineConfig({
   entry: {
@@ -24,21 +23,16 @@ export default defineConfig({
   },
   hooks: {
     // Drop wasm-bindgen's default `module_or_path` fallback; the binary only ever
-    // comes through `@takumi-rs/wasm/auto`.
+    // comes through `@takumi-rs/wasm/auto`. Verify every shipped output, not one.
     "build:done": () => {
-      for (const name of ["export.mjs", "export.cjs"]) {
+      for (const name of exportOutputs) {
         const file = new URL(`dist/${name}`, import.meta.url);
-        const original = readFileSync(file, "utf8");
-        const patched = patchGeneratedExportScript(original);
+        const patched = patchGeneratedExportScript(readFileSync(file, "utf8"));
+        writeFileSync(file, patched);
 
-        if (patched !== original) {
-          writeFileSync(file, patched);
-          patchedExport = true;
+        if (patched.includes('new URL("takumi_wasm_bg.wasm"')) {
+          throw new Error(`module_or_path fallback not removed from dist/${name}`);
         }
-      }
-
-      if (!patchedExport) {
-        throw new Error("No generated export script changes were applied");
       }
     },
   },
