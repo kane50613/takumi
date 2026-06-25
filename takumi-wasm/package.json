@@ -106,9 +106,9 @@
     }
   },
   "scripts": {
-    "build": "wasm-pack build --no-pack --release --out-dir pkg --target web && bun build:js && bun scripts/patch-generated-loader.ts",
+    "build": "wasm-pack build --no-pack --release --out-dir pkg --target web && bun build:js",
     "build:js": "tsdown",
-    "build:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target web && bun build:js && bun scripts/patch-generated-loader.ts",
+    "build:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target web && bun build:js",
     "publish-lint": "attw --pack . && publint --strict ."
   },
   "dependencies": {
