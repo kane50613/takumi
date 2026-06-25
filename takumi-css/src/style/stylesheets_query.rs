@@ -10,12 +10,7 @@ impl ComputedStyle {
   pub fn make_computed(&mut self, sizing: &SizingContext) {
     // `font-size` computed value is already resolved in `sizing.font_size`.
     // Keep it as css-px in style to avoid re-resolving descendant inheritance.
-    let dpr = sizing.viewport.device_pixel_ratio;
-    self.font_size = if dpr > 0.0 {
-      FontSize::Length(Length::Px(sizing.font_size / dpr))
-    } else {
-      FontSize::Length(Length::Px(sizing.font_size))
-    };
+    self.font_size = FontSize::Length(Length::Px(sizing.to_css(sizing.font_size)));
 
     self.make_computed_values(sizing);
 
@@ -68,6 +63,7 @@ impl ComputedStyle {
   ) -> bool {
     self.isolation == Isolation::Isolate
       || self.is_z_index_applicable(is_flex_or_grid_item)
+      || self.offset_path.is_some()
       || self.has_non_identity_transform(border_box, sizing)
       || self.needs_offscreen_compositing()
   }
@@ -105,6 +101,38 @@ impl ComputedStyle {
     }
     if self.scale != SpacePair::default() {
       local *= Affine::scale(self.scale.x.0, self.scale.y.0);
+    }
+    // offset-path sits after translate/rotate/scale and before `transform`, and
+    // resolves against the containing block (Blink `GetReferenceBox`), proxied
+    // here by the query-container size, then the viewport, then the border box.
+    let reference_box = Size {
+      width: sizing
+        .container_size
+        .width
+        .filter(|width| *width > 0.0)
+        .or_else(|| sizing.viewport.size.width.map(|width| width as f32))
+        .unwrap_or(border_box.width),
+      height: sizing
+        .container_size
+        .height
+        .filter(|height| *height > 0.0)
+        .or_else(|| sizing.viewport.size.height.map(|height| height as f32))
+        .unwrap_or(border_box.height),
+    };
+    if let Some(path) = &self.offset_path
+      && let Some((point, tangent)) = sample_offset_path(
+        path,
+        self.offset_distance,
+        &self.offset_position,
+        sizing,
+        reference_box,
+      )
+    {
+      local *= Affine::translation(point.x - origin.x, point.y - origin.y);
+      local *= Affine::rotation_radians(self.offset_rotate.resolve(tangent));
+      if let Some(anchor) = self.offset_anchor.resolve(sizing, border_box) {
+        local *= Affine::translation(origin.x - anchor.x, origin.y - anchor.y);
+      }
     }
     if let Some(node_transform) = &self.transform {
       local *= Affine::from_transforms(node_transform.iter(), sizing, border_box);
