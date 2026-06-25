@@ -1,3 +1,12 @@
+## takumi-js@2.0.0-beta.13 (beta)
+
+### Keep the Vite WASM loader out of Node bundles
+
+The WASM escape hatch always carries an explicit `module`, so it now loads
+`wasm-init` directly instead of `@takumi-rs/wasm/auto`. A Next/webpack node
+build that only uses napi no longer drags the Vite `?url` binary loader into
+its graph, where the unresolvable query broke the build.
+
 ## takumi-js@2.0.0-beta.10 (beta)
 
 ### Resolve the render backend through import conditions
