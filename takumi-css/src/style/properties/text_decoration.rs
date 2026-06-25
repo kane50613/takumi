@@ -142,6 +142,7 @@ impl<'i> FromCss<'i> for TextDecorationThickness {
   const VALID_TOKENS: &'static [CssToken] = &[
     CssToken::Keyword("from-font"),
     CssToken::Syntax(CssSyntaxKind::Length),
+    CssToken::Syntax(CssSyntaxKind::Percentage),
   ];
 }
 
@@ -187,6 +188,85 @@ impl ToCss for TextDecorationThickness {
     match self {
       Self::FromFont => dest.write_str("from-font"),
       Self::Length(l) => l.to_css(dest),
+    }
+  }
+}
+
+/// Represents the `text-underline-offset` value, shifting the underline away from
+/// the text. Positive lengths move it further from the text.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub enum TextUnderlineOffset {
+  /// Use the font's default underline position.
+  #[default]
+  Auto,
+  /// Offset by a specific length; percentages resolve against `1em`.
+  Length(Length),
+}
+
+impl TextUnderlineOffset {
+  /// Resolves the offset to pixels, with `auto` yielding `0`.
+  pub fn resolve_px(&self, sizing: &SizingContext) -> f32 {
+    match self {
+      Self::Auto => 0.0,
+      Self::Length(length) => length.to_px(sizing, sizing.font_size),
+    }
+  }
+}
+
+impl MakeComputed for TextUnderlineOffset {
+  fn make_computed(&mut self, sizing: &SizingContext) {
+    if let Self::Length(length) = self {
+      length.make_computed(sizing);
+    }
+  }
+}
+
+impl Animatable for TextUnderlineOffset {
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) {
+    *self = match (*from, *to) {
+      (TextUnderlineOffset::Length(from), TextUnderlineOffset::Length(to)) => {
+        let mut value = from;
+        value.interpolate(&from, &to, progress, sizing, current_color);
+        TextUnderlineOffset::Length(value)
+      }
+      _ if progress >= 0.5 => *to,
+      _ => *from,
+    };
+  }
+}
+
+impl<'i> FromCss<'i> for TextUnderlineOffset {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    if input
+      .try_parse(|input| input.expect_ident_matching("auto"))
+      .is_ok()
+    {
+      return Ok(Self::Auto);
+    }
+
+    Ok(Self::Length(Length::from_css(input)?))
+  }
+
+  const VALID_TOKENS: &'static [CssToken] = &[
+    CssToken::Keyword("auto"),
+    CssToken::Syntax(CssSyntaxKind::Length),
+    CssToken::Syntax(CssSyntaxKind::Percentage),
+  ];
+}
+
+impl ToCss for TextUnderlineOffset {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Auto => dest.write_str("auto"),
+      Self::Length(length) => length.to_css(dest),
     }
   }
 }
@@ -278,7 +358,10 @@ impl<'i> FromCss<'i> for TextDecoration {
     CssToken::Keyword("line-through"),
     CssToken::Keyword("overline"),
     CssToken::Keyword("solid"),
+    CssToken::Keyword("from-font"),
     CssToken::Syntax(CssSyntaxKind::Color),
+    CssToken::Syntax(CssSyntaxKind::Length),
+    CssToken::Syntax(CssSyntaxKind::Percentage),
   ];
 }
 
@@ -356,5 +439,26 @@ mod tests {
   fn test_parse_text_decoration_invalid() {
     let result = TextDecoration::from_str("invalid");
     assert!(result.is_err());
+  }
+
+  #[test]
+  fn test_parse_text_underline_offset_auto() {
+    assert_eq!(
+      TextUnderlineOffset::from_str("auto"),
+      Ok(TextUnderlineOffset::Auto)
+    );
+  }
+
+  #[test]
+  fn test_parse_text_underline_offset_length() {
+    assert_eq!(
+      TextUnderlineOffset::from_str("3px"),
+      Ok(TextUnderlineOffset::Length(Length::Px(3.0)))
+    );
+  }
+
+  #[test]
+  fn test_parse_text_underline_offset_invalid() {
+    assert!(TextUnderlineOffset::from_str("solid").is_err());
   }
 }
