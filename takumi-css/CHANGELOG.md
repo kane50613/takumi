@@ -1,3 +1,22 @@
+## takumi-css@0.2.0-beta.3
+
+### Add CSS `offset-path` support
+
+The path accepts `ray()`, the basic shapes `path()`/`circle()`/`ellipse()`/`polygon()`/`inset()`,
+and a bare `<coord-box>`
+
+`offset-distance`, `offset-rotate`, `offset-anchor`, `offset-position`, and the `offset` shorthand control placement.
+
+`url()` references are not supported.
+
+### Route device-pixel-ratio conversion through one boundary
+
+Device pixels are the canonical unit and `viewport.size` is the source of truth.
+`Viewport` and `SizingContext` now expose `to_device`/`to_css` as the only place
+the ratio is applied, replacing ad-hoc multiplications across `to_px`, `calc()`,
+font-relative collapses, tailwind breakpoints, and image intrinsic sizes.
+Rendered output is unchanged.
+
 ## takumi-css@0.2.0-beta.2
 
 ### Apply `fontFamilies` as the default font
