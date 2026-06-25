@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
+  <g transform="matrix(.555 -.832 .832 .555 52.523 504.94)">
+    <rect x="0" y="0" width="72" height="18" fill="#285adc"/>
+  </g>
+  <g transform="matrix(.698 -.716 .716 .698 147.639 376.062)">
+    <rect x="0" y="0" width="72" height="18" fill="#285ac8"/>
+  </g>
+  <g transform="matrix(.841 -.541 .541 .841 266.005 268.076)">
+    <rect x="0" y="0" width="72" height="18" fill="#285ab4"/>
+  </g>
+  <g transform="matrix(.955 -.297 .297 .955 406.772 191.068)">
+    <rect x="0" y="0" width="72" height="18" fill="#285aa0"/>
+  </g>
+  <rect x="564" y="156" width="72" height="18" fill="#285a8c"/>
+  <g transform="matrix(.955 .297 -.297 .955 724.479 169.68)">
+    <rect x="0" y="0" width="72" height="18" fill="#285a78"/>
+  </g>
+  <g transform="matrix(.841 .541 -.541 .841 873.451 229.11)">
+    <rect x="0" y="0" width="72" height="18" fill="#285a64"/>
+  </g>
+  <g transform="matrix(.698 .716 -.716 .698 1002.11 324.498)">
+    <rect x="0" y="0" width="72" height="18" fill="#285a50"/>
+  </g>
+  <g transform="matrix(.555 .832 -.832 .555 1107.492 445.064)">
+    <rect x="0" y="0" width="72" height="18" fill="#285a3c"/>
+  </g>
+</svg>

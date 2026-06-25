@@ -972,9 +972,11 @@ define_style! {
     translate: SpacePair<Length>,
     transform: Option<Transforms>,
     transform_origin: TransformOrigin,
-    offset_path: Option<BasicShape>,
+    offset_path: Option<OffsetPath>,
     offset_distance: Length,
     offset_rotate: OffsetRotate,
+    offset_anchor: OffsetAnchor,
+    offset_position: OffsetPosition,
     mask_image: Option<BackgroundImages>,
     mask_size: BackgroundSizes,
     mask_position: BackgroundPositions,
@@ -1082,6 +1084,13 @@ define_style! {
     padding_inline_end: LengthDefaultsToZero => (padding_right, padding_left),
   }
   shorthands {
+    offset: OffsetShorthand => [OffsetPosition, OffsetPath, OffsetDistance, OffsetRotate, OffsetAnchor] |value, target| {
+      target.push(StyleDeclaration::offset_position(value.position));
+      target.push(StyleDeclaration::offset_path(value.path));
+      target.push(StyleDeclaration::offset_distance(value.distance));
+      target.push(StyleDeclaration::offset_rotate(value.rotate));
+      target.push(StyleDeclaration::offset_anchor(value.anchor));
+    },
     animation: Animations => [AnimationName, AnimationDuration, AnimationDelay, AnimationTimingFunction, AnimationIterationCount, AnimationDirection, AnimationFillMode, AnimationPlayState] |value, target| {
       target.push(StyleDeclaration::animation_duration(value.iter().map(|animation| animation.duration).collect()));
       target.push(StyleDeclaration::animation_delay(value.iter().map(|animation| animation.delay).collect()));

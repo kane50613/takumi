@@ -751,9 +751,25 @@ fn test_offset_properties_parse_from_css() {
     &ComputedStyle::default(),
   );
 
-  assert!(matches!(style.offset_path, Some(BasicShape::Path(_))));
+  assert!(matches!(
+    style.offset_path,
+    Some(OffsetPath::Shape(BasicShape::Path(_)))
+  ));
   assert_eq!(style.offset_distance, Length::Percentage(25.0));
   assert_eq!(style.offset_rotate, OffsetRotate::Reverse(Angle::new(30.0)));
+}
+
+#[test]
+fn test_offset_shorthand_expands() {
+  let style = inherited_style_from_pairs(
+    [("offset", "ray(45deg closest-side) 10px auto / 100% 0%")],
+    &ComputedStyle::default(),
+  );
+
+  assert!(matches!(style.offset_path, Some(OffsetPath::Ray(_))));
+  assert_eq!(style.offset_distance, Length::Px(10.0));
+  assert_eq!(style.offset_rotate, OffsetRotate::Auto(Angle::zero()));
+  assert!(matches!(style.offset_anchor, OffsetAnchor::Position(_)));
 }
 
 #[test]
@@ -773,7 +789,7 @@ fn test_offset_path_moves_element_onto_path_and_creates_stacking_context() {
     height: 40.0,
   };
 
-  style.offset_path = BasicShape::from_str("path('M 0 0 L 100 0')").ok();
+  style.offset_path = OffsetPath::from_str("path('M 0 0 L 100 0')").ok();
   style.offset_distance = Length::Percentage(50.0);
 
   assert!(style.creates_stacking_context(border_box, &sizing, false));

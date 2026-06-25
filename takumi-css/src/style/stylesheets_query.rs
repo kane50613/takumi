@@ -109,12 +109,41 @@ impl ComputedStyle {
     }
     // CSS Motion Path: the offset transform applies after translate/rotate/scale
     // and before the `transform` property, all within the transform-origin frame.
-    if let Some(shape) = &self.offset_path
-      && let Some((point, tangent)) =
-        sample_offset_path(shape, self.offset_distance, sizing, border_box)
+    // CSS Motion Path resolves ray()/shape geometry against the containing
+    // block. The nearest available proxy is the query-container size, then the
+    // viewport (the initial containing block), then the element's border box.
+    let dpr = sizing.viewport.device_pixel_ratio;
+    let viewport_px = |dimension: Option<u32>| dimension.map(|value| value as f32 * dpr);
+    let reference_box = Size {
+      width: sizing
+        .container_size
+        .width
+        .filter(|width| *width > 0.0)
+        .or_else(|| viewport_px(sizing.viewport.size.width))
+        .unwrap_or(border_box.width),
+      height: sizing
+        .container_size
+        .height
+        .filter(|height| *height > 0.0)
+        .or_else(|| viewport_px(sizing.viewport.size.height))
+        .unwrap_or(border_box.height),
+    };
+    if let Some(path) = &self.offset_path
+      && let Some((point, tangent)) = sample_offset_path(
+        path,
+        self.offset_distance,
+        &self.offset_position,
+        sizing,
+        reference_box,
+      )
     {
       local *= Affine::translation(point.x - origin.x, point.y - origin.y);
       local *= Affine::rotation_radians(self.offset_rotate.resolve(tangent));
+      // offset-anchor: a value other than `auto` re-anchors the box, shifting it
+      // back to transform-origin and then to the anchor point.
+      if let Some(anchor) = self.offset_anchor.resolve(sizing, border_box) {
+        local *= Affine::translation(origin.x - anchor.x, origin.y - anchor.y);
+      }
     }
     if let Some(node_transform) = &self.transform {
       local *= Affine::from_transforms(node_transform.iter(), sizing, border_box);

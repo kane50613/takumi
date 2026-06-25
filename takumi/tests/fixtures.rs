@@ -38,6 +38,8 @@ pub mod style_mix_blend_mode;
 pub mod style_object_fit;
 #[path = "fixtures/style_object_position.rs"]
 pub mod style_object_position;
+#[path = "fixtures/style_offset_path.rs"]
+pub mod style_offset_path;
 #[path = "fixtures/style_opacity.rs"]
 pub mod style_opacity;
 #[path = "fixtures/style_overflow.rs"]
