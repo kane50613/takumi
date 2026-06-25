@@ -102,12 +102,9 @@ impl ComputedStyle {
     if self.scale != SpacePair::default() {
       local *= Affine::scale(self.scale.x.0, self.scale.y.0);
     }
-    // CSS Motion Path: the offset transform applies after translate/rotate/scale
-    // and before the `transform` property, all within the transform-origin frame.
-    // CSS Motion Path resolves ray()/shape geometry against the containing
-    // block, not the element's own box (Blink `GetReferenceBox`). The nearest
-    // available proxy is the query-container size, then the viewport (the
-    // initial containing block), then the element's border box.
+    // offset-path sits after translate/rotate/scale and before `transform`, and
+    // resolves against the containing block (Blink `GetReferenceBox`), proxied
+    // here by the query-container size, then the viewport, then the border box.
     let reference_box = Size {
       width: sizing
         .container_size
@@ -133,8 +130,6 @@ impl ComputedStyle {
     {
       local *= Affine::translation(point.x - origin.x, point.y - origin.y);
       local *= Affine::rotation_radians(self.offset_rotate.resolve(tangent));
-      // offset-anchor: a value other than `auto` re-anchors the box, shifting it
-      // back to transform-origin and then to the anchor point.
       if let Some(anchor) = self.offset_anchor.resolve(sizing, border_box) {
         local *= Affine::translation(origin.x - anchor.x, origin.y - anchor.y);
       }

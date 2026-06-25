@@ -35,8 +35,7 @@ fn root(children: Vec<Node>) -> Node {
   )
 }
 
-// Markers ride a cubic bezier; `offset-rotate: auto` turns each to face the
-// path tangent.
+// Markers ride a cubic bezier, turned to the tangent by `offset-rotate: auto`.
 #[test]
 fn test_offset_path_along_curve() {
   let markers = STOPS
@@ -101,7 +100,7 @@ fn glyph(character: char, index: usize, distance: f32, path: &str, font_size: f3
       ))),
   );
 
-  // The positioned wrapper carries the motion; the glyph rides inside it.
+  // The wrapper carries the motion; the glyph rides inside it.
   Node::container([text]).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
@@ -116,8 +115,7 @@ fn glyph(character: char, index: usize, distance: f32, path: &str, font_size: f3
   )
 }
 
-// Each glyph rides a circle and turns to face the tangent: a rainbow seal that
-// wraps a full ring, bottom letters flipping like a real circular stamp.
+// Glyphs ride a circle, each turned to the tangent: a circular seal.
 #[test]
 fn test_offset_path_circular_text() {
   let ring = "★ TAKUMI ★ MOTION PATH ★ OFFSET ★ ";
@@ -137,8 +135,7 @@ fn test_offset_path_circular_text() {
   run_fixture_test(root(glyphs), "offset_path_circular_text");
 }
 
-// "offset-path" spelled along a flowing wave, every letter banking with the
-// curve's slope.
+// "offset-path" spelled along a wave, each letter banking with the slope.
 #[test]
 fn test_offset_path_wave_text() {
   let wave = "path('M 120 315 C 360 60, 480 570, 720 315 S 1080 60, 1180 315')";

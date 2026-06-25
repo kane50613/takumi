@@ -363,8 +363,7 @@ impl Animatable for OffsetRotate {
     sizing: &SizingContext,
     current_color: Color,
   ) {
-    // Interpolate the angle only when both endpoints share the auto/reverse/fixed
-    // kind; otherwise the property animates discretely (CSS Motion Path L1).
+    // Interpolate the angle only when the auto/reverse/fixed kind matches.
     let same_kind = matches!(
       (from, to),
       (Self::Auto(_), Self::Auto(_))
@@ -746,8 +745,7 @@ pub fn sample_offset_path(
       sizing,
     ),
     OffsetPath::CoordBox(_) => {
-      // Only the element's own border box is available here; other coord boxes
-      // (and the containing-block geometry) fall back to it.
+      // Every coord box falls back to the available border box.
       let rect = kurbo::Rect::new(
         0.0,
         0.0,
@@ -848,8 +846,7 @@ mod tests {
       height: 200.0,
     };
 
-    // Start at center (100, 100); 0deg points up, so a positive distance
-    // decreases y.
+    // Start at center (100, 100); 0deg points up, so distance moves -y.
     let (point, _) = sample_offset_path(
       &path,
       Length::Px(50.0),
