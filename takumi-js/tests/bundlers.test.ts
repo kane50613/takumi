@@ -7,8 +7,10 @@ import { join } from "node:path";
 // `.node` binary must never reach a worker/edge bundle. We bundle a tiny consumer
 // under each condition set and assert which backend got pulled in.
 //
-// Each case runs in its own `bun build` process: Bun.build shares a resolver
-// cache across calls in one process, which bleeds conditions between builds.
+// Each case runs in its own `bun build` process. In-process Bun.build reuses the
+// running process's module resolution, so once another test imports the package
+// at runtime (resolving `#backend` to napi), Bun.build returns that cached backend
+// regardless of `conditions`. A fresh process per case avoids that poisoning.
 // Requires `bun run build` first — `#backend` resolves to ./dist/backend/*. The
 // fixture lives inside the repo so module resolution reaches the workspace.
 
