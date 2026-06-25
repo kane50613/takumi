@@ -189,20 +189,26 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 
 ### Effects & transform
 
-| Property                                    | Values                                                                 |
-| :------------------------------------------ | :--------------------------------------------------------------------- |
-| `boxShadow`                                 | Supported                                                              |
-| `opacity`                                   | Supported                                                              |
-| `filter`                                    | `<filter-function>`                                                    |
-| `backdropFilter`                            | `<filter-function>`                                                    |
-| `mixBlendMode`                              | Supported                                                              |
-| `isolation`                                 | Supported                                                              |
-| `transform`, `rotate`, `scale`, `translate` | 2D only; `transform` accepts functions like `translateX()`, `scaleX()` |
-| `transformOrigin`                           | Supported                                                              |
-| `clipPath`                                  | `<basic-shape>`                                                        |
-| `clipRule`                                  | Supported                                                              |
-| `imageRendering`                            | `auto`, `smooth`, `pixelated`                                          |
-| `strokeLinejoin`                            | `miter`, `round`, `bevel`                                              |
+| Property                                    | Values                                                                                                                        |
+| :------------------------------------------ | :---------------------------------------------------------------------------------------------------------------------------- |
+| `boxShadow`                                 | Supported                                                                                                                     |
+| `opacity`                                   | Supported                                                                                                                     |
+| `filter`                                    | `<filter-function>`                                                                                                           |
+| `backdropFilter`                            | `<filter-function>`                                                                                                           |
+| `mixBlendMode`                              | Supported                                                                                                                     |
+| `isolation`                                 | Supported                                                                                                                     |
+| `transform`, `rotate`, `scale`, `translate` | 2D only; `transform` accepts functions like `translateX()`, `scaleX()`                                                        |
+| `transformOrigin`                           | Supported                                                                                                                     |
+| `clipPath`                                  | `<basic-shape>`                                                                                                               |
+| `clipRule`                                  | Supported                                                                                                                     |
+| `offsetPath`                                | `ray()`, `<basic-shape>` (`path()`, `circle()`, `ellipse()`, `polygon()`, `inset()`), `<coord-box>`; `url()` is not supported |
+| `offsetDistance`                            | `<length-percentage>` (percentage of the path length)                                                                         |
+| `offsetRotate`                              | `auto`, `reverse`, `<angle>`, `auto <angle>`                                                                                  |
+| `offsetAnchor`                              | `auto` (transform-origin) or `<position>`                                                                                     |
+| `offsetPosition`                            | `normal`, `auto`, `<position>`                                                                                                |
+| `offset`                                    | Shorthand for the five `offset-*` longhands                                                                                   |
+| `imageRendering`                            | `auto`, `smooth`, `pixelated`                                                                                                 |
+| `strokeLinejoin`                            | `miter`, `round`, `bevel`                                                                                                     |
 
 ### Animation
 
