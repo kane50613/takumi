@@ -715,18 +715,12 @@ mod tests {
   #[test]
   fn units_agree_in_device_space_at_dpr_2() {
     // sizing(): dpr = 2, viewport.size = (200, 100) device px (= 100x50 css px).
+    // Absolute units cross the dpr boundary; viewport/percentage units already
+    // resolve in device space, so all land in the same 200px-wide frame.
     let sizing = sizing();
 
-    // Absolute CSS-px units cross the dpr boundary; 100 css px == the 200 px
-    // device viewport width.
     assert_near(Length::<true>::Px(100.0).to_px(&sizing, 0.0), 200.0);
-    // Viewport units already resolve in device space — never re-scaled.
     assert_near(Length::<true>::Vw(100.0).to_px(&sizing, 0.0), 200.0);
-    assert_near(
-      Length::<true>::Px(100.0).to_px(&sizing, 0.0),
-      Length::<true>::Vw(100.0).to_px(&sizing, 0.0),
-    );
-    // Percentages resolve against a device-px reference, with no dpr factor.
     assert_near(
       Length::<true>::Percentage(50.0).to_px(&sizing, 200.0),
       100.0,

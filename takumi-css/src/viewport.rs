@@ -73,12 +73,10 @@ impl Viewport {
     }
   }
 
-  /// Converts an author-space CSS-pixel value into device pixels.
-  ///
-  /// Device pixels are the engine's canonical unit: `viewport.size`, layout
-  /// boxes and every value downstream of [`crate::style::Length::to_px`] are
-  /// already device pixels. This is the **only** place the device-pixel ratio is
-  /// multiplied in — never write `value * device_pixel_ratio` elsewhere.
+  /// Converts an author-space CSS-pixel value into device pixels, the engine's
+  /// canonical unit (`viewport.size`, layout boxes and everything downstream of
+  /// [`crate::style::Length::to_px`] are device pixels). The only place the
+  /// device-pixel ratio is multiplied in; never write `value * dpr` elsewhere.
   #[inline]
   pub fn to_device(self, css_px: f32) -> f32 {
     css_px * self.effective_dpr()

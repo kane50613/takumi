@@ -314,8 +314,8 @@ impl ToCss for OffsetPosition {
   }
 }
 
-/// Represents the CSS `offset-rotate` property: the rotation applied to an
-/// element as it travels along its `offset-path`.
+/// The CSS `offset-rotate` property: rotation applied as the element travels
+/// along its `offset-path`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OffsetRotate {
   /// `auto [<angle>]`: face the direction of the path, plus an optional offset.

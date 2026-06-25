@@ -33,8 +33,8 @@ pub struct SizingContext {
 }
 
 impl SizingContext {
-  /// Converts an author-space CSS-pixel value into device pixels.
-  /// Delegates to [`crate::Viewport::to_device`] — the single dpr boundary.
+  /// Converts an author-space CSS-pixel value into device pixels via
+  /// [`crate::Viewport::to_device`], the single dpr boundary.
   #[inline]
   pub fn to_device(&self, css_px: f32) -> f32 {
     self.viewport.to_device(css_px)

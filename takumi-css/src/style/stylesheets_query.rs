@@ -107,7 +107,7 @@ impl ComputedStyle {
     // CSS Motion Path resolves ray()/shape geometry against the containing
     // block. The nearest available proxy is the query-container size, then the
     // viewport (the initial containing block), then the element's border box.
-    // All of these are already device pixels — never apply the dpr here.
+    // All are already device pixels, so the dpr is never applied here.
     let reference_box = Size {
       width: sizing
         .container_size
