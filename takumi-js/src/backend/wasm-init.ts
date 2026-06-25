@@ -7,10 +7,7 @@ import type { Backend, BackendModule } from "./types";
  * `@takumi-rs/wasm` guards against double init, so a binary already loaded by
  * `@takumi-rs/wasm/auto` (e.g. on Deno) makes this a no-op.
  */
-export async function initWasm(
-  fallback: BackendModule,
-  module: BackendModule | undefined,
-): Promise<Backend> {
+export async function initWasm(module?: BackendModule, fallback?: BackendModule): Promise<Backend> {
   const source = module ?? fallback;
   const resolved = typeof source === "function" ? await source() : await source;
   const input =
