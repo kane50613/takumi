@@ -1,6 +1,7 @@
 use std::{collections::HashMap, rc::Rc, str::FromStr};
 
 use cssparser::{Parser, ParserInput};
+use parley::FontFeature;
 use serde_json::{from_value, json};
 use taffy::Size;
 
@@ -82,6 +83,81 @@ fn test_deserialize_numeric_opacity_preserves_fraction() -> Result<(), serde_jso
 
   assert_eq!(computed.opacity, PercentageNumber(0.3));
   Ok(())
+}
+
+fn feature_tags(features: &[FontFeature]) -> Vec<(String, u16)> {
+  features
+    .iter()
+    .map(|feature| {
+      (
+        String::from_utf8_lossy(&feature.tag.to_bytes()).into_owned(),
+        feature.value,
+      )
+    })
+    .collect()
+}
+
+#[test]
+fn font_variant_longhands_expand_to_features() {
+  let style = inherited_style_from_pairs(
+    [
+      ("font-variant-numeric", "tabular-nums ordinal"),
+      ("font-variant-caps", "all-small-caps"),
+      ("font-variant-east-asian", "traditional ruby"),
+      ("font-variant-position", "super"),
+    ],
+    &ComputedStyle::default(),
+  );
+
+  assert_eq!(
+    feature_tags(&style.resolved_font_features()),
+    vec![
+      ("tnum".into(), 1),
+      ("ordn".into(), 1),
+      ("trad".into(), 1),
+      ("ruby".into(), 1),
+      ("c2sc".into(), 1),
+      ("smcp".into(), 1),
+      ("sups".into(), 1),
+    ],
+  );
+}
+
+#[test]
+fn font_variant_ligatures_none_disables_defaults() {
+  let style = inherited_style_from_pairs(
+    [("font-variant-ligatures", "none")],
+    &ComputedStyle::default(),
+  );
+
+  assert_eq!(
+    feature_tags(&style.resolved_font_features()),
+    vec![
+      ("liga".into(), 0),
+      ("clig".into(), 0),
+      ("dlig".into(), 0),
+      ("hlig".into(), 0),
+      ("calt".into(), 0),
+    ],
+  );
+}
+
+#[test]
+fn font_variant_shorthand_distributes_and_settings_win() {
+  let style = inherited_style_from_pairs(
+    [
+      ("font-variant", "common-ligatures tabular-nums small-caps"),
+      // explicit feature-settings is appended last so it overrides the variant tag
+      ("font-feature-settings", "\"tnum\" 0"),
+    ],
+    &ComputedStyle::default(),
+  );
+
+  let tags = feature_tags(&style.resolved_font_features());
+  assert_eq!(tags.first(), Some(&("liga".to_string(), 1)));
+  assert!(tags.contains(&("smcp".to_string(), 1)));
+  // both tnum entries present; the last (settings) wins under swash's last-tag semantics
+  assert_eq!(tags.last(), Some(&("tnum".to_string(), 0)));
 }
 
 #[test]

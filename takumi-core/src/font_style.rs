@@ -122,7 +122,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
       font_variations: FontVariations::List(Cow::Borrowed(
         style.parent.font_variation_settings.as_ref(),
       )),
-      font_features: FontFeatures::List(Cow::Borrowed(style.parent.font_feature_settings.as_ref())),
+      font_features: FontFeatures::List(style.parent.resolved_font_features()),
       font_family: style.font_family.to_parley(),
       letter_spacing: style.letter_spacing,
       word_spacing: style.word_spacing,

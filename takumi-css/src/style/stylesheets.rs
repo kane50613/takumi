@@ -1041,6 +1041,11 @@ define_style! {
     font_weight: FontWeight where inherit = true,
     font_variation_settings: FontVariationSettings where inherit = true,
     font_feature_settings: FontFeatureSettings where inherit = true,
+    font_variant_ligatures: FontVariantLigatures where inherit = true,
+    font_variant_numeric: FontVariantNumeric where inherit = true,
+    font_variant_east_asian: FontVariantEastAsian where inherit = true,
+    font_variant_caps: FontVariantCaps where inherit = true,
+    font_variant_position: FontVariantPosition where inherit = true,
     font_synthesis_weight: FontSynthesic where inherit = true,
     font_synthesis_style: FontSynthesic where inherit = true,
     max_lines: Option<u32>,
@@ -1354,6 +1359,13 @@ define_style! {
     font_synthesis: FontSynthesis => [FontSynthesisWeight, FontSynthesisStyle] |value, target| {
       target.push(StyleDeclaration::font_synthesis_weight(value.weight));
       target.push(StyleDeclaration::font_synthesis_style(value.style));
+    },
+    font_variant: FontVariant => [FontVariantLigatures, FontVariantNumeric, FontVariantEastAsian, FontVariantCaps, FontVariantPosition] |value, target| {
+      target.push(StyleDeclaration::font_variant_ligatures(value.ligatures));
+      target.push(StyleDeclaration::font_variant_numeric(value.numeric));
+      target.push(StyleDeclaration::font_variant_east_asian(value.east_asian));
+      target.push(StyleDeclaration::font_variant_caps(value.caps));
+      target.push(StyleDeclaration::font_variant_position(value.position));
     },
     webkit_text_stroke: Option<TextStroke> => [WebkitTextStrokeWidth, WebkitTextStrokeColor] |value, target| {
       target.push(StyleDeclaration::webkit_text_stroke_width(

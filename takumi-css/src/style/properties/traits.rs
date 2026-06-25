@@ -194,6 +194,7 @@ impl CssDescriptorKind {
 }
 
 /// Enum representing CSS tokens.
+#[derive(Clone, Copy)]
 #[non_exhaustive]
 pub enum CssToken {
   /// A CSS keyword.
@@ -202,6 +203,36 @@ pub enum CssToken {
   Syntax(CssSyntaxKind),
   /// A reusable CSS descriptor backed by a compact enum table.
   Descriptor(CssDescriptorKind),
+}
+
+impl CssToken {
+  /// Total length of `lists` flattened, for sizing the [`Self::merge_lists`] array.
+  pub(crate) const fn merged_len(lists: &[&[CssToken]]) -> usize {
+    let (mut len, mut list) = (0, 0);
+    while list < lists.len() {
+      len += lists[list].len();
+      list += 1;
+    }
+    len
+  }
+
+  /// Concatenates token lists into a single array, e.g. to build a shorthand's
+  /// `VALID_TOKENS` from its longhands'. `N` must be [`Self::merged_len`].
+  pub(crate) const fn merge_lists<const N: usize>(lists: &[&[CssToken]]) -> [CssToken; N] {
+    let mut merged = [CssToken::Keyword(""); N];
+    let (mut index, mut list) = (0, 0);
+    while list < lists.len() {
+      let tokens = lists[list];
+      let mut token = 0;
+      while token < tokens.len() {
+        merged[index] = tokens[token];
+        index += 1;
+        token += 1;
+      }
+      list += 1;
+    }
+    merged
+  }
 }
 
 impl std::fmt::Display for CssToken {
