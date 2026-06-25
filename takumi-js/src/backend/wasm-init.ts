@@ -14,7 +14,7 @@ export async function initWasm(
   const source = module ?? fallback;
   const resolved = typeof source === "function" ? await source() : await source;
   const input =
-    resolved !== undefined && typeof resolved === "object" && "default" in resolved
+    resolved !== null && typeof resolved === "object" && "default" in resolved
       ? resolved.default
       : resolved;
 
