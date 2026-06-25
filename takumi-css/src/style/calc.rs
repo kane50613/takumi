@@ -170,8 +170,18 @@ impl CalcFormula {
     let container_min = container_width.min(container_height);
     let container_max = container_width.max(container_height);
 
+    // Absolute units are authored in CSS px and cross the dpr boundary once;
+    // every relative unit already resolves against a device-pixel basis.
+    let absolute_css = self.px
+      + self.cm * ONE_CM_IN_PX
+      + self.mm * ONE_MM_IN_PX
+      + self.inch * ONE_IN_PX
+      + self.q * ONE_Q_IN_PX
+      + self.pt * ONE_PT_IN_PX
+      + self.pc * ONE_PC_IN_PX;
+
     CalcLinear {
-      px: self.px * sizing.viewport.device_pixel_ratio
+      px: sizing.to_device(absolute_css)
         + self.rem * sizing.rem_basis()
         + self.em * sizing.font_size
         + self.lh * sizing.line_height
@@ -183,13 +193,7 @@ impl CalcFormula {
         + self.cqmin * container_min / 100.0
         + self.cqmax * container_max / 100.0
         + self.vmin * viewport_min / 100.0
-        + self.vmax * viewport_max / 100.0
-        + self.cm * ONE_CM_IN_PX * sizing.viewport.device_pixel_ratio
-        + self.mm * ONE_MM_IN_PX * sizing.viewport.device_pixel_ratio
-        + self.inch * ONE_IN_PX * sizing.viewport.device_pixel_ratio
-        + self.q * ONE_Q_IN_PX * sizing.viewport.device_pixel_ratio
-        + self.pt * ONE_PT_IN_PX * sizing.viewport.device_pixel_ratio
-        + self.pc * ONE_PC_IN_PX * sizing.viewport.device_pixel_ratio,
+        + self.vmax * viewport_max / 100.0,
       percent: self.percent,
     }
   }

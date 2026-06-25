@@ -463,9 +463,8 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
   pub fn to_px(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
     let value = self.to_px_pre_dpr(sizing, percentage_full_px);
 
-    // Only absolute units carry a device-pixel-ratio factor.
-    let dpr = sizing.viewport.device_pixel_ratio;
-    let dpr = if dpr > 0.0 { dpr } else { 1.0 };
+    // Only absolute units carry a device-pixel-ratio factor; relative units
+    // already resolve against device-pixel bases.
     let value = match self {
       Length::Px(_)
       | Length::Cm(_)
@@ -473,7 +472,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
       | Length::In(_)
       | Length::Q(_)
       | Length::Pt(_)
-      | Length::Pc(_) => value * dpr,
+      | Length::Pc(_) => sizing.to_device(value),
       _ => value,
     };
 
@@ -493,36 +492,20 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
 
 impl<const DEFAULT_AUTO: bool> MakeComputed for Length<DEFAULT_AUTO> {
   fn make_computed(&mut self, sizing: &SizingContext) {
+    // These collapse a device-pixel computed value back into a CSS-px `Px`
+    // (which `to_px` will later scale by the dpr), so divide the ratio out here.
     if let Self::Em(em) = *self {
-      let dpr = sizing.viewport.device_pixel_ratio;
-      let font_size = if dpr > 0.0 {
-        sizing.font_size / dpr
-      } else {
-        sizing.font_size
-      };
-
-      *self = Self::Px(em * font_size);
+      *self = Self::Px(em * sizing.to_css(sizing.font_size));
       return;
     }
 
     if let Self::Lh(lh) = *self {
-      let dpr = sizing.viewport.device_pixel_ratio;
-      let line_height = if dpr > 0.0 {
-        sizing.line_height / dpr
-      } else {
-        sizing.line_height
-      };
-
-      *self = Self::Px(lh * line_height);
+      *self = Self::Px(lh * sizing.to_css(sizing.line_height));
       return;
     }
 
     if let Self::Rlh(rlh) = *self {
-      let dpr = sizing.viewport.device_pixel_ratio;
-      let basis = sizing.root_line_height_basis();
-      let line_height = if dpr > 0.0 { basis / dpr } else { basis };
-
-      *self = Self::Px(rlh * line_height);
+      *self = Self::Px(rlh * sizing.to_css(sizing.root_line_height_basis()));
       return;
     }
 
@@ -530,12 +513,7 @@ impl<const DEFAULT_AUTO: bool> MakeComputed for Length<DEFAULT_AUTO> {
       let linear = formula.resolve(sizing);
 
       if is_near_zero(linear.percent) {
-        let dpr = sizing.viewport.device_pixel_ratio;
-        *self = Self::Px(if dpr > 0.0 {
-          linear.px / dpr
-        } else {
-          linear.px
-        });
+        *self = Self::Px(sizing.to_css(linear.px));
         return;
       }
 
@@ -732,6 +710,29 @@ mod tests {
       ..Default::default()
     });
     assert_near(value.to_px(&sizing, 0.0), 32.0);
+  }
+
+  #[test]
+  fn units_agree_in_device_space_at_dpr_2() {
+    // sizing(): dpr = 2, viewport.size = (200, 100) device px (= 100x50 css px).
+    let sizing = sizing();
+
+    // Absolute CSS-px units cross the dpr boundary; 100 css px == the 200 px
+    // device viewport width.
+    assert_near(Length::<true>::Px(100.0).to_px(&sizing, 0.0), 200.0);
+    // Viewport units already resolve in device space — never re-scaled.
+    assert_near(Length::<true>::Vw(100.0).to_px(&sizing, 0.0), 200.0);
+    assert_near(
+      Length::<true>::Px(100.0).to_px(&sizing, 0.0),
+      Length::<true>::Vw(100.0).to_px(&sizing, 0.0),
+    );
+    // Percentages resolve against a device-px reference, with no dpr factor.
+    assert_near(
+      Length::<true>::Percentage(50.0).to_px(&sizing, 200.0),
+      100.0,
+    );
+    // 1in = 96 css px -> 192 device px.
+    assert_near(Length::<true>::In(1.0).to_px(&sizing, 0.0), 192.0);
   }
 
   #[test]

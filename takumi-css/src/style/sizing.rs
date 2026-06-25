@@ -14,7 +14,7 @@ pub struct SizingContext {
   #[builder(default)]
   pub container_size: Size<Option<f32>>,
   /// The font size in pixels.
-  #[builder(default = viewport.font_size * viewport.device_pixel_ratio)]
+  #[builder(default = viewport.to_device(viewport.font_size))]
   pub font_size: f32,
   /// Computed `font-size` of the root element in device pixels. `None` before
   /// the root has been resolved; readers should fall back to `viewport.font_size`.
@@ -22,7 +22,7 @@ pub struct SizingContext {
   #[builder(default)]
   pub root_font_size: Option<f32>,
   /// Pixel basis for the `lh` unit.
-  #[builder(default = viewport.font_size * viewport.device_pixel_ratio)]
+  #[builder(default = viewport.to_device(viewport.font_size))]
   pub line_height: f32,
   /// Pixel basis for the `rlh` unit; `None` before root is resolved.
   #[builder(default)]
@@ -33,11 +33,24 @@ pub struct SizingContext {
 }
 
 impl SizingContext {
+  /// Converts an author-space CSS-pixel value into device pixels.
+  /// Delegates to [`crate::Viewport::to_device`] — the single dpr boundary.
+  #[inline]
+  pub fn to_device(&self, css_px: f32) -> f32 {
+    self.viewport.to_device(css_px)
+  }
+
+  /// Converts a device-pixel value back into author-space CSS pixels.
+  #[inline]
+  pub fn to_css(&self, device_px: f32) -> f32 {
+    self.viewport.to_css(device_px)
+  }
+
   /// Device-pixel basis for the `rem` unit.
   pub fn rem_basis(&self) -> f32 {
     self
       .root_font_size
-      .unwrap_or(self.viewport.font_size * self.viewport.device_pixel_ratio)
+      .unwrap_or(self.to_device(self.viewport.font_size))
   }
 
   /// Device-pixel basis for the `rlh` unit.

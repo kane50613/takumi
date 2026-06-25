@@ -10,12 +10,7 @@ impl ComputedStyle {
   pub fn make_computed(&mut self, sizing: &SizingContext) {
     // `font-size` computed value is already resolved in `sizing.font_size`.
     // Keep it as css-px in style to avoid re-resolving descendant inheritance.
-    let dpr = sizing.viewport.device_pixel_ratio;
-    self.font_size = if dpr > 0.0 {
-      FontSize::Length(Length::Px(sizing.font_size / dpr))
-    } else {
-      FontSize::Length(Length::Px(sizing.font_size))
-    };
+    self.font_size = FontSize::Length(Length::Px(sizing.to_css(sizing.font_size)));
 
     self.make_computed_values(sizing);
 
@@ -112,20 +107,19 @@ impl ComputedStyle {
     // CSS Motion Path resolves ray()/shape geometry against the containing
     // block. The nearest available proxy is the query-container size, then the
     // viewport (the initial containing block), then the element's border box.
-    let dpr = sizing.viewport.device_pixel_ratio;
-    let viewport_px = |dimension: Option<u32>| dimension.map(|value| value as f32 * dpr);
+    // All of these are already device pixels — never apply the dpr here.
     let reference_box = Size {
       width: sizing
         .container_size
         .width
         .filter(|width| *width > 0.0)
-        .or_else(|| viewport_px(sizing.viewport.size.width))
+        .or_else(|| sizing.viewport.size.width.map(|width| width as f32))
         .unwrap_or(border_box.width),
       height: sizing
         .container_size
         .height
         .filter(|height| *height > 0.0)
-        .or_else(|| viewport_px(sizing.viewport.size.height))
+        .or_else(|| sizing.viewport.size.height.map(|height| height as f32))
         .unwrap_or(border_box.height),
     };
     if let Some(path) = &self.offset_path

@@ -97,7 +97,7 @@ pub(crate) fn measure_image_node(
     },
     (None, None) => intrinsic_size,
   }
-  .map(|value| value * context.sizing.viewport.device_pixel_ratio);
+  .map(|value| context.sizing.to_device(value));
 
   let style_known_dimensions = Size {
     width: resolve_style_size_axis(style.size.width, available_space.width, context),

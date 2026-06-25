@@ -400,27 +400,29 @@ impl ImageSource {
       }
     };
 
-    let dpr = sizing.viewport.device_pixel_ratio;
-    (width * dpr, height * dpr)
+    (sizing.to_device(width), sizing.to_device(height))
   }
 
   /// Intrinsic sizing for `background-size`/`mask-size` (§5.3). Bitmaps and GIFs
   /// have both dimensions; an SVG may have only a `viewBox` ratio.
   pub fn intrinsic_sizing(&self, sizing: &SizingContext) -> IntrinsicSizing {
-    let dpr = sizing.viewport.device_pixel_ratio;
     match self {
       #[cfg(feature = "svg")]
       ImageSource::Svg(svg) => IntrinsicSizing {
-        width: svg.intrinsic.width.map(|width| width * dpr),
-        height: svg.intrinsic.height.map(|height| height * dpr),
+        width: svg.intrinsic.width.map(|width| sizing.to_device(width)),
+        height: svg.intrinsic.height.map(|height| sizing.to_device(height)),
         ratio: svg.intrinsic.ratio,
       },
-      ImageSource::Bitmap(bitmap) => {
-        IntrinsicSizing::from_dimensions(bitmap.width() as f32 * dpr, bitmap.height() as f32 * dpr)
-      }
+      ImageSource::Bitmap(bitmap) => IntrinsicSizing::from_dimensions(
+        sizing.to_device(bitmap.width() as f32),
+        sizing.to_device(bitmap.height() as f32),
+      ),
       ImageSource::Gif(gif) => {
         let frame = &gif.frames[0].buffer;
-        IntrinsicSizing::from_dimensions(frame.width() as f32 * dpr, frame.height() as f32 * dpr)
+        IntrinsicSizing::from_dimensions(
+          sizing.to_device(frame.width() as f32),
+          sizing.to_device(frame.height() as f32),
+        )
       }
     }
   }

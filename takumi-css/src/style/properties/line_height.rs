@@ -106,12 +106,7 @@ impl MakeComputed for LineHeight {
   fn make_computed(&mut self, sizing: &SizingContext) {
     match self {
       Self::Length(Length::Percentage(value)) => {
-        let dpr = sizing.viewport.device_pixel_ratio;
-        let font_size = if dpr > 0.0 {
-          sizing.font_size / dpr
-        } else {
-          sizing.font_size
-        };
+        let font_size = sizing.to_css(sizing.font_size);
 
         *self = Self::Length(Length::Px((*value / 100.0) * font_size));
       }
