@@ -5,9 +5,12 @@ use cssparser::Parser;
 use kurbo::{BezPath, ParamCurve, ParamCurveArclen, PathEl, PathSeg, Shape};
 use taffy::{Point, Size};
 
-use crate::style::{
-  Angle, Animatable, BasicShape, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed,
-  ParseResult, ShapePosition, ShapeRadius, SizingContext, ToCss,
+use crate::{
+  declare_enum_from_css_impl,
+  style::{
+    Angle, Animatable, BasicShape, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed,
+    ParseResult, ShapePosition, ShapeRadius, SizingContext, ToCss,
+  },
 };
 
 /// Flattening tolerance (CSS px) for arc-length integration and shape sampling.
@@ -124,7 +127,7 @@ pub enum CoordBox {
   ViewBox,
 }
 
-crate::style::properties::declare_enum_from_css_impl!(
+declare_enum_from_css_impl!(
   CoordBox,
   "content-box" => CoordBox::ContentBox,
   "padding-box" => CoordBox::PaddingBox,

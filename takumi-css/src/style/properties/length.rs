@@ -492,8 +492,6 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
 
 impl<const DEFAULT_AUTO: bool> MakeComputed for Length<DEFAULT_AUTO> {
   fn make_computed(&mut self, sizing: &SizingContext) {
-    // These collapse a device-pixel computed value back into a CSS-px `Px`
-    // (which `to_px` will later scale by the dpr), so divide the ratio out here.
     if let Self::Em(em) = *self {
       *self = Self::Px(em * sizing.to_css(sizing.font_size));
       return;

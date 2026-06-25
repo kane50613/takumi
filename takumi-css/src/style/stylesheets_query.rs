@@ -105,9 +105,9 @@ impl ComputedStyle {
     // CSS Motion Path: the offset transform applies after translate/rotate/scale
     // and before the `transform` property, all within the transform-origin frame.
     // CSS Motion Path resolves ray()/shape geometry against the containing
-    // block. The nearest available proxy is the query-container size, then the
-    // viewport (the initial containing block), then the element's border box.
-    // All are already device pixels, so the dpr is never applied here.
+    // block, not the element's own box (Blink `GetReferenceBox`). The nearest
+    // available proxy is the query-container size, then the viewport (the
+    // initial containing block), then the element's border box.
     let reference_box = Size {
       width: sizing
         .container_size
