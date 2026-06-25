@@ -142,6 +142,7 @@ impl<'i> FromCss<'i> for TextDecorationThickness {
   const VALID_TOKENS: &'static [CssToken] = &[
     CssToken::Keyword("from-font"),
     CssToken::Syntax(CssSyntaxKind::Length),
+    CssToken::Syntax(CssSyntaxKind::Percentage),
   ];
 }
 
@@ -357,7 +358,10 @@ impl<'i> FromCss<'i> for TextDecoration {
     CssToken::Keyword("line-through"),
     CssToken::Keyword("overline"),
     CssToken::Keyword("solid"),
+    CssToken::Keyword("from-font"),
     CssToken::Syntax(CssSyntaxKind::Color),
+    CssToken::Syntax(CssSyntaxKind::Length),
+    CssToken::Syntax(CssSyntaxKind::Percentage),
   ];
 }
 
