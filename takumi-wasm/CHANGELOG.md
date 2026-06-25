@@ -1,3 +1,11 @@
+## @takumi-rs/wasm@2.0.0-beta.10 (beta)
+
+### Resolve `edge-light` in the `/auto` export
+
+`@takumi-rs/wasm/auto` now maps the `edge-light` condition (Next.js / Vercel
+Edge) to the `?module` loader, so edge bundlers get the binary form they need
+instead of falling through to the Vite `?url` loader.
+
 ## @takumi-rs/wasm@2.0.0-beta.9 (beta)
 
 ### Fix the Node bundler entries for ESM and CJS
