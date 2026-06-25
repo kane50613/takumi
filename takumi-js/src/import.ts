@@ -1,21 +1,24 @@
 import { loadBackend } from "#backend";
-import type { BackendModule } from "./backend/types";
+import type { BackendModule, LoadBackend } from "./backend/types";
 
 type Imports = Awaited<ReturnType<typeof loadBackend>>;
 
 let importPromise: Promise<Imports> | null = null;
 
 /**
- * Resolves the rendering backend once and caches it. Which backend loads is
- * decided by the package's `#backend` import conditions, so the bundler (or
- * runtime) picks napi on Node/Bun and WASM everywhere else — no native binary
- * ever reaches a worker/edge bundle, and no runtime sniffing is needed.
- *
- * The first call's `module` wins; a failed load clears the cache so a later
- * call can retry (e.g. after a transient WASM init error).
+ * Resolves the rendering backend once and caches it. With no `module`, the
+ * `#backend` import conditions pick it (napi on Node/Bun, WASM elsewhere). An
+ * explicit `module` is a WASM binary, so it forces WASM — the escape hatch for a
+ * Node target that can't load the native addon. A failed load clears the cache.
  */
 export function getImports(module?: BackendModule): Promise<Imports> {
-  importPromise ??= loadBackend(module).catch((error) => {
+  importPromise ??= (
+    module === undefined
+      ? loadBackend()
+      : import("./backend/wasm").then((wasm: { loadBackend: LoadBackend }) =>
+          wasm.loadBackend(module),
+        )
+  ).catch((error) => {
     importPromise = null;
 
     throw error;

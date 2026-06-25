@@ -25,7 +25,7 @@ function listFiles(dir: string): string[] {
 }
 
 describe("waku-ssr integration", () => {
-  test("build resolves the napi backend and keeps WASM out of the node bundle", () => {
+  test("build resolves the napi backend for the node target", () => {
     runBunBuild();
 
     expect(existsSync(DIST_SERVER_DIR)).toBe(true);
@@ -35,10 +35,8 @@ describe("waku-ssr integration", () => {
     );
     const allContent = files.map((file) => readFileSync(file, "utf8")).join("\n");
 
-    // `#backend` resolves the node target to napi; the WASM backend never enters
-    // the bundle. The native addon is dynamically imported so it stays external
-    // and its `.node` binary loads from node_modules (a bundled copy would break).
+    // `#backend` resolves the node target to napi, dynamically imported so the
+    // native addon stays external and its `.node` binary loads from node_modules.
     expect(allContent).toContain("@takumi-rs/core");
-    expect(allContent).not.toContain("@takumi-rs/wasm");
   }, 60_000);
 });
