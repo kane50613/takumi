@@ -302,6 +302,49 @@ impl TailwindPropertyParser for BackgroundClip {
   }
 }
 
+/// Defines the positioning area that `background-position` and `background-size`
+/// resolve against.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub enum BackgroundOrigin {
+  /// Position against the border box.
+  BorderBox,
+  /// Position against the padding box.
+  #[default]
+  PaddingBox,
+  /// Position against the content box.
+  ContentBox,
+}
+
+declare_enum_from_css_impl!(
+  BackgroundOrigin,
+  "border-box" => BackgroundOrigin::BorderBox,
+  "padding-box" => BackgroundOrigin::PaddingBox,
+  "content-box" => BackgroundOrigin::ContentBox
+);
+
+impl TailwindPropertyParser for BackgroundOrigin {
+  fn parse_tw(token: &str) -> Option<Self> {
+    match_ignore_ascii_case! {token,
+      "border" => Some(BackgroundOrigin::BorderBox),
+      "padding" => Some(BackgroundOrigin::PaddingBox),
+      "content" => Some(BackgroundOrigin::ContentBox),
+      _ => None,
+    }
+  }
+}
+
+impl From<BackgroundClip> for Option<BackgroundOrigin> {
+  fn from(clip: BackgroundClip) -> Self {
+    match clip {
+      BackgroundClip::BorderBox => Some(BackgroundOrigin::BorderBox),
+      BackgroundClip::PaddingBox => Some(BackgroundOrigin::PaddingBox),
+      BackgroundClip::ContentBox => Some(BackgroundOrigin::ContentBox),
+      BackgroundClip::Text | BackgroundClip::BorderArea => None,
+    }
+  }
+}
+
 /// Represents the CSS `border-radius` property, supporting elliptical corners.
 ///
 /// Each corner has independent horizontal and vertical radii, allowing for both circular and elliptical shapes.

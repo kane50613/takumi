@@ -13,9 +13,9 @@ use takumi_core::{
     inline::{InlineBoxItem, VisualInlineBox},
     node::{ImageData, Node, NodeKind},
     style::{
-      Affine, BackgroundClip, BackgroundImage, BasicShape, BlendMode, BorderStyle, Color,
-      ComputedStyle, FillRule, Isolation, Length, Overflow, ShapeRadius, Sides, SizingContext,
-      SpacePair, StyleSheet, ToCss,
+      Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BasicShape, BlendMode,
+      BorderStyle, Color, ComputedStyle, FillRule, Isolation, Length, Overflow, ShapeRadius, Sides,
+      SizingContext, SpacePair, StyleSheet, ToCss,
     },
     tree::{LayoutTree, RenderNode},
   },
@@ -243,6 +243,37 @@ pub(crate) fn emit_box_chrome(
   })
 }
 
+/// The `background-origin` positioning area as an absolute frame within the box.
+fn background_origin_frame(
+  origin: BackgroundOrigin,
+  layout: &taffy::Layout,
+  x: f32,
+  y: f32,
+) -> Frame {
+  let b = layout.border;
+  let p = layout.padding;
+  let frame = |left: f32, right: f32, top: f32, bottom: f32| {
+    Frame::new(
+      x + left,
+      y + top,
+      (layout.size.width - left - right).max(0.0),
+      (layout.size.height - top - bottom).max(0.0),
+    )
+  };
+
+  match origin {
+    BackgroundOrigin::BorderBox => Frame::new(x, y, layout.size.width, layout.size.height),
+    BackgroundOrigin::PaddingBox => frame(b.left, b.right, b.top, b.bottom),
+    BackgroundOrigin::ContentBox => frame(
+      b.left + p.left,
+      b.right + p.right,
+      b.top + p.top,
+      b.bottom + p.bottom,
+    ),
+    _ => Frame::new(x, y, layout.size.width, layout.size.height),
+  }
+}
+
 /// Emits the element's background (color then image layers) clipped to the region
 /// selected by `background-clip`. Mirrors the raster backend's `draw_background`.
 /// `background-clip: text` is suppressed here and painted by the text path.
@@ -285,8 +316,10 @@ pub(crate) fn emit_background(
     doc.rect(x, y, width, height, Rgba(background.0))?;
   }
   if let Some(images) = style.background_image.as_deref() {
-    LayerEmitter::new(&node.context, doc)
-      .background_images(images, Frame::new(x, y, width, height))?;
+    LayerEmitter::new(&node.context, doc).background_images(
+      images,
+      background_origin_frame(style.background_origin, layout, x, y),
+    )?;
   }
   if let Some(group) = bg_group {
     doc.end_group(group)?;

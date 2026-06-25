@@ -113,7 +113,7 @@ pub(crate) fn draw_background(
 
   match context.style.background_clip {
     BackgroundClip::BorderBox => {
-      let layers = collect_background_layers(context, layout.size, &mut canvas.buffer_pool)?;
+      let layers = collect_background_layers(context, layout, &mut canvas.buffer_pool)?;
 
       if border_radius.is_zero() {
         for tile in layers {
@@ -171,7 +171,7 @@ pub(crate) fn draw_background(
     BackgroundClip::PaddingBox => {
       border_radius.inset_by_border_width();
 
-      let layers = collect_background_layers(context, layout.size, &mut canvas.buffer_pool)?;
+      let layers = collect_background_layers(context, layout, &mut canvas.buffer_pool)?;
 
       if let Some(tile) = rasterize_layers(
         layers,
@@ -199,7 +199,7 @@ pub(crate) fn draw_background(
       border_radius.inset_by_border_width();
       border_radius.expand_by(layout.padding.map(|size| -size));
 
-      let layers = collect_background_layers(context, layout.size, &mut canvas.buffer_pool)?;
+      let layers = collect_background_layers(context, layout, &mut canvas.buffer_pool)?;
 
       if let Some(tile) = rasterize_layers(
         layers,
@@ -240,7 +240,7 @@ pub(crate) fn draw_border(
 ) -> Result<()> {
   let clip_image = if context.style.background_clip == BackgroundClip::BorderArea {
     rasterize_layers(
-      collect_background_layers(context, layout.size, &mut canvas.buffer_pool)?,
+      collect_background_layers(context, layout, &mut canvas.buffer_pool)?,
       layout.size.map(|x| x as u32),
       context,
       BorderProperties::default(),

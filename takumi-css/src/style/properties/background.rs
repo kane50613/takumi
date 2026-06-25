@@ -18,6 +18,8 @@ pub struct Background {
   pub repeat: BackgroundRepeat,
   /// Background clip.
   pub clip: BackgroundClip,
+  /// Background origin.
+  pub origin: BackgroundOrigin,
   /// Background blend mode.
   pub blend_mode: BlendMode,
 }
@@ -37,7 +39,9 @@ impl<'i> FromCss<'i> for Background {
     let mut position = None;
     let mut size = None;
     let mut repeat = None;
+    let mut origin = None;
     let mut clip = None;
+    let mut box_count = 0u8;
     let mut blend_mode = None;
 
     while !input.is_exhausted() && !next_is_comma(input) {
@@ -81,11 +85,16 @@ impl<'i> FromCss<'i> for Background {
         continue;
       }
 
-      // Try to parse background-clip
-      if clip.is_none()
+      // A `<box>` value: the first sets origin (and clip), a second overrides
+      // clip only. https://drafts.csswg.org/css-backgrounds/#background
+      if box_count < 2
         && let Ok(value) = input.try_parse(BackgroundClip::from_css)
       {
+        if box_count == 0 {
+          origin = Option::<BackgroundOrigin>::from(value);
+        }
         clip = Some(value);
+        box_count += 1;
         continue;
       }
 
@@ -111,6 +120,7 @@ impl<'i> FromCss<'i> for Background {
       size: size.unwrap_or_default(),
       repeat: repeat.unwrap_or_default(),
       clip: clip.unwrap_or_default(),
+      origin: origin.unwrap_or_default(),
       blend_mode: blend_mode.unwrap_or_default(),
     })
   }
@@ -157,13 +167,36 @@ mod tests {
 
   #[test]
   fn test_parse_background_color_and_clip() {
+    // A single `<box>` sets both origin and clip.
     assert_eq!(
       Background::from_str("red border-box"),
       Ok(Background {
         color: Some(ColorInput::Value(Color([255, 0, 0, 255]))),
         clip: BackgroundClip::BorderBox,
+        origin: BackgroundOrigin::BorderBox,
         ..Default::default()
       })
+    );
+  }
+
+  #[test]
+  fn test_parse_background_two_boxes_origin_then_clip() {
+    assert_eq!(
+      Background::from_str("content-box border-box"),
+      Ok(Background {
+        origin: BackgroundOrigin::ContentBox,
+        clip: BackgroundClip::BorderBox,
+        ..Default::default()
+      })
+    );
+  }
+
+  #[test]
+  fn test_parse_background_default_origin_is_padding_box() {
+    assert_eq!(Background::default().origin, BackgroundOrigin::PaddingBox);
+    assert_eq!(
+      Background::from_str("red").unwrap().origin,
+      BackgroundOrigin::PaddingBox
     );
   }
 

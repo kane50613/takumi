@@ -1016,6 +1016,7 @@ define_style! {
     background_blend_mode: BlendModes,
     background_color: ColorDefaultsToTransparent,
     background_clip: BackgroundClip,
+    background_origin: BackgroundOrigin,
     box_shadow: Option<BoxShadows>,
     grid_auto_columns: Option<GridTrackSizes>,
     grid_auto_rows: Option<GridTrackSizes>,
@@ -1320,7 +1321,7 @@ define_style! {
     overflow: SpacePair<Overflow> => [OverflowX, OverflowY] |value, target| {
       push_axis_declarations!(target, value, overflow_x, overflow_y);
     },
-    background: Backgrounds => [BackgroundImage, BackgroundPosition, BackgroundSize, BackgroundRepeat, BackgroundBlendMode, BackgroundColor, BackgroundClip] |value, target| {
+    background: Backgrounds => [BackgroundImage, BackgroundPosition, BackgroundSize, BackgroundRepeat, BackgroundBlendMode, BackgroundColor, BackgroundClip, BackgroundOrigin] |value, target| {
       target.push(StyleDeclaration::background_position(
         value.iter().map(|background| background.position).collect(),
       ));
@@ -1347,6 +1348,12 @@ define_style! {
         value
           .last()
           .map(|background| background.clip)
+          .unwrap_or_default(),
+      ));
+      target.push(StyleDeclaration::background_origin(
+        value
+          .last()
+          .map(|background| background.origin)
           .unwrap_or_default(),
       ));
       target.push(StyleDeclaration::background_image(Some(

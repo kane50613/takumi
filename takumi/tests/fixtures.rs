@@ -24,6 +24,8 @@ pub mod style_backdrop_filter;
 pub mod style_background_clip;
 #[path = "fixtures/style_background_image.rs"]
 pub mod style_background_image;
+#[path = "fixtures/style_background_origin.rs"]
+pub mod style_background_origin;
 #[path = "fixtures/style_clip_path.rs"]
 pub mod style_clip_path;
 #[path = "fixtures/style_filter.rs"]

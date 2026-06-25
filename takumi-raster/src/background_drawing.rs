@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use image::Rgba;
 use smallvec::{SmallVec, smallvec};
-use taffy::Size;
+use taffy::{Layout, Point, Size};
 use tiny_skia::{IntSize, Pixmap, PixmapMut, PremultipliedColorU8};
 
 #[cfg(feature = "svg")]
@@ -760,11 +760,53 @@ pub(crate) fn create_mask(
   )
 }
 
+struct OriginBox {
+  offset: Point<f32>,
+  size: Size<f32>,
+}
+
+fn background_origin_box(origin: BackgroundOrigin, layout: Layout) -> OriginBox {
+  let border = layout.border;
+  let padding = layout.padding;
+  let inset = |left: f32, right: f32, top: f32, bottom: f32| OriginBox {
+    offset: Point { x: left, y: top },
+    size: Size {
+      width: layout.size.width - left - right,
+      height: layout.size.height - top - bottom,
+    },
+  };
+
+  match origin {
+    BackgroundOrigin::BorderBox => OriginBox {
+      offset: Point { x: 0.0, y: 0.0 },
+      size: layout.size,
+    },
+    BackgroundOrigin::PaddingBox => inset(border.left, border.right, border.top, border.bottom),
+    BackgroundOrigin::ContentBox => inset(
+      border.left + padding.left,
+      border.right + padding.right,
+      border.top + padding.top,
+      border.bottom + padding.bottom,
+    ),
+    _ => OriginBox {
+      offset: Point { x: 0.0, y: 0.0 },
+      size: layout.size,
+    },
+  }
+}
+
 pub(crate) fn collect_background_layers(
   context: &RenderContext,
-  border_box: Size<f32>,
+  layout: Layout,
   buffer_pool: &mut BufferPool,
 ) -> Result<TileLayers> {
+  let border_box = layout.size;
+  // `background-origin` sets the positioning area; tiles resolve against it and
+  // are then shifted to its offset within the border box.
+  // ponytail: repeats fill the origin box, not the clip box — a divergence only
+  // when origin and clip differ on a repeating layer.
+  let origin = background_origin_box(context.style.background_origin, layout);
+
   let mut layers = resolve_tile_layers(ResolveTileLayersInput {
     images: context.style.background_image.as_deref().unwrap_or(&[]),
     positions: &context.style.background_position,
@@ -772,9 +814,18 @@ pub(crate) fn collect_background_layers(
     repeats: &context.style.background_repeat,
     blend_modes: &context.style.background_blend_mode,
     context,
-    border_box: border_box.map(|x| x as u32),
+    border_box: origin.size.map(|x| x.max(0.0) as u32),
     buffer_pool,
   })?;
+
+  let dx = origin.offset.x as i32;
+  let dy = origin.offset.y as i32;
+  if dx != 0 || dy != 0 {
+    for layer in &mut layers {
+      layer.xs.iter_mut().for_each(|x| *x += dx);
+      layer.ys.iter_mut().for_each(|y| *y += dy);
+    }
+  }
 
   let background_color = context
     .style

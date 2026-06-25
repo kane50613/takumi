@@ -540,6 +540,7 @@ impl_passthrough_animatable!(
   ObjectFit,
   Overflow,
   BackgroundClip,
+  BackgroundOrigin,
   GridAutoFlow,
   GridLine,
   GridTemplateAreas,
