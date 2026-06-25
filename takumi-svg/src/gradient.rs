@@ -67,28 +67,35 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
   pub(crate) fn background_images(
     &mut self,
     images: &[BackgroundImage],
-    frame: Frame,
+    area: Frame,
+    paint: Frame,
   ) -> io::Result<()> {
     self.image_layers(
       images,
       &self.context.style.background_size,
       &self.context.style.background_position,
       &self.context.style.background_repeat,
-      frame,
+      area,
+      paint,
     )
   }
 
   /// Emits a list of background/mask image layers honoring per-layer size/
   /// position/repeat. Shared by `background-image` and `mask-image`.
+  ///
+  /// `area` is the `background-origin` positioning area; `paint` is the painting
+  /// (border) box that `repeat` tiles fill and overflow is clipped to, so origin
+  /// only shifts placement, not the clip — matching the raster backend.
   pub(crate) fn image_layers(
     &mut self,
     images: &[BackgroundImage],
     sizes: &[BackgroundSize],
     positions: &[BackgroundPosition],
     repeats: &[BackgroundRepeat],
-    frame: Frame,
+    area: Frame,
+    paint: Frame,
   ) -> io::Result<()> {
-    if frame.w <= 0.0 || frame.h <= 0.0 {
+    if paint.w <= 0.0 || paint.h <= 0.0 {
       return Ok(());
     }
     let last_size = sizes.last().copied().unwrap_or_default();
@@ -102,7 +109,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       let size = sizes.get(index).copied().unwrap_or(last_size);
       let position = positions.get(index).copied().unwrap_or(last_position);
       let repeat = repeats.get(index).copied().unwrap_or(last_repeat);
-      self.layer(image, size, position, repeat, frame)?;
+      self.layer(image, size, position, repeat, area, paint)?;
     }
     Ok(())
   }
@@ -113,47 +120,42 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     size: BackgroundSize,
     position: BackgroundPosition,
     repeat: BackgroundRepeat,
-    frame: Frame,
+    area: Frame,
+    paint: Frame,
   ) -> io::Result<()> {
-    let Some(placement) = resolve_placement(
-      image,
-      size,
-      position,
-      repeat,
-      self.context,
-      frame.w,
-      frame.h,
-    ) else {
+    let Some(placement) =
+      resolve_placement(image, size, position, repeat, self.context, area, paint)
+    else {
       return Ok(());
     };
     if placement.tile_w <= 0.0 || placement.tile_h <= 0.0 {
       return Ok(());
     }
 
-    // A single tile filling the box at the origin is the common case (no-repeat
-    // or an exact fit); paint it directly. Otherwise tile via a <pattern>.
+    // Tile positions are relative to the painting box, so origin only shifts
+    // placement while the clip stays the painting box.
     if placement.xs.len() == 1 && placement.ys.len() == 1 {
       let tile = Frame::new(
-        frame.x + placement.xs[0],
-        frame.y + placement.ys[0],
+        paint.x + placement.xs[0],
+        paint.y + placement.ys[0],
         placement.tile_w,
         placement.tile_h,
       );
-      // A `cover`/positioned tile can extend past the box; clip it so it does not
-      // bleed outside the element (the raster backend clips background to the box).
-      let overflows = tile.x < frame.x - 1e-3
-        || tile.y < frame.y - 1e-3
-        || tile.x + tile.w > frame.x + frame.w + 1e-3
-        || tile.y + tile.h > frame.y + frame.h + 1e-3;
+      // A `cover`/positioned/origin-shifted tile can extend past the painting box;
+      // clip it so it does not bleed outside the element (matching the raster backend).
+      let overflows = tile.x < paint.x - 1e-3
+        || tile.y < paint.y - 1e-3
+        || tile.x + tile.w > paint.x + paint.w + 1e-3
+        || tile.y + tile.h > paint.y + paint.h + 1e-3;
       if overflows {
-        let token = self.begin_box_clip(frame)?;
+        let token = self.begin_box_clip(paint)?;
         self.tile(image, tile)?;
         return self.doc.end_group(token);
       }
       return self.tile(image, tile);
     }
 
-    self.tiled_pattern(image, frame, &placement)
+    self.tiled_pattern(image, paint, &placement)
   }
 
   /// Opens a group clipped to the layer box so tiles that extend past the edges
@@ -168,7 +170,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
   fn tiled_pattern(
     &mut self,
     image: &BackgroundImage,
-    frame: Frame,
+    paint_box: Frame,
     placement: &LayerPlacement,
   ) -> io::Result<()> {
     // A `<pattern>` repeats on both axes, so only use it when both axes have
@@ -180,8 +182,8 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       && placement.xs.len() > 1
       && placement.ys.len() > 1
     {
-      let origin_x = frame.x + placement.xs[0];
-      let origin_y = frame.y + placement.ys[0];
+      let origin_x = paint_box.x + placement.xs[0];
+      let origin_y = paint_box.y + placement.ys[0];
       let (token, paint) = self.doc.begin_pattern(origin_x, origin_y, step_x, step_y)?;
       self.tile(
         image,
@@ -190,18 +192,18 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       self.doc.end_pattern(token)?;
       return self
         .doc
-        .rect_paint(frame.x, frame.y, frame.w, frame.h, &paint);
+        .rect_paint(paint_box.x, paint_box.y, paint_box.w, paint_box.h, &paint);
     }
 
     // Explicit tile grid, clipped to the box so edge tiles don't bleed outside.
-    let token = self.begin_box_clip(frame)?;
+    let token = self.begin_box_clip(paint_box)?;
     for &ty in &placement.ys {
       for &tx in &placement.xs {
         self.tile(
           image,
           Frame::new(
-            frame.x + tx,
-            frame.y + ty,
+            paint_box.x + tx,
+            paint_box.y + ty,
             placement.tile_w,
             placement.tile_h,
           ),
@@ -403,23 +405,35 @@ fn resolve_placement(
   position: BackgroundPosition,
   repeat: BackgroundRepeat,
   context: &RenderContext,
-  w: f32,
-  h: f32,
+  area: Frame,
+  paint: Frame,
 ) -> Option<LayerPlacement> {
-  let area = Size {
-    width: w.round().max(0.0) as u32,
-    height: h.round().max(0.0) as u32,
+  let area_size = Size {
+    width: area.w.round().max(0.0) as u32,
+    height: area.h.round().max(0.0) as u32,
   };
   let intrinsic = intrinsic_sizing(image, context);
-  let resolved = size.resolve(area, &context.sizing, intrinsic);
+  let resolved = size.resolve(area_size, &context.sizing, intrinsic);
   let tile_w = resolved.width as f32;
   let tile_h = resolved.height as f32;
   if tile_w <= 0.0 || tile_h <= 0.0 {
     return None;
   }
 
-  let (xs, tile_w) = resolve_axis(repeat.0, position.0.x, tile_w, area.width, &context.sizing);
-  let (ys, tile_h) = resolve_axis(repeat.1, position.0.y, tile_h, area.height, &context.sizing);
+  // Positions are relative to the painting box; the positioning area's offset
+  // within it shifts placement.
+  let axis_x = AxisFrame {
+    area: area_size.width,
+    paint: paint.w.round().max(0.0) as u32,
+    offset: (area.x - paint.x).round() as i32,
+  };
+  let axis_y = AxisFrame {
+    area: area_size.height,
+    paint: paint.h.round().max(0.0) as u32,
+    offset: (area.y - paint.y).round() as i32,
+  };
+  let (xs, tile_w) = resolve_axis(repeat.0, position.0.x, tile_w, axis_x, &context.sizing);
+  let (ys, tile_h) = resolve_axis(repeat.1, position.0.y, tile_h, axis_y, &context.sizing);
 
   Some(LayerPlacement {
     tile_w,
@@ -429,40 +443,52 @@ fn resolve_placement(
   })
 }
 
-/// Resolves one axis' tile positions and (for `round`) adjusted tile size,
-/// mirroring the raster backend's `resolve_axis_tiles`.
+/// One axis of the positioning area within the painting box. Mirrors the raster
+/// backend's `AxisArea`.
+#[derive(Clone, Copy)]
+struct AxisFrame {
+  area: u32,
+  paint: u32,
+  offset: i32,
+}
+
+/// Resolves one axis' painting-box-relative tile positions and (for `round`)
+/// adjusted tile size, mirroring the raster backend's `resolve_axis_tiles`.
 fn resolve_axis(
   repeat: BackgroundRepeatStyle,
   component: PositionComponent,
   tile_size: f32,
-  area_size: u32,
+  axis: AxisFrame,
   sizing: &SizingContext,
 ) -> (Vec<f32>, f32) {
   let tile = tile_size.round().max(0.0) as u32;
+  let anchor = || axis.offset + resolve_position(component, tile, axis.area, sizing);
+
   match repeat {
-    BackgroundRepeatStyle::NoRepeat => {
-      let origin = resolve_position(component, tile, area_size, sizing);
-      (vec![origin as f32], tile_size)
-    }
+    BackgroundRepeatStyle::NoRepeat => (vec![anchor() as f32], tile_size),
     BackgroundRepeatStyle::Repeat => {
-      let origin = resolve_position(component, tile, area_size, sizing);
-      let positions = collect_repeat_tile_positions(area_size, tile, origin)
+      let positions = collect_repeat_tile_positions(axis.paint, tile, anchor())
         .into_iter()
         .map(|x| x as f32)
         .collect();
       (positions, tile_size)
     }
-    BackgroundRepeatStyle::Space => {
-      let positions = collect_spaced_tile_positions(area_size, tile)
+    BackgroundRepeatStyle::Space => (
+      collect_spaced_tile_positions(axis.area, tile)
         .into_iter()
-        .map(|x| x as f32)
-        .collect();
-      (positions, tile_size)
-    }
+        .map(|x| (x + axis.offset) as f32)
+        .collect(),
+      tile_size,
+    ),
     BackgroundRepeatStyle::Round => {
-      let (positions, new_tile) = collect_stretched_tile_positions(area_size, tile);
-      let positions = positions.into_iter().map(|x| x as f32).collect();
-      (positions, new_tile as f32)
+      let (positions, new_tile) = collect_stretched_tile_positions(axis.area, tile);
+      (
+        positions
+          .into_iter()
+          .map(|x| (x + axis.offset) as f32)
+          .collect(),
+        new_tile as f32,
+      )
     }
   }
 }

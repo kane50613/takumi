@@ -653,7 +653,7 @@ pub(crate) fn draw_inline_layout(
   let need_line_through = decoration_mask.contains(TextDecorationLines::LINE_THROUGH);
 
   let clip_image = if context.style.background_clip == BackgroundClip::Text {
-    let layers = collect_background_layers(context, layout.size, &mut canvas.buffer_pool)?;
+    let layers = collect_background_layers(context, layout, &mut canvas.buffer_pool)?;
 
     rasterize_layers(
       layers,
