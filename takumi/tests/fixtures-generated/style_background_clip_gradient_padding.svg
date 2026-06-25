@@ -4,7 +4,7 @@
     <path d="M487 250h226v130h-226v-130Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
-    <linearGradient id="lg1" gradientUnits="userSpaceOnUse" x1="496" y1="211" x2="704" y2="419">
+    <linearGradient id="lg1" gradientUnits="userSpaceOnUse" x1="511" y1="226" x2="689" y2="404">
       <stop offset="0" stop-color="#667eea"/>
       <stop offset=".016" stop-color="#667de9"/>
       <stop offset=".032" stop-color="#677ce8"/>
@@ -70,7 +70,7 @@
       <stop offset=".984" stop-color="#764ca3"/>
       <stop offset="1" stop-color="#764ba2"/>
     </linearGradient>
-    <rect x="472" y="235" width="256" height="160" fill="url(#lg1)"/>
+    <rect x="487" y="250" width="226" height="130" fill="url(#lg1)"/>
   </g>
   <path d="M472 235h256v160h-256v-160Zm15 15h226v130h-226v-130Z" fill="#fff" fill-rule="evenodd"/>
 </svg>
