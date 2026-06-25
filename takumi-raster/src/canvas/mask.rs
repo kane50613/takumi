@@ -13,6 +13,7 @@ use crate::{
     Affine, Axis, BasicShape, BorderStyle, Color, ComputedStyle, FillRule, ImageScalingAlgorithm,
     Overflow, ShapeRadius, Sides, SizingContext, SpacePair,
   },
+  scale_commands,
 };
 use takumi_core::geometry::transformed_rect_extents;
 
@@ -675,7 +676,9 @@ pub(crate) fn render_clip_shape_mask(
       }
     }
     BasicShape::Path(shape) => {
-      paths.extend(shape.path.as_ref().commands());
+      // path() coords are CSS px; scale to device space like the to_px shapes.
+      let scale = context.sizing.to_device(1.0);
+      paths.extend(scale_commands(shape.path.as_ref().commands(), scale));
     }
   }
 

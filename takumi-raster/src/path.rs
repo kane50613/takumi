@@ -253,6 +253,22 @@ impl PathData for str {
   }
 }
 
+/// Scale a command list's coordinates uniformly (CSS px → device space).
+pub(crate) fn scale_commands(commands: Vec<Command>, scale: f32) -> Vec<Command> {
+  let point = |pt: TinyPoint| TinyPoint::from_xy(pt.x * scale, pt.y * scale);
+
+  commands
+    .into_iter()
+    .map(|command| match command {
+      Command::MoveTo(a) => Command::MoveTo(point(a)),
+      Command::LineTo(a) => Command::LineTo(point(a)),
+      Command::QuadTo(a, b) => Command::QuadTo(point(a), point(b)),
+      Command::CubicTo(a, b, c) => Command::CubicTo(point(a), point(b), point(c)),
+      Command::Close => Command::Close,
+    })
+    .collect()
+}
+
 pub(crate) fn build_path(commands: &[Command]) -> Option<TinyPath> {
   let mut builder = TinyPathBuilder::new();
 

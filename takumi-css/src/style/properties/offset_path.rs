@@ -545,7 +545,12 @@ fn basic_shape_to_bezpath(
   let px = |length: Length, full: f32| f64::from(length.to_px(sizing, full));
 
   match shape {
-    BasicShape::Path(path_shape) => BezPath::from_svg(&path_shape.path).ok(),
+    BasicShape::Path(path_shape) => {
+      // path() coords are CSS px; scale to device space like the to_px shapes.
+      let mut path = BezPath::from_svg(&path_shape.path).ok()?;
+      path.apply_affine(kurbo::Affine::scale(f64::from(sizing.to_device(1.0))));
+      Some(path)
+    }
     BasicShape::Polygon(polygon) => {
       let mut coordinates = polygon.coordinates.iter();
       let first = coordinates.next()?;
@@ -835,6 +840,30 @@ mod tests {
       size,
     )
     .unwrap();
+    assert!((point.x - 100.0).abs() < 0.5, "x = {}", point.x);
+  }
+
+  #[test]
+  fn path_coordinates_scale_with_device_pixel_ratio() {
+    let path = OffsetPath::from_str("path('M 0 0 L 100 0')").unwrap();
+    let size = Size {
+      width: 400.0,
+      height: 400.0,
+    };
+    let sizing = SizingContext::builder()
+      .viewport(crate::Viewport::new((400, 400)).with_device_pixel_ratio(2.0))
+      .build();
+
+    let (point, _) = sample_offset_path(
+      &path,
+      Length::Percentage(50.0),
+      &OffsetPosition::Normal,
+      &sizing,
+      size,
+    )
+    .unwrap();
+
+    // The authored 100px line is CSS px; at dpr 2 its midpoint sits at 100 device px.
     assert!((point.x - 100.0).abs() < 0.5, "x = {}", point.x);
   }
 

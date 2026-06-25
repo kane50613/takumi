@@ -408,7 +408,9 @@ pub(crate) fn emit_clip_path_group(
     }
     BasicShape::Path(path) => {
       let even_odd = path.fill_rule.unwrap_or(node.context.style.clip_rule) == FillRule::EvenOdd;
-      let transform = format!("translate({} {})", Num(x), Num(y));
+      // Inner scale lifts CSS-px path() coords to device space; translate offsets after.
+      let scale = sizing.to_device(1.0);
+      let transform = format!("translate({} {}) scale({})", Num(x), Num(y), Num(scale));
       doc.clip_path_transformed(&path.path, even_odd, Some(&transform))?
     }
   };
