@@ -1,7 +1,6 @@
-import * as core from "@takumi-rs/core";
 import type { LoadBackend } from "./types";
 
-// Selected by the `node`/`bun` import condition: the native napi addon. It is
-// never reachable from a worker/edge bundle, so bundlers can't drag the `.node`
-// binary into runtimes that can't load it.
-export const loadBackend: LoadBackend = async () => core;
+// Dynamic import so bundlers don't inline the native addon — its `.node` binary
+// must resolve from node_modules at runtime, which a bundled-in copy breaks.
+// Selected by the `node`/`bun` condition, so it never reaches a worker/edge bundle.
+export const loadBackend: LoadBackend = () => import("@takumi-rs/core");
