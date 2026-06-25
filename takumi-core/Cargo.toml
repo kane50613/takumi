@@ -1,6 +1,6 @@
 [package]
 name = "takumi-core"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Backend-agnostic layout, style, and resource core for takumi."
@@ -43,7 +43,7 @@ features = ["aarch64_simd", "avx512_simd"]
 
 [dependencies.takumi-css]
 path = "../takumi-css"
-version = "0.2.0-beta.3"
+version = "0.2.0-beta.4"
 
 [dependencies.serde]
 workspace = true
