@@ -26,7 +26,7 @@ const GOOGLE_FONTS = [
   "Noto Sans Hebrew",
   "Noto Sans Devanagari",
   "Noto Sans Thai",
-].map((family) => ({ family, weight: "100..900" as const }));
+].map((name) => ({ name, weight: "100..900" as const }));
 
 let renderer: Renderer | undefined;
 

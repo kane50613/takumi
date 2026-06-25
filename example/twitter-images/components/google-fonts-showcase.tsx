@@ -31,8 +31,8 @@ const greetings: Greeting[] = [
 const UI_FAMILY = "Inter";
 
 export const googleFonts: GoogleFontFamily[] = [
-  { family: UI_FAMILY, weight: 600 },
-  ...greetings.map((g) => ({ family: g.family, weight: g.weight })),
+  { name: UI_FAMILY, weight: 600 },
+  ...greetings.map((g) => ({ name: g.family, weight: g.weight })),
 ];
 
 const INK = "#1d1d1f";

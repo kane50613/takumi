@@ -74,7 +74,7 @@ describe("googleFonts", () => {
     );
 
     const fonts = await googleFonts({
-      families: [{ family: "Inter", weight: [400, 700] }],
+      families: [{ name: "Inter", weight: [400, 700] }],
       fetch: fetchMock,
     });
 
@@ -108,7 +108,7 @@ describe("googleFonts", () => {
     );
 
     const fonts = await googleFonts({
-      families: [{ family: "Public Sans", weight: [400, 700] }],
+      families: [{ name: "Public Sans", weight: [400, 700] }],
       fetch: fetchMock,
     });
 
@@ -122,7 +122,7 @@ describe("googleFonts", () => {
       ),
     );
     const staticFonts = await googleFonts({
-      families: [{ family: "Inter", weight: [400, 700] }],
+      families: [{ name: "Inter", weight: [400, 700] }],
       fetch: staticMock,
     });
     expect(staticFonts.map((f) => f.weight).sort()).toEqual([400, 700]);
@@ -141,7 +141,7 @@ describe("googleFonts", () => {
     });
 
     await googleFonts({
-      families: [{ family: "Open Sans", weight: [700, 400], style: ["normal", "italic"] }],
+      families: [{ name: "Open Sans", weight: [700, 400], style: ["normal", "italic"] }],
       fetch: fetchMock,
     });
 
@@ -164,7 +164,7 @@ describe("googleFonts", () => {
     const { fetchMock, family } = captureFamily();
 
     await googleFonts({
-      families: [{ family: "Inter", weight: "100..900", axes: { opsz: "14..32" } }],
+      families: [{ name: "Inter", weight: "100..900", axes: { opsz: "14..32" } }],
       fetch: fetchMock,
     });
 
@@ -176,7 +176,7 @@ describe("googleFonts", () => {
 
     await googleFonts({
       families: [
-        { family: "Inter", weight: 400, style: ["normal", "italic"], axes: { opsz: "14..32" } },
+        { name: "Inter", weight: 400, style: ["normal", "italic"], axes: { opsz: "14..32" } },
       ],
       fetch: fetchMock,
     });
@@ -189,7 +189,7 @@ describe("googleFonts", () => {
 
     // An unknown family takes the loose form, whose axes accept any tag.
     await googleFonts({
-      families: [{ family: "Made Up Sans", weight: 400, axes: { opsz: 14, CASL: 0.5 } }],
+      families: [{ name: "Made Up Sans", weight: 400, axes: { opsz: 14, CASL: 0.5 } }],
       fetch: fetchMock,
     });
 
@@ -200,7 +200,7 @@ describe("googleFonts", () => {
     const { fetchMock, family } = captureFamily();
 
     await googleFonts({
-      families: [{ family: "Made Up Sans", weight: 400, axes: { wght: 999, ital: 1, opsz: 18 } }],
+      families: [{ name: "Made Up Sans", weight: 400, axes: { wght: 999, ital: 1, opsz: 18 } }],
       fetch: fetchMock,
     });
 
@@ -225,7 +225,7 @@ describe("googleFonts", () => {
     });
 
     const fonts = await googleFonts({
-      families: [{ family: "Inter", weight: "100..900" }],
+      families: [{ name: "Inter", weight: "100..900" }],
       fetch: fetchMock,
     });
 

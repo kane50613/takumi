@@ -11,7 +11,7 @@ type AxisValue = number | WeightRange;
 
 type KnownGoogleFontFamily = {
   [K in keyof GoogleFontCatalog]: {
-    family: K;
+    name: K;
     /** `400`, `[400, 700]`, or a range like `"100..900"` for the variable font. @default 400 */
     weight?: GoogleFontCatalog[K]["weight"] | GoogleFontCatalog[K]["weight"][] | WeightRange;
     /** `"normal"`, `"italic"`, or both. @default "normal" */
@@ -26,7 +26,7 @@ type KnownGoogleFontFamily = {
 type GoogleFontFamilyObject =
   | KnownGoogleFontFamily
   | {
-      family: string;
+      name: string;
       weight?: number | number[] | WeightRange;
       style?: FontStyle | FontStyle[];
       axes?: Record<string, AxisValue>;
@@ -105,7 +105,7 @@ function buildUrl(options: GoogleFontsOptions) {
       .filter(([tag]) => tag !== "ital" && tag !== "wght")
       .map(([tag, value]): [string, string] => [tag, String(value)]);
 
-    url.searchParams.append("family", familyValue(family.family, weights, styles, customAxes));
+    url.searchParams.append("family", familyValue(family.name, weights, styles, customAxes));
   }
   if (options.display) {
     url.searchParams.set("display", options.display);

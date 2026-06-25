@@ -148,8 +148,8 @@ for (const seg of segments) {
   const { node } = await fromJsx(still(seg));
   const fonts = await googleFonts({
     families: [
-      { family: seg.family, weight: seg.weight },
-      { family: UI, weight: 600 },
+      { name: seg.family, weight: seg.weight },
+      { name: UI, weight: 600 },
     ],
   });
   const renderer = new Renderer();
