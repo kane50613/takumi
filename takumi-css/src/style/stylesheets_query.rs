@@ -68,6 +68,7 @@ impl ComputedStyle {
   ) -> bool {
     self.isolation == Isolation::Isolate
       || self.is_z_index_applicable(is_flex_or_grid_item)
+      || self.offset_path.is_some()
       || self.has_non_identity_transform(border_box, sizing)
       || self.needs_offscreen_compositing()
   }
@@ -105,6 +106,15 @@ impl ComputedStyle {
     }
     if self.scale != SpacePair::default() {
       local *= Affine::scale(self.scale.x.0, self.scale.y.0);
+    }
+    // CSS Motion Path: the offset transform applies after translate/rotate/scale
+    // and before the `transform` property, all within the transform-origin frame.
+    if let Some(shape) = &self.offset_path
+      && let Some((point, tangent)) =
+        sample_offset_path(shape, self.offset_distance, sizing, border_box)
+    {
+      local *= Affine::translation(point.x - origin.x, point.y - origin.y);
+      local *= Affine::rotation_radians(self.offset_rotate.resolve(tangent));
     }
     if let Some(node_transform) = &self.transform {
       local *= Affine::from_transforms(node_transform.iter(), sizing, border_box);

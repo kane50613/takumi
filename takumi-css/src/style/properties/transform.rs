@@ -232,7 +232,12 @@ impl Affine {
 
   /// Creates a new rotation transform
   pub fn rotation(angle: Angle) -> Self {
-    let (sin, cos) = angle.to_radians().sin_cos();
+    Self::rotation_radians(angle.to_radians())
+  }
+
+  /// Creates a new rotation transform from an angle in radians
+  pub fn rotation_radians(radians: f32) -> Self {
+    let (sin, cos) = radians.sin_cos();
 
     Self {
       a: cos,

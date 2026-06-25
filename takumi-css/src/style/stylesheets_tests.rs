@@ -741,6 +741,53 @@ fn test_creates_stacking_context_from_z_index_scope() {
 }
 
 #[test]
+fn test_offset_properties_parse_from_css() {
+  let style = inherited_style_from_pairs(
+    [
+      ("offset-path", "path('M 0 0 L 100 0')"),
+      ("offset-distance", "25%"),
+      ("offset-rotate", "reverse 30deg"),
+    ],
+    &ComputedStyle::default(),
+  );
+
+  assert!(matches!(style.offset_path, Some(BasicShape::Path(_))));
+  assert_eq!(style.offset_distance, Length::Percentage(25.0));
+  assert_eq!(style.offset_rotate, OffsetRotate::Reverse(Angle::new(30.0)));
+}
+
+#[test]
+fn test_offset_path_moves_element_onto_path_and_creates_stacking_context() {
+  let mut style = ComputedStyle::default();
+  let sizing = SizingContext {
+    viewport: Viewport::new((1200, 630)),
+    container_size: Size::NONE,
+    font_size: 16.0,
+    root_font_size: None,
+    line_height: 0.0,
+    root_line_height: None,
+    calc_arena: Rc::new(CalcArena::default()),
+  };
+  let border_box = Size {
+    width: 100.0,
+    height: 40.0,
+  };
+
+  style.offset_path = BasicShape::from_str("path('M 0 0 L 100 0')").ok();
+  style.offset_distance = Length::Percentage(50.0);
+
+  assert!(style.creates_stacking_context(border_box, &sizing, false));
+
+  // The default offset-anchor is transform-origin (the box center). At 50% the
+  // anchor lands on the path midpoint (50, 0).
+  let local = style.local_transform(border_box, &sizing);
+  let center = taffy::Point { x: 50.0, y: 20.0 };
+  let placed = local.transform_point(center);
+  assert!((placed.x - 50.0).abs() < 0.5, "x = {}", placed.x);
+  assert!(placed.y.abs() < 0.5, "y = {}", placed.y);
+}
+
+#[test]
 fn test_relative_position_participates_in_positioned_paint_bucket() {
   let style = ComputedStyle {
     position: Position::Relative,

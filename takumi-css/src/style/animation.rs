@@ -562,6 +562,7 @@ impl_passthrough_animatable!(
   OverflowWrap,
   WordBreak,
   BasicShape,
+  OffsetRotate,
   FillRule,
   WhiteSpace,
   WhiteSpaceCollapse,

@@ -17,6 +17,7 @@ thiserror.workspace = true
 typed-builder.workspace = true
 precomputed-hash.workspace = true
 tiny-skia.workspace = true
+kurbo.workspace = true
 bytemuck.workspace = true
 selectors.workspace = true
 smallvec.workspace = true
