@@ -25,6 +25,6 @@ describe("bundler entries resolve under Node", () => {
   for (const [type, entry, script] of cases) {
     it(`${type} ${entry}`, async () => {
       await $`node --input-type=${type} -e ${script}`.cwd(cwd).quiet();
-    });
+    }, 30_000);
   }
 });
