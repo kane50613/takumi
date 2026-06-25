@@ -28,6 +28,7 @@ mod font_size;
 mod font_stretch;
 mod font_style;
 mod font_synthesis;
+mod font_variant;
 mod font_variation_settings;
 mod font_weight;
 mod gradient_utils;
@@ -83,6 +84,7 @@ pub use font_size::*;
 pub use font_stretch::*;
 pub use font_style::*;
 pub use font_synthesis::*;
+pub use font_variant::*;
 pub use font_variation_settings::*;
 pub use font_weight::*;
 pub use gradient_utils::{

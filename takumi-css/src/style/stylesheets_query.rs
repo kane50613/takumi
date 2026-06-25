@@ -1,5 +1,6 @@
-use std::marker::PhantomData;
+use std::{borrow::Cow, marker::PhantomData};
 
+use parley::FontFeature;
 use taffy::{Line, Point, Rect, Size};
 
 use super::ComputedStyle;
@@ -230,6 +231,28 @@ impl ComputedStyle {
         SizedTextDecorationThickness::Value(thickness.to_px(sizing, sizing.font_size))
       }
     }
+  }
+
+  /// Resolved OpenType features: the `font-variant-*` expansions followed by explicit
+  /// `font-feature-settings`, which win on tag conflicts. Borrows the settings when no
+  /// `font-variant-*` is active, avoiding an allocation.
+  pub fn resolved_font_features(&self) -> Cow<'_, [FontFeature]> {
+    let mut features = Vec::new();
+    append_variant_features(
+      &self.font_variant_ligatures,
+      &self.font_variant_numeric,
+      &self.font_variant_east_asian,
+      &self.font_variant_caps,
+      &self.font_variant_position,
+      &mut features,
+    );
+
+    if features.is_empty() {
+      return Cow::Borrowed(self.font_feature_settings.as_ref());
+    }
+
+    features.extend_from_slice(&self.font_feature_settings);
+    Cow::Owned(features)
   }
 
   /// Converts the computed style into a `taffy::Style` for layout.
