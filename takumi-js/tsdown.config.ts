@@ -8,7 +8,6 @@ export default defineConfig({
     wasm: "src/wasm/index.ts",
     "backend/node": "src/backend/node.ts",
     "backend/wasm": "src/backend/wasm.ts",
-    "backend/wasm-next": "src/backend/wasm-next.ts",
     "helpers/index": "src/helpers/index.ts",
     "helpers/emoji": "src/helpers/emoji.ts",
     "helpers/jsx": "src/helpers/jsx.ts",

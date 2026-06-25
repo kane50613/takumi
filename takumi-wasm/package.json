@@ -69,6 +69,10 @@
         "types": "./bundlers/wasm-module.d.ts",
         "default": "./bundlers/workerd.js"
       },
+      "edge-light": {
+        "types": "./bundlers/wasm-module.d.ts",
+        "default": "./bundlers/next.mjs"
+      },
       "unwasm": {
         "types": "./bundlers/wasm-module.d.ts",
         "default": "./bundlers/next.mjs"

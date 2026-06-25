@@ -74,10 +74,12 @@ describe("#backend resolution by import condition", () => {
     expect(code).not.toContain("@takumi-rs/core");
   });
 
-  test("edge-light → WASM next, never native core", () => {
+  test("edge-light → WASM, never native core", () => {
+    // edge-light routes to the WASM backend (`@takumi-rs/wasm/auto`); the auto
+    // entry's own conditions then pick the Next/Vercel edge loader downstream.
     const code = bundle({ target: "browser", conditions: ["edge-light"] });
 
-    expect(code).toContain("@takumi-rs/wasm/next");
+    expect(code).toContain("@takumi-rs/wasm/auto");
     expect(code).not.toContain("@takumi-rs/core");
   });
 

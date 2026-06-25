@@ -37,16 +37,6 @@
   "types": "./dist/index.d.mts",
   "imports": {
     "#backend": {
-      "edge-light": {
-        "import": {
-          "types": "./dist/backend/wasm-next.d.mts",
-          "default": "./dist/backend/wasm-next.mjs"
-        },
-        "require": {
-          "types": "./dist/backend/wasm-next.d.cts",
-          "default": "./dist/backend/wasm-next.cjs"
-        }
-      },
       "workerd": {
         "import": {
           "types": "./dist/backend/wasm.d.mts",
