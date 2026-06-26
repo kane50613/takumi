@@ -33,6 +33,8 @@ Rust (takumi crate):
 - OutputFormat::Jpeg/WebP carry Quality; lossless -> WebPLossless; write_image(img, &mut out, fmt)
 - measure_layout -> measure, render_sequence_animation -> render_animation; render -> Bitmap
 - render_for_layout drops the current_color argument
+- style value types (unstable): LengthDefaultsToZero -> Length, ColorDefaultsToTransparent -> ColorInput
+- BackgroundPosition -> PositionValue, BackgroundPositions -> PositionValues; ObjectPosition/TransformOrigin removed -> PositionValue (PositionValue::center() for the 50% 50% default)
 
 CSS defaults changed, verify visually: position relative -> static; border/outline width
 0 -> medium (3px); negative scale reflects; line-clamp is a shorthand; currentColor in SVG
@@ -270,11 +272,20 @@ image.render_for_layout(width, height, image_rendering, time_ms)?; // [!code ++]
 
 ### `Length` and `ColorInput` drop their default-flavor type parameter
 
-`Length` and `ColorInput` were generic over a `const` bool so one enum could default two ways (`auto` vs `0`, `currentColor` vs `transparent`). That parameter is gone: both are plain enums. The `LengthDefaultsToZero` and `ColorDefaultsToTransparent` aliases are removed — use `Length` and `ColorInput`. `BackgroundPosition` is likewise non-generic; its `ObjectPosition` and `TransformOrigin` aliases stay. Rendering is unchanged: the zero/transparent/center initial values are now declared per field.
+`Length` and `ColorInput` were generic over a `const` bool so one enum could default two ways (`auto` vs `0`, `currentColor` vs `transparent`). That parameter is gone: both are plain enums. The `LengthDefaultsToZero` and `ColorDefaultsToTransparent` aliases are removed — use `Length` and `ColorInput`. Rendering is unchanged: the zero/transparent initial values are now declared per field.
 
 ```rust
 let inset: LengthDefaultsToZero = Length::Px(0.0); // [!code --]
 let inset: Length = Length::Px(0.0); // [!code ++]
+```
+
+### `BackgroundPosition` is renamed to `PositionValue`
+
+The CSS `<position>` value backs `background-position`, `object-position`, `transform-origin`, `mask-position`, and gradient centers, so `BackgroundPosition` was renamed to `PositionValue`, and `BackgroundPositions` to `PositionValues`. The `ObjectPosition` and `TransformOrigin` aliases are removed — they were aliases of `BackgroundPosition`, so their `Default` was top-left, not the `50% 50%` those properties actually default to. Use `PositionValue`, and `PositionValue::center()` for the `center center` initial value.
+
+```rust
+let origin: TransformOrigin = TransformOrigin::default(); // [!code --]
+let origin: PositionValue = PositionValue::center(); // [!code ++]
 ```
 
 ## More in Changelog!
