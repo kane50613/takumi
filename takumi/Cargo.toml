@@ -1,6 +1,6 @@
 [package]
 name = "takumi"
-version = "2.0.0-beta.13"
+version = "2.0.0-beta.14"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Render UI component trees to images."
@@ -55,3 +55,4 @@ path = "../takumi-svg"
 
 [lints]
 workspace = true
+

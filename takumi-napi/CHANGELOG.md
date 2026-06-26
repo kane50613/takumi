@@ -1,3 +1,16 @@
+## @takumi-rs/core@2.0.0-beta.14 (beta)
+
+### Declare csstype as a runtime dependency
+
+The published type definitions import `csstype`, but it was only a
+devDependency, so consumers hit `Cannot find module 'csstype'`. Move it to
+`dependencies`.
+
+### Bound the SVG raster cache
+
+The per-SVG rasterization cache is now size-capped instead of growing unbounded
+for the lifetime of the SVG source.
+
 ## @takumi-rs/core@2.0.0-beta.10 (beta)
 
 ### Strip the unused `__dirname` shim from the generated loader

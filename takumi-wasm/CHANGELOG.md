@@ -1,3 +1,11 @@
+## @takumi-rs/wasm@2.0.0-beta.14 (beta)
+
+### Declare csstype as a runtime dependency
+
+The published type definitions import `csstype`, but it was only a
+devDependency, so consumers hit `Cannot find module 'csstype'`. Move it to
+`dependencies`.
+
 ## @takumi-rs/wasm@2.0.0-beta.10 (beta)
 
 ### Resolve `edge-light` in the `/auto` export
