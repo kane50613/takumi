@@ -58,7 +58,7 @@ export const showcaseProjects: Project[] = [
   },
   {
     title: "Nakafa",
-    image: "https://nakafa.com/open-graph/en-about.png",
+    image: "https://nakafa.com/og/en/image.png",
     url: "https://nakafa.com",
     width: 1200,
     height: 630,
