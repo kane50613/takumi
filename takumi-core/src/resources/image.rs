@@ -29,7 +29,7 @@ pub type ImageResult = Result<ImageSource, ImageResourceError>;
 pub enum ImageSource {
   /// An svg image source
   #[cfg(feature = "svg")]
-  Svg(SvgSource),
+  Svg(Arc<SvgSource>),
   /// A bitmap image source
   Bitmap(Arc<ImageBuffer>),
   /// An animated gif source.
@@ -38,16 +38,16 @@ pub enum ImageSource {
 
 /// Represents the resolved SVG source.
 #[cfg(feature = "svg")]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct SvgSource {
   /// Original SVG source, for embedding directly in a vector backend.
-  source: Arc<str>,
+  source: Box<str>,
   /// Parsed SVG tree used for size and initial metadata.
-  pub tree: Arc<resvg::usvg::Tree>,
+  pub tree: resvg::usvg::Tree,
   /// Intrinsic dimensions (non-percentage `width`/`height`) and `viewBox`
   /// aspect ratio, for CSS `background-size`/`mask-size` resolution.
   intrinsic: SvgIntrinsic,
-  raster_cache: Arc<SvgRasterCache>,
+  raster_cache: SvgRasterCache,
 }
 
 #[cfg(feature = "svg")]
@@ -136,7 +136,7 @@ impl GifSource {
 #[cfg(feature = "svg")]
 impl From<SvgSource> for ImageSource {
   fn from(svg: SvgSource) -> Self {
-    ImageSource::Svg(svg)
+    ImageSource::Svg(Arc::new(svg))
   }
 }
 
@@ -233,10 +233,10 @@ impl FromStr for SvgSource {
     let intrinsic = svg_intrinsic_sizing(document.root_element(), tree.size());
 
     Ok(SvgSource {
-      source: Arc::from(src),
-      tree: Arc::new(tree),
+      source: Box::from(src),
+      tree,
       intrinsic,
-      raster_cache: Arc::new(SvgRasterCache::new(SVG_RASTER_CACHE_CAPACITY)),
+      raster_cache: SvgRasterCache::new(SVG_RASTER_CACHE_CAPACITY),
     })
   }
 }
@@ -283,7 +283,7 @@ impl ImageSource {
       if let Ok(text) = from_utf8(bytes)
         && is_svg_like(text)
       {
-        return Ok(ImageSource::Svg(text.parse()?));
+        return Ok(ImageSource::Svg(Arc::new(text.parse()?)));
       }
     }
 
@@ -605,7 +605,7 @@ mod image_cache_tests {
     assert!(matches!(a, ImageSource::Svg(_)));
     match (&a, &b) {
       (ImageSource::Svg(x), ImageSource::Svg(y)) => {
-        assert!(!std::sync::Arc::ptr_eq(&x.tree, &y.tree))
+        assert!(!std::sync::Arc::ptr_eq(x, y))
       }
       _ => panic!("expected svgs"),
     }
