@@ -8,8 +8,38 @@ export const showcaseProjects: Project[] = [
     height: 630,
   },
   {
+    title: "TanStack",
+    image: "https://tanstack.com/api/og/query.png",
+    url: "https://tanstack.com",
+    width: 1200,
+    height: 630,
+  },
+  {
     image: "https://www.fumadocs.dev/og/image.webp",
     url: "https://fumadocs.dev/",
+    width: 1200,
+    height: 630,
+  },
+  {
+    title: "Wotaku",
+    image: "https://wotaku.wiki/__og_image__/og.png",
+    url: "https://wotaku.wiki",
+    width: 1200,
+    height: 630,
+  },
+  {
+    title: "Stepperize",
+    image:
+      "https://stepperize.com/api/og?title=Stepperize&description=The+type-safe+way+to+build+multi-step+experiences+in+React.&section=Documentation&variant=website",
+    url: "https://stepperize.com",
+    width: 1200,
+    height: 630,
+  },
+  {
+    title: "Swetrix",
+    image:
+      "https://swetrix.com/api/og-image.png?title=Swetrix&description=Open+source,+privacy-first+web+analytics",
+    url: "https://swetrix.com",
     width: 1200,
     height: 630,
   },
@@ -20,26 +50,21 @@ export const showcaseProjects: Project[] = [
     height: 630,
   },
   {
-    image: "https://res.cloudinary.com/alfanjauhari/image/upload/og/works/gcbc.webp",
-    url: "https://www.alfanjauhari.com/",
+    title: "Bookhive",
+    image: "https://bookhive.buzz/og/marketing",
+    url: "https://bookhive.buzz",
     width: 1200,
     height: 630,
   },
   {
-    url: "https://who-to-bother-at.com",
-    image: "https://who-to-bother-at.com/og/vercel",
+    title: "Nakafa",
+    image: "https://nakafa.com/og/en/image.png",
+    url: "https://nakafa.com",
     width: 1200,
     height: 630,
   },
   {
-    image:
-      "https://image-bench.kane.tw/render?provider=takumi-webp&template=gradients&width=800&height=400",
-    url: "https://image-bench.kane.tw",
-    width: 800,
-    height: 400,
-  },
-  {
-    image: "https://shotwell.app/og-image.png",
+    image: "https://shotwell.app/og/docs/image.webp",
     url: "https://shotwell.app/?utm_source=takumi&utm_medium=showcase&utm_campaign=launch",
     width: 1200,
     height: 630,
@@ -67,6 +92,25 @@ export const showcaseProjects: Project[] = [
     url: "https://bannx.com",
     width: 1200,
     height: 630,
+  },
+  {
+    image: "https://res.cloudinary.com/alfanjauhari/image/upload/og/works/gcbc.webp",
+    url: "https://www.alfanjauhari.com/",
+    width: 1200,
+    height: 630,
+  },
+  {
+    url: "https://who-to-bother-at.com",
+    image: "https://who-to-bother-at.com/og/vercel",
+    width: 1200,
+    height: 630,
+  },
+  {
+    image:
+      "https://image-bench.kane.tw/render?provider=takumi-webp&template=gradients&width=800&height=400",
+    url: "https://image-bench.kane.tw",
+    width: 800,
+    height: 400,
   },
 ];
 
