@@ -16,8 +16,7 @@ description: Generate Open Graph images for every page at build time.
     ```
 
     ```npm
-    npm i -D react
-    npm i @fontsource/roboto
+    npm i -D react @fontsource/roboto
     ```
 
   </Step>
@@ -31,6 +30,7 @@ description: Generate Open Graph images for every page at build time.
     ```js title="astro.config.mjs"
     import { defineConfig } from "astro/config";
     import * as fs from "node:fs";
+    import { fileURLToPath } from "node:url";
     import astroTakumi, { presets } from "astro-takumi";
 
     export default defineConfig({
@@ -38,7 +38,7 @@ description: Generate Open Graph images for every page at build time.
       integrations: [
         astroTakumi({
           options: {
-            fonts: [fs.readFileSync("node_modules/@fontsource/roboto/files/roboto-latin-400-normal.woff")],
+            fonts: [fs.readFileSync(fileURLToPath(import.meta.resolve("@fontsource/roboto/files/roboto-latin-400-normal.woff")))],
           },
           render: presets.blackAndWhite,
         }),
@@ -50,7 +50,7 @@ description: Generate Open Graph images for every page at build time.
   <Step>
     ### Reference the image from your layout
 
-    `getImagePath` returns the URL of the image generated for the current page. The build fails if `og:image` does not match it.
+    `getImagePath` returns the URL of the image generated for the current page. The build fails if the `og:image` value does not match that path.
 
     ```astro title="src/layouts/Layout.astro"
     ---
