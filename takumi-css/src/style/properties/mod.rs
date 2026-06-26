@@ -136,6 +136,21 @@ pub(crate) fn next_is_comma<'i>(input: &mut Parser<'i, '_>) -> bool {
   is_comma
 }
 
+/// Implements `TailwindPropertyParser` by delegating to each type's `FromStr`.
+macro_rules! impl_tw_from_str {
+  ($($ty:ty),+ $(,)?) => {
+    $(
+      impl TailwindPropertyParser for $ty {
+        fn parse_tw(token: &str) -> Option<Self> {
+          Self::from_str(token).ok()
+        }
+      }
+    )+
+  };
+}
+
+impl_tw_from_str!(ObjectFit, TextAlign, LineJoin, AlignItems, BorderStyle);
+
 impl<T: Animatable + Copy> Animatable for SpacePair<T> {
   fn interpolate(
     &mut self,
@@ -176,27 +191,38 @@ impl<T: Animatable + Copy> Animatable for Sides<T> {
 }
 
 macro_rules! unexpected_token {
-  (@build $type:ty, $location:expr, $token:expr $(,)?) => {{
-    let location = $location;
-    let token = $token;
-    let token = cssparser::ToCss::to_css_string(token);
-    let message = <$type as $crate::style::FromCss>::EXPECT_MESSAGE
-      .build_message(&token, $crate::style::merge_enum_values(<$type as $crate::style::FromCss>::VALID_TOKENS));
-
-    cssparser::ParseError {
-      location,
-      kind: cssparser::ParseErrorKind::Custom(std::borrow::Cow::Owned(message)),
-    }
-  }};
   ($type:ty, $location:expr, $token:expr $(,)?) => {
-    $crate::style::unexpected_token!(@build $type, $location, $token)
+    $crate::style::build_unexpected_token(
+      $location,
+      $token,
+      <$type as $crate::style::FromCss>::EXPECT_MESSAGE,
+      <$type as $crate::style::FromCss>::VALID_TOKENS,
+    )
   };
   ($location:expr, $token:expr $(,)?) => {
-    $crate::style::unexpected_token!(@build Self, $location, $token)
+    $crate::style::unexpected_token!(Self, $location, $token)
   };
 }
 
 pub(crate) use unexpected_token;
+
+/// Builds the `ParseError` for an unexpected token, out-of-line and `#[cold]` to keep the many `FromCss` call sites tiny.
+#[cold]
+#[inline(never)]
+pub(crate) fn build_unexpected_token<'i>(
+  location: cssparser::SourceLocation,
+  token: &cssparser::Token<'_>,
+  expect: CssExpectedMessage,
+  valid_tokens: &'static [CssToken],
+) -> cssparser::ParseError<'i, std::borrow::Cow<'i, str>> {
+  let token = cssparser::ToCss::to_css_string(token);
+  let message = expect.build_message(&token, merge_enum_values(valid_tokens));
+
+  cssparser::ParseError {
+    location,
+    kind: cssparser::ParseErrorKind::Custom(std::borrow::Cow::Owned(message)),
+  }
+}
 
 /// Helper function to merge enum values into a human-readable format.
 /// - `["fill"]` → `"'fill'"`
@@ -257,12 +283,6 @@ declare_enum_from_css_impl!(
   "scale-down" => ObjectFit::ScaleDown,
   "none" => ObjectFit::None
 );
-
-impl TailwindPropertyParser for ObjectFit {
-  fn parse_tw(token: &str) -> Option<Self> {
-    Self::from_str(token).ok()
-  }
-}
 
 /// Defines how the background is clipped.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -455,12 +475,6 @@ declare_enum_from_css_impl!(
   "end" => TextAlign::End
 );
 
-impl TailwindPropertyParser for TextAlign {
-  fn parse_tw(token: &str) -> Option<Self> {
-    Self::from_str(token).ok()
-  }
-}
-
 impl_from_taffy_enum!(
   TextAlign, Alignment, Left, Right, Center, Justify, Start, End
 );
@@ -520,12 +534,6 @@ declare_enum_from_css_impl!(
   "round" => LineJoin::Round,
   "bevel" => LineJoin::Bevel
 );
-
-impl TailwindPropertyParser for LineJoin {
-  fn parse_tw(token: &str) -> Option<Self> {
-    Self::from_str(token).ok()
-  }
-}
 
 /// Defines the positioning method for an element.
 ///
@@ -970,12 +978,6 @@ declare_box_alignment_enum_impl!(
   }
 );
 
-impl TailwindPropertyParser for AlignItems {
-  fn parse_tw(token: &str) -> Option<Self> {
-    Self::from_str(token).ok()
-  }
-}
-
 impl From<AlignItems> for Option<taffy::AlignItems> {
   fn from(value: AlignItems) -> Self {
     match value {
@@ -1149,12 +1151,6 @@ declare_enum_from_css_impl!(
   "inset" => BorderStyle::Inset,
   "outset" => BorderStyle::Outset,
 );
-
-impl TailwindPropertyParser for BorderStyle {
-  fn parse_tw(token: &str) -> Option<Self> {
-    Self::from_str(token).ok()
-  }
-}
 
 impl From<ImageScalingAlgorithm> for FilterType {
   fn from(algorithm: ImageScalingAlgorithm) -> Self {

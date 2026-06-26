@@ -31,7 +31,6 @@ image-webp.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 libwebp-sys.workspace = true
-dashmap.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.bytemuck]
 workspace = true

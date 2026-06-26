@@ -5,11 +5,6 @@
 
 use std::{borrow::Cow, str::FromStr, sync::Arc};
 
-#[cfg(target_arch = "wasm32")]
-use std::{cell::RefCell, collections::HashMap};
-
-#[cfg(not(target_arch = "wasm32"))]
-use dashmap::DashMap;
 use image::RgbaImage;
 use quick_cache::{Weighter, sync::Cache};
 use serde::Deserialize;
@@ -108,42 +103,33 @@ impl GifSource {
     })
   }
 
-  /// Frame shown at the given playback time, looping over total duration.
-  pub fn frame_at_time(&self, time_ms: u64) -> &ImageBuffer {
+  /// Index of the frame shown at the given playback time, looping over total duration.
+  fn frame_index_at(&self, time_ms: u64) -> usize {
     if self.total_duration_ms == 0 {
-      return &self.frames[0].buffer;
+      return 0;
     }
 
     let target_time = time_ms % self.total_duration_ms;
     let mut elapsed_ms = 0_u64;
 
-    for frame in self.frames.iter() {
+    for (index, frame) in self.frames.iter().enumerate() {
       elapsed_ms = elapsed_ms.saturating_add(frame.duration_ms as u64);
       if target_time < elapsed_ms {
-        return &frame.buffer;
+        return index;
       }
     }
 
-    &self.frames[0].buffer
+    0
+  }
+
+  /// Frame shown at the given playback time, looping over total duration.
+  pub fn frame_at_time(&self, time_ms: u64) -> &ImageBuffer {
+    &self.frames[self.frame_index_at(time_ms)].buffer
   }
 
   /// Shared frame shown at the given playback time, looping over total duration.
   pub fn frame_at_time_arc(&self, time_ms: u64) -> Arc<ImageBuffer> {
-    if self.total_duration_ms == 0 {
-      return self.frames[0].buffer.clone();
-    }
-
-    let target_time = time_ms % self.total_duration_ms;
-    let mut elapsed_ms = 0_u64;
-
-    for frame in self.frames.iter() {
-      elapsed_ms = elapsed_ms.saturating_add(frame.duration_ms as u64);
-      if target_time < elapsed_ms {
-        return frame.buffer.clone();
-      }
-    }
-
-    self.frames[0].buffer.clone()
+    self.frames[self.frame_index_at(time_ms)].buffer.clone()
   }
 }
 
@@ -216,39 +202,35 @@ impl SvgRasterCacheKey {
   }
 }
 
+/// An SVG is rasterized at only a handful of distinct sizes; this caps that.
 #[cfg(feature = "svg")]
-#[derive(Debug, Default)]
+const SVG_RASTER_CACHE_CAPACITY: usize = 32;
+
+#[cfg(feature = "svg")]
+#[derive(Debug)]
 struct SvgRasterCache {
-  #[cfg(target_arch = "wasm32")]
-  map: RefCell<HashMap<SvgRasterCacheKey, Arc<ImageBuffer>>>,
-  #[cfg(not(target_arch = "wasm32"))]
-  map: DashMap<SvgRasterCacheKey, Arc<ImageBuffer>>,
+  // ponytail: count-bounded, lock-free (same `quick_cache` as `ImageCache`). Byte-budget it if a
+  // huge SVG cached at many sizes ever bloats memory.
+  map: Cache<SvgRasterCacheKey, Arc<ImageBuffer>>,
+}
+
+#[cfg(feature = "svg")]
+impl Default for SvgRasterCache {
+  fn default() -> Self {
+    Self {
+      map: Cache::new(SVG_RASTER_CACHE_CAPACITY),
+    }
+  }
 }
 
 #[cfg(feature = "svg")]
 impl SvgRasterCache {
   fn get(&self, key: SvgRasterCacheKey) -> Option<Arc<ImageBuffer>> {
-    #[cfg(target_arch = "wasm32")]
-    {
-      self.map.borrow().get(&key).cloned()
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-      self.map.get(&key).map(|pixmap| pixmap.clone())
-    }
+    self.map.get(&key)
   }
 
   fn insert(&self, key: SvgRasterCacheKey, pixmap: Arc<ImageBuffer>) {
-    #[cfg(target_arch = "wasm32")]
-    {
-      self.map.borrow_mut().insert(key, pixmap);
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-      self.map.insert(key, pixmap);
-    }
+    self.map.insert(key, pixmap);
   }
 }
 

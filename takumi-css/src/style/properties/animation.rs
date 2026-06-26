@@ -9,6 +9,24 @@ use crate::style::{
   declare_enum_from_css_impl, next_is_comma, tw::TailwindPropertyParser,
 };
 
+/// Implements `FromCss` for a `Box<[T]>` animation list type as a comma-separated list of `$elem`.
+macro_rules! impl_comma_list_from_css {
+  ($list:ty, $elem:ty) => {
+    impl_comma_list_from_css!($list, $elem, <$elem>::VALID_TOKENS);
+  };
+  ($list:ty, $elem:ty, $valid:expr) => {
+    impl<'i> FromCss<'i> for $list {
+      fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+        input
+          .parse_comma_separated(<$elem>::from_css)
+          .map(Vec::into_boxed_slice)
+      }
+
+      const VALID_TOKENS: &'static [CssToken] = $valid;
+    }
+  };
+}
+
 /// Represents a CSS animation time value stored in milliseconds.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct AnimationTime {
@@ -52,32 +70,20 @@ pub type AnimationNames = Box<[AnimationName]>;
 
 impl MakeComputed for AnimationNames {}
 
-impl<'i> FromCss<'i> for AnimationNames {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    input
-      .parse_comma_separated(AnimationName::from_css)
-      .map(Vec::into_boxed_slice)
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = &[
+impl_comma_list_from_css!(
+  AnimationNames,
+  AnimationName,
+  &[
     CssToken::Keyword("none"),
     CssToken::Syntax(CssSyntaxKind::CustomIdent),
     CssToken::Syntax(CssSyntaxKind::String),
-  ];
-}
+  ]
+);
 
 /// Parsed values for `animation-duration` and `animation-delay`.
 pub type AnimationDurations = Box<[AnimationTime]>;
 
-impl<'i> FromCss<'i> for AnimationDurations {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    input
-      .parse_comma_separated(AnimationTime::from_css)
-      .map(Vec::into_boxed_slice)
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = AnimationTime::VALID_TOKENS;
-}
+impl_comma_list_from_css!(AnimationDurations, AnimationTime);
 
 /// Supported CSS timing functions for animations.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -160,15 +166,7 @@ impl<'i> FromCss<'i> for AnimationTimingFunction {
 /// Parsed values for `animation-timing-function`.
 pub type AnimationTimingFunctions = Box<[AnimationTimingFunction]>;
 
-impl<'i> FromCss<'i> for AnimationTimingFunctions {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    input
-      .parse_comma_separated(AnimationTimingFunction::from_css)
-      .map(Vec::into_boxed_slice)
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = AnimationTimingFunction::VALID_TOKENS;
-}
+impl_comma_list_from_css!(AnimationTimingFunctions, AnimationTimingFunction);
 
 /// Supported values for `animation-iteration-count`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -214,15 +212,7 @@ impl<'i> FromCss<'i> for AnimationIterationCount {
 /// Parsed values for `animation-iteration-count`.
 pub type AnimationIterationCounts = Box<[AnimationIterationCount]>;
 
-impl<'i> FromCss<'i> for AnimationIterationCounts {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    input
-      .parse_comma_separated(AnimationIterationCount::from_css)
-      .map(Vec::into_boxed_slice)
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = AnimationIterationCount::VALID_TOKENS;
-}
+impl_comma_list_from_css!(AnimationIterationCounts, AnimationIterationCount);
 
 /// Supported values for `animation-direction`.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -250,15 +240,7 @@ declare_enum_from_css_impl!(
 /// Parsed values for `animation-direction`.
 pub type AnimationDirections = Box<[AnimationDirection]>;
 
-impl<'i> FromCss<'i> for AnimationDirections {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    input
-      .parse_comma_separated(AnimationDirection::from_css)
-      .map(Vec::into_boxed_slice)
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = AnimationDirection::VALID_TOKENS;
-}
+impl_comma_list_from_css!(AnimationDirections, AnimationDirection);
 
 /// Supported values for `animation-fill-mode`.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -286,15 +268,7 @@ declare_enum_from_css_impl!(
 /// Parsed values for `animation-fill-mode`.
 pub type AnimationFillModes = Box<[AnimationFillMode]>;
 
-impl<'i> FromCss<'i> for AnimationFillModes {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    input
-      .parse_comma_separated(AnimationFillMode::from_css)
-      .map(Vec::into_boxed_slice)
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = AnimationFillMode::VALID_TOKENS;
-}
+impl_comma_list_from_css!(AnimationFillModes, AnimationFillMode);
 
 /// Supported values for `animation-play-state`.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -316,15 +290,7 @@ declare_enum_from_css_impl!(
 /// Parsed values for `animation-play-state`.
 pub type AnimationPlayStates = Box<[AnimationPlayState]>;
 
-impl<'i> FromCss<'i> for AnimationPlayStates {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    input
-      .parse_comma_separated(AnimationPlayState::from_css)
-      .map(Vec::into_boxed_slice)
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = AnimationPlayState::VALID_TOKENS;
-}
+impl_comma_list_from_css!(AnimationPlayStates, AnimationPlayState);
 
 /// Parsed value for one `animation` shorthand item.
 #[derive(Debug, Clone, PartialEq, Default, TypedBuilder)]

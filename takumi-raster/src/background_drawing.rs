@@ -325,34 +325,21 @@ impl BackgroundTile {
   pub(crate) fn rasterize_row(&self, y: u32, width: u32, dst: &mut [u8]) {
     debug_assert_eq!(dst.len(), (width * 4) as usize);
     let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(dst);
+
+    fn rasterize_gradient_row<T: GradientOverlayTile>(t: &T, y: u32, pixels: &mut [[u8; 4]]) {
+      let lut_len = t.lut_len();
+      let mut row_state = t.begin_row(0, y, lut_len);
+      for chunk in pixels.iter_mut() {
+        let lut_idx = t.next_lut_index(&mut row_state);
+        let p = t.sample_at(lut_idx);
+        *chunk = [p.red(), p.green(), p.blue(), p.alpha()];
+      }
+    }
+
     match self {
-      Self::Linear(t) => {
-        let lut_len = t.lut_len();
-        let mut row_state = t.begin_row(0, y, lut_len);
-        for chunk in pixels.iter_mut() {
-          let lut_idx = t.next_lut_index(&mut row_state);
-          let p = t.sample_at(lut_idx);
-          *chunk = [p.red(), p.green(), p.blue(), p.alpha()];
-        }
-      }
-      Self::Radial(t) => {
-        let lut_len = t.lut_len();
-        let mut row_state = t.begin_row(0, y, lut_len);
-        for chunk in pixels.iter_mut() {
-          let lut_idx = t.next_lut_index(&mut row_state);
-          let p = t.sample_at(lut_idx);
-          *chunk = [p.red(), p.green(), p.blue(), p.alpha()];
-        }
-      }
-      Self::Conic(t) => {
-        let lut_len = t.lut_len();
-        let mut row_state = t.begin_row(0, y, lut_len);
-        for chunk in pixels.iter_mut() {
-          let lut_idx = t.next_lut_index(&mut row_state);
-          let p = t.sample_at(lut_idx);
-          *chunk = [p.red(), p.green(), p.blue(), p.alpha()];
-        }
-      }
+      Self::Linear(t) => rasterize_gradient_row(t, y, pixels),
+      Self::Radial(t) => rasterize_gradient_row(t, y, pixels),
+      Self::Conic(t) => rasterize_gradient_row(t, y, pixels),
       Self::Pixmap(t) => {
         let ps = PaintSource::from(t.as_ref());
         for (x, chunk) in pixels.iter_mut().enumerate() {
