@@ -27,7 +27,7 @@ pub struct ConicGradient {
   #[builder(default)]
   pub from_angle: Angle,
   /// Center position (default 50% 50%).
-  #[builder(default)]
+  #[builder(default = ObjectPosition::center())]
   pub center: ObjectPosition,
   /// The color interpolation method used between stops.
   #[builder(default)]
@@ -329,7 +329,7 @@ impl<'i> FromCss<'i> for ConicGradient {
       Ok(ConicGradient {
         repeating,
         from_angle: from_angle.unwrap_or(Angle::zero()),
-        center: center.unwrap_or_default(),
+        center: center.unwrap_or_else(ObjectPosition::center),
         interpolation,
         stops: stops.into_boxed_slice(),
       })
@@ -434,7 +434,7 @@ mod tests {
         Ok(ConicGradient {
           repeating: false,
           from_angle: Angle::zero(),
-          center: ObjectPosition::default(),
+          center: ObjectPosition::center(),
           interpolation: ColorInterpolationMethod::default(),
           stops: stops.into(),
         }),
@@ -450,7 +450,7 @@ mod tests {
       Ok(ConicGradient {
         repeating: false,
         from_angle: Angle::zero(),
-        center: ObjectPosition::default(),
+        center: ObjectPosition::center(),
         interpolation: ColorInterpolationMethod {
           color_space: ColorSpaceTag::Oklab,
           hue_direction: HueDirection::Shorter,
@@ -479,7 +479,7 @@ mod tests {
       Ok(ConicGradient {
         repeating: false,
         from_angle: Angle::new(90.0),
-        center: BackgroundPosition::<false>(SpacePair::from_pair(
+        center: BackgroundPosition(SpacePair::from_pair(
           Length::Percentage(25.0).into(),
           Length::Percentage(75.0).into()
         )),

@@ -336,11 +336,11 @@ pub enum TailwindProperty {
   /// `mask-image` property.
   MaskImage(BackgroundImage),
   /// `gap` property.
-  Gap(LengthDefaultsToZero),
+  Gap(Length),
   /// `column-gap` property.
-  GapX(LengthDefaultsToZero),
+  GapX(Length),
   /// `row-gap` property.
-  GapY(LengthDefaultsToZero),
+  GapY(Length),
   /// `grid-auto-flow` property.
   GridAutoFlow(GridAutoFlow),
   /// `grid-auto-columns` property.
@@ -380,7 +380,7 @@ pub enum TailwindProperty {
   /// `opacity` property.
   Opacity(PercentageNumber),
   /// `background-color` property.
-  BackgroundColor(ColorDefaultsToTransparent),
+  BackgroundColor(ColorInput),
   /// `border-color` property.
   BorderColor(ColorInput),
   /// `border-top-width` property.
@@ -456,41 +456,41 @@ pub enum TailwindProperty {
   /// `transform-origin` property.
   TransformOrigin(TransformOrigin),
   /// `margin` property.
-  Margin(LengthDefaultsToZero),
+  Margin(Length),
   /// `margin-inline` property.
-  MarginX(LengthDefaultsToZero),
+  MarginX(Length),
   /// `margin-block` property.
-  MarginY(LengthDefaultsToZero),
+  MarginY(Length),
   /// `margin-top` property.
-  MarginTop(LengthDefaultsToZero),
+  MarginTop(Length),
   /// `margin-right` property.
-  MarginRight(LengthDefaultsToZero),
+  MarginRight(Length),
   /// `margin-bottom` property.
-  MarginBottom(LengthDefaultsToZero),
+  MarginBottom(Length),
   /// `margin-left` property.
-  MarginLeft(LengthDefaultsToZero),
+  MarginLeft(Length),
   /// `margin-inline-start` property.
-  MarginInlineStart(LengthDefaultsToZero),
+  MarginInlineStart(Length),
   /// `margin-inline-end` property.
-  MarginInlineEnd(LengthDefaultsToZero),
+  MarginInlineEnd(Length),
   /// `padding` property.
-  Padding(LengthDefaultsToZero),
+  Padding(Length),
   /// `padding-inline` property.
-  PaddingX(LengthDefaultsToZero),
+  PaddingX(Length),
   /// `padding-block` property.
-  PaddingY(LengthDefaultsToZero),
+  PaddingY(Length),
   /// `padding-top` property.
-  PaddingTop(LengthDefaultsToZero),
+  PaddingTop(Length),
   /// `padding-right` property.
-  PaddingRight(LengthDefaultsToZero),
+  PaddingRight(Length),
   /// `padding-bottom` property.
-  PaddingBottom(LengthDefaultsToZero),
+  PaddingBottom(Length),
   /// `padding-left` property.
-  PaddingLeft(LengthDefaultsToZero),
+  PaddingLeft(Length),
   /// `padding-inline-start` property.
-  PaddingInlineStart(LengthDefaultsToZero),
+  PaddingInlineStart(Length),
   /// `padding-inline-end` property.
-  PaddingInlineEnd(LengthDefaultsToZero),
+  PaddingInlineEnd(Length),
   /// `inset` property.
   Inset(Length),
   /// `inset-inline` property.

@@ -3,7 +3,7 @@ use std::fmt;
 use taffy::{Point, Size};
 
 use crate::style::{
-  CssExpectedMessage, CssToken, FromCss, LengthDefaultsToZero, MakeComputed, Overflow, ParseResult,
+  CssExpectedMessage, CssToken, FromCss, Length, MakeComputed, Overflow, ParseResult,
   SizingContext, ToCss,
 };
 
@@ -75,7 +75,7 @@ impl SpacePair<Overflow> {
 }
 
 /// A pair of values for horizontal and vertical border radii.
-pub type BorderRadiusPair = SpacePair<LengthDefaultsToZero>;
+pub type BorderRadiusPair = SpacePair<Length>;
 
 impl BorderRadiusPair {
   /// Resolves both radii to non-negative pixels against the border box.

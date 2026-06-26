@@ -132,9 +132,8 @@ impl ToCss for BackgroundImage {
 #[cfg(test)]
 mod tests {
   use crate::style::{
-    Angle, BackgroundPosition, Color, ConicGradient, GradientStop, Length, LengthDefaultsToZero,
-    LinearGradient, LinearGradientDirection, RadialGradient, RadialShape, RadialSize, SpacePair,
-    StopPosition,
+    Angle, BackgroundPosition, Color, ConicGradient, GradientStop, Length, LinearGradient,
+    LinearGradientDirection, RadialGradient, RadialShape, RadialSize, SpacePair, StopPosition,
   };
 
   use super::*;
@@ -168,10 +167,10 @@ mod tests {
           BackgroundImage::Radial(
             RadialGradient::builder()
               .size(RadialSize::Explicit {
-                radius_x: LengthDefaultsToZero::Percentage(0.6 * 100.0),
-                radius_y: LengthDefaultsToZero::Percentage(0.6 * 100.0),
+                radius_x: Length::Percentage(0.6 * 100.0),
+                radius_y: Length::Percentage(0.6 * 100.0),
               })
-              .center(BackgroundPosition::<false>(SpacePair::from_pair(
+              .center(BackgroundPosition(SpacePair::from_pair(
                 Length::Percentage(0.5 * 100.0).into(),
                 Length::Percentage(0.5 * 100.0).into(),
               )))
@@ -190,10 +189,10 @@ mod tests {
           BackgroundImage::Radial(
             RadialGradient::builder()
               .size(RadialSize::Explicit {
-                radius_x: LengthDefaultsToZero::Percentage(0.3 * 100.0),
-                radius_y: LengthDefaultsToZero::Percentage(0.3 * 100.0),
+                radius_x: Length::Percentage(0.3 * 100.0),
+                radius_y: Length::Percentage(0.3 * 100.0),
               })
-              .center(BackgroundPosition::<false>(SpacePair::from_pair(
+              .center(BackgroundPosition(SpacePair::from_pair(
                 Length::Percentage(0.5 * 100.0).into(),
                 Length::Percentage(0.5 * 100.0).into(),
               )))
@@ -254,8 +253,8 @@ mod tests {
               .repeating(true)
               .shape(RadialShape::Circle)
               .size(RadialSize::Explicit {
-                radius_x: LengthDefaultsToZero::Px(20.0),
-                radius_y: LengthDefaultsToZero::Px(20.0),
+                radius_x: Length::Px(20.0),
+                radius_y: Length::Px(20.0),
               })
               .stops([
                 GradientStop::ColorHint {

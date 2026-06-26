@@ -97,22 +97,22 @@ impl From<PositionComponent> for Length {
 
 /// Parsed position value for one layer-like CSS property.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct BackgroundPosition<const DEFAULT_TOP_LEFT: bool = true>(
-  pub SpacePair<PositionComponent>,
-);
+pub struct BackgroundPosition(pub SpacePair<PositionComponent>);
 
-/// `object-position` value with a CSS initial value of `center center`.
-pub type ObjectPosition = BackgroundPosition<false>;
-/// `transform-origin` value with a CSS initial value of `center center`.
-pub type TransformOrigin = BackgroundPosition<false>;
+/// `object-position` value. Same type as [`BackgroundPosition`]; its `center center` initial
+/// value is supplied at the use site, not by the type.
+pub type ObjectPosition = BackgroundPosition;
+/// `transform-origin` value. Same type as [`BackgroundPosition`]; its `center center` initial
+/// value is supplied at the use site, not by the type.
+pub type TransformOrigin = BackgroundPosition;
 
-impl<const DEFAULT_TOP_LEFT: bool> MakeComputed for BackgroundPosition<DEFAULT_TOP_LEFT> {
+impl MakeComputed for BackgroundPosition {
   fn make_computed(&mut self, sizing: &SizingContext) {
     self.0.make_computed(sizing);
   }
 }
 
-impl<const DEFAULT_TOP_LEFT: bool> Animatable for BackgroundPosition<DEFAULT_TOP_LEFT> {
+impl Animatable for BackgroundPosition {
   fn list_interpolation_strategy() -> ListInterpolationStrategy {
     ListInterpolationStrategy::RepeatToLcm
   }
@@ -131,7 +131,7 @@ impl<const DEFAULT_TOP_LEFT: bool> Animatable for BackgroundPosition<DEFAULT_TOP
   }
 }
 
-impl<const DEFAULT_TOP_LEFT: bool> BackgroundPosition<DEFAULT_TOP_LEFT> {
+impl BackgroundPosition {
   /// Resolves the position to a pixel point within the border box.
   pub fn to_point(self, sizing: &SizingContext, border_box: Size<f32>) -> Point<f32> {
     Point {
@@ -141,7 +141,7 @@ impl<const DEFAULT_TOP_LEFT: bool> BackgroundPosition<DEFAULT_TOP_LEFT> {
   }
 }
 
-impl<const DEFAULT_TOP_LEFT: bool> TailwindPropertyParser for BackgroundPosition<DEFAULT_TOP_LEFT> {
+impl TailwindPropertyParser for BackgroundPosition {
   fn parse_tw(token: &str) -> Option<Self> {
     match token {
       "top-left" => Some(Self(SpacePair::from_pair(
@@ -185,23 +185,27 @@ impl<const DEFAULT_TOP_LEFT: bool> TailwindPropertyParser for BackgroundPosition
   }
 }
 
-impl<const DEFAULT_TOP_LEFT: bool> Default for BackgroundPosition<DEFAULT_TOP_LEFT> {
+impl Default for BackgroundPosition {
   fn default() -> Self {
-    if DEFAULT_TOP_LEFT {
-      Self(SpacePair::from_pair(
-        PositionComponent::KeywordX(PositionKeywordX::Left),
-        PositionComponent::KeywordY(PositionKeywordY::Top),
-      ))
-    } else {
-      Self(SpacePair::from_pair(
-        PositionComponent::KeywordX(PositionKeywordX::Center),
-        PositionComponent::KeywordY(PositionKeywordY::Center),
-      ))
-    }
+    Self(SpacePair::from_pair(
+      PositionComponent::KeywordX(PositionKeywordX::Left),
+      PositionComponent::KeywordY(PositionKeywordY::Top),
+    ))
   }
 }
 
-impl<'i, const DEFAULT_TOP_LEFT: bool> FromCss<'i> for BackgroundPosition<DEFAULT_TOP_LEFT> {
+impl BackgroundPosition {
+  /// Center position (`center center`), the initial value for `object-position` and
+  /// `transform-origin`.
+  pub fn center() -> Self {
+    Self(SpacePair::from_pair(
+      PositionComponent::KeywordX(PositionKeywordX::Center),
+      PositionComponent::KeywordY(PositionKeywordY::Center),
+    ))
+  }
+}
+
+impl<'i> FromCss<'i> for BackgroundPosition {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let first = PositionComponent::from_css(input)?;
     // If a second exists, parse it; otherwise, 1-value syntax means y=center
@@ -263,7 +267,7 @@ impl<'i> FromCss<'i> for BackgroundPositions {
     parse_comma_list(input, BackgroundPosition::from_css)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = BackgroundPosition::<true>::VALID_TOKENS;
+  const VALID_TOKENS: &'static [CssToken] = BackgroundPosition::VALID_TOKENS;
 }
 
 impl ToCss for PositionKeywordX {
@@ -296,7 +300,7 @@ impl ToCss for PositionComponent {
   }
 }
 
-impl<const DEFAULT_TOP_LEFT: bool> ToCss for BackgroundPosition<DEFAULT_TOP_LEFT> {
+impl ToCss for BackgroundPosition {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     self.0.to_css(dest)
   }

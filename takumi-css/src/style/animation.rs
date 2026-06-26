@@ -583,7 +583,7 @@ impl_passthrough_animatable!(
   FontVariation,
 );
 
-impl<const DEFAULT_AUTO: bool> Animatable for Length<DEFAULT_AUTO> {
+impl Animatable for Length {
   fn interpolate(
     &mut self,
     from: &Self,
@@ -603,11 +603,7 @@ impl<const DEFAULT_AUTO: bool> Animatable for Length<DEFAULT_AUTO> {
   }
 }
 
-fn interpolate_length<const DEFAULT_AUTO: bool>(
-  from: Length<DEFAULT_AUTO>,
-  to: Length<DEFAULT_AUTO>,
-  progress: f32,
-) -> Option<Length<DEFAULT_AUTO>> {
+fn interpolate_length(from: Length, to: Length, progress: f32) -> Option<Length> {
   macro_rules! lerp_variants {
     ($($variant:ident),+ $(,)?) => {
       match (from, to) {
@@ -626,10 +622,7 @@ fn interpolate_length<const DEFAULT_AUTO: bool>(
   )
 }
 
-fn resolve_length_with_sizing<const DEFAULT_AUTO: bool>(
-  value: Length<DEFAULT_AUTO>,
-  sizing: &SizingContext,
-) -> Option<f32> {
+fn resolve_length_with_sizing(value: Length, sizing: &SizingContext) -> Option<f32> {
   if matches!(value, Length::Auto) {
     return None;
   }
@@ -1394,23 +1387,23 @@ mod tests {
   fn text_indent_interpolates_amount_continuously() {
     let mut target = TextIndent::default();
     let from = TextIndent {
-      amount: LengthDefaultsToZero::Px(10.0),
+      amount: Length::Px(10.0),
       each_line: false,
       hanging: false,
     };
     let to = TextIndent {
-      amount: LengthDefaultsToZero::Px(30.0),
+      amount: Length::Px(30.0),
       each_line: true,
       hanging: true,
     };
 
     target.interpolate(&from, &to, 0.25, &sizing(), current_color());
-    assert_eq!(target.amount, LengthDefaultsToZero::Px(15.0));
+    assert_eq!(target.amount, Length::Px(15.0));
     assert!(!target.each_line);
     assert!(!target.hanging);
 
     target.interpolate(&from, &to, 0.75, &sizing(), current_color());
-    assert_eq!(target.amount, LengthDefaultsToZero::Px(25.0));
+    assert_eq!(target.amount, Length::Px(25.0));
     assert!(target.each_line);
     assert!(target.hanging);
   }

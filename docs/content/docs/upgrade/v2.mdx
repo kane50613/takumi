@@ -268,6 +268,15 @@ image.render_for_layout(width, height, image_rendering, time_ms, current_color)?
 image.render_for_layout(width, height, image_rendering, time_ms)?; // [!code ++]
 ```
 
+### `Length` and `ColorInput` drop their default-flavor type parameter
+
+`Length` and `ColorInput` were generic over a `const` bool so one enum could default two ways (`auto` vs `0`, `currentColor` vs `transparent`). That parameter is gone: both are plain enums. The `LengthDefaultsToZero` and `ColorDefaultsToTransparent` aliases are removed — use `Length` and `ColorInput`. `BackgroundPosition` is likewise non-generic; its `ObjectPosition` and `TransformOrigin` aliases stay. Rendering is unchanged: the zero/transparent/center initial values are now declared per field.
+
+```rust
+let inset: LengthDefaultsToZero = Length::Px(0.0); // [!code --]
+let inset: Length = Length::Px(0.0); // [!code ++]
+```
+
 ## More in Changelog!
 
 For the full list of changes, see the [releases](https://github.com/kane50613/takumi/releases).

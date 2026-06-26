@@ -5,23 +5,37 @@ use typed_builder::TypedBuilder;
 
 use super::box_shadow::parse_offsets_blur;
 use crate::style::{
-  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length, LengthDefaultsToZero,
+  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length,
   ListInterpolationStrategy, MakeComputed, ParseResult, SizingContext, ToCss, next_is_comma,
 };
 
 /// Represents a text shadow with all its properties.
-#[derive(Debug, Clone, PartialEq, Copy, Default, TypedBuilder)]
+#[derive(Debug, Clone, PartialEq, Copy, TypedBuilder)]
 #[builder(field_defaults(default))]
 #[non_exhaustive]
 pub struct TextShadow {
   /// Horizontal offset of the shadow.
-  pub offset_x: LengthDefaultsToZero,
+  #[builder(default = Length::zero())]
+  pub offset_x: Length,
   /// Vertical offset of the shadow.
-  pub offset_y: LengthDefaultsToZero,
+  #[builder(default = Length::zero())]
+  pub offset_y: Length,
   /// Blur radius of the shadow. Higher values create a more blurred shadow.
-  pub blur_radius: LengthDefaultsToZero,
+  #[builder(default = Length::zero())]
+  pub blur_radius: Length,
   /// Color of the shadow.
   pub color: ColorInput,
+}
+
+impl Default for TextShadow {
+  fn default() -> Self {
+    Self {
+      offset_x: Length::zero(),
+      offset_y: Length::zero(),
+      blur_radius: Length::zero(),
+      color: ColorInput::default(),
+    }
+  }
 }
 
 /// Represents a collection of text shadows; has custom `FromCss` implementation for comma-separated values.

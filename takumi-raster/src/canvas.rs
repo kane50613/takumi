@@ -2059,7 +2059,7 @@ mod tests {
     let gradient = ConicGradient {
       repeating: false,
       from_angle: Angle::zero(),
-      center: ObjectPosition::default(),
+      center: ObjectPosition::center(),
       interpolation: ColorInterpolationMethod::default(),
       stops: [
         GradientStop::ColorHint {

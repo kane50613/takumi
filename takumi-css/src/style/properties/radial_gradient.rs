@@ -9,8 +9,8 @@ use super::gradient_utils::{
 };
 use crate::style::{
   Color, ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop,
-  GradientStops, Length, LengthDefaultsToZero, MakeComputed, ObjectPosition, ParseResult,
-  SizingContext, ToCss, declare_enum_from_css_impl, unexpected_token,
+  GradientStops, Length, MakeComputed, ObjectPosition, ParseResult, SizingContext, ToCss,
+  declare_enum_from_css_impl, unexpected_token,
 };
 
 /// Represents a radial gradient.
@@ -27,7 +27,7 @@ pub struct RadialGradient {
   #[builder(default)]
   pub size: RadialSize,
   /// Center position
-  #[builder(default)]
+  #[builder(default = ObjectPosition::center())]
   pub center: ObjectPosition,
   /// The color interpolation method used between stops.
   #[builder(default)]
@@ -79,9 +79,9 @@ pub enum RadialSize {
   /// For `circle`, the larger of the two radii is used.
   Explicit {
     /// Horizontal radius.
-    radius_x: LengthDefaultsToZero,
+    radius_x: Length,
     /// Vertical radius.
-    radius_y: LengthDefaultsToZero,
+    radius_y: Length,
   },
 }
 impl<'i> FromCss<'i> for RadialSize {
@@ -409,7 +409,7 @@ impl<'i> FromCss<'i> for RadialGradient {
     input.parse_nested_block(|input| {
       let mut shape = RadialShape::Ellipse;
       let mut size = RadialSize::FarthestCorner;
-      let mut center = ObjectPosition::default();
+      let mut center = ObjectPosition::center();
       let mut interpolation = ColorInterpolationMethod::default();
 
       loop {
@@ -423,10 +423,8 @@ impl<'i> FromCss<'i> for RadialGradient {
           continue;
         }
 
-        if let Ok(radius_x) = input.try_parse(LengthDefaultsToZero::from_css) {
-          let radius_y = input
-            .try_parse(LengthDefaultsToZero::from_css)
-            .unwrap_or(radius_x);
+        if let Ok(radius_x) = input.try_parse(Length::from_css) {
+          let radius_y = input.try_parse(Length::from_css).unwrap_or(radius_x);
           size = RadialSize::Explicit { radius_x, radius_y };
           continue;
         }
@@ -531,8 +529,8 @@ mod tests {
   use crate::{
     Viewport,
     style::{
-      BackgroundPosition, Color, Length, LengthDefaultsToZero, PositionComponent, PositionKeywordX,
-      PositionKeywordY, SpacePair, StopPosition, properties::gradient_utils::red_blue_stops,
+      BackgroundPosition, Color, Length, PositionComponent, PositionKeywordX, PositionKeywordY,
+      SpacePair, StopPosition, properties::gradient_utils::red_blue_stops,
     },
   };
   #[test]
@@ -600,7 +598,7 @@ mod tests {
       gradient,
       Ok(
         RadialGradient::builder()
-          .center(BackgroundPosition::<false>(SpacePair::from_pair(
+          .center(BackgroundPosition(SpacePair::from_pair(
             PositionComponent::KeywordX(PositionKeywordX::Left),
             PositionComponent::KeywordY(PositionKeywordY::Top),
           )))
@@ -619,7 +617,7 @@ mod tests {
       gradient,
       Ok(
         RadialGradient::builder()
-          .center(BackgroundPosition::<false>(SpacePair::from_pair(
+          .center(BackgroundPosition(SpacePair::from_pair(
             Length::Percentage(25.0).into(),
             Length::Percentage(70.0).into(),
           )))
@@ -649,7 +647,7 @@ mod tests {
       Ok(
         RadialGradient::builder()
           .shape(RadialShape::Circle)
-          .center(BackgroundPosition::<false>(SpacePair::from_single(
+          .center(BackgroundPosition(SpacePair::from_single(
             PositionComponent::Length(Length::Px(25.0),)
           )))
           .stops([
@@ -729,11 +727,11 @@ mod tests {
         shape: RadialShape::Ellipse,
         size:
           RadialSize::Explicit {
-            radius_x: LengthDefaultsToZero::Percentage(radius_x),
-            radius_y: LengthDefaultsToZero::Percentage(radius_y),
+            radius_x: Length::Percentage(radius_x),
+            radius_y: Length::Percentage(radius_y),
           },
         center:
-          BackgroundPosition::<false>(SpacePair {
+          BackgroundPosition(SpacePair {
             x: PositionComponent::Length(Length::Percentage(center_x)),
             y: PositionComponent::Length(Length::Percentage(center_y)),
           }),
@@ -849,8 +847,8 @@ mod tests {
       .repeating(true)
       .shape(RadialShape::Circle)
       .size(RadialSize::Explicit {
-        radius_x: LengthDefaultsToZero::Px(20.0),
-        radius_y: LengthDefaultsToZero::Px(20.0),
+        radius_x: Length::Px(20.0),
+        radius_y: Length::Px(20.0),
       })
       .stops([
         GradientStop::ColorHint {
@@ -896,7 +894,7 @@ mod tests {
   #[test]
   fn test_radial_gradient_ellipse_closest_corner() {
     let gradient = RadialGradient::builder()
-      .center(BackgroundPosition::<false>(SpacePair::from_pair(
+      .center(BackgroundPosition(SpacePair::from_pair(
         Length::Px(20.0).into(),
         Length::Px(20.0).into(),
       )))

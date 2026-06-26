@@ -5,7 +5,7 @@ use taffy::Size;
 use crate::{
   Viewport,
   error::StyleSheetParseError,
-  style::{CalcArena, FromCss, LengthDefaultsToZero, SizingContext},
+  style::{CalcArena, FromCss, Length, SizingContext},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -30,8 +30,8 @@ enum MediaOrientation {
 
 #[derive(Debug, Clone, PartialEq)]
 enum MediaFeature {
-  Width(MediaFeatureComparison, LengthDefaultsToZero),
-  Height(MediaFeatureComparison, LengthDefaultsToZero),
+  Width(MediaFeatureComparison, Length),
+  Height(MediaFeatureComparison, Length),
   Orientation(MediaOrientation),
 }
 
@@ -239,7 +239,7 @@ fn parse_media_feature<'i, 't>(
     MediaFeatureComparison::Equal
   };
 
-  let length = LengthDefaultsToZero::from_css(input).map_err(ParseError::into)?;
+  let length = Length::from_css(input).map_err(ParseError::into)?;
 
   if feature_name.eq_ignore_ascii_case("width")
     || feature_name.eq_ignore_ascii_case("min-width")

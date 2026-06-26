@@ -4,13 +4,13 @@ use cssparser::{BasicParseErrorKind, ParseError, Parser};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
-  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length, LengthDefaultsToZero,
+  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length,
   ListInterpolationStrategy, MakeComputed, ParseResult, SizingContext, ToCss, next_is_comma,
 };
 
 /// Represents a box shadow with all its properties.
 /// Construct with [`BoxShadow::builder`].
-#[derive(Debug, Clone, PartialEq, Copy, Default, TypedBuilder)]
+#[derive(Debug, Clone, PartialEq, Copy, TypedBuilder)]
 #[builder(field_defaults(default))]
 #[non_exhaustive]
 pub struct BoxShadow {
@@ -18,15 +18,32 @@ pub struct BoxShadow {
   #[builder(default = false)]
   pub inset: bool,
   /// Horizontal offset of the shadow.
-  pub offset_x: LengthDefaultsToZero,
+  #[builder(default = Length::zero())]
+  pub offset_x: Length,
   /// Vertical offset of the shadow.
-  pub offset_y: LengthDefaultsToZero,
+  #[builder(default = Length::zero())]
+  pub offset_y: Length,
   /// Blur radius of the shadow. Higher values create a more blurred shadow.
-  pub blur_radius: LengthDefaultsToZero,
+  #[builder(default = Length::zero())]
+  pub blur_radius: Length,
   /// Spread radius of the shadow. Positive values expand the shadow, negative values shrink it.
-  pub spread_radius: LengthDefaultsToZero,
+  #[builder(default = Length::zero())]
+  pub spread_radius: Length,
   /// Color of the shadow.
   pub color: ColorInput,
+}
+
+impl Default for BoxShadow {
+  fn default() -> Self {
+    Self {
+      inset: false,
+      offset_x: Length::zero(),
+      offset_y: Length::zero(),
+      blur_radius: Length::zero(),
+      spread_radius: Length::zero(),
+      color: ColorInput::default(),
+    }
+  }
 }
 
 /// Represents a collection of box shadows, have custom `FromCss` implementation for comma-separated values.
@@ -45,9 +62,7 @@ impl<'i> FromCss<'i> for BoxShadows {
 }
 
 /// Parses a `<length>` rejecting percentages, which are invalid for shadow blur/spread radii.
-fn parse_non_percentage_length<'i>(
-  input: &mut Parser<'i, '_>,
-) -> ParseResult<'i, LengthDefaultsToZero> {
+fn parse_non_percentage_length<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Length> {
   let length = Length::from_css(input)?;
   if matches!(length, Length::Percentage(_)) {
     return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
@@ -57,14 +72,7 @@ fn parse_non_percentage_length<'i>(
 
 pub(super) fn parse_offsets_blur<'i>(
   input: &mut Parser<'i, '_>,
-) -> ParseResult<
-  'i,
-  (
-    LengthDefaultsToZero,
-    LengthDefaultsToZero,
-    LengthDefaultsToZero,
-  ),
-> {
+) -> ParseResult<'i, (Length, Length, Length)> {
   let horizontal = Length::from_css(input)?;
   let vertical = Length::from_css(input)?;
   let blur = input
