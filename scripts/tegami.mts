@@ -1,3 +1,4 @@
+import { execFileSync } from "child_process";
 import { readFile, writeFile } from "fs/promises";
 import path from "path";
 import { tegami, type PackageOptions, type TegamiPlugin } from "tegami";
@@ -56,6 +57,25 @@ function workspaceProtocol(): TegamiPlugin {
   };
 }
 
+// Tegami publishes a pre-packed tarball, which skips npm's `prepublishOnly` — so
+// @takumi-rs/core's napi platform packages never ship and its `optionalDependencies`
+// stay empty. Stage and publish them at publish time instead, before the core tarball
+// is built, so the platform versions exist and core carries the matching optionalDeps.
+function napiPlatformPackages(): TegamiPlugin {
+  return {
+    name: "napi-platform-packages",
+    async willPublish({ pkg }) {
+      if (pkg.name !== "@takumi-rs/core") return;
+
+      const run = (cmd: string, args: string[]) =>
+        execFileSync(cmd, args, { cwd: pkg.path, stdio: "inherit" });
+
+      run("bun", ["run", "artifacts"]);
+      run("bunx", ["napi", "prepublish", "-t", "npm", "--no-gh-release"]);
+    },
+  };
+}
+
 // v2 beta line; clear this for the stable 2.0.0 release.
 const prerelease = "beta";
 
@@ -87,6 +107,7 @@ for (const name of independentCrates) {
 const paper = tegami({
   plugins: [
     github({ repo: "kane50613/takumi", cli: { versionPr: { base: "master" } } }),
+    napiPlatformPackages(),
     workspaceProtocol(),
   ],
   groups: {
