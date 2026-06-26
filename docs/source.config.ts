@@ -56,7 +56,7 @@ export default defineConfig({
         light: "github-light",
         dark: "github-dark",
       },
-      langs: ["ts", "tsx", "js", "svelte"],
+      langs: ["ts", "tsx", "js", "svelte", "astro"],
       transformers: [
         ...(rehypeCodeDefaultOptions.transformers ?? []),
         transformerTwoslash({

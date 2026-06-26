@@ -1,0 +1,74 @@
+---
+title: Astro
+description: Generate Open Graph images for every page at build time.
+---
+
+[astro-takumi](https://github.com/vikas5914/astro-takumi) renders an Open Graph image for every page of an Astro site. During the build it reads each emitted page, renders a React component — or a [built-in preset](https://github.com/vikas5914/astro-takumi#presets) — through Takumi, and writes the image next to the HTML.
+
+<Steps>
+  <Step>
+    ### Add the integration
+
+    `astro add` wires the integration into your config. React and a font are needed too — React authors the image and never ships to the client, and fonts must be declared explicitly since system fonts are unavailable.
+
+    ```npm
+    npx astro add astro-takumi
+    ```
+
+    ```npm
+    npm i -D react
+    npm i @fontsource/roboto
+    ```
+
+  </Step>
+  <Step>
+    ### Configure the integration
+
+    Pass the fonts to render with and a `render` function. The presets cover common layouts; `site` is required so Takumi can build absolute image URLs.
+
+    <Callout>astro-takumi runs in `astro:build:done`, so it only covers statically rendered pages.</Callout>
+
+    ```js title="astro.config.mjs"
+    import { defineConfig } from "astro/config";
+    import * as fs from "node:fs";
+    import astroTakumi, { presets } from "astro-takumi";
+
+    export default defineConfig({
+      site: "https://example.com",
+      integrations: [
+        astroTakumi({
+          options: {
+            fonts: [fs.readFileSync("node_modules/@fontsource/roboto/files/roboto-latin-400-normal.woff")],
+          },
+          render: presets.blackAndWhite,
+        }),
+      ],
+    });
+    ```
+
+  </Step>
+  <Step>
+    ### Reference the image from your layout
+
+    `getImagePath` returns the URL of the image generated for the current page. The build fails if `og:image` does not match it.
+
+    ```astro title="src/layouts/Layout.astro"
+    ---
+    import { getImagePath } from "astro-takumi";
+
+    const { title } = Astro.props;
+    const { url, site } = Astro;
+
+    const openGraphImageUrl = getImagePath({ url, site });
+    ---
+
+    <head>
+      <title>{title}</title>
+      <meta property="og:title" content={title} />
+      <meta property="og:type" content="website" />
+      <meta property="og:image" content={openGraphImageUrl} />
+    </head>
+    ```
+
+  </Step>
+</Steps>
