@@ -743,7 +743,7 @@ fn test_merge_from_background_longhands_clear_lower_priority_background_color() 
   ))]);
   let inline_style = style_with([
     StyleDeclaration::background_image(Some([BackgroundImage::None].into())),
-    StyleDeclaration::background_position([BackgroundPosition::default()].into()),
+    StyleDeclaration::background_position([PositionValue::default()].into()),
     StyleDeclaration::background_size([BackgroundSize::default()].into()),
     StyleDeclaration::background_repeat([BackgroundRepeat::default()].into()),
     StyleDeclaration::background_blend_mode([BlendMode::default()].into()),
@@ -1218,7 +1218,7 @@ fn test_var_defers_when_property_parser_accepts_a_prefix() {
 
   assert_eq!(
     style.background_position.as_ref(),
-    [BackgroundPosition(SpacePair::from_pair(
+    [PositionValue(SpacePair::from_pair(
       PositionComponent::Length(Length::Px(0.0)),
       PositionComponent::Length(Length::Px(150.0)),
     ))]

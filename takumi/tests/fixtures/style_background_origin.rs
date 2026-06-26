@@ -27,7 +27,7 @@ fn test_style_background_origin() {
           BackgroundRepeats::from_str("no-repeat").unwrap(),
         ))
         .with(StyleDeclaration::background_position(
-          BackgroundPositions::from_str("left top").unwrap(),
+          PositionValues::from_str("left top").unwrap(),
         ))
         .with(StyleDeclaration::background_origin(origin)),
     )

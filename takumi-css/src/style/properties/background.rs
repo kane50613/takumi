@@ -11,7 +11,7 @@ pub struct Background {
   /// Background image.
   pub image: BackgroundImage,
   /// Background position.
-  pub position: BackgroundPosition,
+  pub position: PositionValue,
   /// Background size.
   pub size: BackgroundSize,
   /// Background repeat.
@@ -55,7 +55,7 @@ impl<'i> FromCss<'i> for Background {
 
       // Try to parse background-position (and optionally background-size with /)
       if position.is_none()
-        && let Ok(value) = input.try_parse(BackgroundPosition::from_css)
+        && let Ok(value) = input.try_parse(PositionValue::from_css)
       {
         position = Some(value);
 
@@ -205,7 +205,7 @@ mod tests {
     assert_eq!(
       Background::from_str("center/cover"),
       Ok(Background {
-        position: BackgroundPosition(SpacePair::from_pair(
+        position: PositionValue(SpacePair::from_pair(
           PositionComponent::KeywordX(PositionKeywordX::Center),
           PositionComponent::KeywordY(PositionKeywordY::Center),
         )),
@@ -221,7 +221,7 @@ mod tests {
       Background::from_str("no-repeat center/80% url(../img/image.png)"),
       Ok(Background {
         image: BackgroundImage::Url("../img/image.png".into()),
-        position: BackgroundPosition(SpacePair::from_pair(
+        position: PositionValue(SpacePair::from_pair(
           PositionComponent::KeywordX(PositionKeywordX::Center),
           PositionComponent::KeywordY(PositionKeywordY::Center),
         )),
@@ -257,7 +257,7 @@ mod tests {
             image: BackgroundImage::Radial(
               RadialGradient::builder()
                 .shape(RadialShape::Circle)
-                .center(BackgroundPosition(SpacePair::from_pair(
+                .center(PositionValue(SpacePair::from_pair(
                   Length::Percentage(80.0).into(),
                   Length::Percentage(20.0).into(),
                 )))
@@ -279,7 +279,7 @@ mod tests {
             image: BackgroundImage::Radial(
               RadialGradient::builder()
                 .shape(RadialShape::Circle)
-                .center(BackgroundPosition(SpacePair::from_pair(
+                .center(PositionValue(SpacePair::from_pair(
                   Length::Percentage(20.0).into(),
                   Length::Percentage(80.0).into(),
                 )))

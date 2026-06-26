@@ -700,7 +700,7 @@ fn text_mask_image_gradient_and_emoji() {
           BackgroundSizes::from_str("100% 100%").unwrap(),
         ))
         .with(StyleDeclaration::background_position(
-          BackgroundPositions::from_str("0 0").unwrap(),
+          PositionValues::from_str("0 0").unwrap(),
         ))
         .with(StyleDeclaration::background_repeat(
           BackgroundRepeats::from_str("no-repeat").unwrap(),
@@ -763,7 +763,7 @@ fn text_stroke_background_clip() {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::background_image(Some(gradient_images)))
       .with(StyleDeclaration::background_position(
-        BackgroundPositions::from_str("center center").unwrap(),
+        PositionValues::from_str("center center").unwrap(),
       ))
       .with(StyleDeclaration::background_clip(BackgroundClip::Text))
       .with(StyleDeclaration::color(ColorInput::Value(Color::white())))
@@ -990,7 +990,7 @@ fn text_super_bold_stroke_background_clip() {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::background_image(Some(gradient_images)))
       .with(StyleDeclaration::background_position(
-        BackgroundPositions::from_str("center center").unwrap(),
+        PositionValues::from_str("center center").unwrap(),
       ))
       .with(StyleDeclaration::background_clip(BackgroundClip::Text))
       .with(StyleDeclaration::display(Display::Block))

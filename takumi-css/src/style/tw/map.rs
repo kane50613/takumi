@@ -35,9 +35,9 @@ macro_rules! property_parsers {
 
 property_parsers! {
   ObjectFit(ObjectFit) => ObjectFit,
-  ObjectPosition(ObjectPosition) => ObjectPosition,
-  BgPosition(BackgroundPosition) => BackgroundPosition,
-  TransformOrigin(TransformOrigin) => TransformOrigin,
+  ObjectPosition(PositionValue) => PositionValue,
+  BgPosition(PositionValue) => PositionValue,
+  TransformOrigin(PositionValue) => PositionValue,
   BgSize(BackgroundSize) => BackgroundSize,
   BgImage(BackgroundImage) => BackgroundImage,
   LengthAuto(Length) => Length,

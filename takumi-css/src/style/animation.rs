@@ -730,13 +730,13 @@ mod tests {
 
   #[test]
   fn background_position_interpolates_components() {
-    let mut target: BackgroundPosition = BackgroundPosition::default();
+    let mut target: PositionValue = PositionValue::default();
     target.interpolate(
-      &BackgroundPosition(SpacePair::from_pair(
+      &PositionValue(SpacePair::from_pair(
         PositionComponent::KeywordX(PositionKeywordX::Left),
         PositionComponent::KeywordY(PositionKeywordY::Top),
       )),
-      &BackgroundPosition(SpacePair::from_pair(
+      &PositionValue(SpacePair::from_pair(
         PositionComponent::KeywordX(PositionKeywordX::Right),
         PositionComponent::KeywordY(PositionKeywordY::Bottom),
       )),
@@ -747,7 +747,7 @@ mod tests {
 
     assert_eq!(
       target,
-      BackgroundPosition(SpacePair::from_pair(
+      PositionValue(SpacePair::from_pair(
         PositionComponent::Length(Length::Percentage(50.0)),
         PositionComponent::Length(Length::Percentage(50.0)),
       ))

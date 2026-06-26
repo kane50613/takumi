@@ -58,7 +58,7 @@ fn test_style_transform_origin_center() {
   let container = Node::container(
     ROTATED_ANGLES
       .iter()
-      .map(|angle| create_rotated_container(*angle, TransformOrigin::default()))
+      .map(|angle| create_rotated_container(*angle, PositionValue::center()))
       .collect::<Vec<_>>(),
   )
   .with_style(
@@ -82,7 +82,7 @@ fn test_style_transform_origin_top_left() {
       .map(|angle| {
         create_rotated_container(
           *angle,
-          BackgroundPosition(SpacePair::from_pair(
+          PositionValue(SpacePair::from_pair(
             PositionComponent::KeywordX(PositionKeywordX::Left),
             PositionComponent::KeywordY(PositionKeywordY::Top),
           )),
@@ -105,7 +105,7 @@ fn test_style_transform_origin_top_left() {
   run_fixture_test(container, "style_transform_origin_top_left");
 }
 
-fn create_rotated_container(angle: f32, transform_origin: TransformOrigin) -> Node {
+fn create_rotated_container(angle: f32, transform_origin: PositionValue) -> Node {
   Node::image("assets/images/yeecord.png").with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))

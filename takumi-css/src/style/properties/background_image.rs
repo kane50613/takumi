@@ -132,8 +132,8 @@ impl ToCss for BackgroundImage {
 #[cfg(test)]
 mod tests {
   use crate::style::{
-    Angle, BackgroundPosition, Color, ConicGradient, GradientStop, Length, LinearGradient,
-    LinearGradientDirection, RadialGradient, RadialShape, RadialSize, SpacePair, StopPosition,
+    Angle, Color, ConicGradient, GradientStop, Length, LinearGradient, LinearGradientDirection,
+    PositionValue, RadialGradient, RadialShape, RadialSize, SpacePair, StopPosition,
   };
 
   use super::*;
@@ -170,7 +170,7 @@ mod tests {
                 radius_x: Length::Percentage(0.6 * 100.0),
                 radius_y: Length::Percentage(0.6 * 100.0),
               })
-              .center(BackgroundPosition(SpacePair::from_pair(
+              .center(PositionValue(SpacePair::from_pair(
                 Length::Percentage(0.5 * 100.0).into(),
                 Length::Percentage(0.5 * 100.0).into(),
               )))
@@ -192,7 +192,7 @@ mod tests {
                 radius_x: Length::Percentage(0.3 * 100.0),
                 radius_y: Length::Percentage(0.3 * 100.0),
               })
-              .center(BackgroundPosition(SpacePair::from_pair(
+              .center(PositionValue(SpacePair::from_pair(
                 Length::Percentage(0.5 * 100.0).into(),
                 Length::Percentage(0.5 * 100.0).into(),
               )))

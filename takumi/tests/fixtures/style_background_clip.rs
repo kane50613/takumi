@@ -87,7 +87,7 @@ fn test_style_background_clip_text_gradient() {
         BackgroundSizes::from_str("100% 100%").unwrap(),
       ))
       .with(StyleDeclaration::background_position(
-        BackgroundPositions::from_str("0 0").unwrap(),
+        PositionValues::from_str("0 0").unwrap(),
       ))
       .with(StyleDeclaration::background_repeat(
         BackgroundRepeats::from_str("no-repeat").unwrap(),
@@ -126,7 +126,7 @@ fn test_style_background_clip_text_radial_gradient() {
         BackgroundSizes::from_str("100% 100%").unwrap(),
       ))
       .with(StyleDeclaration::background_position(
-        BackgroundPositions::from_str("center center").unwrap(),
+        PositionValues::from_str("center center").unwrap(),
       ))
       .with(StyleDeclaration::background_clip(BackgroundClip::Text))
       .with(StyleDeclaration::color(ColorInput::Value(
@@ -196,7 +196,7 @@ fn test_style_background_clip_with_gradient_background() {
       .with(StyleDeclaration::height(Rem(10.0)))
       .with(StyleDeclaration::background_image(Some(gradient_images)))
       .with(StyleDeclaration::background_position(
-        BackgroundPositions::from_str("center center").unwrap(),
+        PositionValues::from_str("center center").unwrap(),
       ))
       .with(StyleDeclaration::background_clip(
         BackgroundClip::PaddingBox,
@@ -232,7 +232,7 @@ fn test_style_background_clip_text_multiline() {
             .with(StyleDeclaration::background_image(Some(gradient_images)))
             .with(StyleDeclaration::background_size(BackgroundSizes::from_str("100% 100%").unwrap()))
             .with(StyleDeclaration::background_position(
-              BackgroundPositions::from_str("center center").unwrap(),
+              PositionValues::from_str("center center").unwrap(),
             ))
             .with(StyleDeclaration::background_clip(BackgroundClip::Text))
             .with(StyleDeclaration::color(ColorInput::Value(Color::transparent())))

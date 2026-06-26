@@ -322,11 +322,11 @@ pub enum TailwindProperty {
   /// `display` property.
   Display(Display),
   /// `object-position` property.
-  ObjectPosition(ObjectPosition),
+  ObjectPosition(PositionValue),
   /// `object-fit` property.
   ObjectFit(ObjectFit),
   /// `background-position` property.
-  BackgroundPosition(BackgroundPosition),
+  BackgroundPosition(PositionValue),
   /// `background-size` property.
   BackgroundSize(BackgroundSize),
   /// `background-repeat` property.
@@ -454,7 +454,7 @@ pub enum TailwindProperty {
   /// `scale-y` property.
   ScaleY(PercentageNumber),
   /// `transform-origin` property.
-  TransformOrigin(TransformOrigin),
+  TransformOrigin(PositionValue),
   /// `margin` property.
   Margin(Length),
   /// `margin-inline` property.

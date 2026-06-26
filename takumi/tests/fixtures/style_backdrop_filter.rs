@@ -68,7 +68,7 @@ fn test_style_backdrop_filter() {
           .unwrap(),
         )))
         .with(StyleDeclaration::background_position(
-          BackgroundPositions::from_str("center center").unwrap(),
+          PositionValues::from_str("center center").unwrap(),
         )),)
   ;
 
@@ -125,7 +125,7 @@ fn test_style_backdrop_filter_frosted_glass() {
         BackgroundImages::from_str("url(assets/images/yeecord.png)").unwrap(),
       )))
       .with(StyleDeclaration::background_position(
-        BackgroundPositions::from_str("center center").unwrap(),
+        PositionValues::from_str("center center").unwrap(),
       ))
       .with(StyleDeclaration::background_size(
         BackgroundSizes::from_str("cover").unwrap(),

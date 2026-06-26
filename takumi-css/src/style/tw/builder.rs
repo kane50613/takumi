@@ -392,7 +392,7 @@ impl TwGradientState {
           repeating: false,
           shape: RadialShape::Ellipse,
           size: RadialSize::FarthestCorner,
-          center: ObjectPosition::center(),
+          center: PositionValue::center(),
           interpolation: ColorInterpolationMethod::default(),
           stops: stops.into_boxed_slice(),
         };
@@ -406,7 +406,7 @@ impl TwGradientState {
         let gradient = ConicGradient {
           repeating: false,
           from_angle: angle,
-          center: ObjectPosition::center(),
+          center: PositionValue::center(),
           interpolation: ColorInterpolationMethod::default(),
           stops: stops.into_boxed_slice(),
         };

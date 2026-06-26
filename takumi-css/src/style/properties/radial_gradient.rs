@@ -9,7 +9,7 @@ use super::gradient_utils::{
 };
 use crate::style::{
   Color, ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop,
-  GradientStops, Length, MakeComputed, ObjectPosition, ParseResult, SizingContext, ToCss,
+  GradientStops, Length, MakeComputed, ParseResult, PositionValue, SizingContext, ToCss,
   declare_enum_from_css_impl, unexpected_token,
 };
 
@@ -27,8 +27,8 @@ pub struct RadialGradient {
   #[builder(default)]
   pub size: RadialSize,
   /// Center position
-  #[builder(default = ObjectPosition::center())]
-  pub center: ObjectPosition,
+  #[builder(default = PositionValue::center())]
+  pub center: PositionValue,
   /// The color interpolation method used between stops.
   #[builder(default)]
   pub interpolation: ColorInterpolationMethod,
@@ -409,7 +409,7 @@ impl<'i> FromCss<'i> for RadialGradient {
     input.parse_nested_block(|input| {
       let mut shape = RadialShape::Ellipse;
       let mut size = RadialSize::FarthestCorner;
-      let mut center = ObjectPosition::center();
+      let mut center = PositionValue::center();
       let mut interpolation = ColorInterpolationMethod::default();
 
       loop {
@@ -430,7 +430,7 @@ impl<'i> FromCss<'i> for RadialGradient {
         }
 
         if input.try_parse(|i| i.expect_ident_matching("at")).is_ok() {
-          center = ObjectPosition::from_css(input)?;
+          center = PositionValue::from_css(input)?;
           continue;
         }
 
@@ -529,7 +529,7 @@ mod tests {
   use crate::{
     Viewport,
     style::{
-      BackgroundPosition, Color, Length, PositionComponent, PositionKeywordX, PositionKeywordY,
+      Color, Length, PositionComponent, PositionKeywordX, PositionKeywordY, PositionValue,
       SpacePair, StopPosition, properties::gradient_utils::red_blue_stops,
     },
   };
@@ -598,7 +598,7 @@ mod tests {
       gradient,
       Ok(
         RadialGradient::builder()
-          .center(BackgroundPosition(SpacePair::from_pair(
+          .center(PositionValue(SpacePair::from_pair(
             PositionComponent::KeywordX(PositionKeywordX::Left),
             PositionComponent::KeywordY(PositionKeywordY::Top),
           )))
@@ -617,7 +617,7 @@ mod tests {
       gradient,
       Ok(
         RadialGradient::builder()
-          .center(BackgroundPosition(SpacePair::from_pair(
+          .center(PositionValue(SpacePair::from_pair(
             Length::Percentage(25.0).into(),
             Length::Percentage(70.0).into(),
           )))
@@ -647,7 +647,7 @@ mod tests {
       Ok(
         RadialGradient::builder()
           .shape(RadialShape::Circle)
-          .center(BackgroundPosition(SpacePair::from_single(
+          .center(PositionValue(SpacePair::from_single(
             PositionComponent::Length(Length::Px(25.0),)
           )))
           .stops([
@@ -731,7 +731,7 @@ mod tests {
             radius_y: Length::Percentage(radius_y),
           },
         center:
-          BackgroundPosition(SpacePair {
+          PositionValue(SpacePair {
             x: PositionComponent::Length(Length::Percentage(center_x)),
             y: PositionComponent::Length(Length::Percentage(center_y)),
           }),
@@ -894,7 +894,7 @@ mod tests {
   #[test]
   fn test_radial_gradient_ellipse_closest_corner() {
     let gradient = RadialGradient::builder()
-      .center(BackgroundPosition(SpacePair::from_pair(
+      .center(PositionValue(SpacePair::from_pair(
         Length::Px(20.0).into(),
         Length::Px(20.0).into(),
       )))
