@@ -73,7 +73,7 @@ default-features = false
 features = ["napi4", "serde-json"]
 
 [workspace.dependencies.parley]
-version = "0.9"
+version = "0.11"
 default-features = false
 features = ["std"]
 
@@ -90,7 +90,7 @@ version = "1"
 features = ["derive"]
 
 [workspace.dependencies.skrifa]
-version = "0.42"
+version = "0.43"
 default-features = false
 features = ["std"]
 
