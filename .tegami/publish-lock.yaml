@@ -1,0 +1,51 @@
+core:changelogs:
+  - content: "---\npackages:\n  npm:@takumi-rs/core:\n    type: patch\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Declare csstype as a runtime dependency\n\nThe published type definitions import `csstype`, but it was only a\ndevDependency, so consumers hit `Cannot find module 'csstype'`. Move it to\n`dependencies`.\n"
+    filename: csstype-dependency.md
+    v: 0.0.0
+  - content: "---\npackages:\n  npm:@takumi-rs/core:\n    type: patch\n---\n\n### Bound the SVG raster cache\n\nThe per-SVG rasterization cache is now size-capped instead of growing unbounded\nfor the lifetime of the SVG source.\n"
+    filename: bound-svg-raster-cache.md
+    v: 0.0.0
+  - content: "---\npackages:\n  npm:takumi-js:\n    type: patch\n---\n\n### Explain a failed native backend load\n\nWhen `@takumi-rs/core` can't load on Node, the render now throws an error\npointing at the `module` option for the WASM backend, instead of surfacing the\nraw native loader failure.\n"
+    filename: node-backend-load-error.md
+    v: 0.0.0
+core:packages:
+  - id: npm:@takumi-rs/image-response
+    updated: true
+  - changelogIds:
+      - csstype-dependency.md
+      - bound-svg-raster-cache.md
+    id: npm:@takumi-rs/core
+    updated: true
+  - changelogIds:
+      - node-backend-load-error.md
+    id: npm:takumi-js
+    updated: true
+  - changelogIds:
+      - csstype-dependency.md
+    id: npm:@takumi-rs/wasm
+    updated: true
+  - id: npm:@takumi-rs/helpers
+    updated: true
+  - id: cargo:takumi
+    updated: true
+  - id: cargo:takumi-core
+    updated: false
+  - id: cargo:takumi-css
+    updated: false
+  - id: cargo:takumi-svg
+    updated: false
+  - id: cargo:takumi-raster
+    updated: false
+  - id: cargo:example
+    updated: false
+npm:packages:
+  - distTag: beta
+    id: npm:@takumi-rs/image-response
+  - distTag: beta
+    id: npm:@takumi-rs/core
+  - distTag: beta
+    id: npm:takumi-js
+  - distTag: beta
+    id: npm:@takumi-rs/wasm
+  - distTag: beta
+    id: npm:@takumi-rs/helpers

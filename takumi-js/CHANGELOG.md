@@ -1,3 +1,11 @@
+## takumi-js@2.0.0-beta.14 (beta)
+
+### Explain a failed native backend load
+
+When `@takumi-rs/core` can't load on Node, the render now throws an error
+pointing at the `module` option for the WASM backend, instead of surfacing the
+raw native loader failure.
+
 ## takumi-js@2.0.0-beta.13 (beta)
 
 ### Keep the Vite WASM loader out of Node bundles
