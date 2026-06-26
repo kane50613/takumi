@@ -70,14 +70,14 @@
     "publish-lint": "attw --pack . && publint --strict ."
   },
   "dependencies": {
-    "@takumi-rs/helpers": "workspace:*"
+    "@takumi-rs/helpers": "workspace:*",
+    "csstype": "^3.2.3"
   },
   "devDependencies": {
     "@napi-rs/cli": "3.7.2",
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "csstype": "^3.2.3",
     "lucide-react": "catalog:",
     "mitata": "^1.0.34",
     "react": "catalog:",
