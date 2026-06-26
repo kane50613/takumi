@@ -46,7 +46,7 @@ impl<'i> FromCss<'i> for GridLength {
     Ok(GridLength::Fr(*value))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = Length::<true>::VALID_TOKENS;
+  const VALID_TOKENS: &'static [CssToken] = Length::VALID_TOKENS;
 }
 
 impl MakeComputed for GridLength {

@@ -6,7 +6,7 @@ use takumi::{
     Viewport,
     node::Node,
     style::{
-      AlignItems, BackgroundClip, BackgroundImages, BackgroundPositions, BackgroundRepeats,
+      AlignItems, BackgroundClip, BackgroundImages, PositionValues, BackgroundRepeats,
       BackgroundSizes, BorderRadius, Color, ColorInput, Display, FlexDirection, FontWeight,
       FromCss, JustifyContent,
       Length::{Percentage, Px},
@@ -56,7 +56,7 @@ fn gradient_clip_text_fixture() -> Node {
           BackgroundSizes::from_str("100% 100%").unwrap(),
         ))
         .with(StyleDeclaration::background_position(
-          BackgroundPositions::from_str("0 0").unwrap(),
+          PositionValues::from_str("0 0").unwrap(),
         ))
         .with(StyleDeclaration::background_repeat(
           BackgroundRepeats::from_str("no-repeat").unwrap(),

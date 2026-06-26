@@ -147,7 +147,7 @@ impl<'i> FromCss<'i> for TwLetterSpacing {
     Ok(Self(Length::from_css(input)?))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = Length::<true>::VALID_TOKENS;
+  const VALID_TOKENS: &'static [CssToken] = Length::VALID_TOKENS;
 }
 
 impl Neg for TwLetterSpacing {
@@ -176,7 +176,7 @@ impl TailwindPropertyParser for TwLetterSpacing {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TwRounded(
   /// Corner radius.
-  pub LengthDefaultsToZero,
+  pub Length,
 );
 
 impl<'i> FromCss<'i> for TwRounded {
@@ -184,7 +184,7 @@ impl<'i> FromCss<'i> for TwRounded {
     Ok(TwRounded(Length::from_css(input)?))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = Length::<false>::VALID_TOKENS;
+  const VALID_TOKENS: &'static [CssToken] = Length::VALID_TOKENS;
 }
 
 impl TailwindPropertyParser for TwRounded {
@@ -226,7 +226,7 @@ impl<'i> FromCss<'i> for TwGradientPosition {
     Ok(TwGradientPosition(length))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = Length::<true>::VALID_TOKENS;
+  const VALID_TOKENS: &'static [CssToken] = Length::VALID_TOKENS;
 }
 
 impl TailwindPropertyParser for TwGradientPosition {
@@ -249,7 +249,7 @@ impl<'i> FromCss<'i> for TwBlur {
     Ok(TwBlur(Length::from_css(input)?))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = Length::<true>::VALID_TOKENS;
+  const VALID_TOKENS: &'static [CssToken] = Length::VALID_TOKENS;
 }
 
 impl TailwindPropertyParser for TwBlur {

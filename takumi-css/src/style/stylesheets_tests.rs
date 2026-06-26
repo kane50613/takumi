@@ -560,21 +560,21 @@ fn parse_style_declaration_supports_legacy_grid_gap_aliases() {
   let row_gap = parse_declarations("grid-row-gap", "4px");
   assert_eq!(
     row_gap.iter().collect::<Vec<_>>(),
-    vec![&StyleDeclaration::row_gap(LengthDefaultsToZero::Px(4.0))]
+    vec![&StyleDeclaration::row_gap(Length::Px(4.0))]
   );
 
   let column_gap = parse_declarations("grid-column-gap", "3px");
   assert_eq!(
     column_gap.iter().collect::<Vec<_>>(),
-    vec![&StyleDeclaration::column_gap(LengthDefaultsToZero::Px(3.0))]
+    vec![&StyleDeclaration::column_gap(Length::Px(3.0))]
   );
 
   let gap = parse_declarations("grid-gap", "1px 2px");
   assert_eq!(
     gap.iter().collect::<Vec<_>>(),
     vec![
-      &StyleDeclaration::row_gap(LengthDefaultsToZero::Px(1.0)),
-      &StyleDeclaration::column_gap(LengthDefaultsToZero::Px(2.0)),
+      &StyleDeclaration::row_gap(Length::Px(1.0)),
+      &StyleDeclaration::column_gap(Length::Px(2.0)),
     ]
   );
 }
@@ -743,7 +743,7 @@ fn test_merge_from_background_longhands_clear_lower_priority_background_color() 
   ))]);
   let inline_style = style_with([
     StyleDeclaration::background_image(Some([BackgroundImage::None].into())),
-    StyleDeclaration::background_position([BackgroundPosition::default()].into()),
+    StyleDeclaration::background_position([PositionValue::default()].into()),
     StyleDeclaration::background_size([BackgroundSize::default()].into()),
     StyleDeclaration::background_repeat([BackgroundRepeat::default()].into()),
     StyleDeclaration::background_blend_mode([BlendMode::default()].into()),
@@ -1218,7 +1218,7 @@ fn test_var_defers_when_property_parser_accepts_a_prefix() {
 
   assert_eq!(
     style.background_position.as_ref(),
-    [BackgroundPosition(SpacePair::from_pair(
+    [PositionValue(SpacePair::from_pair(
       PositionComponent::Length(Length::Px(0.0)),
       PositionComponent::Length(Length::Px(150.0)),
     ))]

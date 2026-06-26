@@ -1672,7 +1672,7 @@ mod tests {
       Viewport,
       style::{
         Angle, BlendMode, Color, ColorInterpolationMethod, ConicGradient, ConicGradientTile,
-        FromCss, GradientStop, Length, LinearGradient, LinearGradientTile, ObjectPosition,
+        FromCss, GradientStop, Length, LinearGradient, LinearGradientTile, PositionValue,
         RadialGradient, RadialGradientTile, SizingContext, StopPosition,
       },
     },
@@ -2059,7 +2059,7 @@ mod tests {
     let gradient = ConicGradient {
       repeating: false,
       from_angle: Angle::zero(),
-      center: ObjectPosition::default(),
+      center: PositionValue::center(),
       interpolation: ColorInterpolationMethod::default(),
       stops: [
         GradientStop::ColorHint {

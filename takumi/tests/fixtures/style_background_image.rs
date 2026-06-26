@@ -2,8 +2,8 @@ use takumi::prelude::{Length::*, *};
 
 use crate::test_utils::run_fixture_test;
 
-fn centered_background_position() -> BackgroundPositions {
-  BackgroundPositions::from_str("center center").unwrap()
+fn centered_background_position() -> PositionValues {
+  PositionValues::from_str("center center").unwrap()
 }
 
 fn create_container(background_images: BackgroundImages) -> Node {
@@ -22,7 +22,7 @@ fn create_container(background_images: BackgroundImages) -> Node {
 fn create_container_with(
   background_images: BackgroundImages,
   background_size: Option<BackgroundSizes>,
-  background_position: Option<BackgroundPositions>,
+  background_position: Option<PositionValues>,
   background_repeat: Option<BackgroundRepeats>,
 ) -> Node {
   Node::container([]).with_style(
@@ -259,7 +259,7 @@ fn test_background_no_repeat_center_with_size_px() {
   let container = create_container_with(
     images,
     Some(BackgroundSizes::from_str("200px 120px").unwrap()),
-    Some(BackgroundPositions::from_str("center center").unwrap()),
+    Some(PositionValues::from_str("center center").unwrap()),
     Some(BackgroundRepeats::from_str("no-repeat").unwrap()),
   );
 
@@ -273,7 +273,7 @@ fn test_background_repeat_tile_from_top_left() {
   let container = create_container_with(
     images,
     Some(BackgroundSizes::from_str("160px 100px").unwrap()),
-    Some(BackgroundPositions::from_str("0 0").unwrap()),
+    Some(PositionValues::from_str("0 0").unwrap()),
     Some(BackgroundRepeats::from_str("repeat").unwrap()),
   );
 
@@ -319,7 +319,7 @@ fn test_background_position_percentage_with_no_repeat() {
   let container = create_container_with(
     images,
     Some(BackgroundSizes::from_str("220px 160px").unwrap()),
-    Some(BackgroundPositions::from_str("25% 75%").unwrap()),
+    Some(PositionValues::from_str("25% 75%").unwrap()),
     Some(BackgroundRepeats::from_str("no-repeat").unwrap()),
   );
 
@@ -334,7 +334,7 @@ fn test_background_size_percentage_with_repeat() {
   let container = create_container_with(
     images,
     Some(BackgroundSizes::from_str("20% 20%").unwrap()),
-    Some(BackgroundPositions::from_str("0 0").unwrap()),
+    Some(PositionValues::from_str("0 0").unwrap()),
     Some(BackgroundRepeats::from_str("repeat").unwrap()),
   );
 
@@ -351,7 +351,7 @@ fn test_background_image_grid_pattern() {
   let container = create_container_with(
     images.clone(),
     Some(BackgroundSizes::from_str("40px 40px").unwrap()),
-    Some(BackgroundPositions::from_str("0 0, 0 0").unwrap()),
+    Some(PositionValues::from_str("0 0, 0 0").unwrap()),
     Some(BackgroundRepeats::from_str("repeat, repeat").unwrap()),
   )
   .with_style(
@@ -364,7 +364,7 @@ fn test_background_image_grid_pattern() {
         BackgroundSizes::from_str("40px 40px").unwrap(),
       ))
       .with(StyleDeclaration::background_position(
-        BackgroundPositions::from_str("0 0, 0 0").unwrap(),
+        PositionValues::from_str("0 0, 0 0").unwrap(),
       ))
       .with(StyleDeclaration::background_repeat(
         BackgroundRepeats::from_str("repeat, repeat").unwrap(),
@@ -419,7 +419,7 @@ fn test_background_size_contain() {
   let container = create_container_with(
     images,
     Some(BackgroundSizes::from_str("contain").unwrap()),
-    Some(BackgroundPositions::from_str("center center").unwrap()),
+    Some(PositionValues::from_str("center center").unwrap()),
     Some(BackgroundRepeats::from_str("no-repeat").unwrap()),
   );
 
@@ -432,7 +432,7 @@ fn test_background_size_cover() {
   let container = create_container_with(
     images,
     Some(BackgroundSizes::from_str("cover").unwrap()),
-    Some(BackgroundPositions::from_str("center center").unwrap()),
+    Some(PositionValues::from_str("center center").unwrap()),
     Some(BackgroundRepeats::from_str("no-repeat").unwrap()),
   );
 

@@ -27,7 +27,7 @@ pub(crate) type TileLayers = Vec<TileLayer>;
 
 #[derive(Clone, Copy)]
 pub(crate) struct LayerTileStyle {
-  pub pos: BackgroundPosition,
+  pub pos: PositionValue,
   pub size: BackgroundSize,
   pub repeat: BackgroundRepeat,
   pub blend_mode: BlendMode,
@@ -46,7 +46,7 @@ pub(crate) struct ResolveLayerTilesInput<'a> {
 
 pub(crate) struct ResolveTileLayersInput<'a> {
   pub images: &'a [BackgroundImage],
-  pub positions: &'a [BackgroundPosition],
+  pub positions: &'a [PositionValue],
   pub sizes: &'a [BackgroundSize],
   pub repeats: &'a [BackgroundRepeat],
   pub blend_modes: &'a [BlendMode],
@@ -385,7 +385,7 @@ struct AxisArea {
 /// Resolves tile origins on one axis, in border-box coordinates.
 fn resolve_axis_tiles(
   repeat: BackgroundRepeatStyle,
-  pos: BackgroundPosition,
+  pos: PositionValue,
   tile_size: u32,
   axis: AxisArea,
   sizing: &SizingContext,
@@ -459,7 +459,7 @@ fn calculate_available_space(area_size: u32, tile_size: u32) -> i32 {
 }
 
 pub(crate) fn resolve_position_component_x(
-  comp: BackgroundPosition,
+  comp: PositionValue,
   tile_w: u32,
   area_w: u32,
   sizing: &SizingContext,
@@ -477,7 +477,7 @@ pub(crate) fn resolve_position_component_x(
 }
 
 pub(crate) fn resolve_position_component_y(
-  comp: BackgroundPosition,
+  comp: PositionValue,
   tile_h: u32,
   area_h: u32,
   sizing: &SizingContext,
@@ -884,7 +884,7 @@ mod tests {
   use crate::layout::{
     Viewport,
     style::{
-      BackgroundPosition, CalcArena, Length, PositionComponent, PositionKeywordX, PositionKeywordY,
+      CalcArena, Length, PositionComponent, PositionKeywordX, PositionKeywordY, PositionValue,
       SizingContext, SpacePair,
     },
   };
@@ -905,7 +905,7 @@ mod tests {
   #[test]
   fn oversized_background_keywords_resolve_to_negative_offsets() {
     let sizing = test_sizing();
-    let position = BackgroundPosition(SpacePair::from_pair(
+    let position = PositionValue(SpacePair::from_pair(
       PositionComponent::KeywordX(PositionKeywordX::Right),
       PositionComponent::KeywordY(PositionKeywordY::Bottom),
     ));
@@ -923,7 +923,7 @@ mod tests {
   #[test]
   fn oversized_background_percentages_use_signed_available_space() {
     let sizing = test_sizing();
-    let position = BackgroundPosition(SpacePair::from_pair(
+    let position = PositionValue(SpacePair::from_pair(
       PositionComponent::Length(Length::Percentage(25.0)),
       PositionComponent::Length(Length::Percentage(75.0)),
     ));

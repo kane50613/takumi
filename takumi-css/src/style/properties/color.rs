@@ -167,21 +167,19 @@ impl From<[f32; 4]> for Color {
 }
 
 /// Represents a color input value.
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq, Copy, Default)]
 #[non_exhaustive]
-pub enum ColorInput<const DEFAULT_CURRENT_COLOR: bool = true> {
+pub enum ColorInput {
   /// Inherit from the `color` value.
+  #[default]
   CurrentColor,
   /// A color value.
   Value(Color),
 }
 
-/// A color value that defaults to transparent instead of currentColor.
-pub type ColorDefaultsToTransparent = ColorInput<false>;
+impl MakeComputed for ColorInput {}
 
-impl<const DEFAULT_CURRENT_COLOR: bool> MakeComputed for ColorInput<DEFAULT_CURRENT_COLOR> {}
-
-impl<const DEFAULT_CURRENT_COLOR: bool> Animatable for ColorInput<DEFAULT_CURRENT_COLOR> {
+impl Animatable for ColorInput {
   fn interpolate(
     &mut self,
     from: &Self,
@@ -203,17 +201,12 @@ impl<const DEFAULT_CURRENT_COLOR: bool> Animatable for ColorInput<DEFAULT_CURREN
   }
 }
 
-impl<const DEFAULT_CURRENT_COLOR: bool> Default for ColorInput<DEFAULT_CURRENT_COLOR> {
-  fn default() -> Self {
-    if DEFAULT_CURRENT_COLOR {
-      ColorInput::CurrentColor
-    } else {
-      ColorInput::Value(Color::transparent())
-    }
+impl ColorInput {
+  /// A fully transparent color, the initial value for `background-color`.
+  pub const fn transparent() -> Self {
+    ColorInput::Value(Color::transparent())
   }
-}
 
-impl<const DEFAULT_CURRENT_COLOR: bool> ColorInput<DEFAULT_CURRENT_COLOR> {
   /// Resolves the color input to a color.
   pub fn resolve(self, current_color: Color) -> Color {
     match self {
@@ -223,9 +216,7 @@ impl<const DEFAULT_CURRENT_COLOR: bool> ColorInput<DEFAULT_CURRENT_COLOR> {
   }
 }
 
-impl<const DEFAULT_CURRENT_COLOR: bool> TailwindPropertyParser
-  for ColorInput<DEFAULT_CURRENT_COLOR>
-{
+impl TailwindPropertyParser for ColorInput {
   fn parse_tw(token: &str) -> Option<Self> {
     if token.eq_ignore_ascii_case("current") {
       return Some(ColorInput::CurrentColor);
@@ -436,7 +427,7 @@ impl TailwindPropertyParser for Color {
   }
 }
 
-impl<const DEFAULT_CURRENT_COLOR: bool> From<Color> for ColorInput<DEFAULT_CURRENT_COLOR> {
+impl From<Color> for ColorInput {
   fn from(color: Color) -> Self {
     ColorInput::Value(color)
   }
@@ -489,7 +480,7 @@ impl ToCss for Color {
   }
 }
 
-impl<const DEFAULT_CURRENT_COLOR: bool> ToCss for ColorInput<DEFAULT_CURRENT_COLOR> {
+impl ToCss for ColorInput {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::CurrentColor => dest.write_str("currentColor"),
@@ -646,7 +637,7 @@ impl<'i> FromCss<'i> for ColorMix {
   const VALID_TOKENS: &'static [CssToken] = &[CssToken::Descriptor(CssDescriptorKind::ColorMixFn)];
 }
 
-impl<'i, const DEFAULT_CURRENT_COLOR: bool> FromCss<'i> for ColorInput<DEFAULT_CURRENT_COLOR> {
+impl<'i> FromCss<'i> for ColorInput {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("currentcolor"))
@@ -895,7 +886,7 @@ mod tests {
     ] {
       assert_eq!(
         ColorInput::from_str(css),
-        Ok(ColorInput::<true>::Value(expected)),
+        Ok(ColorInput::Value(expected)),
         "failed for {css}",
       );
     }
@@ -909,7 +900,7 @@ mod tests {
     ] {
       assert_eq!(
         ColorInput::from_str(css),
-        Ok(ColorInput::<true>::Value(expected)),
+        Ok(ColorInput::Value(expected)),
         "failed for {css}",
       );
     }
@@ -917,96 +908,93 @@ mod tests {
 
   #[test]
   fn test_parse_color_invalid_function() {
-    assert!(ColorInput::<true>::from_str("invalid(255, 0, 153)").is_err());
+    assert!(ColorInput::from_str("invalid(255, 0, 153)").is_err());
   }
 
   #[test]
   fn test_parse_color_mix_srgb_default_percentages() {
     assert_eq!(
       ColorInput::from_str("color-mix(in srgb, red, blue)"),
-      Ok(ColorInput::<true>::Value(Color([128, 0, 128, 255])))
+      Ok(ColorInput::Value(Color([128, 0, 128, 255])))
     );
   }
 
   #[test]
   fn test_parse_color_mix_equivalent_percentage_syntaxes() {
-    let canonical = ColorInput::<true>::from_str("color-mix(in srgb, red 25%, blue 75%)");
+    let canonical = ColorInput::from_str("color-mix(in srgb, red 25%, blue 75%)");
 
     assert_eq!(
       canonical,
-      ColorInput::<true>::from_str("color-mix(in srgb, 25% red, 75% blue)")
+      ColorInput::from_str("color-mix(in srgb, 25% red, 75% blue)")
     );
     assert_eq!(
       canonical,
-      ColorInput::<true>::from_str("color-mix(in srgb, red 25%, 75% blue)")
+      ColorInput::from_str("color-mix(in srgb, red 25%, 75% blue)")
     );
     assert_eq!(
       canonical,
-      ColorInput::<true>::from_str("color-mix(in srgb, red 25%, blue)")
+      ColorInput::from_str("color-mix(in srgb, red 25%, blue)")
     );
-    assert_eq!(
-      canonical,
-      Ok(ColorInput::<true>::Value(Color([64, 0, 191, 255])))
-    );
+    assert_eq!(canonical, Ok(ColorInput::Value(Color([64, 0, 191, 255]))));
   }
 
   #[test]
   fn test_parse_color_mix_lch_missing_percentage_equivalence() {
-    let canonical = ColorInput::<true>::from_str("color-mix(in lch, purple 50%, plum 50%)");
+    let canonical = ColorInput::from_str("color-mix(in lch, purple 50%, plum 50%)");
 
     assert_eq!(
       canonical,
-      ColorInput::<true>::from_str("color-mix(in lch, purple 50%, plum)")
+      ColorInput::from_str("color-mix(in lch, purple 50%, plum)")
     );
     assert_eq!(
       canonical,
-      ColorInput::<true>::from_str("color-mix(in lch, purple, plum 50%)")
+      ColorInput::from_str("color-mix(in lch, purple, plum 50%)")
     );
     assert_eq!(
       canonical,
-      ColorInput::<true>::from_str("color-mix(in lch, purple, plum)")
+      ColorInput::from_str("color-mix(in lch, purple, plum)")
     );
     assert_eq!(
       canonical,
-      ColorInput::<true>::from_str("color-mix(in lch, plum, purple)")
+      ColorInput::from_str("color-mix(in lch, plum, purple)")
     );
   }
 
   #[test]
   fn test_parse_color_mix_lch_normalizes_equal_opaque_percentages() {
-    let canonical = ColorInput::<true>::from_str("color-mix(in lch, purple 50%, plum 50%)");
+    let canonical = ColorInput::from_str("color-mix(in lch, purple 50%, plum 50%)");
 
     assert_eq!(
       canonical,
-      ColorInput::<true>::from_str("color-mix(in lch, purple 55%, plum 55%)")
+      ColorInput::from_str("color-mix(in lch, purple 55%, plum 55%)")
     );
     assert_eq!(
       canonical,
-      ColorInput::<true>::from_str("color-mix(in lch, purple 70%, plum 70%)")
+      ColorInput::from_str("color-mix(in lch, purple 70%, plum 70%)")
     );
     assert_eq!(
       canonical,
-      ColorInput::<true>::from_str("color-mix(in lch, purple 95%, plum 95%)")
+      ColorInput::from_str("color-mix(in lch, purple 95%, plum 95%)")
     );
     assert_eq!(
       canonical,
-      ColorInput::<true>::from_str("color-mix(in lch, purple 125%, plum 125%)")
+      ColorInput::from_str("color-mix(in lch, purple 125%, plum 125%)")
     );
     assert_eq!(
       canonical,
-      ColorInput::<true>::from_str("color-mix(in lch, purple 9999%, plum 9999%)")
+      ColorInput::from_str("color-mix(in lch, purple 9999%, plum 9999%)")
     );
   }
 
   #[test]
   fn test_parse_color_mix_endpoint_percentages_return_endpoint_colors() {
     assert_eq!(
-      ColorInput::<true>::from_str("color-mix(in srgb, red 100%, blue 0%)"),
-      ColorInput::<true>::from_str("red")
+      ColorInput::from_str("color-mix(in srgb, red 100%, blue 0%)"),
+      ColorInput::from_str("red")
     );
     assert_eq!(
-      ColorInput::<true>::from_str("color-mix(in srgb, red 0%, blue 100%)"),
-      ColorInput::<true>::from_str("blue")
+      ColorInput::from_str("color-mix(in srgb, red 0%, blue 100%)"),
+      ColorInput::from_str("blue")
     );
   }
 
@@ -1014,35 +1002,33 @@ mod tests {
   fn test_parse_color_mix_alpha_multiplier_under_100_percent() {
     assert_eq!(
       ColorInput::from_str("color-mix(in srgb, red 30%, blue 30%)"),
-      Ok(ColorInput::<true>::Value(Color([128, 0, 128, 153])))
+      Ok(ColorInput::Value(Color([128, 0, 128, 153])))
     );
   }
 
   #[test]
   fn test_parse_color_mix_hue_directions_change_result() {
     assert_eq!(
-      ColorInput::<true>::from_str(
+      ColorInput::from_str(
         "color-mix(in hsl shorter hue, hsl(50deg 50% 50%), hsl(330deg 50% 50%))",
       ),
-      Ok(ColorInput::<true>::Value(Color([191, 86, 64, 255])))
+      Ok(ColorInput::Value(Color([191, 86, 64, 255])))
     );
     assert_eq!(
-      ColorInput::<true>::from_str(
+      ColorInput::from_str(
         "color-mix(in hsl decreasing hue, hsl(50deg 50% 50%), hsl(330deg 50% 50%))",
       ),
-      Ok(ColorInput::<true>::Value(Color([191, 86, 64, 255])))
+      Ok(ColorInput::Value(Color([191, 86, 64, 255])))
     );
     assert_eq!(
-      ColorInput::<true>::from_str(
-        "color-mix(in hsl longer hue, hsl(50deg 50% 50%), hsl(330deg 50% 50%))",
-      ),
-      Ok(ColorInput::<true>::Value(Color([64, 169, 191, 255])))
+      ColorInput::from_str("color-mix(in hsl longer hue, hsl(50deg 50% 50%), hsl(330deg 50% 50%))",),
+      Ok(ColorInput::Value(Color([64, 169, 191, 255])))
     );
     assert_eq!(
-      ColorInput::<true>::from_str(
+      ColorInput::from_str(
         "color-mix(in hsl increasing hue, hsl(50deg 50% 50%), hsl(330deg 50% 50%))",
       ),
-      Ok(ColorInput::<true>::Value(Color([64, 169, 191, 255])))
+      Ok(ColorInput::Value(Color([64, 169, 191, 255])))
     );
   }
 
@@ -1050,90 +1036,89 @@ mod tests {
   fn test_parse_color_mix_over_100_percent_normalizes_weights() {
     assert_eq!(
       ColorInput::from_str("color-mix(in srgb, red 120%, blue 80%)"),
-      Ok(ColorInput::<true>::Value(Color([153, 0, 102, 255])))
+      Ok(ColorInput::Value(Color([153, 0, 102, 255])))
     );
   }
 
   #[test]
   fn test_parse_color_mix_unknown_color_space() {
-    assert!(ColorInput::<true>::from_str("color-mix(in unknown, red, blue)").is_err());
+    assert!(ColorInput::from_str("color-mix(in unknown, red, blue)").is_err());
   }
 
   #[test]
   fn test_parse_color_mix_hue_method_with_non_cylindrical_space_errors() {
-    assert!(ColorInput::<true>::from_str("color-mix(in srgb longer hue, red, blue)").is_err());
+    assert!(ColorInput::from_str("color-mix(in srgb longer hue, red, blue)").is_err());
   }
 
   #[test]
   fn test_parse_color_mix_malformed_missing_comma_errors() {
-    assert!(ColorInput::<true>::from_str("color-mix(in srgb, red blue)").is_err());
+    assert!(ColorInput::from_str("color-mix(in srgb, red blue)").is_err());
   }
 
   #[test]
   fn test_parse_color_mix_zero_sum_percentages_errors() {
-    assert!(ColorInput::<true>::from_str("color-mix(in srgb, red 0%, blue 0%)").is_err());
+    assert!(ColorInput::from_str("color-mix(in srgb, red 0%, blue 0%)").is_err());
   }
 
   #[test]
   fn test_parse_color_mix_accepts_number_as_percentage() {
     assert_eq!(
-      ColorInput::<true>::from_str("color-mix(in srgb, red 0.5, blue 0.5)"),
-      Ok(ColorInput::<true>::Value(Color([128, 0, 128, 255])))
+      ColorInput::from_str("color-mix(in srgb, red 0.5, blue 0.5)"),
+      Ok(ColorInput::Value(Color([128, 0, 128, 255])))
     );
   }
 
   #[test]
   fn test_parse_color_mix_nested_color_mix() {
     assert!(
-      ColorInput::<true>::from_str("color-mix(in srgb, color-mix(in srgb, red, blue), white)")
-        .is_ok()
+      ColorInput::from_str("color-mix(in srgb, color-mix(in srgb, red, blue), white)").is_ok()
     );
   }
 
   #[test]
   fn test_parse_relative_oklch_keywords_only() {
-    let relative = ColorInput::<true>::from_str("oklch(from oklch(0.7 0.15 30) l c h / 0.5)");
-    let direct = ColorInput::<true>::from_str("oklch(0.7 0.15 30 / 0.5)");
+    let relative = ColorInput::from_str("oklch(from oklch(0.7 0.15 30) l c h / 0.5)");
+    let direct = ColorInput::from_str("oklch(0.7 0.15 30 / 0.5)");
     assert_eq!(relative, direct);
   }
 
   #[test]
   fn test_parse_relative_oklch_keywords_only_from_named_color() {
-    assert!(ColorInput::<true>::from_str("oklch(from red l c h)").is_ok());
+    assert!(ColorInput::from_str("oklch(from red l c h)").is_ok());
   }
 
   #[test]
   fn test_parse_relative_rgb_keywords_only_scales_to_255() {
     assert_eq!(
-      ColorInput::<true>::from_str("rgb(from #336699 r g b)"),
-      ColorInput::<true>::from_str("rgb(51 102 153)"),
+      ColorInput::from_str("rgb(from #336699 r g b)"),
+      ColorInput::from_str("rgb(51 102 153)"),
     );
   }
 
   #[test]
   fn test_parse_relative_rgb_drops_origin_alpha_when_alpha_omitted() {
     assert_eq!(
-      ColorInput::<true>::from_str("rgb(from rgb(10 20 30 / 0.5) r g b / 0.25)"),
-      ColorInput::<true>::from_str("rgba(10, 20, 30, 0.25)"),
+      ColorInput::from_str("rgb(from rgb(10 20 30 / 0.5) r g b / 0.25)"),
+      ColorInput::from_str("rgba(10, 20, 30, 0.25)"),
     );
   }
 
   #[test]
   fn test_parse_relative_hsl_with_dimension_hue() {
-    assert!(ColorInput::<true>::from_str("hsl(from red 120deg s l)").is_ok());
+    assert!(ColorInput::from_str("hsl(from red 120deg s l)").is_ok());
   }
 
   #[test]
   fn test_parse_relative_oklch_substitutes_origin_alpha() {
     assert_eq!(
-      ColorInput::<true>::from_str("oklch(from oklch(0.5 0.1 200 / 0.4) l c h / alpha)",),
-      ColorInput::<true>::from_str("oklch(0.5 0.1 200 / 0.4)"),
+      ColorInput::from_str("oklch(from oklch(0.5 0.1 200 / 0.4) l c h / alpha)",),
+      ColorInput::from_str("oklch(0.5 0.1 200 / 0.4)"),
     );
   }
 
   #[test]
   fn test_parse_relative_color_with_color_mix_origin() {
-    assert!(ColorInput::<true>::from_str("lch(from color-mix(in srgb, red, blue) l c h)").is_ok());
+    assert!(ColorInput::from_str("lch(from color-mix(in srgb, red, blue) l c h)").is_ok());
   }
 
   #[test]

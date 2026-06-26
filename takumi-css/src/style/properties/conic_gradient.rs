@@ -10,9 +10,9 @@ use super::gradient_utils::{
   write_gradient_css,
 };
 use crate::style::{
-  Angle, BackgroundPosition, Color, ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss,
-  GradientStop, Length, MakeComputed, ObjectPosition, ParseResult, SizingContext, StopPosition,
-  ToCss, unexpected_token,
+  Angle, Color, ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop,
+  Length, MakeComputed, ParseResult, PositionValue, SizingContext, StopPosition, ToCss,
+  unexpected_token,
 };
 
 const LUT_INDEX_BOUNDARY_EPSILON: f32 = 0.001;
@@ -27,8 +27,8 @@ pub struct ConicGradient {
   #[builder(default)]
   pub from_angle: Angle,
   /// Center position (default 50% 50%).
-  #[builder(default)]
-  pub center: ObjectPosition,
+  #[builder(default = PositionValue::center())]
+  pub center: PositionValue,
   /// The color interpolation method used between stops.
   #[builder(default)]
   pub interpolation: ColorInterpolationMethod,
@@ -297,7 +297,7 @@ impl<'i> FromCss<'i> for ConicGradient {
 
     input.parse_nested_block(|input| {
       let mut from_angle: Option<Angle> = None;
-      let mut center: Option<ObjectPosition> = None;
+      let mut center: Option<PositionValue> = None;
       let mut interpolation = ColorInterpolationMethod::default();
 
       // Parse optional "from <angle>" and/or "at <position>" before the comma
@@ -310,7 +310,7 @@ impl<'i> FromCss<'i> for ConicGradient {
 
         // Try "at <position>"
         if input.try_parse(|i| i.expect_ident_matching("at")).is_ok() {
-          center = Some(BackgroundPosition::from_css(input)?);
+          center = Some(PositionValue::from_css(input)?);
           continue;
         }
 
@@ -329,7 +329,7 @@ impl<'i> FromCss<'i> for ConicGradient {
       Ok(ConicGradient {
         repeating,
         from_angle: from_angle.unwrap_or(Angle::zero()),
-        center: center.unwrap_or_default(),
+        center: center.unwrap_or_else(PositionValue::center),
         interpolation,
         stops: stops.into_boxed_slice(),
       })
@@ -434,7 +434,7 @@ mod tests {
         Ok(ConicGradient {
           repeating: false,
           from_angle: Angle::zero(),
-          center: ObjectPosition::default(),
+          center: PositionValue::center(),
           interpolation: ColorInterpolationMethod::default(),
           stops: stops.into(),
         }),
@@ -450,7 +450,7 @@ mod tests {
       Ok(ConicGradient {
         repeating: false,
         from_angle: Angle::zero(),
-        center: ObjectPosition::default(),
+        center: PositionValue::center(),
         interpolation: ColorInterpolationMethod {
           color_space: ColorSpaceTag::Oklab,
           hue_direction: HueDirection::Shorter,
@@ -479,7 +479,7 @@ mod tests {
       Ok(ConicGradient {
         repeating: false,
         from_angle: Angle::new(90.0),
-        center: BackgroundPosition::<false>(SpacePair::from_pair(
+        center: PositionValue(SpacePair::from_pair(
           Length::Percentage(25.0).into(),
           Length::Percentage(75.0).into()
         )),

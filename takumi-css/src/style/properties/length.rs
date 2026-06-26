@@ -24,10 +24,7 @@ const SAFE_INT_MIN_PX: f32 = i32::MIN as f32;
 const SAFE_INT_MAX_PX: f32 = i32::MAX as f32;
 
 /// Maps a CSS dimension unit (incl. aliases like `dvw`/`cqi`) to its canonical `Length` variant.
-pub(crate) fn length_from_dimension_unit<const DEFAULT_AUTO: bool>(
-  unit: &str,
-  value: f32,
-) -> Option<Length<DEFAULT_AUTO>> {
+pub(crate) fn length_from_dimension_unit(unit: &str, value: f32) -> Option<Length> {
   Some(match_ignore_ascii_case! {unit,
     "px" => Length::Px(value),
     "em" => Length::Em(value),
@@ -82,14 +79,12 @@ fn clamp_px_for_integer_cast(value: f32) -> f32 {
   value.clamp(SAFE_INT_MIN_PX, SAFE_INT_MAX_PX)
 }
 
-/// A length value that defaults to zero instead of auto.
-pub type LengthDefaultsToZero = Length<false>;
-
 /// Represents a value that can be a specific length, percentage, or automatic.
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq, Copy, Default)]
 #[non_exhaustive]
-pub enum Length<const DEFAULT_AUTO: bool = true> {
+pub enum Length {
   /// Automatic sizing based on content
+  #[default]
   Auto,
   /// Percentage value relative to parent container (0-100)
   Percentage(f32),
@@ -135,17 +130,7 @@ pub enum Length<const DEFAULT_AUTO: bool = true> {
   Calc(CalcFormula),
 }
 
-impl<const DEFAULT_AUTO: bool> Default for Length<DEFAULT_AUTO> {
-  fn default() -> Self {
-    if DEFAULT_AUTO {
-      Self::Auto
-    } else {
-      Self::Px(0.0)
-    }
-  }
-}
-
-impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
+impl Length {
   /// Construct a length from a Tailwind spacing-scale multiplier.
   #[inline]
   pub fn from_spacing(units: f32) -> Self {
@@ -153,7 +138,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
   }
 }
 
-impl<const DEFAULT_AUTO: bool> TailwindPropertyParser for Length<DEFAULT_AUTO> {
+impl TailwindPropertyParser for Length {
   fn parse_tw(token: &str) -> Option<Self> {
     if let Ok(value) = token.parse::<f32>() {
       return Some(Length::from_spacing(value));
@@ -203,7 +188,7 @@ impl<const DEFAULT_AUTO: bool> TailwindPropertyParser for Length<DEFAULT_AUTO> {
   }
 }
 
-impl<const DEFAULT_AUTO: bool> ToCss for Length<DEFAULT_AUTO> {
+impl ToCss for Length {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::Auto => dest.write_str("auto"),
@@ -278,7 +263,7 @@ impl<const DEFAULT_AUTO: bool> ToCss for Length<DEFAULT_AUTO> {
   }
 }
 
-impl<const DEFAULT_AUTO: bool> Neg for Length<DEFAULT_AUTO> {
+impl Neg for Length {
   type Output = Self;
 
   fn neg(self) -> Self::Output {
@@ -286,7 +271,7 @@ impl<const DEFAULT_AUTO: bool> Neg for Length<DEFAULT_AUTO> {
   }
 }
 
-impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
+impl Length {
   /// Returns a zero pixel length unit.
   pub const fn zero() -> Self {
     Self::Px(0.0)
@@ -329,13 +314,13 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
   }
 }
 
-impl<const DEFAULT_AUTO: bool> From<f32> for Length<DEFAULT_AUTO> {
+impl From<f32> for Length {
   fn from(value: f32) -> Self {
     Self::Px(value)
   }
 }
 
-impl<'i, const DEFAULT_AUTO: bool> FromCss<'i> for Length<DEFAULT_AUTO> {
+impl<'i> FromCss<'i> for Length {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let location = input.current_source_location();
     let token = input.next()?;
@@ -362,7 +347,7 @@ impl<'i, const DEFAULT_AUTO: bool> FromCss<'i> for Length<DEFAULT_AUTO> {
   const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Length)];
 }
 
-impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
+impl Length {
   fn to_px_pre_dpr(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
     match self {
       Length::Auto => 0.0,
@@ -490,7 +475,7 @@ impl<const DEFAULT_AUTO: bool> Length<DEFAULT_AUTO> {
   }
 }
 
-impl<const DEFAULT_AUTO: bool> MakeComputed for Length<DEFAULT_AUTO> {
+impl MakeComputed for Length {
   fn make_computed(&mut self, sizing: &SizingContext) {
     if let Self::Em(em) = *self {
       *self = Self::Px(em * sizing.to_css(sizing.font_size));
@@ -555,7 +540,7 @@ mod tests {
   #[test]
   fn parse_calc_mixed_returns_formula() {
     assert_eq!(
-      Length::<true>::from_str("calc(100% - 12px)"),
+      Length::from_str("calc(100% - 12px)"),
       Ok(Length::Calc(CalcFormula {
         percent: 1.0,
         px: -12.0,
@@ -566,25 +551,25 @@ mod tests {
 
   #[test]
   fn parse_calc_number_expression_becomes_px() {
-    let parsed = Length::<true>::from_str("calc(1 + 2)");
+    let parsed = Length::from_str("calc(1 + 2)");
     assert_eq!(parsed, Ok(Length::Px(3.0)));
   }
 
   #[test]
   fn parse_calc_rejects_number_plus_length() {
-    let parsed = Length::<true>::from_str("calc(1 + 2px)");
+    let parsed = Length::from_str("calc(1 + 2px)");
     assert!(parsed.is_err());
   }
 
   #[test]
   fn parse_calc_rejects_division_by_zero() {
-    let parsed = Length::<true>::from_str("calc(10px / 0)");
+    let parsed = Length::from_str("calc(10px / 0)");
     assert!(parsed.is_err());
   }
 
   #[test]
   fn negative_calc_keeps_value_sign_consistent() {
-    let value: Length<true> = Length::Calc(CalcFormula {
+    let value: Length = Length::Calc(CalcFormula {
       percent: 0.5,
       px: 10.0,
       ..Default::default()
@@ -597,7 +582,7 @@ mod tests {
 
   #[test]
   fn make_computed_collapses_formula_without_percent_to_px() {
-    let mut value: Length<true> = Length::Calc(CalcFormula {
+    let mut value: Length = Length::Calc(CalcFormula {
       rem: 1.0,
       px: 5.0,
       ..Default::default()
@@ -608,7 +593,7 @@ mod tests {
 
   #[test]
   fn make_computed_collapsed_px_applies_dpr_only_once_in_to_px() {
-    let mut value: Length<true> = Length::Calc(CalcFormula {
+    let mut value: Length = Length::Calc(CalcFormula {
       rem: 1.0,
       px: 5.0,
       ..Default::default()
@@ -622,7 +607,7 @@ mod tests {
 
   #[test]
   fn make_computed_collapses_formula_with_only_percent_to_percentage() {
-    let mut value: Length<true> = Length::Calc(CalcFormula {
+    let mut value: Length = Length::Calc(CalcFormula {
       percent: 0.5,
       ..Default::default()
     });
@@ -632,7 +617,7 @@ mod tests {
 
   #[test]
   fn make_computed_keeps_mixed_formula_as_calc() {
-    let mut value: Length<true> = Length::Calc(CalcFormula {
+    let mut value: Length = Length::Calc(CalcFormula {
       percent: 0.5,
       px: 10.0,
       ..Default::default()
@@ -650,7 +635,7 @@ mod tests {
 
   #[test]
   fn compact_length_calc_pointer_resolves_through_callback() {
-    let value: Length<true> = Length::Calc(CalcFormula {
+    let value: Length = Length::Calc(CalcFormula {
       percent: 0.5,
       px: 10.0,
       ..Default::default()
@@ -667,7 +652,7 @@ mod tests {
   #[test]
   fn compact_length_percent_does_not_use_calc_pointer() {
     let sizing = sizing();
-    let compact = Length::<true>::Percentage(50.0).to_compact_length(&sizing);
+    let compact = Length::Percentage(50.0).to_compact_length(&sizing);
     assert!(!compact.is_calc());
     assert_eq!(compact.tag(), CompactLength::PERCENT_TAG);
     assert_near(compact.value(), 0.5);
@@ -675,7 +660,7 @@ mod tests {
 
   #[test]
   fn to_px_applies_device_pixel_ratio_for_absolute_units() {
-    let px = Length::<true>::Rem(2.0).to_px(&sizing(), 100.0);
+    let px = Length::Rem(2.0).to_px(&sizing(), 100.0);
     assert_near(px, 64.0);
   }
 
@@ -688,22 +673,22 @@ mod tests {
   #[test]
   fn rem_to_px_does_not_double_apply_dpr_when_root_font_size_set() {
     let sizing = descendant_sizing();
-    assert_near(Length::<true>::Rem(1.0).to_px(&sizing, 0.0), 32.0);
-    assert_near(Length::<true>::Rem(2.0).to_px(&sizing, 0.0), 64.0);
-    assert_near(Length::<true>::Rem(0.5).to_px(&sizing, 0.0), 16.0);
+    assert_near(Length::Rem(1.0).to_px(&sizing, 0.0), 32.0);
+    assert_near(Length::Rem(2.0).to_px(&sizing, 0.0), 64.0);
+    assert_near(Length::Rem(0.5).to_px(&sizing, 0.0), 16.0);
   }
 
   #[test]
   fn rem_to_compact_length_does_not_double_apply_dpr_when_root_font_size_set() {
     let sizing = descendant_sizing();
-    let compact = Length::<true>::Rem(1.0).to_compact_length(&sizing);
+    let compact = Length::Rem(1.0).to_compact_length(&sizing);
     assert_near(compact.value(), 32.0);
   }
 
   #[test]
   fn calc_with_rem_does_not_double_apply_dpr_when_root_font_size_set() {
     let sizing = descendant_sizing();
-    let value: Length<true> = Length::Calc(CalcFormula {
+    let value: Length = Length::Calc(CalcFormula {
       rem: 1.0,
       ..Default::default()
     });
@@ -717,20 +702,17 @@ mod tests {
     // resolve in device space, so all land in the same 200px-wide frame.
     let sizing = sizing();
 
-    assert_near(Length::<true>::Px(100.0).to_px(&sizing, 0.0), 200.0);
-    assert_near(Length::<true>::Vw(100.0).to_px(&sizing, 0.0), 200.0);
-    assert_near(
-      Length::<true>::Percentage(50.0).to_px(&sizing, 200.0),
-      100.0,
-    );
+    assert_near(Length::Px(100.0).to_px(&sizing, 0.0), 200.0);
+    assert_near(Length::Vw(100.0).to_px(&sizing, 0.0), 200.0);
+    assert_near(Length::Percentage(50.0).to_px(&sizing, 200.0), 100.0);
     // 1in = 96 css px -> 192 device px.
-    assert_near(Length::<true>::In(1.0).to_px(&sizing, 0.0), 192.0);
+    assert_near(Length::In(1.0).to_px(&sizing, 0.0), 192.0);
   }
 
   #[test]
   fn calc_with_rem_and_px_does_not_double_apply_dpr_when_root_font_size_set() {
     let sizing = descendant_sizing();
-    let value: Length<true> = Length::Calc(CalcFormula {
+    let value: Length = Length::Calc(CalcFormula {
       rem: 1.0,
       px: 5.0,
       ..Default::default()
@@ -740,7 +722,7 @@ mod tests {
 
   #[test]
   fn make_computed_calc_with_rem_collapses_correctly_when_root_font_size_set() {
-    let mut value: Length<true> = Length::Calc(CalcFormula {
+    let mut value: Length = Length::Calc(CalcFormula {
       rem: 1.0,
       px: 5.0,
       ..Default::default()
@@ -753,7 +735,7 @@ mod tests {
 
   #[test]
   fn make_computed_em_applies_dpr_only_once_in_to_px() {
-    let mut value: Length<true> = Length::Em(1.5);
+    let mut value: Length = Length::Em(1.5);
     let sizing = sizing();
     value.make_computed(&sizing);
     assert_eq!(value, Length::Px(7.5));
@@ -762,49 +744,49 @@ mod tests {
 
   #[test]
   fn parse_supports_modern_viewport_and_container_units() {
-    assert_eq!(Length::<true>::from_str("12dvw"), Ok(Length::Vw(12.0)));
-    assert_eq!(Length::<true>::from_str("12svw"), Ok(Length::Vw(12.0)));
-    assert_eq!(Length::<true>::from_str("12lvw"), Ok(Length::Vw(12.0)));
-    assert_eq!(Length::<true>::from_str("12cqw"), Ok(Length::CqW(12.0)));
-    assert_eq!(Length::<true>::from_str("12cqi"), Ok(Length::CqW(12.0)));
-    assert_eq!(Length::<true>::from_str("12vi"), Ok(Length::Vw(12.0)));
-    assert_eq!(Length::<true>::from_str("12dvh"), Ok(Length::Vh(12.0)));
-    assert_eq!(Length::<true>::from_str("12svh"), Ok(Length::Vh(12.0)));
-    assert_eq!(Length::<true>::from_str("12lvh"), Ok(Length::Vh(12.0)));
-    assert_eq!(Length::<true>::from_str("12cqh"), Ok(Length::CqH(12.0)));
-    assert_eq!(Length::<true>::from_str("12cqb"), Ok(Length::CqH(12.0)));
-    assert_eq!(Length::<true>::from_str("12vb"), Ok(Length::Vh(12.0)));
-    assert_eq!(Length::<true>::from_str("12vmin"), Ok(Length::VMin(12.0)));
-    assert_eq!(Length::<true>::from_str("12cqmin"), Ok(Length::CqMin(12.0)));
-    assert_eq!(Length::<true>::from_str("12vmax"), Ok(Length::VMax(12.0)));
-    assert_eq!(Length::<true>::from_str("12cqmax"), Ok(Length::CqMax(12.0)));
+    assert_eq!(Length::from_str("12dvw"), Ok(Length::Vw(12.0)));
+    assert_eq!(Length::from_str("12svw"), Ok(Length::Vw(12.0)));
+    assert_eq!(Length::from_str("12lvw"), Ok(Length::Vw(12.0)));
+    assert_eq!(Length::from_str("12cqw"), Ok(Length::CqW(12.0)));
+    assert_eq!(Length::from_str("12cqi"), Ok(Length::CqW(12.0)));
+    assert_eq!(Length::from_str("12vi"), Ok(Length::Vw(12.0)));
+    assert_eq!(Length::from_str("12dvh"), Ok(Length::Vh(12.0)));
+    assert_eq!(Length::from_str("12svh"), Ok(Length::Vh(12.0)));
+    assert_eq!(Length::from_str("12lvh"), Ok(Length::Vh(12.0)));
+    assert_eq!(Length::from_str("12cqh"), Ok(Length::CqH(12.0)));
+    assert_eq!(Length::from_str("12cqb"), Ok(Length::CqH(12.0)));
+    assert_eq!(Length::from_str("12vb"), Ok(Length::Vh(12.0)));
+    assert_eq!(Length::from_str("12vmin"), Ok(Length::VMin(12.0)));
+    assert_eq!(Length::from_str("12cqmin"), Ok(Length::CqMin(12.0)));
+    assert_eq!(Length::from_str("12vmax"), Ok(Length::VMax(12.0)));
+    assert_eq!(Length::from_str("12cqmax"), Ok(Length::CqMax(12.0)));
   }
 
   #[test]
   fn parse_supports_lh_and_rlh_units() {
-    assert_eq!(Length::<true>::from_str("1.5lh"), Ok(Length::Lh(1.5)));
-    assert_eq!(Length::<true>::from_str("2rlh"), Ok(Length::Rlh(2.0)));
+    assert_eq!(Length::from_str("1.5lh"), Ok(Length::Lh(1.5)));
+    assert_eq!(Length::from_str("2rlh"), Ok(Length::Rlh(2.0)));
   }
 
   #[test]
   fn lh_and_rlh_resolve_to_line_height_basis() {
     let sizing = sizing();
-    assert_near(Length::<true>::Lh(1.0).to_px(&sizing, 0.0), 30.0);
-    assert_near(Length::<true>::Lh(2.0).to_px(&sizing, 0.0), 60.0);
-    assert_near(Length::<true>::Rlh(1.0).to_px(&sizing, 0.0), 40.0);
-    assert_near(Length::<true>::Rlh(0.5).to_px(&sizing, 0.0), 20.0);
+    assert_near(Length::Lh(1.0).to_px(&sizing, 0.0), 30.0);
+    assert_near(Length::Lh(2.0).to_px(&sizing, 0.0), 60.0);
+    assert_near(Length::Rlh(1.0).to_px(&sizing, 0.0), 40.0);
+    assert_near(Length::Rlh(0.5).to_px(&sizing, 0.0), 20.0);
   }
 
   #[test]
   fn rlh_falls_back_to_element_line_height_when_root_unresolved() {
     let mut sizing = sizing();
     sizing.root_line_height = None;
-    assert_near(Length::<true>::Rlh(1.0).to_px(&sizing, 0.0), 30.0);
+    assert_near(Length::Rlh(1.0).to_px(&sizing, 0.0), 30.0);
   }
 
   #[test]
   fn parse_calc_supports_lh_and_rlh() {
-    let parsed = Length::<true>::from_str("calc(1lh + 2rlh - 3px)");
+    let parsed = Length::from_str("calc(1lh + 2rlh - 3px)");
     assert_eq!(
       parsed,
       Ok(Length::Calc(CalcFormula {
@@ -819,7 +801,7 @@ mod tests {
   #[test]
   fn calc_lh_resolves_through_line_height_basis() {
     let sizing = sizing();
-    let parsed = Length::<true>::from_str("calc(1lh + 2px)");
+    let parsed = Length::from_str("calc(1lh + 2px)");
     assert_eq!(
       parsed,
       Ok(Length::Calc(CalcFormula {
@@ -835,7 +817,7 @@ mod tests {
 
   #[test]
   fn make_computed_lh_collapses_to_px_in_pre_dpr_space() {
-    let mut value: Length<true> = Length::Lh(1.5);
+    let mut value: Length = Length::Lh(1.5);
     let sizing = sizing();
     value.make_computed(&sizing);
     assert_eq!(value, Length::Px(22.5));
@@ -844,7 +826,7 @@ mod tests {
 
   #[test]
   fn parse_calc_supports_modern_viewport_and_container_units() {
-    let parsed = Length::<true>::from_str("calc(20cqmax + 5px - 2cqb)");
+    let parsed = Length::from_str("calc(20cqmax + 5px - 2cqb)");
     assert_eq!(
       parsed,
       Ok(Length::Calc(CalcFormula {
@@ -863,43 +845,43 @@ mod tests {
       width: Some(80.0),
       height: Some(40.0),
     };
-    assert_near(Length::<true>::CqW(50.0).to_px(&sizing, 0.0), 40.0);
-    assert_near(Length::<true>::CqH(50.0).to_px(&sizing, 0.0), 20.0);
-    assert_near(Length::<true>::CqMin(50.0).to_px(&sizing, 0.0), 20.0);
-    assert_near(Length::<true>::CqMax(50.0).to_px(&sizing, 0.0), 40.0);
+    assert_near(Length::CqW(50.0).to_px(&sizing, 0.0), 40.0);
+    assert_near(Length::CqH(50.0).to_px(&sizing, 0.0), 20.0);
+    assert_near(Length::CqMin(50.0).to_px(&sizing, 0.0), 20.0);
+    assert_near(Length::CqMax(50.0).to_px(&sizing, 0.0), 40.0);
   }
 
   #[test]
   fn vmin_and_vmax_resolve_to_expected_pixels() {
     let sizing = sizing();
-    assert_near(Length::<true>::VMin(50.0).to_px(&sizing, 0.0), 50.0);
-    assert_near(Length::<true>::VMax(50.0).to_px(&sizing, 0.0), 100.0);
+    assert_near(Length::VMin(50.0).to_px(&sizing, 0.0), 50.0);
+    assert_near(Length::VMax(50.0).to_px(&sizing, 0.0), 100.0);
   }
 
   #[test]
   fn parse_calc_supports_constants() {
     assert_eq!(
-      Length::<true>::from_str("calc(pi)").as_ref(),
+      Length::from_str("calc(pi)").as_ref(),
       Ok(&Length::Px(std::f32::consts::PI))
     );
     assert_eq!(
-      Length::<true>::from_str("calc(e)").as_ref(),
+      Length::from_str("calc(e)").as_ref(),
       Ok(&Length::Px(std::f32::consts::E))
     );
 
-    let inf = Length::<true>::from_str("calc(infinity)");
+    let inf = Length::from_str("calc(infinity)");
     assert_matches!(inf, Ok(Length::Px(v)) if v.is_infinite() && v.is_sign_positive());
 
-    let neg_inf = Length::<true>::from_str("calc(-infinity)");
+    let neg_inf = Length::from_str("calc(-infinity)");
     assert_matches!(neg_inf, Ok(Length::Px(v)) if v.is_infinite() && v.is_sign_negative());
 
-    let nan = Length::<true>::from_str("calc(nan)");
+    let nan = Length::from_str("calc(nan)");
     assert_matches!(nan, Ok(Length::Px(v)) if v.is_nan());
   }
 
   #[test]
   fn parse_calc_infinity_times_length_clamps_in_to_px() {
-    let parsed = Length::<true>::from_str("calc(infinity * 1px)");
+    let parsed = Length::from_str("calc(infinity * 1px)");
     let sizing = sizing();
     assert!(parsed.is_ok(), "expected successful parse, got {parsed:?}");
     let Ok(length) = parsed else {

@@ -29,11 +29,13 @@ pub(crate) use self::stylesheets_mask::PropertyMask;
 use self::{stylesheets_helpers::*, stylesheets_vars::apply_deferred_declaration};
 
 macro_rules! define_inherited_default {
-  ($parent:expr, $inherit:tt) => {
+  // Inherited property: take the parent's computed value.
+  ($parent:expr, $default:expr, $inherit:tt) => {
     $parent.to_owned()
   };
-  ($parent:expr) => {
-    Default::default()
+  // Non-inherited property: reset to the field's initial value.
+  ($parent:expr, $default:expr) => {
+    $default
   };
 }
 
@@ -131,17 +133,22 @@ macro_rules! push_four_side_declarations {
 }
 
 macro_rules! define_style {
+  // Field default for `ComputedStyle`: explicit `= expr` when given, else the type's `Default`.
+  (@default $default:expr) => { $default };
+  (@default) => { ::core::default::Default::default() };
   (
     longhands {
       $(
         $longhand:ident: $longhand_ty:ty
-          $(where inherit = $longhand_inherit:expr)?,
+          $(where inherit = $longhand_inherit:literal)?
+          $(= $longhand_default:expr)?,
       )*
     }
     // `name: type => (ltr_field, rtl_field)` — apply resolves to one of them.
     transient_longhands {
       $(
         $transient:ident: $transient_ty:ty
+          $(= $transient_default:expr)?
           => ($transient_ltr:ident, $transient_rtl:ident),
       )*
     }
@@ -593,7 +600,7 @@ macro_rules! define_style {
       }
 
       /// The computed style snapshot used during layout and rendering.
-      #[derive(Clone, Debug, Default)]
+      #[derive(Clone, Debug)]
       pub struct ComputedStyle {
         /// Resolved custom property values by name.
         pub custom_properties: HashMap<String, String>,
@@ -606,6 +613,19 @@ macro_rules! define_style {
           #[doc = concat!("Computed `", stringify!($longhand), "` value.")]
           pub $longhand: $longhand_ty,
         )*
+      }
+
+      impl Default for ComputedStyle {
+        fn default() -> Self {
+          Self {
+            custom_properties: Default::default(),
+            registered_custom_properties: Default::default(),
+            lang: None,
+            $(
+              $longhand: define_style!(@default $($longhand_default)?),
+            )*
+          }
+        }
       }
 
       /// A single specified declaration stored in a declaration block.
@@ -643,7 +663,7 @@ macro_rules! define_style {
               parent.registered_custom_properties.clone()
             },
             lang: parent.lang,
-            $($longhand: define_inherited_default!(parent.$longhand $(, $longhand_inherit)?),)*
+            $($longhand: define_inherited_default!(parent.$longhand, define_style!(@default $($longhand_default)?) $(, $longhand_inherit)?),)*
           }
         }
 
@@ -790,9 +810,9 @@ macro_rules! define_style {
                 $(
                   LonghandId::[<$longhand:camel>] => {
                     style.$longhand = match keyword {
-                      CssWideKeyword::Initial => Default::default(),
+                      CssWideKeyword::Initial => define_style!(@default $($longhand_default)?),
                       CssWideKeyword::Inherit => parent.$longhand.to_owned(),
-                      CssWideKeyword::Unset => define_inherited_default!(parent.$longhand $(, $longhand_inherit)?),
+                      CssWideKeyword::Unset => define_inherited_default!(parent.$longhand, define_style!(@default $($longhand_default)?) $(, $longhand_inherit)?),
                     };
                   }
                 )*
@@ -800,7 +820,7 @@ macro_rules! define_style {
                   LonghandId::[<$transient:camel>] => {
                     let target = if is_rtl { &mut style.$transient_rtl } else { &mut style.$transient_ltr };
                     *target = match keyword {
-                      CssWideKeyword::Initial | CssWideKeyword::Unset => Default::default(),
+                      CssWideKeyword::Initial | CssWideKeyword::Unset => define_style!(@default $($transient_default)?),
                       CssWideKeyword::Inherit => {
                         if parent.direction == Direction::Rtl {
                           parent.$transient_rtl.to_owned()
@@ -836,13 +856,13 @@ macro_rules! define_style {
               CssWideKeyword::Initial => match property {
                 $(
                   LonghandId::[<$longhand:camel>] => {
-                    style.$longhand = Default::default();
+                    style.$longhand = define_style!(@default $($longhand_default)?);
                   }
                 )*
                 $(
                   LonghandId::[<$transient:camel>] => {
-                    if is_rtl { style.$transient_rtl = Default::default() }
-                    else { style.$transient_ltr = Default::default() }
+                    if is_rtl { style.$transient_rtl = define_style!(@default $($transient_default)?) }
+                    else { style.$transient_ltr = define_style!(@default $($transient_default)?) }
                   }
                 )*
               },
@@ -943,14 +963,14 @@ define_style! {
     min_width: Length,
     min_height: Length,
     aspect_ratio: AspectRatio,
-    padding_top: LengthDefaultsToZero,
-    padding_right: LengthDefaultsToZero,
-    padding_bottom: LengthDefaultsToZero,
-    padding_left: LengthDefaultsToZero,
-    margin_top: LengthDefaultsToZero,
-    margin_right: LengthDefaultsToZero,
-    margin_bottom: LengthDefaultsToZero,
-    margin_left: LengthDefaultsToZero,
+    padding_top: Length = Length::zero(),
+    padding_right: Length = Length::zero(),
+    padding_bottom: Length = Length::zero(),
+    padding_left: Length = Length::zero(),
+    margin_top: Length = Length::zero(),
+    margin_right: Length = Length::zero(),
+    margin_bottom: Length = Length::zero(),
+    margin_left: Length = Length::zero(),
     top: Length,
     right: Length,
     bottom: Length,
@@ -971,7 +991,7 @@ define_style! {
     scale: SpacePair<PercentageNumber>,
     translate: SpacePair<Length>,
     transform: Option<Transforms>,
-    transform_origin: TransformOrigin,
+    transform_origin: PositionValue = PositionValue::center(),
     offset_path: Option<OffsetPath>,
     offset_distance: Length,
     offset_rotate: OffsetRotate,
@@ -979,16 +999,16 @@ define_style! {
     offset_position: OffsetPosition,
     mask_image: Option<BackgroundImages>,
     mask_size: BackgroundSizes,
-    mask_position: BackgroundPositions,
+    mask_position: PositionValues,
     mask_repeat: BackgroundRepeats,
-    column_gap: LengthDefaultsToZero,
-    row_gap: LengthDefaultsToZero,
+    column_gap: Length = Length::zero(),
+    row_gap: Length = Length::zero(),
     flex_grow: Option<FlexGrow>,
     flex_shrink: Option<FlexGrow>,
-    border_top_left_radius: SpacePair<LengthDefaultsToZero>,
-    border_top_right_radius: SpacePair<LengthDefaultsToZero>,
-    border_bottom_right_radius: SpacePair<LengthDefaultsToZero>,
-    border_bottom_left_radius: SpacePair<LengthDefaultsToZero>,
+    border_top_left_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()),
+    border_top_right_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()),
+    border_bottom_right_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()),
+    border_bottom_left_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()),
     border_top_width: LineWidth,
     border_right_width: LineWidth,
     border_bottom_width: LineWidth,
@@ -1008,13 +1028,13 @@ define_style! {
     object_fit: ObjectFit,
     overflow_x: Overflow,
     overflow_y: Overflow,
-    object_position: ObjectPosition,
+    object_position: PositionValue = PositionValue::center(),
     background_image: Option<BackgroundImages>,
-    background_position: BackgroundPositions,
+    background_position: PositionValues,
     background_size: BackgroundSizes,
     background_repeat: BackgroundRepeats,
     background_blend_mode: BlendModes,
-    background_color: ColorDefaultsToTransparent,
+    background_color: ColorInput = ColorInput::transparent(),
     background_clip: BackgroundClip,
     background_origin: BackgroundOrigin,
     box_shadow: Option<BoxShadows>,
@@ -1053,7 +1073,7 @@ define_style! {
     block_ellipsis: BlockEllipsis where inherit = true,
     r#continue: Continue,
     text_align: TextAlign where inherit = true,
-    webkit_text_stroke_width: Option<LengthDefaultsToZero> where inherit = true,
+    webkit_text_stroke_width: Option<Length> where inherit = true,
     webkit_text_stroke_color: Option<ColorInput> where inherit = true,
     webkit_text_fill_color: Option<ColorInput> where inherit = true,
     stroke_linejoin: LineJoin where inherit = true,
@@ -1085,10 +1105,10 @@ define_style! {
     content: ContentValue,
   }
   transient_longhands {
-    margin_inline_start: LengthDefaultsToZero => (margin_left, margin_right),
-    margin_inline_end: LengthDefaultsToZero => (margin_right, margin_left),
-    padding_inline_start: LengthDefaultsToZero => (padding_left, padding_right),
-    padding_inline_end: LengthDefaultsToZero => (padding_right, padding_left),
+    margin_inline_start: Length = Length::zero() => (margin_left, margin_right),
+    margin_inline_end: Length = Length::zero() => (margin_right, margin_left),
+    padding_inline_start: Length = Length::zero() => (padding_left, padding_right),
+    padding_inline_end: Length = Length::zero() => (padding_right, padding_left),
   }
   shorthands {
     offset: OffsetShorthand => [OffsetPosition, OffsetPath, OffsetDistance, OffsetRotate, OffsetAnchor] |value, target| {
@@ -1124,7 +1144,7 @@ define_style! {
       ));
       target.push(StyleDeclaration::animation_name(value.into_iter().map(|animation| animation.name).collect()));
     },
-    padding: Sides<LengthDefaultsToZero> => [PaddingTop, PaddingRight, PaddingBottom, PaddingLeft] |value, target| {
+    padding: Sides<Length> => [PaddingTop, PaddingRight, PaddingBottom, PaddingLeft] |value, target| {
       push_four_side_declarations!(
         target,
         value.0,
@@ -1134,13 +1154,13 @@ define_style! {
         padding_left
       );
     },
-    padding_inline: SpacePair<LengthDefaultsToZero> => [PaddingInlineStart, PaddingInlineEnd] |value, target| {
+    padding_inline: SpacePair<Length> => [PaddingInlineStart, PaddingInlineEnd] |value, target| {
       push_axis_declarations!(target, value, padding_inline_start, padding_inline_end);
     },
-    padding_block: SpacePair<LengthDefaultsToZero> => [PaddingTop, PaddingBottom] |value, target| {
+    padding_block: SpacePair<Length> => [PaddingTop, PaddingBottom] |value, target| {
       push_axis_declarations!(target, value, padding_top, padding_bottom);
     },
-    margin: Sides<LengthDefaultsToZero> => [MarginTop, MarginRight, MarginBottom, MarginLeft] |value, target| {
+    margin: Sides<Length> => [MarginTop, MarginRight, MarginBottom, MarginLeft] |value, target| {
       push_four_side_declarations!(
         target,
         value.0,
@@ -1150,10 +1170,10 @@ define_style! {
         margin_left
       );
     },
-    margin_inline: SpacePair<LengthDefaultsToZero> => [MarginInlineStart, MarginInlineEnd] |value, target| {
+    margin_inline: SpacePair<Length> => [MarginInlineStart, MarginInlineEnd] |value, target| {
       push_axis_declarations!(target, value, margin_inline_start, margin_inline_end);
     },
-    margin_block: SpacePair<LengthDefaultsToZero> => [MarginTop, MarginBottom] |value, target| {
+    margin_block: SpacePair<Length> => [MarginTop, MarginBottom] |value, target| {
       push_axis_declarations!(target, value, margin_top, margin_bottom);
     },
     inset: Sides<Length> => [Top, Right, Bottom, Left] |value, target| {
@@ -1182,7 +1202,7 @@ define_style! {
           .collect(),
       )));
     },
-    gap: SpacePair<LengthDefaultsToZero> => [RowGap, ColumnGap] |value, target| {
+    gap: SpacePair<Length> => [RowGap, ColumnGap] |value, target| {
       push_axis_declarations!(target, value, row_gap, column_gap);
     },
     flex_flow: FlexFlow => [FlexDirection, FlexWrap] |value, target| {
@@ -1343,7 +1363,7 @@ define_style! {
           .iter()
           .filter_map(|background| background.color)
           .next_back()
-          .unwrap_or_default(),
+          .unwrap_or(ColorInput::transparent()),
       ));
       target.push(StyleDeclaration::background_clip(
         value

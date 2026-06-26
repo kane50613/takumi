@@ -415,7 +415,7 @@ impl<'i> FromCss<'i> for StopPosition {
     Ok(StopPosition(length))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = Length::<true>::VALID_TOKENS;
+  const VALID_TOKENS: &'static [CssToken] = Length::VALID_TOKENS;
 }
 
 impl<'i> FromCss<'i> for GradientStop {

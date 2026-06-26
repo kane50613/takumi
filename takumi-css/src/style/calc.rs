@@ -317,7 +317,7 @@ fn parse_calc_product<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcVal
 
 impl CalcFormula {
   /// Bridges a single-unit `Length` to its symbolic `calc(...)` coefficient.
-  fn from_length<const DEFAULT_AUTO: bool>(length: Length<DEFAULT_AUTO>) -> Self {
+  fn from_length(length: Length) -> Self {
     match length {
       Length::Px(v) => Self::px(v),
       Length::Em(v) => Self::em(v),
@@ -364,7 +364,7 @@ fn parse_calc_factor<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcValu
       Ok(CalcValue::Formula(CalcFormula::percent(*unit_value)))
     }
     Token::Dimension { value, unit, .. } => {
-      match length_from_dimension_unit::<true>(unit.as_ref(), *value) {
+      match length_from_dimension_unit(unit.as_ref(), *value) {
         Some(length) => Ok(CalcValue::Formula(CalcFormula::from_length(length))),
         None => Err(unexpected_token!(Length, location, token)),
       }

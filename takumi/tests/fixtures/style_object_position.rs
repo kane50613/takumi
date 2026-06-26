@@ -14,7 +14,7 @@ fn test_style_object_position_contain_center() {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::Contain))
-      .with(StyleDeclaration::object_position(BackgroundPosition(
+      .with(StyleDeclaration::object_position(PositionValue(
         SpacePair::from_single(PositionComponent::KeywordX(PositionKeywordX::Center)),
       ))),
   );
@@ -30,7 +30,7 @@ fn test_style_object_position_contain_top_left() {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::Contain))
-      .with(StyleDeclaration::object_position(BackgroundPosition(
+      .with(StyleDeclaration::object_position(PositionValue(
         SpacePair::from_pair(
           PositionComponent::KeywordX(PositionKeywordX::Left),
           PositionComponent::KeywordY(PositionKeywordY::Top),
@@ -49,7 +49,7 @@ fn test_style_object_position_contain_bottom_right() {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::Contain))
-      .with(StyleDeclaration::object_position(BackgroundPosition(
+      .with(StyleDeclaration::object_position(PositionValue(
         SpacePair::from_pair(
           PositionComponent::KeywordX(PositionKeywordX::Right),
           PositionComponent::KeywordY(PositionKeywordY::Bottom),
@@ -68,7 +68,7 @@ fn test_style_object_position_cover_center() {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::Cover))
-      .with(StyleDeclaration::object_position(BackgroundPosition(
+      .with(StyleDeclaration::object_position(PositionValue(
         SpacePair::from_pair(
           PositionComponent::KeywordX(PositionKeywordX::Center),
           PositionComponent::KeywordY(PositionKeywordY::Center),
@@ -87,7 +87,7 @@ fn test_style_object_position_cover_top_left() {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::Cover))
-      .with(StyleDeclaration::object_position(BackgroundPosition(
+      .with(StyleDeclaration::object_position(PositionValue(
         SpacePair::from_pair(
           PositionComponent::KeywordX(PositionKeywordX::Left),
           PositionComponent::KeywordY(PositionKeywordY::Top),
@@ -106,7 +106,7 @@ fn test_style_object_position_none_center() {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::None))
-      .with(StyleDeclaration::object_position(BackgroundPosition(
+      .with(StyleDeclaration::object_position(PositionValue(
         SpacePair::from_pair(
           PositionComponent::KeywordX(PositionKeywordX::Center),
           PositionComponent::KeywordY(PositionKeywordY::Center),
@@ -125,7 +125,7 @@ fn test_style_object_position_none_top_left() {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::None))
-      .with(StyleDeclaration::object_position(BackgroundPosition(
+      .with(StyleDeclaration::object_position(PositionValue(
         SpacePair::from_pair(
           PositionComponent::KeywordX(PositionKeywordX::Left),
           PositionComponent::KeywordY(PositionKeywordY::Top),
@@ -144,7 +144,7 @@ fn test_style_object_position_percentage_25_75() {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::Contain))
-      .with(StyleDeclaration::object_position(BackgroundPosition(
+      .with(StyleDeclaration::object_position(PositionValue(
         SpacePair::from_pair(Percentage(25.0).into(), Percentage(75.0).into()),
       ))),
   );

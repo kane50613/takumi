@@ -2,8 +2,8 @@ use takumi::prelude::{Length::*, *};
 
 use crate::test_utils::run_fixture_test;
 
-fn centered_layer_position() -> BackgroundPositions {
-  BackgroundPositions::from_str("center center").unwrap()
+fn centered_layer_position() -> PositionValues {
+  PositionValues::from_str("center center").unwrap()
 }
 
 fn create_container_with_mask(mask_image: BackgroundImages, background_color: Color) -> Node {

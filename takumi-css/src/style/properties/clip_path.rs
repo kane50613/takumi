@@ -204,7 +204,7 @@ impl<'i> FromCss<'i> for ShapePosition {
     Ok(ShapePosition(SpacePair::from_pair(first, second)))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = Length::<true>::VALID_TOKENS;
+  const VALID_TOKENS: &'static [CssToken] = Length::VALID_TOKENS;
 }
 
 impl<'i> FromCss<'i> for BasicShape {

@@ -3,25 +3,31 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, LengthDefaultsToZero, MakeComputed,
-  ParseResult, SizingContext, ToCss, unexpected_token,
+  Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
+  SizingContext, ToCss, unexpected_token,
 };
 
 /// Controls indentation of the first line, or hanging/each-line variants.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub struct TextIndent {
   /// The indent amount.
-  pub amount: LengthDefaultsToZero,
+  pub amount: Length,
   /// Apply the indent after every hard line break.
   pub each_line: bool,
   /// Indent continuation lines instead of the first line.
   pub hanging: bool,
 }
 
+impl Default for TextIndent {
+  fn default() -> Self {
+    Self::new(Length::zero())
+  }
+}
+
 impl TextIndent {
   /// Creates a text indent with the given amount and default keyword options.
-  pub const fn new(amount: LengthDefaultsToZero) -> Self {
+  pub const fn new(amount: Length) -> Self {
     Self {
       amount,
       each_line: false,
@@ -82,7 +88,7 @@ impl<'i> FromCss<'i> for TextIndent {
 
     while !input.is_exhausted() {
       if amount.is_none()
-        && let Ok(length) = input.try_parse(LengthDefaultsToZero::from_css)
+        && let Ok(length) = input.try_parse(Length::from_css)
       {
         amount = Some(length);
         continue;
@@ -100,7 +106,7 @@ impl<'i> FromCss<'i> for TextIndent {
     }
 
     Ok(Self {
-      amount: amount.unwrap_or_default(),
+      amount: amount.unwrap_or(Length::zero()),
       each_line,
       hanging,
     })
@@ -128,14 +134,14 @@ impl ToCss for TextIndent {
 
 #[cfg(test)]
 mod tests {
-  use crate::style::{FromCss, LengthDefaultsToZero, TextIndent};
+  use crate::style::{FromCss, Length, TextIndent};
 
   #[test]
   fn parses_indent_keywords_in_any_order() {
     assert_eq!(
       TextIndent::from_str("hanging 2em each-line"),
       Ok(TextIndent {
-        amount: LengthDefaultsToZero::Em(2.0),
+        amount: Length::Em(2.0),
         each_line: true,
         hanging: true,
       })
@@ -144,6 +150,18 @@ mod tests {
 
   #[test]
   fn defaults_to_zero_indent() {
-    assert_eq!(TextIndent::default().amount, LengthDefaultsToZero::Px(0.0));
+    assert_eq!(TextIndent::default().amount, Length::Px(0.0));
+  }
+
+  #[test]
+  fn keyword_only_keeps_zero_amount() {
+    assert_eq!(
+      TextIndent::from_str("hanging"),
+      Ok(TextIndent {
+        amount: Length::Px(0.0),
+        each_line: false,
+        hanging: true,
+      })
+    );
   }
 }
