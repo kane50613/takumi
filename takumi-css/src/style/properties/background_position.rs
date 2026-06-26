@@ -197,7 +197,7 @@ impl Default for BackgroundPosition {
 impl BackgroundPosition {
   /// Center position (`center center`), the initial value for `object-position` and
   /// `transform-origin`.
-  pub fn center() -> Self {
+  pub const fn center() -> Self {
     Self(SpacePair::from_pair(
       PositionComponent::KeywordX(PositionKeywordX::Center),
       PositionComponent::KeywordY(PositionKeywordY::Center),

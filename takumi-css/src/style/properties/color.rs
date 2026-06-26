@@ -203,7 +203,7 @@ impl Animatable for ColorInput {
 
 impl ColorInput {
   /// A fully transparent color, the initial value for `background-color`.
-  pub fn transparent() -> Self {
+  pub const fn transparent() -> Self {
     ColorInput::Value(Color::transparent())
   }
 
