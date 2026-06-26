@@ -116,11 +116,11 @@
     "publish-lint": "attw --pack . && publint --strict ."
   },
   "dependencies": {
-    "@takumi-rs/helpers": "workspace:*"
+    "@takumi-rs/helpers": "workspace:*",
+    "csstype": "^3.2.3"
   },
   "devDependencies": {
     "@types/bun": "catalog:",
-    "csstype": "^3.2.3",
     "tsdown": "catalog:",
     "unrun": "catalog:"
   },

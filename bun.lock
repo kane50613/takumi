@@ -270,13 +270,13 @@
       "version": "2.0.0-beta.13",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
+        "csstype": "^3.2.3",
       },
       "devDependencies": {
         "@napi-rs/cli": "3.7.2",
         "@types/bun": "catalog:",
         "@types/react": "catalog:",
         "@types/react-dom": "catalog:",
-        "csstype": "^3.2.3",
         "lucide-react": "catalog:",
         "mitata": "^1.0.34",
         "react": "catalog:",
@@ -300,10 +300,10 @@
       "version": "2.0.0-beta.13",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
+        "csstype": "^3.2.3",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
-        "csstype": "^3.2.3",
         "tsdown": "catalog:",
         "unrun": "catalog:",
       },
