@@ -86,7 +86,7 @@ for (const name of independentCrates) {
 
 const paper = tegami({
   plugins: [
-    github({ repo: "kane50613/takumi", cli: { versionPr: { base: "master" } } }),
+    github({ repo: "kane50613/takumi", versionPr: { base: "master" } }),
     workspaceProtocol(),
   ],
   groups: {
