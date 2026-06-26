@@ -206,33 +206,11 @@ impl SvgRasterCacheKey {
 #[cfg(feature = "svg")]
 const SVG_RASTER_CACHE_CAPACITY: usize = 32;
 
+/// Per-`SvgSource` cache of rasterized bitmaps keyed by target size. Count-bounded and lock-free
+/// (the same `quick_cache` as `ImageCache`); byte-budget it if a huge SVG cached at many sizes ever
+/// bloats memory.
 #[cfg(feature = "svg")]
-#[derive(Debug)]
-struct SvgRasterCache {
-  // ponytail: count-bounded, lock-free (same `quick_cache` as `ImageCache`). Byte-budget it if a
-  // huge SVG cached at many sizes ever bloats memory.
-  map: Cache<SvgRasterCacheKey, Arc<ImageBuffer>>,
-}
-
-#[cfg(feature = "svg")]
-impl Default for SvgRasterCache {
-  fn default() -> Self {
-    Self {
-      map: Cache::new(SVG_RASTER_CACHE_CAPACITY),
-    }
-  }
-}
-
-#[cfg(feature = "svg")]
-impl SvgRasterCache {
-  fn get(&self, key: SvgRasterCacheKey) -> Option<Arc<ImageBuffer>> {
-    self.map.get(&key)
-  }
-
-  fn insert(&self, key: SvgRasterCacheKey, pixmap: Arc<ImageBuffer>) {
-    self.map.insert(key, pixmap);
-  }
-}
+type SvgRasterCache = Cache<SvgRasterCacheKey, Arc<ImageBuffer>>;
 
 #[cfg(feature = "svg")]
 impl FromStr for SvgSource {
@@ -258,7 +236,7 @@ impl FromStr for SvgSource {
       source: Arc::from(src),
       tree: Arc::new(tree),
       intrinsic,
-      raster_cache: Arc::default(),
+      raster_cache: Arc::new(SvgRasterCache::new(SVG_RASTER_CACHE_CAPACITY)),
     })
   }
 }
@@ -347,7 +325,7 @@ impl ImageSource {
         use resvg::usvg::Transform;
 
         let cache_key = SvgRasterCacheKey::new(width, height, image_rendering);
-        if let Some(pixmap) = svg.raster_cache.get(cache_key) {
+        if let Some(pixmap) = svg.raster_cache.get(&cache_key) {
           return Ok(RenderedImage::Rasterized(pixmap));
         }
 
