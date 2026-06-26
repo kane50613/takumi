@@ -566,6 +566,56 @@ impl BorderProperties {
     self.expand_by(self.width.map(|size| -size))
   }
 
+  /// Outset `box-shadow` shape: a copy with corner radii expanded by `spread` on every side,
+  /// paired with the spread-expanded box size. Shared by the raster and svg backends.
+  pub fn outset_shadow_box(&self, size: Size<f32>, spread: f32) -> (Self, Size<f32>) {
+    let mut expanded = *self;
+    expanded.expand_by(Rect {
+      top: spread,
+      right: spread,
+      bottom: spread,
+      left: spread,
+    });
+
+    let spread_size = Size {
+      width: (size.width + 2.0 * spread).max(0.0),
+      height: (size.height + 2.0 * spread).max(0.0),
+    };
+
+    (expanded, spread_size)
+  }
+
+  /// CSS overlapping-curves scale factor: shrinks corner radii so adjacent radii on a side never
+  /// exceed the border-box edge.
+  fn overlapping_curves_scale(&self, border_box: Size<f32>) -> f32 {
+    let axis_scale = |a: f32, b: f32, extent: f32| {
+      let sum = a + b;
+      if sum > extent { extent / sum } else { 1.0 }
+    };
+
+    1.0f32
+      .min(axis_scale(
+        self.radius.0[0].x,
+        self.radius.0[1].x,
+        border_box.width,
+      ))
+      .min(axis_scale(
+        self.radius.0[3].x,
+        self.radius.0[2].x,
+        border_box.width,
+      ))
+      .min(axis_scale(
+        self.radius.0[0].y,
+        self.radius.0[3].y,
+        border_box.height,
+      ))
+      .min(axis_scale(
+        self.radius.0[1].y,
+        self.radius.0[2].y,
+        border_box.height,
+      ))
+  }
+
   /// Append rounded-rect path commands for this border's corner radii.
   pub fn append_mask_commands(
     &self,
@@ -582,36 +632,7 @@ impl BorderProperties {
     // The magic number for the cubic bezier curve
     const KAPPA: f32 = 4.0 / 3.0 * (SQRT_2 - 1.0);
 
-    // Calculate scale factor inline (CSS Overlapping Curves)
-    let scale = 1.0f32
-      .min(
-        if self.radius.0[0].x + self.radius.0[1].x > border_box.width {
-          border_box.width / (self.radius.0[0].x + self.radius.0[1].x)
-        } else {
-          1.0
-        },
-      )
-      .min(
-        if self.radius.0[3].x + self.radius.0[2].x > border_box.width {
-          border_box.width / (self.radius.0[3].x + self.radius.0[2].x)
-        } else {
-          1.0
-        },
-      )
-      .min(
-        if self.radius.0[0].y + self.radius.0[3].y > border_box.height {
-          border_box.height / (self.radius.0[0].y + self.radius.0[3].y)
-        } else {
-          1.0
-        },
-      )
-      .min(
-        if self.radius.0[1].y + self.radius.0[2].y > border_box.height {
-          border_box.height / (self.radius.0[1].y + self.radius.0[2].y)
-        } else {
-          1.0
-        },
-      );
+    let scale = self.overlapping_curves_scale(border_box);
 
     // --- Top Edge ---
     // Start after Top-Left corner
@@ -729,35 +750,7 @@ impl BorderProperties {
   pub(crate) fn scaled_corner_radii(&self, border_box: Size<f32>) -> Sides<SpacePair<f32>> {
     // Match `append_mask_commands` overlapping-curves scaling so dash adjustment aligns with the
     // actual rendered contour.
-    let scale = 1.0f32
-      .min(
-        if self.radius.0[0].x + self.radius.0[1].x > border_box.width {
-          border_box.width / (self.radius.0[0].x + self.radius.0[1].x)
-        } else {
-          1.0
-        },
-      )
-      .min(
-        if self.radius.0[3].x + self.radius.0[2].x > border_box.width {
-          border_box.width / (self.radius.0[3].x + self.radius.0[2].x)
-        } else {
-          1.0
-        },
-      )
-      .min(
-        if self.radius.0[0].y + self.radius.0[3].y > border_box.height {
-          border_box.height / (self.radius.0[0].y + self.radius.0[3].y)
-        } else {
-          1.0
-        },
-      )
-      .min(
-        if self.radius.0[1].y + self.radius.0[2].y > border_box.height {
-          border_box.height / (self.radius.0[1].y + self.radius.0[2].y)
-        } else {
-          1.0
-        },
-      );
+    let scale = self.overlapping_curves_scale(border_box);
 
     let mut scaled = self.radius;
     for corner in &mut scaled.0 {

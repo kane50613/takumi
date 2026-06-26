@@ -1075,27 +1075,24 @@ pub(crate) fn emit_box_shadows(
     if resolved.color.0[3] == 0 {
       continue;
     }
-    let sx = x + resolved.offset_x - resolved.spread_radius;
-    let sy = y + resolved.offset_y - resolved.spread_radius;
-    let spread_size = Size {
-      width: w + 2.0 * resolved.spread_radius,
-      height: h + 2.0 * resolved.spread_radius,
-    };
+
+    // Shadow shape = the element's rounded border-box, radii expanded by the
+    // spread (shared core geometry with the raster backend).
+    let element_border = BorderProperties::from_context(&node.context, layout.size, layout.border);
+    let (shadow, spread_size) = element_border.outset_shadow_box(
+      Size {
+        width: w,
+        height: h,
+      },
+      resolved.spread_radius,
+    );
     if spread_size.width <= 0.0 || spread_size.height <= 0.0 {
       continue;
     }
-    let fill = Rgba(resolved.color.0);
 
-    // Shadow shape = the element's rounded border-box, radii expanded by the
-    // spread (reusing core geometry, matching the raster backend).
-    let mut shadow = BorderProperties::from_context(&node.context, layout.size, layout.border);
-    let spread = resolved.spread_radius;
-    shadow.expand_by(Rect {
-      top: spread,
-      right: spread,
-      bottom: spread,
-      left: spread,
-    });
+    let sx = x + resolved.offset_x - resolved.spread_radius;
+    let sy = y + resolved.offset_y - resolved.spread_radius;
+    let fill = Rgba(resolved.color.0);
     let data = border_box_path_data(&shadow, spread_size, sx, sy);
 
     emit_with_blur(doc, resolved.blur_radius, |doc| doc.path(&data, fill))?;

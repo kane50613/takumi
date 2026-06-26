@@ -44,20 +44,15 @@ pub(crate) fn draw_outset_box_shadow(
     let mut paths = Vec::new();
     let mut element_paths = Vec::new();
 
-    let mut border_radius = element_border_radius;
     let resolved_spread_radius = shadow
       .spread_radius
       .to_px(&context.sizing, layout.size.width);
 
-    border_radius.expand_by(Sides([resolved_spread_radius; 4]).into());
+    let (border_radius, spread_size) =
+      element_border_radius.outset_shadow_box(layout.size, resolved_spread_radius);
 
     let shadow =
       SizedShadow::from_box_shadow(*shadow, &context.sizing, context.current_color, layout.size);
-
-    let spread_size = Size {
-      width: (layout.size.width + 2.0 * resolved_spread_radius).max(0.0),
-      height: (layout.size.height + 2.0 * resolved_spread_radius).max(0.0),
-    };
 
     border_radius.append_mask_commands(
       &mut paths,
