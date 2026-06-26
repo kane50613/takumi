@@ -2238,6 +2238,10 @@ pub(crate) fn break_lines(
       YieldData::LineBreak(data) => data.line_height,
       YieldData::MaxHeightExceeded(data) => data.line_height,
       YieldData::InlineBoxBreak(data) => {
+        breaker
+          .state_mut()
+          .append_inline_box_to_line(data.advance, 0.0);
+
         let Some(inline_box) = inline_boxes.get(data.inline_box_index).cloned() else {
           continue;
         };
