@@ -68,6 +68,50 @@ export const showcaseProjects: Project[] = [
     width: 1200,
     height: 630,
   },
+  {
+    title: "TanStack",
+    image: "https://tanstack.com/api/og/query.png",
+    url: "https://tanstack.com",
+    width: 1200,
+    height: 630,
+  },
+  {
+    title: "Wotaku",
+    image: "https://wotaku.wiki/__og_image__/og.png",
+    url: "https://wotaku.wiki",
+    width: 1200,
+    height: 630,
+  },
+  {
+    title: "Stepperize",
+    image:
+      "https://stepperize.com/api/og?title=Stepperize&description=The+type-safe+way+to+build+multi-step+experiences+in+React.&section=Documentation&variant=website",
+    url: "https://stepperize.com",
+    width: 1200,
+    height: 630,
+  },
+  {
+    title: "Swetrix",
+    image:
+      "https://swetrix.com/api/og-image.png?title=Swetrix&description=Open+source,+privacy-first+web+analytics",
+    url: "https://swetrix.com",
+    width: 1200,
+    height: 630,
+  },
+  {
+    title: "Nakafa",
+    image: "https://nakafa.com/open-graph/en-about.png",
+    url: "https://nakafa.com",
+    width: 1200,
+    height: 630,
+  },
+  {
+    title: "Bookhive",
+    image: "https://bookhive.buzz/og/marketing",
+    url: "https://bookhive.buzz",
+    width: 1200,
+    height: 630,
+  },
 ];
 
 export const showcaseTemplates: Template[] = [
