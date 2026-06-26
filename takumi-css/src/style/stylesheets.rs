@@ -1363,7 +1363,7 @@ define_style! {
           .iter()
           .filter_map(|background| background.color)
           .next_back()
-          .unwrap_or_default(),
+          .unwrap_or(ColorInput::transparent()),
       ));
       target.push(StyleDeclaration::background_clip(
         value

@@ -106,7 +106,7 @@ impl<'i> FromCss<'i> for TextIndent {
     }
 
     Ok(Self {
-      amount: amount.unwrap_or_default(),
+      amount: amount.unwrap_or(Length::zero()),
       each_line,
       hanging,
     })
@@ -151,5 +151,17 @@ mod tests {
   #[test]
   fn defaults_to_zero_indent() {
     assert_eq!(TextIndent::default().amount, Length::Px(0.0));
+  }
+
+  #[test]
+  fn keyword_only_keeps_zero_amount() {
+    assert_eq!(
+      TextIndent::from_str("hanging"),
+      Ok(TextIndent {
+        amount: Length::Px(0.0),
+        each_line: false,
+        hanging: true,
+      })
+    );
   }
 }
