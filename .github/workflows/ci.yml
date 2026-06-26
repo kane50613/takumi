@@ -30,10 +30,10 @@ jobs:
     name: Lint and Format
     runs-on: ubuntu-slim
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@main
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: canary
 
@@ -50,7 +50,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
@@ -81,7 +81,7 @@ jobs:
         run: CARGO_PROFILE_TEST_STRIP="debuginfo" cargo test
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@main
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: canary
 
@@ -101,7 +101,7 @@ jobs:
 
       - name: Upload changed files artifact
         if: steps.check_changes.outputs.changed == 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: changed-files
           path: changed_files.tar.gz
@@ -127,10 +127,10 @@ jobs:
     name: Build @takumi-rs/helpers
     runs-on: ubuntu-slim
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@main
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: canary
 
@@ -146,7 +146,7 @@ jobs:
         run: bun run build
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: helpers-dist
           path: takumi-helpers/dist
@@ -157,10 +157,10 @@ jobs:
     runs-on: ubuntu-slim
     needs: build-helpers
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@main
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: canary
 
@@ -207,10 +207,10 @@ jobs:
     runs-on: ${{ matrix.settings.host }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@main
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: canary
 
@@ -228,7 +228,7 @@ jobs:
         run: pip install cargo-zigbuild
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: helpers-dist
           path: takumi-helpers/dist
@@ -245,7 +245,7 @@ jobs:
         run: ${{ matrix.settings.build }} && bun build:js
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bindings-${{ matrix.settings.target }}
           path: |
@@ -271,27 +271,27 @@ jobs:
     runs-on: ubuntu-slim
     needs: [build-helpers, build-and-test-napi, build-wasm]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@main
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: canary
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download N-API bindings artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi
 
       - name: Download WASM artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: wasm-package
           path: takumi-wasm
@@ -304,7 +304,7 @@ jobs:
         run: bun run build
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: js-dist
           path: takumi-js/dist
@@ -315,33 +315,33 @@ jobs:
     runs-on: ubuntu-slim
     needs: [build-helpers, build-js, build-and-test-napi, build-wasm]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@main
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: canary
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download N-API bindings artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi
 
       - name: Download WASM artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: wasm-package
           path: takumi-wasm
 
       - name: Download takumi-js artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: js-dist
           path: takumi-js/dist
@@ -380,33 +380,33 @@ jobs:
     runs-on: ubuntu-slim
     needs: [build-helpers, build-js, build-and-test-napi, build-wasm]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@main
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: canary
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download N-API bindings artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi
 
       - name: Download WASM artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: wasm-package
           path: takumi-wasm
 
       - name: Download takumi-js artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: js-dist
           path: takumi-js/dist
@@ -419,7 +419,7 @@ jobs:
         run: bun run build
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: image-response-dist
           path: takumi-image-response/dist
@@ -430,39 +430,39 @@ jobs:
     runs-on: ubuntu-slim
     needs: [build-helpers, build-js, build-and-test-napi, build-wasm, build-image-response]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@main
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: canary
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download N-API bindings artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi
 
       - name: Download takumi-js artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: js-dist
           path: takumi-js/dist
 
       - name: Download WASM artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: wasm-package
           path: takumi-wasm
 
       - name: Download image-response artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: image-response-dist
           path: takumi-image-response/dist
@@ -477,10 +477,10 @@ jobs:
     name: Build @takumi-rs/wasm
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@main
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: canary
 
@@ -510,7 +510,7 @@ jobs:
         run: bun run build
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wasm-package
           path: |
@@ -547,21 +547,21 @@ jobs:
     runs-on: ${{ matrix.settings.host }}
     timeout-minutes: 3
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@main
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: canary
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: wasm-package
           path: takumi-wasm
@@ -579,45 +579,45 @@ jobs:
     needs: pass-test
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@main
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: canary
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download all N-API artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: bindings-*
           path: takumi-napi/artifacts
 
       - name: Download N-API bindings artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi
 
       - name: Download takumi-js artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: js-dist
           path: takumi-js/dist
 
       - name: Download image-response artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: image-response-dist
           path: takumi-image-response/dist
 
       - name: Download WASM artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: wasm-package
           path: takumi-wasm
@@ -635,6 +635,7 @@ jobs:
   pass-test:
     name: Pass Test
     runs-on: ubuntu-slim
+    if: always()
     needs:
       [
         lint-and-format,
@@ -647,25 +648,59 @@ jobs:
         test-wasm,
       ]
     steps:
-      - name: Pass test
-        run: echo "Pass test"
+      - name: Verify all checks passed
+        if: >-
+          contains(needs.*.result, 'failure')
+          || contains(needs.*.result, 'cancelled')
+          || contains(needs.*.result, 'skipped')
+        run: exit 1
 
-  release:
-    name: Release
+  version-pr:
+    name: Version PR
+    runs-on: ubuntu-slim
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-tags: true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: canary
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          stage: release
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Draft version PR
+        run: bun tegami version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish:
+    name: Publish
     runs-on: ubuntu-slim
     needs: pass-test
-    if: github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     permissions:
       contents: write
       id-token: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-tags: true
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@main
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: canary
 
@@ -677,37 +712,37 @@ jobs:
           binstall: cargo-rdme@1.5.1
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download all napi artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: bindings-*
           path: takumi-napi/artifacts
 
       - name: Download N-API bindings artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi
 
       - name: Download takumi-js artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: js-dist
           path: takumi-js/dist
 
       - name: Download image-response artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: image-response-dist
           path: takumi-image-response/dist
 
       - name: Download WASM artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: wasm-package
           path: takumi-wasm
@@ -719,11 +754,11 @@ jobs:
       - name: Update npm version
         run: bun install -g npm@latest
 
-      - uses: rust-lang/crates-io-auth-action@v1
+      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
         id: crates-io-auth
 
-      - name: Version or publish packages
-        run: bun tegami ci
+      - name: Publish packages
+        run: bun tegami publish && bun tegami cleanup
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
@@ -741,33 +776,33 @@ jobs:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@main
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: canary
 
       - name: Download helpers artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: helpers-dist
           path: takumi-helpers/dist
 
       - name: Download N-API bindings artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: takumi-napi
 
       - name: Download WASM artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: wasm-package
           path: takumi-wasm
 
       - name: Download js-dist artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: js-dist
           path: takumi-js/dist
@@ -809,7 +844,7 @@ jobs:
 
       - name: Comment preview URL on PR
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const prNumber = context.payload.pull_request?.number;
