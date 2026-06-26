@@ -116,6 +116,7 @@ Compare rendering output across providers at [image-bench.kane.tw](https://image
 ## Who's Using Takumi
 
 - [Dcard](https://dcard.tw) renders post share images
+- [TanStack](https://tanstack.com) renders OG images for its docs
 - [Fumadocs](https://fumadocs.dev) generates its docs OG images
 - [Nuxt OG Image](https://nuxtseo.com/docs/og-image/renderers/takumi) ships Takumi as a built-in renderer
 - [shiki-image](https://github.com/pi0/shiki-image) turns syntax-highlighted code into images
