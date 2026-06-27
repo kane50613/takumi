@@ -2,13 +2,13 @@
 packages:
   npm:@takumi-rs/helpers:
     replay:
-      - 'exit prerelease: npm:@takumi-rs/helpers'
+      - "exit prerelease: npm:@takumi-rs/helpers"
   npm:@takumi-rs/core:
     replay:
-      - 'exit prerelease: npm:@takumi-rs/core'
+      - "exit prerelease: npm:@takumi-rs/core"
   npm:@takumi-rs/wasm:
     replay:
-      - 'exit prerelease: npm:@takumi-rs/wasm'
+      - "exit prerelease: npm:@takumi-rs/wasm"
 ---
 
 ### Accept a bare URL string in `fonts`
