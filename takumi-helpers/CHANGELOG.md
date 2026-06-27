@@ -1,3 +1,19 @@
+## @takumi-rs/helpers@2.0.0-rc.0 (rc)
+
+### Match the Chromium UA stylesheet for default element styles
+
+Parse the relative font keywords `bolder`/`lighter` (`font-weight`) and
+`larger`/`smaller` (`font-size`), resolving to the values Chromium uses. Expand
+the default element presets to cover lists, `sub`/`sup`, `ins`/`del`, forms,
+`details`/`summary`, and `search`.
+
+### Accept a bare URL string in `fonts`
+
+`fonts` entries can now be a URL string, e.g. `fonts: ["https://example.com/Inter.woff2"]`.
+The bytes are fetched on demand and keyed by the URL; family name, weight, and style come
+from the font file. The object form stays for overriding those. Adds `fontFromUrl` to
+`@takumi-rs/helpers`.
+
 ## @takumi-rs/helpers@2.0.0-beta.10 (beta)
 
 ### Rename the `googleFonts` family field from `family` to `name`

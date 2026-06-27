@@ -1,3 +1,11 @@
+## takumi-js@2.0.0-rc.0 (rc)
+
+### Remove `encodeFrames`
+
+`Renderer.encodeFrames` and its `EncodeFramesOptions` / `AnimationFrameSource`
+types are gone. `renderAnimation` covers scene-based animation; pre-rendered
+frame encoding had no callers.
+
 ## takumi-js@2.0.0-beta.14 (beta)
 
 ### Explain a failed native backend load

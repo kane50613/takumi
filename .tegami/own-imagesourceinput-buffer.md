@@ -1,6 +1,8 @@
 ---
 packages:
-  "cargo:takumi-core": minor
+  cargo:takumi-core:
+    replay:
+      - 'exit prerelease: cargo:takumi-core'
 ---
 
 ### Drop `serde_bytes::ByteBuf` from `ImageSourceInput::Buffer`

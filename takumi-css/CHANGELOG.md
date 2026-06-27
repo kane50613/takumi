@@ -1,3 +1,25 @@
+## takumi-css@0.2.0-rc.0
+
+### Keep the `color` and `selectors` crates out of the public API
+
+`ColorInterpolationMethod`'s color-space fields and `CssRule`'s selector list
+leaked the `color` and `selectors` crates. Their fields are now `pub(crate)`,
+`build_color_lut_with_interpolation` takes the opaque interpolation method
+instead of raw `color` types, and `CssRule` exposes a `selectors()` accessor.
+
+### Match the Chromium UA stylesheet for default element styles
+
+Parse the relative font keywords `bolder`/`lighter` (`font-weight`) and
+`larger`/`smaller` (`font-size`), resolving to the values Chromium uses. Expand
+the default element presets to cover lists, `sub`/`sup`, `ins`/`del`, forms,
+`details`/`summary`, and `search`.
+
+### Mark the property-identifier enums `#[non_exhaustive]`
+
+`LonghandId`, `ShorthandId`, `PropertyId`, and `StyleDeclaration` gain a variant
+for every CSS property, so supporting a new property stays non-breaking across
+1.0.
+
 ## takumi-css@0.2.0-beta.4
 
 ### Support `text-underline-offset`

@@ -1,3 +1,29 @@
+## takumi-core@0.1.0-rc.0
+
+### Drop `serde_bytes::ByteBuf` from `ImageSourceInput::Buffer`
+
+The `Buffer` variant exposed `serde_bytes::ByteBuf` in the public API. It now
+holds a `Vec<u8>` with `#[serde(with = "serde_bytes")]`, keeping the FFI
+bytes wire format while keeping `serde_bytes` out of the surface.
+
+### Own `GenericFamily` so callers don't depend on `parley`
+
+`FontResource::generic_family` took a `parley::GenericFamily`, forcing callers
+to add `parley` as a dependency. It now takes a takumi-owned `GenericFamily`
+newtype exposing the families as named constants (`GenericFamily::SANS_SERIF`,
+etc.), re-exported from the prelude.
+
+### Mark the core node and image enums `#[non_exhaustive]`
+
+`NodeKind`, `ImageSource`, `ImageSourceInput`, and `ImageCacheMode` can now gain
+variants without a breaking change, so the surface stays stable across 1.0.
+
+### Stop exposing the parsed SVG tree as a public field
+
+`SvgSource::tree` was a public `resvg::usvg::Tree` field, leaking `usvg` into
+the API. It is now `pub(crate)`, with a `dimensions()` accessor for the canvas
+size that callers actually need.
+
 ## takumi-core@0.1.0-beta.6
 
 ### Support `text-underline-offset`

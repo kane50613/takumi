@@ -3,6 +3,7 @@ name = "takumi-wasm"
 publish = false
 edition = "2024"
 license = "MIT OR Apache-2.0"
+version = "0.0.0"
 
 [lib]
 crate-type = ["cdylib"]
@@ -47,3 +48,4 @@ wasm-opt = [
 
 [lints]
 workspace = true
+

@@ -1,6 +1,8 @@
 ---
 packages:
-  "cargo:takumi-core": minor
+  cargo:takumi-core:
+    replay:
+      - 'exit prerelease: cargo:takumi-core'
 ---
 
 ### Mark the core node and image enums `#[non_exhaustive]`

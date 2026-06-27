@@ -1,8 +1,14 @@
 ---
 packages:
-  "npm:@takumi-rs/core": minor
-  "npm:@takumi-rs/wasm": minor
-  "npm:takumi-js": minor
+  npm:@takumi-rs/core:
+    replay:
+      - 'exit prerelease: npm:@takumi-rs/core'
+  npm:@takumi-rs/wasm:
+    replay:
+      - 'exit prerelease: npm:@takumi-rs/wasm'
+  npm:takumi-js:
+    replay:
+      - 'exit prerelease: npm:takumi-js'
 ---
 
 ### Remove `encodeFrames`

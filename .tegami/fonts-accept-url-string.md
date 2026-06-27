@@ -1,8 +1,14 @@
 ---
 packages:
-  "npm:@takumi-rs/helpers": patch
-  "npm:@takumi-rs/core": patch
-  "npm:@takumi-rs/wasm": patch
+  npm:@takumi-rs/helpers:
+    replay:
+      - 'exit prerelease: npm:@takumi-rs/helpers'
+  npm:@takumi-rs/core:
+    replay:
+      - 'exit prerelease: npm:@takumi-rs/core'
+  npm:@takumi-rs/wasm:
+    replay:
+      - 'exit prerelease: npm:@takumi-rs/wasm'
 ---
 
 ### Accept a bare URL string in `fonts`
