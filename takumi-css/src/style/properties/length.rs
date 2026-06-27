@@ -397,7 +397,7 @@ impl Length {
   }
 
   /// Resolves to a taffy `CompactLength`, keeping percent and calc unresolved.
-  pub fn to_compact_length(self, sizing: &SizingContext) -> CompactLength {
+  pub(crate) fn to_compact_length(self, sizing: &SizingContext) -> CompactLength {
     match self {
       Length::Auto => CompactLength::auto(),
       Length::Percentage(value) => CompactLength::percent(value / 100.0),
@@ -434,7 +434,7 @@ impl Length {
   }
 
   /// Resolves to a taffy `LengthPercentage`, treating auto as zero.
-  pub fn resolve_to_length_percentage(self, sizing: &SizingContext) -> LengthPercentage {
+  pub(crate) fn resolve_to_length_percentage(self, sizing: &SizingContext) -> LengthPercentage {
     let compact_length = self.to_compact_length(sizing);
 
     if compact_length.is_auto() {
@@ -465,12 +465,15 @@ impl Length {
   }
 
   /// Resolves to a taffy `LengthPercentageAuto`.
-  pub fn resolve_to_length_percentage_auto(self, sizing: &SizingContext) -> LengthPercentageAuto {
+  pub(crate) fn resolve_to_length_percentage_auto(
+    self,
+    sizing: &SizingContext,
+  ) -> LengthPercentageAuto {
     unsafe { LengthPercentageAuto::from_raw(self.to_compact_length(sizing)) }
   }
 
   /// Resolves to a taffy `Dimension`.
-  pub fn resolve_to_dimension(self, sizing: &SizingContext) -> Dimension {
+  pub(crate) fn resolve_to_dimension(self, sizing: &SizingContext) -> Dimension {
     self.resolve_to_length_percentage_auto(sizing).into()
   }
 }

@@ -16,8 +16,7 @@ pub enum GridLength {
 }
 
 impl GridLength {
-  /// Converts the grid track size to a compact length representation.
-  pub fn to_compact_length(self, sizing: &SizingContext) -> CompactLength {
+  pub(crate) fn to_compact_length(self, sizing: &SizingContext) -> CompactLength {
     match self {
       GridLength::Fr(fr) => CompactLength::fr(fr),
       GridLength::Unit(unit) => unit.to_compact_length(sizing),
