@@ -575,7 +575,11 @@ macro_rules! define_style {
             }
           }
 
-          for declaration in declarations {
+          let parent_font_weight = parent.font_weight.value();
+          for mut declaration in declarations {
+            if let StyleDeclaration::FontWeight(weight) = &mut declaration {
+              *weight = weight.resolve_against(parent_font_weight);
+            }
             declaration.apply_with_parent(&mut style, parent);
           }
           style

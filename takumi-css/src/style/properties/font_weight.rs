@@ -10,8 +10,46 @@ use crate::style::{
 };
 
 /// Represents font weight value.
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
-pub struct FontWeight(ParleyFontWeight);
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum FontWeight {
+  /// An absolute numeric weight.
+  Absolute(ParleyFontWeight),
+  /// One step bolder than the inherited weight, resolved against the parent.
+  Bolder,
+  /// One step lighter than the inherited weight, resolved against the parent.
+  Lighter,
+}
+
+impl Default for FontWeight {
+  fn default() -> Self {
+    FontWeight::from(400.0)
+  }
+}
+
+// https://drafts.csswg.org/css-fonts-4/#font-weight-prop
+fn bolder(weight: f32) -> f32 {
+  if weight < 350.0 {
+    400.0
+  } else if weight < 550.0 {
+    700.0
+  } else if weight < 900.0 {
+    900.0
+  } else {
+    weight
+  }
+}
+
+fn lighter(weight: f32) -> f32 {
+  if weight < 100.0 {
+    weight
+  } else if weight < 550.0 {
+    100.0
+  } else if weight < 750.0 {
+    400.0
+  } else {
+    700.0
+  }
+}
 
 impl MakeComputed for FontWeight {}
 
@@ -35,14 +73,11 @@ impl<'i> FromCss<'i> for FontWeight {
 
     match token {
       Token::Number { value, .. } => Ok((*value).into()),
-      // `bolder`/`lighter` are relative to the inherited weight; with no cascade
-      // context at parse time, resolve against the initial 400 base.
-      // https://drafts.csswg.org/css-fonts-4/#font-weight-prop
       Token::Ident(ident) => match_ignore_ascii_case! { ident,
         "normal" => Ok(400.0.into()),
         "bold" => Ok(700.0.into()),
-        "bolder" => Ok(700.0.into()),
-        "lighter" => Ok(100.0.into()),
+        "bolder" => Ok(FontWeight::Bolder),
+        "lighter" => Ok(FontWeight::Lighter),
         _ => Err(unexpected_token!(location, token)),
       },
       _ => Err(unexpected_token!(location, token)),
@@ -80,27 +115,47 @@ impl TailwindPropertyParser for FontWeight {
 }
 
 impl FontWeight {
-  /// The numeric weight (100-900).
+  /// The numeric weight (1-1000). Relative keywords fall back to the `normal`
+  /// (400) base; call [`resolve_against`](Self::resolve_against) during
+  /// inheritance to step from the parent weight.
   pub fn value(self) -> f32 {
-    self.0.value()
+    match self {
+      Self::Absolute(weight) => weight.value(),
+      Self::Bolder => bolder(400.0),
+      Self::Lighter => lighter(400.0),
+    }
+  }
+
+  /// Resolves `bolder`/`lighter` against the inherited parent weight; absolute
+  /// weights pass through unchanged.
+  pub fn resolve_against(self, parent: f32) -> Self {
+    match self {
+      Self::Bolder => FontWeight::from(bolder(parent)),
+      Self::Lighter => FontWeight::from(lighter(parent)),
+      absolute => absolute,
+    }
   }
 }
 
 impl From<FontWeight> for ParleyFontWeight {
   fn from(value: FontWeight) -> Self {
-    value.0
+    ParleyFontWeight::new(value.value())
   }
 }
 
 impl From<f32> for FontWeight {
   fn from(value: f32) -> Self {
-    FontWeight(ParleyFontWeight::new(value))
+    FontWeight::Absolute(ParleyFontWeight::new(value))
   }
 }
 
 impl ToCss for FontWeight {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    write!(dest, "{}", self.value())
+    match self {
+      Self::Bolder => dest.write_str("bolder"),
+      Self::Lighter => dest.write_str("lighter"),
+      Self::Absolute(weight) => write!(dest, "{}", weight.value()),
+    }
   }
 }
 
@@ -114,8 +169,15 @@ mod tests {
   }
 
   #[test]
-  fn resolves_relative_keywords_to_chromium_values() {
-    assert_eq!(FontWeight::from_str("bolder"), Ok(700.0.into()));
-    assert_eq!(FontWeight::from_str("lighter"), Ok(100.0.into()));
+  fn resolves_relative_keywords_against_parent() {
+    assert_eq!(FontWeight::from_str("bolder"), Ok(FontWeight::Bolder));
+    assert_eq!(FontWeight::from_str("lighter"), Ok(FontWeight::Lighter));
+
+    assert_eq!(FontWeight::Bolder.resolve_against(400.0).value(), 700.0);
+    assert_eq!(FontWeight::Bolder.resolve_against(700.0).value(), 900.0);
+    assert_eq!(FontWeight::Bolder.resolve_against(900.0).value(), 900.0);
+    assert_eq!(FontWeight::Lighter.resolve_against(400.0).value(), 100.0);
+    assert_eq!(FontWeight::Lighter.resolve_against(600.0).value(), 400.0);
+    assert_eq!(FontWeight::Lighter.resolve_against(900.0).value(), 700.0);
   }
 }
