@@ -2,7 +2,7 @@
 packages:
   cargo:takumi-core:
     replay:
-      - "exit prerelease: cargo:takumi-core"
+      - 'exit prerelease: cargo:takumi-core'
 ---
 
 ### Own `GenericFamily` so callers don't depend on `parley`
