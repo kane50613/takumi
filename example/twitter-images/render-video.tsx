@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Renderer } from "takumi-js/node";
 import { fromJsx } from "takumi-js/helpers/jsx";
 import { googleFonts } from "takumi-js/helpers";
+import { render } from "takumi-js";
 
 // Logical width; rendered straight to 1080p (devicePixelRatio keeps it crisp, no supersample).
 const W = 1600;
@@ -144,17 +144,18 @@ const ff = Bun.spawn(
 
 const framesPerSeg = Math.round((FPS * SEG_MS) / 1000);
 
+const fonts = await googleFonts({
+  families: [
+    ...segments.map((seg) => ({ name: seg.family, weight: seg.weight })),
+    { name: UI, weight: 600 },
+  ],
+});
+
 for (const seg of segments) {
   const { node } = await fromJsx(still(seg));
-  const fonts = await googleFonts({
-    families: [
-      { name: seg.family, weight: seg.weight },
-      { name: UI, weight: 600 },
-    ],
-  });
-  const renderer = new Renderer();
+
   for (let f = 0; f < framesPerSeg; f++) {
-    const buf = await renderer.render(node, {
+    const buf = await render(node, {
       width: OUT_W,
       height: OUT_H,
       devicePixelRatio: DPR,
@@ -163,10 +164,13 @@ for (const seg of segments) {
       images: [{ src: "takumi.svg", data: logo }],
       fonts,
       timeMs: Math.round((f * 1000) / FPS),
+      fontFamilies: [seg.family, UI],
     });
+
     ff.stdin.write(buf);
     await ff.stdin.flush();
   }
+
   console.log(`seg ${seg.text} (${seg.family})`);
 }
 
