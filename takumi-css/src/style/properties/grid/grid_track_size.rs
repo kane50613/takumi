@@ -35,8 +35,7 @@ pub enum GridTrackSize {
 }
 
 impl GridTrackSize {
-  /// Converts the grid track size to a non-repeated track sizing function.
-  pub fn to_min_max(self, sizing: &SizingContext) -> TrackSizingFunction {
+  pub(crate) fn to_min_max(self, sizing: &SizingContext) -> TrackSizingFunction {
     match self {
       // SAFETY: The compact length is a valid track sizing function.
       Self::Fixed(size) => unsafe {
