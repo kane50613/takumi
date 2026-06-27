@@ -26,6 +26,7 @@ pub type ImageResult = Result<ImageSource, ImageResourceError>;
 
 #[derive(Debug, Clone)]
 /// Represents the source of an image.
+#[non_exhaustive]
 pub enum ImageSource {
   /// An svg image source
   #[cfg(feature = "svg")]
@@ -477,6 +478,7 @@ const DEFAULT_MAX_BYTES: u64 = 64 << 20; // 64 MiB
 /// Cache policy for a decoded image, applied per [`ImageCache::get_or_decode`] call.
 #[derive(Clone, Copy, Default, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum ImageCacheMode {
   /// Cache the decoded image for reuse (evictable).
   #[default]

@@ -95,6 +95,7 @@ fn data_url(src: &ImageSourceInput, context: &RenderContext) -> Option<String> {
     ImageSourceInput::Loaded(source) => loaded_data_url(source),
     // Only resolvable when the render supplied a resource map (usually empty).
     ImageSourceInput::Url(_) => src.resolve(context).ok().and_then(|s| loaded_data_url(&s)),
+    _ => None,
   }
 }
 
@@ -106,6 +107,7 @@ fn loaded_data_url(source: &ImageSource) -> Option<String> {
       .encode_png()
       .map(|png| encode("image/png", &png)),
     ImageSource::Svg(svg) => Some(encode("image/svg+xml", svg.source().as_bytes())),
+    _ => None,
   }
 }
 

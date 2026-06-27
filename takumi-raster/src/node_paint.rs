@@ -332,6 +332,7 @@ pub(crate) fn draw_node_content(
     NodeKind::Container { .. } => Ok(()),
     NodeKind::Image(image) => draw_image_node_content(image, context, canvas, layout),
     NodeKind::Text(text) => draw_text_node_content(text, context, canvas, layout),
+    _ => Ok(()),
   }
 }
 
