@@ -11,8 +11,9 @@ use image::{Rgba, RgbaImage};
 use parley::{
   GenericFamily as ParleyGenericFamily, GlyphRun, LayoutContext, TextStyle, TreeBuilder,
   fontique::{
-    Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, FontStyle,
-    QueryFamily, QueryStatus, Script, ScriptExt,
+    Attributes, Blob, Collection, CollectionOptions, FallbackKey,
+    FontInfoOverride as FontiqueFontInfoOverride, FontStyle, QueryFamily, QueryStatus, Script,
+    ScriptExt,
   },
 };
 use skrifa::{
@@ -24,8 +25,9 @@ use skrifa::{
   },
   instance::{LocationRef, Size},
   outline::{DrawSettings, OutlineGlyphCollection, OutlinePen},
-  raw::types::{BoundingBox, F2Dot14},
+  raw::types::{BoundingBox, F2Dot14, Tag},
 };
+use takumi_css::style::{FontStretch, FontStyle as CssFontStyle, FontWeight};
 use thiserror::Error;
 use tiny_skia::{IntSize, PathSegment as Command, Pixmap};
 
@@ -902,6 +904,17 @@ impl Fonts {
     } = font;
 
     let blob = source.into_blob()?;
+    let axes = info_override
+      .as_ref()
+      .map(FontInfoOverride::fontique_axes)
+      .unwrap_or_default();
+    let info_override = info_override.as_ref().map(|o| FontiqueFontInfoOverride {
+      family_name: o.family_name.as_deref(),
+      width: o.width.map(Into::into),
+      style: o.style.map(Into::into),
+      weight: o.weight.map(Into::into),
+      axes: (!axes.is_empty()).then_some(axes.as_slice()),
+    });
     let registered_fonts = self.inner.collection.register_fonts(blob, info_override);
 
     let mut families = Vec::with_capacity(registered_fonts.len());
@@ -1083,13 +1096,44 @@ impl From<GenericFamily> for ParleyGenericFamily {
   }
 }
 
+/// Overrides for a registered font's metadata, replacing the values declared by
+/// the font itself. Owned so callers need not depend on `parley`/`fontique`.
+#[derive(Debug, Default, Clone)]
+pub struct FontInfoOverride {
+  /// Family name to register the font under, instead of its own.
+  pub family_name: Option<String>,
+  /// Width/stretch to use instead of the font's own.
+  pub width: Option<FontStretch>,
+  /// Slant (italic/oblique) to use instead of the font's own.
+  pub style: Option<CssFontStyle>,
+  /// Weight to use instead of the font's own.
+  pub weight: Option<FontWeight>,
+  /// Default values for the font's variation axes, as `(tag, value)` pairs.
+  /// Tags must be four ASCII bytes (e.g. `"wght"`); invalid tags are ignored.
+  pub axes: Vec<(String, f32)>,
+}
+
+impl FontInfoOverride {
+  fn fontique_axes(&self) -> Vec<(Tag, f32)> {
+    self
+      .axes
+      .iter()
+      .filter_map(|(tag, value)| {
+        Tag::new_checked(tag.as_bytes())
+          .ok()
+          .map(|tag| (tag, *value))
+      })
+      .collect()
+  }
+}
+
 #[derive(Debug)]
 /// Information of a font resource
 pub struct FontResource<'a> {
   /// Font source
   source: FontSource<'a>,
   /// Font information for override
-  info_override: Option<FontInfoOverride<'a>>,
+  info_override: Option<FontInfoOverride>,
   /// Generic font family
   generic_family: Option<GenericFamily>,
   /// Logical family this font is a coverage subset of (see [`FontResource::subset_of`]).
@@ -1108,7 +1152,7 @@ impl<'a> FontResource<'a> {
   }
 
   /// Set font information for override
-  pub fn override_info(self, info_override: FontInfoOverride<'a>) -> Self {
+  pub fn override_info(self, info_override: FontInfoOverride) -> Self {
     Self {
       info_override: Some(info_override),
       ..self

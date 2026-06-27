@@ -58,6 +58,12 @@ impl From<FontStyle> for ParleyFontStyle {
   }
 }
 
+impl From<ParleyFontStyle> for FontStyle {
+  fn from(value: ParleyFontStyle) -> Self {
+    Self(value)
+  }
+}
+
 impl ToCss for FontStyle {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match &self.0 {

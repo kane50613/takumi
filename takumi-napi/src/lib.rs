@@ -16,11 +16,11 @@ use std::{fmt::Display, ops::Deref};
 
 use napi::{De, Env, Error, bindgen_prelude::*};
 use napi_derive::napi;
-use parley::{FontStyle, FontWeight, fontique::FontInfoOverride};
+use parley::FontStyle;
 use serde::{Deserialize, Deserializer, de::DeserializeOwned};
 use takumi_core::{
-  layout::style::{KeyframesRule, StyleSheet},
-  resources::font::FontResource,
+  layout::style::{FontWeight, KeyframesRule, StyleSheet},
+  resources::font::{FontInfoOverride, FontResource},
 };
 
 pub use renderer::Renderer;
@@ -118,11 +118,10 @@ pub(crate) fn resolve_font_resource<'a>(
   buffer: &'a [u8],
 ) -> Result<FontResource<'a>> {
   let resource = FontResource::new(buffer).override_info(FontInfoOverride {
-    family_name: font.name.as_deref(),
-    width: None,
-    style: font.style.map(|style| style.0),
-    weight: font.weight.map(|weight| FontWeight::new(weight as f32)),
-    axes: None,
+    family_name: font.name.clone(),
+    style: font.style.map(|style| style.0.into()),
+    weight: font.weight.map(|weight| FontWeight::from(weight as f32)),
+    ..Default::default()
   });
 
   let resource = match &font.subset_of {

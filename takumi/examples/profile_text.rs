@@ -1,4 +1,3 @@
-use parley::fontique::FontInfoOverride;
 use std::hint::black_box;
 use takumi::{prelude::*, render};
 
@@ -18,7 +17,7 @@ fn load_global() -> Fonts {
   g.register(
     FontResource::new(regular.to_vec())
       .override_info(FontInfoOverride {
-        family_name: Some("Geist"),
+        family_name: Some("Geist".to_string()),
         ..Default::default()
       })
       .generic_family(GenericFamily::SANS_SERIF),

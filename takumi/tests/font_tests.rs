@@ -5,7 +5,6 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use parley::fontique::FontInfoOverride;
 use takumi::{prelude::*, render};
 
 fn font_path(path: &str) -> PathBuf {
@@ -30,7 +29,7 @@ fn register_subset(fonts: &mut Fonts, path: &str, unique_name: &str, logical: &s
     .register(
       FontResource::new(read_font(path))
         .override_info(FontInfoOverride {
-          family_name: Some(unique_name),
+          family_name: Some(unique_name.to_string()),
           ..Default::default()
         })
         .generic_family(GenericFamily::SANS_SERIF)
