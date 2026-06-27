@@ -154,8 +154,8 @@ const fonts = await googleFonts({
 for (const seg of segments) {
   const { node } = await fromJsx(still(seg));
 
-  for (let f = 0; f < framesPerSeg; f++) {
-    const buf = await render(node, {
+  const renderAt = (timeMs: number) =>
+    render(node, {
       width: OUT_W,
       height: OUT_H,
       devicePixelRatio: DPR,
@@ -163,10 +163,15 @@ for (const seg of segments) {
       stylesheets,
       images: [{ src: "takumi.svg", data: logo }],
       fonts,
-      timeMs: Math.round((f * 1000) / FPS),
+      timeMs,
       fontFamilies: [seg.family, UI],
     });
 
+  const bufs = await Promise.all(
+    Array.from({ length: framesPerSeg }, (_, f) => renderAt(Math.round((f * 1000) / FPS))),
+  );
+
+  for (const buf of bufs) {
     ff.stdin.write(buf);
     await ff.stdin.flush();
   }

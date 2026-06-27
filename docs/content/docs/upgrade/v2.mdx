@@ -35,10 +35,13 @@ Rust (takumi crate):
 - render_for_layout drops the current_color argument
 - style value types (unstable): LengthDefaultsToZero -> Length, ColorDefaultsToTransparent -> ColorInput
 - BackgroundPosition -> PositionValue, BackgroundPositions -> PositionValues; ObjectPosition/TransformOrigin removed -> PositionValue (PositionValue::center() for the 50% 50% default)
+- core enums (NodeKind, ImageSource, ImageSourceInput, ImageCacheMode, Length, ColorInput) and css PropertyId/StyleDeclaration are now #[non_exhaustive]: add a wildcard match arm; build via constructors, not struct literals
 
 CSS defaults changed, verify visually: position relative -> static; border/outline width
 0 -> medium (3px); negative scale reflects; line-clamp is a shorthand; currentColor in SVG
-images is no longer tinted.
+images is no longer tinted; transform-origin/object-position default top-left -> center; bolder/lighter
+and larger/smaller font keywords now resolve; more elements (lists, sub/sup, ins/del, forms,
+details/summary) carry default styles.
 ```
 
 The sections below explain each line.
@@ -47,14 +50,14 @@ The sections below explain each line.
 
 ### Top-level functions are async
 
-The top-level `takumi-js` functions `render`, `renderSvg`, and `renderAnimation` await font and image loading before they render, so callers must `await` them. The [napi](https://www.npmjs.com/package/@takumi-rs/core) `Renderer` methods are async too. The [WebAssembly](https://www.npmjs.com/package/@takumi-rs/wasm) `Renderer` methods stay synchronous and return bytes directly.
+The top-level `takumi-js` functions `render`, `renderSvg`, and `renderAnimation` await font and image loading before they render, so callers must `await` them. The [napi](https://www.npmjs.com/package/@takumi-rs/core) and [WebAssembly](https://www.npmjs.com/package/@takumi-rs/wasm) `Renderer` methods are async too.
 
 ```ts
 const image = render(node, options); // [!code --]
 const image = await render(node, options); // [!code ++]
 ```
 
-`measure` and `encodeFrames` are `Renderer` methods, not top-level exports.
+`measure` is a `Renderer` method, not a top-level export. `encodeFrames` is removed — use `renderAnimation` (or `render` per frame for raw output).
 
 ### The `Renderer` constructor takes no arguments
 
@@ -88,10 +91,10 @@ const image = await renderer.render(node, {
 
 ### Renamed and changed options
 
-| v1                 | v2                                            | Note                                                                      |
-| ------------------ | --------------------------------------------- | ------------------------------------------------------------------------- |
-| `fetchedResources` | `images`                                      | Pre-fetched images, keyed by `src`.                                       |
-| —                  | `fonts` on `renderAnimation` / `encodeFrames` | Animation calls now accept `fonts` and `fontFamilies`, matching `render`. |
+| v1                 | v2                           | Note                                                                      |
+| ------------------ | ---------------------------- | ------------------------------------------------------------------------- |
+| `fetchedResources` | `images`                     | Pre-fetched images, keyed by `src`.                                       |
+| —                  | `fonts` on `renderAnimation` | Animation calls now accept `fonts` and `fontFamilies`, matching `render`. |
 
 ```tsx
 const image = await renderer.render(node, {
@@ -135,12 +138,13 @@ const svg = await renderSvg(<OgImage />, { width: 1200, height: 630 }); // [!cod
 
 These properties changed their default or behavior to match the CSS spec. Verify affected pages visually.
 
-| Property                         | v1              | v2             | Action                                                                                |
-| -------------------------------- | --------------- | -------------- | ------------------------------------------------------------------------------------- |
-| `position`                       | `relative`      | `static`       | Set `position: relative` where you relied on the default containing block or insets.  |
-| `border-width` / `outline-width` | `0`             | `medium` (3px) | `border: solid red` now draws a 3px line; was invisible.                              |
-| `scale` (negative)               | collapses to 0  | reflects       | `scale: -1`, `scaleX(-1)` etc. now mirror the element.                                |
-| `line-clamp`                     | single property | shorthand      | Expands to `max-lines`, `block-ellipsis`, `continue`; only `block-ellipsis` inherits. |
+| Property                               | v1              | v2               | Action                                                                                |
+| -------------------------------------- | --------------- | ---------------- | ------------------------------------------------------------------------------------- |
+| `position`                             | `relative`      | `static`         | Set `position: relative` where you relied on the default containing block or insets.  |
+| `border-width` / `outline-width`       | `0`             | `medium` (3px)   | `border: solid red` now draws a 3px line; was invisible.                              |
+| `scale` (negative)                     | collapses to 0  | reflects         | `scale: -1`, `scaleX(-1)` etc. now mirror the element.                                |
+| `line-clamp`                           | single property | shorthand        | Expands to `max-lines`, `block-ellipsis`, `continue`; only `block-ellipsis` inherits. |
+| `transform-origin` / `object-position` | top-left        | center (50% 50%) | Set the origin or anchor explicitly where you relied on the top-left default.         |
 
 The sections below cover the subtler cases.
 
@@ -184,6 +188,14 @@ An omitted width in `border` / `outline` now resolves to `medium` (3px), the CSS
 ### `line-clamp`
 
 `line-clamp` is now a shorthand for the `max-lines`, `block-ellipsis`, and `continue` longhands (CSS Overflow 4). `block-ellipsis` inherits; `max-lines` and `continue` do not, so a clamped ancestor no longer forces its line limit onto descendants. `-webkit-line-clamp` still works and expands to the same longhands.
+
+### Wider default element styles
+
+v2 ships a Chromium-parity user-agent stylesheet. Two changes affect existing markup.
+
+Relative keywords now resolve. `font-weight: bolder` / `lighter` and `font-size: larger` / `smaller` were ignored in v1. They take effect in v2.
+
+More elements carry default styles: lists, `sub`, `sup`, `ins`, `del`, form controls, `details`, `summary`, and `search`. These elements render differently than v1. Override the defaults where you need the old look.
 
 ## Rust
 
@@ -242,11 +254,11 @@ write_image(&image, ImageOutputFormat::WebP, 80)?; // [!code --]
 write_image(&image, &mut output, OutputFormat::WebP { quality: Quality::new(80) })?; // [!code ++]
 ```
 
-In the napi and wasm bindings, `format` is a string (`"png"` | `"jpeg"` | `"webp"` | ...) with separate optional `quality` and `lossless` fields. `quality` applies to JPEG and lossy WebP; `lossless` applies to WebP.
+In the napi binding, `format` is a string (`"png"` | `"jpeg"` | `"webp"` | ...) with separate optional `quality` and `lossless` fields. `quality` applies to JPEG and lossy WebP; `lossless` applies to WebP. On the wasm binding WebP is always lossless, so there is no `lossless` field and `quality` applies to JPEG only.
 
 ```ts
 renderer.render(node, { format: "jpeg", quality: 80 });
-renderer.render(node, { format: "webp", lossless: true });
+renderer.render(node, { format: "webp", lossless: true }); // napi only
 ```
 
 ### Renamed entry points
@@ -286,6 +298,18 @@ The CSS `<position>` value backs `background-position`, `object-position`, `tran
 ```rust
 let origin: TransformOrigin = TransformOrigin::default(); // [!code --]
 let origin: PositionValue = PositionValue::center(); // [!code ++]
+```
+
+### Core enums are `#[non_exhaustive]`
+
+Several public enums gained `#[non_exhaustive]`: `NodeKind`, `ImageSource`, `ImageSourceInput`, `ImageCacheMode`, `Length`, and `ColorInput` (plus `PropertyId` and `StyleDeclaration` in `takumi-css`). You can no longer build these variants with a struct literal from outside the crate, and a `match` on them needs a wildcard arm.
+
+```rust
+match node.kind {
+  NodeKind::Container(_) => {}
+  NodeKind::Text(_) => {}
+  _ => {} // [!code ++]
+}
 ```
 
 ## More in Changelog!
