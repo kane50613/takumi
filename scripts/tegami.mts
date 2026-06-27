@@ -57,7 +57,7 @@ function workspaceProtocol(): TegamiPlugin {
 }
 
 // v2 beta line; clear this for the stable 2.0.0 release.
-const prerelease = "beta";
+const prerelease = "rc";
 
 if (prerelease) process.env.npm_config_tag = prerelease;
 

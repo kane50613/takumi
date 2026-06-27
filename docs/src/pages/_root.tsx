@@ -27,9 +27,9 @@ export default function RootElement({ children }: { children: ReactNode }) {
       </head>
       <body className="flex flex-col min-h-screen">
         <Provider>
-          <Banner id="takumi-v2-beta">
+          <Banner id="takumi-v2-prerelease">
             <a href="https://v1.takumi.kane.tw" target="_blank" rel="noreferrer">
-              You're reading the v2 beta docs. For the stable release, switch to v1 →
+              You're reading the v2 prerelease docs. For the stable release, switch to v1 →
             </a>
           </Banner>
           {children}
