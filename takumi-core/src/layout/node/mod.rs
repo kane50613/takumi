@@ -67,6 +67,7 @@ pub struct TextData {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 /// An image source as received from input: URL, raw bytes, or already loaded.
+#[non_exhaustive]
 pub enum ImageSourceInput {
   /// Source URL or path.
   Url(Arc<str>),
@@ -278,6 +279,7 @@ pub struct Node {
 /// Represents the nodes enum.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
+#[non_exhaustive]
 pub enum NodeKind {
   /// A node that contains other nodes.
   Container {

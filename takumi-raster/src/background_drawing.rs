@@ -551,6 +551,7 @@ pub(crate) fn render_tile(
             }
             RenderedImage::Borrowed { .. } => None,
           },
+          _ => None,
         }
       } else {
         None
