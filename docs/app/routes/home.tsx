@@ -44,7 +44,7 @@ const CODE_SNIPPET = `export default function DemoCard() {
 
 const CTA_COMMAND = "bun i takumi-js";
 
-const TITLE = "Takumi — Render your React components to images.";
+const TITLE = "Takumi — Render JSX to images. Skip the browser.";
 const DESCRIPTION =
   "Rust-powered image rendering engine. Write JSX, get pixels. Built for fast image generation across runtimes.";
 

@@ -36,9 +36,6 @@ function PrintSpread() {
           />
         ))}
       </div>
-      <p className="mt-6 font-mono text-xs leading-relaxed text-muted-foreground">
-        Output from example/twitter-images — every image on this page was rendered by Takumi.
-      </p>
     </div>
   );
 }
