@@ -7,7 +7,7 @@ use std::{
   sync::{Arc, LazyLock},
 };
 
-use parley::{GenericFamily, fontique::FontInfoOverride};
+use parley::fontique::FontInfoOverride;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use takumi::{
   encode_animated_gif, encode_animated_png, encode_animated_webp, prelude::*, render, write_image,
@@ -25,52 +25,52 @@ const TEST_FONTS: &[(&str, &str, GenericFamily)] = &[
   (
     "assets/fonts/geist/Geist[wght].woff2",
     "Geist",
-    GenericFamily::SansSerif,
+    GenericFamily::SANS_SERIF,
   ),
   (
     "assets/fonts/geist/GeistMono[wght].woff2",
     "Geist Mono",
-    GenericFamily::Monospace,
+    GenericFamily::MONOSPACE,
   ),
   (
     "assets/fonts/twemoji/TwemojiMozilla-colr.woff2",
     "Twemoji Mozilla",
-    GenericFamily::Emoji,
+    GenericFamily::EMOJI,
   ),
   (
     "assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf",
     "Archivo",
-    GenericFamily::SansSerif,
+    GenericFamily::SANS_SERIF,
   ),
   (
     "assets/fonts/sil/scheherazade-new-v17-arabic-regular.woff2",
     "Scheherazade New Test",
-    GenericFamily::Serif,
+    GenericFamily::SERIF,
   ),
   (
     "assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2",
     "Noto Sans TC",
-    GenericFamily::SansSerif,
+    GenericFamily::SANS_SERIF,
   ),
   (
     "assets/fonts/cjk-locl-test/CJKLoclTest.woff2",
     "CJK Locl Test",
-    GenericFamily::SansSerif,
+    GenericFamily::SANS_SERIF,
   ),
   (
     "assets/fonts/noto-sans/noto-sans-devanagari-v30-devanagari-regular.woff2",
     "Noto Sans Devanagari",
-    GenericFamily::Serif,
+    GenericFamily::SERIF,
   ),
   (
     "assets/fonts/poppins/poppins-v24-devanagari_latin-regular.woff2",
     "Poppins",
-    GenericFamily::SansSerif,
+    GenericFamily::SANS_SERIF,
   ),
   (
     "assets/fonts/poppins/poppins-v24-devanagari_latin-700.woff2",
     "Poppins Bold",
-    GenericFamily::SansSerif,
+    GenericFamily::SANS_SERIF,
   ),
 ];
 

@@ -5,7 +5,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use parley::{GenericFamily, fontique::FontInfoOverride};
+use parley::fontique::FontInfoOverride;
 use takumi::{prelude::*, render};
 
 fn font_path(path: &str) -> PathBuf {
@@ -33,7 +33,7 @@ fn register_subset(fonts: &mut Fonts, path: &str, unique_name: &str, logical: &s
           family_name: Some(unique_name),
           ..Default::default()
         })
-        .generic_family(GenericFamily::SansSerif)
+        .generic_family(GenericFamily::SANS_SERIF)
         .subset_of(logical),
     )
     .unwrap();

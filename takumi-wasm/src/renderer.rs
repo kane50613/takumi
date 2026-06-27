@@ -2,7 +2,7 @@
 
 use crate::{helper::map_error, model::*};
 use base64::{Engine, prelude::BASE64_STANDARD};
-use parley::{FontWeight, GenericFamily, fontique::FontInfoOverride};
+use parley::{FontWeight, fontique::FontInfoOverride};
 use serde_wasm_bindgen::{from_value, to_value};
 use std::{
   borrow::Cow,
@@ -17,7 +17,7 @@ use takumi_core::{
     style::{KeyframesRule, StyleSheet},
   },
   resources::{
-    font::{FontResource, RegisteredFamily},
+    font::{FontResource, GenericFamily, RegisteredFamily},
     image::{ImageCache, ImageSource as LoadedImageSource},
   },
 };
@@ -31,7 +31,7 @@ use wasm_bindgen::prelude::*;
 const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[(
   include_bytes!("../../assets/fonts/manrope/manrope-latin-wght-normal.woff2"),
   "Manrope",
-  GenericFamily::SansSerif,
+  GenericFamily::SANS_SERIF,
 )];
 
 /// The main renderer for Takumi image rendering engine.
