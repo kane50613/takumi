@@ -35,9 +35,14 @@ impl<'i> FromCss<'i> for FontWeight {
 
     match token {
       Token::Number { value, .. } => Ok((*value).into()),
+      // `bolder`/`lighter` are relative to the inherited weight; with no cascade
+      // context at parse time, resolve against the initial 400 base.
+      // https://drafts.csswg.org/css-fonts-4/#font-weight-prop
       Token::Ident(ident) => match_ignore_ascii_case! { ident,
         "normal" => Ok(400.0.into()),
         "bold" => Ok(700.0.into()),
+        "bolder" => Ok(700.0.into()),
+        "lighter" => Ok(100.0.into()),
         _ => Err(unexpected_token!(location, token)),
       },
       _ => Err(unexpected_token!(location, token)),
@@ -48,6 +53,8 @@ impl<'i> FromCss<'i> for FontWeight {
     CssToken::Syntax(CssSyntaxKind::Number),
     CssToken::Keyword("normal"),
     CssToken::Keyword("bold"),
+    CssToken::Keyword("bolder"),
+    CssToken::Keyword("lighter"),
   ];
 }
 
@@ -104,5 +111,11 @@ mod tests {
   #[test]
   fn parses_numeric_font_weight() {
     assert_eq!(FontWeight::from_str("700"), Ok(700.0.into()));
+  }
+
+  #[test]
+  fn resolves_relative_keywords_to_chromium_values() {
+    assert_eq!(FontWeight::from_str("bolder"), Ok(700.0.into()));
+    assert_eq!(FontWeight::from_str("lighter"), Ok(100.0.into()));
   }
 }

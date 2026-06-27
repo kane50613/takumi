@@ -1,10 +1,10 @@
 use std::fmt;
 
-use cssparser::Parser;
+use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
-  SizingContext, ToCss, declare_enum_from_css_impl,
+  SizingContext, ToCss, declare_enum_from_css_impl, unexpected_token,
 };
 
 /// Absolute `font-size` keywords.
@@ -58,7 +58,10 @@ declare_enum_from_css_impl!(
   "xxx-large" => FontSizeKeyword::XXXLarge,
 );
 
-/// A `font-size` value, either a keyword or an explicit length.
+// https://drafts.csswg.org/css-fonts-4/#valdef-font-size-larger
+const RELATIVE_SIZE_RATIO: f32 = 1.2;
+
+/// A `font-size` value: a keyword, a relative keyword, or an explicit length.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum FontSize {
@@ -66,6 +69,10 @@ pub enum FontSize {
   Keyword(FontSizeKeyword),
   /// A concrete CSS length such as `16px` or `1rem`.
   Length(Length),
+  /// `larger` — the inherited font size scaled up by 1.2.
+  Larger,
+  /// `smaller` — the inherited font size scaled down by 1.2.
+  Smaller,
 }
 
 impl FontSize {
@@ -74,6 +81,22 @@ impl FontSize {
     match self {
       Self::Keyword(keyword) => keyword.to_length().to_px(sizing, inherited_font_size),
       Self::Length(length) => length.to_px(sizing, inherited_font_size),
+      Self::Larger => inherited_font_size * RELATIVE_SIZE_RATIO,
+      Self::Smaller => inherited_font_size / RELATIVE_SIZE_RATIO,
+    }
+  }
+
+  fn parse_relative<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let location = input.current_source_location();
+    let token = input.next()?;
+
+    match token {
+      Token::Ident(ident) => match_ignore_ascii_case! { ident,
+        "larger" => Ok(Self::Larger),
+        "smaller" => Ok(Self::Smaller),
+        _ => Err(unexpected_token!(location, token)),
+      },
+      _ => Err(unexpected_token!(location, token)),
     }
   }
 }
@@ -101,6 +124,7 @@ impl<'i> FromCss<'i> for FontSize {
     input
       .try_parse(FontSizeKeyword::from_css)
       .map(Self::Keyword)
+      .or_else(|_| input.try_parse(Self::parse_relative))
       .or_else(|_| Length::from_css(input).map(Self::Length))
   }
 
@@ -113,6 +137,8 @@ impl<'i> FromCss<'i> for FontSize {
     CssToken::Keyword("x-large"),
     CssToken::Keyword("xx-large"),
     CssToken::Keyword("xxx-large"),
+    CssToken::Keyword("larger"),
+    CssToken::Keyword("smaller"),
     CssToken::Syntax(CssSyntaxKind::Length),
   ];
 }
@@ -134,14 +160,15 @@ impl Animatable for FontSize {
     sizing: &SizingContext,
     current_color: Color,
   ) {
-    let from_length = match *from {
+    let to_length = |size: Self| match size {
       Self::Keyword(keyword) => keyword.to_length(),
       Self::Length(length) => length,
+      Self::Larger => Length::Em(RELATIVE_SIZE_RATIO),
+      Self::Smaller => Length::Em(1.0 / RELATIVE_SIZE_RATIO),
     };
-    let to_length = match *to {
-      Self::Keyword(keyword) => keyword.to_length(),
-      Self::Length(length) => length,
-    };
+
+    let from_length = to_length(*from);
+    let to_length = to_length(*to);
 
     let mut value = from_length;
     value.interpolate(&from_length, &to_length, progress, sizing, current_color);
@@ -154,6 +181,8 @@ impl ToCss for FontSize {
     match self {
       Self::Keyword(k) => k.to_css(dest),
       Self::Length(l) => l.to_css(dest),
+      Self::Larger => dest.write_str("larger"),
+      Self::Smaller => dest.write_str("smaller"),
     }
   }
 }
@@ -169,6 +198,24 @@ mod tests {
     style::{CalcArena, SizingContext},
     viewport::Viewport,
   };
+
+  #[test]
+  fn relative_keywords_scale_inherited_size() {
+    let sizing = SizingContext {
+      viewport: Viewport::new((1200, 630)),
+      container_size: Size::NONE,
+      font_size: 20.0,
+      root_font_size: None,
+      line_height: 0.0,
+      root_line_height: None,
+      calc_arena: Rc::new(CalcArena::default()),
+    };
+
+    assert_eq!(FontSize::from_str("larger"), Ok(FontSize::Larger));
+    assert_eq!(FontSize::from_str("smaller"), Ok(FontSize::Smaller));
+    assert_eq!(FontSize::Larger.to_px(&sizing, 20.0), 24.0);
+    assert_eq!(FontSize::Smaller.to_px(&sizing, 20.0), 20.0 / 1.2);
+  }
 
   #[test]
   fn defaults_to_medium_keyword() {
