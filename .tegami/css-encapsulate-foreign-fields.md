@@ -3,8 +3,9 @@ packages:
   "cargo:takumi-css": minor
 ---
 
-### Encapsulate foreign-typed public fields behind accessors
+### Keep the `color` and `selectors` crates out of the public API
 
-`ColorInterpolationMethod`'s `color_space`/`hue_direction` and `CssRule`'s
-`selectors` were public fields exposing the `color` and `selectors` crates. They
-are now `pub(crate)` with accessor methods.
+`ColorInterpolationMethod`'s color-space fields and `CssRule`'s selector list
+leaked the `color` and `selectors` crates. Their fields are now `pub(crate)`,
+`build_color_lut_with_interpolation` takes the opaque interpolation method
+instead of raw `color` types, and `CssRule` exposes a `selectors()` accessor.

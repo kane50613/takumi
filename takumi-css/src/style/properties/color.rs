@@ -33,18 +33,6 @@ pub struct ColorInterpolationMethod {
   pub(crate) hue_direction: HueDirection,
 }
 
-impl ColorInterpolationMethod {
-  /// The color space used to interpolate between two colors.
-  pub fn color_space(&self) -> ColorSpaceTag {
-    self.color_space
-  }
-
-  /// The hue interpolation strategy for cylindrical color spaces.
-  pub fn hue_direction(&self) -> HueDirection {
-    self.hue_direction
-  }
-}
-
 impl Default for ColorInterpolationMethod {
   fn default() -> Self {
     Self {

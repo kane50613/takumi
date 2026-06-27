@@ -312,8 +312,7 @@ impl RadialGradientTile {
       &lut_resolved_stops,
       lut_axis_length,
       lut_size,
-      gradient.interpolation.color_space,
-      gradient.interpolation.hue_direction,
+      gradient.interpolation,
     );
     let lut_len = color_lut.len();
     let inv_radius_x = radius_x.max(1e-6).recip();
