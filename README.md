@@ -65,28 +65,43 @@ export function GET() {
 ### Animated WebP
 
 ```tsx
-import { Renderer } from "takumi-js/node";
-import { fromJsx } from "takumi-js/helpers/jsx";
+import { renderAnimation } from "takumi-js";
 import { writeFile } from "node:fs/promises";
 
-const renderer = new Renderer();
-
-const { node, stylesheets } = await fromJsx(
-  <div tw="w-full h-full flex items-center justify-center">
-    <div tw="w-32 h-32 bg-blue-500 animate-spin rounded-lg" />
-  </div>,
-);
-
-const animation = await renderer.renderAnimation({
+const animation = await renderAnimation({
   width: 400,
   height: 400,
   fps: 30,
   format: "webp",
-  stylesheets,
-  scenes: [{ durationMs: 1000, node }],
+  scenes: [
+    {
+      durationMs: 1000,
+      node: (
+        <div tw="w-full h-full flex items-center justify-center">
+          <div tw="w-32 h-32 bg-blue-500 animate-spin rounded-lg" />
+        </div>
+      ),
+    },
+  ],
 });
 
 await writeFile("./output.webp", animation);
+```
+
+### Vector SVG
+
+```tsx
+import { renderSvg } from "takumi-js";
+import { writeFile } from "node:fs/promises";
+
+const svg = await renderSvg(
+  <div tw="w-full h-full flex items-center justify-center bg-gradient-to-b from-blue-100 to-red-50">
+    <h1 tw="text-6xl font-bold">Hello from Takumi</h1>
+  </div>,
+  { width: 1200, height: 630 },
+);
+
+await writeFile("./output.svg", svg);
 ```
 
 ### Rust

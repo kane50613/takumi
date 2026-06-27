@@ -1,0 +1,112 @@
+---
+title: ImageResponse
+description: Serve rendered images over HTTP with a next/og-compatible Response.
+icon: Send
+---
+
+`ImageResponse` extends the web `Response`, so any runtime with `Request` and `Response` returns it from a route handler. The API matches `next/og`.
+
+```tsx
+import { ImageResponse } from "takumi-js/response";
+
+export function GET() {
+  return new ImageResponse(<OgImage />, { width: 1200, height: 630 });
+}
+```
+
+## Options
+
+`ImageResponseOptions` is `RenderOptions` plus the standard `ResponseInit` fields and an error hook.
+
+<TypeTable
+  type={{
+    width: { type: "number", required: true, description: "Canvas width in pixels." },
+    height: { type: "number", required: true, description: "Canvas height in pixels." },
+    format: {
+      type: '"png" | "jpeg" | "webp" | "ico" | "raw"',
+      description: "Output encoder. Sets the default content-type.",
+      typeDescriptionLink: "/docs/output-formats",
+    },
+    quality: {
+      type: "number",
+      description: "Encoder quality, 0–100. Applies to JPEG and lossy WebP.",
+    },
+    fonts: {
+      type: "Font[]",
+      description: "Per-response fonts; identical fonts are decoded once.",
+      typeDescriptionLink: "/docs/typography-and-fonts",
+    },
+    images: {
+      type: "ImageLoader[]",
+      description: "Pre-fetched images keyed by src.",
+      typeDescriptionLink: "/docs/load-images",
+    },
+    renderer: {
+      type: "Renderer",
+      description: "Bring your own renderer instance to reuse caches.",
+      typeDescriptionLink: "#bring-your-own-renderer",
+    },
+    jsx: {
+      type: "FromJsxOptions",
+      description: "JSX conversion options, e.g. { defaultStyles: false }.",
+    },
+    headers: {
+      type: "HeadersInit",
+      description: "Response headers. content-type defaults to format.",
+    },
+    status: { type: "number", description: "Response status code." },
+    onError: {
+      type: "(error: unknown) => void | Promise<void>",
+      description: "Runs after a render failure, for side effects like logging.",
+      typeDescriptionLink: "#error-handling",
+    },
+  }}
+/>
+
+## Custom headers
+
+`content-type` defaults to the chosen `format`. Set cache headers or override anything via `headers`.
+
+```tsx
+new ImageResponse(<OgImage />, {
+  format: "webp",
+  headers: {
+    "Cache-Control": "public, immutable, max-age=31536000",
+  },
+});
+```
+
+## Error handling
+
+`ImageResponse` exposes a `ready` promise: it resolves when the render succeeds and rejects when it fails. Await it to serve a fallback.
+
+```tsx
+const response = new ImageResponse(<OgImage />);
+
+try {
+  await response.ready;
+  return response;
+} catch {
+  return new Response("Failed to generate image", { status: 500 });
+}
+```
+
+`onError` is a notification hook for side effects like logging. Its return value is ignored and the response stream still errors, so it cannot substitute a fallback image — use `ready` for that.
+
+```tsx
+new ImageResponse(<OgImage />, {
+  onError: (error) => console.error(error),
+});
+```
+
+## Bring your own renderer
+
+Pass a `renderer` to reuse a configured instance across responses. A reused renderer decodes each font and image once.
+
+```tsx
+import { Renderer } from "@takumi-rs/core";
+
+const renderer = new Renderer();
+
+new ImageResponse(<OgImage />, { renderer });
+```
