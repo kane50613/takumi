@@ -215,7 +215,7 @@ pub fn interpolate_rgba(c1: Color, c2: Color, t: f32) -> Color {
 }
 
 /// Interpolates two colors in the given color space and hue direction.
-pub fn interpolate_with_color_space(
+pub(crate) fn interpolate_with_color_space(
   c1: Color,
   c2: Color,
   t: f32,
@@ -504,9 +504,10 @@ pub fn build_color_lut_with_interpolation(
   resolved_stops: &[ResolvedGradientStop],
   axis_length: f32,
   lut_size: usize,
-  color_space: ColorSpaceTag,
-  hue_direction: HueDirection,
+  interpolation: ColorInterpolationMethod,
 ) -> Vec<PremultipliedColorU8> {
+  let color_space = interpolation.color_space;
+  let hue_direction = interpolation.hue_direction;
   if lut_size == 0 {
     return Vec::new();
   }
@@ -950,8 +951,10 @@ mod tests {
       &resolved,
       16.0,
       17,
-      ColorSpaceTag::Srgb,
-      HueDirection::Shorter,
+      ColorInterpolationMethod {
+        color_space: ColorSpaceTag::Srgb,
+        hue_direction: HueDirection::Shorter,
+      },
     );
 
     assert_eq!(lut[7], Color([255, 0, 0, 255]).into());
@@ -980,8 +983,10 @@ mod tests {
       &resolved,
       32.0,
       lut_size,
-      ColorSpaceTag::Srgb,
-      HueDirection::Shorter,
+      ColorInterpolationMethod {
+        color_space: ColorSpaceTag::Srgb,
+        hue_direction: HueDirection::Shorter,
+      },
     );
     let stop_indices = assign_stop_sample_indices(&resolved, 32.0, lut.len());
 
@@ -1007,8 +1012,10 @@ mod tests {
       &resolved,
       10.0,
       33,
-      ColorSpaceTag::Srgb,
-      HueDirection::Shorter,
+      ColorInterpolationMethod {
+        color_space: ColorSpaceTag::Srgb,
+        hue_direction: HueDirection::Shorter,
+      },
     );
 
     for pair in lut.windows(2) {

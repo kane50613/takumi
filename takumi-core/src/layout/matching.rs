@@ -424,7 +424,7 @@ pub(crate) fn match_stylesheets_view<'a>(
       let mut best_before: Option<u32> = None;
       let mut best_after: Option<u32> = None;
 
-      for selector in rule.selectors.slice() {
+      for selector in rule.selectors().slice() {
         let Some(target) = selector_target(selector) else {
           continue;
         };

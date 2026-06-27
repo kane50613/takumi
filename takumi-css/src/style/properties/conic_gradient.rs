@@ -175,8 +175,7 @@ impl ConicGradientTile {
       &lut_resolved_stops,
       lut_axis_length_deg,
       lut_size,
-      gradient.interpolation.color_space,
-      gradient.interpolation.hue_direction,
+      gradient.interpolation,
     );
     let lut_len = color_lut.len();
     let angle_to_lut_scale = if repeating && repeat_period_deg > 1e-6 && lut_len > 1 {

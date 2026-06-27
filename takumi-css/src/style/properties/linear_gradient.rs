@@ -244,8 +244,7 @@ impl LinearGradientTile {
       &lut_resolved_stops,
       lut_axis_length,
       lut_size,
-      gradient.interpolation.color_space,
-      gradient.interpolation.hue_direction,
+      gradient.interpolation,
     );
     let lut_len = color_lut.len();
     let position_to_lut_scale = if lut_axis_length.abs() <= f32::EPSILON || lut_len <= 1 {

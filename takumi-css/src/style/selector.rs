@@ -536,7 +536,7 @@ fn parse_fragment_with_mode<'i, 't>(
 #[derive(Debug, Clone)]
 pub struct CssRule {
   /// Selectors this rule applies to.
-  pub selectors: SelectorList<SelectorImpl>,
+  pub(crate) selectors: SelectorList<SelectorImpl>,
   /// Declarations without `!important`.
   pub normal_declarations: StyleDeclarationBlock,
   /// Declarations marked `!important`.
@@ -547,6 +547,13 @@ pub struct CssRule {
   pub layer: Option<LayerPath>,
   /// Resolved ordinal of the rule's layer.
   pub layer_order: Option<usize>,
+}
+
+impl CssRule {
+  /// The selectors this rule applies to.
+  pub fn selectors(&self) -> &SelectorList<SelectorImpl> {
+    &self.selectors
+  }
 }
 
 fn parse_property_rule<'i, 't>(

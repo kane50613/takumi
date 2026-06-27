@@ -28,9 +28,9 @@ fn is_cylindrical_color_space(color_space: ColorSpaceTag) -> bool {
 #[non_exhaustive]
 pub struct ColorInterpolationMethod {
   /// The color space used to interpolate between two colors.
-  pub color_space: ColorSpaceTag,
+  pub(crate) color_space: ColorSpaceTag,
   /// Optional hue interpolation strategy for cylindrical color spaces.
-  pub hue_direction: HueDirection,
+  pub(crate) hue_direction: HueDirection,
 }
 
 impl Default for ColorInterpolationMethod {

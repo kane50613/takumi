@@ -551,8 +551,7 @@ fn lut_svg_stops(
     resolved,
     axis_length.max(1e-6),
     GRADIENT_LUT_STOPS,
-    interpolation.color_space,
-    interpolation.hue_direction,
+    interpolation,
   );
   if lut.len() <= 1 {
     return svg_stops(resolved, 0.0, axis_length);
