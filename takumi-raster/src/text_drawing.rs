@@ -293,10 +293,10 @@ pub(crate) fn draw_glyph(
       transform *= Affine::translation(bitmap.placement.left as f32, -bitmap.placement.top as f32);
       transform *= Affine::scale(bitmap.scale_x, bitmap.scale_y);
       canvas.overlay_sampled_pixmap(
-        bitmap.pixmap.as_ref(),
+        bitmap.pixmap().as_ref(),
         Size {
-          width: bitmap.pixmap.width(),
-          height: bitmap.pixmap.height(),
+          width: bitmap.pixmap().width(),
+          height: bitmap.pixmap().height(),
         },
         Default::default(),
         transform,
@@ -528,8 +528,12 @@ fn draw_color_outline_image(
       Color([record.red(), record.green(), record.blue(), alpha])
     };
 
-    let (mask, placement) =
-      render_mask(&layer.paths, Some(transform), None, &mut canvas.buffer_pool);
+    let (mask, placement) = render_mask(
+      layer.paths(),
+      Some(transform),
+      None,
+      &mut canvas.buffer_pool,
+    );
     canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
     canvas.buffer_pool.release(mask);
   }

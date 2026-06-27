@@ -497,11 +497,11 @@ fn emit_run_glyphs(
         if color_override.is_some() || clip_data.is_some() {
           continue;
         }
-        let Ok(png) = bitmap.pixmap.encode_png() else {
+        let Ok(png) = bitmap.pixmap().encode_png() else {
           continue;
         };
         flush_glyph_run(doc, &mut merged, fill, stroke)?;
-        let (width, height) = (bitmap.pixmap.width(), bitmap.pixmap.height());
+        let (width, height) = (bitmap.pixmap().width(), bitmap.pixmap().height());
         let bitmap_matrix = placed
           * Affine::translation(bitmap.placement.left as f32, -(bitmap.placement.top as f32))
           * Affine::scale(bitmap.scale_x, bitmap.scale_y);

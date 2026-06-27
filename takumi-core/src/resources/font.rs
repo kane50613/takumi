@@ -53,7 +53,7 @@ pub enum ResolvedGlyph {
 #[derive(Clone)]
 pub struct ResolvedBitmapGlyph {
   /// Source bitmap.
-  pub pixmap: Pixmap,
+  pub(crate) pixmap: Pixmap,
   /// Horizontal scale from source to placement.
   pub scale_x: f32,
   /// Vertical scale from source to placement.
@@ -63,6 +63,11 @@ pub struct ResolvedBitmapGlyph {
 }
 
 impl ResolvedBitmapGlyph {
+  /// The source bitmap for this glyph.
+  pub fn pixmap(&self) -> &Pixmap {
+    &self.pixmap
+  }
+
   /// Write the glyph's alpha channel into `mask`, scaling to the placement size.
   pub fn write_alpha_mask(&self, mask: &mut [u8]) {
     let width = self.placement.width as usize;
@@ -138,11 +143,18 @@ pub enum ResolvedOutlineGlyph {
 #[derive(Clone)]
 pub struct ResolvedColorLayer {
   /// Outline path commands for this layer.
-  pub paths: Vec<Command>,
+  pub(crate) paths: Vec<Command>,
   /// Index into the font's color palette.
   pub palette_index: u16,
   /// Layer opacity, 0..=1.
   pub alpha: f32,
+}
+
+impl ResolvedColorLayer {
+  /// Outline path commands for this layer.
+  pub fn paths(&self) -> &[Command] {
+    &self.paths
+  }
 }
 
 /// Pixel placement of a rendered glyph.
