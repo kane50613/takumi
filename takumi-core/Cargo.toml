@@ -8,6 +8,10 @@ repository = "https://github.com/kane50613/takumi"
 readme = "README.md"
 rust-version = "1.91"
 
+# `serde_bytes` is used via `#[serde(with = "serde_bytes")]`, which cargo-machete can't see.
+[package.metadata.cargo-machete]
+ignored = ["serde_bytes"]
+
 [dependencies]
 cssparser.workspace = true
 png.workspace = true
