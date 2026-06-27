@@ -26,6 +26,15 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
   script: {
     display: "none",
   },
+  noscript: {
+    display: "none",
+  },
+  datalist: {
+    display: "none",
+  },
+  template: {
+    display: "none",
+  },
   // Generic block-level elements
   body: {
     margin: 8,
@@ -93,6 +102,68 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     borderWidth: 1,
     display: "block",
   },
+  // Lists
+  ul: {
+    marginTop: "1em",
+    marginBottom: "1em",
+    paddingLeft: 40,
+    display: "block",
+  },
+  ol: {
+    marginTop: "1em",
+    marginBottom: "1em",
+    paddingLeft: 40,
+    display: "block",
+  },
+  menu: {
+    marginTop: "1em",
+    marginBottom: "1em",
+    paddingLeft: 40,
+    display: "block",
+  },
+  li: {
+    display: "block",
+  },
+  dl: {
+    marginTop: "1em",
+    marginBottom: "1em",
+    display: "block",
+  },
+  dt: {
+    display: "block",
+  },
+  dd: {
+    marginLeft: 40,
+    display: "block",
+  },
+  // Forms and interactive elements
+  form: {
+    display: "block",
+  },
+  fieldset: {
+    marginLeft: 2,
+    marginRight: 2,
+    paddingTop: "0.35em",
+    paddingRight: "0.75em",
+    paddingBottom: "0.625em",
+    paddingLeft: "0.75em",
+    borderWidth: 2,
+    display: "block",
+  },
+  legend: {
+    paddingLeft: 2,
+    paddingRight: 2,
+    display: "block",
+  },
+  details: {
+    display: "block",
+  },
+  summary: {
+    display: "block",
+  },
+  search: {
+    display: "block",
+  },
   // Heading elements
   h1: {
     fontSize: "2em",
@@ -150,11 +221,14 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
   u: {
     textDecoration: "underline",
   },
+  ins: {
+    textDecoration: "underline",
+  },
   strong: {
-    fontWeight: "bold",
+    fontWeight: "bolder",
   },
   b: {
-    fontWeight: "bold",
+    fontWeight: "bolder",
   },
   i: {
     fontStyle: "italic",
@@ -188,13 +262,24 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     color: "black",
   },
   big: {
-    fontSize: "1.2em",
+    fontSize: "larger",
   },
   small: {
-    fontSize: "0.8em",
+    fontSize: "smaller",
   },
   s: {
     textDecoration: "line-through",
+  },
+  del: {
+    textDecoration: "line-through",
+  },
+  sub: {
+    fontSize: "smaller",
+    verticalAlign: "sub",
+  },
+  sup: {
+    fontSize: "smaller",
+    verticalAlign: "super",
   },
   div: {
     display: "block",

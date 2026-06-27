@@ -642,15 +642,18 @@ describe("fromJsx", () => {
             {
               type: "container",
               tagName: "ul",
+              preset: defaultStylePresets.ul,
               children: [
                 {
                   type: "text",
                   text: "Item 1",
+                  preset: defaultStylePresets.li,
                   tagName: "li",
                 },
                 {
                   type: "text",
                   text: "Item 2",
+                  preset: defaultStylePresets.li,
                   tagName: "li",
                 },
               ],
