@@ -1,7 +1,11 @@
 ---
 packages:
-  "cargo:takumi-css": minor
-  "npm:@takumi-rs/helpers": minor
+  cargo:takumi-css:
+    replay:
+      - 'exit prerelease: cargo:takumi-css'
+  npm:@takumi-rs/helpers:
+    replay:
+      - 'exit prerelease: npm:@takumi-rs/helpers'
 ---
 
 ### Match the Chromium UA stylesheet for default element styles
