@@ -1,89 +1,78 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@takumi-rs/core:\n    type: minor\n  npm:@takumi-rs/wasm:\n    type: minor\n  npm:takumi-js:\n    type: minor\n---\n\n### Remove `encodeFrames`\n\n`Renderer.encodeFrames` and its `EncodeFramesOptions` / `AnimationFrameSource`\ntypes are gone. `renderAnimation` covers scene-based animation; pre-rendered\nframe encoding had no callers.\n"
-    filename: drop-encode-frames.md
+  - content: "---\npackages:\n  cargo:takumi-css:\n    replay:\n      - 'exit prerelease: cargo:takumi-css'\n---\n\n### Mark the property-identifier enums `#[non_exhaustive]`\n\n`LonghandId`, `ShorthandId`, `PropertyId`, and `StyleDeclaration` gain a variant\nfor every CSS property, so supporting a new property stays non-breaking across\n1.0.\n"
+    filename: css-property-enums-non-exhaustive.md
     v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-css:\n    type: minor\n---\n\n### Keep the `color` and `selectors` crates out of the public API\n\n`ColorInterpolationMethod`'s color-space fields and `CssRule`'s selector list\nleaked the `color` and `selectors` crates. Their fields are now `pub(crate)`,\n`build_color_lut_with_interpolation` takes the opaque interpolation method\ninstead of raw `color` types, and `CssRule` exposes a `selectors()` accessor.\n"
+  - content: "---\npackages:\n  cargo:takumi-css:\n    replay:\n      - 'exit prerelease: cargo:takumi-css'\n---\n\n### Keep the `color` and `selectors` crates out of the public API\n\n`ColorInterpolationMethod`'s color-space fields and `CssRule`'s selector list\nleaked the `color` and `selectors` crates. Their fields are now `pub(crate)`,\n`build_color_lut_with_interpolation` takes the opaque interpolation method\ninstead of raw `color` types, and `CssRule` exposes a `selectors()` accessor.\n"
     filename: css-encapsulate-foreign-fields.md
     v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-css:\n    type: minor\n  npm:@takumi-rs/helpers:\n    type: minor\n---\n\n### Match the Chromium UA stylesheet for default element styles\n\nParse the relative font keywords `bolder`/`lighter` (`font-weight`) and\n`larger`/`smaller` (`font-size`), resolving to the values Chromium uses. Expand\nthe default element presets to cover lists, `sub`/`sup`, `ins`/`del`, forms,\n`details`/`summary`, and `search`.\n"
-    filename: ua-presets-chromium-parity.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Drop `serde_bytes::ByteBuf` from `ImageSourceInput::Buffer`\n\nThe `Buffer` variant exposed `serde_bytes::ByteBuf` in the public API. It now\nholds a `Vec<u8>` with `#[serde(with = \"serde_bytes\")]`, keeping the FFI\nbytes wire format while keeping `serde_bytes` out of the surface.\n"
-    filename: own-imagesourceinput-buffer.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    type: patch\n  npm:@takumi-rs/core:\n    type: patch\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Accept a bare URL string in `fonts`\n\n`fonts` entries can now be a URL string, e.g. `fonts: [\"https://example.com/Inter.woff2\"]`.\nThe bytes are fetched on demand and keyed by the URL; family name, weight, and style come\nfrom the font file. The object form stays for overriding those. Adds `fontFromUrl` to\n`@takumi-rs/helpers`.\n"
+  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    replay:\n      - 'exit prerelease: npm:@takumi-rs/helpers'\n  npm:@takumi-rs/core:\n    replay:\n      - 'exit prerelease: npm:@takumi-rs/core'\n  npm:@takumi-rs/wasm:\n    replay:\n      - 'exit prerelease: npm:@takumi-rs/wasm'\n---\n\n### Accept a bare URL string in `fonts`\n\n`fonts` entries can now be a URL string, e.g. `fonts: [\"https://example.com/Inter.woff2\"]`.\nThe bytes are fetched on demand and keyed by the URL; family name, weight, and style come\nfrom the font file. The object form stays for overriding those. Adds `fontFromUrl` to\n`@takumi-rs/helpers`.\n"
     filename: fonts-accept-url-string.md
     v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Own `GenericFamily` so callers don't depend on `parley`\n\n`FontResource::generic_family` took a `parley::GenericFamily`, forcing callers\nto add `parley` as a dependency. It now takes a takumi-owned `GenericFamily`\nnewtype exposing the families as named constants (`GenericFamily::SANS_SERIF`,\netc.), re-exported from the prelude.\n"
-    filename: own-generic-family.md
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n  npm:@takumi-rs/core:\n    type: patch\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Make subset-group font selection deterministic\n\nSubsets registered under one logical family (via `FontResource::subset_of`) were kept\nin registration order. Callers commonly register fonts concurrently, so that order — and\ntherefore which subset won for a codepoint covered by more than one (e.g. overlapping\nweight subsets, where the loser is faux-bolded) — varied per process. Identical input\ncould render to different bytes run to run.\n\nSubsets are now held in a `BTreeSet`, ordered by their family name, so expansion and\nselection no longer depend on registration timing. Same input renders identically.\n"
+    filename: deterministic-subset-font-order.md
     v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Mark the core node and image enums `#[non_exhaustive]`\n\n`NodeKind`, `ImageSource`, `ImageSourceInput`, and `ImageCacheMode` can now gain\nvariants without a breaking change, so the surface stays stable across 1.0.\n"
+  - content: "---\npackages:\n  cargo:takumi-core:\n    replay:\n      - 'exit prerelease: cargo:takumi-core'\n---\n\n### Mark the core node and image enums `#[non_exhaustive]`\n\n`NodeKind`, `ImageSource`, `ImageSourceInput`, and `ImageCacheMode` can now gain\nvariants without a breaking change, so the surface stays stable across 1.0.\n"
     filename: core-enums-non-exhaustive.md
     v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Stop exposing the parsed SVG tree as a public field\n\n`SvgSource::tree` was a public `resvg::usvg::Tree` field, leaking `usvg` into\nthe API. It is now `pub(crate)`, with a `dimensions()` accessor for the canvas\nsize that callers actually need.\n"
+  - content: "---\npackages:\n  cargo:takumi-core:\n    replay:\n      - 'exit prerelease: cargo:takumi-core'\n---\n\n### Drop `serde_bytes::ByteBuf` from `ImageSourceInput::Buffer`\n\nThe `Buffer` variant exposed `serde_bytes::ByteBuf` in the public API. It now\nholds a `Vec<u8>` with `#[serde(with = \"serde_bytes\")]`, keeping the FFI\nbytes wire format while keeping `serde_bytes` out of the surface.\n"
+    filename: own-imagesourceinput-buffer.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    replay:\n      - 'exit prerelease: cargo:takumi-core'\n---\n\n### Own `GenericFamily` so callers don't depend on `parley`\n\n`FontResource::generic_family` took a `parley::GenericFamily`, forcing callers\nto add `parley` as a dependency. It now takes a takumi-owned `GenericFamily`\nnewtype exposing the families as named constants (`GenericFamily::SANS_SERIF`,\netc.), re-exported from the prelude.\n"
+    filename: own-generic-family.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-css:\n    replay:\n      - 'exit prerelease: cargo:takumi-css'\n  npm:@takumi-rs/helpers:\n    replay:\n      - 'exit prerelease: npm:@takumi-rs/helpers'\n---\n\n### Match the Chromium UA stylesheet for default element styles\n\nParse the relative font keywords `bolder`/`lighter` (`font-weight`) and\n`larger`/`smaller` (`font-size`), resolving to the values Chromium uses. Expand\nthe default element presets to cover lists, `sub`/`sup`, `ins`/`del`, forms,\n`details`/`summary`, and `search`.\n"
+    filename: ua-presets-chromium-parity.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    replay:\n      - 'exit prerelease: cargo:takumi-core'\n---\n\n### Stop exposing the parsed SVG tree as a public field\n\n`SvgSource::tree` was a public `resvg::usvg::Tree` field, leaking `usvg` into\nthe API. It is now `pub(crate)`, with a `dimensions()` accessor for the canvas\nsize that callers actually need.\n"
     filename: svgsource-tree-private.md
     v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-css:\n    type: minor\n---\n\n### Mark the property-identifier enums `#[non_exhaustive]`\n\n`LonghandId`, `ShorthandId`, `PropertyId`, and `StyleDeclaration` gain a variant\nfor every CSS property, so supporting a new property stays non-breaking across\n1.0.\n"
-    filename: css-property-enums-non-exhaustive.md
+  - content: "---\npackages:\n  npm:@takumi-rs/core:\n    replay:\n      - 'exit prerelease: npm:@takumi-rs/core'\n  npm:@takumi-rs/wasm:\n    replay:\n      - 'exit prerelease: npm:@takumi-rs/wasm'\n  npm:takumi-js:\n    replay:\n      - 'exit prerelease: npm:takumi-js'\n---\n\n### Remove `encodeFrames`\n\n`Renderer.encodeFrames` and its `EncodeFramesOptions` / `AnimationFrameSource`\ntypes are gone. `renderAnimation` covers scene-based animation; pre-rendered\nframe encoding had no callers.\n"
+    filename: drop-encode-frames.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
+  - id: npm:@takumi-rs/helpers
+    updated: true
   - changelogIds:
-      - drop-encode-frames.md
-      - fonts-accept-url-string.md
+      - deterministic-subset-font-order.md
     id: npm:@takumi-rs/wasm
     updated: true
   - changelogIds:
-      - ua-presets-chromium-parity.md
-      - fonts-accept-url-string.md
-    id: npm:@takumi-rs/helpers
+      - deterministic-subset-font-order.md
+    id: npm:@takumi-rs/core
     updated: true
-  - changelogIds:
-      - drop-encode-frames.md
-    id: npm:takumi-js
+  - id: npm:takumi-js
     updated: true
   - id: npm:@takumi-rs/image-response
     updated: true
-  - changelogIds:
-      - drop-encode-frames.md
-      - fonts-accept-url-string.md
-    id: npm:@takumi-rs/core
+  - id: cargo:takumi-svg
     updated: true
+  - id: cargo:takumi-css
+    updated: false
   - id: cargo:takumi-wasm
     updated: false
-  - id: cargo:takumi-svg
+  - changelogIds:
+      - deterministic-subset-font-order.md
+    id: cargo:takumi-core
     updated: true
   - id: cargo:takumi
     updated: true
-  - changelogIds:
-      - css-encapsulate-foreign-fields.md
-      - ua-presets-chromium-parity.md
-      - css-property-enums-non-exhaustive.md
-    id: cargo:takumi-css
-    updated: true
-  - changelogIds:
-      - own-imagesourceinput-buffer.md
-      - own-generic-family.md
-      - core-enums-non-exhaustive.md
-      - svgsource-tree-private.md
-    id: cargo:takumi-core
-    updated: true
-  - id: cargo:takumi-raster
-    updated: true
   - id: cargo:takumi-napi
     updated: false
+  - id: cargo:takumi-raster
+    updated: true
   - id: cargo:example
     updated: false
 npm:packages:
   - id: npm:takumi
   - distTag: rc
+    id: npm:@takumi-rs/helpers
+  - distTag: rc
     id: npm:@takumi-rs/wasm
   - distTag: rc
-    id: npm:@takumi-rs/helpers
+    id: npm:@takumi-rs/core
   - distTag: rc
     id: npm:takumi-js
   - distTag: rc
     id: npm:@takumi-rs/image-response
-  - distTag: rc
-    id: npm:@takumi-rs/core
