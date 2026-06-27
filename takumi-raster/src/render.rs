@@ -29,9 +29,9 @@ use takumi_core::scene::build_stacking_contexts;
 
 /// Root computed style carrying the render-level `lang` and `fontFamilies` defaults,
 /// inherited by every node that does not set its own.
-fn root_style(lang: Option<Language>, font_families: Option<&[String]>) -> Box<ComputedStyle> {
+fn root_style(lang: Option<String>, font_families: Option<&[String]>) -> Box<ComputedStyle> {
   Box::new(ComputedStyle {
-    lang,
+    lang: lang.and_then(|tag| Language::parse(&tag).ok()),
     font_family: font_families.map_or_else(FontFamily::default, |names| {
       FontFamily::from_names(names.iter().cloned())
     }),
@@ -70,7 +70,7 @@ pub struct RenderOptions<'g> {
   /// Default BCP-47 language applied to the root, inherited by nodes without
   /// their own `lang`. Drives locale-aware shaping and line-breaking.
   #[builder(default)]
-  pub(crate) lang: Option<Language>,
+  pub(crate) lang: Option<String>,
 }
 
 impl<'g> RenderOptions<'g> {

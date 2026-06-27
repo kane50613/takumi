@@ -1,7 +1,6 @@
 use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi_core::Language;
 use takumi_core::layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node, style::StyleSheet};
 use takumi_raster::measure;
 
@@ -86,7 +85,7 @@ impl Task for MeasureTask {
       .node(node)
       .fonts(&fonts)
       .font_families(take(&mut self.font_families))
-      .lang(take(&mut self.lang).and_then(|s| Language::parse(&s).ok()))
+      .lang(take(&mut self.lang))
       .build();
 
     measure(options).map_err(map_error)

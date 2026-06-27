@@ -61,7 +61,7 @@ pub struct SvgOptions<'g> {
   /// Default BCP-47 language applied to the root, inherited by nodes without
   /// their own `lang`. Drives locale-aware shaping and line-breaking.
   #[builder(default)]
-  pub(crate) lang: Option<Language>,
+  pub(crate) lang: Option<String>,
 }
 
 /// Renders a node tree to a vector SVG string.
@@ -79,7 +79,7 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
     .stylesheet(options.stylesheet.into())
     .time_ms(options.time_ms)
     .style(Box::new(ComputedStyle {
-      lang: options.lang,
+      lang: options.lang.and_then(|tag| Language::parse(&tag).ok()),
       ..Default::default()
     }))
     .build();

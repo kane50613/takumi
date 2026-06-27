@@ -1,7 +1,6 @@
 use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi_core::Language;
 use takumi_core::layout::{Viewport, node::Node, style::StyleSheet};
 
 use crate::{
@@ -80,7 +79,7 @@ impl Task for SvgRenderTask {
         .node(node)
         .fonts(&fonts)
         .font_families(take(&mut self.font_families))
-        .lang(take(&mut self.lang).and_then(|s| Language::parse(&s).ok()))
+        .lang(take(&mut self.lang))
         .build(),
     )
     .map_err(map_error)

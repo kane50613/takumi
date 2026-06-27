@@ -2,7 +2,6 @@ use std::{borrow::Cow, collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
 use rayon::prelude::*;
-use takumi_core::Language;
 use takumi_core::layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node};
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, encode_animated_gif,
@@ -91,7 +90,7 @@ impl Task for EncodeFramesTask {
       let viewport = self.viewport;
       let draw_debug_border = self.draw_debug_border;
       let font_families = take(&mut self.font_families);
-      let lang = take(&mut self.lang).and_then(|s| Language::parse(&s).ok());
+      let lang = take(&mut self.lang);
       let stylesheet = parse_stylesheet(self.stylesheets.clone(), Vec::new())?;
       let frames = frames
         .into_par_iter()
@@ -105,7 +104,7 @@ impl Task for EncodeFramesTask {
                 .node(node)
                 .fonts(&fonts)
                 .font_families(font_families.clone())
-                .lang(lang)
+                .lang(lang.clone())
                 .draw_debug_border(draw_debug_border)
                 .build(),
             )
