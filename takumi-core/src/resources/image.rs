@@ -44,7 +44,7 @@ pub struct SvgSource {
   /// Original SVG source, for embedding directly in a vector backend.
   source: Box<str>,
   /// Parsed SVG tree used for size and initial metadata.
-  pub tree: resvg::usvg::Tree,
+  pub(crate) tree: resvg::usvg::Tree,
   /// Intrinsic dimensions (non-percentage `width`/`height`) and `viewBox`
   /// aspect ratio, for CSS `background-size`/`mask-size` resolution.
   intrinsic: SvgIntrinsic,
@@ -53,6 +53,13 @@ pub struct SvgSource {
 
 #[cfg(feature = "svg")]
 impl SvgSource {
+  /// The SVG canvas dimensions in pixels, from the root `width`/`height` or
+  /// `viewBox`.
+  pub fn dimensions(&self) -> (f32, f32) {
+    let size = self.tree.size();
+    (size.width(), size.height())
+  }
+
   /// The original SVG markup, for embedding directly in a vector backend.
   pub fn source(&self) -> &str {
     &self.source
@@ -353,7 +360,7 @@ impl ImageSource {
   pub fn size(&self, sizing: &SizingContext) -> (f32, f32) {
     let (width, height) = match self {
       #[cfg(feature = "svg")]
-      ImageSource::Svg(svg) => (svg.tree.size().width(), svg.tree.size().height()),
+      ImageSource::Svg(svg) => svg.dimensions(),
       ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
       ImageSource::Gif(gif) => {
         let frame = &gif.frames[0].buffer;

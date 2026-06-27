@@ -62,10 +62,10 @@ pub(crate) fn measure_image_node(
 
   let intrinsic_size = match &image_source {
     #[cfg(feature = "svg")]
-    ImageSource::Svg(svg) => Size {
-      width: svg.tree.size().width(),
-      height: svg.tree.size().height(),
-    },
+    ImageSource::Svg(svg) => {
+      let (width, height) = svg.dimensions();
+      Size { width, height }
+    }
     ImageSource::Gif(gif) => {
       let frame = gif.frame_at_time(context.time_ms);
       Size {
