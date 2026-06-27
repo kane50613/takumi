@@ -22,9 +22,8 @@ use takumi_raster::{
 };
 
 use crate::{
-  De, deserialize_with_tracing, encode_frames_task::EncodeFramesTask, load_font_task::LoadFontTask,
-  map_error, measure_task::MeasureTask, parse_font_input,
-  render_animation_task::RenderAnimationTask, render_task::RenderTask,
+  De, deserialize_with_tracing, load_font_task::LoadFontTask, map_error, measure_task::MeasureTask,
+  parse_font_input, render_animation_task::RenderAnimationTask, render_task::RenderTask,
   svg_render_task::SvgRenderTask,
 };
 
@@ -213,16 +212,6 @@ impl From<DitheringAlgorithm> for CoreDitheringAlgorithm {
   }
 }
 
-/// Represents a single frame in a precomputed animation sequence.
-#[napi(object)]
-pub struct AnimationFrameSource<'ctx> {
-  /// The node tree to render for this frame.
-  #[napi(ts_type = "Node")]
-  pub node: Object<'ctx>,
-  /// The duration of this frame in milliseconds.
-  pub duration_ms: u32,
-}
-
 /// Represents a single scene in a sequential animation timeline.
 #[napi(object)]
 pub struct AnimationSceneSource<'ctx> {
@@ -254,37 +243,6 @@ pub struct RenderAnimationOptions<'env> {
   pub lossless: Option<bool>,
   /// Frames per second for timeline sampling.
   pub fps: u32,
-  /// Images keyed by `src`, each carrying raw bytes.
-  pub images: Option<Vec<ImageSource<'env>>>,
-  /// CSS stylesheets to apply before rendering.
-  pub stylesheets: Option<Vec<String>>,
-  /// The device pixel ratio.
-  /// @default 1.0
-  pub device_pixel_ratio: Option<f64>,
-  /// Per-render font stack: ordered family names used as the fallback chain.
-  /// Defaults to all registered families in registration order.
-  pub font_families: Option<Vec<String>>,
-  /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
-  pub lang: Option<String>,
-}
-
-/// Options for encoding a precomputed frame sequence.
-#[napi(object)]
-pub struct EncodeFramesOptions<'env> {
-  /// Whether to draw debug borders around layout elements.
-  pub draw_debug_border: Option<bool>,
-  /// The width of each frame in pixels.
-  pub width: u32,
-  /// The height of each frame in pixels.
-  pub height: u32,
-  /// The output animation format (WebP, APNG, or GIF).
-  pub format: Option<AnimationOutputFormat>,
-  /// The quality of lossy WebP (0-100). Ignored for APNG and GIF, and when
-  /// `lossless` is set.
-  pub quality: Option<u8>,
-  /// Encode WebP losslessly. Defaults to lossless when neither `quality` nor
-  /// `lossless` is given. Ignored for APNG and GIF.
-  pub lossless: Option<bool>,
   /// Images keyed by `src`, each carrying raw bytes.
   pub images: Option<Vec<ImageSource<'env>>>,
   /// CSS stylesheets to apply before rendering.
@@ -568,29 +526,6 @@ impl Renderer {
   ) -> Result<AsyncTask<RenderAnimationTask>> {
     Ok(AsyncTask::with_optional_signal(
       RenderAnimationTask::from_options(env, options, Arc::clone(&self.state))?,
-      signal,
-    ))
-  }
-
-  /// Encodes a precomputed frame sequence into an animated image buffer asynchronously.
-  #[napi(
-    ts_args_type = "source: AnimationFrameSource[], options: EncodeFramesOptions, signal?: AbortSignal",
-    ts_return_type = "Promise<Buffer>"
-  )]
-  pub fn encode_frames(
-    &self,
-    env: Env,
-    source: Vec<AnimationFrameSource>,
-    options: EncodeFramesOptions,
-    signal: Option<AbortSignal>,
-  ) -> Result<AsyncTask<EncodeFramesTask>> {
-    let frames = source
-      .into_iter()
-      .map(|frame| Ok((deserialize_with_tracing(frame.node)?, frame.duration_ms)))
-      .collect::<Result<Vec<_>>>()?;
-
-    Ok(AsyncTask::with_optional_signal(
-      EncodeFramesTask::from_options(env, frames, options, Arc::clone(&self.state))?,
       signal,
     ))
   }

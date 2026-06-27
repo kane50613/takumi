@@ -3,7 +3,6 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 #![deny(missing_docs)]
 
-mod encode_frames_task;
 mod load_font_task;
 mod measure_task;
 mod pool;

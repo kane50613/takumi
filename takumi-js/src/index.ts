@@ -9,11 +9,9 @@ export type {
   TextNode,
 } from "@takumi-rs/helpers";
 export type {
-  AnimationFrameSource,
   AnimationOutputFormat,
   AnimationSceneSource,
   DitheringAlgorithm,
-  EncodeFramesOptions,
   Font,
   FontDetails,
   FontLoader,

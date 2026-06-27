@@ -366,48 +366,6 @@ describe("renderAsDataUrl", () => {
     });
   });
 
-  describe("encodeFrames", () => {
-    test("with stylesheet keyframes", async () => {
-      const result = await renderer.encodeFrames(
-        [
-          {
-            node: {
-              type: "container",
-              tagName: "div",
-            },
-            durationMs: 1000,
-          },
-        ],
-        {
-          width: 200,
-          height: 100,
-          format: "gif",
-          stylesheets: [
-            `
-              div {
-                width: 100px;
-                height: 100px;
-                background: red;
-                animation-name: grow;
-                animation-duration: 1000ms;
-                animation-timing-function: linear;
-                animation-fill-mode: both;
-              }
-
-              @keyframes grow {
-                from { width: 100px; }
-                to { width: 200px; }
-              }
-            `,
-          ],
-        },
-      );
-
-      expect(result).toBeInstanceOf(Uint8Array);
-      expect(Buffer.from(result.subarray(0, 6)).toString("ascii")).toMatch(/^GIF8[79]a$/);
-    });
-  });
-
   test("with structured keyframes in render options", async () => {
     const animated = await renderer.measure(
       {

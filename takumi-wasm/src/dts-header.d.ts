@@ -114,36 +114,6 @@ export type RenderAnimationOptions = {
   fontFamilies?: string[];
 };
 
-export type EncodeFramesOptions = {
-  width: number;
-  height: number;
-  format?: "webp" | "apng" | "gif";
-  /**
-   * The quality of WebP format (0-100). Ignored for APNG and GIF.
-   */
-  quality?: number;
-  /**
-   * Images keyed by `src`, each carrying raw bytes. Provided up front and used
-   * in place of fetching external `src` URLs during rendering.
-   */
-  images?: ImageSource[];
-  drawDebugBorder?: boolean;
-  /**
-   * CSS stylesheets to apply before rendering.
-   */
-  stylesheets?: string[];
-  /**
-   * Defines the ratio resolution of the image to the physical pixels.
-   * @default 1.0
-   */
-  devicePixelRatio?: number;
-  /**
-   * Per-render font stack: ordered family names used as the fallback chain.
-   * Defaults to all registered families in registration order.
-   */
-  fontFamilies?: string[];
-};
-
 export type FontDetails = {
   name?: string;
   data: ByteBuf;
@@ -202,11 +172,6 @@ export type MeasuredNode = {
   transform: [number, number, number, number, number, number];
   children: MeasuredNode[];
   runs: MeasuredTextRun[];
-};
-
-export type AnimationFrameSource = {
-  node: Node;
-  durationMs: number;
 };
 
 export type AnimationSceneSource = {

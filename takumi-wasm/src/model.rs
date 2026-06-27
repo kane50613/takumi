@@ -31,10 +31,6 @@ extern "C" {
   #[wasm_bindgen(typescript_type = "RenderAnimationOptions")]
   pub type RenderAnimationOptionsType;
 
-  /// JavaScript object representing frame encoding options.
-  #[wasm_bindgen(typescript_type = "EncodeFramesOptions")]
-  pub type EncodeFramesOptionsType;
-
   /// JavaScript type for font input (FontDetails or ByteBuf).
   #[wasm_bindgen(typescript_type = "Font")]
   pub type FontType;
@@ -50,10 +46,6 @@ extern "C" {
   /// JavaScript object representing a measured node tree.
   #[wasm_bindgen(typescript_type = "MeasuredNode")]
   pub type MeasuredNodeType;
-
-  /// JavaScript object representing an animation frame source.
-  #[wasm_bindgen(typescript_type = "AnimationFrameSource")]
-  pub type AnimationFrameSourceType;
 
   /// JavaScript object representing an animation scene source.
   #[wasm_bindgen(typescript_type = "AnimationSceneSource")]
@@ -142,30 +134,6 @@ pub struct RenderAnimationOptions {
   pub device_pixel_ratio: Option<f32>,
   /// Frames per second for timeline sampling.
   pub fps: u32,
-  /// Per-render font stack: ordered family names used as the fallback chain.
-  pub font_families: Option<Vec<String>>,
-  /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
-  pub lang: Option<String>,
-}
-
-/// Options for encoding a precomputed frame sequence.
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EncodeFramesOptions {
-  /// The width of each frame in pixels.
-  pub width: u32,
-  /// The height of each frame in pixels.
-  pub height: u32,
-  /// The output animation format (WebP, APNG, or GIF).
-  pub format: Option<AnimationOutputFormat>,
-  /// Pre-fetched image resources to use during rendering.
-  pub images: Option<Vec<ImageSource>>,
-  /// Whether to draw debug borders around layout elements.
-  pub draw_debug_border: Option<bool>,
-  /// CSS stylesheets to apply before rendering.
-  pub stylesheets: Option<Vec<String>>,
-  /// The device pixel ratio for scaling.
-  pub device_pixel_ratio: Option<f32>,
   /// Per-render font stack: ordered family names used as the fallback chain.
   pub font_families: Option<Vec<String>>,
   /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
@@ -274,16 +242,6 @@ impl From<FontStyle> for ParleyFontStyle {
   fn from(style: FontStyle) -> Self {
     style.0
   }
-}
-
-/// A single frame in an animation sequence.
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AnimationFrameSource {
-  /// The node tree to render for this frame.
-  pub node: Node,
-  /// The duration of this frame in milliseconds.
-  pub duration_ms: u32,
 }
 
 /// A single scene in a sequential animation timeline.

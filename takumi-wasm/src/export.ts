@@ -1,8 +1,6 @@
 import {
   Renderer as RendererInternal,
-  type AnimationFrameSource,
   type ByteBuf,
-  type EncodeFramesOptions as EncodeFramesOptionsInternal,
   type Font,
   type FontDetails,
   type ImageSource,
@@ -64,14 +62,6 @@ export type AnimationOutputFormatOptions =
   | { format: "gif" };
 
 export type RenderAnimationOptions = Omit<RenderAnimationOptionsInternal, "images" | "format"> &
-  AnimationOutputFormatOptions & {
-    fonts?: FontLoader[];
-    images?: ImageLoader[];
-    /** Register only the `fonts` subsets the content renders. @default true */
-    subset?: boolean;
-  };
-
-export type EncodeFramesOptions = Omit<EncodeFramesOptionsInternal, "images" | "format"> &
   AnimationOutputFormatOptions & {
     fonts?: FontLoader[];
     images?: ImageLoader[];
@@ -192,19 +182,6 @@ export class Renderer {
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
 
     return this.inner.renderAnimation({
-      ...rest,
-      images: resolvedImages,
-      fontFamilies: fontFamilies ?? registeredFamilies,
-    });
-  }
-
-  async encodeFrames(frames: AnimationFrameSource[], options: EncodeFramesOptions) {
-    const { fonts, fontFamilies, images, subset, ...rest } = options;
-    const nodes = frames.map((frame) => frame.node);
-    const registeredFamilies = await this.prepareFonts(pickFonts({ fonts, source: nodes, subset }));
-    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
-
-    return this.inner.encodeFrames(frames, {
       ...rest,
       images: resolvedImages,
       fontFamilies: fontFamilies ?? registeredFamilies,

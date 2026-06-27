@@ -1,7 +1,5 @@
 import type {
-  AnimationFrameSource,
   ByteBuf,
-  EncodeFramesOptions as EncodeFramesOptionsInternal,
   Font,
   FontDetails,
   ImageSource,
@@ -69,18 +67,6 @@ export type AnimationOutputFormatOptions =
 
 export type RenderAnimationOptions = Omit<
   RenderAnimationOptionsInternal,
-  "images" | "format" | "quality" | "lossless"
-> &
-  AnimationOutputFormatOptions & {
-    fonts?: FontLoader[];
-    signal?: AbortSignal;
-    images?: ImageLoader[];
-    /** Register only the `fonts` subsets the content renders. @default true */
-    subset?: boolean;
-  };
-
-export type EncodeFramesOptions = Omit<
-  EncodeFramesOptionsInternal,
   "images" | "format" | "quality" | "lossless"
 > &
   AnimationOutputFormatOptions & {
@@ -208,18 +194,6 @@ export class Renderer {
     );
 
     return this.inner.renderAnimation({ ...rest, ...resolved }, signal);
-  }
-
-  async encodeFrames(frames: AnimationFrameSource[], options: EncodeFramesOptions) {
-    const { fonts, fontFamilies, signal, images, subset, ...rest } = options;
-    const nodes = frames.map((frame) => frame.node);
-    const resolved = await this.resolveResources(
-      pickFonts({ fonts, source: nodes, subset }),
-      images,
-      fontFamilies,
-    );
-
-    return this.inner.encodeFrames(frames, { ...rest, ...resolved }, signal);
   }
 
   async registerFont(font: FontLoader) {

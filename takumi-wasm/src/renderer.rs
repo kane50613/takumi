@@ -453,48 +453,4 @@ impl Renderer {
 
     self.encode_animation(rendered_frames, format)
   }
-
-  /// Encodes a precomputed frame sequence into an animated image buffer.
-  #[wasm_bindgen(js_name = encodeFrames)]
-  pub fn encode_frames(
-    &self,
-    frames: Vec<AnimationFrameSourceType>,
-    options: EncodeFramesOptionsType,
-  ) -> Result<Vec<u8>, JsValue> {
-    let frames: Vec<AnimationFrameSource> = from_value(frames.into()).map_err(map_error)?;
-    let options: EncodeFramesOptions = from_value(options.into()).map_err(map_error)?;
-    let images = self.fetch_resources_map(options.images.as_deref())?;
-    let viewport = Viewport::new((options.width, options.height)).with_device_pixel_ratio(
-      options
-        .device_pixel_ratio
-        .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
-    );
-    let stylesheet = StyleSheet::parse_owned_list_loosy(options.stylesheets.unwrap_or_default());
-    let state = self.read_state()?;
-    let rendered_frames = frames
-      .into_iter()
-      .map(|frame| -> Result<AnimationFrame, JsValue> {
-        let render_options = takumi_raster::RenderOptions::builder()
-          .viewport(viewport)
-          .images(images.clone())
-          .node(frame.node)
-          .fonts(&state)
-          .font_families(options.font_families.clone())
-          .lang(
-            options
-              .lang
-              .clone()
-              .and_then(|s| takumi_core::Language::parse(&s).ok()),
-          )
-          .draw_debug_border(options.draw_debug_border.unwrap_or_default())
-          .stylesheet(stylesheet.clone())
-          .build();
-
-        let image = render(render_options).map_err(map_error)?;
-        Ok(AnimationFrame::new(image, frame.duration_ms))
-      })
-      .collect::<Result<Vec<_>, JsValue>>()?;
-
-    self.encode_animation(rendered_frames, options.format)
-  }
 }
