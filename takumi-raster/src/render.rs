@@ -2,7 +2,7 @@ use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
 use parley::{GlyphRun, InlineBoxKind, Language, PositionedLayoutItem};
 use serde::Serialize;
-use taffy::{AvailableSpace, Layout, NodeId, TaffyError, geometry::Size};
+use taffy::{AvailableSpace, Layout, NodeId, geometry::Size};
 use takumi_core::layout::style::SizingContext;
 use typed_builder::TypedBuilder;
 
@@ -268,9 +268,13 @@ fn collect_measure_result(
         container_size,
       }) => {
         let Some(current) = node.node_at_path_mut(&path) else {
-          return Err(Error::LayoutError(TaffyError::InvalidInputNode(node_id)));
+          return Err(Error::LayoutError(format!(
+            "invalid layout node {node_id:?}"
+          )));
         };
-        let layout = *layout_results.layout(node_id)?;
+        let layout = *layout_results
+          .layout(node_id)
+          .map_err(|e| Error::LayoutError(e.to_string()))?;
         current.context.sizing.container_size = container_size;
 
         transform *= Affine::translation(layout.location.x, layout.location.y);
@@ -433,7 +437,9 @@ fn collect_measure_result(
           continue;
         }
 
-        let layout_children = layout_results.box_children(node_id)?;
+        let layout_children = layout_results
+          .box_children(node_id)
+          .map_err(|e| Error::LayoutError(e.to_string()))?;
         if layout_children.is_empty() {
           measured_by_node_id.insert(
             usize::from(node_id),
@@ -486,7 +492,9 @@ fn collect_measure_result(
         let mut children = Vec::with_capacity(child_ids.len());
         for child_id in child_ids {
           let Some(child) = measured_by_node_id.remove(&usize::from(child_id)) else {
-            return Err(Error::LayoutError(TaffyError::InvalidInputNode(child_id)));
+            return Err(Error::LayoutError(format!(
+              "invalid layout node {child_id:?}"
+            )));
           };
           children.push(child);
         }
@@ -507,7 +515,7 @@ fn collect_measure_result(
 
   measured_by_node_id
     .remove(&usize::from(node_id))
-    .ok_or_else(|| Error::LayoutError(TaffyError::InvalidInputNode(node_id)))
+    .ok_or_else(|| Error::LayoutError(format!("invalid layout node {node_id:?}")))
 }
 
 fn create_measured_node(
@@ -558,7 +566,8 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
   let layout_results = tree.into_results();
   let root_node_id = layout_results.root_node_id();
   let root_size = layout_results
-    .layout(root_node_id)?
+    .layout(root_node_id)
+    .map_err(|e| Error::LayoutError(e.to_string()))?
     .size
     .map(|size| size.round() as u32);
 

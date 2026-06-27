@@ -91,12 +91,12 @@ pub enum Error {
 
   /// Error encoding a PNG image.
   #[error("PNG encoding error: {0}")]
-  PngError(#[from] png::EncodingError),
+  PngError(String),
 
   /// Error encoding a WebP image.
   #[error("WebP encoding error: {0}")]
   #[cfg(target_arch = "wasm32")]
-  WebPEncodingError(#[from] image_webp::EncodingError),
+  WebPEncodingError(String),
 
   /// Structured errors from WebP encoding and RIFF container assembly.
   #[error("WebP error: {0}")]
@@ -104,11 +104,11 @@ pub enum Error {
 
   /// Error encoding a GIF image.
   #[error("GIF encoding error: {0}")]
-  GifEncodingError(#[from] gif::EncodingError),
+  GifEncodingError(String),
 
   /// Generic image processing error.
   #[error("Image error: {0}")]
-  ImageError(#[from] image::ImageError),
+  ImageError(String),
 
   /// Invalid viewport dimensions (e.g., width or height is 0).
   #[error("Invalid viewport: width or height cannot be 0")]
@@ -154,13 +154,7 @@ pub enum Error {
 
   /// Error during layout computation.
   #[error("Layout error: {0}")]
-  LayoutError(taffy::TaffyError),
-}
-
-impl From<taffy::TaffyError> for Error {
-  fn from(err: taffy::TaffyError) -> Self {
-    Self::LayoutError(err)
-  }
+  LayoutError(String),
 }
 
 /// A specialized Result type for Takumi operations.

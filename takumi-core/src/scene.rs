@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use parley::{InlineBoxKind, PositionedLayoutItem};
-use taffy::{AvailableSpace, Layout, NodeId, Point, TaffyError, geometry::Size};
+use taffy::{AvailableSpace, Layout, NodeId, Point, geometry::Size};
 
 use crate::{
   error::{Error, Result},
@@ -234,11 +234,14 @@ pub fn build_stacking_contexts(
 
   while let Some(visit) = visits.pop() {
     let Some(current) = root.node_at_path(&visit.path) else {
-      return Err(Error::LayoutError(TaffyError::InvalidInputNode(
-        visit.node_id,
+      return Err(Error::LayoutError(format!(
+        "invalid layout node {:?}",
+        visit.node_id
       )));
     };
-    let layout = *layout_results.layout(visit.node_id)?;
+    let layout = *layout_results
+      .layout(visit.node_id)
+      .map_err(|e| Error::LayoutError(e.to_string()))?;
     if current.context.style.is_invisible() {
       continue;
     }
@@ -317,7 +320,9 @@ pub fn build_stacking_contexts(
       continue;
     }
 
-    let layout_children = layout_results.box_children(visit.node_id)?;
+    let layout_children = layout_results
+      .box_children(visit.node_id)
+      .map_err(|e| Error::LayoutError(e.to_string()))?;
     let child_container_size = Size {
       width: Some(layout.content_box_width()),
       height: Some(layout.content_box_height()),

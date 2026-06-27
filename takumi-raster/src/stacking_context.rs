@@ -1,4 +1,4 @@
-use taffy::{AvailableSpace, Layout, NodeId, Point, TaffyError, geometry::Size};
+use taffy::{AvailableSpace, Layout, NodeId, Point, geometry::Size};
 use tiny_skia::{Pixmap, PixmapMut};
 
 use crate::{
@@ -282,11 +282,14 @@ fn begin_node_render(
   isolation_bounds_hint: Option<SceneBounds>,
 ) -> Result<Option<DeferredNodeRender>> {
   let Some(current) = root.node_at_path_mut(&node_paint.path) else {
-    return Err(Error::LayoutError(TaffyError::InvalidInputNode(
-      node_paint.node_id,
+    return Err(Error::LayoutError(format!(
+      "invalid layout node {:?}",
+      node_paint.node_id
     )));
   };
-  let layout = *layout_results.layout(node_paint.node_id)?;
+  let layout = *layout_results
+    .layout(node_paint.node_id)
+    .map_err(|e| Error::LayoutError(e.to_string()))?;
 
   if current.context.style.is_invisible() || !node_paint.transform.is_invertible() {
     return Ok(None);
@@ -408,8 +411,9 @@ fn paint_single_node(
       filter_bounds,
     }) => {
       let Some(current) = root.node_at_path_mut(&path) else {
-        return Err(Error::LayoutError(TaffyError::InvalidInputNode(
-          node_paint.node_id,
+        return Err(Error::LayoutError(format!(
+          "invalid layout node {:?}",
+          node_paint.node_id
         )));
       };
       finish_node_render(
@@ -452,8 +456,9 @@ pub(crate) fn paint_context(
   context_id: usize,
 ) -> Result<()> {
   let Some(context) = contexts.get(context_id) else {
-    return Err(Error::LayoutError(TaffyError::InvalidInputNode(
-      NodeId::new(context_id as u64),
+    return Err(Error::LayoutError(format!(
+      "invalid layout node {:?}",
+      NodeId::new(context_id as u64)
     )));
   };
 
@@ -496,7 +501,9 @@ pub(crate) fn paint_context(
       let node_id = context
         .root()
         .map_or(layout_results.root_node_id(), |node| node.node_id);
-      return Err(Error::LayoutError(TaffyError::InvalidInputNode(node_id)));
+      return Err(Error::LayoutError(format!(
+        "invalid layout node {node_id:?}"
+      )));
     };
     finish_node_render(
       current,

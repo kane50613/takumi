@@ -235,9 +235,11 @@ impl FromStr for SvgSource {
       allow_dtd: true,
       ..Default::default()
     };
-    let document = Document::parse_with_options(src, options).map_err(Error::ParsingFailed)?;
+    let document = Document::parse_with_options(src, options)
+      .map_err(|e| ImageResourceError::SvgParseError(Error::ParsingFailed(e).to_string()))?;
 
-    let tree = Tree::from_xmltree(&document, &Options::default())?;
+    let tree = Tree::from_xmltree(&document, &Options::default())
+      .map_err(|e| ImageResourceError::SvgParseError(e.to_string()))?;
     let intrinsic = svg_intrinsic_sizing(document.root_element(), tree.size());
 
     Ok(SvgSource {
@@ -295,7 +297,7 @@ impl ImageSource {
       }
     }
 
-    let image = decode_image(bytes).map_err(ImageResourceError::DecodeError)?;
+    let image = decode_image(bytes).map_err(|e| ImageResourceError::DecodeError(e.to_string()))?;
     let source = match image {
       DecodedImage::Buffer(buffer) => ImageSource::Bitmap(Arc::new(buffer)),
       DecodedImage::Gif(gif) => ImageSource::Gif(GifSource::from_decoded(gif)?),
@@ -450,7 +452,7 @@ fn parse_viewbox_ratio(view_box: &str) -> Option<f32> {
 pub enum ImageResourceError {
   /// An error occurred while decoding the image data
   #[error("An error occurred while decoding the image data: {0}")]
-  DecodeError(#[from] image::ImageError),
+  DecodeError(String),
   /// The image data URI is in an invalid format
   #[error("The image data URI is in an invalid format")]
   InvalidDataUriFormat,
@@ -460,7 +462,7 @@ pub enum ImageResourceError {
   #[cfg(feature = "svg")]
   /// An error occurred while parsing an SVG image
   #[error("An error occurred while parsing an SVG image: {0}")]
-  SvgParseError(#[from] resvg::usvg::Error),
+  SvgParseError(String),
   /// SVG parsing is not supported in this build
   #[cfg(not(feature = "svg"))]
   #[error("SVG parsing is not supported in this build")]

@@ -6,7 +6,7 @@ use taffy::{AbsoluteAxis, AvailableSpace, Point, Rect, Size};
 use takumi_core::{
   Fonts, Language,
   context::RenderContext,
-  error::Result,
+  error::{Error, Result},
   layout::{
     Viewport,
     border::{BorderProperties, BorderSide, border_dash_pattern},
@@ -92,7 +92,9 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
 
   let results = tree.into_results();
 
-  let root_layout = results.layout(root_id)?;
+  let root_layout = results
+    .layout(root_id)
+    .map_err(|e| Error::LayoutError(e.to_string()))?;
   let width = viewport
     .size
     .width

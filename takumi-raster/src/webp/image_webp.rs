@@ -5,7 +5,7 @@ use image_webp::{ColorType, EncoderParams, WebPEncoder};
 
 use crate::{
   Result,
-  error::WebPError,
+  error::{Error, WebPError},
   webp::{U24_MAX, has_any_alpha_pixel, strip_alpha_channel},
   write::{AnimatedWebpOptions, AnimationFrame},
 };
@@ -71,16 +71,18 @@ pub(crate) fn write_webp_lossless(
     Cow::Owned(strip_alpha_channel(image))
   };
 
-  encoder.encode(
-    &image_data,
-    width,
-    height,
-    if has_alpha {
-      ColorType::Rgba8
-    } else {
-      ColorType::Rgb8
-    },
-  )?;
+  encoder
+    .encode(
+      &image_data,
+      width,
+      height,
+      if has_alpha {
+        ColorType::Rgba8
+      } else {
+        ColorType::Rgb8
+      },
+    )
+    .map_err(|e| Error::WebPEncodingError(e.to_string()))?;
 
   Ok(())
 }
