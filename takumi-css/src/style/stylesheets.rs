@@ -165,6 +165,7 @@ macro_rules! define_style {
       /// Identifies a single longhand property.
       #[repr(u8)]
       #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+      #[non_exhaustive]
       pub enum LonghandId {
         $(
           #[doc = concat!("The `", stringify!($longhand), "` longhand.")]
@@ -191,6 +192,7 @@ macro_rules! define_style {
       /// Identifies a shorthand property that expands into longhands.
       #[repr(u8)]
       #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+      #[non_exhaustive]
       pub enum ShorthandId {
         $(
           #[doc = concat!("The `", stringify!($shorthand), "` shorthand.")]
@@ -294,6 +296,7 @@ macro_rules! define_style {
 
       /// Identifies any property: longhand, shorthand, custom, or ignored.
       #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+      #[non_exhaustive]
       pub enum PropertyId {
         /// An unrecognized property that is dropped.
         Ignored,
@@ -635,6 +638,7 @@ macro_rules! define_style {
       /// A single specified declaration stored in a declaration block.
       #[allow(private_interfaces)]
       #[derive(Debug, Clone, PartialEq)]
+      #[non_exhaustive]
       pub enum StyleDeclaration {
         $(
           /// An explicit specified value for a non-shorthand property.
