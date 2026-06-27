@@ -14,11 +14,16 @@ import {
 export * from "../pkg/takumi_wasm";
 export { default } from "../pkg/takumi_wasm";
 
-import { extractResourceUrls, pickFonts } from "@takumi-rs/helpers";
+import { extractResourceUrls, fontFromUrl, pickFonts } from "@takumi-rs/helpers";
 
 export { extractResourceUrls };
 
+/**
+ * A font to register. Either a URL string (fetched on demand, with name/weight/style read from the
+ * file), raw bytes, or a descriptor with a lazy `data()` loader.
+ */
 export type FontLoader =
+  | string
   | Font
   | (Omit<FontDetails, "data"> & {
       data: () => Promise<FontDetails["data"]> | FontDetails["data"];
@@ -193,17 +198,18 @@ export class Renderer {
   }
 
   async registerFont(font: FontLoader) {
-    const key = createFontKey(font);
+    const loader = typeof font === "string" ? fontFromUrl(font) : font;
+    const key = createFontKey(loader);
 
     const cached = this.getFont(key);
     if (cached) {
       return cached;
     }
 
-    const extracted = extractFontBuffer(font);
+    const extracted = extractFontBuffer(loader);
     // Keep the descriptor's name/subsetOf/weight/style; only the data is resolved.
     const register = (data: ByteBuf) =>
-      this.inner.registerFont(isBuffer(font) ? data : { ...font, data });
+      this.inner.registerFont(isBuffer(loader) ? data : { ...loader, data });
 
     if (isBuffer(extracted)) {
       const binded = register(extracted);
@@ -224,7 +230,7 @@ export class Renderer {
   }
 }
 
-function extractFontBuffer(font: FontLoader) {
+function extractFontBuffer(font: Exclude<FontLoader, string>) {
   if (isBuffer(font)) {
     return font;
   }
@@ -236,7 +242,7 @@ function extractFontBuffer(font: FontLoader) {
   return font.data();
 }
 
-function createFontKey(font: FontLoader) {
+function createFontKey(font: Exclude<FontLoader, string>) {
   if (isBuffer(font)) {
     return font;
   }

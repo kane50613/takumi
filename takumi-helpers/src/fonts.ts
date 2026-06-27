@@ -336,6 +336,18 @@ export function subsetFonts<T>({
   );
 }
 
+/**
+ * Turn a font URL into a loader: fetches the bytes on demand, keyed by the URL so repeated renders
+ * dedupe. Family name, weight, and style come from the font file. Lets `fonts` take a bare URL
+ * string, e.g. `fonts: ["https://example.com/Inter.woff2"]`.
+ */
+export function fontFromUrl(url: string) {
+  return {
+    key: url,
+    data: () => fetchOk(url).then((r) => r.arrayBuffer()),
+  };
+}
+
 /** Apply {@link subsetFonts} unless `subset` is `false`. Passes `undefined` fonts through. */
 export function pickFonts<T>({
   fonts,

@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { googleFonts, subsetFonts } from "../src/fonts";
+import { fontFromUrl, googleFonts, subsetFonts } from "../src/fonts";
 import type { Node } from "../src/types";
 
 const bytes = (s: string) => new TextEncoder().encode(s).buffer;
@@ -335,6 +335,12 @@ describe("subsetFonts", () => {
     expect(subsetFonts({ fonts: [fallback, greek], source: "Hi" })).toEqual([fallback]);
   });
 
+  test("keeps a bare URL string (no ranges) regardless of content", () => {
+    const url = "https://example.com/Inter.woff2";
+
+    expect(subsetFonts({ fonts: [url], source: "Hi" })).toEqual([url]);
+  });
+
   test("regression: a multi-subset family can't tofu — covering subset survives, sibling drops", async () => {
     // The bug: same-named subsets collide so a glyph routes to a file lacking it.
     // The fix: googleFonts names subsets distinctly + subsetFonts keeps the covering one by range.
@@ -346,5 +352,26 @@ describe("subsetFonts", () => {
     expect(fonts).toHaveLength(1);
     expect(fonts[0]!.name).toBe("Inter latin");
     expect(fonts[0]!.subsetOf).toBe("Inter");
+  });
+});
+
+describe("fontFromUrl", () => {
+  test("keys by URL and fetches the bytes on demand", async () => {
+    const url = "https://example.com/Inter.woff2";
+    const fetchMock = mock((u: string) => Promise.resolve(new Response(bytes(u))));
+    const original = globalThis.fetch;
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    try {
+      const loader = fontFromUrl(url);
+      expect(loader.key).toBe(url);
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      const data = await loader.data();
+      expect(new TextDecoder().decode(data)).toBe(url);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });

@@ -17,7 +17,27 @@ Each package ships its own built-in families. Add your own for anything else.
 
 ### The `fonts` option
 
-Pass the fonts a render needs through `fonts`. Each entry is raw bytes, or a `{ name, data, weight, style }` descriptor. `data` can be a loader that returns the bytes. A reused renderer decodes each file once.
+Pass the fonts a render needs through `fonts`. An entry takes one of three forms:
+
+| Entry      | Resolves to                                                                      |
+| ---------- | -------------------------------------------------------------------------------- |
+| URL string | Fetched on demand, keyed by the URL. Name, weight, and style come from the file. |
+| Raw bytes  | A `Uint8Array`, `ArrayBuffer`, or `Buffer`, registered directly.                 |
+| Descriptor | `{ name, data, weight, style }`. The fields override what the file reports.      |
+
+A reused renderer decodes each file once.
+
+```tsx twoslash
+import { ImageResponse } from "takumi-js/response";
+
+export function GET() {
+  return new ImageResponse(<div />, {
+    fonts: ["https://example.com/Inter.woff2"],
+  });
+}
+```
+
+The descriptor overrides what the file reports, or supplies bytes through a loader. `data` is raw bytes or a function that returns them.
 
 ```tsx twoslash
 import { ImageResponse } from "takumi-js/response";
@@ -27,7 +47,8 @@ export function GET() {
     fonts: [
       {
         name: "Inter",
-        data: () => fetch("/path-to-inter.woff2").then((res) => res.arrayBuffer()),
+        weight: 700,
+        data: () => fetch("https://example.com/Inter.woff2").then((res) => res.arrayBuffer()),
       },
     ],
   });
@@ -38,7 +59,7 @@ The takumi-js functions `render`, `renderAnimation`, and `renderSvg` take the sa
 
 ### From Google Fonts
 
-`googleFonts` fetches families from Google Fonts in one request and returns `fonts` entries: one lazy loader per coverage subset, downloaded when the renderer first needs it. `render` registers only the subsets the content draws, so unused weights and scripts download nothing. Reference each family by name in `font-family`.
+`googleFonts` fetches families from Google Fonts in one request and returns `fonts` entries: one lazy loader per coverage subset, downloaded when the renderer first needs it. Reference each family by name in `font-family`. [Subsetting](#subsetting) trims them to the content, so unused weights and scripts download nothing.
 
 ```tsx
 import { render } from "takumi-js";
@@ -66,7 +87,18 @@ fonts: await googleFonts({ families: [{ name: "Inter", weight: [400, 700], style
 | `display`  | a `font-display` value                        | Maps to CSS `font-display`.                                   |
 | `cache`    | a `Map`                                       | Reuses the metadata CSS across renders.                       |
 
-Each subset registers under its own internal name; `font-family: Inter` expands across all of them, so each script finds the file that covers it. `render` trims the set to the content, so the same `fonts` work for any text. To trim ahead of time, or when `subset: false` opts out of the automatic pass, call `subsetFonts({ fonts, source })`, where `source` is the string, node, or node array you render.
+Each subset registers under its own internal name; `font-family: Inter` expands across all of them, so each script finds the file that covers it.
+
+### Subsetting
+
+`render` registers only the subsets the content draws, so the same `fonts` work for any text and unused ranges never download. The pass runs automatically.
+
+| Font kind                           | Behavior                                    |
+| ----------------------------------- | ------------------------------------------- |
+| Ranged subsets (from `googleFonts`) | Trimmed to the codepoints the content uses. |
+| Whole files (URL string, raw bytes) | No `unicode-range`, so they load in full.   |
+
+`subset: false` opts out. To trim before the render, call `subsetFonts({ fonts, source })`, where `source` is the string, node, or node array you render.
 
 ### Preloading with `registerFont`
 
