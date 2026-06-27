@@ -1,7 +1,7 @@
 use std::{
   borrow::Cow,
   cell::RefCell,
-  collections::{HashMap, hash_map::Entry},
+  collections::{BTreeSet, HashMap, hash_map::Entry},
   iter::once,
   rc::Rc,
   sync::Arc,
@@ -709,11 +709,13 @@ fn font_style_css(style: FontStyle) -> String {
 pub struct Fonts {
   inner: parley::FontContext,
   /// Maps a logical family name (the name authors write in `font-family`) to the
-  /// unique internal names of the subset families registered under it, in registration
-  /// order. Populated by [`FontResource::subset_of`]; consulted when a render expands a
-  /// `font-family` into its per-coverage subset stack. Shared (immutable after
+  /// unique internal names of the subset families registered under it. Populated by
+  /// [`FontResource::subset_of`]; consulted when a render expands a `font-family` into
+  /// its per-coverage subset stack. A `BTreeSet` so the stack is ordered by family name,
+  /// not registration arrival order (callers often register concurrently) — selection
+  /// among subsets that overlap a codepoint stays deterministic. Shared (immutable after
   /// registration) so a render can read it without borrowing the parley context.
-  groups: Arc<HashMap<String, Vec<String>>>,
+  groups: Arc<HashMap<String, BTreeSet<String>>>,
   /// Every registered family name in registration order. The fallback bucket is built from
   /// this so its per-script priority is deterministic; `fontique`'s `family_names()` iterates
   /// a `HashMap` (hash order), which would otherwise make font selection vary per render.
@@ -741,7 +743,7 @@ impl Default for Fonts {
 #[derive(Clone)]
 pub struct FontsSnapshot {
   context: Rc<RefCell<Fonts>>,
-  pub(crate) groups: Arc<HashMap<String, Vec<String>>>,
+  pub(crate) groups: Arc<HashMap<String, BTreeSet<String>>>,
 }
 
 impl FontsSnapshot {
@@ -765,16 +767,19 @@ impl Fonts {
     if let Some(names) = fallbacks {
       // A name may be a logical subset family; expand it to its registered subset names so
       // the fallback bucket carries the whole stack, matching `font-family` expansion.
-      let family_ids = names
-        .iter()
-        .flat_map(|name| {
-          self
-            .groups
-            .get(name)
-            .map_or_else(|| std::slice::from_ref(name), Vec::as_slice)
-        })
-        .filter_map(|name| cloned.collection.family_id(name))
-        .collect::<Vec<_>>();
+      let mut family_ids = Vec::new();
+      for name in names {
+        match self.groups.get(name) {
+          Some(subsets) => {
+            family_ids.extend(
+              subsets
+                .iter()
+                .filter_map(|n| cloned.collection.family_id(n)),
+            );
+          }
+          None => family_ids.extend(cloned.collection.family_id(name)),
+        }
+      }
 
       for (script, _) in Script::all_samples() {
         cloned.collection.set_fallbacks(
@@ -927,12 +932,10 @@ impl Fonts {
       }
 
       if let Some(logical) = &subset_of {
-        let names = Arc::make_mut(&mut self.groups)
+        Arc::make_mut(&mut self.groups)
           .entry(logical.clone())
-          .or_default();
-        if !names.contains(&name) {
-          names.push(name.clone());
-        }
+          .or_default()
+          .insert(name.clone());
       }
 
       families.push(RegisteredFamily { name, faces });

@@ -1,4 +1,7 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::{
+  borrow::Cow,
+  collections::{BTreeSet, HashMap},
+};
 
 use parley::{
   FontFamily as ParleyFontFamily, FontFamilyName, FontFeatures, FontVariations, GenericFamily,
@@ -53,7 +56,7 @@ impl ExpandedFontFamily {
 
   /// Expands `family` against the registered subset `groups`: a name that's a subset group
   /// becomes its registered subset families (in order); other names pass through unchanged.
-  fn expand(family: &FontFamily, groups: &HashMap<String, Vec<String>>) -> Self {
+  fn expand(family: &FontFamily, groups: &HashMap<String, BTreeSet<String>>) -> Self {
     let mut tokens = Vec::new();
     for name in family.names() {
       match name {
