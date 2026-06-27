@@ -22,15 +22,7 @@ export const Route = createFileRoute("/")({
             width: 1200,
             height: 630,
             format: "webp",
-            fonts: [
-              {
-                name: "Geist",
-                data: () =>
-                  fetch("https://takumi.kane.tw/fonts/Geist.woff2").then((res) =>
-                    res.arrayBuffer(),
-                  ),
-              },
-            ],
+            fonts: ["https://takumi.kane.tw/fonts/Geist.woff2"],
           },
         );
       },

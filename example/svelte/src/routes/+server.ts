@@ -15,12 +15,6 @@ export async function GET({ url }: RequestEvent) {
     width: 1200,
     height: 630,
     stylesheets: [style],
-    fonts: [
-      {
-        name: "Geist",
-        data: () =>
-          fetch("https://takumi.kane.tw/fonts/Geist.woff2").then((res) => res.arrayBuffer()),
-      },
-    ],
+    fonts: ["https://takumi.kane.tw/fonts/Geist.woff2"],
   });
 }

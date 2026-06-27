@@ -21,13 +21,7 @@ export function GET(request: Request) {
       width: 1200,
       height: 630,
       format: "webp",
-      fonts: [
-        {
-          name: "Geist",
-          data: () =>
-            fetch("https://takumi.kane.tw/fonts/Geist.woff2").then((r) => r.arrayBuffer()),
-        },
-      ],
+      fonts: ["https://takumi.kane.tw/fonts/Geist.woff2"],
     },
   );
 }
