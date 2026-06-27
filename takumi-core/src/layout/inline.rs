@@ -2358,9 +2358,9 @@ mod tests {
       style::{Color, ColorInput, Display, Style, StyleDeclaration, WhiteSpace},
       tree::RenderNode,
     },
-    resources::font::FontResource,
+    resources::font::{FontResource, GenericFamily},
   };
-  use parley::{GenericFamily, fontique::FontInfoOverride};
+  use parley::fontique::FontInfoOverride;
   use takumi_css::SizingContext;
 
   fn create_test_context() -> Fonts {
@@ -2380,7 +2380,7 @@ mod tests {
             family_name: Some("Geist"),
             ..Default::default()
           })
-          .generic_family(GenericFamily::SansSerif),
+          .generic_family(GenericFamily::SANS_SERIF),
       )
       .unwrap_or_else(|error| panic!("failed to load test font {}: {error}", path.display()));
     context

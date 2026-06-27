@@ -1,4 +1,4 @@
-use parley::{GenericFamily, fontique::FontInfoOverride};
+use parley::fontique::FontInfoOverride;
 use std::hint::black_box;
 use takumi::{prelude::*, render};
 
@@ -21,7 +21,7 @@ fn load_global() -> Fonts {
         family_name: Some("Geist"),
         ..Default::default()
       })
-      .generic_family(GenericFamily::SansSerif),
+      .generic_family(GenericFamily::SANS_SERIF),
   )
   .unwrap();
   g

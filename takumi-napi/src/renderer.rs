@@ -7,13 +7,13 @@ use arc_swap::ArcSwap;
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use parley::{GenericFamily, fontique::FontInfoOverride};
+use parley::fontique::FontInfoOverride;
 use rayon::prelude::*;
 use takumi_core::{
   Fonts,
   layout::{node::Node, style::KeyframesRule as CoreKeyframesRule},
   resources::{
-    font::FontResource,
+    font::{FontResource, GenericFamily},
     image::{ImageCache, ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource},
   },
 };
@@ -392,12 +392,12 @@ const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[
   (
     include_bytes!("../../assets/fonts/geist/Geist[wght].woff2"),
     "Geist",
-    GenericFamily::SansSerif,
+    GenericFamily::SANS_SERIF,
   ),
   (
     include_bytes!("../../assets/fonts/geist/GeistMono[wght].woff2"),
     "Geist Mono",
-    GenericFamily::Monospace,
+    GenericFamily::MONOSPACE,
   ),
 ];
 

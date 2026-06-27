@@ -9,7 +9,7 @@ use std::{
 
 use image::{Rgba, RgbaImage};
 use parley::{
-  GenericFamily, GlyphRun, LayoutContext, TextStyle, TreeBuilder,
+  GenericFamily as ParleyGenericFamily, GlyphRun, LayoutContext, TextStyle, TreeBuilder,
   fontique::{
     Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, FontStyle,
     QueryFamily, QueryStatus, Script, ScriptExt,
@@ -941,7 +941,7 @@ impl Fonts {
         self
           .inner
           .collection
-          .append_generic_families(generic_family, once(family));
+          .append_generic_families(generic_family.into(), once(family));
       }
     }
 
@@ -1039,6 +1039,47 @@ impl<'a> AsRef<[u8]> for FontSource<'a> {
       Self::Raw(raw) => raw,
       Self::Blob(blob) => blob.as_ref(),
     }
+  }
+}
+
+/// A CSS generic font family a registered font fulfills, exposed as named
+/// constants so callers need not depend on `parley`.
+/// https://drafts.csswg.org/css-fonts/#generic-font-families
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GenericFamily(ParleyGenericFamily);
+
+impl GenericFamily {
+  /// `serif`
+  pub const SERIF: Self = Self(ParleyGenericFamily::Serif);
+  /// `sans-serif`
+  pub const SANS_SERIF: Self = Self(ParleyGenericFamily::SansSerif);
+  /// `monospace`
+  pub const MONOSPACE: Self = Self(ParleyGenericFamily::Monospace);
+  /// `cursive`
+  pub const CURSIVE: Self = Self(ParleyGenericFamily::Cursive);
+  /// `fantasy`
+  pub const FANTASY: Self = Self(ParleyGenericFamily::Fantasy);
+  /// `system-ui`
+  pub const SYSTEM_UI: Self = Self(ParleyGenericFamily::SystemUi);
+  /// `ui-serif`
+  pub const UI_SERIF: Self = Self(ParleyGenericFamily::UiSerif);
+  /// `ui-sans-serif`
+  pub const UI_SANS_SERIF: Self = Self(ParleyGenericFamily::UiSansSerif);
+  /// `ui-monospace`
+  pub const UI_MONOSPACE: Self = Self(ParleyGenericFamily::UiMonospace);
+  /// `ui-rounded`
+  pub const UI_ROUNDED: Self = Self(ParleyGenericFamily::UiRounded);
+  /// `emoji`
+  pub const EMOJI: Self = Self(ParleyGenericFamily::Emoji);
+  /// `math`
+  pub const MATH: Self = Self(ParleyGenericFamily::Math);
+  /// `fangsong`
+  pub const FANG_SONG: Self = Self(ParleyGenericFamily::FangSong);
+}
+
+impl From<GenericFamily> for ParleyGenericFamily {
+  fn from(value: GenericFamily) -> Self {
+    value.0
   }
 }
 

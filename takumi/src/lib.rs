@@ -74,7 +74,7 @@ pub mod prelude {
       style::*,
     },
     resources::{
-      font::{FontError, FontResource, RegisteredFamily},
+      font::{FontError, FontResource, GenericFamily, RegisteredFamily},
       image::{ImageCacheMode, ImageSource},
     },
   };
