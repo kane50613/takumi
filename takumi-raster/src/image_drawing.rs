@@ -52,7 +52,7 @@ pub(crate) fn process_image_for_object_fit<'i>(
       (rendered.width() as f32, rendered.height() as f32)
     }
     #[cfg(feature = "svg")]
-    ImageSource::Svg(svg) => (svg.tree.size().width(), svg.tree.size().height()),
+    ImageSource::Svg(svg) => svg.dimensions(),
     _ => (image_width, image_height),
   };
   let source_to_intrinsic = if image_width == 0.0 || image_height == 0.0 {
