@@ -3,6 +3,7 @@ use takumi::{
   prelude::{Length::*, *},
   render,
 };
+use takumi_core::layout::style::FromCss;
 
 const ITERS: usize = 100;
 

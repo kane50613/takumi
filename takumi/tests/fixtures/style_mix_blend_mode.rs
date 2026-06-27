@@ -1,4 +1,5 @@
 use takumi::prelude::{Length::*, *};
+use takumi_core::layout::style::FromCss;
 
 use crate::test_utils::run_fixture_test;
 use std::sync::Arc;

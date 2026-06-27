@@ -7,6 +7,7 @@ use std::{
 
 use parley::{GenericFamily, fontique::FontInfoOverride};
 use takumi::{prelude::*, render};
+use takumi_core::layout::style::FromCss;
 
 fn font_path(path: &str) -> PathBuf {
   Path::new(env!("CARGO_MANIFEST_DIR"))

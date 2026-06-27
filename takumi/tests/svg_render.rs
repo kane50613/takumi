@@ -11,6 +11,7 @@ use resvg::{
   usvg::{Options, Tree},
 };
 use takumi::prelude::{Length::*, *};
+use takumi_core::layout::style::FromCss;
 use takumi_svg::{SvgOptions, render};
 
 const W: u32 = 200;
