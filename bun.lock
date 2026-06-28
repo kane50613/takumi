@@ -12,7 +12,7 @@
         "oxfmt": "^0.56.0",
         "oxlint": "^1.71.0",
         "publint": "^0.3.21",
-        "tegami": "^1.0.0-beta.0",
+        "tegami": "^1.0.0-beta.1",
         "typescript": "catalog:",
       },
     },
@@ -58,7 +58,7 @@
         "@types/node": "catalog:",
         "@types/react": "catalog:",
         "@types/react-dom": "catalog:",
-        "prettier": "^3.9.0",
+        "prettier": "^3.9.1",
         "vite": "catalog:",
       },
     },
@@ -216,7 +216,7 @@
     },
     "takumi-helpers": {
       "name": "@takumi-rs/helpers",
-      "version": "2.0.0-beta.14",
+      "version": "2.0.0-rc.1",
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/react": "catalog:",
@@ -239,7 +239,7 @@
     },
     "takumi-image-response": {
       "name": "@takumi-rs/image-response",
-      "version": "2.0.0-beta.14",
+      "version": "2.0.0-rc.1",
       "dependencies": {
         "takumi-js": "workspace:*",
       },
@@ -251,7 +251,7 @@
     },
     "takumi-js": {
       "name": "takumi-js",
-      "version": "2.0.0-beta.14",
+      "version": "2.0.0-rc.1",
       "dependencies": {
         "@takumi-rs/core": "workspace:*",
         "@takumi-rs/helpers": "workspace:*",
@@ -267,7 +267,7 @@
     },
     "takumi-napi": {
       "name": "@takumi-rs/core",
-      "version": "2.0.0-beta.14",
+      "version": "2.0.0-rc.1",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
         "csstype": "^3.2.3",
@@ -297,7 +297,7 @@
     },
     "takumi-wasm": {
       "name": "@takumi-rs/wasm",
-      "version": "2.0.0-beta.14",
+      "version": "2.0.0-rc.1",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
         "csstype": "^3.2.3",
@@ -2031,7 +2031,7 @@
 
     "postcss": ["postcss@8.5.15", "", { "dependencies": { "nanoid": "^3.3.12", "picocolors": "^1.1.1", "source-map-js": "^1.2.1" } }, "sha512-FfR8sjd4em2T6fb3I2MwAJU7HWVMr9zba+enmQeeWFfCbm+UOC/0X4DS8XtpUTMwWMGbjKYP7xjfNekzyGmB3A=="],
 
-    "prettier": ["prettier@3.9.0", "", { "bin": { "prettier": "bin/prettier.cjs" } }, "sha512-LjIqSIC5VYLzs9WedVmJ2ljNAGnU+DteIClbahu4L/DBeWjZ6iT/k1lAYyu9JUh+1xINxWadaPw/Pl63y/agAw=="],
+    "prettier": ["prettier@3.9.1", "", { "bin": { "prettier": "bin/prettier.cjs" } }, "sha512-ppiDo2CSwexck1eyZUwJHg/N3nf1+6IRCv7W/VJ5vaLnVCmB7+3CdRfMwoCHBBX6xTrREDTksZ4OZl5SSf4zXA=="],
 
     "property-information": ["property-information@7.1.0", "", {}, "sha512-TwEZ+X+yCJmYfL7TPUOcvBZ4QfoT5YenQiJuX//0th53DE6w0xxLEtfK3iyryQFddXuvkIk51EEgrJQ0WJkOmQ=="],
 
@@ -2197,7 +2197,7 @@
 
     "tar": ["tar@7.5.13", "", { "dependencies": { "@isaacs/fs-minipass": "^4.0.0", "chownr": "^3.0.0", "minipass": "^7.1.2", "minizlib": "^3.1.0", "yallist": "^5.0.0" } }, "sha512-tOG/7GyXpFevhXVh8jOPJrmtRpOTsYqUIkVdVooZYJS/z8WhfQUX8RJILmeuJNinGAMSu1veBr4asSHFt5/hng=="],
 
-    "tegami": ["tegami@1.0.0-beta.0", "", { "dependencies": { "@clack/prompts": "^1.6.0", "@rainbowatcher/toml-edit-js": "^0.6.5", "commander": "^15.0.0", "js-yaml": "^5.1.0", "mdast-util-from-markdown": "^2.0.3", "mdast-util-to-markdown": "^2.1.2", "package-manager-detector": "^1.6.0", "semver": "^7.8.5", "tinyexec": "^1.2.4", "tinyglobby": "^0.2.17", "zod": "^4.4.3" } }, "sha512-B0Wn9neO9kTqsWijg8SvGZsgm63A4DsW0Vy6vffRBLZJjAMwGP8xTfqOEq3BYdZzr0V177rNvFzBYn+4sY3PVQ=="],
+    "tegami": ["tegami@1.0.0-beta.1", "", { "dependencies": { "@clack/prompts": "^1.6.0", "@rainbowatcher/toml-edit-js": "^0.6.5", "commander": "^15.0.0", "js-yaml": "^5.1.0", "mdast-util-from-markdown": "^2.0.3", "mdast-util-to-markdown": "^2.1.2", "package-manager-detector": "^1.6.0", "semver": "^7.8.5", "tinyexec": "^1.2.4", "tinyglobby": "^0.2.17", "zod": "^4.4.3" } }, "sha512-EaKWUAhn6JOPK45VAnJmo5wBvpdlGOez2jiNWovKQgPsSb8DGcWUj82biBbtZUqVqD+epeG64Zdjpq5M6zzmbw=="],
 
     "terser": ["terser@5.44.0", "", { "dependencies": { "@jridgewell/source-map": "^0.3.3", "acorn": "^8.15.0", "commander": "^2.20.0", "source-map-support": "~0.5.20" }, "bin": { "terser": "bin/terser" } }, "sha512-nIVck8DK+GM/0Frwd+nIhZ84pR/BX7rmXMfYwyg+Sri5oGVE99/E3KvXqpC2xHFxyqXyGHTKBSioxxplrO4I4w=="],
 

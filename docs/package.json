@@ -48,7 +48,7 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "prettier": "^3.9.0",
+    "prettier": "^3.9.1",
     "vite": "catalog:"
   }
 }
