@@ -57,6 +57,14 @@ export const showcaseProjects: Project[] = [
     height: 630,
   },
   {
+    title: "Luma",
+    image:
+      "https://og.luma.com/cdn-cgi/image/format=auto,fit=cover,dpr=1,anim=false,background=white,quality=75,width=800,height=420/event?calendar_avatar=https%3A%2F%2Fcdn.lu.ma%2Favatars-default%2Fcommunity_avatar_16.png&color0=%23fdf8f2&color1=%23f4856a&color2=%236285eb&host_avatar=https%3A%2F%2Fcdn.lu.ma%2Favatars-default%2Favatar_16.png&host_name=Kindred%20Haven%20KH&img=https%3A%2F%2Fimages.lumacdn.com%2Fuploads%2Fhe%2F8cb747e6-ff8d-4182-b47f-bd81a842578e.png&name=Bloom%20%26%20Breathe%3A%20A%20Mindful%20Floral%20Session%20for%20Mothers&palette_neutral=%23fdf8f2%3A15.88&palette_vibrant=%23f4856a%3A10.27%2C%236285eb%3A7.64",
+    url: "https://lu.ma",
+    width: 800,
+    height: 420,
+  },
+  {
     title: "Nakafa",
     image: "https://nakafa.com/og/en/image.png",
     url: "https://nakafa.com",

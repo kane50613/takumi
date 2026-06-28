@@ -134,6 +134,7 @@ Compare rendering output across providers at [image-bench.kane.tw](https://image
 - [TanStack](https://tanstack.com) renders OG images for its docs
 - [Fumadocs](https://fumadocs.dev) generates its docs OG images
 - [Nuxt OG Image](https://nuxtseo.com/docs/og-image/renderers/takumi) ships Takumi as a built-in renderer
+- [Luma](https://lu.ma) renders event share images
 - [shiki-image](https://github.com/pi0/shiki-image) turns syntax-highlighted code into images
 
 More projects in the [showcase](https://takumi.kane.tw/showcase). Takumi is part of the [Vercel OSS Program](https://vercel.com/oss).
