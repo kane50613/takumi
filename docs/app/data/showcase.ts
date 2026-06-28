@@ -57,6 +57,14 @@ export const showcaseProjects: Project[] = [
     height: 630,
   },
   {
+    title: "Luma",
+    image:
+      "https://og.luma.com/event?name=Fall+Soir%C3%A9e+in+Central+Park&img=https%3A%2F%2Fimages.lumacdn.com%2Fevent-covers%2Fu0%2F2ada32a2-014d-45f2-95cf-9ec972d06137&color0=%23836746",
+    url: "https://lu.ma",
+    width: 1200,
+    height: 630,
+  },
+  {
     title: "Nakafa",
     image: "https://nakafa.com/og/en/image.png",
     url: "https://nakafa.com",
