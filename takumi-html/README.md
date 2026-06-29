@@ -1,3 +1,10 @@
 # takumi-html
 
-Parse HTML + Tailwind markup into a takumi node tree, mirroring the JS `fromHtml` helper.
+<!-- cargo-rdme start -->
+
+Parse HTML markup into a takumi [`Node`] tree.
+
+Mirrors the JavaScript `fromHtml()` helper so a Rust server can turn an
+HTML + Tailwind template into a renderable tree without a Node.js sidecar.
+
+<!-- cargo-rdme end -->
