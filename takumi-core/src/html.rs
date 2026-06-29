@@ -271,7 +271,7 @@ fn build_element(
 
   if tag == "img" {
     let src = attribute(handle, "src")
-      .filter(|src| !src.is_empty())
+      .filter(|src| !src.trim().is_empty())
       .ok_or(HtmlError::MissingImageSrc)?;
     let image = ImageData {
       src: ImageSourceInput::Url(src.into()),
@@ -294,7 +294,7 @@ fn build_element(
 
   if tag == "svg" {
     let image = ImageData {
-      src: ImageSourceInput::Url(serialize_outer_html(handle).into()),
+      src: ImageSourceInput::Buffer(serialize_outer_html(handle).into_bytes()),
       width: dimension(handle, "width"),
       height: dimension(handle, "height"),
     };
@@ -448,23 +448,10 @@ fn serialize_outer_html(handle: &Handle) -> String {
   String::from_utf8_lossy(&buffer).into_owned()
 }
 
-/// Parse a CSS declaration block, dropping declarations that fail to parse so
-/// one unsupported value does not discard the rest.
+/// Parse a CSS declaration block, ignoring it if it fails to parse. Parses the
+/// whole block so values containing `;` (e.g. `data:` URIs) survive.
 fn parse_declarations(css: &str) -> StyleDeclarationBlock {
-  let mut block = StyleDeclarationBlock::default();
-
-  for declaration in css.split(';') {
-    let declaration = declaration.trim();
-    if declaration.is_empty() {
-      continue;
-    }
-
-    if let Ok(parsed) = StyleDeclarationBlock::from_str(declaration) {
-      block.append(parsed);
-    }
-  }
-
-  block
+  StyleDeclarationBlock::from_str(css).unwrap_or_default()
 }
 
 #[cfg(test)]
