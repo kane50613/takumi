@@ -6,6 +6,7 @@
 //! Mirrors the JavaScript `fromHtml()` helper so a Rust server can turn an
 //! HTML + Tailwind template into a renderable tree without a Node.js sidecar.
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 use std::sync::LazyLock;
@@ -15,8 +16,10 @@ use html5ever::tendril::TendrilSink;
 use html5ever::{ParseOpts, QualName, local_name, ns, parse_fragment};
 use markup5ever_rcdom::{Handle, NodeData, RcDom, SerializableHandle};
 
-use takumi_core::layout::node::{ImageData, ImageSourceInput, Node, NodeKind};
-use takumi_core::layout::style::{Direction, Style, StyleDeclarationBlock, tw::TailwindValues};
+use takumi_core::layout::{
+  node::{ImageData, ImageSourceInput, Node, NodeKind},
+  style::{Direction, Style, StyleDeclarationBlock, tw::TailwindValues},
+};
 
 /// Tags whose content is dropped, matching the JS `isHtmlVoidElement` set.
 const VOID_TAGS: [&str; 5] = ["head", "meta", "link", "style", "script"];
@@ -25,73 +28,114 @@ const VOID_TAGS: [&str; 5] = ["head", "meta", "link", "style", "script"];
 /// `takumi-helpers/src/jsx/style-presets.ts`. Keep in sync.
 ///
 /// Numeric CSS values from the TS source are written with explicit `px` units.
-#[rustfmt::skip]
 const DEFAULT_PRESETS: &[(&str, &str)] = &[
-    ("html", "display:block"),
-    ("head", "display:none"),
-    ("meta", "display:none"),
-    ("title", "display:none"),
-    ("link", "display:none"),
-    ("style", "display:none"),
-    ("script", "display:none"),
-    ("noscript", "display:none"),
-    ("datalist", "display:none"),
-    ("template", "display:none"),
-    ("body", "margin:8px;display:block"),
-    ("p", "margin-top:1em;margin-bottom:1em;display:block"),
-    ("blockquote", "margin-top:1em;margin-bottom:1em;margin-left:40px;margin-right:40px;display:block"),
-    ("figure", "margin-top:1em;margin-bottom:1em;margin-left:40px;margin-right:40px;display:block"),
-    ("figcaption", "display:block"),
-    ("address", "font-style:italic;display:block"),
-    ("article", "display:block"),
-    ("aside", "display:block"),
-    ("footer", "display:block"),
-    ("header", "display:block"),
-    ("hgroup", "display:block"),
-    ("main", "display:block"),
-    ("nav", "display:block"),
-    ("section", "display:block"),
-    ("center", "text-align:center;display:block"),
-    ("hr", "margin-top:0.5em;margin-bottom:0.5em;margin-left:auto;margin-right:auto;border-width:1px;display:block"),
-    ("ul", "margin-top:1em;margin-bottom:1em;padding-left:40px;display:block"),
-    ("ol", "margin-top:1em;margin-bottom:1em;padding-left:40px;display:block"),
-    ("menu", "margin-top:1em;margin-bottom:1em;padding-left:40px;display:block"),
-    ("li", "display:block"),
-    ("dl", "margin-top:1em;margin-bottom:1em;display:block"),
-    ("dt", "display:block"),
-    ("dd", "margin-left:40px;display:block"),
-    ("form", "display:block"),
-    ("fieldset", "margin-left:2px;margin-right:2px;padding-top:0.35em;padding-right:0.75em;padding-bottom:0.625em;padding-left:0.75em;border-width:2px;display:block"),
-    ("legend", "padding-left:2px;padding-right:2px;display:block"),
-    ("details", "display:block"),
-    ("summary", "display:block"),
-    ("search", "display:block"),
-    ("h1", "font-size:2em;margin-top:0.67em;margin-bottom:0.67em;margin-left:0;margin-right:0;font-weight:bold;display:block"),
-    ("h2", "font-size:1.5em;margin-top:0.83em;margin-bottom:0.83em;margin-left:0;margin-right:0;font-weight:bold;display:block"),
-    ("h3", "font-size:1.17em;margin-top:1em;margin-bottom:1em;margin-left:0;margin-right:0;font-weight:bold;display:block"),
-    ("h4", "margin-top:1.33em;margin-bottom:1.33em;margin-left:0;margin-right:0;font-weight:bold;display:block"),
-    ("h5", "font-size:0.83em;margin-top:1.67em;margin-bottom:1.67em;margin-left:0;margin-right:0;font-weight:bold;display:block"),
-    ("h6", "font-size:0.67em;margin-top:2.33em;margin-bottom:2.33em;margin-left:0;margin-right:0;font-weight:bold;display:block"),
-    ("u", "text-decoration:underline"),
-    ("ins", "text-decoration:underline"),
-    ("strong", "font-weight:bolder"),
-    ("b", "font-weight:bolder"),
-    ("i", "font-style:italic"),
-    ("em", "font-style:italic"),
-    ("cite", "font-style:italic"),
-    ("dfn", "font-style:italic"),
-    ("code", "font-family:monospace"),
-    ("kbd", "font-family:monospace"),
-    ("samp", "font-family:monospace"),
-    ("pre", "font-family:monospace;white-space:pre;margin:1em 0;display:block"),
-    ("mark", "background-color:yellow;color:black"),
-    ("big", "font-size:larger"),
-    ("small", "font-size:smaller"),
-    ("s", "text-decoration:line-through"),
-    ("del", "text-decoration:line-through"),
-    ("sub", "font-size:smaller;vertical-align:sub"),
-    ("sup", "font-size:smaller;vertical-align:super"),
-    ("div", "display:block"),
+  ("html", "display:block"),
+  ("head", "display:none"),
+  ("meta", "display:none"),
+  ("title", "display:none"),
+  ("link", "display:none"),
+  ("style", "display:none"),
+  ("script", "display:none"),
+  ("noscript", "display:none"),
+  ("datalist", "display:none"),
+  ("template", "display:none"),
+  ("body", "margin:8px;display:block"),
+  ("p", "margin-top:1em;margin-bottom:1em;display:block"),
+  (
+    "blockquote",
+    "margin-top:1em;margin-bottom:1em;margin-left:40px;margin-right:40px;display:block",
+  ),
+  (
+    "figure",
+    "margin-top:1em;margin-bottom:1em;margin-left:40px;margin-right:40px;display:block",
+  ),
+  ("figcaption", "display:block"),
+  ("address", "font-style:italic;display:block"),
+  ("article", "display:block"),
+  ("aside", "display:block"),
+  ("footer", "display:block"),
+  ("header", "display:block"),
+  ("hgroup", "display:block"),
+  ("main", "display:block"),
+  ("nav", "display:block"),
+  ("section", "display:block"),
+  ("center", "text-align:center;display:block"),
+  (
+    "hr",
+    "margin-top:0.5em;margin-bottom:0.5em;margin-left:auto;margin-right:auto;border-width:1px;display:block",
+  ),
+  (
+    "ul",
+    "margin-top:1em;margin-bottom:1em;padding-left:40px;display:block",
+  ),
+  (
+    "ol",
+    "margin-top:1em;margin-bottom:1em;padding-left:40px;display:block",
+  ),
+  (
+    "menu",
+    "margin-top:1em;margin-bottom:1em;padding-left:40px;display:block",
+  ),
+  ("li", "display:block"),
+  ("dl", "margin-top:1em;margin-bottom:1em;display:block"),
+  ("dt", "display:block"),
+  ("dd", "margin-left:40px;display:block"),
+  ("form", "display:block"),
+  (
+    "fieldset",
+    "margin-left:2px;margin-right:2px;padding-top:0.35em;padding-right:0.75em;padding-bottom:0.625em;padding-left:0.75em;border-width:2px;display:block",
+  ),
+  ("legend", "padding-left:2px;padding-right:2px;display:block"),
+  ("details", "display:block"),
+  ("summary", "display:block"),
+  ("search", "display:block"),
+  (
+    "h1",
+    "font-size:2em;margin-top:0.67em;margin-bottom:0.67em;margin-left:0;margin-right:0;font-weight:bold;display:block",
+  ),
+  (
+    "h2",
+    "font-size:1.5em;margin-top:0.83em;margin-bottom:0.83em;margin-left:0;margin-right:0;font-weight:bold;display:block",
+  ),
+  (
+    "h3",
+    "font-size:1.17em;margin-top:1em;margin-bottom:1em;margin-left:0;margin-right:0;font-weight:bold;display:block",
+  ),
+  (
+    "h4",
+    "margin-top:1.33em;margin-bottom:1.33em;margin-left:0;margin-right:0;font-weight:bold;display:block",
+  ),
+  (
+    "h5",
+    "font-size:0.83em;margin-top:1.67em;margin-bottom:1.67em;margin-left:0;margin-right:0;font-weight:bold;display:block",
+  ),
+  (
+    "h6",
+    "font-size:0.67em;margin-top:2.33em;margin-bottom:2.33em;margin-left:0;margin-right:0;font-weight:bold;display:block",
+  ),
+  ("u", "text-decoration:underline"),
+  ("ins", "text-decoration:underline"),
+  ("strong", "font-weight:bolder"),
+  ("b", "font-weight:bolder"),
+  ("i", "font-style:italic"),
+  ("em", "font-style:italic"),
+  ("cite", "font-style:italic"),
+  ("dfn", "font-style:italic"),
+  ("code", "font-family:monospace"),
+  ("kbd", "font-family:monospace"),
+  ("samp", "font-family:monospace"),
+  (
+    "pre",
+    "font-family:monospace;white-space:pre;margin:1em 0;display:block",
+  ),
+  ("mark", "background-color:yellow;color:black"),
+  ("big", "font-size:larger"),
+  ("small", "font-size:smaller"),
+  ("s", "text-decoration:line-through"),
+  ("del", "text-decoration:line-through"),
+  ("sub", "font-size:smaller;vertical-align:sub"),
+  ("sup", "font-size:smaller;vertical-align:super"),
+  ("div", "display:block"),
 ];
 
 static DEFAULT_STYLE_PRESETS: LazyLock<HashMap<Box<str>, Style>> = LazyLock::new(|| {
@@ -112,30 +156,32 @@ pub enum HtmlError {
 
 /// Per-tag default styles applied at the lowest cascade layer.
 ///
-/// [`StylePresets::default`] is the built-in Chromium table, shared by reference
-/// at no allocation cost. Supply your own with [`From`]; disable presets via
-/// `FromHtmlOptions { presets: None, .. }`.
-#[derive(Debug, Clone, Default)]
-pub enum StylePresets {
-  /// The built-in Chromium element presets.
-  #[default]
-  Builtin,
-  /// Caller-supplied presets, fully replacing the built-in table.
-  Custom(HashMap<Box<str>, Style>),
-}
+/// [`StylePresets::chromium`] is the built-in table, borrowed from a shared
+/// static at no allocation cost. Supply your own with [`From`]; disable presets
+/// via `FromHtmlOptions { presets: None, .. }`.
+#[derive(Debug, Clone)]
+pub struct StylePresets(Cow<'static, HashMap<Box<str>, Style>>);
 
 impl StylePresets {
+  /// Built-in Chromium element presets.
+  pub fn chromium() -> Self {
+    Self(Cow::Borrowed(&DEFAULT_STYLE_PRESETS))
+  }
+
   fn get(&self, tag: &str) -> Option<&Style> {
-    match self {
-      Self::Builtin => DEFAULT_STYLE_PRESETS.get(tag),
-      Self::Custom(presets) => presets.get(tag),
-    }
+    self.0.get(tag)
+  }
+}
+
+impl Default for StylePresets {
+  fn default() -> Self {
+    Self::chromium()
   }
 }
 
 impl From<HashMap<Box<str>, Style>> for StylePresets {
   fn from(presets: HashMap<Box<str>, Style>) -> Self {
-    Self::Custom(presets)
+    Self(Cow::Owned(presets))
   }
 }
 
@@ -144,12 +190,11 @@ impl From<&[(&str, &str)]> for StylePresets {
   /// fail to parse are dropped, matching the JS object path's ignore-unknown
   /// behavior.
   fn from(entries: &[(&str, &str)]) -> Self {
-    Self::Custom(
-      entries
-        .iter()
-        .map(|&(tag, css)| (tag.into(), Style::from(parse_declarations(css))))
-        .collect(),
-    )
+    entries
+      .iter()
+      .map(|&(tag, css)| (tag.into(), Style::from(parse_declarations(css))))
+      .collect::<HashMap<_, _>>()
+      .into()
   }
 }
 
@@ -200,6 +245,18 @@ pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlErr
   }
 
   Ok(collapse(nodes))
+}
+
+/// Adds [`Node::from_html`](FromHtml::from_html) when this crate is in scope.
+pub trait FromHtml: Sized {
+  /// Parse HTML markup into a node tree. See [`from_html`].
+  fn from_html(source: &str, options: FromHtmlOptions) -> Result<Self, HtmlError>;
+}
+
+impl FromHtml for Node {
+  fn from_html(source: &str, options: FromHtmlOptions) -> Result<Self, HtmlError> {
+    from_html(source, options)
+  }
 }
 
 fn is_whitespace_only_text(node: &Node) -> bool {
