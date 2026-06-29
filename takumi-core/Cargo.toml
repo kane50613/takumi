@@ -29,6 +29,8 @@ quick_cache.workspace = true
 smallvec.workspace = true
 parley.workspace = true
 taffy.workspace = true
+html5ever = { version = "0.39.0", optional = true }
+markup5ever_rcdom = { version = "0.39.0", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 image-webp.workspace = true
@@ -73,6 +75,7 @@ default = ["woff2", "woff", "svg"]
 svg = ["dep:resvg", "dep:roxmltree"]
 woff2 = ["dep:wuff", "wuff/brotli"]
 woff = ["dep:wuff", "wuff/z"]
+from_html = ["dep:html5ever", "dep:markup5ever_rcdom"]
 
 [dev-dependencies]
 serde_json.workspace = true

@@ -39,6 +39,7 @@ svg-backend = ["dep:takumi-svg"]
 woff2 = ["takumi-core/woff2"]
 woff = ["takumi-core/woff"]
 rayon = ["takumi-raster?/rayon"]
+from_html = ["takumi-core/from_html"]
 
 [dev-dependencies]
 parley.workspace = true

@@ -88,6 +88,9 @@ pub mod prelude {
 
   #[cfg(feature = "svg-backend")]
   pub use takumi_svg::SvgOptions;
+
+  #[cfg(feature = "from_html")]
+  pub use takumi_core::html::{FromHtmlOptions, HtmlError, StylePresets};
 }
 
 #[cfg(feature = "raster-backend")]

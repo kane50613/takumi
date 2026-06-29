@@ -27,6 +27,10 @@ pub use takumi_css::keyframes;
 pub mod resources;
 pub mod scene;
 
+/// Parse HTML markup into a node tree.
+#[cfg(feature = "from_html")]
+pub mod html;
+
 use std::collections::HashSet;
 
 pub use error::{Error, Result};
