@@ -188,8 +188,8 @@ impl Node {
     )
     .one(source);
 
-    // `parse_fragment` nests the parsed roots under a synthetic context
-    // element, which is the document's sole child.
+    // `parse_fragment` wraps the roots in a synthetic context element, the
+    // document's only child.
     let mut nodes = Vec::new();
     if let Some(context) = dom.document.children.borrow().first() {
       for child in context.children.borrow().iter() {
@@ -203,8 +203,7 @@ impl Node {
 
 /// Apply the root-collapse rule shared with the JS `fromHtml`.
 fn collapse(mut nodes: Vec<Node>) -> Node {
-  // Drop pretty-printing whitespace around the roots so a single element wrapped
-  // in newlines stays a single root instead of being wrapped in a container.
+  // Trim whitespace-only roots so a newline-wrapped single element stays one root.
   while nodes.first().is_some_and(Node::is_whitespace_only_text) {
     nodes.remove(0);
   }
@@ -371,8 +370,8 @@ fn apply_metadata(
     let name = attr.name.local.as_ref();
     let value = attr.value.as_ref();
 
-    // Tailwind classes are read independently of the reserved names so the
-    // property can be aliased to e.g. `class` without losing the class name.
+    // Read Tailwind independently of reserved names so it can alias `class`
+    // without dropping the class name.
     if name == tw_property
       && let Ok(tw) = TailwindValues::from_str(value)
     {
@@ -389,7 +388,7 @@ fn apply_metadata(
         }
       }
       "style" => node = node.with_style(Style::from(parse_declarations(value))),
-      // Already consumed above; keep it out of the passthrough attributes.
+      // Consumed above; keep out of the passthrough attributes.
       _ if name == tw_property => {}
       _ => {
         attributes.insert(name.into(), value.into());
@@ -562,7 +561,7 @@ mod tests {
         .attributes
         .as_ref()
         .and_then(|a| a.get("data-x"))
-        .map(|v| v.as_ref()),
+        .map(AsRef::as_ref),
       Some("1"),
     );
   }
