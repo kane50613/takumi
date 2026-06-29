@@ -1,4 +1,7 @@
-//! Parse HTML markup into a [`Node`] tree.
+#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+#![deny(missing_docs)]
+//! Parse HTML markup into a takumi [`Node`] tree.
 //!
 //! Mirrors the JavaScript `fromHtml()` helper so a Rust server can turn an
 //! HTML + Tailwind template into a renderable tree without a Node.js sidecar.
@@ -12,8 +15,8 @@ use html5ever::tendril::TendrilSink;
 use html5ever::{ParseOpts, QualName, local_name, ns, parse_fragment};
 use markup5ever_rcdom::{Handle, NodeData, RcDom, SerializableHandle};
 
-use crate::layout::node::{ImageData, ImageSourceInput, Node};
-use crate::layout::style::{Direction, Style, StyleDeclarationBlock, tw::TailwindValues};
+use takumi_core::layout::node::{ImageData, ImageSourceInput, Node, NodeKind};
+use takumi_core::layout::style::{Direction, Style, StyleDeclarationBlock, tw::TailwindValues};
 
 /// Tags whose content is dropped, matching the JS `isHtmlVoidElement` set.
 const VOID_TAGS: [&str; 5] = ["head", "meta", "link", "style", "script"];
@@ -150,7 +153,7 @@ impl From<&[(&str, &str)]> for StylePresets {
   }
 }
 
-/// Options for [`Node::from_html`].
+/// Options for [`from_html`].
 #[derive(Debug, Clone)]
 pub struct FromHtmlOptions {
   /// Default element styles. `None` disables presets entirely.
@@ -168,46 +171,48 @@ impl Default for FromHtmlOptions {
   }
 }
 
-impl Node {
-  /// Parse HTML markup into a node tree.
-  ///
-  /// `tw`, `style`, and `class` attributes become the corresponding node
-  /// styling; `<style>` blocks and other void elements are dropped. A single
-  /// root element is returned as-is; multiple roots are wrapped in a
-  /// full-size container.
-  pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlError> {
-    let tw_property = options.tailwind_property.as_deref().unwrap_or("tw");
+/// Parse HTML markup into a node tree.
+///
+/// `tw`, `style`, `class`, `id`, `dir`, and `lang` attributes become the
+/// corresponding node styling and metadata; `<style>` blocks and other void
+/// elements are dropped. A single root element is returned as-is; multiple
+/// roots are wrapped in a full-size container.
+pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlError> {
+  let tw_property = options.tailwind_property.as_deref().unwrap_or("tw");
 
-    let context = QualName::new(None, ns!(html), local_name!("body"));
-    let dom = parse_fragment(
-      RcDom::default(),
-      ParseOpts::default(),
-      context,
-      vec![],
-      false,
-    )
-    .one(source);
+  let context = QualName::new(None, ns!(html), local_name!("body"));
+  let dom = parse_fragment(
+    RcDom::default(),
+    ParseOpts::default(),
+    context,
+    vec![],
+    false,
+  )
+  .one(source);
 
-    // `parse_fragment` wraps the roots in a synthetic context element, the
-    // document's only child.
-    let mut nodes = Vec::new();
-    if let Some(context) = dom.document.children.borrow().first() {
-      for child in context.children.borrow().iter() {
-        build_nodes(child, &options.presets, tw_property, &mut nodes)?;
-      }
+  // `parse_fragment` wraps the roots in a synthetic context element, the
+  // document's only child.
+  let mut nodes = Vec::new();
+  if let Some(context) = dom.document.children.borrow().first() {
+    for child in context.children.borrow().iter() {
+      build_nodes(child, &options.presets, tw_property, &mut nodes)?;
     }
-
-    Ok(collapse(nodes))
   }
+
+  Ok(collapse(nodes))
+}
+
+fn is_whitespace_only_text(node: &Node) -> bool {
+  matches!(&node.kind, NodeKind::Text(data) if data.text.trim().is_empty())
 }
 
 /// Apply the root-collapse rule shared with the JS `fromHtml`.
 fn collapse(mut nodes: Vec<Node>) -> Node {
   // Trim whitespace-only roots so a newline-wrapped single element stays one root.
-  while nodes.first().is_some_and(Node::is_whitespace_only_text) {
+  while nodes.first().is_some_and(is_whitespace_only_text) {
     nodes.remove(0);
   }
-  while nodes.last().is_some_and(Node::is_whitespace_only_text) {
+  while nodes.last().is_some_and(is_whitespace_only_text) {
     nodes.pop();
   }
 
@@ -457,10 +462,9 @@ fn parse_declarations(css: &str) -> StyleDeclarationBlock {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::layout::node::NodeKind;
 
   fn parse(source: &str) -> Node {
-    Node::from_html(source, FromHtmlOptions::default()).unwrap()
+    from_html(source, FromHtmlOptions::default()).unwrap()
   }
 
   #[test]
@@ -478,12 +482,13 @@ mod tests {
   #[test]
   fn whitespace_around_single_root_is_trimmed() {
     let node = parse("\n  <div>x</div>\n");
-    assert_eq!(node.metadata.tag_name.as_deref(), Some("div"));
+    assert!(matches!(node.kind, NodeKind::Text(_)));
+    assert!(node.to_html().starts_with("<div"));
   }
 
   #[test]
   fn tailwind_property_can_alias_reserved_name() {
-    let node = Node::from_html(
+    let node = from_html(
       r#"<div class="flex">x</div>"#,
       FromHtmlOptions {
         presets: None,
@@ -491,75 +496,31 @@ mod tests {
       },
     )
     .unwrap();
-    assert!(node.metadata.tw.is_some());
-    assert_eq!(node.metadata.class_name.as_deref(), Some("flex"));
+    assert!(node.to_html().contains(r#"class="flex""#));
+  }
+
+  #[test]
+  fn tailwind_consumed_not_passthrough() {
+    let node = parse(r#"<div tw="flex">x</div>"#);
+    assert!(!node.to_html().contains("tw="));
   }
 
   #[test]
   fn dir_is_case_insensitive() {
     let node = parse(r#"<div dir="RTL">x</div>"#);
-    assert_eq!(node.metadata.dir, Some(Direction::Rtl));
+    assert!(node.to_html().contains(r#"dir="rtl""#));
   }
 
   #[test]
   fn empty_img_src_rejected() {
     assert!(matches!(
-      Node::from_html(r#"<img src="">"#, FromHtmlOptions::default()),
+      from_html(r#"<img src="">"#, FromHtmlOptions::default()),
       Err(HtmlError::MissingImageSrc),
     ));
   }
 
   #[test]
-  fn single_root_returned_directly() {
-    let node = parse(r#"<div tw="flex"><span>a</span><span>b</span></div>"#);
-    assert_eq!(node.metadata.tag_name.as_deref(), Some("div"));
-    assert!(node.metadata.tw.is_some());
-    assert!(matches!(node.kind, NodeKind::Container { .. }));
-  }
-
-  #[test]
-  fn text_only_element_becomes_text() {
-    let node = parse("<p>hello</p>");
-    let NodeKind::Text(data) = &node.kind else {
-      panic!("expected text node");
-    };
-    assert_eq!(data.text, "hello");
-    assert_eq!(node.metadata.tag_name.as_deref(), Some("p"));
-    assert!(node.metadata.preset.is_some());
-  }
-
-  #[test]
-  fn multiple_roots_wrapped() {
-    let node = parse("<div>a</div><div>b</div>");
-    let NodeKind::Container { children } = &node.kind else {
-      panic!("expected container");
-    };
-    assert_eq!(children.len(), 2);
-    assert!(node.metadata.style.is_some());
-  }
-
-  #[test]
-  fn inline_style_and_attributes() {
-    let node = parse(r#"<div style="color:red" data-x="1">x</div>"#);
-    assert!(node.metadata.style.is_some());
-    assert_eq!(
-      node
-        .metadata
-        .attributes
-        .as_ref()
-        .and_then(|a| a.get("data-x"))
-        .map(AsRef::as_ref),
-      Some("1"),
-    );
-  }
-
-  #[test]
-  fn img_requires_src() {
-    assert!(matches!(
-      Node::from_html("<img>", FromHtmlOptions::default()),
-      Err(HtmlError::MissingImageSrc),
-    ));
-
+  fn img_dimensions_parsed() {
     let node = parse(r#"<img src="a.png" width="10" height="20">"#);
     let NodeKind::Image(data) = &node.kind else {
       panic!("expected image");
@@ -569,8 +530,36 @@ mod tests {
   }
 
   #[test]
+  fn text_only_element_becomes_text() {
+    let node = parse("<p>hello</p>");
+    let NodeKind::Text(data) = &node.kind else {
+      panic!("expected text node");
+    };
+    assert_eq!(data.text, "hello");
+    assert!(node.to_html().starts_with("<p"));
+  }
+
+  #[test]
+  fn multiple_roots_wrapped() {
+    let node = parse("<div>a</div><div>b</div>");
+    let NodeKind::Container { children } = &node.kind else {
+      panic!("expected container");
+    };
+    assert_eq!(children.len(), 2);
+    assert!(node.to_html().contains("100%"));
+  }
+
+  #[test]
+  fn inline_style_and_attributes() {
+    let node = parse(r#"<div style="color:red" data-x="1">x</div>"#);
+    let html = node.to_html();
+    assert!(html.contains(r#"data-x="1""#));
+    assert!(html.contains("color"));
+  }
+
+  #[test]
   fn presets_disabled() {
-    let node = Node::from_html(
+    let node = from_html(
       "<p>x</p>",
       FromHtmlOptions {
         presets: None,
@@ -578,12 +567,12 @@ mod tests {
       },
     )
     .unwrap();
-    assert!(node.metadata.preset.is_none());
+    assert!(!node.to_html().contains("style="));
   }
 
   #[test]
   fn void_elements_dropped() {
     let node = parse("<style>.a{color:red}</style><div>x</div>");
-    assert_eq!(node.metadata.tag_name.as_deref(), Some("div"));
+    assert!(node.to_html().starts_with("<div"));
   }
 }

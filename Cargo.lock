@@ -1598,6 +1598,7 @@ dependencies = [
  "resvg",
  "serde_json",
  "takumi-core",
+ "takumi-html",
  "takumi-raster",
  "takumi-svg",
 ]
@@ -1611,11 +1612,9 @@ dependencies = [
  "cssparser",
  "data-url",
  "gif",
- "html5ever",
  "image",
  "image-webp",
  "libwebp-sys",
- "markup5ever_rcdom",
  "parley",
  "png",
  "quick_cache",
@@ -1658,6 +1657,16 @@ dependencies = [
  "thiserror",
  "tiny-skia",
  "typed-builder",
+]
+
+[[package]]
+name = "takumi-html"
+version = "0.1.0-rc.1"
+dependencies = [
+ "html5ever",
+ "markup5ever_rcdom",
+ "takumi-core",
+ "thiserror",
 ]
 
 [[package]]

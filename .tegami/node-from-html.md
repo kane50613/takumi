@@ -1,17 +1,18 @@
 ---
 packages:
-  cargo:takumi-core:
+  cargo:takumi-html:
     replay:
-      - "exit prerelease: cargo:takumi-core"
+      - "exit prerelease: cargo:takumi-html"
   cargo:takumi:
     replay:
       - "exit prerelease: cargo:takumi"
 ---
 
-### Add `Node::from_html` to parse HTML into a node tree
+### Add `takumi-html` for parsing HTML into a node tree
 
-Behind the `from_html` feature, `Node::from_html(source, FromHtmlOptions)` turns
-HTML + Tailwind markup into a node tree, mirroring the JS `fromHtml` helper.
-`tw`, `style`, `class`, `id`, `dir`, and `lang` attributes map to node styling and
-metadata. `FromHtmlOptions` enables the built-in Chromium presets, a custom preset
-table, or none.
+The new `takumi-html` crate turns HTML + Tailwind markup into a node tree via
+`from_html(source, FromHtmlOptions)`, mirroring the JS `fromHtml` helper. `tw`,
+`style`, `class`, `id`, `dir`, and `lang` attributes map to node styling and
+metadata. `FromHtmlOptions` enables the built-in Chromium presets, a custom
+preset table, or none. Exposed through the `takumi` umbrella under the
+`from-html` feature as `takumi::from_html`.

@@ -68,20 +68,11 @@ optional = true
 workspace = true
 optional = true
 
-[dependencies.html5ever]
-workspace = true
-optional = true
-
-[dependencies.markup5ever_rcdom]
-workspace = true
-optional = true
-
 [features]
 default = ["woff2", "woff", "svg"]
 svg = ["dep:resvg", "dep:roxmltree"]
 woff2 = ["dep:wuff", "wuff/brotli"]
 woff = ["dep:wuff", "wuff/z"]
-from_html = ["dep:html5ever", "dep:markup5ever_rcdom"]
 
 [dev-dependencies]
 serde_json.workspace = true
