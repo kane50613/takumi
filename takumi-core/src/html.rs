@@ -203,6 +203,15 @@ impl Node {
 
 /// Apply the root-collapse rule shared with the JS `fromHtml`.
 fn collapse(mut nodes: Vec<Node>) -> Node {
+  // Drop pretty-printing whitespace around the roots so a single element wrapped
+  // in newlines stays a single root instead of being wrapped in a container.
+  while nodes.first().is_some_and(Node::is_whitespace_only_text) {
+    nodes.remove(0);
+  }
+  while nodes.last().is_some_and(Node::is_whitespace_only_text) {
+    nodes.pop();
+  }
+
   match nodes.len() {
     0 => Node::container([]),
     1 => nodes.pop().unwrap_or_default(),
@@ -262,7 +271,9 @@ fn build_element(
   }
 
   if tag == "img" {
-    let src = attribute(handle, "src").ok_or(HtmlError::MissingImageSrc)?;
+    let src = attribute(handle, "src")
+      .filter(|src| !src.is_empty())
+      .ok_or(HtmlError::MissingImageSrc)?;
     let image = ImageData {
       src: ImageSourceInput::Url(src.into()),
       width: dimension(handle, "width"),
@@ -359,6 +370,15 @@ fn apply_metadata(
   for attr in attrs.borrow().iter() {
     let name = attr.name.local.as_ref();
     let value = attr.value.as_ref();
+
+    // Tailwind classes are read independently of the reserved names so the
+    // property can be aliased to e.g. `class` without losing the class name.
+    if name == tw_property
+      && let Ok(tw) = TailwindValues::from_str(value)
+    {
+      node = node.with_tw(tw);
+    }
+
     match name {
       "class" => node = node.with_class_name(value),
       "id" => node = node.with_id(value),
@@ -369,11 +389,8 @@ fn apply_metadata(
         }
       }
       "style" => node = node.with_style(Style::from(parse_declarations(value))),
-      _ if name == tw_property => {
-        if let Ok(tw) = TailwindValues::from_str(value) {
-          node = node.with_tw(tw);
-        }
-      }
+      // Already consumed above; keep it out of the passthrough attributes.
+      _ if name == tw_property => {}
       _ => {
         attributes.insert(name.into(), value.into());
       }
@@ -404,10 +421,14 @@ fn dimension(handle: &Handle, name: &str) -> Option<f32> {
 }
 
 fn parse_direction(value: &str) -> Option<Direction> {
-  match value {
-    "ltr" => Some(Direction::Ltr),
-    "rtl" => Some(Direction::Rtl),
-    _ => None,
+  let value = value.trim();
+
+  if value.eq_ignore_ascii_case("ltr") {
+    Some(Direction::Ltr)
+  } else if value.eq_ignore_ascii_case("rtl") {
+    Some(Direction::Rtl)
+  } else {
+    None
   }
 }
 
@@ -466,6 +487,40 @@ mod tests {
         "preset `{tag}` produced no declarations",
       );
     }
+  }
+
+  #[test]
+  fn whitespace_around_single_root_is_trimmed() {
+    let node = parse("\n  <div>x</div>\n");
+    assert_eq!(node.metadata.tag_name.as_deref(), Some("div"));
+  }
+
+  #[test]
+  fn tailwind_property_can_alias_reserved_name() {
+    let node = Node::from_html(
+      r#"<div class="flex">x</div>"#,
+      FromHtmlOptions {
+        presets: None,
+        tailwind_property: Some("class".into()),
+      },
+    )
+    .unwrap();
+    assert!(node.metadata.tw.is_some());
+    assert_eq!(node.metadata.class_name.as_deref(), Some("flex"));
+  }
+
+  #[test]
+  fn dir_is_case_insensitive() {
+    let node = parse(r#"<div dir="RTL">x</div>"#);
+    assert_eq!(node.metadata.dir, Some(Direction::Rtl));
+  }
+
+  #[test]
+  fn empty_img_src_rejected() {
+    assert!(matches!(
+      Node::from_html(r#"<img src="">"#, FromHtmlOptions::default()),
+      Err(HtmlError::MissingImageSrc),
+    ));
   }
 
   #[test]

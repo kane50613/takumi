@@ -12,5 +12,6 @@ packages:
 
 Behind the `from_html` feature, `Node::from_html(source, FromHtmlOptions)` turns
 HTML + Tailwind markup into a node tree, mirroring the JS `fromHtml` helper.
-`tw`/`style`/`class` attributes map to node styling and `FromHtmlOptions` exposes
-the Chromium element presets for override or opt-out.
+`tw`, `style`, `class`, `id`, `dir`, and `lang` attributes map to node styling and
+metadata. `FromHtmlOptions` enables the built-in Chromium presets, a custom preset
+table, or none.
