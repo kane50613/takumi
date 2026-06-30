@@ -145,6 +145,10 @@ static DEFAULT_STYLE_PRESETS: LazyLock<HashMap<Box<str>, Style>> = LazyLock::new
     .collect()
 });
 
+/// Default cap on element nesting depth, guarding the recursive walk against
+/// stack overflow on hostile input. Matches Blink's limit.
+pub const DEFAULT_MAX_DEPTH: usize = 512;
+
 /// Errors raised while parsing HTML into a node tree.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -152,6 +156,9 @@ pub enum HtmlError {
   /// An `<img>` element lacked the required `src` attribute.
   #[error("image element must have a `src` attribute")]
   MissingImageSrc,
+  /// Element nesting exceeded [`FromHtmlOptions::max_depth`].
+  #[error("element nesting exceeded the maximum depth of {0}")]
+  MaxDepthExceeded(usize),
 }
 
 /// Per-tag default styles applied at the lowest cascade layer.
@@ -191,12 +198,45 @@ impl From<HashMap<Box<str>, Style>> for StylePresets {
 }
 
 /// Options for [`from_html`].
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct FromHtmlOptions {
   /// Default element styles. Use [`StylePresets::empty`] to disable.
   pub presets: StylePresets,
   /// Attribute name carrying Tailwind classes. `None` means `tw`.
   pub tailwind_property: Option<Box<str>>,
+  /// Maximum element nesting depth before [`HtmlError::MaxDepthExceeded`].
+  /// Defaults to [`DEFAULT_MAX_DEPTH`].
+  pub max_depth: usize,
+}
+
+impl Default for FromHtmlOptions {
+  fn default() -> Self {
+    Self {
+      presets: StylePresets::default(),
+      tailwind_property: None,
+      max_depth: DEFAULT_MAX_DEPTH,
+    }
+  }
+}
+
+impl FromHtmlOptions {
+  /// Sets the element style presets.
+  pub fn with_presets(mut self, presets: StylePresets) -> Self {
+    self.presets = presets;
+    self
+  }
+
+  /// Sets the attribute name carrying Tailwind classes.
+  pub fn with_tailwind_property(mut self, name: impl Into<Box<str>>) -> Self {
+    self.tailwind_property = Some(name.into());
+    self
+  }
+
+  /// Sets the maximum element nesting depth.
+  pub fn with_max_depth(mut self, max_depth: usize) -> Self {
+    self.max_depth = max_depth;
+    self
+  }
 }
 
 /// Parse HTML markup into a node tree.
@@ -223,7 +263,14 @@ pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlErr
   let mut nodes = Vec::new();
   if let Some(context) = dom.document.children.borrow().first() {
     for child in context.children.borrow().iter() {
-      build_nodes(child, &options.presets, tw_property, &mut nodes)?;
+      build_nodes(
+        child,
+        &options.presets,
+        tw_property,
+        options.max_depth,
+        0,
+        &mut nodes,
+      )?;
     }
   }
 
@@ -269,6 +316,8 @@ fn build_nodes(
   handle: &Handle,
   presets: &StylePresets,
   tw_property: &str,
+  max_depth: usize,
+  depth: usize,
   out: &mut Vec<Node>,
 ) -> Result<(), HtmlError> {
   match &handle.data {
@@ -277,7 +326,7 @@ fn build_nodes(
     | NodeData::ProcessingInstruction { .. } => {}
     NodeData::Document => {
       for child in handle.children.borrow().iter() {
-        build_nodes(child, presets, tw_property, out)?;
+        build_nodes(child, presets, tw_property, max_depth, depth, out)?;
       }
     }
     NodeData::Text { contents } => {
@@ -289,7 +338,7 @@ fn build_nodes(
     NodeData::Element { name, .. } => {
       let tag = name.local.as_ref();
 
-      if let Some(node) = build_element(handle, tag, presets, tw_property)? {
+      if let Some(node) = build_element(handle, tag, presets, tw_property, max_depth, depth)? {
         out.push(node);
       }
     }
@@ -303,7 +352,13 @@ fn build_element(
   tag: &str,
   presets: &StylePresets,
   tw_property: &str,
+  max_depth: usize,
+  depth: usize,
 ) -> Result<Option<Node>, HtmlError> {
+  if depth >= max_depth {
+    return Err(HtmlError::MaxDepthExceeded(max_depth));
+  }
+
   if tag == "br" {
     return Ok(Some(apply_metadata(
       Node::text("\n"),
@@ -365,7 +420,14 @@ fn build_element(
 
   let mut children = Vec::new();
   for child in handle.children.borrow().iter() {
-    build_nodes(child, presets, tw_property, &mut children)?;
+    build_nodes(
+      child,
+      presets,
+      tw_property,
+      max_depth,
+      depth + 1,
+      &mut children,
+    )?;
   }
 
   Ok(Some(apply_metadata(
@@ -522,10 +584,9 @@ mod tests {
   fn tailwind_property_can_alias_reserved_name() {
     let node = from_html(
       r#"<div class="flex">x</div>"#,
-      FromHtmlOptions {
-        presets: StylePresets::empty(),
-        tailwind_property: Some("class".into()),
-      },
+      FromHtmlOptions::default()
+        .with_presets(StylePresets::empty())
+        .with_tailwind_property("class"),
     )
     .unwrap();
     assert!(node.to_html().contains(r#"class="flex""#));
@@ -593,13 +654,20 @@ mod tests {
   fn presets_disabled() {
     let node = from_html(
       "<p>x</p>",
-      FromHtmlOptions {
-        presets: StylePresets::empty(),
-        tailwind_property: None,
-      },
+      FromHtmlOptions::default().with_presets(StylePresets::empty()),
     )
     .unwrap();
     assert!(!node.to_html().contains("style="));
+  }
+
+  #[test]
+  fn nesting_past_max_depth_is_rejected() {
+    let src = format!("{}{}", "<div>".repeat(4), "</div>".repeat(4));
+    let opts = FromHtmlOptions::default().with_max_depth(2);
+    assert!(matches!(
+      from_html(&src, opts),
+      Err(HtmlError::MaxDepthExceeded(2)),
+    ));
   }
 
   #[test]

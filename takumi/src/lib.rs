@@ -90,7 +90,7 @@ pub mod prelude {
   pub use takumi_svg::SvgOptions;
 
   #[cfg(feature = "from-html")]
-  pub use takumi_html::{FromHtml, FromHtmlOptions, HtmlError, StylePresets};
+  pub use takumi_html::{DEFAULT_MAX_DEPTH, FromHtml, FromHtmlOptions, HtmlError, StylePresets};
 }
 
 #[cfg(feature = "raster-backend")]
