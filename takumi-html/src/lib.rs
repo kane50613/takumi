@@ -2,32 +2,32 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 #![deny(missing_docs)]
 //! Parse HTML markup into a takumi [`Node`] tree.
-//!
-//! Mirrors the JavaScript `fromHtml()` helper so a Rust server can turn an
-//! HTML + Tailwind template into a renderable tree without a Node.js sidecar.
 
-use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
-use std::str::FromStr;
-use std::sync::LazyLock;
+use std::{
+  borrow::Cow,
+  collections::{BTreeMap, HashMap},
+  str::FromStr,
+  sync::LazyLock,
+};
 
-use html5ever::serialize::{SerializeOpts, TraversalScope, serialize};
-use html5ever::tendril::TendrilSink;
-use html5ever::{ParseOpts, QualName, local_name, ns, parse_fragment};
+use html5ever::{
+  ParseOpts, QualName, local_name, ns, parse_fragment,
+  serialize::{SerializeOpts, TraversalScope, serialize},
+  tendril::TendrilSink,
+};
 use markup5ever_rcdom::{Handle, NodeData, RcDom, SerializableHandle};
 
 use takumi_core::layout::{
   node::{ImageData, ImageSourceInput, Node, NodeKind},
-  style::{Direction, Style, StyleDeclarationBlock, tw::TailwindValues},
+  style::{Direction, FromCss, Style, StyleDeclarationBlock, tw::TailwindValues},
 };
 
-/// Tags whose content is dropped, matching the JS `isHtmlVoidElement` set.
+/// Tags whose entire subtree is dropped, matching the JS `isHtmlVoidElement`
+/// set. Deliberately distinct from the `display:none` presets (`title`,
+/// `noscript`, `template`, ...): these never reach the tree, those are merely
+/// laid out hidden.
 const VOID_TAGS: [&str; 5] = ["head", "meta", "link", "style", "script"];
 
-/// Default element style presets, ported from
-/// `takumi-helpers/src/jsx/style-presets.ts`. Keep in sync.
-///
-/// Numeric CSS values from the TS source are written with explicit `px` units.
 const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ("html", "display:block"),
   ("head", "display:none"),
@@ -158,7 +158,7 @@ pub enum HtmlError {
 ///
 /// [`StylePresets::chromium`] is the built-in table, borrowed from a shared
 /// static at no allocation cost. Supply your own with [`From`]; disable presets
-/// via `FromHtmlOptions { presets: None, .. }`.
+/// with [`StylePresets::empty`].
 #[derive(Debug, Clone)]
 pub struct StylePresets(Cow<'static, HashMap<Box<str>, Style>>);
 
@@ -166,6 +166,11 @@ impl StylePresets {
   /// Built-in Chromium element presets.
   pub fn chromium() -> Self {
     Self(Cow::Borrowed(&DEFAULT_STYLE_PRESETS))
+  }
+
+  /// Empty presets — every element keeps its bare style.
+  pub fn empty() -> Self {
+    Self(Cow::Owned(HashMap::new()))
   }
 
   fn get(&self, tag: &str) -> Option<&Style> {
@@ -185,35 +190,13 @@ impl From<HashMap<Box<str>, Style>> for StylePresets {
   }
 }
 
-impl From<&[(&str, &str)]> for StylePresets {
-  /// Build presets from `(tag, css-declarations)` pairs. Declarations that
-  /// fail to parse are dropped, matching the JS object path's ignore-unknown
-  /// behavior.
-  fn from(entries: &[(&str, &str)]) -> Self {
-    entries
-      .iter()
-      .map(|&(tag, css)| (tag.into(), Style::from(parse_declarations(css))))
-      .collect::<HashMap<_, _>>()
-      .into()
-  }
-}
-
 /// Options for [`from_html`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct FromHtmlOptions {
-  /// Default element styles. `None` disables presets entirely.
-  pub presets: Option<StylePresets>,
+  /// Default element styles. Use [`StylePresets::empty`] to disable.
+  pub presets: StylePresets,
   /// Attribute name carrying Tailwind classes. `None` means `tw`.
   pub tailwind_property: Option<Box<str>>,
-}
-
-impl Default for FromHtmlOptions {
-  fn default() -> Self {
-    Self {
-      presets: Some(StylePresets::default()),
-      tailwind_property: None,
-    }
-  }
 }
 
 /// Parse HTML markup into a node tree.
@@ -284,7 +267,7 @@ fn collapse(mut nodes: Vec<Node>) -> Node {
 
 fn build_nodes(
   handle: &Handle,
-  presets: &Option<StylePresets>,
+  presets: &StylePresets,
   tw_property: &str,
   out: &mut Vec<Node>,
 ) -> Result<(), HtmlError> {
@@ -318,7 +301,7 @@ fn build_nodes(
 fn build_element(
   handle: &Handle,
   tag: &str,
-  presets: &Option<StylePresets>,
+  presets: &StylePresets,
   tw_property: &str,
 ) -> Result<Option<Node>, HtmlError> {
   if tag == "br" {
@@ -356,7 +339,7 @@ fn build_element(
 
   if tag == "svg" {
     let image = ImageData {
-      src: ImageSourceInput::Buffer(serialize_outer_html(handle).into_bytes()),
+      src: ImageSourceInput::Buffer(serialize_outer_html(handle)),
       width: dimension(handle, "width"),
       height: dimension(handle, "height"),
     };
@@ -414,12 +397,12 @@ fn apply_metadata(
   mut node: Node,
   handle: &Handle,
   tag: &str,
-  presets: &Option<StylePresets>,
+  presets: &StylePresets,
   tw_property: &str,
 ) -> Node {
   node = node.with_tag_name(tag);
 
-  if let Some(preset) = presets.as_ref().and_then(|presets| presets.get(tag)) {
+  if let Some(preset) = presets.get(tag) {
     node = node.with_preset(preset.clone());
   }
 
@@ -482,20 +465,12 @@ fn dimension(handle: &Handle, name: &str) -> Option<f32> {
 }
 
 fn parse_direction(value: &str) -> Option<Direction> {
-  let value = value.trim();
-
-  if value.eq_ignore_ascii_case("ltr") {
-    Some(Direction::Ltr)
-  } else if value.eq_ignore_ascii_case("rtl") {
-    Some(Direction::Rtl)
-  } else {
-    None
-  }
+  Direction::from_str(value).ok()
 }
 
 /// Serialize an element including its own tag (outer HTML), used to round-trip
 /// `<svg>` subtrees into an image source.
-fn serialize_outer_html(handle: &Handle) -> String {
+fn serialize_outer_html(handle: &Handle) -> Vec<u8> {
   let mut buffer = Vec::new();
   let serializable: SerializableHandle = handle.clone().into();
   let opts = SerializeOpts {
@@ -504,10 +479,10 @@ fn serialize_outer_html(handle: &Handle) -> String {
   };
 
   if serialize(&mut buffer, &serializable, opts).is_err() {
-    return String::new();
+    return Vec::new();
   }
 
-  String::from_utf8_lossy(&buffer).into_owned()
+  buffer
 }
 
 /// Parse a CSS declaration block, ignoring it if it fails to parse. Parses the
@@ -548,7 +523,7 @@ mod tests {
     let node = from_html(
       r#"<div class="flex">x</div>"#,
       FromHtmlOptions {
-        presets: None,
+        presets: StylePresets::empty(),
         tailwind_property: Some("class".into()),
       },
     )
@@ -619,7 +594,7 @@ mod tests {
     let node = from_html(
       "<p>x</p>",
       FromHtmlOptions {
-        presets: None,
+        presets: StylePresets::empty(),
         tailwind_property: None,
       },
     )
