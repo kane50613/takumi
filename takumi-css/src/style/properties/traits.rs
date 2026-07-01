@@ -597,6 +597,11 @@ fn interpolate_neutral_padded_list<T: Animatable + Clone>(
 
 /// Serialize a style value to its CSS string representation.
 pub trait ToCss {
+  /// Separator used between items when this type is serialized in a `Vec`/`[T]`
+  /// list. Defaults to `", "`; space-separated grammars (e.g. `filter`, grid
+  /// track lists) override it.
+  const LIST_SEPARATOR: &'static str = ", ";
+
   /// Write the CSS representation of this value into `dest`.
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result;
 
@@ -627,7 +632,7 @@ impl<T: ToCss> ToCss for Box<[T]> {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     for (i, item) in self.iter().enumerate() {
       if i > 0 {
-        dest.write_str(", ")?;
+        dest.write_str(T::LIST_SEPARATOR)?;
       }
       item.to_css(dest)?;
     }
@@ -639,7 +644,7 @@ impl<T: ToCss> ToCss for Vec<T> {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     for (i, item) in self.iter().enumerate() {
       if i > 0 {
-        dest.write_str(", ")?;
+        dest.write_str(T::LIST_SEPARATOR)?;
       }
       item.to_css(dest)?;
     }

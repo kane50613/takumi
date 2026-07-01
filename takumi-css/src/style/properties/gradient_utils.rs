@@ -143,29 +143,30 @@ pub(crate) fn write_gradient_css<W: fmt::Write>(
 ) -> fmt::Result {
   dest.write_str(name)?;
   dest.write_char('(')?;
-  let mut first = true;
 
+  // Direction and color-interpolation-method share the leading clause,
+  // space-separated (e.g. `to right in srgb`); a comma only precedes the stops.
+  let mut has_prelude = false;
   if !params.is_empty() {
     dest.write_str(params)?;
-    first = false;
+    has_prelude = true;
   }
 
   let mut interp_buf = String::new();
   interpolation.to_css(&mut interp_buf)?;
   if !interp_buf.is_empty() {
-    if !first {
-      dest.write_str(", ")?;
+    if has_prelude {
+      dest.write_char(' ')?;
     }
     dest.write_str(&interp_buf)?;
-    first = false;
+    has_prelude = true;
   }
 
-  for stop in stops.iter() {
-    if !first {
+  for (index, stop) in stops.iter().enumerate() {
+    if has_prelude || index > 0 {
       dest.write_str(", ")?;
     }
     stop.to_css(dest)?;
-    first = false;
   }
 
   dest.write_char(')')

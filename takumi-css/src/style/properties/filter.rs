@@ -361,6 +361,9 @@ impl<'i> FromCss<'i> for Filter {
 }
 
 impl ToCss for Filter {
+  // The `filter`/`backdrop-filter` grammar is space-separated, not comma.
+  const LIST_SEPARATOR: &'static str = " ";
+
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     macro_rules! write_fn {
       ($name:expr, $v:expr) => {{
@@ -398,6 +401,12 @@ mod tests {
   #[test]
   fn test_parse_none_clears_filters() {
     assert_eq!(Filters::from_str("none"), Ok(Filters::default()));
+  }
+
+  #[test]
+  fn filters_serialize_space_separated() {
+    let filters = Filters::from_str("blur(3px) grayscale(0.5)").unwrap();
+    assert_eq!(filters.to_css_string(), "blur(3px) grayscale(0.5)");
   }
 
   #[test]

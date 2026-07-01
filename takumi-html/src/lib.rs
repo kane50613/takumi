@@ -495,6 +495,10 @@ fn apply_metadata(
         }
       }
       "style" => node = node.with_style(Style::from(parse_declarations(value))),
+      // Consumed into `ImageData`; re-emitted by serialization, so keep them out
+      // of the passthrough attributes to avoid duplicating on round-trip.
+      "src" if tag == "img" => {}
+      "width" | "height" if matches!(tag, "img" | "svg") => {}
       // Consumed above; keep out of the passthrough attributes.
       _ if name == tw_property => {}
       _ => {
