@@ -1,0 +1,22 @@
+diff --git a/dist/plugins/cargo.js b/dist/plugins/cargo.js
+index 9ec6ca323049e0b7441d19b1fdc580db7400f5d4..656facdfce073d52b6e02ff27a1125ca19daebe6 100644
+--- a/dist/plugins/cargo.js
++++ b/dist/plugins/cargo.js
+@@ -9,7 +9,7 @@ import { glob } from "tinyglobby";
+ import initToml, { edit, parse as parse$1 } from "@rainbowatcher/toml-edit-js";
+ //#region src/plugins/cargo/schema.ts
+ const cargoDependencySchema = z.union([z.string(), z.object({
+-	version: z.string(),
++	version: z.string().optional(),
+ 	package: z.string().optional(),
+ 	path: z.string().optional()
+ })]);
+@@ -29,7 +29,7 @@ const cargoWorkspaceSchema = z.object({
+ 	package: z.object({ version: z.string().optional() }).optional()
+ });
+ const cargoManifestSchema = z.object({
+-	package: cargoPackageSchema,
++	package: cargoPackageSchema.optional(),
+ 	workspace: cargoWorkspaceSchema.optional(),
+ 	dependencies: z.record(z.string(), cargoDependencySchema).optional(),
+ 	"dev-dependencies": z.record(z.string(), cargoDependencySchema).optional(),
