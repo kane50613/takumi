@@ -1,92 +1,85 @@
 core:changelogs:
-  - content: "---\npackages:\n  cargo:takumi-html:\n    type: minor\n  cargo:takumi:\n    type: minor\n---\n\n### Add `takumi-html` for parsing HTML into a node tree\n\nNew `takumi-html` crate parses HTML + Tailwind markup into a node tree with\n`from_html(source, FromHtmlOptions)`, mirroring the JS `fromHtml`. The `tw`,\n`style`, `class`, `id`, `dir`, and `lang` attributes map to node styling and\nmetadata; `FromHtmlOptions` sets the `StylePresets` table and a `max_depth`\nnesting cap. The `takumi` umbrella re-exports it under the `from-html` feature\nas `takumi::from_html`, plus `Node::from_html` via the `FromHtml` prelude\ntrait.\n"
-    filename: node-from-html.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-css:\n    type: patch\n---\n\n### Serialize filter, grid track, and gradient values as valid CSS\n\n`filter`/`backdrop-filter` and grid track lists were comma-joined\n(`blur(3px), grayscale(0.5)`, `50px, 100px`) where CSS wants spaces, via the\nshared `Vec` serializer. `ToCss` now carries a per-type `LIST_SEPARATOR`\n(default `, `), overridden to a space for `Filter` and `GridTemplateComponent`.\nLinear, radial, and conic gradients also placed the color-interpolation method\nafter a comma (`to right, in srgb`); it now sits in the leading clause\n(`to right in srgb`). The output re-parses instead of dropping these\nproperties.\n"
-    filename: gradient-filter-grid-serialization.md
+  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    type: patch\n---\n\n### Add `baseUrl` to `googleFonts`\n\n`googleFonts` takes an optional `baseUrl`, defaulting to Google Fonts, so an API-compatible\ncss2 mirror can be used instead, e.g. `baseUrl: \"https://fonts.bunny.net/css2\"` for Bunny Fonts.\n"
+    filename: google-fonts-base-url.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:takumi-template
-    updated: false
-  - id: npm:takumi-js
+  - id: npm:@takumi-rs/core
     updated: true
   - id: npm:@takumi-rs/wasm
     updated: true
+  - changelogIds:
+      - google-fonts-base-url.md
+    id: npm:@takumi-rs/helpers
+    updated: true
+  - id: npm:takumi-js
+    updated: true
   - id: npm:docs
     updated: false
-  - id: npm:@takumi-rs/helpers
-    updated: true
   - id: npm:@takumi-rs/image-response
     updated: true
-  - id: npm:@takumi-rs/core
-    updated: true
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:example-satori-html
+  - id: npm:takumi-template
     updated: false
   - id: npm:ffplay
     updated: false
   - id: npm:example-nextjs
     updated: false
-  - changelogIds:
-      - node-from-html.md
-    id: cargo:takumi
-    updated: true
-  - id: cargo:takumi-core
-    updated: true
-  - id: cargo:takumi-raster
-    updated: true
-  - changelogIds:
-      - gradient-filter-grid-serialization.md
-    id: cargo:takumi-css
-    updated: true
-  - id: cargo:takumi-wasm
+  - id: npm:example-satori-html
     updated: false
-  - changelogIds:
-      - node-from-html.md
-    id: cargo:takumi-html
-    updated: true
+  - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
+  - id: npm:svelte
+    updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: cargo:takumi-css
+    updated: false
   - id: cargo:takumi-napi
     updated: false
+  - id: cargo:takumi-wasm
+    updated: false
   - id: cargo:takumi-svg
+    updated: false
+  - id: cargo:takumi-core
+    updated: false
+  - id: cargo:takumi-html
+    updated: false
+  - id: cargo:takumi-raster
+    updated: false
+  - id: cargo:takumi
     updated: true
   - id: cargo:example
     updated: false
 npm:packages:
   - id: npm:takumi
-  - id: npm:takumi-template
   - distTag: rc
-    id: npm:takumi-js
+    id: npm:@takumi-rs/core
   - distTag: rc
     id: npm:@takumi-rs/wasm
-  - id: npm:docs
   - distTag: rc
     id: npm:@takumi-rs/helpers
   - distTag: rc
-    id: npm:@takumi-rs/image-response
+    id: npm:takumi-js
+  - id: npm:docs
   - distTag: rc
-    id: npm:@takumi-rs/core
-  - id: npm:example-cloudflare-workers
-  - id: npm:example-twitter-images
-  - id: npm:example-css-library-integration
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:waku-ssr
-  - id: npm:example-tanstack-start
-  - id: npm:svelte
-  - id: npm:example-satori-html
+    id: npm:@takumi-rs/image-response
+  - id: npm:takumi-template
   - id: npm:ffplay
   - id: npm:example-nextjs
+  - id: npm:example-satori-html
+  - id: npm:example-tanstack-start
+  - id: npm:example-twitter-images
+  - id: npm:svelte
+  - id: npm:example-cloudflare-workers
+  - id: npm:waku-ssr
+  - id: npm:example-css-library-integration
+  - id: npm:ffmpeg-keyframe-animation
