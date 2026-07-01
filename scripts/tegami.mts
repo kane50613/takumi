@@ -1,7 +1,24 @@
-import { tegami, type BumpType, type PackageOptions, type WorkspacePackage } from "tegami";
+import { $ } from "bun";
+import {
+  tegami,
+  type BumpType,
+  type PackageOptions,
+  type TegamiPlugin,
+  type WorkspacePackage,
+} from "tegami";
 import { createCli } from "tegami/cli";
 import { cargo } from "tegami/plugins/cargo";
 import { github } from "tegami/plugins/github";
+
+// tegami serializes changelogs/manifests in a style oxfmt rejects; reformat
+// before the github plugin stages and commits the version branch.
+const oxfmt: TegamiPlugin = {
+  name: "oxfmt",
+  enforce: "pre",
+  async applyCliDraft() {
+    await $`oxfmt --write .`.quiet();
+  },
+};
 
 // v2 beta line; clear this for the stable 2.0.0 release.
 const prerelease = "rc";
@@ -48,6 +65,7 @@ const bumpDep = ({
 
 const paper = tegami({
   plugins: [
+    oxfmt,
     github({ repo: "kane50613/takumi", versionPr: { base: "master" } }),
     cargo({ updateLockFile: true, bumpDep }),
   ],

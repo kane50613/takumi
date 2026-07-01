@@ -2,13 +2,13 @@
 packages:
   cargo:takumi-core:
     replay:
-      - 'exit prerelease: cargo:takumi-core'
+      - "exit prerelease: cargo:takumi-core"
   npm:@takumi-rs/core:
     replay:
-      - 'exit prerelease: npm:@takumi-rs/core'
+      - "exit prerelease: npm:@takumi-rs/core"
   npm:@takumi-rs/wasm:
     replay:
-      - 'exit prerelease: npm:@takumi-rs/wasm'
+      - "exit prerelease: npm:@takumi-rs/wasm"
 ---
 
 ### Make subset-group font selection deterministic
