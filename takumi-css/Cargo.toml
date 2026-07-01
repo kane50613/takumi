@@ -1,6 +1,6 @@
 [package]
 name = "takumi-css"
-version = "0.2.0-rc.0"
+version = "0.2.0-rc.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "CSS parsing and style resolution layer for takumi."
@@ -35,5 +35,6 @@ serde_json.workspace = true
 
 [lints]
 workspace = true
+
 
 

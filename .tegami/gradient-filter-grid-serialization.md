@@ -1,6 +1,8 @@
 ---
 packages:
-  cargo:takumi-css: patch
+  cargo:takumi-css:
+    replay:
+      - 'exit prerelease: cargo:takumi-css'
 ---
 
 ### Serialize filter, grid track, and gradient values as valid CSS
