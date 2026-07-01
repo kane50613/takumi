@@ -28,6 +28,12 @@ version = "0.1.0-rc.1"
 default-features = false
 optional = true
 
+[dependencies.takumi-html]
+path = "../takumi-html"
+version = "0.1.0-rc.1"
+default-features = false
+optional = true
+
 [features]
 default = ["raster-backend", "woff2", "woff", "svg", "rayon"]
 raster-backend = ["dep:takumi-raster"]
@@ -39,6 +45,7 @@ svg-backend = ["dep:takumi-svg"]
 woff2 = ["takumi-core/woff2"]
 woff = ["takumi-core/woff"]
 rayon = ["takumi-raster?/rayon"]
+from-html = ["dep:takumi-html"]
 
 [dev-dependencies]
 parley.workspace = true

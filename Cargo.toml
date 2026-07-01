@@ -6,6 +6,7 @@ members = [
   "takumi-raster",
   "takumi-css",
   "takumi-svg",
+  "takumi-html",
   "takumi-napi",
   "takumi-wasm",
   "example/rust",
@@ -25,10 +26,12 @@ gif = "0.14"
 globwalk = "0.9"
 hex = "0.4"
 hmac = "0.13"
+html5ever = "0.39"
 image-webp = "0.2"
 js-sys = "0.3"
 kurbo = "0.13"
 libwebp-sys = "0.14"
+markup5ever_rcdom = "0.39"
 mimalloc = "0.1"
 napi-build = "2"
 napi-derive = "3"

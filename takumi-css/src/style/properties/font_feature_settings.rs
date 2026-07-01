@@ -69,7 +69,26 @@ impl<'i> FromCss<'i> for FontFeatureSettings {
 }
 
 impl ToCss for parley::FontFeature {
+  // An empty `font-feature-settings` list is the keyword `normal`.
+  const EMPTY_LIST_KEYWORD: Option<&'static str> = Some("normal");
+
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     write!(dest, "\"{}\" {}", self.tag, self.value)
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn empty_settings_serialize_as_normal() {
+    assert_eq!(FontFeatureSettings::default().to_css_string(), "normal");
+    assert_eq!(
+      FontFeatureSettings::from_str("normal")
+        .unwrap()
+        .to_css_string(),
+      "normal"
+    );
   }
 }

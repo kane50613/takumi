@@ -146,6 +146,23 @@ pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &
 
   create_dir_all("tests/fixtures-generated").ok();
 
+  let node_html = options.node().to_html();
+
+  // `from_html` is a normalizing importer (presets, collapse, text folding), so
+  // round-tripping is a fixpoint: re-serializing a parsed tree reproduces it.
+  // Disable presets/tw so the comparison sees only structure, not injected UA
+  // styles.
+  #[cfg(feature = "from-html")]
+  {
+    let options = FromHtmlOptions::default().with_presets(StylePresets::empty());
+    let round_tripped = Node::from_html(&node_html, options).expect("round-trip parse");
+    assert_eq!(
+      node_html,
+      round_tripped.to_html(),
+      "from_html round-trip diverged for {fixture_name}",
+    );
+  }
+
   let html_content = format!(
     r#"<!DOCTYPE html>
 <html>
@@ -158,10 +175,7 @@ pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &
   {}
 </body>
 </html>"#,
-    fixture_name,
-    viewport_width,
-    viewport_height,
-    options.node().to_html()
+    fixture_name, viewport_width, viewport_height, node_html
   );
 
   write(

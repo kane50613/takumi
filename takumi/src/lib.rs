@@ -88,6 +88,9 @@ pub mod prelude {
 
   #[cfg(feature = "svg-backend")]
   pub use takumi_svg::SvgOptions;
+
+  #[cfg(feature = "from-html")]
+  pub use takumi_html::{DEFAULT_MAX_DEPTH, FromHtml, FromHtmlOptions, HtmlError, StylePresets};
 }
 
 #[cfg(feature = "raster-backend")]
@@ -98,6 +101,9 @@ pub use takumi_raster::{
 
 #[cfg(feature = "svg-backend")]
 pub use takumi_svg::render as render_svg;
+
+#[cfg(feature = "from-html")]
+pub use takumi_html::from_html;
 
 /// Unstable, semver-exempt access to the backend crates in full.
 ///
@@ -112,4 +118,7 @@ pub mod unstable {
 
   #[cfg(feature = "svg-backend")]
   pub use takumi_svg as svg;
+
+  #[cfg(feature = "from-html")]
+  pub use takumi_html as html;
 }

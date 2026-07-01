@@ -997,6 +997,17 @@ mod tests {
   }
 
   #[test]
+  fn interpolation_color_space_round_trips() {
+    // The serialized form must stay valid CSS (direction and color space in one
+    // clause), so re-parsing keeps the interpolation instead of dropping it.
+    let gradient =
+      LinearGradient::from_str("linear-gradient(to right in oklab, #ff0000, #0000ff)").unwrap();
+    let reparsed = LinearGradient::from_str(&gradient.to_css_string()).unwrap();
+    assert_eq!(gradient, reparsed);
+    assert_eq!(reparsed.interpolation.color_space, ColorSpaceTag::Oklab);
+  }
+
+  #[test]
   fn test_parse_linear_gradient_with_interpolation_hue_direction() {
     assert_eq!(
       LinearGradient::from_str("linear-gradient(to right in oklch longer hue, red, blue)"),
