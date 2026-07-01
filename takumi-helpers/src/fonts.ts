@@ -50,6 +50,11 @@ export type GoogleFontsOptions = FetchOptions & {
    * playground re-rendering on each edit) so the metadata is fetched and parsed once.
    */
   cache?: Pick<Map<string, string>, "has" | "get" | "set">;
+  /**
+   * css2 base URL. Defaults to Google Fonts; point it at an API-compatible mirror like
+   * `https://fonts.bunny.net/css2`.
+   */
+  baseUrl?: string;
 };
 
 const GOOGLE_FONTS_CSS = "https://fonts.googleapis.com/css2";
@@ -88,7 +93,7 @@ function familyValue(
 }
 
 function buildUrl(options: GoogleFontsOptions) {
-  const url = new URL(GOOGLE_FONTS_CSS);
+  const url = new URL(options.baseUrl ?? GOOGLE_FONTS_CSS);
   for (const family of options.families) {
     if (typeof family === "string") {
       url.searchParams.append("family", familyValue(family, ["400"], ["normal"], []));
