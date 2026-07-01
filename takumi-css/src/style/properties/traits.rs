@@ -602,6 +602,12 @@ pub trait ToCss {
   /// track lists) override it.
   const LIST_SEPARATOR: &'static str = ", ";
 
+  /// Keyword an empty `Vec`/`[T]` list of this type serializes to instead of an
+  /// empty string (`none` for `filter`/`grid-template-*`, `normal` for
+  /// `font-feature-settings`/`font-variation-settings`). `None` keeps the empty
+  /// string.
+  const EMPTY_LIST_KEYWORD: Option<&'static str> = None;
+
   /// Write the CSS representation of this value into `dest`.
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result;
 
@@ -628,27 +634,32 @@ impl<T: ToCss> ToCss for Option<T> {
   }
 }
 
+fn write_css_list<W: fmt::Write, T: ToCss>(items: &[T], dest: &mut W) -> fmt::Result {
+  if items.is_empty() {
+    return match T::EMPTY_LIST_KEYWORD {
+      Some(keyword) => dest.write_str(keyword),
+      None => Ok(()),
+    };
+  }
+
+  for (i, item) in items.iter().enumerate() {
+    if i > 0 {
+      dest.write_str(T::LIST_SEPARATOR)?;
+    }
+    item.to_css(dest)?;
+  }
+  Ok(())
+}
+
 impl<T: ToCss> ToCss for Box<[T]> {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    for (i, item) in self.iter().enumerate() {
-      if i > 0 {
-        dest.write_str(T::LIST_SEPARATOR)?;
-      }
-      item.to_css(dest)?;
-    }
-    Ok(())
+    write_css_list(self, dest)
   }
 }
 
 impl<T: ToCss> ToCss for Vec<T> {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    for (i, item) in self.iter().enumerate() {
-      if i > 0 {
-        dest.write_str(T::LIST_SEPARATOR)?;
-      }
-      item.to_css(dest)?;
-    }
-    Ok(())
+    write_css_list(self, dest)
   }
 }
 

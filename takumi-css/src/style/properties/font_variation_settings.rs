@@ -39,6 +39,9 @@ impl<'i> FromCss<'i> for FontVariationSettings {
 }
 
 impl ToCss for parley::FontVariation {
+  // An empty `font-variation-settings` list is the keyword `normal`.
+  const EMPTY_LIST_KEYWORD: Option<&'static str> = Some("normal");
+
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     write!(dest, "\"{}\" {}", self.tag, self.value)
   }

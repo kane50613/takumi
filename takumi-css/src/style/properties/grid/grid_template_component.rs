@@ -193,6 +193,8 @@ pub(crate) fn collect_components_and_names(
 impl ToCss for GridTemplateComponent {
   // Track lists are space-separated, not comma.
   const LIST_SEPARATOR: &'static str = " ";
+  // An empty track list is the keyword `none`.
+  const EMPTY_LIST_KEYWORD: Option<&'static str> = Some("none");
 
   fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
     match self {
@@ -230,6 +232,11 @@ mod tests {
   fn components_serialize_space_separated() {
     let components = GridTemplateComponents::from_str("50px 100px").unwrap();
     assert_eq!(components.to_css_string(), "50px 100px");
+  }
+
+  #[test]
+  fn empty_components_serialize_as_none() {
+    assert_eq!(GridTemplateComponents::default().to_css_string(), "none");
   }
 
   #[test]
