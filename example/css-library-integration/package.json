@@ -14,8 +14,8 @@
   "devDependencies": {
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
-    "tailwindcss": "^4.3.1",
+    "tailwindcss": "^4.3.2",
     "typescript": "catalog:",
-    "unocss": "^66.7.3"
+    "unocss": "^66.7.4"
   }
 }
