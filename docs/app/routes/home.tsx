@@ -46,7 +46,7 @@ const CTA_COMMAND = "bun i takumi-js";
 
 const TITLE = "Takumi — Render JSX to images. Skip the browser.";
 const DESCRIPTION =
-  "Rust-powered image rendering engine. Write JSX, get pixels. Built for fast image generation across runtimes.";
+  "Rust-powered image rendering engine. Write JSX, get pixels. Runs on Node, browsers, and Cloudflare Workers.";
 
 const highlighter = await createHighlighterCore({
   themes: [githubDarkDefault, githubLightDefault],

@@ -19,11 +19,24 @@ Drop-in compatible with `next/og`.
 
 ## Why Takumi
 
-Takumi is a rendering pipeline built in Rust for one job: turning markup and CSS into pixels. It parses CSS, lays out the tree, shapes text, composites layers, and encodes the output inside a single binary. A headless-Chromium setup spends around 300 MB of RAM and a browser cold start on the same OG card; Takumi spends a function call.
+Takumi is a rendering pipeline built in Rust for one job: **turning markup and CSS into pixels**. It parses CSS, lays out the tree, shapes text, composites layers, and encodes the output inside a single binary. A headless-Chromium setup spends around **300 MB of RAM** and a browser cold start on the same OG card; Takumi spends **a function call**.
 
-One engine covers every deployment target. Node.js servers load the native binding, Cloudflare Workers and browsers load the WASM build, and Rust applications embed the `takumi` crate. Prebuilt binaries ship for macOS, Linux (glibc and musl), and Windows, on both x64 and ARM64.
+**One engine, every deployment target:**
 
-The CSS support reaches past the usual OG-image subset: CSS Grid, `::before` and `::after`, `:is()` and `:where()` selectors, masks and `clip-path`, `backdrop-filter`, `background-clip: text`, conic gradients, RTL text, and Tailwind v4 utilities including arbitrary values.
+- **Node.js** loads the native binding
+- **Cloudflare Workers and browsers** load the WASM build
+- **Rust applications** embed the `takumi` crate
+
+Prebuilt binaries ship for macOS, Linux (glibc and musl), and Windows, on x64 and ARM64.
+
+**CSS support reaches past the usual OG-image subset:**
+
+- CSS Grid, block, inline, float
+- `::before`, `::after`, `:is()`, `:where()`
+- masks, `clip-path`, `backdrop-filter`, blend modes
+- `background-clip: text`, conic gradients
+- RTL text
+- Tailwind v4 utilities, including arbitrary values
 
 ## Quick Start
 
