@@ -1,11 +1,11 @@
 use image::Rgba;
 use smallvec::SmallVec;
 use taffy::{Point, Size};
-use tiny_skia::PixmapMut;
+use tiny_skia::{Mask as TinyMask, PixmapMut};
 
 use crate::{
   BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Placement, RenderContext, Result,
-  SizedShadow, apply_blur, apply_blur_rgba_bytes,
+  SizedShadow, apply_blur, apply_blur_rgba_bytes, intersect_alpha_masks,
   layout::style::{
     Affine, Color, Filter, FilterCategory, LUMA_WEIGHTS, PercentageNumber, SEPIA_WEIGHTS,
     SizingContext, TransferChannel, TransferTable, compose_transfer_table, fast_div_255,
@@ -392,16 +392,15 @@ pub(crate) fn apply_backdrop_filter(
   layout_size: Size<f32>,
   transform: Affine,
   context: &RenderContext,
+  node_mask: Option<&TinyMask>,
 ) -> Result<()> {
   let filters = &context.style.backdrop_filter;
 
-  if filters.iter().all(|f| matches!(f, Filter::DropShadow(_))) {
+  if filters.iter().all(Filter::is_drop_shadow) {
     return Ok(());
   }
 
-  let drop_shadow_filtered = filters
-    .iter()
-    .filter(|f| !matches!(f, Filter::DropShadow(_)));
+  let drop_shadow_filtered = filters.iter().filter(|f| !f.is_drop_shadow());
 
   let canvas_size = canvas.size();
   if canvas_size.width == 0 || canvas_size.height == 0 {
@@ -413,11 +412,28 @@ pub(crate) fn apply_backdrop_filter(
   border.append_mask_commands(&mut paths, layout_size, Point::ZERO);
 
   // Render the mask for compositing.
-  let (mask_data, placement) = render_mask(&paths, Some(transform), None, &mut canvas.buffer_pool);
+  let (mut mask_data, mut placement) =
+    render_mask(&paths, Some(transform), None, &mut canvas.buffer_pool);
 
   if placement.width == 0 || placement.height == 0 {
     canvas.buffer_pool.release(mask_data);
     return Ok(());
+  }
+
+  if let Some(node_mask) = node_mask {
+    let node_placement = Placement {
+      left: 0,
+      top: 0,
+      width: node_mask.width(),
+      height: node_mask.height(),
+    };
+    let intersected =
+      intersect_alpha_masks(&mask_data, placement, node_mask.data(), node_placement);
+    canvas.buffer_pool.release(mask_data);
+    let Some(intersected) = intersected else {
+      return Ok(());
+    };
+    (mask_data, placement) = intersected;
   }
 
   let Some(mask_bounds) = mask_bounds(&mask_data, placement.width, placement.height) else {

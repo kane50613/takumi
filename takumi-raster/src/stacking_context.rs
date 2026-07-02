@@ -303,6 +303,25 @@ fn begin_node_render(
   current.context.transform = node_paint.transform;
 
   if !current.context.style.backdrop_filter.is_empty() {
+    // Filtered backdrop is clipped by the node's clip-path and mask, like Chromium's
+    // backdrop root: https://drafts.fxtf.org/filter-effects-2/#BackdropRoot
+    let node_mask = if current.context.style.has_shape_mask() {
+      match prepare_node_mask(
+        &current.context,
+        &current.context.style,
+        layout,
+        node_paint.transform,
+        canvas.viewport(),
+        &mut canvas.buffer_pool,
+      )? {
+        NodeMaskAction::Shell(mask) => Some(mask),
+        NodeMaskAction::SkipRendering => return Ok(Some(DeferredNodeRender::SkipRendering)),
+        _ => None,
+      }
+    } else {
+      None
+    };
+
     let border = BorderProperties::from_context(&current.context, layout.size, layout.border);
     apply_backdrop_filter(
       canvas,
@@ -310,6 +329,7 @@ fn begin_node_render(
       layout.size,
       node_paint.transform,
       &current.context,
+      node_mask.as_ref(),
     )?;
   }
 
@@ -540,12 +560,7 @@ fn supports_bounds_hint(node: &RenderNode, require_child_clipping: bool) -> bool
 
   style.filter.is_empty()
     && style.backdrop_filter.is_empty()
-    && style.clip_path.is_none()
-    && style.mask_image.as_ref().is_none_or(|images| {
-      images
-        .iter()
-        .all(|image| matches!(image, BackgroundImage::None))
-    })
+    && !style.has_shape_mask()
     && !has_box_shadow
     && !has_outline
     && !has_text_shadow

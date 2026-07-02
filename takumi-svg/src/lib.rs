@@ -12,7 +12,9 @@
 //! Coverage: backgrounds, borders, border-radius (backgrounds/clip), linear and
 //! radial gradients (conic via a wedge-path approximation), box-shadow, text
 //! (glyph outlines, decorations, text-shadow, `-webkit-text-stroke`), bitmap/
-//! emoji glyphs and images, clip-path/overflow, opacity, and affine transforms.
+//! emoji glyphs and images, clip-path/overflow, opacity, filter and
+//! backdrop-filter (`<filter>` chains; the backdrop is the scene replayed up to
+//! the element), and affine transforms.
 
 mod box_model;
 mod gradient;
@@ -479,12 +481,19 @@ impl SvgDocument {
   /// `result="fN"`/`in="f(N-1)"`; the region is widened so blur/shadow are not
   /// clipped. `size` is the element's border-box size, the resolution basis for
   /// `drop-shadow` lengths (mirroring the raster backend).
+  ///
+  /// With `restore_opaque_alpha` the chain ends by snapping alpha back to
+  /// opaque. A backdrop blur feathers the replay's alpha at the canvas edge
+  /// (outside the input is transparent), letting the sharp original bleed
+  /// through; browsers sample the backdrop with edge duplication instead, so
+  /// no feathering exists to begin with.
   pub(crate) fn filter(
     &mut self,
     filters: &[Filter],
     sizing: &SizingContext,
     current_color: Color,
     size: Size<f32>,
+    restore_opaque_alpha: bool,
   ) -> io::Result<Option<String>> {
     if filters.is_empty() {
       return Ok(None);
@@ -508,6 +517,14 @@ impl SvgDocument {
       let result = format!("f{index}");
       self.filter_primitive(filter, &prev, &result, sizing, current_color, size)?;
       prev = result.into();
+    }
+    if restore_opaque_alpha {
+      self.open("feComponentTransfer", &[("in", prev)])?;
+      self.empty(
+        "feFuncA",
+        &[("type", "discrete".into()), ("tableValues", "1".into())],
+      )?;
+      self.close("feComponentTransfer")?;
     }
     self.close("filter")?;
     Ok(Some(reference))

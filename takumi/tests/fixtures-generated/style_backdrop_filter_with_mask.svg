@@ -1,0 +1,584 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect x="0" y="0" width="1200" height="630" fill="#000"/>
+  <pattern id="pat0" patternUnits="userSpaceOnUse" x="0" y="0" width="48" height="48">
+    <linearGradient id="lg1" gradientUnits="userSpaceOnUse" x1="24" y1="0" x2="24" y2="48">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset=".016" stop-color="#fff"/>
+      <stop offset=".032" stop-color="#fff"/>
+      <stop offset=".048" stop-color="#fff"/>
+      <stop offset=".063" stop-color="#fff"/>
+      <stop offset=".079" stop-color="#fff"/>
+      <stop offset=".095" stop-color="#fff"/>
+      <stop offset=".111" stop-color="#fff"/>
+      <stop offset=".127" stop-color="#fff"/>
+      <stop offset=".143" stop-color="#fff"/>
+      <stop offset=".167" stop-color="#fff"/>
+      <stop offset=".167" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".19" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".206" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".222" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".238" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".254" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".27" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".286" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".302" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".317" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".333" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".349" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".365" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".381" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".397" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".413" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".429" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".444" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".46" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".476" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".492" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".508" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".524" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".54" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".556" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".571" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".587" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".603" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".619" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".635" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".651" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".667" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".683" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".698" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".714" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".73" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".746" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".762" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".778" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".794" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".81" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".825" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".841" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".857" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".873" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".889" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".905" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".921" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".937" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".952" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".968" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".984" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </linearGradient>
+    <rect x="0" y="0" width="48" height="48" fill="url(#lg1)"/>
+  </pattern>
+  <rect x="0" y="0" width="1200" height="630" fill="url(#pat0)"/>
+  <pattern id="pat2" patternUnits="userSpaceOnUse" x="0" y="0" width="48" height="48">
+    <linearGradient id="lg3" gradientUnits="userSpaceOnUse" x1="0" y1="24" x2="48" y2="24">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset=".016" stop-color="#fff"/>
+      <stop offset=".032" stop-color="#fff"/>
+      <stop offset=".048" stop-color="#fff"/>
+      <stop offset=".063" stop-color="#fff"/>
+      <stop offset=".079" stop-color="#fff"/>
+      <stop offset=".095" stop-color="#fff"/>
+      <stop offset=".111" stop-color="#fff"/>
+      <stop offset=".127" stop-color="#fff"/>
+      <stop offset=".143" stop-color="#fff"/>
+      <stop offset=".167" stop-color="#fff"/>
+      <stop offset=".167" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".19" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".206" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".222" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".238" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".254" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".27" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".286" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".302" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".317" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".333" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".349" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".365" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".381" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".397" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".413" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".429" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".444" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".46" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".476" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".492" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".508" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".524" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".54" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".556" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".571" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".587" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".603" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".619" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".635" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".651" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".667" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".683" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".698" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".714" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".73" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".746" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".762" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".778" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".794" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".81" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".825" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".841" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".857" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".873" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".889" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".905" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".921" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".937" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".952" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".968" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".984" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </linearGradient>
+    <rect x="0" y="0" width="48" height="48" fill="url(#lg3)"/>
+  </pattern>
+  <rect x="0" y="0" width="1200" height="630" fill="url(#pat2)"/>
+  <mask id="mk4" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+    <linearGradient id="lg5" gradientUnits="userSpaceOnUse" x1="600" y1="0" x2="600" y2="630">
+      <stop offset="0" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".016" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".032" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".048" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".063" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".079" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".095" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".111" stop-color="#000" stop-opacity=".012"/>
+      <stop offset=".127" stop-color="#000" stop-opacity=".031"/>
+      <stop offset=".143" stop-color="#000" stop-opacity=".047"/>
+      <stop offset=".159" stop-color="#000" stop-opacity=".067"/>
+      <stop offset=".175" stop-color="#000" stop-opacity=".082"/>
+      <stop offset=".19" stop-color="#000" stop-opacity=".102"/>
+      <stop offset=".206" stop-color="#000" stop-opacity=".118"/>
+      <stop offset=".222" stop-color="#000" stop-opacity=".137"/>
+      <stop offset=".238" stop-color="#000" stop-opacity=".153"/>
+      <stop offset=".254" stop-color="#000" stop-opacity=".173"/>
+      <stop offset=".27" stop-color="#000" stop-opacity=".188"/>
+      <stop offset=".286" stop-color="#000" stop-opacity=".208"/>
+      <stop offset=".302" stop-color="#000" stop-opacity=".224"/>
+      <stop offset=".317" stop-color="#000" stop-opacity=".243"/>
+      <stop offset=".333" stop-color="#000" stop-opacity=".259"/>
+      <stop offset=".349" stop-color="#000" stop-opacity=".278"/>
+      <stop offset=".365" stop-color="#000" stop-opacity=".294"/>
+      <stop offset=".381" stop-color="#000" stop-opacity=".314"/>
+      <stop offset=".397" stop-color="#000" stop-opacity=".329"/>
+      <stop offset=".413" stop-color="#000" stop-opacity=".349"/>
+      <stop offset=".429" stop-color="#000" stop-opacity=".365"/>
+      <stop offset=".444" stop-color="#000" stop-opacity=".384"/>
+      <stop offset=".46" stop-color="#000" stop-opacity=".4"/>
+      <stop offset=".476" stop-color="#000" stop-opacity=".42"/>
+      <stop offset=".492" stop-color="#000" stop-opacity=".435"/>
+      <stop offset=".508" stop-color="#000" stop-opacity=".455"/>
+      <stop offset=".524" stop-color="#000" stop-opacity=".471"/>
+      <stop offset=".54" stop-color="#000" stop-opacity=".49"/>
+      <stop offset=".556" stop-color="#000" stop-opacity=".506"/>
+      <stop offset=".571" stop-color="#000" stop-opacity=".525"/>
+      <stop offset=".587" stop-color="#000" stop-opacity=".541"/>
+      <stop offset=".603" stop-color="#000" stop-opacity=".561"/>
+      <stop offset=".619" stop-color="#000" stop-opacity=".576"/>
+      <stop offset=".635" stop-color="#000" stop-opacity=".596"/>
+      <stop offset=".651" stop-color="#000" stop-opacity=".612"/>
+      <stop offset=".667" stop-color="#000" stop-opacity=".631"/>
+      <stop offset=".683" stop-color="#000" stop-opacity=".647"/>
+      <stop offset=".698" stop-color="#000" stop-opacity=".667"/>
+      <stop offset=".714" stop-color="#000" stop-opacity=".682"/>
+      <stop offset=".73" stop-color="#000" stop-opacity=".702"/>
+      <stop offset=".746" stop-color="#000" stop-opacity=".718"/>
+      <stop offset=".762" stop-color="#000" stop-opacity=".737"/>
+      <stop offset=".778" stop-color="#000" stop-opacity=".753"/>
+      <stop offset=".794" stop-color="#000" stop-opacity=".773"/>
+      <stop offset=".81" stop-color="#000" stop-opacity=".788"/>
+      <stop offset=".825" stop-color="#000" stop-opacity=".808"/>
+      <stop offset=".841" stop-color="#000" stop-opacity=".824"/>
+      <stop offset=".857" stop-color="#000" stop-opacity=".843"/>
+      <stop offset=".873" stop-color="#000" stop-opacity=".859"/>
+      <stop offset=".889" stop-color="#000" stop-opacity=".878"/>
+      <stop offset=".905" stop-color="#000" stop-opacity=".894"/>
+      <stop offset=".921" stop-color="#000" stop-opacity=".914"/>
+      <stop offset=".937" stop-color="#000" stop-opacity=".929"/>
+      <stop offset=".952" stop-color="#000" stop-opacity=".949"/>
+      <stop offset=".968" stop-color="#000" stop-opacity=".965"/>
+      <stop offset=".984" stop-color="#000" stop-opacity=".984"/>
+      <stop offset="1" stop-color="#000"/>
+    </linearGradient>
+    <rect x="0" y="0" width="1200" height="630" fill="url(#lg5)"/>
+  </mask>
+  <g mask="url(#mk4)">
+    <rect x="0" y="0" width="1200" height="630" fill="#ef4444"/>
+  </g>
+  <clipPath id="cp6">
+    <path d="M0 0h1200v630h-1200v-630Z"/>
+  </clipPath>
+  <g clip-path="url(#cp6)">
+    <mask id="mk7" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+      <radialGradient id="rg8" gradientUnits="userSpaceOnUse" cx="600" cy="315" r="600" gradientTransform="matrix(1 0 0 .525 0 149.625)">
+        <stop offset="0" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".016" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".032" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".048" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".063" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".079" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".095" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".111" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".127" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".143" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".159" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".175" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".19" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".206" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".222" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".238" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".254" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".27" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".286" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".302" stop-color="#000" stop-opacity="0"/>
+        <stop offset=".317" stop-color="#000" stop-opacity=".024"/>
+        <stop offset=".333" stop-color="#000" stop-opacity=".047"/>
+        <stop offset=".349" stop-color="#000" stop-opacity=".071"/>
+        <stop offset=".365" stop-color="#000" stop-opacity=".094"/>
+        <stop offset=".381" stop-color="#000" stop-opacity=".114"/>
+        <stop offset=".397" stop-color="#000" stop-opacity=".137"/>
+        <stop offset=".413" stop-color="#000" stop-opacity=".161"/>
+        <stop offset=".429" stop-color="#000" stop-opacity=".184"/>
+        <stop offset=".444" stop-color="#000" stop-opacity=".208"/>
+        <stop offset=".46" stop-color="#000" stop-opacity=".227"/>
+        <stop offset=".476" stop-color="#000" stop-opacity=".251"/>
+        <stop offset=".492" stop-color="#000" stop-opacity=".275"/>
+        <stop offset=".508" stop-color="#000" stop-opacity=".298"/>
+        <stop offset=".524" stop-color="#000" stop-opacity=".322"/>
+        <stop offset=".54" stop-color="#000" stop-opacity=".341"/>
+        <stop offset=".556" stop-color="#000" stop-opacity=".365"/>
+        <stop offset=".571" stop-color="#000" stop-opacity=".388"/>
+        <stop offset=".587" stop-color="#000" stop-opacity=".412"/>
+        <stop offset=".603" stop-color="#000" stop-opacity=".431"/>
+        <stop offset=".619" stop-color="#000" stop-opacity=".455"/>
+        <stop offset=".635" stop-color="#000" stop-opacity=".478"/>
+        <stop offset=".651" stop-color="#000" stop-opacity=".502"/>
+        <stop offset=".667" stop-color="#000" stop-opacity=".525"/>
+        <stop offset=".683" stop-color="#000" stop-opacity=".545"/>
+        <stop offset=".698" stop-color="#000" stop-opacity=".569"/>
+        <stop offset=".714" stop-color="#000" stop-opacity=".592"/>
+        <stop offset=".73" stop-color="#000" stop-opacity=".616"/>
+        <stop offset=".746" stop-color="#000" stop-opacity=".635"/>
+        <stop offset=".762" stop-color="#000" stop-opacity=".659"/>
+        <stop offset=".778" stop-color="#000" stop-opacity=".682"/>
+        <stop offset=".794" stop-color="#000" stop-opacity=".706"/>
+        <stop offset=".81" stop-color="#000" stop-opacity=".729"/>
+        <stop offset=".825" stop-color="#000" stop-opacity=".749"/>
+        <stop offset=".841" stop-color="#000" stop-opacity=".773"/>
+        <stop offset=".857" stop-color="#000" stop-opacity=".796"/>
+        <stop offset=".873" stop-color="#000" stop-opacity=".82"/>
+        <stop offset=".889" stop-color="#000" stop-opacity=".843"/>
+        <stop offset=".905" stop-color="#000" stop-opacity=".863"/>
+        <stop offset=".921" stop-color="#000" stop-opacity=".886"/>
+        <stop offset=".937" stop-color="#000" stop-opacity=".91"/>
+        <stop offset=".952" stop-color="#000" stop-opacity=".933"/>
+        <stop offset=".968" stop-color="#000" stop-opacity=".953"/>
+        <stop offset=".984" stop-color="#000" stop-opacity=".976"/>
+        <stop offset="1" stop-color="#000"/>
+      </radialGradient>
+      <rect x="0" y="0" width="1200" height="630" fill="url(#rg8)"/>
+    </mask>
+    <g mask="url(#mk7)">
+      <filter id="ft9" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="24" result="f0"/>
+        <feComponentTransfer in="f0">
+          <feFuncA type="discrete" tableValues="1"/>
+        </feComponentTransfer>
+      </filter>
+      <g filter="url(#ft9)">
+        <rect x="0" y="0" width="1200" height="630" fill="#000"/>
+        <pattern id="pat10" patternUnits="userSpaceOnUse" x="0" y="0" width="48" height="48">
+          <linearGradient id="lg11" gradientUnits="userSpaceOnUse" x1="24" y1="0" x2="24" y2="48">
+            <stop offset="0" stop-color="#fff"/>
+            <stop offset=".016" stop-color="#fff"/>
+            <stop offset=".032" stop-color="#fff"/>
+            <stop offset=".048" stop-color="#fff"/>
+            <stop offset=".063" stop-color="#fff"/>
+            <stop offset=".079" stop-color="#fff"/>
+            <stop offset=".095" stop-color="#fff"/>
+            <stop offset=".111" stop-color="#fff"/>
+            <stop offset=".127" stop-color="#fff"/>
+            <stop offset=".143" stop-color="#fff"/>
+            <stop offset=".167" stop-color="#fff"/>
+            <stop offset=".167" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".19" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".206" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".222" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".238" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".254" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".27" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".286" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".302" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".317" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".333" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".349" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".365" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".381" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".397" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".413" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".429" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".444" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".46" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".476" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".492" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".508" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".524" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".54" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".556" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".571" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".587" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".603" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".619" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".635" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".651" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".667" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".683" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".698" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".714" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".73" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".746" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".762" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".778" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".794" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".81" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".825" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".841" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".857" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".873" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".889" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".905" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".921" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".937" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".952" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".968" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".984" stop-color="#000" stop-opacity="0"/>
+            <stop offset="1" stop-color="#000" stop-opacity="0"/>
+          </linearGradient>
+          <rect x="0" y="0" width="48" height="48" fill="url(#lg11)"/>
+        </pattern>
+        <rect x="0" y="0" width="1200" height="630" fill="url(#pat10)"/>
+        <pattern id="pat12" patternUnits="userSpaceOnUse" x="0" y="0" width="48" height="48">
+          <linearGradient id="lg13" gradientUnits="userSpaceOnUse" x1="0" y1="24" x2="48" y2="24">
+            <stop offset="0" stop-color="#fff"/>
+            <stop offset=".016" stop-color="#fff"/>
+            <stop offset=".032" stop-color="#fff"/>
+            <stop offset=".048" stop-color="#fff"/>
+            <stop offset=".063" stop-color="#fff"/>
+            <stop offset=".079" stop-color="#fff"/>
+            <stop offset=".095" stop-color="#fff"/>
+            <stop offset=".111" stop-color="#fff"/>
+            <stop offset=".127" stop-color="#fff"/>
+            <stop offset=".143" stop-color="#fff"/>
+            <stop offset=".167" stop-color="#fff"/>
+            <stop offset=".167" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".19" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".206" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".222" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".238" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".254" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".27" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".286" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".302" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".317" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".333" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".349" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".365" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".381" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".397" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".413" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".429" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".444" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".46" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".476" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".492" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".508" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".524" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".54" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".556" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".571" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".587" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".603" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".619" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".635" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".651" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".667" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".683" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".698" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".714" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".73" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".746" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".762" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".778" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".794" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".81" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".825" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".841" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".857" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".873" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".889" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".905" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".921" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".937" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".952" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".968" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".984" stop-color="#000" stop-opacity="0"/>
+            <stop offset="1" stop-color="#000" stop-opacity="0"/>
+          </linearGradient>
+          <rect x="0" y="0" width="48" height="48" fill="url(#lg13)"/>
+        </pattern>
+        <rect x="0" y="0" width="1200" height="630" fill="url(#pat12)"/>
+        <mask id="mk14" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+          <linearGradient id="lg15" gradientUnits="userSpaceOnUse" x1="600" y1="0" x2="600" y2="630">
+            <stop offset="0" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".016" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".032" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".048" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".063" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".079" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".095" stop-color="#000" stop-opacity="0"/>
+            <stop offset=".111" stop-color="#000" stop-opacity=".012"/>
+            <stop offset=".127" stop-color="#000" stop-opacity=".031"/>
+            <stop offset=".143" stop-color="#000" stop-opacity=".047"/>
+            <stop offset=".159" stop-color="#000" stop-opacity=".067"/>
+            <stop offset=".175" stop-color="#000" stop-opacity=".082"/>
+            <stop offset=".19" stop-color="#000" stop-opacity=".102"/>
+            <stop offset=".206" stop-color="#000" stop-opacity=".118"/>
+            <stop offset=".222" stop-color="#000" stop-opacity=".137"/>
+            <stop offset=".238" stop-color="#000" stop-opacity=".153"/>
+            <stop offset=".254" stop-color="#000" stop-opacity=".173"/>
+            <stop offset=".27" stop-color="#000" stop-opacity=".188"/>
+            <stop offset=".286" stop-color="#000" stop-opacity=".208"/>
+            <stop offset=".302" stop-color="#000" stop-opacity=".224"/>
+            <stop offset=".317" stop-color="#000" stop-opacity=".243"/>
+            <stop offset=".333" stop-color="#000" stop-opacity=".259"/>
+            <stop offset=".349" stop-color="#000" stop-opacity=".278"/>
+            <stop offset=".365" stop-color="#000" stop-opacity=".294"/>
+            <stop offset=".381" stop-color="#000" stop-opacity=".314"/>
+            <stop offset=".397" stop-color="#000" stop-opacity=".329"/>
+            <stop offset=".413" stop-color="#000" stop-opacity=".349"/>
+            <stop offset=".429" stop-color="#000" stop-opacity=".365"/>
+            <stop offset=".444" stop-color="#000" stop-opacity=".384"/>
+            <stop offset=".46" stop-color="#000" stop-opacity=".4"/>
+            <stop offset=".476" stop-color="#000" stop-opacity=".42"/>
+            <stop offset=".492" stop-color="#000" stop-opacity=".435"/>
+            <stop offset=".508" stop-color="#000" stop-opacity=".455"/>
+            <stop offset=".524" stop-color="#000" stop-opacity=".471"/>
+            <stop offset=".54" stop-color="#000" stop-opacity=".49"/>
+            <stop offset=".556" stop-color="#000" stop-opacity=".506"/>
+            <stop offset=".571" stop-color="#000" stop-opacity=".525"/>
+            <stop offset=".587" stop-color="#000" stop-opacity=".541"/>
+            <stop offset=".603" stop-color="#000" stop-opacity=".561"/>
+            <stop offset=".619" stop-color="#000" stop-opacity=".576"/>
+            <stop offset=".635" stop-color="#000" stop-opacity=".596"/>
+            <stop offset=".651" stop-color="#000" stop-opacity=".612"/>
+            <stop offset=".667" stop-color="#000" stop-opacity=".631"/>
+            <stop offset=".683" stop-color="#000" stop-opacity=".647"/>
+            <stop offset=".698" stop-color="#000" stop-opacity=".667"/>
+            <stop offset=".714" stop-color="#000" stop-opacity=".682"/>
+            <stop offset=".73" stop-color="#000" stop-opacity=".702"/>
+            <stop offset=".746" stop-color="#000" stop-opacity=".718"/>
+            <stop offset=".762" stop-color="#000" stop-opacity=".737"/>
+            <stop offset=".778" stop-color="#000" stop-opacity=".753"/>
+            <stop offset=".794" stop-color="#000" stop-opacity=".773"/>
+            <stop offset=".81" stop-color="#000" stop-opacity=".788"/>
+            <stop offset=".825" stop-color="#000" stop-opacity=".808"/>
+            <stop offset=".841" stop-color="#000" stop-opacity=".824"/>
+            <stop offset=".857" stop-color="#000" stop-opacity=".843"/>
+            <stop offset=".873" stop-color="#000" stop-opacity=".859"/>
+            <stop offset=".889" stop-color="#000" stop-opacity=".878"/>
+            <stop offset=".905" stop-color="#000" stop-opacity=".894"/>
+            <stop offset=".921" stop-color="#000" stop-opacity=".914"/>
+            <stop offset=".937" stop-color="#000" stop-opacity=".929"/>
+            <stop offset=".952" stop-color="#000" stop-opacity=".949"/>
+            <stop offset=".968" stop-color="#000" stop-opacity=".965"/>
+            <stop offset=".984" stop-color="#000" stop-opacity=".984"/>
+            <stop offset="1" stop-color="#000"/>
+          </linearGradient>
+          <rect x="0" y="0" width="1200" height="630" fill="url(#lg15)"/>
+        </mask>
+        <g mask="url(#mk14)">
+          <rect x="0" y="0" width="1200" height="630" fill="#ef4444"/>
+        </g>
+      </g>
+    </g>
+  </g>
+  <mask id="mk16" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+    <radialGradient id="rg17" gradientUnits="userSpaceOnUse" cx="600" cy="315" r="600" gradientTransform="matrix(1 0 0 .525 0 149.625)">
+      <stop offset="0" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".016" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".032" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".048" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".063" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".079" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".095" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".111" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".127" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".143" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".159" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".175" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".19" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".206" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".222" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".238" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".254" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".27" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".286" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".302" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".317" stop-color="#000" stop-opacity=".024"/>
+      <stop offset=".333" stop-color="#000" stop-opacity=".047"/>
+      <stop offset=".349" stop-color="#000" stop-opacity=".071"/>
+      <stop offset=".365" stop-color="#000" stop-opacity=".094"/>
+      <stop offset=".381" stop-color="#000" stop-opacity=".114"/>
+      <stop offset=".397" stop-color="#000" stop-opacity=".137"/>
+      <stop offset=".413" stop-color="#000" stop-opacity=".161"/>
+      <stop offset=".429" stop-color="#000" stop-opacity=".184"/>
+      <stop offset=".444" stop-color="#000" stop-opacity=".208"/>
+      <stop offset=".46" stop-color="#000" stop-opacity=".227"/>
+      <stop offset=".476" stop-color="#000" stop-opacity=".251"/>
+      <stop offset=".492" stop-color="#000" stop-opacity=".275"/>
+      <stop offset=".508" stop-color="#000" stop-opacity=".298"/>
+      <stop offset=".524" stop-color="#000" stop-opacity=".322"/>
+      <stop offset=".54" stop-color="#000" stop-opacity=".341"/>
+      <stop offset=".556" stop-color="#000" stop-opacity=".365"/>
+      <stop offset=".571" stop-color="#000" stop-opacity=".388"/>
+      <stop offset=".587" stop-color="#000" stop-opacity=".412"/>
+      <stop offset=".603" stop-color="#000" stop-opacity=".431"/>
+      <stop offset=".619" stop-color="#000" stop-opacity=".455"/>
+      <stop offset=".635" stop-color="#000" stop-opacity=".478"/>
+      <stop offset=".651" stop-color="#000" stop-opacity=".502"/>
+      <stop offset=".667" stop-color="#000" stop-opacity=".525"/>
+      <stop offset=".683" stop-color="#000" stop-opacity=".545"/>
+      <stop offset=".698" stop-color="#000" stop-opacity=".569"/>
+      <stop offset=".714" stop-color="#000" stop-opacity=".592"/>
+      <stop offset=".73" stop-color="#000" stop-opacity=".616"/>
+      <stop offset=".746" stop-color="#000" stop-opacity=".635"/>
+      <stop offset=".762" stop-color="#000" stop-opacity=".659"/>
+      <stop offset=".778" stop-color="#000" stop-opacity=".682"/>
+      <stop offset=".794" stop-color="#000" stop-opacity=".706"/>
+      <stop offset=".81" stop-color="#000" stop-opacity=".729"/>
+      <stop offset=".825" stop-color="#000" stop-opacity=".749"/>
+      <stop offset=".841" stop-color="#000" stop-opacity=".773"/>
+      <stop offset=".857" stop-color="#000" stop-opacity=".796"/>
+      <stop offset=".873" stop-color="#000" stop-opacity=".82"/>
+      <stop offset=".889" stop-color="#000" stop-opacity=".843"/>
+      <stop offset=".905" stop-color="#000" stop-opacity=".863"/>
+      <stop offset=".921" stop-color="#000" stop-opacity=".886"/>
+      <stop offset=".937" stop-color="#000" stop-opacity=".91"/>
+      <stop offset=".952" stop-color="#000" stop-opacity=".933"/>
+      <stop offset=".968" stop-color="#000" stop-opacity=".953"/>
+      <stop offset=".984" stop-color="#000" stop-opacity=".976"/>
+      <stop offset="1" stop-color="#000"/>
+    </radialGradient>
+    <rect x="0" y="0" width="1200" height="630" fill="url(#rg17)"/>
+  </mask>
+  <g mask="url(#mk16)">
+  </g>
+  <path d="M292.02 332.77q-4.39 0-7.55-1.49t-4.94-4.17-2.03-6.33l7.34-.37q.29 2.03 1.18 3.45.89 1.41 2.39 2.14 1.51.72 3.7.72 1.83 0 3.11-.44t1.95-1.31q.67-.89.67-2.19 0-1.17-.57-2.08t-2.21-1.65q-1.62-.75-4.81-1.47-4.36-.97-7.03-2.22-2.66-1.25-3.86-3.14-1.2-1.91-1.2-4.8 0-3.05 1.53-5.36t4.39-3.61 6.84-1.29q4.24 0 7.16 1.48t4.58 4.08 2.01 5.97l-7.3.34q-.17-1.76-.98-3.06-.81-1.31-2.2-2.03-1.39-.74-3.36-.74-2.47 0-3.89 1.1-1.41 1.09-1.41 2.87 0 1.27.63 2.11t2.17 1.45q1.53.61 4.28 1.21 4.73.93 7.5 2.42 2.77 1.47 3.94 3.48t1.17 4.6q0 3.17-1.61 5.5t-4.58 3.58q-2.95 1.25-7.01 1.25ZM311.18 332v-34.08h7.19v14.35l-.94.01q.36-2.25 1.5-3.69t2.83-2.17q1.7-.72 3.72-.72 2.87 0 4.81 1.24 1.95 1.23 2.92 3.45.99 2.2.99 5.06v16.55h-7.19v-14.84q0-2.86-.91-4.3-.9-1.45-2.98-1.45-2.21 0-3.49 1.5-1.26 1.5-1.26 4.43v14.66ZM347.54 332.58q-4.02 0-6.53-1.85t-2.52-5.18q0-3.38 2.13-5.24t6.36-2.72l8.26-1.64q0-2.5-1.12-3.76t-3.25-1.27q-2.03 0-3.19.95-1.14.94-1.51 2.74l-7.24-.3q.75-4.26 3.83-6.43 3.09-2.18 8.11-2.18 5.76 0 8.67 2.75 2.91 2.74 2.91 8.02v8.75q0 1.09.36 1.47.37.37 1.09.37h.72v4.94q-.33.11-1.08.19t-1.48.08q-1.54 0-2.86-.5-1.32-.52-2.11-1.8-.8-1.3-.8-3.66l.59.5q-.45 1.72-1.7 3.03-1.23 1.3-3.17 2.02-1.92.72-4.47.72Zm1.72-4.94q1.8 0 3.12-.7 1.35-.72 2.1-2.05.76-1.33.76-3.19v-1.25l-5.82 1.25q-1.77.38-2.65 1.16-.85.78-.85 2.02 0 1.31.84 2.04.86.72 2.5.72ZM368.4 332v-25.73h6.82l.25 7.46-.56-.11q.63-3.89 2.22-5.62t4.41-1.73h2.31v5.98h-2.36q-2 0-3.31.53-1.3.52-1.96 1.67-.64 1.14-.64 3.08v14.47ZM387.45 339.2v-32.93h6.94l.16 5.45-.61-.27q.95-2.79 3.11-4.26 2.17-1.49 5.06-1.49 3.59 0 6 1.78 2.42 1.79 3.64 4.83t1.22 6.83q0 3.77-1.24 6.81t-3.67 4.85q-2.42 1.78-6 1.78-1.89 0-3.53-.69-1.62-.69-2.8-1.94-1.17-1.26-1.68-2.98l.59-.39v12.62Zm12.64-12.17q2.53 0 3.99-2.09 1.47-2.11 1.47-5.8t-1.47-5.8q-1.46-2.11-3.99-2.11-1.68 0-2.9.89t-1.89 2.65-.66 4.37q0 2.59.64 4.36.66 1.77 1.89 2.66 1.24.87 2.92.87ZM440.52 332.58q-3.96 0-6.89-1.66-2.94-1.67-4.57-4.69t-1.62-7.09q0-4.06 1.62-7.06 1.63-3.02 4.57-4.69 2.93-1.69 6.89-1.69 3.42 0 6.11 1.21 2.7 1.2 4.39 3.45 1.68 2.23 2.04 5.41l-7.4.34q-.36-2.39-1.74-3.61-1.36-1.23-3.4-1.23-2.71 0-4.19 2.07t-1.47 5.8q0 3.75 1.47 5.83 1.48 2.06 4.19 2.06 2.07 0 3.45-1.25t1.69-3.87l7.4.29q-.34 3.17-2 5.52-1.65 2.33-4.36 3.59-2.68 1.27-6.18 1.27ZM468.65 332.58q-3.94 0-6.86-1.66-2.93-1.67-4.53-4.69t-1.6-7.09 1.6-7.06q1.6-3.02 4.5-4.69 2.9-1.69 6.81-1.69 3.84 0 6.69 1.67 2.84 1.68 4.39 4.8t1.54 7.44v1.47h-18.08q.16 3.05 1.66 4.55 1.52 1.49 4 1.49 1.83.01 3.06-.78t1.75-2.37l7.25.42q-1.03 3.88-4.29 6.03t-7.89 2.16Zm-5.54-15.92h10.72q-.14-2.83-1.57-4.22-1.43-1.41-3.69-1.41-2.24 0-3.71 1.47-1.45 1.47-1.75 4.16ZM485.61 332v-25.73h6.49l.28 7.54-.88-.22q.36-2.89 1.55-4.61 1.19-1.73 2.94-2.5 1.76-.78 3.89-.78 2.78 0 4.73 1.21 1.96 1.2 2.99 3.39t1.03 5.15v16.55h-7.19v-14.16q0-2.06-.36-3.48-.34-1.44-1.22-2.19-.86-.76-2.37-.76-2.25 0-3.47 1.67-1.22 1.65-1.22 4.76v14.16ZM523.95 332q-4 0-5.88-1.86t-1.87-5.87v-24.04h7.2v23.19q0 1.85.78 2.53.78.69 2.39.69h3.6v5.36Zm-11.89-20.36v-5.37h18.11v5.37ZM545.54 332.58q-3.94 0-6.86-1.66-2.92-1.67-4.53-4.69-1.59-3.03-1.59-7.09t1.59-7.06q1.61-3.02 4.5-4.69 2.91-1.69 6.81-1.69 3.85 0 6.69 1.67t4.39 4.8q1.55 3.11 1.55 7.44v1.47h-18.08q.16 3.05 1.66 4.55 1.51 1.49 4 1.49 1.83.01 3.06-.78t1.75-2.37l7.25.42q-1.03 3.88-4.3 6.03-3.25 2.16-7.89 2.16Zm-5.53-15.92h10.72q-.14-2.83-1.58-4.22-1.42-1.41-3.69-1.41-2.23 0-3.7 1.47-1.45 1.47-1.75 4.16ZM562.51 332v-25.73h6.83l.25 7.46-.57-.11q.63-3.89 2.22-5.62t4.41-1.73h2.31v5.98h-2.36q-2 0-3.31.53-1.3.52-1.95 1.67t-.64 3.08v14.47ZM579.47 339.61l2.6-7.61h-3.14v-7.36h7.81v6.58l-3.35 8.39ZM617.39 332.58q-2.71 0-4.69-1.14-1.97-1.16-3.06-3.22l-.16 3.78h-6.89v-34.08h7.19v12.02q1.04-1.82 3-3.02 1.96-1.22 4.61-1.22 3.26 0 5.67 1.66t3.72 4.69q1.32 3.01 1.32 7.09t-1.32 7.09q-1.32 3.02-3.72 4.69-2.41 1.66-5.67 1.66Zm-2-5.55q2.39 0 3.84-2.08t1.45-5.81q0-3.77-1.44-5.83-1.42-2.08-3.81-2.08-1.78 0-3.06.94-1.27.92-1.94 2.69-.65 1.77-.65 4.28 0 2.44.65 4.22.67 1.78 1.94 2.73t3.02.94ZM639.5 332q-3.14 0-4.94-1.58-1.78-1.59-1.78-5.12v-27.38h7.19v26.61q0 1.11.53 1.61.55.5 1.55.5h1.71v5.36ZM655.87 332.58q-3.95 0-6.2-2.56-2.25-2.58-2.25-7.18v-16.57h7.19v14.86q0 2.98.94 4.35t2.89 1.38q2.21 0 3.42-1.5 1.22-1.52 1.22-4.55v-14.54h7.18v25.73h-6.54l-.19-7.41.87.19q-.53 3.88-2.7 5.85-2.15 1.95-5.83 1.95ZM676.56 332v-25.73h6.82l.25 7.46-.56-.11q.63-3.89 2.22-5.62t4.41-1.73h2.31v5.98h-2.36q-2 0-3.31.53-1.3.52-1.96 1.67-.64 1.14-.64 3.08v14.47ZM695.61 332v-25.73h6.83l.25 7.46-.56-.11q.62-3.89 2.22-5.62t4.4-1.73h2.32v5.98h-2.36q-2 0-3.32.53-1.29.52-1.95 1.67-.64 1.14-.64 3.08v14.47ZM725.69 332.58q-3.94 0-6.86-1.66-2.93-1.67-4.53-4.69t-1.6-7.09 1.6-7.06q1.6-3.02 4.5-4.69 2.9-1.69 6.81-1.69 3.84 0 6.69 1.67 2.84 1.68 4.39 4.8t1.54 7.44v1.47h-18.08q.16 3.05 1.66 4.55 1.52 1.49 4 1.49 1.83.01 3.06-.78t1.75-2.37l7.25.42q-1.03 3.88-4.29 6.03t-7.89 2.16Zm-5.54-15.92h10.72q-.14-2.83-1.57-4.22-1.43-1.41-3.69-1.41-2.24 0-3.71 1.47-1.45 1.47-1.75 4.16ZM751.81 332.58q-3.25 0-5.63-1.64-2.36-1.66-3.64-4.67t-1.28-7.13q0-4.11 1.3-7.12 1.3-3.04 3.67-4.68 2.39-1.64 5.58-1.64 2.75 0 4.75 1.13 2 1.11 3.01 3.11v-12.02h7.21v34.08h-6.91l-.14-3.78q-1.05 2.06-3.14 3.22-2.09 1.14-4.78 1.14Zm2.37-5.55q1.74 0 2.94-.89t1.83-2.64q.62-1.77.62-4.36 0-2.64-.62-4.39t-1.83-2.63-2.94-.89q-2.53 0-4.01 2.13-1.49 2.11-1.49 5.78 0 3.58 1.5 5.73 1.5 2.16 4 2.16ZM795.62 332.58q-3.94 0-6.86-1.66-2.92-1.67-4.53-4.69-1.59-3.03-1.59-7.09t1.59-7.06q1.61-3.02 4.5-4.69 2.91-1.69 6.81-1.69 3.85 0 6.69 1.67t4.39 4.8q1.55 3.11 1.55 7.44v1.47h-18.08q.16 3.05 1.66 4.55 1.51 1.49 4 1.49 1.83.01 3.06-.78t1.75-2.37l7.25.42q-1.03 3.88-4.3 6.03-3.25 2.16-7.89 2.16Zm-5.53-15.92h10.72q-.14-2.83-1.58-4.22-1.42-1.41-3.69-1.41-2.23 0-3.7 1.47-1.45 1.47-1.75 4.16ZM821.74 332.58q-3.25 0-5.62-1.64-2.36-1.66-3.64-4.67t-1.28-7.13q0-4.11 1.29-7.12 1.3-3.04 3.68-4.68t5.57-1.64q2.75 0 4.75 1.13 2 1.11 3.02 3.11v-12.02h7.2v34.08h-6.9l-.14-3.78q-1.05 2.06-3.14 3.22-2.1 1.14-4.79 1.14Zm2.38-5.55q1.73 0 2.94-.89t1.83-2.64q.62-1.77.62-4.36 0-2.64-.62-4.39t-1.83-2.63-2.94-.89q-2.53 0-4.02 2.13-1.48 2.11-1.48 5.78 0 3.58 1.5 5.73 1.5 2.16 4 2.16ZM854.09 339.78q-3.69 0-6.17-.92-2.49-.91-3.96-2.55-1.45-1.64-2.03-3.75l7.39-.53q.41 1.27 1.47 1.97 1.06.72 3.3.72 2.56 0 3.92-1.22 1.37-1.22 1.37-3.88v-2.78q-.9 1.79-2.92 2.88-2.01 1.08-4.51 1.08-3.16 0-5.61-1.55-2.44-1.56-3.82-4.38-1.37-2.81-1.37-6.57 0-3.72 1.36-6.55 1.37-2.83 3.8-4.44 2.42-1.61 5.56-1.61 2.84 0 4.78 1.25 1.95 1.24 2.94 3.3v-3.98h7.06v23.2q0 3.44-1.59 5.72-1.58 2.29-4.41 3.43-2.83 1.16-6.56 1.16Zm-.08-14.3q2.48 0 3.95-1.9 1.47-1.92 1.49-5.35.01-2.26-.64-3.89-.66-1.62-1.89-2.5t-2.91-.87q-2.58 0-4.02 1.98-1.42 1.99-1.42 5.28 0 3.33 1.47 5.3 1.48 1.95 3.97 1.95ZM884.09 332.58q-3.94 0-6.86-1.66-2.93-1.67-4.53-4.69t-1.6-7.09 1.6-7.06q1.6-3.02 4.5-4.69 2.9-1.69 6.81-1.69 3.84 0 6.69 1.67 2.84 1.68 4.39 4.8t1.54 7.44v1.47h-18.08q.16 3.05 1.66 4.55 1.52 1.49 4 1.49 1.83.01 3.06-.78t1.75-2.37l7.25.42q-1.03 3.88-4.29 6.03t-7.89 2.16Zm-5.54-15.92h10.72q-.14-2.83-1.57-4.22-1.43-1.41-3.69-1.41-2.24 0-3.71 1.47-1.45 1.47-1.75 4.16ZM912.04 332.58q-4.14 0-6.82-1.11-2.65-1.13-4.01-3.08-1.36-1.97-1.55-4.5l7.31-.25q.32 1.84 1.49 2.84 1.17.99 3.61.99 1.92 0 2.94-.64t1.01-1.94q0-.8-.39-1.33-.37-.53-1.48-.92-1.1-.41-3.22-.78-4.05-.7-6.35-1.67-2.28-.99-3.22-2.5-.92-1.52-.92-3.75 0-3.71 2.88-5.97t8.58-2.27q3.89 0 6.36 1.16t3.76 3.16 1.45 4.53l-7.21.28q-.04-1.19-.54-2.1-.48-.92-1.45-1.42-.95-.51-2.47-.51-1.89 0-2.92.79-1.02.79-1.02 2.1 0 .92.41 1.53.42.61 1.45.98t2.79.64q4.04.57 6.45 1.58t3.44 2.58q1.04 1.56 1.04 3.78 0 3.77-3.06 5.78-3.05 2.02-8.34 2.02Z" fill="#fff"/>
+</svg>

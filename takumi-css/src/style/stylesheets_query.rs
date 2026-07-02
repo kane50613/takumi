@@ -76,7 +76,13 @@ impl ComputedStyle {
       || !self.filter.is_empty()
       || !self.backdrop_filter.is_empty()
       || self.mix_blend_mode != BlendMode::Normal
-      || self.clip_path.is_some()
+      || self.has_shape_mask()
+  }
+
+  /// Whether `clip-path` or a non-empty `mask-image` shapes the element's
+  /// visible area.
+  pub fn has_shape_mask(&self) -> bool {
+    self.clip_path.is_some()
       || self.mask_image.as_ref().is_some_and(|images| {
         images
           .iter()

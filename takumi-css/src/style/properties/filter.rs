@@ -103,6 +103,13 @@ impl BlurType {
   }
 }
 
+impl Filter {
+  /// Whether this is `drop-shadow()`, which `backdrop-filter` ignores.
+  pub fn is_drop_shadow(&self) -> bool {
+    matches!(self, Filter::DropShadow(_))
+  }
+}
+
 /// A list of filter operations
 pub type Filters = Vec<Filter>;
 

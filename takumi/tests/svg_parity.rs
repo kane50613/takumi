@@ -28,7 +28,9 @@ const FLOOR: f32 = 90.0;
 /// Shrink this as the backend improves; entries are `(name, why)`.
 const KNOWN_DIVERGENT: &[(&str, &str)] = &[(
   "style_backdrop_filter",
-  "backdrop-filter not implemented by the svg backend",
+  "backdrop-filter: opacity() semantics differ: raster replaces the backdrop \
+   pixels, svg (paint-over model, no erase) composites the filtered copy over \
+   the original",
 )];
 
 /// Straight-alpha composite over white. Transparent pixels become white, so two
