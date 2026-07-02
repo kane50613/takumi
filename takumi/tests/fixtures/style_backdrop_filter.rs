@@ -187,15 +187,15 @@ fn test_style_backdrop_filter_with_mask() {
       )))
       .with(StyleDeclaration::background_image(Some(
         BackgroundImages::from_str(
-          "linear-gradient(90deg, transparent 0%, transparent 48%, white 48%, white 52%, transparent 52%, transparent 100%)",
+          "linear-gradient(to right, white 8px, transparent 8px), linear-gradient(to bottom, white 8px, transparent 8px)",
         )
         .unwrap(),
       )))
       .with(StyleDeclaration::background_size(
-        BackgroundSizes::from_str("40px 100%").unwrap(),
+        BackgroundSizes::from_str("48px 48px").unwrap(),
       ))
       .with(StyleDeclaration::background_repeat(
-        BackgroundRepeats::from_str("repeat-x").unwrap(),
+        BackgroundRepeats::from_str("repeat, repeat").unwrap(),
       )),
   );
 

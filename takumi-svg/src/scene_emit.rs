@@ -84,11 +84,15 @@ fn emit_backdrop(
   let shape_clip = emit_clip_path_group(node, layout.size, x, y, doc)?;
   let mask = emit_mask_group(node, x, y, layout.size.width, layout.size.height, doc)?;
 
+  // Alpha restore approximates the edge-duplicated backdrop sampling browsers
+  // use; skipped for opacity(), which lowers alpha on purpose.
+  let restore_alpha = !filters.iter().any(|f| matches!(f, Filter::Opacity(_)));
   let filter_ref = doc.filter(
     &filters,
     &node.context.sizing,
     node.context.current_color,
     layout.size,
+    restore_alpha,
   )?;
   let filter_group = doc.begin_group(IDENTITY, 1.0, None, filter_ref.as_deref())?;
 

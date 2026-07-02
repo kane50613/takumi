@@ -178,7 +178,7 @@ pub(crate) fn emit_box_chrome(
 
   let opacity = style.opacity.0;
   let filter_ref = if !style.filter.is_empty() {
-    doc.filter(&style.filter, &node.context.sizing, cc, layout.size)?
+    doc.filter(&style.filter, &node.context.sizing, cc, layout.size, false)?
   } else {
     None
   };

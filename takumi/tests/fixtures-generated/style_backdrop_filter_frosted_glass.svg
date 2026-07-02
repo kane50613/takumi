@@ -11,6 +11,9 @@
   <g clip-path="url(#cp1)">
     <filter id="ft2" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
       <feGaussianBlur in="SourceGraphic" stdDeviation="16" result="f0"/>
+      <feComponentTransfer in="f0">
+        <feFuncA type="discrete" tableValues="1"/>
+      </feComponentTransfer>
     </filter>
     <g filter="url(#ft2)">
       <clipPath id="cp3">

@@ -72,6 +72,9 @@
   <g clip-path="url(#cp1)">
     <filter id="ft2" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
       <feGaussianBlur in="SourceGraphic" stdDeviation="0" result="f0"/>
+      <feComponentTransfer in="f0">
+        <feFuncA type="discrete" tableValues="1"/>
+      </feComponentTransfer>
     </filter>
     <g filter="url(#ft2)">
       <linearGradient id="lg3" gradientUnits="userSpaceOnUse" x1="142.5" y1="-142.5" x2="1057.5" y2="772.5">
@@ -151,6 +154,9 @@
   <g clip-path="url(#cp4)">
     <filter id="ft5" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
       <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="f0"/>
+      <feComponentTransfer in="f0">
+        <feFuncA type="discrete" tableValues="1"/>
+      </feComponentTransfer>
     </filter>
     <g filter="url(#ft5)">
       <linearGradient id="lg6" gradientUnits="userSpaceOnUse" x1="142.5" y1="-142.5" x2="1057.5" y2="772.5">
@@ -232,6 +238,9 @@
   <g clip-path="url(#cp7)">
     <filter id="ft8" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
       <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="f0"/>
+      <feComponentTransfer in="f0">
+        <feFuncA type="discrete" tableValues="1"/>
+      </feComponentTransfer>
     </filter>
     <g filter="url(#ft8)">
       <linearGradient id="lg9" gradientUnits="userSpaceOnUse" x1="142.5" y1="-142.5" x2="1057.5" y2="772.5">
@@ -315,6 +324,9 @@
   <g clip-path="url(#cp10)">
     <filter id="ft11" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
       <feGaussianBlur in="SourceGraphic" stdDeviation="20" result="f0"/>
+      <feComponentTransfer in="f0">
+        <feFuncA type="discrete" tableValues="1"/>
+      </feComponentTransfer>
     </filter>
     <g filter="url(#ft11)">
       <linearGradient id="lg12" gradientUnits="userSpaceOnUse" x1="142.5" y1="-142.5" x2="1057.5" y2="772.5">
@@ -400,6 +412,9 @@
   <g clip-path="url(#cp13)">
     <filter id="ft14" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
       <feColorMatrix in="SourceGraphic" type="matrix" values=".213 .715 .072 0 0 .213 .715 .072 0 0 .213 .715 .072 0 0 0 0 0 1 0" result="f0"/>
+      <feComponentTransfer in="f0">
+        <feFuncA type="discrete" tableValues="1"/>
+      </feComponentTransfer>
     </filter>
     <g filter="url(#ft14)">
       <linearGradient id="lg15" gradientUnits="userSpaceOnUse" x1="142.5" y1="-142.5" x2="1057.5" y2="772.5">
@@ -487,6 +502,9 @@
   <g clip-path="url(#cp16)">
     <filter id="ft17" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
       <feColorMatrix in="SourceGraphic" type="matrix" values=".393 .769 .189 0 0 .349 .686 .168 0 0 .272 .534 .131 0 0 0 0 0 1 0" result="f0"/>
+      <feComponentTransfer in="f0">
+        <feFuncA type="discrete" tableValues="1"/>
+      </feComponentTransfer>
     </filter>
     <g filter="url(#ft17)">
       <linearGradient id="lg18" gradientUnits="userSpaceOnUse" x1="142.5" y1="-142.5" x2="1057.5" y2="772.5">
@@ -580,6 +598,9 @@
         <feFuncG type="table" tableValues="1 0"/>
         <feFuncB type="table" tableValues="1 0"/>
       </feComponentTransfer>
+      <feComponentTransfer in="f0">
+        <feFuncA type="discrete" tableValues="1"/>
+      </feComponentTransfer>
     </filter>
     <g filter="url(#ft20)">
       <linearGradient id="lg21" gradientUnits="userSpaceOnUse" x1="142.5" y1="-142.5" x2="1057.5" y2="772.5">
@@ -671,6 +692,9 @@
   <g clip-path="url(#cp22)">
     <filter id="ft23" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
       <feColorMatrix in="SourceGraphic" type="hueRotate" values="180" result="f0"/>
+      <feComponentTransfer in="f0">
+        <feFuncA type="discrete" tableValues="1"/>
+      </feComponentTransfer>
     </filter>
     <g filter="url(#ft23)">
       <linearGradient id="lg24" gradientUnits="userSpaceOnUse" x1="142.5" y1="-142.5" x2="1057.5" y2="772.5">
@@ -767,6 +791,9 @@
         <feFuncR type="linear" slope=".5"/>
         <feFuncG type="linear" slope=".5"/>
         <feFuncB type="linear" slope=".5"/>
+      </feComponentTransfer>
+      <feComponentTransfer in="f0">
+        <feFuncA type="discrete" tableValues="1"/>
       </feComponentTransfer>
     </filter>
     <g filter="url(#ft26)">
@@ -866,6 +893,9 @@
         <feFuncR type="linear" slope="1.5"/>
         <feFuncG type="linear" slope="1.5"/>
         <feFuncB type="linear" slope="1.5"/>
+      </feComponentTransfer>
+      <feComponentTransfer in="f0">
+        <feFuncA type="discrete" tableValues="1"/>
       </feComponentTransfer>
     </filter>
     <g filter="url(#ft29)">
@@ -967,6 +997,9 @@
         <feFuncR type="linear" slope=".5" intercept=".25"/>
         <feFuncG type="linear" slope=".5" intercept=".25"/>
         <feFuncB type="linear" slope=".5" intercept=".25"/>
+      </feComponentTransfer>
+      <feComponentTransfer in="f0">
+        <feFuncA type="discrete" tableValues="1"/>
       </feComponentTransfer>
     </filter>
     <g filter="url(#ft32)">
@@ -1071,6 +1104,9 @@
         <feFuncG type="linear" slope="2" intercept="-.5"/>
         <feFuncB type="linear" slope="2" intercept="-.5"/>
       </feComponentTransfer>
+      <feComponentTransfer in="f0">
+        <feFuncA type="discrete" tableValues="1"/>
+      </feComponentTransfer>
     </filter>
     <g filter="url(#ft35)">
       <linearGradient id="lg36" gradientUnits="userSpaceOnUse" x1="142.5" y1="-142.5" x2="1057.5" y2="772.5">
@@ -1172,6 +1208,9 @@
   <g clip-path="url(#cp37)">
     <filter id="ft38" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
       <feColorMatrix in="SourceGraphic" type="saturate" values="0" result="f0"/>
+      <feComponentTransfer in="f0">
+        <feFuncA type="discrete" tableValues="1"/>
+      </feComponentTransfer>
     </filter>
     <g filter="url(#ft38)">
       <linearGradient id="lg39" gradientUnits="userSpaceOnUse" x1="142.5" y1="-142.5" x2="1057.5" y2="772.5">
@@ -1275,6 +1314,9 @@
   <g clip-path="url(#cp40)">
     <filter id="ft41" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
       <feColorMatrix in="SourceGraphic" type="saturate" values="2" result="f0"/>
+      <feComponentTransfer in="f0">
+        <feFuncA type="discrete" tableValues="1"/>
+      </feComponentTransfer>
     </filter>
     <g filter="url(#ft41)">
       <linearGradient id="lg42" gradientUnits="userSpaceOnUse" x1="142.5" y1="-142.5" x2="1057.5" y2="772.5">
@@ -1490,6 +1532,9 @@
     <filter id="ft47" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
       <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="f0"/>
       <feColorMatrix in="f0" type="matrix" values=".606 .358 .036 0 0 .106 .858 .036 0 0 .106 .358 .536 0 0 0 0 0 1 0" result="f1"/>
+      <feComponentTransfer in="f1">
+        <feFuncA type="discrete" tableValues="1"/>
+      </feComponentTransfer>
     </filter>
     <g filter="url(#ft47)">
       <linearGradient id="lg48" gradientUnits="userSpaceOnUse" x1="142.5" y1="-142.5" x2="1057.5" y2="772.5">
