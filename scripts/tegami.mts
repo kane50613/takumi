@@ -20,6 +20,19 @@ const oxfmt: TegamiPlugin = {
   },
 };
 
+// tegami updates the lockfile with `bun install --frozen-lockfile`, which never
+// rewrites the workspace version fields bun.lock caches. bun then resolves
+// `workspace:*` deps from those stale versions at publish, pinning internal
+// deps to an old release. Re-run a writable install so the version PR's
+// bun.lock records the bumped versions. Runs after the frozen install (npm
+// plugin, `enforce: "pre"`) and before the github plugin commits the branch.
+const refreshLockfile: TegamiPlugin = {
+  name: "refresh-lockfile",
+  async applyCliDraft() {
+    await $`bun install`.quiet();
+  },
+};
+
 // v2 beta line; clear this for the stable 2.0.0 release.
 const prerelease = "rc";
 
@@ -66,6 +79,7 @@ const bumpDep = ({
 const paper = tegami({
   plugins: [
     oxfmt,
+    refreshLockfile,
     github({ repo: "kane50613/takumi", versionPr: { base: "master" } }),
     cargo({ updateLockFile: true, bumpDep }),
   ],
