@@ -1,9 +1,17 @@
 ---
 packages:
-  npm:takumi-js: major
-  npm:@takumi-rs/helpers: major
-  npm:@takumi-rs/core: major
-  npm:@takumi-rs/wasm: major
+  npm:takumi-js:
+    replay:
+      - "exit prerelease: npm:takumi-js"
+  npm:@takumi-rs/helpers:
+    replay:
+      - "exit prerelease: npm:@takumi-rs/helpers"
+  npm:@takumi-rs/core:
+    replay:
+      - "exit prerelease: npm:@takumi-rs/core"
+  npm:@takumi-rs/wasm:
+    replay:
+      - "exit prerelease: npm:@takumi-rs/wasm"
 ---
 
 ### Replace `fetchResources`/`extractResourceUrls` with `prepareImages`

@@ -1,6 +1,6 @@
 [package]
 name = "takumi-html"
-version = "0.1.0-rc.2"
+version = "0.1.0-rc.3"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Parse HTML + Tailwind markup into a takumi node tree, mirroring the JS `fromHtml` helper."
@@ -15,7 +15,7 @@ thiserror.workspace = true
 
 [dependencies.takumi-core]
 path = "../takumi-core"
-version = "0.1.0-rc.2"
+version = "0.1.0-rc.3"
 
 [lints]
 workspace = true

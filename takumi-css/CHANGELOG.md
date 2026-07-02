@@ -1,3 +1,12 @@
+## takumi-css@0.2.0-rc.2
+
+### Render backdrop-filter in the SVG backend
+
+SVG has no native backdrop source, so the backdrop is the scene replayed up to
+the element, run through an SVG `<filter>` chain, then clipped to the border
+box and attenuated by the element's mask and clip-path. Adds
+`ComputedStyle::has_shape_mask` and `Filter::is_drop_shadow`.
+
 ## takumi-css@0.2.0-rc.1
 
 ### Serialize filter, grid track, and gradient values as valid CSS

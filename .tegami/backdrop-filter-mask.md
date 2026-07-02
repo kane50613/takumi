@@ -1,7 +1,8 @@
 ---
 packages:
   cargo:takumi-raster:
-    type: patch
+    replay:
+      - "exit prerelease: cargo:takumi-raster"
 ---
 
 ### Clip backdrop-filter output by the node's mask and clip-path

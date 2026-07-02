@@ -1,9 +1,11 @@
 ---
 packages:
   cargo:takumi-svg:
-    type: minor
+    replay:
+      - "exit prerelease: cargo:takumi-svg"
   cargo:takumi-css:
-    type: minor
+    replay:
+      - "exit prerelease: cargo:takumi-css"
 ---
 
 ### Render backdrop-filter in the SVG backend

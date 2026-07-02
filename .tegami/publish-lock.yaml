@@ -1,85 +1,107 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    type: patch\n---\n\n### Add `baseUrl` to `googleFonts`\n\n`googleFonts` takes an optional `baseUrl`, defaulting to Google Fonts, so an API-compatible\ncss2 mirror can be used instead, e.g. `baseUrl: \"https://fonts.bunny.net/css2\"` for Bunny Fonts.\n"
-    filename: google-fonts-base-url.md
+  - content: "---\npackages:\n  npm:takumi-js:\n    type: major\n  npm:@takumi-rs/helpers:\n    type: major\n  npm:@takumi-rs/core:\n    type: major\n  npm:@takumi-rs/wasm:\n    type: major\n---\n\n### Replace `fetchResources`/`extractResourceUrls` with `prepareImages`\n\n`@takumi-rs/helpers` exports `prepareImages({ node, sources?, fetchCache?, fetch?, timeout? })`,\nwhich collects a node tree's remote images and fetches the ones not already supplied. Pass a\n`fetchCache` (a `Map<string, Promise<ArrayBuffer>>`, or any `Map`-like store) to coalesce\nconcurrent fetches of the same URL and reuse the bytes across renders; a failed fetch is\nevicted so a later call retries.\n\nThe `extractResourceUrls` and `fetchResources` helpers are removed. The `images` render option\ntakes the same group form: `{ sources, fetchCache, fetch, timeout }`.\n"
+    filename: prepare-images-helper.md
+    v: 0.0.0
+  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    type: patch\n---\n\n### Keep elements as containers when children carry no text\n\nAn element whose children resolved to a textless iterable (e.g. `{[]}`) became an\nempty text node instead of a container, so its `background` and other box styles\nnever painted. Such elements now stay containers.\n"
+    filename: empty-array-children-background.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-svg:\n    type: minor\n  cargo:takumi-css:\n    type: minor\n---\n\n### Render backdrop-filter in the SVG backend\n\nSVG has no native backdrop source, so the backdrop is the scene replayed up to\nthe element, run through an SVG `<filter>` chain, then clipped to the border\nbox and attenuated by the element's mask and clip-path. Adds\n`ComputedStyle::has_shape_mask` and `Filter::is_drop_shadow`.\n"
+    filename: svg-backdrop-filter.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-raster:\n    type: patch\n---\n\n### Clip backdrop-filter output by the node's mask and clip-path\n\nThe filtered backdrop painted across the whole border box even when the node\nhad a `mask` or `clip-path`, unlike browsers where the mask applies to the\nfiltered backdrop too. The backdrop composite is now attenuated by the node\nmask, and a fully masked-out node skips the backdrop filter entirely.\n"
+    filename: backdrop-filter-mask.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:@takumi-rs/core
-    updated: true
-  - id: npm:@takumi-rs/wasm
-    updated: true
   - changelogIds:
-      - google-fonts-base-url.md
-    id: npm:@takumi-rs/helpers
-    updated: true
-  - id: npm:takumi-js
+      - prepare-images-helper.md
+    id: npm:takumi-js
     updated: true
   - id: npm:docs
     updated: false
-  - id: npm:@takumi-rs/image-response
+  - changelogIds:
+      - prepare-images-helper.md
+      - empty-array-children-background.md
+    id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:takumi-template
     updated: false
-  - id: npm:ffplay
-    updated: false
-  - id: npm:example-nextjs
+  - changelogIds:
+      - prepare-images-helper.md
+    id: npm:@takumi-rs/core
+    updated: true
+  - id: npm:@takumi-rs/image-response
+    updated: true
+  - changelogIds:
+      - prepare-images-helper.md
+    id: npm:@takumi-rs/wasm
+    updated: true
+  - id: npm:example-cloudflare-workers
     updated: false
   - id: npm:example-satori-html
     updated: false
-  - id: npm:example-tanstack-start
-    updated: false
   - id: npm:example-twitter-images
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
     updated: false
   - id: npm:svelte
     updated: false
-  - id: npm:example-cloudflare-workers
+  - id: npm:example-tanstack-start
     updated: false
   - id: npm:waku-ssr
     updated: false
   - id: npm:example-css-library-integration
     updated: false
-  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:ffplay
     updated: false
-  - id: cargo:takumi-css
+  - id: npm:example-nextjs
     updated: false
+  - changelogIds:
+      - svg-backdrop-filter.md
+    id: cargo:takumi-svg
+    updated: true
+  - changelogIds:
+      - svg-backdrop-filter.md
+    id: cargo:takumi-css
+    updated: true
   - id: cargo:takumi-napi
     updated: false
-  - id: cargo:takumi-wasm
-    updated: false
-  - id: cargo:takumi-svg
-    updated: false
-  - id: cargo:takumi-core
-    updated: false
-  - id: cargo:takumi-html
-    updated: false
-  - id: cargo:takumi-raster
-    updated: false
+  - changelogIds:
+      - backdrop-filter-mask.md
+    id: cargo:takumi-raster
+    updated: true
   - id: cargo:takumi
     updated: true
+  - id: cargo:takumi-html
+    updated: true
+  - id: cargo:takumi-core
+    updated: true
+  - id: cargo:takumi-wasm
+    updated: false
   - id: cargo:example
     updated: false
 npm:packages:
   - id: npm:takumi
   - distTag: rc
-    id: npm:@takumi-rs/core
-  - distTag: rc
-    id: npm:@takumi-rs/wasm
-  - distTag: rc
-    id: npm:@takumi-rs/helpers
-  - distTag: rc
     id: npm:takumi-js
   - id: npm:docs
   - distTag: rc
-    id: npm:@takumi-rs/image-response
+    id: npm:@takumi-rs/helpers
   - id: npm:takumi-template
-  - id: npm:ffplay
-  - id: npm:example-nextjs
-  - id: npm:example-satori-html
-  - id: npm:example-tanstack-start
-  - id: npm:example-twitter-images
-  - id: npm:svelte
+  - distTag: rc
+    id: npm:@takumi-rs/core
+  - distTag: rc
+    id: npm:@takumi-rs/image-response
+  - distTag: rc
+    id: npm:@takumi-rs/wasm
   - id: npm:example-cloudflare-workers
+  - id: npm:example-satori-html
+  - id: npm:example-twitter-images
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:svelte
+  - id: npm:example-tanstack-start
   - id: npm:waku-ssr
   - id: npm:example-css-library-integration
-  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:ffplay
+  - id: npm:example-nextjs
