@@ -1,5 +1,4 @@
-import { googleFonts } from "takumi-js/helpers";
-import { prepareImages } from "takumi-js";
+import { googleFonts, prepareImages } from "takumi-js/helpers";
 import { extractEmojis } from "takumi-js/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
 import wasm, { init, Renderer } from "takumi-js/wasm";
