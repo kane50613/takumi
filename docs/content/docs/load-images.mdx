@@ -136,7 +136,7 @@ export function GET() {
 ```tsx twoslash
 import { extractEmojis } from "takumi-js/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
-import { prepareImages } from "takumi-js";
+import { prepareImages } from "takumi-js/helpers";
 import { Renderer } from "takumi-js/node";
 
 let { node } = await fromJsx(<div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>);

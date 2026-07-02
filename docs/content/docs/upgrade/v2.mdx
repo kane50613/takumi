@@ -24,7 +24,7 @@ JS (takumi-js, @takumi-rs/*):
 - loadFont/loadFonts/loadFontSync -> registerFont (only to reuse a font across renders)
 - render option fetchedResources -> images (keyed by src; no global image store)
 - render option resourcesOptions -> images.fetch/images.timeout; combine pre-fetched entries and a shared byte cache with the group form images: { sources: [...], fetch: myFetch, fetchCache: myMap }
-- extractResourceUrls + fetchResources helpers -> prepareImages({ node, fetchCache? }) from "takumi-js"
+- extractResourceUrls + fetchResources helpers -> prepareImages({ node, fetchCache? }) from "takumi-js/helpers"
 - format is a string ("png"|"jpeg"|"webp"|...) with optional quality (jpeg/lossy webp) and lossless (webp)
 - createImageResponse(opts)(jsx) -> new ImageResponse(jsx, opts)
 
@@ -115,7 +115,7 @@ const imageCache = new Map<string, Promise<ArrayBuffer>>();
 const image = await render(node, {
   resourcesOptions: { fetch: myFetch }, // [!code --]
   images: {
-    sources: resources, // [!code ++]
+    sources, // pre-fetched entries, not re-fetched [!code ++]
     fetch: myFetch, // [!code ++]
     fetchCache: imageCache, // reused across renders, dedupes concurrent fetches [!code ++]
   },

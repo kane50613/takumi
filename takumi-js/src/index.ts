@@ -22,13 +22,11 @@ export type {
   MeasuredTextRun,
   OutputFormat,
 } from "@takumi-rs/core";
-export { prepareImages, render, renderAnimation, renderSvg } from "./render";
+export { render, renderAnimation, renderSvg } from "./render";
 
 export type {
   AnimationScene,
-  ImageFetchCache,
   ImagesInput,
-  PrepareImagesOptions,
   RenderAnimationOptions,
   RenderInput,
   RenderOptions,

@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { Node } from "@takumi-rs/helpers";
-import { prepareImages } from "../src/render";
+import type { Node } from "../src/types";
+import { prepareImages } from "../src/utils";
 
 const ok = (url: string) => new Response(new TextEncoder().encode(url).buffer);
 
