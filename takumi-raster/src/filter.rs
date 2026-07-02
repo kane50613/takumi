@@ -5,7 +5,7 @@ use tiny_skia::{Mask as TinyMask, PixmapMut};
 
 use crate::{
   BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Placement, RenderContext, Result,
-  SizedShadow, apply_blur, apply_blur_rgba_bytes,
+  SizedShadow, apply_blur, apply_blur_rgba_bytes, intersect_alpha_masks,
   layout::style::{
     Affine, Color, Filter, FilterCategory, LUMA_WEIGHTS, PercentageNumber, SEPIA_WEIGHTS,
     SizingContext, TransferChannel, TransferTable, compose_transfer_table, fast_div_255,
@@ -284,34 +284,6 @@ fn backdrop_region(
     .clamp_to(canvas_size)
 }
 
-fn intersect_mask_with_node_mask(mask_data: &mut [u8], placement: Placement, node_mask: &TinyMask) {
-  let node_width = node_mask.width() as i32;
-  let node_height = node_mask.height() as i32;
-  let node_data = node_mask.data();
-
-  for (y, row) in mask_data
-    .chunks_exact_mut(placement.width as usize)
-    .enumerate()
-  {
-    let node_y = placement.top + y as i32;
-    if node_y < 0 || node_y >= node_height {
-      row.fill(0);
-      continue;
-    }
-
-    let node_row_start = node_y as usize * node_width as usize;
-    for (x, alpha) in row.iter_mut().enumerate() {
-      let node_x = placement.left + x as i32;
-      if node_x < 0 || node_x >= node_width {
-        *alpha = 0;
-        continue;
-      }
-
-      *alpha = fast_div_255(*alpha as u32 * node_data[node_row_start + node_x as usize] as u32);
-    }
-  }
-}
-
 fn composite_backdrop_with_mask(
   canvas_row: &mut [u8],
   backdrop_row: &[u8],
@@ -424,13 +396,11 @@ pub(crate) fn apply_backdrop_filter(
 ) -> Result<()> {
   let filters = &context.style.backdrop_filter;
 
-  if filters.iter().all(|f| matches!(f, Filter::DropShadow(_))) {
+  if filters.iter().all(Filter::is_drop_shadow) {
     return Ok(());
   }
 
-  let drop_shadow_filtered = filters
-    .iter()
-    .filter(|f| !matches!(f, Filter::DropShadow(_)));
+  let drop_shadow_filtered = filters.iter().filter(|f| !f.is_drop_shadow());
 
   let canvas_size = canvas.size();
   if canvas_size.width == 0 || canvas_size.height == 0 {
@@ -442,7 +412,7 @@ pub(crate) fn apply_backdrop_filter(
   border.append_mask_commands(&mut paths, layout_size, Point::ZERO);
 
   // Render the mask for compositing.
-  let (mut mask_data, placement) =
+  let (mut mask_data, mut placement) =
     render_mask(&paths, Some(transform), None, &mut canvas.buffer_pool);
 
   if placement.width == 0 || placement.height == 0 {
@@ -451,7 +421,19 @@ pub(crate) fn apply_backdrop_filter(
   }
 
   if let Some(node_mask) = node_mask {
-    intersect_mask_with_node_mask(&mut mask_data, placement, node_mask);
+    let node_placement = Placement {
+      left: 0,
+      top: 0,
+      width: node_mask.width(),
+      height: node_mask.height(),
+    };
+    let intersected =
+      intersect_alpha_masks(&mask_data, placement, node_mask.data(), node_placement);
+    canvas.buffer_pool.release(mask_data);
+    let Some(intersected) = intersected else {
+      return Ok(());
+    };
+    (mask_data, placement) = intersected;
   }
 
   let Some(mask_bounds) = mask_bounds(&mask_data, placement.width, placement.height) else {

@@ -137,8 +137,8 @@ fn test_style_backdrop_filter_frosted_glass() {
 
 #[test]
 fn test_style_backdrop_filter_with_mask() {
-  let absolute_inset_zero = |style: Style| {
-    style
+  let absolute_inset_zero = || {
+    Style::default()
       .with(StyleDeclaration::position(Position::Absolute))
       .with(StyleDeclaration::top(Px(0.0)))
       .with(StyleDeclaration::right(Px(0.0)))
@@ -147,7 +147,7 @@ fn test_style_backdrop_filter_with_mask() {
   };
 
   let masked_background = Node::container([]).with_style(
-    absolute_inset_zero(Style::default())
+    absolute_inset_zero()
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([239, 68, 68, 255]),
       )))
@@ -157,7 +157,7 @@ fn test_style_backdrop_filter_with_mask() {
   );
 
   let masked_backdrop_blur = Node::container([]).with_style(
-    absolute_inset_zero(Style::default())
+    absolute_inset_zero()
       .with(StyleDeclaration::backdrop_filter(
         Filters::from_str("blur(24px)").unwrap(),
       ))

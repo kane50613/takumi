@@ -12,7 +12,7 @@ use crate::{
       InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan, collect_inline_items,
       create_inline_layout, resolve_inline_max_height,
     },
-    style::{Affine, BackgroundImage, BlendMode, Color, ComputedStyle, Filter, SizingContext},
+    style::{Affine, BackgroundImage, BlendMode, Color, Filter, SizingContext},
     tree::{LayoutResults, RenderNode},
   },
   prepare_node_mask,
@@ -305,7 +305,7 @@ fn begin_node_render(
   if !current.context.style.backdrop_filter.is_empty() {
     // Filtered backdrop is clipped by the node's clip-path and mask, like Chromium's
     // backdrop root: https://drafts.fxtf.org/filter-effects-2/#BackdropRoot
-    let node_mask = if node_shapes_backdrop(&current.context.style) {
+    let node_mask = if current.context.style.has_shape_mask() {
       match prepare_node_mask(
         &current.context,
         &current.context.style,
@@ -530,15 +530,6 @@ pub(crate) fn paint_context(
   Ok(())
 }
 
-fn node_shapes_backdrop(style: &ComputedStyle) -> bool {
-  style.clip_path.is_some()
-    || style.mask_image.as_ref().is_some_and(|images| {
-      images
-        .iter()
-        .any(|image| !matches!(image, BackgroundImage::None))
-    })
-}
-
 fn supports_bounds_hint(node: &RenderNode, require_child_clipping: bool) -> bool {
   let style = &node.context.style;
   let has_children = node
@@ -569,12 +560,7 @@ fn supports_bounds_hint(node: &RenderNode, require_child_clipping: bool) -> bool
 
   style.filter.is_empty()
     && style.backdrop_filter.is_empty()
-    && style.clip_path.is_none()
-    && style.mask_image.as_ref().is_none_or(|images| {
-      images
-        .iter()
-        .all(|image| matches!(image, BackgroundImage::None))
-    })
+    && !style.has_shape_mask()
     && !has_box_shadow
     && !has_outline
     && !has_text_shadow

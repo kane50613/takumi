@@ -13,6 +13,8 @@ value is correctly escaped.
 Coverage: backgrounds, borders, border-radius (backgrounds/clip), linear and
 radial gradients (conic via a wedge-path approximation), box-shadow, text
 (glyph outlines, decorations, text-shadow, `-webkit-text-stroke`), bitmap/
-emoji glyphs and images, clip-path/overflow, opacity, and affine transforms.
+emoji glyphs and images, clip-path/overflow, opacity, filter and
+backdrop-filter (`<filter>` chains; the backdrop is the scene replayed up to
+the element), and affine transforms.
 
 <!-- cargo-rdme end -->
